@@ -232,7 +232,7 @@ async def get_cockpit_uebersicht(
     sonstiges_verbrauch = 0.0
     sonstige_ertraege_gesamt = 0.0
     sonstige_ausgaben_gesamt = 0.0
-    dienstlich_ladekosten_euro = 0.0
+    dienstlich_pv_netz_by_ym: dict[tuple[int, int], tuple[float, float]] = {}
     zeitraum_monate = set()
 
     for imd in all_imd:
@@ -277,11 +277,12 @@ async def get_cockpit_uebersicht(
             if ist_dienstlich(inv):
                 # #262: SoT-Helper liefert (pv, netz) inkl. Fallback für
                 # evcc-Imports ohne expliziten `ladung_netz_kwh`-Key.
+                # Kosten erst NACH dem Monatsdaten-Load berechnen — der
+                # Netzbezug-Anteil läuft per-Monat über den Flexpreis
+                # (gleichzeitig mit aussichten.get_finanz_prognose umgestellt).
                 pv_kwh, netz_kwh = get_emob_pv_netz_kwh(data)
-                dienstlich_ladekosten_euro += (
-                    netz_kwh * wallbox_preis_cent +
-                    pv_kwh * einspeise_verguetung_cent
-                ) / 100
+                d_pv, d_netz = dienstlich_pv_netz_by_ym.get(key, (0.0, 0.0))
+                dienstlich_pv_netz_by_ym[key] = (d_pv + pv_kwh, d_netz + netz_kwh)
             elif inv.typ == "e-auto":
                 eauto_imd_data.append(data)
                 km_monat = data.get("km_gefahren", 0) or 0
@@ -318,8 +319,6 @@ async def get_cockpit_uebersicht(
         sonstige_ertraege_gesamt += summen["ertraege_euro"]
         sonstige_ausgaben_gesamt += summen["ausgaben_euro"]
 
-    sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
-
     # E-Mobilitäts-Pool: EINE Quelle liefert die konsistente Heimladungs-
     # Trias (pv + netz == ladung). Früher feldweises max() über pv/netz —
     # das konnte pv aus der einen, netz aus der anderen Quelle nehmen und
@@ -346,6 +345,20 @@ async def get_cockpit_uebersicht(
 
     md_result = await db.execute(md_query)
     monatsdaten_list = md_result.scalars().all()
+    monatsdaten_by_ym = {(m.jahr, m.monat): m for m in monatsdaten_list}
+
+    # Dienstliche Ladekosten: Netzbezug-Anteil per-Monat über den Flexpreis
+    # (`resolve_netzbezug_preis_cent`), Fallback Wallbox-Tarif; entgangene
+    # Einspeisung bleibt statisch (Vertragswert). Gleichzeitig mit
+    # aussichten.get_finanz_prognose umgestellt ([[feedback_aggregations_drift]]).
+    dienstlich_ladekosten_euro = 0.0
+    for d_key, (d_pv, d_netz) in dienstlich_pv_netz_by_ym.items():
+        d_md = monatsdaten_by_ym.get(d_key)
+        d_preis = resolve_netzbezug_preis_cent(d_md, wallbox_preis_cent) if d_md else wallbox_preis_cent
+        dienstlich_ladekosten_euro += (
+            d_netz * d_preis + d_pv * einspeise_verguetung_cent
+        ) / 100
+    sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
 
     # Anschaffungsdatum-Grenze: Energiebilanz + Erträge nur über Monate, in denen
     # mindestens ein PV-Erzeuger (PV-Module ∪ Balkonkraftwerke) aktiv war.

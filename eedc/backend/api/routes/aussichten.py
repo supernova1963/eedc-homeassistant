@@ -24,10 +24,15 @@ from backend.models.pvgis_prognose import PVGISPrognose
 from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
-from backend.core.berechnungen import einspeise_erloes_euro, berechne_verbrauchs_kennzahlen
+from backend.core.berechnungen import (
+    FinanzMonatsZeile,
+    berechne_finanz_aggregat,
+    berechne_verbrauchs_kennzahlen,
+    einspeise_erloes_euro,
+)
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.calculations import berechne_ust_eigenverbrauch
-from backend.core.field_definitions import get_wp_strom_kwh
+from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -980,13 +985,18 @@ async def get_finanz_prognose(
                 gesamt_pv += kwh
                 pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
 
-    # BKW-Erzeugung
+    # BKW-Erzeugung (+ Eigenverbrauch pro Monat für die Finanz-Aggregation)
+    bkw_ev_pro_monat: dict[tuple[int, int], float] = {}
     for bkw in balkonkraftwerke:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == bkw.id:
                 kwh = daten.get("pv_erzeugung_kwh", 0)
                 gesamt_pv += kwh
                 pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
+                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
+                bkw_ev_pro_monat[(jahr, monat)] = (
+                    bkw_ev_pro_monat.get((jahr, monat), 0) + bkw_ev
+                )
 
     # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
     # Speicher-Daten (gesamt + pro Monat für die SoT-EV-Berechnung)
@@ -1227,16 +1237,12 @@ async def get_finanz_prognose(
     bisherige_eauto_ersparnis = 0.0
 
     # Anschaffungsdatum-Grenze für den anlagenweiten PV-Ertrag (Einspeise-Erlös +
-    # EV-Ersparnis). WP/E-Auto/BKW/Sonstige begrenzen ihre Monate bereits über
-    # `ist_aktiv_im_monat` (#236); nur dieser Pfad summierte bisher ALLE
-    # Monatsdaten — auch Monate vor PV-Inbetriebnahme bzw. nach Stilllegung. Das
-    # ist genau die asymmetrische Verzerrung, vor der [[feedback_aggregations_drift]]
-    # warnt, und verletzt das Prinzip „Anschaffungsdatum ist die Grenze für ALLE
-    # Auswertungen" ([[feedback_anschaffungsdatum_grenze]]). Grenze = aktives
-    # Fenster der PV-Erzeuger (PV-Module ∪ Balkonkraftwerke), analog zur
-    # `covered_months`-Logik in cockpit/uebersicht.py. Ohne registrierte PV-Quelle
-    # oder ohne gesetztes Anschaffungsdatum bleibt das Verhalten unverändert
-    # (`ist_aktiv_im_monat` ist dann für alle Monate True → kein Filter).
+    # EV-Ersparnis). WP/E-Auto/Sonstige begrenzen ihre Monate bereits über
+    # `ist_aktiv_im_monat` (#236); dieser Pfad filtert auf das aktive Fenster der
+    # PV-Erzeuger (PV-Module ∪ Balkonkraftwerke), analog zur `md_pv`-Logik in
+    # cockpit/uebersicht.py ([[feedback_anschaffungsdatum_grenze]]). Ohne
+    # registrierte PV-Quelle oder ohne gesetztes Anschaffungsdatum bleibt das
+    # Verhalten unverändert (`ist_aktiv_im_monat` ist dann für alle Monate True).
     pv_erzeuger = pv_module + balkonkraftwerke
 
     def _pv_aktiv_im_monat(jahr: int, monat: int) -> bool:
@@ -1244,25 +1250,49 @@ async def get_finanz_prognose(
             return True
         return any(p.ist_aktiv_im_monat(jahr, monat) for p in pv_erzeuger)
 
+    # #326-Vollmigration: Einspeise-Erlös §51 + EV-/BKW-Ersparnis laufen über
+    # den SoT-Helper `berechne_finanz_aggregat` — per-Monat mit Monats-Flexpreis
+    # UND Monats-Tarif (gueltig_ab-Stichtag), deckungsgleich mit Cockpit,
+    # Jahresbericht-PDF und HA-Export ([[feedback_aggregations_drift]]). Die
+    # aussichten-spezifischen Anteile (WP-/E-Auto-Alternativkosten, Prognose)
+    # bleiben lokal — sie sind keine Aggregat-Semantik.
+    _tarif_cache: dict[date, dict] = {}
+
+    async def _tarif_fuer_monat(jahr: int, monat: int) -> dict:
+        stichtag = date(jahr, monat, 1)
+        if stichtag not in _tarif_cache:
+            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
+                db, anlage_id, target_date=stichtag
+            )
+        return _tarif_cache[stichtag]
+
+    finanz_zeilen: list[FinanzMonatsZeile] = []
     for md in monatsdaten:
         if not _pv_aktiv_im_monat(md.jahr, md.monat):
             continue
-        md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis)
-        # Einspeise-Erlös §51-bereinigt — Anwender ohne Strompreis-Sensor
-        # (m_neg=None) sehen die alte ungekürzte Berechnung.
-        if md.einspeisung_kwh:
-            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, md.jahr, md.monat)
-            m_erloes = einspeise_erloes_euro(
-                einspeisung_kwh=md.einspeisung_kwh,
-                neg_preis_kwh=m_neg,
-                verguetung_ct_kwh=einspeiseverguetung,
-            )
-            bisherige_ertraege += m_erloes.erloes_euro
-        # EV-Ersparnis (beinhaltet bereits Speicher + V2H) — #304 Teil 2: aus dem
-        # SoT-abgeleiteten Eigenverbrauch statt dem Legacy-Feld md.eigenverbrauch_kwh
-        ev_monat = eigenverbrauch_pro_monat.get((md.jahr, md.monat), 0)
-        if ev_monat:
-            bisherige_ertraege += ev_monat * md_preis / 100
+        m_key = (md.jahr, md.monat)
+        m_tarife = await _tarif_fuer_monat(md.jahr, md.monat)
+        m_allgemein = m_tarife.get("allgemein")
+        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
+        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        # §51: Anwender ohne Strompreis-Mitschrift (m_neg=None) sehen die
+        # ungekürzte Berechnung.
+        m_neg = (
+            await get_neg_preis_einspeisung_monat(db, anlage_id, md.jahr, md.monat)
+            if md.einspeisung_kwh else None
+        )
+        finanz_zeilen.append(FinanzMonatsZeile(
+            einspeisung_kwh=md.einspeisung_kwh or 0,
+            netzbezug_kwh=md.netzbezug_kwh or 0,
+            pv_erzeugung_kwh=pv_pro_monat.get(m_key, 0),
+            speicher_ladung_kwh=speicher_ladung_pro_monat.get(m_key, 0),
+            speicher_entladung_kwh=speicher_entladung_pro_monat.get(m_key, 0),
+            v2h_entladung_kwh=v2h_pro_monat.get(m_key, 0),
+            bkw_eigenverbrauch_kwh=bkw_ev_pro_monat.get(m_key, 0),
+            netzbezug_preis_cent=resolve_netzbezug_preis_cent(md, m_preis_cent),
+            einspeiseverguetung_cent=m_einspeis_cent,
+            neg_preis_kwh=m_neg,
+        ))
 
     # Wärmepumpe Alternativkosten-Ersparnis
     # Ersparnis = Gas-Kosten (was es kosten würde) + fixe Zusatzkosten - WP-Stromkosten
@@ -1329,15 +1359,8 @@ async def get_finanz_prognose(
     gesamt_km = sum(a["km"] for a in eauto_aggregate.values())
     gesamt_eauto_netz = sum(a["netz_kwh"] for a in eauto_aggregate.values())
 
-    # BKW Ersparnis (Eigenverbrauch spart Netzbezug)
-    bisherige_bkw_ersparnis = 0.0
-    for bkw in balkonkraftwerke:
-        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == bkw.id and bkw.ist_aktiv_im_monat(jahr, monat):
-                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
-                md = monatsdaten_dict.get((jahr, monat))
-                md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis) if md else netzbezug_preis
-                bisherige_bkw_ersparnis += bkw_ev * md_preis / 100
+    # BKW-Ersparnis: kommt aus `berechne_finanz_aggregat` (bkw_eigenverbrauch_kwh
+    # in den Finanz-Zeilen oben) — kein eigener Loop mehr.
 
     # Sonstige Positionen für ALLE Investitionstypen (Wallbox-Erstattungen, THG-Quote, BHKW etc.)
     bisherige_sonstige_netto = 0.0
@@ -1346,21 +1369,33 @@ async def get_finanz_prognose(
             if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
                 bisherige_sonstige_netto += berechne_sonstige_netto(daten)
 
-    # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene Einspeisung)
+    # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene
+    # Einspeisung). Netzbezug-Anteil per-Monat über den Flexpreis (gleichzeitig
+    # mit cockpit/uebersicht.py umgestellt — einseitig wäre neue Asymmetrie);
+    # Einspeisevergütung bleibt statisch (Vertragswert). PV/Netz-Split über den
+    # SoT-Helper `get_emob_pv_netz_kwh` (#262: evcc-Import ohne ladung_netz_kwh).
     bisherige_dienstlich_ladekosten = 0.0
     for inv in alle_investitionen:
         if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
             for (inv_id, jahr, monat), daten in historische_inv_daten.items():
                 if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
-                    netz_kwh = daten.get("ladung_netz_kwh", 0) or 0
-                    pv_kwh = daten.get("ladung_pv_kwh", 0) or 0
+                    pv_kwh, netz_kwh = get_emob_pv_netz_kwh(daten)
+                    md = monatsdaten_dict.get((jahr, monat))
+                    md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis) if md else netzbezug_preis
                     bisherige_dienstlich_ladekosten += (
-                        netz_kwh * netzbezug_preis + pv_kwh * einspeiseverguetung
+                        netz_kwh * md_preis + pv_kwh * einspeiseverguetung
                     ) / 100
     bisherige_sonstige_netto -= bisherige_dienstlich_ladekosten
 
-    # Alternativkosten + BKW + Sonstige zu bisherigen Erträgen addieren
-    bisherige_ertraege += bisherige_wp_ersparnis + bisherige_eauto_ersparnis + bisherige_bkw_ersparnis + bisherige_sonstige_netto
+    # Finanz-Aggregat (Einspeise-Erlös §51 + EV- + BKW-Ersparnis + Sonstige)
+    # + aussichten-spezifische Alternativkosten-Ersparnisse (WP, E-Auto).
+    _finanz = berechne_finanz_aggregat(
+        finanz_zeilen, sonstige_netto_euro=bisherige_sonstige_netto
+    )
+    bisherige_bkw_ersparnis = _finanz.bkw_ersparnis_euro
+    bisherige_ertraege = (
+        _finanz.netto_ertrag_euro + bisherige_wp_ersparnis + bisherige_eauto_ersparnis
+    )
 
     # Anteilige Betriebskosten für den historischen Zeitraum abziehen
     betriebskosten_hist = betriebskosten_ges * anzahl_monate_hist / 12 if anzahl_monate_hist > 0 else 0
