@@ -82,6 +82,25 @@ _ENERGY_UNIT_TO_KWH: dict[str, float] = {
     "GWh": 1_000_000.0,
 }
 
+# statistics_short_term-Slotlänge (HA-Recorder schreibt 5-Min-Aggregate).
+SHORT_TERM_SLOT = 5
+
+
+def _snap_to_slot(dt: datetime, slot_minuten: int) -> datetime:
+    """Rundet einen Zeitstempel auf das nächste Slot-Raster (Sekunden=0).
+
+    HA-`start_ts` liegen i. d. R. exakt auf der 5-Min-Grenze, können aber durch
+    Recorder-Latenz minimal driften (z. B. H:00:01). Das Snapping garantiert
+    exakte Schlüssel, damit das Delta ``sum@t − sum@(t−5min)`` den Vorgänger-Slot
+    sicher findet.
+    """
+    basis = dt.replace(second=0, microsecond=0)
+    rest = basis.minute % slot_minuten
+    gerundet = basis - timedelta(minutes=rest)
+    if rest * 2 >= slot_minuten:  # aufrunden ab Hälfte
+        gerundet += timedelta(minutes=slot_minuten)
+    return gerundet
+
 
 class HAStatisticsService:
     """Service für Zugriff auf HA-Langzeitstatistiken (SQLite oder MariaDB)."""
@@ -1057,6 +1076,122 @@ class HAStatisticsService:
                 else:
                     slots[h] = round(end - start, 3)
             result[sid] = slots
+
+        return result
+
+    def get_short_term_5min_for_day(
+        self,
+        sensor_ids: list[str],
+        datum: date,
+        bis: Optional[datetime] = None,
+    ) -> dict[str, dict]:
+        """Liest `statistics_short_term` (5-Min-Granularität) für einen Tag.
+
+        Speist die Live-Tagesverlauf-Kurve im Add-on-Modus aus derselben
+        SoT-Familie wie die Heute-kWh-Kacheln (`safe_get_tages_kwh`), damit
+        Kurven-Integral und Kachel deckungsgleich sind (Konsistenz-, kein
+        Genauigkeitsfall). short_term hat ~10–14 Tage Retention — reicht für
+        den Tagesverlauf.
+
+        Pro Sensor werden ZWEI Bausteine geliefert:
+          - ``counter_deltas`` (nur `has_sum`-Sensoren, kWh-Zähler): 5-Min-Delta
+            ``sum@t − sum@(t−5min)`` je Slot-Beginn ``t`` (= Energie im Intervall
+            ``[t, t+5min)``). `sum` ist HAs reset-bereinigte Lifetime-Summe
+            ([[feedback_ha_statistics_aggregation]] — MAX(sum)−MIN(sum) statt
+            state). Telescoping über den Tag ⇒ Σ = Tages-Zähler-Delta.
+          - ``means``: roher `mean` (Statistics-Einheit, i. d. R. W/kW) je
+            Slot-Beginn — für reine Power-Sensoren ohne kWh-Pendant.
+
+        HA-Konvention: `sum`/`mean` bei ``start_ts=t`` gehören zum 5-Min-Intervall
+        ``[t, t+5min)``; `sum` ist der Zählerstand am ENDE (= Zähler bei
+        ``t+5min``). Delta für Slot ``[t, t+5min)`` = ``sum@t − sum@(t−5min)``.
+
+        Args:
+            sensor_ids: HA Entity-IDs (kWh-Zähler und/oder Power-Sensoren).
+            datum: Der Tag (lokale Zeit).
+            bis: Obergrenze (z. B. ``now`` für heute); Default = Tagesende.
+
+        Returns:
+            ``{sensor_id: {"has_sum": bool, "unit": str|None,
+                           "counter_deltas": {slot_dt: kwh_delta},
+                           "means": {slot_dt: mean_native}}}``
+            Sensoren ohne Treffer in `statistics_meta`/`short_term` fehlen.
+        """
+        if not self.is_available or not sensor_ids:
+            return {}
+
+        import time as time_module
+
+        tag_start = datetime.combine(datum, datetime.min.time())
+        # 5-Min-Vorlauf: für das Delta von Slot 00:00 brauchen wir den
+        # Zählerstand bei 00:00 (= sum @ start_ts=23:55 Vortag).
+        win_start = tag_start - timedelta(minutes=SHORT_TERM_SLOT)
+        win_end = (bis or (tag_start + timedelta(days=1))) + timedelta(minutes=SHORT_TERM_SLOT)
+        ts_von = time_module.mktime(win_start.timetuple())
+        ts_bis = time_module.mktime(win_end.timetuple())
+
+        slot = timedelta(minutes=SHORT_TERM_SLOT)
+        result: dict[str, dict] = {}
+
+        try:
+            with self._engine.connect() as conn:
+                meta_by_id: dict[str, SensorMeta] = {}
+                for sid in sensor_ids:
+                    m = self.get_metadata(conn, sid)
+                    if m:
+                        meta_by_id[sid] = m
+                if not meta_by_id:
+                    return {}
+
+                placeholders = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
+                meta_params: dict = {f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())}
+                meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
+
+                rows = conn.execute(
+                    text(f"""
+                        SELECT metadata_id, start_ts, sum, mean
+                        FROM statistics_short_term
+                        WHERE metadata_id IN ({placeholders})
+                          AND start_ts >= :ts_von
+                          AND start_ts <= :ts_bis
+                        ORDER BY metadata_id, start_ts
+                    """),
+                    {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
+                )
+
+                # Pro Sensor: {slot_beginn_dt: sum_kwh} und {slot_beginn_dt: mean}.
+                sum_by_slot: dict[str, dict[datetime, float]] = {sid: {} for sid in meta_by_id}
+                means_by_slot: dict[str, dict[datetime, float]] = {sid: {} for sid in meta_by_id}
+
+                for row in rows:
+                    sid = meta_id_to_sensor.get(row[0])
+                    if not sid:
+                        continue
+                    meta = meta_by_id[sid]
+                    slot_dt = _snap_to_slot(datetime.fromtimestamp(row[1]), SHORT_TERM_SLOT)
+                    if meta.has_sum and row[2] is not None:
+                        faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
+                        sum_by_slot[sid][slot_dt] = row[2] * faktor
+                    if row[3] is not None:
+                        means_by_slot[sid][slot_dt] = row[3]
+
+                for sid, meta in meta_by_id.items():
+                    sbs = sum_by_slot[sid]
+                    deltas: dict[datetime, float] = {}
+                    for t, wert in sbs.items():
+                        prev = sbs.get(t - slot)
+                        if prev is not None:
+                            deltas[t] = round(wert - prev, 4)
+                    result[sid] = {
+                        "has_sum": meta.has_sum,
+                        "unit": meta.unit,
+                        "counter_deltas": deltas,
+                        "means": means_by_slot[sid],
+                    }
+
+        except Exception as e:
+            logger.warning(f"get_short_term_5min_for_day Fehler: {type(e).__name__}: {e}")
+            return {}
 
         return result
 

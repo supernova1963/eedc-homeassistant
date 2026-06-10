@@ -16,17 +16,154 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.live_sensor_config import (
+    ERZEUGER_TYPEN,
     SKIP_TYPEN,
     TV_SERIE_CONFIG,
+    UNIT_TO_W,
     baue_investitions_serien,
     extract_live_config,
 )
 from backend.services.live_history_service import (
+    _MONATSABSCHLUSS_KWH,
+    _feld_eid,
     get_history_normalized,
     apply_invert_to_history,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_counter_eid(
+    typ: str, suffix: Optional[str], felder: dict,
+) -> Optional[str]:
+    """kWh-Zähler-Entity einer Investitions-Serie — deckungsgleich mit der
+    Bevorzugung in ``get_tages_kwh`` (Kacheln).
+
+    PV/BKW → ``pv_erzeugung_kwh``; WP → ``stromverbrauch_kwh``; Wallbox →
+    ``ladung_kwh`` (via ``_MONATSABSCHLUSS_KWH``). WP-Split-Serien (``suffix``
+    Heizen/Warmwasser) haben keinen eigenen kWh-Zähler → None (Mean-Pfad).
+    Speicher ist bidirektional → bewusst kein Zähler-Pfad (None → Mean, mit
+    erhaltenem Vorzeichen).
+    """
+    if typ in ERZEUGER_TYPEN:
+        return _feld_eid(felder.get("pv_erzeugung_kwh", {}))
+    if suffix is None and typ in _MONATSABSCHLUSS_KWH:
+        field, _ = _MONATSABSCHLUSS_KWH[typ]
+        return _feld_eid(felder.get(field, {}))
+    return None
+
+
+def _baue_short_term_overlays(
+    anlage: Anlage,
+    serien_core: list,
+    serie_entities: dict[str, list[str]],
+    investitionen: dict,
+    pv_gesamt_eid: Optional[str],
+    netz_bezug_eid: Optional[str],
+    netz_einspeisung_eid: Optional[str],
+    netz_kombi_eid: Optional[str],
+    start: datetime,
+    end: datetime,
+) -> tuple[dict[str, list], dict[str, list]]:
+    """Baut die `statistics_short_term`-Overlays für die Add-on-Kurve.
+
+    Pro Serie wird der Punkt-Strom unter ihrer **Power-Entity** (dem Schlüssel,
+    den die Slot-Schleife liest) ersetzt durch:
+      - **counter_overlay** (kWh-Zähler vorhanden): 5-Min-`sum`-Deltas → positive
+        Leistung. Vorzeichenlos (Richtung kommt aus ``seite``/Netz-Logik) →
+        wird NACH ``apply_invert`` eingespielt.
+      - **mean_overlay** (nur Power-Sensor): `short_term.mean` → W. Gleiche
+        Roh-Sensor-Semantik wie die History → wird VOR ``apply_invert``
+        eingespielt (Invert gilt, Vorzeichen bleibt erhalten — wichtig für
+        Speicher/Netz-Kombi).
+
+    Liefert eine Serie keine short_term-Daten, fehlt ihre Power-Entity in beiden
+    Overlays → die rohe History bleibt stehen (daten-getriebener Fallback, kein
+    Feature-Flag).
+    """
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    from backend.core.berechnungen.live_tagesverlauf_5min import (
+        counter_deltas_zu_leistung,
+        means_zu_leistung,
+    )
+
+    stats = get_ha_statistics_service()
+    if not stats.is_available:
+        return {}, {}
+
+    mapping = anlage.sensor_mapping or {}
+    mapping_inv = mapping.get("investitionen", {})
+    basis_map = mapping.get("basis", {})
+
+    counter_src: dict[str, str] = {}  # power_eid → kWh-Zähler-eid
+    mean_src: dict[str, str] = {}     # power_eid → power_eid (self)
+
+    for spec in serien_core:
+        eids = serie_entities.get(spec.key, [])
+        if not eids:
+            continue
+        power_eid = eids[0]
+        inv = investitionen.get(spec.inv_id)
+        if inv is None:
+            continue
+        felder = (mapping_inv.get(spec.inv_id, {}) or {}).get("felder", {}) or {}
+        counter_eid = _resolve_counter_eid(inv.typ, spec.suffix, felder)
+        if counter_eid:
+            counter_src[power_eid] = counter_eid
+        else:
+            mean_src.setdefault(power_eid, power_eid)
+
+    # PV-Gesamt (Basis-Fallback, kein kWh-Zähler) → Mean.
+    if pv_gesamt_eid:
+        mean_src.setdefault(pv_gesamt_eid, pv_gesamt_eid)
+
+    # Netz: getrennte kWh-Zähler bevorzugen (deckungsgleich mit get_tages_kwh),
+    # sonst Mean des Power-Sensors. Kombi-Sensor ist bidirektional → Mean.
+    if netz_bezug_eid:
+        c = _feld_eid(basis_map.get("netzbezug", {}))
+        if c:
+            counter_src[netz_bezug_eid] = c
+        else:
+            mean_src.setdefault(netz_bezug_eid, netz_bezug_eid)
+    if netz_einspeisung_eid:
+        c = _feld_eid(basis_map.get("einspeisung", {}))
+        if c:
+            counter_src[netz_einspeisung_eid] = c
+        else:
+            mean_src.setdefault(netz_einspeisung_eid, netz_einspeisung_eid)
+    if netz_kombi_eid:
+        mean_src.setdefault(netz_kombi_eid, netz_kombi_eid)
+
+    query_ids = list(set(list(counter_src.values()) + list(mean_src.values())))
+    if not query_ids:
+        return {}, {}
+
+    try:
+        st = stats.get_short_term_5min_for_day(query_ids, start.date(), bis=end)
+    except Exception as e:  # pragma: no cover — defensiv, Fallback = rohe History
+        logger.debug("short_term-Overlay übersprungen: %s", e)
+        return {}, {}
+
+    counter_overlay: dict[str, list] = {}
+    for power_eid, counter_eid in counter_src.items():
+        data = st.get(counter_eid)
+        if not data or not data.get("has_sum"):
+            continue
+        pts = counter_deltas_zu_leistung(data["counter_deltas"])
+        if pts:
+            counter_overlay[power_eid] = pts
+
+    mean_overlay: dict[str, list] = {}
+    for power_eid in mean_src:
+        data = st.get(power_eid)
+        if not data:
+            continue
+        faktor_w = UNIT_TO_W.get(data.get("unit") or "", 1.0)
+        pts = means_zu_leistung(data["means"], faktor_w)
+        if pts:
+            mean_overlay[power_eid] = pts
+
+    return mean_overlay, counter_overlay
 
 
 async def get_tagesverlauf(
@@ -207,10 +344,31 @@ async def get_tagesverlauf(
     except Exception as e:
         logger.debug("Börsenpreis-Fallback: %s", e)
 
+    # HA-LTS-Konsistenz: Kurve aus statistics_short_term speisen, damit
+    # Kurven-Integral und Heute-kWh-Kacheln (safe_get_tages_kwh) aus derselben
+    # SoT-Familie kommen (#135-Folge). Pro Serie 5-Min-sum-Deltas des kWh-Zählers
+    # bzw. short_term.mean des Power-Sensors; Strompreis bleibt unberührt.
+    pv_gesamt_eid = serie_entities["pv_gesamt"][0] if "pv_gesamt" in serie_entities else None
+    mean_overlay, counter_overlay = _baue_short_term_overlays(
+        anlage, serien_core, serie_entities, investitionen,
+        pv_gesamt_eid, netz_bezug_eid, netz_einspeisung_eid, netz_kombi_eid,
+        start, end,
+    )
+
+    # Mean-Overlay VOR Invert (gleiche Roh-Sensor-Semantik → Invert gilt,
+    # Vorzeichen bleibt erhalten — wichtig für Speicher/Netz-Kombi).
+    for eid, pts in mean_overlay.items():
+        history[eid] = pts
+
     # Vorzeichen-Invertierung auf History anwenden (#58)
     apply_invert_to_history(
         history, basis_live, basis_invert, inv_live_map, inv_invert_map
     )
+
+    # Counter-Overlay NACH Invert: Zähler-Energie ist vorzeichenlos/positiv,
+    # die Richtung kommt aus serie['seite'] bzw. der Netz-Logik — kein Invert.
+    for eid, pts in counter_overlay.items():
+        history[eid] = pts
 
     # 10-Minuten-Mittelwerte berechnen
     punkte: list[dict] = []
