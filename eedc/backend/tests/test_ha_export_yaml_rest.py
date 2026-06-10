@@ -121,3 +121,23 @@ async def test_mqtt_auto_publish_job_feuert_zeitnah_nach_boot(monkeypatch):
         )
     finally:
         scheduler._scheduler.shutdown(wait=False)
+
+
+async def test_mqtt_export_aktiviert_impliziert_auto_publish(monkeypatch):
+    """M-B (Gernot 2026-06-10): Wer den MQTT-Export einschaltet (mqtt.enabled),
+    bekommt Auto-Publish automatisch — die separate Default-aus-Option
+    mqtt.auto_publish war die Ursache für „Sensoren aktualisieren nur per Klick"."""
+    from backend.core.config import settings as app_settings
+    from backend.services.scheduler import EEDCScheduler
+
+    monkeypatch.setattr(app_settings, "mqtt_auto_publish", False, raising=False)
+    monkeypatch.setattr(app_settings, "mqtt_enabled", True, raising=False)
+
+    scheduler = EEDCScheduler()
+    assert scheduler.start()
+    try:
+        assert scheduler._scheduler.get_job("mqtt_auto_publish") is not None, (
+            "mqtt.enabled=true muss den Auto-Publish-Job registrieren"
+        )
+    finally:
+        scheduler._scheduler.shutdown(wait=False)

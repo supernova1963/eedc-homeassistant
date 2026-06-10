@@ -87,9 +87,13 @@ class EEDCScheduler:
             # Connector-Bridge (beide in main.py darin verschachtelt), daher
             # erfasst dieser Schalter alle MQTT-Pfade inkl. Standalone/Connectoren.
 
-            # MQTT Auto-Publish: Intervall aus settings (nur wenn MQTT_AUTO_PUBLISH=true)
+            # MQTT Auto-Publish: läuft automatisch mit, sobald der MQTT-Export
+            # aktiviert ist (mqtt.enabled) — die separate Option mqtt.auto_publish
+            # bleibt als Schalter für env-Setups ohne MQTT_ENABLED gültig.
+            # M-B-Entscheid Gernot 2026-06-10: Default-aus-Auto-Publish führte
+            # dazu, dass Export-Sensoren nur beim manuellen Klick aktualisierten.
             from backend.core.config import settings as app_settings
-            if app_settings.mqtt_auto_publish:
+            if app_settings.mqtt_auto_publish or app_settings.mqtt_enabled:
                 interval = max(5, app_settings.mqtt_publish_interval)  # Minimum 5 Minuten
                 self._scheduler.add_job(
                     mqtt_auto_publish_job,
