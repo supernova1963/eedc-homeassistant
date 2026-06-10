@@ -7,7 +7,9 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [3.41.0] - 2026-06-10 — Konsistente Finanzwerte, täglicher Connector-Abruf & Jahresbericht-Abschluss
+
+> ✨ **Minor / Feature + Fixes.** Drei Tester-Anliegen in einem Release: durchgängig identische Finanzwerte über Cockpit/PDF/HA-Export bei dynamischen Stromtarifen (#326, rilmor-mhrs), täglicher automatischer Connector-Abruf ohne MQTT-Inbound (#300, Safi105) und der abgeschlossene Jahresbericht mit Speicher-Sektion auf einer einzigen PDF-Engine (#303, kingcap1). 939 Backend-Tests grün.
 
 ### Added
 
