@@ -170,7 +170,7 @@ Tabs erscheinen nur, wenn die Anlage die jeweilige Komponente hat (strukturell N
 - **Lineare Sektion-Reihenfolge (hier bewusst fix):** Status → Verlauf → Vergleich → Aussicht. Vier Sektionen sind genug und stabil über alle Komponententypen — keine komponentenspezifische Sondersortierung. **Bewusster Unterschied zu den Cockpit-Zeitsichten:** Dort sind die Sektionen sortierbar (gut angekommenes Monatsbericht-Muster), im Komponenten-Hub *nicht* — die typ-übergreifende Stabilität ist hier der höhere Wert (man findet dieselbe Sektion bei jedem Komponententyp am selben Platz). Klappbar bleiben die Sektionen auch hier.
 - **Vergleich-Sektion (Saison + Werte):** Die „Vergleich"-Sektion trägt einen **Diagramm ⇄ Tabelle-Umschalter** — *Diagramm* mit Saison-Toggle (Winter/Heizperiode/Sommer) und Wetternormalisierung (Heizgradtage, fairer Mehrjahresvergleich; #195 Punkt 3, primär Wärme/Klima), *Tabelle* = die komponenten-scoped Werte (numerischer Zwilling, eine Tabellen-SoT, siehe Cockpit). Saisonale Mehrjahres-Muster (#110) sind die datengebundene Ausbaustufe.
 - **Energieprofil verschwindet als eigenständige Seite — dreifacher Zielort:** der *anlage-weite* Tagesüberblick → **Cockpit/Tag**; der *komponentenspezifische* Stundenverlauf → „Verlauf im Zeitraum"-Sektion (Strom-Profil PV, Wärme-Profil WP); die *Rohtabelle* → Auswertungen/Tabelle; die **Pflege** (Vollbackfill, Löschen, Reaggregation) → Einstellungen/Daten/Energieprofil-Pflege. **Anzeige ≠ Pflege.**
-- **Komponentenspezifische KPIs** via `lib/komponentenStyle.ts` als SoT (Style-Guide A5 + B9). Erweiterung auf E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage ist Pflicht-Voraussetzung — heute nur WP+Speicher (Disc #163). **Hinweis (2026-05-31):** der SoT wird heute nirgends real konsumiert (Dashboards hardcoden Stil) → A5 zuerst in WP/Speicher einziehen, dann erweitern (sonst toter Code), siehe Style-Guide A5.
+- **Komponentenspezifische KPIs** via `lib/komponentenStyle.ts` als SoT (Style-Guide A5 + B9). Erweiterung auf E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage ist Pflicht-Voraussetzung — heute nur WP+Speicher (Disc #163). **Hinweis (2026-05-31, präzisiert 2026-06-11):** die KPI-Stil-Records des SoT werden heute nirgends real konsumiert (Dashboards hardcoden Stil); nur der `fmtKpi`-Helfer ist in 4 Dashboards lebendig → A5 zuerst in WP/Speicher einziehen, dann erweitern (sonst toter Code), siehe Style-Guide A5.
 
 **Status-KPIs pro Komponententyp (✅ entschieden 2026-06-02 — Kanon für A5):** Ratifiziert die heute prominenten KPIs je Typ als Soll-Satz für die „Aktueller Status"-Sektion; `komponentenStyle.ts` bekommt die passenden Stil-Records.
 
@@ -268,8 +268,8 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 | Schritt | Inhalt |
 |---|---|
 | **A0** | Design-Tokens (Typo · Farben · Spacing · Schatten · Radius) als Tailwind-Theme + `lib/design-tokens.ts`. Keine sichtbare UI-Änderung. |
-| **B1** | PillTabs → SubTabs-Migration (4 Verbraucher inkl. DesignPreview). **Kein 1:1-Swap** — SubTabs route-getrieben, PillTabs state-getrieben (+ beta/tooltip). **✅ Entschieden:** auf **echte URL-Routen** heben (zukunftssicher, passt zur Redirect-Tabelle); beta/tooltip auf der Route-Variante nachbauen. Vereinheitlicht die Sub-Nav für Cockpit-Sub-Tabs + Komponenten-Hub. |
-| **B9-Vorbereitung** | KPICard-SoT-Komponente mit `size: 'sm' \| 'md' \| 'lg'` + Color-Enum. **Nicht drei, sondern fünf** echte KPICard-Versionen + drei `KpiCard`-Label-Helfer (= 8 Definitionen, ~26 referenzierende Dateien, Stand 2026-05-31) migrieren; die Community-Vergleichs-Variante bleibt ggf. eigener Sonderfall. Pflicht-Item, weil v4.0.0 saubere KPI-Strips überall braucht. |
+| **B1** | PillTabs → SubTabs-Migration (**3 Verbraucher, Stand 2026-06-11:** Auswertung, Aussichten, Community — DesignPreview nutzt PillTabs nur noch als Deprecated-Kommentar). **Kein 1:1-Swap** — SubTabs route-getrieben, PillTabs state-getrieben (+ beta/tooltip). **✅ Entschieden:** auf **echte URL-Routen** heben (zukunftssicher, passt zur Redirect-Tabelle); beta/tooltip auf der Route-Variante nachbauen. Vereinheitlicht die Sub-Nav für Cockpit-Sub-Tabs + Komponenten-Hub. |
+| **B9-Vorbereitung** | KPICard-SoT-Komponente mit `size: 'sm' \| 'md' \| 'lg'` + Color-Enum. **Nicht drei, sondern fünf** echte KPICard-Versionen + drei `KpiCard`-Label-Helfer (= 8 Definitionen, 29 referenzierende Dateien, Stand 2026-06-11) migrieren; die Community-Vergleichs-Variante bleibt ggf. eigener Sonderfall. Pflicht-Item, weil v4.0.0 saubere KPI-Strips überall braucht. |
 | **A5-Vorbereitung** | `lib/komponentenStyle.ts` auf E-Auto, BKW, Wallbox, Sonstiges, PV-Anlage erweitern (Disc #163). Vorbedingung für konsistente Komponenten-Seiten. |
 
 ### Phase 1 — v4.0.0 IA-Refactor (ein Release)
@@ -324,6 +324,8 @@ Alle Bestandspfade müssen redirected werden — Foren-Posts, Memory-Pfade, Issu
 | `/einstellungen/energieprofil` | `/cockpit/tag` (Anzeige aufgeteilt — Rohtabelle → `/auswertungen/tabelle`, Pflege → `/einstellungen/energieprofil-pflege`) |
 
 Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.tsx`. Keine 404s.
+
+> **Bestand (verifiziert 2026-06-11):** `App.tsx:73-167` enthält bereits **24** `Navigate`-Redirects aus früheren Umbauten — deren **Ziele** müssen beim Schnitt mit umgebogen werden (z. B. `/cockpit/aktueller-monat` zeigt heute auf `/cockpit/monatsberichte`, künftig direkt auf `/cockpit/monat`); **keine Redirect-Ketten**. Der Eintrag `/cockpit/monatsbericht` (Singular) war nie eine echte Route — rein defensiv.
 
 ---
 
