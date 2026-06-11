@@ -1,11 +1,25 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.42.0)
+> **Stand:** Juni 2026 (v3.42.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.42.1 — Korrekturen aus euren Rückmeldungen (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Anlagen-/Jahresbericht: „Sonstige Erträge & Ausgaben" jetzt vollständig.** Im PDF-Bericht waren die manuell gepflegten sonstigen Positionen nur teilweise berücksichtigt — ein Monat mit einer größeren Sonderausgabe konnte fälschlich positiv erscheinen, und die Monatszeilen summierten sich nicht sauber auf den Jahres-Netto-Ertrag. Jetzt landet jede Position im richtigen Monat (negative Monate werden auch negativ dargestellt), und die Finanz-Übersicht zeigt „Sonstige Erträge/Ausgaben" als eigene Zeile. Cockpit, Auswertung und Bericht passen damit durchgängig zusammen.
+- **Anker-SOLIX-Import: Netzbezug und Batterie-Werte korrekt.** Beim Import fehlte bisher der Netzbezug ganz, und die Batterie-Lade/Entlade-Werte stimmten nicht. eedc fragt jetzt die richtigen Datenbereiche der Anker-Cloud ab und füllt alle Werte korrekt. (Der Import bleibt vorerst als „in Erprobung" markiert, bis ein weiterer Gerätetest das bestätigt.)
+
+### Gut zu wissen
+
+- **Standalone/Docker: PDF-Export repariert.** Wer eedc als eigenständige Docker-Variante betreibt, konnte seit Umstellung auf die neue PDF-Engine keine Berichte mehr erzeugen (Fehlermeldung zu einer fehlenden System-Bibliothek). Dem Standalone-Image fehlten ein paar Schriften-/Grafik-Bibliotheken — die sind jetzt dabei. **Das HA-Add-on war nie betroffen.** Nach dem Update einmal `docker compose pull && docker compose up -d`.
+- **HA-Export: Port klarer beschriftet.** Der für den REST-Export benötigte Port 8099 trägt in den Add-on-Netzwerkeinstellungen jetzt eine Beschreibung, die erklärt, dass er nur für den REST-Sensor-Export gebraucht wird (für die normale Nutzung und MQTT bleibt er aus).
 
 ---
 

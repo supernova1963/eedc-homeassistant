@@ -9,6 +9,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+---
+
+## [3.42.1] - 2026-06-11 — PDF-Sonstige, Anker-SOLIX-Mapping & Standalone-PDF-Fix
+
+> 🔧 **Patch / Fixes.** Mehrere Tester-Befunde aus den v3.42.0-Gegenchecks: Der PDF-Anlagenbericht weist „Sonstige Erträge & Ausgaben" jetzt durchgängig aus (rilmor-mhrs, #326-Folge), der Anker-SOLIX-Import füllt Netzbezug und Batterie korrekt (Johnny_1993, #328), und der **Standalone-PDF-Export** läuft wieder (SolarKlim2025 — dem Standalone-Image fehlten die WeasyPrint-Systemlibs). Dazu eine klarere Port-Beschriftung (rapahl) und zwei interne Berechnungs-Layer-Slices. 1005 Backend-Tests grün.
+
 ### Fixed
 
 - **Anker SOLIX Cloud-Import: Netzbezug & Batterie-Werte korrekt (#328, Gegentest Johnny_1993).** Der erste echte Gerätetest zeigte: PV-Ertrag und Einspeisung stimmten, aber der **Netzbezug fehlte ganz** und die **Batterie-Lade/Entlade-Werte waren falsch**. Ursache: der `energy_analysis`-Endpunkt liefert je `device_type` nur die Felder seines Bereichs — ein einzelner `solar_production`-Aufruf enthält weder Netzbezug noch die Batterie-Summen. eedc fragt jetzt pro Monat drei Bereiche ab (`solar_production`, `home_usage`, `solarbank`) und setzt sie zusammen: Netzbezug aus `grid_to_home_total`, Batterie-Ladung aus PV- + Netz-Anteil, Entladung aus `battery_to_home_total`. Optionale Bereiche dürfen fehlen (Anlage ohne Speicher), ohne den Monat zu verlieren. Feldnamen anhand der Anker-OSS-Referenz (thomluther/anker-solix-api) verdrahtet. Provider bleibt als „ungetestet" markiert, bis der erneute Gegentest grün ist.
