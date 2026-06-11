@@ -21,6 +21,8 @@ Submodule:
   Tages-Boundary-Diff ableiten + Pflicht-Invariante (Variante 2-light)
 - `invarianten` — Konsistenz-Asserts (Σ Hourly == Daily, Σ pv == komponenten_pv etc.)
 - `speicher` — Speicher-Effizienz (gleitend, carry-over-immun)
+- `spez_ertrag` — spezifischer Ertrag annualisiert (saisonal gewichtet,
+  per-Monat-aktives kWp) — Cockpit-Kachel == HA-Export-Sensor
 
 Geplant (step-by-step, wenn Konsumenten angefasst werden):
 - `peaks` — Peak-Werte (peak_pv/bezug/einspeisung)
@@ -100,10 +102,20 @@ from backend.core.berechnungen.pv_verteilung import (
     verteile_basis_kwh_nach_kwp,
 )
 from backend.core.berechnungen.preis_rang import (
+    GUENSTIG_SCHWELLE_FAKTOR,
     GUENSTIG_TOP_N,
+    PEAK_AUSSCHLUSS_N,
     RANG_TEUER,
     PreisRangErgebnis,
     berechne_preis_rang,
+    guenstig_schwelle,
+)
+from backend.core.berechnungen.spez_ertrag import (
+    MONATSGEWICHTE_52N,
+    PV_ERZEUGER_TYPEN,
+    berechne_spez_ertrag_annualisiert,
+    kwp_aktiv_im_monat,
+    monatsgewichte_aus_pvgis,
 )
 from backend.core.berechnungen.speicher import (
     EFFIZIENZ_FENSTER_MONATE,
@@ -165,10 +177,18 @@ __all__ = [
     "pruefe_speicher_netzladung_kumulativ",
     "assert_speicher_durchsatz_konsistent",
     "pruefe_speicher_durchsatz_konsistenz",
+    "GUENSTIG_SCHWELLE_FAKTOR",
     "GUENSTIG_TOP_N",
+    "PEAK_AUSSCHLUSS_N",
     "RANG_TEUER",
     "PreisRangErgebnis",
     "berechne_preis_rang",
+    "guenstig_schwelle",
+    "MONATSGEWICHTE_52N",
+    "PV_ERZEUGER_TYPEN",
+    "berechne_spez_ertrag_annualisiert",
+    "kwp_aktiv_im_monat",
+    "monatsgewichte_aus_pvgis",
     "SpeicherSimErgebnis",
     "StundenBilanz",
     "simuliere_speicher_tag",

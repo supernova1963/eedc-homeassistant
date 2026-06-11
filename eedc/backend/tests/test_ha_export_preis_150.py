@@ -1,6 +1,8 @@
 """Tests #150 Slice B — eedc-Börsenpreis-Rang-Export nach HA.
 
-Rang je Tag-/Nacht-Fenster (1–5 günstigste, 99 Rest) + günstige-Stunden-Anzahl.
+Rang je Tag-/Nacht-Fenster (1–5 günstigste, 99 Rest) + günstige-Stunden-Anzahl
+gesamt/Tag/Nacht. „Günstig" ist zweistufig (Rainer-PN 2026-06-11): Rang 1–5
+UND Preis ≥10 % unter dem Tagesdurchschnitt ohne die 3 Peak-Stunden.
 Reine Rang-Logik + solar-basiertes Fenster isoliert, Verdrahtung mit gemockten
 Preis-/Wetter-Quellen.
 """
@@ -13,37 +15,60 @@ from types import SimpleNamespace
 import pytest
 
 from backend.core.berechnungen.preis_rang import (
+    GUENSTIG_SCHWELLE_FAKTOR,
     GUENSTIG_TOP_N,
     RANG_TEUER,
     berechne_preis_rang,
+    guenstig_schwelle,
 )
 from backend.services.solar_forecast_service import sonnenauf_unter_stunde
 from backend.models import Anlage, Investition, Monatsdaten
 
 
+# ── Günstig-Schwelle (rein) ─────────────────────────────────────────────────
+
+def test_guenstig_schwelle_ohne_drei_peaks():
+    # 24 Preise 1..24 ct: ohne die 3 Peaks (22, 23, 24) bleibt Ø(1..21) = 11.
+    preise = {h: float(h + 1) for h in range(24)}
+    schwelle = guenstig_schwelle(preise)
+    assert schwelle == pytest.approx(11.0 * GUENSTIG_SCHWELLE_FAKTOR)
+
+
+def test_guenstig_schwelle_zu_wenige_preise_ist_none():
+    assert guenstig_schwelle({0: 8.0, 1: 9.0, 2: 7.0}) is None
+
+
 # ── Rang-Logik (rein) ───────────────────────────────────────────────────────
 
-def test_rang_billigste_ist_eins_rest_99():
+def test_rang_billigste_ist_eins_schwelle_kappt_top5():
+    # Sortiert [5,10,15,20,25,30,40,50] → ohne 3 Peaks Ø=15 → Schwelle 13.5:
+    # nur 5 ct und 10 ct sind günstig, der Rest der Top-5 fällt auf 99.
     preise = {h: float(p) for h, p in enumerate([30, 10, 20, 5, 40, 50, 15, 25])}
     erg = berechne_preis_rang(preise, tag_stunden=set(range(8)), nacht_stunden=set(), aktuelle_stunde=3)
+    assert erg.schwelle_cent == pytest.approx(13.5)
     assert erg.rang_profil[3] == 1          # 5 ct = billigste
     assert erg.rang_profil[1] == 2          # 10 ct
-    assert erg.rang_profil[6] == 3          # 15 ct
-    assert sorted(r for r in erg.rang_profil.values() if r <= GUENSTIG_TOP_N) == [1, 2, 3, 4, 5]
+    assert erg.rang_profil[6] == RANG_TEUER  # 15 ct > Schwelle → nicht günstig
     assert erg.rang_profil[5] == RANG_TEUER  # 50 ct = teuerste → 99
     assert erg.rang_aktuell == 1
-    assert erg.guenstige_stunden_anzahl == 5
+    assert erg.guenstige_stunden_anzahl == 2
 
 
-def test_rang_tag_und_nacht_getrennt():
+def test_rang_tag_und_nacht_getrennt_schwelle_global():
+    # Nacht billig (5 ct), Tag teuer (30 ct): die Schwelle wird über ALLE
+    # Tagespreise gebildet — im Tag-Fenster ist damit trotz Top-5-Ranking
+    # KEINE Stunde günstig (Rainer-Kern: erzwungener Verbrauch bei 30 ct
+    # ergibt keinen Sinn, nur weil die Stunde relativ vorn liegt).
     preise = {h: (5.0 if h < 6 else 30.0) for h in range(24)}
     tag = set(range(6, 21))
     nacht = set(range(24)) - tag
     erg = berechne_preis_rang(preise, tag_stunden=tag, nacht_stunden=nacht, aktuelle_stunde=10)
-    # Im Tag-Fenster werden 5 Stunden trotz hoher Absolutpreise zu 1..5.
-    tag_raenge = sorted(erg.rang_profil[h] for h in tag)
-    assert tag_raenge[:5] == [1, 2, 3, 4, 5]
-    assert erg.guenstige_stunden_anzahl == 10   # je Fenster 5 günstige
+    assert all(erg.rang_profil[h] == RANG_TEUER for h in tag)
+    assert erg.guenstige_stunden_tag == 0
+    # Im Nacht-Fenster: 6 × 5-ct-Stunden, davon Top-5 günstig.
+    assert erg.guenstige_stunden_nacht == GUENSTIG_TOP_N
+    assert erg.guenstige_stunden_anzahl == GUENSTIG_TOP_N
+    assert erg.rang_aktuell == RANG_TEUER
 
 
 def test_rang_kleines_fenster_alle_guenstig():
@@ -103,6 +128,13 @@ async def test_preis_sensoren_erscheinen(db, _patch_preis):
 
     assert "eedc_preis_rang" in by_key
     assert by_key["eedc_preis_guenstige_stunden_anzahl"].value >= 1
-    # Rang-Profil reist als Attribut mit.
+    # Tag/Nacht-Split (Rainer-PN 2026-06-11): Summe == Gesamt-Anzahl.
+    assert (
+        by_key["eedc_preis_guenstige_stunden_tag"].value
+        + by_key["eedc_preis_guenstige_stunden_nacht"].value
+        == by_key["eedc_preis_guenstige_stunden_anzahl"].value
+    )
+    # Rang-Profil + Günstig-Schwelle reisen als Attribute mit.
     profil = by_key["eedc_preis_rang"].zusatz_attribute["rang_profil"]
     assert profil and all("stunde" in e and "rang" in e for e in profil)
+    assert by_key["eedc_preis_rang"].zusatz_attribute["guenstig_schwelle_cent"] > 0

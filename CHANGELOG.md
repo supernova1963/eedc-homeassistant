@@ -9,7 +9,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **HA-Export: „PV-Prognose heute" + echter Rest-Wert (rapahl-PN).** Der Sensor „PV-Prognose Rest heute" enthielt das bisherige IST und war damit faktisch der Tageswert unter irreführendem Namen („Rest 67 kWh um 11 Uhr"). Jetzt liefert er nur noch die **Prognose der verbleibenden Stunden** (Steuerungswert: wie viel PV kommt noch), und ein neuer Sensor **„PV-Prognose heute"** zeigt den rollenden Tageswert (IST bisher + Rest — läuft mit dem IST mit, wie seinerzeit besprochen). Das Stundenprofil-Attribut hängt jetzt am Tageswert-Sensor.
+- **HA-Export: „Günstige Stunden" mit echter Preis-Schwelle + Tag/Nacht getrennt (rapahl-PN).** Bisher waren die „günstigen" Stunden rein relativ (die 5 billigsten je Tag-/Nacht-Fenster) — die Anzahl stand damit praktisch konstant auf 10, und der Börsenpreis-Rang markierte Stunden als günstig, in denen erzwungener Verbrauch oder Netzladung keinen Sinn ergibt. Günstig ist jetzt nur, was zusätzlich **mindestens 10 % unter dem Tagesdurchschnitt ohne die 3 Peak-Stunden** liegt (Rainer-Definition). Neue Sensoren **„Günstige Stunden Tag"** und **„Günstige Stunden Nacht"** (je max. 5); die Schwelle reist als Attribut `guenstig_schwelle_cent` am Börsenpreis-Rang mit.
+
 ### Fixed
+
+- **HA-Export: „Spezifischer Ertrag" aufs Jahr normiert statt Laufzeit-Summe (rapahl-PN).** Der Sensor rechnete Lebenszeit-PV-Erzeugung ÷ heutiges kWp — bei 3 Jahren Historie rund das Dreifache des gewohnten Jahreswerts (Rainer: 1.955 kWh/kWp). Jetzt rechnet er über denselben SoT-Helper wie die Cockpit-Kachel: saisonal gewichtet annualisiert (PVGIS-Monatsverteilung, Fallback 52°N) und mit der pro Monat tatsächlich aktiven PV-Leistung (Erweiterung/Teil-Rückbau). Neuer Berechnungs-Layer-Helper `core/berechnungen/spez_ertrag.py` (ADR-001), Symmetrie-Test Cockpit == HA-Export.
 
 - **Cloud-Import: kein „Failed to fetch" mehr bei langen Zeiträumen (#328).** Der Datenabruf aus den Hersteller-Clouds lief als ein einziger langer Request — bei vielen Monaten (z. B. Anker SOLIX mit drei Datenbereichen pro Monat) brach der Browser bzw. das HA-Ingress nach einigen Minuten mit „Failed to fetch" ab, obwohl der Import im Hintergrund weiterlief. Der Abruf läuft jetzt als **Hintergrund-Job mit Status-Abfrage**: der Wizard zeigt „Abruf läuft im Hintergrund … (Xs)" mit Sekunden-Zähler und wartet zuverlässig auf das Ergebnis, egal wie lange es dauert. Gilt für **alle** Cloud-Provider.
 - **Anker SOLIX: robuster bei API-Drosselung (HTTP 429, #328).** Bei längeren Import-Zeiträumen (viele Monate × drei Datenbereiche) drosselt die Anker-Cloud gelegentlich (HTTP 429). Bisher wurde der betroffene Bereich/Monat dann übersprungen — jetzt wartet eedc gestaffelt (30 s, dann 60 s) und versucht es erneut, sodass keine Werte verloren gehen. Bleibt es dauerhaft bei 429, erscheint weiterhin die klare Hinweis-Meldung.

@@ -1,9 +1,11 @@
 """eedc-eigener Börsenpreis-Rang für den HA-Export (#150 Slice B).
 
 Liefert die Trigger-Sensoren für `calculate_anlage_sensors()`:
-  - Rang der aktuellen Stunde (1–5 = fünf günstigste je Fenster, 99 = teuer/Rest)
-  - Anzahl als günstig markierter Stunden
-  - das Rang-Profil des Tages (als Sensor-Attribut, kein eigenes Topic)
+  - Rang der aktuellen Stunde (1–5 = günstigste je Fenster UND ≥10 % unter
+    Ø-ohne-3-Peaks, 99 = teuer/Rest — Schwelle seit Rainer-PN 2026-06-11)
+  - Anzahl als günstig markierter Stunden (gesamt + Tag/Nacht getrennt)
+  - das Rang-Profil des Tages + die Günstig-Schwelle (als Sensor-Attribute,
+    kein eigenes Topic)
 
 Tag- und Nacht-Fenster werden **solar-basiert** getrennt bewertet
 (Sonnenauf→-untergang = Tag), das Fenster wandert damit saisonal. eedc liefert
@@ -33,8 +35,10 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
     """Berechnet die Börsenpreis-Rang-Exportwerte einer Anlage.
 
     Returns:
-        dict mit ``preis_rang`` (int | None), ``guenstige_stunden_anzahl`` (int)
-        und ``rang_profil`` (Liste ``{stunde, rang}``) — oder ``None``.
+        dict mit ``preis_rang`` (int | None), ``guenstige_stunden_anzahl``,
+        ``guenstige_stunden_tag``, ``guenstige_stunden_nacht`` (int),
+        ``guenstig_schwelle_cent`` (float | None) und ``rang_profil``
+        (Liste ``{stunde, rang}``) — oder ``None``.
     """
     if not anlage.latitude or not anlage.longitude:
         return None
@@ -73,6 +77,9 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
         return {
             "preis_rang": ergebnis.rang_aktuell,
             "guenstige_stunden_anzahl": ergebnis.guenstige_stunden_anzahl,
+            "guenstige_stunden_tag": ergebnis.guenstige_stunden_tag,
+            "guenstige_stunden_nacht": ergebnis.guenstige_stunden_nacht,
+            "guenstig_schwelle_cent": ergebnis.schwelle_cent,
             "rang_profil": rang_profil,
         }
     except Exception as e:  # Export bleibt für die übrigen Sensoren grün

@@ -20,8 +20,11 @@ from backend.api.deps import get_db
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
+    berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
+    monatsgewichte_aus_pvgis,
 )
+from backend.models.pvgis_prognose import PVGISPrognose
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.utils.sonstige_positionen import berechne_sonstige_netto
@@ -355,7 +358,39 @@ async def calculate_anlage_sensors(
     gesamtverbrauch = kennzahlen.gesamtverbrauch_kwh
     autarkie = kennzahlen.autarkie_prozent
     ev_quote = kennzahlen.eigenverbrauchsquote_prozent
-    spez_ertrag = (pv_erzeugung / anlage.leistung_kwp) if anlage.leistung_kwp else 0
+    # Spezifischer Ertrag — annualisiert über den SoT-Helper, deckungsgleich
+    # mit der Cockpit-Kachel (Rainer-PN 2026-06-11: die alte Roh-Division
+    # Lebenszeit-kWh ÷ heutiges kWp lieferte einen über die Laufzeit
+    # aufkumulierten Wert, ~3× Jahreswert bei 3 Jahren Historie).
+    spez_covered_months = set(pv_by_ym.keys())
+    if not spez_covered_months:
+        # Fallback ohne PV-IMDs (reine Zähler-Setups): Monate mit Legacy-PV>0 —
+        # symmetrisch zum Cockpit-Fallback in cockpit/uebersicht.py.
+        spez_covered_months = {
+            (m.jahr, m.monat) for m in monatsdaten if (m.pv_erzeugung_kwh or 0) > 0
+        }
+    spez_gewichte = None
+    if spez_covered_months:
+        pvgis_res = await db.execute(
+            select(PVGISPrognose)
+            .where(
+                PVGISPrognose.anlage_id == anlage.id,
+                PVGISPrognose.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
+            )
+            .order_by(PVGISPrognose.abgerufen_am.desc())
+            .limit(1)
+        )
+        pvgis = pvgis_res.scalar_one_or_none()
+        spez_gewichte = monatsgewichte_aus_pvgis(
+            pvgis.monatswerte if pvgis else None
+        ) or None
+    spez_ertrag = berechne_spez_ertrag_annualisiert(
+        pv_erzeugung_kwh=pv_erzeugung,
+        covered_months=spez_covered_months,
+        investitionen=investitionen,
+        fallback_kwp=anlage.leistung_kwp or 0.0,
+        monatsgewichte=spez_gewichte,
+    )
 
     # Finanzen (#326) — über den SoT-Helper `berechne_finanz_aggregat`, damit
     # HA-Export dieselbe Netto-Ertrag-Zahl liefert wie Cockpit/Jahresbericht.
@@ -642,9 +677,12 @@ async def calculate_anlage_sensors(
             value = round(ev_quote, 1)
             berechnung = f"{eigenverbrauch:.0f} ÷ {pv_erzeugung:.0f} × 100"
         elif sensor.key == "spezifischer_ertrag_kwh_kwp":
-            value = round(spez_ertrag, 0) if anlage.leistung_kwp else None
-            if anlage.leistung_kwp:
-                berechnung = f"{pv_erzeugung:.0f} ÷ {anlage.leistung_kwp:.1f}"
+            value = round(spez_ertrag, 0) if spez_ertrag else None
+            if value is not None:
+                berechnung = (
+                    f"{pv_erzeugung:.0f} kWh annualisiert "
+                    f"(saisonal gewichtet, wie Cockpit)"
+                )
         elif sensor.key == "netto_ertrag_euro":
             value = round(netto_ertrag, 2)
             berechnung = f"{einspeise_erloes:.2f} + {ev_ersparnis:.2f} + {sonstige_netto_gesamt:.2f} (sonstige)"
@@ -763,10 +801,12 @@ async def calculate_anlage_sensors(
         for sensor in PROGNOSE_SENSOREN:
             value = None
             zusatz: dict = {}
-            if sensor.key == "eedc_prognose_rest_today_kwh":
-                value = prognose["rest_today_kwh"]
+            if sensor.key == "eedc_prognose_heute_kwh":
+                value = prognose["heute_kwh"]
                 if prognose.get("stundenprofil_heute"):
                     zusatz = {"stundenprofil_kwh": prognose["stundenprofil_heute"]}
+            elif sensor.key == "eedc_prognose_rest_today_kwh":
+                value = prognose["rest_today_kwh"]
             elif sensor.key == "eedc_prognose_day_plus_1_kwh":
                 value = prognose["day_plus_1_kwh"]
             elif sensor.key == "eedc_prognose_day_plus_2_kwh":
@@ -791,8 +831,14 @@ async def calculate_anlage_sensors(
                 value = preis["preis_rang"]
                 if preis.get("rang_profil"):
                     zusatz = {"rang_profil": preis["rang_profil"]}
+                if preis.get("guenstig_schwelle_cent") is not None:
+                    zusatz["guenstig_schwelle_cent"] = preis["guenstig_schwelle_cent"]
             elif sensor.key == "eedc_preis_guenstige_stunden_anzahl":
                 value = preis["guenstige_stunden_anzahl"]
+            elif sensor.key == "eedc_preis_guenstige_stunden_tag":
+                value = preis["guenstige_stunden_tag"]
+            elif sensor.key == "eedc_preis_guenstige_stunden_nacht":
+                value = preis["guenstige_stunden_nacht"]
 
             if value is not None:
                 sensor_values.append(SensorValue(

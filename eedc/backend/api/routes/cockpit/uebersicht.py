@@ -19,8 +19,10 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
+    berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
     eauto_effizienz_100km,
+    monatsgewichte_aus_pvgis,
 )
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH,
@@ -451,7 +453,10 @@ async def get_cockpit_uebersicht(
             if (md.pv_erzeugung_kwh or 0) > 0:
                 covered_months.add((md.jahr, md.monat))
 
-    monthly_weight: dict[int, float] = {}
+    # Annualisierung über den SoT-Helper (per-Monat-aktives kWp + saisonale
+    # Gewichtung) — deckungsgleich mit dem HA-Export-Sensor
+    # ([[feedback_aggregator_symmetrie]], Rainer-PN 2026-06-11).
+    monatsgewichte: Optional[dict[int, float]] = None
     if covered_months and anlagenleistung_kwp > 0:
         pvgis_res = await db.execute(
             select(PVGISPrognose)
@@ -460,64 +465,17 @@ async def get_cockpit_uebersicht(
             .limit(1)
         )
         pvgis = pvgis_res.scalar_one_or_none()
-        if pvgis and pvgis.monatswerte:
-            for entry in pvgis.monatswerte:
-                try:
-                    m = int(entry.get("monat"))
-                    e = float(entry.get("e_m") or 0.0)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= m <= 12 and e > 0:
-                    monthly_weight[m] = e
-        if not monthly_weight:
-            # Typische 52°N-Verteilung in % des Jahresertrags
-            monthly_weight = {
-                1: 2.5, 2: 4.5, 3: 8.0, 4: 11.5, 5: 13.0, 6: 13.5,
-                7: 13.5, 8: 12.0, 9: 9.0, 10: 6.5, 11: 3.5, 12: 2.5,
-            }
+        monatsgewichte = monatsgewichte_aus_pvgis(
+            pvgis.monatswerte if pvgis else None
+        ) or None
 
-    # Nenner pro Monat mit der TATSÄCHLICH AKTIVEN PV-Leistung gewichten.
-    # Bug-Symptom "alle Jahre = ~300 kWh/kWp": Anlagen, die über die Jahre
-    # erweitert wurden, hatten den heutigen kWp-Stand × Jahresanzahl als
-    # Nenner. Frühere Jahre mit kleinerer Anlage wurden so künstlich
-    # niedrig gerechnet. Per-Monat-Lookup via ist_aktiv_im_monat liefert
-    # die historisch korrekte Leistung pro Datenpunkt.
-    def _kwp_aktiv_im_monat(jahr: int, monat: int) -> float:
-        kwp = 0.0
-        for inv in investitionen:
-            if inv.typ not in ("pv-module", "balkonkraftwerk"):
-                continue
-            if not inv.ist_aktiv_im_monat(jahr, monat):
-                continue
-            if inv.typ == "pv-module" and inv.leistung_kwp:
-                kwp += inv.leistung_kwp
-            elif inv.typ == "balkonkraftwerk":
-                if inv.leistung_kwp:
-                    kwp += inv.leistung_kwp
-                else:
-                    params = inv.parameter or {}
-                    bkw_anzahl = params.get("anzahl", 1) or 1
-                    kwp += (params.get("leistung_wp", 0) or 0) * bkw_anzahl / 1000
-        return kwp
-
-    weight_sum_year = sum(monthly_weight.values())
-    denom_kwp_jahre = 0.0  # Summe kWp·Jahres-Äquivalente
-    if covered_months and weight_sum_year > 0:
-        for (j, m) in covered_months:
-            w = monthly_weight.get(m, 0.0) / weight_sum_year
-            kwp_m = _kwp_aktiv_im_monat(j, m)
-            if kwp_m <= 0:
-                # Fallback wenn Investitionen ohne Anschaffungsdatum existieren
-                # oder Setup nur Anlagen-Zähler nutzt.
-                kwp_m = anlagenleistung_kwp
-            denom_kwp_jahre += kwp_m * w
-
-    if denom_kwp_jahre > 0 and pv_erzeugung > 0:
-        spez_ertrag = pv_erzeugung / denom_kwp_jahre
-    elif anlagenleistung_kwp > 0:
-        spez_ertrag = pv_erzeugung / anlagenleistung_kwp if pv_erzeugung > 0 else None
-    else:
-        spez_ertrag = None
+    spez_ertrag = berechne_spez_ertrag_annualisiert(
+        pv_erzeugung_kwh=pv_erzeugung,
+        covered_months=covered_months if anlagenleistung_kwp > 0 else set(),
+        investitionen=investitionen,
+        fallback_kwp=anlagenleistung_kwp,
+        monatsgewichte=monatsgewichte,
+    )
 
     # Komponenten-Flags und Berechnungen (nur aktive Investitionen)
     speicher_invs = [i for i in investitionen if i.typ == "speicher" and i.ist_aktiv_an(today)]

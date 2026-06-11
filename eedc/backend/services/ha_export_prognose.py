@@ -1,7 +1,10 @@
 """eedc-eigene PV-Prognose-Werte für den HA-Export (#150 Slice A).
 
 Liefert die Vorausschau-Sensoren für `calculate_anlage_sensors()`:
-  - Rest-Ertrag heute (IST bisher + Σ Rest-Stunden der eedc-Prognose)
+  - Tagesprognose heute, rollend (IST bisher + Σ Rest-Stunden der eedc-Prognose)
+  - Rest-Ertrag heute (NUR Σ Prognose der verbleibenden Stunden — Rainer-PN
+    2026-06-11: der alte „Rest heute" enthielt das IST und war damit faktisch
+    der Tageswert unter irreführendem Namen)
   - Tagesprognose morgen / übermorgen / in 3 Tagen
   - „Speicher voll um" (SoC-Simulation ab AKTUELLEM Speicherstand)
   - das eedc-Stundenprofil heute (als Sensor-Attribut, kein eigenes Topic)
@@ -36,9 +39,11 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
     """Berechnet die eedc-eigenen PV-Prognose-Exportwerte einer Anlage.
 
     Returns:
-        dict mit ``rest_today_kwh``, ``day_plus_1_kwh``, ``day_plus_2_kwh``,
-        ``day_plus_3_kwh``, ``speicher_voll_um`` (str "HH:00" | None) und
-        ``stundenprofil_heute`` (24 kWh-Werte) — oder ``None``.
+        dict mit ``heute_kwh`` (rollender Tageswert = IST bisher + Rest),
+        ``rest_today_kwh`` (nur Σ verbleibende Stunden), ``day_plus_1_kwh``,
+        ``day_plus_2_kwh``, ``day_plus_3_kwh``, ``speicher_voll_um``
+        (str "HH:00" | None) und ``stundenprofil_heute`` (24 kWh-Werte) —
+        oder ``None``.
     """
     if not anlage.latitude or not anlage.longitude:
         return None
@@ -125,7 +130,8 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             for h in range(24)
         ]
 
-        # Rest-Ertrag heute = IST bisher + Σ Prognose-Slots der Reststunden.
+        # Rest = Σ Prognose-Slots der verbleibenden Stunden; rollender
+        # Tageswert „heute" = IST bisher + Rest.
         now = datetime.now(_BERLIN_TZ)
         ist_res = await db.execute(
             select(TagesEnergieProfil).where(
@@ -135,8 +141,8 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         )
         ist_p = ist_profil(ist_res.scalars().all(), jetzt_stunde=now.hour, datum=heute)
         ist_bisher = ist_p.tageswert_kwh or 0.0
-        rest = sum(stunden_kwh_heute[h] for h in range(now.hour + 1, 24))
-        rest_today = round(ist_bisher + rest, 1)
+        rest_today = round(sum(stunden_kwh_heute[h] for h in range(now.hour + 1, 24)), 1)
+        heute_kwh = round(ist_bisher + rest_today, 1)
 
         # „Speicher voll um" — Simulation ab aktuellem SoC (nicht Mitternacht).
         speicher_voll_um = None
@@ -154,6 +160,7 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             speicher_voll_um = sim.speicher_voll_um
 
         return {
+            "heute_kwh": heute_kwh,
             "rest_today_kwh": rest_today,
             "day_plus_1_kwh": _tageswert(1),
             "day_plus_2_kwh": _tageswert(2),
