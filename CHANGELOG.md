@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Anker SOLIX als „getestet" markiert (#328).** Nach dem v3.42.1-Mapping-Fix hat Johnny_1993 am echten Gerät bestätigt, dass Login, Datenabruf und die Werte (PV, Einspeisung, Netzbezug, Batterie) stimmen — der Provider ist nicht mehr als „in Erprobung" gekennzeichnet.
+
 ---
 
 ## [3.42.1] - 2026-06-11 — PDF-Sonstige, Anker-SOLIX-Mapping & Standalone-PDF-Fix

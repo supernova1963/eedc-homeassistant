@@ -1,7 +1,7 @@
 """Tests für den Anker SOLIX Cloud-Import-Provider — ECDH+AES-Login (#328).
 
 Deckt ab:
-- Provider-Metadaten (Felder, Registrierung, getestet=False bis Johnny-Gegentest).
+- Provider-Metadaten (Felder, Registrierung, getestet=True seit Johnny-Gegentest #328).
 - Krypto-Bausteine deterministisch: ECDH-Shared-Secret (P-256), AES-256-CBC-
   Passwort-Verschlüsselung (IV = Secret[:16], PKCS7, Base64), gtoken=MD5(user_id).
 - Login-Payload-Aufbau (enc=0, Public-Key unkomprimiert hex, kein MD5²-Legacy).
@@ -54,8 +54,8 @@ def test_info_metadaten():
     info = AnkerSolixProvider().info()
     assert info.id == "anker_solix"
     assert info.hersteller == "Anker"
-    # Bleibt False, bis Johnnys Gegentest grün ist (#328).
-    assert info.getestet is False
+    # Validiert am echten Gerät (Johnny_1993, #328, 2026-06-11).
+    assert info.getestet is True
 
     by_id = {f.id: f for f in info.credential_fields}
     assert set(by_id) == {"email", "password", "server"}

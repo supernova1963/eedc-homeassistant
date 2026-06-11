@@ -37,7 +37,8 @@ Schema nachvollzogen anhand der Community-Dokumentation von
 https://github.com/thomluther/anker-solix-api (eigene Implementierung).
 
 HINWEIS: Reverse-engineered API, kann bei App-Updates brechen.
-Dieser Provider ist NICHT mit echten Geräten getestet (getestet=False).
+Mit echtem Gerät validiert (Johnny_1993, #328, 2026-06-11: Login + Daten-
+Mapping inkl. Netzbezug/Batterie korrekt) → getestet=True.
 """
 
 import asyncio
@@ -485,7 +486,7 @@ class AnkerSolixProvider(CloudImportProvider):
                     ],
                 ),
             ],
-            getestet=False,
+            getestet=True,
         )
 
     async def test_connection(self, credentials: dict) -> CloudConnectionTestResult:
