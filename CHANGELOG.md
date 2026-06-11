@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Anker SOLIX: robuster bei API-Drosselung (HTTP 429, #328).** Bei längeren Import-Zeiträumen (viele Monate × drei Datenbereiche) drosselt die Anker-Cloud gelegentlich (HTTP 429). Bisher wurde der betroffene Bereich/Monat dann übersprungen — jetzt wartet eedc gestaffelt (30 s, dann 60 s) und versucht es erneut, sodass keine Werte verloren gehen. Bleibt es dauerhaft bei 429, erscheint weiterhin die klare Hinweis-Meldung.
+
 ### Changed
 
 - **Anker SOLIX als „getestet" markiert (#328).** Nach dem v3.42.1-Mapping-Fix hat Johnny_1993 am echten Gerät bestätigt, dass Login, Datenabruf und die Werte (PV, Einspeisung, Netzbezug, Batterie) stimmen — der Provider ist nicht mehr als „in Erprobung" gekennzeichnet.

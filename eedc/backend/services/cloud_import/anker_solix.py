@@ -85,8 +85,14 @@ ANKER_SERVER_PUBLIC_KEY_HEX = (
 
 # Die Anker-Server drosseln wiederholte Aufrufe desselben Endpunkts
 # (Community-Erfahrung: ~10 Requests/Minute pro Endpunkt). Pro Monat machen
-# wir genau 1 energy_analysis-Request und halten dazwischen Abstand.
+# wir DREI energy_analysis-Requests (devTypes solar/home/solarbank) und halten
+# zwischen ALLEN Requests Abstand.
 REQUEST_DELAY_S = 6.0
+
+# Trotz Drosselung kann ein 429 auftreten (lange Zeiträume = viele Requests,
+# Johnny_1993 #328). Statt den Bereich/Monat zu verlieren, warten wir gestaffelt
+# und versuchen es erneut. Werte als Modul-Konstante, damit Tests sie patchen.
+RATE_LIMIT_RETRY_DELAYS_S = (30.0, 60.0)
 
 # Bekannte Anker-API-Fehlercodes → verständliche UI-Meldung.
 # (Cloud-Import-Fehler sind seit v3.31.5 in der UI sichtbar.)
@@ -326,6 +332,9 @@ async def _get_energy_analysis(
     rangeType 'week' akzeptiert beliebige Zeiträume (bis 1 Jahr) und liefert
     eine Tages-Aufschlüsselung in `power` plus *_total-Felder über das
     gesamte (inklusive) Intervall.
+
+    Bei HTTP 429 (Drosselung) wird gestaffelt erneut versucht
+    (RATE_LIMIT_RETRY_DELAYS_S), statt den Bereich zu verlieren.
     """
     payload = {
         "site_id": site_id,
@@ -335,14 +344,25 @@ async def _get_energy_analysis(
         "start_time": start_date,
         "end_time": end_date,
     }
-    resp = await client.post(
-        f"{api_base}{ENERGY_ANALYSIS_PATH}",
-        json=payload,
-        headers=_auth_headers(auth_token, user_id),
-    )
-    return _check_response(
-        resp.status_code, resp.json(), "Energiedaten abrufen fehlgeschlagen"
-    )
+    url = f"{api_base}{ENERGY_ANALYSIS_PATH}"
+    headers = _auth_headers(auth_token, user_id)
+
+    # Erster Versuch + gestaffelte Retries NUR bei 429; andere Fehler sofort
+    # an _check_response (klare Meldung). Bei 429 bis zum letzten Versuch warten.
+    delays = (0.0, *RATE_LIMIT_RETRY_DELAYS_S)
+    for attempt, delay in enumerate(delays):
+        if delay:
+            logger.info(
+                "Anker SOLIX 429 (devType %s) — warte %.0fs und versuche erneut "
+                "(%d/%d)", dev_type, delay, attempt, len(delays) - 1,
+            )
+            await asyncio.sleep(delay)
+        resp = await client.post(url, json=payload, headers=headers)
+        if resp.status_code != 429 or attempt == len(delays) - 1:
+            return _check_response(
+                resp.status_code, resp.json(),
+                "Energiedaten abrufen fehlgeschlagen",
+            )
 
 
 def _safe_float(value) -> Optional[float]:
