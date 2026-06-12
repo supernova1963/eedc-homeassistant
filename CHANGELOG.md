@@ -17,6 +17,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **HA-Export: Günstig-Schwelle pro Anlage einstellbar (rapahl-PN-Folge).** Der Prozentsatz unter dem Tagesdurchschnitt, ab dem eine Stunde als „günstig" gilt, lässt sich jetzt auf der MQTT-Export-Seite je Anlage festlegen (0–50 %, Standard 10 %) — wer z. B. mit Ø×0,925 plant, trägt 7,5 % ein und steuert damit Anzahl der günstigen Stunden und die eigene Ladeverlust-Abwägung selbst. Wirkt auf Börsenpreis-Rang und alle drei Günstige-Stunden-Sensoren; die Lade-/Entlade-Strategie bleibt bewusst beim Nutzer in HA.
 
+### Changed
+
+- **HA-Export: Status-Sensoren wandern in den Diagnose-Bereich (rapahl-PN-Folge).** Die vier Status-Sensoren („Letzter Import — Jahr/Monat/Monatsname" und „Erfasste Monate") werden per MQTT Discovery jetzt als `entity_category: diagnostic` angelegt — sie erscheinen in HA im Diagnose-Bereich des eedc-Geräts statt in der normalen Sensor-Liste und entlasten so die Entitäten-Übersicht. Wirkt nur auf **neu angelegte** Entitäten; bestehende behalten ihre Kategorie (wer umstellen will: Discovery bereinigen und erneut publizieren — oder einfach so lassen).
+
 ---
 
 ## [3.43.0] - 2026-06-11 — HA-Export-Feinschliff, Cloud-Import ohne Timeout & Anker-SOLIX bestätigt

@@ -41,6 +41,7 @@ class SensorDefinition:
     device_class: Optional[str] = None # HA device_class (z.B. "energy", "monetary")
     state_class: Optional[str] = None  # HA state_class (z.B. "total", "measurement")
     enabled_by_default: bool = True    # Standardmäßig aktiviert
+    entity_category: Optional[str] = None  # HA entity_category (z.B. "diagnostic")
 
 
 @dataclass
@@ -352,6 +353,7 @@ LETZTER_IMPORT_SENSOREN = [
         category=SensorCategory.STATUS,
         formel="Jahr des zuletzt erfassten Monats",
         state_class="measurement",
+        entity_category="diagnostic",
     ),
     SensorDefinition(
         key="letzter_import_monat",
@@ -361,6 +363,7 @@ LETZTER_IMPORT_SENSOREN = [
         category=SensorCategory.STATUS,
         formel="Monat des zuletzt erfassten Datensatzes (1-12)",
         state_class="measurement",
+        entity_category="diagnostic",
     ),
     SensorDefinition(
         key="letzter_import_monat_name",
@@ -369,6 +372,7 @@ LETZTER_IMPORT_SENSOREN = [
         icon="mdi:calendar-text",
         category=SensorCategory.STATUS,
         formel="Monatsname (z.B. 'Dezember 2025')",
+        entity_category="diagnostic",
     ),
     SensorDefinition(
         key="anzahl_monate_erfasst",
@@ -378,6 +382,7 @@ LETZTER_IMPORT_SENSOREN = [
         category=SensorCategory.STATUS,
         formel="Anzahl der erfassten Monatsdaten",
         state_class="total",
+        entity_category="diagnostic",
     ),
 ]
 

@@ -164,6 +164,8 @@ class MQTTClient:
             payload["device_class"] = sensor.device_class
         if sensor.state_class:
             payload["state_class"] = sensor.state_class
+        if sensor.entity_category:
+            payload["entity_category"] = sensor.entity_category
 
         # Device-Info für Gruppierung in HA
         payload["device"] = {
