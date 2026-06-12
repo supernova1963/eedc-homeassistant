@@ -9,6 +9,10 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **HA-Export: Günstig-Schwelle pro Anlage einstellbar (rapahl-PN-Folge).** Der Prozentsatz unter dem Tagesdurchschnitt, ab dem eine Stunde als „günstig" gilt, lässt sich jetzt auf der MQTT-Export-Seite je Anlage festlegen (0–50 %, Standard 10 %) — wer z. B. mit Ø×0,925 plant, trägt 7,5 % ein und steuert damit Anzahl der günstigen Stunden und die eigene Ladeverlust-Abwägung selbst. Wirkt auf Börsenpreis-Rang und alle drei Günstige-Stunden-Sensoren; die Lade-/Entlade-Strategie bleibt bewusst beim Nutzer in HA.
+
 ---
 
 ## [3.43.0] - 2026-06-11 — HA-Export-Feinschliff, Cloud-Import ohne Timeout & Anker-SOLIX bestätigt
@@ -19,7 +23,6 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **HA-Export: „PV-Prognose heute" + echter Rest-Wert (rapahl-PN).** Der Sensor „PV-Prognose Rest heute" enthielt das bisherige IST und war damit faktisch der Tageswert unter irreführendem Namen („Rest 67 kWh um 11 Uhr"). Jetzt liefert er nur noch die **Prognose der verbleibenden Stunden** (Steuerungswert: wie viel PV kommt noch), und ein neuer Sensor **„PV-Prognose heute"** zeigt den rollenden Tageswert (IST bisher + Rest — läuft mit dem IST mit, wie seinerzeit besprochen). Das Stundenprofil-Attribut hängt jetzt am Tageswert-Sensor.
 - **HA-Export: „Günstige Stunden" mit echter Preis-Schwelle + Tag/Nacht getrennt (rapahl-PN).** Bisher waren die „günstigen" Stunden rein relativ (die 5 billigsten je Tag-/Nacht-Fenster) — die Anzahl stand damit praktisch konstant auf 10, und der Börsenpreis-Rang markierte Stunden als günstig, in denen erzwungener Verbrauch oder Netzladung keinen Sinn ergibt. Günstig ist jetzt nur, was zusätzlich **mindestens 10 % unter dem Tagesdurchschnitt ohne die 3 Peak-Stunden** liegt (Rainer-Definition). Neue Sensoren **„Günstige Stunden Tag"** und **„Günstige Stunden Nacht"** (je max. 5); die Schwelle reist als Attribut `guenstig_schwelle_cent` am Börsenpreis-Rang mit.
-- **HA-Export: Günstig-Schwelle pro Anlage einstellbar (rapahl-PN-Folge).** Der Prozentsatz unter dem Tagesdurchschnitt, ab dem eine Stunde als „günstig" gilt, lässt sich jetzt auf der MQTT-Export-Seite je Anlage festlegen (0–50 %, Standard 10 %) — wer z. B. mit Ø×0,925 plant, trägt 7,5 % ein und steuert damit Anzahl der günstigen Stunden und die eigene Ladeverlust-Abwägung selbst. Wirkt auf Börsenpreis-Rang und alle drei Günstige-Stunden-Sensoren; die Lade-/Entlade-Strategie bleibt bewusst beim Nutzer in HA.
 
 ### Fixed
 
