@@ -323,6 +323,61 @@ Live-Mappings (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` 
 
 ---
 
+## 11. Export-Sensoren (eedc → HA)
+
+Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Dieser Abschnitt beschreibt die umgekehrte Richtung: berechnete eedc-Werte, die als **HA-Entitäten** bereitgestellt werden — per MQTT Discovery (empfohlen) oder REST. Einrichtung: *Einstellungen → Home Assistant → MQTT-Export* (siehe Handbuch Einstellungen, Kap. 5).
+
+> **Zeithorizont:** Sofern nicht anders angegeben, beziehen sich die Werte auf die **Gesamtlaufzeit** (alle erfassten Monate, jeweils ab Anschaffungsdatum der Komponenten). Der laufende Monat fließt erst nach dem Monatsabschluss ein. Einzige Ausnahme: der **Spezifische Ertrag** ist aufs Jahr normiert (siehe unten).
+
+### Anlage-weite Sensoren
+
+| Sensor | Einheit | Bedeutung |
+|---|---|---|
+| `pv_erzeugung_gesamt_kwh` | kWh | Σ PV-Erzeugung aller erfassten Monate |
+| `direktverbrauch_gesamt_kwh` | kWh | PV direkt verbraucht (ohne Speicherumweg) |
+| `eigenverbrauch_gesamt_kwh` | kWh | Direktverbrauch + Speicher-Entladung + V2H |
+| `einspeisung_gesamt_kwh` / `netzbezug_gesamt_kwh` | kWh | Zählerwerte |
+| `gesamtverbrauch_kwh` | kWh | Eigenverbrauch + Netzbezug |
+| `autarkie_prozent` / `eigenverbrauch_quote_prozent` | % | Quoten über die Gesamtlaufzeit |
+| `spezifischer_ertrag_kwh_kwp` | kWh/kWp | **Aufs Jahr normiert** — siehe Hinweis unten |
+| `netto_ertrag_euro` | € | Einspeiseerlös + EV-Ersparnis + Sonstige Erträge/Ausgaben |
+| `einspeise_erloes_euro` / `eigenverbrauch_ersparnis_euro` | € | Finanz-Bausteine (deckungsgleich mit Cockpit/Berichten) |
+| `co2_ersparnis_kg` | kg | CO₂-Einsparung |
+| `investition_gesamt_euro`, `jahres_ersparnis_euro`, `roi_prozent`, `amortisation_jahre` | €, €/Jahr, %, Jahre | Investitions-KPIs |
+| `speicher_zyklen`, `speicher_effizienz_prozent` | —, % | Speicher-KPIs |
+| `letzter_import_jahr/_monat/_monat_name`, `anzahl_monate_erfasst` | — | Status der Datenbasis |
+
+Zusätzlich erscheinen **pro Investition** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`) — jeweils unter einem eigenen HA-Gerät.
+
+> **Spezifischer Ertrag — warum nicht einfach kWh ÷ kWp?** Der Sensor ist **annualisiert** und damit deckungsgleich mit der Cockpit-Kachel: saisonal gewichtet (PVGIS-Monatsverteilung) und mit der pro Monat tatsächlich aktiven PV-Leistung (Erweiterung/Teil-Rückbau wird korrekt gewichtet). Die naive Division *Gesamterzeugung ÷ heutiges kWp* würde bei 3 Jahren Historie etwa das Dreifache des gewohnten Jahreswerts anzeigen.
+
+### PV-Prognose-Sensoren (`eedc_prognose_*`)
+
+Quelle ist **immer die eedc-eigene Prognose** (OpenMeteo × Korrekturfaktor) — nie Solcast/SFML, denn deren Werte liegen über die jeweilige HA-Integration ohnehin nativ in HA (kein Doppel-Export, keine Drift).
+
+| Sensor | Bedeutung |
+|---|---|
+| `eedc_prognose_heute_kwh` | **Rollender Tageswert**: bisheriges IST + Prognose der verbleibenden Stunden. Läuft im Tagesverlauf mit dem IST mit — abends ≈ tatsächlicher Tagesertrag. Trägt das Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 Werte; Slot N = Energie der Stunde N−1 → N). |
+| `eedc_prognose_rest_today_kwh` | **Echter Rest**: nur die Σ Prognose der verbleibenden Stunden (ohne IST). Der Steuerungswert für Automationen — „wie viel PV kommt heute noch?" |
+| `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Werte ändern sich nur, wenn OpenMeteo einen neuen Modelllauf liefert (alle paar Stunden) — stundenlang unveränderte Werte sind normal. |
+| `eedc_speicher_voll_um` | Uhrzeit, zu der der Speicher voraussichtlich voll ist (Simulation ab **aktuellem** Ladestand). |
+
+### Börsenpreis-Trigger (`eedc_preis_*`)
+
+Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — der variiert je Vertrag/Region, die Kurvenform ist dieselbe). Tag- und Nacht-Fenster werden **solar-basiert getrennt** bewertet (Sonnenauf-/-untergang, wandert saisonal).
+
+**Günstig-Definition (zweistufig):** Eine Stunde gilt als günstig, wenn sie (1) zu den 5 billigsten ihres Fensters gehört **und** (2) ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden. Der Prozentsatz ist je Anlage einstellbar (MQTT-Export-Seite). Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
+
+| Sensor | Bedeutung |
+|---|---|
+| `eedc_preis_rang` | Rang der **aktuellen** Stunde: 1–5 = günstig (1 = billigste ihres Fensters), 99 = teuer/Rest. Attribute: `rang_profil` (alle 24 Stunden) und `guenstig_schwelle_cent` (die heutige Schwelle in ct/kWh). |
+| `eedc_preis_guenstige_stunden_anzahl` | Anzahl günstiger Stunden heute (Tag + Nacht) |
+| `eedc_preis_guenstige_stunden_tag` / `_nacht` | Anzahl je Fenster (max. 5) |
+
+> **Eigene Kriterien:** Wer eine andere Schwelle bevorzugt, stellt den Prozentsatz auf der Export-Seite um — oder rechnet in HA per Template direkt auf den Attributen (`rang_profil`, `guenstig_schwelle_cent`). eedc liefert bewusst nur die **Trigger-Werte**; die Lade-/Entlade-Strategie baut jeder selbst in seinen Automationen.
+
+---
+
 ## Allgemeine Regeln für Sensoren
 
 ### Tagessensoren (Utility Meter)
@@ -350,4 +405,4 @@ Live-Leistungssensoren werden automatisch konvertiert: `kW → W`, `MW → W`. F
 
 ---
 
-*Letzte Aktualisierung: Juni 2026 (v3.36.0)*
+*Letzte Aktualisierung: Juni 2026 (v3.43.x — Export-Sensoren-Referenz ergänzt)*
