@@ -8,7 +8,7 @@ import { Leaf, Download, Sprout } from 'lucide-react'
 import { Card, Button, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
-import { TYP_LABELS } from '../../lib/constants'
+import { TYP_LABELS, CHART_COLORS, MARKER_WARNUNG } from '../../lib'
 import { investitionenApi, type CO2AmortisationResponse } from '../../api/investitionen'
 import { KPICard } from './KPICard'
 import { TabProps, createMonatsZeitreihe } from './types'
@@ -166,7 +166,7 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" kg" tick={{ fontSize: 11 }} />
               <Tooltip content={<ChartTooltip unit="kg CO2" decimals={0} />} />
-              <Bar dataKey="co2_einsparung" name="CO2 eingespart" fill="#10b981" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="co2_einsparung" name="CO2 eingespart" fill={CHART_COLORS.co2Pv} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -188,20 +188,20 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
                 type="monotone"
                 dataKey="kumuliert_co2"
                 name="Kumulierte Einsparung"
-                stroke="#10b981"
-                fill="#10b981"
+                stroke={CHART_COLORS.co2Pv}
+                fill={CHART_COLORS.co2Pv}
                 fillOpacity={0.3}
               />
               {graueLast > 0 && (
                 <ReferenceLine
                   y={graueLast}
-                  stroke="#f59e0b"
+                  stroke={MARKER_WARNUNG.linie}
                   strokeDasharray="6 4"
                   label={{
                     value: `Graue Last ${(graueLast / 1000).toFixed(1)} t`,
                     position: 'insideTopLeft',
                     fontSize: 11,
-                    fill: '#b45309',
+                    fill: MARKER_WARNUNG.text,
                   }}
                 />
               )}

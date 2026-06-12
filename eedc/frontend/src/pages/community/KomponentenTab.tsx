@@ -36,6 +36,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
+import { SERIEN_PALETTE, CHART_ACHSEN, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN } from '../../lib'
 import { communityApi } from '../../api'
 import type {
   CommunityBenchmarkResponse,
@@ -226,9 +227,6 @@ export default function KomponentenTab({ zeitraum, benchmark, benchmarkLoading, 
 // Speicher Deep-Dive
 // =============================================================================
 
-// Farben für Speicherklassen
-const SPEICHER_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
-
 function SpeicherDeepDive({
   benchmark,
   communityStats,
@@ -286,7 +284,7 @@ function SpeicherDeepDive({
         return {
           name: label,
           anzahl: k.anzahl,
-          fill: SPEICHER_COLORS[i % SPEICHER_COLORS.length],
+          fill: SERIEN_PALETTE[i % SERIEN_PALETTE.length],
           avg_zyklen: k.durchschnitt_zyklen ?? 0,
           avg_wirkungsgrad: k.durchschnitt_wirkungsgrad ?? 0,
         }
@@ -382,12 +380,12 @@ function SpeicherDeepDive({
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={vergleichsData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} width={90} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }} width={90} />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
-                  <Bar dataKey="du" name="Du" fill="#22c55e" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="community" name="Community" fill="#9ca3af" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="community" name="Community" fill={CHART_ACHSEN.light.referenz} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -620,12 +618,12 @@ function WaermepumpeDeepDive({
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={regionData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                    <XAxis type="number" domain={[0, 5]} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} horizontal={false} />
+                    <XAxis type="number" domain={[0, 5]} tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }} />
                     <YAxis
                       type="category"
                       dataKey="name"
-                      tick={{ fill: '#6b7280', fontSize: 11 }}
+                      tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
                       width={120}
                     />
                     <Tooltip content={<ChartTooltip formatter={(value) => `JAZ: ${value.toFixed(2)}`} />} />
@@ -633,14 +631,14 @@ function WaermepumpeDeepDive({
                       {regionData.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
-                          fill={entry.region === eigeneRegion ? '#3b82f6' : '#9ca3af'}
+                          fill={entry.region === eigeneRegion ? EIGENE_SERIE_FARBEN.du : CHART_ACHSEN.light.referenz}
                         />
                       ))}
                       <LabelList
                         dataKey="jaz"
                         position="right"
                         formatter={(value: number) => value.toFixed(2)}
-                        style={{ fill: '#374151', fontSize: 11 }}
+                        style={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
                       />
                     </Bar>
                   </BarChart>
@@ -671,9 +669,6 @@ function WaermepumpeDeepDive({
 // E-Auto Deep-Dive
 // =============================================================================
 
-// Farben für E-Auto Nutzungsklassen
-const EAUTO_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444']
-
 function EAutoDeepDive({
   benchmark,
   communityStats,
@@ -702,7 +697,7 @@ function EAutoDeepDive({
         name: k.klasse.charAt(0).toUpperCase() + k.klasse.slice(1), // Capitalize
         beschreibung: k.beschreibung,
         anzahl: k.anzahl,
-        fill: EAUTO_COLORS[i % EAUTO_COLORS.length],
+        fill: SERIEN_PALETTE[i % SERIEN_PALETTE.length],
         avg_pv_anteil: k.durchschnitt_pv_anteil ?? 0,
         avg_verbrauch: k.durchschnitt_verbrauch_100km ?? 0,
       }))
@@ -720,8 +715,8 @@ function EAutoDeepDive({
 
     const pvAnteil = eauto.pv_anteil.wert
     return [
-      { name: 'PV', wert: pvAnteil, fill: '#22c55e' },
-      { name: 'Netz/Extern', wert: 100 - pvAnteil, fill: '#ef4444' },
+      { name: 'PV', wert: pvAnteil, fill: LADEQUELLEN_FARBEN.pv },
+      { name: 'Netz/Extern', wert: 100 - pvAnteil, fill: LADEQUELLEN_FARBEN.netz },
     ]
   }, [eauto])
 
@@ -826,9 +821,9 @@ function EAutoDeepDive({
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={ladequellenData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} width={80} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }} width={80} />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
                   <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
                     {ladequellenData.map((entry, index) => (

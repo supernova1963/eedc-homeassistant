@@ -4,7 +4,7 @@
 
 import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell, XAxis } from 'recharts'
 import { ChartTooltip } from '../../components/ui'
-import { MONAT_KURZ } from '../../lib'
+import { MONAT_KURZ, SOLAR_INTENSITAET } from '../../lib'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
 
 export default function SparklineChart({ monatsdaten, selectedYear }: {
@@ -49,9 +49,9 @@ export default function SparklineChart({ monatsdaten, selectedYear }: {
                 <Cell
                   key={i}
                   fill={
-                    entry.kwh >= max * 0.8 ? '#f59e0b'
-                      : entry.kwh >= max * 0.5 ? '#fbbf24'
-                        : '#fde68a'
+                    entry.kwh >= max * 0.8 ? SOLAR_INTENSITAET[2]
+                      : entry.kwh >= max * 0.5 ? SOLAR_INTENSITAET[1]
+                        : SOLAR_INTENSITAET[0]
                   }
                 />
               ))}

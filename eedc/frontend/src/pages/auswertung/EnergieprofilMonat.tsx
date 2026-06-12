@@ -29,7 +29,7 @@ const METRIK_OPTIONEN: { key: Metrik; label: string; farbe: 'green' | 'red' | 'o
   { key: 'ueberschuss_kw', label: 'Überschuss / Defizit', farbe: 'divergent' },
 ]
 
-import { MONAT_KURZ, MONAT_NAMEN } from '../../lib/constants'
+import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, CHART_ACHSEN, COLORS } from '../../lib'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
 
@@ -75,7 +75,7 @@ function zellenFarbe(
     // -max..0..+max → blau (defizit)..weiss..amber (überschuss)
     const norm = Math.max(-1, Math.min(1, wert / max))
     if (norm >= 0) {
-      // 0..1 → weiss bis amber-500 (#f59e0b)
+      // 0..1 → weiss bis Amber-500
       const a = norm.toFixed(2)
       return `rgba(245, 158, 11, ${a})`
     } else {
@@ -559,13 +559,13 @@ function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | 
     <div style={{ width: '100%', height: 240 }}>
       <ResponsiveContainer>
         <LineChart data={chartDaten} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.3} />
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} strokeOpacity={0.3} />
           <XAxis dataKey="stunde" tick={{ fontSize: 11 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', fontSize: 11 }} />
           <Tooltip content={<ChartTooltip unit="kW" />} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="PV" stroke="#10b981" strokeWidth={2} dot={false} name="PV Ø" />
-          <Line type="monotone" dataKey="Verbrauch" stroke="#ef4444" strokeWidth={2} dot={false} name="Verbrauch Ø" />
+          <Line type="monotone" dataKey="PV" stroke={KATEGORIE_FARBEN.pv} strokeWidth={2} dot={false} name="PV Ø" />
+          <Line type="monotone" dataKey="Verbrauch" stroke={COLORS.consumption} strokeWidth={2} dot={false} name="Verbrauch Ø" />
         </LineChart>
       </ResponsiveContainer>
     </div>

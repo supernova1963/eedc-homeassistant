@@ -13,6 +13,7 @@ import { useSelectedAnlage } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
+import { SOLL_IST_COLORS, CHART_ACHSEN } from '../lib'
 // PrognoseVergleich-Import entfernt: SFML-Vergleichs-Card gelöscht (Prognosequellen-Wahl)
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -333,17 +334,17 @@ export default function PrognoseVsIst() {
                     }
                   />
                   <Legend />
-                  <ReferenceLine yAxisId="right" y={0} stroke="#666" strokeDasharray="3 3" />
-                  <Bar yAxisId="left" dataKey="prognose" fill="#f59e0b" name="PVGIS Prognose" />
-                  <Bar yAxisId="left" dataKey="ist" fill="#22c55e" name="IST-Erzeugung" />
+                  <ReferenceLine yAxisId="right" y={0} stroke={CHART_ACHSEN.light.referenz} strokeDasharray="3 3" />
+                  <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} name="PVGIS Prognose" />
+                  <Bar yAxisId="left" dataKey="ist" fill={SOLL_IST_COLORS.ist} name="IST-Erzeugung" />
                   <Line
                     yAxisId="right"
                     type="monotone"
                     dataKey="abweichungProzent"
-                    stroke="#8b5cf6"
+                    stroke={SOLL_IST_COLORS.abweichung}
                     strokeWidth={2}
                     name="Abweichung %"
-                    dot={{ fill: '#8b5cf6' }}
+                    dot={{ fill: SOLL_IST_COLORS.abweichung }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>

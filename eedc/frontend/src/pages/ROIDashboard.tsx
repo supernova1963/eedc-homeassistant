@@ -37,6 +37,7 @@ import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc, Quelle
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useAktuellerStrompreis } from '../hooks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../api'
+import { TYP_COLORS, GELD_COLORS } from '../lib'
 
 const typIcons: Record<string, React.ElementType> = {
   'e-auto': Car,
@@ -47,17 +48,6 @@ const typIcons: Record<string, React.ElementType> = {
   'pv-module': Sun,
   'balkonkraftwerk': LayoutGrid,
   'sonstiges': Settings2,
-}
-
-const typColors: Record<string, string> = {
-  'e-auto': '#3b82f6',
-  'waermepumpe': '#f97316',
-  'speicher': '#22c55e',
-  'wallbox': '#a855f7',
-  'wechselrichter': '#06b6d4',
-  'pv-module': '#eab308',
-  'balkonkraftwerk': '#14b8a6',
-  'sonstiges': '#6b7280',
 }
 
 const typLabels: Record<string, string> = {
@@ -221,7 +211,7 @@ export default function ROIDashboard() {
       .map(([typ, value]) => ({
         name: typLabels[typ] || typ,
         value: Math.round(value),
-        color: typColors[typ] || '#6b7280',
+        color: TYP_COLORS[typ] || TYP_COLORS['sonstiges'],
       }))
       .filter(d => d.value > 0)
   }, [roiData])
@@ -239,7 +229,7 @@ export default function ROIDashboard() {
       einsparung: b.jahres_einsparung,
       amortisation: b.amortisation_jahre ?? 0,
       typ: b.investition_typ,
-      color: typColors[b.investition_typ] || '#6b7280',
+      color: TYP_COLORS[b.investition_typ] || TYP_COLORS['sonstiges'],
     }))
   }, [roiData])
 
@@ -444,7 +434,7 @@ export default function ROIDashboard() {
                       type="monotone"
                       dataKey="kumulierte_einsparung"
                       name="Kumulierte Einsparung"
-                      stroke="#22c55e"
+                      stroke={GELD_COLORS.ersparnis}
                       strokeWidth={2}
                       dot={false}
                     />
@@ -452,7 +442,7 @@ export default function ROIDashboard() {
                       type="monotone"
                       dataKey="investition"
                       name="Investition"
-                      stroke="#ef4444"
+                      stroke={GELD_COLORS.kosten}
                       strokeWidth={2}
                       strokeDasharray="5 5"
                       dot={false}
@@ -517,8 +507,8 @@ export default function ROIDashboard() {
                     }
                   />} />
                   <Legend />
-                  <Bar dataKey="kosten" fill="#94a3b8" name="Relevante Kosten" />
-                  <Bar dataKey="einsparung" fill="#22c55e" name="Jährliche Einsparung" />
+                  <Bar dataKey="kosten" fill={GELD_COLORS.kosten} name="Relevante Kosten" />
+                  <Bar dataKey="einsparung" fill={GELD_COLORS.ersparnis} name="Jährliche Einsparung" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -584,7 +574,7 @@ export default function ROIDashboard() {
                             )}
                             <Icon
                               className="h-4 w-4 flex-shrink-0"
-                              style={{ color: typColors[b.investition_typ] }}
+                              style={{ color: TYP_COLORS[b.investition_typ] }}
                             />
                             <div>
                               <p className="text-sm font-medium text-gray-900 dark:text-white">

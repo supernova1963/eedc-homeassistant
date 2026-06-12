@@ -74,7 +74,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
       typ,
       label: TYP_LABELS[typ] || typ,
       kosten: invs.reduce((sum, inv) => sum + (inv.anschaffungskosten_gesamt || 0), 0),
-      color: TYP_COLORS[typ] || '#6b7280',
+      color: TYP_COLORS[typ] || TYP_COLORS['sonstiges'],
     })).filter(t => t.kosten > 0).sort((a, b) => b.kosten - a.kosten)
   }, [invByTyp])
 
@@ -413,7 +413,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                         <td className="px-4 py-3 text-sm text-gray-500">
                           <span
                             className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                            style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || '#6b7280'}20`, color: TYP_COLORS[b.investition_typ] || '#6b7280' }}
+                            style={{ backgroundColor: `${TYP_COLORS[b.investition_typ] || TYP_COLORS['sonstiges']}20`, color: TYP_COLORS[b.investition_typ] || TYP_COLORS['sonstiges'] }}
                           >
                             {TYP_LABELS[b.investition_typ] || b.investition_typ}
                           </span>
@@ -475,14 +475,14 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                         >
                           <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 pl-10">
                             <span className="flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: TYP_COLORS[komp.typ] || '#6b7280' }} />
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: TYP_COLORS[komp.typ] || TYP_COLORS['sonstiges'] }} />
                               {komp.bezeichnung}
                             </span>
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-500">
                             <span
                               className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                              style={{ backgroundColor: `${TYP_COLORS[komp.typ] || '#6b7280'}15`, color: TYP_COLORS[komp.typ] || '#6b7280' }}
+                              style={{ backgroundColor: `${TYP_COLORS[komp.typ] || TYP_COLORS['sonstiges']}15`, color: TYP_COLORS[komp.typ] || TYP_COLORS['sonstiges'] }}
                             >
                               {TYP_LABELS[komp.typ] || komp.typ}
                             </span>

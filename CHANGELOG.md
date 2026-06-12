@@ -9,6 +9,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Eine Farbe = eine Bedeutung: app-weite Farb-Vereinheitlichung (Design-Fundament für v4.0.0, Paket P1).** Alle Chart- und Anzeige-Farben kommen jetzt aus einer zentralen Definition (`lib/colors.ts`) statt aus über 360 verstreuten Einzelwerten in 40 Dateien — ein Wächter-Check (`npm run check:design`) verhindert ab sofort neue Streuner. Dabei wurden bewusst sichtbare Inkonsistenzen bereinigt (alle vom Maintainer freigegeben):
+  - **Netzbezug ist überall Dunkelrot** (statt Signal-Rot) — das helle Signal-Rot ist jetzt exklusiv für Kosten, negative Werte und Fehler reserviert. Damit sind Netzbezug-Serie und „Achtung"-Rot erstmals unterscheidbar.
+  - **PV/Solar einheitlich in einem Amber-Ton** — vorher drei verschiedene Gelbtöne je nach Seite (u. a. Live-Ansichten).
+  - **Speicher überall: Ladung = Grün, Entladung = Blau** — inkl. Live-Energiefluss (vorher dort Blau/Cyan).
+  - **Lade-Quellen (E-Auto/Wallbox) überall gleich:** PV = Grün, Netz = Dunkelrot (Netz-Ladung ist Netzbezug), Extern = Orange — vorher drei verschiedene Schemata in Cockpit, Auswertungen und Community.
+  - **„Du/deine Anlage" in Community-Vergleichen überall Blau** (vorher je nach Tab blau, grün oder violett).
+  - Wetter-/Energiefluss-Kategorien, SOLL/IST-Farben, Prognose-Quellen-Farben, Jahresvergleichs- und PV-String-Paletten sind jetzt app-weit identisch.
+- **Intern (Fundament):** Status-Farbachse (OK/Warnung/Kritisch/Info) und Geld-Farblogik zentral definiert; Tailwind-Theme bezieht die Farben direkt aus der Zentrale (kein Drift möglich); KPI-Karten-Farbklassen auf eine Definition zusammengeführt; Komponenten-KPI-Stile als Kanon für alle 7 Komponententypen (+ 3 Sonstiges-Varianten) hinterlegt, Wärmepumpen-/Speicher-Dashboard konsumieren sie.
+
 ---
 
 ## [3.44.0] - 2026-06-12 — Einstellbare Günstig-Schwelle, Mehrtages-Prognose mit Korrekturprofil & Stundenprofile

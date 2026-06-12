@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
+import { CHART_ACHSEN } from '../../lib'
 
 interface TagesverlaufChartProps {
   serien: TagesverlaufSerie[]
@@ -216,7 +217,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           />
 
           {/* Null-Linie (Energiebilanz-Grenze) */}
-          <ReferenceLine yAxisId="left" y={0} stroke="#9ca3af" strokeWidth={1.5} />
+          <ReferenceLine yAxisId="left" y={0} stroke={CHART_ACHSEN.light.referenz} strokeWidth={1.5} />
 
           {/* Dynamische Areas — getrennte Stacks für Quellen und Senken */}
           {renderSerien.map((rs) => {
@@ -269,7 +270,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           <ReferenceLine
             yAxisId="left"
             x={currentHour}
-            stroke="#6b7280"
+            stroke={CHART_ACHSEN.light.referenz}
             strokeDasharray="3 3"
             label={{ value: 'Jetzt', position: 'top', fontSize: 10 }}
           />

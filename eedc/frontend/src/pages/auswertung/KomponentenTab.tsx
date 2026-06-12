@@ -10,6 +10,7 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, monatNamen } from './types'
+import { COLORS, LADEQUELLEN_FARBEN } from '../../lib'
 import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
 
 interface KomponentenTabProps extends Pick<TabProps, 'anlage' | 'strompreis' | 'zeitraumLabel'> {
@@ -325,7 +326,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <Bar yAxisId="left" dataKey="speicher_ladung_kwh" name="Ladung" fill={CHART_COLORS.speicherLadung} />
                   <Bar yAxisId="left" dataKey="speicher_entladung_kwh" name="Entladung" fill={CHART_COLORS.speicherEntladung} />
                   {komponenten.hat_arbitrage && (
-                    <Bar yAxisId="left" dataKey="speicher_arbitrage_kwh" name="Arbitrage (Netz)" fill="#8b5cf6" />
+                    <Bar yAxisId="left" dataKey="speicher_arbitrage_kwh" name="Arbitrage (Netz)" fill={CHART_COLORS.speicherArbitrage} />
                   )}
                   <Line yAxisId="right" type="monotone" dataKey="speicher_effizienz_prozent" name="Effizienz (%)" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={false} />
                 </ComposedChart>
@@ -466,8 +467,8 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <Legend />
                   {(wpSummen.heizung > 0 || wpSummen.warmwasser > 0) ? (
                     <>
-                      <Bar yAxisId="left" dataKey="wp_heizung_kwh" name="Heizung" stackId="waerme" fill="#f87171" />
-                      <Bar yAxisId="left" dataKey="wp_warmwasser_kwh" name="Warmwasser" stackId="waerme" fill="#60a5fa" />
+                      <Bar yAxisId="left" dataKey="wp_heizung_kwh" name="Heizung" stackId="waerme" fill={CHART_COLORS.wpWaerme} />
+                      <Bar yAxisId="left" dataKey="wp_warmwasser_kwh" name="Warmwasser" stackId="waerme" fill={CHART_COLORS.wpWarmwasser} />
                     </>
                   ) : (
                     <Bar yAxisId="left" dataKey="wp_waerme_kwh" name="Wärme" fill={CHART_COLORS.wpWaerme} />
@@ -615,13 +616,13 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       return `${value.toFixed(0)} kWh`
                     }} />} />
                   <Legend />
-                  <Bar yAxisId="left" dataKey="emob_ladung_pv_kwh" name="PV-Ladung" stackId="ladung" fill="#f59e0b" />
-                  <Bar yAxisId="left" dataKey="emob_ladung_netz_kwh" name="Netz-Ladung" stackId="ladung" fill="#ef4444" />
+                  <Bar yAxisId="left" dataKey="emob_ladung_pv_kwh" name="PV-Ladung" stackId="ladung" fill={LADEQUELLEN_FARBEN.pv} />
+                  <Bar yAxisId="left" dataKey="emob_ladung_netz_kwh" name="Netz-Ladung" stackId="ladung" fill={LADEQUELLEN_FARBEN.netz} />
                   {emobSummen.externLadung > 0 && (
-                    <Bar yAxisId="left" dataKey="emob_ladung_extern_kwh" name="Extern" stackId="ladung" fill="#f97316" />
+                    <Bar yAxisId="left" dataKey="emob_ladung_extern_kwh" name="Extern" stackId="ladung" fill={LADEQUELLEN_FARBEN.extern} />
                   )}
                   {komponenten.hat_v2h && (
-                    <Bar yAxisId="left" dataKey="emob_v2h_kwh" name="V2H" fill="#06b6d4" />
+                    <Bar yAxisId="left" dataKey="emob_v2h_kwh" name="V2H" fill={CHART_COLORS.emobV2h} />
                   )}
                   <Line yAxisId="right" type="monotone" dataKey="emob_pv_anteil_prozent" name="PV-Anteil (%)" stroke={CHART_COLORS.emobPvAnteil} strokeWidth={2} dot={false} />
                 </ComposedChart>
@@ -741,12 +742,12 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
                   <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
                   <Legend />
-                  <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill="#f59e0b" />
-                  <Bar dataKey="bkw_eigenverbrauch_kwh" name="Eigenverbrauch" fill="#10b981" />
+                  <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
+                  <Bar dataKey="bkw_eigenverbrauch_kwh" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} />
                   {bkwSummen.speicherLadung > 0 && (
                     <>
-                      <Bar dataKey="bkw_speicher_ladung_kwh" name="Speicher Ladung" fill="#22c55e" />
-                      <Bar dataKey="bkw_speicher_entladung_kwh" name="Speicher Entladung" fill="#3b82f6" />
+                      <Bar dataKey="bkw_speicher_ladung_kwh" name="Speicher Ladung" fill={CHART_COLORS.speicherLadung} />
+                      <Bar dataKey="bkw_speicher_entladung_kwh" name="Speicher Entladung" fill={CHART_COLORS.speicherEntladung} />
                     </>
                   )}
                 </ComposedChart>
@@ -817,10 +818,10 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
                   <Legend />
                   {sonstigesSummen.erzeugung > 0 && (
-                    <Bar dataKey="sonstiges_erzeugung_kwh" name="Erzeugung" fill="#10b981" />
+                    <Bar dataKey="sonstiges_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
                   )}
                   {sonstigesSummen.verbrauch > 0 && (
-                    <Bar dataKey="sonstiges_verbrauch_kwh" name="Verbrauch" fill="#ef4444" />
+                    <Bar dataKey="sonstiges_verbrauch_kwh" name="Verbrauch" fill={COLORS.consumption} />
                   )}
                 </ComposedChart>
               </ResponsiveContainer>

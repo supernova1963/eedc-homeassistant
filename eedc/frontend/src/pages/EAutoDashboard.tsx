@@ -8,7 +8,7 @@ import { Car, Zap, Leaf, TrendingUp, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ } from '../lib'
+import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, CHART_COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { EAutoDashboardResponse } from '../api/investitionen'
 import {
@@ -141,8 +141,8 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
   ].filter(d => d.value > 0)
 
   const kostenVergleichData = [
-    { name: 'E-Auto (Strom)', value: z.strom_kosten_gesamt_euro || 0, fill: '#22c55e' },
-    { name: 'Verbrenner (Benzin)', value: z.benzin_kosten_alternativ_euro || 0, fill: '#ef4444' },
+    { name: 'E-Auto (Strom)', value: z.strom_kosten_gesamt_euro || 0, fill: GELD_COLORS.ersparnis },
+    { name: 'Verbrenner (Benzin)', value: z.benzin_kosten_alternativ_euro || 0, fill: GELD_COLORS.kosten },
   ]
 
   return (
@@ -237,9 +237,9 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
                   dataKey="value"
                   label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                 >
-                  <Cell fill="#22c55e" /> {/* PV: grün */}
-                  <Cell fill="#f97316" /> {/* Netz: orange */}
-                  <Cell fill="#ef4444" /> {/* Extern: rot */}
+                  <Cell fill={LADEQUELLEN_FARBEN.pv} /> {/* PV: grün */}
+                  <Cell fill={LADEQUELLEN_FARBEN.netz} /> {/* Netz: dunkelrot */}
+                  <Cell fill={LADEQUELLEN_FARBEN.extern} /> {/* Extern: orange */}
                 </Pie>
                 <Tooltip content={<ChartTooltip unit="kWh" decimals={1} />} />
               </PieChart>
@@ -251,12 +251,12 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
               PV: {(z.ladung_pv_kwh || 0).toFixed(0)} kWh
             </span>
             <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+              <span className="w-3 h-3 rounded-full bg-red-700"></span>
               Netz: {(z.ladung_netz_kwh || 0).toFixed(0)} kWh
             </span>
             {(z.ladung_extern_kwh || 0) > 0 && (
               <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                <span className="w-3 h-3 rounded-full bg-orange-500"></span>
                 Extern: {(z.ladung_extern_kwh || 0).toFixed(0)} kWh ({(z.ladung_extern_euro || 0).toFixed(2)} €)
               </span>
             )}
@@ -301,7 +301,7 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
                 <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="km" fill="#3b82f6" name="km" />
+                <Bar dataKey="km" fill={CHART_COLORS.emobKm} name="km" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -320,9 +320,9 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
                 <YAxis />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend />
-                <Bar dataKey="pv" stackId="a" fill="#22c55e" name="Heim: PV" />
-                <Bar dataKey="netz" stackId="a" fill="#f97316" name="Heim: Netz" />
-                <Bar dataKey="extern" stackId="a" fill="#ef4444" name="Extern" />
+                <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" />
+                <Bar dataKey="netz" stackId="a" fill={LADEQUELLEN_FARBEN.netz} name="Heim: Netz" />
+                <Bar dataKey="extern" stackId="a" fill={LADEQUELLEN_FARBEN.extern} name="Extern" />
               </BarChart>
             </ResponsiveContainer>
           </div>

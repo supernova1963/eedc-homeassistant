@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
+import { CHART_ACHSEN, EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET } from '../../lib'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, RegionStatistik } from '../../api/community'
 import {
@@ -58,9 +59,9 @@ const BUNDESLAENDER: Record<string, { name: string; kurzname: string }> = {
 
 // Farbinterpolation für Choropleth: hell (wenig Ertrag) → dunkel (viel Ertrag)
 function interpolateColor(value: number, min: number, max: number): string {
-  if (max === min) return '#fbbf24'
+  if (max === min) return SOLAR_INTENSITAET[1]
   const t = Math.max(0, Math.min(1, (value - min) / (max - min)))
-  // Farbverlauf: #dbeafe (hellblau, niedrig) → #fbbf24 (gelb, hoch)
+  // Farbverlauf: Hellblau (niedrig) → Gelb (hoch), als RGB-Stützwerte interpoliert
   const r = Math.round(219 + (251 - 219) * t)
   const g = Math.round(234 + (191 - 234) * t)
   const b = Math.round(254 + (36 - 254) * t)
@@ -111,8 +112,8 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  fill={wert !== undefined ? interpolateColor(wert, min, max) : '#e5e7eb'}
-                  stroke={isOwn ? '#1d4ed8' : '#fff'}
+                  fill={wert !== undefined ? interpolateColor(wert, min, max) : CHART_ACHSEN.light.grid}
+                  stroke={isOwn ? EIGENE_SERIE_FARBEN.duRand : KARTE_FARBEN.grenze}
                   strokeWidth={isOwn ? 2.5 : 0.8}
                   style={{
                     default: { outline: 'none' },
@@ -232,17 +233,17 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
       {
         name: 'Du',
         wert: regionalStats.spezErtrag,
-        fill: 'var(--color-primary-500, #3b82f6)',
+        fill: EIGENE_SERIE_FARBEN.du,
       },
       {
         name: regionalStats.regionName,
         wert: regionalStats.regionDurchschnitt,
-        fill: '#60a5fa',
+        fill: EIGENE_SERIE_FARBEN.region,
       },
       {
         name: 'Community',
         wert: regionalStats.communityDurchschnitt,
-        fill: '#9ca3af',
+        fill: CHART_ACHSEN.light.referenz,
       },
     ]
   }, [regionalStats])
@@ -353,21 +354,21 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={vergleichsData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={true} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} horizontal={true} vertical={false} />
               <XAxis
                 type="number"
-                tick={{ fill: '#6b7280', fontSize: 12 }}
+                tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                 domain={[0, 'auto']}
                 label={{
                   value: 'kWh/kWp',
                   position: 'bottom',
-                  style: { fill: '#6b7280', fontSize: 12 },
+                  style: { fill: CHART_ACHSEN.light.achse, fontSize: 12 },
                 }}
               />
               <YAxis
                 type="category"
                 dataKey="name"
-                tick={{ fill: '#6b7280', fontSize: 12 }}
+                tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                 width={100}
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" />} />

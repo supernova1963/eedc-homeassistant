@@ -7,6 +7,7 @@
 
 import { BarChart, Bar, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
+import { SOLAR_INTENSITAET } from '../../lib'
 
 interface SparklineBarProps {
   /** Chart-Daten mit `name` (Label) und einem numerischen Wert. */
@@ -21,7 +22,7 @@ interface SparklineBarProps {
 
 export default function SparklineBar({
   data,
-  colors = ['#fde68a', '#fbbf24', '#f59e0b'],
+  colors = SOLAR_INTENSITAET as [string, string, string],
   unit = 'kWh',
   height = 80,
 }: SparklineBarProps) {

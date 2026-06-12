@@ -6,6 +6,7 @@ import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
+import { CHART_COLORS, STATUS_COLORS } from '../../lib'
 import {
   ResponsiveContainer,
   BarChart,
@@ -229,7 +230,7 @@ export default function TrendTab({ anlageId }: Props) {
                 {jahresChartData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={entry.kwh === bestesJahr?.gesamt_kwh ? '#10b981' : '#eab308'}
+                    fill={entry.kwh === bestesJahr?.gesamt_kwh ? STATUS_COLORS.ok : CHART_COLORS.erzeugung}
                   />
                 ))}
               </Bar>
@@ -261,7 +262,7 @@ export default function TrendTab({ anlageId }: Props) {
                 type="monotone"
                 dataKey="spez_ertrag"
                 name="Spez. Ertrag"
-                stroke="#3b82f6"
+                stroke={CHART_COLORS.spezErtrag}
                 strokeWidth={2}
                 dot={{ r: 5 }}
               />

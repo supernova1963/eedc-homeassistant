@@ -5,6 +5,7 @@
 
 import Card from './Card'
 import FormelTooltip from './FormelTooltip'
+import { COLOR_CLASSES, type KomponentenColor } from '../../lib/komponentenStyle'
 
 interface KPICardProps {
   title: string
@@ -12,24 +13,13 @@ interface KPICardProps {
   unit?: string
   subtitle?: string
   icon: React.ElementType
-  color?: 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'orange' | 'cyan' | 'gray'
+  color?: KomponentenColor
   trend?: 'up' | 'down'
   // Tooltip für Berechnungsdetails
   formel?: string
   berechnung?: string
   ergebnis?: string
   sicht?: string
-}
-
-const colorClasses = {
-  blue: { icon: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-  green: { icon: 'text-green-500', bg: 'bg-green-50 dark:bg-green-900/20' },
-  yellow: { icon: 'text-yellow-500', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
-  red: { icon: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
-  purple: { icon: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-  orange: { icon: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
-  cyan: { icon: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/20' },
-  gray: { icon: 'text-gray-500', bg: 'bg-gray-50 dark:bg-gray-800' },
 }
 
 export function KPICard({
@@ -45,7 +35,7 @@ export function KPICard({
   ergebnis,
   sicht,
 }: KPICardProps) {
-  const colors = colorClasses[color]
+  const colors = COLOR_CLASSES[color]
 
   const valueContent = (
     <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
@@ -75,7 +65,7 @@ export function KPICard({
           )}
         </div>
         <div className={`p-2 sm:p-3 rounded-xl ${colors.bg} ml-2 sm:ml-3 flex-shrink-0`}>
-          <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.icon}`} />
+          <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.text}`} />
         </div>
       </div>
     </Card>

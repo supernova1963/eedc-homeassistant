@@ -18,9 +18,7 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS } from '../../lib/colors'
-
-const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899']
+import { SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN } from '../../lib'
 
 interface PVAnlageTabProps {
   anlageId: number
@@ -421,7 +419,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
                 <Line
                   type="monotone"
                   dataKey="Gesamt"
-                  stroke="#6b7280"
+                  stroke={KATEGORIE_FARBEN.sonstige}
                   strokeWidth={3}
                   strokeDasharray="5 5"
                   dot={{ r: 4 }}

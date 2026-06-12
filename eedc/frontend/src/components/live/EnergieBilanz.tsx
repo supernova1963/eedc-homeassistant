@@ -8,7 +8,7 @@
 
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets } from 'lucide-react'
 import type { LiveKomponente } from '../../api/liveDashboard'
-import { KATEGORIE_FARBEN } from '../../lib'
+import { KATEGORIE_FARBEN, STATUS_COLORS } from '../../lib'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   sun: Sun,
@@ -33,7 +33,7 @@ function getColor(key: string): string {
   if (COLOR_MAP[prefix]) return COLOR_MAP[prefix]
   // Basis-Kategorie aus erstem Segment (z.B. "waermepumpe_5_heizen" → "waermepumpe")
   const basis = key.split('_')[0]
-  return COLOR_MAP[basis] || '#6b7280'
+  return COLOR_MAP[basis] || KATEGORIE_FARBEN.sonstige
 }
 
 interface EnergieBilanzProps {
@@ -102,7 +102,7 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
                       className="absolute right-0 top-0.5 h-5 rounded-l transition-all duration-500"
                       style={{
                         width: `${erzPct}%`,
-                        backgroundColor: '#22c55e',
+                        backgroundColor: STATUS_COLORS.ok, // grün — Bilanz-positiv (Erzeugung/Quelle)
                         opacity: 0.8,
                       }}
                     />

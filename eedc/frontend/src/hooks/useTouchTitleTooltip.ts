@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { TOOLTIP_FARBEN } from '../lib'
 
 /**
  * Globaler Touch-Support für HTML title=""-Attribute.
@@ -26,7 +27,7 @@ export function useTouchTitleTooltip() {
       Object.assign(tooltip.style, {
         position: 'fixed',
         zIndex: '10000',
-        background: '#1f2937',
+        background: TOOLTIP_FARBEN.bg,
         color: 'white',
         padding: '5px 10px',
         borderRadius: '4px',

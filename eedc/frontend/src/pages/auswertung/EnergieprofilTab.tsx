@@ -12,10 +12,9 @@ import { exportToCSV } from '../../utils/export'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
 import { EnergieprofilMonat } from './EnergieprofilMonat'
 import { EnergieprofilPrognose } from './EnergieprofilPrognose'
-import { DEDIZIERTE_KATEGORIEN } from '../../lib'
-
-// Farben für extra Sonstiges-Serien (Rotation) — hex für Recharts, Tailwind-Klassen für Tabelle
-const EXTRA_FARBEN = ['#8b5cf6', '#06b6d4', '#84cc16', '#f43f5e', '#fb923c', '#a78bfa']
+import {
+  DEDIZIERTE_KATEGORIEN, EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, CHART_ACHSEN, WOCHENTAG_FARBEN,
+} from '../../lib'
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
@@ -33,18 +32,6 @@ const GRUPPEN = [
   { label: 'Sa', tage: [5] },
   { label: 'So', tage: [6] },
 ]
-
-const GRUPPEN_FARBEN: Record<string, string> = {
-  'Mo–Fr': '#3b82f6',
-  'Sa–So': '#f97316',
-  'Mo': '#6366f1',
-  'Di': '#8b5cf6',
-  'Mi': '#ec4899',
-  'Do': '#14b8a6',
-  'Fr': '#84cc16',
-  'Sa': '#f59e0b',
-  'So': '#ef4444',
-}
 
 // Tailwind-Klassen für aktive Wochentag-Buttons (kein inline style)
 const GRUPPEN_BG_CSS: Record<string, string> = {
@@ -150,18 +137,18 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
   interface ChartSerie { dataKey: string; label: string; farbe: string; stackId: 'quellen' | 'senken'; hideLabel?: boolean }
   const chartSerien = useMemo<ChartSerie[]>(() => {
     const r: ChartSerie[] = []
-    r.push({ dataKey: 'pv', label: 'PV', farbe: '#eab308', stackId: 'quellen' })
+    r.push({ dataKey: 'pv', label: 'PV', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
     extraErzeuger.forEach((es, i) =>
-      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_FARBEN[i % EXTRA_FARBEN.length], stackId: 'quellen' }))
-    r.push({ dataKey: 'bat_pos', label: 'Batterie', farbe: '#3b82f6', stackId: 'quellen' })
-    r.push({ dataKey: 'bat_neg', label: 'Batterie ↓', farbe: '#3b82f6', stackId: 'senken', hideLabel: true })
-    r.push({ dataKey: 'netz_pos', label: 'Stromnetz', farbe: '#ef4444', stackId: 'quellen' })
-    r.push({ dataKey: 'netz_neg', label: 'Stromnetz ↓', farbe: '#ef4444', stackId: 'senken', hideLabel: true })
-    r.push({ dataKey: 'hausverbrauch', label: 'Hausverbrauch', farbe: '#10b981', stackId: 'senken' })
-    r.push({ dataKey: 'wp', label: 'Wärmepumpe', farbe: '#f97316', stackId: 'senken' })
-    r.push({ dataKey: 'wb', label: 'Wallbox', farbe: '#a855f7', stackId: 'senken' })
+      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[i % EXTRA_SERIEN_FARBEN.length], stackId: 'quellen' }))
+    r.push({ dataKey: 'bat_pos', label: 'Batterie', farbe: KATEGORIE_FARBEN.batterie, stackId: 'quellen' })
+    r.push({ dataKey: 'bat_neg', label: 'Batterie ↓', farbe: KATEGORIE_FARBEN.batterie, stackId: 'senken', hideLabel: true })
+    r.push({ dataKey: 'netz_pos', label: 'Stromnetz', farbe: KATEGORIE_FARBEN.netz, stackId: 'quellen' })
+    r.push({ dataKey: 'netz_neg', label: 'Stromnetz ↓', farbe: KATEGORIE_FARBEN.netz, stackId: 'senken', hideLabel: true })
+    r.push({ dataKey: 'hausverbrauch', label: 'Hausverbrauch', farbe: KATEGORIE_FARBEN.haushalt, stackId: 'senken' })
+    r.push({ dataKey: 'wp', label: 'Wärmepumpe', farbe: KATEGORIE_FARBEN.waermepumpe, stackId: 'senken' })
+    r.push({ dataKey: 'wb', label: 'Wallbox', farbe: KATEGORIE_FARBEN.wallbox, stackId: 'senken' })
     extraVerbraucher.forEach((es, i) =>
-      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_FARBEN[(extraErzeuger.length + i) % EXTRA_FARBEN.length], stackId: 'senken' }))
+      r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[(extraErzeuger.length + i) % EXTRA_SERIEN_FARBEN.length], stackId: 'senken' }))
     return r
   }, [extraErzeuger, extraVerbraucher])
 
@@ -266,7 +253,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
-              <ReferenceLine y={0} stroke="#9ca3af" strokeWidth={1.5} />
+              <ReferenceLine y={0} stroke={CHART_ACHSEN.light.referenz} strokeWidth={1.5} />
               <Tooltip content={<ChartTooltip
                 unit=" kW" decimals={2}
                 formatter={(v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`}
@@ -293,7 +280,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
               ))}
 
               <Line dataKey="gesamterzeugung" name="gesamterzeugung"
-                stroke="#fbbf24" strokeWidth={2} strokeDasharray="5 3"
+                stroke={COLORS.solar} strokeWidth={2} strokeDasharray="5 3"
                 dot={false} connectNulls legendType="none" />
             </ComposedChart>
           </ResponsiveContainer>
@@ -466,7 +453,7 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
                   key={g.label}
                   dataKey={g.label}
                   name={g.label}
-                  stroke={GRUPPEN_FARBEN[g.label]}
+                  stroke={WOCHENTAG_FARBEN[g.label]}
                   strokeWidth={2}
                   dot={false}
                   connectNulls

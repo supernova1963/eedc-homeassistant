@@ -10,7 +10,7 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { NICHT_ENERGIE_KATEGORIEN } from '../../lib'
+import { CHART_ACHSEN, CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN } from '../../lib'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
 function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; className?: string }) {
@@ -32,11 +32,11 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
 
 // Verbrauchs-Kategorien für gestapeltes Chart
 const VERBRAUCH_KATEGORIEN = [
-  { key: 'haushalt', label: 'Haushalt', farbe: '#ef4444' },
-  { key: 'batterie_ladung', label: 'Speicher-Ladung', farbe: '#8b5cf6' },
-  { key: 'wallbox', label: 'Wallbox', farbe: '#22c55e' },
-  { key: 'waermepumpe', label: 'Wärmepumpe', farbe: '#06b6d4' },
-  { key: 'sonstige', label: 'Sonstige', farbe: '#9ca3af' },
+  { key: 'haushalt', label: 'Haushalt', farbe: KATEGORIE_FARBEN.haushalt },
+  { key: 'batterie_ladung', label: 'Speicher-Ladung', farbe: KATEGORIE_FARBEN.batterie },
+  { key: 'wallbox', label: 'Wallbox', farbe: KATEGORIE_FARBEN.wallbox },
+  { key: 'waermepumpe', label: 'Wärmepumpe', farbe: KATEGORIE_FARBEN.waermepumpe },
+  { key: 'sonstige', label: 'Sonstige', farbe: KATEGORIE_FARBEN.sonstige },
 ] as const
 
 interface WetterWidgetProps {
@@ -457,38 +457,38 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               <defs>
                 {/* PV-Gradienten */}
                 <linearGradient id="pvIstGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#eab308" stopOpacity={0.1} />
+                  <stop offset="5%" stopColor={COLORS.solar} stopOpacity={0.5} />
+                  <stop offset="95%" stopColor={COLORS.solar} stopOpacity={0.1} />
                 </linearGradient>
                 <linearGradient id="pvProgGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#eab308" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#eab308" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor={COLORS.solar} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={COLORS.solar} stopOpacity={0.02} />
                 </linearGradient>
                 {/* Verbrauch-Gradienten pro Kategorie */}
                 <linearGradient id="haushaltGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor={KATEGORIE_FARBEN.haushalt} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={KATEGORIE_FARBEN.haushalt} stopOpacity={0.05} />
                 </linearGradient>
                 <linearGradient id="batterieGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.6} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.2} />
+                  <stop offset="5%" stopColor={KATEGORIE_FARBEN.batterie} stopOpacity={0.6} />
+                  <stop offset="95%" stopColor={KATEGORIE_FARBEN.batterie} stopOpacity={0.2} />
                 </linearGradient>
                 <linearGradient id="wallboxGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor={KATEGORIE_FARBEN.wallbox} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={KATEGORIE_FARBEN.wallbox} stopOpacity={0.05} />
                 </linearGradient>
                 <linearGradient id="wpGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor={KATEGORIE_FARBEN.waermepumpe} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={KATEGORIE_FARBEN.waermepumpe} stopOpacity={0.05} />
                 </linearGradient>
                 <linearGradient id="sonstigeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#9ca3af" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#9ca3af" stopOpacity={0.05} />
+                  <stop offset="5%" stopColor={KATEGORIE_FARBEN.sonstige} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={KATEGORIE_FARBEN.sonstige} stopOpacity={0.05} />
                 </linearGradient>
                 {/* Prognose-Verbrauch */}
                 <linearGradient id="vrbProgGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02} />
+                  <stop offset="5%" stopColor={COLORS.consumption} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={COLORS.consumption} stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -527,39 +527,39 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               {/* Aktuelle Stunde — Trennlinie IST/Prognose */}
               <ReferenceLine
                 x={String(currentHour)}
-                stroke="#6366f1"
+                stroke={CHART_ACHSEN.light.referenz}
                 strokeDasharray="3 3"
                 strokeWidth={1}
-                label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: '#6366f1' }}
+                label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: CHART_ACHSEN.light.referenz }}
               />
               {/* Sonnenaufgang */}
               {wetter.sunrise && (
                 <ReferenceLine
                   x={String(parseInt(wetter.sunrise.split(':')[0]))}
-                  stroke="#f59e0b"
+                  stroke={COLORS.solar}
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
-                  label={{ value: `SA ${wetter.sunrise}`, position: 'insideTopLeft', fontSize: 10, fill: '#f59e0b' }}
+                  label={{ value: `SA ${wetter.sunrise}`, position: 'insideTopLeft', fontSize: 10, fill: COLORS.solar }}
                 />
               )}
               {/* Solar Noon */}
               {wetter.solar_noon && (
                 <ReferenceLine
                   x={String(parseInt(wetter.solar_noon.split(':')[0]))}
-                  stroke="#f97316"
+                  stroke={CHART_COLORS.solarNoon}
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
-                  label={{ value: `Noon ${wetter.solar_noon}`, position: 'insideTopLeft', fontSize: 10, fill: '#f97316' }}
+                  label={{ value: `Noon ${wetter.solar_noon}`, position: 'insideTopLeft', fontSize: 10, fill: CHART_COLORS.solarNoon }}
                 />
               )}
               {/* Sonnenuntergang */}
               {wetter.sunset && (
                 <ReferenceLine
                   x={String(parseInt(wetter.sunset.split(':')[0]))}
-                  stroke="#f59e0b"
+                  stroke={COLORS.solar}
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
-                  label={{ value: `SU ${wetter.sunset}`, position: 'insideTopLeft', fontSize: 10, fill: '#f59e0b' }}
+                  label={{ value: `SU ${wetter.sunset}`, position: 'insideTopLeft', fontSize: 10, fill: COLORS.solar }}
                 />
               )}
 
@@ -568,7 +568,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 <Area
                   type="monotone"
                   dataKey="pv_ist"
-                  stroke="#eab308"
+                  stroke={COLORS.solar}
                   fill="url(#pvIstGrad)"
                   strokeWidth={2}
                   connectNulls={false}
@@ -582,7 +582,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   type="monotone"
                   dataKey="haushalt_ist"
                   stackId="verbrauch"
-                  stroke="#ef4444"
+                  stroke={KATEGORIE_FARBEN.haushalt}
                   fill="url(#haushaltGrad)"
                   strokeWidth={1.5}
                   connectNulls={false}
@@ -594,7 +594,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   type="monotone"
                   dataKey="batterie_ladung_ist"
                   stackId="verbrauch"
-                  stroke="#8b5cf6"
+                  stroke={KATEGORIE_FARBEN.batterie}
                   fill="url(#batterieGrad)"
                   strokeWidth={1.5}
                   connectNulls={false}
@@ -606,7 +606,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   type="monotone"
                   dataKey="wallbox_ist"
                   stackId="verbrauch"
-                  stroke="#22c55e"
+                  stroke={KATEGORIE_FARBEN.wallbox}
                   fill="url(#wallboxGrad)"
                   strokeWidth={1.5}
                   connectNulls={false}
@@ -618,7 +618,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   type="monotone"
                   dataKey="waermepumpe_ist"
                   stackId="verbrauch"
-                  stroke="#06b6d4"
+                  stroke={KATEGORIE_FARBEN.waermepumpe}
                   fill="url(#wpGrad)"
                   strokeWidth={1.5}
                   connectNulls={false}
@@ -630,7 +630,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   type="monotone"
                   dataKey="sonstige_ist"
                   stackId="verbrauch"
-                  stroke="#9ca3af"
+                  stroke={KATEGORIE_FARBEN.sonstige}
                   fill="url(#sonstigeGrad)"
                   strokeWidth={1}
                   connectNulls={false}
@@ -643,7 +643,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 <Area
                   type="monotone"
                   dataKey="pv_prognose"
-                  stroke="#eab308"
+                  stroke={COLORS.solar}
                   fill="url(#pvProgGrad)"
                   strokeWidth={1.5}
                   strokeDasharray="6 3"
@@ -656,7 +656,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 <Area
                   type="monotone"
                   dataKey="verbrauch_prognose"
-                  stroke="#ef4444"
+                  stroke={COLORS.consumption}
                   fill="url(#vrbProgGrad)"
                   strokeWidth={1}
                   strokeDasharray="4 2"
@@ -675,7 +675,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             )}
             {showPv && (
               <span className="flex items-center gap-1">
-                <span className="w-3 h-0.5 bg-yellow-500/40 rounded" style={{ borderTop: '1px dashed #eab308' }} /> PV (Prognose)
+                <span className="w-3 h-0.5 bg-amber-500/40 rounded" style={{ borderTop: `1px dashed ${COLORS.solar}` }} /> PV (Prognose)
               </span>
             )}
             {showVerbrauch && aktiveKategorien.map(k => (
@@ -689,7 +689,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                       ? `Basiert auf ${wetter.profil_tage ?? '?'} Tagen ${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}-History (${wetter.profil_quelle === 'mqtt' ? 'MQTT' : 'HA'})`
                       : 'Standardlastprofil — wird durch individuelles Profil ersetzt sobald History verfügbar'
                     }>
-                <span className="w-3 h-0.5 bg-red-400/40 rounded" style={{ borderTop: '1px dashed #ef4444' }} />
+                <span className="w-3 h-0.5 bg-violet-500/40 rounded" style={{ borderTop: `1px dashed ${COLORS.consumption}` }} />
                 {wetter.profil_typ?.startsWith('individuell')
                   ? `Verbr. (ind., ${wetter.profil_typ === 'individuell_wochenende' ? 'WE' : 'WT'})`
                   : 'Verbr. (BDEW H0)'

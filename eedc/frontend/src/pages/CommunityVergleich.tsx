@@ -53,7 +53,7 @@ const ZEITRAUM_OPTIONS: { value: ZeitraumTyp; label: string }[] = [
   { value: 'seit_installation', label: 'Seit Installation' },
 ]
 
-import { REGION_NAMEN } from '../lib/constants'
+import { REGION_NAMEN, CHART_ACHSEN, TYP_COLORS } from '../lib'
 
 interface CommunityVergleichProps {
   /** Wenn true, wird ohne eigenen Header angezeigt (eingebettet in Auswertung) */
@@ -426,13 +426,13 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
                       ertrag: m.spez_ertrag_kwh_kwp || 0,
                     }))}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} />
-                    <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                    <XAxis dataKey="name" tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }} />
+                    <YAxis tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }} />
                     <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                     <Bar dataKey="ertrag" radius={[4, 4, 0, 0]}>
                       {benchmark.anlage.monatswerte.slice(-12).map((_, index) => (
-                        <Cell key={`cell-${index}`} fill="#f97316" />
+                        <Cell key={`cell-${index}`} fill={TYP_COLORS['pv-system']} />
                       ))}
                     </Bar>
                   </BarChart>

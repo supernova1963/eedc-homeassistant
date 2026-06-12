@@ -54,3 +54,12 @@ export function formatNumber(value: number | null | undefined, decimals = 1): st
   if (value == null) return '—'
   return value.toLocaleString(DE, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
+
+/**
+ * KPI-Wert mit Datenlücken-Token: `—` bei fehlendem/ungültigem Wert (A3).
+ * Heimat seit dem Fundament-Paket hier (vorher `lib/komponentenStyle.ts`).
+ */
+export function fmtKpi(value: number | null | undefined, decimals = 0): string {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return value.toFixed(decimals)
+}

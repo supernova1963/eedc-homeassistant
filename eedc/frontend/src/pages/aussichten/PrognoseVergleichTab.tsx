@@ -26,6 +26,7 @@ import {
   wetterBackfill,
 } from '../../api/korrekturprofil'
 import { KorrekturprofilHeatmapCard } from './KorrekturprofilHeatmapCard'
+import { PROGNOSE_QUELLEN_COLORS, CHART_ACHSEN } from '../../lib'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -670,7 +671,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={visibleChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.dark.grid} opacity={0.3} />
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} tickFormatter={(v) => v.replace(':00', '')} padding={{ left: 8, right: 8 }} />
               <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
               <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
@@ -678,13 +679,13 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                 ist: 'IST', eedc: `eedc${lf != null ? ` (${progBasisLabel} ×${lf.toFixed(2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)'
               }[v] || v)} />
               {data.aktuelle_stunde !== null && (
-                <ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke="#6b7280" strokeDasharray="3 3"
-                  label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: '#9ca3af' }} />
+                <ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke={CHART_ACHSEN.dark.referenz} strokeDasharray="3 3"
+                  label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: CHART_ACHSEN.dark.achse }} />
               )}
-              <Area dataKey="ist" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} />
-              {hasSolcast && <Line dataKey="solcast" stroke="#3b82f6" strokeWidth={2} dot={false} name="solcast" />}
-              {hasEedc && <Line dataKey="eedc" stroke="#f97316" strokeWidth={2} dot={false} name="eedc" />}
-              <Line dataKey="openmeteo" stroke="#eab308" strokeWidth={1.5} strokeDasharray="5 3" dot={false} name="openmeteo" />
+              <Area dataKey="ist" stroke={PROGNOSE_QUELLEN_COLORS.ist} fill={PROGNOSE_QUELLEN_COLORS.ist} fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} />
+              {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} dot={false} name="solcast" />}
+              {hasEedc && <Line dataKey="eedc" stroke={PROGNOSE_QUELLEN_COLORS.eedc} strokeWidth={2} dot={false} name="eedc" />}
+              <Line dataKey="openmeteo" stroke={PROGNOSE_QUELLEN_COLORS.openmeteo} strokeWidth={1.5} strokeDasharray="5 3" dot={false} name="openmeteo" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

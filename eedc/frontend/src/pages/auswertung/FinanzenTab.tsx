@@ -10,6 +10,7 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { KPICard } from './KPICard'
 import { TabProps, COLORS, createMonatsZeitreihe } from './types'
+import { GELD_COLORS } from '../../lib'
 import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
 import type { Strompreis } from '../../types'
 
@@ -239,7 +240,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
               <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
               <Bar dataKey="netzbezug_kosten" name="Netzbezug (negativ)" fill={COLORS.grid} />
               {gesamt.sonderkosten > 0 && (
-                <Bar dataKey="sonderkosten" name="Sonderkosten" fill="#f59e0b" />
+                <Bar dataKey="sonderkosten" name="Sonderkosten" fill={GELD_COLORS.kosten} />
               )}
             </BarChart>
           </ResponsiveContainer>

@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
 import { Card, Alert } from '../../components/ui'
+import { COLORS, CHART_COLORS, CHART_ACHSEN } from '../../lib'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
 
 interface Props {
@@ -203,58 +204,58 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
                     label={{ value: 'SoC', angle: 90, position: 'insideRight', style: { fontSize: 10 } }}
                   />
                 )}
-                <ReferenceLine yAxisId="kw" y={0} stroke="#9ca3af" strokeWidth={1.5} />
+                <ReferenceLine yAxisId="kw" y={0} stroke={CHART_ACHSEN.light.referenz} strokeWidth={1.5} />
                 <Tooltip content={<PrognoseTooltip hatSpeicher={hatSpeicher} />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
 
-                {/* PV-Erzeugung (oben, gelb) */}
+                {/* PV-Erzeugung (oben) */}
                 <Area
                   yAxisId="kw"
                   type="monotone"
                   dataKey="pv"
                   name="PV-Prognose"
-                  fill="#eab308"
-                  stroke="#eab308"
+                  fill={COLORS.solar}
+                  stroke={COLORS.solar}
                   fillOpacity={0.3}
                   strokeWidth={2}
                   isAnimationActive={false}
                 />
 
-                {/* Einspeisung (oben, cyan) */}
+                {/* Einspeisung (oben) */}
                 <Area
                   yAxisId="kw"
                   type="monotone"
                   dataKey="einspeisung"
                   name="Einspeisung"
-                  fill="#06b6d4"
-                  stroke="#06b6d4"
+                  fill={CHART_COLORS.einspeisung}
+                  stroke={CHART_COLORS.einspeisung}
                   fillOpacity={0.2}
                   strokeWidth={1}
                   strokeDasharray="4 2"
                   isAnimationActive={false}
                 />
 
-                {/* Verbrauch (unten, grau-grün) */}
+                {/* Verbrauch (unten) */}
                 <Area
                   yAxisId="kw"
                   type="monotone"
                   dataKey="verbrauch"
                   name="Verbrauch"
-                  fill="#6b7280"
-                  stroke="#6b7280"
+                  fill={COLORS.consumption}
+                  stroke={COLORS.consumption}
                   fillOpacity={0.25}
                   strokeWidth={2}
                   isAnimationActive={false}
                 />
 
-                {/* Netzbezug (unten, rot) */}
+                {/* Netzbezug (unten) */}
                 <Area
                   yAxisId="kw"
                   type="monotone"
                   dataKey="netzbezug"
                   name="Netzbezug"
-                  fill="#ef4444"
-                  stroke="#ef4444"
+                  fill={CHART_COLORS.netzbezug}
+                  stroke={CHART_COLORS.netzbezug}
                   fillOpacity={0.2}
                   strokeWidth={1}
                   strokeDasharray="4 2"
@@ -268,7 +269,7 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
                     type="monotone"
                     dataKey="soc"
                     name="SoC"
-                    stroke="#3b82f6"
+                    stroke={COLORS.battery}
                     strokeWidth={2}
                     dot={false}
                     connectNulls

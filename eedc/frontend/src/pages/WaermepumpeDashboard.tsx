@@ -4,12 +4,12 @@
  */
 
 import { Fragment, useState, useEffect } from 'react'
-import { Flame, Zap, Leaf, TrendingUp, Thermometer, Power, PieChart as PieChartIcon, BarChart3, Calendar, Table, Timer } from 'lucide-react'
+import { Flame, Leaf, TrendingUp, Power, PieChart as PieChartIcon, BarChart3, Calendar, Table, Timer } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, SortableSection, OrderedSections } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useSectionOrder } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, fmtKpi, SAISON_FENSTER } from '../lib'
+import { MONAT_KURZ, fmtKpi, SAISON_FENSTER, WP_KPI, SERIEN_PALETTE, GELD_COLORS, CHART_COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
 import {
@@ -162,7 +162,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
   // Monatsvergleich über Jahre: Jan/Feb/...Dez als Gruppen, je ein Balken pro Jahr
   const [vergleichModus, setVergleichModus] = useState<'jaz' | 'strom'>('strom')
   const vergleichJahre = [...new Set(monatsdaten.map(md => md.jahr))].sort()
-  const vergleichJahreColors = ['#f59e0b', '#22c55e', '#3b82f6', '#ef4444', '#8b5cf6']
+  const vergleichJahreColors = SERIEN_PALETTE
   const vergleichData = Array.from({ length: 12 }, (_, i) => {
     const monat = i + 1
     const entry: Record<string, string | number | null> = { name: MONAT_KURZ[monat] }
@@ -240,8 +240,8 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
   ]
 
   const kostenVergleichData = [
-    { name: 'Wärmepumpe', value: z.wp_kosten_euro, fill: '#22c55e' },
-    { name: 'Gas/Öl', value: z.alte_heizung_kosten_euro, fill: '#ef4444' },
+    { name: 'Wärmepumpe', value: z.wp_kosten_euro, fill: GELD_COLORS.ersparnis },
+    { name: 'Gas/Öl', value: z.alte_heizung_kosten_euro, fill: GELD_COLORS.kosten },
   ]
 
   return (
@@ -264,40 +264,32 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
-          title="JAZ"
+          {...WP_KPI.jaz}
           value={fmtKpi(z.durchschnitt_cop, 2)}
-          icon={Thermometer}
-          color="orange"
           formel="JAZ = Wärme ÷ Strom (Gesamtlaufzeit)"
           berechnung={`${z.gesamt_waerme_kwh.toFixed(0)} kWh ÷ ${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
           ergebnis={z.durchschnitt_cop ? `= ${z.durchschnitt_cop.toFixed(2)}` : '—'}
         />
         <KPICard
-          title="Wärme erzeugt"
+          {...WP_KPI.waerme}
           value={fmtKpi(z.gesamt_waerme_kwh / 1000, 1)}
           unit="MWh"
-          icon={Flame}
-          color="red"
           formel="Wärme = Heizung + Warmwasser"
           berechnung={`${z.gesamt_heizenergie_kwh.toFixed(0)} + ${z.gesamt_warmwasser_kwh.toFixed(0)} kWh`}
           ergebnis={`= ${z.gesamt_waerme_kwh.toFixed(0)} kWh`}
         />
         <KPICard
-          title="Strom verbraucht"
+          {...WP_KPI.strom}
           value={fmtKpi(z.gesamt_stromverbrauch_kwh / 1000, 1)}
           unit="MWh"
-          icon={Zap}
-          color="yellow"
           formel="Σ Stromverbrauch WP"
           berechnung={`${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
           ergebnis={`= ${(z.gesamt_stromverbrauch_kwh / 1000).toFixed(2)} MWh`}
         />
         <KPICard
-          title="Ersparnis vs. Gas"
+          {...WP_KPI.ersparnis}
           value={fmtKpi(z.ersparnis_euro, 0)}
           unit="€"
-          icon={TrendingUp}
-          color="green"
           trend={z.ersparnis_euro > 0 ? 'up' : undefined}
           formel="Ersparnis = Gas/Öl-Kosten − WP-Kosten"
           berechnung={`${z.alte_heizung_kosten_euro.toFixed(0)} € − ${z.wp_kosten_euro.toFixed(0)} €`}
@@ -308,36 +300,32 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       {hatGetrennteStrom && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <KPICard
+            {...WP_KPI.jaz}
             title="JAZ Heizen"
             value={fmtKpi(z.cop_heizen, 2)}
-            icon={Thermometer}
-            color="orange"
             formel="JAZ Heizen = Heizwärme ÷ Strom Heizen"
             berechnung={`${z.gesamt_heizung_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
             ergebnis={z.cop_heizen ? `= ${z.cop_heizen.toFixed(2)}` : '—'}
           />
           <KPICard
+            {...WP_KPI.jaz}
             title="JAZ Warmwasser"
             value={fmtKpi(z.cop_warmwasser, 2)}
-            icon={Thermometer}
-            color="orange"
             formel="JAZ WW = Warmwasser ÷ Strom WW"
             berechnung={`${z.gesamt_warmwasser_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
             ergebnis={(z.cop_warmwasser && z.cop_warmwasser > 0) ? `= ${z.cop_warmwasser.toFixed(2)}` : '—'}
           />
           <KPICard
+            {...WP_KPI.strom}
             title="Strom Heizen"
             value={fmtKpi(z.gesamt_strom_heizen_kwh ? z.gesamt_strom_heizen_kwh / 1000 : null, 1)}
             unit="MWh"
-            icon={Zap}
-            color="yellow"
           />
           <KPICard
+            {...WP_KPI.strom}
             title="Strom Warmwasser"
             value={fmtKpi(z.gesamt_strom_warmwasser_kwh ? z.gesamt_strom_warmwasser_kwh / 1000 : null, 1)}
             unit="MWh"
-            icon={Zap}
-            color="yellow"
           />
         </div>
       )}
@@ -432,8 +420,8 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
                 dataKey="value"
                 label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
               >
-                <Cell fill="#ef4444" />
-                <Cell fill="#3b82f6" />
+                <Cell fill={CHART_COLORS.wpWaerme} />
+                <Cell fill={CHART_COLORS.wpWarmwasser} />
               </Pie>
               <Tooltip content={<ChartTooltip unit="kWh" />} />
             </PieChart>
@@ -497,8 +485,8 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
               <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
               <Tooltip content={<ChartTooltip unit="kWh" />} />
               <Legend />
-              <Area type="monotone" dataKey="heizung" stackId="1" fill="#ef4444" stroke="#dc2626" name="Heizung" />
-              <Area type="monotone" dataKey="warmwasser" stackId="1" fill="#3b82f6" stroke="#2563eb" name="Warmwasser" />
+              <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
+              <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" />
             </AreaChart>
           </ResponsiveContainer>
         </div>

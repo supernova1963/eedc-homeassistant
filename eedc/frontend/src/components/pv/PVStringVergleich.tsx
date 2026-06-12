@@ -16,9 +16,7 @@ import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } fro
 import { Card, LoadingSpinner, Alert } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS } from '../../lib/colors'
-
-const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899']
+import { SOLL_IST_COLORS, STRING_COLORS } from '../../lib'
 
 interface Props {
   anlageId: number

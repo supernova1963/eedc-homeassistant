@@ -4,12 +4,12 @@
  */
 
 import { Fragment, useState, useEffect } from 'react'
-import { Battery, Zap, TrendingUp, Activity, RotateCw, DollarSign } from 'lucide-react'
+import { Battery, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, QuelleBadge, FormelTooltip, fmtCalc } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, fmtKpi, WIRKUNGSGRAD_QUELLE_LABELS } from '../lib'
+import { MONAT_KURZ, fmtKpi, WIRKUNGSGRAD_QUELLE_LABELS, SPEICHER_KPI, CHART_COLORS, COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
 import {
@@ -168,20 +168,17 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
-          title="Vollzyklen"
+          {...SPEICHER_KPI.vollzyklen}
           value={z.vollzyklen.toFixed(0)}
-          icon={RotateCw}
-          color="blue"
           formel="Vollzyklen = Ladung ÷ Kapazität"
           berechnung={`${z.gesamt_ladung_kwh.toFixed(0)} kWh ÷ ${z.kapazitaet_kwh} kWh`}
           ergebnis={`= ${z.vollzyklen.toFixed(1)} Zyklen`}
         />
         <KPICard
-          title="Wirkungsgrad η"
+          {...SPEICHER_KPI.wirkungsgrad}
           value={fmtKpi(istEta != null ? istEta : z.effizienz_prozent, 1)}
           unit="%"
-          icon={Activity}
-          color={etaAlarm ? 'red' : 'cyan'}
+          color={etaAlarm ? 'red' : SPEICHER_KPI.wirkungsgrad.color}
           subtitle={
             istEta != null && etaQuelle
               ? `IST · ${WIRKUNGSGRAD_QUELLE_LABELS[etaQuelle] ?? etaQuelle}`
@@ -200,21 +197,17 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
           }
         />
         <KPICard
-          title="Durchsatz"
+          {...SPEICHER_KPI.durchsatz}
           value={(z.gesamt_entladung_kwh / 1000).toFixed(1)}
           unit="MWh"
-          icon={Zap}
-          color="yellow"
           formel="Durchsatz = Σ Entladung"
           berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh`}
           ergebnis={`= ${(z.gesamt_entladung_kwh / 1000).toFixed(2)} MWh`}
         />
         <KPICard
-          title="Ersparnis"
+          {...SPEICHER_KPI.ersparnis}
           value={z.ersparnis_euro.toFixed(0)}
           unit="€"
-          icon={TrendingUp}
-          color="green"
           trend={z.ersparnis_euro > 0 ? 'up' : undefined}
           formel="Ersparnis = Entladung × (Strompreis − Einspeisevergütung)"
           berechnung={`${z.gesamt_entladung_kwh.toFixed(0)} kWh × Spread`}
@@ -347,13 +340,13 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
                 <Legend />
                 {z.arbitrage_faehig && z.arbitrage_kwh > 0 ? (
                   <>
-                    <Bar dataKey="pvLadung" stackId="ladung" fill="#3b82f6" name="PV-Ladung" />
-                    <Bar dataKey="arbitrage" stackId="ladung" fill="#f59e0b" name="Netz-Ladung" />
+                    <Bar dataKey="pvLadung" stackId="ladung" fill={CHART_COLORS.speicherLadung} name="PV-Ladung" />
+                    <Bar dataKey="arbitrage" stackId="ladung" fill={COLORS.grid} name="Netz-Ladung" />
                   </>
                 ) : (
-                  <Bar dataKey="ladung" fill="#3b82f6" name="Ladung" />
+                  <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
                 )}
-                <Bar dataKey="entladung" fill="#22c55e" name="Entladung" />
+                <Bar dataKey="entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -371,7 +364,7 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis tickFormatter={(v) => v.toFixed(1)} width={40} />
                 <Tooltip content={<ChartTooltip decimals={1} />} />
-                <Area type="monotone" dataKey="zyklen" fill="#8b5cf6" stroke="#7c3aed" name="Zyklen" />
+                <Area type="monotone" dataKey="zyklen" fill={CHART_COLORS.speicherZyklen} stroke={CHART_COLORS.speicherZyklen} name="Zyklen" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -391,7 +384,7 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
               <XAxis dataKey="name" fontSize={10} />
               <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={55} />
               <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
-              <Line type="monotone" dataKey="effizienz" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
+              <Line type="monotone" dataKey="effizienz" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>

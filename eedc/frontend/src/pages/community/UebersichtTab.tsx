@@ -49,8 +49,8 @@ import {
   Legend,
 } from 'recharts'
 
-// Bundesland-Namen
-import { REGION_NAMEN } from '../../lib/constants'
+// Bundesland-Namen + Farb-Zentrale
+import { REGION_NAMEN, CHART_ACHSEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE } from '../../lib'
 
 interface UebersichtTabProps {
   anlageId: number
@@ -573,28 +573,28 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
-                  <PolarGrid stroke="#e5e7eb" />
+                  <PolarGrid stroke={CHART_ACHSEN.light.grid} />
                   <PolarAngleAxis
                     dataKey="kategorie"
-                    tick={{ fill: '#6b7280', fontSize: 11 }}
+                    tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
                   />
                   <PolarRadiusAxis
                     angle={90}
                     domain={[0, 100]}
-                    tick={{ fill: '#9ca3af', fontSize: 10 }}
+                    tick={{ fill: CHART_ACHSEN.light.referenz, fontSize: 10 }}
                   />
                   <Radar
                     name="Du"
                     dataKey="du"
-                    stroke="var(--color-primary-500, #3b82f6)"
-                    fill="var(--color-primary-500, #3b82f6)"
+                    stroke={EIGENE_SERIE_FARBEN.du}
+                    fill={EIGENE_SERIE_FARBEN.du}
                     fillOpacity={0.3}
                   />
                   <Radar
                     name="Community"
                     dataKey="community"
-                    stroke="#f59e0b"
-                    fill="#f59e0b"
+                    stroke={SERIEN_PALETTE[0]}
+                    fill={SERIEN_PALETTE[0]}
                     fillOpacity={0.15}
                   />
                   <Legend />

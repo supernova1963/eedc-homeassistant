@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
-import { KATEGORIE_FARBEN } from '../../lib'
+import { CHART_ACHSEN, CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS } from '../../lib'
 import EnergieFlussBackground from './EnergieFlussBackground'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
@@ -106,7 +106,7 @@ function getColor(key: string): string {
   if (COLOR_MAP[prefix]) return COLOR_MAP[prefix]
   // Dann: Basis-Kategorie aus erstem Segment (z.B. "waermepumpe_5_heizen" → "waermepumpe")
   const basis = key.split('_')[0]
-  return COLOR_MAP[basis] || '#6b7280'
+  return COLOR_MAP[basis] || KATEGORIE_FARBEN.sonstige
 }
 
 /** Netz-Farbe dynamisch nach Flussrichtung: grün=Balance, orange=Einspeisung, rot=Bezug
@@ -116,18 +116,18 @@ function getNetzColor(komp: LiveKomponente, pufferW: number): string {
   const einspeisungKw = komp.verbrauch_kw ?? 0
   const bezugKw = komp.erzeugung_kw ?? 0
   const nettoW = (bezugKw - einspeisungKw) * 1000
-  if (Math.abs(nettoW) <= pufferW) return '#22c55e' // grün — Balance
-  if (nettoW < 0) return '#f59e0b'                    // orange — Einspeisung
-  return '#ef4444'                                     // rot — Netzbezug
+  if (Math.abs(nettoW) <= pufferW) return STATUS_COLORS.ok // grün — Balance
+  if (nettoW < 0) return COLORS.solar                       // amber — Einspeisung (PV-Überschuss)
+  return COLORS.grid                                        // dunkelrot — Netzbezug (F2)
 }
 
 /** Farbe für eine Komponente — Netz dynamisch, Batterie nach Lade-/Entladezustand, Rest statisch */
 function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
   if (komp.key === 'netz') return getNetzColor(komp, netzPufferW)
-  // Batterie/Speicher: Cyan bei Entladung, Blau bei Ladung
+  // Batterie/Speicher: Kanon Ladung=grün / Entladung=blau (Maintainer-entschieden)
   if (komp.key.startsWith('batterie_')) {
     const entlaedt = (komp.erzeugung_kw ?? 0) > (komp.verbrauch_kw ?? 0)
-    return entlaedt ? '#06b6d4' : '#3b82f6'  // cyan = Entladung, blau = Ladung
+    return entlaedt ? CHART_COLORS.speicherEntladung : CHART_COLORS.speicherLadung
   }
   return getColor(komp.key)
 }
@@ -331,9 +331,9 @@ function getSoc(key: string, gauges?: LiveGauge[]): number | null {
 
 /** SoC Farbe: rot < 20%, gelb 20-50%, grün > 50% */
 function socColor(pct: number): string {
-  if (pct < 20) return '#ef4444'
-  if (pct < 50) return '#eab308'
-  return '#22c55e'
+  if (pct < 20) return STATUS_COLORS.kritisch
+  if (pct < 50) return STATUS_COLORS.warnung
+  return STATUS_COLORS.ok
 }
 
 // ─── Component ──────────────────────────────────────────────────────
@@ -486,7 +486,7 @@ export default function EnergieFluss({
               <path
                 d={d}
                 fill="none"
-                stroke={isActive ? color : '#9ca3af'}
+                stroke={isActive ? color : CHART_ACHSEN.light.referenz}
                 strokeWidth={thickness}
                 strokeOpacity={isActive ? 0.2 : 0.08}
                 strokeLinecap="round"
@@ -550,7 +550,7 @@ export default function EnergieFluss({
               <circle
                 cx={CX} cy={CY} r={HAUS_R + 6}
                 fill="none"
-                stroke="#10b981"
+                stroke={KATEGORIE_FARBEN.haushalt}
                 strokeWidth={3}
                 filter="url(#ef-haus-glow)"
                 style={{ animation: 'haus-glow 3s ease-in-out infinite' }}
@@ -558,7 +558,7 @@ export default function EnergieFluss({
               <circle
                 cx={CX} cy={CY} r={HAUS_R + 2}
                 fill="none"
-                stroke="#10b981"
+                stroke={KATEGORIE_FARBEN.haushalt}
                 strokeWidth={1.5}
                 strokeOpacity={0.3}
               />
@@ -569,7 +569,7 @@ export default function EnergieFluss({
             cx={CX} cy={CY} r={HAUS_R}
             className="fill-white dark:fill-gray-800"
             fillOpacity={bgVariant === 'sunset' ? 0.92 : 0.65}
-            stroke="#10b981"
+            stroke={KATEGORIE_FARBEN.haushalt}
             strokeWidth={2}
             strokeOpacity={0.6}
           />
@@ -681,7 +681,7 @@ export default function EnergieFluss({
                 rx={NODE_R}
                 className="fill-white dark:fill-gray-800"
                 fillOpacity={bgVariant === 'sunset' ? 0.92 : 0.6}
-                stroke={isActive ? color : '#9ca3af'}
+                stroke={isActive ? color : CHART_ACHSEN.light.referenz}
                 strokeWidth={isActive ? 1 : 0.5}
                 strokeOpacity={isActive ? 0.7 : 0.3}
                 filter={lite ? undefined : "url(#ef-card-shadow)"}
@@ -706,7 +706,7 @@ export default function EnergieFluss({
                   width={NODE_W - 3}
                   height={(NODE_H - 3) * (auslastungPct / 100)}
                   rx={NODE_R - 1}
-                  fill={auslastungPct >= 80 ? '#f59e0b' : auslastungPct >= 40 ? '#eab308' : '#86efac'}
+                  fill={auslastungPct >= 80 ? SOLAR_INTENSITAET[2] : auslastungPct >= 40 ? SOLAR_INTENSITAET[1] : SOLAR_INTENSITAET[0]}
                   fillOpacity={0.25}
                 />
               )}
@@ -723,7 +723,7 @@ export default function EnergieFluss({
               )}
               {/* Icon */}
               <foreignObject x={node.x - dims.iconSize / 2} y={node.y - NODE_H / 2 + 6} width={dims.iconSize} height={dims.iconSize}>
-                <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : '#9ca3af'} />
+                <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : CHART_ACHSEN.light.referenz} />
               </foreignObject>
 
               {/* kW-Wert */}

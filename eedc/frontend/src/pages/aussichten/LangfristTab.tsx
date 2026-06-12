@@ -6,6 +6,7 @@ import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-rea
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, LangfristPrognose } from '../../api/aussichten'
+import { CHART_COLORS, SOLL_IST_COLORS, CHART_ACHSEN } from '../../lib'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -202,7 +203,7 @@ export default function LangfristTab({ anlageId }: Props) {
                   type="monotone"
                   dataKey="konfidenz"
                   name="Konfidenzband"
-                  fill="#3b82f6"
+                  fill={SOLL_IST_COLORS.soll}
                   fillOpacity={0.1}
                   stroke="none"
                 />
@@ -212,7 +213,7 @@ export default function LangfristTab({ anlageId }: Props) {
               <Bar
                 dataKey="pvgis"
                 name="PVGIS-Prognose"
-                fill="#9ca3af"
+                fill={CHART_ACHSEN.light.referenz}
                 fillOpacity={0.5}
                 radius={[4, 4, 0, 0]}
               />
@@ -221,7 +222,7 @@ export default function LangfristTab({ anlageId }: Props) {
               <Bar
                 dataKey="trend"
                 name="Trend-korrigiert"
-                fill="#eab308"
+                fill={CHART_COLORS.erzeugung}
                 radius={[4, 4, 0, 0]}
               />
             </ComposedChart>

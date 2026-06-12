@@ -42,7 +42,7 @@ import {
   Legend,
 } from 'recharts'
 
-import { MONAT_KURZ, MONAT_NAMEN } from '../../lib/constants'
+import { MONAT_KURZ, MONAT_NAMEN, CHART_ACHSEN, EIGENE_SERIE_FARBEN, TYP_COLORS } from '../../lib'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
 
@@ -238,30 +238,30 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
               <AreaChart data={ertragsverlauf}>
                 <defs>
                   <linearGradient id="colorErtrag" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--color-primary-500, #3b82f6)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="var(--color-primary-500, #3b82f6)" stopOpacity={0} />
+                    <stop offset="5%" stopColor={EIGENE_SERIE_FARBEN.du} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={EIGENE_SERIE_FARBEN.du} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
                   interval={Math.floor(ertragsverlauf.length / 12)}
                 />
                 <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
                     position: 'insideLeft',
-                    style: { fill: '#6b7280', fontSize: 12 },
+                    style: { fill: CHART_ACHSEN.light.achse, fontSize: 12 },
                   }}
                 />
                 <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                 <Area
                   type="monotone"
                   dataKey="ertrag"
-                  stroke="var(--color-primary-500, #3b82f6)"
+                  stroke={EIGENE_SERIE_FARBEN.du}
                   strokeWidth={2}
                   fill="url(#colorErtrag)"
                 />
@@ -394,13 +394,13 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monatlicherDurchschnitt}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
                 />
                 <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                   domain={[0, 'auto']}
                 />
                 <Tooltip
@@ -414,9 +414,9 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 <Line
                   type="monotone"
                   dataKey="durchschnitt"
-                  stroke="var(--color-primary-500, #3b82f6)"
+                  stroke={EIGENE_SERIE_FARBEN.du}
                   strokeWidth={3}
-                  dot={{ fill: 'var(--color-primary-500, #3b82f6)', strokeWidth: 2 }}
+                  dot={{ fill: EIGENE_SERIE_FARBEN.du, strokeWidth: 2 }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>
@@ -447,14 +447,14 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 waermepumpe: communityTrends.trends.waermepumpe_quote[i]?.wert || 0,
                 eauto: communityTrends.trends.eauto_quote[i]?.wert || 0,
               }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
                 <XAxis
                   dataKey="monat"
-                  tick={{ fill: '#6b7280', fontSize: 10 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 10 }}
                   interval={1}
                 />
                 <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                   domain={[0, 100]}
                   unit="%"
                 />
@@ -480,9 +480,9 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                     return labels[value] || value
                   }}
                 />
-                <Line type="monotone" dataKey="speicher" stroke="#22c55e" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="waermepumpe" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="eauto" stroke="#a855f7" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="speicher" stroke={TYP_COLORS['speicher']} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="waermepumpe" stroke={TYP_COLORS['waermepumpe']} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="eauto" stroke={TYP_COLORS['e-auto']} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -506,20 +506,20 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={degradation.nach_alter}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
                 <XAxis
                   dataKey="alter_jahre"
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                  label={{ value: 'Anlagenalter (Jahre)', position: 'bottom', offset: -5, fill: '#6b7280' }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                  label={{ value: 'Anlagenalter (Jahre)', position: 'bottom', offset: -5, fill: CHART_ACHSEN.light.achse }}
                 />
                 <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                   domain={['dataMin - 50', 'dataMax + 50']}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
                     position: 'insideLeft',
-                    style: { fill: '#6b7280' },
+                    style: { fill: CHART_ACHSEN.light.achse },
                   }}
                 />
                 <Tooltip
@@ -536,9 +536,9 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 <Line
                   type="monotone"
                   dataKey="durchschnitt_spez_ertrag"
-                  stroke="#f97316"
+                  stroke={TYP_COLORS['pv-system']}
                   strokeWidth={3}
-                  dot={{ fill: '#f97316', strokeWidth: 2 }}
+                  dot={{ fill: TYP_COLORS['pv-system'], strokeWidth: 2 }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Sunrise, Sunset } from 'lucide-react'
+import { SOLAR_INTENSITAET } from '../../lib'
 
 interface SunProgressBarProps {
   sunrise: string   // "06:12"
@@ -87,7 +88,7 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstun
           className="absolute inset-y-0 left-0 rounded-full"
           style={{
             width: `${pct}%`,
-            background: 'linear-gradient(to right, #fbbf24, #f59e0b, #f97316)',
+            background: `linear-gradient(to right, ${SOLAR_INTENSITAET.join(', ')})`,
           }}
         />
         {/* Solar-Noon-Markierung */}

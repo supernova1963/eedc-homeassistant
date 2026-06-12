@@ -10,6 +10,7 @@ import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
 import { investitionenApi } from '../api'
+import { LADEQUELLEN_FARBEN, GELD_COLORS } from '../lib'
 import type { WallboxDashboardResponse } from '../api/investitionen'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -133,8 +134,8 @@ function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashb
 
   // Kostenvergleich: Was die Heimladung extern gekostet hätte vs. tatsächliche Kosten
   const kostenVergleichData = [
-    { name: 'Heimladung (tatsächlich)', value: z.heim_kosten_euro || 0, fill: '#22c55e' },
-    { name: 'Heimladung (als extern)', value: z.heim_als_extern_kosten_euro || 0, fill: '#ef4444' },
+    { name: 'Heimladung (tatsächlich)', value: z.heim_kosten_euro || 0, fill: GELD_COLORS.ersparnis },
+    { name: 'Heimladung (als extern)', value: z.heim_als_extern_kosten_euro || 0, fill: GELD_COLORS.kosten },
   ]
 
   const leistungKw = z.leistung_kw || 11
@@ -234,9 +235,9 @@ function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashb
                       dataKey="value"
                       label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                     >
-                      <Cell fill="#22c55e" /> {/* PV: grün */}
-                      <Cell fill="#f97316" /> {/* Netz: orange */}
-                      <Cell fill="#ef4444" /> {/* Extern: rot */}
+                      <Cell fill={LADEQUELLEN_FARBEN.pv} /> {/* PV: grün */}
+                      <Cell fill={LADEQUELLEN_FARBEN.netz} /> {/* Netz: dunkelrot */}
+                      <Cell fill={LADEQUELLEN_FARBEN.extern} /> {/* Extern: orange */}
                     </Pie>
                     <Tooltip content={<ChartTooltip unit="kWh" decimals={1} />} />
                   </PieChart>
@@ -249,7 +250,7 @@ function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashb
                 </span>
                 {(z.extern_ladung_kwh || 0) > 0 && (
                   <span className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-red-500" />
+                    <MapPin className="h-4 w-4 text-orange-500" />
                     Extern: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh
                   </span>
                 )}

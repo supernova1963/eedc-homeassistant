@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { MONAT_KURZ } from '../../lib/constants'
+import { MONAT_KURZ, CHART_ACHSEN, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL } from '../../lib'
 import {
   Sun,
   TrendingUp,
@@ -267,22 +267,22 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: '#6b7280', fontSize: 11 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
                   interval={0}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
                 <YAxis
-                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
                     position: 'insideLeft',
-                    style: { fill: '#6b7280', fontSize: 12 },
+                    style: { fill: CHART_ACHSEN.light.achse, fontSize: 12 },
                   }}
                 />
                 <Tooltip
@@ -298,7 +298,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 <Line
                   type="monotone"
                   dataKey="durchschnitt"
-                  stroke="#9ca3af"
+                  stroke={CHART_ACHSEN.light.referenz}
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}
@@ -309,7 +309,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.isPositive ? '#22c55e' : '#ef4444'}
+                      fill={entry.isPositive ? STATUS_COLORS.ok : STATUS_COLORS.kritisch}
                       fillOpacity={0.8}
                     />
                   ))}
@@ -411,15 +411,15 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 isOwn: benchmark.benchmark.spez_ertrag_anlage >= bin.von &&
                        benchmark.benchmark.spez_ertrag_anlage < bin.bis,
               }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
                 <XAxis
                   dataKey="range"
-                  tick={{ fill: '#6b7280', fontSize: 10 }}
+                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 10 }}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
+                <YAxis tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }} />
                 <Tooltip
                   content={<ChartTooltip
                     formatter={(value) => `${value} Anlagen`}
@@ -433,7 +433,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                     return (
                       <Cell
                         key={`cell-${index}`}
-                        fill={isOwn ? '#8b5cf6' : '#d1d5db'}
+                        fill={isOwn ? EIGENE_SERIE_FARBEN.du : SERIE_NEUTRAL}
                         fillOpacity={isOwn ? 1 : 0.7}
                       />
                     )

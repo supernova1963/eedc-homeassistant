@@ -9,7 +9,7 @@ import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ } from '../lib'
+import { MONAT_KURZ, CHART_COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { BalkonkraftwerkDashboardResponse } from '../api/investitionen'
 import {
@@ -129,8 +129,8 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
   }))
 
   const verbrauchPieData = [
-    { name: 'Eigenverbrauch', value: z.gesamt_eigenverbrauch_kwh, fill: '#22c55e' },
-    { name: 'Einspeisung', value: z.gesamt_einspeisung_kwh, fill: '#f59e0b' },
+    { name: 'Eigenverbrauch', value: z.gesamt_eigenverbrauch_kwh, fill: CHART_COLORS.eigenverbrauch },
+    { name: 'Einspeisung', value: z.gesamt_einspeisung_kwh, fill: CHART_COLORS.einspeisung },
   ]
 
   return (
@@ -263,11 +263,11 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
           </div>
           <div className="flex justify-center gap-6 text-sm">
             <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-green-500"></span>
+              <span className="w-3 h-3 rounded-full bg-violet-500"></span>
               Eigenverbrauch: {z.gesamt_eigenverbrauch_kwh.toFixed(0)} kWh
             </span>
             <span className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+              <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
               Einspeisung: {z.gesamt_einspeisung_kwh.toFixed(0)} kWh
             </span>
           </div>
@@ -286,8 +286,8 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
                 <YAxis />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend />
-                <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill="#22c55e" stroke="#16a34a" name="Eigenverbrauch" />
-                <Area type="monotone" dataKey="einspeisung" stackId="1" fill="#f59e0b" stroke="#d97706" name="Einspeisung" />
+                <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
+                <Area type="monotone" dataKey="einspeisung" stackId="1" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} name="Einspeisung" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -334,8 +334,8 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
                   <YAxis />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend />
-                  <Bar dataKey="speicher_ladung" fill="#8b5cf6" name="Ladung" />
-                  <Bar dataKey="speicher_entladung" fill="#a855f7" name="Entladung" />
+                  <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
+                  <Bar dataKey="speicher_entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

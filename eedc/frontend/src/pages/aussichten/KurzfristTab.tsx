@@ -9,6 +9,7 @@ import { Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
+import { CHART_COLORS, SOLAR_INTENSITAET } from '../../lib'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -293,14 +294,14 @@ export default function KurzfristTab({ anlageId }: Props) {
                     dataKey="pv_morgens"
                     name="Vormittag"
                     stackId="pv"
-                    fill="#f59e0b"
+                    fill={SOLAR_INTENSITAET[2]}
                   />
                   <Bar
                     yAxisId="left"
                     dataKey="pv_nachmittags"
                     name="Nachmittag"
                     stackId="pv"
-                    fill="#eab308"
+                    fill={SOLAR_INTENSITAET[1]}
                     radius={[4, 4, 0, 0]}
                   />
                 </>
@@ -309,7 +310,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                   yAxisId="left"
                   dataKey="pv_kwh"
                   name="PV-Prognose"
-                  fill="#eab308"
+                  fill={CHART_COLORS.erzeugung}
                   radius={[4, 4, 0, 0]}
                 />
               )}
@@ -318,7 +319,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                 type="monotone"
                 dataKey="temperatur"
                 name="Temperatur"
-                stroke="#ef4444"
+                stroke={CHART_COLORS.temperatur}
                 strokeWidth={2}
                 dot={{ r: 3 }}
               />

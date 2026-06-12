@@ -2,6 +2,8 @@
  * GaugeChart — SVG-Halbkreis-Gauge für SoC, Netz, Autarkie.
  */
 
+import { AMPEL_SKALA, COLORS } from '../../lib'
+
 interface GaugeChartProps {
   wert: number
   min: number
@@ -14,17 +16,17 @@ interface GaugeChartProps {
 function getGaugeColor(key: string, wert: number, min: number, max: number): string {
   if (key === 'netz') {
     // Netz: grün bei Einspeisung (negativ), rot bei Bezug (positiv)
-    return wert <= 0 ? '#22c55e' : '#ef4444'
+    return wert <= 0 ? AMPEL_SKALA.gut : AMPEL_SKALA.kritisch
   }
   if (key === 'pv-leistung') {
-    // PV-Leistung: gelb (PV-Farbe), bei >100% orange (Überleistung)
-    return wert > 100 ? '#f97316' : '#eab308'
+    // PV-Leistung: Solar-Farbe, bei >100% Ampel-Orange (Überleistung)
+    return wert > 100 ? AMPEL_SKALA.hoch : COLORS.solar
   }
   // SoC / Autarkie: rot < 20%, gelb 20-50%, grün > 50%
   const prozent = max > min ? ((wert - min) / (max - min)) * 100 : 0
-  if (prozent < 20) return '#ef4444'
-  if (prozent < 50) return '#eab308'
-  return '#22c55e'
+  if (prozent < 20) return AMPEL_SKALA.kritisch
+  if (prozent < 50) return AMPEL_SKALA.maessig
+  return AMPEL_SKALA.gut
 }
 
 export default function GaugeChart({ wert, min, max, label, einheit }: GaugeChartProps) {

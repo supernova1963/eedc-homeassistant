@@ -1,4 +1,10 @@
 /** @type {import('tailwindcss').Config} */
+
+// Farb-SoT: src/lib/colors.ts (Regel 0/0a, Style-Guide A2).
+// Tailwind lädt die Config via jiti — der TS-Import funktioniert zur Build-Zeit
+// und macht Drift zwischen Theme und Zentrale baulich unmöglich.
+import { COLORS, STATUS_COLORS } from './src/lib/colors'
+
 export default {
   content: [
     "./index.html",
@@ -23,12 +29,14 @@ export default {
           950: '#052e16',
         },
         energy: {
-          solar: '#fbbf24',    // Gelb für PV
-          grid: '#ef4444',     // Rot für Netzbezug
-          battery: '#3b82f6',  // Blau für Batterie
-          consumption: '#8b5cf6', // Violett für Verbrauch
-          export: '#10b981',   // Grün für Einspeisung
-        }
+          solar: COLORS.solar,          // Gelb für PV (F1 kanonisiert)
+          grid: COLORS.grid,            // Dunkelrot für Netzbezug (F2)
+          battery: COLORS.battery,      // Blau für Batterie
+          consumption: COLORS.consumption, // Violett für Verbrauch
+          export: COLORS.feedin,        // Grün für Einspeisung
+        },
+        // Status-Achse (F3): text-status-ok, bg-status-warnung, …
+        status: STATUS_COLORS,
       },
     },
   },

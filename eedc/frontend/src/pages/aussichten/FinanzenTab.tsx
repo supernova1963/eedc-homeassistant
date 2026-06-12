@@ -6,7 +6,7 @@ import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, F
 import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
-import { INVESTITION_TYP_ORDER } from '../../lib/constants'
+import { INVESTITION_TYP_ORDER, CHART_COLORS } from '../../lib'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -102,8 +102,8 @@ export default function FinanzenTab({ anlageId }: Props) {
 
   // Pie-Chart für Ertrags-Zusammensetzung
   const pieData = [
-    { name: 'EV-Ersparnis', value: prognose.jahres_ev_ersparnis_euro, fill: '#10b981' },
-    { name: 'Einspeise-Erlös', value: prognose.jahres_einspeise_erloes_euro, fill: '#3b82f6' },
+    { name: 'EV-Ersparnis', value: prognose.jahres_ev_ersparnis_euro, fill: CHART_COLORS.evErsparnis },
+    { name: 'Einspeise-Erlös', value: prognose.jahres_einspeise_erloes_euro, fill: CHART_COLORS.einspeiseErloes },
   ]
 
   // Amortisations-Fortschritt (kumuliert)
@@ -296,12 +296,12 @@ export default function FinanzenTab({ anlageId }: Props) {
                     return labels[value] || value
                   }}
                 />
-                <Bar dataKey="einspeise_erloes" stackId="a" fill="#3b82f6" name="einspeise_erloes" />
-                <Bar dataKey="ev_ersparnis" stackId="a" fill="#10b981" name="ev_ersparnis" />
+                <Bar dataKey="einspeise_erloes" stackId="a" fill={CHART_COLORS.einspeiseErloes} name="einspeise_erloes" />
+                <Bar dataKey="ev_ersparnis" stackId="a" fill={CHART_COLORS.evErsparnis} name="ev_ersparnis" />
                 <Line
                   type="monotone"
                   dataKey="netto_ertrag"
-                  stroke="#f59e0b"
+                  stroke={CHART_COLORS.nettoErtrag}
                   strokeWidth={2}
                   dot={{ r: 3 }}
                   name="netto_ertrag"

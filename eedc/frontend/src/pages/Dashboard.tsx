@@ -20,7 +20,7 @@ import {
   Receipt, Share2, Activity, Thermometer, TrendingDown
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Select, fmtCalc } from '../components/ui'
-import { fmtKpi } from '../lib'
+import { fmtKpi, CHART_COLORS } from '../lib'
 import {
   HeroLeiste, EnergyFlowDiagram, RingGaugeCard, SparklineChart,
   AmortisationsBar, CommunityTeaser, CommunityNudge, Section, SectionLink, KPICard,
@@ -223,7 +223,7 @@ export default function Dashboard() {
             title="Autarkie"
             value={data.autarkie_prozent}
             subtitle="Unabhängigkeit"
-            color="#3b82f6"
+            color={CHART_COLORS.autarkie}
             formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} ÷ ${fmtCalc(data.gesamtverbrauch_kwh, 0)} × 100`}
             ergebnis={`= ${fmtCalc(data.autarkie_prozent, 1)} %`}
@@ -232,7 +232,7 @@ export default function Dashboard() {
             title="Eigenverbrauch"
             value={data.eigenverbrauch_quote_prozent}
             subtitle="Selbst genutzte PV"
-            color="#a855f7"
+            color={CHART_COLORS.evQuote}
             formel="Eigenverbrauch ÷ Erzeugung × 100"
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} ÷ ${fmtCalc(data.pv_erzeugung_kwh, 0)} × 100`}
             ergebnis={`= ${fmtCalc(data.eigenverbrauch_quote_prozent, 1)} %`}
