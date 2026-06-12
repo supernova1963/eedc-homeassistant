@@ -1,11 +1,27 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.43.0)
+> **Stand:** Juni 2026 (v3.44.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.44.0 — Einstellbare Günstig-Schwelle, schlauere Mehrtages-Prognose & Stundenprofile (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Dokumente-ZIP funktioniert auch ohne Infothek-Einträge.** Wer alle Berichte fürs ZIP ankreuzte, aber keine Infothek gepflegt hat, bekam einen Fehler — und gar kein ZIP. Jetzt zeigt die Infothek-Dossier-Karte direkt „Keine Einträge vorhanden" und ist gar nicht erst wählbar; die übrigen Berichte laden normal.
+
+### Für HA-Export-Nutzer (Sensoren nach Home Assistant)
+
+- **Günstig-Schwelle selbst festlegen.** Ab wann eine Stunde als „günstig" gilt (Standard: mindestens 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden), stellst du jetzt oben auf der MQTT-Export-Seite je Anlage ein (0–50 %). Damit steuerst du selbst, wie viele günstige Stunden deine Automationen bekommen — z. B. 7,5 % für den verbreiteten Faktor Ø×0,925.
+- **Mehrtages-Prognose nutzt dein gelerntes Korrekturprofil.** „PV-Prognose morgen/übermorgen/Tag+3" (und die Spalte „eedc" im Prognosen-Vergleich) korrigieren OpenMeteo jetzt pro Stunde mit deinem Korrekturprofil — saisonale Verschattung fließt also auch in die Folgetage ein, nicht nur in den Live-Tagesverlauf. Sensor und Prognosen-Vergleich zeigen denselben Wert. Ohne gelerntes Profil ändert sich nichts. Kleiner Hinweis: Die Folgetag-Werte können sich jetzt auch über Nacht ändern, wenn das Korrekturprofil dazulernt — das ist gewollt.
+- **Stundenprofile an allen Prognose-Sensoren.** Auch morgen/übermorgen/Tag+3 tragen jetzt das komplette 24-Stunden-Profil als Attribut — damit lassen sich Lade- und Verbrauchsplanungen für morgen direkt als HA-Template bauen (Beispiel in der [Sensor-Referenz](SENSOR-REFERENZ.md)). Es gilt immer: Sensor-Tageswert = Summe des Stundenprofils.
+- **Status-Sensoren aufgeräumt.** „Letzter Import" und „Erfasste Monate" erscheinen bei neuen Installationen im Diagnose-Bereich des eedc-Geräts statt in der normalen Sensor-Liste (bestehende Entitäten behalten ihren Platz).
+- **Alle Export-Sensoren jetzt in der Hilfe dokumentiert** — neuer Abschnitt „Export-Sensoren (eedc → HA)" in der [Sensor-Referenz](SENSOR-REFERENZ.md) mit Bedeutung, Zeitbezug und den Prognose-/Preis-Details.
 
 ---
 

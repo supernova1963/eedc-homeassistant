@@ -11,6 +11,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [3.44.0] - 2026-06-12 — Einstellbare Günstig-Schwelle, Mehrtages-Prognose mit Korrekturprofil & Stundenprofile
+
+> ✨ **Minor / Feature + Fixes.** Das Abschluss-Release der HA-Export-Runde: Die **Günstig-Schwelle** der Börsenpreis-Sensoren ist pro Anlage einstellbar, die **Mehrtages-Prognose** (morgen/übermorgen/Tag+3) korrigiert OpenMeteo jetzt pro Stunde über die gelernte Korrekturprofil-Kaskade — HA-Export und Prognosen-Vergleich zeigen denselben Wert —, alle vier Prognose-Sensoren tragen ihr **Stundenprofil als Attribut** (Tageswert == Σ Stunden, garantiert), und die Status-Sensoren wandern in den **Diagnose-Bereich**. Dazu: der Dokumente-ZIP scheitert nicht mehr an einer leeren Infothek (Dirk), und die Export-Sensoren sind erstmals vollständig in der Hilfe dokumentiert. 1030 Backend-Tests grün.
+
+### Fixed
+
+- **Dokumente: leere Infothek lässt den ZIP-Download nicht mehr komplett scheitern (Dirk, PV-Forum).** Wer alle Berichte fürs ZIP ankreuzte, aber keine Infothek-Einträge gepflegt hat, bekam einen Komplett-Fehler („Infothek-Dossier: ValueError: Keine Einträge zum Exportieren") — und gar kein ZIP. Jetzt wird die Infothek-Dossier-Karte bei leerer Infothek **deaktiviert angezeigt** (mit Hinweis, wo Einträge gepflegt werden) und ist weder einzeln noch fürs ZIP wählbar — die übrigen Berichte laden normal. Direkte API-Aufrufe erhalten statt des rohen Fehlers eine verständliche Meldung; echte Render-Fehler brechen das ZIP weiterhin bewusst komplett ab (kein halbes ZIP).
+
+### Added
+
+- **HA-Export: Stundenprofil-Attribute auch an „PV-Prognose morgen/übermorgen/Tag+3".** Die drei Folgetag-Sensoren tragen jetzt — wie der Heute-Sensor — das komplette korrigierte Stundenprofil als Attribut `stundenprofil_kwh` (24 kWh-Werte, Slot N = Energie der Stunde N−1 → N). Damit lassen sich Lade-/Verbrauchsplanungen für morgen direkt in HA-Templates bauen (z. B. Vormittags-Summe = `[:13] | sum`); eigene VM/NM-Sensoren gibt es bewusst nicht, das bleibt Template-Sache. Es gilt garantiert: **Sensor-Tageswert == Σ Stundenprofil** (Invarianten-Test).
+- **HA-Export: Günstig-Schwelle pro Anlage einstellbar (rapahl-PN-Folge).** Der Prozentsatz unter dem Tagesdurchschnitt, ab dem eine Stunde als „günstig" gilt, lässt sich jetzt auf der MQTT-Export-Seite je Anlage festlegen (0–50 %, Standard 10 %) — wer z. B. mit Ø×0,925 plant, trägt 7,5 % ein und steuert damit Anzahl der günstigen Stunden und die eigene Ladeverlust-Abwägung selbst. Wirkt auf Börsenpreis-Rang und alle drei Günstige-Stunden-Sensoren; die Lade-/Entlade-Strategie bleibt bewusst beim Nutzer in HA.
+
+### Changed
+
+- **PV-Prognose morgen/übermorgen/Tag+3: Korrekturprofil-Kaskade statt Pauschal-Lernfaktor.** Die Folgetag-Prognosen (HA-Export-Sensoren **und** Spalte „eedc" im Prognosen-Vergleich) korrigieren OpenMeteo jetzt **pro Stunde** über die gelernte Korrekturprofil-Kaskade (Sonnenstand × Wetter → Saison-Stunde → Sonnenstand → Skalar) — wie es der Live-Tagesverlauf seit v3.26 tut — statt mit einem pauschalen Tages-Lernfaktor. Saisonale Verschattung oder systematische Vormittags-Abweichungen fließen damit auch in die Mehrtages-Werte ein. Der Tageswert ist die Σ der korrigierten Stunden; HA-Sensor und Prognosen-Vergleich zeigen **denselben Wert** (Symmetrie-Test). Bei Anlagen ohne gelerntes Profil ändert sich nichts (Lernfaktor-Skalar wie bisher). Hinweis für Beobachter der Day+1/+2-Sensoren: die Werte können sich jetzt zusätzlich zum OpenMeteo-Modelllauf-Takt auch mit dem nächtlichen Korrekturprofil-Update ändern — das ist gewollt.
+- **HA-Export: Status-Sensoren wandern in den Diagnose-Bereich (rapahl-PN-Folge).** Die vier Status-Sensoren („Letzter Import — Jahr/Monat/Monatsname" und „Erfasste Monate") werden per MQTT Discovery jetzt als `entity_category: diagnostic` angelegt — sie erscheinen in HA im Diagnose-Bereich des eedc-Geräts statt in der normalen Sensor-Liste und entlasten so die Entitäten-Übersicht. Wirkt nur auf **neu angelegte** Entitäten; bestehende behalten ihre Kategorie (wer umstellen will: Discovery bereinigen und erneut publizieren — oder einfach so lassen).
+
+---
+
 ## [3.43.0] - 2026-06-11 — HA-Export-Feinschliff, Cloud-Import ohne Timeout & Anker-SOLIX bestätigt
 
 > ✨ **Minor / Feature + Fixes.** Drei Stränge: Der **HA-Export** wird nach rapahls MQTT-Gegencheck präziser (echter Rest-Prognosewert + neuer rollender Tageswert, „Günstige Stunden" mit echter Preis-Schwelle statt konstant 10, spezifischer Ertrag aufs Jahr normiert). Der **Cloud-Import** läuft jetzt als Hintergrund-Job und bricht bei langen Zeiträumen nicht mehr mit „Failed to fetch" ab (alle Provider). Und **Anker SOLIX** ist nach Johnnys Gegentest bestätigt (Netzbezug/Batterie korrekt, robust gegen API-Drosselung, nicht mehr „in Erprobung"). 1017 Backend-Tests grün.

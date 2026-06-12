@@ -817,17 +817,23 @@ Zusätzlich zur automatischen Monatswertberechnung kannst du KPIs exportieren:
 
 **Pfad**: Einstellungen → HA-Export → Sensoren publizieren
 
-| Sensor | Einheit | Beschreibung |
-|--------|---------|--------------|
-| `sensor.eedc_pv_erzeugung` | kWh | Gesamte PV-Erzeugung |
-| `sensor.eedc_eigenverbrauch` | kWh | Selbst verbrauchter PV-Strom |
-| `sensor.eedc_autarkie` | % | Autarkiegrad |
-| `sensor.eedc_eigenverbrauchsquote` | % | EV-Quote |
-| `sensor.eedc_einsparung` | € | Finanzielle Einsparung |
-| `sensor.eedc_co2_einsparung` | kg | Vermiedene Emissionen |
-| `sensor.eedc_jahres_ersparnis_euro` | € | Gesamt-Jahresersparnis inkl. WP-/E-Auto-/BKW-Beiträgen |
-| `sensor.eedc_roi_prozent` | % | Jahres-ROI |
-| `sensor.eedc_amortisation_jahre` | Jahre | Verbleibende Amortisation |
+Die vollständige Liste aller exportierten Sensoren mit Bedeutung und Einheiten steht in der **[Sensor-Referenz, Abschnitt „Export-Sensoren (eedc → HA)"](SENSOR-REFERENZ.md)**. Die wichtigsten Gruppen:
+
+| Gruppe | Beispiele | Zeitbezug |
+|--------|-----------|-----------|
+| Energie & Quoten | PV-Erzeugung, Eigenverbrauch, Autarkie, EV-Quote | Gesamtlaufzeit (erfasste Monate) |
+| Finanzen & Investition | Netto-Ertrag, Jahresersparnis, ROI, Amortisation | Gesamtlaufzeit bzw. annualisiert |
+| Spezifischer Ertrag | kWh/kWp | **aufs Jahr normiert** (wie Cockpit-Kachel) |
+| PV-Prognose | „PV-Prognose heute" (rollender Tageswert), „Rest heute" (nur verbleibende Stunden), morgen/+2/+3, „Speicher voll um" | live, eedc-eigene Prognose |
+| Börsenpreis-Trigger | Börsenpreis-Rang (1–5/99), Günstige Stunden gesamt/Tag/Nacht | live, Day-Ahead-Kurve |
+
+> **Hinweis Gesamtlaufzeit:** Der laufende Monat fließt erst nach dem Monatsabschluss in die Laufzeit-Werte ein — die Jahres-Sicht gehört bewusst in eedc selbst, nicht in die HA-Sensoren.
+
+#### Günstig-Schwelle einstellen
+
+Eine Stunde gilt als „günstig", wenn sie zu den 5 billigsten ihres Tag-/Nacht-Fensters gehört **und** ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesdurchschnitt (ohne die 3 teuersten Stunden) liegt. Der Prozentsatz lässt sich **oben auf der MQTT-Export-Seite je Anlage festlegen** (0–50 %, Standard 10 %) — wer z. B. mit dem verbreiteten Faktor Ø×0,925 plant, trägt 7,5 % ein. Die resultierende Schwelle in ct/kWh hängt als Attribut `guenstig_schwelle_cent` am Börsenpreis-Rang. eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du selbst in deinen HA-Automationen.
+
+> **Zu viele Entitäten?** Nicht benötigte Sensoren kannst du in HA deaktivieren — oder nur von der Aufzeichnung ausnehmen (`recorder:`-`exclude` in der `configuration.yaml`): dann bleiben die aktuellen Werte sichtbar, ohne Historie in der Datenbank.
 
 > **Komponenten-Beiträge in MQTT-Sensoren (v3.19.1):** `jahres_ersparnis_euro`, `roi_prozent` und `amortisation_jahre` rechnen die Alternativkosten-Ersparnisse von Wärmepumpe (vs. Gas/Öl), E-Auto (vs. Benzin) und Balkonkraftwerk mit ein — analog zu Aussichten → Finanzen. Vorher kam bei Anlagen mit WP/E-Auto eine absurd lange Amortisation heraus (z. B. 188,6 Jahre, weil nur PV-Netto-Ertrag gezählt wurde).
 
