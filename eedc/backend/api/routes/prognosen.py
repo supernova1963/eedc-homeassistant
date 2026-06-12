@@ -33,6 +33,7 @@ from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
 from backend.services.solar_forecast_service import fetch_gti_forecast, _solar_noon_hour
+from backend.services.eedc_prognose_service import berechne_eedc_prognose
 from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 from backend.services.pv_orientation import resolve_system_losses
 from backend.services.prognose_adapter import (
@@ -492,14 +493,44 @@ async def get_prognosen_vergleich(
             if tag_idx == 0:
                 openmeteo_stundenprofil = eintraege
 
-    # ── EEDC = OpenMeteo × Lernfaktor (MOS-Kaskade: saisonal → quartal → gesamt) ──
-    # EEDC nutzt immer OpenMeteo als Basis — Solcast/SFML sind eigene Quellen.
+    # ── EEDC = OpenMeteo × Korrekturprofil-Kaskade — gemeinsamer Pfad mit dem
+    # HA-Export #150 (`eedc_prognose_service`): Vergleichs-Spalte „eedc" und
+    # Export-Sensoren zeigen per Konstruktion denselben Tageswert (Tageswert =
+    # Σ korrigierte Stunden-Slots). EEDC nutzt immer OpenMeteo als Basis —
+    # Solcast/SFML sind eigene Quellen. Das Lernfaktor-Detail bleibt als
+    # Anzeige/Diagnose (eedc_lernfaktor*-Felder) UND als Fallback-Pfad.
     lf_result = await _get_lernfaktor_detail(anlage_id, db, quelle="openmeteo")
     lernfaktor = lf_result.faktor
     eedc_stundenprofil = []
     eedc_tagesprofile: list[list[StundenProfilEintrag]] = [[], [], []]
-    _eedc_basis_om = True  # EEDC basiert immer auf OpenMeteo
-    if _eedc_basis_om and lernfaktor is not None:
+    eedc_heute_kwh = None
+    eedc_morgen_kwh = None
+    eedc_uebermorgen_kwh = None
+    eedc_prog = None
+    try:
+        # days=4 wie der HA-Export → identischer OpenMeteo-Solar-Cache-Eintrag.
+        eedc_prog = await berechne_eedc_prognose(db, anlage, days=4, skip_jitter=True)
+    except Exception as e:
+        logger.warning(f"eedc-Kaskaden-Prognose fehlgeschlagen: {e}")
+    if eedc_prog:
+        eedc_tagessummen: list[Optional[float]] = [None, None, None]
+        for tag_idx in range(3):
+            tag = eedc_prog.tage[tag_idx] if tag_idx < len(eedc_prog.tage) else None
+            if tag is None:
+                continue
+            eedc_tagessummen[tag_idx] = tag.tageswert_kwh
+            if tag.profil is not None:
+                eedc_tagesprofile[tag_idx] = [
+                    StundenProfilEintrag(
+                        stunde=h, kw=tag.profil.stundenprofil_export_kwh[h]
+                    )
+                    for h in range(24)
+                ]
+        eedc_stundenprofil = eedc_tagesprofile[0]
+        eedc_heute_kwh, eedc_morgen_kwh, eedc_uebermorgen_kwh = eedc_tagessummen
+    elif lernfaktor is not None:
+        # Fallback (OpenMeteo-Solar-Abruf nicht verfügbar): bisheriger
+        # Skalar-Pfad auf dem GTI-Profil des Vergleichs.
         for s in openmeteo_stundenprofil:
             eedc_stundenprofil.append(StundenProfilEintrag(
                 stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
@@ -509,10 +540,6 @@ async def get_prognosen_vergleich(
                 eedc_tagesprofile[tag_idx].append(StundenProfilEintrag(
                     stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
                 ))
-    eedc_heute_kwh = None
-    eedc_morgen_kwh = None
-    eedc_uebermorgen_kwh = None
-    if _eedc_basis_om and lernfaktor is not None:
         eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh is not None else None
         eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None else None
         eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None else None

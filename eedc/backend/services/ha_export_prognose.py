@@ -7,12 +7,18 @@ Liefert die Vorausschau-Sensoren für `calculate_anlage_sensors()`:
     der Tageswert unter irreführendem Namen)
   - Tagesprognose morgen / übermorgen / in 3 Tagen
   - „Speicher voll um" (SoC-Simulation ab AKTUELLEM Speicherstand)
-  - das eedc-Stundenprofil heute (als Sensor-Attribut, kein eigenes Topic)
+  - die eedc-Stundenprofile heute + Tag+1/2/3 (als Sensor-Attribut, kein
+    eigenes Topic)
+
+Prognose-Basis: ``eedc_prognose_service`` — OpenMeteo-GTI-Stundenprofil ×
+Korrekturprofil-Kaskade pro Stunde (Legacy-Skalar als Fallback), Tageswert =
+Σ korrigierte Stunden-Slots (Invariante: Sensor-State == Σ Attribut-Slots).
+Gleicher Pfad wie die „eedc"-Spalte im Prognosen-Vergleich.
 
 Quellen-Regel (Export-Rahmen): es wird IMMER nur die **eedc-eigene** Prognose
-(OpenMeteo × Lernfaktor) exportiert — nie Solcast/SFML, die liegen via eigene
-HA-Integration schon in HA. Die gewählte Anzeige-Quelle der Anlage ist hier
-deshalb bewusst irrelevant.
+exportiert — nie Solcast/SFML, die liegen via eigene HA-Integration schon in
+HA. Die gewählte Anzeige-Quelle der Anlage ist hier deshalb bewusst
+irrelevant.
 
 Robustheit: fehlende Koordinaten / keine PV / Netzwerkfehler → ``None``; die
 Sensoren entfallen dann lautlos (Export bleibt für die übrigen Sensoren grün).
@@ -42,93 +48,37 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         dict mit ``heute_kwh`` (rollender Tageswert = IST bisher + Rest),
         ``rest_today_kwh`` (nur Σ verbleibende Stunden), ``day_plus_1_kwh``,
         ``day_plus_2_kwh``, ``day_plus_3_kwh``, ``speicher_voll_um``
-        (str "HH:00" | None) und ``stundenprofil_heute`` (24 kWh-Werte) —
-        oder ``None``.
+        (str "HH:00" | None), ``stundenprofil_heute`` und
+        ``stundenprofil_day_plus_1/2/3`` (je 24 kWh-Slots) — oder ``None``.
     """
-    if not anlage.latitude or not anlage.longitude:
-        return None
-
     try:
-        from backend.services.solar_forecast_service import get_solar_prognose
-        from backend.services.pv_orientation import (
-            get_pv_kwp,
-            get_pv_neigung,
-            get_pv_azimut,
-            resolve_system_losses,
-        )
+        from backend.services.eedc_prognose_service import berechne_eedc_prognose
         from backend.services.prognose_adapter import ist_profil
         from backend.services.verbrauch_prognose_service import get_verbrauch_prognose
-        from backend.models.pvgis_prognose import PVGISPrognose
-        from backend.api.routes.live_wetter import _get_lernfaktor
         from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 
         heute = date.today()
 
-        # Aktive PV-/Balkonkraftwerk-Module — kWp + dominante Orientierung
-        # (gleicher Pfad wie die Tagesprognose in energie_profil/views.py).
-        res = await db.execute(
-            select(Investition).where(
-                Investition.anlage_id == anlage.id,
-                Investition.typ.in_(["pv-module", "balkonkraftwerk"]),
-                Investition.aktiv.is_(True),
-            )
-        )
-        invs = [
-            i for i in res.scalars().all()
-            if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
-        ]
-        kwp = sum(get_pv_kwp(i) for i in invs)
-        if kwp <= 0:
-            kwp = anlage.leistung_kwp or 0.0
-        if kwp <= 0:
+        prognose = await berechne_eedc_prognose(db, anlage, days=4)
+        if not prognose:
             return None
-
-        pvgis_res = await db.execute(
-            select(PVGISPrognose).where(
-                PVGISPrognose.anlage_id == anlage.id,
-                PVGISPrognose.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
-            ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
-        )
-        system_losses = resolve_system_losses(pvgis_res.scalar_one_or_none())
-        neigung = get_pv_neigung(invs[0]) if invs else 35
-        azimut = get_pv_azimut(invs[0]) if invs else 0
-
-        # eedc-Basis = OpenMeteo-GTI; Tag 0..3 (heute + 3 Folgetage)
-        prognose = await get_solar_prognose(
-            latitude=anlage.latitude,
-            longitude=anlage.longitude,
-            kwp=kwp,
-            neigung=neigung,
-            ausrichtung=azimut,
-            days=4,
-            system_losses=system_losses,
-        )
-        if not prognose or not prognose.tageswerte:
-            return None
-
-        # eedc = OpenMeteo × Lernfaktor (MOS-Kaskade). Kein Lernfaktor → 1.0.
-        lernfaktor = await _get_lernfaktor(anlage.id, db) or 1.0
-        by_datum = {t.datum: t for t in prognose.tageswerte}
 
         def _tageswert(offset: int) -> Optional[float]:
-            tag = by_datum.get((heute + timedelta(days=offset)).isoformat())
-            if not tag or tag.pv_ertrag_kwh is None:
-                return None
-            return round(tag.pv_ertrag_kwh * lernfaktor, 1)
+            tag = prognose.tage[offset] if offset < len(prognose.tage) else None
+            return tag.tageswert_kwh if tag else None
 
-        heute_tag = by_datum.get(heute.isoformat())
-        stunden_kwh_heute = [
-            round(
-                (
-                    heute_tag.stunden_kw[h]
-                    if heute_tag and heute_tag.stunden_kw and h < len(heute_tag.stunden_kw)
-                    else 0.0
-                )
-                * lernfaktor,
-                3,
-            )
-            for h in range(24)
-        ]
+        def _stundenprofil(offset: int) -> Optional[list]:
+            tag = prognose.tage[offset] if offset < len(prognose.tage) else None
+            if tag is None or tag.profil is None:
+                return None
+            return list(tag.profil.stundenprofil_export_kwh)
+
+        heute_tag = prognose.tage[0] if prognose.tage else None
+        stunden_kwh_heute = (
+            list(heute_tag.profil.stunden_kwh)
+            if heute_tag and heute_tag.profil
+            else [0.0] * 24
+        )
 
         # Rest = Σ Prognose-Slots der verbleibenden Stunden; rollender
         # Tageswert „heute" = IST bisher + Rest.
@@ -167,6 +117,9 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             "day_plus_3_kwh": _tageswert(3),
             "speicher_voll_um": speicher_voll_um,
             "stundenprofil_heute": [round(v, 2) for v in stunden_kwh_heute],
+            "stundenprofil_day_plus_1": _stundenprofil(1),
+            "stundenprofil_day_plus_2": _stundenprofil(2),
+            "stundenprofil_day_plus_3": _stundenprofil(3),
         }
     except Exception as e:  # Export bleibt für die übrigen Sensoren grün
         logger.warning(

@@ -49,12 +49,14 @@ def test_speicher_start_stunde_ueberspringt_vergangenheit():
 # ── Verdrahtung: calculate_anlage_sensors mit gemockten Quellen ─────────────
 
 def _fake_solar_prognose(tageswerte):
+    # Σ stunden_kw == pv_ertrag_kwh (gleiche Invariante wie der echte
+    # solar_forecast_service: Tagessumme = Σ Stunden-Erträge).
     heute = date.today()
     tage = [
         SimpleNamespace(
             datum=(heute + timedelta(days=i)).isoformat(),
             pv_ertrag_kwh=val,
-            stunden_kw=[1.0 if 8 <= h < 18 else 0.0 for h in range(24)],
+            stunden_kw=[val / 10 if 8 <= h < 18 else 0.0 for h in range(24)],
         )
         for i, val in enumerate(tageswerte)
     ]
@@ -65,6 +67,7 @@ def _fake_solar_prognose(tageswerte):
 def _patch_prognose(monkeypatch):
     import backend.services.solar_forecast_service as sfs
     import backend.api.routes.live_wetter as lw
+    from backend.services.korrekturprofil_lookup import _cache
 
     async def fake_get_solar_prognose(**kwargs):
         return _fake_solar_prognose([20.0, 18.0, 15.0, 12.0])  # heute, +1, +2, +3
@@ -74,6 +77,9 @@ def _patch_prognose(monkeypatch):
 
     monkeypatch.setattr(sfs, "get_solar_prognose", fake_get_solar_prognose)
     monkeypatch.setattr(lw, "_get_lernfaktor", fake_lernfaktor)
+    # Kaskaden-Profil-Cache ist prozessweit (anlage_id-keyed) — Leaks aus
+    # anderen Tests vermeiden; ohne Profile fällt jede Stunde auf den Skalar.
+    _cache.clear()
 
 
 async def _seed_pv_anlage(db, prognose_quelle="eedc") -> Anlage:
@@ -102,7 +108,9 @@ async def test_prognose_sensoren_erscheinen(db, _patch_prognose):
     sensors = await calculate_anlage_sensors(db, anlage)
     by_key = {sv.definition.key: sv for sv in sensors}
 
-    # Tagesprognosen = pv_ertrag × Lernfaktor (0.9).
+    # Tagesprognosen = Σ korrigierte Stunden-Slots; ohne Kaskaden-Profil
+    # greift der Skalar-Fallback 0.9 → wie bisher pv_ertrag × 0.9
+    # (Regressions-Erwartung: Anlagen OHNE Profil verhalten sich unverändert).
     assert by_key["eedc_prognose_day_plus_1_kwh"].value == pytest.approx(18.0 * 0.9, abs=0.05)
     assert by_key["eedc_prognose_day_plus_2_kwh"].value == pytest.approx(15.0 * 0.9, abs=0.05)
     assert by_key["eedc_prognose_day_plus_3_kwh"].value == pytest.approx(12.0 * 0.9, abs=0.05)
@@ -110,8 +118,16 @@ async def test_prognose_sensoren_erscheinen(db, _patch_prognose):
     assert "eedc_prognose_rest_today_kwh" in by_key
     # Rest ⊆ Tageswert: heute = IST bisher + Rest (Rainer-PN 2026-06-11).
     assert by_key["eedc_prognose_rest_today_kwh"].value <= by_key["eedc_prognose_heute_kwh"].value
-    # Stundenprofil reist als Attribut des Tageswerts mit (kein eigenes Topic).
+    # Stundenprofile reisen als Attribut mit (kein eigenes Topic) — heute UND
+    # Tag+1/2/3 (Geparkt-Trigger Kaskaden-Umzug, Gernot-Entscheid 2026-06-11).
     assert len(by_key["eedc_prognose_heute_kwh"].zusatz_attribute["stundenprofil_kwh"]) == 24
+    for day_key in ("eedc_prognose_day_plus_1_kwh",
+                    "eedc_prognose_day_plus_2_kwh",
+                    "eedc_prognose_day_plus_3_kwh"):
+        profil = by_key[day_key].zusatz_attribute["stundenprofil_kwh"]
+        assert len(profil) == 24
+        # Pflicht-Invariante: Sensor-State == Σ exportierte Stundenwerte.
+        assert by_key[day_key].value == pytest.approx(sum(profil), abs=0.051)
 
 
 async def test_rest_heute_ist_echter_rest(db, _patch_prognose, monkeypatch):
@@ -133,11 +149,11 @@ async def test_rest_heute_ist_echter_rest(db, _patch_prognose, monkeypatch):
     sensors = await calculate_anlage_sensors(db, anlage)
     by_key = {sv.definition.key: sv for sv in sensors}
 
-    # Profil: 1.0 kW in Stunden 8–17, Lernfaktor 0.9. Um 12:00 sind die
-    # Rest-Slots 13..17 → 5 × 0.9 = 4.5 kWh. Kein IST-Profil geseedet →
-    # Tageswert == Rest.
-    assert by_key["eedc_prognose_rest_today_kwh"].value == pytest.approx(4.5, abs=0.05)
-    assert by_key["eedc_prognose_heute_kwh"].value == pytest.approx(4.5, abs=0.05)
+    # Profil heute: 2.0 kWh in Stunden 8–17 (Tageswert 20), Skalar 0.9. Um
+    # 12:00 sind die Rest-Slots 13..17 → 5 × 2.0 × 0.9 = 9.0 kWh. Kein
+    # IST-Profil geseedet → Tageswert == Rest.
+    assert by_key["eedc_prognose_rest_today_kwh"].value == pytest.approx(9.0, abs=0.05)
+    assert by_key["eedc_prognose_heute_kwh"].value == pytest.approx(9.0, abs=0.05)
 
 
 async def test_quellen_regel_nur_eedc_kein_solcast_sfml(db, _patch_prognose):

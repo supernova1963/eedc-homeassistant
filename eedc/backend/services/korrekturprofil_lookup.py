@@ -41,7 +41,7 @@ from backend.services.wetter.solar_position import (
     bin_key,
     solar_position_lokal,
 )
-from backend.services.wetter.utils import Wetterklasse
+from backend.services.wetter.utils import Wetterklasse, klassifiziere_stunde
 
 logger = logging.getLogger(__name__)
 
@@ -237,3 +237,52 @@ async def lookup_korrekturfaktor(
 
     # Kein Profil verfügbar → Caller-Fallback
     return None
+
+
+async def korrekturfaktoren_fuer_tag(
+    db: AsyncSession,
+    *,
+    anlage_id: int,
+    lat: float,
+    lon: float,
+    datum: date,
+    stunden_bewoelkung: Optional[list] = None,
+    stunden_niederschlag: Optional[list] = None,
+    stunden_wetter_code: Optional[list] = None,
+) -> list[Optional[float]]:
+    """Kaskaden-Korrekturfaktor für alle 24 Stunden eines Prognose-Tages.
+
+    Wetterklasse pro Stunde via ``klassifiziere_stunde`` aus den stündlichen
+    OpenMeteo-Werten; fehlende Arrays/Werte (alte Cache-Einträge ohne
+    stündlichen ``weather_code``, Versions-Skew) → Klasse ggf. ``None``, die
+    Kaskade greift dann ab Stufe ``stunde``.
+
+    ``None``-Einträge = Kaskaden-Miss für diese Stunde; der Caller fällt dort
+    auf den Legacy-Skalar (``_get_lernfaktor``) zurück.
+
+    Performance: das Profil liegt nach dem ersten Lookup im Anlage-Cache
+    (TTL 1h) — 24 Aufrufe pro Tag bzw. 96 pro Export-Publish sind reine
+    In-Memory-Nachschläge plus Sonnenstand-Berechnung, keine DB-Queries.
+    """
+
+    def _wert(arr: Optional[list], h: int):
+        return arr[h] if arr is not None and h < len(arr) else None
+
+    faktoren: list[Optional[float]] = []
+    for h in range(24):
+        klasse = klassifiziere_stunde(
+            _wert(stunden_bewoelkung, h),
+            _wert(stunden_niederschlag, h),
+            _wert(stunden_wetter_code, h),
+        )
+        kp = await lookup_korrekturfaktor(
+            db,
+            anlage_id=anlage_id,
+            lat=lat,
+            lon=lon,
+            datum=datum,
+            stunde=h,
+            klasse=klasse,
+        )
+        faktoren.append(kp.faktor if kp is not None else None)
+    return faktoren

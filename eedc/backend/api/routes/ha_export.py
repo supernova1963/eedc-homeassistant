@@ -809,10 +809,16 @@ async def calculate_anlage_sensors(
                 value = prognose["rest_today_kwh"]
             elif sensor.key == "eedc_prognose_day_plus_1_kwh":
                 value = prognose["day_plus_1_kwh"]
+                if prognose.get("stundenprofil_day_plus_1"):
+                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_1"]}
             elif sensor.key == "eedc_prognose_day_plus_2_kwh":
                 value = prognose["day_plus_2_kwh"]
+                if prognose.get("stundenprofil_day_plus_2"):
+                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_2"]}
             elif sensor.key == "eedc_prognose_day_plus_3_kwh":
                 value = prognose["day_plus_3_kwh"]
+                if prognose.get("stundenprofil_day_plus_3"):
+                    zusatz = {"stundenprofil_kwh": prognose["stundenprofil_day_plus_3"]}
             elif sensor.key == "eedc_speicher_voll_um":
                 value = prognose["speicher_voll_um"]
 

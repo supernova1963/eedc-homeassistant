@@ -23,6 +23,8 @@ Submodule:
 - `speicher` — Speicher-Effizienz (gleitend, carry-over-immun)
 - `spez_ertrag` — spezifischer Ertrag annualisiert (saisonal gewichtet,
   per-Monat-aktives kWp) — Cockpit-Kachel == HA-Export-Sensor
+- `prognose_korrektur` — Kaskaden-Faktoren auf Prognose-Stundenprofil,
+  Tageswert = Σ Export-Slots (Invariante HA-Export #150 / Prognosen-Vergleich)
 
 Geplant (step-by-step, wenn Konsumenten angefasst werden):
 - `peaks` — Peak-Werte (peak_pv/bezug/einspeisung)
@@ -110,6 +112,10 @@ from backend.core.berechnungen.preis_rang import (
     berechne_preis_rang,
     guenstig_schwelle,
 )
+from backend.core.berechnungen.prognose_korrektur import (
+    KorrigiertesTagesprofil,
+    korrigiere_tagesprofil,
+)
 from backend.core.berechnungen.spez_ertrag import (
     MONATSGEWICHTE_52N,
     PV_ERZEUGER_TYPEN,
@@ -184,6 +190,8 @@ __all__ = [
     "PreisRangErgebnis",
     "berechne_preis_rang",
     "guenstig_schwelle",
+    "KorrigiertesTagesprofil",
+    "korrigiere_tagesprofil",
     "MONATSGEWICHTE_52N",
     "PV_ERZEUGER_TYPEN",
     "berechne_spez_ertrag_annualisiert",

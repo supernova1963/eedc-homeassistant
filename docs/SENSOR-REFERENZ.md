@@ -353,14 +353,18 @@ Zusätzlich erscheinen **pro Investition** (E-Auto, Wärmepumpe, Speicher, Wallb
 
 ### PV-Prognose-Sensoren (`eedc_prognose_*`)
 
-Quelle ist **immer die eedc-eigene Prognose** (OpenMeteo × Korrekturfaktor) — nie Solcast/SFML, denn deren Werte liegen über die jeweilige HA-Integration ohnehin nativ in HA (kein Doppel-Export, keine Drift).
+Quelle ist **immer die eedc-eigene Prognose** (OpenMeteo × Korrekturprofil) — nie Solcast/SFML, denn deren Werte liegen über die jeweilige HA-Integration ohnehin nativ in HA (kein Doppel-Export, keine Drift).
+
+Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenstand × Wetter → Saison-Stunde → Sonnenstand → Skalar; bei Anlagen ohne gelerntes Profil greift wie bisher der Lernfaktor-Skalar). Der Tagessensor ist dabei stets die Σ seiner korrigierten Stundenwerte — Sensor-State und `stundenprofil_kwh`-Attribut passen exakt zusammen. Dieselbe Berechnung speist die Spalte „eedc" im Prognosen-Vergleich: Add-on-Ansicht und HA-Sensor zeigen denselben Tageswert.
 
 | Sensor | Bedeutung |
 |---|---|
 | `eedc_prognose_heute_kwh` | **Rollender Tageswert**: bisheriges IST + Prognose der verbleibenden Stunden. Läuft im Tagesverlauf mit dem IST mit — abends ≈ tatsächlicher Tagesertrag. Trägt das Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 Werte; Slot N = Energie der Stunde N−1 → N). |
 | `eedc_prognose_rest_today_kwh` | **Echter Rest**: nur die Σ Prognose der verbleibenden Stunden (ohne IST). Der Steuerungswert für Automationen — „wie viel PV kommt heute noch?" |
-| `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Werte ändern sich nur, wenn OpenMeteo einen neuen Modelllauf liefert (alle paar Stunden) — stundenlang unveränderte Werte sind normal. |
+| `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Trägt jeweils das korrigierte Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 kWh-Werte, Slot-Konvention wie oben) — z. B. für Lade-Planung per Template. Werte ändern sich, wenn OpenMeteo einen neuen Modelllauf liefert (alle paar Stunden) **oder** das gelernte Korrekturprofil aktualisiert wird (nächtlich) — stundenlang unveränderte Werte sind normal. |
 | `eedc_speicher_voll_um` | Uhrzeit, zu der der Speicher voraussichtlich voll ist (Simulation ab **aktuellem** Ladestand). |
+
+> **Vormittag/Nachmittag:** eigene VM/NM-Sensoren gibt es bewusst nicht — beides ist per HA-Template direkt aus `stundenprofil_kwh` ableitbar (z. B. `{{ state_attr('sensor.…_day_plus_1_kwh', 'stundenprofil_kwh')[:13] | sum }}` für die Stunden bis 12 Uhr).
 
 ### Börsenpreis-Trigger (`eedc_preis_*`)
 
@@ -405,4 +409,4 @@ Live-Leistungssensoren werden automatisch konvertiert: `kW → W`, `MW → W`. F
 
 ---
 
-*Letzte Aktualisierung: Juni 2026 (v3.43.x — Export-Sensoren-Referenz ergänzt)*
+*Letzte Aktualisierung: Juni 2026 (v3.44.x — Prognose-Export: Korrekturprofil-Kaskade + Stundenprofil-Attribute Tag+1/2/3)*

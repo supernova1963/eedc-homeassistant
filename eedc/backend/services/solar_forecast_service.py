@@ -147,6 +147,13 @@ class SolarPrognoseTag:
     pv_ertrag_nachmittags_kwh: Optional[float] = None  # ab 12:00
     datenquelle: str = "best_match"  # Welches Wettermodell die Daten lieferte
     stunden_kw: Optional[List[float]] = None  # 24 Werte (kW pro Stunde), für Tagesprognose
+    # Stündliche Wetterdaten je Backward-Slot — für die Korrekturprofil-Kaskade
+    # (klassifiziere_stunde) im Export-/Day+1–3-Pfad. Defaults None: Leser
+    # müssen fehlende Felder tolerieren (alte Cache-Einträge enthalten den
+    # stündlichen weather_code nicht — Versions-Skew-Leitplanke).
+    stunden_bewoelkung: Optional[List[Optional[float]]] = None
+    stunden_niederschlag: Optional[List[Optional[float]]] = None
+    stunden_wetter_code: Optional[List[Optional[int]]] = None
 
 
 @dataclass
@@ -236,6 +243,7 @@ async def fetch_gti_forecast(
             "precipitation",
             "snowfall",
             "sunshine_duration",
+            "weather_code",  # für klassifiziere_stunde (Kaskaden-Parität zum Live-Pfad)
         ]),
         "daily": ",".join([
             "shortwave_radiation_sum",
@@ -494,6 +502,10 @@ def _build_prognose(
     # Nach Tagen gruppieren und Ertrag berechnen
     daily_data = {}
     cloud_values = hourly.get("cloud_cover", [])
+    precip_values = hourly.get("precipitation", [])
+    # Alte (L2-persistente) Cache-Einträge enthalten den stündlichen
+    # weather_code noch nicht → .get-Fallback, Leser tolerieren None.
+    code_values = hourly.get("weather_code", [])
     solar_noon_cache: dict[str, float] = {}  # Tag → Solar Noon (Stunde als float)
 
     for i, timestamp in enumerate(timestamps):
@@ -510,6 +522,10 @@ def _build_prognose(
                 "snow_sum": 0,
                 "cloud_values": [],  # Für Durchschnittsberechnung
                 "stunden_kw": [0.0] * 24,  # Stündliche PV-Leistung (kW)
+                # Stündliches Wetter je Slot (für die Korrekturprofil-Kaskade)
+                "stunden_bewoelkung": [None] * 24,
+                "stunden_niederschlag": [None] * 24,
+                "stunden_wetter_code": [None] * 24,
             }
             # Solar Noon für diesen Tag berechnen
             solar_noon_cache[tag] = _solar_noon_hour(tag, longitude)
@@ -535,6 +551,19 @@ def _build_prognose(
         cloud = cloud_values[i] if i < len(cloud_values) else None
         if cloud is not None:
             day["cloud_values"].append(cloud)
+
+        # Stündliches Wetter je Backward-Slot (gleiches Slot-Mapping wie GTI,
+        # #297: preceding-hour-Wert@Stunde IST bereits Slot Stunde).
+        w_stunde = int(timestamp[11:13]) if len(timestamp) >= 13 else None
+        if w_stunde is not None and 0 <= w_stunde < 24:
+            w_slot = openmeteo_preceding_hour_slot(w_stunde)
+            day["stunden_bewoelkung"][w_slot] = cloud
+            day["stunden_niederschlag"][w_slot] = (
+                precip_values[i] if i < len(precip_values) else None
+            )
+            day["stunden_wetter_code"][w_slot] = (
+                code_values[i] if i < len(code_values) else None
+            )
 
         # Stündlichen Ertrag berechnen
         if gti is not None and gti > 0:
@@ -630,6 +659,9 @@ def _build_prognose(
             pv_ertrag_nachmittags_kwh=round(ertrag_nachmittags, 2) if ertrag_nachmittags > 0 else None,
             datenquelle=datenquelle_tag,
             stunden_kw=[round(v, 3) for v in day.get("stunden_kw", [0.0] * 24)],
+            stunden_bewoelkung=day.get("stunden_bewoelkung"),
+            stunden_niederschlag=day.get("stunden_niederschlag"),
+            stunden_wetter_code=day.get("stunden_wetter_code"),
         ))
 
         summe_kwh += ertrag
