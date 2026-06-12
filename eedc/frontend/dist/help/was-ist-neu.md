@@ -1,11 +1,26 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.42.1)
+> **Stand:** Juni 2026 (v3.43.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.43.0 — HA-Export-Feinschliff, Cloud-Import ohne Timeout & Anker SOLIX bestätigt (Juni 2026)
+
+### Was sich für dich ändert
+
+- **Cloud-Import bricht nicht mehr mit „Failed to fetch" ab.** Wer historische Daten aus einer Hersteller-Cloud importiert (Anker, EcoFlow, Sungrow …), bekam bei längeren Zeiträumen manchmal die Fehlermeldung „Failed to fetch", obwohl der Import im Hintergrund noch lief. Der Abruf läuft jetzt sauber im Hintergrund — der Wizard zeigt „Abruf läuft im Hintergrund … (Sekunden)" und wartet zuverlässig, egal wie lange es dauert. Gilt für alle Cloud-Provider.
+- **Anker SOLIX vollständig importiert + bestätigt.** Der Anker-SOLIX-Import füllt jetzt auch Netzbezug und Batterie-Werte korrekt (sie kamen aus den falschen Datenbereichen) und ist gegen die gelegentliche Drosselung der Anker-Cloud abgesichert. Nach erfolgreichem Gerätetest ist der Import nicht mehr als „in Erprobung" gekennzeichnet.
+
+### Für HA-Export-Nutzer (Sensoren nach Home Assistant)
+
+- **„PV-Prognose heute" neu + „Rest heute" korrigiert.** „PV-Prognose Rest heute" zeigt jetzt wirklich nur die Prognose der **verbleibenden** Stunden (wie viel PV kommt noch) — vorher war versehentlich der ganze Tageswert drin. Der neue Sensor **„PV-Prognose heute"** liefert den rollenden Tageswert (bisher erzeugt + Rest).
+- **„Günstige Stunden" mit echter Preis-Schwelle.** Bisher waren immer die 5 billigsten Stunden je Tag/Nacht „günstig" (also fast konstant 10). Jetzt zählt nur als günstig, was auch **spürbar unter dem Tagesschnitt** liegt — getrennt als **„Günstige Stunden Tag"** und **„Günstige Stunden Nacht"**. Besser geeignet, um Verbraucher oder Speicherladung gezielt zu schalten.
+- **„Spezifischer Ertrag" aufs Jahr normiert.** Der Sensor zeigte die Summe über die gesamte Laufzeit geteilt durch die heutige Leistung — bei mehreren Jahren ein Vielfaches des gewohnten Werts. Jetzt entspricht er dem Jahreswert aus dem Cockpit.
 
 ---
 
