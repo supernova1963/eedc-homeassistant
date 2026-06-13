@@ -138,10 +138,6 @@ function App() {
             {/* Einstellungen - Community */}
             <Route path="einstellungen/community" element={<CommunityShare />} />
 
-            {/* Dev-only Showcase für Style-Guide-Iteration (Page-Component
-                rendert in Production null, Route bleibt aber bestehen). */}
-            <Route path="dev/design-preview" element={<DesignPreview />} />
-
             {/* Bestands-Redirects (entfernte/umbenannte Seiten + Legacy-URLs)
                 — Single Source: routes/routeManifest.ts, mitgeprüft vom
                 Redirect-Auto-Test (keine Ketten, keine 404). */}
@@ -149,6 +145,11 @@ function App() {
               <Route key={r.from} path={r.from} element={<Navigate to={r.to} replace />} />
             ))}
           </Route>
+
+          {/* Dev-only Vorschau-Skelett (IA-V4) — bewusst OHNE Layout, damit die
+              klickbare Vorschau die eigene Top-Nav-Schale zeigt statt der alten.
+              Rendert in Production null (DEV-Guard in der Komponente). */}
+          <Route path="dev/design-preview" element={<DesignPreview />} />
         </Routes>
       </Suspense>
     </HashRouter>

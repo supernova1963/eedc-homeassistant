@@ -24,6 +24,7 @@ import {
   LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings, Menu, X,
   Sun, Battery, Flame, Car, Plug, Wrench, Zap, Euro, Leaf, PiggyBank, Table2,
   Activity, TrendingUp, Trophy, MapPin, ArrowRight, LineChart, Wallet,
+  ArrowUp, ArrowDown, ChevronDown,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -178,6 +179,78 @@ function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonl
   )
 }
 
+// Klapp- UND sortierbare Detail-Sektionen — das gut angekommene Monatsbericht-
+// Muster, in v4 auf alle Cockpit-Zeitsichten ausgeweitet (KONZEPT-IA-V4: „an den
+// Zeitraum gebunden, ein Persistenz-SoT B6"). Hier als Andeutung: ↑↓ sortiert,
+// Chevron klappt auf/zu. (Kein Widget-Builder — nur der feste Sektionssatz.)
+interface SektionDef { id: string; icon: LucideIcon; title: string; summary: string; farbe: string }
+const COCKPIT_SEKTIONEN: SektionDef[] = [
+  { id: 'energie',   icon: Sun,     title: 'Energie-Bilanz',     summary: '618 kWh PV · 96 % Autarkie', farbe: 'text-yellow-500' },
+  { id: 'finanzen',  icon: Euro,    title: 'Finanzen',           summary: '+90,25 € Monatsergebnis',    farbe: 'text-blue-500' },
+  { id: 'community', icon: Users,   title: 'Community-Vergleich', summary: '2 Anlagen im Juni 2026',     farbe: 'text-blue-500' },
+  { id: 'speicher',  icon: Battery, title: 'Speicher',           summary: '99 kWh geladen · 7,7 Zyklen · 73 % η', farbe: 'text-green-500' },
+  { id: 'emob',      icon: Car,     title: 'E-Mobilität',        summary: '62 kWh geladen · 221 km · +7,82 € vs. Verbrenner', farbe: 'text-purple-500' },
+]
+
+function SortbareSektionen() {
+  const [reihenfolge, setReihenfolge] = useState(COCKPIT_SEKTIONEN)
+  const [offen, setOffen] = useState<Set<string>>(new Set())
+
+  const verschieben = (index: number, richtung: -1 | 1) => {
+    const ziel = index + richtung
+    if (ziel < 0 || ziel >= reihenfolge.length) return
+    const next = [...reihenfolge]
+    ;[next[index], next[ziel]] = [next[ziel], next[index]]
+    setReihenfolge(next)
+  }
+  const toggle = (id: string) => {
+    const next = new Set(offen)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setOffen(next)
+  }
+
+  return (
+    <div className="space-y-2">
+      {reihenfolge.map((s, i) => {
+        const istOffen = offen.has(s.id)
+        return (
+          <div key={s.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+            <div className="flex items-center gap-2 px-3 min-h-[44px]">
+              <button type="button" onClick={() => toggle(s.id)} className="flex-1 flex items-center gap-2 text-left py-2 min-w-0">
+                <s.icon className={`h-4 w-4 flex-shrink-0 ${s.farbe}`} />
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">{s.title}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{s.summary}</span>
+              </button>
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                <button type="button" onClick={() => verschieben(i, -1)} disabled={i === 0} aria-label="nach oben"
+                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-default">
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => verschieben(i, 1)} disabled={i === reihenfolge.length - 1} aria-label="nach unten"
+                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-default">
+                  <ArrowDown className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => toggle(s.id)} aria-label={istOffen ? 'einklappen' : 'aufklappen'}
+                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                  <ChevronDown className={`h-4 w-4 transition-transform ${istOffen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            </div>
+            {istOffen && (
+              <div className="px-3 pb-3">
+                <DummyChart label={`${s.title} — Detail`} />
+                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
+                  Cross-Link → Komponenten/Auswertungen <ArrowRight className="h-3 w-3" />
+                </p>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Inhalts-Sichten ──────────────────────────────────────────────────────────
 function CockpitView() {
   const [sub, setSub] = useState<CockpitSub>('Live')
@@ -202,9 +275,13 @@ function CockpitView() {
               <DummyChart label={sub === 'Live' ? 'Energiefluss (Default Live)' : 'Verlauf'} />
             </Sektion>
             <Sektion title="Werte/Tabelle" hint="numerischer Zwilling, eingebettet"><DummyChart label="Werte-Embed" /></Sektion>
-            <Sektion title="Komponenten-Sektionen" hint="klapp- und sortierbar">
-              <p className="text-sm text-gray-500 dark:text-gray-400">Speicher · Wärme · E-Mobilität — je mit Cross-Link → Komponenten/&lt;typ&gt;.</p>
-            </Sektion>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                Detail-Sektionen
+                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">klapp- und sortierbar (↑↓), je Sicht gemerkt — Monatsbericht-Muster</span>
+              </h3>
+              <SortbareSektionen />
+            </div>
           </>
         )}
       </div>
@@ -372,7 +449,7 @@ export default function DesignPreview() {
   )
 
   return (
-    <div className="h-dvh flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 -mx-3 sm:-mx-6 -mt-4 sm:-mt-4">
+    <div className="h-dvh flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Top-Nav-Schale */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="px-4 sm:px-6 flex items-center justify-between h-14">
