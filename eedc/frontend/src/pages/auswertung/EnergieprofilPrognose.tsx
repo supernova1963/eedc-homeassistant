@@ -317,13 +317,13 @@ function PrognoseTooltip({ active, payload, label }: {
   if (!active || !payload) return null
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg px-3 py-2 text-xs">
-      <p className="font-medium text-gray-900 dark:text-white mb-1">{label}</p>
+    <div className="bg-gray-900 dark:bg-gray-950 border border-gray-700 rounded-lg shadow-lg px-3 py-2 text-xs">
+      <p className="font-medium text-white mb-1">{label}</p>
       {payload.filter(p => p.value != null).map((p, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
-          <span className="text-gray-600 dark:text-gray-400">{p.name}:</span>
-          <span className="font-medium text-gray-900 dark:text-white">
+          <span className="text-gray-300">{p.name}:</span>
+          <span className="font-medium text-white">
             {p.name === 'SoC' ? `${p.value.toFixed(1)}%` : `${Math.abs(p.value).toFixed(2)} kW`}
           </span>
         </div>

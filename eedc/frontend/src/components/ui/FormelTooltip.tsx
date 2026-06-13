@@ -96,7 +96,7 @@ export default function FormelTooltip({
       {isVisible && (
         <div
           ref={tooltipRef}
-          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg pointer-events-none"
+          className="fixed z-[10000] px-3 py-2 text-sm bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg pointer-events-none"
           style={{
             minWidth: '200px',
             maxWidth: '350px',
@@ -220,7 +220,7 @@ export function SimpleTooltip({
 
       {isVisible && (
         <div
-          className="fixed z-[9999] px-2 py-1 text-xs bg-gray-800 text-white rounded shadow-lg max-w-xs whitespace-normal break-words"
+          className="fixed z-[10000] px-2 py-1 text-xs bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg max-w-xs whitespace-normal break-words"
           style={{
             top: position === 'bottom' ? coords.top : 'auto',
             bottom: position === 'top' ? `calc(100vh - ${coords.top}px)` : 'auto',
@@ -234,8 +234,8 @@ export function SimpleTooltip({
               border-l-[4px] border-l-transparent
               border-r-[4px] border-r-transparent
               ${position === 'top'
-                ? 'top-full border-t-[4px] border-t-gray-800'
-                : 'bottom-full border-b-[4px] border-b-gray-800'
+                ? 'top-full border-t-[4px] border-t-gray-900 dark:border-t-gray-950'
+                : 'bottom-full border-b-[4px] border-b-gray-900 dark:border-b-gray-950'
               }`}
           />
         </div>

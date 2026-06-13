@@ -176,7 +176,7 @@ export const EXTRA_SERIEN_FARBEN = ['#8b5cf6', '#06b6d4', '#84cc16', '#f43f5e', 
 // ─── Tooltip-Grundfarben (Vorgriff auf den Tooltip-Kanon, Paket P3) ─────────
 
 export const TOOLTIP_FARBEN = {
-  bg: '#1f2937',      // gray-800 — dunkler Kanon
+  bg: '#111827',      // gray-900 — Tooltip-Kanon (P3, = FormelTooltip/ChartTooltip-Fläche)
   text: '#ffffff',
 }
 

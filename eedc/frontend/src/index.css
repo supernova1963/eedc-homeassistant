@@ -15,6 +15,19 @@ html.dark .recharts-legend-item-text {
   color: #d1d5db !important;
 }
 
+/* Recharts Default-Tooltip — Tooltip-Kanon (P3): dunkel in BEIDEN Modi.
+   Catch-all für etwaige <Tooltip/> ohne content={<ChartTooltip/>}; bevorzugt
+   wird ChartTooltip (de-DE-Format, Farb-Punkte). Gilt light+dark, kein html.dark. */
+.recharts-default-tooltip {
+  background-color: #111827 !important; /* gray-900 */
+  border: 1px solid #374151 !important; /* gray-700 */
+  border-radius: 0.5rem !important;     /* rounded-lg */
+  color: #fff !important;
+}
+.recharts-default-tooltip .recharts-tooltip-label {
+  color: #fff !important;
+}
+
 /* Custom base styles */
 @layer base {
   html, body {

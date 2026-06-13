@@ -37,9 +37,10 @@ export default function ChartTooltip({
   const compact = sorted.length === 1 && hasLabel
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3 text-sm">
+    // Tooltip-Kanon (P3): dunkel in beiden Modi, rounded-lg, text-sm (= FormelTooltip-Linie).
+    <div className="bg-gray-900 dark:bg-gray-950 border border-gray-700 rounded-lg shadow-lg p-3 text-sm">
       {hasLabel && (
-        <p className="font-medium text-gray-900 dark:text-white mb-1">{String(displayLabel)}</p>
+        <p className="font-medium text-white mb-1">{String(displayLabel)}</p>
       )}
       {sorted.map((entry, i) => {
         if (entry.type === 'none') return null
@@ -71,7 +72,7 @@ export default function ChartTooltip({
               style={{ backgroundColor: color }}
             />
             {!compact && (
-              <span className="text-gray-600 dark:text-gray-300">{displayName}:</span>
+              <span className="text-gray-300">{displayName}:</span>
             )}
             <span className="font-medium" style={{ color }}>{formatted}</span>
           </div>

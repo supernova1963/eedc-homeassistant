@@ -150,6 +150,12 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **A3-Kopplung:** der Tooltip erklärt auch, *warum* ein Wert `—`/`N/A`/`?` ist (Datenlücke vs. strukturell vs. Schätzung).
 > **Mobile:** kein Hover auf Touch → Tap/Long-press-Popover (Touch-Target ≥ 44 px, siehe Mobile M4).
 
+> **✅ Tooltip-Kanon (visuell, Fundament-P3, 2026-06-13).** EIN dunkles Tooltip-Design für alle:
+> - **Fläche:** `bg-gray-900 dark:bg-gray-950 text-white`, `rounded-lg`, `shadow-lg` — in beiden Modi dunkel. Daten-Tooltips `p-3 text-sm`, Micro-Tooltips (title-Ersatz, `SimpleTooltip`) `px-2 py-1 text-xs`.
+> - **Quellen:** `ChartTooltip` (alle Recharts-Charts via `content={<ChartTooltip/>}`, de-DE-Format + Farb-Punkte), `FormelTooltip`/`SimpleTooltip` (`ui/`), `useTouchTitleTooltip` (Hook, `title=`-Ersatz auf Touch, Farbe aus `TOOLTIP_FARBEN`). Etwaige rohe `<Tooltip/>` fängt eine zentrale `index.css`-Regel (`.recharts-default-tooltip`) auf dieselbe dunkle Optik ab.
+> - **z-Layer:** alle Tooltips/Tooltip-Popovers auf `z-[10000]` (über Modal `z-50`); JS-Inline-SoT `Z_TOOLTIP` (`lib/constants.ts`).
+> - **Mobile:** `FormelTooltip`/`SimpleTooltip` haben Click-Toggle; `title=` via `useTouchTitleTooltip`; Recharts-Charts reagieren nativ auf Touch (Tap/Drag).
+
 **Betroffene Issues:** #243 B9 (FormelTooltip-Konsolidierung), Disc #162 (fmtKpi/Datenzustand).
 
 ---

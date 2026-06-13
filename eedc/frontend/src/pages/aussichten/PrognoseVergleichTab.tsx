@@ -147,7 +147,7 @@ function IstUnvollstaendigPopover({
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full mt-1 z-[9999] w-72 max-w-[calc(100vw-2rem)] p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl text-left"
+          className="absolute right-0 top-full mt-1 z-[10000] w-72 max-w-[calc(100vw-2rem)] p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl text-left"
         >
           <div className="text-xs font-semibold text-gray-900 dark:text-white mb-1">
             IST-Daten unvollständig
@@ -1190,7 +1190,7 @@ function StundenTooltip({ active, payload, label, hasEedc }: StundenTooltipProps
   const prev = (h - 1 + 24) % 24
   const intervalLabel = `${String(prev).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:00 Uhr`
   return (
-    <div className="bg-gray-800 text-white p-2 rounded shadow-lg text-xs">
+    <div className="bg-gray-900 dark:bg-gray-950 text-white p-3 rounded-lg shadow-lg text-xs">
       <div className="font-medium mb-1">{intervalLabel}</div>
       {payload.map((p: StundenTooltipPayload) => {
         const key = p.dataKey ?? ''
@@ -1201,7 +1201,7 @@ function StundenTooltip({ active, payload, label, hasEedc }: StundenTooltipProps
         return (
           <div key={key} className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke || p.fill }} />
-            <span className="text-gray-400 dark:text-gray-500">{labels[key] || key}:</span>
+            <span className="text-gray-300">{labels[key] || key}:</span>
             <span className="font-mono font-medium">{p.value?.toFixed(2)} kW</span>
           </div>
         )

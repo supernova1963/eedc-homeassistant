@@ -20,6 +20,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
   - Wetter-/Energiefluss-Kategorien, SOLL/IST-Farben, Prognose-Quellen-Farben, Jahresvergleichs- und PV-String-Paletten sind jetzt app-weit identisch.
 - **Intern (Fundament):** Status-Farbachse (OK/Warnung/Kritisch/Info) und Geld-Farblogik zentral definiert; Tailwind-Theme bezieht die Farben direkt aus der Zentrale (kein Drift möglich); KPI-Karten-Farbklassen auf eine Definition zusammengeführt; Komponenten-KPI-Stile als Kanon für alle 7 Komponententypen (+ 3 Sonstiges-Varianten) hinterlegt, Wärmepumpen-/Speicher-Dashboard konsumieren sie.
 - **Dark-Mode-Lesbarkeit überall verbessert (Design-Fundament Paket P2).** Gedämpfter Text und Icons (Captions, Hinweise, Platzhalter) hatten an über 250 Stellen kein Dunkel-Pendant und wirkten im Dunkelmodus zu grell — jetzt durchgängig dezent abgestimmt. **Diagramm-Achsen, Gitterlinien und Referenzlinien passen sich jetzt dem Dunkelmodus an** (vorher in vielen Charts fest helle Linien). Zwei Lesbarkeits-Fehler behoben, bei denen Hinweistext im Dunkelmodus zu dunkel statt heller wurde.
+- **Einheitliche Tooltips überall (Design-Fundament Paket P3).** Alle Tooltips (Diagramm-Werte, Berechnungs-Herleitungen, Kurz-Hinweise) haben jetzt **dasselbe dunkle Aussehen** mit abgerundeten Ecken — vorher waren die Diagramm-Tooltips hell und brachen optisch aus, und es gab leicht unterschiedliche Eckenrundungen/Schriftgrößen. Tooltips liegen jetzt zuverlässig **über** Dialogen (vorher konnten sie teilweise dahinter verschwinden).
 
 ---
 

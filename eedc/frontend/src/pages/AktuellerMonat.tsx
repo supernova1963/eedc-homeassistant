@@ -672,7 +672,7 @@ export default function AktuellerMonat() {
                     if (!active || !payload?.length) return null
                     const p = payload[0]?.payload
                     return p ? (
-                      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm shadow">
+                      <div className="bg-gray-900 dark:bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm shadow-lg text-white">
                         <span className="font-medium">{p.name}:</span> {p.label}
                       </div>
                     ) : null

@@ -7,6 +7,15 @@
 
 import type { InvestitionTyp } from '../types'
 
+// ─── z-Index-Skala ───────────────────────────────────────────────────────────
+
+/**
+ * Tooltip-Layer (P3-Kanon): über Modals (z-50) und Popovers. Für className
+ * die Tailwind-Entsprechung `z-[10000]` verwenden — dieser Wert ist die SoT
+ * für JS-Inline-Styles (z. B. `useTouchTitleTooltip`).
+ */
+export const Z_TOOLTIP = 10000
+
 // ─── Monatsnamen ─────────────────────────────────────────────────────────────
 
 /** Kurze Monatsnamen, 1-basiert (Index 0 = leer). Für Chart-Labels, Tabellen. */
