@@ -1,4 +1,4 @@
-name: Backend Tests
+name: Tests
 
 # Macht das v3.34-QS-Sicherheitsnetz maschinell durchsetzbar: bisher lief die
 # Backend-Suite nur lokal via scripts/smoke.sh vor jedem Release (release.sh).
@@ -6,6 +6,9 @@ name: Backend Tests
 # blockt PRs/Pushes auf main mit rotem Test — die Drift-Klasse, gegen die
 # Phase A/B/C absichern, fällt damit durch Test statt durch Inspektion.
 # Siehe docs/ADR-001-BERECHNUNGS-LAYER.md + Audit v3.34 (M6/§2).
+#
+# Seit IA-V4 E1-P3 zusätzlich: Frontend-Job (tsc + Design-Konformitäts-Wächter
+# + Vitest-Routing/Komponenten-Tests). Eng fokussiert, kein Coverage-Ziel.
 
 on:
   push:
@@ -13,6 +16,7 @@ on:
       - main
     paths:
       - 'eedc/backend/**'
+      - 'eedc/frontend/**'
       - 'eedc/pytest.ini'
       - '.github/workflows/tests.yml'
   pull_request:
@@ -20,6 +24,7 @@ on:
       - main
     paths:
       - 'eedc/backend/**'
+      - 'eedc/frontend/**'
       - 'eedc/pytest.ini'
       - '.github/workflows/tests.yml'
   workflow_dispatch:
@@ -66,3 +71,32 @@ jobs:
       - name: Akzeptanz-Tests (pytest)
         working-directory: eedc
         run: python -m pytest -q --no-header
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: eedc/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: eedc/frontend
+        run: npm ci
+
+      - name: Typecheck (tsc)
+        working-directory: eedc/frontend
+        run: npx tsc --noEmit
+
+      - name: Design-Konformität (Inline-Hex-Wächter)
+        working-directory: eedc/frontend
+        run: npm run check:design
+
+      - name: Vitest (Routing/Redirects + Komponenten)
+        working-directory: eedc/frontend
+        run: npm test
