@@ -25,6 +25,12 @@ yarn-error.log*
 # eedc/frontend/dist/ - jetzt im Repo für schnellere Add-on Installation
 *.js.map
 
+# IA-v4 Vorschau-Build (Wegwerf, Etappe 2) — separates Output, NIE committen.
+# preview-dist/ entsteht via `npm run build:preview`; website/public/preview/
+# wird im Pages-Workflow zur Build-Zeit befüllt (vgl. deploy-website.yml).
+eedc/frontend/preview-dist/
+website/public/preview/
+
 # IDE
 .idea/
 .vscode/

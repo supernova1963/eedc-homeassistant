@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:preview": "vite build --config vite.preview.config.ts && node -e \"require('fs').renameSync('preview-dist/preview.html','preview-dist/index.html')\"",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "test": "vitest run",

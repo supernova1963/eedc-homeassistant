@@ -7,6 +7,7 @@ on:
       - 'website/**'
       - 'docs/**'
       - 'CHANGELOG.md'
+      - 'eedc/frontend/**'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +36,23 @@ jobs:
       - name: Install dependencies
         working-directory: website
         run: npm ci
+
+      # ── IA-v4-Vorschau (Etappe 2): eigener Vite-Build, ohne Backend, eigene
+      #    Pages-Base /eedc-homeassistant/preview/. Output wird in website/public/
+      #    eingeschleust, sodass Astro es nach website/dist/preview/ übernimmt.
+      #    Wegwerf-Vorschau — der Output ist gitignored, NICHT im Repo committet.
+      - name: Install frontend dependencies (preview)
+        working-directory: eedc/frontend
+        run: npm ci
+
+      - name: Build IA-v4 preview
+        working-directory: eedc/frontend
+        run: npm run build:preview
+
+      - name: Stage preview into website public dir
+        run: |
+          mkdir -p website/public/preview
+          cp -r eedc/frontend/preview-dist/. website/public/preview/
 
       - name: Build website
         working-directory: website
