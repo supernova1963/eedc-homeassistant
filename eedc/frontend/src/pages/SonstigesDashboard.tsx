@@ -76,7 +76,7 @@ export default function SonstigesDashboard() {
               <Wrench className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Keine sonstigen Investitionen für diese Anlage erfasst.</p>
               <p className="text-sm mt-2">Füge eine sonstige Investition unter "Investitionen" hinzu.</p>
-              <p className="text-xs mt-1 text-gray-400">z.B. Mini-BHKW, Pelletofen, Mini-Wind, Brennstoffzelle</p>
+              <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">z.B. Mini-BHKW, Pelletofen, Mini-Wind, Brennstoffzelle</p>
             </div>
           </Card>
         </>

@@ -245,30 +245,30 @@ export default function Infothek() {
                   key={vp.id}
                   className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                 >
-                  <User className="h-4 w-4 text-gray-400 shrink-0" />
+                  <User className="h-4 w-4 text-gray-400 dark:text-gray-500 shrink-0" />
                   <span className="font-medium text-sm text-gray-900 dark:text-white">
                     {vp.bezeichnung}
                   </span>
                   {p.telefon ? (
-                    <a href={`tel:${String(p.telefon)}`} className="text-gray-400 hover:text-primary-600" title={String(p.telefon)}>
+                    <a href={`tel:${String(p.telefon)}`} className="text-gray-400 dark:text-gray-500 hover:text-primary-600" title={String(p.telefon)}>
                       <Phone className="h-3.5 w-3.5" />
                     </a>
                   ) : null}
                   {p.email ? (
-                    <a href={`mailto:${String(p.email)}`} className="text-gray-400 hover:text-primary-600" title={String(p.email)}>
+                    <a href={`mailto:${String(p.email)}`} className="text-gray-400 dark:text-gray-500 hover:text-primary-600" title={String(p.email)}>
                       <Mail className="h-3.5 w-3.5" />
                     </a>
                   ) : null}
                   <button
                     onClick={() => handleEdit(vp)}
-                    className="p-1 text-gray-400 hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 text-gray-400 dark:text-gray-500 hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Bearbeiten"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => setDeleteConfirm(vp)}
-                    className="p-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Löschen"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -487,21 +487,21 @@ function InfothekKarte({
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={onToggleAktiv}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               title={eintrag.aktiv ? 'Archivieren' : 'Wiederherstellen'}
             >
               <Archive className="h-4 w-4" />
             </button>
             <button
               onClick={onEdit}
-              className="p-2 text-gray-400 hover:text-primary-600 transition-colors"
+              className="p-2 text-gray-400 dark:text-gray-500 hover:text-primary-600 transition-colors"
               title="Bearbeiten"
             >
               <Pencil className="h-4 w-4" />
             </button>
             <button
               onClick={onDelete}
-              className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+              className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 transition-colors"
               title="Löschen"
             >
               <Trash2 className="h-4 w-4" />

@@ -339,7 +339,7 @@ export default function Import() {
                 </div>
               ) : (
                 <>
-                  <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                  <Upload className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     CSV-Datei hierher ziehen oder klicken zum Auswählen
                   </p>
@@ -468,7 +468,7 @@ export default function Import() {
               </div>
             ) : (
               <>
-                <FileJson className="h-8 w-8 mx-auto text-gray-400 mb-2" />
+                <FileJson className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   JSON-Datei hierher ziehen oder klicken zum Auswählen
                 </p>
@@ -591,7 +591,7 @@ function JSONImportResultCard({ result, onClose }: JSONImportResultCardProps) {
     <div className={`relative p-4 rounded-lg border mb-4 ${getColorClass()}`}>
       <button
         onClick={onClose}
-        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600"
+        className="absolute top-2 right-2 p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600"
       >
         <X className="h-4 w-4" />
       </button>
@@ -703,7 +703,7 @@ function ImportResultCard({ result, onClose }: ImportResultCardProps) {
     <div className={`relative p-4 rounded-lg border ${getColorClass()}`}>
       <button
         onClick={onClose}
-        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600"
+        className="absolute top-2 right-2 p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600"
       >
         <X className="h-4 w-4" />
       </button>

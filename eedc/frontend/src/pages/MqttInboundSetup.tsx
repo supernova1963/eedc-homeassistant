@@ -372,14 +372,14 @@ export default function MqttInboundSetup() {
                   <span className="font-medium text-gray-900 dark:text-white tabular-nums">
                     {w.wert}
                   </span>
-                  <span className="text-xs text-gray-400 tabular-nums">
+                  <span className="text-xs text-gray-400 dark:text-gray-500 tabular-nums">
                     {new Date(w.zeitpunkt).toLocaleTimeString('de-DE')}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 italic">
+            <p className="text-sm text-gray-400 dark:text-gray-500 italic">
               Noch keine Werte empfangen. Klicke &quot;Aktualisieren&quot; nach dem Senden von Testdaten.
             </p>
           )}
@@ -424,7 +424,7 @@ export default function MqttInboundSetup() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400 italic">
+          <p className="text-sm text-gray-400 dark:text-gray-500 italic">
             Keine Anlagen/Investitionen vorhanden. Lege zuerst eine Anlage mit Investitionen an.
           </p>
         )}
@@ -470,7 +470,7 @@ function TopicRow({ label, beschreibung, topic, copied, onCopy }: {
       </code>
       <button
         onClick={() => onCopy(topic)}
-        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
         title="Topic kopieren"
       >
         {copied === topic ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -595,9 +595,9 @@ ${actions}`
         <div className="flex items-center gap-2">
           <Wand2 className="w-5 h-5 text-purple-500" />
           <h2 className="font-semibold text-gray-900 dark:text-white">HA Automation Generator</h2>
-          <span className="text-xs text-gray-400">Home Assistant YAML erzeugen</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">Home Assistant YAML erzeugen</span>
         </div>
-        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -762,7 +762,7 @@ function YamlOutput({ id, title, yaml, copied, onCopy }: {
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{title}</span>
         <button
           onClick={() => onCopy(id, yaml)}
-          className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200"
         >
           {copied === id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
           {copied === id ? 'Kopiert!' : 'Kopieren'}
@@ -849,11 +849,11 @@ end`,
         className="w-full flex items-center justify-between p-5 text-left"
       >
         <div className="flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-gray-400" />
+          <BookOpen className="w-5 h-5 text-gray-400 dark:text-gray-500" />
           <h2 className="font-semibold text-gray-900 dark:text-white">Andere Systeme</h2>
-          <span className="text-xs text-gray-400">Node-RED, ioBroker, FHEM, openHAB</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">Node-RED, ioBroker, FHEM, openHAB</span>
         </div>
-        <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
@@ -889,7 +889,7 @@ end`,
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{s.label}</span>
                 <button
                   onClick={() => copySnippet(s.id, s.code)}
-                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200"
                 >
                   {copiedSnippet === s.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                   {copiedSnippet === s.id ? 'Kopiert' : 'Kopieren'}

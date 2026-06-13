@@ -137,9 +137,9 @@ function InvestitionForm({
           </div>
         </div>
         {expanded ? (
-          <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
         )}
       </button>
 

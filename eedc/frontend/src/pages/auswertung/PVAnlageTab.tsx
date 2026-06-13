@@ -201,7 +201,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
   if (!data || data.strings.length === 0) {
     return (
       <Card className="text-center py-8">
-        <Sun className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <Sun className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
           Keine PV-Module gefunden
         </h3>

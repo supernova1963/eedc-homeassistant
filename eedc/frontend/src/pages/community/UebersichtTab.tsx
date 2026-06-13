@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
+import { useChartTheme } from '../../context/ThemeContext'
 import type {
   CommunityBenchmarkResponse,
   ZeitraumTyp,
@@ -50,7 +51,7 @@ import {
 } from 'recharts'
 
 // Bundesland-Namen + Farb-Zentrale
-import { REGION_NAMEN, CHART_ACHSEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE } from '../../lib'
+import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE } from '../../lib'
 
 interface UebersichtTabProps {
   anlageId: number
@@ -133,6 +134,7 @@ const ACHIEVEMENT_DEFINITIONEN = {
 }
 
 export default function UebersichtTab({ benchmark, benchmarkLoading: loading, benchmarkError: error }: UebersichtTabProps) {
+  const achsen = useChartTheme()
 
   // Ranking-Badge berechnen
   const rankingBadge = useMemo(() => {
@@ -482,7 +484,7 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
                 label="Community Durchschnitt"
                 wert={benchmark.benchmark.spez_ertrag_durchschnitt}
                 einheit="kWh/kWp"
-                icon={<BarChart3 className="h-5 w-5 text-gray-400" />}
+                icon={<BarChart3 className="h-5 w-5 text-gray-400 dark:text-gray-500" />}
               />
               <VergleichsBox
                 label={REGION_NAMEN[benchmark.anlage.region] || benchmark.anlage.region}
@@ -573,15 +575,15 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={radarData}>
-                  <PolarGrid stroke={CHART_ACHSEN.light.grid} />
+                  <PolarGrid stroke={achsen.grid} />
                   <PolarAngleAxis
                     dataKey="kategorie"
-                    tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
+                    tick={{ fill: achsen.achse, fontSize: 11 }}
                   />
                   <PolarRadiusAxis
                     angle={90}
                     domain={[0, 100]}
-                    tick={{ fill: CHART_ACHSEN.light.referenz, fontSize: 10 }}
+                    tick={{ fill: achsen.referenz, fontSize: 10 }}
                   />
                   <Radar
                     name="Du"
@@ -866,7 +868,7 @@ function VergleichsBox({
           {label}
           {tooltipText && (
             <SimpleTooltip text={tooltipText}>
-              <HelpCircle className="h-3 w-3 text-gray-400 opacity-60" />
+              <HelpCircle className="h-3 w-3 text-gray-400 dark:text-gray-500 opacity-60" />
             </SimpleTooltip>
           )}
         </span>
@@ -875,7 +877,7 @@ function VergleichsBox({
         {isRank ? '#' : ''}
         {wert.toFixed(isRank ? 0 : 0)}
         {einheit && <span className="text-sm font-normal text-gray-500 ml-1">{einheit}</span>}
-        {zusatz && <span className="text-sm font-normal text-gray-400 ml-2">{zusatz}</span>}
+        {zusatz && <span className="text-sm font-normal text-gray-400 dark:text-gray-500 ml-2">{zusatz}</span>}
       </p>
     </div>
   )
@@ -960,7 +962,7 @@ function KPIRow({
         {label}
         {tooltipText && (
           <SimpleTooltip text={tooltipText}>
-            <HelpCircle className="h-3.5 w-3.5 text-gray-400 opacity-60" />
+            <HelpCircle className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500 opacity-60" />
           </SimpleTooltip>
         )}
       </span>
@@ -990,49 +992,49 @@ function AchievementBadge({ achievement }: { achievement: Achievement }) {
     yellow: {
       bg: achievement.erreicht ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-yellow-300 dark:border-yellow-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-yellow-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-yellow-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-yellow-700 dark:text-yellow-300' : 'text-gray-500',
     },
     green: {
       bg: achievement.erreicht ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-green-300 dark:border-green-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-green-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-green-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-green-700 dark:text-green-300' : 'text-gray-500',
     },
     emerald: {
       bg: achievement.erreicht ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-emerald-300 dark:border-emerald-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-emerald-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-emerald-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-500',
     },
     blue: {
       bg: achievement.erreicht ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-blue-300 dark:border-blue-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-blue-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-blue-700 dark:text-blue-300' : 'text-gray-500',
     },
     purple: {
       bg: achievement.erreicht ? 'bg-purple-100 dark:bg-purple-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-purple-300 dark:border-purple-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-purple-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-purple-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-purple-700 dark:text-purple-300' : 'text-gray-500',
     },
     cyan: {
       bg: achievement.erreicht ? 'bg-cyan-100 dark:bg-cyan-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-cyan-300 dark:border-cyan-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-cyan-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-cyan-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-cyan-700 dark:text-cyan-300' : 'text-gray-500',
     },
     orange: {
       bg: achievement.erreicht ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-orange-300 dark:border-orange-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-orange-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-orange-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-orange-700 dark:text-orange-300' : 'text-gray-500',
     },
     indigo: {
       bg: achievement.erreicht ? 'bg-indigo-100 dark:bg-indigo-900/30' : 'bg-gray-100 dark:bg-gray-800',
       border: achievement.erreicht ? 'border-indigo-300 dark:border-indigo-700' : 'border-gray-200 dark:border-gray-700',
-      icon: achievement.erreicht ? 'text-indigo-500' : 'text-gray-400',
+      icon: achievement.erreicht ? 'text-indigo-500' : 'text-gray-400 dark:text-gray-500',
       text: achievement.erreicht ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-500',
     },
   }
@@ -1071,7 +1073,7 @@ function AchievementBadge({ achievement }: { achievement: Achievement }) {
               style={{ width: `${Math.min(100, Math.max(0, achievement.fortschritt))}%` }}
             />
           </div>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             {achievement.fortschritt.toFixed(0)}%
           </p>
         </div>

@@ -28,9 +28,9 @@ export default function SummaryRow({
             </>
           )
         ) : optional ? (
-          <span className="text-gray-400">—</span>
+          <span className="text-gray-400 dark:text-gray-500">—</span>
         ) : (
-          <span className="text-gray-400 italic">nicht ausgefüllt</span>
+          <span className="text-gray-400 dark:text-gray-500 italic">nicht ausgefüllt</span>
         )}
       </span>
     </div>

@@ -195,7 +195,7 @@ export default function Strompreise() {
                   <TableRow key={sp.id} className={aktuell ? 'bg-green-50/50 dark:bg-green-900/10' : ''}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Zap className={`h-5 w-5 ${aktuell ? 'text-green-500' : 'text-gray-400'}`} />
+                        <Zap className={`h-5 w-5 ${aktuell ? 'text-green-500' : 'text-gray-400 dark:text-gray-500'}`} />
                         <div>
                           <span className="font-medium">
                             {sp.tarifname || 'Standard'}
@@ -247,7 +247,7 @@ export default function Strompreise() {
                           <span className="text-gray-500 text-sm"> €/Mon</span>
                         </>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-gray-400 dark:text-gray-500">-</span>
                       )}
                     </TableCell>
                     <TableCell>

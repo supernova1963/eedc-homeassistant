@@ -170,7 +170,7 @@ function VerticalTimeline({ entries, selectedJahr, selectedMonat, onSelect }: {
                         {MONAT_NAMEN[e.monat].substring(0, 3)}
                       </span>
                       <span className={`text-xs tabular-nums ${
-                        e.laufend ? 'text-emerald-500 dark:text-emerald-400' : isSel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400'
+                        e.laufend ? 'text-emerald-500 dark:text-emerald-400' : isSel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
                       }`}>
                         {e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`}
                       </span>
@@ -344,7 +344,7 @@ export default function MonatsabschlussView() {
   if (anlagen.length === 0) return <Alert type="warning">Bitte lege zuerst eine PV-Anlage an.</Alert>
   if (timelineEntries.length === 0) return (
     <Card className="text-center py-12">
-      <BarChart3 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+      <BarChart3 className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
       <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Keine Monatsdaten</h3>
       <p className="text-gray-500 dark:text-gray-400 mb-4">Bitte wähle eine Anlage mit konfigurierten Sensoren.</p>
     </Card>
@@ -474,7 +474,7 @@ export default function MonatsabschlussView() {
                   {d.pv_erzeugung_kwh != null && <span className="font-medium text-gray-700 dark:text-gray-300">{fmt(d.pv_erzeugung_kwh, 0)} kWh PV</span>}
                   {d.autarkie_prozent != null && <span className="text-green-600 dark:text-green-400 font-medium">{fmt(d.autarkie_prozent, 0)} % Autarkie</span>}
                   {d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && (
-                    <span className="text-gray-400 text-xs">SOLL {Math.round(d.pv_erzeugung_kwh / d.soll_pv_kwh * 100)} %</span>
+                    <span className="text-gray-400 dark:text-gray-500 text-xs">SOLL {Math.round(d.pv_erzeugung_kwh / d.soll_pv_kwh * 100)} %</span>
                   )}
                 </span>
               }
@@ -1105,8 +1105,8 @@ export default function MonatsabschlussView() {
               <SortableSection storageKeyPrefix="monatsberichte" sectionId="community" icon={Users} color="text-blue-400" title="Community-Vergleich"
                 summary={
                   monatsVergleich
-                    ? <span className="text-xs text-gray-400">{monatsVergleich.anzahl_anlagen} Anlagen im {MONAT_NAMEN[selectedMonat!]} {selectedJahr}</span>
-                    : <span className="text-xs text-gray-400">Lade…</span>
+                    ? <span className="text-xs text-gray-400 dark:text-gray-500">{monatsVergleich.anzahl_anlagen} Anlagen im {MONAT_NAMEN[selectedMonat!]} {selectedJahr}</span>
+                    : <span className="text-xs text-gray-400 dark:text-gray-500">Lade…</span>
                 }
               >
                 {monatsVergleich ? (
@@ -1229,7 +1229,7 @@ export default function MonatsabschlussView() {
                 summary={
                   <span className="flex gap-3 text-sm">
                     {d.speicher_ladung_kwh != null && <span>{fmt(d.speicher_ladung_kwh, 0)} kWh geladen</span>}
-                    {d.speicher_vollzyklen != null && <span className="text-gray-400">{fmtCalc(d.speicher_vollzyklen, 1)} Zyklen</span>}
+                    {d.speicher_vollzyklen != null && <span className="text-gray-400 dark:text-gray-500">{fmtCalc(d.speicher_vollzyklen, 1)} Zyklen</span>}
                     {d.speicher_wirkungsgrad_prozent != null && <span className="text-green-600 dark:text-green-400">{fmt(d.speicher_wirkungsgrad_prozent, 0)} % η</span>}
                   </span>
                 }
@@ -1487,7 +1487,7 @@ export default function MonatsabschlussView() {
             {d.hat_sonstiges && (
               <SortableSection storageKeyPrefix="monatsberichte" sectionId="sonstiges" icon={Wrench} color="text-gray-500" title="Sonstiges"
                 summary={
-                  <span className="flex gap-3 text-sm text-gray-400">
+                  <span className="flex gap-3 text-sm text-gray-400 dark:text-gray-500">
                     {d.sonstiges_erzeugung_kwh != null && <span>{fmt(d.sonstiges_erzeugung_kwh, 0)} kWh erzeugt</span>}
                     {d.sonstiges_verbrauch_kwh != null && <span>{fmt(d.sonstiges_verbrauch_kwh, 0)} kWh verbraucht</span>}
                   </span>

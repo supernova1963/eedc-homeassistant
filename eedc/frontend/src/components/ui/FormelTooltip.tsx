@@ -89,7 +89,7 @@ export default function FormelTooltip({
 
       {/* Info-Icon als Hinweis — auf Mobile ausgeblendet (kein Hover, knapper Platz) */}
       {showIcon && (
-        <Info className="hidden sm:inline-block w-3.5 h-3.5 ml-1 text-gray-400 opacity-60" />
+        <Info className="hidden sm:inline-block w-3.5 h-3.5 ml-1 text-gray-400 dark:text-gray-500 opacity-60" />
       )}
 
       {/* Tooltip — fixed positioniert, damit overflow-Container nicht clippen */}

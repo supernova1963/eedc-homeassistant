@@ -165,6 +165,37 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ---
 
+### A8 — Hell/Dunkel-Modus (Light/Dark)
+
+> **✅ Umgesetzt mit Fundament-P2 (2026-06-13).** Mechanismus: `ThemeContext` (`light`/`dark`/`system`, localStorage `eedc-theme`, `<html class="dark">`). Entscheid **F5(a):** Serien-/Datenfarben sind in **beiden Modi identisch** (keine aufgehellten Dark-Serienfarben — das wäre ein eigenes späteres Projekt). Dark-Anpassung betrifft nur Text-Kontrast, Chart-Infrastruktur (Achsen/Grid) und Abgrenzung (Border statt Schatten).
+
+**Text-Paarungen (de-facto-Kanon, verbindlich):**
+
+| Light | Dark | Rolle |
+|---|---|---|
+| `text-gray-900` | `dark:text-white` | Primärtext / Überschriften |
+| `text-gray-700` | `dark:text-gray-300` | Fließtext |
+| `text-gray-600` | `dark:text-gray-400` | Sekundärtext |
+| `text-gray-500` | `dark:text-gray-400` | gedämpfter Text |
+| `text-gray-400` | `dark:text-gray-500` | **Muted/Icons/Captions** (im Dark dezent *dunkler*, sonst zu hell auf Dunkelgrund) |
+| `bg-white` | `dark:bg-gray-800` | Karten/Flächen |
+| `border-gray-200` | `dark:border-gray-700` | Rahmen |
+
+> Die Muted-Zeile (`text-gray-400 → dark:text-gray-500`) ist bewusst „dunkler im Dark Mode": gedämpfter Text/Icons sind auf Dunkelgrund sonst zu präsent. Das ist der dominante Bestand (P2-Sweep über 254 Stellen). Disabled-States (`text-gray-500 dark:text-gray-500`) sind eine bewusste Ausnahme (gewollt geringer Kontrast).
+
+**Charts — zwei klar getrennte Mechanismen (Regel Nr. 0):**
+
+1. **Recharts-TEXT** (Tick-Werte, Legende, Pie-Labels) → zentrale `html.dark .recharts-*`-Overrides in `index.css` (Catch-all, greift ohne Pro-Komponenten-Props).
+2. **Recharts-STROKES/FILLS** (CartesianGrid, ReferenceLine, PolarGrid, neutrale Balken) → Hook **`useChartTheme()`** (`context/ThemeContext.tsx`), liefert `CHART_ACHSEN.{light|dark}` modusabhängig. **Kein** hartkodiertes `CHART_ACHSEN.light.*` mehr in Komponenten.
+
+> **`CHART_ACHSEN` führt bewusst KEINEN `border`-Key.** Card-/Tabellen-Rahmen laufen über Tailwind `border` / `dark:border-gray-700` (siehe Text-Paarungen) — ein Muster pro Aufgabe. `CHART_ACHSEN` bleibt auf Recharts-Inline-Styles (`achse`/`grid`/`referenz`, je hell+dunkel) beschränkt; die Modus-Matrix ist `lib/colors.ts:CHART_ACHSEN` (SoT, keine Doc-Tabelle — A2-Pointer-Prinzip).
+
+**Schatten-Kanon:** Light = `shadow-sm` (Tailwind-Default, **kein** eigener boxShadow-Token). Dark = **Border-Abgrenzung** statt Schatten (Schatten ist auf `gray-800` quasi unsichtbar) — **kein `dark:shadow-*`-Ausbau**. Bewusst nur diese eine Stufe.
+
+**Betroffene Issues:** F5 (Dark-Mode-Variante), §3-Inventur (243 `text-gray-400`-Lücken).
+
+---
+
 ## Teil B — Komponenten
 
 ### B1 — KPI-Karten

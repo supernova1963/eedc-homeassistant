@@ -258,7 +258,7 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
                     <tr key={k}>
                       <td className="py-0.5">{KAT_LABELS[k] || k}</td>
                       <td className="py-0.5 text-right tabular-nums">{fmtKwh(alt)}</td>
-                      <td className="py-0.5 text-center text-gray-400">
+                      <td className="py-0.5 text-center text-gray-400 dark:text-gray-500">
                         <ArrowRight className="inline w-3 h-3" />
                       </td>
                       <td className={`py-0.5 text-right tabular-nums ${diffClass(alt, neu)}`}>
@@ -291,7 +291,7 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
                     <tr key={c.feld}>
                       <td className="py-0.5">{COUNTER_LABELS[c.feld] || c.feld}</td>
                       <td className="py-0.5 text-right tabular-nums">{fmtCount(c.alt)}</td>
-                      <td className="py-0.5 text-center text-gray-400">
+                      <td className="py-0.5 text-center text-gray-400 dark:text-gray-500">
                         <ArrowRight className="inline w-3 h-3" />
                       </td>
                       <td className={`py-0.5 text-right tabular-nums ${counterDiffClass(c.alt, c.neu)}`}>

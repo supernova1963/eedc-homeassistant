@@ -12,7 +12,7 @@ export default function QuickLink({ title, description, onClick }: { title: stri
           <h3 className="font-medium text-gray-900 dark:text-white">{title}</h3>
           <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
         </div>
-        <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
+        <ArrowRight className="h-5 w-5 text-gray-400 dark:text-gray-500 group-hover:text-primary-600 transition-colors" />
       </div>
     </button>
   )

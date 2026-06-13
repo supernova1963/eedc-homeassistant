@@ -63,7 +63,7 @@ export function InvestitionSection({
               {aktiveFelder.map((feld) => (
                 <div key={feld.feld}>
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    {feld.label} {feld.einheit && <span className="text-gray-400">({feld.einheit})</span>}
+                    {feld.label} {feld.einheit && <span className="text-gray-400 dark:text-gray-500">({feld.einheit})</span>}
                   </label>
                   <input
                     type="number"

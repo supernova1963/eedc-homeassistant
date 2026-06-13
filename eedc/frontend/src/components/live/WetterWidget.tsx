@@ -10,7 +10,8 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_ACHSEN, CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
 function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; className?: string }) {
@@ -18,15 +19,15 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
     case 'sunny': return <Sun className={`${className} text-yellow-400`} />
     case 'mostly_sunny': return <CloudSun className={`${className} text-yellow-400`} />
     case 'partly_cloudy': return <CloudSun className={`${className} text-yellow-300`} />
-    case 'cloudy': return <Cloud className={`${className} text-gray-400`} />
-    case 'foggy': return <CloudFog className={`${className} text-gray-400`} />
+    case 'cloudy': return <Cloud className={`${className} text-gray-400 dark:text-gray-500`} />
+    case 'foggy': return <CloudFog className={`${className} text-gray-400 dark:text-gray-500`} />
     case 'drizzle': return <CloudDrizzle className={`${className} text-blue-300`} />
     case 'rainy':
     case 'showers': return <CloudRain className={`${className} text-blue-400`} />
     case 'snowy':
     case 'snow_showers': return <CloudSnow className={`${className} text-blue-200`} />
     case 'thunderstorm': return <CloudLightning className={`${className} text-purple-400`} />
-    default: return <Cloud className={`${className} text-gray-400`} />
+    default: return <Cloud className={`${className} text-gray-400 dark:text-gray-500`} />
   }
 }
 
@@ -49,6 +50,7 @@ interface WetterWidgetProps {
 type ChartView = 'beides' | 'pv' | 'verbrauch'
 
 export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }: WetterWidgetProps) {
+  const achsen = useChartTheme()
   const now = new Date()
   const currentHour = now.getHours()
 
@@ -306,7 +308,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
     const istKoordinatenLuecke = wetter?.grund === 'keine_koordinaten'
     return (
       <div className="text-center py-6">
-        <Cloud className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+        <Cloud className="h-8 w-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
         <p className="text-sm text-gray-500 dark:text-gray-400">
           {istKoordinatenLuecke ? 'Keine Wetterdaten verfügbar' : 'Wetterdaten momentan nicht verfügbar'}
         </p>
@@ -527,10 +529,10 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               {/* Aktuelle Stunde — Trennlinie IST/Prognose */}
               <ReferenceLine
                 x={String(currentHour)}
-                stroke={CHART_ACHSEN.light.referenz}
+                stroke={achsen.referenz}
                 strokeDasharray="3 3"
                 strokeWidth={1}
-                label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: CHART_ACHSEN.light.referenz }}
+                label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: achsen.referenz }}
               />
               {/* Sonnenaufgang */}
               {wetter.sunrise && (

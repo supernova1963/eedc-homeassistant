@@ -75,7 +75,7 @@ const QUELLEN_KUERZEL: Record<string, { label: string; color: string }> = {
   icon_d2:              { label: 'ICON-D2', color: 'text-cyan-400' },
   icon_eu:              { label: 'ICON-EU', color: 'text-green-400' },
   ecmwf_ifs04:          { label: 'ECMWF', color: 'text-purple-400' },
-  best_match:           { label: 'Best Match', color: 'text-gray-400' },
+  best_match:           { label: 'Best Match', color: 'text-gray-400 dark:text-gray-500' },
 }
 
 
@@ -237,7 +237,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                   </span>
                 )}
                 <div className="flex items-center gap-1 mt-1">
-                  <Thermometer className="h-3 w-3 text-gray-400" />
+                  <Thermometer className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                   <span className="text-xs text-gray-500">
                     {tag.temperatur_max_c?.toFixed(0) ?? '-'}°C
                   </span>
@@ -390,7 +390,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                   </td>
                   {hasKaskade && (
                     <td className="py-2 px-3 text-right">
-                      <span className={`text-xs font-mono ${QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.color || 'text-gray-400'}`}>
+                      <span className={`text-xs font-mono ${QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.color || 'text-gray-400 dark:text-gray-500'}`}>
                         {QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.label || tag.datenquelle}
                       </span>
                     </td>

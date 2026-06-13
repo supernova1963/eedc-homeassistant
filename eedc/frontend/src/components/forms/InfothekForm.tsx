@@ -279,7 +279,7 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
             <button
               type="button"
               onClick={() => setInvestitionIds([])}
-              className="text-xs text-gray-400 hover:text-gray-200 mt-1"
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-200 mt-1"
             >
               Alle abwählen
             </button>

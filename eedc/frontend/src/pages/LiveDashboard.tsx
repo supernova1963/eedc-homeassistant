@@ -221,7 +221,7 @@ export default function LiveDashboard() {
       {/* Kein Live-Sensor konfiguriert */}
       {!loading && data && !data.verfuegbar && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
-          <Activity className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <Activity className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
             Keine Live-Daten verfügbar
           </h2>
@@ -303,7 +303,7 @@ export default function LiveDashboard() {
                           <div className="text-xs text-gray-500 dark:text-gray-400">Batterie</div>
                           <div className="text-lg font-bold text-teal-600 dark:text-teal-400">
                             <span title="Ladung (in den Speicher)">&#9660;{ladung.toFixed(1)}</span>
-                            <span className="text-gray-400 mx-0.5">/</span>
+                            <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
                             <span title="Entladung (aus dem Speicher)">&#9650;{entladung.toFixed(1)}</span>
                             <span className="text-xs font-normal ml-0.5">kWh</span>
                           </div>
@@ -387,7 +387,7 @@ export default function LiveDashboard() {
               {prognose3Tage && prognose3Tage.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`${wetter?.prognose_quelle === 'solcast' ? 'Solcast-Prognose (pur)' : wetter?.prognose_quelle === 'sfml' ? 'Solar Forecast ML (pur)' : 'GTI-basierte Prognose (Open-Meteo) mit Lernfaktor'}. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 opacity-50 cursor-help" /></SimpleTooltip>
+                    Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`${wetter?.prognose_quelle === 'solcast' ? 'Solcast-Prognose (pur)' : wetter?.prognose_quelle === 'sfml' ? 'Solar Forecast ML (pur)' : 'GTI-basierte Prognose (Open-Meteo) mit Lernfaktor'}. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 dark:text-gray-500 opacity-50 cursor-help" /></SimpleTooltip>
                   </h3>
                   {prognose3Tage.some(t => t.pv_ertrag_morgens_kwh != null) && (
                     <div className="grid grid-cols-[auto_1fr_7rem] px-3 mb-0.5">
@@ -395,7 +395,7 @@ export default function LiveDashboard() {
                       <span />
                       <span className="text-[10px] text-right">
                         <span className="text-amber-500">VM</span>
-                        <span className="text-gray-400 mx-0.5">/</span>
+                        <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
                         <span className="text-yellow-500">NM</span>
                       </span>
                     </div>
@@ -449,7 +449,7 @@ export default function LiveDashboard() {
                             {hasVmNm ? (
                               <>
                                 <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
-                                <span className="text-gray-400 mx-0.5">/</span>
+                                <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
                                 <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>
                               </>
                             ) : null}

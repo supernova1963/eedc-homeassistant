@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
+import { useChartTheme } from '../../context/ThemeContext'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, TrendDaten, DegradationsAnalyse } from '../../api/community'
 import {
@@ -42,7 +43,7 @@ import {
   Legend,
 } from 'recharts'
 
-import { MONAT_KURZ, MONAT_NAMEN, CHART_ACHSEN, EIGENE_SERIE_FARBEN, TYP_COLORS } from '../../lib'
+import { MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS } from '../../lib'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
 
@@ -63,6 +64,7 @@ interface TrendsTabProps {
 }
 
 export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError }: TrendsTabProps) {
+  const achsen = useChartTheme()
   const [communityTrends, setCommunityTrends] = useState<TrendDaten | null>(null)
   const [degradation, setDegradation] = useState<DegradationsAnalyse | null>(null)
   const [extraLoading, setExtraLoading] = useState(false)
@@ -242,19 +244,19 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                     <stop offset="95%" stopColor={EIGENE_SERIE_FARBEN.du} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
+                  tick={{ fill: achsen.achse, fontSize: 11 }}
                   interval={Math.floor(ertragsverlauf.length / 12)}
                 />
                 <YAxis
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                  tick={{ fill: achsen.achse, fontSize: 12 }}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
                     position: 'insideLeft',
-                    style: { fill: CHART_ACHSEN.light.achse, fontSize: 12 },
+                    style: { fill: achsen.achse, fontSize: 12 },
                   }}
                 />
                 <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
@@ -360,7 +362,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 ) : jahresvergleich.differenzProzent <= -0.5 ? (
                   <ArrowDownRight className="h-6 w-6 text-red-500" />
                 ) : (
-                  <Minus className="h-6 w-6 text-gray-400" />
+                  <Minus className="h-6 w-6 text-gray-400 dark:text-gray-500" />
                 )}
                 <div>
                   <span className={`text-2xl font-bold ${
@@ -394,13 +396,13 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monatlicherDurchschnitt}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
+                  tick={{ fill: achsen.achse, fontSize: 11 }}
                 />
                 <YAxis
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                  tick={{ fill: achsen.achse, fontSize: 12 }}
                   domain={[0, 'auto']}
                 />
                 <Tooltip
@@ -447,14 +449,14 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 waermepumpe: communityTrends.trends.waermepumpe_quote[i]?.wert || 0,
                 eauto: communityTrends.trends.eauto_quote[i]?.wert || 0,
               }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="monat"
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 10 }}
+                  tick={{ fill: achsen.achse, fontSize: 10 }}
                   interval={1}
                 />
                 <YAxis
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                  tick={{ fill: achsen.achse, fontSize: 12 }}
                   domain={[0, 100]}
                   unit="%"
                 />
@@ -506,20 +508,20 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={degradation.nach_alter}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="alter_jahre"
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
-                  label={{ value: 'Anlagenalter (Jahre)', position: 'bottom', offset: -5, fill: CHART_ACHSEN.light.achse }}
+                  tick={{ fill: achsen.achse, fontSize: 12 }}
+                  label={{ value: 'Anlagenalter (Jahre)', position: 'bottom', offset: -5, fill: achsen.achse }}
                 />
                 <YAxis
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                  tick={{ fill: achsen.achse, fontSize: 12 }}
                   domain={['dataMin - 50', 'dataMax + 50']}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
                     position: 'insideLeft',
-                    style: { fill: CHART_ACHSEN.light.achse },
+                    style: { fill: achsen.achse },
                   }}
                 />
                 <Tooltip

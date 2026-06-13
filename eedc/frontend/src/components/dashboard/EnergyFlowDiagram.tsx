@@ -37,7 +37,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
               <Sun className="h-3.5 w-3.5 text-yellow-500" />
               <span>PV erzeugt: <strong className="text-gray-700 dark:text-gray-300">{fmt(pv)}</strong></span>
             </span>
-            <span className="text-xs text-gray-400">Wohin?</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">Wohin?</span>
           </div>
           <div className="flex h-7 rounded-lg overflow-hidden gap-px bg-gray-100 dark:bg-gray-700">
             {direkt > 0 && (
@@ -93,7 +93,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
               <Home className="h-3.5 w-3.5 text-purple-500" />
               <span>Haus verbraucht: <strong className="text-gray-700 dark:text-gray-300">{fmt(data.gesamtverbrauch_kwh)}</strong></span>
             </span>
-            <span className="text-xs text-gray-400">Woher?</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">Woher?</span>
           </div>
           <div className="flex h-7 rounded-lg overflow-hidden gap-px bg-gray-100 dark:bg-gray-700">
             {direkt > 0 && (

@@ -10,7 +10,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
-import { CHART_ACHSEN, CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
 
 // ─── Lite-Modus (reduzierte Animationen für Mobile/WebView) ─────────
@@ -342,6 +343,7 @@ export default function EnergieFluss({
   komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
   netzPufferW = 100,
 }: EnergieFlussProps) {
+  const achsen = useChartTheme()
   const [lite, toggleLite] = useLiteMode()
   const [bgVariant, setBgVariant] = useBgVariant()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -486,7 +488,7 @@ export default function EnergieFluss({
               <path
                 d={d}
                 fill="none"
-                stroke={isActive ? color : CHART_ACHSEN.light.referenz}
+                stroke={isActive ? color : achsen.referenz}
                 strokeWidth={thickness}
                 strokeOpacity={isActive ? 0.2 : 0.08}
                 strokeLinecap="round"
@@ -681,7 +683,7 @@ export default function EnergieFluss({
                 rx={NODE_R}
                 className="fill-white dark:fill-gray-800"
                 fillOpacity={bgVariant === 'sunset' ? 0.92 : 0.6}
-                stroke={isActive ? color : CHART_ACHSEN.light.referenz}
+                stroke={isActive ? color : achsen.referenz}
                 strokeWidth={isActive ? 1 : 0.5}
                 strokeOpacity={isActive ? 0.7 : 0.3}
                 filter={lite ? undefined : "url(#ef-card-shadow)"}
@@ -723,7 +725,7 @@ export default function EnergieFluss({
               )}
               {/* Icon */}
               <foreignObject x={node.x - dims.iconSize / 2} y={node.y - NODE_H / 2 + 6} width={dims.iconSize} height={dims.iconSize}>
-                <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : CHART_ACHSEN.light.referenz} />
+                <IconElement name={k.icon} size={dims.iconSize} color={isActive ? color : achsen.referenz} />
               </foreignObject>
 
               {/* kW-Wert */}

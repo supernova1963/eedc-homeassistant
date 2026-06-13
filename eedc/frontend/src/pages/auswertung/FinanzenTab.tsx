@@ -93,7 +93,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
   if (!strompreis) {
     return (
       <Card className="text-center py-8">
-        <Euro className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <Euro className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
           Strompreis erforderlich
         </h3>
@@ -277,7 +277,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
             {gesamt.nettoNachSonderkosten.toFixed(0)} €
           </span>
           {gesamt.sonderkosten > 0 && (
-            <span className="text-gray-400 text-xs">(nach {gesamt.sonderkosten.toFixed(0)} € Sonderkosten)</span>
+            <span className="text-gray-400 dark:text-gray-500 text-xs">(nach {gesamt.sonderkosten.toFixed(0)} € Sonderkosten)</span>
           )}
         </div>
       </Card>

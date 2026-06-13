@@ -509,7 +509,7 @@ function DataTable({
                       onClick={() => onReaggregate(t.datum)}
                       disabled={reagDatum !== null}
                       title={`Tag ${t.datum} neu aggregieren`}
-                      className="p-1 text-gray-400 hover:text-primary-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="p-1 text-gray-400 dark:text-gray-500 hover:text-primary-600 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${isReag ? 'animate-spin' : ''}`} />
                     </button>
@@ -538,13 +538,13 @@ function DataTable({
                 >
                   {formatValue(stats[col.key].agg, col.format)}
                   {col.agg === 'avg' && (
-                    <span className="ml-1 text-[10px] text-gray-400">Ø</span>
+                    <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">Ø</span>
                   )}
                   {col.agg === 'max' && (
-                    <span className="ml-1 text-[10px] text-gray-400">max</span>
+                    <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">max</span>
                   )}
                   {col.agg === 'min' && (
-                    <span className="ml-1 text-[10px] text-gray-400">min</span>
+                    <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500">min</span>
                   )}
                 </td>
               ))}

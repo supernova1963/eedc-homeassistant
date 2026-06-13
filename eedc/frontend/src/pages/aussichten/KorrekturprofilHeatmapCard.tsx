@@ -244,7 +244,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
       </div>
 
       {loading && (
-        <div className="text-xs text-gray-400">Lädt Profile…</div>
+        <div className="text-xs text-gray-400 dark:text-gray-500">Lädt Profile…</div>
       )}
 
       {isEmpty && !loading && (
@@ -292,11 +292,11 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
               <table className="text-[10px] border-collapse">
                 <thead>
                   <tr>
-                    <th className="text-right pr-1 font-medium text-gray-400 sticky left-0 bg-white dark:bg-gray-900">
+                    <th className="text-right pr-1 font-medium text-gray-400 dark:text-gray-500 sticky left-0 bg-white dark:bg-gray-900">
                       Elev↓ \ Az→
                     </th>
                     {azimute.map(az => (
-                      <th key={az} className="px-0.5 py-0.5 font-normal text-gray-400 text-center" style={{ minWidth: 22 }}>
+                      <th key={az} className="px-0.5 py-0.5 font-normal text-gray-400 dark:text-gray-500 text-center" style={{ minWidth: 22 }}>
                         {az}
                       </th>
                     ))}
@@ -305,7 +305,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
                 <tbody>
                   {elevationen.map(el => (
                     <tr key={el}>
-                      <td className="text-right pr-1 text-gray-400 font-mono sticky left-0 bg-white dark:bg-gray-900">
+                      <td className="text-right pr-1 text-gray-400 dark:text-gray-500 font-mono sticky left-0 bg-white dark:bg-gray-900">
                         {el}°
                       </td>
                       {azimute.map(az => {
@@ -344,11 +344,11 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
               <table className="text-[10px] border-collapse">
                 <thead>
                   <tr>
-                    <th className="text-right pr-1 font-medium text-gray-400 sticky left-0 bg-white dark:bg-gray-900">
+                    <th className="text-right pr-1 font-medium text-gray-400 dark:text-gray-500 sticky left-0 bg-white dark:bg-gray-900">
                       Monat \ Slot→
                     </th>
                     {saisonStunden.map(h => (
-                      <th key={h} className="px-0.5 py-0.5 font-normal text-gray-400 text-center" style={{ minWidth: 22 }}>
+                      <th key={h} className="px-0.5 py-0.5 font-normal text-gray-400 dark:text-gray-500 text-center" style={{ minWidth: 22 }}>
                         {h}
                       </th>
                     ))}
@@ -357,7 +357,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
                 <tbody>
                   {monate.map(m => (
                     <tr key={m}>
-                      <td className="text-right pr-1 text-gray-400 font-mono sticky left-0 bg-white dark:bg-gray-900">
+                      <td className="text-right pr-1 text-gray-400 dark:text-gray-500 font-mono sticky left-0 bg-white dark:bg-gray-900">
                         {MONAT_KURZ[m]}
                       </td>
                       {saisonStunden.map(h => {
@@ -409,30 +409,30 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
           {/* Stats */}
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px] text-gray-600 dark:text-gray-400">
             <div>
-              <div className="text-gray-400">Tage eingegangen</div>
+              <div className="text-gray-400 dark:text-gray-500">Tage eingegangen</div>
               <div className="font-mono">{sw?.tage_eingegangen ?? 0}</div>
             </div>
             <div>
-              <div className="text-gray-400">Bins (×Wetter)</div>
+              <div className="text-gray-400 dark:text-gray-500">Bins (×Wetter)</div>
               <div className="font-mono">{Object.keys(sw?.faktoren ?? {}).length}</div>
             </div>
             <div>
-              <div className="text-gray-400">Zellen (Saison)</div>
+              <div className="text-gray-400 dark:text-gray-500">Zellen (Saison)</div>
               <div className="font-mono">{Object.keys(stZellen).length}</div>
             </div>
             <div>
-              <div className="text-gray-400">Bins (Sonnenstand)</div>
+              <div className="text-gray-400 dark:text-gray-500">Bins (Sonnenstand)</div>
               <div className="font-mono">{Object.keys(son?.faktoren ?? {}).length}</div>
             </div>
             <div>
-              <div className="text-gray-400">Skalar (Fallback)</div>
+              <div className="text-gray-400 dark:text-gray-500">Skalar (Fallback)</div>
               <div className="font-mono">
                 {skalar?.faktor_skalar != null ? skalar.faktor_skalar.toFixed(3) : '—'}
               </div>
             </div>
           </div>
 
-          <div className="mt-2 text-[10px] text-gray-400">
+          <div className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
             Aktualisiert: {formatDatum(sw?.aktualisiert_am ?? stundeP?.aktualisiert_am ?? son?.aktualisiert_am ?? skalar?.aktualisiert_am)}
           </div>
         </>

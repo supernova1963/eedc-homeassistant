@@ -672,7 +672,7 @@ export default function PVGISSettings() {
                           {p.horizont_verwendet ? (
                             <span title="Eigenes Profil"><Mountain className="h-4 w-4 text-green-500 mx-auto" /></span>
                           ) : (
-                            <span className="text-gray-400 text-xs">DEM</span>
+                            <span className="text-gray-400 dark:text-gray-500 text-xs">DEM</span>
                           )}
                         </td>
                         <td className="text-center py-2 px-2">
@@ -682,7 +682,7 @@ export default function PVGISSettings() {
                               Aktiv
                             </span>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
                           )}
                         </td>
                         <td className="text-right py-2 px-2">
@@ -772,7 +772,7 @@ export default function PVGISSettings() {
                         {p.verfuegbar ? (
                           <span className="text-green-600 dark:text-green-400">✓ Verfügbar</span>
                         ) : (
-                          <span className="text-gray-400">Nicht verfügbar</span>
+                          <span className="text-gray-400 dark:text-gray-500">Nicht verfügbar</span>
                         )}
                       </div>
                     </div>

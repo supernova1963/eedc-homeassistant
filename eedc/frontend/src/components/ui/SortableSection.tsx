@@ -75,7 +75,7 @@ export default function SortableSection({
               type="button"
               onClick={(e) => { stop(e); onMoveUp?.() }}
               disabled={!onMoveUp}
-              className="p-1 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+              className="p-1 rounded text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
               title="Sektion nach oben verschieben"
               aria-label="Sektion nach oben verschieben"
             >
@@ -85,7 +85,7 @@ export default function SortableSection({
               type="button"
               onClick={(e) => { stop(e); onMoveDown?.() }}
               disabled={!onMoveDown}
-              className="p-1 rounded text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+              className="p-1 rounded text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
               title="Sektion nach unten verschieben"
               aria-label="Sektion nach unten verschieben"
             >
@@ -93,7 +93,7 @@ export default function SortableSection({
             </button>
           </span>
         )}
-        <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="px-4 pb-5 pt-2 border-t border-gray-100 dark:border-gray-700">

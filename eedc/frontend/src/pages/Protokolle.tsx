@@ -147,7 +147,7 @@ function SystemLogsTab() {
           className="w-40 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
         />
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             value={search}
@@ -235,7 +235,7 @@ function SystemLogsTab() {
               ))}
               {logs.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-gray-400">
+                  <td colSpan={4} className="p-8 text-center text-gray-400 dark:text-gray-500">
                     Keine Log-Eintr\u00e4ge gefunden
                   </td>
                 </tr>
@@ -349,7 +349,7 @@ function AktivitaetenTab() {
           <option value="false">Fehlgeschlagen</option>
         </select>
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             value={searchInput}

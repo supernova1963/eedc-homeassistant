@@ -59,7 +59,7 @@ export default function SparklineChart({ monatsdaten, selectedYear }: {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      <div className="flex justify-between text-xs text-gray-400 mt-0.5">
+      <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-0.5">
         <span>{chartData[0]?.name}</span>
         <span>{chartData[chartData.length - 1]?.name}</span>
       </div>

@@ -48,7 +48,7 @@ export default function CollapsibleSection({
           className="flex items-center gap-2 flex-1 text-left text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400"
         >
           <ChevronDown
-            className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`}
+            className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-0' : '-rotate-90'}`}
           />
           {title}
         </button>

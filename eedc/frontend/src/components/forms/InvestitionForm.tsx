@@ -458,7 +458,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             <label htmlFor="parent_investition_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Gehört zu ({parentLabel})
               {isParentRequired ? ' *' : ' (optional)'}
-              {loadingParents && <span className="text-xs text-gray-400 ml-2">(Laden...)</span>}
+              {loadingParents && <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">(Laden...)</span>}
             </label>
             {possibleParents.length > 0 ? (
               <>
@@ -1429,7 +1429,7 @@ function InfothekVerknuepfungen({ investitionId }: { investitionId: number }) {
       </div>
 
       {loading ? (
-        <p className="text-xs text-gray-400">Laden...</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">Laden...</p>
       ) : eintraege.length === 0 ? (
         <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-500 dark:text-gray-400">

@@ -562,7 +562,7 @@ export default function ROIDashboard() {
                                   else next.add(b.investition_id)
                                   return next
                                 })}
-                                className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex-shrink-0"
+                                className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 flex-shrink-0"
                                 aria-label="Speicher-Details ein-/ausklappen"
                               >
                                 {isExpanded
@@ -612,7 +612,7 @@ export default function ROIDashboard() {
                               </span>
                             </FormelTooltip>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
@@ -628,7 +628,7 @@ export default function ROIDashboard() {
                               </span>
                             </FormelTooltip>
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-emerald-600 dark:text-emerald-400">

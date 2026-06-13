@@ -25,7 +25,7 @@ export default function OptionaleStep({
           <div key={feld.feld} className="space-y-2">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               {feld.label}
-              {feld.einheit && <span className="text-gray-400 ml-1">({feld.einheit})</span>}
+              {feld.einheit && <span className="text-gray-400 dark:text-gray-500 ml-1">({feld.einheit})</span>}
             </label>
 
             {feld.typ === 'text' ? (

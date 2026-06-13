@@ -137,7 +137,7 @@ export function PVStringVergleich({ anlageId }: Props) {
   if (!data || !data.strings || data.strings.length === 0) {
     return (
       <div className="text-center py-8">
-        <Sun className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <Sun className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
           Keine PV-Module gefunden
         </h3>
@@ -164,7 +164,7 @@ export function PVStringVergleich({ anlageId }: Props) {
 
   // Performance Badge
   const PerformanceBadge = ({ ratio }: { ratio: number | null | undefined }) => {
-    if (ratio == null) return <span className="text-gray-400">-</span>
+    if (ratio == null) return <span className="text-gray-400 dark:text-gray-500">-</span>
     const pct = ratio * 100
     const colorClass = pct >= 95 ? 'text-green-600' : pct < 85 ? 'text-red-600' : 'text-amber-600'
     const Icon = pct >= 95 ? TrendingUp : pct < 85 ? TrendingDown : null

@@ -413,7 +413,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                               type="button"
                               onClick={() => moveCol(col.key, 'up')}
                               disabled={idx === 0}
-                              className="h-3.5 w-4 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 disabled:cursor-default leading-none"
+                              className="h-3.5 w-4 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 disabled:cursor-default leading-none"
                               title="Nach oben"
                             >
                               <ChevronUp className="h-3 w-3" />
@@ -422,7 +422,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                               type="button"
                               onClick={() => moveCol(col.key, 'down')}
                               disabled={idx === orderedGroupCols.length - 1}
-                              className="h-3.5 w-4 flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 disabled:cursor-default leading-none"
+                              className="h-3.5 w-4 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-20 disabled:cursor-default leading-none"
                               title="Nach unten"
                             >
                               <ChevronDown className="h-3 w-3" />
@@ -436,7 +436,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
                 <button
                   type="button"
                   onClick={() => setColOrder(COLUMNS.map(c => c.key))}
-                  className="mt-1 w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1"
+                  className="mt-1 w-full text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1"
                 >
                   Reihenfolge zurücksetzen
                 </button>

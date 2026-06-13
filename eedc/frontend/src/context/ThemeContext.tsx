@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { CHART_ACHSEN } from '../lib/colors'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -63,4 +64,20 @@ export function useTheme() {
     throw new Error('useTheme must be used within a ThemeProvider')
   }
   return context
+}
+
+/**
+ * Dark-aware Chart-Infrastruktur-Farben (Achse/Grid/Referenz) — der EINE Weg,
+ * Recharts-Inline-Styles theme-abhängig zu färben (Regel Nr. 0).
+ *
+ * Hintergrund (Style-Guide A2, P2): Recharts-TEXT (Tick-Werte, Legende,
+ * Pie-Labels) wird zentral über die `html.dark .recharts-*`-Overrides in
+ * `index.css` dark-aware. Recharts-STROKES/FILLS (CartesianGrid, ReferenceLine,
+ * PolarGrid, neutrale Balken …) lassen sich nur per Inline-Style setzen — dafür
+ * dieser Hook. So gibt es genau zwei klar getrennte Mechanismen (Text=CSS,
+ * Stroke=Hook), nicht pro Komponente hartkodierte `CHART_ACHSEN.light.*`.
+ */
+export function useChartTheme() {
+  const { isDark } = useTheme()
+  return isDark ? CHART_ACHSEN.dark : CHART_ACHSEN.light
 }

@@ -494,14 +494,14 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
       <div className="flex items-center gap-1 ml-4">
         <button
           onClick={onEdit}
-          className="p-2 text-gray-400 hover:text-primary-600 transition-colors"
+          className="p-2 text-gray-400 dark:text-gray-500 hover:text-primary-600 transition-colors"
           title="Bearbeiten"
         >
           <Pencil className="h-4 w-4" />
         </button>
         <button
           onClick={onDelete}
-          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+          className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 transition-colors"
           title="Löschen"
         >
           <Trash2 className="h-4 w-4" />

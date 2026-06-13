@@ -77,7 +77,7 @@ export default function Auswertung() {
     return (
       <div className="space-y-6">
         <Card className="text-center py-12">
-          <Sun className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+          <Sun className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
             Noch keine Daten vorhanden
           </h3>

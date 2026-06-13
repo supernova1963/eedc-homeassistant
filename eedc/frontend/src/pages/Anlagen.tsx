@@ -95,13 +95,13 @@ export default function Anlagen() {
                         {anlage.standort_plz} {anlage.standort_ort}
                       </div>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-400 dark:text-gray-500">-</span>
                     )}
                   </TableCell>
                   <TableCell>
                     {anlage.installationsdatum
                       ? new Date(anlage.installationsdatum).toLocaleDateString('de-DE')
-                      : <span className="text-gray-400">-</span>
+                      : <span className="text-gray-400 dark:text-gray-500">-</span>
                     }
                   </TableCell>
                   <TableCell className="text-right">

@@ -38,7 +38,7 @@ export default function HAConnectionStep({
             {haConnected ? (
               <Wifi className="w-5 h-5 text-green-600 dark:text-green-400" />
             ) : (
-              <WifiOff className="w-5 h-5 text-gray-400" />
+              <WifiOff className="w-5 h-5 text-gray-400 dark:text-gray-500" />
             )}
           </div>
           <div>

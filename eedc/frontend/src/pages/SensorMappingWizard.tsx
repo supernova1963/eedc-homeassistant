@@ -997,7 +997,7 @@ export default function SensorMappingWizard() {
                 : `Konfiguriere die Sensoren für ${currentStepConfig.investitionen?.length || 0} Komponente(n)`
           }
           action={
-            <div className="flex items-center gap-2 text-gray-400">
+            <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
               {currentStepConfig.icon}
               <span className="text-sm">
                 {currentStep + 1} / {steps.length}

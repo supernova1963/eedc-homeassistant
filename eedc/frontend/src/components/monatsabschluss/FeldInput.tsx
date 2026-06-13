@@ -20,7 +20,7 @@ export default function FeldInput({
     <div className={compact ? '' : 'space-y-2'}>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
         {feld.label}
-        <span className="text-gray-400 ml-1">({feld.einheit})</span>
+        <span className="text-gray-400 dark:text-gray-500 ml-1">({feld.einheit})</span>
       </label>
 
       {/* Eingabefeld + Übernehmen daneben — der Übernehmen-Button saß früher
@@ -64,7 +64,7 @@ export default function FeldInput({
               title={v.beschreibung}
             >
               {v.wert} {feld.einheit}
-              <span className="text-gray-400 ml-1">({getQuelleLabel(v.quelle)})</span>
+              <span className="text-gray-400 dark:text-gray-500 ml-1">({getQuelleLabel(v.quelle)})</span>
             </button>
           ))}
         </div>

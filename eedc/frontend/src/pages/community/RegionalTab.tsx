@@ -21,7 +21,8 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
-import { CHART_ACHSEN, EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
+import { EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET } from '../../lib'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, RegionStatistik } from '../../api/community'
 import {
@@ -74,6 +75,7 @@ interface ChoroplethKarteProps {
 }
 
 function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
+  const achsen = useChartTheme()
   const [tooltip, setTooltip] = useState<{ name: string; region: RegionStatistik | null; wert: number; x: number; y: number } | null>(null)
 
   const regionMap = useMemo(() => {
@@ -112,7 +114,7 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  fill={wert !== undefined ? interpolateColor(wert, min, max) : CHART_ACHSEN.light.grid}
+                  fill={wert !== undefined ? interpolateColor(wert, min, max) : achsen.grid}
                   stroke={isOwn ? EIGENE_SERIE_FARBEN.duRand : KARTE_FARBEN.grenze}
                   strokeWidth={isOwn ? 2.5 : 0.8}
                   style={{
@@ -184,6 +186,7 @@ interface RegionalTabProps {
 }
 
 export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkError }: RegionalTabProps) {
+  const achsen = useChartTheme()
   const [allRegions, setAllRegions] = useState<RegionStatistik[]>([])
   const [extraLoading, setExtraLoading] = useState(false)
 
@@ -243,7 +246,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
       {
         name: 'Community',
         wert: regionalStats.communityDurchschnitt,
-        fill: CHART_ACHSEN.light.referenz,
+        fill: achsen.referenz,
       },
     ]
   }, [regionalStats])
@@ -354,21 +357,21 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={vergleichsData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} horizontal={true} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} horizontal={true} vertical={false} />
               <XAxis
                 type="number"
-                tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                tick={{ fill: achsen.achse, fontSize: 12 }}
                 domain={[0, 'auto']}
                 label={{
                   value: 'kWh/kWp',
                   position: 'bottom',
-                  style: { fill: CHART_ACHSEN.light.achse, fontSize: 12 },
+                  style: { fill: achsen.achse, fontSize: 12 },
                 }}
               />
               <YAxis
                 type="category"
                 dataKey="name"
-                tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                tick={{ fill: achsen.achse, fontSize: 12 }}
                 width={100}
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" />} />
@@ -500,7 +503,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                         <td className="py-2 px-3">
                           <div className="flex items-center gap-2">
                             <span className={`text-xs font-medium w-5 text-center ${
-                              index < 3 ? 'text-yellow-600' : 'text-gray-400'
+                              index < 3 ? 'text-yellow-600' : 'text-gray-400 dark:text-gray-500'
                             }`}>
                               {index + 1}
                             </span>
@@ -521,7 +524,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
                           {region.avg_speicher_ladung_kwh != null
-                            ? <><div>{region.avg_speicher_ladung_kwh.toFixed(0)} ↓</div><div className="text-xs text-gray-400">{region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↑ kWh</div></>
+                            ? <><div>{region.avg_speicher_ladung_kwh.toFixed(0)} ↓</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↑ kWh</div></>
                             : '-'}
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
@@ -529,12 +532,12 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
                           {region.avg_eauto_km != null
-                            ? <><div>{region.avg_eauto_km.toFixed(0)} km</div><div className="text-xs text-gray-400">{region.avg_eauto_ladung_kwh != null ? `${region.avg_eauto_ladung_kwh.toFixed(0)} kWh` : '–'}</div></>
+                            ? <><div>{region.avg_eauto_km.toFixed(0)} km</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_eauto_ladung_kwh != null ? `${region.avg_eauto_ladung_kwh.toFixed(0)} kWh` : '–'}</div></>
                             : '-'}
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
                           {region.avg_wallbox_kwh != null
-                            ? <><div>{region.avg_wallbox_kwh.toFixed(0)} kWh</div><div className="text-xs text-gray-400">{region.avg_wallbox_pv_anteil != null ? `${region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : '–'}</div></>
+                            ? <><div>{region.avg_wallbox_kwh.toFixed(0)} kWh</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_wallbox_pv_anteil != null ? `${region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : '–'}</div></>
                             : '-'}
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">

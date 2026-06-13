@@ -139,7 +139,7 @@ export default function VersorgerSection({ value, onChange }: VersorgerSectionPr
                     e.stopPropagation()
                     removeVersorger(key)
                   }}
-                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                  className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
                   title="Versorger entfernen"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -249,7 +249,7 @@ export default function VersorgerSection({ value, onChange }: VersorgerSectionPr
                             <button
                               type="button"
                               onClick={() => removeZaehler(key, index)}
-                              className="p-2 text-gray-400 hover:text-red-500 transition-colors mt-6"
+                              className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors mt-6"
                               title="Zähler entfernen"
                             >
                               <Trash2 className="w-4 h-4" />

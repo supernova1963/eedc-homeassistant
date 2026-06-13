@@ -404,7 +404,7 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
           <p className="text-xs text-gray-600 dark:text-gray-400">{selected.beschreibung}</p>
 
           {selected.anleitung && (
-            <p className="text-xs text-gray-500 dark:text-gray-500 italic">{selected.anleitung}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 italic">{selected.anleitung}</p>
           )}
 
           {/* Investitions-Auswahl (nur wenn erfordert_investition) */}
@@ -453,10 +453,10 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
               {preview.map((p, i) => (
                 <div key={i} className="font-mono text-[11px]">
                   <span className="text-gray-700 dark:text-gray-300">{p.topic}</span>
-                  <span className="text-gray-400 mx-1">→</span>
+                  <span className="text-gray-400 dark:text-gray-500 mx-1">→</span>
                   <span className="text-primary-600 dark:text-primary-400">{p.ziel_key}</span>
                   {p.beschreibung && (
-                    <span className="text-gray-400 ml-2">({p.beschreibung})</span>
+                    <span className="text-gray-400 dark:text-gray-500 ml-2">({p.beschreibung})</span>
                   )}
                 </div>
               ))}
@@ -670,7 +670,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
       {/* Mapping-Liste */}
       {loading ? (
         <div className="flex justify-center py-4">
-          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          <Loader2 className="w-5 h-5 animate-spin text-gray-400 dark:text-gray-500" />
         </div>
       ) : mappings.length === 0 && !showForm ? (
         <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
@@ -699,7 +699,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
               <button onClick={() => handleToggle(m)} className="shrink-0" title={m.aktiv ? 'Deaktivieren' : 'Aktivieren'}>
                 {m.aktiv
                   ? <ToggleRight className="w-5 h-5 text-green-500" />
-                  : <ToggleLeft className="w-5 h-5 text-gray-400" />
+                  : <ToggleLeft className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                 }
               </button>
 
@@ -709,7 +709,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
                   <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate" title={m.quell_topic}>
                     {m.quell_topic}
                   </span>
-                  <span className="text-gray-400 text-xs shrink-0">→</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-xs shrink-0">→</span>
                   <span className="text-xs font-mono text-primary-600 dark:text-primary-400 truncate" title={m.ziel_key}>
                     {m.ziel_key}
                   </span>
@@ -748,7 +748,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => startEdit(m)}
-                  className="p-1.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                   title="Bearbeiten"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
@@ -756,7 +756,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
                 <button
                   onClick={() => handleDelete(m.id)}
                   disabled={deleting === m.id}
-                  className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  className="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                   title="Löschen"
                 >
                   {deleting === m.id

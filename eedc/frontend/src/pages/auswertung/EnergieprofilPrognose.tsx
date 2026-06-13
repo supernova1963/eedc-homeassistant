@@ -11,7 +11,8 @@ import {
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
 import { Card, Alert } from '../../components/ui'
-import { COLORS, CHART_COLORS, CHART_ACHSEN } from '../../lib'
+import { COLORS, CHART_COLORS } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
 
 interface Props {
@@ -54,6 +55,7 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
   const [daten, setDaten] = useState<TagesPrognose | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const achsen = useChartTheme()
 
   useEffect(() => {
     if (!anlageId || !datum) return
@@ -117,7 +119,7 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
         >
           Morgen
         </button>
-        {loading && <span className="text-xs text-gray-400">Lade...</span>}
+        {loading && <span className="text-xs text-gray-400 dark:text-gray-500">Lade...</span>}
       </div>
 
       {/* Error */}
@@ -204,7 +206,7 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
                     label={{ value: 'SoC', angle: 90, position: 'insideRight', style: { fontSize: 10 } }}
                   />
                 )}
-                <ReferenceLine yAxisId="kw" y={0} stroke={CHART_ACHSEN.light.referenz} strokeWidth={1.5} />
+                <ReferenceLine yAxisId="kw" y={0} stroke={achsen.referenz} strokeWidth={1.5} />
                 <Tooltip content={<PrognoseTooltip hatSpeicher={hatSpeicher} />} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
 

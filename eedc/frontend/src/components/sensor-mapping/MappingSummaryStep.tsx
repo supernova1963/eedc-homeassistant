@@ -77,7 +77,7 @@ interface MappingSummaryStepProps {
 
 const STRATEGIE_ICONS: Record<StrategieTyp, React.ReactNode> = {
   sensor: <Wifi className="w-4 h-4 text-green-500" />,
-  keine: <MinusCircle className="w-4 h-4 text-gray-400" />,
+  keine: <MinusCircle className="w-4 h-4 text-gray-400 dark:text-gray-500" />,
 }
 
 const STRATEGIE_LABELS: Record<StrategieTyp, string> = {
@@ -108,7 +108,7 @@ function MappingRow({ label, mapping, obsolet }: { label: string; mapping: FeldM
     return (
       <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
         <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
-        <span className="text-sm text-gray-400 italic">Nicht konfiguriert</span>
+        <span className="text-sm text-gray-400 dark:text-gray-500 italic">Nicht konfiguriert</span>
       </div>
     )
   }
@@ -155,7 +155,7 @@ function LiveSensorRow({ label, entityId, inverted }: { label: string; entityId:
           )}
         </div>
       ) : (
-        <span className="text-sm text-gray-400 italic">Nicht zugeordnet</span>
+        <span className="text-sm text-gray-400 dark:text-gray-500 italic">Nicht zugeordnet</span>
       )}
     </div>
   )
@@ -229,7 +229,7 @@ export default function MappingSummaryStep({
           count={stats.sensor}
         />
         <StatCard
-          icon={<MinusCircle className="w-5 h-5 text-gray-400" />}
+          icon={<MinusCircle className="w-5 h-5 text-gray-400 dark:text-gray-500" />}
           label="Kein Sensor"
           count={stats.keine}
         />

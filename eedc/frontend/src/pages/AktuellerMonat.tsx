@@ -15,7 +15,8 @@ import {
   FileSpreadsheet, Plug, Cloud, Upload, FileText,
 } from 'lucide-react'
 import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
-import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS, CHART_ACHSEN } from '../lib'
+import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS } from '../lib'
+import { useChartTheme } from '../context/ThemeContext'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useApiData } from '../hooks'
@@ -70,6 +71,7 @@ function QuelleBadge({ quelle, aktiv }: { quelle: string; aktiv: boolean }) {
 
 export default function AktuellerMonat() {
   const navigate = useNavigate()
+  const achsen = useChartTheme()
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [refreshing, setRefreshing] = useState(false)
 
@@ -280,7 +282,7 @@ export default function AktuellerMonat() {
         <Card>
           <div className="p-6">
             <div className="flex items-start gap-4 mb-6">
-              <AlertCircle className="h-8 w-8 text-gray-400 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-8 w-8 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-lg font-medium text-gray-900 dark:text-white">
                   Keine Daten für {data.monat_name} {data.jahr}
@@ -425,7 +427,7 @@ export default function AktuellerMonat() {
                           </text>
                           {info && (
                             <circle cx={-2} cy={1} r={3.5} className={quelleColor(info.quelle).replace('bg-', 'fill-')}
-                              fill={info.quelle === 'ha_statistics' || info.quelle === 'ha_sensor' ? STATUS_COLORS.ok : info.quelle === 'local_connector' ? STATUS_COLORS.info : CHART_ACHSEN.light.referenz}
+                              fill={info.quelle === 'ha_statistics' || info.quelle === 'ha_sensor' ? STATUS_COLORS.ok : info.quelle === 'local_connector' ? STATUS_COLORS.info : achsen.referenz}
                             >
                               <title>{quelleLabel(info.quelle)}</title>
                             </circle>
@@ -505,7 +507,7 @@ export default function AktuellerMonat() {
                 </div>
               </>
             ) : (
-              <p className="text-gray-400 text-sm text-center py-8">Keine Verteilungsdaten</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm text-center py-8">Keine Verteilungsdaten</p>
             )}
           </Card>
         </div>
@@ -526,7 +528,7 @@ export default function AktuellerMonat() {
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend />
                 <Bar dataKey="Aktuell" fill={CHART_COLORS.erzeugung} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Vorjahr" fill={CHART_ACHSEN.light.referenz} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Vorjahr" fill={achsen.referenz} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -587,13 +589,13 @@ export default function AktuellerMonat() {
                     <span className="font-medium">{fmt(data.wp_waerme_kwh)} kWh</span>
                   </div>
                   {(data.wp_heizung_kwh ?? 0) > 0 && (
-                    <div className="flex justify-between pl-3 text-gray-400">
+                    <div className="flex justify-between pl-3 text-gray-400 dark:text-gray-500">
                       <span>Heizung:</span>
                       <span>{fmt(data.wp_heizung_kwh)} kWh</span>
                     </div>
                   )}
                   {(data.wp_warmwasser_kwh ?? 0) > 0 && (
-                    <div className="flex justify-between pl-3 text-gray-400">
+                    <div className="flex justify-between pl-3 text-gray-400 dark:text-gray-500">
                       <span>Warmwasser:</span>
                       <span>{fmt(data.wp_warmwasser_kwh)} kWh</span>
                     </div>
@@ -818,7 +820,7 @@ export default function AktuellerMonat() {
                     {fmt(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 0)}%
                   </p>
                 </FormelTooltip>
-                <p className="text-sm text-gray-400 mt-2">
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
                   {fmt(data.pv_erzeugung_kwh)} von {fmt(data.soll_pv_kwh)} kWh
                 </p>
               </div>

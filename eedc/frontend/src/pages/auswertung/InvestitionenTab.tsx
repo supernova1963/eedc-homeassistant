@@ -105,7 +105,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
   if (investitionen.length === 0) {
     return (
       <Card className="text-center py-8">
-        <PiggyBank className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+        <PiggyBank className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
           Keine Investitionen erfasst
         </h3>
@@ -394,8 +394,8 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                           <div className="flex items-center gap-2">
                             {isPVSystem && (
                               isExpanded
-                                ? <ChevronDown className="h-4 w-4 text-gray-400" />
-                                : <ChevronRight className="h-4 w-4 text-gray-400" />
+                                ? <ChevronDown className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                                : <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                             )}
                             {(isOrphanPVModule || isEmptyWR) && (
                               <span title={isOrphanPVModule ? 'PV-Modul ohne Wechselrichter-Zuordnung' : 'Wechselrichter ohne PV-Module'}>
@@ -404,7 +404,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                             )}
                             {b.investition_bezeichnung}
                             {isPVSystem && (
-                              <span className="text-xs text-gray-400">
+                              <span className="text-xs text-gray-400 dark:text-gray-500">
                                 ({b.komponenten!.length} Komponenten)
                               </span>
                             )}
@@ -494,10 +494,10 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                             {komp.einsparung !== null ? (
                               <span className="text-green-500">{komp.einsparung.toFixed(0)} €</span>
                             ) : (
-                              <span className="text-gray-400 italic text-xs">via Module</span>
+                              <span className="text-gray-400 dark:text-gray-500 italic text-xs">via Module</span>
                             )}
                           </td>
-                          <td className="px-4 py-2 text-sm text-right text-gray-400" colSpan={2}>
+                          <td className="px-4 py-2 text-sm text-right text-gray-400 dark:text-gray-500" colSpan={2}>
                             {typeof komp.detail?.anteil_prozent === 'number' && (
                               <span className="text-xs">{komp.detail.anteil_prozent.toFixed(0)}% Anteil</span>
                             )}

@@ -116,7 +116,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           <span className="font-medium text-gray-700 dark:text-gray-300">{anlage?.anlagenname}</span>
-          <span className="mx-1.5 text-gray-400">•</span>
+          <span className="mx-1.5 text-gray-400 dark:text-gray-500">•</span>
           {data.anlagenleistung_kwp.toFixed(1)} kWp
         </p>
         <div className="flex items-center gap-2">
@@ -132,7 +132,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={() => setShowShareModal(true)}
-            className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             aria-label="Monatstext für Social Media"
           >
             <Share2 className="h-4 w-4" />

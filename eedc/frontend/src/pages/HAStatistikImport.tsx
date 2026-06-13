@@ -292,7 +292,7 @@ export default function HAStatistikImport() {
       case 'importieren':
         return <CheckCircle className="w-4 h-4 text-green-500" />
       case 'ueberspringen':
-        return <ArrowRight className="w-4 h-4 text-gray-400" />
+        return <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
       case 'konflikt':
         return <AlertTriangle className="w-4 h-4 text-amber-500" />
       case 'ueberschreiben':
@@ -663,14 +663,14 @@ function MonatRow({
           <div className="flex items-center gap-3">
             {hasDetails ? (
               expanded ? (
-                <ChevronDown className="w-4 h-4 text-gray-400" />
+                <ChevronDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               ) : (
-                <ChevronRight className="w-4 h-4 text-gray-400" />
+                <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               )
             ) : (
               <div className="w-4" />
             )}
-            <Calendar className="w-4 h-4 text-gray-400" />
+            <Calendar className="w-4 h-4 text-gray-400 dark:text-gray-500" />
             <span className="font-medium text-gray-900 dark:text-white">
               {monat.monat_name} {monat.jahr}
             </span>

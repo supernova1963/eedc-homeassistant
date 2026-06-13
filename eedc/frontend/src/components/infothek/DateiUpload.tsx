@@ -195,7 +195,7 @@ export default function DateiUpload({ eintragId, onDateiChange }: DateiUploadPro
               <button
                 type="button"
                 onClick={() => removePending(item.id)}
-                className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
+                className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 disabled:opacity-50"
                 title="Entfernen"
                 disabled={uploading}
               >

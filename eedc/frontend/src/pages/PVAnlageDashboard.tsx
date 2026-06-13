@@ -292,7 +292,7 @@ export default function PVAnlageDashboard() {
                             <div key={mod.id} className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                               <Sun className="h-4 w-4 text-yellow-500 flex-shrink-0" />
                               <span className="truncate">{mod.bezeichnung}</span>
-                              <span className="text-gray-400 ml-auto whitespace-nowrap">
+                              <span className="text-gray-400 dark:text-gray-500 ml-auto whitespace-nowrap">
                                 {mod.leistung_kwp?.toFixed(1)} kWp
                                 {mod.ausrichtung && ` • ${mod.ausrichtung}`}
                               </span>
@@ -316,7 +316,7 @@ export default function PVAnlageDashboard() {
                                 <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
                                 <span className="truncate">{sp.bezeichnung}</span>
                                 {kapBrutto != null && (
-                                  <span className="text-gray-400 ml-auto whitespace-nowrap">
+                                  <span className="text-gray-400 dark:text-gray-500 ml-auto whitespace-nowrap">
                                     {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
                                     {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
                                   </span>
@@ -349,7 +349,7 @@ export default function PVAnlageDashboard() {
                         <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
                         <span className="truncate">{sp.bezeichnung}</span>
                         {kapBrutto != null && (
-                          <span className="text-gray-400 ml-auto whitespace-nowrap">
+                          <span className="text-gray-400 dark:text-gray-500 ml-auto whitespace-nowrap">
                             {kapBrutto.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh
                             {zeigeNutzbar && ` (${kapNutzbar!.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} nutzbar)`}
                           </span>
@@ -457,7 +457,7 @@ export default function PVAnlageDashboard() {
 
       {!hasData && hasPVSystem && (
         <Card className="text-center py-12">
-          <BarChart3 className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+          <BarChart3 className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
             Noch keine Monatsdaten vorhanden
           </h3>

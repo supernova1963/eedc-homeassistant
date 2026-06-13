@@ -103,7 +103,7 @@ export default function MarkdownNotizen({
           {value ? (
             <Markdown>{value}</Markdown>
           ) : (
-            <p className="text-gray-400 italic">Keine Notizen</p>
+            <p className="text-gray-400 dark:text-gray-500 italic">Keine Notizen</p>
           )}
         </div>
       ) : (

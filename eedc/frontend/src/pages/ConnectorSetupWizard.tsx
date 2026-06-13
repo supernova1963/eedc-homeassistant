@@ -686,7 +686,7 @@ export default function ConnectorSetupWizard() {
       {currentStep === 2 && status && !status.configured && (
         <Card>
           <div className="text-center py-8">
-            <WifiOff className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+            <WifiOff className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-3" />
             <p className="text-gray-600 dark:text-gray-400">
               Kein Connector konfiguriert.
             </p>

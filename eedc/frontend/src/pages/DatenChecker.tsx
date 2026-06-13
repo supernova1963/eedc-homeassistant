@@ -111,9 +111,9 @@ function KategorieSektion({
       >
         <div className="flex items-center gap-2">
           {open ? (
-            <ChevronDown className="h-4 w-4 text-gray-400" />
+            <ChevronDown className="h-4 w-4 text-gray-400 dark:text-gray-500" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-gray-400" />
+            <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500" />
           )}
           <span className="font-medium text-sm text-gray-900 dark:text-white">
             {kategorieLabels[kategorie] || kategorie}

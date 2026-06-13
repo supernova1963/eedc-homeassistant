@@ -184,7 +184,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                   ) : prognose.amortisation_prognose_jahr ? (
                     <span>{prognose.amortisation_prognose_jahr}</span>
                   ) : (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-400 dark:text-gray-500">-</span>
                   )}
                 </p>
               </FormelTooltip>

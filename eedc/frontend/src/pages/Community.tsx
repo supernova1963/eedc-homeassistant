@@ -178,7 +178,7 @@ export default function Community() {
             target="_blank"
             rel="noopener noreferrer"
             title="Community-Server im Browser öffnen"
-            className="p-2 rounded-lg text-gray-400 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <ExternalLink className="h-5 w-5" />
           </a>
@@ -209,7 +209,7 @@ export default function Community() {
                 ))}
               </select>
               <SimpleTooltip text={ZEITRAUM_OPTIONS.find(o => o.value === zeitraum)?.tooltip || 'Betrachtungszeitraum wählen'}>
-                <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                <HelpCircle className="h-4 w-4 text-gray-400 dark:text-gray-500 cursor-help" />
               </SimpleTooltip>
             </div>
           )}

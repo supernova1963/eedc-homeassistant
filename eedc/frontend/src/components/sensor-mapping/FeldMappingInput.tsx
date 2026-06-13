@@ -144,7 +144,7 @@ function SensorAutocomplete({ value, onChange, sensors, placeholder, requireStat
         </div>
       ) : (
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             value={search}

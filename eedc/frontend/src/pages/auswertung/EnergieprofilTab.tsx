@@ -13,8 +13,9 @@ import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPu
 import { EnergieprofilMonat } from './EnergieprofilMonat'
 import { EnergieprofilPrognose } from './EnergieprofilPrognose'
 import {
-  DEDIZIERTE_KATEGORIEN, EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, CHART_ACHSEN, WOCHENTAG_FARBEN,
+  DEDIZIERTE_KATEGORIEN, EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, WOCHENTAG_FARBEN,
 } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
   // 250ms dauert. Auf schnellen Rechnern → kein Flash; auf langsamen
   // Rechnern / Netzen weiterhin sichtbares Feedback.
   const [zeigeLader, setZeigeLader] = useState(false)
+  const achsen = useChartTheme()
 
   useEffect(() => {
     if (!anlageId || !datum) return
@@ -220,7 +222,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
         >
           <ChevronRight className="h-4 w-4" />
         </button>
-        {zeigeLader && <span className="text-xs text-gray-400">Lade…</span>}
+        {zeigeLader && <span className="text-xs text-gray-400 dark:text-gray-500">Lade…</span>}
       </div>
 
       {/* KPI-Zeile */}
@@ -253,7 +255,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
-              <ReferenceLine y={0} stroke={CHART_ACHSEN.light.referenz} strokeWidth={1.5} />
+              <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
               <Tooltip content={<ChartTooltip
                 unit=" kW" decimals={2}
                 formatter={(v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`}
@@ -403,7 +405,7 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
           </div>
         </div>
 
-        {loading && <span className="text-xs text-gray-400">Lade…</span>}
+        {loading && <span className="text-xs text-gray-400 dark:text-gray-500">Lade…</span>}
       </div>
 
       {/* Wochentag-Toggles */}
@@ -698,7 +700,7 @@ function TagesdetailTabelle({ daten, extraSerien, datum }: { daten: StundenWert[
                 })}
                 <button type="button"
                   onClick={() => setVisibleCols(new Set(TD_COLUMNS.filter(c => c.defaultVisible).map(c => c.key)))}
-                  className="mt-1 w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1">
+                  className="mt-1 w-full text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-center py-1">
                   Standard wiederherstellen
                 </button>
               </div>

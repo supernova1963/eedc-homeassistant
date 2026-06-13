@@ -120,7 +120,7 @@ export default function Einrichtung() {
                     <h3 className="font-semibold text-gray-900 dark:text-white">
                       {quelle.title}
                     </h3>
-                    <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors shrink-0" />
+                    <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors shrink-0" />
                   </div>
                   <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     {quelle.description}
@@ -137,7 +137,7 @@ export default function Einrichtung() {
                         </>
                       ) : (
                         <>
-                          <Circle className="h-3.5 w-3.5 text-gray-400" />
+                          <Circle className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
                           <span className="text-gray-500">Nicht konfiguriert</span>
                         </>
                       )}

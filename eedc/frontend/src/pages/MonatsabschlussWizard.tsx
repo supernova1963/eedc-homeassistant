@@ -613,7 +613,7 @@ export default function MonatsabschlussWizard() {
         <button
           type="button"
           onClick={() => navigate(`/monatsdaten`)}
-          className="mt-1 text-xs text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 underline underline-offset-2"
+          className="mt-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-500 dark:hover:text-primary-400 underline underline-offset-2"
         >
           Anderen Monat bearbeiten → Monatsdaten-Tabelle
         </button>

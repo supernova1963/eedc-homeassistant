@@ -353,7 +353,7 @@ export default function CustomImportWizard() {
             {anlagen.length > 0 && (
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Anlage wählen <span className="font-normal text-gray-400">(empfohlen – für automatische Erkennung von Investitions-Spalten)</span>
+                  Anlage wählen <span className="font-normal text-gray-400 dark:text-gray-500">(empfohlen – für automatische Erkennung von Investitions-Spalten)</span>
                 </label>
                 <select
                   value={selectedAnlageId ?? ''}
@@ -386,7 +386,7 @@ export default function CustomImportWizard() {
                 </>
               ) : (
                 <>
-                  <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                  <Upload className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500 mb-3" />
                   <p className="text-gray-700 dark:text-gray-300 font-medium">
                     Datei hier ablegen oder klicken
                   </p>
@@ -438,7 +438,7 @@ export default function CustomImportWizard() {
                       <button
                         type="button"
                         onClick={() => handleDeleteTemplate(t.name)}
-                        className="p-1 text-gray-400 hover:text-red-500"
+                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500"
                         title="Template löschen"
                       >
                         <X className="w-3 h-3" />
@@ -483,7 +483,7 @@ export default function CustomImportWizard() {
                       </div>
 
                       {/* Pfeil */}
-                      <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <ArrowRight className="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
 
                       {/* Vorzeichen invertieren */}
                       {currentMapping && currentMapping !== 'jahr' && currentMapping !== 'monat' && (
@@ -587,10 +587,10 @@ export default function CustomImportWizard() {
                       <span className="font-mono text-gray-600 dark:text-gray-400 text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded flex-shrink-0">
                         {inv.spalte}
                       </span>
-                      <ArrowRight className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                      <ArrowRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                       <span className="text-gray-700 dark:text-gray-300">
                         {inv.inv_bezeichnung}
-                        <span className="text-gray-400 ml-1">({inv.suffix})</span>
+                        <span className="text-gray-400 dark:text-gray-500 ml-1">({inv.suffix})</span>
                       </span>
                       <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0 ml-auto" />
                     </div>

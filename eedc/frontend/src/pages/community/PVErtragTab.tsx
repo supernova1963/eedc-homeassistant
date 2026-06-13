@@ -9,7 +9,8 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { MONAT_KURZ, CHART_ACHSEN, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
+import { MONAT_KURZ, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL } from '../../lib'
 import {
   Sun,
   TrendingUp,
@@ -43,6 +44,7 @@ interface PVErtragTabProps {
 }
 
 export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkError }: PVErtragTabProps) {
+  const achsen = useChartTheme()
   const [distribution, setDistribution] = useState<Verteilung | null>(null)
   const [monthlyAverages, setMonthlyAverages] = useState<MonatlicheDurchschnitte | null>(null)
   const [extraLoading, setExtraLoading] = useState(false)
@@ -267,22 +269,22 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 11 }}
+                  tick={{ fill: achsen.achse, fontSize: 11 }}
                   interval={0}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
                 <YAxis
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }}
+                  tick={{ fill: achsen.achse, fontSize: 12 }}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
                     position: 'insideLeft',
-                    style: { fill: CHART_ACHSEN.light.achse, fontSize: 12 },
+                    style: { fill: achsen.achse, fontSize: 12 },
                   }}
                 />
                 <Tooltip
@@ -298,7 +300,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 <Line
                   type="monotone"
                   dataKey="durchschnitt"
-                  stroke={CHART_ACHSEN.light.referenz}
+                  stroke={achsen.referenz}
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   dot={false}
@@ -366,7 +368,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                       <td className="py-3 px-4">
                         <span className="font-medium text-gray-900 dark:text-white">{js.jahr}</span>
                         {!js.vollstaendig && (
-                          <span className="ml-2 text-xs text-gray-400">(unvollständig)</span>
+                          <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">(unvollständig)</span>
                         )}
                       </td>
                       <td className="text-right py-3 px-4">
@@ -411,15 +413,15 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 isOwn: benchmark.benchmark.spez_ertrag_anlage >= bin.von &&
                        benchmark.benchmark.spez_ertrag_anlage < bin.bis,
               }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} />
+                <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="range"
-                  tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 10 }}
+                  tick={{ fill: achsen.achse, fontSize: 10 }}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis tick={{ fill: CHART_ACHSEN.light.achse, fontSize: 12 }} />
+                <YAxis tick={{ fill: achsen.achse, fontSize: 12 }} />
                 <Tooltip
                   content={<ChartTooltip
                     formatter={(value) => `${value} Anlagen`}

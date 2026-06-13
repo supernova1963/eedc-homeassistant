@@ -210,7 +210,7 @@ export default function Backup() {
               }
             `}
           >
-            <FileJson className="h-10 w-10 mx-auto mb-3 text-gray-400" />
+            <FileJson className="h-10 w-10 mx-auto mb-3 text-gray-400 dark:text-gray-500" />
             {importing ? (
               <LoadingSpinner text="Importiere..." />
             ) : (

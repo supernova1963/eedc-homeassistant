@@ -127,7 +127,7 @@ function AnteilEingabe({
           </div>
         </div>
       ))}
-      <div className={`text-xs text-right pt-1 ${fehler ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+      <div className={`text-xs text-right pt-1 ${fehler ? 'text-red-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
         Summe: {summe.toFixed(1)} % {fehler && '— muss 100 % ergeben'}
       </div>
     </div>
@@ -467,7 +467,7 @@ export default function DataImportWizard() {
                   </>
                 ) : (
                   <>
-                    <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                    <Upload className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-500 mb-3" />
                     <p className="text-gray-700 dark:text-gray-300 font-medium">
                       CSV-Datei hier ablegen oder klicken
                     </p>
@@ -493,7 +493,7 @@ export default function DataImportWizard() {
                     type="button"
                     aria-label="Datei entfernen"
                     onClick={() => { setFile(null); setPreview(null) }}
-                    className="ml-auto text-gray-400 hover:text-gray-600"
+                    className="ml-auto text-gray-400 dark:text-gray-500 hover:text-gray-600"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -534,7 +534,7 @@ export default function DataImportWizard() {
                     ))}
                   </select>
                   {isLoadingZuordnung && (
-                    <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 flex items-center gap-1">
                       <Loader2 className="w-3 h-3 animate-spin" /> Investitionen werden geprüft...
                     </p>
                   )}

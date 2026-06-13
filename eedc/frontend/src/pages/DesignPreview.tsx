@@ -164,7 +164,7 @@ function DatenzustandCard({ token, label, hint }: { token: string; label: string
     <div className="border border-gray-200 dark:border-gray-700 rounded p-3">
       <div className="text-3xl font-semibold text-gray-700 dark:text-gray-200 text-center mb-1">{token}</div>
       <div className="text-xs font-medium text-gray-600 dark:text-gray-400 text-center">{label}</div>
-      {hint && <div className="text-[10px] text-gray-500 dark:text-gray-500 text-center mt-1">{hint}</div>}
+      {hint && <div className="text-[10px] text-gray-500 dark:text-gray-400 text-center mt-1">{hint}</div>}
     </div>
   )
 }

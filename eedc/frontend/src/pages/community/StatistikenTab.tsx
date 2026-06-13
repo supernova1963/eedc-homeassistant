@@ -305,7 +305,7 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
                   : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
               }`}
             >
-              <div className={item.vorhanden ? item.cls.icon : 'text-gray-400'}>
+              <div className={item.vorhanden ? item.cls.icon : 'text-gray-400 dark:text-gray-500'}>
                 {item.icon}
               </div>
               <div className="flex-1 min-w-0">

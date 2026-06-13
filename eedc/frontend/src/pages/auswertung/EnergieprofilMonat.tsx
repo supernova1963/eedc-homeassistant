@@ -29,7 +29,8 @@ const METRIK_OPTIONEN: { key: Metrik; label: string; farbe: 'green' | 'red' | 'o
   { key: 'ueberschuss_kw', label: 'Überschuss / Defizit', farbe: 'divergent' },
 ]
 
-import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, CHART_ACHSEN, COLORS } from '../../lib'
+import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, COLORS } from '../../lib'
+import { useChartTheme } from '../../context/ThemeContext'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
 
@@ -550,6 +551,7 @@ function KomponentenTabelle({ eintraege }: { eintraege: KomponentenEintrag[] }) 
 }
 
 function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | null; verbrauch_kw: number | null }[] }) {
+  const achsen = useChartTheme()
   const chartDaten = daten.map(d => ({
     stunde: `${String(d.stunde).padStart(2, '0')}`,
     PV: d.pv_kw,
@@ -559,7 +561,7 @@ function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | 
     <div style={{ width: '100%', height: 240 }}>
       <ResponsiveContainer>
         <LineChart data={chartDaten} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART_ACHSEN.light.grid} strokeOpacity={0.3} />
+          <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} strokeOpacity={0.3} />
           <XAxis dataKey="stunde" tick={{ fontSize: 11 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', fontSize: 11 }} />
           <Tooltip content={<ChartTooltip unit="kW" />} />
@@ -586,7 +588,7 @@ function PeakListe({ titel, hinweis, eintraege, farbe }: {
           <p className="text-xs text-gray-500 dark:text-gray-400">{hinweis}</p>
         </div>
         {eintraege.length === 0 ? (
-          <div className="py-4 text-center text-xs text-gray-400">Keine Daten</div>
+          <div className="py-4 text-center text-xs text-gray-400 dark:text-gray-500">Keine Daten</div>
         ) : (
           <table className="w-full text-xs">
             <thead>

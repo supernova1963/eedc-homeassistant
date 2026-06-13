@@ -153,7 +153,7 @@ export default function TrendTab({ anlageId }: Props) {
               )
             ) : (
               <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                <Minus className="h-5 w-5 text-gray-400" />
+                <Minus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
               </div>
             )}
             <div>
@@ -168,7 +168,7 @@ export default function TrendTab({ anlageId }: Props) {
                     </span>
                   )
                 ) : (
-                  <span className="text-gray-400">-</span>
+                  <span className="text-gray-400 dark:text-gray-500">-</span>
                 )}
               </p>
             </div>
@@ -416,14 +416,14 @@ export default function TrendTab({ anlageId }: Props) {
                         {j.gesamt_kwh.toLocaleString('de-DE')} kWh
                       </span>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-400 dark:text-gray-500">-</span>
                     )}
                   </td>
                   <td className="py-2 px-3 text-right">
                     {j.spezifischer_ertrag_kwh_kwp > 0 ? (
                       `${j.spezifischer_ertrag_kwh_kwp.toFixed(0)} kWh/kWp`
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-400 dark:text-gray-500">-</span>
                     )}
                   </td>
                   <td className="py-2 px-3 text-right">
@@ -438,7 +438,7 @@ export default function TrendTab({ anlageId }: Props) {
                         {(j.performance_ratio * 100).toFixed(0)}%
                       </span>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span className="text-gray-400 dark:text-gray-500">-</span>
                     )}
                   </td>
                 </tr>

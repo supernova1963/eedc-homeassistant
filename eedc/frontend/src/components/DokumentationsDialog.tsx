@@ -249,8 +249,8 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
                       </div>
                     </div>
                     {isLoading
-                      ? <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
-                      : !isDisabled && <Download className="h-4 w-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200" />
+                      ? <Loader2 className="h-4 w-4 text-gray-400 dark:text-gray-500 animate-spin" />
+                      : !isDisabled && <Download className="h-4 w-4 text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-200" />
                     }
                   </div>
                   <p className="text-xs text-gray-600 dark:text-gray-400 leading-snug">{card.beschreibung}</p>
@@ -294,7 +294,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
           </button>
         )}
 
-        <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
           <strong>Tipp:</strong> Über die Kästchen an den Karten lassen sich mehrere Berichte
           auswählen und gesammelt als ZIP herunterladen (ab 2 Berichten).
           {' '}<strong>Beta-Hinweis:</strong> Anlagendokumentation und Finanzbericht sind als Beta gekennzeichnet —

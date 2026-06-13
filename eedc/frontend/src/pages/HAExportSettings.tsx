@@ -811,9 +811,9 @@ export default function HAExportSettings() {
                     <span className="text-sm text-gray-500">({sensors.length})</span>
                   </div>
                   {expandedCategories.has(category) ? (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                    <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
+                    <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                   )}
                 </button>
 
