@@ -21,6 +21,7 @@ from backend.api.routes.infothek import INFOTHEK_KATEGORIEN
 from backend.models.anlage import Anlage
 from backend.models.infothek import InfothekEintrag
 from backend.models.investition import Investition
+from backend.utils.investition_filter import sort_investitionen_nach_typ
 
 
 TYP_LABELS = {
@@ -99,7 +100,8 @@ async def build_finanzbericht_context(
         .where(Investition.anlage_id == anlage_id)
         .order_by(Investition.anschaffungsdatum.nulls_last(), Investition.id)
     )
-    investitionen = list(inv_res.scalars().all())
+    # Kanonische Typ-Reihenfolge (Fundament P4 / F7) statt rein nach Datum.
+    investitionen = sort_investitionen_nach_typ(inv_res.scalars().all())
 
     investitionen_rows: list[dict] = []
     summe_kosten = 0.0

@@ -23,6 +23,7 @@ from backend.core.config import settings
 from backend.core.field_definitions import get_felder_fuer_investition
 from backend.core.investition_parameter import PARAM_WAERMEPUMPE
 from backend.models.anlage import Anlage
+from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.services.activity_service import log_activity
 from backend.services.ha_energy_service import (
     DeviceConsumptionCandidate,
@@ -191,9 +192,9 @@ async def get_sensor_mapping(anlage_id: int):
         inv_result = await session.execute(
             select(Investition)
             .where(Investition.anlage_id == anlage_id)
-            .order_by(Investition.typ, Investition.bezeichnung)
+            .order_by(Investition.bezeichnung)
         )
-        investitionen_db = inv_result.scalars().all()
+        investitionen_db = sort_investitionen_nach_typ(inv_result.scalars().all())
 
         # Investitions-Infos aufbereiten
         investitionen: list[InvestitionInfo] = []

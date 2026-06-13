@@ -9,6 +9,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
 import { useSelectedAnlage, useInvestitionen } from '../../hooks'
+import { compareTyp } from '../../lib'
 import type { InvestitionTyp } from '../../types'
 import {
   LayoutDashboard,
@@ -58,16 +59,20 @@ const cockpitBaseTabs: TabItem[] = [
 ]
 
 // Investitions-Tabs: werden nur angezeigt wenn der Typ als Investition existiert.
-// Reihenfolge laut Cockpit-Banner-Bild aus detLAN #186 (PV → Speicher → WP → WB → EAuto).
-// Konsistent mit `INVESTITION_TYP_ORDER` in `hooks/useSetupWizard.ts`.
+// Reihenfolge folgt dem Kanon `INVESTITION_TYP_ORDER` (lib/constants.ts) — via
+// compareTyp erzwungen, damit die Tab-Folge nicht von der Literal-Reihenfolge
+// driften kann (Fundament P4 / F7). Im Cockpit erscheinen nur die Verbraucher-/
+// Speicher-Typen als Tabs (PV-Module/Wechselrichter laufen unter „PV-Anlage").
 const cockpitInvestitionTabs: (TabItem & { typen: InvestitionTyp[] })[] = [
-  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun,     typen: ['balkonkraftwerk'] },
   { name: 'Speicher',        href: '/cockpit/speicher',         icon: Battery, typen: ['speicher'] },
+  { name: 'Balkonkraftwerk', href: '/cockpit/balkonkraftwerk',  icon: Sun,     typen: ['balkonkraftwerk'] },
   { name: 'Wärmepumpe',      href: '/cockpit/waermepumpe',      icon: Flame,   typen: ['waermepumpe'] },
   { name: 'Wallbox',         href: '/cockpit/wallbox',          icon: Plug,    typen: ['wallbox'] },
   { name: 'E-Auto',          href: '/cockpit/e-auto',           icon: Car,     typen: ['e-auto'] },
   { name: 'Sonstiges',       href: '/cockpit/sonstiges',        icon: Wrench,  typen: ['sonstiges'] },
 ]
+// Kanon erzwingen (statt Literal-Reihenfolge), damit die Tab-Folge nicht driftet.
+cockpitInvestitionTabs.sort((a, b) => compareTyp({ typ: a.typen[0] }, { typ: b.typen[0] }))
 
 // ─── Einstellungen-Gruppen ────────────────────────────────────────────────────
 const einstellungenGruppen: TabGroup[] = [

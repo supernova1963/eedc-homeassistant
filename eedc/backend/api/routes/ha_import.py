@@ -27,7 +27,7 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
-from backend.utils.investition_filter import aktiv_jetzt
+from backend.utils.investition_filter import aktiv_jetzt, sort_investitionen_nach_typ
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_SPEICHER,
@@ -188,9 +188,9 @@ async def get_investitionen_mit_feldern(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
         .where(aktiv_jetzt())
-        .order_by(Investition.typ, Investition.bezeichnung)
+        .order_by(Investition.bezeichnung)
     )
-    investitionen = result.scalars().all()
+    investitionen = sort_investitionen_nach_typ(result.scalars().all())
 
     return [
         InvestitionMitFeldern(

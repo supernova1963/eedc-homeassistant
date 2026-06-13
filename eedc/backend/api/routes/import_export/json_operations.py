@@ -22,6 +22,7 @@ from backend.services.activity_service import log_activity
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.models.strompreis import Strompreis
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 
@@ -319,9 +320,9 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .order_by(Investition.typ, Investition.id)
+        .order_by(Investition.id)
     )
-    all_investitionen = list(inv_result.scalars().all())
+    all_investitionen = sort_investitionen_nach_typ(inv_result.scalars().all())
 
     # InvestitionMonatsdaten laden
     inv_ids = [inv.id for inv in all_investitionen]

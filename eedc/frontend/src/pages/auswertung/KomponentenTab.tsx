@@ -336,6 +336,131 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
         </>
       )}
 
+      {/* ========== BALKONKRAFTWERK ========== */}
+      {komponenten?.hat_balkonkraftwerk && bkwSummen.erzeugung > 0 && (
+        <>
+          <div className="border-b border-gray-200 dark:border-gray-700 pb-2 mt-8">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Sun className="h-6 w-6 text-yellow-500" />
+              Balkonkraftwerk
+              {bkwSummen.speicherLadung > 0 && (
+                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
+                  mit Speicher
+                </span>
+              )}
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Die BKW-Erzeugung ist in der PV-Gesamterzeugung enthalten, wird hier aber separat ausgewiesen.
+            </p>
+          </div>
+
+          {/* BKW KPIs - Erste Zeile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+            <KPICard
+              title="Erzeugung gesamt"
+              value={bkwSummen.erzeugung.toFixed(0)}
+              unit="kWh"
+              icon={Sun}
+              color="text-yellow-500"
+              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+              formel="Σ BKW-Erzeugung aller Monate"
+              berechnung={`${fmtCalc(bkwSummen.erzeugung, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(bkwSummen.erzeugung, 0)} kWh`}
+            />
+            <KPICard
+              title="Eigenverbrauch"
+              value={bkwSummen.eigenverbrauch.toFixed(0)}
+              unit="kWh"
+              icon={Sun}
+              color="text-green-500"
+              bgColor="bg-green-50 dark:bg-green-900/20"
+              formel="Σ BKW-Eigenverbrauch aller Monate"
+              berechnung={`${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh`}
+              ergebnis={`= ${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh`}
+            />
+            <KPICard
+              title="EV-Quote"
+              value={bkwSummen.erzeugung > 0 ? ((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100).toFixed(0) : '—'}
+              unit="%"
+              icon={Sun}
+              color="text-purple-500"
+              bgColor="bg-purple-50 dark:bg-purple-900/20"
+              formel="Eigenverbrauch ÷ Erzeugung × 100"
+              berechnung={`${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh ÷ ${fmtCalc(bkwSummen.erzeugung, 0)} kWh × 100`}
+              ergebnis={bkwSummen.erzeugung > 0 ? `= ${fmtCalc((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100, 0)}%` : '—'}
+            />
+            <KPICard
+              title="Einspeisung"
+              value={(bkwSummen.erzeugung - bkwSummen.eigenverbrauch).toFixed(0)}
+              unit="kWh"
+              subtitle="geschätzt"
+              icon={Sun}
+              color="text-blue-500"
+              bgColor="bg-blue-50 dark:bg-blue-900/20"
+            />
+          </div>
+
+          {/* BKW KPIs - Zweite Zeile: Speicher (nur wenn vorhanden) */}
+          {bkwSummen.speicherLadung > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+              <KPICard
+                title="Speicher Ladung"
+                value={bkwSummen.speicherLadung.toFixed(0)}
+                unit="kWh"
+                icon={Battery}
+                color="text-green-500"
+                bgColor="bg-green-50 dark:bg-green-900/20"
+                formel="Σ BKW-Speicher Ladung"
+              />
+              <KPICard
+                title="Speicher Entladung"
+                value={bkwSummen.speicherEntladung.toFixed(0)}
+                unit="kWh"
+                icon={Battery}
+                color="text-blue-500"
+                bgColor="bg-blue-50 dark:bg-blue-900/20"
+                formel="Σ BKW-Speicher Entladung"
+              />
+              <KPICard
+                title="Speicher Effizienz"
+                value={bkwSummen.speicherLadung > 0 ? ((bkwSummen.speicherEntladung / bkwSummen.speicherLadung) * 100).toFixed(0) : '—'}
+                unit="%"
+                icon={Activity}
+                color="text-cyan-500"
+                bgColor="bg-cyan-50 dark:bg-cyan-900/20"
+                formel="Entladung ÷ Ladung × 100"
+              />
+            </div>
+          )}
+
+          {/* BKW Chart */}
+          <Card>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Balkonkraftwerk pro Monat
+            </h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData.filter(z => z.bkw_erzeugung_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                  <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+                  <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
+                  <Legend />
+                  <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
+                  <Bar dataKey="bkw_eigenverbrauch_kwh" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} />
+                  {bkwSummen.speicherLadung > 0 && (
+                    <>
+                      <Bar dataKey="bkw_speicher_ladung_kwh" name="Speicher Ladung" fill={CHART_COLORS.speicherLadung} />
+                      <Bar dataKey="bkw_speicher_entladung_kwh" name="Speicher Entladung" fill={CHART_COLORS.speicherEntladung} />
+                    </>
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </>
+      )}
+
       {/* ========== WÄRMEPUMPE ========== */}
       {komponenten?.hat_waermepumpe && wpSummen.strom > 0 && (
         <>
@@ -625,131 +750,6 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                     <Bar yAxisId="left" dataKey="emob_v2h_kwh" name="V2H" fill={CHART_COLORS.emobV2h} />
                   )}
                   <Line yAxisId="right" type="monotone" dataKey="emob_pv_anteil_prozent" name="PV-Anteil (%)" stroke={CHART_COLORS.emobPvAnteil} strokeWidth={2} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </>
-      )}
-
-      {/* ========== BALKONKRAFTWERK ========== */}
-      {komponenten?.hat_balkonkraftwerk && bkwSummen.erzeugung > 0 && (
-        <>
-          <div className="border-b border-gray-200 dark:border-gray-700 pb-2 mt-8">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Sun className="h-6 w-6 text-yellow-500" />
-              Balkonkraftwerk
-              {bkwSummen.speicherLadung > 0 && (
-                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded">
-                  mit Speicher
-                </span>
-              )}
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Die BKW-Erzeugung ist in der PV-Gesamterzeugung enthalten, wird hier aber separat ausgewiesen.
-            </p>
-          </div>
-
-          {/* BKW KPIs - Erste Zeile */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            <KPICard
-              title="Erzeugung gesamt"
-              value={bkwSummen.erzeugung.toFixed(0)}
-              unit="kWh"
-              icon={Sun}
-              color="text-yellow-500"
-              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
-              formel="Σ BKW-Erzeugung aller Monate"
-              berechnung={`${fmtCalc(bkwSummen.erzeugung, 0)} kWh`}
-              ergebnis={`= ${fmtCalc(bkwSummen.erzeugung, 0)} kWh`}
-            />
-            <KPICard
-              title="Eigenverbrauch"
-              value={bkwSummen.eigenverbrauch.toFixed(0)}
-              unit="kWh"
-              icon={Sun}
-              color="text-green-500"
-              bgColor="bg-green-50 dark:bg-green-900/20"
-              formel="Σ BKW-Eigenverbrauch aller Monate"
-              berechnung={`${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh`}
-              ergebnis={`= ${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh`}
-            />
-            <KPICard
-              title="EV-Quote"
-              value={bkwSummen.erzeugung > 0 ? ((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100).toFixed(0) : '—'}
-              unit="%"
-              icon={Sun}
-              color="text-purple-500"
-              bgColor="bg-purple-50 dark:bg-purple-900/20"
-              formel="Eigenverbrauch ÷ Erzeugung × 100"
-              berechnung={`${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh ÷ ${fmtCalc(bkwSummen.erzeugung, 0)} kWh × 100`}
-              ergebnis={bkwSummen.erzeugung > 0 ? `= ${fmtCalc((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100, 0)}%` : '—'}
-            />
-            <KPICard
-              title="Einspeisung"
-              value={(bkwSummen.erzeugung - bkwSummen.eigenverbrauch).toFixed(0)}
-              unit="kWh"
-              subtitle="geschätzt"
-              icon={Sun}
-              color="text-blue-500"
-              bgColor="bg-blue-50 dark:bg-blue-900/20"
-            />
-          </div>
-
-          {/* BKW KPIs - Zweite Zeile: Speicher (nur wenn vorhanden) */}
-          {bkwSummen.speicherLadung > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-              <KPICard
-                title="Speicher Ladung"
-                value={bkwSummen.speicherLadung.toFixed(0)}
-                unit="kWh"
-                icon={Battery}
-                color="text-green-500"
-                bgColor="bg-green-50 dark:bg-green-900/20"
-                formel="Σ BKW-Speicher Ladung"
-              />
-              <KPICard
-                title="Speicher Entladung"
-                value={bkwSummen.speicherEntladung.toFixed(0)}
-                unit="kWh"
-                icon={Battery}
-                color="text-blue-500"
-                bgColor="bg-blue-50 dark:bg-blue-900/20"
-                formel="Σ BKW-Speicher Entladung"
-              />
-              <KPICard
-                title="Speicher Effizienz"
-                value={bkwSummen.speicherLadung > 0 ? ((bkwSummen.speicherEntladung / bkwSummen.speicherLadung) * 100).toFixed(0) : '—'}
-                unit="%"
-                icon={Activity}
-                color="text-cyan-500"
-                bgColor="bg-cyan-50 dark:bg-cyan-900/20"
-                formel="Entladung ÷ Ladung × 100"
-              />
-            </div>
-          )}
-
-          {/* BKW Chart */}
-          <Card>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Balkonkraftwerk pro Monat
-            </h3>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData.filter(z => z.bkw_erzeugung_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
-                  <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
-                  <Legend />
-                  <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
-                  <Bar dataKey="bkw_eigenverbrauch_kwh" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} />
-                  {bkwSummen.speicherLadung > 0 && (
-                    <>
-                      <Bar dataKey="bkw_speicher_ladung_kwh" name="Speicher Ladung" fill={CHART_COLORS.speicherLadung} />
-                      <Bar dataKey="bkw_speicher_entladung_kwh" name="Speicher Entladung" fill={CHART_COLORS.speicherEntladung} />
-                    </>
-                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>

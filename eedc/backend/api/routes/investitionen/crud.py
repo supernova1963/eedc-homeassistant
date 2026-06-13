@@ -15,7 +15,7 @@ from datetime import date
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
-from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_jahr
+from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_jahr, sort_investitionen_nach_typ
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.api.routes.strompreise import (
@@ -263,10 +263,11 @@ async def list_investitionen(
     if aktiv is not None:
         query = query.where(Investition.aktiv == aktiv)
 
-    query = query.order_by(Investition.typ, Investition.bezeichnung)
+    # Kanonische Typ-Reihenfolge (Fundament P4 / F7) statt alphabetisch.
+    query = query.order_by(Investition.bezeichnung)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    return sort_investitionen_nach_typ(result.scalars().all())
 
 
 @router.get("/{investition_id}", response_model=InvestitionResponse)
@@ -596,12 +597,12 @@ async def get_roi_dashboard(
     inv_stmt = (
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .order_by(Investition.typ, Investition.id)
+        .order_by(Investition.id)
     )
     if jahr is not None:
         inv_stmt = inv_stmt.where(aktiv_im_jahr(jahr))
     inv_result = await db.execute(inv_stmt)
-    investitionen = list(inv_result.scalars().all())
+    investitionen = sort_investitionen_nach_typ(inv_result.scalars().all())
 
     # Benzinpreis-Lookup für E-Auto-ROI: Monatsdaten.kraftstoffpreis_euro
     # (EU Weekly Oil Bulletin, seit v3.17.0) ist die Realität. Vorher las

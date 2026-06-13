@@ -89,7 +89,7 @@ function VglZeile({ label, aktuell, vm, vj, unit, inv = false, formel, ergebnis 
 // ─── Sektions-Reihenfolge (individuell pro Nutzer, localStorage) ──────────────
 const DEFAULT_SECTION_ORDER = [
   'energie', 'finanzen', 'community',
-  'speicher', 'waermepumpe', 'emobilitaet', 'balkonkraftwerk', 'sonstiges',
+  'speicher', 'balkonkraftwerk', 'waermepumpe', 'emobilitaet', 'sonstiges',
 ] as const
 
 // ─── Typen ────────────────────────────────────────────────────────────────────

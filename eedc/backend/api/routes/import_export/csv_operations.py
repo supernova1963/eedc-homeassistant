@@ -18,7 +18,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.utils.investition_filter import aktiv_jetzt
+from backend.utils.investition_filter import aktiv_jetzt, sort_investitionen_nach_typ
 from backend.services.wetter.orchestrator import get_wetterdaten
 from backend.utils.sonstige_positionen import berechne_sonstige_summen, get_sonstige_positionen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
@@ -71,9 +71,9 @@ async def get_csv_template_info(anlage_id: int, db: AsyncSession = Depends(get_d
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id, aktiv_jetzt())
-        .order_by(Investition.typ, Investition.id)
+        .order_by(Investition.id)
     )
-    investitionen = inv_result.scalars().all()
+    investitionen = sort_investitionen_nach_typ(inv_result.scalars().all())
 
     # Personalisierte Spalten je nach Investition (v0.9)
     # Spaltennamen: leserliche Bezeichnungen mit Einheit
@@ -589,9 +589,9 @@ async def export_csv(
         inv_result = await db.execute(
             select(Investition)
             .where(Investition.anlage_id == anlage_id)
-            .order_by(Investition.typ, Investition.id)
+            .order_by(Investition.id)
         )
-        investitionen = list(inv_result.scalars().all())
+        investitionen = sort_investitionen_nach_typ(inv_result.scalars().all())
 
         for inv in investitionen:
             imd_query = select(InvestitionMonatsdaten).where(
