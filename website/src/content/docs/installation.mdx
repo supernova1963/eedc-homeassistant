@@ -1,16 +1,16 @@
 ---
 title: Installation
-description: EEDC als Home Assistant Add-on oder Standalone installieren
+description: eedc als Home Assistant Add-on oder Standalone installieren
 ---
 
 import { Image } from 'astro:assets';
 import sensormappingImg from '../../assets/screenshots/einstellungen_sensormapping.png';
 
-EEDC kann als Home Assistant Add-on oder standalone betrieben werden.
+eedc kann als Home Assistant Add-on oder standalone betrieben werden.
 
 ## Option A: Home Assistant Add-on (empfohlen)
 
-Die einfachste Methode – EEDC wird direkt in Home Assistant integriert und kann automatisch Daten aus deinen Sensoren übernehmen.
+Die einfachste Methode – eedc wird direkt in Home Assistant integriert und kann automatisch Daten aus deinen Sensoren übernehmen.
 
 ### Voraussetzungen
 
@@ -23,7 +23,7 @@ Die einfachste Methode – EEDC wird direkt in Home Assistant integriert und kan
    ```
    https://github.com/supernova1963/eedc-homeassistant
    ```
-2. **Add-on installieren:** „EEDC – Energie Effizienz Data Center" im Store suchen und installieren
+2. **Add-on installieren:** „eedc – Energie Effizienz Data Center" im Store suchen und installieren
 3. **Add-on starten:** Nach der Installation auf „Starten" klicken
 4. **Weboberfläche öffnen:** Über den Button „Weboberfläche öffnen" oder direkt über die Sidebar
 5. **Anlage einrichten:** Der Setup-Wizard führt dich durch die Erstkonfiguration
@@ -36,7 +36,7 @@ Für den direkten Zugriff auf Home Assistant Langzeitstatistiken ist ein Volume-
 
 ## Option B: Standalone (Docker)
 
-EEDC kann auch ohne Home Assistant betrieben werden. Ideal wenn du deine Daten manuell oder per CSV-Import erfassen möchtest.
+eedc kann auch ohne Home Assistant betrieben werden. Ideal wenn du deine Daten manuell oder per CSV-Import erfassen möchtest.
 
 ### Voraussetzungen
 
@@ -61,12 +61,12 @@ Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://git
 
 ## Nach der Installation
 
-<Image src={sensormappingImg} alt="EEDC Sensor-Mapping Wizard" quality={85} />
+<Image src={sensormappingImg} alt="eedc Sensor-Mapping Wizard" quality={85} />
 
 1. **Anlage anlegen:** Standort, Koordinaten und Grunddaten eingeben
 2. **Komponenten erfassen:** Wechselrichter, PV-Module, Speicher, etc. mit Investitionskosten
 3. **Strompreise hinterlegen:** Bezugspreis, Einspeisevergütung, ggf. Spezialtarife
-4. **Sensor-Mapping (HA):** Zuordnung deiner HA-Sensoren zu EEDC-Feldern
+4. **Sensor-Mapping (HA):** Zuordnung deiner HA-Sensoren zu eedc-Feldern
 5. **Monatsdaten importieren:** Via HA-Statistik-Import, CSV oder manuelle Eingabe
 
 ---

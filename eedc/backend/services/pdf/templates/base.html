@@ -2,13 +2,13 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <title>{% block doc_title %}EEDC Dokument{% endblock %}</title>
+  <title>{% block doc_title %}eedc Dokument{% endblock %}</title>
   <link rel="stylesheet" href="{{ static_dir }}/styles.css">
   <link rel="stylesheet" href="{{ static_dir }}/print.css">
 </head>
 <body>
   <div class="page-stripe"></div>
-  <h1 class="doc-title">{% block heading %}EEDC{% endblock %}</h1>
+  <h1 class="doc-title">{% block heading %}eedc{% endblock %}</h1>
   {% block subheading %}{% endblock %}
   {% block content %}{% endblock %}
 </body>

@@ -229,7 +229,7 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
               </div>
               <ProgressBar value={position.perzentilGesamt} color="primary" />
               <p className="text-sm text-primary-600 dark:text-primary-400 mt-2">
-                Besser als {position.perzentilGesamt}% der Community
+                Besser als {position.perzentilGesamt} % der Community
               </p>
             </div>
 
@@ -251,7 +251,7 @@ export default function StatistikenTab({ benchmark, benchmarkLoading, benchmarkE
               </div>
               <ProgressBar value={position.perzentilRegion} color="blue" />
               <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
-                Besser als {position.perzentilRegion}% in deiner Region
+                Besser als {position.perzentilRegion} % in deiner Region
               </p>
             </div>
           </div>
@@ -448,7 +448,7 @@ function QuoteCard({ label, value, color }: { label: string; value: number; colo
     <div className={`p-4 rounded-lg bg-${color}-50 dark:bg-${color}-900/20`}>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{label}</p>
       <p className={`text-2xl font-bold text-${color}-600 dark:text-${color}-400`}>
-        {value.toFixed(1)}%
+        {value.toFixed(1)} %
       </p>
     </div>
   )

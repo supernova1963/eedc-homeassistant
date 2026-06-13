@@ -429,7 +429,7 @@ function SpeicherDeepDive({
                     cx="50%"
                     cy="50%"
                     outerRadius={70}
-                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)} %)`}
                     labelLine={false}
                   >
                     {klassenData.map((entry, index) => (
@@ -467,7 +467,7 @@ function SpeicherDeepDive({
                         {k.name === eigeneKlasse && <span className="text-xs text-primary-500">(Du)</span>}
                       </td>
                       <td className="text-right py-1">{k.avg_zyklen.toFixed(0)}</td>
-                      <td className="text-right py-1">{k.avg_wirkungsgrad.toFixed(1)}%</td>
+                      <td className="text-right py-1">{k.avg_wirkungsgrad.toFixed(1)} %</td>
                     </tr>
                   ))}
                 </tbody>
@@ -865,7 +865,7 @@ function EAutoDeepDive({
                     cx="50%"
                     cy="50%"
                     outerRadius={70}
-                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)} %)`}
                     labelLine={false}
                   >
                     {nutzungData.map((entry, index) => (
@@ -903,7 +903,7 @@ function EAutoDeepDive({
                         {k.name.toLowerCase() === eigeneKlasse?.toLowerCase() && <span className="text-xs text-primary-500">(Du)</span>}
                       </td>
                       <td className="text-right py-1">{k.avg_verbrauch.toFixed(1)} kWh/100km</td>
-                      <td className="text-right py-1">{k.avg_pv_anteil.toFixed(0)}%</td>
+                      <td className="text-right py-1">{k.avg_pv_anteil.toFixed(0)} %</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1166,7 +1166,7 @@ function KPICard({
             <TrendingDown className="h-3 w-3" />
           )}
           <span>
-            {abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)}% vs. Ø
+            {abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)} % vs. Ø
           </span>
         </div>
       )}

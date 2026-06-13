@@ -435,7 +435,7 @@ export default function MonatsdatenPage() {
       case 'kwh':
         return val.toLocaleString('de-DE', { maximumFractionDigits: 1 })
       case 'percent':
-        return `${val.toFixed(1)}%`
+        return `${val.toFixed(1)} %`
       default:
         return val.toLocaleString('de-DE', { maximumFractionDigits: 1 })
     }

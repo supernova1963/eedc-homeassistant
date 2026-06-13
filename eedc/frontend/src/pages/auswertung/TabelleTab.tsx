@@ -326,7 +326,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
       <span className={colorClass}>
         {isPositive ? '▲' : delta < 0 ? '▼' : '='} {fmtVal(Math.abs(delta), col.decimals)}
         {deltaPct != null && (
-          <span className="ml-1 opacity-75">({deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(1)}%)</span>
+          <span className="ml-1 opacity-75">({deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(1)} %)</span>
         )}
       </span>
     )

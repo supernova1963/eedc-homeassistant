@@ -1,4 +1,4 @@
-/* EEDC Custom Styles for Starlight */
+/* eedc Custom Styles for Starlight */
 
 /* Dark Mode (Default) */
 :root {
@@ -82,7 +82,7 @@
 }
 
 /* Screenshot images */
-img[alt*="Screenshot"], img[alt*="EEDC"] {
+img[alt*="Screenshot"], img[alt*="eedc"] {
 	border-radius: 8px;
 	border: 1px solid var(--sl-color-gray-4);
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);

@@ -414,7 +414,7 @@ export default function PVAnlageDashboard() {
                   cy="50%"
                   innerRadius={50}
                   outerRadius={80}
-                  label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  label={({ percent }) => `${(percent * 100).toFixed(0)} %`}
                   labelLine={false}
                 >
                   {verteilungData.map((entry, index) => (

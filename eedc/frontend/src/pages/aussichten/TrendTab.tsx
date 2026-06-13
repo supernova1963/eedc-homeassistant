@@ -164,7 +164,7 @@ export default function TrendTab({ anlageId }: Props) {
                     <span className="text-green-600">keine messbar</span>
                   ) : (
                     <span className={degradation < -1 ? 'text-red-600' : 'text-yellow-600'}>
-                      {degradation.toFixed(1)}%
+                      {degradation.toFixed(1)} %
                     </span>
                   )
                 ) : (
@@ -340,11 +340,11 @@ export default function TrendTab({ anlageId }: Props) {
                   </span>
                 ) : degradation < -1 ? (
                   <span className="text-red-600">
-                    {degradation.toFixed(2)}% pro Jahr
+                    {degradation.toFixed(2)} % pro Jahr
                   </span>
                 ) : (
                   <span className="text-yellow-600 dark:text-yellow-400">
-                    {degradation.toFixed(2)}% pro Jahr
+                    {degradation.toFixed(2)} % pro Jahr
                   </span>
                 )}
               </p>
@@ -435,7 +435,7 @@ export default function TrendTab({ anlageId }: Props) {
                           ? 'text-red-600'
                           : 'text-gray-600'
                       }>
-                        {(j.performance_ratio * 100).toFixed(0)}%
+                        {(j.performance_ratio * 100).toFixed(0)} %
                       </span>
                     ) : (
                       <span className="text-gray-400 dark:text-gray-500">-</span>

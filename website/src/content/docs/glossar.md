@@ -1,14 +1,14 @@
 ---
 title: "Glossar & Support"
-description: "Begriffserklärungen rund um PV, EEDC und Support-Informationen"
+description: "Begriffserklärungen rund um PV, eedc und Support-Informationen"
 ---
 
 
-# EEDC Glossar & Support
+# eedc Glossar & Support
 
 **Version 3.16.1** | Stand: April 2026
 
-> Dieses Glossar ist Teil der EEDC-Dokumentation.
+> Dieses Glossar ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md)
 
 ---
@@ -24,7 +24,7 @@ description: "Begriffserklärungen rund um PV, EEDC und Support-Informationen"
 | **Netzbezug** | Aus dem Netz bezogener Strom |
 | **kWp** | Kilowatt Peak – Nennleistung der PV-Anlage unter Standardtestbedingungen |
 | **kWh** | Kilowattstunde – Energiemenge |
-| **ROI** | Return on Investment – Kapitalrendite; in EEDC als Jahres-% oder kumulierter Fortschritt |
+| **ROI** | Return on Investment – Kapitalrendite; in eedc als Jahres-% oder kumulierter Fortschritt |
 | **COP** | Coefficient of Performance – momentane Effizienz der Wärmepumpe (Wärme / Strom) |
 | **SCOP** | Seasonal COP – saisonale Effizienz vom EU-Energielabel, standortunabhängig |
 | **JAZ** | Jahresarbeitszahl – gemessene Effizienz der Wärmepumpe am eigenen Standort über ein Jahr |
@@ -36,16 +36,16 @@ description: "Begriffserklärungen rund um PV, EEDC und Support-Informationen"
 | **MaStR** | Marktstammdatenregister – amtliches Register aller Energieerzeugungsanlagen in Deutschland |
 | **BKW** | Balkonkraftwerk – kleine steckfertige PV-Anlage (auch: Balkonkraftwerk, Steckersolaranlage) |
 | **MQTT** | Message Queuing Telemetry Transport – schlankes Protokoll für IoT- und Smarthome-Kommunikation |
-| **MQTT-Inbound** | EEDC-Funktion zum Empfang von Echtzeitdaten aus beliebigen Smarthome-Systemen via MQTT |
-| **MQTT-Gateway** | EEDC-Funktion zum Übersetzen eigener Geräte-Topics (Shelly, OpenDTU, Tasmota …) auf EEDC-Felder |
-| **Sensor-Mapping** | Zuordnung von Home-Assistant-Sensoren zu EEDC-Feldern im Wizard |
-| **SFML** | Solar Forecast ML – KI-basierte Ertragsprognose eines externen Dienstes; wird in EEDC als zweite Linie neben der eigenen Prognose angezeigt |
+| **MQTT-Inbound** | eedc-Funktion zum Empfang von Echtzeitdaten aus beliebigen Smarthome-Systemen via MQTT |
+| **MQTT-Gateway** | eedc-Funktion zum Übersetzen eigener Geräte-Topics (Shelly, OpenDTU, Tasmota …) auf eedc-Felder |
+| **Sensor-Mapping** | Zuordnung von Home-Assistant-Sensoren zu eedc-Feldern im Wizard |
+| **SFML** | Solar Forecast ML – KI-basierte Ertragsprognose eines externen Dienstes; wird in eedc als zweite Linie neben der eigenen Prognose angezeigt |
 | **ICON-CH2** | MeteoSwiss-Wettermodell mit 2 km Auflösung; empfohlen für alpine Standorte (CH, AT, Südtirol) |
 | **ICON-D2** | DWD-Wettermodell mit 2,2 km Auflösung; hochauflösend für Deutschland |
 | **ECMWF IFS** | Globales Wettermodell des Europäischen Zentrums für mittelfristige Wettervorhersage |
-| **Infothek** | Optionales EEDC-Modul zur Verwaltung von Verträgen, Zählern, Kontakten und Dokumenten |
+| **Infothek** | Optionales eedc-Modul zur Verwaltung von Verträgen, Zählern, Kontakten und Dokumenten |
 | **Monatsabschluss** | Monatliche Datenerfassung via geführtem Wizard mit automatischen Vorschlägen aus mehreren Quellen |
-| **Connector** | Geräte-Modul in EEDC für direkten API-Abruf von Wechselrichtern, Speichern und Ladesäulen |
+| **Connector** | Geräte-Modul in eedc für direkten API-Abruf von Wechselrichtern, Speichern und Ladesäulen |
 | **Community-Hash** | Anonymer Identifier für die Community-Benchmark-Funktion; kein Rückschluss auf Person oder Adresse |
 
 ---

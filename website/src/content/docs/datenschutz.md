@@ -1,6 +1,6 @@
 ---
 title: Datenschutzerklärung
-description: Datenschutzerklärung für die EEDC-Website
+description: Datenschutzerklärung für die eedc-Website
 ---
 
 ## 1. Datenschutz auf einen Blick
@@ -56,9 +56,9 @@ Das Kontaktformular auf der Support-Seite nutzt den Dienst **Formspree** (Formsp
 
 ---
 
-## 6. Hinweis zur EEDC-Software
+## 6. Hinweis zur eedc-Software
 
-Diese Datenschutzerklärung gilt ausschließlich für diese Website. Die EEDC-Software selbst verarbeitet Daten lokal auf deinem eigenen System. Die optionale Community-Funktion überträgt ausschließlich anonymisierte, aggregierte Leistungsdaten – keine personenbezogenen Informationen.
+Diese Datenschutzerklärung gilt ausschließlich für diese Website. Die eedc-Software selbst verarbeitet Daten lokal auf deinem eigenen System. Die optionale Community-Funktion überträgt ausschließlich anonymisierte, aggregierte Leistungsdaten – keine personenbezogenen Informationen.
 
 ---
 

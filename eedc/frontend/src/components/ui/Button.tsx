@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'icon'
   loading?: boolean
 }
 
@@ -22,6 +22,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       sm: 'px-3 py-1.5 text-sm',
       md: 'px-4 py-2 text-sm',
       lg: 'px-6 py-3 text-base',
+      // icon-only (B15): quadratisch, Touch-Target >= 44px. Pflicht: title/aria-label.
+      icon: 'p-2 min-w-[44px] min-h-[44px]',
     }
 
     return (

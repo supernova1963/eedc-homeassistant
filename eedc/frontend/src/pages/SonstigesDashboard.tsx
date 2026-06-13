@@ -290,7 +290,7 @@ function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)} %`}
                 >
                   <Cell fill={CHART_COLORS.eigenverbrauch} />
                   <Cell fill={CHART_COLORS.einspeisung} />
@@ -461,7 +461,7 @@ function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, select
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)} %`}
                 >
                   <Cell fill={KATEGORIE_FARBEN.pv} />
                   <Cell fill={KATEGORIE_FARBEN.netz} />
@@ -651,7 +651,7 @@ function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
                     <td className="py-2 px-2">{md.name}</td>
                     <td className="text-right py-2 px-2 text-purple-600">{md.ladung.toFixed(1)}</td>
                     <td className="text-right py-2 px-2 text-green-600">{md.entladung.toFixed(1)}</td>
-                    <td className="text-right py-2 px-2">{effizienz.toFixed(1)}%</td>
+                    <td className="text-right py-2 px-2">{effizienz.toFixed(1)} %</td>
                   </tr>
                 )
               })}

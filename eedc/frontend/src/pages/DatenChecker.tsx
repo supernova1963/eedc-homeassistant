@@ -361,7 +361,7 @@ export default function DatenChecker() {
                   Monatsdaten-Abdeckung
                 </span>
                 <span className="text-sm text-gray-500">
-                  {result.monatsdaten_abdeckung.vorhanden} von {result.monatsdaten_abdeckung.erwartet} Monate ({result.monatsdaten_abdeckung.prozent}%)
+                  {result.monatsdaten_abdeckung.vorhanden} von {result.monatsdaten_abdeckung.erwartet} Monate ({result.monatsdaten_abdeckung.prozent} %)
                 </span>
               </div>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">

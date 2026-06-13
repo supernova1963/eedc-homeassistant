@@ -324,7 +324,7 @@ function PrognoseTooltip({ active, payload, label }: {
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
           <span className="text-gray-300">{p.name}:</span>
           <span className="font-medium text-white">
-            {p.name === 'SoC' ? `${p.value.toFixed(1)}%` : `${Math.abs(p.value).toFixed(2)} kW`}
+            {p.name === 'SoC' ? `${p.value.toFixed(1)} %` : `${Math.abs(p.value).toFixed(2)} kW`}
           </span>
         </div>
       ))}

@@ -295,7 +295,7 @@ export default function PrognoseVsIst() {
                 </p>
               </div>
               <p className={`text-xs ${jahresAbweichung >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                {jahresAbweichung >= 0 ? '+' : ''}{jahresAbweichungProzent.toFixed(1)}%
+                {jahresAbweichung >= 0 ? '+' : ''}{jahresAbweichungProzent.toFixed(1)} %
               </p>
             </Card>
 
@@ -306,7 +306,7 @@ export default function PrognoseVsIst() {
                   {hochgerechneterJahresIst.toLocaleString('de-DE', { maximumFractionDigits: 0 })} kWh
                 </p>
                 <p className="text-xs text-gray-400 dark:text-gray-500">
-                  ({((hochgerechneterJahresIst / jahresPrognose - 1) * 100).toFixed(1)}% vs. Prognose)
+                  ({((hochgerechneterJahresIst / jahresPrognose - 1) * 100).toFixed(1)} % vs. Prognose)
                 </p>
               </Card>
             )}
@@ -329,7 +329,7 @@ export default function PrognoseVsIst() {
                     content={
                       <ChartTooltip
                         formatter={(value: number, name: string) => {
-                          if (name === 'Abweichung %') return `${value.toFixed(1)}%`
+                          if (name === 'Abweichung %') return `${value.toFixed(1)} %`
                           return `${value.toFixed(0)} kWh`
                         }}
                       />
@@ -389,7 +389,7 @@ export default function PrognoseVsIst() {
                         {d.ist > 0 ? `${d.abweichung >= 0 ? '+' : ''}${d.abweichung.toFixed(0)} kWh` : '-'}
                       </td>
                       <td className={`text-right py-2 px-2 ${d.abweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {d.ist > 0 ? `${d.abweichungProzent >= 0 ? '+' : ''}${d.abweichungProzent.toFixed(1)}%` : '-'}
+                        {d.ist > 0 ? `${d.abweichungProzent >= 0 ? '+' : ''}${d.abweichungProzent.toFixed(1)} %` : '-'}
                       </td>
                       <td className="text-center py-2 px-2">
                         {d.ist === 0 ? (
@@ -426,7 +426,7 @@ export default function PrognoseVsIst() {
                       {jahresAbweichung >= 0 ? '+' : ''}{jahresAbweichung.toFixed(0)} kWh
                     </td>
                     <td className={`text-right py-2 px-2 ${jahresAbweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {jahresAbweichungProzent >= 0 ? '+' : ''}{jahresAbweichungProzent.toFixed(1)}%
+                      {jahresAbweichungProzent >= 0 ? '+' : ''}{jahresAbweichungProzent.toFixed(1)} %
                     </td>
                     <td></td>
                   </tr>

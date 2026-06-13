@@ -4,11 +4,11 @@ description: "Teil III: Einstellungen, Datenerfassung, Sensor-Mapping und HA-Int
 ---
 
 
-# EEDC Handbuch — Teil III: Einstellungen & Sensormapping
+# eedc Handbuch — Teil III: Einstellungen & Sensormapping
 
 **Version 3.16.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -44,13 +44,13 @@ Bearbeite die Stammdaten deiner PV-Anlage:
   - Füge Zähler hinzu (Bezeichnung wie "Einspeisung", "Bezug", Zählernummer)
 
 **Wettermodell:**
-- **auto** (Standard): EEDC wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match)
+- **auto** (Standard): eedc wählt automatisch (Bright Sky für DE, sonst Open-Meteo best_match)
 - **MeteoSwiss ICON-CH2**: Empfohlen für alpine Standorte in der Schweiz und Südtirol (2 km Auflösung)
 - **ICON-D2**: Hochauflösendes DWD-Modell für Deutschland (2,2 km)
 - **ICON-EU**: Europäisches Modell mit mittlerer Auflösung
 - **ECMWF IFS**: Globales ECMWF-Modell (0,25°)
 
-Bei spezifischer Modellauswahl versucht EEDC zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Datenquelle wird pro Tag in der Kurzfrist-Ansicht mit einem Kürzel angezeigt (MS/D2/EU/EC/BM).
+Bei spezifischer Modellauswahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Datenquelle wird pro Tag in der Kurzfrist-Ansicht mit einem Kürzel angezeigt (MS/D2/EU/EC/BM).
 
 **Steuerliche Behandlung:**
 - **Keine USt-Auswirkung** (Standard): Für Anlagen ab 2023 mit Nullsteuersatz (≤30 kWp) oder Kleinunternehmer
@@ -373,7 +373,7 @@ Mit dem Custom-Import kannst du beliebige CSV- oder JSON-Dateien importieren, di
 
 **Wizard-Ablauf (4 Schritte):**
 1. **Upload**: CSV- oder JSON-Datei per Drag & Drop oder Dateiauswahl hochladen. Die Datei wird automatisch analysiert, Spalten und Beispielwerte werden erkannt.
-2. **Mapping**: Jede erkannte Spalte einem EEDC-Zielfeld zuordnen (z.B. "Energy_kWh" → "PV-Erzeugung"). Optionen:
+2. **Mapping**: Jede erkannte Spalte einem eedc-Zielfeld zuordnen (z.B. "Energy_kWh" → "PV-Erzeugung"). Optionen:
    - **Auto-Detect**: Erkennt gängige Spaltenbezeichnungen automatisch (deutsch + englisch)
    - **Einheit**: Wh, kWh oder MWh – wird automatisch umgerechnet
    - **Dezimalzeichen**: Auto-Erkennung oder manuell (Punkt/Komma)
@@ -401,7 +401,7 @@ Zum Ausprobieren ohne echte Daten:
 
 ## 3. Sensor-Mapping
 
-Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den EEDC-Feldern.
+Der **Sensor-Mapping-Wizard** ermöglicht die flexible Zuordnung deiner Home Assistant Sensoren zu den eedc-Feldern.
 
 ### 3.1 Wizard starten
 
@@ -422,7 +422,7 @@ Ordne die grundlegenden Energie-Sensoren zu:
 | **Batterie-Entladung** | Gesamt-Entladung | HA-Sensor, Manuell |
 | **Außentemperatur** | Aktuelle Außentemperatur in °C | HA-Sensor (bevorzugt), Open-Meteo Fallback |
 
-**Vorzeichen-Inversion:** Manche Sensoren liefern Leistungswerte mit invertiertem Vorzeichen (z.B. Einspeisung als negativer Wert). Pro Leistungs-Sensor gibt es eine Checkbox **"Vorzeichen invertieren"** — aktiviere sie, wenn der Sensor negative statt positive Werte liefert. EEDC rechnet intern immer mit positiven Werten.
+**Vorzeichen-Inversion:** Manche Sensoren liefern Leistungswerte mit invertiertem Vorzeichen (z.B. Einspeisung als negativer Wert). Pro Leistungs-Sensor gibt es eine Checkbox **"Vorzeichen invertieren"** — aktiviere sie, wenn der Sensor negative statt positive Werte liefert. eedc rechnet intern immer mit positiven Werten.
 
 #### Schritt 2: PV-Module
 
@@ -496,17 +496,17 @@ Bei der Sensor-Auswahl werden automatisch alle verfügbaren HA-Sensoren angezeig
 
 Mit dem HA-Statistik Import kannst du **alle historischen Monatsdaten seit der Installation deiner PV-Anlage** automatisch aus der Home Assistant Langzeitstatistik-Datenbank importieren. Das ist besonders nützlich, wenn du:
 
-- EEDC neu installiert hast und Altdaten übernehmen möchtest
+- eedc neu installiert hast und Altdaten übernehmen möchtest
 - Monatsdaten nachträglich befüllen willst
 - Von manueller auf automatische Erfassung umstellen möchtest
 
 ### 4.2 Voraussetzungen
 
-- **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den EEDC-Feldern zugeordnet sein
+- **Sensor-Mapping konfiguriert**: Die HA-Sensoren müssen den eedc-Feldern zugeordnet sein
 - **Home Assistant Langzeitstatistiken**: Deine Sensoren müssen in der HA-Datenbank gespeichert werden
-- **EEDC v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
+- **eedc v2.0.0+**: Das Volume-Mapping `config:ro` muss vorhanden sein
 
-> **MariaDB/MySQL-Nutzer:** Der HA-Statistik Import unterstützt seit v3.4.11 auch MariaDB und MySQL als Recorder-Backend — nicht nur SQLite. EEDC erkennt den Datenbanktyp automatisch anhand der konfigurierten Verbindungsdaten.
+> **MariaDB/MySQL-Nutzer:** Der HA-Statistik Import unterstützt seit v3.4.11 auch MariaDB und MySQL als Recorder-Backend — nicht nur SQLite. eedc erkennt den Datenbanktyp automatisch anhand der konfigurierten Verbindungsdaten.
 
 > ⚠️ **Wichtig**: Bei Update von v1.x auf v2.0.0 ist eine Neuinstallation des Add-ons erforderlich! Siehe CHANGELOG für Upgrade-Anleitung.
 
@@ -535,7 +535,7 @@ Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 2. Wähle den gewünschten Monat aus der Liste verfügbarer HA-Statistik-Monate
 3. **Bei neuem Monat**: Die Werte werden direkt ins Formular übernommen
 4. **Bei existierendem Monat**: Ein Vergleichs-Modal zeigt die Unterschiede:
-   - Spalte "Vorhanden" zeigt aktuelle Werte in EEDC
+   - Spalte "Vorhanden" zeigt aktuelle Werte in eedc
    - Spalte "HA-Statistik" zeigt Werte aus Home Assistant
    - Spalte "Diff" zeigt die Abweichung (farbcodiert bei >10%)
    - Wähle "HA-Werte übernehmen" oder "Abbrechen"
@@ -552,7 +552,7 @@ Es gibt zwei Wege, einzelne Monate aus HA-Statistik zu laden:
 
 ### 4.5 Startwerte beim Sensor-Mapping
 
-Beim Speichern des Sensor-Mappings bietet EEDC zwei Optionen für die Startwerte:
+Beim Speichern des Sensor-Mappings bietet eedc zwei Optionen für die Startwerte:
 
 1. **Aus HA-Statistik laden (empfohlen)**: Verwendet die gespeicherten Zählerstände vom Monatsanfang aus der HA-Datenbank
 2. **Aktuelle Werte verwenden**: Setzt die aktuellen Sensorwerte als Startwerte (Monatswert startet bei 0)
@@ -563,10 +563,10 @@ Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
 | Situation | Standard-Auswahl | Beschreibung |
 |-----------|------------------|--------------|
-| Neuer Monat | ✓ Ausgewählt | Monat existiert noch nicht in EEDC |
+| Neuer Monat | ✓ Ausgewählt | Monat existiert noch nicht in eedc |
 | Leerer Monat | ✓ Ausgewählt | Monatsdaten vorhanden aber alle Felder leer |
 | Ausgefüllter Monat | ✗ Nicht ausgewählt | Mindestens ein Feld hat einen Wert |
-| Konflikt | ✗ Nicht ausgewählt | Werte in EEDC weichen von HA ab |
+| Konflikt | ✗ Nicht ausgewählt | Werte in eedc weichen von HA ab |
 
 **Hinweis**: Du kannst jeden Monat individuell per Checkbox auswählen oder abwählen.
 
@@ -574,7 +574,7 @@ Der Import schützt deine manuell erfassten Daten durch individuelle Auswahl:
 
 ## 5. Home Assistant Integration
 
-EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
+eedc kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home Assistant für die automatische Monatswertberechnung nutzen.
 
 ### 5.1 Voraussetzungen
 
@@ -583,7 +583,7 @@ EEDC kann berechnete KPIs an Home Assistant exportieren und Sensordaten aus Home
 
 ### 5.2 MQTT konfigurieren
 
-**Pfad**: EEDC Add-on Konfiguration in Home Assistant
+**Pfad**: eedc Add-on Konfiguration in Home Assistant
 
 In der Add-on-Konfiguration:
 ```yaml
@@ -597,7 +597,7 @@ mqtt:
 
 ### 5.3 MQTT Auto-Discovery
 
-Wenn du das **Sensor-Mapping** konfigurierst und speicherst (→ siehe [§3 Sensor-Mapping](#3-sensor-mapping)), erstellt EEDC automatisch MQTT-Entities in Home Assistant. Diese ermöglichen die automatische Berechnung von Monatswerten.
+Wenn du das **Sensor-Mapping** konfigurierst und speicherst (→ siehe [§3 Sensor-Mapping](#3-sensor-mapping)), erstellt eedc automatisch MQTT-Entities in Home Assistant. Diese ermöglichen die automatische Berechnung von Monatswerten.
 
 #### Wie funktioniert es?
 
@@ -631,8 +631,8 @@ Die Entity-IDs enthalten den technischen Key für Eindeutigkeit:
 - `sensor.eedc_{anlage}_{key}_monat` - Monatswert
 
 Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
-- "EEDC BYD HVS 12.8 Ladung Monatsanfang"
-- "EEDC SMA eCharger 22 Ladung Monat"
+- "eedc BYD HVS 12.8 Ladung Monatsanfang"
+- "eedc SMA eCharger 22 Ladung Monat"
 
 ### 5.4 Monatsstartwerte initialisieren
 
@@ -649,7 +649,7 @@ Die **Friendly Names** enthalten den Investitionsnamen für bessere Lesbarkeit:
 1. Gehe zu **Einstellungen → Sensor-Zuordnung**
 2. Nach dem Speichern erscheint ein Dialog "Startwerte initialisieren?"
 3. Klicke auf **"Startwerte initialisieren"**
-4. EEDC liest die aktuellen Zählerstände aus HA und setzt sie als Startwerte
+4. eedc liest die aktuellen Zählerstände aus HA und setzt sie als Startwerte
 
 #### Methode 2: Manuell in Home Assistant
 
@@ -685,7 +685,7 @@ Oder im **MQTT Explorer**:
 1. Navigiere zu `homeassistant/number/` und `homeassistant/sensor/`
 2. Lösche alle Topics die mit `eedc_` beginnen
 3. Home Assistant neu starten
-4. In EEDC: Sensor-Mapping erneut speichern
+4. In eedc: Sensor-Mapping erneut speichern
 
 ### 5.6 KPI-Export (klassisch)
 
@@ -712,7 +712,7 @@ rest:
   - resource: http://localhost:8099/api/ha/export/sensors/1
     scan_interval: 3600
     sensor:
-      - name: "EEDC PV Erzeugung"
+      - name: "eedc PV Erzeugung"
         value_template: "{{ value_json.pv_erzeugung_kwh }}"
         unit_of_measurement: "kWh"
 ```
@@ -721,7 +721,7 @@ rest:
 
 ## 6. MQTT-Inbound
 
-MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Smarthome-System** an EEDC zu senden.
+MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Smarthome-System** an eedc zu senden.
 
 ### Voraussetzungen
 
@@ -730,7 +730,7 @@ MQTT-Inbound ermöglicht es, Live-Leistungsdaten und Monatswerte von **jedem Sma
 
 ### Topic-Struktur
 
-EEDC definiert zwei Topic-Typen:
+eedc definiert zwei Topic-Typen:
 
 ```
 eedc/{anlage_id}/live/{key}    → Echtzeit-Leistung in Watt (W)
@@ -769,9 +769,9 @@ MQTT Energy-Daten erscheinen als Vorschläge im Monatsabschluss-Wizard (Konfiden
 
 **Pfad**: Einstellungen → Home Assistant → MQTT-Gateway
 
-Das **MQTT-Gateway** ergänzt den MQTT-Inbound um ein flexibles Topic-Mapping: Du kannst die MQTT-Topics deiner eigenen Geräte (Shelly, OpenDTU, Tasmota, ...) direkt auf EEDC-Felder mappen — ohne dein Smarthome-System zu ändern.
+Das **MQTT-Gateway** ergänzt den MQTT-Inbound um ein flexibles Topic-Mapping: Du kannst die MQTT-Topics deiner eigenen Geräte (Shelly, OpenDTU, Tasmota, ...) direkt auf eedc-Felder mappen — ohne dein Smarthome-System zu ändern.
 
-> **Unterschied zu MQTT-Inbound:** MQTT-Inbound erwartet Daten auf fixen EEDC-Topics (`eedc/{id}/live/...`). Das Gateway übersetzt beliebige eigene Topics in diese Struktur.
+> **Unterschied zu MQTT-Inbound:** MQTT-Inbound erwartet Daten auf fixen eedc-Topics (`eedc/{id}/live/...`). Das Gateway übersetzt beliebige eigene Topics in diese Struktur.
 
 ### 7.1 Geräte-Presets
 
@@ -791,7 +791,7 @@ Nach dem Laden eines Presets werden die Topic-Pfade mit deinen Gerätedaten (z.B
 
 Für Geräte ohne Preset kannst du das Mapping manuell konfigurieren:
 
-1. **EEDC-Zielfeld wählen** (z.B. "PV-Leistung gesamt")
+1. **eedc-Zielfeld wählen** (z.B. "PV-Leistung gesamt")
 2. **Quell-Topic eingeben** (z.B. `solar/openDTU12345/total/Power`)
 3. **JSON-Pfad** angeben falls das Payload ein JSON-Objekt ist (z.B. `data.power`)
 4. **Einheit** wählen (W oder kW — wird automatisch umgerechnet)
@@ -799,7 +799,7 @@ Für Geräte ohne Preset kannst du das Mapping manuell konfigurieren:
 
 ### 7.3 Bridge-Modus (Connector → MQTT)
 
-Geräte-Connectors (SMA, Fronius etc.) können ihre Messwerte über die MQTT-Bridge regelmäßig auf EEDC-Topics publishen — auch wenn das Gerät kein natives MQTT spricht:
+Geräte-Connectors (SMA, Fronius etc.) können ihre Messwerte über die MQTT-Bridge regelmäßig auf eedc-Topics publishen — auch wenn das Gerät kein natives MQTT spricht:
 
 **Pfad**: Einstellungen → Datenerfassung → Connector → "Als MQTT-Bridge aktivieren"
 
@@ -856,7 +856,7 @@ Die Protokolle-Seite ist das zentrale Werkzeug zur Fehlersuche. Sie besteht aus 
 | Button | Funktion |
 |--------|----------|
 | **Debug** (Käfer-Icon) | Schaltet den Log-Level zwischen INFO und DEBUG um. Debug zeigt alle Detail-Meldungen — ideal für Fehlersuche, danach wieder deaktivieren (erhöhter Speicherverbrauch). Kein Restart nötig. |
-| **Neustart** (Pfeil-Icon) | Startet EEDC neu. Bei HA über die Supervisor-API, Standalone über Container-Restart. Bestätigungsdialog vor Ausführung. |
+| **Neustart** (Pfeil-Icon) | Startet eedc neu. Bei HA über die Supervisor-API, Standalone über Container-Restart. Bestätigungsdialog vor Ausführung. |
 
 ### Tab 1: System-Logs
 
@@ -933,7 +933,7 @@ Bei einem Support-Fall empfehlen wir diesen Ablauf:
 
 **Pfad**: Einstellungen → System → Energieprofile
 
-EEDC sammelt automatisch stündliche Energiedaten und verdichtet sie zu Tages- und Monatswerten. Dies geschieht im Hintergrund — du musst nichts konfigurieren, solange ein Sensor-Mapping eingerichtet ist (→ siehe [§3 Sensor-Mapping](#3-sensor-mapping)).
+eedc sammelt automatisch stündliche Energiedaten und verdichtet sie zu Tages- und Monatswerten. Dies geschieht im Hintergrund — du musst nichts konfigurieren, solange ein Sensor-Mapping eingerichtet ist (→ siehe [§3 Sensor-Mapping](#3-sensor-mapping)).
 
 ### Wie funktioniert es?
 
@@ -948,7 +948,7 @@ EEDC sammelt automatisch stündliche Energiedaten und verdichtet sie zu Tages- u
 
 ### Warum?
 
-HA-History hat nur ~10 Tage Retention. EEDC sichert die Daten dauerhaft in seiner eigenen Datenbank, sodass auch langfristige Analysen (Jahresvergleiche, Speicher-Dimensionierung) möglich sind.
+HA-History hat nur ~10 Tage Retention. eedc sichert die Daten dauerhaft in seiner eigenen Datenbank, sodass auch langfristige Analysen (Jahresvergleiche, Speicher-Dimensionierung) möglich sind.
 
 ### Datenbestand
 

@@ -371,7 +371,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                       : 'text-red-600 dark:text-red-400'
                   }`}>
                     {jahresvergleich.differenzProzent >= 0 ? '+' : ''}
-                    {jahresvergleich.differenzProzent.toFixed(1)}%
+                    {jahresvergleich.differenzProzent.toFixed(1)} %
                   </span>
                   <p className="text-xs text-gray-500">
                     {jahresvergleich.differenz >= 0 ? '+' : ''}{jahresvergleich.differenz.toFixed(0)} kWh/kWp
@@ -551,7 +551,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
             <div className="flex items-center gap-2">
               <Info className="h-5 w-5 text-orange-500" />
               <span className="font-medium text-orange-900 dark:text-orange-100">
-                Durchschnittliche Degradation: {degradation.durchschnittliche_degradation_prozent_jahr.toFixed(2)}% / Jahr
+                Durchschnittliche Degradation: {degradation.durchschnittliche_degradation_prozent_jahr.toFixed(2)} % / Jahr
               </span>
             </div>
             <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">

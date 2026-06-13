@@ -649,8 +649,8 @@ export default function EnergieFluss({
           const tipParts = [k.label]
           if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.erzeugung_kw!.toFixed(2)} kW (Erzeugung)`)
           if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.verbrauch_kw!.toFixed(2)} kW (Verbrauch)`)
-          if (hasSoc) tipParts.push(`SoC: ${soc}%`)
-          if (auslastungPct !== null) tipParts.push(`Auslastung: ${auslastungPct.toFixed(0)}% von ${k.leistung_kwp} kWp`)
+          if (hasSoc) tipParts.push(`SoC: ${soc} %`)
+          if (auslastungPct !== null) tipParts.push(`Auslastung: ${auslastungPct.toFixed(0)} % von ${k.leistung_kwp} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {
             const bezug = tagesWerte?.netz_bezug
@@ -747,7 +747,7 @@ export default function EnergieFluss({
                   className="font-semibold"
                   fill={socColor(soc)}
                 >
-                  {soc}%
+                  {soc} %
                 </text>
               )}
 

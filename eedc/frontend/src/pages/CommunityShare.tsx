@@ -30,6 +30,7 @@ import type { PreviewResponse, ShareResponse, CommunityStatus } from '../api'
 import { useSelectedAnlage } from '../hooks'
 
 import { REGION_NAMEN } from '../lib/constants'
+import Button from '../components/ui/Button'
 
 export default function CommunityShare() {
   const navigate = useNavigate()
@@ -185,7 +186,7 @@ export default function CommunityShare() {
                   <span className="text-lg font-normal text-gray-500 dark:text-gray-400 ml-1">kWh/kWp</span>
                 </p>
                 <p className={`text-sm mt-1 ${abweichung >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)}% vs. Durchschnitt
+                  {abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)} % vs. Durchschnitt
                 </p>
               </div>
 
@@ -240,7 +241,8 @@ export default function CommunityShare() {
             <ExternalLink className="h-4 w-4" />
             Dein persönliches Benchmark öffnen
           </a>
-          <button
+          <Button
+            variant="ghost"
             onClick={() => {
               setResult(null)
               setPreview(null)
@@ -249,17 +251,14 @@ export default function CommunityShare() {
                 communityApi.getPreview(selectedAnlage).then(setPreview)
               }
             }}
-            className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 font-medium"
+            className="gap-2"
           >
             <RefreshCw className="h-4 w-4" />
             Erneut teilen
-          </button>
-          <button
-            onClick={() => navigate('/')}
-            className="px-5 py-2.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => navigate('/')}>
             Zum Dashboard
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -539,13 +538,16 @@ export default function CommunityShare() {
                 </p>
               </div>
             </div>
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setShowDeleteConfirm(true)}
-              className="text-red-600 hover:text-red-800 p-1"
+              className="text-red-600 hover:text-red-700"
               title="Daten löschen"
+              aria-label="Daten löschen"
             >
               <Trash2 className="h-5 w-5" />
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -559,34 +561,23 @@ export default function CommunityShare() {
             Dies kann nicht rückgängig gemacht werden.
           </p>
           <div className="flex gap-3">
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Wird gelöscht...
-                </>
-              ) : (
+            <Button variant="danger" onClick={handleDelete} loading={deleting} className="gap-2">
+              {deleting ? 'Wird gelöscht...' : (
                 <>
                   <Trash2 className="h-4 w-4" />
                   Ja, löschen
                 </>
               )}
-            </button>
-            <button
-              onClick={() => setShowDeleteConfirm(false)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-            >
+            </Button>
+            <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>
               Abbrechen
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      {/* Teilen-Button */}
+      {/* Teilen-Button — bewusst Section-CTA in Community-Orange (B15-Ausnahme:
+          themenspezifische Primär-CTA-Farbe statt Standard-Blau, vom Maintainer ok). */}
       <div className="flex justify-center pt-4">
         <button
           onClick={handleShare}

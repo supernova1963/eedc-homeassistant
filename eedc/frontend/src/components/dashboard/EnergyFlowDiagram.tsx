@@ -45,7 +45,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
                 style={{ width: `${pct(direkt, pvSum)}%` }}
                 title={`Direktverbrauch: ${fmt(direkt)}`}>
                 {pct(direkt, pvSum) >= 12 && (
-                  <span className="text-xs text-white font-medium">{pct(direkt, pvSum)}%</span>
+                  <span className="text-xs text-white font-medium">{pct(direkt, pvSum)} %</span>
                 )}
               </div>
             )}
@@ -54,7 +54,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
                 style={{ width: `${pct(speicherLad, pvSum)}%` }}
                 title={`Speicher: ${fmt(speicherLad)}`}>
                 {pct(speicherLad, pvSum) >= 12 && (
-                  <span className="text-xs text-white font-medium">{pct(speicherLad, pvSum)}%</span>
+                  <span className="text-xs text-white font-medium">{pct(speicherLad, pvSum)} %</span>
                 )}
               </div>
             )}
@@ -63,7 +63,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
                 style={{ width: `${pct(einspeis, pvSum)}%` }}
                 title={`Einspeisung: ${fmt(einspeis)}`}>
                 {pct(einspeis, pvSum) >= 12 && (
-                  <span className="text-xs text-white font-medium">{pct(einspeis, pvSum)}%</span>
+                  <span className="text-xs text-white font-medium">{pct(einspeis, pvSum)} %</span>
                 )}
               </div>
             )}
@@ -101,7 +101,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
                 style={{ width: `${pct(direkt, hausSum)}%` }}
                 title={`PV direkt: ${fmt(direkt)}`}>
                 {pct(direkt, hausSum) >= 12 && (
-                  <span className="text-xs text-white font-medium">{pct(direkt, hausSum)}%</span>
+                  <span className="text-xs text-white font-medium">{pct(direkt, hausSum)} %</span>
                 )}
               </div>
             )}
@@ -110,7 +110,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
                 style={{ width: `${pct(speicherEntl, hausSum)}%` }}
                 title={`Speicher: ${fmt(speicherEntl)}`}>
                 {pct(speicherEntl, hausSum) >= 12 && (
-                  <span className="text-xs text-white font-medium">{pct(speicherEntl, hausSum)}%</span>
+                  <span className="text-xs text-white font-medium">{pct(speicherEntl, hausSum)} %</span>
                 )}
               </div>
             )}
@@ -119,7 +119,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
                 style={{ width: `${pct(netz, hausSum)}%` }}
                 title={`Netzbezug: ${fmt(netz)}`}>
                 {pct(netz, hausSum) >= 12 && (
-                  <span className="text-xs text-white font-medium">{pct(netz, hausSum)}%</span>
+                  <span className="text-xs text-white font-medium">{pct(netz, hausSum)} %</span>
                 )}
               </div>
             )}

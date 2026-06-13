@@ -251,7 +251,7 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)} %`}
                 >
                   {verbrauchPieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -319,7 +319,7 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
             <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
               <p className="text-sm text-purple-600 dark:text-purple-400">Effizienz</p>
               <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
-                {z.speicher_effizienz_prozent.toFixed(1)}%
+                {z.speicher_effizienz_prozent.toFixed(1)} %
               </p>
             </div>
           </div>

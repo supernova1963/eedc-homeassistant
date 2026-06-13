@@ -1,15 +1,15 @@
 ---
 title: Über das Projekt
-description: Hintergrund und Motivation hinter EEDC
+description: Hintergrund und Motivation hinter eedc
 ---
 
-## Was ist EEDC?
+## Was ist eedc?
 
-**EEDC** (Energie Effizienz Data Center) ist eine Open-Source-Software zur umfassenden Analyse von PV-Anlagen und Energiesystemen. Es wurde entwickelt, um Betreibern von Photovoltaikanlagen detaillierte Einblicke in ihre Energiedaten zu geben – weit über das hinaus, was einfache Monitoring-Tools bieten.
+**eedc** (Energie Effizienz Data Center) ist eine Open-Source-Software zur umfassenden Analyse von PV-Anlagen und Energiesystemen. Es wurde entwickelt, um Betreibern von Photovoltaikanlagen detaillierte Einblicke in ihre Energiedaten zu geben – weit über das hinaus, was einfache Monitoring-Tools bieten.
 
 ## Motivation
 
-Die meisten PV-Monitoring-Lösungen zeigen dir, wie viel Strom du erzeugst. EEDC geht weiter:
+Die meisten PV-Monitoring-Lösungen zeigen dir, wie viel Strom du erzeugst. eedc geht weiter:
 
 - **ROI-Analyse** mit Mehrkosten-Ansatz (Was hätte die Alternative gekostet?)
 - **Komponentenweise Auswertung** (nicht nur PV, sondern auch Speicher, Wärmepumpe, E-Auto)
@@ -26,7 +26,7 @@ Die meisten PV-Monitoring-Lösungen zeigen dir, wie viel Strom du erzeugst. EEDC
 
 ## Mitmachen
 
-EEDC ist ein Community-Projekt. Beiträge sind willkommen:
+eedc ist ein Community-Projekt. Beiträge sind willkommen:
 
 - [GitHub Repository](https://github.com/supernova1963/eedc-homeassistant)
 - [Issues & Feature-Requests](https://github.com/supernova1963/eedc-homeassistant/issues)

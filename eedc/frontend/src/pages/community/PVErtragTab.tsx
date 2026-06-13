@@ -186,11 +186,11 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold text-gray-900 dark:text-white">
-              Top {100 - (perzentil || 0)}%
+              Top {100 - (perzentil || 0)} %
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Besser als {perzentil}% der Community
+            Besser als {perzentil} % der Community
           </p>
         </Card>
 
@@ -217,7 +217,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 : 'text-red-600 dark:text-red-400'
             }`}>
               {(performanceStats?.abweichungGesamt || 0) >= 0 ? '+' : ''}
-              {performanceStats?.abweichungGesamt.toFixed(1)}%
+              {performanceStats?.abweichungGesamt.toFixed(1)} %
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -244,7 +244,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 : 'text-red-600 dark:text-red-400'
             }`}>
               {(performanceStats?.abweichungRegion || 0) >= 0 ? '+' : ''}
-              {performanceStats?.abweichungRegion.toFixed(1)}%
+              {performanceStats?.abweichungRegion.toFixed(1)} %
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -380,7 +380,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                         <span className={`font-medium ${
                           isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
-                          {isPositive ? '+' : ''}{abweichung.toFixed(1)}%
+                          {isPositive ? '+' : ''}{abweichung.toFixed(1)} %
                         </span>
                       </td>
                       <td className="text-right py-3 px-4 text-gray-500 dark:text-gray-400">

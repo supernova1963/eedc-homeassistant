@@ -156,7 +156,7 @@ function formatValue(val: number | null, format: ColumnConfig['format']): string
   switch (format) {
     case 'kwh':     return val.toLocaleString('de-DE', { maximumFractionDigits: 1 })
     case 'kw':      return val.toLocaleString('de-DE', { maximumFractionDigits: 2 })
-    case 'percent': return `${(val * 100).toFixed(1)}%`
+    case 'percent': return `${(val * 100).toFixed(1)} %`
     case 'temp':    return `${val.toFixed(1)}°C`
     case 'zyklen':  return val.toFixed(2)
     case 'stunden': {

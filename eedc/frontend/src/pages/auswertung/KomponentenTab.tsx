@@ -280,7 +280,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               bgColor="bg-cyan-50 dark:bg-cyan-900/20"
               formel="Entladung ÷ Ladung × 100"
               berechnung={`${fmtCalc(speicherSummen.entladung, 0)} kWh ÷ ${fmtCalc(speicherSummen.ladung, 0)} kWh × 100`}
-              ergebnis={speicherSummen.effizienz ? `= ${fmtCalc(speicherSummen.effizienz, 1)}%` : '—'}
+              ergebnis={speicherSummen.effizienz ? `= ${fmtCalc(speicherSummen.effizienz, 1)} %` : '—'}
             />
             {komponenten.hat_arbitrage && speicherSummen.arbitrage > 0 ? (
               <KPICard
@@ -298,7 +298,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 title="Verlust"
                 value={(speicherSummen.ladung - speicherSummen.entladung).toFixed(0)}
                 unit="kWh"
-                subtitle={speicherSummen.effizienz ? `${(100 - speicherSummen.effizienz).toFixed(1)}%` : undefined}
+                subtitle={speicherSummen.effizienz ? `${(100 - speicherSummen.effizienz).toFixed(1)} %` : undefined}
                 icon={Battery}
                 color="text-gray-500"
                 bgColor="bg-gray-50 dark:bg-gray-900/20"
@@ -387,7 +387,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               bgColor="bg-purple-50 dark:bg-purple-900/20"
               formel="Eigenverbrauch ÷ Erzeugung × 100"
               berechnung={`${fmtCalc(bkwSummen.eigenverbrauch, 0)} kWh ÷ ${fmtCalc(bkwSummen.erzeugung, 0)} kWh × 100`}
-              ergebnis={bkwSummen.erzeugung > 0 ? `= ${fmtCalc((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100, 0)}%` : '—'}
+              ergebnis={bkwSummen.erzeugung > 0 ? `= ${fmtCalc((bkwSummen.eigenverbrauch / bkwSummen.erzeugung) * 100, 0)} %` : '—'}
             />
             <KPICard
               title="Einspeisung"
@@ -526,7 +526,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 title="Heizung"
                 value={(wpSummen.heizung / 1000).toFixed(2)}
                 unit="MWh"
-                subtitle={wpSummen.waerme > 0 ? `${((wpSummen.heizung / wpSummen.waerme) * 100).toFixed(0)}% der Wärme` : undefined}
+                subtitle={wpSummen.waerme > 0 ? `${((wpSummen.heizung / wpSummen.waerme) * 100).toFixed(0)} % der Wärme` : undefined}
                 icon={Flame}
                 color="text-red-400"
                 bgColor="bg-red-50 dark:bg-red-900/20"
@@ -536,7 +536,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 title="Warmwasser"
                 value={(wpSummen.warmwasser / 1000).toFixed(2)}
                 unit="MWh"
-                subtitle={wpSummen.waerme > 0 ? `${((wpSummen.warmwasser / wpSummen.waerme) * 100).toFixed(0)}% der Wärme` : undefined}
+                subtitle={wpSummen.waerme > 0 ? `${((wpSummen.warmwasser / wpSummen.waerme) * 100).toFixed(0)} % der Wärme` : undefined}
                 icon={Flame}
                 color="text-blue-500"
                 bgColor="bg-blue-50 dark:bg-blue-900/20"
@@ -655,7 +655,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
               bgColor="bg-green-50 dark:bg-green-900/20"
               formel="PV-Ladung ÷ Gesamtladung × 100"
               berechnung={`${fmtCalc(emobSummen.pvLadung, 0)} kWh ÷ ${fmtCalc(emobSummen.ladung, 0)} kWh × 100`}
-              ergebnis={emobSummen.pvAnteil ? `= ${fmtCalc(emobSummen.pvAnteil, 0)}%` : '—'}
+              ergebnis={emobSummen.pvAnteil ? `= ${fmtCalc(emobSummen.pvAnteil, 0)} %` : '—'}
             />
             <KPICard
               title="Verbrauch"
@@ -679,7 +679,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 title="PV-Ladung"
                 value={emobSummen.pvLadung.toFixed(0)}
                 unit="kWh"
-                subtitle={emobSummen.ladung > 0 ? `${((emobSummen.pvLadung / emobSummen.ladung) * 100).toFixed(0)}% der Ladung` : undefined}
+                subtitle={emobSummen.ladung > 0 ? `${((emobSummen.pvLadung / emobSummen.ladung) * 100).toFixed(0)} % der Ladung` : undefined}
                 icon={Sun}
                 color="text-yellow-500"
                 bgColor="bg-yellow-50 dark:bg-yellow-900/20"
@@ -689,7 +689,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 title="Netz-Ladung"
                 value={emobSummen.netzLadung.toFixed(0)}
                 unit="kWh"
-                subtitle={emobSummen.ladung > 0 ? `${((emobSummen.netzLadung / emobSummen.ladung) * 100).toFixed(0)}% der Ladung` : undefined}
+                subtitle={emobSummen.ladung > 0 ? `${((emobSummen.netzLadung / emobSummen.ladung) * 100).toFixed(0)} % der Ladung` : undefined}
                 icon={Zap}
                 color="text-red-500"
                 bgColor="bg-red-50 dark:bg-red-900/20"

@@ -4,11 +4,11 @@ description: "Teil II: Navigation, Dashboards, Auswertungen, Community und Aussi
 ---
 
 
-# EEDC Handbuch — Teil II: Bedienung
+# eedc Handbuch — Teil II: Bedienung
 
 **Version 3.16.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -65,7 +65,7 @@ Das Dropdown-Menü ist in fünf Kategorien unterteilt:
 - Allgemein – Version, Status
 
 **Home Assistant** (nur bei HA-Nutzung sichtbar):
-- Sensor-Zuordnung – HA-Sensoren zu EEDC-Feldern zuordnen
+- Sensor-Zuordnung – HA-Sensoren zu eedc-Feldern zuordnen
 - Statistik-Import – Bulk-Import aus HA-Langzeitstatistik
 - MQTT-Export – MQTT Auto-Discovery Konfiguration
 - MQTT-Inbound – Universelle Datenbrücke konfigurieren
@@ -483,9 +483,9 @@ Wetterbasierte Ertragsschätzung für die nächsten 7 Tage:
 - **Anzeige**: Tägliche Erzeugungsschätzung basierend auf Globalstrahlung
 - **Wettersymbole**: Sonnig, bewölkt, regnerisch
 - **Datenquelle-Kürzel** pro Tag: MS (MeteoSwiss ICON-CH2), D2 (ICON-D2), EU (ICON-EU), EC (ECMWF IFS), BM (best_match)
-- **Solar Forecast ML (SFML)**: Wenn SFML konfiguriert ist, erscheint im Chart eine zweite Linie mit dem KI-basierten Ertrag zum Vergleich mit der EEDC-Prognose und dem tatsächlichen IST-Wert
+- **Solar Forecast ML (SFML)**: Wenn SFML konfiguriert ist, erscheint im Chart eine zweite Linie mit dem KI-basierten Ertrag zum Vergleich mit der eedc-Prognose und dem tatsächlichen IST-Wert
 
-Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z.B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt EEDC automatisch (auto).
+Das verwendete Wettermodell lässt sich pro Anlage im Dropdown **Anlage → Wettermodell** auf einen fixen Anbieter umstellen (z.B. MeteoSwiss ICON-CH2 für alpine Standorte). Ohne Auswahl wählt eedc automatisch (auto).
 
 ### 7.2 Langfristig (12 Monate)
 
@@ -540,7 +540,7 @@ Die **Infothek** ist ein optionales Modul für Verträge, Zähler, Kontakte und 
 **Funktionen im Überblick:**
 - 14 Kategorien mit passenden Vorlagen-Feldern (Strom-, Gas-, Wasservertrag, Versicherung, Wartung, MaStR, ...)
 - Bis zu 3 Fotos oder PDFs pro Eintrag (JPEG, PNG, HEIC, PDF)
-- Optionale Verknüpfung mit EEDC-Investitionen
+- Optionale Verknüpfung mit eedc-Investitionen
 - PDF-Export aller Einträge für den Hefter
 - Archivierung statt Löschung
 

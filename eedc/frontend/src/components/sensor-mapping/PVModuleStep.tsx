@@ -72,7 +72,7 @@ export default function PVModuleStep({
             value: 'keine',
             label: 'Kein Sensor',
             description: hasPvGesamtSensor && kwpAnteil > 0
-              ? `Anteilig (${(kwpAnteil * 100).toFixed(1)}%) aus PV-Gesamt verteilt oder manuell erfassen`
+              ? `Anteilig (${(kwpAnteil * 100).toFixed(1)} %) aus PV-Gesamt verteilt oder manuell erfassen`
               : 'Manuell im Monatsabschluss erfassen',
           },
         ]
@@ -91,7 +91,7 @@ export default function PVModuleStep({
                 {inv.kwp && (
                   <div className="text-xs text-gray-500">
                     {inv.kwp.toFixed(1)} kWp
-                    {kwpAnteil > 0 && ` (${(kwpAnteil * 100).toFixed(1)}%)`}
+                    {kwpAnteil > 0 && ` (${(kwpAnteil * 100).toFixed(1)} %)`}
                   </div>
                 )}
               </div>

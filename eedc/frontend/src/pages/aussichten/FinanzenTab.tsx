@@ -147,7 +147,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                 ergebnis={`= ${prognose.amortisations_fortschritt_prozent.toFixed(1)} %`}
               >
                 <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {prognose.amortisations_fortschritt_prozent.toFixed(1)}%
+                  {prognose.amortisations_fortschritt_prozent.toFixed(1)} %
                 </p>
               </FormelTooltip>
             </div>
@@ -325,7 +325,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                  label={({ percent }) => `${(percent * 100).toFixed(0)} %`}
                 >
                   {pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -339,7 +339,7 @@ export default function FinanzenTab({ anlageId }: Props) {
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">EV-Quote:</span>
-              <span className="font-medium">{prognose.eigenverbrauchsquote_prozent.toFixed(1)}%</span>
+              <span className="font-medium">{prognose.eigenverbrauchsquote_prozent.toFixed(1)} %</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Eigenverbrauch:</span>

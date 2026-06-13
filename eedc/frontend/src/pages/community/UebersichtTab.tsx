@@ -828,7 +828,7 @@ function AbweichungBadge({ wert, durchschnitt }: { wert: number; durchschnitt: n
         <TrendingDown className="h-4 w-4" />
       )}
       {isPositive ? '+' : ''}
-      {abweichung.toFixed(1)}% vs. Durchschnitt
+      {abweichung.toFixed(1)} % vs. Durchschnitt
     </span>
   )
 }
@@ -978,7 +978,7 @@ function KPIRow({
                 : 'text-red-600 dark:text-red-400'
             }`}
           >
-            ({abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)}%)
+            ({abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)} %)
           </span>
         )}
       </div>
@@ -1074,7 +1074,7 @@ function AchievementBadge({ achievement }: { achievement: Achievement }) {
             />
           </div>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            {achievement.fortschritt.toFixed(0)}%
+            {achievement.fortschritt.toFixed(0)} %
           </p>
         </div>
       )}

@@ -138,7 +138,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                   outerRadius={80}
                   dataKey="kosten"
                   nameKey="label"
-                  label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)}%`}
+                  label={({ label, percent }) => `${label}: ${(percent * 100).toFixed(0)} %`}
                   labelLine={false}
                 >
                   {kostenByTyp.map((entry, index) => (
@@ -211,7 +211,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           sicht="Gesamt-Anlage · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
           formel="Jahresersparnis ÷ Relevante Kosten × 100"
           berechnung={roiData && roiData.gesamt_relevante_kosten > 0 ? `${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € ÷ ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € × 100` : undefined}
-          ergebnis={roiData?.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent.toFixed(1)}% ROI p.a.` : undefined}
+          ergebnis={roiData?.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent.toFixed(1)} % ROI p.a.` : undefined}
         />
         <KPICard
           title="Amortisation"
@@ -447,7 +447,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                             sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
                             formel="Ersparnis ÷ Mehrkosten × 100"
                             berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
-                            ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)}% p.a.` : 'nicht berechenbar'}
+                            ergebnis={b.roi_prozent ? `= ${b.roi_prozent.toFixed(1)} % p.a.` : 'nicht berechenbar'}
                           >
                             <span className="cursor-help border-b border-dotted border-gray-400">
                               {b.roi_prozent?.toFixed(1) || '—'}%
@@ -499,7 +499,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                           </td>
                           <td className="px-4 py-2 text-sm text-right text-gray-400 dark:text-gray-500" colSpan={2}>
                             {typeof komp.detail?.anteil_prozent === 'number' && (
-                              <span className="text-xs">{komp.detail.anteil_prozent.toFixed(0)}% Anteil</span>
+                              <span className="text-xs">{komp.detail.anteil_prozent.toFixed(0)} % Anteil</span>
                             )}
                             {typeof komp.detail?.hinweis === 'string' && (
                               <span className="text-xs italic">{komp.detail.hinweis}</span>

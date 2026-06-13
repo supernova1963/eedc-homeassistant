@@ -1092,7 +1092,7 @@ function MaeMbeCard({ label, mae, mbe, color, hint }: {
   color: string
   hint?: string
 }) {
-  const fmtMbe = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
+  const fmtMbe = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)} %`
   return (
     <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
       <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</div>
@@ -1100,7 +1100,7 @@ function MaeMbeCard({ label, mae, mbe, color, hint }: {
         <SimpleTooltip text="MAE = Mean Absolute Error: durchschnittliche Abweichung |Prognose − IST| in % — Streuung">
           <div>
             <span className="text-xs text-gray-500 mr-1">MAE</span>
-            <span className={`text-lg font-bold ${color}`}>{mae !== null ? `${mae.toFixed(0)}%` : '—'}</span>
+            <span className={`text-lg font-bold ${color}`}>{mae !== null ? `${mae.toFixed(0)} %` : '—'}</span>
           </div>
         </SimpleTooltip>
         <SimpleTooltip text="MBE = Mean Bias Error: durchschnittliche vorzeichenbehaftete Abweichung — positiv = systematisch zu hoch, negativ = zu niedrig. |MBE| ≪ MAE → Streuung; |MBE| ≈ MAE → systematischer Bias (Lernfaktor wirkt).">
@@ -1123,7 +1123,7 @@ function AsymmetrieCard({ label, asym, color, hint }: {
   color: string
   hint?: string
 }) {
-  const fmtPct = (v: number | null) => v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(0)}%`
+  const fmtPct = (v: number | null) => v === null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(0)} %`
   const overCount = asym?.over_count ?? 0
   const underCount = asym?.under_count ?? 0
   const tagWord = (n: number) => n === 1 ? 'Tag' : 'Tage'
@@ -1166,7 +1166,7 @@ function AbweichungCell({ prognose, ist }: { prognose: number; ist: number | nul
   if (ist === null || ist < 0.5) return <span>{prognose.toFixed(1)}</span>
   const pct = ((prognose - ist) / ist) * 100
   const color = Math.abs(pct) < 10 ? 'text-green-500' : Math.abs(pct) < 30 ? 'text-yellow-500' : 'text-red-500'
-  return <span>{prognose.toFixed(1)}<span className={`text-xs ml-1 ${color}`}>{pct > 0 ? '+' : ''}{pct.toFixed(0)}%</span></span>
+  return <span>{prognose.toFixed(1)}<span className={`text-xs ml-1 ${color}`}>{pct > 0 ? '+' : ''}{pct.toFixed(0)} %</span></span>
 }
 
 interface StundenTooltipPayload {

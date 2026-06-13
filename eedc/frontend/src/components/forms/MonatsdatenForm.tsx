@@ -401,7 +401,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
       // Info-Text über Datenquelle
       const quellenText = data.datenquelle === 'open-meteo'
-        ? `Historische Daten von Open-Meteo${data.abdeckung_prozent ? ` (${data.abdeckung_prozent}% Abdeckung)` : ''}`
+        ? `Historische Daten von Open-Meteo${data.abdeckung_prozent ? ` (${data.abdeckung_prozent} % Abdeckung)` : ''}`
         : data.datenquelle === 'pvgis-tmy'
         ? 'Durchschnittswerte von PVGIS (TMY)'
         : 'Geschätzte Durchschnittswerte'

@@ -33,4 +33,4 @@ Unser Angebot enthält Links zu externen Webseiten Dritter, auf deren Inhalte wi
 
 ### Urheberrecht
 
-Die durch den Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Die Software EEDC steht unter einer Open-Source-Lizenz – Details im [GitHub Repository](https://github.com/supernova1963/eedc-homeassistant).
+Die durch den Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen Urheberrecht. Die Software eedc steht unter einer Open-Source-Lizenz – Details im [GitHub Repository](https://github.com/supernova1963/eedc-homeassistant).

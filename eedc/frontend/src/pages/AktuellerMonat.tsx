@@ -378,7 +378,7 @@ export default function AktuellerMonat() {
             icon={Home}
             color="green"
             subtitle={vj?.autarkie_prozent !== undefined
-              ? `VJ: ${fmt(vj.autarkie_prozent, 0)}%`
+              ? `VJ: ${fmt(vj.autarkie_prozent, 0)} %`
               : undefined}
             formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
             berechnung={data.eigenverbrauch_kwh !== null && data.gesamtverbrauch_kwh !== null
@@ -464,7 +464,7 @@ export default function AktuellerMonat() {
                         cy="50%"
                         innerRadius={45}
                         outerRadius={75}
-                        label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                        label={({ percent }) => `${(percent * 100).toFixed(0)} %`}
                         labelLine={false}
                       >
                         {verteilungData.map((entry, index) => (
@@ -500,7 +500,7 @@ export default function AktuellerMonat() {
                           : undefined}
                         ergebnis={`= ${fmtCalc(data.eigenverbrauch_quote_prozent, 1)} %`}
                       >
-                        <span className="font-medium">{fmt(data.eigenverbrauch_quote_prozent, 0)}%</span>
+                        <span className="font-medium">{fmt(data.eigenverbrauch_quote_prozent, 0)} %</span>
                       </FormelTooltip>
                     </div>
                   )}
@@ -565,7 +565,7 @@ export default function AktuellerMonat() {
                         berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} kWh ÷ ${fmtCalc(data.speicher_ladung_kwh, 0)} kWh × 100`}
                         ergebnis={`= ${fmtCalc(data.speicher_entladung_kwh / data.speicher_ladung_kwh * 100, 1)} %`}
                       >
-                        <span className="font-medium">{fmt(data.speicher_entladung_kwh / data.speicher_ladung_kwh * 100, 0)}%</span>
+                        <span className="font-medium">{fmt(data.speicher_entladung_kwh / data.speicher_ladung_kwh * 100, 0)} %</span>
                       </FormelTooltip>
                     </div>
                   )}
@@ -775,6 +775,7 @@ export default function AktuellerMonat() {
                 <div className={`rounded-xl p-5 text-center border-2 ${gesamtnettoertrag >= 0 ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/20' : 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/20'}`}>
                   <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Gesamtnettoertrag</p>
                   <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={`= ${fmtCalc(gesamtnettoertrag, 2)} €`}>
+                    {/* text-5xl: dokumentierte Ausnahme (Monatsbericht-Hero-Zahl, Style-Guide A1) */}
                     <span className={`text-5xl font-bold cursor-help ${gesamtnettoertrag >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                       {fmtEuro(gesamtnettoertrag)}
                     </span>
@@ -816,8 +817,9 @@ export default function AktuellerMonat() {
                   berechnung={`${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.soll_pv_kwh, 0)} kWh × 100`}
                   ergebnis={`= ${fmtCalc(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 1)} %`}
                 >
+                  {/* text-5xl: dokumentierte Ausnahme (Monatsbericht-Hero-Zahl, Style-Guide A1) */}
                   <p className={`text-5xl font-bold ${data.pv_erzeugung_kwh! >= data.soll_pv_kwh! ? 'text-green-500' : 'text-orange-500'}`}>
-                    {fmt(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 0)}%
+                    {fmt(data.pv_erzeugung_kwh! / data.soll_pv_kwh! * 100, 0)} %
                   </p>
                 </FormelTooltip>
                 <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">

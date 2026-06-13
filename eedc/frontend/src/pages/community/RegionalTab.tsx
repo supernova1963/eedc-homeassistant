@@ -152,7 +152,7 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
               {tooltip.region.avg_speicher_ladung_kwh != null && <p>🔋 {tooltip.region.avg_speicher_ladung_kwh.toFixed(0)} ↓ / {tooltip.region.avg_speicher_entladung_kwh?.toFixed(0) ?? '–'} ↑ kWh/Mon</p>}
               {tooltip.region.avg_wp_jaz != null && <p>♨️ JAZ {tooltip.region.avg_wp_jaz.toFixed(1)}</p>}
               {tooltip.region.avg_eauto_km != null && <p>🚗 {tooltip.region.avg_eauto_km.toFixed(0)} km/Mon · {tooltip.region.avg_eauto_ladung_kwh != null ? `${tooltip.region.avg_eauto_ladung_kwh.toFixed(0)} kWh zuhause` : '–'}</p>}
-              {tooltip.region.avg_wallbox_kwh != null && <p>🔌 {tooltip.region.avg_wallbox_kwh.toFixed(0)} kWh/Mon{tooltip.region.avg_wallbox_pv_anteil != null ? ` · ${tooltip.region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : ''}</p>}
+              {tooltip.region.avg_wallbox_kwh != null && <p>🔌 {tooltip.region.avg_wallbox_kwh.toFixed(0)} kWh/Mon{tooltip.region.avg_wallbox_pv_anteil != null ? ` · ${tooltip.region.avg_wallbox_pv_anteil.toFixed(0)} % PV` : ''}</p>}
               {tooltip.region.avg_bkw_kwh != null && <p>🪟 {tooltip.region.avg_bkw_kwh.toFixed(0)} kWh/Mon</p>}
             </div>
           )}
@@ -309,7 +309,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Besser als {regionalStats.perzentilRegion}% in deiner Region
+            Besser als {regionalStats.perzentilRegion} % in deiner Region
           </p>
         </Card>
 
@@ -336,7 +336,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                 : 'text-red-600 dark:text-red-400'
             }`}>
               {regionalStats.abweichungRegion >= 0 ? '+' : ''}
-              {regionalStats.abweichungRegion.toFixed(1)}%
+              {regionalStats.abweichungRegion.toFixed(1)} %
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -407,7 +407,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                   : 'text-red-600 dark:text-red-400'
               }`}>
                 {regionalStats.abweichungCommunity >= 0 ? '+' : ''}
-                {regionalStats.abweichungCommunity.toFixed(1)}%
+                {regionalStats.abweichungCommunity.toFixed(1)} %
               </span>
               <span className="text-gray-500 dark:text-gray-400">
                 {regionalStats.abweichungCommunity >= 0 ? 'über' : 'unter'} dem Durchschnitt
@@ -537,7 +537,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
                           {region.avg_wallbox_kwh != null
-                            ? <><div>{region.avg_wallbox_kwh.toFixed(0)} kWh</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_wallbox_pv_anteil != null ? `${region.avg_wallbox_pv_anteil.toFixed(0)}% PV` : '–'}</div></>
+                            ? <><div>{region.avg_wallbox_kwh.toFixed(0)} kWh</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_wallbox_pv_anteil != null ? `${region.avg_wallbox_pv_anteil.toFixed(0)} % PV` : '–'}</div></>
                             : '-'}
                         </td>
                         <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">

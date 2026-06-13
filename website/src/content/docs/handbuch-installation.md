@@ -4,11 +4,11 @@ description: "Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Feh
 ---
 
 
-# EEDC Handbuch — Teil I: Installation & Einrichtung
+# eedc Handbuch — Teil I: Installation & Einrichtung
 
 **Version 3.16.1** | Stand: April 2026
 
-> Dieses Handbuch ist Teil der EEDC-Dokumentation.
+> Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
 
 ---
@@ -37,7 +37,7 @@ description: "Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Feh
 
 ### Grundprinzipien
 
-1. **Standalone-First**: EEDC funktioniert komplett ohne Home Assistant
+1. **Standalone-First**: eedc funktioniert komplett ohne Home Assistant
 2. **Lokale Datenspeicherung**: Alle Daten bleiben auf deinem Server
 3. **Monatliche Granularität**: Daten werden pro Monat erfasst und ausgewertet
 4. **Flexible Datenquellen**: CSV-Import, manuelle Eingabe, oder Wetter-API
@@ -60,7 +60,7 @@ description: "Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Feh
    - Füge hinzu: `https://github.com/supernova1963/eedc-homeassistant`
 
 2. **Add-on installieren**:
-   - Suche nach "EEDC" im Add-on Store
+   - Suche nach "eedc" im Add-on Store
    - Klicke auf *Installieren*
    - Aktiviere "In Sidebar anzeigen"
    - Starte das Add-on

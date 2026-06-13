@@ -319,7 +319,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               value={formData.ust_satz_prozent}
               onChange={handleChange}
               placeholder={UST_DEFAULTS[formData.standort_land] || '19'}
-              hint={`Standard: ${UST_DEFAULTS[formData.standort_land] || '19'}% (${formData.standort_land || 'DE'})`}
+              hint={`Standard: ${UST_DEFAULTS[formData.standort_land] || '19'} % (${formData.standort_land || 'DE'})`}
             />
           )}
         </div>

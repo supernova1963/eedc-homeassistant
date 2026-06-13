@@ -308,7 +308,7 @@ export default function LangfristTab({ anlageId }: Props) {
                           ? 'text-red-600'
                           : 'text-gray-600'
                       }>
-                        {(m.historische_performance_ratio * 100).toFixed(0)}%
+                        {(m.historische_performance_ratio * 100).toFixed(0)} %
                       </span>
                     ) : (
                       <span className="text-gray-400 dark:text-gray-500">-</span>

@@ -16,7 +16,7 @@ TARGET="src/content/docs"
 
 # Mapping: Quelldatei → Zieldatei|Titel|Beschreibung
 declare -A DOCS=(
-  ["BENUTZERHANDBUCH.md"]="benutzerhandbuch.md|Benutzerhandbuch|Übersicht und Navigation zum EEDC-Benutzerhandbuch"
+  ["BENUTZERHANDBUCH.md"]="benutzerhandbuch.md|Benutzerhandbuch|Übersicht und Navigation zum eedc-Benutzerhandbuch"
   ["HANDBUCH_INSTALLATION.md"]="handbuch-installation.md|Installation & Einrichtung|Teil I: Installation, Setup-Wizard, Monatsabschluss, Tipps und Fehlerbehebung"
   ["HANDBUCH_BEDIENUNG.md"]="handbuch-bedienung.md|Bedienung|Teil II: Navigation, Dashboards, Auswertungen, Community und Aussichten"
   ["HANDBUCH_EINSTELLUNGEN.md"]="handbuch-einstellungen.md|Einstellungen & Sensormapping|Teil III: Einstellungen, Datenerfassung, Sensor-Mapping und HA-Integration"
@@ -54,6 +54,6 @@ for src in "${!DOCS[@]}"; do
 done
 
 # Changelog separat (von Repository-Root)
-sync_file "$CHANGELOG" "changelog.md" "Changelog" "Alle Änderungen und Versionshistorie von EEDC"
+sync_file "$CHANGELOG" "changelog.md" "Changelog" "Alle Änderungen und Versionshistorie von eedc"
 
 echo "✓ Docs sync complete (9 files)"

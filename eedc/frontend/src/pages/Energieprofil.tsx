@@ -208,7 +208,7 @@ export default function Energieprofil() {
                     Abdeckung: {stats.zeitraum.tage_mit_daten} von {stats.zeitraum.tage_gesamt} Tagen
                   </span>
                   <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
-                    {stats.zeitraum.abdeckung_prozent}%
+                    {stats.zeitraum.abdeckung_prozent} %
                   </span>
                 </div>
                 <div className="w-full bg-emerald-200 dark:bg-emerald-800 rounded-full h-2">

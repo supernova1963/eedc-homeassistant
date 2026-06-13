@@ -3,11 +3,11 @@ title: "Berechnungsreferenz"
 description: "Alle Berechnungsketten: Energiebilanz, Finanzen, ROI, Prognosen, SFML und Energieprofile"
 ---
 
-# EEDC Berechnungsreferenz
+# eedc Berechnungsreferenz
 
 **Version 3.16.1** | Stand: April 2026
 
-Dieses Dokument beschreibt alle Berechnungsketten im EEDC-System: von den Eingabefeldern
+Dieses Dokument beschreibt alle Berechnungsketten im eedc-System: von den Eingabefeldern
 über die Berechnungslogik bis zur Anzeige im Frontend. Es dient als Referenz zur Fehlersuche
 und zum Verständnis der Datenflüsse.
 
@@ -520,7 +520,7 @@ Das verwendete Wettermodell ist pro Anlage konfigurierbar (`Anlage.wettermodell`
 | `icon_eu` | DWD ICON-EU | ~7 km | Europa |
 | `ecmwf_ifs04` | ECMWF IFS | 0,25° | Global |
 
-Bei einem spezifischen Modell versucht EEDC zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Die verwendete Quelle pro Tag wird im Response als `datenquelle`-Kürzel (MS/D2/EU/EC/BM) mitgeliefert.
+Bei einem spezifischen Modell versucht eedc zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Die verwendete Quelle pro Tag wird im Response als `datenquelle`-Kürzel (MS/D2/EU/EC/BM) mitgeliefert.
 
 ### 4.1b Solar Forecast ML (SFML)
 
@@ -528,14 +528,14 @@ Bei einem spezifischen Modell versucht EEDC zuerst dieses Modell. Schlägt der A
 **Service:** `services/solar_forecast_service.py`
 **Externe API:** forecast.solar oder solcast.com (konfigurierbar)
 
-SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der EEDC-Eigenprognose und den IST-Werten.
+SFML ist eine optionale KI-basierte Prognose-Ergänzung. Sie liefert eine zweite Tages-Prognoselinie neben der eedc-Eigenprognose und den IST-Werten.
 
 #### Datenfluss
 
 ```
 1. Externer SFML-Anbieter liefert kWh-Prognose pro Tag
 2. Werte werden in DB persistiert (Tabelle: SolarForecastML)
-3. Endpoint gibt SFML-Werte zusammen mit EEDC-Prognose zurück
+3. Endpoint gibt SFML-Werte zusammen mit eedc-Prognose zurück
 ```
 
 #### Response-Felder (pro Tag)

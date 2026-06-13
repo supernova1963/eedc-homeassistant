@@ -171,7 +171,7 @@ export function PVStringVergleich({ anlageId }: Props) {
     return (
       <span className={`flex items-center gap-1 ${colorClass}`}>
         {Icon && <Icon className="h-3 w-3" />}
-        {pct.toFixed(0)}%
+        {pct.toFixed(0)} %
       </span>
     )
   }

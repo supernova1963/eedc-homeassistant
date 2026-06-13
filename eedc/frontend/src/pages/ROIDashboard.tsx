@@ -371,13 +371,13 @@ export default function ROIDashboard() {
               icon={TrendingUp}
               title="Jährliche Einsparung"
               value={`${roiData.gesamt_jahres_einsparung.toLocaleString('de-DE')} €`}
-              subtitle={roiData.gesamt_roi_prozent ? `ROI: ${roiData.gesamt_roi_prozent}%` : 'ROI: -'}
+              subtitle={roiData.gesamt_roi_prozent ? `ROI: ${roiData.gesamt_roi_prozent} %` : 'ROI: -'}
               color="text-green-500"
               bgColor="bg-green-50 dark:bg-green-900/20"
               sicht="Gesamt-Anlage · Jahres-Prognose · Mehrkosten-Ansatz"
               formel="Σ Einsparungen aller Investitionen"
               berechnung={roiData.gesamt_relevante_kosten > 0 ? `ROI = Einsparung ÷ Kosten × 100` : undefined}
-              ergebnis={roiData.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent}% ROI` : undefined}
+              ergebnis={roiData.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent} % ROI` : undefined}
             />
             <KPICard
               icon={Clock}
@@ -473,7 +473,7 @@ export default function ROIDashboard() {
                       cy="50%"
                       outerRadius={100}
                       label={({ name, percent }) =>
-                        `${name}: ${(percent * 100).toFixed(0)}%`
+                        `${name}: ${(percent * 100).toFixed(0)} %`
                       }
                       labelLine={true}
                     >
@@ -605,10 +605,10 @@ export default function ROIDashboard() {
                               sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
                               formel="Jahresersparnis ÷ Relevante Kosten × 100"
                               berechnung={`${fmtCalc(b.jahres_einsparung, 0)} € ÷ ${fmtCalc(b.relevante_kosten, 0)} € × 100`}
-                              ergebnis={`= ${b.roi_prozent}% p.a.`}
+                              ergebnis={`= ${b.roi_prozent} % p.a.`}
                             >
                               <span className={b.roi_prozent >= 10 ? 'text-green-600 dark:text-green-400 cursor-help border-b border-dotted border-green-400' : 'text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-400'}>
-                                {b.roi_prozent}%
+                                {b.roi_prozent} %
                               </span>
                             </FormelTooltip>
                           ) : (
@@ -658,7 +658,7 @@ export default function ROIDashboard() {
                       {roiData.gesamt_jahres_einsparung.toLocaleString('de-DE')} €
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-white">
-                      {roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent}%` : '-'}
+                      {roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent} %` : '-'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-white">
                       {roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J.` : '-'}

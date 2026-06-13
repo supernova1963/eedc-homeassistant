@@ -480,7 +480,7 @@ function AbweichungBadge({ wert, durchschnitt }: { wert: number; durchschnitt: n
         <TrendingDown className="h-4 w-4" />
       )}
       {isPositive ? '+' : ''}
-      {abweichung.toFixed(1)}% vs. Durchschnitt
+      {abweichung.toFixed(1)} % vs. Durchschnitt
     </span>
   )
 }
@@ -582,7 +582,7 @@ function KPIRow({
                 : 'text-red-600 dark:text-red-400'
             }`}
           >
-            ({abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)}%)
+            ({abweichung >= 0 ? '+' : ''}{abweichung.toFixed(1)} %)
           </span>
         )}
       </div>
