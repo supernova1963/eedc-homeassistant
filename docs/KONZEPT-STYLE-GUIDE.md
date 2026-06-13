@@ -12,6 +12,28 @@
 
 ---
 
+## Grundregeln (gelten vor allem anderen)
+
+### Regel Nr. 0 — Gleiches Element = gleiche Darstellung, überall
+
+Jede Komponenten-Klasse (KPI-Karte, Tabelle, Chart, Tooltip, Button, Badge, Banner, Bericht …) hat **genau eine kanonische Form** — entweder eine SoT-Komponente (`components/ui/…`) oder eine Konventions-Tabelle in diesem Dokument. Eine Abweichung braucht einen **dokumentierten Grund** (Code-Kommentar + Eintrag in der Ausnahmen-Liste).
+
+**Meta-Regel:** Jede Kanon-Regel = **eine konsumierbare Quelle** (Konstante/Komponente/Helfer) **+ ein Wächter** (automatischer Test oder feste Review-Frage). Nie eine zweite Komponente für ein existierendes Pattern bauen (PillTabs-Lehre #208→#216). Unklare UI-Vorlage **vor** der Umsetzung in einem Satz rückbestätigen (#187/#216 entstanden aus Fehlinterpretation).
+
+### Regel Nr. 0a — Konventions-Pflicht bei allem Neuen (universell)
+
+Sobald etwas mit Darstellung erstellt oder geändert wird — Seite, Komponente, Chart, Tabelle, Text, Tooltip, Badge, Bericht, Export, Sensor-Name, … — ist verpflichtend zu prüfen:
+
+1. **Gibt es schon eine Regel/SoT-Komponente?** → anwenden (lokale/harte Formatierung daneben ist verboten).
+2. **Keine, aber sinnvoll?** (Faustfrage: kann das Element wiederkehren oder hat es Geschwister?) → **Regel definieren + die Zentrale erweitern, als Teil derselben Arbeit** — nicht „später".
+3. **Echter Einzelfall / bewusste Abweichung?** → **Maintainer-Freigabe**, doppelt dokumentiert: Code-Kommentar (warum + Referenz) **und** Ausnahmen-Liste (Startbestand: `EnergieFlussBackground.tsx` szenische Gradienten; CommunityShare Orange-Section-CTA; AktuellerMonat `text-5xl`-Hero-Zahlen).
+
+Die Default-Antwort auf „brauche ich hier eine Regel?" ist **ja, prüfen**. Reichweite der Regel ≠ Reichweite des Wächters — der automatische Check (`npm run check:design`) deckt nur die grep-bare Teilmenge (Inline-Hex) ab; die Prüf-Pflicht gilt universell.
+
+> **Durchsetzung:** (1) **Wächter** `npm run check:design` (Inline-Hex außerhalb `lib/colors.ts` + Allowlist) — Allowlist-Eintrag = bewusstes Freigabe-Artefakt. (2) **Prozess:** Regel 0a steht zusätzlich als Arbeitsregel in `CLAUDE.md` und bindet jede Session.
+
+---
+
 ## Methodik
 
 - **Wachsend statt Big-Bang — mit einer Ausnahme.** Pro Umsetzungs-Welle (typisch 1–2 Bereiche) werden die zugehörigen Abschnitte hier mit-geschrieben — fertige Regel + Vorher/Nachher-Screenshot aus dem ausgelieferten Code. **Ausnahme:** der IA-Refactor zu v4.0.0 (siehe `KONZEPT-IA-V4.md`) wird als zusammenhängender Schnitt umgesetzt, weil die Achsen-Trennung nicht inkrementell migrierbar ist.
@@ -84,12 +106,24 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### A1 — Typografie-System
 
-> **Skala (semantisch, nicht Pixel):** Display · Title-XL · Title-L · Title-M · Title-S · Body-L · Body-M · Body-S · Caption.
-> Tokens statt ad-hoc Tailwind-Klassen. Schriftfamilie, Line-Heights, Letter-Spacing pro Token.
+> **Skala (semantisch, 9 Stufen).** Doc-Norm (Fundament-P6, Doc-Pflicht vor E3). **Heimat = Bestands-Tailwind-Klassen** — KEIN eigenes `design-tokens.ts`. Eigene Tailwind-Klassen (`text-display` …) werden nur angelegt, wenn eine konkrete E3-Seite sie braucht; bis dahin die Bestands-Klasse rechts.
 
-*Konkrete Tabelle folgt mit erster Umsetzungs-Welle.*
+| Token | Größe / Zeilenhöhe | Gewicht | Bestands-Klasse | Einsatz |
+|---|---|---|---|---|
+| `display` | 30 px / 36 px | 700 | `text-3xl font-bold` | Hero-/Großwerte |
+| `title-xl` | 24 px / 32 px | 700 | `text-2xl font-bold` | Seitentitel (h1, PageHeader) |
+| `title-l` | 20 px / 28 px | 600 | `text-lg font-semibold` | Sektions-Titel |
+| `title-m` | 18 px / 28 px | 600 | `text-lg font-medium` | Card-Titel |
+| `title-s` | 16 px / 24 px | 600 | `text-base font-semibold` | Unter-Titel |
+| `body-l` | 16 px / 24 px | 400 | `text-base` | hervorgehobener Fließtext |
+| `body-m` | 14 px / 20 px | 400 | `text-sm` | Standard-Fließtext |
+| `body-s` | 12 px / 16 px | 400 | `text-xs` | Sekundär-Text |
+| `caption` | 11 px / 14 px | 400 | `text-[11px]` | Beschriftungen |
 
-**Betroffene Issues (Datenpunkte):** #258 P4 (Textgestaltung-Unruhe), #256 (Schriftgrößen-Inkonsistenz).
+> **Mapping auf §5-Bestand:** h1 = `title-xl` (PageHeader) · Sektion = `title-l` · KPI-Wert = `display`/`title-xl` · Body = `body-m` · Caption = `body-s`/`caption`. **Letter-Spacing:** bewusst weggelassen (kein Bedarf). **Schriftfamilie:** System-Stack (Tailwind-Default).
+> **Dokumentierte Ausnahme:** `text-5xl` für die zwei Monatsbericht-Hero-Zahlen in `AktuellerMonat.tsx` (bewusste Showpiece-Größe oberhalb `display`, Regel 0a Stufe 3, Code-Kommentar vorhanden).
+
+**Betroffene Issues (Datenpunkte):** #258 P4 (Textgestaltung-Unruhe), #256 (Schriftgrößen-Inkonsistenz), #247 P3.
 
 ---
 
@@ -121,9 +155,16 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Animiert:** Wert-Änderungen (Zahlen-Tween), Hover-Highlights, State-Toggles.
 > **Statisch:** Layout-Wechsel, Modal-Inhalt-Wechsel, Tab-Wechsel.
-> **Dauer-Konvention:** 150 ms (Mikro), 300 ms (Standard), 500 ms+ (Hervorhebung). Easing `ease-out` Standard.
 
-*Konkrete Animation-Tokens folgen.*
+> **Dauer-Konvention (Doc-Norm, Fundament-P6).** Heimat = Bestands-Tailwind-Klassen (`duration-*`); eigene `duration-mikro`-Klassen nur bei echtem E3-Bedarf.
+
+| Token | Dauer | Bestands-Klasse | Einsatz |
+|---|---|---|---|
+| `mikro` | 150 ms | `duration-150` | Hover, Toggles |
+| `standard` | 300 ms | `duration-300` | Ein-/Ausblenden, Wert-Wechsel |
+| `hervorhebung` | 500 ms | `duration-500` | Zahlen-Tween, Hervorhebung |
+
+> **Easing:** `ease-out` Standard. **Reduce-Motion:** `@media (prefers-reduced-motion: reduce)` respektieren (Energiefluss-Linien tun das bereits). Animiert = Wert/Hover/Toggle; statisch = Layout/Tab/Modal.
 
 **Betroffene Issues:** *(noch keine direkten)*
 
@@ -220,11 +261,13 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### B2 — Tabellen + Listen
 
-> **Spalten-Header:** Stil-Konvention folgt (Casing + Einheit im Header, siehe unten).
-> **Sortierung:** `INVESTITION_TYP_ORDER` aus `lib/constants.ts` als SoT (etabliert v3.27.1, in v3.29.2 weiter ausgerollt). Suffix-Typen-Sortierung über Präfix-Match. **Zeitreihen-Default aktuell→alt.**
-> **Leerwert-Darstellung:** `—` aus A3.
-> **Einheits-Anzeige:** Spalten-Header mit Einheit (z. B. „Strom (kWh)"), nicht pro Zelle (#237).
-> **Einheitliches Spalten-Auswahl-Pattern (#292):** Drop-Down mit „Standard wiederherstellen", Anzahl-Badge, konsistente CSV-Beschriftung — heute über mehrere Tabellen gedriftet (fünf belegte Befunde aus #292).
+> **Konkrete Konvention (Fundament-P6, Vorgabe für Slice 3.1 `<WerteTabelle>`):**
+> - **Spalten-Header-Casing:** erstes Wort groß, Rest klein (Satz-Stil), keine Versalien; Gewicht `font-medium`, Farbe `text-gray-500 dark:text-gray-400`.
+> - **Einheit im Header** in Klammern: Format `Name (Einheit)`, z. B. „Strom (kWh)", „Autarkie (%)" — **nicht** pro Zelle (#237). Genau dieses Klammer-Format überall.
+> - **Sortierung:** Typ-Spalten nach `INVESTITION_TYP_ORDER` (`lib/constants.ts` / `compareTyp`) als SoT; Suffix-Typen über Präfix-Match. **Datums-/Zeitreihen-Default absteigend (aktuell → alt), F10** — Ausnahme nur Verlaufs-Charts (chronologisch).
+> - **Leerwert:** `—` aus A3.
+> - **Zahlen:** rechtsbündig, deutsches Komma + Tausenderpunkt, `%` mit Leerzeichen (C2/C3).
+> - **Spalten-Auswahl-Pattern (#292) einheitlich:** Drop-Down mit „Standard wiederherstellen", Anzahl-Badge (gewählt/gesamt), CSV-Button beschriftet „CSV" (nicht „CSV Export"). Heute über mehrere Tabellen gedriftet (fünf belegte Befunde aus #292) → in 3.1 baulich vereinheitlicht.
 
 **Betroffene Issues:** #243 B8, #210, #237, #292.
 
@@ -275,13 +318,16 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### B7 — Diagramme / Charts
 
-> **Achsen + Legende:** beschriftete Achsen mit Einheit (siehe C3), Legende konsistent platziert; Zeitachse nach der etablierten Slot-Konvention (backward).
-> **Farb-Mapping:** Serien-Farben **aus den A2-Tokens** (PV = gelb, Speicher = lila, Verbrauch = blau, …) — nicht ad-hoc pro Chart. Eine Datenrolle = überall dieselbe Farbe.
-> **Hover/Tap-Tooltip:** Wert + Einheit + Zeitpunkt am Datenpunkt; auf Touch tap-bar (Mobile M4).
-> **Chart-Typ pro Datenart:** Verlauf → Linie/Fläche, Zusammensetzung → gestapelt, Vergleich → Balken, Anteil → Donut. Konvention, nicht Seiten-Einzelfall.
-> **Leerzustand:** keine Daten → klare Leer-Darstellung (siehe B8), keine leeren Achsenkreuze.
+> **Konkrete Spec (Fundament-P6, technische Basis P1/P2 + P3):**
+> - **Farb-Mapping:** Serien-Farben **aus `lib/colors.ts`** (`CHART_COLORS`/`COLORS`/Paletten) — nie ad-hoc. Eine Datenrolle = überall dieselbe Farbe (Wächter `check:design`).
+> - **Achsen/Grid:** Farben aus `CHART_ACHSEN` über den Hook **`useChartTheme()`** (dark-aware, A8); Tick-Text via zentrale `index.css`-Overrides. Achsen-Beschriftung mit Einheit (C3), `fontSize: 11–12`. Zeitachse Slot-Konvention backward.
+> - **Label-Format (#247 P2):** Wertelabels nur wo nötig, deutsches Zahlformat, `%` mit Leerzeichen; keine doppelten Beschriftungen (Achse **und** Datenlabel).
+> - **Legende:** konsistent platziert (oben oder unten je Chart-Typ, innerhalb einer Seite gleich); Recharts-Default-Position akzeptiert, aber nicht pro Chart umspringen.
+> - **Tooltip:** **P3-Tooltip-Kanon** (`ChartTooltip`, dunkel, A6) — Wert + Einheit + Zeitpunkt; auf Touch tap-bar.
+> - **Chart-Typ pro Datenart:** Verlauf → Linie/Fläche · Zusammensetzung → gestapelt · Vergleich → Balken · Anteil → Donut. Konvention, nicht Seiten-Einzelfall.
+> - **Leerzustand:** keine Daten → klare Leer-Darstellung (B8), keine leeren Achsenkreuze.
 
-**Betroffene Issues:** neue Norm; eedc ist chart-dicht, bislang ungeregelt.
+**Betroffene Issues:** #247 P2; eedc ist chart-dicht, bislang ungeregelt.
 
 ---
 
@@ -296,13 +342,75 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ---
 
+### B15 — Buttons + Formulare
+
+> **SoT-Komponente:** `components/ui/Button.tsx` — **Pflicht**, keine Ad-hoc-`<button>` mit eigenem Styling (Regel 0). #209 P6-Entscheid (Maintainer 2026-06-13).
+> **Stil-Entscheid (#209 P6):**
+> - **Eine gefüllte Primär-CTA** pro Bereich (`variant="primary"`; Section-Themen-Farbe als dokumentierte Ausnahme erlaubt, z. B. Community-Orange).
+> - **Sekundär-/Tertiär-Aktionen flach** (`variant="ghost"`) — nicht gefüllt-grau; ruhigeres Bild, die CTA hebt sich ab.
+> - **Destruktive Bestätigung** `variant="danger"` (gefüllt rot) für die eigentliche Lösch-Aktion.
+> - **Icon-only erlaubt** für etablierte Aktionen (Schließen, Löschen, Bearbeiten): `size="icon"` (quadratisch, Touch-Target ≥ 44 px) + **Pflicht** `title`/`aria-label`.
+> - **Größen:** `sm`/`md`/`lg`/`icon`. Loading-State über `loading`-Prop (eingebauter Spinner), nicht per Hand.
+> **Formulare:** Inputs/Selects/Checkboxen über die `.input`/`.label`-Klassen (`index.css`) bzw. die vorhandenen Form-Bausteine — Radius `control` (`rounded-lg`), dunkel-Paarungen aus A8. Keine rohen `<input>` mit eigenem Styling.
+
+**Betroffene Issues:** #209 P6, Inventur (~18 % Ad-hoc-Buttons, v. a. CommunityShare).
+
+---
+
+### B16 — Modals + Wizards
+
+> **Ein Dialog-Muster:** `components/ui/Modal.tsx` als SoT (Overlay `z-50`, zentriert, `bg-white dark:bg-gray-800`, `rounded-xl`, Schließen-`✕` oben rechts als Icon-Button B15). Kein zweites Dialog-Layout.
+> **Schließen/Abbrechen-Konvention:** `✕` oben rechts **und** „Abbrechen" (ghost) unten links; Primär-Aktion unten rechts. ESC + Backdrop-Klick schließen (außer bei ungespeicherten Eingaben).
+> **Ein Wizard-Layout:** Schritt-Indikator oben, Inhalt mittig, „Zurück"(ghost)/„Weiter"(primary) unten; mobil scrollbarer Inhalt mit fixierter Button-Leiste (#213 P5 belegte zwei abweichende Wizard-Layouts → ein Muster). **Bauliche** Vereinheitlichung der bestehenden Wizards = eigener Punkt nach dem v4-Flip (nicht Fundament); die **Regel** gilt ab sofort für Neues.
+
+**Betroffene Issues:** #213 P5.
+
+---
+
+### B17 — Badges + Status-Indikatoren + Alerts
+
+> **Status-Achse (F3):** ok / warnung / kritisch / info — Farben aus `STATUS_COLORS` (`lib/colors.ts`), Icons aus **`STATUS_ICONS`** (`lib/komponentenStyle.ts`) als EINE Quelle:
+>
+> | Status | Farbe (`STATUS_COLORS`) | Icon (`STATUS_ICONS`) |
+> |---|---|---|
+> | ok | `#22c55e` grün | `CheckCircle` |
+> | warnung | `#eab308` gelb | `AlertTriangle` |
+> | kritisch | `#ef4444` rot | `XCircle` |
+> | info | `#3b82f6` blau | `Info` |
+>
+> **Badges/Chips/Pills** (QuelleBadge, „ohne Statistik", beta …): Form `rounded-full` oder `rounded-lg`(control), `text-xs`, dezente Tönung (`bg-{c}-50 dark:bg-{c}-900/20` + `text-{c}-700 dark:text-{c}-300`); Casing wie Fließtext (kein ALL-CAPS).
+> **Alerts/Hinweis-Boxen:** Typ = Status-Achse; Icon-Satz fix aus `STATUS_ICONS`, kein Ad-hoc-Icon je Alert. Daten-Checker, Badges und Alerts konsumieren dieselbe Quelle.
+
+**Betroffene Issues:** F3 (Status-Achse), #247 P1 (Icon-Zurückhaltung).
+
+---
+
+### B18 — PDF-Berichte
+
+> **Template-SoT:** `services/pdf/templates/base.html` + `static/styles.css`/`print.css` (WeasyPrint, seit #121→#303). Jahresbericht/Infothek/Selftest erben per `{% extends %}`. Marken-Schreibung „eedc" (P5-Sweep). Komponenten-Reihenfolge kanonisch (`sort_investitionen_nach_typ`, P4).
+> **Offener Folge-Punkt (nicht Fundament):** `anlagendokumentation.html` + `finanzbericht.html` sind Standalone-Dokumente mit eigenem Inline-CSS, die **nicht** von `base.html` erben (visuell angeglichen, aber latentes Drift-Risiko nach §9-Klasse 7). Angleichung als kleiner dokumentierter Folge-Punkt einplanen.
+
+**Betroffene Issues:** #121, #303.
+
+---
+
 ## Teil C — Layout + Texte
 
 ### C1 — Spacing-Standards
 
-> **Tokens:** `--page-padding-top` · `--nav-content-gap` · `--section-spacing` · `--card-padding` · `--card-gap`.
-> SoT: **überholt (Update 2026-06-12)** — **kein** `design-tokens.ts`; die konkrete C1-Spacing-Tabelle füllt **Fundament-P6** als Doc-Norm (Tailwind-Theme nur bei echtem Klassen-Bedarf). `lib/spacing.ts` entfällt weiterhin.
-> Bestehende Spacings im Code auditieren und auf Tokens migrieren.
+> **Spacing/Radius/Schatten (Doc-Norm, Fundament-P6).** Heimat = Bestands-Tailwind-Klassen, **kein** `design-tokens.ts`, **kein** `lib/spacing.ts`. Eigene Klassen (`p-card` …) nur bei echtem E3-Bedarf.
+
+| Token | Wert | Bestands-Klasse | Einsatz |
+|---|---|---|---|
+| `card-sm` | 16 px | `p-4` | kompakte Karten |
+| `card` | 24 px | `p-6` | Standard-Card-Padding |
+| `card-lg` | 32 px | `p-8` | große Karten |
+| `section` | 24 px | `space-y-6` | Abstand zwischen Seiten-Sektionen |
+| `grid-sm` | 12 px | `gap-3` | KPI-Grid mobil |
+| `grid` | 16 px | `gap-4` | KPI-Grid ab `sm` |
+
+> **Radius:** `card` = 12 px (`rounded-xl`) für Karten/Icon-Chips · `control` = 8 px (`rounded-lg`) für Buttons/Inputs/Badges/Tooltips.
+> **Schatten:** Light = `shadow-sm` (Tailwind-Default, **kein** eigener boxShadow-Token). Dark = **Border-Abgrenzung** statt Schatten — **kein `dark:shadow-*`-Ausbau** (s. A8). Bewusst nur diese eine Stufe.
 
 **Betroffene Issues:** #243 B6, #209 P5.
 

@@ -15,9 +15,20 @@
  */
 
 import {
-  Activity, Battery, Car, Flame, Hash, Home, Leaf, RotateCw, Sun,
-  Thermometer, TrendingUp, Zap,
+  Activity, AlertTriangle, Battery, Car, CheckCircle, Flame, Hash, Home, Info,
+  Leaf, RotateCw, Sun, Thermometer, TrendingUp, XCircle, Zap,
 } from 'lucide-react'
+
+/**
+ * Status-Achse (F3) — Icon-Satz als EINE Quelle (Style-Guide B17). Farben dazu:
+ * `STATUS_COLORS` in `lib/colors.ts`. Alerts/Badges/Daten-Checker konsumieren beide.
+ */
+export const STATUS_ICONS = {
+  ok: CheckCircle,
+  warnung: AlertTriangle,
+  kritisch: XCircle,
+  info: Info,
+} as const
 
 export type KomponentenColor = 'orange' | 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'cyan' | 'gray'
 

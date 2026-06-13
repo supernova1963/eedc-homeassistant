@@ -121,6 +121,16 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 2. **Datenquellen getrennt:** `Monatsdaten` = Zählerwerte, `InvestitionMonatsdaten` = Komponenten-Details
 3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.pv_erzeugung_kwh` und `Monatsdaten.batterie_*` → Nutze `InvestitionMonatsdaten`
 
+## Design-Konventionen (Regel 0a — Pflicht bei allem Neuen)
+
+> SoT: [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel Nr. 0 + 0a am Anfang). Farb-SoT: `frontend/src/lib/colors.ts`.
+
+Bei **allem mit Darstellung** (Seite, Komponente, Chart, Tabelle, Tooltip, Button, Badge, Bericht, Text, Sensor-Name …) gilt: (1) **Regel/SoT existiert → anwenden** (keine lokale/harte Formatierung daneben); (2) **keine, aber sinnvoll → Regel definieren + Zentrale erweitern in derselben Arbeit**; (3) **echter Einzelfall → Maintainer-Freigabe + Code-Kommentar + Ausnahmen-Liste**.
+
+- **Keine Inline-Hex-Farben** außerhalb `lib/colors.ts`. **Pflicht-Check bei Frontend-Arbeit:** `cd eedc/frontend && npm run check:design` (muss 0 melden) — Allowlist-Eintrag = bewusste Freigabe.
+- **Eine Datenrolle = eine Farbe** (`lib/colors.ts`); **eine Komponenten-Klasse = eine SoT-Komponente** (KPICard, Button, ChartTooltip, Modal …) — nie eine zweite Komponente für ein bestehendes Pattern.
+- **Typ-Reihenfolge** immer aus `INVESTITION_TYP_ORDER`/`compareTyp` bzw. Backend `sort_investitionen_nach_typ`. **Datums-Listen/Tabellen** Default absteigend (neueste zuerst). **% mit Leerzeichen**, **„eedc"** klein.
+
 ## Kritische Code-Patterns
 
 ### SQLAlchemy JSON-Felder
