@@ -17,14 +17,14 @@
  * schnitt: `h-dvh`, Touch-Targets ≥ 44 px, Hamburger (M0).
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { KPICard } from '../components/ui'
 import type { KomponentenColor } from '../lib/komponentenStyle'
 import {
   LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings, Menu, X,
   Sun, Battery, Flame, Car, Plug, Wrench, Zap, Euro, Leaf, PiggyBank, Table2,
   Activity, TrendingUp, Trophy, MapPin, ArrowRight, LineChart, Wallet,
-  ArrowUp, ArrowDown, ChevronDown,
+  ArrowUp, ArrowDown, ChevronDown, Maximize2, Minimize2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -135,21 +135,9 @@ function KpiStrip({ kpis }: { kpis: KpiDummy[] }) {
   )
 }
 
-function Sektion({ title, children, hint }: { title: string; children?: React.ReactNode; hint?: string }) {
+function DummyChart({ label, tall }: { label: string; tall?: boolean }) {
   return (
-    <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-        {title}
-        {hint && <span className="text-xs font-normal text-gray-400 dark:text-gray-500">{hint}</span>}
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function DummyChart({ label }: { label: string }) {
-  return (
-    <div className="h-40 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm gap-2">
+    <div className={`${tall ? 'h-full min-h-[300px]' : 'h-40'} rounded-lg border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400 dark:text-gray-500 text-sm gap-2`}>
       <LineChart className="h-5 w-5" />
       {label}
     </div>
@@ -179,112 +167,149 @@ function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonl
   )
 }
 
-// Klapp- UND sortierbare Detail-Sektionen — das gut angekommene Monatsbericht-
-// Muster, in v4 auf alle Cockpit-Zeitsichten ausgeweitet (KONZEPT-IA-V4: „an den
-// Zeitraum gebunden, ein Persistenz-SoT B6"). Hier als Andeutung: ↑↓ sortiert,
-// Chevron klappt auf/zu. (Kein Widget-Builder — nur der feste Sektionssatz.)
-interface SektionDef { id: string; icon: LucideIcon; title: string; summary: string; farbe: string }
-const COCKPIT_SEKTIONEN: SektionDef[] = [
-  { id: 'energie',   icon: Sun,     title: 'Energie-Bilanz',     summary: '618 kWh PV · 96 % Autarkie', farbe: 'text-yellow-500' },
-  { id: 'finanzen',  icon: Euro,    title: 'Finanzen',           summary: '+90,25 € Monatsergebnis',    farbe: 'text-blue-500' },
-  { id: 'community', icon: Users,   title: 'Community-Vergleich', summary: '2 Anlagen im Juni 2026',     farbe: 'text-blue-500' },
-  { id: 'speicher',  icon: Battery, title: 'Speicher',           summary: '99 kWh geladen · 7,7 Zyklen · 73 % η', farbe: 'text-green-500' },
-  { id: 'emob',      icon: Car,     title: 'E-Mobilität',        summary: '62 kWh geladen · 221 km · +7,82 € vs. Verbrenner', farbe: 'text-purple-500' },
-]
+// ─── Universelles Block-Modell (Gernot-Entscheid 2026-06-13) ──────────────────
+// JEDER Block (KPI-Strip, Hauptblock, Werte/Tabelle, Detail-Sektion …) ist
+// einklappbar (⌄) und hat einen Fokus/Vollbild-Schalter (⤢) — app-weit auf allen
+// Inhalts-Achsen (Cockpit/Komponenten/Auswertungen/Community). In den Cockpit-
+// Zeitsichten zusätzlich per ↑↓ verschiebbar (Monatsbericht-Muster, fester Satz).
+// Fokus macht u. a. den Live-Energiefluss wieder bildschirmfüllend (Erhalt der
+// beliebten Live-Seite). Persistenz pro Sicht = B6-SoT (in der echten App).
+interface Block {
+  id: string
+  title: string
+  icon?: LucideIcon
+  farbe?: string
+  summary?: string
+  /** Default-Zustand; false = startet eingeklappt (z. B. datenreich/mobil). */
+  defaultOpen?: boolean
+  /** `fokus` = Vollbild-Render (Charts groß). Param mit _ wenn ungenutzt. */
+  render: (fokus: boolean) => React.ReactNode
+}
 
-function SortbareSektionen() {
-  const [reihenfolge, setReihenfolge] = useState(COCKPIT_SEKTIONEN)
-  const [offen, setOffen] = useState<Set<string>>(new Set())
+function BloeckeView({ bloecke, sortierbar = false }: { bloecke: Block[]; sortierbar?: boolean }) {
+  const [order, setOrder] = useState<string[]>(() => bloecke.map((b) => b.id))
+  const [zu, setZu] = useState<Set<string>>(() => new Set(bloecke.filter((b) => b.defaultOpen === false).map((b) => b.id)))
+  const [fokus, setFokus] = useState<string | null>(null)
+  const byId = useMemo(() => Object.fromEntries(bloecke.map((b) => [b.id, b] as const)), [bloecke])
 
-  const verschieben = (index: number, richtung: -1 | 1) => {
-    const ziel = index + richtung
-    if (ziel < 0 || ziel >= reihenfolge.length) return
-    const next = [...reihenfolge]
-    ;[next[index], next[ziel]] = [next[ziel], next[index]]
-    setReihenfolge(next)
+  const verschieben = (i: number, r: -1 | 1) => {
+    const ziel = i + r
+    if (ziel < 0 || ziel >= order.length) return
+    const next = [...order]
+    ;[next[i], next[ziel]] = [next[ziel], next[i]]
+    setOrder(next)
   }
   const toggle = (id: string) => {
-    const next = new Set(offen)
+    const next = new Set(zu)
     next.has(id) ? next.delete(id) : next.add(id)
-    setOffen(next)
+    setZu(next)
   }
 
+  // ── Fokus/Vollbild: nur dieser Block, füllt den Inhaltsbereich ──────────────
+  if (fokus && byId[fokus]) {
+    const b = byId[fokus]
+    return (
+      <div className="min-h-[85vh] flex flex-col p-3 sm:p-6 gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            {b.icon && <b.icon className={`h-5 w-5 ${b.farbe ?? ''}`} />}
+            {b.title}
+            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">Fokus / Vollbild</span>
+          </h2>
+          <button type="button" onClick={() => setFokus(null)}
+            className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700">
+            <Minimize2 className="h-4 w-4" /> Zurück
+          </button>
+        </div>
+        <div className="flex-1 min-h-0">{b.render(true)}</div>
+      </div>
+    )
+  }
+
+  const ordered = order.map((id) => byId[id]).filter(Boolean) as Block[]
   return (
-    <div className="space-y-2">
-      {reihenfolge.map((s, i) => {
-        const istOffen = offen.has(s.id)
+    <div className="p-3 sm:p-6 space-y-3 max-w-[1920px] mx-auto">
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        Jeder Block: <ChevronDown className="inline h-3 w-3" /> einklappen · <Maximize2 className="inline h-3 w-3" /> Fokus/Vollbild
+        {sortierbar && <> · <ArrowUp className="inline h-3 w-3" /><ArrowDown className="inline h-3 w-3" /> verschieben</>}
+      </p>
+      {ordered.map((b, i) => {
+        const istZu = zu.has(b.id)
         return (
-          <div key={s.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+          <section key={b.id} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
             <div className="flex items-center gap-2 px-3 min-h-[44px]">
-              <button type="button" onClick={() => toggle(s.id)} className="flex-1 flex items-center gap-2 text-left py-2 min-w-0">
-                <s.icon className={`h-4 w-4 flex-shrink-0 ${s.farbe}`} />
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">{s.title}</span>
-                <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{s.summary}</span>
+              <button type="button" onClick={() => toggle(b.id)} className="flex-1 flex items-center gap-2 text-left py-2 min-w-0">
+                {b.icon && <b.icon className={`h-4 w-4 flex-shrink-0 ${b.farbe ?? 'text-gray-400 dark:text-gray-500'}`} />}
+                <span className="text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">{b.title}</span>
+                {b.summary && <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{b.summary}</span>}
               </button>
               <div className="flex items-center gap-0.5 flex-shrink-0">
-                <button type="button" onClick={() => verschieben(i, -1)} disabled={i === 0} aria-label="nach oben"
-                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-default">
-                  <ArrowUp className="h-4 w-4" />
-                </button>
-                <button type="button" onClick={() => verschieben(i, 1)} disabled={i === reihenfolge.length - 1} aria-label="nach unten"
-                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-default">
-                  <ArrowDown className="h-4 w-4" />
-                </button>
-                <button type="button" onClick={() => toggle(s.id)} aria-label={istOffen ? 'einklappen' : 'aufklappen'}
+                {sortierbar && (
+                  <>
+                    <button type="button" onClick={() => verschieben(i, -1)} disabled={i === 0} aria-label="nach oben"
+                      className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-default">
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={() => verschieben(i, 1)} disabled={i === ordered.length - 1} aria-label="nach unten"
+                      className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-default">
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+                <button type="button" onClick={() => setFokus(b.id)} aria-label="Fokus / Vollbild"
                   className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-                  <ChevronDown className={`h-4 w-4 transition-transform ${istOffen ? 'rotate-180' : ''}`} />
+                  <Maximize2 className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => toggle(b.id)} aria-label={istZu ? 'aufklappen' : 'einklappen'}
+                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                  <ChevronDown className={`h-4 w-4 transition-transform ${istZu ? '-rotate-90' : ''}`} />
                 </button>
               </div>
             </div>
-            {istOffen && (
-              <div className="px-3 pb-3">
-                <DummyChart label={`${s.title} — Detail`} />
-                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
-                  Cross-Link → Komponenten/Auswertungen <ArrowRight className="h-3 w-3" />
-                </p>
-              </div>
-            )}
-          </div>
+            {!istZu && <div className="px-3 pb-3">{b.render(false)}</div>}
+          </section>
         )
       })}
     </div>
   )
 }
 
+// Detail-Sektionen der Cockpit-Zeitsichten (Summary-Zeilen wie im Monatsbericht).
+const COCKPIT_DETAIL: { id: string; icon: LucideIcon; title: string; summary: string; farbe: string }[] = [
+  { id: 'd-energie',   icon: Sun,     title: 'Energie-Bilanz',      summary: '618 kWh PV · 96 % Autarkie', farbe: 'text-yellow-500' },
+  { id: 'd-finanzen',  icon: Euro,    title: 'Finanzen',            summary: '+90,25 € Monatsergebnis',    farbe: 'text-blue-500' },
+  { id: 'd-community', icon: Users,   title: 'Community-Vergleich',  summary: '2 Anlagen im Juni 2026',     farbe: 'text-blue-500' },
+  { id: 'd-speicher',  icon: Battery, title: 'Speicher',            summary: '99 kWh geladen · 7,7 Zyklen · 73 % η', farbe: 'text-green-500' },
+  { id: 'd-emob',      icon: Car,     title: 'E-Mobilität',         summary: '62 kWh geladen · 221 km · +7,82 € vs. Verbrenner', farbe: 'text-purple-500' },
+]
+
 // ─── Inhalts-Sichten ──────────────────────────────────────────────────────────
 function CockpitView() {
   const [sub, setSub] = useState<CockpitSub>('Live')
+  const istLive = sub === 'Live'
+
+  const bloecke: Block[] =
+    sub === 'Aussicht'
+      ? [
+          { id: 'kpi', title: 'Kennzahlen', icon: Activity, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
+          { id: 'wetter', title: 'Wetter + PV-Ertragsprognose', icon: Sun, render: (f) => <DummyChart label="Prognose-Verlauf (7/14 Tage · 12 Monate · Mehrjahr)" tall={f} /> },
+          { id: 'quellen', title: 'Forward-Quellenvergleich', icon: BarChart3, summary: 'OpenMeteo · eedc · Solcast', render: (f) => <DummyChart label="Quellenvergleich" tall={f} /> },
+        ]
+      : [
+          { id: 'kpi', title: 'Kennzahlen', icon: Activity, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
+          { id: 'haupt', title: 'Hauptblock', icon: LineChart, summary: 'Verlauf ⇄ Fluss', defaultOpen: true, render: (f) => <DummyChart label={istLive ? 'Energiefluss (Default Live) — ⤢ für Vollbild' : 'Verlauf'} tall={f} /> },
+          { id: 'werte', title: 'Werte/Tabelle', icon: Table2, summary: 'numerischer Zwilling', defaultOpen: !istLive, render: (f) => <DummyChart label="Werte-Embed" tall={f} /> },
+          ...COCKPIT_DETAIL.map((d): Block => ({
+            id: d.id, title: d.title, icon: d.icon, farbe: d.farbe, summary: d.summary, defaultOpen: false,
+            render: (f) => <DummyChart label={`${d.title} — Detail`} tall={f} />,
+          })),
+        ]
+
   return (
     <>
       <SubTabBar tabs={COCKPIT_SUBS} active={sub} onSelect={setSub} />
-      <div className="p-3 sm:p-6 space-y-4 max-w-[1920px] mx-auto">
-        <KpiStrip kpis={cockpitStrip(sub)} />
-        {sub === 'Aussicht' ? (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {['7 Tage', '14 Tage', '12 Monate', 'Mehrjahr'].map((h) => (
-                <span key={h} className="min-h-[44px] flex items-center px-3 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{h}</span>
-              ))}
-            </div>
-            <Sektion title="Wetter + PV-Ertragsprognose"><DummyChart label="Prognose-Verlauf" /></Sektion>
-            <Sektion title="Forward-Quellenvergleich (OpenMeteo · eedc · Solcast)"><DummyChart label="Quellenvergleich" /></Sektion>
-          </>
-        ) : (
-          <>
-            <Sektion title="Hauptblock" hint="Verlauf ⇄ Fluss (Linsen-Toggle)">
-              <DummyChart label={sub === 'Live' ? 'Energiefluss (Default Live)' : 'Verlauf'} />
-            </Sektion>
-            <Sektion title="Werte/Tabelle" hint="numerischer Zwilling, eingebettet"><DummyChart label="Werte-Embed" /></Sektion>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-                Detail-Sektionen
-                <span className="text-xs font-normal text-gray-400 dark:text-gray-500">klapp- und sortierbar (↑↓), je Sicht gemerkt — Monatsbericht-Muster</span>
-              </h3>
-              <SortbareSektionen />
-            </div>
-          </>
-        )}
-      </div>
+      {/* Cockpit-Zeitsichten: alle Blöcke klapp-/fokussierbar UND sortierbar */}
+      <BloeckeView key={`cockpit-${sub}`} bloecke={bloecke} sortierbar />
     </>
   )
 }
@@ -292,6 +317,14 @@ function CockpitView() {
 function KomponentenView() {
   const [typ, setTyp] = useState(KOMP_TYPEN[0].key)
   const aktiv = KOMP_TYPEN.find((t) => t.key === typ)!
+  // Variante C — fixe lineare Folge (Stabilität über Typen): nicht sortierbar,
+  // aber klapp- und fokussierbar.
+  const bloecke: Block[] = [
+    { id: 'status', title: 'Aktueller Status', icon: Activity, defaultOpen: true, render: (_f) => <KpiStrip kpis={KOMP_STATUS[typ]} /> },
+    { id: 'verlauf', title: 'Verlauf im Zeitraum', icon: LineChart, defaultOpen: true, render: (f) => <DummyChart label="Tages-/Monatschart" tall={f} /> },
+    { id: 'vergleich', title: 'Vergleich', icon: BarChart3, summary: 'Diagramm ⇄ Tabelle · Saison-Toggle', defaultOpen: false, render: (f) => <DummyChart label="Vorjahr/Vormonat · wetternormalisiert" tall={f} /> },
+    { id: 'aussicht', title: 'Aussicht', icon: TrendingUp, summary: 'komponentenspezifische Prognose', defaultOpen: false, render: (_f) => <p className="text-sm text-gray-500 dark:text-gray-400">z. B. „wann voll/leer" (Speicher) — entfällt bei Typen ohne sinnvolle Prognose.</p> },
+  ]
   return (
     <>
       <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
@@ -313,38 +346,27 @@ function KomponentenView() {
           ))}
         </nav>
       </div>
-      <div className="p-3 sm:p-6 space-y-4 max-w-[1920px] mx-auto">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">{aktiv.label}</h2>
-          <span className="min-h-[44px] flex items-center px-3 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">Mai 2026 ▾</span>
-        </div>
-        {/* Variante C — fixe lineare Sektion-Folge: Status → Verlauf → Vergleich → Aussicht */}
-        <Sektion title="Aktueller Status"><KpiStrip kpis={KOMP_STATUS[typ]} /></Sektion>
-        <Sektion title="Verlauf im Zeitraum"><DummyChart label="Tages-/Monatschart" /></Sektion>
-        <Sektion title="Vergleich" hint="Diagramm ⇄ Tabelle · Saison-Toggle"><DummyChart label="Vorjahr/Vormonat · wetternormalisiert" /></Sektion>
-        <Sektion title="Aussicht" hint="komponentenspezifische Prognose">
-          <p className="text-sm text-gray-500 dark:text-gray-400">z. B. „wann voll/leer" (Speicher) — entfällt bei Typen ohne sinnvolle Prognose.</p>
-        </Sektion>
+      <div className="px-3 sm:px-6 pt-4 flex items-center justify-between max-w-[1920px] mx-auto">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">{aktiv.label}</h2>
+        <span className="min-h-[44px] flex items-center px-3 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">Mai 2026 ▾</span>
       </div>
+      <BloeckeView key={`komp-${typ}`} bloecke={bloecke} />
     </>
   )
 }
 
 function AuswertungenView() {
   const [sub, setSub] = useState<(typeof AUSW_SUBS)[number]>('Finanzen')
+  const bloecke: Block[] = [
+    { id: 'main', title: sub, icon: BarChart3, summary: 'analytischer Schnitt über die ganze Anlage', defaultOpen: true, render: (f) => <DummyChart label={sub === 'Tabelle' ? 'Volle Werkbank (Spalten-Picker, CSV)' : `${sub}-Auswertung`} tall={f} /> },
+    ...(sub === 'Finanzen'
+      ? [{ id: 'tkonto', title: 'SOLL/HABEN-T-Konto', icon: Wallet, summary: 'aus dem Monatsbericht hierher verlagert (F2-a)', defaultOpen: true, render: (_f: boolean) => <p className="text-sm text-gray-500 dark:text-gray-400">zeitraum-parametrisiert (Tag/Monat/Jahr) + sonstige Positionen (#310).</p> } as Block]
+      : []),
+  ]
   return (
     <>
       <SubTabBar tabs={AUSW_SUBS} active={sub} onSelect={setSub} />
-      <div className="p-3 sm:p-6 space-y-4 max-w-[1920px] mx-auto">
-        <Sektion title={sub} hint="analytischer Schnitt über die ganze Anlage">
-          <DummyChart label={sub === 'Tabelle' ? 'Volle Werkbank (Spalten-Picker, CSV)' : `${sub}-Auswertung`} />
-        </Sektion>
-        {sub === 'Finanzen' && (
-          <Sektion title="SOLL/HABEN-T-Konto" hint="aus dem Monatsbericht hierher verlagert (F2-a), zeitraum-parametrisiert">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Tag/Monat/Jahr-Selektor + sonstige Positionen (#310).</p>
-          </Sektion>
-        )}
-      </div>
+      <BloeckeView key={`ausw-${sub}`} bloecke={bloecke} />
     </>
   )
 }
@@ -356,13 +378,14 @@ function CommunityView() {
     { title: 'Spez. Ertrag', value: '1.040', unit: 'kWh/kWp', color: 'cyan', icon: TrendingUp },
     { title: 'Region',       value: 'Bayern', color: 'green', icon: MapPin },
   ]
+  const bloecke: Block[] = [
+    { id: 'kpi', title: 'Kennzahlen', icon: Trophy, defaultOpen: true, render: (_f) => <KpiStrip kpis={kpis} /> },
+    { id: 'inhalt', title: sub, icon: BarChart3, defaultOpen: true, render: (f) => <DummyChart label={`Community: ${sub}`} tall={f} /> },
+  ]
   return (
     <>
       <SubTabBar tabs={COMM_SUBS} active={sub} onSelect={setSub} />
-      <div className="p-3 sm:p-6 space-y-4 max-w-[1920px] mx-auto">
-        <KpiStrip kpis={kpis} />
-        <Sektion title={sub}><DummyChart label={`Community: ${sub}`} /></Sektion>
-      </div>
+      <BloeckeView key={`comm-${sub}`} bloecke={bloecke} />
     </>
   )
 }
@@ -370,9 +393,10 @@ function CommunityView() {
 function HilfeView() {
   return (
     <div className="p-3 sm:p-6 space-y-4 max-w-3xl mx-auto">
-      <Sektion title="Hilfe" hint="In-App-Handbuch">
+      <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Hilfe <span className="text-xs font-normal text-gray-400 dark:text-gray-500">In-App-Handbuch</span></h3>
         <p className="text-sm text-gray-500 dark:text-gray-400">Inkl. „Wo ist X hin?" beim v4-Flip (Aussichten → Cockpit/Aussicht, T-Konto → Auswertungen/Finanzen …).</p>
-      </Sektion>
+      </section>
     </div>
   )
 }
