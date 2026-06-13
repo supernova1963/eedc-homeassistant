@@ -9,6 +9,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.0] - 2026-06-13 — Design-Fundament: einheitliche Farben, Tooltips, KPI-Karten & verlinkbare Reiter
+
 ### Changed
 
 - **Eine Farbe = eine Bedeutung: app-weite Farb-Vereinheitlichung (Design-Fundament für v4.0.0, Paket P1).** Alle Chart- und Anzeige-Farben kommen jetzt aus einer zentralen Definition (`lib/colors.ts`) statt aus über 360 verstreuten Einzelwerten in 40 Dateien — ein Wächter-Check (`npm run check:design`) verhindert ab sofort neue Streuner. Dabei wurden bewusst sichtbare Inkonsistenzen bereinigt (alle vom Maintainer freigegeben):

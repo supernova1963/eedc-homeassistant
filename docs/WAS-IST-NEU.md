@@ -1,11 +1,27 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.44.0)
+> **Stand:** Juni 2026 (v3.45.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.0 — Einheitliches Design: Farben, Tooltips, KPI-Karten & direkt verlinkbare Reiter (Juni 2026)
+
+> Diese Version ist die sichtbare **Design-Grundlage** für die kommende neue Menüstruktur (4.0.0): überall dieselben Farben, Tooltips, Kennzahl-Kacheln und Schreibweisen. **An den Funktionen ändert sich nichts** — nur das Erscheinungsbild wird einheitlich. (Eine klickbare Vorschau der neuen Menüstruktur kommt separat.)
+
+### Was sich für dich ändert
+
+- **Eine Farbe = eine Bedeutung.** Farben bedeuten jetzt app-weit dasselbe: **Netzbezug ist überall Dunkelrot** (das helle Rot bleibt für Kosten, Minuswerte und Fehler), PV/Solar einheitlich gelb, Speicher Ladung = Grün / Entladung = Blau, und „deine Anlage" im Community-Vergleich immer Blau. Vorher unterschieden sich diese Farben je nach Seite.
+- **Dunkelmodus besser lesbar.** Gedämpfte Texte/Hinweise und die Diagramm-Achsen/Gitterlinien passen sich jetzt sauber dem Dunkelmodus an (vorher teils zu grell oder fest hell).
+- **Einheitliche Tooltips.** Alle Tooltips (Diagramm-Werte, Berechnungs-Herleitungen, Kurzhinweise) sehen jetzt gleich aus (dunkel, abgerundet) und liegen zuverlässig über Dialogen.
+- **Komponenten immer in derselben Reihenfolge.** In allen Listen, Diagrammen und Berichten erscheinen die Komponenten-Typen jetzt in einer einheitlichen Reihenfolge (vorher teils alphabetisch, z. B. Balkonkraftwerk fälschlich zuerst).
+- **Einheitliche Schreibweisen.** Prozentwerte mit Leerzeichen („84,2 %"), und „eedc" wird jetzt auch in den PDF-Berichten und auf der Website klein geschrieben.
+- **Kennzahl-Kacheln aus einem Guss.** Die Kacheln in Cockpit, Auswertungen und den Dashboards haben jetzt überall gleiche Schriftgrößen, Icon-Positionen und Einheiten-Abstände.
+- **Reiter direkt verlinkbar.** In **Auswertungen**, **Aussichten** und **Community** hat jeder Reiter jetzt eine eigene Adresse (z. B. `…/#/auswertungen/finanzen`). Lesezeichen und die Zurück-Taste landen wieder beim richtigen Reiter. Bedienung und Aussehen der Reiter bleiben gleich.
 
 ---
 
