@@ -60,21 +60,23 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### A0 — Design-Tokens (Pflicht-Vorarbeit vor v4.0.0-IA-Refactor)
 
-> **Inhalt:** Konkrete Token-Werte für Typografie, Farben, Spacing, Schatten, Radius — als Tailwind-Theme-Extension + `lib/design-tokens.ts`.
+> **⚠️ Update 2026-06-12 (Fundament-P1):** Der `lib/design-tokens.ts`-Verweis in dieser A0-Sektion ist **überholt** — es gibt **kein** separates `design-tokens`-Modul. **Farb-SoT = `lib/colors.ts`** (vervollständigte Zentrale, app-weit durchgesetzt + Wächter `npm run check:design`, P1 `9730d414`). A0 = „Farben" ist damit **geshippt**. Die übrigen Token (Typo A1, Animation A4, Spacing/Radius/Schatten C1) werden in **Fundament-P6** als konkrete **Doc-Tabellen** befüllt — **Doc-Pflicht vor E3, nicht „bei Bedarf"**; Heimat = bestehende lib-Module / Tailwind-Theme bei echtem Klassen-Bedarf, **kein** neues Schicht-Modul, **kein** `lib/spacing.ts`. Der untenstehende A0-Liefer-Artefakt-Text (`design-tokens.ts`, „Spacing geht im A0-Artefakt auf") gilt entsprechend angepasst.
+
+> **Inhalt:** Konkrete Token-Werte für Typografie, Farben, Spacing, Schatten, Radius — als Tailwind-Theme-Extension; Farb-SoT = `lib/colors.ts` (s. Update-Banner oben).
 > **Scope:** Tokens + Theme. **Keine Komponenten-Refactors, keine sichtbare UI-Änderung.** Bestehende Klassen werden Schritt für Schritt in den Folge-Wellen auf die Tokens umgestellt.
 > **Warum vor dem IA-Refactor:** der v4.0.0-Schnitt (siehe [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)) bringt viele neue Seiten (Komponenten-Hub, Einstellungs-Kachel-Grid, Cockpit-Sub-Tabs). Ohne vorab fixierte Tokens improvisiert jeder neue View seine Werte → sofort Drift, kein Marken-Versprechen.
 
 **Liefer-Artefakt:**
 
 - `eedc/frontend/tailwind.config.js` mit konkreten Token-Werten in `theme.extend`.
-- `eedc/frontend/src/lib/design-tokens.ts` mit semantischen Aliasen für Stellen, die kein Tailwind nutzen können (z. B. Chart-Farben, dynamische Inline-Styles).
+- Chart-Farben / dynamische Inline-Styles (kein Tailwind möglich): **`lib/colors.ts`** als SoT (ersetzt das ursprünglich geplante `design-tokens.ts` — s. Update-Banner).
 - Dunkel-Mode-Linien-Logik definiert (Kontrast-Stufen, Schatten-Inversion).
 
 **Konkrete Tabellen** werden mit der Umsetzung in A1, A2, A4, C1 hier befüllt — A0 ist der Sammel-Marker, dass diese Sektionen **vor** dem IA-Refactor konkret sein müssen.
 
 > **✅ Vorab-Entscheidungen (2026-05-31):**
-> 1. **Farb-Kanon — revidiert 2026-06-11: die Ist-Palette ist normativ** (battery=blau, consumption=lila — der 05-31-Tausch beruhte auf einem unbegründeten Doc-Vorschlag, s. A2-Revisions-Block). **Einzige Wert-Änderung: Netzbezug → Dunkelrot `#b91c1c`**, damit Signal-Rot `#ef4444` exklusiv für Kosten/negativ/Fehler wird (der Rot-Konflikt war der reale Kern des Befunds). A0 kodifiziert die Bestandswerte als Token, leitet alle Duplikate (tailwind / `lib/colors.ts` / KPICard-`COLOR_CLASSES`) daraus ab und ergänzt die Status-Achse; der Netzbezug-Wechsel wird erst am v4.0.0-Flip sichtbar.
-> 2. **Spacing-SoT — `design-tokens.ts`.** Spacing geht im A0-Artefakt (Tailwind-Theme + `design-tokens.ts`) auf; `lib/spacing.ts` entfällt.
+> 1. **Farb-Kanon — revidiert 2026-06-11: die Ist-Palette ist normativ** (battery=blau, consumption=lila — der 05-31-Tausch beruhte auf einem unbegründeten Doc-Vorschlag, s. A2-Revisions-Block). **Einzige Wert-Änderung: Netzbezug → Dunkelrot `#b91c1c`**, damit Signal-Rot `#ef4444` exklusiv für Kosten/negativ/Fehler wird (der Rot-Konflikt war der reale Kern des Befunds). `lib/colors.ts` ist die Zentrale (Bestandswerte kodifiziert, Duplikate tailwind / KPICard-`COLOR_CLASSES` daraus abgeleitet, Status-Achse ergänzt); der Netzbezug-Wechsel ist **mit Fundament-P1 sofort geshippt** (F2, nicht erst am Flip — Update 2026-06-12).
+> 2. **Spacing-SoT — überholt (s. Update-Banner):** **kein** `design-tokens.ts`; die konkrete C1-Spacing-Tabelle füllt **Fundament-P6** als Doc-Norm (Tailwind-Theme nur bei echtem Klassen-Bedarf). `lib/spacing.ts` entfällt weiterhin.
 
 > **A0-Grundsatz — vollenden, nicht abtippen:** „normativ" (Farben seit Revision 2026-06-11: Ist-Palette + Rot-Differenzierung; analog A1/A4/C1) heißt, das semantische *System* ist die Quelle — **nicht** der heutige, teils lückenhafte Doc-Text. A0 baut das System **fertig**, statt einen unvollständigen Stand einzufrieren (das wäre wieder Flicken). Konkret für Farben: alle Energie-/Komponenten-Rollen (PV, Speicher, Verbrauch, Netzbezug, Einspeisung, Kosten, Umwelt) **und** die getrennte Status-Achse (OK/Warning/Error/Info) bekommen definierte Token-Werte; die tailwind-Palette **und** die heute duplizierten `KPICard`-/`komponentenStyle`-Farb-Enums werden daraus **abgeleitet** (eine Quelle), nicht parallel gepflegt. Dasselbe Prinzip gilt für Typo (A1), Animation (A4), Spacing (C1): die Token-Tabelle wird in A0 vollständig gemacht, nicht aus dem Ist-Stand zusammengeklaubt.
 
@@ -93,12 +95,14 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### A2 — Farb-Palette + semantische Farb-Codes
 
-> **Semantik (revidiert 2026-06-11 — Ist-Palette + Rot-Differenzierung, s. Revisions-Block unten):** Datentyp → Farbe. PV/Energie = gelb, **Speicher = blau `#3b82f6`, Verbrauch = lila `#8b5cf6`, Einspeisung = grün `#10b981`, Netzbezug = Dunkelrot `#b91c1c`**, Umwelt = grün; **Signal-Rot `#ef4444` exklusiv für Kosten/negativ/Fehler.** Status-Farben (OK/Warning/Error/Info) getrennt.
+> **Semantik (revidiert 2026-06-11 — Ist-Palette + Rot-Differenzierung, s. Revisions-Block unten):** Datentyp → Farbe. PV/Energie = gelb, **Speicher = blau `#3b82f6`, Verbrauch = lila `#8b5cf6`, Einspeisung = grün `#10b981`, Netzbezug = Dunkelrot `#b91c1c`**, Umwelt = grün; **Signal-Rot `#ef4444` exklusiv für Kosten/negativ/Fehler.** Status-Farben (OK/Warning/Error/Info) getrennt. **SoT der konkreten Werte: `lib/colors.ts`** (keine Farbtabelle im Doc — s. Revisions-Block unten).
 > Dunkel- vs. Hell-Mode mit eigener Linien-Logik (Kontrast, Schatten, Saturation).
 
 > **⚠️ Drift-Befund + offene Entscheidung (2026-05-31):** Die ausgelieferte `tailwind.config.js:25-31`-`energy`-Palette weicht von dieser Semantik ab — `battery=#3b82f6 (blau)` und `consumption=#8b5cf6 (violett)` sind gegenüber „Verbrauch=blau / Speicher=lila" **vertauscht**, und `grid=#ef4444 (rot, Netzbezug)` kollidiert mit „Kosten=rot". Zusätzlich definieren **`lib/colors.ts`** (`COLORS`/`CHART_COLORS`/`SOLL_IST_COLORS` — Chart-Farben mit derselben Vertauschung, 5 Konsumenten; Befund nachgetragen 2026-06-11), `ui/KPICard.tsx` + `komponentenStyle.ts` die Farb-Enums dupliziert, nicht aus A2 abgeleitet. ~~**✅ Entschieden (2026-05-31): A2 ist normativ** — A0 migriert den Code an diese Semantik (Speicher→lila, Verbrauch→blau), der visuelle Bruch an den Charts ist akzeptiert.~~ **⚠️ REVIDIERT (2026-06-11, Gernot — zweigeteilt):** (1) **blau↔lila-Tausch gekippt, die Ist-Palette bleibt** (battery=blau `#3b82f6`, consumption=lila `#8b5cf6`): die 05-31-Fassung machte die Semantik-Zeile aus dem Konzept-Skelett vom 23.05. normativ, für die die Archäologie **keinen dokumentierten Produkt-Grund** fand („Konkrete Farbliste folgt", Begründung fehlte; Entscheidung fiel im 7er-Batch unter dem generellen Aufräum-Prinzip). (2) **Der Rot-Konflikt war dagegen real** (Gernot-Erinnerung + Befund: Rot heute 4-fach belegt — Netzbezug-Serie, WP-Wärme, CO₂-WP und `text-red`-Negativwerte in denselben Finanz-Sichten) → **Netzbezug → Dunkelrot `#b91c1c`**, Signal-Rot `#ef4444` wird **exklusiv** für Kosten/negativ/Fehler. Einziger sichtbarer Serien-Wechsel, gebündelt am v4.0.0-Flip. **A0-To-do:** Bestand als Token kodifizieren (Mini-Wert-Drifts wie solar `#fbbf24` vs. `#f59e0b` je Rolle kanonisieren; Fehlfarben wie `wpErsparnis`=rot — eine *Ersparnis* in Rot — auf die Geld-Logik grün/rot bereinigen), Status-Achse ergänzen. Die Datentyp-Achse bildet die 8-Wert-`COLOR_CLASSES` ab; die Status-Achse (OK/Warning/Error/Info) braucht noch eigene Token-Werte.
 
-*Konkrete Farbliste folgt mit der A0-Entscheidung.*
+> **✅ Update 2026-06-12 (F2 / Fundament-P1):** Der Netzbezug-Wechsel `#ef4444` → `#b91c1c` wurde mit **Fundament-P1 GESHIPPT** (nicht erst am v4-Flip); **Signal-Rot `#ef4444` ab sofort exklusiv** für Kosten/negativ/Fehler. **Farb-SoT = `lib/colors.ts`** (vervollständigte Zentrale + Wächter `npm run check:design`), **NICHT** ein `design-tokens`-Modul; der A0-Liefer-Artefakt-Text gilt entsprechend angepasst. Die übrigen Token-Tabellen (A1 Typo / A4 Animation / C1 Spacing-Radius-Schatten) werden in **Fundament-P6** als Doc-Tabellen befüllt (Doc-Pflicht vor E3).
+
+**Keine Farbtabelle im Doc** — die verbindlichen Werte stehen in `lib/colors.ts` (SoT); Doc-Tabellen driften (§9-Lehre). A2 bleibt **Pointer** (löst den Doc-Konflikt K1 mit Fundament-P6.1 auf).
 
 **Betroffene Issues:** *(noch keine direkten)*
 
@@ -107,7 +111,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### A3 — Datenzustand-Vokabular
 
 > **Unterscheidung:** `—` (echte Datenlücke) · *N/A* (strukturell nicht zutreffend, z. B. Komponente nicht vorhanden) · `…` (in Berechnung) · `?` (unsicher / Schätzung).
-> Display-Token `—` bereits etabliert (v3.29.1 #239). **Ist-Stand (2026-05-31):** `fmtKpi`-Helfer existiert bereits in `lib/komponentenStyle.ts:49`, die `/dev/design-preview`-Galerie rendert alle vier Tokens. Offen ist nur die SoT-Heimat von `fmtKpi` (bleibt in `komponentenStyle.ts` oder zieht ins A0-`design-tokens.ts`/ein `fmt`-Modul) und die durchgängige Anwendung.
+> Display-Token `—` bereits etabliert (v3.29.1 #239). **Ist-Stand (2026-05-31, aktualisiert 2026-06-12):** `fmtKpi`-Helfer + `/dev/design-preview`-Galerie (rendert alle vier Tokens) existieren. **Update P1 (Entscheid Nr. 5):** SoT-Heimat geklärt — `fmtKpi` ist nach **`lib/formatting.ts`** umgezogen (kein `design-tokens.ts`); offen bleibt nur die durchgängige Anwendung.
 
 **Betroffene Issues:** Disc #162 (`fmtKpi`-Helfer + Datenloch vs. strukturell N/A).
 
@@ -128,8 +132,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### A5 — Icons + Symbol-Konventionen
 
 > **Linien-Icons:** `lucide-react` als SoT.
-> **Komponenten-Typ-Icons:** via `lib/komponentenStyle.ts` (noch unvollständig — WP/Speicher ja, E-Auto/BKW/Wallbox/Sonstiges/PV-Anlage offen, Disc #163).
-> **A5 in zwei Schritten (2026-05-31):** die vorhandenen `WP_KPI`/`SPEICHER_*`-Konstanten werden heute **nirgends real konsumiert** (Dashboards hardcoden title/icon/color) — also (a) zuerst WaermepumpeDashboard/SpeicherDashboard auf den SoT umstellen (SoT erstmals einziehen), (b) dann die fünf fehlenden Typen ergänzen. „PV-Anlage" ist dabei ein UI-Aggregat (pv-module/wechselrichter/balkonkraftwerk), kein eigener `InvestitionTyp`.
+> **Komponenten-Typ-Icons:** via `lib/komponentenStyle.ts` (Records für alle Typen angelegt P1; reale Nutzung bisher WP/Speicher, übrige Dashboards folgen — Disc #163, s. Update unten).
+> **A5 in zwei Schritten (2026-05-31, durch P1 erledigt — s. Update unten):** die vorhandenen `WP_KPI`/`SPEICHER_*`-Konstanten wurden **damals nirgends real konsumiert** (Dashboards hardcodeten title/icon/color) — also (a) zuerst WaermepumpeDashboard/SpeicherDashboard auf den SoT umstellen (SoT erstmals einziehen), (b) dann die fünf fehlenden Typen ergänzen. „PV-Anlage" ist dabei ein UI-Aggregat (pv-module/wechselrichter/balkonkraftwerk), kein eigener `InvestitionTyp`.
+> **✅ Update 2026-06-12 (P1):** D2-Kanon **komplett** in `komponentenStyle.ts` — alle 7 Typen + 3 Sonstiges-Varianten als KPI-Records angelegt; Schritt (a) erledigt: **WP- + Speicher-Dashboard konsumieren die Records real**. Offen nur die Übernahme in die übrigen 5 Dashboards (B9/E1-P2). `COLOR_CLASSES` = einzige Definition, `ui/KPICard.tsx` leitet ab (keine Parallel-Pflege).
 > **Status-Icons:** konsistent (Check/Warning/Error/Info).
 > **Dekorative Icons** in Headern/Bannern vermeiden (Forum #206 P2-Linie).
 
@@ -259,7 +264,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### C1 — Spacing-Standards
 
 > **Tokens:** `--page-padding-top` · `--nav-content-gap` · `--section-spacing` · `--card-padding` · `--card-gap`.
-> SoT: **✅ entschieden (2026-05-31)** — Spacing geht im A0-Artefakt (`design-tokens.ts` + Tailwind-Theme) auf; ein eigenes `lib/spacing.ts` entfällt.
+> SoT: **überholt (Update 2026-06-12)** — **kein** `design-tokens.ts`; die konkrete C1-Spacing-Tabelle füllt **Fundament-P6** als Doc-Norm (Tailwind-Theme nur bei echtem Klassen-Bedarf). `lib/spacing.ts` entfällt weiterhin.
 > Bestehende Spacings im Code auditieren und auf Tokens migrieren.
 
 **Betroffene Issues:** #243 B6, #209 P5.
