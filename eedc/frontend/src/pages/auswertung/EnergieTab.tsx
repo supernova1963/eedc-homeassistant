@@ -5,10 +5,9 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { Sun, Zap, TrendingUp, Download } from 'lucide-react'
-import { Card, Button, fmtCalc } from '../../components/ui'
+import { Card, Button, fmtCalc, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
-import { KPICard } from './KPICard'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
 
 export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitraumLabel }: TabProps) {
@@ -63,8 +62,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
           value={(stats.gesamtErzeugung / 1000).toFixed(1)}
           unit="MWh"
           icon={Sun}
-          color="text-yellow-500"
-          bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+          color="yellow"
           formel="Σ PV-Erzeugung aller Monate"
           berechnung={`${fmtCalc(stats.gesamtErzeugung, 0)} kWh`}
           ergebnis={`= ${fmtCalc(stats.gesamtErzeugung / 1000, 1)} MWh`}
@@ -75,8 +73,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
           unit="%"
           subtitle={`${(stats.gesamtEigenverbrauch / 1000).toFixed(1)} MWh`}
           icon={Zap}
-          color="text-purple-500"
-          bgColor="bg-purple-50 dark:bg-purple-900/20"
+          color="purple"
           formel="Eigenverbrauch ÷ PV-Erzeugung × 100"
           berechnung={`${fmtCalc(stats.gesamtEigenverbrauch, 0)} kWh ÷ ${fmtCalc(stats.gesamtErzeugung, 0)} kWh × 100`}
           ergebnis={`= ${fmtCalc((stats.gesamtEigenverbrauch / stats.gesamtErzeugung) * 100, 1)} %`}
@@ -87,8 +84,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
           unit="%"
           subtitle="Durchschnitt"
           icon={TrendingUp}
-          color="text-blue-500"
-          bgColor="bg-blue-50 dark:bg-blue-900/20"
+          color="blue"
           formel="Eigenverbrauch ÷ Gesamtverbrauch × 100"
           berechnung="Durchschnitt aller Monate"
           ergebnis={`= ${fmtCalc(stats.durchschnittAutarkie, 1)} %`}
@@ -99,8 +95,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
           unit="kWh/kWp"
           subtitle={anlage?.leistung_kwp ? `${anlage.leistung_kwp} kWp` : undefined}
           icon={Sun}
-          color="text-amber-500"
-          bgColor="bg-amber-50 dark:bg-amber-900/20"
+          color="yellow"
           formel="PV-Erzeugung ÷ Anlagenleistung"
           berechnung={anlage?.leistung_kwp ? `${fmtCalc(stats.gesamtErzeugung, 0)} kWh ÷ ${anlage.leistung_kwp} kWp` : undefined}
           ergebnis={anlage?.leistung_kwp ? `= ${fmtCalc(stats.gesamtErzeugung / anlage.leistung_kwp, 0)} kWh/kWp` : undefined}

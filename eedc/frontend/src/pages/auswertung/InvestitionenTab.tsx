@@ -8,11 +8,10 @@ import {
   PiggyBank, Wallet, TrendingUp, Calendar,
   ChevronDown, ChevronRight, AlertTriangle
 } from 'lucide-react'
-import { Card, LoadingSpinner, FormelTooltip, fmtCalc } from '../../components/ui'
+import { Card, LoadingSpinner, FormelTooltip, fmtCalc, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useInvestitionen } from '../../hooks'
 import { investitionenApi, cockpitApi, type ROIDashboardResponse, type ROIKomponente, type CockpitUebersicht } from '../../api'
-import { KPICard } from './KPICard'
 import { COLORS, TYP_COLORS, TYP_LABELS } from './types'
 import type { useAktuellerStrompreis } from '../../hooks'
 
@@ -181,8 +180,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           unit="€"
           subtitle={`${investitionen.length} Komponenten`}
           icon={Wallet}
-          color="text-blue-500"
-          bgColor="bg-blue-50 dark:bg-blue-900/20"
+          color="blue"
           sicht="Gesamt-Anlage · Mehrkosten-Ansatz (Anschaffung minus Alternativkosten)"
           formel="Σ Anschaffungskosten − Alternativkosten"
           berechnung={roiData ? `${fmtCalc(roiData.gesamt_investition, 0)} € − ${fmtCalc(roiData.gesamt_investition - roiData.gesamt_relevante_kosten, 0)} € Alternativ` : undefined}
@@ -193,8 +191,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           value={(roiData?.gesamt_jahres_einsparung || 0).toFixed(0)}
           unit="€/Jahr"
           icon={TrendingUp}
-          color="text-green-500"
-          bgColor="bg-green-50 dark:bg-green-900/20"
+          color="green"
           sicht="Gesamt-Anlage · Prognose auf Basis konfigurierter Parameter und aktueller Strompreise"
           formel="Einspeiseerlös + Eigenverbrauch-Ersparnis"
           berechnung={pvModulDetails ? `${fmtCalc(pvModulDetails.einspeise_erloes_euro as number, 2)} € + ${fmtCalc(pvModulDetails.ev_ersparnis_euro as number, 2)} €` : 'Σ aller Investitions-Einsparungen'}
@@ -206,8 +203,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           unit="%"
           subtitle="pro Jahr"
           icon={TrendingUp}
-          color="text-purple-500"
-          bgColor="bg-purple-50 dark:bg-purple-900/20"
+          color="purple"
           sicht="Gesamt-Anlage · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
           formel="Jahresersparnis ÷ Relevante Kosten × 100"
           berechnung={roiData && roiData.gesamt_relevante_kosten > 0 ? `${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} € ÷ ${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € × 100` : undefined}
@@ -218,8 +214,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
           value={roiData?.gesamt_amortisation_jahre?.toFixed(1) || '—'}
           unit="Jahre"
           icon={Calendar}
-          color="text-amber-500"
-          bgColor="bg-amber-50 dark:bg-amber-900/20"
+          color="yellow"
           sicht="Gesamt-Anlage · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne Berücksichtigung bisheriger Erträge)"
           formel="Relevante Kosten ÷ Jahresersparnis"
           berechnung={roiData && roiData.gesamt_jahres_einsparung > 0 ? `${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined}

@@ -33,7 +33,7 @@ import {
   LineChart,
   Line,
 } from 'recharts'
-import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc, QuelleBadge } from '../components/ui'
+import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc, QuelleBadge, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useAktuellerStrompreis } from '../hooks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../api'
@@ -360,8 +360,7 @@ export default function ROIDashboard() {
               title="Gesamtinvestition"
               value={`${roiData.gesamt_investition.toLocaleString('de-DE')} €`}
               subtitle={`Relevant: ${roiData.gesamt_relevante_kosten.toLocaleString('de-DE')} €`}
-              color="text-blue-500"
-              bgColor="bg-blue-50 dark:bg-blue-900/20"
+              color="blue"
               sicht="Gesamt-Anlage · Vollkosten + Mehrkosten-Ansatz im Untertitel"
               formel="Σ Anschaffungskosten aller Investitionen"
               berechnung={`Relevant = Gesamt − Alternativkosten`}
@@ -372,8 +371,7 @@ export default function ROIDashboard() {
               title="Jährliche Einsparung"
               value={`${roiData.gesamt_jahres_einsparung.toLocaleString('de-DE')} €`}
               subtitle={roiData.gesamt_roi_prozent ? `ROI: ${roiData.gesamt_roi_prozent} %` : 'ROI: -'}
-              color="text-green-500"
-              bgColor="bg-green-50 dark:bg-green-900/20"
+              color="green"
               sicht="Gesamt-Anlage · Jahres-Prognose · Mehrkosten-Ansatz"
               formel="Σ Einsparungen aller Investitionen"
               berechnung={roiData.gesamt_relevante_kosten > 0 ? `ROI = Einsparung ÷ Kosten × 100` : undefined}
@@ -384,8 +382,7 @@ export default function ROIDashboard() {
               title="Amortisation"
               value={roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} Jahre` : '-'}
               subtitle="Bis zur Kostendeckung"
-              color="text-orange-500"
-              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              color="orange"
               sicht="Gesamt-Anlage · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
               formel="Relevante Kosten ÷ Jährliche Einsparung"
               berechnung={roiData.gesamt_jahres_einsparung > 0 ? `${fmtCalc(roiData.gesamt_relevante_kosten, 0)} € ÷ ${fmtCalc(roiData.gesamt_jahres_einsparung, 0)} €/Jahr` : undefined}
@@ -396,8 +393,7 @@ export default function ROIDashboard() {
               title="CO2-Einsparung"
               value={`${roiData.gesamt_co2_einsparung_kg.toLocaleString('de-DE')} kg`}
               subtitle="pro Jahr"
-              color="text-emerald-500"
-              bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+              color="green"
               sicht="Gesamt-Anlage · Jahres-Prognose"
               formel="Σ CO2-Einsparungen aller Investitionen"
               berechnung="Je nach Investitionstyp unterschiedlich"
@@ -683,45 +679,3 @@ export default function ROIDashboard() {
   )
 }
 
-interface KPICardProps {
-  icon: React.ElementType
-  title: string
-  value: string
-  subtitle?: string
-  color: string
-  bgColor: string
-  // Tooltip-Props
-  formel?: string
-  berechnung?: string
-  ergebnis?: string
-  sicht?: string
-}
-
-function KPICard({ icon: Icon, title, value, subtitle, color, bgColor, formel, berechnung, ergebnis, sicht }: KPICardProps) {
-  const valueContent = (
-    <span className="text-2xl font-bold text-gray-900 dark:text-white">{value}</span>
-  )
-
-  return (
-    <Card>
-      <div className="flex items-start gap-4">
-        <div className={`p-3 rounded-lg ${bgColor}`}>
-          <Icon className={`h-6 w-6 ${color}`} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-500 dark:text-gray-400">{title}</p>
-          {formel ? (
-            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
-              {valueContent}
-            </FormelTooltip>
-          ) : (
-            valueContent
-          )}
-          {subtitle && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
-          )}
-        </div>
-      </div>
-    </Card>
-  )
-}

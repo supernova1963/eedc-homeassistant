@@ -19,11 +19,11 @@ import {
   ArrowDownToLine, ArrowUpFromLine, Percent, Gauge, Euro, Leaf,
   Receipt, Share2, Activity, Thermometer, TrendingDown
 } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Select, fmtCalc } from '../components/ui'
+import { Card, Button, LoadingSpinner, Select, fmtCalc, KPICard } from '../components/ui'
 import { fmtKpi, CHART_COLORS } from '../lib'
 import {
   HeroLeiste, EnergyFlowDiagram, RingGaugeCard, SparklineChart,
-  AmortisationsBar, CommunityTeaser, CommunityNudge, Section, SectionLink, KPICard,
+  AmortisationsBar, CommunityTeaser, CommunityNudge, Section, SectionLink,
   QuickLink, ShareTextModal, GettingStarted
 } from '../components/dashboard'
 import { useSelectedAnlage } from '../hooks'
@@ -172,8 +172,7 @@ export default function Dashboard() {
             value={(data.pv_erzeugung_kwh / 1000).toFixed(1)}
             unit="MWh"
             icon={Sun}
-            color="text-energy-solar"
-            bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+            color="yellow"
             onClick={() => navigate('/cockpit/pv-anlage')}
             formel="Σ PV-Erzeugung aller Monate"
             berechnung={`${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh`}
@@ -184,8 +183,7 @@ export default function Dashboard() {
             value={(data.gesamtverbrauch_kwh / 1000).toFixed(1)}
             unit="MWh"
             icon={Home}
-            color="text-energy-consumption"
-            bgColor="bg-purple-50 dark:bg-purple-900/20"
+            color="purple"
             formel="Eigenverbrauch + Netzbezug"
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} + ${fmtCalc(data.netzbezug_kwh, 0)} kWh`}
             ergebnis={`= ${fmtCalc(data.gesamtverbrauch_kwh / 1000, 1)} MWh`}
@@ -195,8 +193,7 @@ export default function Dashboard() {
             value={(data.netzbezug_kwh / 1000).toFixed(1)}
             unit="MWh"
             icon={ArrowDownToLine}
-            color="text-energy-grid"
-            bgColor="bg-red-50 dark:bg-red-900/20"
+            color="red"
             formel="Σ Netzbezug aller Monate"
             berechnung={`${fmtCalc(data.netzbezug_kwh, 0)} kWh`}
             ergebnis={`= ${fmtCalc(data.netzbezug_kwh / 1000, 1)} MWh`}
@@ -206,8 +203,7 @@ export default function Dashboard() {
             value={(data.einspeisung_kwh / 1000).toFixed(1)}
             unit="MWh"
             icon={ArrowUpFromLine}
-            color="text-green-500"
-            bgColor="bg-green-50 dark:bg-green-900/20"
+            color="green"
             formel="Σ Einspeisung aller Monate"
             berechnung={`${fmtCalc(data.einspeisung_kwh, 0)} kWh`}
             ergebnis={`= ${fmtCalc(data.einspeisung_kwh / 1000, 1)} MWh`}
@@ -243,8 +239,7 @@ export default function Dashboard() {
             unit="%"
             subtitle="Ohne Speicher-Umweg"
             icon={TrendingUp}
-            color="text-orange-500"
-            bgColor="bg-orange-50 dark:bg-orange-900/20"
+            color="orange"
             formel="Direktverbrauch ÷ Erzeugung × 100"
             berechnung={`${fmtCalc(data.direktverbrauch_kwh, 0)} ÷ ${fmtCalc(data.pv_erzeugung_kwh, 0)} × 100`}
             ergebnis={`= ${fmtCalc(data.direktverbrauch_quote_prozent, 1)} %`}
@@ -255,8 +250,7 @@ export default function Dashboard() {
             unit="kWh/kWp"
             subtitle="Anlageneffizienz"
             icon={Sun}
-            color="text-yellow-600"
-            bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+            color="yellow"
             formel="Erzeugung ÷ Anlagenleistung"
             berechnung={`${fmtCalc(data.pv_erzeugung_kwh, 0)} kWh ÷ ${fmtCalc(data.anlagenleistung_kwp, 2)} kWp`}
             ergebnis={`= ${fmtCalc(data.spezifischer_ertrag_kwh_kwp || 0, 0)} kWh/kWp`}
@@ -273,8 +267,7 @@ export default function Dashboard() {
               value={(data.speicher_ladung_kwh / 1000).toFixed(2)}
               unit="MWh"
               icon={ArrowDownToLine}
-              color="text-green-500"
-              bgColor="bg-green-50 dark:bg-green-900/20"
+              color="green"
               formel="Σ Speicher-Ladung"
               berechnung={`${fmtCalc(data.speicher_ladung_kwh, 0)} kWh`}
               ergebnis={`= ${fmtCalc(data.speicher_ladung_kwh / 1000, 2)} MWh`}
@@ -284,8 +277,7 @@ export default function Dashboard() {
               value={(data.speicher_entladung_kwh / 1000).toFixed(2)}
               unit="MWh"
               icon={ArrowUpFromLine}
-              color="text-blue-500"
-              bgColor="bg-blue-50 dark:bg-blue-900/20"
+              color="blue"
               formel="Σ Speicher-Entladung"
               berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} kWh`}
               ergebnis={`= ${fmtCalc(data.speicher_entladung_kwh / 1000, 2)} MWh`}
@@ -295,8 +287,7 @@ export default function Dashboard() {
               value={fmtKpi(data.speicher_effizienz_prozent, 1)}
               unit="%"
               icon={Activity}
-              color="text-cyan-500"
-              bgColor="bg-cyan-50 dark:bg-cyan-900/20"
+              color="cyan"
               formel="Entladung ÷ Ladung × 100"
               berechnung={`${fmtCalc(data.speicher_entladung_kwh, 0)} ÷ ${fmtCalc(data.speicher_ladung_kwh, 0)} × 100`}
               ergebnis={data.speicher_effizienz_prozent ? `= ${fmtCalc(data.speicher_effizienz_prozent, 1)} %` : '—'}
@@ -307,8 +298,7 @@ export default function Dashboard() {
               unit=""
               subtitle={`${data.speicher_kapazitaet_kwh.toFixed(1)} kWh Kapazität`}
               icon={Battery}
-              color="text-green-600"
-              bgColor="bg-green-50 dark:bg-green-900/20"
+              color="green"
               formel="Ladung ÷ Kapazität"
               berechnung={`${fmtCalc(data.speicher_ladung_kwh, 0)} kWh ÷ ${fmtCalc(data.speicher_kapazitaet_kwh, 1)} kWh`}
               ergebnis={`= ${fmtCalc(data.speicher_vollzyklen || 0, 0)} Zyklen`}
@@ -326,8 +316,7 @@ export default function Dashboard() {
               value={fmtKpi(data.wp_cop, 2)}
               unit=""
               icon={Thermometer}
-              color="text-orange-500"
-              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              color="orange"
               formel="JAZ = Wärme ÷ Strom"
               berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} ÷ ${fmtCalc(data.wp_strom_kwh, 0)}`}
               ergebnis={data.wp_cop ? `= ${fmtCalc(data.wp_cop, 2)}` : '—'}
@@ -337,8 +326,7 @@ export default function Dashboard() {
               value={(data.wp_waerme_kwh / 1000).toFixed(2)}
               unit="MWh"
               icon={Flame}
-              color="text-red-500"
-              bgColor="bg-red-50 dark:bg-red-900/20"
+              color="red"
               formel="Σ Heizung + Warmwasser"
               berechnung={`${fmtCalc(data.wp_waerme_kwh, 0)} kWh`}
               ergebnis={`= ${fmtCalc(data.wp_waerme_kwh / 1000, 2)} MWh`}
@@ -348,8 +336,7 @@ export default function Dashboard() {
               value={(data.wp_strom_kwh / 1000).toFixed(2)}
               unit="MWh"
               icon={Zap}
-              color="text-yellow-500"
-              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+              color="yellow"
               formel="Σ WP-Stromverbrauch"
               berechnung={`${fmtCalc(data.wp_strom_kwh, 0)} kWh`}
               ergebnis={`= ${fmtCalc(data.wp_strom_kwh / 1000, 2)} MWh`}
@@ -359,8 +346,7 @@ export default function Dashboard() {
               value={data.wp_ersparnis_euro.toFixed(0)}
               unit="€"
               icon={TrendingUp}
-              color="text-green-500"
-              bgColor="bg-green-50 dark:bg-green-900/20"
+              color="green"
               formel="Gaskosten - Stromkosten"
               berechnung={`(${fmtCalc(data.wp_waerme_kwh, 0)} kWh ÷ 0.9 × 10ct) - (${fmtCalc(data.wp_strom_kwh, 0)} kWh × Strompreis)`}
               ergebnis={`= ${fmtCalc(data.wp_ersparnis_euro, 0)} €`}
@@ -379,8 +365,7 @@ export default function Dashboard() {
                 value={(data.sonstiges_erzeugung_kwh / 1000).toFixed(2)}
                 unit="MWh"
                 icon={Sun}
-                color="text-green-500"
-                bgColor="bg-green-50 dark:bg-green-900/20"
+                color="green"
                 formel="Σ Erzeugung über alle Sonstige-Erzeuger"
                 berechnung={`${fmtCalc(data.sonstiges_erzeugung_kwh, 0)} kWh`}
                 ergebnis={`= ${fmtCalc(data.sonstiges_erzeugung_kwh / 1000, 2)} MWh`}
@@ -392,8 +377,7 @@ export default function Dashboard() {
                 value={(data.sonstiges_verbrauch_kwh / 1000).toFixed(2)}
                 unit="MWh"
                 icon={Zap}
-                color="text-red-500"
-                bgColor="bg-red-50 dark:bg-red-900/20"
+                color="red"
                 formel="Σ Verbrauch über alle Sonstige-Verbraucher"
                 berechnung={`${fmtCalc(data.sonstiges_verbrauch_kwh, 0)} kWh`}
                 ergebnis={`= ${fmtCalc(data.sonstiges_verbrauch_kwh / 1000, 2)} MWh`}
@@ -412,8 +396,7 @@ export default function Dashboard() {
               value={(data.emob_km / 1000).toFixed(1)}
               unit="Tkm"
               icon={Car}
-              color="text-purple-500"
-              bgColor="bg-purple-50 dark:bg-purple-900/20"
+              color="purple"
               formel="Σ gefahrene Kilometer"
               berechnung={`${fmtCalc(data.emob_km, 0)} km`}
               ergebnis={`= ${fmtCalc(data.emob_km / 1000, 1)} Tkm`}
@@ -423,8 +406,7 @@ export default function Dashboard() {
               value={(data.emob_ladung_kwh / 1000).toFixed(2)}
               unit="MWh"
               icon={Zap}
-              color="text-blue-500"
-              bgColor="bg-blue-50 dark:bg-blue-900/20"
+              color="blue"
               formel="Σ Heim + Extern Ladung"
               berechnung={`${fmtCalc(data.emob_ladung_kwh, 0)} kWh`}
               ergebnis={`= ${fmtCalc(data.emob_ladung_kwh / 1000, 2)} MWh`}
@@ -434,8 +416,7 @@ export default function Dashboard() {
               value={data.emob_pv_anteil_prozent?.toFixed(0) || '—'}
               unit="%"
               icon={Sun}
-              color="text-yellow-500"
-              bgColor="bg-yellow-50 dark:bg-yellow-900/20"
+              color="yellow"
               formel="PV-Ladung ÷ Heimladung × 100"
               berechnung="PV-geladene kWh ÷ Gesamt-Ladung"
               ergebnis={`= ${fmtCalc(data.emob_pv_anteil_prozent || 0, 0)} %`}
@@ -445,8 +426,7 @@ export default function Dashboard() {
               value={data.emob_ersparnis_euro.toFixed(0)}
               unit="€"
               icon={Euro}
-              color="text-green-600"
-              bgColor="bg-green-50 dark:bg-green-900/20"
+              color="green"
               formel="Benzinkosten - Stromkosten"
               berechnung="Benzin (7L/100km × 1.80€) - Strom"
               ergebnis={`= ${fmtCalc(data.emob_ersparnis_euro, 0)} €`}
@@ -463,8 +443,7 @@ export default function Dashboard() {
             value={data.einspeise_erloes_euro.toFixed(0)}
             unit="€"
             icon={ArrowUpFromLine}
-            color="text-green-500"
-            bgColor="bg-green-50 dark:bg-green-900/20"
+            color="green"
             formel="Einspeisung × Vergütung"
             berechnung={`${fmtCalc(data.einspeisung_kwh, 0)} kWh × 8.2 ct/kWh`}
             ergebnis={`= ${fmtCalc(data.einspeise_erloes_euro, 0)} €`}
@@ -475,8 +454,7 @@ export default function Dashboard() {
               value={data.nicht_vergueteter_erloes_euro.toFixed(0)}
               unit="€"
               icon={TrendingDown}
-              color="text-amber-600"
-              bgColor="bg-amber-50 dark:bg-amber-900/20"
+              color="yellow"
               formel="Negativpreis-Einspeisung × Vergütung"
               berechnung={`${fmtCalc(data.einspeise_neg_preis_kwh, 0)} kWh × 8.2 ct/kWh`}
               ergebnis={`= ${fmtCalc(data.nicht_vergueteter_erloes_euro, 0)} € entgangen`}
@@ -487,8 +465,7 @@ export default function Dashboard() {
             value={data.ev_ersparnis_euro.toFixed(0)}
             unit="€"
             icon={Zap}
-            color="text-purple-500"
-            bgColor="bg-purple-50 dark:bg-purple-900/20"
+            color="purple"
             formel="Eigenverbrauch × Strompreis"
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh × Strompreis`}
             ergebnis={`= ${fmtCalc(data.ev_ersparnis_euro, 0)} €`}
@@ -499,8 +476,7 @@ export default function Dashboard() {
               value={data.netzbezug_kosten_euro.toFixed(0)}
               unit="€"
               icon={ArrowDownToLine}
-              color="text-red-500"
-              bgColor="bg-red-50 dark:bg-red-900/20"
+              color="red"
               formel="Σ (Netzbezug × Strompreis + Grundpreis)"
               berechnung={`${fmtCalc(data.netzbezug_kwh, 0)} kWh × Strompreis + Grundpreis`}
               ergebnis={`= ${fmtCalc(data.netzbezug_kosten_euro, 0)} €`}
@@ -512,8 +488,7 @@ export default function Dashboard() {
               value={`-${data.ust_eigenverbrauch_euro.toFixed(0)}`}
               unit="€"
               icon={Receipt}
-              color="text-orange-500"
-              bgColor="bg-orange-50 dark:bg-orange-900/20"
+              color="orange"
               formel="EV × Selbstkosten × USt-Satz"
               berechnung="Regelbesteuerung: USt auf unentgeltliche Wertabgabe"
               ergebnis={`= -${fmtCalc(data.ust_eigenverbrauch_euro, 0)} €`}
@@ -524,8 +499,7 @@ export default function Dashboard() {
             value={data.netto_ertrag_euro.toFixed(0)}
             unit="€"
             icon={TrendingUp}
-            color="text-blue-600"
-            bgColor="bg-blue-50 dark:bg-blue-900/20"
+            color="blue"
             formel={data.ust_eigenverbrauch_euro ? "Erlös + Ersparnis − USt" : "Erlös + Ersparnis"}
             berechnung={data.ust_eigenverbrauch_euro
               ? `${fmtCalc(data.einspeise_erloes_euro, 0)} + ${fmtCalc(data.ev_ersparnis_euro, 0)} − ${fmtCalc(data.ust_eigenverbrauch_euro, 0)} €`
@@ -538,8 +512,7 @@ export default function Dashboard() {
             unit="%"
             subtitle={`von ${data.investition_gesamt_euro.toFixed(0)} € Invest`}
             icon={Gauge}
-            color="text-emerald-600"
-            bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+            color="green"
             onClick={() => navigate('/auswertungen/roi')}
             sicht="Gesamt-Anlage · Jahres-ROI · IST-Werte · Vollkosten"
             formel="Jahres-Ertrag ÷ Investition × 100"
@@ -561,8 +534,7 @@ export default function Dashboard() {
             unit="t"
             subtitle="Vermiedene Emissionen"
             icon={Sun}
-            color="text-green-500"
-            bgColor="bg-green-50 dark:bg-green-900/20"
+            color="green"
             formel="Eigenverbrauch × CO₂-Faktor"
             berechnung={`${fmtCalc(data.eigenverbrauch_kwh, 0)} kWh × 0.38 kg/kWh`}
             ergebnis={`= ${fmtCalc(data.co2_pv_kg, 0)} kg`}
@@ -573,8 +545,7 @@ export default function Dashboard() {
             unit="t"
             subtitle="vs. Gas-Heizung"
             icon={Flame}
-            color="text-teal-500"
-            bgColor="bg-teal-50 dark:bg-teal-900/20"
+            color="cyan"
             formel="CO₂ Gas - CO₂ Strom"
             berechnung="Gasverbrauch × 0.201 - WP-Strom × 0.38"
             ergebnis={`= ${fmtCalc(data.co2_wp_kg, 0)} kg`}
@@ -585,8 +556,7 @@ export default function Dashboard() {
             unit="t"
             subtitle="vs. Verbrenner"
             icon={Car}
-            color="text-blue-500"
-            bgColor="bg-blue-50 dark:bg-blue-900/20"
+            color="blue"
             formel="CO₂ Benzin - CO₂ Strom"
             berechnung="Benzinverbrauch × 2.37 - Stromverbrauch × 0.38"
             ergebnis={`= ${fmtCalc(data.co2_emob_kg, 0)} kg`}
@@ -597,8 +567,7 @@ export default function Dashboard() {
             unit="t"
             subtitle="Gesamte Einsparung"
             icon={Leaf}
-            color="text-emerald-600"
-            bgColor="bg-emerald-50 dark:bg-emerald-900/20"
+            color="green"
             formel="Σ aller CO₂-Einsparungen"
             berechnung={`${fmtCalc(data.co2_pv_kg, 0)} + ${fmtCalc(data.co2_wp_kg, 0)} + ${fmtCalc(data.co2_emob_kg, 0)} kg`}
             ergebnis={`= ${fmtCalc(data.co2_gesamt_kg / 1000, 1)} t`}

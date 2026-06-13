@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { Card, CollapsibleSection } from '../../components/ui'
+import { Card, CollapsibleSection, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { EnergieprofilTageTabelleEmbedded } from '../../components/energieprofil/EnergieprofilTageTabelle'
 import {
@@ -260,44 +260,47 @@ export function EnergieprofilMonat({ anlageId }: Props) {
         <>
           {/* KPI-Strip: Haupt-Kennzahlen */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            <KpiCard label="PV-Erzeugung" value={fmt0(data.pv_kwh, 'kWh')} color="text-emerald-600 dark:text-emerald-400" />
-            <KpiCard label="Verbrauch" value={fmt0(data.verbrauch_kwh, 'kWh')} color="text-red-600 dark:text-red-400" />
-            <KpiCard label="Einspeisung" value={fmt0(data.einspeisung_kwh, 'kWh')} color="text-blue-600 dark:text-blue-400" />
-            <KpiCard label="Netzbezug" value={fmt0(data.netzbezug_kwh, 'kWh')} color="text-orange-600 dark:text-orange-400" />
-            <KpiCard label="Autarkie" value={data.autarkie_prozent != null ? `${data.autarkie_prozent.toFixed(0)} %` : '—'} />
-            <KpiCard label="Eigenverbrauch" value={data.eigenverbrauch_prozent != null ? `${data.eigenverbrauch_prozent.toFixed(0)} %` : '—'} />
-            <KpiCard label="PR Ø" value={data.performance_ratio_avg != null ? data.performance_ratio_avg.toFixed(2) : '—'} />
-            <KpiCard label="Batterie-Vollzyklen" value={data.batterie_vollzyklen_summe != null ? data.batterie_vollzyklen_summe.toFixed(1) : '—'} />
+            <KPICard size="sm" title="PV-Erzeugung" value={fmt0(data.pv_kwh, 'kWh')} color="green" />
+            <KPICard size="sm" title="Verbrauch" value={fmt0(data.verbrauch_kwh, 'kWh')} color="red" />
+            <KPICard size="sm" title="Einspeisung" value={fmt0(data.einspeisung_kwh, 'kWh')} color="blue" />
+            <KPICard size="sm" title="Netzbezug" value={fmt0(data.netzbezug_kwh, 'kWh')} color="orange" />
+            <KPICard size="sm" title="Autarkie" value={data.autarkie_prozent != null ? `${data.autarkie_prozent.toFixed(0)} %` : '—'} />
+            <KPICard size="sm" title="Eigenverbrauch" value={data.eigenverbrauch_prozent != null ? `${data.eigenverbrauch_prozent.toFixed(0)} %` : '—'} />
+            <KPICard size="sm" title="PR Ø" value={data.performance_ratio_avg != null ? data.performance_ratio_avg.toFixed(2) : '—'} />
+            <KPICard size="sm" title="Batterie-Vollzyklen" value={data.batterie_vollzyklen_summe != null ? data.batterie_vollzyklen_summe.toFixed(1) : '—'} />
           </div>
 
           {/* KPI-Strip: Erweiterte Analyse */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            <KpiCard label="Grundbedarf (Nacht)" value={data.grundbedarf_kw != null ? `${data.grundbedarf_kw.toFixed(2)} kW` : '—'} />
-            <KpiCard label="Direkt-Eigenverbrauch" value={fmt0(data.direkt_eigenverbrauch_kwh, 'kWh')} color="text-emerald-600 dark:text-emerald-400" />
-            <KpiCard label="Batterie geladen" value={fmt0(data.batterie_ladung_kwh, 'kWh')} color="text-blue-600 dark:text-blue-400" />
-            <KpiCard label="Batterie entladen" value={fmt0(data.batterie_entladung_kwh, 'kWh')} color="text-orange-600 dark:text-orange-400" />
-            <KpiCard label="Batterie-η" value={data.batterie_wirkungsgrad != null ? `${(data.batterie_wirkungsgrad * 100).toFixed(0)} %` : '—'} />
-            <KpiCard label="PV Best-Tag" value={fmt0(data.pv_tag_best_kwh, 'kWh')} />
-            <KpiCard label="PV Ø-Tag" value={fmt0(data.pv_tag_schnitt_kwh, 'kWh')} />
-            <KpiCard label="PV Schlecht-Tag" value={fmt0(data.pv_tag_schlecht_kwh, 'kWh')} />
+            <KPICard size="sm" title="Grundbedarf (Nacht)" value={data.grundbedarf_kw != null ? `${data.grundbedarf_kw.toFixed(2)} kW` : '—'} />
+            <KPICard size="sm" title="Direkt-Eigenverbrauch" value={fmt0(data.direkt_eigenverbrauch_kwh, 'kWh')} color="green" />
+            <KPICard size="sm" title="Batterie geladen" value={fmt0(data.batterie_ladung_kwh, 'kWh')} color="blue" />
+            <KPICard size="sm" title="Batterie entladen" value={fmt0(data.batterie_entladung_kwh, 'kWh')} color="orange" />
+            <KPICard size="sm" title="Batterie-η" value={data.batterie_wirkungsgrad != null ? `${(data.batterie_wirkungsgrad * 100).toFixed(0)} %` : '—'} />
+            <KPICard size="sm" title="PV Best-Tag" value={fmt0(data.pv_tag_best_kwh, 'kWh')} />
+            <KPICard size="sm" title="PV Ø-Tag" value={fmt0(data.pv_tag_schnitt_kwh, 'kWh')} />
+            <KPICard size="sm" title="PV Schlecht-Tag" value={fmt0(data.pv_tag_schlecht_kwh, 'kWh')} />
           </div>
 
           {/* Börsenpreis / Negativpreis (§51 EEG) — nur wenn Daten vorhanden */}
           {data.negative_preis_stunden != null && data.negative_preis_stunden > 0 && (
             <CollapsibleSection storageKey="monat-boersenpreis" title="Börsenpreis (§51 EEG)" defaultOpen>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <KpiCard
-                  label="Neg. Börsenpreis"
+                <KPICard
+                  size="sm"
+                  title="Neg. Börsenpreis"
                   value={`${data.negative_preis_stunden} h`}
-                  color="text-amber-600 dark:text-amber-400"
+                  color="yellow"
                 />
-                <KpiCard
-                  label="Einspeisung bei neg. Preis"
+                <KPICard
+                  size="sm"
+                  title="Einspeisung bei neg. Preis"
                   value={fmt1(data.einspeisung_neg_preis_kwh, 'kWh')}
-                  color="text-amber-600 dark:text-amber-400"
+                  color="yellow"
                 />
-                <KpiCard
-                  label="Börsenpreis Ø"
+                <KPICard
+                  size="sm"
+                  title="Börsenpreis Ø"
                   value={data.boersenpreis_avg_cent != null ? `${data.boersenpreis_avg_cent.toFixed(1)} ct` : '—'}
                 />
               </div>
@@ -416,15 +419,6 @@ export function EnergieprofilMonat({ anlageId }: Props) {
 }
 
 // ─── Subkomponenten ──────────────────────────────────────────────────────────
-
-function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
-      <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-0.5 truncate">{label}</div>
-      <div className={`text-sm font-semibold ${color ?? 'text-gray-900 dark:text-white'}`}>{value}</div>
-    </div>
-  )
-}
 
 interface HeatmapProps {
   tageImMonat: number

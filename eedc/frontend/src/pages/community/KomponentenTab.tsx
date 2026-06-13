@@ -349,21 +349,21 @@ function SpeicherDeepDive({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* KPI-Übersicht */}
         <div className="space-y-4">
-          <KPICard
+          <CommunityVergleichsKPI
             label="Zyklen/Jahr"
             icon={<BatteryCharging className="h-5 w-5 text-green-500" />}
             kpi={speicher.zyklen_jahr}
             einheit=""
             beschreibung="Vollständige Lade-/Entladezyklen"
           />
-          <KPICard
+          <CommunityVergleichsKPI
             label="Wirkungsgrad"
             icon={<Gauge className="h-5 w-5 text-blue-500" />}
             kpi={speicher.wirkungsgrad}
             einheit="%"
             beschreibung="Entladen / Geladen"
           />
-          <KPICard
+          <CommunityVergleichsKPI
             label="Netzlade-Anteil"
             icon={<Zap className="h-5 w-5 text-yellow-500" />}
             kpi={speicher.netz_anteil}
@@ -567,7 +567,7 @@ function WaermepumpeDeepDive({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KPICard
+        <CommunityVergleichsKPI
           label="Jahresarbeitszahl (JAZ)"
           icon={<Thermometer className="h-5 w-5 text-blue-500" />}
           kpi={wp.jaz}
@@ -575,14 +575,14 @@ function WaermepumpeDeepDive({
           beschreibung="Wärmeenergie / Stromverbrauch"
           large
         />
-        <KPICard
+        <CommunityVergleichsKPI
           label="Stromverbrauch"
           icon={<Zap className="h-5 w-5 text-yellow-500" />}
           kpi={wp.stromverbrauch}
           einheit="kWh"
           beschreibung="Gesamt im Zeitraum"
         />
-        <KPICard
+        <CommunityVergleichsKPI
           label="Wärmeerzeugung"
           icon={<Home className="h-5 w-5 text-red-500" />}
           kpi={wp.waermeerzeugung}
@@ -774,21 +774,21 @@ function EAutoDeepDive({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* KPIs */}
         <div className="space-y-4">
-          <KPICard
+          <CommunityVergleichsKPI
             label="PV-Ladeanteil"
             icon={<Sun className="h-5 w-5 text-yellow-500" />}
             kpi={eauto.pv_anteil}
             einheit="%"
             beschreibung="Anteil PV an Gesamtladung"
           />
-          <KPICard
+          <CommunityVergleichsKPI
             label="Ladung gesamt"
             icon={<BatteryCharging className="h-5 w-5 text-purple-500" />}
             kpi={eauto.ladung_gesamt}
             einheit="kWh"
             beschreibung="Gesamte Lademenge"
           />
-          <KPICard
+          <CommunityVergleichsKPI
             label="Verbrauch"
             icon={<Gauge className="h-5 w-5 text-blue-500" />}
             kpi={eauto.verbrauch_100km}
@@ -797,7 +797,7 @@ function EAutoDeepDive({
             invertColors
           />
           {eauto.km && (
-            <KPICard
+            <CommunityVergleichsKPI
               label="Gefahrene km"
               icon={<Route className="h-5 w-5 text-gray-500" />}
               kpi={eauto.km}
@@ -806,7 +806,7 @@ function EAutoDeepDive({
             />
           )}
           {eauto.v2h && eauto.v2h.wert > 0 && (
-            <KPICard
+            <CommunityVergleichsKPI
               label="V2H Entladung"
               icon={<Zap className="h-5 w-5 text-green-500" />}
               kpi={eauto.v2h}
@@ -971,7 +971,7 @@ function WallboxDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KPICard
+        <CommunityVergleichsKPI
           label="PV-Ladeanteil"
           icon={<Sun className="h-5 w-5 text-yellow-500" />}
           kpi={wallbox.pv_anteil}
@@ -979,14 +979,14 @@ function WallboxDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse 
           beschreibung="Anteil PV an Gesamtladung"
           large
         />
-        <KPICard
+        <CommunityVergleichsKPI
           label="Ladung gesamt"
           icon={<Zap className="h-5 w-5 text-cyan-500" />}
           kpi={wallbox.ladung}
           einheit="kWh"
           beschreibung="Im Zeitraum"
         />
-        <KPICard
+        <CommunityVergleichsKPI
           label="Ladevorgänge"
           icon={<BarChart3 className="h-5 w-5 text-gray-500" />}
           kpi={wallbox.ladevorgaenge}
@@ -1056,7 +1056,7 @@ function BKWDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KPICard
+        <CommunityVergleichsKPI
           label="Spezifischer Ertrag"
           icon={<TrendingUp className="h-5 w-5 text-amber-500" />}
           kpi={bkw.spez_ertrag}
@@ -1064,14 +1064,14 @@ function BKWDeepDive({ benchmark }: { benchmark: CommunityBenchmarkResponse }) {
           beschreibung="Normierter Ertrag"
           large
         />
-        <KPICard
+        <CommunityVergleichsKPI
           label="Erzeugung"
           icon={<Zap className="h-5 w-5 text-yellow-500" />}
           kpi={bkw.erzeugung}
           einheit="kWh"
           beschreibung="Im Zeitraum"
         />
-        <KPICard
+        <CommunityVergleichsKPI
           label="Eigenverbrauch"
           icon={<Home className="h-5 w-5 text-green-500" />}
           kpi={bkw.eigenverbrauch}
@@ -1117,7 +1117,13 @@ function RangBadge({ rang, von }: { rang: number; von: number }) {
   )
 }
 
-function KPICard({
+/**
+ * Dokumentierter Sonderfall der KPICard-SoT (Style-Guide B9): Community-Vergleichs-
+ * Kachel mit community_avg-Delta + invertColors-Logik. Bewusst NICHT die zentrale
+ * `components/ui/KPICard`, weil die Vergleichsmechanik (Abweichung %, Trend-Färbung)
+ * dort nicht hingehört. Farb-/Größenlogik bleibt an die SoT-Konventionen angelehnt.
+ */
+function CommunityVergleichsKPI({
   label,
   icon,
   kpi,

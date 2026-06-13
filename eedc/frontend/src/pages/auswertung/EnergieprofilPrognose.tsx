@@ -10,7 +10,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
-import { Card, Alert } from '../../components/ui'
+import { Card, Alert, KPICard } from '../../components/ui'
 import { COLORS, CHART_COLORS } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
@@ -131,48 +131,55 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
       {daten && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-            <KpiCard
-              icon={<Sun className="h-4 w-4 text-yellow-500" />}
-              label="PV-Prognose"
+            <KPICard
+              size="sm"
+              icon={Sun}
+              title="PV-Prognose"
               value={`${fmt1(daten.pv_summe_kwh)} kWh`}
-              color="text-yellow-600 dark:text-yellow-400"
+              color="yellow"
             />
-            <KpiCard
-              icon={<Zap className="h-4 w-4 text-gray-500" />}
-              label="Verbrauch"
+            <KPICard
+              size="sm"
+              icon={Zap}
+              title="Verbrauch"
               value={`${fmt1(daten.verbrauch_summe_kwh)} kWh`}
-              color="text-gray-600 dark:text-gray-300"
+              color="gray"
             />
-            <KpiCard
-              icon={<ArrowDown className="h-4 w-4 text-red-500" />}
-              label="Netzbezug"
+            <KPICard
+              size="sm"
+              icon={ArrowDown}
+              title="Netzbezug"
               value={`${fmt1(daten.netzbezug_summe_kwh)} kWh`}
-              color="text-red-600 dark:text-red-400"
+              color="red"
             />
-            <KpiCard
-              icon={<ArrowUp className="h-4 w-4 text-cyan-500" />}
-              label="Einspeisung"
+            <KPICard
+              size="sm"
+              icon={ArrowUp}
+              title="Einspeisung"
               value={`${fmt1(daten.einspeisung_summe_kwh)} kWh`}
-              color="text-cyan-600 dark:text-cyan-400"
+              color="cyan"
             />
-            <KpiCard
-              icon={<Sun className="h-4 w-4 text-green-500" />}
-              label="Eigenverbrauch"
+            <KPICard
+              size="sm"
+              icon={Sun}
+              title="Eigenverbrauch"
               value={`${fmt1(daten.eigenverbrauch_kwh)} kWh`}
-              color="text-green-600 dark:text-green-400"
+              color="green"
             />
-            <KpiCard
-              icon={<Zap className="h-4 w-4 text-primary-500" />}
-              label="Autarkie"
+            <KPICard
+              size="sm"
+              icon={Zap}
+              title="Autarkie"
               value={`${fmt0(daten.autarkie_prozent)} %`}
-              color="text-primary-600 dark:text-primary-400"
+              color="green"
             />
             {hatSpeicher && (
-              <KpiCard
-                icon={<Battery className="h-4 w-4 text-blue-500" />}
-                label="Speicher voll"
+              <KPICard
+                size="sm"
+                icon={Battery}
+                title="Speicher voll"
                 value={daten.speicher_voll_um ?? 'nicht erreicht'}
-                color="text-blue-600 dark:text-blue-400"
+                color="blue"
               />
             )}
           </div>
@@ -328,23 +335,6 @@ function PrognoseTooltip({ active, payload, label }: {
           </span>
         </div>
       ))}
-    </div>
-  )
-}
-
-
-// ── KPI-Card ─────────────────────────────────────────────────────────────────
-
-function KpiCard({ icon, label, value, color }: {
-  icon: React.ReactNode; label: string; value: string; color?: string
-}) {
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
-      <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-        {icon}
-        {label}
-      </div>
-      <div className={`text-sm font-semibold ${color ?? 'text-gray-900 dark:text-white'}`}>{value}</div>
     </div>
   )
 }

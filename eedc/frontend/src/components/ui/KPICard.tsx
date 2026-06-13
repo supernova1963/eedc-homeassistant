@@ -1,21 +1,38 @@
 /**
- * KPICard Komponente
- * Zeigt eine Kennzahl mit Icon, optional mit Tooltip für Berechnungsdetails
+ * KPICard — Single Source of Truth für Kennzahl-Kacheln (Style-Guide B9/B1, #258).
+ *
+ * EINZIGE KPICard-Definition der App. Drei Größen, ein Farb-Enum (`KomponentenColor`
+ * aus `lib/komponentenStyle` → `COLOR_CLASSES`, Werte aus `lib/colors.ts`):
+ *
+ *   md  (Default)  Standard-Kachel mit farbiger Icon-Box (Cockpit/Auswertung/Dashboards)
+ *   sm             Kompaktform ohne Icon-Box — Wert trägt die Farbe (Energieprofil-Streifen)
+ *   lg             Prominente Kachel (Hero/Featured)
+ *
+ * Konventionen (B1 #258): Einheit immer gedämpft hinter dem Wert, Icon-Position
+ * konsistent rechts (boxed) bzw. inline links vor dem Label (sm). Optionaler
+ * A6-FormelTooltip-Slot (`formel`/`berechnung`/`ergebnis`/`sicht`) — Optik aus dem
+ * P3-Tooltip-Kanon (`FormelTooltip`). Ausbau des Herleitungs-Vertrags ist E4.
+ *
+ * Dokumentierter Sonderfall: `pages/community/KomponentenTab` hält eine eigene
+ * Vergleichs-Kachel (community_avg-Delta) AUF dieser Farb-/Größen-Logik.
  */
 
 import Card from './Card'
 import FormelTooltip from './FormelTooltip'
 import { COLOR_CLASSES, type KomponentenColor } from '../../lib/komponentenStyle'
 
-interface KPICardProps {
+export interface KPICardProps {
   title: string
   value: string | number
   unit?: string
   subtitle?: string
-  icon: React.ElementType
+  icon?: React.ElementType
+  /** Datentyp-Farbe. In sm tönt sie den Wert; ohne Angabe bleibt der Wert neutral. In md/lg färbt sie die Icon-Box (Default blau). */
   color?: KomponentenColor
+  size?: 'sm' | 'md' | 'lg'
   trend?: 'up' | 'down'
-  // Tooltip für Berechnungsdetails
+  onClick?: () => void
+  // A6-Tooltip-Slot (Berechnungsdetails)
   formel?: string
   berechnung?: string
   ergebnis?: string
@@ -28,46 +45,104 @@ export function KPICard({
   unit,
   subtitle,
   icon: Icon,
-  color = 'blue',
+  color,
+  size = 'md',
   trend,
+  onClick,
   formel,
   berechnung,
   ergebnis,
   sicht,
 }: KPICardProps) {
-  const colors = COLOR_CLASSES[color]
+  const formattedValue = typeof value === 'number' ? value.toLocaleString('de-DE') : value
+
+  const trendMark =
+    trend === 'up' ? <span className="ml-1 text-green-500">↑</span>
+    : trend === 'down' ? <span className="ml-1 text-red-500">↓</span>
+    : null
+
+  // ── Kompaktform (sm): kein Icon-Kasten, der Wert trägt die Farbe ──────────────
+  if (size === 'sm') {
+    const valueColor = color ? COLOR_CLASSES[color].text : 'text-gray-900 dark:text-white'
+    const iconColor = color ? COLOR_CLASSES[color].text : 'text-gray-500 dark:text-gray-400'
+    const valueContent = (
+      <span className={`text-sm font-semibold ${valueColor} whitespace-nowrap`}>
+        {formattedValue}
+        {unit && <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">{unit}</span>}
+        {trendMark}
+      </span>
+    )
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+        <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+          {Icon && <Icon className={`h-3.5 w-3.5 ${iconColor} flex-shrink-0`} />}
+          <span className="truncate">{title}</span>
+        </div>
+        <div>
+          {formel ? (
+            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
+              {valueContent}
+            </FormelTooltip>
+          ) : (
+            valueContent
+          )}
+        </div>
+        {subtitle && (
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{subtitle}</p>
+        )}
+      </div>
+    )
+  }
+
+  // ── Standard-/Prominent-Kachel (md/lg) mit farbiger Icon-Box ──────────────────
+  const colors = COLOR_CLASSES[color ?? 'blue']
+  const dims = {
+    md: { value: 'text-xl sm:text-2xl', icon: 'h-5 w-5 sm:h-6 sm:w-6', box: 'p-2 sm:p-3' },
+    lg: { value: 'text-2xl sm:text-3xl', icon: 'h-6 w-6 sm:h-7 sm:w-7', box: 'p-3' },
+  }[size]
 
   const valueContent = (
-    <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
-      {typeof value === 'number' ? value.toLocaleString('de-DE') : value}
-      {unit && <span className="text-xs sm:text-sm font-normal ml-1">{unit}</span>}
-      {trend === 'up' && <span className="ml-2 text-green-500">↑</span>}
-      {trend === 'down' && <span className="ml-2 text-red-500">↓</span>}
+    <span className={`${dims.value} font-bold text-gray-900 dark:text-white whitespace-nowrap`}>
+      {formattedValue}
+      {unit && <span className="text-xs sm:text-sm font-normal text-gray-500 dark:text-gray-400 ml-1">{unit}</span>}
+      {trendMark}
     </span>
   )
 
-  return (
-    <Card>
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{title}</p>
-          <div className="mt-1">
-            {formel ? (
-              <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
-                {valueContent}
-              </FormelTooltip>
-            ) : (
-              valueContent
-            )}
-          </div>
-          {subtitle && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{subtitle}</p>
+  const inner = (
+    <div className="flex items-start justify-between">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{title}</p>
+        <div className="mt-1">
+          {formel ? (
+            <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
+              {valueContent}
+            </FormelTooltip>
+          ) : (
+            valueContent
           )}
         </div>
-        <div className={`p-2 sm:p-3 rounded-xl ${colors.bg} ml-2 sm:ml-3 flex-shrink-0`}>
-          <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${colors.text}`} />
-        </div>
+        {subtitle && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{subtitle}</p>
+        )}
       </div>
-    </Card>
+      {Icon && (
+        <div className={`${dims.box} rounded-xl ${colors.bg} ml-2 sm:ml-3 flex-shrink-0`}>
+          <Icon className={`${dims.icon} ${colors.text}`} />
+        </div>
+      )}
+    </div>
   )
+
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className="text-left w-full rounded-xl transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <Card>{inner}</Card>
+      </button>
+    )
+  }
+  return <Card>{inner}</Card>
 }

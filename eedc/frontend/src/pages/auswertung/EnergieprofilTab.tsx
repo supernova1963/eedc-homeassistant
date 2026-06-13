@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns, ChevronLeft, ChevronRight } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
-import { Card, Button } from '../../components/ui'
+import { Card, Button, KPICard } from '../../components/ui'
 import { exportToCSV } from '../../utils/export'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
 import { EnergieprofilMonat } from './EnergieprofilMonat'
@@ -228,13 +228,13 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
       {/* KPI-Zeile */}
       {kpis && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          <KpiCard label="Verfügbare Energie" value={`${fmt1(kpis.gesamterzKwh)} kWh`} color="text-yellow-600 dark:text-yellow-400" />
-          <KpiCard label="PV-Anteil"       value={`${fmt1(kpis.pvKwh)} kWh`}         color="text-amber-500 dark:text-amber-400" />
-          <KpiCard label="Gesamtverbrauch" value={`${fmt1(kpis.vKwh)} kWh`}          color="text-gray-600 dark:text-gray-300" />
-          <KpiCard label="Netzbezug"       value={`${fmt1(kpis.netzbezugKwh)} kWh`}  color="text-red-600 dark:text-red-400" />
-          <KpiCard label="Einspeisung"     value={`${fmt1(kpis.einspeisKwh)} kWh`}   color="text-blue-600 dark:text-blue-400" />
-          <KpiCard label="Autarkie"        value={kpis.autarkie != null ? `${fmt0(kpis.autarkie)} %` : '—'} color="text-primary-600 dark:text-primary-400" />
-          <KpiCard label="Temperatur"      value={kpis.tempMin != null ? `${fmt1(kpis.tempMin)} / ${fmt1(kpis.tempMax)} °C` : '—'} color="text-orange-600 dark:text-orange-400" />
+          <KPICard size="sm" title="Verfügbare Energie" value={`${fmt1(kpis.gesamterzKwh)} kWh`} color="yellow" />
+          <KPICard size="sm" title="PV-Anteil"       value={`${fmt1(kpis.pvKwh)} kWh`}         color="yellow" />
+          <KPICard size="sm" title="Gesamtverbrauch" value={`${fmt1(kpis.vKwh)} kWh`}          color="gray" />
+          <KPICard size="sm" title="Netzbezug"       value={`${fmt1(kpis.netzbezugKwh)} kWh`}  color="red" />
+          <KPICard size="sm" title="Einspeisung"     value={`${fmt1(kpis.einspeisKwh)} kWh`}   color="blue" />
+          <KPICard size="sm" title="Autarkie"        value={kpis.autarkie != null ? `${fmt0(kpis.autarkie)} %` : '—'} color="green" />
+          <KPICard size="sm" title="Temperatur"      value={kpis.tempMin != null ? `${fmt1(kpis.tempMin)} / ${fmt1(kpis.tempMax)} °C` : '—'} color="orange" />
         </div>
       )}
 
@@ -841,15 +841,6 @@ function WochenmusterTabelle({ daten }: { daten: WochenmusterPunkt[] }) {
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100
-}
-
-function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
-      <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{label}</div>
-      <div className={`text-sm font-semibold ${color ?? 'text-gray-900 dark:text-white'}`}>{value}</div>
-    </div>
-  )
 }
 
 // ─── Info-Panel ───────────────────────────────────────────────────────────────
