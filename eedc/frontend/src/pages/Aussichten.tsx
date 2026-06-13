@@ -1,20 +1,24 @@
 /**
- * Aussichten Hauptseite - Tab-Navigation für Prognosen
+ * Aussichten Hauptseite - Tab-Navigation für Prognosen (route-getrieben, B1/E1-P3)
  */
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Sun, TrendingUp, Calendar, ArrowRight, Euro, BarChart3 } from 'lucide-react'
-import { Card, Button, Alert, PillTabs } from '../components/ui'
-import type { PillTab } from '../components/ui'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Sun, ArrowRight } from 'lucide-react'
+import { Card, Button, Alert } from '../components/ui'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
 import { KurzfristTab, LangfristTab, TrendTab, FinanzenTab, PrognoseVergleichTab } from './aussichten/index'
 
 type TabType = 'kurzfristig' | 'prognosen' | 'langfristig' | 'trend' | 'finanzen'
 
+const AUSSICHTEN_TABS = ['kurzfristig', 'prognosen', 'langfristig', 'trend', 'finanzen'] as const
+
 export default function Aussichten() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabType>('kurzfristig')
+  // Aktiver Tab aus der URL (`/aussichten/<tab>`); Default = kurzfristig.
+  const { tab } = useParams()
+  const activeTab: TabType = (AUSSICHTEN_TABS as readonly string[]).includes(tab ?? '')
+    ? (tab as TabType)
+    : 'kurzfristig'
 
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
 
@@ -58,20 +62,13 @@ export default function Aussichten() {
     )
   }
 
-  const tabs: PillTab<TabType>[] = [
-    { key: 'kurzfristig', label: 'Kurzfristig', icon: Sun, tooltip: '7-14 Tage Wetterprognose mit PV-Ertragsprognose' },
-    { key: 'prognosen', label: 'Prognosen', icon: BarChart3, tooltip: 'PV-Prognosen vergleichen (OpenMeteo, eedc-kalibriert, Solcast)' },
-    { key: 'langfristig', label: 'Langfristig', icon: Calendar, tooltip: '12-Monats-Prognose basierend auf PVGIS-Daten' },
-    { key: 'trend', label: 'Trend', icon: TrendingUp, tooltip: 'Historische Trends und Degradationsanalyse' },
-    { key: 'finanzen', label: 'Finanzen', icon: Euro, tooltip: 'Finanzielle Prognosen und Amortisation' },
-  ]
-
   return (
     <div className="space-y-6">
-      {/* Sticky Header mit Filter */}
-      <div className="sticky -top-3 sm:-top-6 z-30 bg-gray-50 dark:bg-gray-900 pb-4 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-3 sm:pt-6">
-        {anlagen.length > 1 && (
-          <div className="flex items-center justify-end gap-2 mb-4 flex-wrap">
+      {/* Sticky Header mit Anlagen-Filter (nur bei >1 Anlage; Sub-Tab-Leiste
+          lebt in der Layout-SubTabs) */}
+      {anlagen.length > 1 && (
+        <div className="sticky -top-3 sm:-top-6 z-30 bg-gray-50 dark:bg-gray-900 pb-4 -mx-3 sm:-mx-6 px-3 sm:px-6 pt-3 sm:pt-6">
+          <div className="flex items-center justify-end gap-2 flex-wrap">
             <select
               value={selectedAnlageId ?? ''}
               onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
@@ -82,11 +79,8 @@ export default function Aussichten() {
               ))}
             </select>
           </div>
-        )}
-
-        {/* Tabs */}
-        <PillTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
-      </div>
+        </div>
+      )}
 
       {/* Tab-Inhalte */}
       {selectedAnlageId && (

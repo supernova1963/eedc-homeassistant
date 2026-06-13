@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import { LEGACY_REDIRECTS } from './routes/routeManifest'
 import { useTouchTitleTooltip } from './hooks/useTouchTitleTooltip'
 
 // LiveDashboard eager — ist die Startseite (/)
@@ -81,24 +82,24 @@ function App() {
             <Route path="cockpit/speicher" element={<SpeicherDashboard />} />
             <Route path="cockpit/wallbox" element={<WallboxDashboard />} />
             <Route path="cockpit/balkonkraftwerk" element={<BalkonkraftwerkDashboard />} />
-            <Route path="cockpit/aktueller-monat" element={<Navigate to="/cockpit/monatsberichte" replace />} />
             <Route path="cockpit/monatsberichte" element={<MonatsabschlussView />} />
             <Route path="cockpit/sonstiges" element={<SonstigesDashboard />} />
 
             {/* Live Dashboard */}
             <Route path="live" element={<LiveDashboard />} />
 
-            {/* Auswertungen */}
-            <Route path="auswertungen" element={<Auswertung />} />
+            {/* Auswertungen — Sub-Tabs route-getrieben (B1). Statische
+                Geschwister-Routen (roi/prognose/export) ranken über `:tab`. */}
+            <Route path="auswertungen/:tab" element={<Auswertung />} />
             <Route path="auswertungen/roi" element={<ROIDashboard />} />
             <Route path="auswertungen/prognose" element={<PrognoseVsIst />} />
             <Route path="auswertungen/export" element={<Auswertung />} /> {/* TODO: PDF Export */}
 
-            {/* Aussichten (Prognosen) */}
-            <Route path="aussichten" element={<Aussichten />} />
+            {/* Aussichten (Prognosen) — Sub-Tabs route-getrieben (B1) */}
+            <Route path="aussichten/:tab" element={<Aussichten />} />
 
-            {/* Community */}
-            <Route path="community" element={<Community />} />
+            {/* Community — Sub-Tabs route-getrieben (B1) */}
+            <Route path="community/:tab" element={<Community />} />
 
             {/* In-App-Hilfe (#130) */}
             <Route path="hilfe" element={<Hilfe />} />
@@ -112,7 +113,6 @@ function App() {
 
             {/* Einstellungen - Daten */}
             <Route path="einstellungen/monatsdaten" element={<Monatsdaten />} />
-            <Route path="einstellungen/monatsabschluss" element={<Navigate to="/einstellungen/monatsdaten" replace />} />
             <Route path="monatsabschluss/:anlageId" element={<MonatsabschlussWizard />} />
             <Route path="monatsabschluss/:anlageId/:jahr/:monat" element={<MonatsabschlussWizard />} />
             <Route path="einstellungen/energieprofil" element={<Energieprofil />} />
@@ -142,29 +142,12 @@ function App() {
                 rendert in Production null, Route bleibt aber bestehen). */}
             <Route path="dev/design-preview" element={<DesignPreview />} />
 
-            {/* Redirects für entfernte/umbenannte Seiten */}
-            <Route path="einstellungen/datenerfassung" element={<Navigate to="/einstellungen/monatsdaten" replace />} />
-            <Route path="einstellungen/demo" element={<Navigate to="/einstellungen/import" replace />} />
-            <Route path="einstellungen/ha-import" element={<Navigate to="/einstellungen/monatsdaten" replace />} />
-            <Route path="einstellungen/pvgis" element={<Navigate to="/einstellungen/solarprognose" replace />} />
-            <Route path="auswertungen/community" element={<Navigate to="/community" replace />} />
-
-            {/* Legacy redirects für alte URLs */}
-            <Route path="dashboard" element={<Navigate to="/cockpit" replace />} />
-            <Route path="anlagen" element={<Navigate to="/einstellungen/anlage" replace />} />
-            <Route path="monatsdaten" element={<Navigate to="/einstellungen/monatsdaten" replace />} />
-            <Route path="strompreise" element={<Navigate to="/einstellungen/strompreise" replace />} />
-            <Route path="investitionen" element={<Navigate to="/einstellungen/investitionen" replace />} />
-            <Route path="auswertung" element={<Navigate to="/auswertungen" replace />} />
-            <Route path="roi" element={<Navigate to="/auswertungen/roi" replace />} />
-            <Route path="e-auto" element={<Navigate to="/cockpit/e-auto" replace />} />
-            <Route path="waermepumpe" element={<Navigate to="/cockpit/waermepumpe" replace />} />
-            <Route path="speicher" element={<Navigate to="/cockpit/speicher" replace />} />
-            <Route path="wallbox" element={<Navigate to="/cockpit/wallbox" replace />} />
-            <Route path="balkonkraftwerk" element={<Navigate to="/cockpit/balkonkraftwerk" replace />} />
-            <Route path="sonstiges" element={<Navigate to="/cockpit/sonstiges" replace />} />
-            <Route path="import" element={<Navigate to="/einstellungen/import" replace />} />
-            <Route path="settings" element={<Navigate to="/einstellungen/allgemein" replace />} />
+            {/* Bestands-Redirects (entfernte/umbenannte Seiten + Legacy-URLs)
+                — Single Source: routes/routeManifest.ts, mitgeprüft vom
+                Redirect-Auto-Test (keine Ketten, keine 404). */}
+            {LEGACY_REDIRECTS.map((r) => (
+              <Route key={r.from} path={r.from} element={<Navigate to={r.to} replace />} />
+            ))}
           </Route>
         </Routes>
       </Suspense>

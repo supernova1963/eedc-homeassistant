@@ -10,21 +10,14 @@
  * - Statistiken: Community-weite Insights
  */
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   Users,
-  Trophy,
-  Sun,
-  Battery,
-  MapPin,
-  TrendingUp,
-  BarChart3,
   ExternalLink,
   AlertCircle,
   HelpCircle,
 } from 'lucide-react'
-import { Card, Alert, PillTabs } from '../components/ui'
-import type { PillTab } from '../components/ui'
+import { Card, Alert } from '../components/ui'
 import { communityApi, type CommunityBenchmarkResponse } from '../api/community'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { DataLoadingState } from '../components/common'
@@ -42,6 +35,10 @@ import {
 
 type TabType = 'uebersicht' | 'pv-ertrag' | 'komponenten' | 'regional' | 'trends' | 'statistiken'
 
+const COMMUNITY_TABS = ['uebersicht', 'pv-ertrag', 'komponenten', 'regional', 'trends', 'statistiken'] as const
+// Tabs mit Zeitraum-Filter (Trends/Statistiken zeigen community-weite Zeitreihen ohne Selektor).
+const ZEITRAUM_TABS = new Set<TabType>(['uebersicht', 'pv-ertrag', 'komponenten', 'regional'])
+
 // Zeitraum-Optionen mit Erklärungen
 const ZEITRAUM_OPTIONS: { value: ZeitraumTyp; label: string; tooltip: string }[] = [
   { value: 'letzter_monat', label: 'Letzter Monat', tooltip: 'Daten des letzten vollständigen Monats' },
@@ -52,7 +49,11 @@ const ZEITRAUM_OPTIONS: { value: ZeitraumTyp; label: string; tooltip: string }[]
 
 export default function Community() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabType>('uebersicht')
+  // Aktiver Tab aus der URL (`/community/<tab>`); Default = uebersicht.
+  const { tab } = useParams()
+  const activeTab: TabType = (COMMUNITY_TABS as readonly string[]).includes(tab ?? '')
+    ? (tab as TabType)
+    : 'uebersicht'
   const [zeitraum, setZeitraum] = useState<ZeitraumTyp>('letzte_12_monate')
 
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -155,17 +156,8 @@ export default function Community() {
     )
   }
 
-  const tabs: (PillTab<TabType> & { hatZeitraum: boolean })[] = [
-    { key: 'uebersicht', label: 'Übersicht', icon: Trophy, hatZeitraum: true },
-    { key: 'pv-ertrag', label: 'PV-Ertrag', icon: Sun, hatZeitraum: true },
-    { key: 'komponenten', label: 'Komponenten', icon: Battery, hatZeitraum: true },
-    { key: 'regional', label: 'Regional', icon: MapPin, hatZeitraum: true },
-    { key: 'trends', label: 'Trends', icon: TrendingUp, hatZeitraum: false },
-    { key: 'statistiken', label: 'Statistiken', icon: BarChart3, hatZeitraum: false },
-  ]
-
   // Prüfen ob aktueller Tab Zeitraum-Filter unterstützt
-  const zeigeZeitraumFilter = tabs.find(t => t.key === activeTab)?.hatZeitraum ?? false
+  const zeigeZeitraumFilter = ZEITRAUM_TABS.has(activeTab)
 
   return (
     <div className="space-y-6">
@@ -214,12 +206,9 @@ export default function Community() {
             </div>
           )}
         </div>
-
-        {/* Tabs */}
-        <PillTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
       </div>
 
-      {/* Tab-Inhalte */}
+      {/* Tab-Inhalte (Sub-Tab-Leiste lebt in der Layout-SubTabs) */}
       {anlageId && (
         <>
           {activeTab === 'uebersicht' && (

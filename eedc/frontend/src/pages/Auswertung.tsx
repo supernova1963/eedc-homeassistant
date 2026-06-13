@@ -1,13 +1,15 @@
-// Auswertung Hauptseite - Tab-Navigation
-import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+// Auswertung Hauptseite - Tab-Navigation (route-getrieben, B1/E1-P3)
+import { useState, useMemo } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Sun, ArrowRight, FileText } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Alert, PillTabs } from '../components/ui'
-import type { PillTab } from '../components/ui'
+import { Card, Button, LoadingSpinner, Alert } from '../components/ui'
 import { useSelectedAnlage, useAggregierteDaten, useAggregierteStats, useAktuellerStrompreis, useStrompreise } from '../hooks'
 import { EnergieTab, KomponentenTab, FinanzenTab, CO2Tab, InvestitionenTab, PVAnlageTab, TabelleTab, EnergieprofilTab } from './auswertung/index'
 
 type TabType = 'energie' | 'pv' | 'komponenten' | 'finanzen' | 'co2' | 'investitionen' | 'tabelle' | 'energieprofil'
+
+// Reihenfolge = Sub-Tab-Reihenfolge in der Layout-SubTabs (components/layout/SubTabs).
+const AUSWERTUNG_TABS = ['energie', 'pv', 'komponenten', 'finanzen', 'co2', 'investitionen', 'tabelle', 'energieprofil'] as const
 
 // Zeitraum-Label für Anzeige erstellen
 function getZeitraumLabel(selectedYear: number | 'all', verfuegbareJahre: number[]): string {
@@ -23,16 +25,14 @@ function getZeitraumLabel(selectedYear: number | 'all', verfuegbareJahre: number
 
 export default function Auswertung() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabType>('energie')
+  // Aktiver Tab kommt aus der URL (`/auswertungen/<tab>`); Default = energie.
+  // Der Tab-Wechsel selbst (Layout-SubTabs) scrollt main bereits an den Anfang
+  // (Layout-Effekt auf location.pathname, #154 detLAN-Pattern).
+  const { tab } = useParams()
+  const activeTab: TabType = (AUSWERTUNG_TABS as readonly string[]).includes(tab ?? '')
+    ? (tab as TabType)
+    : 'energie'
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all')
-
-  // Tab-Wechsel: hart auf Seitenanfang scrollen (#154 detLAN — Cockpit-Pattern).
-  // useEffect läuft NACH dem Re-Render des neuen Tabs, daher robust auch bei
-  // Tabs mit langem Inhalt; behavior:'auto' ohne Smooth-Animation, damit das
-  // Auge die neue Seite immer von oben aufnimmt.
-  useEffect(() => {
-    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'auto' })
-  }, [activeTab])
 
   const { anlagen, selectedAnlageId, setSelectedAnlageId, selectedAnlage: anlage, loading: anlagenLoading } = useSelectedAnlage()
 
@@ -93,17 +93,6 @@ export default function Auswertung() {
     )
   }
 
-  const tabs: PillTab<TabType>[] = [
-    { key: 'energie', label: 'Energie' },
-    { key: 'pv', label: 'PV-Anlage' },
-    { key: 'komponenten', label: 'Komponenten' },
-    { key: 'finanzen', label: 'Finanzen' },
-    { key: 'co2', label: 'CO2' },
-    { key: 'investitionen', label: 'Investitionen' },
-    { key: 'tabelle', label: 'Tabelle' },
-    { key: 'energieprofil', label: 'Energieprofil', beta: true },
-  ]
-
   // Zeitraum-Label berechnen
   const zeitraumLabel = getZeitraumLabel(selectedYear, verfuegbareJahre)
 
@@ -151,12 +140,9 @@ export default function Auswertung() {
             )}
           </div>
         </div>
-
-        {/* Tabs */}
-        <PillTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} />
       </div>
 
-      {/* Tab Content */}
+      {/* Tab Content (Sub-Tab-Leiste lebt in der Layout-SubTabs) */}
       <div>
         {activeTab === 'energie' && (
           <EnergieTab data={filteredData} stats={filteredStats} anlage={anlage} strompreis={strompreis} alleTarife={alleTarife} zeitraumLabel={zeitraumLabel} />

@@ -11,6 +11,7 @@ import { useHAAvailable } from '../../hooks/useHAAvailable'
 import { useSelectedAnlage, useInvestitionen } from '../../hooks'
 import { compareTyp } from '../../lib'
 import type { InvestitionTyp } from '../../types'
+import { SimpleTooltip } from '../ui/FormelTooltip'
 import {
   LayoutDashboard,
   Car,
@@ -27,6 +28,7 @@ import {
   Cpu,
   Radio,
   BarChart2,
+  BarChart3,
   Share2,
   MapPin,
   HardDrive,
@@ -34,6 +36,12 @@ import {
   ScrollText,
   FileText,
   Activity,
+  Euro,
+  Leaf,
+  Table2,
+  Calendar,
+  Trophy,
+  TrendingUp,
 } from 'lucide-react'
 
 interface TabItem {
@@ -41,6 +49,10 @@ interface TabItem {
   href: string
   icon: LucideIcon
   exact?: boolean
+  /** Beta-Badge hinter dem Label (von PillTabs übernommen, B1). */
+  beta?: boolean
+  /** Tooltip-Text auf dem Tab (von PillTabs übernommen, B1). */
+  tooltip?: string
 }
 
 interface TabGroup {
@@ -73,6 +85,39 @@ const cockpitInvestitionTabs: (TabItem & { typen: InvestitionTyp[] })[] = [
 ]
 // Kanon erzwingen (statt Literal-Reihenfolge), damit die Tab-Folge nicht driftet.
 cockpitInvestitionTabs.sort((a, b) => compareTyp({ typ: a.typen[0] }, { typ: b.typen[0] }))
+
+// ─── Auswertungen / Aussichten / Community ───────────────────────────────────
+// B1 (E1-P3): Diese drei Seiten waren state-getrieben (PillTabs). Jetzt route-
+// getrieben über echte URLs `/auswertungen/<tab>` etc. — die Tab-Leiste lebt
+// hier in der Layout-SubTabs (eine Sub-Nav-Mechanik), die Seite rendert nur den
+// Inhalt zum URL-Tab. Bestand 1:1 gehoben (gleiche Tabs/Reihenfolge/Beta/Tooltip).
+const auswertungenTabs: TabItem[] = [
+  { name: 'Energie',       href: '/auswertungen/energie',       icon: Zap },
+  { name: 'PV-Anlage',     href: '/auswertungen/pv',            icon: Sun },
+  { name: 'Komponenten',   href: '/auswertungen/komponenten',   icon: Cpu },
+  { name: 'Finanzen',      href: '/auswertungen/finanzen',      icon: Euro },
+  { name: 'CO2',           href: '/auswertungen/co2',           icon: Leaf },
+  { name: 'Investitionen', href: '/auswertungen/investitionen', icon: PiggyBank },
+  { name: 'Tabelle',       href: '/auswertungen/tabelle',       icon: Table2 },
+  { name: 'Energieprofil', href: '/auswertungen/energieprofil', icon: Activity, beta: true },
+]
+
+const aussichtenTabs: TabItem[] = [
+  { name: 'Kurzfristig', href: '/aussichten/kurzfristig', icon: Sun,        tooltip: '7-14 Tage Wetterprognose mit PV-Ertragsprognose' },
+  { name: 'Prognosen',   href: '/aussichten/prognosen',   icon: BarChart3,  tooltip: 'PV-Prognosen vergleichen (OpenMeteo, eedc-kalibriert, Solcast)' },
+  { name: 'Langfristig', href: '/aussichten/langfristig', icon: Calendar,   tooltip: '12-Monats-Prognose basierend auf PVGIS-Daten' },
+  { name: 'Trend',       href: '/aussichten/trend',       icon: TrendingUp, tooltip: 'Historische Trends und Degradationsanalyse' },
+  { name: 'Finanzen',    href: '/aussichten/finanzen',    icon: Euro,       tooltip: 'Finanzielle Prognosen und Amortisation' },
+]
+
+const communityTabs: TabItem[] = [
+  { name: 'Übersicht',   href: '/community/uebersicht',   icon: Trophy },
+  { name: 'PV-Ertrag',   href: '/community/pv-ertrag',    icon: Sun },
+  { name: 'Komponenten', href: '/community/komponenten',  icon: Battery },
+  { name: 'Regional',    href: '/community/regional',     icon: MapPin },
+  { name: 'Trends',      href: '/community/trends',       icon: TrendingUp },
+  { name: 'Statistiken', href: '/community/statistiken',  icon: BarChart3 },
+]
 
 // ─── Einstellungen-Gruppen ────────────────────────────────────────────────────
 const einstellungenGruppen: TabGroup[] = [
@@ -164,6 +209,17 @@ export default function SubTabs() {
     return <CockpitTabBar />
   }
 
+  // ── Auswertungen / Aussichten / Community (B1, route-getrieben) ──────────
+  if (path.startsWith('/auswertungen')) {
+    return <TabBar tabs={auswertungenTabs} ariaLabel="Auswertungen-Tabs" />
+  }
+  if (path.startsWith('/aussichten')) {
+    return <TabBar tabs={aussichtenTabs} ariaLabel="Aussichten-Tabs" />
+  }
+  if (path.startsWith('/community')) {
+    return <TabBar tabs={communityTabs} ariaLabel="Community-Tabs" />
+  }
+
   // ── Einstellungen – gruppen-aware ────────────────────────────────────────
   if (path.startsWith('/einstellungen')) {
     // HA-Gruppe nur anzeigen wenn HA verfügbar
@@ -199,7 +255,7 @@ function CockpitTabBar() {
 }
 
 // ─── Wiederverwendbare Tab-Leiste ─────────────────────────────────────────────
-function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) {
+function TabBar({ tabs, groupLabel, ariaLabel }: { tabs: TabItem[]; groupLabel?: string; ariaLabel?: string }) {
   const navRef = useRef<HTMLElement>(null)
   const location = useLocation()
 
@@ -217,7 +273,7 @@ function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <div className="px-4 sm:px-6">
-        <nav ref={navRef} aria-label={groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs'} className="flex items-center gap-1 py-2 overflow-x-auto snap-x snap-proximity scrollbar-none">
+        <nav ref={navRef} aria-label={ariaLabel ?? (groupLabel ? `${groupLabel}-Tabs` : 'Cockpit-Tabs')} className="flex items-center gap-1 py-2 overflow-x-auto snap-x snap-proximity scrollbar-none">
           {groupLabel && (
             <>
               <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide whitespace-nowrap pr-2">
@@ -226,23 +282,37 @@ function TabBar({ tabs, groupLabel }: { tabs: TabItem[]; groupLabel?: string }) 
               <span className="h-4 w-px bg-gray-300 dark:bg-gray-600 mr-2 shrink-0" />
             </>
           )}
-          {tabs.map((tab) => (
-            <NavLink
-              key={tab.href}
-              to={tab.href}
-              end={tab.exact}
-              className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors snap-start ${
-                  isActive
-                    ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
-                    : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
-                }`
-              }
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.name}
-            </NavLink>
-          ))}
+          {tabs.map((tab) => {
+            const link = (
+              <NavLink
+                key={tab.href}
+                to={tab.href}
+                end={tab.exact}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors snap-start ${
+                    isActive
+                      ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
+                      : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  }`
+                }
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.name}
+                {tab.beta && (
+                  <span className="rounded px-1 py-0.5 text-[10px] font-semibold leading-none bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                    Beta
+                  </span>
+                )}
+              </NavLink>
+            )
+            return tab.tooltip ? (
+              <SimpleTooltip key={tab.href} text={tab.tooltip}>
+                {link}
+              </SimpleTooltip>
+            ) : (
+              link
+            )
+          })}
         </nav>
       </div>
     </div>
