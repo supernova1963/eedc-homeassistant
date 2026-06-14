@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.core.berechnungen import autarkie_prozent
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER,
 )
@@ -163,7 +164,7 @@ async def get_nachhaltigkeit(
         co2_monat = co2_pv + co2_wp + co2_emob
         co2_kumuliert += co2_monat
 
-        autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
+        autarkie = autarkie_prozent(eigenverbrauch, gesamtverbrauch)
         autarkie_summe += autarkie
         autarkie_count += 1
 

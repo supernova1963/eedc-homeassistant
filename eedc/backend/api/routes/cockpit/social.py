@@ -15,6 +15,11 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.core.berechnungen import (
+    autarkie_prozent,
+    eigenverbrauchsquote_prozent,
+    spezifischer_ertrag_kwh_kwp,
+)
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER,
 )
@@ -172,9 +177,9 @@ async def get_share_text(
     direktverbrauch = max(0, pv_erzeugung - einspeisung - speicher_ladung) if pv_erzeugung > 0 else 0
     eigenverbrauch = direktverbrauch + speicher_entladung
     gesamtverbrauch = eigenverbrauch + netzbezug
-    autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
-    ev_quote = min(eigenverbrauch / pv_erzeugung * 100, 100) if pv_erzeugung > 0 else 0
-    spez_ertrag = pv_erzeugung / kwp if kwp > 0 else 0
+    autarkie = autarkie_prozent(eigenverbrauch, gesamtverbrauch)
+    ev_quote = eigenverbrauchsquote_prozent(eigenverbrauch, pv_erzeugung)
+    spez_ertrag = spezifischer_ertrag_kwh_kwp(pv_erzeugung, kwp) or 0
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     speicher_eff = (speicher_entladung / speicher_ladung * 100) if speicher_ladung > 0 else 0

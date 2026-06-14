@@ -64,10 +64,12 @@ from backend.core.calculations import (
 from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.berechnungen import (
     eauto_effizienz_100km,
+    eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
     speicher_effizienz_prozent,
+    spezifischer_ertrag_kwh_kwp,
     summe_graue_last,
 )
 from backend.api.routes.investitionen.crud import InvestitionResponse
@@ -1181,7 +1183,7 @@ async def get_balkonkraftwerk_dashboard(
             gesamt_einspeisung = max(0, gesamt_erzeugung - gesamt_eigenverbrauch)
 
         # Eigenverbrauchsquote
-        eigenverbrauch_quote = min(gesamt_eigenverbrauch / gesamt_erzeugung * 100, 100) if gesamt_erzeugung > 0 else 0
+        eigenverbrauch_quote = eigenverbrauchsquote_prozent(gesamt_eigenverbrauch, gesamt_erzeugung)
 
         # Speicher-Effizienz
         speicher_effizienz = (gesamt_speicher_entladung / gesamt_speicher_ladung * 100) if gesamt_speicher_ladung > 0 else 0
@@ -1197,7 +1199,9 @@ async def get_balkonkraftwerk_dashboard(
         co2_ersparnis = gesamt_eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
 
         # Spezifischer Ertrag (kWh pro kWp)
-        spezifischer_ertrag = (gesamt_erzeugung / (gesamt_leistung_wp / 1000)) if gesamt_leistung_wp > 0 else 0
+        spezifischer_ertrag = spezifischer_ertrag_kwh_kwp(
+            gesamt_erzeugung, gesamt_leistung_wp / 1000 if gesamt_leistung_wp > 0 else 0
+        ) or 0
 
         zusammenfassung = {
             'gesamt_erzeugung_kwh': round(gesamt_erzeugung, 1),
@@ -1307,7 +1311,7 @@ async def get_sonstiges_dashboard(
 
         # Berechnungen je nach Kategorie
         if kategorie == 'erzeuger':
-            eigenverbrauch_quote = min(gesamt_eigenverbrauch / gesamt_erzeugung * 100, 100) if gesamt_erzeugung > 0 else 0
+            eigenverbrauch_quote = eigenverbrauchsquote_prozent(gesamt_eigenverbrauch, gesamt_erzeugung)
             ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
             # §51-Erlös über SoT (ADR-001, M3); neg_preis_kwh = None auf
             # Monatsdaten-Aggregat-Ebene → volle Einspeisung (verhaltensneutral).

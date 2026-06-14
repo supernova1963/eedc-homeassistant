@@ -26,8 +26,10 @@ from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
+    autarkie_prozent,
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
+    eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
     imd_typ_beitrag,
     merge_datenquellen,
@@ -1011,10 +1013,10 @@ async def get_aktueller_monat(
         if netzbezug is not None:
             gesamtverbrauch = round(eigenverbrauch + netzbezug, 2)
             if gesamtverbrauch > 0:
-                autarkie = round(eigenverbrauch / gesamtverbrauch * 100, 1)
+                autarkie = round(autarkie_prozent(eigenverbrauch, gesamtverbrauch), 1)
 
         if pv > 0:
-            ev_quote = round(min(eigenverbrauch / pv * 100, 100), 1)
+            ev_quote = round(eigenverbrauchsquote_prozent(eigenverbrauch, pv), 1)
 
     # ── Finanzen ──
     einspeise_erloes = None
