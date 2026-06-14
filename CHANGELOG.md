@@ -9,6 +9,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.2] - 2026-06-14 — Hotfix: API-Start (fastapi-0.137.0-Regression)
+
+### Fixed
+
+- **Add-on registrierte nach v3.45.1 nur einen Bruchteil der API-Routen** (~42 statt ~226) — große Teile der App waren nicht erreichbar. Ursache: **fastapi 0.137.0** (frisch erschienen, über das ungedeckelte `fastapi>=0.109.0` gezogen) hat eine Regression in `include_router(prefix=…)` — unter **Python 3.11** (HA-Add-on-Laufzeit `python:3.11-slim`) werden die Sub-Routen nicht übernommen. fastapi ist jetzt auf `<0.137` gedeckelt (0.136.x ist sauber). **Reiner Dependency-Pin, kein Code geändert.** Verifiziert: voller App-Boot auf 3.11 → 226 Routen.
+
 ## [3.45.1] - 2026-06-14 — Berechnungs-Kern konsolidiert: weniger Drift, korrektere Detail-Werte
 
 ### Fixed

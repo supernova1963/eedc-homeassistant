@@ -1,7 +1,11 @@
 # EEDC Backend Dependencies
 
 # Web Framework
-fastapi>=0.109.0
+# fastapi <0.137: 0.137.0 hat eine include_router(prefix=...)-Regression — bei
+# Python 3.11 (HA-Add-on python:3.11-slim) werden 0 Routen statt aller Sub-Routen
+# registriert (Add-on bootet mit ~42 statt ~226 Routen). 0.136.x ist sauber.
+# Vor Anheben: vollständigen App-Boot auf 3.11 prüfen (len(app.routes) >= 217).
+fastapi>=0.109.0,<0.137
 uvicorn[standard]>=0.27.0
 
 # Database
