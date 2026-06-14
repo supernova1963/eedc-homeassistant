@@ -9,6 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.1] - 2026-06-14 — Berechnungs-Kern konsolidiert: weniger Drift, korrektere Detail-Werte
+
+### Fixed
+
+- **E-Auto ohne Kilometer-Daten ließ die Finanz-Prognose (Aussichten) abstürzen** (500-Fehler durch fehlenden Schlüssel) — behoben, fehlende km-Basis wird sauber abgefangen.
+- **Eigenverbrauchsquote konnte über 100 % anzeigen.** In der Aussichten-Prognose und im PDF-Jahresbericht konnte die Quote bei Quellen-Drift (Eigenverbrauch > Erzeugung) rechnerisch über 100 % springen — jetzt app-weit auf 100 % begrenzt (zentraler Helper).
+- **Monats-Aggregat (`/aggregiert`) an die übrigen Auswertungen angeglichen:** Wärmepumpen-Heizenergie aus Alt-/Importdaten (Legacy-Feld `heizung_kwh`) wurde teils ignoriert, und dienstliche E-Autos/Wallboxen wurden mitgezählt (fehlender `ist_dienstlich`-Filter). Beides korrigiert. Cockpit-Übersicht: Sonstiges-Aggregat ist jetzt kategorie-bewusst.
+
+### Changed
+
+- **Speicher-Cockpit lädt schneller (#333):** gezielte Spalten-Projektion beim Laden der Speicher-Wirtschaftlichkeit.
+- **Intern — großes verhaltensneutrales Refactoring des Berechnungs-Kerns (Berechnungs-Layer, ADR-001):** Die monatliche per-Komponenten-Aggregation, die Netzbezugskosten, die Kennzahlen (Autarkie/Eigenverbrauchsquote/spezifischer Ertrag) und die Speicher-Wirtschaftlichkeit (reine Berechnung vs. DB getrennt) laufen jetzt über einen zentralen Single-Source-of-Truth-Layer statt über verstreute Inline-Kopien. Verhindert künftige Drift zwischen Cockpit, Auswertungen, Monatsbericht, HA-Export und PDF. Keine Funktionsänderung an diesen Stellen; abgesichert durch ~1165 Tests, Char-Netze, Symmetrie- und Konformitäts-Wächter.
+
 ## [3.45.0] - 2026-06-13 — Design-Fundament: einheitliche Farben, Tooltips, KPI-Karten & verlinkbare Reiter
 
 ### Changed
