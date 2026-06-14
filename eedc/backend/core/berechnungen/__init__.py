@@ -31,6 +31,10 @@ Geplant (step-by-step, wenn Konsumenten angefasst werden):
 - `kennzahlen` — Eigenverbrauch, Autarkie, spez. Tagesertrag (Migration aus calculations.py)
 """
 
+from backend.core.berechnungen.alternativkosten import (
+    berechne_bkw_alternativkosten_ersparnis,
+    berechne_wp_alternativkosten_ersparnis,
+)
 from backend.core.berechnungen.co2_amortisation import (
     QUELLE_DEFAULT,
     QUELLE_FEHLT,
@@ -143,6 +147,8 @@ from backend.core.berechnungen.verbrauch import (
 )
 
 __all__ = [
+    "berechne_bkw_alternativkosten_ersparnis",
+    "berechne_wp_alternativkosten_ersparnis",
     "QUELLE_OVERRIDE",
     "QUELLE_DEFAULT",
     "QUELLE_FEHLT",

@@ -19,7 +19,9 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
+    berechne_bkw_alternativkosten_ersparnis,
     berechne_finanz_aggregat,
+    berechne_wp_alternativkosten_ersparnis,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
     monatsgewichte_aus_pvgis,
@@ -506,59 +508,18 @@ async def calculate_anlage_sensors(
         strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
     )
 
-    # Per-WP-Parameter (statt last-write-wins über waermepumpen).
-    # Bug #7 v3.25.0: Default vereinheitlicht aus PARAM_WAERMEPUMPE_DEFAULTS (vorher 10.0).
-    # Multi-WP-Drift: bei zwei WPs mit unterschiedlichen Energieträgern (Gas + Öl)
-    # wurde der Wirkungsgrad der letzten auf beide angewendet — die HA-Sensoren
-    # `jahres_ersparnis_euro`, `roi_prozent`, `amortisation_jahre` waren falsch.
-    wp_aggregate_anl: dict[int, dict] = {}
-    for wp in waermepumpen:
-        params = wp.parameter or {}
-        wp_aggregate_anl[wp.id] = {
-            "alter_preis_cent": (
-                params.get(
-                    PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"],
-                    PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
-                ) or PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
-            ),
-            "alter_wirkungsgrad": (
-                WP_WIRKUNGSGRAD_OEL_DEFAULT
-                if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel"
-                else WP_WIRKUNGSGRAD_GAS_DEFAULT
-            ),
-            "zusatzkosten_jahr": params.get(
-                PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0,
-            ) or 0,
-        }
-    wp_alternativ_zusatzkosten_jahr = sum(
-        a["zusatzkosten_jahr"] for a in wp_aggregate_anl.values()
-    )
-
-    # Monatsdaten-Dict für Monats-Gaspreis
+    # Monatsdaten-Dict für Monats-Gaspreis / -Benzinpreis
     md_by_periode = {(md.jahr, md.monat): md for md in monatsdaten}
 
-    bisherige_wp_ersparnis = 0.0
-    wp_monate_gezaehlt: set[tuple[int, int]] = set()
-    for wp in waermepumpen:
-        wp_agg = wp_aggregate_anl[wp.id]
-        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == wp.id:
-                thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
-                    daten.get("warmwasser_kwh", 0) or 0
-                )
-                strom = get_wp_strom_kwh(daten, wp.parameter)
-                md = md_by_periode.get((jahr, monat))
-                monats_gaspreis = (
-                    md.gaspreis_cent_kwh
-                    if md and md.gaspreis_cent_kwh is not None
-                    else wp_agg["alter_preis_cent"]
-                )
-                gas_kosten = (thermisch / wp_agg["alter_wirkungsgrad"]) * monats_gaspreis / 100
-                wp_stromkosten_netz = strom * (1.0 - WP_PV_ANTEIL_DEFAULT) * netzbezug_preis_cent / 100
-                bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
-                wp_monate_gezaehlt.add((jahr, monat))
-    # Fixe Zusatzkosten (Schornsteinfeger, Wartung, Grundpreis) pro erfassten Monat
-    bisherige_wp_ersparnis += wp_alternativ_zusatzkosten_jahr * len(wp_monate_gezaehlt) / 12
+    # WP-Alternativkosten (vs. Gas/Öl) über den Berechnungs-Layer (ADR-001):
+    # per-WP-Parameter (kein last-write-wins über waermepumpen), per-Monat-
+    # Gaspreis aus Monatsdaten mit Fallback auf den WP-Parameter-Default.
+    bisherige_wp_ersparnis = berechne_wp_alternativkosten_ersparnis(
+        waermepumpen,
+        historische_inv_daten,
+        {k: md.gaspreis_cent_kwh for k, md in md_by_periode.items()},
+        netzbezug_preis_cent,
+    )
 
     # Per-E-Auto-Aufschlüsselung der bisherige-Ersparnis. Vorher las eine
     # `for ea`-Schleife `benzinpreis_default` + `vergleich_l_100km` in zwei
@@ -600,12 +561,10 @@ async def calculate_anlage_sensors(
                 benzin_liter * monats_benzinpreis - netz * netzbezug_preis_cent / 100
             )
 
-    bisherige_bkw_ersparnis = 0.0
-    for bkw in balkonkraftwerke:
-        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
-            if inv_id == bkw.id:
-                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
-                bisherige_bkw_ersparnis += bkw_ev * netzbezug_preis_cent / 100
+    # BKW-Alternativkosten: Eigenverbrauch zum Netzbezugspreis (Berechnungs-Layer).
+    bisherige_bkw_ersparnis = berechne_bkw_alternativkosten_ersparnis(
+        balkonkraftwerke, historische_inv_daten, netzbezug_preis_cent,
+    )
 
     historischer_netto_ertrag = (
         netto_ertrag
