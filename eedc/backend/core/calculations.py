@@ -7,7 +7,13 @@ Alle Formeln für Kennzahlen, Einsparungen und Auswertungen.
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.core.berechnungen import berechne_netzbezug_kosten, einspeise_erloes_euro
+from backend.core.berechnungen import (
+    autarkie_prozent,
+    berechne_netzbezug_kosten,
+    eigenverbrauchsquote_prozent,
+    einspeise_erloes_euro,
+    spezifischer_ertrag_kwh_kwp,
+)
 
 
 # =============================================================================
@@ -146,12 +152,12 @@ def berechne_monatskennzahlen(
     eigenverbrauch = direktverbrauch + batterie_entladung_kwh + v2h_entladung_kwh
     gesamtverbrauch = eigenverbrauch + netzbezug_kwh
 
-    # Quoten berechnen
-    ev_quote = min(eigenverbrauch / pv_erzeugung_kwh * 100, 100) if pv_erzeugung_kwh > 0 else 0
-    autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0
+    # Quoten berechnen (SoT-Primitive, ADR-001)
+    ev_quote = eigenverbrauchsquote_prozent(eigenverbrauch, pv_erzeugung_kwh)
+    autarkie = autarkie_prozent(eigenverbrauch, gesamtverbrauch)
 
     # Spezifischer Ertrag (kWh pro kWp)
-    spez_ertrag = (pv_erzeugung_kwh / leistung_kwp) if leistung_kwp and leistung_kwp > 0 else None
+    spez_ertrag = spezifischer_ertrag_kwh_kwp(pv_erzeugung_kwh, leistung_kwp)
 
     # Finanzielle Berechnungen (Cent -> Euro). §51-Erlös über SoT (ADR-001, M3);
     # neg_preis_kwh = None — diese Funktion kennt keine Negativpreis-Spalte →

@@ -29,6 +29,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backend.core.berechnungen.kennzahlen import (
+    autarkie_prozent,
+    eigenverbrauchsquote_prozent,
+)
+
 
 @dataclass
 class VerbrauchsKennzahlen:
@@ -69,8 +74,8 @@ def berechne_verbrauchs_kennzahlen(
     eigenverbrauch = direktverbrauch + speicher_entladung + v2h_entladung
     gesamtverbrauch = eigenverbrauch + netzbezug
 
-    autarkie = (eigenverbrauch / gesamtverbrauch * 100) if gesamtverbrauch > 0 else 0.0
-    ev_quote = min(eigenverbrauch / pv * 100, 100) if pv > 0 else 0.0
+    autarkie = autarkie_prozent(eigenverbrauch, gesamtverbrauch)
+    ev_quote = eigenverbrauchsquote_prozent(eigenverbrauch, pv)
     dv_quote = (direktverbrauch / pv * 100) if pv > 0 else 0.0
 
     return VerbrauchsKennzahlen(

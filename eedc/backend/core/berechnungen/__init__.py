@@ -76,6 +76,11 @@ from backend.core.berechnungen.imd_monatsaggregat import (
     imd_typ_beitrag,
 )
 from backend.core.berechnungen.netzbezug_kosten import berechne_netzbezug_kosten
+from backend.core.berechnungen.kennzahlen import (
+    autarkie_prozent,
+    eigenverbrauchsquote_prozent,
+    spezifischer_ertrag_kwh_kwp,
+)
 from backend.core.berechnungen.energie import (
     BATTERIE_KOMPONENTEN_PREFIXE,
     PV_KOMPONENTEN_PREFIXE,
@@ -177,6 +182,9 @@ __all__ = [
     "ImdTypBeitrag",
     "imd_typ_beitrag",
     "berechne_netzbezug_kosten",
+    "autarkie_prozent",
+    "eigenverbrauchsquote_prozent",
+    "spezifischer_ertrag_kwh_kwp",
     "QUELLE_GEMESSEN",
     "QUELLE_LADUNG",
     "QUELLE_KEINE",
