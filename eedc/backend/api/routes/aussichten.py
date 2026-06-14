@@ -1226,6 +1226,12 @@ async def get_finanz_prognose(
             "netz_kwh": 0.0,
             "pv_kwh": eauto_pv_pro_inv.get(ea.id, 0.0),
             "bisherige_ersparnis": 0.0,
+            # Invariante: immer gesetzt — der Jahres-Block unten (Zeile ~1589)
+            # läuft nur bei gesamt_km > 0. Ohne diese Init crasht die
+            # Komponenten-Schleife (Zeile ~1757) bei einem E-Auto OHNE
+            # historische km (frisch angelegt, noch keine Daten) → 500 auf der
+            # gesamten Aussichten-Finanzseite.
+            "jahres_ersparnis": 0.0,
         }
 
     # =====================================================================
