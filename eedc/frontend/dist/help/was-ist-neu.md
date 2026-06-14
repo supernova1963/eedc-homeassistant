@@ -1,11 +1,17 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.1)
+> **Stand:** Juni 2026 (v3.45.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.2 — Hotfix: Add-on startet wieder vollständig (Juni 2026)
+
+> Falls du **v3.45.1** installiert hattest und viele Seiten/Funktionen nicht erreichbar waren, behebt diese Version das. Ursache war eine am selben Tag erschienene Fremd-Bibliothek (fastapi 0.137.0), die beim Add-on-Start fast alle API-Routen verschluckte — wir haben sie auf die funktionierende Version festgenagelt. Inhaltlich identisch zu v3.45.1 (keine weiteren Änderungen).
 
 ---
 
