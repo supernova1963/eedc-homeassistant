@@ -53,6 +53,7 @@
 > **⚠️ Ausnahme (Cross-Concept, 2026-05-31):** der **Komponenten-Hub-Datums-Selektor** (IA-V4 Variante C, „sticky", dem alle Sektionen folgen) ist **von auto-hide ausgenommen** — sonst verschwindet die zentrale Zeit-Achsen-Kontrolle. Falls er auf schmalem Viewport stört: Klapp-Schublade-Fallback (unten), nicht auto-hide.
 > **HA-Companion-Bar** auf Mobile entfallen lassen (~48 px Gewinn; Swipe-from-left holt sie ohnehin). **⚠️ Zu verifizieren vor Umsetzung:** möglicher Gesten-Konflikt zwischen Companion-eigenem „Swipe-from-left" und dem Hamburger-Slide-in-from-left (M0) — braucht Companion-Umgebung (`feedback_smoketest_braucht_release`), kein Zwischen-Release im QS-Hold erzwingen.
 > **Floating-Selektoren** dürfen Mobile-Bildschirm nicht zusätzlich blockieren — falls Konflikt: Selektor wird auf Mobile zur Klapp-Schublade.
+> **⚠️ Desktop-Gegenstück (detLAN #243, 2026-06-14):** Auf **Desktop** bleibt die zweite Navi-Leiste (Sub-Tabs) **fixiert** (`position: sticky` am oberen Rand, kein auto-hide) — das auto-hide-Verhalten gilt ausschließlich Mobile. So scrollt der Inhalt, die Tab-Auswahl bleibt erreichbar. Öffentlich zugesagt in comment-4702376029.
 >
 > Bezug: [Style-Guide B5 Selektoren](KONZEPT-STYLE-GUIDE.md#b5--selektoren).
 
