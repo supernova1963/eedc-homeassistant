@@ -19,12 +19,14 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
 from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
+    imd_typ_beitrag,
     resolve_pv_je_modul,
     PvModul,
     PV_QUELLE_FEHLT,
 )
 from backend.utils.investition_value import get_inv_value
-from backend.core.field_definitions import get_pv_erzeugung_kwh, get_wp_strom_kwh, get_feld_hinweise
+from backend.core.field_definitions import get_feld_hinweise
+from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
 from backend.services.provenance import (
     log_delete,
@@ -289,39 +291,51 @@ async def list_monatsdaten_aggregiert(
         hat_wallbox_imd = False
 
         for inv, data in inv_data:
+            # D3 (Block 1): Dienstwagen-E-Autos/Wallboxen gehören wie überall
+            # sonst NICHT in den E-Mob-Pool der eigenen Anlage — vorher fehlte
+            # der Filter hier als einziger Read-Site (feedback_dienstwagen_alle_checks).
+            if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
+                continue
+
+            # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
+            b = imd_typ_beitrag(inv, data)
+
             if inv.typ == "pv-module":
-                # gemessenen Pro-Modul-Wert sammeln (None = Feld fehlt) —
-                # Aggregation/Verteilung erfolgt nach der Schleife.
+                # gemessenen Pro-Modul-Wert ROH sammeln (None = Feld fehlt, für
+                # die kWp-Verteilung unten) — keine Aggregation hier.
                 pv_modul_measured[inv.id] = data.get("pv_erzeugung_kwh")
             elif inv.typ == "balkonkraftwerk":
                 hat_pv_imd = True
-                pv_erzeugung += get_pv_erzeugung_kwh(data)
-                # BKW-Speicher
+                pv_erzeugung += b.bkw_erzeugung
+                # QUIRK (IST-Stand): BKW-Speicher fließt in DENSELBEN Speicher-Akku
+                # wie echte Speicher (siehe BLOCK1-FELD-MATRIX D2).
                 hat_speicher_imd = True
-                speicher_ladung += data.get("speicher_ladung_kwh", 0) or 0
-                speicher_entladung += data.get("speicher_entladung_kwh", 0) or 0
+                speicher_ladung += b.bkw_speicher_ladung
+                speicher_entladung += b.bkw_speicher_entladung
             elif inv.typ == "speicher":
                 hat_speicher_imd = True
-                speicher_ladung += data.get("ladung_kwh", 0) or 0
-                speicher_entladung += data.get("entladung_kwh", 0) or 0
+                speicher_ladung += b.speicher_ladung
+                speicher_entladung += b.speicher_entladung
             elif inv.typ == "waermepumpe":
                 hat_wp_imd = True
-                wp_strom += get_wp_strom_kwh(data, inv.parameter)
-                if (inv.parameter or {}).get("getrennte_strommessung"):
+                wp_strom += b.wp_strom
+                if b.wp_hat_split:
                     hat_wp_split_imd = True
-                    wp_strom_heizen += data.get("strom_heizen_kwh", 0) or 0
-                    wp_strom_warmwasser += data.get("strom_warmwasser_kwh", 0) or 0
-                wp_heizung += data.get("heizenergie_kwh", 0) or 0
-                wp_warmwasser += data.get("warmwasser_kwh", 0) or 0
+                    wp_strom_heizen += b.wp_strom_heizen
+                    wp_strom_warmwasser += b.wp_strom_warmwasser
+                # D1 (Block 1): Heizung kanonisch (heizenergie_kwh inkl.
+                # heizung_kwh-Legacy-Fallback) — vorher roh ohne Legacy.
+                wp_heizung += b.wp_heizung
+                wp_warmwasser += b.wp_warmwasser
             elif inv.typ == "e-auto":
                 hat_eauto_imd = True
-                eauto_ladung += (data.get("ladung_pv_kwh", 0) or 0) + (data.get("ladung_netz_kwh", 0) or 0)
-                eauto_km += data.get("km_gefahren", 0) or 0
-                v2h_entladung += data.get("v2h_entladung_kwh", 0) or 0
+                eauto_ladung += b.eauto_ladung_pv_netz
+                eauto_km += b.eauto_km
+                v2h_entladung += b.eauto_v2h
             elif inv.typ == "wallbox":
                 hat_wallbox_imd = True
-                wallbox_ladung += data.get("ladung_kwh", 0) or 0
-                wallbox_ladung_pv += data.get("ladung_pv_kwh", 0) or 0
+                wallbox_ladung += b.wallbox_ladung
+                wallbox_ladung_pv += b.wallbox_ladung_pv
 
         # PV-Module: kWp-Verteilung (Read-time, [[project_kwp_verteilung_aggregator]]).
         # Aktive Module des Monats aus der vollständigen Investitions-Liste —
