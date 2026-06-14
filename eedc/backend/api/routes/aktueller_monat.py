@@ -25,7 +25,12 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
-from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro, merge_datenquellen
+from backend.core.berechnungen import (
+    eauto_effizienz_100km,
+    einspeise_erloes_euro,
+    imd_typ_beitrag,
+    merge_datenquellen,
+)
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
@@ -375,38 +380,36 @@ async def _collect_saved_data(
             if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
             data = imd.verbrauch_daten or {}
+            # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
+            b = imd_typ_beitrag(inv, data)
 
             if inv.typ == "pv-module":
-                pv_erzeugung_total += data.get("pv_erzeugung_kwh", 0) or 0
+                pv_erzeugung_total += b.pv_erzeugung
             elif inv.typ == "speicher":
-                speicher_ladung_total += data.get("ladung_kwh", 0) or 0
-                speicher_entladung_total += data.get("entladung_kwh", 0) or 0
+                speicher_ladung_total += b.speicher_ladung
+                speicher_entladung_total += b.speicher_entladung
             elif inv.typ == "waermepumpe":
                 # #183: bei getrennter Strommessung Gesamt-Strom aus Einzel-
-                # Sensoren bilden, alter Gesamt-Sensor wird ignoriert.
-                wp_strom_total += get_wp_strom_kwh(data, inv.parameter)
-                wp_waerme_total += (
-                    data.get("waerme_kwh", 0) or
-                    get_wp_heizenergie_kwh(data) +
-                    (data.get("warmwasser_kwh", 0) or 0)
-                )
+                # Sensoren (im Resolver). wp_waerme = waerme_kwh oder Heiz+WW.
+                wp_strom_total += b.wp_strom
+                wp_waerme_total += b.wp_waerme
             elif inv.typ == "e-auto":
                 if not ist_dienstlich(inv):
                     eauto_imd_data.append(data)
-                    eauto_km_total += data.get("km_gefahren", 0) or 0
-                    eauto_verbrauch_total += data.get("verbrauch_kwh", 0) or 0
+                    eauto_km_total += b.eauto_km
+                    eauto_verbrauch_total += b.eauto_verbrauch
             elif inv.typ == "wallbox":
                 if not ist_dienstlich(inv):
                     wb_imd_data.append(data)
             elif inv.typ == "balkonkraftwerk":
-                bkw_kwh = (
-                    data.get("pv_erzeugung_kwh", 0) or
-                    data.get("erzeugung_kwh", 0) or 0
-                )
+                bkw_kwh = b.bkw_erzeugung
                 bkw_erzeugung_total += bkw_kwh
                 # BKW ist PV-Erzeugung → fließt in Gesamt-PV ein
                 pv_erzeugung_total += bkw_kwh
-                bkw_eigenverbrauch_total += data.get("eigenverbrauch_kwh", 0) or bkw_kwh
+                # D5 (Block 1, IST-Stand erhalten): eigenverbrauch fällt bei
+                # fehlendem Messwert auf die volle Erzeugung zurück — Site-1-Quirk,
+                # divergent zu Komponenten/Übersicht (siehe FELD-MATRIX D5).
+                bkw_eigenverbrauch_total += b.bkw_eigenverbrauch or bkw_kwh
 
         # E-Mobilitäts-Pool: EINE Quelle liefert die konsistente Heimladungs-
         # Trias (pv + netz == ladung). Früher feldweises max() — das nahm pv
@@ -524,7 +527,6 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     pv_inv_ids = [i.id for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
     bat_inv_ids = [i.id for i in investitionen if i.typ == "speicher"]
     wp_inv_ids = [i.id for i in investitionen if i.typ == "waermepumpe"]
-    wp_params_by_id = {i.id: (i.parameter or {}) for i in investitionen if i.typ == "waermepumpe"}
     # E-Auto und Wallbox separat halten — selbe Pool-Doppelzählungs-Falle wie
     # in `_collect_saved_data` (siehe dort). Max-pro-Feld statt Summe.
     eauto_inv_ids = [i.id for i in investitionen if i.typ == "e-auto" and not ist_dienstlich(i)]
@@ -548,25 +550,36 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         wb_ladung_vj = 0.0
         emob_km_vj = 0.0
 
+        inv_by_id_vj = {i.id: i for i in investitionen}
         for imd in imd_result.scalars().all():
+            inv = inv_by_id_vj.get(imd.investition_id)
+            if not inv:
+                continue
             data = imd.verbrauch_daten or {}
+            # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
+            b = imd_typ_beitrag(inv, data)
             if imd.investition_id in pv_inv_ids:
-                pv_vj += get_pv_erzeugung_kwh(data)
-            elif imd.investition_id in bat_inv_ids:
-                bat_ladung_vj += data.get("ladung_kwh", 0) or 0
-                bat_entladung_vj += data.get("entladung_kwh", 0) or 0
-            elif imd.investition_id in wp_inv_ids:
-                # #183: bei getrennter Strommessung Gesamt-Strom aus Einzel-
-                # Sensoren bilden.
-                wp_strom_vj += get_wp_strom_kwh(data, wp_params_by_id.get(imd.investition_id))
-                wp_waerme_vj += (
-                    (data.get("heizenergie_kwh", 0) or 0) + (data.get("warmwasser_kwh", 0) or 0)
+                # pv_inv_ids enthält PV-Module UND BKW. D6 (IST-Stand erhalten):
+                # pv-module behält den erzeugung_kwh-Legacy-Fallback (divergent zum
+                # aktuellen Monat); BKW kanonisch via Resolver.
+                pv_vj += (
+                    get_pv_erzeugung_kwh(data) if inv.typ == "pv-module"
+                    else b.bkw_erzeugung
                 )
+            elif imd.investition_id in bat_inv_ids:
+                bat_ladung_vj += b.speicher_ladung
+                bat_entladung_vj += b.speicher_entladung
+            elif imd.investition_id in wp_inv_ids:
+                # D1 (Block 1): wp_waerme kanonisch (waerme_kwh-Vorrang +
+                # heizung_kwh-Legacy) statt rohem Heiz+WW — angeglichen an den
+                # aktuellen Monat derselben Route.
+                wp_strom_vj += b.wp_strom
+                wp_waerme_vj += b.wp_waerme
             elif imd.investition_id in eauto_inv_ids:
-                eauto_ladung_vj += get_eauto_ladung_kwh(data)
-                emob_km_vj += data.get("km_gefahren", 0) or 0
+                eauto_ladung_vj += b.eauto_ladung_kanonisch
+                emob_km_vj += b.eauto_km
             elif imd.investition_id in wb_inv_ids:
-                wb_ladung_vj += data.get("ladung_kwh", 0) or 0
+                wb_ladung_vj += b.wallbox_ladung
 
         # Pool-Auswahl konsistent zu _collect_saved_data: pro Feld die größere
         # Quelle. WB liefert üblicherweise Loadpoint-Wahrheit, EAuto ist Vehicle-
