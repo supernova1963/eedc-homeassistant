@@ -155,6 +155,91 @@ def test_inline_einspeise_erloes_nur_im_layer():
     )
 
 
+# Pattern: gas-/öl-Kosten der Altanlage `(waerme / wirkungsgrad) * gaspreis / 100`
+# — der drift-anfällige Kern der WP-Alternativkosten-Rechnung („was hätte die
+# fossile Heizung gekostet"). Verlangt eine Division durch eine `…wirkungsgrad…`-
+# Variable, gefolgt von `* <preis> / 100`; sehr spezifisch (die WP rechnet ihre
+# EIGENEN Kosten über JAZ/COP/SCOP, nicht über `wirkungsgrad`).
+_INLINE_GAS_KOSTEN_ALTANLAGE = re.compile(
+    r'''/\s*[\w\["'\]]*wirkungsgrad[\w\["'\]]*\s*\)\s*\*\s*\w+\s*/\s*100'''
+)
+
+# Designierte Heimaten der Fragment-Formel: der per-Monat-Aggregat-Helper im
+# Layer und der per-WP-Service-Helper. Beide berechnen das Fragment intern; die
+# „echte" Konsolidierung (ein gemeinsames `gas_kosten_altanlage`-Fragment) ist
+# der dokumentierte Folge-Schritt (siehe Grandfathered-Begründung unten).
+ALLOWED_GAS_KOSTEN_FILES = {
+    "core/berechnungen/alternativkosten.py",   # per-Monat-Aggregat (SoT)
+    "services/wp_wirtschaftlichkeit.py",        # per-WP-Service-Helper
+    "core/berechnungen/__init__.py",            # Re-Export
+}
+
+# Bestehende Inline-Kopien — Schuld, kein Persil-Schein. Bei nächstem Touch des
+# betroffenen Codes auf einen gemeinsamen Fragment-Helper konsolidieren und den
+# Eintrag entfernen.
+GAS_KOSTEN_GRANDFATHERED: dict[str, str] = {
+    "api/routes/ha_export.py": (
+        "wp_ersparnis_euro-Sensor (per-WP, volle Stromkosten ohne PV-Anteil-"
+        "Split) — Trigger: gemeinsamen gas_kosten_altanlage-Fragment-Helper "
+        "extrahieren oder nächster HA-Export-WP-Touch."
+    ),
+    "api/routes/aussichten.py": (
+        "WP-PROGNOSE (Forecast-Jahr, thermisch-gewichteter Aggregat-Wirkungsgrad)"
+        " — die bisherige/historische Formel ist bereits auf den Layer "
+        "konvergiert; der Forecast-Pfad folgt beim nächsten WP-Prognose-Touch."
+    ),
+}
+
+
+def test_inline_gas_kosten_altanlage_nur_im_layer():
+    """Die Altanlagen-Gaskosten-Formel `(waerme / wirkungsgrad) * preis / 100`
+    darf nur in den designierten Helper-Heimaten oder (übergangsweise) in der
+    Grandfathered-Liste stehen — sonst driftet die WP-Alternativkosten-Rechnung
+    erneut (gleiche Klasse wie die in v3.x deduplizierten Einzel-Kopien)."""
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_GAS_KOSTEN_FILES or rel in GAS_KOSTEN_GRANDFATHERED:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if _INLINE_GAS_KOSTEN_ALTANLAGE.search(line):
+                verstoesse.append((rel, line_no, line.strip()))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel='Inline `(waerme / wirkungsgrad) × gaspreis / 100` außerhalb der WP-Alternativkosten-Helfer',
+    ) + (
+        "\n\nSoT-Migration:\n"
+        "  from backend.core.berechnungen import berechne_wp_alternativkosten_ersparnis\n"
+        "  # bzw. services.wp_wirtschaftlichkeit.berechne_wp_ersparnis (per-WP).\n"
+        "  # Neue Inline-Kopie? In GAS_KOSTEN_GRANDFATHERED mit Begründung eintragen."
+    )
+
+
+def test_gas_kosten_grandfathered_enthalten_pattern_noch():
+    """Wenn eine grandfathered Datei das Pattern nicht mehr enthält, muss sie
+    aus GAS_KOSTEN_GRANDFATHERED entfernt werden (gegen Eintrags-Rotten)."""
+    veraltete: list[str] = []
+    for rel in GAS_KOSTEN_GRANDFATHERED:
+        path = _BACKEND_ROOT / rel
+        if not path.exists():
+            veraltete.append(f"{rel} — Datei existiert nicht mehr")
+            continue
+        text = path.read_text(encoding="utf-8")
+        if not _INLINE_GAS_KOSTEN_ALTANLAGE.search(text):
+            veraltete.append(
+                f"{rel} — kein Gaskosten-Pattern mehr, Eintrag aus "
+                f"GAS_KOSTEN_GRANDFATHERED entfernen"
+            )
+    assert not veraltete, (
+        "Veraltete GAS_KOSTEN_GRANDFATHERED-Einträge:\n"
+        + "\n".join(f"  - {e}" for e in veraltete)
+    )
+
+
 def test_grandfathered_dateien_existieren_und_enthalten_pattern():
     """Wenn eine Datei aus der Grandfathered-Liste keine Verstöße mehr enthält,
     muss sie aus der Liste entfernt werden — sonst rotten die Einträge."""
