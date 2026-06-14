@@ -293,6 +293,49 @@ def test_inline_netzbezug_kosten_nur_im_layer():
     )
 
 
+# Pattern: Inline-Eigenverbrauchsquote `eigenverbrauch… / (pv|erzeugung)… * 100`
+# (Schläfer-Block 3). Nach der Konsolidierung lebt sie nur noch im Helper
+# `eigenverbrauchsquote_prozent` (gecappt auf 100 %, Maintainer-Entscheid).
+_INLINE_EV_QUOTE = re.compile(
+    r'''eigenverbrauch\w*\s*/\s*(?:pv|erzeugung|gesamt_erzeugung)\w*\s*\*\s*100'''
+)
+
+# Erlaubt: Helfer-Heimat + dokumentierte Ausnahmen (kW-Live-Sichten +
+# energie_profil/views.py = offener IA-V4-Phase-1A-Produktentscheid).
+ALLOWED_EV_QUOTE_FILES = {
+    "core/berechnungen/kennzahlen.py",            # eigenverbrauchsquote_prozent (SoT)
+    "api/routes/live_dashboard.py",                # Live, kW statt kWh
+    "services/live_komponenten_builder.py",        # Live, kW statt kWh
+    "api/routes/energie_profil/views.py",          # IA-V4-Phase-1A-Produktentscheid
+}
+
+
+def test_inline_eigenverbrauchsquote_nur_im_layer():
+    """Die Eigenverbrauchsquote `eigenverbrauch / erzeugung × 100` darf nur im
+    Helper `eigenverbrauchsquote_prozent` (gecappt) oder den dokumentierten
+    Ausnahmen (kW-Live / views.py) stehen — sonst driftet der 100-%-Cap erneut."""
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_EV_QUOTE_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if _INLINE_EV_QUOTE.search(line):
+                verstoesse.append((rel, line_no, line.strip()))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel='Inline `eigenverbrauch / erzeugung × 100` außerhalb von eigenverbrauchsquote_prozent',
+    ) + (
+        "\n\nSoT-Migration:\n"
+        "  from backend.core.berechnungen import eigenverbrauchsquote_prozent\n"
+        "  ev_quote = eigenverbrauchsquote_prozent(eigenverbrauch_kwh, pv_erzeugung_kwh)"
+    )
+
+
 # Pattern: bare `.startswith("pv_")`-Literal (ohne zentralen Prefix-Import).
 # Die Live-Keyspace-Konsumenten (live_history_service, live_komponenten_builder)
 # legen Erzeuger einheitlich unter `pv_` ab; sie müssen die Prefix-Quelle aus
