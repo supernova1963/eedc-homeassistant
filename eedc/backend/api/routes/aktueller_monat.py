@@ -25,7 +25,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
-from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro
+from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro, merge_datenquellen
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
@@ -695,43 +695,23 @@ async def get_aktueller_monat(
     ist_aktueller_monat = (jahr == now.year and monat == now.month)
     investitionen = [i for i in anlage.investitionen if i.aktiv]
 
-    # ── Daten sammeln (niedrigste Konfidenz zuerst, höchste überschreibt) ──
-    resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
-
+    # ── Daten sammeln (I/O) — Zusammenführung nach Präzedenz im SoT-Helper ──
+    # Sammeln bleibt hier (DB/HA-Zugriff); die Merge-/Override-Regeln leben in
+    # core/berechnungen/datenquellen.merge_datenquellen (ADR-001) — eine Stelle,
+    # symmetrie-getestet, ohne Drift zwischen den Quellen-Zweigen.
+    # MQTT wird für abgeschlossene Monate gar nicht erst gesammelt.
     saved = await _collect_saved_data(anlage_id, jahr, monat, investitionen, db)
-    resolved.update(saved)
-
     connector = await _collect_connector_data(anlage, jahr, monat)
-    if ist_aktueller_monat:
-        # Laufender Monat: Connector (Konfidenz 90 %) ist frischer als die
-        # gespeicherten Werte und darf sie überschreiben (Vorschau).
-        resolved.update(connector)
-    else:
-        # Abgeschlossener Monat: gespeicherte Monatsdaten sind authoritativ
-        # (analog HA-Stats unten, #118). Der Connector darf gespeicherte/manuell
-        # gepflegte Werte NICHT rückwirkend überschreiben — sonst überschreibt
-        # z. B. ein Sungrow-Connector ohne separate Einspeisungs-Messung den
-        # gespeicherten Einspeisungs-Wert mit 0 (#325, detlefh68). Nur Felder
-        # füllen, die noch fehlen.
-        for k, v in connector.items():
-            resolved.setdefault(k, v)
-
     mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen) if ist_aktueller_monat else {}
-    resolved.update(mqtt_energy)
-
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
-    if ist_aktueller_monat:
-        # Laufender Monat: HA-Stats sind die frischeste Quelle und sollen die
-        # gespeicherten Werte überschreiben (Vorschau aus Live-Sensoren).
-        resolved.update(ha_stats)
-    else:
-        # Vergangener Monat: gespeicherte Monatsdaten + InvestitionMonatsdaten
-        # sind authoritativ (Monatsabschluss). HA-Stats nur als Fallback für
-        # Felder, die noch nicht vorhanden sind — kein Override mehr, sonst
-        # können sich Werte rückwirkend ändern (Sensor-Renames, Recorder-Drift)
-        # und Monatsbericht weicht von Auswertung→Tabelle ab (#118).
-        for k, v in ha_stats.items():
-            resolved.setdefault(k, v)
+
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = merge_datenquellen(
+        saved=saved,
+        connector=connector,
+        mqtt_energy=mqtt_energy,
+        ha_stats=ha_stats,
+        ist_aktueller_monat=ist_aktueller_monat,
+    )
 
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
     # Nur aggregieren wenn kein direkter Top-Level-Wert existiert (sonst Doppelzählung!)

@@ -47,6 +47,9 @@ from backend.core.berechnungen.counter import (
     pruefe_counter_konsistent,
     verteile_counter_auf_stunden,
 )
+from backend.core.berechnungen.datenquellen import (
+    merge_datenquellen,
+)
 from backend.core.berechnungen.einspeise_erloes import (
     EinspeiseErloes,
     einspeise_erloes_euro,
@@ -152,6 +155,7 @@ __all__ = [
     "assert_counter_konsistent",
     "pruefe_counter_konsistent",
     "verteile_counter_auf_stunden",
+    "merge_datenquellen",
     "EinspeiseErloes",
     "einspeise_erloes_euro",
     "FinanzAggregat",
