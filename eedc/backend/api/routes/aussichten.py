@@ -28,6 +28,7 @@ from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
     berechne_verbrauchs_kennzahlen,
+    berechne_wp_alternativkosten_ersparnis,
     einspeise_erloes_euro,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
@@ -1239,7 +1240,6 @@ async def get_finanz_prognose(
     # =====================================================================
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_investitionen)
     bisherige_ertraege = 0.0
-    bisherige_wp_ersparnis = 0.0
     bisherige_eauto_ersparnis = 0.0
 
     # Anschaffungsdatum-Grenze für den anlagenweiten PV-Ertrag (Einspeise-Erlös +
@@ -1300,38 +1300,37 @@ async def get_finanz_prognose(
             neg_preis_kwh=m_neg,
         ))
 
-    # Wärmepumpe Alternativkosten-Ersparnis
-    # Ersparnis = Gas-Kosten (was es kosten würde) + fixe Zusatzkosten - WP-Stromkosten
+    # Wärmepumpe Alternativkosten-Ersparnis (vs. Gas/Öl) — die „bisherige"-
+    # Ersparnis-FORMEL liegt jetzt im SoT-Helper `berechne_wp_alternativkosten_
+    # ersparnis` (core/berechnungen/alternativkosten.py), identisch zum HA-Export
+    # ([[feedback_aggregations_drift]]). `historische_inv_daten` ist bereits
+    # per-Investition auf das aktive Fenster gefiltert (Z. ~948–953), erfüllt
+    # also den Helper-Kontrakt; der Monats-Gaspreis (Monatsdaten → per-WP-Default-
+    # Fallback im Helper) wird als Perioden-Map durchgereicht.
+    gaspreis_by_periode = {
+        (md.jahr, md.monat): md.gaspreis_cent_kwh for md in monatsdaten
+    }
+    bisherige_wp_ersparnis = berechne_wp_alternativkosten_ersparnis(
+        waermepumpen,
+        historische_inv_daten,
+        gaspreis_by_periode,
+        wp_netzbezug_preis,
+    )
+
+    # Thermische Wärmemengen pro WP/gesamt — getrennte Concern: nur die
+    # WP-PROGNOSE (Z. ~1520) braucht sie (thermisch-gewichtete alter_preis/
+    # Wirkungsgrad-Mischung). Bewusst NICHT im Ersparnis-Helper, der reine
+    # Aggregat-Σ liefert.
     gesamt_wp_thermisch = 0.0
-    wp_monate_gezaehlt: set[tuple[int, int]] = set()
     for wp in waermepumpen:
         wp_agg = wp_aggregate[wp.id]
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == wp.id and wp.ist_aktiv_im_monat(jahr, monat):
-                heiz = daten.get("heizenergie_kwh", 0)
-                ww = daten.get("warmwasser_kwh", 0)
-                strom = get_wp_strom_kwh(daten, wp.parameter)
-                thermisch = heiz + ww
+                thermisch = (daten.get("heizenergie_kwh", 0) or 0) + (
+                    daten.get("warmwasser_kwh", 0) or 0
+                )
                 gesamt_wp_thermisch += thermisch
                 wp_agg["thermisch_kwh"] += thermisch
-                # Monatspreis: Monatsdaten.gaspreis_cent_kwh → Fallback per-WP-Default
-                md = monatsdaten_dict.get((jahr, monat))
-                monats_gaspreis = (
-                    md.gaspreis_cent_kwh
-                    if md and md.gaspreis_cent_kwh is not None
-                    else wp_agg["alter_preis_cent"]
-                )
-                # Gas-Alternative: thermisch / Wirkungsgrad * Preis — pro WP
-                gas_kosten = (thermisch / wp_agg["alter_wirkungsgrad"]) * monats_gaspreis / 100
-                # WP-Stromkosten (nur Netzanteil, PV-Anteil ist bereits in EV-Ersparnis)
-                # Konservative 50/50-Annahme — TODO: aus tatsächlichen Daten herleiten
-                wp_netz_anteil = 1.0 - WP_PV_ANTEIL_DEFAULT
-                wp_stromkosten_netz = strom * wp_netz_anteil * wp_netzbezug_preis / 100
-                # Netto-Ersparnis (Gas-Alternative minus WP-Netzstrom)
-                bisherige_wp_ersparnis += gas_kosten - wp_stromkosten_netz
-                wp_monate_gezaehlt.add((jahr, monat))
-    # Fixe Zusatzkosten pro erfassten Monat (1/12 pro Monat)
-    bisherige_wp_ersparnis += wp_alternativ_zusatzkosten_jahr * len(wp_monate_gezaehlt) / 12
 
     # E-Auto Alternativkosten-Ersparnis
     # Ersparnis = Benzin-Kosten - Netzstrom-Kosten
