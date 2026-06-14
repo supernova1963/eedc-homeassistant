@@ -17,9 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
+    autarkie_prozent,
     berechne_finanz_aggregat,
     berechne_verbrauchs_kennzahlen,
+    eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
+    spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.utils.sonstige_positionen import berechne_sonstige_netto
@@ -283,8 +286,8 @@ async def build_jahresbericht_context(
         )
         ev = kennzahlen.eigenverbrauch_kwh
         gesamt = ev + netz
-        autarkie = _safe_div(ev, gesamt) * 100
-        spez = _safe_div(pv, anlage.leistung_kwp or 0)
+        autarkie = autarkie_prozent(ev, gesamt)
+        spez = spezifischer_ertrag_kwh_kwp(pv, anlage.leistung_kwp or 0) or 0.0
         m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, j, m)
         m_erloes = einspeise_erloes_euro(
             einspeisung_kwh=einsp,
@@ -343,9 +346,9 @@ async def build_jahresbericht_context(
 
     # ── 9. Jahres-KPIs / Finanzen / CO₂ ─────────────────────────────────
     gesamtverbrauch = ev_gesamt + netz_gesamt
-    autarkie_jahr = _safe_div(ev_gesamt, gesamtverbrauch) * 100
-    ev_quote = _safe_div(ev_gesamt, pv_gesamt) * 100
-    spez_ertrag_jahr = _safe_div(pv_gesamt, anlage.leistung_kwp or 0)
+    autarkie_jahr = autarkie_prozent(ev_gesamt, gesamtverbrauch)
+    ev_quote = eigenverbrauchsquote_prozent(ev_gesamt, pv_gesamt)  # cappt jetzt 100 %
+    spez_ertrag_jahr = spezifischer_ertrag_kwh_kwp(pv_gesamt, anlage.leistung_kwp or 0) or 0.0
 
     # #326: Sonstige Erträge/Ausgaben (manuell gepflegt) gehören in den
     # Netto-Ertrag — exakt wie Cockpit/Auswertungen. `all_imd` ist bereits auf

@@ -29,8 +29,10 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_verbrauchs_kennzahlen,
     berechne_wp_alternativkosten_ersparnis,
+    eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
     gas_kosten_altanlage,
+    spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.calculations import berechne_ust_eigenverbrauch
@@ -661,7 +663,7 @@ async def get_trend_analyse(
         max_monate = heute.month if jahr == heute.year else 12
         ist_vollstaendig = anzahl_monate >= max_monate
 
-        spez_ertrag = gesamt_kwh / anlagenleistung_kwp if anlagenleistung_kwp > 0 else 0
+        spez_ertrag = spezifischer_ertrag_kwh_kwp(gesamt_kwh, anlagenleistung_kwp) or 0
         pr = gesamt_kwh / pvgis_jahresertrag if pvgis_jahresertrag > 0 else None
 
         jahres_vergleich.append(JahresVergleichSchema(
@@ -1865,7 +1867,9 @@ async def get_finanz_prognose(
         jahres_erzeugung_kwh=round(jahres_erzeugung, 0),
         jahres_eigenverbrauch_kwh=round(jahres_eigenverbrauch, 0),
         jahres_einspeisung_kwh=round(jahres_einspeisung, 0),
-        eigenverbrauchsquote_prozent=round(jahres_eigenverbrauch / jahres_erzeugung * 100 if jahres_erzeugung > 0 else 0, 1),
+        eigenverbrauchsquote_prozent=round(
+            eigenverbrauchsquote_prozent(jahres_eigenverbrauch, jahres_erzeugung), 1
+        ),
         jahres_einspeise_erloes_euro=round(jahres_einspeise_erloes, 2),
         jahres_ev_ersparnis_euro=round(jahres_ev_ersparnis, 2),
         ust_eigenverbrauch_euro=round(ust_eigenverbrauch, 2) if ust_eigenverbrauch > 0 else None,
