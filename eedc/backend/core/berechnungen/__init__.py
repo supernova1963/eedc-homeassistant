@@ -71,6 +71,10 @@ from backend.core.berechnungen.emob import (
     EffizienzWert,
     eauto_effizienz_100km,
 )
+from backend.core.berechnungen.imd_monatsaggregat import (
+    ImdTypBeitrag,
+    imd_typ_beitrag,
+)
 from backend.core.berechnungen.energie import (
     BATTERIE_KOMPONENTEN_PREFIXE,
     PV_KOMPONENTEN_PREFIXE,
@@ -169,6 +173,8 @@ __all__ = [
     "FinanzAggregat",
     "FinanzMonatsZeile",
     "berechne_finanz_aggregat",
+    "ImdTypBeitrag",
+    "imd_typ_beitrag",
     "QUELLE_GEMESSEN",
     "QUELLE_LADUNG",
     "QUELLE_KEINE",
