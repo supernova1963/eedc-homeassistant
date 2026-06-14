@@ -1,11 +1,26 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.0)
+> **Stand:** Juni 2026 (v3.45.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.1 — Korrektere Detail-Werte & schnelleres Speicher-Cockpit (Juni 2026)
+
+> Diese Version bringt vor allem **unter der Haube** Aufräumarbeiten: Der Berechnungs-Kern wurde an vielen Stellen auf eine gemeinsame Quelle zusammengeführt, damit dieselbe Kennzahl überall denselben Wert zeigt. **An den Funktionen ändert sich nichts** — ein paar Detail-Werte werden dadurch korrekter.
+
+### Was sich für dich ändert
+
+- **Eigenverbrauchsquote bleibt bei höchstens 100 %.** In der Aussichten-Prognose und im PDF-Jahresbericht konnte die Eigenverbrauchsquote rechnerisch über 100 % springen, wenn Mess- und Importdaten leicht auseinanderliefen. Sie wird jetzt überall sauber auf 100 % begrenzt.
+- **Finanz-Prognose stürzt bei E-Autos ohne Kilometerstand nicht mehr ab.** Wer ein E-Auto ohne gepflegte km-Daten hat, bekam in den Aussichten teils gar keine Finanzprognose mehr (Fehler) — behoben.
+- **Speicher-Cockpit lädt schneller.** Die Speicher-Wirtschaftlichkeit wird mit weniger Datenbankaufwand geladen.
+- **Monatsansicht genauer bei Alt-/Importdaten und Dienstwagen.** In der aggregierten Monatsansicht wurde Wärmepumpen-Heizenergie aus älteren Importen teils nicht mitgezählt, und dienstliche E-Autos/Wallboxen rutschten in die Eigen-Bilanz. Beides ist jetzt an die übrigen Auswertungen angeglichen.
+
+> Hintergrund für Technik-Interessierte: Komponenten-Aggregation, Netzbezugskosten, Autarkie/Eigenverbrauch/spez. Ertrag und die Speicher-Wirtschaftlichkeit laufen jetzt über einen zentralen Berechnungs-Layer — das verhindert künftige Abweichungen zwischen Cockpit, Auswertungen, Monatsbericht, HA-Export und PDF.
 
 ---
 
