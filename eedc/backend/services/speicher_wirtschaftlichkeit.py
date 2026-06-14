@@ -316,8 +316,20 @@ async def berechne_effektiver_ladepreis(
     `datenbasis-zu-duenn`/`keine-netzladung`/`keine-tep-daten` sind
     informativ für das UI-Badge.
     """
+    # Spalten-Projektion statt voller ORM-Zeilen: der Helper braucht nur diese
+    # vier Float-Spalten. Volle TEP-Objekte würden pro Zeile zwei JSON-Spalten
+    # (komponenten + source_provenance) deserialisieren — bei mehrjährigen
+    # Anlagen sind das zehntausende Stundenzeilen und der Hauptkostenfaktor des
+    # Speicher-Dashboards (#333). Filter bleibt batterie_kw IS NOT NULL (nicht
+    # < 0), damit `stunden_gesamt_im_fenster` und die quelle-Unterscheidung
+    # keine-tep-daten vs. keine-netzladung (UI-Badge) exakt erhalten bleiben.
     result = await db.execute(
-        select(TagesEnergieProfil)
+        select(
+            TagesEnergieProfil.batterie_kw,
+            TagesEnergieProfil.netzbezug_kw,
+            TagesEnergieProfil.strompreis_cent,
+            TagesEnergieProfil.boersenpreis_cent,
+        )
         .where(
             TagesEnergieProfil.anlage_id == anlage_id,
             TagesEnergieProfil.datum >= von,
@@ -326,7 +338,7 @@ async def berechne_effektiver_ladepreis(
         )
         .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
     )
-    rows = result.scalars().all()
+    rows = result.all()
 
     if not rows:
         return EffektiverLadepreisErgebnis(
