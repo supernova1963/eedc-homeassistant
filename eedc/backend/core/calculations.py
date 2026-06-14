@@ -237,11 +237,11 @@ def berechne_speicher_einsparung(
     Returns:
         SpeicherEinsparung mit gemappten pv_anteil_euro / arbitrage_anteil_euro.
     """
-    # --- IST-Modus: Delegation an den kanonischen Spread-Service ---
+    # --- IST-Modus: Delegation an die kanonische Spread-Berechnung ---
     if ist_entladung_kwh is not None:
-        # Lokaler Import vermeidet eine Modul-Zyklen-Falle, falls calculations.py
-        # je in den Service zurückgezogen wird.
-        from backend.services.speicher_wirtschaftlichkeit import berechne_speicher_ersparnis
+        # Lokaler Import hält calculations.py importseitig schlank (der
+        # Spread-Helper wird nur im IST-Modus gebraucht).
+        from backend.core.berechnungen.speicher_wirtschaftlichkeit import berechne_speicher_ersparnis
 
         # Im Arbitrage-Modus liefert `lade_preis_cent` den Ø-Ladepreis; sonst None →
         # Netzladung wird im Service als kostenneutral behandelt.
