@@ -22,6 +22,7 @@ from backend.core.berechnungen import (
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
     eauto_effizienz_100km,
+    imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
 )
 from backend.core.calculations import (
@@ -30,13 +31,7 @@ from backend.core.calculations import (
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
-from backend.core.field_definitions import (
-    get_emob_pv_netz_kwh,
-    get_pv_erzeugung_kwh,
-    get_sonstiges_verbrauch_kwh,
-    get_wp_heizenergie_kwh,
-    get_wp_strom_kwh,
-)
+from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -254,26 +249,24 @@ async def get_cockpit_uebersicht(
         key = (imd.jahr, imd.monat)
         zeitraum_monate.add(key)
 
+        # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
+        b = imd_typ_beitrag(inv, data)
+
         if inv.typ == "pv-module":
-            pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
-            pv_erzeugung_inv += pv_kwh
-            pv_erzeugung_inv_by_ym[key] = pv_erzeugung_inv_by_ym.get(key, 0) + pv_kwh
+            pv_erzeugung_inv += b.pv_erzeugung
+            pv_erzeugung_inv_by_ym[key] = pv_erzeugung_inv_by_ym.get(key, 0) + b.pv_erzeugung
 
         if inv.typ == "speicher":
-            lad = data.get("ladung_kwh", 0) or 0
-            entl = data.get("entladung_kwh", 0) or 0
-            speicher_ladung += lad
-            speicher_entladung += entl
-            speicher_ladung_by_ym[key] = speicher_ladung_by_ym.get(key, 0) + lad
-            speicher_entladung_by_ym[key] = speicher_entladung_by_ym.get(key, 0) + entl
+            speicher_ladung += b.speicher_ladung
+            speicher_entladung += b.speicher_entladung
+            speicher_ladung_by_ym[key] = speicher_ladung_by_ym.get(key, 0) + b.speicher_ladung
+            speicher_entladung_by_ym[key] = speicher_entladung_by_ym.get(key, 0) + b.speicher_entladung
 
         elif inv.typ == "waermepumpe":
-            heizung = get_wp_heizenergie_kwh(data)
-            warmwasser = data.get("warmwasser_kwh", 0) or 0
-            wp_heizung += heizung
-            wp_warmwasser += warmwasser
-            wp_waerme += data.get("waerme_kwh", 0) or (heizung + warmwasser)
-            wp_strom += get_wp_strom_kwh(data, inv.parameter)
+            wp_heizung += b.wp_heizung
+            wp_warmwasser += b.wp_warmwasser
+            wp_waerme += b.wp_waerme
+            wp_strom += b.wp_strom
 
         elif inv.typ in ("e-auto", "wallbox"):
             if ist_dienstlich(inv):
@@ -287,35 +280,31 @@ async def get_cockpit_uebersicht(
                 dienstlich_pv_netz_by_ym[key] = (d_pv + pv_kwh, d_netz + netz_kwh)
             elif inv.typ == "e-auto":
                 eauto_imd_data.append(data)
-                km_monat = data.get("km_gefahren", 0) or 0
-                eauto_km += km_monat
-                eauto_verbrauch += data.get("verbrauch_kwh", 0) or 0
-                v2h_kwh = data.get("v2h_entladung_kwh", 0) or 0
-                v2h_entladung += v2h_kwh
-                v2h_by_ym[key] = v2h_by_ym.get(key, 0) + v2h_kwh
-                if km_monat:
+                eauto_km += b.eauto_km
+                eauto_verbrauch += b.eauto_verbrauch
+                v2h_entladung += b.eauto_v2h
+                v2h_by_ym[key] = v2h_by_ym.get(key, 0) + b.eauto_v2h
+                if b.eauto_km:
                     eauto_km_pro_monat[(imd.jahr, imd.monat)] = (
-                        eauto_km_pro_monat.get((imd.jahr, imd.monat), 0.0) + km_monat
+                        eauto_km_pro_monat.get((imd.jahr, imd.monat), 0.0) + b.eauto_km
                     )
             else:  # wallbox (nicht-dienstlich)
                 wb_imd_data.append(data)
 
         elif inv.typ == "balkonkraftwerk":
-            bkw_kwh = get_pv_erzeugung_kwh(data)
-            bkw_ev = data.get("eigenverbrauch_kwh", 0) or 0
-            bkw_erzeugung += bkw_kwh
-            bkw_eigenverbrauch += bkw_ev
-            pv_erzeugung_inv += bkw_kwh
-            pv_erzeugung_inv_by_ym[key] = pv_erzeugung_inv_by_ym.get(key, 0) + bkw_kwh
-            bkw_eigenverbrauch_by_ym[key] = bkw_eigenverbrauch_by_ym.get(key, 0) + bkw_ev
+            bkw_erzeugung += b.bkw_erzeugung
+            bkw_eigenverbrauch += b.bkw_eigenverbrauch
+            pv_erzeugung_inv += b.bkw_erzeugung
+            pv_erzeugung_inv_by_ym[key] = pv_erzeugung_inv_by_ym.get(key, 0) + b.bkw_erzeugung
+            bkw_eigenverbrauch_by_ym[key] = bkw_eigenverbrauch_by_ym.get(key, 0) + b.bkw_eigenverbrauch
 
         elif inv.typ == "sonstiges":
-            # Pro Investition entweder Erzeuger- oder Verbraucher-Seite
-            # (siehe inv.parameter.kategorie) — Werte sind sich gegenseitig
-            # ausschließend, beide Felder bleiben bei der jeweils anderen
-            # Sicht 0. SoT-Helper liest auch Legacy-Felder mit.
-            sonstiges_erzeugung += data.get("erzeugung_kwh", 0) or 0
-            sonstiges_verbrauch += get_sonstiges_verbrauch_kwh(data)
+            # D4 (Block 1): zentraler Resolver ist kategorie-bewusst (wie Site
+            # Komponenten) — verbraucher liefert nur Verbrauch, erzeuger nur
+            # Erzeugung. Für gültige Daten (sich ausschließende Felder) identisch
+            # zum bisherigen kategorie-blinden Σ; minimal-strenger im Misch-Edge.
+            sonstiges_erzeugung += b.sonstiges_erzeugung
+            sonstiges_verbrauch += b.sonstiges_verbrauch
 
         summen = berechne_sonstige_summen(data)
         sonstige_ertraege_gesamt += summen["ertraege_euro"]
