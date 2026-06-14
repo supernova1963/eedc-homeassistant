@@ -221,3 +221,41 @@ async def test_charnetz_uebersicht(db):
     assert ueb.bkw_erzeugung_kwh == pytest.approx(120.0)
     assert ueb.bkw_eigenverbrauch_kwh == pytest.approx(90.0)
     assert ueb.sonstiges_verbrauch_kwh == pytest.approx(200.0)
+
+
+# ── Pflicht-Symmetrie: gemeinsame Felder über die Read-Sites deckungsgleich ──
+
+async def test_symmetrie_cross_site(db):
+    """Aggregator-Symmetrie ([[feedback_aggregator_symmetrie]]): aktueller_monat,
+    Komponenten und Übersicht liefern für DIESELBE Anlage deckungsgleiche
+    per-Typ-Aggregate (Site-zu-Site verglichen, nicht gegen Konstanten) — bricht
+    sofort, wenn eine Site erneut driftet. Dies ist der Drift-Lock für Block 1:
+    ein statischer Layer-Wächter ist hier nicht sinnvoll (dieselben IMD-Felder
+    lesen ~10 legitime Nicht-Block-1-Sites), der behaviorale Test fängt
+    semantische Drift, nicht nur syntaktische.
+
+    /aggregiert ist bewusst NICHT dabei: andere Form (Einzelmonat) + BKW-Speicher-
+    Lump-Quirk in speicher_ladung — eigene Charakterisierung oben.
+    """
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+    from backend.api.routes.cockpit.komponenten import get_komponenten_zeitreihe
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+
+    anlage_id = await _seed(db)
+    am = await get_aktueller_monat(anlage_id=anlage_id, jahr=2026, monat=4, db=db)
+    resp = await get_komponenten_zeitreihe(anlage_id=anlage_id, jahr=2026, db=db)
+    k = next(m for m in resp.monatswerte if (m.jahr, m.monat) == (2026, 4))
+    ueb = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=2026, db=db)
+
+    # Speicher
+    assert am.speicher_ladung_kwh == k.speicher_ladung_kwh == ueb.speicher_ladung_kwh
+    assert am.speicher_entladung_kwh == k.speicher_entladung_kwh == ueb.speicher_entladung_kwh
+    # WP
+    assert am.wp_strom_kwh == k.wp_strom_kwh == ueb.wp_strom_kwh
+    assert am.wp_waerme_kwh == k.wp_waerme_kwh == ueb.wp_waerme_kwh
+    # E-Mob (Pool)
+    assert am.emob_ladung_kwh == k.emob_ladung_kwh == ueb.emob_ladung_kwh
+    assert am.emob_km == k.emob_km == ueb.emob_km
+    # BKW
+    assert am.bkw_erzeugung_kwh == k.bkw_erzeugung_kwh == ueb.bkw_erzeugung_kwh
+    assert am.bkw_eigenverbrauch_kwh == k.bkw_eigenverbrauch_kwh == ueb.bkw_eigenverbrauch_kwh
