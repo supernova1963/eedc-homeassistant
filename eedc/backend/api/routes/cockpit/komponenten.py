@@ -13,7 +13,11 @@ from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
-from backend.core.berechnungen import eauto_effizienz_100km, einspeise_erloes_euro
+from backend.core.berechnungen import (
+    eauto_effizienz_100km,
+    einspeise_erloes_euro,
+    imd_typ_beitrag,
+)
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.utils.sonstige_positionen import aggregiere_sonstige_je_monat
 from backend.api.routes.cockpit._shared import MONATSNAMEN
@@ -23,13 +27,6 @@ from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
-)
-from backend.core.field_definitions import (
-    get_pv_erzeugung_kwh,
-    get_sonstiges_verbrauch_kwh,
-    get_speicher_netzladung_kwh,
-    get_wp_heizenergie_kwh,
-    get_wp_strom_kwh,
 )
 
 router = APIRouter()
@@ -208,70 +205,51 @@ async def get_komponenten_zeitreihe(
         # (all_inv_ids ohne PV/WR) und laufzeit-gefiltert (ist_aktiv_im_monat).
         # Finanzpositionen werden unten entkoppelt über ALLE Investitionen
         # aggregiert (#310). Siehe `aggregiere_sonstige_je_monat`.
-        if inv.typ == "speicher":
-            d["speicher_ladung"] += data.get("ladung_kwh", 0) or 0
-            d["speicher_entladung"] += data.get("entladung_kwh", 0) or 0
-            arbitrage_kwh = get_speicher_netzladung_kwh(data)
-            if arbitrage_kwh > 0:
-                hat_arbitrage = True
-                d["speicher_arbitrage"] += arbitrage_kwh
-                preis = data.get("speicher_ladepreis_cent", 0) or 0
-                if preis > 0:
-                    d["speicher_arbitrage_preis_sum"] += preis * arbitrage_kwh
-                    d["speicher_arbitrage_count"] += arbitrage_kwh
+        # Dienstwagen rausfiltern (Joachim-Pattern, feedback_dienstwagen_alle_checks.md):
+        # ist_dienstlich-Komponenten gehören in dienstliche Ladekosten, nicht in
+        # den E-Mobilitäts-Pool der eigenen Anlage.
+        if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
+            continue
 
-        elif inv.typ == "waermepumpe":
-            heizung = get_wp_heizenergie_kwh(data)
-            warmwasser = data.get("warmwasser_kwh", 0) or 0
-            waerme_gesamt = data.get("waerme_kwh", 0) or (heizung + warmwasser)
-            d["wp_heizung"] += heizung
-            d["wp_warmwasser"] += warmwasser
-            d["wp_waerme"] += waerme_gesamt
-            # #183: bei getrennter Strommessung Gesamt-Strom aus den Einzel-
-            # Sensoren bilden — alter Gesamt-Sensor wird ignoriert, sonst
-            # driften JAZ-Gesamt und JAZ-Einzel gegeneinander.
-            d["wp_strom"] += get_wp_strom_kwh(data, inv.parameter)
-            if "strom_heizen_kwh" in data:
-                d["wp_strom_heizen"] += data.get("strom_heizen_kwh", 0) or 0
-                d["wp_strom_warmwasser"] += data.get("strom_warmwasser_kwh", 0) or 0
+        # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1). Nicht-
+        # zutreffende Felder sind 0 → unbedingtes Falten ist verhaltensneutral.
+        b = imd_typ_beitrag(inv, data)
 
-        elif inv.typ in ("e-auto", "wallbox"):
-            # Dienstwagen rausfiltern (Joachim-Pattern, feedback_dienstwagen_alle_checks.md):
-            # ist_dienstlich-Komponenten gehören in dienstliche Ladekosten,
-            # nicht in den E-Mobilitäts-Pool der eigenen Anlage.
-            if ist_dienstlich(inv):
-                continue
-            # Rohe IMD je Quelle sammeln — Pooling zentral via
-            # `get_emob_heimladung_canonical` weiter unten. km + v2h nur vom E-Auto.
-            if inv.typ == "e-auto":
-                d["eauto_imds"].append(data)
-                d["eauto_km"] += data.get("km_gefahren", 0) or 0
-                # Gemessener Fahrverbrauch (für Ø Verbrauch kWh/100 km mit Vorrang
-                # vor der Ladungs-Näherung — selbe Quelle wie E-Auto-Dashboard).
-                d["eauto_verbrauch"] += data.get("verbrauch_kwh", 0) or 0
-                v2h = data.get("v2h_entladung_kwh", 0) or 0
-                if v2h > 0:
-                    hat_v2h = True
-                    d["eauto_v2h"] += v2h
-            else:  # wallbox
-                d["wb_imds"].append(data)
+        d["speicher_ladung"] += b.speicher_ladung
+        d["speicher_entladung"] += b.speicher_entladung
+        if b.speicher_arbitrage > 0:
+            hat_arbitrage = True
+            d["speicher_arbitrage"] += b.speicher_arbitrage
+            if b.speicher_ladepreis_cent > 0:
+                d["speicher_arbitrage_preis_sum"] += b.speicher_ladepreis_cent * b.speicher_arbitrage
+                d["speicher_arbitrage_count"] += b.speicher_arbitrage
 
-        elif inv.typ == "balkonkraftwerk":
-            d["bkw_erzeugung"] += get_pv_erzeugung_kwh(data)
-            d["bkw_eigenverbrauch"] += data.get("eigenverbrauch_kwh", 0) or 0
-            d["bkw_speicher_ladung"] += data.get("speicher_ladung_kwh", 0) or 0
-            d["bkw_speicher_entladung"] += data.get("speicher_entladung_kwh", 0) or 0
+        d["wp_heizung"] += b.wp_heizung
+        d["wp_warmwasser"] += b.wp_warmwasser
+        d["wp_waerme"] += b.wp_waerme
+        d["wp_strom"] += b.wp_strom
+        d["wp_strom_heizen"] += b.wp_strom_heizen
+        d["wp_strom_warmwasser"] += b.wp_strom_warmwasser
 
-        elif inv.typ == "sonstiges":
-            params = inv.parameter or {}
-            kategorie = params.get("kategorie", "")
-            if kategorie == "erzeuger":
-                d["sonstiges_erzeugung"] += data.get("erzeugung_kwh", 0) or 0
-            elif kategorie == "verbraucher":
-                d["sonstiges_verbrauch"] += get_sonstiges_verbrauch_kwh(data)
-            else:
-                d["sonstiges_erzeugung"] += data.get("erzeugung_kwh", 0) or 0
-                d["sonstiges_verbrauch"] += get_sonstiges_verbrauch_kwh(data)
+        d["bkw_erzeugung"] += b.bkw_erzeugung
+        d["bkw_eigenverbrauch"] += b.bkw_eigenverbrauch
+        d["bkw_speicher_ladung"] += b.bkw_speicher_ladung
+        d["bkw_speicher_entladung"] += b.bkw_speicher_entladung
+
+        d["sonstiges_erzeugung"] += b.sonstiges_erzeugung
+        d["sonstiges_verbrauch"] += b.sonstiges_verbrauch
+
+        # E-Mob: km/Fahrverbrauch/V2H skalar; rohe IMD je Quelle sammeln — Pooling
+        # zentral via `get_emob_heimladung_canonical` weiter unten (km+v2h nur E-Auto).
+        d["eauto_km"] += b.eauto_km
+        d["eauto_verbrauch"] += b.eauto_verbrauch
+        if b.eauto_v2h > 0:
+            hat_v2h = True
+            d["eauto_v2h"] += b.eauto_v2h
+        if inv.typ == "e-auto":
+            d["eauto_imds"].append(data)
+        elif inv.typ == "wallbox":
+            d["wb_imds"].append(data)
 
     monatswerte = []
     # E-Mobilität: Σ über alle Monate für das Komponenten-Aggregat (Ø Verbrauch
