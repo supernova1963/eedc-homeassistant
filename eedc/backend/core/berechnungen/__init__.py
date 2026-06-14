@@ -75,6 +75,7 @@ from backend.core.berechnungen.imd_monatsaggregat import (
     ImdTypBeitrag,
     imd_typ_beitrag,
 )
+from backend.core.berechnungen.netzbezug_kosten import berechne_netzbezug_kosten
 from backend.core.berechnungen.energie import (
     BATTERIE_KOMPONENTEN_PREFIXE,
     PV_KOMPONENTEN_PREFIXE,
@@ -175,6 +176,7 @@ __all__ = [
     "berechne_finanz_aggregat",
     "ImdTypBeitrag",
     "imd_typ_beitrag",
+    "berechne_netzbezug_kosten",
     "QUELLE_GEMESSEN",
     "QUELLE_LADUNG",
     "QUELLE_KEINE",
