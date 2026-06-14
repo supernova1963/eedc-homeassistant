@@ -44,10 +44,12 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
     WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
-from backend.services.speicher_wirtschaftlichkeit import (
-    berechne_effektiver_ladepreis,
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     berechne_speicher_ersparnis,
     berechne_v2h_ersparnis,
+)
+from backend.services.speicher_wirtschaftlichkeit import (
+    berechne_effektiver_ladepreis,
 )
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,

@@ -49,12 +49,14 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     EXTERNE_LADUNG_DEFAULT_EURO_KWH,
 )
-from backend.services.speicher_wirtschaftlichkeit import (
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     aggregiere_speicher_ist,
-    berechne_effektiver_ladepreis,
-    berechne_ist_wirkungsgrad,
     berechne_v2h_ersparnis,
     ist_eta_degradation_alarm,
+)
+from backend.services.speicher_wirtschaftlichkeit import (
+    berechne_effektiver_ladepreis,
+    berechne_ist_wirkungsgrad,
 )
 from backend.core.calculations import (
     CO2_FAKTOR_BENZIN_KG_LITER,

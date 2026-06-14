@@ -1230,9 +1230,11 @@ async def get_aktueller_monat(
         # über die Monatsgrenze hinaus), nicht relativ zur Ladung.
         if sl > 0:
             from calendar import monthrange
+            from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
+                ist_soc_drift_signifikant,
+            )
             from backend.services.speicher_wirtschaftlichkeit import (
                 _lese_soc_am_periodenrand,
-                ist_soc_drift_signifikant,
             )
             try:
                 monat_start = date(jahr, monat, 1)

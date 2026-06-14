@@ -31,13 +31,15 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE_DEFAULTS,
 )
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
+from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
+    aggregiere_speicher_ist,
+    ist_eta_degradation_alarm,
+)
 from backend.services.speicher_wirtschaftlichkeit import (
     EffektiverLadepreisErgebnis,
     WirkungsgradErgebnis,
-    aggregiere_speicher_ist,
     berechne_effektiver_ladepreis,
     berechne_ist_wirkungsgrad,
-    ist_eta_degradation_alarm,
 )
 from backend.services.eauto_wirtschaftlichkeit import (
     letzter_kraftstoffpreis_aus_lookup,
