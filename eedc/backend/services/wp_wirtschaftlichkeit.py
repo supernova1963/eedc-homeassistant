@@ -29,6 +29,7 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
 )
+from backend.core.berechnungen import gas_kosten_altanlage
 from backend.core.wirtschaftlichkeit_defaults import (
     GASPREIS_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -102,7 +103,7 @@ def berechne_wp_ersparnis(
     else:
         gaspreis_cent = _wp_alter_preis_cent(wp_parameter)
 
-    alte_heizung_kosten = (wp_waerme_kwh / wirkungsgrad) * gaspreis_cent / 100
+    alte_heizung_kosten = gas_kosten_altanlage(wp_waerme_kwh, wirkungsgrad, gaspreis_cent)
     wp_kosten = wp_strom_kwh * wp_strompreis_cent / 100
     ersparnis = alte_heizung_kosten - wp_kosten
 
