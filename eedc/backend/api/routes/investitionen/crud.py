@@ -159,6 +159,62 @@ class InvestitionResponse(InvestitionBase):
         from_attributes = True
 
 
+def _gruppiere_investitionen(
+    investitionen: list[Investition],
+) -> tuple[dict[int, dict], list[Investition], list[Investition]]:
+    """Gruppiert Investitionen strukturell für die ROI-Berechnung.
+
+    Reine Zwei-Pass-Zuordnung (keine DB-I/O, keine Berechnung, keine
+    Anzeige-Strings) der bereits geladenen Investitions-Liste:
+
+    - **PV-Systeme** — Wechselrichter mit zugeordneten PV-Modulen und
+      DC-gekoppelten Speichern (Parent = WR). ROI nur auf System-Ebene
+      sinnvoll.
+    - **Standalone** — AC-gekoppelte Speicher (ohne gültigen WR-Parent) und
+      alle übrigen Typen (E-Auto, Wärmepumpe, Wallbox, Balkonkraftwerk,
+      Sonstiges).
+    - **Orphan-PV-Module** — PV-Module ohne (gültige)
+      Wechselrichter-Zuordnung (Altdaten).
+
+    Zwei-Pass-Ansatz: erst alle Wechselrichter registrieren, damit
+    `parent_investition_id` unabhängig von der Sortierung aufgelöst werden
+    kann.
+
+    Returns:
+        (pv_systeme, standalone, orphan_pv_module) — `pv_systeme` als
+        ``wr_id -> {"wr": Investition, "pv_module": [...], "speicher": [...]}``.
+    """
+    pv_systeme: dict[int, dict] = {}
+    standalone: list[Investition] = []
+    orphan_pv_module: list[Investition] = []
+
+    for inv in investitionen:
+        if inv.typ == InvestitionTyp.WECHSELRICHTER.value:
+            pv_systeme[inv.id] = {"wr": inv, "pv_module": [], "speicher": []}
+
+    for inv in investitionen:
+        if inv.typ == InvestitionTyp.WECHSELRICHTER.value:
+            continue  # bereits im ersten Pass registriert
+        elif inv.typ == InvestitionTyp.PV_MODULE.value:
+            if inv.parent_investition_id and inv.parent_investition_id in pv_systeme:
+                pv_systeme[inv.parent_investition_id]["pv_module"].append(inv)
+            else:
+                # PV-Modul ohne Wechselrichter-Zuordnung
+                orphan_pv_module.append(inv)
+        elif inv.typ == InvestitionTyp.SPEICHER.value:
+            if inv.parent_investition_id and inv.parent_investition_id in pv_systeme:
+                # DC-gekoppelter Speicher am Hybrid-WR
+                pv_systeme[inv.parent_investition_id]["speicher"].append(inv)
+            else:
+                # AC-gekoppelter Speicher - eigenständig
+                standalone.append(inv)
+        else:
+            # E-Auto, Wärmepumpe, Wallbox, Balkonkraftwerk, Sonstiges
+            standalone.append(inv)
+
+    return pv_systeme, standalone, orphan_pv_module
+
+
 # =============================================================================
 # Router
 # =============================================================================
@@ -662,42 +718,10 @@ async def get_roi_dashboard(
     # ==========================================================================
     # Phase 1: Gruppiere Investitionen nach PV-Systemen und Standalone
     # ==========================================================================
-
-    # PV-Systeme: Wechselrichter mit zugeordneten PV-Modulen und DC-Speichern
-    pv_systeme: dict[int, dict] = {}  # wr_id -> {wr, pv_module[], speicher[]}
-
-    # Standalone: Investitionen die nicht zu einem PV-System gehören
-    standalone: list[Investition] = []
-
-    # Orphans: PV-Module/Speicher ohne Wechselrichter-Zuordnung (Altdaten)
-    orphan_pv_module: list[Investition] = []
-
-    # Zwei-Pass-Ansatz: Erst alle Wechselrichter sammeln, damit parent_investition_id
-    # korrekt aufgelöst werden kann (unabhängig von der Sortierung)
-    for inv in investitionen:
-        if inv.typ == InvestitionTyp.WECHSELRICHTER.value:
-            pv_systeme[inv.id] = {"wr": inv, "pv_module": [], "speicher": []}
-
-    # Zweiter Pass: PV-Module und Speicher zuordnen
-    for inv in investitionen:
-        if inv.typ == InvestitionTyp.WECHSELRICHTER.value:
-            continue  # bereits verarbeitet
-        elif inv.typ == InvestitionTyp.PV_MODULE.value:
-            if inv.parent_investition_id and inv.parent_investition_id in pv_systeme:
-                pv_systeme[inv.parent_investition_id]["pv_module"].append(inv)
-            else:
-                # PV-Modul ohne Wechselrichter-Zuordnung
-                orphan_pv_module.append(inv)
-        elif inv.typ == InvestitionTyp.SPEICHER.value:
-            if inv.parent_investition_id and inv.parent_investition_id in pv_systeme:
-                # DC-gekoppelter Speicher am Hybrid-WR
-                pv_systeme[inv.parent_investition_id]["speicher"].append(inv)
-            else:
-                # AC-gekoppelter Speicher - eigenständig
-                standalone.append(inv)
-        else:
-            # E-Auto, Wärmepumpe, Wallbox, Balkonkraftwerk, Sonstiges
-            standalone.append(inv)
+    # Strukturierung extrahiert nach modul-internem `_gruppiere_investitionen`
+    # (rein, DB-/Anzeige-frei). `pv_systeme`: wr_id -> {wr, pv_module[], speicher[]};
+    # `orphan_pv_module`: PV-Module ohne WR-Zuordnung (Altdaten).
+    pv_systeme, standalone, orphan_pv_module = _gruppiere_investitionen(investitionen)
 
     # ==========================================================================
     # Phase 2: Hilfsfunktion für PV-Erzeugungsdaten
