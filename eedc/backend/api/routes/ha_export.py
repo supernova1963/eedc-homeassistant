@@ -23,6 +23,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
     berechne_spez_ertrag_annualisiert,
+    gas_kosten_altanlage,
     berechne_verbrauchs_kennzahlen,
     monatsgewichte_aus_pvgis,
 )
@@ -1004,7 +1005,7 @@ async def calculate_investition_sensors(
                         gp = (amd.gaspreis_cent_kwh
                               if amd and amd.gaspreis_cent_kwh is not None
                               else fallback_alter_preis)
-                        alte_kosten += (waerme / alter_wirkungsgrad) * gp / 100
+                        alte_kosten += gas_kosten_altanlage(waerme, alter_wirkungsgrad, gp)
                     # Fixe Zusatzkosten anteilig
                     alte_kosten += zusatzkosten_jahr * len(monatsdaten) / 12
                     wp_kosten = gesamt_strom * netzbezug_preis / 100

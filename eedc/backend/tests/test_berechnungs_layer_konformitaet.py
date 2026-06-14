@@ -178,11 +178,6 @@ ALLOWED_GAS_KOSTEN_FILES = {
 # betroffenen Codes auf einen gemeinsamen Fragment-Helper konsolidieren und den
 # Eintrag entfernen.
 GAS_KOSTEN_GRANDFATHERED: dict[str, str] = {
-    "api/routes/ha_export.py": (
-        "wp_ersparnis_euro-Sensor (per-WP, volle Stromkosten ohne PV-Anteil-"
-        "Split) — Trigger: gemeinsamen gas_kosten_altanlage-Fragment-Helper "
-        "extrahieren oder nächster HA-Export-WP-Touch."
-    ),
     "api/routes/aussichten.py": (
         "WP-PROGNOSE (Forecast-Jahr, thermisch-gewichteter Aggregat-Wirkungsgrad)"
         " — die bisherige/historische Formel ist bereits auf den Layer "
