@@ -83,3 +83,15 @@ async def test_wp_alternativkosten_delta_isoliert(db):
 
     delta = res_mit.bisherige_ertraege_euro - res_ohne.bisherige_ertraege_euro
     assert delta == pytest.approx(152.22, abs=0.01)
+
+
+async def test_wp_forecast_ersparnis_golden(db):
+    """Golden-Master für den WP-PROGNOSE-Pfad (`wp_alternativ_ersparnis_euro`),
+    der die Gaskosten-Teilformel inline trägt. Ohne WP ist der Wert 0 → der
+    Forecast-Wert ist hier isoliert. Pinnt den IST-Stand vor der Migration auf
+    `gas_kosten_altanlage` (byte-identische Arithmetik → unverändert)."""
+    id_mit = await _seed(db, mit_wp=True)
+    res = await get_finanz_prognose(anlage_id=id_mit, monate=12, db=db)
+    # 12-Monats-Horizont deckt jeden Kalendermonat genau einmal ab →
+    # Saison-Summen datums-unabhängig, Golden-Wert stabil.
+    assert res.wp_alternativ_ersparnis_euro == pytest.approx(971.83, abs=0.01)

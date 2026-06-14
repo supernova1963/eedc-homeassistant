@@ -30,6 +30,7 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     berechne_wp_alternativkosten_ersparnis,
     einspeise_erloes_euro,
+    gas_kosten_altanlage,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.core.calculations import berechne_ust_eigenverbrauch
@@ -1538,7 +1539,9 @@ async def get_finanz_prognose(
         )
         # Was es mit Gas kosten würde (Energiepreis + fixe Zusatzkosten)
         gas_kosten_jahr = (
-            (wp_thermisch_jahr / wp_alter_wirkungsgrad_agg) * prognose_gaspreis / 100
+            gas_kosten_altanlage(
+                wp_thermisch_jahr, wp_alter_wirkungsgrad_agg, prognose_gaspreis
+            )
             + wp_alternativ_zusatzkosten_jahr
         )
         # WP-Stromkosten pro Jahr (nur Netzanteil) — konservative 50/50-Annahme

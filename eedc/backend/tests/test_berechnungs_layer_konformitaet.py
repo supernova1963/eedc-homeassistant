@@ -164,26 +164,19 @@ _INLINE_GAS_KOSTEN_ALTANLAGE = re.compile(
     r'''/\s*[\w\["'\]]*wirkungsgrad[\w\["'\]]*\s*\)\s*\*\s*\w+\s*/\s*100'''
 )
 
-# Designierte Heimaten der Fragment-Formel: der per-Monat-Aggregat-Helper im
-# Layer und der per-WP-Service-Helper. Beide berechnen das Fragment intern; die
-# „echte" Konsolidierung (ein gemeinsames `gas_kosten_altanlage`-Fragment) ist
-# der dokumentierte Folge-Schritt (siehe Grandfathered-Begründung unten).
+# Einzige Heimat der Fragment-Formel: der Helper `gas_kosten_altanlage`. Alle
+# vier vormals duplizierten Sites (Aggregat, per-WP-Service, HA-Export-Sensor,
+# Aussichten-Forecast) ziehen jetzt auf ihn → das Literal lebt nur noch in
+# seinem Funktionsrumpf.
 ALLOWED_GAS_KOSTEN_FILES = {
-    "core/berechnungen/alternativkosten.py",   # per-Monat-Aggregat (SoT)
-    "services/wp_wirtschaftlichkeit.py",        # per-WP-Service-Helper
+    "core/berechnungen/alternativkosten.py",   # gas_kosten_altanlage (SoT)
     "core/berechnungen/__init__.py",            # Re-Export
 }
 
-# Bestehende Inline-Kopien — Schuld, kein Persil-Schein. Bei nächstem Touch des
-# betroffenen Codes auf einen gemeinsamen Fragment-Helper konsolidieren und den
-# Eintrag entfernen.
-GAS_KOSTEN_GRANDFATHERED: dict[str, str] = {
-    "api/routes/aussichten.py": (
-        "WP-PROGNOSE (Forecast-Jahr, thermisch-gewichteter Aggregat-Wirkungsgrad)"
-        " — die bisherige/historische Formel ist bereits auf den Layer "
-        "konvergiert; der Forecast-Pfad folgt beim nächsten WP-Prognose-Touch."
-    ),
-}
+# Leer — die Schulden sind getilgt. Jede neue Inline-Kopie schlägt im Wächter
+# an; eine bewusste Ausnahme müsste hier mit Begründung + Migrations-Trigger
+# eingetragen werden (Format: relativer Pfad → Begründung).
+GAS_KOSTEN_GRANDFATHERED: dict[str, str] = {}
 
 
 def test_inline_gas_kosten_altanlage_nur_im_layer():
