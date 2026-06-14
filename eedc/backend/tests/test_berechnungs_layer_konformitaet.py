@@ -255,6 +255,44 @@ def test_grandfathered_dateien_existieren_und_enthalten_pattern():
     )
 
 
+# Pattern: Netzbezugskosten-Formel `… / 100 + …grundpreis` (Schläfer-Block 2).
+# Nach der Konsolidierung lebt sie nur noch im Helper `berechne_netzbezug_kosten`.
+# Die bare `kWh × ct / 100`-Multiplikation (ohne Grundpreis) bleibt bewusst
+# inline und ist hier NICHT gemeint — der `+ …grundpreis`-Teil ist der Marker.
+_INLINE_NETZBEZUG_KOSTEN = re.compile(r'''/\s*100\s*\+\s*[\w\["'\].]*grundpreis''')
+
+ALLOWED_NETZBEZUG_KOSTEN_FILES = {
+    "core/berechnungen/netzbezug_kosten.py",  # berechne_netzbezug_kosten (SoT)
+}
+
+
+def test_inline_netzbezug_kosten_nur_im_layer():
+    """Die Netzbezugskosten-Formel `kWh × preis / 100 + grundpreis` darf nur im
+    Helper `berechne_netzbezug_kosten` stehen — sonst driftet der Grundpreis
+    erneut über die Finanz-Read-Sites (komponenten/uebersicht/aktueller_monat/
+    calculations)."""
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_NETZBEZUG_KOSTEN_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if _INLINE_NETZBEZUG_KOSTEN.search(line):
+                verstoesse.append((rel, line_no, line.strip()))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel='Inline `kWh × preis / 100 + grundpreis` außerhalb von berechne_netzbezug_kosten',
+    ) + (
+        "\n\nSoT-Migration:\n"
+        "  from backend.core.berechnungen import berechne_netzbezug_kosten\n"
+        "  netzbezug_kosten = berechne_netzbezug_kosten(kwh, preis_cent, grundpreis_euro)"
+    )
+
+
 # Pattern: bare `.startswith("pv_")`-Literal (ohne zentralen Prefix-Import).
 # Die Live-Keyspace-Konsumenten (live_history_service, live_komponenten_builder)
 # legen Erzeuger einheitlich unter `pv_` ab; sie müssen die Prefix-Quelle aus

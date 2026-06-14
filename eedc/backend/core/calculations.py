@@ -7,7 +7,7 @@ Alle Formeln für Kennzahlen, Einsparungen und Auswertungen.
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.core.berechnungen import einspeise_erloes_euro
+from backend.core.berechnungen import berechne_netzbezug_kosten, einspeise_erloes_euro
 
 
 # =============================================================================
@@ -159,7 +159,9 @@ def berechne_monatskennzahlen(
     einspeise_erloes = einspeise_erloes_euro(
         einspeisung_kwh, None, einspeiseverguetung_cent
     ).erloes_euro
-    netzbezug_kosten = netzbezug_kwh * netzbezug_preis_cent / 100 + grundpreis_euro_monat
+    netzbezug_kosten = berechne_netzbezug_kosten(
+        netzbezug_kwh, netzbezug_preis_cent, grundpreis_euro_monat
+    )
     ev_ersparnis = eigenverbrauch * netzbezug_preis_cent / 100
 
     # Netto-Ertrag der PV-Anlage:

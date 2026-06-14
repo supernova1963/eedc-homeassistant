@@ -14,6 +14,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.berechnungen import (
+    berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     einspeise_erloes_euro,
     imd_typ_beitrag,
@@ -341,7 +342,9 @@ async def get_komponenten_zeitreihe(
         md = monatsdaten_by_key.get((jahr, monat))
         if md:
             eff_preis = resolve_netzbezug_preis_cent(md, m_preis_cent)
-            m_netzbezug_kosten = (md.netzbezug_kwh or 0) * eff_preis / 100 + m_grundpreis
+            m_netzbezug_kosten = berechne_netzbezug_kosten(
+                md.netzbezug_kwh or 0, eff_preis, m_grundpreis
+            )
             # §51 EEG: Einspeisung in Negativpreis-Stunden ist unvergütet.
             # Ohne Tages-Aggregat (m_neg=None) greift alte Berechnung.
             m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)

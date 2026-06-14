@@ -21,6 +21,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
+    berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
@@ -555,7 +556,7 @@ async def get_cockpit_uebersicht(
         m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
         eff_preis = resolve_netzbezug_preis_cent(m, m_preis_cent)
         kwh = m.netzbezug_kwh or 0
-        netzbezug_kosten += kwh * eff_preis / 100 + m_grundpreis
+        netzbezug_kosten += berechne_netzbezug_kosten(kwh, eff_preis, m_grundpreis)
 
         m_key = (m.jahr, m.monat)
         m_pv = pv_erzeugung_inv_by_ym.get(m_key, 0.0) if use_inv_pv else (m.pv_erzeugung_kwh or 0)

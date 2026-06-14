@@ -26,6 +26,7 @@ from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
+    berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     einspeise_erloes_euro,
     imd_typ_beitrag,
@@ -639,7 +640,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 )
                 result["einspeise_erloes_euro"] = round(m_erloes.erloes_euro, 2)
             if netz > 0:
-                result["netzbezug_kosten_euro"] = round(netz * netz_preis / 100 + grundpreis, 2)
+                result["netzbezug_kosten_euro"] = round(
+                    berechne_netzbezug_kosten(netz, netz_preis, grundpreis), 2
+                )
             if ev > 0:
                 result["ev_ersparnis_euro"] = round(ev * netz_preis / 100, 2)
             einspeise_e = result.get("einspeise_erloes_euro", 0) or 0
@@ -1040,7 +1043,9 @@ async def get_aktueller_monat(
             einspeise_erloes = round(m_erloes.erloes_euro, 2)
         if netzbezug is not None:
             grundpreis = allgemein_tarif.grundpreis_euro_monat or 0
-            netzbezug_kosten = round(netzbezug * netzbezug_preis_cent / 100 + grundpreis, 2)
+            netzbezug_kosten = round(
+                berechne_netzbezug_kosten(netzbezug, netzbezug_preis_cent, grundpreis), 2
+            )
         if eigenverbrauch is not None:
             ev_ersparnis = round(eigenverbrauch * netzbezug_preis_cent / 100, 2)
 
