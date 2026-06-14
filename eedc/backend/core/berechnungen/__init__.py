@@ -34,6 +34,7 @@ Geplant (step-by-step, wenn Konsumenten angefasst werden):
 from backend.core.berechnungen.alternativkosten import (
     berechne_bkw_alternativkosten_ersparnis,
     berechne_wp_alternativkosten_ersparnis,
+    gas_kosten_altanlage,
 )
 from backend.core.berechnungen.co2_amortisation import (
     QUELLE_DEFAULT,
@@ -149,6 +150,7 @@ from backend.core.berechnungen.verbrauch import (
 __all__ = [
     "berechne_bkw_alternativkosten_ersparnis",
     "berechne_wp_alternativkosten_ersparnis",
+    "gas_kosten_altanlage",
     "QUELLE_OVERRIDE",
     "QUELLE_DEFAULT",
     "QUELLE_FEHLT",

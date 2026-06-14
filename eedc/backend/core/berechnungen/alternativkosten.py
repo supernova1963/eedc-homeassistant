@@ -38,6 +38,20 @@ from backend.core.wirtschaftlichkeit_defaults import (
 )
 
 
+def gas_kosten_altanlage(
+    waerme_kwh: float, wirkungsgrad: float, gaspreis_cent: float,
+) -> float:
+    """Hypothetische Brennstoffkosten der fossilen Altanlage in €.
+
+    Single Source of der drift-anfälligen Formel ``(Wärme / Wirkungsgrad) ×
+    Gaspreis / 100`` — die Energiekosten, die die ersetzte Gas-/Öl-Heizung für
+    eine gegebene thermische Wärmemenge verursacht hätte. Genutzt von der
+    per-Monat-Aggregat-Ersparnis (hier), der per-WP-Service-Ersparnis
+    (`services.wp_wirtschaftlichkeit`) sowie den HA-Export- und Prognose-Sichten.
+    """
+    return (waerme_kwh / wirkungsgrad) * gaspreis_cent / 100
+
+
 def _wp_aggregate(parameter: Optional[dict]) -> dict:
     """Per-WP-Kennwerte (alter Preis, Wirkungsgrad, fixe Zusatzkosten/Jahr) aus
     den Investitions-Parametern — vereinheitlicht über die Defaults.
@@ -102,7 +116,9 @@ def berechne_wp_alternativkosten_ersparnis(
             strom = get_wp_strom_kwh(daten, wp.parameter)
             g = gaspreis_by_periode.get((jahr, monat))
             monats_gaspreis = g if g is not None else wp_agg["alter_preis_cent"]
-            gas_kosten = (thermisch / wp_agg["alter_wirkungsgrad"]) * monats_gaspreis / 100
+            gas_kosten = gas_kosten_altanlage(
+                thermisch, wp_agg["alter_wirkungsgrad"], monats_gaspreis
+            )
             wp_stromkosten_netz = (
                 strom * (1.0 - WP_PV_ANTEIL_DEFAULT) * netzbezug_preis_cent / 100
             )

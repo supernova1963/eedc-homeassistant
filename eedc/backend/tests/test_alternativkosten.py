@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from backend.core.berechnungen import (
     berechne_bkw_alternativkosten_ersparnis,
     berechne_wp_alternativkosten_ersparnis,
+    gas_kosten_altanlage,
 )
 
 
@@ -107,3 +108,33 @@ def test_bkw_ignoriert_fremde_inv_ids():
 
 def test_bkw_leer():
     assert berechne_bkw_alternativkosten_ersparnis([], {}, 30.0) == 0.0
+
+
+# ============================================================================
+# gas_kosten_altanlage — Fragment-Helper (SoT der „bisherige fossile Heizung"-
+# Energiekosten). Konsolidiert die zuvor 4× duplizierte Inline-Formel.
+# ============================================================================
+
+
+def test_gas_kosten_altanlage_grundfall():
+    """(1000 / 0,90) * 10 / 100 = 111,111 €."""
+    assert gas_kosten_altanlage(1000.0, 0.90, 10.0) == (1000.0 / 0.90) * 10.0 / 100
+
+
+def test_gas_kosten_altanlage_oel_wirkungsgrad():
+    """Niedrigerer Öl-Wirkungsgrad → höhere hypothetische Kosten."""
+    gas = gas_kosten_altanlage(1000.0, 0.90, 10.0)
+    oel = gas_kosten_altanlage(1000.0, 0.85, 10.0)
+    assert oel > gas
+
+
+def test_gas_kosten_altanlage_null_waerme():
+    assert gas_kosten_altanlage(0.0, 0.90, 10.0) == 0.0
+
+
+def test_gas_kosten_altanlage_byte_identisch_zur_inline_formel():
+    """Verhaltens-Garantie für die Migration: identisch zur bisherigen
+    Inline-Berechnung `(waerme / wirkungsgrad) * gaspreis / 100` (gleiche
+    Operations-Reihenfolge → keine Float-Abweichung)."""
+    for waerme, wg, preis in [(800.0, 0.9, 12.0), (1234.5, 0.85, 9.3), (300.0, 0.9, 0.0)]:
+        assert gas_kosten_altanlage(waerme, wg, preis) == (waerme / wg) * preis / 100
