@@ -19,7 +19,7 @@ import {
   Target,
   Award,
 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, Verteilung, MonatlicheDurchschnitte } from '../../api/community'
@@ -177,80 +177,33 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
       {/* Performance-Übersicht */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Perzentil-Karte */}
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-primary-100 dark:bg-primary-900/30">
-              <Award className="h-5 w-5 text-primary-500" />
-            </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">Deine Position</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-gray-900 dark:text-white">
-              Top {100 - (perzentil || 0)} %
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Besser als {perzentil} % der Community
-          </p>
-        </Card>
+        <KPICard
+          title="Deine Position"
+          value={`Top ${100 - (perzentil || 0)} %`}
+          subtitle={`Besser als ${perzentil} % der Community`}
+          color="blue"
+          icon={Award}
+        />
 
         {/* Abweichung Gesamt */}
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`p-2 rounded-lg ${
-              (performanceStats?.abweichungGesamt || 0) >= 0
-                ? 'bg-green-100 dark:bg-green-900/30'
-                : 'bg-red-100 dark:bg-red-900/30'
-            }`}>
-              {(performanceStats?.abweichungGesamt || 0) >= 0 ? (
-                <TrendingUp className="h-5 w-5 text-green-500" />
-              ) : (
-                <TrendingDown className="h-5 w-5 text-red-500" />
-              )}
-            </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">vs. Community</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-3xl font-bold ${
-              (performanceStats?.abweichungGesamt || 0) >= 0
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-red-600 dark:text-red-400'
-            }`}>
-              {(performanceStats?.abweichungGesamt || 0) >= 0 ? '+' : ''}
-              {performanceStats?.abweichungGesamt.toFixed(1)} %
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {performanceStats?.differenzAbsolut.toFixed(0)} kWh/kWp Differenz
-          </p>
-        </Card>
+        <KPICard
+          title="vs. Community"
+          value={`${(performanceStats?.abweichungGesamt || 0) >= 0 ? '+' : ''}${performanceStats?.abweichungGesamt.toFixed(1)}`}
+          unit="%"
+          subtitle={`${performanceStats?.differenzAbsolut.toFixed(0)} kWh/kWp Differenz`}
+          color={(performanceStats?.abweichungGesamt || 0) >= 0 ? 'green' : 'red'}
+          icon={(performanceStats?.abweichungGesamt || 0) >= 0 ? TrendingUp : TrendingDown}
+        />
 
         {/* Abweichung Region */}
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`p-2 rounded-lg ${
-              (performanceStats?.abweichungRegion || 0) >= 0
-                ? 'bg-green-100 dark:bg-green-900/30'
-                : 'bg-red-100 dark:bg-red-900/30'
-            }`}>
-              <Target className="h-5 w-5 text-blue-500" />
-            </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">vs. Region</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-3xl font-bold ${
-              (performanceStats?.abweichungRegion || 0) >= 0
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-red-600 dark:text-red-400'
-            }`}>
-              {(performanceStats?.abweichungRegion || 0) >= 0 ? '+' : ''}
-              {performanceStats?.abweichungRegion.toFixed(1)} %
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Vergleich mit deinem Bundesland
-          </p>
-        </Card>
+        <KPICard
+          title="vs. Region"
+          value={`${(performanceStats?.abweichungRegion || 0) >= 0 ? '+' : ''}${performanceStats?.abweichungRegion.toFixed(1)}`}
+          unit="%"
+          subtitle="Vergleich mit deinem Bundesland"
+          color={(performanceStats?.abweichungRegion || 0) >= 0 ? 'green' : 'red'}
+          icon={Target}
+        />
       </div>
 
       {/* Monatlicher Ertrag mit Community-Vergleich */}

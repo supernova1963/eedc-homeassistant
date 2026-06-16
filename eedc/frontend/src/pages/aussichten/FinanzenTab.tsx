@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, Fuel } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
 import { INVESTITION_TYP_ORDER, CHART_COLORS } from '../../lib'
@@ -113,104 +113,61 @@ export default function FinanzenTab({ anlageId }: Props) {
     <div className="space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-              <Euro className="h-5 w-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Jahres-Ertrag</p>
-              <FormelTooltip
-                sicht="Gesamt-Anlage · Jahres-Prognose auf Basis PVGIS + historischer Ø-Werte"
-                formel="PV-Netto + WP-, E-Auto-, BKW-Ersparnis − Betriebskosten"
-                ergebnis={`= ${fmtCalc(prognose.jahres_netto_ertrag_euro, 0)} €/Jahr`}
-              >
-                <p className="text-xl font-bold text-green-600">
-                  {prognose.jahres_netto_ertrag_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-                </p>
-              </FormelTooltip>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Jahres-Ertrag"
+          value={prognose.jahres_netto_ertrag_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          unit="€"
+          color="green"
+          icon={Euro}
+          sicht="Gesamt-Anlage · Jahres-Prognose auf Basis PVGIS + historischer Ø-Werte"
+          formel="PV-Netto + WP-, E-Auto-, BKW-Ersparnis − Betriebskosten"
+          ergebnis={`= ${fmtCalc(prognose.jahres_netto_ertrag_euro, 0)} €/Jahr`}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation</p>
-              <FormelTooltip
-                sicht="Gesamt-Anlage · kumulierter Fortschritt · IST-Werte gegen Gesamt-Investition"
-                formel="Bisherige Erträge ÷ Gesamtinvestition × 100"
-                berechnung={`${fmtCalc(prognose.bisherige_ertraege_euro, 0)} € ÷ ${fmtCalc(prognose.investition_gesamt_euro, 0)} € × 100`}
-                ergebnis={`= ${prognose.amortisations_fortschritt_prozent.toFixed(1)} %`}
-              >
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {prognose.amortisations_fortschritt_prozent.toFixed(1)} %
-                </p>
-              </FormelTooltip>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Amortisation"
+          value={prognose.amortisations_fortschritt_prozent.toFixed(1)}
+          unit="%"
+          color="blue"
+          icon={TrendingUp}
+          sicht="Gesamt-Anlage · kumulierter Fortschritt · IST-Werte gegen Gesamt-Investition"
+          formel="Bisherige Erträge ÷ Gesamtinvestition × 100"
+          berechnung={`${fmtCalc(prognose.bisherige_ertraege_euro, 0)} € ÷ ${fmtCalc(prognose.investition_gesamt_euro, 0)} € × 100`}
+          ergebnis={`= ${prognose.amortisations_fortschritt_prozent.toFixed(1)} %`}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            {prognose.amortisation_erreicht ? (
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-            ) : (
-              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              </div>
-            )}
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation</p>
-              <FormelTooltip
-                sicht="Gesamt-Anlage · Prognose Jahr · IST-Erträge + erwartete Jahresersparnis"
-                formel="heute + (Restbetrag ÷ Jahres-Netto-Ertrag)"
-                ergebnis={
-                  prognose.amortisation_erreicht
-                    ? '= bereits erreicht'
-                    : prognose.amortisation_prognose_jahr
-                      ? `= voraussichtlich ${prognose.amortisation_prognose_jahr}`
-                      : 'nicht berechenbar'
-                }
-              >
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {prognose.amortisation_erreicht ? (
-                    <span className="text-green-600">Erreicht</span>
-                  ) : prognose.amortisation_prognose_jahr ? (
-                    <span>{prognose.amortisation_prognose_jahr}</span>
-                  ) : (
-                    <span className="text-gray-400 dark:text-gray-500">-</span>
-                  )}
-                </p>
-              </FormelTooltip>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Amortisation"
+          value={
+            prognose.amortisation_erreicht
+              ? 'Erreicht'
+              : prognose.amortisation_prognose_jahr
+                ? String(prognose.amortisation_prognose_jahr)
+                : '–'
+          }
+          color={prognose.amortisation_erreicht ? 'green' : 'orange'}
+          icon={prognose.amortisation_erreicht ? CheckCircle : Clock}
+          sicht="Gesamt-Anlage · Prognose Jahr · IST-Erträge + erwartete Jahresersparnis"
+          formel="heute + (Restbetrag ÷ Jahres-Netto-Ertrag)"
+          ergebnis={
+            prognose.amortisation_erreicht
+              ? '= bereits erreicht'
+              : prognose.amortisation_prognose_jahr
+                ? `= voraussichtlich ${prognose.amortisation_prognose_jahr}`
+                : 'nicht berechenbar'
+          }
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-              <PiggyBank className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Bisherige Erträge</p>
-              <FormelTooltip
-                sicht="Gesamt-Anlage · IST-Werte · kumuliert seit ältestem Monatsdaten-Eintrag"
-                formel="Σ historische Erträge (Einspeise + EV-Ersparnis + WP- + E-Auto- + BKW- + sonstige)"
-                ergebnis={`= ${fmtCalc(prognose.bisherige_ertraege_euro, 0)} € kumuliert`}
-              >
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {prognose.bisherige_ertraege_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-                </p>
-              </FormelTooltip>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Bisherige Erträge"
+          value={prognose.bisherige_ertraege_euro.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          unit="€"
+          color="purple"
+          icon={PiggyBank}
+          sicht="Gesamt-Anlage · IST-Werte · kumuliert seit ältestem Monatsdaten-Eintrag"
+          formel="Σ historische Erträge (Einspeise + EV-Ersparnis + WP- + E-Auto- + BKW- + sonstige)"
+          ergebnis={`= ${fmtCalc(prognose.bisherige_ertraege_euro, 0)} € kumuliert`}
+        />
       </div>
 
       {/* ROI-Fortschrittsbalken */}

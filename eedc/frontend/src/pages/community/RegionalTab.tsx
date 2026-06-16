@@ -19,7 +19,7 @@ import {
   Users,
   Sun,
 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
 import { EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET } from '../../lib'
@@ -275,74 +275,32 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
       {/* Regionale Position */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Dein Bundesland */}
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <MapPin className="h-5 w-5 text-blue-500" />
-            </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">Dein Standort</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-gray-900 dark:text-white">
-              {regionalStats.regionName}
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {regionalStats.anzahlAnlagen} Anlagen in der Region
-          </p>
-        </Card>
+        <KPICard
+          title="Dein Standort"
+          value={regionalStats.regionName}
+          subtitle={`${regionalStats.anzahlAnlagen} Anlagen in der Region`}
+          color="blue"
+          icon={MapPin}
+        />
 
         {/* Rang in Region */}
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
-              <Trophy className="h-5 w-5 text-yellow-500" />
-            </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">Rang in {BUNDESLAENDER[regionalStats.region]?.kurzname || regionalStats.region}</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-gray-900 dark:text-white">
-              #{regionalStats.rang}
-            </span>
-            <span className="text-gray-500 dark:text-gray-400">
-              von {regionalStats.anzahlAnlagen}
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Besser als {regionalStats.perzentilRegion} % in deiner Region
-          </p>
-        </Card>
+        <KPICard
+          title={`Rang in ${BUNDESLAENDER[regionalStats.region]?.kurzname || regionalStats.region}`}
+          value={`#${regionalStats.rang} von ${regionalStats.anzahlAnlagen}`}
+          subtitle={`Besser als ${regionalStats.perzentilRegion} % in deiner Region`}
+          color="yellow"
+          icon={Trophy}
+        />
 
         {/* Abweichung vom Regions-Durchschnitt */}
-        <Card>
-          <div className="flex items-center gap-3 mb-2">
-            <div className={`p-2 rounded-lg ${
-              regionalStats.abweichungRegion >= 0
-                ? 'bg-green-100 dark:bg-green-900/30'
-                : 'bg-red-100 dark:bg-red-900/30'
-            }`}>
-              {regionalStats.abweichungRegion >= 0 ? (
-                <TrendingUp className="h-5 w-5 text-green-500" />
-              ) : (
-                <TrendingDown className="h-5 w-5 text-red-500" />
-              )}
-            </div>
-            <span className="text-sm text-gray-500 dark:text-gray-400">vs. Region</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-3xl font-bold ${
-              regionalStats.abweichungRegion >= 0
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-red-600 dark:text-red-400'
-            }`}>
-              {regionalStats.abweichungRegion >= 0 ? '+' : ''}
-              {regionalStats.abweichungRegion.toFixed(1)} %
-            </span>
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Ø Region: {regionalStats.regionDurchschnitt.toFixed(0)} kWh/kWp
-          </p>
-        </Card>
+        <KPICard
+          title="vs. Region"
+          value={`${regionalStats.abweichungRegion >= 0 ? '+' : ''}${regionalStats.abweichungRegion.toFixed(1)}`}
+          unit="%"
+          subtitle={`Ø Region: ${regionalStats.regionDurchschnitt.toFixed(0)} kWh/kWp`}
+          color={regionalStats.abweichungRegion >= 0 ? 'green' : 'red'}
+          icon={regionalStats.abweichungRegion >= 0 ? TrendingUp : TrendingDown}
+        />
       </div>
 
       {/* Vergleichs-Chart */}

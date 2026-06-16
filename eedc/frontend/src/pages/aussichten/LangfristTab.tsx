@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, LangfristPrognose } from '../../api/aussichten'
 import { CHART_COLORS, SOLL_IST_COLORS } from '../../lib'
@@ -24,14 +24,14 @@ interface Props {
   anlageId: number
 }
 
-function TrendIcon({ richtung }: { richtung: string }) {
+function TrendIcon({ richtung, className = 'h-5 w-5' }: { richtung: string; className?: string }) {
   switch (richtung) {
     case 'positiv':
-      return <TrendingUp className="h-5 w-5 text-green-500" />
+      return <TrendingUp className={`${className} text-green-500`} />
     case 'negativ':
-      return <TrendingDown className="h-5 w-5 text-red-500" />
+      return <TrendingDown className={`${className} text-red-500`} />
     default:
-      return <Minus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+      return <Minus className={`${className} text-gray-400 dark:text-gray-500`} />
   }
 }
 
@@ -92,59 +92,34 @@ export default function LangfristTab({ anlageId }: Props) {
     <div className="space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-              <Zap className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Jahresprognose</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {prognose.jahresprognose_kwh.toLocaleString('de-DE')} kWh
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Jahresprognose"
+          value={prognose.jahresprognose_kwh.toLocaleString('de-DE')}
+          unit="kWh"
+          color="yellow"
+          icon={Zap}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Zeitraum</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {monate} Monate
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Zeitraum"
+          value={`${monate} Monate`}
+          color="blue"
+          icon={Calendar}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <TrendIcon richtung={trendAnalyse.trend_richtung} />
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Performance-Ratio</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {prString}
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Performance-Ratio"
+          value={prString}
+          color={trendAnalyse.trend_richtung === 'positiv' ? 'green' : trendAnalyse.trend_richtung === 'negativ' ? 'red' : 'gray'}
+          icon={(p) => <TrendIcon richtung={trendAnalyse.trend_richtung} {...p} />}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <Info className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Datenbasis</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {trendAnalyse.datenbasis_monate} Monate
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Datenbasis"
+          value={`${trendAnalyse.datenbasis_monate} Monate`}
+          color="gray"
+          icon={Info}
+        />
       </div>
 
       {/* Controls */}

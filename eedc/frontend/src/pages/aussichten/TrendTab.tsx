@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
 import { CHART_COLORS, STATUS_COLORS } from '../../lib'
@@ -103,91 +103,36 @@ export default function TrendTab({ anlageId }: Props) {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {bestesJahr && (
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <Award className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Bestes Jahr</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {bestesJahr.jahr}
-                </p>
-                <p className="text-sm text-green-600">
-                  {bestesJahr.gesamt_kwh.toLocaleString('de-DE')} kWh
-                </p>
-              </div>
-            </div>
-          </Card>
+          <KPICard
+            title="Bestes Jahr"
+            value={bestesJahr.jahr}
+            color="green"
+            icon={Award}
+            subtitle={`${bestesJahr.gesamt_kwh.toLocaleString('de-DE')} kWh`}
+          />
         )}
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Analysezeitraum</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {trend.analyse_zeitraum.von} - {trend.analyse_zeitraum.bis}
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Analysezeitraum"
+          value={`${trend.analyse_zeitraum.von} - ${trend.analyse_zeitraum.bis}`}
+          color="blue"
+          icon={Calendar}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            {degradation !== null ? (
-              degradation < -1 ? (
-                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                  <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
-                </div>
-              ) : degradation < 0 ? (
-                <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                  <TrendingDown className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                </div>
-              ) : (
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <Minus className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-              )
-            ) : (
-              <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                <Minus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-              </div>
-            )}
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Degradation/Jahr</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {degradation !== null ? (
-                  degradation === 0 ? (
-                    <span className="text-green-600">keine messbar</span>
-                  ) : (
-                    <span className={degradation < -1 ? 'text-red-600' : 'text-yellow-600'}>
-                      {degradation.toFixed(1)} %
-                    </span>
-                  )
-                ) : (
-                  <span className="text-gray-400 dark:text-gray-500">-</span>
-                )}
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Degradation/Jahr"
+          value={degradation === null ? '–' : degradation === 0 ? 'keine messbar' : `${degradation.toFixed(1)} %`}
+          color={degradation === null ? 'gray' : degradation < -1 ? 'red' : degradation < 0 ? 'yellow' : 'green'}
+          icon={degradation === null ? Minus : degradation < 0 ? TrendingDown : Minus}
+        />
 
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-              <Zap className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Anlagenleistung</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
-                {trend.anlagenleistung_kwp.toFixed(1)} kWp
-              </p>
-            </div>
-          </div>
-        </Card>
+        <KPICard
+          title="Anlagenleistung"
+          value={trend.anlagenleistung_kwp.toFixed(1)}
+          unit="kWp"
+          color="yellow"
+          icon={Zap}
+        />
       </div>
 
       {/* Jahre-Selector */}

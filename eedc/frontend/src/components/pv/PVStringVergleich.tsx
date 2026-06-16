@@ -13,7 +13,7 @@ import {
   ComposedChart, Line, Area
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import { SOLL_IST_COLORS, STRING_COLORS } from '../../lib'
@@ -190,42 +190,36 @@ export function PVStringVergleich({ anlageId }: Props) {
 
       {/* KPI Übersicht */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-          <p className="text-sm text-blue-600 dark:text-blue-400">SOLL (Prognose)</p>
-          <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
-            {(data.prognose_gesamt_kwh / 1000).toFixed(1)} MWh
-          </p>
-          <p className="text-xs text-blue-500">{data.anzahl_jahre} Jahre × PVGIS</p>
-        </div>
-        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
-          <p className="text-sm text-amber-600 dark:text-amber-400">IST (Erzeugt)</p>
-          <p className="text-xl font-bold text-amber-700 dark:text-amber-300">
-            {(data.ist_gesamt_kwh / 1000).toFixed(1)} MWh
-          </p>
-          <p className="text-xs text-amber-500">{data.anzahl_monate} Monate erfasst</p>
-        </div>
-        <div className={`rounded-lg p-4 ${
-          (data.abweichung_gesamt_prozent ?? 0) >= 0
-            ? 'bg-green-50 dark:bg-green-900/20'
-            : 'bg-red-50 dark:bg-red-900/20'
-        }`}>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Abweichung</p>
-          <p className={`text-xl font-bold ${
-            (data.abweichung_gesamt_prozent ?? 0) >= 0
-              ? 'text-green-600 dark:text-green-400'
-              : 'text-red-600 dark:text-red-400'
-          }`}>
-            {(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
-            {data.abweichung_gesamt_prozent?.toFixed(1) ?? '0'}%
-          </p>
-        </div>
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">Zeitraum</p>
-          <p className="text-xl font-bold text-gray-700 dark:text-gray-300">
-            {data.erstes_jahr} - {data.letztes_jahr}
-          </p>
-          <p className="text-xs text-gray-500">{data.anlagen_leistung_kwp.toFixed(1)} kWp</p>
-        </div>
+        <KPICard
+          title="SOLL (Prognose)"
+          value={(data.prognose_gesamt_kwh / 1000).toFixed(1)}
+          unit="MWh"
+          color="blue"
+          icon={TrendingUp}
+          subtitle={`${data.anzahl_jahre} Jahre × PVGIS`}
+        />
+        <KPICard
+          title="IST (Erzeugt)"
+          value={(data.ist_gesamt_kwh / 1000).toFixed(1)}
+          unit="MWh"
+          color="yellow"
+          icon={Sun}
+          subtitle={`${data.anzahl_monate} Monate erfasst`}
+        />
+        <KPICard
+          title="Abweichung"
+          value={`${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${data.abweichung_gesamt_prozent?.toFixed(1) ?? '0'}`}
+          unit="%"
+          color={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'green' : 'red'}
+          icon={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? TrendingUp : TrendingDown}
+        />
+        <KPICard
+          title="Zeitraum"
+          value={`${data.erstes_jahr} - ${data.letztes_jahr}`}
+          color="gray"
+          icon={Calendar}
+          subtitle={`${data.anlagen_leistung_kwp.toFixed(1)} kWp`}
+        />
       </div>
 
       {/* Beste/Schlechteste Performance */}
