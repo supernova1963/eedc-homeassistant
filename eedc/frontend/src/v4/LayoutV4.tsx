@@ -10,12 +10,14 @@
  * Mobile-Querschnitt wie im Skelett: `h-dvh`, Touch-Targets ≥ 44 px.
  */
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, BarChart3 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
-// Inhalts-Achse (Struktur-SoT: KONZEPT-IA-V4). Slice 1 verdrahtet nur Cockpit
-// real; die weiteren Achsen kommen mit ihren echten Sichten in Folge-Slices.
-const TOP: { key: string; label: string; to: string; icon: typeof LayoutDashboard }[] = [
-  { key: 'cockpit', label: 'Cockpit', to: '/v4/cockpit/monat', icon: LayoutDashboard },
+// Inhalts-Achse (Struktur-SoT: KONZEPT-IA-V4). Real verdrahtet: Cockpit +
+// Auswertungen/Werte-Tabelle; weitere Achsen folgen in späteren Slices.
+const TOP: { key: string; label: string; to: string; icon: LucideIcon }[] = [
+  { key: 'cockpit',      label: 'Cockpit',      to: '/v4/cockpit/monat',         icon: LayoutDashboard },
+  { key: 'auswertungen', label: 'Auswertungen', to: '/v4/auswertungen/tabelle',  icon: BarChart3 },
 ]
 
 export default function LayoutV4() {

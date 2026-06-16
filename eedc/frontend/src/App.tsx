@@ -73,6 +73,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
   ? {
       LayoutV4: lazy(() => import('./v4/LayoutV4')),
       CockpitV4: lazy(() => import('./v4/CockpitV4')),
+      AuswertungenTabelleV4: lazy(() => import('./v4/AuswertungenTabelleV4')),
     }
   : null
 
@@ -172,6 +173,8 @@ function App() {
               <Route index element={<Navigate to="/v4/cockpit/monat" replace />} />
               <Route path="cockpit" element={<Navigate to="/v4/cockpit/monat" replace />} />
               <Route path="cockpit/:zeit" element={<V4.CockpitV4 />} />
+              <Route path="auswertungen" element={<Navigate to="/v4/auswertungen/tabelle" replace />} />
+              <Route path="auswertungen/tabelle" element={<V4.AuswertungenTabelleV4 />} />
             </Route>
           )}
         </Routes>

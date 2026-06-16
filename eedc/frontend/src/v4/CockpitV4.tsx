@@ -18,11 +18,14 @@ import {
 import {
   Sun, Activity, Zap, ArrowUpFromLine, Euro, LineChart,
 } from 'lucide-react'
+import { Table2 } from 'lucide-react'
 import { LoadingSpinner, Card, ChartTooltip } from '../components/ui'
 import { BlockShell, KpiStrip } from '../components/blocks'
 import type { Block } from '../components/blocks'
 import type { KpiStripItem } from '../components/blocks/KpiStrip'
+import { WerteTabelle } from '../components/werte'
 import { useSelectedAnlage } from '../hooks'
+import { useWerteZeitreihe } from './useWerteZeitreihe'
 import { MONAT_KURZ, CHART_COLORS } from '../lib'
 import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -75,7 +78,8 @@ function MonatsChart({ monatsdaten }: { monatsdaten: AggregierteMonatsdaten[] })
 
 export default function CockpitV4() {
   const { zeit = 'monat' } = useParams<{ zeit: string }>()
-  const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
+  const { anlagen, selectedAnlageId, selectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
+  const { rows: werteRows } = useWerteZeitreihe(selectedAnlageId, selectedAnlage)
 
   const [data, setData] = useState<CockpitUebersicht | null>(null)
   const [monatsdaten, setMonatsdaten] = useState<AggregierteMonatsdaten[]>([])
@@ -171,6 +175,14 @@ export default function CockpitV4() {
         summary: 'Verlauf über alle erfassten Monate',
         defaultOpen: true,
         render: () => <MonatsChart monatsdaten={monatsdaten} />,
+      },
+      {
+        id: 'werte',
+        title: 'Werte/Tabelle',
+        icon: Table2,
+        summary: 'numerischer Zwilling (read-only)',
+        defaultOpen: false,
+        render: () => <WerteTabelle rows={werteRows} modus="embed" alleWerteHref="#/v4/auswertungen/tabelle" />,
       },
     ]
     inhalt = <BlockShell key="cockpit-monat" persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
