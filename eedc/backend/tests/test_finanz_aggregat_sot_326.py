@@ -178,3 +178,76 @@ async def test_netto_ertrag_symmetrie_cockpit_pdf_haexport(db):
     netto = next(s for s in sensors if s.definition.key == "netto_ertrag_euro").value
     assert netto == pytest.approx(erwartet, abs=0.05), (
         f"HA-Export netto {netto} ≠ {erwartet}")
+
+
+async def _anlage_historische_tarife(db):
+    """PV-Anlage über zwei Jahre mit unterschiedlichen Jahres-Tarifen.
+
+    rilmor-mhrs (#326-Rest): vier Tibber-Jahrestarife (23,90 → 32,80 ct). Hier
+    minimal: 2024 @ 26,8 ct + 2025 @ 32,8 ct, je ein PV-Monat mit 400 kWh
+    Eigenverbrauch, **kein** Monats-Flex-Ø (`netzbezug_durchschnittspreis_cent`)
+    → der Basistarif-Fallback wird benutzt. Der Jahresbericht nahm bisher den
+    NEUESTEN Tarif (32,8) für ALLE Jahre → 2024-EV überbewertet. Cockpit löst den
+    Tarif pro Monat auf (historische Tarife).
+    """
+    from backend.models import Anlage, Investition, Monatsdaten, Strompreis
+    from backend.models.investition import InvestitionMonatsdaten
+
+    anlage = Anlage(anlagenname="HistTarif326", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+
+    # Zwei Jahres-Tarife (Standard), KEIN Monats-Flex-Ø in den Monatsdaten.
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1), gueltig_bis=date(2024, 12, 31),
+        netzbezug_arbeitspreis_cent_kwh=26.8, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2025, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=32.8, einspeiseverguetung_cent_kwh=8.0,
+    ))
+
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2024, monat=6,
+                       pv_erzeugung_kwh=1000.0, einspeisung_kwh=600.0, netzbezug_kwh=50.0))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=6,
+                       pv_erzeugung_kwh=1000.0, einspeisung_kwh=600.0, netzbezug_kwh=50.0))
+
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
+                     anschaffungskosten_gesamt=10000.0)
+    db.add(pv)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2024, monat=6,
+        verbrauch_daten={"pv_erzeugung_kwh": 1000.0}))
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2025, monat=6,
+        verbrauch_daten={"pv_erzeugung_kwh": 1000.0}))
+    await db.commit()
+    return anlage
+
+
+async def test_netto_ertrag_symmetrie_historische_tarife(db):
+    """Cockpit == Jahresbericht-PDF bei mehreren Jahres-Tarifen (#326-Rest).
+
+    EV 400 kWh/Monat: 2024 @ 26,8 ct = 107,20 € + 2025 @ 32,8 ct = 131,20 €
+    = 238,40 € EV-Ersparnis; Einspeise 2×(600·8,0/100) = 96,00 € → Netto 334,40 €.
+    Mit dem alten Einheitstarif (32,8 für beide Jahre) wäre der Bericht bei
+    358,40 € gelandet — die ~24 € Drift, die rilmor als „Summe ≠ Cockpit" sah.
+    """
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+    from backend.services.pdf.builders.jahresbericht import build_jahresbericht_context
+
+    anlage = await _anlage_historische_tarife(db)
+    erwartet = 334.40
+
+    cockpit = await get_cockpit_uebersicht(anlage_id=anlage.id, jahr=None, db=db)
+    assert cockpit.netto_ertrag_euro == pytest.approx(erwartet, abs=0.05), (
+        f"Cockpit netto {cockpit.netto_ertrag_euro} ≠ {erwartet}")
+    assert cockpit.ev_ersparnis_euro == pytest.approx(238.40, abs=0.05)
+
+    ctx = await build_jahresbericht_context(db, anlage.id, jahr=None)
+    assert ctx["kpis"]["netto_ertrag_euro"] == pytest.approx(erwartet, abs=0.05), (
+        f"Jahresbericht netto {ctx['kpis']['netto_ertrag_euro']} ≠ {erwartet} "
+        "(Einheitstarif statt historischer Tarife?)")
+    # Symmetrie explizit: beide Pfade müssen denselben Wert liefern.
+    assert ctx["kpis"]["netto_ertrag_euro"] == pytest.approx(
+        cockpit.netto_ertrag_euro, abs=0.05)

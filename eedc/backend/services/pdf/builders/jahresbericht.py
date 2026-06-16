@@ -9,7 +9,7 @@ Reine Datenschicht — keine HTTP-, keine Render-Aufrufe.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import select
@@ -31,6 +31,10 @@ from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canoni
 from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
+)
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
 )
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -75,7 +79,11 @@ async def build_jahresbericht_context(
 
     ist_gesamtzeitraum = jahr is None
 
-    # ── 2. Strompreis (neuester Eintrag) ────────────────────────────────
+    # ── 2. Strompreis (neuester Eintrag — nur für die Tarif-Anzeige im
+    #        Berichtskopf). Die Finanzrechnung pro Monat löst den jeweils
+    #        gültigen Tarif separat über `lade_tarife_fuer_anlage` auf
+    #        (historische Tarife, #326/rilmor-mhrs) — siehe `_tarif_fuer_monat`
+    #        unten. Cockpit/Auswertungen rechnen identisch.
     res = await db.execute(
         select(Strompreis)
         .where(Strompreis.anlage_id == anlage_id)
@@ -83,8 +91,8 @@ async def build_jahresbericht_context(
         .limit(1)
     )
     strompreis = res.scalar_one_or_none()
-    netzbezug_cent = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
-    einspeise_cent = strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2
+    netzbezug_cent = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT
+    einspeise_cent = strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT
 
     # ── 3. Investitionen ────────────────────────────────────────────────
     # KEIN aktiv-Filter (Issue #123): Jahresbericht ist historisch, spätere
@@ -256,7 +264,26 @@ async def build_jahresbericht_context(
     emob_netz = emob_pool.netz_kwh
 
     # ── 8. Monats-Tabelle aufbauen ──────────────────────────────────────
-    from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
+    from backend.api.routes.strompreise import (
+        lade_tarife_fuer_anlage,
+        resolve_netzbezug_preis_cent,
+    )
+
+    # #326 (rilmor-mhrs): Tarif PRO MONAT auflösen statt eines Einheitstarifs.
+    # Der Bericht nahm bisher nur den neuesten Strompreis für ALLE Monate →
+    # historische Jahre (z. B. 2023/2024 mit niedrigerem Tarif) wurden mit dem
+    # aktuellen Preis überbewertet → EV-Ersparnis/Netto-Ertrag ≠ Cockpit. Cockpit/
+    # Auswertungen lösen den Tarif seit jeher per Monat über `lade_tarife_fuer_anlage`
+    # auf (gueltig_ab/gueltig_bis, „historische Tarife"). Cache je Stichtag.
+    _tarif_cache: dict[date, dict] = {}
+
+    async def _tarif_fuer_monat(j: int, m: int) -> dict:
+        stichtag = date(j, m, 1)
+        if stichtag not in _tarif_cache:
+            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
+                db, anlage_id, target_date=stichtag
+            )
+        return _tarif_cache[stichtag]
 
     monats_zeilen: list[dict] = []
     # #326: Finanz-Aggregation über den SoT-Helper `berechne_finanz_aggregat`.
@@ -289,13 +316,22 @@ async def build_jahresbericht_context(
         autarkie = autarkie_prozent(ev, gesamt)
         spez = spezifischer_ertrag_kwh_kwp(pv, anlage.leistung_kwp or 0) or 0.0
         m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, j, m)
+        # #326: Pro Monat gültiger Tarif (historische Tarife) statt Einheitstarif.
+        m_tarife = await _tarif_fuer_monat(j, m)
+        m_allgemein = m_tarife.get("allgemein")
+        m_netzbezug_cent = (
+            m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
+        )
+        m_einspeise_cent = (
+            m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        )
         m_erloes = einspeise_erloes_euro(
             einspeisung_kwh=einsp,
             neg_preis_kwh=m_neg,
-            verguetung_ct_kwh=einspeise_cent,
+            verguetung_ct_kwh=m_einspeise_cent,
         )
-        # #326: Monats-Flexpreis (dynamischer Tarif-Ø → Fallback fixer Tarif).
-        m_preis = resolve_netzbezug_preis_cent(md, netzbezug_cent)
+        # #326: Monats-Flexpreis (dynamischer Tarif-Ø → Fallback Monatstarif).
+        m_preis = resolve_netzbezug_preis_cent(md, m_netzbezug_cent)
         einsp_eur = m_erloes.erloes_euro
         ev_eur = ev * m_preis / 100
         sonstige_eur = sonstige_by_ym.get((j, m), 0)
@@ -307,7 +343,7 @@ async def build_jahresbericht_context(
             speicher_entladung_kwh=speicher_entladung_by_ym.get(key, 0),
             v2h_entladung_kwh=v2h_by_ym.get(key, 0),
             netzbezug_preis_cent=m_preis,
-            einspeiseverguetung_cent=einspeise_cent,
+            einspeiseverguetung_cent=m_einspeise_cent,
             neg_preis_kwh=m_neg,
         ))
         pv_gesamt += pv
