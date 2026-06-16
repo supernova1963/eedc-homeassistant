@@ -63,6 +63,19 @@ const Hilfe = lazy(() => import('./pages/Hilfe'))
 // Lazy-Import minimiert das auf einen kleinen separaten Chunk.
 const DesignPreview = lazy(() => import('./pages/DesignPreview'))
 
+// IA-v4-Vorschau-Routenbaum (`/v4/…`) — nur hinter dem Build-Flag VITE_IA_V4.
+// Der `import.meta.env`-Check steht hier bewusst INLINE (nicht über die
+// IA_V4-Konstante aus lib/flags.ts): Vite ersetzt ihn statisch, sodass bei
+// abgeschaltetem Flag der ganze Ternär zu `null` faltet und Rollup die
+// `import()`-Aufrufe als toten Code wegwirft — KEINE v4-Chunks im Produktiv-
+// Bundle (Bitidentität). Cross-module-Const-Folding garantiert das nicht.
+const V4 = import.meta.env.VITE_IA_V4 === 'true'
+  ? {
+      LayoutV4: lazy(() => import('./v4/LayoutV4')),
+      CockpitV4: lazy(() => import('./v4/CockpitV4')),
+    }
+  : null
+
 function App() {
   useTouchTitleTooltip()
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
@@ -150,6 +163,17 @@ function App() {
               klickbare Vorschau die eigene Top-Nav-Schale zeigt statt der alten.
               Rendert in Production null (DEV-Guard in der Komponente). */}
           <Route path="dev/design-preview" element={<DesignPreview />} />
+
+          {/* IA-v4-Vorschau (E3): paralleler Routenbaum hinter VITE_IA_V4,
+              eigenes LayoutV4 (kein Eingriff in den Bestandsbaum). Bei Flag aus
+              ist `V4` null → kein Mount, kein Chunk. */}
+          {V4 && (
+            <Route path="v4" element={<V4.LayoutV4 />}>
+              <Route index element={<Navigate to="/v4/cockpit/monat" replace />} />
+              <Route path="cockpit" element={<Navigate to="/v4/cockpit/monat" replace />} />
+              <Route path="cockpit/:zeit" element={<V4.CockpitV4 />} />
+            </Route>
+          )}
         </Routes>
       </Suspense>
     </HashRouter>
