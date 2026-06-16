@@ -402,3 +402,43 @@ def _format_verstoesse_meldung(
         "kurzer Begründung. Siehe `docs/ADR-001-BERECHNUNGS-LAYER.md`.",
     ])
     return "\n".join(zeilen)
+
+
+# ── #326: FinanzMonatsZeile nur im gemeinsamen Builder konstruieren ──────────
+# Der reine Aggregat-Helper `berechne_finanz_aggregat` liefert nur dann denselben
+# Netto-Ertrag über alle Read-Sites, wenn er dieselben EINGABEN bekommt. Genau
+# das ist mehrfach gedriftet (Einheitstarif statt historischer Monatstarife,
+# rilmor-mhrs). Deshalb darf `FinanzMonatsZeile(...)` NUR im gemeinsamen Builder
+# `services/finanz_zeilen.py` (`baue_finanz_zeile`) konstruiert werden — jede
+# Read-Site MUSS durch die zentrale per-Monat-Tarif-Auflösung. Typ-Annotationen
+# `list[FinanzMonatsZeile]` matchen bewusst NICHT (kein `(` nach dem Namen).
+_FINANZ_MONATSZEILE_CTOR = re.compile(r'\bFinanzMonatsZeile\s*\(')
+
+ALLOWED_FINANZ_MONATSZEILE_FILES = {
+    "services/finanz_zeilen.py",             # der gemeinsame Builder (einzige Bau-Stelle)
+    "core/berechnungen/finanz_aggregat.py",  # Dataclass-Definition
+    "core/berechnungen/__init__.py",         # Re-Export
+}
+
+
+def test_finanz_monatszeile_nur_im_builder():
+    """`FinanzMonatsZeile(...)` darf nur im Builder `services/finanz_zeilen.py`
+    konstruiert werden — sonst kann eine Read-Site die per-Monat-Tarif-Auflösung
+    umgehen (Einheitstarif-Drift, #326)."""
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_FINANZ_MONATSZEILE_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if _FINANZ_MONATSZEILE_CTOR.search(line):
+                verstoesse.append((rel, line_no, line.strip()))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel='`FinanzMonatsZeile(...)` außerhalb des Builders services/finanz_zeilen.py '
+              '— nutze `baue_finanz_zeile` (sonst Einheitstarif-Drift, #326)',
+    )

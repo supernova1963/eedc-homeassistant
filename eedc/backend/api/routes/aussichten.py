@@ -35,6 +35,7 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
+from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 from backend.core.calculations import berechne_ust_eigenverbrauch
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -1267,32 +1268,23 @@ async def get_finanz_prognose(
     # Jahresbericht-PDF und HA-Export ([[feedback_aggregations_drift]]). Die
     # aussichten-spezifischen Anteile (WP-/E-Auto-Alternativkosten, Prognose)
     # bleiben lokal — sie sind keine Aggregat-Semantik.
+    # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
+    # Konstruktions-Stelle, Wächter) — er löst den Monatstarif auf (historische
+    # Tarife). Energie-Aggregation + §51-Negativpreis bleiben hier lokal.
     _tarif_cache: dict[date, dict] = {}
-
-    async def _tarif_fuer_monat(jahr: int, monat: int) -> dict:
-        stichtag = date(jahr, monat, 1)
-        if stichtag not in _tarif_cache:
-            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
-                db, anlage_id, target_date=stichtag
-            )
-        return _tarif_cache[stichtag]
-
     finanz_zeilen: list[FinanzMonatsZeile] = []
     for md in monatsdaten:
         if not _pv_aktiv_im_monat(md.jahr, md.monat):
             continue
         m_key = (md.jahr, md.monat)
-        m_tarife = await _tarif_fuer_monat(md.jahr, md.monat)
-        m_allgemein = m_tarife.get("allgemein")
-        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
-        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
         # §51: Anwender ohne Strompreis-Mitschrift (m_neg=None) sehen die
         # ungekürzte Berechnung.
         m_neg = (
             await get_neg_preis_einspeisung_monat(db, anlage_id, md.jahr, md.monat)
             if md.einspeisung_kwh else None
         )
-        finanz_zeilen.append(FinanzMonatsZeile(
+        finanz_zeilen.append(await baue_finanz_zeile(db, anlage_id, FinanzZeileEingabe(
+            jahr=md.jahr, monat=md.monat,
             einspeisung_kwh=md.einspeisung_kwh or 0,
             netzbezug_kwh=md.netzbezug_kwh or 0,
             pv_erzeugung_kwh=pv_pro_monat.get(m_key, 0),
@@ -1300,10 +1292,9 @@ async def get_finanz_prognose(
             speicher_entladung_kwh=speicher_entladung_pro_monat.get(m_key, 0),
             v2h_entladung_kwh=v2h_pro_monat.get(m_key, 0),
             bkw_eigenverbrauch_kwh=bkw_ev_pro_monat.get(m_key, 0),
-            netzbezug_preis_cent=resolve_netzbezug_preis_cent(md, m_preis_cent),
-            einspeiseverguetung_cent=m_einspeis_cent,
             neg_preis_kwh=m_neg,
-        ))
+            monatsdaten=md,
+        ), tarif_cache=_tarif_cache))
 
     # Wärmepumpe Alternativkosten-Ersparnis (vs. Gas/Öl) — die „bisherige"-
     # Ersparnis-FORMEL liegt jetzt im SoT-Helper `berechne_wp_alternativkosten_

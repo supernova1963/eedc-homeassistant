@@ -31,6 +31,7 @@ from backend.core.calculations import (
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
 from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -561,7 +562,11 @@ async def get_cockpit_uebersicht(
         m_key = (m.jahr, m.monat)
         m_pv = pv_erzeugung_inv_by_ym.get(m_key, 0.0) if use_inv_pv else (m.pv_erzeugung_kwh or 0)
         m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, m.jahr, m.monat)
-        finanz_zeilen.append(FinanzMonatsZeile(
+        # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
+        # Konstruktions-Stelle, Wächter) — derselbe `_tarif_cache` → der Preis der
+        # Zeile ist deckungsgleich mit `eff_preis` der Netzbezugskosten oben.
+        finanz_zeilen.append(await baue_finanz_zeile(db, anlage_id, FinanzZeileEingabe(
+            jahr=m.jahr, monat=m.monat,
             einspeisung_kwh=m.einspeisung_kwh or 0,
             netzbezug_kwh=kwh,
             pv_erzeugung_kwh=m_pv,
@@ -569,10 +574,9 @@ async def get_cockpit_uebersicht(
             speicher_entladung_kwh=speicher_entladung_by_ym.get(m_key, 0.0),
             v2h_entladung_kwh=v2h_by_ym.get(m_key, 0.0),
             bkw_eigenverbrauch_kwh=bkw_eigenverbrauch_by_ym.get(m_key, 0.0),
-            netzbezug_preis_cent=eff_preis,
-            einspeiseverguetung_cent=m_einspeis_cent,
             neg_preis_kwh=m_neg,
-        ))
+            monatsdaten=m,
+        ), tarif_cache=_tarif_cache))
 
     # §51 EEG: nicht vergüteter Erlös + zugehörige kWh kommen aus dem Aggregat;
     # `hat_neg_preis_daten` bleibt False, wenn KEIN Monat Tages-Aggregate hat,

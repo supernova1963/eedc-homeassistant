@@ -264,33 +264,16 @@ async def build_jahresbericht_context(
     emob_netz = emob_pool.netz_kwh
 
     # ── 8. Monats-Tabelle aufbauen ──────────────────────────────────────
-    from backend.api.routes.strompreise import (
-        lade_tarife_fuer_anlage,
-        resolve_netzbezug_preis_cent,
-    )
+    # #326: Tarif PRO MONAT (historische Tarife) statt Einheitstarif — die
+    # FinanzMonatsZeile wird über den gemeinsamen Builder `baue_finanz_zeile`
+    # gebaut (einzige erlaubte Konstruktions-Stelle, Konformitäts-Wächter), damit
+    # Cockpit/Auswertungen/HA-Export/Jahresbericht garantiert dieselben Eingaben
+    # nutzen. Der Builder löst den Monatstarif auf; das Display liest Preis/Erlös
+    # aus der zurückgegebenen Zeile zurück (single source).
+    from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 
-    # #326 (rilmor-mhrs): Tarif PRO MONAT auflösen statt eines Einheitstarifs.
-    # Der Bericht nahm bisher nur den neuesten Strompreis für ALLE Monate →
-    # historische Jahre (z. B. 2023/2024 mit niedrigerem Tarif) wurden mit dem
-    # aktuellen Preis überbewertet → EV-Ersparnis/Netto-Ertrag ≠ Cockpit. Cockpit/
-    # Auswertungen lösen den Tarif seit jeher per Monat über `lade_tarife_fuer_anlage`
-    # auf (gueltig_ab/gueltig_bis, „historische Tarife"). Cache je Stichtag.
     _tarif_cache: dict[date, dict] = {}
-
-    async def _tarif_fuer_monat(j: int, m: int) -> dict:
-        stichtag = date(j, m, 1)
-        if stichtag not in _tarif_cache:
-            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
-                db, anlage_id, target_date=stichtag
-            )
-        return _tarif_cache[stichtag]
-
     monats_zeilen: list[dict] = []
-    # #326: Finanz-Aggregation über den SoT-Helper `berechne_finanz_aggregat`.
-    # Die EV-Ersparnis pro Monat wird mit dem aufgelösten Monats-Flexpreis
-    # (`resolve_netzbezug_preis_cent`) gerechnet — deckungsgleich mit Cockpit/
-    # HA-Export/Auswertungen. Der Jahres-Summary ist Σ dieser per-Monat-Zeilen,
-    # nicht `ev_gesamt × Ø-Preis` (rilmor-mhrs #326: Flex-Tarif-Drift).
     finanz_zeilen: list[FinanzMonatsZeile] = []
 
     async def _zeile_fuer(j: int, m: int) -> dict:
@@ -316,36 +299,24 @@ async def build_jahresbericht_context(
         autarkie = autarkie_prozent(ev, gesamt)
         spez = spezifischer_ertrag_kwh_kwp(pv, anlage.leistung_kwp or 0) or 0.0
         m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, j, m)
-        # #326: Pro Monat gültiger Tarif (historische Tarife) statt Einheitstarif.
-        m_tarife = await _tarif_fuer_monat(j, m)
-        m_allgemein = m_tarife.get("allgemein")
-        m_netzbezug_cent = (
-            m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
-        )
-        m_einspeise_cent = (
-            m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        )
-        m_erloes = einspeise_erloes_euro(
-            einspeisung_kwh=einsp,
-            neg_preis_kwh=m_neg,
-            verguetung_ct_kwh=m_einspeise_cent,
-        )
-        # #326: Monats-Flexpreis (dynamischer Tarif-Ø → Fallback Monatstarif).
-        m_preis = resolve_netzbezug_preis_cent(md, m_netzbezug_cent)
-        einsp_eur = m_erloes.erloes_euro
-        ev_eur = ev * m_preis / 100
-        sonstige_eur = sonstige_by_ym.get((j, m), 0)
-        finanz_zeilen.append(FinanzMonatsZeile(
-            einspeisung_kwh=einsp,
-            netzbezug_kwh=netz,
-            pv_erzeugung_kwh=pv,
+        zeile = await baue_finanz_zeile(db, anlage_id, FinanzZeileEingabe(
+            jahr=j, monat=m,
+            einspeisung_kwh=einsp, netzbezug_kwh=netz, pv_erzeugung_kwh=pv,
             speicher_ladung_kwh=speicher_ladung_by_ym.get(key, 0),
             speicher_entladung_kwh=speicher_entladung_by_ym.get(key, 0),
             v2h_entladung_kwh=v2h_by_ym.get(key, 0),
-            netzbezug_preis_cent=m_preis,
-            einspeiseverguetung_cent=m_einspeise_cent,
             neg_preis_kwh=m_neg,
-        ))
+            monatsdaten=md,
+        ), tarif_cache=_tarif_cache)
+        finanz_zeilen.append(zeile)
+        # Display aus der Zeile (gleicher Tarif wie der Aggregat-Helper):
+        einsp_eur = einspeise_erloes_euro(
+            einspeisung_kwh=einsp,
+            neg_preis_kwh=m_neg,
+            verguetung_ct_kwh=zeile.einspeiseverguetung_cent,
+        ).erloes_euro
+        ev_eur = ev * zeile.netzbezug_preis_cent / 100
+        sonstige_eur = sonstige_by_ym.get((j, m), 0)
         pv_gesamt += pv
         einsp_gesamt += einsp
         netz_gesamt += netz
