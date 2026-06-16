@@ -248,6 +248,20 @@ async def test_netto_ertrag_symmetrie_historische_tarife(db):
     assert ctx["kpis"]["netto_ertrag_euro"] == pytest.approx(erwartet, abs=0.05), (
         f"Jahresbericht netto {ctx['kpis']['netto_ertrag_euro']} ≠ {erwartet} "
         "(Einheitstarif statt historischer Tarife?)")
-    # Symmetrie explizit: beide Pfade müssen denselben Wert liefern.
+
+    # HA-Export: dieselbe Kennzahl, derselbe Einheitstarif-Bug (rilmor hätte
+    # ihn im netto_ertrag-Sensor genauso gesehen).
+    from backend.api.routes.ha_export import calculate_anlage_sensors
+    from sqlalchemy import select as _select
+    from backend.models import Anlage as _Anlage
+    anlage_obj = (await db.execute(
+        _select(_Anlage).where(_Anlage.id == anlage.id))).scalar_one()
+    sensors = await calculate_anlage_sensors(db, anlage_obj)
+    ha_netto = next(s for s in sensors if s.definition.key == "netto_ertrag_euro").value
+    assert ha_netto == pytest.approx(erwartet, abs=0.05), (
+        f"HA-Export netto {ha_netto} ≠ {erwartet} (Einheitstarif?)")
+
+    # Symmetrie explizit: alle drei Pfade müssen denselben Wert liefern.
     assert ctx["kpis"]["netto_ertrag_euro"] == pytest.approx(
         cockpit.netto_ertrag_euro, abs=0.05)
+    assert ha_netto == pytest.approx(cockpit.netto_ertrag_euro, abs=0.05)
