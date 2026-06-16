@@ -24,6 +24,18 @@ Alle Aggregat-Berechnungen über die zentralen Daten-Tabellen (`TagesEnergieProf
 - Inline-Pattern wie `k.startswith("pv_") or k.startswith("bkw_")` außerhalb des Layers — `summe_pv_bkw_kwh()` aus dem Layer benutzen.
 - Parallel-Implementierungen von Σ-Berechnungen über dieselben Tabellen-Felder.
 
+## Geteilter Helper ≠ gelöste Drift — auch die EINGABE muss zentral (Lehre #326)
+
+Ein gemeinsamer Aggregat-Helper (z. B. `berechne_finanz_aggregat`) liefert nur dann denselben Wert über alle Read-Sites, wenn er auch **dieselben Eingaben** bekommt. In #326 nutzten zwar alle vier Finanz-Read-Sites denselben Helper, **bauten ihre Eingaben (`FinanzMonatsZeile`) aber jede selbst** — eine löste den Strompreis pro Monat (historische Tarife), zwei nahmen den neuesten Tarif für alle Jahre → ~174 € Drift, die viermal nacheinander auftauchte (jede Reparatur deckte den nächsten Parallelpfad auf). Der WeasyPrint-Jahresbericht (neu 04/2026) riss dabei einen längst gelösten Tarif-Bug wieder auf, weil neuer Code die alte Lösung nicht kannte.
+
+**Regel — bei einer Kennzahl, die an ≥2 Read-Sites gebaut wird:**
+
+1. **Gemeinsamer Eingabe-Builder**, nicht nur ein Formel-Helper. Die Konstruktion des Eingabe-Objekts (inkl. drift-anfälliger Auflösungen wie Tarif-pro-Monat) gehört in **eine** Funktion (DB-I/O → Service-Schicht, nicht core). Beispiel: `services/finanz_zeilen.py` `baue_finanz_zeile`.
+2. **Statischer Wächter**, der die Konstruktion außerhalb des Builders verbietet (analog `test_finanz_monatszeile_nur_im_builder`) — so kann auch **künftiger** Code die zentrale Auflösung nicht umgehen.
+3. **Symmetrie-Test**, der „Site A == Site B == …" für eine realistische Fixture beweist (inkl. der Edge-Cases, die der Default-Pfad umgeht — z. B. mehrere Jahres-Tarife OHNE Monats-Flex-Ø).
+
+Symmetrie-Test allein reicht nicht (er kennt nur die eingetragenen Sites); statischer Wächter allein reicht nicht (er fängt Formel-, nicht Wert-Drift). Erst der Builder macht Drift strukturell unmöglich; Wächter + Symmetrie-Test sichern es ab.
+
 ## Migration bestehender Konsumenten
 
 Step-by-step, opportunistisch beim nächsten Touch des betroffenen Codes. Übersicht der bekannten offenen Stellen: siehe Memory `project_berechnungs_layer_offen.md` und `INLINE_PATTERN_GRANDFATHERED` in `tests/test_berechnungs_layer_konformitaet.py`.
