@@ -248,7 +248,7 @@ function DummyChart({ label, tall }: { label: string; tall?: boolean }) {
 
 function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonly T[]; active: T; onSelect: (t: T) => void }) {
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 xl:sticky xl:top-0 z-20">
+    <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 lg:sticky lg:top-0 z-20">
       <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
         {tabs.map((t) => (
           <button
@@ -475,7 +475,7 @@ function KomponentenView() {
   ]
   return (
     <>
-      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 xl:sticky xl:top-0 z-20">
+      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 lg:sticky lg:top-0 z-20">
         <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
           {KOMP_TYPEN.map((t) => (
             <button
@@ -783,7 +783,7 @@ function EinstellungenView() {
   return (
     <>
       {/* Zweite Leiste = Kategorien (analog Komponenten, fix). Aktiver Reiter = Überschrift. */}
-      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 xl:sticky xl:top-0 z-20">
+      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 lg:sticky lg:top-0 z-20">
         <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
           {EINSTELLUNGEN_KATEGORIEN.map((k) => (
             <button
@@ -849,27 +849,26 @@ export default function IASkeleton() {
   return (
     <div className="h-dvh flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Top-Nav-Schale.
-          Desktop/Mobile-Schnitt bewusst bei `xl` (1280 px), NICHT `lg` (1024 px):
-          Tablet quer (1024 px) soll die Mobile-Schale bekommen — Hamburger-Top-Nav
-          + nach oben wegscrollende zweite Leiste (Gernot-Entscheid #243). Die
-          Content-Grids behalten ihre eigenen `lg:`-Spalten — nur die Nav ist `xl`. */}
+          Desktop/Mobile-Schnitt bei `lg` (1024 px): ab 1024 px feste Top-Nav +
+          fixierte zweite Leiste; darunter Hamburger + wegscrollende zweite Leiste
+          (detLAN #243 — zweite Leiste soll auf dem Desktop stehen bleiben). */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="px-4 sm:px-6 flex items-center justify-between h-14">
           <div className="flex items-center gap-3">
             <span className="text-xl font-bold text-gray-900 dark:text-white">eedc</span>
             <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">IA-v4 VORSCHAU</span>
-            <nav aria-label="Hauptnavigation" className="ml-4 hidden xl:flex items-center gap-1">
+            <nav aria-label="Hauptnavigation" className="ml-4 hidden lg:flex items-center gap-1">
               {TOP_INHALT.map((t) => navBtn(t.key, t.label, t.icon, top === t.key))}
             </nav>
           </div>
-          <div className="hidden xl:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1">
             <span className="h-5 w-px bg-gray-300 dark:bg-gray-600 mx-1" />
             {TOP_META.map((t) => navBtn(t.key, t.label, t.icon, top === t.key))}
           </div>
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="xl:hidden min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+            className="lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
             aria-label="Menü"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -877,7 +876,7 @@ export default function IASkeleton() {
         </div>
         {/* Mobile-Menü (M0 Hamburger) */}
         {mobileOpen && (
-          <nav aria-label="Hauptnavigation mobil" className="xl:hidden border-t border-gray-200 dark:border-gray-700 px-4 py-3 space-y-1">
+          <nav aria-label="Hauptnavigation mobil" className="lg:hidden border-t border-gray-200 dark:border-gray-700 px-4 py-3 space-y-1">
             {alleEintraege.map((t) => navBtn(t.key, t.label, t.icon, top === t.key))}
           </nav>
         )}

@@ -15,6 +15,17 @@ describe('KPICard (SoT, B9)', () => {
     expect(screen.getByText('kWh')).toBeInTheDocument()
   })
 
+  it('setzt eine Umbruch-Gelegenheit (<wbr>) zwischen Wert und Einheit (#243 detLAN)', () => {
+    // Wert und Einheit sind je whitespace-nowrap; ohne den <wbr> dazwischen gäbe es
+    // KEINE Umbruch-Gelegenheit → Einheit liefe in die Icon-Box. Invariante absichern.
+    const { container, unmount } = render(<KPICard title="Verbrauch" value="17,2" unit="kWh/100km" />)
+    expect(container.querySelector('wbr')).not.toBeNull()
+    unmount()
+    // Ohne Einheit kein <wbr>.
+    const ohne = render(<KPICard title="Verbrauch" value="17,2" />)
+    expect(ohne.container.querySelector('wbr')).toBeNull()
+  })
+
   it('rendert ein String-Value unverändert', () => {
     render(<KPICard title="Status" value="—" />)
     expect(screen.getByText('—')).toBeInTheDocument()

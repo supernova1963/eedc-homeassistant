@@ -11,7 +11,10 @@
  * Konventionen (B1 #258): Einheit immer gedämpft hinter dem Wert, Icon-Position
  * konsistent rechts (boxed) bzw. inline links vor dem Label (sm). Die Einheit darf
  * bei Platzmangel umbrechen (die Zahl bleibt unzerbrochen) — verhindert Überlauf in
- * die Icon-Box auf schmalen Karten (#243 detLAN). Optionaler
+ * die Icon-Box auf schmalen Karten (#243 detLAN). Wert und Einheit sind je
+ * `whitespace-nowrap`; der `<wbr/>` DAZWISCHEN ist die einzige Umbruch-Gelegenheit
+ * (zwei direkt benachbarte nowrap-Spans ohne ihn brechen NICHT um — nicht entfernen).
+ * Optionaler
  * A6-FormelTooltip-Slot (`formel`/`berechnung`/`ergebnis`/`sicht`) — Optik aus dem
  * P3-Tooltip-Kanon (`FormelTooltip`). Ausbau des Herleitungs-Vertrags ist E4.
  *
@@ -70,7 +73,7 @@ export function KPICard({
     const valueContent = (
       <span className={`text-sm font-semibold ${valueColor}`}>
         <span className="whitespace-nowrap">{formattedValue}{trendMark}</span>
-        {unit && <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1 whitespace-nowrap">{unit}</span>}
+        {unit && <><wbr /><span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1 whitespace-nowrap">{unit}</span></>}
       </span>
     )
     return (
@@ -105,7 +108,7 @@ export function KPICard({
   const valueContent = (
     <span className={`${dims.value} font-bold text-gray-900 dark:text-white`}>
       <span className="whitespace-nowrap">{formattedValue}{trendMark}</span>
-      {unit && <span className="text-xs sm:text-sm font-normal text-gray-500 dark:text-gray-400 ml-1 whitespace-nowrap">{unit}</span>}
+      {unit && <><wbr /><span className="text-xs sm:text-sm font-normal text-gray-500 dark:text-gray-400 ml-1 whitespace-nowrap">{unit}</span></>}
     </span>
   )
 
