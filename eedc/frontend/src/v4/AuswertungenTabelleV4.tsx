@@ -54,7 +54,6 @@ export default function AuswertungenTabelleV4() {
       <Card>
         <WerteTabelle
           rows={gefiltert}
-          modus="werkbank"
           vorjahrRows={vorjahrRows}
           jahrLabel={jahr === 'alle' ? '' : jahr}
           vergleichLabel={jahr === 'alle' ? null : jahr - 1}

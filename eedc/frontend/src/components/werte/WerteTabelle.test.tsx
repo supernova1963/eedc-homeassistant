@@ -23,8 +23,8 @@ const rows = [mz(1, 2025), mz(2, 2025)]
 describe('WerteTabelle', () => {
   beforeEach(() => localStorage.clear())
 
-  it('werkbank: Steuerung + Default-Spalten + Footer', () => {
-    render(<WerteTabelle rows={rows} modus="werkbank" />)
+  it('Steuerung (Picker/CSV) + Default-Spalten + Footer — überall identisch', () => {
+    render(<WerteTabelle rows={rows} />)
     expect(screen.getByRole('button', { name: /Spalten/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /CSV/ })).toBeInTheDocument()
     // Default-sichtbare Spalte
@@ -33,8 +33,8 @@ describe('WerteTabelle', () => {
     expect(screen.getByText('2 Monate')).toBeInTheDocument()
   })
 
-  it('werkbank: Spalten-Picker blendet eine Spalte aus', () => {
-    render(<WerteTabelle rows={rows} modus="werkbank" />)
+  it('Spalten-Picker blendet eine Spalte aus', () => {
+    render(<WerteTabelle rows={rows} />)
     expect(screen.getByText(/PV-Erzeugung \(kWh\)/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Spalten/ }))
     // Checkbox „PV-Erzeugung" im Picker abwählen
@@ -43,22 +43,19 @@ describe('WerteTabelle', () => {
     expect(screen.queryByText(/PV-Erzeugung \(kWh\)/)).not.toBeInTheDocument()
   })
 
-  it('embed: read-only (kein Picker/CSV) + Cross-Link + fixe Spalten', () => {
-    render(<WerteTabelle rows={rows} modus="embed" embedKeys={['erzeugung']} alleWerteHref="/v4/auswertungen/tabelle" />)
-    expect(screen.queryByRole('button', { name: /Spalten/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /CSV/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/PV-Erzeugung \(kWh\)/)).toBeInTheDocument()
-    // andere Spalte NICHT da
-    expect(screen.queryByText(/Einspeisung \(kWh\)/)).not.toBeInTheDocument()
+  it('Cockpit-Platzierung hat dieselbe Funktion (Picker/CSV) + Cross-Link', () => {
+    render(<WerteTabelle rows={rows} alleWerteHref="/v4/auswertungen/tabelle" />)
+    // gleiche Funktion wie Auswertungen/Tabelle — Picker + CSV vorhanden
+    expect(screen.getByRole('button', { name: /Spalten/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /CSV/ })).toBeInTheDocument()
     const link = screen.getByRole('link', { name: /Alle Werte/ })
     expect(link).toHaveAttribute('href', '/v4/auswertungen/tabelle')
   })
 
-  it('werkbank: Vergleich-Toggle erscheint bei Vorjahr-Daten und schaltet Δ frei', () => {
+  it('Vergleich-Toggle erscheint bei Vorjahr-Daten und schaltet Δ frei', () => {
     render(
       <WerteTabelle
         rows={rows}
-        modus="werkbank"
         vorjahrRows={[mz(1, 2024), mz(2, 2024)]}
         jahrLabel={2025}
         vergleichLabel={2024}

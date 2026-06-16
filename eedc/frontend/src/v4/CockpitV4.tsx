@@ -182,7 +182,7 @@ export default function CockpitV4() {
         icon: Table2,
         summary: 'numerischer Zwilling (read-only)',
         defaultOpen: false,
-        render: () => <WerteTabelle rows={werteRows} modus="embed" alleWerteHref="#/v4/auswertungen/tabelle" />,
+        render: () => <WerteTabelle rows={werteRows} alleWerteHref="#/v4/auswertungen/tabelle" />,
       },
     ]
     inhalt = <BlockShell key="cockpit-monat" persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />

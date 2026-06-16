@@ -1,12 +1,13 @@
 /**
- * WerteTabelle — granularitäts-agnostische Werte-Tabelle (IA v4 Werte-SoT, W2/W3).
+ * WerteTabelle — die EINE Werte-Tabelle (IA v4 Werte-SoT, W1/W2).
  *
- * Zwei Modi:
- *  - `werkbank`: voller Spalten-Picker (Sichtbarkeit + Reihenfolge je Gruppe),
- *    CSV-Export, Vorjahr-Vergleich (aktuell · Vergleich · Δ), Footer-Aggregat.
- *    Persistenz der Picker-Wahl in localStorage. = Auswertungen/Tabelle.
- *  - `embed`: fixer, read-only Spaltensatz (Default Energie-Basis), Footer,
- *    ein Cross-Link „alle Werte / Export →". Für Cockpit-Zeitsichten/Komponenten.
+ * Gleiche Funktion + Aussehen wie Auswertungen/Tabelle — egal wo eingebettet
+ * (Cockpit-Zeitsichten, Komponenten, eigene Werkbank-Seite). Es unterscheiden
+ * sich NUR die übergebenen Zeiträume (Zeilen/Granularität): voller Spalten-
+ * Picker (Sichtbarkeit + Reihenfolge je Gruppe), CSV-Export, Vorjahr-Vergleich
+ * (aktuell · Vergleich · Δ) und Footer-Aggregat sind überall vorhanden
+ * (Gernot-Konzept 2026-06-16: „Funktion + Aussehen entsprechen, nur Zeiträume
+ * variieren" — löst die frühere W3-read-only-Embed-Idee ab).
  *
  * Speist sich aus dem W1-Registry (`lib/werte`); Vergleichs-/CSV-/Footer-Logik
  * ist dort zentralisiert (verhaltensgleich aus `TabelleTab` herausgelöst). Die
@@ -51,33 +52,24 @@ function DeltaZelle({ current, prev, metrik }: { current: number | null; prev: n
 
 export interface WerteTabelleProps {
   rows: MonatsZeitreihe[]
-  modus: 'werkbank' | 'embed'
-  /** Werkbank: Vergleichs-Zeilen (Vorjahr); aktiviert den cur/cmp/Δ-Toggle. */
+  /** Vergleichs-Zeilen (Vorjahr); aktiviert den cur/cmp/Δ-Toggle. */
   vorjahrRows?: MonatsZeitreihe[] | null
   jahrLabel?: string | number
   vergleichLabel?: string | number | null
-  /** Embed: fixer Spaltensatz (Default = Energie-Basis). */
-  embedKeys?: string[]
-  /** Embed: Cross-Link-Ziel „alle Werte / Export →". */
+  /** Optionaler Cross-Link „alle Werte / Export →" (z. B. im Cockpit-Embed). */
   alleWerteHref?: string
   csvDateiname?: string
 }
 
-const EMBED_DEFAULT_KEYS = WERTE_METRIKEN.filter((m) => m.gruppe === 'basis' && m.defaultVisible).map((m) => m.key)
-
 export function WerteTabelle({
   rows,
-  modus,
   vorjahrRows = null,
   jahrLabel = '',
   vergleichLabel = null,
-  embedKeys,
   alleWerteHref,
   csvDateiname = 'werte_tabelle.csv',
 }: WerteTabelleProps) {
-  const istEmbed = modus === 'embed'
-
-  // ── Werkbank-State: Sichtbarkeit + Reihenfolge (persistiert) ────────────────
+  // ── Sichtbarkeit + Reihenfolge (persistiert, geteilt über alle Platzierungen) ─
   const [visible, setVisible] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem(LS_COLS)
@@ -100,27 +92,20 @@ export function WerteTabelle({
   })
   const [pickerOffen, setPickerOffen] = useState(false)
   const [vergleichAn, setVergleichAn] = useState(false)
-  const [showPicker] = useState(modus === 'werkbank')
 
   useEffect(() => {
-    if (istEmbed) return
     try { localStorage.setItem(LS_COLS, JSON.stringify([...visible])) } catch { /* ignore */ }
-  }, [visible, istEmbed])
+  }, [visible])
   useEffect(() => {
-    if (istEmbed) return
     try { localStorage.setItem(LS_ORDER, JSON.stringify(order)) } catch { /* ignore */ }
-  }, [order, istEmbed])
+  }, [order])
 
-  // ── Aktive Spalten ──────────────────────────────────────────────────────────
-  const aktiveMetriken = useMemo<WerteMetrik[]>(() => {
-    if (istEmbed) {
-      const keys = embedKeys && embedKeys.length > 0 ? embedKeys : EMBED_DEFAULT_KEYS
-      return keys.map((k) => METRIK_BY_KEY[k]).filter(Boolean)
-    }
-    return order.map((k) => METRIK_BY_KEY[k]).filter((m) => m && visible.has(m.key))
-  }, [istEmbed, embedKeys, order, visible])
+  const aktiveMetriken = useMemo<WerteMetrik[]>(
+    () => order.map((k) => METRIK_BY_KEY[k]).filter((m) => m && visible.has(m.key)),
+    [order, visible],
+  )
 
-  const vergleichVerfuegbar = !istEmbed && vorjahrRows != null && vorjahrRows.length > 0 && vergleichLabel != null
+  const vergleichVerfuegbar = vorjahrRows != null && vorjahrRows.length > 0 && vergleichLabel != null
   const zeigeVergleich = vergleichVerfuegbar && vergleichAn
 
   const vorjahrLookup = useMemo<Record<number, MonatsZeitreihe>>(() => {
@@ -173,28 +158,31 @@ export function WerteTabelle({
 
   return (
     <div className="space-y-3">
-      {/* ── Werkbank-Steuerung ─────────────────────────────────────────────── */}
-      {showPicker && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setPickerOffen((o) => !o)}>
-            <Columns className="h-4 w-4" /> Spalten
+      {/* ── Steuerung (überall identisch) ──────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setPickerOffen((o) => !o)}>
+          <Columns className="h-4 w-4" /> Spalten
+        </Button>
+        {vergleichVerfuegbar && (
+          <Button
+            size="sm"
+            variant={zeigeVergleich ? 'primary' : 'secondary'}
+            onClick={() => setVergleichAn((v) => !v)}
+          >
+            <GitCompareArrows className="h-4 w-4" /> Vergleich {vergleichLabel}
           </Button>
-          {vergleichVerfuegbar && (
-            <Button
-              size="sm"
-              variant={zeigeVergleich ? 'primary' : 'secondary'}
-              onClick={() => setVergleichAn((v) => !v)}
-            >
-              <GitCompareArrows className="h-4 w-4" /> Vergleich {vergleichLabel}
-            </Button>
-          )}
-          <Button size="sm" variant="secondary" onClick={csvExport}>
-            <Download className="h-4 w-4" /> CSV
-          </Button>
-        </div>
-      )}
+        )}
+        <Button size="sm" variant="secondary" onClick={csvExport}>
+          <Download className="h-4 w-4" /> CSV
+        </Button>
+        {alleWerteHref && (
+          <a href={alleWerteHref} className="ml-auto inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+            Alle Werte / Export <ArrowRight className="h-4 w-4" />
+          </a>
+        )}
+      </div>
 
-      {showPicker && pickerOffen && (
+      {pickerOffen && (
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {WERTE_GRUPPEN.map((g) => (
             <div key={g}>
@@ -297,13 +285,6 @@ export function WerteTabelle({
           )}
         </table>
       </div>
-
-      {/* ── Embed-Cross-Link „alle Werte / Export →" (W3) ──────────────────── */}
-      {istEmbed && alleWerteHref && (
-        <a href={alleWerteHref} className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
-          Alle Werte / Export <ArrowRight className="h-4 w-4" />
-        </a>
-      )}
     </div>
   )
 }
