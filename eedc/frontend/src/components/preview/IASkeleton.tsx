@@ -248,7 +248,7 @@ function DummyChart({ label, tall }: { label: string; tall?: boolean }) {
 
 function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonly T[]; active: T; onSelect: (t: T) => void }) {
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 lg:sticky lg:top-0 z-20">
+    <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
       <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
         {tabs.map((t) => (
           <button
@@ -265,6 +265,19 @@ function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonl
           </button>
         ))}
       </nav>
+    </div>
+  )
+}
+
+// View-Schale: zweite Leiste bleibt ab `lg` FIX (außerhalb des Scrollbereichs),
+// darunter scrollt alles zusammen (Mobile-Schale, detLAN/Gernot #243). Damit
+// schließt der vertikale Scrollbalken die zweite Leiste auf dem Desktop NICHT
+// mehr ein — behebt das Safari/Firefox-Ruckeln der vormals `sticky`-Leiste.
+function ViewShell({ bar, children }: { bar?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="lg:flex lg:flex-col lg:h-full lg:min-h-0">
+      {bar}
+      <div className="lg:flex-1 lg:overflow-auto lg:min-h-0">{children}</div>
     </div>
   )
 }
@@ -452,11 +465,10 @@ function CockpitView() {
         ]
 
   return (
-    <>
-      <SubTabBar tabs={COCKPIT_SUBS} active={sub} onSelect={setSub} />
+    <ViewShell bar={<SubTabBar tabs={COCKPIT_SUBS} active={sub} onSelect={setSub} />}>
       {/* Cockpit-Zeitsichten: alle Blöcke klapp-/fokussierbar UND sortierbar */}
       <BloeckeView key={`cockpit-${sub}`} persistKey={`cockpit-${sub}`} bloecke={bloecke} sortierbar />
-    </>
+    </ViewShell>
   )
 }
 
@@ -474,8 +486,8 @@ function KomponentenView() {
     { id: 'einstellungen', title: 'Einstellungen', icon: Settings, summary: 'alle Parameter dieser Komponente — nicht mehr raten (#243)', defaultOpen: false, render: (_f) => <ParamGruppen typ={typ} /> },
   ]
   return (
-    <>
-      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 lg:sticky lg:top-0 z-20">
+    <ViewShell bar={
+      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
         <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
           {KOMP_TYPEN.map((t) => (
             <button
@@ -494,12 +506,13 @@ function KomponentenView() {
           ))}
         </nav>
       </div>
+    }>
       <div className="px-3 sm:px-6 pt-4 flex items-center justify-between max-w-[1920px] mx-auto">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">{aktiv.label}</h2>
         <span className="min-h-[44px] flex items-center px-3 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">Mai 2026 ▾</span>
       </div>
       <BloeckeView key={`komp-${typ}`} persistKey={`komp-${typ}`} bloecke={bloecke} />
-    </>
+    </ViewShell>
   )
 }
 
@@ -515,10 +528,9 @@ function AuswertungenView() {
       : []),
   ]
   return (
-    <>
-      <SubTabBar tabs={AUSW_SUBS} active={sub} onSelect={setSub} />
+    <ViewShell bar={<SubTabBar tabs={AUSW_SUBS} active={sub} onSelect={setSub} />}>
       <BloeckeView key={`ausw-${sub}`} persistKey={`ausw-${sub}`} bloecke={bloecke} />
-    </>
+    </ViewShell>
   )
 }
 
@@ -534,21 +546,22 @@ function CommunityView() {
     { id: 'inhalt', title: sub, icon: BarChart3, defaultOpen: true, render: (f) => <DummyChart label={`Community: ${sub}`} tall={f} /> },
   ]
   return (
-    <>
-      <SubTabBar tabs={COMM_SUBS} active={sub} onSelect={setSub} />
+    <ViewShell bar={<SubTabBar tabs={COMM_SUBS} active={sub} onSelect={setSub} />}>
       <BloeckeView key={`comm-${sub}`} persistKey={`comm-${sub}`} bloecke={bloecke} />
-    </>
+    </ViewShell>
   )
 }
 
 function HilfeView() {
   return (
-    <div className="p-3 sm:p-6 space-y-4 max-w-3xl mx-auto">
-      <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Hilfe <span className="text-xs font-normal text-gray-400 dark:text-gray-500">In-App-Handbuch</span></h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Inkl. „Wo ist X hin?" beim v4-Flip (Aussichten → Cockpit/Aussicht, T-Konto → Auswertungen/Finanzen …).</p>
-      </section>
-    </div>
+    <ViewShell>
+      <div className="p-3 sm:p-6 space-y-4 max-w-3xl mx-auto">
+        <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Hilfe <span className="text-xs font-normal text-gray-400 dark:text-gray-500">In-App-Handbuch</span></h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Inkl. „Wo ist X hin?" beim v4-Flip (Aussichten → Cockpit/Aussicht, T-Konto → Auswertungen/Finanzen …).</p>
+        </section>
+      </div>
+    </ViewShell>
   )
 }
 
@@ -781,9 +794,9 @@ function EinstellungenView() {
     }
   })
   return (
-    <>
-      {/* Zweite Leiste = Kategorien (analog Komponenten, fix). Aktiver Reiter = Überschrift. */}
-      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 lg:sticky lg:top-0 z-20">
+    <ViewShell bar={
+      /* Zweite Leiste = Kategorien (analog Komponenten, fix). Aktiver Reiter = Überschrift. */
+      <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
         <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
           {EINSTELLUNGEN_KATEGORIEN.map((k) => (
             <button
@@ -802,6 +815,7 @@ function EinstellungenView() {
           ))}
         </nav>
       </div>
+    }>
       <div className="px-3 sm:px-6 pt-4 space-y-3 max-w-[1920px] mx-auto">
         <input
           type="search"
@@ -820,7 +834,7 @@ function EinstellungenView() {
         </p>
       </div>
       <BloeckeView key={`einst-${kat}`} persistKey={`einst-${kat}`} bloecke={bloecke} />
-    </>
+    </ViewShell>
   )
 }
 
@@ -882,8 +896,9 @@ export default function IASkeleton() {
         )}
       </header>
 
-      {/* Inhalt je Achse */}
-      <main className="flex-1 overflow-auto">
+      {/* Inhalt je Achse. Ab `lg` scrollt nur der Inhalt (ViewShell), darunter
+          scrollt `main` komplett (zweite Leiste scrollt mit weg, Mobile-Schale). */}
+      <main className="flex-1 overflow-auto lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
         {top === 'cockpit' && <CockpitView />}
         {top === 'komponenten' && <KomponentenView />}
         {top === 'auswertungen' && <AuswertungenView />}

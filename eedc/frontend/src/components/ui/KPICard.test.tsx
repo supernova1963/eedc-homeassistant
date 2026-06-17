@@ -15,15 +15,15 @@ describe('KPICard (SoT, B9)', () => {
     expect(screen.getByText('kWh')).toBeInTheDocument()
   })
 
-  it('setzt eine Umbruch-Gelegenheit (<wbr>) zwischen Wert und Einheit (#243 detLAN)', () => {
-    // Wert und Einheit sind je whitespace-nowrap; ohne den <wbr> dazwischen gäbe es
-    // KEINE Umbruch-Gelegenheit → Einheit liefe in die Icon-Box. Invariante absichern.
-    const { container, unmount } = render(<KPICard title="Verbrauch" value="17,2" unit="kWh/100km" />)
-    expect(container.querySelector('wbr')).not.toBeNull()
-    unmount()
-    // Ohne Einheit kein <wbr>.
-    const ohne = render(<KPICard title="Verbrauch" value="17,2" />)
-    expect(ohne.container.querySelector('wbr')).toBeNull()
+  it('hält Wert+Einheit einzeilig und kürzt mit … ab (truncate, #243 detLAN)', () => {
+    // Wert+Einheit dürfen NICHT umbrechen und NICHT in die Icon-Box laufen, sondern
+    // konsistent (wie die Titel) mit Ellipsis enden. Invariante: der Wert-Container
+    // trägt `truncate` und cappt per max-w-full auf die Spaltenbreite.
+    const { getByText } = render(<KPICard title="Verbrauch" value="17,2" unit="kWh/100km" />)
+    const einheit = getByText('kWh/100km')
+    const container = einheit.parentElement as HTMLElement
+    expect(container.className).toMatch(/\btruncate\b/)
+    expect(container.className).toMatch(/\bmax-w-full\b/)
   })
 
   it('rendert ein String-Value unverändert', () => {
