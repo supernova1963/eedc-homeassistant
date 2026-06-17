@@ -304,6 +304,63 @@ class TagesZusammenfassungResponse(BaseModel):
     einspeisung_neg_preis_kwh: Optional[float] = None
 
 
+class TagWerteResponse(BaseModel):
+    """Tageszeile für die Werte/Tabelle-Embed-Sicht in Tagesgranularität
+    (IA v4 E3, Cockpit/Monat). Feldnamen sind **deckungsgleich mit den
+    Frontend-Registry-Keys** (`lib/werte`), damit der Tag-Accessor `getTagWert`
+    — wie `getMonatWert` — direkt `row[key]` lesen kann.
+
+    Energie-Bilanz + Quoten + Speicher/WP stammen aus `bilanz_aus_stundenrows`
+    (Σ stündl. TEP-Rows, identische Semantik wie `get_monatsauswertung` →
+    additive Symmetrie). Finanzen über den `baue_finanz_zeile`-SoT (#326,
+    je-Monat-Tarif). Die `*_kw`/PR/Börsenpreis-Felder sind tag-native (kein
+    Monats-Pendant).
+    """
+    datum: date
+    stunden_verfuegbar: int = 0
+    datenquelle: Optional[str] = None
+    # Energie (additive kWh) — Registry-Keys
+    erzeugung: float = 0.0
+    eigenverbrauch: float = 0.0
+    einspeisung: float = 0.0
+    netzbezug: float = 0.0
+    gesamtverbrauch: float = 0.0
+    direktverbrauch: float = 0.0
+    # Quoten (%)
+    autarkie: Optional[float] = None
+    evQuote: Optional[float] = None
+    spezErtrag: Optional[float] = None
+    # Speicher
+    speicher_ladung: Optional[float] = None
+    speicher_entladung: Optional[float] = None
+    speicher_effizienz: Optional[float] = None
+    # Wärmepumpe (nur Strom je Tag ableitbar; Wärme/COP bleiben monat-only)
+    wp_strom: Optional[float] = None
+    # Finanzen (€) — einfaches lineares Modell wie createMonatsZeitreihe
+    einspeise_erloes: float = 0.0
+    ev_ersparnis: float = 0.0
+    netzbezug_kosten: float = 0.0
+    netto_ertrag: float = 0.0
+    netto_bilanz: float = 0.0
+    # CO₂
+    co2_einsparung: float = 0.0
+    # ── Tag-native Zusatzmetriken (kein Monats-Registry-Pendant) ──
+    ueberschuss_kwh: Optional[float] = None
+    defizit_kwh: Optional[float] = None
+    peak_pv_kw: Optional[float] = None
+    peak_netzbezug_kw: Optional[float] = None
+    peak_einspeisung_kw: Optional[float] = None
+    performance_ratio: Optional[float] = None
+    batterie_vollzyklen: Optional[float] = None
+    temperatur_min_c: Optional[float] = None
+    temperatur_max_c: Optional[float] = None
+    strahlung_summe_wh_m2: Optional[float] = None
+    boersenpreis_avg_cent: Optional[float] = None
+    boersenpreis_min_cent: Optional[float] = None
+    negative_preis_stunden: Optional[int] = None
+    einspeisung_neg_preis_kwh: Optional[float] = None
+
+
 class ReaggregatePreviewBoundary(BaseModel):
     sensor_key: str
     kategorie: Optional[str] = None

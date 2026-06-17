@@ -1,32 +1,28 @@
 /**
  * WerteTabelle — die EINE Werte-Tabelle (IA v4 Werte-SoT, W1/W2).
  *
- * Gleiche Funktion + Aussehen wie Auswertungen/Tabelle — egal wo eingebettet
- * (Cockpit-Zeitsichten, Komponenten, eigene Werkbank-Seite). Es unterscheiden
- * sich NUR die übergebenen Zeiträume (Zeilen/Granularität): voller Spalten-
- * Picker (Sichtbarkeit + Reihenfolge je Gruppe), CSV-Export, Vorjahr-Vergleich
- * (aktuell · Vergleich · Δ) und Footer-Aggregat sind überall vorhanden
- * (Gernot-Konzept 2026-06-16: „Funktion + Aussehen entsprechen, nur Zeiträume
- * variieren" — löst die frühere W3-read-only-Embed-Idee ab).
+ * Gleiche Funktion + Aussehen — egal in welcher Granularität (Monats- oder
+ * Tageszeilen) und egal wo eingebettet (Cockpit-Zeitsichten, Komponenten,
+ * eigene Werkbank-Seite). Es unterscheiden sich NUR die übergebenen Zeiträume
+ * (Zeilen-Granularität) und der je Granularität verfügbare Metrik-Satz
+ * (`metrikenFuer`): voller Spalten-Picker (Sichtbarkeit + Reihenfolge je
+ * Gruppe), CSV-Export, Vergleich (aktuell · Vergleich · Δ) und Footer-Aggregat
+ * sind überall vorhanden (Gernot-Konzept 2026-06-16; löst die frühere
+ * W3-read-only-Embed-Idee ab).
  *
- * Speist sich aus dem W1-Registry (`lib/werte`); Vergleichs-/CSV-/Footer-Logik
- * ist dort zentralisiert (verhaltensgleich aus `TabelleTab` herausgelöst). Die
+ * Eingabe ist die normalisierte {@link WerteZeile} (`lib/werte/zeile`); die
+ * Vergleichs-/CSV-/Footer-Logik ist in `lib/werte` zentralisiert. Die
  * Produktiv-Seite `pages/auswertung/TabelleTab.tsx` bleibt bis zum Flip (3.8)
  * unangetastet — diese Komponente ist der künftige SoT.
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Download, Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
 import { Button } from '../ui'
-import { MONAT_KURZ } from '../../lib'
-import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import {
-  WERTE_METRIKEN, WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
-  getMonatWert, fmtWert, aggregiere, bewerteDelta, exportWerteCsv,
-  type WerteMetrik,
+  WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
+  fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
+  type WerteMetrik, type WerteZeile, type Granularitaet,
 } from '../../lib/werte'
-
-const LS_COLS = 'eedc-werte-werkbank:cols'
-const LS_ORDER = 'eedc-werte-werkbank:order'
 
 const URTEIL_KLASSE: Record<string, string> = {
   gut: 'text-green-600 dark:text-green-400',
@@ -51,9 +47,11 @@ function DeltaZelle({ current, prev, metrik }: { current: number | null; prev: n
 }
 
 export interface WerteTabelleProps {
-  rows: MonatsZeitreihe[]
-  /** Vergleichs-Zeilen (Vorjahr); aktiviert den cur/cmp/Δ-Toggle. */
-  vorjahrRows?: MonatsZeitreihe[] | null
+  rows: WerteZeile[]
+  /** Vergleichs-Zeilen (Vorjahr/Vergleichsmonat); aktiviert den cur/cmp/Δ-Toggle. */
+  vorjahrRows?: WerteZeile[] | null
+  /** Zeilen-Granularität → verfügbarer Metrik-Satz + Footer-Einheit + LS-Scope. */
+  granularitaet?: Granularitaet
   jahrLabel?: string | number
   vergleichLabel?: string | number | null
   /** Optionaler Cross-Link „alle Werte / Export →" (z. B. im Cockpit-Embed). */
@@ -64,41 +62,79 @@ export interface WerteTabelleProps {
 export function WerteTabelle({
   rows,
   vorjahrRows = null,
+  granularitaet = 'monat',
   jahrLabel = '',
   vergleichLabel = null,
   alleWerteHref,
   csvDateiname = 'werte_tabelle.csv',
 }: WerteTabelleProps) {
-  // ── Sichtbarkeit + Reihenfolge (persistiert, geteilt über alle Platzierungen) ─
+  // Verfügbare Metriken + Picker-Gruppen je Granularität.
+  const verfuegbar = useMemo(() => metrikenFuer(granularitaet), [granularitaet])
+  const verfuegbarKeys = useMemo(() => new Set(verfuegbar.map((m) => m.key)), [verfuegbar])
+  const gruppen = useMemo(
+    () => WERTE_GRUPPEN.filter((g) => verfuegbar.some((m) => m.gruppe === g)),
+    [verfuegbar],
+  )
+  const einheitLabel = granularitaet === 'tag' ? 'Tage' : 'Monate'
+  // LS-Scope je Granularität, damit Monats-/Tages-Spaltenwahl unabhängig bleibt.
+  const lsCols = `eedc-werte-werkbank:cols:${granularitaet}`
+  const lsOrder = `eedc-werte-werkbank:order:${granularitaet}`
+
+  // ── Sichtbarkeit + Reihenfolge (persistiert je Granularität) ─
   const [visible, setVisible] = useState<Set<string>>(() => {
     try {
-      const raw = localStorage.getItem(LS_COLS)
+      const raw = localStorage.getItem(lsCols)
       if (raw) {
-        const keys = (JSON.parse(raw) as string[]).filter((k) => METRIK_BY_KEY[k])
+        const keys = (JSON.parse(raw) as string[]).filter((k) => verfuegbarKeys.has(k))
         if (keys.length > 0) return new Set(keys)
       }
     } catch { /* ignore */ }
-    return new Set(WERTE_METRIKEN.filter((m) => m.defaultVisible).map((m) => m.key))
+    return new Set(verfuegbar.filter((m) => m.defaultVisible).map((m) => m.key))
   })
   const [order, setOrder] = useState<string[]>(() => {
     try {
-      const raw = localStorage.getItem(LS_ORDER)
+      const raw = localStorage.getItem(lsOrder)
       if (raw) {
-        const keys = JSON.parse(raw) as string[]
-        if (WERTE_METRIKEN.every((m) => keys.includes(m.key))) return keys
+        const keys = (JSON.parse(raw) as string[]).filter((k) => verfuegbarKeys.has(k))
+        if (verfuegbar.every((m) => keys.includes(m.key))) return keys
       }
     } catch { /* ignore */ }
-    return WERTE_METRIKEN.map((m) => m.key)
+    return verfuegbar.map((m) => m.key)
   })
   const [pickerOffen, setPickerOffen] = useState(false)
   const [vergleichAn, setVergleichAn] = useState(false)
 
+  // Granularitätswechsel → Sichtbarkeit/Reihenfolge neu aus dem passenden Scope.
   useEffect(() => {
-    try { localStorage.setItem(LS_COLS, JSON.stringify([...visible])) } catch { /* ignore */ }
-  }, [visible])
+    setVisible(() => {
+      try {
+        const raw = localStorage.getItem(lsCols)
+        if (raw) {
+          const keys = (JSON.parse(raw) as string[]).filter((k) => verfuegbarKeys.has(k))
+          if (keys.length > 0) return new Set(keys)
+        }
+      } catch { /* ignore */ }
+      return new Set(verfuegbar.filter((m) => m.defaultVisible).map((m) => m.key))
+    })
+    setOrder(() => {
+      try {
+        const raw = localStorage.getItem(lsOrder)
+        if (raw) {
+          const keys = (JSON.parse(raw) as string[]).filter((k) => verfuegbarKeys.has(k))
+          if (verfuegbar.every((m) => keys.includes(m.key))) return keys
+        }
+      } catch { /* ignore */ }
+      return verfuegbar.map((m) => m.key)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [granularitaet])
+
   useEffect(() => {
-    try { localStorage.setItem(LS_ORDER, JSON.stringify(order)) } catch { /* ignore */ }
-  }, [order])
+    try { localStorage.setItem(lsCols, JSON.stringify([...visible])) } catch { /* ignore */ }
+  }, [visible, lsCols])
+  useEffect(() => {
+    try { localStorage.setItem(lsOrder, JSON.stringify(order)) } catch { /* ignore */ }
+  }, [order, lsOrder])
 
   const aktiveMetriken = useMemo<WerteMetrik[]>(
     () => order.map((k) => METRIK_BY_KEY[k]).filter((m) => m && visible.has(m.key)),
@@ -108,18 +144,21 @@ export function WerteTabelle({
   const vergleichVerfuegbar = vorjahrRows != null && vorjahrRows.length > 0 && vergleichLabel != null
   const zeigeVergleich = vergleichVerfuegbar && vergleichAn
 
-  const vorjahrLookup = useMemo<Record<number, MonatsZeitreihe>>(() => {
-    const m: Record<number, MonatsZeitreihe> = {}
-    if (vorjahrRows) for (const r of vorjahrRows) m[r.monat] = r
+  const vorjahrLookup = useMemo<Record<number, WerteZeile>>(() => {
+    const m: Record<number, WerteZeile> = {}
+    if (vorjahrRows) for (const r of vorjahrRows) m[r.vergleichKey] = r
     return m
   }, [vorjahrRows])
 
-  const aggregat = useMemo(() => aggregiere(rows), [rows])
-  const vorjahrAggregat = useMemo(() => (vorjahrRows ? aggregiere(vorjahrRows) : null), [vorjahrRows])
+  const aggregat = useMemo(() => aggregiere(rows, aktiveMetriken), [rows, aktiveMetriken])
+  const vorjahrAggregat = useMemo(
+    () => (vorjahrRows ? aggregiere(vorjahrRows, aktiveMetriken) : null),
+    [vorjahrRows, aktiveMetriken],
+  )
 
   function verschiebe(key: string, dir: 'up' | 'down') {
     const gruppe = METRIK_BY_KEY[key].gruppe
-    const gruppenKeys = WERTE_METRIKEN.filter((m) => m.gruppe === gruppe).map((m) => m.key)
+    const gruppenKeys = verfuegbar.filter((m) => m.gruppe === gruppe).map((m) => m.key)
     const inGruppe = order.filter((k) => gruppenKeys.includes(k))
     const idx = inGruppe.indexOf(key)
     const neu = dir === 'up' ? idx - 1 : idx + 1
@@ -143,12 +182,13 @@ export function WerteTabelle({
       jahrLabel,
       vergleichLabel: zeigeVergleich ? vergleichLabel : null,
       metriken: aktiveMetriken,
+      einheitLabel,
       dateiname: csvDateiname,
     })
   }
 
   const sorted = useMemo(
-    () => [...rows].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat)),
+    () => [...rows].sort((a, b) => a.sortKey - b.sortKey),
     [rows],
   )
 
@@ -184,7 +224,7 @@ export function WerteTabelle({
 
       {pickerOffen && (
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {WERTE_GRUPPEN.map((g) => (
+          {gruppen.map((g) => (
             <div key={g}>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">{GRUPPE_LABELS[g]}</p>
               <ul className="space-y-0.5">
@@ -237,14 +277,14 @@ export function WerteTabelle({
           </thead>
           <tbody>
             {sorted.map((r) => {
-              const prev = zeigeVergleich ? vorjahrLookup[r.monat] : undefined
+              const prev = zeigeVergleich ? vorjahrLookup[r.vergleichKey] : undefined
               return (
-                <tr key={`${r.jahr}-${r.monat}`} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{MONAT_KURZ[r.monat]} {r.jahr}</td>
+                <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800">
+                  <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{r.label}</td>
                   {aktiveMetriken.map((m) => {
-                    const v = getMonatWert(r, m.key)
+                    const v = r.wert(m.key)
                     if (zeigeVergleich) {
-                      const pv = prev ? getMonatWert(prev, m.key) : null
+                      const pv = prev ? prev.wert(m.key) : null
                       return (
                         <Fragment key={m.key}>
                           <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
@@ -263,7 +303,7 @@ export function WerteTabelle({
             <tfoot>
               <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 font-semibold">
                 <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 text-xs uppercase tracking-wide whitespace-nowrap">
-                  {sorted.length} Monate
+                  {sorted.length} {einheitLabel}
                 </td>
                 {aktiveMetriken.map((m) => {
                   const v = aggregat[m.key]

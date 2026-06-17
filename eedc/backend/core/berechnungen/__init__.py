@@ -164,12 +164,18 @@ from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     ist_eta_degradation_alarm,
     ist_soc_drift_signifikant,
 )
+from backend.core.berechnungen.tagesbilanz import (
+    TagesBilanz,
+    bilanz_aus_stundenrows,
+)
 from backend.core.berechnungen.verbrauch import (
     VerbrauchsKennzahlen,
     berechne_verbrauchs_kennzahlen,
 )
 
 __all__ = [
+    "TagesBilanz",
+    "bilanz_aus_stundenrows",
     "berechne_bkw_alternativkosten_ersparnis",
     "berechne_wp_alternativkosten_ersparnis",
     "gas_kosten_altanlage",

@@ -24,7 +24,10 @@ import { BlockShell, KpiStrip } from '../components/blocks'
 import type { Block } from '../components/blocks'
 import type { KpiStripItem } from '../components/blocks/KpiStrip'
 import { WerteTabelle } from '../components/werte'
+import { monatsZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
+import CockpitMonatV4 from './CockpitMonatV4'
+import { ViewShell } from './ViewShell'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
 import { MONAT_KURZ, CHART_COLORS } from '../lib'
 import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
@@ -136,13 +139,16 @@ export default function CockpitV4() {
   )
 
   let inhalt: React.ReactNode
-  if (zeit !== 'monat') {
+  if (zeit === 'monat') {
+    // Echte Einzelmonats-Sicht (Tages-Granularität), lädt selbst.
+    inhalt = <CockpitMonatV4 anlageId={selectedAnlageId} />
+  } else if (zeit !== 'jahr') {
     inhalt = (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
         <Card>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Die Zeit-Sicht „{ZEITEN.find((z) => z.key === zeit)?.label ?? zeit}" wird in einem späteren
-            IA-v4-Slice mit echten Daten verdrahtet. Slice 1 zeigt „Monat".
+            IA-v4-Slice mit echten Daten verdrahtet.
           </p>
         </Card>
       </div>
@@ -166,8 +172,9 @@ export default function CockpitV4() {
       </div>
     )
   } else {
+    // Zeit „Jahr/Gesamt": kumulativer KPI-Strip + Monatsreihe + Monats-Tabelle.
     const bloecke: Block[] = [
-      { id: 'kpi', title: 'Kennzahlen', icon: Activity, defaultOpen: true, render: () => <KpiStrip kpis={cockpitKpis(data)} /> },
+      { id: 'kpi', title: 'Kennzahlen (gesamt)', icon: Activity, defaultOpen: true, render: () => <KpiStrip kpis={cockpitKpis(data)} /> },
       {
         id: 'verlauf',
         title: 'PV-Monatserträge',
@@ -178,20 +185,15 @@ export default function CockpitV4() {
       },
       {
         id: 'werte',
-        title: 'Werte/Tabelle',
+        title: 'Werte/Tabelle (Monat)',
         icon: Table2,
-        summary: 'numerischer Zwilling (read-only)',
+        summary: 'numerischer Zwilling der Monatsreihe',
         defaultOpen: false,
-        render: () => <WerteTabelle rows={werteRows} alleWerteHref="#/v4/auswertungen/tabelle" />,
+        render: () => <WerteTabelle rows={werteRows.map(monatsZeile)} granularitaet="monat" alleWerteHref="#/v4/auswertungen/tabelle" />,
       },
     ]
-    inhalt = <BlockShell key="cockpit-monat" persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
+    inhalt = <BlockShell key="cockpit-jahr" persistKey="v4-cockpit-jahr" bloecke={bloecke} sortierbar />
   }
 
-  return (
-    <>
-      {zeitNav}
-      {inhalt}
-    </>
-  )
+  return <ViewShell bar={zeitNav}>{inhalt}</ViewShell>
 }

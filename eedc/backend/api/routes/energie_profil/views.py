@@ -46,6 +46,7 @@ from ._shared import (
     StundenWertResponse,
     TagesPrognoseResponse,
     TagesZusammenfassungResponse,
+    TagWerteResponse,
     TagesprofilStunde,
     WochenmusterPunkt,
     _key_to_serie_info,
@@ -117,6 +118,35 @@ async def get_tages_zusammenfassungen(
         )
         for t in tage
     ]
+
+
+@router.get("/{anlage_id}/tage-werte", response_model=list[TagWerteResponse])
+async def get_tage_werte(
+    anlage_id: int,
+    von: date = Query(..., description="Startdatum (inklusiv)"),
+    bis: date = Query(..., description="Enddatum (inklusiv)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Tages-Werte-Zeilen (Energie-Bilanz + Finanzen + tag-native Metriken)
+    für die Werte/Tabelle-Embed-Sicht in Tagesgranularität (IA v4 E3).
+
+    Eine Zeile pro Tag, additiv zur Monatsbilanz (Σ stündl. TEP-Rows über den
+    SoT-Helper `bilanz_aus_stundenrows`). Finanzen über den `baue_finanz_zeile`-
+    SoT (je-Monat-Tarif).
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise not_found("Anlage", anlage_id)
+
+    if (bis - von).days > 366:
+        raise bad_request("Zeitraum darf maximal 366 Tage umfassen")
+
+    # Lazy-Import: Service importiert das Routes-Schema (`_shared`) → Top-Level-
+    # Import hier ergäbe einen Zyklus (routes-Package ↔ Service).
+    from backend.services.energie_profil.tage_werte import baue_tage_werte
+
+    return await baue_tage_werte(db, anlage, von, bis)
 
 
 @router.get("/{anlage_id}/komponenten-serien", response_model=list[SerieInfo])

@@ -50,7 +50,9 @@ export default function LayoutV4() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto">
+      {/* Ab lg gibt main keine eigene Scroll-Leiste mehr her, sondern wird flex-
+          Container für die ViewShell (fixe 2. Leiste). Mobile: alles scrollt. */}
+      <main className="flex-1 overflow-auto lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
         <Outlet />
       </main>
     </div>

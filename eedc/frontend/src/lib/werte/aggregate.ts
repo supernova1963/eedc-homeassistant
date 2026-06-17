@@ -1,16 +1,20 @@
 /**
  * Footer-Aggregation der Werte-Tabelle: pro Metrik Summe (`sum`) oder
  * Durchschnitt (`avg`); `none` → null. null-Werte werden übersprungen, leere
- * Spalte → null. Verhaltensgleich aus `TabelleTab.aggregateRows`.
+ * Spalte → null. Verhaltensgleich aus `TabelleTab.aggregateRows`, jetzt
+ * granularitäts-agnostisch über `WerteZeile`.
  */
-import type { MonatsZeitreihe } from '../../pages/auswertung/types'
-import { WERTE_METRIKEN, getMonatWert } from './registry'
+import type { WerteMetrik } from './registry'
+import type { WerteZeile } from './zeile'
 
-export function aggregiere(rows: MonatsZeitreihe[]): Record<string, number | null> {
+export function aggregiere(
+  rows: WerteZeile[],
+  metriken: WerteMetrik[],
+): Record<string, number | null> {
   const result: Record<string, number | null> = {}
-  for (const m of WERTE_METRIKEN) {
+  for (const m of metriken) {
     const vals = rows
-      .map((r) => getMonatWert(r, m.key))
+      .map((r) => r.wert(m.key))
       .filter((v): v is number => v != null)
     if (vals.length === 0) {
       result[m.key] = null

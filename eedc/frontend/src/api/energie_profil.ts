@@ -70,6 +70,58 @@ export interface TagesZusammenfassung {
   einspeisung_neg_preis_kwh: number | null
 }
 
+/**
+ * Tageszeile für die Werte/Tabelle-Embed-Sicht in Tagesgranularität
+ * (IA v4 E3, Cockpit/Monat). Feldnamen sind deckungsgleich mit den
+ * Registry-Keys (`lib/werte`), damit `getTagWert` direkt `row[key]` liest.
+ * Backend: GET /energie-profil/{id}/tage-werte (additiv zur Monatsbilanz).
+ */
+export interface TagWerte {
+  datum: string
+  stunden_verfuegbar: number
+  datenquelle: string | null
+  // Energie (kWh)
+  erzeugung: number
+  eigenverbrauch: number
+  einspeisung: number
+  netzbezug: number
+  gesamtverbrauch: number
+  direktverbrauch: number
+  // Quoten (%)
+  autarkie: number | null
+  evQuote: number | null
+  spezErtrag: number | null
+  // Speicher
+  speicher_ladung: number | null
+  speicher_entladung: number | null
+  speicher_effizienz: number | null
+  // Wärmepumpe (nur Strom je Tag)
+  wp_strom: number | null
+  // Finanzen (€)
+  einspeise_erloes: number
+  ev_ersparnis: number
+  netzbezug_kosten: number
+  netto_ertrag: number
+  netto_bilanz: number
+  // CO₂
+  co2_einsparung: number
+  // Tag-native Zusatzmetriken (kein Monats-Pendant)
+  ueberschuss_kwh: number | null
+  defizit_kwh: number | null
+  peak_pv_kw: number | null
+  peak_netzbezug_kw: number | null
+  peak_einspeisung_kw: number | null
+  performance_ratio: number | null
+  batterie_vollzyklen: number | null
+  temperatur_min_c: number | null
+  temperatur_max_c: number | null
+  strahlung_summe_wh_m2: number | null
+  boersenpreis_avg_cent: number | null
+  boersenpreis_min_cent: number | null
+  negative_preis_stunden: number | null
+  einspeisung_neg_preis_kwh: number | null
+}
+
 export interface HeatmapZelle {
   tag: number          // 1..31
   stunde: number       // 0..23
@@ -259,6 +311,9 @@ export const energieProfilApi = {
 
   getTage: (anlageId: number, von: string, bis: string): Promise<TagesZusammenfassung[]> =>
     api.get(`/energie-profil/${anlageId}/tage?von=${von}&bis=${bis}`),
+
+  getTageWerte: (anlageId: number, von: string, bis: string): Promise<TagWerte[]> =>
+    api.get(`/energie-profil/${anlageId}/tage-werte?von=${von}&bis=${bis}`),
 
   getKomponentenSerien: (anlageId: number, von: string, bis: string): Promise<SerieInfo[]> =>
     api.get(`/energie-profil/${anlageId}/komponenten-serien?von=${von}&bis=${bis}`),

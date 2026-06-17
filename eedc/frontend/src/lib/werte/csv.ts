@@ -1,34 +1,37 @@
 /**
  * CSV-Export der Werte-Tabelle — Header-/Zeilen-/Aggregat-Schema verhaltensgleich
- * aus `TabelleTab.handleExport`. Bei aktivem Vergleich wird jede Spalte zu drei
- * Spalten (aktuell · Vergleich · Δ), plus eine abschließende Aggregat-Zeile.
+ * aus `TabelleTab.handleExport`, jetzt granularitäts-agnostisch über `WerteZeile`.
+ * Bei aktivem Vergleich wird jede Spalte zu drei Spalten (aktuell · Vergleich · Δ),
+ * plus eine abschließende Aggregat-Zeile.
  */
-import { MONAT_KURZ } from '../constants'
 import { exportToCSV } from '../../utils/export'
-import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { WerteMetrik } from './registry'
-import { getMonatWert } from './registry'
+import type { WerteZeile } from './zeile'
 import { aggregiere } from './aggregate'
 
 export interface WerteCsvOptions {
-  rows: MonatsZeitreihe[]
-  /** Vergleichs-Zeilen (Vorjahr o. Ä.); null = kein Vergleich. */
-  vorjahrRows: MonatsZeitreihe[] | null
+  rows: WerteZeile[]
+  /** Vergleichs-Zeilen (Vorjahr/Vergleichsmonat); null = kein Vergleich. */
+  vorjahrRows: WerteZeile[] | null
   /** Label der aktuellen Spalte (z. B. "2025"). */
   jahrLabel: string | number
   /** Label der Vergleichsspalte (z. B. "2024"); null = kein Vergleich. */
   vergleichLabel: string | number | null
   /** Aktive Metriken in Anzeige-Reihenfolge. */
   metriken: WerteMetrik[]
+  /** Einheit der Aggregat-Zeile ("Monate" / "Tage"). */
+  einheitLabel: string
   dateiname: string
 }
 
-export function exportWerteCsv({ rows, vorjahrRows, jahrLabel, vergleichLabel, metriken, dateiname }: WerteCsvOptions) {
+export function exportWerteCsv({
+  rows, vorjahrRows, jahrLabel, vergleichLabel, metriken, einheitLabel, dateiname,
+}: WerteCsvOptions) {
   const vergleich = vorjahrRows != null && vergleichLabel != null
-  const vorjahrLookup: Record<number, MonatsZeitreihe> = {}
-  if (vorjahrRows) for (const r of vorjahrRows) vorjahrLookup[r.monat] = r
+  const vorjahrLookup: Record<number, WerteZeile> = {}
+  if (vorjahrRows) for (const r of vorjahrRows) vorjahrLookup[r.vergleichKey] = r
 
-  const headers: string[] = ['Jahr', 'Monat']
+  const headers: string[] = ['Zeitraum']
   metriken.forEach((m) => {
     const base = m.unit ? `${m.label} (${m.unit})` : m.label
     if (vergleich) {
@@ -41,13 +44,13 @@ export function exportWerteCsv({ rows, vorjahrRows, jahrLabel, vergleichLabel, m
   })
 
   const out: (string | number)[][] = rows.map((r) => {
-    const prev = vergleich ? vorjahrLookup[r.monat] : undefined
-    const zeile: (string | number)[] = [r.jahr, MONAT_KURZ[r.monat]]
+    const prev = vergleich ? vorjahrLookup[r.vergleichKey] : undefined
+    const zeile: (string | number)[] = [r.label]
     metriken.forEach((m) => {
-      const v = getMonatWert(r, m.key)
+      const v = r.wert(m.key)
       zeile.push(v != null ? v : '')
       if (vergleich) {
-        const pv = prev ? getMonatWert(prev, m.key) : null
+        const pv = prev ? prev.wert(m.key) : null
         zeile.push(pv != null ? pv : '')
         zeile.push(v != null && pv != null ? v - pv : '')
       }
@@ -55,14 +58,10 @@ export function exportWerteCsv({ rows, vorjahrRows, jahrLabel, vergleichLabel, m
     return zeile
   })
 
-  // Aggregat-Zeile (Jahres-Spanne + Monatszahl + Spalten-Aggregate)
-  const agg = aggregiere(rows)
-  const vorjahrAgg = vergleich && vorjahrRows ? aggregiere(vorjahrRows) : null
-  const jahre = rows.map((r) => r.jahr)
-  const aggZeile: (string | number)[] = [
-    rows.length > 0 ? `${Math.min(...jahre)}–${Math.max(...jahre)}` : '',
-    `${rows.length} Monate`,
-  ]
+  // Aggregat-Zeile (Anzahl + Spalten-Aggregate)
+  const agg = aggregiere(rows, metriken)
+  const vorjahrAgg = vergleich && vorjahrRows ? aggregiere(vorjahrRows, metriken) : null
+  const aggZeile: (string | number)[] = [`${rows.length} ${einheitLabel}`]
   metriken.forEach((m) => {
     const v = agg[m.key]
     aggZeile.push(v != null ? v : '')

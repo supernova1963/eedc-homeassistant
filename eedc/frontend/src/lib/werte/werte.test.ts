@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
+import type { TagWerte } from '../../api/energie_profil'
 import {
-  WERTE_METRIKEN, WERTE_GRUPPEN, METRIK_BY_KEY, getMonatWert,
+  WERTE_METRIKEN, WERTE_GRUPPEN, METRIK_BY_KEY, getMonatWert, getTagWert,
+  metrikenFuer, monatsZeile, tagesZeile,
   aggregiere, bewerteDelta, exportWerteCsv,
 } from './index'
 
@@ -24,10 +26,34 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
   }
 }
 
+function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
+  return {
+    datum, stunden_verfuegbar: 24, datenquelle: 'ha_sensor',
+    erzeugung: 30, eigenverbrauch: 18, einspeisung: 12, netzbezug: 6,
+    gesamtverbrauch: 24, direktverbrauch: 15,
+    autarkie: 75, evQuote: 60, spezErtrag: 3,
+    speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
+    wp_strom: null,
+    einspeise_erloes: 1, ev_ersparnis: 2, netzbezug_kosten: 1.5,
+    netto_ertrag: 3, netto_bilanz: 1.5, co2_einsparung: 11.4,
+    ueberschuss_kwh: 8, defizit_kwh: 2, peak_pv_kw: 6.2,
+    peak_netzbezug_kw: 1.1, peak_einspeisung_kw: 4.0,
+    performance_ratio: 0.85, batterie_vollzyklen: 0.4,
+    temperatur_min_c: 10, temperatur_max_c: 22,
+    strahlung_summe_wh_m2: 5000, boersenpreis_avg_cent: 9.5,
+    boersenpreis_min_cent: -1, negative_preis_stunden: 1,
+    einspeisung_neg_preis_kwh: 0,
+    ...over,
+  }
+}
+
 describe('W1-Registry', () => {
-  it('hat 23 Metriken, jede mit gültiger Gruppe', () => {
-    expect(WERTE_METRIKEN).toHaveLength(23)
-    for (const m of WERTE_METRIKEN) expect(WERTE_GRUPPEN).toContain(m.gruppe)
+  it('hat 33 Metriken (23 Monat + 10 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    expect(WERTE_METRIKEN).toHaveLength(33)
+    for (const m of WERTE_METRIKEN) {
+      expect(WERTE_GRUPPEN).toContain(m.gruppe)
+      expect(m.granular.length).toBeGreaterThan(0)
+    }
   })
   it('METRIK_BY_KEY findet per key', () => {
     expect(METRIK_BY_KEY['autarkie'].aggregation).toBe('avg')
@@ -38,18 +64,63 @@ describe('W1-Registry', () => {
     expect(getMonatWert(r, 'erzeugung')).toBe(412)
     expect(getMonatWert(r, 'speicher_ladung')).toBeNull()
   })
+  it('getTagWert liest Property bzw. null', () => {
+    const r = tw('2026-05-10', { erzeugung: 41 })
+    expect(getTagWert(r, 'erzeugung')).toBe(41)
+    expect(getTagWert(r, 'peak_pv_kw')).toBe(6.2)
+    expect(getTagWert(r, 'speicher_ladung')).toBeNull()
+  })
+})
+
+describe('metrikenFuer (Granularität)', () => {
+  it('Monat = 23 Registry-Metriken, kein Tag-natives Feld', () => {
+    const m = metrikenFuer('monat')
+    expect(m).toHaveLength(23)
+    expect(m.find((x) => x.key === 'peak_pv_kw')).toBeUndefined()
+    expect(m.find((x) => x.key === 'wp_waerme')).toBeDefined()
+  })
+  it('Tag = ohne WP-Wärme/COP/E-Auto, mit Tag-nativen', () => {
+    const keys = metrikenFuer('tag').map((x) => x.key)
+    expect(keys).toContain('peak_pv_kw')
+    expect(keys).toContain('ueberschuss_kwh')
+    expect(keys).toContain('erzeugung')
+    expect(keys).not.toContain('wp_waerme')
+    expect(keys).not.toContain('eauto_km')
+  })
+})
+
+describe('zeile-Normalisierung', () => {
+  it('monatsZeile: Label/sortKey/vergleichKey', () => {
+    const z = monatsZeile(mz(5, 2025, { erzeugung: 123 }))
+    expect(z.vergleichKey).toBe(5)
+    expect(z.sortKey).toBe(2025 * 100 + 5)
+    expect(z.wert('erzeugung')).toBe(123)
+  })
+  it('tagesZeile: vergleichKey = Tag-im-Monat, sortKey aufsteigend', () => {
+    const z = tagesZeile(tw('2026-05-10', { erzeugung: 41 }))
+    expect(z.vergleichKey).toBe(10)
+    expect(z.id).toBe('2026-05-10')
+    expect(z.wert('erzeugung')).toBe(41)
+    expect(z.wert('peak_pv_kw')).toBe(6.2)
+    expect(tagesZeile(tw('2026-05-11')).sortKey).toBeGreaterThan(z.sortKey)
+  })
 })
 
 describe('aggregiere', () => {
-  const rows = [mz(1, 2025, { erzeugung: 100, autarkie: 60 }), mz(2, 2025, { erzeugung: 200, autarkie: 80 })]
+  const metriken = metrikenFuer('monat')
+  const rows = [monatsZeile(mz(1, 2025, { erzeugung: 100, autarkie: 60 })), monatsZeile(mz(2, 2025, { erzeugung: 200, autarkie: 80 }))]
   it('summiert sum-Metriken', () => {
-    expect(aggregiere(rows)['erzeugung']).toBe(300)
+    expect(aggregiere(rows, metriken)['erzeugung']).toBe(300)
   })
   it('mittelt avg-Metriken', () => {
-    expect(aggregiere(rows)['autarkie']).toBe(70)
+    expect(aggregiere(rows, metriken)['autarkie']).toBe(70)
   })
   it('liefert null für leere Spalte (alle null)', () => {
-    expect(aggregiere(rows)['speicher_ladung']).toBeNull()
+    expect(aggregiere(rows, metriken)['speicher_ladung']).toBeNull()
+  })
+  it('aggregiert Tageszeilen (Σ Überschuss)', () => {
+    const tage = [tagesZeile(tw('2026-05-10', { ueberschuss_kwh: 8 })), tagesZeile(tw('2026-05-11', { ueberschuss_kwh: 5 }))]
+    expect(aggregiere(tage, metrikenFuer('tag'))['ueberschuss_kwh']).toBe(13)
   })
 })
 
@@ -71,21 +142,28 @@ describe('bewerteDelta', () => {
 
 describe('exportWerteCsv (Schema)', () => {
   beforeEach(() => vi.mocked(exportToCSV).mockClear())
-  const rows = [mz(1, 2025), mz(2, 2025)]
+  const rows = [monatsZeile(mz(1, 2025)), monatsZeile(mz(2, 2025))]
   const metriken = [METRIK_BY_KEY['erzeugung'], METRIK_BY_KEY['autarkie']]
 
-  it('ohne Vergleich: Jahr/Monat + eine Spalte je Metrik + Agg-Zeile', () => {
-    exportWerteCsv({ rows, vorjahrRows: null, jahrLabel: 2025, vergleichLabel: null, metriken, dateiname: 'x.csv' })
+  it('ohne Vergleich: Zeitraum + eine Spalte je Metrik + Agg-Zeile', () => {
+    exportWerteCsv({ rows, vorjahrRows: null, jahrLabel: 2025, vergleichLabel: null, metriken, einheitLabel: 'Monate', dateiname: 'x.csv' })
     const [headers, out, name] = vi.mocked(exportToCSV).mock.calls[0]
-    expect(headers.slice(0, 2)).toEqual(['Jahr', 'Monat'])
+    expect(headers[0]).toBe('Zeitraum')
     expect(headers).toContain('PV-Erzeugung (kWh)')
     expect(name).toBe('x.csv')
     // letzte Zeile = Aggregat („2 Monate")
-    expect(out[out.length - 1][1]).toBe('2 Monate')
+    expect(out[out.length - 1][0]).toBe('2 Monate')
+  })
+
+  it('Tages-Export nutzt Einheit „Tage"', () => {
+    const tage = [tagesZeile(tw('2026-05-10')), tagesZeile(tw('2026-05-11'))]
+    exportWerteCsv({ rows: tage, vorjahrRows: null, jahrLabel: 'Mai', vergleichLabel: null, metriken, einheitLabel: 'Tage', dateiname: 't.csv' })
+    const [, out] = vi.mocked(exportToCSV).mock.calls[0]
+    expect(out[out.length - 1][0]).toBe('2 Tage')
   })
 
   it('mit Vergleich: drei Spalten je Metrik inkl. Δ-Header', () => {
-    exportWerteCsv({ rows, vorjahrRows: [mz(1, 2024), mz(2, 2024)], jahrLabel: 2025, vergleichLabel: 2024, metriken, dateiname: 'x.csv' })
+    exportWerteCsv({ rows, vorjahrRows: [monatsZeile(mz(1, 2024)), monatsZeile(mz(2, 2024))], jahrLabel: 2025, vergleichLabel: 2024, metriken, einheitLabel: 'Monate', dateiname: 'x.csv' })
     const [headers] = vi.mocked(exportToCSV).mock.calls[0]
     expect(headers).toContain('PV-Erzeugung (kWh) 2025')
     expect(headers).toContain('PV-Erzeugung (kWh) 2024')
