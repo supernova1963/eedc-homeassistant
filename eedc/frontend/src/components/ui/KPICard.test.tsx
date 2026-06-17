@@ -15,15 +15,16 @@ describe('KPICard (SoT, B9)', () => {
     expect(screen.getByText('kWh')).toBeInTheDocument()
   })
 
-  it('hält Wert+Einheit einzeilig und kürzt mit … ab (truncate, #243 detLAN)', () => {
-    // Wert+Einheit dürfen NICHT umbrechen und NICHT in die Icon-Box laufen, sondern
-    // konsistent (wie die Titel) mit Ellipsis enden. Invariante: der Wert-Container
-    // trägt `truncate` und cappt per max-w-full auf die Spaltenbreite.
+  it('hält die Zahl unzerbrochen; nur die Einheit weicht verlustfrei (#243)', () => {
+    // Die Zahl ist das Wichtigste: nie kürzen (kein `…`), nie umbrechen. Reicht der
+    // Platz nicht, weicht NUR die Einheit in die nächste Zeile (flex-wrap, verlustfrei).
     const { getByText } = render(<KPICard title="Verbrauch" value="17,2" unit="kWh/100km" />)
-    const einheit = getByText('kWh/100km')
-    const container = einheit.parentElement as HTMLElement
-    expect(container.className).toMatch(/\btruncate\b/)
-    expect(container.className).toMatch(/\bmax-w-full\b/)
+    const zahl = getByText('17,2')
+    expect(zahl.className).toMatch(/\bflex-shrink-0\b/)
+    expect(zahl.className).toMatch(/\bwhitespace-nowrap\b/)
+    const container = getByText('kWh/100km').parentElement as HTMLElement
+    expect(container.className).toMatch(/\bflex-wrap\b/)
+    expect(container.className).not.toMatch(/\btruncate\b/) // keine Ellipsis (würde die Zahl fressen)
   })
 
   it('rendert ein String-Value unverändert', () => {

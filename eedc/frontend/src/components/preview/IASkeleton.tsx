@@ -228,8 +228,11 @@ function BerichtTeaser({ titel, dateiname }: { titel: string; dateiname: string 
 
 // ─── Bausteine ───────────────────────────────────────────────────────────────
 function KpiStrip({ kpis }: { kpis: KpiDummy[] }) {
+  // Inhaltsabhängige Spaltenreduzierung (#243 Gernot): auto-fit + minmax lässt die
+  // Spaltenzahl stufenlos sinken, sobald eine Kachel sonst zu schmal für „Zahl +
+  // Einheit" würde — die Engstelle kurz vor einem festen Breakpoint entfällt damit.
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3">
       {kpis.map((k) => (
         <KPICard key={k.title} title={k.title} value={k.value} unit={k.unit} color={k.color} icon={k.icon} />
       ))}
