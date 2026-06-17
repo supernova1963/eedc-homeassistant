@@ -12,9 +12,9 @@
  * konsistent rechts (boxed) bzw. inline links vor dem Label (sm). EINZEILIG: die
  * ZAHL ist unantastbar (`flex-shrink-0 whitespace-nowrap` — nie gekürzt); reicht
  * der Platz nicht, kürzt NUR die Einheit mit `…` (`min-w-0 truncate`), kein Umbruch
- * (#243 Gernot). Die Grid-Mindestbreite (`auto-fit minmax`, KpiStrip = 200 px) ist
- * so gewählt, dass Zahl (bis ~7 Stellen) + Icon + mind. 3 Einheiten-Zeichen immer
- * inline passen — die Ellipsis greift also nur bei wirklich langen Einheiten.
+ * (#243 Gernot). Die Grid-Mindestbreite (`auto-fit minmax`, KpiStrip = 248 px) ist
+ * so gewählt, dass Zahl (bis ~7 Stellen) + Icon + Einheit komfortabel inline passen
+ * (auch bei vielen Kacheln nicht gequetscht) — die Ellipsis greift fast nie.
  * Optionaler
  * A6-FormelTooltip-Slot (`formel`/`berechnung`/`ergebnis`/`sicht`) — Optik aus dem
  * P3-Tooltip-Kanon (`FormelTooltip`). Ausbau des Herleitungs-Vertrags ist E4.
