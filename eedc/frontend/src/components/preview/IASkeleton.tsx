@@ -260,8 +260,8 @@ function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonl
             onClick={() => onSelect(t)}
             className={`min-h-[44px] flex items-center px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
               active === t
-                ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
-                : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
+                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/50'
             }`}
           >
             {t}
@@ -499,8 +499,8 @@ function KomponentenView() {
               onClick={() => setTyp(t.key)}
               className={`min-h-[44px] flex items-center gap-2 px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                 typ === t.key
-                  ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
-                  : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
             >
               <t.icon className="h-4 w-4" />
@@ -808,8 +808,8 @@ function EinstellungenView() {
               onClick={() => setKat(k.key)}
               className={`min-h-[44px] flex items-center gap-2 px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                 kat === k.key
-                  ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
-                  : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
             >
               <k.icon className="h-4 w-4" />
