@@ -114,15 +114,20 @@ export function MonatBilanz({
   ]
 
   const dash = <span className="text-gray-300 dark:text-gray-600">—</span>
-  const cell = (val: number | null | undefined, row: BilanzRow) =>
-    val != null
-      ? (
-        <span className="flex items-center justify-end gap-1">
-          <span className="hidden sm:inline text-gray-400 dark:text-gray-500">{fmt(val, row.unit === '%' ? 1 : 0)}</span>
-          <Delta a={row.ist} b={val} inv={row.inv} />
-        </span>
-      )
-      : dash
+  const dec = (row: BilanzRow) => (row.unit === '%' ? 1 : 0)
+
+  // Vergleichsspalte als Paar: Wert (dezimalbündig, erst ab sm sichtbar) + Δ%
+  // (rechtsbündig). Getrennte Zellen, damit Zahlen zeilenübergreifend fluchten (#4).
+  const vglZellen = (val: number | null | undefined, row: BilanzRow) => (
+    <>
+      <td className="py-1.5 pl-3 text-right tabular-nums text-gray-400 dark:text-gray-500 hidden sm:table-cell">
+        {val != null ? fmt(val, dec(row)) : dash}
+      </td>
+      <td className="py-1.5 pr-1 text-right tabular-nums">
+        {val != null ? <Delta a={row.ist} b={val} inv={row.inv} /> : dash}
+      </td>
+    </>
+  )
 
   const sollPct = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
     ? Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)
@@ -136,22 +141,25 @@ export function MonatBilanz({
           <thead>
             <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
               <th className="text-left pb-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
-              <th className="text-right pb-1.5 font-medium">IST</th>
-              <th className="text-right pb-1.5 font-medium">Vormonat</th>
-              <th className="text-right pb-1.5 font-medium">Vorjahr</th>
-              {glMonStats && <th className="text-right pb-1.5 font-medium">Ø {monatName}</th>}
+              {/* Jede Wertspalte überspannt 2 Sub-Spalten (Zahl + Einheit/Δ%), Header zentriert (#4). */}
+              <th colSpan={2} className="text-center pb-1.5 font-medium">IST</th>
+              <th colSpan={2} className="text-center pb-1.5 font-medium">Vormonat</th>
+              <th colSpan={2} className="text-center pb-1.5 font-medium">Vorjahr</th>
+              {glMonStats && <th colSpan={2} className="text-center pb-1.5 font-medium">Ø {monatName}</th>}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.label} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
                 <td className="py-1.5 text-gray-600 dark:text-gray-400">{row.label}</td>
-                <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
-                  {fmt(row.ist, row.unit === '%' ? 1 : 0)} {row.unit}
+                {/* IST: Zahl rechtsbündig + Einheit als eigene linksbündige Spalte. */}
+                <td className="py-1.5 pl-3 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
+                  {fmt(row.ist, dec(row))}
                 </td>
-                <td className="py-1.5 text-right tabular-nums">{cell(row.vm, row)}</td>
-                <td className="py-1.5 text-right tabular-nums">{cell(row.vj, row)}</td>
-                {glMonStats && <td className="py-1.5 text-right tabular-nums">{cell(row.gm, row)}</td>}
+                <td className="py-1.5 pr-1 text-left text-gray-500 dark:text-gray-400">{row.unit}</td>
+                {vglZellen(row.vm, row)}
+                {vglZellen(row.vj, row)}
+                {glMonStats && vglZellen(row.gm, row)}
               </tr>
             ))}
           </tbody>

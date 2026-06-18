@@ -117,4 +117,8 @@ export const REAL_ROUTE_PATHS: string[] = [
   'v4/cockpit/:zeit',
   'v4/auswertungen',
   'v4/auswertungen/tabelle',
+  'v4/komponenten',
+  'v4/community',
+  'v4/hilfe',
+  'v4/einstellungen',
 ]

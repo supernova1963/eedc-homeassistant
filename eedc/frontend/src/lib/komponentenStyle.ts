@@ -16,8 +16,10 @@
 
 import {
   Activity, AlertTriangle, Battery, Car, CheckCircle, Flame, Hash, Home, Info,
-  Leaf, RotateCw, Sun, Thermometer, TrendingUp, XCircle, Zap,
+  Leaf, Plug, RotateCw, Sun, Thermometer, TrendingUp, Wrench, XCircle, Zap,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { TYP_TEXT_CLASS } from './colors'
 
 /**
  * Status-Achse (F3) — Icon-Satz als EINE Quelle (Style-Guide B17). Farben dazu:
@@ -46,7 +48,7 @@ export const COLOR_CLASSES: Record<KomponentenColor, { text: string; bg: string 
 
 export interface KpiStyle {
   title: string
-  icon: React.ElementType
+  icon: LucideIcon
   color: KomponentenColor
 }
 
@@ -125,3 +127,29 @@ export const SONSTIGES_SPEICHER_KPI = {
   effizienz: { title: 'Effizienz', icon: TrendingUp, color: 'blue'   as const },
   ersparnis: { title: 'Ersparnis', icon: TrendingUp, color: 'green'  as const },
 } as const satisfies Record<string, KpiStyle>
+
+// ─── Komponenten-Identität (#3b') — Icon + Farbe + Label je Investitionstyp ───
+//
+// Sektions-Kopf-Identität (Cockpit-Teaser, Komponenten-Achse, Vorschau). Icon +
+// Label zentral, Farbe = Tailwind-Zwilling des Farb-Kanons `TYP_COLORS`
+// (lib/colors.ts). Löst die vier hardcodierten `TYP_ICONS`-Dubletten ab. Label
+// folgt `TYP_LABELS`, außer `waermepumpe` → „Wärme/Klima" (#263).
+
+export interface KomponentenIdentitaet {
+  icon: LucideIcon
+  /** Tailwind-Text-Klasse (Zwilling von `TYP_COLORS`). */
+  farbe: string
+  label: string
+}
+
+export const KOMPONENTEN_IDENTITAET: Record<string, KomponentenIdentitaet> = {
+  'pv-module':       { icon: Sun,     farbe: TYP_TEXT_CLASS['pv-module'],       label: 'PV-Module' },
+  'wechselrichter':  { icon: Zap,     farbe: TYP_TEXT_CLASS['wechselrichter'],  label: 'Wechselrichter' },
+  'speicher':        { icon: Battery, farbe: TYP_TEXT_CLASS['speicher'],        label: 'Speicher' },
+  'balkonkraftwerk': { icon: Sun,     farbe: TYP_TEXT_CLASS['balkonkraftwerk'], label: 'Balkonkraftwerk' },
+  'waermepumpe':     { icon: Flame,   farbe: TYP_TEXT_CLASS['waermepumpe'],     label: 'Wärme/Klima' },
+  'wallbox':         { icon: Plug,    farbe: TYP_TEXT_CLASS['wallbox'],         label: 'Wallbox' },
+  'e-auto':          { icon: Car,     farbe: TYP_TEXT_CLASS['e-auto'],          label: 'E-Auto' },
+  'sonstiges':       { icon: Wrench,  farbe: TYP_TEXT_CLASS['sonstiges'],       label: 'Sonstiges' },
+  'pv-system':       { icon: Sun,     farbe: TYP_TEXT_CLASS['pv-system'],       label: 'PV-System' },
+}

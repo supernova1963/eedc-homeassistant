@@ -74,6 +74,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
       LayoutV4: lazy(() => import('./v4/LayoutV4')),
       CockpitV4: lazy(() => import('./v4/CockpitV4')),
       AuswertungenTabelleV4: lazy(() => import('./v4/AuswertungenTabelleV4')),
+      Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
 
@@ -175,6 +176,11 @@ function App() {
               <Route path="cockpit/:zeit" element={<V4.CockpitV4 />} />
               <Route path="auswertungen" element={<Navigate to="/v4/auswertungen/tabelle" replace />} />
               <Route path="auswertungen/tabelle" element={<V4.AuswertungenTabelleV4 />} />
+              {/* Noch nicht gebaute Achsen — Platzhalter hält die Nav vollständig. */}
+              <Route path="komponenten" element={<V4.Platzhalter />} />
+              <Route path="community" element={<V4.Platzhalter />} />
+              <Route path="hilfe" element={<V4.Platzhalter />} />
+              <Route path="einstellungen" element={<V4.Platzhalter />} />
             </Route>
           )}
         </Routes>

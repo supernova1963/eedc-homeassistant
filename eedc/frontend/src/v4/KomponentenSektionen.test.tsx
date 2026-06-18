@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
+import { KOMPONENTEN_IDENTITAET } from '../lib'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
 function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
@@ -26,8 +27,11 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
       wp_strom_kwh: 330, wp_waerme_kwh: 1240,
     }))
     expect(bloecke.map((b) => b.id)).toEqual(['k-speicher', 'k-waermepumpe'])
-    expect(bloecke[0].farbe).toBe('text-green-500')
-    expect(bloecke[1].farbe).toBe('text-orange-500')
+    // Sektions-Kopf-Identität kommt aus dem SoT (#3b', TYP_COLORS-Kanon) —
+    // gegen die Quelle prüfen, kein hardcodiertes Duplikat.
+    expect(bloecke[0].farbe).toBe(KOMPONENTEN_IDENTITAET['speicher'].farbe)
+    expect(bloecke[1].farbe).toBe(KOMPONENTEN_IDENTITAET['waermepumpe'].farbe)
+    expect(bloecke[1].title).toBe('Wärme/Klima')
   })
 
   it('Speicher-Summary trägt Ladung/Zyklen/η', () => {
@@ -42,11 +46,28 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
     expect(b.summary).toMatch(/JAZ 3,80/) // 1254/330 = 3,8
   })
 
-  it('alle fünf Komponenten aktiv → fünf Blöcke', () => {
+  it('alle fünf Komponenten aktiv → fünf Blöcke (Sonstiges = Erzeuger-Variante)', () => {
     const bloecke = baueKomponentenBloecke(d({
       speicher_ladung_kwh: 99, wp_strom_kwh: 330, emob_ladung_kwh: 62,
       bkw_erzeugung_kwh: 612, sonstiges_erzeugung_kwh: 320,
     }))
-    expect(bloecke.map((b) => b.id)).toEqual(['k-speicher', 'k-waermepumpe', 'k-emob', 'k-bkw', 'k-sonstiges'])
+    expect(bloecke.map((b) => b.id)).toEqual(['k-speicher', 'k-waermepumpe', 'k-emob', 'k-bkw', 'k-sonstiges-erzeuger'])
+  })
+
+  it('Sonstiges (#3c): Block heißt nach dem Gerät; Erzeuger/Verbraucher getrennt', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      sonstiges_erzeugung_kwh: 120, sonstiges_verbrauch_kwh: 80,
+      investitionen_financials: [
+        { investition_id: 10, bezeichnung: 'Mini-BHKW', typ: 'sonstiges' },
+      ] as unknown as AktuellerMonatResponse['investitionen_financials'],
+    }))
+    expect(bloecke.map((b) => b.id)).toEqual(['k-sonstiges-erzeuger', 'k-sonstiges-verbraucher'])
+    expect(bloecke[0].title).toBe('Mini-BHKW')
+    expect(bloecke[1].title).toBe('Mini-BHKW')
+  })
+
+  it('Sonstiges ohne Investitionsnamen → Fallback „Sonstiges"', () => {
+    const bloecke = baueKomponentenBloecke(d({ sonstiges_erzeugung_kwh: 120 }))
+    expect(bloecke[0].title).toBe('Sonstiges')
   })
 })

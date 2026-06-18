@@ -12,14 +12,24 @@
  * Aktiv-Gating: ein Block erscheint nur, wenn die Komponente im Monat Daten hat.
  */
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
-import { Battery, Flame, Car, Sun, Wrench, Activity, Zap, TrendingUp, Euro, Home, Plug, Snowflake } from 'lucide-react'
+import { Battery, TrendingUp, Plug } from 'lucide-react'
 import { fmtCalc, ChartTooltip } from '../components/ui'
 import { KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
-import { EXTRA_SERIEN_FARBEN } from '../lib'
+import {
+  EXTRA_SERIEN_FARBEN, KOMPONENTEN_IDENTITAET,
+  SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
+  SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI,
+} from '../lib'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 const hat = (v: number | null | undefined) => v != null
+
+/** Sektions-Kopf-Identität (Icon + Farbe) aus dem SoT — #3b'. */
+const ident = (typ: string) => {
+  const i = KOMPONENTEN_IDENTITAET[typ]
+  return { icon: i.icon, farbe: i.farbe }
+}
 
 /** Aufteilungs-Donut (B7) — z. B. WP Heizung/Warmwasser, Lade-Mix. */
 export function AufteilungDonut({ daten }: { daten: { name: string; value: number }[] }) {
@@ -55,15 +65,17 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
 
   // ── Speicher ────────────────────────────────────────────────────────────
   if (hat(d.speicher_ladung_kwh) || hat(d.speicher_entladung_kwh) || hat(d.speicher_kapazitaet_kwh)) {
+    // Ladung/Entladung haben kein D2-Status-Pendant → bleiben (Teaser-Metrik);
+    // Wirkungsgrad/Vollzyklen ziehen Icon/Farbe/Titel aus dem D2-Kanon.
     const kpis: KpiStripItem[] = [
       { title: 'Ladung', value: fmt(d.speicher_ladung_kwh), unit: 'kWh', color: 'blue', icon: Battery },
       { title: 'Entladung', value: fmt(d.speicher_entladung_kwh), unit: 'kWh', color: 'green', icon: Battery },
-      { title: 'Effizienz η', value: fmtCalc(d.speicher_wirkungsgrad_prozent, 1, '—'), unit: '%', color: 'cyan', icon: Activity },
-      { title: 'Vollzyklen', value: fmtCalc(d.speicher_vollzyklen, 2, '—'), color: 'blue', icon: TrendingUp,
+      { ...SPEICHER_KPI.wirkungsgrad, value: fmtCalc(d.speicher_wirkungsgrad_prozent, 1, '—'), unit: '%' },
+      { ...SPEICHER_KPI.vollzyklen, value: fmtCalc(d.speicher_vollzyklen, 2, '—'),
         subtitle: hat(d.speicher_kapazitaet_kwh) ? `Kapazität ${fmt(d.speicher_kapazitaet_kwh)} kWh` : undefined },
     ]
     bloecke.push({
-      id: 'k-speicher', title: 'Speicher', icon: Battery, farbe: 'text-green-500', defaultOpen: false,
+      id: 'k-speicher', title: 'Speicher', ...ident('speicher'), defaultOpen: false,
       summary: `${fmt(d.speicher_ladung_kwh)} kWh geladen · ${fmtCalc(d.speicher_vollzyklen, 1, '—')} Zyklen · ${fmtCalc(d.speicher_wirkungsgrad_prozent, 0, '—')} % η`,
       render: () => <Sektion kpis={kpis} />,
     })
@@ -73,10 +85,10 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
   if (hat(d.wp_strom_kwh) || hat(d.wp_waerme_kwh)) {
     const jaz = hat(d.wp_waerme_kwh) && d.wp_strom_kwh ? d.wp_waerme_kwh! / d.wp_strom_kwh : null
     const kpis: KpiStripItem[] = [
-      { title: 'JAZ', value: fmtCalc(jaz, 2, '—'), color: 'green', icon: TrendingUp, formel: 'JAZ = Wärme ÷ Strom' },
-      { title: 'Wärme erzeugt', value: fmt(d.wp_waerme_kwh), unit: 'kWh', color: 'orange', icon: Flame },
-      { title: 'Strom verbraucht', value: fmt(d.wp_strom_kwh), unit: 'kWh', color: 'yellow', icon: Zap },
-      { title: 'Ersparnis vs. Gas', value: hat(d.wp_ersparnis_euro) ? `+${fmtCalc(d.wp_ersparnis_euro, 2)}` : '—', unit: '€', color: 'green', icon: Euro },
+      { ...WP_KPI.jaz, value: fmtCalc(jaz, 2, '—'), formel: 'JAZ = Wärme ÷ Strom' },
+      { ...WP_KPI.waerme, value: fmt(d.wp_waerme_kwh), unit: 'kWh' },
+      { ...WP_KPI.strom, value: fmt(d.wp_strom_kwh), unit: 'kWh' },
+      { ...WP_KPI.ersparnis, value: hat(d.wp_ersparnis_euro) ? `+${fmtCalc(d.wp_ersparnis_euro, 2)}` : '—', unit: '€' },
     ]
     const donutDaten = [
       { name: 'Heizung', value: d.wp_heizung_kwh ?? 0 },
@@ -84,7 +96,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
     ]
     const hatSplit = (d.wp_heizung_kwh ?? 0) + (d.wp_warmwasser_kwh ?? 0) > 0
     bloecke.push({
-      id: 'k-waermepumpe', title: 'Wärmepumpe', icon: Flame, farbe: 'text-orange-500', defaultOpen: false,
+      id: 'k-waermepumpe', title: KOMPONENTEN_IDENTITAET['waermepumpe'].label, ...ident('waermepumpe'), defaultOpen: false,
       summary: `${jaz != null ? `JAZ ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${hat(d.wp_ersparnis_euro) ? ` · +${fmt(d.wp_ersparnis_euro, 0)} € vs. Gas` : ''}`,
       render: () => <Sektion kpis={kpis} donut={hatSplit ? <AufteilungDonut daten={donutDaten} /> : undefined} />,
     })
@@ -94,15 +106,16 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
   if (hat(d.emob_ladung_kwh) || hat(d.emob_km)) {
     const pvAnteil = hat(d.emob_ladung_pv_kwh) && d.emob_ladung_kwh
       ? (d.emob_ladung_pv_kwh! / d.emob_ladung_kwh) * 100 : null
+    // „Ladung gesamt" ohne D2-Pendant → bleibt; Rest aus dem D2-Kanon (E-Auto).
     const kpis: KpiStripItem[] = [
       { title: 'Ladung gesamt', value: fmt(d.emob_ladung_kwh), unit: 'kWh', color: 'purple', icon: Plug },
-      { title: 'PV-Anteil', value: fmtCalc(pvAnteil, 0, '—'), unit: '%', color: 'green', icon: Sun,
+      { ...EAUTO_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
         subtitle: hat(d.emob_ladung_pv_kwh) ? `${fmt(d.emob_ladung_pv_kwh)} kWh PV` : undefined },
-      { title: 'Kilometer', value: fmt(d.emob_km), unit: 'km', color: 'blue', icon: Car },
-      { title: 'Verbrauch', value: fmtCalc(d.emob_verbrauch_100km, 1, '—'), unit: 'kWh/100km', color: 'yellow', icon: Zap },
+      { ...EAUTO_KPI.gefahren, value: fmt(d.emob_km), unit: 'km' },
+      { ...EAUTO_KPI.verbrauch, value: fmtCalc(d.emob_verbrauch_100km, 1, '—'), unit: 'kWh/100km' },
     ]
     bloecke.push({
-      id: 'k-emob', title: 'E-Mobilität', icon: Car, farbe: 'text-purple-500', defaultOpen: false,
+      id: 'k-emob', title: 'E-Mobilität', ...ident('e-auto'), defaultOpen: false,
       summary: `${fmt(d.emob_ladung_kwh)} kWh geladen · ${fmt(d.emob_km)} km${hat(d.emob_ersparnis_euro) ? ` · +${fmt(d.emob_ersparnis_euro, 2)} € vs. Verbrenner` : ''}`,
       render: () => <Sektion kpis={kpis} />,
     })
@@ -114,29 +127,59 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
       ? d.bkw_erzeugung_kwh! - d.bkw_eigenverbrauch_kwh! : null
     const evQuote = d.bkw_erzeugung_kwh && hat(d.bkw_eigenverbrauch_kwh)
       ? (d.bkw_eigenverbrauch_kwh! / d.bkw_erzeugung_kwh) * 100 : null
+    // Einspeisung ohne D2-Pendant → bleibt; Erzeugung/Eigenverbrauch aus D2 (BKW).
     const kpis: KpiStripItem[] = [
-      { title: 'Erzeugung', value: fmt(d.bkw_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: Sun },
-      { title: 'Eigenverbrauch', value: fmt(d.bkw_eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: Home,
+      { ...BKW_KPI.erzeugung, value: fmt(d.bkw_erzeugung_kwh), unit: 'kWh' },
+      { ...BKW_KPI.eigenverbrauch, value: fmt(d.bkw_eigenverbrauch_kwh), unit: 'kWh',
         subtitle: evQuote != null ? `${evQuote.toFixed(0)} % EV-Quote` : undefined },
       { title: 'Einspeisung', value: fmt(einsp), unit: 'kWh', color: 'green', icon: TrendingUp },
     ]
     bloecke.push({
-      id: 'k-bkw', title: 'Balkonkraftwerk', icon: Sun, farbe: 'text-yellow-400', defaultOpen: false,
+      id: 'k-bkw', title: 'Balkonkraftwerk', ...ident('balkonkraftwerk'), defaultOpen: false,
       summary: `${fmt(d.bkw_erzeugung_kwh)} kWh erzeugt${evQuote != null ? ` · ${evQuote.toFixed(0)} % EV` : ''}`,
       render: () => <Sektion kpis={kpis} />,
     })
   }
 
-  // ── Sonstiges ─────────────────────────────────────────────────────────────
-  if (hat(d.sonstiges_erzeugung_kwh) || hat(d.sonstiges_verbrauch_kwh)) {
-    const kpis: KpiStripItem[] = []
-    if (hat(d.sonstiges_erzeugung_kwh)) kpis.push({ title: 'Erzeugung', value: fmt(d.sonstiges_erzeugung_kwh), unit: 'kWh', color: 'green', icon: Zap })
-    if (hat(d.sonstiges_eigenverbrauch_kwh)) kpis.push({ title: 'Eigenverbrauch', value: fmt(d.sonstiges_eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: Home })
+  // ── Sonstiges (Sonderfall #3c) ────────────────────────────────────────────
+  // Heterogen (Erzeuger/Verbraucher) → keine sinnvolle Sammel-Summe. Statt einem
+  // generischen „Sonstiges"-Block je Wirkrichtung EIN Block, benannt nach dem/den
+  // Sonstiges-Gerät(en) (`investitionen_financials`, nur für die Namen), mit der
+  // passenden Art-Variante. Energie bleibt das Wirkrichtungs-Aggregat (homogen
+  // innerhalb der Art). Voller Per-Gerät-Deep-Dive → später Komponenten-Achse.
+  // Mehrere Geräte → Namen kommasepariert (bewusste Vereinfachung im Teaser).
+  const sonstigesNamen = (d.investitionen_financials ?? [])
+    .filter((f) => f.typ === 'sonstiges')
+    .map((f) => f.bezeichnung)
+    .filter(Boolean)
+  const sonstigesTitel = sonstigesNamen.length ? sonstigesNamen.join(', ') : 'Sonstiges'
+
+  if (hat(d.sonstiges_erzeugung_kwh)) {
+    const kpis: KpiStripItem[] = [
+      { ...SONSTIGES_ERZEUGER_KPI.erzeugung, value: fmt(d.sonstiges_erzeugung_kwh), unit: 'kWh' },
+    ]
+    if (hat(d.sonstiges_eigenverbrauch_kwh)) kpis.push({ ...SONSTIGES_ERZEUGER_KPI.eigenverbrauch, value: fmt(d.sonstiges_eigenverbrauch_kwh), unit: 'kWh' })
     if (hat(d.sonstiges_einspeisung_kwh)) kpis.push({ title: 'Einspeisung', value: fmt(d.sonstiges_einspeisung_kwh), unit: 'kWh', color: 'green', icon: TrendingUp })
-    if (hat(d.sonstiges_verbrauch_kwh)) kpis.push({ title: 'Verbrauch', value: fmt(d.sonstiges_verbrauch_kwh), unit: 'kWh', color: 'red', icon: Snowflake })
     bloecke.push({
-      id: 'k-sonstiges', title: 'Sonstiges', icon: Wrench, farbe: 'text-gray-500', defaultOpen: false,
-      summary: hat(d.sonstiges_erzeugung_kwh) ? `${fmt(d.sonstiges_erzeugung_kwh)} kWh erzeugt` : `${fmt(d.sonstiges_verbrauch_kwh)} kWh verbraucht`,
+      id: 'k-sonstiges-erzeuger', title: sonstigesTitel, ...ident('sonstiges'), defaultOpen: false,
+      summary: `${fmt(d.sonstiges_erzeugung_kwh)} kWh erzeugt`,
+      render: () => <Sektion kpis={kpis} />,
+    })
+  }
+
+  if (hat(d.sonstiges_verbrauch_kwh)) {
+    const bezugGesamt = (d.sonstiges_bezug_pv_kwh ?? 0) + (d.sonstiges_bezug_netz_kwh ?? 0)
+    const pvAnteil = bezugGesamt > 0 ? ((d.sonstiges_bezug_pv_kwh ?? 0) / bezugGesamt) * 100 : null
+    const kpis: KpiStripItem[] = [
+      { ...SONSTIGES_VERBRAUCHER_KPI.verbrauch, value: fmt(d.sonstiges_verbrauch_kwh), unit: 'kWh' },
+    ]
+    if (pvAnteil != null) kpis.push({
+      ...SONSTIGES_VERBRAUCHER_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
+      subtitle: `${fmt(d.sonstiges_bezug_pv_kwh)} kWh PV · ${fmt(d.sonstiges_bezug_netz_kwh)} kWh Netz`,
+    })
+    bloecke.push({
+      id: 'k-sonstiges-verbraucher', title: sonstigesTitel, ...ident('sonstiges'), defaultOpen: false,
+      summary: `${fmt(d.sonstiges_verbrauch_kwh)} kWh verbraucht`,
       render: () => <Sektion kpis={kpis} />,
     })
   }

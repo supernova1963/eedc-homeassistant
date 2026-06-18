@@ -11,14 +11,13 @@
  * die übrigen Zeit-Achsen zeigen einen Hinweis, bis ihre echten Sichten folgen.
  */
 import { useEffect, useState } from 'react'
-import { useParams, NavLink } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
   BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import {
-  Sun, Activity, Zap, ArrowUpFromLine, Euro, LineChart,
+  Sun, Activity, Zap, ArrowUpFromLine, Euro,
 } from 'lucide-react'
-import { Table2 } from 'lucide-react'
 import { LoadingSpinner, Card, ChartTooltip } from '../components/ui'
 import { BlockShell, KpiStrip } from '../components/blocks'
 import type { Block } from '../components/blocks'
@@ -27,9 +26,10 @@ import { WerteTabelle } from '../components/werte'
 import { monatsZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
 import CockpitMonatV4 from './CockpitMonatV4'
+import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
-import { MONAT_KURZ, CHART_COLORS } from '../lib'
+import { MONAT_KURZ, CHART_COLORS, BLOCK_IDENTITAET } from '../lib'
 import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 
@@ -115,27 +115,9 @@ export default function CockpitV4() {
     }
   }, [selectedAnlageId])
 
-  // Zeit-Achse (Sub-Tabs, route-getrieben).
+  // Zeit-Achse (Sub-Tabs, route-getrieben) über die geteilte IASubTabBar (SoT).
   const zeitNav = (
-    <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
-      <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none max-w-[1920px] mx-auto">
-        {ZEITEN.map((z) => (
-          <NavLink
-            key={z.key}
-            to={`/v4/cockpit/${z.key}`}
-            className={({ isActive }) =>
-              `min-h-[44px] flex items-center px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-                isActive
-                  ? 'bg-white dark:bg-gray-800 text-primary-700 dark:text-primary-300 shadow-sm'
-                  : 'text-gray-600 hover:bg-white/50 dark:text-gray-400 dark:hover:bg-gray-800/50'
-              }`
-            }
-          >
-            {z.label}
-          </NavLink>
-        ))}
-      </nav>
-    </div>
+    <IASubTabBar items={ZEITEN.map((z) => ({ key: z.key, label: z.label, to: `/v4/cockpit/${z.key}` }))} />
   )
 
   let inhalt: React.ReactNode
@@ -174,11 +156,11 @@ export default function CockpitV4() {
   } else {
     // Zeit „Jahr/Gesamt": kumulativer KPI-Strip + Monatsreihe + Monats-Tabelle.
     const bloecke: Block[] = [
-      { id: 'kpi', title: 'Kennzahlen (gesamt)', icon: Activity, defaultOpen: true, render: () => <KpiStrip kpis={cockpitKpis(data)} /> },
+      { id: 'kpi', title: 'Kennzahlen (gesamt)', ...BLOCK_IDENTITAET.kennzahlen, defaultOpen: true, render: () => <KpiStrip kpis={cockpitKpis(data)} /> },
       {
         id: 'verlauf',
         title: 'PV-Monatserträge',
-        icon: LineChart,
+        ...BLOCK_IDENTITAET.verlauf,
         summary: 'Verlauf über alle erfassten Monate',
         defaultOpen: true,
         render: () => <MonatsChart monatsdaten={monatsdaten} />,
@@ -186,7 +168,7 @@ export default function CockpitV4() {
       {
         id: 'werte',
         title: 'Werte/Tabelle (Monat)',
-        icon: Table2,
+        ...BLOCK_IDENTITAET.werte,
         summary: 'numerischer Zwilling der Monatsreihe',
         defaultOpen: false,
         render: () => <WerteTabelle rows={werteRows.map(monatsZeile)} granularitaet="monat" alleWerteHref="#/v4/auswertungen/tabelle" />,

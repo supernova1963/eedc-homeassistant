@@ -46,8 +46,10 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
     e.laufend ? `${MONAT_KURZ[e.monat]} ${e.jahr} — laufender Monat` : `${MONAT_KURZ[e.monat]} ${e.jahr}: ${Math.round(e.pv_kwh)} kWh`
 
   // ── Mobile: horizontale Chip-Leiste ──────────────────────────────────────
+  // Absteigend (neueste zuerst) wie der Desktop-Zweig — generelle Datums-Listen-
+  // Regel (CLAUDE.md). Das scrollIntoView zentriert die Auswahl ohnehin.
   const mobilSorted = useMemo(
-    () => [...entries].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat)),
+    () => [...entries].sort((a, b) => (b.jahr !== a.jahr ? b.jahr - a.jahr : b.monat - a.monat)),
     [entries],
   )
   const selChipRef = useRef<HTMLButtonElement>(null)

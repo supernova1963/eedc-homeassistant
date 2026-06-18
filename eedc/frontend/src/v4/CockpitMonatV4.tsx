@@ -14,12 +14,11 @@
  * docken später als weitere Blöcke an.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { LineChart, Table2, Activity, Scale } from 'lucide-react'
 import { LoadingSpinner, Card } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { WerteTabelle } from '../components/werte'
 import { tagesZeile } from '../lib/werte'
-import { MONAT_KURZ } from '../lib'
+import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
@@ -162,7 +161,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       {
         id: 'kpi',
         title: 'Kennzahlen',
-        icon: Activity,
+        ...BLOCK_IDENTITAET.kennzahlen,
         summary: '5 Energie-Kennzahlen + Netto-Ertrag',
         defaultOpen: true,
         render: () => (monatData
@@ -172,7 +171,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       {
         id: 'bilanz',
         title: 'Energie-Bilanz',
-        icon: Scale,
+        ...BLOCK_IDENTITAET.energieBilanz,
         summary: 'IST / Vormonat / Vorjahr / Ø-Monat + SOLL (PVGIS)',
         defaultOpen: true,
         render: () => (monatData
@@ -182,7 +181,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       {
         id: 'tagesverlauf',
         title: 'Tagesverlauf',
-        icon: LineChart,
+        ...BLOCK_IDENTITAET.verlauf,
         summary: 'Tageswerte des Monats ⇄ Monats-Fluss',
         defaultOpen: true,
         render: () => <TagesverlaufChart tage={tage} />,
@@ -190,7 +189,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       {
         id: 'werte',
         title: 'Werte/Tabelle (Tagesebene)',
-        icon: Table2,
+        ...BLOCK_IDENTITAET.werte,
         summary: 'numerischer Zwilling des Tagesverlaufs',
         defaultOpen: false,
         render: () => (

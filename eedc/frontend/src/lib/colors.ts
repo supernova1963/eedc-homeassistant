@@ -227,3 +227,22 @@ export const TYP_COLORS: Record<string, string> = {
   'sonstiges': '#6b7280',
   'pv-system': '#f97316',
 }
+
+/**
+ * Tailwind-Text-Klassen-Zwilling zu {@link TYP_COLORS} — für Icon-Farben in
+ * Komponenten/Seiten (dort sind Inline-Hex verboten, `check:design`). Jeder
+ * Eintrag ist die `-500`-Klasse desselben Farbtons wie der Hex daneben; beide
+ * Maps zusammen pflegen (eine Farb-Rolle, zwei Ausgabeformen — wie `COLORS` ↔
+ * `COLOR_CLASSES`). Konsumiert von `komponentenStyle.KOMPONENTEN_IDENTITAET`.
+ */
+export const TYP_TEXT_CLASS: Record<string, string> = {
+  'pv-module': 'text-amber-500',     // #f59e0b
+  'wechselrichter': 'text-yellow-500', // #eab308
+  'speicher': 'text-blue-500',       // #3b82f6
+  'e-auto': 'text-violet-500',       // #8b5cf6
+  'wallbox': 'text-cyan-500',        // #06b6d4
+  'waermepumpe': 'text-red-500',     // #ef4444
+  'balkonkraftwerk': 'text-emerald-500', // #10b981
+  'sonstiges': 'text-gray-500',      // #6b7280
+  'pv-system': 'text-orange-500',    // #f97316
+}

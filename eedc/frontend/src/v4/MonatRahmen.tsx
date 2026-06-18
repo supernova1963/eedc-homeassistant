@@ -9,8 +9,9 @@
  * - {@link communityBlock}: Community-Vergleich, data-gated (nur wenn Anlagen im
  *   Monat vorhanden, O4).
  */
-import { ArrowRight, Euro, Users } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
+import { BLOCK_IDENTITAET } from '../lib'
 import type { Block } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
@@ -69,8 +70,7 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse): Block {
   return {
     id: 'finanzen',
     title: 'Finanzen',
-    icon: Euro,
-    farbe: 'text-blue-500',
+    ...BLOCK_IDENTITAET.finanzen,
     summary: `${euro(d.netto_ertrag_euro)} Netto-Ertrag`,
     defaultOpen: false,
     render: () => (
@@ -109,8 +109,7 @@ export function communityBlock(
   return {
     id: 'community',
     title: 'Community-Vergleich',
-    icon: Users,
-    farbe: 'text-blue-500',
+    ...BLOCK_IDENTITAET.community,
     summary: `${vergleich.anzahl_anlagen} Anlage${vergleich.anzahl_anlagen !== 1 ? 'n' : ''} im ${monatName}`,
     defaultOpen: false,
     render: () => (

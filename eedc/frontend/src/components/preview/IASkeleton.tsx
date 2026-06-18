@@ -25,15 +25,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { KPICard } from '../ui'
 import { compareTyp } from '../../lib/constants'
+import { BLOCK_IDENTITAET } from '../../lib/blockStyle'
+import { KOMPONENTEN_IDENTITAET } from '../../lib/komponentenStyle'
 import type { KomponentenColor } from '../../lib/komponentenStyle'
 import {
-  LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings, Menu, X,
+  LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings,
   Sun, Battery, Flame, Car, Plug, Wrench, Zap, Euro, Leaf, PiggyBank, Table2,
   Activity, TrendingUp, Trophy, MapPin, ArrowRight, LineChart, Wallet,
   ArrowUp, ArrowDown, ChevronDown, Maximize2, Minimize2,
   CheckCircle2, AlertTriangle, Sparkles, BookOpen, FileText,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { IATopNav } from '../layout/IATopNav'
+import { IASubTabBar } from '../layout/IASubTabBar'
 
 // ─── Achsen / Tabs (Struktur-SoT: KONZEPT-IA-V4) ─────────────────────────────
 type TopKey = 'cockpit' | 'komponenten' | 'auswertungen' | 'community' | 'hilfe' | 'einstellungen'
@@ -56,15 +60,17 @@ type CockpitSub = (typeof COCKPIT_SUBS)[number]
 // Variante C konsolidiert: Wechselrichter+PV-Module → „PV-Anlage", Wärmepumpe →
 // „Wärme/Klima", Balkonkraftwerk → „BKW". `.sort(compareTyp)` hält die Hub-Folge
 // driftfest an der SoT (detLAN #243: E-Auto stand vor Wallbox, BKW zu weit hinten).
+// Icon je Typ aus dem Identitäts-SoT (KOMPONENTEN_IDENTITAET, #3b'); Tab-Labels
+// bewusst kurz (PV-Anlage/BKW). `.sort(compareTyp)` hält die Hub-Folge driftfest.
 const KOMP_TYPEN: { key: string; label: string; icon: LucideIcon; typ: string }[] = [
-  { key: 'pv',        label: 'PV-Anlage',   icon: Sun,     typ: 'pv-module' },
-  { key: 'speicher',  label: 'Speicher',    icon: Battery, typ: 'speicher' },
-  { key: 'bkw',       label: 'BKW',         icon: Sun,     typ: 'balkonkraftwerk' },
-  { key: 'waerme',    label: 'Wärme/Klima', icon: Flame,   typ: 'waermepumpe' },
-  { key: 'wallbox',   label: 'Wallbox',     icon: Plug,    typ: 'wallbox' },
-  { key: 'eauto',     label: 'E-Auto',      icon: Car,     typ: 'e-auto' },
-  { key: 'sonstiges', label: 'Sonstiges',   icon: Wrench,  typ: 'sonstiges' },
-].sort(compareTyp)
+  { key: 'pv',        label: 'PV-Anlage',   typ: 'pv-module' },
+  { key: 'speicher',  label: 'Speicher',    typ: 'speicher' },
+  { key: 'bkw',       label: 'BKW',         typ: 'balkonkraftwerk' },
+  { key: 'waerme',    label: 'Wärme/Klima', typ: 'waermepumpe' },
+  { key: 'wallbox',   label: 'Wallbox',     typ: 'wallbox' },
+  { key: 'eauto',     label: 'E-Auto',      typ: 'e-auto' },
+  { key: 'sonstiges', label: 'Sonstiges',   typ: 'sonstiges' },
+].map((t) => ({ ...t, icon: KOMPONENTEN_IDENTITAET[t.typ].icon })).sort(compareTyp)
 
 const AUSW_SUBS = ['Finanzen', 'CO₂', 'ROI', 'Tabelle', 'Prognose-vs-IST'] as const
 const COMM_SUBS = ['Übersicht', 'PV-Ertrag', 'Komponenten', 'Regional', 'Trends'] as const
@@ -249,26 +255,11 @@ function DummyChart({ label, tall }: { label: string; tall?: boolean }) {
   )
 }
 
+// Dünner Adapter auf die geteilte IASubTabBar (SoT) — hält die state-getriebene
+// Vorschau-Signatur (tabs/active/onSelect), rendert aber die EINE Leiste.
 function SubTabBar<T extends string>({ tabs, active, onSelect }: { tabs: readonly T[]; active: T; onSelect: (t: T) => void }) {
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
-      <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => onSelect(t)}
-            className={`min-h-[44px] flex items-center px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-              active === t
-                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/50'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </nav>
-    </div>
+    <IASubTabBar items={tabs.map((t) => ({ key: t, label: t, active: active === t, onClick: () => onSelect(t) }))} />
   )
 }
 
@@ -434,12 +425,14 @@ function BloeckeView({ bloecke, sortierbar = false, persistKey }: { bloecke: Blo
 }
 
 // Detail-Sektionen der Cockpit-Zeitsichten (Summary-Zeilen wie im Monatsbericht).
-const COCKPIT_DETAIL: { id: string; icon: LucideIcon; title: string; summary: string; farbe: string }[] = [
-  { id: 'd-energie',   icon: Sun,     title: 'Energie-Bilanz',      summary: '618 kWh PV · 96 % Autarkie', farbe: 'text-yellow-500' },
-  { id: 'd-finanzen',  icon: Euro,    title: 'Finanzen',            summary: '+90,25 € Monatsergebnis',    farbe: 'text-blue-500' },
-  { id: 'd-community', icon: Users,   title: 'Community-Vergleich',  summary: '2 Anlagen im Juni 2026',     farbe: 'text-blue-500' },
-  { id: 'd-speicher',  icon: Battery, title: 'Speicher',            summary: '99 kWh geladen · 7,7 Zyklen · 73 % η', farbe: 'text-green-500' },
-  { id: 'd-emob',      icon: Car,     title: 'E-Mobilität',         summary: '62 kWh geladen · 221 km · +7,82 € vs. Verbrenner', farbe: 'text-purple-500' },
+// Universelle Blöcke aus dem Block-SoT (#3b), Komponenten-Zeilen aus dem
+// Identitäts-SoT (#3b') — keine hardcodierten Icons/Farben mehr.
+const COCKPIT_DETAIL: { id: string; icon: LucideIcon; title: string; summary: string; farbe?: string }[] = [
+  { id: 'd-energie',   ...BLOCK_IDENTITAET.energieBilanz, title: 'Energie-Bilanz',     summary: '618 kWh PV · 96 % Autarkie' },
+  { id: 'd-finanzen',  ...BLOCK_IDENTITAET.finanzen,      title: 'Finanzen',            summary: '+90,25 € Monatsergebnis' },
+  { id: 'd-community', ...BLOCK_IDENTITAET.community,      title: 'Community-Vergleich', summary: '2 Anlagen im Juni 2026' },
+  { id: 'd-speicher',  icon: KOMPONENTEN_IDENTITAET['speicher'].icon, farbe: KOMPONENTEN_IDENTITAET['speicher'].farbe, title: 'Speicher',     summary: '99 kWh geladen · 7,7 Zyklen · 73 % η' },
+  { id: 'd-emob',      icon: KOMPONENTEN_IDENTITAET['e-auto'].icon,   farbe: KOMPONENTEN_IDENTITAET['e-auto'].farbe,   title: 'E-Mobilität', summary: '62 kWh geladen · 221 km · +7,82 € vs. Verbrenner' },
 ]
 
 // ─── Inhalts-Sichten ──────────────────────────────────────────────────────────
@@ -450,14 +443,14 @@ function CockpitView() {
   const bloecke: Block[] =
     sub === 'Aussicht'
       ? [
-          { id: 'kpi', title: 'Kennzahlen', icon: Activity, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
+          { id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
           { id: 'wetter', title: 'Wetter + PV-Ertragsprognose', icon: Sun, render: (f) => <DummyChart label="Prognose-Verlauf (7/14 Tage · 12 Monate · Mehrjahr)" tall={f} /> },
           { id: 'quellen', title: 'Forward-Quellenvergleich', icon: BarChart3, summary: 'OpenMeteo · eedc · Solcast', render: (f) => <DummyChart label="Quellenvergleich" tall={f} /> },
         ]
       : [
-          { id: 'kpi', title: 'Kennzahlen', icon: Activity, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
-          { id: 'haupt', title: 'Hauptblock', icon: LineChart, summary: 'Verlauf ⇄ Fluss', defaultOpen: true, render: (f) => <DummyChart label={istLive ? 'Energiefluss (Default Live) — ⤢ für Vollbild' : 'Verlauf'} tall={f} /> },
-          { id: 'werte', title: 'Werte/Tabelle', icon: Table2, summary: 'numerischer Zwilling', defaultOpen: !istLive, render: (f) => <DummyChart label="Werte-Embed" tall={f} /> },
+          { id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
+          { id: 'haupt', title: 'Hauptblock', ...BLOCK_IDENTITAET.verlauf, summary: 'Verlauf ⇄ Fluss', defaultOpen: true, render: (f) => <DummyChart label={istLive ? 'Energiefluss (Default Live) — ⤢ für Vollbild' : 'Verlauf'} tall={f} /> },
+          { id: 'werte', title: 'Werte/Tabelle', ...BLOCK_IDENTITAET.werte, summary: 'numerischer Zwilling', defaultOpen: !istLive, render: (f) => <DummyChart label="Werte-Embed" tall={f} /> },
           ...COCKPIT_DETAIL.map((d): Block => ({
             id: d.id, title: d.title, icon: d.icon, farbe: d.farbe, summary: d.summary, defaultOpen: false,
             render: (f) => <DummyChart label={`${d.title} — Detail`} tall={f} />,
@@ -483,7 +476,7 @@ function KomponentenView() {
   // alle Parameter dieser Komponente am Ort der Komponente, eingeklappt.
   const bloecke: Block[] = [
     { id: 'status', title: 'Aktueller Status', icon: Activity, defaultOpen: true, render: (_f) => <KpiStrip kpis={KOMP_STATUS[typ]} /> },
-    { id: 'verlauf', title: 'Verlauf im Zeitraum', icon: LineChart, defaultOpen: true, render: (f) => <DummyChart label="Tages-/Monatschart" tall={f} /> },
+    { id: 'verlauf', title: 'Verlauf im Zeitraum', ...BLOCK_IDENTITAET.verlauf, defaultOpen: true, render: (f) => <DummyChart label="Tages-/Monatschart" tall={f} /> },
     { id: 'vergleich', title: 'Vergleich', icon: BarChart3, summary: 'Diagramm ⇄ Tabelle · Saison-Toggle', defaultOpen: false, render: (f) => <DummyChart label="Vorjahr/Vormonat · wetternormalisiert" tall={f} /> },
     { id: 'aussicht', title: 'Aussicht', icon: TrendingUp, summary: 'komponentenspezifische Prognose', defaultOpen: false, render: (_f) => <p className="text-sm text-gray-500 dark:text-gray-400">z. B. „wann voll/leer" (Speicher) — entfällt bei Typen ohne sinnvolle Prognose.</p> },
     { id: 'einstellungen', title: 'Einstellungen', icon: Settings, summary: 'alle Parameter dieser Komponente — nicht mehr raten (#243)', defaultOpen: false, render: (_f) => <ParamGruppen typ={typ} /> },
@@ -844,60 +837,21 @@ function EinstellungenView() {
 // ─── Schale ───────────────────────────────────────────────────────────────────
 export default function IASkeleton() {
   const [top, setTop] = useState<TopKey>('cockpit')
-  const [mobileOpen, setMobileOpen] = useState(false)
 
-  const alleEintraege = [...TOP_INHALT, ...TOP_META]
-  const navBtn = (key: TopKey, label: string, Icon: LucideIcon, aktiv: boolean) => (
-    <button
-      key={key}
-      type="button"
-      onClick={() => { setTop(key); setMobileOpen(false) }}
-      className={`min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-        aktiv
-          ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-      {label}
-    </button>
+  // State-getriebene Items für die geteilte IATopNav (SoT). Marke, Theme-Cycle,
+  // Hamburger + lg-Responsive liefert die Shell; die Vorschau steuert nur `top`.
+  const item = (t: { key: TopKey; label: string; icon: LucideIcon }) => ({
+    key: t.key, label: t.label, icon: t.icon, active: top === t.key, onClick: () => setTop(t.key),
+  })
+  const badge = (
+    <span className="ml-3 px-2 py-0.5 text-[10px] font-mono rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">
+      Vorschau
+    </span>
   )
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
-      {/* Top-Nav-Schale.
-          Desktop/Mobile-Schnitt bei `lg` (1024 px): ab 1024 px feste Top-Nav +
-          fixierte zweite Leiste; darunter Hamburger + wegscrollende zweite Leiste
-          (detLAN #243 — zweite Leiste soll auf dem Desktop stehen bleiben). */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="px-4 sm:px-6 flex items-center justify-between h-14">
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-bold text-gray-900 dark:text-white">eedc</span>
-            <span className="px-2 py-0.5 text-[10px] font-mono rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">IA-v4 VORSCHAU</span>
-            <nav aria-label="Hauptnavigation" className="ml-4 hidden lg:flex items-center gap-1">
-              {TOP_INHALT.map((t) => navBtn(t.key, t.label, t.icon, top === t.key))}
-            </nav>
-          </div>
-          <div className="hidden lg:flex items-center gap-1">
-            <span className="h-5 w-px bg-gray-300 dark:bg-gray-600 mx-1" />
-            {TOP_META.map((t) => navBtn(t.key, t.label, t.icon, top === t.key))}
-          </div>
-          <button
-            type="button"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="lg:hidden min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
-            aria-label="Menü"
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-        </div>
-        {/* Mobile-Menü (M0 Hamburger) */}
-        {mobileOpen && (
-          <nav aria-label="Hauptnavigation mobil" className="lg:hidden border-t border-gray-200 dark:border-gray-700 px-4 py-3 space-y-1">
-            {alleEintraege.map((t) => navBtn(t.key, t.label, t.icon, top === t.key))}
-          </nav>
-        )}
-      </header>
+      <IATopNav inhalt={TOP_INHALT.map(item)} meta={TOP_META.map(item)} modusBadge={badge} />
 
       {/* Inhalt je Achse. Ab `lg` scrollt nur der Inhalt (ViewShell), darunter
           scrollt `main` komplett (zweite Leiste scrollt mit weg, Mobile-Schale). */}
