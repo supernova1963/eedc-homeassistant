@@ -428,8 +428,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Datums-Format:** TT.MM.JJJJ in Listen; „Mai 2026" in Headern.
 > **Zahlen-Format:** deutsches Komma, Tausender-Punkt.
 > **Display-Token `—`** als einheitliches Leerwert-Zeichen (etabliert v3.29.1).
+> **Region-/Bundesland-Schreibweise (#336):** **voller Name als Default** (SoT: `REGION_NAMEN` in `lib/constants.ts`), bei Platzmangel auf die verfügbare Breite mit „…" gekürzt (= Überlauf-Regel der KPICard, kein Umbruch, kein Abschneiden der Zahl). **Nur in sehr engen Kontexten** (z. B. Chart-Achsenbeschriftungen) das **ISO-3166-2-Kürzel** (SH, BW, NW …) statt Klarname, plus definierte Sonderfälle (**XX = Ausland**, AT/CH). **Keine erfundene Abkürzungstabelle** (Altlast `BUNDESLAENDER.kurzname` in `RegionalTab.tsx` mit „SchlHol"/„MeckPom" wird beim Community-Umbau ersatzlos aufgelöst). Begründung: ISO ist als 2-stelliger Code für Anzeige zu kryptisch („NW" statt „NRW"), als Engfall-Kürzel aber korrekt; juristische Abkürzungslisten (C.H. Beck) sind stilistisch uneinheitlich.
 
-**Betroffene Issues:** #243 B7, #258 P6.
+**Betroffene Issues:** #243 B7, #258 P6, #336.
 
 ---
 
