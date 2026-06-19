@@ -760,6 +760,48 @@ def build_feld_labels() -> dict[str, str]:
 FELD_LABELS: dict[str, str] = build_feld_labels()
 
 
+def build_feld_einheiten() -> dict[str, str]:
+    """Baut {feldname_oder_key_oder_mapping_key: einheit} aus der Registry.
+
+    Single Source of Truth für Einheiten-Plausibilität (Daten-Checker
+    `_check_sensor_mapping_einheit`): erlaubt, zu jedem gemappten Slot die
+    erwartete Einheit nachzuschlagen, statt sie aus Namenskonventionen zu raten.
+    Deckt Basis-Zähler (mapping_key + feld), Basis-Live-Keys, alle
+    Investitions-Felder (inkl. Sonstiges-Kategorien) und Investitions-Live-Keys
+    ab. Strings kollidieren nicht über Kontexte (z. B. `einspeisung` vs.
+    `einspeisung_kwh` vs. `einspeisung_w`); gleiche Strings tragen dieselbe
+    Einheit.
+    """
+    einheiten: dict[str, str] = {}
+
+    for f in BASIS_FELDER + BEDINGTE_BASIS_FELDER:
+        if "mapping_key" in f:
+            einheiten[f["mapping_key"]] = f.get("einheit", "")
+        einheiten[f["feld"]] = f.get("einheit", "")
+
+    for f in BASIS_LIVE_FELDER:
+        einheiten[f["key"]] = f.get("einheit", "")
+
+    for felder in INVESTITION_FELDER.values():
+        if isinstance(felder, dict):  # sonstiges → nach Kategorie
+            for kat_felder in felder.values():
+                for f in kat_felder:
+                    einheiten[f["feld"]] = f.get("einheit", "")
+        else:
+            for f in felder:
+                einheiten[f["feld"]] = f.get("einheit", "")
+
+    for felder in LIVE_FELDER_INV.values():
+        for f in felder:
+            einheiten[f["key"]] = f.get("einheit", "")
+
+    return einheiten
+
+
+# Vorgefertigtes Einheiten-Dict (einmalig berechnet)
+FELD_EINHEITEN: dict[str, str] = build_feld_einheiten()
+
+
 # =============================================================================
 # Reader-Helper für `verbrauch_daten`-JSON
 #

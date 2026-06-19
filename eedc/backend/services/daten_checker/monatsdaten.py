@@ -281,7 +281,12 @@ class MonatsdatenChecks:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"{prefix}: Einspeisung ({md.einspeisung_kwh:.0f} kWh) > PV-Erzeugung ({pv_erzeugung:.0f} kWh)",
-                    details="Einspeisung kann nicht höher als die Erzeugung sein",
+                    details=(
+                        "Einspeisung kann nicht höher als die Erzeugung sein. "
+                        "Häufigste Ursache: Einspeisungs- und Netzbezugs-Sensor "
+                        "sind im Sensor-Mapping vertauscht (oder das Vorzeichen "
+                        "eines kombinierten Netz-Sensors ist invertiert)."
+                    ),
                     link=md_link,
                 ))
 
@@ -343,7 +348,8 @@ class MonatsdatenChecks:
                             f"+ Netzbezug {md.netzbezug_kwh:.0f} "
                             f"+ Bat.Entladung {bat_entladung:.0f} "
                             f"– Bat.Ladung {bat_ladung:.0f} = {hausverbrauch:.1f} kWh. "
-                            f"Hinweis: Fehlende Batterie-Daten können diesen Fehler verursachen."
+                            f"Häufige Ursachen: vertauschte Einspeisungs-/Netzbezugs-Sensoren "
+                            f"im Mapping oder fehlende Batterie-Daten."
                         ),
                         link=md_link,
                     ))

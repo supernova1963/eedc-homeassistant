@@ -315,3 +315,128 @@ class SensorChecks:
             ))
 
         return ergebnisse
+
+    # ─── Sensor-Mapping-Einheit: Leistung ↔ Energie (#674 + #200) ────────
+
+    async def _check_sensor_mapping_einheit(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """
+        Prüft alle gemappten Slots auf Leistung↔Energie-Verwechslung — in BEIDE
+        Richtungen, einheiten-getrieben aus `FELD_EINHEITEN` (SoT field_definitions).
+
+        - **Energie-Sensor (kWh) in einem Leistungs-Slot (W)** → ERROR (#674,
+          mameier1234): der Zählerstand wird als Momentanleistung gelesen
+          (7130 kWh → 7130 W), der live als Residual berechnete Hausverbrauch
+          klemmt auf 0. PV/Batterie und der kWh-Tagesverlauf bleiben korrekt,
+          deshalb sehen die kWh-Monatschecks (#3/#6) den Fall nicht.
+        - **Leistungssensor (W) in einem kWh-Slot** → WARNING (#200): die
+          state-Differenz ist eine Leistungs-, keine Energie-Differenz; die
+          Laufzeit fällt auf Trapez-Integration zurück (degradiert, nicht null).
+
+        Nur diese eindeutig gefährliche Verwechslung; SoC (%)/Temperatur (°C)/
+        Preis (ct/kWh)/km bleiben bewusst außen vor (legitime Einheiten-Varianten
+        → Fehlalarm-Risiko). Deterministisch + zeitunabhängig (HA-Einheit statt
+        Live-Werte).
+        """
+        from backend.core.field_definitions import FELD_EINHEITEN, FELD_LABELS
+        from backend.services.live_sensor_config import extract_live_config
+
+        kat = CheckKategorie.SENSOR_MAPPING_EINHEIT
+
+        _POWER = {"W", "kW", "MW"}
+        _ENERGY = {"kWh", "Wh", "MWh"}
+
+        def _klasse(unit: Optional[str]) -> Optional[str]:
+            if unit in _POWER:
+                return "leistung"
+            if unit in _ENERGY:
+                return "energie"
+            return None
+
+        mapping = anlage.sensor_mapping or {}
+        inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
+
+        # Slots sammeln: (entity_id, label, erwartete_klasse) — nur Slots, deren
+        # erwartete Einheit (aus FELD_EINHEITEN) Leistung oder Energie ist.
+        slots: list[tuple[str, str, str]] = []
+
+        def _add(eid: Optional[str], schluessel: str, label: str) -> None:
+            erwartet = _klasse(FELD_EINHEITEN.get(schluessel))
+            if eid and erwartet:
+                slots.append((eid, label, erwartet))
+
+        # Live-Slots (basis + investitionen)
+        basis_live, inv_live_map, _, _ = extract_live_config(anlage)
+        for key, eid in basis_live.items():
+            _add(eid, key, f"{FELD_LABELS.get(key, key)} (Live)")
+        for inv_id, live in inv_live_map.items():
+            name = inv_label.get(str(inv_id), f"Inv. {inv_id}")
+            for key, eid in live.items():
+                _add(eid, key, f"{name}: {FELD_LABELS.get(key, key)} (Live)")
+
+        # Basis-Zähler (mapping["basis"][mapping_key] = {strategie, sensor_id})
+        for mk, m in (mapping.get("basis") or {}).items():
+            if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                _add(m["sensor_id"], mk, FELD_LABELS.get(mk, mk))
+
+        # Investitions-Felder (kWh-Zähler etc.)
+        for inv_id, inv_data in (mapping.get("investitionen") or {}).items():
+            if not isinstance(inv_data, dict):
+                continue
+            name = inv_label.get(str(inv_id), f"Inv. {inv_id}")
+            for feld, m in (inv_data.get("felder") or {}).items():
+                if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
+                    _add(m["sensor_id"], feld, f"{name}: {FELD_LABELS.get(feld, feld)}")
+
+        if not slots:
+            return []
+
+        from backend.services.ha_state_service import get_ha_state_service
+        units = await get_ha_state_service().get_sensor_units([eid for eid, _, _ in slots])
+        if not units:
+            # HA nicht erreichbar (Standalone) → Einheit unbekannt, stiller Skip.
+            return []
+
+        ergebnisse: list[CheckErgebnis] = []
+        for eid, label, erwartet in slots:
+            actual_unit = units.get(eid)
+            actual = _klasse(actual_unit)
+            # Nur die klare Leistung↔Energie-Verwechslung melden. Unbekannte/
+            # andere Einheiten (None) erzeugen keinen Fehlalarm.
+            if actual is None or actual == erwartet:
+                continue
+
+            if erwartet == "leistung":  # Energie-Sensor im Leistungs-Slot (#674)
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
+                    meldung=(
+                        f"Leistungs-Slot „{label}\" trägt einen Energie-Sensor "
+                        f"(Einheit {actual_unit})"
+                    ),
+                    details=(
+                        "In einen Leistungs-Slot gehört ein Leistungssensor (W/kW), "
+                        "kein kWh-Zähler. Der Zählerstand wird sonst als Momentan"
+                        "leistung gelesen (z. B. 7130 kWh → 7130 W) — im Live-"
+                        "Energiefluss kippt dadurch der berechnete Hausverbrauch "
+                        f"(klemmt auf 0). Bitte für „{label}\" einen Leistungssensor "
+                        f"(W/kW) wählen; aktuell: {eid}."
+                    ),
+                    link="/einstellungen/sensor-mapping",
+                ))
+            else:  # erwartet == "energie": Leistungssensor im kWh-Slot (#200)
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.WARNING,
+                    meldung=(
+                        f"Energie-Slot „{label}\" trägt einen Leistungssensor "
+                        f"(Einheit {actual_unit})"
+                    ),
+                    details=(
+                        "In einen Energie-Slot gehört ein kumulativer kWh-Zähler, "
+                        "kein Leistungssensor (W/kW). Aus einem Leistungssensor "
+                        "lässt sich die Energie nur näherungsweise per Integration "
+                        "ableiten (ungenauer, anfällig für Lücken). Bitte für "
+                        f"„{label}\" einen kWh-Zähler wählen; aktuell: {eid}."
+                    ),
+                    link="/einstellungen/sensor-mapping",
+                ))
+
+        return ergebnisse

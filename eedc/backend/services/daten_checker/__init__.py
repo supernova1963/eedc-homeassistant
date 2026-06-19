@@ -106,6 +106,7 @@ class DatenChecker(
         ergebnisse.extend(await self._check_energieprofil_plausibilitaet(anlage))
         ergebnisse.extend(await self._check_mqtt_topic_abdeckung(anlage))
         ergebnisse.extend(await self._check_sensor_mapping_lts(anlage))
+        ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
         ergebnisse.extend(await self._check_datenquelle_drift(anlage))

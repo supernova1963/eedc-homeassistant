@@ -68,6 +68,16 @@ class CheckKategorie(str, Enum):
     # Eintrag lenkt den Anwender dann auf eine bewusste Entscheidung: nur eine
     # Quelle pflegen.
     EMOB_POOL_PFLEGE = "emob_pool_pflege"
+    # Sensor-Mapping-Einheit (mameier1234 #674 + #200): prüft Leistung↔Energie
+    # in BEIDE Richtungen über ALLE gemappten Slots, einheiten-getrieben aus
+    # field_definitions (FELD_EINHEITEN). Energie-Sensor (kWh) in einem
+    # Leistungs-Slot (W) → der Zählerstand wird als Momentanleistung gelesen
+    # (7130 kWh → 7130 W), der Live-Hausverbrauch klemmt auf 0 (#674, ERROR).
+    # Leistungssensor (W) in einem kWh-Slot → state-Differenz ist keine kWh
+    # (#200, WARNING; Laufzeit fällt auf Trapez-Integration zurück). Nur die
+    # eindeutig gefährliche Leistung/Energie-Verwechslung; %/°C/Preis/km bewusst
+    # ausgenommen (legitime Einheiten-Varianten → Fehlalarm-Risiko).
+    SENSOR_MAPPING_EINHEIT = "sensor_mapping_einheit"
 
 
 @dataclass
