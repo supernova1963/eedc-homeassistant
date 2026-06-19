@@ -42,6 +42,7 @@ export interface AktuellerMonatResponse {
   einspeisung_kwh: number | null
   netzbezug_kwh: number | null
   eigenverbrauch_kwh: number | null
+  direktverbrauch_kwh: number | null  // PV direkt verbraucht (ohne Speicher) = EV − Speicher-Entladung
   gesamtverbrauch_kwh: number | null
 
   // Quoten (%)
@@ -131,6 +132,7 @@ export interface AktuellerMonatResponse {
     einspeisung_kwh?: number
     netzbezug_kwh?: number
     eigenverbrauch_kwh?: number
+    direktverbrauch_kwh?: number
     gesamtverbrauch_kwh?: number
     autarkie_prozent?: number
     wp_strom_kwh?: number

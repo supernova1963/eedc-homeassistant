@@ -113,6 +113,7 @@ class AktuellerMonatResponse(BaseModel):
     einspeisung_kwh: Optional[float] = None
     netzbezug_kwh: Optional[float] = None
     eigenverbrauch_kwh: Optional[float] = None
+    direktverbrauch_kwh: Optional[float] = None  # PV direkt verbraucht (ohne Speicher): EV − Speicher-Entladung; günstigster Verbrauch (nur entgangene Einspeisung)
     gesamtverbrauch_kwh: Optional[float] = None
 
     # Quoten (%)
@@ -618,6 +619,7 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     ev = direktverbrauch + bat_entladung
     gv = ev + netz
     result["eigenverbrauch_kwh"] = round(ev, 1)
+    result["direktverbrauch_kwh"] = round(direktverbrauch, 1)
     result["gesamtverbrauch_kwh"] = round(gv, 1) if gv > 0 else None
     result["autarkie_prozent"] = round(ev / gv * 100, 1) if gv > 0 else None
 
@@ -1004,6 +1006,7 @@ async def get_aktueller_monat(
 
     # ── Berechnete Werte ──
     eigenverbrauch = None
+    direktverbrauch = None
     gesamtverbrauch = None
     autarkie = None
     ev_quote = None
@@ -1011,7 +1014,7 @@ async def get_aktueller_monat(
     if pv is not None and einspeisung is not None:
         ladung = speicher_ladung or 0
         entladung = speicher_entladung or 0
-        direktverbrauch = max(0, pv - einspeisung - ladung)
+        direktverbrauch = round(max(0, pv - einspeisung - ladung), 2)
         eigenverbrauch = round(direktverbrauch + entladung, 2)
 
         if netzbezug is not None:
@@ -1599,6 +1602,7 @@ async def get_aktueller_monat(
         einspeisung_kwh=einspeisung,
         netzbezug_kwh=netzbezug,
         eigenverbrauch_kwh=eigenverbrauch,
+        direktverbrauch_kwh=direktverbrauch,
         gesamtverbrauch_kwh=gesamtverbrauch,
         autarkie_prozent=autarkie,
         eigenverbrauch_quote_prozent=ev_quote,

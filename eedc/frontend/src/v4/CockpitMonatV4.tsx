@@ -23,6 +23,7 @@ import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
+import { MonatStepper } from './MonatStepper'
 import { MonatHeader, finanzTeaserBlock, communityBlock } from './MonatRahmen'
 import { energieProfilApi, type TagWerte, type VerfuegbarerMonat } from '../api/energie_profil'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -143,6 +144,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
     return {
       pv: pick((m) => m.pv_erzeugung_kwh),
       ev: pick((m) => m.eigenverbrauch_kwh),
+      direkt: pick((m) => m.direktverbrauch_kwh),
       einsp: pick((m) => m.einspeisung_kwh),
       netz: pick((m) => m.netzbezug_kwh),
       gesamt: pick((m) => m.gesamtverbrauch_kwh),
@@ -263,36 +265,48 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-[1920px] mx-auto lg:flex lg:gap-6">
-      {/* Monats-Rail: links Desktop / oben Mobile (B2) */}
-      <div className="lg:w-52 lg:shrink-0 mb-4 lg:mb-0">
-        <MonatsRail
-          entries={railEntries}
-          jahr={gewaehlt?.jahr ?? 0}
-          monat={gewaehlt?.monat ?? 0}
-          onSelect={(j, m) => setGewaehlt({ jahr: j, monat: m })}
-        />
-      </div>
+    <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+      {/* Mobil: schwebender Player-Stepper. Bewusst direktes Kind der voll-hohen
+          Wurzel (NICHT in der kurzen Rail-Spalte) — sonst klebt `sticky` nur
+          innerhalb seines kurzen Eltern-Containers und verschwindet beim Scrollen. */}
+      <MonatStepper
+        entries={railEntries}
+        jahr={gewaehlt?.jahr ?? 0}
+        monat={gewaehlt?.monat ?? 0}
+        onSelect={(j, m) => setGewaehlt({ jahr: j, monat: m })}
+      />
 
-      <div className="flex-1 min-w-0 space-y-4">
-        <MonatHeader
-          titel={gewaehlt ? monatLabel(gewaehlt) : '…'}
-          laufend={istLaufend}
-          d={monatData}
-          onReload={reload}
-          reloading={reloading}
-          zeigeAbschlussLink={hatOffeneAbschluesse}
-        />
+      <div className="lg:flex lg:gap-6">
+        {/* Desktop: Rail-Sidebar (links) */}
+        <div className="hidden lg:block lg:w-52 lg:shrink-0">
+          <MonatsRail
+            entries={railEntries}
+            jahr={gewaehlt?.jahr ?? 0}
+            monat={gewaehlt?.monat ?? 0}
+            onSelect={(j, m) => setGewaehlt({ jahr: j, monat: m })}
+          />
+        </div>
 
-        {error ? (
-          <Card><p className="text-red-500">{error}</p></Card>
-        ) : loading ? (
-          <LoadingSpinner text="Lade Monat…" />
-        ) : monate.length === 0 ? (
-          <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
-        ) : (
-          <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
-        )}
+        <div className="flex-1 min-w-0 space-y-4">
+          <MonatHeader
+            titel={gewaehlt ? monatLabel(gewaehlt) : '…'}
+            laufend={istLaufend}
+            d={monatData}
+            onReload={reload}
+            reloading={reloading}
+            zeigeAbschlussLink={hatOffeneAbschluesse}
+          />
+
+          {error ? (
+            <Card><p className="text-red-500">{error}</p></Card>
+          ) : loading ? (
+            <LoadingSpinner text="Lade Monat…" />
+          ) : monate.length === 0 ? (
+            <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
+          ) : (
+            <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
+          )}
+        </div>
       </div>
     </div>
   )

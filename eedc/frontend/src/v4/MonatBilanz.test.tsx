@@ -10,6 +10,7 @@ function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
     pv_erzeugung_kwh: 412, einspeisung_kwh: 189, netzbezug_kwh: 143,
     eigenverbrauch_kwh: 223, gesamtverbrauch_kwh: 366,
     autarkie_prozent: 61, eigenverbrauch_quote_prozent: 54,
+    direktverbrauch_kwh: 180,
     netto_ertrag_euro: 128, soll_pv_kwh: 450, vorjahr: null,
     ...over,
   } as AktuellerMonatResponse
@@ -61,6 +62,19 @@ describe('baueMonatKpis', () => {
   })
 })
 
+describe('MonatBilanz — Mobil-Ansicht (gestapelte Karten < sm)', () => {
+  it('rendert VM-Vergleichschips statt Tabellenspalten', () => {
+    render(<MonatBilanz d={d()} vm={vm} glMonStats={null} monatName="Mai" />)
+    // Pro Kennzahl ein „VM …"-Chip (gestapelte Mobil-Karten, immer im DOM).
+    expect(screen.getAllByText(/^VM\b/).length).toBeGreaterThan(0)
+  })
+
+  it('zeigt die Direktverbrauch-Zeile (günstigster Verbrauch)', () => {
+    render(<MonatBilanz d={d()} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.getAllByText('Direktverbrauch').length).toBeGreaterThan(0)
+  })
+})
+
 describe('MonatBilanz — PV-Verteilung (O3-Revision: Balken wie IST)', () => {
   it('rendert EV/Einspeisung-Balken mit Prozent aus PV-Erzeugung', () => {
     render(<MonatBilanz d={d()} vm={vm} glMonStats={null} monatName="Mai" />)
@@ -78,8 +92,10 @@ describe('MonatBilanz — PV-Verteilung (O3-Revision: Balken wie IST)', () => {
 })
 
 describe('MonatBilanz — Vergleichs-Färbung (#337)', () => {
+  // Label steht jetzt doppelt im DOM (Mobil-Karte + Tabelle) — die Tabellen-Instanz
+  // ist die mit einem <tr>-Vorfahren.
   const deltaIn = (label: string) => {
-    const row = screen.getByText(label).closest('tr')!
+    const row = screen.getAllByText(label).map((el) => el.closest('tr')).find(Boolean)!
     return within(row).getByText(/%/)
   }
 

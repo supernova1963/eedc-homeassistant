@@ -16,7 +16,7 @@
  * (`monatsdatenApi.listAggregiert`).
  */
 import { fmtCalc } from '../components/ui'
-import FormelTooltip from '../components/ui/FormelTooltip'
+import FormelTooltip, { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken } from '../components/blocks'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
@@ -26,6 +26,7 @@ import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 export interface GleicheMonatStats {
   pv: number | null
   ev: number | null
+  direkt: number | null
   einsp: number | null
   netz: number | null
   gesamt: number | null
@@ -109,6 +110,36 @@ function Delta({ a, b, inv = false, besser }: { a: number | null | undefined; b:
   )
 }
 
+/** Vergleichs-Chip für die gestapelte Mobil-Ansicht (< sm): „VM ▲90 %", farbig,
+ *  voller Absolutwert im Tooltip. Ersetzt die Tabellen-Spalten auf schmalen Schirmen
+ *  (kein Spalten/Header-Versatz, umbruch-sicher). */
+function VglChip({ prefix, lang, ist, val, unit, dec, inv, besser }: {
+  prefix: string; lang: string
+  ist: number | null | undefined; val: number | null | undefined
+  unit: string; dec: number; inv?: boolean; besser?: boolean
+}) {
+  if (ist == null || val == null || val === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500">
+        {prefix} —
+      </span>
+    )
+  }
+  const pct = ((ist - val) / Math.abs(val)) * 100
+  const positive = besser != null ? besser : (inv ? pct <= 0 : pct >= 0)
+  return (
+    <SimpleTooltip text={`${lang}: ${fmt(val, dec)} ${unit}`}>
+      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+        positive
+          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+      }`}>
+        {prefix} {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(0)} %
+      </span>
+    </SimpleTooltip>
+  )
+}
+
 interface BilanzRow {
   label: string
   ist: number | null | undefined
@@ -140,6 +171,9 @@ export function MonatBilanz({
     { label: 'PV-Erzeugung',    ist: d.pv_erzeugung_kwh,   vm: vm?.pv_erzeugung_kwh,   vj: vj?.pv_erzeugung_kwh,   gm: glMonStats?.pv ?? null,       unit: 'kWh' },
     { label: 'Eigenverbrauch',  ist: d.eigenverbrauch_kwh,  vm: vm?.eigenverbrauch_kwh, vj: vj?.eigenverbrauch_kwh, gm: glMonStats?.ev ?? null,       unit: 'kWh',
       besserVm: evBesser(vm?.autarkie_prozent), besserVj: evBesser(vj?.autarkie_prozent), besserGm: evBesser(glMonStats?.autarkie) },
+    // Direktverbrauch = PV direkt (ohne Speicher), Teilmenge des Eigenverbrauchs;
+    // „günstigster" Verbrauch (nur entgangene Einspeisung als Opportunitätskosten).
+    { label: 'Direktverbrauch', ist: d.direktverbrauch_kwh, vm: vm?.direktverbrauch_kwh, vj: vj?.direktverbrauch_kwh, gm: glMonStats?.direkt ?? null,  unit: 'kWh' },
     { label: 'Einspeisung',     ist: d.einspeisung_kwh,     vm: vm?.einspeisung_kwh,    vj: vj?.einspeisung_kwh,    gm: glMonStats?.einsp ?? null,    unit: 'kWh' },
     { label: 'Netzbezug',       ist: d.netzbezug_kwh,       vm: vm?.netzbezug_kwh,      vj: vj?.netzbezug_kwh,      gm: glMonStats?.netz ?? null,     unit: 'kWh', inv: true },
     { label: 'Gesamtverbrauch', ist: d.gesamtverbrauch_kwh, vm: vm?.gesamtverbrauch_kwh, vj: vj?.gesamtverbrauch_kwh, gm: glMonStats?.gesamt ?? null,  unit: 'kWh', inv: true },
@@ -168,8 +202,31 @@ export function MonatBilanz({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* IST/VM/VJ/Ø-Tabelle (B10) */}
-      <div className="lg:col-span-2 overflow-x-auto">
+      {/* IST/VM/VJ/Ø-Vergleich (B10) */}
+      <div className="lg:col-span-2">
+        {/* Mobil (< sm): gestapelte Kennzahl-Karten statt Tabelle — keine Spalten/
+            Header, die verrutschen können; Vergleiche als umbruch-sichere Chips,
+            Absolutwerte im Tooltip. */}
+        <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/50">
+          {rows.map((row) => (
+            <div key={row.label} className="py-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400 truncate">{row.label}</span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+                  {fmt(row.ist, dec(row))} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{row.unit}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                <VglChip prefix="VM" lang="Vormonat" ist={row.ist} val={row.vm} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserVm} />
+                <VglChip prefix="VJ" lang="Vorjahr" ist={row.ist} val={row.vj} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserVj} />
+                {glMonStats && <VglChip prefix={`Ø ${monatName}`} lang={`Ø ${monatName}`} ist={row.ist} val={row.gm} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserGm} />}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop (≥ sm): die aligned Tabelle. */}
+        <div className="hidden sm:block overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
@@ -197,6 +254,7 @@ export function MonatBilanz({
             ))}
           </tbody>
         </table>
+        </div>
         {glMonStats && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {glMonStats.count} {monatName}-Monat{glMonStats.count !== 1 ? 'en' : ''}

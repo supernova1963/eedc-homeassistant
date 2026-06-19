@@ -2,11 +2,11 @@
  * MonatsRail — Monats-Zeitstrahl der Cockpit/Monat-Sicht (IA v4 E3 Slice 2e, B2).
  *
  * Vertikal auf Desktop (links, Jahres-Divider + Monatspunkte + Mini-PV-Balken +
- * „läuft"-Badge), horizontal scrollbar auf Mobile. Ersetzt den interimistischen
- * Dropdown-Selektor. Verhaltensgleich zum Donor `MonatsabschlussView`
- * (`VerticalTimeline`), aber als eigenständige, responsive /v4-Komponente.
+ * „läuft"-Badge). **Nur noch Desktop** (`hidden lg:block`) — mobil übernimmt der
+ * schwebende {@link MonatStepper} (detLAN-Hybrid 2026-06-19). Verhaltensgleich zum
+ * Donor `MonatsabschlussView` (`VerticalTimeline`).
  */
-import { useEffect, useMemo, useRef } from 'react'
+import { useMemo } from 'react'
 import { MONAT_KURZ } from '../lib'
 
 export interface RailEintrag {
@@ -45,49 +45,9 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
   const titel = (e: RailEintrag) =>
     e.laufend ? `${MONAT_KURZ[e.monat]} ${e.jahr} — laufender Monat` : `${MONAT_KURZ[e.monat]} ${e.jahr}: ${Math.round(e.pv_kwh)} kWh`
 
-  // ── Mobile: horizontale Chip-Leiste ──────────────────────────────────────
-  // Absteigend (neueste zuerst) wie der Desktop-Zweig — generelle Datums-Listen-
-  // Regel (CLAUDE.md). Das scrollIntoView zentriert die Auswahl ohnehin.
-  const mobilSorted = useMemo(
-    () => [...entries].sort((a, b) => (b.jahr !== a.jahr ? b.jahr - a.jahr : b.monat - a.monat)),
-    [entries],
-  )
-  const selChipRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    selChipRef.current?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })
-  }, [jahr, monat])
-
   return (
     <>
-      {/* Mobile (horizontal) */}
-      <div className="lg:hidden -mx-3 px-3 overflow-x-auto scrollbar-none">
-        <div className="flex gap-1.5 w-max pb-1">
-          {mobilSorted.map((e) => {
-            const sel = istSel(e)
-            return (
-              <button
-                key={`${e.jahr}-${e.monat}`}
-                ref={sel ? selChipRef : null}
-                type="button"
-                onClick={() => onSelect(e.jahr, e.monat)}
-                title={titel(e)}
-                className={`min-h-[44px] flex flex-col items-center justify-center px-3 rounded-lg border text-xs font-medium whitespace-nowrap transition-colors ${
-                  sel
-                    ? 'border-primary-400 bg-primary-50 text-primary-700 dark:border-primary-500 dark:bg-primary-900/30 dark:text-primary-300'
-                    : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                <span>{MONAT_KURZ[e.monat]} ’{String(e.jahr).slice(-2)}</span>
-                <span className={e.laufend ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}>
-                  {e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Desktop (vertikal) */}
+      {/* Desktop (vertikal) — mobil übernimmt der MonatStepper */}
       <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none space-y-3 pr-1">
         {jahre.map((j) => (
           <div key={j}>
