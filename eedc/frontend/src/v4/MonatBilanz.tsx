@@ -18,7 +18,7 @@
 import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
 import { VerteilungsBalken } from '../components/blocks'
-import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro } from 'lucide-react'
+import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -43,6 +43,13 @@ export function baueMonatKpis(
   const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null
     ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
     : vm ? `VM: ${fmt(vm.pv_erzeugung_kwh)} kWh` : undefined
+
+  // Monatsergebnis = nach Betriebskosten (verhaltensgleich zu MonatsabschlussView
+  // `nettoNachAllem`, Donor): Gesamt-Nettoertrag − Betriebskosten + Sonstiges.
+  // `!= null` statt Falsy-Check, damit 0 € nicht verschwindet (CLAUDE.md 0-Werte).
+  const monatsergebnis = d.gesamtnettoertrag_euro != null
+    ? d.gesamtnettoertrag_euro - (d.betriebskosten_anteilig_euro ?? 0) + (d.sonstige_netto_euro ?? 0)
+    : null
 
   return [
     {
@@ -71,6 +78,15 @@ export function baueMonatKpis(
     },
     {
       title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: Euro,
+      subtitle: 'vor Betriebskosten',
+      formel: 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
+    },
+    {
+      title: 'Monatsergebnis',
+      value: fmtCalc(monatsergebnis, 2, '—'), unit: '€',
+      color: monatsergebnis != null && monatsergebnis < 0 ? 'red' : 'green', icon: Wallet,
+      subtitle: 'nach Betriebskosten',
+      formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
     },
   ]
 }

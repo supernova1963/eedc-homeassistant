@@ -13,7 +13,7 @@
  * KPI-Strip (2c), Komponenten-Sektionen (2d), Finanz-/Community-Teaser (2e)
  * docken später als weitere Blöcke an.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { WerteTabelle } from '../components/werte'
@@ -46,6 +46,18 @@ function monatLabel({ jahr, monat }: MonatRef): string {
   return `${MONAT_KURZ[monat]} ${jahr}`
 }
 
+/** Tages-Werte (Monat + Vormonat) + Einzelmonats-KPIs in einem Zug — geteilt von
+ *  Initial-Load und Reload (C1), damit es keinen zweiten Fetch-Pfad gibt. */
+function ladeMonatsdaten(anlageId: number, ref: MonatRef) {
+  const akt = monatsSpanne(ref)
+  const vm = monatsSpanne(vormonat(ref))
+  return Promise.all([
+    energieProfilApi.getTageWerte(anlageId, akt.von, akt.bis),
+    energieProfilApi.getTageWerte(anlageId, vm.von, vm.bis).catch(() => [] as TagWerte[]),
+    aktuellerMonatApi.getData(anlageId, ref.jahr, ref.monat).catch(() => null),
+  ])
+}
+
 export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefined }) {
   const [monate, setMonate] = useState<VerfuegbarerMonat[]>([])
   const [gewaehlt, setGewaehlt] = useState<MonatRef | null>(null)
@@ -55,6 +67,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   const [alleMonate, setAlleMonate] = useState<AggregierteMonatsdaten[]>([])
   const [monatsVergleich, setMonatsVergleich] = useState<MonatsVergleich | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Verfügbare Monate + Monatsreihe (für Vormonat/Ø-Monat) laden → neuesten vorwählen.
@@ -83,18 +96,35 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
     let ab = false
     setLoading(true)
     setError(null)
-    const akt = monatsSpanne(gewaehlt)
-    const vm = monatsSpanne(vormonat(gewaehlt))
-    Promise.all([
-      energieProfilApi.getTageWerte(anlageId, akt.von, akt.bis),
-      energieProfilApi.getTageWerte(anlageId, vm.von, vm.bis).catch(() => [] as TagWerte[]),
-      aktuellerMonatApi.getData(anlageId, gewaehlt.jahr, gewaehlt.monat).catch(() => null),
-    ])
+    ladeMonatsdaten(anlageId, gewaehlt)
       .then(([t, v, m]) => { if (!ab) { setTage(t); setVormonatTage(v); setMonatData(m) } })
       .catch(() => { if (!ab) setError('Fehler beim Laden der Tageswerte') })
       .finally(() => { if (!ab) setLoading(false) })
     return () => { ab = true }
   }, [anlageId, gewaehlt])
+
+  // C1: Aktualisieren (nur laufender Monat) — refetcht dieselben Quellen wie der
+  // Initial-Load, ohne den Voll-Spinner (nur das Reload-Icon dreht).
+  const reload = useCallback(() => {
+    if (!anlageId || !gewaehlt) return
+    setReloading(true)
+    ladeMonatsdaten(anlageId, gewaehlt)
+      .then(([t, v, m]) => { setTage(t); setVormonatTage(v); setMonatData(m) })
+      .catch(() => {})
+      .finally(() => setReloading(false))
+  }, [anlageId, gewaehlt])
+
+  // C2: „Abschluss starten" nur wenn Vergangenheits-Monate noch offen sind
+  // (verhaltensgleich zu MonatsabschlussView.hatOffeneAbschluesse).
+  const hatOffeneAbschluesse = useMemo(() => {
+    const heute = new Date()
+    const hj = heute.getFullYear()
+    const hm = heute.getMonth() + 1
+    const vm = hm === 1 ? { jahr: hj - 1, monat: 12 } : { jahr: hj, monat: hm - 1 }
+    if (alleMonate.length === 0) return true
+    const letzter = [...alleMonate].sort((a, b) => (b.jahr !== a.jahr ? b.jahr - a.jahr : b.monat - a.monat))[0]
+    return letzter.jahr < vm.jahr || (letzter.jahr === vm.jahr && letzter.monat < vm.monat)
+  }, [alleMonate])
 
   // Vormonat-Aggregat + Ø gleicher Monat (andere Jahre) aus der Monatsreihe.
   const vormonatAgg = useMemo<AggregierteMonatsdaten | null>(() => {
@@ -170,7 +200,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
         id: 'kpi',
         title: 'Kennzahlen',
         ...BLOCK_IDENTITAET.kennzahlen,
-        summary: '5 Energie-Kennzahlen + Netto-Ertrag',
+        summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis',
         defaultOpen: true,
         render: () => (monatData
           ? <KpiStrip kpis={baueMonatKpis(monatData, vormonatAgg)} />
@@ -245,7 +275,14 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       </div>
 
       <div className="flex-1 min-w-0 space-y-4">
-        <MonatHeader titel={gewaehlt ? monatLabel(gewaehlt) : '…'} laufend={istLaufend} d={monatData} />
+        <MonatHeader
+          titel={gewaehlt ? monatLabel(gewaehlt) : '…'}
+          laufend={istLaufend}
+          d={monatData}
+          onReload={reload}
+          reloading={reloading}
+          zeigeAbschlussLink={hatOffeneAbschluesse}
+        />
 
         {error ? (
           <Card><p className="text-red-500">{error}</p></Card>

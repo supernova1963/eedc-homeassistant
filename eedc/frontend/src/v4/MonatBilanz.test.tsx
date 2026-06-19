@@ -18,11 +18,24 @@ function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
 const vm = { pv_erzeugung_kwh: 380, autarkie_prozent: 58, eigenverbrauch_kwh: 210, einspeisung_kwh: 170, netzbezug_kwh: 150 } as AggregierteMonatsdaten
 
 describe('baueMonatKpis', () => {
-  it('liefert 5 Energie-Cards + Netto-Ertrag (6)', () => {
+  it('liefert 5 Energie-Cards + Netto-Ertrag + Monatsergebnis (7)', () => {
     const k = baueMonatKpis(d(), vm)
     expect(k.map((x) => x.title)).toEqual([
-      'PV-Erzeugung', 'Autarkie', 'Eigenverbrauch', 'Einspeisung', 'Netzbezug', 'Netto-Ertrag',
+      'PV-Erzeugung', 'Autarkie', 'Eigenverbrauch', 'Einspeisung', 'Netzbezug', 'Netto-Ertrag', 'Monatsergebnis',
     ])
+  })
+
+  it('Monatsergebnis = Gesamt-Nettoertrag − Betriebskosten + Sonstiges (nach BK)', () => {
+    const me = baueMonatKpis(d({ gesamtnettoertrag_euro: 150, betriebskosten_anteilig_euro: 30, sonstige_netto_euro: 5 }), vm)
+      .find((x) => x.title === 'Monatsergebnis')!
+    expect(me.unit).toBe('€')
+    expect(me.value).toBe('125,00') // 150 − 30 + 5
+    expect(me.subtitle).toBe('nach Betriebskosten')
+  })
+
+  it('Monatsergebnis bleibt — wenn Gesamt-Nettoertrag fehlt', () => {
+    const me = baueMonatKpis(d({ gesamtnettoertrag_euro: null }), vm).find((x) => x.title === 'Monatsergebnis')!
+    expect(me.value).toBe('—')
   })
 
   it('PV-Card trägt SOLL-Annotation (O2) statt VM, wenn SOLL vorhanden', () => {

@@ -9,7 +9,7 @@
  * - {@link communityBlock}: Community-Vergleich, data-gated (nur wenn Anlagen im
  *   Monat vorhanden, O4).
  */
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, RefreshCw, CalendarClock } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { BLOCK_IDENTITAET } from '../lib'
 import type { Block } from '../components/blocks'
@@ -33,10 +33,15 @@ function provenanceQuellen(feldQuellen: AktuellerMonatResponse['feld_quellen']):
   return [...set]
 }
 
-export function MonatHeader({ titel, laufend, d }: {
+export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbschlussLink }: {
   titel: string
   laufend: boolean
   d: AktuellerMonatResponse | null
+  /** C1: Aktualisieren-Aktion (nur laufender Monat); fehlt → Button entfällt. */
+  onReload?: () => void
+  reloading?: boolean
+  /** C2: „Abschluss starten"-Cross-Link zeigen (laufend + offene Vergangenheits-Monate). */
+  zeigeAbschlussLink?: boolean
 }) {
   const quellen = d ? provenanceQuellen(d.feld_quellen) : []
   return (
@@ -51,16 +56,40 @@ export function MonatHeader({ titel, laufend, d }: {
           {laufend ? 'läuft' : 'abgeschlossen'}
         </span>
       </div>
-      {quellen.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-gray-400 dark:text-gray-500">Quellen:</span>
-          {quellen.map((q) => (
-            <span key={q} className="text-[10px] leading-tight px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-              {q}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* C1: Aktualisieren — nur im laufenden Monat (IST-Parität MonatsabschlussView). */}
+        {laufend && onReload && (
+          <button
+            type="button"
+            onClick={onReload}
+            disabled={reloading}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${reloading ? 'animate-spin' : ''}`} />
+            Aktualisieren
+          </button>
+        )}
+        {/* C2: Cross-Link zu Einstellungen/Daten (Abschluss) statt Inline-Wizard (B5/SPEC). */}
+        {laufend && zeigeAbschlussLink && (
+          <a
+            href="#/einstellungen/monatsdaten"
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            Abschluss starten
+          </a>
+        )}
+        {quellen.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs text-gray-400 dark:text-gray-500">Quellen:</span>
+            {quellen.map((q) => (
+              <span key={q} className="text-[10px] leading-tight px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                {q}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -81,6 +110,15 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse): Block {
           <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Netzbezug-Kosten</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd></div>
           <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euro(d.netto_ertrag_euro)}</dd></div>
         </dl>
+        {/* C3: Tarif-Info-Zeile (Begleit-Info zum Finanz-Teaser, IST-Parität). */}
+        {(d.netzbezug_durchschnittspreis_cent != null || d.netzbezug_preis_cent != null || d.einspeise_preis_cent != null) && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+            {d.netzbezug_durchschnittspreis_cent != null
+              ? <span>Netzbezug Ø <span className="text-blue-500 dark:text-blue-400 font-medium">{fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh</span> (flex)</span>
+              : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>}
+            {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}
+          </div>
+        )}
         <a href="#/v4/auswertungen/tabelle" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
           volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
         </a>
