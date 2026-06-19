@@ -9,6 +9,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.3] - 2026-06-19 — Daten-Checker erkennt vertauschte Leistungs-/Energie-Sensoren
+
+### Added
+
+- **Daten-Checker findet vertauschte Leistungs- und Energie-Sensoren (#674, #200).** Wenn ein kWh-Zählerstand versehentlich in einem Live-Leistungs-Slot (W) gemappt ist — oder umgekehrt ein Leistungssensor (W) in einem kWh-Slot — meldet der Daten-Checker das jetzt gezielt: kWh-im-Leistungs-Slot als **Fehler**, Leistung-im-kWh-Slot als **Warnung** (die Laufzeit hat dort einen Trapez-Fallback). Solche Verwechslungen waren bisher schwer zu finden — ein kWh-Wert (z. B. 7130) als „7130 W" gelesen ließ den live berechneten Hausverbrauch auf 0 hängen, während die kWh-Monatswerte korrekt blieben. Der Check läuft über **alle** gemappten Slots (Live + Zähler, Anlage + Investitionen) und ist auf die eindeutige Leistung/Energie-Verwechslung beschränkt (%/°C/Preis/km bleiben bewusst außen vor, kein Fehlalarm). Ohne Home-Assistant-Anbindung (Standalone) wird er still übersprungen.
+
+### Changed
+
+- **Klarere Ursachen-Hinweise in den Monats-Checks:** Die Prüfungen „Einspeisung größer als PV-Erzeugung" und „negativer Hausverbrauch" nennen jetzt vertauschte Netz-Sensoren als wahrscheinliche Ursache.
+- **Intern — IA-v4-Vorbereitung (hinter Build-Flag, für Nutzer noch nicht aktiv):** Weiterer Aufbau des kommenden Menü-/Sichten-Konzepts (Referenz-Sicht „Cockpit/Monat") sowie geteilte Anzeige-Bausteine. Diese Arbeit ist flag-gesteuert und im ausgelieferten Produkt nicht sichtbar (Produktiv-Build bit-identisch ohne v4-Code).
+
 ## [3.45.2] - 2026-06-14 — Hotfix: API-Start (fastapi-0.137.0-Regression)
 
 ### Fixed
