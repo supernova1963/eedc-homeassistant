@@ -3,9 +3,10 @@
  *
  * Zeigt den gewählten Monat als TAGES-Verlauf (eine Säule je Tag) und schaltet
  * per Linsen-Toggle auf den aggregierten MONATS-FLUSS um. In beiden Linsen ist
- * die PV-Verteilung Eigenverbrauch/Einspeisung integriert (O3 — kein separater
- * Balken-Block): die Erzeugungs-Säule ist in EV (unten) + Einspeisung (oben)
- * gesplittet.
+ * die PV-Verteilung Eigenverbrauch/Einspeisung im Chart gesplittet: die
+ * Erzeugungs-Säule ist EV (unten) + Einspeisung (oben). Hinweis (O3-Revision
+ * 2026-06-18): das ersetzt NICHT die vertrauten Verteilungs-Balken in der
+ * Energie-Bilanz (die bleiben wie im IST) — der Chart-Split ist zusätzlich.
  *
  * Datenquelle: `TagWerte[]` aus dem Tages-Werte-Endpoint (numerischer Zwilling
  * des Werte-Embeds, B9) — dieselbe SoT wie die Tabelle, damit Chart und Zahlen

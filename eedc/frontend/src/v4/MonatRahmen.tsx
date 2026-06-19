@@ -97,22 +97,36 @@ export function communityBlock(
   vergleich: MonatsVergleich,
   d: AktuellerMonatResponse,
   monatName: string,
+  jahr: number,
 ): Block | null {
   if (!vergleich || vergleich.anzahl_anlagen <= 0) return null
-  const zeilen: { label: string; du: number | null | undefined; median: number | null | undefined; unit: string }[] = [
+  const anlagenWort = `${vergleich.anzahl_anlagen} Anlage${vergleich.anzahl_anlagen !== 1 ? 'n' : ''}`
+  // Spez.-Ertrag-Abweichung zum Community-Median — periodenkorrekt (Monats-Median),
+  // gleiche Basis wie der Vergleich (anlage.leistung_kwp). KEIN periodenfalscher Rang;
+  // ein echter periodenbezogener Rang ist als eedc-community-Erweiterung getrackt (#338).
+  const eigenSpez = d.spez_ertrag
+  const medianSpez = vergleich.spez_ertrag?.median
+  const vz = (v: number) => (v > 0 ? '+' : '')
+  const spezText =
+    eigenSpez != null && medianSpez != null && medianSpez > 0
+      ? ` · spez. Ertrag ${fmtCalc(eigenSpez, 0)} kWh/kWp (${vz(eigenSpez - medianSpez)}${fmtCalc(eigenSpez - medianSpez, 0)} / ${vz(((eigenSpez - medianSpez) / medianSpez) * 100)}${fmtCalc(((eigenSpez - medianSpez) / medianSpez) * 100, 0)} % vs. Median)`
+      : ''
+  // inv = „niedriger ist besser" (nur Netzbezug); steuert das ▲▼-Vergleichs-Badge (A2, wie IST).
+  const zeilen: { label: string; du: number | null | undefined; median: number | null | undefined; unit: string; inv?: boolean }[] = [
     { label: 'Autarkie',       du: d.autarkie_prozent,            median: vergleich.autarkie?.median,     unit: '%' },
     { label: 'Eigenverbrauch', du: d.eigenverbrauch_quote_prozent, median: vergleich.eigenverbrauch?.median, unit: '%' },
     { label: 'Einspeisung',    du: d.einspeisung_kwh,             median: vergleich.einspeisung?.median,   unit: 'kWh' },
-    { label: 'Netzbezug',      du: d.netzbezug_kwh,               median: vergleich.netzbezug?.median,     unit: 'kWh' },
+    { label: 'Netzbezug',      du: d.netzbezug_kwh,               median: vergleich.netzbezug?.median,     unit: 'kWh', inv: true },
   ]
   const fmt = (v: number | null | undefined, unit: string) => (v == null ? '—' : `${fmtCalc(v, unit === '%' ? 1 : 0)} ${unit}`)
   return {
     id: 'community',
     title: 'Community-Vergleich',
     ...BLOCK_IDENTITAET.community,
-    summary: `${vergleich.anzahl_anlagen} Anlage${vergleich.anzahl_anlagen !== 1 ? 'n' : ''} im ${monatName}`,
+    summary: `${anlagenWort} im ${monatName}${spezText}`,
     defaultOpen: false,
     render: () => (
+      <div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -120,6 +134,7 @@ export function communityBlock(
               <th className="py-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
               <th className="py-1.5 text-right font-medium">Deine Anlage</th>
               <th className="py-1.5 text-right font-medium">Ø Community (Median)</th>
+              <th className="py-1.5 pl-2 text-right font-medium"><span className="sr-only">Vergleich</span></th>
             </tr>
           </thead>
           <tbody>
@@ -128,10 +143,28 @@ export function communityBlock(
                 <td className="py-1.5 text-gray-600 dark:text-gray-400">{z.label}</td>
                 <td className="py-1.5 text-right tabular-nums font-semibold text-gray-900 dark:text-white">{fmt(z.du, z.unit)}</td>
                 <td className="py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmt(z.median, z.unit)}</td>
+                <td className="py-1.5 pl-2 text-right">
+                  {z.du != null && z.median != null && (() => {
+                    const better = z.inv ? z.du <= z.median : z.du >= z.median
+                    return (
+                      <span className={`text-xs font-medium px-1 py-0.5 rounded ${
+                        better
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      }`}>
+                        {better ? '▲' : '▼'}
+                      </span>
+                    )
+                  })()}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+          Basis: {anlagenWort} · {monatName} {jahr}
+        </p>
       </div>
     ),
   }

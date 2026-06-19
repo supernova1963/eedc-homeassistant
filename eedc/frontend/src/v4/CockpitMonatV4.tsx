@@ -14,7 +14,7 @@
  * docken später als weitere Blöcke an.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { LoadingSpinner, Card } from '../components/ui'
+import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { WerteTabelle } from '../components/werte'
 import { tagesZeile } from '../lib/werte'
@@ -157,6 +157,14 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   const bloecke: Block[] = useMemo(() => {
     if (!gewaehlt) return []
     const vmRef = vormonat(gewaehlt)
+    // Energie-Bilanz Block-Summary = Kernwerte auf einen Blick (wie IST), nicht
+    // die Struktur-Beschreibung — im eingeklappten Zustand direkt ablesbar (A1).
+    const bilanzSummary = monatData
+      ? `${fmtCalc(monatData.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(monatData.autarkie_prozent, 0, '—')} % Autarkie${
+          monatData.soll_pv_kwh != null && monatData.pv_erzeugung_kwh != null && monatData.soll_pv_kwh > 0
+            ? ` · SOLL ${Math.round((monatData.pv_erzeugung_kwh / monatData.soll_pv_kwh) * 100)} %`
+            : ''}`
+      : 'IST / Vormonat / Vorjahr / Ø-Monat'
     return [
       {
         id: 'kpi',
@@ -172,7 +180,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
         id: 'bilanz',
         title: 'Energie-Bilanz',
         ...BLOCK_IDENTITAET.energieBilanz,
-        summary: 'IST / Vormonat / Vorjahr / Ø-Monat + SOLL (PVGIS)',
+        summary: bilanzSummary,
         defaultOpen: true,
         render: () => (monatData
           ? <MonatBilanz d={monatData} vm={vormonatAgg} glMonStats={glMonStats} monatName={MONAT_KURZ[gewaehlt.monat]} />
@@ -183,7 +191,9 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
         title: 'Tagesverlauf',
         ...BLOCK_IDENTITAET.verlauf,
         summary: 'Tageswerte des Monats ⇄ Monats-Fluss',
-        defaultOpen: true,
+        // Default-Klappregel (Gernot 2026-06-19): nur Kennzahlen + Energie-Bilanz
+        // offen, alle anderen Blöcke eingeklappt.
+        defaultOpen: false,
         render: () => <TagesverlaufChart tage={tage} />,
       },
       {
@@ -207,7 +217,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       // Finanz-Teaser (B5) + Community (O4, data-gated) — vor den Komponenten.
       ...(monatData ? [finanzTeaserBlock(monatData)] : []),
       ...(monatData && monatsVergleich
-        ? [communityBlock(monatsVergleich, monatData, MONAT_KURZ[gewaehlt.monat])].filter((b): b is NonNullable<typeof b> => b != null)
+        ? [communityBlock(monatsVergleich, monatData, MONAT_KURZ[gewaehlt.monat], gewaehlt.jahr)].filter((b): b is NonNullable<typeof b> => b != null)
         : []),
       // Komponenten-Detailblöcke (aktiv-gegatet, B6/B7).
       ...(monatData ? baueKomponentenBloecke(monatData) : []),

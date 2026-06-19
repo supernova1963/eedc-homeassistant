@@ -33,6 +33,7 @@ from backend.core.berechnungen import (
     einspeise_erloes_euro,
     imd_typ_beitrag,
     merge_datenquellen,
+    spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
@@ -117,6 +118,9 @@ class AktuellerMonatResponse(BaseModel):
     # Quoten (%)
     autarkie_prozent: Optional[float] = None
     eigenverbrauch_quote_prozent: Optional[float] = None
+    # Spezifischer Ertrag kWh/kWp — gleiche Basis wie der Community-Vergleich
+    # (anlage.leistung_kwp), damit die Abweichung zum Community-Median stimmt.
+    spez_ertrag: Optional[float] = None
 
     # Komponenten — Speicher
     speicher_ladung_kwh: Optional[float] = None
@@ -1578,6 +1582,10 @@ async def get_aktueller_monat(
         get_val("emob_km") or 0,
     )
 
+    # Spez. Ertrag auf Community-Basis (anlage.leistung_kwp), für die Abweichung
+    # zum Community-Median in der Cockpit/Monat-Summary.
+    spez_ertrag = spezifischer_ertrag_kwh_kwp(pv or 0, anlage.leistung_kwp)
+
     return AktuellerMonatResponse(
         anlage_id=anlage.id,
         anlage_name=anlage.anlagenname,
@@ -1594,6 +1602,7 @@ async def get_aktueller_monat(
         gesamtverbrauch_kwh=gesamtverbrauch,
         autarkie_prozent=autarkie,
         eigenverbrauch_quote_prozent=ev_quote,
+        spez_ertrag=round(spez_ertrag, 1) if spez_ertrag is not None else None,
         # Komponenten — Speicher
         speicher_ladung_kwh=speicher_ladung,
         speicher_entladung_kwh=speicher_entladung,

@@ -47,6 +47,8 @@ export interface AktuellerMonatResponse {
   // Quoten (%)
   autarkie_prozent: number | null
   eigenverbrauch_quote_prozent: number | null
+  // Spez. Ertrag kWh/kWp (Community-Basis) — für die Median-Abweichung im Community-Block.
+  spez_ertrag?: number | null
 
   // Komponenten — Speicher
   speicher_ladung_kwh: number | null

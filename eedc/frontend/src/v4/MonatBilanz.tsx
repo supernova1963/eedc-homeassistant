@@ -5,14 +5,19 @@
  * - {@link baueMonatKpis}: der D1-Strip (5 Energie-Cards + Netto-Ertrag €, B3),
  *   Vormonat in der Zweitzeile, SOLL-Annotation am PV-KPI (O2 Teil 1).
  * - {@link MonatBilanz}: IST/Vormonat/Vorjahr/Ø-Monat-Vergleichstabelle (B10) +
- *   schlanker SOLL/IST-Fortschrittsblock (PVGIS, O2 Teil 2). Kein PV-Verteilungs-
- *   Balken (O3 lebt in der Fluss-Linse des Tagesverlaufs).
+ *   schlanker SOLL/IST-Fortschrittsblock (PVGIS, O2 Teil 2) + PV-Verteilungs-
+ *   Balken (EV/Einspeisung) wie im IST. O3-Revision (2026-06-18): die Balken
+ *   bleiben hier — die ursprüngliche Wegnahme in die Fluss-Linse war unnötig
+ *   (keine Notwendigkeit, vertraute IST-Anzeige erhalten). Die Fluss-Linse zeigt
+ *   die Aufteilung zusätzlich im Chart, ist aber nicht ihr einziger Ort.
  *
  * Quellen verhaltensgleich zum Donor `pages/MonatsabschlussView.tsx`: IST + Vorjahr
  * + SOLL aus `aktuellerMonatApi.getData`, Vormonat + Ø-Monat aus der Monatsreihe
  * (`monatsdatenApi.listAggregiert`).
  */
 import { fmtCalc } from '../components/ui'
+import FormelTooltip from '../components/ui/FormelTooltip'
+import { VerteilungsBalken } from '../components/blocks'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -70,10 +75,13 @@ export function baueMonatKpis(
   ]
 }
 
-function Delta({ a, b, inv = false }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean }) {
+function Delta({ a, b, inv = false, besser }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean; besser?: boolean }) {
   if (a == null || b == null || b === 0) return null
   const pct = ((a - b) / Math.abs(b)) * 100
-  const positive = inv ? pct <= 0 : pct >= 0
+  // `besser` (z. B. Autarkie-Richtung für Eigenverbrauch, #337) übersteuert die reine
+  // Wert-Richtung; sonst Standard: inv = „niedriger ist besser". Der ▲▼-Pfeil zeigt
+  // weiter die absolute Änderung, die Farbe folgt `besser`.
+  const positive = besser != null ? besser : (inv ? pct <= 0 : pct >= 0)
   return (
     <span className={`text-xs font-medium px-1 py-0.5 rounded ${
       positive
@@ -93,6 +101,10 @@ interface BilanzRow {
   gm: number | null
   unit: string
   inv?: boolean
+  // Optionaler Farb-Override je Vergleichsspalte (Eigenverbrauch → Autarkie-Richtung, #337).
+  besserVm?: boolean
+  besserVj?: boolean
+  besserGm?: boolean
 }
 
 export function MonatBilanz({
@@ -104,12 +116,17 @@ export function MonatBilanz({
   monatName: string
 }) {
   const vj = d.vorjahr
+  // Eigenverbrauch-Färbung folgt der Autarkie-Richtung (EV ÷ Gesamtverbrauch), nicht
+  // dem absoluten EV-Wert (#337): grün nur, wenn der EV-Anteil am Verbrauch gestiegen ist.
+  const evBesser = (vglAutarkie: number | null | undefined): boolean | undefined =>
+    d.autarkie_prozent != null && vglAutarkie != null ? d.autarkie_prozent >= vglAutarkie : undefined
   const rows: BilanzRow[] = [
     { label: 'PV-Erzeugung',    ist: d.pv_erzeugung_kwh,   vm: vm?.pv_erzeugung_kwh,   vj: vj?.pv_erzeugung_kwh,   gm: glMonStats?.pv ?? null,       unit: 'kWh' },
-    { label: 'Eigenverbrauch',  ist: d.eigenverbrauch_kwh,  vm: vm?.eigenverbrauch_kwh, vj: vj?.eigenverbrauch_kwh, gm: glMonStats?.ev ?? null,       unit: 'kWh' },
+    { label: 'Eigenverbrauch',  ist: d.eigenverbrauch_kwh,  vm: vm?.eigenverbrauch_kwh, vj: vj?.eigenverbrauch_kwh, gm: glMonStats?.ev ?? null,       unit: 'kWh',
+      besserVm: evBesser(vm?.autarkie_prozent), besserVj: evBesser(vj?.autarkie_prozent), besserGm: evBesser(glMonStats?.autarkie) },
     { label: 'Einspeisung',     ist: d.einspeisung_kwh,     vm: vm?.einspeisung_kwh,    vj: vj?.einspeisung_kwh,    gm: glMonStats?.einsp ?? null,    unit: 'kWh' },
     { label: 'Netzbezug',       ist: d.netzbezug_kwh,       vm: vm?.netzbezug_kwh,      vj: vj?.netzbezug_kwh,      gm: glMonStats?.netz ?? null,     unit: 'kWh', inv: true },
-    { label: 'Gesamtverbrauch', ist: d.gesamtverbrauch_kwh, vm: vm?.gesamtverbrauch_kwh, vj: vj?.gesamtverbrauch_kwh, gm: glMonStats?.gesamt ?? null,  unit: 'kWh' },
+    { label: 'Gesamtverbrauch', ist: d.gesamtverbrauch_kwh, vm: vm?.gesamtverbrauch_kwh, vj: vj?.gesamtverbrauch_kwh, gm: glMonStats?.gesamt ?? null,  unit: 'kWh', inv: true },
     { label: 'Autarkie',        ist: d.autarkie_prozent,    vm: vm?.autarkie_prozent,   vj: vj?.autarkie_prozent,   gm: glMonStats?.autarkie ?? null, unit: '%'   },
   ]
 
@@ -118,13 +135,13 @@ export function MonatBilanz({
 
   // Vergleichsspalte als Paar: Wert (dezimalbündig, erst ab sm sichtbar) + Δ%
   // (rechtsbündig). Getrennte Zellen, damit Zahlen zeilenübergreifend fluchten (#4).
-  const vglZellen = (val: number | null | undefined, row: BilanzRow) => (
+  const vglZellen = (val: number | null | undefined, row: BilanzRow, besser?: boolean) => (
     <>
       <td className="py-1.5 pl-3 text-right tabular-nums text-gray-400 dark:text-gray-500 hidden sm:table-cell">
         {val != null ? fmt(val, dec(row)) : dash}
       </td>
       <td className="py-1.5 pr-1 text-right tabular-nums">
-        {val != null ? <Delta a={row.ist} b={val} inv={row.inv} /> : dash}
+        {val != null ? <Delta a={row.ist} b={val} inv={row.inv} besser={besser} /> : dash}
       </td>
     </>
   )
@@ -157,9 +174,9 @@ export function MonatBilanz({
                   {fmt(row.ist, dec(row))}
                 </td>
                 <td className="py-1.5 pr-1 text-left text-gray-500 dark:text-gray-400">{row.unit}</td>
-                {vglZellen(row.vm, row)}
-                {vglZellen(row.vj, row)}
-                {glMonStats && vglZellen(row.gm, row)}
+                {vglZellen(row.vm, row, row.besserVm)}
+                {vglZellen(row.vj, row, row.besserVj)}
+                {glMonStats && vglZellen(row.gm, row, row.besserGm)}
               </tr>
             ))}
           </tbody>
@@ -175,7 +192,15 @@ export function MonatBilanz({
       <div>
         {sollPct != null ? (
           <>
-            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">IST/SOLL (PVGIS)</p>
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+              <FormelTooltip
+                formel="IST ÷ SOLL × 100"
+                berechnung={d.pv_erzeugung_kwh != null && d.soll_pv_kwh != null ? `${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(d.soll_pv_kwh)} kWh` : undefined}
+                ergebnis={`= ${sollPct} %`}
+              >
+                IST/SOLL (PVGIS)
+              </FormelTooltip>
+            </p>
             <div className="flex justify-end">
               <span className={`text-4xl font-bold ${
                 sollPct >= 100 ? 'text-green-500 dark:text-green-400'
@@ -197,6 +222,21 @@ export function MonatBilanz({
           </>
         ) : (
           <p className="text-xs text-gray-400 dark:text-gray-500">Keine PVGIS-SOLL-Prognose für diesen Monat.</p>
+        )}
+
+        {/* PV-Verteilung (EV/Einspeisung) — VerteilungsBalken-SoT (B7-Revision 2026-06-19):
+            wie IST als Balken, zusätzlich kWh; eine Bildsprache wie WP/Lade-Mix.
+            O3-Revision: bewusst hier, nicht nur in der Fluss-Linse. */}
+        {d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && (d.pv_erzeugung_kwh ?? 0) > 0 && (
+          <div className="mt-4">
+            <VerteilungsBalken
+              titel="PV-Verteilung"
+              segmente={[
+                { label: 'Eigenverbr.', wert: d.eigenverbrauch_kwh, farbe: 'bg-purple-500' },
+                { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: 'bg-green-500' },
+              ]}
+            />
+          </div>
         )}
       </div>
     </div>

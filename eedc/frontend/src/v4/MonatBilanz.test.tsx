@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { baueMonatKpis } from './MonatBilanz'
+import { render, screen, within } from '@testing-library/react'
+import { baueMonatKpis, MonatBilanz } from './MonatBilanz'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
@@ -44,5 +45,50 @@ describe('baueMonatKpis', () => {
     const ne = baueMonatKpis(d(), vm).find((x) => x.title === 'Netto-Ertrag')!
     expect(ne.unit).toBe('€')
     expect(ne.value).toBe('128,00')
+  })
+})
+
+describe('MonatBilanz — PV-Verteilung (O3-Revision: Balken wie IST)', () => {
+  it('rendert EV/Einspeisung-Balken mit Prozent aus PV-Erzeugung', () => {
+    render(<MonatBilanz d={d()} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.getByText('PV-Verteilung')).toBeInTheDocument()
+    // VerteilungsBalken: Label · Wert kWh · % (Anteil an EV+Einspeisung = 223+189 = 412)
+    expect(screen.getByText('Eigenverbr.')).toBeInTheDocument()
+    expect(screen.getByText('223 kWh · 54 %')).toBeInTheDocument()
+    expect(screen.getByText('189 kWh · 46 %')).toBeInTheDocument()
+  })
+
+  it('ohne PV-Erzeugung kein Verteilungs-Block', () => {
+    render(<MonatBilanz d={d({ pv_erzeugung_kwh: 0 })} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.queryByText('PV-Verteilung')).not.toBeInTheDocument()
+  })
+})
+
+describe('MonatBilanz — Vergleichs-Färbung (#337)', () => {
+  const deltaIn = (label: string) => {
+    const row = screen.getByText(label).closest('tr')!
+    return within(row).getByText(/%/)
+  }
+
+  it('Gesamtverbrauch-Anstieg ist rot', () => {
+    const vmX = { ...vm, gesamtverbrauch_kwh: 300, autarkie_prozent: 58 } as AggregierteMonatsdaten
+    render(<MonatBilanz d={d({ gesamtverbrauch_kwh: 366 })} vm={vmX} glMonStats={null} monatName="Mai" />)
+    const badge = deltaIn('Gesamtverbrauch')
+    expect(badge.textContent).toContain('▲') // Verbrauch stieg
+    expect(badge.className).toMatch(/red/)    // mehr Verbrauch = schlechter
+  })
+
+  it('Eigenverbrauch-Anstieg ist rot, wenn die Autarkie fiel', () => {
+    const vmX = { ...vm, eigenverbrauch_kwh: 210, autarkie_prozent: 65 } as AggregierteMonatsdaten
+    render(<MonatBilanz d={d({ eigenverbrauch_kwh: 223, autarkie_prozent: 61 })} vm={vmX} glMonStats={null} monatName="Mai" />)
+    const badge = deltaIn('Eigenverbrauch')
+    expect(badge.textContent).toContain('▲') // EV stieg absolut
+    expect(badge.className).toMatch(/red/)    // aber Autarkie fiel → rot
+  })
+
+  it('Eigenverbrauch-Anstieg ist grün, wenn die Autarkie stieg', () => {
+    const vmX = { ...vm, eigenverbrauch_kwh: 210, autarkie_prozent: 58 } as AggregierteMonatsdaten
+    render(<MonatBilanz d={d({ eigenverbrauch_kwh: 223, autarkie_prozent: 61 })} vm={vmX} glMonStats={null} monatName="Mai" />)
+    expect(deltaIn('Eigenverbrauch').className).toMatch(/green/)
   })
 })
