@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { isValidElement } from 'react'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { KOMPONENTEN_IDENTITAET } from '../lib'
+import type { Block } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
 function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
@@ -69,5 +72,60 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
   it('Sonstiges ohne Investitionsnamen → Fallback „Sonstiges"', () => {
     const bloecke = baueKomponentenBloecke(d({ sonstiges_erzeugung_kwh: 120 }))
     expect(bloecke[0].title).toBe('Sonstiges')
+  })
+})
+
+// E-Gegencheck: periodensinnvolle IST-Detailwerte in die Komponenten-Blöcke übernommen.
+function renderBlock(bloecke: Block[], id: string) {
+  const b = bloecke.find((x) => x.id === id)!
+  const node = b.render(false)
+  if (!isValidElement(node)) throw new Error('render() ergab kein Element')
+  return render(node)
+}
+
+describe('Komponenten-Detail (E-Gegencheck)', () => {
+  it('Speicher: Netzladung + Bilanz + Wirkungsverluste (€)', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      speicher_ladung_kwh: 100, speicher_entladung_kwh: 90, speicher_ladung_netz_kwh: 0,
+      einspeise_preis_cent: 8, netzbezug_preis_cent: 30,
+    }))
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.getByText('Netzladung (Arbitrage)')).toBeInTheDocument()
+    expect(screen.getByText(/Bilanz \(Entladung − Ladung\)/)).toBeInTheDocument()
+    // Verlust 10 kWh × 100 % PV × 8 ct = 0,80 €
+    expect(screen.getByText('Wirkungsverluste (Opportunitätskosten)')).toBeInTheDocument()
+    expect(screen.getByText('−0,80 €')).toBeInTheDocument()
+  })
+
+  it('Wärmepumpe: #238 Kompressor-Starts + Betriebsstunden (Σ Monat) + Strom-Split', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      wp_strom_kwh: 330, wp_waerme_kwh: 1254,
+      wp_starts_max_tag: 5, wp_starts_summe_monat: 120,
+      wp_betriebsstunden_max_tag: 8.5, wp_betriebsstunden_summe_monat: 210,
+      wp_strom_heizen_kwh: 200, wp_strom_warmwasser_kwh: 130,
+    }))
+    renderBlock(bloecke, 'k-waermepumpe')
+    expect(screen.getByText('Kompressor-Starts')).toBeInTheDocument()
+    expect(screen.getByText('120')).toBeInTheDocument()
+    expect(screen.getByText('Betriebsstunden')).toBeInTheDocument()
+    expect(screen.getByText('Stromverbrauch · davon Heizung')).toBeInTheDocument()
+    expect(screen.getByText('Stromverbrauch · davon Warmwasser')).toBeInTheDocument()
+  })
+
+  it('WP ohne Counter-Daten: keine #238-Kacheln', () => {
+    const bloecke = baueKomponentenBloecke(d({ wp_strom_kwh: 330, wp_waerme_kwh: 1254 }))
+    renderBlock(bloecke, 'k-waermepumpe')
+    expect(screen.queryByText('Kompressor-Starts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Betriebsstunden')).not.toBeInTheDocument()
+  })
+
+  it('E-Mobilität: Netz-Anteil + extern + V2H-Rückspeisung', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      emob_ladung_kwh: 62, emob_ladung_netz_kwh: 20, emob_ladung_extern_kwh: 5, emob_v2h_kwh: 3,
+    }))
+    renderBlock(bloecke, 'k-emob')
+    expect(screen.getByText('Ladung · Netz-Anteil')).toBeInTheDocument()
+    expect(screen.getByText('Ladung · extern')).toBeInTheDocument()
+    expect(screen.getByText('V2H-Rückspeisung')).toBeInTheDocument()
   })
 })
