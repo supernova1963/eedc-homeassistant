@@ -262,8 +262,8 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
                    einspeisung_kw, netzbezug_kw, batterie_kw,
                    waermepumpe_kw, wallbox_kw, ueberschuss_kw, defizit_kw,
                    temperatur_c, globalstrahlung_wm2, soc_prozent,
-                   komponenten, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+                   komponenten, source_provenance, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',datetime('now'))
             """, (
                 anlage_id, tag.isoformat(), d["stunde"],
                 d["pv_kw"], d["verbrauch_kw"],
@@ -299,8 +299,8 @@ def seed_anlage(conn: sqlite3.Connection, anlage_id: int, kwp: float, tage: int)
                peak_pv_kw, peak_netzbezug_kw, peak_einspeisung_kw,
                temperatur_min_c, temperatur_max_c, strahlung_summe_wh_m2,
                performance_ratio, stunden_verfuegbar, datenquelle,
-               komponenten_kwh, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,24,'seed',?,datetime('now'),datetime('now'))
+               komponenten_kwh, source_provenance, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,24,'seed',?,'{}',datetime('now'),datetime('now'))
         """, (
             anlage_id, tag.isoformat(),
             round(u_kwh, 2), round(d_kwh, 2),
