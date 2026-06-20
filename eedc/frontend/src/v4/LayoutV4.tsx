@@ -11,6 +11,7 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings } from 'lucide-react'
 import { IATopNav, type IANavItem } from '../components/layout/IATopNav'
+import { AnlagenSelektor } from './AnlagenSelektor'
 
 export default function LayoutV4() {
   const { pathname } = useLocation()
@@ -37,7 +38,7 @@ export default function LayoutV4() {
 
   return (
     <div className="h-dvh bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
-      <IATopNav inhalt={inhalt} meta={meta} modusBadge={badge} />
+      <IATopNav inhalt={inhalt} meta={meta} modusBadge={badge} anlagenSelektor={<AnlagenSelektor />} />
       {/* Ab lg gibt main keine eigene Scroll-Leiste mehr her, sondern wird flex-
           Container für die ViewShell (fixe 2. Leiste). Mobile: alles scrollt. */}
       <main className="flex-1 overflow-auto lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">

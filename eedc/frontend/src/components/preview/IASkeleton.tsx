@@ -38,6 +38,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { IATopNav } from '../layout/IATopNav'
 import { IASubTabBar } from '../layout/IASubTabBar'
+import { AnlagenSelektorView } from '../layout/AnlagenSelektorView'
 
 // ─── Achsen / Tabs (Struktur-SoT: KONZEPT-IA-V4) ─────────────────────────────
 type TopKey = 'cockpit' | 'komponenten' | 'auswertungen' | 'community' | 'hilfe' | 'einstellungen'
@@ -835,8 +836,15 @@ function EinstellungenView() {
 }
 
 // ─── Schale ───────────────────────────────────────────────────────────────────
+// Demo-Anlagen für den Vorschau-Selektor (backendlos; ≥2 → Selektor sichtbar).
+const DEMO_ANLAGEN = [
+  { id: 1, anlagenname: 'Eigenheim' },
+  { id: 2, anlagenname: 'Ferienhaus Süd' },
+]
+
 export default function IASkeleton() {
   const [top, setTop] = useState<TopKey>('cockpit')
+  const [demoAnlageId, setDemoAnlageId] = useState(1)
 
   // State-getriebene Items für die geteilte IATopNav (SoT). Marke, Theme-Cycle,
   // Hamburger + lg-Responsive liefert die Shell; die Vorschau steuert nur `top`.
@@ -851,7 +859,12 @@ export default function IASkeleton() {
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
-      <IATopNav inhalt={TOP_INHALT.map(item)} meta={TOP_META.map(item)} modusBadge={badge} />
+      <IATopNav
+        inhalt={TOP_INHALT.map(item)}
+        meta={TOP_META.map(item)}
+        modusBadge={badge}
+        anlagenSelektor={<AnlagenSelektorView anlagen={DEMO_ANLAGEN} selectedId={demoAnlageId} onSelect={setDemoAnlageId} />}
+      />
 
       {/* Inhalt je Achse. Ab `lg` scrollt nur der Inhalt (ViewShell), darunter
           scrollt `main` komplett (zweite Leiste scrollt mit weg, Mobile-Schale). */}

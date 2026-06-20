@@ -14,7 +14,6 @@
  * docken später als weitere Blöcke an.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight } from 'lucide-react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
@@ -23,11 +22,10 @@ import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilan
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
 import { MonatStepper } from './MonatStepper'
-import { MonatHeader, finanzTeaserBlock, communityNudgeText } from './MonatRahmen'
+import { MonatHeader, finanzTeaserBlock } from './MonatRahmen'
 import { energieProfilApi, type TagWerte, type VerfuegbarerMonat } from '../api/energie_profil'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
-import { communityApi, type MonatsVergleich } from '../api/community'
 
 interface MonatRef { jahr: number; monat: number }
 
@@ -62,7 +60,6 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   const [tage, setTage] = useState<TagWerte[]>([])
   const [monatData, setMonatData] = useState<AktuellerMonatResponse | null>(null)
   const [alleMonate, setAlleMonate] = useState<AggregierteMonatsdaten[]>([])
-  const [monatsVergleich, setMonatsVergleich] = useState<MonatsVergleich | null>(null)
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -148,17 +145,6 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       count: ms.length,
     }
   }, [alleMonate, gewaehlt])
-
-  // Community-Monats-Benchmark (data-gated; Fehler still schlucken, O4).
-  useEffect(() => {
-    if (!gewaehlt) return
-    let ab = false
-    setMonatsVergleich(null)
-    communityApi.getMonatsBenchmark(gewaehlt.jahr, gewaehlt.monat)
-      .then((v) => { if (!ab) setMonatsVergleich(v) })
-      .catch(() => {})
-    return () => { ab = true }
-  }, [gewaehlt])
 
   // Rail-Einträge: verfügbare Monate + PV (Mini-Balken) + laufender Monat.
   const railEntries = useMemo<RailEintrag[]>(() => {
@@ -279,24 +265,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
           ) : monate.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
           ) : (
-            <>
-              <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
-              {/* Cross-Links statt eingebetteter Blöcke: Werte/Tabelle → Auswertungen
-                  (alle Zeit-Perspektiven), Community → Community-Achse (data-gated). */}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm px-3 sm:px-6 max-w-[1920px] mx-auto">
-                <a href="#/v4/auswertungen/tabelle" className="inline-flex items-center gap-1 text-primary-700 dark:text-primary-300 hover:underline">
-                  Alle Werte / Tabelle <ArrowRight className="h-4 w-4" />
-                </a>
-                {monatData && (() => {
-                  const txt = communityNudgeText(monatsVergleich, monatData, MONAT_KURZ[gewaehlt?.monat ?? 1])
-                  return txt ? (
-                    <a href="#/v4/community" className="inline-flex items-center gap-1 text-primary-700 dark:text-primary-300 hover:underline">
-                      {txt} <ArrowRight className="h-4 w-4" />
-                    </a>
-                  ) : null
-                })()}
-              </div>
-            </>
+            <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
           )}
         </div>
       </div>

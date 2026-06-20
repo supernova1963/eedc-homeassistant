@@ -37,27 +37,31 @@ export interface IANavItem {
   active?: boolean
 }
 
-const navCls = (aktiv: boolean) =>
-  `min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+const navCls = (aktiv: boolean, nurIcon = false) =>
+  `min-h-[44px] flex items-center gap-2 ${nurIcon ? 'px-2' : 'px-3'} rounded-lg text-sm font-medium transition-colors ${
     aktiv
       ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
       : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
   }`
 
-function NavEntry({ item, onNavigate }: { item: IANavItem; onNavigate?: () => void }) {
+function NavEntry({ item, onNavigate, iconOnly }: { item: IANavItem; onNavigate?: () => void; iconOnly?: boolean }) {
   const Icon = item.icon
+  const nurIcon = iconOnly && !!Icon
   const inhalt = (
     <>
       {Icon && <Icon className="h-4 w-4" />}
-      {item.label}
+      {!nurIcon && item.label}
     </>
   )
+  // Icon-only: Label als Tooltip + barrierefreier Name erhalten (sekundäre Meta-Achse).
+  const a11y = nurIcon ? { title: item.label, 'aria-label': item.label } : {}
   if (item.to) {
     return (
       <NavLink
         to={item.to}
         onClick={onNavigate}
-        className={item.active !== undefined ? () => navCls(item.active!) : ({ isActive }) => navCls(isActive)}
+        {...a11y}
+        className={item.active !== undefined ? () => navCls(item.active!, nurIcon) : ({ isActive }) => navCls(isActive, nurIcon)}
       >
         {inhalt}
       </NavLink>
@@ -67,7 +71,8 @@ function NavEntry({ item, onNavigate }: { item: IANavItem; onNavigate?: () => vo
     <button
       type="button"
       onClick={() => { item.onClick?.(); onNavigate?.() }}
-      className={navCls(!!item.active)}
+      {...a11y}
+      className={navCls(!!item.active, nurIcon)}
     >
       {inhalt}
     </button>
@@ -96,11 +101,14 @@ export function IATopNav({
   inhalt,
   meta,
   modusBadge,
+  anlagenSelektor,
 }: {
   inhalt: IANavItem[]
   meta: IANavItem[]
   /** Optionale Modus-Kennung (z. B. „Vorschau") — reine Markierung, kein Design-Ziel. */
   modusBadge?: React.ReactNode
+  /** Globaler Anlagen-Kontextwähler (links neben Marke / im Mobile-Menü). Vorschau: leer. */
+  anlagenSelektor?: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const alle = [...inhalt, ...meta]
@@ -114,14 +122,16 @@ export function IATopNav({
           <img src={eedcIcon} alt="eedc" className="h-10 w-10 shrink-0" />
           <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">eedc</span>
           {modusBadge}
+          {anlagenSelektor && <div className="ml-3 hidden lg:flex items-center">{anlagenSelektor}</div>}
           <nav aria-label="Hauptnavigation" className="ml-6 hidden lg:flex items-center gap-1">
             {inhalt.map((t) => <NavEntry key={t.key} item={t} onNavigate={closeMobile} />)}
           </nav>
         </div>
 
-        {/* Rechts: Meta-Gruppe (Trenner) + Theme (Desktop) */}
+        {/* Rechts: Meta-Gruppe icon-only (sekundäre Achse, spart Breite an der
+            lg-Grenze) + Theme. Labels nur im Mobile-Hamburger (genug Platz). */}
         <div className="hidden lg:flex items-center gap-1">
-          {meta.map((t) => <NavEntry key={t.key} item={t} onNavigate={closeMobile} />)}
+          {meta.map((t) => <NavEntry key={t.key} item={t} onNavigate={closeMobile} iconOnly />)}
           <span className="h-5 w-px bg-gray-300 dark:bg-gray-600 mx-1" />
           <ThemeToggle />
         </div>
@@ -140,6 +150,7 @@ export function IATopNav({
       {/* Mobile-Menü (M0 Hamburger) — alle Achsen + Meta + Theme */}
       {mobileOpen && (
         <nav aria-label="Hauptnavigation mobil" className="lg:hidden border-t border-gray-200 dark:border-gray-700 px-4 py-3 space-y-1">
+          {anlagenSelektor && <div className="pb-1">{anlagenSelektor}</div>}
           {alle.map((t) => <NavEntry key={t.key} item={t} onNavigate={closeMobile} />)}
           <div className="pt-1"><ThemeToggle /></div>
         </nav>
