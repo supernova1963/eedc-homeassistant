@@ -428,12 +428,13 @@ function BloeckeView({ bloecke, sortierbar = false, persistKey }: { bloecke: Blo
 // Detail-Sektionen der Cockpit-Zeitsichten (Summary-Zeilen wie im Monatsbericht).
 // Universelle Blöcke aus dem Block-SoT (#3b), Komponenten-Zeilen aus dem
 // Identitäts-SoT (#3b') — keine hardcodierten Icons/Farben mehr.
+// Reihenfolge wie entschieden: Energie-Bilanz → Komponenten → Finanzen UNTEN (B5).
+// Community-Block bewusst ENTFERNT (O4 — lebt auf der Community-Top-Achse).
 const COCKPIT_DETAIL: { id: string; icon: LucideIcon; title: string; summary: string; farbe?: string }[] = [
   { id: 'd-energie',   ...BLOCK_IDENTITAET.energieBilanz, title: 'Energie-Bilanz',     summary: '618 kWh PV · 96 % Autarkie' },
-  { id: 'd-finanzen',  ...BLOCK_IDENTITAET.finanzen,      title: 'Finanzen',            summary: '+90,25 € Monatsergebnis' },
-  { id: 'd-community', ...BLOCK_IDENTITAET.community,      title: 'Community-Vergleich', summary: '2 Anlagen im Juni 2026' },
   { id: 'd-speicher',  icon: KOMPONENTEN_IDENTITAET['speicher'].icon, farbe: KOMPONENTEN_IDENTITAET['speicher'].farbe, title: 'Speicher',     summary: '99 kWh geladen · 7,7 Zyklen · 73 % η' },
   { id: 'd-emob',      icon: KOMPONENTEN_IDENTITAET['e-auto'].icon,   farbe: KOMPONENTEN_IDENTITAET['e-auto'].farbe,   title: 'E-Mobilität', summary: '62 kWh geladen · 221 km · +7,82 € vs. Verbrenner' },
+  { id: 'd-finanzen',  ...BLOCK_IDENTITAET.finanzen,      title: 'Finanzen',            summary: '+90,25 € Monatsergebnis' },
 ]
 
 // ─── Inhalts-Sichten ──────────────────────────────────────────────────────────
@@ -450,8 +451,9 @@ function CockpitView() {
         ]
       : [
           { id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen, defaultOpen: true, render: (_f) => <KpiStrip kpis={cockpitStrip(sub)} /> },
-          { id: 'haupt', title: 'Hauptblock', ...BLOCK_IDENTITAET.verlauf, summary: 'Verlauf ⇄ Fluss', defaultOpen: true, render: (f) => <DummyChart label={istLive ? 'Energiefluss (Default Live) — ⤢ für Vollbild' : 'Verlauf'} tall={f} /> },
-          { id: 'werte', title: 'Werte/Tabelle', ...BLOCK_IDENTITAET.werte, summary: 'numerischer Zwilling', defaultOpen: !istLive, render: (f) => <DummyChart label="Werte-Embed" tall={f} /> },
+          // Hauptblock: Monat/Tag/Jahr = gestapelter Verlauf-Chart (Toggle „⇄ Fluss" verworfen, O3/B4);
+          // Live = Energiefluss-Default. Werte/Tabelle-Embed ENTFERNT (B9 → Auswertungen/Tabelle).
+          { id: 'haupt', title: 'Hauptblock', ...BLOCK_IDENTITAET.verlauf, summary: istLive ? 'Energiefluss' : 'Verlauf', defaultOpen: true, render: (f) => <DummyChart label={istLive ? 'Energiefluss (Default Live) — ⤢ für Vollbild' : 'Verlauf'} tall={f} /> },
           ...COCKPIT_DETAIL.map((d): Block => ({
             id: d.id, title: d.title, icon: d.icon, farbe: d.farbe, summary: d.summary, defaultOpen: false,
             render: (f) => <DummyChart label={`${d.title} — Detail`} tall={f} />,
