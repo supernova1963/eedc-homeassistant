@@ -37,6 +37,17 @@ describe('BlockShell', () => {
     expect(screen.getByText('Inhalt B')).toBeInTheDocument()
   })
 
+  it('Reset-Button erscheint bei Abweichung und stellt den Default wieder her', () => {
+    render(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    expect(screen.queryByText('zurücksetzen')).not.toBeInTheDocument() // Default → kein Button
+    fireEvent.click(screen.getAllByLabelText('einklappen')[0])         // A einklappen → weicht ab
+    expect(screen.getByText('zurücksetzen')).toBeInTheDocument()
+    expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('zurücksetzen'))
+    expect(screen.getByText('Inhalt A')).toBeInTheDocument()          // wieder offen
+    expect(screen.queryByText('zurücksetzen')).not.toBeInTheDocument() // wieder Default
+  })
+
   it('zeigt im Fokus nur den gewählten Block + Zurück', () => {
     render(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
     const fokusButtons = screen.getAllByLabelText('Fokus / Vollbild')

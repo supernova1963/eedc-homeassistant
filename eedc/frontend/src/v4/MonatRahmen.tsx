@@ -130,6 +130,24 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse): Block {
   }
 }
 
+/** Slim Community-Nudge-Text für den Cross-Link (Block entfernt → Inhalt lebt auf
+ *  der Community-Achse). Null, wenn keine Vergleichsdaten (data-gated). */
+export function communityNudgeText(
+  vergleich: MonatsVergleich | null,
+  d: AktuellerMonatResponse,
+  monatName: string,
+): string | null {
+  if (!vergleich || vergleich.anzahl_anlagen <= 0) return null
+  const anlagenWort = `${vergleich.anzahl_anlagen} Anlage${vergleich.anzahl_anlagen !== 1 ? 'n' : ''}`
+  const eigenSpez = d.spez_ertrag
+  const medianSpez = vergleich.spez_ertrag?.median
+  if (eigenSpez != null && medianSpez != null && medianSpez > 0) {
+    const rel = ((eigenSpez - medianSpez) / medianSpez) * 100
+    return `Community: spez. Ertrag ${rel > 0 ? '+' : ''}${fmtCalc(rel, 0)} % vs. Median im ${monatName} (${anlagenWort})`
+  }
+  return `Community-Vergleich ${monatName} (${anlagenWort})`
+}
+
 /** Community-Block (O4) — nur wenn Anlagen im Monat vorhanden (data-gated). */
 export function communityBlock(
   vergleich: MonatsVergleich,

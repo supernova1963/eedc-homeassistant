@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowUp, ArrowDown, ChevronDown, Maximize2, Minimize2,
+  ArrowUp, ArrowDown, ChevronDown, Maximize2, Minimize2, RotateCcw,
 } from 'lucide-react'
 import type { Block } from './types'
 
@@ -58,6 +58,22 @@ export function BlockShell({
   const [fokus, setFokus] = useState<string | null>(null)
   const byId = useMemo(() => Object.fromEntries(bloecke.map((b) => [b.id, b] as const)), [bloecke])
 
+  // Default-Klappzustand (defaultOpen === false → eingeklappt) für den Reset.
+  const defaultZu = useMemo(
+    () => bloecke.filter((b) => b.defaultOpen === false).map((b) => b.id),
+    [bloecke],
+  )
+  const istDefault = useMemo(() => {
+    const sameOrder = order.length === ids.length && order.every((id, i) => id === ids[i])
+    const sameZu = zu.size === defaultZu.length && defaultZu.every((id) => zu.has(id))
+    return sameOrder && sameZu
+  }, [order, ids, zu, defaultZu])
+  const zuruecksetzen = () => {
+    setOrder(ids)
+    setZu(new Set(defaultZu))
+    setFokus(null)
+  }
+
   // Klappzustand (+ Reihenfolge) pro Sicht merken.
   useEffect(() => {
     speichereBlockState(persistKey, { order, zu: [...zu] })
@@ -103,16 +119,27 @@ export function BlockShell({
   const ordered = order.map((id) => byId[id]).filter(Boolean) as Block[]
   return (
     <div className="p-3 sm:p-6 space-y-3 max-w-[1920px] mx-auto">
-      <p className="text-xs text-gray-400 dark:text-gray-500">
-        Jeder Block: <ChevronDown className="inline h-3 w-3" /> einklappen ·{' '}
-        <Maximize2 className="inline h-3 w-3" /> Fokus/Vollbild
-        {sortierbar && (
-          <>
-            {' '}· <ArrowUp className="inline h-3 w-3" />
-            <ArrowDown className="inline h-3 w-3" /> verschieben
-          </>
-        )}{' '}
-        · Zustand bleibt gemerkt
+      <p className="text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-1">
+        <span>
+          Jeder Block: <ChevronDown className="inline h-3 w-3" /> einklappen ·{' '}
+          <Maximize2 className="inline h-3 w-3" /> Fokus/Vollbild
+          {sortierbar && (
+            <>
+              {' '}· <ArrowUp className="inline h-3 w-3" />
+              <ArrowDown className="inline h-3 w-3" /> verschieben
+            </>
+          )}{' '}
+          · Zustand bleibt gemerkt
+        </span>
+        {!istDefault && (
+          <button
+            type="button"
+            onClick={zuruecksetzen}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            <RotateCcw className="h-3 w-3" /> zurücksetzen
+          </button>
+        )}
       </p>
       {ordered.map((b, i) => {
         const istZu = zu.has(b.id)

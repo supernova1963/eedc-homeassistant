@@ -14,17 +14,16 @@
  * docken später als weitere Blöcke an.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowRight } from 'lucide-react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
-import { WerteTabelle } from '../components/werte'
-import { tagesZeile } from '../lib/werte'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
 import { MonatStepper } from './MonatStepper'
-import { MonatHeader, finanzTeaserBlock, communityBlock } from './MonatRahmen'
+import { MonatHeader, finanzTeaserBlock, communityNudgeText } from './MonatRahmen'
 import { energieProfilApi, type TagWerte, type VerfuegbarerMonat } from '../api/energie_profil'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -47,14 +46,12 @@ function monatLabel({ jahr, monat }: MonatRef): string {
   return `${MONAT_KURZ[monat]} ${jahr}`
 }
 
-/** Tages-Werte (Monat + Vormonat) + Einzelmonats-KPIs in einem Zug — geteilt von
+/** Tages-Werte des Monats + Einzelmonats-KPIs in einem Zug — geteilt von
  *  Initial-Load und Reload (C1), damit es keinen zweiten Fetch-Pfad gibt. */
 function ladeMonatsdaten(anlageId: number, ref: MonatRef) {
   const akt = monatsSpanne(ref)
-  const vm = monatsSpanne(vormonat(ref))
   return Promise.all([
     energieProfilApi.getTageWerte(anlageId, akt.von, akt.bis),
-    energieProfilApi.getTageWerte(anlageId, vm.von, vm.bis).catch(() => [] as TagWerte[]),
     aktuellerMonatApi.getData(anlageId, ref.jahr, ref.monat).catch(() => null),
   ])
 }
@@ -63,7 +60,6 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   const [monate, setMonate] = useState<VerfuegbarerMonat[]>([])
   const [gewaehlt, setGewaehlt] = useState<MonatRef | null>(null)
   const [tage, setTage] = useState<TagWerte[]>([])
-  const [vormonatTage, setVormonatTage] = useState<TagWerte[]>([])
   const [monatData, setMonatData] = useState<AktuellerMonatResponse | null>(null)
   const [alleMonate, setAlleMonate] = useState<AggregierteMonatsdaten[]>([])
   const [monatsVergleich, setMonatsVergleich] = useState<MonatsVergleich | null>(null)
@@ -98,7 +94,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
     setLoading(true)
     setError(null)
     ladeMonatsdaten(anlageId, gewaehlt)
-      .then(([t, v, m]) => { if (!ab) { setTage(t); setVormonatTage(v); setMonatData(m) } })
+      .then(([t, m]) => { if (!ab) { setTage(t); setMonatData(m) } })
       .catch(() => { if (!ab) setError('Fehler beim Laden der Tageswerte') })
       .finally(() => { if (!ab) setLoading(false) })
     return () => { ab = true }
@@ -110,7 +106,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
     if (!anlageId || !gewaehlt) return
     setReloading(true)
     ladeMonatsdaten(anlageId, gewaehlt)
-      .then(([t, v, m]) => { setTage(t); setVormonatTage(v); setMonatData(m) })
+      .then(([t, m]) => { setTage(t); setMonatData(m) })
       .catch(() => {})
       .finally(() => setReloading(false))
   }, [anlageId, gewaehlt])
@@ -188,7 +184,6 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
 
   const bloecke: Block[] = useMemo(() => {
     if (!gewaehlt) return []
-    const vmRef = vormonat(gewaehlt)
     // Energie-Bilanz Block-Summary = Kernwerte auf einen Blick (wie IST), nicht
     // die Struktur-Beschreibung — im eingeklappten Zustand direkt ablesbar (A1).
     const bilanzSummary = monatData
@@ -197,6 +192,8 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
             ? ` · SOLL ${Math.round((monatData.pv_erzeugung_kwh / monatData.soll_pv_kwh) * 100)} %`
             : ''}`
       : 'IST / Vormonat / Vorjahr / Ø-Monat'
+    // Default-Klappregel (Gernot 2026-06-19, revidiert): NUR der erste Block
+    // (Kennzahlen) offen — alle übrigen eingeklappt, ihre Summary trägt den Kern.
     return [
       {
         id: 'kpi',
@@ -213,48 +210,26 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
         title: 'Energie-Bilanz',
         ...BLOCK_IDENTITAET.energieBilanz,
         summary: bilanzSummary,
-        defaultOpen: true,
+        defaultOpen: false,
         render: () => (monatData
           ? <MonatBilanz d={monatData} vm={vormonatAgg} glMonStats={glMonStats} monatName={MONAT_KURZ[gewaehlt.monat]} />
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
       },
       {
         id: 'tagesverlauf',
-        title: 'Tagesverlauf',
+        title: 'Verlauf',
         ...BLOCK_IDENTITAET.verlauf,
         summary: 'Tageswerte des Monats ⇄ Monats-Fluss',
-        // Default-Klappregel (Gernot 2026-06-19): nur Kennzahlen + Energie-Bilanz
-        // offen, alle anderen Blöcke eingeklappt.
         defaultOpen: false,
         render: () => <TagesverlaufChart tage={tage} />,
       },
-      {
-        id: 'werte',
-        title: 'Werte/Tabelle (Tagesebene)',
-        ...BLOCK_IDENTITAET.werte,
-        summary: 'numerischer Zwilling des Tagesverlaufs',
-        defaultOpen: false,
-        render: () => (
-          <WerteTabelle
-            rows={tage.map(tagesZeile)}
-            vorjahrRows={vormonatTage.length > 0 ? vormonatTage.map(tagesZeile) : null}
-            granularitaet="tag"
-            jahrLabel={monatLabel(gewaehlt)}
-            vergleichLabel={monatLabel(vmRef)}
-            alleWerteHref="#/v4/auswertungen/tabelle"
-            csvDateiname={`werte_tag_${gewaehlt.jahr}-${String(gewaehlt.monat).padStart(2, '0')}.csv`}
-          />
-        ),
-      },
-      // Finanz-Teaser (B5) + Community (O4, data-gated) — vor den Komponenten.
-      ...(monatData ? [finanzTeaserBlock(monatData)] : []),
-      ...(monatData && monatsVergleich
-        ? [communityBlock(monatsVergleich, monatData, MONAT_KURZ[gewaehlt.monat], gewaehlt.jahr)].filter((b): b is NonNullable<typeof b> => b != null)
-        : []),
       // Komponenten-Detailblöcke (aktiv-gegatet, B6/B7).
       ...(monatData ? baueKomponentenBloecke(monatData) : []),
+      // Finanz-Teaser (B5) — bewusst GANZ UNTEN: Netto-Ertrag/Monatsergebnis stehen
+      // bereits in den Kennzahlen (D), hier nur Aufschlüsselung + Tarif + Cross-Link.
+      ...(monatData ? [finanzTeaserBlock(monatData)] : []),
     ]
-  }, [gewaehlt, tage, vormonatTage, monatData, vormonatAgg, glMonStats, monatsVergleich])
+  }, [gewaehlt, tage, monatData, vormonatAgg, glMonStats])
 
   if (!anlageId) {
     return (
@@ -304,7 +279,24 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
           ) : monate.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
           ) : (
-            <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
+            <>
+              <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
+              {/* Cross-Links statt eingebetteter Blöcke: Werte/Tabelle → Auswertungen
+                  (alle Zeit-Perspektiven), Community → Community-Achse (data-gated). */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm px-3 sm:px-6 max-w-[1920px] mx-auto">
+                <a href="#/v4/auswertungen/tabelle" className="inline-flex items-center gap-1 text-primary-700 dark:text-primary-300 hover:underline">
+                  Alle Werte / Tabelle <ArrowRight className="h-4 w-4" />
+                </a>
+                {monatData && (() => {
+                  const txt = communityNudgeText(monatsVergleich, monatData, MONAT_KURZ[gewaehlt?.monat ?? 1])
+                  return txt ? (
+                    <a href="#/v4/community" className="inline-flex items-center gap-1 text-primary-700 dark:text-primary-300 hover:underline">
+                      {txt} <ArrowRight className="h-4 w-4" />
+                    </a>
+                  ) : null
+                })()}
+              </div>
+            </>
           )}
         </div>
       </div>
