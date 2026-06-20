@@ -73,6 +73,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
   ? {
       LayoutV4: lazy(() => import('./v4/LayoutV4')),
       CockpitV4: lazy(() => import('./v4/CockpitV4')),
+      KomponentenV4: lazy(() => import('./v4/KomponentenV4')),
       Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
@@ -180,7 +181,9 @@ function App() {
                   im Repo, aber unverdrahtet). */}
               <Route path="auswertungen" element={<V4.Platzhalter />} />
               <Route path="auswertungen/tabelle" element={<V4.Platzhalter />} />
-              <Route path="komponenten" element={<V4.Platzhalter />} />
+              {/* Komponenten-Hub (Was-Achse, Phase A.2): Index → erster Typ. */}
+              <Route path="komponenten" element={<V4.KomponentenV4 />} />
+              <Route path="komponenten/:typ" element={<V4.KomponentenV4 />} />
               <Route path="community" element={<V4.Platzhalter />} />
               <Route path="hilfe" element={<V4.Platzhalter />} />
               <Route path="einstellungen" element={<V4.Platzhalter />} />
