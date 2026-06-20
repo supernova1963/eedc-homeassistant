@@ -22,7 +22,7 @@ export default function LayoutV4() {
   const inhalt: IANavItem[] = [
     { key: 'cockpit',      label: 'Cockpit',      icon: LayoutDashboard, to: '/v4/cockpit/monat',        active: aktiv('/v4/cockpit') },
     { key: 'komponenten',  label: 'Komponenten',  icon: Boxes,           to: '/v4/komponenten',          active: aktiv('/v4/komponenten') },
-    { key: 'auswertungen', label: 'Auswertungen', icon: BarChart3,       to: '/v4/auswertungen/tabelle', active: aktiv('/v4/auswertungen') },
+    { key: 'auswertungen', label: 'Auswertungen', icon: BarChart3,       to: '/v4/auswertungen',         active: aktiv('/v4/auswertungen') },
     { key: 'community',    label: 'Community',    icon: Users,           to: '/v4/community',            active: aktiv('/v4/community') },
   ]
   const meta: IANavItem[] = [

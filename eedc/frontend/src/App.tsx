@@ -73,7 +73,6 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
   ? {
       LayoutV4: lazy(() => import('./v4/LayoutV4')),
       CockpitV4: lazy(() => import('./v4/CockpitV4')),
-      AuswertungenTabelleV4: lazy(() => import('./v4/AuswertungenTabelleV4')),
       Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
@@ -175,9 +174,12 @@ function App() {
               <Route index element={<Navigate to="/v4/cockpit/monat" replace />} />
               <Route path="cockpit" element={<Navigate to="/v4/cockpit/monat" replace />} />
               <Route path="cockpit/:zeit" element={<V4.CockpitV4 />} />
-              <Route path="auswertungen" element={<Navigate to="/v4/auswertungen/tabelle" replace />} />
-              <Route path="auswertungen/tabelle" element={<V4.AuswertungenTabelleV4 />} />
-              {/* Noch nicht gebaute Achsen — Platzhalter hält die Nav vollständig. */}
+              {/* Noch nicht gebaute Achsen/Sichten — Platzhalter hält die Nav
+                  vollständig. Auswertungen folgt als eigenes Muster nach Phase 3;
+                  bis dahin KEIN rohes Tabellen-Gerüst (AuswertungenTabelleV4 bleibt
+                  im Repo, aber unverdrahtet). */}
+              <Route path="auswertungen" element={<V4.Platzhalter />} />
+              <Route path="auswertungen/tabelle" element={<V4.Platzhalter />} />
               <Route path="komponenten" element={<V4.Platzhalter />} />
               <Route path="community" element={<V4.Platzhalter />} />
               <Route path="hilfe" element={<V4.Platzhalter />} />

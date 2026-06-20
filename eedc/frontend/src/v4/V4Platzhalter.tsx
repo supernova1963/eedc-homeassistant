@@ -9,6 +9,7 @@ import { Card } from '../components/ui'
 
 const LABEL: Record<string, string> = {
   komponenten: 'Komponenten',
+  auswertungen: 'Auswertungen',
   community: 'Community',
   hilfe: 'Hilfe',
   einstellungen: 'Einstellungen',
