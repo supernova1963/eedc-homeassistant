@@ -9,6 +9,7 @@ nur geladen wenn SUPERVISOR_TOKEN gesetzt ist.
 
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -165,9 +166,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.debug(f"Cache-Warmup fehlgeschlagen: {e}")
 
+    # Statische Demo-/Showcase-Deployments (z. B. Tester-Server) brauchen weder
+    # Scheduler noch externe Prefetches: keine Hintergrund-Snapshots (→ kein
+    # Default-Monat-Drift bei festen Daten), keine Wetter/Preis-API-Calls.
+    _disable_scheduler = os.environ.get("EEDC_DISABLE_SCHEDULER", "").lower() == "true"
+
     # Kein L2-Inhalt → Prefetch sofort im Hintergrund starten
     # Damit ist der Cache warm bevor der erste User die Seite lädt.
-    if _cache_cold:
+    if _cache_cold and not _disable_scheduler:
         try:
             from backend.services.prefetch_service import prefetch_all_prognosen
 
@@ -176,8 +182,10 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.debug(f"Sofort-Prefetch fehlgeschlagen: {e}")
 
-    # Scheduler starten
-    if start_scheduler():
+    # Scheduler starten (im statischen Demo-Modus bewusst übersprungen)
+    if _disable_scheduler:
+        print("Scheduler deaktiviert (EEDC_DISABLE_SCHEDULER=true) — statische Demo.")
+    elif start_scheduler():
         print("Scheduler gestartet.")
         # Snapshot-Recovery für Restart-Edge-Case (verpasste :05/:55-Jobs)
         try:

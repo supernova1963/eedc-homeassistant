@@ -64,18 +64,27 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Verfügbare Monate + Monatsreihe (für Vormonat/Ø-Monat) laden → neuesten vorwählen.
+  // Verfügbare Monate + Monatsreihe (für Vormonat/Ø-Monat) laden → Default vorwählen.
+  // Beide Quellen parallel, damit die Default-Wahl die Monatsdaten kennt.
   useEffect(() => {
     if (!anlageId) return
     let ab = false
-    monatsdatenApi.listAggregiert(anlageId).then((m) => { if (!ab) setAlleMonate(m) }).catch(() => {})
-    energieProfilApi.getVerfuegbareMonate(anlageId)
-      .then((ms) => {
+    Promise.all([
+      monatsdatenApi.listAggregiert(anlageId),
+      energieProfilApi.getVerfuegbareMonate(anlageId),
+    ])
+      .then(([agg, ms]) => {
         if (ab) return
+        setAlleMonate(agg)
         setMonate(ms)
-        if (ms.length > 0) {
-          const neueste = [...ms].sort((a, b) => (a.jahr !== b.jahr ? b.jahr - a.jahr : b.monat - a.monat))[0]
-          setGewaehlt({ jahr: neueste.jahr, monat: neueste.monat })
+        // Default = neuester Monat MIT Monatsdaten — NICHT bloß die neueste TEP/TZ-
+        // Zeile: ein laufender Monat ohne Abschluss (oder eine Snapshot-Streuzeile)
+        // würde sonst leer vorgewählt. Fallback: neuester verfügbarer Monat.
+        const desc = <T extends { jahr: number; monat: number }>(xs: T[]) =>
+          [...xs].sort((a, b) => (a.jahr !== b.jahr ? b.jahr - a.jahr : b.monat - a.monat))
+        const wahl = desc(agg)[0] ?? desc(ms)[0]
+        if (wahl) {
+          setGewaehlt({ jahr: wahl.jahr, monat: wahl.monat })
         } else {
           setLoading(false)
         }

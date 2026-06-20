@@ -86,8 +86,9 @@ function App() {
       <Suspense fallback={null}>
         <Routes>
           <Route path="/" element={<Layout />}>
-            {/* Redirect root to Live Dashboard */}
-            <Route index element={<Navigate to="/live" replace />} />
+            {/* Root-Redirect: Release → Live-Dashboard; flag-on Build (VITE_IA_V4)
+                → direkt in die IA-v4-Demo (Tester-Server landet auf v4). */}
+            <Route index element={<Navigate to={V4 ? '/v4/cockpit/monat' : '/live'} replace />} />
 
             {/* Cockpit (Dashboards) */}
             <Route path="cockpit" element={<Dashboard />} />
