@@ -17,7 +17,7 @@
  */
 import { fmtCalc } from '../components/ui'
 import FormelTooltip, { SimpleTooltip } from '../components/ui/FormelTooltip'
-import { VerteilungsBalken } from '../components/blocks'
+import { VerteilungsBalken, GeraeteHinweis } from '../components/blocks'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -200,6 +200,12 @@ export function MonatBilanz({
     ? Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)
     : null
 
+  // Woraus sich die PV-Erzeugung zusammensetzt (Strings + WR) — Aggregations-Hinweis.
+  const pvGeraete = [
+    ...(d.komponenten_geraete?.['pv-module'] ?? []),
+    ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
+  ]
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* IST/VM/VJ/Ø-Vergleich (B10) */}
@@ -310,6 +316,12 @@ export function MonatBilanz({
                 { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: 'bg-green-500' },
               ]}
             />
+          </div>
+        )}
+
+        {pvGeraete.length >= 2 && (
+          <div className="mt-3">
+            <GeraeteHinweis label="PV-Erzeugung aus" namen={pvGeraete} />
           </div>
         )}
       </div>

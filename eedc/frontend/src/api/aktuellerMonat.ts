@@ -151,6 +151,8 @@ export interface AktuellerMonatResponse {
 
   // Per-Investition Finanzdetails (T-Konto)
   investitionen_financials: InvestitionFinancialDetail[]
+  // Aktive Geräte je Typ im Monat (Namen) — für „aggregiert aus …"-Hinweise
+  komponenten_geraete: Record<string, string[]>
 
   // Quellenangabe pro Feld
   feld_quellen: Record<string, DatenquelleInfo>

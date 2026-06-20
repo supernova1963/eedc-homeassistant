@@ -216,6 +216,11 @@ class AktuellerMonatResponse(BaseModel):
     # Per-Investition Finanzdetails (für T-Konto)
     investitionen_financials: list[InvestitionFinancialDetail] = []
 
+    # Aktive Geräte je Typ im Monat (Namen) — macht in aggregierten Blöcken
+    # kenntlich, woraus die Summe besteht (z. B. PV aus mehreren Strings + WR,
+    # E-Mob aus Auto + Wallbox). Deckungsgleich mit der Aggregation (ist_aktiv_im_monat).
+    komponenten_geraete: dict[str, list[str]] = {}
+
     # Quellenangabe pro Feld
     feld_quellen: dict[str, DatenquelleInfo] = {}
 
@@ -1509,6 +1514,12 @@ async def get_aktueller_monat(
         if not feld.startswith("inv_")  # Investitions-Detail-Felder ausblenden
     }
 
+    # ── Aktive Geräte je Typ (Namen) für die „aggregiert aus …"-Hinweise ──
+    komponenten_geraete: dict[str, list[str]] = {}
+    for _inv in investitionen:
+        if _inv.ist_aktiv_im_monat(jahr, monat):
+            komponenten_geraete.setdefault(_inv.typ, []).append(_inv.bezeichnung)
+
     # ── Per-Investition Finanzdetails (T-Konto) ──
     investitionen_financials: list[InvestitionFinancialDetail] = []
     if investitionen and allgemein_tarif:
@@ -1673,6 +1684,7 @@ async def get_aktueller_monat(
         soll_pv_kwh=soll_pv,
         # Per-Investition Finanzdetails
         investitionen_financials=investitionen_financials,
+        komponenten_geraete=komponenten_geraete,
         # Quellen
         feld_quellen=feld_quellen,
     )

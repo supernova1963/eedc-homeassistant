@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { TagesverlaufChart, baueVerlaufDaten, baueFlussDaten } from './TagesverlaufChart'
+import { TagesverlaufChart, baueChartDaten } from './TagesverlaufChart'
 import type { TagWerte } from '../api/energie_profil'
 
 function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
@@ -24,38 +24,34 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
   }
 }
 
-describe('baueVerlaufDaten', () => {
-  it('eine Säule je Tag, Netzbezug negativ, aufsteigend sortiert', () => {
-    const d = baueVerlaufDaten([tw('2026-05-11', { netzbezug: 6 }), tw('2026-05-10')])
+describe('baueChartDaten', () => {
+  it('eine Zeile je Tag, aufsteigend sortiert, Netzbezug positiv, mit Direktverbrauch + Speicher-Entladung', () => {
+    const d = baueChartDaten([tw('2026-05-11'), tw('2026-05-10', { speicher_entladung: 3 })])
     expect(d.map((p) => p.tag)).toEqual([10, 11])
     expect(d[0].eigenverbrauch).toBe(18)
     expect(d[0].einspeisung).toBe(12)
-    expect(d[0].netzbezug).toBe(-6) // Senke nach unten
+    expect(d[0].netzbezug).toBe(6)         // positiv (gestapelt, kein Vorzeichen-Flip)
+    expect(d[0].direktverbrauch).toBe(15)
+    expect(d[0].speicherEntladung).toBe(3)
   })
-})
 
-describe('baueFlussDaten', () => {
-  it('Erzeugung = EV+Einspeisung, Verbrauch = EV+Netzbezug (Monats-Σ)', () => {
-    const f = baueFlussDaten([tw('2026-05-10'), tw('2026-05-11')])
-    const erz = f.find((b) => b.name === 'Erzeugung')!
-    const vbr = f.find((b) => b.name === 'Verbrauch')!
-    expect(erz.eigenverbrauch).toBe(36) // 2 × 18
-    expect(erz.einspeisung).toBe(24)    // 2 × 12
-    expect(erz.netzbezug).toBe(0)
-    expect(vbr.eigenverbrauch).toBe(36)
-    expect(vbr.netzbezug).toBe(12)      // 2 × 6
-    expect(vbr.einspeisung).toBe(0)
+  it('speicher_entladung null → 0', () => {
+    const d = baueChartDaten([tw('2026-05-10')])
+    expect(d[0].speicherEntladung).toBe(0)
   })
 })
 
 describe('TagesverlaufChart', () => {
-  it('Linsen-Toggle schaltet Tagesverlauf ⇄ Monats-Fluss', () => {
-    render(<TagesverlaufChart tage={[tw('2026-05-10'), tw('2026-05-11')]} />)
-    const fluss = screen.getByRole('button', { name: /Monats-Fluss/ })
-    const verlauf = screen.getByRole('button', { name: /Tagesverlauf/ })
-    expect(verlauf).toHaveClass('shadow-sm') // default aktiv
-    fireEvent.click(fluss)
-    expect(fluss).toHaveClass('shadow-sm')
+  it('Toggle Erzeugung ⇄ Verbrauch ändert die Stapel-Beschreibung (Direktverbrauch)', () => {
+    render(<TagesverlaufChart tage={[tw('2026-05-10')]} />)
+    expect(screen.getByText(/Eigenverbrauch \+ Einspeisung = PV-Erzeugung/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Verbrauch' }))
+    expect(screen.getByText(/Direktverbrauch \+ Speicher-Entladung \+ Netzbezug = Gesamtverbrauch/)).toBeInTheDocument()
+  })
+
+  it('Autarkie %-Toggle vorhanden', () => {
+    render(<TagesverlaufChart tage={[tw('2026-05-10')]} />)
+    expect(screen.getByRole('button', { name: 'Autarkie %' })).toBeInTheDocument()
   })
 
   it('leerer Monat → Hinweis statt Chart', () => {

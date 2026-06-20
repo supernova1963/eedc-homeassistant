@@ -219,7 +219,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
         id: 'tagesverlauf',
         title: 'Verlauf',
         ...BLOCK_IDENTITAET.verlauf,
-        summary: 'Tageswerte des Monats ⇄ Monats-Fluss',
+        summary: 'Tages-Bilanz: Erzeugung / Verbrauch / Autarkie',
         defaultOpen: false,
         render: () => <TagesverlaufChart tage={tage} />,
       },

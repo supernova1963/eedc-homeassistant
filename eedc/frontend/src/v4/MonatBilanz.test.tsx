@@ -89,6 +89,17 @@ describe('MonatBilanz — PV-Verteilung (O3-Revision: Balken wie IST)', () => {
     render(<MonatBilanz d={d({ pv_erzeugung_kwh: 0 })} vm={vm} glMonStats={null} monatName="Mai" />)
     expect(screen.queryByText('PV-Verteilung')).not.toBeInTheDocument()
   })
+
+  it('PV-Geräte-Hinweis bei mehreren Strings + WR', () => {
+    render(<MonatBilanz d={d({ komponenten_geraete: { 'pv-module': ['Süddach', 'Ostdach', 'Westdach'], 'wechselrichter': ['Fronius'] } })} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.getByText(/PV-Erzeugung aus:/)).toBeInTheDocument()
+    expect(screen.getByText(/Süddach · Ostdach · Westdach · Fronius/)).toBeInTheDocument()
+  })
+
+  it('PV-Geräte-Hinweis aus bei nur einem Gerät', () => {
+    render(<MonatBilanz d={d({ komponenten_geraete: { 'pv-module': ['Süddach'] } })} vm={vm} glMonStats={null} monatName="Mai" />)
+    expect(screen.queryByText(/PV-Erzeugung aus/)).not.toBeInTheDocument()
+  })
 })
 
 describe('MonatBilanz — Vergleichs-Färbung (#337)', () => {

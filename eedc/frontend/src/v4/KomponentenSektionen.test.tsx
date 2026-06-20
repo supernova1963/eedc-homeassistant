@@ -129,3 +129,24 @@ describe('Komponenten-Detail (E-Gegencheck)', () => {
     expect(screen.getByText('V2H-Rückspeisung')).toBeInTheDocument()
   })
 })
+
+describe('Geräte-Hinweis (Aggregation kenntlich machen)', () => {
+  it('mehrere Geräte im Block → „Aggregiert aus …" mit Namen (E-Mob: Auto + Wallbox)', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      emob_ladung_kwh: 62,
+      komponenten_geraete: { 'e-auto': ['Tesla Model 3'], 'wallbox': ['go-eCharger'] },
+    }))
+    renderBlock(bloecke, 'k-emob')
+    expect(screen.getByText(/Aggregiert aus:/)).toBeInTheDocument()
+    expect(screen.getByText(/Tesla Model 3 · go-eCharger/)).toBeInTheDocument()
+  })
+
+  it('nur ein Gerät → kein Hinweis', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      speicher_ladung_kwh: 99,
+      komponenten_geraete: { 'speicher': ['BYD HVS'] },
+    }))
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.queryByText(/Aggregiert aus/)).not.toBeInTheDocument()
+  })
+})

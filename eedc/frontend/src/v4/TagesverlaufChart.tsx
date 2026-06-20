@@ -1,75 +1,58 @@
 /**
- * TagesverlaufChart — Hauptblock der Cockpit/Monat-Sicht (IA v4 E3, B4).
+ * TagesverlaufChart — „Verlauf"-Hauptblock der Cockpit/Monat-Sicht (IA v4 E3, B4).
  *
- * Zeigt den gewählten Monat als TAGES-Verlauf (eine Säule je Tag) und schaltet
- * per Linsen-Toggle auf den aggregierten MONATS-FLUSS um. In beiden Linsen ist
- * die PV-Verteilung Eigenverbrauch/Einspeisung im Chart gesplittet: die
- * Erzeugungs-Säule ist EV (unten) + Einspeisung (oben). Hinweis (O3-Revision
- * 2026-06-18): das ersetzt NICHT die vertrauten Verteilungs-Balken in der
- * Energie-Bilanz (die bleiben wie im IST) — der Chart-Split ist zusätzlich.
+ * Gestapelter Tages-Balken-Chart im bewährten Stil der IST-Auswertung
+ * („Energie-Bilanz pro Monat", `pages/auswertung/EnergieTab.tsx`), hier aber auf
+ * die TAGE des gewählten Monats angewandt (granularitäts-agnostisches Prinzip:
+ * Monat→Tage, später Tag→Stunden / Jahr→Monate). Toggles:
+ *   • Erzeugung  — Eigenverbrauch + Einspeisung gestapelt (= PV) · Netzbezug separat
+ *   • Verbrauch  — Direktverbrauch + Speicher-Entladung + Netzbezug gestapelt
+ *                  (= Gesamtverbrauch) · Einspeisung separat  ← Direktverbrauch-Detail
+ *   • Autarkie % — optionale Linie auf zweiter (%)-Achse
  *
- * Datenquelle: `TagWerte[]` aus dem Tages-Werte-Endpoint (numerischer Zwilling
- * des Werte-Embeds, B9) — dieselbe SoT wie die Tabelle, damit Chart und Zahlen
- * nie auseinanderlaufen.
+ * Datenquelle: `TagWerte[]` (Tages-Werte-Endpoint) — dieselbe SoT wie die
+ * Auswertungen/Tabelle, damit Chart und Zahlen nie auseinanderlaufen.
  */
 import { useMemo, useState } from 'react'
 import {
-  ComposedChart, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, ReferenceLine,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { BarChart3, Workflow } from 'lucide-react'
 import { ChartTooltip } from '../components/ui'
 import { CHART_COLORS } from '../lib'
 import type { TagWerte } from '../api/energie_profil'
 
-export type Linse = 'verlauf' | 'fluss'
+type BilanzView = 'erzeugung' | 'verbrauch'
 
-interface VerlaufPunkt {
+interface ChartPunkt {
   tag: number
   eigenverbrauch: number
   einspeisung: number
-  netzbezug: number  // negativ (Senke)
+  netzbezug: number
+  direktverbrauch: number
+  speicherEntladung: number
+  autarkie: number | null
 }
 
-/** Pro Tag: Erzeugung (EV+Einspeisung) nach oben, Netzbezug nach unten. */
-export function baueVerlaufDaten(tage: TagWerte[]): VerlaufPunkt[] {
+/** Pro Tag des Monats die Bilanz-Werte (aufsteigend nach Datum). */
+export function baueChartDaten(tage: TagWerte[]): ChartPunkt[] {
   return [...tage]
     .sort((a, b) => a.datum.localeCompare(b.datum))
     .map((t) => ({
       tag: Number(t.datum.slice(8, 10)),
       eigenverbrauch: round1(t.eigenverbrauch),
       einspeisung: round1(t.einspeisung),
-      netzbezug: round1(-t.netzbezug),
+      netzbezug: round1(t.netzbezug),
+      direktverbrauch: round1(t.direktverbrauch),
+      speicherEntladung: round1(t.speicher_entladung ?? 0),
+      autarkie: t.autarkie != null ? round1(t.autarkie) : null,
     }))
 }
 
-interface FlussBalken {
-  name: string
-  eigenverbrauch: number
-  einspeisung: number
-  netzbezug: number
-}
-
-/** Monats-Σ: „Erzeugung" = EV+Einspeisung, „Verbrauch" = EV+Netzbezug. */
-export function baueFlussDaten(tage: TagWerte[]): FlussBalken[] {
-  const ev = sum(tage, (t) => t.eigenverbrauch)
-  const einsp = sum(tage, (t) => t.einspeisung)
-  const netz = sum(tage, (t) => t.netzbezug)
-  return [
-    { name: 'Erzeugung', eigenverbrauch: round1(ev), einspeisung: round1(einsp), netzbezug: 0 },
-    { name: 'Verbrauch', eigenverbrauch: round1(ev), einspeisung: 0, netzbezug: round1(netz) },
-  ]
-}
-
-const LINSEN: { key: Linse; label: string; icon: typeof BarChart3 }[] = [
-  { key: 'verlauf', label: 'Tagesverlauf', icon: BarChart3 },
-  { key: 'fluss', label: 'Monats-Fluss', icon: Workflow },
-]
-
 export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
-  const [linse, setLinse] = useState<Linse>('verlauf')
-  const verlauf = useMemo(() => baueVerlaufDaten(tage), [tage])
-  const fluss = useMemo(() => baueFlussDaten(tage), [tage])
+  const [view, setView] = useState<BilanzView>('erzeugung')
+  const [showAutarkie, setShowAutarkie] = useState(false)
+  const daten = useMemo(() => baueChartDaten(tage), [tage])
 
   if (tage.length === 0) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Tagesdaten im Monat.</p>
@@ -77,54 +60,75 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
 
   return (
     <div className="space-y-3">
-      {/* Linsen-Toggle */}
-      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
-        {LINSEN.map((l) => {
-          const Icon = l.icon
-          const aktiv = linse === l.key
-          return (
+      {/* Toggles: Erzeugung/Verbrauch + Autarkie % (wie IST-Auswertung) */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          {(['erzeugung', 'verbrauch'] as const).map((v) => (
             <button
-              key={l.key}
+              key={v}
               type="button"
-              onClick={() => setLinse(l.key)}
-              className={`min-h-[36px] flex items-center gap-1.5 px-3 rounded-md text-sm font-medium transition-colors ${
-                aktiv
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              onClick={() => setView(v)}
+              className={`min-h-[36px] px-3 text-sm font-medium transition-colors ${
+                view === v
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
+                  : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
               }`}
             >
-              <Icon className="h-4 w-4" /> {l.label}
+              {v === 'erzeugung' ? 'Erzeugung' : 'Verbrauch'}
             </button>
-          )
-        })}
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowAutarkie((s) => !s)}
+          className={`min-h-[36px] px-3 text-sm font-medium rounded-lg border transition-colors ${
+            showAutarkie
+              ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800'
+          }`}
+        >
+          Autarkie %
+        </button>
       </div>
+
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        {view === 'erzeugung'
+          ? 'Gestapelt: Eigenverbrauch + Einspeisung = PV-Erzeugung'
+          : 'Gestapelt: Direktverbrauch + Speicher-Entladung + Netzbezug = Gesamtverbrauch'}
+      </p>
 
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          {linse === 'verlauf' ? (
-            <ComposedChart data={verlauf} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} stackOffset="sign">
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="tag" tick={{ fontSize: 12 }} />
-              <YAxis width={48} tick={{ fontSize: 12 }} />
-              <ReferenceLine y={0} className="stroke-gray-400 dark:stroke-gray-500" />
-              <Tooltip content={<ChartTooltip unit=" kWh" decimals={1} />} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} />
-              <Bar dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} />
-              <Bar dataKey="netzbezug" name="Netzbezug" stackId="netz" fill={CHART_COLORS.netzbezug} />
-            </ComposedChart>
-          ) : (
-            <BarChart data={fluss} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis width={48} tick={{ fontSize: 12 }} />
-              <Tooltip content={<ChartTooltip unit=" kWh" decimals={1} />} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="f" fill={CHART_COLORS.eigenverbrauch} />
-              <Bar dataKey="einspeisung" name="Einspeisung" stackId="f" fill={CHART_COLORS.einspeisung} />
-              <Bar dataKey="netzbezug" name="Netzbezug" stackId="f" fill={CHART_COLORS.netzbezug} />
-            </BarChart>
-          )}
+          <ComposedChart data={daten} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+            <XAxis dataKey="tag" tick={{ fontSize: 12 }} />
+            <YAxis yAxisId="kwh" width={48} tick={{ fontSize: 12 }} unit=" kWh" />
+            {showAutarkie && (
+              <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} width={40} tick={{ fontSize: 12 }} unit=" %" />
+            )}
+            <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
+              name === 'Autarkie' ? `${value.toFixed(1)} %` : `${value.toFixed(1)} kWh`} />} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+
+            {view === 'erzeugung' ? (
+              <>
+                <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} />
+                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} />
+                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} />
+              </>
+            ) : (
+              <>
+                <Bar yAxisId="kwh" dataKey="direktverbrauch" name="Direktverbrauch" stackId="vb" fill={CHART_COLORS.direktverbrauch} />
+                <Bar yAxisId="kwh" dataKey="speicherEntladung" name="Speicher-Entladung" stackId="vb" fill={CHART_COLORS.speicherEntladung} />
+                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" stackId="vb" fill={CHART_COLORS.netzbezug} />
+                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} />
+              </>
+            )}
+
+            {showAutarkie && (
+              <Line yAxisId="pct" type="monotone" dataKey="autarkie" name="Autarkie" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} connectNulls />
+            )}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -133,8 +137,4 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
 
 function round1(v: number): number {
   return Math.round(v * 10) / 10
-}
-
-function sum(tage: TagWerte[], f: (t: TagWerte) => number): number {
-  return tage.reduce((s, t) => s + (f(t) || 0), 0)
 }

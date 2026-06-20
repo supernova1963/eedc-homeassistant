@@ -16,7 +16,7 @@ import { Battery, TrendingUp, Plug, Power, Clock } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
 import QuelleBadge from '../components/ui/QuelleBadge'
-import { KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
+import { KpiStrip, VerteilungsBalken, GeraeteHinweis, type Block, type KpiStripItem } from '../components/blocks'
 import {
   KOMPONENTEN_IDENTITAET,
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
@@ -33,11 +33,17 @@ const ident = (typ: string) => {
   return { icon: i.icon, farbe: i.farbe }
 }
 
-function Sektion({ kpis, extra }: { kpis: KpiStripItem[]; extra?: ReactNode }) {
+/** Aktive Geräte-Namen eines oder mehrerer Typen (für den „aggregiert aus …"-Hinweis). */
+function geraeteNamen(d: AktuellerMonatResponse, ...typen: string[]): string[] {
+  return typen.flatMap((t) => d.komponenten_geraete?.[t] ?? [])
+}
+
+function Sektion({ kpis, extra, geraete }: { kpis: KpiStripItem[]; extra?: ReactNode; geraete?: string[] }) {
   return (
     <div className="space-y-3">
       <KpiStrip kpis={kpis} />
       {extra}
+      {geraete && <GeraeteHinweis namen={geraete} />}
     </div>
   )
 }
@@ -133,7 +139,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
     bloecke.push({
       id: 'k-speicher', title: 'Speicher', ...ident('speicher'), defaultOpen: false,
       summary: `${fmt(d.speicher_ladung_kwh)} kWh geladen · ${fmtCalc(d.speicher_vollzyklen, 1, '—')} Zyklen · ${fmtCalc(d.speicher_wirkungsgrad_prozent, 0, '—')} % η`,
-      render: () => <Sektion kpis={kpis} extra={<DetailListe rows={detail} />} />,
+      render: () => <Sektion kpis={kpis} extra={<DetailListe rows={detail} />} geraete={geraeteNamen(d, 'speicher')} />,
     })
   }
 
@@ -175,7 +181,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
           ]} />
           <DetailListe rows={wpDetail} />
         </>
-      } />,
+      } geraete={geraeteNamen(d, 'waermepumpe')} />,
     })
   }
 
@@ -199,7 +205,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
     bloecke.push({
       id: 'k-emob', title: 'E-Mobilität', ...ident('e-auto'), defaultOpen: false,
       summary: `${fmt(d.emob_ladung_kwh)} kWh geladen · ${fmt(d.emob_km)} km${hat(d.emob_ersparnis_euro) ? ` · +${fmt(d.emob_ersparnis_euro, 2)} € vs. Verbrenner` : ''}`,
-      render: () => <Sektion kpis={kpis} extra={<DetailListe rows={emobDetail} />} />,
+      render: () => <Sektion kpis={kpis} extra={<DetailListe rows={emobDetail} />} geraete={geraeteNamen(d, 'e-auto', 'wallbox')} />,
     })
   }
 
@@ -219,7 +225,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
     bloecke.push({
       id: 'k-bkw', title: 'Balkonkraftwerk', ...ident('balkonkraftwerk'), defaultOpen: false,
       summary: `${fmt(d.bkw_erzeugung_kwh)} kWh erzeugt · in Gesamt-PV enthalten`,
-      render: () => <Sektion kpis={kpis} />,
+      render: () => <Sektion kpis={kpis} geraete={geraeteNamen(d, 'balkonkraftwerk')} />,
     })
   }
 
