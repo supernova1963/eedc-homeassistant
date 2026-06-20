@@ -39,6 +39,7 @@ import type { LucideIcon } from 'lucide-react'
 import { IATopNav } from '../layout/IATopNav'
 import { IASubTabBar } from '../layout/IASubTabBar'
 import { AnlagenSelektorView } from '../layout/AnlagenSelektorView'
+import { APP_VERSION } from '../../config/version'
 
 // ─── Achsen / Tabs (Struktur-SoT: KONZEPT-IA-V4) ─────────────────────────────
 type TopKey = 'cockpit' | 'komponenten' | 'auswertungen' | 'community' | 'hilfe' | 'einstellungen'
@@ -844,6 +845,41 @@ const DEMO_ANLAGEN = [
   { id: 2, anlagenname: 'Ferienhaus Süd' },
 ]
 
+// ─── VORSCHLAG Shell-Konzept-Runde: persistente Status-Fußzeile ───────────────
+// „Wie geht's dem System gerade?" — heute über die App verstreut (Connector-
+// Status, Daten-Checker, MQTT-Badge, Backup-Alter, Update-Banner). Idee (Gernot
+// 2026-06-20, à la Windows-Dienste): EINE glanceable Leiste unten, je Dienst ein
+// Status-Punkt + Detail, klickbar → Details/Cross-Link. Hier als Demo-Vorschlag;
+// gehört in die gemeinsame Shell-Konzept-Runde (Header-Chrome + Footer), bevor
+// die echte (geteilte) Komponente entsteht. Version wandert mit hierher.
+const STATUS_DIENSTE: { label: string; ton: 'ok' | 'warnung' | 'kritisch'; detail: string }[] = [
+  { label: 'Connectoren', ton: 'ok', detail: '2/2 online' },
+  { label: 'Daten-Checker', ton: 'warnung', detail: '3 Hinweise' },
+  { label: 'MQTT', ton: 'ok', detail: 'verbunden' },
+  { label: 'Backup', ton: 'ok', detail: 'vor 2 Tagen' },
+  { label: 'Solarprognose', ton: 'warnung', detail: 'PVGIS > 7 Tage' },
+]
+const TON_KLASSE = { ok: 'text-green-500', warnung: 'text-amber-500', kritisch: 'text-red-500' } as const
+
+function StatusFooter() {
+  return (
+    <footer className="shrink-0 h-9 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 sm:px-6 flex items-center gap-4 overflow-x-auto scrollbar-none text-xs">
+      {STATUS_DIENSTE.map((d) => {
+        const Icon = d.ton === 'ok' ? CheckCircle2 : AlertTriangle
+        return (
+          <button key={d.label} type="button" title={`${d.label}: ${d.detail} — Details öffnen`}
+            className="flex items-center gap-1.5 whitespace-nowrap shrink-0 hover:underline">
+            <Icon className={`h-3.5 w-3.5 ${TON_KLASSE[d.ton]}`} />
+            <span className="text-gray-600 dark:text-gray-300 font-medium">{d.label}</span>
+            <span className="text-gray-400 dark:text-gray-500">{d.detail}</span>
+          </button>
+        )
+      })}
+      <span className="ml-auto shrink-0 font-mono text-gray-400 dark:text-gray-500 whitespace-nowrap">eedc v{APP_VERSION}</span>
+    </footer>
+  )
+}
+
 export default function IASkeleton() {
   const [top, setTop] = useState<TopKey>('cockpit')
   const [demoAnlageId, setDemoAnlageId] = useState(1)
@@ -878,6 +914,9 @@ export default function IASkeleton() {
         {top === 'hilfe' && <HilfeView />}
         {top === 'einstellungen' && <EinstellungenView />}
       </main>
+
+      {/* VORSCHLAG (Shell-Konzept-Runde): persistente Status-Fußzeile + Version. */}
+      <StatusFooter />
     </div>
   )
 }
