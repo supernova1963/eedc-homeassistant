@@ -325,7 +325,9 @@ async def lifespan(app: FastAPI):
         else:
             print("  MQTT-Inbound: konnte nicht gestartet werden")
 
-    # Initialer Prognose-Prefetch nach kurzem Delay (DB + Scheduler müssen bereit sein)
+    # Initialer Prognose-Prefetch nach kurzem Delay (DB + Scheduler müssen bereit
+    # sein). Im statischen Demo-Modus übersprungen — der Prefetch holt externe
+    # Wetterdaten UND persistiert eine HEUTE-Tageszeile (Default-Monat-Drift).
     async def _initial_prefetch():
         await asyncio.sleep(30)
         try:
@@ -338,7 +340,8 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.debug(f"Initialer Prognose-Prefetch fehlgeschlagen: {e}")
 
-    asyncio.create_task(_initial_prefetch())
+    if not _disable_scheduler:
+        asyncio.create_task(_initial_prefetch())
 
     yield
 
