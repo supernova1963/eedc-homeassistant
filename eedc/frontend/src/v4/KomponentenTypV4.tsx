@@ -20,6 +20,7 @@ import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { BarChart3, ExternalLink, Settings } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet } from './komponentenAdapter'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
+import { KomponentenVergleich } from './KomponentenVergleich'
 import type { Investition } from '../types'
 
 /** Read-only Einstellungs-Anzeige je Gerät (#243 A1-B): Stammdaten + Parameter
@@ -101,13 +102,13 @@ function geraetBloecke(g: KompGeraet): Block[] {
     },
     {
       id: 'vergleich', title: 'Vergleich', icon: BarChart3,
-      summary: 'Diagramm ⇄ Tabelle · Vergleichsjahr', defaultOpen: false,
-      render: () => (
-        <FolgtHinweis
-          text="Vergleich (Vorjahr/Saison, Diagramm ⇄ scoped Werte-Tabelle) folgt. Der volle Mehrjahres-Vergleich mit Spalten-Picker lebt in den Auswertungen."
-          crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/v4/auswertungen/tabelle' }}
-        />
-      ),
+      summary: 'Jahresvergleich · Diagramm ⇄ Tabelle', defaultOpen: false,
+      render: () => (g.vergleich
+        ? <KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} />
+        : <FolgtHinweis
+            text="Für diesen Typ liegt noch kein Jahresvergleich vor."
+            crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/v4/auswertungen/tabelle' }}
+          />),
     },
     {
       id: 'einstellungen', title: 'Einstellungen', icon: Settings,

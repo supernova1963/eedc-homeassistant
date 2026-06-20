@@ -43,6 +43,18 @@ export interface KompGeraet {
   aufteilung?: { titel: string; einheit?: string; segmente: VerteilungSegment[] }
   /** Block ④ Verlauf: gestapelter Monatsverlauf (gesamte Historie). */
   verlauf?: { bars: VerlaufBar[]; rows: VerlaufRow[]; einheit?: string }
+  /** Block ⑤ Vergleich (dünn): Jahressummen einer Leitkennzahl je Jahr. */
+  vergleich?: { label: string; einheit: string; farbe: string; jahre: { jahr: number; summe: number }[] }
+}
+
+/** Jahressummen einer Leitkennzahl aus den Monatsdaten (für Block ⑤ dünn). */
+function jahresSummen(
+  md: InvestitionMonatsdaten[],
+  wert: (vd: Record<string, number>) => number,
+): { jahr: number; summe: number }[] {
+  const m = new Map<number, number>()
+  for (const r of md) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, wert(r.verbrauch_daten) || 0))
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
 }
 
 /** Monatszeilen aus InvestitionMonatsdaten (chronologisch) — ein Extraktor je
@@ -86,6 +98,13 @@ function pvVerlaufRows(agg: AggregierteMonatsdaten[]): VerlaufRow[] {
     }))
 }
 
+/** PV-Jahressummen Erzeugung (= EV + Einspeisung) aus aggregierten Monaten. */
+function pvJahresSummen(agg: AggregierteMonatsdaten[]): { jahr: number; summe: number }[] {
+  const m = new Map<number, number>()
+  for (const r of agg) m.set(r.jahr, (m.get(r.jahr) ?? 0) + Math.max(0, (r.eigenverbrauch_kwh ?? 0) + (r.einspeisung_kwh ?? 0)))
+  return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([jahr, summe]) => ({ jahr, summe }))
+}
+
 export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   // PV-Anlage = anlage-weites UI-Aggregat (cockpit-Übersicht + aggregierte Monate
   // für die EV/Einspeisung-Aufteilung). Genau ein „Gerät".
@@ -119,6 +138,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           ],
           rows: pvVerlaufRows(agg),
         } : undefined,
+        vergleich: agg.length ? {
+          label: 'Erzeugung', einheit: 'kWh', farbe: CHART_COLORS.erzeugung,
+          jahre: pvJahresSummen(agg),
+        } : undefined,
       }]
     },
   },
@@ -149,6 +172,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { key: 'ladung', wert: (vd) => vd.ladung_kwh },
             { key: 'entladung', wert: (vd) => vd.entladung_kwh },
           ]),
+        } : undefined,
+        vergleich: md.length ? {
+          label: 'Entladung', einheit: 'kWh', farbe: CHART_COLORS.speicherEntladung,
+          jahre: jahresSummen(md, (vd) => vd.entladung_kwh),
         } : undefined,
       }))
     },
@@ -181,6 +208,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { key: 'warmwasser', wert: (vd) => vd.warmwasser_kwh },
           ]),
         } : undefined,
+        vergleich: md.length ? {
+          label: 'Wärme', einheit: 'kWh', farbe: CHART_COLORS.wpWaerme,
+          jahre: jahresSummen(md, (vd) => (vd.heizenergie_kwh ?? 0) + (vd.warmwasser_kwh ?? 0)),
+        } : undefined,
       }))
     },
   },
@@ -212,6 +243,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { key: 'pv', wert: (vd) => vd.ladung_pv_kwh },
             { key: 'netz', wert: (vd) => vd.ladung_netz_kwh },
           ]),
+        } : undefined,
+        vergleich: md.length ? {
+          label: 'Ladung', einheit: 'kWh', farbe: CHART_COLORS.emobLadung,
+          jahre: jahresSummen(md, (vd) => (vd.ladung_pv_kwh ?? 0) + (vd.ladung_netz_kwh ?? 0)),
         } : undefined,
       }))
     },
@@ -265,6 +300,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { key: 'ev', wert: (vd) => vd.eigenverbrauch_kwh },
             { key: 'einsp', wert: (vd) => (vd.pv_erzeugung_kwh ?? 0) - (vd.eigenverbrauch_kwh ?? 0) },
           ]),
+        } : undefined,
+        vergleich: md.length ? {
+          label: 'Erzeugung', einheit: 'kWh', farbe: CHART_COLORS.erzeugung,
+          jahre: jahresSummen(md, (vd) => vd.pv_erzeugung_kwh ?? 0),
         } : undefined,
       }))
     },

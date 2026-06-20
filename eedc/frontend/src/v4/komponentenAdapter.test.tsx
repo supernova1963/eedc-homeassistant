@@ -47,6 +47,23 @@ describe('KOMPONENTEN_ADAPTER', () => {
     // Verlauf chronologisch sortiert (Okt vor Nov), Keys ladung/entladung
     expect(g.verlauf?.bars.map((b) => b.key)).toEqual(['ladung', 'entladung'])
     expect(g.verlauf?.rows.map((r) => [r.name, r.ladung])).toEqual([['Okt 25', 80], ['Nov 25', 100]])
+    // Vergleich: Jahressumme Entladung (90 + 70 = 160 in 2025)
+    expect(g.vergleich?.label).toBe('Entladung')
+    expect(g.vergleich?.jahre).toEqual([{ jahr: 2025, summe: 160 }])
+  })
+
+  it('Vergleich: Jahressummen über mehrere Jahre, chronologisch', async () => {
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'speicher' }),
+      zusammenfassung: { vollzyklen: 1, effizienz_prozent: 90, gesamt_entladung_kwh: 0, gesamt_ladung_kwh: 0, arbitrage_kwh: 0, ersparnis_euro: 0 },
+      monatsdaten: [
+        { jahr: 2024, monat: 6, verbrauch_daten: { ladung_kwh: 10, entladung_kwh: 50 } },
+        { jahr: 2025, monat: 1, verbrauch_daten: { ladung_kwh: 10, entladung_kwh: 30 } },
+        { jahr: 2025, monat: 2, verbrauch_daten: { ladung_kwh: 10, entladung_kwh: 40 } },
+      ],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    expect(g.vergleich?.jahre).toEqual([{ jahr: 2024, summe: 50 }, { jahr: 2025, summe: 70 }])
   })
 
   it('Wärmepumpe: JAZ + Heizung/Warmwasser-Aufteilung', async () => {
