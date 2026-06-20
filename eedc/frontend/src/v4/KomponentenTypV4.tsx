@@ -19,6 +19,7 @@ import { BLOCK_IDENTITAET } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { BarChart3, ExternalLink, Settings } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet } from './komponentenAdapter'
+import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import type { Investition } from '../types'
 
 /** Read-only Einstellungs-Anzeige je Gerät (#243 A1-B): Stammdaten + Parameter
@@ -93,8 +94,10 @@ function geraetBloecke(g: KompGeraet): Block[] {
     },
     {
       id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
-      summary: 'Zeitreihe über die gesamte Laufzeit', defaultOpen: false,
-      render: () => <FolgtHinweis text="Verlaufs-Chart über die gesamte Historie (Monat/Jahr-Granularität) folgt im nächsten Schritt." />,
+      summary: 'Monatsverlauf über die gesamte Laufzeit', defaultOpen: false,
+      render: (fokus) => (g.verlauf
+        ? <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} tall={fokus} />
+        : <FolgtHinweis text="Für diesen Typ liegt keine eigene Monatszeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." />),
     },
     {
       id: 'vergleich', title: 'Vergleich', icon: BarChart3,

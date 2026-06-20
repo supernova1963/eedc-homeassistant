@@ -29,17 +29,24 @@ const titles = (ks: { title: string }[]) => ks.map((k) => k.title)
 beforeEach(() => vi.clearAllMocks())
 
 describe('KOMPONENTEN_ADAPTER', () => {
-  it('Speicher: D2-KPIs + Ladequellen-Aufteilung (PV/Netz aus Arbitrage)', async () => {
+  it('Speicher: D2-KPIs + Ladequellen-Aufteilung (PV/Netz aus Arbitrage) + Verlauf', async () => {
     getSpeicherDashboard.mockResolvedValue([{
       investition: inv({ typ: 'speicher' }),
       zusammenfassung: { vollzyklen: 312, effizienz_prozent: 90, ist_wirkungsgrad_prozent: 92,
         gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, arbitrage_kwh: 500, ersparnis_euro: 286 },
+      monatsdaten: [
+        { jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } },
+        { jahr: 2025, monat: 10, verbrauch_daten: { ladung_kwh: 80, entladung_kwh: 70 } },
+      ],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
     expect(titles(g.status)).toEqual(['Vollzyklen', 'Wirkungsgrad η', 'Durchsatz', 'Ersparnis'])
     // bevorzugt ist_wirkungsgrad_prozent (92) vor effizienz_prozent (90)
     expect(g.status[1].value).toBe('92')
     expect(g.aufteilung?.segmente.map((s) => [s.label, s.wert])).toEqual([['PV-Ladung', 4000], ['Netz-Ladung', 500]])
+    // Verlauf chronologisch sortiert (Okt vor Nov), Keys ladung/entladung
+    expect(g.verlauf?.bars.map((b) => b.key)).toEqual(['ladung', 'entladung'])
+    expect(g.verlauf?.rows.map((r) => [r.name, r.ladung])).toEqual([['Okt 25', 80], ['Nov 25', 100]])
   })
 
   it('Wärmepumpe: JAZ + Heizung/Warmwasser-Aufteilung', async () => {
@@ -47,6 +54,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
       investition: inv({ typ: 'waermepumpe' }),
       zusammenfassung: { durchschnitt_cop: 3.8, gesamt_waerme_kwh: 12400, gesamt_stromverbrauch_kwh: 3300,
         gesamt_heizenergie_kwh: 9400, gesamt_warmwasser_kwh: 3000, ersparnis_euro: 410 },
+      monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { heizenergie_kwh: 800, warmwasser_kwh: 200 } }],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
     expect(titles(g.status)).toEqual(['JAZ', 'Wärme erzeugt', 'Strom verbraucht', 'Ersparnis vs. Gas'])
@@ -58,6 +66,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
       investition: inv({ typ: 'e-auto' }),
       zusammenfassung: { gesamt_km: 14200, durchschnitt_verbrauch_kwh_100km: null, pv_anteil_heim_prozent: 61,
         ersparnis_vs_benzin_euro: 1120, gesamt_ladung_kwh: 1000, ladung_pv_kwh: 600, ladung_netz_kwh: 300, ladung_extern_kwh: 100 },
+      monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_pv_kwh: 60, ladung_netz_kwh: 30 } }],
     }])
     const [g] = await KOMPONENTEN_ADAPTER['e-auto'].fetch(1)
     expect(g.status[1].value).toBe('—')
@@ -69,6 +78,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
       investition: inv({ typ: 'sonstiges' }),
       zusammenfassung: { kategorie: 'verbraucher', beschreibung: 'Pool', gesamt_verbrauch_kwh: 320,
         pv_anteil_prozent: 72, kosten_netz_euro: 40, ersparnis_pv_euro: 96, sonderkosten_euro: 0 },
+      monatsdaten: [],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
     expect(titles(g.status)).toEqual(['Verbrauch', 'PV-Anteil', 'Netzkosten', 'PV-Ersparnis'])

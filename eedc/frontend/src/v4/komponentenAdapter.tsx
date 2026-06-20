@@ -13,9 +13,11 @@
  * Verlauf/Vergleich/Aussicht + spezifische Blöcke (②③⑥) docken später an.
  */
 import { fmtCalc } from '../components/ui'
+import { MONAT_KURZ } from '../lib'
+import { CHART_COLORS, LADEQUELLEN_FARBEN } from '../lib/colors'
 import { cockpitApi } from '../api/cockpit'
-import { investitionenApi } from '../api/investitionen'
-import { monatsdatenApi } from '../api/monatsdaten'
+import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
+import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
   PV_ANLAGE_KPI, SPEICHER_KPI, WP_KPI, EAUTO_KPI, WALLBOX_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI, SONSTIGES_SPEICHER_KPI,
@@ -23,6 +25,7 @@ import {
 } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
 import type { VerteilungSegment } from '../components/blocks'
+import type { VerlaufBar, VerlaufRow } from './KomponentenVerlaufChart'
 import type { Investition } from '../types'
 
 /** Tailwind-bg-Rollenfarben für die Aufteilungs-Segmente (keine Inline-Hex). */
@@ -38,6 +41,23 @@ export interface KompGeraet {
   label: string
   status: KpiStripItem[]
   aufteilung?: { titel: string; einheit?: string; segmente: VerteilungSegment[] }
+  /** Block ④ Verlauf: gestapelter Monatsverlauf (gesamte Historie). */
+  verlauf?: { bars: VerlaufBar[]; rows: VerlaufRow[]; einheit?: string }
+}
+
+/** Monatszeilen aus InvestitionMonatsdaten (chronologisch) — ein Extraktor je
+ *  Serie liest den passenden `verbrauch_daten`-Key (gegen Demo verifiziert). */
+function rowsAusMd(
+  md: InvestitionMonatsdaten[],
+  serien: { key: string; wert: (vd: Record<string, number>) => number }[],
+): VerlaufRow[] {
+  return [...md]
+    .sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
+    .map((m) => {
+      const row: VerlaufRow = { name: `${MONAT_KURZ[m.monat]} ${String(m.jahr).slice(2)}` }
+      for (const s of serien) row[s.key] = Math.max(0, s.wert(m.verbrauch_daten) || 0)
+      return row
+    })
 }
 
 export interface KompAdapter {
@@ -54,6 +74,17 @@ function kpi(stil: KpiStyle, value: string | number, unit?: string): KpiStripIte
 const mwh = (kwh: number | null | undefined) => fmtCalc(kwh != null ? kwh / 1000 : null, 1, '—')
 const n0 = (v: number | null | undefined) => fmtCalc(v, 0, '—')
 const n1 = (v: number | null | undefined) => fmtCalc(v, 1, '—')
+
+/** PV-Verlauf aus aggregierten Monaten (EV/Einspeisung), chronologisch. */
+function pvVerlaufRows(agg: AggregierteMonatsdaten[]): VerlaufRow[] {
+  return [...agg]
+    .sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))
+    .map((m) => ({
+      name: `${MONAT_KURZ[m.monat]} ${String(m.jahr).slice(2)}`,
+      ev: Math.max(0, m.eigenverbrauch_kwh ?? 0),
+      einsp: Math.max(0, m.einspeisung_kwh ?? 0),
+    }))
+}
 
 export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   // PV-Anlage = anlage-weites UI-Aggregat (cockpit-Übersicht + aggregierte Monate
@@ -81,6 +112,13 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Einspeisung', wert: einsp, farbe: SEG.einspeisung },
           ],
         } : undefined,
+        verlauf: agg.length ? {
+          bars: [
+            { key: 'ev', label: 'Eigenverbrauch', farbe: CHART_COLORS.eigenverbrauch },
+            { key: 'einsp', label: 'Einspeisung', farbe: CHART_COLORS.einspeisung },
+          ],
+          rows: pvVerlaufRows(agg),
+        } : undefined,
       }]
     },
   },
@@ -88,7 +126,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   speicher: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getSpeicherDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
         status: [
           kpi(SPEICHER_KPI.vollzyklen, n0(z.vollzyklen)),
@@ -102,6 +140,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Netz-Ladung', wert: z.arbitrage_kwh ?? 0, farbe: SEG.netz },
           ],
         } : undefined,
+        verlauf: md.length ? {
+          bars: [
+            { key: 'ladung', label: 'Ladung', farbe: CHART_COLORS.speicherLadung },
+            { key: 'entladung', label: 'Entladung', farbe: CHART_COLORS.speicherEntladung },
+          ],
+          rows: rowsAusMd(md, [
+            { key: 'ladung', wert: (vd) => vd.ladung_kwh },
+            { key: 'entladung', wert: (vd) => vd.entladung_kwh },
+          ]),
+        } : undefined,
       }))
     },
   },
@@ -109,7 +157,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   waermepumpe: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getWaermepumpeDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
         status: [
           kpi(WP_KPI.jaz, n1(z.durchschnitt_cop)),
@@ -123,6 +171,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Warmwasser', wert: z.gesamt_warmwasser_kwh, farbe: SEG.warmwasser },
           ],
         } : undefined,
+        verlauf: md.length ? {
+          bars: [
+            { key: 'heizung', label: 'Heizung', farbe: CHART_COLORS.wpWaerme },
+            { key: 'warmwasser', label: 'Warmwasser', farbe: CHART_COLORS.wpWarmwasser },
+          ],
+          rows: rowsAusMd(md, [
+            { key: 'heizung', wert: (vd) => vd.heizenergie_kwh },
+            { key: 'warmwasser', wert: (vd) => vd.warmwasser_kwh },
+          ]),
+        } : undefined,
       }))
     },
   },
@@ -130,7 +188,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   'e-auto': {
     async fetch(anlageId) {
       const ds = await investitionenApi.getEAutoDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
         status: [
           kpi(EAUTO_KPI.gefahren, n0(z.gesamt_km), 'km'),
@@ -144,6 +202,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Netz', wert: z.ladung_netz_kwh, farbe: SEG.netz },
             { label: 'Extern', wert: z.ladung_extern_kwh, farbe: SEG.extern },
           ],
+        } : undefined,
+        verlauf: md.length ? {
+          bars: [
+            { key: 'pv', label: 'PV-Ladung', farbe: LADEQUELLEN_FARBEN.pv },
+            { key: 'netz', label: 'Netz-Ladung', farbe: LADEQUELLEN_FARBEN.netz },
+          ],
+          rows: rowsAusMd(md, [
+            { key: 'pv', wert: (vd) => vd.ladung_pv_kwh },
+            { key: 'netz', wert: (vd) => vd.ladung_netz_kwh },
+          ]),
         } : undefined,
       }))
     },
@@ -173,7 +241,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   balkonkraftwerk: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getBalkonkraftwerkDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
         status: [
           kpi(BKW_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
@@ -186,6 +254,17 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Eigenverbrauch', wert: z.gesamt_eigenverbrauch_kwh, farbe: SEG.ev },
             { label: 'Einspeisung', wert: z.gesamt_einspeisung_kwh, farbe: SEG.einspeisung },
           ],
+        } : undefined,
+        verlauf: md.length ? {
+          bars: [
+            { key: 'ev', label: 'Eigenverbrauch', farbe: CHART_COLORS.eigenverbrauch },
+            { key: 'einsp', label: 'Einspeisung', farbe: CHART_COLORS.einspeisung },
+          ],
+          // Einspeisung im Monat = Erzeugung − Eigenverbrauch (kein eigener Key).
+          rows: rowsAusMd(md, [
+            { key: 'ev', wert: (vd) => vd.eigenverbrauch_kwh },
+            { key: 'einsp', wert: (vd) => (vd.pv_erzeugung_kwh ?? 0) - (vd.eigenverbrauch_kwh ?? 0) },
+          ]),
         } : undefined,
       }))
     },
