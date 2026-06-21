@@ -17,53 +17,22 @@ import { KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 import { energieProfilApi } from '../api/energie_profil'
+import {
+  KATEGORIE_LABELS as kategorieLabels,
+  KATEGORIE_REIHENFOLGE as kategorieReihenfolge,
+  SEVERITY_CONFIG,
+  type CheckSchwere,
+} from '../config/datenCheckerKategorien'
 
 // ─── Konstanten ─────────────────────────────────────────────────────────────
-
-const kategorieLabels: Record<string, string> = {
-  stammdaten: 'Stammdaten',
-  strompreise: 'Strompreise',
-  investitionen: 'Investitionen',
-  monatsdaten_vollstaendigkeit: 'Monatsdaten – Vollständigkeit',
-  monatsdaten_plausibilitaet: 'Monatsdaten – Plausibilität',
-  energieprofil_abdeckung: 'Energieprofil – Zähler-Abdeckung',
-  energieprofil_plausibilitaet: 'Energieprofil – Plausibilität',
-  mqtt_topic_abdeckung: 'MQTT – Topic-Abdeckung',
-  sensor_mapping_lts: 'Sensor-Mapping – HA-Statistics',
-  sensor_mapping_einheit: 'Sensor-Mapping – Einheiten (Leistung/Energie)',
-  provenance_conflict: 'Daten-Quellen – Konflikte',
-  datenquelle_status: 'Datenquelle – aktiver Pfad',
-  datenquelle_drift: 'Datenquelle – Drift zu HA-Statistics',
-  pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
-  emob_pool_pflege: 'E-Mobilität – Pool-Pflege',
-}
-
-const kategorieReihenfolge = [
-  'stammdaten',
-  'strompreise',
-  'investitionen',
-  'monatsdaten_vollstaendigkeit',
-  'monatsdaten_plausibilitaet',
-  'energieprofil_abdeckung',
-  'energieprofil_plausibilitaet',
-  'mqtt_topic_abdeckung',
-  'sensor_mapping_lts',
-  'sensor_mapping_einheit',
-  'provenance_conflict',
-  'datenquelle_status',
-  'datenquelle_drift',
-  'pv_ueber_erfassung',
-  'emob_pool_pflege',
-]
+// Kategorie-Labels/-Reihenfolge + Severity-Config sind jetzt SoT in
+// config/datenCheckerKategorien.ts (geteilt mit dem IA-V4-Komponenten-Hub).
 
 function severityIcon(schwere: string) {
-  switch (schwere) {
-    case 'error': return <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-    case 'warning': return <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-    case 'info': return <Info className="h-4 w-4 text-blue-500 flex-shrink-0" />
-    case 'ok': return <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
-    default: return null
-  }
+  const cfg = SEVERITY_CONFIG[schwere as CheckSchwere]
+  if (!cfg) return null
+  const Icon = cfg.icon
+  return <Icon className={`h-4 w-4 ${cfg.colorClass} flex-shrink-0`} />
 }
 
 function severityBadge(counts: Record<string, number>) {

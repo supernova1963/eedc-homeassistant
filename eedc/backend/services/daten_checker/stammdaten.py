@@ -254,6 +254,11 @@ class StammdatenChecks:
         for inv in aktive:
             name = f"{inv.bezeichnung} ({inv.typ})"
             param = inv.parameter or {}
+            # IA-V4 #243: alle in diesem Durchlauf erzeugten Befunde (inkl. der
+            # _check_*_monatsdaten-Helper) dieser Investition zuordnen — der
+            # Komponenten-Hub filtert darauf. Tagging am Schleifenende, da das
+            # anlagenweite _check_pv_erzeugung VOR der Schleife läuft.
+            _start = len(ergebnisse)
 
             # Typ-spezifische Prüfungen
             if inv.typ == "pv-module":
@@ -471,5 +476,8 @@ class StammdatenChecks:
                     details="Werden für ROI-Berechnung benötigt",
                     link="/einstellungen/investitionen",
                 ))
+
+            for _e in ergebnisse[_start:]:
+                _e.investition_id = inv.id
 
         return ergebnisse

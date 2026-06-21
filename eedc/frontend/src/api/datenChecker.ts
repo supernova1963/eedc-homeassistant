@@ -16,6 +16,9 @@ export interface CheckErgebnis {
   action_kind?: 'reaggregate_day'
   action_params?: Record<string, unknown>
   action_label?: string
+  // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —
+  // erlaubt dem Komponenten-Hub, Befunde je Gerät zu filtern.
+  investition_id?: number
 }
 
 export interface MonatsdatenAbdeckung {

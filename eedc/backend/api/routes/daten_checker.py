@@ -34,6 +34,8 @@ class CheckErgebnisResponse(BaseModel):
     action_kind: Optional[str] = None
     action_params: Optional[dict] = None
     action_label: Optional[str] = None
+    # IA-V4 #243: Komponenten-Zuordnung für den Komponenten-Hub-Filter.
+    investition_id: Optional[int] = None
 
 
 class MonatsdatenAbdeckungResponse(BaseModel):
@@ -84,6 +86,7 @@ async def daten_check(
                 action_kind=e.action_kind,
                 action_params=e.action_params,
                 action_label=e.action_label,
+                investition_id=e.investition_id,
             )
             for e in result.ergebnisse
         ],

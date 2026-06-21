@@ -18,13 +18,15 @@ import { BLOCK_IDENTITAET } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { sensorMappingApi } from '../api/sensorMapping'
 import { liveDashboardApi } from '../api/liveDashboard'
-import { AlertTriangle, BarChart3, Cpu, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
+import { AlertTriangle, BarChart3, ClipboardCheck, Cpu, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import { KomponentenVergleich } from './KomponentenVergleich'
 import { infothekApi } from '../api/infothek'
 import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
+import { datenCheckerApi, type CheckErgebnis } from '../api/datenChecker'
+import { SEVERITY_CONFIG, type CheckSchwere } from '../config/datenCheckerKategorien'
 import type { Investition } from '../types'
 import type { InfothekEintrag } from '../types/infothek'
 
@@ -102,6 +104,10 @@ const EDIT_INVEST = '#/einstellungen/investitionen'
 const EDIT_SENSOR = '#/einstellungen/sensor-mapping'
 const EDIT_MQTT = '#/einstellungen/mqtt-inbound'
 const EDIT_INFOTHEK = '#/einstellungen/infothek'
+const EDIT_DATENCHECKER = '#/einstellungen/daten-checker'
+
+/** Severity-Rang für die Sortierung der Daten-Checker-Befunde (error zuerst). */
+const SCHWERE_RANG: Record<CheckSchwere, number> = { error: 0, warning: 1, info: 2, ok: 3 }
 
 function EditLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -314,6 +320,76 @@ function InfothekBlock({ invs }: { invs: Investition[] }) {
   )
 }
 
+/** Eine Daten-Checker-Befund-Zeile (Severity-Icon + Meldung + optionale Details). */
+function BefundRow({ e }: { e: CheckErgebnis }) {
+  const cfg = SEVERITY_CONFIG[e.schwere]
+  const Icon = cfg?.icon ?? AlertTriangle
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${cfg?.colorClass ?? 'text-gray-400'}`} />
+      <div className="min-w-0">
+        <span className="text-gray-700 dark:text-gray-300">{e.meldung}</span>
+        {e.details && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{e.details}</p>}
+      </div>
+    </li>
+  )
+}
+
+/** Daten-Checker-Block (#243): komponenten-zuordenbare Qualitäts-Befunde dieser
+ *  Komponente (Stammdaten/Monatsdaten je Gerät), gefiltert über die vom Backend
+ *  gesetzte `investition_id`. Bewusst dünn & read-only: anlagenweite Werte-
+ *  Anomalien (Plausibilität/Drift, zeitpunkt-/reparatur-gebunden, K-B5) bleiben
+ *  draußen und sind über den Cross-Link zur vollen Daten-Checker-Werkbank
+ *  (inkl. Reparatur-Aktionen) erreichbar. */
+function DatenCheckerBlock({ anlageId, invs }: { anlageId: number; invs: Investition[] }) {
+  const [befunde, setBefunde] = useState<CheckErgebnis[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Stabiler Primitiv-Key (id 0 = PV-UI-Aggregat ohne eigene Befunde).
+  const idKey = invs.filter((i) => i.id !== 0).map((i) => i.id).join(',')
+
+  useEffect(() => {
+    let ab = false
+    const ids = new Set(idKey ? idKey.split(',').map(Number) : [])
+    setLoading(true)
+    datenCheckerApi.check(anlageId)
+      .then((r) => {
+        if (ab) return
+        const eigene = r.ergebnisse
+          // Nur offene Befunde dieser Komponente: investition_id gesetzt +
+          // nicht OK (OK-Bestätigungen = kein Handlungsbedarf, raus aus dem Hub).
+          .filter((e) => e.investition_id != null && ids.has(e.investition_id) && e.schwere !== 'ok')
+          .sort((a, b) => SCHWERE_RANG[a.schwere] - SCHWERE_RANG[b.schwere])
+        setBefunde(eigene)
+        setLoading(false)
+      })
+      .catch(() => { if (!ab) { setBefunde([]); setLoading(false) } })
+    return () => { ab = true }
+  }, [anlageId, idKey])
+
+  return (
+    <div className="space-y-3">
+      <GruppenKopf
+        icon={ClipboardCheck} titel="Daten-Qualität"
+        edit={<EditLink href={EDIT_DATENCHECKER}>Alle Prüfungen & Reparatur</EditLink>}
+      />
+      {loading ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500">Prüfe Daten…</p>
+      ) : befunde.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">Keine offenen Befunde für diese Komponente.</p>
+      ) : (
+        <ul className="space-y-2">
+          {befunde.map((e, i) => <BefundRow key={`${e.kategorie}-${i}`} e={e} />)}
+        </ul>
+      )}
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        Zeitpunktbezogene Werte-Auffälligkeiten (Ausreißer, Lücken einzelner Tage) und ihre Reparatur
+        liegen in der <span className="font-medium">Daten-Checker</span>-Werkbank.
+      </p>
+    </div>
+  )
+}
+
 /** Markierter Folge-Block (Verlauf/Vergleich) — ehrlich „im Bau", kein Fake. */
 function FolgtHinweis({ text, crossLink }: { text: string; crossLink?: { label: string; href: string } }) {
   return (
@@ -496,6 +572,13 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
     id: 'infothek', title: 'Dokumente & Infos', icon: FileText,
     summary: 'Verträge, Datenblätter & Dokumente dieser Komponente', defaultOpen: false,
     render: () => <InfothekBlock invs={g.verknuepfteInvs ?? [g.inv]} />,
+  })
+
+  // Daten-Qualität (#243) — komponenten-zuordenbare Befunde dieser Komponente (dünn, read-only, Cross-Link zur Werkbank).
+  bloecke.push({
+    id: 'daten-checker', title: 'Daten-Qualität', icon: ClipboardCheck,
+    summary: 'Offene Daten-Befunde dieser Komponente', defaultOpen: false,
+    render: () => <DatenCheckerBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} />,
   })
 
   // ⑦ Einstellungen (Pflicht) — alle verknüpften Investitionen strukturiert + Sensor-/MQTT-Zuordnungen + Edit-Verzweigung.

@@ -94,6 +94,13 @@ class CheckErgebnis:
     action_kind: Optional[str] = None
     action_params: Optional[dict] = None
     action_label: Optional[str] = None
+    # IA-V4 #243: optionale Komponenten-Zuordnung. Nur komponenten-bezogene
+    # Checks (Stammdaten/Monatsdaten/Energieprofil-Abdeckung/E-Mob-Pflege je
+    # Investition) füllen das Feld, damit der Komponenten-Hub seine Befunde
+    # sauber je Gerät filtern kann. Anlagen-aggregierte Werte-Anomalien
+    # (Plausibilität, Drift, Provenance) lassen es bewusst None — die gehören
+    # in den Reparatur-Pfad, nicht in den Hub.
+    investition_id: Optional[int] = None
 
 
 @dataclass
