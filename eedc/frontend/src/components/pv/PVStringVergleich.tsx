@@ -390,7 +390,31 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
 
       {/* String-Detail-Tabelle */}
       <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)">
-        <div className="overflow-x-auto">
+        {/* Mobil (< sm): Karten je String/Modul statt Tabelle — Muster wie
+            Cockpit-Energiebilanz (eine Datenliste, zwei Render-Pfade). */}
+        <div className="sm:hidden space-y-2">
+          {data.strings.map((s, idx) => (
+            <div key={s.investition_id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: STRING_COLORS[idx % STRING_COLORS.length] }} />
+                <span className="font-medium text-gray-900 dark:text-white truncate">{s.bezeichnung}</span>
+                <span className="ml-auto shrink-0"><PerformanceBadge ratio={s.performance_ratio_gesamt} /></span>
+              </div>
+              {s.wechselrichter_name && <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>}
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.leistung_kwp.toFixed(1)}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Ausrichtung</dt><dd className="text-gray-700 dark:text-gray-300">{s.ausrichtung || '-'}{s.neigung_grad != null && ` / ${s.neigung_grad}°`}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{(s.prognose_gesamt_kwh / 1000).toFixed(1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium tabular-nums" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>{(s.ist_gesamt_kwh / 1000).toFixed(1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent?.toFixed(1) ?? '0'}%</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.spezifischer_ertrag_kwh_kwp?.toFixed(0) ?? '-'}</dd></div>
+              </dl>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop (≥ sm): Tabelle */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>

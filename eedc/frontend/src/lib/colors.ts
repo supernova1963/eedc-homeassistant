@@ -16,8 +16,10 @@
  *   exklusiv für Kosten/negativ/Fehler. Komponenten-Identität WP bleibt #ef4444
  *   (TYP_COLORS — bewusste, dokumentierte Ko-Existenz).
  * - F3: Status-Achse ok/warnung/kritisch/info (= bisherige Ampel-Schwellen).
- * - F4: Grün-Duo bewusst getrennt: #10b981 = Einspeisung/Erlös (Emerald),
- *   #22c55e = Speicher-Ladung/Status-ok (Green) — erscheinen in denselben Charts.
+ * - F4: #10b981 = Einspeisung/Erlös (Emerald). Speicher-Ladung war früher
+ *   #22c55e (Green), las sich aber im selben Stapel zu nah am Einspeisung-
+ *   Emerald (IA-V4 #243, Gernot) → jetzt Orange #f97316 (klar abgesetzt, nicht-
+ *   grün). #22c55e bleibt für Status-ok / Ersparnis (eigene Achsen/Charts).
  */
 
 // ─── Energie-Rollen (A2-Datentyp-Achse) ─────────────────────────────────────
@@ -69,7 +71,7 @@ export const CHART_COLORS = {
   direktverbrauch: '#f97316',    // Orange
   spezErtrag: '#eab308',         // Yellow
   // Speicher
-  speicherLadung: '#22c55e',     // Green (F4)
+  speicherLadung: '#f97316',     // Orange (F4-Revision #243): klar abgesetzt von Einspeisung-Emerald; war #22c55e
   speicherEntladung: '#3b82f6',  // Blue
   speicherEffizienz: '#06b6d4',  // Cyan
   // Wärmepumpe (Komponenten-Identität Rot bleibt — dokumentiert, s. Kopf)

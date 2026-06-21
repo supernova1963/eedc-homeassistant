@@ -16,6 +16,11 @@ export interface VerlaufBar {
 }
 export interface VerlaufRow { name: string; [serie: string]: number | string }
 
+/** Lange Serien-Bezeichnungen im Tooltip auf eine Zeile kürzen (mit „…"). */
+function kuerze(label: string, max = 22): string {
+  return label.length > max ? `${label.slice(0, max - 1)}…` : label
+}
+
 export function KomponentenVerlaufChart({
   rows, bars, einheit = 'kWh', tall, gestapelt = true,
 }: { rows: VerlaufRow[]; bars: VerlaufBar[]; einheit?: string; tall?: boolean; gestapelt?: boolean }) {
@@ -29,7 +34,9 @@ export function KomponentenVerlaufChart({
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} interval="preserveStartEnd" />
           <YAxis fontSize={10} width={44} unit={` ${einheit}`} />
-          <Tooltip formatter={(v: number) => [`${Math.round(v)} ${einheit}`]} />
+          {/* Bezeichnung (gekürzt) zur Zahl in den Tooltip — zweiter Array-
+              Eintrag ist der Serien-Name, sonst zeigt Recharts nur Zahlen. */}
+          <Tooltip formatter={(v: number, name: string) => [`${Math.round(v)} ${einheit}`, kuerze(name)]} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {bars.map((b) => (
             // stapel-Gruppe gewinnt (paarweise Stapel); sonst gestapelt=false → gruppiert, true → ein Stapel.
