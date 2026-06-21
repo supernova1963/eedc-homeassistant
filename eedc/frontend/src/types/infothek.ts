@@ -17,6 +17,7 @@ export interface InfothekEintrag {
   in_anlagendoku?: boolean
   created_at?: string | null
   updated_at?: string | null
+  dateien_count?: number
 }
 
 export interface InfothekEintragCreate {

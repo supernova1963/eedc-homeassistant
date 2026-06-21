@@ -18,12 +18,15 @@ import { BLOCK_IDENTITAET } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { sensorMappingApi } from '../api/sensorMapping'
 import { liveDashboardApi } from '../api/liveDashboard'
-import { AlertTriangle, BarChart3, Cpu, ExternalLink, Layers, Network, Radio, Settings, Zap } from 'lucide-react'
+import { AlertTriangle, BarChart3, Cpu, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import { KomponentenVergleich } from './KomponentenVergleich'
+import { infothekApi } from '../api/infothek'
+import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
 import type { Investition } from '../types'
+import type { InfothekEintrag } from '../types/infothek'
 
 /** Parameter-Zeilen einer Investition (Stammdaten + JSON-Parameter). */
 function paramFelder(inv: Investition): { label: string; wert: string }[] {
@@ -98,6 +101,7 @@ function SensorRow({ z }: { z: SensorZeile }) {
 const EDIT_INVEST = '#/einstellungen/investitionen'
 const EDIT_SENSOR = '#/einstellungen/sensor-mapping'
 const EDIT_MQTT = '#/einstellungen/mqtt-inbound'
+const EDIT_INFOTHEK = '#/einstellungen/infothek'
 
 function EditLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -227,6 +231,85 @@ function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Invest
         Anlagenweite Einstellungen (USt, §51 EEG, Netz-Puffer, Prognosequelle) und zeitlich variable
         Strompreise liegen unter <span className="font-medium">Einstellungen</span> — anderer Geltungsbereich.
       </p>
+    </div>
+  )
+}
+
+/** Infothek-Block (#243): verknüpfte Dokumente & Infos dieser Komponente —
+ *  read-only, dünn (volle Werkbank = Cross-Link zur Infothek). Lädt die N:M-
+ *  verknüpften aktiven Einträge aller zugehörigen Investitionen (PV = WR + Module
+ *  + Speicher; sonst die eine Komponente), dedupliziert + nach Kategorie gruppiert
+ *  (Icon/Label aus `KATEGORIE_CONFIG`-SoT). Datei-Indikator aus `dateien_count`. */
+function InfothekBlock({ invs }: { invs: Investition[] }) {
+  const [eintraege, setEintraege] = useState<InfothekEintrag[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Stabiler Primitiv-Key (id 0 = PV-UI-Aggregat hat keine eigene Infothek) → kein Refetch je Render.
+  const idKey = invs.filter((i) => i.id !== 0).map((i) => i.id).join(',')
+
+  useEffect(() => {
+    let ab = false
+    const ids = idKey ? idKey.split(',').map(Number) : []
+    setLoading(true)
+    Promise.all(ids.map((id) => infothekApi.listFuerInvestition(id).catch(() => [] as InfothekEintrag[])))
+      .then((listen) => {
+        if (ab) return
+        const seen = new Set<number>()
+        const flach: InfothekEintrag[] = []
+        for (const e of listen.flat()) {
+          if (!e.aktiv || seen.has(e.id)) continue // archivierte raus, N:M-Duplikate dedupe
+          seen.add(e.id)
+          flach.push(e)
+        }
+        setEintraege(flach)
+        setLoading(false)
+      })
+    return () => { ab = true }
+  }, [idKey])
+
+  // Nach Kategorie gruppieren (Erst-Vorkommen-Reihenfolge; Backend liefert je Inv nach sortierung).
+  const gruppen = useMemo(() => {
+    const m = new Map<string, InfothekEintrag[]>()
+    for (const e of eintraege) {
+      const arr = m.get(e.kategorie) ?? []
+      arr.push(e)
+      m.set(e.kategorie, arr)
+    }
+    return [...m.entries()]
+  }, [eintraege])
+
+  return (
+    <div className="space-y-4">
+      <GruppenKopf icon={FileText} titel="Verknüpfte Dokumente" edit={<EditLink href={EDIT_INFOTHEK}>Zur Infothek</EditLink>} />
+      {loading ? (
+        <p className="text-xs text-gray-400 dark:text-gray-500">Lade Dokumente…</p>
+      ) : eintraege.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">Keine mit dieser Komponente verknüpften Dokumente.</p>
+      ) : (
+        gruppen.map(([kat, eintr]) => {
+          const cfg = KATEGORIE_CONFIG[kat]
+          const KatIcon = cfg?.icon ?? FileText
+          return (
+            <div key={kat} className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                <KatIcon className={`h-3.5 w-3.5 ${cfg?.color ?? 'text-gray-400'}`} /> {cfg?.label ?? kat}
+              </div>
+              <ul className="space-y-0.5">
+                {eintr.map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-gray-700 dark:text-gray-300 truncate">{e.bezeichnung}</span>
+                    {!!e.dateien_count && (
+                      <span className="inline-flex items-center gap-0.5 text-xs text-gray-500 dark:text-gray-400 shrink-0" title={`${e.dateien_count} Datei(en)`}>
+                        <Paperclip className="h-3 w-3" />{e.dateien_count}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }
@@ -407,6 +490,13 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
   })
 
   // ⑥ Aussicht entfällt im Hub (Gernot 2026-06-21): zeitliche Differenzierung → Cockpit/Aussicht.
+
+  // Dokumente & Infos (#243) — N:M-verknüpfte Infothek-Einträge dieser Komponente (dünn, read-only).
+  bloecke.push({
+    id: 'infothek', title: 'Dokumente & Infos', icon: FileText,
+    summary: 'Verträge, Datenblätter & Dokumente dieser Komponente', defaultOpen: false,
+    render: () => <InfothekBlock invs={g.verknuepfteInvs ?? [g.inv]} />,
+  })
 
   // ⑦ Einstellungen (Pflicht) — alle verknüpften Investitionen strukturiert + Sensor-/MQTT-Zuordnungen + Edit-Verzweigung.
   bloecke.push({

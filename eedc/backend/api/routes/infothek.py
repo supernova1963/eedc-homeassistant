@@ -294,6 +294,7 @@ class InfothekEintragResponse(InfothekEintragBase):
     ansprechpartner_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    dateien_count: int = 0  # Anzahl angehängter Dateien (Indikator; nur dort befüllt, wo gebraucht)
 
     class Config:
         from_attributes = True
@@ -377,7 +378,19 @@ def _resolve_investition_ids(
     return []
 
 
-def _eintrag_to_response(eintrag: InfothekEintrag, inv_ids: list[int]) -> dict:
+async def _get_dateien_count_batch(db: AsyncSession, eintrag_ids: list[int]) -> dict[int, int]:
+    """Zählt angehängte Dateien je Eintrag (Batch, für den Datei-Indikator)."""
+    if not eintrag_ids:
+        return {}
+    result = await db.execute(
+        select(InfothekDatei.eintrag_id, func.count(InfothekDatei.id))
+        .where(InfothekDatei.eintrag_id.in_(eintrag_ids))
+        .group_by(InfothekDatei.eintrag_id)
+    )
+    return {eid: cnt for eid, cnt in result.all()}
+
+
+def _eintrag_to_response(eintrag: InfothekEintrag, inv_ids: list[int], dateien_count: int = 0) -> dict:
     """Baut ein Response-Dict mit investition_ids aus einem InfothekEintrag."""
     return {
         "id": eintrag.id,
@@ -394,6 +407,7 @@ def _eintrag_to_response(eintrag: InfothekEintrag, inv_ids: list[int]) -> dict:
         "ansprechpartner_id": eintrag.ansprechpartner_id,
         "created_at": eintrag.created_at,
         "updated_at": eintrag.updated_at,
+        "dateien_count": dateien_count,
     }
 
 
@@ -707,7 +721,8 @@ async def list_eintraege_fuer_investition(
     eintraege = result.scalars().all()
     ids = [e.id for e in eintraege]
     inv_map = await _get_investition_ids_batch(db, ids)
-    return [_eintrag_to_response(e, inv_map.get(e.id, [])) for e in eintraege]
+    datei_map = await _get_dateien_count_batch(db, ids)
+    return [_eintrag_to_response(e, inv_map.get(e.id, []), datei_map.get(e.id, 0)) for e in eintraege]
 
 
 # =============================================================================
