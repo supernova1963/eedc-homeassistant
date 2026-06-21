@@ -1,31 +1,32 @@
 /**
  * KomponentenTypV4 — die Pro-Typ-Komponentenseite (IA v4 Phase A.2).
  *
- * Rendert den Block-Katalog aus SPEC-KOMPONENTEN.md: **Pflicht-Blöcke**
- * ① Status · ④ Verlauf · ⑤ Vergleich (dünn) · ⑦ Einstellungen — fix-linear,
- * nicht sortierbar (K-B4), einklappbar via BlockShell. Hub = Gesamtzeitraum
- * (K-B5, kein Datums-Selektor). Mehrere Geräte desselben Typs → Geräte-Selektor
- * (Art ①, Muster wie Anlagen-Selektor).
- *
- * Stand A.2-1: Status (D2-KPIs SoT + Aufteilung) + Einstellungen real auf
- * Lebensdauer-Daten; Verlauf/Vergleich als markierte Folge-Blöcke (Chart +
- * WerteTabelle-Embed im nächsten Schritt), Aussicht + spezifische Blöcke (②③⑥)
- * danach je Typ.
+ * Rendert den Block-Katalog aus SPEC-KOMPONENTEN.md in **kanonischer fixer
+ * Reihenfolge** (nicht sortierbar, K-B4; einklappbar via BlockShell):
+ * ① Status · ② Struktur/Verknüpfung · ③ Sub-Komponente · ④ Verlauf ·
+ * ⑤ Vergleich · ⑦ Einstellungen. Pflicht = ①④⑤⑦ (immer), spezifisch = ②③
+ * (nur wenn der Adapter sie für den Typ liefert ⇒ Seite = Pflicht ∪
+ * zutreffend-spezifisch). Aussicht (⑥) entfällt im Hub (Gernot 2026-06-21):
+ * zeitliche Differenzierung → Cockpit/Aussicht. Typ-eigene IST-Analysen
+ * (Verlauf/Vergleich) via `komponentenAnalyse`-Registry. Hub = Gesamtzeitraum
+ * (K-B5, kein Datums-Selektor). Mehrere Geräte → Geräte-Selektor (Art ①).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, VerteilungsBalken, type Block } from '../components/blocks'
 import { BLOCK_IDENTITAET } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
-import { BarChart3, ExternalLink, Settings } from 'lucide-react'
-import { KOMPONENTEN_ADAPTER, type KompGeraet } from './komponentenAdapter'
+import { sensorMappingApi } from '../api/sensorMapping'
+import { liveDashboardApi } from '../api/liveDashboard'
+import { AlertTriangle, BarChart3, Cpu, ExternalLink, Layers, Network, Radio, Settings, Zap } from 'lucide-react'
+import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
+import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
 import { KomponentenVergleich } from './KomponentenVergleich'
 import type { Investition } from '../types'
 
-/** Read-only Einstellungs-Anzeige je Gerät (#243 A1-B): Stammdaten + Parameter
- *  + „Investition öffnen"-Link; anlagenweite/zeitliche Param liegen woanders. */
-function EinstellungInhalt({ inv }: { inv: Investition }) {
+/** Parameter-Zeilen einer Investition (Stammdaten + JSON-Parameter). */
+function paramFelder(inv: Investition): { label: string; wert: string }[] {
   const felder: { label: string; wert: string }[] = []
   if (inv.leistung_kwp != null) felder.push({ label: 'Leistung', wert: `${fmtCalc(inv.leistung_kwp, 1)} kWp` })
   if (inv.ausrichtung) felder.push({ label: 'Ausrichtung', wert: inv.ausrichtung })
@@ -37,30 +38,194 @@ function EinstellungInhalt({ inv }: { inv: Investition }) {
     if (v == null || typeof v === 'object') continue
     felder.push({ label: k.replace(/_/g, ' '), wert: String(v) })
   }
+  return felder
+}
+
+interface FeldM { strategie?: string; sensor_id?: string | null }
+type LiveMap = Record<string, string | null> | null
+interface InvMap { felder?: Record<string, FeldM>; live?: LiveMap }
+interface MappingShape {
+  basis?: Record<string, FeldM | LiveMap | undefined> & { live?: LiveMap }
+  investitionen?: Record<string, InvMap>
+}
+
+interface SensorZeile { feld: string; sensor: string; live?: boolean }
+
+/** Sensor-Zuordnungen einer Investition: Statistik-Felder (strategie 'sensor') +
+ *  Live-Sensoren (`live`-Block) + Legacy `ha_entity_id`. */
+function invSensoren(inv: Investition, mapping: MappingShape | null): SensorZeile[] {
+  const out: SensorZeile[] = []
+  const invMap = mapping?.investitionen?.[String(inv.id)]
+  for (const [feld, m] of Object.entries(invMap?.felder ?? {})) {
+    if (m?.strategie === 'sensor' && m.sensor_id) out.push({ feld: feld.replace(/_/g, ' '), sensor: m.sensor_id })
+  }
+  for (const [feld, sid] of Object.entries(invMap?.live ?? {})) {
+    if (sid) out.push({ feld: feld.replace(/_/g, ' '), sensor: sid, live: true })
+  }
+  if (inv.ha_entity_id) out.push({ feld: 'HA-Sensor', sensor: inv.ha_entity_id })
+  return out
+}
+
+/** Anlagen-Basis-Sensoren: Statistik-Rollen (strategie 'sensor') + Live-Rollen. */
+function basisSensoren(mapping: MappingShape | null): SensorZeile[] {
+  const basis = mapping?.basis
+  if (!basis) return []
+  const out: SensorZeile[] = []
+  for (const [rolle, m] of Object.entries(basis)) {
+    if (rolle === 'live' || rolle === 'live_invert') continue
+    const fm = m as FeldM
+    if (fm?.strategie === 'sensor' && fm.sensor_id) out.push({ feld: rolle.replace(/_/g, ' '), sensor: fm.sensor_id })
+  }
+  for (const [rolle, sid] of Object.entries(basis.live ?? {})) {
+    if (sid) out.push({ feld: rolle.replace(/_/g, ' '), sensor: sid, live: true })
+  }
+  return out
+}
+
+/** Eine Sensor-Zeile (Feld → entity_id, Live-Marker). */
+function SensorRow({ z }: { z: SensorZeile }) {
   return (
-    <div className="space-y-3">
-      {inv.id === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          „PV-Anlage" bündelt mehrere Geräte (Module/Wechselrichter). Parameter je Gerät liegen in den Investitionen.
-        </p>
-      ) : felder.length ? (
-        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
-          {felder.map((f) => (
-            <div key={f.label} className="flex items-center justify-between gap-2 text-sm border-b border-gray-100 dark:border-gray-800 py-1">
-              <dt className="text-gray-500 dark:text-gray-400 capitalize">{f.label}</dt>
-              <dd className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{f.wert}</dd>
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5">
+        {z.live && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" title="Live-Sensor" />}
+        {z.feld}{z.live ? ' (live)' : ''}
+      </span>
+      <code className="text-xs text-gray-700 dark:text-gray-300 truncate">{z.sensor}</code>
+    </div>
+  )
+}
+
+const EDIT_INVEST = '#/einstellungen/investitionen'
+const EDIT_SENSOR = '#/einstellungen/sensor-mapping'
+const EDIT_MQTT = '#/einstellungen/mqtt-inbound'
+
+function EditLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+      <ExternalLink className="h-3.5 w-3.5" /> {children}
+    </a>
+  )
+}
+
+/** Kopfzeile einer Komponente (Icon + Bezeichnung + Typ-Label). */
+function KompKopf({ inv, rechts }: { inv: Investition; rechts?: ReactNode }) {
+  const ident = KOMPONENTEN_IDENTITAET[inv.typ]
+  const Icon = ident?.icon ?? Settings
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2 font-medium text-gray-900 dark:text-white min-w-0">
+        <Icon className={`h-4 w-4 shrink-0 ${ident?.farbe ?? 'text-gray-400'}`} />
+        <span className="truncate">{inv.bezeichnung}</span>
+        <span className="text-xs font-normal text-gray-500 dark:text-gray-400 whitespace-nowrap">{ident?.label ?? inv.typ}</span>
+      </div>
+      {rechts}
+    </div>
+  )
+}
+
+/** Gruppen-Überschrift (Bearbeitungs-Domäne) mit Bearbeiten-Verzweigung rechts. */
+function GruppenKopf({ icon: Icon, titel, edit }: { icon: typeof Cpu; titel: string; edit: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 pb-1">
+      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        <Icon className="h-3.5 w-3.5" /> {titel}
+      </div>
+      <div className="flex gap-3">{edit}</div>
+    </div>
+  )
+}
+
+/** Einstellungen-Block (#243): nach Bearbeitungs-Domäne gegliedert —
+ *  **Stammdaten** (Parameter → Investition bearbeiten) und **Zuordnungen**
+ *  (HA-Sensoren inkl. Live + MQTT-Topics → Sensor-Mapping/MQTT). Für die
+ *  PV-Anlage über WR + Module + Speicher (sonst die eine Komponente). */
+function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Investition[] }) {
+  const [mapping, setMapping] = useState<MappingShape | null>(null)
+  const [topics, setTopics] = useState<{ ziel_key: string; quell_topic: string }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let ab = false
+    setLoading(true)
+    Promise.all([
+      sensorMappingApi.getMapping(anlageId).then((r) => r.mapping as MappingShape | null).catch(() => null),
+      liveDashboardApi.getGatewayMappings(anlageId).catch(() => [] as { ziel_key: string; quell_topic: string }[]),
+    ]).then(([m, t]) => { if (!ab) { setMapping(m); setTopics(t); setLoading(false) } })
+    return () => { ab = true }
+  }, [anlageId])
+
+  const echteInvs = invs.filter((i) => i.id !== 0) // PV-UI-Aggregat (id 0) selbst hat keine Parameter
+  const basis = basisSensoren(mapping)
+  const hatZuordnungen = echteInvs.some((i) => invSensoren(i, mapping).length > 0) || basis.length > 0 || topics.length > 0
+
+  return (
+    <div className="space-y-6">
+      {/* Stammdaten — bearbeitbar über die Investition */}
+      <div className="space-y-3">
+        <GruppenKopf icon={Settings} titel="Stammdaten" edit={<EditLink href={EDIT_INVEST}>Investitionen bearbeiten</EditLink>} />
+        {echteInvs.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Keine Investitions-Parameter hinterlegt.</p>
+        ) : echteInvs.map((inv) => {
+          const felder = paramFelder(inv)
+          return (
+            <div key={inv.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+              <KompKopf inv={inv} rechts={<EditLink href={EDIT_INVEST}>Bearbeiten</EditLink>} />
+              {felder.length > 0 ? (
+                <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+                  {felder.map((f) => (
+                    <div key={f.label} className="flex items-center justify-between gap-2 text-sm border-b border-gray-100 dark:border-gray-800 py-0.5">
+                      <dt className="text-gray-500 dark:text-gray-400 capitalize">{f.label}</dt>
+                      <dd className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{f.wert}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : <p className="text-xs text-gray-400 dark:text-gray-500">Keine Parameter hinterlegt.</p>}
             </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Keine Parameter hinterlegt.</p>
-      )}
-      <a href="#/v4/einstellungen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
-        <Settings className="h-4 w-4" /> Diese Parameter bearbeiten (Investition öffnen)
-      </a>
+          )
+        })}
+      </div>
+
+      {/* Zuordnungen — bearbeitbar über Sensor-Mapping / MQTT */}
+      <div className="space-y-3">
+        <GruppenKopf icon={Cpu} titel="Zuordnungen — Sensoren & MQTT" edit={<>
+          <EditLink href={EDIT_SENSOR}>Sensoren</EditLink>
+          <EditLink href={EDIT_MQTT}>MQTT</EditLink>
+        </>} />
+        {loading ? (
+          <p className="text-xs text-gray-400 dark:text-gray-500">Lade Zuordnungen…</p>
+        ) : !hatZuordnungen ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Keine Sensor-/MQTT-Zuordnungen hinterlegt.</p>
+        ) : (
+          <>
+            {echteInvs.map((inv) => {
+              const sensoren = invSensoren(inv, mapping)
+              if (!sensoren.length) return null
+              return (
+                <div key={inv.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-1.5">
+                  <KompKopf inv={inv} />
+                  {sensoren.map((s) => <SensorRow key={`${s.feld}-${s.sensor}`} z={s} />)}
+                </div>
+              )
+            })}
+            {(basis.length > 0 || topics.length > 0) && (
+              <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-3 space-y-1 bg-gray-50/50 dark:bg-gray-800/30">
+                <div className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Anlagen-Datenquellen</div>
+                {basis.map((b) => <SensorRow key={`b-${b.feld}-${b.sensor}`} z={b} />)}
+                {topics.map((t) => (
+                  <div key={`${t.ziel_key}-${t.quell_topic}`} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5"><Radio className="h-3 w-3 shrink-0" />{t.ziel_key.replace(/_/g, ' ')}</span>
+                    <code className="text-xs text-gray-700 dark:text-gray-300 truncate">{t.quell_topic}</code>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       <p className="text-xs text-gray-400 dark:text-gray-500">
         Anlagenweite Einstellungen (USt, §51 EEG, Netz-Puffer, Prognosequelle) und zeitlich variable
-        Strompreise liegen unter <span className="font-medium">Einstellungen</span> — anderer Geltungsbereich, dort verlinkt.
+        Strompreise liegen unter <span className="font-medium">Einstellungen</span> — anderer Geltungsbereich.
       </p>
     </div>
   )
@@ -80,8 +245,91 @@ function FolgtHinweis({ text, crossLink }: { text: string; crossLink?: { label: 
   )
 }
 
-function geraetBloecke(g: KompGeraet): Block[] {
-  return [
+/** Eine Knoten-Liste (Module / Speicher) unter einem Wechselrichter (Block ② Topologie). */
+function TopoListe({ titel, items }: { titel: string; items: TopoItem[] }) {
+  if (!items.length) return null
+  return (
+    <div>
+      <div className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1">{titel}</div>
+      <ul className="space-y-0.5">
+        {items.map((it, i) => (
+          <li key={i} className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-gray-700 dark:text-gray-300">{it.label}</span>
+            {it.detail && <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">{it.detail}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** Block ② Struktur/Verknüpfung — PV-Topologie (WR→Module/Speicher + Orphan)
+ *  oder dünne Referenzzeilen (Speicher-Kopplung / Wallbox-Datenquelle). */
+function StrukturInhalt({ s }: { s: KompStruktur }) {
+  if (s.art === 'referenz') {
+    return (
+      <dl className="space-y-2">
+        {s.zeilen.map((z, i) => (
+          <div key={i}>
+            <div className="flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 py-1 text-sm">
+              <dt className="text-gray-500 dark:text-gray-400">{z.label}</dt>
+              {z.wert && <dd className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{z.wert}</dd>}
+            </div>
+            {z.hinweis && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{z.hinweis}</p>}
+          </div>
+        ))}
+      </dl>
+    )
+  }
+  const hatOrphan = s.orphanModule.length > 0 || s.orphanSpeicher.length > 0
+  return (
+    <div className="space-y-3">
+      {hatOrphan && (
+        <div className="flex items-start gap-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-2 text-sm text-yellow-700 dark:text-yellow-300">
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            {s.orphanModule.length > 0 && `${s.orphanModule.length} PV-Modul(e) ohne Wechselrichter-Zuordnung. `}
+            {s.orphanSpeicher.length > 0 && `${s.orphanSpeicher.length} Speicher ohne Wechselrichter-Zuordnung.`}
+          </span>
+        </div>
+      )}
+      {s.wr.map((w, i) => (
+        <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+          <div className="flex items-center gap-2 font-medium text-gray-900 dark:text-white">
+            <Zap className="h-4 w-4 text-gray-400" />
+            <span>{w.label}</span>
+            {w.detail && <span className="text-xs font-normal text-gray-500 dark:text-gray-400">· {w.detail}</span>}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 mt-2">
+            <TopoListe titel="Module" items={w.module} />
+            <TopoListe titel="Speicher" items={w.speicher} />
+          </div>
+        </div>
+      ))}
+      {hatOrphan && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          <TopoListe titel="Module ohne Zuordnung" items={s.orphanModule} />
+          <TopoListe titel="Speicher ohne Zuordnung" items={s.orphanSpeicher} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Sekundär-/Sub-KPI-Strip mit kleiner Überschrift (Block ① Sekundär, Block ③). */
+function KpiUnterblock({ titel, kpis }: { titel: string; kpis: KompGeraet['status'] }) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">{titel}</div>
+      <KpiStrip kpis={kpis} />
+    </div>
+  )
+}
+
+function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
+  const analyse = KOMPONENTEN_ANALYSE[typ]
+  const bloecke: Block[] = [
+    // ① Status (Pflicht) — D2-KPIs + Aufteilung + ggf. Sekundär-Strip.
     {
       id: 'status', title: 'Aktueller Status', ...BLOCK_IDENTITAET.kennzahlen,
       summary: g.status.map((k) => `${k.value} ${k.unit ?? ''}`.trim()).slice(0, 2).join(' · '),
@@ -90,32 +338,84 @@ function geraetBloecke(g: KompGeraet): Block[] {
         <div className="space-y-4">
           <KpiStrip kpis={g.status} />
           {g.aufteilung && <VerteilungsBalken titel={g.aufteilung.titel} einheit={g.aufteilung.einheit} segmente={g.aufteilung.segmente} />}
+          {g.sekundaer && <KpiUnterblock titel={g.sekundaer.titel} kpis={g.sekundaer.kpis} />}
         </div>
       ),
     },
-    {
-      id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
-      summary: 'Monatsverlauf über die gesamte Laufzeit', defaultOpen: false,
-      render: (fokus) => (g.verlauf
-        ? <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} tall={fokus} />
-        : <FolgtHinweis text="Für diesen Typ liegt keine eigene Monatszeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." />),
-    },
-    {
-      id: 'vergleich', title: 'Vergleich', icon: BarChart3,
-      summary: 'Jahresvergleich · Diagramm ⇄ Tabelle', defaultOpen: false,
-      render: () => (g.vergleich
+  ]
+
+  // ② Struktur/Verknüpfung (spezifisch).
+  if (g.struktur) {
+    const topo = g.struktur.art === 'topologie'
+    bloecke.push({
+      id: 'struktur', title: topo ? 'System-Struktur' : 'Verknüpfung', icon: Network,
+      summary: topo ? 'Wechselrichter → Module / Speicher' : 'Zuordnung & Datenquelle',
+      defaultOpen: false,
+      render: () => <StrukturInhalt s={g.struktur!} />,
+    })
+  }
+
+  // ③ Sub-Komponente (spezifisch, In-Wirt).
+  if (g.subKomponente) {
+    bloecke.push({
+      id: 'sub', title: g.subKomponente.titel, icon: Layers,
+      summary: g.subKomponente.kpis.map((k) => `${k.value} ${k.unit ?? ''}`.trim()).slice(0, 2).join(' · '),
+      defaultOpen: false,
+      render: () => (
+        <div className="space-y-3">
+          {g.subKomponente!.hinweis && <p className="text-xs text-gray-400 dark:text-gray-500">{g.subKomponente!.hinweis}</p>}
+          <KpiStrip kpis={g.subKomponente!.kpis} />
+        </div>
+      ),
+    })
+  }
+
+  // ④ Verlauf (Pflicht) — typ-eigene IST-Charts via Analyse-Registry, sonst generischer Adapter-Verlauf.
+  bloecke.push({
+    id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
+    summary: 'Zeitreihe über die gesamte Laufzeit', defaultOpen: false,
+    render: (fokus) => (analyse?.verlauf
+      ? analyse.verlauf(anlageId)
+      : g.verlauf
+        ? (
+          <div className="space-y-4">
+            <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} gestapelt={g.verlauf.gestapelt} tall={fokus} />
+            {g.verlauf.verteilungen && g.verlauf.verteilungen.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {g.verlauf.verteilungen.map((v) => (
+                  <VerteilungsBalken key={v.titel} titel={v.titel} einheit={v.einheit} segmente={v.segmente} />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+        : <FolgtHinweis text="Für diesen Typ liegt keine eigene Zeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." />),
+  })
+
+  // ⑤ Vergleich (Pflicht) — typ-eigene IST-Analyse (z. B. PV-SOLL/IST pro String) via Registry, sonst generischer Jahresvergleich.
+  bloecke.push({
+    id: 'vergleich', title: 'Vergleich', icon: BarChart3,
+    summary: analyse?.vergleich ? 'Komponentenspezifischer Vergleich' : 'Jahresvergleich · Diagramm ⇄ Tabelle', defaultOpen: false,
+    render: () => (analyse?.vergleich
+      ? analyse.vergleich(anlageId)
+      : g.vergleich
         ? <KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} />
         : <FolgtHinweis
             text="Für diesen Typ liegt noch kein Jahresvergleich vor."
             crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/v4/auswertungen/tabelle' }}
           />),
-    },
-    {
-      id: 'einstellungen', title: 'Einstellungen', icon: Settings,
-      summary: 'Parameter dieser Komponente — nicht mehr raten (#243)', defaultOpen: false,
-      render: () => <EinstellungInhalt inv={g.inv} />,
-    },
-  ]
+  })
+
+  // ⑥ Aussicht entfällt im Hub (Gernot 2026-06-21): zeitliche Differenzierung → Cockpit/Aussicht.
+
+  // ⑦ Einstellungen (Pflicht) — alle verknüpften Investitionen strukturiert + Sensor-/MQTT-Zuordnungen + Edit-Verzweigung.
+  bloecke.push({
+    id: 'einstellungen', title: 'Einstellungen', icon: Settings,
+    summary: 'Parameter, Sensoren & MQTT dieser Komponente — mit Bearbeiten-Links', defaultOpen: false,
+    render: () => <EinstellungenBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} />,
+  })
+
+  return bloecke
 }
 
 export default function KomponentenTypV4({ typ, anlageId }: { typ: string; anlageId: number | undefined }) {
@@ -139,7 +439,7 @@ export default function KomponentenTypV4({ typ, anlageId }: { typ: string; anlag
   }, [anlageId, adapter, typ])
 
   const g = geraete[aktiv]
-  const bloecke = useMemo(() => (g ? geraetBloecke(g) : []), [g])
+  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0) : []), [g, typ, anlageId])
 
   if (!anlageId) return <Hinweis text="Noch keine Anlage gewählt." />
   if (!adapter) return <Hinweis text={`Für „${ident?.label ?? typ}" gibt es noch keine Hub-Sicht.`} />

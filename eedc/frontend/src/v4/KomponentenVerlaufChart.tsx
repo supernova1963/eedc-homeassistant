@@ -8,12 +8,17 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 
-export interface VerlaufBar { key: string; label: string; farbe: string }
+export interface VerlaufBar {
+  key: string; label: string; farbe: string
+  /** Stapel-Gruppe: Bars gleicher `stapel` stapeln sich; verschiedene stehen
+   *  nebeneinander (z. B. PV „Erzeugung" je Modul ⟷ „Verwendung"). */
+  stapel?: string
+}
 export interface VerlaufRow { name: string; [serie: string]: number | string }
 
 export function KomponentenVerlaufChart({
-  rows, bars, einheit = 'kWh', tall,
-}: { rows: VerlaufRow[]; bars: VerlaufBar[]; einheit?: string; tall?: boolean }) {
+  rows, bars, einheit = 'kWh', tall, gestapelt = true,
+}: { rows: VerlaufRow[]; bars: VerlaufBar[]; einheit?: string; tall?: boolean; gestapelt?: boolean }) {
   if (rows.length === 0) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Verlaufsdaten erfasst.</p>
   }
@@ -27,7 +32,8 @@ export function KomponentenVerlaufChart({
           <Tooltip formatter={(v: number) => [`${Math.round(v)} ${einheit}`]} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {bars.map((b) => (
-            <Bar key={b.key} dataKey={b.key} name={b.label} stackId="a" fill={b.farbe} />
+            // stapel-Gruppe gewinnt (paarweise Stapel); sonst gestapelt=false → gruppiert, true → ein Stapel.
+            <Bar key={b.key} dataKey={b.key} name={b.label} stackId={b.stapel ?? (gestapelt ? 'a' : undefined)} fill={b.farbe} />
           ))}
         </BarChart>
       </ResponsiveContainer>

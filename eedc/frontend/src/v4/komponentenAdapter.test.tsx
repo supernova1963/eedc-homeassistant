@@ -4,7 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const getSpeicherDashboard = vi.fn()
 const getWaermepumpeDashboard = vi.fn()
 const getEAutoDashboard = vi.fn()
+const getWallboxDashboard = vi.fn()
+const getBalkonkraftwerkDashboard = vi.fn()
 const getSonstigesDashboard = vi.fn()
+const list = vi.fn()
 const getUebersicht = vi.fn()
 const listAggregiert = vi.fn()
 
@@ -13,9 +16,10 @@ vi.mock('../api/investitionen', () => ({
     getSpeicherDashboard: (...a: unknown[]) => getSpeicherDashboard(...a),
     getWaermepumpeDashboard: (...a: unknown[]) => getWaermepumpeDashboard(...a),
     getEAutoDashboard: (...a: unknown[]) => getEAutoDashboard(...a),
-    getWallboxDashboard: vi.fn(),
-    getBalkonkraftwerkDashboard: vi.fn(),
+    getWallboxDashboard: (...a: unknown[]) => getWallboxDashboard(...a),
+    getBalkonkraftwerkDashboard: (...a: unknown[]) => getBalkonkraftwerkDashboard(...a),
     getSonstigesDashboard: (...a: unknown[]) => getSonstigesDashboard(...a),
+    list: (...a: unknown[]) => list(...a),
   },
 }))
 vi.mock('../api/cockpit', () => ({ cockpitApi: { getUebersicht: (...a: unknown[]) => getUebersicht(...a) } }))
@@ -26,7 +30,7 @@ import { KOMPONENTEN_ADAPTER } from './komponentenAdapter'
 const inv = (over = {}) => ({ id: 1, anlage_id: 1, typ: 'x', bezeichnung: 'Gerät A', aktiv: true, ...over })
 const titles = (ks: { title: string }[]) => ks.map((k) => k.title)
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => { vi.clearAllMocks(); list.mockResolvedValue([]); listAggregiert.mockResolvedValue([]) })
 
 describe('KOMPONENTEN_ADAPTER', () => {
   it('Speicher: D2-KPIs + Ladequellen-Aufteilung (PV/Netz aus Arbitrage) + Verlauf', async () => {
@@ -110,5 +114,123 @@ describe('KOMPONENTEN_ADAPTER', () => {
     const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
     expect(titles(g.status)).toEqual(['Anlagenleistung', 'Gesamterzeugung', 'Spez. Ertrag', 'Eigenverbrauch'])
     expect(g.aufteilung?.segmente.map((s) => [s.label, s.wert])).toEqual([['Eigenverbrauch', 250], ['Einspeisung', 250]])
+  })
+})
+
+describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
+  it('PV ② Topologie: WR→Module/Speicher via parent + Orphan, nur aktiv', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
+    list.mockResolvedValue([
+      inv({ id: 10, typ: 'wechselrichter', bezeichnung: 'WR Süd', parameter: { max_leistung_kw: 8 } }),
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Dach Süd', parent_investition_id: 10, leistung_kwp: 6, ausrichtung: 'Süd' }),
+      inv({ id: 12, typ: 'speicher', bezeichnung: 'DC-Speicher', parent_investition_id: 10, parameter: { kapazitaet_kwh: 10 } }),
+      inv({ id: 13, typ: 'pv-module', bezeichnung: 'Garage (verwaist)' }), // ohne parent → Orphan
+      inv({ id: 14, typ: 'pv-module', bezeichnung: 'inaktiv', parent_investition_id: 10, aktiv: false }), // raus
+    ])
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(g.struktur?.art).toBe('topologie')
+    if (g.struktur?.art !== 'topologie') throw new Error('topologie erwartet')
+    expect(g.struktur.wr).toHaveLength(1)
+    expect(g.struktur.wr[0].label).toBe('WR Süd')
+    expect(g.struktur.wr[0].detail).toBe('8,0 kW')
+    expect(g.struktur.wr[0].module.map((m) => m.label)).toEqual(['Dach Süd'])
+    expect(g.struktur.wr[0].speicher.map((s) => s.label)).toEqual(['DC-Speicher'])
+    expect(g.struktur.orphanModule.map((m) => m.label)).toEqual(['Garage (verwaist)']) // inaktiv NICHT dabei
+    // PV: verknüpfte Investitionen für den Einstellungen-Block (aktiv, ohne inaktiv)
+    expect(g.verknuepfteInvs?.map((i) => i.id).sort()).toEqual([10, 11, 12, 13])
+  })
+
+  it('Speicher ① Arbitrage-Sekundär (nur wenn fähig+Netzladung) + ② Kopplungs-Referenz', async () => {
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ id: 5, typ: 'speicher', parent_investition_id: 10 }),
+      zusammenfassung: { vollzyklen: 100, effizienz_prozent: 90, gesamt_entladung_kwh: 1000, gesamt_ladung_kwh: 1000,
+        ersparnis_euro: 100, arbitrage_faehig: true, arbitrage_kwh: 200, arbitrage_avg_preis_cent: 12, arbitrage_gewinn_euro: 30 },
+      monatsdaten: [],
+    }])
+    list.mockResolvedValue([inv({ id: 10, typ: 'wechselrichter', bezeichnung: 'WR Nord' })])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    expect(g.sekundaer?.titel).toBe('Arbitrage (Netzladung)')
+    expect(titles(g.sekundaer!.kpis)).toEqual(['Netzladung', 'Ø Ladepreis', 'Anteil an Ladung', 'Arbitrage-Gewinn'])
+    expect(g.struktur?.art).toBe('referenz')
+    if (g.struktur?.art !== 'referenz') throw new Error('referenz erwartet')
+    expect(g.struktur.zeilen[0].hinweis).toContain('WR Nord')
+  })
+
+  it('Speicher: keine Arbitrage-Sekundär wenn nicht fähig', async () => {
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ id: 5, typ: 'speicher' }),
+      zusammenfassung: { vollzyklen: 100, effizienz_prozent: 90, gesamt_entladung_kwh: 1000, gesamt_ladung_kwh: 1000,
+        ersparnis_euro: 100, arbitrage_faehig: false, arbitrage_kwh: 0, arbitrage_gewinn_euro: 0 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    expect(g.sekundaer).toBeUndefined()
+    expect(g.struktur?.art).toBe('referenz') // eigenständig
+  })
+
+  it('WP ① Sekundär: getrennte JAZ + #238 nur wenn gepflegt', async () => {
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: 3.8, gesamt_waerme_kwh: 100, gesamt_stromverbrauch_kwh: 30,
+        gesamt_heizenergie_kwh: 80, gesamt_warmwasser_kwh: 20, ersparnis_euro: 100,
+        cop_heizen: 4.1, cop_warmwasser: 2.9, kompressor_starts_summe_erfasst: 1234, kompressor_starts_gesamt: 5678,
+        betriebsstunden_summe_erfasst: 900, oe_laufzeit_pro_start_h: 0.73 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    expect(titles(g.sekundaer!.kpis)).toEqual(['JAZ Heizen', 'JAZ Warmwasser', 'Kompressor-Starts', 'Betriebsstunden', 'Ø Laufzeit/Start'])
+    // starts_pro_betriebsstunde fehlt → KPI nicht da
+    expect(titles(g.sekundaer!.kpis)).not.toContain('Starts/Betriebsstunde')
+  })
+
+  it('WP: keine Sekundär ohne getrennte/238-Daten', async () => {
+    getWaermepumpeDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'waermepumpe' }),
+      zusammenfassung: { durchschnitt_cop: 3.8, gesamt_waerme_kwh: 100, gesamt_stromverbrauch_kwh: 30,
+        gesamt_heizenergie_kwh: 80, gesamt_warmwasser_kwh: 20, ersparnis_euro: 100 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
+    expect(g.sekundaer).toBeUndefined()
+  })
+
+  it('E-Auto ③ V2H nur wenn entladen', async () => {
+    getEAutoDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'e-auto' }),
+      zusammenfassung: { gesamt_km: 100, durchschnitt_verbrauch_kwh_100km: 18, pv_anteil_heim_prozent: 50,
+        ersparnis_vs_benzin_euro: 100, gesamt_ladung_kwh: 100, ladung_pv_kwh: 50, ladung_netz_kwh: 50, ladung_extern_kwh: 0,
+        v2h_entladung_kwh: 120, v2h_ersparnis_euro: 36 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER['e-auto'].fetch(1)
+    expect(g.subKomponente?.titel).toBe('Vehicle-to-Home (V2H)')
+    expect(titles(g.subKomponente!.kpis)).toEqual(['V2H Entladung', 'V2H Ersparnis'])
+  })
+
+  it('BKW ③ integrierter Speicher nur wenn hat_speicher', async () => {
+    getBalkonkraftwerkDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'balkonkraftwerk' }),
+      zusammenfassung: { gesamt_erzeugung_kwh: 800, gesamt_eigenverbrauch_kwh: 600, gesamt_einspeisung_kwh: 200,
+        eigenverbrauch_quote_prozent: 75, spezifischer_ertrag_kwh_kwp: 900, gesamt_ersparnis_euro: 200,
+        hat_speicher: true, speicher_kapazitaet_wh: 2048, speicher_ladung_kwh: 120, speicher_entladung_kwh: 100, speicher_effizienz_prozent: 83 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
+    expect(g.subKomponente?.titel).toBe('Integrierter Speicher')
+    expect(g.subKomponente?.hinweis).toContain('2.048 Wh')
+    expect(titles(g.subKomponente!.kpis)).toEqual(['Ladung', 'Entladung', 'Effizienz'])
+  })
+
+  it('Wallbox ② Datenquellen-Referenz (aus E-Auto-Ladedaten)', async () => {
+    getWallboxDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'wallbox' }),
+      zusammenfassung: { gesamt_heim_ladung_kwh: 500, ladung_pv_kwh: 300, ladung_netz_kwh: 200, pv_anteil_prozent: 60,
+        gesamt_ladevorgaenge: 40, ersparnis_vs_extern_euro: 120 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.wallbox.fetch(1)
+    expect(g.struktur?.art).toBe('referenz')
+    if (g.struktur?.art !== 'referenz') throw new Error('referenz erwartet')
+    expect(g.struktur.zeilen[0].label).toBe('Datenquelle')
   })
 })

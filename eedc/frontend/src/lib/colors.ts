@@ -167,6 +167,10 @@ export const SERIEN_PALETTE = ['#f59e0b', '#22c55e', '#3b82f6', '#ef4444', '#8b5
 /** PV-String-Vergleich (bis 6 Strings) — identisch in allen String-Ansichten. */
 export const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899']
 
+/** Tailwind-bg-Klassen-Zwillinge zu STRING_COLORS (Tailwind-500) — für VerteilungsBalken/
+ *  Anteils-Darstellungen pro String/Modul (dort sind bg-Klassen statt Inline-Hex nötig). */
+export const STRING_BG = ['bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-cyan-500', 'bg-pink-500']
+
 /** Solar-Intensitäts-Rampe (Sparklines: schwach → stark). */
 export const SOLAR_INTENSITAET = ['#fde68a', '#fbbf24', '#f59e0b']
 

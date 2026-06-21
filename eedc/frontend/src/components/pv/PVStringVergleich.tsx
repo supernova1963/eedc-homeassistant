@@ -7,10 +7,10 @@
  * 3. Tabelle mit Gesamtlaufzeit-Statistik pro String
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type ReactNode, type ComponentType } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Line, Area
+  ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard } from '../ui'
@@ -20,12 +20,44 @@ import { SOLL_IST_COLORS, STRING_COLORS } from '../../lib'
 
 interface Props {
   anlageId: number
+  /** Eingebettet in einen v4-Block (BlockShell): kompakte Sektions-Überschriften
+   *  ohne verschachtelte Cards + komponentengerechte Diagramme (SOLL/IST je Modul,
+   *  Saison-Modulauswahl). Default false = IST-Dashboard-Darstellung (unverändert). */
+  embed?: boolean
 }
 
-export function PVStringVergleich({ anlageId }: Props) {
+/** Sektions-Rahmen: im Embed kompakte Überschrift (subordiniert dem Block-Titel),
+ *  sonst die gewohnte Card mit großer Überschrift (IST-Seite). */
+function Sektion({ embed, icon: Icon, farbe, titel, hinweis, children }: {
+  embed: boolean; icon: ComponentType<{ className?: string }>; farbe: string; titel: string; hinweis?: string; children: ReactNode
+}) {
+  if (embed) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+          <Icon className={`h-4 w-4 ${farbe}`} /> {titel}
+        </div>
+        {hinweis && <p className="text-xs text-gray-500 dark:text-gray-400">{hinweis}</p>}
+        {children}
+      </div>
+    )
+  }
+  return (
+    <Card>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+        <Icon className={`h-5 w-5 ${farbe}`} /> {titel}
+      </h3>
+      {hinweis && <p className="text-sm text-gray-500 mb-4">{hinweis}</p>}
+      {children}
+    </Card>
+  )
+}
+
+export function PVStringVergleich({ anlageId, embed = false }: Props) {
   const [data, setData] = useState<PVStringsGesamtlaufzeitResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [saisonModul, setSaisonModul] = useState<string>('gesamt')
 
   useEffect(() => {
     let cancelled = false
@@ -89,17 +121,32 @@ export function PVStringVergleich({ anlageId }: Props) {
       })
   }, [data])
 
-  // Chart-Daten: Saisonaler Vergleich (Jan-Dez)
-  const saisonalChartData = useMemo(() => {
-    if (!data?.saisonal_aggregiert) return []
+  // Chart-Daten: SOLL/IST je Modul nebeneinander (Gesamtlaufzeit) + Delta-Label (Embed).
+  const moduleVergleichData = useMemo(() => {
+    if (!data?.strings) return []
+    return data.strings.map(s => ({
+      name: s.bezeichnung,
+      SOLL: Math.round(s.prognose_gesamt_kwh),
+      IST: Math.round(s.ist_gesamt_kwh),
+      deltaLabel: s.abweichung_gesamt_prozent != null
+        ? `${s.abweichung_gesamt_prozent >= 0 ? '+' : ''}${s.abweichung_gesamt_prozent.toFixed(0)} %`
+        : '',
+    }))
+  }, [data])
 
-    return data.saisonal_aggregiert.map(s => ({
+  // Chart-Daten: Saisonaler Vergleich (Jan-Dez) — Quelle nach Modulauswahl (Gesamt / einzelnes Modul).
+  const saisonalChartData = useMemo(() => {
+    const quelle = saisonModul === 'gesamt'
+      ? data?.saisonal_aggregiert
+      : data?.strings.find(s => String(s.investition_id) === saisonModul)?.saisonalwerte
+    if (!quelle) return []
+    return quelle.map(s => ({
       name: s.monat_name.slice(0, 3),
       SOLL: Math.round(s.prognose_kwh),
       'IST Ø': Math.round(s.ist_durchschnitt_kwh),
       'IST Summe': Math.round(s.ist_summe_kwh),
     }))
-  }, [data])
+  }, [data, saisonModul])
 
   const jahresFormatter = useMemo(() => {
     if (jahresChartData.length === 0) return (val: number) => `${val} kWh`
@@ -169,7 +216,7 @@ export function PVStringVergleich({ anlageId }: Props) {
     const colorClass = pct >= 95 ? 'text-green-600' : pct < 85 ? 'text-red-600' : 'text-amber-600'
     const Icon = pct >= 95 ? TrendingUp : pct < 85 ? TrendingDown : null
     return (
-      <span className={`flex items-center gap-1 ${colorClass}`}>
+      <span className={`flex items-center justify-end gap-1 ${colorClass}`}>
         {Icon && <Icon className="h-3 w-3" />}
         {pct.toFixed(0)} %
       </span>
@@ -244,70 +291,73 @@ export function PVStringVergleich({ anlageId }: Props) {
         </div>
       )}
 
-      {/* Jahresübersicht pro String */}
-      {jahresChartData.length > 0 && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-blue-500" />
-            SOLL vs IST pro Jahr
-          </h3>
+      {/* SOLL vs IST — Embed: je Modul nebeneinander + Delta-Label; IST-Seite: pro Jahr */}
+      {(embed ? moduleVergleichData.length > 0 : jahresChartData.length > 0) && (
+        <Sektion embed={embed} icon={Calendar} farbe="text-blue-500"
+          titel={embed ? 'SOLL vs IST je Modul (Gesamtlaufzeit)' : 'SOLL vs IST pro Jahr'}
+          hinweis={embed ? 'PVGIS-Prognose vs. erzeugt je Modul; Label = Abweichung.' : undefined}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={jahresChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis tickFormatter={jahresFormatter} width={80} />
-                <Tooltip content={<ChartTooltip unit="kWh" />} />
-                <Legend />
-                {data.strings.map((s, idx) => {
-                  // Bei nur einem String: SOLL/IST-Standardfarben (konsistent zu anderen Diagrammen)
-                  // Bei mehreren Strings: pro String eine Farbe (Differenzierung wichtiger)
-                  const single = data.strings.length === 1
-                  const baseColor = single
-                    ? SOLL_IST_COLORS.soll
-                    : STRING_COLORS[idx % STRING_COLORS.length]
-                  return (
-                    <Bar
-                      key={`${s.investition_id}-soll`}
-                      dataKey={`${s.bezeichnung} SOLL`}
-                      fill={`${baseColor}66`}
-                      stroke={baseColor}
-                      strokeWidth={1}
-                      strokeDasharray="4 2"
-                      name={`${s.bezeichnung} SOLL`}
-                    />
-                  )
-                })}
-                {data.strings.map((s, idx) => {
-                  const single = data.strings.length === 1
-                  const baseColor = single
-                    ? SOLL_IST_COLORS.ist
-                    : STRING_COLORS[idx % STRING_COLORS.length]
-                  return (
-                    <Bar
-                      key={`${s.investition_id}-ist`}
-                      dataKey={`${s.bezeichnung} IST`}
-                      fill={baseColor}
-                      name={`${s.bezeichnung} IST`}
-                    />
-                  )
-                })}
-              </BarChart>
+              {embed ? (
+                <BarChart data={moduleVergleichData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis tickFormatter={jahresFormatter} width={70} fontSize={11} />
+                  <Tooltip content={<ChartTooltip unit="kWh" />} />
+                  <Legend />
+                  <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={`${SOLL_IST_COLORS.soll}66`} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray="4 2" />
+                  <Bar dataKey="IST" name="IST (erzeugt)" fill={SOLL_IST_COLORS.ist}>
+                    <LabelList dataKey="deltaLabel" position="top" fontSize={11} />
+                  </Bar>
+                </BarChart>
+              ) : (
+                <BarChart data={jahresChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis tickFormatter={jahresFormatter} width={80} />
+                  <Tooltip content={<ChartTooltip unit="kWh" />} />
+                  <Legend />
+                  {data.strings.map((s, idx) => {
+                    const single = data.strings.length === 1
+                    const baseColor = single ? SOLL_IST_COLORS.soll : STRING_COLORS[idx % STRING_COLORS.length]
+                    return (
+                      <Bar key={`${s.investition_id}-soll`} dataKey={`${s.bezeichnung} SOLL`}
+                        fill={`${baseColor}66`} stroke={baseColor} strokeWidth={1} strokeDasharray="4 2"
+                        name={`${s.bezeichnung} SOLL`} />
+                    )
+                  })}
+                  {data.strings.map((s, idx) => {
+                    const single = data.strings.length === 1
+                    const baseColor = single ? SOLL_IST_COLORS.ist : STRING_COLORS[idx % STRING_COLORS.length]
+                    return (
+                      <Bar key={`${s.investition_id}-ist`} dataKey={`${s.bezeichnung} IST`}
+                        fill={baseColor} name={`${s.bezeichnung} IST`} />
+                    )
+                  })}
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
-        </Card>
+        </Sektion>
       )}
 
-      {/* Saisonaler Vergleich */}
+      {/* Saisonaler Vergleich — Embed: Modulauswahl (Gesamt / einzelnes Modul) */}
       {saisonalChartData.length > 0 && (
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-green-500" />
-            Saisonaler Vergleich (Jan - Dez)
-          </h3>
-          <p className="text-sm text-gray-500 mb-4">
-            Vergleicht die monatliche PVGIS-Prognose mit dem Durchschnitt der tatsächlichen Erzeugung über alle Jahre.
-          </p>
+        <Sektion embed={embed} icon={BarChart3} farbe="text-green-500" titel="Saisonaler Vergleich (Jan – Dez)"
+          hinweis="Monatliche PVGIS-Prognose vs. Durchschnitt der tatsächlichen Erzeugung über alle Jahre.">
+          {embed && data.strings.length > 1 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-500 dark:text-gray-400">Modul:</label>
+              <select
+                value={saisonModul}
+                onChange={(e) => setSaisonModul(e.target.value)}
+                className="min-h-[36px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-2 text-gray-700 dark:text-gray-300"
+              >
+                <option value="gesamt">Gesamt (alle Module)</option>
+                {data.strings.map(s => <option key={s.investition_id} value={String(s.investition_id)}>{s.bezeichnung}</option>)}
+              </select>
+            </div>
+          )}
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={saisonalChartData}>
@@ -335,14 +385,11 @@ export function PVStringVergleich({ anlageId }: Props) {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-        </Card>
+        </Sektion>
       )}
 
       {/* String-Detail-Tabelle */}
-      <Card>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Einzelne Strings / Module (Gesamtlaufzeit)
-        </h3>
+      <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800">
@@ -404,7 +451,7 @@ export function PVStringVergleich({ anlageId }: Props) {
             </tbody>
           </table>
         </div>
-      </Card>
+      </Sektion>
     </div>
   )
 }
