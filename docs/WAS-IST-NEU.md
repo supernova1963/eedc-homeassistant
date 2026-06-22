@@ -1,11 +1,25 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.3)
+> **Stand:** Juni 2026 (v3.45.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.4 — Sonstige Erzeuger (z. B. BHKW) zählen in die Bilanz (Juni 2026)
+
+> Wer einen eigenen Stromerzeuger außer PV oder Balkonkraftwerk gepflegt hat — etwa ein **Mini-BHKW** — unter „Sonstiges", sah dessen Erzeugung bisher nur isoliert. In Eigenverbrauch und Autarkie floss sie nicht ein. Weil dein Einspeise- und Netzbezugszähler aber den Strom **aller** Erzeuger im Haus messen, wurde deine Autarkie dadurch zu niedrig angezeigt.
+
+### Was sich für dich ändert
+
+- **Sonstige Erzeuger zählen jetzt überall mit** — im Monatsbericht, in der Cockpit-Übersicht, in den Auswertungen und im Live-Dashboard. Eigenverbrauch und Autarkie stimmen damit auch, wenn neben der PV noch ein weiterer Erzeuger einspeist.
+- **PV-Kennzahlen bleiben sauber getrennt:** spezifischer Ertrag und Performance-Ratio bewerten weiterhin nur die PV-Anlage — ein BHKW verfälscht sie nicht mehr.
+- **Bewusst noch offen:** CO₂-Einsparung und Wirtschaftlichkeit eines brennstoffbetriebenen Erzeugers (Brennstoffkosten, Emissionen) werden noch nicht bewertet — das folgt mit einem eigenen Modell.
+
+> Inselanlagen ohne Netzanschluss sind davon nicht betroffen.
 
 ---
 

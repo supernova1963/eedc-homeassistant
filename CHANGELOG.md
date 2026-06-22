@@ -9,6 +9,8 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.4] - 2026-06-22 — Sonstige Erzeuger (BHKW) zählen in die Energiebilanz
+
 ### Fixed
 
 - **Sonstige Erzeuger (z. B. Mini-BHKW) zählen jetzt überall in die Energiebilanz.** Wer einen Erzeuger unter „Sonstiges" gepflegt hat, sah dessen Erzeugung im **Monatsbericht, der Cockpit-Übersicht und den Auswertungen-Finanzen** bisher nur isoliert — sie floss dort **nicht** in Eigenverbrauch/Autarkie ein. Da Einspeise- und Netzbezugs-Zähler aber die Summe **aller** Erzeuger hinter dem Hausanschluss messen, war die Bilanz dadurch still verfälscht: Der gemessene Einspeise-Wert enthielt den Beitrag des sonstigen Erzeugers, die gezählte Erzeugung jedoch nicht → **Direkt-/Eigenverbrauch und Autarkie wurden zu niedrig** ausgewiesen. Jetzt geht die **Gesamterzeugung** (PV + Balkonkraftwerk + sonstige Erzeuger) konsistent in alle Bilanz-Sichten ein — monatlich, im **Live-Dashboard** (ein sonstiger Erzeuger mit Live-Leistungssensor erscheint als eigene Erzeugungs-Quelle und hebt Live-Autarkie/Eigenverbrauch) und in der **Tages-/Energieprofil-Bilanz** (dort war er bereits enthalten).
