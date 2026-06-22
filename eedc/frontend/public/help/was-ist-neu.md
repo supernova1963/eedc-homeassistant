@@ -1,11 +1,23 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.4)
+> **Stand:** Juni 2026 (v3.45.5)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.5 — Live-Tagesverlauf ohne falsche Leistungs-Spitzen (Juni 2026)
+
+> Bei Wechselrichtern oder Zählern mit grober kWh-Auflösung (oder seltener Cloud-Aktualisierung) zeigte der Live-Tagesverlauf gelegentlich einzelne, physikalisch unmögliche Leistungs-Nadeln — die Tagessumme stimmte, nur die Kurve sah „zackig" aus.
+
+### Was sich für dich ändert
+
+- **Saubere Live-Kurve auch bei grobem Zähler:** Erkennt eedc, dass dein Zähler zu selten meldet, glättet es nur die **Kurvenform** anhand deines Live-Leistungssensors — die **Energiewerte (Stunde/Tag) bleiben unverändert exakt**. Bei einem feinen Zähler ändert sich nichts.
+
+> Standalone-/MQTT-Installationen waren nie betroffen (sie rechnen ohnehin leistungsbasiert).
 
 ---
 
