@@ -64,6 +64,7 @@ def _baue_short_term_overlays(
     netz_kombi_eid: Optional[str],
     start: datetime,
     end: datetime,
+    history: dict[str, list],
 ) -> tuple[dict[str, list], dict[str, list]]:
     """Baut die `statistics_short_term`-Overlays für die Add-on-Kurve.
 
@@ -83,7 +84,7 @@ def _baue_short_term_overlays(
     """
     from backend.services.ha_statistics_service import get_ha_statistics_service
     from backend.core.berechnungen.live_tagesverlauf_5min import (
-        counter_deltas_zu_leistung,
+        kurven_leistung_mit_live_fallback,
         means_zu_leistung,
     )
 
@@ -145,13 +146,27 @@ def _baue_short_term_overlays(
         return {}, {}
 
     counter_overlay: dict[str, list] = {}
+    grob_log: dict[str, int] = {}  # power_eid → Anzahl grober Stunden (Diagnose)
     for power_eid, counter_eid in counter_src.items():
         data = st.get(counter_eid)
         if not data or not data.get("has_sum"):
             continue
-        pts = counter_deltas_zu_leistung(data["counter_deltas"])
+        # Live-Form derselben Serie (rohe Power-History, noch nicht invertiert —
+        # der Helfer nutzt nur den Betrag) für den Grober-Zähler-Fallback.
+        pts, grobe_stunden = kurven_leistung_mit_live_fallback(
+            data["counter_deltas"], history.get(power_eid),
+        )
         if pts:
             counter_overlay[power_eid] = pts
+        if grobe_stunden:
+            grob_log[power_eid] = len(grobe_stunden)
+
+    if grob_log:
+        logger.info(
+            "Tagesverlauf: grober Energie-Zähler erkannt (Takt > 5 min) — "
+            "Kurvenform stundenweise aus Live-Sensor, Energie aus Zähler: %s",
+            ", ".join(f"{eid}={n}h" for eid, n in grob_log.items()),
+        )
 
     mean_overlay: dict[str, list] = {}
     for power_eid in mean_src:
@@ -352,7 +367,7 @@ async def get_tagesverlauf(
     mean_overlay, counter_overlay = _baue_short_term_overlays(
         anlage, serien_core, serie_entities, investitionen,
         pv_gesamt_eid, netz_bezug_eid, netz_einspeisung_eid, netz_kombi_eid,
-        start, end,
+        start, end, history,
     )
 
     # Mean-Overlay VOR Invert (gleiche Roh-Sensor-Semantik → Invert gilt,
