@@ -32,10 +32,11 @@ import {
   LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings,
   Sun, Battery, Flame, Car, Plug, Wrench, Zap, Euro, Leaf, PiggyBank, Table2,
   Activity, TrendingUp, Trophy, MapPin, ArrowRight, LineChart, Wallet,
-  ArrowUp, ArrowDown, ChevronDown, Maximize2, Minimize2,
+  ArrowUp, ArrowDown, ChevronDown, Maximize2,
   CheckCircle2, AlertTriangle, Sparkles, BookOpen, FileText,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { FokusVollbild } from '../blocks/FokusVollbild'
 import { IATopNav } from '../layout/IATopNav'
 import { IASubTabBar } from '../layout/IASubTabBar'
 import { AnlagenSelektorView } from '../layout/AnlagenSelektorView'
@@ -355,24 +356,13 @@ function BloeckeView({ bloecke, sortierbar = false, persistKey }: { bloecke: Blo
     setZu(next)
   }
 
-  // ── Fokus/Vollbild: nur dieser Block, füllt den Inhaltsbereich ──────────────
+  // ── Fokus/Vollbild: nur dieser Block, bildschirmfüllend (geteiltes Overlay) ──
   if (fokus && byId[fokus]) {
     const b = byId[fokus]
     return (
-      <div className="min-h-[85vh] flex flex-col p-3 sm:p-6 gap-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            {b.icon && <b.icon className={`h-5 w-5 ${b.farbe ?? ''}`} />}
-            {b.title}
-            <span className="text-xs font-normal text-gray-400 dark:text-gray-500">Fokus / Vollbild</span>
-          </h2>
-          <button type="button" onClick={() => setFokus(null)}
-            className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700">
-            <Minimize2 className="h-4 w-4" /> Zurück
-          </button>
-        </div>
-        <div className="flex-1 min-h-0">{b.render(true)}</div>
-      </div>
+      <FokusVollbild titel={b.title} icon={b.icon} farbe={b.farbe} onClose={() => setFokus(null)}>
+        {b.render(true)}
+      </FokusVollbild>
     )
   }
 

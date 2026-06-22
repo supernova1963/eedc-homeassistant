@@ -316,6 +316,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **✅ Entschieden (2026-05-31, korrigiert 2026-06-01): EIN Sektions-Persistenz-SoT.** Statt `SortableSection` ersatzlos zu streichen (das war die ältere, mit dem Cap verwechselte Fassung — siehe Korrektur oben), werden Auf/Zu **und** Reihenfolge in **einem** Mechanismus zusammengeführt (`CollapsibleSection` um die Reorder-Fähigkeit erweitert, `SortableSection` darin aufgelöst). Reorder bleibt also als Funktion erhalten, nur ohne Doppel-Logik. **Geltungsbereich:** Cockpit-Zeitsichten ja; Komponenten-Hub fix (IA-V4 Variante C). detLAN (#175) bleibt bedient.
 > **Default-Open** pro Sektion definieren (datenreich → standardmäßig offen; sekundär → standardmäßig zu).
 > **Mobile-Default** abweichend siehe [KONZEPT-MOBILE.md M1](KONZEPT-MOBILE.md).
+> **IA-V4-Block-Modell (SoT):** Im v4-Routenbaum tragen Inhalts-Blöcke das universelle Modell `components/blocks/BlockShell` (einklappen + optional ↑↓-Reihenfolge + Persistenz je Sicht). **Fokus/Vollbild ist EIN geteilter Baustein:** `components/blocks/FokusVollbild` (bildschirmfüllendes Overlay) — konsumiert von `BlockShell` (⤢ je Block) **und** `FokusKachel` (⤢ je Karte für IST-treue Layouts ohne Block-Stack, z. B. Cockpit/Live). **Keine zweite Fokus-Implementierung** (Regel 0a); Komponenten mit eigener Kopfzeile reichen den ⤢ über einen `kopfAktion`-Slot ein (Vorbild `live/EnergieFluss`). Stand 2026-06-22 (A.3).
 
 **Betroffene Issues:** #258 P5, #148.
 

@@ -9,6 +9,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.5] - 2026-06-22 — Live-Tagesverlauf: keine unmöglichen Leistungs-Nadeln bei groben Zählern
+
+### Fixed
+
+- **Live-Tagesverlauf zeigt keine physikalisch unmöglichen Leistungs-Nadeln mehr (#680, mameier1234).** Bei Wechselrichtern/Zählern mit grober kWh-Auflösung oder seltener Cloud-Aktualisierung erschienen im Live-Tagesverlauf vereinzelt Riesen-Spitzen (z. B. 13 kW bei 11 kWp) samt spiegelbildlichem Haushalts-Ausschlag — die **Tagessumme stimmte, nur die Kurvenform** war verzerrt. Ursache: Die Kurve rekonstruiert die Leistung aus dem kWh-Zähler (`P = ΔkWh × 12000`) und unterstellt 5-Minuten-Auflösung; meldet der Zähler seltener, bucht Home Assistant den ganzen Zuwachs in **einen** Slot → Nadel. Jetzt fällt **nur die Kurvenform** stundenweise auf den Live-Leistungssensor zurück, wenn der Zähler nachweislich zu grob ist (Phantom-Null: Zähler ≈ 0, Live > 50 W); die Stunden-Energie bleibt die Zählersumme und wird auf die Live-Form normiert → **Summe exakt erhalten** (LTS-treu), Live-Drift kann die Energie nicht verfälschen. Detektor ist in-memory (keine HA-Extra-Abfrage), Entscheidung pro Stunde. Standalone-/MQTT-Installationen sind bereits leistungsbasiert und nicht betroffen.
+
+### Changed
+
+- **Intern — IA-v4-Vorbereitung (hinter Build-Flag, für Nutzer noch nicht aktiv):** Referenz-Sicht **Cockpit/Live** (das reiche IST-Live-Layout in die neue Shell eingepasst, kein Neubau; durchgängiger **Fokus/Vollbild-Schalter** je Karte als geteilter Baustein) sowie Komponenten-Hub-Feinschliff. Flag-gesteuert, im ausgelieferten Produkt nicht sichtbar (Produktiv-Build bit-identisch ohne v4-Code).
+
 ## [3.45.4] - 2026-06-22 — Sonstige Erzeuger (BHKW) zählen in die Energiebilanz
 
 ### Fixed

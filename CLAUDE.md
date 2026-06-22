@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.45.4 | **Status:** Stable Release
+**Version:** 3.45.5 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -181,6 +181,8 @@ EEDC Add-on                              Community Server
 ## Letzte Änderungen
 
 > **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`.
+
+**v3.45.5** (2026-06-22) — Live-Tagesverlauf: Nadel-Spikes bei grobem Energie-Zähler weg (#680). Kurve rekonstruiert Leistung aus kWh-Zähler (`ΔkWh×12000`, 5-Min-Annahme); meldet der Zähler seltener, landet der ganze Zuwachs in EINEM Slot → 13-kW-Nadel. Fix: nur die **Kurvenform** fällt stundenweise auf den Live-Leistungssensor zurück (Phantom-Null-Detektor), Stunden-Energie = Zählersumme bleibt LTS-treu (Σ normiert). Intern (flag-off-dormant): **IA-V4 A.3 Cockpit/Live** (IST-Layout in v4-Shell, kein Neubau; durchgängig Fokus/Vollbild via geteiltem `FokusVollbild`/`FokusKachel`, BlockShell auf dasselbe Overlay umgestellt) + Komponenten-Hub-Korrekturen.
 
 **v3.45.4** (2026-06-22) — Sonstige Erzeuger (BHKW) in der Energiebilanz: ein Erzeuger unter „Sonstiges" (Kategorie *Erzeuger*) speist hinter den EINEN Hauszähler → seine Erzeugung zählt jetzt in EV/Autarkie in **allen** Bilanz-Pfaden (Monat + Vorjahr, Live, Tag/Energieprofil) via Layer-SoT `erzeugung_hinter_zaehler_kwh`. PV-Kennzahlen (spez. Ertrag/PR) bleiben rein; CO₂/Wirtschaftlichkeit eines Brennstoff-Erzeugers bewusst „nicht bewertet". Lehre: Bilanz-Drift saß in drei getrennten Pfaden — Symptom-Patch hätte nur den Monat erwischt.
 
