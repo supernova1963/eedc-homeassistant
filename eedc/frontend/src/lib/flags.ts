@@ -14,3 +14,12 @@
  * garantiert. `IA_V4` hier bleibt der SoT für Komponenten-/Laufzeit-Code.
  */
 export const IA_V4 = import.meta.env.VITE_IA_V4 === 'true'
+
+/**
+ * `DEMO_DEFAULT` startet datenlose Echtzeit-Sichten (Cockpit/Live) direkt im
+ * Demo-Modus + macht den Demo-Schalter sichtbar. Gedacht für die Guest-Box
+ * (Tester-Server ohne echte HA-/MQTT-Live-Quelle), gesetzt von
+ * `scripts/deploy-guest.sh` (`VITE_DEMO_DEFAULT=true`). Dev-Box/Produktiv lassen
+ * es ungesetzt → Live verhält sich wie bisher (Demo nur via `?debug` + Klick).
+ */
+export const DEMO_DEFAULT = import.meta.env.VITE_DEMO_DEFAULT === 'true'

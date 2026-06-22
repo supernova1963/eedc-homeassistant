@@ -39,8 +39,10 @@ if [ "${1:-}" = "--seed" ]; then
   SEED_FILE="${2:?--seed braucht einen Pfad zur Demo-DB}"
 fi
 
-echo "==> [1/5] Frontend flag-on bauen (VITE_IA_V4=true)"
-( cd "$EEDC_DIR" && VITE_IA_V4=true npm --prefix frontend run build >/dev/null )
+# VITE_DEMO_DEFAULT=true: Cockpit/Live startet im Demo-Modus (Guest hat keine
+# echte HA-/MQTT-Live-Quelle) → Tester sehen sofort befüllte Live-Daten.
+echo "==> [1/5] Frontend flag-on bauen (VITE_IA_V4=true, VITE_DEMO_DEFAULT=true)"
+( cd "$EEDC_DIR" && VITE_IA_V4=true VITE_DEMO_DEFAULT=true npm --prefix frontend run build >/dev/null )
 ls "$EEDC_DIR/frontend/dist/assets/" | grep -qiE 'CockpitV4|LayoutV4' \
   || { echo "FEHLER: keine v4-Chunks im Build"; exit 1; }
 

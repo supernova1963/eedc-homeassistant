@@ -7,7 +7,7 @@
  * Tages-kWh Tooltips, Σ Erzeugung/Verbrauch.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
 import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS } from '../../lib'
@@ -160,6 +160,8 @@ interface EnergieFlussProps {
   gauges?: LiveGauge[]
   pvSollKw?: number | null
   netzPufferW?: number
+  /** Optionale Aktion ganz rechts in der Kopfzeile (z. B. Fokus/Vollbild-⤢). */
+  kopfAktion?: ReactNode
 }
 
 interface NodePosition {
@@ -341,7 +343,7 @@ function socColor(pct: number): string {
 
 export default function EnergieFluss({
   komponenten, summeErzeugung, summeVerbrauch, summePv, tagesWerte, gauges, pvSollKw,
-  netzPufferW = 100,
+  netzPufferW = 100, kopfAktion,
 }: EnergieFlussProps) {
   const achsen = useChartTheme()
   const [lite, toggleLite] = useLiteMode()
@@ -445,6 +447,7 @@ export default function EnergieFluss({
             {lite ? <ZapIcon className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
             {lite ? 'Lite' : 'Effekte'}
           </button>
+          {kopfAktion}
         </div>
       </div>
 
