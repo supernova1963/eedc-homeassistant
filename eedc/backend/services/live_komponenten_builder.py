@@ -49,6 +49,10 @@ def build_komponenten(
     summe_verbrauch = 0.0
     gauges = []
     pv_total_w = 0.0
+    # Sonstige Erzeuger (z. B. BHKW) speisen hinter den Zähler → gehen in die
+    # Netzpunkt-Bilanz (Autarkie/EV), aber NICHT in pv_total_w (PV-Leistungs-%
+    # bleibt rein). Konzept Sonstiger Erzeuger 2026-06-22.
+    sonstige_erzeugung_w = 0.0
 
     # Wallbox-Keys sammeln für E-Auto → Wallbox Zuordnung
     wallbox_keys: list[str] = []
@@ -152,6 +156,12 @@ def build_komponenten(
                    and inv.parameter.get(PARAM_E_AUTO["V2H_FAEHIG"]))
         ist_bidirektional = typ in BIDIREKTIONAL_TYPEN or ist_v2h
 
+        ist_sonstiger_erzeuger = (
+            typ == "sonstiges"
+            and isinstance(inv.parameter, dict)
+            and inv.parameter.get("kategorie") == "erzeuger"
+        )
+
         if typ in ERZEUGER_TYPEN:
             kw = val_w / 1000
             komponenten.append({
@@ -164,6 +174,22 @@ def build_komponenten(
             })
             summe_erzeugung += kw
             pv_total_w += val_w
+
+        elif ist_sonstiger_erzeuger:
+            # Sonstiger Erzeuger (BHKW) — eigene Erzeugungs-Komponente, fließt in
+            # die Netzpunkt-Bilanz (summe_erzeugung + Autarkie unten), aber NICHT
+            # in pv_total_w (kein PV → keine kWp/PV-%, Achsen-Trennung).
+            kw = val_w / 1000
+            komponenten.append({
+                "key": f"sonstige_{inv_id}",
+                "label": inv.bezeichnung,
+                "icon": TYP_ICON.get(typ, "wrench"),
+                "erzeugung_kw": round(kw, 3),
+                "verbrauch_kw": None,
+                "leistung_kwp": None,
+            })
+            summe_erzeugung += kw
+            sonstige_erzeugung_w += val_w
 
         elif ist_bidirektional:
             kw = abs(val_w) / 1000
@@ -307,9 +333,12 @@ def build_komponenten(
             "einheit": "% kWp",
         })
 
-    # Autarkie + Eigenverbrauchsquote
-    if pv_total_w > 0 and (einspeisung_w is not None or netzbezug_w is not None):
-        pv_kw = pv_total_w / 1000
+    # Autarkie + Eigenverbrauchsquote — Netzpunkt-Bilanz nutzt die Gesamterzeugung
+    # hinter dem Zähler (PV + sonstige Erzeuger wie BHKW), nicht nur PV. Die
+    # PV-Leistungs-Gauge oben bleibt rein (pv_total_w). Konzept Sonstiger Erzeuger.
+    erzeugung_w = pv_total_w + sonstige_erzeugung_w
+    if erzeugung_w > 0 and (einspeisung_w is not None or netzbezug_w is not None):
+        erzeugung_kw = erzeugung_w / 1000
         bat_ladung_kw = sum(
             k.get("verbrauch_kw") or 0 for k in komponenten
             if k["key"].startswith("batterie_") or k["key"].startswith("v2h_")
@@ -318,7 +347,7 @@ def build_komponenten(
             k.get("erzeugung_kw") or 0 for k in komponenten
             if k["key"].startswith("batterie_") or k["key"].startswith("v2h_")
         )
-        direktverbrauch_kw = max(0, pv_kw - (einspeisung_w or 0) / 1000 - bat_ladung_kw)
+        direktverbrauch_kw = max(0, erzeugung_kw - (einspeisung_w or 0) / 1000 - bat_ladung_kw)
         eigenverbrauch_kw = direktverbrauch_kw + bat_entladung_kw
         gesamt_verbrauch_kw = eigenverbrauch_kw + (netzbezug_w or 0) / 1000
 
@@ -333,8 +362,8 @@ def build_komponenten(
                 "einheit": "%",
             })
 
-        if pv_kw > 0:
-            ev_quote = eigenverbrauch_kw / pv_kw * 100
+        if erzeugung_kw > 0:
+            ev_quote = eigenverbrauch_kw / erzeugung_kw * 100
             gauges.append({
                 "key": "eigenverbrauch",
                 "label": "Eigenverbr.",

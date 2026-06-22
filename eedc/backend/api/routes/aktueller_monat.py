@@ -31,6 +31,7 @@ from backend.core.berechnungen import (
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
+    erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     merge_datenquellen,
     spezifischer_ertrag_kwh_kwp,
@@ -384,6 +385,7 @@ async def _collect_saved_data(
         eauto_verbrauch_total = 0.0  # gemessener Fahrverbrauch (Vorrang vor Ladung)
         bkw_erzeugung_total = 0.0
         bkw_eigenverbrauch_total = 0.0
+        sonstiges_erzeugung_total = 0.0  # sonstige Erzeuger (BHKW) hinter dem Zähler
 
         for imd in imd_result.scalars().all():
             inv = inv_by_id.get(imd.investition_id)
@@ -423,6 +425,10 @@ async def _collect_saved_data(
                 # fehlendem Messwert auf die volle Erzeugung zurück — Site-1-Quirk,
                 # divergent zu Komponenten/Übersicht (siehe FELD-MATRIX D5).
                 bkw_eigenverbrauch_total += b.bkw_eigenverbrauch or bkw_kwh
+            elif inv.typ == "sonstiges":
+                # Sonstiger Erzeuger (BHKW) speist hinter den Zähler → in die
+                # Netzpunkt-Bilanz (Resolver kategorie-bewusst: nur erzeuger).
+                sonstiges_erzeugung_total += b.sonstiges_erzeugung
 
         # E-Mobilitäts-Pool: EINE Quelle liefert die konsistente Heimladungs-
         # Trias (pv + netz == ladung). Früher feldweises max() — das nahm pv
@@ -462,6 +468,8 @@ async def _collect_saved_data(
             resolved["bkw_erzeugung_kwh"] = (bkw_erzeugung_total, quelle)
         if bkw_eigenverbrauch_total > 0:
             resolved["bkw_eigenverbrauch_kwh"] = (bkw_eigenverbrauch_total, quelle)
+        if sonstiges_erzeugung_total > 0:
+            resolved["sonstiges_erzeugung_kwh"] = (sonstiges_erzeugung_total, quelle)
 
     return resolved
 
@@ -544,7 +552,12 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     # in `_collect_saved_data` (siehe dort). Max-pro-Feld statt Summe.
     eauto_inv_ids = [i.id for i in investitionen if i.typ == "e-auto" and not ist_dienstlich(i)]
     wb_inv_ids = [i.id for i in investitionen if i.typ == "wallbox" and not ist_dienstlich(i)]
-    all_inv_ids = pv_inv_ids + bat_inv_ids + wp_inv_ids + eauto_inv_ids + wb_inv_ids
+    # Sonstige Erzeuger (BHKW) speisen hinter den Zähler → in die Netzpunkt-Bilanz
+    # (Konzept Sonstiger Erzeuger); auch der VJ-Vergleich muss sie mitziehen,
+    # sonst zeigt das YoY-Delta einen methodischen Scheinsprung.
+    sonstiges_inv_ids = [i.id for i in investitionen if i.typ == "sonstiges"]
+    all_inv_ids = pv_inv_ids + bat_inv_ids + wp_inv_ids + eauto_inv_ids + wb_inv_ids + sonstiges_inv_ids
+    sonstiges_vj = 0.0
 
     if all_inv_ids:
         imd_result = await db.execute(
@@ -593,6 +606,8 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
                 emob_km_vj += b.eauto_km
             elif imd.investition_id in wb_inv_ids:
                 wb_ladung_vj += b.wallbox_ladung
+            elif inv.typ == "sonstiges":
+                sonstiges_vj += b.sonstiges_erzeugung
 
         # Pool-Auswahl konsistent zu _collect_saved_data: pro Feld die größere
         # Quelle. WB liefert üblicherweise Loadpoint-Wahrheit, EAuto ist Vehicle-
@@ -620,7 +635,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     netz = result.get("netzbezug_kwh", 0) or 0
     bat_ladung = result.get("speicher_ladung_kwh", 0) or 0
     bat_entladung = result.get("speicher_entladung_kwh", 0) or 0
-    direktverbrauch = max(0, pv - einsp - bat_ladung) if pv > 0 else 0
+    # Netzpunkt-Bilanz inkl. sonstiger Erzeuger (BHKW); `pv` (result) bleibt rein.
+    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv, sonstiges_vj)
+    direktverbrauch = max(0, erzeugung_bilanz - einsp - bat_ladung) if erzeugung_bilanz > 0 else 0
     ev = direktverbrauch + bat_entladung
     gv = ev + netz
     result["eigenverbrauch_kwh"] = round(ev, 1)
@@ -1009,6 +1026,15 @@ async def get_aktueller_monat(
     speicher_ladung = get_val("speicher_ladung_kwh")
     speicher_entladung = get_val("speicher_entladung_kwh")
 
+    # Sonstige Erzeuger (z. B. BHKW) speisen hinter den Hauszähler → ihre Erzeugung
+    # gehört in die Netzpunkt-Bilanz, sonst drückt der gemessene Einspeise-Zähler
+    # die PV-Bilanz still zu niedrig (Konzept Sonstiger Erzeuger 2026-06-22).
+    # `pv` (Anzeige + PV-Kennzahlen) bleibt rein. Der Wert wird in
+    # `_collect_saved_data` aktiv-/anschaffungsdatum-gefiltert aggregiert
+    # ([[feedback_anschaffungsdatum_grenze]]).
+    sonstiges_erz_bilanz = get_val("sonstiges_erzeugung_kwh") or 0
+    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv, sonstiges_erz_bilanz)
+
     # ── Berechnete Werte ──
     eigenverbrauch = None
     direktverbrauch = None
@@ -1016,10 +1042,10 @@ async def get_aktueller_monat(
     autarkie = None
     ev_quote = None
 
-    if pv is not None and einspeisung is not None:
+    if (pv is not None or sonstiges_erz_bilanz > 0) and einspeisung is not None:
         ladung = speicher_ladung or 0
         entladung = speicher_entladung or 0
-        direktverbrauch = round(max(0, pv - einspeisung - ladung), 2)
+        direktverbrauch = round(max(0, erzeugung_bilanz - einspeisung - ladung), 2)
         eigenverbrauch = round(direktverbrauch + entladung, 2)
 
         if netzbezug is not None:
@@ -1027,8 +1053,8 @@ async def get_aktueller_monat(
             if gesamtverbrauch > 0:
                 autarkie = round(autarkie_prozent(eigenverbrauch, gesamtverbrauch), 1)
 
-        if pv > 0:
-            ev_quote = round(eigenverbrauchsquote_prozent(eigenverbrauch, pv), 1)
+        if erzeugung_bilanz > 0:
+            ev_quote = round(eigenverbrauchsquote_prozent(eigenverbrauch, erzeugung_bilanz), 1)
 
     # ── Finanzen ──
     einspeise_erloes = None

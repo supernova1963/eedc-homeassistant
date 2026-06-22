@@ -303,6 +303,10 @@ async def get_hourly_kwh_by_category(
 
         final[h] = {
             "pv": pv_total,
+            # Sonstiges-Erzeuger-Anteil separat ausweisen, damit die
+            # Performance-Ratio nur die REINE PV-Erzeugung gegen GTI rechnet
+            # (`pv` enthält den Sonstiges-Anteil bewusst für die Bilanz).
+            "erzeugung_sonstiges": sonst_erz,
             "einspeisung": einsp,
             "netzbezug": bez,
             "ladung_batterie": ladung_batt,

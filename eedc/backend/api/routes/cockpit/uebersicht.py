@@ -23,6 +23,7 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
+    erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
 )
@@ -364,7 +365,15 @@ async def get_cockpit_uebersicht(
     # Stilllegungsdatum aktiv (Daten fließen ein), aktiv=False → komplett
     # ausgeblendet. Ohne registrierte PV-Quelle oder ohne gesetztes
     # Anschaffungsdatum bleibt das Verhalten unverändert (Filter greift nicht).
-    _pv_erzeuger = [i for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
+    # Eigen-Erzeuger = PV-Module ∪ Balkonkraftwerke ∪ sonstige Erzeuger (z. B.
+    # BHKW). Auch ein sonstiger Erzeuger speist hinter den Hauszähler, also zählt
+    # ein Monat mit aktivem Erzeuger (auch ohne PV) seine Zählerwerte mit
+    # (konsistent zur BKW-Behandlung; Konzept Sonstiger Erzeuger 2026-06-22).
+    _pv_erzeuger = [
+        i for i in investitionen
+        if i.typ in ("pv-module", "balkonkraftwerk")
+        or (i.typ == "sonstiges" and (getattr(i, "parameter", None) or {}).get("kategorie") == "erzeuger")
+    ]
 
     def _pv_aktiv_im_monat(jahr: int, monat: int) -> bool:
         if not _pv_erzeuger:
@@ -379,11 +388,18 @@ async def get_cockpit_uebersicht(
     pv_erzeugung_md = sum(m.pv_erzeugung_kwh or 0 for m in md_pv)
     pv_erzeugung = pv_erzeugung_inv if pv_erzeugung_inv > 0 else pv_erzeugung_md
 
+    # Netzpunkt-Bilanz: sonstige Erzeuger (z. B. BHKW) speisen hinter denselben
+    # Zähler → ihre Erzeugung gehört in die EV/Autarkie-Ableitung, sonst drückt
+    # der gemessene Einspeise-Zähler die PV-Bilanz still zu niedrig (Konzept
+    # Sonstiger Erzeuger). `pv_erzeugung` bleibt rein für PV-Kennzahlen unten
+    # (spez. Ertrag/Performance-Ratio/SOLL-IST).
+    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_erzeugung, sonstiges_erzeugung)
+
     # Kanonische Verbrauchs-Kennzahlen über den SoT-Helper (ADR-001) statt der
     # früher hier duplizierten Inline-Formel — inkl. V2H (E-Auto → Haus) als
     # Eigenverbrauch, einheitlich mit HA-Export/Aussichten/Jahresbericht.
     _kz = berechne_verbrauchs_kennzahlen(
-        pv_erzeugung_kwh=pv_erzeugung,
+        pv_erzeugung_kwh=erzeugung_bilanz,
         einspeisung_kwh=einspeisung,
         netzbezug_kwh=netzbezug,
         speicher_ladung_kwh=speicher_ladung,

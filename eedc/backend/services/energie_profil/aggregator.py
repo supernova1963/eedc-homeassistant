@@ -461,7 +461,8 @@ async def aggregate_day(
         # Fehlt der Zähler einer Kategorie, bleibt der Wert None.
         # Konvention für Batterie: positiv=Ladung, negativ=Entladung (netto).
         snap_h = kwh_pro_stunde.get(h, {}) if kwh_pro_stunde else {}
-        pv_kw = snap_h.get("pv")
+        pv_kw = snap_h.get("pv")  # inkl. Sonstiges-Erzeuger (für die Bilanz)
+        sonstige_erz_kw = snap_h.get("erzeugung_sonstiges")  # für PV-reine PR
         einspeisung_kw = snap_h.get("einspeisung")
         netzbezug_kw = snap_h.get("netzbezug")
         verbrauch_kw = snap_h.get("verbrauch")
@@ -484,7 +485,9 @@ async def aggregate_day(
             defizit = None
 
         if pv_kw is not None:
-            pv_ertrag_summe += pv_kw
+            # Performance-Ratio = reine PV-Qualität (Ertrag vs. GTI) → den in `pv`
+            # enthaltenen Sonstiges-Erzeuger-Anteil (BHKW, kein GTI-Bezug) abziehen.
+            pv_ertrag_summe += pv_kw - (sonstige_erz_kw or 0.0)
 
         peak_pv = max(peak_pv, pv_kw_w)
         peak_bezug = max(peak_bezug, netzbezug_kw_w)

@@ -192,6 +192,10 @@ async def get_hourly_kwh_by_category_lts(
 
         final[h] = {
             "pv": pv_total,
+            # Sonstiges-Erzeuger-Anteil separat (für PV-reine Performance-Ratio;
+            # `pv` enthält ihn bewusst für die Bilanz) — symmetrisch zu
+            # snapshot/aggregator.py.
+            "erzeugung_sonstiges": sonst_erz,
             "einspeisung": einsp,
             "netzbezug": bez,
             "batterie_netto": batt_netto,

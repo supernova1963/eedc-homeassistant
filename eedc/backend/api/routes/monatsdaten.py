@@ -19,6 +19,7 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
 from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
+    erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     resolve_pv_je_modul,
     PvModul,
@@ -275,6 +276,7 @@ async def list_monatsdaten_aggregiert(
         v2h_entladung = 0.0  # E-Auto → Haus, zählt wie Speicher-Entladung als Eigenverbrauch
         wallbox_ladung = 0.0
         wallbox_ladung_pv = 0.0
+        sonstiges_erzeugung = 0.0  # sonstige Erzeuger (BHKW) hinter dem Zähler
 
         # PV-Module werden NICHT direkt in der Schleife summiert — der
         # kWp-Verteilungs-Read-time-Helper (resolve_pv_je_modul) entscheidet
@@ -336,6 +338,11 @@ async def list_monatsdaten_aggregiert(
                 hat_wallbox_imd = True
                 wallbox_ladung += b.wallbox_ladung
                 wallbox_ladung_pv += b.wallbox_ladung_pv
+            elif inv.typ == "sonstiges":
+                # Sonstiger Erzeuger (z. B. BHKW) speist hinter den Hauszähler —
+                # Erzeugung gehört in die Netzpunkt-Bilanz (Resolver ist
+                # kategorie-bewusst: nur erzeuger liefert sonstiges_erzeugung).
+                sonstiges_erzeugung += b.sonstiges_erzeugung
 
         # PV-Module: kWp-Verteilung (Read-time, [[project_kwp_verteilung_aggregator]]).
         # Aktive Module des Monats aus der vollständigen Investitions-Liste —
@@ -369,12 +376,17 @@ async def list_monatsdaten_aggregiert(
         einspeisung = md.einspeisung_kwh or 0
         netzbezug = md.netzbezug_kwh or 0
 
+        # Netzpunkt-Bilanz: sonstige Erzeuger (BHKW) hinter dem Zähler zählen mit,
+        # sonst verfälscht der gemessene Einspeise-Zähler die PV-Bilanz (Konzept
+        # Sonstiger Erzeuger). `pv_erzeugung` bleibt rein (Legacy-Check/PV-Anzeige).
+        erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_erzeugung, sonstiges_erzeugung)
+
         # #304-Bruder: kanonische Verbrauchs-Kennzahlen über den SoT-Helper —
         # zuvor rechnete dieser Stats-Pfad eigenverbrauch von Hand und ließ V2H
         # weg (E-Auto→Haus), während Cockpit/Aussichten/HA-Export/PDF V2H bereits
         # als Eigenverbrauch zählen. Deckungsgleich mit `berechne_verbrauchs_kennzahlen`.
         _kz = berechne_verbrauchs_kennzahlen(
-            pv_erzeugung_kwh=pv_erzeugung,
+            pv_erzeugung_kwh=erzeugung_bilanz,
             einspeisung_kwh=einspeisung,
             netzbezug_kwh=netzbezug,
             speicher_ladung_kwh=speicher_ladung,

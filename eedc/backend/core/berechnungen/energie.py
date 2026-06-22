@@ -71,6 +71,35 @@ def summe_pv_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
     return _summe_prefix(komponenten_kwh, PV_KOMPONENTEN_PREFIXE, nur_positiv=True)
 
 
+# ─── Netzpunkt-Bilanz: Gesamterzeugung hinter dem Hauszähler ────────────────
+
+
+def erzeugung_hinter_zaehler_kwh(*erzeuger_kwh: Optional[float]) -> float:
+    """Σ aller Erzeuger-Beiträge *hinter dem Hauszähler* — Eingang der Netzpunkt-Bilanz.
+
+    PV-Module + Balkonkraftwerk + **sonstige Erzeuger** (z. B. Mini-BHKW/KWK).
+    An EINEM Netzanschluss messen die Zähler (`einspeisung_kwh`/`netzbezug_kwh`)
+    die Summe ALLER dahinter liegenden Erzeuger. Deshalb MUSS die Eigenverbrauchs-/
+    Autarkie-Ableitung (`berechne_verbrauchs_kennzahlen`) diese Gesamtsumme als
+    „Erzeugung" bekommen — sonst wird die Bilanz still verfälscht: ein ignorierter
+    Erzeuger drückt `direktverbrauch = max(0, Erzeugung − Einspeisung − …)` zu
+    niedrig (auf 0 geklemmt), und Autarkie/EV-Quote werden unterschätzt
+    (Konzept „Sonstiger Erzeuger", 2026-06-22).
+
+    Achsen-Trennung (bewusst): PV-EIGENE Kennzahlen (spez. Ertrag, Performance-
+    Ratio, SOLL/IST, kWp) nutzen NUR die PV-Erzeugung, NICHT diese Summe — ein
+    sonstiger Erzeuger ist energetisch Erzeuger, aber kein PV-Modul. CO₂-/
+    Wirtschaftlichkeits-Bewertung bleibt ebenfalls quellenspezifisch (ein BHKW
+    spart kein CO₂, sondern emittiert; Brennstoffkosten sind ein eigener Posten).
+    Insel-Anlagen (kein Netzanschluss, kein Bezug/keine Einspeisung) fallen nicht
+    unter diesen Begriff — das ist ein Anlagen-Merkmal (eigenes KZ, geplant).
+
+    None-tolerant (None → 0.0). Aufrufer übergeben i. d. R. die schon
+    zusammengefasste PV-(inkl. BKW-)Erzeugung + die Sonstiges-Erzeugung.
+    """
+    return sum(float(x or 0.0) for x in erzeuger_kwh)
+
+
 def summe_waermepumpe_kwh(komponenten_kwh: Optional[dict]) -> float:
     """Σ aller `waermepumpe_<id>`-Keys (immer ≥ 0, elektrischer Verbrauch)."""
     return _summe_prefix(komponenten_kwh, WAERMEPUMPE_KOMPONENTEN_PREFIXE)
