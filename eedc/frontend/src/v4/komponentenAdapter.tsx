@@ -19,11 +19,11 @@
  * → lebt in Cockpit/Aussicht. Typ-spezifische IST-Analysen (PV-SOLL/IST je String)
  * kommen aus `komponentenAnalyse.tsx`, nicht aus diesem Daten-Adapter.
  */
-import { Activity, Battery, Clock, Droplet, Euro, Flame, Percent, Power, TrendingUp, Zap } from 'lucide-react'
+import { Activity, Battery, Clock, Droplet, Euro, Flame, Leaf, Percent, Power, TrendingUp, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { MONAT_KURZ, STRING_COLORS, STRING_BG } from '../lib'
-import { CHART_COLORS, LADEQUELLEN_FARBEN } from '../lib/colors'
+import { CHART_COLORS, LADEQUELLEN_FARBEN, ROLLEN_BG } from '../lib/colors'
 import { cockpitApi } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -37,12 +37,8 @@ import type { VerteilungSegment } from '../components/blocks'
 import type { VerlaufBar, VerlaufRow } from './KomponentenVerlaufChart'
 import type { Investition } from '../types'
 
-/** Tailwind-bg-Rollenfarben für die Aufteilungs-Segmente (keine Inline-Hex). */
-const SEG = {
-  pv: 'bg-green-500', ev: 'bg-green-500', einspeisung: 'bg-blue-400',
-  netz: 'bg-red-500', extern: 'bg-gray-400', heizung: 'bg-orange-500',
-  warmwasser: 'bg-red-400', entladung: 'bg-green-500', ladung: 'bg-purple-500',
-} as const
+/** Datenrollen→bg-Klassen für Aufteilungs-Segmente — SoT in `lib/colors.ts`. */
+const SEG = ROLLEN_BG
 
 /** Ein Knoten im Block ② „Struktur" (PV-Topologie): Modul / Speicher unter einem WR. */
 export interface TopoItem { label: string; detail?: string }
@@ -58,8 +54,17 @@ export type KompStruktur =
 export interface KompGeraet {
   inv: Investition
   label: string
+  /** Optionales Badge am Geräte-Selektor (z. B. Sonstiges-Kategorie Erzeuger/
+   *  Verbraucher/Speicher) — macht heterogene Geräte gleichen Typs unterscheidbar. */
+  selektorBadge?: string
   status: KpiStripItem[]
   aufteilung?: { titel: string; einheit?: string; segmente: VerteilungSegment[] }
+  /** Block ① Kennzahlen-Strip (IST-Summary-Karten, numerisch — z. B. Speicher
+   *  Ladung/Entladung gesamt, Zyklen/Monat, Verlust). Vor `aufteilung`. */
+  kennzahlen?: { titel: string; kpis: KpiStripItem[] }
+  /** Block ① Hinweise/Alarme (Speicher-Degradation, Durchsatz-Inkonsistenz …) —
+   *  als Alert im Status-Block, direkt unter den D2-KPIs. */
+  hinweise?: { ton: 'warning' | 'error'; text: string }[]
   /** Block ① Sekundär-KPIs (numerisch, im Strip unter den 4 D2-KPIs). */
   sekundaer?: { titel: string; kpis: KpiStripItem[] }
   /** Block ② Struktur/Verknüpfung (spezifisch: PV-Topologie / Verknüpfungs-Referenz). */
@@ -261,14 +266,36 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         investitionenApi.getSpeicherDashboard(anlageId),
         investitionenApi.list(anlageId).catch(() => [] as Investition[]),
       ])
-      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => {
+      // η-Alarm färbt die Wirkungsgrad-Kachel rot (IST-getreu, #264).
+      const wirkungsgradKpi = kpi(SPEICHER_KPI.wirkungsgrad, n0(z.ist_wirkungsgrad_prozent ?? z.effizienz_prozent), '%')
+      if (z.eta_degradation_alarm) wirkungsgradKpi.color = 'red'
+      // ① Alarme (IST-getreu): Degradation + Durchsatz-Invariante.
+      const hinweise: NonNullable<KompGeraet['hinweise']> = []
+      if (z.eta_degradation_alarm && z.ist_wirkungsgrad_prozent != null && z.param_wirkungsgrad_prozent != null) {
+        hinweise.push({ ton: 'warning', text: `Gemessener Wirkungsgrad (${n1(z.ist_wirkungsgrad_prozent)} %) liegt mehr als 5 Prozentpunkte unter dem Parameter-Wert (${n1(z.param_wirkungsgrad_prozent)} %) — möglicher Hinweis auf Speicher-Degradation. Wert prüfen, ggf. Parameter anpassen.` })
+      }
+      if (z.durchsatz_inkonsistent) {
+        hinweise.push({ ton: 'warning', text: 'Die kumulierte Entladung übersteigt die kumulierte Ladung — über die gesamte Historie physikalisch unmöglich. Bitte die erfassten Lade- und Entlade-Werte prüfen (beim Datenübertrag leicht vertauscht).' })
+      }
+      return {
         inv, label: inv.bezeichnung,
         status: [
           kpi(SPEICHER_KPI.vollzyklen, n0(z.vollzyklen)),
-          kpi(SPEICHER_KPI.wirkungsgrad, n0(z.ist_wirkungsgrad_prozent ?? z.effizienz_prozent), '%'),
+          wirkungsgradKpi,
           kpi(SPEICHER_KPI.durchsatz, mwh(z.gesamt_entladung_kwh), 'MWh'),
           kpi(SPEICHER_KPI.ersparnis, n0(z.ersparnis_euro), '€'),
         ],
+        hinweise: hinweise.length ? hinweise : undefined,
+        // ① Kennzahlen (IST-Summary-Karten): Ladung/Entladung gesamt, Zyklen/Monat, Verlust.
+        kennzahlen: {
+          titel: 'Kennzahlen', kpis: [
+            k('Ladung gesamt', n0(z.gesamt_ladung_kwh), 'kWh', 'blue', Battery),
+            k('Entladung gesamt', n0(z.gesamt_entladung_kwh), 'kWh', 'green', Zap),
+            k('Zyklen/Monat', n1(z.zyklen_pro_monat), undefined, 'purple', Activity, { formel: 'Vollzyklen ÷ Anzahl Monate' }),
+            k('Verlust', n0(z.gesamt_ladung_kwh - z.gesamt_entladung_kwh), 'kWh', 'gray', TrendingUp, { formel: 'Ladung − Entladung' }),
+          ],
+        },
         // ① Sekundär: Arbitrage (Netzladung) — schlanker Hinweis, Tiefe in #142/B11 (K-O2).
         sekundaer: (z.arbitrage_faehig && z.arbitrage_kwh > 0) ? {
           titel: 'Arbitrage (Netzladung)',
@@ -307,7 +334,8 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           label: 'Entladung', einheit: 'kWh', farbe: CHART_COLORS.speicherEntladung,
           jahre: jahresSummen(md, (vd) => vd.entladung_kwh),
         } : undefined,
-      }))
+      }
+      })
     },
   },
 
@@ -337,6 +365,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           kpi(WP_KPI.ersparnis, n0(z.ersparnis_euro), '€'),
         ],
         sekundaer: sek.length ? { titel: 'Betrieb & getrennte JAZ', kpis: sek } : undefined,
+        // ① CO₂-Ersparnis gegenüber fossiler Heizung (IST-getreu, eigene Kennzahl).
+        kennzahlen: z.co2_ersparnis_kg != null ? {
+          titel: 'Umwelt', kpis: [k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'vs. fossile Heizung' })],
+        } : undefined,
         aufteilung: (z.gesamt_heizenergie_kwh > 0 || z.gesamt_warmwasser_kwh > 0) ? {
           titel: 'Wärme nach Zweck', segmente: [
             { label: 'Heizung', wert: z.gesamt_heizenergie_kwh, farbe: SEG.heizung },
@@ -373,6 +405,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           kpi(EAUTO_KPI.pvAnteil, n0(z.pv_anteil_heim_prozent), '%'),
           kpi(EAUTO_KPI.ersparnis, n0(z.ersparnis_vs_benzin_euro), '€'),
         ],
+        // ① CO₂-Ersparnis vs. Verbrenner (IST-getreu, eigene Kennzahl).
+        kennzahlen: z.co2_ersparnis_kg != null ? {
+          titel: 'Umwelt', kpis: [k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'vs. Verbrenner' })],
+        } : undefined,
         aufteilung: z.gesamt_ladung_kwh > 0 ? {
           titel: 'Ladequellen', segmente: [
             { label: 'PV', wert: z.ladung_pv_kwh, farbe: SEG.pv },
@@ -409,7 +445,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   wallbox: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getWallboxDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z }) => ({
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
         status: [
           kpi(WALLBOX_KPI.heimladung, mwh(z.gesamt_heim_ladung_kwh), 'MWh'),
@@ -423,11 +459,21 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             { label: 'Netz', wert: z.ladung_netz_kwh, farbe: SEG.netz },
           ],
         } : undefined,
-        // ② Verknüpfung (dünn): Wallbox-Statistik ist aus E-Auto-Ladedaten abgeleitet (IST-treu).
+        // ② Verknüpfung (dünn): PV/Netz-Split ist aus E-Auto-Ladedaten abgeleitet (IST-treu);
+        //    die eigene Heimladung/Vorgänge-Zeitreihe steht in der Wallbox-IMD.
         struktur: {
           art: 'referenz',
-          zeilen: [{ label: 'Datenquelle', wert: 'aus E-Auto-Ladedaten', hinweis: 'Die Wallbox-Statistik wird aus den E-Auto-Ladedaten dieser Anlage abgeleitet.' }],
+          zeilen: [{ label: 'PV/Netz-Aufteilung', wert: 'aus E-Auto-Ladedaten', hinweis: 'Die PV-/Netz-Aufteilung der Heimladung wird aus den E-Auto-Ladedaten dieser Anlage abgeleitet.' }],
         } as KompStruktur,
+        // ④ Verlauf: Heimladung je Monat (PV/Netz-Split nur als Gesamt-Aufteilung, s. ①).
+        verlauf: md.length ? {
+          bars: [{ key: 'heim', label: 'Heimladung', farbe: CHART_COLORS.emobLadung }],
+          rows: rowsAusMd(md, [{ key: 'heim', wert: (vd) => vd.ladung_kwh }]),
+        } : undefined,
+        vergleich: md.length ? {
+          label: 'Heimladung', einheit: 'kWh', farbe: CHART_COLORS.emobLadung,
+          jahre: jahresSummen(md, (vd) => vd.ladung_kwh),
+        } : undefined,
       }))
     },
   },
@@ -443,6 +489,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           kpi(BKW_KPI.ersparnis, n0(z.gesamt_ersparnis_euro), '€'),
           kpi(BKW_KPI.spezErtrag, n0(z.spezifischer_ertrag_kwh_kwp), 'kWh/kWp'),
         ],
+        // ① IST-Summary-Karten: CO₂, Eigenverbrauch-Summe, Einspeisung, entgangener
+        //    Erlös (Einspeisung × 8 ct/kWh — wie IST, unvergütete BKW-Einspeisung).
+        kennzahlen: {
+          titel: 'Kennzahlen', kpis: [
+            k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'Eigenverbrauch × 0,4 kg/kWh' }),
+            k('Eigenverbrauch', n0(z.gesamt_eigenverbrauch_kwh), 'kWh', 'green', Zap),
+            k('Einspeisung', n0(z.gesamt_einspeisung_kwh), 'kWh', 'orange', TrendingUp, { subtitle: 'unvergütet' }),
+            k('Entgangener Erlös', n2(z.gesamt_einspeisung_kwh * 0.08), '€', 'gray', Euro, { formel: 'Einspeisung × 8 ct/kWh' }),
+          ],
+        },
         aufteilung: z.gesamt_erzeugung_kwh > 0 ? {
           titel: 'Verwendung der Erzeugung', segmente: [
             { label: 'Eigenverbrauch', wert: z.gesamt_eigenverbrauch_kwh, farbe: SEG.ev },
@@ -481,10 +537,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   sonstiges: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getSonstigesDashboard(anlageId)
-      return ds.map(({ investition: inv, zusammenfassung: z }) => {
+      const KAT_BADGE: Record<string, string> = { erzeuger: 'Erzeuger', verbraucher: 'Verbraucher', speicher: 'Speicher' }
+      return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => {
+        // Kategorie-Badge (Selektor-Differenzierung) + Sonderkosten-Alert (IST-getreu).
+        const selektorBadge = KAT_BADGE[z.kategorie] ?? 'Sonstiges'
+        const hinweise: KompGeraet['hinweise'] = (z.sonderkosten_euro ?? 0) > 0
+          ? [{ ton: 'warning', text: `Sonderkosten (Reparaturen, Wartung): ${n2(z.sonderkosten_euro)} €` }]
+          : undefined
         if (z.kategorie === 'verbraucher') {
           return {
-            inv, label: inv.bezeichnung,
+            inv, label: inv.bezeichnung, selektorBadge, hinweise,
             status: [
               kpi(SONSTIGES_VERBRAUCHER_KPI.verbrauch, n0(z.gesamt_verbrauch_kwh), 'kWh'),
               kpi(SONSTIGES_VERBRAUCHER_KPI.pvAnteil, n0(z.pv_anteil_prozent), '%'),
@@ -497,11 +559,26 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
                 { label: 'Netz', wert: z.bezug_netz_kwh, farbe: SEG.netz },
               ],
             } : undefined,
+            // ④ Verlauf: Strombezug je Monat nach Quelle (PV ⟷ Netz, gestapelt).
+            verlauf: md.length ? {
+              bars: [
+                { key: 'pv', label: 'PV', farbe: LADEQUELLEN_FARBEN.pv },
+                { key: 'netz', label: 'Netz', farbe: LADEQUELLEN_FARBEN.netz },
+              ],
+              rows: rowsAusMd(md, [
+                { key: 'pv', wert: (vd) => vd.bezug_pv_kwh },
+                { key: 'netz', wert: (vd) => vd.bezug_netz_kwh },
+              ]),
+            } : undefined,
+            vergleich: md.length ? {
+              label: 'Verbrauch', einheit: 'kWh', farbe: CHART_COLORS.netzbezug,
+              jahre: jahresSummen(md, (vd) => vd.verbrauch_kwh),
+            } : undefined,
           }
         }
         if (z.kategorie === 'speicher') {
           return {
-            inv, label: inv.bezeichnung,
+            inv, label: inv.bezeichnung, selektorBadge, hinweise,
             status: [
               kpi(SONSTIGES_SPEICHER_KPI.ladung, n0(z.gesamt_ladung_kwh), 'kWh'),
               kpi(SONSTIGES_SPEICHER_KPI.entladung, n0(z.gesamt_entladung_kwh), 'kWh'),
@@ -514,11 +591,26 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
                 { label: 'Entladung', wert: z.gesamt_entladung_kwh, farbe: SEG.entladung },
               ],
             } : undefined,
+            // ④ Verlauf: Ladung ⟷ Entladung je Monat (wie Haupt-Speicher).
+            verlauf: md.length ? {
+              bars: [
+                { key: 'ladung', label: 'Ladung', farbe: CHART_COLORS.speicherLadung },
+                { key: 'entladung', label: 'Entladung', farbe: CHART_COLORS.speicherEntladung },
+              ],
+              rows: rowsAusMd(md, [
+                { key: 'ladung', wert: (vd) => vd.ladung_kwh },
+                { key: 'entladung', wert: (vd) => vd.entladung_kwh },
+              ]),
+            } : undefined,
+            vergleich: md.length ? {
+              label: 'Entladung', einheit: 'kWh', farbe: CHART_COLORS.speicherEntladung,
+              jahre: jahresSummen(md, (vd) => vd.entladung_kwh),
+            } : undefined,
           }
         }
         // Default: Erzeuger
         return {
-          inv, label: inv.bezeichnung,
+          inv, label: inv.bezeichnung, selektorBadge, hinweise,
           status: [
             kpi(SONSTIGES_ERZEUGER_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
             kpi(SONSTIGES_ERZEUGER_KPI.eigenverbrauch, n0(z.eigenverbrauch_quote_prozent), '%'),
@@ -530,6 +622,15 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
               { label: 'Eigenverbrauch', wert: z.gesamt_eigenverbrauch_kwh, farbe: SEG.ev },
               { label: 'Einspeisung', wert: z.gesamt_einspeisung_kwh, farbe: SEG.einspeisung },
             ],
+          } : undefined,
+          // ④ Verlauf: Erzeugung je Monat (EV/Einspeisung-Split nur als Gesamt-Aufteilung, s. ①).
+          verlauf: md.length ? {
+            bars: [{ key: 'erz', label: 'Erzeugung', farbe: CHART_COLORS.erzeugung }],
+            rows: rowsAusMd(md, [{ key: 'erz', wert: (vd) => vd.erzeugung_kwh }]),
+          } : undefined,
+          vergleich: md.length ? {
+            label: 'Erzeugung', einheit: 'kWh', farbe: CHART_COLORS.erzeugung,
+            jahre: jahresSummen(md, (vd) => vd.erzeugung_kwh),
           } : undefined,
         }
       })

@@ -9,13 +9,11 @@ import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, CHART_COLORS } from '../lib'
+import { CHART_COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { BalkonkraftwerkDashboardResponse } from '../api/investitionen'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area
-} from 'recharts'
+import { BkwErzeugungVerlauf, BkwSpeicherVerlauf, BkwMonatsTabelle } from '../components/balkonkraftwerk'
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 export default function BalkonkraftwerkDashboard() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -118,15 +116,6 @@ function PlaceholderHeader(props: SelectorProps) {
 function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: BalkonkraftwerkDashboardResponse } & SelectorProps) {
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
-
-  const monthlyData = monatsdaten.map(md => ({
-    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-    erzeugung: md.verbrauch_daten.erzeugung_kwh || 0,
-    eigenverbrauch: md.verbrauch_daten.eigenverbrauch_kwh || 0,
-    einspeisung: md.verbrauch_daten.einspeisung_kwh || 0,
-    speicher_ladung: md.verbrauch_daten.speicher_ladung_kwh || 0,
-    speicher_entladung: md.verbrauch_daten.speicher_entladung_kwh || 0,
-  }))
 
   const verbrauchPieData = [
     { name: 'Eigenverbrauch', value: z.gesamt_eigenverbrauch_kwh, fill: CHART_COLORS.eigenverbrauch },
@@ -278,19 +267,7 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
             Erzeugung pro Monat (kWh)
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-                <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
-                <Area type="monotone" dataKey="einspeisung" stackId="1" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} name="Einspeisung" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          <BkwErzeugungVerlauf monatsdaten={monatsdaten} />
         </div>
       </div>
 
@@ -326,19 +303,7 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
 
           {/* Speicher Chart */}
           <div className="mt-4">
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" fontSize={10} />
-                  <YAxis />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Legend />
-                  <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
-                  <Bar dataKey="speicher_entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <BkwSpeicherVerlauf monatsdaten={monatsdaten} />
           </div>
         </div>
       )}
@@ -359,39 +324,8 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Monatsdaten anzeigen
         </summary>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-2">Monat</th>
-                <th className="text-right py-2 px-2">Erzeugung</th>
-                <th className="text-right py-2 px-2">Eigenverbrauch</th>
-                <th className="text-right py-2 px-2">Einspeisung</th>
-                {z.hat_speicher && (
-                  <>
-                    <th className="text-right py-2 px-2">Sp. Ladung</th>
-                    <th className="text-right py-2 px-2">Sp. Entl.</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyData.map((md, idx) => (
-                <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2">{md.name}</td>
-                  <td className="text-right py-2 px-2 text-yellow-600">{md.erzeugung.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-green-600">{md.eigenverbrauch.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-orange-600">{md.einspeisung.toFixed(1)}</td>
-                  {z.hat_speicher && (
-                    <>
-                      <td className="text-right py-2 px-2 text-purple-600">{md.speicher_ladung.toFixed(1)}</td>
-                      <td className="text-right py-2 px-2 text-purple-600">{md.speicher_entladung.toFixed(1)}</td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <BkwMonatsTabelle monatsdaten={monatsdaten} hatSpeicher={z.hat_speicher} />
         </div>
       </details>
     </div>

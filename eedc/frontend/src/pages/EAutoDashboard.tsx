@@ -8,13 +8,11 @@ import { Car, Zap, Leaf, TrendingUp, Battery } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, CHART_COLORS } from '../lib'
+import { LADEQUELLEN_FARBEN } from '../lib'
 import { investitionenApi } from '../api'
 import type { EAutoDashboardResponse } from '../api/investitionen'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell
-} from 'recharts'
+import { EAutoKmVerlauf, EAutoLadungVerlauf, EAutoKostenvergleich, EAutoMonatsTabelle } from '../components/eauto'
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import ChartTooltip from '../components/ui/ChartTooltip'
 
 export default function EAutoDashboard() {
@@ -122,28 +120,12 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
   const { investition, monatsdaten, zusammenfassung } = dashboard
   const z = zusammenfassung
 
-  // Daten für Charts vorbereiten
-  const monthlyData = monatsdaten.map(md => ({
-    name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-    km: md.verbrauch_daten.km_gefahren || 0,
-    verbrauch: md.verbrauch_daten.verbrauch_kwh || 0,
-    pv: md.verbrauch_daten.ladung_pv_kwh || 0,
-    netz: md.verbrauch_daten.ladung_netz_kwh || 0,
-    extern: md.verbrauch_daten.ladung_extern_kwh || 0,
-    v2h: md.verbrauch_daten.v2h_entladung_kwh || 0,
-  }))
-
   // Ladequelle: Heim (PV + Netz) vs Extern
   const ladungPieData = [
     { name: 'Heim: PV', value: z.ladung_pv_kwh || 0 },
     { name: 'Heim: Netz', value: z.ladung_netz_kwh || 0 },
     { name: 'Extern', value: z.ladung_extern_kwh || 0 },
   ].filter(d => d.value > 0)
-
-  const kostenVergleichData = [
-    { name: 'E-Auto (Strom)', value: z.strom_kosten_gesamt_euro || 0, fill: GELD_COLORS.ersparnis },
-    { name: 'Verbrenner (Benzin)', value: z.benzin_kosten_alternativ_euro || 0, fill: GELD_COLORS.kosten },
-  ]
 
   return (
     <div className="space-y-6">
@@ -268,22 +250,7 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
             Kostenvergleich E-Auto vs. Verbrenner
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={kostenVergleichData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-                <YAxis type="category" dataKey="name" width={120} />
-                <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-                <Bar dataKey="value" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="text-center mt-2">
-            <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-              Ersparnis: {(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €
-            </span>
-          </div>
+          <EAutoKostenvergleich zusammenfassung={z} />
         </div>
       </div>
 
@@ -294,17 +261,7 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
             Kilometer pro Monat
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar dataKey="km" fill={CHART_COLORS.emobKm} name="km" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <EAutoKmVerlauf monatsdaten={monatsdaten} />
         </div>
 
         {/* Ladung pro Monat */}
@@ -312,20 +269,7 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
             Ladung pro Monat (kWh)
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-                <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" />
-                <Bar dataKey="netz" stackId="a" fill={LADEQUELLEN_FARBEN.netz} name="Heim: Netz" />
-                <Bar dataKey="extern" stackId="a" fill={LADEQUELLEN_FARBEN.extern} name="Extern" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <EAutoLadungVerlauf monatsdaten={monatsdaten} />
         </div>
       </div>
 
@@ -364,31 +308,8 @@ function EAutoBlock({ dashboard, ...selectorProps }: { dashboard: EAutoDashboard
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Monatsdaten anzeigen
         </summary>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-2">Monat</th>
-                <th className="text-right py-2 px-2">km</th>
-                <th className="text-right py-2 px-2">kWh</th>
-                <th className="text-right py-2 px-2">PV</th>
-                <th className="text-right py-2 px-2">Netz</th>
-                <th className="text-right py-2 px-2">V2H</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monatsdaten.map((md) => (
-                <tr key={md.id} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
-                  <td className="text-right py-2 px-2">{md.verbrauch_daten.km_gefahren || 0}</td>
-                  <td className="text-right py-2 px-2">{(md.verbrauch_daten.verbrauch_kwh || 0).toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-green-600">{(md.verbrauch_daten.ladung_pv_kwh || 0).toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-red-600">{(md.verbrauch_daten.ladung_netz_kwh || 0).toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-purple-600">{(md.verbrauch_daten.v2h_entladung_kwh || 0).toFixed(1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <EAutoMonatsTabelle monatsdaten={monatsdaten} />
         </div>
       </details>
     </div>

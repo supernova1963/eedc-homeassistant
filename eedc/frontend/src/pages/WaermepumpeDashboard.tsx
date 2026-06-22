@@ -9,13 +9,11 @@ import { Card, LoadingSpinner, Alert, Select, KPICard, SortableSection, OrderedS
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useSectionOrder } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, fmtKpi, SAISON_FENSTER, WP_KPI, SERIEN_PALETTE, GELD_COLORS, CHART_COLORS } from '../lib'
+import { fmtKpi, WP_KPI, CHART_COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area, LabelList
-} from 'recharts'
+import { WaermepumpeVergleich, WaermepumpeMonatsverlauf, WaermepumpeKostenvergleich, WaermepumpeMonatsTabelle } from '../components/waermepumpe'
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 export default function WaermepumpeDashboard() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -139,109 +137,9 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
 
   const hatGetrennteStrom = z.cop_heizen !== undefined
 
-  const monthlyData = monatsdaten.map(md => {
-    const d = md.verbrauch_daten
-    const strom = d.stromverbrauch_kwh || 0
-    const heizung = d.heizenergie_kwh || 0
-    const warmwasser = d.warmwasser_kwh || 0
-    const stromHeizen = d.strom_heizen_kwh || 0
-    const stromWarmwasser = d.strom_warmwasser_kwh || 0
-    return {
-      name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-      strom,
-      strom_heizen: stromHeizen,
-      strom_warmwasser: stromWarmwasser,
-      heizung,
-      warmwasser,
-      cop: (heizung + warmwasser) / (strom || 1),
-      cop_heizen: stromHeizen > 0 ? heizung / stromHeizen : null,
-      cop_warmwasser: stromWarmwasser > 0 ? warmwasser / stromWarmwasser : null,
-    }
-  })
-
-  // Monatsvergleich über Jahre: Jan/Feb/...Dez als Gruppen, je ein Balken pro Jahr
-  const [vergleichModus, setVergleichModus] = useState<'jaz' | 'strom'>('strom')
-  const vergleichJahre = [...new Set(monatsdaten.map(md => md.jahr))].sort()
-  const vergleichJahreColors = SERIEN_PALETTE
-  const vergleichData = Array.from({ length: 12 }, (_, i) => {
-    const monat = i + 1
-    const entry: Record<string, string | number | null> = { name: MONAT_KURZ[monat] }
-    for (const jahr of vergleichJahre) {
-      const md = monatsdaten.find(m => m.monat === monat && m.jahr === jahr)
-      if (md) {
-        const waerme = (md.verbrauch_daten.heizenergie_kwh || 0) + (md.verbrauch_daten.warmwasser_kwh || 0)
-        const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
-        if (vergleichModus === 'jaz') {
-          entry[`val_${jahr}`] = strom > 0 ? Math.round(waerme / strom * 100) / 100 : null
-        } else {
-          entry[`val_${jahr}`] = strom > 0 ? Math.round(strom) : null
-        }
-      } else {
-        entry[`val_${jahr}`] = null
-      }
-    }
-    return entry
-  })
-
-  // Saison-Modus: Fokus-Fenster (Winter/Heizperiode/Sommer) über die gesamte
-  // Lebensdauer zu Saison-Instanzen aggregiert. Kein Jahresfilter (#195:
-  // Cockpit-vs-Auswertung-Grenze) — der Achsen-Toggle wechselt nur die Sicht.
-  const [vergleichAchse, setVergleichAchse] = useState<'monate' | 'saison'>('monate')
-  const [saisonFenster, setSaisonFenster] = useState<keyof typeof SAISON_FENSTER>('winter')
-  const saisonCfg = SAISON_FENSTER[saisonFenster]
-  const saisonSpanntJahr = saisonCfg.monate.some(m => m < saisonCfg.startMonat)
-  const saisonData = (() => {
-    if (vergleichJahre.length === 0) return []
-    const minJ = vergleichJahre[0]
-    const maxJ = vergleichJahre[vergleichJahre.length - 1]
-    const rows: { name: string; value: number | null; label: string; vollstaendig: boolean }[] = []
-    for (let startJahr = minJ - 1; startJahr <= maxJ; startJahr++) {
-      let sumStrom = 0
-      let sumWaerme = 0
-      let monateMitDaten = 0
-      for (const m of saisonCfg.monate) {
-        const kalenderJahr = m >= saisonCfg.startMonat ? startJahr : startJahr + 1
-        const md = monatsdaten.find(x => x.monat === m && x.jahr === kalenderJahr)
-        if (md) {
-          monateMitDaten++
-          // #195 / rapahl-PN: bei getrennter Strommessung saisonbereinigt
-          // rechnen — nur Heizung. Warmwasser läuft ganzjährig ~konstant
-          // und würde den Saison-Vergleich verwässern.
-          if (hatGetrennteStrom) {
-            sumStrom += md.verbrauch_daten.strom_heizen_kwh || 0
-            sumWaerme += md.verbrauch_daten.heizenergie_kwh || 0
-          } else {
-            sumStrom += md.verbrauch_daten.stromverbrauch_kwh || 0
-            sumWaerme += (md.verbrauch_daten.heizenergie_kwh || 0) + (md.verbrauch_daten.warmwasser_kwh || 0)
-          }
-        }
-      }
-      if (monateMitDaten === 0) continue
-      const vollstaendig = monateMitDaten === saisonCfg.monate.length
-      const basisName = saisonSpanntJahr
-        ? `${String(startJahr % 100).padStart(2, '0')}/${String((startJahr + 1) % 100).padStart(2, '0')}`
-        : `${startJahr}`
-      const wert = vergleichModus === 'jaz'
-        ? (sumStrom > 0 ? Math.round((sumWaerme / sumStrom) * 100) / 100 : null)
-        : Math.round(sumStrom)
-      rows.push({
-        name: vollstaendig ? basisName : `${basisName} (${monateMitDaten}/${saisonCfg.monate.length})`,
-        value: wert,
-        label: wert == null ? '' : (vergleichModus === 'jaz' ? wert.toFixed(2) : wert.toLocaleString('de-DE')),
-        vollstaendig,
-      })
-    }
-    return rows
-  })()
-
   const waermePieData = [
     { name: 'Heizung', value: z.gesamt_heizenergie_kwh },
     { name: 'Warmwasser', value: z.gesamt_warmwasser_kwh },
-  ]
-
-  const kostenVergleichData = [
-    { name: 'Wärmepumpe', value: z.wp_kosten_euro, fill: GELD_COLORS.ersparnis },
-    { name: 'Gas/Öl', value: z.alte_heizung_kosten_euro, fill: GELD_COLORS.kosten },
   ]
 
   return (
@@ -449,22 +347,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         summary={`Ersparnis ${z.ersparnis_euro.toFixed(0)} €`}
         defaultOpen
       >
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={kostenVergleichData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-              <YAxis type="category" dataKey="name" width={110} />
-              <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-              <Bar dataKey="value" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="text-center mt-2">
-          <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-            Ersparnis: {z.ersparnis_euro.toFixed(2)} €
-          </span>
-        </div>
+        <WaermepumpeKostenvergleich zusammenfassung={z} />
       </SortableSection>
 
       {/* Wärme pro Monat */}
@@ -477,19 +360,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         summary={`${monatsdaten.length} Monate`}
         defaultOpen
       >
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" fontSize={10} />
-              <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
-              <Tooltip content={<ChartTooltip unit="kWh" />} />
-              <Legend />
-              <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
-              <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <WaermepumpeMonatsverlauf monatsdaten={monatsdaten} />
       </SortableSection>
 
       {/* Monatsvergleich über Jahre – mit Toggle */}
@@ -498,110 +369,11 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         storageKeyPrefix={wpStoragePrefix}
         icon={Calendar}
         color="text-purple-500"
-        title={`${vergleichModus === 'jaz' ? 'JAZ' : 'Stromverbrauch'} ${vergleichAchse === 'saison' ? 'Saisonvergleich' : 'Monatsvergleich'}`}
-        summary={vergleichJahre.length > 1 ? `${vergleichJahre[0]}–${vergleichJahre[vergleichJahre.length - 1]}` : `${vergleichJahre[0] ?? ''}`}
+        title="Monats- / Saisonvergleich"
+        summary="Strom ⇄ JAZ · Monate ⇄ Saison"
         defaultOpen
       >
-        <div className="flex items-center justify-end flex-wrap gap-2 mb-4">
-          {/* Metrik: Strom / JAZ */}
-          <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-            <button
-              onClick={() => setVergleichModus('strom')}
-              className={`px-3 py-1 transition-colors ${vergleichModus === 'strom' ? 'bg-yellow-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-            >
-              Strom (kWh)
-            </button>
-            <button
-              onClick={() => setVergleichModus('jaz')}
-              className={`px-3 py-1 transition-colors ${vergleichModus === 'jaz' ? 'bg-orange-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-            >
-              JAZ
-            </button>
-          </div>
-          {/* Achse: Monate / Saison */}
-          <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-            <button
-              onClick={() => setVergleichAchse('monate')}
-              className={`px-3 py-1 transition-colors ${vergleichAchse === 'monate' ? 'bg-purple-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-            >
-              Monate
-            </button>
-            <button
-              onClick={() => setVergleichAchse('saison')}
-              className={`px-3 py-1 transition-colors ${vergleichAchse === 'saison' ? 'bg-purple-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-            >
-              Saison
-            </button>
-          </div>
-          {/* Saison-Fenster — nur im Saison-Modus */}
-          {vergleichAchse === 'saison' && (
-            <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-              {(Object.keys(SAISON_FENSTER) as (keyof typeof SAISON_FENSTER)[]).map(key => (
-                <button
-                  key={key}
-                  onClick={() => setSaisonFenster(key)}
-                  title={`${SAISON_FENSTER[key].label} (${SAISON_FENSTER[key].bereich})`}
-                  className={`px-3 py-1 transition-colors ${saisonFenster === key ? 'bg-purple-500 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                >
-                  {SAISON_FENSTER[key].label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {vergleichAchse === 'saison' && saisonData.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-16">
-            Keine Daten im Fenster {saisonCfg.label} ({saisonCfg.bereich}).
-          </p>
-        ) : (
-          <div className="h-72 text-gray-700 dark:text-gray-200">
-            <ResponsiveContainer width="100%" height="100%">
-              {vergleichAchse === 'monate' ? (
-                <BarChart data={vergleichData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" fontSize={12} />
-                  <YAxis domain={vergleichModus === 'jaz' ? [0, 6] : undefined} />
-                  <Tooltip content={<ChartTooltip formatter={(v) => vergleichModus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
-                  <Legend />
-                  {vergleichJahre.map((jahr, i) => (
-                    <Bar
-                      key={jahr}
-                      dataKey={`val_${jahr}`}
-                      name={`${jahr}`}
-                      fill={vergleichJahreColors[i % vergleichJahreColors.length]}
-                    />
-                  ))}
-                </BarChart>
-              ) : (
-                <BarChart data={saisonData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" fontSize={12} />
-                  <YAxis domain={vergleichModus === 'jaz' ? [0, 6] : undefined} />
-                  <Tooltip content={<ChartTooltip formatter={(v) => vergleichModus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
-                  <Bar dataKey="value" name={vergleichModus === 'jaz' ? 'JAZ' : 'Strom'}>
-                    {saisonData.map((s, i) => (
-                      <Cell
-                        key={i}
-                        fill={vergleichJahreColors[i % vergleichJahreColors.length]}
-                        fillOpacity={s.vollstaendig ? 1 : 0.4}
-                      />
-                    ))}
-                    <LabelList dataKey="label" position="top" fill="currentColor" fontSize={13} fontWeight={600} />
-                  </Bar>
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        )}
-        {vergleichAchse === 'saison' && saisonData.length > 0 && (
-          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            {saisonCfg.label}: {saisonCfg.bereich} ({saisonCfg.monate.length} Monate).{' '}
-            {hatGetrennteStrom
-              ? 'Saison-Strom = nur Heizung (Warmwasser ausgeklammert, getrennte Strommessung).'
-              : 'Saison-Strom inkl. Warmwasser — keine getrennte Strommessung erfasst.'}{' '}
-            Blasse Balken kennzeichnen eine unvollständige Saison.
-          </p>
-        )}
+        <WaermepumpeVergleich monatsdaten={monatsdaten} hatGetrennteStrom={hatGetrennteStrom} />
       </SortableSection>
 
       {/* CO2 Info */}
@@ -634,36 +406,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         title="Monatsdaten"
         summary={`${monatsdaten.length} Einträge`}
       >
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-2">Monat</th>
-                <th className="text-right py-2 px-2">Strom (kWh)</th>
-                <th className="text-right py-2 px-2">Heizung (kWh)</th>
-                <th className="text-right py-2 px-2">Warmwasser (kWh)</th>
-                <th className="text-right py-2 px-2">JAZ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monatsdaten.map((md) => {
-                const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
-                const heiz = md.verbrauch_daten.heizenergie_kwh || 0
-                const ww = md.verbrauch_daten.warmwasser_kwh || 0
-                const cop = strom > 0 ? (heiz + ww) / strom : 0
-                return (
-                  <tr key={md.id} className="border-b border-gray-100 dark:border-gray-800">
-                    <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
-                    <td className="text-right py-2 px-2">{strom.toFixed(0)}</td>
-                    <td className="text-right py-2 px-2 text-red-600">{heiz.toFixed(0)}</td>
-                    <td className="text-right py-2 px-2 text-blue-600">{ww.toFixed(0)}</td>
-                    <td className="text-right py-2 px-2 text-orange-600">{cop.toFixed(2)}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <WaermepumpeMonatsTabelle monatsdaten={monatsdaten} />
       </SortableSection>
 
       </OrderedSections>

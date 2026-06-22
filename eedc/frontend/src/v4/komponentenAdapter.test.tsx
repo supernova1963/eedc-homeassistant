@@ -56,6 +56,25 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.vergleich?.jahre).toEqual([{ jahr: 2025, summe: 160 }])
   })
 
+  it('Speicher ① Kennzahlen-Strip + Degradations-/Durchsatz-Alarm + η-Alarm-Farbe', async () => {
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'speicher' }),
+      zusammenfassung: { vollzyklen: 312, effizienz_prozent: 80, ist_wirkungsgrad_prozent: 80,
+        param_wirkungsgrad_prozent: 90, eta_degradation_alarm: true, durchsatz_inkonsistent: true,
+        gesamt_entladung_kwh: 4100, gesamt_ladung_kwh: 4500, zyklen_pro_monat: 26, arbitrage_kwh: 0, ersparnis_euro: 286 },
+      monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    // η-Kachel rot bei Degradations-Alarm
+    expect(g.status[1].color).toBe('red')
+    // Kennzahlen-Strip: Ladung/Entladung gesamt, Zyklen/Monat, Verlust (4500−4100=400)
+    expect(titles(g.kennzahlen!.kpis)).toEqual(['Ladung gesamt', 'Entladung gesamt', 'Zyklen/Monat', 'Verlust'])
+    expect(g.kennzahlen!.kpis[3].value).toBe('400')
+    // Zwei Alarme (Degradation + Durchsatz-Invariante)
+    expect(g.hinweise).toHaveLength(2)
+    expect(g.hinweise!.every((h) => h.ton === 'warning')).toBe(true)
+  })
+
   it('Vergleich: Jahressummen über mehrere Jahre, chronologisch', async () => {
     getSpeicherDashboard.mockResolvedValue([{
       investition: inv({ typ: 'speicher' }),
@@ -74,24 +93,29 @@ describe('KOMPONENTEN_ADAPTER', () => {
     getWaermepumpeDashboard.mockResolvedValue([{
       investition: inv({ typ: 'waermepumpe' }),
       zusammenfassung: { durchschnitt_cop: 3.8, gesamt_waerme_kwh: 12400, gesamt_stromverbrauch_kwh: 3300,
-        gesamt_heizenergie_kwh: 9400, gesamt_warmwasser_kwh: 3000, ersparnis_euro: 410 },
+        gesamt_heizenergie_kwh: 9400, gesamt_warmwasser_kwh: 3000, ersparnis_euro: 410, co2_ersparnis_kg: 2100 },
       monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { heizenergie_kwh: 800, warmwasser_kwh: 200 } }],
     }])
     const [g] = await KOMPONENTEN_ADAPTER.waermepumpe.fetch(1)
     expect(titles(g.status)).toEqual(['JAZ', 'Wärme erzeugt', 'Strom verbraucht', 'Ersparnis vs. Gas'])
     expect(g.aufteilung?.segmente.map((s) => s.label)).toEqual(['Heizung', 'Warmwasser'])
+    // CO₂-Ersparnis als eigene Kennzahl (IST-getreu)
+    expect(titles(g.kennzahlen!.kpis)).toEqual(['CO₂-Ersparnis'])
+    expect(g.kennzahlen!.kpis[0].value).toBe('2.100')
   })
 
   it('E-Auto: Ø-Verbrauch null → „—" statt 0 (nie 0 erfinden)', async () => {
     getEAutoDashboard.mockResolvedValue([{
       investition: inv({ typ: 'e-auto' }),
       zusammenfassung: { gesamt_km: 14200, durchschnitt_verbrauch_kwh_100km: null, pv_anteil_heim_prozent: 61,
-        ersparnis_vs_benzin_euro: 1120, gesamt_ladung_kwh: 1000, ladung_pv_kwh: 600, ladung_netz_kwh: 300, ladung_extern_kwh: 100 },
+        ersparnis_vs_benzin_euro: 1120, gesamt_ladung_kwh: 1000, ladung_pv_kwh: 600, ladung_netz_kwh: 300, ladung_extern_kwh: 100,
+        co2_ersparnis_kg: 1850 },
       monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_pv_kwh: 60, ladung_netz_kwh: 30 } }],
     }])
     const [g] = await KOMPONENTEN_ADAPTER['e-auto'].fetch(1)
     expect(g.status[1].value).toBe('—')
     expect(g.aufteilung?.segmente.map((s) => s.label)).toEqual(['PV', 'Netz', 'Extern'])
+    expect(titles(g.kennzahlen!.kpis)).toEqual(['CO₂-Ersparnis'])
   })
 
   it('Sonstiges: kategorie wählt die richtige 4er-KPI-Reihe', async () => {
@@ -103,6 +127,22 @@ describe('KOMPONENTEN_ADAPTER', () => {
     }])
     const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
     expect(titles(g.status)).toEqual(['Verbrauch', 'PV-Anteil', 'Netzkosten', 'PV-Ersparnis'])
+    // Kategorie-Badge am Selektor; kein Sonderkosten-Alert bei 0
+    expect(g.selektorBadge).toBe('Verbraucher')
+    expect(g.hinweise).toBeUndefined()
+  })
+
+  it('Sonstiges: Sonderkosten>0 → Warn-Hinweis; Erzeuger-Badge', async () => {
+    getSonstigesDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'sonstiges' }),
+      zusammenfassung: { kategorie: 'erzeuger', beschreibung: 'BHKW', gesamt_erzeugung_kwh: 500,
+        eigenverbrauch_quote_prozent: 80, gesamt_ersparnis_euro: 120, co2_ersparnis_kg: 200, sonderkosten_euro: 75 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
+    expect(g.selektorBadge).toBe('Erzeuger')
+    expect(g.hinweise).toHaveLength(1)
+    expect(g.hinweise![0].text).toContain('Sonderkosten')
   })
 
   it('PV-Anlage: cockpit-Übersicht + EV/Einspeisung-Summe aus aggregierten Monaten', async () => {
@@ -221,7 +261,7 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(titles(g.subKomponente!.kpis)).toEqual(['Ladung', 'Entladung', 'Effizienz'])
   })
 
-  it('Wallbox ② Datenquellen-Referenz (aus E-Auto-Ladedaten)', async () => {
+  it('Wallbox ② PV/Netz-Aufteilungs-Referenz (aus E-Auto-Ladedaten)', async () => {
     getWallboxDashboard.mockResolvedValue([{
       investition: inv({ typ: 'wallbox' }),
       zusammenfassung: { gesamt_heim_ladung_kwh: 500, ladung_pv_kwh: 300, ladung_netz_kwh: 200, pv_anteil_prozent: 60,
@@ -231,6 +271,37 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     const [g] = await KOMPONENTEN_ADAPTER.wallbox.fetch(1)
     expect(g.struktur?.art).toBe('referenz')
     if (g.struktur?.art !== 'referenz') throw new Error('referenz erwartet')
-    expect(g.struktur.zeilen[0].label).toBe('Datenquelle')
+    expect(g.struktur.zeilen[0].label).toBe('PV/Netz-Aufteilung')
+  })
+
+  it('Wallbox ④/⑤ aus eigener IMD (Heimladung je Monat / Jahr)', async () => {
+    getWallboxDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'wallbox' }),
+      zusammenfassung: { gesamt_heim_ladung_kwh: 500, ladung_pv_kwh: 300, ladung_netz_kwh: 200, pv_anteil_prozent: 60,
+        gesamt_ladevorgaenge: 40, ersparnis_vs_extern_euro: 120 },
+      monatsdaten: [
+        { jahr: 2025, monat: 1, verbrauch_daten: { ladung_kwh: 100 } },
+        { jahr: 2025, monat: 2, verbrauch_daten: { ladung_kwh: 80 } },
+      ],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.wallbox.fetch(1)
+    expect(g.verlauf?.bars.map((b) => b.key)).toEqual(['heim'])
+    expect(g.verlauf?.rows).toHaveLength(2)
+    expect(g.vergleich?.jahre).toEqual([{ jahr: 2025, summe: 180 }])
+  })
+
+  it('Sonstiges-Erzeuger ④/⑤ aus IMD (Erzeugung je Monat / Jahr)', async () => {
+    getSonstigesDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'sonstiges' }),
+      zusammenfassung: { kategorie: 'erzeuger', gesamt_erzeugung_kwh: 300, gesamt_eigenverbrauch_kwh: 200,
+        gesamt_einspeisung_kwh: 100, eigenverbrauch_quote_prozent: 67, gesamt_ersparnis_euro: 90, co2_ersparnis_kg: 150 },
+      monatsdaten: [
+        { jahr: 2025, monat: 1, verbrauch_daten: { erzeugung_kwh: 120 } },
+        { jahr: 2025, monat: 2, verbrauch_daten: { erzeugung_kwh: 80 } },
+      ],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
+    expect(g.verlauf?.bars.map((b) => b.key)).toEqual(['erz'])
+    expect(g.vergleich?.jahre).toEqual([{ jahr: 2025, summe: 200 }])
   })
 })

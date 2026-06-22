@@ -173,6 +173,21 @@ export const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6
  *  Anteils-Darstellungen pro String/Modul (dort sind bg-Klassen statt Inline-Hex nötig). */
 export const STRING_BG = ['bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-cyan-500', 'bg-pink-500']
 
+/** Datenrollen → Tailwind-bg-Klasse für Aufteilungs-Segmente (VerteilungsBalken).
+ *  „Eine Datenrolle = eine Farbe" (Regel 0a) als bg-Klassen-SoT — analog
+ *  {@link STRING_BG}. Bezug zu den Hex-Rollen oben in Klammern. */
+export const ROLLEN_BG = {
+  pv: 'bg-green-500',          // PV-Strom / Eigenverbrauch-Quelle
+  ev: 'bg-green-500',          // Eigenverbrauch (= genutzte PV)
+  einspeisung: 'bg-blue-400',  // ins Netz abgegeben
+  netz: 'bg-red-500',          // Netzbezug (grid)
+  extern: 'bg-gray-400',       // externe Ladung
+  heizung: 'bg-orange-500',    // WP-Heizwärme
+  warmwasser: 'bg-red-400',    // WP-Warmwasser
+  ladung: 'bg-purple-500',     // Speicher-Ladung
+  entladung: 'bg-green-500',   // Speicher-Entladung
+} as const
+
 /** Solar-Intensitäts-Rampe (Sparklines: schwach → stark). */
 export const SOLAR_INTENSITAET = ['#fde68a', '#fbbf24', '#f59e0b']
 

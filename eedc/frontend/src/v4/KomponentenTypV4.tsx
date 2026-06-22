@@ -1,8 +1,10 @@
 /**
  * KomponentenTypV4 — die Pro-Typ-Komponentenseite (IA v4 Phase A.2).
  *
- * Rendert den Block-Katalog aus SPEC-KOMPONENTEN.md in **kanonischer fixer
- * Reihenfolge** (nicht sortierbar, K-B4; einklappbar via BlockShell):
+ * Rendert den Block-Katalog aus SPEC-KOMPONENTEN.md in **kanonischer Default-
+ * Reihenfolge**, die der Nutzer aber **verschieben** darf (`BlockShell sortierbar`,
+ * Reihenfolge persistiert je Sicht — K-B4 revidiert 2026-06-21, Gernot: feste
+ * Reihenfolge war falsch; IST-Dashboards konnten Sektionen schon verschieben):
  * ① Status · ② Struktur/Verknüpfung · ③ Sub-Komponente · ④ Verlauf ·
  * ⑤ Vergleich · ⑦ Einstellungen. Pflicht = ①④⑤⑦ (immer), spezifisch = ②③
  * (nur wenn der Adapter sie für den Typ liefert ⇒ Seite = Pflicht ∪
@@ -12,16 +14,17 @@
  * (K-B5, kein Datums-Selektor). Mehrere Geräte → Geräte-Selektor (Art ①).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
+import { LoadingSpinner, Card, Alert, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, VerteilungsBalken, type Block } from '../components/blocks'
-import { BLOCK_IDENTITAET } from '../lib'
+import { BLOCK_IDENTITAET, STATUS_COLORS } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { sensorMappingApi } from '../api/sensorMapping'
 import { liveDashboardApi } from '../api/liveDashboard'
-import { AlertTriangle, BarChart3, ClipboardCheck, Cpu, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
+import { AlertTriangle, BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
+import { KomponentenMonatsTabelle } from './KomponentenMonatsTabelle'
 import { KomponentenVergleich } from './KomponentenVergleich'
 import { infothekApi } from '../api/infothek'
 import { KATEGORIE_CONFIG } from '../config/infothekKategorien'
@@ -92,7 +95,7 @@ function SensorRow({ z }: { z: SensorZeile }) {
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
       <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5">
-        {z.live && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" title="Live-Sensor" />}
+        {z.live && <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS.ok }} title="Live-Sensor" />}
         {z.feld}{z.live ? ' (live)' : ''}
       </span>
       <code className="text-xs text-gray-700 dark:text-gray-300 truncate">{z.sensor}</code>
@@ -444,13 +447,10 @@ function StrukturInhalt({ s }: { s: KompStruktur }) {
   return (
     <div className="space-y-3">
       {hatOrphan && (
-        <div className="flex items-start gap-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-2 text-sm text-yellow-700 dark:text-yellow-300">
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-          <span>
-            {s.orphanModule.length > 0 && `${s.orphanModule.length} PV-Modul(e) ohne Wechselrichter-Zuordnung. `}
-            {s.orphanSpeicher.length > 0 && `${s.orphanSpeicher.length} Speicher ohne Wechselrichter-Zuordnung.`}
-          </span>
-        </div>
+        <Alert type="warning">
+          {s.orphanModule.length > 0 && `${s.orphanModule.length} PV-Modul(e) ohne Wechselrichter-Zuordnung. `}
+          {s.orphanSpeicher.length > 0 && `${s.orphanSpeicher.length} Speicher ohne Wechselrichter-Zuordnung.`}
+        </Alert>
       )}
       {s.wr.map((w, i) => (
         <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
@@ -496,6 +496,8 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
       render: () => (
         <div className="space-y-4">
           <KpiStrip kpis={g.status} />
+          {g.hinweise?.map((h, i) => <Alert key={i} type={h.ton}>{h.text}</Alert>)}
+          {g.kennzahlen && <KpiUnterblock titel={g.kennzahlen.titel} kpis={g.kennzahlen.kpis} />}
           {g.aufteilung && <VerteilungsBalken titel={g.aufteilung.titel} einheit={g.aufteilung.einheit} segmente={g.aufteilung.segmente} />}
           {g.sekundaer && <KpiUnterblock titel={g.sekundaer.titel} kpis={g.sekundaer.kpis} />}
         </div>
@@ -534,7 +536,7 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
     id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
     summary: 'Zeitreihe über die gesamte Laufzeit', defaultOpen: false,
     render: (fokus) => (analyse?.verlauf
-      ? analyse.verlauf(anlageId)
+      ? analyse.verlauf(anlageId, g.inv)
       : g.verlauf
         ? (
           <div className="space-y-4">
@@ -546,6 +548,11 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
                 ))}
               </div>
             )}
+            {/* Scoped read-only Monats-Detailtabelle (WKW 1-42/70) — selbe Daten wie der Chart.
+                PV ausgenommen: dessen ④ ist jahres-aggregiert (Modul-Stapel), keine Monatszeilen. */}
+            {typ !== 'pv-module' && (
+              <KomponentenMonatsTabelle rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} />
+            )}
           </div>
         )
         : <FolgtHinweis text="Für diesen Typ liegt keine eigene Zeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." />),
@@ -556,7 +563,7 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
     id: 'vergleich', title: 'Vergleich', icon: BarChart3,
     summary: analyse?.vergleich ? 'Komponentenspezifischer Vergleich' : 'Jahresvergleich · Diagramm ⇄ Tabelle', defaultOpen: false,
     render: () => (analyse?.vergleich
-      ? analyse.vergleich(anlageId)
+      ? analyse.vergleich(anlageId, g.inv)
       : g.vergleich
         ? <KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} />
         : <FolgtHinweis
@@ -564,6 +571,16 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
             crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/v4/auswertungen/tabelle' }}
           />),
   })
+
+  // Wirtschaftlichkeit (typ-spezifisch via Registry) — Kostenvergleich/ROI/Amortisation
+  // mit eigener Heimat im Hub (WP=vs Gas, Wallbox=ROI, E-Auto=vs Benzin …).
+  if (analyse?.wirtschaftlichkeit) {
+    bloecke.push({
+      id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit', icon: Euro,
+      summary: 'Kostenvergleich & Ersparnis', defaultOpen: false,
+      render: () => analyse.wirtschaftlichkeit!(anlageId, g.inv),
+    })
+  }
 
   // ⑥ Aussicht entfällt im Hub (Gernot 2026-06-21): zeitliche Differenzierung → Cockpit/Aussicht.
 
@@ -628,16 +645,23 @@ export default function KomponentenTypV4({ typ, anlageId }: { typ: string; anlag
           {geraete.map((d, i) => (
             <button
               key={d.inv.id || d.label} type="button" onClick={() => setAktiv(i)}
-              className={`min-h-[44px] px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`min-h-[44px] px-3 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                 i === aktiv
                   ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
                   : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/50'
               }`}
-            >{d.label}</button>
+            >
+              {d.label}
+              {d.selektorBadge && (
+                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                  {d.selektorBadge}
+                </span>
+              )}
+            </button>
           ))}
         </div>
       )}
-      <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} />
+      <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar />
     </div>
   )
 }

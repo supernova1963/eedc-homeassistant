@@ -10,12 +10,10 @@ import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
 import { investitionenApi } from '../api'
-import { LADEQUELLEN_FARBEN, GELD_COLORS } from '../lib'
+import { LADEQUELLEN_FARBEN } from '../lib'
 import type { WallboxDashboardResponse } from '../api/investitionen'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
-} from 'recharts'
+import { WallboxWirtschaftlichkeit } from '../components/wallbox'
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import ChartTooltip from '../components/ui/ChartTooltip'
 
 export default function WallboxDashboard() {
@@ -132,12 +130,6 @@ function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashb
     { name: 'Extern', value: z.extern_ladung_kwh || 0 },
   ].filter(d => d.value > 0)
 
-  // Kostenvergleich: Was die Heimladung extern gekostet hätte vs. tatsächliche Kosten
-  const kostenVergleichData = [
-    { name: 'Heimladung (tatsächlich)', value: z.heim_kosten_euro || 0, fill: GELD_COLORS.ersparnis },
-    { name: 'Heimladung (als extern)', value: z.heim_als_extern_kosten_euro || 0, fill: GELD_COLORS.kosten },
-  ]
-
   const leistungKw = z.leistung_kw || 11
   const hatDaten = (z.gesamt_heim_ladung_kwh || 0) > 0
 
@@ -215,128 +207,48 @@ function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashb
             />
           </div>
 
-          {/* Charts */}
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Ladequelle */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-                Ladequelle
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={ladungPieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)} %`}
-                    >
-                      <Cell fill={LADEQUELLEN_FARBEN.pv} /> {/* PV: grün */}
-                      <Cell fill={LADEQUELLEN_FARBEN.netz} /> {/* Netz: dunkelrot */}
-                      <Cell fill={LADEQUELLEN_FARBEN.extern} /> {/* Extern: orange */}
-                    </Pie>
-                    <Tooltip content={<ChartTooltip unit="kWh" decimals={1} />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex justify-center gap-4 text-sm flex-wrap">
+          {/* Ladequelle */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+              Ladequelle
+            </h3>
+            <div className="h-64 max-w-md">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={ladungPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)} %`}
+                  >
+                    <Cell fill={LADEQUELLEN_FARBEN.pv} /> {/* PV: grün */}
+                    <Cell fill={LADEQUELLEN_FARBEN.netz} /> {/* Netz: dunkelrot */}
+                    <Cell fill={LADEQUELLEN_FARBEN.extern} /> {/* Extern: orange */}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip unit="kWh" decimals={1} />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex gap-4 text-sm flex-wrap">
+              <span className="flex items-center gap-2">
+                <Home className="h-4 w-4 text-purple-500" />
+                Heim: {(z.gesamt_heim_ladung_kwh || 0).toFixed(0)} kWh
+              </span>
+              {(z.extern_ladung_kwh || 0) > 0 && (
                 <span className="flex items-center gap-2">
-                  <Home className="h-4 w-4 text-purple-500" />
-                  Heim: {(z.gesamt_heim_ladung_kwh || 0).toFixed(0)} kWh
+                  <MapPin className="h-4 w-4 text-orange-500" />
+                  Extern: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh
                 </span>
-                {(z.extern_ladung_kwh || 0) > 0 && (
-                  <span className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-orange-500" />
-                    Extern: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Kostenvergleich */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-                Kostenvergleich: Heimladung vs. Externe Preise
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={kostenVergleichData} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-                    <YAxis type="category" dataKey="name" width={150} />
-                    <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-                    <Legend />
-                    <Bar dataKey="value" name="Kosten" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="text-center mt-2">
-                <span className="text-lg font-semibold text-green-600 dark:text-green-400">
-                  Ersparnis durch Wallbox: {(z.ersparnis_vs_extern_euro || 0).toFixed(2)} €
-                </span>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Erklärung */}
-          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 space-y-2">
-            <p className="text-sm font-medium text-purple-700 dark:text-purple-300">
-              Wallbox-ROI erklärt
-            </p>
-            <p className="text-sm text-purple-600 dark:text-purple-400">
-              Die Ersparnis errechnet sich aus dem Unterschied zwischen Heimladen und externem Laden:
-            </p>
-            <ul className="text-sm text-purple-600 dark:text-purple-400 list-disc list-inside">
-              <li>PV-Ladung zuhause: kostenlos ({(z.ladung_pv_kwh || 0).toFixed(0)} kWh)</li>
-              <li>Netz-Ladung zuhause: Haushaltsstrom ({(z.ladung_netz_kwh || 0).toFixed(0)} kWh = {(z.heim_kosten_euro || 0).toFixed(2)} €)</li>
-              <li>Vergleichspreis extern: {(z.extern_preis_kwh_euro || 0.50).toFixed(2)} €/kWh</li>
-            </ul>
-            {(z.extern_ladung_kwh || 0) > 0 && (
-              <p className="text-sm text-purple-600 dark:text-purple-400 mt-2">
-                Tatsächliche externe Ladung: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh für {(z.extern_kosten_euro || 0).toFixed(2)} €
-              </p>
-            )}
-          </div>
-
-          {/* Anschaffungskosten und Amortisation */}
-          {investition.anschaffungskosten_gesamt && investition.anschaffungskosten_gesamt > 0 && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Anschaffungskosten</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {investition.anschaffungskosten_gesamt.toLocaleString('de-DE')} €
-                  </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Ersparnis/Jahr (hochgerechnet)</p>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {(z.anzahl_monate && z.anzahl_monate > 0
-                      ? ((z.ersparnis_vs_extern_euro || 0) / z.anzahl_monate * 12).toFixed(0)
-                      : 0
-                    )} €
-                  </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation (ca.)</p>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {(() => {
-                      const jahresErsparnis = z.anzahl_monate && z.anzahl_monate > 0
-                        ? ((z.ersparnis_vs_extern_euro || 0) / z.anzahl_monate * 12)
-                        : 0
-                      if (jahresErsparnis <= 0) return '∞'
-                      const jahre = investition.anschaffungskosten_gesamt! / jahresErsparnis
-                      return `${jahre.toFixed(1)} Jahre`
-                    })()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Wirtschaftlichkeit: Kostenvergleich + ROI-Erklärung + Amortisation */}
+          <WallboxWirtschaftlichkeit zusammenfassung={z} investition={investition} />
         </>
       )}
     </div>

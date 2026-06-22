@@ -6,16 +6,12 @@
 import { Fragment, useState, useEffect } from 'react'
 import { Battery, DollarSign } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, QuelleBadge, FormelTooltip, fmtCalc } from '../components/ui'
-import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, fmtKpi, WIRKUNGSGRAD_QUELLE_LABELS, SPEICHER_KPI, CHART_COLORS, COLORS } from '../lib'
+import { fmtKpi, WIRKUNGSGRAD_QUELLE_LABELS, SPEICHER_KPI } from '../lib'
 import { investitionenApi } from '../api'
 import type { SpeicherDashboardResponse } from '../api/investitionen'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  AreaChart, Area, LineChart, Line
-} from 'recharts'
+import { SpeicherVerlaufCharts } from '../components/speicher'
 
 export default function SpeicherDashboard() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -126,27 +122,6 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
   const etaAlarm = z.eta_degradation_alarm === true
   const ladepreisCent = z.effektiver_ladepreis_cent ?? z.arbitrage_avg_preis_cent
   const ladepreisQuelle = z.effektiver_ladepreis_cent != null ? z.effektiver_ladepreis_quelle : undefined
-
-  const monthlyData = monatsdaten.map(md => {
-    const ladung = md.verbrauch_daten.ladung_kwh || 0
-    const entladung = md.verbrauch_daten.entladung_kwh || 0
-    const arbitrage = md.verbrauch_daten.speicher_ladung_netz_kwh || 0
-    return {
-      name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
-      ladung,
-      entladung,
-      arbitrage,
-      pvLadung: ladung - arbitrage,
-      zyklen: z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0,
-    }
-  })
-
-  // Gleitende 12-Monats-Effizienz vom Backend — carry-over-immun. Eine naive
-  // Pro-Monats-Effizienz konnte durch den SoC-Übertrag >100 % zeigen.
-  const effizienzData = effizienz_verlauf.map(e => ({
-    name: `${MONAT_KURZ[e.monat]} ${e.jahr.toString().slice(2)}`,
-    effizienz: e.effizienz_prozent,
-  }))
 
   return (
     <div className="space-y-6">
@@ -323,101 +298,12 @@ function SpeicherBlock({ dashboard, ...selectorProps }: { dashboard: SpeicherDas
         </div>
       )}
 
-      {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Ladung/Entladung pro Monat */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Ladung & Entladung pro Monat (kWh)
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis tickFormatter={(v) => `${v} kWh`} width={70} />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
-                {z.arbitrage_faehig && z.arbitrage_kwh > 0 ? (
-                  <>
-                    <Bar dataKey="pvLadung" stackId="ladung" fill={CHART_COLORS.speicherLadung} name="PV-Ladung" />
-                    <Bar dataKey="arbitrage" stackId="ladung" fill={COLORS.grid} name="Netz-Ladung" />
-                  </>
-                ) : (
-                  <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
-                )}
-                <Bar dataKey="entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Zyklen pro Monat */}
-        <div>
-          <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Vollzyklen pro Monat
-          </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis tickFormatter={(v) => v.toFixed(1)} width={40} />
-                <Tooltip content={<ChartTooltip decimals={1} />} />
-                <Area type="monotone" dataKey="zyklen" fill={CHART_COLORS.speicherZyklen} stroke={CHART_COLORS.speicherZyklen} name="Zyklen" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Effizienz Chart — gleitende 12-Monats-Effizienz (carry-over-immun).
-          Pro-Monat wäre der Wert durch den SoC-Übertrag verzerrt. */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-          Effizienz — gleitende 12 Monate (%)
-        </h3>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={effizienzData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" fontSize={10} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={55} />
-              <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
-              <Line type="monotone" dataKey="effizienz" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Detail-Tabelle */}
-      <details className="border-t border-gray-200 dark:border-gray-700 pt-4">
-        <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-          Monatsdaten anzeigen
-        </summary>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-2">Monat</th>
-                <th className="text-right py-2 px-2">Ladung</th>
-                <th className="text-right py-2 px-2">Entladung</th>
-                <th className="text-right py-2 px-2">Zyklen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlyData.map((md, idx) => (
-                <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2">{md.name}</td>
-                  <td className="text-right py-2 px-2 text-blue-600">{md.ladung.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-green-600">{md.entladung.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2">{md.zyklen.toFixed(1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+      {/* Charts + Monatstabelle — geteilte IST-Komponente (auch im IA-v4-Hub). */}
+      <SpeicherVerlaufCharts
+        monatsdaten={monatsdaten}
+        zusammenfassung={z}
+        effizienzVerlauf={effizienz_verlauf}
+      />
     </div>
   )
 }
