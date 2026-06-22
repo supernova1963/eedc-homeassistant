@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.29.2 | **Status:** Stable Release
+**Version:** 3.45.4 | **Status:** Stable Release
 
 ## Verbundene Repositories
 
@@ -179,6 +179,12 @@ EEDC Add-on                              Community Server
 > Die alten `ha_sensor_*` Felder im Anlage-Model dürfen NICHT aus der DB/dem Model entfernt werden (bestehende Installationen). Neuer Code nutzt ausschließlich `sensor_mapping`.
 
 ## Letzte Änderungen
+
+> **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`.
+
+**v3.45.4** (2026-06-22) — Sonstige Erzeuger (BHKW) in der Energiebilanz: ein Erzeuger unter „Sonstiges" (Kategorie *Erzeuger*) speist hinter den EINEN Hauszähler → seine Erzeugung zählt jetzt in EV/Autarkie in **allen** Bilanz-Pfaden (Monat + Vorjahr, Live, Tag/Energieprofil) via Layer-SoT `erzeugung_hinter_zaehler_kwh`. PV-Kennzahlen (spez. Ertrag/PR) bleiben rein; CO₂/Wirtschaftlichkeit eines Brennstoff-Erzeugers bewusst „nicht bewertet". Lehre: Bilanz-Drift saß in drei getrennten Pfaden — Symptom-Patch hätte nur den Monat erwischt.
+
+> **v3.30–v3.44:** Detail nur noch im [CHANGELOG](CHANGELOG.md) (Digest hier seit v3.29.2 nicht fortgeschrieben).
 
 **v3.29.x** (2026-05-13/14) — Aggregations-Hardening + UX-Bündel vor Menüstruktur-Konzept:
 
