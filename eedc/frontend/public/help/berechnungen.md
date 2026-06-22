@@ -142,19 +142,37 @@ Hardcodierte Werte in `cockpit.py`:
 #### Formeln
 
 ```
-Direktverbrauch     = max(0, PV_Erzeugung - Einspeisung - Batterie_Ladung)
+Erzeugung_gesamt    = PV_Erzeugung + BKW + sonstige_Erzeuger   (hinter dem Zähler)
+Direktverbrauch     = max(0, Erzeugung_gesamt - Einspeisung - Batterie_Ladung)
 Eigenverbrauch      = Direktverbrauch + Batterie_Entladung + V2H_Entladung
 Gesamtverbrauch     = Eigenverbrauch + Netzbezug
-EV-Quote (%)        = Eigenverbrauch / PV_Erzeugung * 100        (wenn PV > 0)
-Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100     (wenn GV > 0)
-Spez. Ertrag        = PV_Erzeugung / Leistung_kWp               (kWh/kWp)
+EV-Quote (%)        = Eigenverbrauch / Erzeugung_gesamt * 100   (wenn Erzeugung > 0)
+Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100    (wenn GV > 0)
+Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV)
 
 Einspeise-Erlös (EUR)    = Einspeisung * Einspeisevergütung / 100
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
-CO2-Einsparung (kg)      = PV_Erzeugung * 0.38
+CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (nur PV/BKW; s. u.)
 ```
+
+**Netzpunkt-Bilanz (Erzeugung_gesamt):** Am EINEN Netzanschluss messen die Zähler
+(`Einspeisung`/`Netzbezug`) die Summe **aller** dahinter liegenden Erzeuger. Deshalb
+geht in die Eigenverbrauchs-/Autarkie-Ableitung die **Gesamterzeugung** ein —
+PV-Module + Balkonkraftwerk + **sonstige Erzeuger** (z. B. Mini-BHKW). Würde ein
+Erzeuger ignoriert, drückte der gemessene Einspeise-Zähler `Direktverbrauch` zu
+niedrig (auf 0 geklemmt) und Autarkie/EV-Quote würden unterschätzt. SoT-Helper:
+`core/berechnungen/energie.erzeugung_hinter_zaehler_kwh` (ADR-001).
+
+**Achsen-Trennung (bewusst):** PV-**eigene** Kennzahlen (spez. Ertrag, Performance-
+Ratio, SOLL/IST, kWp) nutzen **nur** `PV_Erzeugung`, nicht `Erzeugung_gesamt` — ein
+sonstiger Erzeuger ist energetisch Erzeuger, aber kein PV-Modul. Ebenso bleibt
+**CO₂/Wirtschaftlichkeit quellenspezifisch**: ein brennstoffbasierter Erzeuger (BHKW)
+spart kein CO₂, sondern emittiert, und hat Brennstoffkosten — er bekommt daher keine
+PV-artige CO₂-Ersparnis (bewertet als „nicht bewertet", bis ein eigenes BHKW-Modell
+existiert). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
+fallen nicht unter diese Bilanz — das ist ein Anlagen-Merkmal (eigenes KZ, geplant).
 
 **Wichtig:** `Netto_Ertrag` enthält NICHT den Abzug der Netzbezugskosten, da diese auch ohne PV angefallen wären.
 
