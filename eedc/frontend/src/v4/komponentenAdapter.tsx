@@ -80,6 +80,19 @@ export interface KompGeraet {
   }
   /** Block ⑤ Vergleich (dünn): Jahressummen einer Leitkennzahl je Jahr. */
   vergleich?: { label: string; einheit: string; farbe: string; jahre: { jahr: number; summe: number }[] }
+  /** Block „Wirtschaftlichkeit" — **Ertrags-Zusammensetzung** (generischer Modus
+   *  für Typen OHNE Alternativ-Vergleich: PV/Speicher/BKW/Sonstiges). Schlüsselt
+   *  das wirtschaftliche Ergebnis in seine Ertragsposten (€) auf: 1 Posten → nur
+   *  Kennzahl, ≥2 → zusätzlich €-Aufteilungsbalken. Typen MIT Alternative (WP/
+   *  E-Auto/Wallbox) liefern stattdessen einen Registry-Vergleich (`komponentenAnalyse`).
+   *  `nichtBewertet` = ehrlicher „nicht bewertbar"-Hinweis statt Fake (Sonstiger
+   *  Erzeuger ohne Brennstoffmodell, Konzept Gernot 2026-06-22). */
+  wirtschaftlichkeit?: {
+    posten: { label: string; euro: number | null | undefined; farbe: string; hinweis?: string }[]
+    gesamt?: { label: string; euro: number | null | undefined }
+    hinweis?: string
+    nichtBewertet?: string
+  }
   /** Einstellungen-Block: alle verknüpften Investitionen, deren Parameter +
    *  Sensor-/MQTT-Zuordnungen gezeigt werden (PV = WR+Module+Speicher; sonst [inv]). */
   verknuepfteInvs?: Investition[]
@@ -127,6 +140,15 @@ function k(
   extra?: { subtitle?: string; formel?: string; berechnung?: string },
 ): KpiStripItem {
   return { title, value, unit, color, icon, ...extra }
+}
+
+/** KPI als **„nicht bewertet"** statt Fake-0 — abgeleitete Kennzahl, deren
+ *  Quellgröße fehlt bzw. (Sonstiger Erzeuger/BHKW) ohne Brennstoffmodell nicht
+ *  bewertbar ist. Wert `—`, neutrale Farbe, erklärende Zweitzeile. Setzt die
+ *  bestehende Regel „abgeleitete Größe nur zeigen, wenn die Quelle vorliegt" für
+ *  den 0-Fall fort (Konzept Sonstiger Erzeuger, Gernot 2026-06-22). */
+function unbewertet(stil: KpiStyle, hinweis: string): KpiStripItem {
+  return { title: stil.title, icon: stil.icon, color: 'gray', value: '—', subtitle: hinweis }
 }
 
 /** MWh-formatiert (kWh-Eingang), 1 Nachkomma; '—' bei fehlend. */
@@ -253,6 +275,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         verlauf: (agg.length && mv) ? mv : undefined,
         // ⑤ Vergleich = echte IST-Analyse SOLL-IST pro String (komponentenAnalyse-Registry).
         vergleich: undefined,
+        // Wirtschaftlichkeit = Ertrags-Zusammensetzung: EV-Ersparnis (vermiedener
+        // Netzbezug) + Einspeise-Erlös → Netto-Ertrag.
+        wirtschaftlichkeit: (ev > 0 || einsp > 0) ? {
+          posten: [
+            { label: 'Eigenverbrauchs-Ersparnis', euro: u.ev_ersparnis_euro, farbe: SEG.ev, hinweis: 'vermiedener Netzbezug' },
+            { label: 'Einspeise-Erlös', euro: u.einspeise_erloes_euro, farbe: SEG.einspeisung },
+          ],
+          gesamt: { label: 'Netto-Ertrag', euro: u.netto_ertrag_euro },
+          hinweis: 'Netto-Ertrag nach Betriebskosten und USt auf Eigenverbrauch.',
+        } : undefined,
         struktur: hatTopo ? topo : undefined,
         // Einstellungen: alle aktiven PV-System-Investitionen (WR/Module/Speicher).
         verknuepfteInvs: invs.filter((i) => i.aktiv && ['wechselrichter', 'pv-module', 'speicher'].includes(i.typ)),
@@ -333,6 +365,16 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         vergleich: md.length ? {
           label: 'Entladung', einheit: 'kWh', farbe: CHART_COLORS.speicherEntladung,
           jahre: jahresSummen(md, (vd) => vd.entladung_kwh),
+        } : undefined,
+        // Wirtschaftlichkeit = Ertrags-Zusammensetzung: Eigenverbrauchs-Ersparnis
+        // (höhere PV-Nutzung) + Arbitrage-Gewinn (Netzladung billig → teuer), wenn vorhanden.
+        wirtschaftlichkeit: (z.ersparnis_euro ?? 0) > 0 || (z.arbitrage_gewinn_euro ?? 0) > 0 ? {
+          posten: [
+            { label: 'Eigenverbrauchs-Ersparnis', euro: z.ersparnis_euro, farbe: SEG.ev, hinweis: 'erhöhter PV-Eigenverbrauch' },
+            ...(z.arbitrage_faehig && (z.arbitrage_gewinn_euro ?? 0) > 0
+              ? [{ label: 'Arbitrage-Gewinn', euro: z.arbitrage_gewinn_euro, farbe: SEG.netz, hinweis: 'günstig laden, teuer nutzen' }]
+              : []),
+          ],
         } : undefined,
       }
       })
@@ -520,6 +562,14 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           label: 'Erzeugung', einheit: 'kWh', farbe: CHART_COLORS.erzeugung,
           jahre: jahresSummen(md, (vd) => vd.pv_erzeugung_kwh ?? 0),
         } : undefined,
+        // Wirtschaftlichkeit = Ertrags-Zusammensetzung: 1 Posten (Eigenverbrauchs-
+        // Ersparnis); BKW-Einspeisung ist unvergütet → als Hinweis (entgangener Erlös), kein Posten.
+        wirtschaftlichkeit: (z.gesamt_ersparnis_euro ?? 0) > 0 ? {
+          posten: [{ label: 'Eigenverbrauchs-Ersparnis', euro: z.gesamt_ersparnis_euro, farbe: SEG.ev, hinweis: 'vermiedener Netzbezug' }],
+          hinweis: (z.gesamt_einspeisung_kwh ?? 0) > 0
+            ? `Einspeisung unvergütet — entgangener Erlös rechnerisch ${n2(z.gesamt_einspeisung_kwh * 0.08)} € (8 ct/kWh).`
+            : undefined,
+        } : undefined,
         // ③ Sub-Komponente: integrierter Speicher (Eigenschaft des BKW-Wirts).
         subKomponente: z.hat_speicher ? {
           titel: 'Integrierter Speicher',
@@ -574,6 +624,11 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
               label: 'Verbrauch', einheit: 'kWh', farbe: CHART_COLORS.netzbezug,
               jahre: jahresSummen(md, (vd) => vd.verbrauch_kwh),
             } : undefined,
+            // Wirtschaftlichkeit = Ertrags-Zusammensetzung: PV-Ersparnis (PV-Bezug
+            // statt Netz) — 1 Posten.
+            wirtschaftlichkeit: (z.ersparnis_pv_euro ?? 0) > 0 ? {
+              posten: [{ label: 'PV-Ersparnis', euro: z.ersparnis_pv_euro, farbe: SEG.pv, hinweis: 'PV-Bezug statt Netz' }],
+            } : undefined,
           }
         }
         if (z.kategorie === 'speicher') {
@@ -606,18 +661,33 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
               label: 'Entladung', einheit: 'kWh', farbe: CHART_COLORS.speicherEntladung,
               jahre: jahresSummen(md, (vd) => vd.entladung_kwh),
             } : undefined,
+            // Wirtschaftlichkeit = Ertrags-Zusammensetzung: Ersparnis durch erhöhten
+            // Eigenverbrauch — 1 Posten.
+            wirtschaftlichkeit: (z.ersparnis_euro ?? 0) > 0 ? {
+              posten: [{ label: 'Eigenverbrauchs-Ersparnis', euro: z.ersparnis_euro, farbe: SEG.ev }],
+            } : undefined,
           }
         }
-        // Default: Erzeuger
+        // Default: Erzeuger. Sonstiger Erzeuger (BHKW/Pellet/Brennstoffzelle) speist
+        // hinter den Hauszähler → seine Erzeugung zählt in die Netzpunkt-Bilanz
+        // (EV/Autarkie, Backend v3.45.4). Die GERÄTESCHARFE Identität bleibt aber
+        // getrennt: ohne Brennstoffmodell sind CO₂-Ersparnis und Wirtschaftlichkeit
+        // nicht bewertbar (kein Fake-0), und der EV/Einspeisung-Split wird je Gerät
+        // nicht gemessen (Konzept Gernot 2026-06-22, [[feedback_keine_erfundenen_ausnahmeregeln]]).
+        const erzEvGemessen = (z.gesamt_eigenverbrauch_kwh ?? 0) > 0 || (z.gesamt_einspeisung_kwh ?? 0) > 0
         return {
           inv, label: inv.bezeichnung, selektorBadge, hinweise,
           status: [
             kpi(SONSTIGES_ERZEUGER_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
-            kpi(SONSTIGES_ERZEUGER_KPI.eigenverbrauch, n0(z.eigenverbrauch_quote_prozent), '%'),
-            kpi(SONSTIGES_ERZEUGER_KPI.ersparnis, n0(z.gesamt_ersparnis_euro), '€'),
-            kpi(SONSTIGES_ERZEUGER_KPI.co2, n1((z.co2_ersparnis_kg ?? 0) / 1000), 't'),
+            erzEvGemessen
+              ? kpi(SONSTIGES_ERZEUGER_KPI.eigenverbrauch, n0(z.eigenverbrauch_quote_prozent), '%')
+              : unbewertet(SONSTIGES_ERZEUGER_KPI.eigenverbrauch, 'je Gerät nicht gemessen'),
+            unbewertet(SONSTIGES_ERZEUGER_KPI.ersparnis, 'Brennstoffkosten unbekannt'),
+            unbewertet(SONSTIGES_ERZEUGER_KPI.co2, 'Brennstoff-CO₂ unbekannt'),
           ],
-          aufteilung: (z.gesamt_erzeugung_kwh ?? 0) > 0 ? {
+          // Aufteilung nur, wenn der EV/Einspeisung-Split tatsächlich erfasst ist
+          // (sonst zwei 0-Segmente = Fake).
+          aufteilung: erzEvGemessen ? {
             titel: 'Verwendung der Erzeugung', segmente: [
               { label: 'Eigenverbrauch', wert: z.gesamt_eigenverbrauch_kwh, farbe: SEG.ev },
               { label: 'Einspeisung', wert: z.gesamt_einspeisung_kwh, farbe: SEG.einspeisung },
@@ -632,6 +702,13 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             label: 'Erzeugung', einheit: 'kWh', farbe: CHART_COLORS.erzeugung,
             jahre: jahresSummen(md, (vd) => vd.erzeugung_kwh),
           } : undefined,
+          // Wirtschaftlichkeit ehrlich „nicht bewertet": Brennstoffkosten und
+          // Brennstoff-CO₂ eines sonstigen Erzeugers (BHKW/Pellet/Brennstoffzelle)
+          // sind ohne Brennstoffmodell nicht bewertbar — kein Fake-Ersparnis.
+          wirtschaftlichkeit: {
+            posten: [],
+            nichtBewertet: 'Brennstoffkosten und -CO₂ eines sonstigen Erzeugers (z. B. BHKW) sind ohne hinterlegtes Brennstoffmodell nicht bewertbar. Die Erzeugung zählt energetisch in die Anlagenbilanz (Eigenverbrauch/Autarkie); eine eigene Wirtschaftlichkeits- oder CO₂-Bewertung wäre an dieser Stelle Spekulation.',
+          },
         }
       })
     },

@@ -485,6 +485,29 @@ function KpiUnterblock({ titel, kpis }: { titel: string; kpis: KompGeraet['statu
   )
 }
 
+/** Block „Wirtschaftlichkeit" — generische **Ertrags-Zusammensetzung** (Typen ohne
+ *  Alternativ-Vergleich: PV/Speicher/BKW/Sonstiges). Ertragsposten als €-Kennzahlen
+ *  + (ab 2 Posten) €-Aufteilungsbalken; `nichtBewertet` zeigt einen ehrlichen
+ *  Hinweis statt Fake-Zahlen (Sonstiger Erzeuger ohne Brennstoffmodell). */
+function WirtschaftlichkeitInhalt({ w }: { w: NonNullable<KompGeraet['wirtschaftlichkeit']> }) {
+  if (w.nichtBewertet) return <Alert type="info">{w.nichtBewertet}</Alert>
+  const posten = w.posten.filter((p) => (p.euro ?? 0) > 0)
+  const kpis: KompGeraet['status'] = posten.map((p) => ({
+    title: p.label, value: fmtCalc(p.euro, 0, '—'), unit: '€', color: 'green', icon: Euro, subtitle: p.hinweis,
+  }))
+  if (w.gesamt) kpis.push({ title: w.gesamt.label, value: fmtCalc(w.gesamt.euro, 0, '—'), unit: '€', color: 'blue', icon: Euro })
+  return (
+    <div className="space-y-4">
+      {kpis.length > 0 && <KpiStrip kpis={kpis} />}
+      {posten.length >= 2 && (
+        <VerteilungsBalken titel="Zusammensetzung des Ertrags" einheit="€"
+          segmente={posten.map((p) => ({ label: p.label, wert: p.euro, farbe: p.farbe }))} />
+      )}
+      {w.hinweis && <p className="text-xs text-gray-400 dark:text-gray-500">{w.hinweis}</p>}
+    </div>
+  )
+}
+
 function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
   const analyse = KOMPONENTEN_ANALYSE[typ]
   const bloecke: Block[] = [
@@ -572,13 +595,18 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
           />),
   })
 
-  // Wirtschaftlichkeit (typ-spezifisch via Registry) — Kostenvergleich/ROI/Amortisation
-  // mit eigener Heimat im Hub (WP=vs Gas, Wallbox=ROI, E-Auto=vs Benzin …).
-  if (analyse?.wirtschaftlichkeit) {
+  // Wirtschaftlichkeit (Pflicht bei allen Typen) — zwei Modi:
+  //  • Vergleich (Registry): typen MIT Alternative (WP=vs Gas, E-Auto=vs Benzin, Wallbox=ROI).
+  //  • Ertrags-Zusammensetzung (Adapter `g.wirtschaftlichkeit`): PV/Speicher/BKW/Sonstiges —
+  //    Aufschlüsselung in Ertragsposten; Sonstiger Erzeuger ehrlich „nicht bewertet".
+  if (analyse?.wirtschaftlichkeit || g.wirtschaftlichkeit) {
     bloecke.push({
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit', icon: Euro,
-      summary: 'Kostenvergleich & Ersparnis', defaultOpen: false,
-      render: () => analyse.wirtschaftlichkeit!(anlageId, g.inv),
+      summary: analyse?.wirtschaftlichkeit ? 'Kostenvergleich & Ersparnis' : 'Ertrags-Zusammensetzung',
+      defaultOpen: false,
+      render: () => (analyse?.wirtschaftlichkeit
+        ? analyse.wirtschaftlichkeit(anlageId, g.inv)
+        : <WirtschaftlichkeitInhalt w={g.wirtschaftlichkeit!} />),
     })
   }
 

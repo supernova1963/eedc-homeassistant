@@ -305,3 +305,54 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(g.vergleich?.jahre).toEqual([{ jahr: 2025, summe: 200 }])
   })
 })
+
+describe('KOMPONENTEN_ADAPTER — Wirtschaftlichkeit + „nicht bewertet" (P2/P4)', () => {
+  it('Sonstiger Erzeuger: CO₂/Ersparnis „nicht bewertet" (—), EV-Quote — wenn ungemessen, Aufteilung unterdrückt', async () => {
+    getSonstigesDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'sonstiges' }),
+      // BHKW-Fall: Erzeugung real, EV/Einspeisung/Ersparnis/CO₂ alle 0 (kein Brennstoffmodell)
+      zusammenfassung: { kategorie: 'erzeuger', gesamt_erzeugung_kwh: 1560, gesamt_eigenverbrauch_kwh: 0,
+        gesamt_einspeisung_kwh: 0, eigenverbrauch_quote_prozent: 0, gesamt_ersparnis_euro: 0, co2_ersparnis_kg: 0 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
+    expect(g.status[0].value).toBe('1.560')                       // Erzeugung real
+    expect(g.status.slice(1).map((k) => k.value)).toEqual(['—', '—', '—'])  // kein Fake-0
+    expect(g.status.slice(1).every((k) => k.color === 'gray')).toBe(true)
+    expect(g.aufteilung).toBeUndefined()                          // zwei 0-Segmente unterdrückt
+    expect(g.wirtschaftlichkeit?.nichtBewertet).toContain('Brennstoffmodell')
+  })
+
+  it('Sonstiger Erzeuger: EV-Quote bleibt Wert, wenn EV/Einspeisung gemessen (Ersparnis trotzdem nicht bewertet)', async () => {
+    getSonstigesDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'sonstiges' }),
+      zusammenfassung: { kategorie: 'erzeuger', gesamt_erzeugung_kwh: 300, gesamt_eigenverbrauch_kwh: 200,
+        gesamt_einspeisung_kwh: 100, eigenverbrauch_quote_prozent: 67, gesamt_ersparnis_euro: 90, co2_ersparnis_kg: 150 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.sonstiges.fetch(1)
+    expect(g.status[1].value).toBe('67')                          // EV-Quote gemessen → echter Wert
+    expect(g.status[2].value).toBe('—')                           // Ersparnis bleibt nicht bewertet
+    expect(g.aufteilung?.segmente.map((s) => s.wert)).toEqual([200, 100])
+  })
+
+  it('PV-Wirtschaftlichkeit: EV-Ersparnis + Einspeise-Erlös (2 Posten) + Netto-Ertrag', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10, ev_ersparnis_euro: 4167, einspeise_erloes_euro: 1615, netto_ertrag_euro: 5222 })
+    listAggregiert.mockResolvedValue([{ eigenverbrauch_kwh: 100, einspeisung_kwh: 50 }])
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(g.wirtschaftlichkeit?.posten.map((p) => [p.label, p.euro])).toEqual([['Eigenverbrauchs-Ersparnis', 4167], ['Einspeise-Erlös', 1615]])
+    expect(g.wirtschaftlichkeit?.gesamt).toEqual({ label: 'Netto-Ertrag', euro: 5222 })
+  })
+
+  it('BKW-Wirtschaftlichkeit: 1 Posten (EV-Ersparnis) + entgangener-Erlös-Hinweis', async () => {
+    getBalkonkraftwerkDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'balkonkraftwerk' }),
+      zusammenfassung: { gesamt_erzeugung_kwh: 800, gesamt_eigenverbrauch_kwh: 700, gesamt_einspeisung_kwh: 100,
+        gesamt_ersparnis_euro: 291, co2_ersparnis_kg: 368, eigenverbrauch_quote_prozent: 88, spezifischer_ertrag_kwh_kwp: 1278 },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.balkonkraftwerk.fetch(1)
+    expect(g.wirtschaftlichkeit?.posten).toHaveLength(1)
+    expect(g.wirtschaftlichkeit?.hinweis).toContain('entgangener Erlös')
+  })
+})
