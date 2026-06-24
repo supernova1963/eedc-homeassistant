@@ -15,11 +15,10 @@
  * (`components/live/*`) → eine Code-Wahrheit.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { Activity, Battery, Calendar, CloudSun, LineChart, Maximize2, Sun, Sunrise, Thermometer, Workflow } from 'lucide-react'
 import { useSelectedAnlage } from '../hooks'
 import { liveDashboardApi } from '../api/liveDashboard'
-import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse, MqttInboundStatus } from '../api/liveDashboard'
+import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse } from '../api/liveDashboard'
 import { wetterApi } from '../api/wetter'
 import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
@@ -32,7 +31,7 @@ import LiveSocBalken from '../components/live/LiveSocBalken'
 import LiveTemperaturen from '../components/live/LiveTemperaturen'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
 import { Card } from '../components/ui'
-import { DEMO_DEFAULT } from '../lib/flags'
+import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
 
 const REFRESH_INTERVAL = 5_000
 const WETTER_REFRESH_INTERVAL = 300_000
@@ -40,19 +39,15 @@ const TAGESVERLAUF_REFRESH_INTERVAL = 60_000
 
 export default function CockpitLiveV4({ anlageId }: { anlageId: number | undefined }) {
   const { selectedAnlage } = useSelectedAnlage()
-  const [searchParams] = useSearchParams()
-  // Guest-Box (kein echter Live-Sensor): Demo per Build-Flag vorab an + Schalter
-  // sichtbar, damit Tester sofort befüllte Live-Daten sehen ([[DEMO_DEFAULT]]).
-  const isDebug = searchParams.has('debug') || DEMO_DEFAULT
+  // Demo-Modus ist global (Status-Fusszeile schaltet ihn); Live liest ihn nur.
+  const { demoMode } = useDemoMode()
   const [data, setData] = useState<LiveDashboardResponse | null>(null)
   const [wetter, setWetter] = useState<LiveWetterResponse | null>(null)
   const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(null)
   const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(null)
-  const [mqttStatus, setMqttStatus] = useState<MqttInboundStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<string | null>(null)
-  const [demoMode, setDemoMode] = useState(DEMO_DEFAULT)
   const [eflFokus, setEflFokus] = useState(false) // Energiefluss-Vollbild (⤢ in seiner eigenen Kopfzeile)
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -105,10 +100,6 @@ export default function CockpitLiveV4({ anlageId }: { anlageId: number | undefin
   }, [anlageId, demoMode])
 
   useEffect(() => {
-    liveDashboardApi.getMqttStatus().then(setMqttStatus).catch(() => {})
-  }, [])
-
-  useEffect(() => {
     fetchData(false)
     fetchWetter()
     fetchTagesverlauf()
@@ -138,6 +129,16 @@ export default function CockpitLiveV4({ anlageId }: { anlageId: number | undefin
   const hatAussicht = !!(prognose3Tage && prognose3Tage.length > 0)
   const hatTemp = !!(wetter?.aktuell?.temperatur_c != null || data?.warmwasser_temperatur_c != null)
 
+  // Live-Status in die app-weite Fusszeile melden (G11): Frische · Live-Punkt ·
+  // Quelle (P5-Provenance; erster Konsument). MQTT/Verbindung liegt seit P2 im
+  // globalen Status-Hook der Fusszeile.
+  useReportDatenStatus({
+    live: data?.verfuegbar,
+    aktualisiertText: lastUpdate,
+    intervallText: '(5s)',
+    quelle: demoMode ? 'Demo-Daten' : 'Live-Sensoren',
+  })
+
   if (!anlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
@@ -148,37 +149,8 @@ export default function CockpitLiveV4({ anlageId }: { anlageId: number | undefin
 
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-      {/* L-Header: Live-Status-Zeile (Anlage-Wahl liegt global in der Shell). */}
-      <div className="flex items-center justify-end gap-4 flex-wrap">
-        {isDebug && (
-          <button
-            onClick={() => setDemoMode(!demoMode)}
-            className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${
-              demoMode
-                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-            }`}
-          >
-            {demoMode ? 'Demo an' : 'Demo'}
-          </button>
-        )}
-        {mqttStatus?.subscriber_aktiv && (
-          <span
-            className="text-xs px-2 py-1 rounded-md bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-            title={`MQTT: ${mqttStatus.broker}\nNachrichten: ${mqttStatus.empfangene_nachrichten ?? 0}${mqttStatus.letzte_nachricht ? `\nLetzte: ${new Date(mqttStatus.letzte_nachricht).toLocaleTimeString('de-DE')}` : ''}`}
-          >
-            MQTT {mqttStatus.empfangene_nachrichten ? `(${mqttStatus.empfangene_nachrichten})` : ''}
-          </span>
-        )}
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          {data?.verfuegbar && (
-            <span className="inline-block h-2 w-2 rounded-full bg-green-500" aria-label="Live-Daten verfügbar" />
-          )}
-          {lastUpdate && <span aria-live="polite">Update: {lastUpdate}</span>}
-          <span className="text-xs">(5s)</span>
-        </div>
-      </div>
-
+      {/* Live-Status (Punkt · Update · MQTT · Demo) liegt jetzt in der app-weiten
+          Status-Fusszeile (G11) — via useReportDatenStatus gemeldet. */}
       {error && (
         <div role="alert" className="flex items-center gap-2 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-400">
           <Activity className="h-5 w-5 shrink-0" />
