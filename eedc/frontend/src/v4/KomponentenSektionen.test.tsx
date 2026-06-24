@@ -54,7 +54,9 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
       speicher_ladung_kwh: 99, wp_strom_kwh: 330, emob_ladung_kwh: 62,
       bkw_erzeugung_kwh: 612, sonstiges_erzeugung_kwh: 320,
     }))
-    expect(bloecke.map((b) => b.id)).toEqual(['k-speicher', 'k-waermepumpe', 'k-emob', 'k-bkw', 'k-sonstiges-erzeuger'])
+    // Default-Reihenfolge = INVESTITION_TYP_ORDER (SoT): Speicher → Balkonkraftwerk
+    // → Wärmepumpe → E-Mobilität → Sonstiges (BKW vor WP).
+    expect(bloecke.map((b) => b.id)).toEqual(['k-speicher', 'k-bkw', 'k-waermepumpe', 'k-emob', 'k-sonstiges-erzeuger'])
   })
 
   it('Sonstiges (#3c): Block heißt nach dem Gerät; Erzeuger/Verbraucher getrennt', () => {

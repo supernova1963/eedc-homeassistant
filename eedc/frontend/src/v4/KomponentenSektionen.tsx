@@ -18,7 +18,7 @@ import FormelTooltip from '../components/ui/FormelTooltip'
 import QuelleBadge from '../components/ui/QuelleBadge'
 import { KpiStrip, VerteilungsBalken, GeraeteHinweis, type Block, type KpiStripItem } from '../components/blocks'
 import {
-  KOMPONENTEN_IDENTITAET,
+  KOMPONENTEN_IDENTITAET, INVESTITION_TYP_ORDER,
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI,
 } from '../lib'
@@ -85,9 +85,20 @@ function speicherWirkungsverluste(d: AktuellerMonatResponse) {
   return { euro, teile }
 }
 
-/** Liefert die Blöcke der aktiven Komponenten in kanonischer Reihenfolge. */
-export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
+/** Liefert die Blöcke der aktiven Komponenten in kanonischer Reihenfolge.
+ *  `periode` steuert nur die period-spezifischen Label/Texte (WP-Counter: Tag vs.
+ *  Monat/Jahr); Default 'monat' lässt Cockpit/Monat unverändert. Cockpit/Tag ruft mit
+ *  'tag' → gleiche Blöcke, tages-korrekte Beschriftung. Cockpit/Jahr ruft mit 'jahr'
+ *  → wie 'monat' (Σ-Slot trägt die Jahressumme, Max/Tag = höchster Einzeltag des Jahres). */
+export function baueKomponentenBloecke(d: AktuellerMonatResponse, periode: 'monat' | 'tag' | 'jahr' = 'monat'): Block[] {
+  const istTag = periode === 'tag'
   const bloecke: Block[] = []
+
+  // Voraussetzungs-Hinweis bei „—" auf Tagesebene (Gernot 2026-06-24): Tooltip,
+  // welcher Sensor/welche Zuordnung für den Tageswert fehlt. Nur auf Tag (istTag) —
+  // auf Monat/Jahr bedeutet „—" fehlende Monatsdaten (anderer Kontext, eigener Pfad).
+  const tagHinweis = (vorhanden: boolean, text: string): string | undefined =>
+    istTag && !vorhanden ? text : undefined
 
   // ── Speicher ────────────────────────────────────────────────────────────
   if (hat(d.speicher_ladung_kwh) || hat(d.speicher_entladung_kwh) || hat(d.speicher_kapazitaet_kwh)) {
@@ -146,23 +157,37 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
   // ── Wärmepumpe ──────────────────────────────────────────────────────────
   if (hat(d.wp_strom_kwh) || hat(d.wp_waerme_kwh)) {
     const jaz = hat(d.wp_waerme_kwh) && d.wp_strom_kwh ? d.wp_waerme_kwh! / d.wp_strom_kwh : null
+    // Dieselben Felder wie Monat — auf Tag „—" wo der Tagessensor fehlt (Wärme/JAZ
+    // nur mit Wärmemengenzähler; Ersparnis € folgt aus Wärme). Kein Weglassen
+    // ([[feedback_sensor_ableitbar_nicht_weglassen]]).
+    const wmz = 'Tageswert braucht einen Wärmemengenzähler am Gerät (Sensor zuordnen); sonst nur Monatswert.'
     const kpis: KpiStripItem[] = [
-      { ...WP_KPI.jaz, value: fmtCalc(jaz, 2, '—'), formel: 'JAZ = Wärme ÷ Strom' },
-      { ...WP_KPI.waerme, value: fmt(d.wp_waerme_kwh), unit: 'kWh' },
+      { ...WP_KPI.jaz, value: fmtCalc(jaz, 2, '—'), formel: jaz != null ? 'JAZ = Wärme ÷ Strom' : undefined,
+        hinweis: tagHinweis(jaz != null, 'Tages-JAZ = Wärme ÷ Strom — ' + wmz) },
+      { ...WP_KPI.waerme, value: fmt(d.wp_waerme_kwh), unit: 'kWh', hinweis: tagHinweis(hat(d.wp_waerme_kwh), wmz) },
       { ...WP_KPI.strom, value: fmt(d.wp_strom_kwh), unit: 'kWh' },
-      { ...WP_KPI.ersparnis, value: hat(d.wp_ersparnis_euro) ? `+${fmtCalc(d.wp_ersparnis_euro, 2)}` : '—', unit: '€' },
+      { ...WP_KPI.ersparnis, value: hat(d.wp_ersparnis_euro) ? `+${fmtCalc(d.wp_ersparnis_euro, 2)}` : '—', unit: '€',
+        hinweis: tagHinweis(hat(d.wp_ersparnis_euro), 'Ersparnis folgt aus der Tages-Wärme — ' + wmz) },
     ]
-    // #238 Counter (Verschleiß-/Auslegungs-Indikatoren): Σ Monat prominent, Max/Tag
-    // im Untertitel — verhaltensgleich MonatsabschlussView. Period-aggregierbar (E).
-    if (d.wp_starts_max_tag != null && d.wp_starts_max_tag > 0) kpis.push({
+    // #238 Counter (Verschleiß-/Auslegungs-Indikatoren). Monat: Σ Monat prominent,
+    // Max/Tag im Untertitel. Tag: Tagessumme prominent, kein Max/Tag (period-korrekt,
+    // Gernot 2026-06-23). Für Tag liefert der Aufrufer die Tages-Summe in
+    // `wp_starts_summe_monat`/`wp_betriebsstunden_summe_monat` (period-neutraler Slot).
+    const startsZeigen = istTag ? (d.wp_starts_summe_monat != null && d.wp_starts_summe_monat > 0)
+                                : (d.wp_starts_max_tag != null && d.wp_starts_max_tag > 0)
+    if (startsZeigen) kpis.push({
       title: 'Kompressor-Starts', color: 'gray', icon: Power,
       value: d.wp_starts_summe_monat != null ? d.wp_starts_summe_monat.toLocaleString('de-DE') : String(d.wp_starts_max_tag),
-      formel: 'Σ aller Tagessummen im Monat', subtitle: `Max/Tag: ${d.wp_starts_max_tag}`,
+      formel: istTag ? 'Kompressor-Starts an diesem Tag' : 'Σ aller Tagessummen im Monat',
+      subtitle: istTag ? undefined : `Max/Tag: ${d.wp_starts_max_tag}`,
     })
-    if (d.wp_betriebsstunden_max_tag != null && d.wp_betriebsstunden_max_tag > 0) kpis.push({
+    const betriebZeigen = istTag ? (d.wp_betriebsstunden_summe_monat != null && d.wp_betriebsstunden_summe_monat > 0)
+                                 : (d.wp_betriebsstunden_max_tag != null && d.wp_betriebsstunden_max_tag > 0)
+    if (betriebZeigen) kpis.push({
       title: 'Betriebsstunden', color: 'gray', icon: Clock, unit: 'h',
       value: fmtCalc(d.wp_betriebsstunden_summe_monat ?? d.wp_betriebsstunden_max_tag, 1, '—'),
-      formel: 'Σ aller Tages-Betriebsstunden im Monat', subtitle: `Max/Tag: ${fmt(d.wp_betriebsstunden_max_tag, 1)} h`,
+      formel: istTag ? 'Betriebsstunden an diesem Tag' : 'Σ aller Tages-Betriebsstunden im Monat',
+      subtitle: istTag ? undefined : `Max/Tag: ${fmt(d.wp_betriebsstunden_max_tag, 1)} h`,
     })
     // Strom-Split Heizung/Warmwasser (#191, nur bei getrennter Strommessung).
     const wpDetail: DetailZeile[] = []
@@ -170,15 +195,20 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
     if (hat(d.wp_strom_warmwasser_kwh)) wpDetail.push({ label: 'Stromverbrauch · davon Warmwasser', wert: `${fmt(d.wp_strom_warmwasser_kwh)} kWh` })
     bloecke.push({
       id: 'k-waermepumpe', title: KOMPONENTEN_IDENTITAET['waermepumpe'].label, ...ident('waermepumpe'), defaultOpen: false,
-      summary: `${jaz != null ? `JAZ ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${hat(d.wp_ersparnis_euro) ? ` · +${fmt(d.wp_ersparnis_euro, 0)} € vs. Gas` : ''}`,
-      // Wärme-Aufteilung Heizung/Warmwasser als VerteilungsBalken (B7-Revision), darunter
-      // der Strom-Split als Detailzeilen (E-Gegencheck).
+      // Summary aus den vorhandenen Werten (Wärme/JAZ wenn da — Monat/Jahr/Tag-mit-WMZ;
+      // sonst Strom — Tag ohne WMZ). Period-agnostisch, kein Sonderpfad.
+      summary: hat(d.wp_waerme_kwh)
+        ? `${jaz != null ? `JAZ ${fmtCalc(jaz, 2)} · ` : ''}${fmt(d.wp_waerme_kwh)} kWh Wärme${hat(d.wp_ersparnis_euro) ? ` · +${fmt(d.wp_ersparnis_euro, 0)} € vs. Gas` : ''}`
+        : `${fmt(d.wp_strom_kwh)} kWh Strom${hat(d.wp_starts_summe_monat) ? ` · ${d.wp_starts_summe_monat!.toLocaleString('de-DE')} Starts` : ''}`,
+      // Wärme-Aufteilung Heizung/Warmwasser als VerteilungsBalken (B7-Revision) — nur
+      // wenn thermische Daten vorhanden (Monat/Jahr immer; Tag nur mit Wärmemengenzähler);
+      // darunter der Strom-Split als Detailzeilen.
       render: () => <Sektion kpis={kpis} extra={
         <>
-          <VerteilungsBalken segmente={[
+          {(hat(d.wp_heizung_kwh) || hat(d.wp_warmwasser_kwh)) && <VerteilungsBalken segmente={[
             { label: 'Heizung', wert: d.wp_heizung_kwh, farbe: 'bg-red-500' },
             { label: 'Warmwasser', wert: d.wp_warmwasser_kwh, farbe: 'bg-blue-500' },
-          ]} />
+          ]} />}
           <DetailListe rows={wpDetail} />
         </>
       } geraete={geraeteNamen(d, 'waermepumpe')} />,
@@ -189,22 +219,28 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
   if (hat(d.emob_ladung_kwh) || hat(d.emob_km)) {
     const pvAnteil = hat(d.emob_ladung_pv_kwh) && d.emob_ladung_kwh
       ? (d.emob_ladung_pv_kwh! / d.emob_ladung_kwh) * 100 : null
-    // „Ladung gesamt" ohne D2-Pendant → bleibt; Rest aus dem D2-Kanon (E-Auto).
+    // Dieselben Felder wie Monat. PV-Anteil/Netz-Anteil sind auf Tag mit Sensor
+    // erhebbar (tagDetail), km/Verbrauch/extern/V2H/Ersparnis haben keinen Tages-
+    // Sensor → „—" wo nicht vorhanden, kein Weglassen ([[feedback_sensor_ableitbar_nicht_weglassen]]).
     const kpis: KpiStripItem[] = [
       { title: 'Ladung gesamt', value: fmt(d.emob_ladung_kwh), unit: 'kWh', color: 'purple', icon: Plug },
       { ...EAUTO_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
-        subtitle: hat(d.emob_ladung_pv_kwh) ? `${fmt(d.emob_ladung_pv_kwh)} kWh PV` : undefined },
-      { ...EAUTO_KPI.gefahren, value: fmt(d.emob_km), unit: 'km' },
-      { ...EAUTO_KPI.verbrauch, value: fmtCalc(d.emob_verbrauch_100km, 1, '—'), unit: 'kWh/100km' },
+        subtitle: hat(d.emob_ladung_pv_kwh) ? `${fmt(d.emob_ladung_pv_kwh)} kWh PV` : undefined,
+        hinweis: tagHinweis(pvAnteil != null, 'PV-Ladesensor (ladung_pv) der Wallbox/dem Auto zuordnen.') },
+      { ...EAUTO_KPI.gefahren, value: fmt(d.emob_km), unit: 'km',
+        hinweis: tagHinweis(hat(d.emob_km), 'Kein Tages-Kilometersensor — Strecke nur im Monatsabschluss erfassbar.') },
+      { ...EAUTO_KPI.verbrauch, value: fmtCalc(d.emob_verbrauch_100km, 1, '—'), unit: 'kWh/100km',
+        hinweis: tagHinweis(d.emob_verbrauch_100km != null, 'Folgt aus der Tages-Strecke — kein Tages-Sensor.') },
     ]
-    // Lade-Herkunft + V2H als Detailzeilen (E-Gegencheck) — period-aggregierbar.
+    // Lade-Herkunft + V2H als Detailzeilen — Netz-Anteil tagesgenau (tagDetail),
+    // extern/V2H nur monatlich (→ nur zeigen wenn vorhanden).
     const emobDetail: DetailZeile[] = []
     if (hat(d.emob_ladung_netz_kwh)) emobDetail.push({ label: 'Ladung · Netz-Anteil', wert: `${fmt(d.emob_ladung_netz_kwh)} kWh` })
     if (hat(d.emob_ladung_extern_kwh)) emobDetail.push({ label: 'Ladung · extern', wert: `${fmt(d.emob_ladung_extern_kwh)} kWh` })
     if (hat(d.emob_v2h_kwh)) emobDetail.push({ label: 'V2H-Rückspeisung', wert: `${fmt(d.emob_v2h_kwh)} kWh` })
     bloecke.push({
       id: 'k-emob', title: 'E-Mobilität', ...ident('e-auto'), defaultOpen: false,
-      summary: `${fmt(d.emob_ladung_kwh)} kWh geladen · ${fmt(d.emob_km)} km${hat(d.emob_ersparnis_euro) ? ` · +${fmt(d.emob_ersparnis_euro, 2)} € vs. Verbrenner` : ''}`,
+      summary: `${fmt(d.emob_ladung_kwh)} kWh geladen${hat(d.emob_km) ? ` · ${fmt(d.emob_km)} km` : ''}${hat(d.emob_ersparnis_euro) ? ` · +${fmt(d.emob_ersparnis_euro, 2)} € vs. Verbrenner` : ''}`,
       render: () => <Sektion kpis={kpis} extra={<DetailListe rows={emobDetail} />} geraete={geraeteNamen(d, 'e-auto', 'wallbox')} />,
     })
   }
@@ -215,12 +251,17 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
       ? d.bkw_erzeugung_kwh! - d.bkw_eigenverbrauch_kwh! : null
     const evQuote = d.bkw_erzeugung_kwh && hat(d.bkw_eigenverbrauch_kwh)
       ? (d.bkw_eigenverbrauch_kwh! / d.bkw_erzeugung_kwh) * 100 : null
-    // Einspeisung ohne D2-Pendant → bleibt; Erzeugung/Eigenverbrauch aus D2 (BKW).
+    // Erzeugung ist tagesgenau (Stundensumme). Eigenverbrauch/Einspeisung brauchen
+    // den EV-Split — BKW hat selten einen eigenen Zähler → „—" wo nicht vorhanden
+    // (korrekt, kein Weglassen; Gernot 2026-06-24, [[feedback_sensor_ableitbar_nicht_weglassen]]).
+    const bkwHinweis = 'Eigenverbrauch/Einspeisung braucht einen eigenen BKW-Zähler (selten vorhanden).'
     const kpis: KpiStripItem[] = [
       { ...BKW_KPI.erzeugung, value: fmt(d.bkw_erzeugung_kwh), unit: 'kWh' },
       { ...BKW_KPI.eigenverbrauch, value: fmt(d.bkw_eigenverbrauch_kwh), unit: 'kWh',
-        subtitle: evQuote != null ? `${evQuote.toFixed(0)} % EV-Quote` : undefined },
-      { title: 'Einspeisung', value: fmt(einsp), unit: 'kWh', color: 'green', icon: TrendingUp },
+        subtitle: evQuote != null ? `${evQuote.toFixed(0)} % EV-Quote` : undefined,
+        hinweis: tagHinweis(hat(d.bkw_eigenverbrauch_kwh), bkwHinweis) },
+      { title: 'Einspeisung', value: fmt(einsp), unit: 'kWh', color: 'green', icon: TrendingUp,
+        hinweis: tagHinweis(einsp != null, bkwHinweis) },
     ]
     bloecke.push({
       id: 'k-bkw', title: 'Balkonkraftwerk', ...ident('balkonkraftwerk'), defaultOpen: false,
@@ -272,5 +313,17 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse): Block[] {
     })
   }
 
-  return bloecke
+  // Default-Reihenfolge = Standard-Investitionstyp-Reihenfolge (`INVESTITION_TYP_ORDER`,
+  // SoT) statt Bau-Reihenfolge — d. h. Speicher → Balkonkraftwerk → Wärmepumpe →
+  // E-Mobilität → Sonstiges (BKW vor WP). Gilt einheitlich für Monat/Tag/Jahr.
+  // Stabil → die zwei Sonstiges-Blöcke (Erzeuger vor Verbraucher) behalten ihre Folge.
+  const ID_TYP: Record<string, string> = {
+    'k-speicher': 'speicher', 'k-bkw': 'balkonkraftwerk', 'k-waermepumpe': 'waermepumpe',
+    'k-emob': 'wallbox', 'k-sonstiges-erzeuger': 'sonstiges', 'k-sonstiges-verbraucher': 'sonstiges',
+  }
+  const ordnung = (b: Block) => {
+    const i = (INVESTITION_TYP_ORDER as readonly string[]).indexOf(ID_TYP[b.id] ?? '')
+    return i === -1 ? INVESTITION_TYP_ORDER.length : i
+  }
+  return [...bloecke].sort((a, b) => ordnung(a) - ordnung(b))
 }

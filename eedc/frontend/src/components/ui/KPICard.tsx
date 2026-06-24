@@ -24,7 +24,7 @@
  */
 
 import Card from './Card'
-import FormelTooltip from './FormelTooltip'
+import FormelTooltip, { SimpleTooltip } from './FormelTooltip'
 import { COLOR_CLASSES, type KomponentenColor } from '../../lib/komponentenStyle'
 
 export interface KPICardProps {
@@ -43,6 +43,9 @@ export interface KPICardProps {
   berechnung?: string
   ergebnis?: string
   sicht?: string
+  /** Voraussetzungs-Hinweis bei fehlendem Wert („—"): erklärt im Tooltip, welche
+   *  Zuordnung/welcher Sensor fehlt (Gernot 2026-06-24). Nur wirksam ohne `formel`. */
+  hinweis?: string
 }
 
 export function KPICard({
@@ -59,6 +62,7 @@ export function KPICard({
   berechnung,
   ergebnis,
   sicht,
+  hinweis,
 }: KPICardProps) {
   const formattedValue = typeof value === 'number' ? value.toLocaleString('de-DE') : value
 
@@ -88,6 +92,10 @@ export function KPICard({
             <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
               {valueContent}
             </FormelTooltip>
+          ) : hinweis ? (
+            <SimpleTooltip text={hinweis}>
+              <span className="inline-flex items-baseline border-b border-dotted border-gray-300 dark:border-gray-600 cursor-help">{valueContent}</span>
+            </SimpleTooltip>
           ) : (
             valueContent
           )}
@@ -122,6 +130,10 @@ export function KPICard({
             <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis} sicht={sicht}>
               {valueContent}
             </FormelTooltip>
+          ) : hinweis ? (
+            <SimpleTooltip text={hinweis}>
+              <span className="inline-flex items-baseline border-b border-dotted border-gray-300 dark:border-gray-600 cursor-help">{valueContent}</span>
+            </SimpleTooltip>
           ) : (
             valueContent
           )}

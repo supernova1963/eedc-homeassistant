@@ -361,6 +361,37 @@ class TagWerteResponse(BaseModel):
     einspeisung_neg_preis_kwh: Optional[float] = None
 
 
+class TagDetailResponse(BaseModel):
+    """Tages-Detail-Werte für Cockpit/Tag, die NICHT in der Tages-Bilanz/
+    `TagWerteResponse` stehen, aber aus Snapshots/TEP tagesgenau erhebbar sind
+    (D1 „maximal erheben", SPEC-COCKPIT-TAG-JAHR Abschnitt F). Pro gewähltem Tag
+    EIN Aufruf (anders als die 90-Tage-Werte-Spanne — diese Felder sind
+    snapshot-teuer). Felder sind `None`, wenn der jeweilige Sensor nicht gemappt
+    ist bzw. keine Snapshot-/TEP-Daten vorliegen → das Frontend lässt sie weg.
+    """
+    datum: date
+    # WP-Strom-Split (getrennte Strommessung) — Tages-Boundary-Diff.
+    wp_strom_heizen_kwh: Optional[float] = None
+    wp_strom_warmwasser_kwh: Optional[float] = None
+    # WP-Wärme (thermisch, nur mit Wärmemengenzähler-Sensor) — Tages-Boundary-Diff.
+    # Ermöglicht Tages-JAZ (= Wärme ÷ Strom) und Wärme-Aufteilung.
+    wp_heizung_kwh: Optional[float] = None
+    wp_warmwasser_kwh: Optional[float] = None
+    # Speicher-Netzladung (Arbitrage) — Tages-Boundary-Diff.
+    speicher_ladung_netz_kwh: Optional[float] = None
+    # Speicher effektiver Netz-Ladepreis (stundengewichtet, Tagesspanne).
+    speicher_effektiver_ladepreis_cent: Optional[float] = None
+    speicher_effektiver_ladepreis_quelle: Optional[str] = None
+    # E-Mobilität PV-/Netz-Anteil der Ladung — Tages-Boundary-Diff (nur bei Sensor).
+    emob_ladung_pv_kwh: Optional[float] = None
+    emob_ladung_netz_kwh: Optional[float] = None
+    # PV Tages-SOLL = OM-Tagesprognose × eedc-Lernfaktor (wie Genauigkeits-Tracking).
+    soll_pv_kwh: Optional[float] = None
+    # Tages-Tarif (Monatstarif je Tag) — für Wirkungsverluste € + Tarif-Zeile.
+    einspeise_preis_cent: Optional[float] = None
+    netzbezug_preis_cent: Optional[float] = None
+
+
 class ReaggregatePreviewBoundary(BaseModel):
     sensor_key: str
     kategorie: Optional[str] = None

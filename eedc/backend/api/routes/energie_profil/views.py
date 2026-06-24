@@ -45,6 +45,7 @@ from ._shared import (
     StundenPrognose,
     StundenWertResponse,
     TagesPrognoseResponse,
+    TagDetailResponse,
     TagesZusammenfassungResponse,
     TagWerteResponse,
     TagesprofilStunde,
@@ -147,6 +148,72 @@ async def get_tage_werte(
     from backend.services.energie_profil.tage_werte import baue_tage_werte
 
     return await baue_tage_werte(db, anlage, von, bis)
+
+
+@router.get("/{anlage_id}/tag-detail", response_model=TagDetailResponse)
+async def get_tag_detail(
+    anlage_id: int,
+    datum: date = Query(..., description="Tag (YYYY-MM-DD)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Snapshot-teure Tages-Detailwerte für Cockpit/Tag (D1 „maximal erheben",
+    SPEC-COCKPIT-TAG-JAHR Abschnitt F/I): WP-Strom-Split + WP-Wärme (Heizung/
+    Warmwasser, nur mit Wärmemengenzähler), Speicher-Netzladung + effektiver
+    Ladepreis, E-Mob PV-/Netz-Anteil der Ladung, PV-Tages-SOLL (OM × eedc-
+    Lernfaktor) und Tagestarif (für Wirkungsverluste €/Tarif-Zeile). Alles
+    tagesgenau aus Snapshots/TEP/Prognose. Bewusst EIN Aufruf pro gewähltem Tag
+    (nicht über die 90-Tage-Werte-Spanne), da Snapshot-Boundary-Diffs teuer sind.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise not_found("Anlage", anlage_id)
+
+    inv_result = await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
+    investitionen_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+
+    from backend.services.snapshot.aggregator import get_tagesdetail_kwh
+    from backend.services.speicher_wirtschaftlichkeit import berechne_effektiver_ladepreis
+    from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
+    from backend.api.routes.live_wetter import _get_lernfaktor
+
+    detail = await get_tagesdetail_kwh(db, anlage, investitionen_by_id, datum)
+    eff = await berechne_effektiver_ladepreis(db, anlage_id=anlage_id, von=datum, bis=datum)
+
+    # PV Tages-SOLL = OM-Tagesprognose × eedc-Lernfaktor (wie Genauigkeits-Tracking).
+    tz_prog = await db.execute(
+        select(TagesZusammenfassung.pv_prognose_kwh).where(
+            TagesZusammenfassung.anlage_id == anlage_id,
+            TagesZusammenfassung.datum == datum,
+        )
+    )
+    pv_prognose = tz_prog.scalar_one_or_none()
+    lernfaktor = await _get_lernfaktor(anlage_id, db, quelle="openmeteo")
+    soll_pv = round(pv_prognose * lernfaktor, 1) if (pv_prognose and lernfaktor) else pv_prognose
+
+    # Tagestarif (Monatstarif je Tag) — Preise hängen nicht von Mengen ab.
+    tarif = await baue_finanz_zeile(
+        db, anlage_id, FinanzZeileEingabe(jahr=datum.year, monat=datum.month), tarif_cache={}
+    )
+
+    return TagDetailResponse(
+        datum=datum,
+        wp_strom_heizen_kwh=detail.get("wp_strom_heizen_kwh"),
+        wp_strom_warmwasser_kwh=detail.get("wp_strom_warmwasser_kwh"),
+        wp_heizung_kwh=detail.get("wp_heizung_kwh"),
+        wp_warmwasser_kwh=detail.get("wp_warmwasser_kwh"),
+        speicher_ladung_netz_kwh=detail.get("speicher_ladung_netz_kwh"),
+        speicher_effektiver_ladepreis_cent=(
+            round(eff.effektiver_ladepreis_cent, 2)
+            if eff.effektiver_ladepreis_cent is not None else None
+        ),
+        speicher_effektiver_ladepreis_quelle=eff.quelle,
+        emob_ladung_pv_kwh=detail.get("emob_ladung_pv_kwh"),
+        emob_ladung_netz_kwh=detail.get("emob_ladung_netz_kwh"),
+        soll_pv_kwh=soll_pv,
+        einspeise_preis_cent=tarif.einspeiseverguetung_cent,
+        netzbezug_preis_cent=tarif.netzbezug_preis_cent,
+    )
 
 
 @router.get("/{anlage_id}/komponenten-serien", response_model=list[SerieInfo])

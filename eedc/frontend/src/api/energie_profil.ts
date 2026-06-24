@@ -122,6 +122,28 @@ export interface TagWerte {
   einspeisung_neg_preis_kwh: number | null
 }
 
+/**
+ * Tages-Detailwerte (Cockpit/Tag), die NICHT in der Tages-Bilanz stehen, aber
+ * snapshot-/TEP-genau pro Tag erhebbar sind (SPEC-COCKPIT-TAG-JAHR Abschnitt F,
+ * D1 „maximal erheben"). Ein Aufruf je gewähltem Tag (`getTagDetail`). Felder
+ * `null` = Sensor nicht gemappt / keine Daten → Frontend lässt sie weg.
+ */
+export interface TagDetail {
+  datum: string
+  wp_strom_heizen_kwh: number | null
+  wp_strom_warmwasser_kwh: number | null
+  wp_heizung_kwh: number | null
+  wp_warmwasser_kwh: number | null
+  speicher_ladung_netz_kwh: number | null
+  speicher_effektiver_ladepreis_cent: number | null
+  speicher_effektiver_ladepreis_quelle: string | null
+  emob_ladung_pv_kwh: number | null
+  emob_ladung_netz_kwh: number | null
+  soll_pv_kwh: number | null
+  einspeise_preis_cent: number | null
+  netzbezug_preis_cent: number | null
+}
+
 export interface HeatmapZelle {
   tag: number          // 1..31
   stunde: number       // 0..23
@@ -314,6 +336,9 @@ export const energieProfilApi = {
 
   getTageWerte: (anlageId: number, von: string, bis: string): Promise<TagWerte[]> =>
     api.get(`/energie-profil/${anlageId}/tage-werte?von=${von}&bis=${bis}`),
+
+  getTagDetail: (anlageId: number, datum: string): Promise<TagDetail> =>
+    api.get(`/energie-profil/${anlageId}/tag-detail?datum=${datum}`),
 
   getKomponentenSerien: (anlageId: number, von: string, bis: string): Promise<SerieInfo[]> =>
     api.get(`/energie-profil/${anlageId}/komponenten-serien?von=${von}&bis=${bis}`),

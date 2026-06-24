@@ -14,7 +14,7 @@
  * NICHT roh notiert, sondern aus `COLOR_CLASSES` (`lib/komponentenStyle`, der
  * EINEN 8er-Farbklassen-Definition; Werte aus `lib/colors.ts`) bezogen.
  */
-import { Activity, Scale, LineChart, Table2, Euro, Users } from 'lucide-react'
+import { Activity, Scale, LineChart, Table2, Euro, Users, CloudSun, CalendarRange, TrendingDown, Flame } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { COLOR_CLASSES } from './komponentenStyle'
 
@@ -25,6 +25,11 @@ export type BlockKind =
   | 'werte'
   | 'finanzen'
   | 'community'
+  // Cockpit/Aussicht (A.4) — Projektions-Blöcke
+  | 'wetter'
+  | 'saison'
+  | 'degradation'
+  | 'wpAussicht'
 
 export interface BlockIdentitaet {
   icon: LucideIcon
@@ -39,4 +44,10 @@ export const BLOCK_IDENTITAET: Record<BlockKind, BlockIdentitaet> = {
   werte:         { icon: Table2 },    // neutral
   finanzen:      { icon: Euro,      farbe: COLOR_CLASSES.green.text }, // Geld-Logik
   community:     { icon: Users,     farbe: COLOR_CLASSES.blue.text },  // „eigene Serie"
+  // Aussicht: Wetter = Solar/gelb (Umgebung treibt PV); übrige neutral (Projektion
+  // ohne Einzel-Datenrolle), Degradation NICHT rot gefärbt (Status-Hinweis, kein Alarm).
+  wetter:         { icon: CloudSun,     farbe: COLOR_CLASSES.yellow.text },
+  saison:         { icon: CalendarRange }, // neutral
+  degradation:    { icon: TrendingDown }, // neutral
+  wpAussicht:     { icon: Flame, farbe: COLOR_CLASSES.red.text }, // WP-Identität (rot, dokumentiert)
 }

@@ -92,7 +92,7 @@ export function baueMonatKpis(
   ]
 }
 
-function Delta({ a, b, inv = false, besser }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean; besser?: boolean }) {
+export function Delta({ a, b, inv = false, besser }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean; besser?: boolean }) {
   if (a == null || b == null || b === 0) return null
   const pct = ((a - b) / Math.abs(b)) * 100
   // `besser` (z. B. Autarkie-Richtung für Eigenverbrauch, #337) übersteuert die reine
@@ -113,7 +113,7 @@ function Delta({ a, b, inv = false, besser }: { a: number | null | undefined; b:
 /** Vergleichs-Chip für die gestapelte Mobil-Ansicht (< sm): „VM ▲90 %", farbig,
  *  voller Absolutwert im Tooltip. Ersetzt die Tabellen-Spalten auf schmalen Schirmen
  *  (kein Spalten/Header-Versatz, umbruch-sicher). */
-function VglChip({ prefix, lang, ist, val, unit, dec, inv, besser }: {
+export function VglChip({ prefix, lang, ist, val, unit, dec, inv, besser }: {
   prefix: string; lang: string
   ist: number | null | undefined; val: number | null | undefined
   unit: string; dec: number; inv?: boolean; besser?: boolean

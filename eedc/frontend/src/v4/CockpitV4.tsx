@@ -1,17 +1,19 @@
 /**
  * CockpitV4 — Dispatcher der Cockpit-Zeit-Achse.
  *
- * „Monat" (Referenz-Muster, → {@link CockpitMonatV4}) und „Live"
- * (→ {@link CockpitLiveV4}, A.3) sind pattern-treu gebaut. Die übrigen Zeit-
- * Sichten (Tag/Jahr/Aussicht) zeigen noch einen Platzhalter, bis ihre echten
- * Sichten folgen (Tag/Jahr = Varianten von Monat). Bewusst KEIN Vorab-Gerüst,
- * das von der entschiedenen Struktur driftet (vgl. IASkeleton-Pflege-Timing).
+ * „Monat" (Referenz-Muster, → {@link CockpitMonatV4}), „Live" (→ {@link
+ * CockpitLiveV4}, A.3), „Aussicht" (→ {@link CockpitAussichtV4}, A.4), „Tag"
+ * (→ {@link CockpitTagV4}) und „Jahr" (→ {@link CockpitJahrV4}) sind als Monat-
+ * Varianten pattern-treu gebaut.
  */
 import { useParams } from 'react-router-dom'
 import { Card } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import CockpitMonatV4 from './CockpitMonatV4'
 import CockpitLiveV4 from './CockpitLiveV4'
+import CockpitAussichtV4 from './CockpitAussichtV4'
+import CockpitTagV4 from './CockpitTagV4'
+import CockpitJahrV4 from './CockpitJahrV4'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 
@@ -39,6 +41,15 @@ export default function CockpitV4() {
     ) : zeit === 'live' ? (
       // A.3 — Echtzeit-Sicht (reiches IST-Layout, lose ins Skelett eingepasst).
       <CockpitLiveV4 anlageId={selectedAnlageId} />
+    ) : zeit === 'aussicht' ? (
+      // A.4 — Projektions-Sicht (Vorwärts-Teleskop, Horizont-Selektor).
+      <CockpitAussichtV4 anlageId={selectedAnlageId} />
+    ) : zeit === 'tag' ? (
+      // Monat-Variante auf Tages-/Stunden-Granularität.
+      <CockpitTagV4 anlageId={selectedAnlageId} />
+    ) : zeit === 'jahr' ? (
+      // Monat-Variante auf Jahres-/Monats-Granularität (Σ der 12 Monate).
+      <CockpitJahrV4 anlageId={selectedAnlageId} />
     ) : (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
         <Card>

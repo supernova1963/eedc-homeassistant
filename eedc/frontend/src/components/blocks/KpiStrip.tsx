@@ -23,6 +23,9 @@ export interface KpiStripItem {
   formel?: string
   berechnung?: string
   ergebnis?: string
+  /** Voraussetzungs-Hinweis bei fehlendem Wert („—") — Tooltip, was zugeordnet
+   *  werden muss (Gernot 2026-06-24). */
+  hinweis?: string
 }
 
 export function KpiStrip({ kpis }: { kpis: KpiStripItem[] }) {
@@ -46,6 +49,7 @@ export function KpiStrip({ kpis }: { kpis: KpiStripItem[] }) {
           formel={k.formel}
           berechnung={k.berechnung}
           ergebnis={k.ergebnis}
+          hinweis={k.hinweis}
         />
       ))}
     </div>

@@ -501,6 +501,94 @@ async def get_komponenten_tageskwh(
     return result
 
 
+async def get_tagesdetail_kwh(
+    db: AsyncSession,
+    anlage,
+    investitionen_by_id: dict,
+    datum: date,
+) -> dict[str, float]:
+    """Tages-kWh für Felder, die `get_komponenten_tageskwh` bewusst NICHT separat
+    ausweist, die aber Cockpit/Tag für die Detailzeilen braucht (D1 „maximal
+    erheben", SPEC-COCKPIT-TAG-JAHR Abschnitt F):
+
+      - WP `strom_heizen_kwh` / `strom_warmwasser_kwh` (getrennte Strommessung) —
+        in der Bilanz zu EINEM `waermepumpe_<id>`-Key zusammengefasst.
+      - Speicher `ladung_netz_kwh` (Arbitrage) — in der Bilanz bewusst
+        ausgeschlossen (Teilmenge von `ladung_kwh`, Doppelzähl-Schutz).
+
+    Boundary-Diff über das HA-Tagesfenster `[Tag 00:00, Folgetag 00:00)`,
+    identisch zu `get_komponenten_tageskwh` (gleiche Tagesreset-Behandlung). Summe
+    über alle aktiven Investitionen des Typs. Liefert `{feld: Σ_kwh}` nur für
+    tatsächlich als Sensor gemappte Felder mit Snapshot-Daten — fehlt das
+    Mapping/der Snapshot, fehlt das Feld (Aufrufer lässt es weg, kein „—"-Clutter).
+    """
+    sensor_mapping = anlage.sensor_mapping or {}
+    investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    rng = BoundaryRange.for_day_total(datum)
+    start_off, end_off = rng.boundary_offsets  # (0, 24)
+    ts_start = rng.boundary_at(start_off)
+    ts_ende = rng.boundary_at(end_off)
+
+    async def _diff(sensor_key: str, sensor_id: Optional[str]) -> Optional[float]:
+        s0 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_start)
+        s1 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_ende)
+        if s0 is None or s1 is None:
+            return None
+        d = s1 - s0
+        if d < -0.01:
+            if s1 < 0.5 and s0 > 0.5:  # Tagesreset-Zähler (HA utility_meter daily)
+                return max(0.0, s1)
+            logger.warning(
+                f"Negatives Tagesdetail-Delta für anlage={anlage.id} "
+                f"key={sensor_key} ({datum}): {d:.3f} → ignoriert"
+            )
+            return None
+        return max(0.0, d)
+
+    # (typ, mapping-feld) → semantischer Ausgabe-Key. Alle Felder sind in
+    # KUMULATIVE_ZAEHLER_FELDER, also per Boundary-Diff erhebbar. Wichtig: speicher-
+    # und emob-`ladung_netz_kwh` sind verschiedene Begriffe → getrennte Ausgabe-Keys
+    # (sonst Vermischung). Wallbox + E-Auto fließen in DENSELBEN emob-Key (Σ).
+    AUSGABE = {
+        ("waermepumpe", "strom_heizen_kwh"): "wp_strom_heizen_kwh",
+        ("waermepumpe", "strom_warmwasser_kwh"): "wp_strom_warmwasser_kwh",
+        # thermische Wärme (nur mit Wärmemengenzähler-Sensor; in der Bilanz
+        # ausgeschlossen, hier für Tages-JAZ/Wärme).
+        ("waermepumpe", "heizenergie_kwh"): "wp_heizung_kwh",
+        ("waermepumpe", "warmwasser_kwh"): "wp_warmwasser_kwh",
+        ("speicher", "ladung_netz_kwh"): "speicher_ladung_netz_kwh",
+        ("wallbox", "ladung_pv_kwh"): "emob_ladung_pv_kwh",
+        ("wallbox", "ladung_netz_kwh"): "emob_ladung_netz_kwh",
+        ("e-auto", "ladung_pv_kwh"): "emob_ladung_pv_kwh",
+        ("e-auto", "ladung_netz_kwh"): "emob_ladung_netz_kwh",
+    }
+    summen: dict[str, float] = {}
+    for inv_id_str, inv_data in investitionen_map.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(inv_id_str) or investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        typ = getattr(inv, "typ", None)
+        # E-Auto mit parent (Wallbox misst die Ladung) → Skip, sonst Doppelzählung
+        # (spiegelt investition_beitraege/Live-Pfad).
+        if typ == "e-auto" and getattr(inv, "parent_investition_id", None) is not None:
+            continue
+        felder = inv_data.get("felder", {}) or {}
+        for (t, feld), out_key in AUSGABE.items():
+            if t != typ:
+                continue
+            cfg = felder.get(feld)
+            if not isinstance(cfg, dict) or cfg.get("strategie") != "sensor":
+                continue
+            d = await _diff(f"inv:{inv_id_str}:{feld}", cfg.get("sensor_id"))
+            if d is None:
+                continue
+            summen[out_key] = summen.get(out_key, 0.0) + d
+
+    return summen
+
+
 async def get_hourly_counter_sum_by_feld(
     db: AsyncSession,
     anlage,
