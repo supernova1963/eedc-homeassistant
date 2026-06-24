@@ -216,8 +216,8 @@ export const ROLLEN_BG = {
   einspeisung: DATENROLLE.einspeisung.bg,
   netz: DATENROLLE.netzbezug.bg,
   extern: DATENROLLE.extern.bg,
-  heizung: 'bg-orange-500',    // WP-Heizwärme (Komponenten-Identität)
-  warmwasser: 'bg-red-400',    // WP-Warmwasser
+  heizung: 'bg-red-500',       // WP-Heizwärme = WP-Identitätsrot (Regel A; war orange)
+  warmwasser: 'bg-red-400',    // WP-Warmwasser = helleres WP-Rot (= Backend live #f87171)
   ladung: DATENROLLE.speicherLadung.bg,
   entladung: DATENROLLE.speicherEntladung.bg,
 } as const
@@ -264,18 +264,46 @@ export const CHART_ACHSEN = {
   dark:  { achse: '#9ca3af', grid: '#374151', referenz: '#6b7280' }, // gray-400/700/500
 }
 
+// ─── Komponenten-Identität (Investitionstyp) — kanonische SoT (Regel A) ──────
+/**
+ * **Kanonische Komponenten-Identitäts-Farbmap (SoT, Gernot 2026-06-24, Regel A)**
+ * — die EINE Quelle für „eine Komponente = eine Identitätsfarbe" je Investitions-
+ * typ. Jeder Eintrag trägt Recharts-`hex` + Tailwind-`bg` + Tailwind-`text`-Zwilling.
+ * **Kollisionsfrei + disjunkt von {@link DATENROLLE}** — Ausnahmen: PV=Amber und
+ * Speicher=Blau teilen bewusst die gleichnamige Rolle (Komponente = ihre Rolle).
+ * `TYP_COLORS`/`TYP_TEXT_CLASS` UND die Komponenten-Keys von `KATEGORIE_FARBEN`
+ * leiten hieraus ab (kein zweiter Satz). SoT-Doc: `docs/drafts/SPEC-IDENTITAETS-FARBMAP.md`.
+ */
+export const KOMPONENTEN_FARBEN = {
+  'pv-module':       { hex: '#f59e0b', bg: 'bg-amber-500',  text: 'text-amber-500',  tint: 'bg-amber-50 dark:bg-amber-900/20' },   // = PV-Rolle (bewusst)
+  'wechselrichter':  { hex: '#eab308', bg: 'bg-yellow-500', text: 'text-yellow-500', tint: 'bg-yellow-50 dark:bg-yellow-900/20' },
+  'speicher':        { hex: '#3b82f6', bg: 'bg-blue-500',   text: 'text-blue-500',   tint: 'bg-blue-50 dark:bg-blue-900/20' },     // = Speicher-Entladung-Rolle (bewusst)
+  'e-auto':          { hex: '#14b8a6', bg: 'bg-teal-500',   text: 'text-teal-500',   tint: 'bg-teal-50 dark:bg-teal-900/20' },     // war Violett (= EV-Rolle) → Teal
+  'wallbox':         { hex: '#06b6d4', bg: 'bg-cyan-500',   text: 'text-cyan-500',   tint: 'bg-cyan-50 dark:bg-cyan-900/20' },
+  'waermepumpe':     { hex: '#ef4444', bg: 'bg-red-500',    text: 'text-red-500',    tint: 'bg-red-50 dark:bg-red-900/20' },       // Identitäts-Rot (Ko-Existenz Signal-Rot, dokumentiert)
+  'balkonkraftwerk': { hex: '#fbbf24', bg: 'bg-amber-400',  text: 'text-amber-400',  tint: 'bg-amber-50 dark:bg-amber-900/20' },   // war Emerald (= Einspeisung-Rolle) → helles Amber
+  'sonstiges':       { hex: '#6b7280', bg: 'bg-gray-500',   text: 'text-gray-500',   tint: 'bg-gray-50 dark:bg-gray-900/20' },
+  'pv-system':       { hex: '#d97706', bg: 'bg-amber-600',  text: 'text-amber-600',  tint: 'bg-amber-50 dark:bg-amber-900/20' },   // war Orange (= speicherLadung-Rolle) → dunkles Amber
+} as const
+
+/** Sonstiger Erzeuger / Mini-BHKW (typ=`sonstiges` + Kategorie `erzeuger`) — eigene
+ *  Identität, da KEIN eigener Investitionstyp. Lime, distinkt von PV-Amber/Emerald. */
+export const SONSTIGES_ERZEUGER_FARBE = { hex: '#84cc16', bg: 'bg-lime-500', text: 'text-lime-500', tint: 'bg-lime-50 dark:bg-lime-900/20' } as const
+
 // ─── Tagesverlauf-Kategorien ─────────────────────────────────────────────────
 
-/** Farben für Energiefluss- und Bilanz-Visualisierungen (nach Tagesverlauf-Kategorie) */
+/** Farben für Energiefluss-/Bilanz-Visualisierungen (nach Tagesverlauf-Kategorie).
+ *  Rollen (pv/netz/batterie) ← {@link COLORS}; Komponenten ← {@link KOMPONENTEN_FARBEN};
+ *  `haushalt` = virtuelle Verbrauchs-Aggregat-Serie (eigener Ton, NICHT Einspeisung). */
 export const KATEGORIE_FARBEN: Record<string, string> = {
   pv: COLORS.solar,        // F1: war #eab308 — kanonisiert
   netz: COLORS.grid,       // F2: Dunkelrot
   batterie: COLORS.battery,
-  eauto: '#a855f7',
-  wallbox: '#a855f7',
-  waermepumpe: '#f97316',
-  sonstige: '#6b7280',
-  haushalt: '#10b981',
+  eauto: KOMPONENTEN_FARBEN['e-auto'].hex,        // Teal (war #a855f7 = identisch zu wallbox)
+  wallbox: KOMPONENTEN_FARBEN['wallbox'].hex,     // Cyan (war #a855f7)
+  waermepumpe: KOMPONENTEN_FARBEN['waermepumpe'].hex,  // Rot (war #f97316 = speicherLadung-Rolle)
+  sonstige: KOMPONENTEN_FARBEN['sonstiges'].hex,
+  haushalt: '#64748b',     // slate-500 — war #10b981 (= Einspeisung-Emerald, semantisch falsch)
 }
 
 /**
@@ -290,35 +318,17 @@ export const DEDIZIERTE_KATEGORIEN = new Set([
   'pv', 'batterie', 'netz', 'haushalt', 'waermepumpe', 'wallbox', 'eauto', 'virtual',
 ])
 
-// ─── Typ-Farben (Komponenten-Identität der Investitionstypen) ────────────────
+// ─── Typ-Farben — abgeleitet aus KOMPONENTEN_FARBEN (eine Quelle) ────────────
 
-export const TYP_COLORS: Record<string, string> = {
-  'pv-module': '#f59e0b',
-  'wechselrichter': '#eab308',
-  'speicher': '#3b82f6',
-  'e-auto': '#8b5cf6',
-  'wallbox': '#06b6d4',
-  'waermepumpe': '#ef4444', // Identitäts-Rot, bewusste Ko-Existenz mit Signal-Rot
-  'balkonkraftwerk': '#10b981',
-  'sonstiges': '#6b7280',
-  'pv-system': '#f97316',
-}
+/** Komponenten-Identität als Hex je Investitionstyp — **abgeleitet** aus
+ *  {@link KOMPONENTEN_FARBEN}, nicht mehr parallel pflegen. */
+export const TYP_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(KOMPONENTEN_FARBEN).map(([typ, f]) => [typ, f.hex]),
+)
 
-/**
- * Tailwind-Text-Klassen-Zwilling zu {@link TYP_COLORS} — für Icon-Farben in
- * Komponenten/Seiten (dort sind Inline-Hex verboten, `check:design`). Jeder
- * Eintrag ist die `-500`-Klasse desselben Farbtons wie der Hex daneben; beide
- * Maps zusammen pflegen (eine Farb-Rolle, zwei Ausgabeformen — wie `COLORS` ↔
- * `COLOR_CLASSES`). Konsumiert von `komponentenStyle.KOMPONENTEN_IDENTITAET`.
- */
-export const TYP_TEXT_CLASS: Record<string, string> = {
-  'pv-module': 'text-amber-500',     // #f59e0b
-  'wechselrichter': 'text-yellow-500', // #eab308
-  'speicher': 'text-blue-500',       // #3b82f6
-  'e-auto': 'text-violet-500',       // #8b5cf6
-  'wallbox': 'text-cyan-500',        // #06b6d4
-  'waermepumpe': 'text-red-500',     // #ef4444
-  'balkonkraftwerk': 'text-emerald-500', // #10b981
-  'sonstiges': 'text-gray-500',      // #6b7280
-  'pv-system': 'text-orange-500',    // #f97316
-}
+/** Tailwind-Text-Klassen-Zwilling der Komponenten-Identität — **abgeleitet** aus
+ *  {@link KOMPONENTEN_FARBEN} (Icon-Farben; Inline-Hex verboten, `check:design`).
+ *  Konsumiert von `komponentenStyle.KOMPONENTEN_IDENTITAET`. */
+export const TYP_TEXT_CLASS: Record<string, string> = Object.fromEntries(
+  Object.entries(KOMPONENTEN_FARBEN).map(([typ, f]) => [typ, f.text]),
+)

@@ -126,7 +126,7 @@ function BalkonkraftwerkBlock({ dashboard, ...selectorProps }: { dashboard: Balk
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Sun className="h-8 w-8 text-yellow-500 flex-shrink-0" />
+          <Sun className="h-8 w-8 text-amber-400 flex-shrink-0" />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
               {investition.bezeichnung}

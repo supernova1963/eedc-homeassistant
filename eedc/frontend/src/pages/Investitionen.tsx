@@ -16,20 +16,22 @@ import {
   wallboxParameter,
   wechselrichterParameter,
   balkonkraftwerkParameter,
+  KOMPONENTEN_FARBEN,
 } from '../lib'
 
-// Icon + Farbe pro Typ. Reihenfolge + Label kommen aus INVESTITION_TYP_ORDER /
-// INVESTITION_TYP_LABELS (zentral), damit Stammdaten konsistent zu Cockpit /
-// Statistik-Import / Sensor-Mapping bleibt.
+// Icon pro Typ; Identitätsfarbe + Tint kommen aus der Kanon-SoT KOMPONENTEN_FARBEN
+// (lib/colors.ts) — keine zweite Farbmap mehr (Regel A, war zuvor gedriftet:
+// e-auto blau/wallbox lila/wp orange …). Reihenfolge + Label aus INVESTITION_TYP_ORDER /
+// INVESTITION_TYP_LABELS, damit Stammdaten konsistent zu Cockpit / Sensor-Mapping bleibt.
 const TYP_ICON_STYLE: Record<InvestitionTyp, { icon: React.ElementType; color: string; bgColor: string }> = {
-  'wechselrichter':  { icon: Settings2,  color: 'text-cyan-500',   bgColor: 'bg-cyan-50 dark:bg-cyan-900/20' },
-  'pv-module':       { icon: Sun,        color: 'text-yellow-500', bgColor: 'bg-yellow-50 dark:bg-yellow-900/20' },
-  'balkonkraftwerk': { icon: LayoutGrid, color: 'text-teal-500',   bgColor: 'bg-teal-50 dark:bg-teal-900/20' },
-  'speicher':        { icon: Battery,    color: 'text-green-500',  bgColor: 'bg-green-50 dark:bg-green-900/20' },
-  'waermepumpe':     { icon: Flame,      color: 'text-orange-500', bgColor: 'bg-orange-50 dark:bg-orange-900/20' },
-  'wallbox':         { icon: Plug,       color: 'text-purple-500', bgColor: 'bg-purple-50 dark:bg-purple-900/20' },
-  'e-auto':          { icon: Car,        color: 'text-blue-500',   bgColor: 'bg-blue-50 dark:bg-blue-900/20' },
-  'sonstiges':       { icon: Settings2,  color: 'text-gray-500',   bgColor: 'bg-gray-50 dark:bg-gray-900/20' },
+  'wechselrichter':  { icon: Settings2,  color: KOMPONENTEN_FARBEN['wechselrichter'].text,  bgColor: KOMPONENTEN_FARBEN['wechselrichter'].tint },
+  'pv-module':       { icon: Sun,        color: KOMPONENTEN_FARBEN['pv-module'].text,       bgColor: KOMPONENTEN_FARBEN['pv-module'].tint },
+  'balkonkraftwerk': { icon: LayoutGrid, color: KOMPONENTEN_FARBEN['balkonkraftwerk'].text, bgColor: KOMPONENTEN_FARBEN['balkonkraftwerk'].tint },
+  'speicher':        { icon: Battery,    color: KOMPONENTEN_FARBEN['speicher'].text,        bgColor: KOMPONENTEN_FARBEN['speicher'].tint },
+  'waermepumpe':     { icon: Flame,      color: KOMPONENTEN_FARBEN['waermepumpe'].text,     bgColor: KOMPONENTEN_FARBEN['waermepumpe'].tint },
+  'wallbox':         { icon: Plug,       color: KOMPONENTEN_FARBEN['wallbox'].text,         bgColor: KOMPONENTEN_FARBEN['wallbox'].tint },
+  'e-auto':          { icon: Car,        color: KOMPONENTEN_FARBEN['e-auto'].text,          bgColor: KOMPONENTEN_FARBEN['e-auto'].tint },
+  'sonstiges':       { icon: Settings2,  color: KOMPONENTEN_FARBEN['sonstiges'].text,       bgColor: KOMPONENTEN_FARBEN['sonstiges'].tint },
 }
 
 export default function Investitionen() {

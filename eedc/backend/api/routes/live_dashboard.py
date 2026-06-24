@@ -82,7 +82,7 @@ class TagesverlaufSerie(BaseModel):
     key: str              # z.B. "pv_3", "batterie_5", "wallbox_6", "netz", "haushalt"
     label: str            # z.B. "PV Süd", "BYD HVS 10.2"
     kategorie: str        # "pv", "batterie", "wallbox", "waermepumpe", "sonstige", "netz", "haushalt"
-    farbe: str            # Hex-Farbe, z.B. "#eab308"
+    farbe: str            # Hex-Farbe, z.B. "#f59e0b" (Kanon, s. lib/colors.ts)
     seite: str            # "quelle" (positiv) oder "senke" (negativ), oder "overlay" (sekundäre Y-Achse)
     bidirektional: bool = False  # Speicher/Netz: wechselt dynamisch die Seite
     einheit: Optional[str] = None  # Nur für Overlay-Serien, z.B. "ct/kWh"
@@ -236,19 +236,19 @@ def _generate_demo_tagesverlauf(anlage_id: int) -> dict:
     # Demo-Serien: Zwei PV-Strings, Batterie, Wallbox, WP, Netz, Haushalt
     serien = [
         {"key": "pv_1", "label": "PV Süd (String A)", "kategorie": "pv",
-         "farbe": "#eab308", "seite": "quelle", "bidirektional": False},
+         "farbe": "#f59e0b", "seite": "quelle", "bidirektional": False},
         {"key": "pv_2", "label": "PV Ost (String B)", "kategorie": "pv",
-         "farbe": "#ca8a04", "seite": "quelle", "bidirektional": False},
+         "farbe": "#b45309", "seite": "quelle", "bidirektional": False},
         {"key": "batterie_3", "label": "BYD HVS 10.2", "kategorie": "batterie",
          "farbe": "#3b82f6", "seite": "quelle", "bidirektional": True},
         {"key": "wallbox_6", "label": "go-eCharger", "kategorie": "wallbox",
-         "farbe": "#a855f7", "seite": "senke", "bidirektional": False},
+         "farbe": "#06b6d4", "seite": "senke", "bidirektional": False},
         {"key": "waermepumpe_5", "label": "Viessmann Vitocal", "kategorie": "waermepumpe",
-         "farbe": "#f97316", "seite": "senke", "bidirektional": False},
+         "farbe": "#ef4444", "seite": "senke", "bidirektional": False},
         {"key": "netz", "label": "Stromnetz", "kategorie": "netz",
-         "farbe": "#ef4444", "seite": "quelle", "bidirektional": True},
+         "farbe": "#b91c1c", "seite": "quelle", "bidirektional": True},
         {"key": "haushalt", "label": "Haushalt", "kategorie": "haushalt",
-         "farbe": "#10b981", "seite": "senke", "bidirektional": False},
+         "farbe": "#64748b", "seite": "senke", "bidirektional": False},
     ]
 
     punkte = []

@@ -16,7 +16,7 @@ import {
   Thermometer, Activity, Power, Clock,
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, QuelleBadge, FormelTooltip, fmtCalc, SortableSection, OrderedSections } from '../components/ui'
-import { fmtKpi } from '../lib'
+import { fmtKpi, TYP_TEXT_CLASS } from '../lib'
 import { useSelectedAnlage, useAggregierteDaten, useSectionOrder } from '../hooks'
 import { aktuellerMonatApi, AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { cockpitApi } from '../api/cockpit'
@@ -658,17 +658,9 @@ export default function MonatsabschlussView() {
                   }
 
                   // Farbe je Investitionstyp
-                  const typColor = (typ: string) => {
-                    switch (typ) {
-                      case 'balkonkraftwerk': return 'text-blue-500 dark:text-blue-300'
-                      case 'speicher':        return 'text-blue-600 dark:text-blue-400'
-                      case 'waermepumpe':     return 'text-orange-500'
-                      case 'e-auto':
-                      case 'wallbox':         return 'text-purple-500'
-                      case 'sonstiges':       return 'text-teal-600 dark:text-teal-400'
-                      default:                return 'text-blue-600 dark:text-blue-400'
-                    }
-                  }
+                  // Identitätsfarbe je Typ aus der Kanon-SoT (TYP_TEXT_CLASS, Regel A) —
+                  // keine zweite Typ→Farbmap mehr (war gedriftet: e-auto/wallbox lila, WP orange).
+                  const typColor = (typ: string) => TYP_TEXT_CLASS[typ] ?? 'text-gray-500'
 
                   const fins = d.investitionen_financials ?? []
                   const hasPerInv = fins.length > 0
@@ -772,7 +764,7 @@ export default function MonatsabschlussView() {
                     ...(!hasPerInv && d.wp_ersparnis_euro != null ? [{
                       label: 'WP-Ersparnis vs. Gas',
                       wert: d.wp_ersparnis_euro,
-                      color: 'text-orange-500',
+                      color: typColor('waermepumpe'),
                       formel: '(Wärme ÷ 0,9 × Gaspreis) − Strom × WP-Strompreis',
                       berechnung: d.wp_waerme_kwh != null && d.wp_strom_kwh != null
                         ? `${fmt(d.wp_waerme_kwh, 1)} kWh / 0,9 × 10 ct − ${fmt(d.wp_strom_kwh, 1)} kWh × ${fmtCalc(netzPreis, 2)} ct`
@@ -1332,7 +1324,7 @@ export default function MonatsabschlussView() {
               const jaz = d.wp_strom_kwh != null && d.wp_waerme_kwh != null && d.wp_strom_kwh > 0
                 ? d.wp_waerme_kwh / d.wp_strom_kwh : null
               return (
-              <SortableSection storageKeyPrefix="monatsberichte" sectionId="waermepumpe" icon={Flame} color="text-orange-500" title="Wärmepumpe"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="waermepumpe" icon={Flame} color="text-red-500" title="Wärmepumpe"
                 summary={
                   <span className="flex gap-3 text-sm">
                     {d.wp_strom_kwh != null && <span>{fmt(d.wp_strom_kwh, 0)} kWh Strom</span>}
@@ -1465,7 +1457,7 @@ export default function MonatsabschlussView() {
 
             {/* ════ SEKTION 6: Balkonkraftwerk ══════════════════════════ */}
             {d.hat_balkonkraftwerk && (
-              <SortableSection storageKeyPrefix="monatsberichte" sectionId="balkonkraftwerk" icon={Sun} color="text-yellow-400" title="Balkonkraftwerk"
+              <SortableSection storageKeyPrefix="monatsberichte" sectionId="balkonkraftwerk" icon={Sun} color="text-amber-400" title="Balkonkraftwerk"
                 summary={<span className="text-sm">{fmt(d.bkw_erzeugung_kwh, 0)} kWh erzeugt · in Gesamt-PV enthalten</span>}
               >
                 <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">

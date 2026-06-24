@@ -18,7 +18,7 @@ import FormelTooltip from '../components/ui/FormelTooltip'
 import QuelleBadge from '../components/ui/QuelleBadge'
 import { KpiStrip, VerteilungsBalken, GeraeteHinweis, type Block, type KpiStripItem } from '../components/blocks'
 import {
-  KOMPONENTEN_IDENTITAET, INVESTITION_TYP_ORDER,
+  KOMPONENTEN_IDENTITAET, INVESTITION_TYP_ORDER, SONSTIGES_ERZEUGER_FARBE, ROLLEN_BG,
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI,
 } from '../lib'
@@ -206,8 +206,8 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, periode: 'mona
       render: () => <Sektion kpis={kpis} extra={
         <>
           {(hat(d.wp_heizung_kwh) || hat(d.wp_warmwasser_kwh)) && <VerteilungsBalken segmente={[
-            { label: 'Heizung', wert: d.wp_heizung_kwh, farbe: 'bg-red-500' },
-            { label: 'Warmwasser', wert: d.wp_warmwasser_kwh, farbe: 'bg-blue-500' },
+            { label: 'Heizung', wert: d.wp_heizung_kwh, farbe: ROLLEN_BG.heizung },
+            { label: 'Warmwasser', wert: d.wp_warmwasser_kwh, farbe: ROLLEN_BG.warmwasser },
           ]} />}
           <DetailListe rows={wpDetail} />
         </>
@@ -290,7 +290,8 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, periode: 'mona
     if (hat(d.sonstiges_eigenverbrauch_kwh)) kpis.push({ ...SONSTIGES_ERZEUGER_KPI.eigenverbrauch, value: fmt(d.sonstiges_eigenverbrauch_kwh), unit: 'kWh' })
     if (hat(d.sonstiges_einspeisung_kwh)) kpis.push({ title: 'Einspeisung', value: fmt(d.sonstiges_einspeisung_kwh), unit: 'kWh', color: 'green', icon: TrendingUp })
     bloecke.push({
-      id: 'k-sonstiges-erzeuger', title: sonstigesTitel, ...ident('sonstiges'), defaultOpen: false,
+      // Eigene Identitätsfarbe (Lime) — sonstiger Erzeuger/Mini-BHKW ist NICHT PV (Regel A).
+      id: 'k-sonstiges-erzeuger', title: sonstigesTitel, ...ident('sonstiges'), farbe: SONSTIGES_ERZEUGER_FARBE.text, defaultOpen: false,
       summary: `${fmt(d.sonstiges_erzeugung_kwh)} kWh erzeugt`,
       render: () => <Sektion kpis={kpis} />,
     })

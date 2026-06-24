@@ -111,7 +111,7 @@ function PlaceholderHeader(props: SelectorProps) {
   return (
     <div className="flex items-center justify-between flex-wrap gap-4">
       <div className="flex items-center gap-3 min-w-0">
-        <Plug className="h-8 w-8 text-purple-500 flex-shrink-0" />
+        <Plug className="h-8 w-8 text-cyan-500 flex-shrink-0" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Wallbox</h1>
       </div>
       <AnlageSelector {...props} />
@@ -137,7 +137,7 @@ function WallboxBlock({ dashboard, ...selectorProps }: { dashboard: WallboxDashb
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Plug className="h-8 w-8 text-purple-500 flex-shrink-0" />
+          <Plug className="h-8 w-8 text-cyan-500 flex-shrink-0" />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
               {investition.bezeichnung}

@@ -114,7 +114,7 @@ function PlaceholderHeader(props: SelectorProps) {
   return (
     <div className="flex items-center justify-between flex-wrap gap-4">
       <div className="flex items-center gap-3 min-w-0">
-        <Flame className="h-8 w-8 text-orange-500 flex-shrink-0" />
+        <Flame className="h-8 w-8 text-red-500 flex-shrink-0" />
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">Wärmepumpe</h1>
       </div>
       <AnlageSelector {...props} />
@@ -146,7 +146,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Flame className="h-8 w-8 text-orange-500 flex-shrink-0" />
+          <Flame className="h-8 w-8 text-red-500 flex-shrink-0" />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white truncate">
               {investition.bezeichnung}

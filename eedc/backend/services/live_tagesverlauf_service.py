@@ -241,7 +241,8 @@ async def get_tagesverlauf(
         inv = investitionen[spec.inv_id]
         config = TV_SERIE_CONFIG.get(inv.typ, {})
         if spec.suffix:  # WP-Split: eigene Farbe für Warmwasser, kein max_w
-            farbe = "#f59e0b" if spec.suffix == "warmwasser" else config.get("farbe")
+            # WP-Warmwasser: rotes WP-Familienlicht (red-400), NICHT PV-Amber (Regel A 2026-06-24)
+            farbe = "#f87171" if spec.suffix == "warmwasser" else config.get("farbe")
             serien.append({
                 "key": spec.key,
                 "label": f"{inv.bezeichnung}{_SUFFIX_LABEL.get(spec.suffix, '')}",
@@ -269,7 +270,7 @@ async def get_tagesverlauf(
             "key": "pv_gesamt",
             "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
             "kategorie": "pv",
-            "farbe": "#eab308",
+            "farbe": "#f59e0b",
             "seite": "quelle",
             "bidirektional": False,
         })
@@ -296,7 +297,7 @@ async def get_tagesverlauf(
             "key": "netzbezug",
             "label": "Netzbezug",
             "kategorie": "netz",
-            "farbe": "#ef4444",
+            "farbe": "#b91c1c",
             "seite": "quelle",
             "bidirektional": False,
         })
@@ -305,7 +306,7 @@ async def get_tagesverlauf(
             "key": "einspeisung",
             "label": "Einspeisung",
             "kategorie": "netz",
-            "farbe": "#06b6d4",
+            "farbe": "#10b981",
             "seite": "senke",
             "bidirektional": False,
         })
@@ -506,7 +507,7 @@ async def get_tagesverlauf(
             "key": "haushalt",
             "label": "Haushalt",
             "kategorie": "haushalt",
-            "farbe": "#10b981",
+            "farbe": "#64748b",
             "seite": "senke",
             "bidirektional": False,
         })
@@ -609,7 +610,7 @@ async def _get_tagesverlauf_mqtt(
                 "key": key_w,
                 "label": f"{inv.bezeichnung} Warmwasser",
                 "kategorie": config["kategorie"],
-                "farbe": "#f59e0b",
+                "farbe": "#f87171",  # WP-Warmwasser red-400 (WP-Familie), NICHT PV-Amber (Regel A)
                 "seite": config["seite"],
                 "bidirektional": config["bidirektional"],
             })
@@ -661,7 +662,7 @@ async def _get_tagesverlauf_mqtt(
             "key": "pv_gesamt",
             "label": f"PV Gesamt{f' {gesamt_kwp} kWp' if gesamt_kwp else ''}",
             "kategorie": "pv",
-            "farbe": "#eab308",
+            "farbe": "#f59e0b",
             "seite": "quelle",
             "bidirektional": False,
         })
@@ -679,7 +680,7 @@ async def _get_tagesverlauf_mqtt(
             "key": "netzbezug",
             "label": "Netzbezug",
             "kategorie": "netz",
-            "farbe": "#ef4444",
+            "farbe": "#b91c1c",
             "seite": "quelle",
             "bidirektional": False,
         })
@@ -688,7 +689,7 @@ async def _get_tagesverlauf_mqtt(
             "key": "einspeisung",
             "label": "Einspeisung",
             "kategorie": "netz",
-            "farbe": "#06b6d4",
+            "farbe": "#10b981",
             "seite": "senke",
             "bidirektional": False,
         })
@@ -785,7 +786,7 @@ async def _get_tagesverlauf_mqtt(
             "key": "haushalt",
             "label": "Haushalt",
             "kategorie": "haushalt",
-            "farbe": "#10b981",
+            "farbe": "#64748b",
             "seite": "senke",
             "bidirektional": False,
         })

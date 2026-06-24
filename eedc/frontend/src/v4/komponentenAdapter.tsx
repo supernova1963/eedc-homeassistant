@@ -23,7 +23,7 @@ import { Activity, Battery, Clock, Droplet, Euro, Flame, Leaf, Percent, Power, T
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG } from '../lib'
-import { CHART_COLORS, LADEQUELLEN_FARBEN, ROLLEN_BG } from '../lib/colors'
+import { CHART_COLORS, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
 import { cockpitApi } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -694,12 +694,13 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             ],
           } : undefined,
           // ④ Verlauf: Erzeugung je Monat (EV/Einspeisung-Split nur als Gesamt-Aufteilung, s. ①).
+          // Eigene Identitätsfarbe (Lime) — ein sonstiger Erzeuger/Mini-BHKW ist NICHT PV (Regel A).
           verlauf: md.length ? {
-            bars: [{ key: 'erz', label: 'Erzeugung', farbe: CHART_COLORS.erzeugung }],
+            bars: [{ key: 'erz', label: 'Erzeugung', farbe: SONSTIGES_ERZEUGER_FARBE.hex }],
             rows: rowsAusMd(md, [{ key: 'erz', wert: (vd) => vd.erzeugung_kwh }]),
           } : undefined,
           vergleich: md.length ? {
-            label: 'Erzeugung', einheit: 'kWh', farbe: CHART_COLORS.erzeugung,
+            label: 'Erzeugung', einheit: 'kWh', farbe: SONSTIGES_ERZEUGER_FARBE.hex,
             jahre: jahresSummen(md, (vd) => vd.erzeugung_kwh),
           } : undefined,
           // Wirtschaftlichkeit ehrlich „nicht bewertet": Brennstoffkosten und
