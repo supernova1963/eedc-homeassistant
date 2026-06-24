@@ -15,8 +15,9 @@
  * `glMonStats`), keine Roh-Daten-Aggregation.
  */
 import { fmtCalc } from '../components/ui'
+import FormelTooltip from '../components/ui/FormelTooltip'
 import { VerteilungsBalken } from '../components/blocks'
-import { DATENROLLE } from '../lib'
+import { DATENROLLE, AMPEL_SKALA } from '../lib'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
@@ -118,11 +119,26 @@ export function TagBilanz({
     </>
   )
 
-  // Tages-Spitzen (Tag-native, kein Monats-Pendant) — füllen die rechte Spalte
-  // anstelle der monatlichen SOLL/IST-Progression (kein per-Tag-PVGIS-SOLL).
+  // PR-Ampel = Tages-Pendant zum Monats-SOLL/IST: PR = Ertrag ÷ (gemessene
+  // Einstrahlung × kWp) = IST gegen das physikalische Optimum bei der heutigen
+  // Sonne. Selbsttragend (Einstrahlung liegt im Tageswert vor) → kein per-Tag-
+  // PVGIS-SOLL/Backfill nötig (Gernot-Entscheid 2026-06-24). Ampelfarbe aus SoT.
+  const prPct = t.performance_ratio != null ? t.performance_ratio * 100 : null
+  const prColor = prPct == null ? undefined
+    : prPct >= 80 ? AMPEL_SKALA.gut
+    : prPct >= 70 ? AMPEL_SKALA.maessig
+    : prPct >= 60 ? AMPEL_SKALA.hoch
+    : AMPEL_SKALA.kritisch
+  const prWort = prPct == null ? null
+    : prPct >= 80 ? 'sehr gut'
+    : prPct >= 70 ? 'solide'
+    : prPct >= 60 ? 'mäßig'
+    : 'auffällig niedrig'
+  const strahlungKwh = t.strahlung_summe_wh_m2 != null ? t.strahlung_summe_wh_m2 / 1000 : null
+
+  // Tages-Spitzen (Tag-native) — Peak PV + Temperatur (PR steht prominent oben).
   const spitzen: { label: string; value: string }[] = []
   if (t.peak_pv_kw != null) spitzen.push({ label: 'Peak PV', value: `${fmtCalc(t.peak_pv_kw, 2)} kW` })
-  if (t.performance_ratio != null) spitzen.push({ label: 'Performance-Ratio', value: `${fmtCalc(t.performance_ratio * 100, 0)} %` })
   if (t.temperatur_min_c != null && t.temperatur_max_c != null)
     spitzen.push({ label: 'Temperatur', value: `${fmtCalc(t.temperatur_min_c, 1)} / ${fmtCalc(t.temperatur_max_c, 1)} °C` })
 
@@ -181,8 +197,32 @@ export function TagBilanz({
         )}
       </div>
 
-      {/* Tages-Spitzen + PV-Verteilung */}
+      {/* PR-Ampel (prominent, Tages-Ersatz für Monats-SOLL/IST) + Spitzen + PV-Verteilung */}
       <div className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+            <FormelTooltip
+              formel="Ertrag ÷ (Einstrahlung × kWp)"
+              berechnung={strahlungKwh != null ? `bei ${fmt(strahlungKwh, 1)} kWh/m² Einstrahlung` : undefined}
+              ergebnis={prPct != null ? `= ${fmt(prPct, 0)} %` : undefined}
+            >
+              Performance Ratio
+            </FormelTooltip>
+          </p>
+          {prPct != null ? (
+            <>
+              <div className="flex justify-end">
+                <span className="text-4xl font-bold" style={{ color: prColor }}>{fmt(prPct, 0)} %</span>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 text-right">
+                {prWort}{strahlungKwh != null ? ` · bei ${fmt(strahlungKwh, 1)} kWh/m²` : ''}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-gray-400 dark:text-gray-500">Keine Einstrahlungsdaten für diesen Tag — PR nicht berechenbar.</p>
+          )}
+        </div>
+
         {spitzen.length > 0 && (
           <dl className="space-y-1.5">
             {spitzen.map((s) => (
