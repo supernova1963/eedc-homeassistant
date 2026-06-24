@@ -194,9 +194,13 @@ class AsymmetrieEintrag(BaseModel):
 class GenauigkeitsResponse(BaseModel):
     """Response für Genauigkeits-Tracking.
 
-    MAE = Mean Absolute Error (mit abs()) — Streuung
-    MBE = Mean Bias Error (ohne abs(), vorzeichenbehaftet) — systematischer Bias
-    Asymmetrie = MBE aufgeteilt in „darüber" / „darunter" (Rainer-Mockup #151)
+    Werte sind pro Tag durch den IST-Wert normiert ((Prognose−IST)/IST·100),
+    also streng genommen MAPE/MPE (Rainer-PN 2026-06-23). Feldnamen behalten
+    aus Kompatibilität das `_mae_/_mbe_`-Schema; die UI labelt MAPE/MPE.
+
+    MAPE = mittlerer absoluter prozentualer Fehler (mit abs()) — Streuung
+    MPE  = mittlerer prozentualer Fehler (ohne abs(), vorzeichenbehaftet) — systematischer Bias
+    Asymmetrie = MPE aufgeteilt in „darüber" / „darunter" (Rainer-Mockup #151)
     Alle Werte in Prozent vom IST.
     """
     tage: List[GenauigkeitsEintrag] = []

@@ -582,15 +582,15 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   Stündliche Day-Ahead-Genauigkeit pro Wetter-Klasse, letzte{' '}
                   {stratifizierung.tage_zeitraum} Tage,{' '}
                   {stratifizierung.stunden_klassifiziert} Tageslicht-Stunden.
-                  MAE = Streuung, MBE = systematischer Bias (positiv = IST &gt; Prognose).
+                  MAPE = Streuung, MPE = systematischer Bias (positiv = IST &gt; Prognose).
                 </div>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">
                       <th className="text-left py-1 pr-2 font-medium text-gray-500">Klasse</th>
                       <th className="text-right py-1 px-2 font-medium text-gray-500">n</th>
-                      <th className="text-right py-1 px-2 font-medium text-gray-500">MAE %</th>
-                      <th className="text-right py-1 pl-2 font-medium text-gray-500">MBE %</th>
+                      <th className="text-right py-1 px-2 font-medium text-gray-500">MAPE %</th>
+                      <th className="text-right py-1 pl-2 font-medium text-gray-500">MPE %</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -629,7 +629,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
                   {Math.max(stratifizierung.tage_ohne_wetter, stratifizierung.tep_tage_ohne_wetter)}{' '}
                   Tage noch nicht geladen. eedc kann sie kostenlos aus dem Open-Meteo-Archiv
                   nachholen. {stratifizierung.tage_mit_prognose > 0 ? (
-                    <>Danach zeigt diese Card MAE/MBE getrennt nach{' '}
+                    <>Danach zeigt diese Card MAPE/MPE getrennt nach{' '}
                     <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.</>
                   ) : (
                     <>Solange noch keine Day-Ahead-Stundenprofile gespeichert sind, bleibt die
@@ -952,7 +952,7 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
             )}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-            MAE/Bias oben über {genauigkeit.anzahl_tage} Tage
+            MAPE/Bias oben über {genauigkeit.anzahl_tage} Tage
             {ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0
               ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)`
               : ''}
@@ -1097,13 +1097,13 @@ function MaeMbeCard({ label, mae, mbe, color, hint }: {
     <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
       <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</div>
       <div className="flex items-baseline justify-center gap-3">
-        <SimpleTooltip text="MAE = Mean Absolute Error: durchschnittliche Abweichung |Prognose − IST| in % — Streuung">
+        <SimpleTooltip text="MAPE = Mean Absolute Percentage Error: durchschnittliche Abweichung |Prognose − IST| / IST in % — Streuung">
           <div>
-            <span className="text-xs text-gray-500 mr-1">MAE</span>
+            <span className="text-xs text-gray-500 mr-1">MAPE</span>
             <span className={`text-lg font-bold ${color}`}>{mae !== null ? `${mae.toFixed(0)} %` : '—'}</span>
           </div>
         </SimpleTooltip>
-        <SimpleTooltip text="MBE = Mean Bias Error: durchschnittliche vorzeichenbehaftete Abweichung — positiv = systematisch zu hoch, negativ = zu niedrig. |MBE| ≪ MAE → Streuung; |MBE| ≈ MAE → systematischer Bias (Lernfaktor wirkt).">
+        <SimpleTooltip text="MPE = Mean Percentage Error: durchschnittliche vorzeichenbehaftete Abweichung in % vom IST — positiv = systematisch zu hoch, negativ = zu niedrig. |MPE| ≪ MAPE → Streuung; |MPE| ≈ MAPE → systematischer Bias (Lernfaktor wirkt).">
           <div>
             <span className="text-xs text-gray-500 mr-1">Bias</span>
             <span className={`text-lg font-bold ${mbe === null ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>

@@ -88,10 +88,13 @@ async def wetter_backfill_endpoint(
 
 
 class StratifizierungEintrag(BaseModel):
-    """MAE/MBE pro Wetterklasse oder pro (Stunde × Wetterklasse).
+    """MAPE/MPE pro Wetterklasse oder pro (Stunde × Wetterklasse).
 
-    MAE = Mean Absolute Error in % vom IST
-    MBE = Mean Bias Error in % vom IST (vorzeichenbehaftet)
+    Werte sind durch den IST-Wert normiert, also MAPE/MPE (Rainer-PN 2026-06-23).
+    Feldnamen behalten aus Kompatibilität das `mae_/mbe_`-Schema; die UI labelt MAPE/MPE.
+
+    mae_pct = mittlerer absoluter prozentualer Fehler (MAPE) in % vom IST
+    mbe_pct = mittlerer prozentualer Fehler (MPE) in % vom IST (vorzeichenbehaftet)
     """
     stunden_count: int = 0
     mae_pct: Optional[float] = None
