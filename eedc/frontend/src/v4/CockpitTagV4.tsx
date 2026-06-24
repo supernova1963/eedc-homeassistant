@@ -18,9 +18,10 @@
  *  - Rail-/Stepper-Liste = verfügbare Tage (letzte 90 Tage), einmal geladen (wie
  *    Monat seine verfügbaren Monate).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
 import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
@@ -80,6 +81,11 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // B1: Scroll-Position beim Tageswechsel halten (siehe CockpitMonatV4).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const merkeScroll = useScrollErhalt(rootRef, loading)
+  const waehle = useCallback((d: string) => { merkeScroll(); setDatum(d) }, [merkeScroll])
 
   // Rail-/Stepper-Liste = verfügbare Tage (letzte 90 Tage), einmal je Anlage —
   // wie Monat seine verfügbaren Monate lädt (selektion-unabhängig).
@@ -181,15 +187,15 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
   const istHeute = datum >= heuteISO()
 
   return (
-    <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+    <div ref={rootRef} className="p-3 sm:p-6 max-w-[1920px] mx-auto">
       {/* Mobil: schwebender Player-Stepper — direktes Kind der voll-hohen Wurzel
           (NICHT in der kurzen Rail-Spalte), damit `sticky` beim Scrollen hält. */}
-      <TagStepper entries={railEntries} datum={datum} onSelect={setDatum} />
+      <TagStepper entries={railEntries} datum={datum} onSelect={waehle} />
 
       <div className="lg:flex lg:gap-6">
         {/* Desktop: Rail-Sidebar (links) */}
         <div className="hidden lg:block lg:w-52 lg:shrink-0">
-          <TagesRail entries={railEntries} datum={datum} onSelect={setDatum} />
+          <TagesRail entries={railEntries} datum={datum} onSelect={waehle} />
         </div>
 
         <div className="flex-1 min-w-0 space-y-4">

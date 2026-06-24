@@ -9,7 +9,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { MONAT_KURZ, CHART_COLORS } from '../../lib'
+import { ChartLegende } from '../ui'
+import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
@@ -33,8 +34,8 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} />
           <YAxis />
-          <Tooltip content={<ChartTooltip />} />
-          <Legend />
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
+          <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
           <Area type="monotone" dataKey="einspeisung" stackId="1" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} name="Einspeisung" />
         </AreaChart>
@@ -53,8 +54,8 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} />
           <YAxis />
-          <Tooltip content={<ChartTooltip />} />
-          <Legend />
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
+          <Legend content={<ChartLegende />} />
           <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
           <Bar dataKey="speicher_entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
         </BarChart>

@@ -25,7 +25,7 @@ import {
   ArrowDownRight,
   Minus,
 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
 import { communityApi } from '../../api'
@@ -412,7 +412,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                     labelFormatter={(label) => MONATSNAMEN_LANG[MONATSNAMEN.indexOf(label as string)]}
                   />}
                 />
-                <Legend formatter={() => 'Durchschnittlicher Ertrag'} />
+                <Legend content={<ChartLegende formatter={() => 'Durchschnittlicher Ertrag'} />} />
                 <Line
                   type="monotone"
                   dataKey="durchschnitt"
@@ -472,7 +472,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                     return labels[name] || name
                   }}
                 />} />
-                <Legend
+                <Legend content={<ChartLegende
                   formatter={(value) => {
                     const labels: Record<string, string> = {
                       speicher: 'Speicher-Quote',
@@ -481,7 +481,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                     }
                     return labels[value] || value
                   }}
-                />
+                />} />
                 <Line type="monotone" dataKey="speicher" stroke={TYP_COLORS['speicher']} strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="waermepumpe" stroke={TYP_COLORS['waermepumpe']} strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="eauto" stroke={TYP_COLORS['e-auto']} strokeWidth={2} dot={false} />
@@ -534,7 +534,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                     labelFormatter={(label) => `${label} Jahre alt`}
                   />}
                 />
-                <Legend formatter={() => 'Durchschnittlicher spez. Ertrag'} />
+                <Legend content={<ChartLegende formatter={() => 'Durchschnittlicher spez. Ertrag'} />} />
                 <Line
                   type="monotone"
                   dataKey="durchschnitt_spez_ertrag"

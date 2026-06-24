@@ -16,7 +16,8 @@ import {
   AreaChart, Area, LineChart, Line,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { MONAT_KURZ, CHART_COLORS, COLORS } from '../../lib'
+import { ChartLegende } from '../ui'
+import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = SpeicherDashboardResponse['zusammenfassung']
@@ -68,8 +69,8 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis tickFormatter={(v) => `${v} kWh`} width={70} />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
+                <Legend content={<ChartLegende />} />
                 {arbitrageAktiv ? (
                   <>
                     <Bar dataKey="pvLadung" stackId="ladung" fill={CHART_COLORS.speicherLadung} name="PV-Ladung" />
@@ -93,7 +94,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis tickFormatter={(v) => v.toFixed(1)} width={40} />
-                <Tooltip content={<ChartTooltip decimals={1} />} />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip decimals={1} />} />
                 <Area type="monotone" dataKey="zyklen" fill={CHART_COLORS.speicherZyklen} stroke={CHART_COLORS.speicherZyklen} name="Zyklen" />
               </AreaChart>
             </ResponsiveContainer>
@@ -110,7 +111,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={10} />
               <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={55} />
-              <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
+              <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="%" decimals={1} />} />
               <Line type="monotone" dataKey="effizienz" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
             </LineChart>
           </ResponsiveContainer>

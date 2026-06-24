@@ -7,13 +7,13 @@
 
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Sun, AlertCircle, RefreshCw, Target, Download } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
+import { Card, LoadingSpinner, Alert, Select, Button, ChartLegende } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import { pvgisApi, monatsdatenApi } from '../api'
 import type { PVModulPrognose } from '../api/pvgis'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
-import { SOLL_IST_COLORS } from '../lib'
+import { SOLL_IST_COLORS, PROGNOSE_DASH } from '../lib'
 import { useChartTheme } from '../context/ThemeContext'
 // PrognoseVergleich-Import entfernt: SFML-Vergleichs-Card gelöscht (Prognosequellen-Wahl)
 import {
@@ -335,9 +335,9 @@ export default function PrognoseVsIst() {
                       />
                     }
                   />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   <ReferenceLine yAxisId="right" y={0} stroke={achsen.referenz} strokeDasharray="3 3" />
-                  <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} name="PVGIS Prognose" />
+                  <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="PVGIS Prognose" />
                   <Bar yAxisId="left" dataKey="ist" fill={SOLL_IST_COLORS.ist} name="IST-Erzeugung" />
                   <Line
                     yAxisId="right"

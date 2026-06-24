@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { Battery, Flame, Car, Download, AlertCircle, Sun, Zap, RefreshCw, Thermometer, TrendingUp, Activity } from 'lucide-react'
-import { Card, Button, fmtCalc, KPICard } from '../../components/ui'
+import { Card, Button, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { TabProps, CHART_COLORS, monatNamen } from './types'
@@ -316,7 +316,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       if (name.includes('Effizienz')) return `${value?.toFixed(1) || '—'} %`
                       return `${value.toFixed(0)} kWh`
                     }} />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   <Bar yAxisId="left" dataKey="speicher_ladung_kwh" name="Ladung" fill={CHART_COLORS.speicherLadung} />
                   <Bar yAxisId="left" dataKey="speicher_entladung_kwh" name="Entladung" fill={CHART_COLORS.speicherEntladung} />
                   {komponenten.hat_arbitrage && (
@@ -432,7 +432,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                   <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
                   <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
                   <Bar dataKey="bkw_eigenverbrauch_kwh" name="Eigenverbrauch" fill={CHART_COLORS.eigenverbrauch} />
                   {bkwSummen.speicherLadung > 0 && (
@@ -568,7 +568,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       if (name === 'COP') return `${value?.toFixed(2) || '—'}`
                       return `${value.toFixed(0)} kWh`
                     }} />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   {(wpSummen.heizung > 0 || wpSummen.warmwasser > 0) ? (
                     <>
                       <Bar yAxisId="left" dataKey="wp_heizung_kwh" name="Heizung" stackId="waerme" fill={CHART_COLORS.wpWaerme} />
@@ -711,7 +711,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                       if (name.includes('€')) return `${value.toFixed(2)} €`
                       return `${value.toFixed(0)} kWh`
                     }} />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   <Bar yAxisId="left" dataKey="emob_ladung_pv_kwh" name="PV-Ladung" stackId="ladung" fill={LADEQUELLEN_FARBEN.pv} />
                   <Bar yAxisId="left" dataKey="emob_ladung_netz_kwh" name="Netz-Ladung" stackId="ladung" fill={LADEQUELLEN_FARBEN.netz} />
                   {emobSummen.externLadung > 0 && (
@@ -784,7 +784,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                   <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
                   <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   {sonstigesSummen.erzeugung > 0 && (
                     <Bar dataKey="sonstiges_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
                   )}

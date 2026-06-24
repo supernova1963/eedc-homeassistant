@@ -33,7 +33,7 @@ import {
   LineChart,
   Line,
 } from 'recharts'
-import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc, QuelleBadge, KPICard } from '../components/ui'
+import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, fmtCalc, QuelleBadge, KPICard, ChartLegende } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useAktuellerStrompreis } from '../hooks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../api'
@@ -425,7 +425,7 @@ export default function ROIDashboard() {
                       labelFormatter={(label) => `Jahr ${label}`}
                       unit="€"
                     />} />
-                    <Legend />
+                    <Legend content={<ChartLegende />} />
                     <Line
                       type="monotone"
                       dataKey="kumulierte_einsparung"
@@ -502,7 +502,7 @@ export default function ROIDashboard() {
                         : `${value.toLocaleString('de-DE')} €/Jahr`
                     }
                   />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   <Bar dataKey="kosten" fill={GELD_COLORS.kosten} name="Relevante Kosten" />
                   <Bar dataKey="einsparung" fill={GELD_COLORS.ersparnis} name="Jährliche Einsparung" />
                 </BarChart>

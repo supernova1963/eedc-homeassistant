@@ -32,7 +32,7 @@ import {
   Shield,
   HelpCircle,
 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, ChartLegende } from '../../components/ui'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
 import type {
@@ -599,7 +599,7 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
                     fill={SERIEN_PALETTE[0]}
                     fillOpacity={0.15}
                   />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>

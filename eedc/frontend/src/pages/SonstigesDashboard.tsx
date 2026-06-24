@@ -6,7 +6,7 @@
 
 import { Fragment, useState, useEffect } from 'react'
 import { Wrench, Zap, TrendingUp, Home, Leaf, Battery, AlertCircle } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select, KPICard } from '../components/ui'
+import { Card, LoadingSpinner, Alert, Select, KPICard, ChartLegende } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage } from '../hooks'
 import type { Anlage } from '../types'
@@ -313,7 +313,7 @@ function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
                 <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
                 <Area type="monotone" dataKey="einspeisung" stackId="1" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} name="Einspeisung" />
               </AreaChart>
@@ -484,7 +484,7 @@ function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, select
                 <XAxis dataKey="name" fontSize={10} />
                 <YAxis />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
                 <Bar dataKey="bezug_pv" stackId="1" fill={KATEGORIE_FARBEN.pv} name="PV-Strom" />
                 <Bar dataKey="bezug_netz" stackId="1" fill={KATEGORIE_FARBEN.netz} name="Netzstrom" />
               </BarChart>
@@ -620,7 +620,7 @@ function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
               <XAxis dataKey="name" fontSize={10} />
               <YAxis />
               <Tooltip content={<ChartTooltip />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
               <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
               <Bar dataKey="entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
             </BarChart>

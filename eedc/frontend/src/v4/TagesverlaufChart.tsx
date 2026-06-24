@@ -18,7 +18,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { ChartTooltip } from '../components/ui'
+import { ChartTooltip, ChartLegende } from '../components/ui'
 import { CHART_COLORS } from '../lib'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -108,7 +108,7 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
             )}
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
               name === 'Autarkie' ? `${value.toFixed(1)} %` : `${value.toFixed(1)} kWh`} />} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
 
             {view === 'erzeugung' ? (
               <>

@@ -16,6 +16,7 @@
  */
 import { fmtCalc } from '../components/ui'
 import { VerteilungsBalken } from '../components/blocks'
+import { DATENROLLE } from '../lib'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
@@ -197,8 +198,8 @@ export function TagBilanz({
           <VerteilungsBalken
             titel="PV-Verteilung"
             segmente={[
-              { label: 'Eigenverbr.', wert: t.eigenverbrauch, farbe: 'bg-purple-500' },
-              { label: 'Einspeisung', wert: t.einspeisung, farbe: 'bg-green-500' },
+              { label: 'Eigenverbr.', wert: t.eigenverbrauch, farbe: DATENROLLE.eigenverbrauch.bg },
+              { label: 'Einspeisung', wert: t.einspeisung, farbe: DATENROLLE.einspeisung.bg },
             ]}
           />
         )}

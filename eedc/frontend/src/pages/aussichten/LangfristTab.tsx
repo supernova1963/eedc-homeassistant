@@ -3,10 +3,10 @@
  */
 import { useState, useEffect } from 'react'
 import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, LangfristPrognose } from '../../api/aussichten'
-import { CHART_COLORS, SOLL_IST_COLORS } from '../../lib'
+import { CHART_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import {
   ResponsiveContainer,
@@ -172,7 +172,7 @@ export default function LangfristTab({ anlageId }: Props) {
                   if (name === 'Konfidenzband') return null
                   return `${value.toFixed(0)} kWh`
                 }} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
 
               {/* Konfidenzband */}
               {showKonfidenz && (
@@ -191,7 +191,9 @@ export default function LangfristTab({ anlageId }: Props) {
                 dataKey="pvgis"
                 name="PVGIS-Prognose"
                 fill={achsen.referenz}
-                fillOpacity={0.5}
+                stroke={achsen.referenz}
+                strokeWidth={1}
+                strokeDasharray={PROGNOSE_DASH}
                 radius={[4, 4, 0, 0]}
               />
 

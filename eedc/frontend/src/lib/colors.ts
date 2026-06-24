@@ -173,19 +173,53 @@ export const STRING_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#06b6
  *  Anteils-Darstellungen pro String/Modul (dort sind bg-Klassen statt Inline-Hex nötig). */
 export const STRING_BG = ['bg-amber-500', 'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-cyan-500', 'bg-pink-500']
 
+/**
+ * **Kanonische Datenrollen-Farben (SoT, Gernot 2026-06-24)** — die EINE Quelle
+ * für „eine Datenrolle = eine Farbe" (Regel 0a). Jede Rolle trägt den Recharts-
+ * **Hex** (Linien/Balken/Pies) UND die **Tailwind-bg-Klasse** (VerteilungsBalken),
+ * damit dieselbe Rolle in JEDER Darstellung gleich aussieht. Abgeleitet aus
+ * {@link COLORS}; Hex ↔ bg sind aufeinander abgestimmte Tailwind-500-Töne.
+ *
+ * Vorher lagen die Rollenfarben dreifach auseinander (Inline-`bg-purple/green`
+ * in den Bilanzen, `ROLLEN_BG` grün/blau im Hub-Balken, `CHART_COLORS` violett/
+ * emerald im Hub-Chart) → behoben, alles zieht jetzt von hier.
+ */
+export const DATENROLLE = {
+  pv:                { hex: COLORS.solar,       bg: 'bg-amber-500' },   // PV-Erzeugung
+  eigenverbrauch:    { hex: COLORS.consumption, bg: 'bg-violet-500' },  // = Direktverbrauch (genutzte PV)
+  einspeisung:       { hex: COLORS.feedin,      bg: 'bg-emerald-500' }, // ins Netz abgegeben
+  netzbezug:         { hex: COLORS.grid,        bg: 'bg-red-700' },     // aus dem Netz bezogen
+  speicherLadung:    { hex: '#f97316',          bg: 'bg-orange-500' },  // in den Speicher
+  speicherEntladung: { hex: COLORS.battery,     bg: 'bg-blue-500' },    // aus dem Speicher
+  extern:            { hex: '#9ca3af',          bg: 'bg-gray-400' },    // externe Ladung
+} as const
+
+/** PV-Modul-Palette = Schattierungen der Solar-Farbe (alle Module sind PV) —
+ *  bewusst KEINE kategorischen Fremdfarben, damit Module nicht mit den
+ *  Verwendungs-Rollen (emerald/orange/violett) im selben Stapel-Chart kollidieren
+ *  (Rainer/Gernot 2026-06-24: Westdach=Einspeisung, Süddach≈Speicherladung).
+ *
+ *  **Regel-Scope (Gernot 2026-06-24):** Amber-Schattierungen NUR dort, wo Module
+ *  UND Rollen im selben Chart liegen (Komponenten-Hub PV-Verlauf). Eigenständige
+ *  String-/Modul-Charts ohne Rollen (z. B. `PVStringVergleich` SOLL/IST pro
+ *  String) behalten die distinkten {@link STRING_COLORS} — dort trennen bunte
+ *  Töne mehrere Strings besser und es gibt keine Kollision. */
+export const PV_MODUL_FARBEN = ['#b45309', '#f59e0b', '#fcd34d', '#fbbf24', '#78350f', '#fde68a']
+export const PV_MODUL_BG = ['bg-amber-700', 'bg-amber-500', 'bg-amber-300', 'bg-amber-400', 'bg-amber-900', 'bg-amber-200']
+
 /** Datenrollen → Tailwind-bg-Klasse für Aufteilungs-Segmente (VerteilungsBalken).
- *  „Eine Datenrolle = eine Farbe" (Regel 0a) als bg-Klassen-SoT — analog
- *  {@link STRING_BG}. Bezug zu den Hex-Rollen oben in Klammern. */
+ *  Leitet aus {@link DATENROLLE} ab (keine Parallel-Definition mehr); WP-Roh-
+ *  rollen (heizung/warmwasser) sind komponenten-eigene Identitäten. */
 export const ROLLEN_BG = {
-  pv: 'bg-green-500',          // PV-Strom / Eigenverbrauch-Quelle
-  ev: 'bg-green-500',          // Eigenverbrauch (= genutzte PV)
-  einspeisung: 'bg-blue-400',  // ins Netz abgegeben
-  netz: 'bg-red-500',          // Netzbezug (grid)
-  extern: 'bg-gray-400',       // externe Ladung
-  heizung: 'bg-orange-500',    // WP-Heizwärme
+  pv: DATENROLLE.pv.bg,
+  ev: DATENROLLE.eigenverbrauch.bg,
+  einspeisung: DATENROLLE.einspeisung.bg,
+  netz: DATENROLLE.netzbezug.bg,
+  extern: DATENROLLE.extern.bg,
+  heizung: 'bg-orange-500',    // WP-Heizwärme (Komponenten-Identität)
   warmwasser: 'bg-red-400',    // WP-Warmwasser
-  ladung: 'bg-purple-500',     // Speicher-Ladung
-  entladung: 'bg-green-500',   // Speicher-Entladung
+  ladung: DATENROLLE.speicherLadung.bg,
+  entladung: DATENROLLE.speicherEntladung.bg,
 } as const
 
 /** Solar-Intensitäts-Rampe (Sparklines: schwach → stark). */
@@ -200,6 +234,27 @@ export const TOOLTIP_FARBEN = {
   bg: '#111827',      // gray-900 — Tooltip-Kanon (P3, = FormelTooltip/ChartTooltip-Fläche)
   text: '#ffffff',
 }
+
+/**
+ * Hover-/Cursor-Overlay für Charts (S3/S4, Triage 2026-06-24) — die EINE
+ * app-weite Hover-Mechanik. Recharts zeichnet `cursor.fill` NUR bei Bar-/
+ * Composed-Charts als Highlight-Rechteck (Linien/Flächen behalten ihren
+ * Default-Cursor). Mittleres Grau mit NIEDRIGER Alpha → dezent in hell UND
+ * dunkel (Dark nicht mehr grell, S3), das **Raster scheint durch** und der
+ * **Balken bleibt deckend** (S4: nicht der Balken wird transparent, sondern der
+ * Hintergrund). Hebt sich klar von soliden „Verlust"-Grau-Balken ab (S5).
+ * Als `cursor={CHART_HOVER_CURSOR}` an `<Tooltip>` setzen.
+ */
+export const CHART_HOVER_CURSOR = { fill: 'rgba(107, 114, 128, 0.14)' } // gray-500 @ 14 %
+
+/**
+ * Strich-Muster für **Prognose-/SOLL-Serien** in Charts (Gernot 2026-06-24) —
+ * die EINE app-weite Konvention: „Prognose/SOLL = gestrichelt, IST/gemessen =
+ * durchgezogen". Auf `strokeDasharray` von Linien, Flächen-Rändern UND Balken-
+ * Rändern setzen (z. B. PVGIS-Prognose, OpenMeteo/Solcast/eedc-Prognose, SOLL).
+ * Ersetzt die früheren ad-hoc-Muster `"4 2"`/`"5 3"`.
+ */
+export const PROGNOSE_DASH = '5 3'
 
 // ─── Chart-Infrastruktur: Achsen/Grid/Referenzlinien (hell + dunkel) ────────
 

@@ -18,9 +18,10 @@
  *  - Verlauf-Chart + Vorjahr/Ø-Jahr-Vergleich = `monatsdatenApi.listAggregiert`
  *    (Σ der IMD je Monat), einmal je Anlage geladen.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET } from '../lib'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
@@ -40,6 +41,11 @@ export default function CockpitJahrV4({ anlageId }: { anlageId: number | undefin
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // B1: Scroll-Position beim Jahreswechsel halten (siehe CockpitMonatV4).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const merkeScroll = useScrollErhalt(rootRef, loading)
+  const waehle = useCallback((j: number) => { merkeScroll(); setJahr(j) }, [merkeScroll])
 
   // Monatsreihe (alle Jahre) einmal je Anlage — liefert verfügbare Jahre, die
   // Verlauf-Monatsbalken und die Vorjahr/Ø-Jahr-Vergleiche. Default = neuestes
@@ -169,14 +175,14 @@ export default function CockpitJahrV4({ anlageId }: { anlageId: number | undefin
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+    <div ref={rootRef} className="p-3 sm:p-6 max-w-[1920px] mx-auto">
       {/* Mobil: schwebender Player-Stepper — direktes Kind der voll-hohen Wurzel. */}
-      <JahrStepper entries={railEntries} jahr={jahr ?? 0} onSelect={setJahr} />
+      <JahrStepper entries={railEntries} jahr={jahr ?? 0} onSelect={waehle} />
 
       <div className="lg:flex lg:gap-6">
         {/* Desktop: Rail-Sidebar (links) */}
         <div className="hidden lg:block lg:w-52 lg:shrink-0">
-          <JahresRail entries={railEntries} jahr={jahr ?? 0} onSelect={setJahr} />
+          <JahresRail entries={railEntries} jahr={jahr ?? 0} onSelect={waehle} />
         </div>
 
         <div className="flex-1 min-w-0 space-y-4">

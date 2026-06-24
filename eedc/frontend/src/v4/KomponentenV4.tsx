@@ -18,9 +18,12 @@ import { ViewShell } from './ViewShell'
 import KomponentenTypV4 from './KomponentenTypV4'
 
 /** Hub-Tabs: key (URL) → Investitionstyp. PV-Anlage = Aggregat aus
- *  pv-module/wechselrichter; BKW eigener Tab. Sortiert über compareTyp. */
-const HUB_TABS: { key: string; typ: string }[] = [
-  { key: 'pv-anlage', typ: 'pv-module' },
+ *  pv-module/wechselrichter; BKW eigener Tab. Sortiert über compareTyp.
+ *  `label` überschreibt das Typ-Label aus `KOMPONENTEN_IDENTITAET` NUR fürs
+ *  Hub-Tab (PV-Tab fasst Wechselrichter+Module zusammen → „PV-Anlage");
+ *  das per-Komponente-Typ-Label „PV-Module" (Badges/Kategorie) bleibt unberührt. */
+const HUB_TABS: { key: string; typ: string; label?: string }[] = [
+  { key: 'pv-anlage', typ: 'pv-module', label: 'PV-Anlage' },
   { key: 'speicher', typ: 'speicher' },
   { key: 'bkw', typ: 'balkonkraftwerk' },
   { key: 'waermepumpe', typ: 'waermepumpe' },
@@ -55,7 +58,7 @@ export default function KomponentenV4() {
 
   const nav = (
     <IASubTabBar items={verfuegbar.map((t) => ({
-      key: t.key, label: KOMPONENTEN_IDENTITAET[t.typ].label, to: `/v4/komponenten/${t.key}`,
+      key: t.key, label: t.label ?? KOMPONENTEN_IDENTITAET[t.typ].label, to: `/v4/komponenten/${t.key}`,
     }))} />
   )
 

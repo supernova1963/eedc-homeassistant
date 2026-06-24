@@ -36,16 +36,19 @@ export function VerteilungsBalken({
       {titel && (
         <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{titel}</p>
       )}
+      {/* S2: feste Label- UND Wert-Spalte (`w-20`/`w-28`) → die Grau-Tracks sind
+          dazwischen IMMER gleich lang (100 %-Baseline), unabhängig von der Länge
+          des Werttextes. Klare Kanten (`rounded-sm` statt Pille) = sachlicher. */}
       <div className="space-y-2.5">
         {segmente.map((s, i) => {
           const pct = Math.round((werte[i] / total) * 100)
           return (
-            <div key={s.label} className="flex items-center gap-2 text-xs">
+            <div key={s.label} className="flex items-center gap-3 text-xs">
               <span className="w-20 text-gray-600 dark:text-gray-400 shrink-0">{s.label}</span>
-              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 min-w-[2rem]">
-                <div className={`h-2 rounded-full ${s.farbe}`} style={{ width: `${pct}%` }} />
+              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-sm h-2 min-w-[2rem]">
+                <div className={`h-2 rounded-sm ${s.farbe}`} style={{ width: `${pct}%` }} />
               </div>
-              <span className="text-right text-gray-700 dark:text-gray-300 font-medium tabular-nums whitespace-nowrap shrink-0">
+              <span className="w-28 text-right text-gray-700 dark:text-gray-300 font-medium tabular-nums whitespace-nowrap shrink-0">
                 {fmtCalc(werte[i], 0)} {einheit} · {pct} %
               </span>
             </div>

@@ -8,7 +8,7 @@ import {
   PiggyBank, Wallet, TrendingUp, Calendar,
   ChevronDown, ChevronRight, AlertTriangle
 } from 'lucide-react'
-import { Card, LoadingSpinner, FormelTooltip, fmtCalc, KPICard } from '../../components/ui'
+import { Card, LoadingSpinner, FormelTooltip, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useInvestitionen } from '../../hooks'
 import { investitionenApi, cockpitApi, type ROIDashboardResponse, type ROIKomponente, type CockpitUebersicht } from '../../api'
@@ -235,7 +235,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                 <XAxis dataKey="jahr" unit=" J." tick={{ fontSize: 11 }} />
                 <YAxis unit=" €" tick={{ fontSize: 11 }} />
                 <Tooltip content={<ChartTooltip unit="€" />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
                 <Area
                   type="monotone"
                   dataKey="investition"

@@ -12,7 +12,7 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Card } from '../ui'
+import { Card, ChartLegende } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -88,10 +88,9 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
             unit=" kW" decimals={2}
             formatter={(v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`}
           />} />
-          <Legend
-            wrapperStyle={{ fontSize: 11 }}
-            formatter={(value: string) => chartSerien.find(cs => cs.dataKey === value)?.label ?? value}
-          />
+          <Legend content={<ChartLegende
+            formatter={(value) => chartSerien.find(cs => cs.dataKey === value)?.label ?? value}
+          />} />
 
           {chartSerien.map(cs => (
             <Area

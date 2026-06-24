@@ -9,7 +9,8 @@
  */
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { fmtCalc } from '../components/ui'
+import { CHART_HOVER_CURSOR } from '../lib'
+import { fmtCalc, ChartTooltip } from '../components/ui'
 import { ExternalLink } from 'lucide-react'
 
 export interface VergleichJahr { jahr: number; summe: number }
@@ -74,7 +75,7 @@ export function KomponentenVergleich({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" fontSize={11} />
               <YAxis fontSize={10} width={44} unit={` ${einheit}`} />
-              <Tooltip formatter={(v: number) => [`${Math.round(v)} ${einheit}`, label]} />
+              <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} />} />
               <Bar dataKey="summe" name={label}>
                 {sortiert.map((j) => (
                   <Cell key={j.jahr} fill={farbe} fillOpacity={j.jahr === neuestes.jahr || j.jahr === ref.jahr ? 1 : 0.45} />

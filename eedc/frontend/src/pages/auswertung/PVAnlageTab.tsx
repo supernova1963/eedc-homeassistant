@@ -13,11 +13,11 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, Download, AlertTriangle, GitCompare } from 'lucide-react'
-import { Card, Button, LoadingSpinner, Alert, fmtCalc, KPICard } from '../../components/ui'
+import { Card, Button, LoadingSpinner, Alert, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN } from '../../lib'
+import { SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, PROGNOSE_DASH } from '../../lib'
 
 interface PVAnlageTabProps {
   anlageId: number
@@ -337,8 +337,8 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               <XAxis type="number" unit=" kWh" />
               <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
               <Tooltip content={<ChartTooltip unit="kWh" />} />
-              <Legend />
-              <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL (Prognose)" />
+              <Legend content={<ChartLegende />} />
+              <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL (Prognose)" />
               <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST (Erzeugt)" />
             </BarChart>
           </ResponsiveContainer>
@@ -367,8 +367,8 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
               <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
               <Tooltip content={<ChartTooltip unit="kWh" />} />
-              <Legend />
-              <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL" />
+              <Legend content={<ChartLegende />} />
+              <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL" />
               <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST" />
               <Line
                 type="monotone"
@@ -400,7 +400,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
                   ticks={[80, 90, 100, 110, 120]}
                 />
                 <Tooltip content={<ChartTooltip unit="%" />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
                 {data.strings.map((s, idx) => (
                   <Line
                     key={s.investition_id}

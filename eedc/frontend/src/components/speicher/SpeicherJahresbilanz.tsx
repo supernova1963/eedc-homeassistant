@@ -11,7 +11,8 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { CHART_COLORS, COLORS, SERIE_NEUTRAL } from '../../lib'
+import { CHART_COLORS, COLORS, SERIE_NEUTRAL, CHART_HOVER_CURSOR } from '../../lib'
+import { ChartLegende } from '../ui'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 interface JahrBilanz {
@@ -94,8 +95,8 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false }: { monatsdat
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="jahr" fontSize={11} />
             <YAxis fontSize={10} width={56} unit=" kWh" />
-            <Tooltip content={<BilanzTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<BilanzTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
             {serien.map((s) => (
               <Bar key={s.key} dataKey={s.key} name={s.name} stackId={s.stapel} fill={s.farbe} />
             ))}

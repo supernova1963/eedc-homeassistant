@@ -42,8 +42,8 @@ export function JahrStepper({ entries, jahr, onSelect }: JahrStepperProps) {
   )
 
   return (
-    <div className="lg:hidden sticky top-0 z-20 -mx-3 px-3 pt-1 pb-2 mb-3 bg-gray-50 dark:bg-gray-900">
-      <div className="flex items-center gap-0.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1 py-1 shadow-sm">
+    <div className="lg:hidden sticky top-0 z-20 -mx-3 px-3 pt-1 pb-2 mb-3 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex items-center gap-0.5 max-w-md mx-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1 py-1 shadow-sm">
         <Btn ziel={ziel(oldest)} icon={ChevronFirst} lbl="ältestes Jahr" />
         <Btn ziel={ziel(jahr - 1)} icon={ChevronLeft} lbl="voriges Jahr" />
         <button

@@ -16,6 +16,7 @@
 import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis } from '../components/blocks'
+import { DATENROLLE } from '../lib'
 import { Delta, VglChip } from './MonatBilanz'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
@@ -223,8 +224,8 @@ export function JahrBilanz({
             <VerteilungsBalken
               titel="PV-Verteilung"
               segmente={[
-                { label: 'Eigenverbr.', wert: d.eigenverbrauch_kwh, farbe: 'bg-purple-500' },
-                { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: 'bg-green-500' },
+                { label: 'Eigenverbr.', wert: d.eigenverbrauch_kwh, farbe: DATENROLLE.eigenverbrauch.bg },
+                { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: DATENROLLE.einspeisung.bg },
               ]}
             />
           </div>

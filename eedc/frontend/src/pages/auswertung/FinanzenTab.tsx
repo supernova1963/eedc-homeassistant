@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { Euro, TrendingUp, Download, Wrench } from 'lucide-react'
-import { Card, Button, fmtCalc, KPICard } from '../../components/ui'
+import { Card, Button, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { TabProps, COLORS, createMonatsZeitreihe } from './types'
@@ -230,7 +230,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
               <YAxis unit=" €" tick={{ fontSize: 11 }} />
               <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
               <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
               <Bar dataKey="netzbezug_kosten" name="Netzbezug (negativ)" fill={COLORS.grid} />

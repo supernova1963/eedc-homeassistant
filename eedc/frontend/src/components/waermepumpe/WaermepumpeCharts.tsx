@@ -9,7 +9,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { MONAT_KURZ, CHART_COLORS, GELD_COLORS } from '../../lib'
+import { ChartLegende } from '../ui'
+import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
@@ -28,8 +29,8 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} />
           <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
-          <Tooltip content={<ChartTooltip unit="kWh" />} />
-          <Legend />
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
+          <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
           <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" />
         </AreaChart>
@@ -52,7 +53,7 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" tickFormatter={(v) => `${v}€`} />
             <YAxis type="category" dataKey="name" width={110} />
-            <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
             <Bar dataKey="value" />
           </BarChart>
         </ResponsiveContainer>

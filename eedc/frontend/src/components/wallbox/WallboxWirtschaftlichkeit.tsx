@@ -7,7 +7,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { GELD_COLORS } from '../../lib'
+import { ChartLegende } from '../ui'
+import { GELD_COLORS, CHART_HOVER_CURSOR } from '../../lib'
 import type { WallboxDashboardResponse } from '../../api/investitionen'
 import type { Investition } from '../../types'
 
@@ -36,8 +37,8 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis type="number" tickFormatter={(v) => `${v}€`} />
               <YAxis type="category" dataKey="name" width={150} />
-              <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-              <Legend />
+              <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
+              <Legend content={<ChartLegende />} />
               <Bar dataKey="value" name="Kosten" />
             </BarChart>
           </ResponsiveContainer>

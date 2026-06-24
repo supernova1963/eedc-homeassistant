@@ -10,7 +10,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, CHART_COLORS } from '../../lib'
+import { ChartLegende } from '../ui'
+import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten, EAutoDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = EAutoDashboardResponse['zusammenfassung']
@@ -37,7 +38,7 @@ export function EAutoKmVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonats
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} />
           <YAxis />
-          <Tooltip content={<ChartTooltip />} />
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Bar dataKey="km" fill={CHART_COLORS.emobKm} name="km" />
         </BarChart>
       </ResponsiveContainer>
@@ -55,8 +56,8 @@ export function EAutoLadungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} />
           <YAxis />
-          <Tooltip content={<ChartTooltip />} />
-          <Legend />
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
+          <Legend content={<ChartLegende />} />
           <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" />
           <Bar dataKey="netz" stackId="a" fill={LADEQUELLEN_FARBEN.netz} name="Heim: Netz" />
           <Bar dataKey="extern" stackId="a" fill={LADEQUELLEN_FARBEN.extern} name="Extern" />
@@ -80,7 +81,7 @@ export function EAutoKostenvergleich({ zusammenfassung: z }: { zusammenfassung: 
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" tickFormatter={(v) => `${v}€`} />
             <YAxis type="category" dataKey="name" width={120} />
-            <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
             <Bar dataKey="value" />
           </BarChart>
         </ResponsiveContainer>

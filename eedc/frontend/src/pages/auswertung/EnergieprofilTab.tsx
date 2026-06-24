@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
-import { Card, KPICard } from '../../components/ui'
+import { Card, KPICard, ChartLegende } from '../../components/ui'
 import { TagVerlaufChart, TagWerteTabelle } from '../../components/tag'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
 import { EnergieprofilMonat } from './EnergieprofilMonat'
@@ -361,7 +361,7 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${v}`} />
               <Tooltip content={<ChartTooltip unit=" kW" decimals={2} />} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
               {GRUPPEN.filter(g => aktivGruppen.includes(g.label)).map(g => (
                 <Line
                   key={g.label}

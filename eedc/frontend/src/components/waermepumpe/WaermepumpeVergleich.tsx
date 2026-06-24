@@ -14,7 +14,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE } from '../../lib'
+import { ChartLegende } from '../ui'
+import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 function Toggle({ aktiv, aktivKlasse, onClick, children, title }: {
@@ -132,8 +133,8 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} />
-                <Tooltip content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
-                <Legend />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
+                <Legend content={<ChartLegende />} />
                 {jahre.map((jahr, i) => (
                   <Bar key={jahr} dataKey={`val_${jahr}`} name={`${jahr}`} fill={jahrFarben[i % jahrFarben.length]} />
                 ))}
@@ -143,7 +144,7 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" fontSize={12} />
                 <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} />
-                <Tooltip content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
                 <Bar dataKey="value" name={modus === 'jaz' ? 'JAZ' : 'Strom'}>
                   {saisonData.map((s, i) => (
                     <Cell key={i} fill={jahrFarben[i % jahrFarben.length]} fillOpacity={s.vollstaendig ? 1 : 0.4} />

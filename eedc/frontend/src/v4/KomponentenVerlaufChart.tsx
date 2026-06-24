@@ -7,6 +7,8 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import { CHART_HOVER_CURSOR } from '../lib'
+import { ChartTooltip, ChartLegende } from '../components/ui'
 
 export interface VerlaufBar {
   key: string; label: string; farbe: string
@@ -34,10 +36,10 @@ export function KomponentenVerlaufChart({
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" fontSize={10} interval="preserveStartEnd" />
           <YAxis fontSize={10} width={44} unit={` ${einheit}`} />
-          {/* Bezeichnung (gekürzt) zur Zahl in den Tooltip — zweiter Array-
-              Eintrag ist der Serien-Name, sonst zeigt Recharts nur Zahlen. */}
-          <Tooltip formatter={(v: number, name: string) => [`${Math.round(v)} ${einheit}`, kuerze(name)]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {/* ChartTooltip-SoT (S1: Viereck-Swatch, monochromer Wert); Serien-Name
+              gekürzt, Wert gerundet mit Einheit. */}
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} nameFormatter={kuerze} />} />
+          <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
           {bars.map((b) => (
             // stapel-Gruppe gewinnt (paarweise Stapel); sonst gestapelt=false → gruppiert, true → ein Stapel.
             <Bar key={b.key} dataKey={b.key} name={b.label} stackId={b.stapel ?? (gestapelt ? 'a' : undefined)} fill={b.farbe} />

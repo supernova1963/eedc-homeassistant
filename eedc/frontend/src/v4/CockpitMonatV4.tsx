@@ -13,9 +13,10 @@
  * KPI-Strip (2c), Komponenten-Sektionen (2d), Finanz-/Community-Teaser (2e)
  * docken später als weitere Blöcke an.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
@@ -63,6 +64,13 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // B1: Scroll-Position beim Monatswechsel halten (Container vom Wurzel-Element
+  // aus gefunden — mobil `main`, Desktop ViewShell). `merkeScroll` vor jedem
+  // setGewaehlt; Wiederherstellung nach dem Reload (Signal = loading-Flip).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const merkeScroll = useScrollErhalt(rootRef, loading)
+  const waehle = useCallback((j: number, m: number) => { merkeScroll(); setGewaehlt({ jahr: j, monat: m }) }, [merkeScroll])
 
   // Verfügbare Monate + Monatsreihe (für Vormonat/Ø-Monat) laden → Default vorwählen.
   // Beide Quellen parallel, damit die Default-Wahl die Monatsdaten kennt.
@@ -235,7 +243,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+    <div ref={rootRef} className="p-3 sm:p-6 max-w-[1920px] mx-auto">
       {/* Mobil: schwebender Player-Stepper. Bewusst direktes Kind der voll-hohen
           Wurzel (NICHT in der kurzen Rail-Spalte) — sonst klebt `sticky` nur
           innerhalb seines kurzen Eltern-Containers und verschwindet beim Scrollen. */}
@@ -243,7 +251,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
         entries={railEntries}
         jahr={gewaehlt?.jahr ?? 0}
         monat={gewaehlt?.monat ?? 0}
-        onSelect={(j, m) => setGewaehlt({ jahr: j, monat: m })}
+        onSelect={waehle}
       />
 
       <div className="lg:flex lg:gap-6">
@@ -253,7 +261,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
             entries={railEntries}
             jahr={gewaehlt?.jahr ?? 0}
             monat={gewaehlt?.monat ?? 0}
-            onSelect={(j, m) => setGewaehlt({ jahr: j, monat: m })}
+            onSelect={waehle}
           />
         </div>
 

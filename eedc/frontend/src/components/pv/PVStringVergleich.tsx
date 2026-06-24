@@ -13,10 +13,10 @@ import {
   ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS, STRING_COLORS } from '../../lib'
+import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH } from '../../lib'
 
 interface Props {
   anlageId: number
@@ -303,9 +303,11 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" fontSize={12} />
                   <YAxis tickFormatter={jahresFormatter} width={70} fontSize={11} />
-                  <Tooltip content={<ChartTooltip unit="kWh" />} />
-                  <Legend />
-                  <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={`${SOLL_IST_COLORS.soll}66`} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray="4 2" />
+                  <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
+                  <Legend content={<ChartLegende />} />
+                  {/* SOLL deckend (S4: Balken nicht transparent); als Prognose nur
+                      über den gestrichelten Rand markiert. */}
+                  <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} />
                   <Bar dataKey="IST" name="IST (erzeugt)" fill={SOLL_IST_COLORS.ist}>
                     <LabelList dataKey="deltaLabel" position="top" fontSize={11} />
                   </Bar>
@@ -315,14 +317,14 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis tickFormatter={jahresFormatter} width={80} />
-                  <Tooltip content={<ChartTooltip unit="kWh" />} />
-                  <Legend />
+                  <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
+                  <Legend content={<ChartLegende />} />
                   {data.strings.map((s, idx) => {
                     const single = data.strings.length === 1
                     const baseColor = single ? SOLL_IST_COLORS.soll : STRING_COLORS[idx % STRING_COLORS.length]
                     return (
                       <Bar key={`${s.investition_id}-soll`} dataKey={`${s.bezeichnung} SOLL`}
-                        fill={`${baseColor}66`} stroke={baseColor} strokeWidth={1} strokeDasharray="4 2"
+                        fill={baseColor} stroke={baseColor} strokeWidth={1} strokeDasharray={PROGNOSE_DASH}
                         name={`${s.bezeichnung} SOLL`} />
                     )
                   })}
@@ -364,13 +366,14 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis tickFormatter={saisonalFormatter} width={80} />
-                <Tooltip content={<ChartTooltip unit="kWh" />} />
-                <Legend />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
+                <Legend content={<ChartLegende />} />
                 <Area
                   type="monotone"
                   dataKey="SOLL"
                   fill={SOLL_IST_COLORS.soll}
                   stroke={SOLL_IST_COLORS.soll}
+                  strokeDasharray={PROGNOSE_DASH}
                   fillOpacity={0.2}
                   name="PVGIS Prognose"
                 />

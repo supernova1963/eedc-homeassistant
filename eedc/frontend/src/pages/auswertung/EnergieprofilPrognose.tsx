@@ -10,7 +10,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
-import { Card, Alert, KPICard } from '../../components/ui'
+import { Card, Alert, KPICard, ChartLegende } from '../../components/ui'
 import { COLORS, CHART_COLORS } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
@@ -176,7 +176,7 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
             )}
             <ReferenceLine yAxisId="kw" y={0} stroke={achsen.referenz} strokeWidth={1.5} />
             <Tooltip content={<PrognoseTooltip hatSpeicher={hatSpeicher} />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
             <Area yAxisId="kw" type="monotone" dataKey="pv" name="PV-Prognose" fill={COLORS.solar} stroke={COLORS.solar} fillOpacity={0.3} strokeWidth={2} isAnimationActive={false} />
             <Area yAxisId="kw" type="monotone" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} fillOpacity={0.2} strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} />
             <Area yAxisId="kw" type="monotone" dataKey="verbrauch" name="Verbrauch" fill={COLORS.consumption} stroke={COLORS.consumption} fillOpacity={0.25} strokeWidth={2} isAnimationActive={false} />
@@ -214,7 +214,7 @@ function PrognoseTooltip({ active, payload, label }: {
       <p className="font-medium text-white mb-1">{label}</p>
       {payload.filter(p => p.value != null).map((p, i) => (
         <div key={i} className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+          <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: p.color }} />
           <span className="text-gray-300">{p.name}:</span>
           <span className="font-medium text-white">
             {p.name === 'SoC' ? `${p.value.toFixed(1)} %` : `${Math.abs(p.value).toFixed(2)} kW`}

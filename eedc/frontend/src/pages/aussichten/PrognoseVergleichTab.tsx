@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useRef } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, Info, Zap, BarChart3, Calendar } from 'lucide-react'
-import { Card, LoadingSpinner, Alert } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, ChartLegende } from '../../components/ui'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
 import {
   aussichtenApi,
@@ -26,7 +26,7 @@ import {
   wetterBackfill,
 } from '../../api/korrekturprofil'
 import { KorrekturprofilHeatmapCard } from './KorrekturprofilHeatmapCard'
-import { PROGNOSE_QUELLEN_COLORS } from '../../lib'
+import { PROGNOSE_QUELLEN_COLORS, PROGNOSE_DASH } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import {
   ResponsiveContainer,
@@ -677,17 +677,17 @@ export default function PrognoseVergleichTab({ anlageId }: Props) {
               <XAxis dataKey="stunde" tick={{ fontSize: 11 }} tickFormatter={(v) => v.replace(':00', '')} padding={{ left: 8, right: 8 }} />
               <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
               <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
-              <Legend wrapperStyle={{ fontSize: 12 }} formatter={(v: string) => ({
+              <Legend content={<ChartLegende formatter={(v) => ({
                 ist: 'IST', eedc: `eedc${lf != null ? ` (${progBasisLabel} ×${lf.toFixed(2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)'
-              }[v] || v)} />
+              }[v] || v)} />} />
               {data.aktuelle_stunde !== null && (
                 <ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke={achsen.referenz} strokeDasharray="3 3"
                   label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: achsen.achse }} />
               )}
               <Area dataKey="ist" stroke={PROGNOSE_QUELLEN_COLORS.ist} fill={PROGNOSE_QUELLEN_COLORS.ist} fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} />
-              {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} dot={false} name="solcast" />}
-              {hasEedc && <Line dataKey="eedc" stroke={PROGNOSE_QUELLEN_COLORS.eedc} strokeWidth={2} dot={false} name="eedc" />}
-              <Line dataKey="openmeteo" stroke={PROGNOSE_QUELLEN_COLORS.openmeteo} strokeWidth={1.5} strokeDasharray="5 3" dot={false} name="openmeteo" />
+              {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="solcast" />}
+              {hasEedc && <Line dataKey="eedc" stroke={PROGNOSE_QUELLEN_COLORS.eedc} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="eedc" />}
+              <Line dataKey="openmeteo" stroke={PROGNOSE_QUELLEN_COLORS.openmeteo} strokeWidth={1.5} strokeDasharray={PROGNOSE_DASH} dot={false} name="openmeteo" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -1200,7 +1200,7 @@ function StundenTooltip({ active, payload, label, hasEedc }: StundenTooltipProps
         const labels: Record<string, string> = { openmeteo: 'OpenMeteo (roh)', eedc: 'eedc (kalibriert)', solcast: 'Solcast', ist: 'IST' }
         return (
           <div key={key} className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.stroke || p.fill }} />
+            <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: p.stroke || p.fill }} />
             <span className="text-gray-300">{labels[key] || key}:</span>
             <span className="font-mono font-medium">{p.value?.toFixed(2)} kW</span>
           </div>

@@ -5,7 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import { Sun, Zap, TrendingUp, Download } from 'lucide-react'
-import { Card, Button, fmtCalc, KPICard } from '../../components/ui'
+import { Card, Button, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
@@ -175,7 +175,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
                   if (name === 'Autarkie') return `${value.toFixed(1)} %`
                   return `${value.toFixed(0)} kWh`
                 }} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
 
               {/* Erzeugung-Ansicht: Eigenverbrauch + Einspeisung gestapelt, Netzbezug separat */}
               {bilanzView === 'erzeugung' && (
@@ -229,7 +229,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
                   if (name.includes('kWh/kWp')) return `${value.toFixed(0)} kWh/kWp`
                   return `${value.toFixed(1)} %`
                 }} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
               <Line yAxisId="left" type="monotone" dataKey="autarkie" name="Autarkie (%)" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} />
               <Line yAxisId="left" type="monotone" dataKey="evQuote" name="EV-Quote (%)" stroke={CHART_COLORS.evQuote} strokeWidth={2} dot={false} />
               <Bar yAxisId="right" dataKey="spezErtrag" name="Spez. Ertrag (kWh/kWp)" fill={CHART_COLORS.spezErtrag} opacity={0.7} />

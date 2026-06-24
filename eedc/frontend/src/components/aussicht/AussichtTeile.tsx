@@ -16,8 +16,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { fmtCalc } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS } from '../../lib'
+import { fmtCalc, ChartLegende } from '../ui'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
@@ -198,15 +198,15 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={60} className="text-gray-600 dark:text-gray-400" />
             <YAxis tick={{ fontSize: 12 }} className="text-gray-600 dark:text-gray-400" label={{ value: 'kWh', angle: -90, position: 'insideLeft' }} />
-            <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) => {
               if (name === 'Konfidenzband') return null
               return `${value.toFixed(0)} kWh`
             }} />} />
-            <Legend />
+            <Legend content={<ChartLegende />} />
             {showKonfidenz && (
               <Area type="monotone" dataKey="konfidenz" name="Konfidenzband" fill={SOLL_IST_COLORS.soll} fillOpacity={0.1} stroke="none" />
             )}
-            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} fillOpacity={0.5} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} radius={[4, 4, 0, 0]} />
             <Bar dataKey="trend" name="Trend-korrigiert" fill={CHART_COLORS.erzeugung} radius={[4, 4, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>

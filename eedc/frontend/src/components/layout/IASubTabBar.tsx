@@ -9,6 +9,7 @@
  */
 import { NavLink } from 'react-router-dom'
 import type { IANavItem } from './IATopNav'
+import { ScrollSchatten } from '../ui'
 
 const tabCls = (aktiv: boolean) =>
   `min-h-[44px] flex items-center px-3 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
@@ -20,23 +21,28 @@ const tabCls = (aktiv: boolean) =>
 export function IASubTabBar({ items }: { items: IANavItem[] }) {
   return (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
-      <nav className="flex items-center gap-1 h-14 overflow-x-auto scrollbar-none max-w-[1920px] mx-auto">
-        {items.map((t) =>
-          t.to ? (
-            <NavLink
-              key={t.key}
-              to={t.to}
-              className={t.active !== undefined ? () => tabCls(t.active!) : ({ isActive }) => tabCls(isActive)}
-            >
-              {t.label}
-            </NavLink>
-          ) : (
-            <button key={t.key} type="button" onClick={t.onClick} className={tabCls(!!t.active)}>
-              {t.label}
-            </button>
-          ),
-        )}
-      </nav>
+      {/* L1: Overflow-Schatten zeigt an, dass die Leiste seitlich weiterläuft. */}
+      <div className="max-w-[1920px] mx-auto">
+        <ScrollSchatten achse="horizontal">
+          <nav className="flex items-center gap-1 h-14">
+            {items.map((t) =>
+              t.to ? (
+                <NavLink
+                  key={t.key}
+                  to={t.to}
+                  className={t.active !== undefined ? () => tabCls(t.active!) : ({ isActive }) => tabCls(isActive)}
+                >
+                  {t.label}
+                </NavLink>
+              ) : (
+                <button key={t.key} type="button" onClick={t.onClick} className={tabCls(!!t.active)}>
+                  {t.label}
+                </button>
+              ),
+            )}
+          </nav>
+        </ScrollSchatten>
+      </div>
     </div>
   )
 }

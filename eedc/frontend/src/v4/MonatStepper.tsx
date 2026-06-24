@@ -57,8 +57,8 @@ export function MonatStepper({ entries, jahr, monat, onSelect }: MonatStepperPro
   }
 
   return (
-    <div className="lg:hidden sticky top-0 z-20 -mx-3 px-3 pt-1 pb-2 mb-3 bg-gray-50 dark:bg-gray-900">
-      <div className="flex items-center gap-0.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1 py-1 shadow-sm">
+    <div className="lg:hidden sticky top-0 z-20 -mx-3 px-3 pt-1 pb-2 mb-3 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm">
+      <div className="flex items-center gap-0.5 max-w-md mx-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1 py-1 shadow-sm">
         <Btn ziel={oldest} icon={ChevronFirst} label="ältester Monat" />
         <Btn ziel={prevYear} icon={ChevronsLeft} label="ein Jahr zurück" />
         <Btn ziel={prev} icon={ChevronLeft} label="voriger Monat" />

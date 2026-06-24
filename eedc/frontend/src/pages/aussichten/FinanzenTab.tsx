@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, Fuel } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc, KPICard } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
 import { INVESTITION_TYP_ORDER, CHART_COLORS } from '../../lib'
@@ -243,7 +243,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                   label={{ value: '€', angle: -90, position: 'insideLeft' }}
                 />
                 <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-                <Legend
+                <Legend content={<ChartLegende
                   formatter={(value) => {
                     const labels: Record<string, string> = {
                       einspeise_erloes: 'Einspeise-Erlös',
@@ -252,7 +252,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                     }
                     return labels[value] || value
                   }}
-                />
+                />} />
                 <Bar dataKey="einspeise_erloes" stackId="a" fill={CHART_COLORS.einspeiseErloes} name="einspeise_erloes" />
                 <Bar dataKey="ev_ersparnis" stackId="a" fill={CHART_COLORS.evErsparnis} name="ev_ersparnis" />
                 <Line
@@ -289,7 +289,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                   ))}
                 </Pie>
                 <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
               </PieChart>
             </ResponsiveContainer>
           </div>

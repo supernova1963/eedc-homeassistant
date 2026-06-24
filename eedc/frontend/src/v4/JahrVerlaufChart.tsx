@@ -16,8 +16,8 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { ChartTooltip } from '../components/ui'
-import { CHART_COLORS, MONAT_KURZ } from '../lib'
+import { ChartTooltip, ChartLegende } from '../components/ui'
+import { CHART_COLORS, MONAT_KURZ, CHART_HOVER_CURSOR } from '../lib'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
 type BilanzView = 'erzeugung' | 'verbrauch'
@@ -105,9 +105,9 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
             {showAutarkie && (
               <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} width={40} tick={{ fontSize: 12 }} unit=" %" />
             )}
-            <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) =>
               name === 'Autarkie' ? `${value.toFixed(1)} %` : `${value.toFixed(1)} kWh`} />} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
 
             {view === 'erzeugung' ? (
               <>

@@ -6,7 +6,7 @@
  */
 import { useState, useEffect } from 'react'
 import { Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer, Zap } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
 import { CHART_COLORS, SOLAR_INTENSITAET } from '../../lib'
@@ -262,7 +262,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                   if (name === 'Temperatur') return `${value.toFixed(0)} °C`
                   return `${value.toFixed(1)}`
                 }} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
               {hasVmNm ? (
                 <>
                   <Bar

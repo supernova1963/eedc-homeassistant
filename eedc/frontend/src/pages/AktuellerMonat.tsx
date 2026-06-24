@@ -14,8 +14,8 @@ import {
   Home, TrendingUp, AlertCircle, CalendarClock,
   FileSpreadsheet, Plug, Cloud, Upload, FileText,
 } from 'lucide-react'
-import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc } from '../components/ui'
-import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS } from '../lib'
+import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc, ChartLegende } from '../components/ui'
+import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH } from '../lib'
 import { useChartTheme } from '../context/ThemeContext'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { DataLoadingState } from '../components/common'
@@ -526,7 +526,7 @@ export default function AktuellerMonat() {
                 <XAxis dataKey="name" />
                 <YAxis tickFormatter={vorjahrFormatter} width={90} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
                 <Bar dataKey="Aktuell" fill={CHART_COLORS.erzeugung} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Vorjahr" fill={achsen.referenz} radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -803,9 +803,9 @@ export default function AktuellerMonat() {
                   <XAxis dataKey="name" />
                   <YAxis tickFormatter={sollIstFormatter} width={90} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
-                  <Legend />
+                  <Legend content={<ChartLegende />} />
                   <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

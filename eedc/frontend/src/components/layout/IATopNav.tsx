@@ -79,20 +79,35 @@ function NavEntry({ item, onNavigate, iconOnly }: { item: IANavItem; onNavigate?
   )
 }
 
-function ThemeToggle() {
+/** Theme-Cycle. Desktop = icon-only (Breite); im Mobile-Hamburger (`mitLabel`)
+ *  mit Text-Label im NavEntry-Stil, damit kein Eintrag ohne Bezeichnung dasteht
+ *  (L3, analog Hilfe/Einstellungen). */
+function ThemeToggle({ mitLabel = false }: { mitLabel?: boolean }) {
   const { theme, setTheme } = useTheme()
   const cycle = () => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')
+  const Icon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor
+  const name = theme === 'light' ? 'Hell' : theme === 'dark' ? 'Dunkel' : 'System'
+  if (mitLabel) {
+    return (
+      <button
+        type="button"
+        onClick={cycle}
+        className="w-full min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors"
+        aria-label={`Design: ${name}`}
+      >
+        <Icon className="h-4 w-4" /> Design: {name}
+      </button>
+    )
+  }
   return (
     <button
       type="button"
       onClick={cycle}
       className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
       aria-label={`Theme: ${theme}`}
-      title={`Theme: ${theme === 'light' ? 'Hell' : theme === 'dark' ? 'Dunkel' : 'System'}`}
+      title={`Design: ${name}`}
     >
-      {theme === 'light' && <Sun className="h-5 w-5" />}
-      {theme === 'dark' && <Moon className="h-5 w-5" />}
-      {theme === 'system' && <Monitor className="h-5 w-5" />}
+      <Icon className="h-5 w-5" />
     </button>
   )
 }
@@ -152,7 +167,7 @@ export function IATopNav({
         <nav aria-label="Hauptnavigation mobil" className="lg:hidden border-t border-gray-200 dark:border-gray-700 px-4 py-3 space-y-1">
           {anlagenSelektor && <div className="pb-1">{anlagenSelektor}</div>}
           {alle.map((t) => <NavEntry key={t.key} item={t} onNavigate={closeMobile} />)}
-          <div className="pt-1"><ThemeToggle /></div>
+          <div className="pt-1"><ThemeToggle mitLabel /></div>
         </nav>
       )}
     </header>

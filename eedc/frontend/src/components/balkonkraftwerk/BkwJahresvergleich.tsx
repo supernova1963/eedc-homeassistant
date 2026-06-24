@@ -8,7 +8,8 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { CHART_COLORS } from '../../lib'
+import { CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { ChartLegende } from '../ui'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 interface JahrVerwendung { jahr: number; eigenverbrauch: number; einspeisung: number; gesamt: number }
@@ -71,8 +72,8 @@ export function BkwJahresvergleich({ monatsdaten, embed = false }: { monatsdaten
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="jahr" fontSize={11} />
             <YAxis fontSize={10} width={56} unit=" kWh" />
-            <Tooltip content={<VerwendungTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<VerwendungTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
             {SERIEN.map((s) => (
               <Bar key={s.key} dataKey={s.key} name={s.name} stackId="verw" fill={s.farbe} />
             ))}

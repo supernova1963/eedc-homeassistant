@@ -10,7 +10,7 @@
 
 import { useMemo } from 'react'
 import { Sun, Zap, TrendingUp, Activity, BarChart3, AlertTriangle, PieChart as PieChartIcon, Wrench } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc, SortableSection, OrderedSections } from '../components/ui'
+import { Card, LoadingSpinner, Alert, Select, KPICard, fmtCalc, SortableSection, OrderedSections, ChartLegende } from '../components/ui'
 import { useSelectedAnlage, useApiData, useInvestitionen, useSectionOrder } from '../hooks'
 import { cockpitApi, type CockpitUebersicht } from '../api/cockpit'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -382,7 +382,7 @@ export default function PVAnlageDashboard() {
                 <XAxis dataKey="name" />
                 <YAxis tickFormatter={jahresFormatter} width={80} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
-                <Legend />
+                <Legend content={<ChartLegende />} />
                 <Bar dataKey="Erzeugung" fill={COLORS.solar} />
                 <Bar dataKey="Eigenverbrauch" fill={COLORS.consumption} />
                 <Bar dataKey="Einspeisung" fill={COLORS.feedin} />

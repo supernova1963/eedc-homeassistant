@@ -67,14 +67,16 @@ export default function ChartTooltip({
         const displayName = nameFormatter ? nameFormatter(entry.name as string) : entry.name
         return (
           <div key={i} className="flex items-center gap-2">
+            {/* S1: Farbzuordnung NUR über das Viereck-Swatch — Text bleibt
+                monochrom (Seriosität, app-weit einheitlich mit der Legende). */}
             <span
-              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
               style={{ backgroundColor: color }}
             />
             {!compact && (
               <span className="text-gray-300">{displayName}:</span>
             )}
-            <span className="font-medium" style={{ color }}>{formatted}</span>
+            <span className="font-medium text-white">{formatted}</span>
           </div>
         )
       })}

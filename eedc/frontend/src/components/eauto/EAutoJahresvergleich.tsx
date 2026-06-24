@@ -9,7 +9,8 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { LADEQUELLEN_FARBEN } from '../../lib'
+import { LADEQUELLEN_FARBEN, CHART_HOVER_CURSOR } from '../../lib'
+import { ChartLegende } from '../ui'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 interface JahrLadung { jahr: number; pv: number; netz: number; extern: number; gesamt: number }
@@ -76,8 +77,8 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdat
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="jahr" fontSize={11} />
             <YAxis fontSize={10} width={56} unit=" kWh" />
-            <Tooltip content={<LadungTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<LadungTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
             {serien.map((s) => (
               <Bar key={s.key} dataKey={s.key} name={s.name} stackId="lad" fill={s.farbe} />
             ))}

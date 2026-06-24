@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { Card, CollapsibleSection, KPICard } from '../../components/ui'
+import { Card, CollapsibleSection, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { EnergieprofilTageTabelleEmbedded } from '../../components/energieprofil/EnergieprofilTageTabelle'
 import {
@@ -559,7 +559,7 @@ function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | 
           <XAxis dataKey="stunde" tick={{ fontSize: 11 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', fontSize: 11 }} />
           <Tooltip content={<ChartTooltip unit="kW" />} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
           <Line type="monotone" dataKey="PV" stroke={KATEGORIE_FARBEN.pv} strokeWidth={2} dot={false} name="PV Ø" />
           <Line type="monotone" dataKey="Verbrauch" stroke={COLORS.consumption} strokeWidth={2} dot={false} name="Verbrauch Ø" />
         </LineChart>

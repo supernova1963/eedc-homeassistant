@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from 'react'
 import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
 import { CHART_COLORS, STATUS_COLORS } from '../../lib'
@@ -170,7 +170,7 @@ export default function TrendTab({ anlageId }: Props) {
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
               <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
               <Bar dataKey="kwh" name="Jahresertrag" radius={[4, 4, 0, 0]}>
                 {jahresChartData.map((entry, index) => (
                   <Cell
@@ -202,7 +202,7 @@ export default function TrendTab({ anlageId }: Props) {
                 domain={['auto', 'auto']}
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={0} />} />
-              <Legend />
+              <Legend content={<ChartLegende />} />
               <Line
                 type="monotone"
                 dataKey="spez_ertrag"

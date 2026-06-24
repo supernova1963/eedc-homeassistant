@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
+import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 
 interface TagesverlaufChartProps {
@@ -195,8 +196,8 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
               return `${richtung} ${absVal} kW`
             }}
           />} />
-          <Legend
-            formatter={(value: string) => {
+          <Legend content={<ChartLegende
+            formatter={(value) => {
               // Overlay-Serien direkt
               const overlay = overlaySerien.find((s) => s.key === value)
               if (overlay) return `${overlay.label} (${overlay.einheit || ''})`
@@ -205,9 +206,8 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
               // Bidirektionale: nur einmal in Legende (pos zeigen, neg verstecken)
               return origSerie?.label || rs?.label || value
             }}
-            wrapperStyle={{ fontSize: 11, cursor: 'pointer' }}
-            onClick={(e) => {
-              if (e && typeof e.dataKey === 'string') {
+            onItemClick={(e) => {
+              if (typeof e.dataKey === 'string') {
                 // Overlay oder Render-Serie → Toggle
                 const overlay = overlaySerien.find((s) => s.key === e.dataKey)
                 if (overlay) { toggleSerie(overlay.key); return }
@@ -215,7 +215,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 if (rs) toggleSerie(rs.origKey)
               }
             }}
-          />
+          />} />
 
           {/* Null-Linie (Energiebilanz-Grenze) */}
           <ReferenceLine yAxisId="left" y={0} stroke={achsen.referenz} strokeWidth={1.5} />
