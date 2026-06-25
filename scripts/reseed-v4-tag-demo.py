@@ -11,11 +11,14 @@ Macht aus der vorhandenen stündlichen TEP-Reihe die fehlenden Tages-Bausteine:
 Werte sind aus der TEP abgeleitet (pv_kw/waermepumpe_kw/wallbox_kw), damit sie zu
 den IST-Energiewerten passen. /tmp ist flüchtig → nach Reboot erneut ausführen.
 """
+import os
 import sqlite3
 import json
 from datetime import datetime, timedelta
 
-DB = "/tmp/eedc_v4devbox.db"
+# DB-Pfad per Env überschreibbar (z. B. für den Guest-Box-Demo-DB-Aufbau);
+# Default = laufende Dev-Box-DB (Recovery-Prozedur, UEBERGABE).
+DB = os.environ.get("EEDC_RESEED_DB", "/tmp/eedc_v4devbox.db")
 ANLAGE = 1
 WP_ID, WB_ID = "4", "5"
 
