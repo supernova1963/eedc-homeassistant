@@ -3,7 +3,7 @@
  */
 
 import { BarChart, Bar, ResponsiveContainer, Tooltip, Cell, XAxis } from 'recharts'
-import { ChartTooltip } from '../../components/ui'
+import { eedcTooltipProps } from '../../components/ui'
 import { MONAT_KURZ, SOLAR_INTENSITAET } from '../../lib'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
 
@@ -43,7 +43,7 @@ export default function SparklineChart({ monatsdaten, selectedYear }: {
             {/* #241 NongJoWo: XAxis (hidden) damit der Tooltip-Header
                 den Monatsnamen zeigt statt den Bar-Index. */}
             <XAxis dataKey="name" hide />
-            <Tooltip content={<ChartTooltip unit="kWh" />} />
+            <Tooltip {...eedcTooltipProps({ unit: 'kWh' })} />
             <Bar dataKey="kwh" name="PV-Ertrag" radius={[2, 2, 0, 0]}>
               {chartData.map((entry, i) => (
                 <Cell

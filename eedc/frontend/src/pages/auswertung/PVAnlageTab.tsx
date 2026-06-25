@@ -17,7 +17,7 @@ import { Card, Button, LoadingSpinner, Alert, fmtCalc, KPICard, ChartLegende } f
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, PROGNOSE_DASH } from '../../lib'
+import { SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, PROGNOSE_DASH, HILFSLINIE_DASH } from '../../lib'
 
 interface PVAnlageTabProps {
   anlageId: number
@@ -416,7 +416,7 @@ export function PVAnlageTab({ anlageId, selectedYear, verfuegbareJahre, zeitraum
                   dataKey="Gesamt"
                   stroke={KATEGORIE_FARBEN.sonstige}
                   strokeWidth={3}
-                  strokeDasharray="5 5"
+                  strokeDasharray={HILFSLINIE_DASH}
                   dot={{ r: 4 }}
                 />
               </LineChart>

@@ -241,8 +241,8 @@ async def get_tagesverlauf(
         inv = investitionen[spec.inv_id]
         config = TV_SERIE_CONFIG.get(inv.typ, {})
         if spec.suffix:  # WP-Split: eigene Farbe für Warmwasser, kein max_w
-            # WP-Warmwasser: rotes WP-Familienlicht (red-400), NICHT PV-Amber (Regel A 2026-06-24)
-            farbe = "#f87171" if spec.suffix == "warmwasser" else config.get("farbe")
+            # WP-Warmwasser: blau (= CHART_COLORS.wpWarmwasser; Gernot 2026-06-25 nach detLAN „Wasser=blau")
+            farbe = "#3b82f6" if spec.suffix == "warmwasser" else config.get("farbe")
             serien.append({
                 "key": spec.key,
                 "label": f"{inv.bezeichnung}{_SUFFIX_LABEL.get(spec.suffix, '')}",
@@ -610,7 +610,7 @@ async def _get_tagesverlauf_mqtt(
                 "key": key_w,
                 "label": f"{inv.bezeichnung} Warmwasser",
                 "kategorie": config["kategorie"],
-                "farbe": "#f87171",  # WP-Warmwasser red-400 (WP-Familie), NICHT PV-Amber (Regel A)
+                "farbe": "#3b82f6",  # WP-Warmwasser blau (= CHART_COLORS.wpWarmwasser; Gernot 2026-06-25 nach detLAN)
                 "seite": config["seite"],
                 "bidirektional": config["bidirektional"],
             })

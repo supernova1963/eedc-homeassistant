@@ -26,10 +26,10 @@ export default function LiveHeuteKacheln({ data }: { data: LiveDashboardResponse
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Heute</h3>
       <div className="grid grid-cols-2 gap-2">
         {data.heute_pv_kwh !== null && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-3 py-2"
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2"
                title={data.gestern_pv_kwh !== null ? `Gestern: ${data.gestern_pv_kwh.toFixed(1)} kWh` : undefined}>
             <div className="text-xs text-gray-500 dark:text-gray-400">PV-Erzeugung</div>
-            <div className="text-lg font-bold text-yellow-600 dark:text-yellow-400">{data.heute_pv_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+            <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{data.heute_pv_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
           </div>
         )}
         {/* Batterie heute (Ladung/Entladung) */}
@@ -56,9 +56,9 @@ export default function LiveHeuteKacheln({ data }: { data: LiveDashboardResponse
           )
         })()}
         {data.heute_eigenverbrauch_kwh !== null && (
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
+          <div className="bg-violet-50 dark:bg-violet-900/20 rounded-lg px-3 py-2">
             <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch <SimpleTooltip text={`Selbst genutzter PV-Strom (Direktverbrauch + Batterieentladung)${data.gestern_eigenverbrauch_kwh !== null ? ` | Gestern: ${data.gestern_eigenverbrauch_kwh.toFixed(1)} kWh` : ''}`}><Info className="inline w-3 h-3 opacity-50 cursor-help" /></SimpleTooltip></div>
-            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+            <div className="text-lg font-bold text-violet-600 dark:text-violet-400">{data.heute_eigenverbrauch_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
           </div>
         )}
         {data.heute_netzbezug_kwh !== null && (
@@ -76,10 +76,10 @@ export default function LiveHeuteKacheln({ data }: { data: LiveDashboardResponse
         )}
         {/* Einspeisung als PV-Überschuss zum Schluss */}
         {data.heute_einspeisung_kwh !== null && (
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg px-3 py-2"
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2"
                title={`PV-Strom der ins Netz eingespeist wird${data.gestern_einspeisung_kwh !== null ? `\nGestern: ${data.gestern_einspeisung_kwh.toFixed(1)} kWh` : ''}`}>
             <div className="text-xs text-gray-500 dark:text-gray-400">Einspeisung</div>
-            <div className="text-lg font-bold text-green-600 dark:text-green-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
+            <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{data.heute_einspeisung_kwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span></div>
           </div>
         )}
       </div>

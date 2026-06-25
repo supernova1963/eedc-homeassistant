@@ -15,7 +15,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR, SERIE_GEDIMMT } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 function Toggle({ aktiv, aktivKlasse, onClick, children, title }: {
@@ -147,7 +147,7 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
                 <Bar dataKey="value" name={modus === 'jaz' ? 'JAZ' : 'Strom'}>
                   {saisonData.map((s, i) => (
-                    <Cell key={i} fill={jahrFarben[i % jahrFarben.length]} fillOpacity={s.vollstaendig ? 1 : 0.4} />
+                    <Cell key={i} fill={jahrFarben[i % jahrFarben.length]} fillOpacity={s.vollstaendig ? 1 : SERIE_GEDIMMT} />
                   ))}
                   <LabelList dataKey="label" position="top" fill="currentColor" fontSize={13} fontWeight={600} />
                 </Bar>

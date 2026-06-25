@@ -16,8 +16,9 @@ describe('ChartLegende', () => {
     expect(swatches.length).toBe(2)
     // kein runder Marker (S1: Viereck statt Kreis)
     expect(container.querySelector('.rounded-full')).toBeNull()
-    // Text monochrom (Theme-Token, nicht serienfarbig)
-    expect(screen.getByText('pv').className).toContain('text-gray-600')
+    // Text monochrom (Theme-Token, nicht serienfarbig); Default-Label aus dem
+    // CHART_LABELS-Kanon (Regel D): dataKey 'pv' → 'PV'.
+    expect(screen.getByText('PV').className).toContain('text-gray-600')
   })
 
   it('formatter mappt dataKey → Anzeigename', () => {
@@ -34,7 +35,7 @@ describe('ChartLegende', () => {
   it('onItemClick feuert mit dem Eintrag (Serie an/aus)', () => {
     const onItemClick = vi.fn()
     render(<ChartLegende payload={payload} onItemClick={onItemClick} />)
-    fireEvent.click(screen.getByText('pv'))
+    fireEvent.click(screen.getByText('PV'))
     expect(onItemClick).toHaveBeenCalledWith(expect.objectContaining({ dataKey: 'pv' }))
   })
 

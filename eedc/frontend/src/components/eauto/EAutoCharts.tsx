@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, GELD_TEXT_CLASS, CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten, EAutoDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = EAutoDashboardResponse['zusammenfassung']
@@ -87,7 +87,7 @@ export function EAutoKostenvergleich({ zusammenfassung: z }: { zusammenfassung: 
         </ResponsiveContainer>
       </div>
       <div className="text-center">
-        <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+        <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.ersparnis}`}>
           Ersparnis: {(z.ersparnis_vs_benzin_euro || 0).toFixed(2)} €
         </span>
       </div>
@@ -118,7 +118,8 @@ export function EAutoMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMo
               <td className="text-right py-2 px-2">{(md.verbrauch_daten.verbrauch_kwh || 0).toFixed(1)}</td>
               <td className="text-right py-2 px-2 text-green-600">{(md.verbrauch_daten.ladung_pv_kwh || 0).toFixed(1)}</td>
               <td className="text-right py-2 px-2 text-red-600">{(md.verbrauch_daten.ladung_netz_kwh || 0).toFixed(1)}</td>
-              <td className="text-right py-2 px-2 text-purple-600">{(md.verbrauch_daten.v2h_entladung_kwh || 0).toFixed(1)}</td>
+              {/* V2H = emobV2h-Identität (cyan), war fälschlich violett (Audit-E). */}
+              <td className="text-right py-2 px-2 text-cyan-600">{(md.verbrauch_daten.v2h_entladung_kwh || 0).toFixed(1)}</td>
             </tr>
           ))}
         </tbody>

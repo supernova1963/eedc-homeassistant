@@ -18,6 +18,7 @@
  * (`hide` am Series-Element → `entry.inactive`) werden gedimmt.
  */
 import type { ReactNode } from 'react'
+import { CHART_LABELS } from '../../lib'
 
 export interface LegendEintrag {
   value: string
@@ -46,7 +47,8 @@ export default function ChartLegende({ payload, formatter, onItemClick }: ChartL
   return (
     <ul className="flex flex-wrap justify-center items-center gap-x-4 gap-y-1 m-0 p-0 list-none text-xs">
       {items.map((entry, i) => {
-        const text = formatter ? formatter(entry.value, entry) : entry.value
+        // Default-`formatter` aus dem zentralen Label-Kanon (Regel D) → Legende ≡ Tooltip.
+        const text = formatter ? formatter(entry.value, entry) : (CHART_LABELS[entry.value] ?? entry.value)
         if (text == null || text === '') return null
         return (
           <li

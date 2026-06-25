@@ -5,8 +5,8 @@
  * mit 3-Stufen-Farbgradient (niedrig → mittel → hoch).
  */
 
-import { BarChart, Bar, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-import ChartTooltip from '../ui/ChartTooltip'
+import { BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { eedcTooltipProps } from '../ui'
 import { SOLAR_INTENSITAET } from '../../lib'
 
 interface SparklineBarProps {
@@ -35,8 +35,10 @@ export default function SparklineBar({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-            <Tooltip content={<ChartTooltip unit={unit} />} />
-            <Bar dataKey="value" name={unit} radius={[2, 2, 0, 0]}>
+            {/* Hidden XAxis → Tooltip-Header zeigt die Kategorie statt Bar-Index. */}
+            <XAxis dataKey="name" hide />
+            <Tooltip {...eedcTooltipProps({ unit })} />
+            <Bar dataKey="value" name="Wert" radius={[2, 2, 0, 0]}>
               {data.map((entry, i) => (
                 <Cell
                   key={i}

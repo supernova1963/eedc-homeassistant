@@ -16,7 +16,7 @@
 import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis } from '../components/blocks'
-import { DATENROLLE } from '../lib'
+import { DATENROLLE, AMPEL_TEXT_CLASS, AMPEL_BG_CLASS, sollIstStufe } from '../lib'
 import { Delta, VglChip } from './MonatBilanz'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
@@ -197,17 +197,11 @@ export function JahrBilanz({
               </FormelTooltip>
             </p>
             <div className="flex justify-end">
-              <span className={`text-4xl font-bold ${
-                sollPct >= 100 ? 'text-green-500 dark:text-green-400'
-                  : sollPct >= 75 ? 'text-yellow-500 dark:text-yellow-400'
-                  : 'text-orange-500'
-              }`}>{sollPct} %</span>
+              <span className={`text-4xl font-bold ${AMPEL_TEXT_CLASS[sollIstStufe(sollPct)]}`}>{sollPct} %</span>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-2 mt-2">
               <div
-                className={`h-2 rounded-full ${
-                  sollPct >= 100 ? 'bg-green-500' : sollPct >= 75 ? 'bg-yellow-400' : 'bg-orange-400'
-                }`}
+                className={`h-2 rounded-sm ${AMPEL_BG_CLASS[sollIstStufe(sollPct)]}`}
                 style={{ width: `${Math.min(100, sollPct)}%` }}
               />
             </div>

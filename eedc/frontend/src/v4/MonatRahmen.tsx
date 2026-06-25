@@ -11,7 +11,7 @@
  */
 import { ArrowRight, RefreshCw, CalendarClock } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
-import { BLOCK_IDENTITAET } from '../lib'
+import { BLOCK_IDENTITAET, VERGLEICH_BADGE } from '../lib'
 import type { Block } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
@@ -186,9 +186,7 @@ export function communityBlock(
                     const better = z.inv ? z.du <= z.median : z.du >= z.median
                     return (
                       <span className={`text-xs font-medium px-1 py-0.5 rounded ${
-                        better
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        better ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
                       }`}>
                         {better ? '▲' : '▼'}
                       </span>

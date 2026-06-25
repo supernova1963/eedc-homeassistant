@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE } from '../../lib'
 import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = SpeicherDashboardResponse['zusammenfassung']
@@ -137,8 +137,8 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
               {monthlyData.map((md, idx) => (
                 <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
                   <td className="py-2 px-2">{md.name}</td>
-                  <td className="text-right py-2 px-2 text-blue-600">{md.ladung.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2 text-green-600">{md.entladung.toFixed(1)}</td>
+                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{md.ladung.toFixed(1)}</td>
+                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{md.entladung.toFixed(1)}</td>
                   <td className="text-right py-2 px-2">{md.zyklen.toFixed(1)}</td>
                 </tr>
               ))}

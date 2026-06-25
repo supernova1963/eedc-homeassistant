@@ -1,6 +1,7 @@
 import type { Payload, ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent'
+import { CHART_LABELS, SERIE_NEUTRAL } from '../../lib'
 
-interface ChartTooltipProps {
+export interface ChartTooltipProps {
   active?: boolean
   payload?: Payload<ValueType, NameType>[]
   label?: unknown
@@ -11,6 +12,9 @@ interface ChartTooltipProps {
   unit?: string
   decimals?: number
   locale?: string
+  /** Regel F (2026-06-25): dataKey im Payload, der das 100-%-Total trägt → je
+   *  Zeile zusätzlich „(xx %)" (Anteil). Ersetzt die hellen Custom-%-Tooltips. */
+  percentOf?: string
 }
 
 export default function ChartTooltip({
@@ -24,6 +28,7 @@ export default function ChartTooltip({
   unit,
   decimals,
   locale = 'de-DE',
+  percentOf,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
 
@@ -32,6 +37,15 @@ export default function ChartTooltip({
   const sorted = itemSorter
     ? [...payload].sort((a, b) => (itemSorter(a) - itemSorter(b)))
     : payload
+
+  // Default-`nameFormatter` aus dem zentralen Label-Kanon (Regel D) → nie Roh-Keys;
+  // Tooltip-Label ≡ Legende-Label. Expliziter Formatter übersteuert.
+  const resolveName = nameFormatter ?? ((n: string) => CHART_LABELS[n] ?? n)
+
+  // Anteils-Modus (Regel F): Total vom ersten Payload-Punkt lesen.
+  const ganz = percentOf
+    ? Number((sorted[0]?.payload as Record<string, unknown> | undefined)?.[percentOf])
+    : undefined
 
   // Single-Entry + Header → kompaktes Layout (kein Name, nur Wert)
   const compact = sorted.length === 1 && hasLabel
@@ -46,7 +60,7 @@ export default function ChartTooltip({
         if (entry.type === 'none') return null
         const val = entry.value as number
         const p = entry.payload as Record<string, unknown> | undefined
-        const color: string = entry.color || entry.fill || (typeof p?.fill === 'string' ? p.fill : undefined) || (typeof p?.color === 'string' ? p.color : undefined) || '#888'
+        const color: string = entry.color || entry.fill || (typeof p?.fill === 'string' ? p.fill : undefined) || (typeof p?.color === 'string' ? p.color : undefined) || SERIE_NEUTRAL
         let formatted: string | null
         const isNum = typeof val === 'number' && Number.isFinite(val)
         if (formatter) {
@@ -64,7 +78,10 @@ export default function ChartTooltip({
           formatted = String(val)
         }
         if (formatted === null) return null
-        const displayName = nameFormatter ? nameFormatter(entry.name as string) : entry.name
+        const displayName = resolveName(entry.name as string)
+        const anteil = ganz !== undefined && Number.isFinite(ganz) && ganz > 0 && isNum
+          ? `${Math.round((val / ganz) * 100)} %`
+          : undefined
         return (
           <div key={i} className="flex items-center gap-2">
             {/* S1: Farbzuordnung NUR über das Viereck-Swatch — Text bleibt
@@ -77,6 +94,7 @@ export default function ChartTooltip({
               <span className="text-gray-300">{displayName}:</span>
             )}
             <span className="font-medium text-white">{formatted}</span>
+            {anteil && <span className="text-gray-400">({anteil})</span>}
           </div>
         )
       })}

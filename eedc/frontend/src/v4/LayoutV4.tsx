@@ -22,7 +22,7 @@ export default function LayoutV4() {
   // Inhalts-Achse (Struktur-SoT: KONZEPT-IA-V4). Achsen-Aktivität via Pfad-Präfix
   // (eine Achse bleibt aktiv über all ihre Sub-Routen).
   const inhalt: IANavItem[] = [
-    { key: 'cockpit',      label: 'Cockpit',      icon: LayoutDashboard, to: '/v4/cockpit/monat',        active: aktiv('/v4/cockpit') },
+    { key: 'cockpit',      label: 'Cockpit',      icon: LayoutDashboard, to: '/v4/cockpit/live',         active: aktiv('/v4/cockpit') },
     { key: 'komponenten',  label: 'Komponenten',  icon: Boxes,           to: '/v4/komponenten',          active: aktiv('/v4/komponenten') },
     { key: 'auswertungen', label: 'Auswertungen', icon: BarChart3,       to: '/v4/auswertungen',         active: aktiv('/v4/auswertungen') },
     { key: 'community',    label: 'Community',    icon: Users,           to: '/v4/community',            active: aktiv('/v4/community') },

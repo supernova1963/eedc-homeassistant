@@ -12,9 +12,8 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Card, ChartLegende } from '../ui'
-import ChartTooltip from '../ui/ChartTooltip'
-import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS } from '../../lib'
+import { Card, ChartLegende, eedcTooltipProps } from '../ui'
+import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, HILFSLINIE_DASH, AREA_FILL_OPACITY } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -84,10 +83,11 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
           <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
           <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
           <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
-          <Tooltip content={<ChartTooltip
-            unit=" kW" decimals={2}
-            formatter={(v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`}
-          />} />
+          <Tooltip {...eedcTooltipProps({
+            unit: ' kW', decimals: 2,
+            nameFormatter: (name) => chartSerien.find(cs => cs.dataKey === name)?.label ?? name,
+            formatter: (v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`,
+          })} />
           <Legend content={<ChartLegende
             formatter={(value) => chartSerien.find(cs => cs.dataKey === value)?.label ?? value}
           />} />
@@ -100,7 +100,7 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
               name={cs.dataKey}
               fill={cs.farbe}
               stroke={cs.farbe}
-              fillOpacity={0.3}
+              fillOpacity={AREA_FILL_OPACITY}
               strokeWidth={1.5}
               stackId={cs.stackId}
               isAnimationActive={false}
@@ -108,8 +108,9 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
             />
           ))}
 
+          {/* Summen-/Hilfslinie (keine Prognose) → HILFSLINIE_DASH, nicht PROGNOSE_DASH (Regel C). */}
           <Line dataKey="gesamterzeugung" name="gesamterzeugung"
-            stroke={COLORS.solar} strokeWidth={2} strokeDasharray="5 3"
+            stroke={COLORS.solar} strokeWidth={2} strokeDasharray={HILFSLINIE_DASH}
             dot={false} connectNulls legendType="none" />
         </ComposedChart>
       </ResponsiveContainer>

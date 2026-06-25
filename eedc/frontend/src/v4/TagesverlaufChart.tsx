@@ -19,7 +19,7 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { ChartTooltip, ChartLegende } from '../components/ui'
-import { CHART_COLORS } from '../lib'
+import { CHART_COLORS, CHART_HOVER_CURSOR } from '../lib'
 import type { TagWerte } from '../api/energie_profil'
 
 type BilanzView = 'erzeugung' | 'verbrauch'
@@ -106,7 +106,7 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
             {showAutarkie && (
               <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} width={40} tick={{ fontSize: 12 }} unit=" %" />
             )}
-            <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
+            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) =>
               name === 'Autarkie' ? `${value.toFixed(1)} %` : `${value.toFixed(1)} kWh`} />} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
 

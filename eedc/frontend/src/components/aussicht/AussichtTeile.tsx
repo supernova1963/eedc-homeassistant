@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { fmtCalc, ChartLegende } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
@@ -204,9 +204,11 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
             }} />} />
             <Legend content={<ChartLegende />} />
             {showKonfidenz && (
-              <Area type="monotone" dataKey="konfidenz" name="Konfidenzband" fill={SOLL_IST_COLORS.soll} fillOpacity={0.1} stroke="none" />
+              <Area type="monotone" dataKey="konfidenz" name="Konfidenzband" fill={SOLL_IST_COLORS.soll} fillOpacity={KONFIDENZ_BAND_OPACITY} stroke="none" />
             )}
-            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} radius={[4, 4, 0, 0]} />
+            {/* PVGIS = Referenz/Basis-Modell, KEINE IST-Serie im Chart (vs. die genauere
+                trend-korrigierte Prognose) → HILFSLINIE_DASH statt PROGNOSE_DASH (Regel C). */}
+            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={HILFSLINIE_DASH} radius={[4, 4, 0, 0]} />
             <Bar dataKey="trend" name="Trend-korrigiert" fill={CHART_COLORS.erzeugung} radius={[4, 4, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>

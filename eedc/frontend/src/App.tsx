@@ -88,7 +88,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             {/* Root-Redirect: Release → Live-Dashboard; flag-on Build (VITE_IA_V4)
                 → direkt in die IA-v4-Demo (Tester-Server landet auf v4). */}
-            <Route index element={<Navigate to={V4 ? '/v4/cockpit/monat' : '/live'} replace />} />
+            <Route index element={<Navigate to={V4 ? '/v4/cockpit/live' : '/live'} replace />} />
 
             {/* Cockpit (Dashboards) */}
             <Route path="cockpit" element={<Dashboard />} />
@@ -172,8 +172,8 @@ function App() {
               ist `V4` null → kein Mount, kein Chunk. */}
           {V4 && (
             <Route path="v4" element={<V4.LayoutV4 />}>
-              <Route index element={<Navigate to="/v4/cockpit/monat" replace />} />
-              <Route path="cockpit" element={<Navigate to="/v4/cockpit/monat" replace />} />
+              <Route index element={<Navigate to="/v4/cockpit/live" replace />} />
+              <Route path="cockpit" element={<Navigate to="/v4/cockpit/live" replace />} />
               <Route path="cockpit/:zeit" element={<V4.CockpitV4 />} />
               {/* Noch nicht gebaute Achsen/Sichten — Platzhalter hält die Nav
                   vollständig. Auswertungen folgt als eigenes Muster nach Phase 3;

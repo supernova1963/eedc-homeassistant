@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
+import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY } from '../../lib'
 import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -175,7 +176,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
               label={{ value: overlaySerien[0].einheit || '', angle: -90, position: 'insideRight', fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
             />
           )}
-          <Tooltip content={<ChartTooltip
+          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip
             labelFormatter={(label) => `${label} Uhr`}
             itemSorter={(item) => -(Math.abs(item.value as number))}
             nameFormatter={(name) => {
@@ -236,7 +237,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 yAxisId="left"
                 fill={rs.farbe}
                 stroke={rs.farbe}
-                fillOpacity={0.3}
+                fillOpacity={AREA_FILL_OPACITY}
                 strokeWidth={1.5}
                 stackId={rs.stackId}
                 isAnimationActive={false}
@@ -258,7 +259,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 yAxisId="right"
                 stroke={s.farbe}
                 strokeWidth={1.5}
-                strokeDasharray="4 2"
+                strokeDasharray={HILFSLINIE_DASH}
                 dot={false}
                 isAnimationActive={false}
                 connectNulls={false}

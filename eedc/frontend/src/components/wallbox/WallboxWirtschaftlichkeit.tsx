@@ -8,7 +8,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { GELD_COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { GELD_COLORS, GELD_TEXT_CLASS, KOMPONENTEN_FARBEN, CHART_HOVER_CURSOR } from '../../lib'
 import type { WallboxDashboardResponse } from '../../api/investitionen'
 import type { Investition } from '../../types'
 
@@ -44,25 +44,25 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
           </ResponsiveContainer>
         </div>
         <div className="text-center mt-1">
-          <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+          <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.ersparnis}`}>
             Ersparnis durch Wallbox: {(z.ersparnis_vs_extern_euro || 0).toFixed(2)} €
           </span>
         </div>
       </div>
 
-      {/* ROI-Erklärung */}
-      <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 space-y-2">
-        <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Wallbox-ROI erklärt</p>
-        <p className="text-sm text-purple-600 dark:text-purple-400">
+      {/* ROI-Erklärung — Wallbox-Identität cyan (war violett, Audit-A/E). */}
+      <div className={`${KOMPONENTEN_FARBEN.wallbox.tint} rounded-lg p-4 space-y-2`}>
+        <p className="text-sm font-medium text-cyan-700 dark:text-cyan-300">Wallbox-ROI erklärt</p>
+        <p className="text-sm text-cyan-600 dark:text-cyan-400">
           Die Ersparnis errechnet sich aus dem Unterschied zwischen Heimladen und externem Laden:
         </p>
-        <ul className="text-sm text-purple-600 dark:text-purple-400 list-disc list-inside">
+        <ul className="text-sm text-cyan-600 dark:text-cyan-400 list-disc list-inside">
           <li>PV-Ladung zuhause: kostenlos ({(z.ladung_pv_kwh || 0).toFixed(0)} kWh)</li>
           <li>Netz-Ladung zuhause: Haushaltsstrom ({(z.ladung_netz_kwh || 0).toFixed(0)} kWh = {(z.heim_kosten_euro || 0).toFixed(2)} €)</li>
           <li>Vergleichspreis extern: {(z.extern_preis_kwh_euro || 0.50).toFixed(2)} €/kWh</li>
         </ul>
         {(z.extern_ladung_kwh || 0) > 0 && (
-          <p className="text-sm text-purple-600 dark:text-purple-400">
+          <p className="text-sm text-cyan-600 dark:text-cyan-400">
             Tatsächliche externe Ladung: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh für {(z.extern_kosten_euro || 0).toFixed(2)} €
           </p>
         )}
@@ -77,7 +77,7 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
           </div>
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Ersparnis/Jahr (hochgerechnet)</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">{jahresErsparnis.toFixed(0)} €</p>
+            <p className={`text-2xl font-bold ${GELD_TEXT_CLASS.ersparnis}`}>{jahresErsparnis.toFixed(0)} €</p>
           </div>
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation (ca.)</p>

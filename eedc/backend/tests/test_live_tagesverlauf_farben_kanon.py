@@ -36,7 +36,7 @@ KANON_PV_GESAMT = "#f59e0b"
 KANON_NETZBEZUG = "#b91c1c"
 KANON_EINSPEISUNG = "#10b981"
 KANON_HAUSHALT = "#64748b"
-KANON_WP_WARMWASSER = "#f87171"   # WP-Familie red-400 (NICHT PV-Amber)
+KANON_WP_WARMWASSER = "#3b82f6"   # blau (= CHART_COLORS.wpWarmwasser; Gernot 2026-06-25 nach detLAN „Wasser=blau")
 
 _BACKEND = Path(__file__).resolve().parents[1]
 _SERVICE = (_BACKEND / "services" / "live_tagesverlauf_service.py").read_text(encoding="utf-8")

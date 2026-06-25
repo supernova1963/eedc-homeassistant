@@ -203,12 +203,16 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
 
           {error ? (
             <Card><p className="text-red-500">{error}</p></Card>
-          ) : loading ? (
+          ) : loading && !tag ? (
+            // Voll-Spinner NUR beim Erst-Load (noch keine Daten). Beim Tageswechsel
+            // bleibt der bestehende Block-Stack stehen und aktualisiert sich in-place
+            // → kein Hochspringen, kein „Aufblitzen" (detLAN T2, 2026-06-25). Kein
+            // `key={datum}` mehr → BlockShell re-rendert statt zu remounten.
             <LoadingSpinner text="Lade Tag…" />
           ) : bloecke.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Daten für diesen Tag vorhanden.</p></Card>
           ) : (
-            <BlockShell key={datum} persistKey="v4-cockpit-tag" bloecke={bloecke} sortierbar />
+            <BlockShell persistKey="v4-cockpit-tag" bloecke={bloecke} sortierbar />
           )}
         </div>
       </div>

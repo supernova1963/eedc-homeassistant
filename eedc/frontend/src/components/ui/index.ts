@@ -16,6 +16,7 @@ export { default as FormelTooltip, SimpleTooltip, fmtCalc } from './FormelToolti
 export { KPICard } from './KPICard'
 export { default as QuelleBadge } from './QuelleBadge'
 export { default as ChartTooltip } from './ChartTooltip'
+export { eedcTooltipProps } from './eedcTooltip'
 export { default as ChartLegende } from './ChartLegende'
 export type { LegendEintrag } from './ChartLegende'
 export { default as ScrollSchatten } from './ScrollSchatten'

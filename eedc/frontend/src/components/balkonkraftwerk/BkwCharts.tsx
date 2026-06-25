@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
@@ -86,12 +86,12 @@ export function BkwMonatsTabelle({ monatsdaten, hatSpeicher }: { monatsdaten: In
           {data.map((md, idx) => (
             <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
               <td className="py-2 px-2">{md.name}</td>
-              <td className="text-right py-2 px-2 text-yellow-600">{md.erzeugung.toFixed(1)}</td>
-              <td className="text-right py-2 px-2 text-green-600">{md.eigenverbrauch.toFixed(1)}</td>
-              <td className="text-right py-2 px-2 text-orange-600">{md.einspeisung.toFixed(1)}</td>
+              <td className={`text-right py-2 px-2 ${DATENROLLE.pv.text}`}>{md.erzeugung.toFixed(1)}</td>
+              <td className={`text-right py-2 px-2 ${DATENROLLE.eigenverbrauch.text}`}>{md.eigenverbrauch.toFixed(1)}</td>
+              <td className={`text-right py-2 px-2 ${DATENROLLE.einspeisung.text}`}>{md.einspeisung.toFixed(1)}</td>
               {hatSpeicher && <>
-                <td className="text-right py-2 px-2 text-purple-600">{md.speicher_ladung.toFixed(1)}</td>
-                <td className="text-right py-2 px-2 text-purple-600">{md.speicher_entladung.toFixed(1)}</td>
+                <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{md.speicher_ladung.toFixed(1)}</td>
+                <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{md.speicher_entladung.toFixed(1)}</td>
               </>}
             </tr>
           ))}

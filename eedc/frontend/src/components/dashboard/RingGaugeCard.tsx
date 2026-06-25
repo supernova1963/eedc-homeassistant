@@ -35,8 +35,8 @@ export default function RingGaugeCard({ title, value, subtitle, color, formel, b
           <p className="text-xs text-gray-500 dark:text-gray-400">{title}</p>
           <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white whitespace-nowrap">
             {formel
-              ? <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>{value.toFixed(1)} %</FormelTooltip>
-              : <>{value.toFixed(1)} %</>
+              ? <FormelTooltip formel={formel} berechnung={berechnung} ergebnis={ergebnis}>{value.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %</FormelTooltip>
+              : <>{value.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %</>
             }
           </p>
           {subtitle && <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{subtitle}</p>}

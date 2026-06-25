@@ -669,10 +669,11 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             </AreaChart>
           </ResponsiveContainer>
           {/* Legende */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-gray-500 dark:text-gray-400 mt-1 justify-center">
+          {/* Schrift wie der ChartLegende-Standard (text-xs / gray-600/300), detLAN T5. */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300 mt-1 justify-center">
             {showPv && (
               <span className="flex items-center gap-1">
-                <span className="w-3 h-0.5 bg-yellow-500 rounded" /> PV (IST)
+                <span className="w-3 h-0.5 bg-amber-500 rounded" /> PV (IST)
               </span>
             )}
             {showPv && (

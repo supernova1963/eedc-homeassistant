@@ -9,7 +9,7 @@
  */
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { CHART_HOVER_CURSOR } from '../lib'
+import { CHART_HOVER_CURSOR, SERIE_GEDIMMT } from '../lib'
 import { fmtCalc, ChartTooltip } from '../components/ui'
 import { ExternalLink } from 'lucide-react'
 
@@ -78,7 +78,7 @@ export function KomponentenVergleich({
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} />} />
               <Bar dataKey="summe" name={label}>
                 {sortiert.map((j) => (
-                  <Cell key={j.jahr} fill={farbe} fillOpacity={j.jahr === neuestes.jahr || j.jahr === ref.jahr ? 1 : 0.45} />
+                  <Cell key={j.jahr} fill={farbe} fillOpacity={j.jahr === neuestes.jahr || j.jahr === ref.jahr ? 1 : SERIE_GEDIMMT} />
                 ))}
               </Bar>
             </BarChart>

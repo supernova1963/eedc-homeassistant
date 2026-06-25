@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR } from '../../lib'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
@@ -59,7 +59,7 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
         </ResponsiveContainer>
       </div>
       <div className="text-center">
-        <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+        <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.ersparnis}`}>
           Ersparnis: {z.ersparnis_euro.toFixed(2)} €
         </span>
       </div>
@@ -91,6 +91,7 @@ export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: Investi
               <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
                 <td className="text-right py-2 px-2">{strom.toFixed(0)}</td>
+                {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
                 <td className="text-right py-2 px-2 text-red-600">{heiz.toFixed(0)}</td>
                 <td className="text-right py-2 px-2 text-blue-600">{ww.toFixed(0)}</td>
                 <td className="text-right py-2 px-2 text-orange-600">{cop.toFixed(2)}</td>
