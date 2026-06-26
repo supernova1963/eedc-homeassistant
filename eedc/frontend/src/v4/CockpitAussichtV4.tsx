@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
+import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { BLOCK_IDENTITAET } from '../lib'
 import {
   TagesPrognose, KurzfristDetails, LangfristVerlaufChart, LangfristMonatswerte,
@@ -107,7 +108,22 @@ function StundenDatumPicker({ datum, setDatum }: { datum: string; setDatum: (d: 
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
 
-export default function CockpitAussichtV4({ anlageId }: { anlageId: number | undefined }) {
+// persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
+// (Element-Ebene; eigener LS-Prefix). SLICE-1-Park, analog Cockpit/Monat.
+const SICHT_KEY = 'v4-cockpit-aussicht'
+
+export default function CockpitAussichtV4(props: { anlageId: number | undefined }) {
+  // ParkProvider umschließt den Body, damit `usePark` (Kennzahlen-Filter, ParkFuss)
+  // im selben Baum greift. Ohne Provider blieben die Park-Hooks inert (Produktion).
+  return (
+    <ParkProvider persistKey={SICHT_KEY}>
+      <CockpitAussichtInner {...props} />
+    </ParkProvider>
+  )
+}
+
+function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
+  const park = usePark()
   const { selectedAnlage } = useSelectedAnlage()
   const [searchParams, setSearchParams] = useSearchParams()
   const horizont: Horizont = istHorizont(searchParams.get('h')) ? (searchParams.get('h') as Horizont) : DEFAULT_HORIZONT
@@ -192,15 +208,22 @@ export default function CockpitAussichtV4({ anlageId }: { anlageId: number | und
       defaultOpen: false,
       render: () => <AussichtFinanzTeaser finanz={finanz} />,
     } : null
+    // R5-5a (Rainer): Kennzahlen-Kacheln parkbar (SLICE 1) — stabile parkId je
+    // Titel, geparkte raus; sind ALLE geparkt → Block ganz weg (wie Cockpit/Monat).
+    const kennzahlenBlock = (items: KpiStripItem[], summary: string): Block | null => {
+      const mit = items.map((k) => ({ ...k, parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}` }))
+      const sichtbar = mit.filter((k) => !park.istGeparkt(k.parkId!))
+      if (!sichtbar.length) return null
+      return {
+        id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
+        summary, defaultOpen: true, render: () => <KpiStrip kpis={sichtbar} />,
+      }
+    }
     if (istKurz) {
       if (!kurz) return []
+      const kpi = kennzahlenBlock(kurzKpis(kurz), `${kurz.summe_kwh.toFixed(0)} kWh in ${kurz.tage.length} Tagen · Ø ${kurz.durchschnitt_kwh_tag.toFixed(1)} kWh/Tag`)
       const list: Block[] = [
-        {
-          id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-          summary: `${kurz.summe_kwh.toFixed(0)} kWh in ${kurz.tage.length} Tagen · Ø ${kurz.durchschnitt_kwh_tag.toFixed(1)} kWh/Tag`,
-          defaultOpen: true,
-          render: () => <KpiStrip kpis={kurzKpis(kurz)} />,
-        },
+        ...(kpi ? [kpi] : []),
         {
           id: 'verlauf', title: 'Tages-Prognose', ...BLOCK_IDENTITAET.wetter,
           summary: `${kurz.tage.length} Tage: Wetter, Temperatur & PV-Ertrag je Tag`,
@@ -242,13 +265,9 @@ export default function CockpitAussichtV4({ anlageId }: { anlageId: number | und
     }
     // 12 Monate
     if (!lang) return []
+    const kpiLang = kennzahlenBlock(langKpis(lang), `${lang.jahresprognose_kwh.toLocaleString('de-DE')} kWh Jahresprognose`)
     const list: Block[] = [
-      {
-        id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-        summary: `${lang.jahresprognose_kwh.toLocaleString('de-DE')} kWh Jahresprognose`,
-        defaultOpen: true,
-        render: () => <KpiStrip kpis={langKpis(lang)} />,
-      },
+      ...(kpiLang ? [kpiLang] : []),
       {
         id: 'verlauf', title: 'Monats-Prognose', ...BLOCK_IDENTITAET.verlauf,
         summary: 'PVGIS vs. Trend-korrigiert + Konfidenzband',
@@ -291,7 +310,7 @@ export default function CockpitAussichtV4({ anlageId }: { anlageId: number | und
     }
     if (finanzTeaser) list.push(finanzTeaser)
     return list
-  }, [istKurz, kurz, lang, trend, wp, finanz, anlageId, pDatum, pDaten, pError])
+  }, [istKurz, kurz, lang, trend, wp, finanz, anlageId, pDatum, pDaten, pError, park])
 
   if (!anlageId) {
     return (
@@ -359,6 +378,10 @@ export default function CockpitAussichtV4({ anlageId }: { anlageId: number | und
       ) : (
         <BlockShell key={horizont} persistKey={`v4-cockpit-aussicht-${horizont}`} bloecke={bloecke} sortierbar />
       )}
+
+      {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert, bis etwas
+          geparkt ist. */}
+      <ParkFuss />
     </div>
   )
 }

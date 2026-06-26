@@ -73,10 +73,13 @@ export function ScrollSchatten({
   return (
     <div className="relative">
       <div ref={ref} className={`overflow-auto scrollbar-none ${className}`}>{children}</div>
-      {vert && <div className={`${fade} inset-x-0 top-0 h-5 bg-gradient-to-b ${k.top ? 'opacity-100' : 'opacity-0'}`} />}
-      {vert && <div className={`${fade} inset-x-0 bottom-0 h-5 bg-gradient-to-t ${k.bottom ? 'opacity-100' : 'opacity-0'}`} />}
-      {horiz && <div className={`${fade} inset-y-0 left-0 w-8 bg-gradient-to-r ${k.left ? 'opacity-100' : 'opacity-0'}`} />}
-      {horiz && <div className={`${fade} inset-y-0 right-0 w-8 bg-gradient-to-l ${k.right ? 'opacity-100' : 'opacity-0'}`} />}
+      {/* D5-2 (detLAN): breiterer, weicher Fade → erkennbarer als Scroll-Affordanz,
+          aber durch die Flächenfarben-Maske nicht aufdringlich (Gernot: „erkennbarer,
+          nicht auffälliger"). Etwas größere Fläche (h-7/w-12) liest sich klarer. */}
+      {vert && <div className={`${fade} inset-x-0 top-0 h-7 bg-gradient-to-b ${k.top ? 'opacity-100' : 'opacity-0'}`} />}
+      {vert && <div className={`${fade} inset-x-0 bottom-0 h-7 bg-gradient-to-t ${k.bottom ? 'opacity-100' : 'opacity-0'}`} />}
+      {horiz && <div className={`${fade} inset-y-0 left-0 w-12 bg-gradient-to-r ${k.left ? 'opacity-100' : 'opacity-0'}`} />}
+      {horiz && <div className={`${fade} inset-y-0 right-0 w-12 bg-gradient-to-l ${k.right ? 'opacity-100' : 'opacity-0'}`} />}
     </div>
   )
 }

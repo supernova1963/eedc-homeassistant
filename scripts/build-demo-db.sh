@@ -64,6 +64,24 @@ echo "==> [4/6] Sommer-Reseed Apr–Jun 2026 (plausible PV/Einspeisung/Temp + PR
 # und füllt die TZ-Aggregate (PR/Spitzen/Temp), die der Tag-Reseed nicht erzeugt.
 EEDC_RESEED_DB="$OUT" python3 "$SCRIPT_DIR/seed-v4-sommer-2026.py"
 
+echo "==> [4b] Monats-Aggregate 2026 (Apr–Jun) additiv aus 2025-H1"
+# R5-1/2/3 (Rainer simon42): monatsdaten/IMD enden im Master 2025-12, während die
+# TEP/TZ-Tagesdaten via +175-Shift bis 2026-06-23 reichen → Cockpit/Monat sprang auf
+# „Dez 2025", Cockpit/Jahr kannte 2026 gar nicht (Monat/Jahr wählen „neuester mit
+# Daten"). Wir spiegeln genau die DREI Monate MIT 2026-Tagesdaten (Apr/Mai/Jun) als
+# Monats-Aggregate aus 2025-H1 (reale, plausible Werte; Juni ≈ Sommer-Seed-Einspeisung)
+# → Monat-Default = Jun 2026, Jahr kennt 2026 als Teiljahr. Additiv (Master unberührt),
+# nur Monate mit Tagesdaten (keine leeren Aggregat-Geister). pv_erzeugung_kwh ist
+# bewusst Legacy/NULL (PV kommt aus IMD der PV-Module).
+sqlite3 "$OUT" "
+  INSERT INTO monatsdaten (anlage_id,jahr,monat,einspeisung_kwh,netzbezug_kwh,pv_erzeugung_kwh,direktverbrauch_kwh,eigenverbrauch_kwh,gesamtverbrauch_kwh,batterie_ladung_kwh,batterie_entladung_kwh,batterie_ladung_netz_kwh,batterie_ladepreis_cent,netzbezug_durchschnittspreis_cent,kraftstoffpreis_euro,gaspreis_cent_kwh,globalstrahlung_kwh_m2,sonnenstunden,durchschnittstemperatur,ueberschuss_kwh,defizit_kwh,batterie_vollzyklen,performance_ratio,peak_netzbezug_kw,sonderkosten_euro,sonderkosten_beschreibung,datenquelle,notizen,source_provenance,source_hash,created_at,updated_at)
+  SELECT anlage_id,2026,monat,einspeisung_kwh,netzbezug_kwh,pv_erzeugung_kwh,direktverbrauch_kwh,eigenverbrauch_kwh,gesamtverbrauch_kwh,batterie_ladung_kwh,batterie_entladung_kwh,batterie_ladung_netz_kwh,batterie_ladepreis_cent,netzbezug_durchschnittspreis_cent,kraftstoffpreis_euro,gaspreis_cent_kwh,globalstrahlung_kwh_m2,sonnenstunden,durchschnittstemperatur,ueberschuss_kwh,defizit_kwh,batterie_vollzyklen,performance_ratio,peak_netzbezug_kw,sonderkosten_euro,sonderkosten_beschreibung,datenquelle,notizen,source_provenance,source_hash,created_at,updated_at
+  FROM monatsdaten WHERE jahr=2025 AND monat IN (4,5,6);
+  INSERT INTO investition_monatsdaten (investition_id,jahr,monat,verbrauch_daten,einsparung_monat_euro,co2_einsparung_kg,source_provenance,source_hash,created_at,updated_at)
+  SELECT investition_id,2026,monat,verbrauch_daten,einsparung_monat_euro,co2_einsparung_kg,source_provenance,source_hash,created_at,updated_at
+  FROM investition_monatsdaten WHERE jahr=2025 AND monat IN (4,5,6);
+"
+
 if [ -n "$EXTRA_ANLAGE_DB" ]; then
   echo "==> [5/6] Leere Test-Anlage Ferienhaus Sued (Sammel-Screen) aus $EXTRA_ANLAGE_DB uebernehmen"
   sqlite3 "$OUT" "ATTACH '$EXTRA_ANLAGE_DB' AS src;

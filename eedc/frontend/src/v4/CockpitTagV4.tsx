@@ -85,7 +85,11 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
   // B1: Scroll-Position beim Tageswechsel halten (siehe CockpitMonatV4).
   const rootRef = useRef<HTMLDivElement>(null)
   const merkeScroll = useScrollErhalt(rootRef, loading)
-  const waehle = useCallback((d: string) => { merkeScroll(); setDatum(d) }, [merkeScroll])
+  const initialisiert = useRef(false)  // R5-1: Default einmalig auf „neuester Tag mit Daten"
+  const waehle = useCallback((d: string) => {
+    initialisiert.current = true  // ab erster User-Wahl nicht mehr automatisch umspringen
+    merkeScroll(); setDatum(d)
+  }, [merkeScroll])
 
   // Rail-/Stepper-Liste = verfügbare Tage (letzte 90 Tage), einmal je Anlage —
   // wie Monat seine verfügbaren Monate lädt (selektion-unabhängig).
@@ -99,6 +103,15 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
         const entries: TagRailEintrag[] = tw.map((r) => ({ datum: r.datum, pv_kwh: r.erzeugung ?? 0, heute: r.datum === heute }))
         if (!entries.some((e) => e.datum === heute)) entries.push({ datum: heute, pv_kwh: 0, heute: true })
         setRailEntries(entries)
+        // R5-1 (Rainer): Default = neuester Tag MIT Daten (einheitlich mit Cockpit/
+        // Monat+Jahr), NICHT fix „gestern" — sonst landet man auf einem leeren
+        // Kalendertag, wenn die jüngsten Tagesdaten älter sind (Demo bis 23.06.;
+        // bzw. verzögerte HA-Aggregation). Nur beim Erst-Load, nie über eine
+        // bereits getroffene User-Wahl hinweg.
+        if (!initialisiert.current) {
+          const neuesterMitDaten = tw.reduce<string | null>((m, r) => (m && m >= r.datum ? m : r.datum), null)
+          if (neuesterMitDaten) { initialisiert.current = true; setDatum(neuesterMitDaten) }
+        }
       })
       .catch(() => { if (!ab) setRailEntries([]) })
     return () => { ab = true }
