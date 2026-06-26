@@ -200,6 +200,16 @@ export const PROGNOSE_QUELLEN_COLORS = {
   solcast: '#3b82f6',
 }
 
+/** Tailwind-Text-Klassen-Zwillinge zu {@link PROGNOSE_QUELLEN_COLORS} (R3): die
+ *  Quellen-Rolle als Text-Farbe in Tabellen/Headern/Legenden-Text — eine Quelle =
+ *  überall dieselbe Farbklasse, statt inline `text-yellow/orange/blue/green-500`. */
+export const PROGNOSE_QUELLEN_TEXT = {
+  ist: 'text-green-500',
+  openmeteo: 'text-yellow-500',
+  eedc: 'text-orange-500',
+  solcast: 'text-blue-500',
+}
+
 // ─── Mehrserien-Paletten ─────────────────────────────────────────────────────
 
 /** Jahres-/Serienvergleich (Balken pro Jahr) — Reihenfolge fix, max. 5 Serien. */
