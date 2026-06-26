@@ -25,6 +25,8 @@ export interface KpiStripItem {
   formel?: string
   berechnung?: string
   ergebnis?: string
+  /** Provenance-/Sicht-Zeile im Formel-Tooltip (z. B. „Gesamt-Anlage · Prognose"). */
+  sicht?: string
   /** Voraussetzungs-Hinweis bei fehlendem Wert („—") — Tooltip, was zugeordnet
    *  werden muss (Gernot 2026-06-24). */
   hinweis?: string
@@ -54,6 +56,7 @@ export function KpiStrip({ kpis }: { kpis: KpiStripItem[] }) {
             formel={k.formel}
             berechnung={k.berechnung}
             ergebnis={k.ergebnis}
+            sicht={k.sicht}
             hinweis={k.hinweis}
           />
         )
