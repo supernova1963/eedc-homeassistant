@@ -57,6 +57,15 @@ export interface WerteTabelleProps {
   /** Optionaler Cross-Link „alle Werte / Export →" (z. B. im Cockpit-Embed). */
   alleWerteHref?: string
   csvDateiname?: string
+  /** localStorage-Namensraum für Spaltenwahl/-reihenfolge. Default-Scope teilen sich
+   *  alle Embeds (Cockpit/Komponenten); eine eigene Sicht (z. B. Werte-Werkbank)
+   *  setzt einen eigenen Scope → unabhängige Spaltenwahl ohne Embed-Nebenwirkung. */
+  scope?: string
+  /** Initial sichtbare Spalten (Registry-keys) statt Registry-`defaultVisible` —
+   *  greift nur, solange im Scope nichts gespeichert ist. */
+  defaultSpalten?: string[]
+  /** Vergleich (cur/cmp/Δ) initial eingeschaltet, falls Vergleichszeilen vorliegen. */
+  vergleichDefaultAn?: boolean
 }
 
 export function WerteTabelle({
@@ -67,6 +76,9 @@ export function WerteTabelle({
   vergleichLabel = null,
   alleWerteHref,
   csvDateiname = 'werte_tabelle.csv',
+  scope = 'werte-werkbank',
+  defaultSpalten,
+  vergleichDefaultAn = false,
 }: WerteTabelleProps) {
   // Verfügbare Metriken + Picker-Gruppen je Granularität.
   const verfuegbar = useMemo(() => metrikenFuer(granularitaet), [granularitaet])
@@ -77,8 +89,15 @@ export function WerteTabelle({
   )
   const einheitLabel = granularitaet === 'tag' ? 'Tage' : 'Monate'
   // LS-Scope je Granularität, damit Monats-/Tages-Spaltenwahl unabhängig bleibt.
-  const lsCols = `eedc-werte-werkbank:cols:${granularitaet}`
-  const lsOrder = `eedc-werte-werkbank:order:${granularitaet}`
+  const lsCols = `eedc-${scope}:cols:${granularitaet}`
+  const lsOrder = `eedc-${scope}:order:${granularitaet}`
+  // Default-Sichtbarkeit: explizite Werkbank-Vorgabe (defaultSpalten) ∨ Registry.
+  const defaultVisibleKeys = useMemo(() => {
+    const base = defaultSpalten && defaultSpalten.length
+      ? defaultSpalten
+      : verfuegbar.filter((m) => m.defaultVisible).map((m) => m.key)
+    return base.filter((k) => verfuegbarKeys.has(k))
+  }, [defaultSpalten, verfuegbar, verfuegbarKeys])
 
   // ── Sichtbarkeit + Reihenfolge (persistiert je Granularität) ─
   const [visible, setVisible] = useState<Set<string>>(() => {
@@ -89,7 +108,7 @@ export function WerteTabelle({
         if (keys.length > 0) return new Set(keys)
       }
     } catch { /* ignore */ }
-    return new Set(verfuegbar.filter((m) => m.defaultVisible).map((m) => m.key))
+    return new Set(defaultVisibleKeys)
   })
   const [order, setOrder] = useState<string[]>(() => {
     try {
@@ -102,7 +121,7 @@ export function WerteTabelle({
     return verfuegbar.map((m) => m.key)
   })
   const [pickerOffen, setPickerOffen] = useState(false)
-  const [vergleichAn, setVergleichAn] = useState(false)
+  const [vergleichAn, setVergleichAn] = useState(vergleichDefaultAn)
   // Spalten-Sortierung (IST-Parität TabelleTab): null = chronologisch aufsteigend
   // (Default, wie die Cockpit-Embeds) · '__zeit' = Zeitraum-Spalte · sonst Metrik-key.
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -124,7 +143,7 @@ export function WerteTabelle({
           if (keys.length > 0) return new Set(keys)
         }
       } catch { /* ignore */ }
-      return new Set(verfuegbar.filter((m) => m.defaultVisible).map((m) => m.key))
+      return new Set(defaultVisibleKeys)
     })
     setOrder(() => {
       try {
