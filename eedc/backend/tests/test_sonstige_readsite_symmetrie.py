@@ -240,3 +240,7 @@ async def test_sonstiges_verbraucher_erscheint_im_cockpit(db, verbrauch_key):
     )
     assert am.sonstiges_bezug_pv_kwh == 22
     assert am.sonstiges_bezug_netz_kwh == 183
+    # Pro-Gerät-Aufschlüsselung (Sonder-Darstellung): EIN Verbraucher-Gerät mit Name.
+    g = [x for x in am.sonstiges_geraete if x.kategorie == "verbraucher"]
+    assert len(g) == 1 and g[0].bezeichnung == "Heizstab Warmwasser"
+    assert g[0].verbrauch_kwh == 205 and g[0].bezug_pv_kwh == 22 and g[0].bezug_netz_kwh == 183

@@ -98,6 +98,22 @@ class InvestitionFinancialDetail(BaseModel):
     sonstige_ausgaben_euro: float = 0.0
 
 
+class SonstigesGeraet(BaseModel):
+    """Ein einzelnes „Sonstiges"-Gerät mit seinen Energiewerten — für die Sonder-
+    Darstellung im Cockpit: zwei Blöcke (Erzeuger/Verbraucher), darin pro Gerät
+    eine eigene Werte-Zeile mit Bezeichnung."""
+    bezeichnung: str
+    kategorie: str  # "erzeuger" | "verbraucher"
+    # Erzeuger
+    erzeugung_kwh: Optional[float] = None
+    eigenverbrauch_kwh: Optional[float] = None
+    einspeisung_kwh: Optional[float] = None
+    # Verbraucher
+    verbrauch_kwh: Optional[float] = None
+    bezug_pv_kwh: Optional[float] = None
+    bezug_netz_kwh: Optional[float] = None
+
+
 class AktuellerMonatResponse(BaseModel):
     """Aggregierte Übersicht des aktuellen Monats."""
     anlage_id: int
@@ -185,6 +201,9 @@ class AktuellerMonatResponse(BaseModel):
     sonstiges_verbrauch_kwh: Optional[float] = None    # Verbraucher-Typ
     sonstiges_bezug_pv_kwh: Optional[float] = None
     sonstiges_bezug_netz_kwh: Optional[float] = None
+    # Pro-Gerät-Aufschlüsselung für die Sonder-Darstellung (2 Blöcke Erzeuger/
+    # Verbraucher, darin je Gerät eine eigene Werte-Zeile mit Bezeichnung).
+    sonstiges_geraete: list[SonstigesGeraet] = []
     hat_sonstiges: bool = False
 
     # Finanzen (Euro)
@@ -1405,6 +1424,7 @@ async def get_aktueller_monat(
     sonstiges_bezug_netz = None
 
     sonstiges_invs = [i for i in investitionen if i.typ == "sonstiges"]
+    sonstiges_geraete: list[SonstigesGeraet] = []
     if sonstiges_invs:
         se_total = 0.0
         sev_total = 0.0
@@ -1412,20 +1432,47 @@ async def get_aktueller_monat(
         sv_total = 0.0
         sbpv_total = 0.0
         sbnetz_total = 0.0
+        # Pro-Gerät-Akkumulator (für die Sonder-Darstellung: Werte je Gerät).
+        acc: dict[int, dict[str, float]] = {}
         for imd in get_imd_for_invs(sonstiges_invs):
             data = imd.verbrauch_daten or {}
-            se_total   += data.get("erzeugung_kwh", 0) or 0
-            sev_total  += data.get("eigenverbrauch_kwh", 0) or 0
-            sei_total  += data.get("einspeisung_kwh", 0) or 0
-            sv_total   += get_sonstiges_verbrauch_kwh(data)
-            sbpv_total += data.get("bezug_pv_kwh", 0) or 0
-            sbnetz_total += data.get("bezug_netz_kwh", 0) or 0
+            erz = data.get("erzeugung_kwh", 0) or 0
+            eig = data.get("eigenverbrauch_kwh", 0) or 0
+            ein = data.get("einspeisung_kwh", 0) or 0
+            vrb = get_sonstiges_verbrauch_kwh(data)
+            bpv = data.get("bezug_pv_kwh", 0) or 0
+            bnz = data.get("bezug_netz_kwh", 0) or 0
+            se_total += erz; sev_total += eig; sei_total += ein
+            sv_total += vrb; sbpv_total += bpv; sbnetz_total += bnz
+            g = acc.setdefault(imd.investition_id, {"erz": 0.0, "eig": 0.0, "ein": 0.0, "vrb": 0.0, "bpv": 0.0, "bnz": 0.0})
+            g["erz"] += erz; g["eig"] += eig; g["ein"] += ein
+            g["vrb"] += vrb; g["bpv"] += bpv; g["bnz"] += bnz
         if se_total > 0:   sonstiges_erzeugung    = round(se_total, 2)
         if sev_total > 0:  sonstiges_eigenverbrauch = round(sev_total, 2)
         if sei_total > 0:  sonstiges_einspeisung  = round(sei_total, 2)
         if sv_total > 0:   sonstiges_verbrauch    = round(sv_total, 2)
         if sbpv_total > 0: sonstiges_bezug_pv     = round(sbpv_total, 2)
         if sbnetz_total > 0: sonstiges_bezug_netz = round(sbnetz_total, 2)
+        # Pro-Gerät-Liste in Investitions-Reihenfolge; Kategorie aus parameter.
+        def _v(x: float) -> Optional[float]:
+            return round(x, 2) if x > 0 else None
+        for inv in sonstiges_invs:
+            g = acc.get(inv.id)
+            if not g:
+                continue
+            kat = (inv.parameter or {}).get("kategorie", "erzeuger")
+            if kat == "verbraucher":
+                if g["vrb"] > 0 or g["bpv"] > 0 or g["bnz"] > 0:
+                    sonstiges_geraete.append(SonstigesGeraet(
+                        bezeichnung=inv.bezeichnung, kategorie="verbraucher",
+                        verbrauch_kwh=_v(g["vrb"]), bezug_pv_kwh=_v(g["bpv"]), bezug_netz_kwh=_v(g["bnz"]),
+                    ))
+            else:
+                if g["erz"] > 0:
+                    sonstiges_geraete.append(SonstigesGeraet(
+                        bezeichnung=inv.bezeichnung, kategorie="erzeuger",
+                        erzeugung_kwh=_v(g["erz"]), eigenverbrauch_kwh=_v(g["eig"]), einspeisung_kwh=_v(g["ein"]),
+                    ))
 
     # Flexibler Tarif: Durchschnittspreis aus Monatsdaten lesen
     netzbezug_durchschnittspreis = None
@@ -1689,6 +1736,7 @@ async def get_aktueller_monat(
         sonstiges_verbrauch_kwh=sonstiges_verbrauch,
         sonstiges_bezug_pv_kwh=sonstiges_bezug_pv,
         sonstiges_bezug_netz_kwh=sonstiges_bezug_netz,
+        sonstiges_geraete=sonstiges_geraete,
         hat_sonstiges=hat_sonstiges,
         # Finanzen
         einspeise_erloes_euro=einspeise_erloes,

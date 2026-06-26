@@ -16,7 +16,7 @@
  * Quoten (Autarkie/EV-Quote/η/JAZ/Verbrauch/100km) → aus den Summen NEU berechnet
  * (nie Monats-Mittel der Quoten); Preise → Mittel der Monate; Kapazität → Max.
  */
-import type { AktuellerMonatResponse, InvestitionFinancialDetail } from '../api/aktuellerMonat'
+import type { AktuellerMonatResponse, InvestitionFinancialDetail, SonstigesGeraet } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
 /** Summe null-bewusst: nur wenn KEIN Monat einen Wert liefert ⇒ null (sonst 0+…). */
@@ -89,6 +89,30 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     const set = new Set([...(geraete[typ] ?? []), ...namen])
     geraete[typ] = [...set]
   }
+
+  // Sonstiges pro Gerät über die Monate aufsummieren (nach Kategorie + Bezeichnung).
+  const sgMap = new Map<string, Required<SonstigesGeraet>>()
+  for (const m of monate) for (const g of m.sonstiges_geraete ?? []) {
+    const key = `${g.kategorie}|${g.bezeichnung}`
+    const a = sgMap.get(key) ?? {
+      bezeichnung: g.bezeichnung, kategorie: g.kategorie,
+      erzeugung_kwh: 0, eigenverbrauch_kwh: 0, einspeisung_kwh: 0, verbrauch_kwh: 0, bezug_pv_kwh: 0, bezug_netz_kwh: 0,
+    }
+    a.erzeugung_kwh = (a.erzeugung_kwh ?? 0) + (g.erzeugung_kwh ?? 0)
+    a.eigenverbrauch_kwh = (a.eigenverbrauch_kwh ?? 0) + (g.eigenverbrauch_kwh ?? 0)
+    a.einspeisung_kwh = (a.einspeisung_kwh ?? 0) + (g.einspeisung_kwh ?? 0)
+    a.verbrauch_kwh = (a.verbrauch_kwh ?? 0) + (g.verbrauch_kwh ?? 0)
+    a.bezug_pv_kwh = (a.bezug_pv_kwh ?? 0) + (g.bezug_pv_kwh ?? 0)
+    a.bezug_netz_kwh = (a.bezug_netz_kwh ?? 0) + (g.bezug_netz_kwh ?? 0)
+    sgMap.set(key, a)
+  }
+  const nz = (v: number) => (v > 0 ? Math.round(v * 100) / 100 : null)
+  const sonstigesGeraete: SonstigesGeraet[] = [...sgMap.values()].map((g) => ({
+    bezeichnung: g.bezeichnung, kategorie: g.kategorie,
+    erzeugung_kwh: nz(g.erzeugung_kwh ?? 0), eigenverbrauch_kwh: nz(g.eigenverbrauch_kwh ?? 0),
+    einspeisung_kwh: nz(g.einspeisung_kwh ?? 0), verbrauch_kwh: nz(g.verbrauch_kwh ?? 0),
+    bezug_pv_kwh: nz(g.bezug_pv_kwh ?? 0), bezug_netz_kwh: nz(g.bezug_netz_kwh ?? 0),
+  }))
 
   // Quellen-Union (Provenance-Badges im Header).
   const feldQuellen: AktuellerMonatResponse['feld_quellen'] = {}
@@ -167,6 +191,7 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     sonstiges_verbrauch_kwh: summe(f('sonstiges_verbrauch_kwh')),
     sonstiges_bezug_pv_kwh: summe(f('sonstiges_bezug_pv_kwh')),
     sonstiges_bezug_netz_kwh: summe(f('sonstiges_bezug_netz_kwh')),
+    sonstiges_geraete: sonstigesGeraete,
     hat_sonstiges: monate.some((m) => m.hat_sonstiges),
 
     // Finanzen (Σ)

@@ -28,7 +28,7 @@ import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
 import type { Block } from '../components/blocks'
 import type { TagWerte, StundenWert, SerieInfo, TagDetail } from '../api/energie_profil'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import type { AktuellerMonatResponse, SonstigesGeraet } from '../api/aktuellerMonat'
 
 /** Tages-Daten → `AktuellerMonatResponse`-Shape (nur die von den Bauern gelesenen
  *  Felder; Rest bleibt undefined/null → „—"). `tagDetail` (optional) liefert die
@@ -41,14 +41,21 @@ export function baueTagAlsMonat(
   const wpStartsTag = stunden.reduce((a, s) => a + (s.wp_starts_anzahl ?? 0), 0)
   const wpBetriebsstundenTag = stunden.reduce((a, s) => a + (s.wp_betriebsstunden ?? 0), 0)
   let bkw = 0, emob = 0, sonstErz = 0, sonstVerb = 0
-  const sonstNamen: string[] = []
+  // Pro-Gerät-Liste (Tag): je Serie ein Gerät — Tag kennt nur Erzeugung/Verbrauch
+  // (kein Eigenverbrauch-/Bezug-Split auf Stundenebene).
+  const sonstigesGeraete: SonstigesGeraet[] = []
   for (const s of serien) {
     const v = tagessumme(s.key)
     if (s.typ === 'balkonkraftwerk') bkw += Math.max(0, v)
     else if (s.kategorie === 'wallbox' || s.kategorie === 'eauto') emob += Math.abs(v)
     else if (s.kategorie === 'sonstige') {
-      if (s.seite === 'quelle') { sonstErz += Math.max(0, v); sonstNamen.push(s.label) }
-      else if (s.seite === 'senke') { sonstVerb += Math.abs(v); sonstNamen.push(s.label) }
+      if (s.seite === 'quelle') {
+        const e = Math.max(0, v); sonstErz += e
+        if (e > 0) sonstigesGeraete.push({ bezeichnung: s.label, kategorie: 'erzeuger', erzeugung_kwh: e })
+      } else if (s.seite === 'senke') {
+        const c = Math.abs(v); sonstVerb += c
+        if (c > 0) sonstigesGeraete.push({ bezeichnung: s.label, kategorie: 'verbraucher', verbrauch_kwh: c })
+      }
     }
   }
   const pos = (v: number) => (v > 0 ? v : null)
@@ -82,7 +89,8 @@ export function baueTagAlsMonat(
     bkw_erzeugung_kwh: pos(bkw),
     sonstiges_erzeugung_kwh: pos(sonstErz),
     sonstiges_verbrauch_kwh: pos(sonstVerb),
-    investitionen_financials: sonstNamen.map((n) => ({ typ: 'sonstiges', bezeichnung: n })),
+    sonstiges_geraete: sonstigesGeraete,
+    investitionen_financials: sonstigesGeraete.map((g) => ({ typ: 'sonstiges', bezeichnung: g.bezeichnung })),
     // PV Tages-SOLL (OM × Lernfaktor) — für SOLL-Annotation am PV-KPI.
     soll_pv_kwh: tagDetail?.soll_pv_kwh ?? null,
     // Finanzen (TagWerte) + Tagestarif (tagDetail) für Wirkungsverluste €/Tarif-Zeile.

@@ -82,6 +82,20 @@ sqlite3 "$OUT" "
   FROM investition_monatsdaten WHERE jahr=2025 AND monat IN (4,5,6);
 "
 
+echo "==> [4c] Heizstab-Stunden (Sonstiges-Verbraucher) auf BHKW-Tagen (Tag-Demo-Parität)"
+# Der Heizstab (sonstige_12) fehlte in der Stunden-Demo (TEP komponenten) → Cockpit/
+# Tag konnte den Sonstiges-Verbraucher nie zeigen, obwohl der Monat ihn hat. Wir
+# setzen ein plausibles Morgen-/Abend-Profil (Senke = NEGATIV) auf genau den Tagen,
+# die schon einen Mini-BHKW (sonstige_10) tragen → BEIDE Sonstiges-Blöcke auf
+# denselben Tagen demonstrierbar (z. B. 2026-06-23). Klassifikation als Verbraucher
+# erfolgt automatisch (inv.typ=sonstiges + parameter.kategorie=verbraucher → Senke).
+sqlite3 "$OUT" "
+  UPDATE tages_energie_profil
+     SET komponenten = json_set(komponenten, '\$.sonstige_12', -0.6)
+   WHERE datum IN (SELECT DISTINCT datum FROM tages_energie_profil WHERE komponenten LIKE '%sonstige_10%')
+     AND stunde IN (6, 7, 19, 20, 21);
+"
+
 if [ -n "$EXTRA_ANLAGE_DB" ]; then
   echo "==> [5/6] Leere Test-Anlage Ferienhaus Sued (Sammel-Screen) aus $EXTRA_ANLAGE_DB uebernehmen"
   sqlite3 "$OUT" "ATTACH '$EXTRA_ANLAGE_DB' AS src;

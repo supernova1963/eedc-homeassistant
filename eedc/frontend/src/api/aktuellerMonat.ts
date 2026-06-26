@@ -27,6 +27,17 @@ export interface InvestitionFinancialDetail {
   sonstige_ausgaben_euro: number
 }
 
+export interface SonstigesGeraet {
+  bezeichnung: string
+  kategorie: 'erzeuger' | 'verbraucher' | string
+  erzeugung_kwh?: number | null
+  eigenverbrauch_kwh?: number | null
+  einspeisung_kwh?: number | null
+  verbrauch_kwh?: number | null
+  bezug_pv_kwh?: number | null
+  bezug_netz_kwh?: number | null
+}
+
 export interface AktuellerMonatResponse {
   anlage_id: number
   anlage_name: string
@@ -104,6 +115,8 @@ export interface AktuellerMonatResponse {
   sonstiges_verbrauch_kwh: number | null
   sonstiges_bezug_pv_kwh: number | null
   sonstiges_bezug_netz_kwh: number | null
+  // Pro-Gerät-Aufschlüsselung (2 Blöcke Erzeuger/Verbraucher, je Gerät eine Zeile)
+  sonstiges_geraete?: SonstigesGeraet[]
   hat_sonstiges: boolean
 
   // Finanzen (Euro)

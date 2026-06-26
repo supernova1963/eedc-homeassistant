@@ -15,8 +15,10 @@
  *  - KPI/Bilanz aus dem Tages-Werte-SoT `getTageWerte` (`TagWerte`, wie Monat-SoT,
  *    NICHT aus Stunden summiert). 90-Tage-Fenster liefert Tag + Vortag + Ø-Wochentag.
  *  - Stundenverlauf/Stundenwerte + Komponenten-Energie/WP-Counter aus `getStunden`.
- *  - Rail-/Stepper-Liste = verfügbare Tage (letzte 90 Tage), einmal geladen (wie
- *    Monat seine verfügbaren Monate).
+ *  - Rail-/Stepper-Liste = letzte 90 Tage (Schnellauswahl); ALLE verfügbaren Tage
+ *    erreicht man über die Datumsauswahl im Stepper (Date-Input ab dem ältesten Tag)
+ *    + „Zurücksetzen" auf den neuesten Tag. Das 90-Tage-`FENSTER` dient zugleich dem
+ *    Ø-gleicher-Wochentag-Rückblick ab dem gewählten Tag.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card } from '../components/ui'
@@ -46,7 +48,11 @@ function vorTagen(iso: string, tage: number): string {
 function wochentagOf(iso: string): number { return new Date(iso + 'T12:00:00').getDay() }
 const WOCHENTAG_LANG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
 
-const FENSTER_TAGE = 90  // Vortag + Ø-gleicher-Wochentag + Rail-/Stepper-Liste
+// (a) Gernot 2026-06-26: Picker/Liste (Rail) = letzte 90 Tage; ALLE verfügbaren
+// Tage erreicht man über die Datumsauswahl (Date-Input, ältester Tag aus
+// `verfuegbare-monate`) + „Zurücksetzen". Dasselbe 90-Fenster dient dem Ø-gleicher-
+// Wochentag-Rückblick ab dem gewählten Tag (das `tage-werte`-Backend deckelt 366 T).
+const FENSTER_TAGE = 90
 
 /** Ø über die gleichen Wochentage im Fenster — client-seitiges Mittel vorab-
  *  aggregierter Tageswerte (wie Monat `glMonStats`). */
@@ -81,6 +87,7 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
   const [loading, setLoading] = useState(true)
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [aeltesterTag, setAeltesterTag] = useState<string>()  // (a) Date-Input-Untergrenze = ältester verfügbarer Tag
 
   // B1: Scroll-Position beim Tageswechsel halten (siehe CockpitMonatV4).
   const rootRef = useRef<HTMLDivElement>(null)
@@ -114,6 +121,21 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
         }
       })
       .catch(() => { if (!ab) setRailEntries([]) })
+    return () => { ab = true }
+  }, [anlageId])
+
+  // (a) Ältester verfügbarer Tag für die Datumsauswahl-Untergrenze — aus den
+  // verfügbaren Monaten (uncapped, leichtgewichtig); erster Tag des frühesten Monats.
+  useEffect(() => {
+    if (!anlageId) return
+    let ab = false
+    energieProfilApi.getVerfuegbareMonate(anlageId)
+      .then((ms) => {
+        if (ab || ms.length === 0) return
+        const frueh = [...ms].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))[0]
+        setAeltesterTag(`${frueh.jahr}-${String(frueh.monat).padStart(2, '0')}-01`)
+      })
+      .catch(() => {})
     return () => { ab = true }
   }, [anlageId])
 
@@ -203,12 +225,12 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
     <div ref={rootRef} className="p-3 sm:p-6 max-w-[1920px] mx-auto">
       {/* Mobil: schwebender Player-Stepper — direktes Kind der voll-hohen Wurzel
           (NICHT in der kurzen Rail-Spalte), damit `sticky` beim Scrollen hält. */}
-      <TagStepper entries={railEntries} datum={datum} onSelect={waehle} />
+      <TagStepper entries={railEntries} datum={datum} onSelect={waehle} aeltesterTag={aeltesterTag} />
 
       <div className="lg:flex lg:gap-6">
         {/* Desktop: Rail-Sidebar (links) */}
         <div className="hidden lg:block lg:w-52 lg:shrink-0">
-          <TagesRail entries={railEntries} datum={datum} onSelect={waehle} />
+          <TagesRail entries={railEntries} datum={datum} onSelect={waehle} aeltesterTag={aeltesterTag} />
         </div>
 
         <div className="flex-1 min-w-0 space-y-4">

@@ -22,7 +22,7 @@ import {
   SPEICHER_KPI, WP_KPI, EAUTO_KPI, BKW_KPI,
   SONSTIGES_ERZEUGER_KPI, SONSTIGES_VERBRAUCHER_KPI,
 } from '../lib'
-import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import type { AktuellerMonatResponse, SonstigesGeraet } from '../api/aktuellerMonat'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 const hat = (v: number | null | undefined) => v != null
@@ -44,6 +44,24 @@ function Sektion({ kpis, extra, geraete }: { kpis: KpiStripItem[]; extra?: React
       <KpiStrip kpis={kpis} />
       {extra}
       {geraete && <GeraeteHinweis namen={geraete} />}
+    </div>
+  )
+}
+
+/** Sonder-Darstellung „Sonstiges": je Gerät eine beschriftete Werte-Gruppe
+ *  (Gerätebezeichnung + KpiStrip), damit innerhalb des Erzeuger-/Verbraucher-
+ *  Blocks die Werte PRO Gerät ablesbar sind (Gernot 2026-06-26). */
+function GeraeteSektionen({ geraete, kpisVon }: {
+  geraete: SonstigesGeraet[]; kpisVon: (g: SonstigesGeraet) => KpiStripItem[]
+}) {
+  return (
+    <div className="space-y-4">
+      {geraete.map((g) => (
+        <div key={g.bezeichnung} className="space-y-2">
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{g.bezeichnung}</div>
+          <KpiStrip kpis={kpisVon(g)} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -276,41 +294,46 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, periode: 'mona
   // Sonstiges-Gerät(en) (`investitionen_financials`, nur für die Namen), mit der
   // passenden Art-Variante. Energie bleibt das Wirkrichtungs-Aggregat (homogen
   // innerhalb der Art). Voller Per-Gerät-Deep-Dive → später Komponenten-Achse.
-  // Mehrere Geräte → Namen kommasepariert (bewusste Vereinfachung im Teaser).
-  const sonstigesNamen = (d.investitionen_financials ?? [])
-    .filter((f) => f.typ === 'sonstiges')
-    .map((f) => f.bezeichnung)
-    .filter(Boolean)
-  const sonstigesTitel = sonstigesNamen.length ? sonstigesNamen.join(', ') : 'Sonstiges'
+  // Sonder-Darstellung „Sonstiges" (Gernot 2026-06-26): ZWEI feste Blöcke
+  // „Sonstiges – Erzeuger" / „Sonstiges – Verbraucher"; INNERHALB je Gerät eine
+  // eigene Werte-Zeile mit Bezeichnung (echte Pro-Gerät-Werte, nicht die Summe).
+  const sonstigesGeraete = d.sonstiges_geraete ?? []
+  const erzeugerGeraete = sonstigesGeraete.filter((g) => g.kategorie === 'erzeuger')
+  const verbraucherGeraete = sonstigesGeraete.filter((g) => g.kategorie === 'verbraucher')
 
-  if (hat(d.sonstiges_erzeugung_kwh)) {
-    const kpis: KpiStripItem[] = [
-      { ...SONSTIGES_ERZEUGER_KPI.erzeugung, value: fmt(d.sonstiges_erzeugung_kwh), unit: 'kWh' },
-    ]
-    if (hat(d.sonstiges_eigenverbrauch_kwh)) kpis.push({ ...SONSTIGES_ERZEUGER_KPI.eigenverbrauch, value: fmt(d.sonstiges_eigenverbrauch_kwh), unit: 'kWh' })
-    if (hat(d.sonstiges_einspeisung_kwh)) kpis.push({ title: 'Einspeisung', value: fmt(d.sonstiges_einspeisung_kwh), unit: 'kWh', color: 'green', icon: TrendingUp })
+  const erzeugerKpis = (g: SonstigesGeraet): KpiStripItem[] => {
+    const ks: KpiStripItem[] = [{ ...SONSTIGES_ERZEUGER_KPI.erzeugung, value: fmt(g.erzeugung_kwh), unit: 'kWh' }]
+    if (hat(g.eigenverbrauch_kwh)) ks.push({ ...SONSTIGES_ERZEUGER_KPI.eigenverbrauch, value: fmt(g.eigenverbrauch_kwh), unit: 'kWh' })
+    if (hat(g.einspeisung_kwh)) ks.push({ title: 'Einspeisung', value: fmt(g.einspeisung_kwh), unit: 'kWh', color: 'green', icon: TrendingUp })
+    return ks
+  }
+  const verbraucherKpis = (g: SonstigesGeraet): KpiStripItem[] => {
+    const bezugGesamt = (g.bezug_pv_kwh ?? 0) + (g.bezug_netz_kwh ?? 0)
+    const pvAnteil = bezugGesamt > 0 ? ((g.bezug_pv_kwh ?? 0) / bezugGesamt) * 100 : null
+    const ks: KpiStripItem[] = [{ ...SONSTIGES_VERBRAUCHER_KPI.verbrauch, value: fmt(g.verbrauch_kwh), unit: 'kWh' }]
+    if (pvAnteil != null) ks.push({
+      ...SONSTIGES_VERBRAUCHER_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
+      subtitle: `${fmt(g.bezug_pv_kwh)} kWh PV · ${fmt(g.bezug_netz_kwh)} kWh Netz`,
+    })
+    return ks
+  }
+
+  if (erzeugerGeraete.length > 0) {
+    const summe = erzeugerGeraete.reduce((a, g) => a + (g.erzeugung_kwh ?? 0), 0)
     bloecke.push({
-      // Eigene Identitätsfarbe (Lime) — sonstiger Erzeuger/Mini-BHKW ist NICHT PV (Regel A).
-      id: 'k-sonstiges-erzeuger', title: sonstigesTitel, ...ident('sonstiges'), farbe: SONSTIGES_ERZEUGER_FARBE.text, defaultOpen: false,
-      summary: `${fmt(d.sonstiges_erzeugung_kwh)} kWh erzeugt`,
-      render: () => <Sektion kpis={kpis} />,
+      // Eigene Identitätsfarbe (Lime) — sonstiger Erzeuger ist NICHT PV (Regel A).
+      id: 'k-sonstiges-erzeuger', title: 'Sonstiges – Erzeuger', ...ident('sonstiges'), farbe: SONSTIGES_ERZEUGER_FARBE.text, defaultOpen: false,
+      summary: `${fmt(summe)} kWh erzeugt`,
+      render: () => <GeraeteSektionen geraete={erzeugerGeraete} kpisVon={erzeugerKpis} />,
     })
   }
 
-  if (hat(d.sonstiges_verbrauch_kwh)) {
-    const bezugGesamt = (d.sonstiges_bezug_pv_kwh ?? 0) + (d.sonstiges_bezug_netz_kwh ?? 0)
-    const pvAnteil = bezugGesamt > 0 ? ((d.sonstiges_bezug_pv_kwh ?? 0) / bezugGesamt) * 100 : null
-    const kpis: KpiStripItem[] = [
-      { ...SONSTIGES_VERBRAUCHER_KPI.verbrauch, value: fmt(d.sonstiges_verbrauch_kwh), unit: 'kWh' },
-    ]
-    if (pvAnteil != null) kpis.push({
-      ...SONSTIGES_VERBRAUCHER_KPI.pvAnteil, value: fmtCalc(pvAnteil, 0, '—'), unit: '%',
-      subtitle: `${fmt(d.sonstiges_bezug_pv_kwh)} kWh PV · ${fmt(d.sonstiges_bezug_netz_kwh)} kWh Netz`,
-    })
+  if (verbraucherGeraete.length > 0) {
+    const summe = verbraucherGeraete.reduce((a, g) => a + (g.verbrauch_kwh ?? 0), 0)
     bloecke.push({
-      id: 'k-sonstiges-verbraucher', title: sonstigesTitel, ...ident('sonstiges'), defaultOpen: false,
-      summary: `${fmt(d.sonstiges_verbrauch_kwh)} kWh verbraucht`,
-      render: () => <Sektion kpis={kpis} />,
+      id: 'k-sonstiges-verbraucher', title: 'Sonstiges – Verbraucher', ...ident('sonstiges'), defaultOpen: false,
+      summary: `${fmt(summe)} kWh verbraucht`,
+      render: () => <GeraeteSektionen geraete={verbraucherGeraete} kpisVon={verbraucherKpis} />,
     })
   }
 

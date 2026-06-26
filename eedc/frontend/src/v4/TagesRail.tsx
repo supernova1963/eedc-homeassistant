@@ -19,6 +19,9 @@ interface TagesRailProps {
   entries: TagRailEintrag[]
   datum: string
   onSelect: (datum: string) => void
+  /** Ältester verfügbarer Tag (jenseits der 90-Tage-Liste) — Untergrenze der
+   *  Datumsauswahl, damit ALLE vorhandenen Tage direkt anspringbar sind. */
+  aeltesterTag?: string
 }
 
 const WT_KURZ = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -27,7 +30,7 @@ const wochentag = (d: string) => WT_KURZ[new Date(d + 'T12:00:00').getDay()]
 const tagNr = (d: string) => new Date(d + 'T12:00:00').getDate()
 const monatLabel = (key: string) => `${MONAT_KURZ[Number(key.slice(5, 7))]} ${key.slice(0, 4)}`
 
-export function TagesRail({ entries, datum, onSelect }: TagesRailProps) {
+export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailProps) {
   const byMonat = useMemo(() => {
     const map = new Map<string, TagRailEintrag[]>()
     const sorted = [...entries].sort((a, b) => (a.datum < b.datum ? 1 : -1)) // neueste zuerst
@@ -47,7 +50,10 @@ export function TagesRail({ entries, datum, onSelect }: TagesRailProps) {
 
   const monate = useMemo(() => [...byMonat.keys()].sort((a, b) => (a < b ? 1 : -1)), [byMonat])
   const heuteISO = new Date().toISOString().slice(0, 10)
-  const aeltester = useMemo(() => entries.reduce((m, e) => (m && m < e.datum ? m : e.datum), entries[0]?.datum ?? ''), [entries])
+  const aeltesterListe = useMemo(() => entries.reduce((m, e) => (m && m < e.datum ? m : e.datum), entries[0]?.datum ?? ''), [entries])
+  // Untergrenze der Datumsauswahl = ältester verfügbarer Tag (kann vor der 90-Tage-
+  // Liste liegen → alle Tage erreichbar), Fallback = ältester Listen-Tag.
+  const aeltester = aeltesterTag && (!aeltesterListe || aeltesterTag < aeltesterListe) ? aeltesterTag : aeltesterListe
   const titel = (e: TagRailEintrag) =>
     e.heute ? `${wochentag(e.datum)} ${tagNr(e.datum)}. — heute` : `${wochentag(e.datum)} ${tagNr(e.datum)}.: ${Math.round(e.pv_kwh)} kWh`
 
