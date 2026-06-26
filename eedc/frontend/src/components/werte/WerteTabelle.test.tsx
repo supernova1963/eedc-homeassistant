@@ -11,11 +11,15 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
     erzeugung: 100 * monat, eigenverbrauch: 60, einspeisung: 40, netzbezug: 30,
     gesamtverbrauch: 90, direktverbrauch: 50,
     autarkie: 70, evQuote: 60, spezErtrag: 80,
+    globalstrahlung: null, sonnenstunden: null,
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
     wp_waerme: null, wp_strom: null, wp_cop: null,
+    wp_strom_heizen: null, wp_strom_warmwasser: null,
+    wp_waerme_heizen: null, wp_waerme_warmwasser: null,
     eauto_km: null, eauto_ladung: null, eauto_pv_anteil: null,
+    wallbox_ladung: null, wallbox_pv_ladung: null, wallbox_pv_anteil: null,
     einspeise_erloes: 5, ev_ersparnis: 12, netzbezug_kosten: 9,
-    netto_ertrag: 8, netto_bilanz: 8, co2_einsparung: 25,
+    netto_ertrag: 8, netto_bilanz: 8, netzbezug_preis_cent: null, co2_einsparung: 25,
     ...over,
   }
 }
@@ -84,6 +88,17 @@ describe('WerteTabelle', () => {
     const toggle = screen.getByRole('button', { name: /Vergleich 2024/ })
     fireEvent.click(toggle)
     expect(screen.getAllByText(/[▲▼=]/).length).toBeGreaterThan(0)
+  })
+
+  it('Spalten-Sortierung: Klick auf Metrik-Header sortiert absteigend, Default bleibt chronologisch (IST-Parität)', () => {
+    render(<WerteTabelle rows={monatsRows} granularitaet="monat" />)
+    // Default chronologisch aufsteigend: Jan (erzeugung 100) vor Feb (200).
+    let rows = screen.getAllByRole('row')
+    expect(within(rows[1]).getByText('Jan 2025')).toBeInTheDocument()
+    // Klick auf „PV-Erzeugung" → absteigend nach Wert → Feb (200) zuerst.
+    fireEvent.click(screen.getByRole('button', { name: /PV-Erzeugung/ }))
+    rows = screen.getAllByRole('row')
+    expect(within(rows[1]).getByText('Feb 2025')).toBeInTheDocument()
   })
 
   it('Tages-Granularität: Tag-native Spalte sichtbar, Footer „Tage", kein WP-Wärme', () => {

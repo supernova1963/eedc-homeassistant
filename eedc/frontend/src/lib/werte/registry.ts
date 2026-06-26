@@ -14,7 +14,7 @@
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 
-export type WerteGruppe = 'basis' | 'quoten' | 'speicher' | 'waermepumpe' | 'eauto' | 'finanzen' | 'co2' | 'tagdetail'
+export type WerteGruppe = 'basis' | 'quoten' | 'wetter' | 'speicher' | 'waermepumpe' | 'eauto' | 'finanzen' | 'co2' | 'tagdetail'
 export type WerteAggregation = 'sum' | 'avg' | 'none'
 
 /**
@@ -61,23 +61,34 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'autarkie',           label: 'Autarkie',          unit: '%',       gruppe: 'quoten',      decimals: 1, aggregation: 'avg', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'evQuote',            label: 'EV-Quote',          unit: '%',       gruppe: 'quoten',      decimals: 1, aggregation: 'avg', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'spezErtrag',         label: 'Spez. Ertrag',      unit: 'kWh/kWp', gruppe: 'quoten',      decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
+  // Wetter (Einstrahlungs-Kontext, verfügbar wenn Wetterdaten erfasst)
+  { key: 'globalstrahlung',    label: 'Globalstrahlung',   unit: 'kWh/m²',  gruppe: 'wetter',      decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'sonnenstunden',      label: 'Sonnenstunden',     unit: 'h',       gruppe: 'wetter',      decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   // Speicher
   { key: 'speicher_ladung',    label: 'Speicher Ladung',    unit: 'kWh',    gruppe: 'speicher',    decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'speicher_entladung', label: 'Speicher Entladung', unit: 'kWh',    gruppe: 'speicher',    decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
   { key: 'speicher_effizienz', label: 'Speicher Effizienz', unit: '%',      gruppe: 'speicher',    decimals: 1, aggregation: 'avg', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   // Wärmepumpe — nur Strom pro Tag ableitbar; Wärme/COP bleiben monat-only
   { key: 'wp_strom',           label: 'WP Strom',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: undefined },
+  { key: 'wp_strom_heizen',    label: 'WP Strom Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wp_strom_warmwasser',label: 'WP Strom WW',       unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'wp_waerme',          label: 'WP Wärme',          unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_waerme_heizen',   label: 'WP Wärme Heizen',   unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wp_waerme_warmwasser',label: 'WP Wärme WW',      unit: 'kWh',     gruppe: 'waermepumpe', decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   { key: 'wp_cop',             label: 'WP COP',            unit: '',        gruppe: 'waermepumpe', decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // E-Auto — kein sauberer Tages-Wert (km/Lade-Split) → monat-only
   { key: 'eauto_km',           label: 'E-Auto',            unit: 'km',      gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
   { key: 'eauto_ladung',       label: 'E-Auto Ladung',     unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wallbox_ladung',     label: 'Wallbox Ladung',    unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: undefined },
+  { key: 'wallbox_pv_ladung',  label: 'Wallbox PV-Ladung', unit: 'kWh',     gruppe: 'eauto',       decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
+  { key: 'wallbox_pv_anteil',  label: 'Wallbox PV-Anteil', unit: '%',       gruppe: 'eauto',       decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: true },
   // Finanzen — Berechnung via createMonatsZeitreihe mit historisch korrektem Tarif pro Monat
   { key: 'einspeise_erloes',   label: 'Einspeise-Erlös',   unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'ev_ersparnis',       label: 'EV-Ersparnis',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'netzbezug_kosten',   label: 'Netzbezug-Kosten',  unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: false },
   { key: 'netto_ertrag',       label: 'Netto-Ertrag',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   { key: 'netto_bilanz',       label: 'Netto-Bilanz',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
+  { key: 'netzbezug_preis_cent', label: 'Ø Netzpreis',     unit: 'ct/kWh',  gruppe: 'finanzen',    decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
   // CO2
   { key: 'co2_einsparung',     label: 'CO₂-Einsparung',    unit: 'kg',      gruppe: 'co2',         decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   // ── Tag-native Zusatzmetriken (kein Monats-Pendant, nur Tagessichten) ──
@@ -93,11 +104,12 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'temperatur_max_c',       label: 'Temp. max',      unit: '°C',     gruppe: 'tagdetail',   decimals: 1, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
 ]
 
-export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'speicher', 'waermepumpe', 'eauto', 'finanzen', 'co2', 'tagdetail']
+export const WERTE_GRUPPEN: WerteGruppe[] = ['basis', 'quoten', 'wetter', 'speicher', 'waermepumpe', 'eauto', 'finanzen', 'co2', 'tagdetail']
 
 export const GRUPPE_LABELS: Record<WerteGruppe, string> = {
   basis:       'Energie',
   quoten:      'Quoten',
+  wetter:      'Wetter',
   speicher:    'Speicher',
   waermepumpe: 'Wärmepumpe',
   eauto:       'E-Auto',

@@ -6,18 +6,30 @@
  * `useWerteZeitreihe` aus der Demo-DB (relativer API-Pfad). Die Produktiv-Seite
  * Auswertungen/Tabelle (`TabelleTab`) bleibt bis zum Flip (3.8) unangetastet.
  */
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { LoadingSpinner, Card } from '../components/ui'
 import { WerteTabelle } from '../components/werte'
 import { monatsZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
-import { ViewShell } from './ViewShell'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
+import { AuswertungKopf } from './AuswertungKopf'
 
 export default function AuswertungenTabelleV4() {
   const { anlagen, selectedAnlageId, selectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
   const { rows, jahre, loading, error } = useWerteZeitreihe(selectedAnlageId, selectedAnlage)
   const [jahr, setJahr] = useState<number | 'alle'>('alle')
+  // Vergleichsjahr frei wählbar (IST-Parität TabelleTab `compareYear`); nur bei
+  // konkretem Jahr aktiv, Auto-Default = Vorjahr (sonst nächstverfügbares).
+  const [vergleichsJahr, setVergleichsJahr] = useState<number | null>(null)
+
+  const verfuegbareVergleichsJahre = useMemo(
+    () => (jahr === 'alle' ? [] : jahre.filter((j) => j !== jahr)),
+    [jahr, jahre],
+  )
+  useEffect(() => {
+    if (jahr === 'alle' || verfuegbareVergleichsJahre.length === 0) { setVergleichsJahr(null); return }
+    setVergleichsJahr(verfuegbareVergleichsJahre.includes(jahr - 1) ? jahr - 1 : verfuegbareVergleichsJahre[0])
+  }, [jahr, verfuegbareVergleichsJahre])
 
   if (anlagenLoading || loading) return <LoadingSpinner text="Lade Werte…" />
   if (anlagen.length === 0) {
@@ -36,23 +48,22 @@ export default function AuswertungenTabelleV4() {
   }
 
   const gefiltert = jahr === 'alle' ? rows : rows.filter((r) => r.jahr === jahr)
-  const vorjahrRows = jahr === 'alle' ? null : rows.filter((r) => r.jahr === jahr - 1)
+  const vorjahrRows = vergleichsJahr == null ? null : rows.filter((r) => r.jahr === vergleichsJahr)
 
   return (
-    <ViewShell>
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-lg font-bold text-gray-900 dark:text-white">Werte-Tabelle</h1>
-        <select
-          value={jahr === 'alle' ? '' : jahr}
-          onChange={(e) => setJahr(e.target.value ? Number(e.target.value) : 'alle')}
-          aria-label="Jahr filtern"
-          className="input w-auto"
-        >
-          <option value="">Alle Jahre</option>
-          {jahre.map((j) => <option key={j} value={j}>{j}</option>)}
-        </select>
-      </div>
+      <AuswertungKopf titel="Werte-Werkbank" jahr={jahr} setJahr={setJahr} jahre={jahre}>
+        {jahr !== 'alle' && verfuegbareVergleichsJahre.length > 0 && (
+          <select
+            value={vergleichsJahr ?? ''}
+            onChange={(e) => setVergleichsJahr(e.target.value ? Number(e.target.value) : null)}
+            aria-label="Vergleichsjahr wählen"
+            className="input w-auto"
+          >
+            {verfuegbareVergleichsJahre.map((j) => <option key={j} value={j}>vs. {j}</option>)}
+          </select>
+        )}
+      </AuswertungKopf>
 
       <Card>
         <WerteTabelle
@@ -60,11 +71,10 @@ export default function AuswertungenTabelleV4() {
           vorjahrRows={vorjahrRows ? vorjahrRows.map(monatsZeile) : null}
           granularitaet="monat"
           jahrLabel={jahr === 'alle' ? '' : jahr}
-          vergleichLabel={jahr === 'alle' ? null : jahr - 1}
+          vergleichLabel={vergleichsJahr}
           csvDateiname={`werte_${selectedAnlage?.anlagenname ?? 'export'}.csv`}
         />
       </Card>
     </div>
-    </ViewShell>
   )
 }

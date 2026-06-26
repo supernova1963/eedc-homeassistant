@@ -103,6 +103,16 @@ export function WerteTabelle({
   })
   const [pickerOffen, setPickerOffen] = useState(false)
   const [vergleichAn, setVergleichAn] = useState(false)
+  // Spalten-Sortierung (IST-Parität TabelleTab): null = chronologisch aufsteigend
+  // (Default, wie die Cockpit-Embeds) · '__zeit' = Zeitraum-Spalte · sonst Metrik-key.
+  const [sortKey, setSortKey] = useState<string | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function toggleSort(key: string) {
+    if (sortKey === key) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return }
+    setSortKey(key)
+    setSortDir(key === '__zeit' ? 'asc' : 'desc') // Metrik: größter Wert zuerst
+  }
 
   // Granularitätswechsel → Sichtbarkeit/Reihenfolge neu aus dem passenden Scope.
   useEffect(() => {
@@ -187,10 +197,22 @@ export function WerteTabelle({
     })
   }
 
-  const sorted = useMemo(
-    () => [...rows].sort((a, b) => a.sortKey - b.sortKey),
-    [rows],
-  )
+  const sorted = useMemo(() => {
+    const arr = [...rows]
+    if (sortKey === null || sortKey === '__zeit') {
+      arr.sort((a, b) => a.sortKey - b.sortKey)
+      if (sortKey === '__zeit' && sortDir === 'desc') arr.reverse()
+      return arr
+    }
+    arr.sort((a, b) => {
+      const av = a.wert(sortKey); const bv = b.wert(sortKey)
+      if (av == null && bv == null) return 0
+      if (av == null) return 1   // fehlende Werte ans Ende
+      if (bv == null) return -1
+      return sortDir === 'asc' ? av - bv : bv - av
+    })
+    return arr
+  }, [rows, sortKey, sortDir])
 
   if (sorted.length === 0) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Werte im Zeitraum.</p>
@@ -267,10 +289,16 @@ export function WerteTabelle({
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
-              <th className="px-3 py-2 font-medium whitespace-nowrap">Zeitraum</th>
+              <th className="px-3 py-2 font-medium whitespace-nowrap">
+                <button type="button" onClick={() => toggleSort('__zeit')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
+                  Zeitraum {sortKey === '__zeit' && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                </button>
+              </th>
               {aktiveMetriken.map((m) => (
                 <th key={m.key} colSpan={zeigeVergleich ? 3 : 1} className="px-3 py-2 text-right font-medium whitespace-nowrap">
-                  {m.label}{m.unit ? ` (${m.unit})` : ''}
+                  <button type="button" onClick={() => toggleSort(m.key)} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
+                    {m.label}{m.unit ? ` (${m.unit})` : ''} {sortKey === m.key && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </button>
                 </th>
               ))}
             </tr>

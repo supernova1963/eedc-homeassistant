@@ -39,6 +39,9 @@ export interface MonatsZeitreihe {
   autarkie: number
   evQuote: number
   spezErtrag: number
+  // Wetter (Einstrahlungs-Kontext) — null = keine Wetterdaten in dem Monat
+  globalstrahlung: number | null
+  sonnenstunden: number | null
   // Speicher — null = keine aktive Speicher-Komponente in dem Monat
   speicher_ladung: number | null
   speicher_entladung: number | null
@@ -47,16 +50,27 @@ export interface MonatsZeitreihe {
   wp_waerme: number | null
   wp_strom: number | null
   wp_cop: number | null
+  // WP-Split — Strom nur bei getrennter Strommessung (#191), Wärme aus IMD
+  wp_strom_heizen: number | null
+  wp_strom_warmwasser: number | null
+  wp_waerme_heizen: number | null
+  wp_waerme_warmwasser: number | null
   // E-Auto — null = kein aktives E-Auto in dem Monat
   eauto_km: number | null
   eauto_ladung: number | null
   eauto_pv_anteil: number | null
+  // Wallbox — Durchsatz + PV-Anteil (null = keine Wallbox / nicht gemessen)
+  wallbox_ladung: number | null
+  wallbox_pv_ladung: number | null
+  wallbox_pv_anteil: number | null
   // Finanzen
   einspeise_erloes: number
   ev_ersparnis: number
   netzbezug_kosten: number
   netto_ertrag: number
   netto_bilanz: number
+  /** Real verrechneter Monats-Ø-Netzbezugspreis (Flex-Ø oder statischer Tarif, #326). */
+  netzbezug_preis_cent: number | null
   // CO2
   co2_einsparung: number
 }
@@ -125,11 +139,22 @@ export function createMonatsZeitreihe(
     const wp_cop = (wp_waerme != null && wp_strom != null)
       ? calcCOP(wp_waerme, wp_strom)
       : null
+    // WP-Split: Strom-Heizen/WW nur bei getrennter Strommessung (#191), Wärme aus IMD.
+    const wp_strom_heizen = md.wp_strom_heizen_kwh
+    const wp_strom_warmwasser = md.wp_strom_warmwasser_kwh
+    const wp_waerme_heizen = wp_heizung
+    const wp_waerme_warmwasser = wp_warmwasser
 
     // E-Auto: null = kein aktives E-Auto.
     const eauto_km = md.eauto_km
     const eauto_ladung = md.eauto_ladung_kwh
-    const eauto_pv_anteil = null // Wird später berechnet wenn PV-Anteil verfügbar
+    // Wallbox-Durchsatz + PV-Anteil (PV-Anteil ableitbar aus den beiden Roh-Feldern).
+    const wallbox_ladung = md.wallbox_ladung_kwh
+    const wallbox_pv_ladung = md.wallbox_ladung_pv_kwh
+    const wallbox_pv_anteil = (wallbox_pv_ladung != null && wallbox_ladung != null && wallbox_ladung > 0)
+      ? (wallbox_pv_ladung / wallbox_ladung) * 100
+      : null
+    const eauto_pv_anteil = wallbox_pv_anteil // gleicher PV-Anteil (Wallbox = Lade-Pfad des E-Autos)
 
     // Finanzen: historisch korrekter Tarif pro Monat, Fallback auf aktuellen
     const tarif = (tarifeDesc.length > 0 ? findGueltigerTarif(tarifeDesc, md.jahr, md.monat) : null) || strompreis
@@ -165,20 +190,30 @@ export function createMonatsZeitreihe(
       autarkie,
       evQuote,
       spezErtrag,
+      globalstrahlung: md.globalstrahlung_kwh_m2,
+      sonnenstunden: md.sonnenstunden,
       speicher_ladung,
       speicher_entladung,
       speicher_effizienz,
       wp_waerme,
       wp_strom,
       wp_cop,
+      wp_strom_heizen,
+      wp_strom_warmwasser,
+      wp_waerme_heizen,
+      wp_waerme_warmwasser,
       eauto_km,
       eauto_ladung,
       eauto_pv_anteil,
+      wallbox_ladung,
+      wallbox_pv_ladung,
+      wallbox_pv_anteil,
       einspeise_erloes,
       ev_ersparnis,
       netzbezug_kosten,
       netto_ertrag,
       netto_bilanz,
+      netzbezug_preis_cent: netzPreisCent,
       co2_einsparung,
     }
   })

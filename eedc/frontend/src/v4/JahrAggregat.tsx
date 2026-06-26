@@ -61,11 +61,26 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
   const emobLadung = summe(f('emob_ladung_kwh'))
   const emobKm = summe(f('emob_km'))
 
-  // Per-Investition-Finanzdetails: dedup nach id (nur typ/bezeichnung werden von
-  // den Bauern gelesen → Sonstiges-Titel). Erste Nennung je id gewinnt.
+  // Per-Investition-Finanzdetails über das Jahr aufsummieren (Jahres-T-Konto in
+  // Auswertungen/Finanzen): numerische Felder Σ (null-bewusst), Identität/Label
+  // vom ersten Vorkommen. Monats-`formel`/`berechnung` entfallen — ein Jahres-Σ
+  // hat kein sinnvolles Monats-Formelbild (Tooltip zeigt dann nur Label + Σ).
+  // (Die Monat-Bauer für Cockpit/Jahr lesen nur typ/bezeichnung → unverändert.)
+  const addNull = (a: number | null, b: number | null): number | null =>
+    a == null && b == null ? null : (a ?? 0) + (b ?? 0)
   const financialsMap = new Map<number, InvestitionFinancialDetail>()
   for (const m of monate) for (const fin of m.investitionen_financials ?? []) {
-    if (!financialsMap.has(fin.investition_id)) financialsMap.set(fin.investition_id, fin)
+    const prev = financialsMap.get(fin.investition_id)
+    if (!prev) {
+      financialsMap.set(fin.investition_id, { ...fin, formel: null, berechnung: null })
+    } else {
+      prev.betriebskosten_monat_euro += fin.betriebskosten_monat_euro
+      prev.erloes_euro = addNull(prev.erloes_euro, fin.erloes_euro)
+      prev.ersparnis_euro = addNull(prev.ersparnis_euro, fin.ersparnis_euro)
+      prev.sonstige_ertraege_euro += fin.sonstige_ertraege_euro
+      prev.sonstige_ausgaben_euro += fin.sonstige_ausgaben_euro
+      if (!prev.ersparnis_label && fin.ersparnis_label) prev.ersparnis_label = fin.ersparnis_label
+    }
   }
 
   // Aktive Geräte je Typ über das Jahr (Union, dedup) — für „aggregiert aus …".

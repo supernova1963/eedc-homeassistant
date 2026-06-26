@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
@@ -55,7 +56,22 @@ function ladeMonatsdaten(anlageId: number, ref: MonatRef) {
   ])
 }
 
-export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefined }) {
+// persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
+// (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
+const SICHT_KEY = 'v4-cockpit-monat'
+
+export default function CockpitMonatV4(props: { anlageId: number | undefined }) {
+  // ParkProvider muss den Body umschließen, damit `usePark` (Kennzahlen-Filter,
+  // ParkFuss) im selben Baum greift. SLICE 1 — Referenz-Sicht.
+  return (
+    <ParkProvider persistKey={SICHT_KEY}>
+      <CockpitMonatInner {...props} />
+    </ParkProvider>
+  )
+}
+
+function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
+  const park = usePark()
   const [monate, setMonate] = useState<VerfuegbarerMonat[]>([])
   const [gewaehlt, setGewaehlt] = useState<MonatRef | null>(null)
   const [tage, setTage] = useState<TagWerte[]>([])
@@ -195,19 +211,39 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
             ? ` · SOLL ${Math.round((monatData.pv_erzeugung_kwh / monatData.soll_pv_kwh) * 100)} %`
             : ''}`
       : 'IST / Vormonat / Vorjahr / Ø-Monat'
+    // Kennzahlen-Kacheln parkbar machen (SLICE 1): stabile parkId je Titel; geparkte
+    // werden im Strip ausgeblendet. Sind ALLE geparkt → Block-Hülle ausblenden
+    // (Gernot-Abnahme 2026-06-25, Entscheidung 2).
+    const kpiItems = monatData
+      ? baueMonatKpis(monatData, vormonatAgg).map((k) => ({
+          ...k,
+          parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,
+        }))
+      : []
+    const sichtbareKpi = kpiItems.filter((k) => !park.istGeparkt(k.parkId))
+    const kennzahlenBlock: Block | null = monatData
+      ? (sichtbareKpi.length > 0
+          ? {
+              id: 'kpi',
+              title: 'Kennzahlen',
+              ...BLOCK_IDENTITAET.kennzahlen,
+              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis',
+              defaultOpen: true,
+              render: () => <KpiStrip kpis={sichtbareKpi} />,
+            }
+          : null)
+      : {
+          id: 'kpi',
+          title: 'Kennzahlen',
+          ...BLOCK_IDENTITAET.kennzahlen,
+          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis',
+          defaultOpen: true,
+          render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Monats-Kennzahlen verfügbar.</p>,
+        }
     // Default-Klappregel (Gernot 2026-06-19, revidiert): NUR der erste Block
     // (Kennzahlen) offen — alle übrigen eingeklappt, ihre Summary trägt den Kern.
     return [
-      {
-        id: 'kpi',
-        title: 'Kennzahlen',
-        ...BLOCK_IDENTITAET.kennzahlen,
-        summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis',
-        defaultOpen: true,
-        render: () => (monatData
-          ? <KpiStrip kpis={baueMonatKpis(monatData, vormonatAgg)} />
-          : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Monats-Kennzahlen verfügbar.</p>),
-      },
+      ...(kennzahlenBlock ? [kennzahlenBlock] : []),
       {
         id: 'bilanz',
         title: 'Energie-Bilanz',
@@ -232,7 +268,7 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
       // bereits in den Kennzahlen (D), hier nur Aufschlüsselung + Tarif + Cross-Link.
       ...(monatData ? [finanzTeaserBlock(monatData)] : []),
     ]
-  }, [gewaehlt, tage, monatData, vormonatAgg, glMonStats])
+  }, [gewaehlt, tage, monatData, vormonatAgg, glMonStats, park])
 
   if (!anlageId) {
     return (
@@ -282,8 +318,12 @@ export default function CockpitMonatV4({ anlageId }: { anlageId: number | undefi
           ) : monate.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
           ) : (
-            <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey="v4-cockpit-monat" bloecke={bloecke} sortierbar />
+            <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
           )}
+
+          {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer,
+              bis etwas geparkt ist; rendert nichts ohne ParkProvider. */}
+          <ParkFuss />
         </div>
       </div>
     </div>

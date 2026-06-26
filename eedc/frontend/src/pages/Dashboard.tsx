@@ -20,7 +20,7 @@ import {
   Receipt, Share2, Activity, Thermometer, TrendingDown
 } from 'lucide-react'
 import { Card, Button, LoadingSpinner, Select, fmtCalc, KPICard } from '../components/ui'
-import { fmtKpi, CHART_COLORS } from '../lib'
+import { fmtZahl, CHART_COLORS } from '../lib'
 import {
   HeroLeiste, EnergyFlowDiagram, RingGaugeCard, SparklineChart,
   AmortisationsBar, CommunityTeaser, CommunityNudge, Section, SectionLink,
@@ -284,7 +284,7 @@ export default function Dashboard() {
             />
             <KPICard
               title="Effizienz"
-              value={fmtKpi(data.speicher_effizienz_prozent, 1)}
+              value={fmtZahl(data.speicher_effizienz_prozent, 1)}
               unit="%"
               icon={Activity}
               color="cyan"
@@ -313,7 +313,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <KPICard
               title="JAZ"
-              value={fmtKpi(data.wp_cop, 2)}
+              value={fmtZahl(data.wp_cop, 2)}
               unit=""
               icon={Thermometer}
               color="orange"

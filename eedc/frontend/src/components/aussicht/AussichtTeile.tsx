@@ -429,7 +429,7 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
 // Monat (`MonatRahmen.finanzTeaserBlock`). Die volle Finanzrechnung (T-Konto,
 // zeitraum-parametrisiert) lebt weiterhin in Auswertungen/Finanzen.
 // Zahlen aus `aussichten/finanzen` (Backend-Aggregat, ADR-001) — keine FE-Rechnung.
-// `euro` spiegelt bewusst den Monat-Teaser (`+X €` via fmtCalc) statt lib/formatEuro,
+// `euro` spiegelt bewusst den Monat-Teaser (`+X €` via fmtCalc, mit Vorzeichen),
 // damit beide Finanz-Teaser EINE Darstellung teilen (eine Komponenten-Klasse = eine SoT).
 export const euroVz = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${fmtCalc(v, 2)} €`)
 

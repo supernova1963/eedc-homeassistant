@@ -9,7 +9,7 @@ import { Card, LoadingSpinner, Alert, Select, KPICard, SortableSection, OrderedS
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useSectionOrder } from '../hooks'
 import type { Anlage } from '../types'
-import { fmtKpi, WP_KPI, CHART_COLORS } from '../lib'
+import { fmtZahl, WP_KPI, CHART_COLORS } from '../lib'
 import { investitionenApi } from '../api'
 import type { WaermepumpeDashboardResponse } from '../api/investitionen'
 import { WaermepumpeVergleich, WaermepumpeMonatsverlauf, WaermepumpeKostenvergleich, WaermepumpeMonatsTabelle } from '../components/waermepumpe'
@@ -163,14 +163,14 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           {...WP_KPI.jaz}
-          value={fmtKpi(z.durchschnitt_cop, 2)}
+          value={fmtZahl(z.durchschnitt_cop, 2)}
           formel="JAZ = Wärme ÷ Strom (Gesamtlaufzeit)"
           berechnung={`${z.gesamt_waerme_kwh.toFixed(0)} kWh ÷ ${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
           ergebnis={z.durchschnitt_cop ? `= ${z.durchschnitt_cop.toFixed(2)}` : '—'}
         />
         <KPICard
           {...WP_KPI.waerme}
-          value={fmtKpi(z.gesamt_waerme_kwh / 1000, 1)}
+          value={fmtZahl(z.gesamt_waerme_kwh / 1000, 1)}
           unit="MWh"
           formel="Wärme = Heizung + Warmwasser"
           berechnung={`${z.gesamt_heizenergie_kwh.toFixed(0)} + ${z.gesamt_warmwasser_kwh.toFixed(0)} kWh`}
@@ -178,7 +178,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         />
         <KPICard
           {...WP_KPI.strom}
-          value={fmtKpi(z.gesamt_stromverbrauch_kwh / 1000, 1)}
+          value={fmtZahl(z.gesamt_stromverbrauch_kwh / 1000, 1)}
           unit="MWh"
           formel="Σ Stromverbrauch WP"
           berechnung={`${z.gesamt_stromverbrauch_kwh.toFixed(0)} kWh`}
@@ -186,7 +186,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
         />
         <KPICard
           {...WP_KPI.ersparnis}
-          value={fmtKpi(z.ersparnis_euro, 0)}
+          value={fmtZahl(z.ersparnis_euro, 0)}
           unit="€"
           trend={z.ersparnis_euro > 0 ? 'up' : undefined}
           formel="Ersparnis = Gas/Öl-Kosten − WP-Kosten"
@@ -200,7 +200,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
           <KPICard
             {...WP_KPI.jaz}
             title="JAZ Heizen"
-            value={fmtKpi(z.cop_heizen, 2)}
+            value={fmtZahl(z.cop_heizen, 2)}
             formel="JAZ Heizen = Heizwärme ÷ Strom Heizen"
             berechnung={`${z.gesamt_heizung_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_heizen_kwh?.toFixed(0)} kWh`}
             ergebnis={z.cop_heizen ? `= ${z.cop_heizen.toFixed(2)}` : '—'}
@@ -208,7 +208,7 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
           <KPICard
             {...WP_KPI.jaz}
             title="JAZ Warmwasser"
-            value={fmtKpi(z.cop_warmwasser, 2)}
+            value={fmtZahl(z.cop_warmwasser, 2)}
             formel="JAZ WW = Warmwasser ÷ Strom WW"
             berechnung={`${z.gesamt_warmwasser_getrennt_kwh?.toFixed(0)} kWh ÷ ${z.gesamt_strom_warmwasser_kwh?.toFixed(0)} kWh`}
             ergebnis={(z.cop_warmwasser && z.cop_warmwasser > 0) ? `= ${z.cop_warmwasser.toFixed(2)}` : '—'}
@@ -216,13 +216,13 @@ function WaermepumpeBlock({ dashboard, ...selectorProps }: { dashboard: Waermepu
           <KPICard
             {...WP_KPI.strom}
             title="Strom Heizen"
-            value={fmtKpi(z.gesamt_strom_heizen_kwh ? z.gesamt_strom_heizen_kwh / 1000 : null, 1)}
+            value={fmtZahl(z.gesamt_strom_heizen_kwh ? z.gesamt_strom_heizen_kwh / 1000 : null, 1)}
             unit="MWh"
           />
           <KPICard
             {...WP_KPI.strom}
             title="Strom Warmwasser"
-            value={fmtKpi(z.gesamt_strom_warmwasser_kwh ? z.gesamt_strom_warmwasser_kwh / 1000 : null, 1)}
+            value={fmtZahl(z.gesamt_strom_warmwasser_kwh ? z.gesamt_strom_warmwasser_kwh / 1000 : null, 1)}
             unit="MWh"
           />
         </div>

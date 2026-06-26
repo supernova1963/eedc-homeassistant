@@ -119,7 +119,7 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse): Block {
             {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}
           </div>
         )}
-        <a href="#/v4/auswertungen/tabelle" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+        <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
           volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
         </a>
         <p className="text-xs text-gray-400 dark:text-gray-500">

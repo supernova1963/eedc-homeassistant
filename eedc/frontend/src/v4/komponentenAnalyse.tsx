@@ -18,6 +18,7 @@
  * E-Auto/BKW/Sonstiges ziehen nach demselben Muster nach (je IST-Analyse).
  */
 import type { ReactNode } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { PVStringVergleich } from '../components/pv'
 import { SpeicherVerlaufIST, SpeicherVergleichIST } from './SpeicherVerlaufIST'
 import { WaermepumpeVerlaufIST, WaermepumpeVergleichIST, WaermepumpeWirtschaftlichkeitIST } from './WaermepumpeHubBloecke'
@@ -42,7 +43,16 @@ export const KOMPONENTEN_ANALYSE: Record<string, KompAnalyse> = {
   // PV-Anlage: SOLL-IST-Vergleich pro String (PVGIS-Prognose vs. gemessen) —
   // wiederverwendete IST-Komponente, self-fetch über anlageId.
   'pv-module': {
-    vergleich: (anlageId) => <PVStringVergleich anlageId={anlageId} embed />,
+    // D4 „beides": scoped SOLL/IST pro String hier (Embed) + Cross-Link auf die
+    // volle Prognose-Analyse (Quellen-Vergleich/MAE-MAPE) in Auswertungen/Prognose.
+    vergleich: (anlageId) => (
+      <div className="space-y-3">
+        <PVStringVergleich anlageId={anlageId} embed />
+        <a href="#/v4/auswertungen/prognose" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+          <ExternalLink className="h-4 w-4" /> Volle Prognose-Analyse (Quellen-Vergleich, MAE/MAPE) →
+        </a>
+      </div>
+    ),
   },
   // Speicher: IST-Zeitreihen (η-12M-Degradation, Vollzyklen, Arbitrage-Stapel)
   // im Verlauf; ⑤ = Jahres-Energiebilanz (Ladung-Herkunft ⟷ Entladung+Verlust).

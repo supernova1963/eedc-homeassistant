@@ -74,6 +74,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
       LayoutV4: lazy(() => import('./v4/LayoutV4')),
       CockpitV4: lazy(() => import('./v4/CockpitV4')),
       KomponentenV4: lazy(() => import('./v4/KomponentenV4')),
+      AuswertungenV4: lazy(() => import('./v4/AuswertungenV4')),
       Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
@@ -175,12 +176,10 @@ function App() {
               <Route index element={<Navigate to="/v4/cockpit/live" replace />} />
               <Route path="cockpit" element={<Navigate to="/v4/cockpit/live" replace />} />
               <Route path="cockpit/:zeit" element={<V4.CockpitV4 />} />
-              {/* Noch nicht gebaute Achsen/Sichten — Platzhalter hält die Nav
-                  vollständig. Auswertungen folgt als eigenes Muster nach Phase 3;
-                  bis dahin KEIN rohes Tabellen-Gerüst (AuswertungenTabelleV4 bleibt
-                  im Repo, aber unverdrahtet). */}
-              <Route path="auswertungen" element={<V4.Platzhalter />} />
-              <Route path="auswertungen/tabelle" element={<V4.Platzhalter />} />
+              {/* Auswertungen (Wie-Achse, Phase A.5): Dispatcher mit Sub-Tabs
+                  {finanzen,roi,prognose,co2,tabelle}; Index → Finanzen (Default). */}
+              <Route path="auswertungen" element={<Navigate to="/v4/auswertungen/finanzen" replace />} />
+              <Route path="auswertungen/:sub" element={<V4.AuswertungenV4 />} />
               {/* Komponenten-Hub (Was-Achse, Phase A.2): Index → erster Typ. */}
               <Route path="komponenten" element={<V4.KomponentenV4 />} />
               <Route path="komponenten/:typ" element={<V4.KomponentenV4 />} />

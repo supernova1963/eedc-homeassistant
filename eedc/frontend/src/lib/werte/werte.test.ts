@@ -17,11 +17,15 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
     erzeugung: 100, eigenverbrauch: 60, einspeisung: 40, netzbezug: 30,
     gesamtverbrauch: 90, direktverbrauch: 50,
     autarkie: 70, evQuote: 60, spezErtrag: 80,
+    globalstrahlung: null, sonnenstunden: null,
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
     wp_waerme: null, wp_strom: null, wp_cop: null,
+    wp_strom_heizen: null, wp_strom_warmwasser: null,
+    wp_waerme_heizen: null, wp_waerme_warmwasser: null,
     eauto_km: null, eauto_ladung: null, eauto_pv_anteil: null,
+    wallbox_ladung: null, wallbox_pv_ladung: null, wallbox_pv_anteil: null,
     einspeise_erloes: 5, ev_ersparnis: 12, netzbezug_kosten: 9,
-    netto_ertrag: 8, netto_bilanz: 8, co2_einsparung: 25,
+    netto_ertrag: 8, netto_bilanz: 8, netzbezug_preis_cent: null, co2_einsparung: 25,
     ...over,
   }
 }
@@ -48,8 +52,8 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 33 Metriken (23 Monat + 10 Tag-native), jede mit gültiger Gruppe + granular', () => {
-    expect(WERTE_METRIKEN).toHaveLength(33)
+  it('hat 43 Metriken (33 Monat + 10 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    expect(WERTE_METRIKEN).toHaveLength(43)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -73,11 +77,15 @@ describe('W1-Registry', () => {
 })
 
 describe('metrikenFuer (Granularität)', () => {
-  it('Monat = 23 Registry-Metriken, kein Tag-natives Feld', () => {
+  it('Monat = 33 Registry-Metriken, kein Tag-natives Feld', () => {
     const m = metrikenFuer('monat')
-    expect(m).toHaveLength(23)
+    expect(m).toHaveLength(33)
     expect(m.find((x) => x.key === 'peak_pv_kw')).toBeUndefined()
     expect(m.find((x) => x.key === 'wp_waerme')).toBeDefined()
+    // Vollständigkeits-Spalten (Gernot 2026-06-26): verfügbare Felder als wählbare Spalten.
+    expect(m.find((x) => x.key === 'globalstrahlung')).toBeDefined()
+    expect(m.find((x) => x.key === 'wallbox_pv_anteil')).toBeDefined()
+    expect(m.find((x) => x.key === 'netzbezug_preis_cent')).toBeDefined()
   })
   it('Tag = ohne WP-Wärme/COP/E-Auto, mit Tag-nativen', () => {
     const keys = metrikenFuer('tag').map((x) => x.key)
