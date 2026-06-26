@@ -202,3 +202,41 @@ async def test_reiner_sonstige_monat_erscheint_in_komponenten(db):
     km = await _komp_monat(db, anlage.id, 2026, 7)
     assert km is not None, "reiner Sonstige-Monat muss eine Zeile erzeugen"
     assert km.sonstige_ertraege_euro == 42.0
+
+
+# ── C. Sonstiges-Verbraucher: Legacy-Key-Drift (R5-6 simon42) ────────────────
+
+@pytest.mark.parametrize("verbrauch_key", ["verbrauch_kwh", "verbrauch_sonstig_kwh"])
+async def test_sonstiges_verbraucher_erscheint_im_cockpit(db, verbrauch_key):
+    """Regression R5-6 (Rainer/simon42): Ein Sonstiges-Verbraucher (Heizstab)
+    erschien im Komponenten-Hub, aber NICHT im Cockpit. Ursache: die Cockpit-
+    Aggregation las hart `verbrauch_sonstig_kwh`, während die Demo-/Legacy-Daten
+    `verbrauch_kwh` tragen → `sonstiges_verbrauch_kwh=None` → Verbraucher-Block
+    weg-gegatet. Beide Read-Sites routen jetzt über `get_sonstiges_verbrauch_kwh`
+    (kanonisch + Legacy-Fallback) → der Verbrauch erscheint bei BEIDEN Keys.
+    Lehre: [[feedback_aggregations_drift]], [[feedback_aggregator_symmetrie]].
+    """
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+
+    anlage = Anlage(anlagenname="SymHeizstab", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    inv = Investition(
+        anlage_id=anlage.id, typ="sonstiges", bezeichnung="Heizstab Warmwasser",
+        anschaffungsdatum=date(2024, 1, 1), aktiv=True,
+        parameter={"kategorie": "verbraucher"},
+    )
+    db.add(inv)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(
+        investition_id=inv.id, jahr=2026, monat=4,
+        verbrauch_daten={verbrauch_key: 205, "bezug_pv_kwh": 22, "bezug_netz_kwh": 183},
+    ))
+    await db.commit()
+
+    am = await get_aktueller_monat(anlage_id=anlage.id, jahr=2026, monat=4, db=db)
+    assert am.sonstiges_verbrauch_kwh == 205, (
+        f"Sonstiges-Verbraucher mit Key '{verbrauch_key}' muss im Cockpit erscheinen"
+    )
+    assert am.sonstiges_bezug_pv_kwh == 22
+    assert am.sonstiges_bezug_netz_kwh == 183

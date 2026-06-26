@@ -63,7 +63,7 @@ from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh
+from backend.core.field_definitions import get_emob_pv_netz_kwh, get_sonstiges_verbrauch_kwh
 from backend.core.berechnungen import (
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
@@ -1302,7 +1302,7 @@ async def get_sonstiges_dashboard(
                 gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0)
                 gesamt_einspeisung += d.get('einspeisung_kwh', 0)
             elif kategorie == 'verbraucher':
-                gesamt_verbrauch += d.get('verbrauch_kwh', 0)
+                gesamt_verbrauch += get_sonstiges_verbrauch_kwh(d)
                 gesamt_bezug_pv += d.get('bezug_pv_kwh', 0)
                 gesamt_bezug_netz += d.get('bezug_netz_kwh', 0)
             elif kategorie == 'speicher':

@@ -53,6 +53,7 @@ from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_emob_pv_netz_kwh,
     get_pv_erzeugung_kwh,
+    get_sonstiges_verbrauch_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
@@ -1416,7 +1417,7 @@ async def get_aktueller_monat(
             se_total   += data.get("erzeugung_kwh", 0) or 0
             sev_total  += data.get("eigenverbrauch_kwh", 0) or 0
             sei_total  += data.get("einspeisung_kwh", 0) or 0
-            sv_total   += data.get("verbrauch_sonstig_kwh", 0) or 0
+            sv_total   += get_sonstiges_verbrauch_kwh(data)
             sbpv_total += data.get("bezug_pv_kwh", 0) or 0
             sbnetz_total += data.get("bezug_netz_kwh", 0) or 0
         if se_total > 0:   sonstiges_erzeugung    = round(se_total, 2)
