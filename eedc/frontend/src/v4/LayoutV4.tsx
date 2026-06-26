@@ -43,8 +43,11 @@ export default function LayoutV4() {
       <div className="h-dvh bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
         <IATopNav inhalt={inhalt} meta={meta} modusBadge={badge} anlagenSelektor={<AnlagenSelektor />} />
         {/* Ab lg gibt main keine eigene Scroll-Leiste mehr her, sondern wird flex-
-            Container für die ViewShell (fixe 2. Leiste). Mobile: alles scrollt. */}
-        <main className="flex-1 overflow-auto lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
+            Container für die ViewShell (fixe 2. Leiste). Mobile: alles scrollt.
+            D6-1: `scrollbar-gutter:stable` (nur mobil) reserviert eine eigene
+            Scrollbar-Spalte → die vollbreite, milchige Datums-Nav (ZeitStepper,
+            `-mx-3` + backdrop-blur) verdeckt die Scrollbar nicht mehr. */}
+        <main className="flex-1 overflow-auto max-lg:[scrollbar-gutter:stable] lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
           <Outlet />
         </main>
         {/* G11 Shell-Slice: app-weite Status-Fusszeile (klebt unten via flex-col). */}
