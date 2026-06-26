@@ -42,6 +42,8 @@ vi.mock('../api/energie_profil', () => ({
   energieProfilApi: {
     getStunden: vi.fn(() => Promise.resolve(stundenAntwort)),
     getTageWerte: vi.fn(() => Promise.resolve([tag])),
+    // R5-F2: Tag holt den ältesten verfügbaren Tag für die Datumsauswahl-Untergrenze.
+    getVerfuegbareMonate: vi.fn(() => Promise.resolve([])),
     getTagDetail: vi.fn(() => Promise.resolve({
       datum: gestern,
       wp_strom_heizen_kwh: 3.0, wp_strom_warmwasser_kwh: 1.2,

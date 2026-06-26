@@ -52,28 +52,37 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
   it('alle fünf Komponenten aktiv → fünf Blöcke (Sonstiges = Erzeuger-Variante)', () => {
     const bloecke = baueKomponentenBloecke(d({
       speicher_ladung_kwh: 99, wp_strom_kwh: 330, emob_ladung_kwh: 62,
-      bkw_erzeugung_kwh: 612, sonstiges_erzeugung_kwh: 320,
+      bkw_erzeugung_kwh: 612,
+      sonstiges_geraete: [{ bezeichnung: 'Mini-BHKW', kategorie: 'erzeuger', erzeugung_kwh: 320 }],
     }))
     // Default-Reihenfolge = INVESTITION_TYP_ORDER (SoT): Speicher → Balkonkraftwerk
     // → Wärmepumpe → E-Mobilität → Sonstiges (BKW vor WP).
     expect(bloecke.map((b) => b.id)).toEqual(['k-speicher', 'k-bkw', 'k-waermepumpe', 'k-emob', 'k-sonstiges-erzeuger'])
   })
 
-  it('Sonstiges (#3c): Block heißt nach dem Gerät; Erzeuger/Verbraucher getrennt', () => {
+  it('Sonstiges-Sonderdarstellung: 2 feste Blöcke (Erzeuger/Verbraucher), pro Gerät eigene Werte-Zeile', () => {
     const bloecke = baueKomponentenBloecke(d({
-      sonstiges_erzeugung_kwh: 120, sonstiges_verbrauch_kwh: 80,
-      investitionen_financials: [
-        { investition_id: 10, bezeichnung: 'Mini-BHKW', typ: 'sonstiges' },
-      ] as unknown as AktuellerMonatResponse['investitionen_financials'],
+      sonstiges_geraete: [
+        { bezeichnung: 'Mini-BHKW', kategorie: 'erzeuger', erzeugung_kwh: 120 },
+        { bezeichnung: 'Heizstab Warmwasser', kategorie: 'verbraucher', verbrauch_kwh: 80 },
+      ],
     }))
+    // Feste, generische Block-Titel (NICHT der Gerätename) — der Gerätename steht
+    // PRO Gerät im Block-Inhalt.
     expect(bloecke.map((b) => b.id)).toEqual(['k-sonstiges-erzeuger', 'k-sonstiges-verbraucher'])
-    expect(bloecke[0].title).toBe('Mini-BHKW')
-    expect(bloecke[1].title).toBe('Mini-BHKW')
+    expect(bloecke[0].title).toBe('Sonstiges – Erzeuger')
+    expect(bloecke[1].title).toBe('Sonstiges – Verbraucher')
+    // Pro-Gerät-Zeile: Bezeichnung erscheint im gerenderten Block-Inhalt.
+    renderBlock(bloecke, 'k-sonstiges-verbraucher')
+    expect(screen.getByText('Heizstab Warmwasser')).toBeInTheDocument()
   })
 
-  it('Sonstiges ohne Investitionsnamen → Fallback „Sonstiges"', () => {
-    const bloecke = baueKomponentenBloecke(d({ sonstiges_erzeugung_kwh: 120 }))
-    expect(bloecke[0].title).toBe('Sonstiges')
+  it('Sonstiges nur Erzeuger → nur Erzeuger-Block (generischer Titel)', () => {
+    const bloecke = baueKomponentenBloecke(d({
+      sonstiges_geraete: [{ bezeichnung: 'Mini-BHKW', kategorie: 'erzeuger', erzeugung_kwh: 120 }],
+    }))
+    expect(bloecke.map((b) => b.id)).toEqual(['k-sonstiges-erzeuger'])
+    expect(bloecke[0].title).toBe('Sonstiges – Erzeuger')
   })
 })
 
