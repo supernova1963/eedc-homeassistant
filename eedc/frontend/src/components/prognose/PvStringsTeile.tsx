@@ -167,7 +167,7 @@ export function PvStringHeaderZeile({ data, zeitraumLabel, onCsv }: {
       </p>
       {onCsv && (
         <Button variant="secondary" size="sm" onClick={onCsv}>
-          <Download className="h-4 w-4 mr-2" />CSV Export
+          <Download className="h-4 w-4 mr-2" />CSV-Export
         </Button>
       )}
     </div>
@@ -218,8 +218,8 @@ export function PvStringSollIstBar({ data }: { data: PVStringsResponse }) {
             layout="vertical"
           >
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis type="number" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} />
-            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
+            <XAxis type="number" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} tick={{ fontSize: 10 }} />
+            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
             <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL (Prognose)" />
@@ -249,7 +249,7 @@ export function PvStringMonatsverlauf({ data, selectedYear }: { data: PVStringsR
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-            <YAxis width={60} tick={{ fontSize: 11 }} tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} />
+            <YAxis width={60} tick={{ fontSize: 10 }} tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
             <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL" />
@@ -335,8 +335,8 @@ export function PvStringMehrjahr({ data, jahresvergleichData }: {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={jahresvergleichData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" />
-            <YAxis unit="%" domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+            <YAxis unit=" %" domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tick={{ fontSize: 10 }} />
             <Tooltip content={<ChartTooltip unit="%" />} />
             <Legend content={<ChartLegende />} />
             {data.strings.map((s, idx) => (

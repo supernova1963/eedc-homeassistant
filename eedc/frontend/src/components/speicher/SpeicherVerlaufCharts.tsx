@@ -67,7 +67,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tickFormatter={(v) => `${v} kWh`} width={70} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
@@ -92,7 +92,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tickFormatter={(v) => v.toFixed(1)} width={40} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip decimals={1} />} />
                 <Area type="monotone" dataKey="zyklen" fill={CHART_COLORS.speicherZyklen} stroke={CHART_COLORS.speicherZyklen} name="Zyklen" />
@@ -109,7 +109,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={effizienzData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" fontSize={10} />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
               <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} width={55} />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="%" decimals={1} />} />
               <Line type="monotone" dataKey="effizienz" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />

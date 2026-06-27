@@ -432,7 +432,7 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
                     <XAxis dataKey="name" tick={{ fill: achsen.achse, fontSize: 12 }} />
                     <YAxis tick={{ fill: achsen.achse, fontSize: 12 }} />
                     <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
-                    <Bar dataKey="ertrag" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="ertrag" radius={[2, 2, 0, 0]}>
                       {benchmark.anlage.monatswerte.slice(-12).map((_, index) => (
                         <Cell key={`cell-${index}`} fill={TYP_COLORS['pv-system']} />
                       ))}

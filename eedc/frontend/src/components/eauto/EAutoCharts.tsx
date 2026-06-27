@@ -36,8 +36,8 @@ export function EAutoKmVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonats
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" fontSize={10} />
-          <YAxis />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Bar dataKey="km" fill={CHART_COLORS.emobKm} name="km" />
         </BarChart>
@@ -54,8 +54,8 @@ export function EAutoLadungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" fontSize={10} />
-          <YAxis />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" />
@@ -80,7 +80,7 @@ export function EAutoKostenvergleich({ zusammenfassung: z }: { zusammenfassung: 
           <BarChart data={data} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-            <YAxis type="category" dataKey="name" width={120} />
+            <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10 }} />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
             <Bar dataKey="value" />
           </BarChart>

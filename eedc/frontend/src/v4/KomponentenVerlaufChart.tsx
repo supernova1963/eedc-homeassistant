@@ -7,7 +7,8 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { CHART_HOVER_CURSOR } from '../lib'
+import { CHART_HOVER_CURSOR, xAchse, yAchse } from '../lib'
+import { useSchmaleAchse } from '../hooks'
 import { ChartTooltip, ChartLegende } from '../components/ui'
 
 export interface VerlaufBar {
@@ -26,6 +27,7 @@ function kuerze(label: string, max = 22): string {
 export function KomponentenVerlaufChart({
   rows, bars, einheit = 'kWh', tall, gestapelt = true,
 }: { rows: VerlaufRow[]; bars: VerlaufBar[]; einheit?: string; tall?: boolean; gestapelt?: boolean }) {
+  const schmal = useSchmaleAchse()
   if (rows.length === 0) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Verlaufsdaten erfasst.</p>
   }
@@ -34,8 +36,8 @@ export function KomponentenVerlaufChart({
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" fontSize={10} interval="preserveStartEnd" />
-          <YAxis fontSize={10} width={44} unit={` ${einheit}`} />
+          <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+          <YAxis {...yAchse(schmal, 44)} unit={` ${einheit}`} />
           {/* ChartTooltip-SoT (S1: Viereck-Swatch, monochromer Wert); Serien-Name
               gekürzt, Wert gerundet mit Einheit. */}
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} nameFormatter={kuerze} />} />

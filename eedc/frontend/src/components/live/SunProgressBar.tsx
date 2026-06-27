@@ -82,10 +82,10 @@ export default function SunProgressBar({ sunrise, sunset, solar_noon, sonnenstun
       )}
 
       {/* Balken */}
-      <div className="relative h-3 rounded-full overflow-visible bg-gray-200 dark:bg-gray-700">
+      <div className="relative h-3 rounded-sm overflow-visible bg-gray-200 dark:bg-gray-700">
         {/* Gradient-Fortschritt */}
         <div
-          className="absolute inset-y-0 left-0 rounded-full"
+          className="absolute inset-y-0 left-0 rounded-sm"
           style={{
             width: `${pct}%`,
             background: `linear-gradient(to right, ${SOLAR_INTENSITAET.join(', ')})`,

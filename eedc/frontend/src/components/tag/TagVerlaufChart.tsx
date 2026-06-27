@@ -80,8 +80,8 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={chartDaten} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-          <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toFixed(1)} />
+          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} />
           <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
           <Tooltip {...eedcTooltipProps({
             unit: ' kW', decimals: 2,

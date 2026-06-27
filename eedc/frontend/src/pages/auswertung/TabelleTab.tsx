@@ -447,7 +447,7 @@ export function TabelleTab({ data, anlage, strompreis, alleTarife, zeitraumLabel
           {/* CSV Export */}
           <Button variant="secondary" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
-            CSV Export
+            CSV-Export
           </Button>
         </div>
       </div>

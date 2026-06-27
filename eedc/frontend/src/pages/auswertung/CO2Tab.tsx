@@ -96,7 +96,7 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />
-          CSV Export
+          CSV-Export
         </Button>
       </div>
 
@@ -159,9 +159,9 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
             <BarChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis unit=" kg" tick={{ fontSize: 11 }} />
+              <YAxis unit=" kg" tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip unit="kg CO2" decimals={0} />} />
-              <Bar dataKey="co2_einsparung" name="CO2 eingespart" fill={CHART_COLORS.co2Pv} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="co2_einsparung" name="CO2 eingespart" fill={CHART_COLORS.co2Pv} radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -177,7 +177,7 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
             <AreaChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis tickFormatter={(v) => `${(v/1000).toFixed(1)}`} unit=" t" tick={{ fontSize: 11 }} />
+              <YAxis tickFormatter={(v) => `${(v/1000).toFixed(1)}`} unit=" t" tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip formatter={(value) => `${(value / 1000).toFixed(2)} t CO2`} />} />
               <Area
                 type="monotone"

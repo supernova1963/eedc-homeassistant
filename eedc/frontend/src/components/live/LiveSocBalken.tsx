@@ -26,8 +26,8 @@ export default function LiveSocBalken({ gauges }: { gauges: LiveGauge[] }) {
                 <span className="text-gray-600 dark:text-gray-400 truncate mr-2">{gauge.label}</span>
                 <span className="font-bold text-gray-900 dark:text-white shrink-0">{Math.round(gauge.wert)}{gauge.einheit}</span>
               </div>
-              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+              <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-sm overflow-hidden">
+                <div className={`h-full rounded-sm transition-all ${color}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
               </div>
             </div>
           )

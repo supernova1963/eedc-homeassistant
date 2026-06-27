@@ -178,8 +178,8 @@ function VerticalTimeline({ entries, selectedJahr, selectedMonat, onSelect }: {
                     </div>
                     {!e.laufend && (
                       <svg className="mt-0.5 w-full h-1" aria-hidden="true">
-                        <rect width="100%" height="4" rx="2" className="fill-gray-100 dark:fill-gray-700" />
-                        <rect width={`${barW}%`} height="4" rx="2" className={isSel ? 'fill-blue-500' : 'fill-yellow-400 dark:fill-yellow-500'} />
+                        <rect width="100%" height="4" rx="1" className="fill-gray-100 dark:fill-gray-700" />
+                        <rect width={`${barW}%`} height="4" rx="1" className={isSel ? 'fill-blue-500' : 'fill-yellow-400 dark:fill-yellow-500'} />
                       </svg>
                     )}
                   </div>
@@ -587,8 +587,8 @@ export default function MonatsabschlussView() {
                             <span className={`text-4xl font-bold ${colorText}`}>{pct} %</span>
                           </FormelTooltip>
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
-                          <div className={`h-2 rounded-full ${colorBar}`} style={{ width: `${Math.min(100, pct)}%` }} />
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-2 mt-2">
+                          <div className={`h-2 rounded-sm ${colorBar}`} style={{ width: `${Math.min(100, pct)}%` }} />
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
                           {fmt(d.pv_erzeugung_kwh, 0)} von {fmt(d.soll_pv_kwh, 0)} kWh
@@ -612,8 +612,8 @@ export default function MonatsabschlussView() {
                           ]).map(({ label, pct: p, color }) => (
                             <div key={label} className="flex items-center gap-2 text-xs">
                               <span className="w-20 text-gray-600 dark:text-gray-400 shrink-0">{label}</span>
-                              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div className={`h-2 rounded-full ${color}`} style={{ width: `${p}%` }} />
+                              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-sm h-2">
+                                <div className={`h-2 rounded-sm ${color}`} style={{ width: `${p}%` }} />
                               </div>
                               <span className="w-8 text-right text-gray-700 dark:text-gray-300 font-medium tabular-nums">{p} %</span>
                             </div>

@@ -131,8 +131,8 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
             {achse === 'monate' ? (
               <BarChart data={monatData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={12} />
-                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
                 <Legend content={<ChartLegende />} />
                 {jahre.map((jahr, i) => (
@@ -142,8 +142,8 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
             ) : (
               <BarChart data={saisonData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={12} />
-                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
                 <Bar dataKey="value" name={modus === 'jaz' ? 'JAZ' : 'Strom'}>
                   {saisonData.map((s, i) => (

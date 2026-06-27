@@ -227,7 +227,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />
-          CSV Export
+          CSV-Export
         </Button>
       </div>
 
@@ -310,8 +310,8 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 <ComposedChart data={chartData.filter(z => z.speicher_ladung_kwh > 0 || z.speicher_entladung_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis yAxisId="left" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit=" %" tick={{ fontSize: 10 }} />
                   <Tooltip content={<ChartTooltip formatter={(value, name) => {
                       if (name.includes('Effizienz')) return `${value?.toFixed(1) || '—'} %`
                       return `${value.toFixed(0)} kWh`
@@ -430,7 +430,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 <ComposedChart data={chartData.filter(z => z.bkw_erzeugung_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+                  <YAxis unit=" kWh" width={60} tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
                   <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
                   <Legend content={<ChartLegende />} />
                   <Bar dataKey="bkw_erzeugung_kwh" name="Erzeugung" fill={CHART_COLORS.erzeugung} />
@@ -562,8 +562,8 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 <ComposedChart data={chartData.filter(z => z.wp_waerme_kwh > 0 || z.wp_strom_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis yAxisId="left" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="right" orientation="right" domain={[0, 'auto']} tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 'auto']} tick={{ fontSize: 10 }} />
                   <Tooltip content={<ChartTooltip formatter={(value, name) => {
                       if (name === 'COP') return `${value?.toFixed(2) || '—'}`
                       return `${value.toFixed(0)} kWh`
@@ -703,8 +703,8 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 <ComposedChart data={chartData.filter(z => z.emob_km > 0 || z.emob_ladung_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[0, 100]} unit=" %" tick={{ fontSize: 10 }} />
                   <Tooltip content={<ChartTooltip formatter={(value, name) => {
                       if (name.includes('PV-Anteil')) return `${value?.toFixed(0) || '—'} %`
                       if (name.includes('km')) return `${value.toFixed(0)} km`
@@ -782,7 +782,7 @@ export function KomponentenTab({ anlage, strompreis, selectedYear, zeitraumLabel
                 <ComposedChart data={chartData.filter(z => z.sonstiges_erzeugung_kwh > 0 || z.sonstiges_verbrauch_kwh > 0)} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+                  <YAxis unit=" kWh" width={60} tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
                   <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
                   <Legend content={<ChartLegende />} />
                   {sonstigesSummen.erzeugung > 0 && (

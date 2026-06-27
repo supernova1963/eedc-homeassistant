@@ -231,8 +231,8 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={vm.amortisationData}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis dataKey="jahr" label={{ value: 'Jahre', position: 'bottom' }} tick={{ fontSize: 12 }} />
-            <YAxis tickFormatter={geldTick} unit=" €" tick={{ fontSize: 12 }} width={70} />
+            <XAxis dataKey="jahr" label={{ value: 'Jahre', position: 'bottom' }} tick={{ fontSize: 10 }} />
+            <YAxis tickFormatter={geldTick} unit=" €" tick={{ fontSize: 10 }} width={70} />
             <Tooltip content={<ChartTooltip labelFormatter={(label) => `Jahr ${label}`} unit="€" />} />
             <Legend content={<ChartLegende />} />
             <Line type="monotone" dataKey="kumulierte_einsparung" name="Kumulierte Einsparung" stroke={GELD_COLORS.ersparnis} strokeWidth={2} dot={false} />
@@ -288,8 +288,8 @@ export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={vm.investitionenChart} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis type="number" tickFormatter={geldTick} />
-            <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
+            <XAxis type="number" tickFormatter={geldTick} tick={{ fontSize: 10 }} />
+            <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => name === 'Relevante Kosten' ? `${fmtZahl(value, 0)} €` : `${fmtZahl(value, 0)} €/Jahr`} />} />
             <Legend content={<ChartLegende />} />
             <Bar dataKey="kosten" fill={GELD_COLORS.kosten} name="Relevante Kosten" />

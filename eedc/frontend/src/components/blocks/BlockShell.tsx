@@ -104,8 +104,12 @@ export function BlockShell({
   }
 
   const ordered = order.map((id) => byId[id]).filter(Boolean) as Block[]
+  // D7-4 (detLAN R7): KEIN Eigen-Padding/-max-width mehr — die konsumierende Sicht
+  // ist der EINE Padding-Owner (`p-3 sm:p-6 max-w-[1920px] mx-auto`). Vorher paddete
+  // BlockShell zusätzlich → Doppel-Padding (Blöcke schmaler als Kopf/Parkplatz,
+  // Mobil-Platzverlust). Jetzt richten sich Kopf, Blöcke und Parkplatz an EINER Kante aus.
   return (
-    <div className="p-3 sm:p-6 space-y-3 max-w-[1920px] mx-auto">
+    <div className="space-y-3">
       <p className="text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-1">
         <span>
           Jeder Block: <ChevronDown className="inline h-3 w-3" /> einklappen ·{' '}

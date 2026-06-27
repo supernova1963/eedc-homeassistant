@@ -386,8 +386,8 @@ function SpeicherDeepDive({
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: achsen.achse, fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fill: achsen.achse, fontSize: 12 }} width={90} />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
-                  <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="community" name="Community" fill={achsen.referenz} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 2, 2, 0]} />
+                  <Bar dataKey="community" name="Community" fill={achsen.referenz} radius={[0, 2, 2, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -630,7 +630,7 @@ function WaermepumpeDeepDive({
                       width={120}
                     />
                     <Tooltip content={<ChartTooltip formatter={(value) => `JAZ: ${value.toFixed(2)}`} />} />
-                    <Bar dataKey="jaz" radius={[0, 4, 4, 0]}>
+                    <Bar dataKey="jaz" radius={[0, 2, 2, 0]}>
                       {regionData.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
@@ -829,7 +829,7 @@ function EAutoDeepDive({
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: achsen.achse, fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fill: achsen.achse, fontSize: 12 }} width={80} />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
-                  <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="wert" radius={[0, 2, 2, 0]}>
                     {ladequellenData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}

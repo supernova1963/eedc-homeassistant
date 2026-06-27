@@ -260,7 +260,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                   name="durchschnitt"
                 />
                 {/* Eigener Ertrag als Balken */}
-                <Bar dataKey="ertrag" radius={[4, 4, 0, 0]} name="ertrag">
+                <Bar dataKey="ertrag" radius={[2, 2, 0, 0]} name="ertrag">
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
@@ -381,7 +381,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                     labelFormatter={(label) => `${label} kWh/kWp`}
                   />}
                 />
-                <Bar dataKey="anzahl" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="anzahl" radius={[2, 2, 0, 0]}>
                   {distribution.bins.map((bin, index) => {
                     const isOwn = benchmark.benchmark.spez_ertrag_anlage >= bin.von &&
                                   benchmark.benchmark.spez_ertrag_anlage < bin.bis

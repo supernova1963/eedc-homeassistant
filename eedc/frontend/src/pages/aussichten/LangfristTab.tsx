@@ -157,14 +157,14 @@ export default function LangfristTab({ anlageId }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10 }}
                 angle={-45}
                 textAnchor="end"
                 height={60}
                 className="text-gray-600 dark:text-gray-400"
               />
               <YAxis
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
@@ -194,7 +194,7 @@ export default function LangfristTab({ anlageId }: Props) {
                 stroke={achsen.referenz}
                 strokeWidth={1}
                 strokeDasharray={PROGNOSE_DASH}
-                radius={[4, 4, 0, 0]}
+                radius={[2, 2, 0, 0]}
               />
 
               {/* Trend-korrigierte Prognose */}
@@ -202,7 +202,7 @@ export default function LangfristTab({ anlageId }: Props) {
                 dataKey="trend"
                 name="Trend-korrigiert"
                 fill={CHART_COLORS.erzeugung}
-                radius={[4, 4, 0, 0]}
+                radius={[2, 2, 0, 0]}
               />
             </ComposedChart>
           </ResponsiveContainer>

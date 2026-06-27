@@ -54,6 +54,9 @@ export default function BasisSensorenStep({
   onSolcastResourceIdsChange,
 }: BasisSensorenStepProps) {
   const hinweise = useFeldHinweise()
+  // Hook unbedingt auf Top-Level (react-hooks/rules-of-hooks) — vorher inline im
+  // bedingten Solcast-Block aufgerufen, was die Hook-Reihenfolge brechen konnte.
+  const haAvailable = useHAAvailable()
   const basisOptionen = [
     {
       value: 'sensor' as const,
@@ -260,7 +263,7 @@ export default function BasisSensorenStep({
             {/* Solcast PV Forecast (optional — Standalone API-Token) */}
             {onSolcastHaChange && (
               <SolcastConfigBlock
-                haAvailable={useHAAvailable()}
+                haAvailable={haAvailable}
                 solcastHaAktiv={solcastHaAktiv}
                 onSolcastHaChange={onSolcastHaChange}
                 solcastApiKey={solcastApiKey}

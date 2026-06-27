@@ -213,8 +213,8 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={vm.vergleichsDaten}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="monatName" />
-            <YAxis yAxisId="left" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} />
+            <XAxis dataKey="monatName" tick={{ fontSize: 10 }} />
+            <YAxis yAxisId="left" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} tick={{ fontSize: 10 }} />
             <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v}%`} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
               name.includes('%') ? formatProzent(value).text : formatEnergie(value, maxKwh).text} />} />

@@ -301,8 +301,8 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               {embed ? (
                 <BarChart data={moduleVergleichData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" fontSize={12} />
-                  <YAxis tickFormatter={jahresFormatter} width={70} fontSize={11} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={jahresFormatter} width={70} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
                   {/* SOLL deckend (S4: Balken nicht transparent); als Prognose nur
@@ -315,8 +315,8 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               ) : (
                 <BarChart data={jahresChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis tickFormatter={jahresFormatter} width={80} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={jahresFormatter} width={80} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
                   {data.strings.map((s, idx) => {
@@ -364,8 +364,8 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={saisonalChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis tickFormatter={saisonalFormatter} width={80} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={saisonalFormatter} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
                 <Area

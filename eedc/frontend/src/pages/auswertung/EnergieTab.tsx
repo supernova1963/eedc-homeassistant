@@ -51,7 +51,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />
-          CSV Export
+          CSV-Export
         </Button>
       </div>
 
@@ -160,7 +160,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
                 yAxisId="kwh"
                 tickFormatter={(v) => `${v.toFixed(0)}`}
                 unit=" kWh"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10 }}
               />
               {showAutarkie && (
                 <YAxis
@@ -168,7 +168,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
                   orientation="right"
                   domain={[0, 100]}
                   unit="%"
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                 />
               )}
               <Tooltip content={<ChartTooltip formatter={(value, name) => {
@@ -223,8 +223,8 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
             <ComposedChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis yAxisId="left" domain={[0, 100]} unit="%" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh/kWp" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="left" domain={[0, 100]} unit=" %" tick={{ fontSize: 10 }} />
+              <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh/kWp" tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip formatter={(value, name) => {
                   if (name.includes('kWh/kWp')) return `${value.toFixed(0)} kWh/kWp`
                   return `${value.toFixed(1)} %`
@@ -249,7 +249,7 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
             <LineChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis unit=" kWh" width={60} tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+              <YAxis unit=" kWh" width={60} tick={{ fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
               <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Line type="monotone" dataKey="erzeugung" name="PV-Erzeugung" stroke={CHART_COLORS.erzeugung} strokeWidth={2} dot={false} />
             </LineChart>

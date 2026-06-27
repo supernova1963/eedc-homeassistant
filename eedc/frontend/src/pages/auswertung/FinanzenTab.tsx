@@ -129,7 +129,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
         </p>
         <Button variant="secondary" size="sm" onClick={handleExportCSV}>
           <Download className="h-4 w-4 mr-2" />
-          CSV Export
+          CSV-Export
         </Button>
       </div>
 
@@ -228,7 +228,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
             <BarChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis unit=" €" tick={{ fontSize: 11 }} />
+              <YAxis unit=" €" tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
@@ -253,7 +253,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
             <AreaChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis unit=" €" tick={{ fontSize: 11 }} />
+              <YAxis unit=" €" tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
               <Area
                 type="monotone"
@@ -287,7 +287,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
             <ComposedChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-              <YAxis unit=" €" tick={{ fontSize: 11 }} />
+              <YAxis unit=" €" tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
               <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
               <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />

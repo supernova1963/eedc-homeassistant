@@ -412,7 +412,7 @@ export default function AktuellerMonat() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={energieBilanzData} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" unit=" kWh" />
+                  <XAxis type="number" unit=" kWh" tick={{ fontSize: 10 }} />
                   <YAxis
                     type="category"
                     dataKey="name"
@@ -422,7 +422,7 @@ export default function AktuellerMonat() {
                       const info = entry?.quellefeld ? q[entry.quellefeld] : null
                       return (
                         <g transform={`translate(${props.x},${props.y})`}>
-                          <text x={-8} y={0} dy={4} textAnchor="end" className="text-xs fill-gray-700 dark:fill-gray-300" fontSize={12}>
+                          <text x={-8} y={0} dy={4} textAnchor="end" className="fill-gray-700 dark:fill-gray-300" fontSize={10}>
                             {props.payload.value}
                           </text>
                           {info && (
@@ -437,7 +437,7 @@ export default function AktuellerMonat() {
                     }}
                   />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
-                  <Bar dataKey="value" name="kWh" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="value" name="kWh" radius={[0, 2, 2, 0]}>
                     {energieBilanzData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
@@ -523,12 +523,12 @@ export default function AktuellerMonat() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={vorjahrData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis tickFormatter={vorjahrFormatter} width={90} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={vorjahrFormatter} width={90} tick={{ fontSize: 10 }} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
-                <Bar dataKey="Aktuell" fill={CHART_COLORS.erzeugung} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Vorjahr" fill={achsen.referenz} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Aktuell" fill={CHART_COLORS.erzeugung} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="Vorjahr" fill={achsen.referenz} radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -666,8 +666,8 @@ export default function AktuellerMonat() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={waterfallData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={(v: number) => `${v.toFixed(0)} €`} width={52} tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={(v: number) => `${v.toFixed(0)} €`} width={52} tick={{ fontSize: 10 }} />
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     const p = payload[0]?.payload
@@ -679,7 +679,7 @@ export default function AktuellerMonat() {
                   }} />
                   {/* Unsichtbarer Offset-Balken positioniert den sichtbaren Balken korrekt */}
                   <Bar dataKey="offset" stackId="wf" fill="transparent" legendType="none" />
-                  <Bar dataKey="wert" stackId="wf" radius={[3, 3, 0, 0]} legendType="none">
+                  <Bar dataKey="wert" stackId="wf" radius={[2, 2, 0, 0]} legendType="none">
                     {waterfallData.map((entry, i) => (
                       <Cell key={i} fill={entry.fill} />
                     ))}
@@ -800,12 +800,12 @@ export default function AktuellerMonat() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sollIstData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis tickFormatter={sollIstFormatter} width={90} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis tickFormatter={sollIstFormatter} width={90} tick={{ fontSize: 10 }} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
-                  <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -520,9 +520,9 @@ function ProgressBar({ value, color }: { value: number; color: 'primary' | 'blue
   }
 
   return (
-    <div className="w-full bg-white/50 dark:bg-gray-700/50 rounded-full h-2">
+    <div className="w-full bg-white/50 dark:bg-gray-700/50 rounded-sm h-2">
       <div
-        className={`h-2 rounded-full ${colorClasses[color]} transition-all duration-500`}
+        className={`h-2 rounded-sm ${colorClasses[color]} transition-all duration-500`}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>

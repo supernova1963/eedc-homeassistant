@@ -335,9 +335,9 @@ export default function DatenChecker() {
                   {result.monatsdaten_abdeckung.vorhanden} von {result.monatsdaten_abdeckung.erwartet} Monate ({result.monatsdaten_abdeckung.prozent} %)
                 </span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-2.5">
                 <div
-                  className={`h-2.5 rounded-full transition-all ${
+                  className={`h-2.5 rounded-sm transition-all ${
                     result.monatsdaten_abdeckung.prozent >= 90
                       ? 'bg-green-500'
                       : result.monatsdaten_abdeckung.prozent >= 70

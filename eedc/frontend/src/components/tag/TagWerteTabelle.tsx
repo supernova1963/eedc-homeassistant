@@ -248,7 +248,7 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
           </div>
           <Button variant="secondary" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-1.5" />
-            CSV
+            CSV-Export
           </Button>
         </div>
       </div>

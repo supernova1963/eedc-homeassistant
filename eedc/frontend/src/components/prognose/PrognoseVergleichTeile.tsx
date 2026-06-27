@@ -673,8 +673,8 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={visibleChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} opacity={0.3} />
-            <XAxis dataKey="stunde" tick={{ fontSize: 11 }} tickFormatter={(v) => v.replace(':00', '')} padding={{ left: 8, right: 8 }} />
-            <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
+            <XAxis dataKey="stunde" tick={{ fontSize: 10 }} tickFormatter={(v) => v.replace(':00', '')} padding={{ left: 8, right: 8 }} />
+            <YAxis tick={{ fontSize: 10 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
             <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
             <Legend content={<ChartLegende formatter={(v) => ({ ist: 'IST', eedc: `eedc${lf != null ? ` (OpenMeteo ×${fmtZahl(lf, 2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)' }[v] || v)} />} />
             {data.aktuelle_stunde !== null && (<ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke={achsen.referenz} strokeDasharray="3 3" label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: achsen.achse }} />)}

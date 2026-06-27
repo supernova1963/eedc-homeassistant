@@ -196,8 +196,8 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={60} className="text-gray-600 dark:text-gray-400" />
-            <YAxis tick={{ fontSize: 12 }} className="text-gray-600 dark:text-gray-400" label={{ value: 'kWh', angle: -90, position: 'insideLeft' }} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} className="text-gray-600 dark:text-gray-400" />
+            <YAxis tick={{ fontSize: 10 }} className="text-gray-600 dark:text-gray-400" label={{ value: 'kWh', angle: -90, position: 'insideLeft' }} />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) => {
               if (name === 'Konfidenzband') return null
               return `${value.toFixed(0)} kWh`
@@ -208,8 +208,8 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
             )}
             {/* PVGIS = Referenz/Basis-Modell, KEINE IST-Serie im Chart (vs. die genauere
                 trend-korrigierte Prognose) → HILFSLINIE_DASH statt PROGNOSE_DASH (Regel C). */}
-            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={HILFSLINIE_DASH} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="trend" name="Trend-korrigiert" fill={CHART_COLORS.erzeugung} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={HILFSLINIE_DASH} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="trend" name="Trend-korrigiert" fill={CHART_COLORS.erzeugung} radius={[2, 2, 0, 0]} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

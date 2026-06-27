@@ -241,19 +241,19 @@ export default function KurzfristTab({ anlageId }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="datum"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
               />
               <YAxis
                 yAxisId="left"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fontSize: 12 }}
+                tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: '°C', angle: 90, position: 'insideRight' }}
               />
@@ -278,7 +278,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                     name="Nachmittag"
                     stackId="pv"
                     fill={SOLAR_INTENSITAET[1]}
-                    radius={[4, 4, 0, 0]}
+                    radius={[2, 2, 0, 0]}
                   />
                 </>
               ) : (
@@ -287,7 +287,7 @@ export default function KurzfristTab({ anlageId }: Props) {
                   dataKey="pv_kwh"
                   name="PV-Prognose"
                   fill={CHART_COLORS.erzeugung}
-                  radius={[4, 4, 0, 0]}
+                  radius={[2, 2, 0, 0]}
                 />
               )}
               <Line

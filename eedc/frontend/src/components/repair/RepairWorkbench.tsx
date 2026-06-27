@@ -795,7 +795,7 @@ function formatTime(iso: string): string {
     // Zeitzone-Marker (vor v3.30.3, #257 detLAN). `new Date(iso)` würde die
     // dann als lokale Zeit interpretieren — wir hängen `Z` an, wenn weder
     // `Z` noch `+HH:MM`/`-HH:MM` am Ende stehen.
-    const needsTz = !/Z$|[+\-]\d{2}:?\d{2}$/.test(iso)
+    const needsTz = !/Z$|[+-]\d{2}:?\d{2}$/.test(iso)
     const normalized = needsTz ? `${iso}Z` : iso
     return new Date(normalized).toLocaleString('de-DE', {
       year: 'numeric', month: '2-digit', day: '2-digit',

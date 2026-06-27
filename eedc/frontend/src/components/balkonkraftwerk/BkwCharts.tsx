@@ -32,8 +32,8 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" fontSize={10} />
-          <YAxis />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
@@ -52,8 +52,8 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" fontSize={10} />
-          <YAxis />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />

@@ -278,9 +278,10 @@ export default function PVGISSettings() {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                           <YAxis
                             width={70}
+                            tick={{ fontSize: 10 }}
                             tickFormatter={(v) => `${Number(v).toLocaleString('de-DE')} kWh`}
                           />
                           <Tooltip content={<ChartTooltip unit="kWh" />} />
@@ -564,9 +565,10 @@ export default function PVGISSettings() {
                       margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" fontSize={10} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                       <YAxis
                         width={70}
+                        tick={{ fontSize: 10 }}
                         tickFormatter={(v) => `${Number(v).toLocaleString('de-DE')} kWh`}
                       />
                       <Tooltip content={<ChartTooltip unit="kWh" />} />

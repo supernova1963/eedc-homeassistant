@@ -41,7 +41,7 @@ describe('Element-Park (SLICE 1)', () => {
     expect(screen.queryByText(/Papierkorb/)).not.toBeInTheDocument()
   })
 
-  it('parkt ein Element per Rechtsklick → Element weg, „Geparkt (1)" + Chip', () => {
+  it('parkt ein Element per Rechtsklick → Element weg, „Parkplatz (1)" + Chip', () => {
     render(<Harness />)
     expect(screen.getByText('Inhalt A')).toBeInTheDocument()
     // Rechtsklick auf Element A → Overlay „Parken".
@@ -50,7 +50,7 @@ describe('Element-Park (SLICE 1)', () => {
 
     expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
     expect(screen.getByText('Inhalt B')).toBeInTheDocument()
-    expect(screen.getByText('Geparkt (1)')).toBeInTheDocument()
+    expect(screen.getByText('Parkplatz (1)')).toBeInTheDocument()
   })
 
   it('holt ein geparktes Element per Chip-Tap zurück', () => {
@@ -58,10 +58,10 @@ describe('Element-Park (SLICE 1)', () => {
     fireEvent.contextMenu(screen.getByText('Inhalt A'))
     fireEvent.click(screen.getByText('Parken'))
     // „Geparkt"-Block aufklappen → Chip antippen.
-    fireEvent.click(screen.getByText('Geparkt (1)'))
+    fireEvent.click(screen.getByText('Parkplatz (1)'))
     fireEvent.click(screen.getByText('Kennzahl A'))
     expect(screen.getByText('Inhalt A')).toBeInTheDocument()
-    expect(screen.queryByText(/Geparkt \(/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Parkplatz \(/)).not.toBeInTheDocument()
   })
 
   it('„alles zurückholen" leert den Papierkorb', () => {
@@ -70,11 +70,11 @@ describe('Element-Park (SLICE 1)', () => {
     fireEvent.click(screen.getByText('Parken'))
     fireEvent.contextMenu(screen.getByText('Inhalt B'))
     fireEvent.click(screen.getByText('Parken'))
-    expect(screen.getByText('Geparkt (2)')).toBeInTheDocument()
+    expect(screen.getByText('Parkplatz (2)')).toBeInTheDocument()
     fireEvent.click(screen.getByText('alles zurückholen'))
     expect(screen.getByText('Inhalt A')).toBeInTheDocument()
     expect(screen.getByText('Inhalt B')).toBeInTheDocument()
-    expect(screen.queryByText(/Geparkt \(/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Parkplatz \(/)).not.toBeInTheDocument()
   })
 
   it('persistiert geparkte Elemente (id + titel) pro Sicht in localStorage', () => {
@@ -89,7 +89,7 @@ describe('Element-Park (SLICE 1)', () => {
     unmount()
     render(<Harness />)
     expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
-    expect(screen.getByText('Geparkt (1)')).toBeInTheDocument()
+    expect(screen.getByText('Parkplatz (1)')).toBeInTheDocument()
   })
 
   it('lädt schema-robust: kaputter/fremder LS-Inhalt → leer, kein Crash', () => {
@@ -97,7 +97,7 @@ describe('Element-Park (SLICE 1)', () => {
     render(<Harness />)
     expect(screen.getByText('Inhalt A')).toBeInTheDocument()
     expect(screen.getByText('Inhalt B')).toBeInTheDocument()
-    expect(screen.queryByText(/Geparkt \(/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Parkplatz \(/)).not.toBeInTheDocument()
   })
 
   it('verwirft unbekannte/teilweise Einträge beim Laden (Element bleibt sichtbar)', () => {
@@ -105,6 +105,6 @@ describe('Element-Park (SLICE 1)', () => {
     render(<Harness />)
     // kpi:a ohne titel = ungültig → nicht geparkt → A sichtbar.
     expect(screen.getByText('Inhalt A')).toBeInTheDocument()
-    expect(screen.queryByText(/Geparkt \(/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Parkplatz \(/)).not.toBeInTheDocument()
   })
 })

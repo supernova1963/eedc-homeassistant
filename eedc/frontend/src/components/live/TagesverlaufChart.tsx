@@ -156,13 +156,13 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="zeit"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 10 }}
             className="fill-gray-500 dark:fill-gray-400"
             interval="preserveStartEnd"
           />
           <YAxis
             yAxisId="left"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 10 }}
             className="fill-gray-500 dark:fill-gray-400"
             tickFormatter={(v: number) => v.toFixed(1)}
           />

@@ -190,12 +190,15 @@ export default function CockpitJahrV4({ anlageId }: { anlageId: number | undefin
 
           {error ? (
             <Card><p className="text-red-500">{error}</p></Card>
-          ) : loading ? (
+          ) : loading && !jahrData ? (
+            // Voll-Spinner NUR beim Erst-Load (detLAN D7-2, 2026-06-27; analog Tag T2).
+            // Beim Jahreswechsel bleibt der Block-Stack stehen und aktualisiert sich
+            // in-place; kein `key={…}` mehr → BlockShell re-rendert statt zu remounten.
             <LoadingSpinner text="Lade Jahr…" />
           ) : jahr == null ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Jahresdaten erfasst.</p></Card>
           ) : (
-            <BlockShell key={`jahr-${jahr}`} persistKey="v4-cockpit-jahr" bloecke={bloecke} sortierbar />
+            <BlockShell persistKey="v4-cockpit-jahr" bloecke={bloecke} sortierbar />
           )}
         </div>
       </div>

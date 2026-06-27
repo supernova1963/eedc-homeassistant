@@ -254,7 +254,7 @@ export function WerteTabelle({
           </Button>
         )}
         <Button size="sm" variant="secondary" onClick={csvExport}>
-          <Download className="h-4 w-4" /> CSV
+          <Download className="h-4 w-4" /> CSV-Export
         </Button>
         {alleWerteHref && (
           <a href={alleWerteHref} className="ml-auto inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">

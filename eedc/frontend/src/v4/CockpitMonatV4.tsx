@@ -313,12 +313,16 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
 
           {error ? (
             <Card><p className="text-red-500">{error}</p></Card>
-          ) : loading ? (
+          ) : loading && !monatData ? (
+            // Voll-Spinner NUR beim Erst-Load (noch keine Daten). Beim Monatswechsel
+            // bleibt der bestehende Block-Stack stehen und aktualisiert sich in-place
+            // → kein „Aufblitzen" (detLAN D7-2, 2026-06-27; analog Tag T2). Kein
+            // `key={…}` mehr → BlockShell re-rendert statt zu remounten.
             <LoadingSpinner text="Lade Monat…" />
           ) : monate.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
           ) : (
-            <BlockShell key={`monat-${gewaehlt?.jahr}-${gewaehlt?.monat}`} persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
+            <BlockShell persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
           )}
 
           {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer,

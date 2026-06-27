@@ -138,7 +138,7 @@ function Co2Inner() {
       summary: `${fc.text} eingespart`, defaultOpen: true,
       badge: (
         <Button variant="secondary" size="sm" onClick={handleCsv}>
-          <Download className="h-4 w-4 mr-1" /> CSV
+          <Download className="h-4 w-4 mr-1" /> CSV-Export
         </Button>
       ),
       render: () => (
@@ -152,9 +152,9 @@ function Co2Inner() {
                   <BarChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={monAchse.tick} unit={` ${monAchse.einheit}`} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={monAchse.tick} unit={` ${monAchse.einheit}`} tick={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${monAchse.tick(v)} ${monAchse.einheit}`} />} />
-                    <Bar dataKey="co2_einsparung" name="CO₂ eingespart" fill={CHART_COLORS.co2Pv} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="co2_einsparung" name="CO₂ eingespart" fill={CHART_COLORS.co2Pv} radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -208,7 +208,7 @@ function Co2Inner() {
                   <AreaChart data={kumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={kumAchse.tick} unit={` ${kumAchse.einheit}`} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={kumAchse.tick} unit={` ${kumAchse.einheit}`} tick={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${kumAchse.tick(v)} ${kumAchse.einheit}`} />} />
                     <Area type="monotone" dataKey="kumuliert_co2" name="Kumulierte Einsparung"
                       stroke={CHART_COLORS.co2Pv} fill={CHART_COLORS.co2Pv} fillOpacity={0.3} />

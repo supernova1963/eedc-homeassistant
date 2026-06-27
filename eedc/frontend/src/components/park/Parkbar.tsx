@@ -4,7 +4,7 @@
  * Geste (kein sichtbares Icon, Affordanz = die Geste):
  *  • Desktop: Rechtsklick (contextmenu, preventDefault) → Park-Overlay
  *  • Mobil:   Long-Press (~500 ms, Bewegung < 10 px) → Park-Overlay
- * Overlay (Papierkorb + „Parken") erscheint nur während der Geste, schließt bei
+ * Overlay (Parkplatz-Symbol + „Parken") erscheint nur während der Geste, schließt bei
  * Außen-Tap. Zurückholen läuft NICHT hier, sondern per Chip-Tap im {@link GeparktBlock}.
  *
  * Release-sicher: außerhalb eines ParkProvider (`!aktiv`) reicht der Wrapper die
@@ -13,7 +13,7 @@
  * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
  */
 import { useRef, useState, type ReactNode } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ParkingSquare } from 'lucide-react'
 import { usePark } from './ParkContext'
 
 const LONGPRESS_MS = 500
@@ -25,7 +25,7 @@ export function Parkbar({
   children,
 }: {
   id: string
-  /** Klartext für den Papierkorb-Chip (wird beim Parken mitpersistiert). */
+  /** Klartext für den Parkplatz-Chip (wird beim Parken mitpersistiert). */
   titel: string
   children: ReactNode
 }) {
@@ -94,7 +94,7 @@ export function Parkbar({
             onClick={parke}
             className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-1 rounded-xl bg-gray-900/70 text-white backdrop-blur-sm transition-colors hover:bg-gray-900/80"
           >
-            <Trash2 className="h-5 w-5" />
+            <ParkingSquare className="h-5 w-5" />
             <span className="text-xs font-medium">Parken</span>
           </button>
         </>

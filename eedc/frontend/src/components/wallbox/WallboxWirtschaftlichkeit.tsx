@@ -36,7 +36,7 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
             <BarChart data={kostenVergleichData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-              <YAxis type="category" dataKey="name" width={150} />
+              <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="value" name="Kosten" />

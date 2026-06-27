@@ -60,8 +60,8 @@ export function JahresRail({ entries, jahr, onSelect }: JahresRailProps) {
                   </span>
                 </div>
                 <svg className="mt-0.5 w-full h-1" aria-hidden="true">
-                  <rect width="100%" height="4" rx="2" className="fill-gray-100 dark:fill-gray-700" />
-                  <rect width={`${barW}%`} height="4" rx="2" className={sel ? 'fill-blue-500' : DATENROLLE.pv.fill} />
+                  <rect width="100%" height="4" rx="1" className="fill-gray-100 dark:fill-gray-700" />
+                  <rect width={`${barW}%`} height="4" rx="1" className={sel ? 'fill-blue-500' : DATENROLLE.pv.fill} />
                 </svg>
               </div>
             </button>

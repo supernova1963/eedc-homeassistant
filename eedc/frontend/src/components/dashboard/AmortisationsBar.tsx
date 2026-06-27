@@ -43,9 +43,9 @@ function SichtBar({ label, kurzbeschreibung, invest, kumuliert, anzahlMonate, ja
           {progress >= 100 && <> · ✓ amortisiert</>}
         </span>
       </div>
-      <div className="h-2 bg-emerald-200 dark:bg-emerald-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-emerald-200 dark:bg-emerald-800 rounded-sm overflow-hidden">
         <div
-          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+          className="h-full bg-emerald-500 rounded-sm transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>

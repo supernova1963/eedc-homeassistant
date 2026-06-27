@@ -19,7 +19,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Euro, TrendingUp, Wallet, FileText, Download, Wrench } from 'lucide-react'
-import { LoadingSpinner, Card, Button, ChartLegende } from '../components/ui'
+import { LoadingSpinner, Card, Button, buttonClasses, ChartLegende } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -192,7 +192,7 @@ function FinanzenInner() {
                   <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Legend content={<ChartLegende />} />
                     <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
@@ -212,7 +212,7 @@ function FinanzenInner() {
                   <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
                     <Area type="monotone" dataKey="kumuliert_ertrag" name="Kumulierter Ertrag"
                       stroke={COLORS.feedin} fill={COLORS.feedin} fillOpacity={0.3} />
@@ -235,7 +235,7 @@ function FinanzenInner() {
                   <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 10 }} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
                     <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
@@ -294,7 +294,9 @@ function FinanzenInner() {
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
       <AuswertungKopf titel="Finanzen" jahr={basis.jahr} setJahr={basis.setJahr} jahre={basis.jahre} />
-      <BlockShell key={`fin-${basis.jahr}`} persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
+      {/* Kein `key={jahr}` → BlockShell re-rendert in-place beim Jahreswechsel
+          (detLAN D7-6, 2026-06-27), statt sichtbar zu remounten. */}
+      <BlockShell persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
       <ParkFuss />
     </div>
   )
@@ -377,7 +379,10 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
           </select>
         )}
       </div>
-      {laden ? (
+      {laden && !d ? (
+        // Spinner nur beim Erst-Load; beim Monat/Jahr-Umschalten bleibt das
+        // bestehende T-Konto stehen und der Content tauscht in-place (detLAN D7-6,
+        // 2026-06-27 — „ausschließlich den Content neu schreiben").
         <LoadingSpinner text="Lade T-Konto…" />
       ) : d ? (
         <TKonto d={d} sonderkosten={sonderkosten} />
@@ -398,7 +403,7 @@ function FinanzberichtTeaser({ anlageId, jahr }: { anlageId: number | undefined 
         Finanzbericht als PDF{jahr !== 'alle' ? ` (Jahr ${jahr})` : ' (Gesamtzeitraum)'} — die zentrale
         Berichts-/Dokumentenverwaltung folgt in den Einstellungen.
       </p>
-      <a href={url} className="min-h-[44px] inline-flex items-center gap-2 px-4 rounded-lg text-sm font-medium bg-primary-600 text-white hover:bg-primary-700">
+      <a href={url} className={buttonClasses({ variant: 'primary', className: 'gap-2 no-underline' })}>
         <FileText className="h-4 w-4" /> Finanzbericht (PDF)
       </a>
     </div>

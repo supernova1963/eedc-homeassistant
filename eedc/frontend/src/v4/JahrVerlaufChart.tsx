@@ -17,7 +17,8 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { ChartTooltip, ChartLegende } from '../components/ui'
-import { CHART_COLORS, MONAT_KURZ, CHART_HOVER_CURSOR } from '../lib'
+import { CHART_COLORS, MONAT_KURZ, CHART_HOVER_CURSOR, xAchse, yAchse } from '../lib'
+import { useSchmaleAchse } from '../hooks'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
 type BilanzView = 'erzeugung' | 'verbrauch'
@@ -50,6 +51,7 @@ export function baueJahrChartDaten(monate: AggregierteMonatsdaten[]): ChartPunkt
 }
 
 export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] }) {
+  const schmal = useSchmaleAchse()
   const [view, setView] = useState<BilanzView>('erzeugung')
   const [showAutarkie, setShowAutarkie] = useState(false)
   const daten = useMemo(() => baueJahrChartDaten(monate), [monate])
@@ -100,10 +102,10 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={daten} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="monat" tick={{ fontSize: 12 }} />
-            <YAxis yAxisId="kwh" width={48} tick={{ fontSize: 12 }} unit=" kWh" />
+            <XAxis dataKey="monat" {...xAchse(schmal)} />
+            <YAxis yAxisId="kwh" {...yAchse(schmal, 48)} unit=" kWh" />
             {showAutarkie && (
-              <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} width={40} tick={{ fontSize: 12 }} unit=" %" />
+              <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} unit=" %" />
             )}
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) =>
               name === 'Autarkie' ? `${value.toFixed(1)} %` : `${value.toFixed(1)} kWh`} />} />

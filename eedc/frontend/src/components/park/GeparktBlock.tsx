@@ -1,5 +1,6 @@
 /**
- * GeparktBlock — der „Papierkorb" / „Geparkt (n)" am Fuß einer Sicht.
+ * GeparktBlock — der „Parkplatz (n)" am Fuß einer Sicht (Sammelzone für geparkte
+ * Elemente, passend zur Aktion „parken").
  *
  * Nur sichtbar bei n > 0, eingeklappt-default. Je geparktem Element ein Chip
  * (Titel) → ANTIPPEN holt es an seine feste kanonische Position zurück (Chip-Tap,
@@ -11,7 +12,7 @@
  * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
  */
 import { useState } from 'react'
-import { ChevronDown, RotateCcw, Trash2, Undo2 } from 'lucide-react'
+import { ChevronDown, RotateCcw, ParkingSquare, Undo2 } from 'lucide-react'
 import { usePark } from './ParkContext'
 
 export function GeparktBlock() {
@@ -21,17 +22,20 @@ export function GeparktBlock() {
   if (!park.aktiv || park.geparkt.length === 0) return null
   const n = park.geparkt.length
 
+  // D7-4: optisch als seitenbezogene Zone abgesetzt (gestrichelter Rahmen + gedämpfter
+  // Grund) — NICHT der solide Karten-Look eines Inhalts-Blocks, damit die Sonderbreite/
+  // Funktion (block-übergreifend) als gewollt liest.
   return (
-    <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+    <section className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-100/50 dark:bg-gray-800/30 overflow-hidden">
       <div className="flex items-center gap-2 px-3 min-h-[44px]">
         <button
           type="button"
           onClick={() => setOffen((o) => !o)}
           className="flex-1 flex items-center gap-2 text-left py-2 min-w-0"
         >
-          <Trash2 className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
+          <ParkingSquare className="h-4 w-4 flex-shrink-0 text-gray-400 dark:text-gray-500" />
           <span className="text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
-            Geparkt ({n})
+            Parkplatz ({n})
           </span>
           <span className="text-xs text-gray-400 dark:text-gray-500 truncate">
             ausgeblendete Anzeigen · antippen holt zurück

@@ -179,8 +179,8 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
         <ResponsiveContainer width="100%" height={360}>
           <ComposedChart data={chartDaten} margin={{ top: 5, right: hatSpeicher ? 50 : 10, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
-            <YAxis yAxisId="kw" tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v.toFixed(1)}`} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+            <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
+            <YAxis yAxisId="kw" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v.toFixed(1)}`} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
             {hatSpeicher && (
               <YAxis yAxisId="soc" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}%`} label={{ value: 'SoC', angle: 90, position: 'insideRight', style: { fontSize: 10 } }} />
             )}

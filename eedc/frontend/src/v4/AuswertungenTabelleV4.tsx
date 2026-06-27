@@ -226,7 +226,9 @@ function EnergieprofilBlock({
           />
         }
       />
-      {loading ? (
+      {loading && rows.length === 0 ? (
+        // Spinner nur beim Erst-Load; bei Zeitraum-/Vergleichswechsel bleibt die
+        // bestehende Tabelle stehen und aktualisiert sich in-place (detLAN D7-6).
         <LoadingSpinner text="Lade Tageswerte…" />
       ) : error ? (
         <p className="text-red-500 text-sm">{error}</p>

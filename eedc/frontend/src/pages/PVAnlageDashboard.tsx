@@ -379,8 +379,8 @@ export default function PVAnlageDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={jahresChartData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis tickFormatter={jahresFormatter} width={80} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={jahresFormatter} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="Erzeugung" fill={COLORS.solar} />

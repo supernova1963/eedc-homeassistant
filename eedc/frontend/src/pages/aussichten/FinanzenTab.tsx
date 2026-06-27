@@ -184,9 +184,9 @@ export default function FinanzenTab({ anlageId }: Props) {
             {prognose.bisherige_ertraege_euro.toLocaleString('de-DE')} € von {prognose.investition_gesamt_euro.toLocaleString('de-DE')} €
           </span>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-4">
           <div
-            className={`h-4 rounded-full transition-all ${
+            className={`h-4 rounded-sm transition-all ${
               prognose.amortisation_erreicht
                 ? 'bg-green-500'
                 : amortFortschritt > 75
@@ -233,13 +233,13 @@ export default function FinanzenTab({ anlageId }: Props) {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis
                   dataKey="name"
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
                 <YAxis
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 10 }}
                   label={{ value: '€', angle: -90, position: 'insideLeft' }}
                 />
                 <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />

@@ -1059,9 +1059,9 @@ function AchievementBadge({ achievement }: { achievement: Achievement }) {
       {/* Fortschrittsbalken für nicht erreichte */}
       {!achievement.erreicht && achievement.fortschritt !== undefined && (
         <div className="mt-2">
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-1.5">
             <div
-              className={`h-1.5 rounded-full ${
+              className={`h-1.5 rounded-sm ${
                 achievement.farbe === 'yellow' ? 'bg-yellow-400' :
                 achievement.farbe === 'green' ? 'bg-green-400' :
                 achievement.farbe === 'blue' ? 'bg-blue-400' :

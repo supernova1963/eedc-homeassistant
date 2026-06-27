@@ -310,8 +310,8 @@ function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
@@ -481,8 +481,8 @@ function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, select
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" fontSize={10} />
-                <YAxis />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="bezug_pv" stackId="1" fill={KATEGORIE_FARBEN.pv} name="PV-Strom" />
@@ -617,8 +617,8 @@ function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" fontSize={10} />
-              <YAxis />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} />
               <Tooltip content={<ChartTooltip />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />

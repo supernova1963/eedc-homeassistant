@@ -211,9 +211,9 @@ export default function Energieprofil() {
                     {stats.zeitraum.abdeckung_prozent} %
                   </span>
                 </div>
-                <div className="w-full bg-emerald-200 dark:bg-emerald-800 rounded-full h-2">
+                <div className="w-full bg-emerald-200 dark:bg-emerald-800 rounded-sm h-2">
                   <div
-                    className="bg-emerald-500 h-2 rounded-full transition-all"
+                    className="bg-emerald-500 h-2 rounded-sm transition-all"
                     style={{ width: `${Math.min(100, stats.zeitraum.abdeckung_prozent)}%` }}
                   />
                 </div>

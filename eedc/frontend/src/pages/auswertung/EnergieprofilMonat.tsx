@@ -556,8 +556,8 @@ function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | 
       <ResponsiveContainer>
         <LineChart data={chartDaten} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} strokeOpacity={0.3} />
-          <XAxis dataKey="stunde" tick={{ fontSize: 11 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 10 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', fontSize: 11 }} />
           <Tooltip content={<ChartTooltip unit="kW" />} />
           <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
           <Line type="monotone" dataKey="PV" stroke={KATEGORIE_FARBEN.pv} strokeWidth={2} dot={false} name="PV Ø" />

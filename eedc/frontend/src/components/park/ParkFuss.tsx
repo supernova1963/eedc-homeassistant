@@ -20,7 +20,7 @@ export function ParkFuss() {
       <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1.5 px-1">
         <MousePointerClick className="h-3 w-3 flex-shrink-0" />
         <span>
-          Tipp: eine Anzeige lange drücken (Rechtsklick) → in den Papierkorb.
+          Tipp: eine Anzeige lange drücken (Rechtsklick) → auf den Parkplatz.
         </span>
       </p>
     </div>

@@ -333,7 +333,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                 width={100}
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" />} />
-              <Bar dataKey="wert" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="wert" radius={[0, 2, 2, 0]}>
                 {vergleichsData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />
                 ))}

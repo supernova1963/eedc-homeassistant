@@ -52,8 +52,8 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdat
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="jahr" fontSize={11} />
-            <YAxis fontSize={10} width={56} unit=" kWh" />
+            <XAxis dataKey="jahr" tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} width={56} unit=" kWh" />
             <Tooltip {...eedcTooltipProps({ unit: ' kWh', decimals: 0, percentOf: 'gesamt' })} />
             <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
             {serien.map((s) => (

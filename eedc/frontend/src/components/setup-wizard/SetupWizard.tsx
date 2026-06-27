@@ -166,9 +166,9 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                   {currentStepIndex + 1}/{STEPS_CONFIG.length}
                 </span>
               </div>
-              <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-sm overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-sm transition-all duration-500"
                   style={{ width: `${wizard.progress}%` }}
                 />
               </div>

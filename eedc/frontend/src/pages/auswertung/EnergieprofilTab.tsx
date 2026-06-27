@@ -358,8 +358,8 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
           <ResponsiveContainer width="100%" height={320}>
             <ComposedChart data={chartDaten} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
-              <XAxis dataKey="stunde" tick={{ fontSize: 11 }} interval={2} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${v}`} />
+              <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${v}`} />
               <Tooltip content={<ChartTooltip unit=" kW" decimals={2} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
               {GRUPPEN.filter(g => aktivGruppen.includes(g.label)).map(g => (
@@ -606,8 +606,8 @@ export function EnergieprofilTab({ anlageId }: EnergieprofilTabProps) {
                 <span>{tageMitDaten} von {MIN_TAGE} Tagen</span>
                 <span>{Math.round(tageMitDaten / MIN_TAGE * 100)} %</span>
               </div>
-              <div className="h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className={`h-full bg-primary-500 rounded-full transition-all ${progressClass}`} />
+              <div className="h-2.5 bg-gray-200 dark:bg-gray-700 rounded-sm overflow-hidden">
+                <div className={`h-full bg-primary-500 rounded-sm transition-all ${progressClass}`} />
               </div>
             </div>
             <p className="text-xs text-gray-400 dark:text-gray-500">

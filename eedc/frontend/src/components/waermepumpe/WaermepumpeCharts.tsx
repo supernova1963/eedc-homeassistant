@@ -27,8 +27,8 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" fontSize={10} />
-          <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+          <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} tick={{ fontSize: 10 }} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
@@ -52,7 +52,7 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
           <BarChart data={data} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-            <YAxis type="category" dataKey="name" width={110} />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
             <Bar dataKey="value" />
           </BarChart>
