@@ -51,7 +51,7 @@ import {
 } from 'recharts'
 
 // Bundesland-Namen + Farb-Zentrale
-import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE } from '../../lib'
+import { REGION_NAMEN, EIGENE_SERIE_FARBEN, SERIEN_PALETTE, ACHSEN_TICK } from '../../lib'
 
 interface UebersichtTabProps {
   anlageId: number
@@ -578,7 +578,7 @@ export default function UebersichtTab({ benchmark, benchmarkLoading: loading, be
                   <PolarGrid stroke={achsen.grid} />
                   <PolarAngleAxis
                     dataKey="kategorie"
-                    tick={{ fill: achsen.achse, fontSize: 11 }}
+                    tick={ACHSEN_TICK}
                   />
                   <PolarRadiusAxis
                     angle={90}

@@ -15,11 +15,11 @@ import {
   FileSpreadsheet, Plug, Cloud, Upload, FileText,
 } from 'lucide-react'
 import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc, ChartLegende } from '../components/ui'
-import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH } from '../lib'
+import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH, xAchse, yAchse } from '../lib'
 import { useChartTheme } from '../context/ThemeContext'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { DataLoadingState } from '../components/common'
-import { useSelectedAnlage, useApiData } from '../hooks'
+import { useSelectedAnlage, useApiData, useSchmaleAchse } from '../hooks'
 import { aktuellerMonatApi } from '../api/aktuellerMonat'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -72,6 +72,7 @@ function QuelleBadge({ quelle, aktiv }: { quelle: string; aktiv: boolean }) {
 export default function AktuellerMonat() {
   const navigate = useNavigate()
   const achsen = useChartTheme()
+  const schmal = useSchmaleAchse()
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [refreshing, setRefreshing] = useState(false)
 
@@ -523,8 +524,8 @@ export default function AktuellerMonat() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={vorjahrData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tickFormatter={vorjahrFormatter} width={90} tick={{ fontSize: 10 }} />
+                <XAxis dataKey="name" {...xAchse(schmal)} />
+                <YAxis tickFormatter={vorjahrFormatter} {...yAchse(schmal, 90)} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="Aktuell" fill={CHART_COLORS.erzeugung} radius={[2, 2, 0, 0]} />
@@ -666,8 +667,8 @@ export default function AktuellerMonat() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={waterfallData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={(v: number) => `${v.toFixed(0)} €`} width={52} tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" {...xAchse(schmal)} />
+                  <YAxis tickFormatter={(v: number) => `${v.toFixed(0)} €`} {...yAchse(schmal, 52)} />
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     const p = payload[0]?.payload
@@ -800,8 +801,8 @@ export default function AktuellerMonat() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sollIstData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={sollIstFormatter} width={90} tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" {...xAchse(schmal)} />
+                  <YAxis tickFormatter={sollIstFormatter} {...yAchse(schmal, 90)} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
                   <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} radius={[2, 2, 0, 0]} />

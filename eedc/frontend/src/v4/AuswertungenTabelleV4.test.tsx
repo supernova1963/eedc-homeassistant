@@ -33,7 +33,7 @@ describe('AuswertungenTabelleV4 (Werte-Werkbank)', () => {
   it('rendert beide Blöcke mit block-interner Zeitraum/Vergleich-Leiste', () => {
     render(<AuswertungenTabelleV4 />)
     expect(screen.getByText('Monatswerte')).toBeInTheDocument()
-    expect(screen.getByText('Energieprofile (Tageswerte)')).toBeInTheDocument()
+    expect(screen.getByText('Tageswerte')).toBeInTheDocument()
     // Monats-Block ist default offen → seine Zeitraum-Leiste rendert.
     expect(screen.getAllByText('Zeitraum').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Vergleich').length).toBeGreaterThan(0)

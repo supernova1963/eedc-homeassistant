@@ -23,12 +23,12 @@ import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../componen
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
   CO2_FAKTOR_KG_KWH, CHART_COLORS, MARKER_WARNUNG, TYP_LABELS,
-  formatCo2, fmtZahl, formatProzent, co2Achse,
+  formatCo2, fmtZahl, formatProzent, co2Achse, xAchse, yAchse,
 } from '../lib'
 import { exportToCSV } from '../utils/export'
 import { investitionenApi, type CO2AmortisationResponse } from '../api/investitionen'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
-import { useSelectedAnlage } from '../hooks'
+import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 
@@ -66,6 +66,7 @@ function Co2Inner() {
     return () => { aktiv = false }
   }, [selectedAnlageId])
 
+  const schmal = useSchmaleAchse()
   const zeitreihe = useMemo(() => createMonatsZeitreihe(basis.gefiltert), [basis.gefiltert])
   const kumuliert = useMemo(() => {
     let summe = 0
@@ -151,8 +152,8 @@ function Co2Inner() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={monAchse.tick} unit={` ${monAchse.einheit}`} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+                    <YAxis tickFormatter={monAchse.tick} unit={` ${monAchse.einheit}`} {...yAchse(schmal)} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${monAchse.tick(v)} ${monAchse.einheit}`} />} />
                     <Bar dataKey="co2_einsparung" name="CO₂ eingespart" fill={CHART_COLORS.co2Pv} radius={[2, 2, 0, 0]} />
                   </BarChart>
@@ -207,8 +208,8 @@ function Co2Inner() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={kumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={kumAchse.tick} unit={` ${kumAchse.einheit}`} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+                    <YAxis tickFormatter={kumAchse.tick} unit={` ${kumAchse.einheit}`} {...yAchse(schmal)} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${kumAchse.tick(v)} ${kumAchse.einheit}`} />} />
                     <Area type="monotone" dataKey="kumuliert_co2" name="Kumulierte Einsparung"
                       stroke={CHART_COLORS.co2Pv} fill={CHART_COLORS.co2Pv} fillOpacity={0.3} />

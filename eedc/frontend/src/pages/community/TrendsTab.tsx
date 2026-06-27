@@ -43,7 +43,8 @@ import {
   Legend,
 } from 'recharts'
 
-import { MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS } from '../../lib'
+import { MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS, ACHSEN_TICK, xAchse, yAchse } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
 
@@ -65,6 +66,7 @@ interface TrendsTabProps {
 
 export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError }: TrendsTabProps) {
   const achsen = useChartTheme()
+  const schmal = useSchmaleAchse()
   const [communityTrends, setCommunityTrends] = useState<TrendDaten | null>(null)
   const [degradation, setDegradation] = useState<DegradationsAnalyse | null>(null)
   const [extraLoading, setExtraLoading] = useState(false)
@@ -247,11 +249,11 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: achsen.achse, fontSize: 11 }}
+                  {...xAchse(schmal)}
                   interval={Math.floor(ertragsverlauf.length / 12)}
                 />
                 <YAxis
-                  tick={{ fill: achsen.achse, fontSize: 12 }}
+                  {...yAchse(schmal)}
                   label={{
                     value: 'kWh/kWp',
                     angle: -90,
@@ -399,10 +401,10 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: achsen.achse, fontSize: 11 }}
+                  {...xAchse(schmal)}
                 />
                 <YAxis
-                  tick={{ fill: achsen.achse, fontSize: 12 }}
+                  {...yAchse(schmal)}
                   domain={[0, 'auto']}
                 />
                 <Tooltip
@@ -452,11 +454,11 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="monat"
-                  tick={{ fill: achsen.achse, fontSize: 10 }}
+                  {...xAchse(schmal)}
                   interval={1}
                 />
                 <YAxis
-                  tick={{ fill: achsen.achse, fontSize: 12 }}
+                  {...yAchse(schmal)}
                   domain={[0, 100]}
                   unit="%"
                 />
@@ -511,11 +513,11 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="alter_jahre"
-                  tick={{ fill: achsen.achse, fontSize: 12 }}
+                  tick={ACHSEN_TICK}
                   label={{ value: 'Anlagenalter (Jahre)', position: 'bottom', offset: -5, fill: achsen.achse }}
                 />
                 <YAxis
-                  tick={{ fill: achsen.achse, fontSize: 12 }}
+                  {...yAchse(schmal)}
                   domain={['dataMin - 50', 'dataMax + 50']}
                   label={{
                     value: 'kWh/kWp',

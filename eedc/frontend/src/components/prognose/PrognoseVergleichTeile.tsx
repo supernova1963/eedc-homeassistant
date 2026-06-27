@@ -17,7 +17,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 } from 'lucide-react'
-import { Card, ChartLegende } from '../ui'
+import { Card, ChartLegende, buttonClasses } from '../ui'
 import { SimpleTooltip } from '../ui/FormelTooltip'
 import {
   aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag,
@@ -250,8 +250,8 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
             <div className={`text-xs mb-2 px-2 py-1 rounded ${feedback.tone === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : feedback.tone === 'warning' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>{feedback.msg}</div>
           )}
           <div className="flex gap-2">
-            <button type="button" onClick={handleReaggregate} disabled={busy} className="flex-1 px-2 py-1 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded transition-colors">{busy ? 'Berechne…' : 'Tag neu berechnen'}</button>
-            <a href="#/einstellungen/sensor-mapping" className="px-2 py-1 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded transition-colors">Sensor-Mapping</a>
+            <button type="button" onClick={handleReaggregate} disabled={busy} className={buttonClasses({ variant: 'primary', size: 'sm', className: 'flex-1' })}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</button>
+            <a href="#/einstellungen/sensor-mapping" className={buttonClasses({ variant: 'secondary', size: 'sm' })}>Sensor-Mapping</a>
           </div>
         </div>
       )}

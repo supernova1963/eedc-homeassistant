@@ -24,7 +24,7 @@ import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
-import { COLORS, GELD_COLORS, MONAT_NAMEN, formatGeld, fmtZahl } from '../lib'
+import { COLORS, GELD_COLORS, MONAT_NAMEN, formatGeld, fmtZahl, xAchse, yAchse } from '../lib'
 import { exportToCSV } from '../utils/export'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -32,7 +32,7 @@ import { cockpitApi, type KomponentenZeitreihe } from '../api/cockpit'
 import { importApi } from '../api/import'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { baueJahrAlsMonat } from './JahrAggregat'
-import { useSelectedAnlage } from '../hooks'
+import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 
@@ -63,6 +63,7 @@ function FinanzenInner() {
     return () => { aktiv = false }
   }, [selectedAnlageId])
 
+  const schmal = useSchmaleAchse()
   const zeitreihe = useMemo(
     () => (basis.strompreis ? createMonatsZeitreihe(basis.gefiltert, undefined, basis.strompreis, basis.alleTarife) : []),
     [basis.gefiltert, basis.strompreis, basis.alleTarife],
@@ -191,8 +192,8 @@ function FinanzenInner() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+                    <YAxis tickFormatter={euroTick} unit=" €" {...yAchse(schmal)} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Legend content={<ChartLegende />} />
                     <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
@@ -211,8 +212,8 @@ function FinanzenInner() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+                    <YAxis tickFormatter={euroTick} unit=" €" {...yAchse(schmal)} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
                     <Area type="monotone" dataKey="kumuliert_ertrag" name="Kumulierter Ertrag"
                       stroke={COLORS.feedin} fill={COLORS.feedin} fillOpacity={0.3} />
@@ -234,8 +235,8 @@ function FinanzenInner() {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+                    <YAxis tickFormatter={euroTick} unit=" €" {...yAchse(schmal)} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
                     <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />

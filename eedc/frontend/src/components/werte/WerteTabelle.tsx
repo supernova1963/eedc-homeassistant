@@ -334,13 +334,13 @@ export function WerteTabelle({
                       const pv = prev ? prev.wert(m.key) : null
                       return (
                         <Fragment key={m.key}>
-                          <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtWert(pv, m.decimals)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-xs border-r border-gray-100 dark:border-gray-800"><DeltaZelle current={v} prev={pv} metrik={m} /></td>
+                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtWert(pv, m.decimals)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-xs border-r border-gray-100 dark:border-gray-800"><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                         </Fragment>
                       )
                     }
-                    return <td key={m.key} className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
+                    return <td key={m.key} className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
                   })}
                 </tr>
               )
@@ -359,13 +359,13 @@ export function WerteTabelle({
                     const pv = vorjahrAggregat?.[m.key] ?? null
                     return (
                       <Fragment key={m.key}>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-800 dark:text-gray-100">{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{pv != null ? `${prefix}${fmtWert(pv, m.decimals)}` : '—'}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-xs border-r border-gray-300 dark:border-gray-600"><DeltaZelle current={v} prev={pv} metrik={m} /></td>
+                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-800 dark:text-gray-100">{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-500 dark:text-gray-400">{pv != null ? `${prefix}${fmtWert(pv, m.decimals)}` : '—'}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-xs border-r border-gray-300 dark:border-gray-600"><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                       </Fragment>
                     )
                   }
-                  return <td key={m.key} className="px-3 py-2.5 text-right tabular-nums text-gray-800 dark:text-gray-100">{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
+                  return <td key={m.key} className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-800 dark:text-gray-100">{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
                 })}
               </tr>
             </tfoot>

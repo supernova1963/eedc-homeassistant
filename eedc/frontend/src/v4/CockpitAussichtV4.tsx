@@ -20,7 +20,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, Info, RefreshCw, ArrowRight,
 } from 'lucide-react'
-import { Card, LoadingSpinner } from '../components/ui'
+import { Card, LoadingSpinner, buttonClasses } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { BLOCK_IDENTITAET } from '../lib'
@@ -365,7 +365,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             Für Prognosen werden die Koordinaten der Anlage benötigt. Bitte konfiguriere den Standort in den Anlagen-Einstellungen.
           </p>
-          <a href="#/einstellungen/anlage" className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors">
+          <a href="#/einstellungen/anlage" className={buttonClasses({ variant: 'primary', size: 'sm', className: 'gap-1.5' })}>
             Anlage konfigurieren <ArrowRight className="h-4 w-4" />
           </a>
         </Card>

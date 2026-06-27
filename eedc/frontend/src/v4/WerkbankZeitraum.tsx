@@ -83,26 +83,27 @@ export function WerkbankZeitraum({
   )
 }
 
-export type TagVergleichModus = 'vormonat' | '30vj' | '90vj' | 'custom'
+export type TagVergleichModus = 'vorperiode' | 'periodeImJahr'
 
-/** Vergleichs-Selektor des Energieprofil-Blocks (analog Zeitraum): Vormonat ·
- *  30 Tage VJ · 90 Tage VJ · freier Zeitraum von–bis. Ein-/Ausblenden des
- *  Vergleichs läuft über den „Vergleich"-Knopf der Tabelle selbst. */
+/** Vergleichs-Selektor des Tageswerte-Blocks (Gernot 2026-06-27). Trennt sauber vom
+ *  Primär-Zeitraum: der Vergleich ist immer **gleich lang wie der Primärbereich**:
+ *   • **Vorperiode** — die gleich langen Tage direkt davor (Positions-Ausrichtung).
+ *   • **Periode im Jahr** — derselbe Monats-/Tagesspann, nur ins gewählte Jahr
+ *     verschoben (Kalender-Ausrichtung); Jahr aus dem Dropdown. Löst die alten
+ *     fixen 30/90-Tage-Fenster ab. Ein-/Ausblenden läuft über den „Vergleich"-Knopf
+ *     der Tabelle (dieser Selektor wählt nur den Typ). */
 export function VergleichLeisteTag({
-  modus, onModus, customVon, customBis, onCustomVon, onCustomBis,
+  modus, onModus, jahr, onJahr, jahre,
 }: {
   modus: TagVergleichModus
   onModus: (m: TagVergleichModus) => void
-  customVon: string
-  customBis: string
-  onCustomVon: (v: string) => void
-  onCustomBis: (v: string) => void
+  jahr: number
+  onJahr: (j: number) => void
+  jahre: number[]
 }) {
   const chips: { k: TagVergleichModus; label: string }[] = [
-    { k: 'vormonat', label: 'Vormonat' },
-    { k: '30vj', label: '30 Tage VJ' },
-    { k: '90vj', label: '90 Tage VJ' },
-    { k: 'custom', label: 'Zeitraum von–bis' },
+    { k: 'vorperiode', label: 'Vorperiode' },
+    { k: 'periodeImJahr', label: 'Periode im Jahr' },
   ]
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
@@ -119,14 +120,11 @@ export function VergleichLeisteTag({
           </button>
         ))}
       </div>
-      {modus === 'custom' && (
-        <span className="flex items-center gap-1 text-sm">
-          <input type="date" value={customVon} max={customBis || undefined}
-            onChange={(e) => onCustomVon(e.target.value)} aria-label="Vergleich von" className="input w-auto py-1 text-sm" />
-          <span className="text-gray-400">–</span>
-          <input type="date" value={customBis} min={customVon || undefined}
-            onChange={(e) => onCustomBis(e.target.value)} aria-label="Vergleich bis" className="input w-auto py-1 text-sm" />
-        </span>
+      {modus === 'periodeImJahr' && (
+        <select value={jahr} onChange={(e) => onJahr(Number(e.target.value))}
+          aria-label="Vergleichsjahr" className="input w-auto py-1 text-sm">
+          {jahre.map((j) => <option key={j} value={j}>{j}</option>)}
+        </select>
       )}
     </div>
   )

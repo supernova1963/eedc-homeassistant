@@ -22,7 +22,7 @@ import {
 import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
-import { EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET } from '../../lib'
+import { EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET, ACHSEN_TICK } from '../../lib'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, RegionStatistik } from '../../api/community'
 import {
@@ -318,7 +318,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
               <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} horizontal={true} vertical={false} />
               <XAxis
                 type="number"
-                tick={{ fill: achsen.achse, fontSize: 12 }}
+                tick={ACHSEN_TICK}
                 domain={[0, 'auto']}
                 label={{
                   value: 'kWh/kWp',
@@ -329,7 +329,7 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
               <YAxis
                 type="category"
                 dataKey="name"
-                tick={{ fill: achsen.achse, fontSize: 12 }}
+                tick={ACHSEN_TICK}
                 width={100}
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" />} />

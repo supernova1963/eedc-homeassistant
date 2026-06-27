@@ -11,6 +11,7 @@ vi.mock('../hooks', () => ({
     anlagen: [{ id: 1, anlagenname: 'Test' }], selectedAnlageId: 1,
     selectedAnlage: { id: 1, anlagenname: 'Test' }, loading: false,
   }),
+  useSchmaleAchse: () => false,
 }))
 
 vi.mock('./useAuswertungBasis', () => ({

@@ -16,17 +16,17 @@ import { LoadingSpinner, Card } from '../components/ui'
 import { BlockShell, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
-import { monatsZeile, tagesZeile } from '../lib/werte'
+import { monatsZeile, tagesZeile, type WerteZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
-import { useTagesWerte, minusEinJahr } from './useTagesWerte'
+import { useTagesWerte } from './useTagesWerte'
 import { WerkbankZeitraum, VergleichLeisteTag, type ZeitChip, type TagVergleichModus } from './WerkbankZeitraum'
 
 const SICHT_KEY = 'v4-auswertungen-tabelle'
 const SCOPE = 'auswertungen-werkbank'
 // Bild-1-Default (Gernot 2026-06-26): Energie + Quoten, ohne Finanz-Spalten.
 const DEFAULT_SPALTEN = ['erzeugung', 'eigenverbrauch', 'einspeisung', 'netzbezug', 'gesamtverbrauch', 'autarkie', 'evQuote']
-const VGL_LABEL: Record<TagVergleichModus, string> = { vormonat: 'Vormonat', '30vj': '30 T VJ', '90vj': '90 T VJ', custom: 'Zeitraum' }
+const vglLabel = (modus: TagVergleichModus, jahr: number) => (modus === 'periodeImJahr' ? String(jahr) : 'Vorperiode')
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const letzterTag = (y: number, m: number) => new Date(y, m, 0).getDate()
@@ -74,14 +74,17 @@ function TabelleInner() {
   // ── Energieprofil-Block: von/bis (YYYY-MM-DD) + Vergleichs-Auswahl ──
   const [tagVon, setTagVon] = useState('')
   const [tagBis, setTagBis] = useState('')
-  const [vglModus, setVglModus] = useState<TagVergleichModus>('30vj')
-  const [vglCustomVon, setVglCustomVon] = useState('')
-  const [vglCustomBis, setVglCustomBis] = useState('')
+  const [vglModus, setVglModus] = useState<TagVergleichModus>('vorperiode')
+  const [vglJahr, setVglJahr] = useState(0)  // 0 = noch nicht initialisiert (s. Effekt)
   useEffect(() => {
     if (!anker || tagVon) return
     setTagVon(`${anker.jahr}-${pad(anker.monat)}-01`)
     setTagBis(`${anker.jahr}-${pad(anker.monat)}-${pad(letzterTag(anker.jahr, anker.monat))}`)
   }, [anker, tagVon])
+  useEffect(() => {
+    if (!anker || vglJahr) return
+    setVglJahr(anker.jahr - 1)  // Default-Vergleichsjahr = Primär-Jahr − 1
+  }, [anker, vglJahr])
 
   if (anlagenLoading || loading) return <LoadingSpinner text="Lade Werte…" />
   if (anlagen.length === 0) {
@@ -146,15 +149,14 @@ function TabelleInner() {
   }
   if (!tagGeparkt) {
     bloecke.push({
-      id: 'energieprofile', title: 'Energieprofile (Tageswerte)', icon: CalendarDays, farbe: 'text-gray-400',
-      summary: `${tagVon || '…'} – ${tagBis || '…'} · Vgl. ${VGL_LABEL[vglModus]}`, defaultOpen: false,
+      id: 'energieprofile', title: 'Tageswerte', icon: CalendarDays, farbe: 'text-gray-400',
+      summary: `${tagVon || '…'} – ${tagBis || '…'} · Vgl. ${vglLabel(vglModus, vglJahr)}`, defaultOpen: false,
       render: () => (
         <EnergieprofilBlock
           anlageId={selectedAnlageId!} von={tagVon} bis={tagBis}
           onRange={(v, b) => { setTagVon(v); setTagBis(b) }}
           vglModus={vglModus} onVglModus={setVglModus}
-          vglCustomVon={vglCustomVon} vglCustomBis={vglCustomBis}
-          onVglCustomVon={setVglCustomVon} onVglCustomBis={setVglCustomBis}
+          vglJahr={vglJahr} onVglJahr={setVglJahr} jahre={jahre}
           anker={anker} anlagenname={selectedAnlage?.anlagenname}
         />
       ),
@@ -170,49 +172,100 @@ function TabelleInner() {
   )
 }
 
-/** Vergleichsbereich (von/bis) aus Modus + primärem Zeitraum. null = keiner. */
-function tagVergleichRange(
-  modus: TagVergleichModus, von: string, bis: string, cVon: string, cBis: string,
-): { von: string; bis: string } | null {
-  if (modus === 'custom') return cVon && cBis ? { von: cVon, bis: cBis } : null
-  if (modus === 'vormonat') {
-    const [y, m] = von.split('-').map(Number)
-    const py = m === 1 ? y - 1 : y
-    const pm = m === 1 ? 12 : m - 1
-    return { von: `${py}-${pad(pm)}-01`, bis: `${py}-${pad(pm)}-${pad(letzterTag(py, pm))}` }
+const keyOf = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return y * 10000 + m * 100 + d }
+/** Tage in [von..bis] inklusiv. */
+function tageInklusiv(von: string, bis: string): number {
+  const [ay, am, ad] = von.split('-').map(Number)
+  const [by, bm, bd] = bis.split('-').map(Number)
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000) + 1
+}
+/** ISO um `delta` Jahre verschieben, 29.2. aufs Monatsende geklemmt. */
+function shiftJahr(iso: string, delta: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const ny = y + delta
+  return `${ny}-${pad(m)}-${pad(Math.min(d, letzterTag(ny, m)))}`
+}
+
+type VglAlign = 'position' | 'kalender'
+interface VglKonfig { von: string; bis: string; align: VglAlign; vor?: (iso: string) => string }
+
+/**
+ * Vergleichs-Konfiguration aus Modus + primärem Zeitraum + Vergleichsjahr (Gernot
+ * 2026-06-27). Das Vergleichsfenster ist IMMER gleich lang wie der Primärbereich:
+ *  • vorperiode — die gleich langen Tage direkt davor → **Positions-Ausrichtung**.
+ *  • periodeImJahr — derselbe Spann ins Jahr `jahr` verschoben → **Kalender-Ausrichtung**
+ *    (`vor()` bildet eine Vergleichszeile vorwärts auf ihren Primärtag ab).
+ */
+export function tagVergleich(
+  modus: TagVergleichModus, von: string, bis: string, jahr: number,
+): VglKonfig | null {
+  if (!von || !bis) return null
+  if (modus === 'vorperiode') {
+    const cBisP = addTage(von, -1)
+    return { von: addTage(cBisP, -(tageInklusiv(von, bis) - 1)), bis: cBisP, align: 'position' }
   }
-  const vBis = minusEinJahr(bis)
-  return { von: addTage(vBis, modus === '30vj' ? -29 : -89), bis: vBis }
+  // periodeImJahr: Primärbereich um (jahr − Primär-Jahr) verschieben.
+  const delta = jahr - Number(von.slice(0, 4))
+  if (delta === 0) return null  // selbes Jahr = kein sinnvoller Vergleich
+  return { von: shiftJahr(von, delta), bis: shiftJahr(bis, delta), align: 'kalender', vor: (iso) => shiftJahr(iso, -delta) }
+}
+
+/**
+ * Re-Keying der Tageszeilen für die Vergleichs-Ausrichtung (s. {@link tagVergleich}).
+ * Positions-Ausrichtung: chronologischer Index als Match-Key (Zeile i ↔ i). Kalender:
+ * Primär behält den Datum-Key, Vergleich wird vorwärts auf den Primärtag abgebildet.
+ */
+export function richteAus(prim: WerteZeile[], comp: WerteZeile[] | null, vgl: VglKonfig | null): {
+  primZeilen: WerteZeile[]; vglZeilen: WerteZeile[] | null
+} {
+  if (!vgl || !comp) return { primZeilen: prim, vglZeilen: comp }
+  if (vgl.align === 'position') {
+    return {
+      primZeilen: [...prim].sort((a, b) => a.sortKey - b.sortKey).map((z, i) => ({ ...z, vergleichKey: i })),
+      vglZeilen: [...comp].sort((a, b) => a.sortKey - b.sortKey).map((z, i) => ({ ...z, vergleichKey: i })),
+    }
+  }
+  return {
+    primZeilen: prim.map((z) => ({ ...z, vergleichKey: z.sortKey })),
+    vglZeilen: comp.map((z) => ({ ...z, vergleichKey: vgl.vor ? keyOf(vgl.vor(z.id)) : z.sortKey })),
+  }
 }
 
 /** Tages-Block: lazy (mountet erst beim Aufklappen) → lädt nur dann die Tageswerte. */
 function EnergieprofilBlock({
-  anlageId, von, bis, onRange, vglModus, onVglModus, vglCustomVon, vglCustomBis,
-  onVglCustomVon, onVglCustomBis, anker, anlagenname,
+  anlageId, von, bis, onRange, vglModus, onVglModus, vglJahr, onVglJahr, jahre, anker, anlagenname,
 }: {
   anlageId: number
   von: string; bis: string
   onRange: (von: string, bis: string) => void
   vglModus: TagVergleichModus
   onVglModus: (m: TagVergleichModus) => void
-  vglCustomVon: string; vglCustomBis: string
-  onVglCustomVon: (v: string) => void; onVglCustomBis: (v: string) => void
+  vglJahr: number
+  onVglJahr: (j: number) => void
+  jahre: number[]
   anker: { jahr: number; monat: number } | null
   anlagenname?: string
 }) {
-  const vgl = von && bis ? tagVergleichRange(vglModus, von, bis, vglCustomVon, vglCustomBis) : null
+  const vgl = useMemo(
+    () => (von && bis ? tagVergleich(vglModus, von, bis, vglJahr) : null),
+    [von, bis, vglModus, vglJahr],
+  )
   const { rows, vorjahrRows, loading, error } = useTagesWerte(anlageId, von, bis, vgl?.von ?? null, vgl?.bis ?? null)
+  const { primZeilen, vglZeilen } = useMemo(
+    () => richteAus(rows.map(tagesZeile), vorjahrRows ? vorjahrRows.map(tagesZeile) : null, vgl),
+    [rows, vorjahrRows, vgl],
+  )
 
-  const monatEnde = anker ? `${anker.jahr}-${pad(anker.monat)}-${pad(letzterTag(anker.jahr, anker.monat))}` : bis
+  // Primär-Schnellwahl: füllt nur von–bis (Gernot 2026-06-27). Vormonat = Monat vor dem Anker.
+  const vm = anker ? (anker.monat === 1 ? { jahr: anker.jahr - 1, monat: 12 } : { jahr: anker.jahr, monat: anker.monat - 1 }) : null
+  const monatRange = (j: number, m: number): [string, string] => [`${j}-${pad(m)}-01`, `${j}-${pad(m)}-${pad(letzterTag(j, m))}`]
   const chips: ZeitChip[] = anker ? [
-    {
-      label: 'Aktueller Monat',
-      range: () => [`${anker.jahr}-${pad(anker.monat)}-01`, `${anker.jahr}-${pad(anker.monat)}-${pad(letzterTag(anker.jahr, anker.monat))}`],
-      aktiv: von === `${anker.jahr}-${pad(anker.monat)}-01`,
-    },
-    { label: '30 Tage', range: () => [addTage(monatEnde, -29), monatEnde] },
-    { label: '90 Tage', range: () => [addTage(monatEnde, -89), monatEnde] },
+    { label: 'Aktueller Monat', range: () => monatRange(anker.jahr, anker.monat), aktiv: von === `${anker.jahr}-${pad(anker.monat)}-01` },
+    ...(vm ? [{ label: 'Vormonat', range: (): [string, string] => monatRange(vm.jahr, vm.monat), aktiv: von === `${vm.jahr}-${pad(vm.monat)}-01` }] : []),
   ] : []
+
+  // Vergleichsjahr-Optionen = Datenjahre (+ aktuelle Wahl), absteigend.
+  const jahrOptionen = Array.from(new Set([...jahre, vglJahr].filter((j) => j > 0))).sort((a, b) => b - a)
 
   return (
     <div className="space-y-3">
@@ -221,8 +274,7 @@ function EnergieprofilBlock({
         vergleichSlot={
           <VergleichLeisteTag
             modus={vglModus} onModus={onVglModus}
-            customVon={vglCustomVon} customBis={vglCustomBis}
-            onCustomVon={onVglCustomVon} onCustomBis={onVglCustomBis}
+            jahr={vglJahr} onJahr={onVglJahr} jahre={jahrOptionen}
           />
         }
       />
@@ -233,12 +285,12 @@ function EnergieprofilBlock({
       ) : error ? (
         <p className="text-red-500 text-sm">{error}</p>
       ) : (
-        <Parkbar id="tabelle:energieprofile" titel="Energieprofile (Tageswerte)">
+        <Parkbar id="tabelle:energieprofile" titel="Tageswerte">
           <WerteTabelle
-            rows={rows.map(tagesZeile)}
-            vorjahrRows={vorjahrRows ? vorjahrRows.map(tagesZeile) : null}
+            rows={primZeilen}
+            vorjahrRows={vglZeilen}
             granularitaet="tag"
-            vergleichLabel={vgl ? VGL_LABEL[vglModus] : null}
+            vergleichLabel={vgl ? vglLabel(vglModus, vglJahr) : null}
             vergleichDefaultAn={!!vgl}
             scope={SCOPE} defaultSpalten={DEFAULT_SPALTEN}
             csvDateiname={`werte_tag_${anlagenname ?? 'export'}.csv`}
