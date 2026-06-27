@@ -10,7 +10,8 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
@@ -26,14 +27,15 @@ export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
 
 /** Erzeugung pro Monat (Eigenverbrauch + Einspeisung gestapelt). */
 export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+  const schmal = useSchmaleAchse()
   const data = prepBkwMonate(monatsdaten)
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="name" {...xAchse(schmal)} />
+          <YAxis {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
@@ -46,14 +48,15 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
 
 /** Integrierter Speicher: Ladung/Entladung pro Monat (Bar). */
 export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+  const schmal = useSchmaleAchse()
   const data = prepBkwMonate(monatsdaten)
   return (
     <div className="h-48">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="name" {...xAchse(schmal)} />
+          <YAxis {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />

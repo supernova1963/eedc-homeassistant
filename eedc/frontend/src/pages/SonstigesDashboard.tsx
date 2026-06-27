@@ -8,9 +8,9 @@ import { Fragment, useState, useEffect } from 'react'
 import { Wrench, Zap, TrendingUp, Home, Leaf, Battery, AlertCircle } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, KPICard, ChartLegende } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useSelectedAnlage } from '../hooks'
+import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, CHART_COLORS, KATEGORIE_FARBEN } from '../lib'
+import { MONAT_KURZ, CHART_COLORS, KATEGORIE_FARBEN, xAchse, yAchse } from '../lib'
 import { investitionenApi } from '../api'
 import type { SonstigesDashboardResponse } from '../api/investitionen'
 import {
@@ -189,6 +189,7 @@ function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
   selectorProps: SelectorProps
 }) {
+  const schmal = useSchmaleAchse()
   const monthlyData = monatsdaten.map(md => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     erzeugung: md.verbrauch_daten.erzeugung_kwh || 0,
@@ -310,8 +311,8 @@ function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
+                <XAxis dataKey="name" {...xAchse(schmal)} />
+                <YAxis {...yAchse(schmal)} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
@@ -360,6 +361,7 @@ function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, select
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
   selectorProps: SelectorProps
 }) {
+  const schmal = useSchmaleAchse()
   const monthlyData = monatsdaten.map(md => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     verbrauch: md.verbrauch_daten.verbrauch_kwh || 0,
@@ -481,8 +483,8 @@ function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, select
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
+                <XAxis dataKey="name" {...xAchse(schmal)} />
+                <YAxis {...yAchse(schmal)} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="bezug_pv" stackId="1" fill={KATEGORIE_FARBEN.pv} name="PV-Strom" />
@@ -531,6 +533,7 @@ function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
   zusammenfassung: SonstigesDashboardResponse['zusammenfassung']
   selectorProps: SelectorProps
 }) {
+  const schmal = useSchmaleAchse()
   const monthlyData = monatsdaten.map(md => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     ladung: md.verbrauch_daten.ladung_kwh || 0,
@@ -617,8 +620,8 @@ function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} />
+              <XAxis dataKey="name" {...xAchse(schmal)} />
+              <YAxis {...yAchse(schmal)} />
               <Tooltip content={<ChartTooltip />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />

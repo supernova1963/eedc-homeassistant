@@ -11,7 +11,8 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, GELD_TEXT_CLASS, CHART_COLORS, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, GELD_TEXT_CLASS, CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, EAutoDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = EAutoDashboardResponse['zusammenfassung']
@@ -30,14 +31,15 @@ export function prepEAutoMonate(monatsdaten: InvestitionMonatsdaten[]) {
 
 /** Kilometer pro Monat (Bar). */
 export function EAutoKmVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+  const schmal = useSchmaleAchse()
   const data = prepEAutoMonate(monatsdaten)
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="name" {...xAchse(schmal)} />
+          <YAxis {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Bar dataKey="km" fill={CHART_COLORS.emobKm} name="km" />
         </BarChart>
@@ -48,14 +50,15 @@ export function EAutoKmVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonats
 
 /** Ladung pro Monat nach Quelle (PV/Netz/Extern, gestapelt). */
 export function EAutoLadungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+  const schmal = useSchmaleAchse()
   const data = prepEAutoMonate(monatsdaten)
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="name" {...xAchse(schmal)} />
+          <YAxis {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" />

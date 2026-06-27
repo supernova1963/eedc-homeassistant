@@ -10,13 +10,15 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
 
 /** Wärmeerzeugung pro Monat (Heizung + Warmwasser gestapelt). */
 export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
+  const schmal = useSchmaleAchse()
   const data = monatsdaten.map((md) => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     heizung: md.verbrauch_daten.heizenergie_kwh || 0,
@@ -27,8 +29,8 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} tick={{ fontSize: 10 }} />
+          <XAxis dataKey="name" {...xAchse(schmal)} />
+          <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />

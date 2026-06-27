@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { useSelectedAnlage } from '../hooks'
+import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { communityApi, anlagenApi } from '../api'
 import type {
   CommunityBenchmarkResponse,
@@ -53,7 +53,7 @@ const ZEITRAUM_OPTIONS: { value: ZeitraumTyp; label: string }[] = [
   { value: 'seit_installation', label: 'Seit Installation' },
 ]
 
-import { REGION_NAMEN, TYP_COLORS } from '../lib'
+import { REGION_NAMEN, TYP_COLORS, xAchse, yAchse } from '../lib'
 import { useChartTheme } from '../context/ThemeContext'
 
 interface CommunityVergleichProps {
@@ -72,6 +72,7 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
   const [error, setError] = useState<string | null>(null)
   const [notShared, setNotShared] = useState(false)
   const achsen = useChartTheme()
+  const schmal = useSchmaleAchse()
 
   // Prüfen ob Anlage bereits geteilt wurde
   const [communityHash, setCommunityHash] = useState<string | null>(null)
@@ -429,8 +430,8 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
                     }))}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
-                    <XAxis dataKey="name" tick={{ fill: achsen.achse, fontSize: 12 }} />
-                    <YAxis tick={{ fill: achsen.achse, fontSize: 12 }} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} />
+                    <YAxis {...yAchse(schmal)} />
                     <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                     <Bar dataKey="ertrag" radius={[2, 2, 0, 0]}>
                       {benchmark.anlage.monatswerte.slice(-12).map((_, index) => (

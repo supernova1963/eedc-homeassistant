@@ -9,7 +9,8 @@ import { Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
-import { CHART_COLORS, SOLAR_INTENSITAET } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -83,6 +84,7 @@ export default function KurzfristTab({ anlageId }: Props) {
   const [prognose, setPrognose] = useState<SolarPrognose | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const schmal = useSchmaleAchse()
   const tage = 14
 
   useEffect(() => {
@@ -241,12 +243,12 @@ export default function KurzfristTab({ anlageId }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="datum"
-                tick={{ fontSize: 10 }}
+                {...xAchse(schmal)}
                 className="text-gray-600 dark:text-gray-400"
               />
               <YAxis
                 yAxisId="left"
-                tick={{ fontSize: 10 }}
+                {...yAchse(schmal)}
                 className="text-gray-600 dark:text-gray-400"
                 label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
               />

@@ -19,7 +19,8 @@ import type { KpiStripItem } from '../blocks'
 import { pvgisApi, monatsdatenApi } from '../../api'
 import type { PVModulPrognose } from '../../api/pvgis'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
-import { SOLL_IST_COLORS, PROGNOSE_DASH, formatEnergie, energieAchse, formatProzent } from '../../lib'
+import { SOLL_IST_COLORS, PROGNOSE_DASH, formatEnergie, energieAchse, formatProzent, xAchse, yAchse } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -202,6 +203,7 @@ export function PvgisSpeichern({ vm }: { vm: PrognoseVsIstVM }) {
 /** Monatlicher SOLL/IST-Vergleich (Balken) + Abweichungs-Linie. */
 export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: number | undefined }) {
   const achsen = useChartTheme()
+  const schmal = useSchmaleAchse()
   const maxKwh = Math.max(0, ...vm.vergleichsDaten.flatMap(d => [d.prognose, d.ist]))
   const eAchse = energieAchse(maxKwh)
   return (
@@ -213,8 +215,8 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={vm.vergleichsDaten}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="monatName" tick={{ fontSize: 10 }} />
-            <YAxis yAxisId="left" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} tick={{ fontSize: 10 }} />
+            <XAxis dataKey="monatName" {...xAchse(schmal)} />
+            <YAxis yAxisId="left" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} {...yAchse(schmal)} />
             <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v}%`} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
               name.includes('%') ? formatProzent(value).text : formatEnergie(value, maxKwh).text} />} />
