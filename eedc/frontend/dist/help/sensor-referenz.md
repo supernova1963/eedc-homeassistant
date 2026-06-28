@@ -259,6 +259,21 @@ Direkter API-Aufruf für Standalone-Nutzer ohne HA-Integration. Konfiguration in
 
 ---
 
+## 8a. eedc-PV-Prognose nach HA exportieren (MQTT / HA-Sensoren)
+
+eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die **eedc**-Quelle, nie Solcast/SFML — die liegen via eigene HA-Integration bereits in HA). Alle Werte stammen aus dem **Prognose-Kanon** und sind damit identisch mit der App-Anzeige und der „eedc"-Spalte im Vergleich.
+
+| Sensor / Schlüssel | Bedeutung |
+|---|---|
+| `eedc_prognose_heute_kwh` | **PV-Tagesprognose heute** — voller Tageswert (kanonisch, rollt mit OpenMeteo, == Anzeige). |
+| `eedc_prognose_rest_today_kwh` | **Rest heute** — nur Σ der Prognose für die verbleibenden Stunden (aus demselben Kanon → rollt synchron mit „heute"). |
+| `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Attribut `stundenprofil_kwh` = 24 Backward-Slots (kWh); Sensor-State == Σ Slots. |
+| `eedc_speicher_voll_um` | Uhrzeit „Speicher voll" aus der SoC-Simulation ab aktuellem Speicherstand. |
+
+> **Hinweis:** Bis v3.45.5 war `eedc_prognose_heute_kwh` „IST bisher + Rest" und wich damit von der App-Anzeige ab. Seit dem Prognose-Kanon trägt der Sensor den **vollen kanonischen Tageswert** (== Anzeige); „Rest heute" ist der reine Rest. Automationen, die auf den alten „IST+Rest"-Wert gebaut haben, sollten auf `…_rest_today_kwh` umgestellt werden, wenn sie den Rest brauchen.
+
+---
+
 ## 9. Counter vs. kWh — strikte Trennung
 
 eedc unterscheidet seit v3.24.0 zwei Klassen kumulativer Sensoren:
