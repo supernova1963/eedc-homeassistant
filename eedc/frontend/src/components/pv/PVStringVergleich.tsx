@@ -465,7 +465,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
                     (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
                     {(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
-                    {s.abweichung_gesamt_prozent?.toFixed(1) ?? '0'}%
+                    {s.abweichung_gesamt_prozent?.toFixed(1) ?? '0'} %
                   </td>
                   <td className="px-3 py-3 text-right">
                     <PerformanceBadge ratio={s.performance_ratio_gesamt} />

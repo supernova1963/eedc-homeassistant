@@ -7,6 +7,7 @@
  * Abnahme Gernot 2026-06-25 (SPEC-AUSWERTUNGEN.md §0a, R2-Tabelle):
  *  - Umschalt-Schwelle = **≥ 1.000** der jeweiligen Einheit (Einzelwert; bei Achsen
  *    bestimmt der Achsen-Max die Einheit für die GANZE Achse → value=Achse=Tooltip=CSV gleich).
+ *    **Ausnahme Energie (R10-3, 2026-06-28):** MWh/GWh erst ab **≥ 10.000** (5-stellig).
  *  - NK: kWh 0 · MWh/GWh 2 · kg 0 · t 2 · € (Summen) 0 · ct/kWh 2 · % 1 · kWh/kWp 0 · JAZ/COP/PR 2.
  *  - Zahlen de-DE mit Tausenderpunkt (R1); Nicht-Mengen (Jahr/ID/Version) laufen NIE hier durch.
  *
@@ -33,16 +34,25 @@ export interface FmtWert {
 }
 
 interface Stufe {
+  /** Divisor der Stufe (z. B. 1.000 für kWh→MWh). */
   faktor: number
   einheit: string
   nk: number
+  /** Umschalt-Schwelle: ab |Referenz| ≥ `schwelle` greift die Stufe. Default = `faktor`.
+   *  Getrennt vom Divisor, damit z. B. MWh ERST ab 10.000 kWh greift (R10-3), aber
+   *  weiterhin durch 1.000 geteilt wird. */
+  schwelle?: number
 }
 type Leiter = Stufe[] // aufsteigend nach faktor
 
+// R10-3 (Rainer R10 / Gernot 2026-06-28): MWh erst ab **≥ 10.000 kWh** (5-stellig),
+// GWh analog ab ≥ 10.000 MWh — Divisor bleibt 1.000/1.000.000. Bewusst NUR Energie
+// (CO₂/Leistung unverändert). Voraussetzung war der Achsen-Cut-off-Fix (D9-A/D9-D):
+// kWh-Werte bis 9.999 bleiben 4-stellig → dürfen am Y-Achsen-Rand nicht abschneiden.
 const ENERGIE: Leiter = [
   { faktor: 1, einheit: 'kWh', nk: 0 },
-  { faktor: 1_000, einheit: 'MWh', nk: 2 },
-  { faktor: 1_000_000, einheit: 'GWh', nk: 2 },
+  { faktor: 1_000, einheit: 'MWh', nk: 2, schwelle: 10_000 },
+  { faktor: 1_000_000, einheit: 'GWh', nk: 2, schwelle: 10_000_000 },
 ]
 const CO2: Leiter = [
   { faktor: 1, einheit: 'kg', nk: 0 },
@@ -54,11 +64,11 @@ const LEISTUNG: Leiter = [
   { faktor: 1_000_000, einheit: 'MW', nk: 2 },
 ]
 
-/** Höchste Stufe, deren Schwelle (faktor) der |Referenzwert| erreicht (≥ 1.000-Regel). */
+/** Höchste Stufe, deren Umschalt-Schwelle (`schwelle ?? faktor`) der |Referenzwert| erreicht. */
 function waehleStufe(leiter: Leiter, referenz: number): Stufe {
   const abs = Math.abs(referenz)
   let gewaehlt = leiter[0]
-  for (const s of leiter) if (abs >= s.faktor) gewaehlt = s
+  for (const s of leiter) if (abs >= (s.schwelle ?? s.faktor)) gewaehlt = s
   return gewaehlt
 }
 

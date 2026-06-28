@@ -4,7 +4,13 @@ import { isValidElement } from 'react'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { KOMPONENTEN_IDENTITAET } from '../lib'
 import type { Block } from '../components/blocks'
+import type { ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+
+/** Park-Stub: alles geparkt (Element-Park-Doktrin — leerer Block verschwindet). */
+const ALLES_GEPARKT: ParkApi = {
+  aktiv: true, istGeparkt: () => true, park: () => {}, entparke: () => {}, zuruecksetzen: () => {}, geparkt: [],
+}
 
 function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
   // Basis = nichts aktiv; Tests aktivieren gezielt einzelne Komponenten.
@@ -83,6 +89,14 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
     }))
     expect(bloecke.map((b) => b.id)).toEqual(['k-sonstiges-erzeuger'])
     expect(bloecke[0].title).toBe('Sonstiges – Erzeuger')
+  })
+
+  it('Element-Park: alle Elemente geparkt → keine Blöcke (Block-Hide-Doktrin)', () => {
+    const data = d({
+      speicher_ladung_kwh: 99, wp_strom_kwh: 330, emob_ladung_kwh: 62, bkw_erzeugung_kwh: 612,
+      sonstiges_geraete: [{ bezeichnung: 'Mini-BHKW', kategorie: 'erzeuger', erzeugung_kwh: 320 }],
+    })
+    expect(baueKomponentenBloecke(data, ALLES_GEPARKT)).toHaveLength(0)
   })
 })
 

@@ -373,11 +373,16 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
           <SegBtn aktiv={modus === 'monat'} onClick={() => setModus('monat')}>Monat</SegBtn>
           <SegBtn aktiv={modus === 'jahr'} onClick={() => setModus('jahr')}>Jahr ({jahr ?? '—'})</SegBtn>
         </div>
-        {modus === 'monat' && (
+        {/* D9-E: Beide Modi belegen dieselbe Toolbar-Höhe (kein Verschwinden des
+            Selects → kein Vertikal-Sprung des T-Kontos beim Monat↔Jahr-Wechsel;
+            Content-Swap bleibt in-place wie D7-6). */}
+        {modus === 'monat' ? (
           <select value={monat ?? ''} onChange={(e) => setMonat(e.target.value ? Number(e.target.value) : null)}
             aria-label="Monat wählen" className="input w-auto">
             {monate.map((m) => <option key={m} value={m}>{MONAT_NAMEN[m]} {jahr}</option>)}
           </select>
+        ) : (
+          <span className="text-sm text-gray-500 dark:text-gray-400 px-2 py-1.5">Ganzes Jahr {jahr ?? '—'}</span>
         )}
       </div>
       {laden && !d ? (

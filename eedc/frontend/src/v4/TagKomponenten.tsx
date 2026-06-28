@@ -27,6 +27,7 @@
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
 import type { Block } from '../components/blocks'
+import type { ParkApi } from '../components/park'
 import type { TagWerte, StundenWert, SerieInfo, TagDetail } from '../api/energie_profil'
 import type { AktuellerMonatResponse, SonstigesGeraet } from '../api/aktuellerMonat'
 
@@ -106,8 +107,9 @@ export function baueTagAlsMonat(
 /** Komponenten-Detailblöcke (aktiv-gegated) + Finanz-Teaser für einen Tag — gleiche
  *  Bauer wie Cockpit/Monat. Reihenfolge: Komponenten …, dann Finanzen (ganz unten). */
 export function baueTagKomponentenUndFinanz(
-  tag: TagWerte, stunden: StundenWert[], serien: SerieInfo[], tagDetail?: TagDetail | null,
+  tag: TagWerte, stunden: StundenWert[], serien: SerieInfo[], park: ParkApi, tagDetail?: TagDetail | null,
 ): Block[] {
   const d = baueTagAlsMonat(tag, stunden, serien, tagDetail)
-  return [...baueKomponentenBloecke(d, 'tag'), finanzTeaserBlock(d)]
+  const finanz = finanzTeaserBlock(d, park)
+  return [...baueKomponentenBloecke(d, park, 'tag'), ...(finanz ? [finanz] : [])]
 }

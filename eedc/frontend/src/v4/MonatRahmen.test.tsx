@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { isValidElement } from 'react'
 import { finanzTeaserBlock, communityBlock, MonatHeader } from './MonatRahmen'
+import type { ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
 
@@ -13,14 +14,14 @@ const d = {
 
 describe('finanzTeaserBlock', () => {
   it('Block mit Netto-Ertrag-Summary + Cross-Link-Heimat', () => {
-    const b = finanzTeaserBlock(d)
+    const b = finanzTeaserBlock(d)!
     expect(b.id).toBe('finanzen')
     expect(b.summary).toMatch(/\+128,00 € Netto-Ertrag/)
   })
 
   it('C3: Tarif-Info-Zeile zeigt flexiblen Netzbezug-Ø + Einspeisepreis', () => {
     const dd = { ...d, netzbezug_durchschnittspreis_cent: 32.5, einspeise_preis_cent: 8.2 } as AktuellerMonatResponse
-    const block = finanzTeaserBlock(dd)
+    const block = finanzTeaserBlock(dd)!
     const node = block.render(false)
     if (!isValidElement(node)) throw new Error('render() ergab kein Element')
     render(node)
@@ -30,10 +31,17 @@ describe('finanzTeaserBlock', () => {
   })
 
   it('C3: ohne Tarif-Felder keine Tarif-Zeile', () => {
-    const node = finanzTeaserBlock(d).render(false)
+    const node = finanzTeaserBlock(d)!.render(false)
     if (!isValidElement(node)) throw new Error('render() ergab kein Element')
     render(node)
     expect(screen.queryByText(/ct\/kWh/)).not.toBeInTheDocument()
+  })
+
+  it('Element-Park: alle Finanz-Elemente geparkt → kein Block (null)', () => {
+    const allesGeparkt: ParkApi = {
+      aktiv: true, istGeparkt: () => true, park: () => {}, entparke: () => {}, zuruecksetzen: () => {}, geparkt: [],
+    }
+    expect(finanzTeaserBlock(d, allesGeparkt)).toBeNull()
   })
 })
 

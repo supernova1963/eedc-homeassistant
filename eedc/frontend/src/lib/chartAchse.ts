@@ -44,3 +44,48 @@ export function yAchse(schmal: boolean, breite?: number): YAchsenProps {
     ? { tick: ACHSEN_TICK, angle: -90, textAnchor: 'middle', width: 28 }
     : { tick: ACHSEN_TICK, ...(breite != null ? { width: breite } : {}) }
 }
+
+// ── Achsen-EINHEIT (D9-A / detLAN R9, Plan B) ────────────────────────────────
+
+export interface AchsenEinheitLabel {
+  value: string
+  angle?: number
+  position: 'insideTopLeft' | 'insideTopRight' | 'insideLeft' | 'insideRight'
+  offset?: number
+  fontSize: number
+  style?: { textAnchor?: 'start' | 'middle' | 'end' }
+}
+
+/**
+ * achsenEinheit — die EINE Wahrheit für den Einheiten-Titel einer Achse (Plan B,
+ * detLAN R9 / Gernot 2026-06-28):
+ *   • **breit (≥640):** Einheit **einmal waagerecht oben** an der Achse
+ *     (`insideTopLeft`/`insideTopRight`, kein `angle`) — kein gedrehter Längs-Titel
+ *     mehr. Innen an der oberen Achsenecke statt `position:'top'`, damit die Einheit
+ *     bei knappem `margin.top` nicht oben abschneidet (D9-D Cut-off, Gate für R10-3).
+ *   • **schmal (<640, {@link useSchmaleAchse}):** quer längs der Achse (90°),
+ *     gerechtfertigt auf Mobile.
+ * `seite` = Orientierung der Achse: `'links'` (Default, primär) | `'rechts'`
+ * (2. Achse). Jede Achse trägt genau **eine** Einheit; Klammer-Überschriften im
+ * Chart-Kopf entfallen (Einheit gehört an die Achse). Recharts erkennt `<Label>`
+ * am `label`-Prop → Spread nicht nötig, direkt: `label={achsenEinheit('kWh', schmal)}`.
+ *
+ * Hinweis Legenden-Kollision (D9-D3): die Einheit sitzt innen an der oberen
+ * Achsenecke → hat der Chart eine **Top**-Legende (`verticalAlign="top"`), diese
+ * nach unten setzen, damit Titel ≠ Legende (Recharts-Default ist ohnehin unten).
+ */
+export function achsenEinheit(
+  einheit: string,
+  schmal: boolean,
+  seite: 'links' | 'rechts' = 'links',
+): AchsenEinheitLabel {
+  if (schmal) {
+    return seite === 'rechts'
+      ? { value: einheit, angle: 90, position: 'insideRight', fontSize: 10, style: { textAnchor: 'middle' } }
+      : { value: einheit, angle: -90, position: 'insideLeft', fontSize: 10, style: { textAnchor: 'middle' } }
+  }
+  // breit: Einheit waagerecht innen an der oberen Achsenecke
+  return seite === 'rechts'
+    ? { value: einheit, position: 'insideTopRight', offset: 6, fontSize: 10, style: { textAnchor: 'end' } }
+    : { value: einheit, position: 'insideTopLeft', offset: 6, fontSize: 10, style: { textAnchor: 'start' } }
+}

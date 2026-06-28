@@ -17,7 +17,8 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { fmtCalc, ChartLegende } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
@@ -179,6 +180,7 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
 /** Monats-Balken PVGIS vs. Trend-korrigiert + Konfidenzband — IST LangfristTab-Chart. */
 export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognose }) {
   const [showKonfidenz, setShowKonfidenz] = useState(true)
+  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const chartData = prognose.monatswerte.map((m) => ({
     name: `${m.monat_name.substring(0, 3)} ${m.jahr}`,
@@ -197,7 +199,7 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
           <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} className="text-gray-600 dark:text-gray-400" />
-            <YAxis tick={{ fontSize: 10 }} className="text-gray-600 dark:text-gray-400" label={{ value: 'kWh', angle: -90, position: 'insideLeft' }} />
+            <YAxis tick={{ fontSize: 10 }} className="text-gray-600 dark:text-gray-400" label={achsenEinheit('kWh', schmal)} />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) => {
               if (name === 'Konfidenzband') return null
               return `${value.toFixed(0)} kWh`

@@ -11,7 +11,8 @@ import {
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
 import { Card, Alert, KPICard, ChartLegende } from '../../components/ui'
-import { COLORS, CHART_COLORS } from '../../lib'
+import { COLORS, CHART_COLORS, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
 
@@ -136,6 +137,7 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
 // ── Chart-Karte (KPIs + Verlauf + Meta) ──────────────────────────────────────
 
 export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
+  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const hatSpeicher = daten.speicher_kapazitaet_kwh != null
   const chartDaten = useMemo(() => daten.stunden.map(s => ({
@@ -180,9 +182,9 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
           <ComposedChart data={chartDaten} margin={{ top: 5, right: hatSpeicher ? 50 : 10, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
-            <YAxis yAxisId="kw" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v.toFixed(1)}`} label={{ value: 'kW', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+            <YAxis yAxisId="kw" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v.toFixed(1)}`} label={achsenEinheit('kW', schmal)} />
             {hatSpeicher && (
-              <YAxis yAxisId="soc" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}%`} label={{ value: 'SoC', angle: 90, position: 'insideRight', style: { fontSize: 10 } }} />
+              <YAxis yAxisId="soc" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v} %`} label={achsenEinheit('SoC', schmal, 'rechts')} />
             )}
             <ReferenceLine yAxisId="kw" y={0} stroke={achsen.referenz} strokeWidth={1.5} />
             <Tooltip content={<PrognoseTooltip hatSpeicher={hatSpeicher} />} />

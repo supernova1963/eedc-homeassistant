@@ -6,7 +6,8 @@ import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, F
 import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
-import { INVESTITION_TYP_ORDER, CHART_COLORS } from '../../lib'
+import { INVESTITION_TYP_ORDER, CHART_COLORS, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -58,6 +59,7 @@ function komponentenBeitragTypIndex(typ: string): number {
 }
 
 export default function FinanzenTab({ anlageId }: Props) {
+  const schmal = useSchmaleAchse()
   const [prognose, setPrognose] = useState<FinanzPrognose | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -240,7 +242,7 @@ export default function FinanzenTab({ anlageId }: Props) {
                 />
                 <YAxis
                   tick={{ fontSize: 10 }}
-                  label={{ value: '€', angle: -90, position: 'insideLeft' }}
+                  label={achsenEinheit('€', schmal)}
                 />
                 <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Legend content={<ChartLegende

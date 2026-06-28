@@ -15,7 +15,8 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { LoadingSpinner, Card, Alert, fmtCalc } from '../components/ui'
-import { BlockShell, KpiStrip, VerteilungsBalken, type Block } from '../components/blocks'
+import { BlockShell, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
+import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_COLORS } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { sensorMappingApi } from '../api/sensorMapping'
@@ -32,6 +33,12 @@ import { datenCheckerApi, type CheckErgebnis } from '../api/datenChecker'
 import { SEVERITY_CONFIG, type CheckSchwere } from '../config/datenCheckerKategorien'
 import type { Investition } from '../types'
 import type { InfothekEintrag } from '../types/infothek'
+
+/** Slug für view-weit eindeutige parkIds. */
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/gi, '-')
+/** block-präfixierte parkId je KPI (Kollisionsschutz über mehrere Blöcke). */
+const mitParkId = (prefix: string, kpis: KpiStripItem[]): KpiStripItem[] =>
+  kpis.map((k) => ({ ...k, parkId: `kpi:${prefix}-${slug(k.title)}` }))
 
 /** Parameter-Zeilen einer Investition (Stammdaten + JSON-Parameter). */
 function paramFelder(inv: Investition): { label: string; wert: string }[] {
@@ -508,135 +515,169 @@ function WirtschaftlichkeitInhalt({ w }: { w: NonNullable<KompGeraet['wirtschaft
   )
 }
 
-function geraetBloecke(g: KompGeraet, typ: string, anlageId: number): Block[] {
+function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi): Block[] {
   const analyse = KOMPONENTEN_ANALYSE[typ]
-  const bloecke: Block[] = [
-    // ① Status (Pflicht) — D2-KPIs + Aufteilung + ggf. Sekundär-Strip.
-    {
-      id: 'status', title: 'Aktueller Status', ...BLOCK_IDENTITAET.kennzahlen,
-      summary: g.status.map((k) => `${k.value} ${k.unit ?? ''}`.trim()).slice(0, 2).join(' · '),
-      defaultOpen: true,
-      render: () => (
-        <div className="space-y-4">
-          <KpiStrip kpis={g.status} />
-          {g.hinweise?.map((h, i) => <Alert key={i} type={h.ton}>{h.text}</Alert>)}
-          {g.kennzahlen && <KpiUnterblock titel={g.kennzahlen.titel} kpis={g.kennzahlen.kpis} />}
-          {g.aufteilung && <VerteilungsBalken titel={g.aufteilung.titel} einheit={g.aufteilung.einheit} segmente={g.aufteilung.segmente} />}
-          {g.sekundaer && <KpiUnterblock titel={g.sekundaer.titel} kpis={g.sekundaer.kpis} />}
-        </div>
-      ),
-    },
-  ]
+  const istGeparkt = (id: string) => park.istGeparkt(id)
+  // Element-Park-Doktrin (Gernot 2026-06-27): JEDE Anzeige im Block einzeln parkbar
+  // (KPIs, Charts, Tabellen, Balken, Hinweise); der Block selbst NICHT. Sind ALLE
+  // Element-IDs eines Blocks geparkt → Block ausblenden.
+  const alleGeparkt = (ids: string[]) => ids.length > 0 && ids.every(istGeparkt)
+  const bloecke: Block[] = []
 
-  // ② Struktur/Verknüpfung (spezifisch).
-  if (g.struktur) {
+  // ① Status (Pflicht) — D2-KPIs + Hinweise + Sub-Strips + Aufteilung, je parkbar.
+  const statusKpis = mitParkId('status', g.status)
+  const statusIds = [
+    ...statusKpis.map((k) => k.parkId).filter((x): x is string => !!x),
+    ...(g.hinweise?.map((_, i) => `el:status-hinweis-${i}`) ?? []),
+    ...(g.kennzahlen ? ['el:status-kennzahlen'] : []),
+    ...(g.aufteilung ? ['el:status-aufteilung'] : []),
+    ...(g.sekundaer ? ['el:status-sekundaer'] : []),
+  ]
+  if (!alleGeparkt(statusIds)) bloecke.push({
+    id: 'status', title: 'Aktueller Status', ...BLOCK_IDENTITAET.kennzahlen,
+    summary: g.status.map((k) => `${k.value} ${k.unit ?? ''}`.trim()).slice(0, 2).join(' · '),
+    defaultOpen: true,
+    render: () => (
+      <div className="space-y-4">
+        <KpiStrip kpis={statusKpis} />
+        {g.hinweise?.map((h, i) => <Parkbar key={i} id={`el:status-hinweis-${i}`} titel="Hinweis"><Alert type={h.ton}>{h.text}</Alert></Parkbar>)}
+        {g.kennzahlen && <Parkbar id="el:status-kennzahlen" titel={g.kennzahlen.titel}><KpiUnterblock titel={g.kennzahlen.titel} kpis={g.kennzahlen.kpis} /></Parkbar>}
+        {g.aufteilung && <Parkbar id="el:status-aufteilung" titel={g.aufteilung.titel}><VerteilungsBalken titel={g.aufteilung.titel} einheit={g.aufteilung.einheit} segmente={g.aufteilung.segmente} /></Parkbar>}
+        {g.sekundaer && <Parkbar id="el:status-sekundaer" titel={g.sekundaer.titel}><KpiUnterblock titel={g.sekundaer.titel} kpis={g.sekundaer.kpis} /></Parkbar>}
+      </div>
+    ),
+  })
+
+  // ② Struktur/Verknüpfung (ein Element).
+  if (g.struktur && !istGeparkt('el:struktur')) {
     const topo = g.struktur.art === 'topologie'
     bloecke.push({
       id: 'struktur', title: topo ? 'System-Struktur' : 'Verknüpfung', icon: Network,
       summary: topo ? 'Wechselrichter → Module / Speicher' : 'Zuordnung & Datenquelle',
       defaultOpen: false,
-      render: () => <StrukturInhalt s={g.struktur!} />,
+      render: () => <Parkbar id="el:struktur" titel="Struktur"><StrukturInhalt s={g.struktur!} /></Parkbar>,
     })
   }
 
-  // ③ Sub-Komponente (spezifisch, In-Wirt).
+  // ③ Sub-Komponente — Hinweis + KPIs, je parkbar.
   if (g.subKomponente) {
-    bloecke.push({
+    const subKpis = mitParkId('sub', g.subKomponente.kpis)
+    const subIds = [...subKpis.map((k) => k.parkId).filter((x): x is string => !!x), ...(g.subKomponente.hinweis ? ['el:sub-hinweis'] : [])]
+    if (!alleGeparkt(subIds)) bloecke.push({
       id: 'sub', title: g.subKomponente.titel, icon: Layers,
       summary: g.subKomponente.kpis.map((k) => `${k.value} ${k.unit ?? ''}`.trim()).slice(0, 2).join(' · '),
       defaultOpen: false,
       render: () => (
         <div className="space-y-3">
-          {g.subKomponente!.hinweis && <p className="text-xs text-gray-400 dark:text-gray-500">{g.subKomponente!.hinweis}</p>}
-          <KpiStrip kpis={g.subKomponente!.kpis} />
+          {g.subKomponente!.hinweis && <Parkbar id="el:sub-hinweis" titel="Hinweis"><p className="text-xs text-gray-400 dark:text-gray-500">{g.subKomponente!.hinweis}</p></Parkbar>}
+          <KpiStrip kpis={subKpis} />
         </div>
       ),
     })
   }
 
-  // ④ Verlauf (Pflicht) — typ-eigene IST-Charts via Analyse-Registry, sonst generischer Adapter-Verlauf.
-  bloecke.push({
+  // ④ Verlauf — Registry-Analyse = EIN Element; generischer Verlauf = Chart + Verteilungen
+  //    + Monatstabelle, je parkbar; ohne Daten ein parkbarer Hinweis.
+  const verlaufIds = analyse?.verlauf
+    ? ['el:verlauf']
+    : g.verlauf
+      ? ['el:verlauf', ...(g.verlauf.verteilungen?.map((_, i) => `el:verlauf-vert-${i}`) ?? []), ...(typ !== 'pv-module' ? ['el:verlauf-tabelle'] : [])]
+      : ['el:verlauf-hinweis']
+  if (!alleGeparkt(verlaufIds)) bloecke.push({
     id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
     summary: 'Zeitreihe über die gesamte Laufzeit', defaultOpen: false,
     render: (fokus) => (analyse?.verlauf
-      ? analyse.verlauf(anlageId, g.inv)
+      ? <Parkbar id="el:verlauf" titel="Verlauf">{analyse.verlauf(anlageId, g.inv)}</Parkbar>
       : g.verlauf
         ? (
           <div className="space-y-4">
-            <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} gestapelt={g.verlauf.gestapelt} tall={fokus} />
+            <Parkbar id="el:verlauf" titel="Verlauf">
+              <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} gestapelt={g.verlauf.gestapelt} tall={fokus} />
+            </Parkbar>
             {g.verlauf.verteilungen && g.verlauf.verteilungen.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {g.verlauf.verteilungen.map((v) => (
-                  <VerteilungsBalken key={v.titel} titel={v.titel} einheit={v.einheit} segmente={v.segmente} />
+                {g.verlauf.verteilungen.map((v, i) => (
+                  <Parkbar key={v.titel} id={`el:verlauf-vert-${i}`} titel={v.titel}><VerteilungsBalken titel={v.titel} einheit={v.einheit} segmente={v.segmente} /></Parkbar>
                 ))}
               </div>
             )}
             {/* Scoped read-only Monats-Detailtabelle (WKW 1-42/70) — selbe Daten wie der Chart.
                 PV ausgenommen: dessen ④ ist jahres-aggregiert (Modul-Stapel), keine Monatszeilen. */}
             {typ !== 'pv-module' && (
-              <KomponentenMonatsTabelle rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} />
+              <Parkbar id="el:verlauf-tabelle" titel="Monats-Detailtabelle">
+                <KomponentenMonatsTabelle rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} />
+              </Parkbar>
             )}
           </div>
         )
-        : <FolgtHinweis text="Für diesen Typ liegt keine eigene Zeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." />),
+        : <Parkbar id="el:verlauf-hinweis" titel="Verlauf-Hinweis"><FolgtHinweis text="Für diesen Typ liegt keine eigene Zeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." /></Parkbar>),
   })
 
-  // ⑤ Vergleich (Pflicht) — typ-eigene IST-Analyse (z. B. PV-SOLL/IST pro String) via Registry, sonst generischer Jahresvergleich.
-  bloecke.push({
+  // ⑤ Vergleich — Registry-/generische Analyse oder Hinweis, je ein parkbares Element.
+  const vergleichIds = (analyse?.vergleich || g.vergleich) ? ['el:vergleich'] : ['el:vergleich-hinweis']
+  if (!alleGeparkt(vergleichIds)) bloecke.push({
     id: 'vergleich', title: 'Vergleich', icon: BarChart3,
     summary: analyse?.vergleich ? 'Komponentenspezifischer Vergleich' : 'Jahresvergleich · Diagramm ⇄ Tabelle', defaultOpen: false,
     render: () => (analyse?.vergleich
-      ? analyse.vergleich(anlageId, g.inv)
+      ? <Parkbar id="el:vergleich" titel="Vergleich">{analyse.vergleich(anlageId, g.inv)}</Parkbar>
       : g.vergleich
-        ? <KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} />
-        : <FolgtHinweis
+        ? <Parkbar id="el:vergleich" titel="Vergleich"><KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} /></Parkbar>
+        : <Parkbar id="el:vergleich-hinweis" titel="Vergleich-Hinweis"><FolgtHinweis
             text="Für diesen Typ liegt noch kein Jahresvergleich vor."
             crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/v4/auswertungen/tabelle' }}
-          />),
+          /></Parkbar>),
   })
 
-  // Wirtschaftlichkeit (Pflicht bei allen Typen) — zwei Modi:
-  //  • Vergleich (Registry): typen MIT Alternative (WP=vs Gas, E-Auto=vs Benzin, Wallbox=ROI).
-  //  • Ertrags-Zusammensetzung (Adapter `g.wirtschaftlichkeit`): PV/Speicher/BKW/Sonstiges —
-  //    Aufschlüsselung in Ertragsposten; Sonstiger Erzeuger ehrlich „nicht bewertet".
-  if (analyse?.wirtschaftlichkeit || g.wirtschaftlichkeit) {
+  // Wirtschaftlichkeit — Registry-Vergleich ODER Ertrags-Zusammensetzung; ein parkbares Element.
+  if ((analyse?.wirtschaftlichkeit || g.wirtschaftlichkeit) && !istGeparkt('el:wirtschaftlichkeit')) {
     bloecke.push({
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit', icon: Euro,
       summary: analyse?.wirtschaftlichkeit ? 'Kostenvergleich & Ersparnis' : 'Ertrags-Zusammensetzung',
       defaultOpen: false,
-      render: () => (analyse?.wirtschaftlichkeit
+      render: () => <Parkbar id="el:wirtschaftlichkeit" titel="Wirtschaftlichkeit">{analyse?.wirtschaftlichkeit
         ? analyse.wirtschaftlichkeit(anlageId, g.inv)
-        : <WirtschaftlichkeitInhalt w={g.wirtschaftlichkeit!} />),
+        : <WirtschaftlichkeitInhalt w={g.wirtschaftlichkeit!} />}</Parkbar>,
     })
   }
 
   // ⑥ Aussicht entfällt im Hub (Gernot 2026-06-21): zeitliche Differenzierung → Cockpit/Aussicht.
 
-  // Dokumente & Infos (#243) — N:M-verknüpfte Infothek-Einträge dieser Komponente (dünn, read-only).
-  bloecke.push({
+  // Dokumente & Infos (#243) — N:M-verknüpfte Infothek-Einträge dieser Komponente (ein Element).
+  if (!istGeparkt('el:infothek')) bloecke.push({
     id: 'infothek', title: 'Dokumente & Infos', icon: FileText,
     summary: 'Verträge, Datenblätter & Dokumente dieser Komponente', defaultOpen: false,
-    render: () => <InfothekBlock invs={g.verknuepfteInvs ?? [g.inv]} />,
+    render: () => <Parkbar id="el:infothek" titel="Dokumente & Infos"><InfothekBlock invs={g.verknuepfteInvs ?? [g.inv]} /></Parkbar>,
   })
 
-  // Daten-Qualität (#243) — komponenten-zuordenbare Befunde dieser Komponente (dünn, read-only, Cross-Link zur Werkbank).
-  bloecke.push({
+  // Daten-Qualität (#243) — komponenten-zuordenbare Befunde (ein Element).
+  if (!istGeparkt('el:daten-checker')) bloecke.push({
     id: 'daten-checker', title: 'Daten-Qualität', icon: ClipboardCheck,
     summary: 'Offene Daten-Befunde dieser Komponente', defaultOpen: false,
-    render: () => <DatenCheckerBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} />,
+    render: () => <Parkbar id="el:daten-checker" titel="Daten-Qualität"><DatenCheckerBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} /></Parkbar>,
   })
 
-  // ⑦ Einstellungen (Pflicht) — alle verknüpften Investitionen strukturiert + Sensor-/MQTT-Zuordnungen + Edit-Verzweigung.
-  bloecke.push({
+  // ⑦ Einstellungen (Pflicht) — Parameter + Sensor-/MQTT-Zuordnungen (ein Element).
+  if (!istGeparkt('el:einstellungen')) bloecke.push({
     id: 'einstellungen', title: 'Einstellungen', icon: Settings,
     summary: 'Parameter, Sensoren & MQTT dieser Komponente — mit Bearbeiten-Links', defaultOpen: false,
-    render: () => <EinstellungenBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} />,
+    render: () => <Parkbar id="el:einstellungen" titel="Einstellungen"><EinstellungenBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} /></Parkbar>,
   })
 
   return bloecke
 }
 
-export default function KomponentenTypV4({ typ, anlageId }: { typ: string; anlageId: number | undefined }) {
+export default function KomponentenTypV4(props: { typ: string; anlageId: number | undefined }) {
+  // ParkProvider je Typ-Sicht (eigener LS-Scope `eedc-park:v4-komponenten-<typ>`,
+  // analog zur BlockShell-Persistenz). Element-Park der ①Status-KPIs.
+  return (
+    <ParkProvider persistKey={`v4-komponenten-${props.typ}`}>
+      <KomponentenTypInner {...props} />
+    </ParkProvider>
+  )
+}
+
+function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number | undefined }) {
+  const park = usePark()
   const [geraete, setGeraete] = useState<KompGeraet[]>([])
   const [aktiv, setAktiv] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -657,7 +698,7 @@ export default function KomponentenTypV4({ typ, anlageId }: { typ: string; anlag
   }, [anlageId, adapter, typ])
 
   const g = geraete[aktiv]
-  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0) : []), [g, typ, anlageId])
+  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0, park) : []), [g, typ, anlageId, park])
 
   if (!anlageId) return <Hinweis text="Noch keine Anlage gewählt." />
   if (!adapter) return <Hinweis text={`Für „${ident?.label ?? typ}" gibt es noch keine Hub-Sicht.`} />
@@ -690,6 +731,9 @@ export default function KomponentenTypV4({ typ, anlageId }: { typ: string; anlag
         </div>
       )}
       <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar />
+
+      {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert ohne Provider. */}
+      <ParkFuss />
     </div>
   )
 }

@@ -100,13 +100,13 @@ export default function LiveHeuteKacheln({ data }: { data: LiveDashboardResponse
             {autarkie !== null && (
               <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-1.5">
                 <div className="text-xs text-gray-500 dark:text-gray-400">Autarkie</div>
-                <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{autarkie.toFixed(0)}<span className="text-xs font-normal">%</span></div>
+                <div className="text-base font-bold text-emerald-600 dark:text-emerald-400">{autarkie.toFixed(0)}{' '}<span className="text-xs font-normal">%</span></div>
               </div>
             )}
             {evQuote !== null && (
               <div className="bg-sky-50 dark:bg-sky-900/20 rounded-lg px-3 py-1.5">
                 <div className="text-xs text-gray-500 dark:text-gray-400">Eigenverbrauch</div>
-                <div className="text-base font-bold text-sky-600 dark:text-sky-400">{evQuote.toFixed(0)}<span className="text-xs font-normal">%</span></div>
+                <div className="text-base font-bold text-sky-600 dark:text-sky-400">{evQuote.toFixed(0)}{' '}<span className="text-xs font-normal">%</span></div>
               </div>
             )}
           </div>

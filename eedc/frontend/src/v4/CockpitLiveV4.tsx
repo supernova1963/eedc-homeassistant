@@ -30,6 +30,7 @@ import SolarAussicht3Tage from '../components/live/SolarAussicht3Tage'
 import LiveSocBalken from '../components/live/LiveSocBalken'
 import LiveTemperaturen from '../components/live/LiveTemperaturen'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
+import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { Card } from '../components/ui'
 import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
 
@@ -37,7 +38,20 @@ const REFRESH_INTERVAL = 5_000
 const WETTER_REFRESH_INTERVAL = 300_000
 const TAGESVERLAUF_REFRESH_INTERVAL = 60_000
 
-export default function CockpitLiveV4({ anlageId }: { anlageId: number | undefined }) {
+// persistKey-SoT der Sicht (Element-Park-Scope `eedc-park:v4-cockpit-live`).
+const SICHT_KEY = 'v4-cockpit-live'
+
+export default function CockpitLiveV4(props: { anlageId: number | undefined }) {
+  // Element-Park (SLICE 1): Live-Sektionen werden parkbar (Element-Ebene, KEINE
+  // BlockShell-Block-Ebene — Gernot 2026-06-26). Energiefluss-Fokus/Vollbild bleibt.
+  return (
+    <ParkProvider persistKey={SICHT_KEY}>
+      <CockpitLiveInner {...props} />
+    </ParkProvider>
+  )
+}
+
+function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const { selectedAnlage } = useSelectedAnlage()
   // Demo-Modus ist global (Status-Fusszeile schaltet ihn); Live liest ihn nur.
   const { demoMode } = useDemoMode()
@@ -199,78 +213,100 @@ export default function CockpitLiveV4({ anlageId }: { anlageId: number | undefin
           {/* Kopf-Region „auf einen Blick": Energiefluss (2/3) ⟷ Sidebar (1/3),
               ab xl nebeneinander (IST, #164 detLAN: Side-by-Side erst ab xl). */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div className="xl:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
-              {!eflFokus && (
-                <EnergieFluss
-                  {...flussProps}
-                  kopfAktion={
-                    <button
-                      type="button"
-                      onClick={() => setEflFokus(true)}
-                      aria-label="Energiefluss: Fokus / Vollbild"
-                      className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </button>
-                  }
-                />
-              )}
-            </div>
-
-            {/* Sidebar unter „Heute": Sektionen gestapelt, je eigene FokusKachel. */}
-            <div className="space-y-3">
-              <FokusKachel titel="Heute" icon={Calendar} kompakt>
-                <LiveHeuteKacheln data={data} />
-              </FokusKachel>
-              {hatSonne && (
-                <FokusKachel titel="Sonnenstand" icon={Sunrise} kompakt zeigeTitel>
-                  <SunProgressBar
-                    sunrise={wetter!.sunrise!}
-                    sunset={wetter!.sunset!}
-                    solar_noon={wetter!.solar_noon ?? undefined}
-                    sonnenstunden={wetter!.sonnenstunden}
-                    sonnenstundenBisher={wetter!.sonnenstunden_bisher}
-                    sonnenstundenRest={wetter!.sonnenstunden_rest}
+            {/* Energiefluss ist parkbar (Element-Ebene); Grid-Span am Parkbar-Wrapper,
+                damit das Layout beim Parken sauber reflowt. Vollbild bleibt erhalten. */}
+            <Parkbar id="live:energiefluss" titel="Energiefluss" className="xl:col-span-2">
+              <div className="h-full bg-white dark:bg-gray-800 rounded-lg shadow p-4 sm:p-6 flex flex-col">
+                {!eflFokus && (
+                  <EnergieFluss
+                    {...flussProps}
+                    kopfAktion={
+                      <button
+                        type="button"
+                        onClick={() => setEflFokus(true)}
+                        aria-label="Energiefluss: Fokus / Vollbild"
+                        className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                      >
+                        <Maximize2 className="h-4 w-4" />
+                      </button>
+                    }
                   />
+                )}
+              </div>
+            </Parkbar>
+
+            {/* Sidebar unter „Heute": Sektionen gestapelt, je eigene FokusKachel +
+                je parkbares Element. */}
+            <div className="space-y-3">
+              <Parkbar id="live:heute" titel="Heute">
+                <FokusKachel titel="Heute" icon={Calendar} kompakt>
+                  <LiveHeuteKacheln data={data} />
                 </FokusKachel>
+              </Parkbar>
+              {hatSonne && (
+                <Parkbar id="live:sonnenstand" titel="Sonnenstand">
+                  <FokusKachel titel="Sonnenstand" icon={Sunrise} kompakt zeigeTitel>
+                    <SunProgressBar
+                      sunrise={wetter!.sunrise!}
+                      sunset={wetter!.sunset!}
+                      solar_noon={wetter!.solar_noon ?? undefined}
+                      sonnenstunden={wetter!.sonnenstunden}
+                      sonnenstundenBisher={wetter!.sonnenstunden_bisher}
+                      sonnenstundenRest={wetter!.sonnenstunden_rest}
+                    />
+                  </FokusKachel>
+                </Parkbar>
               )}
               {hatAussicht && (
-                <FokusKachel titel="Solar-Aussicht" icon={Sun} kompakt>
-                  <SolarAussicht3Tage prognose3Tage={prognose3Tage!} wetter={wetter} heutePvKwh={data.heute_pv_kwh} />
-                </FokusKachel>
+                <Parkbar id="live:solar-aussicht" titel="Solar-Aussicht">
+                  <FokusKachel titel="Solar-Aussicht" icon={Sun} kompakt>
+                    <SolarAussicht3Tage prognose3Tage={prognose3Tage!} wetter={wetter} heutePvKwh={data.heute_pv_kwh} />
+                  </FokusKachel>
+                </Parkbar>
               )}
               {hatSoc && (
-                <FokusKachel titel="Ladezustand" icon={Battery} kompakt>
-                  <LiveSocBalken gauges={data.gauges} />
-                </FokusKachel>
+                <Parkbar id="live:ladezustand" titel="Ladezustand">
+                  <FokusKachel titel="Ladezustand" icon={Battery} kompakt>
+                    <LiveSocBalken gauges={data.gauges} />
+                  </FokusKachel>
+                </Parkbar>
               )}
               {hatTemp && (
-                <FokusKachel titel="Temperaturen" icon={Thermometer} kompakt zeigeTitel>
-                  <LiveTemperaturen
-                    aussenC={wetter?.aktuell?.temperatur_c}
-                    tempMinC={wetter?.temperatur_min_c}
-                    tempMaxC={wetter?.temperatur_max_c}
-                    warmwasserC={data.warmwasser_temperatur_c}
-                  />
-                </FokusKachel>
+                <Parkbar id="live:temperaturen" titel="Temperaturen">
+                  <FokusKachel titel="Temperaturen" icon={Thermometer} kompakt zeigeTitel>
+                    <LiveTemperaturen
+                      aussenC={wetter?.aktuell?.temperatur_c}
+                      tempMinC={wetter?.temperatur_min_c}
+                      tempMaxC={wetter?.temperatur_max_c}
+                      warmwasserC={data.warmwasser_temperatur_c}
+                    />
+                  </FokusKachel>
+                </Parkbar>
               )}
             </div>
           </div>
 
-          {/* Volle Breite (wie IST): Wetter heute, dann Tagesverlauf als eigener Block. */}
+          {/* Volle Breite (wie IST): Wetter heute, dann Tagesverlauf — je parkbar. */}
           {wetter && (
-            <FokusKachel titel="Wetter heute" icon={CloudSun} zeigeTitel>
-              <WetterWidget wetter={wetter} tagesverlauf={tagesverlauf} anlageId={anlageId ?? null} />
-            </FokusKachel>
+            <Parkbar id="live:wetter-heute" titel="Wetter heute">
+              <FokusKachel titel="Wetter heute" icon={CloudSun} zeigeTitel>
+                <WetterWidget wetter={wetter} tagesverlauf={tagesverlauf} anlageId={anlageId ?? null} />
+              </FokusKachel>
+            </Parkbar>
           )}
           {hatTagesverlauf && (
-            <FokusKachel titel="Tagesverlauf" icon={LineChart}>
-              <TagesverlaufChart serien={tagesverlauf!.serien} punkte={tagesverlauf!.punkte} uebersprungen={tagesverlauf!.uebersprungen} />
-            </FokusKachel>
+            <Parkbar id="live:tagesverlauf" titel="Tagesverlauf">
+              <FokusKachel titel="Tagesverlauf" icon={LineChart}>
+                <TagesverlaufChart serien={tagesverlauf!.serien} punkte={tagesverlauf!.punkte} uebersprungen={tagesverlauf!.uebersprungen} />
+              </FokusKachel>
+            </Parkbar>
           )}
         </div>
         )
       })()}
+
+      {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer. */}
+      <ParkFuss />
     </div>
   )
 }

@@ -10,7 +10,7 @@ import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../compon
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
 import { aussichtenApi } from '../../api/aussichten'
-import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse, achsenEinheit } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import {
   ResponsiveContainer,
@@ -262,14 +262,14 @@ export default function KurzfristTab({ anlageId }: Props) {
                 yAxisId="left"
                 {...yAchse(schmal)}
                 className="text-gray-600 dark:text-gray-400"
-                label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
+                label={achsenEinheit('kWh', schmal)}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
                 tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
-                label={{ value: '°C', angle: 90, position: 'insideRight' }}
+                label={achsenEinheit('°C', schmal, 'rechts')}
               />
               <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
                   if (name === 'Vormittag' || name === 'Nachmittag' || name === 'PV-Prognose') return `${value.toFixed(1)} kWh`

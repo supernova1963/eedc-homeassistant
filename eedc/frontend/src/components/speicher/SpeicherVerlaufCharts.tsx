@@ -112,7 +112,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
             <LineChart data={effizienzData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" {...xAchse(schmal)} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} {...yAchse(schmal, 55)} />
+              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v} %`} {...yAchse(schmal, 55)} />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="%" decimals={1} />} />
               <Line type="monotone" dataKey="effizienz" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
             </LineChart>

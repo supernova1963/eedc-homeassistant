@@ -18,7 +18,8 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
-import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY } from '../../lib'
+import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -40,6 +41,7 @@ interface RenderSerie {
 
 export default function TagesverlaufChart({ serien, punkte, uebersprungen }: TagesverlaufChartProps) {
   const achsen = useChartTheme()
+  const schmal = useSchmaleAchse()
   const [hidden, setHidden] = useState<Set<string>>(new Set())
 
   const toggleSerie = useCallback((origKey: string) => {
@@ -53,6 +55,8 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
 
   // Overlay-Serien (z.B. Strompreis) — separate Achse, als Linie
   const overlaySerien = useMemo(() => serien.filter((s) => s.seite === 'overlay'), [serien])
+  // Einheit der Hauptachse (links) = erste Nicht-Overlay-Serie (D9-A: Achse trägt ihre Einheit).
+  const hauptEinheit = useMemo(() => serien.find((s) => s.seite !== 'overlay')?.einheit || '', [serien])
 
   // Render-Serien: Bidirektionale werden in _pos/_neg aufgespalten (ohne Overlays)
   const renderSerien = useMemo<RenderSerie[]>(() => {
@@ -165,6 +169,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
             tick={{ fontSize: 10 }}
             className="fill-gray-500 dark:fill-gray-400"
             tickFormatter={(v: number) => v.toFixed(1)}
+            label={hauptEinheit ? achsenEinheit(hauptEinheit, schmal) : undefined}
           />
           {overlaySerien.length > 0 && (
             <YAxis
@@ -173,7 +178,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
               tick={{ fontSize: 10 }}
               className="fill-gray-400 dark:fill-gray-500"
               tickFormatter={(v: number) => v.toFixed(0)}
-              label={{ value: overlaySerien[0].einheit || '', angle: -90, position: 'insideRight', fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
+              label={achsenEinheit(overlaySerien[0].einheit || '', schmal, 'rechts')}
             />
           )}
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip

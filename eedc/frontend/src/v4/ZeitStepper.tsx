@@ -49,6 +49,9 @@ interface ZeitStepperProps {
   /** Optionales Direktsprung-Element oben in der Liste (Tag: Date-Picker);
    *  bekommt eine `close`-Funktion zum Schließen der Liste nach Auswahl. */
   direktsprung?: (close: () => void) => ReactNode
+  /** D10-2: im Fokus/Vollbild-Kopf wird der Stepper auf JEDER Breite gezeigt (kein
+   *  `lg:hidden`) und sitzt nicht sticky — er ist dort die einzige Datums-Nav. */
+  immerSichtbar?: boolean
 }
 
 const BTN_CLASS =
@@ -64,7 +67,7 @@ function StepBtn({ icon: Icon, label, go }: ZeitSchritt) {
   )
 }
 
-export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprung }: ZeitStepperProps) {
+export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprung, immerSichtbar = false }: ZeitStepperProps) {
   const [offen, setOffen] = useState(false)
 
   // D7-3 (detLAN R7): KEIN Voll-Bleed (`-mx-3`) mehr → der Streifen bleibt auf
@@ -72,7 +75,9 @@ export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprun
   // schwebt damit im rechten Gutter statt über der Nav. `scrollbar-gutter` (mobil,
   // No-Op bei Overlay-Scrollbalken) wird dadurch entbehrlich.
   return (
-    <div className="lg:hidden sticky top-0 z-20 pt-1 pb-2 mb-3 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm">
+    <div className={immerSichtbar
+      ? 'mb-3'
+      : 'lg:hidden sticky top-0 z-20 pt-1 pb-2 mb-3 bg-gray-50/80 dark:bg-gray-900/80 backdrop-blur-sm'}>
       <div className="flex items-center gap-0.5 max-w-md mx-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1 py-1 shadow-sm">
         {zurueck.map((s, i) => <StepBtn key={`z${i}`} {...s} />)}
         <button

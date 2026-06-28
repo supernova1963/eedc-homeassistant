@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
@@ -75,7 +76,22 @@ function berechneWochentagStats(fenster: TagWerte[], datum: string): GleicheWoch
   }
 }
 
-export default function CockpitTagV4({ anlageId }: { anlageId: number | undefined }) {
+// persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
+// (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
+const SICHT_KEY = 'v4-cockpit-tag'
+
+export default function CockpitTagV4(props: { anlageId: number | undefined }) {
+  // ParkProvider umschließt den Body, damit `usePark` (Kennzahlen-Filter, ParkFuss)
+  // im selben Baum greift — wie Cockpit/Monat (SLICE-1-Referenz).
+  return (
+    <ParkProvider persistKey={SICHT_KEY}>
+      <CockpitTagInner {...props} />
+    </ParkProvider>
+  )
+}
+
+function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
+  const park = usePark()
   const [datum, setDatum] = useState(gesternISO())
   const [railEntries, setRailEntries] = useState<TagRailEintrag[]>([])
   const [stunden, setStunden] = useState<StundenWert[]>([])
@@ -177,39 +193,50 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
     const extraSerien = serien.filter((s) => !DEDIZIERTE_KATEGORIEN.has(s.kategorie))
     const wochentag = WOCHENTAG_LANG[wochentagOf(datum)]
     if (tag) {
-      list.push({
-        id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-        summary: `${(tag.erzeugung).toFixed(0)} kWh PV · ${tag.autarkie != null ? tag.autarkie.toFixed(0) : '—'} % Autarkie`,
-        defaultOpen: true,
-        render: () => <KpiStrip kpis={baueTagKpis(tag, vortag, tagDetail?.soll_pv_kwh)} />,
-      })
-      list.push({
+      // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte
+      // werden im Strip ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen
+      // (Monat-Referenz, Gernot-Abnahme 2026-06-25).
+      const kpiItems = baueTagKpis(tag, vortag, tagDetail?.soll_pv_kwh).map((k) => ({
+        ...k,
+        parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,
+      }))
+      const sichtbareKpi = kpiItems.filter((k) => !park.istGeparkt(k.parkId))
+      if (sichtbareKpi.length > 0) {
+        list.push({
+          id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
+          summary: `${(tag.erzeugung).toFixed(0)} kWh PV · ${tag.autarkie != null ? tag.autarkie.toFixed(0) : '—'} % Autarkie`,
+          defaultOpen: true,
+          render: () => <KpiStrip kpis={sichtbareKpi} />,
+        })
+      }
+      // Bilanz-Panel als parkbares Element; geparkt → ganzer Block weg.
+      if (!park.istGeparkt('el:bilanz')) list.push({
         id: 'bilanz', title: 'Energie-Bilanz', ...BLOCK_IDENTITAET.energieBilanz,
         summary: `IST / Vortag${wtStats ? ` / Ø ${wochentag}` : ''}`,
         defaultOpen: false,
-        render: () => <TagBilanz t={tag} vt={vortag} wtStats={wtStats} wochentagName={wochentag} />,
+        render: () => <Parkbar id="el:bilanz" titel="Energie-Bilanz"><TagBilanz t={tag} vt={vortag} wtStats={wtStats} wochentagName={wochentag} /></Parkbar>,
       })
     }
     if (stunden.length > 0) {
-      list.push({
+      if (!park.istGeparkt('el:stundenverlauf')) list.push({
         id: 'verlauf', title: 'Stundenverlauf', ...BLOCK_IDENTITAET.verlauf,
         summary: 'Stundenmittel: Quellen ▲ / Senken ▼',
         defaultOpen: false,
-        render: () => <TagVerlaufChart daten={stunden} extraSerien={extraSerien} />,
+        render: () => <Parkbar id="el:stundenverlauf" titel="Stundenverlauf"><TagVerlaufChart daten={stunden} extraSerien={extraSerien} /></Parkbar>,
       })
-      list.push({
+      if (!park.istGeparkt('el:stundenwerte')) list.push({
         id: 'stundenwerte', title: 'Stundenwerte', ...BLOCK_IDENTITAET.werte,
         summary: 'Stundenwerte in kW · Σ-Zeile = kWh/Tag',
         defaultOpen: false,
-        render: () => <TagWerteTabelle daten={stunden} extraSerien={extraSerien} datum={datum} />,
+        render: () => <Parkbar id="el:stundenwerte" titel="Stundenwerte"><TagWerteTabelle daten={stunden} extraSerien={extraSerien} datum={datum} /></Parkbar>,
       })
     }
     // Komponenten-Detailblöcke (aktiv-gegated) + Finanz-Teaser — dieselben Bauer
     // wie Cockpit/Monat (period='tag'). `tagDetail` füttert die tagesgenauen
     // Zusatzwerte (WP-Strom-Split, Speicher-Netzladung/Ladepreis).
-    if (tag) list.push(...baueTagKomponentenUndFinanz(tag, stunden, serien, tagDetail))
+    if (tag) list.push(...baueTagKomponentenUndFinanz(tag, stunden, serien, park, tagDetail))
     return list
-  }, [tag, vortag, wtStats, stunden, serien, datum, tagDetail])
+  }, [tag, vortag, wtStats, stunden, serien, datum, tagDetail, park])
 
   if (!anlageId) {
     return (
@@ -247,8 +274,20 @@ export default function CockpitTagV4({ anlageId }: { anlageId: number | undefine
           ) : bloecke.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Daten für diesen Tag vorhanden.</p></Card>
           ) : (
-            <BlockShell persistKey="v4-cockpit-tag" bloecke={bloecke} sortierbar />
+            <BlockShell
+              persistKey={SICHT_KEY}
+              bloecke={bloecke}
+              sortierbar
+              /* D10-2: im Vollbild läuft die Tages-Nav oben mit (auf jeder Breite). */
+              fokusKopf={
+                <TagStepper entries={railEntries} datum={datum} onSelect={waehle} aeltesterTag={aeltesterTag} immerSichtbar />
+              }
+            />
           )}
+
+          {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer,
+              bis etwas geparkt ist; rendert nichts ohne ParkProvider. */}
+          <ParkFuss />
         </div>
       </div>
     </div>

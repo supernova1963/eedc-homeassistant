@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
-import { ParkProvider, ParkFuss, usePark } from '../components/park'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
@@ -242,31 +242,35 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
         }
     // Default-Klappregel (Gernot 2026-06-19, revidiert): NUR der erste Block
     // (Kennzahlen) offen — alle übrigen eingeklappt, ihre Summary trägt den Kern.
+    // Finanz-Teaser kann komplett geparkt sein → null (kein Block).
+    const finanzBlock = monatData ? finanzTeaserBlock(monatData, park) : null
     return [
       ...(kennzahlenBlock ? [kennzahlenBlock] : []),
-      {
+      // Bilanz-/Verlauf-Blöcke: ihr eines Element ist parkbar; ist es geparkt,
+      // entfällt der ganze Block (Element-Park-Doktrin, Gernot 2026-06-27).
+      ...(park.istGeparkt('el:bilanz') ? [] : [{
         id: 'bilanz',
         title: 'Energie-Bilanz',
         ...BLOCK_IDENTITAET.energieBilanz,
         summary: bilanzSummary,
         defaultOpen: false,
         render: () => (monatData
-          ? <MonatBilanz d={monatData} vm={vormonatAgg} glMonStats={glMonStats} monatName={MONAT_KURZ[gewaehlt.monat]} />
+          ? <Parkbar id="el:bilanz" titel="Energie-Bilanz"><MonatBilanz d={monatData} vm={vormonatAgg} glMonStats={glMonStats} monatName={MONAT_KURZ[gewaehlt.monat]} /></Parkbar>
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
-      },
-      {
+      }]),
+      ...(park.istGeparkt('el:verlauf') ? [] : [{
         id: 'tagesverlauf',
         title: 'Verlauf',
         ...BLOCK_IDENTITAET.verlauf,
         summary: 'Tages-Bilanz: Erzeugung / Verbrauch / Autarkie',
         defaultOpen: false,
-        render: () => <TagesverlaufChart tage={tage} />,
-      },
+        render: () => <Parkbar id="el:verlauf" titel="Verlauf"><TagesverlaufChart tage={tage} /></Parkbar>,
+      }]),
       // Komponenten-Detailblöcke (aktiv-gegatet, B6/B7).
-      ...(monatData ? baueKomponentenBloecke(monatData) : []),
+      ...(monatData ? baueKomponentenBloecke(monatData, park) : []),
       // Finanz-Teaser (B5) — bewusst GANZ UNTEN: Netto-Ertrag/Monatsergebnis stehen
       // bereits in den Kennzahlen (D), hier nur Aufschlüsselung + Tarif + Cross-Link.
-      ...(monatData ? [finanzTeaserBlock(monatData)] : []),
+      ...(finanzBlock ? [finanzBlock] : []),
     ]
   }, [gewaehlt, tage, monatData, vormonatAgg, glMonStats, park])
 
@@ -322,7 +326,21 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
           ) : monate.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
           ) : (
-            <BlockShell persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
+            <BlockShell
+              persistKey={SICHT_KEY}
+              bloecke={bloecke}
+              sortierbar
+              /* D10-2: im Vollbild läuft die Monats-Nav oben mit (auf jeder Breite). */
+              fokusKopf={
+                <MonatStepper
+                  entries={railEntries}
+                  jahr={gewaehlt?.jahr ?? 0}
+                  monat={gewaehlt?.monat ?? 0}
+                  onSelect={waehle}
+                  immerSichtbar
+                />
+              }
+            />
           )}
 
           {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer,

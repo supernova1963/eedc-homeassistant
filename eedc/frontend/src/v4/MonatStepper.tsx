@@ -16,11 +16,13 @@ interface MonatStepperProps {
   jahr: number
   monat: number
   onSelect: (jahr: number, monat: number) => void
+  /** D10-2: im Fokus/Vollbild-Kopf auf jeder Breite sichtbar (durchgereicht). */
+  immerSichtbar?: boolean
 }
 
 const k = (j: number, m: number) => j * 100 + m
 
-export function MonatStepper({ entries, jahr, monat, onSelect }: MonatStepperProps) {
+export function MonatStepper({ entries, jahr, monat, onSelect, immerSichtbar }: MonatStepperProps) {
   const asc = useMemo(
     () => [...entries].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat)),
     [entries],
@@ -63,6 +65,7 @@ export function MonatStepper({ entries, jahr, monat, onSelect }: MonatStepperPro
       titel={aktuell ? `${MONAT_KURZ[aktuell.monat]} ${aktuell.jahr}` : '—'}
       badge={aktuell?.laufend ? 'läuft' : null}
       eintraege={eintraege}
+      immerSichtbar={immerSichtbar}
     />
   )
 }

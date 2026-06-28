@@ -37,10 +37,14 @@ export function BlockShell({
   bloecke,
   sortierbar = false,
   persistKey,
+  fokusKopf,
 }: {
   bloecke: Block[]
   sortierbar?: boolean
   persistKey: string
+  /** D10-2: Kopf-Slot, der im Fokus/Vollbild oben mitläuft (z. B. die Datums-Nav
+   *  der Seite). Reicht ihn an {@link FokusVollbild} durch — kein Nav-Neubau. */
+  fokusKopf?: import('react').ReactNode
 }) {
   const ids = useMemo(() => bloecke.map((b) => b.id), [bloecke])
   const [order, setOrder] = useState<string[]>(() => {
@@ -97,7 +101,7 @@ export function BlockShell({
   if (fokus && byId[fokus]) {
     const b = byId[fokus]
     return (
-      <FokusVollbild titel={b.title} icon={b.icon} farbe={b.farbe} onClose={() => setFokus(null)}>
+      <FokusVollbild titel={b.title} icon={b.icon} farbe={b.farbe} kopf={fokusKopf} onClose={() => setFokus(null)}>
         {b.render(true)}
       </FokusVollbild>
     )

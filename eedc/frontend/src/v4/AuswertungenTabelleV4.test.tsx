@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 vi.mock('../hooks', () => ({
+  useSchmaleAchse: () => false,
   useSelectedAnlage: () => ({
     anlagen: [{ id: 1, anlagenname: 'Test' }], selectedAnlageId: 1,
     selectedAnlage: { id: 1, anlagenname: 'Test' }, loading: false,

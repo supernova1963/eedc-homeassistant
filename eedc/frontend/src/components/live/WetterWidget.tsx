@@ -10,7 +10,8 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
@@ -50,6 +51,7 @@ interface WetterWidgetProps {
 type ChartView = 'beides' | 'pv' | 'verbrauch'
 
 export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }: WetterWidgetProps) {
+  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const now = new Date()
   const currentHour = now.getHours()
@@ -505,7 +507,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 tick={{ fontSize: 10 }}
                 className="fill-gray-400 dark:fill-gray-500"
                 tickFormatter={(v: number) => `${v.toFixed(1)}`}
-                label={{ value: 'kW', angle: -90, position: 'insideLeft', offset: 15, fontSize: 10, className: 'fill-gray-400 dark:fill-gray-500' }}
+                label={achsenEinheit('kW', schmal)}
               />
               <Tooltip content={<ChartTooltip
                 labelFormatter={(label) => {

@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
 
@@ -30,7 +30,7 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
         <AreaChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" {...xAchse(schmal)} />
-          <YAxis label={{ value: 'kWh', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }} {...yAchse(schmal)} />
+          <YAxis label={achsenEinheit('kWh', schmal)} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
@@ -53,7 +53,7 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" tickFormatter={(v) => `${v}€`} />
+            <XAxis type="number" tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} />
             <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
             <Bar dataKey="value" />
@@ -62,7 +62,7 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
       </div>
       <div className="text-center">
         <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.ersparnis}`}>
-          Ersparnis: {z.ersparnis_euro.toFixed(2)} €
+          Ersparnis: {fmtZahl(z.ersparnis_euro, 2)} €
         </span>
       </div>
     </div>

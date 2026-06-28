@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET } from '../lib'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
@@ -34,7 +35,21 @@ import { baueJahrAlsMonat, jahrVergleichAus, mittelJahre, type JahrVergleich } f
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 
-export default function CockpitJahrV4({ anlageId }: { anlageId: number | undefined }) {
+// persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
+// (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
+const SICHT_KEY = 'v4-cockpit-jahr'
+
+export default function CockpitJahrV4(props: { anlageId: number | undefined }) {
+  // ParkProvider umschließt den Body (wie Cockpit/Monat, SLICE-1-Referenz).
+  return (
+    <ParkProvider persistKey={SICHT_KEY}>
+      <CockpitJahrInner {...props} />
+    </ParkProvider>
+  )
+}
+
+function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
+  const park = usePark()
   const [alleMonate, setAlleMonate] = useState<AggregierteMonatsdaten[]>([])
   const [jahr, setJahr] = useState<number | null>(null)
   const [jahrData, setJahrData] = useState<AktuellerMonatResponse | null>(null)
@@ -138,33 +153,52 @@ export default function CockpitJahrV4({ anlageId }: { anlageId: number | undefin
             ? ` · SOLL ${Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
             : ''}`
       : 'IST / Vorjahr / Ø-Jahr'
+    // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte im Strip
+    // ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen (Monat-Referenz).
+    const kpiItems = d
+      ? baueJahrKpis(d, vorjahr).map((k) => ({
+          ...k,
+          parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,
+        }))
+      : []
+    const sichtbareKpi = kpiItems.filter((k) => !park.istGeparkt(k.parkId))
+    const kennzahlenBlock: Block | null = d
+      ? (sichtbareKpi.length > 0
+          ? {
+              id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
+              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis',
+              defaultOpen: true,
+              render: () => <KpiStrip kpis={sichtbareKpi} />,
+            }
+          : null)
+      : {
+          id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
+          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis',
+          defaultOpen: true,
+          render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahres-Kennzahlen verfügbar.</p>,
+        }
+    const finanzBlock = d ? finanzTeaserBlock(d, park) : null
     return [
-      {
-        id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-        summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis',
-        defaultOpen: true,
-        render: () => (d
-          ? <KpiStrip kpis={baueJahrKpis(d, vorjahr)} />
-          : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahres-Kennzahlen verfügbar.</p>),
-      },
-      {
+      ...(kennzahlenBlock ? [kennzahlenBlock] : []),
+      // Bilanz-/Verlauf-Element parkbar; geparkt → ganzer Block weg (Doktrin 2026-06-27).
+      ...(park.istGeparkt('el:bilanz') ? [] : [{
         id: 'bilanz', title: 'Energie-Bilanz', ...BLOCK_IDENTITAET.energieBilanz,
         summary: bilanzSummary,
         defaultOpen: false,
         render: () => (d
-          ? <JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} />
+          ? <Parkbar id="el:bilanz" titel="Energie-Bilanz"><JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} /></Parkbar>
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
-      },
-      {
+      }]),
+      ...(park.istGeparkt('el:verlauf') ? [] : [{
         id: 'verlauf', title: 'Verlauf', ...BLOCK_IDENTITAET.verlauf,
         summary: 'Monats-Bilanz: Erzeugung / Verbrauch / Autarkie',
         defaultOpen: false,
-        render: () => <JahrVerlaufChart monate={monatsZeilen} />,
-      },
-      ...(d ? baueKomponentenBloecke(d, 'jahr') : []),
-      ...(d ? [finanzTeaserBlock(d)] : []),
+        render: () => <Parkbar id="el:verlauf" titel="Verlauf"><JahrVerlaufChart monate={monatsZeilen} /></Parkbar>,
+      }]),
+      ...(d ? baueKomponentenBloecke(d, park, 'jahr') : []),
+      ...(finanzBlock ? [finanzBlock] : []),
     ]
-  }, [jahr, jahrData, vorjahr, oeJahr, monatsZeilen])
+  }, [jahr, jahrData, vorjahr, oeJahr, monatsZeilen, park])
 
   if (!anlageId) {
     return (
@@ -198,8 +232,20 @@ export default function CockpitJahrV4({ anlageId }: { anlageId: number | undefin
           ) : jahr == null ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Jahresdaten erfasst.</p></Card>
           ) : (
-            <BlockShell persistKey="v4-cockpit-jahr" bloecke={bloecke} sortierbar />
+            <BlockShell
+              persistKey={SICHT_KEY}
+              bloecke={bloecke}
+              sortierbar
+              /* D10-2: im Vollbild läuft die Jahres-Nav oben mit (auf jeder Breite). */
+              fokusKopf={
+                <JahrStepper entries={railEntries} jahr={jahr ?? 0} onSelect={waehle} immerSichtbar />
+              }
+            />
           )}
+
+          {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer,
+              bis etwas geparkt ist; rendert nichts ohne ParkProvider. */}
+          <ParkFuss />
         </div>
       </div>
     </div>

@@ -13,6 +13,7 @@ import { ArrowRight, RefreshCw, CalendarClock } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { BLOCK_IDENTITAET, VERGLEICH_BADGE } from '../lib'
 import type { Block } from '../components/blocks'
+import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
 
@@ -94,8 +95,13 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
   )
 }
 
-/** Finanz-Teaser (B5): Netto-Ertrag + Aufschlüsselung + Cross-Link nach Auswertungen. */
-export function finanzTeaserBlock(d: AktuellerMonatResponse): Block {
+/** Finanz-Teaser (B5): Netto-Ertrag + Aufschlüsselung + Cross-Link nach Auswertungen.
+ *  Element-Park-Doktrin (Gernot 2026-06-27): jede Anzeige (Bilanz/Tarif/Cross-Link)
+ *  einzeln parkbar; sind alle geparkt → kein Block (`null`). */
+export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOOP_PARK): Block | null {
+  const hatTarif = d.netzbezug_durchschnittspreis_cent != null || d.netzbezug_preis_cent != null || d.einspeise_preis_cent != null
+  const ids = ['el:finanzen-bilanz', ...(hatTarif ? ['el:finanzen-tarif'] : []), 'el:finanzen-link']
+  if (ids.every((id) => park.istGeparkt(id))) return null
   return {
     id: 'finanzen',
     title: 'Finanzen',
@@ -104,27 +110,35 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse): Block {
     defaultOpen: false,
     render: () => (
       <div className="space-y-3">
-        <dl className="text-sm space-y-1.5">
-          <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.einspeise_erloes_euro)}</dd></div>
-          <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">EV-Ersparnis</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.ev_ersparnis_euro)}</dd></div>
-          <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Netzbezug-Kosten</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd></div>
-          <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euro(d.netto_ertrag_euro)}</dd></div>
-        </dl>
+        <Parkbar id="el:finanzen-bilanz" titel="Finanz-Bilanz">
+          <dl className="text-sm space-y-1.5">
+            <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.einspeise_erloes_euro)}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">EV-Ersparnis</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.ev_ersparnis_euro)}</dd></div>
+            <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Netzbezug-Kosten</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd></div>
+            <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euro(d.netto_ertrag_euro)}</dd></div>
+          </dl>
+        </Parkbar>
         {/* C3: Tarif-Info-Zeile (Begleit-Info zum Finanz-Teaser, IST-Parität). */}
-        {(d.netzbezug_durchschnittspreis_cent != null || d.netzbezug_preis_cent != null || d.einspeise_preis_cent != null) && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
-            {d.netzbezug_durchschnittspreis_cent != null
-              ? <span>Netzbezug Ø <span className="text-blue-500 dark:text-blue-400 font-medium">{fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh</span> (flex)</span>
-              : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>}
-            {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}
-          </div>
+        {hatTarif && (
+          <Parkbar id="el:finanzen-tarif" titel="Tarif-Info">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+              {d.netzbezug_durchschnittspreis_cent != null
+                ? <span>Netzbezug Ø <span className="text-blue-500 dark:text-blue-400 font-medium">{fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh</span> (flex)</span>
+                : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>}
+              {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}
+            </div>
+          </Parkbar>
         )}
-        <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
-          volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
-        </a>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Das vollständige SOLL/HABEN-T-Konto liegt in Auswertungen/Finanzen (zeitraum-parametrisiert).
-        </p>
+        <Parkbar id="el:finanzen-link" titel="Cross-Link Finanzrechnung">
+          <div className="space-y-3">
+            <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+              volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
+            </a>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Das vollständige SOLL/HABEN-T-Konto liegt in Auswertungen/Finanzen (zeitraum-parametrisiert).
+            </p>
+          </div>
+        </Parkbar>
       </div>
     ),
   }

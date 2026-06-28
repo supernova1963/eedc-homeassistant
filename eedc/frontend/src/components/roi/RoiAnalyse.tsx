@@ -231,7 +231,7 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={vm.amortisationData}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis dataKey="jahr" label={{ value: 'Jahre', position: 'bottom' }} tick={{ fontSize: 10 }} />
+            <XAxis dataKey="jahr" label={{ value: 'Jahre', position: 'insideBottom', offset: -2, fontSize: 10 }} tick={{ fontSize: 10 }} height={36} />
             <YAxis tickFormatter={geldTick} unit=" €" tick={{ fontSize: 10 }} width={70} />
             <Tooltip content={<ChartTooltip labelFormatter={(label) => `Jahr ${label}`} unit="€" />} />
             <Legend content={<ChartLegende />} />
@@ -242,7 +242,7 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
       </div>
       {roiData.gesamt_amortisation_jahre && (
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 text-center">
-          Break-Even nach ca. {roiData.gesamt_amortisation_jahre} Jahren
+          Break-Even nach ca. {fmtZahl(roiData.gesamt_amortisation_jahre, 1)} Jahren
         </p>
       )}
     </Card>
@@ -288,7 +288,8 @@ export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={vm.investitionenChart} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis type="number" tickFormatter={geldTick} tick={{ fontSize: 10 }} />
+            {/* D9-F: Domain an Daten klemmen (Werte ≥ 0 → kein leerer Negativbereich) + € als Einheit. */}
+            <XAxis type="number" domain={[0, 'auto']} tickFormatter={geldTick} unit=" €" tick={{ fontSize: 10 }} />
             <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => name === 'Relevante Kosten' ? `${fmtZahl(value, 0)} €` : `${fmtZahl(value, 0)} €/Jahr`} />} />
             <Legend content={<ChartLegende />} />

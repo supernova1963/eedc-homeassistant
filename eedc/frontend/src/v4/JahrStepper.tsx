@@ -13,9 +13,11 @@ interface JahrStepperProps {
   entries: JahrRailEintrag[]
   jahr: number
   onSelect: (jahr: number) => void
+  /** D10-2: im Fokus/Vollbild-Kopf auf jeder Breite sichtbar (durchgereicht). */
+  immerSichtbar?: boolean
 }
 
-export function JahrStepper({ entries, jahr, onSelect }: JahrStepperProps) {
+export function JahrStepper({ entries, jahr, onSelect, immerSichtbar }: JahrStepperProps) {
   const desc = useMemo(() => [...entries].sort((a, b) => b.jahr - a.jahr), [entries])
   const oldest = useMemo(() => entries.reduce((m, e) => Math.min(m, e.jahr), entries[0]?.jahr ?? jahr), [entries, jahr])
   const newest = useMemo(() => entries.reduce((m, e) => Math.max(m, e.jahr), entries[0]?.jahr ?? jahr), [entries, jahr])
@@ -49,6 +51,7 @@ export function JahrStepper({ entries, jahr, onSelect }: JahrStepperProps) {
       titel={String(jahr)}
       badge={aktuell?.laufend ? 'läuft' : null}
       eintraege={eintraege}
+      immerSichtbar={immerSichtbar}
     />
   )
 }

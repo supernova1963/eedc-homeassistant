@@ -6,7 +6,8 @@ import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
-import { CHART_COLORS, STATUS_COLORS } from '../../lib'
+import { CHART_COLORS, STATUS_COLORS, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import {
   ResponsiveContainer,
   BarChart,
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export default function TrendTab({ anlageId }: Props) {
+  const schmal = useSchmaleAchse()
   const [trend, setTrend] = useState<TrendAnalyseResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +169,7 @@ export default function TrendTab({ anlageId }: Props) {
               <YAxis
                 tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
-                label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
+                label={achsenEinheit('kWh', schmal)}
               />
               <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Legend content={<ChartLegende />} />

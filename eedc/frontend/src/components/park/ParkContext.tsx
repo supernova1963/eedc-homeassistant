@@ -37,7 +37,9 @@ export interface ParkApi {
   geparkt: GeparktesElement[]
 }
 
-const NOOP: ParkApi = {
+/** Inertes No-Op (kein Provider / kein Park-Kontext). Auch Default für Block-Bauer,
+ *  die park als Argument nehmen (ohne Kontext = nichts geparkt, alles sichtbar). */
+export const NOOP_PARK: ParkApi = {
   aktiv: false,
   istGeparkt: () => false,
   park: () => {},
@@ -46,7 +48,7 @@ const NOOP: ParkApi = {
   geparkt: [],
 }
 
-const ParkCtx = createContext<ParkApi>(NOOP)
+const ParkCtx = createContext<ParkApi>(NOOP_PARK)
 
 /** Element-Park-Zustand pro Sicht. `usePark()` außerhalb = inertes No-Op. */
 export function usePark(): ParkApi {

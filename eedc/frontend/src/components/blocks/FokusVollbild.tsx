@@ -6,17 +6,25 @@
  * Block-Stack). Ein Verhalten + ein Look app-weit — keine zweite Kopie.
  */
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Minimize2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-export function FokusVollbild({ titel, icon: Icon, farbe, onClose, children }: {
+export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, children }: {
   titel: string
   icon?: LucideIcon
   farbe?: string
   onClose: () => void
+  /** D10-2: optionaler Kopf-Slot unter der Titelzeile (z. B. Datums-Navigation der
+   *  Seite). Die Seite reicht ihren bestehenden Stepper durch — kein Nav-Neubau. */
+  kopf?: ReactNode
   children: ReactNode
 }) {
-  return (
+  // D10-1 (detLAN R10): Portal an `document.body`. Ein Ancestor der Block-Zone
+  // erzeugt einen Containing-Block (transform/filter/backdrop-blur/contain) → ein
+  // `fixed inset-0` klemmt sonst relativ dazu statt zum Viewport (Sliver oben).
+  // Das Overlay an `body` zu hängen löst das app-weit (kein Ancestor mehr).
+  const overlay = (
     <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col p-3 sm:p-6 gap-3 overflow-auto">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -32,7 +40,9 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, children }: {
           <Minimize2 className="h-4 w-4" /> Zurück
         </button>
       </div>
+      {kopf != null && <div className="flex-shrink-0">{kopf}</div>}
       <div className="flex-1 min-h-0">{children}</div>
     </div>
   )
+  return typeof document !== 'undefined' ? createPortal(overlay, document.body) : overlay
 }

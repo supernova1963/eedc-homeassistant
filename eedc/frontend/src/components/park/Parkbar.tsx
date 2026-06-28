@@ -22,11 +22,15 @@ const BEWEGUNG_PX = 10
 export function Parkbar({
   id,
   titel,
+  className,
   children,
 }: {
   id: string
   /** Klartext für den Parkplatz-Chip (wird beim Parken mitpersistiert). */
   titel: string
+  /** Zusatz-Klassen für den Wrapper (z. B. Grid-Span `xl:col-span-2`). Wird auch
+   *  ohne Provider angewandt, damit das Layout in Produktion/v3 erhalten bleibt. */
+  className?: string
   children: ReactNode
 }) {
   const park = usePark()
@@ -35,7 +39,7 @@ export function Parkbar({
   const start = useRef<{ x: number; y: number } | null>(null)
 
   // Inert ohne Provider bzw. wenn geparkt → nichts an der kanonischen Stelle.
-  if (!park.aktiv) return <>{children}</>
+  if (!park.aktiv) return className ? <div className={className}>{children}</div> : <>{children}</>
   if (park.istGeparkt(id)) return null
 
   const abbrechen = () => {
@@ -71,7 +75,7 @@ export function Parkbar({
 
   return (
     <div
-      className="relative h-full"
+      className={`relative h-full${className ? ` ${className}` : ''}`}
       onContextMenu={onContextMenu}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}

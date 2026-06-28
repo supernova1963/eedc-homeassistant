@@ -29,7 +29,8 @@ const METRIK_OPTIONEN: { key: Metrik; label: string; farbe: 'green' | 'red' | 'o
   { key: 'ueberschuss_kw', label: 'Überschuss / Defizit', farbe: 'divergent' },
 ]
 
-import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, COLORS } from '../../lib'
+import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, COLORS, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
@@ -545,6 +546,7 @@ function KomponentenTabelle({ eintraege }: { eintraege: KomponentenEintrag[] }) 
 }
 
 function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | null; verbrauch_kw: number | null }[] }) {
+  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const chartDaten = daten.map(d => ({
     stunde: `${String(d.stunde).padStart(2, '0')}`,
@@ -556,8 +558,8 @@ function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | 
       <ResponsiveContainer>
         <LineChart data={chartDaten} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} strokeOpacity={0.3} />
-          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 10 }} label={{ value: 'kW', angle: -90, position: 'insideLeft', fontSize: 11 }} />
+          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} label={achsenEinheit('kW', schmal)} />
           <Tooltip content={<ChartTooltip unit="kW" />} />
           <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
           <Line type="monotone" dataKey="PV" stroke={KATEGORIE_FARBEN.pv} strokeWidth={2} dot={false} name="PV Ø" />

@@ -12,6 +12,7 @@ import { ThemeProvider } from '../context/ThemeContext'
 
 vi.mock('../hooks', () => ({
   useSelectedAnlage: () => ({ selectedAnlage: { id: 1, latitude: 50.1, longitude: 8.7 } }),
+  useSchmaleAchse: () => false,
 }))
 
 const solar = {

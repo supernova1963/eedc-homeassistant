@@ -51,7 +51,10 @@ function istHorizont(v: string | null): v is Horizont {
 
 // ─── KPI-Builder (Kopf, reparametrisiert pro Horizont) ────────────────────────
 
-function kurzKpis(p: SolarPrognose): KpiStripItem[] {
+// `eedcHeute` = kanonischer eedc-Tageswert (Prognose-Kanon, v3.45.6). Die „Heute"-KPI
+// MUSS ihn zeigen — sonst stünde hier der pure `/solar-prognose`-Wert und wiche von
+// allen anderen Anzeigen ab (R8-4). Spiegelt `KurzfristTab` (`eedc ?? pur`).
+function kurzKpis(p: SolarPrognose, eedcHeute?: number | null): KpiStripItem[] {
   const heute = p.tage[0]
   const morgen = p.tage[1]
   const vmNm = (t?: typeof heute) =>
@@ -61,7 +64,7 @@ function kurzKpis(p: SolarPrognose): KpiStripItem[] {
   return [
     { title: `Summe ${p.tage.length} Tage`, value: p.summe_kwh.toFixed(0), unit: 'kWh', color: 'yellow', icon: Zap },
     { title: 'Durchschnitt/Tag', value: p.durchschnitt_kwh_tag.toFixed(1), unit: 'kWh', color: 'blue', icon: Sun },
-    { title: 'Heute', value: (heute?.pv_ertrag_kwh ?? 0).toFixed(1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(heute) },
+    { title: 'Heute', value: (eedcHeute ?? heute?.pv_ertrag_kwh ?? 0).toFixed(1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(heute) },
     { title: 'Morgen', value: (morgen?.pv_ertrag_kwh ?? 0).toFixed(1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(morgen) },
   ]
 }
@@ -130,6 +133,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   const istKurz = horizont === 'kurz'
 
   const [kurz, setKurz] = useState<SolarPrognose | null>(null)
+  const [eedcHeute, setEedcHeute] = useState<number | null>(null) // kanonischer eedc-„Heute"-Wert (R8-4), parallel zur SolarPrognose
   const [lang, setLang] = useState<LangfristPrognose | null>(null)
   // Tagesprognose (Stunden-Chart + Stundenwerte teilen Datum + Daten — getrennte
   // Blöcke, eine Quelle, Gernot 2026-06-23).
@@ -170,11 +174,14 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
         setLang(l); setTrend(t); setWp(w); setFinanz(f)
       } else {
         // Stunden-Prognose-Block lädt seine Daten selbst (EnergieprofilPrognose).
-        const [k, f] = await Promise.all([
+        // `getPrognosenVergleich` liefert den kanonischen eedc-„Heute"-Wert (R8-4);
+        // Soft-fail → Fallback auf den puren SolarPrognose-Wert, kein Sicht-Fehler.
+        const [k, v, f] = await Promise.all([
           wetterApi.getSolarPrognose(reqId, KURZ_TAGE, false),
+          aussichtenApi.getPrognosenVergleich(reqId).catch(() => null),
           finanzP,
         ])
-        setKurz(k); setFinanz(f)
+        setKurz(k); setEedcHeute(v?.eedc_heute_kwh ?? null); setFinanz(f)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden der Aussicht')
@@ -221,7 +228,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     }
     if (istKurz) {
       if (!kurz) return []
-      const kpi = kennzahlenBlock(kurzKpis(kurz), `${kurz.summe_kwh.toFixed(0)} kWh in ${kurz.tage.length} Tagen · Ø ${kurz.durchschnitt_kwh_tag.toFixed(1)} kWh/Tag`)
+      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${kurz.summe_kwh.toFixed(0)} kWh in ${kurz.tage.length} Tagen · Ø ${kurz.durchschnitt_kwh_tag.toFixed(1)} kWh/Tag`)
       const list: Block[] = [
         ...(kpi ? [kpi] : []),
         {
@@ -310,7 +317,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     }
     if (finanzTeaser) list.push(finanzTeaser)
     return list
-  }, [istKurz, kurz, lang, trend, wp, finanz, anlageId, pDatum, pDaten, pError, park])
+  }, [istKurz, kurz, eedcHeute, lang, trend, wp, finanz, anlageId, pDatum, pDaten, pError, park])
 
   if (!anlageId) {
     return (

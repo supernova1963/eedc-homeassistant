@@ -6,7 +6,8 @@ import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-rea
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, LangfristPrognose } from '../../api/aussichten'
-import { CHART_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH } from '../../lib'
+import { CHART_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH, achsenEinheit } from '../../lib'
+import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 import {
   ResponsiveContainer,
@@ -41,6 +42,7 @@ export default function LangfristTab({ anlageId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [monate, setMonate] = useState(12)
   const [showKonfidenz, setShowKonfidenz] = useState(true)
+  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
 
   useEffect(() => {
@@ -166,7 +168,7 @@ export default function LangfristTab({ anlageId }: Props) {
               <YAxis
                 tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
-                label={{ value: 'kWh', angle: -90, position: 'insideLeft' }}
+                label={achsenEinheit('kWh', schmal)}
               />
               <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
                   if (name === 'Konfidenzband') return null

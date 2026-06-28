@@ -74,7 +74,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                         title={verbleibenKwh > 0
                           ? `Noch ~${verbleibenKwh.toFixed(1)} kWh ausstehend`
                           : `Prognose um ${Math.abs(verbleibenKwh).toFixed(1)} kWh übertroffen`}>
-                    {verbleibenKwh > 0 ? `~${verbleibenKwh.toFixed(1)} verbl.` : `+${Math.abs(verbleibenKwh).toFixed(1)} kWh über Progn.${prozentUeber != null ? ` (+${prozentUeber}%)` : ''}`}
+                    {verbleibenKwh > 0 ? `~${verbleibenKwh.toFixed(1)} verbl.` : `+${Math.abs(verbleibenKwh).toFixed(1)} kWh über Progn.${prozentUeber != null ? ` (+${prozentUeber} %)` : ''}`}
                   </span>
                 )}
               </div>

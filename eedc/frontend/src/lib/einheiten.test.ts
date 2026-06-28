@@ -19,31 +19,34 @@ describe('fmtZahl (R1: de-DE mit Tausenderpunkt)', () => {
   })
 })
 
-describe('formatEnergie (kWh→MWh ab ≥1.000, MWh 2 NK)', () => {
-  it('< 1.000 → kWh, 0 NK', () => {
+describe('formatEnergie (kWh→MWh ab ≥10.000 [R10-3], MWh 2 NK)', () => {
+  it('< 10.000 → kWh, 0 NK (inkl. 4-stelliger Werte)', () => {
     expect(formatEnergie(847)).toEqual({ wert: '847', einheit: 'kWh', text: '847 kWh' })
+    // R10-3: 2.000/1.500 bleiben jetzt kWh (vorher MWh) — Tausenderpunkt de-DE.
+    expect(formatEnergie(2000)).toEqual({ wert: '2.000', einheit: 'kWh', text: '2.000 kWh' })
+    expect(formatEnergie(9999)).toEqual({ wert: '9.999', einheit: 'kWh', text: '9.999 kWh' })
   })
-  it('≥ 1.000 → MWh, 2 NK (Gernot-Beispiel 2.000 → 2,00 MWh)', () => {
-    expect(formatEnergie(2000)).toEqual({ wert: '2,00', einheit: 'MWh', text: '2,00 MWh' })
-    expect(formatEnergie(1500)).toEqual({ wert: '1,50', einheit: 'MWh', text: '1,50 MWh' })
+  it('≥ 10.000 → MWh, 2 NK', () => {
+    expect(formatEnergie(10000)).toEqual({ wert: '10,00', einheit: 'MWh', text: '10,00 MWh' })
+    expect(formatEnergie(15000)).toEqual({ wert: '15,00', einheit: 'MWh', text: '15,00 MWh' })
   })
-  it('≥ 1.000.000 → GWh', () => {
-    expect(formatEnergie(2_500_000).einheit).toBe('GWh')
-    expect(formatEnergie(2_500_000).wert).toBe('2,50')
+  it('≥ 10.000.000 → GWh', () => {
+    expect(formatEnergie(12_000_000).einheit).toBe('GWh')
+    expect(formatEnergie(12_000_000).wert).toBe('12,00')
   })
   it('referenz erzwingt gemeinsame Einheit (Achsen-Konsistenz)', () => {
-    // Achsen-Max 5.000 → alle Werte in MWh, auch der kleine 800er.
-    expect(formatEnergie(800, 5000)).toEqual({ wert: '0,80', einheit: 'MWh', text: '0,80 MWh' })
+    // Achsen-Max 50.000 → alle Werte in MWh, auch der kleine 800er.
+    expect(formatEnergie(800, 50000)).toEqual({ wert: '0,80', einheit: 'MWh', text: '0,80 MWh' })
   })
 })
 
 describe('energieAchse (eine Einheit für ganze Achse vom Max)', () => {
-  it('Max ≥ 1.000 → MWh-Ticks', () => {
-    const a = energieAchse(4200)
+  it('Max ≥ 10.000 → MWh-Ticks', () => {
+    const a = energieAchse(42000)
     expect(a.einheit).toBe('MWh')
-    expect(a.tick(2000)).toBe('2,00')
+    expect(a.tick(20000)).toBe('20,00')
   })
-  it('Max < 1.000 → kWh-Ticks', () => {
+  it('Max < 10.000 → kWh-Ticks', () => {
     const a = energieAchse(800)
     expect(a.einheit).toBe('kWh')
     expect(a.tick(500)).toBe('500')
