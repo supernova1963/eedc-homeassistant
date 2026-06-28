@@ -115,8 +115,31 @@ def summe_wallbox_eauto_kwh(komponenten_kwh: Optional[dict]) -> float:
 
 
 def summe_batterie_netto_kwh(komponenten_kwh: Optional[dict]) -> float:
-    """Σ aller `batterie_<id>`-Keys, signed (Ladung − Entladung)."""
+    """Σ aller `batterie_<id>`-Keys, signed in Spalten-Konvention:
+    ENTLADUNG positiv (Quelle), LADUNG negativ (Senke) — identisch zur
+    `TagesEnergieProfil.batterie_kw`-Spalte (s. ``batterie_kw_spalte``)."""
     return _summe_prefix(komponenten_kwh, BATTERIE_KOMPONENTEN_PREFIXE)
+
+
+def batterie_kw_spalte(batt_netto_kwh: Optional[float]) -> Optional[float]:
+    """Vorzeichen-SoT der Batterie-Energiewerte: **ENTLADUNG positiv** (Quelle),
+    **LADUNG negativ** (Senke).
+
+    Eingang ist das Bilanz-Netto ``ladung − entladung`` (Ladung positiv, z. B.
+    ``snap_h['batterie_netto']``) — die gespeicherte Spalte/der Komponenten-Wert
+    ist dessen **Negation**. Die lokale Bilanz-Formel
+    ``verbrauch = pv + bezug − einspeisung − batt_netto`` nutzt weiterhin das
+    Netto (Ladung positiv); nur die *gespeicherte Spalte* folgt dieser Konvention.
+
+    Vertrag gilt für ``TagesEnergieProfil.batterie_kw`` UND
+    ``komponenten[batterie_*]``/``komponenten_kwh[batterie_*]``. Consumer:
+    ``tagesbilanz`` (speicher_ladung/-entladung), ``TagVerlaufChart``/
+    ``TagWerteTabelle`` (bat_pos = Entladung → Quelle), ``EnergieprofilTab``-KPI,
+    ``speicher_wirtschaftlichkeit`` (``batterie_kw < 0`` = Ladestunde), Achse-2-
+    und TZ-Komponenten-Invarianten. Durchgängigkeit:
+    ``tests/test_batterie_vorzeichen_durchgaengig.py``.
+    """
+    return None if batt_netto_kwh is None else -batt_netto_kwh
 
 
 def wert_basis_kwh(komponenten_kwh: Optional[dict], feld: str) -> Optional[float]:

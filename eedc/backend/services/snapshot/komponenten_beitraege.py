@@ -139,8 +139,13 @@ def investition_beitraege(
     elif typ == "speicher":
         # ladung_netz_kwh ist semantisch Teilmenge von ladung_kwh — NICHT
         # zusätzlich aufaddieren (sonst Doppelzählung für Arbitrage-Anwender).
-        _add("ladung_kwh", vorzeichen=+1)
-        _add("entladung_kwh", vorzeichen=-1)
+        # Vorzeichen-Konvention der batterie_*-Komponente: ENTLADUNG positiv
+        # (Quelle), LADUNG negativ (Senke) — identisch zur batterie_kw-Spalte
+        # (SoT: core.berechnungen.batterie_kw_spalte). So sind komponenten_kwh
+        # (Boundary) und der Live-/komponenten-JSON-Pfad (−serie_sum) vorzeichen-
+        # gleich; beide Achse-2-/TZ-Invarianten bleiben konsistent.
+        _add("ladung_kwh", vorzeichen=-1)
+        _add("entladung_kwh", vorzeichen=+1)
 
     elif typ == "waermepumpe":
         # Nur elektrischer Verbrauch. heizenergie_kwh/warmwasser_kwh sind

@@ -62,7 +62,7 @@ async def test_batterie_nettoladen_zaehlt_nicht(db):
     gestern = date.today() - timedelta(days=1)
     await _seed_tz(db, anlage_id, gestern, komponenten_kwh={
         "pv_3": 67.0,
-        "batterie_5": 4.7,    # netto Ladung — darf nicht zur IST-Erzeugung
+        "batterie_5": 4.7,    # Batterie-Netto (Entladung-pos) — nie in IST-Erzeugung
         "wp_7": -3.2,         # Verbraucher (negativ)
         "strompreis": 32.5,   # ct/kWh, nie Energie
     }, pv_prognose_kwh=68.0)

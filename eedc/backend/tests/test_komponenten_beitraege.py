@@ -89,9 +89,11 @@ def test_speicher_ladung_und_entladung():
         "entladung_kwh": _sensor("sensor.entlade"),
     }}
     b = investition_beitraege(inv, sm)
+    # Konvention: ENTLADUNG positiv (Quelle), LADUNG negativ (Senke) — identisch
+    # zur batterie_kw-Spalte (SoT core.berechnungen.batterie_kw_spalte).
     assert _fields_to_beitraege(b) == [
-        ("ladung_kwh", "batterie_5", +1, None),
-        ("entladung_kwh", "batterie_5", -1, None),
+        ("ladung_kwh", "batterie_5", -1, None),
+        ("entladung_kwh", "batterie_5", +1, None),
     ]
 
 

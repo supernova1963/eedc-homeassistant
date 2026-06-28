@@ -150,8 +150,11 @@ async def test_sigma_hourly_einspeisung_netzbezug():
 
 
 async def test_speicher_vorzeichen_konsistent():
-    """Speicher: Hourly batterie_netto = ladung − entladung (netto).
-    Daily batterie_<id> = ebenfalls netto, dieselbe Vorzeichen-Logik."""
+    """Speicher-Vorzeichen: Hourly-Kategorie ``batterie_netto`` = ladung −
+    entladung (Bilanz-Netto, LADUNG positiv — Eingang der Bilanz-Formel).
+    Daily ``batterie_<id>`` (komponenten_kwh) folgt der Spalten-Konvention
+    ENTLADUNG positiv = ``−batterie_netto`` (SoT batterie_kw_spalte). Die
+    beiden sind damit betragsgleich und vorzeichen-INVERS."""
     sensor_mapping = {
         "basis": {
             "einspeisung": {"strategie": "sensor", "sensor_id": "sensor.einsp"},
@@ -186,11 +189,16 @@ async def test_speicher_vorzeichen_konsistent():
     sigma_hourly_netto = sum((h.get("batterie_netto") or 0.0) for h in hourly.values())
     daily_netto = daily["batterie_5"]
 
-    assert abs(sigma_hourly_netto - daily_netto) < 0.01, (
-        f"Batterie Netto: Hourly Σ={sigma_hourly_netto:.3f} vs Daily={daily_netto:.3f}"
+    # Daily (Entladung positiv) = − Hourly-Netto (Ladung positiv): invers.
+    assert abs(sigma_hourly_netto - (-daily_netto)) < 0.01, (
+        f"Batterie: Hourly-Netto Σ={sigma_hourly_netto:.3f} muss == −Daily="
+        f"{-daily_netto:.3f} sein (Spalten-Konvention Entladung positiv)"
     )
-    assert abs(daily_netto - (-1.0)) < 0.01, (
-        f"Erwartet Netto -1.0 (8 lade − 9 entlade), bekommen {daily_netto}"
+    assert abs(sigma_hourly_netto - (-1.0)) < 0.01, (
+        f"Hourly-Netto erwartet -1.0 (8 lade − 9 entlade), bekommen {sigma_hourly_netto}"
+    )
+    assert abs(daily_netto - 1.0) < 0.01, (
+        f"Daily erwartet +1.0 (Entladung positiv: 9 entlade − 8 lade), bekommen {daily_netto}"
     )
 
 

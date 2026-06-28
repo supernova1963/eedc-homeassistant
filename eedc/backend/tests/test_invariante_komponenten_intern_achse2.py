@@ -104,7 +104,8 @@ def test_wallbox_und_eauto_summiert():
 
 
 def test_batterie_netto_signed():
-    """Batterie netto: Ladung positiv, Entladung negativ — beide Pfade signed."""
+    """Batterie netto: ENTLADUNG positiv, LADUNG negativ (Spalten-Konvention,
+    SoT batterie_kw_spalte) — beide Pfade vorzeichen-gleich signed."""
     tep = []
     for h in range(24):
         if 10 <= h <= 13:

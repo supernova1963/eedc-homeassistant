@@ -441,6 +441,8 @@ async def aggregate_day(
     komponenten_summen: dict[str, float] = {}  # Per-Komponenten Tages-kWh
     einspeisung_pro_stunde: dict[int, float] = {}  # h → kWh (für Negativpreis-Berechnung)
 
+    from backend.core.berechnungen import batterie_kw_spalte
+
     for punkt in punkte:
         h = int(punkt["zeit"].split(":")[0])
         werte = punkt.get("werte", {})
@@ -470,7 +472,10 @@ async def aggregate_day(
         verbrauch_kw = snap_h.get("verbrauch")
         waermepumpe_kw = snap_h.get("wp")
         wallbox_kw = snap_h.get("wallbox")
-        batterie_kw = snap_h.get("batterie_netto")
+        # Spalten-Konvention: ENTLADUNG positiv, LADUNG negativ (= Negation des
+        # Bilanz-Netto `ladung − entladung`). batt_netto bleibt für die Bilanz-
+        # Formel unten (verbrauch) erhalten. SoT: core.berechnungen.batterie_kw_spalte.
+        batterie_kw = batterie_kw_spalte(snap_h.get("batterie_netto"))
 
         # Einspeisung pro Stunde für Negativpreis-Analyse (§51 EEG)
         if einspeisung_kw is not None and einspeisung_kw > 0:

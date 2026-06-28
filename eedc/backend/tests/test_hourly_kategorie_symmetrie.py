@@ -77,7 +77,10 @@ def _fold_daily_to_flow(daily: dict, invs: dict) -> dict[str, float]:
         elif key.startswith("pv_") or key.startswith("bkw_"):
             flow["pv"] += val
         elif key.startswith("batterie_"):
-            flow["batterie_netto"] += val
+            # komponenten[batterie_*] ist Spalten-Konvention (Entladung positiv);
+            # das Hourly-Flussfeld `batterie_netto` ist Bilanz-Netto (Ladung
+            # positiv). Beim Falten negieren, damit Σ Hourly == Daily gilt.
+            flow["batterie_netto"] += -val
         elif key.startswith("waermepumpe_"):
             flow["wp"] += val
         elif key.startswith("wallbox_") or key.startswith("eauto_"):

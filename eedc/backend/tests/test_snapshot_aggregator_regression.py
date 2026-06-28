@@ -50,8 +50,9 @@ def _snap_for_sums(sensor_key_to_tagessumme: dict[str, float], datum: date):
 
 
 @pytest.mark.asyncio
-async def test_speicher_nur_ladung_gemappt_liefert_signed_positiv():
-    """Original: result = (ladung or 0) - (entladung or 0) = ladung."""
+async def test_speicher_nur_ladung_gemappt_liefert_signed_negativ():
+    """Spalten-Konvention (Entladung positiv): nur-Ladung → NEGATIV (Senke).
+    SoT core.berechnungen.batterie_kw_spalte."""
     sm = {"basis": {}, "investitionen": {
         "5": {"felder": {"ladung_kwh": _sensor("sensor.lade")}},
     }}
@@ -65,11 +66,12 @@ async def test_speicher_nur_ladung_gemappt_liefert_signed_positiv():
             datum=datum,
         )
     assert "batterie_5" in result
-    assert abs(result["batterie_5"] - 3.5) < 0.001
+    assert abs(result["batterie_5"] - (-3.5)) < 0.001  # Ladung → Senke (negativ)
 
 
 @pytest.mark.asyncio
-async def test_speicher_nur_entladung_gemappt_liefert_signed_negativ():
+async def test_speicher_nur_entladung_gemappt_liefert_signed_positiv():
+    """Spalten-Konvention (Entladung positiv): nur-Entladung → POSITIV (Quelle)."""
     sm = {"basis": {}, "investitionen": {
         "5": {"felder": {"entladung_kwh": _sensor("sensor.ent")}},
     }}
@@ -83,7 +85,7 @@ async def test_speicher_nur_entladung_gemappt_liefert_signed_negativ():
             datum=datum,
         )
     assert "batterie_5" in result
-    assert abs(result["batterie_5"] - (-2.1)) < 0.001
+    assert abs(result["batterie_5"] - 2.1) < 0.001  # Entladung → Quelle (positiv)
 
 
 @pytest.mark.asyncio

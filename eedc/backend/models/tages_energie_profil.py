@@ -54,7 +54,10 @@ class TagesEnergieProfil(Base):
     verbrauch_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     einspeisung_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     netzbezug_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    # batterie_kw: alle Speicher inkl. V2H — positiv=Entladung(Quelle), negativ=Ladung(Senke)
+    # batterie_kw: alle Speicher inkl. V2H — positiv=Entladung(Quelle), negativ=Ladung(Senke).
+    # Vorzeichen-SoT: core.berechnungen.batterie_kw_spalte (= −Bilanz-Netto). NICHT
+    # auf "Ladung positiv" zurückdrehen — alle Consumer (tagesbilanz, Charts,
+    # speicher_wirtschaftlichkeit, komponenten[batterie_*]) erwarten Entladung positiv.
     batterie_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # Einzelne Verbraucher (kW, Absolutwert) — für Effizienz- und Musteranalyse
     waermepumpe_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

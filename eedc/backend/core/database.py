@@ -881,6 +881,19 @@ async def _run_data_migrations() -> None:
             migrate_emob_canonical_source,
         )
 
+        # Batterie-Vorzeichen auf kanonisch ENTLADUNG positiv vereinheitlichen.
+        # MUSS nach dem Code-Fix (aggregator.batterie_kw_spalte +
+        # komponenten_beitraege Speicher-Vorzeichen) laufen, sonst reaggregiert
+        # sie mit dem alten Vorzeichen. Re-Aggregation hält Spalte +
+        # komponenten_kwh im Gleichschritt (kein Spalten-Blind-Negieren).
+        from backend.services.migrations.migrate_batterie_kw_entladung_positiv import (
+            migrate_batterie_kw_entladung_positiv,
+        )
+        await _apply_once(
+            "batterie_kw_entladung_positiv",
+            migrate_batterie_kw_entladung_positiv,
+        )
+
 
 async def init_db():
     """

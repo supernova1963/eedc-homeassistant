@@ -81,8 +81,9 @@ def test_wallbox_und_eauto_zusammen():
 
 
 def test_batterie_netto_signed():
-    """Batterie netto: Ladung positiv, Entladung negativ."""
-    # 4h laden (4*2=8), 6h entladen (-6*1=-6) → netto +2 pro Tag
+    """Batterie netto: ENTLADUNG positiv, LADUNG negativ (Spalten-Konvention,
+    SoT batterie_kw_spalte) — Spalte und komponenten_kwh vorzeichen-gleich."""
+    # 4h entladen (4*2=8), 6h laden (-6*1=-6) → netto +2 pro Tag (Entladung-Überhang)
     tep = []
     for h in range(24):
         if 10 <= h <= 13:
