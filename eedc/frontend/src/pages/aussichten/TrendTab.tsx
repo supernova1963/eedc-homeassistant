@@ -6,8 +6,7 @@ import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
-import { CHART_COLORS, STATUS_COLORS, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { CHART_COLORS, STATUS_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import {
   ResponsiveContainer,
   BarChart,
@@ -27,7 +26,6 @@ interface Props {
 }
 
 export default function TrendTab({ anlageId }: Props) {
-  const schmal = useSchmaleAchse()
   const [trend, setTrend] = useState<TrendAnalyseResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -159,17 +157,19 @@ export default function TrendTab({ anlageId }: Props) {
         <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Jahreserträge</h3>
         <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={jahresChartData}>
+            <BarChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="jahr"
                 tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
+                /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */
               />
               <YAxis
                 tick={{ fontSize: 10 }}
+                tickFormatter={achsenTick}
                 className="text-gray-600 dark:text-gray-400"
-                label={achsenEinheit('kWh', schmal)}
+                label={achsenEinheit('kWh')}
               />
               <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Legend content={<ChartLegende />} />
@@ -188,20 +188,23 @@ export default function TrendTab({ anlageId }: Props) {
 
       {/* Spezifischer Ertrag Chart */}
       <Card className="p-4">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Spezifischer Ertrag (kWh/kWp)</h3>
+        <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Spezifischer Ertrag</h3>
         <div className="h-[250px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={jahresChartData}>
+            <LineChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="jahr"
                 tick={{ fontSize: 10 }}
                 className="text-gray-600 dark:text-gray-400"
+                /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */
               />
               <YAxis
                 tick={{ fontSize: 10 }}
+                tickFormatter={achsenTick}
                 className="text-gray-600 dark:text-gray-400"
                 domain={['auto', 'auto']}
+                label={achsenEinheit('kWh/kWp')}
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={0} />} />
               <Legend content={<ChartLegende />} />

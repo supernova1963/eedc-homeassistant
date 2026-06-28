@@ -1,5 +1,5 @@
 import type { Payload, ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent'
-import { CHART_LABELS, SERIE_NEUTRAL } from '../../lib'
+import { CHART_LABELS, SERIE_NEUTRAL, fmtZahl } from '../../lib'
 
 export interface ChartTooltipProps {
   active?: boolean
@@ -80,7 +80,7 @@ export default function ChartTooltip({
         if (formatted === null) return null
         const displayName = resolveName(entry.name as string)
         const anteil = ganz !== undefined && Number.isFinite(ganz) && ganz > 0 && isNum
-          ? `${Math.round((val / ganz) * 100)} %`
+          ? `${fmtZahl((val / ganz) * 100, 0)} %`
           : undefined
         return (
           <div key={i} className="flex items-center gap-2">

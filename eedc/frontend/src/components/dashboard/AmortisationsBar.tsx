@@ -30,7 +30,7 @@ function SichtBar({ label, kurzbeschreibung, invest, kumuliert, anzahlMonate, ja
           sicht={sicht}
           formel={formel}
           berechnung={`${fmtCalc(kumuliert, 0)} € ÷ ${fmtCalc(invest, 0)} € × 100`}
-          ergebnis={`= ${progress.toFixed(1)} % über ${anzahlMonate} Monate`}
+          ergebnis={`= ${fmtCalc(progress, 1)} % über ${anzahlMonate} Monate`}
         >
           <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300 cursor-help">
             {label}
@@ -38,7 +38,7 @@ function SichtBar({ label, kurzbeschreibung, invest, kumuliert, anzahlMonate, ja
           </span>
         </FormelTooltip>
         <span className="text-xs text-emerald-600 dark:text-emerald-400">
-          {progress.toFixed(1)} %
+          {fmtCalc(progress, 1)} %
           {amortJahr && <> · Break-Even ca. {amortJahr}</>}
           {progress >= 100 && <> · ✓ amortisiert</>}
         </span>

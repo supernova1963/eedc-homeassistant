@@ -6,8 +6,7 @@ import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, F
 import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, FinanzPrognose } from '../../api/aussichten'
-import { INVESTITION_TYP_ORDER, CHART_COLORS, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { INVESTITION_TYP_ORDER, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -59,7 +58,6 @@ function komponentenBeitragTypIndex(typ: string): number {
 }
 
 export default function FinanzenTab({ anlageId }: Props) {
-  const schmal = useSchmaleAchse()
   const [prognose, setPrognose] = useState<FinanzPrognose | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -231,7 +229,7 @@ export default function FinanzenTab({ anlageId }: Props) {
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Monatliche Erträge</h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData}>
+              <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                 <XAxis
                   dataKey="name"
@@ -239,10 +237,12 @@ export default function FinanzenTab({ anlageId }: Props) {
                   angle={-45}
                   textAnchor="end"
                   height={60}
+                  /* achsen-allow: Zeit-/Kategorie-Achse */
                 />
                 <YAxis
                   tick={{ fontSize: 10 }}
-                  label={achsenEinheit('€', schmal)}
+                  tickFormatter={achsenTick}
+                  label={achsenEinheit('€')}
                 />
                 <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                 <Legend content={<ChartLegende

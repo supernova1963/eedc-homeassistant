@@ -10,7 +10,7 @@ import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../compon
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
 import { aussichtenApi } from '../../api/aussichten'
-import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse, achsenEinheit } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import {
   ResponsiveContainer,
@@ -251,25 +251,28 @@ export default function KurzfristTab({ anlageId }: Props) {
         <h3 className="font-semibold text-gray-900 dark:text-white mb-4">PV-Prognose</h3>
         <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
+            <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="datum"
                 {...xAchse(schmal)}
                 className="text-gray-600 dark:text-gray-400"
+                /* achsen-allow: Zeit-/Kategorie-Achse */
               />
               <YAxis
                 yAxisId="left"
                 {...yAchse(schmal)}
+                tickFormatter={achsenTick}
                 className="text-gray-600 dark:text-gray-400"
-                label={achsenEinheit('kWh', schmal)}
+                label={achsenEinheit('kWh')}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
                 tick={{ fontSize: 10 }}
+                tickFormatter={achsenTick}
                 className="text-gray-600 dark:text-gray-400"
-                label={achsenEinheit('°C', schmal, 'rechts')}
+                label={achsenEinheit('°C', 'rechts')}
               />
               <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
                   if (name === 'Vormittag' || name === 'Nachmittag' || name === 'PV-Prognose') return `${value.toFixed(1)} kWh`

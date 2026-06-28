@@ -24,7 +24,7 @@ import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
-import { COLORS, GELD_COLORS, MONAT_NAMEN, formatGeld, fmtZahl, xAchse, yAchse } from '../lib'
+import { COLORS, GELD_COLORS, MONAT_NAMEN, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
 import { exportToCSV } from '../utils/export'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -32,6 +32,7 @@ import { cockpitApi, type KomponentenZeitreihe } from '../api/cockpit'
 import { importApi } from '../api/import'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { baueJahrAlsMonat } from './JahrAggregat'
+import { STEUER_H } from './WerkbankZeitraum'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
@@ -190,10 +191,10 @@ function FinanzenInner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Finanzielle Bilanz pro Monat</p>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <BarChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" {...yAchse(schmal)} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                    <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Legend content={<ChartLegende />} />
                     <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
@@ -210,10 +211,10 @@ function FinanzenInner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Kumulierter Netto-Ertrag</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <AreaChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" {...yAchse(schmal)} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                    <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
                     <Area type="monotone" dataKey="kumuliert_ertrag" name="Kumulierter Ertrag"
                       stroke={COLORS.feedin} fill={COLORS.feedin} fillOpacity={0.3} />
@@ -233,10 +234,10 @@ function FinanzenInner() {
               </p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={euroTick} unit=" €" {...yAchse(schmal)} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                    <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
                     <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
@@ -307,7 +308,7 @@ function FinanzenInner() {
 function SegBtn({ aktiv, onClick, children }: { aktiv: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick}
-      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={`px-3 ${STEUER_H} inline-flex items-center text-sm font-medium transition-colors ${
         aktiv ? 'bg-primary-600 text-white'
               : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
       {children}
@@ -378,11 +379,11 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
             Content-Swap bleibt in-place wie D7-6). */}
         {modus === 'monat' ? (
           <select value={monat ?? ''} onChange={(e) => setMonat(e.target.value ? Number(e.target.value) : null)}
-            aria-label="Monat wählen" className="input w-auto">
+            aria-label="Monat wählen" className={`input w-auto ${STEUER_H} py-0`}>
             {monate.map((m) => <option key={m} value={m}>{MONAT_NAMEN[m]} {jahr}</option>)}
           </select>
         ) : (
-          <span className="text-sm text-gray-500 dark:text-gray-400 px-2 py-1.5">Ganzes Jahr {jahr ?? '—'}</span>
+          <span className={`text-sm text-gray-500 dark:text-gray-400 px-2 inline-flex items-center ${STEUER_H}`}>Ganzes Jahr {jahr ?? '—'}</span>
         )}
       </div>
       {laden && !d ? (

@@ -19,7 +19,7 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { ChartTooltip, ChartLegende } from '../components/ui'
-import { CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse } from '../lib'
+import { CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -101,15 +101,15 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
 
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={daten} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <ComposedChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="tag" {...xAchse(schmal)} />
-            <YAxis yAxisId="kwh" {...yAchse(schmal, 48)} unit=" kWh" />
+            <XAxis dataKey="tag" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Tag) */ />
+            <YAxis yAxisId="kwh" {...yAchse(schmal, 48)} tickFormatter={(v) => fmtZahl(v, 0)} label={achsenEinheit('kWh')} />
             {showAutarkie && (
-              <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} unit=" %" />
+              <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             )}
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) =>
-              name === 'Autarkie' ? `${value.toFixed(1)} %` : `${value.toFixed(1)} kWh`} />} />
+              name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh`} />} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
 
             {view === 'erzeugung' ? (

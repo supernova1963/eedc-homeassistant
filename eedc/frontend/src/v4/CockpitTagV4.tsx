@@ -25,7 +25,7 @@ import { LoadingSpinner, Card } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
-import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN } from '../lib'
+import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
 import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
 import { baueTagKomponentenUndFinanz } from './TagKomponenten'
@@ -204,7 +204,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       if (sichtbareKpi.length > 0) {
         list.push({
           id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-          summary: `${(tag.erzeugung).toFixed(0)} kWh PV · ${tag.autarkie != null ? tag.autarkie.toFixed(0) : '—'} % Autarkie`,
+          summary: `${fmtZahl(tag.erzeugung, 0)} kWh PV · ${tag.autarkie != null ? fmtZahl(tag.autarkie, 0) : '—'} % Autarkie`,
           defaultOpen: true,
           render: () => <KpiStrip kpis={sichtbareKpi} />,
         })

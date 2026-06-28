@@ -97,6 +97,14 @@ jobs:
         working-directory: eedc/frontend
         run: npm run check:design
 
-      - name: Vitest (Routing/Redirects + Komponenten)
+      - name: Achsen-Konformität (Einheit + de-DE tickFormatter)
+        working-directory: eedc/frontend
+        run: npm run check:achsen
+
+      - name: de-DE-Anzeige-Konformität (Tausenderpunkt/Komma/Datum)
+        working-directory: eedc/frontend
+        run: npm run check:de-de
+
+      - name: Vitest (Routing/Redirects + Komponenten + Wächter)
         working-directory: eedc/frontend
         run: npm test

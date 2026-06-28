@@ -137,6 +137,12 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
     netto_w = round((bezug_kw - einsp_kw) * 1000, 0)
     max_netz = max(einsp_kw, bezug_kw) * 1000
 
+    # Batterie heute: Ladung + Entladung getrennt (wie der echte Pfad in
+    # live_history_service: `batterie_<id>_ladung`/`_entladung` + Summe `batterie_<id>`).
+    # Ohne die getrennten Keys rendert LiveHeuteKacheln keine Batterie-Kachel → Lücke.
+    batt_ladung_kwh = round(6.0 + random.uniform(-0.5, 0.5), 1)
+    batt_entladung_kwh = round(4.5 + random.uniform(-0.5, 0.5), 1)
+
     return {
         "anlage_id": anlage_id,
         "anlage_name": anlage_name,
@@ -194,7 +200,9 @@ def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
             "pv_2": round(6.2 + random.uniform(-0.5, 0.5), 1),
             "netz_bezug": round(3.1 + random.uniform(-0.3, 0.3), 1),
             "netz_einspeisung": round(9.2 + random.uniform(-0.5, 0.5), 1),
-            "batterie_3": round(4.5 + random.uniform(-0.5, 0.5), 1),
+            "batterie_3_ladung": batt_ladung_kwh,
+            "batterie_3_entladung": batt_entladung_kwh,
+            "batterie_3": round(batt_ladung_kwh + batt_entladung_kwh, 1),
             "wallbox_6": round(14.7 + random.uniform(-1, 1), 1),
             "eauto_4": round(8.3 + random.uniform(-0.5, 0.5), 1),
             "waermepumpe_5": round(5.2 + random.uniform(-0.3, 0.3), 1),

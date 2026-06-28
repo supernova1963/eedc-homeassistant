@@ -19,7 +19,7 @@ import type { KpiStripItem } from '../blocks'
 import { pvgisApi, monatsdatenApi } from '../../api'
 import type { PVModulPrognose } from '../../api/pvgis'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
-import { SOLL_IST_COLORS, PROGNOSE_DASH, formatEnergie, energieAchse, formatProzent, xAchse, yAchse } from '../../lib'
+import { SOLL_IST_COLORS, PROGNOSE_DASH, formatEnergie, energieAchse, formatProzent, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -213,11 +213,11 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
       </h2>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={vm.vergleichsDaten}>
+          <ComposedChart data={vm.vergleichsDaten} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="monatName" {...xAchse(schmal)} />
-            <YAxis yAxisId="left" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} {...yAchse(schmal)} />
-            <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v} %`} />
+            <XAxis dataKey="monatName" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+            <YAxis yAxisId="left" tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} {...yAchse(schmal)} />
+            <YAxis yAxisId="right" orientation="right" tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
               name.includes('%') ? formatProzent(value).text : formatEnergie(value, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />

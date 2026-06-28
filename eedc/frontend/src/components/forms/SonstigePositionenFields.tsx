@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react'
+import { fmtZahl } from '../../lib'
 
 export interface SonstigePosition {
   bezeichnung: string
@@ -126,13 +127,13 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
           {positionen.length > 0 && (
             <div className="text-xs flex gap-3 pt-1">
               <span className="text-green-600 dark:text-green-400">
-                Ertr&auml;ge: {ertraege.toFixed(2)} &euro;
+                Ertr&auml;ge: {fmtZahl(ertraege, 2)} &euro;
               </span>
               <span className="text-red-600 dark:text-red-400">
-                Ausgaben: {ausgaben.toFixed(2)} &euro;
+                Ausgaben: {fmtZahl(ausgaben, 2)} &euro;
               </span>
               <span className={`font-medium ${netto >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                Netto: {netto >= 0 ? '+' : ''}{netto.toFixed(2)} &euro;
+                Netto: {netto >= 0 ? '+' : ''}{fmtZahl(netto, 2)} &euro;
               </span>
             </div>
           )}

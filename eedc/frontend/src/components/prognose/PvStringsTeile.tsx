@@ -20,6 +20,7 @@ import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
 import {
   SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, PROGNOSE_DASH, HILFSLINIE_DASH,
   formatEnergie, energieAchse, formatProzent, formatSpezErtrag, fmtZahl,
+  achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
 
 export interface PvStringsVM {
@@ -216,10 +217,11 @@ export function PvStringSollIstBar({ data }: { data: PVStringsResponse }) {
               SOLL: s.prognose_jahr_kwh, IST: s.ist_jahr_kwh,
             }))}
             layout="vertical"
+            margin={{ top: ACHSEN_MARGIN_TOP }}
           >
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis type="number" tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} tick={{ fontSize: 10 }} />
-            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} />
+            <XAxis type="number" tickFormatter={(v) => `${eAchse.tick(v)} ${eAchse.einheit}`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (String) */ />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
             <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL (Prognose)" />
@@ -246,10 +248,10 @@ export function PvStringMonatsverlauf({ data, selectedYear }: { data: PVStringsR
       </h3>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData}>
+          <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-            <YAxis width={60} tick={{ fontSize: 10 }} tickFormatter={eAchse.tick} unit={` ${eAchse.einheit}`} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+            <YAxis width={60} tick={{ fontSize: 10 }} tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
             <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL" />
@@ -333,10 +335,10 @@ export function PvStringMehrjahr({ data, jahresvergleichData }: {
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Performance-Entwicklung über Jahre</h3>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={jahresvergleichData}>
+          <LineChart data={jahresvergleichData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-            <YAxis unit=" %" domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tick={{ fontSize: 10 }} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+            <YAxis label={achsenEinheit('%')} domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tickFormatter={achsenTick} tick={{ fontSize: 10 }} />
             <Tooltip content={<ChartTooltip unit="%" />} />
             <Legend content={<ChartLegende />} />
             {data.strings.map((s, idx) => (

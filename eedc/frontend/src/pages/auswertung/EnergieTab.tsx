@@ -9,7 +9,7 @@ import { Card, Button, fmtCalc, KPICard, ChartLegende } from '../../components/u
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { TabProps, CHART_COLORS, createMonatsZeitreihe } from './types'
-import { xAchse, yAchse } from '../../lib'
+import { xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 
 export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitraumLabel }: TabProps) {
@@ -156,22 +156,23 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
         </p>
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <ComposedChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
+              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
               <YAxis
                 yAxisId="kwh"
-                tickFormatter={(v) => `${v.toFixed(0)}`}
-                unit=" kWh"
+                tickFormatter={achsenTick}
                 {...yAchse(schmal)}
+                label={achsenEinheit('kWh')}
               />
               {showAutarkie && (
                 <YAxis
                   yAxisId="pct"
                   orientation="right"
                   domain={[0, 100]}
-                  unit="%"
-                  tick={{ fontSize: 10 }}
+                  tickFormatter={achsenTick}
+                  {...yAchse(schmal)}
+                  label={achsenEinheit('%', 'rechts')}
                 />
               )}
               <Tooltip content={<ChartTooltip formatter={(value, name) => {
@@ -223,11 +224,11 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
         </h3>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <ComposedChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-              <YAxis yAxisId="left" domain={[0, 100]} unit=" %" {...yAchse(schmal)} />
-              <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v.toFixed(0)}`} unit=" kWh/kWp" tick={{ fontSize: 10 }} />
+              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
+              <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('%')} />
+              <YAxis yAxisId="right" orientation="right" tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('kWh/kWp', 'rechts')} />
               <Tooltip content={<ChartTooltip formatter={(value, name) => {
                   if (name.includes('kWh/kWp')) return `${value.toFixed(0)} kWh/kWp`
                   return `${value.toFixed(1)} %`
@@ -249,10 +250,10 @@ export function EnergieTab({ data, stats, anlage, strompreis, alleTarife, zeitra
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <LineChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-              <YAxis unit=" kWh" {...yAchse(schmal, 60)} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
+              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
+              <YAxis {...yAchse(schmal, 60)} label={achsenEinheit('kWh')} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}k` : v} />
               <Tooltip content={<ChartTooltip unit="kWh" decimals={0} />} />
               <Line type="monotone" dataKey="erzeugung" name="PV-Erzeugung" stroke={CHART_COLORS.erzeugung} strokeWidth={2} dot={false} />
             </LineChart>

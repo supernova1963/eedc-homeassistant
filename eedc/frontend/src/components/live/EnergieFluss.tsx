@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from 'react'
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets, Sparkles, Zap as ZapIcon } from 'lucide-react'
 import type { LiveKomponente, LiveGauge } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, SOLAR_INTENSITAET, STATUS_COLORS, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import EnergieFlussBackground from './EnergieFlussBackground'
 
@@ -137,8 +137,8 @@ function getNodeColor(komp: LiveKomponente, netzPufferW = 100): string {
 function formatPower(kw: number): string {
   if (kw <= 0) return '0 W'
   const w = Math.round(kw * 1000)
-  if (w < 10000) return `${w} W`
-  return `${kw.toFixed(1)} kW`
+  if (w < 10000) return `${fmtZahl(w, 0)} W`
+  return `${fmtZahl(kw, 1)} kW`
 }
 
 /** log(1 + kW) für Liniendicke, normiert auf min..max px */
@@ -409,12 +409,12 @@ export default function EnergieFluss({
 
   const hausTip = [
     'Haushalt',
-    `Aktuell: ${haushalt ? (haushalt.verbrauch_kw ?? 0).toFixed(2) : '—'} kW`,
+    `Aktuell: ${haushalt ? fmtZahl(haushalt.verbrauch_kw ?? 0, 2) : '—'} kW`,
     'Verbrauch ohne separat erfasste Geräte (z. B. Wallbox);',
     'enthält auch nicht einzeln gemessene Verbraucher',
-    `Verbrauchsseite (Bilanz): ${summeVerbrauch.toFixed(2)} kW`,
-    `Quellen: ${summeErzeugung.toFixed(2)} kW`,
-    ...(tagesWerte?.haushalt != null ? [`Heute: ${tagesWerte.haushalt.toFixed(1)} kWh`] : []),
+    `Verbrauchsseite (Bilanz): ${fmtZahl(summeVerbrauch, 2)} kW`,
+    `Quellen: ${fmtZahl(summeErzeugung, 2)} kW`,
+    ...(tagesWerte?.haushalt != null ? [`Heute: ${fmtZahl(tagesWerte.haushalt, 1)} kWh`] : []),
   ].join('\n')
 
   return (
@@ -626,7 +626,7 @@ export default function EnergieFluss({
                 ? 'fill-indigo-800 dark:fill-indigo-300'
                 : 'fill-purple-500 dark:fill-purple-400'}
           >
-            Solar Soll ~{pvSollKw.toFixed(1)} kW
+            Solar Soll ~{fmtZahl(pvSollKw, 1)} kW
           </text>
         )}
 
@@ -650,19 +650,19 @@ export default function EnergieFluss({
             ?? tagesWerte?.[k.key.replace(/_\d+$/, '')]
             ?? null
           const tipParts = [k.label]
-          if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.erzeugung_kw!.toFixed(2)} kW (Erzeugung)`)
-          if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${k.verbrauch_kw!.toFixed(2)} kW (Verbrauch)`)
+          if ((k.erzeugung_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.erzeugung_kw!, 2)} kW (Erzeugung)`)
+          if ((k.verbrauch_kw ?? 0) > 0) tipParts.push(`Aktuell: ${fmtZahl(k.verbrauch_kw!, 2)} kW (Verbrauch)`)
           if (hasSoc) tipParts.push(`SoC: ${soc} %`)
-          if (auslastungPct !== null) tipParts.push(`Auslastung: ${auslastungPct.toFixed(0)} % von ${k.leistung_kwp} kWp`)
+          if (auslastungPct !== null) tipParts.push(`Auslastung: ${fmtZahl(auslastungPct, 0)} % von ${k.leistung_kwp} kWp`)
           // Netz: Bezug + Einspeisung separat anzeigen + Farberklärung
           if (k.key === 'netz') {
             const bezug = tagesWerte?.netz_bezug
             const einsp = tagesWerte?.netz_einspeisung
-            if (bezug != null) tipParts.push(`Heute Bezug: ${bezug.toFixed(1)} kWh`)
-            if (einsp != null) tipParts.push(`Heute Einspeisung: ${einsp.toFixed(1)} kWh`)
+            if (bezug != null) tipParts.push(`Heute Bezug: ${fmtZahl(bezug, 1)} kWh`)
+            if (einsp != null) tipParts.push(`Heute Einspeisung: ${fmtZahl(einsp, 1)} kWh`)
             tipParts.push(`Farbe: grün = Balance (< ${netzPufferW} W), orange = Einspeisung, rot = Bezug`)
           } else if (tagesKwh != null) {
-            tipParts.push(`Heute: ${tagesKwh.toFixed(1)} kWh`)
+            tipParts.push(`Heute: ${fmtZahl(tagesKwh, 1)} kWh`)
           }
           const tip = tipParts.join('\n')
 

@@ -11,7 +11,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud, Mountain, Upload } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
-import { STRING_COLORS, CHART_COLORS } from '../lib'
+import { STRING_COLORS, CHART_COLORS, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { pvgisApi, wetterApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
 import type { WetterProviderList } from '../api/wetter'
@@ -276,13 +276,14 @@ export default function PVGISSettings() {
                   return (
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={chartData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                        <BarChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                          <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                           <YAxis
                             width={70}
                             tick={{ fontSize: 10 }}
-                            tickFormatter={(v) => `${Number(v).toLocaleString('de-DE')} kWh`}
+                            tickFormatter={(v) => fmtZahl(v, 0)}
+                            label={achsenEinheit('kWh')}
                           />
                           <Tooltip content={<ChartTooltip unit="kWh" />} />
                           {multiString ? (
@@ -562,14 +563,15 @@ export default function PVGISSettings() {
                         name: monatNamen[m.monat],
                         ertrag: m.e_m
                       }))}
-                      margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
+                      margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                       <YAxis
                         width={70}
                         tick={{ fontSize: 10 }}
-                        tickFormatter={(v) => `${Number(v).toLocaleString('de-DE')} kWh`}
+                        tickFormatter={(v) => fmtZahl(v, 0)}
+                        label={achsenEinheit('kWh')}
                       />
                       <Tooltip content={<ChartTooltip unit="kWh" />} />
                       <Bar dataKey="ertrag" fill={CHART_COLORS.erzeugung} name="Ertrag" />

@@ -9,7 +9,7 @@
  */
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse } from '../lib'
+import { CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import { fmtCalc, ChartTooltip } from '../components/ui'
 import { ExternalLink } from 'lucide-react'
@@ -73,10 +73,10 @@ export function KomponentenVergleich({
       {modus === 'diagramm' ? (
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={sortiert.map((j) => ({ name: String(j.jahr), summe: j.summe }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <BarChart data={sortiert.map((j) => ({ name: String(j.jahr), summe: j.summe }))} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" {...xAchse(schmal)} />
-              <YAxis {...yAchse(schmal, 44)} unit={` ${einheit}`} />
+              <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+              <YAxis {...yAchse(schmal, 44)} tickFormatter={achsenTick} label={achsenEinheit(einheit)} />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} />} />
               <Bar dataKey="summe" name={label}>
                 {sortiert.map((j) => (

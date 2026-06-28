@@ -33,7 +33,7 @@ const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
  *  PV-KPI wie im Monat. */
 export function baueTagKpis(t: TagWerte, vt: TagWerte | null, sollPvKwh?: number | null): KpiStripItem[] {
   const sollTxt = sollPvKwh != null && sollPvKwh > 0
-    ? `SOLL ${fmt(sollPvKwh)} kWh · ${Math.round((t.erzeugung / sollPvKwh) * 100)} %` : null
+    ? `SOLL ${fmt(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %` : null
   const spezTxt = t.spezErtrag != null ? `${fmt(t.spezErtrag, 2)} kWh/kWp` : null
   const vtTxt = vt ? `VT: ${fmt(vt.erzeugung)} kWh` : null
   return [

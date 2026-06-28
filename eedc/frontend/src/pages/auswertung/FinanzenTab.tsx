@@ -9,7 +9,7 @@ import { Card, Button, fmtCalc, KPICard, ChartLegende } from '../../components/u
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { exportToCSV } from '../../utils/export'
 import { TabProps, COLORS, createMonatsZeitreihe } from './types'
-import { GELD_COLORS, xAchse, yAchse } from '../../lib'
+import { GELD_COLORS, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import { cockpitApi, KomponentenZeitreihe } from '../../api/cockpit'
 import type { Strompreis } from '../../types'
@@ -227,10 +227,10 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
         </h3>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <BarChart data={chartDataWithKumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-              <YAxis unit=" €" {...yAchse(schmal)} />
+              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
+              <YAxis tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
               <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
@@ -252,10 +252,10 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <AreaChart data={chartDataWithKumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-              <YAxis unit=" €" {...yAchse(schmal)} />
+              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
+              <YAxis tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
               <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
               <Area
                 type="monotone"
@@ -286,10 +286,10 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartDataWithKumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+            <ComposedChart data={chartDataWithKumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-              <YAxis unit=" €" {...yAchse(schmal)} />
+              <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
+              <YAxis tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
               <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
               <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
               <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />

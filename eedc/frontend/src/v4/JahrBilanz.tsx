@@ -29,7 +29,7 @@ const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
  *  Zweitzeile, SOLL am PV. */
 export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null): KpiStripItem[] {
   const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
-    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
+    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
     : vj?.pv != null ? `VJ: ${fmt(vj.pv)} kWh` : undefined
 
   // Jahresergebnis = nach Betriebskosten (verhaltensgleich Monat: Gesamt-

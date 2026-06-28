@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
@@ -32,10 +32,10 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
+        <AreaChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" {...xAchse(schmal)} />
-          <YAxis {...yAchse(schmal)} />
+          <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+          <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
@@ -53,10 +53,10 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
   return (
     <div className="h-48">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
+        <BarChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" {...xAchse(schmal)} />
-          <YAxis {...yAchse(schmal)} />
+          <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+          <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
           <Legend content={<ChartLegende />} />
           <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
@@ -89,12 +89,12 @@ export function BkwMonatsTabelle({ monatsdaten, hatSpeicher }: { monatsdaten: In
           {data.map((md, idx) => (
             <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
               <td className="py-2 px-2">{md.name}</td>
-              <td className={`text-right py-2 px-2 ${DATENROLLE.pv.text}`}>{md.erzeugung.toFixed(1)}</td>
-              <td className={`text-right py-2 px-2 ${DATENROLLE.eigenverbrauch.text}`}>{md.eigenverbrauch.toFixed(1)}</td>
-              <td className={`text-right py-2 px-2 ${DATENROLLE.einspeisung.text}`}>{md.einspeisung.toFixed(1)}</td>
+              <td className={`text-right py-2 px-2 ${DATENROLLE.pv.text}`}>{fmtZahl(md.erzeugung, 1)}</td>
+              <td className={`text-right py-2 px-2 ${DATENROLLE.eigenverbrauch.text}`}>{fmtZahl(md.eigenverbrauch, 1)}</td>
+              <td className={`text-right py-2 px-2 ${DATENROLLE.einspeisung.text}`}>{fmtZahl(md.einspeisung, 1)}</td>
               {hatSpeicher && <>
-                <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{md.speicher_ladung.toFixed(1)}</td>
-                <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{md.speicher_entladung.toFixed(1)}</td>
+                <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{fmtZahl(md.speicher_ladung, 1)}</td>
+                <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{fmtZahl(md.speicher_entladung, 1)}</td>
               </>}
             </tr>
           ))}

@@ -37,7 +37,7 @@ import {
 import { Card, LoadingSpinner, Alert } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
-import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK } from '../../lib'
+import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl } from '../../lib'
 import { communityApi } from '../../api'
 import type {
   CommunityBenchmarkResponse,
@@ -383,8 +383,8 @@ function SpeicherDeepDive({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={vergleichsData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={ACHSEN_TICK} />
-                  <YAxis type="category" dataKey="name" tick={ACHSEN_TICK} width={90} />
+                  <XAxis type="number" domain={[0, 100]} tick={ACHSEN_TICK} tickFormatter={(v) => `${fmtZahl(v, 0)} %`} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+                  <YAxis type="category" dataKey="name" tick={ACHSEN_TICK} width={90} /* achsen-allow: Kategorie-Namen */ />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
                   <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 2, 2, 0]} />
                   <Bar dataKey="community" name="Community" fill={achsen.referenz} radius={[0, 2, 2, 0]} />
@@ -622,12 +622,13 @@ function WaermepumpeDeepDive({
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={regionData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} horizontal={false} />
-                    <XAxis type="number" domain={[0, 5]} tick={ACHSEN_TICK} />
+                    <XAxis type="number" domain={[0, 5]} tick={ACHSEN_TICK} tickFormatter={(v) => fmtZahl(v, 2)} /* achsen-allow: Wert-Achse waagerecht (JAZ), Format pro Tick (de-DE) */ />
                     <YAxis
                       type="category"
                       dataKey="name"
                       tick={ACHSEN_TICK}
                       width={120}
+                      /* achsen-allow: Kategorie-Namen */
                     />
                     <Tooltip content={<ChartTooltip formatter={(value) => `JAZ: ${value.toFixed(2)}`} />} />
                     <Bar dataKey="jaz" radius={[0, 2, 2, 0]}>
@@ -826,8 +827,8 @@ function EAutoDeepDive({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={ladequellenData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={ACHSEN_TICK} />
-                  <YAxis type="category" dataKey="name" tick={ACHSEN_TICK} width={80} />
+                  <XAxis type="number" domain={[0, 100]} tick={ACHSEN_TICK} tickFormatter={(v) => `${fmtZahl(v, 0)} %`} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+                  <YAxis type="category" dataKey="name" tick={ACHSEN_TICK} width={80} /* achsen-allow: Kategorie-Namen */ />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
                   <Bar dataKey="wert" radius={[0, 2, 2, 0]}>
                     {ladequellenData.map((entry, index) => (

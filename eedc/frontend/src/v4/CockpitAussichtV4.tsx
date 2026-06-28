@@ -23,7 +23,7 @@ import {
 import { Card, LoadingSpinner, buttonClasses } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
-import { BLOCK_IDENTITAET } from '../lib'
+import { BLOCK_IDENTITAET, fmtZahl } from '../lib'
 import {
   TagesPrognose, KurzfristDetails, LangfristVerlaufChart, LangfristMonatswerte,
   SaisonMuster, DegradationsPrognose, WpAussicht, AussichtFinanzTeaser, euroVz,
@@ -59,13 +59,13 @@ function kurzKpis(p: SolarPrognose, eedcHeute?: number | null): KpiStripItem[] {
   const morgen = p.tage[1]
   const vmNm = (t?: typeof heute) =>
     t?.pv_ertrag_morgens_kwh != null
-      ? `VM ${t.pv_ertrag_morgens_kwh.toFixed(1)} · NM ${(t.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}`
+      ? `VM ${fmtZahl(t.pv_ertrag_morgens_kwh, 1)} · NM ${fmtZahl(t.pv_ertrag_nachmittags_kwh ?? 0, 1)}`
       : undefined
   return [
-    { title: `Summe ${p.tage.length} Tage`, value: p.summe_kwh.toFixed(0), unit: 'kWh', color: 'yellow', icon: Zap },
-    { title: 'Durchschnitt/Tag', value: p.durchschnitt_kwh_tag.toFixed(1), unit: 'kWh', color: 'blue', icon: Sun },
-    { title: 'Heute', value: (eedcHeute ?? heute?.pv_ertrag_kwh ?? 0).toFixed(1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(heute) },
-    { title: 'Morgen', value: (morgen?.pv_ertrag_kwh ?? 0).toFixed(1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(morgen) },
+    { title: `Summe ${p.tage.length} Tage`, value: fmtZahl(p.summe_kwh, 0), unit: 'kWh', color: 'yellow', icon: Zap },
+    { title: 'Durchschnitt/Tag', value: fmtZahl(p.durchschnitt_kwh_tag, 1), unit: 'kWh', color: 'blue', icon: Sun },
+    { title: 'Heute', value: fmtZahl(eedcHeute ?? heute?.pv_ertrag_kwh ?? 0, 1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(heute) },
+    { title: 'Morgen', value: fmtZahl(morgen?.pv_ertrag_kwh ?? 0, 1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(morgen) },
   ]
 }
 
@@ -74,10 +74,10 @@ function langKpis(p: LangfristPrognose): KpiStripItem[] {
   const spez = p.anlagenleistung_kwp > 0 ? p.jahresprognose_kwh / p.anlagenleistung_kwp : 0
   return [
     { title: 'Jahresprognose', value: p.jahresprognose_kwh.toLocaleString('de-DE'), unit: 'kWh', color: 'yellow', icon: Zap },
-    { title: 'Spez. Ertrag (Prognose)', value: spez.toFixed(0), unit: 'kWh/kWp', color: 'blue', icon: Sun },
+    { title: 'Spez. Ertrag (Prognose)', value: fmtZahl(spez, 0), unit: 'kWh/kWp', color: 'blue', icon: Sun },
     {
       title: 'Performance-Ratio (Trend)',
-      value: (t.durchschnittliche_performance_ratio * 100).toFixed(0), unit: '%',
+      value: fmtZahl(t.durchschnittliche_performance_ratio * 100, 0), unit: '%',
       color: t.trend_richtung === 'positiv' ? 'green' : t.trend_richtung === 'negativ' ? 'red' : 'gray',
       icon: t.trend_richtung === 'negativ' ? TrendingDown : t.trend_richtung === 'positiv' ? TrendingUp : Minus,
       trend: t.trend_richtung === 'positiv' ? 'up' : t.trend_richtung === 'negativ' ? 'down' : undefined,
@@ -228,7 +228,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     }
     if (istKurz) {
       if (!kurz) return []
-      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${kurz.summe_kwh.toFixed(0)} kWh in ${kurz.tage.length} Tagen · Ø ${kurz.durchschnitt_kwh_tag.toFixed(1)} kWh/Tag`)
+      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${fmtZahl(kurz.summe_kwh, 0)} kWh in ${kurz.tage.length} Tagen · Ø ${fmtZahl(kurz.durchschnitt_kwh_tag, 1)} kWh/Tag`)
       const list: Block[] = [
         ...(kpi ? [kpi] : []),
         {
@@ -300,7 +300,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
       const grad = trend.degradation.geschaetzt_prozent_jahr
       list.push({
         id: 'degradation', title: 'Degradations-Prognose', ...BLOCK_IDENTITAET.degradation,
-        summary: grad == null ? 'noch nicht bewertbar' : grad === 0 ? 'keine messbar' : `${grad.toFixed(1)} % / Jahr`,
+        summary: grad == null ? 'noch nicht bewertbar' : grad === 0 ? 'keine messbar' : `${fmtZahl(grad, 1)} % / Jahr`,
         defaultOpen: false,
         render: () => <DegradationsPrognose trend={trend} />,
       })

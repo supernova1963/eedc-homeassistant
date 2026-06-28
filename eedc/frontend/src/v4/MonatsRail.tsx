@@ -7,7 +7,7 @@
  * Donor `MonatsabschlussView` (`VerticalTimeline`).
  */
 import { useMemo } from 'react'
-import { MONAT_KURZ, DATENROLLE } from '../lib'
+import { MONAT_KURZ, DATENROLLE, fmtZahl } from '../lib'
 
 export interface RailEintrag {
   jahr: number
@@ -43,7 +43,7 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
   const jahre = useMemo(() => [...byJahr.keys()].sort((a, b) => b - a), [byJahr])
   const istSel = (e: RailEintrag) => e.jahr === jahr && e.monat === monat
   const titel = (e: RailEintrag) =>
-    e.laufend ? `${MONAT_KURZ[e.monat]} ${e.jahr} — laufender Monat` : `${MONAT_KURZ[e.monat]} ${e.jahr}: ${Math.round(e.pv_kwh)} kWh`
+    e.laufend ? `${MONAT_KURZ[e.monat]} ${e.jahr} — laufender Monat` : `${MONAT_KURZ[e.monat]} ${e.jahr}: ${fmtZahl(e.pv_kwh, 0)} kWh`
 
   return (
     <>
@@ -85,7 +85,7 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
                         <span className={`text-xs tabular-nums ${
                           e.laufend ? 'text-emerald-500 dark:text-emerald-400' : sel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
                         }`}>
-                          {e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`}
+                          {e.laufend ? 'läuft' : `${fmtZahl(e.pv_kwh, 0)} kWh`}
                         </span>
                       </div>
                       {!e.laufend && (

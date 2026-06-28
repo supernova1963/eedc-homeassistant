@@ -8,7 +8,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { GELD_COLORS, GELD_TEXT_CLASS, KOMPONENTEN_FARBEN, CHART_HOVER_CURSOR } from '../../lib'
+import { GELD_COLORS, GELD_TEXT_CLASS, KOMPONENTEN_FARBEN, CHART_HOVER_CURSOR, fmtZahl } from '../../lib'
 import type { WallboxDashboardResponse } from '../../api/investitionen'
 import type { Investition } from '../../types'
 
@@ -35,8 +35,8 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={kostenVergleichData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tickFormatter={(v) => `${v}€`} />
-              <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} />
+              <XAxis type="number" tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+              <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Heimladung tatsächlich/extern) */ />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="value" name="Kosten" />
@@ -45,7 +45,7 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
         </div>
         <div className="text-center mt-1">
           <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.ersparnis}`}>
-            Ersparnis durch Wallbox: {(z.ersparnis_vs_extern_euro || 0).toFixed(2)} €
+            Ersparnis durch Wallbox: {fmtZahl(z.ersparnis_vs_extern_euro || 0, 2)} €
           </span>
         </div>
       </div>
@@ -57,13 +57,13 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
           Die Ersparnis errechnet sich aus dem Unterschied zwischen Heimladen und externem Laden:
         </p>
         <ul className="text-sm text-cyan-600 dark:text-cyan-400 list-disc list-inside">
-          <li>PV-Ladung zuhause: kostenlos ({(z.ladung_pv_kwh || 0).toFixed(0)} kWh)</li>
-          <li>Netz-Ladung zuhause: Haushaltsstrom ({(z.ladung_netz_kwh || 0).toFixed(0)} kWh = {(z.heim_kosten_euro || 0).toFixed(2)} €)</li>
-          <li>Vergleichspreis extern: {(z.extern_preis_kwh_euro || 0.50).toFixed(2)} €/kWh</li>
+          <li>PV-Ladung zuhause: kostenlos ({fmtZahl(z.ladung_pv_kwh || 0, 0)} kWh)</li>
+          <li>Netz-Ladung zuhause: Haushaltsstrom ({fmtZahl(z.ladung_netz_kwh || 0, 0)} kWh = {fmtZahl(z.heim_kosten_euro || 0, 2)} €)</li>
+          <li>Vergleichspreis extern: {fmtZahl(z.extern_preis_kwh_euro || 0.50, 2)} €/kWh</li>
         </ul>
         {(z.extern_ladung_kwh || 0) > 0 && (
           <p className="text-sm text-cyan-600 dark:text-cyan-400">
-            Tatsächliche externe Ladung: {(z.extern_ladung_kwh || 0).toFixed(0)} kWh für {(z.extern_kosten_euro || 0).toFixed(2)} €
+            Tatsächliche externe Ladung: {fmtZahl(z.extern_ladung_kwh || 0, 0)} kWh für {fmtZahl(z.extern_kosten_euro || 0, 2)} €
           </p>
         )}
       </div>
@@ -77,12 +77,12 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition }: {
           </div>
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Ersparnis/Jahr (hochgerechnet)</p>
-            <p className={`text-2xl font-bold ${GELD_TEXT_CLASS.ersparnis}`}>{jahresErsparnis.toFixed(0)} €</p>
+            <p className={`text-2xl font-bold ${GELD_TEXT_CLASS.ersparnis}`}>{fmtZahl(jahresErsparnis, 0)} €</p>
           </div>
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <p className="text-sm text-gray-500 dark:text-gray-400">Amortisation (ca.)</p>
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {jahresErsparnis <= 0 ? '∞' : `${(anschaffung / jahresErsparnis).toFixed(1)} Jahre`}
+              {jahresErsparnis <= 0 ? '∞' : `${fmtZahl(anschaffung / jahresErsparnis, 1)} Jahre`}
             </p>
           </div>
         </div>

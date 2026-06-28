@@ -22,7 +22,7 @@ import {
 import { Card, LoadingSpinner, Alert, KPICard } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
-import { EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET, ACHSEN_TICK } from '../../lib'
+import { EIGENE_SERIE_FARBEN, KARTE_FARBEN, SOLAR_INTENSITAET, ACHSEN_TICK, fmtZahl } from '../../lib'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, ZeitraumTyp, RegionStatistik } from '../../api/community'
 import {
@@ -320,17 +320,15 @@ export default function RegionalTab({ benchmark, benchmarkLoading, benchmarkErro
                 type="number"
                 tick={ACHSEN_TICK}
                 domain={[0, 'auto']}
-                label={{
-                  value: 'kWh/kWp',
-                  position: 'bottom',
-                  style: { fill: achsen.achse, fontSize: 12 },
-                }}
+                tickFormatter={(v) => `${fmtZahl(v, 0)} kWh/kWp`}
+                /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */
               />
               <YAxis
                 type="category"
                 dataKey="name"
                 tick={ACHSEN_TICK}
                 width={100}
+                /* achsen-allow: Kategorie-Namen */
               />
               <Tooltip content={<ChartTooltip unit="kWh/kWp" />} />
               <Bar dataKey="wert" radius={[0, 2, 2, 0]}>

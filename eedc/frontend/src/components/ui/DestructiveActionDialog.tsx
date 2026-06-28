@@ -58,7 +58,7 @@ export default function DestructiveActionDialog({
       const datum = new Date().toISOString().slice(0, 10)
       await downloadFile(
         importApi.getFullExportUrl(anlageId),
-        `eedc_backup_${safeName}_${datum}.json`,
+        `eedc_backup_${safeName}_${datum}.json`, /* de-de-allow: Dateiname (ISO sortierbar) */
       )
       setBackupCreated(true)
     } catch (e) {

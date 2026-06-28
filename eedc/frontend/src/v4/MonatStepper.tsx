@@ -7,7 +7,7 @@
  */
 import { useMemo } from 'react'
 import { ChevronFirst, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ChevronLast } from 'lucide-react'
-import { MONAT_KURZ } from '../lib'
+import { MONAT_KURZ, fmtZahl } from '../lib'
 import type { RailEintrag } from './MonatsRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
 
@@ -44,7 +44,7 @@ export function MonatStepper({ entries, jahr, monat, onSelect, immerSichtbar }: 
   const eintraege: ZeitStepperEintrag[] = [...asc].reverse().map((e) => ({
     key: String(k(e.jahr, e.monat)),
     label: `${MONAT_KURZ[e.monat]} ${e.jahr}`,
-    wert: e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`,
+    wert: e.laufend ? 'läuft' : `${fmtZahl(e.pv_kwh, 0)} kWh`,
     aktiv: !!e.laufend,
     gewaehlt: e.jahr === jahr && e.monat === monat,
     onClick: () => onSelect(e.jahr, e.monat),

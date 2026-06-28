@@ -15,7 +15,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR, SERIE_GEDIMMT } from '../../lib'
+import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR, SERIE_GEDIMMT, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 function Toggle({ aktiv, aktivKlasse, onClick, children, title }: {
@@ -91,7 +91,7 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
       rows.push({
         name: vollstaendig ? basisName : `${basisName} (${monateMitDaten}/${cfg.monate.length})`,
         value: wert,
-        label: wert == null ? '' : (modus === 'jaz' ? wert.toFixed(2) : wert.toLocaleString('de-DE')),
+        label: wert == null ? '' : (modus === 'jaz' ? fmtZahl(wert, 2) : wert.toLocaleString('de-DE')),
         vollstaendig,
       })
     }
@@ -102,7 +102,7 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
     <div className="space-y-3">
       <div className="flex items-center justify-end flex-wrap gap-2">
         <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-          <Toggle aktiv={modus === 'strom'} aktivKlasse="bg-yellow-500 text-white" onClick={() => setModus('strom')}>Strom (kWh)</Toggle>
+          <Toggle aktiv={modus === 'strom'} aktivKlasse="bg-yellow-500 text-white" onClick={() => setModus('strom')}>Strom</Toggle>
           <Toggle aktiv={modus === 'jaz'} aktivKlasse="bg-orange-500 text-white" onClick={() => setModus('jaz')}>JAZ</Toggle>
         </div>
         <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
@@ -129,22 +129,22 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
         <div className="h-72 text-gray-700 dark:text-gray-200">
           <ResponsiveContainer width="100%" height="100%">
             {achse === 'monate' ? (
-              <BarChart data={monatData}>
+              <BarChart data={monatData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} />
-                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit(modus === 'jaz' ? 'JAZ' : 'kWh')} />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? fmtZahl(v, 2) : `${v} kWh`} />} />
                 <Legend content={<ChartLegende />} />
                 {jahre.map((jahr, i) => (
                   <Bar key={jahr} dataKey={`val_${jahr}`} name={`${jahr}`} fill={jahrFarben[i % jahrFarben.length]} />
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={saisonData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
+              <BarChart data={saisonData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} />
-                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? v?.toFixed(2) : `${v} kWh`} />} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Saison) */ />
+                <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit(modus === 'jaz' ? 'JAZ' : 'kWh')} />
+                <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? fmtZahl(v, 2) : `${v} kWh`} />} />
                 <Bar dataKey="value" name={modus === 'jaz' ? 'JAZ' : 'Strom'}>
                   {saisonData.map((s, i) => (
                     <Cell key={i} fill={jahrFarben[i % jahrFarben.length]} fillOpacity={s.vollstaendig ? 1 : SERIE_GEDIMMT} />

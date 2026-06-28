@@ -150,7 +150,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     const bilanzSummary = d
       ? `${fmtCalc(d.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(d.autarkie_prozent, 0, '—')} % Autarkie${
           d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
-            ? ` · SOLL ${Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
+            ? ` · SOLL ${fmtCalc((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100, 0, '—')} %`
             : ''}`
       : 'IST / Vorjahr / Ø-Jahr'
     // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte im Strip

@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useMemo, useRef } from 'react'
 import { Loader2, AlertTriangle, ArrowRight, Info } from 'lucide-react'
 import { Modal, Button, Alert } from '../ui'
 import { energieProfilApi, type ReaggregatePreviewResponse } from '../../api/energie_profil'
+import { formatDatum, fmtZahl } from '../../lib'
 
 // Nach so vielen Sekunden Apply darf der Modal-X auch im applying-Zustand
 // klicken werden — der Backend-Job läuft dann im Hintergrund weiter, der
@@ -35,7 +36,7 @@ const COUNTER_LABELS: Record<string, string> = {
 
 function fmtKwh(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—'
-  return v.toFixed(3)
+  return fmtZahl(v, 3)
 }
 
 function fmtCount(v: number | null | undefined): string {
@@ -207,7 +208,7 @@ export default function ReaggregatePreviewModal({ anlageId, datum, onClose, onAp
     <Modal
       isOpen={!!datum}
       onClose={handleClose}
-      title={`Vorschau: ${datum} aus HA neu laden`}
+      title={`Vorschau: ${formatDatum(datum)} aus HA neu laden`}
       size="xl"
     >
       {loading && (

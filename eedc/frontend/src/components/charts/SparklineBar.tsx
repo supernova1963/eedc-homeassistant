@@ -36,7 +36,7 @@ export default function SparklineBar({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
             {/* Hidden XAxis → Tooltip-Header zeigt die Kategorie statt Bar-Index. */}
-            <XAxis dataKey="name" hide tick={{ fontSize: 10 }} />
+            <XAxis dataKey="name" hide tick={{ fontSize: 10 }} /* achsen-allow: Sparkline ohne Achsenbeschriftung */ />
             <Tooltip {...eedcTooltipProps({ unit })} />
             <Bar dataKey="value" name="Wert" radius={[2, 2, 0, 0]}>
               {data.map((entry, i) => (

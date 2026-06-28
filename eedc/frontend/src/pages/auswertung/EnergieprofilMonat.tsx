@@ -29,8 +29,7 @@ const METRIK_OPTIONEN: { key: Metrik; label: string; farbe: 'green' | 'red' | 'o
   { key: 'ueberschuss_kw', label: 'Überschuss / Defizit', farbe: 'divergent' },
 ]
 
-import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, COLORS, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { MONAT_KURZ, MONAT_NAMEN, KATEGORIE_FARBEN, COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
@@ -546,7 +545,6 @@ function KomponentenTabelle({ eintraege }: { eintraege: KomponentenEintrag[] }) 
 }
 
 function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | null; verbrauch_kw: number | null }[] }) {
-  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const chartDaten = daten.map(d => ({
     stunde: `${String(d.stunde).padStart(2, '0')}`,
@@ -556,10 +554,10 @@ function TagesprofilChart({ daten }: { daten: { stunde: number; pv_kw: number | 
   return (
     <div style={{ width: '100%', height: 240 }}>
       <ResponsiveContainer>
-        <LineChart data={chartDaten} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+        <LineChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} strokeOpacity={0.3} />
-          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} label={achsenEinheit('kW', schmal)} />
+          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} label={{ value: 'Stunde', position: 'insideBottom', offset: -2, fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
           <Tooltip content={<ChartTooltip unit="kW" />} />
           <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
           <Line type="monotone" dataKey="PV" stroke={KATEGORIE_FARBEN.pv} strokeWidth={2} dot={false} name="PV Ø" />

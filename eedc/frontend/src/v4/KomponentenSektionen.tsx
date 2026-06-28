@@ -314,7 +314,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     const kpis: KpiStripItem[] = [
       { ...BKW_KPI.erzeugung, value: fmt(d.bkw_erzeugung_kwh), unit: 'kWh' },
       { ...BKW_KPI.eigenverbrauch, value: fmt(d.bkw_eigenverbrauch_kwh), unit: 'kWh',
-        subtitle: evQuote != null ? `${evQuote.toFixed(0)} % EV-Quote` : undefined,
+        subtitle: evQuote != null ? `${fmt(evQuote)} % EV-Quote` : undefined,
         hinweis: tagHinweis(hat(d.bkw_eigenverbrauch_kwh), bkwHinweis) },
       { title: 'Einspeisung', value: fmt(einsp), unit: 'kWh', color: 'green', icon: TrendingUp,
         hinweis: tagHinweis(einsp != null, bkwHinweis) },

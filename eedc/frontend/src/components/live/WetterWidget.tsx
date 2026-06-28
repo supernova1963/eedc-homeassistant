@@ -10,8 +10,7 @@ import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceL
 import ChartTooltip from '../ui/ChartTooltip'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
@@ -51,7 +50,6 @@ interface WetterWidgetProps {
 type ChartView = 'beides' | 'pv' | 'verbrauch'
 
 export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }: WetterWidgetProps) {
-  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const now = new Date()
   const currentHour = now.getHours()
@@ -347,7 +345,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             <WetterIcon symbol={aktuell.wetter_symbol} className="h-12 w-12" />
             <div>
               <div className="text-4xl font-bold text-gray-900 dark:text-white leading-none">
-                {aktuell.temperatur_c !== null ? `${aktuell.temperatur_c.toFixed(0)}°` : '–'}
+                {aktuell.temperatur_c !== null ? `${fmtZahl(aktuell.temperatur_c, 0)}°` : '–'}
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {wetterBeschreibung(aktuell.wetter_symbol)}
@@ -361,7 +359,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
           {wetter.temperatur_min_c !== null && wetter.temperatur_max_c !== null && (
             <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <Thermometer className="h-3.5 w-3.5" />
-              <span>{wetter.temperatur_min_c.toFixed(0)}° / {wetter.temperatur_max_c.toFixed(0)}°</span>
+              <span>{fmtZahl(wetter.temperatur_min_c, 0)}° / {fmtZahl(wetter.temperatur_max_c, 0)}°</span>
             </div>
           )}
           {wetter.sonnenstunden !== null && (
@@ -381,14 +379,14 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
           {wetter.grundlast_kw != null && wetter.grundlast_kw > 0 && (
             <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
               <Zap className="h-3.5 w-3.5" />
-              <span>Grundlast {(wetter.grundlast_kw * 1000).toFixed(0)} W</span>
+              <span>Grundlast {fmtZahl(wetter.grundlast_kw * 1000, 0)} W</span>
             </div>
           )}
           {stunden.some((s) => (s.niederschlag_mm || 0) > 0) && (
             <div className="flex items-center gap-1.5 text-blue-500 dark:text-blue-400">
               <Droplets className="h-3.5 w-3.5" />
               <span>
-                {stunden.reduce((sum, s) => sum + (s.niederschlag_mm || 0), 0).toFixed(1)} mm
+                {fmtZahl(stunden.reduce((sum, s) => sum + (s.niederschlag_mm || 0), 0), 1)} mm
               </span>
             </div>
           )}
@@ -440,13 +438,13 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                   className={`flex-1 flex flex-col items-center py-0.5 rounded transition-opacity ${
                     istVergangen ? 'opacity-40' : ''
                   } ${istJetzt ? 'ring-1 ring-primary-400 bg-primary-50 dark:bg-primary-900/20' : ''}`}
-                  title={s ? `${s.zeit}: ${s.temperatur_c?.toFixed(1)}°C, ${s.globalstrahlung_wm2?.toFixed(0)} W/m²` : `${h}:00`}
+                  title={s ? `${s.zeit}: ${fmtZahl(s.temperatur_c, 1)}°C, ${fmtZahl(s.globalstrahlung_wm2, 0)} W/m²` : `${h}:00`}
                 >
                   {s ? (
                     <>
                       <WetterIcon symbol={s.wetter_symbol} className="h-4 w-4" />
                       <span className="text-[9px] text-gray-600 dark:text-gray-400 leading-none">
-                        {s.temperatur_c !== null ? `${s.temperatur_c.toFixed(0)}°` : ''}
+                        {s.temperatur_c !== null ? `${fmtZahl(s.temperatur_c, 0)}°` : ''}
                       </span>
                     </>
                   ) : (
@@ -457,7 +455,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             })}
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 5, left: 0, bottom: 0 }}>
               <defs>
                 {/* PV-Gradienten */}
                 <linearGradient id="pvIstGrad" x1="0" y1="0" x2="0" y2="1">
@@ -501,13 +499,14 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 className="fill-gray-400 dark:fill-gray-500"
                 interval={2}
                 padding={{ left: 8, right: 8 }}
+                /* achsen-allow: Zeit-/Kategorie-Achse */
               />
               <YAxis
                 width={45}
                 tick={{ fontSize: 10 }}
                 className="fill-gray-400 dark:fill-gray-500"
-                tickFormatter={(v: number) => `${v.toFixed(1)}`}
-                label={achsenEinheit('kW', schmal)}
+                tickFormatter={achsenTick}
+                label={achsenEinheit('kW')}
               />
               <Tooltip content={<ChartTooltip
                 labelFormatter={(label) => {
@@ -524,7 +523,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                     const katKey = name.replace('_ist', '')
                     if (!serienKategorien.has(katKey)) return null
                   }
-                  return `${value.toFixed(2)} kW`
+                  return `${fmtZahl(value, 2)} kW`
                 }}
                 itemSorter={() => 0}
               />} />

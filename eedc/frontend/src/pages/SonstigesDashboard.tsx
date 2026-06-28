@@ -10,7 +10,7 @@ import { Card, LoadingSpinner, Alert, Select, KPICard, ChartLegende } from '../c
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, CHART_COLORS, KATEGORIE_FARBEN, xAchse, yAchse } from '../lib'
+import { MONAT_KURZ, CHART_COLORS, KATEGORIE_FARBEN, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { investitionenApi } from '../api'
 import type { SonstigesDashboardResponse } from '../api/investitionen'
 import {
@@ -305,14 +305,14 @@ function ErzeugerBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
         {/* Erzeugung pro Monat */}
         <div>
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Erzeugung pro Monat (kWh)
+            Erzeugung pro Monat
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData}>
+              <AreaChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" {...xAchse(schmal)} />
-                <YAxis {...yAchse(schmal)} />
+                <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
@@ -477,14 +477,14 @@ function VerbraucherBlock({ investition, monatsdaten, zusammenfassung: z, select
         {/* Verbrauch pro Monat */}
         <div>
           <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-            Verbrauch pro Monat (kWh)
+            Verbrauch pro Monat
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
+              <BarChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" {...xAchse(schmal)} />
-                <YAxis {...yAchse(schmal)} />
+                <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
                 <Tooltip content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="bezug_pv" stackId="1" fill={KATEGORIE_FARBEN.pv} name="PV-Strom" />
@@ -614,14 +614,14 @@ function SpeicherBlock({ investition, monatsdaten, zusammenfassung: z, selectorP
       {/* Chart */}
       <div>
         <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-          Ladung & Entladung pro Monat (kWh)
+          Ladung & Entladung pro Monat
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyData}>
+            <BarChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" {...xAchse(schmal)} />
-              <YAxis {...yAchse(schmal)} />
+              <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+              <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
               <Tooltip content={<ChartTooltip />} />
               <Legend content={<ChartLegende />} />
               <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />

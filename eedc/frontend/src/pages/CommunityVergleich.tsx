@@ -53,7 +53,7 @@ const ZEITRAUM_OPTIONS: { value: ZeitraumTyp; label: string }[] = [
   { value: 'seit_installation', label: 'Seit Installation' },
 ]
 
-import { REGION_NAMEN, TYP_COLORS, xAchse, yAchse } from '../lib'
+import { REGION_NAMEN, TYP_COLORS, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useChartTheme } from '../context/ThemeContext'
 
 interface CommunityVergleichProps {
@@ -428,10 +428,11 @@ export default function CommunityVergleich({ embedded = false, anlageId: propsAn
                       name: `${m.monat}/${m.jahr % 100}`,
                       ertrag: m.spez_ertrag_kwh_kwp || 0,
                     }))}
+                    margin={{ top: ACHSEN_MARGIN_TOP }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
-                    <XAxis dataKey="name" {...xAchse(schmal)} />
-                    <YAxis {...yAchse(schmal)} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+                    <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh/kWp')} />
                     <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                     <Bar dataKey="ertrag" radius={[2, 2, 0, 0]}>
                       {benchmark.anlage.monatswerte.slice(-12).map((_, index) => (

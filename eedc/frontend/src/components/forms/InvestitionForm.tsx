@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react'
 import { Button, Input, Alert } from '../ui'
+import { fmtZahl } from '../../lib'
 import type { Investition, InvestitionTyp } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
 import { investitionenApi } from '../../api'
@@ -1246,7 +1247,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
           </div>
           {paramData.anzahl_module && paramData.modul_leistung_wp && (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Berechnete Leistung: {((parseInt(paramData.anzahl_module as string) || 0) * (parseInt(paramData.modul_leistung_wp as string) || 0) / 1000).toFixed(2)} kWp
+              Berechnete Leistung: {fmtZahl((parseInt(paramData.anzahl_module as string) || 0) * (parseInt(paramData.modul_leistung_wp as string) || 0) / 1000, 2)} kWp
             </p>
           )}
         </div>
@@ -1277,7 +1278,7 @@ function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps)
               min="0"
               value={paramData.leistung_wp as string}
               onChange={onChange}
-              hint={bkwLeistungKwp > 0 ? `= ${bkwLeistungKwp.toFixed(2)} kWp` : undefined}
+              hint={bkwLeistungKwp > 0 ? `= ${fmtZahl(bkwLeistungKwp, 2)} kWp` : undefined}
             />
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

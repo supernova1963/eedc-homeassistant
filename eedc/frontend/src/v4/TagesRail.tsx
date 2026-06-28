@@ -7,7 +7,7 @@
  * (gruppiert nach Monat statt Jahr).
  */
 import { useMemo } from 'react'
-import { MONAT_KURZ, DATENROLLE } from '../lib'
+import { MONAT_KURZ, DATENROLLE, fmtZahl } from '../lib'
 
 export interface TagRailEintrag {
   datum: string   // YYYY-MM-DD
@@ -55,7 +55,7 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
   // Liste liegen → alle Tage erreichbar), Fallback = ältester Listen-Tag.
   const aeltester = aeltesterTag && (!aeltesterListe || aeltesterTag < aeltesterListe) ? aeltesterTag : aeltesterListe
   const titel = (e: TagRailEintrag) =>
-    e.heute ? `${wochentag(e.datum)} ${tagNr(e.datum)}. — heute` : `${wochentag(e.datum)} ${tagNr(e.datum)}.: ${Math.round(e.pv_kwh)} kWh`
+    e.heute ? `${wochentag(e.datum)} ${tagNr(e.datum)}. — heute` : `${wochentag(e.datum)} ${tagNr(e.datum)}.: ${fmtZahl(e.pv_kwh, 0)} kWh`
 
   return (
     <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none space-y-3 pr-1">
@@ -103,7 +103,7 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
                       <span className={`text-xs tabular-nums ${
                         e.heute ? 'text-emerald-500 dark:text-emerald-400' : sel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
                       }`}>
-                        {e.heute ? 'heute' : `${Math.round(e.pv_kwh)} kWh`}
+                        {e.heute ? 'heute' : `${fmtZahl(e.pv_kwh, 0)} kWh`}
                       </span>
                     </div>
                     {!e.heute && (

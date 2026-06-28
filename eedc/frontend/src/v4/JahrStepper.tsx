@@ -8,6 +8,7 @@ import { useMemo } from 'react'
 import { ChevronFirst, ChevronLeft, ChevronRight, ChevronLast } from 'lucide-react'
 import type { JahrRailEintrag } from './JahresRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
+import { fmtZahl } from '../lib'
 
 interface JahrStepperProps {
   entries: JahrRailEintrag[]
@@ -32,7 +33,7 @@ export function JahrStepper({ entries, jahr, onSelect, immerSichtbar }: JahrStep
   const eintraege: ZeitStepperEintrag[] = desc.map((e) => ({
     key: String(e.jahr),
     label: String(e.jahr),
-    wert: e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`,
+    wert: e.laufend ? 'läuft' : `${fmtZahl(e.pv_kwh, 0)} kWh`,
     aktiv: !!e.laufend,
     gewaehlt: e.jahr === jahr,
     onClick: () => onSelect(e.jahr),

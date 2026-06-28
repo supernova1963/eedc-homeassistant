@@ -10,7 +10,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, fmtZahl } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
 
@@ -27,10 +27,10 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data}>
+        <AreaChart data={data} margin={{ top: ACHSEN_MARGIN_TOP }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" {...xAchse(schmal)} />
-          <YAxis label={achsenEinheit('kWh', schmal)} {...yAchse(schmal)} />
+          <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+          <YAxis label={achsenEinheit('kWh')} tickFormatter={achsenTick} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
           <Legend content={<ChartLegende />} />
           <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
@@ -53,8 +53,8 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} />
-            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} />
+            <XAxis type="number" tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (WP vs. Gas/Öl) */ />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="€" decimals={2} />} />
             <Bar dataKey="value" />
           </BarChart>
@@ -92,11 +92,11 @@ export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: Investi
             return (
               <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
-                <td className="text-right py-2 px-2">{strom.toFixed(0)}</td>
+                <td className="text-right py-2 px-2">{fmtZahl(strom, 0)}</td>
                 {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
-                <td className="text-right py-2 px-2 text-red-600">{heiz.toFixed(0)}</td>
-                <td className="text-right py-2 px-2 text-blue-600">{ww.toFixed(0)}</td>
-                <td className="text-right py-2 px-2 text-orange-600">{cop.toFixed(2)}</td>
+                <td className="text-right py-2 px-2 text-red-600">{fmtZahl(heiz, 0)}</td>
+                <td className="text-right py-2 px-2 text-blue-600">{fmtZahl(ww, 0)}</td>
+                <td className="text-right py-2 px-2 text-orange-600">{fmtZahl(cop, 2)}</td>
               </tr>
             )
           })}

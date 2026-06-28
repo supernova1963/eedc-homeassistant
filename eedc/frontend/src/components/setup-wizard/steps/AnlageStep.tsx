@@ -65,8 +65,8 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
       if (result) {
         setFormData(prev => ({
           ...prev,
-          latitude: result.latitude.toFixed(6),
-          longitude: result.longitude.toFixed(6),
+          latitude: result.latitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld latitude) */
+          longitude: result.longitude.toFixed(6), /* de-de-allow: Input-Value (editierbares number-Feld longitude) */
         }))
         setGeocodeSuccess(true)
       } else {

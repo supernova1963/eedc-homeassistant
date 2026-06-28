@@ -8,7 +8,7 @@
 
 import { Sun, Zap, Battery, Car, Flame, Wrench, Home, Plug, Heater, Droplets } from 'lucide-react'
 import type { LiveKomponente } from '../../api/liveDashboard'
-import { KATEGORIE_FARBEN, STATUS_COLORS } from '../../lib'
+import { KATEGORIE_FARBEN, STATUS_COLORS, fmtZahl } from '../../lib'
 
 const ICON_MAP: Record<string, React.ElementType> = {
   sun: Sun,
@@ -77,9 +77,9 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
           // Tooltip: aktuell + Tageswert
           const tagesKwh = tagesWerte?.[row.key]
           const tipParts = [row.label]
-          if (row.erzeugung > 0) tipParts.push(`Quelle: ${row.erzeugung.toFixed(2)} kW`)
-          if (row.verbrauch > 0) tipParts.push(`Verbrauch: ${row.verbrauch.toFixed(2)} kW`)
-          if (tagesKwh !== null && tagesKwh !== undefined) tipParts.push(`Heute: ${tagesKwh.toFixed(1)} kWh`)
+          if (row.erzeugung > 0) tipParts.push(`Quelle: ${fmtZahl(row.erzeugung, 2)} kW`)
+          if (row.verbrauch > 0) tipParts.push(`Verbrauch: ${fmtZahl(row.verbrauch, 2)} kW`)
+          if (tagesKwh !== null && tagesKwh !== undefined) tipParts.push(`Heute: ${fmtZahl(tagesKwh, 1)} kWh`)
 
           return (
             <div key={row.key} className="flex items-center gap-2 min-h-9 py-1 cursor-default" title={tipParts.join('\n')}>
@@ -93,7 +93,7 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
               <div className="flex-1 flex justify-end items-center gap-1">
                 {row.erzeugung > 0 && (
                   <span className="text-xs text-green-600 dark:text-green-400 tabular-nums shrink-0">
-                    {row.erzeugung.toFixed(2)}
+                    {fmtZahl(row.erzeugung, 2)}
                   </span>
                 )}
                 <div className="w-full relative h-6">
@@ -129,7 +129,7 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
                 </div>
                 {row.verbrauch > 0 && (
                   <span className="text-xs text-gray-600 dark:text-gray-400 tabular-nums shrink-0">
-                    {row.verbrauch.toFixed(2)}
+                    {fmtZahl(row.verbrauch, 2)}
                   </span>
                 )}
               </div>
@@ -148,10 +148,10 @@ export default function EnergieBilanz({ komponenten, summeErzeugung, summeVerbra
       {/* Summenzeile */}
       <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mt-2 px-2 shrink-0">
         <span className="text-green-600 dark:text-green-400">
-          Quellen: {summeErzeugung.toFixed(2)} kW
+          Quellen: {fmtZahl(summeErzeugung, 2)} kW
         </span>
         <span className="text-red-600 dark:text-red-400">
-          Verbrauch: {summeVerbrauch.toFixed(2)} kW
+          Verbrauch: {fmtZahl(summeVerbrauch, 2)} kW
         </span>
       </div>
     </div>

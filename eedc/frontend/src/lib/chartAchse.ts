@@ -1,91 +1,96 @@
 /**
- * Achsen-Standard (D7-5 / detLAN R7) — EINE Wahrheit für Recharts-Achsen.
+ * Achsen-Standard (D7-5 / detLAN R7 / R9-Nacharbeit) — EINE Wahrheit für Recharts-Achsen.
  *
  *  • `ACHSEN_TICK` — einheitliche Tick-Schriftgröße (10 px) für ALLE Achsen
  *    (X + Y), app-weit. Schluss mit 10/11/12-Drift.
+ *  • `ACHSEN_MARGIN_TOP` — reservierter oberer Rand JEDES Charts, damit die
+ *    waagerechte Einheits-Beschriftung ({@link achsenEinheit}) ÜBER dem obersten
+ *    Tick Platz hat und nicht abschneidet. Pflicht-Margin bei jedem Chart mit
+ *    Einheit: `margin={{ top: ACHSEN_MARGIN_TOP, ... }}`.
  *  • `xAchse(schmal)` — Props-Spread NUR für **Zeit-/Text-X-Achsen** (Monat/Tag/
- *    Datum): auf schmalen Views (Mobile, {@link useSchmaleAchse}) 90° gedreht +
- *    mehr Höhe, damit nichts überlappt; sonst horizontal. Recharts erkennt `<XAxis>`
- *    am Komponententyp → kein Wrapper möglich, daher Spread:
+ *    Datum): auf schmalen Views (Mobile, {@link useSchmaleAchse}) **−45°** gedreht
+ *    + `interval="preserveStartEnd"` (dünnt Labels aus); sonst horizontal. detLAN
+ *    lehnt das frühere 90°-Quer ab (R9). Recharts erkennt `<XAxis>` am
+ *    Komponententyp → kein Wrapper möglich, daher Spread:
  *      `<XAxis dataKey="monat" {...xAchse(schmal)} />`
  *    NICHT auf kurze/numerische X-Achsen anwenden (die bleiben horizontal).
  */
 export const ACHSEN_TICK = { fontSize: 10 } as const
+
+/** Reservierter oberer Chart-Rand für die waagerechte Einheit über dem obersten Tick. */
+export const ACHSEN_MARGIN_TOP = 18
+
+/**
+ * achsenTick — de-DE-Standard-`tickFormatter` für JEDE Wert-Achse: Tausenderpunkt
+ * + Komma-Dezimalen, variable Nachkommastellen (was der Recharts-Tick natürlich
+ * trägt). „2800"→„2.800", „4.5"→„4,5", „100"→„100". Pflicht auf allen Zahl-Achsen,
+ * AUSSER die Achse hat einen wert-*transformierenden* Formatter (MWh/t-Skalierung
+ * via `energieAchse`/`co2Achse`, €-Format via `fmtZahl`+„ €") — der bleibt.
+ */
+export const achsenTick = (v: number | string): string =>
+  typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('de-DE') : String(v ?? '')
 
 export interface XAchsenProps {
   tick: typeof ACHSEN_TICK
   angle?: number
   textAnchor?: 'end' | 'middle'
   height?: number
+  interval?: 'preserveStartEnd'
 }
 
 export function xAchse(schmal: boolean): XAchsenProps {
+  // R9 (detLAN): kein 90°-Quer mehr → −45° + ausgedünnte Labels auf schmalen Views.
   return schmal
-    ? { tick: ACHSEN_TICK, angle: -90, textAnchor: 'end', height: 56 }
+    ? { tick: ACHSEN_TICK, angle: -45, textAnchor: 'end', height: 48, interval: 'preserveStartEnd' }
     : { tick: ACHSEN_TICK }
 }
 
 export interface YAchsenProps {
   tick: typeof ACHSEN_TICK
-  angle?: number
-  textAnchor?: 'middle'
   width?: number
 }
 
 /**
- * yAchse — Y-Achsen-Props (detLAN R7): auf schmalen Views die Y-Tick-Labels 90°
- * drehen + Achsen-Breite verschmälern (gedrehte Zahlen brauchen kaum Breite) →
- * mehr horizontaler Platz fürs Diagramm auf Mobile. `breite` = Normalbreite des
- * Charts (wird auf Desktop durchgereicht; ersetzt das bisherige `width`-Prop).
- *   `<YAxis yAxisId="kwh" {...yAchse(schmal, 48)} unit=" kWh" />`
+ * yAchse — Y-Achsen-Props. R9-Nacharbeit (detLAN): Y-Tick-**Zahlen bleiben immer
+ * waagerecht** (auch mobil — Zahlen sind kurz), kein 90°-Quer mehr. `breite` =
+ * optionale feste Achsenbreite (auf allen Views durchgereicht).
+ *   `<YAxis yAxisId="kwh" {...yAchse(schmal, 48)} label={achsenEinheit('kWh')} />`
  */
-export function yAchse(schmal: boolean, breite?: number): YAchsenProps {
-  return schmal
-    ? { tick: ACHSEN_TICK, angle: -90, textAnchor: 'middle', width: 28 }
-    : { tick: ACHSEN_TICK, ...(breite != null ? { width: breite } : {}) }
+export function yAchse(_schmal: boolean, breite?: number): YAchsenProps {
+  return { tick: ACHSEN_TICK, ...(breite != null ? { width: breite } : {}) }
 }
 
-// ── Achsen-EINHEIT (D9-A / detLAN R9, Plan B) ────────────────────────────────
+// ── Achsen-EINHEIT (R9-Nacharbeit / detLAN+Rainer-Kompromiss) ────────────────
 
 export interface AchsenEinheitLabel {
   value: string
-  angle?: number
-  position: 'insideTopLeft' | 'insideTopRight' | 'insideLeft' | 'insideRight'
-  offset?: number
+  position: 'top'
+  offset: number
   fontSize: number
-  style?: { textAnchor?: 'start' | 'middle' | 'end' }
+  dx?: number
+  style: { textAnchor: 'start' | 'end' }
 }
 
 /**
- * achsenEinheit — die EINE Wahrheit für den Einheiten-Titel einer Achse (Plan B,
- * detLAN R9 / Gernot 2026-06-28):
- *   • **breit (≥640):** Einheit **einmal waagerecht oben** an der Achse
- *     (`insideTopLeft`/`insideTopRight`, kein `angle`) — kein gedrehter Längs-Titel
- *     mehr. Innen an der oberen Achsenecke statt `position:'top'`, damit die Einheit
- *     bei knappem `margin.top` nicht oben abschneidet (D9-D Cut-off, Gate für R10-3).
- *   • **schmal (<640, {@link useSchmaleAchse}):** quer längs der Achse (90°),
- *     gerechtfertigt auf Mobile.
- * `seite` = Orientierung der Achse: `'links'` (Default, primär) | `'rechts'`
- * (2. Achse). Jede Achse trägt genau **eine** Einheit; Klammer-Überschriften im
- * Chart-Kopf entfallen (Einheit gehört an die Achse). Recharts erkennt `<Label>`
- * am `label`-Prop → Spread nicht nötig, direkt: `label={achsenEinheit('kWh', schmal)}`.
- *
- * Hinweis Legenden-Kollision (D9-D3): die Einheit sitzt innen an der oberen
- * Achsenecke → hat der Chart eine **Top**-Legende (`verticalAlign="top"`), diese
- * nach unten setzen, damit Titel ≠ Legende (Recharts-Default ist ohnehin unten).
+ * achsenEinheit — die EINE Wahrheit für den Einheiten-Titel einer Achse
+ * (R9-Nacharbeit, detLAN + Rainer 👍):
+ *   • Einheit als **kleine, waagerechte** Beschriftung **über dem obersten Tick**,
+ *     links an der Achse. **NIE gedreht — auch mobil nicht.** Nie über/auf einem Tick.
+ *   • Umgesetzt via `position:'top'` (oberhalb der Plotfläche) im reservierten
+ *     oberen Rand → Chart braucht `margin={{ top: ACHSEN_MARGIN_TOP, ... }}`,
+ *     sonst clippt es. `textAnchor:'start'` (links) bzw. `'end'` (rechte Achse)
+ *     hält die Einheit linksbündig an der Achse statt zentriert.
+ *   • **KEIN `angle`, KEIN `schmal`-Sonderfall** mehr (das war der R9-Bug).
+ * `seite` = Orientierung: `'links'` (Default, primär) | `'rechts'` (2. Achse).
+ * Jede Achse trägt genau **eine** Einheit; Klammer-Überschriften im Chart-Kopf
+ * („… (kWh)") und `unit=`-Tick-Suffixe entfallen — die Einheit gehört an die Achse.
+ * Recharts erkennt `<Label>` am `label`-Prop → direkt: `label={achsenEinheit('kWh')}`.
  */
 export function achsenEinheit(
   einheit: string,
-  schmal: boolean,
   seite: 'links' | 'rechts' = 'links',
 ): AchsenEinheitLabel {
-  if (schmal) {
-    return seite === 'rechts'
-      ? { value: einheit, angle: 90, position: 'insideRight', fontSize: 10, style: { textAnchor: 'middle' } }
-      : { value: einheit, angle: -90, position: 'insideLeft', fontSize: 10, style: { textAnchor: 'middle' } }
-  }
-  // breit: Einheit waagerecht innen an der oberen Achsenecke
   return seite === 'rechts'
-    ? { value: einheit, position: 'insideTopRight', offset: 6, fontSize: 10, style: { textAnchor: 'end' } }
-    : { value: einheit, position: 'insideTopLeft', offset: 6, fontSize: 10, style: { textAnchor: 'start' } }
+    ? { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: 4, style: { textAnchor: 'end' } }
+    : { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: -4, style: { textAnchor: 'start' } }
 }

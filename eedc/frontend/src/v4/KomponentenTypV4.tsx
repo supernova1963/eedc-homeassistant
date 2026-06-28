@@ -17,7 +17,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { LoadingSpinner, Card, Alert, fmtCalc } from '../components/ui'
 import { BlockShell, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
-import { BLOCK_IDENTITAET, STATUS_COLORS } from '../lib'
+import { BLOCK_IDENTITAET, STATUS_COLORS, formatDatum, jaNein, fmtZahl } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { sensorMappingApi } from '../api/sensorMapping'
 import { liveDashboardApi } from '../api/liveDashboard'
@@ -46,12 +46,14 @@ function paramFelder(inv: Investition): { label: string; wert: string }[] {
   if (inv.leistung_kwp != null) felder.push({ label: 'Leistung', wert: `${fmtCalc(inv.leistung_kwp, 1)} kWp` })
   if (inv.ausrichtung) felder.push({ label: 'Ausrichtung', wert: inv.ausrichtung })
   if (inv.neigung_grad != null) felder.push({ label: 'Neigung', wert: `${inv.neigung_grad}°` })
-  if (inv.anschaffungsdatum) felder.push({ label: 'Anschaffung', wert: inv.anschaffungsdatum })
-  if (inv.stilllegungsdatum) felder.push({ label: 'Stilllegung', wert: inv.stilllegungsdatum })
+  if (inv.anschaffungsdatum) felder.push({ label: 'Anschaffung', wert: formatDatum(inv.anschaffungsdatum) })
+  if (inv.stilllegungsdatum) felder.push({ label: 'Stilllegung', wert: formatDatum(inv.stilllegungsdatum) })
   if (inv.anschaffungskosten_gesamt != null) felder.push({ label: 'Anschaffungskosten', wert: `${fmtCalc(inv.anschaffungskosten_gesamt, 0)} €` })
   for (const [k, v] of Object.entries(inv.parameter ?? {})) {
     if (v == null || typeof v === 'object') continue
-    felder.push({ label: k.replace(/_/g, ' '), wert: String(v) })
+    // de-DE-Anzeige: Boolean → Ja/Nein, Zahl → Tausenderpunkt, sonst roh (Enum/Text).
+    const wert = typeof v === 'boolean' ? jaNein(v) : typeof v === 'number' ? fmtZahl(v, 0) : String(v)
+    felder.push({ label: k.replace(/_/g, ' '), wert })
   }
   return felder
 }

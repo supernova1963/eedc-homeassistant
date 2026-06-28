@@ -40,7 +40,7 @@ function DeltaZelle({ current, prev, metrik }: { current: number | null; prev: n
     <span className={URTEIL_KLASSE[urteil]}>
       {pfeil} {fmtWert(Math.abs(delta), metrik.decimals)}
       {deltaPct != null && (
-        <span className="ml-1 opacity-75">({deltaPct > 0 ? '+' : ''}{deltaPct.toFixed(1)} %)</span>
+        <span className="ml-1 opacity-75">({deltaPct > 0 ? '+' : ''}{fmtWert(deltaPct, 1)} %)</span>
       )}
     </span>
   )

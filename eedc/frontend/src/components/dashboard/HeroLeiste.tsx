@@ -4,6 +4,7 @@
 
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { FormelTooltip, fmtCalc } from '../../components/ui'
+import { fmtZahl } from '../../lib'
 import type { CockpitUebersicht } from '../../api/cockpit'
 
 export default function HeroLeiste({ data, prevData, year }: {
@@ -19,7 +20,7 @@ export default function HeroLeiste({ data, prevData, year }: {
   const items = [
     {
       label: 'Autarkie',
-      value: `${data.autarkie_prozent.toFixed(1)} %`,
+      value: `${fmtCalc(data.autarkie_prozent, 1)} %`,
       delta: trend(data.autarkie_prozent, prevData?.autarkie_prozent),
       color: 'text-blue-600 dark:text-blue-400',
       bg: 'bg-blue-50 dark:bg-blue-900/20',
@@ -31,7 +32,7 @@ export default function HeroLeiste({ data, prevData, year }: {
     {
       label: 'Spez. Ertrag',
       value: data.spezifischer_ertrag_kwh_kwp
-        ? `${data.spezifischer_ertrag_kwh_kwp.toFixed(0)} kWh/kWp`
+        ? `${fmtCalc(data.spezifischer_ertrag_kwh_kwp, 0)} kWh/kWp`
         : '—',
       delta: trend(data.spezifischer_ertrag_kwh_kwp || 0, prevData?.spezifischer_ertrag_kwh_kwp ?? undefined),
       color: 'text-yellow-600 dark:text-yellow-400',
@@ -43,7 +44,7 @@ export default function HeroLeiste({ data, prevData, year }: {
     },
     {
       label: 'Netto-Ertrag',
-      value: `${data.netto_ertrag_euro.toFixed(0)} €`,
+      value: `${fmtCalc(data.netto_ertrag_euro, 0)} €`,
       delta: trend(data.netto_ertrag_euro, prevData?.netto_ertrag_euro),
       color: 'text-emerald-600 dark:text-emerald-400',
       bg: 'bg-emerald-50 dark:bg-emerald-900/20',
@@ -71,7 +72,7 @@ export default function HeroLeiste({ data, prevData, year }: {
                   ? <TrendingDown className="h-3 w-3" />
                   : <Minus className="h-3 w-3" />
               }
-              {item.delta > 0 ? '+' : ''}{item.delta.toFixed(1)} % vs. {year - 1}
+              {item.delta > 0 ? '+' : ''}{fmtZahl(item.delta, 1)} % vs. {year - 1}
             </div>
           )}
         </div>

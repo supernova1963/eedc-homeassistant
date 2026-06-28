@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
-import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse } from '../../lib'
+import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
 
@@ -64,13 +64,13 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
       <div className="grid md:grid-cols-2 gap-6">
         {/* Ladung/Entladung pro Monat (Arbitrage-Stapel bei Netzladung) */}
         <div>
-          <ChartKopf>Ladung &amp; Entladung pro Monat (kWh)</ChartKopf>
+          <ChartKopf>Ladung &amp; Entladung pro Monat</ChartKopf>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData}>
+              <BarChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" {...xAchse(schmal)} />
-                <YAxis tickFormatter={(v) => `${v} kWh`} {...yAchse(schmal, 70)} />
+                <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <YAxis tickFormatter={achsenTick} {...yAchse(schmal, 70)} label={achsenEinheit('kWh')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
                 <Legend content={<ChartLegende />} />
                 {arbitrageAktiv ? (
@@ -92,10 +92,10 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
           <ChartKopf>Vollzyklen pro Monat</ChartKopf>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyData}>
+              <AreaChart data={monthlyData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" {...xAchse(schmal)} />
-                <YAxis tickFormatter={(v) => v.toFixed(1)} {...yAchse(schmal, 40)} />
+                <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <YAxis tickFormatter={achsenTick} {...yAchse(schmal, 40)} label={achsenEinheit('Zyklen')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip decimals={1} />} />
                 <Area type="monotone" dataKey="zyklen" fill={CHART_COLORS.speicherZyklen} stroke={CHART_COLORS.speicherZyklen} name="Zyklen" />
               </AreaChart>
@@ -106,13 +106,13 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
 
       {/* Effizienz — gleitende 12-Monats-Effizienz (carry-over-immun). */}
       <div>
-        <ChartKopf>Effizienz — gleitende 12 Monate (%)</ChartKopf>
+        <ChartKopf>Effizienz — gleitende 12 Monate</ChartKopf>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={effizienzData}>
+            <LineChart data={effizienzData} margin={{ top: ACHSEN_MARGIN_TOP }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" {...xAchse(schmal)} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v} %`} {...yAchse(schmal, 55)} />
+              <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+              <YAxis domain={[0, 100]} tickFormatter={achsenTick} {...yAchse(schmal, 55)} label={achsenEinheit('%')} />
               <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="%" decimals={1} />} />
               <Line type="monotone" dataKey="effizienz" stroke={CHART_COLORS.speicherEffizienz} strokeWidth={2} dot={{ r: 4 }} name="Effizienz" connectNulls />
             </LineChart>
@@ -139,9 +139,9 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
               {monthlyData.map((md, idx) => (
                 <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
                   <td className="py-2 px-2">{md.name}</td>
-                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{md.ladung.toFixed(1)}</td>
-                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{md.entladung.toFixed(1)}</td>
-                  <td className="text-right py-2 px-2">{md.zyklen.toFixed(1)}</td>
+                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{fmtZahl(md.ladung, 1)}</td>
+                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{fmtZahl(md.entladung, 1)}</td>
+                  <td className="text-right py-2 px-2">{fmtZahl(md.zyklen, 1)}</td>
                 </tr>
               ))}
             </tbody>

@@ -7,6 +7,7 @@
 export * from './constants'
 export * from './colors'
 export * from './einheiten'
+export * from './datum'
 export * from './chartAchse'
 export * from './calculations'
 export * from './download'

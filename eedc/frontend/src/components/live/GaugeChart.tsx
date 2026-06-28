@@ -2,7 +2,7 @@
  * GaugeChart — SVG-Halbkreis-Gauge für SoC, Netz, Autarkie.
  */
 
-import { AMPEL_SKALA, COLORS } from '../../lib'
+import { AMPEL_SKALA, COLORS, fmtZahl } from '../../lib'
 
 interface GaugeChartProps {
   wert: number
@@ -64,8 +64,8 @@ export default function GaugeChart({ wert, min, max, label, einheit }: GaugeChar
 
   // Formatierung
   const displayWert = Math.abs(wert) >= 1000
-    ? `${(wert / 1000).toFixed(1)}k`
-    : Number.isInteger(wert) ? wert.toString() : wert.toFixed(1)
+    ? `${fmtZahl(wert / 1000, 1)}k`
+    : Number.isInteger(wert) ? wert.toString() : fmtZahl(wert, 1)
 
   return (
     <div className="flex flex-col items-center">

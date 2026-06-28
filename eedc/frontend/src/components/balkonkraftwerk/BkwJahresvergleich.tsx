@@ -8,7 +8,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { CHART_COLORS } from '../../lib'
+import { CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps } from '../ui'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
@@ -32,7 +32,7 @@ export function prepBkwJahresVerwendung(monatsdaten: InvestitionMonatsdaten[]): 
 }
 
 const fmt = (v: number) => Math.round(v).toLocaleString('de-DE')
-const pct = (v: number, ganz: number) => (ganz > 0 ? `${Math.round((v / ganz) * 100)} %` : '—')
+const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100, 0)} %` : '—')
 
 export function BkwJahresvergleich({ monatsdaten, embed = false }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean }) {
   const daten = prepBkwJahresVerwendung(monatsdaten)
@@ -45,10 +45,10 @@ export function BkwJahresvergleich({ monatsdaten, embed = false }: { monatsdaten
       </p>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={daten} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <BarChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="jahr" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} width={56} unit=" kWh" />
+            <XAxis dataKey="jahr" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+            <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
             <Tooltip {...eedcTooltipProps({ unit: ' kWh', decimals: 0, percentOf: 'gesamt' })} />
             <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
             {SERIEN.map((s) => (

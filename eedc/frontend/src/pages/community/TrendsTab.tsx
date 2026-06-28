@@ -43,7 +43,7 @@ import {
   Legend,
 } from 'recharts'
 
-import { MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS, ACHSEN_TICK, xAchse, yAchse } from '../../lib'
+import { MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS, ACHSEN_TICK, ACHSEN_MARGIN_TOP, xAchse, yAchse, achsenEinheit, achsenTick, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 const MONATSNAMEN = MONAT_KURZ.slice(1)     // 0-basiert
 const MONATSNAMEN_LANG = MONAT_NAMEN.slice(1) // 0-basiert
@@ -239,7 +239,7 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
 
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={ertragsverlauf}>
+              <AreaChart data={ertragsverlauf} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <defs>
                   <linearGradient id="colorErtrag" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={EIGENE_SERIE_FARBEN.du} stopOpacity={0.3} />
@@ -251,15 +251,12 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                   dataKey="name"
                   {...xAchse(schmal)}
                   interval={Math.floor(ertragsverlauf.length / 12)}
+                  /* achsen-allow: Zeit-/Kategorie-Achse */
                 />
                 <YAxis
                   {...yAchse(schmal)}
-                  label={{
-                    value: 'kWh/kWp',
-                    angle: -90,
-                    position: 'insideLeft',
-                    style: { fill: achsen.achse, fontSize: 12 },
-                  }}
+                  tickFormatter={achsenTick}
+                  label={achsenEinheit('kWh/kWp')}
                 />
                 <Tooltip content={<ChartTooltip unit="kWh/kWp" decimals={1} />} />
                 <Area
@@ -397,15 +394,18 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monatlicherDurchschnitt}>
+              <LineChart data={monatlicherDurchschnitt} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
                   {...xAchse(schmal)}
+                  /* achsen-allow: Zeit-/Kategorie-Achse */
                 />
                 <YAxis
                   {...yAchse(schmal)}
                   domain={[0, 'auto']}
+                  tickFormatter={achsenTick}
+                  label={achsenEinheit('kWh/kWp')}
                 />
                 <Tooltip
                   content={<ChartTooltip
@@ -450,17 +450,19 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
                 speicher: p.wert,
                 waermepumpe: communityTrends.trends.waermepumpe_quote[i]?.wert || 0,
                 eauto: communityTrends.trends.eauto_quote[i]?.wert || 0,
-              }))}>
+              }))} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="monat"
                   {...xAchse(schmal)}
                   interval={1}
+                  /* achsen-allow: Zeit-/Kategorie-Achse */
                 />
                 <YAxis
                   {...yAchse(schmal)}
                   domain={[0, 100]}
-                  unit="%"
+                  tickFormatter={achsenTick}
+                  label={achsenEinheit('%')}
                 />
                 <Tooltip content={<ChartTooltip
                   unit="%"
@@ -509,22 +511,19 @@ export default function TrendsTab({ benchmark, benchmarkLoading, benchmarkError 
 
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={degradation.nach_alter}>
+              <LineChart data={degradation.nach_alter} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="alter_jahre"
                   tick={ACHSEN_TICK}
-                  label={{ value: 'Anlagenalter (Jahre)', position: 'bottom', offset: -5, fill: achsen.achse }}
+                  tickFormatter={(v) => `${fmtZahl(v, 0)} Jahre`}
+                  /* achsen-allow: Wert-Achse waagerecht (Anlagenalter), Einheit/Format pro Tick (de-DE) */
                 />
                 <YAxis
                   {...yAchse(schmal)}
                   domain={['dataMin - 50', 'dataMax + 50']}
-                  label={{
-                    value: 'kWh/kWp',
-                    angle: -90,
-                    position: 'insideLeft',
-                    style: { fill: achsen.achse },
-                  }}
+                  tickFormatter={achsenTick}
+                  label={achsenEinheit('kWh/kWp')}
                 />
                 <Tooltip
                   content={<ChartTooltip

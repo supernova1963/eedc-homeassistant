@@ -12,6 +12,7 @@ import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/senso
 import FeldMappingInput, { SensorAutocomplete, type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 import { useFeldHinweise } from '../../hooks/useFeldHinweise'
+import { fmtZahl } from '../../lib'
 
 interface PVModuleStepProps {
   investitionen: InvestitionInfo[]
@@ -72,7 +73,7 @@ export default function PVModuleStep({
             value: 'keine',
             label: 'Kein Sensor',
             description: hasPvGesamtSensor && kwpAnteil > 0
-              ? `Anteilig (${(kwpAnteil * 100).toFixed(1)} %) aus PV-Gesamt verteilt oder manuell erfassen`
+              ? `Anteilig (${fmtZahl(kwpAnteil * 100, 1)} %) aus PV-Gesamt verteilt oder manuell erfassen`
               : 'Manuell im Monatsabschluss erfassen',
           },
         ]
@@ -90,8 +91,8 @@ export default function PVModuleStep({
                 </div>
                 {inv.kwp && (
                   <div className="text-xs text-gray-500">
-                    {inv.kwp.toFixed(1)} kWp
-                    {kwpAnteil > 0 && ` (${(kwpAnteil * 100).toFixed(1)} %)`}
+                    {fmtZahl(inv.kwp, 1)} kWp
+                    {kwpAnteil > 0 && ` (${fmtZahl(kwpAnteil * 100, 1)} %)`}
                   </div>
                 )}
               </div>

@@ -26,7 +26,7 @@ describe('LiveHeuteKacheln', () => {
     expect(screen.getByText('PV-Erzeugung')).toBeInTheDocument()
     expect(screen.getByText('Einspeisung')).toBeInTheDocument()
     expect(screen.getByText('Autarkie')).toBeInTheDocument()
-    expect(screen.getByText('20.0')).toBeInTheDocument() // PV heute
+    expect(screen.getByText('20,0')).toBeInTheDocument() // PV heute (de-DE)
     expect(screen.getByText('80')).toBeInTheDocument()    // Autarkie 8/(8+2)
   })
 

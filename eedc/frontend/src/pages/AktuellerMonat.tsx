@@ -15,7 +15,7 @@ import {
   FileSpreadsheet, Plug, Cloud, Upload, FileText,
 } from 'lucide-react'
 import { Card, Button, Select, KPICard, FormelTooltip, fmtCalc, ChartLegende } from '../components/ui'
-import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH, xAchse, yAchse } from '../lib'
+import { MONAT_NAMEN, CHART_COLORS, GELD_COLORS, STATUS_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl, energieAchse } from '../lib'
 import { useChartTheme } from '../context/ThemeContext'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { DataLoadingState } from '../components/common'
@@ -138,16 +138,14 @@ export default function AktuellerMonat() {
     ]
   }, [data])
 
-  const vorjahrFormatter = useMemo(() => {
+  const vorjahrAchse = useMemo(() => {
     const maxVal = vorjahrData.length > 0 ? Math.max(...vorjahrData.flatMap(d => [d.Aktuell, d.Vorjahr])) : 0
-    const mwh = maxVal > 10000
-    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+    return energieAchse(maxVal)
   }, [vorjahrData])
 
-  const sollIstFormatter = useMemo(() => {
+  const sollIstAchse = useMemo(() => {
     const maxVal = sollIstData.length > 0 ? Math.max(...sollIstData.flatMap(d => [d.IST, d.SOLL])) : 0
-    const mwh = maxVal > 10000
-    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+    return energieAchse(maxVal)
   }, [sollIstData])
 
   const gesamtnettoertrag = data?.gesamtnettoertrag_euro ?? null
@@ -413,11 +411,12 @@ export default function AktuellerMonat() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={energieBilanzData} layout="vertical" margin={{ left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                  <XAxis type="number" unit=" kWh" tick={{ fontSize: 10 }} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${fmtZahl(v, 0)} kWh`} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
                   <YAxis
                     type="category"
                     dataKey="name"
                     width={110}
+                    /* achsen-allow: Kategorie-Namen (Bilanz-Posten) */
                     tick={(props: { x: number; y: number; payload: { value: string; index: number } }) => {
                       const entry = energieBilanzData[props.payload.index]
                       const info = entry?.quellefeld ? q[entry.quellefeld] : null
@@ -522,10 +521,10 @@ export default function AktuellerMonat() {
           </h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={vorjahrData}>
+              <BarChart data={vorjahrData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" {...xAchse(schmal)} />
-                <YAxis tickFormatter={vorjahrFormatter} {...yAchse(schmal, 90)} />
+                <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+                <YAxis tickFormatter={vorjahrAchse.tick} {...yAchse(schmal, 90)} label={achsenEinheit(vorjahrAchse.einheit)} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="Aktuell" fill={CHART_COLORS.erzeugung} radius={[2, 2, 0, 0]} />
@@ -665,10 +664,10 @@ export default function AktuellerMonat() {
             {/* Waterfall-Chart */}
             <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={waterfallData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <BarChart data={waterfallData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" {...xAchse(schmal)} />
-                  <YAxis tickFormatter={(v: number) => `${v.toFixed(0)} €`} {...yAchse(schmal, 52)} />
+                  <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+                  <YAxis tickFormatter={(v: number) => fmtZahl(v, 0)} {...yAchse(schmal, 52)} label={achsenEinheit('€')} />
                   <Tooltip content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     const p = payload[0]?.payload
@@ -799,10 +798,10 @@ export default function AktuellerMonat() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={sollIstData}>
+                <BarChart data={sollIstData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" {...xAchse(schmal)} />
-                  <YAxis tickFormatter={sollIstFormatter} {...yAchse(schmal, 90)} />
+                  <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+                  <YAxis tickFormatter={sollIstAchse.tick} {...yAchse(schmal, 90)} label={achsenEinheit(sollIstAchse.einheit)} />
                   <Tooltip content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
                   <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} radius={[2, 2, 0, 0]} />

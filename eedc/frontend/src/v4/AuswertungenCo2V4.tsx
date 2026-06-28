@@ -24,6 +24,7 @@ import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
   CO2_FAKTOR_KG_KWH, CHART_COLORS, MARKER_WARNUNG, TYP_LABELS,
   formatCo2, fmtZahl, formatProzent, co2Achse, xAchse, yAchse,
+  achsenEinheit, ACHSEN_MARGIN_TOP,
 } from '../lib'
 import { exportToCSV } from '../utils/export'
 import { investitionenApi, type CO2AmortisationResponse } from '../api/investitionen'
@@ -150,10 +151,10 @@ function Co2Inner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">CO₂-Einsparung pro Monat</p>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={zeitreihe} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <BarChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={monAchse.tick} unit={` ${monAchse.einheit}`} {...yAchse(schmal)} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                    <YAxis tickFormatter={monAchse.tick} {...yAchse(schmal)} label={achsenEinheit(monAchse.einheit)} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${monAchse.tick(v)} ${monAchse.einheit}`} />} />
                     <Bar dataKey="co2_einsparung" name="CO₂ eingespart" fill={CHART_COLORS.co2Pv} radius={[2, 2, 0, 0]} />
                   </BarChart>
@@ -206,10 +207,10 @@ function Co2Inner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Kumulierte CO₂-Einsparung</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={kumuliert} margin={{ top: 10, right: 30, left: 0, bottom: 5 }}>
+                  <AreaChart data={kumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-                    <YAxis tickFormatter={kumAchse.tick} unit={` ${kumAchse.einheit}`} {...yAchse(schmal)} />
+                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                    <YAxis tickFormatter={kumAchse.tick} {...yAchse(schmal)} label={achsenEinheit(kumAchse.einheit)} />
                     <Tooltip content={<ChartTooltip formatter={(v) => `${kumAchse.tick(v)} ${kumAchse.einheit}`} />} />
                     <Area type="monotone" dataKey="kumuliert_co2" name="Kumulierte Einsparung"
                       stroke={CHART_COLORS.co2Pv} fill={CHART_COLORS.co2Pv} fillOpacity={0.3} />

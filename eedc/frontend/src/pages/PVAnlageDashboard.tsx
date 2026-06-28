@@ -21,7 +21,7 @@ import {
 import type { Investition } from '../types'
 import { PVStringVergleich } from '../components/pv'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { COLORS, speicherParameter, wechselrichterParameter } from '../lib'
+import { COLORS, speicherParameter, wechselrichterParameter, achsenEinheit, ACHSEN_MARGIN_TOP, energieAchse } from '../lib'
 
 interface PVSystem {
   wechselrichter: Investition
@@ -137,12 +137,11 @@ export default function PVAnlageDashboard() {
     ]
   }, [gesamtErzeugung, gesamtEigenverbrauch, gesamtEinspeisung])
 
-  const jahresFormatter = useMemo(() => {
+  const jahresAchse = useMemo(() => {
     const maxVal = jahresChartData.length > 0
       ? Math.max(...jahresChartData.flatMap(d => [d.Erzeugung, d.Eigenverbrauch, d.Einspeisung]))
       : 0
-    const mwh = maxVal > 10000
-    return (val: number) => mwh ? `${(val / 1000).toFixed(1)} MWh` : `${val} kWh`
+    return energieAchse(maxVal)
   }, [jahresChartData])
 
   const loading = anlagenLoading || invLoading || cockpitLoading
@@ -377,10 +376,10 @@ export default function PVAnlageDashboard() {
         >
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={jahresChartData}>
+              <BarChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tickFormatter={jahresFormatter} width={80} tick={{ fontSize: 10 }} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahre) */ />
+                <YAxis tickFormatter={jahresAchse.tick} width={80} tick={{ fontSize: 10 }} label={achsenEinheit(jahresAchse.einheit)} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
                 <Bar dataKey="Erzeugung" fill={COLORS.solar} />

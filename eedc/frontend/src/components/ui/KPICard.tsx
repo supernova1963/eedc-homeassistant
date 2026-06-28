@@ -82,7 +82,7 @@ export function KPICard({
       </span>
     )
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+      <div className="h-full bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
           {Icon && <Icon className={`h-3.5 w-3.5 ${iconColor} flex-shrink-0`} />}
           <span className="truncate">{title}</span>
@@ -154,11 +154,11 @@ export function KPICard({
     return (
       <button
         onClick={onClick}
-        className="text-left w-full rounded-xl transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="text-left w-full h-full rounded-xl transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
-        <Card>{inner}</Card>
+        <Card className="h-full">{inner}</Card>
       </button>
     )
   }
-  return <Card>{inner}</Card>
+  return <Card className="h-full">{inner}</Card>
 }

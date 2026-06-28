@@ -208,7 +208,7 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     const bilanzSummary = monatData
       ? `${fmtCalc(monatData.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(monatData.autarkie_prozent, 0, '—')} % Autarkie${
           monatData.soll_pv_kwh != null && monatData.pv_erzeugung_kwh != null && monatData.soll_pv_kwh > 0
-            ? ` · SOLL ${Math.round((monatData.pv_erzeugung_kwh / monatData.soll_pv_kwh) * 100)} %`
+            ? ` · SOLL ${fmtCalc((monatData.pv_erzeugung_kwh / monatData.soll_pv_kwh) * 100, 0, '—')} %`
             : ''}`
       : 'IST / Vormonat / Vorjahr / Ø-Monat'
     // Kennzahlen-Kacheln parkbar machen (SLICE 1): stabile parkId je Titel; geparkte

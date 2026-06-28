@@ -43,7 +43,7 @@ export function baueMonatKpis(
   vm: AggregierteMonatsdaten | null,
 ): KpiStripItem[] {
   const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null
-    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
+    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
     : vm ? `VM: ${fmt(vm.pv_erzeugung_kwh)} kWh` : undefined
 
   // Monatsergebnis = nach Betriebskosten (verhaltensgleich zu MonatsabschlussView
@@ -104,7 +104,7 @@ export function Delta({ a, b, inv = false, besser }: { a: number | null | undefi
     <span className={`text-xs font-medium px-1 py-0.5 rounded ${
       positive ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
     }`}>
-      {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(0)} %
+      {pct >= 0 ? '▲' : '▼'} {fmtCalc(Math.abs(pct), 0)} %
     </span>
   )
 }
@@ -131,7 +131,7 @@ export function VglChip({ prefix, lang, ist, val, unit, dec, inv, besser }: {
       <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
         positive ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
       }`}>
-        {prefix} {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(0)} %
+        {prefix} {pct >= 0 ? '▲' : '▼'} {fmtCalc(Math.abs(pct), 0)} %
       </span>
     </SimpleTooltip>
   )

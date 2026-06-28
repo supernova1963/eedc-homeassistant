@@ -178,15 +178,15 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
       `${row.h}:00`,
       ...allCols.map(c => {
         const v = row.vals[c.key]
-        return v != null ? v.toFixed(c.decimals) : ''
+        return v != null ? v.toFixed(c.decimals) : '' /* de-de-allow: CSV-Zellenwert (maschinenlesbar, kein Display) */
       }),
     ])
     // Summenzeile
     csvRows.push(['Σ/kWh', ...allCols.map(c => {
       const v = summen[c.key]
-      return v != null ? v.toFixed(c.decimals) : '—'
+      return v != null ? v.toFixed(c.decimals) : '—' /* de-de-allow: CSV-Zellenwert (maschinenlesbar, kein Display) */
     })])
-    exportToCSV(headers, csvRows, `energieprofil_${datum}.csv`)
+    exportToCSV(headers, csvRows, `energieprofil_${datum}.csv`) /* de-de-allow: Dateiname (ISO sortierbar) */
   }
 
   function SortIcon({ colKey }: { colKey: string }) {

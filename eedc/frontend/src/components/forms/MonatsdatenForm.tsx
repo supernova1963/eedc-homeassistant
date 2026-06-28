@@ -9,6 +9,7 @@ import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi } from '../../api'
 import type { Monatsdaten } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN } from '../../lib/fieldDefinitions'
+import { fmtZahl } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
 import { InvestitionSection } from './sections/InvestitionSection'
 import type { SonstigePosition } from './sections/types'
@@ -280,8 +281,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               speicherOhneDaten.forEach(speicher => {
                 const invIdStr = String(speicher.id)
                 if (initial[invIdStr]) {
-                  initial[invIdStr].ladung_kwh = (legacyLadung * anteil).toFixed(1)
-                  initial[invIdStr].entladung_kwh = (legacyEntladung * anteil).toFixed(1)
+                  initial[invIdStr].ladung_kwh = (legacyLadung * anteil).toFixed(1) /* de-de-allow: Input-Value (editierbares number-Feld, wird per parseFloat gelesen) */
+                  initial[invIdStr].entladung_kwh = (legacyEntladung * anteil).toFixed(1) /* de-de-allow: Input-Value (editierbares number-Feld, wird per parseFloat gelesen) */
                 }
               })
             }
@@ -633,13 +634,13 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               </label>
               <input
                 type="text"
-                value={`${berechneteWerte.pvErzeugung.toFixed(1)} kWh`}
+                value={`${fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh`}
                 readOnly
                 disabled
                 className="input bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Aus {hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: {berechneteWerte.pvErzeugung.toFixed(1)} kWh
+                Aus {hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
               </p>
             </div>
           ) : (
@@ -704,7 +705,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           />
           {(berechneteWerte.batterieLadung > 0 || berechneteWerte.batterieEntladung > 0) && (
             <div className="text-xs text-gray-500 dark:text-gray-400 -mt-2 ml-7">
-              Summe: Ladung {berechneteWerte.batterieLadung.toFixed(1)} kWh | Entladung {berechneteWerte.batterieEntladung.toFixed(1)} kWh
+              Summe: Ladung {fmtZahl(berechneteWerte.batterieLadung, 1)} kWh | Entladung {fmtZahl(berechneteWerte.batterieEntladung, 1)} kWh
             </div>
           )}
         </>

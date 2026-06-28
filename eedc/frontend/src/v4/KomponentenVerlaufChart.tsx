@@ -7,7 +7,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { CHART_HOVER_CURSOR, xAchse, yAchse } from '../lib'
+import { CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import { ChartTooltip, ChartLegende } from '../components/ui'
 
@@ -34,10 +34,10 @@ export function KomponentenVerlaufChart({
   return (
     <div className={tall ? 'h-[420px]' : 'h-72'}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <BarChart data={rows} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" />
-          <YAxis {...yAchse(schmal, 44)} unit={` ${einheit}`} />
+          <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+          <YAxis {...yAchse(schmal, 44)} tickFormatter={achsenTick} label={achsenEinheit(einheit)} />
           {/* ChartTooltip-SoT (S1: Viereck-Swatch, monochromer Wert); Serien-Name
               gekürzt, Wert gerundet mit Einheit. */}
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} nameFormatter={kuerze} />} />

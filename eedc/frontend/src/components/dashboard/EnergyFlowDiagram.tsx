@@ -4,6 +4,7 @@
 
 import { Zap, Sun, Home } from 'lucide-react'
 import { Card } from '../../components/ui'
+import { fmtZahl } from '../../lib'
 import type { CockpitUebersicht } from '../../api/cockpit'
 
 export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht }) {
@@ -19,7 +20,7 @@ export default function EnergyFlowDiagram({ data }: { data: CockpitUebersicht })
   const netz = Math.max(0, data.netzbezug_kwh)
   const hausSum = direkt + speicherEntl + netz || data.gesamtverbrauch_kwh
 
-  const fmt = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)} MWh` : `${v.toFixed(0)} kWh`
+  const fmt = (v: number) => v >= 1000 ? `${fmtZahl(v / 1000, 1)} MWh` : `${fmtZahl(v, 0)} kWh`
   const pct = (v: number, total: number) => total > 0 ? Math.round((v / total) * 100) : 0
 
   return (

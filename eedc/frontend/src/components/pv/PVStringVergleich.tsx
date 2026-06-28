@@ -16,7 +16,7 @@ import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } fro
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH } from '../../lib'
+import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 
 interface Props {
   anlageId: number
@@ -129,7 +129,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
       SOLL: Math.round(s.prognose_gesamt_kwh),
       IST: Math.round(s.ist_gesamt_kwh),
       deltaLabel: s.abweichung_gesamt_prozent != null
-        ? `${s.abweichung_gesamt_prozent >= 0 ? '+' : ''}${s.abweichung_gesamt_prozent.toFixed(0)} %`
+        ? `${s.abweichung_gesamt_prozent >= 0 ? '+' : ''}${fmtZahl(s.abweichung_gesamt_prozent, 0)} %`
         : '',
     }))
   }, [data])
@@ -148,26 +148,34 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
     }))
   }, [data, saisonModul])
 
-  const jahresFormatter = useMemo(() => {
-    if (jahresChartData.length === 0) return (val: number) => `${val} kWh`
+  // Achsen-Einheit + Tick getrennt: Einheit gehört an den Achsen-Titel (R9),
+  // Tick liefert nur die Zahl (de-DE). Schwelle bei 5000: ab dort MWh, damit
+  // "10.000 kWh" nicht abgeschnitten wird.
+  const jahresAchse = useMemo(() => {
+    if (jahresChartData.length === 0) return { einheit: 'kWh', tick: (val: number) => `${val}` }
     const maxVal = Math.max(...jahresChartData.flatMap(row =>
       Object.entries(row).filter(([k]) => k !== 'name').map(([, v]) => Number(v) || 0)
     ))
-    // Schwelle bei 5000: ab dort MWh, damit "10.000 kWh" nicht abgeschnitten wird
     const mwh = maxVal >= 5000
-    return (val: number) => mwh
-      ? `${(val / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MWh`
-      : `${val.toLocaleString('de-DE')} kWh`
+    return {
+      einheit: mwh ? 'MWh' : 'kWh',
+      tick: (val: number) => mwh
+        ? (val / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })
+        : val.toLocaleString('de-DE'),
+    }
   }, [jahresChartData])
 
-  const saisonalFormatter = useMemo(() => {
+  const saisonalAchse = useMemo(() => {
     const maxVal = saisonalChartData.length > 0
       ? Math.max(...saisonalChartData.flatMap(d => [d.SOLL, d['IST Ø']]))
       : 0
     const mwh = maxVal >= 5000
-    return (val: number) => mwh
-      ? `${(val / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} MWh`
-      : `${val.toLocaleString('de-DE')} kWh`
+    return {
+      einheit: mwh ? 'MWh' : 'kWh',
+      tick: (val: number) => mwh
+        ? (val / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })
+        : val.toLocaleString('de-DE'),
+    }
   }, [saisonalChartData])
 
   // Loading State
@@ -218,7 +226,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
     return (
       <span className={`flex items-center justify-end gap-1 ${colorClass}`}>
         {Icon && <Icon className="h-3 w-3" />}
-        {pct.toFixed(0)} %
+        {fmtZahl(pct, 0)} %
       </span>
     )
   }
@@ -239,7 +247,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard
           title="SOLL (Prognose)"
-          value={(data.prognose_gesamt_kwh / 1000).toFixed(1)}
+          value={fmtZahl(data.prognose_gesamt_kwh / 1000, 1)}
           unit="MWh"
           color="blue"
           icon={TrendingUp}
@@ -247,7 +255,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
         />
         <KPICard
           title="IST (Erzeugt)"
-          value={(data.ist_gesamt_kwh / 1000).toFixed(1)}
+          value={fmtZahl(data.ist_gesamt_kwh / 1000, 1)}
           unit="MWh"
           color="yellow"
           icon={Sun}
@@ -255,7 +263,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
         />
         <KPICard
           title="Abweichung"
-          value={`${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${data.abweichung_gesamt_prozent?.toFixed(1) ?? '0'}`}
+          value={`${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'}`}
           unit="%"
           color={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'green' : 'red'}
           icon={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? TrendingUp : TrendingDown}
@@ -265,7 +273,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
           value={`${data.erstes_jahr} - ${data.letztes_jahr}`}
           color="gray"
           icon={Calendar}
-          subtitle={`${data.anlagen_leistung_kwp.toFixed(1)} kWp`}
+          subtitle={`${fmtZahl(data.anlagen_leistung_kwp, 1)} kWp`}
         />
       </div>
 
@@ -301,8 +309,8 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               {embed ? (
                 <BarChart data={moduleVergleichData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={jahresFormatter} width={70} tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Achse (Modul-Name) */ />
+                  <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={70} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
                   {/* SOLL deckend (S4: Balken nicht transparent); als Prognose nur
@@ -313,10 +321,10 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
                   </Bar>
                 </BarChart>
               ) : (
-                <BarChart data={jahresChartData}>
+                <BarChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={jahresFormatter} width={80} tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+                  <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
                   {data.strings.map((s, idx) => {
@@ -362,10 +370,10 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
           )}
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={saisonalChartData}>
+              <ComposedChart data={saisonalChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis tickFormatter={saisonalFormatter} width={80} tick={{ fontSize: 10 }} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <YAxis tickFormatter={saisonalAchse.tick} label={achsenEinheit(saisonalAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />
                 <Area
@@ -405,12 +413,12 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               </div>
               {s.wechselrichter_name && <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>}
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.leistung_kwp.toFixed(1)}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{fmtZahl(s.leistung_kwp, 1)}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Ausrichtung</dt><dd className="text-gray-700 dark:text-gray-300">{s.ausrichtung || '-'}{s.neigung_grad != null && ` / ${s.neigung_grad}°`}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{(s.prognose_gesamt_kwh / 1000).toFixed(1)} MWh</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium tabular-nums" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>{(s.ist_gesamt_kwh / 1000).toFixed(1)} MWh</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent?.toFixed(1) ?? '0'}%</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.spezifischer_ertrag_kwh_kwp?.toFixed(0) ?? '-'}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium tabular-nums" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>{fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}</dd></div>
               </dl>
             </div>
           ))}
@@ -449,29 +457,29 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
                     )}
                   </td>
                   <td className="px-3 py-3 text-right text-gray-600 dark:text-gray-400">
-                    {s.leistung_kwp.toFixed(1)}
+                    {fmtZahl(s.leistung_kwp, 1)}
                   </td>
                   <td className="px-3 py-3 text-gray-600 dark:text-gray-400">
                     {s.ausrichtung || '-'}
                     {s.neigung_grad != null && ` / ${s.neigung_grad}°`}
                   </td>
                   <td className="px-3 py-3 text-right text-blue-600 dark:text-blue-400">
-                    {(s.prognose_gesamt_kwh / 1000).toFixed(1)} MWh
+                    {fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh
                   </td>
                   <td className="px-3 py-3 text-right font-medium" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>
-                    {(s.ist_gesamt_kwh / 1000).toFixed(1)} MWh
+                    {fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh
                   </td>
                   <td className={`px-3 py-3 text-right ${
                     (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                   }`}>
                     {(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
-                    {s.abweichung_gesamt_prozent?.toFixed(1) ?? '0'} %
+                    {s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %
                   </td>
                   <td className="px-3 py-3 text-right">
                     <PerformanceBadge ratio={s.performance_ratio_gesamt} />
                   </td>
                   <td className="px-3 py-3 text-right text-gray-600 dark:text-gray-400">
-                    {s.spezifischer_ertrag_kwh_kwp?.toFixed(0) ?? '-'}
+                    {s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}
                   </td>
                 </tr>
               ))}

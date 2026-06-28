@@ -14,6 +14,7 @@ import FeldMappingInput, { type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
 import LiveSensorSection, { LIVE_FIELDS } from './LiveSensorSection'
 import { useFeldHinweise } from '../../hooks/useFeldHinweise'
+import { fmtZahl } from '../../lib'
 
 interface WaermepumpeStepProps {
   investitionen: InvestitionInfo[]
@@ -124,7 +125,7 @@ export default function WaermepumpeStep({
               </div>
               {inv.cop && (
                 <div className="text-xs text-gray-500">
-                  JAZ: {inv.cop.toFixed(1)}
+                  JAZ: {fmtZahl(inv.cop, 1)}
                 </div>
               )}
             </div>

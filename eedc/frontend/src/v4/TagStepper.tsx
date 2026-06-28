@@ -9,6 +9,7 @@ import { useMemo } from 'react'
 import { ChevronFirst, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ChevronLast } from 'lucide-react'
 import type { TagRailEintrag } from './TagesRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
+import { fmtZahl } from '../lib'
 
 interface TagStepperProps {
   entries: TagRailEintrag[]
@@ -49,7 +50,7 @@ export function TagStepper({ entries, datum, onSelect, aeltesterTag, immerSichtb
   const eintraege: ZeitStepperEintrag[] = desc.map((e) => ({
     key: e.datum,
     label: label(e.datum),
-    wert: e.heute ? 'heute' : `${Math.round(e.pv_kwh)} kWh`,
+    wert: e.heute ? 'heute' : `${fmtZahl(e.pv_kwh, 0)} kWh`,
     aktiv: !!e.heute,
     gewaehlt: e.datum === datum,
     onClick: () => onSelect(e.datum),

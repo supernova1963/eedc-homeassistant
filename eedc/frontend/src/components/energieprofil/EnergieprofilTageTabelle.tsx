@@ -4,7 +4,7 @@ import { Button, Card, Alert, EmptyState } from '../ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../ui'
 import { DataLoadingState } from '../common'
 import { energieProfilApi, type TagesZusammenfassung, type VerfuegbarerMonat, type SerieInfo } from '../../api/energie_profil'
-import { MONAT_KURZ, PV_KOMPONENTEN_PREFIXE } from '../../lib'
+import { MONAT_KURZ, PV_KOMPONENTEN_PREFIXE, fmtZahl, formatDatum } from '../../lib'
 import ReaggregatePreviewModal from './ReaggregatePreviewModal'
 
 type ColumnGroupKey = 'peaks' | 'summen' | 'performance' | 'wetter' | 'preise' | 'komponenten'
@@ -156,9 +156,9 @@ function formatValue(val: number | null, format: ColumnConfig['format']): string
   switch (format) {
     case 'kwh':     return val.toLocaleString('de-DE', { maximumFractionDigits: 1 })
     case 'kw':      return val.toLocaleString('de-DE', { maximumFractionDigits: 2 })
-    case 'percent': return `${(val * 100).toFixed(1)} %`
-    case 'temp':    return `${val.toFixed(1)}°C`
-    case 'zyklen':  return val.toFixed(2)
+    case 'percent': return `${fmtZahl(val * 100, 1)} %`
+    case 'temp':    return `${fmtZahl(val, 1)}°C`
+    case 'zyklen':  return fmtZahl(val, 2)
     case 'stunden': {
       // Pro-Tag-Wert (immer ganze Stunden) → "20/24". Aggregat-Durchschnitt (z. B. 22,93) → "22h 56min".
       if (Number.isInteger(val)) return `${val}/24`
@@ -167,7 +167,7 @@ function formatValue(val: number | null, format: ColumnConfig['format']): string
       return `${h}h ${m}min`
     }
     case 'betriebsstunden': return `${val.toLocaleString('de-DE', { maximumFractionDigits: 1 })} h`
-    case 'ct':      return `${val.toFixed(1)} ct`
+    case 'ct':      return `${fmtZahl(val, 1)} ct`
     case 'int':     return val.toLocaleString('de-DE')
     default:        return String(val)
   }
@@ -233,12 +233,12 @@ function TageTabelleBody({ anlageId, daten, serien, loading, error, jahr, monat,
     if (!previewDatum) return
     if (result.stunden_mit_messdaten > 0) {
       setReagInfo({
-        message: `${previewDatum} reaggregiert: ${result.stunden_mit_messdaten}/24 Stunden mit Messdaten.`,
+        message: `${formatDatum(previewDatum)} reaggregiert: ${result.stunden_mit_messdaten}/24 Stunden mit Messdaten.`,
         tone: 'success',
       })
     } else {
       setReagInfo({
-        message: `${previewDatum} reaggregiert, aber 0/24 Stunden mit Messdaten — keine Snapshots in der DB und HA-Statistics nicht erreichbar.`,
+        message: `${formatDatum(previewDatum)} reaggregiert, aber 0/24 Stunden mit Messdaten — keine Snapshots in der DB und HA-Statistics nicht erreichbar.`,
         tone: 'warning',
       })
     }
@@ -415,7 +415,7 @@ function cellBg(val: number | null, max: number, tone: ColorTone): string | unde
   const norm = Math.min(1, Math.abs(val) / max)
   if (norm < 0.05) return undefined
   // Subtile Sättigung: max 35% Alpha, damit Text lesbar bleibt
-  return `rgba(${TONE_RGB[tone]}, ${(norm * 0.35).toFixed(2)})`
+  return `rgba(${TONE_RGB[tone]}, ${(norm * 0.35).toFixed(2)})` /* de-de-allow: CSS-rgba-Alpha (kein Display) */
 }
 
 function DataTable({
@@ -479,7 +479,7 @@ function DataTable({
                 className={negPreis ? 'border-l-4 border-l-amber-500' : ''}
               >
                 <TableCell>
-                  <span className="font-medium">{t.datum}</span>
+                  <span className="font-medium">{formatDatum(t.datum)}</span>
                   {negPreis && (
                     <span
                       className="ml-2 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400"
@@ -508,7 +508,7 @@ function DataTable({
                       type="button"
                       onClick={() => onReaggregate(t.datum)}
                       disabled={reagDatum !== null}
-                      title={`Tag ${t.datum} neu aggregieren`}
+                      title={`Tag ${formatDatum(t.datum)} neu aggregieren`}
                       className="p-1 text-gray-400 dark:text-gray-500 hover:text-primary-600 disabled:opacity-30 disabled:cursor-not-allowed"
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${isReag ? 'animate-spin' : ''}`} />

@@ -10,6 +10,7 @@ import { Info } from 'lucide-react'
 import type { LiveWetterResponse } from '../../api/liveDashboard'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import { SimpleTooltip } from '../ui/FormelTooltip'
+import { fmtZahl } from '../../lib'
 
 export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }: {
   prognose3Tage: SolarPrognoseTag[]
@@ -66,24 +67,24 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
               <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
               <div className="flex flex-col items-end">
                 <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}>
-                  {(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : tag.pv_ertrag_kwh).toFixed(1)}
+                  {fmtZahl(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : tag.pv_ertrag_kwh, 1)}
                   <span className="text-xs font-normal ml-0.5">kWh</span>
                 </span>
                 {verbleibenKwh != null && (
                   <span className={`text-[10px] ${verbleibenKwh > 0 ? 'text-lime-600 dark:text-lime-400' : 'text-emerald-600 dark:text-emerald-400'}`}
                         title={verbleibenKwh > 0
-                          ? `Noch ~${verbleibenKwh.toFixed(1)} kWh ausstehend`
-                          : `Prognose um ${Math.abs(verbleibenKwh).toFixed(1)} kWh übertroffen`}>
-                    {verbleibenKwh > 0 ? `~${verbleibenKwh.toFixed(1)} verbl.` : `+${Math.abs(verbleibenKwh).toFixed(1)} kWh über Progn.${prozentUeber != null ? ` (+${prozentUeber} %)` : ''}`}
+                          ? `Noch ~${fmtZahl(verbleibenKwh, 1)} kWh ausstehend`
+                          : `Prognose um ${fmtZahl(Math.abs(verbleibenKwh), 1)} kWh übertroffen`}>
+                    {verbleibenKwh > 0 ? `~${fmtZahl(verbleibenKwh, 1)} verbl.` : `+${fmtZahl(Math.abs(verbleibenKwh), 1)} kWh über Progn.${prozentUeber != null ? ` (+${prozentUeber} %)` : ''}`}
                   </span>
                 )}
               </div>
               <span className="text-right text-xs w-28">
                 {hasVmNm ? (
                   <>
-                    <span className="font-semibold text-amber-500">{tag.pv_ertrag_morgens_kwh!.toFixed(1)}</span>
+                    <span className="font-semibold text-amber-500">{fmtZahl(tag.pv_ertrag_morgens_kwh!, 1)}</span>
                     <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
-                    <span className="font-semibold text-yellow-500">{(tag.pv_ertrag_nachmittags_kwh ?? 0).toFixed(1)}</span>
+                    <span className="font-semibold text-yellow-500">{fmtZahl(tag.pv_ertrag_nachmittags_kwh ?? 0, 1)}</span>
                   </>
                 ) : null}
               </span>
@@ -100,7 +101,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                 </span>
                 <div className="flex flex-col items-end">
                   <span className="text-xs font-bold text-orange-500 dark:text-orange-400">
-                    ~{verbrPrognKwh.toFixed(1)}<span className="text-xs font-normal ml-0.5">kWh</span>
+                    ~{fmtZahl(verbrPrognKwh, 1)}<span className="text-xs font-normal ml-0.5">kWh</span>
                   </span>
                 </div>
                 <span className="w-28" />

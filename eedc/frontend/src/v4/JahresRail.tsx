@@ -5,7 +5,7 @@
  * {@link JahrStepper}. Granularität = Jahr (flache Liste, neueste zuerst).
  */
 import { useMemo } from 'react'
-import { DATENROLLE } from '../lib'
+import { DATENROLLE, fmtZahl } from '../lib'
 
 export interface JahrRailEintrag {
   jahr: number
@@ -24,7 +24,7 @@ export function JahresRail({ entries, jahr, onSelect }: JahresRailProps) {
   const maxPv = useMemo(() => Math.max(...entries.map((e) => e.pv_kwh), 1), [entries])
 
   const titel = (e: JahrRailEintrag) =>
-    e.laufend ? `${e.jahr} — läuft` : `${e.jahr}: ${Math.round(e.pv_kwh)} kWh`
+    e.laufend ? `${e.jahr} — läuft` : `${e.jahr}: ${fmtZahl(e.pv_kwh, 0)} kWh`
 
   return (
     <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none pr-1">
@@ -56,7 +56,7 @@ export function JahresRail({ entries, jahr, onSelect }: JahresRailProps) {
                   <span className={`text-xs tabular-nums ${
                     e.laufend ? 'text-emerald-500 dark:text-emerald-400' : sel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
                   }`}>
-                    {e.laufend ? 'läuft' : `${Math.round(e.pv_kwh)} kWh`}
+                    {e.laufend ? 'läuft' : `${fmtZahl(e.pv_kwh, 0)} kWh`}
                   </span>
                 </div>
                 <svg className="mt-0.5 w-full h-1" aria-hidden="true">

@@ -17,8 +17,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { fmtCalc, ChartLegende } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
@@ -76,20 +75,20 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                   index === 0 ? 'bg-primary-50 dark:bg-primary-900/30 ring-1 ring-primary-400' : ''
                 }`}
               >
-                <span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{tag.pv_ertrag_kwh.toFixed(1)}</span>
+                <span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 1)}</span>
                 <div className="flex flex-col justify-end items-center w-full" style={{ height: BALKEN_PX }}>
                   {hasVmNm && summe > 0 ? (
                     <>
-                      <div className="w-1/2 rounded-t" style={{ height: nmPx, backgroundColor: SOLAR_INTENSITAET[1] }} title={`Nachmittag ${nm.toFixed(1)} kWh`} />
-                      <div className="w-1/2" style={{ height: vmPx, backgroundColor: SOLAR_INTENSITAET[2] }} title={`Vormittag ${vm.toFixed(1)} kWh`} />
+                      <div className="w-1/2 rounded-t" style={{ height: nmPx, backgroundColor: SOLAR_INTENSITAET[1] }} title={`Nachmittag ${fmtCalc(nm, 1)} kWh`} />
+                      <div className="w-1/2" style={{ height: vmPx, backgroundColor: SOLAR_INTENSITAET[2] }} title={`Vormittag ${fmtCalc(vm, 1)} kWh`} />
                     </>
                   ) : (
-                    <div className="w-1/2 rounded-t" style={{ height: totalPx, backgroundColor: CHART_COLORS.erzeugung }} title={`${tag.pv_ertrag_kwh.toFixed(1)} kWh`} />
+                    <div className="w-1/2 rounded-t" style={{ height: totalPx, backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(tag.pv_ertrag_kwh, 1)} kWh`} />
                   )}
                 </div>
                 <WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" />
                 <span className="flex items-center gap-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  <Thermometer className="h-3 w-3" />{tag.temperatur_max_c?.toFixed(0) ?? '-'}°
+                  <Thermometer className="h-3 w-3" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
                 </span>
                 <span className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-tight">{formatDatum(tag.datum)}</span>
               </div>
@@ -149,15 +148,15 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
             <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800 ${index === 0 ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
               <td className="py-2 px-3 font-medium">{formatDatum(tag.datum)}</td>
               <td className="py-2 px-3"><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
-              <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{tag.pv_ertrag_kwh.toFixed(1)} kWh</td>
-              {hasVmNm && <td className="py-2 px-3 text-right text-amber-500 tabular-nums">{tag.pv_ertrag_morgens_kwh?.toFixed(1) ?? '-'}</td>}
-              {hasVmNm && <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{tag.pv_ertrag_nachmittags_kwh?.toFixed(1) ?? '-'}</td>}
-              <td className="py-2 px-3 text-right tabular-nums">{tag.gti_kwh_m2?.toFixed(2) ?? '-'} kWh/m²</td>
-              <td className="py-2 px-3 text-right tabular-nums">{tag.bewoelkung_prozent?.toFixed(0) ?? '-'} %</td>
-              <td className="py-2 px-3 text-right tabular-nums">{tag.temperatur_max_c?.toFixed(0) ?? '-'}°C</td>
+              <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{fmtZahl(tag.pv_ertrag_kwh, 1)} kWh</td>
+              {hasVmNm && <td className="py-2 px-3 text-right text-amber-500 tabular-nums">{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '-'}</td>}
+              {hasVmNm && <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '-'}</td>}
+              <td className="py-2 px-3 text-right tabular-nums">{tag.gti_kwh_m2 != null ? fmtZahl(tag.gti_kwh_m2, 2) : '-'} kWh/m²</td>
+              <td className="py-2 px-3 text-right tabular-nums">{tag.bewoelkung_prozent != null ? fmtZahl(tag.bewoelkung_prozent, 0) : '-'} %</td>
+              <td className="py-2 px-3 text-right tabular-nums">{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°C</td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {tag.niederschlag_mm != null && tag.niederschlag_mm > 0
-                  ? <span className="text-blue-500">{tag.niederschlag_mm.toFixed(1)} mm</span>
+                  ? <span className="text-blue-500">{fmtZahl(tag.niederschlag_mm, 1)} mm</span>
                   : '-'}
               </td>
               {hasKaskade && (
@@ -180,7 +179,6 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
 /** Monats-Balken PVGIS vs. Trend-korrigiert + Konfidenzband — IST LangfristTab-Chart. */
 export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognose }) {
   const [showKonfidenz, setShowKonfidenz] = useState(true)
-  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const chartData = prognose.monatswerte.map((m) => ({
     name: `${m.monat_name.substring(0, 3)} ${m.jahr}`,
@@ -196,13 +194,13 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
       </label>
       <div className="h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData}>
+          <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} className="text-gray-600 dark:text-gray-400" />
-            <YAxis tick={{ fontSize: 10 }} className="text-gray-600 dark:text-gray-400" label={achsenEinheit('kWh', schmal)} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} className="text-gray-600 dark:text-gray-400" /* achsen-allow: Zeit-/Kategorie-Achse */ />
+            <YAxis tick={{ fontSize: 10 }} className="text-gray-600 dark:text-gray-400" tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
             <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) => {
               if (name === 'Konfidenzband') return null
-              return `${value.toFixed(0)} kWh`
+              return `${fmtCalc(value, 0)} kWh`
             }} />} />
             <Legend content={<ChartLegende />} />
             {showKonfidenz && (
@@ -224,7 +222,7 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
 export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose }) {
   const pr = (v: number | null) =>
     v == null ? <span className="text-gray-400 dark:text-gray-500">-</span>
-    : <span className={v > 1 ? 'text-green-600' : v < 0.9 ? 'text-red-600' : 'text-gray-600 dark:text-gray-300'}>{(v * 100).toFixed(0)} %</span>
+    : <span className={v > 1 ? 'text-green-600' : v < 0.9 ? 'text-red-600' : 'text-gray-600 dark:text-gray-300'}>{fmtZahl(v * 100, 0)} %</span>
   return (
     <div className="space-y-2">
       <div className="overflow-x-auto">
@@ -243,10 +241,10 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
             {prognose.monatswerte.map((m) => (
               <tr key={`${m.jahr}-${m.monat}`} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-3 font-medium">{m.monat_name} {m.jahr}</td>
-                <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{m.pvgis_prognose_kwh.toFixed(0)} kWh</td>
-                <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{m.trend_korrigiert_kwh.toFixed(0)} kWh</td>
-                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{m.konfidenz_min_kwh.toFixed(0)} kWh</td>
-                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{m.konfidenz_max_kwh.toFixed(0)} kWh</td>
+                <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{fmtZahl(m.pvgis_prognose_kwh, 0)} kWh</td>
+                <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{fmtZahl(m.trend_korrigiert_kwh, 0)} kWh</td>
+                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(m.konfidenz_min_kwh, 0)} kWh</td>
+                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(m.konfidenz_max_kwh, 0)} kWh</td>
                 <td className="py-2 px-3 text-right tabular-nums">{pr(m.historische_performance_ratio)}</td>
               </tr>
             ))}
@@ -254,7 +252,7 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
           <tfoot>
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
               <td className="py-2 px-3">Gesamt</td>
-              <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{prognose.monatswerte.reduce((s, m) => s + m.pvgis_prognose_kwh, 0).toFixed(0)} kWh</td>
+              <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{fmtZahl(prognose.monatswerte.reduce((s, m) => s + m.pvgis_prognose_kwh, 0), 0)} kWh</td>
               <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{prognose.jahresprognose_kwh.toLocaleString('de-DE')} kWh</td>
               <td colSpan={3} />
             </tr>
@@ -311,9 +309,9 @@ export function DegradationsPrognose({ trend }: { trend: TrendAnalyseResponse })
               {grad === 0 ? (
                 <span className="text-green-600">Keine messbare Degradation</span>
               ) : grad < -1 ? (
-                <span className="text-red-600">{grad.toFixed(2)} % pro Jahr</span>
+                <span className="text-red-600">{fmtZahl(grad, 2)} % pro Jahr</span>
               ) : (
-                <span className="text-yellow-600 dark:text-yellow-400">{grad.toFixed(2)} % pro Jahr</span>
+                <span className="text-yellow-600 dark:text-yellow-400">{fmtZahl(grad, 2)} % pro Jahr</span>
               )}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">{d.hinweis}</p>
@@ -394,19 +392,19 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
               <div>
                 <p className="text-gray-500 dark:text-gray-400">Effizienz-Ausblick (JAZ)</p>
                 <p className="flex items-center gap-1.5">
-                  <span className="font-semibold tabular-nums">{z.durchschnitt_cop.toFixed(2)}</span>
+                  <span className="font-semibold tabular-nums">{fmtCalc(z.durchschnitt_cop, 2)}</span>
                   <span className={`inline-flex items-center gap-0.5 text-xs ${trendFarbe}`}>
                     <TrendIcon className="h-3.5 w-3.5" /> {t.richtung}
                   </span>
                 </p>
                 {t.recent != null && t.prior != null && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">zuletzt {t.recent.toFixed(2)} vs. früher {t.prior.toFixed(2)}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">zuletzt {fmtZahl(t.recent, 2)} vs. früher {fmtZahl(t.prior, 2)}</p>
                 )}
               </div>
               <div>
                 <p className="text-gray-500 dark:text-gray-400">Erwartete kommende Heizsaison (Ø)</p>
                 {avgStrom != null && avgWaerme != null ? (
-                  <p className="tabular-nums">~{(avgStrom * 6).toFixed(0)} kWh Strom · ~{(avgWaerme * 6).toFixed(0)} kWh Wärme</p>
+                  <p className="tabular-nums">~{fmtZahl(avgStrom * 6, 0)} kWh Strom · ~{fmtZahl(avgWaerme * 6, 0)} kWh Wärme</p>
                 ) : <p className="text-gray-400 dark:text-gray-500">noch zu wenig Heizsaison-Daten</p>}
                 <p className="text-xs text-gray-400 dark:text-gray-500">Ø aus {heiz.length} erfassten Heizmonaten × 6</p>
               </div>

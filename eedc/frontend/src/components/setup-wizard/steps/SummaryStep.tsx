@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../../../types'
 import type { GespeichertePrognose } from '../../../api/pvgis'
+import { fmtZahl } from '../../../lib'
 
 interface SummaryStepProps {
   anlage: Anlage | null
@@ -223,7 +224,7 @@ export default function SummaryStep({
                   {Math.round(pvgisPrognose.jahresertrag_kwh).toLocaleString('de-DE')} kWh/Jahr
                 </div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {pvgisPrognose.spezifischer_ertrag_kwh_kwp.toFixed(0)} kWh/kWp
+                  {fmtZahl(pvgisPrognose.spezifischer_ertrag_kwh_kwp, 0)} kWh/kWp
                   <span className="text-green-600 dark:text-green-400 ml-2">
                     (PVGIS-Daten gespeichert)
                   </span>

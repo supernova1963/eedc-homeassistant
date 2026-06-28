@@ -27,7 +27,7 @@ import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, Ch
 import ChartTooltip from '../ui/ChartTooltip'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
-import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2 } from '../../lib'
+import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
 
 const typIcons: Record<string, React.ElementType> = {
   'e-auto': Car,
@@ -229,10 +229,10 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Amortisationsverlauf</h3>
       <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={vm.amortisationData}>
+          <LineChart data={vm.amortisationData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis dataKey="jahr" label={{ value: 'Jahre', position: 'insideBottom', offset: -2, fontSize: 10 }} tick={{ fontSize: 10 }} height={36} />
-            <YAxis tickFormatter={geldTick} unit=" €" tick={{ fontSize: 10 }} width={70} />
+            <XAxis dataKey="jahr" tickFormatter={geldTick} tick={{ fontSize: 10 }} /* achsen-allow: Jahres-Index (0–30), Einheit „Jahre" steht im Break-Even-Text + KPI; Achsen-Label kollidierte mit Legende (#29-15) */ />
+            <YAxis tickFormatter={geldTick} tick={{ fontSize: 10 }} width={70} label={achsenEinheit('€')} />
             <Tooltip content={<ChartTooltip labelFormatter={(label) => `Jahr ${label}`} unit="€" />} />
             <Legend content={<ChartLegende />} />
             <Line type="monotone" dataKey="kumulierte_einsparung" name="Kumulierte Einsparung" stroke={GELD_COLORS.ersparnis} strokeWidth={2} dot={false} />
@@ -251,23 +251,27 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
 
 /** Block ③a — Einsparungen nach Investitionstyp (Pie). */
 export function RoiTypPie({ vm }: { vm: RoiAnalyseVM }) {
+  const daten = vm.einsparungenByTyp
+  const summe = daten.reduce((s, d) => s + d.value, 0)
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Einsparungen nach Typ</h3>
-      <div className="h-80">
+      <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
+            {/* Keine Pie-Außenlabels: die ragten mit `labelLine` über den Container
+                und wurden auf schmalen Screens abgeschnitten (detLAN 2026-06-28).
+                Name + % stehen jetzt in der umbruchfähigen Legende darunter — auf
+                jeder Breite vollständig sichtbar. */}
             <Pie
-              data={vm.einsparungenByTyp}
+              data={daten}
               dataKey="value"
               nameKey="name"
               cx="50%"
               cy="50%"
               outerRadius={100}
-              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)} %`}
-              labelLine={true}
             >
-              {vm.einsparungenByTyp.map((entry, index) => (
+              {daten.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.color} />
               ))}
             </Pie>
@@ -275,6 +279,15 @@ export function RoiTypPie({ vm }: { vm: RoiAnalyseVM }) {
           </PieChart>
         </ResponsiveContainer>
       </div>
+      <ul className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
+        {daten.map((d) => (
+          <li key={d.name} className="flex items-center gap-1.5 text-sm">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: d.color }} />
+            <span className="text-gray-700 dark:text-gray-300">{d.name}</span>
+            <span className="text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(summe > 0 ? (d.value / summe) * 100 : 0, 0)} %</span>
+          </li>
+        ))}
+      </ul>
     </Card>
   )
 }
@@ -289,8 +302,8 @@ export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
           <BarChart data={vm.investitionenChart} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
             {/* D9-F: Domain an Daten klemmen (Werte ≥ 0 → kein leerer Negativbereich) + € als Einheit. */}
-            <XAxis type="number" domain={[0, 'auto']} tickFormatter={geldTick} unit=" €" tick={{ fontSize: 10 }} />
-            <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} />
+            <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+            <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Investitionen) */ />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => name === 'Relevante Kosten' ? `${fmtZahl(value, 0)} €` : `${fmtZahl(value, 0)} €/Jahr`} />} />
             <Legend content={<ChartLegende />} />
             <Bar dataKey="kosten" fill={GELD_COLORS.kosten} name="Relevante Kosten" />

@@ -7,6 +7,16 @@
  */
 import type { ReactNode } from 'react'
 
+/**
+ * STEUER_H — EINE einheitliche Höhe (32 px) für ALLE Bedien-Elemente einer
+ * Filter-/Toolbar-Leiste (Chips, Toggle-Pillen, `<input>`, `<select>`). Behebt
+ * detLAN #27 Punkt 2 „unterschiedliche Höhen in einer Reihe" (Chips waren 24 px,
+ * Inputs 32 px, Selects 39 px) ohne die D7-7-Aktions-Buttons (44 px) anzufassen.
+ * Pillen/Buttons brauchen zusätzlich `inline-flex items-center`, `.input`-Felder
+ * `py-0`, damit die feste Höhe greift.
+ */
+export const STEUER_H = 'h-8'
+
 export interface ZeitChip {
   label: string
   /** liefert [von, bis] im passenden Format (YYYY-MM bzw. YYYY-MM-DD). */
@@ -41,7 +51,7 @@ export function WerkbankZeitraum({
               key={c.label}
               type="button"
               onClick={() => { const [v, b] = c.range(); onRange(v, b) }}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2.5 ${STEUER_H} inline-flex items-center text-xs font-medium rounded-md transition-colors ${
                 c.aktiv
                   ? 'bg-primary-600 text-white'
                   : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -56,10 +66,10 @@ export function WerkbankZeitraum({
       <div className="flex items-center gap-1.5 text-sm">
         <span className="text-xs text-gray-500 dark:text-gray-400">Zeitraum</span>
         <input type={inputType} value={von} max={bis || undefined}
-          onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className="input w-auto py-1 text-sm" />
+          onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className={`input w-auto ${STEUER_H} py-0 text-sm`} />
         <span className="text-gray-400">–</span>
         <input type={inputType} value={bis} min={von || undefined}
-          onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className="input w-auto py-1 text-sm" />
+          onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className={`input w-auto ${STEUER_H} py-0 text-sm`} />
       </div>
 
       {vergleichSlot ? vergleichSlot : onVergleich && (
@@ -67,11 +77,11 @@ export function WerkbankZeitraum({
           <span className="text-xs text-gray-500 dark:text-gray-400">Vergleich</span>
           <div className="inline-flex rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
             <button type="button" onClick={() => onVergleich(false)}
-              className={`px-2.5 py-1 text-xs font-medium transition-colors ${!vergleich ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              className={`px-2.5 ${STEUER_H} inline-flex items-center text-xs font-medium transition-colors ${!vergleich ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
               Aus
             </button>
             <button type="button" onClick={() => onVergleich(true)}
-              className={`px-2.5 py-1 text-xs font-medium transition-colors ${vergleich ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              className={`px-2.5 ${STEUER_H} inline-flex items-center text-xs font-medium transition-colors ${vergleich ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
               Vorjahr
             </button>
           </div>
@@ -111,7 +121,7 @@ export function VergleichLeisteTag({
       <div className="flex flex-wrap items-center gap-1">
         {chips.map((c) => (
           <button key={c.k} type="button" onClick={() => onModus(c.k)}
-            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+            className={`px-2.5 ${STEUER_H} inline-flex items-center text-xs font-medium rounded-md transition-colors ${
               modus === c.k
                 ? 'bg-primary-600 text-white'
                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -122,7 +132,7 @@ export function VergleichLeisteTag({
       </div>
       {modus === 'periodeImJahr' && (
         <select value={jahr} onChange={(e) => onJahr(Number(e.target.value))}
-          aria-label="Vergleichsjahr" className="input w-auto py-1 text-sm">
+          aria-label="Vergleichsjahr" className={`input w-auto ${STEUER_H} py-0 text-sm`}>
           {jahre.map((j) => <option key={j} value={j}>{j}</option>)}
         </select>
       )}

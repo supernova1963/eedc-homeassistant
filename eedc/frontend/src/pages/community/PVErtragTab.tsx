@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useChartTheme } from '../../context/ThemeContext'
-import { MONAT_KURZ, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL, ACHSEN_TICK } from '../../lib'
+import { MONAT_KURZ, STATUS_COLORS, EIGENE_SERIE_FARBEN, SERIE_NEUTRAL, ACHSEN_TICK, ACHSEN_MARGIN_TOP, achsenEinheit, achsenTick } from '../../lib'
 import {
   Sun,
   TrendingUp,
@@ -221,7 +221,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
 
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData}>
+              <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="name"
@@ -230,15 +230,12 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                   angle={-45}
                   textAnchor="end"
                   height={60}
+                  /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */
                 />
                 <YAxis
                   tick={ACHSEN_TICK}
-                  label={{
-                    value: 'kWh/kWp',
-                    angle: -90,
-                    position: 'insideLeft',
-                    style: { fill: achsen.achse, fontSize: 12 },
-                  }}
+                  tickFormatter={achsenTick}
+                  label={achsenEinheit('kWh/kWp')}
                 />
                 <Tooltip
                   content={<ChartTooltip
@@ -365,7 +362,7 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                 anzahl: bin.anzahl,
                 isOwn: benchmark.benchmark.spez_ertrag_anlage >= bin.von &&
                        benchmark.benchmark.spez_ertrag_anlage < bin.bis,
-              }))}>
+              }))} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
                 <XAxis
                   dataKey="range"
@@ -373,8 +370,9 @@ export default function PVErtragTab({ benchmark, benchmarkLoading, benchmarkErro
                   angle={-45}
                   textAnchor="end"
                   height={60}
+                  /* achsen-allow: Kategorie-Achse (Ertragsklassen kWh/kWp) */
                 />
-                <YAxis tick={ACHSEN_TICK} />
+                <YAxis tick={ACHSEN_TICK} tickFormatter={achsenTick} label={achsenEinheit('Anlagen')} />
                 <Tooltip
                   content={<ChartTooltip
                     formatter={(value) => `${value} Anlagen`}

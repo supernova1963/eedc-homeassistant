@@ -42,7 +42,7 @@ export default function SparklineChart({ monatsdaten, selectedYear }: {
           <BarChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
             {/* #241 NongJoWo: XAxis (hidden) damit der Tooltip-Header
                 den Monatsnamen zeigt statt den Bar-Index. */}
-            <XAxis dataKey="name" hide tick={{ fontSize: 10 }} />
+            <XAxis dataKey="name" hide tick={{ fontSize: 10 }} /* achsen-allow: Sparkline ohne Achsenbeschriftung */ />
             <Tooltip {...eedcTooltipProps({ unit: 'kWh' })} />
             <Bar dataKey="kwh" name="PV-Ertrag" radius={[2, 2, 0, 0]}>
               {chartData.map((entry, i) => (

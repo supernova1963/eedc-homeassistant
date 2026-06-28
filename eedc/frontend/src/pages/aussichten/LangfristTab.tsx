@@ -6,8 +6,7 @@ import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-rea
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, LangfristPrognose } from '../../api/aussichten'
-import { CHART_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { CHART_COLORS, SOLL_IST_COLORS, PROGNOSE_DASH, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import {
   ResponsiveContainer,
@@ -42,7 +41,6 @@ export default function LangfristTab({ anlageId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [monate, setMonate] = useState(12)
   const [showKonfidenz, setShowKonfidenz] = useState(true)
-  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
 
   useEffect(() => {
@@ -155,7 +153,7 @@ export default function LangfristTab({ anlageId }: Props) {
       <Card className="p-4">
         <div className="h-[350px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData}>
+            <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="name"
@@ -164,11 +162,13 @@ export default function LangfristTab({ anlageId }: Props) {
                 textAnchor="end"
                 height={60}
                 className="text-gray-600 dark:text-gray-400"
+                /* achsen-allow: Zeit-/Kategorie-Achse */
               />
               <YAxis
                 tick={{ fontSize: 10 }}
+                tickFormatter={achsenTick}
                 className="text-gray-600 dark:text-gray-400"
-                label={achsenEinheit('kWh', schmal)}
+                label={achsenEinheit('kWh')}
               />
               <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => {
                   if (name === 'Konfidenzband') return null

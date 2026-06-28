@@ -11,8 +11,7 @@ import {
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
 import { Card, Alert, KPICard, ChartLegende } from '../../components/ui'
-import { COLORS, CHART_COLORS, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
 
@@ -39,12 +38,12 @@ export function maxPrognoseDatum(): string {
 
 function fmt1(v: number | null | undefined): string {
   if (v == null) return '—'
-  return v.toFixed(1)
+  return fmtZahl(v, 1)
 }
 
 function fmt0(v: number | null | undefined): string {
   if (v == null) return '—'
-  return v.toFixed(0)
+  return fmtZahl(v, 0)
 }
 
 const VERBRAUCH_BASIS_LABELS: Record<string, string> = {
@@ -137,7 +136,6 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
 // ── Chart-Karte (KPIs + Verlauf + Meta) ──────────────────────────────────────
 
 export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
-  const schmal = useSchmaleAchse()
   const achsen = useChartTheme()
   const hatSpeicher = daten.speicher_kapazitaet_kwh != null
   const chartDaten = useMemo(() => daten.stunden.map(s => ({
@@ -179,12 +177,12 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
           <span>Verbrauch: {VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis} ({daten.daten_tage} Tage)</span>
         </div>
         <ResponsiveContainer width="100%" height={360}>
-          <ComposedChart data={chartDaten} margin={{ top: 5, right: hatSpeicher ? 50 : 10, left: -10, bottom: 5 }}>
+          <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: hatSpeicher ? 50 : 10, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
-            <YAxis yAxisId="kw" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v.toFixed(1)}`} label={achsenEinheit('kW', schmal)} />
+            <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+            <YAxis yAxisId="kw" tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
             {hatSpeicher && (
-              <YAxis yAxisId="soc" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v} %`} label={achsenEinheit('SoC', schmal, 'rechts')} />
+              <YAxis yAxisId="soc" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             )}
             <ReferenceLine yAxisId="kw" y={0} stroke={achsen.referenz} strokeWidth={1.5} />
             <Tooltip content={<PrognoseTooltip hatSpeicher={hatSpeicher} />} />
@@ -229,7 +227,7 @@ function PrognoseTooltip({ active, payload, label }: {
           <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: p.color }} />
           <span className="text-gray-300">{p.name}:</span>
           <span className="font-medium text-white">
-            {p.name === 'SoC' ? `${p.value.toFixed(1)} %` : `${Math.abs(p.value).toFixed(2)} kW`}
+            {p.name === 'SoC' ? `${fmtZahl(p.value, 1)} %` : `${fmtZahl(Math.abs(p.value), 2)} kW`}
           </span>
         </div>
       ))}
@@ -269,24 +267,24 @@ export function PrognoseTabelle({ daten }: { daten: TagesPrognose }) {
             {daten.stunden.map(s => (
               <tr key={s.stunde} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
                 <td className="px-3 py-1.5 font-medium text-gray-600 dark:text-gray-300 tabular-nums">{s.stunde}:00</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{s.pv_kw.toFixed(2)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{s.verbrauch_kw.toFixed(2)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{fmtZahl(s.pv_kw, 2)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtZahl(s.verbrauch_kw, 2)}</td>
                 <td className={`px-2 py-1.5 text-right tabular-nums font-medium ${
                   s.netto_kw >= 0
                     ? 'text-green-600 dark:text-green-400'
                     : 'text-red-600 dark:text-red-400'
                 }`}>
-                  {s.netto_kw >= 0 ? '+' : ''}{s.netto_kw.toFixed(2)}
+                  {s.netto_kw >= 0 ? '+' : ''}{fmtZahl(s.netto_kw, 2)}
                 </td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-red-600 dark:text-red-400">
-                  {s.netzbezug_kw > 0.005 ? s.netzbezug_kw.toFixed(2) : <Dash />}
+                  {s.netzbezug_kw > 0.005 ? fmtZahl(s.netzbezug_kw, 2) : <Dash />}
                 </td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-cyan-600 dark:text-cyan-400">
-                  {s.einspeisung_kw > 0.005 ? s.einspeisung_kw.toFixed(2) : <Dash />}
+                  {s.einspeisung_kw > 0.005 ? fmtZahl(s.einspeisung_kw, 2) : <Dash />}
                 </td>
                 {hatSpeicher && (
                   <td className="px-2 py-1.5 text-right tabular-nums text-blue-600 dark:text-blue-400">
-                    {s.soc_prozent != null ? s.soc_prozent.toFixed(1) : <Dash />}
+                    {s.soc_prozent != null ? fmtZahl(s.soc_prozent, 1) : <Dash />}
                   </td>
                 )}
               </tr>
@@ -295,17 +293,17 @@ export function PrognoseTabelle({ daten }: { daten: TagesPrognose }) {
           <tfoot>
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold sticky bottom-0">
               <td className="px-3 py-2 text-gray-500 dark:text-gray-400">kWh</td>
-              <td className="px-2 py-2 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{daten.pv_summe_kwh.toFixed(1)}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{daten.verbrauch_summe_kwh.toFixed(1)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{fmtZahl(daten.pv_summe_kwh, 1)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtZahl(daten.verbrauch_summe_kwh, 1)}</td>
               <td className={`px-2 py-2 text-right tabular-nums ${
                 daten.pv_summe_kwh - daten.verbrauch_summe_kwh >= 0
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-red-600 dark:text-red-400'
               }`}>
-                {(daten.pv_summe_kwh - daten.verbrauch_summe_kwh).toFixed(1)}
+                {fmtZahl(daten.pv_summe_kwh - daten.verbrauch_summe_kwh, 1)}
               </td>
-              <td className="px-2 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{daten.netzbezug_summe_kwh.toFixed(1)}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-cyan-600 dark:text-cyan-400">{daten.einspeisung_summe_kwh.toFixed(1)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{fmtZahl(daten.netzbezug_summe_kwh, 1)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-cyan-600 dark:text-cyan-400">{fmtZahl(daten.einspeisung_summe_kwh, 1)}</td>
               {hatSpeicher && <td />}
             </tr>
           </tfoot>

@@ -3,6 +3,7 @@
  */
 
 import { Card, FormelTooltip } from '../../components/ui'
+import { fmtZahl } from '../../lib'
 
 export default function RingGaugeCard({ title, value, subtitle, color, formel, berechnung, ergebnis }: {
   title: string; value: number; subtitle?: string; color: string
@@ -22,7 +23,7 @@ export default function RingGaugeCard({ title, value, subtitle, color, formel, b
         transform="rotate(-90 40 40)" />
       <text x="40" y="45" textAnchor="middle" fontSize="15" fontWeight="bold"
         fill={color}>
-        {value.toFixed(0)}
+        {fmtZahl(value, 0)}
       </text>
     </svg>
   )

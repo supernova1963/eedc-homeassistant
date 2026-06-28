@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Sigma, RefreshCw } from 'lucide-react'
 import { Card } from '../../components/ui'
+import { fmtZahl } from '../../lib'
 import {
   aggregateKorrekturprofil,
   getProfile,
@@ -124,7 +125,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
           `${res.bins_sonnenstand_wetter ?? 0} Bins (mit Wetter), ` +
           `${res.bins_stunde ?? 0} Zellen (Saison), ` +
           `${res.bins_sonnenstand ?? 0} Bins (Sonnenstand), ` +
-          `Skalar ${res.skalar?.toFixed(3) ?? '—'}`
+          `Skalar ${fmtZahl(res.skalar, 3)}`
         )
         await reload()
       } else {
@@ -258,7 +259,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
 
       {nurSkalar && (
         <div className="text-xs text-gray-500 mb-3 p-2 rounded bg-blue-50 dark:bg-blue-900/20">
-          Skalar-Faktor (×{skalar?.faktor_skalar?.toFixed(3)}) ist aktiv und
+          Skalar-Faktor (×{fmtZahl(skalar?.faktor_skalar, 3)}) ist aktiv und
           wirkt im Live-Pfad. Sonnenstand- und Wetter-Bins brauchen
           Day-Ahead-Stundenprofile (`pv_prognose_stundenprofil`), die seit
           v3.26.0 täglich gesammelt werden — die Heatmap-Tabelle füllt sich
@@ -326,11 +327,11 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
                             }}
                             title={
                               f != null
-                                ? `Az ${az}-${az + STEP}°, El ${el}-${el + STEP}°: ×${f.toFixed(2)} (n=${n})`
+                                ? `Az ${az}-${az + STEP}°, El ${el}-${el + STEP}°: ×${fmtZahl(f, 2)} (n=${n})`
                                 : ''
                             }
                           >
-                            {f != null ? f.toFixed(2) : ''}
+                            {f != null ? fmtZahl(f, 2) : ''}
                           </td>
                         )
                       })}
@@ -378,11 +379,11 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
                             }}
                             title={
                               f != null
-                                ? `${MONAT_KURZ[m]}, Slot ${h} (${h - 1}–${h} Uhr): ×${f.toFixed(2)} (n=${n})`
+                                ? `${MONAT_KURZ[m]}, Slot ${h} (${h - 1}–${h} Uhr): ×${fmtZahl(f, 2)} (n=${n})`
                                 : ''
                             }
                           >
-                            {f != null ? f.toFixed(2) : ''}
+                            {f != null ? fmtZahl(f, 2) : ''}
                           </td>
                         )
                       })}
@@ -427,7 +428,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
             <div>
               <div className="text-gray-400 dark:text-gray-500">Skalar (Fallback)</div>
               <div className="font-mono">
-                {skalar?.faktor_skalar != null ? skalar.faktor_skalar.toFixed(3) : '—'}
+                {skalar?.faktor_skalar != null ? fmtZahl(skalar.faktor_skalar, 3) : '—'}
               </div>
             </div>
           </div>

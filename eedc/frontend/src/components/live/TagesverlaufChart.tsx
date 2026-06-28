@@ -18,8 +18,7 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
-import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, achsenEinheit } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -41,7 +40,6 @@ interface RenderSerie {
 
 export default function TagesverlaufChart({ serien, punkte, uebersprungen }: TagesverlaufChartProps) {
   const achsen = useChartTheme()
-  const schmal = useSchmaleAchse()
   const [hidden, setHidden] = useState<Set<string>>(new Set())
 
   const toggleSerie = useCallback((origKey: string) => {
@@ -140,7 +138,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
     <div>
       <div className="flex items-baseline gap-2 mb-3">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-          Tagesverlauf (kW)
+          Tagesverlauf
         </h3>
         <span className="text-[10px] text-gray-400 dark:text-gray-500">
           10-Min-Durchschnitte aus HA-History
@@ -156,20 +154,21 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
         <span>▼ Senken (Verbrauch, Einspeisung)</span>
       </div>
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={chartData} margin={{ top: 5, right: overlaySerien.length > 0 ? 10 : 10, left: -10, bottom: 5 }}>
+        <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: overlaySerien.length > 0 ? 10 : 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="zeit"
             tick={{ fontSize: 10 }}
             className="fill-gray-500 dark:fill-gray-400"
             interval="preserveStartEnd"
+            /* achsen-allow: Zeit-/Kategorie-Achse */
           />
           <YAxis
             yAxisId="left"
             tick={{ fontSize: 10 }}
             className="fill-gray-500 dark:fill-gray-400"
-            tickFormatter={(v: number) => v.toFixed(1)}
-            label={hauptEinheit ? achsenEinheit(hauptEinheit, schmal) : undefined}
+            tickFormatter={achsenTick}
+            label={hauptEinheit ? achsenEinheit(hauptEinheit) : undefined}
           />
           {overlaySerien.length > 0 && (
             <YAxis
@@ -177,8 +176,8 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
               orientation="right"
               tick={{ fontSize: 10 }}
               className="fill-gray-400 dark:fill-gray-500"
-              tickFormatter={(v: number) => v.toFixed(0)}
-              label={achsenEinheit(overlaySerien[0].einheit || '', schmal, 'rechts')}
+              tickFormatter={achsenTick}
+              label={achsenEinheit(overlaySerien[0].einheit || '', 'rechts')}
             />
           )}
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip
@@ -196,8 +195,8 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
               if (Math.abs(value) < 0.001) return null
               // Overlay-Serien: eigene Einheit
               const overlay = overlaySerien.find((s) => s.key === name)
-              if (overlay) return `${value.toFixed(1)} ${overlay.einheit || ''}`
-              const absVal = Math.abs(value).toFixed(2)
+              if (overlay) return `${fmtZahl(value, 1)} ${overlay.einheit || ''}`
+              const absVal = fmtZahl(Math.abs(value), 2)
               const richtung = value > 0 ? '▲' : '▼'
               return `${richtung} ${absVal} kW`
             }}

@@ -4,6 +4,8 @@
  * Extrahiert aus Dashboard.tsx. Verwendet strokeDasharray für den Füllgrad.
  */
 
+import { fmtZahl } from '../../lib'
+
 interface RingGaugeProps {
   /** Wert in Prozent (0–100). */
   value: number
@@ -61,7 +63,7 @@ export default function RingGauge({
         fontWeight="bold"
         fill={color}
       >
-        {label ?? clamped.toFixed(0)}
+        {label ?? fmtZahl(clamped, 0)}
       </text>
     </svg>
   )

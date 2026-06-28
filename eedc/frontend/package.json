@@ -11,7 +11,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check:design": "node scripts/check-design-konformitaet.mjs"
+    "check:design": "node scripts/check-design-konformitaet.mjs",
+    "check:achsen": "node scripts/check-achsen.mjs",
+    "check:de-de": "node scripts/check-de-de.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

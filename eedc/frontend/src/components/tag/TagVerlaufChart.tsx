@@ -13,7 +13,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Card, ChartLegende, eedcTooltipProps } from '../ui'
-import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, HILFSLINIE_DASH, AREA_FILL_OPACITY } from '../../lib'
+import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, HILFSLINIE_DASH, AREA_FILL_OPACITY, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -78,15 +78,15 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
         <span>▼ Senken (Verbrauch, Einspeisung)</span>
       </div>
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={chartDaten} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+        <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
-          <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} />
+          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse (Stunde) */ />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
           <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
           <Tooltip {...eedcTooltipProps({
             unit: ' kW', decimals: 2,
             nameFormatter: (name) => chartSerien.find(cs => cs.dataKey === name)?.label ?? name,
-            formatter: (v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(2)} kW`,
+            formatter: (v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${fmtZahl(Math.abs(v), 2)} kW`,
           })} />
           <Legend content={<ChartLegende
             formatter={(value) => chartSerien.find(cs => cs.dataKey === value)?.label ?? value}

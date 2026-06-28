@@ -13,7 +13,7 @@ import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPu
 import { EnergieprofilMonat } from './EnergieprofilMonat'
 import { EnergieprofilPrognose } from './EnergieprofilPrognose'
 import {
-  DEDIZIERTE_KATEGORIEN, WOCHENTAG_FARBEN,
+  DEDIZIERTE_KATEGORIEN, WOCHENTAG_FARBEN, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
@@ -356,10 +356,10 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
             {' '}· Zeitraum: {von} – {bis}
           </div>
           <ResponsiveContainer width="100%" height={320}>
-            <ComposedChart data={chartDaten} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
-              <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${v}`} />
+              <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
               <Tooltip content={<ChartTooltip unit=" kW" decimals={2} />} />
               <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
               {GRUPPEN.filter(g => aktivGruppen.includes(g.label)).map(g => (
