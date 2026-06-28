@@ -21,6 +21,7 @@ Top-Level-Spalten vorhanden waren.
 
 Dieser Helper vereinheitlicht das Lesen über alle drei Pfade.
 """
+from dataclasses import dataclass
 from typing import Any
 
 # Mapping für Ausrichtung-Strings → Azimut-Grad (EEDC/PVGIS-Konvention:
@@ -92,6 +93,41 @@ def get_pv_azimut(inv: Any, default: int = 0) -> int:
     elif isinstance(param_val, (int, float)):
         return int(param_val)
     return default
+
+
+@dataclass(frozen=True)
+class Orientierungsgruppe:
+    """Eine nach (Neigung, Ausrichtung) zusammengefasste PV-String-Gruppe."""
+
+    neigung: int       # Grad (0=horizontal, 90=vertikal)
+    ausrichtung: int   # Azimut-Grad (0=Süd, -90=Ost, 90=West, 180=Nord)
+    kwp: float         # Summe der kWp aller Module dieser Orientierung
+
+
+def orientierungs_gruppen(invs: Any) -> list[Orientierungsgruppe]:
+    """Gruppiert aktive PV-/BKW-Investitionen nach Orientierung (SoT).
+
+    Der Multi-String-Fan-out (live_wetter, prognose_kanon) fragt OpenMeteo pro
+    Orientierungsgruppe getrennt ab und kombiniert kWp-gewichtet — eine
+    Ost/West-Anlage liefert sonst (über eine gemittelte Ausrichtung) einen
+    systematisch falschen Tagesgang.
+
+    Liest kWp/Neigung/Azimut konsistent über die ``get_pv_*``-Helper (Top-Level-
+    Spalte → ``parameter``-JSON → Default). Module mit kWp ≤ 0 entfallen.
+    Reihenfolge: kWp-stärkste Gruppe zuerst (deterministisch, dominante Gruppe
+    führt für Defaults wie Schätzpfad-Wetter).
+    """
+    gruppen: dict[tuple[int, int], float] = {}
+    for inv in invs or []:
+        kwp = get_pv_kwp(inv)
+        if kwp <= 0:
+            continue
+        key = (int(get_pv_neigung(inv)), int(get_pv_azimut(inv)))
+        gruppen[key] = gruppen.get(key, 0.0) + kwp
+    return [
+        Orientierungsgruppe(neigung=n, ausrichtung=a, kwp=kwp)
+        for (n, a), kwp in sorted(gruppen.items(), key=lambda kv: kv[1], reverse=True)
+    ]
 
 
 # PVGIS-Standard-Systemverluste (Kabel, Wechselrichter, Verschmutzung).

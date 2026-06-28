@@ -52,6 +52,8 @@ eedc holt von Open-Meteo die **GTI** (Strahlung auf die geneigte Modulfläche), 
 
 Die „eedc"-Spalte ist **kein eigenes Wettermodell**, sondern die OpenMeteo-Prognose, korrigiert um das, was eedc aus dem Vergleich Prognose↔IST über deine konkrete Anlage gelernt hat. Im Live-Pfad wird statt eines einzelnen Faktors sogar ein **stündliches Korrekturprofil** angewendet (siehe [§5](#5-lernfaktor--korrekturprofil--wie-eedc-dazulernt)). Diese Quelle ist der Standard.
 
+> **Ein Wert überall.** Die „PV-Tagesprognose heute" (und Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird über **einen** kanonischen Rechenweg gebildet und ist deshalb auf **allen** Sichten identisch — Cockpit/Live, Aussicht, Kurzfrist-Karte, Auswertungen, die „eedc"-Spalte im Prognosen-Vergleich, der gespeicherte Tageswert **und** die MQTT-Sensoren. Bei mehreren Dachflächen (z. B. Ost/West) wird jede Orientierung getrennt gerechnet und dann summiert (Multi-String); die Korrektur sitzt **pro Stunden-Slot auf der Energie** (Tageswert = Summe der Stunden-Slots). Der Wert **rollt** über den Tag mit OpenMeteo mit — aber überall **synchron**, nicht mehr je Seite anders.
+
 ### 2.3 Solcast — optional, dritte Meinung
 
 Solcast ist ein spezialisierter PV-Forecast-Dienst und liefert ein Konfidenzband (p10/p50/p90). Wie eedc ihn anbindet, hängt von der Installation ab:
@@ -201,6 +203,8 @@ Faustregel für die Deutung:
 Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAE und Bias für OpenMeteo, eedc und Solcast nebeneinander; sie bleibt auch dann stabil und lesbar, wenn für eedc noch kein Lernfaktor vorliegt (dann bleibt nur die eedc-Spalte leer).
 
 Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie stark und an wie vielen Tagen die Prognose *über* bzw. *unter* dem IST lag. So wird z. B. ein reiner Vormittags-Bias sichtbar.
+
+> **Welcher Prognosewert geht in die Genauigkeit ein?** Der **Anzeige**-Wert rollt über den Tag mit OpenMeteo mit — für den Tagesabschluss wäre ein Zwischenstand vom Mittag aber irreführend. Das Genauigkeits-Tracking nutzt deshalb einen **eigenen, eingefrorenen Endwert**: er rollt mit, bis OpenMeteo für den Tag (nach Sonnenuntergang) konvergiert ist, und wird dann festgeschrieben. So vergleicht das Ranking IST immer gegen den *fertigen* Tagesforecast, während die Anzeige rollend bleibt.
 
 ---
 

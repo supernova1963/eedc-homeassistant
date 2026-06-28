@@ -680,6 +680,12 @@ async def run_migrations(conn):
             # v3.24.0 (Issue #136): WP-Starts und andere Counter pro Komponente
             if 'komponenten_starts' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN komponenten_starts JSON'))
+            # Prognose-Kanon §6: konvergenz-gefrorener Genauigkeits-Endwert
+            # (rollt mit, bis OM für den Tag konvergiert; dann via _final_at fix).
+            if 'pv_prognose_final_kwh' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_kwh FLOAT'))
+            if 'pv_prognose_final_at' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_zusammenfassung ADD COLUMN pv_prognose_final_at VARCHAR(40)'))
 
         # v3.6.9: Energieprofil-Revision — vorzeichenbasierte Aggregation, WP/Wallbox separat
         # Altdaten werden gelöscht (fehlerhafte kategorie-basierte Aggregation),

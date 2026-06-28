@@ -43,6 +43,8 @@
 | **Solcast** | Kommerzielle PV-Prognose-Quelle. eedc unterstützt sowohl Solcast-API (Free/Paid Key) als auch HA-Integration (BJReplay). 30-Min-Buckets, p10/p50/p90-Konfidenzbänder. |
 | **SFML** | Solar Forecast ML — KI-basierte Ertragsprognose eines externen Dienstes (forecast.solar oder solcast.com) |
 | **Lernfaktor** | Anlagenspezifischer Korrekturfaktor `IST / OpenMeteo-Roh-Prognose`. eedc-kalibrierte Prognose = OpenMeteo × Lernfaktor. |
+| **Prognose-Kanon** | EIN kanonischer Rechenweg (`services/prognose_kanon.py`) für die „PV-Tagesprognose heute" (+ Rest, morgen/übermorgen, VM/NM, Stundenprofil). Liefert allen Sichten denselben Wert — Cockpit/Live, Aussicht, Kurzfrist-Karte, Auswertungen, Vergleich-„eedc"-Spalte, persistierter Tageswert und MQTT. Multi-String-Fan-out pro Orientierung + Korrektur pro Energie-Slot; rollt synchron mit OpenMeteo. |
+| **Tracking-Endwert (`pv_prognose_final_kwh`)** | Der für das Genauigkeits-Ranking eingefrorene Tagesprognose-Wert: rollt mit, bis OpenMeteo nach Sonnenuntergang konvergiert ist, dann fix (`pv_prognose_final_at`). Trennt den *rollenden* Anzeige-Wert vom *fertigen* Vergleichswert. |
 | **MOS-Kaskade** | Saisonale Lernfaktor-Berechnung: Monatsfaktor (≥ 15 Tage gleicher Kalendermonat) → Quartalsfaktor (≥ 15 Tage) → 30-Tage-Fenster (≥ 7 Tage). Aktive Stufe wird oberhalb der Genauigkeits-Card angezeigt. |
 | **MAE** | Mean Absolute Error — `Ø |err_rel|`. Misst Streuung/Schwankungsbreite, unabhängig von der Richtung. |
 | **MBE / Bias** | Mean Bias Error — `Ø err_rel` (mit Vorzeichen). Positiv = Prognose im Mittel zu hoch, negativ = im Mittel zu niedrig. Neutral gefärbt — Vorzeichen ist Information, keine Wertung. |

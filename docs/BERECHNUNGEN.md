@@ -540,6 +540,10 @@ Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Einspeisevergütung
 
 ## 4. Prognosen (Aussichten)
 
+> **Prognose-Kanon — „PV-Tagesprognose heute" ist EIN Wert.** Der „heute"-Wert (sowie Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird seit dem Prognose-Kanon-Fix über **einen** Service (`services/prognose_kanon.py`) gebildet und an alle Konsumenten geliefert: Live/Cockpit (`live_wetter`), die „eedc"-Spalte im Vergleich (`api/routes/prognosen`), die HA-/MQTT-Sensoren (`ha_export_prognose`) und den persistierten Tageswert (`TagesZusammenfassung.pv_prognose_kwh`). Rechenweg: **Multi-String-Fan-out** pro Orientierungsgruppe (`pv_orientation.orientierungs_gruppen` → je ein `get_solar_prognose`) → slot-weise Summe = rohes OpenMeteo-kWh-Profil → **eedc-Korrektur pro Energie-Slot** (`core/berechnungen/prognose_korrektur.korrigiere_tagesprofil`, Kaskade `korrekturprofil_lookup`) mit Invariante `Tageswert == Σ Export-Slots`. Der Wert **rollt** mit OpenMeteo, aber überall synchron. Mathematik in `core/berechnungen/` (ADR-001), Orchestrierung im Kanon-Service. Symmetrie-Test: `tests/test_prognose_kanon.py`.
+>
+> **Genauigkeits-Endwert (§6).** Das Genauigkeits-Ranking vergleicht IST gegen `TagesZusammenfassung.pv_prognose_final_kwh` (Fallback `pv_prognose_kwh`): dieser rollt mit, bis OpenMeteo für den Tag nach Sonnenuntergang konvergiert ist (`core/berechnungen/prognose_final.soll_final_einfrieren`), und wird dann via `pv_prognose_final_at` eingefroren. Der Anzeige-Wert bleibt rollend (Drei-Größen-Modell: Anzeige rollend · Lern-Snapshot gefroren · Tracking-Endwert konvergenz-gefroren).
+
 ### 4.1 Kurzfrist-Prognose (7-16 Tage)
 
 **Endpoint:** `GET /api/aussichten/kurzfristig/{anlage_id}`

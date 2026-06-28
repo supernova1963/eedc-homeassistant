@@ -1,11 +1,24 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.5)
+> **Stand:** Juni 2026 (v3.45.6)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.6 — „Solarprognose heute" ist jetzt überall derselbe Wert (Juni 2026)
+
+> Je nach Seite zeigte eedc für „Solarprognose heute" leicht unterschiedliche Werte — Cockpit, Kurzfrist-Karte, die Vergleichstabelle und der MQTT-Sensor rechneten den Wert jeweils eigenständig. Das ist behoben.
+
+### Was sich für dich ändert
+
+- **Ein Wert überall:** Die PV-Tagesprognose (heute, Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) kommt jetzt aus **einem** Rechenweg und ist auf allen Sichten identisch — Cockpit/Live, Aussicht, Kurzfrist-Karte, Auswertungen, die „eedc"-Spalte im Prognosen-Vergleich **und** die HA-/MQTT-Sensoren. Der Wert aktualisiert sich über den Tag (er „rollt" mit dem Wetter mit), aber überall gleich.
+- **Mehrere Dachflächen genauer:** Bei Ost/West- oder Mehrfach-Ausrichtung wird jede Fläche getrennt gerechnet und dann summiert — der „heute"-Wert kann sich dadurch leicht von früher unterscheiden (genauer).
+- **MQTT „PV-Prognose heute":** trägt jetzt den vollen Tagesprognose-Wert (wie die App). Wer den verbleibenden Rest braucht, nutzt „PV-Prognose Rest heute".
+- **Genauigkeits-Tagesabschluss stabiler:** Der Vergleich Prognose↔IST nutzt den fertigen Tageswert (nach Sonnenuntergang festgeschrieben) statt eines Zwischenstands vom Nachmittag.
 
 ---
 

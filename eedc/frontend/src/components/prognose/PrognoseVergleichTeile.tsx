@@ -34,7 +34,6 @@ import {
 const Q = PROGNOSE_QUELLEN_TEXT
 const eedcKlasse = (hasEedc: boolean) => (hasEedc ? Q.eedc : 'text-gray-400 dark:text-gray-500')
 
-function round(n: number, d: number) { const f = 10 ** d; return Math.round(n * f) / f }
 function fmtKwh(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—'
   return `${fmtZahl(v, 1)} kWh`
@@ -157,7 +156,7 @@ function sichtbareStunden(chartData: ReturnType<typeof chartDatenVon>) {
   const hMax = helle.length > 0 ? Math.min(23, helle[helle.length - 1] + 1) : 23
   return chartData.slice(hMin, hMax + 1)
 }
-function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsResponse | null, hasEedc: boolean, lf: number | null) {
+function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsResponse | null, hasEedc: boolean) {
   const heute = new Date().toISOString().slice(0, 10)
   const historisch = (genauigkeit?.tage ?? []).filter(t => t.datum < heute).slice(-4).map(t => ({
     datum: t.datum, om_kwh: t.openmeteo_kwh, eedc_kwh: t.eedc_kwh, sc_kwh: t.solcast_kwh,
@@ -175,7 +174,9 @@ function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsRe
     const sc = data.solcast_tage.find(s => s.datum === om.datum)
     return {
       datum: om.datum, om_kwh: om.pv_prognose_kwh as number | null,
-      eedc_kwh: hasEedc ? round(om.pv_prognose_kwh * lf!, 1) : null,
+      // Prognose-Kanon: eedc je Tag kommt jetzt vom Backend (kein client-
+      // seitiges `om × Lernfaktor`-Nachrechnen mehr — war eine Drift-Quelle).
+      eedc_kwh: hasEedc ? (om.eedc_kwh ?? null) : null,
       sc_kwh: sc?.kwh ?? null, sc_p10: sc?.p10 ?? null, sc_p90: sc?.p90 ?? null,
       wetter_symbol: om.wetter_symbol as string | null, temp_max: om.temperatur_max_c as number | null,
       ist_kwh: null as number | null, ist_partiell: false,
@@ -752,8 +753,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
-  const lf = data.eedc_lernfaktor
-  const vergleichsTage = vergleichsTageVon(data, genauigkeit, hasEedc, lf)
+  const vergleichsTage = vergleichsTageVon(data, genauigkeit, hasEedc)
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>

@@ -131,11 +131,11 @@ async def test_prognose_sensoren_erscheinen(db, _patch_prognose):
 
 
 async def test_rest_heute_ist_echter_rest(db, _patch_prognose, monkeypatch):
-    """„Rest heute" = NUR Σ verbleibende Stunden (ohne IST) — der alte Sensor
-    enthielt das IST und war damit faktisch der Tageswert unter irreführendem
-    Namen (Rainer-PN 2026-06-11)."""
+    """Prognose-Kanon „ein Wert überall": „heute" = kanonischer eedc-Tageswert
+    (volle Tagesprognose, identisch mit Anzeige/Persistenz/Vergleich-eedc),
+    „Rest heute" = NUR Σ verbleibende Stunden — beide aus demselben Kanon."""
     from datetime import datetime as real_datetime, time as dt_time
-    import backend.services.ha_export_prognose as hep
+    import backend.services.prognose_kanon as kanon
     from backend.api.routes.ha_export import calculate_anlage_sensors
 
     class _FixedNoon(real_datetime):
@@ -143,17 +143,19 @@ async def test_rest_heute_ist_echter_rest(db, _patch_prognose, monkeypatch):
         def now(cls, tz=None):
             return real_datetime.combine(date.today(), dt_time(12, 0), tzinfo=tz)
 
-    monkeypatch.setattr(hep, "datetime", _FixedNoon)
+    # „now" für rest_heute lebt jetzt im Kanon-Service.
+    monkeypatch.setattr(kanon, "datetime", _FixedNoon)
 
     anlage = await _seed_pv_anlage(db)
     sensors = await calculate_anlage_sensors(db, anlage)
     by_key = {sv.definition.key: sv for sv in sensors}
 
-    # Profil heute: 2.0 kWh in Stunden 8–17 (Tageswert 20), Skalar 0.9. Um
-    # 12:00 sind die Rest-Slots 13..17 → 5 × 2.0 × 0.9 = 9.0 kWh. Kein
-    # IST-Profil geseedet → Tageswert == Rest.
+    # Profil heute: 2.0 kWh in Stunden 8–17 (roh 20), Skalar 0.9 → 1.8/Slot,
+    # Tageswert 18.0. „heute" = volle Tagesprognose = 18.0 (NEU: kanonischer
+    # Wert, NICHT mehr IST+Rest). Um 12:00 sind die Rest-Slots 13..17 →
+    # 5 × 1.8 = 9.0 kWh.
     assert by_key["eedc_prognose_rest_today_kwh"].value == pytest.approx(9.0, abs=0.05)
-    assert by_key["eedc_prognose_heute_kwh"].value == pytest.approx(9.0, abs=0.05)
+    assert by_key["eedc_prognose_heute_kwh"].value == pytest.approx(18.0, abs=0.05)
 
 
 async def test_quellen_regel_nur_eedc_kein_solcast_sfml(db, _patch_prognose):

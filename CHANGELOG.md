@@ -9,6 +9,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.6] - 2026-06-27 — Prognose-Kanon: „PV-Tagesprognose heute" ist überall derselbe Wert
+
+### Fixed
+
+- **„Solarprognose heute" zeigte je nach Seite einen anderen Wert (Rainer/rapahl, PN simon42).** Cockpit/Aussicht, die Kurzfrist-Karte, die Auswertungen/Aussichten-„eedc"-Spalte, der persistierte Tageswert und die MQTT-Sensoren rechneten den „heute"-Wert je **eigenständig** — eigener OpenMeteo-Abruf, Korrektur mal auf der Strahlung (GTI) mal auf der Energie, unterschiedliche System-Verluste, teils „IST + Rest" statt Tagesprognose. Ergebnis waren bis zu vier verschiedene Werte fast zeitgleich (z. B. 75,3 / 77,0 / 79,5 / MQTT 76,8). Jetzt liefert **ein** kanonischer Service (`prognose_kanon`) den Wert für **alle** Pfade: Multi-String-Fan-out pro Orientierungsgruppe (Ost/West sauber getrennt) → ein roh-OpenMeteo-kWh-Profil → eedc-Korrektur **pro Energie-Slot** (Tageswert = Σ der Stunden-Slots). Der Wert rollt über den Tag mit OpenMeteo mit — aber **synchron** in Anzeige, Vergleich, Persistenz und MQTT. Die alternative Quelle (Solcast/SFML) folgt derselben „ein Wert überall"-Regel; nur auf der Prognose-Vergleichs-Seite stehen OpenMeteo/eedc/Solcast bewusst nebeneinander, wobei die eedc-Spalte mit allen anderen Seiten übereinstimmt.
+- **MQTT „PV-Prognose heute" = Anzeige-Wert.** Der MQTT-„heute"-Sensor war zuvor „IST bisher + Rest-Stunden" und damit systematisch anders als die App-Anzeige. Er trägt jetzt denselben kanonischen Tagesprognose-Wert; „PV-Prognose Rest heute" kommt aus demselben Helper (beide rollen synchron, auch bei großer OpenMeteo-Korrektur).
+- **Genauigkeits-Tagesabschluss „benimmt sich nicht mehr merkwürdig" (Rainer).** Das Genauigkeits-Ranking vergleicht IST jetzt gegen einen eigenen, **konvergenz-gefrorenen** Endwert (`pv_prognose_final_kwh`): er rollt mit, bis OpenMeteo für den Tag nach Sonnenuntergang konvergiert ist, und wird dann eingefroren — kein Mid-Correction-Snapshot mehr. Der **Anzeige**-Wert bleibt bewusst rollend.
+
+### Changed
+
+- Mehr-Orientierungs-Anlagen (z. B. Ost/West) bekommen den `heute`-Wert jetzt überall multi-string-genau — er kann sich daher leicht von früheren Einzel-Orientierungs-Schätzungen unterscheiden (gewollt, genauer). Bei unvollständigem Abruf einer Orientierungsgruppe wird der Tageswert wie bisher nicht eingefroren (#306).
+
 ## [3.45.5] - 2026-06-22 — Live-Tagesverlauf: keine unmöglichen Leistungs-Nadeln bei groben Zählern
 
 ### Fixed

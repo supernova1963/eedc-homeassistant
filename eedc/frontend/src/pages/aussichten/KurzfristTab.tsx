@@ -9,6 +9,7 @@ import { Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
+import { aussichtenApi } from '../../api/aussichten'
 import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import {
@@ -82,6 +83,9 @@ const QUELLEN_KUERZEL: Record<string, { label: string; color: string }> = {
 
 export default function KurzfristTab({ anlageId }: Props) {
   const [prognose, setPrognose] = useState<SolarPrognose | null>(null)
+  // Prognose-Kanon: der „heute"-Wert ist überall der eedc-Tageswert (= Cockpit/
+  // Aussicht/Vergleich-eedc/MQTT), NICHT der roh-OM-Wert der 14-Tage-Kurzfrist.
+  const [eedcHeuteKwh, setEedcHeuteKwh] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const schmal = useSchmaleAchse()
@@ -97,6 +101,14 @@ export default function KurzfristTab({ anlageId }: Props) {
     try {
       const data = await wetterApi.getSolarPrognose(anlageId, tage, false)
       setPrognose(data)
+      // eedc-„heute" parallel holen (kanonischer Wert); scheitert es, bleibt
+      // die Kurzfrist-Ansicht trotzdem nutzbar (Fallback unten auf roh-OM).
+      try {
+        const vergleich = await aussichtenApi.getPrognosenVergleich(anlageId)
+        setEedcHeuteKwh(vergleich.eedc_heute_kwh)
+      } catch {
+        setEedcHeuteKwh(null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden der Prognose')
     } finally {
@@ -162,7 +174,7 @@ export default function KurzfristTab({ anlageId }: Props) {
         {heute && (
           <KPICard
             title="Heute"
-            value={(heute.pv_ertrag_kwh ?? 0).toFixed(1)}
+            value={(eedcHeuteKwh ?? heute.pv_ertrag_kwh ?? 0).toFixed(1)}
             unit="kWh"
             color="gray"
             icon={(p) => <WetterIcon symbol={heute.wetter_symbol} {...p} />}

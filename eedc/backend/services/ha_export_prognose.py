@@ -1,19 +1,22 @@
 """eedc-eigene PV-Prognose-Werte für den HA-Export (#150 Slice A).
 
 Liefert die Vorausschau-Sensoren für `calculate_anlage_sensors()`:
-  - Tagesprognose heute, rollend (IST bisher + Σ Rest-Stunden der eedc-Prognose)
-  - Rest-Ertrag heute (NUR Σ Prognose der verbleibenden Stunden — Rainer-PN
-    2026-06-11: der alte „Rest heute" enthielt das IST und war damit faktisch
-    der Tageswert unter irreführendem Namen)
+  - Tagesprognose heute — der **kanonische** eedc-Tageswert (= persistierter
+    `pv_prognose_kwh` = Cockpit/Aussicht/Kurzfrist/Vergleich-eedc), rollt
+    intraday mit OpenMeteo mit. **Ein Wert überall** (Prognose-Kanon-Fix V3):
+    der frühere MQTT-„heute" (IST bisher + Rest) war genau die Inkonsistenz
+    aus Rainers PN 2026-06-26 (MQTT 76,8 ≠ Anzeige 75,3) und entfällt.
+  - Rest-Ertrag heute (NUR Σ Prognose der verbleibenden Stunden) — aus
+    DEMSELBEN Kanon-Helper wie „heute", damit beide synchron mit OM rollen.
   - Tagesprognose morgen / übermorgen / in 3 Tagen
   - „Speicher voll um" (SoC-Simulation ab AKTUELLEM Speicherstand)
   - die eedc-Stundenprofile heute + Tag+1/2/3 (als Sensor-Attribut, kein
     eigenes Topic)
 
-Prognose-Basis: ``eedc_prognose_service`` — OpenMeteo-GTI-Stundenprofil ×
-Korrekturprofil-Kaskade pro Stunde (Legacy-Skalar als Fallback), Tageswert =
-Σ korrigierte Stunden-Slots (Invariante: Sensor-State == Σ Attribut-Slots).
-Gleicher Pfad wie die „eedc"-Spalte im Prognosen-Vergleich.
+Prognose-Basis: ``services/prognose_kanon.py`` (Multi-String-Fan-out +
+eedc-Korrektur pro Energie-Slot), Tageswert = Σ korrigierte Stunden-Slots
+(Invariante: Sensor-State == Σ Attribut-Slots). Identischer Kanon wie die
+„eedc"-Spalte im Prognosen-Vergleich und der Live-/Persistenz-Pfad.
 
 Quellen-Regel (Export-Rahmen): es wird IMMER nur die **eedc-eigene** Prognose
 exportiert — nie Solcast/SFML, die liegen via eigene HA-Integration schon in
@@ -52,20 +55,19 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         ``stundenprofil_day_plus_1/2/3`` (je 24 kWh-Slots) — oder ``None``.
     """
     try:
-        from backend.services.eedc_prognose_service import berechne_eedc_prognose
-        from backend.services.prognose_adapter import ist_profil
+        from backend.services.prognose_kanon import kanon_tagesprognose
         from backend.services.verbrauch_prognose_service import get_verbrauch_prognose
         from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 
         heute = date.today()
 
-        prognose = await berechne_eedc_prognose(db, anlage, days=4)
+        prognose = await kanon_tagesprognose(db, anlage, days=4)
         if not prognose:
             return None
 
         def _tageswert(offset: int) -> Optional[float]:
             tag = prognose.tage[offset] if offset < len(prognose.tage) else None
-            return tag.tageswert_kwh if tag else None
+            return tag.eedc_kwh if tag else None
 
         def _stundenprofil(offset: int) -> Optional[list]:
             tag = prognose.tage[offset] if offset < len(prognose.tage) else None
@@ -80,19 +82,15 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
             else [0.0] * 24
         )
 
-        # Rest = Σ Prognose-Slots der verbleibenden Stunden; rollender
-        # Tageswert „heute" = IST bisher + Rest.
+        # „heute" = kanonischer eedc-Tageswert (= Anzeige/Persistenz, rollt mit
+        # OM). „Rest heute" + „heute" aus DEMSELBEN Kanon-Helper (§5.4).
         now = datetime.now(_BERLIN_TZ)
-        ist_res = await db.execute(
-            select(TagesEnergieProfil).where(
-                TagesEnergieProfil.anlage_id == anlage.id,
-                TagesEnergieProfil.datum == heute,
-            ).order_by(TagesEnergieProfil.stunde)
+        heute_kwh = heute_tag.eedc_kwh if heute_tag else None
+        rest_today = (
+            prognose.rest_heute_kwh
+            if prognose.rest_heute_kwh is not None
+            else round(sum(stunden_kwh_heute[h] for h in range(now.hour + 1, 24)), 1)
         )
-        ist_p = ist_profil(ist_res.scalars().all(), jetzt_stunde=now.hour, datum=heute)
-        ist_bisher = ist_p.tageswert_kwh or 0.0
-        rest_today = round(sum(stunden_kwh_heute[h] for h in range(now.hour + 1, 24)), 1)
-        heute_kwh = round(ist_bisher + rest_today, 1)
 
         # „Speicher voll um" — Simulation ab aktuellem SoC (nicht Mitternacht).
         speicher_voll_um = None

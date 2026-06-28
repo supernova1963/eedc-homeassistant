@@ -152,7 +152,17 @@ class TagesZusammenfassung(Base):
 
     # PV-Prognose (kWh): Vom Wetter-Endpoint berechnete Tagesprognose.
     # Dient als Referenzwert für den Lernfaktor (IST/Prognose-Vergleich).
+    # ANZEIGE-Wert (rollend, Overwrite): folgt OpenMeteo intraday mit.
     pv_prognose_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Genauigkeits-Tracking-Endwert (Prognose-Kanon §6): rollt mit
+    # `pv_prognose_kwh` mit, bis OpenMeteo für den Tag konvergiert ist (nach
+    # Sonnenuntergang) — dann via `pv_prognose_final_at` eingefroren. Das
+    # Genauigkeits-Ranking liest DIESES Feld (Fallback `pv_prognose_kwh`),
+    # damit der Tagesabschluss nicht aus einem Mid-Correction-Snapshot
+    # gerechnet wird. Der Anzeige-Wert bleibt rollend (drei-Größen-Modell).
+    pv_prognose_final_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    pv_prognose_final_at: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
 
     # Solar Forecast ML Tagesprognose (kWh): Von SFML-Sensor gelesene ML-Prognose.
     # Für Phase 2: Cockpit-Vergleich EEDC vs. ML vs. IST.

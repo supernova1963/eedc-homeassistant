@@ -120,12 +120,14 @@ async def _seed_pv_anlage(db) -> Anlage:
 async def test_kaskaden_faktoren_uebersteuern_skalar(db, _patch_quellen, monkeypatch):
     """Stunden-Faktoren ≠ Skalar → Tageswert folgt den Stunden-Faktoren."""
     import backend.services.eedc_prognose_service as eps
+    import backend.services.prognose_kanon as kanon
 
     async def fake_faktoren(db_, **kwargs):
         # Vormittag (8–12) dämpfen, Nachmittag (13–17) Kaskaden-Miss → Skalar.
         return [0.5 if 8 <= h <= 12 else None for h in range(24)]
 
-    monkeypatch.setattr(eps, "korrekturfaktoren_fuer_tag", fake_faktoren)
+    # Die Korrektur-Mathematik liegt seit dem Prognose-Kanon im Kanon-Service.
+    monkeypatch.setattr(kanon, "korrekturfaktoren_fuer_tag", fake_faktoren)
 
     anlage = await _seed_pv_anlage(db)
     prog = await eps.berechne_eedc_prognose(db, anlage, days=4)

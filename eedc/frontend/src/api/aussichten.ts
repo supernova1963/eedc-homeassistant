@@ -13,6 +13,9 @@ import { api } from './client'
 export interface TagesPrognose {
   datum: string
   pv_prognose_kwh: number
+  // eedc-Tageswert (Prognose-Kanon) je Tag — Backend-geliefert, damit das
+  // Frontend KEIN client-seitiges `om × Lernfaktor` mehr nachrechnet.
+  eedc_kwh: number | null
   globalstrahlung_kwh_m2: number | null
   sonnenstunden: number | null
   temperatur_max_c: number | null

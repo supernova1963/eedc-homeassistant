@@ -69,6 +69,8 @@ _SOLCAST_WRITER = "solcast_provider"
 # v3.34.2 Phase B entfallen (Backfill schreibt nicht mehr eigenständig in TZ).
 _TZ_SCHREIBFELDER_PROGNOSE: tuple[str, ...] = (
     "pv_prognose_kwh",
+    "pv_prognose_final_kwh",
+    "pv_prognose_final_at",
     "sfml_prognose_kwh",
     "solcast_prognose_kwh",
     "solcast_p10_kwh",
@@ -857,6 +859,7 @@ async def _speichere_prognose(
     pv_stundenprofil: list[float] | None = None,
     solcast_stundenprofil: list[float] | None = None,
     sfml_stundenprofil: list[float] | None = None,
+    pv_final_sonne_unter: bool = False,
 ):
     """
     Speichert die PV-Tagesprognose in TagesZusammenfassung (Upsert).
@@ -870,8 +873,16 @@ async def _speichere_prognose(
     Snapshot bleibt als Day-Ahead-Forecast erhalten, spätere Aufrufe
     überschreiben das Profil nicht (sonst würde der nachmittagsaktualisierte
     Forecast die morgendliche Day-Ahead-Sicht verlieren).
+
+    Prognose-Kanon §6 (`pv_prognose_final_kwh`/`_final_at`): der
+    Genauigkeits-Tracking-Endwert rollt mit `prognose_kwh` mit, bis OpenMeteo
+    für den Tag konvergiert ist (`pv_final_sonne_unter=True` → nach
+    Sonnenuntergang fix) — dann wird `pv_prognose_final_at` gesetzt und der
+    Wert nicht mehr überschrieben. Der Anzeige-Wert `pv_prognose_kwh` bleibt
+    rollend (drei-Größen-Modell).
     """
     from backend.core.database import get_session
+    from backend.core.berechnungen import soll_final_einfrieren
 
     try:
         async with get_session() as db:
@@ -896,6 +907,16 @@ async def _speichere_prognose(
                         db, tz, "pv_prognose_kwh", prognose_kwh,
                         source=_OPENMETEO_SOURCE, writer=_OPENMETEO_WRITER,
                     )
+                    # §6: Tracking-Endwert mitziehen, bis konvergiert (dann fix).
+                    if tz.pv_prognose_final_at is None:
+                        tz.pv_prognose_final_kwh = prognose_kwh
+                        if soll_final_einfrieren(
+                            forecast_kwh=prognose_kwh,
+                            sonne_unter=pv_final_sonne_unter,
+                        ):
+                            tz.pv_prognose_final_at = datetime.now(
+                                ZoneInfo("Europe/Berlin")
+                            ).isoformat()
                 if sfml_kwh is not None:
                     await write_with_provenance(
                         db, tz, "sfml_prognose_kwh", sfml_kwh,
@@ -922,10 +943,16 @@ async def _speichere_prognose(
                 if sfml_stundenprofil is not None and tz.sfml_prognose_stundenprofil is None:
                     tz.sfml_prognose_stundenprofil = sfml_stundenprofil
             else:
+                _final_at = None
+                if (prognose_kwh is not None and soll_final_einfrieren(
+                        forecast_kwh=prognose_kwh, sonne_unter=pv_final_sonne_unter)):
+                    _final_at = datetime.now(ZoneInfo("Europe/Berlin")).isoformat()
                 tz = TagesZusammenfassung(
                     anlage_id=anlage_id,
                     datum=datum,
                     pv_prognose_kwh=prognose_kwh,
+                    pv_prognose_final_kwh=prognose_kwh,
+                    pv_prognose_final_at=_final_at,
                     sfml_prognose_kwh=sfml_kwh,
                     solcast_prognose_kwh=solcast_kwh,
                     solcast_p10_kwh=solcast_p10_kwh,
@@ -1225,6 +1252,25 @@ async def get_live_wetter(
             wp_profil=wp_stunden_profil, referenz_temp_c=referenz_temp_c,
         )
 
+        # ── Prognose-Kanon: EINE Wahrheit für PV-Tagesprognose + Chart-Slots ──
+        # Anzeige-/Persistenz-Wert + die PV-Slots der Chart-Kurve kommen aus dem
+        # kanonischen Service (Multi-String-Fan-out + eedc-Korrektur pro Slot),
+        # damit „heute" hier identisch ist mit Aussicht/Kurzfrist/Vergleich-eedc/
+        # MQTT/persistiertem TZ-Wert. Verbrauchsprofil/Grundlast bleiben aus dem
+        # lokalen GTI-Pfad; nur der PV-Anteil wird kanonisch ersetzt.
+        from backend.services.prognose_kanon import kanon_tagesprognose
+        kanon = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=False)
+        kanon_heute = kanon.tage[0] if (kanon and kanon.tage) else None
+        if kanon_heute is not None:
+            if kanon_heute.eedc_kwh is not None:
+                pv_prognose = kanon_heute.eedc_kwh
+            if kanon_heute.profil is not None:
+                export_slots = kanon_heute.profil.stundenprofil_export_kwh
+                for p in profil:
+                    h = int(p["zeit"].split(":")[0])
+                    if 0 <= h < 24:
+                        p["pv_ertrag_kw"] = round(export_slots[h], 2)
+
         # ── HA-Sensor: Außentemperatur ──
         basis_live = (anlage.sensor_mapping or {}).get("basis", {}).get("live", {})
         temp_entity = basis_live.get("aussentemperatur_c") if basis_live else None
@@ -1357,12 +1403,23 @@ async def get_live_wetter(
         # #306: Den OpenMeteo-Tageswert NICHT einfrieren, wenn der Multi-String-
         # Fan-out unvollständig war — sonst klebt ein kollabierter Solo-String/
         # BKW-Wert als Tagesprognose und verzerrt das Genauigkeits-Tracking +
-        # den Lernfaktor. Solcast (eigener, robuster Call) wird weiter persistiert.
-        om_unvollstaendig = hat_multi_string and not multi_vollstaendig
+        # den Lernfaktor. Vollständigkeit kommt jetzt aus dem Kanon-Fan-out
+        # (om_vollstaendig); kein Kanon (kein PV/Koordinaten) → nichts einfrieren.
+        om_unvollstaendig = kanon_heute is None or not kanon_heute.om_vollstaendig
         om_prognose = None if (om_unvollstaendig or pv_prognose is None or pv_prognose <= 0) else pv_prognose
         # Das OpenMeteo-Stundenprofil stammt aus demselben (kollabierten) Profil —
         # bei Unvollständigkeit ebenfalls nicht einfrieren (first-write-wins).
         om_stundenprofil = None if om_unvollstaendig else pv_stundenprofil
+        # §6: nach Sonnenuntergang ist der OM-Tageswert konvergiert → der
+        # Genauigkeits-Endwert darf eingefroren werden (Anzeige bleibt rollend).
+        from backend.services.solar_forecast_service import sonnenauf_unter_stunde
+        try:
+            _, _sunset_h = sonnenauf_unter_stunde(
+                date.today().isoformat(), anlage.latitude, anlage.longitude
+            )
+            pv_final_sonne_unter = now.hour >= _sunset_h
+        except Exception:
+            pv_final_sonne_unter = False
         if (om_prognose is not None or solcast_kwh is not None
                 or sfml_kwh is not None or sfml_stundenprofil_heute is not None):
             asyncio.create_task(
@@ -1374,6 +1431,7 @@ async def get_live_wetter(
                     pv_stundenprofil=om_stundenprofil,
                     solcast_stundenprofil=solcast_stundenprofil,
                     sfml_stundenprofil=sfml_stundenprofil_heute,
+                    pv_final_sonne_unter=pv_final_sonne_unter,
                 )
             )
 

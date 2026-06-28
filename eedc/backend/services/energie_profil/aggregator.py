@@ -45,6 +45,8 @@ logger = logging.getLogger(__name__)
 # Heatmap blieb dauerhaft leer (0 Bins).
 _PROGNOSE_FELDER_RETTEN: tuple[str, ...] = (
     "pv_prognose_kwh",
+    "pv_prognose_final_kwh",
+    "pv_prognose_final_at",
     "sfml_prognose_kwh",
     "solcast_prognose_kwh",
     "solcast_p10_kwh",

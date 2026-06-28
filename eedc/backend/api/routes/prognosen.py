@@ -33,7 +33,7 @@ from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
 from backend.services.solar_forecast_service import fetch_gti_forecast, _solar_noon_hour
-from backend.services.eedc_prognose_service import berechne_eedc_prognose
+from backend.services.prognose_kanon import kanon_tagesprognose
 from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 from backend.services.pv_orientation import resolve_system_losses
 from backend.services.prognose_adapter import (
@@ -62,6 +62,9 @@ router = APIRouter()
 class TagesPrognoseSchema(BaseModel):
     datum: str
     pv_prognose_kwh: float
+    # eedc-Tageswert (Kanon) je Tag — Backend liefert ihn, damit das Frontend
+    # KEIN client-seitiges `om × lernfaktor` mehr nachrechnet (Drift-Quelle).
+    eedc_kwh: Optional[float] = None
     globalstrahlung_kwh_m2: Optional[float]
     sonnenstunden: Optional[float]
     temperatur_max_c: Optional[float]
@@ -510,19 +513,26 @@ async def get_prognosen_vergleich(
     eedc_heute_kwh = None
     eedc_morgen_kwh = None
     eedc_uebermorgen_kwh = None
-    eedc_prog = None
+    # Prognose-Kanon: eedc UND OpenMeteo-Spalte aus DEMSELBEN Multi-String-
+    # Fan-out — die OM-Spalte ist damit garantiert die Basis der eedc-Spalte
+    # (Symmetrie-Test "OM == OM-Basis"), und eedc hier == Live/MQTT/Export.
+    kanon_prog = None
     try:
         # days=4 wie der HA-Export → identischer OpenMeteo-Solar-Cache-Eintrag.
-        eedc_prog = await berechne_eedc_prognose(db, anlage, days=4, skip_jitter=True)
+        kanon_prog = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=True)
     except Exception as e:
         logger.warning(f"eedc-Kaskaden-Prognose fehlgeschlagen: {e}")
-    if eedc_prog:
+    kanon_by_datum: dict[str, object] = {}
+    if kanon_prog:
+        for kt in kanon_prog.tage:
+            if kt is not None:
+                kanon_by_datum[kt.datum] = kt
         eedc_tagessummen: list[Optional[float]] = [None, None, None]
         for tag_idx in range(3):
-            tag = eedc_prog.tage[tag_idx] if tag_idx < len(eedc_prog.tage) else None
+            tag = kanon_prog.tage[tag_idx] if tag_idx < len(kanon_prog.tage) else None
             if tag is None:
                 continue
-            eedc_tagessummen[tag_idx] = tag.tageswert_kwh
+            eedc_tagessummen[tag_idx] = tag.eedc_kwh
             if tag.profil is not None:
                 eedc_tagesprofile[tag_idx] = [
                     StundenProfilEintrag(
@@ -532,6 +542,25 @@ async def get_prognosen_vergleich(
                 ]
         eedc_stundenprofil = eedc_tagesprofile[0]
         eedc_heute_kwh, eedc_morgen_kwh, eedc_uebermorgen_kwh = eedc_tagessummen
+
+        # OM-Spalte (Headline + 7-Tage-Tabelle) = kanon-OM, damit sie die Basis
+        # der eedc-Spalte ist. Per-Tag eedc in openmeteo_tage einhängen, damit
+        # das Frontend KEIN client-seitiges `om × lernfaktor` mehr nachrechnet.
+        if kanon_by_datum.get((heute).isoformat()) is not None:
+            openmeteo_heute_kwh = kanon_by_datum[heute.isoformat()].om_kwh
+        if kanon_by_datum.get((heute + timedelta(days=1)).isoformat()) is not None:
+            openmeteo_morgen_kwh = kanon_by_datum[(heute + timedelta(days=1)).isoformat()].om_kwh
+        if kanon_by_datum.get((heute + timedelta(days=2)).isoformat()) is not None:
+            openmeteo_uebermorgen_kwh = kanon_by_datum[(heute + timedelta(days=2)).isoformat()].om_kwh
+        for ot in openmeteo_tage:
+            kt = kanon_by_datum.get(ot.datum)
+            if kt is not None:
+                if kt.om_kwh is not None:
+                    ot.pv_prognose_kwh = kt.om_kwh
+                ot.eedc_kwh = kt.eedc_kwh
+            elif lernfaktor is not None and ot.pv_prognose_kwh is not None:
+                # Tage jenseits des Kanon-Horizonts (Tag 4–6): Skalar-Fallback.
+                ot.eedc_kwh = round(ot.pv_prognose_kwh * lernfaktor, 1)
     elif lernfaktor is not None:
         # Fallback (OpenMeteo-Solar-Abruf nicht verfügbar): bisheriger
         # Skalar-Pfad auf dem GTI-Profil des Vergleichs.
@@ -847,16 +876,27 @@ async def get_prognosen_genauigkeit(
         if tz.komponenten_kwh:
             ist_kwh = summe_pv_bkw_kwh(tz.komponenten_kwh)
 
+        # Prognose-Kanon §6: der Tracking-Vergleichswert ist der
+        # konvergenz-gefrorene `pv_prognose_final_kwh` (Fallback auf den
+        # rollenden `pv_prognose_kwh`, solange ein Tag noch nicht final ist) —
+        # damit der Tagesabschluss nicht aus einem Mid-Correction-Snapshot
+        # gerechnet wird (Rainer-Sonderbefund §6).
+        forecast_kwh = (
+            tz.pv_prognose_final_kwh
+            if tz.pv_prognose_final_kwh is not None
+            else tz.pv_prognose_kwh
+        )
+
         # EEDC = OpenMeteo × Lernfaktor (historisch)
         eedc_kwh = None
-        if lernfaktor is not None and tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
-            eedc_kwh = tz.pv_prognose_kwh * lernfaktor
+        if lernfaktor is not None and forecast_kwh and forecast_kwh > 0:
+            eedc_kwh = forecast_kwh * lernfaktor
 
         # Vorzeichenbehaftete relative Tagesfehler je Quelle (nur bei brauchbarem IST)
         om_err = eedc_err = sc_err = None
         if ist_kwh is not None and ist_kwh > 0.5:
-            if tz.pv_prognose_kwh and tz.pv_prognose_kwh > 0:
-                om_err = (tz.pv_prognose_kwh - ist_kwh) / ist_kwh * 100
+            if forecast_kwh and forecast_kwh > 0:
+                om_err = (forecast_kwh - ist_kwh) / ist_kwh * 100
             if eedc_kwh is not None and eedc_kwh > 0:
                 eedc_err = (eedc_kwh - ist_kwh) / ist_kwh * 100
             if tz.solcast_prognose_kwh and tz.solcast_prognose_kwh > 0:
@@ -869,7 +909,7 @@ async def get_prognosen_genauigkeit(
 
         eintraege.append(GenauigkeitsEintrag(
             datum=tz.datum.isoformat(),
-            openmeteo_kwh=round(tz.pv_prognose_kwh, 1) if tz.pv_prognose_kwh is not None else None,
+            openmeteo_kwh=round(forecast_kwh, 1) if forecast_kwh is not None else None,
             eedc_kwh=round(eedc_kwh, 1) if eedc_kwh is not None else None,
             solcast_kwh=round(tz.solcast_prognose_kwh, 1) if tz.solcast_prognose_kwh is not None else None,
             ist_kwh=round(ist_kwh, 1) if ist_kwh is not None else None,

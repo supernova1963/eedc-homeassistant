@@ -135,6 +135,9 @@ from backend.core.berechnungen.prognose_korrektur import (
     KorrigiertesTagesprofil,
     korrigiere_tagesprofil,
 )
+from backend.core.berechnungen.prognose_final import (
+    soll_final_einfrieren,
+)
 from backend.core.berechnungen.spez_ertrag import (
     MONATSGEWICHTE_52N,
     PV_ERZEUGER_TYPEN,
@@ -240,6 +243,7 @@ __all__ = [
     "guenstig_schwelle",
     "KorrigiertesTagesprofil",
     "korrigiere_tagesprofil",
+    "soll_final_einfrieren",
     "MONATSGEWICHTE_52N",
     "PV_ERZEUGER_TYPEN",
     "berechne_spez_ertrag_annualisiert",
