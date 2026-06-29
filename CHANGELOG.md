@@ -9,6 +9,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.7] - 2026-06-29 — Speicher: Lade-/Entlade-Richtung in Auswertung & Tagesverlauf korrigiert
+
+### Fixed
+
+- **Speicher-Laden wurde in mehreren Auswertungs-Sichten falsch herum gewertet (vertauschtes Vorzeichen).** Die gespeicherte Tages-Kennzahl `batterie_kw` wurde als Bilanz-Netto „Ladung − Entladung" (Ladung positiv) geschrieben, während der dokumentierte Feld-Vertrag **und faktisch alle Anzeige-/Auswertungs-Stellen** „Entladung positiv (Quelle)" erwarten. Auffällig wurde das über eine interne Konsistenz-Diagnose (Achse-2-Drift im Log) und Gertis Speicher-Werte (simon42). Behoben — vereinheitlicht auf **eine kanonische Konvention** (Entladung positiv) an allen Stellen: Spalte, Per-Komponenten-Aufschlüsselung und alle Leser. Konkret korrigiert:
+  - **Energieprofil-Tagesverlauf:** das **Laden** des Speichers erschien fälschlich auf der **Quellen-Seite (▲, als Erzeugung)** und floss in die „verfügbare Energie"-Linie; jetzt korrekt als **Senke (▼)**.
+  - **Tageswerte/Bilanz:** **Speicher-Ladung und -Entladung waren vertauscht** (wirkte auf Tages-Tabelle/Auswertung).
+  - **Speicher-Wirtschaftlichkeit:** Netz-Ladekosten/Arbitrage wurden auf den **falschen Stunden** gerechnet.
+  - **Achse-2-Konsistenz-Diagnose:** der dauerhafte Vorzeichen-Flip im Log entfällt.
+- **Live-Dashboard / Energiefluss waren NICHT betroffen** (eigener Pfad, korrekt) — daher fielen die kWh-Kacheln dort nicht auf.
+- **Einmalige Neuberechnung beim Start:** bestehende Verlaufstage werden auf die korrigierte Konvention nachgezogen (Spalte und Komponenten-Aufschlüsselung bleiben dabei im Gleichschritt — keine neuen Drift-Warnungen). Bei viel Historie kann das einige Minuten dauern.
+
+### Changed
+
+- **Intern — IA-v4-Vorbereitung (hinter Build-Flag, für Nutzer nicht aktiv):** Referenz-Sicht-Nacharbeiten (Achsen/de-DE-Formatierung, Live-Block-Umbau, Pie-Legende) sowie zusätzliche Drift-CI-Gates. Flag-gesteuert, im ausgelieferten Produkt nicht sichtbar.
+
 ## [3.45.6] - 2026-06-27 — Prognose-Kanon: „PV-Tagesprognose heute" ist überall derselbe Wert
 
 ### Fixed
