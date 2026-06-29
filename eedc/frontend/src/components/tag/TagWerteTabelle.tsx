@@ -6,7 +6,7 @@
  * IST-Seite EINE Code-Wahrheit teilen (Konvergenz). Spalten-Picker (localStorage),
  * Sortierung, CSV-Export, Summenzeile. Reine Darstellung aus `StundenWert[]`.
  */
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
 import { Card, Button } from '../ui'
 import { exportToCSV } from '../../utils/export'
@@ -64,18 +64,19 @@ const TD_GROUPS: TdGroup[] = ['erzeugung', 'netz', 'verbrauch', 'bilanz', 'quali
 const TD_STORAGE_KEY = 'eedc_tagesprofil_visible_cols'
 
 export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenWert[], extraSerien: SerieInfo[], datum: string }) {
-  const extraErzeuger    = extraSerien.filter(s => s.seite === 'quelle')
-  const extraVerbraucher = extraSerien.filter(s => s.seite === 'senke')
+  // Memoisiert → stabile Referenzen (sonst re-rennt jede abhängige useMemo/useCallback je Render).
+  const extraErzeuger    = useMemo(() => extraSerien.filter(s => s.seite === 'quelle'), [extraSerien])
+  const extraVerbraucher = useMemo(() => extraSerien.filter(s => s.seite === 'senke'), [extraSerien])
 
   // Berechnete Werte pro Stunde
-  function calcGesamterzeugung(s: StundenWert): number {
+  const calcGesamterzeugung = useCallback((s: StundenWert): number => {
     const erzS = extraErzeuger.reduce((a, es) => a + Math.max(0, s.komponenten?.[es.key] ?? 0), 0)
     return round2((s.pv_kw ?? 0) + Math.max(0, s.batterie_kw ?? 0) + erzS)
-  }
-  function calcHausverbrauch(s: StundenWert): number {
+  }, [extraErzeuger])
+  const calcHausverbrauch = useCallback((s: StundenWert): number => {
     const vbrS = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0)
     return round2(Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrS))
-  }
+  }, [extraVerbraucher])
 
   // Sichtbare Spalten aus localStorage
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -147,7 +148,7 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
       const bv = b.vals[sortKey] ?? (sortDir === 'desc' ? -Infinity : Infinity)
       return sortDir === 'asc' ? av - bv : bv - av
     })
-  }, [daten, sortKey, sortDir, extraSerien])
+  }, [daten, sortKey, sortDir, extraSerien, calcGesamterzeugung, calcHausverbrauch])
 
   // Aktive Spalten in Reihenfolge: TD_COLUMNS + extra Serien (eingebettet in Gruppe)
   const allCols = useMemo(() => {
@@ -248,7 +249,8 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
           </div>
           <Button variant="secondary" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-1.5" />
-            CSV-Export
+            {/* D11-15: mobil platzsparend „CSV", ab sm „CSV-Export" */}
+            <span className="sm:hidden">CSV</span><span className="hidden sm:inline">CSV-Export</span>
           </Button>
         </div>
       </div>

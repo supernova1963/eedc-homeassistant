@@ -63,13 +63,22 @@ export function WerkbankZeitraum({
         </div>
       )}
 
-      <div className="flex items-center gap-1.5 text-sm">
-        <span className="text-xs text-gray-500 dark:text-gray-400">Zeitraum</span>
-        <input type={inputType} value={von} max={bis || undefined}
-          onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className={`input w-auto ${STEUER_H} py-0 text-sm`} />
-        <span className="text-gray-400">–</span>
-        <input type={inputType} value={bis} min={von || undefined}
-          onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className={`input w-auto ${STEUER_H} py-0 text-sm`} />
+      {/* D11-5: zwei type=month/date-Felder passen mobil nicht nebeneinander → auf
+          schmal 2 Zeilen „Zeitraum von:/bis:" (Feld volle Breite), ab sm inline
+          „Zeitraum [von] – [bis]". D11-4: Rand an die nicht-aktiven Chips angleichen. */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 text-sm w-full sm:w-auto">
+        <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">Zeitraum</span>
+        <label className="flex items-center gap-1.5 w-full sm:w-auto">
+          <span className="sm:hidden text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Zeitraum von:</span>
+          <input type={inputType} value={von} max={bis || undefined}
+            onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
+        </label>
+        <span className="hidden sm:inline text-gray-400">–</span>
+        <label className="flex items-center gap-1.5 w-full sm:w-auto">
+          <span className="sm:hidden text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Zeitraum bis:</span>
+          <input type={inputType} value={bis} min={von || undefined}
+            onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
+        </label>
       </div>
 
       {vergleichSlot ? vergleichSlot : onVergleich && (
@@ -132,7 +141,7 @@ export function VergleichLeisteTag({
       </div>
       {modus === 'periodeImJahr' && (
         <select value={jahr} onChange={(e) => onJahr(Number(e.target.value))}
-          aria-label="Vergleichsjahr" className={`input w-auto ${STEUER_H} py-0 text-sm`}>
+          aria-label="Vergleichsjahr" className={`input w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`}>
           {jahre.map((j) => <option key={j} value={j}>{j}</option>)}
         </select>
       )}

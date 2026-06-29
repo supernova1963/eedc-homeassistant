@@ -158,7 +158,7 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
         </h3>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+            <BarChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
               <YAxis tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('kg')} />
@@ -176,7 +176,7 @@ export function CO2Tab({ data, stats, zeitraumLabel, anlageId }: CO2TabProps) {
         </h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartDataWithKumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+            <AreaChart data={chartDataWithKumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
               <YAxis tickFormatter={(v) => `${(v/1000).toFixed(1)}`} {...yAchse(schmal)} label={achsenEinheit('t')} />

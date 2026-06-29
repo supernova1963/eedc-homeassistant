@@ -90,13 +90,16 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
   const [aggregateError, setAggregateError] = useState<string | null>(null)
   const [sicht, setSicht] = useState<Sicht>('klar')
 
-  const reload = async () => {
-    setLoading(true)
+  // D11-9(b): `silent` = ohne Voll-Spinner neu laden → nach „Neu aggregieren" bleibt
+  // die Heatmap stehen und die Daten werden in-place getauscht (kein „Zucken"); das
+  // Feedback liefert der „Aggregiert…"-Button-State.
+  const reload = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const res = await getProfile(anlageId)
       setProfile(res.profile)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
@@ -127,7 +130,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
           `${res.bins_sonnenstand ?? 0} Bins (Sonnenstand), ` +
           `Skalar ${fmtZahl(res.skalar, 3)}`
         )
-        await reload()
+        await reload(true)
       } else {
         setAggregateError(res.grund ?? 'Aggregator übersprungen')
       }
@@ -269,14 +272,15 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
 
       {!loading && !isEmpty && (
         <>
-          {/* Klassen-Tabs */}
-          <div className="flex gap-1 mb-3 border-b border-gray-200 dark:border-gray-700">
+          {/* Klassen-Tabs — D11-13: auf schmalen Screens (iPhone SE) ragten die 5 Labels
+              aus dem Fenster → horizontal scrollbar statt Überlauf. */}
+          <div className="flex gap-1 mb-3 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-none">
             {KLASSEN.map(k => (
               <button
                 key={k.key}
                 type="button"
                 onClick={() => setSicht(k.key)}
-                className={`px-3 py-1 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                className={`px-3 py-1 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0 ${
                   sicht === k.key
                     ? 'border-orange-500 text-orange-600 dark:text-orange-400'
                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'

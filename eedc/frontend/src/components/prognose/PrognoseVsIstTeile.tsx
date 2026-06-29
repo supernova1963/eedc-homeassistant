@@ -217,7 +217,7 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="monatName" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
             <YAxis yAxisId="left" tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} {...yAchse(schmal)} />
-            <YAxis yAxisId="right" orientation="right" tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
+            <YAxis yAxisId="right" orientation="right" {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
               name.includes('%') ? formatProzent(value).text : formatEnergie(value, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />

@@ -177,9 +177,13 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
           <span>Verbrauch: {VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis} ({daten.daten_tage} Tage)</span>
         </div>
         <ResponsiveContainer width="100%" height={360}>
-          <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: hatSpeicher ? 50 : 10, left: -10, bottom: 5 }}>
+          {/* D11-16 (detLAN „krassestes Beispiel"): right war 50 → großer Leerraum rechts
+              (Recharts reserviert die SoC-Achsenbreite ohnehin separat). Auf 10 getrimmt. */}
+          <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: hatSpeicher ? 10 : 8, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse */ />
+            {/* D11-16/Stunden: Labels überlappten mobil („0:003:00…") — −45° (konsistent
+                mit der app-weiten 45°-Regel; eigener XAxis, da kein xAchse-Spread). */}
+            <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} angle={-45} textAnchor="end" height={40} /* achsen-allow: Zeit-/Kategorie-Achse */ />
             <YAxis yAxisId="kw" tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
             {hatSpeicher && (
               <YAxis yAxisId="soc" orientation="right" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />

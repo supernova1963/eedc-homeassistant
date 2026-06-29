@@ -75,20 +75,32 @@ export function usePrognoseVergleich(anlageId: number): PrognoseVergleichVM {
   const [backfillError, setBackfillError] = useState<string | null>(null)
 
   const handleWetterBackfill = useCallback(async () => {
-    setBackfillRunning(true); setBackfillResult(null); setBackfillError(null)
+    // D11-9(a): die Status-Meldung am Anfang NICHT leeren — sonst verschwindet die
+    // „✓ …"-Zeile kurz (Block schrumpft → der Block darunter springt eine Zeile hoch
+    // und wieder runter = der von Gernot beschriebene Reflow). Alte Meldung bleibt
+    // stehen, bis die neue sie atomar ersetzt; den jeweils anderen Zustand am ENDE leeren.
+    setBackfillRunning(true)
     try {
       const res = await wetterBackfill(anlageId, 730)
       if (res.status === 'ok') {
-        setBackfillResult(`${res.stunden_geupdated ?? 0} Stunden / ${res.tage_geupdated ?? 0} Tage geladen` +
-          (res.von && res.bis ? ` (${res.von} – ${res.bis})` : ''))
-        setStratifizierung(await getStratifizierung(anlageId, 90).catch(() => null))
+        // Nur wenn wirklich etwas nachgeladen wurde, die Stratifizierung neu holen +
+        // tauschen — sonst „blitzt" die Sicht bei „0 Stunden / 0 Tage" grundlos.
+        const geladen = (res.stunden_geupdated ?? 0) > 0 || (res.tage_geupdated ?? 0) > 0
+        if (geladen) {
+          setBackfillResult(`${res.stunden_geupdated ?? 0} Stunden / ${res.tage_geupdated ?? 0} Tage geladen` +
+            (res.von && res.bis ? ` (${res.von} – ${res.bis})` : ''))
+          setStratifizierung(await getStratifizierung(anlageId, 90).catch(() => null))
+        } else {
+          setBackfillResult('Wetter-Historie ist bereits vollständig — nichts nachzuladen.')
+        }
+        setBackfillError(null)
       } else if (res.status === 'skipped') {
-        setBackfillError(`Übersprungen: ${res.grund ?? 'unbekannter Grund'}`)
+        setBackfillError(`Übersprungen: ${res.grund ?? 'unbekannter Grund'}`); setBackfillResult(null)
       } else {
-        setBackfillError(res.fehler ?? 'Backfill fehlgeschlagen')
+        setBackfillError(res.fehler ?? 'Backfill fehlgeschlagen'); setBackfillResult(null)
       }
     } catch (err) {
-      setBackfillError(err instanceof Error ? err.message : 'Netzwerk-Fehler')
+      setBackfillError(err instanceof Error ? err.message : 'Netzwerk-Fehler'); setBackfillResult(null)
     } finally {
       setBackfillRunning(false)
     }
@@ -565,8 +577,16 @@ export function PvgStratifizierung({ vm }: { vm: PrognoseVergleichVM }) {
           Wetter-Historie (Bewölkung, Niederschlag, WMO-Code) für {Math.max(stratifizierung.tage_ohne_wetter, stratifizierung.tep_tage_ohne_wetter)} Tage noch nicht geladen. eedc kann sie kostenlos aus dem Open-Meteo-Archiv nachholen. {stratifizierung.tage_mit_prognose > 0 ? (<>Danach zeigt diese Card MAPE/MPE getrennt nach <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.</>) : (<>Solange noch keine Day-Ahead-Stundenprofile gespeichert sind, bleibt die Stratifizierungs-Tabelle leer — die Wetter-Daten dienen dann der Vorbereitung für das stündliche Korrekturprofil (Päckchen 2).</>)}
         </div>
         <button type="button" onClick={vm.handleWetterBackfill} disabled={vm.backfillRunning} className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded transition-colors">{vm.backfillRunning ? 'Lädt Wetter-Historie…' : 'Wetter-Historie nachladen (2 Jahre)'}</button>
-        {vm.backfillError && <div className="mt-3 text-xs text-red-600 dark:text-red-400">Fehler: {vm.backfillError}</div>}
-        {vm.backfillResult && <div className="mt-3 text-xs text-green-700 dark:text-green-400">✓ {vm.backfillResult} — Stratifizierung wird neu berechnet</div>}
+        {/* D11-9(a): eine Status-Zeile (Fehler ODER Ergebnis), ohne widersprüchlichen
+            „— Stratifizierung wird neu berechnet"-Suffix (stand auch bei 0/0 da). Der
+            Vanish→Reappear-Sprung ist durch das Nicht-Leeren am Handler-Anfang weg. */}
+        {(vm.backfillError || vm.backfillResult) && (
+          <div className="mt-3 text-xs">
+            {vm.backfillError
+              ? <span className="text-red-600 dark:text-red-400">Fehler: {vm.backfillError}</span>
+              : <span className="text-green-700 dark:text-green-400">✓ {vm.backfillResult}</span>}
+          </div>
+        )}
       </Card>
     )
   }

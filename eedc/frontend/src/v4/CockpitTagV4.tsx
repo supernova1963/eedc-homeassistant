@@ -216,6 +216,19 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
         defaultOpen: false,
         render: () => <Parkbar id="el:bilanz" titel="Energie-Bilanz"><TagBilanz t={tag} vt={vortag} wtStats={wtStats} wochentagName={wochentag} /></Parkbar>,
       })
+    } else {
+      // D11-2: Tag ohne Daten (z. B. Lücken-Tag) — denselben `kpi`-Block mit Hinweis
+      // rendern statt die Block-Liste leeren. So bleibt im Vollbild der Block (gleiche
+      // ID) stehen, statt dass BlockShell unmountet und das Vollbild abrupt wegbricht.
+      list.push({
+        id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
+        summary: 'keine Daten für diesen Tag', defaultOpen: true,
+        render: () => (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Für diesen Tag liegen keine Daten vor. Wähle einen Tag mit Messwerten.
+          </p>
+        ),
+      })
     }
     if (stunden.length > 0) {
       if (!park.istGeparkt('el:stundenverlauf')) list.push({

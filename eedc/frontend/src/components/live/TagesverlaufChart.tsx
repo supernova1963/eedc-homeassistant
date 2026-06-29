@@ -54,7 +54,9 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
   // Overlay-Serien (z.B. Strompreis) — separate Achse, als Linie
   const overlaySerien = useMemo(() => serien.filter((s) => s.seite === 'overlay'), [serien])
   // Einheit der Hauptachse (links) = erste Nicht-Overlay-Serie (D9-A: Achse trägt ihre Einheit).
-  const hauptEinheit = useMemo(() => serien.find((s) => s.seite !== 'overlay')?.einheit || '', [serien])
+  // Butterfly = Leistungs-Verlauf → Fallback kW, falls die Serie keine einheit trägt
+  // (Backend taggt nur die Preis-Overlay). Sonst label-Drop = Y-Achse ohne Einheit (D11-14).
+  const hauptEinheit = useMemo(() => serien.find((s) => s.seite !== 'overlay')?.einheit || 'kW', [serien])
 
   // Render-Serien: Bidirektionale werden in _pos/_neg aufgespalten (ohne Overlays)
   const renderSerien = useMemo<RenderSerie[]>(() => {
@@ -168,7 +170,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
             tick={{ fontSize: 10 }}
             className="fill-gray-500 dark:fill-gray-400"
             tickFormatter={achsenTick}
-            label={hauptEinheit ? achsenEinheit(hauptEinheit) : undefined}
+            label={achsenEinheit(hauptEinheit)}
           />
           {overlaySerien.length > 0 && (
             <YAxis

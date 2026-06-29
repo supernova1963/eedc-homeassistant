@@ -38,11 +38,13 @@ export interface XAchsenProps {
   interval?: 'preserveStartEnd'
 }
 
-export function xAchse(schmal: boolean): XAchsenProps {
-  // R9 (detLAN): kein 90°-Quer mehr → −45° + ausgedünnte Labels auf schmalen Views.
-  return schmal
-    ? { tick: ACHSEN_TICK, angle: -45, textAnchor: 'end', height: 48, interval: 'preserveStartEnd' }
-    : { tick: ACHSEN_TICK }
+export function xAchse(_schmal?: boolean, _immer45?: boolean): XAchsenProps {
+  // D11-10 (detLAN R11 + Gernot, 2026-06-29): 45° X-Achse EINHEITLICH ÜBERALL
+  // (mobil + Desktop). detLAN: „vielleicht einfach einheitlich überall — sieht gut
+  // aus, erleichtert die Arbeit, behebt Desktop-Überlapp bei vielen Labels." Kurze
+  // Label-Sets drehen bewusst mit. (Params bleiben für Aufruf-Kompatibilität, werden
+  // ignoriert.) R9 (detLAN): nie 90°-Quer. `preserveStartEnd` dünnt enge Reihen aus.
+  return { tick: ACHSEN_TICK, angle: -45, textAnchor: 'end', height: 48, interval: 'preserveStartEnd' }
 }
 
 export interface YAchsenProps {

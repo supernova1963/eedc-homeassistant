@@ -71,6 +71,16 @@ let withUnit = 0
 let allowed = 0
 const violations = []
 const tickViolations = []
+const sizeViolations = []
+const dropViolations = []
+
+// Akzeptierte Formen einer 10-px-Tick-Deklaration (ACHSEN_TICK-SoT). Spreads
+// `xAchse(`/`yAchse(` setzen tick:ACHSEN_TICK; `tick={(` ist ein Custom-Renderer
+// (regelt fontSize selbst); `tick={false}`/`hide` = Achse ohne Ticks.
+const TICK_10 = /ACHSEN_TICK|xAchse\(|yAchse\(|fontSize:\s*10\b|fontSize=\{10\}|tick=\{\(|tick=\{false\}|\bhide\b/
+// Label-Drop: `… ? achsenEinheit(…) : undefined|null` lässt die Einheit ganz
+// verschwinden (D11-14: Y-Achse ohne Einheit). Die Einheit muss garantiert sein.
+const LABEL_DROP = /\?\s*achsenEinheit\([^)]*\)\s*:\s*(undefined|null)/
 
 for (const file of tsxFiles(SRC)) {
   const src = readFileSync(file, 'utf8')
@@ -84,6 +94,17 @@ for (const file of tsxFiles(SRC)) {
     // greift der Recharts-Default ohne Tausenderpunkt (R1-Verstoß, detLAN #29).
     if (istWertAchse && !ax.tag.includes('tickFormatter')) {
       tickViolations.push(`${relative(ROOT, file)}:${lineOf(src, ax.index)} <${ax.kind}> Wert-Achse ohne tickFormatter (kein de-DE/Tausenderpunkt)`)
+    }
+    // Tick-GRÖSSE: JEDE Achse muss 10 px tragen (ACHSEN_TICK-SoT). Fehlt die
+    // Deklaration, fällt Recharts auf 12 px → Größen-Drift (D11-6/D11-7: 2. Achse
+    // größer als die 1.). Genau die Lücke, die detLAN #29/#39 fand.
+    if (!TICK_10.test(ax.tag)) {
+      sizeViolations.push(`${relative(ROOT, file)}:${lineOf(src, ax.index)} <${ax.kind}> ohne 10-px-Tick (Recharts-Default 12 px = Größen-Drift)`)
+    }
+    // Label-DROP: bedingte Einheit, die zu undefined/null kollabiert → Achse ohne
+    // Einheit (D11-14). Einheit immer setzen (notfalls Fallback statt Drop).
+    if (LABEL_DROP.test(ax.tag)) {
+      dropViolations.push(`${relative(ROOT, file)}:${lineOf(src, ax.index)} <${ax.kind}> Einheit kann zu undefined/null kollabieren (Achse ohne Einheit)`)
     }
   }
 }
@@ -99,8 +120,18 @@ console.log(
     ? `check:achsen — alle Wert-Achsen mit de-DE tickFormatter`
     : `check:achsen — ${tickViolations.length} Wert-Achse(n) OHNE tickFormatter (kein Tausenderpunkt)`,
 )
+console.log(
+  sizeViolations.length === 0
+    ? `check:achsen — alle Achsen mit 10-px-Tick (keine Größen-Drift)`
+    : `check:achsen — ${sizeViolations.length} Achse(n) OHNE 10-px-Tick`,
+)
+console.log(
+  dropViolations.length === 0
+    ? `check:achsen — keine Einheit kann zu undefined kollabieren`
+    : `check:achsen — ${dropViolations.length} Achse(n) mit kollabierbarer Einheit`,
+)
 
-if (violations.length > 0 || tickViolations.length > 0) {
+if (violations.length > 0 || tickViolations.length > 0 || sizeViolations.length > 0 || dropViolations.length > 0) {
   if (violations.length > 0) {
     console.error(`\n❌ ${violations.length} Achse(n) ohne Einheit und ohne Allowlist-Marker:`)
     for (const v of violations) console.error('  · ' + v)
@@ -117,7 +148,23 @@ if (violations.length > 0 || tickViolations.length > 0) {
         'AUSSER die Achse skaliert/€-formatiert bereits (energieAchse/co2Achse/fmtZahl+„ €").',
     )
   }
+  if (sizeViolations.length > 0) {
+    console.error(`\n❌ ${sizeViolations.length} Achse(n) ohne 10-px-Tick (Größen-Drift, detLAN #29/#39):`)
+    for (const v of sizeViolations) console.error('  · ' + v)
+    console.error(
+      '\nFix: `{...yAchse(schmal)}`/`{...xAchse(schmal)}` spreaden ODER `tick={ACHSEN_TICK}` ' +
+        '(bzw. `tick={{ fontSize: 10 }}`) ergänzen. Custom-Renderer `tick={(…) => …}` ist erlaubt.',
+    )
+  }
+  if (dropViolations.length > 0) {
+    console.error(`\n❌ ${dropViolations.length} Achse(n) mit kollabierbarer Einheit (Achse ohne Einheit):`)
+    for (const v of dropViolations) console.error('  · ' + v)
+    console.error(
+      '\nFix: Einheit immer setzen — `label={achsenEinheit(einheit || \'kW\')}` statt ' +
+        '`label={einheit ? achsenEinheit(einheit) : undefined}` (kein Label-Drop).',
+    )
+  }
   process.exit(1)
 }
 
-console.log('✅ Alle Wert-Achsen tragen genau eine Einheit + de-DE tickFormatter.')
+console.log('✅ Alle Achsen: genau eine Einheit (nie kollabierbar) + de-DE tickFormatter + 10-px-Tick.')

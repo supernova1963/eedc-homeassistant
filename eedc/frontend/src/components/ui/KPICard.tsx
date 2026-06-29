@@ -100,9 +100,9 @@ export function KPICard({
             valueContent
           )}
         </div>
-        {subtitle && (
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{subtitle}</p>
-        )}
+        {/* D11-1: Zeile immer rendern (Platzhalter wenn leer) → einheitliche Kartenhöhe,
+            auch ohne 3. Zeile (detLAN R11: „ggf. einfach ein Leerzeichen einsetzen"). */}
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{subtitle || ' '}</p>
       </div>
     )
   }
@@ -138,9 +138,8 @@ export function KPICard({
             valueContent
           )}
         </div>
-        {subtitle && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{subtitle}</p>
-        )}
+        {/* D11-1: Zeile immer rendern (Platzhalter wenn leer) → einheitliche Kartenhöhe. */}
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">{subtitle || ' '}</p>
       </div>
       {Icon && (
         <div className={`${dims.box} rounded-xl ${colors.bg} ml-2 sm:ml-3 flex-shrink-0`}>

@@ -15,7 +15,7 @@
  * Finanzen; volles Genauigkeits-Tracking → Auswertungen/Prognose-vs-IST;
  * Trend-Historie → Cockpit/Jahr (bewusst NICHT hier).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, Info, RefreshCw, ArrowRight,
@@ -190,9 +190,15 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     }
   }, [anlageId, horizont])
 
+  // D11-9: Horizont-Wechsel (kurz↔lang) soll NICHT den Voll-Spinner zeigen — sonst
+  // flackert die ganze Sicht. Nur beim echten Anlagenwechsel/Erstladen voll laden;
+  // bei reinem Horizont-Wechsel still nachladen (Kopf bleibt, Daten tauschen).
+  const geladenFuer = useRef<number | null>(null)
   useEffect(() => {
     if (!anlageId || !hatKoordinaten) { setLoading(false); return }
-    laden(false)
+    const silent = geladenFuer.current === anlageId
+    geladenFuer.current = anlageId
+    laden(silent)
   }, [anlageId, hatKoordinaten, laden])
 
   // Tagesprognose laden (nur Kurzfristig; Stunden-Chart + Stundenwerte teilen sie).
@@ -317,7 +323,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     }
     if (finanzTeaser) list.push(finanzTeaser)
     return list
-  }, [istKurz, kurz, eedcHeute, lang, trend, wp, finanz, anlageId, pDatum, pDaten, pError, park])
+  }, [istKurz, kurz, eedcHeute, lang, trend, wp, finanz, pDatum, pDaten, pError, park])
 
   if (!anlageId) {
     return (

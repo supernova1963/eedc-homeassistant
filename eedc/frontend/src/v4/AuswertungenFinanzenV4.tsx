@@ -13,7 +13,7 @@
  * ohne k€-Transform · R5 EINE Zeit-Steuerung (Kopf-Jahr; T-Konto erbt) · R6 KPIs +
  * Charts parkbar.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BarChart, Bar, ComposedChart, AreaChart, Area, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -107,13 +107,13 @@ function FinanzenInner() {
   const hatMehrereTarife = (basis.alleTarife?.length || 0) > 1
   const strompreis = basis.strompreis
 
-  const handleCsv = () => {
+  const handleCsv = useCallback(() => {
     const headers = ['Monat', 'Einspeiseerlös (€)', 'EV-Ersparnis (€)', 'Netzbezug-Kosten (€)',
       'Netto-Ertrag (€)', 'Sonderkosten (€)', 'Netto nach Sonderkosten (€)', 'Kumulierter Ertrag (€)']
     const rows = chartData.map((z) => [z.name, z.einspeise_erloes, z.ev_ersparnis, z.netzbezug_kosten,
       z.netto_ertrag, z.sonderkosten, z.netto_nach_sonderkosten, z.kumuliert_ertrag])
     exportToCSV(headers, rows, 'finanzen_export.csv')
-  }
+  }, [chartData])
 
   // T-Konto erbt das Jahr vom Kopf (R5). 'alle' → neuestes Jahr.
   const jahrFuerTKonto = basis.jahr === 'alle' ? (basis.jahre[0] ?? null) : basis.jahr
@@ -191,9 +191,10 @@ function FinanzenInner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Finanzielle Bilanz pro Monat</p>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+                  <BarChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                    {/* D11-10: viele Monatslabels (bis ~37) → −45° auch auf Desktop */}
+                    <XAxis dataKey="name" {...xAchse(schmal, true)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
                     <Legend content={<ChartLegende />} />
@@ -211,7 +212,7 @@ function FinanzenInner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Kumulierter Netto-Ertrag</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+                  <AreaChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
@@ -234,7 +235,7 @@ function FinanzenInner() {
               </p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+                  <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
@@ -282,7 +283,7 @@ function FinanzenInner() {
     }
 
     return [blockUebersicht, blockTKonto, blockBerichte]
-  }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId])
+  }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId, schmal, handleCsv])
 
   if (anlagenLoading || basis.loading) return <LoadingSpinner text="Lade Finanzdaten…" />
   if (anlagen.length === 0) {

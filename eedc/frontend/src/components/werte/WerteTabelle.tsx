@@ -241,20 +241,22 @@ export function WerteTabelle({
     <div className="space-y-3">
       {/* ── Steuerung (überall identisch) ──────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="secondary" onClick={() => setPickerOffen((o) => !o)}>
+        <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => setPickerOffen((o) => !o)}>
           <Columns className="h-4 w-4" /> Spalten
         </Button>
         {vergleichVerfuegbar && (
           <Button
             size="sm"
             variant={zeigeVergleich ? 'primary' : 'secondary'}
+            className="gap-1.5"
             onClick={() => setVergleichAn((v) => !v)}
           >
             <GitCompareArrows className="h-4 w-4" /> Vergleich {vergleichLabel}
           </Button>
         )}
-        <Button size="sm" variant="secondary" onClick={csvExport}>
-          <Download className="h-4 w-4" /> CSV-Export
+        <Button size="sm" variant="secondary" className="gap-1.5" onClick={csvExport}>
+          {/* D11-15: mobil platzsparend „CSV", ab sm „CSV-Export" */}
+          <Download className="h-4 w-4" /> <span className="sm:hidden">CSV</span><span className="hidden sm:inline">CSV-Export</span>
         </Button>
         {alleWerteHref && (
           <a href={alleWerteHref} className="ml-auto inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">

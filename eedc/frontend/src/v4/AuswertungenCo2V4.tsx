@@ -11,7 +11,7 @@
  * Auto-km ohne Tsd-Transform) · R6 KPIs + Charts parkbar. Daten = `useAuswertungBasis`
  * (Jahr-Filter) + `getCO2Amortisation`; CO₂-Faktor aus lib-SoT (kein lokales 0,38).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -88,11 +88,11 @@ function Co2Inner() {
     return { status: 'prognose' as const, monateNoch }
   }, [graueLast, kumuliert, anzahlMonate, gesamtCo2])
 
-  const handleCsv = () => {
+  const handleCsv = useCallback(() => {
     const headers = ['Monat', 'CO₂-Einsparung (kg)', 'Kumuliert (kg)']
     const rows = kumuliert.map((z) => [z.name, z.co2_einsparung, z.kumuliert_co2])
     exportToCSV(headers, rows, 'co2_export.csv')
-  }
+  }, [kumuliert])
 
   const bloecke: Block[] = useMemo(() => {
     const fc = formatCo2(gesamtCo2)
@@ -151,7 +151,7 @@ function Co2Inner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">CO₂-Einsparung pro Monat</p>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+                  <BarChart data={zeitreihe} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={monAchse.tick} {...yAchse(schmal)} label={achsenEinheit(monAchse.einheit)} />
@@ -207,7 +207,7 @@ function Co2Inner() {
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Kumulierte CO₂-Einsparung</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={kumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 30, left: 0, bottom: 5 }}>
+                  <AreaChart data={kumuliert} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={kumAchse.tick} {...yAchse(schmal)} label={achsenEinheit(kumAchse.einheit)} />
@@ -276,7 +276,7 @@ function Co2Inner() {
     }
 
     return [blockBilanz, ...(blockAmort ? [blockAmort] : []), blockBasis]
-  }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung])
+  }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, schmal, handleCsv])
 
   if (anlagenLoading || basis.loading || !amortGeladen) return <LoadingSpinner text="Lade CO₂-Daten…" />
   if (anlagen.length === 0) {
