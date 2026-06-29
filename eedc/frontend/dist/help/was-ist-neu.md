@@ -1,11 +1,23 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.6)
+> **Stand:** Juni 2026 (v3.45.7)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.7 — Speicher: Laden/Entladen in den Auswertungen richtig herum (Juni 2026)
+
+> In mehreren Auswertungs-Sichten war beim Hausspeicher die Lade-/Entlade-Richtung vertauscht — das **Laden** wurde z. B. im Energieprofil-Tagesverlauf als **Erzeugung** dargestellt. Das ist behoben. (Das **Live-Dashboard war korrekt** — dort fiel es nicht auf.)
+
+### Was sich für dich ändert
+
+- **Energieprofil-Tagesverlauf:** Batterie-**Laden** erscheint jetzt korrekt als Verbrauch (▼ unten) statt als Erzeugung (▲ oben), und die „verfügbare Energie"-Linie zählt es nicht mehr mit.
+- **Tageswerte & Speicher-Wirtschaftlichkeit:** Lade-/Entlade-Mengen und die Netz-Ladekosten werden jetzt der richtigen Richtung zugeordnet.
+- **Einmalige Neuberechnung:** Beim ersten Start nach dem Update werden deine Verlaufstage einmalig neu gerechnet (bei viel Historie ein paar Minuten) — danach stimmen auch die Vergangenheitswerte.
 
 ---
 
