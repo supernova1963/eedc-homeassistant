@@ -1,11 +1,24 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.8)
+> **Stand:** Juni 2026 (v3.45.9)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.9 — Speicher-Vergangenheit selbst geradeziehen (Juni 2026)
+
+> Der Speicher-Vorzeichen-Fix aus v3.45.7 wirkt ab dem Update auf neue Tage. **Ältere Tage** (vor dem Update gerechnet) können in den Auswertungen noch die alte, vertauschte Lade-/Entlade-Richtung zeigen. Diese Version macht das **sichtbar** und gibt dir einen **Knopf**, um die betroffenen Tage gezielt neu zu rechnen — bewusst auf deinen Klick hin, **nicht** automatisch beim Start (das hatte in v3.45.7 die Neustart-Schleife ausgelöst).
+
+### Was sich für dich ändert
+
+- **Neuer Eintrag im Daten-Checker: „Batterie – Vorzeichen-Historie".** Er erkennt Tage, an denen das Speicher-Vorzeichen noch verdreht gespeichert ist (Vergleich mit den HA-Statistics), und listet sie auf. Nur relevant, wenn du einen Hausspeicher hast und im HA-Add-on-Modus läufst.
+- **Zwei Reparatur-Knöpfe:** **„Zeitraum neu aggregieren"** rechnet mehrere Tage auf einmal neu (bis zu 31 Tage pro Lauf — bei mehr einfach erneut anstoßen), **„Tag reparieren"** einen einzelnen. Nach dem Lauf verschwindet der Eintrag, sobald die Richtung stimmt.
+- **Nichts passiert ungefragt:** Die Korrektur läuft nur, wenn du sie auslöst (Pull statt Push). Dein Add-on startet weiterhin sofort.
+- **Live-Dashboard war und ist korrekt** — es ging nie um die Live-Ansicht, nur um gespeicherte Vergangenheitswerte.
 
 ---
 

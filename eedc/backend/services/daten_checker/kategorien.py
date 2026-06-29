@@ -78,6 +78,17 @@ class CheckKategorie(str, Enum):
     # eindeutig gefährliche Leistung/Energie-Verwechslung; %/°C/Preis/km bewusst
     # ausgenommen (legitime Einheiten-Varianten → Fehlalarm-Risiko).
     SENSOR_MAPPING_EINHEIT = "sensor_mapping_einheit"
+    # v3.45.9: Alt-Tage, die VOR dem Batterie-Vorzeichen-Fix (v3.45.7/8, SoT
+    # batterie_kw_spalte: ENTLADUNG positiv) aggregiert wurden, tragen das
+    # gespeicherte Batterie-Tagesnetto noch in vertauschter Richtung. Erkennung
+    # per Daten-Signal: gespeichertes Netto (summe_batterie_netto_kwh aus
+    # TagesZusammenfassung.komponenten_kwh) gegen einen frischen HA-LTS-Read mit
+    # aktueller Konvention — entgegengesetztes Vorzeichen bei beidseitig
+    # nennenswertem Betrag = Alt-Tag. Bietet einen MANUELLEN Re-Aggregations-
+    # Trigger (Einzeltag + Bereich, max 31 Tage/Lauf) — NIE als Start-Migration
+    # (feedback_migration_startup_kein_http: der v3.45.7-Versuch hat das Add-on
+    # gebrickt). Nur HA-LTS-Modus; Standalone hat keine Referenz zum Vergleich.
+    BATTERIE_VORZEICHEN_HISTORIE = "batterie_vorzeichen_historie"
 
 
 @dataclass

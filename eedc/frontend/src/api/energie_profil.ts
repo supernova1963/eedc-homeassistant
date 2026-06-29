@@ -355,6 +355,11 @@ export const energieProfilApi = {
   reaggregateTagPreview: (anlageId: number, datum: string, signal?: AbortSignal): Promise<ReaggregatePreviewResponse> =>
     api.get(`/energie-profil/${anlageId}/reaggregate-tag/preview?datum=${datum}`, { signal }),
 
+  // v3.45.9: Bereichs-Reaggregation (max 31 Tage/Lauf) — Bulk-Reparatur z. B.
+  // der Batterie-Vorzeichen-Historie aus dem Daten-Checker.
+  reaggregateBereich: (anlageId: number, von: string, bis: string, mitResnap: boolean = true, signal?: AbortSignal): Promise<{ status: string; [k: string]: unknown }> =>
+    api.post(`/energie-profil/${anlageId}/reaggregate-bereich?von=${von}&bis=${bis}&mit_resnap=${mitResnap}`, undefined, { signal }),
+
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>
     api.get(`/energie-profil/${anlageId}/tagesprognose${datum ? `?datum=${datum}` : ''}`),
 

@@ -55,13 +55,15 @@ function KategorieSektion({
   ergebnisse,
   defaultOpen,
   onReaggregate,
+  onReaggregateBereich,
   reparaturBusy,
 }: {
   kategorie: string
   ergebnisse: CheckErgebnis[]
   defaultOpen: boolean
   onReaggregate?: (anlageId: number, datum: string) => Promise<void>
-  reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` der laufenden Reparatur
+  onReaggregateBereich?: (anlageId: number, von: string, bis: string) => Promise<void>
+  reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich)
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const navigate = useNavigate()
@@ -110,6 +112,17 @@ function KategorieSektion({
               ? `${actionAnlageId}:${actionDatum}` : null
             const isReparaturBusy = reparaturKey && reparaturBusy === reparaturKey
 
+            // v3.45.9: Bereichs-Reparatur (Batterie-Vorzeichen-Historie).
+            const rangeAnlageId = e.action_kind === 'reaggregate_range'
+              ? Number(e.action_params?.anlage_id) : undefined
+            const rangeVon = e.action_kind === 'reaggregate_range'
+              ? String(e.action_params?.von ?? '') : undefined
+            const rangeBis = e.action_kind === 'reaggregate_range'
+              ? String(e.action_params?.bis ?? '') : undefined
+            const rangeKey = rangeAnlageId && rangeVon && rangeBis
+              ? `${rangeAnlageId}:${rangeVon}:${rangeBis}` : null
+            const isRangeBusy = rangeKey && reparaturBusy === rangeKey
+
             return (
               <div
                 key={i}
@@ -134,6 +147,20 @@ function KategorieSektion({
                       <Wrench className="h-3 w-3" />
                     )}
                     {e.action_label ?? 'Tag reparieren'}
+                  </button>
+                )}
+                {e.action_kind === 'reaggregate_range' && onReaggregateBereich && rangeAnlageId && rangeVon && rangeBis && (
+                  <button
+                    onClick={() => onReaggregateBereich(rangeAnlageId, rangeVon, rangeBis)}
+                    disabled={!!reparaturBusy}
+                    className="flex-shrink-0 text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    {isRangeBusy ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Wrench className="h-3 w-3" />
+                    )}
+                    {e.action_label ?? 'Zeitraum neu aggregieren'}
                   </button>
                 )}
                 {e.link && !e.action_kind && (
@@ -198,6 +225,30 @@ export default function DatenChecker() {
       setReparaturMessage({
         art: 'fehler',
         text: e instanceof Error ? e.message : `Reparatur für ${datum} fehlgeschlagen`,
+      })
+    } finally {
+      setReparaturBusy(null)
+    }
+  }
+
+  // v3.45.9: Bereichs-Reparatur (Batterie-Vorzeichen-Historie) über den
+  // bestehenden reaggregate-bereich-Endpoint (max 31 Tage/Lauf, Cap im Backend).
+  const handleReaggregateBereich = async (anlageId: number, von: string, bis: string) => {
+    const key = `${anlageId}:${von}:${bis}`
+    setReparaturBusy(key)
+    setReparaturMessage(null)
+    try {
+      await energieProfilApi.reaggregateBereich(anlageId, von, bis, true)
+      setReparaturMessage({
+        art: 'ok',
+        text: `Zeitraum ${von} bis ${bis} neu aus HA-Statistics aggregiert.`,
+      })
+      // Daten-Checker neu laden → Einträge verschwinden, wenn der Konflikt weg ist.
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      setReparaturMessage({
+        art: 'fehler',
+        text: e instanceof Error ? e.message : `Reaggregation ${von}–${bis} fehlgeschlagen`,
       })
     } finally {
       setReparaturBusy(null)
@@ -374,6 +425,7 @@ export default function DatenChecker() {
                   ergebnisse={items}
                   defaultOpen={hasIssues}
                   onReaggregate={handleReaggregateDay}
+                  onReaggregateBereich={handleReaggregateBereich}
                   reparaturBusy={reparaturBusy}
                 />
               )

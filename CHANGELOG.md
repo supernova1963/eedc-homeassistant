@@ -9,6 +9,17 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.9] - 2026-06-29 — Speicher-Vorzeichen-Historie: schonende Selbstkorrektur per Daten-Checker (statt Start-Migration)
+
+### Added
+
+- **Daten-Checker erkennt Vergangenheitstage mit vertauschter Speicher-Richtung — und korrigiert sie auf Knopfdruck.** Nach dem Vorzeichen-Fix (v3.45.7) tragen Tage, die **vor** dem Update aggregiert wurden, das Batterie-Tagesnetto noch in der alten (vertauschten) Richtung. Der neue Check „Batterie – Vorzeichen-Historie" findet diese Tage über ein **Daten-Signal** (gespeichertes Tages-Netto gegen einen frischen HA-Statistics-Read mit aktueller Konvention — gegenläufiges Vorzeichen bei beidseitig nennenswertem Betrag) und bietet zwei manuelle Reparatur-Wege: **„Zeitraum neu aggregieren"** (Bulk, max. 31 Tage/Lauf) und **„Tag reparieren"** (einzeln). **Pull statt Push, user-getriggert, nie beim Start** — die bewusste Lehre aus der v3.45.7-Start-Schleife: keine blockierende Historien-Migration beim Boot. Nur im HA-Add-on-Modus (HA-Statistics als Vergleichsreferenz); reine Betrags-Drift bei gleicher Richtung wird bewusst **nicht** geflaggt.
+- **Intern (Maintainer-Diagnose, read-only):** neuer Endpoint `GET /api/energie-profil/{id}/achse2-drift` macht die Achse-2-Drift (Zähler- vs. Leistungspfad) pro Tag aus **gespeicherten** Werten abfragbar — zum Vermessen der noch offenen Magnitude-Drift (#315) über viele Tage, ohne Schreibzugriff und ohne Re-Aggregation.
+
+### Notes
+
+- **Achse-2-Magnitude-Drift bleibt diagnose-only.** Die noch offene Betrags-Drift zwischen Leistungs- und Zählerpfad betrifft **nur** die interne Konsistenz-Diagnose im Log — die **angezeigten Werte** (Kacheln/Bilanz/Chart) stammen aus dem Zählerpfad und sind korrekt. Eine Berechnungs-Korrektur braucht echte 5-Minuten-Statistikdaten und einen Reproduktions-Test und folgt bewusst separat (kein Schnellschuss).
+
 ## [3.45.8] - 2026-06-29 — Hotfix: Add-on-Start-Schleife durch v3.45.7-Migration behoben
 
 ### Fixed

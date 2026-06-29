@@ -41,6 +41,7 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   provenance_conflict: 'Daten-Quellen – Konflikte',
   datenquelle_status: 'Datenquelle – aktiver Pfad',
   datenquelle_drift: 'Datenquelle – Drift zu HA-Statistics',
+  batterie_vorzeichen_historie: 'Batterie – Vorzeichen-Historie',
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
   emob_pool_pflege: 'E-Mobilität – Pool-Pflege',
 }
@@ -60,6 +61,7 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'provenance_conflict',
   'datenquelle_status',
   'datenquelle_drift',
+  'batterie_vorzeichen_historie',
   'pv_ueber_erfassung',
   'emob_pool_pflege',
 ]

@@ -110,6 +110,7 @@ class DatenChecker(
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
         ergebnisse.extend(await self._check_datenquelle_drift(anlage))
+        ergebnisse.extend(await self._check_batterie_vorzeichen_historie(anlage))
         ergebnisse.extend(await self._check_pv_ueber_erfassung(anlage))
         ergebnisse.extend(self._check_emob_pool_pflege(anlage))
         ergebnisse.extend(self._check_emob_sensor_doppelmapping(anlage))

@@ -31,7 +31,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
-from backend.core.berechnungen import summe_pv_bkw_kwh
+from backend.core.berechnungen import (
+    summe_pv_bkw_kwh,
+    pruefe_tep_komponenten_intern_konsistenz,
+)
 from backend.models.anlage import Anlage
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services import repair_orchestrator as orch
@@ -262,6 +265,68 @@ async def reaggregate_bereich(
         },
     )
     return {"status": "ok", **summary}
+
+
+@router.get("/{anlage_id}/achse2-drift")
+async def achse2_drift_diagnose(
+    anlage_id: int,
+    von: date = Query(..., description="Startdatum (inkl.)"),
+    bis: date = Query(..., description="Enddatum (inkl.)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only-Diagnose (v3.45.9): Achse-2-Magnitude-Drift pro Tag.
+
+    Vergleicht je Tag die GESPEICHERTEN ``TagesEnergieProfil``-Stunden-
+    Repräsentationen: Zähler-Spalten (``*_kw``, Boundary-/Zählerpfad) gegen das
+    ``komponenten``-JSON (Leistungspfad, W-Integration) — über dieselbe
+    Invariante wie der Aggregator (``pruefe_tep_komponenten_intern_konsistenz``,
+    Toleranz 0,5 kWh). **Kein Schreibzugriff, keine Re-Aggregation.**
+
+    Maintainer-Werkzeug zum Vermessen der gegenläufigen Magnitude-Drift
+    (#315, Memory ``project_achse2_magnitude_drift``) über viele Tage, bevor an
+    der Rekonstruktions-Kette etwas geändert wird. Die angezeigten Werte
+    (Kacheln/Bilanz/Chart) stammen aus dem Zählerpfad und sind korrekt — diese
+    Drift ist rein diagnostisch (log-only im Aggregator, hier abfragbar).
+    """
+    result = await db.execute(
+        select(TagesEnergieProfil)
+        .where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= von,
+            TagesEnergieProfil.datum <= bis,
+        )
+        .order_by(TagesEnergieProfil.datum, TagesEnergieProfil.stunde)
+    )
+    rows = list(result.scalars().all())
+
+    nach_tag: dict[date, list] = {}
+    for row in rows:
+        nach_tag.setdefault(row.datum, []).append(row)
+
+    tage_out: list[dict] = []
+    for datum_, tep_rows in sorted(nach_tag.items()):
+        kategorien = [
+            {
+                "name": bericht.name,
+                "zaehler_kwh": round(bericht.erwartet, 3),
+                "leistung_kwh": round(bericht.tatsaechlich, 3),
+                "abweichung_kwh": round(bericht.abweichung_kwh, 3),
+                "toleranz_kwh": bericht.toleranz_kwh,
+            }
+            for bericht in pruefe_tep_komponenten_intern_konsistenz(tep_rows)
+            if not bericht.konsistent
+        ]
+        if kategorien:
+            tage_out.append({"datum": datum_.isoformat(), "drift": kategorien})
+
+    return {
+        "status": "ok",
+        "anlage_id": anlage_id,
+        "von": von.isoformat(),
+        "bis": bis.isoformat(),
+        "tage_mit_drift": len(tage_out),
+        "tage": tage_out,
+    }
 
 
 @router.post("/{anlage_id}/vollbackfill")

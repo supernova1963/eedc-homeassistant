@@ -13,7 +13,8 @@ export interface CheckErgebnis {
   details?: string
   link?: string
   // Etappe 6 v3.31.1: optionale Inline-Reparatur-Action.
-  action_kind?: 'reaggregate_day'
+  // v3.45.9: 'reaggregate_range' für Bulk-Reparatur (Batterie-Vorzeichen-Historie).
+  action_kind?: 'reaggregate_day' | 'reaggregate_range'
   action_params?: Record<string, unknown>
   action_label?: string
   // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —
