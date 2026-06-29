@@ -269,3 +269,48 @@ zählung + Pflege-Konflikt zurückbringen.
 **Kandidat-Fix:** Der Zähler-Abdeckungs-Check soll den kWh-Zähler-Bedarf eines
 E-Autos **überspringen, wenn eine Wallbox mit kWh-Zähler** in derselben Anlage
 existiert (analog zur strukturellen Quellen-Regel). Gleiche Issue-Familie wie A.
+
+## Offene Lücke 2026-06-29: Tages-Energieprofil-Leistungspfad nicht von Phase 2a erfasst (Achse-2-Magnitude-Drift)
+
+> **Status: ENTDECKT + zu scopen (kein Code).** Aufgetaucht beim Live-Gegencheck der v3.45.9-Achse-2-Diagnose (`GET /api/energie-profil/{id}/achse2-drift`) an Gernots Anlage. SoT für die Weiterarbeit ist dieser Abschnitt + Memory [[project_achse2_magnitude_drift]].
+
+### Befund (Daten, Gernots Anlage 1, v3.45.9)
+
+Die Achse-2-Invariante (`pruefe_tep_komponenten_intern_konsistenz`) meldet für die Kategorie **„Wallbox+E-Auto"** eine **gegenläufige ~2×-Drift** zwischen den beiden gespeicherten Stunden-Repräsentationen:
+
+| Tag | Zählerpfad (`wallbox_kw`-Spalte) | Leistungspfad (Σ `komponenten[wallbox_*]+[eauto_*]`) | Faktor |
+|-----|----------------------------------|------------------------------------------------------|--------|
+| 2026-06-22 | **+7,00** kWh | **−14,00** kWh | −2,00× |
+| 2026-06-24 | **+3,00** kWh | **−6,43** kWh | −2,14× |
+
+Setup: Wallbox (SMA eCharger, inv 2, `parent=None`) + E-Auto (Smart #1, inv 1, `parent=None`) — **getrennt, unverlinkt**. Genau die im Kopf dieses Dokuments (Update 2026-06-03) notierte „Verbleibende Lücke": *Wallbox + E-Auto mit getrennten Sensoren, unverlinkt → Live-/Aggregations-Pfad poolen mit divergenten Heuristiken.*
+
+### Warum das eine eigene Lücke ist (Abgrenzung zu Phase 2a)
+
+- **Phase 2a (v3.36.0)** kanonisierte die **Monats-Read-Sites** (Wallbox/E-Auto-Dashboard, Cockpit, jahresbericht, ha_export) + die einmalige Migration auf die strukturelle Regel „Wallbox vorhanden → Wallbox ist Quelle". Der **tägliche Energieprofil-/Tagesverlauf-Pfad** (die `komponenten`-JSON-**Leistungsserien** aus `live_tagesverlauf_service`/`live_komponenten_builder`, gespeichert in `TagesEnergieProfil.komponenten`) war **nicht** Teil davon.
+- **Nicht heilbar durch Re-Aggregation:** 2026-06-22 wurde am 2026-06-29 manuell neu aggregiert → Drift **unverändert** (+7 / −14). Also **kein** Stale-Mapping-Artefakt, sondern laufendes Verhalten des Tages-Leistungspfads mit aktuellem Mapping.
+- **Kein aktuelles Sensor-Doppelmapping:** `_check_emob_sensor_doppelmapping` ist auf der Anlage **grün** (Gernot hat `evcc_pv_charged` vom E-Auto entfernt; E-Auto trägt nur noch `km_gefahren`). Die Drift besteht **trotzdem** → sie kommt **nicht** aus einem doppelt gemappten Sensor, sondern aus der Pfad-internen Serien-Bildung.
+- **Monats-Pool separat:** `_check_emob_pool_pflege` warnt weiterhin (Monats-Altdaten, EA = WB identisch in 01/2026, 12/2025, 08/2025) — das ist der **Monats**-Pflege-Konflikt, nicht die Tages-Drift.
+
+### Diagnose-only — keine falschen Anzeige-Werte
+
+Die **angezeigten** Werte (Kacheln, Bilanz, Charts, Tages-/Monats-Auswertung) stammen aus dem **Zählerpfad** (`*_kw`-Spalten / `komponenten_kwh` Boundary) und sind **korrekt** (+7). Nur das interne `komponenten`-JSON (Leistungspfad, butterfly-signiert) driftet. Symptom ist die dauerhafte Achse-2-Log-Warnung, jetzt auch im Diagnose-Endpoint sichtbar. Kein Anwender-sichtbarer Wert ist falsch.
+
+### Noch zu klären vor einem Fix-Konzept (per-Key-Mechanismus)
+
+Der Diagnose-Endpoint summiert die Kategorie (`summe_wallbox_eauto_kwh` = Σ `wallbox_*` + `eauto_*`), zeigt also **nicht**, welcher Key die −14 trägt. Zwei Hypothesen, verschiedene Fixes:
+
+1. **Wallbox-Selbst-Verdopplung:** der Leistungspfad baut die Wallbox-Kurve aus **mehreren** Zählern (`ladung_kwh` **+** `ladung_pv_kwh`), obwohl `ladung_pv_kwh` eine **Teilmenge** ist (der Zählerpfad addiert in `komponenten_beitraege.py` bewusst nur `ladung_kwh`). Spräche für genau −2× bei Voll-PV-Ladung.
+2. **Phantom-`eauto_1`-Serie:** der Leistungspfad erzeugt eine eigene E-Auto-Serie (Quelle noch unklar, da E-Auto keinen Lade-Sensor mehr hat) → echter Querschluss `wallbox_2` + `eauto_1`. Der Faktor **2,14×** am 06-24 (> 2×) passt eher hierzu als zur reinen PV-Teilmengen-Verdopplung.
+
+**Auflösung (Scoping-Schritt, kein Fix):** entweder (a) gezielter Code-Read des Tages-Leistungspfads (`extract_live_config` / `baue_investitions_serien` / `live_komponenten_builder.py`: Serien-Quellen + Entity-Dedup) oder (b) den Diagnose-Endpoint um eine **Per-Key-Aufschlüsselung** erweitern und on-box messen.
+
+### Vorgeschlagene Fix-Richtung (im Konzept-Rahmen, NICHT entschieden)
+
+- **Strukturelle Quellen-Regel auf den Tages-Leistungspfad ausdehnen:** die in Phase 2a beschlossene Regel („Wallbox vorhanden + hat Heimladung → Wallbox ist Quelle; E-Auto trägt nur Nutzung") gilt bisher nur monatlich/read-seitig. Der Tages-Leistungspfad muss dieselbe Regel anwenden, statt heuristisch zu poolen — und `ladung_pv_kwh`/`ladung_netz_kwh` als **Teilmengen** behandeln (nie zusätzlich als Kurve aufaddieren), konsistent zu `komponenten_beitraege`.
+- **Achse-2-Invariante für Senken-Vorzeichen normalisieren:** `summe_wallbox_eauto_kwh` (und die anderen Senken-Kategorien) vergleichen die **positive** `*_kw`-Spalte gegen das **negativ** butterfly-signierte JSON → systematischer Vorzeichen-Fehlalarm unabhängig vom Magnituden-Bug. Die Invariante sollte die Senken-Konvention kennen (Betrag/Seite normalisieren), sonst flaggt sie auch nach dem Magnitude-Fix weiter.
+- **Leitplanke:** im abgenommenen Wallbox/E-Auto-Rahmen reparieren, Konzept nicht umwerfen ([[feedback_korrektur_nicht_konzept_umwerfen]]); strukturelle Regel statt neuer Heuristik ([[feedback_sonderfaelle_nicht_reflexhaft_codieren]]); falls ein Fix die Aggregation ändert, Alt-Tage **nur** über manuellen Daten-Checker-Knopf nachziehen, nie als Start-Migration ([[feedback_migration_startup_kein_http]]).
+
+### Trigger / Priorität
+
+Diagnose-only, niedrig-prioritär (keine falschen Anzeige-Werte). Sinnvoll **gebündelt** mit der nächsten echten Wallbox/E-Auto-Arbeit (gemeinsamer Test-/Migrations-Zyklus), nicht als isolierter Hotfix. Re-Evaluierung beim nächsten emob-Pool-Signal.
