@@ -881,18 +881,15 @@ async def _run_data_migrations() -> None:
             migrate_emob_canonical_source,
         )
 
-        # Batterie-Vorzeichen auf kanonisch ENTLADUNG positiv vereinheitlichen.
-        # MUSS nach dem Code-Fix (aggregator.batterie_kw_spalte +
-        # komponenten_beitraege Speicher-Vorzeichen) laufen, sonst reaggregiert
-        # sie mit dem alten Vorzeichen. Re-Aggregation hält Spalte +
-        # komponenten_kwh im Gleichschritt (kein Spalten-Blind-Negieren).
-        from backend.services.migrations.migrate_batterie_kw_entladung_positiv import (
-            migrate_batterie_kw_entladung_positiv,
-        )
-        await _apply_once(
-            "batterie_kw_entladung_positiv",
-            migrate_batterie_kw_entladung_positiv,
-        )
+        # HINWEIS (v3.45.8): Die in v3.45.7 hier registrierte Migration
+        # `batterie_kw_entladung_positiv` wurde ENTFERNT. Sie reaggregierte beim
+        # Start ALLE historischen Tage über externe HTTP-Calls (HA-History +
+        # awattar + open-meteo) und blockierte damit den App-Start so lange, dass
+        # der Supervisor den Add-on-Start abbrach → Neustart-Schleife. Der
+        # Code-Fix (batterie_kw_spalte + komponenten_beitraege) bleibt aktiv, d.h.
+        # NEUE Aggregationen sind korrekt; Alt-Tage heilen sich beim nächsten
+        # regulären Reaggregieren bzw. via „Tag neu berechnen". Eine sichere,
+        # nicht-blockierende Historien-Korrektur kann separat nachgezogen werden.
 
 
 async def init_db():

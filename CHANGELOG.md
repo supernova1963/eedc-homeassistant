@@ -9,6 +9,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.45.8] - 2026-06-29 — Hotfix: Add-on-Start-Schleife durch v3.45.7-Migration behoben
+
+### Fixed
+
+- **Add-on startete nach Update auf v3.45.7 nicht mehr (Neustart-Schleife).** Die in v3.45.7 eingeführte Batterie-Vorzeichen-Migration reaggregierte beim Start **alle** historischen Tage über externe HTTP-Abrufe (HA-History + Strompreis + Wetter). Bei längerer Historie dauerte das so lange, dass der Supervisor den Add-on-Start als fehlgeschlagen wertete und neu startete — die Migration begann von vorn → Endlosschleife. **Die Migration wurde entfernt.** Der eigentliche Vorzeichen-Fix aus v3.45.7 (Speicher Laden/Entladen in Auswertung & Tagesverlauf) **bleibt aktiv**: neue Aggregationen sind korrekt; bereits inkonsistente Alt-Tage korrigieren sich beim nächsten regulären Neuberechnen bzw. gezielt über „Tag neu berechnen". Eine sichere, nicht-blockierende Historien-Korrektur kann separat nachgezogen werden.
+
 ## [3.45.7] - 2026-06-29 — Speicher: Lade-/Entlade-Richtung in Auswertung & Tagesverlauf korrigiert
 
 ### Fixed
