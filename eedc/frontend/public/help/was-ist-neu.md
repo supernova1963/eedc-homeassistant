@@ -1,11 +1,22 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.7)
+> **Stand:** Juni 2026 (v3.45.8)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.45.8 — Hotfix: Add-on startet wieder (Juni 2026)
+
+> Falls dein Add-on nach dem Update auf **v3.45.7** in eine **Neustart-Schleife** geraten ist und nicht mehr erreichbar war: Das behebt diese Version. Ursache war die in v3.45.7 eingeführte einmalige Neuberechnung aller Verlaufstage — sie lief beim Start zu lange (viele externe Abrufe) und der HA-Supervisor brach den Start ab. Diese Neuberechnung wurde **entfernt**.
+
+### Was sich für dich ändert
+
+- **Add-on startet wieder normal** — direkt nach dem Update auf v3.45.8.
+- **Der Speicher-Vorzeichen-Fix aus v3.45.7 bleibt aktiv:** neue/laufende Tage werden korrekt dargestellt. Bereits gespeicherte **Vergangenheitstage** können noch die alte (vertauschte) Speicher-Richtung zeigen — sie korrigieren sich, sobald ein Tag neu berechnet wird (automatisch über die Zeit oder gezielt per „Tag neu berechnen" im Energieprofil). Eine schonende automatische Nachkorrektur kommt separat.
 
 ---
 
