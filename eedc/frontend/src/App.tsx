@@ -75,6 +75,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
       CockpitV4: lazy(() => import('./v4/CockpitV4')),
       KomponentenV4: lazy(() => import('./v4/KomponentenV4')),
       AuswertungenV4: lazy(() => import('./v4/AuswertungenV4')),
+      CommunityV4: lazy(() => import('./v4/CommunityV4')),
       Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
@@ -183,7 +184,10 @@ function App() {
               {/* Komponenten-Hub (Was-Achse, Phase A.2): Index → erster Typ. */}
               <Route path="komponenten" element={<V4.KomponentenV4 />} />
               <Route path="komponenten/:typ" element={<V4.KomponentenV4 />} />
-              <Route path="community" element={<V4.Platzhalter />} />
+              {/* Community (Phase A.6): Dispatcher mit Sub-Tabs {uebersicht,pv-ertrag,
+                  komponenten,regional,trends,statistiken}; Index → Übersicht. */}
+              <Route path="community" element={<Navigate to="/v4/community/uebersicht" replace />} />
+              <Route path="community/:sub" element={<V4.CommunityV4 />} />
               <Route path="hilfe" element={<V4.Platzhalter />} />
               <Route path="einstellungen" element={<V4.Platzhalter />} />
             </Route>

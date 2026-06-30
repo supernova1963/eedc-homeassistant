@@ -1,3 +1,5 @@
+import { createElement, type ReactElement } from 'react'
+
 /**
  * Achsen-Standard (D7-5 / detLAN R7 / R9-Nacharbeit) — EINE Wahrheit für Recharts-Achsen.
  *
@@ -67,24 +69,23 @@ export function yAchse(_schmal: boolean, breite?: number): YAchsenProps {
 export interface AchsenEinheitLabel {
   value: string
   position: 'top'
-  offset: number
-  fontSize: number
-  dx?: number
-  style: { textAnchor: 'start' | 'end' }
+  content: (props: { viewBox?: { x?: number; y?: number; width?: number; height?: number } }) => ReactElement
 }
 
 /**
  * achsenEinheit — die EINE Wahrheit für den Einheiten-Titel einer Achse
- * (R9-Nacharbeit, detLAN + Rainer 👍):
- *   • Einheit als **kleine, waagerechte** Beschriftung **über dem obersten Tick**,
- *     links an der Achse. **NIE gedreht — auch mobil nicht.** Nie über/auf einem Tick.
- *   • Umgesetzt via `position:'top'` (oberhalb der Plotfläche) im reservierten
- *     oberen Rand → Chart braucht `margin={{ top: ACHSEN_MARGIN_TOP, ... }}`,
- *     sonst clippt es. **D12-14 (detLAN R12):** die Einheit folgt der **horizontalen
- *     Ausrichtung der Tick-Werte** — linke Achse `textAnchor:'end'` (rechtsbündig,
- *     wie die rechtsbündigen Zahlen an der Achse), rechte Achse `textAnchor:'start'`
- *     (linksbündig). Vorher saß sie gegenläufig → wirkte „willkürlich".
- *   • **KEIN `angle`, KEIN `schmal`-Sonderfall** mehr (das war der R9-Bug).
+ * (R9-Nacharbeit, detLAN + Rainer 👍; Ausrichtungs-Nachzug Gernot 2026-06-30):
+ *   • Einheit als **kleine, waagerechte** Beschriftung **über dem obersten Tick**.
+ *     **NIE gedreht — auch mobil nicht.** Nie über/auf einem Tick.
+ *   • **Horizontal exakt ÜBER den Tick-Werten** (Gernot 2026-06-30): die Einheit
+ *     muss dieselbe Ausrichtung/Position wie die Achsen-Zahlen haben. `position:'top'`
+ *     allein ankert in der Achsen-Box-MITTE (→ Einheit saß links neben den Zahlen,
+ *     D12-14 drehte nur den `textAnchor`, nicht den Ankerpunkt). Fix: eigener
+ *     `content`-Renderer, der die x-Position aus der `viewBox` an die Tick-Kante legt —
+ *     linke Achse rechtsbündig an der rechten Box-Kante (`x = vb.x + vb.width`,
+ *     `textAnchor:'end'`, wie die rechtsbündigen Zahlen), rechte Achse linksbündig an
+ *     der linken Box-Kante (`x = vb.x`, `textAnchor:'start'`). `y = vb.y - 6` liegt im
+ *     reservierten oberen Rand → Chart braucht weiterhin `margin={{ top: ACHSEN_MARGIN_TOP }}`.
  * `seite` = Orientierung: `'links'` (Default, primär) | `'rechts'` (2. Achse).
  * Jede Achse trägt genau **eine** Einheit; Klammer-Überschriften im Chart-Kopf
  * („… (kWh)") und `unit=`-Tick-Suffixe entfallen — die Einheit gehört an die Achse.
@@ -94,9 +95,30 @@ export function achsenEinheit(
   einheit: string,
   seite: 'links' | 'rechts' = 'links',
 ): AchsenEinheitLabel {
-  // D12-14: Einheit folgt der Tick-Wert-Ausrichtung — links rechtsbündig ('end'),
-  // rechts linksbündig ('start'); dx schiebt sie je von der Achse weg in den Rand.
-  return seite === 'rechts'
-    ? { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: 4, style: { textAnchor: 'start' } }
-    : { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: -4, style: { textAnchor: 'end' } }
+  const rechts = seite === 'rechts'
+  return {
+    value: einheit,
+    position: 'top',
+    content: ({ viewBox }) => {
+      const x = viewBox?.x ?? 0
+      const y = viewBox?.y ?? 0
+      const w = viewBox?.width ?? 0
+      // Tick-Kante: links = rechte Box-Kante (Zahlen rechtsbündig an der Achslinie),
+      // rechts = linke Box-Kante (Zahlen linksbündig an der Achslinie).
+      const tx = rechts ? x : x + w
+      return createElement(
+        'text',
+        {
+          x: tx,
+          y: y - 6,
+          textAnchor: rechts ? 'start' : 'end',
+          fontSize: 10,
+          // Theme-aware via Tailwind fill-Utility (kein Inline-Hex; folgt CHART_THEME
+          // gray-500 light / gray-400 dark = Tick-Farbe).
+          className: 'fill-gray-500 dark:fill-gray-400',
+        },
+        einheit,
+      )
+    },
+  }
 }
