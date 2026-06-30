@@ -107,7 +107,9 @@ function SensorRow({ z }: { z: SensorZeile }) {
         {z.live && <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS.ok }} title="Live-Sensor" />}
         {z.feld}{z.live ? ' (live)' : ''}
       </span>
-      <code className="text-xs text-gray-700 dark:text-gray-300 truncate">{z.sensor}</code>
+      {/* D12-12: min-w-0 — sonst greift `truncate` im Flex-Row nicht und lange
+          entity_ids schieben die Zeile mobil über den Rand. title = voller Wert. */}
+      <code className="text-xs text-gray-700 dark:text-gray-300 truncate min-w-0" title={z.sensor}>{z.sensor}</code>
     </div>
   )
 }
@@ -194,10 +196,13 @@ function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Invest
               <KompKopf inv={inv} rechts={<EditLink href={EDIT_INVEST}>Bearbeiten</EditLink>} />
               {felder.length > 0 ? (
                 <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
+                  {/* D12-12: lange Text-Parameter (z. B. „beschreibung") müssen umbrechen
+                      statt über den Rand zu laufen — `break-words` statt `whitespace-nowrap`;
+                      dt `shrink-0`, Wert rechtsbündig + `min-w-0`. */}
                   {felder.map((f) => (
-                    <div key={f.label} className="flex items-center justify-between gap-2 text-sm border-b border-gray-100 dark:border-gray-800 py-0.5">
-                      <dt className="text-gray-500 dark:text-gray-400 capitalize">{f.label}</dt>
-                      <dd className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{f.wert}</dd>
+                    <div key={f.label} className="flex items-start justify-between gap-2 text-sm border-b border-gray-100 dark:border-gray-800 py-0.5">
+                      <dt className="text-gray-500 dark:text-gray-400 capitalize shrink-0">{f.label}</dt>
+                      <dd className="font-medium text-gray-900 dark:text-white break-words min-w-0 text-right">{f.wert}</dd>
                     </div>
                   ))}
                 </dl>
@@ -235,8 +240,9 @@ function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Invest
                 {basis.map((b) => <SensorRow key={`b-${b.feld}-${b.sensor}`} z={b} />)}
                 {topics.map((t) => (
                   <div key={`${t.ziel_key}-${t.quell_topic}`} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5"><Radio className="h-3 w-3 shrink-0" />{t.ziel_key.replace(/_/g, ' ')}</span>
-                    <code className="text-xs text-gray-700 dark:text-gray-300 truncate">{t.quell_topic}</code>
+                    <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5 shrink-0 min-w-0"><Radio className="h-3 w-3 shrink-0" /><span className="truncate">{t.ziel_key.replace(/_/g, ' ')}</span></span>
+                    {/* D12-12: min-w-0 → langes MQTT-Topic truncatet statt überzulaufen. */}
+                    <code className="text-xs text-gray-700 dark:text-gray-300 truncate min-w-0" title={t.quell_topic}>{t.quell_topic}</code>
                   </div>
                 ))}
               </div>
@@ -315,7 +321,8 @@ function InfothekBlock({ invs }: { invs: Investition[] }) {
               <ul className="space-y-0.5">
                 {eintr.map((e) => (
                   <li key={e.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-gray-700 dark:text-gray-300 truncate">{e.bezeichnung}</span>
+                    {/* D12-12: min-w-0 → langer Dokumenttitel truncatet statt überzulaufen. */}
+                    <span className="text-gray-700 dark:text-gray-300 truncate min-w-0" title={e.bezeichnung}>{e.bezeichnung}</span>
                     {!!e.dateien_count && (
                       <span className="inline-flex items-center gap-0.5 text-xs text-gray-500 dark:text-gray-400 shrink-0" title={`${e.dateien_count} Datei(en)`}>
                         <Paperclip className="h-3 w-3" />{e.dateien_count}
@@ -442,9 +449,10 @@ function StrukturInhalt({ s }: { s: KompStruktur }) {
       <dl className="space-y-2">
         {s.zeilen.map((z, i) => (
           <div key={i}>
-            <div className="flex items-center justify-between gap-2 border-b border-gray-100 dark:border-gray-800 py-1 text-sm">
-              <dt className="text-gray-500 dark:text-gray-400">{z.label}</dt>
-              {z.wert && <dd className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{z.wert}</dd>}
+            {/* D12-12: Referenz-Wert (z. B. Gerätename) umbrechbar statt nowrap. */}
+            <div className="flex items-start justify-between gap-2 border-b border-gray-100 dark:border-gray-800 py-1 text-sm">
+              <dt className="text-gray-500 dark:text-gray-400 shrink-0">{z.label}</dt>
+              {z.wert && <dd className="font-medium text-gray-900 dark:text-white break-words min-w-0 text-right">{z.wert}</dd>}
             </div>
             {z.hinweis && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{z.hinweis}</p>}
           </div>

@@ -127,10 +127,13 @@ function TabelleInner() {
       summary: `${monVon || '…'} – ${monBis || '…'}${monVergleich ? ' · vs. Vorjahr' : ''}`, defaultOpen: true,
       render: () => (
         <div className="space-y-3">
+          {/* D12-8: Eingabe-Grenzen aus dem verfügbaren Datenjahr-Bereich (analog
+              CockpitTagV4 R5-F2) — sperrt Phantasie-Jahre wie „1822". */}
           <WerkbankZeitraum
             modus="monat" von={monVon} bis={monBis}
             onRange={(v, b) => { setMonVon(v); setMonBis(b) }}
             vergleich={monVergleich} onVergleich={setMonVergleich} chips={monChips}
+            minDatum={`${minJahr}-01`} maxDatum={`${maxJahr}-12`}
           />
           <Parkbar id="tabelle:monatswerte" titel="Monatswerte">
             <WerteTabelle
@@ -158,6 +161,7 @@ function TabelleInner() {
           vglModus={vglModus} onVglModus={setVglModus}
           vglJahr={vglJahr} onVglJahr={setVglJahr} jahre={jahre}
           anker={anker} anlagenname={selectedAnlage?.anlagenname}
+          minJahr={minJahr} maxJahr={maxJahr}
         />
       ),
     })
@@ -233,7 +237,7 @@ export function richteAus(prim: WerteZeile[], comp: WerteZeile[] | null, vgl: Vg
 
 /** Tages-Block: lazy (mountet erst beim Aufklappen) → lädt nur dann die Tageswerte. */
 function EnergieprofilBlock({
-  anlageId, von, bis, onRange, vglModus, onVglModus, vglJahr, onVglJahr, jahre, anker, anlagenname,
+  anlageId, von, bis, onRange, vglModus, onVglModus, vglJahr, onVglJahr, jahre, anker, anlagenname, minJahr, maxJahr,
 }: {
   anlageId: number
   von: string; bis: string
@@ -245,6 +249,8 @@ function EnergieprofilBlock({
   jahre: number[]
   anker: { jahr: number; monat: number } | null
   anlagenname?: string
+  minJahr: number
+  maxJahr: number
 }) {
   const vgl = useMemo(
     () => (von && bis ? tagVergleich(vglModus, von, bis, vglJahr) : null),
@@ -271,6 +277,8 @@ function EnergieprofilBlock({
     <div className="space-y-3">
       <WerkbankZeitraum
         modus="tag" von={von} bis={bis} onRange={onRange} chips={chips}
+        // D12-8: Tages-Grenzen aus dem Datenjahr-Bereich (1. Jan – 31. Dez).
+        minDatum={`${minJahr}-01-01`} maxDatum={`${maxJahr}-12-31`}
         vergleichSlot={
           <VergleichLeisteTag
             modus={vglModus} onModus={onVglModus}

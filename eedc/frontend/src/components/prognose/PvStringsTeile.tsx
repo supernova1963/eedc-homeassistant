@@ -166,9 +166,10 @@ export function PvStringHeaderZeile({ data, zeitraumLabel, onCsv }: {
         <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
         {' '}&bull;{' '}{data.strings.length} Strings &bull; {fmtZahl(data.anlagen_leistung_kwp, 1)} kWp
       </p>
+      {/* D12-11: mobil Icon-only (Text drängte sonst in der engen Kopfzeile). */}
       {onCsv && (
-        <Button variant="secondary" size="sm" onClick={onCsv}>
-          <Download className="h-4 w-4 mr-2" />CSV-Export
+        <Button variant="secondary" size="sm" onClick={onCsv} title="CSV-Export">
+          <Download className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">CSV-Export</span>
         </Button>
       )}
     </div>

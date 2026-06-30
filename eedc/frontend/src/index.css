@@ -51,6 +51,19 @@ html.dark .recharts-legend-item-text {
   * {
     @apply transition-colors duration-200;
   }
+
+  /* D12 (Dark-Icon): Native Datums-/Monatsfelder rendern ihr Picker-Icon
+     (::-webkit-calendar-picker-indicator) abhängig vom `color-scheme`. Im
+     Dark-Mode war es schwarz auf dunklem Feld = unsichtbar. `color-scheme: dark`
+     weist den Browser an, die nativen Controls hell zu zeichnen (robuster +
+     ohne Hex-Filter, gilt app-weit für alle date/month/time-Inputs). */
+  html.dark input[type="date"],
+  html.dark input[type="month"],
+  html.dark input[type="time"],
+  html.dark input[type="datetime-local"],
+  html.dark input[type="week"] {
+    color-scheme: dark;
+  }
 }
 
 /* Custom component styles */

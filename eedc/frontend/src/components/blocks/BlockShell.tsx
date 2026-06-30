@@ -6,7 +6,7 @@
  * Promoviert aus `components/preview/IASkeleton.tsx` (dort `BloeckeView`).
  * Hier die echte, getestete Variante für den IA-v4-Routenbaum.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUp, ArrowDown, ChevronDown, Maximize2, RotateCcw,
 } from 'lucide-react'
@@ -50,18 +50,34 @@ export function BlockShell({
   const [order, setOrder] = useState<string[]>(() => {
     const gespeichert = ladeBlockState(persistKey).order
     if (!gespeichert) return ids
-    // Nur bekannte IDs übernehmen, neue/fehlende hinten anhängen (Schema-robust).
-    const gueltig = gespeichert.filter((id) => ids.includes(id))
-    return [...gueltig, ...ids.filter((id) => !gueltig.includes(id))]
+    // Lücken-fest (detLAN-Vollbild-Bug 2026-06-30): die gespeicherte Reihenfolge
+    // VOLLSTÄNDIG behalten — auch IDs, die gerade nicht in der Liste sind (z. B.
+    // Blöcke eines Lücken-Tags, die zurückkommen) —, nur neue IDs hinten anhängen.
+    // Niemals IDs wegwerfen → ein vorübergehend reduziertes `bloecke` kann die
+    // Reihenfolge nicht zerstören.
+    return [...gespeichert, ...ids.filter((id) => !gespeichert.includes(id))]
   })
   const [zu, setZu] = useState<Set<string>>(() => {
     const gespeichert = ladeBlockState(persistKey).zu
     return gespeichert
-      ? new Set(gespeichert.filter((id) => ids.includes(id)))
+      ? new Set(gespeichert)  // Lücken-fest: Klappzustand auch absenter Blöcke behalten
       : new Set(bloecke.filter((b) => b.defaultOpen === false).map((b) => b.id))
   })
   const [fokus, setFokus] = useState<string | null>(null)
+  // Letzte Meta des fokussierten Blocks — damit das Vollbild Titel/Icon behält,
+  // falls der Block kurzzeitig aus der Liste fällt (Lücken-Tag).
+  const lastFokusMeta = useRef<Pick<Block, 'title' | 'icon' | 'farbe'> | null>(null)
   const byId = useMemo(() => Object.fromEntries(bloecke.map((b) => [b.id, b] as const)), [bloecke])
+
+  // Lücken-fest: neu auftauchende Block-IDs hinten anhängen, vorhandene Position
+  // behalten, NIE entfernen — verschwundene Blöcke eines Lücken-Tags bleiben in der
+  // Reihenfolge und kommen an ihrer Stelle zurück (kein „nur noch ein Block").
+  useEffect(() => {
+    setOrder((prev) => {
+      const neu = ids.filter((id) => !prev.includes(id))
+      return neu.length ? [...prev, ...neu] : prev
+    })
+  }, [ids])
 
   // Default-Klappzustand (defaultOpen === false → eingeklappt) für den Reset.
   const defaultZu = useMemo(
@@ -69,12 +85,18 @@ export function BlockShell({
     [bloecke],
   )
   const istDefault = useMemo(() => {
-    const sameOrder = order.length === ids.length && order.every((id, i) => id === ids[i])
-    const sameZu = zu.size === defaultZu.length && defaultZu.every((id) => zu.has(id))
+    // Nur die aktuell SICHTBAREN Blöcke vergleichen (absente Lücken-Tag-IDs in
+    // order/zu zählen nicht als „verändert").
+    const sichtbar = order.filter((id) => ids.includes(id))
+    const sameOrder = sichtbar.length === ids.length && sichtbar.every((id, i) => id === ids[i])
+    const sichtbarZu = [...zu].filter((id) => ids.includes(id))
+    const sameZu = sichtbarZu.length === defaultZu.length && defaultZu.every((id) => zu.has(id))
     return sameOrder && sameZu
   }, [order, ids, zu, defaultZu])
   const zuruecksetzen = () => {
-    setOrder(ids)
+    // Aktuelle Blöcke in Natur-Reihenfolge nach vorn; absente (Lücken-Tag-)IDs
+    // behalten ihre Position dahinter — niemals wegwerfen (sonst Reihenfolge weg).
+    setOrder([...ids, ...order.filter((id) => !ids.includes(id))])
     setZu(new Set(defaultZu))
     setFokus(null)
   }
@@ -98,13 +120,28 @@ export function BlockShell({
   }
 
   // ── Fokus/Vollbild: nur dieser Block, bildschirmfüllend (geteiltes Overlay) ──
-  if (fokus && byId[fokus]) {
+  // Lücken-fest (detLAN 2026-06-30): Das Vollbild bleibt OFFEN, auch wenn der
+  // fokussierte Block kurzzeitig aus `bloecke` fällt (Navigation auf einen Tag
+  // ohne Daten). Statt zurückzuspringen zeigt es einen „keine Daten"-Hinweis +
+  // die durchlaufende Datums-Nav (fokusKopf) — der Nutzer kann im Vollbild
+  // weiterblättern, und sobald der Block zurückkommt, rendert er wieder.
+  if (fokus) {
     const b = byId[fokus]
-    return (
-      <FokusVollbild titel={b.title} icon={b.icon} farbe={b.farbe} kopf={fokusKopf} onClose={() => setFokus(null)}>
-        {b.render(true)}
-      </FokusVollbild>
-    )
+    if (b) lastFokusMeta.current = { title: b.title, icon: b.icon, farbe: b.farbe }
+    const meta = b ?? lastFokusMeta.current
+    if (meta) {
+      return (
+        <FokusVollbild titel={meta.title} icon={meta.icon} farbe={meta.farbe} kopf={fokusKopf} onClose={() => setFokus(null)}>
+          {b
+            ? b.render(true)
+            : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Für diesen Zeitraum liegen keine Daten vor. Wähle über die Navigation oben einen Zeitraum mit Messwerten – oder schließe die Vollansicht.
+              </p>
+            )}
+        </FokusVollbild>
+      )
+    }
   }
 
   const ordered = order.map((id) => byId[id]).filter(Boolean) as Block[]

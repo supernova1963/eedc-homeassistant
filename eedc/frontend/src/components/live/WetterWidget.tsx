@@ -509,6 +509,7 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 label={achsenEinheit('kW')}
               />
               <Tooltip content={<ChartTooltip
+                lineStyle /* D12-2: IST (durchgezogen) vs. Prognose (gestrichelt) bei gleicher Farbe unterscheidbar */
                 labelFormatter={(label) => {
                   // Forward-Slot-Konvention: zeit=h ist Intervall [h, h+1]
                   const h = parseInt(String(label))

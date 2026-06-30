@@ -48,19 +48,27 @@ function formatDatum(datum: string): string {
 // 2026-06-23): EIN spaltengleicher Block — je Tag eine Spalte mit kWh-Wert,
 // VM/NM-Balken, Wettersymbol, Temperatur, Datum, exakt untereinander ausgerichtet
 // (ein CSS-Grid statt Chart+Streifen, damit die Spalten garantiert fluchten).
+// R12-4 Redesign (Gernot 2026-06-29): Wetter-Symbol + Temperatur wieder OBERHALB
+// der Säule und GRÖSSER (an Spaltenbreite skaliert via w-Anteil), Chart deutlich
+// HÖHER; mobil (< lg) Wechsel Säulen → horizontale Balken (löst die Schmal-Enge).
 
-const BALKEN_PX = 110 // Höhe der Balken-Spur
+const BALKEN_PX = 170 // Höhe der vertikalen Balken-Spur (Desktop) — R12-4: deutlich höher (war 110)
+
+// „heute" = erste Spalte/Zeile (Index 0). D12-3: rounded-md + ring-inset, damit
+// der Rahmen vollständig innerhalb der Karte bleibt (kein vom Overflow geklippter
+// Bogen); p-0.5 am Container gibt dem Ring zusätzlich Luft.
+const HEUTE_RING = 'bg-primary-50 dark:bg-primary-900/30 ring-1 ring-inset ring-primary-400'
 
 export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
   const maxKwh = Math.max(...tage.map((t) => t.pv_ertrag_kwh), 0.1)
   const hasVmNm = tage.some((t) => t.pv_ertrag_morgens_kwh != null)
   return (
     <div className="space-y-2">
-      {/* Volle Breite: Grid mit gleich breiten Spalten (1fr) füllt den Container;
-          minmax(40px,…) lässt es auf schmalen Screens horizontal scrollen. Die
-          Säulen wachsen proportional mit (Gernot 2026-06-23). */}
-      <div className="overflow-x-auto">
-        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${tage.length}, minmax(40px, 1fr))` }}>
+      {/* ── Desktop (≥ lg): vertikale Säulen ── */}
+      {/* D12-3: p-0.5 gibt dem „heute"-Ring (Spalte 0) Luft, sonst beschneidet das
+          overflow-x-auto den Rahmen an der linken/oberen Kante. */}
+      <div className="hidden lg:block overflow-x-auto p-0.5">
+        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${tage.length}, minmax(52px, 1fr))` }}>
           {tage.map((tag, index) => {
             const totalPx = (tag.pv_ertrag_kwh / maxKwh) * BALKEN_PX
             const vm = tag.pv_ertrag_morgens_kwh ?? 0
@@ -71,11 +79,15 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
             return (
               <div
                 key={tag.datum}
-                className={`flex flex-col items-center gap-1 rounded-lg px-0.5 pt-1.5 pb-1 ${
-                  index === 0 ? 'bg-primary-50 dark:bg-primary-900/30 ring-1 ring-primary-400' : ''
-                }`}
+                className={`flex flex-col items-center gap-1 rounded-md px-0.5 pt-1.5 pb-1 ${index === 0 ? HEUTE_RING : ''}`}
               >
-                <span className="text-xs font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 1)}</span>
+                {/* Wetter-Symbol GRÖSSER + an die Spaltenbreite gekoppelt (w-3/5 der
+                    1fr-Spalte, gedeckelt) — wächst mit, ohne die Spalte zu sprengen. */}
+                <div className="w-3/5 max-w-[44px]"><WetterIcon symbol={tag.wetter_symbol} className="w-full h-auto" /></div>
+                <span className="flex items-center gap-0.5 text-sm font-medium text-gray-600 dark:text-gray-300 tabular-nums">
+                  <Thermometer className="h-3.5 w-3.5" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
+                </span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 1)}</span>
                 <div className="flex flex-col justify-end items-center w-full" style={{ height: BALKEN_PX }}>
                   {hasVmNm && summe > 0 ? (
                     <>
@@ -86,21 +98,56 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                     <div className="w-1/2 rounded-t" style={{ height: totalPx, backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(tag.pv_ertrag_kwh, 1)} kWh`} />
                   )}
                 </div>
-                <WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" />
-                <span className="flex items-center gap-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-                  <Thermometer className="h-3 w-3" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
-                </span>
-                <span className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-tight">{formatDatum(tag.datum)}</span>
+                <span className="text-[11px] text-gray-400 dark:text-gray-500 text-center leading-tight">{formatDatum(tag.datum)}</span>
               </div>
             )
           })}
         </div>
       </div>
+
+      {/* ── Mobil (< lg): horizontale Balken (Gernot R12-4) ── */}
+      <div className="lg:hidden space-y-1 p-0.5">
+        {tage.map((tag, index) => {
+          const totalPct = (tag.pv_ertrag_kwh / maxKwh) * 100
+          const vm = tag.pv_ertrag_morgens_kwh ?? 0
+          const nm = tag.pv_ertrag_nachmittags_kwh ?? 0
+          const summe = vm + nm
+          const vmPct = summe > 0 ? totalPct * (vm / summe) : 0
+          const nmPct = summe > 0 ? totalPct * (nm / summe) : 0
+          return (
+            <div key={tag.datum} className={`flex items-center gap-2 rounded-md px-1 py-1 ${index === 0 ? HEUTE_RING : ''}`}>
+              {/* Wetter + Temperatur links neben dem Balken, GRÖSSER */}
+              <WetterIcon symbol={tag.wetter_symbol} className="h-8 w-8 shrink-0" />
+              <div className="w-24 shrink-0 leading-tight">
+                <div className="text-xs font-medium text-gray-700 dark:text-gray-200">{formatDatum(tag.datum)}</div>
+                <div className="flex items-center gap-0.5 text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">
+                  <Thermometer className="h-3 w-3" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
+                </div>
+              </div>
+              {/* Horizontaler Balken (Balkenlänge = PV-Ertrag), wächst nach rechts */}
+              <div className="flex-1 min-w-0 h-6 flex items-center">
+                <div className="flex h-6 rounded-sm overflow-hidden" style={{ width: `${Math.max(totalPct, 1.5)}%` }}>
+                  {hasVmNm && summe > 0 ? (
+                    <>
+                      <div className="h-full" style={{ width: `${(vmPct / Math.max(totalPct, 0.01)) * 100}%`, backgroundColor: SOLAR_INTENSITAET[2] }} title={`Vormittag ${fmtCalc(vm, 1)} kWh`} />
+                      <div className="h-full" style={{ width: `${(nmPct / Math.max(totalPct, 0.01)) * 100}%`, backgroundColor: SOLAR_INTENSITAET[1] }} title={`Nachmittag ${fmtCalc(nm, 1)} kWh`} />
+                    </>
+                  ) : (
+                    <div className="h-full w-full" style={{ backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(tag.pv_ertrag_kwh, 1)} kWh`} />
+                  )}
+                </div>
+              </div>
+              <span className="w-14 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 1)}</span>
+            </div>
+          )
+        })}
+      </div>
+
       {hasVmNm && (
-        <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400 dark:text-gray-500">
           <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: SOLAR_INTENSITAET[2] }} /> Vormittag</span>
           <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: SOLAR_INTENSITAET[1] }} /> Nachmittag</span>
-          <span>· Balkenhöhe = PV-Ertrag (kWh)</span>
+          <span>· Balkenlänge = PV-Ertrag (kWh)</span>
         </div>
       )}
     </div>

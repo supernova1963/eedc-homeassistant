@@ -15,6 +15,10 @@ export interface ChartTooltipProps {
   /** Regel F (2026-06-25): dataKey im Payload, der das 100-%-Total trägt → je
    *  Zeile zusätzlich „(xx %)" (Anteil). Ersetzt die hellen Custom-%-Tooltips. */
   percentOf?: string
+  /** D12-2: Swatch als **Linien**-Segment (durchgezogen/gestrichelt aus
+   *  `strokeDasharray`) statt Viereck — für Charts, deren Serien sich nur per
+   *  Linienstil bei gleicher Farbe unterscheiden (z. B. PV IST vs. Prognose). */
+  lineStyle?: boolean
 }
 
 export default function ChartTooltip({
@@ -29,6 +33,7 @@ export default function ChartTooltip({
   decimals,
   locale = 'de-DE',
   percentOf,
+  lineStyle,
 }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
 
@@ -82,14 +87,24 @@ export default function ChartTooltip({
         const anteil = ganz !== undefined && Number.isFinite(ganz) && ganz > 0 && isNum
           ? `${fmtZahl((val / ganz) * 100, 0)} %`
           : undefined
+        // D12-2: bei gleichfarbigen Serien (z. B. PV IST vs. Prognose) unterscheidet
+        // nur der Linienstil → Swatch als Linie (durchgezogen/gestrichelt).
+        const dashed = lineStyle ? !!(entry as { strokeDasharray?: unknown }).strokeDasharray : false
         return (
           <div key={i} className="flex items-center gap-2">
-            {/* S1: Farbzuordnung NUR über das Viereck-Swatch — Text bleibt
-                monochrom (Seriosität, app-weit einheitlich mit der Legende). */}
-            <span
-              className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: color }}
-            />
+            {/* S1: Farbzuordnung über Swatch — Text bleibt monochrom (app-weit
+                einheitlich mit der Legende). Standard = Viereck; lineStyle = Linie. */}
+            {lineStyle ? (
+              <span
+                className="w-3.5 flex-shrink-0"
+                style={{ borderTopWidth: 2, borderTopStyle: dashed ? 'dashed' : 'solid', borderTopColor: color }}
+              />
+            ) : (
+              <span
+                className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                style={{ backgroundColor: color }}
+              />
+            )}
             {!compact && (
               <span className="text-gray-300">{displayName}:</span>
             )}

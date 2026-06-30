@@ -80,8 +80,10 @@ export interface AchsenEinheitLabel {
  *     links an der Achse. **NIE gedreht — auch mobil nicht.** Nie über/auf einem Tick.
  *   • Umgesetzt via `position:'top'` (oberhalb der Plotfläche) im reservierten
  *     oberen Rand → Chart braucht `margin={{ top: ACHSEN_MARGIN_TOP, ... }}`,
- *     sonst clippt es. `textAnchor:'start'` (links) bzw. `'end'` (rechte Achse)
- *     hält die Einheit linksbündig an der Achse statt zentriert.
+ *     sonst clippt es. **D12-14 (detLAN R12):** die Einheit folgt der **horizontalen
+ *     Ausrichtung der Tick-Werte** — linke Achse `textAnchor:'end'` (rechtsbündig,
+ *     wie die rechtsbündigen Zahlen an der Achse), rechte Achse `textAnchor:'start'`
+ *     (linksbündig). Vorher saß sie gegenläufig → wirkte „willkürlich".
  *   • **KEIN `angle`, KEIN `schmal`-Sonderfall** mehr (das war der R9-Bug).
  * `seite` = Orientierung: `'links'` (Default, primär) | `'rechts'` (2. Achse).
  * Jede Achse trägt genau **eine** Einheit; Klammer-Überschriften im Chart-Kopf
@@ -92,7 +94,9 @@ export function achsenEinheit(
   einheit: string,
   seite: 'links' | 'rechts' = 'links',
 ): AchsenEinheitLabel {
+  // D12-14: Einheit folgt der Tick-Wert-Ausrichtung — links rechtsbündig ('end'),
+  // rechts linksbündig ('start'); dx schiebt sie je von der Achse weg in den Rand.
   return seite === 'rechts'
-    ? { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: 4, style: { textAnchor: 'end' } }
-    : { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: -4, style: { textAnchor: 'start' } }
+    ? { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: 4, style: { textAnchor: 'start' } }
+    : { value: einheit, position: 'top', offset: 8, fontSize: 10, dx: -4, style: { textAnchor: 'end' } }
 }

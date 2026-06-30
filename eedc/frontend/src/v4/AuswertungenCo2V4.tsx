@@ -138,9 +138,10 @@ function Co2Inner() {
     const blockBilanz: Block = {
       id: 'bilanz', title: 'CO₂-Bilanz & Wirkung', icon: Leaf, farbe: 'text-green-500',
       summary: `${fc.text} eingespart`, defaultOpen: true,
+      // D12-11: mobil Icon-only (Text drängte sonst in der engen Block-Kopfzeile).
       badge: (
-        <Button variant="secondary" size="sm" onClick={handleCsv}>
-          <Download className="h-4 w-4 mr-1" /> CSV-Export
+        <Button variant="secondary" size="sm" onClick={handleCsv} title="CSV-Export">
+          <Download className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">CSV-Export</span>
         </Button>
       ),
       render: () => (

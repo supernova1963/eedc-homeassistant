@@ -63,7 +63,8 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
       <input
         type="date" aria-label="Datum wählen" value={datum} max={heuteISO} min={aeltester || undefined}
         onChange={(e) => { if (e.target.value) onSelect(e.target.value) }}
-        className="input w-full text-xs"
+        /* D12-9: ring-inset — der Fokus-Ring würde sonst vom overflow-auto-Rail abgeschnitten. */
+        className="input w-full text-xs ring-inset"
       />
       {monate.map((mk) => (
         <div key={mk}>

@@ -79,7 +79,7 @@ describe('CockpitTagV4 — Einzeltag', () => {
     expect(await screen.findByText('abgeschlossen')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Aktualisieren' })).toBeInTheDocument()
     // Stepper-Navigation (mobil) + Datums-Direktsprung (Rail/Stepper).
-    expect(screen.getByRole('button', { name: 'voriger Tag' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'voriger Tag mit Daten' })).toBeInTheDocument()
     expect(screen.getAllByLabelText('Datum wählen').length).toBeGreaterThan(0)
   })
 

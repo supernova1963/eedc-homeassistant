@@ -291,6 +291,8 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
               <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse */ />
               <YAxis tickFormatter={achsenTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
               <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+              {/* D12-5: Legende fehlte (Netto-Ertrag + Trend) — wie der Einspeise-/EV-Chart oben. */}
+              <Legend content={<ChartLegende />} />
               <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
               <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
             </ComposedChart>

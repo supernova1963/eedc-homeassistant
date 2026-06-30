@@ -27,6 +27,7 @@ from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netz
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
     autarkie_prozent,
+    berechne_grundlast,
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
@@ -230,6 +231,12 @@ class AktuellerMonatResponse(BaseModel):
     # Vergleiche
     vorjahr: Optional[dict] = None
     soll_pv_kwh: Optional[float] = None
+
+    # Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). `grundlast_kwh` ist
+    # additiv → Cockpit/Jahr summiert die Monate (analog soll_pv_kwh).
+    grundlast_kw: Optional[float] = None              # Median der Nacht-Stunden-Leistung
+    grundlast_kwh: Optional[float] = None             # geschätzte Grundlast-Energie (kW × 24 × Tage)
+    grundlast_anteil_prozent: Optional[float] = None  # Anteil am Gesamtverbrauch
 
     # Betriebskosten (anteilig, Σ betriebskosten_jahr / 12 aller aktiven Investitionen)
     betriebskosten_anteilig_euro: Optional[float] = None
@@ -721,6 +728,30 @@ async def _load_soll_pv(anlage_id: int, monat: int, db: AsyncSession) -> Optiona
     if not prognosen:
         return None
     return round(sum(p.ertrag_kwh for p in prognosen), 1)
+
+
+async def _load_grundlast_nacht_kw(
+    anlage_id: int, jahr: int, monat: int, db: AsyncSession,
+) -> list[float]:
+    """Nacht-Stunden-Leistungen (0–5 Uhr, verbrauch_kw > 0) des Monats aus dem
+    stündlichen Energieprofil — Sourcing für `berechne_grundlast` (ADR-001:
+    Formel liegt im Berechnungs-Layer, hier nur die Query). Leer, wenn die Anlage
+    keine Stundenprofile hat (dann fällt die Sicht auf PVGIS-SOLL/IST zurück)."""
+    from calendar import monthrange
+    from backend.models.tages_energie_profil import TagesEnergieProfil
+
+    monat_ende = date(jahr, monat, monthrange(jahr, monat)[1])
+    result = await db.execute(
+        select(TagesEnergieProfil.verbrauch_kw).where(
+            TagesEnergieProfil.anlage_id == anlage_id,
+            TagesEnergieProfil.datum >= date(jahr, monat, 1),
+            TagesEnergieProfil.datum <= monat_ende,
+            TagesEnergieProfil.stunde < 5,
+            TagesEnergieProfil.verbrauch_kw.is_not(None),
+            TagesEnergieProfil.verbrauch_kw > 0,
+        )
+    )
+    return [float(w) for w in result.scalars().all()]
 
 
 # =============================================================================
@@ -1573,6 +1604,17 @@ async def get_aktueller_monat(
     vorjahr = await _load_vorjahr(anlage_id, investitionen, jahr, monat, db)
     soll_pv = await _load_soll_pv(anlage_id, monat, db)
 
+    # ── Grundlast (Nacht-Sockel, R12-1: ersetzt PVGIS-SOLL/IST in Cockpit/Monat
+    # + Jahr; Formel im Berechnungs-Layer, Median wie der Live-Wert). Im aktuellen
+    # Monat nur die bisherigen Tage hochrechnen, sonst alle Kalendertage. ──
+    from calendar import monthrange as _monthrange_gl
+    grundlast_tage = now.day if ist_aktueller_monat else _monthrange_gl(jahr, monat)[1]
+    grundlast = berechne_grundlast(
+        nacht_verbrauch_kw=await _load_grundlast_nacht_kw(anlage_id, jahr, monat, db),
+        gesamtverbrauch_kwh=gesamtverbrauch,
+        tage=grundlast_tage,
+    )
+
     # ── Quellen-Übersicht ──
     quellen = {
         "ha_statistics": bool(ha_stats),
@@ -1757,6 +1799,9 @@ async def get_aktueller_monat(
         # Vergleiche
         vorjahr=vorjahr,
         soll_pv_kwh=soll_pv,
+        grundlast_kw=grundlast.grundlast_kw,
+        grundlast_kwh=grundlast.grundlast_kwh,
+        grundlast_anteil_prozent=grundlast.grundlast_anteil_prozent,
         # Per-Investition Finanzdetails
         investitionen_financials=investitionen_financials,
         komponenten_geraete=komponenten_geraete,

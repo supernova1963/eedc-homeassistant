@@ -33,18 +33,32 @@ const label = (iso: string) => {
 
 export function TagStepper({ entries, datum, onSelect, aeltesterTag, immerSichtbar }: TagStepperProps) {
   const desc = useMemo(() => [...entries].sort((a, b) => (a.datum < b.datum ? 1 : -1)), [entries])
-  const oldest = useMemo(() => entries.reduce((m, e) => (m && m < e.datum ? m : e.datum), entries[0]?.datum ?? datum), [entries, datum])
-  const newest = useMemo(() => entries.reduce((m, e) => (m && m > e.datum ? m : e.datum), entries[0]?.datum ?? datum), [entries, datum])
-  // Untergrenze für Navigation/Datumsauswahl = ältester verfügbarer Tag (kann vor
-  // der 90-Tage-Liste liegen); Fallback = ältester Listen-Tag.
+  // Aufsteigende, deduplizierte Liste der navigierbaren Tage = Tage MIT Daten ∪ heute
+  // (CockpitTagV4 hängt heute immer an `entries` an). Die Stepper-Pfeile springen NUR
+  // zu diesen Tagen → kein Landen auf echten Lücken-Tagen (detLAN-Vollbild-Bug
+  // 2026-06-30); heute bleibt als rechter Anschlag immer erreichbar.
+  const ascDaten = useMemo(() => [...new Set(entries.map((e) => e.datum))].sort(), [entries])
+  const oldest = ascDaten[0] ?? datum
+  const newest = ascDaten[ascDaten.length - 1] ?? datum
+  // Untergrenze NUR für die Datumsauswahl (Picker erreicht ALLE Tage, auch vor der
+  // 90-Tage-Liste, R5-F2); die Pfeile bleiben auf den Daten-Tagen.
   const untergrenze = aeltesterTag && aeltesterTag < oldest ? aeltesterTag : oldest
-
   const clamp = (iso: string) => (iso < untergrenze ? untergrenze : iso > newest ? newest : iso)
-  // Ziel-Aktion oder null (am Rand / auf sich selbst deaktiviert).
-  const go = (iso: string) => {
-    const c = clamp(iso)
-    return c === datum ? null : () => onSelect(c)
+
+  // Nachbar-Tage MIT Daten (überspringt Lücken). ±7 = Kalender-Ziel, auf den
+  // nächstgelegenen Daten-Tag in Blätter-Richtung gefangen.
+  const vorigerMit = (iso: string) => ascDaten.reduce<string | null>((r, d) => (d < iso ? d : r), null)
+  const naechsterMit = (iso: string) => ascDaten.find((d) => d > iso) ?? null
+  const sprungZurueck = (iso: string) => {
+    const ziel = verschieben(iso, -7)
+    return ascDaten.reduce<string | null>((r, d) => (d <= ziel ? d : r), null) ?? (oldest < iso ? oldest : null)
   }
+  const sprungVor = (iso: string) => {
+    const ziel = verschieben(iso, 7)
+    return ascDaten.find((d) => d >= ziel) ?? (newest > iso ? newest : null)
+  }
+  // Ziel-Aktion oder null (am Rand / kein Daten-Tag in der Richtung).
+  const go = (iso: string | null) => (iso != null && iso !== datum ? () => onSelect(iso) : null)
   const aktuell = entries.find((e) => e.datum === datum) ?? null
 
   const eintraege: ZeitStepperEintrag[] = desc.map((e) => ({
@@ -59,13 +73,13 @@ export function TagStepper({ entries, datum, onSelect, aeltesterTag, immerSichtb
   return (
     <ZeitStepper
       zurueck={[
-        { icon: ChevronFirst, label: 'ältester Tag', go: go(untergrenze) },
-        { icon: ChevronsLeft, label: '7 Tage zurück', go: go(verschieben(datum, -7)) },
-        { icon: ChevronLeft, label: 'voriger Tag', go: go(verschieben(datum, -1)) },
+        { icon: ChevronFirst, label: 'ältester Tag mit Daten', go: go(oldest) },
+        { icon: ChevronsLeft, label: '~7 Tage zurück', go: go(sprungZurueck(datum)) },
+        { icon: ChevronLeft, label: 'voriger Tag mit Daten', go: go(vorigerMit(datum)) },
       ]}
       vor={[
-        { icon: ChevronRight, label: 'nächster Tag', go: go(verschieben(datum, 1)) },
-        { icon: ChevronsRight, label: '7 Tage vor', go: go(verschieben(datum, 7)) },
+        { icon: ChevronRight, label: 'nächster Tag mit Daten', go: go(naechsterMit(datum)) },
+        { icon: ChevronsRight, label: '~7 Tage vor', go: go(sprungVor(datum)) },
         { icon: ChevronLast, label: 'neuester Tag', go: go(newest) },
       ]}
       titel={label(datum)}
@@ -77,7 +91,8 @@ export function TagStepper({ entries, datum, onSelect, aeltesterTag, immerSichtb
           <input
             type="date" aria-label="Datum wählen" value={datum} max={newest} min={untergrenze}
             onChange={(e) => { if (e.target.value) { onSelect(clamp(e.target.value)); close() } }}
-            className="input w-full text-sm"
+            /* D12-9: ring-inset — Fokus-Ring würde sonst vom overflow-hidden-Dropdown abgeschnitten. */
+            className="input w-full text-sm ring-inset"
           />
           {/* Zurücksetzen → neuester Tag (Ausgangs-Ansicht), wenn man in die
               Historie gesprungen ist (Gernot 2026-06-26). */}

@@ -177,8 +177,14 @@ from backend.core.berechnungen.verbrauch import (
     VerbrauchsKennzahlen,
     berechne_verbrauchs_kennzahlen,
 )
+from backend.core.berechnungen.grundlast import (
+    GrundlastKennzahlen,
+    berechne_grundlast,
+)
 
 __all__ = [
+    "GrundlastKennzahlen",
+    "berechne_grundlast",
     "TagesBilanz",
     "bilanz_aus_stundenrows",
     "berechne_bkw_alternativkosten_ersparnis",

@@ -101,6 +101,10 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
   const [vortag, setVortag] = useState<TagWerte | null>(null)
   const [wtStats, setWtStats] = useState<GleicheWochentagStats | null>(null)
   const [loading, setLoading] = useState(true)
+  // D12-1: „je geladen?" statt `!tag` als Voll-Spinner-Gate — sonst flasht der
+  // Spinner beim Wechsel Lücken-Tag → Lücken-Tag (tag bleibt null) und reißt das
+  // Vollbild weg. Erst-Load zeigt Spinner, danach nie wieder (in-place reload).
+  const [jeGeladen, setJeGeladen] = useState(false)
   const [reloading, setReloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [aeltesterTag, setAeltesterTag] = useState<string>()  // (a) Date-Input-Untergrenze = ältester verfügbarer Tag
@@ -179,6 +183,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden des Tages')
     } finally {
       silent ? setReloading(false) : setLoading(false)
+      setJeGeladen(true)  // D12-1: ab jetzt nur noch in-place aktualisieren, kein Voll-Spinner
     }
   }, [anlageId, datum])
 
@@ -278,11 +283,12 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
 
           {error ? (
             <Card><p className="text-red-500">{error}</p></Card>
-          ) : loading && !tag ? (
-            // Voll-Spinner NUR beim Erst-Load (noch keine Daten). Beim Tageswechsel
-            // bleibt der bestehende Block-Stack stehen und aktualisiert sich in-place
-            // → kein Hochspringen, kein „Aufblitzen" (detLAN T2, 2026-06-25). Kein
-            // `key={datum}` mehr → BlockShell re-rendert statt zu remounten.
+          ) : loading && !jeGeladen ? (
+            // Voll-Spinner NUR beim allerersten Load (noch nie geladen). Beim
+            // Tageswechsel bleibt der Block-Stack stehen und aktualisiert sich
+            // in-place → kein Hochspringen, kein „Aufblitzen" (detLAN T2). D12-1:
+            // `!jeGeladen` statt `!tag` — bei Lücke→Lücke ist tag null, würde sonst
+            // den Spinner flashen und das Vollbild wegreißen. Kein `key={datum}`.
             <LoadingSpinner text="Lade Tag…" />
           ) : bloecke.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Daten für diesen Tag vorhanden.</p></Card>

@@ -64,7 +64,7 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
   const saisonData = (() => {
     if (jahre.length === 0) return []
     const minJ = jahre[0], maxJ = jahre[jahre.length - 1]
-    const rows: { name: string; value: number | null; label: string; vollstaendig: boolean }[] = []
+    const rows: { name: string; value: number | null; label: string; vollstaendig: boolean; fill: string }[] = []
     for (let startJahr = minJ - 1; startJahr <= maxJ; startJahr++) {
       let sumStrom = 0, sumWaerme = 0, monateMitDaten = 0
       for (const m of cfg.monate) {
@@ -93,6 +93,8 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
         value: wert,
         label: wert == null ? '' : (modus === 'jaz' ? fmtZahl(wert, 2) : wert.toLocaleString('de-DE')),
         vollstaendig,
+        // D12-4: Farbe je Saison-Instanz in die Daten → ChartTooltip-Swatch trifft den Balken (sonst SERIE_NEUTRAL-Grau).
+        fill: jahrFarben[rows.length % jahrFarben.length],
       })
     }
     return rows

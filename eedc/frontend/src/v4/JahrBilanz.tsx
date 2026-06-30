@@ -14,9 +14,8 @@
  * Ø-Jahr = Σ der aggregierten Monatszeilen je Jahr (`jahrVergleichAus`).
  */
 import { fmtCalc } from '../components/ui'
-import FormelTooltip from '../components/ui/FormelTooltip'
-import { VerteilungsBalken, GeraeteHinweis } from '../components/blocks'
-import { DATENROLLE, AMPEL_TEXT_CLASS, AMPEL_BG_CLASS, sollIstStufe } from '../lib'
+import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
+import { DATENROLLE } from '../lib'
 import { Delta, VglChip } from './MonatBilanz'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
@@ -119,10 +118,6 @@ export function JahrBilanz({
     </>
   )
 
-  const sollPct = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
-    ? Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)
-    : null
-
   const pvGeraete = [
     ...(d.komponenten_geraete?.['pv-module'] ?? []),
     ...(d.komponenten_geraete?.['wechselrichter'] ?? []),
@@ -183,35 +178,10 @@ export function JahrBilanz({
         )}
       </div>
 
-      {/* SOLL/IST-Fortschritt (Σ PVGIS) + PV-Verteilung */}
+      {/* Grundlast (Nacht-Sockel, R12-1) — ersetzt Σ-PVGIS-SOLL/IST; PVGIS bleibt
+          Fallback ohne Stundendaten. Geteilte SoT-Kachel (Monat + Jahr). */}
       <div>
-        {sollPct != null ? (
-          <>
-            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-              <FormelTooltip
-                formel="IST ÷ SOLL × 100"
-                berechnung={d.pv_erzeugung_kwh != null && d.soll_pv_kwh != null ? `${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(d.soll_pv_kwh)} kWh` : undefined}
-                ergebnis={`= ${sollPct} %`}
-              >
-                IST/SOLL (PVGIS)
-              </FormelTooltip>
-            </p>
-            <div className="flex justify-end">
-              <span className={`text-4xl font-bold ${AMPEL_TEXT_CLASS[sollIstStufe(sollPct)]}`}>{sollPct} %</span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-2 mt-2">
-              <div
-                className={`h-2 rounded-sm ${AMPEL_BG_CLASS[sollIstStufe(sollPct)]}`}
-                style={{ width: `${Math.min(100, sollPct)}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-              {fmt(d.pv_erzeugung_kwh)} von {fmt(d.soll_pv_kwh)} kWh
-            </p>
-          </>
-        ) : (
-          <p className="text-xs text-gray-400 dark:text-gray-500">Keine PVGIS-SOLL-Prognose für dieses Jahr.</p>
-        )}
+        <GrundlastSollIstKachel d={d} />
 
         {d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && (d.pv_erzeugung_kwh ?? 0) > 0 && (
           <div className="mt-4">

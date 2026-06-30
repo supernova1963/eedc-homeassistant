@@ -44,7 +44,10 @@ export function VerteilungsBalken({
           const pct = Math.round((werte[i] / total) * 100)
           return (
             <div key={s.label} className="flex items-center gap-3 text-xs">
-              <span className="w-20 text-gray-600 dark:text-gray-400 shrink-0">{s.label}</span>
+              {/* D12-10: Label-Spalte w-20→w-28 — Labels wie „Direktverbrauch"/
+                  „Eigenverbrauchs-Ersparnis" drängten sonst an den Balken (fehlender
+                  Abstand). Feste Breite bleibt (S2: gleich lange Tracks). */}
+              <span className="w-28 text-gray-600 dark:text-gray-400 shrink-0">{s.label}</span>
               <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-sm h-2 min-w-[2rem]">
                 <div className={`h-2 rounded-sm ${s.farbe}`} style={{ width: `${pct}%` }} />
               </div>

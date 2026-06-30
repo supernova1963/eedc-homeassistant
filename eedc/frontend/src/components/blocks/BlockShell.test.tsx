@@ -75,6 +75,47 @@ describe('BlockShell', () => {
     expect(screen.queryByLabelText('nach oben')).not.toBeInTheDocument()
   })
 
+  // ── Lücken-Tag-Härtung (detLAN-Vollbild-Bug 2026-06-30) ──
+
+  it('Vollbild übersteht das Verschwinden des fokussierten Blocks (kein Rücksprung)', () => {
+    const { rerender } = render(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    fireEvent.click(screen.getAllByLabelText('Fokus / Vollbild')[1]) // Block B in Vollbild
+    expect(screen.getByText('Inhalt B')).toBeInTheDocument()
+    // Navigation auf Lücken-Tag: nur Block A bleibt übrig.
+    rerender(<BlockShell bloecke={[bloecke()[0]]} persistKey={KEY} />)
+    // Vollbild bleibt OFFEN (kein Standard-Rücksprung): „Zurück" + keine-Daten-Hinweis,
+    // und der Standard-Block A wird NICHT als Liste gezeigt.
+    expect(screen.getByText('Zurück')).toBeInTheDocument()
+    expect(screen.getByText(/keine Daten vor/)).toBeInTheDocument()
+    expect(screen.queryByText('Inhalt A')).not.toBeInTheDocument()
+    // Zurück auf einen Daten-Tag: Block B rendert wieder im Vollbild.
+    rerender(<BlockShell bloecke={bloecke()} persistKey={KEY} />)
+    expect(screen.getByText('Inhalt B')).toBeInTheDocument()
+  })
+
+  it('behält die Reihenfolge, wenn Blöcke kurz verschwinden und zurückkommen', () => {
+    const { rerender } = render(<BlockShell bloecke={bloecke()} persistKey={KEY} sortierbar />)
+    fireEvent.click(screen.getAllByLabelText('nach oben')[2]) // C über B → [a, c, b]
+    rerender(<BlockShell bloecke={[bloecke()[0]]} persistKey={KEY} sortierbar />) // Lücken-Tag: nur A
+    rerender(<BlockShell bloecke={bloecke()} persistKey={KEY} sortierbar />)       // zurück: voll
+    const titel = screen.getAllByText(/^Block [ABC]$/).map((e) => e.textContent)
+    expect(titel).toEqual(['Block A', 'Block C', 'Block B'])
+  })
+
+  it('Persistenz bleibt heil über einen Remount auf einem Lücken-Tag', () => {
+    const { unmount } = render(<BlockShell bloecke={bloecke()} persistKey={KEY} sortierbar />)
+    fireEvent.click(screen.getAllByLabelText('nach oben')[2]) // C über B → order [a, c, b]
+    unmount()
+    // Remount auf reduziertem Stand (nur Block A) — darf die gespeicherte
+    // Reihenfolge [a,c,b] NICHT auf [a] schrumpfen (das war der Bug).
+    const r2 = render(<BlockShell bloecke={[bloecke()[0]]} persistKey={KEY} sortierbar />)
+    r2.unmount()
+    render(<BlockShell bloecke={bloecke()} persistKey={KEY} sortierbar />)
+    const titel = screen.getAllByText(/^Block [ABC]$/).map((e) => e.textContent)
+    expect(titel).toEqual(['Block A', 'Block C', 'Block B'])
+    expect(JSON.parse(localStorage.getItem('eedc-bloecke:' + KEY)!).order).toEqual(['a', 'c', 'b'])
+  })
+
   it('persistiert Klappzustand + Reihenfolge pro Sicht in localStorage', () => {
     const { unmount } = render(<BlockShell bloecke={bloecke()} persistKey={KEY} sortierbar />)
     // Block A einklappen + Block C nach oben.

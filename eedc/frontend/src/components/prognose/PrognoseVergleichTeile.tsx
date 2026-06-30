@@ -577,16 +577,16 @@ export function PvgStratifizierung({ vm }: { vm: PrognoseVergleichVM }) {
           Wetter-Historie (Bewölkung, Niederschlag, WMO-Code) für {Math.max(stratifizierung.tage_ohne_wetter, stratifizierung.tep_tage_ohne_wetter)} Tage noch nicht geladen. eedc kann sie kostenlos aus dem Open-Meteo-Archiv nachholen. {stratifizierung.tage_mit_prognose > 0 ? (<>Danach zeigt diese Card MAPE/MPE getrennt nach <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.</>) : (<>Solange noch keine Day-Ahead-Stundenprofile gespeichert sind, bleibt die Stratifizierungs-Tabelle leer — die Wetter-Daten dienen dann der Vorbereitung für das stündliche Korrekturprofil (Päckchen 2).</>)}
         </div>
         <button type="button" onClick={vm.handleWetterBackfill} disabled={vm.backfillRunning} className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded transition-colors">{vm.backfillRunning ? 'Lädt Wetter-Historie…' : 'Wetter-Historie nachladen (2 Jahre)'}</button>
-        {/* D11-9(a): eine Status-Zeile (Fehler ODER Ergebnis), ohne widersprüchlichen
-            „— Stratifizierung wird neu berechnet"-Suffix (stand auch bei 0/0 da). Der
-            Vanish→Reappear-Sprung ist durch das Nicht-Leeren am Handler-Anfang weg. */}
-        {(vm.backfillError || vm.backfillResult) && (
-          <div className="mt-3 text-xs">
-            {vm.backfillError
-              ? <span className="text-red-600 dark:text-red-400">Fehler: {vm.backfillError}</span>
-              : <span className="text-green-700 dark:text-green-400">✓ {vm.backfillResult}</span>}
-          </div>
-        )}
+        {/* D11-9(a)/R12 (Gernot): Status-Zeile IMMER rendern — vorher (kein Ergebnis)
+            ein neutraler Zustands-Hinweis, nach dem Klick Ergebnis/Fehler im selben Slot.
+            So entsteht beim Erst-Klick kein „Zucken" (0→1 Zeile) mehr. */}
+        <div className="mt-3 text-xs">
+          {vm.backfillError
+            ? <span className="text-red-600 dark:text-red-400">Fehler: {vm.backfillError}</span>
+            : vm.backfillResult
+              ? <span className="text-green-700 dark:text-green-400">✓ {vm.backfillResult}</span>
+              : <span className="text-gray-500 dark:text-gray-400">Nachladen empfohlen — die fehlenden Tage werden kostenlos aus dem Open-Meteo-Archiv geholt.</span>}
+        </div>
       </Card>
     )
   }

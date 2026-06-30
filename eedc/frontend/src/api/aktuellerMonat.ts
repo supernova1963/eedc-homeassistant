@@ -162,6 +162,12 @@ export interface AktuellerMonatResponse {
   } | null
   soll_pv_kwh: number | null
 
+  // Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). grundlast_kwh additiv
+  // → Cockpit/Jahr (JahrAggregat) summiert die Monate.
+  grundlast_kw?: number | null              // Median der Nacht-Stunden-Leistung
+  grundlast_kwh?: number | null             // geschätzte Grundlast-Energie (kW × 24 × Tage)
+  grundlast_anteil_prozent?: number | null  // Anteil am Gesamtverbrauch
+
   // Per-Investition Finanzdetails (T-Konto)
   investitionen_financials: InvestitionFinancialDetail[]
   // Aktive Geräte je Typ im Monat (Namen) — für „aggregiert aus …"-Hinweise

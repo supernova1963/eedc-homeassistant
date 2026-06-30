@@ -120,6 +120,15 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
 
   const erster = monate[0]
 
+  // Grundlast (R12-1): grundlast_kwh additiv summieren; Anteil aus den Summen neu
+  // bilden (Nenner = Gesamtverbrauch NUR der Monate mit Grundlast-Daten, damit das
+  // Verhältnis stimmt). Ø-Leistung = Mittel der Monats-Mediane.
+  const glKwh = summe(f('grundlast_kwh'))
+  const glBasis = summe(monate.filter((m) => m.grundlast_kwh != null).map((m) => m.gesamtverbrauch_kwh))
+  const glAnteil = glKwh != null && glBasis != null && glBasis > 0
+    ? Math.round((glKwh / glBasis) * 1000) / 10
+    : null
+
   return {
     anlage_id: erster?.anlage_id ?? 0,
     anlage_name: erster?.anlage_name ?? '',
@@ -214,6 +223,10 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
 
     // SOLL (Σ Monats-PVGIS); Vorjahr-Vergleich liefert die Jahr-Sicht separat.
     soll_pv_kwh: summe(f('soll_pv_kwh')),
+    // Grundlast (R12-1): Σ Energie, Ø Leistung, Anteil aus Summen.
+    grundlast_kw: mittel(f('grundlast_kw')),
+    grundlast_kwh: glKwh,
+    grundlast_anteil_prozent: glAnteil,
     vorjahr: null,
 
     investitionen_financials: [...financialsMap.values()],

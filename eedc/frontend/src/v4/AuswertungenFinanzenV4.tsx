@@ -240,6 +240,8 @@ function FinanzenInner() {
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+                    {/* D12-5: Legende fehlte (2 Serien Netto-Ertrag + Trend) — wie Chart 1. */}
+                    <Legend content={<ChartLegende />} />
                     <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
                     <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
                   </ComposedChart>
@@ -275,8 +277,9 @@ function FinanzenInner() {
       render: () => (
         <div className="space-y-3">
           <FinanzberichtTeaser anlageId={selectedAnlageId} jahr={basis.jahr} />
-          <Button variant="secondary" size="sm" onClick={handleCsv}>
-            <Download className="h-4 w-4 mr-1" /> CSV-Export (Monatswerte)
+          {/* D12-11: mobil Icon-only (Text drängte sonst in der engen Block-Kopfzeile). */}
+          <Button variant="secondary" size="sm" onClick={handleCsv} title="CSV-Export (Monatswerte)">
+            <Download className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">CSV-Export (Monatswerte)</span>
           </Button>
         </div>
       ),

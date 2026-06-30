@@ -6,6 +6,7 @@
  * (HA-artig: von/bis); Vergleich Aus|Vorjahr.
  */
 import type { ReactNode } from 'react'
+import { MonatPicker } from '../components/ui/MonatPicker'
 
 /**
  * STEUER_H — EINE einheitliche Höhe (32 px) für ALLE Bedien-Elemente einer
@@ -17,6 +18,11 @@ import type { ReactNode } from 'react'
  */
 export const STEUER_H = 'h-8'
 
+// D12-8: kleinerer/größerer der beiden ISO-Werte (lexikografisch, gilt für YYYY-MM
+// wie YYYY-MM-DD) — `undefined`, wenn keiner gesetzt ist, damit `max`/`min` entfällt.
+const kleinerVon = (a?: string, b?: string) => (a && b ? (a < b ? a : b) : a || b || undefined)
+const groesserVon = (a?: string, b?: string) => (a && b ? (a > b ? a : b) : a || b || undefined)
+
 export interface ZeitChip {
   label: string
   /** liefert [von, bis] im passenden Format (YYYY-MM bzw. YYYY-MM-DD). */
@@ -26,7 +32,7 @@ export interface ZeitChip {
 }
 
 export function WerkbankZeitraum({
-  modus, von, bis, onRange, vergleich, onVergleich, vergleichSlot, chips, extra,
+  modus, von, bis, onRange, vergleich, onVergleich, vergleichSlot, chips, extra, minDatum, maxDatum,
 }: {
   modus: 'monat' | 'tag'
   von: string
@@ -40,8 +46,11 @@ export function WerkbankZeitraum({
   chips: ZeitChip[]
   /** optionaler Slot rechts (z. B. Status). */
   extra?: ReactNode
+  /** D12-8: harte Untergrenze für beide Felder (YYYY-MM bzw. YYYY-MM-DD), je nach `modus`. */
+  minDatum?: string
+  /** D12-8: harte Obergrenze für beide Felder (YYYY-MM bzw. YYYY-MM-DD), je nach `modus`. */
+  maxDatum?: string
 }) {
-  const inputType = modus === 'monat' ? 'month' : 'date'
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 px-3 py-2">
       {chips.length > 0 && (
@@ -70,14 +79,30 @@ export function WerkbankZeitraum({
         <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400">Zeitraum</span>
         <label className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="sm:hidden text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Zeitraum von:</span>
-          <input type={inputType} value={von} max={bis || undefined}
-            onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
+          {/* D12-8: von-Feld nach unten durch `minDatum` (ältester verfügbarer Zeitpunkt,
+              analog CockpitTagV4 R5-F2), nach oben durch `bis`/`maxDatum` begrenzt —
+              verhindert Phantasie-Jahre wie „1822". String-Vergleich gilt für YYYY-MM
+              wie YYYY-MM-DD. D12-7: Monat = Custom-Picker (ausgeschrieben „Januar 2026"
+              app-weit), Tag = nativ. */}
+          {modus === 'monat' ? (
+            <MonatPicker value={von} min={minDatum} max={kleinerVon(bis, maxDatum)}
+              onChange={(v) => onRange(v, bis)} ariaLabel="Von" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
+          ) : (
+            <input type="date" value={von} min={minDatum || undefined} max={kleinerVon(bis, maxDatum)}
+              onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
+          )}
         </label>
         <span className="hidden sm:inline text-gray-400">–</span>
         <label className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="sm:hidden text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Zeitraum bis:</span>
-          <input type={inputType} value={bis} min={von || undefined}
-            onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
+          {/* D12-8: bis-Feld nach unten durch `von`/`minDatum`, nach oben durch `maxDatum`. */}
+          {modus === 'monat' ? (
+            <MonatPicker value={bis} min={groesserVon(von, minDatum)} max={maxDatum}
+              onChange={(v) => onRange(von, v)} ariaLabel="Bis" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
+          ) : (
+            <input type="date" value={bis} min={groesserVon(von, minDatum)} max={maxDatum || undefined}
+              onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
+          )}
         </label>
       </div>
 
