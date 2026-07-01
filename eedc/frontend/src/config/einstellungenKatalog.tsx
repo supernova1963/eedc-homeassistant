@@ -29,6 +29,7 @@ import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
 import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
+import { DatenCheckerVerwaltung } from '../pages/DatenCheckerTeile'
 import type { InfothekEintrag } from '../types/infothek'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
@@ -256,6 +257,17 @@ function MonatsdatenInhalt() {
   return <MonatsdatenVerwaltung anlageId={selectedAnlageId} />
 }
 
+/** Daten-Checker: native V4-Verwaltung inline im Block (Prüf-Lauf + Kategorien +
+ *  Reparatur-Werkbank, kein navigate). Wie Monatsdaten — Voll-Blick über
+ *  Fokus/Vollbild des Blocks (Gernot 2026-07-01). */
+function DatenCheckerInhalt() {
+  const { selectedAnlageId } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <DatenCheckerVerwaltung anlageId={selectedAnlageId} />
+}
+
 /** MQTT-Inbound: Status + Cache-Zähler (1× gelesen), Einrichten öffnet im Modal. */
 function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
   const [status, setStatus] = useState<MqttInboundStatus | null>(null)
@@ -366,13 +378,9 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     id: 'datenchecker', name: 'Daten-Checker', icon: ClipboardCheck, kategorie: 'daten',
     route: 'einstellungen/daten-checker', hilfe: 'Hilfe: Daten-Checker',
     schlagworte: ['plausibilität', 'lücken', 'ausreißer', 'reparatur', 'werkbank'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="Plausibilitäts-Prüfung deiner Daten — findet Lücken und Ausreißer, mit punktuellem Reparatur-Pfad."
-        aktion="Reparatur-Werkbank" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('einstellungen/daten-checker')}
-      />
-    ),
+    // Gernot 2026-07-01: Prüf-Lauf + Reparatur-Werkbank inline IM Block (wie
+    // Monatsdaten), Voll-Blick über Fokus/Vollbild — kein navigate/separate Seite.
+    inhalt: () => <DatenCheckerInhalt />,
   },
   {
     id: 'einrichtung', name: 'Ersteinrichtung', icon: Wand2, kategorie: 'daten',
