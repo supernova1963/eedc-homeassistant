@@ -69,6 +69,14 @@ export function BlockShell({
   const lastFokusMeta = useRef<Pick<Block, 'title' | 'icon' | 'farbe'> | null>(null)
   const byId = useMemo(() => Object.fromEntries(bloecke.map((b) => [b.id, b] as const)), [bloecke])
 
+  // Sichtbare Blöcke in gemerkter Reihenfolge — absente Lücken-Tag-/Komponenten-IDs
+  // (z. B. E-Mobilität nur an manchen Tagen) rausgefiltert. Basis fürs Rendering UND
+  // fürs ID-basierte Verschieben (R13-1).
+  const ordered = useMemo(
+    () => order.map((id) => byId[id]).filter(Boolean) as Block[],
+    [order, byId],
+  )
+
   // Lücken-fest: neu auftauchende Block-IDs hinten anhängen, vorhandene Position
   // behalten, NIE entfernen — verschwundene Blöcke eines Lücken-Tags bleiben in der
   // Reihenfolge und kommen an ihrer Stelle zurück (kein „nur noch ein Block").
@@ -106,11 +114,19 @@ export function BlockShell({
     speichereBlockState(persistKey, { order, zu: [...zu] })
   }, [persistKey, order, zu])
 
+  // R13-1 (Rainer #101): `i` ist der Index der SICHTBAREN Liste (`ordered`); die
+  // persistierte `order` kann absente IDs enthalten (order.length > ordered.length).
+  // Deshalb NICHT order[i]↔order[i±1] tauschen (trifft falsche/unsichtbare Blöcke),
+  // sondern die beiden sichtbaren Nachbarn PER ID in `order` vertauschen — absente
+  // IDs bleiben an ihrer Stelle.
   const verschieben = (i: number, r: -1 | 1) => {
     const ziel = i + r
-    if (ziel < 0 || ziel >= order.length) return
+    if (ziel < 0 || ziel >= ordered.length) return
+    const a = order.indexOf(ordered[i].id)
+    const b = order.indexOf(ordered[ziel].id)
+    if (a < 0 || b < 0) return
     const next = [...order]
-    ;[next[i], next[ziel]] = [next[ziel], next[i]]
+    ;[next[a], next[b]] = [next[b], next[a]]
     setOrder(next)
   }
   const toggle = (id: string) => {
@@ -144,7 +160,6 @@ export function BlockShell({
     }
   }
 
-  const ordered = order.map((id) => byId[id]).filter(Boolean) as Block[]
   // D7-4 (detLAN R7): KEIN Eigen-Padding/-max-width mehr — die konsumierende Sicht
   // ist der EINE Padding-Owner (`p-3 sm:p-6 max-w-[1920px] mx-auto`). Vorher paddete
   // BlockShell zusätzlich → Doppel-Padding (Blöcke schmaler als Kopf/Parkplatz,
@@ -187,8 +202,12 @@ export function BlockShell({
                 className="flex-1 flex items-center gap-2 text-left py-2 min-w-0"
               >
                 {b.icon && <b.icon className={`h-4 w-4 flex-shrink-0 ${b.farbe ?? 'text-gray-400 dark:text-gray-500'}`} />}
-                <span className="text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">{b.title}</span>
-                {b.summary && <span className="text-xs text-gray-400 dark:text-gray-500 truncate">{b.summary}</span>}
+                {/* D13-6: Kopfzeile bleibt EINZEILIG — Titel truncatet als letzte
+                    Reserve, damit er (mit Badge + langem Untertitel) mobil NIE über
+                    die ↑↓⤢⌄-Controls läuft. Der Untertitel schrumpft zuerst
+                    (starkes flex-shrink), der Titel behält Vorrang. */}
+                <span className="text-sm font-semibold text-gray-900 dark:text-white truncate min-w-0">{b.title}</span>
+                {b.summary && <span className="text-xs text-gray-400 dark:text-gray-500 truncate min-w-0 [flex-shrink:100]">{b.summary}</span>}
               </button>
               {b.badge && <div className="flex-shrink-0">{b.badge}</div>}
               <div className="flex items-center gap-0.5 flex-shrink-0">

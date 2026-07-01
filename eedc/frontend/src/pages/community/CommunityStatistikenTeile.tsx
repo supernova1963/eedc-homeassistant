@@ -354,11 +354,11 @@ export function DeineAnlage({ benchmark, ausstattung }: { benchmark: CommunityBe
               }`} title={item.name}>
                 {item.name}
               </p>
-              {item.details && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {item.details}
-                </p>
-              )}
+              {/* D13-17: Subzeile IMMER rendern (nbsp-Platzhalter wenn leer),
+                  damit Kacheln mit/ohne Detail gleich hoch sind (D11-1-Muster). */}
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {item.details || ' '}
+              </p>
             </div>
             {item.vorhanden ? (
               <CheckCircle2 className={`h-4 w-4 flex-shrink-0 ${item.cls.icon}`} />

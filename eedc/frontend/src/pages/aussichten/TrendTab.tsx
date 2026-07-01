@@ -6,7 +6,7 @@ import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { aussichtenApi, TrendAnalyseResponse } from '../../api/aussichten'
-import { CHART_COLORS, STATUS_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
+import { CHART_COLORS, STATUS_COLORS, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import {
   ResponsiveContainer,
   BarChart,
@@ -161,7 +161,7 @@ export default function TrendTab({ anlageId }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="jahr"
-                tick={{ fontSize: 10 }}
+                {...xAchse()}
                 className="text-gray-600 dark:text-gray-400"
                 /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */
               />
@@ -195,7 +195,7 @@ export default function TrendTab({ anlageId }: Props) {
               <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
               <XAxis
                 dataKey="jahr"
-                tick={{ fontSize: 10 }}
+                {...xAchse()}
                 className="text-gray-600 dark:text-gray-400"
                 /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */
               />

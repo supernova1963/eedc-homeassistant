@@ -16,7 +16,7 @@ import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } fro
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 
 interface Props {
   anlageId: number
@@ -309,7 +309,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               {embed ? (
                 <BarChart data={moduleVergleichData} margin={{ top: 20, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Achse (Modul-Name) */ />
+                  <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Kategorie-Achse (Modul-Name) */ />
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={70} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
@@ -323,7 +323,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               ) : (
                 <BarChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+                  <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende />} />
@@ -372,7 +372,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={saisonalChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis tickFormatter={saisonalAchse.tick} label={achsenEinheit(saisonalAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />

@@ -73,6 +73,7 @@ const violations = []
 const tickViolations = []
 const sizeViolations = []
 const dropViolations = []
+const xRotViolations = []
 
 // Akzeptierte Formen einer 10-px-Tick-Deklaration (ACHSEN_TICK-SoT). Spreads
 // `xAchse(`/`yAchse(` setzen tick:ACHSEN_TICK; `tick={(` ist ein Custom-Renderer
@@ -81,6 +82,16 @@ const TICK_10 = /ACHSEN_TICK|xAchse\(|yAchse\(|fontSize:\s*10\b|fontSize=\{10\}|
 // Label-Drop: `… ? achsenEinheit(…) : undefined|null` lässt die Einheit ganz
 // verschwinden (D11-14: Y-Achse ohne Einheit). Die Einheit muss garantiert sein.
 const LABEL_DROP = /\?\s*achsenEinheit\([^)]*\)\s*:\s*(undefined|null)/
+// D13-2 (detLAN #105): −45°-X-Achse UNIFORM ÜBERALL. D11-10 stellte `xAchse()`
+// auf immer −45°, aber Charts mit EIGENER `<XAxis>` (ohne xAchse()-Spread) blieben
+// waagerecht (Blind-Spot). Eine <XAxis> gilt als −45°-konform, wenn sie den
+// `xAchse(`-Spread ODER ein explizites `angle={-45}` trägt.
+const X_ROTATED = /xAchse\(|angle=\{\s*-?45\s*\}/
+// XAxis, die waagerecht bleiben DÜRFEN: numerische Wert-Achsen (`type="number"` —
+// horizontale Balken/Scatter tragen die Magnitude waagerecht) und versteckte
+// Sparklines (`hide`, keine Labels). Alles andere ist eine Zeit-/Kategorie-Achse
+// und MUSS −45° tragen.
+const X_HORIZONTAL_OK = /type=["']number["']|\bhide\b/
 
 for (const file of tsxFiles(SRC)) {
   const src = readFileSync(file, 'utf8')
@@ -106,6 +117,11 @@ for (const file of tsxFiles(SRC)) {
     if (LABEL_DROP.test(ax.tag)) {
       dropViolations.push(`${relative(ROOT, file)}:${lineOf(src, ax.index)} <${ax.kind}> Einheit kann zu undefined/null kollabieren (Achse ohne Einheit)`)
     }
+    // −45°-ROLLOUT (D13-2): jede Zeit-/Kategorie-X-Achse muss −45° tragen. Nur
+    // `type="number"`-Wert-Achsen + versteckte Sparklines dürfen waagerecht bleiben.
+    if (ax.kind === 'XAxis' && !X_ROTATED.test(ax.tag) && !X_HORIZONTAL_OK.test(ax.tag)) {
+      xRotViolations.push(`${relative(ROOT, file)}:${lineOf(src, ax.index)} <XAxis> Zeit-/Kategorie-Achse ohne −45° (weder xAchse( noch angle={-45})`)
+    }
   }
 }
 
@@ -130,8 +146,19 @@ console.log(
     ? `check:achsen — keine Einheit kann zu undefined kollabieren`
     : `check:achsen — ${dropViolations.length} Achse(n) mit kollabierbarer Einheit`,
 )
+console.log(
+  xRotViolations.length === 0
+    ? `check:achsen — alle Zeit-/Kategorie-X-Achsen −45° (uniform)`
+    : `check:achsen — ${xRotViolations.length} X-Achse(n) OHNE −45° (waagerecht geblieben)`,
+)
 
-if (violations.length > 0 || tickViolations.length > 0 || sizeViolations.length > 0 || dropViolations.length > 0) {
+if (
+  violations.length > 0 ||
+  tickViolations.length > 0 ||
+  sizeViolations.length > 0 ||
+  dropViolations.length > 0 ||
+  xRotViolations.length > 0
+) {
   if (violations.length > 0) {
     console.error(`\n❌ ${violations.length} Achse(n) ohne Einheit und ohne Allowlist-Marker:`)
     for (const v of violations) console.error('  · ' + v)
@@ -164,7 +191,16 @@ if (violations.length > 0 || tickViolations.length > 0 || sizeViolations.length 
         '`label={einheit ? achsenEinheit(einheit) : undefined}` (kein Label-Drop).',
     )
   }
+  if (xRotViolations.length > 0) {
+    console.error(`\n❌ ${xRotViolations.length} X-Achse(n) ohne −45° (D13-2, detLAN #105 — waagerecht geblieben):`)
+    for (const v of xRotViolations) console.error('  · ' + v)
+    console.error(
+      '\nFix: `{...xAchse(schmal)}` spreaden (SoT, −45° uniform) — bespoke `interval`/`padding`/' +
+        '`tickFormatter` bleiben NACH dem Spread erhalten. Echte Wert-Achse (horizontale Balken) → ' +
+        '`type="number"` setzen; Sparkline → `hide`.',
+    )
+  }
   process.exit(1)
 }
 
-console.log('✅ Alle Achsen: genau eine Einheit (nie kollabierbar) + de-DE tickFormatter + 10-px-Tick.')
+console.log('✅ Alle Achsen: genau eine Einheit (nie kollabierbar) + de-DE tickFormatter + 10-px-Tick + −45°-X-Achse (uniform).')

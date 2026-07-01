@@ -9,7 +9,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { LADEQUELLEN_FARBEN, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { LADEQUELLEN_FARBEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps } from '../ui'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
@@ -52,7 +52,7 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdat
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="jahr" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+            <XAxis dataKey="jahr" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
             <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
             <Tooltip {...eedcTooltipProps({ unit: ' kWh', decimals: 0, percentOf: 'gesamt' })} />
             <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />

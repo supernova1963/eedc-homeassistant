@@ -27,7 +27,7 @@ import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, Ch
 import ChartTooltip from '../ui/ChartTooltip'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
-import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
+import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
 
 const typIcons: Record<string, React.ElementType> = {
   'e-auto': Car,
@@ -231,7 +231,7 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={vm.amortisationData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis dataKey="jahr" tickFormatter={geldTick} tick={{ fontSize: 10 }} /* achsen-allow: Jahres-Index (0–30), Einheit „Jahre" steht im Break-Even-Text + KPI; Achsen-Label kollidierte mit Legende (#29-15) */ />
+            <XAxis dataKey="jahr" tickFormatter={geldTick} {...xAchse()} /* achsen-allow: Jahres-Index (0–30), Einheit „Jahre" steht im Break-Even-Text + KPI; Achsen-Label kollidierte mit Legende (#29-15) */ />
             <YAxis tickFormatter={geldTick} tick={{ fontSize: 10 }} width={70} label={achsenEinheit('€')} />
             <Tooltip content={<ChartTooltip labelFormatter={(label) => `Jahr ${label}`} unit="€" />} />
             <Legend content={<ChartLegende />} />

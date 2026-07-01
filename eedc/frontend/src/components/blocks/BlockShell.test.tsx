@@ -102,6 +102,26 @@ describe('BlockShell', () => {
     expect(titel).toEqual(['Block A', 'Block C', 'Block B'])
   })
 
+  it('R13-1 (Rainer #101): verschiebt den SICHTBAREN Nachbarn, wenn `order` absente IDs enthält', () => {
+    const vier = (): Block[] => [
+      { id: 'a', title: 'Block A', defaultOpen: true, render: () => <p>A</p> },
+      { id: 'b', title: 'Block B', defaultOpen: true, render: () => <p>B</p> },
+      { id: 'c', title: 'Block C', defaultOpen: true, render: () => <p>C</p> },
+      { id: 'd', title: 'Block D', defaultOpen: true, render: () => <p>D</p> }, // „E-Mobilität": nur an manchen Tagen
+    ]
+    const { rerender } = render(<BlockShell bloecke={vier()} persistKey={KEY} sortierbar />)
+    // C fällt weg (Komponente an diesem Tag ohne Daten) → order behält [a,b,c,d],
+    // sichtbar bleibt [a,b,d]. Damit order.length(4) > ordered.length(3) = der Bug-Fall.
+    rerender(<BlockShell bloecke={[vier()[0], vier()[1], vier()[3]]} persistKey={KEY} sortierbar />)
+    expect(screen.getAllByText(/^Block [ABD]$/).map((e) => e.textContent)).toEqual(['Block A', 'Block B', 'Block D'])
+    // D (sichtbarer Index 2) nach oben → muss mit dem sichtbaren Nachbarn B tauschen,
+    // NICHT das absente C anfassen. Vor dem Fix wechselten stattdessen b/c unsichtbar.
+    fireEvent.click(screen.getAllByLabelText('nach oben')[2])
+    expect(screen.getAllByText(/^Block [ABD]$/).map((e) => e.textContent)).toEqual(['Block A', 'Block D', 'Block B'])
+    // Persistierte Order: C bleibt an seiner Stelle, nur B↔D getauscht.
+    expect(JSON.parse(localStorage.getItem('eedc-bloecke:' + KEY)!).order).toEqual(['a', 'd', 'c', 'b'])
+  })
+
   it('Persistenz bleibt heil über einen Remount auf einem Lücken-Tag', () => {
     const { unmount } = render(<BlockShell bloecke={bloecke()} persistKey={KEY} sortierbar />)
     fireEvent.click(screen.getAllByLabelText('nach oben')[2]) // C über B → order [a, c, b]

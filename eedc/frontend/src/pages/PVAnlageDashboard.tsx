@@ -21,7 +21,7 @@ import {
 import type { Investition } from '../types'
 import { PVStringVergleich } from '../components/pv'
 import ChartTooltip from '../components/ui/ChartTooltip'
-import { COLORS, speicherParameter, wechselrichterParameter, achsenEinheit, ACHSEN_MARGIN_TOP, energieAchse } from '../lib'
+import { COLORS, speicherParameter, wechselrichterParameter, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, energieAchse } from '../lib'
 
 interface PVSystem {
   wechselrichter: Investition
@@ -378,7 +378,7 @@ export default function PVAnlageDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={jahresChartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahre) */ />
+                <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahre) */ />
                 <YAxis tickFormatter={jahresAchse.tick} width={80} tick={{ fontSize: 10 }} label={achsenEinheit(jahresAchse.einheit)} />
                 <Tooltip content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende />} />

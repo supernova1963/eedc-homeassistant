@@ -54,10 +54,8 @@ function formatDatum(datum: string): string {
 
 const BALKEN_PX = 170 // Höhe der vertikalen Balken-Spur (Desktop) — R12-4: deutlich höher (war 110)
 
-// „heute" = erste Spalte/Zeile (Index 0). D12-3: rounded-md + ring-inset, damit
-// der Rahmen vollständig innerhalb der Karte bleibt (kein vom Overflow geklippter
-// Bogen); p-0.5 am Container gibt dem Ring zusätzlich Luft.
-const HEUTE_RING = 'bg-primary-50 dark:bg-primary-900/30 ring-1 ring-inset ring-primary-400'
+// R13-4a (Rainer #77): die grüne „heute"-Umrandung (1. Spalte) ersatzlos entfernt
+// (überstimmt D12-3). „Heute" ist ohnehin die erste Spalte/Zeile.
 
 export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
   const maxKwh = Math.max(...tage.map((t) => t.pv_ertrag_kwh), 0.1)
@@ -65,11 +63,9 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
   return (
     <div className="space-y-2">
       {/* ── Desktop (≥ lg): vertikale Säulen ── */}
-      {/* D12-3: p-0.5 gibt dem „heute"-Ring (Spalte 0) Luft, sonst beschneidet das
-          overflow-x-auto den Rahmen an der linken/oberen Kante. */}
       <div className="hidden lg:block overflow-x-auto p-0.5">
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${tage.length}, minmax(52px, 1fr))` }}>
-          {tage.map((tag, index) => {
+          {tage.map((tag) => {
             const totalPx = (tag.pv_ertrag_kwh / maxKwh) * BALKEN_PX
             const vm = tag.pv_ertrag_morgens_kwh ?? 0
             const nm = tag.pv_ertrag_nachmittags_kwh ?? 0
@@ -79,7 +75,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
             return (
               <div
                 key={tag.datum}
-                className={`flex flex-col items-center gap-1 rounded-md px-0.5 pt-1.5 pb-1 ${index === 0 ? HEUTE_RING : ''}`}
+                className="flex flex-col items-center gap-1 rounded-md px-0.5 pt-1.5 pb-1"
               >
                 {/* Wetter-Symbol GRÖSSER + an die Spaltenbreite gekoppelt (w-3/5 der
                     1fr-Spalte, gedeckelt) — wächst mit, ohne die Spalte zu sprengen. */}
@@ -87,7 +83,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                 <span className="flex items-center gap-0.5 text-sm font-medium text-gray-600 dark:text-gray-300 tabular-nums">
                   <Thermometer className="h-3.5 w-3.5" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
                 </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 1)}</span>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
                 <div className="flex flex-col justify-end items-center w-full" style={{ height: BALKEN_PX }}>
                   {hasVmNm && summe > 0 ? (
                     <>
@@ -98,7 +94,8 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                     <div className="w-1/2 rounded-t" style={{ height: totalPx, backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(tag.pv_ertrag_kwh, 1)} kWh`} />
                   )}
                 </div>
-                <span className="text-[11px] text-gray-400 dark:text-gray-500 text-center leading-tight">{formatDatum(tag.datum)}</span>
+                {/* R13-4j: Datums-Zeile fetter/abgesetzter (Rainer #77) */}
+                <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 text-center leading-tight">{formatDatum(tag.datum)}</span>
               </div>
             )
           })}
@@ -107,7 +104,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
 
       {/* ── Mobil (< lg): horizontale Balken (Gernot R12-4) ── */}
       <div className="lg:hidden space-y-1 p-0.5">
-        {tage.map((tag, index) => {
+        {tage.map((tag) => {
           const totalPct = (tag.pv_ertrag_kwh / maxKwh) * 100
           const vm = tag.pv_ertrag_morgens_kwh ?? 0
           const nm = tag.pv_ertrag_nachmittags_kwh ?? 0
@@ -115,7 +112,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
           const vmPct = summe > 0 ? totalPct * (vm / summe) : 0
           const nmPct = summe > 0 ? totalPct * (nm / summe) : 0
           return (
-            <div key={tag.datum} className={`flex items-center gap-2 rounded-md px-1 py-1 ${index === 0 ? HEUTE_RING : ''}`}>
+            <div key={tag.datum} className="flex items-center gap-2 rounded-md px-1 py-1">
               {/* Wetter + Temperatur links neben dem Balken, GRÖSSER */}
               <WetterIcon symbol={tag.wetter_symbol} className="h-8 w-8 shrink-0" />
               <div className="w-24 shrink-0 leading-tight">
@@ -137,7 +134,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                   )}
                 </div>
               </div>
-              <span className="w-14 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 1)}</span>
+              <span className="w-14 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
             </div>
           )
         })}
@@ -191,8 +188,10 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
           </tr>
         </thead>
         <tbody>
-          {tage.map((tag, index) => (
-            <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800 ${index === 0 ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
+          {/* R13-4a-Folge: keine grüne „heute"-Zeile (1. Zeile) — konsistent mit
+              der entfärbten Tages-Prognose (Gernot 2026-07-01). */}
+          {tage.map((tag) => (
+            <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
               <td className="py-2 px-3 font-medium">{formatDatum(tag.datum)}</td>
               <td className="py-2 px-3"><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
               <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{fmtZahl(tag.pv_ertrag_kwh, 1)} kWh</td>

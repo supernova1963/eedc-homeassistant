@@ -10,6 +10,7 @@ import { ChevronFirst, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, C
 import { MONAT_KURZ, fmtZahl } from '../lib'
 import type { RailEintrag } from './MonatsRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
+import { DatumPicker } from '../components/ui/DatumPicker'
 
 interface MonatStepperProps {
   entries: RailEintrag[]
@@ -66,17 +67,18 @@ export function MonatStepper({ entries, jahr, monat, onSelect, immerSichtbar }: 
       badge={aktuell?.laufend ? 'läuft' : null}
       eintraege={eintraege}
       direktsprung={(close) => {
-        // Monat/Jahr-Angleich (Gernot 2026-06-29): native Monats-Auswahl wie der
-        // Tag-Date-Picker (Tag hatte Kalender, Monat nicht). value/min/max = YYYY-MM.
+        // Monat/Jahr-Angleich (Gernot 2026-06-29): Direktsprung-Auswahl wie beim Tag.
+        // D13-4/12: EIN Custom-DatumPicker (SoT) statt nativem <input type=month> —
+        // gleiches Icon/Stil app-weit. value/min/max = YYYY-MM.
         const toVal = (j: number, m: number) => `${j}-${String(m).padStart(2, '0')}`
         return (
           <div className="space-y-2">
-            <input
-              type="month" aria-label="Monat wählen" value={toVal(jahr, monat)}
+            <DatumPicker
+              modus="monat" ariaLabel="Monat wählen" value={toVal(jahr, monat)}
               min={oldest ? toVal(oldest.jahr, oldest.monat) : undefined}
               max={newest ? toVal(newest.jahr, newest.monat) : undefined}
-              onChange={(e) => { const v = e.target.value; if (v) { const [j, m] = v.split('-').map(Number); onSelect(j, m); close() } }}
-              className="input w-full text-sm border-gray-200 dark:border-gray-700"
+              onChange={(v) => { const [j, m] = v.split('-').map(Number); onSelect(j, m); close() }}
+              className="w-full text-sm"
             />
             {newest && k(jahr, monat) !== k(newest.jahr, newest.monat) && (
               <button

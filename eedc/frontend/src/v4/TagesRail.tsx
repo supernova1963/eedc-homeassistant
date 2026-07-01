@@ -8,6 +8,7 @@
  */
 import { useMemo } from 'react'
 import { MONAT_KURZ, DATENROLLE, fmtZahl } from '../lib'
+import { DatumPicker } from '../components/ui/DatumPicker'
 
 export interface TagRailEintrag {
   datum: string   // YYYY-MM-DD
@@ -59,12 +60,12 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
 
   return (
     <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none space-y-3 pr-1">
-      {/* Direktsprung (Tage sind viele — anders als Monate). */}
-      <input
-        type="date" aria-label="Datum wählen" value={datum} max={heuteISO} min={aeltester || undefined}
-        onChange={(e) => { if (e.target.value) onSelect(e.target.value) }}
-        /* D12-9: ring-inset — der Fokus-Ring würde sonst vom overflow-auto-Rail abgeschnitten. */
-        className="input w-full text-xs ring-inset"
+      {/* Direktsprung (Tage sind viele — anders als Monate). D13-4/12: Custom-DatumPicker
+          (SoT), Portal-Popover → nicht mehr vom overflow-auto-Rail abgeschnitten (löst
+          auch D12-9-Fokus-Ring-Clip, da der Popover außerhalb des Rails liegt). */}
+      <DatumPicker
+        modus="tag" ariaLabel="Datum wählen" value={datum} max={heuteISO} min={aeltester || undefined}
+        onChange={(v) => onSelect(v)} className="w-full text-xs"
       />
       {monate.map((mk) => (
         <div key={mk}>

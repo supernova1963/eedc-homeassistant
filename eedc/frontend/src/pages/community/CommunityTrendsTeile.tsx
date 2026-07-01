@@ -21,7 +21,7 @@ import {
   Area, AreaChart, Legend,
 } from 'recharts'
 import {
-  MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS, ACHSEN_TICK,
+  MONAT_KURZ, MONAT_NAMEN, EIGENE_SERIE_FARBEN, TYP_COLORS,
   ACHSEN_MARGIN_TOP, xAchse, yAchse, achsenEinheit, achsenTick, fmtZahl,
 } from '../../lib'
 
@@ -515,9 +515,9 @@ export function DegradationBlock({ degradation }: {
             <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
             <XAxis
               dataKey="alter_jahre"
-              tick={ACHSEN_TICK}
+              {...xAchse(schmal)}
               tickFormatter={(v) => `${fmtZahl(v, 0)} Jahre`}
-              /* achsen-allow: Wert-Achse waagerecht (Anlagenalter), Einheit/Format pro Tick (de-DE) */
+              /* achsen-allow: Zeit-/Kategorie-Achse (Anlagenalter), Format pro Tick (de-DE) */
             />
             <YAxis
               {...yAchse(schmal)}

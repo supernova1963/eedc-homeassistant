@@ -321,43 +321,43 @@ export function SpeicherDeepDive({
 
   return (
     <>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* KPI-Übersicht */}
-        <div className="space-y-4">
-          <CommunityVergleichsKPI
-            label="Zyklen/Jahr"
-            icon={<BatteryCharging className="h-5 w-5 text-green-500" />}
-            kpi={speicher.zyklen_jahr}
-            einheit=""
-            beschreibung="Vollständige Lade-/Entladezyklen"
-            parkId="komp-speicher-kpi-zyklen"
-            parkTitel="Speicher · Zyklen/Jahr"
-          />
-          <CommunityVergleichsKPI
-            label="Wirkungsgrad"
-            icon={<Gauge className="h-5 w-5 text-blue-500" />}
-            kpi={speicher.wirkungsgrad}
-            einheit="%"
-            beschreibung="Entladen / Geladen"
-            parkId="komp-speicher-kpi-wirkungsgrad"
-            parkTitel="Speicher · Wirkungsgrad"
-          />
-          <CommunityVergleichsKPI
-            label="Netzlade-Anteil"
-            icon={<Zap className="h-5 w-5 text-yellow-500" />}
-            kpi={speicher.netz_anteil}
-            einheit="%"
-            beschreibung="Anteil Ladung aus Netz statt PV"
-            invertColors
-            parkId="komp-speicher-kpi-netzanteil"
-            parkTitel="Speicher · Netzlade-Anteil"
-          />
-        </div>
+      {/* D13-5: KPIs als Kachelreihe (wie WP/Wallbox/BKW) statt gestapelter
+          Spalte neben dem Chart — konsistentes V4-Muster, kein Leerraum. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CommunityVergleichsKPI
+          label="Zyklen/Jahr"
+          icon={<BatteryCharging className="h-5 w-5 text-green-500" />}
+          kpi={speicher.zyklen_jahr}
+          einheit=""
+          beschreibung="Vollständige Lade-/Entladezyklen"
+          parkId="komp-speicher-kpi-zyklen"
+          parkTitel="Speicher · Zyklen/Jahr"
+        />
+        <CommunityVergleichsKPI
+          label="Wirkungsgrad"
+          icon={<Gauge className="h-5 w-5 text-blue-500" />}
+          kpi={speicher.wirkungsgrad}
+          einheit="%"
+          beschreibung="Entladen / Geladen"
+          parkId="komp-speicher-kpi-wirkungsgrad"
+          parkTitel="Speicher · Wirkungsgrad"
+        />
+        <CommunityVergleichsKPI
+          label="Netzlade-Anteil"
+          icon={<Zap className="h-5 w-5 text-yellow-500" />}
+          kpi={speicher.netz_anteil}
+          einheit="%"
+          beschreibung="Anteil Ladung aus Netz statt PV"
+          invertColors
+          parkId="komp-speicher-kpi-netzanteil"
+          parkTitel="Speicher · Netzlade-Anteil"
+        />
+      </div>
 
-        {/* Vergleichs-Chart */}
-        {vergleichsData.length > 0 && (
-          <Parkbar id="komp-speicher-chart" titel="Speicher · Vergleich mit Community">
-          <div>
+      {/* Vergleichs-Chart (Full-Width unter den KPIs) */}
+      {vergleichsData.length > 0 && (
+        <Parkbar id="komp-speicher-chart" titel="Speicher · Vergleich mit Community">
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
               Vergleich mit Community
             </h4>
@@ -384,9 +384,8 @@ export function SpeicherDeepDive({
               </div>
             </div>
           </div>
-          </Parkbar>
-        )}
-      </div>
+        </Parkbar>
+      )}
 
       {/* Community Speicher-Verteilung */}
       {klassenData.length > 0 && (
@@ -732,65 +731,65 @@ export function EAutoDeepDive({
 
   return (
     <>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* KPIs */}
-        <div className="space-y-4">
+      {/* D13-5: KPIs als Kachelreihe (wie WP/Wallbox/BKW) statt gestapelter
+          Spalte neben dem Chart — konsistentes V4-Muster, kein Leerraum. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CommunityVergleichsKPI
+          label="PV-Ladeanteil"
+          icon={<Sun className="h-5 w-5 text-yellow-500" />}
+          kpi={eauto.pv_anteil}
+          einheit="%"
+          beschreibung="Anteil PV an Gesamtladung"
+          parkId="komp-eauto-kpi-pvanteil"
+          parkTitel="E-Auto · PV-Ladeanteil"
+        />
+        <CommunityVergleichsKPI
+          label="Ladung gesamt"
+          icon={<BatteryCharging className="h-5 w-5 text-purple-500" />}
+          kpi={eauto.ladung_gesamt}
+          einheit="kWh"
+          beschreibung="Gesamte Lademenge"
+          parkId="komp-eauto-kpi-ladung"
+          parkTitel="E-Auto · Ladung gesamt"
+        />
+        <CommunityVergleichsKPI
+          label="Verbrauch"
+          icon={<Gauge className="h-5 w-5 text-blue-500" />}
+          kpi={eauto.verbrauch_100km}
+          einheit="kWh/100km"
+          beschreibung="Durchschnittsverbrauch"
+          invertColors
+          parkId="komp-eauto-kpi-verbrauch"
+          parkTitel="E-Auto · Verbrauch"
+        />
+        {eauto.km && (
           <CommunityVergleichsKPI
-            label="PV-Ladeanteil"
-            icon={<Sun className="h-5 w-5 text-yellow-500" />}
-            kpi={eauto.pv_anteil}
-            einheit="%"
-            beschreibung="Anteil PV an Gesamtladung"
-            parkId="komp-eauto-kpi-pvanteil"
-            parkTitel="E-Auto · PV-Ladeanteil"
+            label="Gefahrene km"
+            icon={<Route className="h-5 w-5 text-gray-500" />}
+            kpi={eauto.km}
+            einheit="km"
+            beschreibung="Im Zeitraum"
+            parkId="komp-eauto-kpi-km"
+            parkTitel="E-Auto · Gefahrene km"
           />
+        )}
+        {eauto.v2h && eauto.v2h.wert > 0 && (
           <CommunityVergleichsKPI
-            label="Ladung gesamt"
-            icon={<BatteryCharging className="h-5 w-5 text-purple-500" />}
-            kpi={eauto.ladung_gesamt}
+            label="V2H Entladung"
+            icon={<Zap className="h-5 w-5 text-green-500" />}
+            kpi={eauto.v2h}
             einheit="kWh"
-            beschreibung="Gesamte Lademenge"
-            parkId="komp-eauto-kpi-ladung"
-            parkTitel="E-Auto · Ladung gesamt"
+            beschreibung="Rückspeisung ins Haus"
+            parkId="komp-eauto-kpi-v2h"
+            parkTitel="E-Auto · V2H Entladung"
           />
-          <CommunityVergleichsKPI
-            label="Verbrauch"
-            icon={<Gauge className="h-5 w-5 text-blue-500" />}
-            kpi={eauto.verbrauch_100km}
-            einheit="kWh/100km"
-            beschreibung="Durchschnittsverbrauch"
-            invertColors
-            parkId="komp-eauto-kpi-verbrauch"
-            parkTitel="E-Auto · Verbrauch"
-          />
-          {eauto.km && (
-            <CommunityVergleichsKPI
-              label="Gefahrene km"
-              icon={<Route className="h-5 w-5 text-gray-500" />}
-              kpi={eauto.km}
-              einheit="km"
-              beschreibung="Im Zeitraum"
-              parkId="komp-eauto-kpi-km"
-              parkTitel="E-Auto · Gefahrene km"
-            />
-          )}
-          {eauto.v2h && eauto.v2h.wert > 0 && (
-            <CommunityVergleichsKPI
-              label="V2H Entladung"
-              icon={<Zap className="h-5 w-5 text-green-500" />}
-              kpi={eauto.v2h}
-              einheit="kWh"
-              beschreibung="Rückspeisung ins Haus"
-              parkId="komp-eauto-kpi-v2h"
-              parkTitel="E-Auto · V2H Entladung"
-            />
-          )}
-        </div>
+        )}
+      </div>
 
-        {/* Ladequellen-Verteilung */}
-        {ladequellenData.length > 0 && (
-          <Parkbar id="komp-eauto-chart" titel="E-Auto · Ladequellen-Verteilung">
-          <div>
+      {/* Ladequellen-Verteilung (Full-Width unter den KPIs) */}
+      {ladequellenData.length > 0 && (
+        <Parkbar id="komp-eauto-chart" titel="E-Auto · Ladequellen-Verteilung">
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
             <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
               Ladequellen-Verteilung
             </h4>
@@ -810,9 +809,8 @@ export function EAutoDeepDive({
               </ResponsiveContainer>
             </div>
           </div>
-          </Parkbar>
-        )}
-      </div>
+        </Parkbar>
+      )}
 
       {/* Community E-Auto nach Nutzungsintensität */}
       {nutzungData.length > 0 && (

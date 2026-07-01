@@ -6,7 +6,7 @@
  * (HA-artig: von/bis); Vergleich Aus|Vorjahr.
  */
 import type { ReactNode } from 'react'
-import { MonatPicker } from '../components/ui/MonatPicker'
+import { DatumPicker } from '../components/ui/DatumPicker'
 
 /**
  * STEUER_H — EINE einheitliche Höhe (32 px) für ALLE Bedien-Elemente einer
@@ -82,27 +82,17 @@ export function WerkbankZeitraum({
           {/* D12-8: von-Feld nach unten durch `minDatum` (ältester verfügbarer Zeitpunkt,
               analog CockpitTagV4 R5-F2), nach oben durch `bis`/`maxDatum` begrenzt —
               verhindert Phantasie-Jahre wie „1822". String-Vergleich gilt für YYYY-MM
-              wie YYYY-MM-DD. D12-7: Monat = Custom-Picker (ausgeschrieben „Januar 2026"
-              app-weit), Tag = nativ. */}
-          {modus === 'monat' ? (
-            <MonatPicker value={von} min={minDatum} max={kleinerVon(bis, maxDatum)}
-              onChange={(v) => onRange(v, bis)} ariaLabel="Von" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
-          ) : (
-            <input type="date" value={von} min={minDatum || undefined} max={kleinerVon(bis, maxDatum)}
-              onChange={(e) => onRange(e.target.value, bis)} aria-label="Von" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
-          )}
+              wie YYYY-MM-DD. D13-4/12: EIN Custom-DatumPicker (SoT) für Monat UND Tag
+              — gleiches Icon/Stil app-weit statt Custom-Monat + nativem Tagesfeld. */}
+          <DatumPicker modus={modus} value={von} min={minDatum} max={kleinerVon(bis, maxDatum)}
+            onChange={(v) => onRange(v, bis)} ariaLabel="Von" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
         </label>
         <span className="hidden sm:inline text-gray-400">–</span>
         <label className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="sm:hidden text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Zeitraum bis:</span>
           {/* D12-8: bis-Feld nach unten durch `von`/`minDatum`, nach oben durch `maxDatum`. */}
-          {modus === 'monat' ? (
-            <MonatPicker value={bis} min={groesserVon(von, minDatum)} max={maxDatum}
-              onChange={(v) => onRange(von, v)} ariaLabel="Bis" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
-          ) : (
-            <input type="date" value={bis} min={groesserVon(von, minDatum)} max={maxDatum || undefined}
-              onChange={(e) => onRange(von, e.target.value)} aria-label="Bis" className={`input w-full sm:w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`} />
-          )}
+          <DatumPicker modus={modus} value={bis} min={groesserVon(von, minDatum)} max={maxDatum}
+            onChange={(v) => onRange(von, v)} ariaLabel="Bis" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
         </label>
       </div>
 

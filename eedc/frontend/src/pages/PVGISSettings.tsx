@@ -11,7 +11,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud, Mountain, Upload } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, Select, Button } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
-import { STRING_COLORS, CHART_COLORS, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
+import { STRING_COLORS, CHART_COLORS, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { pvgisApi, wetterApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
 import type { WetterProviderList } from '../api/wetter'
@@ -278,7 +278,7 @@ export default function PVGISSettings() {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                          <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                           <YAxis
                             width={70}
                             tick={{ fontSize: 10 }}
@@ -566,7 +566,7 @@ export default function PVGISSettings() {
                       margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                      <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                       <YAxis
                         width={70}
                         tick={{ fontSize: 10 }}

@@ -20,7 +20,7 @@ import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
 import {
   SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, PROGNOSE_DASH, HILFSLINIE_DASH,
   formatEnergie, energieAchse, formatProzent, formatSpezErtrag, fmtZahl,
-  achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
+  xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
 
 export interface PvStringsVM {
@@ -251,7 +251,7 @@ export function PvStringMonatsverlauf({ data, selectedYear }: { data: PVStringsR
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+            <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
             <YAxis width={60} tick={{ fontSize: 10 }} tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
@@ -338,7 +338,7 @@ export function PvStringMehrjahr({ data, jahresvergleichData }: {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={jahresvergleichData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
+            <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
             <YAxis label={achsenEinheit('%')} domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tickFormatter={achsenTick} tick={{ fontSize: 10 }} />
             <Tooltip content={<ChartTooltip unit="%" />} />
             <Legend content={<ChartLegende />} />

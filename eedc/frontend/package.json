@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "check:design": "node scripts/check-design-konformitaet.mjs",
     "check:achsen": "node scripts/check-achsen.mjs",
-    "check:de-de": "node scripts/check-de-de.mjs"
+    "check:de-de": "node scripts/check-de-de.mjs",
+    "check:datumpicker": "node scripts/check-datumpicker.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

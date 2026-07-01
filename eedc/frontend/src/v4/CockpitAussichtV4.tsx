@@ -21,6 +21,7 @@ import {
   Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, Info, RefreshCw, ArrowRight,
 } from 'lucide-react'
 import { Card, LoadingSpinner, buttonClasses } from '../components/ui'
+import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { BLOCK_IDENTITAET, fmtZahl } from '../lib'
@@ -61,11 +62,12 @@ function kurzKpis(p: SolarPrognose, eedcHeute?: number | null): KpiStripItem[] {
     t?.pv_ertrag_morgens_kwh != null
       ? `VM ${fmtZahl(t.pv_ertrag_morgens_kwh, 1)} · NM ${fmtZahl(t.pv_ertrag_nachmittags_kwh ?? 0, 1)}`
       : undefined
+  // R13-4c (Rainer #77): Reihenfolge Heute · Morgen · Summe · Durchschnitt.
   return [
-    { title: `Summe ${p.tage.length} Tage`, value: fmtZahl(p.summe_kwh, 0), unit: 'kWh', color: 'yellow', icon: Zap },
-    { title: 'Durchschnitt/Tag', value: fmtZahl(p.durchschnitt_kwh_tag, 1), unit: 'kWh', color: 'blue', icon: Sun },
     { title: 'Heute', value: fmtZahl(eedcHeute ?? heute?.pv_ertrag_kwh ?? 0, 1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(heute) },
     { title: 'Morgen', value: fmtZahl(morgen?.pv_ertrag_kwh ?? 0, 1), unit: 'kWh', color: 'gray', icon: CloudSun, subtitle: vmNm(morgen) },
+    { title: `Summe ${p.tage.length} Tage`, value: fmtZahl(p.summe_kwh, 0), unit: 'kWh', color: 'yellow', icon: Zap },
+    { title: `Ø/Tag (${p.tage.length} T)`, value: fmtZahl(p.durchschnitt_kwh_tag, 1), unit: 'kWh', color: 'blue', icon: Sun },
   ]
 }
 
@@ -96,11 +98,11 @@ function StundenDatumPicker({ datum, setDatum }: { datum: string; setDatum: (d: 
   return (
     <div className="flex items-center gap-3 flex-wrap">
       <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Prognose für:</label>
-      <input
-        type="date" aria-label="Prognose-Datum" value={datum}
+      {/* D13-4/12: Custom-DatumPicker (SoT) statt nativem Tagesfeld — Icon/Stil app-weit. */}
+      <DatumPicker
+        modus="tag" ariaLabel="Prognose-Datum" value={datum}
         min={heuteISO()} max={maxPrognoseDatum()}
-        onChange={(e) => setDatum(e.target.value)}
-        className="input w-auto text-sm"
+        onChange={setDatum} className="w-auto text-sm"
       />
       <button type="button" onClick={() => setDatum(heuteISO())} className={btn(datum === heuteISO())}>Heute</button>
       <button type="button" onClick={() => setDatum(morgenISO())} className={btn(datum === morgenISO())}>Morgen</button>

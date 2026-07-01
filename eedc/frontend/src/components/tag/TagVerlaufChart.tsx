@@ -13,7 +13,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Card, ChartLegende, eedcTooltipProps } from '../ui'
-import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, HILFSLINIE_DASH, AREA_FILL_OPACITY, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -80,7 +80,7 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: 10, left: -10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-          <XAxis dataKey="stunde" tick={{ fontSize: 10 }} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse (Stunde) */ />
+          <XAxis dataKey="stunde" {...xAchse()} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse (Stunde) */ />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
           <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
           <Tooltip {...eedcTooltipProps({

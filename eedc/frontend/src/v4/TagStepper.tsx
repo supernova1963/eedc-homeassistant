@@ -9,6 +9,7 @@ import { useMemo } from 'react'
 import { ChevronFirst, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ChevronLast } from 'lucide-react'
 import type { TagRailEintrag } from './TagesRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
+import { DatumPicker } from '../components/ui/DatumPicker'
 import { fmtZahl } from '../lib'
 
 interface TagStepperProps {
@@ -87,12 +88,12 @@ export function TagStepper({ entries, datum, onSelect, aeltesterTag, immerSichtb
       eintraege={eintraege}
       direktsprung={(close) => (
         <div className="space-y-2">
-          {/* Datumsauswahl erreicht ALLE verfügbaren Tage (min = ältester Tag). */}
-          <input
-            type="date" aria-label="Datum wählen" value={datum} max={newest} min={untergrenze}
-            onChange={(e) => { if (e.target.value) { onSelect(clamp(e.target.value)); close() } }}
-            /* D12-9: ring-inset — Fokus-Ring würde sonst vom overflow-hidden-Dropdown abgeschnitten. */
-            className="input w-full text-sm ring-inset"
+          {/* Datumsauswahl erreicht ALLE verfügbaren Tage (min = ältester Tag). D13-4/12:
+              Custom-DatumPicker (SoT), Portal-Popover → nicht mehr vom overflow-hidden-
+              Dropdown abgeschnitten (löst auch D12-9-Fokus-Ring-Clip). */}
+          <DatumPicker
+            modus="tag" ariaLabel="Datum wählen" value={datum} max={newest} min={untergrenze}
+            onChange={(v) => { onSelect(clamp(v)); close() }} className="w-full text-sm"
           />
           {/* Zurücksetzen → neuester Tag (Ausgangs-Ansicht), wenn man in die
               Historie gesprungen ist (Gernot 2026-06-26). */}

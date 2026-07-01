@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
-import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -160,7 +160,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="zeit"
-            tick={{ fontSize: 10 }}
+            {...xAchse()}
             className="fill-gray-500 dark:fill-gray-400"
             interval="preserveStartEnd"
             /* achsen-allow: Zeit-/Kategorie-Achse */

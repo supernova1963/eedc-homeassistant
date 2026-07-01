@@ -13,7 +13,7 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useInvestitionen } from '../../hooks'
 import { investitionenApi, cockpitApi, type ROIDashboardResponse, type ROIKomponente, type CockpitUebersicht } from '../../api'
 import { COLORS, TYP_COLORS, TYP_LABELS } from './types'
-import { achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import type { useAktuellerStrompreis } from '../../hooks'
 
 interface InvestitionenTabProps {
@@ -233,7 +233,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={amortisationData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                <XAxis dataKey="jahr" tickFormatter={(v) => `${fmtZahl(v, 0)} J.`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+                <XAxis dataKey="jahr" tickFormatter={(v) => `${fmtZahl(v, 0)} J.`} {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr), Format pro Tick (de-DE) */ />
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('€')} />
                 <Tooltip content={<ChartTooltip unit="€" />} />
                 <Legend content={<ChartLegende />} />

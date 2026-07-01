@@ -36,7 +36,7 @@ export const PV_PARK_IDS = {
 
 export interface PVErtragDaten {
   distribution: Verteilung | null
-  chartData: { name: string; ertrag: number; durchschnitt: number; isPositive: boolean }[]
+  chartData: { name: string; ertrag: number; durchschnitt: number; isPositive: boolean; fill: string }[]
   jahresStats: { jahr: number; spezErtrag: number; anzahlMonate: number; vollstaendig: boolean }[] | null
   perzentil: number | null
   performanceStats: { abweichungGesamt: number; abweichungRegion: number; differenzAbsolut: number } | null
@@ -75,7 +75,11 @@ export function usePVErtragDaten(benchmark: CommunityBenchmarkResponse | null): 
         let durchschnitt = avgMap.get(`${m.jahr}-${m.monat}`) ?? avgMap.get(`${m.jahr - 1}-${m.monat}`)
         if (durchschnitt === undefined) durchschnitt = benchmark.benchmark.spez_ertrag_durchschnitt / 12
         const abweichung = durchschnitt > 0 ? ((spezErtrag - durchschnitt) / durchschnitt) * 100 : 0
-        return { name: `${monatsnamen[m.monat - 1]} ${String(m.jahr).slice(2)}`, ertrag: spezErtrag, durchschnitt, isPositive: abweichung >= 0 }
+        // D13-16: `fill` je Zeile → der Tooltip zeigt die tatsächliche Balken-
+        // (Zell-)Farbe (über/unter Ø) statt Neutral-Grau; der Balken selbst wird
+        // weiterhin per <Cell> gefärbt (identische Werte).
+        const isPositive = abweichung >= 0
+        return { name: `${monatsnamen[m.monat - 1]} ${String(m.jahr).slice(2)}`, ertrag: spezErtrag, durchschnitt, isPositive, fill: isPositive ? STATUS_COLORS.ok : STATUS_COLORS.kritisch }
       })
   }, [benchmark, monthlyAverages])
 
@@ -144,9 +148,11 @@ export function MonatsErtragChart({ benchmark, chartData }: { benchmark: Communi
               <CartesianGrid strokeDasharray="3 3" stroke={achsen.grid} />
               <XAxis dataKey="name" tick={ACHSEN_TICK} interval={0} angle={-45} textAnchor="end" height={60} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
               <YAxis tick={ACHSEN_TICK} tickFormatter={achsenTick} label={achsenEinheit('kWh/kWp')} />
-              <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => (name === 'ertrag' || name === 'durchschnitt' ? `${fmtZahl(value, 1)} kWh/kWp` : String(value))} />} />
-              <Line type="monotone" dataKey="durchschnitt" stroke={achsen.referenz} strokeWidth={2} strokeDasharray="5 5" dot={false} name="durchschnitt" />
-              <Bar dataKey="ertrag" radius={[2, 2, 0, 0]} name="ertrag">
+              {/* D13-16: Serien-Namen ausgeschrieben (Tooltip zeigt „Ertrag"/
+                  „Community Ø" statt Roh-Keys) — Tooltip ≙ Legende (S1). */}
+              <Tooltip content={<ChartTooltip formatter={(value: number) => `${fmtZahl(value, 1)} kWh/kWp`} />} />
+              <Line type="monotone" dataKey="durchschnitt" stroke={achsen.referenz} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Community Ø" />
+              <Bar dataKey="ertrag" radius={[2, 2, 0, 0]} name="Ertrag">
                 {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.isPositive ? STATUS_COLORS.ok : STATUS_COLORS.kritisch} fillOpacity={0.8} />)}
               </Bar>
             </ComposedChart>
