@@ -22,13 +22,12 @@ import {
 } from 'lucide-react'
 import { FormBlock, type FormBlockFeld, type FormBlockWert } from '../components/blocks/FormBlock'
 import { Button } from '../components/ui'
-import AnlageForm from '../components/forms/AnlageForm'
 import { useSelectedAnlage, useTheme } from '../hooks'
 import { anlagenApi } from '../api'
 import { infothekApi } from '../api/infothek'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
-import type { AnlageCreate } from '../types'
+import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
 import type { InfothekEintrag } from '../types/infothek'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
@@ -136,28 +135,6 @@ function StandardInhalt({
       )}
     </div>
   )
-}
-
-/**
- * Anlage-Stammdaten: das VOLLE IST-`AnlageForm` (alle Sektionen — Standort,
- * Geokoordinaten, MaStR, Steuer, Wetter-Provider/-Modell, Prognosequelle,
- * Netz-Puffer, Community, Versorger/Zähler) inline im Block, speichert via
- * `anlagenApi.update` + `refresh`. Bewusst KEINE reduzierte Zweitfassung mehr
- * (eine Code-Wahrheit auf dem bestehenden Formular, analog Strompreise).
- */
-function AnlageFormInhalt() {
-  const { selectedAnlage, refresh } = useSelectedAnlage()
-  if (!selectedAnlage) {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
-  }
-  const a = selectedAnlage
-  const onSubmit = async (data: AnlageCreate) => {
-    await anlagenApi.update(a.id, data)
-    await refresh()
-  }
-  // key=a.id → Formular-State setzt bei Anlagenwechsel zurück. Abbrechen synct
-  // die gespeicherten Werte zurück (im Block gibt es kein Modal zu schließen).
-  return <AnlageForm key={a.id} anlage={a} onSubmit={onSubmit} onCancel={() => { void refresh() }} />
 }
 
 /** Allgemein: Darstellung/Theme inline (Client-seitig via ThemeContext). */
@@ -305,7 +282,9 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     id: 'anlage', name: 'Anlage', icon: Settings, kategorie: 'stammdaten',
     route: 'einstellungen/anlage', hilfe: 'Hilfe: Anlage einrichten',
     schlagworte: ['stammdaten', 'kwp', 'standort', 'ust', 'steuer', 'prognosequelle', 'name', 'geokoordinaten', 'mastr', 'wetter', 'versorger', 'zähler'],
-    inhalt: () => <AnlageFormInhalt />,
+    // Gernot 2026-07-01: Tabelle aller Anlagen mit Bearbeiten-Modal (Strompreise-
+    // Muster), statt inline eingebettetem Voll-Formular — auch bei einer Anlage.
+    inhalt: () => <AnlagenVerwaltung />,
   },
   {
     id: 'strompreise', name: 'Strompreise', icon: Zap, kategorie: 'stammdaten',

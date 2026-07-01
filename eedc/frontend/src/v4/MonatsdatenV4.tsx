@@ -5,13 +5,15 @@
  * Erreichbar aus dem Einstellungen-Katalog (Kategorie „Daten") über einen
  * Starter-Block, der zur V4-ROUTE `/v4/monatsdaten` navigiert — Navigation
  * *innerhalb* V4, kein Dead-End nach V3. Der Inhalt kommt aus den geteilten
- * {@link ../pages/MonatsdatenTeile} (EINE Code-Wahrheit mit der IST-Seite);
- * die `anlageId` zieht die Seite aus dem globalen Kontext ({@link useSelectedAnlage}),
- * kein `useParams`.
+ * {@link ../pages/MonatsdatenTeile} (EINE Code-Wahrheit mit der IST-Seite) und
+ * sitzt – wie jede V4-Sicht – in einem {@link BlockShell}-Block (gerahmt/klappbar/
+ * fokussierbar, identisch zum Strompreise-Block). Die `anlageId` zieht die Seite
+ * aus dem globalen Kontext ({@link useSelectedAnlage}), kein `useParams`.
  */
 import { Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Table2 } from 'lucide-react'
 import { ViewShell } from './ViewShell'
+import { BlockShell, type Block } from '../components/blocks'
 import { useSelectedAnlage } from '../hooks'
 import { DataLoadingState } from '../components/common'
 import { Alert } from '../components/ui'
@@ -37,18 +39,33 @@ function Kopf() {
 export default function MonatsdatenV4() {
   const { selectedAnlageId, loading } = useSelectedAnlage()
 
+  const inhalt = () => {
+    if (loading) {
+      return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
+    }
+    if (selectedAnlageId == null) {
+      return (
+        <Alert type="warning">
+          Bitte lege zuerst eine Anlage an, um Monatsdaten zu erfassen.
+        </Alert>
+      )
+    }
+    // Ganze Verwaltung (Toolbar + Tabelle + Modals + Datenverwaltung) in EINEM
+    // Block — analog zum Strompreise-Block (StrompreiseVerwaltung im Katalog-Block).
+    const bloecke: Block[] = [{
+      id: 'monatsdaten',
+      title: 'Monatsdaten',
+      icon: Table2,
+      defaultOpen: true,
+      render: () => <MonatsdatenVerwaltung anlageId={selectedAnlageId} />,
+    }]
+    return <BlockShell persistKey="v4-monatsdaten" bloecke={bloecke} />
+  }
+
   return (
     <ViewShell bar={<Kopf />}>
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        {loading ? (
-          <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
-        ) : selectedAnlageId == null ? (
-          <Alert type="warning">
-            Bitte lege zuerst eine Anlage an, um Monatsdaten zu erfassen.
-          </Alert>
-        ) : (
-          <MonatsdatenVerwaltung anlageId={selectedAnlageId} />
-        )}
+        {inhalt()}
       </div>
     </ViewShell>
   )
