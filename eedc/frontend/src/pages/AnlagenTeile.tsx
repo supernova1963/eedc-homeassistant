@@ -54,6 +54,9 @@ export function AnlagenVerwaltung() {
     return <LoadingSpinner text="Lade Anlagen..." />
   }
 
+  // Nach Anlagen-Nr (id = laufende Nummer) aufsteigend (Gernot 2026-07-01).
+  const anlagenSortiert = [...anlagen].sort((a, b) => a.id - b.id)
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-end">
@@ -83,6 +86,7 @@ export function AnlagenVerwaltung() {
           <Table>
             <TableHead>
               <TableRow>
+                <TableHeader>Anlagen-Nr</TableHeader>
                 <TableHeader>Name</TableHeader>
                 <TableHeader>Leistung</TableHeader>
                 <TableHeader>Standort</TableHeader>
@@ -91,8 +95,12 @@ export function AnlagenVerwaltung() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {anlagen.map((anlage) => (
+              {anlagenSortiert.map((anlage) => (
                 <TableRow key={anlage.id}>
+                  <TableCell>
+                    {/* Anlagen-Nr = id (Nicht-Menge → kein fmtZahl). */}
+                    <span className="font-mono text-gray-500 dark:text-gray-400">{anlage.id}</span>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Sun className="h-5 w-5 text-energy-solar" />
