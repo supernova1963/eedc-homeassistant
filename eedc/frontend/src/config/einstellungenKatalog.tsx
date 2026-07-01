@@ -33,6 +33,7 @@ import { EnergieprofilPflege } from '../pages/EnergieprofilTeile'
 import { InfothekVerwaltung } from '../pages/InfothekTeile'
 import { BackupVerwaltung } from '../pages/BackupTeile'
 import { ProtokolleVerwaltung } from '../pages/ProtokolleTeile'
+import { SolarprognoseVerwaltung } from '../pages/PVGISSettingsTeile'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
@@ -267,6 +268,17 @@ function EnergieprofilPflegeInhalt() {
   return <EnergieprofilPflege anlageId={selectedAnlageId} anlagenname={selectedAnlage?.anlagenname} />
 }
 
+/** Solarprognose: native V4-Verwaltung inline im Block (aktive Prognose · Horizont ·
+ *  Abruf/Vorschau · optimale Ausrichtung · gespeicherte Prognosen · Wetter-Provider,
+ *  kein navigate). Voll-Blick über Fokus/Vollbild des Blocks (Gernot 2026-07-01). */
+function SolarprognoseInhalt() {
+  const { selectedAnlage, selectedAnlageId } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <SolarprognoseVerwaltung anlageId={selectedAnlageId} anlage={selectedAnlage} />
+}
+
 /** Backup: voller JSON-Export + Drag-&-Drop-Restore inline im Block (kein navigate/
  *  Wizard). Gernot 2026-07-01: die Restore-Funktion ist jetzt nativ inline — der
  *  frühere Cross-Link „Aus Datei wiederherstellen → custom-import" (Entsch. 7,
@@ -337,15 +349,10 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'solarprognose', name: 'Solarprognose', icon: Sun, kategorie: 'stammdaten',
     route: 'einstellungen/solarprognose', hilfe: 'Hilfe: Solarprognose',
-    schlagworte: ['pvgis', 'ertragsprognose', 'systemverluste', 'horizont'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="PVGIS-Ertragsprognose und Horizontprofil der Anlage."
-        punkte={['Strahlungsmodell und Systemverluste', 'Horizontprofil (Verschattung)', 'Letzter Abruf']}
-        aktion="Prognose neu abrufen" aktionIcon={Activity}
-        onAktion={() => ctx.navigate('einstellungen/solarprognose')}
-      />
-    ),
+    schlagworte: ['pvgis', 'ertragsprognose', 'systemverluste', 'horizont', 'ausrichtung', 'wetter-provider'],
+    // Gernot 2026-07-01: volle PVGIS-Verwaltung inline IM Block (kein navigate).
+    // Voll-Blick über Fokus/Vollbild des Blocks.
+    inhalt: () => <SolarprognoseInhalt />,
   },
   // ── Infothek (eigener Reiter, Gernot 2026-07-01) ──
   {
