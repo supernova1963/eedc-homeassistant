@@ -30,6 +30,7 @@ import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
 import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
 import { DatenCheckerVerwaltung } from '../pages/DatenCheckerTeile'
+import { EnergieprofilPflege } from '../pages/EnergieprofilTeile'
 import type { InfothekEintrag } from '../types/infothek'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
@@ -268,6 +269,19 @@ function DatenCheckerInhalt() {
   return <DatenCheckerVerwaltung anlageId={selectedAnlageId} />
 }
 
+/** Energieprofil-Pflege: nur die Pflege-Funktionen inline im Block (Datenbestand ·
+ *  Backfill · Kraftstoff · Löschen · Reparatur-Werkbank), OHNE die Tages-Tabelle.
+ *  Gernot 2026-07-01: Anzeige≠Pflege — die Tabelle (Anzeige) wandert zum Cockpit-
+ *  Flip in die Zeit-Sicht; die Reparatur läuft über Werkbank + Daten-Checker
+ *  (Zeilen-Reaggregate-Knopf damit redundant). */
+function EnergieprofilPflegeInhalt() {
+  const { selectedAnlage, selectedAnlageId } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <EnergieprofilPflege anlageId={selectedAnlageId} anlagenname={selectedAnlage?.anlagenname} />
+}
+
 /** MQTT-Inbound: Status + Cache-Zähler (1× gelesen), Einrichten öffnet im Modal. */
 function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
   const [status, setStatus] = useState<MqttInboundStatus | null>(null)
@@ -364,15 +378,11 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'energieprofil', name: 'Energieprofil-Pflege', icon: Activity, kategorie: 'daten',
     route: 'einstellungen/energieprofil',
-    schlagworte: ['backfill', 'reaggregieren', 'tag neu berechnen', 'ha-statistik'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="Nur die Pflege-Funktionen: Backfill aus der HA-Statistik, einzelne Tage neu berechnen, Zeiträume reaggregieren. Die Anzeige der Tageswerte wandert zu den Zeit-Sichten (Flip-Thema)."
-        punkte={['Vollbackfill aus HA-Statistik', 'Einzelnen Tag neu berechnen', 'Zeitraum neu aggregieren']}
-        aktion="Öffnen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('einstellungen/energieprofil')}
-      />
-    ),
+    schlagworte: ['backfill', 'reaggregieren', 'tag neu berechnen', 'ha-statistik', 'werkbank'],
+    // Gernot 2026-07-01: nur die Pflege-Funktionen inline IM Block (Datenbestand ·
+    // Backfill · Kraftstoff · Löschen · Reparatur-Werkbank), OHNE Tages-Tabelle
+    // (Anzeige≠Pflege, wandert zum Cockpit-Flip). Kein navigate/keine separate Seite.
+    inhalt: () => <EnergieprofilPflegeInhalt />,
   },
   {
     id: 'datenchecker', name: 'Daten-Checker', icon: ClipboardCheck, kategorie: 'daten',
