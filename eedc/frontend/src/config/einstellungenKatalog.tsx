@@ -28,6 +28,7 @@ import { infothekApi } from '../api/infothek'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
+import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
 import type { InfothekEintrag } from '../types/infothek'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
@@ -243,6 +244,18 @@ function StrompreiseInhalt() {
   return <StrompreiseVerwaltung anlageId={selectedAnlageId} />
 }
 
+/** Monatsdaten: native V4-Verwaltung inline im Block (Tabelle + alle Modals,
+ *  kein navigate). Gernot 2026-07-01: die Tabelle gehört IN den Block (wie
+ *  Strompreise) — der große „Voll-Blick" läuft über Fokus/Vollbild des Blocks,
+ *  nicht über eine separate Seite. */
+function MonatsdatenInhalt() {
+  const { selectedAnlageId } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <MonatsdatenVerwaltung anlageId={selectedAnlageId} />
+}
+
 /** MQTT-Inbound: Status + Cache-Zähler (1× gelesen), Einrichten öffnet im Modal. */
 function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
   const [status, setStatus] = useState<MqttInboundStatus | null>(null)
@@ -332,16 +345,9 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     id: 'monatsdaten', name: 'Monatsdaten', icon: Table2, kategorie: 'daten',
     route: 'einstellungen/monatsdaten',
     schlagworte: ['zählerstände', 'monat', 'netzbezug', 'monatsabschluss'],
-    // Schweres Werkzeug → eigene native V4-Seite (Plan P3). Der Starter-Block
-    // öffnet die V4-ROUTE `/v4/monatsdaten` (Navigation innerhalb V4, kein
-    // Dead-End nach V3).
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="Zählerstände und Monatswerte pflegen und korrigieren (inkl. Monatsabschluss)."
-        aktion="Monatsdaten öffnen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('v4/monatsdaten')}
-      />
-    ),
+    // Gernot 2026-07-01: Tabelle inline IM Block (wie Strompreise), nicht hinter
+    // „öffnen" auf eigener Seite. Der große Voll-Blick = Fokus/Vollbild des Blocks.
+    inhalt: () => <MonatsdatenInhalt />,
   },
   {
     id: 'energieprofil', name: 'Energieprofil-Pflege', icon: Activity, kategorie: 'daten',
