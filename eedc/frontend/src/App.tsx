@@ -76,6 +76,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
       KomponentenV4: lazy(() => import('./v4/KomponentenV4')),
       AuswertungenV4: lazy(() => import('./v4/AuswertungenV4')),
       CommunityV4: lazy(() => import('./v4/CommunityV4')),
+      EinstellungenV4: lazy(() => import('./v4/EinstellungenV4')),
       Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
@@ -189,7 +190,10 @@ function App() {
               <Route path="community" element={<Navigate to="/v4/community/uebersicht" replace />} />
               <Route path="community/:sub" element={<V4.CommunityV4 />} />
               <Route path="hilfe" element={<V4.Platzhalter />} />
-              <Route path="einstellungen" element={<V4.Platzhalter />} />
+              {/* Einstellungen (Meta-Achse): Kategorie-Leiste {stammdaten,daten,
+                  integration,system,teilen}; Index → Stammdaten (Default). */}
+              <Route path="einstellungen" element={<Navigate to="/v4/einstellungen/stammdaten" replace />} />
+              <Route path="einstellungen/:kategorie" element={<V4.EinstellungenV4 />} />
             </Route>
           )}
         </Routes>

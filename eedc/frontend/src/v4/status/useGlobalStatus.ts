@@ -15,7 +15,7 @@ import { useState, useEffect } from 'react'
 import { systemApi, type UpdateCheckResponse } from '../../api/system'
 import { monatsabschlussApi, type NaechsterMonat } from '../../api/monatsabschluss'
 import { liveDashboardApi, type MqttInboundStatus } from '../../api/liveDashboard'
-import { datenCheckerApi, type DatenCheckResponse } from '../../api/datenChecker'
+import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../../api/datenChecker'
 import { useSelectedAnlage } from '../../hooks'
 
 const MQTT_POLL_MS = 30_000
@@ -27,6 +27,12 @@ export interface GlobalStatus {
   offenerMonat: NaechsterMonat | null
   mqtt: MqttInboundStatus | null
   datencheck: DatenCheckSumme | null
+  /**
+   * Voll-Befunde des Daten-Checks (pro Kategorie) — additiv aus DERSELBEN
+   * `check()`-Antwort wie {@link datencheck}. Nutzt u. a. `useEinstellungenStatus`
+   * für Einträge, die eine Kategorie-Schwere brauchen (Strompreise/Sensor-Mapping).
+   */
+  datencheckErgebnisse: CheckErgebnis[] | null
   anlageId: number | undefined
 }
 
@@ -37,6 +43,7 @@ export function useGlobalStatus(): GlobalStatus {
   const [offenerMonat, setOffenerMonat] = useState<NaechsterMonat | null>(null)
   const [mqtt, setMqtt] = useState<MqttInboundStatus | null>(null)
   const [datencheck, setDatencheck] = useState<DatenCheckSumme | null>(null)
+  const [datencheckErgebnisse, setDatencheckErgebnisse] = useState<CheckErgebnis[] | null>(null)
 
   // Update-Check einmal (wie Produktiv-Layout; ändert sich selten).
   useEffect(() => {
@@ -45,10 +52,12 @@ export function useGlobalStatus(): GlobalStatus {
 
   // Offener Monatsabschluss + Daten-Checker-Zusammenfassung je gewählter Anlage.
   useEffect(() => {
-    if (!anlageId) { setOffenerMonat(null); setDatencheck(null); return }
+    if (!anlageId) { setOffenerMonat(null); setDatencheck(null); setDatencheckErgebnisse(null); return }
     monatsabschlussApi.getNaechsterMonat(anlageId).then(setOffenerMonat).catch(() => {})
-    // Voll-Check (wie die Daten-Checker-Seite) — einmal je Anlage, nur fürs Aggregat.
-    datenCheckerApi.check(anlageId).then((r) => setDatencheck(r.zusammenfassung)).catch(() => {})
+    // Voll-Check (wie die Daten-Checker-Seite) — einmal je Anlage: Aggregat + Befunde.
+    datenCheckerApi.check(anlageId)
+      .then((r) => { setDatencheck(r.zusammenfassung); setDatencheckErgebnisse(r.ergebnisse) })
+      .catch(() => {})
   }, [anlageId])
 
   // MQTT-Inbound global gepollt; bei inaktivem Subscriber blendet die Fusszeile aus.
@@ -60,5 +69,5 @@ export function useGlobalStatus(): GlobalStatus {
     return () => { aktiv = false; clearInterval(iv) }
   }, [])
 
-  return { update, offenerMonat, mqtt, datencheck, anlageId }
+  return { update, offenerMonat, mqtt, datencheck, datencheckErgebnisse, anlageId }
 }

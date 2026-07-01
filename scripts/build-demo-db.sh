@@ -96,6 +96,25 @@ sqlite3 "$OUT" "
      AND stunde IN (6, 7, 19, 20, 21);
 "
 
+echo "==> [4d] Infothek-Demo (Einstellungen-V4: Infothek-Kachel + N:M-Verknüpfung)"
+# Der Master hat keine Infothek-Einträge → die Einstellungen-V4-Infothek-Kachel
+# zeigte in der Demo nur den Leerzustand. Drei plausible Einträge (Stromvertrag,
+# Versicherung, Wartungsvertrag mit WP-Verknüpfung) demonstrieren die Kurz-Liste
+# + die Investitions-Verknüpfung. Kategorien = SoT-Keys (config/infothekKategorien).
+# Idempotent (OUT ist frische Master-Kopie; Guard schützt zusätzlich).
+sqlite3 "$OUT" "
+  INSERT INTO infothek_eintraege (anlage_id,bezeichnung,kategorie,notizen,investition_id,sortierung,aktiv,in_anlagendoku,created_at,updated_at)
+  SELECT 1,'Stromtarif Ökostrom 2026','stromvertrag','Grundpreis 12,90 €/Monat · Arbeitspreis 31,5 ct/kWh',NULL,0,1,1,datetime('now'),datetime('now')
+  WHERE NOT EXISTS (SELECT 1 FROM infothek_eintraege WHERE anlage_id=1 AND bezeichnung='Stromtarif Ökostrom 2026');
+  INSERT INTO infothek_eintraege (anlage_id,bezeichnung,kategorie,notizen,investition_id,sortierung,aktiv,in_anlagendoku,created_at,updated_at)
+  SELECT 1,'PV-Versicherung Police 2023','versicherung','Allgefahrendeckung · Selbstbehalt 150 €',NULL,1,1,1,datetime('now'),datetime('now')
+  WHERE NOT EXISTS (SELECT 1 FROM infothek_eintraege WHERE anlage_id=1 AND bezeichnung='PV-Versicherung Police 2023');
+  INSERT INTO infothek_eintraege (anlage_id,bezeichnung,kategorie,notizen,investition_id,sortierung,aktiv,in_anlagendoku,created_at,updated_at)
+  SELECT 1,'Wartungsvertrag Wärmepumpe','wartungsvertrag','Jährliche Wartung · nächster Termin Herbst 2026',
+    (SELECT id FROM investitionen WHERE anlage_id=1 AND typ='waermepumpe' LIMIT 1),2,1,1,datetime('now'),datetime('now')
+  WHERE NOT EXISTS (SELECT 1 FROM infothek_eintraege WHERE anlage_id=1 AND bezeichnung='Wartungsvertrag Wärmepumpe');
+"
+
 if [ -n "$EXTRA_ANLAGE_DB" ]; then
   echo "==> [5/6] Leere Test-Anlage Ferienhaus Sued (Sammel-Screen) aus $EXTRA_ANLAGE_DB uebernehmen"
   sqlite3 "$OUT" "ATTACH '$EXTRA_ANLAGE_DB' AS src;

@@ -91,7 +91,7 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
     if (left < 8) left = 8
     setPos({ top, left })
   }
-  useLayoutEffect(() => { if (offen) platziere() }, [offen, navJahr, navMonat]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { if (offen) platziere() }, [offen, navJahr, navMonat])
   useEffect(() => {
     if (!offen) { setPos(null); return }
     const onDoc = (e: MouseEvent) => {
@@ -111,7 +111,7 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
       window.removeEventListener('resize', onMove)
       window.removeEventListener('scroll', onMove, true)
     }
-  }, [offen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [offen])
 
   const istAusMonat = (jahr: number, monat: number) => {
     const v = monatVal(jahr, monat)
