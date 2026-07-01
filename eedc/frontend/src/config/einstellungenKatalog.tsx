@@ -24,14 +24,13 @@ import { FormBlock, type FormBlockFeld, type FormBlockWert } from '../components
 import { Button } from '../components/ui'
 import { useSelectedAnlage, useTheme } from '../hooks'
 import { anlagenApi } from '../api'
-import { infothekApi } from '../api/infothek'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
 import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
 import { DatenCheckerVerwaltung } from '../pages/DatenCheckerTeile'
 import { EnergieprofilPflege } from '../pages/EnergieprofilTeile'
-import type { InfothekEintrag } from '../types/infothek'
+import { InfothekVerwaltung } from '../pages/InfothekTeile'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
@@ -209,32 +208,16 @@ function ImportBuendelInhalt({ ctx }: { ctx: InhaltCtx }) {
   )
 }
 
-/** Infothek: Kurz-Liste der letzten Einträge (1× gelesen) + Aktion zur Detail-Route. */
-function InfothekInhalt({ navigate }: { navigate: (route: string) => void }) {
+/** Infothek: volle native V4-Verwaltung inline im Block (alle Kategorien,
+ *  Vertragspartner, N:M-Investitions-Verknüpfung, Datei-Uploads, kein navigate).
+ *  Gernot 2026-07-01: die KOMPLETTE Infothek gehört IN den Block (wie Strompreise/
+ *  Monatsdaten) — der große Voll-Blick läuft über Fokus/Vollbild des Blocks. */
+function InfothekVollInhalt() {
   const { selectedAnlageId } = useSelectedAnlage()
-  const [eintraege, setEintraege] = useState<InfothekEintrag[]>([])
-  const [geladen, setGeladen] = useState(false)
-  useEffect(() => {
-    if (!selectedAnlageId) { setEintraege([]); setGeladen(true); return }
-    let aktiv = true
-    setGeladen(false)
-    infothekApi.list(selectedAnlageId, undefined, true)
-      .then((l) => { if (aktiv) { setEintraege(l); setGeladen(true) } })
-      .catch(() => { if (aktiv) setGeladen(true) })
-    return () => { aktiv = false }
-  }, [selectedAnlageId])
-  const letzte = [...eintraege]
-    .sort((a, b) => (b.updated_at ?? b.created_at ?? '').localeCompare(a.updated_at ?? a.created_at ?? ''))
-    .slice(0, 5)
-    .map((e) => e.bezeichnung)
-  return (
-    <StandardInhalt
-      beschreibung="Wissensspeicher zu deiner Anlage: Notizen, Links und Dokumente — eng an die Investitionen geknüpft."
-      punkte={geladen ? (letzte.length > 0 ? letzte : ['Noch keine Einträge angelegt.']) : undefined}
-      aktion="Eintrag hinzufügen" aktionIcon={BookOpen}
-      onAktion={() => navigate('einstellungen/infothek')}
-    />
-  )
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <InfothekVerwaltung anlageId={selectedAnlageId} />
 }
 
 /** Strompreise: native V4-Verwaltung im Block (Tabelle + Formular-Modals, kein navigate). */
@@ -348,8 +331,8 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'infothek', name: 'Infothek', icon: BookOpen, kategorie: 'infothek',
     route: 'einstellungen/infothek', hilfe: 'Hilfe: Infothek',
-    schlagworte: ['wissen', 'notizen', 'dokumente', 'links'],
-    inhalt: (_f, ctx) => <InfothekInhalt navigate={ctx.navigate} />,
+    schlagworte: ['wissen', 'notizen', 'dokumente', 'links', 'vertragspartner', 'verträge', 'zähler'],
+    inhalt: () => <InfothekVollInhalt />,
   },
   {
     id: 'berichte', name: 'Berichte & Dokumente', icon: FileText, kategorie: 'infothek',
