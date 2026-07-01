@@ -31,6 +31,7 @@ import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
 import { DatenCheckerVerwaltung } from '../pages/DatenCheckerTeile'
 import { EnergieprofilPflege } from '../pages/EnergieprofilTeile'
 import { InfothekVerwaltung } from '../pages/InfothekTeile'
+import { BackupVerwaltung } from '../pages/BackupTeile'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
@@ -265,6 +266,24 @@ function EnergieprofilPflegeInhalt() {
   return <EnergieprofilPflege anlageId={selectedAnlageId} anlagenname={selectedAnlage?.anlagenname} />
 }
 
+/** Backup: voller JSON-Export + Drag-&-Drop-Restore inline im Block (kein navigate/
+ *  Wizard). Gernot 2026-07-01: die Restore-Funktion ist jetzt nativ inline — der
+ *  frühere Cross-Link „Aus Datei wiederherstellen → custom-import" (Entsch. 7,
+ *  navigate-Stub-Zeit) entfällt damit, weil der JSON-Restore hier direkt liegt. */
+function BackupInhalt() {
+  const { selectedAnlage, selectedAnlageId, refresh } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return (
+    <BackupVerwaltung
+      anlageId={selectedAnlageId}
+      anlagenname={selectedAnlage?.anlagenname}
+      onRestored={refresh}
+    />
+  )
+}
+
 /** MQTT-Inbound: Status + Cache-Zähler (1× gelesen), Einrichten öffnet im Modal. */
 function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
   const [status, setStatus] = useState<MqttInboundStatus | null>(null)
@@ -454,16 +473,10 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'backup', name: 'Backup', icon: DatabaseBackup, kategorie: 'system',
     route: 'einstellungen/backup',
-    schlagworte: ['sicherung', 'wiederherstellen', 'restore', 'datenbank'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="Sicherung und Wiederherstellung der eedc-Datenbank. Wiederherstellen aus Datei läuft über den Import-Assistenten (Integration) — hier direkt erreichbar."
-        aktion="Backup erstellen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('einstellungen/backup')}
-        zweitAktion="Aus Datei wiederherstellen" zweitAktionIcon={DatabaseBackup}
-        onZweitAktion={() => ctx.oeffneWizard('custom-import')}
-      />
-    ),
+    schlagworte: ['sicherung', 'wiederherstellen', 'restore', 'datenbank', 'json', 'export'],
+    // Gernot 2026-07-01: voller JSON-Export + Restore inline IM Block (kein
+    // navigate/Wizard). Voll-Blick über Fokus/Vollbild des Blocks.
+    inhalt: () => <BackupInhalt />,
   },
   {
     id: 'protokolle', name: 'Protokolle', icon: ScrollText, kategorie: 'system',

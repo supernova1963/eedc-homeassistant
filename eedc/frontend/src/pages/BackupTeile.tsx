@@ -1,0 +1,237 @@
+/**
+ * Backup & Restore — geteilte Teile (JSON-Voll-Export + -Restore einer Anlage).
+ *
+ * EINE Code-Wahrheit für IST (`pages/Backup.tsx`, dünner Komposer) und IA-V4
+ * (Einstellungen-Katalog-Block „Backup", inline wie Strompreise/Monatsdaten —
+ * Gernot 2026-07-01). Der Aufrufer reicht die bereits aufgelöste `anlageId`
+ * (+ Anlagenname für den Dateinamen), im Mehr-Anlagen-Fall einen `kopfZusatz`
+ * (Anlage-Auswahl) und `onRestored` (Anlagen-Refresh nach erfolgreichem Restore).
+ * Zahlen de-DE über `fmtZahl`.
+ */
+import { useState, useRef, type DragEvent, type ChangeEvent, type ReactNode } from 'react'
+import { Download, Upload, Check, FileJson, AlertTriangle, Info } from 'lucide-react'
+import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
+import { importApi } from '../api'
+import { downloadFile } from '../lib'
+import type { JSONImportResult } from '../types'
+
+/**
+ * Voller Backup-/Restore-Bereich. Wird von der IST-Seite (V3-Hülle) und dem
+ * V4-System-Block geteilt. `anlageId` ist bereits aufgelöst.
+ */
+export function BackupVerwaltung({
+  anlageId,
+  anlagenname,
+  kopfZusatz,
+  onRestored,
+}: {
+  anlageId: number
+  anlagenname?: string
+  kopfZusatz?: ReactNode
+  onRestored?: () => void
+}) {
+  const [isDragging, setIsDragging] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [importResult, setImportResult] = useState<JSONImportResult | null>(null)
+  const [ueberschreiben, setUeberschreiben] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleExport = async () => {
+    setError(null)
+    setExporting(true)
+    try {
+      const safeName = (anlagenname || 'anlage').replace(/\s+/g, '_')
+      const datum = new Date().toISOString().slice(0, 10)
+      await downloadFile(
+        importApi.getFullExportUrl(anlageId),
+        `eedc_backup_${safeName}_${datum}.json`,
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Backup fehlgeschlagen')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = async (e: DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = e.dataTransfer.files
+    if (files.length > 0) await handleFile(files[0])
+  }
+
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) await handleFile(files[0])
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleFile = async (file: File) => {
+    if (!file.name.endsWith('.json')) {
+      setError('Bitte eine JSON-Datei auswählen')
+      return
+    }
+    setError(null)
+    setImportResult(null)
+    setImporting(true)
+    try {
+      const result = await importApi.importJSON(file, ueberschreiben)
+      setImportResult(result)
+      if (result.erfolg) onRestored?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import fehlgeschlagen')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {kopfZusatz && <div className="flex items-center gap-2">{kopfZusatz}</div>}
+
+      <p className="text-gray-500 dark:text-gray-400">
+        Exportiere die Konfiguration deiner Anlage (Stammdaten, Investitionen, Monatsdaten,
+        Strompreise, PVGIS-Prognosen) als JSON oder stelle eine Anlage aus einem Export wieder her.
+      </p>
+
+      {error && <Alert type="error" onClose={() => setError(null)}>{error}</Alert>}
+
+      {/* Backup erstellen */}
+      <Card>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+            <Download className="h-6 w-6 text-blue-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Backup erstellen
+          </h2>
+        </div>
+
+        <div className="space-y-4">
+          <Button onClick={handleExport} disabled={exporting} className="w-full">
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? 'Backup wird erstellt…' : 'Backup als JSON herunterladen'}
+          </Button>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Enthält Konfiguration und Messdaten. Sensor-Mapping wird mitexportiert,
+            MQTT-Setup muss nach Restore neu eingerichtet werden.
+          </p>
+        </div>
+      </Card>
+
+      {/* Infothek-Hinweis */}
+      <div className="flex gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+        <Info className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
+          <p className="font-medium">Infothek-Anhänge (PDFs, Fotos) sind nicht im JSON enthalten.</p>
+          <p>Diese werden direkt in der Datenbank gespeichert und sind nur über ein vollständiges Datenbank-Backup gesichert:</p>
+          <ul className="list-disc list-inside space-y-0.5 mt-1">
+            <li><span className="font-medium">HA-App:</span> Regelmäßige HA-Backups (selektiv eedc) sichern die komplette <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> inkl. aller Anhänge.</li>
+            <li><span className="font-medium">Standalone:</span> Die Datei <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">eedc.db</code> im Datenverzeichnis manuell sichern.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Restore */}
+      <Card>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-green-50 dark:bg-green-900/20">
+            <Upload className="h-6 w-6 text-green-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Restore aus Backup
+          </h2>
+        </div>
+
+        {importResult && importResult.erfolg && (
+          <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-300 font-medium mb-2">
+              <Check className="h-5 w-5" />
+              Anlage „{importResult.anlage_name}" erfolgreich importiert
+            </div>
+            <div className="text-sm text-green-600 dark:text-green-400 space-y-1">
+              {importResult.importiert && Object.entries(importResult.importiert).map(([key, count]) => (
+                count > 0 && <div key={key}>{key}: {count}</div>
+              ))}
+            </div>
+            {importResult.warnungen && importResult.warnungen.length > 0 && (
+              <div className="mt-3 space-y-1">
+                {importResult.warnungen.map((w, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                    {w}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {importResult && !importResult.erfolg && (
+          <Alert type="error" className="mb-4">
+            {importResult.fehler?.join(', ') || 'Import fehlgeschlagen'}
+          </Alert>
+        )}
+
+        <div className="space-y-4">
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`
+              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              ${isDragging
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+              }
+            `}
+          >
+            <FileJson className="h-10 w-10 mx-auto mb-3 text-gray-400 dark:text-gray-500" />
+            {importing ? (
+              <LoadingSpinner text="Importiere..." />
+            ) : (
+              <>
+                <p className="text-gray-600 dark:text-gray-300 font-medium">
+                  JSON-Backup hierher ziehen oder klicken
+                </p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                  .json Datei aus einem früheren eedc-Export
+                </p>
+              </>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <input
+              type="checkbox"
+              checked={ueberschreiben}
+              onChange={(e) => setUeberschreiben(e.target.checked)}
+              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            Existierende Anlage mit gleichem Namen überschreiben
+          </label>
+        </div>
+      </Card>
+    </div>
+  )
+}
