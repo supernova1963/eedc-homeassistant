@@ -77,6 +77,7 @@ const V4 = import.meta.env.VITE_IA_V4 === 'true'
       AuswertungenV4: lazy(() => import('./v4/AuswertungenV4')),
       CommunityV4: lazy(() => import('./v4/CommunityV4')),
       EinstellungenV4: lazy(() => import('./v4/EinstellungenV4')),
+      MonatsdatenV4: lazy(() => import('./v4/MonatsdatenV4')),
       Platzhalter: lazy(() => import('./v4/V4Platzhalter')),
     }
   : null
@@ -194,6 +195,9 @@ function App() {
                   integration,system,teilen}; Index → Stammdaten (Default). */}
               <Route path="einstellungen" element={<Navigate to="/v4/einstellungen/stammdaten" replace />} />
               <Route path="einstellungen/:kategorie" element={<V4.EinstellungenV4 />} />
+              {/* Monatsdaten (Plan P3): eigene native V4-Seite (schweres Werkzeug),
+                  erreicht aus dem Einstellungen-Katalog per V4-Route (kein Dead-End). */}
+              <Route path="monatsdaten" element={<V4.MonatsdatenV4 />} />
             </Route>
           )}
         </Routes>

@@ -353,11 +353,14 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     id: 'monatsdaten', name: 'Monatsdaten', icon: Table2, kategorie: 'daten',
     route: 'einstellungen/monatsdaten',
     schlagworte: ['zählerstände', 'monat', 'netzbezug', 'monatsabschluss'],
+    // Schweres Werkzeug → eigene native V4-Seite (Plan P3). Der Starter-Block
+    // öffnet die V4-ROUTE `/v4/monatsdaten` (Navigation innerhalb V4, kein
+    // Dead-End nach V3).
     inhalt: (_f, ctx) => (
       <StandardInhalt
         beschreibung="Zählerstände und Monatswerte pflegen und korrigieren (inkl. Monatsabschluss)."
-        aktion="Wert erfassen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('einstellungen/monatsdaten')}
+        aktion="Monatsdaten öffnen" aktionIcon={ArrowRight}
+        onAktion={() => ctx.navigate('v4/monatsdaten')}
       />
     ),
   },
