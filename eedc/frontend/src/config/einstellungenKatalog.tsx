@@ -22,12 +22,13 @@ import {
 } from 'lucide-react'
 import { FormBlock, type FormBlockFeld, type FormBlockWert } from '../components/blocks/FormBlock'
 import { Button } from '../components/ui'
+import AnlageForm from '../components/forms/AnlageForm'
 import { useSelectedAnlage, useTheme } from '../hooks'
 import { anlagenApi } from '../api'
 import { infothekApi } from '../api/infothek'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
-import type { AnlageUpdate, PrognoseQuelle, SteuerlicheBehandlung } from '../types'
+import type { AnlageCreate } from '../types'
 import type { InfothekEintrag } from '../types/infothek'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
@@ -137,55 +138,26 @@ function StandardInhalt({
   )
 }
 
-/** Anlage-Stammdaten inline bearbeiten (echte `anlagenApi.update`). */
-function AnlageFormInhalt({ fokus }: { fokus: boolean }) {
+/**
+ * Anlage-Stammdaten: das VOLLE IST-`AnlageForm` (alle Sektionen — Standort,
+ * Geokoordinaten, MaStR, Steuer, Wetter-Provider/-Modell, Prognosequelle,
+ * Netz-Puffer, Community, Versorger/Zähler) inline im Block, speichert via
+ * `anlagenApi.update` + `refresh`. Bewusst KEINE reduzierte Zweitfassung mehr
+ * (eine Code-Wahrheit auf dem bestehenden Formular, analog Strompreise).
+ */
+function AnlageFormInhalt() {
   const { selectedAnlage, refresh } = useSelectedAnlage()
   if (!selectedAnlage) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
   }
   const a = selectedAnlage
-  const felder: FormBlockFeld[] = [
-    { id: 'anlagenname', typ: 'text', label: 'Anlagenname', wert: a.anlagenname, pflicht: true },
-    { id: 'leistung_kwp', typ: 'number', label: 'Leistung', einheit: 'kWp', wert: a.leistung_kwp ?? null, pflicht: true },
-    { id: 'standort_plz', typ: 'text', label: 'PLZ', wert: a.standort_plz ?? '' },
-    { id: 'standort_ort', typ: 'text', label: 'Ort', wert: a.standort_ort ?? '' },
-    {
-      id: 'steuerliche_behandlung', typ: 'select', label: 'USt-Behandlung',
-      wert: a.steuerliche_behandlung ?? 'keine_ust',
-      optionen: [
-        { value: 'keine_ust', label: 'Kleinunternehmer (keine USt)' },
-        { value: 'regelbesteuerung', label: 'Regelbesteuerung (19 %)' },
-      ],
-    },
-    { id: 'ust_satz_prozent', typ: 'number', label: 'USt-Satz', einheit: '%', wert: a.ust_satz_prozent ?? null },
-    { id: 'unterliegt_eeg_51', typ: 'toggle', label: '§51 EEG (Negativpreise)', wert: a.unterliegt_eeg_51 ?? false },
-    {
-      id: 'prognose_quelle', typ: 'select', label: 'Prognosequelle',
-      wert: a.prognose_quelle ?? 'eedc',
-      optionen: [
-        { value: 'eedc', label: 'eedc (kalibriert)' },
-        { value: 'solcast', label: 'Solcast' },
-        { value: 'sfml', label: 'SFML' },
-      ],
-    },
-    { id: 'netz_puffer_w', typ: 'number', label: 'Netz-Puffer', einheit: 'W', wert: a.netz_puffer_w ?? null },
-  ]
-  const onSave = async (w: Record<string, FormBlockWert>) => {
-    const update: AnlageUpdate = {
-      anlagenname: w.anlagenname as string,
-      leistung_kwp: (w.leistung_kwp as number | null) ?? undefined,
-      standort_plz: (w.standort_plz as string) || undefined,
-      standort_ort: (w.standort_ort as string) || undefined,
-      steuerliche_behandlung: w.steuerliche_behandlung as SteuerlicheBehandlung,
-      ust_satz_prozent: (w.ust_satz_prozent as number | null) ?? undefined,
-      unterliegt_eeg_51: w.unterliegt_eeg_51 as boolean,
-      prognose_quelle: w.prognose_quelle as PrognoseQuelle,
-      netz_puffer_w: (w.netz_puffer_w as number | null) ?? undefined,
-    }
-    await anlagenApi.update(a.id, update)
+  const onSubmit = async (data: AnlageCreate) => {
+    await anlagenApi.update(a.id, data)
     await refresh()
   }
-  return <FormBlock felder={felder} onSave={onSave} fokus={fokus} />
+  // key=a.id → Formular-State setzt bei Anlagenwechsel zurück. Abbrechen synct
+  // die gespeicherten Werte zurück (im Block gibt es kein Modal zu schließen).
+  return <AnlageForm key={a.id} anlage={a} onSubmit={onSubmit} onCancel={() => { void refresh() }} />
 }
 
 /** Allgemein: Darstellung/Theme inline (Client-seitig via ThemeContext). */
@@ -332,8 +304,8 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'anlage', name: 'Anlage', icon: Settings, kategorie: 'stammdaten',
     route: 'einstellungen/anlage', hilfe: 'Hilfe: Anlage einrichten',
-    schlagworte: ['stammdaten', 'kwp', 'standort', 'ust', 'steuer', 'prognosequelle', 'name'],
-    inhalt: (f) => <AnlageFormInhalt fokus={f} />,
+    schlagworte: ['stammdaten', 'kwp', 'standort', 'ust', 'steuer', 'prognosequelle', 'name', 'geokoordinaten', 'mastr', 'wetter', 'versorger', 'zähler'],
+    inhalt: () => <AnlageFormInhalt />,
   },
   {
     id: 'strompreise', name: 'Strompreise', icon: Zap, kategorie: 'stammdaten',
