@@ -26,6 +26,7 @@ import { useSelectedAnlage, useTheme } from '../hooks'
 import { anlagenApi } from '../api'
 import { infothekApi } from '../api/infothek'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
+import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import type { AnlageUpdate, PrognoseQuelle, SteuerlicheBehandlung } from '../types'
 import type { InfothekEintrag } from '../types/infothek'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
@@ -284,6 +285,15 @@ function InfothekInhalt({ navigate }: { navigate: (route: string) => void }) {
   )
 }
 
+/** Strompreise: native V4-Verwaltung im Block (Tabelle + Formular-Modals, kein navigate). */
+function StrompreiseInhalt() {
+  const { selectedAnlageId } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <StrompreiseVerwaltung anlageId={selectedAnlageId} />
+}
+
 /** MQTT-Inbound: Status + Cache-Zähler (1× gelesen), Einrichten öffnet im Modal. */
 function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
   const [status, setStatus] = useState<MqttInboundStatus | null>(null)
@@ -329,13 +339,7 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     id: 'strompreise', name: 'Strompreise', icon: Zap, kategorie: 'stammdaten',
     route: 'einstellungen/strompreise', hilfe: 'Hilfe: Strompreise',
     schlagworte: ['tarif', 'netzbezug', 'einspeisung', 'grundpreis', 'ct'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="Netzbezug, Einspeisevergütung und Grundpreis — zeitlich gestaffelt (gültig ab/bis), inkl. WP-/Wallbox-Spezialtarife."
-        aktion="Tarif hinzufügen" aktionIcon={Zap}
-        onAktion={() => ctx.navigate('einstellungen/strompreise')}
-      />
-    ),
+    inhalt: () => <StrompreiseInhalt />,
   },
   {
     id: 'solarprognose', name: 'Solarprognose', icon: Sun, kategorie: 'stammdaten',
