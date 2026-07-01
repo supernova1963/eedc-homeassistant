@@ -32,6 +32,7 @@ import { DatenCheckerVerwaltung } from '../pages/DatenCheckerTeile'
 import { EnergieprofilPflege } from '../pages/EnergieprofilTeile'
 import { InfothekVerwaltung } from '../pages/InfothekTeile'
 import { BackupVerwaltung } from '../pages/BackupTeile'
+import { ProtokolleVerwaltung } from '../pages/ProtokolleTeile'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
@@ -481,14 +482,10 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'protokolle', name: 'Protokolle', icon: ScrollText, kategorie: 'system',
     route: 'einstellungen/protokolle',
-    schlagworte: ['logs', 'system', 'fehler'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="System-Logs einsehen."
-        aktion="Öffnen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('einstellungen/protokolle')}
-      />
-    ),
+    schlagworte: ['logs', 'system', 'fehler', 'aktivitäten', 'debug', 'neustart'],
+    // Gernot 2026-07-01: System-Log-Viewer + Aktivitätsprotokoll + Debug/Neustart
+    // inline IM Block (kein navigate). Voll-Blick über Fokus/Vollbild des Blocks.
+    inhalt: () => <ProtokolleVerwaltung />,
   },
 
   // ── Daten teilen ──
