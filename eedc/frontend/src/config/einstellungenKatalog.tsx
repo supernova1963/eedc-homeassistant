@@ -34,6 +34,7 @@ import { InfothekVerwaltung } from '../pages/InfothekTeile'
 import { BackupVerwaltung } from '../pages/BackupTeile'
 import { ProtokolleVerwaltung } from '../pages/ProtokolleTeile'
 import { SolarprognoseVerwaltung } from '../pages/PVGISSettingsTeile'
+import { MqttExportVerwaltung } from '../pages/HAExportSettingsTeile'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
@@ -268,6 +269,17 @@ function EnergieprofilPflegeInhalt() {
   return <EnergieprofilPflege anlageId={selectedAnlageId} anlagenname={selectedAnlage?.anlagenname} />
 }
 
+/** MQTT-Export: native V4-Verwaltung inline im Block (REST-YAML · MQTT-Discovery
+ *  Publish/Remove · Sensor-Übersicht · Günstig-Schwelle, kein navigate). `haOnly` →
+ *  der Eintrag ist im Standalone deaktiviert, dieser Inhalt rendert nur mit HA. */
+function MqttExportInhalt() {
+  const { selectedAnlage, selectedAnlageId, refresh } = useSelectedAnlage()
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  return <MqttExportVerwaltung anlageId={selectedAnlageId} anlage={selectedAnlage} onAnlageUpdated={refresh} />
+}
+
 /** Solarprognose: native V4-Verwaltung inline im Block (aktive Prognose · Horizont ·
  *  Abruf/Vorschau · optimale Ausrichtung · gespeicherte Prognosen · Wetter-Provider,
  *  kein navigate). Voll-Blick über Fokus/Vollbild des Blocks (Gernot 2026-07-01). */
@@ -445,14 +457,10 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   {
     id: 'ha-export', name: 'MQTT-Export', icon: Share2, kategorie: 'integration',
     route: 'einstellungen/ha-export', hilfe: 'Hilfe: MQTT-Export', haOnly: true,
-    schlagworte: ['mqtt', 'broker', 'topic', 'sensoren', 'home assistant'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="eedc-Kennzahlen und Prognosen als MQTT-/HA-Sensoren ausgeben (Broker, Topic-Präfix, aktive Sensoren)."
-        aktion="Öffnen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.navigate('einstellungen/ha-export')}
-      />
-    ),
+    schlagworte: ['mqtt', 'broker', 'topic', 'sensoren', 'home assistant', 'discovery', 'yaml', 'rest'],
+    // Gernot 2026-07-02: volle Export-Verwaltung inline IM Block (kein navigate).
+    // haOnly → im Standalone deaktiviert, rendert nur mit HA-Integration.
+    inhalt: () => <MqttExportInhalt />,
   },
   {
     id: 'import-buendel', name: 'Import-Assistenten', icon: Boxes, kategorie: 'integration',
