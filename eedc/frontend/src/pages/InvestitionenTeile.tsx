@@ -14,7 +14,7 @@
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, ArrowRight, FileText, ChevronDown, type LucideIcon } from 'lucide-react'
 import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState, DestructiveActionDialog } from '../components/ui'
-import { useInvestitionen, useInvestitionenByTyp } from '../hooks'
+import { useInvestitionen, useInvestitionenByTyp, useV4Basis } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
 import InvestitionForm from '../components/forms/InvestitionForm'
 import InfothekForm from '../components/forms/InfothekForm'
@@ -91,6 +91,8 @@ export interface InvestitionenVerwaltungState {
 export function useInvestitionenVerwaltung(anlageId?: number, anlagenname?: string): InvestitionenVerwaltungState {
   const { investitionen, loading, createInvestition, updateInvestition, deleteInvestition } = useInvestitionen(anlageId)
   const groupedByTyp = useInvestitionenByTyp(investitionen)
+  // Cross-Link-Präfix je Welt (V3-Seite vs. V4-Einstellungs-Block) — geteilte Datei.
+  const v4Basis = useV4Basis()
 
   const [showForm, setShowForm] = useState(false)
   const [editingInvestition, setEditingInvestition] = useState<Investition | null>(null)
@@ -194,7 +196,7 @@ export function useInvestitionenVerwaltung(anlageId?: number, anlagenname?: stri
       {migrationDone && (
         <Alert type="success" onClose={() => setMigrationDone(null)}>
           {migrationDone}{' '}
-          <a href="#/einstellungen/infothek" className="underline font-medium">Zur Infothek</a>
+          <a href={`#${v4Basis}/einstellungen/infothek`} className="underline font-medium">Zur Infothek</a>
         </Alert>
       )}
       {migrationCount > 0 && !migrationDone && (
@@ -446,6 +448,8 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
   const [infothekEintraege, setInfothekEintraege] = useState<InfothekEintrag[]>([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+  // Komponenten-Akte-Links zeigen je Welt auf V3- oder V4-Infothek (geteilte Datei).
+  const v4Basis = useV4Basis()
   const refreshInfothek = useCallback(() => {
     infothekApi.listFuerInvestition(investition.id).then(setInfothekEintraege).catch(() => {})
   }, [investition.id])
@@ -560,7 +564,7 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
             </button>
           ) : infothekEintraege.length === 1 ? (
             <a
-              href="#/einstellungen/infothek"
+              href={`#${v4Basis}/einstellungen/infothek`}
               className="flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
               title={infothekEintraege[0].bezeichnung}
             >
@@ -582,7 +586,7 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
                   {infothekEintraege.map(e => (
                     <a
                       key={e.id}
-                      href="#/einstellungen/infothek"
+                      href={`#${v4Basis}/einstellungen/infothek`}
                       className="block px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
                     >
                       {e.bezeichnung}
