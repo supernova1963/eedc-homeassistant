@@ -6,8 +6,9 @@ import {
 
 // Routen-Inventur (Akzeptanzkriterium §7): jede IST-`/einstellungen/*`-Route aus
 // App.tsx muss von einem Katalog-Eintrag abgedeckt sein — keine verlorene Funktion.
-// `einstellungen/investitionen` fehlt bewusst: Geräte-Bearbeitung wandert in den
-// Komponenten-Hub (Gernot 2026-07-01, Entsch. 5) — nicht mehr Teil der Einstellungen.
+// `einstellungen/investitionen` fehlt bewusst im STATISCHEN Katalog: die Geräte-
+// Verwaltung ist der datengetriebene Reiter „Komponenten" (P8, Gernot 2026-07-02) —
+// ein Block pro Investitionstyp, zur Laufzeit aus investitionenApi, ohne Katalog-Eintrag.
 const IST_ROUTEN = [
   'einstellungen/anlage', 'einstellungen/strompreise',
   'einstellungen/infothek', 'einstellungen/solarprognose', 'einstellungen/monatsdaten',
@@ -31,8 +32,14 @@ describe('einstellungenKatalog (Routen-Inventur + Struktur)', () => {
     for (const e of EINSTELLUNGEN_KATALOG) expect(keys.has(e.kategorie)).toBe(true)
   })
 
-  it('jede Kategorie hat mindestens einen Eintrag', () => {
+  it('jede Kategorie hat mindestens einen Eintrag (außer datengetriebene „Komponenten")', () => {
     for (const k of EINSTELLUNGEN_KATEGORIEN) {
+      // „komponenten" ist datengetrieben (Blöcke pro Investitionstyp zur Laufzeit,
+      // s. EinstellungenV4) → bewusst KEINE statischen Katalog-Einträge.
+      if (k.key === 'komponenten') {
+        expect(eintraegeDerKategorie(k.key).length).toBe(0)
+        continue
+      }
       expect(eintraegeDerKategorie(k.key).length).toBeGreaterThan(0)
     }
   })

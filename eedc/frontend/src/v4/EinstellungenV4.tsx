@@ -19,9 +19,13 @@ import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 import { BlockShell, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss } from '../components/park'
-import { Alert } from '../components/ui'
+import { Alert, LoadingSpinner } from '../components/ui'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { useSelectedAnlage } from '../hooks'
+import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
+import {
+  useInvestitionenVerwaltung, TYP_ICON_STYLE, TypNeuButton, TypGeraeteListe,
+} from '../pages/InvestitionenTeile'
 import { useEinstellungenStatus, type KachelStatus } from '../hooks/useEinstellungenStatus'
 import { EinstellungenModalHost, type WizardKey } from './EinstellungenModalHost'
 
@@ -52,6 +56,58 @@ function StatusBadge({ status, hinweis }: { status: KachelStatus; hinweis?: stri
     <span title={titel} className="flex items-center">
       <m.icon className={`h-4 w-4 ${m.farbe}`} aria-label={titel} />
     </span>
+  )
+}
+
+/**
+ * Datengetriebener Zweig der Kategorie „Komponenten" (P8, Gernot 2026-07-02):
+ * ein {@link BlockShell}-Block PRO Investitionstyp (`INVESTITION_TYP_ORDER`,
+ * default zu), Inhalt = Geräte-Liste des Typs; „+" in der Block-Überschrift legt
+ * ein neues Gerät des Typs an. Kein statischer Katalog-Eintrag — die Blöcke
+ * entstehen zur Laufzeit aus `investitionenApi` (via {@link useInvestitionenVerwaltung}).
+ * Bearbeiten/Neuanlage laufen über das `InvestitionForm`-Modal (kein navigate nach V3).
+ * Reihenfolge NICHT sortierbar → die Typ-Reihenfolge bleibt an die Kanon-SoT gebunden
+ * (konsistent zu Cockpit-Komponenten / Sensor-Zuordnung).
+ */
+function KomponentenEinstellungen() {
+  const { selectedAnlage, selectedAnlageId } = useSelectedAnlage()
+  const v = useInvestitionenVerwaltung(selectedAnlageId ?? undefined, selectedAnlage?.anlagenname)
+
+  if (selectedAnlageId == null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
+  }
+  if (v.loading) {
+    return <LoadingSpinner text="Lade Komponenten..." />
+  }
+
+  const bloecke: Block[] = INVESTITION_TYP_ORDER.map((typ) => {
+    const style = TYP_ICON_STYLE[typ]
+    const anzahl = v.typCounts[typ] ?? 0
+    const label = INVESTITION_TYP_LABELS[typ]
+    return {
+      id: `komponenten-${typ}`,
+      title: label,
+      icon: style.icon,
+      farbe: style.color,
+      summary: `${anzahl} vorhanden`,
+      defaultOpen: false,
+      badge: <TypNeuButton onClick={() => v.oeffneNeu(typ)} label={label} />,
+      render: () => (
+        <TypGeraeteListe
+          geraete={v.geraeteDesTyps(typ)}
+          onEdit={v.oeffneBearbeiten}
+          onDelete={v.frageLoeschen}
+        />
+      ),
+    }
+  })
+
+  return (
+    <div className="space-y-3">
+      {v.hinweise}
+      <BlockShell persistKey="v4-einst-komponenten" bloecke={bloecke} offenzustandFluechtig />
+      {v.modals}
+    </div>
   )
 }
 
@@ -88,6 +144,10 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   }
 
   const suchModus = suche.trim().length > 0
+  // Kategorie „Komponenten" ist datengetrieben (ein Block pro Investitionstyp) und hat
+  // KEINE statischen Katalog-Einträge → eigener Zweig (nur außerhalb der Suche; die Suche
+  // läuft weiter über den statischen Katalog).
+  const istKomponenten = !suchModus && kategorie === 'komponenten'
   const eintraege: EinstellungEintrag[] = suchModus ? sucheEintraege(suche) : eintraegeDerKategorie(kategorie)
 
   const bloecke: Block[] = eintraege.map((e) => {
@@ -138,7 +198,9 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
         </div>
 
         <div className="p-3 sm:p-6 pt-3 max-w-[1920px] mx-auto">
-          {bloecke.length > 0 ? (
+          {istKomponenten ? (
+            <KomponentenEinstellungen />
+          ) : bloecke.length > 0 ? (
             <BlockShell
               key={suchModus ? 'suche' : kategorie}
               persistKey={suchModus ? 'v4-einst-suche' : `v4-einst-${kategorie}`}

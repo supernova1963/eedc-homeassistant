@@ -39,7 +39,7 @@ import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
 
-export type KategorieKey = 'stammdaten' | 'infothek' | 'daten' | 'integration' | 'system'
+export type KategorieKey = 'stammdaten' | 'komponenten' | 'infothek' | 'daten' | 'integration' | 'system'
 
 export interface KategorieDef {
   key: KategorieKey
@@ -49,9 +49,14 @@ export interface KategorieDef {
 
 /** Kategorie-Leiste (2. Ebene, fix — Reihenfolge = Anzeige). Infothek = eigener Reiter
  *  (Gernot 2026-07-01). „Daten teilen" gestrichen → Community-Share als Block unter
- *  Stammdaten (Gernot 2026-07-02, A1). */
+ *  Stammdaten (Gernot 2026-07-02, A1). „Komponenten" = Geräte-Verwaltung (IST
+ *  Investitionen) als eigener Reiter, direkt nach Stammdaten (Gernot 2026-07-02, P8);
+ *  bewusst gleicher Name wie das Top-Menü „Komponenten" (Analyse), das hierher zur
+ *  Bearbeitung verweist. Die Blöcke dieser Kategorie sind datengetrieben (ein Block
+ *  pro Investitionstyp) — kein statischer Katalog-Eintrag (s. EinstellungenV4). */
 export const EINSTELLUNGEN_KATEGORIEN: KategorieDef[] = [
   { key: 'stammdaten', label: 'Stammdaten', icon: Settings },
+  { key: 'komponenten', label: 'Komponenten', icon: Boxes },
   { key: 'infothek', label: 'Infothek', icon: BookOpen },
   { key: 'daten', label: 'Daten', icon: Table2 },
   { key: 'integration', label: 'Integration', icon: Plug },
