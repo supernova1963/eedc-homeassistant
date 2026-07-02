@@ -114,11 +114,15 @@ function SensorRow({ z }: { z: SensorZeile }) {
   )
 }
 
-const EDIT_INVEST = '#/einstellungen/investitionen'
-const EDIT_SENSOR = '#/einstellungen/sensor-mapping'
-const EDIT_MQTT = '#/einstellungen/mqtt-inbound'
-const EDIT_INFOTHEK = '#/einstellungen/infothek'
-const EDIT_DATENCHECKER = '#/einstellungen/daten-checker'
+// Bearbeitungs-Cross-Links des Komponenten-Hubs (Analyse) → die V4-Einstellungs-Reiter.
+// P8-Kurskorrektur: die Geräte-Bearbeitung ist der Einstellungs-Reiter „Komponenten"
+// (IST Investitionen); die V4-Einstellungen re-kategorisieren die Ziele (Zuordnung =
+// config/v3ZuV4Route). KomponentenTypV4 ist v4-only → feste V4-Ziele (kein V3-Sprung).
+const EDIT_INVEST = '#/v4/einstellungen/komponenten'
+const EDIT_SENSOR = '#/v4/einstellungen/integration'
+const EDIT_MQTT = '#/v4/einstellungen/integration'
+const EDIT_INFOTHEK = '#/v4/einstellungen/infothek'
+const EDIT_DATENCHECKER = '#/v4/einstellungen/daten'
 
 /** Severity-Rang für die Sortierung der Daten-Checker-Befunde (error zuerst). */
 const SCHWERE_RANG: Record<CheckSchwere, number> = { error: 0, warning: 1, info: 2, ok: 3 }
