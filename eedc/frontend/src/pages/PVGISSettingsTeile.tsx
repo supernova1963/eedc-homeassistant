@@ -11,8 +11,8 @@
  */
 
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, Compass, AlertCircle, Cloud, Mountain, Upload } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, Button } from '../components/ui'
+import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, AlertCircle, Mountain, Upload } from 'lucide-react'
+import { LoadingSpinner, Alert, Button } from '../components/ui'
 import { STRING_COLORS, CHART_COLORS, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { pvgisApi, wetterApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
@@ -22,6 +22,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import ChartTooltip from '../components/ui/ChartTooltip'
+import CollapsibleSection from '../components/ui/CollapsibleSection'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -205,10 +206,8 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
       {hatKoordinaten && (
         <>
           {/* Aktuelle Prognose */}
-          <Card className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Aktive Prognose
-            </h2>
+          <CollapsibleSection title="Aktive Prognose" storageKey="solarprognose-aktiv" defaultOpen={false}>
+            <div className="space-y-4">
 
             {loading ? (
               <LoadingSpinner />
@@ -326,14 +325,12 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                 <p className="text-sm mt-2">Rufe eine PVGIS Prognose ab und speichere sie.</p>
               </div>
             )}
-          </Card>
+            </div>
+          </CollapsibleSection>
 
           {/* Horizontprofil */}
-          <Card className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <Mountain className="h-5 w-5" />
-              Horizontprofil
-            </h2>
+          <CollapsibleSection title="Horizontprofil" storageKey="solarprognose-horizont" defaultOpen={false}>
+            <div className="space-y-4">
 
             {horizontStatus?.hat_horizont ? (
               <div className="space-y-3">
@@ -459,13 +456,12 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                 }
               }}
             />
-          </Card>
+            </div>
+          </CollapsibleSection>
 
           {/* Neue Prognose abrufen */}
-          <Card className="space-y-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Neue Prognose abrufen
-            </h2>
+          <CollapsibleSection title="Neue Prognose abrufen" storageKey="solarprognose-neu" defaultOpen={false}>
+            <div className="space-y-4">
 
             <div className="grid md:grid-cols-2 gap-4">
               <div>
@@ -574,15 +570,15 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                 </div>
               </div>
             )}
-          </Card>
+            </div>
+          </CollapsibleSection>
 
           {/* Optimale Ausrichtung */}
-          <Card className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Compass className="h-5 w-5" />
-                Optimale Ausrichtung
-              </h2>
+          <CollapsibleSection
+            title="Optimale Ausrichtung"
+            storageKey="solarprognose-optimum"
+            defaultOpen={false}
+            action={
               <Button onClick={loadOptimum} disabled={optimumLoading} variant="secondary">
                 {optimumLoading ? (
                   <RefreshCw className="h-4 w-4 animate-spin mr-2" />
@@ -591,7 +587,9 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                 )}
                 Berechnen
               </Button>
-            </div>
+            }
+          >
+            <div className="space-y-4">
 
             {optimum ? (
               <div className="space-y-4">
@@ -629,14 +627,13 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                 Klicke auf "Berechnen" um die optimale Ausrichtung für deinen Standort zu ermitteln.
               </p>
             )}
-          </Card>
+            </div>
+          </CollapsibleSection>
 
           {/* Gespeicherte Prognosen */}
           {gespeichertePrognosen.length > 0 && (
-            <Card className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Gespeicherte Prognosen
-              </h2>
+            <CollapsibleSection title="Gespeicherte Prognosen" storageKey="solarprognose-gespeichert" defaultOpen={false}>
+              <div className="space-y-4">
 
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
@@ -710,16 +707,14 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                   </tbody>
                 </table>
               </div>
-            </Card>
+              </div>
+            </CollapsibleSection>
           )}
 
           {/* Wetter-Provider Info */}
           {wetterProvider && (
-            <Card className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Cloud className="h-5 w-5" />
-                Wetterdaten-Provider
-              </h2>
+            <CollapsibleSection title="Wetterdaten-Provider" storageKey="solarprognose-wetter" defaultOpen={false}>
+              <div className="space-y-4">
 
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Der Wetter-Provider bestimmt die Quelle für Globalstrahlungsdaten bei der Ist-Erfassung
@@ -777,7 +772,8 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                   ))}
                 </div>
               </div>
-            </Card>
+              </div>
+            </CollapsibleSection>
           )}
 
           {/* Info-Box */}
