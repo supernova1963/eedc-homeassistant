@@ -38,6 +38,7 @@ export function BlockShell({
   sortierbar = false,
   persistKey,
   fokusKopf,
+  offenzustandFluechtig = false,
 }: {
   bloecke: Block[]
   sortierbar?: boolean
@@ -45,6 +46,11 @@ export function BlockShell({
   /** D10-2: Kopf-Slot, der im Fokus/Vollbild oben mitläuft (z. B. die Datums-Nav
    *  der Seite). Reicht ihn an {@link FokusVollbild} durch — kein Nav-Neubau. */
   fokusKopf?: import('react').ReactNode
+  /** A3 (Einstellungen 2026-07-02): Auf/Zu-Zustand flüchtig — beim Betreten IMMER
+   *  der Default-Klappzustand (alle `defaultOpen:false` = zu), persistierten
+   *  Offen-Zustand ignorieren. Reihenfolge bleibt gemerkt. Nur Einstellungen setzt
+   *  das; andere V4-Sichten merken den Offen-Zustand wie bisher. */
+  offenzustandFluechtig?: boolean
 }) {
   const ids = useMemo(() => bloecke.map((b) => b.id), [bloecke])
   const [order, setOrder] = useState<string[]>(() => {
@@ -58,7 +64,8 @@ export function BlockShell({
     return [...gespeichert, ...ids.filter((id) => !gespeichert.includes(id))]
   })
   const [zu, setZu] = useState<Set<string>>(() => {
-    const gespeichert = ladeBlockState(persistKey).zu
+    // A3: flüchtig → persistierten Offen-Zustand ignorieren, immer Default (alle zu).
+    const gespeichert = offenzustandFluechtig ? undefined : ladeBlockState(persistKey).zu
     return gespeichert
       ? new Set(gespeichert)  // Lücken-fest: Klappzustand auch absenter Blöcke behalten
       : new Set(bloecke.filter((b) => b.defaultOpen === false).map((b) => b.id))

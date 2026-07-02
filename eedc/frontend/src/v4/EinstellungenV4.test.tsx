@@ -1,6 +1,6 @@
 /**
  * EinstellungenV4 — Shell-Smoke-Test.
- * Sichert: Kategorie-Leiste mit allen 6 Kategorien, aktive Kategorie rendert ihre
+ * Sichert: Kategorie-Leiste mit allen 5 Kategorien, aktive Kategorie rendert ihre
  * Blöcke, unbekannte Kategorie → Redirect auf Stammdaten, globale Suche filtert.
  */
 import { describe, it, expect, vi } from 'vitest'
@@ -24,9 +24,9 @@ function renderAt(path: string) {
 }
 
 describe('EinstellungenV4 (Einstellungen-Shell)', () => {
-  it('zeigt alle 6 Kategorien in der Leiste', () => {
+  it('zeigt alle 5 Kategorien in der Leiste', () => {
     renderAt('/v4/einstellungen/stammdaten')
-    for (const label of ['Stammdaten', 'Infothek', 'Daten', 'Integration', 'System', 'Daten teilen']) {
+    for (const label of ['Stammdaten', 'Infothek', 'Daten', 'Integration', 'System']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     }
   })

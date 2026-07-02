@@ -95,12 +95,17 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
     // Kein Badge für deaktivierte HA-only-Einträge (Signal gilt dort nicht) und
     // kein Badge ohne belegtes Signal (kein erfundenes ✓).
     const st = deaktiviert ? undefined : statusMap[e.id]
+    // A1: interaktiver Kopf-Slot (z. B. Community-„teilen"-Schalter) hat Vorrang vor
+    // dem Status-Badge; sonst normales Status-Badge (falls belegtes Signal).
+    const kopf = !deaktiviert && e.kopfRender
+      ? e.kopfRender()
+      : st ? <StatusBadge status={st.status} hinweis={st.hinweis} /> : undefined
     return {
       id: e.id,
       title: e.name,
       icon: e.icon,
       defaultOpen: false,
-      badge: st ? <StatusBadge status={st.status} hinweis={st.hinweis} /> : undefined,
+      badge: kopf,
       render: (fokus: boolean) => (deaktiviert ? <HAOnlyHinweis /> : e.inhalt(fokus, ctx)),
     }
   })
@@ -139,6 +144,7 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
               persistKey={suchModus ? 'v4-einst-suche' : `v4-einst-${kategorie}`}
               bloecke={bloecke}
               sortierbar={!suchModus}
+              offenzustandFluechtig
             />
           ) : (
             <p className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">

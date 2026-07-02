@@ -23,7 +23,6 @@ import {
 import { FormBlock, type FormBlockFeld, type FormBlockWert } from '../components/blocks/FormBlock'
 import { Button } from '../components/ui'
 import { useSelectedAnlage, useTheme } from '../hooks'
-import { anlagenApi } from '../api'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
@@ -35,11 +34,12 @@ import { BackupVerwaltung } from '../pages/BackupTeile'
 import { ProtokolleVerwaltung } from '../pages/ProtokolleTeile'
 import { SolarprognoseVerwaltung } from '../pages/PVGISSettingsTeile'
 import { MqttExportVerwaltung } from '../pages/HAExportSettingsTeile'
+import { CommunityTeilenSchalter, CommunityShareBlockInhalt } from '../v4/CommunityShareBlock'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
 
-export type KategorieKey = 'stammdaten' | 'infothek' | 'daten' | 'integration' | 'system' | 'teilen'
+export type KategorieKey = 'stammdaten' | 'infothek' | 'daten' | 'integration' | 'system'
 
 export interface KategorieDef {
   key: KategorieKey
@@ -47,14 +47,15 @@ export interface KategorieDef {
   icon: LucideIcon
 }
 
-/** Kategorie-Leiste (2. Ebene, fix — Reihenfolge = Anzeige). Infothek = eigener Reiter (Gernot 2026-07-01). */
+/** Kategorie-Leiste (2. Ebene, fix — Reihenfolge = Anzeige). Infothek = eigener Reiter
+ *  (Gernot 2026-07-01). „Daten teilen" gestrichen → Community-Share als Block unter
+ *  Stammdaten (Gernot 2026-07-02, A1). */
 export const EINSTELLUNGEN_KATEGORIEN: KategorieDef[] = [
   { key: 'stammdaten', label: 'Stammdaten', icon: Settings },
   { key: 'infothek', label: 'Infothek', icon: BookOpen },
   { key: 'daten', label: 'Daten', icon: Table2 },
   { key: 'integration', label: 'Integration', icon: Plug },
   { key: 'system', label: 'System', icon: Wrench },
-  { key: 'teilen', label: 'Daten teilen', icon: Users },
 ]
 
 /** Kontext, den die Shell in jede Inhalts-Render-Funktion reicht. */
@@ -80,6 +81,10 @@ export interface EinstellungEintrag {
   weitereRouten?: string[]
   /** Block-Inhalt: FormBlock (inline) · Wizard-Button · Listen-/Aktions-Übersicht. */
   inhalt: InhaltRender
+  /** Optionaler interaktiver Slot in der Block-Überschrift (BlockShell-`badge`); ersetzt
+   *  dort das Status-Badge. Für Aktionen, die ohne Aufklappen erreichbar sein sollen
+   *  (A1: Community-„teilen"-Schalter). */
+  kopfRender?: () => ReactNode
   hilfe?: string
   /** Nur mit HA-Integration nutzbar → im Standalone deaktiviert (Entsch. 6). */
   haOnly?: boolean
@@ -158,29 +163,6 @@ function AllgemeinFormInhalt({ fokus }: { fokus: boolean }) {
   ]
   const onSave = (w: Record<string, FormBlockWert>) => {
     setTheme(w.theme as 'system' | 'light' | 'dark')
-  }
-  return <FormBlock felder={felder} onSave={onSave} fokus={fokus} />
-}
-
-/** Community-Share: Auto-Share inline (echte `anlagenApi.update`). */
-function CommunityShareInhalt({ fokus }: { fokus: boolean }) {
-  const { selectedAnlage, refresh } = useSelectedAnlage()
-  if (!selectedAnlage) {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
-  }
-  const a = selectedAnlage
-  const region = a.standort_plz ? `abgeleitet aus PLZ ${a.standort_plz}` : 'abgeleitet aus der PLZ'
-  const felder: FormBlockFeld[] = [
-    {
-      id: 'community_auto_share', typ: 'toggle',
-      label: 'Automatisch teilen (nach Monatsabschluss)',
-      wert: a.community_auto_share ?? false,
-      hinweis: `Anonyme Kennzahlen · Region ${region}`,
-    },
-  ]
-  const onSave = async (w: Record<string, FormBlockWert>) => {
-    await anlagenApi.update(a.id, { community_auto_share: w.community_auto_share as boolean })
-    await refresh()
   }
   return <FormBlock felder={felder} onSave={onSave} fokus={fokus} />
 }
@@ -345,6 +327,15 @@ function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
 export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   // ── Stammdaten ──
   {
+    // A1 (Gernot 2026-07-02): oberster Block; „teilen"-Schalter in der Block-Überschrift
+    // (kopfRender), Inhalt = Vorschau der anonym geteilten Daten (abgeblendet wenn aus).
+    id: 'community', name: 'Community-Share', icon: Users, kategorie: 'stammdaten',
+    route: 'einstellungen/community', hilfe: 'Hilfe: Community',
+    schlagworte: ['community', 'benchmark', 'anonym', 'teilen', 'region', 'daten teilen'],
+    kopfRender: () => <CommunityTeilenSchalter />,
+    inhalt: () => <CommunityShareBlockInhalt />,
+  },
+  {
     id: 'anlage', name: 'Anlage', icon: Settings, kategorie: 'stammdaten',
     route: 'einstellungen/anlage', hilfe: 'Hilfe: Anlage einrichten',
     schlagworte: ['stammdaten', 'kwp', 'standort', 'ust', 'steuer', 'prognosequelle', 'name', 'geokoordinaten', 'mastr', 'wetter', 'versorger', 'zähler'],
@@ -501,14 +492,6 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     // Gernot 2026-07-01: System-Log-Viewer + Aktivitätsprotokoll + Debug/Neustart
     // inline IM Block (kein navigate). Voll-Blick über Fokus/Vollbild des Blocks.
     inhalt: () => <ProtokolleVerwaltung />,
-  },
-
-  // ── Daten teilen ──
-  {
-    id: 'community', name: 'Community-Share', icon: Users, kategorie: 'teilen',
-    route: 'einstellungen/community', hilfe: 'Hilfe: Community',
-    schlagworte: ['community', 'benchmark', 'anonym', 'teilen', 'region'],
-    inhalt: (f) => <CommunityShareInhalt fokus={f} />,
   },
 ]
 
