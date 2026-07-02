@@ -58,7 +58,7 @@ describe('MonatHeader — C1/C2 Sicht-Aktionen', () => {
   it('C2: Abschluss-Cross-Link nur laufend + offene Abschlüsse, zeigt auf Einstellungen/Daten', () => {
     render(<MonatHeader titel="Mai 2026" laufend d={d} zeigeAbschlussLink />)
     const link = screen.getByRole('link', { name: /Abschluss starten/ })
-    expect(link).toHaveAttribute('href', '#/einstellungen/monatsdaten')
+    expect(link).toHaveAttribute('href', '#/v4/einstellungen/daten')
   })
 
   it('C2: kein Abschluss-Link wenn keine offenen Abschlüsse', () => {

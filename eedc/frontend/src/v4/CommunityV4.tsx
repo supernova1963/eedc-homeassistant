@@ -138,7 +138,7 @@ export default function CommunityV4() {
             <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
               Um den Community-Vergleich nutzen zu können, musst du zuerst deine anonymisierten Anlagendaten mit der Community teilen.
             </p>
-            <button onClick={() => navigate('/einstellungen/community')} className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium">
+            <button onClick={() => navigate('/v4/einstellungen/stammdaten')} className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium">
               <Users className="h-5 w-5" /> Jetzt teilen
             </button>
           </div>

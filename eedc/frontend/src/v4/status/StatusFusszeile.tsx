@@ -131,7 +131,7 @@ export function StatusFusszeile() {
               datencheck.info > 0 ? `${datencheck.info} ${datencheck.info === 1 ? 'Hinweis' : 'Hinweise'}` : null,
             ].filter(Boolean).join(' · ')}
             wert={`${checkBefunde}`}
-            onOeffnen={() => navigate('/einstellungen/daten-checker')}
+            onOeffnen={() => navigate('/v4/einstellungen/daten')}
             ausrichtung="links"
             offen={offen}
             setOffen={setOffen}
@@ -174,7 +174,7 @@ export function StatusFusszeile() {
               mqtt!.letzte_nachricht ? ` · Letzte: ${new Date(mqtt!.letzte_nachricht).toLocaleTimeString('de-DE')}` : ''
             }`}
             wert={mqtt!.empfangene_nachrichten ? `MQTT (${mqtt!.empfangene_nachrichten})` : 'MQTT'}
-            onOeffnen={() => navigate('/einstellungen/mqtt-inbound')}
+            onOeffnen={() => navigate('/v4/einstellungen/integration')}
             ausrichtung="links"
             offen={offen}
             setOffen={setOffen}

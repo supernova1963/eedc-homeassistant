@@ -380,7 +380,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             Für Prognosen werden die Koordinaten der Anlage benötigt. Bitte konfiguriere den Standort in den Anlagen-Einstellungen.
           </p>
-          <a href="#/einstellungen/anlage" className={buttonClasses({ variant: 'primary', size: 'sm', className: 'gap-1.5' })}>
+          <a href="#/v4/einstellungen/stammdaten" className={buttonClasses({ variant: 'primary', size: 'sm', className: 'gap-1.5' })}>
             Anlage konfigurieren <ArrowRight className="h-4 w-4" />
           </a>
         </Card>

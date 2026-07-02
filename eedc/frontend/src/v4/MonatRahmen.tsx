@@ -73,7 +73,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
         {/* C2: Cross-Link zu Einstellungen/Daten (Abschluss) statt Inline-Wizard (B5/SPEC). */}
         {laufend && zeigeAbschlussLink && (
           <a
-            href="#/einstellungen/monatsdaten"
+            href="#/v4/einstellungen/daten"
             className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
           >
             <CalendarClock className="h-3.5 w-3.5" />
