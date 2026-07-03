@@ -35,12 +35,14 @@ export function FokusKachel({ titel, icon: Icon, farbe, className = '', kompakt 
       )}
       <div className={`relative bg-white dark:bg-gray-800 rounded-lg shadow ${kompakt ? 'p-3' : 'p-4 sm:p-6'} ${className}`}>
         {/* ⤢ sitzt absolut oben rechts — in der Titelzeile, keine eigene Leerzeile.
-            (Energiefluss bringt sein ⤢ über `kopfAktion` selbst mit.) */}
+            (Energiefluss bringt sein ⤢ über `kopfAktion` selbst mit.)
+            D14-16 (Gernot-Entscheid): unter 640 px ausgeblendet, NICHT entfernt —
+            „die paar Pixel" bringen dort nichts, Desktop-/Breitbild-Nutzen bleibt. */}
         <button
           type="button"
           onClick={() => setFokus(true)}
           aria-label={`${titel}: Fokus / Vollbild`}
-          className="absolute top-2 right-2 z-10 p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+          className="max-sm:hidden absolute top-2 right-2 z-10 p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
         >
           <Maximize2 className="h-4 w-4" />
         </button>

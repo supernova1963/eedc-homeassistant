@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { Plus, Pencil, Trash2, Archive, BookOpen, FileText, User, Phone, Mail, Download } from 'lucide-react'
 import Markdown from 'react-markdown'
-import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
+import { Button, buttonClasses, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
 import InfothekForm from '../components/forms/InfothekForm'
 import DateiLightbox from '../components/infothek/DateiLightbox'
 import { infothekApi } from '../api/infothek'
@@ -140,11 +140,14 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">{kopfZusatz}</div>
-        <div className="flex items-center gap-3">
+        {/* D14-15: wrap statt Quetschen — jeder Button bleibt einzeilig 36 px. */}
+        <div className="flex flex-wrap items-center gap-3">
           {eintraege.length > 0 && (
+            // D14-15 (detLAN #116): Button-SoT-Höhe (36 px) wie die Nachbarn;
+            // PDF behält als Export-Aktion Icon + Wort (Kontext-Regel).
             <a
               href={`./api/infothek/export/pdf?anlage_id=${anlageId}${filterKategorie ? `&kategorie=${filterKategorie}` : ''}`}
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              className={buttonClasses({ variant: 'secondary', className: 'gap-2 no-underline' })}
               title="Als PDF exportieren"
             >
               <Download className="h-4 w-4" />
@@ -152,11 +155,11 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
             </a>
           )}
           <Button variant="secondary" onClick={() => handleCreate('ansprechpartner')}>
-            <User className="h-4 w-4 mr-2" />
+            <User className="max-sm:hidden h-4 w-4 mr-2" />
             Neuer Vertragspartner
           </Button>
           <Button onClick={() => handleCreate()}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="max-sm:hidden h-4 w-4 mr-2" />
             Neuer Eintrag
           </Button>
         </div>
@@ -278,7 +281,7 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
               description="Verwalte Verträge, Zähler, Kontakte und Dokumentation zu deiner PV-Anlage."
               action={
                 <Button onClick={() => handleCreate()}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="max-sm:hidden h-4 w-4 mr-2" />
                   Ersten Eintrag anlegen
                 </Button>
               }

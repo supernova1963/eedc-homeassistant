@@ -8,6 +8,7 @@
  * gebaute Achsen zeigen einen Platzhalter ({@link V4Platzhalter}); ihr echter
  * Bau folgt nach Phase 3. Mobile-Querschnitt: `h-dvh`, Touch-Targets ≥ 44 px.
  */
+import { useLayoutEffect, useRef } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings } from 'lucide-react'
 import { IATopNav, type IANavItem } from '../components/layout/IATopNav'
@@ -18,6 +19,20 @@ import { StatusFusszeile } from './status/StatusFusszeile'
 export default function LayoutV4() {
   const { pathname } = useLocation()
   const aktiv = (praefix: string) => pathname.startsWith(praefix)
+
+  // D14-1/D13-13 (detLAN): Tab-/Routen-Wechsel öffnet die Sicht am Seitenanfang.
+  // Bleibt der Sicht-Container gemountet (Sub-Tab = Routen-Param, z. B.
+  // Einstellungen-Kategorien, Community-Tabs), behält er sonst seinen scrollTop.
+  // Zurückgesetzt werden main (mobiler Scroller) + ViewShell-Innencontainer
+  // (`data-sicht-scroll`, Desktop-Scroller ab lg). Zeit-Navigation INNERHALB einer
+  // Sicht ändert den pathname nicht → `useScrollErhalt` (B1) bleibt unberührt.
+  const mainRef = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const m = mainRef.current
+    if (!m) return
+    m.scrollTop = 0
+    m.querySelectorAll<HTMLElement>('[data-sicht-scroll]').forEach((el) => { el.scrollTop = 0 })
+  }, [pathname])
 
   // Inhalts-Achse (Struktur-SoT: KONZEPT-IA-V4). Achsen-Aktivität via Pfad-Präfix
   // (eine Achse bleibt aktiv über all ihre Sub-Routen).
@@ -47,7 +62,7 @@ export default function LayoutV4() {
             D6-1: `scrollbar-gutter:stable` (nur mobil) reserviert eine eigene
             Scrollbar-Spalte → die vollbreite, milchige Datums-Nav (ZeitStepper,
             `-mx-3` + backdrop-blur) verdeckt die Scrollbar nicht mehr. */}
-        <main className="flex-1 overflow-auto max-lg:[scrollbar-gutter:stable] lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
+        <main ref={mainRef} className="flex-1 overflow-auto max-lg:[scrollbar-gutter:stable] lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
           <Outlet />
         </main>
         {/* G11 Shell-Slice: app-weite Status-Fusszeile (klebt unten via flex-col). */}

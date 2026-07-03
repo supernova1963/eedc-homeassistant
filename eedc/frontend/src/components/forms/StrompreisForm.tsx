@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react'
-import { Button, Input, Alert } from '../ui'
+import { Button, Input, Alert, DatumFeld } from '../ui'
 import type { Strompreis } from '../../types'
 
 interface StrompreisFormProps {
@@ -104,24 +104,17 @@ export default function StrompreisForm({ strompreis, anlageId, onSubmit, onCance
           value={formData.grundpreis_euro_monat}
           onChange={handleChange}
         />
-        <Input
+        {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+        <DatumFeld
           label="Gültig ab"
-          name="gueltig_ab"
-          type="date"
-          min="2000-01-01"
-          max="2099-12-31"
           value={formData.gueltig_ab}
-          onChange={handleChange}
+          onChange={(v) => setFormData(prev => ({ ...prev, gueltig_ab: v }))}
           required
         />
-        <Input
+        <DatumFeld
           label="Gültig bis"
-          name="gueltig_bis"
-          type="date"
-          min="2000-01-01"
-          max="2099-12-31"
           value={formData.gueltig_bis}
-          onChange={handleChange}
+          onChange={(v) => setFormData(prev => ({ ...prev, gueltig_bis: v }))}
           hint="Leer lassen für aktuell gültigen Tarif"
         />
         <Input

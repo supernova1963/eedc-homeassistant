@@ -7,8 +7,8 @@
  * Sortierung, CSV-Export, Summenzeile. Reine Darstellung aus `StundenWert[]`.
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { Download, ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
-import { Card, Button } from '../ui'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
+import { Card, Button, CsvExportButton } from '../ui'
 import { exportToCSV } from '../../utils/export'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -247,11 +247,8 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
               </div>
             )}
           </div>
-          <Button variant="secondary" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-1.5" />
-            {/* D11-15: mobil platzsparend „CSV", ab sm „CSV-Export" */}
-            <span className="sm:hidden">CSV</span><span className="hidden sm:inline">CSV-Export</span>
-          </Button>
+          {/* D13-10: Icon + Wort immer, Breakpoint lg (CsvExportButton-SoT). */}
+          <CsvExportButton onClick={handleExport} />
         </div>
       </div>
 

@@ -137,13 +137,14 @@ function StandardInhalt({
         <div className="flex flex-wrap gap-2">
           {aktion && onAktion && (
             <Button type="button" variant="secondary" size="sm" onClick={onAktion}>
-              {AktionIcon && <AktionIcon className="h-4 w-4 mr-1.5" />}
+              {/* D14-14 (detLAN #116): Aktions-Icons mobil weg — Text bleibt einzeilig. */}
+              {AktionIcon && <AktionIcon className="max-sm:hidden h-4 w-4 mr-1.5" />}
               {aktion}
             </Button>
           )}
           {zweitAktion && onZweitAktion && (
             <Button type="button" variant="secondary" size="sm" onClick={onZweitAktion}>
-              {ZweitAktionIcon && <ZweitAktionIcon className="h-4 w-4 mr-1.5" />}
+              {ZweitAktionIcon && <ZweitAktionIcon className="max-sm:hidden h-4 w-4 mr-1.5" />}
               {zweitAktion}
             </Button>
           )}

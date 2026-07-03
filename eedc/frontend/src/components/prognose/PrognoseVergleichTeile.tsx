@@ -254,13 +254,16 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
     <span ref={ref} className="relative inline-block">
       <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }} className="ml-1 text-amber-500 hover:text-amber-600 cursor-pointer" aria-label="IST-Daten unvollständig">⚠</button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-[10000] w-72 max-w-[calc(100vw-2rem)] p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl text-left">
-          <div className="text-xs font-semibold text-gray-900 dark:text-white mb-1">IST-Daten unvollständig</div>
-          <div className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-2">
+        // D14-12 (detLAN #113): Pop-up-Kanon — dunkel in beiden Modi (= ChartTooltip/
+        // SimpleTooltip-Linie); vorher als einziges Pop-up hell (bg-white).
+        <div className="absolute right-0 top-full mt-1 z-[10000] w-72 max-w-[calc(100vw-2rem)] p-3 bg-gray-900 dark:bg-gray-950 border border-gray-700 rounded-lg shadow-xl text-left">
+          <div className="text-xs font-semibold text-white mb-1">IST-Daten unvollständig</div>
+          <div className="text-xs text-gray-300 leading-relaxed mb-2">
             Ohne Werte für {stundenLabel}. Falls eedc oder HA kürzlich neu gestartet wurden, schließt sich die Lücke beim nächsten Snapshot-Zyklus (max. 1 h). Bleibt sie bestehen, ist wahrscheinlich der kumulative Zähler im Sensor-Mapping nicht gesetzt.
           </div>
           {feedback && (
-            <div className={`text-xs mb-2 px-2 py-1 rounded ${feedback.tone === 'success' ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300' : feedback.tone === 'warning' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' : 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300'}`}>{feedback.msg}</div>
+            // Chips auf dem dunklen Pop-up in beiden Modi in der Dark-Variante.
+            <div className={`text-xs mb-2 px-2 py-1 rounded ${feedback.tone === 'success' ? 'bg-green-900/30 text-green-300' : feedback.tone === 'warning' ? 'bg-amber-900/30 text-amber-300' : 'bg-red-900/30 text-red-300'}`}>{feedback.msg}</div>
           )}
           <div className="flex gap-2">
             <button type="button" onClick={handleReaggregate} disabled={busy} className={buttonClasses({ variant: 'primary', size: 'sm', className: 'flex-1' })}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</button>
@@ -605,13 +608,16 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
     <Card>
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Genauigkeits-Tracking <span className="text-sm font-normal text-gray-500 ml-2">(letzte {genauigkeit.anzahl_tage} Tage)</span></h3>
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
+        {/* D14-19 (detLAN #107 v7): Controls umbruchfähig + Gruppen shrink-0 — vorher
+            klemmte das `overflow-hidden` der Toggle-Gruppe „Diagnostisch" auf
+            „Diagnost" und die Ausreißer-Checkbox lief mobil rechts aus dem Bild. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex shrink-0 rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
             {([7, 10, 30] as const).map(t => (
               <button key={t} type="button" onClick={() => vm.setGenauigkeitsTage(t)} className={`px-3 py-1 transition-colors ${vm.genauigkeitsTage === t ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>{t} T</button>
             ))}
           </div>
-          <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
+          <div className="flex shrink-0 rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
             <button type="button" onClick={() => vm.setGenauigkeitsModus('kompakt')} className={`px-3 py-1 transition-colors ${vm.genauigkeitsModus === 'kompakt' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Kompakt</button>
             <button type="button" onClick={() => vm.setGenauigkeitsModus('diagnostisch')} className={`px-3 py-1 transition-colors ${vm.genauigkeitsModus === 'diagnostisch' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Diagnostisch</button>
           </div>

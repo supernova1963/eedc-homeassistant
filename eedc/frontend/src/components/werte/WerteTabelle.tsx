@@ -16,8 +16,8 @@
  * unangetastet — diese Komponente ist der künftige SoT.
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Download, Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
-import { Button } from '../ui'
+import { Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
+import { Button, CsvExportButton } from '../ui'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
   fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
@@ -254,10 +254,8 @@ export function WerteTabelle({
             <GitCompareArrows className="h-4 w-4" /> Vergleich {vergleichLabel}
           </Button>
         )}
-        <Button size="sm" variant="secondary" className="gap-1.5" onClick={csvExport}>
-          {/* D11-15: mobil platzsparend „CSV", ab sm „CSV-Export" */}
-          <Download className="h-4 w-4" /> <span className="sm:hidden">CSV</span><span className="hidden sm:inline">CSV-Export</span>
-        </Button>
+        {/* D13-10: Icon + Wort immer, Breakpoint lg (CsvExportButton-SoT). */}
+        <CsvExportButton onClick={csvExport} />
         {alleWerteHref && (
           <a href={alleWerteHref} className="ml-auto inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
             Alle Werte / Export <ArrowRight className="h-4 w-4" />

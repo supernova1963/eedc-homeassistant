@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react'
-import { Button, Input, Alert } from '../ui'
+import { Button, Input, Alert, DatumFeld } from '../ui'
 import { fmtZahl } from '../../lib'
 import type { Investition, InvestitionTyp } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
@@ -379,23 +379,17 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             onChange={handleChange}
             required
           />
-          <Input
+          {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+          <DatumFeld
             label="Anschaffungsdatum"
-            name="anschaffungsdatum"
-            type="date"
-            min="2000-01-01"
-            max="2099-12-31"
             value={formData.anschaffungsdatum}
-            onChange={handleChange}
+            onChange={(v) => setFormData(prev => ({ ...prev, anschaffungsdatum: v }))}
           />
-          <Input
+          <DatumFeld
             label="Stilllegungsdatum (optional)"
-            name="stilllegungsdatum"
-            type="date"
-            min={formData.anschaffungsdatum || "2000-01-01"}
-            max="2099-12-31"
+            min={formData.anschaffungsdatum || '2000-01-01'}
             value={formData.stilllegungsdatum}
-            onChange={handleChange}
+            onChange={(v) => setFormData(prev => ({ ...prev, stilllegungsdatum: v }))}
             hint="Ab diesem Datum zählt die Komponente nicht mehr für Live/Prognose. Historische Werte bleiben erhalten."
           />
           <Input

@@ -19,7 +19,7 @@ import type { KpiStripItem } from '../blocks'
 import { pvgisApi, monatsdatenApi } from '../../api'
 import type { PVModulPrognose } from '../../api/pvgis'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
-import { SOLL_IST_COLORS, PROGNOSE_DASH, formatEnergie, energieAchse, formatProzent, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
+import { SOLL_IST_COLORS, formatEnergie, energieAchse, formatProzent, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -222,7 +222,9 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
               name.includes('%') ? formatProzent(value).text : formatEnergie(value, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
             <ReferenceLine yAxisId="right" y={0} stroke={achsen.referenz} strokeDasharray="3 3" />
-            <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="PVGIS Prognose" />
+            {/* D14-10 (detLAN #113): Balken ohne gestrichelte Umrandung — der Dash-Kanon
+                (PROGNOSE_DASH) gilt nur für LINIEN-Serien, nicht als Bar-Border. */}
+            <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} name="PVGIS Prognose" />
             <Bar yAxisId="left" dataKey="ist" fill={SOLL_IST_COLORS.ist} name="IST-Erzeugung" />
             <Line yAxisId="right" type="monotone" dataKey="abweichungProzent" stroke={SOLL_IST_COLORS.abweichung} strokeWidth={2} name="Abweichung %" dot={{ fill: SOLL_IST_COLORS.abweichung }} />
           </ComposedChart>

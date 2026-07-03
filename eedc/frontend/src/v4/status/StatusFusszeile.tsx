@@ -151,19 +151,22 @@ export function StatusFusszeile() {
             setOffen={setOffen}
           />
         )}
-        {offenerMonat && (
-          <StatusItem
-            id="monatsabschluss"
-            icon={CalendarClock}
-            schwere="warning"
-            label="Monatsabschluss offen"
-            detail={`${offenerMonat.monat_name} ${offenerMonat.jahr} ist noch nicht abgeschlossen.`}
-            onOeffnen={anlageId ? () => navigate(`/monatsabschluss/${anlageId}`) : undefined}
-            ausrichtung="links"
-            offen={offen}
-            setOffen={setOffen}
-          />
-        )}
+        {/* R14-10 (Rainer #114/#127, Gernot #130): das Kalender-Symbol ist IMMER da
+            (überall verfügbarer Einstieg in den Monatsabschluss) — amber bei
+            offenem Monat, grün wenn alles abgeschlossen. */}
+        <StatusItem
+          id="monatsabschluss"
+          icon={CalendarClock}
+          schwere={offenerMonat ? 'warning' : 'ok'}
+          label={offenerMonat ? 'Monatsabschluss offen' : 'Monatsabschluss'}
+          detail={offenerMonat
+            ? `${offenerMonat.monat_name} ${offenerMonat.jahr} ist noch nicht abgeschlossen.`
+            : 'Alle Monate sind abgeschlossen.'}
+          onOeffnen={anlageId ? () => navigate(`/monatsabschluss/${anlageId}`) : undefined}
+          ausrichtung="links"
+          offen={offen}
+          setOffen={setOffen}
+        />
         {mqttAktiv && (
           <StatusItem
             id="mqtt"

@@ -1,6 +1,8 @@
 /**
  * Monatsdaten — geteilte Teile (Spalten-SoT + Tabelle + Formular-Modals + HA-Import
- * + Kraftstoffpreis-Backfill).
+ * + Kraftstoffpreis-Backfill). D14-8-Gate (2026-07-03): die Kraftstoffpreis-
+ * Monats-Karte rendert nur in V3 — unter /v4 läuft der Backfill über das
+ * Auswahlfeld der EINEN Reparatur-Werkbank (Energieprofil-Pflege).
  *
  * EINE Code-Wahrheit für IST (`pages/Monatsdaten.tsx`, dünner Komposer) und IA-V4
  * (eigene native V4-Seite `v4/MonatsdatenV4.tsx`). Der Aufrufer reicht die bereits
@@ -14,7 +16,7 @@ import { Button, Card, Modal, EmptyState, Alert } from '../components/ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { MonatsdatenForm } from '../components/forms'
 import { DataLoadingState } from '../components/common'
-import { useMonatsdaten, useInvestitionen, useApiData } from '../hooks'
+import { useMonatsdaten, useInvestitionen, useApiData, useV4Basis } from '../hooks'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
@@ -80,6 +82,8 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   // Hook wird für MonatsdatenForm benötigt
   const { investitionen } = useInvestitionen(anlageId)
   const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
+  // D14-8-Gate: Kraftstoff-Monats-Karte nur in V3 (V4 = Werkbank).
+  const istV4 = !!useV4Basis()
 
   // Aggregierte Daten
   const { data: aggregierteDaten, loading: aggregiertLoading } = useApiData(
@@ -521,8 +525,9 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
         </>
       )}
 
-      {/* Datenverwaltung — rapahl #188: Kraftstoffpreis-Hinweis nur bei E-Auto-Anlage. */}
-      {hatEAuto && kpStatus && kpStatus.monats_offen > 0 && (
+      {/* Datenverwaltung — rapahl #188: Kraftstoffpreis-Hinweis nur bei E-Auto-Anlage.
+          D14-8: nur V3 — unter /v4 konsolidiert in der Reparatur-Werkbank. */}
+      {!istV4 && hatEAuto && kpStatus && kpStatus.monats_offen > 0 && (
         <Card>
           <div className="p-6">
             <div className="flex items-center gap-3 mb-4">

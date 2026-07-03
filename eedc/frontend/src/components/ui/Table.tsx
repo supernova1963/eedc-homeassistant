@@ -1,4 +1,5 @@
 import { ReactNode } from 'react'
+import ScrollSchatten from './ScrollSchatten'
 
 interface TableProps {
   children: ReactNode
@@ -7,11 +8,15 @@ interface TableProps {
 
 export function Table({ children, className = '' }: TableProps) {
   return (
-    <div className="overflow-x-auto">
+    // Abnahme-Fund R14 (Gernot 2026-07-03): überlaufende Tabellen zeigen statt
+    // eines horizontalen Scroll-Balkens den ScrollSchatten-Fade (Blur-Affordanz
+    // links/rechts; scrollbar via Touch/Trackpad/Shift-Rad). Unter `lg` bieten
+    // datendichte Tabellen zusätzlich eine Kachel-Variante an (per Site).
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-900">
       <table className={`min-w-full divide-y divide-gray-200 dark:divide-gray-700 ${className}`}>
         {children}
       </table>
-    </div>
+    </ScrollSchatten>
   )
 }
 

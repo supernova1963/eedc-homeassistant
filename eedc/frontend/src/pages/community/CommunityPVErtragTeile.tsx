@@ -161,8 +161,10 @@ export function MonatsErtragChart({ benchmark, chartData }: { benchmark: Communi
       </Parkbar>
       <Parkbar id="pv-monatsertrag-legende" titel="Monatlicher Ertrag (Legende)">
       <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 mt-4 text-sm">
-        <span className="flex items-center gap-2"><span className="w-4 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.ok }} /><span className="text-gray-600 dark:text-gray-400">Über Monats-Ø</span></span>
-        <span className="flex items-center gap-2"><span className="w-4 h-3 rounded" style={{ backgroundColor: STATUS_COLORS.kritisch }} /><span className="text-gray-600 dark:text-gray-400">Unter Monats-Ø</span></span>
+        {/* D14-11 (detLAN #113, SS 14-42-17): Swatch = Viereck im ChartLegende-Maß
+            (w-2.5 h-2.5 rounded-sm) — vorher 16×12-Rechteck („nicht mehr quadratisch"). */}
+        <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: STATUS_COLORS.ok }} /><span className="text-gray-600 dark:text-gray-400">Über Monats-Ø</span></span>
+        <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: STATUS_COLORS.kritisch }} /><span className="text-gray-600 dark:text-gray-400">Unter Monats-Ø</span></span>
         <span className="flex items-center gap-2"><span className="w-6 h-0 border-t-2 border-dashed border-gray-400" /><span className="text-gray-600 dark:text-gray-400">Community Monats-Ø</span></span>
       </div>
       </Parkbar>
@@ -245,7 +247,8 @@ export function VerteilungHistogramm({ benchmark, distribution }: { benchmark: C
       </Parkbar>
       <Parkbar id="pv-verteilung-legende" titel="Verteilung (Legende)">
       <div className="flex items-center justify-center gap-4 mt-3 text-sm">
-        <span className="flex items-center gap-2"><span className="w-4 h-3 rounded" style={{ backgroundColor: EIGENE_SERIE_FARBEN.du }} /><span className="text-gray-600 dark:text-gray-400">Deine Position</span></span>
+        {/* D14-11: Viereck im ChartLegende-Maß (2. Chart der Seite). */}
+        <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: EIGENE_SERIE_FARBEN.du }} /><span className="text-gray-600 dark:text-gray-400">Deine Position</span></span>
       </div>
       </Parkbar>
     </div>

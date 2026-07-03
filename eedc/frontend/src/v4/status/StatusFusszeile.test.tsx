@@ -83,6 +83,14 @@ describe('StatusFusszeile — Global-Zone (P2)', () => {
     expect(screen.getByText('Öffnen →')).toBeInTheDocument()
   })
 
+  it('R14-10: Monatsabschluss-Symbol bleibt auch ohne offenen Monat sichtbar', async () => {
+    getNaechsterMonat.mockResolvedValue(null)
+    renderMit({})
+    const btn = await screen.findByLabelText('Monatsabschluss')
+    fireEvent.click(btn)
+    expect(screen.getByRole('dialog')).toHaveTextContent('Alle Monate sind abgeschlossen.')
+  })
+
   it('zeigt das MQTT-Symbol nur bei aktivem Subscriber', async () => {
     getMqttStatus.mockResolvedValue({ subscriber_aktiv: true, broker: 'test', empfangene_nachrichten: 42 })
     renderMit({})

@@ -9,11 +9,17 @@
  * gereicht (bleibt in V3 an ihrer Stelle, fehlt im V4-Pflege-Block). Der Block
  * trägt: Datenbestand-Status · Lücken-Backfill · Kraftstoffpreis-Backfill ·
  * Löschen · Reparatur-Werkbank. Zahlen de-DE über `fmtZahl`.
+ *
+ * D14-8 (detLAN #113/#123, Gernot #128 + Gating-Entscheid 2026-07-03): unter
+ * `/v4` ist die „Datenverwaltung"-Karte (Lücken/Kraftstoff/Löschen) ausgeblendet
+ * — dort läuft alles über das Auswahlfeld der EINEN Reparatur-Werkbank; der
+ * Datenbestand ist parkbare Info. V3 bleibt unverändert (IST-Anzeige).
  */
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { Activity, BarChart3, History, RefreshCw, Trash2, Loader2, Info, Fuel } from 'lucide-react'
 import { Button, Card, Alert } from '../components/ui'
-import { useInvestitionen } from '../hooks'
+import { Parkbar } from '../components/park'
+import { useInvestitionen, useV4Basis } from '../hooks'
 import { energieProfilApi, type KraftstoffpreisStatus, type AnlageStats } from '../api/energie_profil'
 import RepairWorkbench from '../components/repair/RepairWorkbench'
 import { fmtZahl } from '../lib'
@@ -37,6 +43,8 @@ export function EnergieprofilPflege({
 }) {
   const { investitionen } = useInvestitionen(anlageId)
   const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
+  // D14-8-Gate: im V4-Daten-Block übernimmt die Werkbank; V3 behält die Karten.
+  const istV4 = !!useV4Basis()
 
   const [stats, setStats] = useState<AnlageStats | null>(null)
   const [kpStatus, setKpStatus] = useState<KraftstoffpreisStatus | null>(null)
@@ -153,8 +161,9 @@ export function EnergieprofilPflege({
       {error && <Alert type="error">{error}</Alert>}
       {message && <Alert type="success">{message}</Alert>}
 
-      {/* Datenbestand */}
+      {/* Datenbestand — D14-8/#128: reine Info, in V4 parkbar (Park-SoT; inert in V3). */}
       {hatProfildaten && stats && (
+        <Parkbar id="info:datenbestand" titel="Datenbestand (pro Anlage)">
         <Card>
           <div className="p-3 sm:p-6">
             <div className="flex items-center gap-3 mb-4">
@@ -221,12 +230,15 @@ export function EnergieprofilPflege({
             )}
           </div>
         </Card>
+        </Parkbar>
       )}
 
       {/* Tages-Energieprofile (Anzeige) — nur wenn die V3-Seite sie reicht. */}
       {tabelleSlot}
 
-      {/* Datenverwaltung */}
+      {/* Datenverwaltung — D14-8: nur V3; unter /v4 konsolidiert im
+          Werkbank-Auswahlfeld (Lücken · Kraftstoffpreise · Löschen). */}
+      {!istV4 && (
       <Card>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -325,6 +337,7 @@ export function EnergieprofilPflege({
           )}
         </div>
       </Card>
+      )}
 
       {/* Reparatur-Werkbank (Etappe 3d Päckchen 4) — Plan + Execute + Verlauf */}
       <RepairWorkbench

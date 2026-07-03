@@ -216,11 +216,12 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
                   <EnergieFluss
                     {...flussProps}
                     kopfAktion={
+                      // D14-16: „Vergrößern" unter 640 px ausblenden (nicht entfernen).
                       <button
                         type="button"
                         onClick={() => setEflFokus(true)}
                         aria-label="Energiefluss: Fokus / Vollbild"
-                        className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                        className="max-sm:hidden p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50"
                       >
                         <Maximize2 className="h-4 w-4" />
                       </button>

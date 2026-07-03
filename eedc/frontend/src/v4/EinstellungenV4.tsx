@@ -105,7 +105,9 @@ function KomponentenEinstellungen() {
   return (
     <div className="space-y-3">
       {v.hinweise}
-      <BlockShell persistKey="v4-einst-komponenten" bloecke={bloecke} offenzustandFluechtig />
+      {/* D14-2 (detLAN #113): Klapp-Zustand wird wieder gemerkt — die A3-Flüchtigkeit
+          (immer alles zu beim Betreten) ist damit zurückgenommen. */}
+      <BlockShell persistKey="v4-einst-komponenten" bloecke={bloecke} />
       {v.modals}
     </div>
   )
@@ -201,12 +203,12 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
           {istKomponenten ? (
             <KomponentenEinstellungen />
           ) : bloecke.length > 0 ? (
+            // D14-2: Klapp-Zustand pro Kategorie gemerkt (A3-Flüchtigkeit zurückgenommen).
             <BlockShell
               key={suchModus ? 'suche' : kategorie}
               persistKey={suchModus ? 'v4-einst-suche' : `v4-einst-${kategorie}`}
               bloecke={bloecke}
               sortierbar={!suchModus}
-              offenzustandFluechtig
             />
           ) : (
             <p className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">

@@ -15,6 +15,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // zu hoch / reingequetscht" (CSV-Export im kompakten Block-Kopf neben 32-px-Nav-Icons).
 // `min-h-[36px]` im Basis-Stil → alle Größen gleich hoch (sm/md/lg variieren nur
 // Padding/Schrift). Filter-Controls (Pillen/Inputs/Selects) liegen bei 32 px (STEUER_H).
+//
+// D14-14 (detLAN #116, Gernot-Entscheid 2026-07-03) — Kontext-Regel Icons mobil:
+// CSV-/PDF-/Export-Buttons behalten IMMER Icon + Wort (CsvExportButton-SoT bzw.
+// PDF-Primäraktion); ANDERE mehrwortige Aktions-Buttons verlieren < 640 px ihr
+// vorangestelltes Icon (`max-sm:hidden` an der Icon-Klasse), damit der Text
+// einzeilig bleibt. Lauf-Spinner (Loader2) bleiben als Aktivitäts-Signal sichtbar.
 const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 min-h-[36px]'
 
 const variants: Record<ButtonVariant, string> = {

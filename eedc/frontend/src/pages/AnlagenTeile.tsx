@@ -20,6 +20,48 @@ import { importApi } from '../api/import'
 import { downloadFile, fmtZahl } from '../lib'
 import type { Anlage, AnlageCreate } from '../types'
 
+/** Aktions-Leiste einer Anlage — EINE Wahrheit für Tabellen-Zeile und Kachel. */
+function AnlageAktionen({ anlage, onDokumente, onEdit, onDelete }: {
+  anlage: Anlage
+  onDokumente: (a: Anlage) => void
+  onEdit: (a: Anlage) => void
+  onDelete: (a: Anlage) => void
+}) {
+  return (
+    <div className="flex justify-end gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onDokumente(anlage)}
+        title="Dokumente (Jahresbericht, Infothek, Anlagendokumentation, Finanzbericht)"
+      >
+        <FolderOpen className="h-4 w-4 text-orange-500" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          const safeName = anlage.anlagenname.replace(/\s+/g, '_')
+          const datum = new Date().toISOString().slice(0, 10)
+          downloadFile(
+            importApi.getFullExportUrl(anlage.id),
+            `eedc_backup_${safeName}_${datum}.json`,
+          ).catch(() => {/* still better than 401 in Safari */})
+        }}
+        title="Export (JSON)"
+      >
+        <Download className="h-4 w-4 text-blue-500" />
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => onEdit(anlage)} title="Bearbeiten">
+        <Edit className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => onDelete(anlage)} title="Löschen">
+        <Trash2 className="h-4 w-4 text-red-500" />
+      </Button>
+    </div>
+  )
+}
+
 /**
  * Voller Anlagen-Manager (Liste ALLER Anlagen). Wird von der IST-Seite (V3-Hülle)
  * und dem V4-Stammdaten-Block geteilt.
@@ -82,7 +124,34 @@ export function AnlagenVerwaltung() {
           />
         </Card>
       ) : (
-        <Card padding="none" className="overflow-hidden">
+        <>
+        {/* Abnahme-Fund R14 (Gernot 2026-07-03): < lg Kachel-Darstellung statt
+            gequetschter Tabelle (Muster wie Monats-Bilanz mobil). */}
+        <div className="lg:hidden space-y-3">
+          {anlagenSortiert.map((anlage) => (
+            <Card key={anlage.id} padding="sm">
+              <div className="flex items-center gap-2">
+                <Sun className="h-5 w-5 text-energy-solar shrink-0" />
+                <span className="font-medium text-gray-900 dark:text-white truncate">{anlage.anlagenname}</span>
+                <span className="font-mono text-xs text-gray-500 dark:text-gray-400">Nr. {anlage.id}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <div><span className="text-gray-500 dark:text-gray-400">Leistung</span><br /><span className="font-mono">{fmtZahl(anlage.leistung_kwp, 1)}</span> kWp</div>
+                <div><span className="text-gray-500 dark:text-gray-400">Installation</span><br />{anlage.installationsdatum ? new Date(anlage.installationsdatum).toLocaleDateString('de-DE') : '—'}</div>
+                <div className="col-span-2"><span className="text-gray-500 dark:text-gray-400">Standort</span><br />{anlage.standort_ort ? `${anlage.standort_plz ?? ''} ${anlage.standort_ort}`.trim() : '—'}</div>
+              </div>
+              <div className="mt-2 border-t border-gray-100 dark:border-gray-700 pt-1">
+                <AnlageAktionen
+                  anlage={anlage}
+                  onDokumente={setDokumenteAnlage}
+                  onEdit={setEditingAnlage}
+                  onDelete={setDeleteConfirm}
+                />
+              </div>
+            </Card>
+          ))}
+        </div>
+        <Card padding="none" className="overflow-hidden hidden lg:block">
           <Table>
             <TableHead>
               <TableRow>
@@ -127,51 +196,19 @@ export function AnlagenVerwaltung() {
                     }
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDokumenteAnlage(anlage)}
-                        title="Dokumente (Jahresbericht, Infothek, Anlagendokumentation, Finanzbericht)"
-                      >
-                        <FolderOpen className="h-4 w-4 text-orange-500" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const safeName = anlage.anlagenname.replace(/\s+/g, '_')
-                          const datum = new Date().toISOString().slice(0, 10)
-                          downloadFile(
-                            importApi.getFullExportUrl(anlage.id),
-                            `eedc_backup_${safeName}_${datum}.json`,
-                          ).catch(() => {/* still better than 401 in Safari */})
-                        }}
-                        title="Export (JSON)"
-                      >
-                        <Download className="h-4 w-4 text-blue-500" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingAnlage(anlage)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteConfirm(anlage)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
+                    <AnlageAktionen
+                      anlage={anlage}
+                      onDokumente={setDokumenteAnlage}
+                      onEdit={setEditingAnlage}
+                      onDelete={setDeleteConfirm}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </Card>
+        </>
       )}
 
       {/* Create Modal */}

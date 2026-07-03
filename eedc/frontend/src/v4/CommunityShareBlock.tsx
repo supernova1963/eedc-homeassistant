@@ -34,7 +34,8 @@ export function CommunityTeilenSchalter() {
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">teilen</span>
+      {/* D14-4 (detLAN #113): Label großgeschrieben. */}
+      <span className="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">Teilen</span>
       <button
         type="button"
         role="switch"
@@ -163,7 +164,7 @@ export function CommunityShareBlockInhalt() {
 
       {!teiltAuto && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Teilen ist ausgeschaltet — aktiviere den Schalter „teilen" oben in der Block-Überschrift.
+          Teilen ist ausgeschaltet — aktiviere den Schalter „Teilen" oben in der Block-Überschrift.
         </p>
       )}
     </div>

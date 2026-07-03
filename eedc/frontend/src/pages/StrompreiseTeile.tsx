@@ -9,7 +9,7 @@
  */
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
-import { Button, Card, Modal, EmptyState, Alert, Input } from '../components/ui'
+import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { useStrompreise } from '../hooks'
 import { GELD_TEXT_CLASS, fmtZahl } from '../lib'
@@ -140,8 +140,53 @@ export function StrompreisTabelle({
   onEdit: (sp: Strompreis) => void
   onDelete: (sp: Strompreis) => void
 }) {
+  // Verwendungs-Badge — EINE Wahrheit für Tabellen-Zeile und Kachel.
+  const verwendungBadge = (sp: Strompreis) =>
+    (!sp.verwendung || sp.verwendung === 'allgemein') ? (
+      <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">Standard</span>
+    ) : sp.verwendung === 'waermepumpe' ? (
+      <span className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300 rounded">Wärmepumpe</span>
+    ) : (
+      <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded">Wallbox</span>
+    )
+
   return (
-    <Card padding="none" className="overflow-hidden">
+    <>
+    {/* Abnahme-Fund R14 (Gernot 2026-07-03): < lg Kachel-Darstellung statt
+        gequetschter Tabelle. */}
+    <div className="lg:hidden space-y-3">
+      {sorted.map((sp) => {
+        const aktuell = istAktuell(sp)
+        return (
+          <Card key={sp.id} padding="sm" className={aktuell ? 'bg-green-50/50 dark:bg-green-900/10' : ''}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Zap className={`h-5 w-5 shrink-0 ${aktuell ? 'text-green-500' : 'text-gray-400 dark:text-gray-500'}`} />
+              <span className="font-medium text-gray-900 dark:text-white">{sp.tarifname || 'Standard'}</span>
+              {aktuell && (
+                <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300 rounded">Aktuell</span>
+              )}
+              {verwendungBadge(sp)}
+            </div>
+            {sp.anbieter && <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{sp.anbieter}</p>}
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              <div><span className="text-gray-500 dark:text-gray-400">Netzbezug</span><br /><span className={`font-mono ${GELD_TEXT_CLASS.kosten}`}>{fmtZahl(sp.netzbezug_arbeitspreis_cent_kwh, 2)}</span> <span className="text-gray-500 text-xs">ct/kWh</span></div>
+              <div><span className="text-gray-500 dark:text-gray-400">Einspeisung</span><br /><span className={`font-mono ${GELD_TEXT_CLASS.ertrag}`}>{fmtZahl(sp.einspeiseverguetung_cent_kwh, 2)}</span> <span className="text-gray-500 text-xs">ct/kWh</span></div>
+              <div><span className="text-gray-500 dark:text-gray-400">Grundpreis</span><br />{sp.grundpreis_euro_monat ? <><span className="font-mono">{fmtZahl(sp.grundpreis_euro_monat, 2)}</span> <span className="text-gray-500 text-xs">€/Mon</span></> : '—'}</div>
+              <div><span className="text-gray-500 dark:text-gray-400">Gültigkeit</span><br />{new Date(sp.gueltig_ab).toLocaleDateString('de-DE')}{sp.gueltig_bis && <> – {new Date(sp.gueltig_bis).toLocaleDateString('de-DE')}</>}</div>
+            </div>
+            <div className="mt-2 border-t border-gray-100 dark:border-gray-700 pt-1 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => onEdit(sp)} aria-label="Tarif bearbeiten">
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => onDelete(sp)} aria-label="Tarif löschen">
+                <Trash2 className="h-4 w-4 text-red-500" />
+              </Button>
+            </div>
+          </Card>
+        )
+      })}
+    </div>
+    <Card padding="none" className="overflow-hidden hidden lg:block">
       <Table>
         <TableHead>
           <TableRow>
@@ -179,21 +224,7 @@ export function StrompreisTabelle({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>
-                  {(!sp.verwendung || sp.verwendung === 'allgemein') ? (
-                    <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
-                      Standard
-                    </span>
-                  ) : sp.verwendung === 'waermepumpe' ? (
-                    <span className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-300 rounded">
-                      Wärmepumpe
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 rounded">
-                      Wallbox
-                    </span>
-                  )}
-                </TableCell>
+                <TableCell>{verwendungBadge(sp)}</TableCell>
                 <TableCell>
                   <span className={`font-mono ${GELD_TEXT_CLASS.kosten}`}>
                     {fmtZahl(sp.netzbezug_arbeitspreis_cent_kwh, 2)}
@@ -241,6 +272,7 @@ export function StrompreisTabelle({
         </TableBody>
       </Table>
     </Card>
+    </>
   )
 }
 
@@ -521,7 +553,9 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
       {/* Preise */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Preise</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* D14-6 (detLAN #113): items-end — das zweizeilig umbrechende
+            „Einspeisevergütung"-Label drückte sein Feld sonst unter die Nachbarn. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <Input
             label="Netzbezug (ct/kWh)"
             name="netzbezug_arbeitspreis_cent_kwh"
@@ -561,24 +595,17 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900 dark:text-white">Gültigkeit</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
+          {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+          <DatumFeld
             label="Gültig ab"
-            name="gueltig_ab"
-            type="date"
-            min="2000-01-01"
-            max="2099-12-31"
             value={formData.gueltig_ab}
-            onChange={handleChange}
+            onChange={(v) => setFormData(prev => ({ ...prev, gueltig_ab: v }))}
             required
           />
-          <Input
+          <DatumFeld
             label="Gültig bis"
-            name="gueltig_bis"
-            type="date"
-            min="2000-01-01"
-            max="2099-12-31"
             value={formData.gueltig_bis}
-            onChange={handleChange}
+            onChange={(v) => setFormData(prev => ({ ...prev, gueltig_bis: v }))}
             hint="Leer lassen für unbefristet"
           />
         </div>

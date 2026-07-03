@@ -25,7 +25,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, Wrench } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, Trash2, Wrench } from 'lucide-react'
 
 import { Alert, Button, Card, Select } from '../ui'
 import {
@@ -39,6 +39,17 @@ import {
   type RepairResult,
   repairApi,
 } from '../../api/repair'
+import { energieProfilApi } from '../../api/energie_profil'
+import { useV4Basis } from '../../hooks'
+
+// D14-8 (detLAN #113/#123, Gernot #128): „Energieprofil-Daten löschen" wandert als
+// Eintrag ins Werkbank-Auswahlfeld — EINE Reparatur-UI. Technisch bleibt es der
+// direkte Bulk-Delete-Endpoint (Konzept Sektion 5.2: kein Orchestrator-Bedarf,
+// der Scheduler baut die Daten binnen 15 Min neu auf), kein Plan/Execute-Diff.
+// Gate (Gernot 2026-07-03): der Eintrag erscheint nur unter /v4 — in V3 bleibt
+// die IST-Lösch-Karte der Energieprofil-Seite zuständig (keine Doppel-UI je Welt).
+const DELETE_ENERGIEPROFIL = 'delete_energieprofil_direkt' as const
+type WorkbenchOp = RepairOperationType | typeof DELETE_ENERGIEPROFIL
 
 interface Props {
   anlageId: number
@@ -75,9 +86,13 @@ const WORKBENCH_OPERATIONS = OPERATION_META.filter((o) => o.inWorkbench)
 
 
 export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
-  const [selectedOp, setSelectedOp] = useState<RepairOperationType>(
+  const [selectedOp, setSelectedOp] = useState<WorkbenchOp>(
     WORKBENCH_OPERATIONS[0].type
   )
+  // D14-8: Zustand des direkten Energieprofil-Löschens (kein Plan/Execute).
+  const [deleteRunning, setDeleteRunning] = useState(false)
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null)
+  const istV4 = !!useV4Basis()
   const [params, setParams] = useState<OperationParamsState>(DEFAULT_PARAMS)
   const [plan, setPlan] = useState<RepairPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
@@ -125,11 +140,28 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
   ])
 
   // Operation-Wechsel: Plan-Vorschau + Result zurücksetzen
-  const handleOpChange = (op: RepairOperationType) => {
+  const handleOpChange = (op: WorkbenchOp) => {
     setSelectedOp(op)
     setPlan(null)
     setExecuteResult(null)
     setError(null)
+    setDeleteMessage(null)
+  }
+
+  // D14-8: direkter Lösch-Pfad (Bestätigung → Endpoint → Ergebnis-Meldung).
+  const handleDeleteEnergieprofil = async () => {
+    if (!window.confirm('Alle Energieprofil-Daten für diese Anlage löschen? Der Scheduler berechnet sie neu (max. 15 Min). Monatsdaten bleiben erhalten.')) return
+    try {
+      setDeleteRunning(true)
+      setDeleteMessage(null)
+      setError(null)
+      const res = await energieProfilApi.deleteRohdatenAnlage(anlageId)
+      setDeleteMessage(`${res.geloescht_stundenwerte} Stundenwerte + ${res.geloescht_tagessummen} Tagessummen gelöscht. Scheduler berechnet neu (max. 15 Min).`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Löschen fehlgeschlagen')
+    } finally {
+      setDeleteRunning(false)
+    }
   }
 
   const buildOperationParams = (): Record<string, unknown> => {
@@ -202,7 +234,8 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     try {
       const req: RepairOperationRequest = {
         anlage_id: anlageId,
-        operation: selectedOp,
+        // handleCreatePlan wird für den Delete-Eintrag nie aufgerufen (eigener Pfad).
+        operation: selectedOp as RepairOperationType,
         params: buildOperationParams(),
       }
       const res = await repairApi.plan(req)
@@ -268,7 +301,11 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
     reloadHistory()
   }
 
-  const opMeta = OPERATION_META.find((o) => o.type === selectedOp)
+  const istDelete = selectedOp === DELETE_ENERGIEPROFIL
+  const opMeta = istDelete ? undefined : OPERATION_META.find((o) => o.type === selectedOp)
+  const opBeschreibung = istDelete
+    ? 'Entfernt alle Stundenwerte und Tageszusammenfassungen dieser Anlage. Der Scheduler berechnet sie neu (max. 15 Min). Monatsdaten bleiben erhalten.'
+    : opMeta?.description
 
   return (
     <Card>
@@ -292,33 +329,58 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
             </label>
             <Select
               value={selectedOp}
-              onChange={(e) => handleOpChange(e.target.value as RepairOperationType)}
-              disabled={planLoading || executeRunning}
-              options={WORKBENCH_OPERATIONS.map((o) => ({ value: o.type, label: o.label }))}
+              onChange={(e) => handleOpChange(e.target.value as WorkbenchOp)}
+              disabled={planLoading || executeRunning || deleteRunning}
+              options={[
+                ...WORKBENCH_OPERATIONS.map((o) => ({ value: o.type as string, label: o.label })),
+                // D14-8: Lösch-Aktion als Werkbank-Eintrag (direkter Pfad, nur /v4).
+                ...(istV4 ? [{ value: DELETE_ENERGIEPROFIL as string, label: 'Energieprofil-Daten löschen' }] : []),
+              ]}
             />
-            {opMeta && (
+            {opBeschreibung && (
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {opMeta.description}
+                {opBeschreibung}
               </p>
             )}
           </div>
 
           {/* Operation-spezifische Parameter */}
-          <OperationParamsEditor
-            operation={selectedOp}
-            params={params}
-            setParams={setParams}
-            disabled={planLoading || executeRunning}
-          />
+          {!istDelete && (
+            <OperationParamsEditor
+              operation={selectedOp as RepairOperationType}
+              params={params}
+              setParams={setParams}
+              disabled={planLoading || executeRunning}
+            />
+          )}
         </div>
 
-        {/* Plan erstellen */}
-        {!plan && !executeResult && (
+        {/* Plan erstellen bzw. D14-8: direkter Lösch-Pfad (Gefahren-Stil) */}
+        {istDelete ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleDeleteEnergieprofil}
+              disabled={deleteRunning}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50"
+            >
+              {deleteRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Energieprofil-Daten löschen
+            </button>
+          </div>
+        ) : !plan && !executeResult && (
           <div className="flex justify-end">
             <Button onClick={handleCreatePlan} disabled={planLoading}>
-              {planLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+              {/* D14-14: Icon mobil weg (Kontext-Regel; Spinner bleibt als Aktivitäts-Signal). */}
+              {planLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="max-sm:hidden h-4 w-4 mr-2" />}
               Plan erstellen
             </Button>
+          </div>
+        )}
+
+        {deleteMessage && (
+          <div className="mt-4">
+            <Alert type="success">{deleteMessage}</Alert>
           </div>
         )}
 
@@ -612,7 +674,7 @@ function PlanPreviewBlock({
       {/* Aktionen */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button onClick={onExecute} disabled={executeRunning}>
-          {executeRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+          {executeRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="max-sm:hidden h-4 w-4 mr-2" />}
           {totalDiff > 0
             ? `Diese ${totalDiff} ${totalDiff === 1 ? 'Änderung' : 'Änderungen'} anwenden`
             : 'Operation ausführen'}

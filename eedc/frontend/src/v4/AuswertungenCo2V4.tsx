@@ -11,13 +11,13 @@
  * Auto-km ohne Tsd-Transform) · R6 KPIs + Charts parkbar. Daten = `useAuswertungBasis`
  * (Jahr-Filter) + `getCO2Amortisation`; CO₂-Faktor aus lib-SoT (kein lokales 0,38).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Leaf, Sprout, Download } from 'lucide-react'
-import { LoadingSpinner, Card, Button, fmtCalc } from '../components/ui'
+import { Leaf, Sprout } from 'lucide-react'
+import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -26,7 +26,6 @@ import {
   formatCo2, fmtZahl, formatProzent, co2Achse, xAchse, yAchse,
   achsenEinheit, ACHSEN_MARGIN_TOP,
 } from '../lib'
-import { exportToCSV } from '../utils/export'
 import { investitionenApi, type CO2AmortisationResponse } from '../api/investitionen'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
@@ -88,12 +87,6 @@ function Co2Inner() {
     return { status: 'prognose' as const, monateNoch }
   }, [graueLast, kumuliert, anzahlMonate, gesamtCo2])
 
-  const handleCsv = useCallback(() => {
-    const headers = ['Monat', 'CO₂-Einsparung (kg)', 'Kumuliert (kg)']
-    const rows = kumuliert.map((z) => [z.name, z.co2_einsparung, z.kumuliert_co2])
-    exportToCSV(headers, rows, 'co2_export.csv')
-  }, [kumuliert])
-
   const bloecke: Block[] = useMemo(() => {
     const fc = formatCo2(gesamtCo2)
     const baeume = gesamtCo2 / KG_PRO_BAUM_JAHR
@@ -138,12 +131,9 @@ function Co2Inner() {
     const blockBilanz: Block = {
       id: 'bilanz', title: 'CO₂-Bilanz & Wirkung', icon: Leaf, farbe: 'text-green-500',
       summary: `${fc.text} eingespart`, defaultOpen: true,
-      // D12-11: mobil Icon-only (Text drängte sonst in der engen Block-Kopfzeile).
-      badge: (
-        <Button variant="secondary" size="sm" onClick={handleCsv} title="CSV-Export">
-          <Download className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">CSV-Export</span>
-        </Button>
-      ),
+      // D14-18 (detLAN #107 v7, SS 08-46-23) — Gernot-Entscheid 2026-07-03:
+      // CSV-Export an diesem Block-Kopf ERSATZLOS entfernt (kein Badge). Die
+      // CO₂-Zeitreihe bleibt über Auswertungen → Tabelle exportierbar.
       render: () => (
         <div className="space-y-4">
           <KpiStrip kpis={bilanzKpis} />
@@ -277,7 +267,7 @@ function Co2Inner() {
     }
 
     return [blockBilanz, ...(blockAmort ? [blockAmort] : []), blockBasis]
-  }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, schmal, handleCsv])
+  }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, schmal])
 
   if (anlagenLoading || basis.loading || !amortGeladen) return <LoadingSpinner text="Lade CO₂-Daten…" />
   if (anlagen.length === 0) {

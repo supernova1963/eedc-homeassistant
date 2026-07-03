@@ -18,8 +18,8 @@ import {
   BarChart, Bar, ComposedChart, AreaChart, Area, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { Euro, TrendingUp, Wallet, FileText, Download, Wrench } from 'lucide-react'
-import { LoadingSpinner, Card, Button, buttonClasses, ChartLegende } from '../components/ui'
+import { Euro, TrendingUp, Wallet, FileText, Wrench } from 'lucide-react'
+import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -277,10 +277,8 @@ function FinanzenInner() {
       render: () => (
         <div className="space-y-3">
           <FinanzberichtTeaser anlageId={selectedAnlageId} jahr={basis.jahr} />
-          {/* D12-11: mobil Icon-only (Text drängte sonst in der engen Block-Kopfzeile). */}
-          <Button variant="secondary" size="sm" onClick={handleCsv} title="CSV-Export (Monatswerte)">
-            <Download className="h-4 w-4 sm:mr-1" /><span className="hidden sm:inline">CSV-Export (Monatswerte)</span>
-          </Button>
+          {/* D13-10/D14-18: Icon + Wort IMMER (CsvExportButton-SoT). */}
+          <CsvExportButton onClick={handleCsv} label="CSV-Export (Monatswerte)" />
         </div>
       ),
     }

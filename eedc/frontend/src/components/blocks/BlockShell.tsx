@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowUp, ArrowDown, ChevronDown, Maximize2, RotateCcw,
+  ArrowUp, ArrowDown, ChevronDown, ChevronsDown, ChevronsUp, Maximize2, RotateCcw,
 } from 'lucide-react'
 import type { Block } from './types'
 import { FokusVollbild } from './FokusVollbild'
@@ -38,7 +38,6 @@ export function BlockShell({
   sortierbar = false,
   persistKey,
   fokusKopf,
-  offenzustandFluechtig = false,
 }: {
   bloecke: Block[]
   sortierbar?: boolean
@@ -46,11 +45,6 @@ export function BlockShell({
   /** D10-2: Kopf-Slot, der im Fokus/Vollbild oben mitläuft (z. B. die Datums-Nav
    *  der Seite). Reicht ihn an {@link FokusVollbild} durch — kein Nav-Neubau. */
   fokusKopf?: import('react').ReactNode
-  /** A3 (Einstellungen 2026-07-02): Auf/Zu-Zustand flüchtig — beim Betreten IMMER
-   *  der Default-Klappzustand (alle `defaultOpen:false` = zu), persistierten
-   *  Offen-Zustand ignorieren. Reihenfolge bleibt gemerkt. Nur Einstellungen setzt
-   *  das; andere V4-Sichten merken den Offen-Zustand wie bisher. */
-  offenzustandFluechtig?: boolean
 }) {
   const ids = useMemo(() => bloecke.map((b) => b.id), [bloecke])
   const [order, setOrder] = useState<string[]>(() => {
@@ -64,8 +58,9 @@ export function BlockShell({
     return [...gespeichert, ...ids.filter((id) => !gespeichert.includes(id))]
   })
   const [zu, setZu] = useState<Set<string>>(() => {
-    // A3: flüchtig → persistierten Offen-Zustand ignorieren, immer Default (alle zu).
-    const gespeichert = offenzustandFluechtig ? undefined : ladeBlockState(persistKey).zu
+    // D14-2: Klapp-Zustand wird überall gemerkt (die A3-Flüchtigkeit der
+    // Einstellungen ist zurückgenommen — detLAN #113, Gernot-Entscheid).
+    const gespeichert = ladeBlockState(persistKey).zu
     return gespeichert
       ? new Set(gespeichert)  // Lücken-fest: Klappzustand auch absenter Blöcke behalten
       : new Set(bloecke.filter((b) => b.defaultOpen === false).map((b) => b.id))
@@ -115,6 +110,13 @@ export function BlockShell({
     setZu(new Set(defaultZu))
     setFokus(null)
   }
+
+  // R14-5 (Rainer #114, Gernot-Entscheid): „alle aufklappen / alle zuklappen" als
+  // Kompromiss neben „zurücksetzen" — hilft, die mühsam erstellte Sortierung zu
+  // erhalten (Reset=Standard bleibt unverändert). Lücken-fest: der Klappzustand
+  // absenter Block-IDs bleibt erhalten, es werden nur die sichtbaren geändert.
+  const alleAufklappen = () => setZu(new Set([...zu].filter((id) => !ids.includes(id))))
+  const alleZuklappen = () => setZu(new Set([...zu, ...ids]))
 
   // Klappzustand (+ Reihenfolge) pro Sicht merken.
   useEffect(() => {
@@ -175,8 +177,11 @@ export function BlockShell({
     <div className="space-y-3">
       <p className="text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-1">
         <span>
-          Jeder Block: <ChevronDown className="inline h-3 w-3" /> einklappen ·{' '}
-          <Maximize2 className="inline h-3 w-3" /> Fokus/Vollbild
+          Jeder Block: <ChevronDown className="inline h-3 w-3" /> einklappen
+          {/* D14-16: ⤢ ist < 640 px ausgeblendet → Hinweis-Fragment ebenso. */}
+          <span className="max-sm:hidden">
+            {' '}· <Maximize2 className="inline h-3 w-3" /> Fokus/Vollbild
+          </span>
           {sortierbar && (
             <>
               {' '}· <ArrowUp className="inline h-3 w-3" />
@@ -185,6 +190,21 @@ export function BlockShell({
           )}{' '}
           · Zustand bleibt gemerkt
         </span>
+        {/* R14-5: einmal pro Seite — erhält die Sortierung (im Gegensatz zum Reset). */}
+        <button
+          type="button"
+          onClick={alleAufklappen}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <ChevronsDown className="h-3 w-3" /> alle aufklappen
+        </button>
+        <button
+          type="button"
+          onClick={alleZuklappen}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <ChevronsUp className="h-3 w-3" /> alle zuklappen
+        </button>
         {!istDefault && (
           <button
             type="button"
@@ -240,11 +260,12 @@ export function BlockShell({
                     </button>
                   </>
                 )}
+                {/* D14-16: „Vergrößern" unter 640 px ausblenden (nicht entfernen). */}
                 <button
                   type="button"
                   onClick={() => setFokus(b.id)}
                   aria-label="Fokus / Vollbild"
-                  className="p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  className="max-sm:hidden p-2 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 >
                   <Maximize2 className="h-4 w-4" />
                 </button>

@@ -85,8 +85,8 @@ describe('EinstellungenV4 (Einstellungen-Shell)', () => {
 
   it('Komponenten-Reiter rendert einen Block pro Investitionstyp (datengetrieben)', () => {
     renderAt('/v4/einstellungen/komponenten')
-    // Block-Titel = Typ-Labels (alle 8 Typen, auch ohne Geräte); Inhalt bleibt
-    // eingeklappt (offenzustandFluechtig) → Geräte-Namen erst nach Aufklappen.
+    // Block-Titel = Typ-Labels (alle 8 Typen, auch ohne Geräte); Inhalt ist per
+    // defaultOpen:false eingeklappt → Geräte-Namen erst nach Aufklappen.
     expect(screen.getByText('Speicher')).toBeInTheDocument()
     expect(screen.getByText('E-Auto')).toBeInTheDocument()
     expect(screen.getByText('Wärmepumpe')).toBeInTheDocument()

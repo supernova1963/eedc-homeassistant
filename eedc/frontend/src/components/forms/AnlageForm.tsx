@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain, Users, Zap } from 'lucide-react'
-import { Button, Input, Alert } from '../ui'
+import { Button, Input, Alert, DatumFeld } from '../ui'
 import VersorgerSection from './VersorgerSection'
 import AnlagenfotoSection from './AnlagenfotoSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
@@ -148,14 +148,11 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             placeholder="z.B. 10.5"
             required
           />
-          <Input
+          {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+          <DatumFeld
             label="Installationsdatum"
-            name="installationsdatum"
-            type="date"
-            min="2000-01-01"
-            max="2099-12-31"
             value={formData.installationsdatum}
-            onChange={handleChange}
+            onChange={(v) => setFormData(prev => ({ ...prev, installationsdatum: v }))}
           />
         </div>
       </div>

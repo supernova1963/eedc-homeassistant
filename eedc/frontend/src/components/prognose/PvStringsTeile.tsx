@@ -11,14 +11,14 @@ import {
   BarChart, Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { Sun, TrendingUp, TrendingDown, Download, GitCompare } from 'lucide-react'
-import { Card, Button, ChartLegende } from '../ui'
+import { Sun, TrendingUp, TrendingDown, GitCompare } from 'lucide-react'
+import { Card, ChartLegende, CsvExportButton } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import type { KpiStripItem } from '../blocks'
 import { exportToCSV } from '../../utils/export'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
 import {
-  SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, PROGNOSE_DASH, HILFSLINIE_DASH,
+  SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, HILFSLINIE_DASH,
   formatEnergie, energieAchse, formatProzent, formatSpezErtrag, fmtZahl,
   xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
@@ -166,12 +166,9 @@ export function PvStringHeaderZeile({ data, zeitraumLabel, onCsv }: {
         <span className="font-medium text-gray-700 dark:text-gray-300">{zeitraumLabel}</span>
         {' '}&bull;{' '}{data.strings.length} Strings &bull; {fmtZahl(data.anlagen_leistung_kwp, 1)} kWp
       </p>
-      {/* D12-11: mobil Icon-only (Text drängte sonst in der engen Kopfzeile). */}
-      {onCsv && (
-        <Button variant="secondary" size="sm" onClick={onCsv} title="CSV-Export">
-          <Download className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">CSV-Export</span>
-        </Button>
-      )}
+      {/* D13-10/D14-18: Icon + Wort IMMER (CsvExportButton-SoT) — Icon-only wirkte
+          mobil wie „CSV fehlt". */}
+      {onCsv && <CsvExportButton onClick={onCsv} />}
     </div>
   )
 }
@@ -225,7 +222,8 @@ export function PvStringSollIstBar({ data }: { data: PVStringsResponse }) {
             <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (String) */ />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
-            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL (Prognose)" />
+            {/* D14-10: kein Dash-Border an Balken (Dash-Kanon nur für Linien-Serien). */}
+            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL (Prognose)" />
             <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST (Erzeugt)" />
           </BarChart>
         </ResponsiveContainer>
@@ -255,7 +253,8 @@ export function PvStringMonatsverlauf({ data, selectedYear }: { data: PVStringsR
             <YAxis width={60} tick={{ fontSize: 10 }} tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
             <Legend content={<ChartLegende />} />
-            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} name="SOLL" />
+            {/* D14-10: kein Dash-Border an Balken (Dash-Kanon nur für Linien-Serien). */}
+            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL" />
             <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST" />
             <Line type="monotone" dataKey="Abweichung" stroke={SOLL_IST_COLORS.abweichung} strokeWidth={2} dot={{ r: 3 }} name="Abweichung" />
           </ComposedChart>

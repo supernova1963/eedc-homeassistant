@@ -214,16 +214,17 @@ function ChoroplethKarte({ allRegions, eigeneRegion }: ChoroplethKarteProps) {
         </Geographies>
       </ComposableMap>
 
-      {/* Tooltip */}
+      {/* Tooltip — D14-12 (detLAN #113, SS 14-28-19): Pop-up-Kanon = dunkel in
+          beiden Modi (ChartTooltip-Linie); war als einziger Karten-Tooltip hell. */}
       {tooltip && (
         <div
-          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 shadow-lg pointer-events-none text-sm"
+          className="fixed z-50 bg-gray-900 dark:bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 shadow-lg pointer-events-none text-sm"
           style={{ left: tooltip.x + 12, top: tooltip.y - 40 }}
         >
-          <p className="font-medium text-gray-900 dark:text-white">{tooltip.name}</p>
-          <p className="text-blue-600 dark:text-blue-400 font-medium">{fmtZahl(tooltip.wert, 0)} kWh/kWp</p>
+          <p className="font-medium text-white">{tooltip.name}</p>
+          <p className="text-blue-400 font-medium">{fmtZahl(tooltip.wert, 0)} kWh/kWp</p>
           {tooltip.region && (
-            <div className="mt-1 pt-1 border-t border-gray-100 dark:border-gray-700 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+            <div className="mt-1 pt-1 border-t border-gray-700 space-y-0.5 text-xs text-gray-300">
               <p>{tooltip.region.anzahl_anlagen} Anlage{tooltip.region.anzahl_anlagen !== 1 ? 'n' : ''} · Ø {fmtZahl(tooltip.region.durchschnitt_kwp, 1)} kWp</p>
               {tooltip.region.avg_speicher_ladung_kwh != null && <p>🔋 {fmtZahl(tooltip.region.avg_speicher_ladung_kwh, 0)} ↓ / {tooltip.region.avg_speicher_entladung_kwh != null ? fmtZahl(tooltip.region.avg_speicher_entladung_kwh, 0) : '–'} ↑ kWh/Mon</p>}
               {tooltip.region.avg_wp_jaz != null && <p>♨️ JAZ {fmtZahl(tooltip.region.avg_wp_jaz, 1)}</p>}

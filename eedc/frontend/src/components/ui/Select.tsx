@@ -31,6 +31,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           id={selectId}
           className={`
             ${compact ? 'w-auto' : 'w-full'} px-3 py-2 rounded-lg border
+            min-h-[42px] leading-6
             bg-white dark:bg-gray-800
             text-gray-900 dark:text-gray-100
             focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent

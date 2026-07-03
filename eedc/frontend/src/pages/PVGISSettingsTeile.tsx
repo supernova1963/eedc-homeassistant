@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, AlertCircle, Mountain, Upload } from 'lucide-react'
 import { LoadingSpinner, Alert, Button } from '../components/ui'
+import { Parkbar } from '../components/park'
 import { STRING_COLORS, CHART_COLORS, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { pvgisApi, wetterApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
@@ -205,6 +206,384 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
 
       {hatKoordinaten && (
         <>
+          {/* D14-3 (detLAN #113/#123, Baufreigabe Gernot 2026-07-03): Reihenfolge
+              „erst Einstellung, dann Ergebnis" — Einstell-/Pflege-Bereiche
+              (Horizontprofil · Neue Prognose · Gespeicherte) zuerst, danach die
+              reinen Anzeige-Bereiche (Aktive Prognose · Optimale Ausrichtung ·
+              Wetter-Provider · Info), jeweils parkbar (Park-SoT; inert in V3). */}
+          {/* Horizontprofil */}
+          <CollapsibleSection title="Horizontprofil" storageKey="solarprognose-horizont" defaultOpen={false}>
+            <div className="space-y-4">
+
+            {horizontStatus?.hat_horizont ? (
+              <div className="space-y-3">
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-2">Profil vorhanden</p>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <p className="text-green-600 dark:text-green-400">Datenpunkte</p>
+                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.anzahl_punkte}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600 dark:text-green-400">Min. Elevation</p>
+                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.min_elevation}°</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600 dark:text-green-400">Max. Elevation</p>
+                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.max_elevation}°</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => horizontFileRef.current?.click()}
+                    disabled={horizontUploading}
+                  >
+                    <Upload className="max-sm:hidden h-4 w-4 mr-2" />
+                    Eigene Datei
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={async () => {
+                      if (!anlageId || !confirm('Horizontprofil löschen?')) return
+                      try {
+                        await pvgisApi.deleteHorizont(anlageId)
+                        setHorizontStatus(null)
+                        setSuccess('Horizontprofil gelöscht')
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Fehler beim Löschen')
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Löschen
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Das Horizontprofil beschreibt, wie hoch Berge, Gebäude oder Bäume den Horizont
+                  in jeder Himmelsrichtung verdecken. Ohne Profil verwendet PVGIS automatisch
+                  Geländedaten (~90m Auflösung) bei der Ertragsprognose.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Button
+                    onClick={async () => {
+                      if (!anlageId) return
+                      setHorizontUploading(true)
+                      setError(null)
+                      try {
+                        const result = await pvgisApi.abrufeHorizont(anlageId)
+                        setHorizontStatus(result)
+                        setSuccess('Geländeprofil von PVGIS abgerufen')
+                      } catch (e) {
+                        const err = e as { detail?: string; message?: string }
+                        setError(err?.detail || err?.message || 'Abruf fehlgeschlagen')
+                      } finally {
+                        setHorizontUploading(false)
+                      }
+                    }}
+                    disabled={horizontUploading}
+                  >
+                    {horizontUploading ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Download className="max-sm:hidden h-4 w-4 mr-2" />
+                    )}
+                    Geländeprofil von PVGIS abrufen
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => horizontFileRef.current?.click()}
+                    disabled={horizontUploading}
+                  >
+                    <Upload className="max-sm:hidden h-4 w-4 mr-2" />
+                    Eigene Datei hochladen
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <strong>Geländeprofil:</strong> Erfasst Berge und große Geländestrukturen (aus Satellitendaten).
+                  <br />
+                  <strong>Eigene Datei:</strong> Für lokale Hindernisse (Gebäude, Bäume), die im Geländemodell fehlen.
+                  Kann z.B. mit Smartphone-Apps wie "Sun Surveyor" erstellt oder von{' '}
+                  <a href="https://re.jrc.ec.europa.eu/pvg_tools/en/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                    PVGIS
+                  </a>
+                  {' '}heruntergeladen werden.
+                </p>
+              </div>
+            )}
+
+            <input
+              ref={horizontFileRef}
+              type="file"
+              accept=".txt,.csv,.hor"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                if (!file || !anlageId) return
+                setHorizontUploading(true)
+                setError(null)
+                try {
+                  const result = await pvgisApi.uploadHorizont(anlageId, file)
+                  setHorizontStatus(result)
+                  setSuccess('Horizontprofil gespeichert')
+                } catch (e) {
+                  const err = e as { detail?: string; message?: string }
+                  setError(err?.detail || err?.message || 'Upload fehlgeschlagen')
+                } finally {
+                  setHorizontUploading(false)
+                  if (horizontFileRef.current) horizontFileRef.current.value = ''
+                }
+              }}
+            />
+            </div>
+          </CollapsibleSection>
+
+          {/* Neue Prognose abrufen */}
+          <CollapsibleSection title="Neue Prognose abrufen" storageKey="solarprognose-neu" defaultOpen={false}>
+            <div className="space-y-4">
+
+            {/* D14-7 (detLAN #113): Hinweis-Zeile liegt UNTER dem Grid — vorher
+                drückte sie das Eingabefeld über die items-end-Schaltfläche. */}
+            <div className="grid md:grid-cols-2 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Systemverluste (%)
+                </label>
+                <input
+                  type="number"
+                  value={systemLosses}
+                  onChange={(e) => setSystemLosses(parseFloat(e.target.value) || 14)}
+                  min={0}
+                  max={50}
+                  step={1}
+                  className="input w-full"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <Button
+                  onClick={loadPreview}
+                  disabled={previewLoading}
+                  className="w-full"
+                >
+                  {previewLoading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Download className="max-sm:hidden h-4 w-4 mr-2" />
+                  )}
+                  Von PVGIS abrufen
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Typisch: 14 % (Kabel, Wechselrichter, etc.)
+            </p>
+
+            {/* Vorschau */}
+            {previewPrognose && (
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium text-gray-900 dark:text-white">Vorschau</h3>
+                  <Button onClick={speicherePrognose} disabled={loading}>
+                    <Check className="max-sm:hidden h-4 w-4 mr-2" />
+                    Speichern & Aktivieren
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-500">Jahresertrag</p>
+                    <p className="text-xl font-bold">{fmtZahl(previewPrognose.jahresertrag_kwh, 0)} kWh</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-500">Spezifisch</p>
+                    <p className="text-xl font-bold">{fmtZahl(previewPrognose.spezifischer_ertrag_kwh_kwp, 0)} kWh/kWp</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-500">Gesamt-Leistung</p>
+                    <p className="text-xl font-bold">{fmtZahl(previewPrognose.gesamt_leistung_kwp, 1)} kWp</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-500">PV-Module</p>
+                    <p className="text-xl font-bold">{previewPrognose.module.length}</p>
+                  </div>
+                </div>
+
+                {/* Detail pro Modul */}
+                {previewPrognose.module.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Module im Detail:</h4>
+                    <div className="grid gap-2">
+                      {previewPrognose.module.map(m => (
+                        <div key={m.investition_id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm">
+                          <span className="font-medium">{m.bezeichnung}</span>
+                          <span className="text-gray-500">
+                            {fmtZahl(m.leistung_kwp, 1)} kWp • {m.ausrichtung} • {m.neigung_grad}° • {fmtZahl(m.jahresertrag_kwh, 0)} kWh/a
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Monatswerte */}
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={previewPrognose.monatsdaten.map(m => ({
+                        name: monatNamen[m.monat],
+                        ertrag: m.e_m
+                      }))}
+                      margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
+                      <YAxis
+                        width={70}
+                        tick={{ fontSize: 10 }}
+                        tickFormatter={(v) => fmtZahl(v, 0)}
+                        label={achsenEinheit('kWh')}
+                      />
+                      <Tooltip content={<ChartTooltip unit="kWh" />} />
+                      <Bar dataKey="ertrag" fill={CHART_COLORS.erzeugung} name="Ertrag" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Gespeicherte Prognosen */}
+          {gespeichertePrognosen.length > 0 && (
+            <CollapsibleSection title="Gespeicherte Prognosen" storageKey="solarprognose-gespeichert" defaultOpen={false}>
+              <div className="space-y-4">
+
+              {/* Abnahme-Fund R14 (Gernot 2026-07-03): < lg Kachel-Darstellung
+                  statt gequetschter Tabelle; ≥ lg Tabelle (Table-SoT-Muster). */}
+              <div className="lg:hidden space-y-3">
+                {gespeichertePrognosen.map((p) => (
+                  <div key={p.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                    <div className="flex items-center gap-2 flex-wrap text-sm">
+                      <span className="font-medium text-gray-900 dark:text-white">{new Date(p.abgerufen_am).toLocaleDateString('de-DE')}</span>
+                      {p.ist_aktiv && (
+                        <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400"><Check className="h-3.5 w-3.5" /> Aktiv</span>
+                      )}
+                      {p.horizont_verwendet ? (
+                        <span title="Eigenes Profil"><Mountain className="h-4 w-4 text-green-500" /></span>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500 text-xs">DEM</span>
+                      )}
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                      <div><span className="text-gray-500 dark:text-gray-400">Jahresertrag</span><br />{fmtZahl(p.jahresertrag_kwh, 0)} kWh</div>
+                      <div><span className="text-gray-500 dark:text-gray-400">kWh/kWp</span><br />{fmtZahl(p.spezifischer_ertrag_kwh_kwp, 0)}</div>
+                      <div><span className="text-gray-500 dark:text-gray-400">Neigung</span><br />{p.neigung_grad}°</div>
+                    </div>
+                    <div className="mt-2 border-t border-gray-100 dark:border-gray-700 pt-1 flex justify-end gap-2">
+                      {!p.ist_aktiv && (
+                        <button
+                          type="button"
+                          onClick={() => aktivierePrognose(p.id)}
+                          className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                          title="Aktivieren"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => loeschePrognose(p.id)}
+                        className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        title="Löschen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="overflow-x-auto hidden lg:block">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                      <th className="text-left py-2 px-2">Datum</th>
+                      <th className="text-right py-2 px-2">Jahresertrag</th>
+                      <th className="text-right py-2 px-2">kWh/kWp</th>
+                      <th className="text-right py-2 px-2">Neigung</th>
+                      <th className="text-center py-2 px-2">Horizont</th>
+                      <th className="text-center py-2 px-2">Status</th>
+                      <th className="text-right py-2 px-2">Aktionen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gespeichertePrognosen.map((p) => (
+                      <tr key={p.id} className="border-b border-gray-100 dark:border-gray-800">
+                        <td className="py-2 px-2">
+                          {new Date(p.abgerufen_am).toLocaleDateString('de-DE')}
+                        </td>
+                        <td className="text-right py-2 px-2">
+                          {fmtZahl(p.jahresertrag_kwh, 0)} kWh
+                        </td>
+                        <td className="text-right py-2 px-2">
+                          {fmtZahl(p.spezifischer_ertrag_kwh_kwp, 0)}
+                        </td>
+                        <td className="text-right py-2 px-2">
+                          {p.neigung_grad}°
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {p.horizont_verwendet ? (
+                            <span title="Eigenes Profil"><Mountain className="h-4 w-4 text-green-500 mx-auto" /></span>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500 text-xs">DEM</span>
+                          )}
+                        </td>
+                        <td className="text-center py-2 px-2">
+                          {p.ist_aktiv ? (
+                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                              <Check className="h-4 w-4" />
+                              Aktiv
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
+                          )}
+                        </td>
+                        <td className="text-right py-2 px-2">
+                          <div className="flex items-center justify-end gap-2">
+                            {!p.ist_aktiv && (
+                              <button
+                                type="button"
+                                onClick={() => aktivierePrognose(p.id)}
+                                className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                                title="Aktivieren"
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => loeschePrognose(p.id)}
+                              className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                              title="Löschen"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              </div>
+            </CollapsibleSection>
+          )}
+
+          <Parkbar id="anzeige:aktive-prognose" titel="Aktive Prognose">
           {/* Aktuelle Prognose */}
           <CollapsibleSection title="Aktive Prognose" storageKey="solarprognose-aktiv" defaultOpen={false}>
             <div className="space-y-4">
@@ -327,252 +706,9 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
             )}
             </div>
           </CollapsibleSection>
+          </Parkbar>
 
-          {/* Horizontprofil */}
-          <CollapsibleSection title="Horizontprofil" storageKey="solarprognose-horizont" defaultOpen={false}>
-            <div className="space-y-4">
-
-            {horizontStatus?.hat_horizont ? (
-              <div className="space-y-3">
-                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                  <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-2">Profil vorhanden</p>
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <p className="text-green-600 dark:text-green-400">Datenpunkte</p>
-                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.anzahl_punkte}</p>
-                    </div>
-                    <div>
-                      <p className="text-green-600 dark:text-green-400">Min. Elevation</p>
-                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.min_elevation}°</p>
-                    </div>
-                    <div>
-                      <p className="text-green-600 dark:text-green-400">Max. Elevation</p>
-                      <p className="font-bold text-green-700 dark:text-green-300">{horizontStatus.max_elevation}°</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => horizontFileRef.current?.click()}
-                    disabled={horizontUploading}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Eigene Datei
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={async () => {
-                      if (!anlageId || !confirm('Horizontprofil löschen?')) return
-                      try {
-                        await pvgisApi.deleteHorizont(anlageId)
-                        setHorizontStatus(null)
-                        setSuccess('Horizontprofil gelöscht')
-                      } catch (e) {
-                        setError(e instanceof Error ? e.message : 'Fehler beim Löschen')
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Löschen
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Das Horizontprofil beschreibt, wie hoch Berge, Gebäude oder Bäume den Horizont
-                  in jeder Himmelsrichtung verdecken. Ohne Profil verwendet PVGIS automatisch
-                  Geländedaten (~90m Auflösung) bei der Ertragsprognose.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button
-                    onClick={async () => {
-                      if (!anlageId) return
-                      setHorizontUploading(true)
-                      setError(null)
-                      try {
-                        const result = await pvgisApi.abrufeHorizont(anlageId)
-                        setHorizontStatus(result)
-                        setSuccess('Geländeprofil von PVGIS abgerufen')
-                      } catch (e) {
-                        const err = e as { detail?: string; message?: string }
-                        setError(err?.detail || err?.message || 'Abruf fehlgeschlagen')
-                      } finally {
-                        setHorizontUploading(false)
-                      }
-                    }}
-                    disabled={horizontUploading}
-                  >
-                    {horizontUploading ? (
-                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Download className="h-4 w-4 mr-2" />
-                    )}
-                    Geländeprofil von PVGIS abrufen
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => horizontFileRef.current?.click()}
-                    disabled={horizontUploading}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Eigene Datei hochladen
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  <strong>Geländeprofil:</strong> Erfasst Berge und große Geländestrukturen (aus Satellitendaten).
-                  <br />
-                  <strong>Eigene Datei:</strong> Für lokale Hindernisse (Gebäude, Bäume), die im Geländemodell fehlen.
-                  Kann z.B. mit Smartphone-Apps wie "Sun Surveyor" erstellt oder von{' '}
-                  <a href="https://re.jrc.ec.europa.eu/pvg_tools/en/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                    PVGIS
-                  </a>
-                  {' '}heruntergeladen werden.
-                </p>
-              </div>
-            )}
-
-            <input
-              ref={horizontFileRef}
-              type="file"
-              accept=".txt,.csv,.hor"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0]
-                if (!file || !anlageId) return
-                setHorizontUploading(true)
-                setError(null)
-                try {
-                  const result = await pvgisApi.uploadHorizont(anlageId, file)
-                  setHorizontStatus(result)
-                  setSuccess('Horizontprofil gespeichert')
-                } catch (e) {
-                  const err = e as { detail?: string; message?: string }
-                  setError(err?.detail || err?.message || 'Upload fehlgeschlagen')
-                } finally {
-                  setHorizontUploading(false)
-                  if (horizontFileRef.current) horizontFileRef.current.value = ''
-                }
-              }}
-            />
-            </div>
-          </CollapsibleSection>
-
-          {/* Neue Prognose abrufen */}
-          <CollapsibleSection title="Neue Prognose abrufen" storageKey="solarprognose-neu" defaultOpen={false}>
-            <div className="space-y-4">
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Systemverluste (%)
-                </label>
-                <input
-                  type="number"
-                  value={systemLosses}
-                  onChange={(e) => setSystemLosses(parseFloat(e.target.value) || 14)}
-                  min={0}
-                  max={50}
-                  step={1}
-                  className="input w-full"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Typisch: 14% (Kabel, Wechselrichter, etc.)
-                </p>
-              </div>
-
-              <div className="flex items-end">
-                <Button
-                  onClick={loadPreview}
-                  disabled={previewLoading}
-                  className="w-full"
-                >
-                  {previewLoading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-2" />
-                  )}
-                  Von PVGIS abrufen
-                </Button>
-              </div>
-            </div>
-
-            {/* Vorschau */}
-            {previewPrognose && (
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-gray-900 dark:text-white">Vorschau</h3>
-                  <Button onClick={speicherePrognose} disabled={loading}>
-                    <Check className="h-4 w-4 mr-2" />
-                    Speichern & Aktivieren
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <p className="text-sm text-gray-500">Jahresertrag</p>
-                    <p className="text-xl font-bold">{fmtZahl(previewPrognose.jahresertrag_kwh, 0)} kWh</p>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <p className="text-sm text-gray-500">Spezifisch</p>
-                    <p className="text-xl font-bold">{fmtZahl(previewPrognose.spezifischer_ertrag_kwh_kwp, 0)} kWh/kWp</p>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <p className="text-sm text-gray-500">Gesamt-Leistung</p>
-                    <p className="text-xl font-bold">{fmtZahl(previewPrognose.gesamt_leistung_kwp, 1)} kWp</p>
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                    <p className="text-sm text-gray-500">PV-Module</p>
-                    <p className="text-xl font-bold">{previewPrognose.module.length}</p>
-                  </div>
-                </div>
-
-                {/* Detail pro Modul */}
-                {previewPrognose.module.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Module im Detail:</h4>
-                    <div className="grid gap-2">
-                      {previewPrognose.module.map(m => (
-                        <div key={m.investition_id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded p-2 text-sm">
-                          <span className="font-medium">{m.bezeichnung}</span>
-                          <span className="text-gray-500">
-                            {fmtZahl(m.leistung_kwp, 1)} kWp • {m.ausrichtung} • {m.neigung_grad}° • {fmtZahl(m.jahresertrag_kwh, 0)} kWh/a
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Monatswerte */}
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={previewPrognose.monatsdaten.map(m => ({
-                        name: monatNamen[m.monat],
-                        ertrag: m.e_m
-                      }))}
-                      margin={{ top: ACHSEN_MARGIN_TOP, right: 20, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
-                      <YAxis
-                        width={70}
-                        tick={{ fontSize: 10 }}
-                        tickFormatter={(v) => fmtZahl(v, 0)}
-                        label={achsenEinheit('kWh')}
-                      />
-                      <Tooltip content={<ChartTooltip unit="kWh" />} />
-                      <Bar dataKey="ertrag" fill={CHART_COLORS.erzeugung} name="Ertrag" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-            </div>
-          </CollapsibleSection>
-
+          <Parkbar id="anzeige:optimale-ausrichtung" titel="Optimale Ausrichtung">
           {/* Optimale Ausrichtung */}
           <CollapsibleSection
             title="Optimale Ausrichtung"
@@ -629,88 +765,9 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
             )}
             </div>
           </CollapsibleSection>
+          </Parkbar>
 
-          {/* Gespeicherte Prognosen */}
-          {gespeichertePrognosen.length > 0 && (
-            <CollapsibleSection title="Gespeicherte Prognosen" storageKey="solarprognose-gespeichert" defaultOpen={false}>
-              <div className="space-y-4">
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-2 px-2">Datum</th>
-                      <th className="text-right py-2 px-2">Jahresertrag</th>
-                      <th className="text-right py-2 px-2">kWh/kWp</th>
-                      <th className="text-right py-2 px-2">Neigung</th>
-                      <th className="text-center py-2 px-2">Horizont</th>
-                      <th className="text-center py-2 px-2">Status</th>
-                      <th className="text-right py-2 px-2">Aktionen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {gespeichertePrognosen.map((p) => (
-                      <tr key={p.id} className="border-b border-gray-100 dark:border-gray-800">
-                        <td className="py-2 px-2">
-                          {new Date(p.abgerufen_am).toLocaleDateString('de-DE')}
-                        </td>
-                        <td className="text-right py-2 px-2">
-                          {fmtZahl(p.jahresertrag_kwh, 0)} kWh
-                        </td>
-                        <td className="text-right py-2 px-2">
-                          {fmtZahl(p.spezifischer_ertrag_kwh_kwp, 0)}
-                        </td>
-                        <td className="text-right py-2 px-2">
-                          {p.neigung_grad}°
-                        </td>
-                        <td className="text-center py-2 px-2">
-                          {p.horizont_verwendet ? (
-                            <span title="Eigenes Profil"><Mountain className="h-4 w-4 text-green-500 mx-auto" /></span>
-                          ) : (
-                            <span className="text-gray-400 dark:text-gray-500 text-xs">DEM</span>
-                          )}
-                        </td>
-                        <td className="text-center py-2 px-2">
-                          {p.ist_aktiv ? (
-                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                              <Check className="h-4 w-4" />
-                              Aktiv
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 dark:text-gray-500">-</span>
-                          )}
-                        </td>
-                        <td className="text-right py-2 px-2">
-                          <div className="flex items-center justify-end gap-2">
-                            {!p.ist_aktiv && (
-                              <button
-                                type="button"
-                                onClick={() => aktivierePrognose(p.id)}
-                                className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
-                                title="Aktivieren"
-                              >
-                                <Check className="h-4 w-4" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => loeschePrognose(p.id)}
-                              className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                              title="Löschen"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              </div>
-            </CollapsibleSection>
-          )}
-
+          <Parkbar id="anzeige:wetter-provider" titel="Wetterdaten-Provider">
           {/* Wetter-Provider Info */}
           {wetterProvider && (
             <CollapsibleSection title="Wetterdaten-Provider" storageKey="solarprognose-wetter" defaultOpen={false}>
@@ -775,7 +832,9 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
               </div>
             </CollapsibleSection>
           )}
+          </Parkbar>
 
+          <Parkbar id="anzeige:ueber-solarprognose" titel="Über Solarprognose">
           {/* Info-Box */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
             <div className="flex items-start gap-3">
@@ -801,6 +860,8 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
               </div>
             </div>
           </div>
+          </Parkbar>
+
         </>
       )}
     </div>

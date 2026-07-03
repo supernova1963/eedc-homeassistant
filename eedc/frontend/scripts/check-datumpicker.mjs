@@ -10,11 +10,14 @@
  * Drift nicht zurückkehrt, blockt dieser Check jedes native Datums-/Monatsfeld
  * unter `src/v4/`.
  *
- * Regel: KEIN `<input type="date">` / `<input type="month">` in `src/v4/**` —
- * dort ist der `DatumPicker` Pflicht. Legacy-Seiten (`src/pages/**`) und IST-
- * Config-Formulare (`src/components/forms/**`, `setup-wizard`, `repair`) sind
- * bewusst NICHT im Scope (Einzeldatum-Eingaben; separat zu bewerten) und dürfen
- * nativ bleiben — der Dark-Icon-Fix in `index.css` deckt sie ab.
+ * Regel: KEIN `<input type="date">` / `<input type="month">` im Scope —
+ * dort ist der `DatumPicker` (bzw. die Formular-Hülle `DatumFeld`) Pflicht.
+ * Scope (D14-13, Entscheid Gernot 2026-07-03 — Slice-A-Ausnahme für die
+ * Einstellungen aufgehoben): `src/v4/**` + die Einstellungen-Formulare
+ * (`src/components/forms/**`, `src/pages/*Teile.tsx`). Setup-Wizard und
+ * Repair-Werkbank bleiben bewusst nativ (der Dark-Icon-Fix in `index.css`
+ * deckt sie ab); übrige Legacy-Seiten (`src/pages/**`) sind V3-only und
+ * fallen mit dem Flip weg.
  *
  * Ausgabe: "check:datumpicker — N v4-Datumsfelder, alle über DatumPicker-SoT".
  */
@@ -24,6 +27,8 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const V4 = join(ROOT, 'src', 'v4')
+const FORMS = join(ROOT, 'src', 'components', 'forms')
+const PAGES = join(ROOT, 'src', 'pages')
 
 /** Rekursiv alle .tsx (ohne Tests) unter `dir` einsammeln. */
 function tsxFiles(dir) {
@@ -46,24 +51,34 @@ function lineOf(src, index) {
 // ein Verstoß.
 const NATIVE = /type=["'](date|month)["']/g
 
+// D14-13: Einstellungen-Formulare mit im Scope — src/components/forms/** komplett
+// + die geteilten Einstellungen-Teile (pages/*Teile.tsx, nicht rekursiv).
+const scopeFiles = [
+  ...tsxFiles(V4),
+  ...tsxFiles(FORMS),
+  ...readdirSync(PAGES)
+    .filter((n) => n.endsWith('Teile.tsx') && !n.endsWith('.test.tsx'))
+    .map((n) => join(PAGES, n)),
+]
+
 let felder = 0
 const violations = []
 
-for (const file of tsxFiles(V4)) {
+for (const file of scopeFiles) {
   const src = readFileSync(file, 'utf8')
   let m
   while ((m = NATIVE.exec(src)) !== null) {
     felder++
-    violations.push(`${relative(ROOT, file)}:${lineOf(src, m.index)} natives <input type="${m[1]}"> — DatumPicker-SoT nutzen`)
+    violations.push(`${relative(ROOT, file)}:${lineOf(src, m.index)} natives <input type="${m[1]}"> — DatumPicker-/DatumFeld-SoT nutzen`)
   }
   // Zählung der SoT-Nutzungen für die Erfolgsmeldung (rein informativ).
-  const sot = (src.match(/<DatumPicker\b/g) || []).length
+  const sot = (src.match(/<(DatumPicker|DatumFeld)\b/g) || []).length
   felder += sot
 }
 
 if (violations.length > 0) {
-  console.log(`check:datumpicker — ${violations.length} native(s) Datums-/Monatsfeld(er) unter src/v4/`)
-  console.error(`\n❌ ${violations.length} native(s) Datums-/Monatsfeld(er) in der IA-V4 (statt DatumPicker-SoT):`)
+  console.log(`check:datumpicker — ${violations.length} native(s) Datums-/Monatsfeld(er) im Scope (v4 + Einstellungen-Formulare)`)
+  console.error(`\n❌ ${violations.length} native(s) Datums-/Monatsfeld(er) (statt DatumPicker-/DatumFeld-SoT):`)
   for (const v of violations) console.error('  · ' + v)
   console.error(
     '\nFix: `<DatumPicker modus="monat|tag" value=… onChange=… min=… max=… />` ' +
@@ -73,5 +88,5 @@ if (violations.length > 0) {
   process.exit(1)
 }
 
-console.log(`check:datumpicker — ${felder} v4-Datumsfelder, alle über DatumPicker-SoT (keine nativen date/month).`)
-console.log('✅ IA-V4 Datums-/Monatsfelder: einheitlicher DatumPicker (D13-4/9/11/12).')
+console.log(`check:datumpicker — ${felder} Datumsfelder im Scope (v4 + Einstellungen-Formulare), alle über DatumPicker-SoT.`)
+console.log('✅ Datums-/Monatsfelder: einheitlicher DatumPicker (D13-4/9/11/12 · D14-13).')
