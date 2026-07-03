@@ -68,10 +68,19 @@ describe('StatusFusszeile — Sicht-Zone (P1)', () => {
 })
 
 describe('StatusFusszeile — Global-Zone (P2)', () => {
-  it('zeigt das Versions-Update-Symbol nur bei verfügbarem Update', async () => {
+  it('zeigt das Versions-Update-Symbol (info) bei verfügbarem Update', async () => {
     checkUpdate.mockResolvedValue({ update_verfuegbar: true, aktuelle_version: '3.45.5', neueste_version: '3.46.0', release_url: 'https://x/y' })
     renderMit({})
     expect(await screen.findByLabelText(/eedc v3\.46\.0 verfügbar/)).toBeInTheDocument()
+  })
+
+  it('zeigt die Version IMMER — neutral mit „aktuell"-Popover ohne Update (SPEC 9.1)', async () => {
+    renderMit({})
+    const btn = await screen.findByLabelText('eedc v3.45.5')
+    fireEvent.click(btn)
+    expect(screen.getByRole('dialog')).toHaveTextContent('eedc ist aktuell')
+    // Kein Update → kein „Öffnen"-Link im Versions-Popover.
+    expect(screen.queryByText('Öffnen →')).not.toBeInTheDocument()
   })
 
   it('zeigt offenen Monatsabschluss (warning) mit Deep-Link', async () => {

@@ -4,7 +4,7 @@
  * SPEC: `docs/drafts/SPEC-STATUS-FUSSZEILE.md`. Dünne Zeile am unteren Shell-Rand
  * (3. Flex-Kind in `LayoutV4`), drei Zonen:
  *   - **global (links)**: installations-weite Indikatoren aus {@link useGlobalStatus} —
- *     Versions-Update · offener Monatsabschluss · MQTT-Verbindung (P2).
+ *     Version/Update (immer sichtbar) · offener Monatsabschluss · MQTT-Verbindung (P2).
  *   - **sicht (rechts)**: Frische der gerade gezeigten Daten (Live-Punkt · „(5s)").
  *   - **meta (ganz rechts)**: Demo-Schalter (nur Debug).
  *
@@ -19,6 +19,7 @@ import { Clock, Radio, ArrowUpCircle, CalendarClock, ListChecks, Database, type 
 import { SEVERITY_CONFIG, type CheckSchwere } from '../../config/datenCheckerKategorien'
 import { useAppStatus } from './AppStatusContext'
 import { useGlobalStatus } from './useGlobalStatus'
+import { APP_VERSION } from '../../config/version'
 
 type Severity = CheckSchwere | 'neutral'
 
@@ -93,6 +94,7 @@ function StatusItem({ id, icon: Icon, schwere, label, detail, wert, onOeffnen, a
 export function StatusFusszeile() {
   const { status, demoMode, setDemoMode, isDebug } = useAppStatus()
   const { update, offenerMonat, mqtt, datencheck, anlageId } = useGlobalStatus()
+  const installiert = update?.aktuelle_version ?? APP_VERSION
   const navigate = useNavigate()
   const [offen, setOffen] = useState<string | null>(null)
   const ref = useRef<HTMLElement | null>(null)
@@ -137,20 +139,27 @@ export function StatusFusszeile() {
             setOffen={setOffen}
           />
         )}
-        {updateDa && (
-          <StatusItem
-            id="update"
-            icon={ArrowUpCircle}
-            schwere="info"
-            label={`eedc v${update!.neueste_version} verfügbar`}
-            detail={`Aktuell installiert: v${update!.aktuelle_version}. Docker: docker-compose pull && up -d · HA: Add-on aktualisieren.`}
-            wert={`v${update!.neueste_version}`}
-            onOeffnen={update!.release_url ? () => window.open(update!.release_url, '_blank', 'noopener') : undefined}
-            ausrichtung="links"
-            offen={offen}
-            setOffen={setOffen}
-          />
-        )}
+        {/* Version IMMER sichtbar (SPEC §4 9.1: info/blau = Update da · neutral =
+            aktuell; Gernot-Fund 2026-07-03 — die Implementierung zeigte das Item
+            nur im Update-Fall; in v4 ist die Fusszeile das Zuhause der Version,
+            V3 trägt sie in Layout.tsx). Fallback = Frontend-APP_VERSION, solange
+            checkUpdate lädt oder fehlschlägt (dann keine „aktuell"-Behauptung). */}
+        <StatusItem
+          id="update"
+          icon={ArrowUpCircle}
+          schwere={updateDa ? 'info' : 'neutral'}
+          label={updateDa ? `eedc v${update!.neueste_version} verfügbar` : `eedc v${installiert}`}
+          detail={updateDa
+            ? `Aktuell installiert: v${installiert}. Docker: docker-compose pull && up -d · HA: Add-on aktualisieren.`
+            : update
+              ? `Installiert: v${installiert} — eedc ist aktuell.`
+              : `Installierte Version: v${installiert}.`}
+          wert={updateDa ? `v${update!.neueste_version}` : `v${installiert}`}
+          onOeffnen={updateDa && update!.release_url ? () => window.open(update!.release_url, '_blank', 'noopener') : undefined}
+          ausrichtung="links"
+          offen={offen}
+          setOffen={setOffen}
+        />
         {/* R14-10 (Rainer #114/#127, Gernot #130): das Kalender-Symbol ist IMMER da
             (überall verfügbarer Einstieg in den Monatsabschluss) — amber bei
             offenem Monat, grün wenn alles abgeschlossen. */}
