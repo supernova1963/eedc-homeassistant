@@ -17,7 +17,7 @@ vi.mock('../api/pvgis', () => ({ pvgisApi: { getAktivePrognose: (id: number) => 
 function gs(over: Partial<GlobalStatus> = {}): GlobalStatus {
   return {
     update: null, offenerMonat: null, mqtt: null,
-    datencheck: null, datencheckErgebnisse: null, anlageId: 7,
+    datencheck: null, datencheckErgebnisse: null, communityGeteilt: null, anlageId: 7,
     ...over,
   }
 }

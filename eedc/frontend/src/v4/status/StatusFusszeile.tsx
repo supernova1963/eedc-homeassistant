@@ -4,7 +4,7 @@
  * SPEC: `docs/drafts/SPEC-STATUS-FUSSZEILE.md`. Dünne Zeile am unteren Shell-Rand
  * (3. Flex-Kind in `LayoutV4`), drei Zonen:
  *   - **global (links)**: installations-weite Indikatoren aus {@link useGlobalStatus} —
- *     Version/Update (immer sichtbar) · offener Monatsabschluss · MQTT-Verbindung (P2).
+ *     Version/Update (immer sichtbar) · offener Monatsabschluss · Community-Teilen · MQTT-Verbindung (P2).
  *   - **sicht (rechts)**: Frische der gerade gezeigten Daten (Live-Punkt · „(5s)").
  *   - **meta (ganz rechts)**: Demo-Schalter (nur Debug).
  *
@@ -13,9 +13,9 @@
  * ok=grün; „neutral" = grau (kein Zustand). Jedes Symbol: Icon + Tap-Popover
  * (Erläuterung + Detail + optional Deep-Link). Mobile: nur Symbole.
  */
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ComponentType } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, Radio, ArrowUpCircle, CalendarClock, ListChecks, Database, type LucideIcon } from 'lucide-react'
+import { Clock, Radio, ArrowUpCircle, CalendarClock, ListChecks, Database, Users, Slash } from 'lucide-react'
 import { SEVERITY_CONFIG, type CheckSchwere } from '../../config/datenCheckerKategorien'
 import { useAppStatus } from './AppStatusContext'
 import { useGlobalStatus } from './useGlobalStatus'
@@ -35,9 +35,21 @@ function schlimmsteSchwere(z: { error: number; warning: number; info: number }):
   return 'ok'
 }
 
+/** Users-Symbol mit Durchstreichung — lucide führt kein „UsersOff"; komponiert
+ *  aus Users + Slash-Overlay (Gernot-Wunsch 2026-07-03: nicht geteilt = knallrot
+ *  durchgestrichen). Nimmt wie ein Lucide-Icon `className` (Größe + Farbe). */
+function UsersDurchgestrichen({ className = '' }: { className?: string }) {
+  return (
+    <span className="relative inline-flex">
+      <Users className={className} />
+      <Slash className={`absolute inset-0 ${className}`} />
+    </span>
+  )
+}
+
 interface ItemProps {
   id: string
-  icon: LucideIcon
+  icon: ComponentType<{ className?: string }>
   schwere: Severity
   /** Kurztitel (Popover-Kopf + aria-label). */
   label: string
@@ -93,7 +105,7 @@ function StatusItem({ id, icon: Icon, schwere, label, detail, wert, onOeffnen, a
 
 export function StatusFusszeile() {
   const { status, demoMode, setDemoMode, isDebug } = useAppStatus()
-  const { update, offenerMonat, mqtt, datencheck, anlageId } = useGlobalStatus()
+  const { update, offenerMonat, mqtt, datencheck, communityGeteilt, anlageId } = useGlobalStatus()
   const installiert = update?.aktuelle_version ?? APP_VERSION
   const navigate = useNavigate()
   const [offen, setOffen] = useState<string | null>(null)
@@ -176,6 +188,26 @@ export function StatusFusszeile() {
           offen={offen}
           setOffen={setOffen}
         />
+        {/* Community-Teilen-Status (Gernot 2026-07-03): IMMER sichtbar sobald
+            bekannt — grün (ok) = Anlage geteilt · Signal-Rot durchgestrichen =
+            nicht geteilt (bewusster Blickfang per Maintainer-Entscheid, Status-
+            Achsen-Rot, keine Fehler-Semantik). Deep-Link = Community-Block in
+            Einstellungen/Stammdaten (§2a-Ziel wie CommunityV4). */}
+        {communityGeteilt !== null && (
+          <StatusItem
+            id="community"
+            icon={communityGeteilt ? Users : UsersDurchgestrichen}
+            schwere={communityGeteilt ? 'ok' : 'error'}
+            label={communityGeteilt ? 'Community: Anlage wird geteilt' : 'Community: Anlage wird nicht geteilt'}
+            detail={communityGeteilt
+              ? 'Anonymisierte Monatswerte fließen in den Community-Benchmark ein.'
+              : 'Diese Anlage teilt keine Daten mit der Community. Teilen lässt sich im Community-Block der Stammdaten aktivieren.'}
+            onOeffnen={() => navigate('/v4/einstellungen/stammdaten')}
+            ausrichtung="links"
+            offen={offen}
+            setOffen={setOffen}
+          />
+        )}
         {mqttAktiv && (
           <StatusItem
             id="mqtt"

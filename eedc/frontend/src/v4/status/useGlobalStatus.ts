@@ -16,6 +16,7 @@ import { systemApi, type UpdateCheckResponse } from '../../api/system'
 import { monatsabschlussApi, type NaechsterMonat } from '../../api/monatsabschluss'
 import { liveDashboardApi, type MqttInboundStatus } from '../../api/liveDashboard'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../../api/datenChecker'
+import { anlagenApi } from '../../api/anlagen'
 import { useSelectedAnlage } from '../../hooks'
 
 const MQTT_POLL_MS = 30_000
@@ -33,6 +34,13 @@ export interface GlobalStatus {
    * für Einträge, die eine Kategorie-Schwere brauchen (Strompreise/Sensor-Mapping).
    */
   datencheckErgebnisse: CheckErgebnis[] | null
+  /**
+   * Community-Teilen-Status der gewählten Anlage (Gernot 2026-07-03):
+   * true = geteilt (`community_hash` gesetzt) · false = nicht geteilt ·
+   * null = unbekannt (keine Anlage / lädt / Fehler). Frisch je Anlage geholt
+   * (wie CommunityV4) — der Selektor-Kontext kann nach dem Teilen stale sein.
+   */
+  communityGeteilt: boolean | null
   anlageId: number | undefined
 }
 
@@ -44,6 +52,7 @@ export function useGlobalStatus(): GlobalStatus {
   const [mqtt, setMqtt] = useState<MqttInboundStatus | null>(null)
   const [datencheck, setDatencheck] = useState<DatenCheckSumme | null>(null)
   const [datencheckErgebnisse, setDatencheckErgebnisse] = useState<CheckErgebnis[] | null>(null)
+  const [communityGeteilt, setCommunityGeteilt] = useState<boolean | null>(null)
 
   // Update-Check einmal (wie Produktiv-Layout; ändert sich selten).
   useEffect(() => {
@@ -52,8 +61,11 @@ export function useGlobalStatus(): GlobalStatus {
 
   // Offener Monatsabschluss + Daten-Checker-Zusammenfassung je gewählter Anlage.
   useEffect(() => {
-    if (!anlageId) { setOffenerMonat(null); setDatencheck(null); setDatencheckErgebnisse(null); return }
+    if (!anlageId) { setOffenerMonat(null); setDatencheck(null); setDatencheckErgebnisse(null); setCommunityGeteilt(null); return }
     monatsabschlussApi.getNaechsterMonat(anlageId).then(setOffenerMonat).catch(() => {})
+    // Community-Teilen-Status frisch je Anlage (community_hash), Fehler = unbekannt.
+    setCommunityGeteilt(null)
+    anlagenApi.get(anlageId).then((a) => setCommunityGeteilt(!!a.community_hash)).catch(() => {})
     // Voll-Check (wie die Daten-Checker-Seite) — einmal je Anlage: Aggregat + Befunde.
     datenCheckerApi.check(anlageId)
       .then((r) => { setDatencheck(r.zusammenfassung); setDatencheckErgebnisse(r.ergebnisse) })
@@ -69,5 +81,5 @@ export function useGlobalStatus(): GlobalStatus {
     return () => { aktiv = false; clearInterval(iv) }
   }, [])
 
-  return { update, offenerMonat, mqtt, datencheck, datencheckErgebnisse, anlageId }
+  return { update, offenerMonat, mqtt, datencheck, datencheckErgebnisse, communityGeteilt, anlageId }
 }

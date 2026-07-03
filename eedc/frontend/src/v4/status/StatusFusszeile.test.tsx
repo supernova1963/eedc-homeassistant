@@ -9,11 +9,13 @@ const checkUpdate = vi.fn()
 const getNaechsterMonat = vi.fn()
 const getMqttStatus = vi.fn()
 const datenCheck = vi.fn()
+const getAnlage = vi.fn()
 
 vi.mock('../../api/system', () => ({ systemApi: { checkUpdate: () => checkUpdate() } }))
 vi.mock('../../api/monatsabschluss', () => ({ monatsabschlussApi: { getNaechsterMonat: () => getNaechsterMonat() } }))
 vi.mock('../../api/liveDashboard', () => ({ liveDashboardApi: { getMqttStatus: () => getMqttStatus() } }))
 vi.mock('../../api/datenChecker', () => ({ datenCheckerApi: { check: () => datenCheck() } }))
+vi.mock('../../api/anlagen', () => ({ anlagenApi: { get: () => getAnlage() } }))
 vi.mock('../../hooks', () => ({ useSelectedAnlage: () => ({ selectedAnlage: { id: 7 } }) }))
 
 beforeEach(() => {
@@ -21,6 +23,7 @@ beforeEach(() => {
   getNaechsterMonat.mockResolvedValue(null)
   getMqttStatus.mockResolvedValue({ subscriber_aktiv: false })
   datenCheck.mockResolvedValue({ zusammenfassung: { error: 0, warning: 0, info: 0, ok: 5 } })
+  getAnlage.mockResolvedValue({ id: 7, community_hash: null })
 })
 
 /** Hilfs-Sicht, die einen Status meldet — simuliert eine echte v4-Sicht. */
@@ -98,6 +101,23 @@ describe('StatusFusszeile — Global-Zone (P2)', () => {
     const btn = await screen.findByLabelText('Monatsabschluss')
     fireEvent.click(btn)
     expect(screen.getByRole('dialog')).toHaveTextContent('Alle Monate sind abgeschlossen.')
+  })
+
+  it('Community geteilt: grünes Users-Symbol mit Popover (Gernot 2026-07-03)', async () => {
+    getAnlage.mockResolvedValue({ id: 7, community_hash: 'abc123' })
+    renderMit({})
+    const btn = await screen.findByLabelText('Community: Anlage wird geteilt')
+    fireEvent.click(btn)
+    expect(screen.getByRole('dialog')).toHaveTextContent('Community-Benchmark')
+  })
+
+  it('Community nicht geteilt: rot durchgestrichen + Deep-Link Stammdaten', async () => {
+    getAnlage.mockResolvedValue({ id: 7, community_hash: null })
+    renderMit({})
+    const btn = await screen.findByLabelText('Community: Anlage wird nicht geteilt')
+    fireEvent.click(btn)
+    expect(screen.getByRole('dialog')).toHaveTextContent('teilt keine Daten')
+    expect(screen.getByText('Öffnen →')).toBeInTheDocument()
   })
 
   it('zeigt das MQTT-Symbol nur bei aktivem Subscriber', async () => {
