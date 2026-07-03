@@ -51,6 +51,7 @@ Diese Regeln werden **nicht** als eigene Wellen verfolgt, sondern in jeder Welle
 - **Datei-Downloads** über `lib/download.ts:downloadFile()`, nie `window.open` (Companion-App blockiert externe Tabs).
 - **Sticky-/Sub-Scroll-Container** mit `overscroll-contain`.
 - **`flex-1`/`min-h-0`** in Multi-Breakpoint-Layouts immer mit Breakpoint-Prefix konsistent zum Direction-Switch.
+- **Fokus sichtbar (Tastatur):** jedes interaktive Element hat einen einheitlichen Fokus-Ring (Primary-Ton, wie `focus:ring-2` im Button-SoT) — nie `outline-none` ohne Ring-Ersatz. (Regel 2026-07-03; Review-Regel, kein Wächter.)
 
 ### Einstellbarkeits-Cap für v4.0.0
 
@@ -243,6 +244,20 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ---
 
+### A9 — Scroll, Überlauf & Kürzung
+
+> **Überlauf-Affordanz = ScrollSchatten, nicht Scrollbalken (Gernot 2026-07-03).** Jeder Scroll-Container (Tabellen, Leisten, Listen, Modal-/Overlay-Inhalte, Charts in Scroll-Wrappern) zeigt „hier geht's weiter" per Kanten-Fade statt sichtbarer Scroll-Leiste: **SoT `components/ui/ScrollSchatten.tsx`** (overflow-getrieben via ResizeObserver, NICHT breakpoint-gated; `scrollbar-none`; `fadeFrom` = Flächenfarbe der Umgebung, für Karten `from-white dark:from-gray-800`). Roher `overflow-*-auto` mit sichtbarem Balken ist für Neues nicht mehr zulässig. Etabliert: `IASubTabBar` (D5-2 „erkennbarer, nicht auffälliger"), `ZeitStepper`, Table-SoT (A14-1 Stammdaten-Tabellen).
+> **Maus-Bedienung ohne Balken = Rad-Umleitung in der SoT (Gernot 2026-07-03):** auf **nur horizontal** scrollenden Containern (`achse='horizontal'`, kein vertikaler Überlauf) leitet `ScrollSchatten` das normale Mausrad auf horizontalen Scroll um — höflich wie Scroll-Chaining (am Anfang/Ende wird das Event durchgereicht, die Seite scrollt weiter). Modifier bleiben nativ: **Shift+Rad = horizontal (Browser-Standard), Strg+Rad = Zoom (nie kapern), Alt/Meta unangetastet**; echte Horizontal-Gesten (Trackpad-`deltaX`) ebenso. Misch-Container (`achse='beide'`) bedient Shift+Rad nativ. Hover-Pfeile im Fade als sichtbare Zusatz-Affordanz: **zurückgestellt**, nur nachrüsten falls Tester weiter stolpern (Long-press/Klick auf den blanken Schatten VERWORFEN — Overlay würde Inhalt-Klicks in der Fade-Zone schlucken, unsichtbares Druckziel).
+> **Durchsetzung:** ✅ Wächter **`npm run check:scrollschatten`** (gebaut 2026-07-03, `scripts/check-scrollschatten.mjs` + Vitest-Wrapper): roher `overflow-*-auto` unter `src/v4/**` + geteilten SoT-Komponenten = Fehler; Allowlist mit Treffer-Zahl = dokumentierte Seiten-/Sicht-Scroller (LayoutV4-main, ViewShell, FokusVollbild-Overlay — die Seite selbst behält den nativen Balken).
+
+> **Scroll-Position bei Navigation (D14-1/D13-13; Scope-Entscheid Gernot 2026-07-03):** Wechsel im **Haupt-Menü und auf der 1. Sub-Ebene** (die gerouteten Ebenen: Achse + `:zeit`/`:sub`/`:typ`/`:kategorie`) öffnet die Sicht **am Seitenanfang** — zentral in der Layout-Shell (`LayoutV4`: `useLayoutEffect` auf `pathname`, main + `[data-sicht-scroll]`), NIE pro Seite. **Tiefere Ebenen bleiben bewusst positionstreu** — an vielen Stellen ist das Bleiben an der Position explizit gewollt: Navigation unterhalb der 1. Sub-Ebene (Block-interne Reiter, Auswahl-Wechsel, Zeit-Navigation via `ZeitStepper`) ist state-getrieben, ändert den `pathname` nicht und darf den Scroll NICHT zurücksetzen (`useScrollErhalt`/`merkeScroll` bleibt unberührt). Wer eine tiefere Ebene neu baut, baut sie ohne Scroll-Reset — nicht als geroutete Ebene, die den zentralen Reset auslöst.
+
+> **Kürzungs-Priorität (verallgemeinert aus der B1-Überlauf-Regel):** Wo Inhalt gekürzt wird (`truncate`), ist definiert, **was geopfert wird — nie der Informationskern**: Zahl vor Einheit (B1), Wert vor Label, Titel-Ende vor Titel-Anfang. `truncate` nie ohne erreichbare Voll-Information: `title`-Attribut als **Desktop-Zugabe** Pflicht; wo die Information auch **mobil** gebraucht wird, zählt `title` NICHT als Lösung (Touch — B1-Linie „kein Hover-Tooltip als Krücke") → dann Layout/Mindestbreite so wählen, dass der Kern passt (B1-Grid-Regel), oder sichtbaren Text behalten (B15 `CsvExportButton`-Prinzip).
+
+**Betroffene Entscheide:** D5-2 (Runde 5), A14-1 + D14-1/D13-13 (Runden 13/14), Regel-Paket 2026-07-03.
+
+---
+
 ## Teil B — Komponenten
 
 ### B1 — KPI-Karten
@@ -358,8 +373,11 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > - **Icon-only erlaubt** für etablierte Aktionen (Schließen, Löschen, Bearbeiten): `size="icon"` (quadratisch, Touch-Target ≥ 44 px) + **Pflicht** `title`/`aria-label`.
 > - **Größen:** `sm`/`md`/`lg`/`icon`. Loading-State über `loading`-Prop (eingebauter Spinner), nicht per Hand.
 > **Formulare:** Inputs/Selects/Checkboxen über die `.input`/`.label`-Klassen (`index.css`) bzw. die vorhandenen Form-Bausteine — Radius `control` (`rounded-lg`), dunkel-Paarungen aus A8. Keine rohen `<input>` mit eigenem Styling.
+> **Kontroll-Höhen-SoT (D14-5, 2026-07-03):** EINE Höhe je Kontroll-Klasse — Formular-Kontrollen (`ui/Input`, `ui/Select`, `ui/DatumFeld`, `.input`) `min-h-[42px]`; Buttons `min-h-[36px]` im Button-Basis-Stil (die Größen `sm`/`md`/`lg` variieren nur Padding/Text, nie die Mindesthöhe). Keine lokalen `h-*`/`py-*`-Improvisationen an Kontrollen.
+> **Button-Kontext-Regel mobil (D13-10 Variante A + D14-18):** Export-/Aktions-Buttons mit Wort-Charakter (CSV/PDF) über den SoT `ui/CsvExportButton`: **immer Icon + Wort** (`≥1024` „CSV-Export", darunter „CSV") — das Wort fällt NIE weg (natives `title` ist auf Touch unsichtbar, Tap-Tooltip kollidiert mit der Aktion); wird es eng, fallen **Icons** weg, nie der Text (Button-SoT: vorangestellte Icons `max-sm:hidden`). Header-Kontext (Icon-only im Control-Cluster `↑↓⤢⌄`) nur für Blöcke mit prominenter Primär-Aktion — im Zweifel Toolbar-Kontext.
+> **Datums-Eingabe = `ui/DatumFeld`/`DatumPicker`** (Runde 14: Ausweitung auf Einstellungen-Formulare, Wächter-Scope erweitert): kein rohes `<input type="date">` mit eigenem Styling.
 
-**Betroffene Issues:** #209 P6, Inventur (~18 % Ad-hoc-Buttons, v. a. CommunityShare).
+**Betroffene Issues:** #209 P6, Inventur (~18 % Ad-hoc-Buttons, v. a. CommunityShare); D13-10/D14-5/D14-18 (Tester-Runden 13/14, Regel-Paket 2026-07-03).
 
 ---
 
@@ -444,6 +462,16 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **kW ≠ kWh:** Leistung vs. Energie nie vermischen (#200-Linie) — die Einheit folgt der Größe.
 
 **Betroffene Issues:** #237 (Einheiten-Header), #200 (kW/kWh), #258 P6 (%-Drift).
+
+---
+
+### C4 — Persistenz-Konvention (localStorage)
+
+> **Namensschema:** `eedc-<bereich>[:<sicht/zweck>]` mit **Bindestrich** — etabliert: `eedc-theme` (ThemeContext), `eedc-bloecke:<sichtKey>` (`BlockShell`). Keine Streu-Keys ohne `eedc-`-Präfix, kein Unterstrich-Stil (Altlast `eedc_community_reset_dismissed` wird bei Gelegenheit migriert, kein Sofort-Umbau).
+> **Persistenz nur über SoT:** Klapp-Zustand + Reihenfolge ausschließlich über den Block-Persistenz-SoT (`BlockShell`, Präfix `eedc-bloecke:`) — keine parallele Key-Logik pro Sicht (Einstellbarkeits-Cap-Neu-Entscheidung 2026-06-01: EIN Persistenz-SoT für Auf/Zu **und** Reihenfolge). Neue Merken-Features (Runde-14-Muster) hängen sich an bestehende SoT-Mechanik, statt eigene Keys zu erfinden.
+> **Durchsetzung:** ✅ Wächter **`npm run check:persistenz`** (gebaut 2026-07-03, `scripts/check-persistenz.mjs` + Vitest-Wrapper): Freeze-Gate — der localStorage-Bestand ist pro Datei eingefroren, jede neue Datei/jeder Zuwachs außerhalb der SoT-Module schlägt an; bewusste Ausnahme = BESTAND-Eintrag (dokumentierte Freigabe).
+
+**Betroffene Entscheide:** Einstellbarkeits-Cap (2026-06-01), Runde-14-Merken-Features, Regel-Paket 2026-07-03.
 
 ---
 

@@ -18,7 +18,9 @@ export function ViewShell({ bar, children }: { bar?: ReactNode; children: ReactN
   return (
     <div className="lg:flex lg:flex-col lg:h-full lg:min-h-0">
       {bar}
-      {/* data-sicht-scroll: Marker für LayoutV4s Scroll-to-top bei Routen-Wechsel (D14-1). */}
+      {/* data-sicht-scroll: Marker für LayoutV4s Scroll-to-top bei Routen-Wechsel (D14-1).
+          A9-Ausnahme (check:scrollschatten-Allowlist): SICHT-Scroller = Seiten-Scroll
+          ab lg — behält den nativen Balken, der Fade gilt nur für Inhalts-Container. */}
       <div data-sicht-scroll className="lg:flex-1 lg:overflow-auto lg:min-h-0">{children}</div>
     </div>
   )

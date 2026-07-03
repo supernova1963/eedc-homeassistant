@@ -16,6 +16,7 @@
  */
 import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken } from '../components/blocks'
 import { DATENROLLE, AMPEL_SKALA } from '../lib'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
@@ -164,8 +165,8 @@ export function TagBilanz({
           ))}
         </div>
 
-        {/* Desktop (≥ sm): aligned Tabelle. */}
-        <div className="hidden sm:block overflow-x-auto">
+        {/* Desktop (≥ sm): aligned Tabelle. Überlauf per ScrollSchatten (A9). */}
+        <ScrollSchatten achse="horizontal" aussenClassName="hidden sm:block" fadeFrom="from-white dark:from-gray-800">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
@@ -189,7 +190,7 @@ export function TagBilanz({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
         {wtStats && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {wtStats.count} {wochentagName}{wtStats.count !== 1 ? '-Tagen' : '-Tag'} (letzte 90 Tage)

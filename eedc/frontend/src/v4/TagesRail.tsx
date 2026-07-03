@@ -8,6 +8,7 @@
  */
 import { useMemo } from 'react'
 import { MONAT_KURZ, DATENROLLE, fmtZahl } from '../lib'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { DatumPicker } from '../components/ui/DatumPicker'
 
 export interface TagRailEintrag {
@@ -59,9 +60,9 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
     e.heute ? `${wochentag(e.datum)} ${tagNr(e.datum)}. — heute` : `${wochentag(e.datum)} ${tagNr(e.datum)}.: ${fmtZahl(e.pv_kwh, 0)} kWh`
 
   return (
-    <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none space-y-3 pr-1">
+    <ScrollSchatten achse="vertikal" aussenClassName="hidden lg:block lg:sticky lg:top-0" className="max-h-[calc(100vh-8rem)] space-y-3 pr-1">
       {/* Direktsprung (Tage sind viele — anders als Monate). D13-4/12: Custom-DatumPicker
-          (SoT), Portal-Popover → nicht mehr vom overflow-auto-Rail abgeschnitten (löst
+          (SoT), Portal-Popover → nicht mehr vom scrollenden Rail abgeschnitten (löst
           auch D12-9-Fokus-Ring-Clip, da der Popover außerhalb des Rails liegt). */}
       <DatumPicker
         modus="tag" ariaLabel="Datum wählen" value={datum} max={heuteISO} min={aeltester || undefined}
@@ -121,6 +122,6 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
           </div>
         </div>
       ))}
-    </div>
+    </ScrollSchatten>
   )
 }

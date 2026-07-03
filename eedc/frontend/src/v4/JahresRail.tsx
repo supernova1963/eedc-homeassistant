@@ -6,6 +6,7 @@
  */
 import { useMemo } from 'react'
 import { DATENROLLE, fmtZahl } from '../lib'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 
 export interface JahrRailEintrag {
   jahr: number
@@ -27,7 +28,7 @@ export function JahresRail({ entries, jahr, onSelect }: JahresRailProps) {
     e.laufend ? `${e.jahr} — läuft` : `${e.jahr}: ${fmtZahl(e.pv_kwh, 0)} kWh`
 
   return (
-    <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none pr-1">
+    <ScrollSchatten achse="vertikal" aussenClassName="hidden lg:block lg:sticky lg:top-0" className="max-h-[calc(100vh-8rem)] pr-1">
       <div className="relative ml-3">
         <div className="absolute left-[6px] top-3 bottom-0 w-px bg-gray-200 dark:bg-gray-700" />
         {sorted.map((e) => {
@@ -68,6 +69,6 @@ export function JahresRail({ entries, jahr, onSelect }: JahresRailProps) {
           )
         })}
       </div>
-    </div>
+    </ScrollSchatten>
   )
 }

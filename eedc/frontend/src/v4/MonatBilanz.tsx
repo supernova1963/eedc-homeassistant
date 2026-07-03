@@ -16,6 +16,7 @@
  * (`monatsdatenApi.listAggregiert`).
  */
 import { fmtCalc } from '../components/ui'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { DATENROLLE, VERGLEICH_BADGE } from '../lib'
@@ -224,8 +225,8 @@ export function MonatBilanz({
           ))}
         </div>
 
-        {/* Desktop (≥ sm): die aligned Tabelle. */}
-        <div className="hidden sm:block overflow-x-auto">
+        {/* Desktop (≥ sm): die aligned Tabelle. Überlauf per ScrollSchatten (A9). */}
+        <ScrollSchatten achse="horizontal" aussenClassName="hidden sm:block" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-xs">
           <thead>
             <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
@@ -253,7 +254,7 @@ export function MonatBilanz({
             ))}
           </tbody>
         </table>
-        </div>
+        </ScrollSchatten>
         {glMonStats && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {glMonStats.count} {monatName}-Monat{glMonStats.count !== 1 ? 'en' : ''}

@@ -24,6 +24,9 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, childre
   // erzeugt einen Containing-Block (transform/filter/backdrop-blur/contain) → ein
   // `fixed inset-0` klemmt sonst relativ dazu statt zum Viewport (Sliver oben).
   // Das Overlay an `body` zu hängen löst das app-weit (kein Ancestor mehr).
+  // A9-Ausnahme (check:scrollschatten-Allowlist): das Vollbild-Overlay IST im
+  // Fokus-Modus die Seite — Seiten-Scroller behalten den nativen Balken (wie
+  // LayoutV4/ViewShell); der ScrollSchatten-Fade gilt für Inhalts-Container.
   const overlay = (
     <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col p-3 sm:p-6 gap-3 overflow-auto">
       <div className="flex items-center justify-between gap-2">

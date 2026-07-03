@@ -18,6 +18,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
 import { Button, CsvExportButton } from '../ui'
+import ScrollSchatten from '../ui/ScrollSchatten'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
   fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
@@ -303,8 +304,8 @@ export function WerteTabelle({
         </div>
       )}
 
-      {/* ── Tabelle ────────────────────────────────────────────────────────── */}
-      <div className="overflow-x-auto">
+      {/* ── Tabelle — Überlauf per ScrollSchatten (A9) ─────────────────────── */}
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
@@ -371,7 +372,7 @@ export function WerteTabelle({
             </tfoot>
           )}
         </table>
-      </div>
+      </ScrollSchatten>
     </div>
   )
 }

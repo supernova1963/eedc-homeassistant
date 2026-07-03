@@ -8,6 +8,7 @@
  */
 import { useMemo } from 'react'
 import { MONAT_KURZ, DATENROLLE, fmtZahl } from '../lib'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 
 export interface RailEintrag {
   jahr: number
@@ -48,7 +49,7 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
   return (
     <>
       {/* Desktop (vertikal) — mobil übernimmt der MonatStepper */}
-      <div className="hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto scrollbar-none space-y-3 pr-1">
+      <ScrollSchatten achse="vertikal" aussenClassName="hidden lg:block lg:sticky lg:top-0" className="max-h-[calc(100vh-8rem)] space-y-3 pr-1">
         {jahre.map((j) => (
           <div key={j}>
             <div className="flex items-center gap-2 mb-1 px-1">
@@ -101,7 +102,7 @@ export function MonatsRail({ entries, jahr, monat, onSelect }: MonatsRailProps) 
             </div>
           </div>
         ))}
-      </div>
+      </ScrollSchatten>
     </>
   )
 }

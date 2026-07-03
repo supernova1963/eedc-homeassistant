@@ -15,6 +15,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { LoadingSpinner, Card, Alert, fmtCalc } from '../components/ui'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_COLORS, formatDatum, jaNein, fmtZahl } from '../lib'
@@ -724,7 +725,7 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
       {/* Geräte-Selektor (Art ①) — nur ab 2 Geräten desselben Typs. */}
       {geraete.length >= 2 && (
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+        <ScrollSchatten className="flex items-center gap-2">
           {geraete.map((d, i) => (
             <button
               key={d.inv.id || d.label} type="button" onClick={() => setAktiv(i)}
@@ -742,7 +743,7 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
               )}
             </button>
           ))}
-        </div>
+        </ScrollSchatten>
       )}
       <BlockShell key={`komp-${typ}-${g?.inv.id ?? aktiv}`} persistKey={`v4-komponenten-${typ}`} bloecke={bloecke} sortierbar />
 

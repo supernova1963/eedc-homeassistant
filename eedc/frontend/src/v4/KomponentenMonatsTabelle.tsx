@@ -7,6 +7,7 @@
  * via `<details>` wie die IST-Dashboards („Monatsdaten anzeigen").
  */
 import type { VerlaufBar, VerlaufRow } from './KomponentenVerlaufChart'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 
 export function KomponentenMonatsTabelle({
   rows, bars, einheit = 'kWh',
@@ -22,7 +23,7 @@ export function KomponentenMonatsTabelle({
       <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
         Monatsdaten anzeigen ({rows.length})
       </summary>
-      <div className="mt-3 overflow-x-auto">
+      <ScrollSchatten achse="horizontal" aussenClassName="mt-3" fadeFrom="from-white dark:from-gray-800">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
@@ -50,7 +51,7 @@ export function KomponentenMonatsTabelle({
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollSchatten>
     </details>
   )
 }

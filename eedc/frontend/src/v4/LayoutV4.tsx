@@ -62,6 +62,9 @@ export default function LayoutV4() {
             D6-1: `scrollbar-gutter:stable` (nur mobil) reserviert eine eigene
             Scrollbar-Spalte → die vollbreite, milchige Datums-Nav (ZeitStepper,
             `-mx-3` + backdrop-blur) verdeckt die Scrollbar nicht mehr. */}
+        {/* A9-Ausnahme (dokumentiert, check:scrollschatten-Allowlist): SEITEN-Scroller —
+            der Haupt-Scroll der App behält den nativen Balken; der ScrollSchatten-Fade
+            gilt für INHALTS-Container (Tabellen, Rails, Leisten), nicht die Seite selbst. */}
         <main ref={mainRef} className="flex-1 overflow-auto max-lg:[scrollbar-gutter:stable] lg:overflow-hidden lg:flex lg:flex-col lg:min-h-0">
           <Outlet />
         </main>

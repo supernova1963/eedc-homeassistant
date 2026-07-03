@@ -14,6 +14,7 @@
  * Ø-Jahr = Σ der aggregierten Monatszeilen je Jahr (`jahrVergleichAus`).
  */
 import { fmtCalc } from '../components/ui'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { DATENROLLE } from '../lib'
 import { Delta, VglChip } from './MonatBilanz'
@@ -145,8 +146,8 @@ export function JahrBilanz({
           ))}
         </div>
 
-        {/* Desktop (≥ sm): aligned Tabelle. */}
-        <div className="hidden sm:block overflow-x-auto">
+        {/* Desktop (≥ sm): aligned Tabelle. Überlauf per ScrollSchatten (A9). */}
+        <ScrollSchatten achse="horizontal" aussenClassName="hidden sm:block" fadeFrom="from-white dark:from-gray-800">
           <table className="w-full text-xs">
             <thead>
               <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
@@ -170,7 +171,7 @@ export function JahrBilanz({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
         {oj && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {ojCount} {ojCount !== 1 ? 'Jahren' : 'Jahr'}

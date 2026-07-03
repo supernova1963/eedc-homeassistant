@@ -13,6 +13,14 @@
  * gray-50/gray-900 = Layout-/Leisten-Fläche) → in hell UND dunkel gut sichtbar
  * (ein schwarz-alpha-Schatten verschwindet auf dunklem Grund). Für abweichende
  * Flächen (z. B. Karten = weiß) `fadeFrom` überschreiben.
+ *
+ * **Rad-Umleitung (A9, Gernot 2026-07-03):** auf NUR horizontal scrollenden
+ * Containern (`achse='horizontal'`, kein vertikaler Überlauf) scrollt das
+ * normale Mausrad horizontal — ohne sichtbaren Balken wäre das Rad am Desktop
+ * sonst wirkungslos (Shift+Rad kennen nur Profis, bleibt nativ erhalten).
+ * Höflich wie Scroll-Chaining: am Anfang/Ende wird das Event NICHT abgefangen,
+ * die Seite scrollt weiter. Modifier-Gesten bleiben nativ (Strg=Zoom,
+ * Shift=horizontal), echte Horizontal-Gesten (Trackpad, deltaX) ebenso.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
@@ -24,6 +32,7 @@ export function ScrollSchatten({
   children,
   achse = 'horizontal',
   className = '',
+  aussenClassName = '',
   fadeFrom = 'from-gray-50 dark:from-gray-900',
 }: {
   children: ReactNode
@@ -31,6 +40,9 @@ export function ScrollSchatten({
   achse?: Achse
   /** Klassen für den Scroll-Container selbst (Höhe, gap, overflow-Variante …). */
   className?: string
+  /** Klassen für den äußeren Positionierungs-Wrapper (Display-Gating wie
+   *  `hidden sm:block`, sticky, Außenabstände) — spart die extra Wrapper-Div. */
+  aussenClassName?: string
   /** Fade-Grundfarbe = Flächenfarbe der Leiste (Tailwind `from-…`). Default
    *  Layout-/Leisten-Fläche gray-50/gray-900; für Karten `from-white dark:from-gray-800`. */
   fadeFrom?: string
@@ -65,13 +77,35 @@ export function ScrollSchatten({
     }
   }, [update])
 
+  // Rad-Umleitung (s. Docblock): non-passiv, weil preventDefault nötig ist.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || achse !== 'horizontal') return
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+      if (el.scrollWidth <= el.clientWidth) return
+      if (el.scrollHeight > el.clientHeight) return // vertikal scrollbar → Rad bleibt vertikal
+      // deltaMode 1 = Zeilen (Firefox-Mausrad) → auf Pixel normieren.
+      const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      const kannWeiter = delta > 0
+        ? el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+        : el.scrollLeft > 1
+      if (!kannWeiter) return
+      e.preventDefault()
+      el.scrollLeft += delta
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [achse])
+
   const horiz = achse === 'horizontal' || achse === 'beide'
   const vert = achse === 'vertikal' || achse === 'beide'
   // Fade maskiert den Rand in der Flächenfarbe (from-…) → transparent nach innen.
   const fade = `pointer-events-none absolute z-10 to-transparent transition-opacity ${fadeFrom}`
 
   return (
-    <div className="relative">
+    <div className={`relative ${aussenClassName}`}>
       <div ref={ref} className={`overflow-auto scrollbar-none ${className}`}>{children}</div>
       {/* D5-2 (detLAN): breiterer, weicher Fade → erkennbarer als Scroll-Affordanz,
           aber durch die Flächenfarben-Maske nicht aufdringlich (Gernot: „erkennbarer,

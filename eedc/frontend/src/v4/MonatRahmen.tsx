@@ -11,6 +11,7 @@
  */
 import { ArrowRight, RefreshCw, CalendarClock } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
+import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BLOCK_IDENTITAET, VERGLEICH_BADGE } from '../lib'
 import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
@@ -179,7 +180,7 @@ export function communityBlock(
     defaultOpen: false,
     render: () => (
       <div>
-      <div className="overflow-x-auto">
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
@@ -211,7 +212,7 @@ export function communityBlock(
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollSchatten>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
           Basis: {anlagenWort} · {monatName} {jahr}
         </p>
