@@ -39,6 +39,14 @@ export const TYP_LABELS: Record<string, string> = {
   'pv-system': 'PV-System',
 }
 
+/** Lesbare Labels für Wärmepumpen-Arten (`WPArt` in lib/investitionParameter.ts). */
+export const WP_ART_LABELS: Record<string, string> = {
+  luft_wasser: 'Luft/Wasser',
+  sole_wasser: 'Sole/Wasser',
+  grundwasser: 'Grundwasser',
+  luft_luft: 'Luft/Luft',
+}
+
 /**
  * Anzeige-Reihenfolge der DB-Investitions-Typen — Single Source of Truth.
  * Reihenfolge: Wechselrichter → PV-Module → Speicher → Balkonkraftwerk →

@@ -15,6 +15,11 @@ import {
 // Types
 // =============================================================================
 
+/**
+ * Ein Monatswert, wie er 1:1 an den Community-Server geht (Spiegel von
+ * `prepare_community_data` / eedc-community `MonatswertInput`). Komponenten-
+ * Felder sind nur gesetzt, wenn die Komponente im Monat Werte hatte.
+ */
 export interface MonatswertPreview {
   jahr: number
   monat: number
@@ -23,6 +28,31 @@ export interface MonatswertPreview {
   netzbezug_kwh: number | null
   autarkie_prozent: number | null
   eigenverbrauch_prozent: number | null
+  // Speicher
+  speicher_ladung_kwh?: number
+  speicher_entladung_kwh?: number
+  speicher_ladung_netz_kwh?: number
+  // Wärmepumpe
+  wp_stromverbrauch_kwh?: number
+  wp_heizwaerme_kwh?: number
+  wp_warmwasser_kwh?: number
+  // E-Auto
+  eauto_ladung_gesamt_kwh?: number
+  eauto_ladung_pv_kwh?: number
+  eauto_ladung_extern_kwh?: number
+  eauto_km?: number
+  eauto_v2h_kwh?: number
+  // Wallbox
+  wallbox_ladung_kwh?: number
+  wallbox_ladung_pv_kwh?: number
+  wallbox_ladevorgaenge?: number
+  // Balkonkraftwerk
+  bkw_erzeugung_kwh?: number
+  bkw_eigenverbrauch_kwh?: number
+  bkw_speicher_ladung_kwh?: number
+  bkw_speicher_entladung_kwh?: number
+  // Sonstiges
+  sonstiges_verbrauch_kwh?: number
 }
 
 export interface CommunityDataPreview {
@@ -35,6 +65,12 @@ export interface CommunityDataPreview {
   hat_waermepumpe: boolean
   hat_eauto: boolean
   hat_wallbox: boolean
+  hat_balkonkraftwerk: boolean
+  hat_sonstiges: boolean
+  wp_art: string | null
+  wallbox_kw: number | null
+  bkw_wp: number | null
+  sonstiges_bezeichnung: string | null
   monatswerte: MonatswertPreview[]
 }
 
