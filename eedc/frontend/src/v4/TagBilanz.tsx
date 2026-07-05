@@ -245,7 +245,7 @@ export function TagBilanz({
           {prPct != null ? (
             <>
               <div className="flex justify-end">
-                <span className="text-4xl font-bold" style={{ color: prColor }}>{fmt(prPct, 0)} %</span>
+                <span className="text-3xl font-bold" style={{ color: prColor }}>{fmt(prPct, 0)} %</span>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 text-right">
                 {prWort}{strahlungKwh != null ? ` · bei ${fmt(strahlungKwh, 1)} kWh/m²` : ''}

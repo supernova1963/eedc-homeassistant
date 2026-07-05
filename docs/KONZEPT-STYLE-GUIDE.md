@@ -123,6 +123,14 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Mapping auf §5-Bestand:** h1 = `title-xl` (PageHeader) · Sektion = `title-l` · KPI-Wert = `display`/`title-xl` · Body = `body-m` · Caption = `body-s`/`caption`. **Letter-Spacing:** bewusst weggelassen (kein Bedarf). **Schriftfamilie:** System-Stack (Tailwind-Default).
 > **Dokumentierte Ausnahme:** `text-5xl` für die zwei Monatsbericht-Hero-Zahlen in `AktuellerMonat.tsx` (bewusste Showpiece-Größe oberhalb `display`, Regel 0a Stufe 3, Code-Kommentar vorhanden).
+>
+> **v4-Zusatz-Zeilen (R3b-Soll-Konzept S8/S12, Gernot-Abnahme 2026-07-05):**
+>
+> | Token | Größe | Gewicht | Bestands-Klasse | Einsatz |
+> |---|---|---|---|---|
+> | `titel-sicht` | 18 px | 700 | `text-lg font-bold` | h1/h2 der v4-Sichten-Köpfe (AuswertungKopf, Tag-/Monat-/JahrRahmen, CockpitAussicht, FokusVollbild) — bewusst kompakter Kopf in der Rail-Shell, deckungsgleich mit der Preview-SoT |
+> | `titel-block` | 14 px | 600 | `text-sm font-semibold` | Block-Kopf der v4-Block-SoT (`BlockShell`) — bewusst kompakt (Mobil-Reserve neben den ↑↓⤢⌄-Controls) |
+> | `micro` | 10 px | 400/500 | `text-[10px]` | Mikro-Badges, Quellen-Chips, Chart-Achsen — kleinste zulässige Größe (Vorrang vor B17-`text-xs` bei Mikro-Badges); `text-[9px]` ist unzulässig (Bestand nur in V3-geteilten Dateien, Normierung mit deren Umstellungs-Paketen) |
 
 **Betroffene Issues (Datenpunkte):** #258 P4 (Textgestaltung-Unruhe), #256 (Schriftgrößen-Inkonsistenz), #247 P3.
 

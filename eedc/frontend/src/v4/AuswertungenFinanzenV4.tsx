@@ -224,7 +224,7 @@ function FinanzenInner() {
               </div>
               <div className="mt-2 flex items-center justify-center gap-3 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Gesamt nach {monate} Monaten:</span>
-                <span className="text-lg font-bold text-green-600 dark:text-green-400">{fmtZahl(gesamt.nettoNachSonderkosten, 0)} €</span>
+                <span className="text-lg font-semibold text-green-600 dark:text-green-400">{fmtZahl(gesamt.nettoNachSonderkosten, 0)} €</span>
               </div>
             </div>
           </Parkbar>

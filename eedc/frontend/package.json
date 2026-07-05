@@ -19,7 +19,8 @@
     "check:scrollschatten": "node scripts/check-scrollschatten.mjs",
     "check:persistenz": "node scripts/check-persistenz.mjs",
     "check:badges": "node scripts/check-badges.mjs",
-    "check:darkmode-paare": "node scripts/check-darkmode-paare.mjs"
+    "check:darkmode-paare": "node scripts/check-darkmode-paare.mjs",
+    "check:typografie": "node scripts/check-typografie.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

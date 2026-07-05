@@ -41,7 +41,7 @@ export function GrundlastSollIstKachel({ d }: { d: AktuellerMonatResponse }) {
           </FormelTooltip>
         </p>
         <div className="flex justify-end">
-          <span className="text-4xl font-bold text-energy-consumption">{fmtGrundlast(d.grundlast_kw)}</span>
+          <span className="text-3xl font-bold text-energy-consumption">{fmtGrundlast(d.grundlast_kw)}</span>
         </div>
         {anteil != null && (
           <>
@@ -79,7 +79,7 @@ export function GrundlastSollIstKachel({ d }: { d: AktuellerMonatResponse }) {
         </FormelTooltip>
       </p>
       <div className="flex justify-end">
-        <span className={`text-4xl font-bold ${AMPEL_TEXT_CLASS[sollIstStufe(sollPct)]}`}>{fmt(sollPct)} %</span>
+        <span className={`text-3xl font-bold ${AMPEL_TEXT_CLASS[sollIstStufe(sollPct)]}`}>{fmt(sollPct)} %</span>
       </div>
       <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-sm h-2 mt-2">
         <div
