@@ -55,6 +55,7 @@ from backend.core.field_definitions import (
     get_emob_pv_netz_kwh,
     get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
+    get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
@@ -1301,11 +1302,12 @@ async def get_aktueller_monat(
             for i in speicher_invs
         )
 
-        # Arbitrage-Ladung aus gespeicherten Daten
+        # Arbitrage-Ladung aus gespeicherten Daten (Kanon-Key + Legacy-Fallback,
+        # deckt frisch geschriebene Legacy-Rows vor dem nächsten Migrations-Lauf)
         ladung_netz_total = 0.0
         for imd in get_imd_for_invs(speicher_invs):
             data = imd.verbrauch_daten or {}
-            ladung_netz_total += data.get("ladung_netz_kwh", 0) or 0
+            ladung_netz_total += get_speicher_netzladung_kwh(data)
         if ladung_netz_total > 0:
             speicher_ladung_netz = round(ladung_netz_total, 2)
 

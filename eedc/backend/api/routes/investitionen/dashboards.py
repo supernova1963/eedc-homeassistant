@@ -63,7 +63,11 @@ from backend.core.calculations import (
     CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
 )
-from backend.core.field_definitions import get_emob_pv_netz_kwh, get_sonstiges_verbrauch_kwh
+from backend.core.field_definitions import (
+    get_emob_pv_netz_kwh,
+    get_sonstiges_verbrauch_kwh,
+    get_speicher_netzladung_kwh,
+)
 from backend.core.berechnungen import (
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
@@ -786,8 +790,10 @@ async def get_speicher_dashboard(
             gesamt_ladung += md_ladung
             gesamt_entladung += md_entladung
             monats_reihe.append((md.jahr, md.monat, md_ladung, md_entladung))
-            # Arbitrage (Netzladung zu günstigen Zeiten)
-            netzladung = d.get('speicher_ladung_netz_kwh', 0) or 0
+            # Arbitrage (Netzladung zu günstigen Zeiten) — Kanon-Key
+            # `ladung_netz_kwh` + Legacy-Fallback über den SoT-Helper; der
+            # rohe Legacy-Read las nach der v3.26-Key-Migration immer 0.
+            netzladung = get_speicher_netzladung_kwh(d)
             if netzladung > 0:
                 gesamt_arbitrage_kwh += netzladung
                 preis = d.get('speicher_ladepreis_cent', 0) or 0
