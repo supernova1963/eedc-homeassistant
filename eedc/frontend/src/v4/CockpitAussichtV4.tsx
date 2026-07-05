@@ -309,7 +309,8 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
       const grad = trend.degradation.geschaetzt_prozent_jahr
       list.push({
         id: 'degradation', title: 'Degradations-Prognose', ...BLOCK_IDENTITAET.degradation,
-        summary: grad == null ? 'noch nicht bewertbar' : grad === 0 ? 'keine messbar' : `${fmtZahl(grad, 1)} % / Jahr`,
+        // C3/S19: Degradation = 2 NK (typisch 0,3–0,5 %/Jahr — 1 NK verlöre Information).
+        summary: grad == null ? 'noch nicht bewertbar' : grad === 0 ? 'keine messbar' : `${fmtZahl(grad, 2)} % / Jahr`,
         defaultOpen: false,
         render: () => <DegradationsPrognose trend={trend} />,
       })

@@ -269,6 +269,8 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
  *  + Gesamt + Datenquellen) — IST LangfristTab, read-only Werte-Embed. */
 export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose }) {
   // B2/C3: Einheit steht im Header „Hist. PR (%)", nicht mehr an der Zelle.
+  // C3/S19 (R3b, dokumentierte Ausnahme): PR-%-Darstellung GANZZAHLIG (0 NK) —
+  // etablierte Konvention aller PR-Anzeigen (TagBilanz, Trend, Aussicht).
   const pr = (v: number | null) =>
     v == null ? <span className="text-gray-400 dark:text-gray-500">—</span>
     : <span className={v > 1 ? TREND_TEXT_CLASS.positiv : v < 0.9 ? TREND_TEXT_CLASS.negativ : TREND_TEXT_CLASS.neutral}>{fmtZahl(v * 100, 0)}</span>
@@ -355,6 +357,8 @@ export function DegradationsPrognose({ trend }: { trend: TrendAnalyseResponse })
       <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
         {grad !== null ? (
           <div className="space-y-2">
+            {/* C3/S19 (R3b, dokumentierte Ausnahme): Degradation = 2 NK
+                (typisch 0,3–0,5 %/Jahr — der 1-NK-%-Kanon verlöre Information). */}
             <p className="text-lg font-medium">
               {grad === 0 ? (
                 <span className={TREND_TEXT_CLASS.positiv}>Keine messbare Degradation</span>

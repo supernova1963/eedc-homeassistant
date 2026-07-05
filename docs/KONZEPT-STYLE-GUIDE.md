@@ -483,8 +483,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### C3 — Einheiten & Präzision
 
 > **Einheit immer präsent:** kein nackter Zahlenwert ohne Einheit; im Tabellen-Header (siehe B2), nicht pro Zelle.
-> **Größen-Umschaltung:** kWh ↔ MWh (bzw. W ↔ kW) ab definierter Schwelle einheitlich, nicht gemischt in derselben Sicht.
-> **Nachkommastellen pro Größe:** kWh 1, € 2, % 1 (Vorschlag) — pro Größenart fix, nicht ad-hoc.
+> **Größen-Umschaltung:** kWh ↔ MWh (bzw. W ↔ kW) ab definierter Schwelle einheitlich, nicht gemischt in derselben Sicht — **über die `formatEnergie`-/`formatLeistung`-SoT (`lib/einheiten.ts`), keine unbedingte Hand-Umrechnung** (R3b S17); zusammengehörige KPIs einer Sicht über `referenzKwh` an EINE Skala koppeln.
+> **Nachkommastellen pro Größe:** kWh 1 · € 2 · **% 1 (fest, R3b S19 — war „Vorschlag")** — pro Größenart fix, nicht ad-hoc. **Dokumentierte Ganzzahl-%-Ausnahmen (0 NK):** Perzentile/Ranking-Positionen („Top X %") · Abdeckungs-/Fortschrittsgrade (n-von-m: Monats-Abdeckung, Achievements) · Chart-Achsen-Ticks + kompakte Chart-Datenlabels · Prognose-Fehlermaße (MAPE/MBE) · grobe Community-Ø-Anteile · **PR-%-Darstellungen** (etablierte Ganzzahl-Konvention; per R2 ist PR eigentlich Effizienz-Größe, dimensionslos 2 NK — die %-Form ist dokumentierter Altbestand). **Sonderfall Degradation: 2 NK** (typisch 0,3–0,5 %/Jahr). JAZ/COP/PR-Kennzahl: 2 NK via `formatEffizienz`.
+> **CSV-Präzision (R3b S20):** Rundung VOR dem Export — **max. 4 NK** (kappt Float-Artefakte wie „0,30000000000000004"), bewusst NICHT die Anzeige-NK (CSV bleibt maschinenlesbar präziser als die Tabelle); umgesetzt im CSV-SoT `lib/werte/csv.ts`.
 > **`%` mit Leerzeichen** („84,2 %", aus C2), deutsches Komma + Tausender-Punkt.
 > **kW ≠ kWh:** Leistung vs. Energie nie vermischen (#200-Linie) — die Einheit folgt der Größe.
 

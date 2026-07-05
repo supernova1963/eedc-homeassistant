@@ -43,16 +43,22 @@ export function exportWerteCsv({
     }
   })
 
+  // C3/S20 (R3b, 2026-07-05): Rundung VOR dem Export — max. 4 NK. Kappt
+  // Float-Artefakte (0.4−0.1 → „0,30000000000000004") ohne Datenverlust
+  // (bewusst NICHT die Anzeige-decimals der Registry: die würden kWh auf 0 NK
+  // stutzen — CSV bleibt maschinenlesbar präziser als die Tabelle).
+  const rund = (v: number) => Math.round(v * 1e4) / 1e4
+
   const out: (string | number)[][] = rows.map((r) => {
     const prev = vergleich ? vorjahrLookup[r.vergleichKey] : undefined
     const zeile: (string | number)[] = [r.label]
     metriken.forEach((m) => {
       const v = r.wert(m.key)
-      zeile.push(v != null ? v : '')
+      zeile.push(v != null ? rund(v) : '')
       if (vergleich) {
         const pv = prev ? prev.wert(m.key) : null
-        zeile.push(pv != null ? pv : '')
-        zeile.push(v != null && pv != null ? v - pv : '')
+        zeile.push(pv != null ? rund(pv) : '')
+        zeile.push(v != null && pv != null ? rund(v - pv) : '')
       }
     })
     return zeile
@@ -64,11 +70,11 @@ export function exportWerteCsv({
   const aggZeile: (string | number)[] = [`${rows.length} ${einheitLabel}`]
   metriken.forEach((m) => {
     const v = agg[m.key]
-    aggZeile.push(v != null ? v : '')
+    aggZeile.push(v != null ? rund(v) : '')
     if (vergleich) {
       const pv = vorjahrAgg?.[m.key] ?? null
-      aggZeile.push(pv != null ? pv : '')
-      aggZeile.push(v != null && pv != null ? v - pv : '')
+      aggZeile.push(pv != null ? rund(pv) : '')
+      aggZeile.push(v != null && pv != null ? rund(v - pv) : '')
     }
   })
   out.push(aggZeile)

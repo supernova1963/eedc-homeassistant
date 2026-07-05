@@ -177,4 +177,21 @@ describe('exportWerteCsv (Schema)', () => {
     expect(headers).toContain('PV-Erzeugung (kWh) 2024')
     expect(headers).toContain('Δ vs. 2024')
   })
+
+  // C3/S20 (R3b): Rundung vor Export — Float-Artefakte (0.4−0.1 =
+  // 0.30000000000000004) dürfen NICHT in der Exportdatei landen (max. 4 NK).
+  it('S20: Δ-Werte ohne Float-Artefakte (max. 4 NK)', () => {
+    exportWerteCsv({
+      rows: [monatsZeile(mz(1, 2025, { erzeugung: 0.4 }))],
+      vorjahrRows: [monatsZeile(mz(1, 2024, { erzeugung: 0.1 }))],
+      jahrLabel: 2025, vergleichLabel: 2024,
+      metriken: [METRIK_BY_KEY['erzeugung']], einheitLabel: 'Monate', dateiname: 'x.csv',
+    })
+    const [, out] = vi.mocked(exportToCSV).mock.calls[0]
+    // Zeile 0: [Label, 0.4, 0.1, Δ] — Δ exakt 0.3, nicht 0.30000000000000004.
+    expect(out[0][3]).toBe(0.3)
+    for (const zelle of out.flat()) {
+      if (typeof zelle === 'number') expect(String(zelle)).toMatch(/^-?\d+(\.\d{1,4})?$/)
+    }
+  })
 })
