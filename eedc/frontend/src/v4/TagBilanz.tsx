@@ -18,7 +18,8 @@ import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken } from '../components/blocks'
-import { DATENROLLE, AMPEL_SKALA } from '../lib'
+import { DATENROLLE, AMPEL_TEXT_CLASS } from '../lib'
+import { BilanzKachel } from '../components/blocks/GrundlastSollIstKachel'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -156,18 +157,15 @@ export function TagBilanz({
   // PR-Ampel = Tages-Pendant zum Monats-SOLL/IST: PR = Ertrag ÷ (gemessene
   // Einstrahlung × kWp) = IST gegen das physikalische Optimum bei der heutigen
   // Sonne. Selbsttragend (Einstrahlung liegt im Tageswert vor) → kein per-Tag-
-  // PVGIS-SOLL/Backfill nötig (Gernot-Entscheid 2026-06-24). Ampelfarbe aus SoT.
+  // PVGIS-SOLL/Backfill nötig (Gernot-Entscheid 2026-06-24). R3b S6: EINE
+  // Stufen-Quelle → Farbe (AMPEL_TEXT_CLASS-Zwilling, Regel G) + Wort daraus.
   const prPct = t.performance_ratio != null ? t.performance_ratio * 100 : null
-  const prColor = prPct == null ? undefined
-    : prPct >= 80 ? AMPEL_SKALA.gut
-    : prPct >= 70 ? AMPEL_SKALA.maessig
-    : prPct >= 60 ? AMPEL_SKALA.hoch
-    : AMPEL_SKALA.kritisch
-  const prWort = prPct == null ? null
-    : prPct >= 80 ? 'sehr gut'
-    : prPct >= 70 ? 'solide'
-    : prPct >= 60 ? 'mäßig'
-    : 'auffällig niedrig'
+  const prStufe = prPct == null ? null
+    : prPct >= 80 ? 'gut' as const
+    : prPct >= 70 ? 'maessig' as const
+    : prPct >= 60 ? 'hoch' as const
+    : 'kritisch' as const
+  const PR_WORT = { gut: 'sehr gut', maessig: 'solide', hoch: 'mäßig', kritisch: 'auffällig niedrig' } as const
   const strahlungKwh = t.strahlung_summe_wh_m2 != null ? t.strahlung_summe_wh_m2 / 1000 : null
 
   // Tages-Spitzen (Tag-native) — Peak PV + Temperatur (PR steht prominent oben).
@@ -231,29 +229,29 @@ export function TagBilanz({
         )}
       </div>
 
-      {/* PR-Ampel (prominent, Tages-Ersatz für Monats-SOLL/IST) + Spitzen + PV-Verteilung */}
+      {/* PR-Ampel (prominent, Tages-Ersatz für Monats-SOLL/IST) + Spitzen + PV-Verteilung.
+          R3b S6: geteilter Kachel-Kern BilanzKachel (GrundlastSollIstKachel-SoT)
+          statt Markup-Kopie; Wert-Farbe als AMPEL_TEXT_CLASS-Klasse statt Inline-Hex. */}
       <div className="space-y-4">
         <div>
-          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-            <FormelTooltip
+          {prPct != null && prStufe != null ? (
+            <BilanzKachel
+              label="Performance Ratio"
               formel="Ertrag ÷ (Einstrahlung × kWp)"
               berechnung={strahlungKwh != null ? `bei ${fmt(strahlungKwh, 1)} kWh/m² Einstrahlung` : undefined}
-              ergebnis={prPct != null ? `= ${fmt(prPct, 0)} %` : undefined}
-            >
-              Performance Ratio
-            </FormelTooltip>
-          </p>
-          {prPct != null ? (
-            <>
-              <div className="flex justify-end">
-                <span className="text-3xl font-bold" style={{ color: prColor }}>{fmt(prPct, 0)} %</span>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 text-right">
-                {prWort}{strahlungKwh != null ? ` · bei ${fmt(strahlungKwh, 1)} kWh/m²` : ''}
-              </p>
-            </>
+              ergebnis={`= ${fmt(prPct, 0)} %`}
+              wert={`${fmt(prPct, 0)} %`}
+              wertClass={AMPEL_TEXT_CLASS[prStufe]}
+              subtitle={<>{PR_WORT[prStufe]}{strahlungKwh != null ? ` · bei ${fmt(strahlungKwh, 1)} kWh/m²` : ''}</>}
+              subtitleRechts
+            />
           ) : (
-            <p className="text-xs text-gray-400 dark:text-gray-500">Keine Einstrahlungsdaten für diesen Tag — PR nicht berechenbar.</p>
+            <>
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                <FormelTooltip formel="Ertrag ÷ (Einstrahlung × kWp)">Performance Ratio</FormelTooltip>
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">Keine Einstrahlungsdaten für diesen Tag — PR nicht berechenbar.</p>
+            </>
           )}
         </div>
 
