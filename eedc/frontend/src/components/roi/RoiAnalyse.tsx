@@ -409,7 +409,15 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                         <Icon className="h-4 w-4 flex-shrink-0" style={{ color: TYP_COLORS[b.investition_typ] }} />
                         <div>
                           <p className="text-sm font-medium text-gray-900 dark:text-white">{b.investition_bezeichnung}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{typLabels[b.investition_typ]}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {typLabels[b.investition_typ]}
+                            {/* R15-4: DC-Speicher hat KEINE eigene Zeile (System-Ansatz) —
+                                sein Enthaltensein hier kenntlich machen. */}
+                            {(() => {
+                              const sp = b.komponenten?.filter((k) => k.typ === 'speicher') ?? []
+                              return sp.length > 0 ? ` · inkl. Speicher ${sp.map((k) => k.bezeichnung).join(', ')}` : ''
+                            })()}
+                          </p>
                         </div>
                       </div>
                     </td>
