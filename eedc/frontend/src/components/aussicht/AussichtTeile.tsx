@@ -320,8 +320,8 @@ export function SaisonMuster({ muster }: { muster: TrendAnalyseResponse['saisona
         <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Beste Monate</h4>
         <div className="flex flex-wrap gap-2">
           {muster.beste_monate.map((monat, index) => (
-            <span key={monat} className={`px-3 py-1 rounded-full text-sm font-medium ${
-              index === 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-500'
+            <span key={monat} className={`px-3 py-1 rounded-full text-xs font-medium ${
+              index === 0 ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-400' : 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-500'
             }`}>{monat}</span>
           ))}
         </div>
@@ -330,8 +330,8 @@ export function SaisonMuster({ muster }: { muster: TrendAnalyseResponse['saisona
         <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Schwächste Monate</h4>
         <div className="flex flex-wrap gap-2">
           {muster.schlechteste_monate.map((monat, index) => (
-            <span key={monat} className={`px-3 py-1 rounded-full text-sm font-medium ${
-              index === 0 ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-500'
+            <span key={monat} className={`px-3 py-1 rounded-full text-xs font-medium ${
+              index === 0 ? 'bg-orange-50 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400' : 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-500'
             }`}>{monat}</span>
           ))}
         </div>

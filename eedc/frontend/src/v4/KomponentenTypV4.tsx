@@ -737,7 +737,7 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
             >
               {d.label}
               {d.selektorBadge && (
-                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                   {d.selektorBadge}
                 </span>
               )}

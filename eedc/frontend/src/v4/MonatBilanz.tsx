@@ -135,7 +135,7 @@ export function Delta({ a, b, inv = false, besser }: { a: number | null | undefi
   // weiter die absolute Änderung, die Farbe folgt `besser`.
   const positive = besser != null ? besser : (inv ? pct <= 0 : pct >= 0)
   return (
-    <span className={`text-xs font-medium px-1 py-0.5 rounded ${
+    <span className={`text-xs font-medium px-1 py-0.5 rounded-full ${
       positive ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
     }`}>
       {pct >= 0 ? '▲' : '▼'} {fmtCalc(Math.abs(pct), 0)} %
@@ -153,7 +153,7 @@ export function VglChip({ prefix, lang, ist, val, unit, dec, inv, besser }: {
 }) {
   if (ist == null || val == null || val === 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500">
+      <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-gray-50 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500">
         {prefix} —
       </span>
     )
@@ -162,7 +162,7 @@ export function VglChip({ prefix, lang, ist, val, unit, dec, inv, besser }: {
   const positive = besser != null ? besser : (inv ? pct <= 0 : pct >= 0)
   return (
     <SimpleTooltip text={`${lang}: ${fmt(val, dec)} ${unit}`}>
-      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
+      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${
         positive ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
       }`}>
         {prefix} {pct >= 0 ? '▲' : '▼'} {fmtCalc(Math.abs(pct), 0)} %

@@ -52,8 +52,8 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
         <h1 className="text-lg font-bold text-gray-900 dark:text-white">{titel}</h1>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
           laufend
-            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+            : 'bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
         }`}>
           {laufend ? 'läuft' : 'abgeschlossen'}
         </span>
@@ -85,7 +85,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs text-gray-400 dark:text-gray-500">Quellen:</span>
             {quellen.map((q) => (
-              <span key={q} className="text-[10px] leading-tight px-1.5 py-0.5 rounded font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              <span key={q} className="text-[10px] leading-tight px-1.5 py-0.5 rounded-full font-medium bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                 {q}
               </span>
             ))}
@@ -200,7 +200,7 @@ export function communityBlock(
                   {z.du != null && z.median != null && (() => {
                     const better = z.inv ? z.du <= z.median : z.du >= z.median
                     return (
-                      <span className={`text-xs font-medium px-1 py-0.5 rounded ${
+                      <span className={`text-xs font-medium px-1 py-0.5 rounded-full ${
                         better ? VERGLEICH_BADGE.besser : VERGLEICH_BADGE.schlechter
                       }`}>
                         {better ? '▲' : '▼'}

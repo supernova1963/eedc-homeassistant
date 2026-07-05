@@ -88,7 +88,7 @@ export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprun
         >
           <span className="truncate">{titel}</span>
           {badge && (
-            <span className="text-[10px] leading-none px-1 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{badge}</span>
+            <span className="text-[10px] leading-none px-1 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">{badge}</span>
           )}
           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${offen ? 'rotate-180' : ''}`} />
         </button>

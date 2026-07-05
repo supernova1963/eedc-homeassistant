@@ -17,7 +17,8 @@
     "check:datumpicker": "node scripts/check-datumpicker.mjs",
     "check:v4links": "node scripts/check-v4links.mjs",
     "check:scrollschatten": "node scripts/check-scrollschatten.mjs",
-    "check:persistenz": "node scripts/check-persistenz.mjs"
+    "check:persistenz": "node scripts/check-persistenz.mjs",
+    "check:badges": "node scripts/check-badges.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

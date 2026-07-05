@@ -48,7 +48,7 @@ export default function LayoutV4() {
   ]
 
   const badge = (
-    <span className="ml-3 px-2 py-0.5 text-[10px] font-mono rounded bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200">
+    <span className="ml-3 px-2 py-0.5 text-[10px] font-mono rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300">
       Vorschau
     </span>
   )

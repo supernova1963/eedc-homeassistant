@@ -298,37 +298,37 @@ export function CommunityShareBlockInhalt() {
             {(v.speicher_kwh || v.hat_waermepumpe || v.hat_eauto || v.hat_wallbox || v.hat_balkonkraftwerk || v.hat_sonstiges) && (
               <div className="flex flex-wrap gap-2">
                 {v.speicher_kwh ? (
-                  <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-1 text-sm text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-xs text-green-700 dark:bg-green-900/20 dark:text-green-300">
                     <Battery className="h-4 w-4" />
                     Speicher ({fmtZahl(v.speicher_kwh, 1)} kWh)
                   </span>
                 ) : null}
                 {v.hat_balkonkraftwerk && (
-                  <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-1 text-sm text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300">
                     <Sun className="h-4 w-4" />
                     Balkonkraftwerk{v.bkw_wp ? ` (${fmtZahl(v.bkw_wp, 0)} Wp)` : ''}
                   </span>
                 )}
                 {v.hat_waermepumpe && (
-                  <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-1 text-sm text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
                     <Home className="h-4 w-4" />
                     Wärmepumpe{v.wp_art ? ` (${WP_ART_LABELS[v.wp_art] || v.wp_art})` : ''}
                   </span>
                 )}
                 {v.hat_wallbox && (
-                  <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-sm text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-1 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                     <Plug className="h-4 w-4" />
                     Wallbox{v.wallbox_kw ? ` (${fmtZahl(v.wallbox_kw, 1)} kW)` : ''}
                   </span>
                 )}
                 {v.hat_eauto && (
-                  <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-2 py-1 text-sm text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-1 text-xs text-purple-700 dark:bg-purple-900/20 dark:text-purple-300">
                     <Car className="h-4 w-4" />
                     E-Auto
                   </span>
                 )}
                 {v.hat_sonstiges && (
-                  <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-sm text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-1 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
                     <Package className="h-4 w-4" />
                     Sonstiges{v.sonstiges_bezeichnung ? ` (${v.sonstiges_bezeichnung})` : ''}
                   </span>
