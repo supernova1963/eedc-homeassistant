@@ -14,7 +14,8 @@
  */
 import { lazy, Suspense, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, AlertTriangle, Sparkles, Home, type LucideIcon } from 'lucide-react'
+import { Home, type LucideIcon } from 'lucide-react'
+import { STATUS_ICONS } from '../lib'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 import { BlockShell, type Block } from '../components/blocks'
@@ -43,9 +44,9 @@ import {
  * (Status-Achse, kein Hex → check:design).
  */
 const STATUS_META: Record<KachelStatus, { icon: LucideIcon; farbe: string; titel: string }> = {
-  ok: { icon: CheckCircle2, farbe: 'text-green-500', titel: 'eingerichtet' },
-  warn: { icon: AlertTriangle, farbe: 'text-amber-500', titel: 'braucht Aufmerksamkeit' },
-  neu: { icon: Sparkles, farbe: 'text-blue-500', titel: 'neu — noch nicht eingerichtet' },
+  ok: { icon: STATUS_ICONS.ok, farbe: 'text-green-500', titel: 'eingerichtet' },
+  warn: { icon: STATUS_ICONS.warnung, farbe: 'text-amber-500', titel: 'braucht Aufmerksamkeit' },
+  neu: { icon: STATUS_ICONS.info, farbe: 'text-blue-500', titel: 'neu — noch nicht eingerichtet' },
 }
 
 /** Status-Icon für den Block-Kopf (Tooltip = Grund, sonst Standardtitel). */
@@ -193,9 +194,9 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
             className="w-full min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 text-sm text-gray-900 dark:text-white"
           />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
-            <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> eingerichtet</span>
-            <span className="flex items-center gap-1"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> braucht Aufmerksamkeit</span>
-            <span className="flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-500" /> neu</span>
+            <span className="flex items-center gap-1"><STATUS_META.ok.icon className={`h-3.5 w-3.5 ${STATUS_META.ok.farbe}`} /> eingerichtet</span>
+            <span className="flex items-center gap-1"><STATUS_META.warn.icon className={`h-3.5 w-3.5 ${STATUS_META.warn.farbe}`} /> braucht Aufmerksamkeit</span>
+            <span className="flex items-center gap-1"><STATUS_META.neu.icon className={`h-3.5 w-3.5 ${STATUS_META.neu.farbe}`} /> neu</span>
           </div>
         </div>
 

@@ -18,11 +18,11 @@ import { LoadingSpinner, Card, Alert, fmtCalc } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
-import { BLOCK_IDENTITAET, STATUS_COLORS, formatDatum, jaNein, fmtZahl } from '../lib'
+import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { sensorMappingApi } from '../api/sensorMapping'
 import { liveDashboardApi } from '../api/liveDashboard'
-import { AlertTriangle, BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
+import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
@@ -347,7 +347,7 @@ function InfothekBlock({ invs }: { invs: Investition[] }) {
 /** Eine Daten-Checker-Befund-Zeile (Severity-Icon + Meldung + optionale Details). */
 function BefundRow({ e }: { e: CheckErgebnis }) {
   const cfg = SEVERITY_CONFIG[e.schwere]
-  const Icon = cfg?.icon ?? AlertTriangle
+  const Icon = cfg?.icon ?? STATUS_ICONS.warnung
   return (
     <li className="flex items-start gap-2 text-sm">
       <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${cfg?.colorClass ?? 'text-gray-400 dark:text-gray-500'}`} />

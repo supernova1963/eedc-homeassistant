@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import {
   Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer,
-  TrendingDown, TrendingUp, Minus, AlertTriangle, ArrowRight,
+  TrendingDown, TrendingUp, Minus, ArrowRight,
 } from 'lucide-react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Area,
@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { fmtCalc, ChartLegende } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
@@ -366,7 +366,7 @@ export function DegradationsPrognose({ trend }: { trend: TrendAnalyseResponse })
             )}
             {d.zuverlaessig === false && (
               <div className="flex items-start gap-1.5 text-sm text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <STATUS_ICONS.warnung className="h-4 w-4 mt-0.5 flex-shrink-0" />
                 <span>Weniger als 3 vollständige Jahre – Wert ist durch Wetterschwankungen beeinflusst und nur eingeschränkt aussagekräftig.</span>
               </div>
             )}

@@ -3,7 +3,8 @@
  * Nutzt die geteilten Teile aus {@link CommunityPVErtragTeile} (eine Code-Wahrheit
  * mit dem IST-`PVErtragTab`), hier in die `BlockShell` gehängt.
  */
-import { Award, Sun, Calendar, Target, Info } from 'lucide-react'
+import { Award, Sun, Calendar, Target } from 'lucide-react'
+import { STATUS_ICONS } from '../lib'
 import { BlockShell, type Block } from '../components/blocks'
 import { LoadingSpinner, Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
@@ -64,7 +65,7 @@ function CommunityPVErtragInner({ benchmark, loading, error }: Props) {
       render: () => <VerteilungHistogramm benchmark={benchmark} distribution={d.distribution!} />,
     } : null,
     !alleGeparkt(PV_PARK_IDS.hinweis) ? {
-      id: 'hinweis', title: 'Über den Vergleich', icon: Info, defaultOpen: false,
+      id: 'hinweis', title: 'Über den Vergleich', icon: STATUS_ICONS.info, defaultOpen: false,
       render: () => <VergleichHinweis benchmark={benchmark} performanceStats={d.performanceStats} />,
     } : null,
   ]

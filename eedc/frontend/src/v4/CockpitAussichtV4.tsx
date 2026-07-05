@@ -18,13 +18,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, Info, RefreshCw, ArrowRight,
+  Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, RefreshCw, ArrowRight,
 } from 'lucide-react'
 import { Card, LoadingSpinner, buttonClasses } from '../components/ui'
 import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
-import { BLOCK_IDENTITAET, fmtZahl } from '../lib'
+import { BLOCK_IDENTITAET, STATUS_ICONS, fmtZahl } from '../lib'
 import {
   TagesPrognose, KurzfristDetails, LangfristVerlaufChart, LangfristMonatswerte,
   SaisonMuster, DegradationsPrognose, WpAussicht, AussichtFinanzTeaser, euroVz,
@@ -84,7 +84,7 @@ function langKpis(p: LangfristPrognose): KpiStripItem[] {
       icon: t.trend_richtung === 'negativ' ? TrendingDown : t.trend_richtung === 'positiv' ? TrendingUp : Minus,
       trend: t.trend_richtung === 'positiv' ? 'up' : t.trend_richtung === 'negativ' ? 'down' : undefined,
     },
-    { title: 'Datenbasis', value: `${t.datenbasis_monate} Monate`, color: 'gray', icon: Info },
+    { title: 'Datenbasis', value: `${t.datenbasis_monate} Monate`, color: 'gray', icon: STATUS_ICONS.info },
   ]
 }
 

@@ -5,7 +5,8 @@
  * Komponente ein Block in INVESTITION_TYP_ORDER:
  * Speicher → BKW → WP → Wallbox → E-Auto.
  */
-import { Battery, Sun, Home, Plug, Car } from 'lucide-react'
+import { Battery } from 'lucide-react'
+import { KOMPONENTEN_IDENTITAET } from '../lib'
 import { BlockShell, type Block } from '../components/blocks'
 import { LoadingSpinner, Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
@@ -27,6 +28,12 @@ import {
   wallboxParkIds,
   eautoParkIds,
 } from '../pages/community/CommunityKomponentenTeile'
+
+/** Typ-Identität (Icon/Farbe/Label) aus der SoT statt lokaler Kopien (A5). */
+const ident = (typ: keyof typeof KOMPONENTEN_IDENTITAET) => {
+  const k = KOMPONENTEN_IDENTITAET[typ]
+  return { title: k.label, icon: k.icon, farbe: k.farbe }
+}
 
 type Props = {
   benchmark: CommunityBenchmarkResponse | null
@@ -70,7 +77,7 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
 
   const bloecke: (Block | null)[] = [
     d.verfuegbareKomponenten.includes('speicher') && speicher && !alleGeparkt(speicherParkIds(benchmark, d.speicherByClass)) ? {
-      id: 'speicher', title: 'Speicher', icon: Battery, farbe: 'text-green-500',
+      id: 'speicher', ...ident('speicher'),
       summary: speicherUntertitel(benchmark),
       badge: speicher.zyklen_jahr?.rang && speicher.zyklen_jahr.von
         ? <RangBadge rang={speicher.zyklen_jahr.rang} von={speicher.zyklen_jahr.von} /> : undefined,
@@ -78,7 +85,7 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
       render: () => <SpeicherDeepDive benchmark={benchmark} communityStats={d.speicherByClass} />,
     } : null,
     d.verfuegbareKomponenten.includes('bkw') && bkw && !alleGeparkt(bkwParkIds(benchmark)) ? {
-      id: 'bkw', title: 'Balkonkraftwerk', icon: Sun, farbe: 'text-amber-500',
+      id: 'bkw', ...ident('balkonkraftwerk'),
       summary: bkwUntertitel(benchmark),
       badge: bkw.spez_ertrag?.rang && bkw.spez_ertrag.von
         ? <RangBadge rang={bkw.spez_ertrag.rang} von={bkw.spez_ertrag.von} /> : undefined,
@@ -86,7 +93,7 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
       render: () => <BKWDeepDive benchmark={benchmark} />,
     } : null,
     d.verfuegbareKomponenten.includes('waermepumpe') && wp && !alleGeparkt(waermepumpeParkIds(benchmark, d.wpByRegion)) ? {
-      id: 'waermepumpe', title: 'Wärmepumpe', icon: Home, farbe: 'text-blue-500',
+      id: 'waermepumpe', ...ident('waermepumpe'),
       summary: 'Effizienz-Analyse',
       badge: wp.jaz?.rang && wp.jaz.von
         ? <RangBadge rang={wp.jaz.rang} von={wp.jaz.von} /> : undefined,
@@ -94,7 +101,7 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
       render: () => <WaermepumpeDeepDive benchmark={benchmark} communityStats={d.wpByRegion} />,
     } : null,
     d.verfuegbareKomponenten.includes('wallbox') && wallbox && !alleGeparkt(wallboxParkIds(benchmark)) ? {
-      id: 'wallbox', title: 'Wallbox', icon: Plug, farbe: 'text-cyan-500',
+      id: 'wallbox', ...ident('wallbox'),
       summary: wallboxUntertitel(benchmark),
       badge: wallbox.pv_anteil?.rang && wallbox.pv_anteil.von
         ? <RangBadge rang={wallbox.pv_anteil.rang} von={wallbox.pv_anteil.von} /> : undefined,
@@ -102,7 +109,7 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
       render: () => <WallboxDeepDive benchmark={benchmark} />,
     } : null,
     d.verfuegbareKomponenten.includes('eauto') && eauto && !alleGeparkt(eautoParkIds(benchmark, d.eautoByUsage)) ? {
-      id: 'eauto', title: 'E-Auto', icon: Car, farbe: 'text-purple-500',
+      id: 'eauto', ...ident('e-auto'),
       summary: 'Lade- und Verbrauchsanalyse',
       badge: eauto.pv_anteil?.rang && eauto.pv_anteil.von
         ? <RangBadge rang={eauto.pv_anteil.rang} von={eauto.pv_anteil.von} /> : undefined,

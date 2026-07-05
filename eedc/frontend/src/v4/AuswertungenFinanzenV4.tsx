@@ -18,13 +18,13 @@ import {
   BarChart, Bar, ComposedChart, AreaChart, Area, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { Euro, TrendingUp, Wallet, FileText, Wrench } from 'lucide-react'
+import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
 import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
-import { COLORS, GELD_COLORS, MONAT_NAMEN, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
+import { COLORS, GELD_COLORS, MONAT_NAMEN, STATUS_ICONS, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
 import { exportToCSV } from '../utils/export'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -173,7 +173,7 @@ function FinanzenInner() {
             <Parkbar id="hinweis:sonderkosten" titel="Sonderkosten-Hinweis">
               <Card className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
                 <div className="flex items-center gap-3">
-                  <Wrench className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                  <STATUS_ICONS.warnung className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                   <div>
                     <h4 className="font-medium text-amber-800 dark:text-amber-200">
                       Sonderkosten im Zeitraum: {fmtZahl(gesamt.sonderkosten, 2)} €

@@ -11,10 +11,10 @@
  */
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { Users, ExternalLink, AlertCircle, HelpCircle } from 'lucide-react'
+import { Users, ExternalLink, HelpCircle } from 'lucide-react'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
-import { Card, Alert, LoadingSpinner } from '../components/ui'
+import { Card, Alert, EmptyState, LoadingSpinner } from '../components/ui'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { useSelectedAnlage } from '../hooks'
 import { anlagenApi } from '../api'
@@ -132,16 +132,16 @@ export default function CommunityV4() {
     inhalt = (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
         <Card>
-          <div className="text-center py-12">
-            <AlertCircle className="h-16 w-16 text-primary-500 mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Teile erst deine Daten</h2>
-            <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto mb-6">
-              Um den Community-Vergleich nutzen zu können, musst du zuerst deine anonymisierten Anlagendaten mit der Community teilen.
-            </p>
-            <button onClick={() => navigate('/v4/einstellungen/stammdaten')} className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium">
-              <Users className="h-5 w-5" /> Jetzt teilen
-            </button>
-          </div>
+          <EmptyState
+            icon={Users}
+            title="Teile erst deine Daten"
+            description="Um den Community-Vergleich nutzen zu können, musst du zuerst deine anonymisierten Anlagendaten mit der Community teilen."
+            action={
+              <button onClick={() => navigate('/v4/einstellungen/stammdaten')} className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium">
+                <Users className="h-5 w-5" /> Jetzt teilen
+              </button>
+            }
+          />
         </Card>
       </div>
     )
