@@ -72,26 +72,21 @@ export function MonatStepper({ entries, jahr, monat, onSelect, immerSichtbar }: 
         // gleiches Icon/Stil app-weit. value/min/max = YYYY-MM.
         const toVal = (j: number, m: number) => `${j}-${String(m).padStart(2, '0')}`
         return (
-          <div className="space-y-2">
-            <DatumPicker
-              modus="monat" ariaLabel="Monat wählen" value={toVal(jahr, monat)}
-              min={oldest ? toVal(oldest.jahr, oldest.monat) : undefined}
-              max={newest ? toVal(newest.jahr, newest.monat) : undefined}
-              onChange={(v) => { const [j, m] = v.split('-').map(Number); onSelect(j, m); close() }}
-              className="w-full text-sm"
-            />
-            {newest && k(jahr, monat) !== k(newest.jahr, newest.monat) && (
-              <button
-                type="button"
-                onClick={() => { onSelect(newest.jahr, newest.monat); close() }}
-                className="w-full text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-              >
-                ↺ Zurücksetzen (neuester Monat)
-              </button>
-            )}
-          </div>
+          <DatumPicker
+            modus="monat" ariaLabel="Monat wählen" value={toVal(jahr, monat)}
+            min={oldest ? toVal(oldest.jahr, oldest.monat) : undefined}
+            max={newest ? toVal(newest.jahr, newest.monat) : undefined}
+            onChange={(v) => { const [j, m] = v.split('-').map(Number); onSelect(j, m); close() }}
+            className="w-full text-sm"
+          />
         )
       }}
+      zuruecksetzen={
+        // ↺ auf den neuesten Monat; Render = ZeitStepper-Unterbau (B15/S2).
+        newest && k(jahr, monat) !== k(newest.jahr, newest.monat)
+          ? { label: '↺ Zurücksetzen (neuester Monat)', onClick: () => onSelect(newest.jahr, newest.monat) }
+          : null
+      }
       immerSichtbar={immerSichtbar}
     />
   )

@@ -87,27 +87,21 @@ export function TagStepper({ entries, datum, onSelect, aeltesterTag, immerSichtb
       badge={aktuell?.heute ? 'heute' : null}
       eintraege={eintraege}
       direktsprung={(close) => (
-        <div className="space-y-2">
-          {/* Datumsauswahl erreicht ALLE verfügbaren Tage (min = ältester Tag). D13-4/12:
-              Custom-DatumPicker (SoT), Portal-Popover → nicht mehr vom overflow-hidden-
-              Dropdown abgeschnitten (löst auch D12-9-Fokus-Ring-Clip). */}
-          <DatumPicker
-            modus="tag" ariaLabel="Datum wählen" value={datum} max={newest} min={untergrenze}
-            onChange={(v) => { onSelect(clamp(v)); close() }} className="w-full text-sm"
-          />
-          {/* Zurücksetzen → neuester Tag (Ausgangs-Ansicht), wenn man in die
-              Historie gesprungen ist (Gernot 2026-06-26). */}
-          {datum !== newest && (
-            <button
-              type="button"
-              onClick={() => { onSelect(newest); close() }}
-              className="w-full text-xs px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-            >
-              ↺ Zurücksetzen (neuester Tag)
-            </button>
-          )}
-        </div>
+        // Datumsauswahl erreicht ALLE verfügbaren Tage (min = ältester Tag). D13-4/12:
+        // Custom-DatumPicker (SoT), Portal-Popover → nicht mehr vom overflow-hidden-
+        // Dropdown abgeschnitten (löst auch D12-9-Fokus-Ring-Clip).
+        <DatumPicker
+          modus="tag" ariaLabel="Datum wählen" value={datum} max={newest} min={untergrenze}
+          onChange={(v) => { onSelect(clamp(v)); close() }} className="w-full text-sm"
+        />
       )}
+      zuruecksetzen={
+        // Zurücksetzen → neuester Tag (Ausgangs-Ansicht), wenn man in die
+        // Historie gesprungen ist (Gernot 2026-06-26); Render = ZeitStepper-Unterbau (B15/S2).
+        datum !== newest
+          ? { label: '↺ Zurücksetzen (neuester Tag)', onClick: () => onSelect(newest) }
+          : null
+      }
       immerSichtbar={immerSichtbar}
     />
   )

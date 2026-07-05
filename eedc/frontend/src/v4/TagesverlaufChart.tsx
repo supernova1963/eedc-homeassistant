@@ -18,7 +18,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { ChartTooltip, ChartLegende } from '../components/ui'
+import { ChartTooltip, ChartLegende, SegmentControl } from '../components/ui'
 import { CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import type { TagWerte } from '../api/energie_profil'
@@ -64,22 +64,11 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
     <div className="space-y-3">
       {/* Toggles: Erzeugung/Verbrauch + Autarkie % (wie IST-Auswertung) */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-          {(['erzeugung', 'verbrauch'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`min-h-[36px] px-3 text-sm font-medium transition-colors ${
-                view === v
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                  : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
-              }`}
-            >
-              {v === 'erzeugung' ? 'Erzeugung' : 'Verbrauch'}
-            </button>
-          ))}
-        </div>
+        <SegmentControl
+          ariaLabel="Bilanz-Ansicht"
+          optionen={[{ key: 'erzeugung', label: 'Erzeugung' }, { key: 'verbrauch', label: 'Verbrauch' }]}
+          value={view} onChange={setView}
+        />
         <button
           type="button"
           onClick={() => setShowAutarkie((s) => !s)}

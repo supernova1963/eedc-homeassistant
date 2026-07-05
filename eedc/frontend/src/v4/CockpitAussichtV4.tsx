@@ -18,9 +18,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, RefreshCw, ArrowRight,
+  Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, ArrowRight,
 } from 'lucide-react'
-import { Card, LoadingSpinner, buttonClasses } from '../components/ui'
+import { Card, LoadingSpinner, buttonClasses, SegmentControl } from '../components/ui'
+import { ReloadButton } from './ReloadButton'
 import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
@@ -90,11 +91,6 @@ function langKpis(p: LangfristPrognose): KpiStripItem[] {
 
 // Datum-Picker für die Tages-Stundenprognose (Heute/Morgen-Shortcuts + bis +14 T).
 function StundenDatumPicker({ datum, setDatum }: { datum: string; setDatum: (d: string) => void }) {
-  const btn = (aktiv: boolean) =>
-    `px-2 py-1 text-xs rounded font-medium transition-colors ${
-      aktiv ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
-        : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-    }`
   return (
     <div className="flex items-center gap-3 flex-wrap">
       <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Prognose für:</label>
@@ -104,8 +100,13 @@ function StundenDatumPicker({ datum, setDatum }: { datum: string; setDatum: (d: 
         min={heuteISO()} max={maxPrognoseDatum()}
         onChange={setDatum} className="w-auto text-sm"
       />
-      <button type="button" onClick={() => setDatum(heuteISO())} className={btn(datum === heuteISO())}>Heute</button>
-      <button type="button" onClick={() => setDatum(morgenISO())} className={btn(datum === morgenISO())}>Morgen</button>
+      {/* B15/S4: Shortcut-Paar als SegmentControl-SoT; steht der Picker auf +2..+14,
+          entspricht `datum` keiner Option → beide inaktiv (von der SoT erlaubt). */}
+      <SegmentControl
+        ariaLabel="Prognose-Tag-Shortcut" size="sm"
+        optionen={[{ key: heuteISO(), label: 'Heute' }, { key: morgenISO(), label: 'Morgen' }]}
+        value={datum} onChange={setDatum}
+      />
     </div>
   )
 }
@@ -341,35 +342,15 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">Aussicht</h1>
-          {/* Horizont-Selektor (segmented control, URL-linkbar ?h=) */}
-          <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            {HORIZONTE.map((h) => (
-              <button
-                key={h.key}
-                type="button"
-                onClick={() => setHorizont(h.key)}
-                aria-pressed={horizont === h.key}
-                className={`text-xs px-3 py-1.5 font-medium transition-colors ${
-                  horizont === h.key
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                }`}
-              >
-                {h.label}
-              </button>
-            ))}
-          </div>
+          {/* Horizont-Selektor (SegmentControl-SoT, URL-linkbar ?h=) */}
+          <SegmentControl
+            ariaLabel="Prognose-Horizont" size="sm"
+            optionen={HORIZONTE.map((h) => ({ key: h.key, label: h.label }))}
+            value={horizont} onChange={setHorizont}
+          />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => laden(true)}
-            disabled={reloading || loading}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${reloading ? 'animate-spin' : ''}`} />
-            Aktualisieren
-          </button>
+          <ReloadButton onClick={() => laden(true)} loading={reloading} disabled={loading} />
         </div>
       </div>
 

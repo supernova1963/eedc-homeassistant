@@ -19,7 +19,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
-import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton } from '../components/ui'
+import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl } from '../components/ui'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -32,7 +32,7 @@ import { cockpitApi, type KomponentenZeitreihe } from '../api/cockpit'
 import { importApi } from '../api/import'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { baueJahrAlsMonat } from './JahrAggregat'
-import { STEUER_H } from './WerkbankZeitraum'
+import { STEUER_H } from '../lib/komponentenStyle'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
@@ -306,18 +306,6 @@ function FinanzenInner() {
   )
 }
 
-/** Segment-Button für den Monat/Jahr-Umschalter. */
-function SegBtn({ aktiv, onClick, children }: { aktiv: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`px-3 ${STEUER_H} inline-flex items-center text-sm font-medium transition-colors ${
-        aktiv ? 'bg-primary-600 text-white'
-              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-      {children}
-    </button>
-  )
-}
-
 /** T-Konto mit Monat|Jahr-Umschalter. Das Jahr kommt vom Sicht-Kopf (R5, Prop `jahr`),
  *  der Block wählt nur Monat-im-Jahr vs. Ganzjahr-Σ (`baueJahrAlsMonat`, kein Backend). */
 function TKontoPeriode({ anlageId, daten, jahr }: {
@@ -372,10 +360,11 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <SegBtn aktiv={modus === 'monat'} onClick={() => setModus('monat')}>Monat</SegBtn>
-          <SegBtn aktiv={modus === 'jahr'} onClick={() => setModus('jahr')}>Jahr ({jahr ?? '—'})</SegBtn>
-        </div>
+        <SegmentControl
+          ariaLabel="Zeitraum-Modus"
+          optionen={[{ key: 'monat', label: 'Monat' }, { key: 'jahr', label: `Jahr (${jahr ?? '—'})` }]}
+          value={modus} onChange={setModus}
+        />
         {/* D9-E: Beide Modi belegen dieselbe Toolbar-Höhe (kein Verschwinden des
             Selects → kein Vertikal-Sprung des T-Kontos beim Monat↔Jahr-Wechsel;
             Content-Swap bleibt in-place wie D7-6). */}

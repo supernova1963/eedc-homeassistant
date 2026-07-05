@@ -14,7 +14,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Users, ExternalLink, HelpCircle } from 'lucide-react'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
-import { Card, Alert, EmptyState, LoadingSpinner } from '../components/ui'
+import { Card, Alert, EmptyState, LoadingSpinner, Button } from '../components/ui'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { useSelectedAnlage } from '../hooks'
 import { anlagenApi } from '../api'
@@ -137,9 +137,10 @@ export default function CommunityV4() {
             title="Teile erst deine Daten"
             description="Um den Community-Vergleich nutzen zu können, musst du zuerst deine anonymisierten Anlagendaten mit der Community teilen."
             action={
-              <button onClick={() => navigate('/v4/einstellungen/stammdaten')} className="inline-flex items-center gap-2 px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-medium">
-                <Users className="h-5 w-5" /> Jetzt teilen
-              </button>
+              /* B15: ui/Button-SoT (size="lg" = px-6 py-3 wie vorher, Töne 600/700 statt 500/600). */
+              <Button variant="primary" size="lg" className="gap-2" onClick={() => navigate('/v4/einstellungen/stammdaten')}>
+                <Users className="h-5 w-5 max-sm:hidden" /> Jetzt teilen
+              </Button>
             }
           />
         </Card>

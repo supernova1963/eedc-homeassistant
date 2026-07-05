@@ -20,7 +20,7 @@ import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 import { BlockShell, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss } from '../components/park'
-import { Alert, LoadingSpinner } from '../components/ui'
+import { Alert, LoadingSpinner, Input } from '../components/ui'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { useSelectedAnlage } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
@@ -185,13 +185,13 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
     <ParkProvider persistKey="v4-einstellungen">
       <ViewShell bar={nav}>
         <div className="px-3 sm:px-6 pt-4 space-y-3 max-w-[1920px] mx-auto">
-          <input
+          {/* B15: ui/Input-SoT (42-px-Formular-Höhe + Focus-Ring) statt rohem <input> mit 44px. */}
+          <Input
             type="search"
             value={suche}
             onChange={(e) => setSuche(e.target.value)}
             placeholder="Suchen in allen Einstellungen …"
             aria-label="Einstellungen durchsuchen"
-            className="w-full min-h-[44px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 text-sm text-gray-900 dark:text-white"
           />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
             <span className="flex items-center gap-1"><STATUS_META.ok.icon className={`h-3.5 w-3.5 ${STATUS_META.ok.farbe}`} /> eingerichtet</span>

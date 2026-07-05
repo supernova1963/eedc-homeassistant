@@ -15,6 +15,7 @@ import { useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { ChevronDown } from 'lucide-react'
 import { ScrollSchatten } from '../components/ui/ScrollSchatten'
+import Button from '../components/ui/Button'
 
 /** Ein Player-Schritt (Pfeil-Button). `go=null` → am Rand deaktiviert. */
 export interface ZeitSchritt {
@@ -49,6 +50,10 @@ interface ZeitStepperProps {
   /** Optionales Direktsprung-Element oben in der Liste (Tag: Date-Picker);
    *  bekommt eine `close`-Funktion zum Schließen der Liste nach Auswahl. */
   direktsprung?: (close: () => void) => ReactNode
+  /** „↺ Zurücksetzen"-Aktion unter dem Direktsprung (B15/S2: EIN Unterbau-Render
+   *  über ui/Button ghost+sm statt handgebauter Kopien in Tag-/MonatStepper);
+   *  `null`/undefined → entfällt. Schließen der Liste übernimmt der Stepper. */
+  zuruecksetzen?: { label: string; onClick: () => void } | null
   /** D10-2: im Fokus/Vollbild-Kopf wird der Stepper auf JEDER Breite gezeigt (kein
    *  `lg:hidden`) und sitzt nicht sticky — er ist dort die einzige Datums-Nav. */
   immerSichtbar?: boolean
@@ -67,7 +72,7 @@ function StepBtn({ icon: Icon, label, go }: ZeitSchritt) {
   )
 }
 
-export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprung, immerSichtbar = false }: ZeitStepperProps) {
+export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprung, zuruecksetzen, immerSichtbar = false }: ZeitStepperProps) {
   const [offen, setOffen] = useState(false)
 
   // D7-3 (detLAN R7): KEIN Voll-Bleed (`-mx-3`) mehr → der Streifen bleibt auf
@@ -97,9 +102,17 @@ export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprun
 
       {offen && (
         <div className="mt-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg overflow-hidden">
-          {direktsprung && (
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700/50">
-              {direktsprung(() => setOffen(false))}
+          {(direktsprung || zuruecksetzen) && (
+            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700/50 space-y-2">
+              {direktsprung?.(() => setOffen(false))}
+              {zuruecksetzen && (
+                <Button
+                  variant="ghost" size="sm" className="w-full"
+                  onClick={() => { zuruecksetzen.onClick(); setOffen(false) }}
+                >
+                  {zuruecksetzen.label}
+                </Button>
+              )}
             </div>
           )}
           <ScrollSchatten achse="vertikal" className="max-h-72" fadeFrom="from-white dark:from-gray-800">

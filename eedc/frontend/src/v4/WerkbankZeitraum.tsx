@@ -7,16 +7,9 @@
  */
 import type { ReactNode } from 'react'
 import { DatumPicker } from '../components/ui/DatumPicker'
-
-/**
- * STEUER_H — EINE einheitliche Höhe (32 px) für ALLE Bedien-Elemente einer
- * Filter-/Toolbar-Leiste (Chips, Toggle-Pillen, `<input>`, `<select>`). Behebt
- * detLAN #27 Punkt 2 „unterschiedliche Höhen in einer Reihe" (Chips waren 24 px,
- * Inputs 32 px, Selects 39 px) ohne die D7-7-Aktions-Buttons (44 px) anzufassen.
- * Pillen/Buttons brauchen zusätzlich `inline-flex items-center`, `.input`-Felder
- * `py-0`, damit die feste Höhe greift.
- */
-export const STEUER_H = 'h-8'
+// STEUER_H (32-px-Toolbar-Höhe) lebt seit R3b S5 im lib-SoT-Modul `komponentenStyle`.
+import { STEUER_H } from '../lib/komponentenStyle'
+import { SegmentControl } from '../components/ui/SegmentControl'
 
 // D12-8: kleinerer/größerer der beiden ISO-Werte (lexikografisch, gilt für YYYY-MM
 // wie YYYY-MM-DD) — `undefined`, wenn keiner gesetzt ist, damit `max`/`min` entfällt.
@@ -99,16 +92,12 @@ export function WerkbankZeitraum({
       {vergleichSlot ? vergleichSlot : onVergleich && (
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-gray-500 dark:text-gray-400">Vergleich</span>
-          <div className="inline-flex rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <button type="button" onClick={() => onVergleich(false)}
-              className={`px-2.5 ${STEUER_H} inline-flex items-center text-xs font-medium transition-colors ${!vergleich ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-              Aus
-            </button>
-            <button type="button" onClick={() => onVergleich(true)}
-              className={`px-2.5 ${STEUER_H} inline-flex items-center text-xs font-medium transition-colors ${vergleich ? 'bg-primary-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-              Vorjahr
-            </button>
-          </div>
+          <SegmentControl
+            ariaLabel="Vergleich" size="sm" radius="md"
+            optionen={[{ key: 'aus', label: 'Aus' }, { key: 'vorjahr', label: 'Vorjahr' }]}
+            value={vergleich ? 'vorjahr' : 'aus'}
+            onChange={(k) => onVergleich(k === 'vorjahr')}
+          />
         </div>
       )}
 

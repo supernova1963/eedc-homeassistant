@@ -25,6 +25,7 @@ import { communityApi, type PreviewResponse, type MonatswertPreview, type Commun
 import { REGION_NAMEN, WP_ART_LABELS, MONAT_NAMEN } from '../lib/constants'
 import { fmtZahl } from '../lib'
 import Button from '../components/ui/Button'
+import Switch from '../components/ui/Switch'
 
 // Ausstattungs-Badge-Icons aus der Typ-Identitäts-SoT (A5) statt lokaler Kopien.
 const SpeicherIcon = KOMPONENTEN_IDENTITAET['speicher'].icon
@@ -64,23 +65,8 @@ export function CommunityTeilenSchalter() {
     <div className="flex items-center gap-2">
       {/* D14-4 (detLAN #113): Label großgeschrieben. */}
       <span className="hidden text-xs text-gray-500 dark:text-gray-400 sm:inline">Teilen</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={an}
-        aria-label="Anonyme Community-Daten teilen"
-        disabled={saving}
-        onClick={umschalten}
-        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-          an ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-        }`}
-      >
-        <span
-          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-            an ? 'translate-x-5' : 'translate-x-0.5'
-          }`}
-        />
-      </button>
+      {/* B15/S3: ui/Switch-SoT statt handgebauter Kopie. */}
+      <Switch checked={an} onChange={umschalten} ariaLabel="Anonyme Community-Daten teilen" disabled={saving} />
     </div>
   )
 }

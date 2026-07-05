@@ -11,7 +11,7 @@
  * Element-Park (Parkbar je Feld). Ohne ParkProvider ist Parkbar inert → in v3 DOM-neutral.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Input, Select } from '../ui'
+import { Button, Input, Select, Switch } from '../ui'
 import { DatumPicker } from '../ui/DatumPicker'
 import { Parkbar } from '../park/Parkbar'
 
@@ -216,23 +216,13 @@ function FeldControl({
       return (
         <div className="flex items-center justify-between gap-3 py-1">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{feld.label}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={wert as boolean}
-            aria-label={feld.label}
+          {/* B15/S3: ui/Switch-SoT (aus dieser Inline-Variante extrahiert). */}
+          <Switch
+            checked={wert as boolean}
+            onChange={(an) => setzeWert(feld.id, an)}
+            ariaLabel={feld.label}
             disabled={feld.disabled}
-            onClick={() => setzeWert(feld.id, !(wert as boolean))}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              wert ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
-            }`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                wert ? 'translate-x-5' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+          />
         </div>
       )
   }

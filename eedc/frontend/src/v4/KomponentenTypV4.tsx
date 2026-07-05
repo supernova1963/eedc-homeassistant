@@ -723,7 +723,10 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
 
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-      {/* Geräte-Selektor (Art ①) — nur ab 2 Geräten desselben Typs. */}
+      {/* Geräte-Selektor (Art ①) — nur ab 2 Geräten desselben Typs.
+          Bewusst KEIN ui/SegmentControl (R3b S4, 2026-07-05): das ist ein scrollbarer
+          Pill-/Tab-Selektor mit Badges (B3-Territorium, Primary-Tint-Aktivstil) und
+          44-px-Touch-Target, keine 32-px-Toolbar-Segmentgruppe. */}
       {geraete.length >= 2 && (
         <ScrollSchatten className="flex items-center gap-2">
           {geraete.map((d, i) => (

@@ -9,7 +9,8 @@
  * - {@link communityBlock}: Community-Vergleich, data-gated (nur wenn Anlagen im
  *   Monat vorhanden, O4).
  */
-import { ArrowRight, RefreshCw, CalendarClock } from 'lucide-react'
+import { ArrowRight, CalendarClock } from 'lucide-react'
+import { ReloadButton } from './ReloadButton'
 import { fmtCalc } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BLOCK_IDENTITAET, VERGLEICH_BADGE } from '../lib'
@@ -60,17 +61,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         {/* C1: Aktualisieren — nur im laufenden Monat (IST-Parität MonatsabschlussView). */}
-        {laufend && onReload && (
-          <button
-            type="button"
-            onClick={onReload}
-            disabled={reloading}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${reloading ? 'animate-spin' : ''}`} />
-            Aktualisieren
-          </button>
-        )}
+        {laufend && onReload && <ReloadButton onClick={onReload} loading={!!reloading} />}
         {/* C2: Cross-Link zu Einstellungen/Daten (Abschluss) statt Inline-Wizard (B5/SPEC). */}
         {laufend && zeigeAbschlussLink && (
           <a

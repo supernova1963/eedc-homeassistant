@@ -32,6 +32,19 @@ export const STATUS_ICONS = {
   info: Info,
 } as const
 
+/**
+ * STEUER_H — EINE einheitliche Höhe (32 px) für ALLE Bedien-Elemente einer
+ * Filter-/Toolbar-Leiste (Chips, Toggle-Pillen, Segment-Controls, `<input>`,
+ * `<select>`) — dritte Kontroll-Höhen-Klasse neben Formular-42px und Button-36px
+ * (Style-Guide B15 Kontroll-Höhen-SoT, R3b S5). Behebt detLAN #27 Punkt 2
+ * „unterschiedliche Höhen in einer Reihe" (Chips waren 24 px, Inputs 32 px,
+ * Selects 39 px) ohne die Aktions-Buttons (36 px) anzufassen. Pillen/Buttons
+ * brauchen zusätzlich `inline-flex items-center`, `.input`-Felder `py-0`,
+ * damit die feste Höhe greift. (R3b Etappe 2: aus `v4/WerkbankZeitraum`
+ * hierher gehoben — Design-Konstante gehört ins lib-SoT-Modul, nicht in eine Sicht.)
+ */
+export const STEUER_H = 'h-8'
+
 export type KomponentenColor = 'orange' | 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'cyan' | 'gray'
 
 /** KPI-Farbklassen (Datentyp-Achse) — einzige Definition, KPICard leitet ab. */

@@ -11,7 +11,8 @@ import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useSchmaleAchse } from '../hooks'
-import { fmtCalc, ChartTooltip } from '../components/ui'
+import { fmtCalc, ChartTooltip, SegmentControl } from '../components/ui'
+import { STEUER_H } from '../lib/komponentenStyle'
 import { ExternalLink } from 'lucide-react'
 
 export interface VergleichJahr { jahr: number; summe: number }
@@ -42,25 +43,22 @@ export function KomponentenVergleich({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
           Vergleichsjahr
+          {/* B15/S5: Toolbar-Kontext → 32-px-Klasse STEUER_H im .input-Muster
+              (wie WerkbankZeitraum-Vergleichsjahr), keine lokale 36-px-Improvisation. */}
           <select
             value={vglJahr} onChange={(e) => setVglJahr(Number(e.target.value))}
-            className="min-h-[36px] rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 text-sm"
+            className={`input w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`}
           >
             {sortiert.filter((j) => j.jahr !== neuestes.jahr).map((j) => (
               <option key={j.jahr} value={j.jahr}>{j.jahr}</option>
             ))}
           </select>
         </label>
-        <div className="flex items-center gap-1">
-          {(['diagramm', 'tabelle'] as const).map((m) => (
-            <button key={m} type="button" onClick={() => setModus(m)}
-              className={`min-h-[36px] px-3 rounded-lg text-sm font-medium capitalize ${
-                modus === m
-                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800/50'
-              }`}>{m === 'diagramm' ? 'Diagramm' : 'Tabelle'}</button>
-          ))}
-        </div>
+        <SegmentControl
+          ariaLabel="Darstellung"
+          optionen={[{ key: 'diagramm', label: 'Diagramm' }, { key: 'tabelle', label: 'Tabelle' }]}
+          value={modus} onChange={setModus}
+        />
       </div>
 
       {deltaPct != null && (

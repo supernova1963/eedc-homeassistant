@@ -3,8 +3,8 @@
  * Pendant zu {@link MonatHeader}: Titel (langes Datum) + Status-Badge
  * (heute/abgeschlossen) + Aktualisieren + Quellen-Provenance (`TagWerte.datenquelle`).
  */
-import { RefreshCw } from 'lucide-react'
 import type { TagWerte } from '../api/energie_profil'
+import { ReloadButton } from './ReloadButton'
 
 // Roh-Enum → Label (Roh-Werte gehören nie in die UI, [[feedback_typ_labels_pattern]]).
 const QUELLE_LABEL: Record<string, string> = {
@@ -40,17 +40,7 @@ export function TagHeader({ datum, laufend, tag, onReload, reloading }: {
         </span>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        {onReload && (
-          <button
-            type="button"
-            onClick={onReload}
-            disabled={reloading}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${reloading ? 'animate-spin' : ''}`} />
-            Aktualisieren
-          </button>
-        )}
+        {onReload && <ReloadButton onClick={onReload} loading={!!reloading} />}
         {quelle && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs text-gray-400 dark:text-gray-500">Quellen:</span>
