@@ -14,7 +14,7 @@
  * draußen, Solcast-Spalte) + Format (R1/R2/R3) stecken in den geteilten Teilen.
  */
 import { Target, Sun, TrendingUp, GitCompareArrows, Clock } from 'lucide-react'
-import { LoadingSpinner, Card, Alert } from '../components/ui'
+import { LoadingSpinner, Card, Alert, FehlerZustand } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
@@ -135,6 +135,14 @@ export default function AuswertungenPrognoseV4() {
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const basis = useAuswertungBasis(selectedAnlageId)
 
+  if (basis.error) {
+    // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher stille Leere.
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <FehlerZustand text={basis.error} onRetry={basis.refresh} />
+      </div>
+    )
+  }
   if (anlagenLoading || basis.loading) return <LoadingSpinner text="Lade Prognose-Daten…" />
   if (anlagen.length === 0 || !selectedAnlageId) {
     return (

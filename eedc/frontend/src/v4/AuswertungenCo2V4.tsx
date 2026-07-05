@@ -17,7 +17,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Leaf, Sprout } from 'lucide-react'
-import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
+import { LoadingSpinner, Card, fmtCalc, FehlerZustand } from '../components/ui'
 import { eedcTooltipProps } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -269,6 +269,16 @@ function Co2Inner() {
     return [blockBilanz, ...(blockAmort ? [blockAmort] : []), blockBasis]
   }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, schmal])
 
+  if (basis.error) {
+    // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).
+    // VOR dem Lade-Gate, damit ein hängender Amortisations-Call den Fehler nicht verdeckt
+    // (refresh nullt error beim Start → während des Retrys greift wieder das Lade-Gate).
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <FehlerZustand text={basis.error} onRetry={basis.refresh} />
+      </div>
+    )
+  }
   if (anlagenLoading || basis.loading || !amortGeladen) return <LoadingSpinner text="Lade CO₂-Daten…" />
   if (anlagen.length === 0) {
     return (

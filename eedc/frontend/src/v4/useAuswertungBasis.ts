@@ -19,7 +19,9 @@ function zeitraumLabelFuer(jahr: number | 'alle', jahre: number[]): string {
 }
 
 export function useAuswertungBasis(anlageId: number | undefined | null) {
-  const { daten, loading } = useAggregierteDaten(anlageId ?? undefined)
+  // S15 (B8): error + refresh mit durchreichen — sonst rendern die Konsumenten bei
+  // Fetch-Fehler 0-Wert-KPIs, die wie echte Daten aussehen (stille Leere).
+  const { daten, loading, error, refresh } = useAggregierteDaten(anlageId ?? undefined)
   const { strompreis } = useAktuellerStrompreis(anlageId ?? null)
   const { strompreise: alleTarife } = useStrompreise(anlageId ?? undefined)
   const [jahr, setJahr] = useState<number | 'alle'>('alle')
@@ -35,5 +37,5 @@ export function useAuswertungBasis(anlageId: number | undefined | null) {
   const stats = useAggregierteStats(gefiltert)
   const zeitraumLabel = useMemo(() => zeitraumLabelFuer(jahr, jahre), [jahr, jahre])
 
-  return { daten, gefiltert, stats, strompreis, alleTarife, jahr, setJahr, jahre, zeitraumLabel, loading }
+  return { daten, gefiltert, stats, strompreis, alleTarife, jahr, setJahr, jahre, zeitraumLabel, loading, error, refresh }
 }

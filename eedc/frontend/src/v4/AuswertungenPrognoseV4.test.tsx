@@ -5,7 +5,7 @@
  * die Sicht-Komposition + Park-Hülle.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
 vi.mock('../hooks', () => ({
   useSchmaleAchse: () => false,
@@ -58,5 +58,16 @@ describe('AuswertungenPrognoseV4 (Sub 4)', () => {
       expect(screen.getByText(titel)).toBeInTheDocument()
     }
     expect(screen.getAllByLabelText('Jahr filtern').length).toBe(1)
+  })
+
+  it('zeigt bei Basis-Fetch-Fehler den B8-Fehler-Baustein mit Retry statt stiller Leere (S15)', () => {
+    const refresh = vi.fn()
+    Object.assign(basisMock, { error: 'Fehler beim Laden der aggregierten Daten', refresh })
+    render(<AuswertungenPrognoseV4 />)
+    expect(screen.getByText('Fehler beim Laden der aggregierten Daten')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Erneut versuchen/ }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+    cleanup()
+    Object.assign(basisMock, { error: null, refresh: undefined })
   })
 })

@@ -4,7 +4,7 @@
  * Daten-Hooks/API gestubbt → isoliert auf die Sicht-Komposition.
  */
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
 vi.mock('../hooks', () => ({
   useSelectedAnlage: () => ({
@@ -14,18 +14,17 @@ vi.mock('../hooks', () => ({
   useSchmaleAchse: () => false,
 }))
 
-vi.mock('./useAuswertungBasis', () => ({
-  useAuswertungBasis: () => ({
-    daten: [], loading: false, strompreis: null, alleTarife: [],
-    jahr: 'alle' as const, setJahr: vi.fn(), jahre: [2025], zeitraumLabel: '2025',
-    gefiltert: [{
-      jahr: 2025, monat: 5, pv_erzeugung_kwh: 12000, eigenverbrauch_kwh: 6000,
-      einspeisung_kwh: 6000, netzbezug_kwh: 3000, gesamtverbrauch_kwh: 9000,
-      direktverbrauch_kwh: 4000, autarkie_prozent: 70, eigenverbrauchsquote_prozent: 50,
-    }],
-    stats: { gesamtErzeugung: 12000, anzahlMonate: 12 },
-  }),
-}))
+const basisMock = {
+  daten: [], loading: false, strompreis: null, alleTarife: [],
+  jahr: 'alle' as const, setJahr: vi.fn(), jahre: [2025], zeitraumLabel: '2025',
+  gefiltert: [{
+    jahr: 2025, monat: 5, pv_erzeugung_kwh: 12000, eigenverbrauch_kwh: 6000,
+    einspeisung_kwh: 6000, netzbezug_kwh: 3000, gesamtverbrauch_kwh: 9000,
+    direktverbrauch_kwh: 4000, autarkie_prozent: 70, eigenverbrauchsquote_prozent: 50,
+  }],
+  stats: { gesamtErzeugung: 12000, anzahlMonate: 12 },
+}
+vi.mock('./useAuswertungBasis', () => ({ useAuswertungBasis: () => basisMock }))
 
 vi.mock('../api/investitionen', () => ({
   investitionenApi: {
@@ -47,5 +46,16 @@ describe('AuswertungenCo2V4 (Sub 2)', () => {
     expect(await screen.findByText('CO₂-Amortisation')).toBeInTheDocument()
     // 12.000 kWh × 0,38 = 4.560 kg → R2 schaltet auf t (≥1.000) → Einheit „t" im Strip.
     expect(screen.getAllByText('t').length).toBeGreaterThan(0)
+  })
+
+  it('zeigt bei Basis-Fetch-Fehler den B8-Fehler-Baustein mit Retry statt 0-KPIs (S15)', () => {
+    const refresh = vi.fn()
+    Object.assign(basisMock, { error: 'Fehler beim Laden der aggregierten Daten', refresh })
+    render(<AuswertungenCo2V4 />)
+    expect(screen.getByText('Fehler beim Laden der aggregierten Daten')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Erneut versuchen/ }))
+    expect(refresh).toHaveBeenCalledTimes(1)
+    cleanup()
+    Object.assign(basisMock, { error: null, refresh: undefined })
   })
 })

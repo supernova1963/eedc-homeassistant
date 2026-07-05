@@ -19,7 +19,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
-import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps } from '../components/ui'
+import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps, FehlerZustand } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
@@ -287,6 +287,14 @@ function FinanzenInner() {
     return [blockUebersicht, blockTKonto, blockBerichte]
   }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId, schmal, handleCsv])
 
+  if (basis.error) {
+    // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <FehlerZustand text={basis.error} onRetry={basis.refresh} />
+      </div>
+    )
+  }
   if (anlagenLoading || basis.loading) return <LoadingSpinner text="Lade Finanzdaten…" />
   if (anlagen.length === 0) {
     return (
