@@ -75,13 +75,14 @@ export function BkwMonatsTabelle({ monatsdaten, hatSpeicher }: { monatsdaten: In
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
+            {/* B2/C3 (#237): Einheit im Header „Name (Einheit)", nicht pro Zelle. */}
             <th className="text-left py-2 px-2">Monat</th>
-            <th className="text-right py-2 px-2">Erzeugung</th>
-            <th className="text-right py-2 px-2">Eigenverbrauch</th>
-            <th className="text-right py-2 px-2">Einspeisung</th>
+            <th className="text-right py-2 px-2">Erzeugung (kWh)</th>
+            <th className="text-right py-2 px-2">Eigenverbrauch (kWh)</th>
+            <th className="text-right py-2 px-2">Einspeisung (kWh)</th>
             {hatSpeicher && <>
-              <th className="text-right py-2 px-2">Sp. Ladung</th>
-              <th className="text-right py-2 px-2">Sp. Entl.</th>
+              <th className="text-right py-2 px-2">Sp. Ladung (kWh)</th>
+              <th className="text-right py-2 px-2">Sp. Entl. (kWh)</th>
             </>}
           </tr>
         </thead>

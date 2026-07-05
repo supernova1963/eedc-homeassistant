@@ -22,7 +22,8 @@
     "check:darkmode-paare": "node scripts/check-darkmode-paare.mjs",
     "check:typografie": "node scripts/check-typografie.mjs",
     "check:status-icons": "node scripts/check-status-icons.mjs",
-    "check:buttons": "node scripts/check-buttons.mjs"
+    "check:buttons": "node scripts/check-buttons.mjs",
+    "check:tabellen": "node scripts/check-tabellen.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

@@ -156,13 +156,16 @@ export function communityBlock(
       ? ` · spez. Ertrag ${fmtCalc(eigenSpez, 0)} kWh/kWp (${vz(eigenSpez - medianSpez)}${fmtCalc(eigenSpez - medianSpez, 0)} / ${vz(((eigenSpez - medianSpez) / medianSpez) * 100)}${fmtCalc(((eigenSpez - medianSpez) / medianSpez) * 100, 0)} % vs. Median)`
       : ''
   // inv = „niedriger ist besser" (nur Netzbezug); steuert das ▲▼-Vergleichs-Badge (A2, wie IST).
+  // B2/S14 (R3b E2): transponierte Tabelle → Einheit genau EINMAL je Zeile am
+  // Zeilen-Label „Kennzahl (Einheit)", nicht in jeder Wertzelle (`unit` bleibt
+  // für die Dezimal-Logik erhalten).
   const zeilen: { label: string; du: number | null | undefined; median: number | null | undefined; unit: string; inv?: boolean }[] = [
-    { label: 'Autarkie',       du: d.autarkie_prozent,            median: vergleich.autarkie?.median,     unit: '%' },
-    { label: 'Eigenverbrauch', du: d.eigenverbrauch_quote_prozent, median: vergleich.eigenverbrauch?.median, unit: '%' },
-    { label: 'Einspeisung',    du: d.einspeisung_kwh,             median: vergleich.einspeisung?.median,   unit: 'kWh' },
-    { label: 'Netzbezug',      du: d.netzbezug_kwh,               median: vergleich.netzbezug?.median,     unit: 'kWh', inv: true },
+    { label: 'Autarkie (%)',        du: d.autarkie_prozent,            median: vergleich.autarkie?.median,     unit: '%' },
+    { label: 'Eigenverbrauch (%)',  du: d.eigenverbrauch_quote_prozent, median: vergleich.eigenverbrauch?.median, unit: '%' },
+    { label: 'Einspeisung (kWh)',   du: d.einspeisung_kwh,             median: vergleich.einspeisung?.median,   unit: 'kWh' },
+    { label: 'Netzbezug (kWh)',     du: d.netzbezug_kwh,               median: vergleich.netzbezug?.median,     unit: 'kWh', inv: true },
   ]
-  const fmt = (v: number | null | undefined, unit: string) => (v == null ? '—' : `${fmtCalc(v, unit === '%' ? 1 : 0)} ${unit}`)
+  const fmt = (v: number | null | undefined, unit: string) => (v == null ? '—' : fmtCalc(v, unit === '%' ? 1 : 0))
   return {
     id: 'community',
     title: 'Community-Vergleich',
@@ -174,7 +177,7 @@ export function communityBlock(
       <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
+            <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
               <th className="py-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
               <th className="py-1.5 text-right font-medium">Deine Anlage</th>
               <th className="py-1.5 text-right font-medium">Ø Community (Median)</th>

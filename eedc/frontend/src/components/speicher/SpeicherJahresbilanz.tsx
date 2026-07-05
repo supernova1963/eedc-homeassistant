@@ -90,11 +90,13 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false }: { monatsdat
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+                {/* B2/C3 (#237): Einheit im Header — Zellen tragen nur Zahl + %-Anteil
+                    (Anteil am Jahres-Ladungsvolumen, eigene Einheit → bleibt in der Zelle). */}
                 <th className="text-left py-2 px-2 font-medium">Jahr</th>
-                <th className="text-right py-2 px-2 font-medium">PV-Ladung</th>
-                {hatNetz && <th className="text-right py-2 px-2 font-medium">Netz-Ladung</th>}
-                <th className="text-right py-2 px-2 font-medium">Entladung</th>
-                <th className="text-right py-2 px-2 font-medium">Verlust</th>
+                <th className="text-right py-2 px-2 font-medium">PV-Ladung (kWh)</th>
+                {hatNetz && <th className="text-right py-2 px-2 font-medium">Netz-Ladung (kWh)</th>}
+                <th className="text-right py-2 px-2 font-medium">Entladung (kWh)</th>
+                <th className="text-right py-2 px-2 font-medium">Verlust (kWh)</th>
               </tr>
             </thead>
             <tbody>

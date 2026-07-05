@@ -296,8 +296,9 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 > **Konkrete Konvention (Fundament-P6, Vorgabe für Slice 3.1 `<WerteTabelle>`):**
 > - **Spalten-Header-Casing:** erstes Wort groß, Rest klein (Satz-Stil), keine Versalien; Gewicht `font-medium`, Farbe `text-gray-500 dark:text-gray-400`.
-> - **Einheit im Header** in Klammern: Format `Name (Einheit)`, z. B. „Strom (kWh)", „Autarkie (%)" — **nicht** pro Zelle (#237). Genau dieses Klammer-Format überall.
-> - **Sortierung:** Typ-Spalten nach `INVESTITION_TYP_ORDER` (`lib/constants.ts` / `compareTyp`) als SoT; Suffix-Typen über Präfix-Match. **Datums-/Zeitreihen-Default absteigend (aktuell → alt), F10** — Ausnahme nur Verlaufs-Charts (chronologisch).
+> - **Einheit im Header** in Klammern: Format `Name (Einheit)`, z. B. „Strom (kWh)", „Autarkie (%)" — **nicht** pro Zelle (#237). Genau dieses Klammer-Format überall (runde Klammern — keine `[kWh]`).
+> - **Transponierte Tabellen** (Kennzahl je Zeile, gemischte Einheiten — z. B. Bilanz-IST/VM/VJ, Community-Vergleich; R3b S14, 2026-07-05): Einheit genau **einmal je Zeile** — als Einheiten-Subspalte (Bilanz-Trio) **oder** am Zeilen-Label `Kennzahl (Einheit)` (Community-Vergleich), **nie** in jeder Wertzelle.
+> - **Sortierung:** Typ-Spalten nach `INVESTITION_TYP_ORDER` (`lib/constants.ts` / `compareTyp`) als SoT; Suffix-Typen über Präfix-Match. **Datums-/Zeitreihen-Default absteigend (aktuell → alt), F10** — Ausnahmen (abschließend): Verlaufs-Charts (chronologisch) · **WerteTabelle-Zeitreihen-Default aufsteigend** (R3b E1, Gernot 2026-07-05: Lese-Richtung der Analyse-Tabelle, Kommentar an der Komponente) · **T-Konto-Monats-Select kalendarisch Jan→Dez** (R3b E5, Gernot 2026-07-05: Jahres-Kontext, Default-Auswahl bleibt der neueste Monat).
 > - **Leerwert:** `—` aus A3.
 > - **Zahlen:** rechtsbündig, deutsches Komma + Tausenderpunkt, `%` mit Leerzeichen (C2/C3).
 > - **Spalten-Auswahl-Pattern (#292) einheitlich:** Drop-Down mit „Standard wiederherstellen", Anzahl-Badge (gewählt/gesamt), CSV-Button beschriftet „CSV" (nicht „CSV Export"). Heute über mehrere Tabellen gedriftet (fünf belegte Befunde aus #292) → in 3.1 baulich vereinheitlicht.

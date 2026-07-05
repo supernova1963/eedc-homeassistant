@@ -125,6 +125,10 @@ export function WerteTabelle({
   const [vergleichAn, setVergleichAn] = useState(vergleichDefaultAn)
   // Spalten-Sortierung (IST-Parität TabelleTab): null = chronologisch aufsteigend
   // (Default, wie die Cockpit-Embeds) · '__zeit' = Zeitraum-Spalte · sonst Metrik-key.
+  // Dokumentierte F10-AUSNAHME (R3b E1, Gernot 2026-07-05): WerteTabelle-Zeitreihen
+  // bleiben bewusst AUFSTEIGEND (Lese-Richtung der Analyse-Tabelle mit Δ-Vergleich);
+  // die F10-Regel „Datums-Listen absteigend" gilt unverändert für alle anderen
+  // Tabellen (z. B. KomponentenMonatsTabelle). Scope der Ausnahme: NUR dieser Default.
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
@@ -242,8 +246,9 @@ export function WerteTabelle({
     <div className="space-y-3">
       {/* ── Steuerung (überall identisch) ──────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* B2 #292: Anzahl-Badge (gewählt/gesamt) am Picker-Button. */}
         <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => setPickerOffen((o) => !o)}>
-          <Columns className="h-4 w-4" /> Spalten
+          <Columns className="h-4 w-4" /> Spalten ({visible.size}/{verfuegbar.length})
         </Button>
         {vergleichVerfuegbar && (
           <Button
@@ -265,7 +270,8 @@ export function WerteTabelle({
       </div>
 
       {pickerOffen && (
-        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {gruppen.map((g) => (
             <div key={g}>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">{GRUPPE_LABELS[g]}</p>
@@ -302,13 +308,24 @@ export function WerteTabelle({
             </div>
           ))}
         </div>
+        {/* B2 #292: „Standard wiederherstellen" — zurück auf den Spalten-Default
+            (Werkbank-`defaultSpalten` ∨ Registry) UND die Registry-Reihenfolge. */}
+        <div className="border-t border-gray-100 dark:border-gray-700/50 pt-2">
+          <Button
+            size="sm" variant="ghost"
+            onClick={() => { setVisible(new Set(defaultVisibleKeys)); setOrder(verfuegbar.map((m) => m.key)) }}
+          >
+            Standard wiederherstellen
+          </Button>
+        </div>
+        </div>
       )}
 
       {/* ── Tabelle — Überlauf per ScrollSchatten (A9) ─────────────────────── */}
       <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
+            <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
               <th className="px-3 py-2 font-medium whitespace-nowrap">
                 <button type="button" onClick={() => toggleSort('__zeit')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
                   Zeitraum {sortKey === '__zeit' && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}

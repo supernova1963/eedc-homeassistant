@@ -700,7 +700,7 @@ function EinstellungSeite({ inhalt, fokus }: { inhalt: Inhalt; fokus: boolean })
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-gray-400 dark:text-gray-500">
+              <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
                 {inhalt.spalten.map((s) => <th key={s} className="py-1 pr-4 font-medium whitespace-nowrap">{s}</th>)}
               </tr>
             </thead>

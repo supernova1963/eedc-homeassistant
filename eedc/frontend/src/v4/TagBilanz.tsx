@@ -201,7 +201,7 @@ export function TagBilanz({
         <ScrollSchatten achse="horizontal" aussenClassName="hidden sm:block" fadeFrom="from-white dark:from-gray-800">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+              <tr className="text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
                 <th className="text-left pb-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
                 <th colSpan={2} className="text-center pb-1.5 font-medium">IST</th>
                 <th colSpan={2} className="text-center pb-1.5 font-medium">Vortag</th>

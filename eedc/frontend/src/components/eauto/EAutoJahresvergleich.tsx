@@ -72,10 +72,11 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdat
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+                {/* B2/C3 (#237): Einheit im Header — Zellen tragen nur Zahl + %-Anteil. */}
                 <th className="text-left py-2 px-2 font-medium">Jahr</th>
-                <th className="text-right py-2 px-2 font-medium">PV</th>
-                <th className="text-right py-2 px-2 font-medium">Netz</th>
-                {hatExtern && <th className="text-right py-2 px-2 font-medium">Extern</th>}
+                <th className="text-right py-2 px-2 font-medium">PV (kWh)</th>
+                <th className="text-right py-2 px-2 font-medium">Netz (kWh)</th>
+                {hatExtern && <th className="text-right py-2 px-2 font-medium">Extern (kWh)</th>}
               </tr>
             </thead>
             <tbody>

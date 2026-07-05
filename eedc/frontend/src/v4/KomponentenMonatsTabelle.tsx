@@ -32,7 +32,7 @@ export function KomponentenMonatsTabelle({
                 <th key={b.key} className="text-right py-2 px-2 font-medium whitespace-nowrap">
                   <span className="inline-flex items-center gap-1.5 justify-end">
                     <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: b.farbe }} />
-                    {b.label} <span className="font-normal text-gray-400 dark:text-gray-500">[{einheit}]</span>
+                    {b.label} <span className="font-normal text-gray-400 dark:text-gray-500">({einheit})</span>
                   </span>
                 </th>
               ))}

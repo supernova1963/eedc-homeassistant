@@ -88,7 +88,7 @@ export function KomponentenVergleich({
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-gray-400 dark:text-gray-500 border-b border-gray-200 dark:border-gray-700">
+            <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
               <th className="py-1 font-medium">Jahr</th>
               <th className="py-1 font-medium text-right">{label} ({einheit})</th>
               <th className="py-1 font-medium text-right">Δ vs. {ref.jahr}</th>
