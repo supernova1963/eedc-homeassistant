@@ -7,7 +7,7 @@
  * (gruppiert nach Monat statt Jahr).
  */
 import { useMemo } from 'react'
-import { MONAT_KURZ, WT_KURZ, DATENROLLE, fmtZahl } from '../lib'
+import { MONAT_KURZ, WT_KURZ, DATENROLLE, fmtZahl, LAUFEND_ZUSTAND } from '../lib'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { DatumPicker } from '../components/ui/DatumPicker'
 
@@ -92,7 +92,7 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
                 >
                   <span className={`relative z-10 mt-1 h-3 w-3 rounded-full border-2 shrink-0 transition-all ${
                     e.heute
-                      ? 'bg-emerald-400 border-emerald-500 animate-pulse'
+                      ? LAUFEND_ZUSTAND.punkt
                       : sel
                         ? 'bg-blue-600 border-blue-600 shadow shadow-blue-400/50'
                         : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 group-hover:border-blue-400'
@@ -103,7 +103,7 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
                         {wochentag(e.datum)} {tagNr(e.datum)}.
                       </span>
                       <span className={`text-xs tabular-nums ${
-                        e.heute ? 'text-emerald-500 dark:text-emerald-400' : sel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
+                        e.heute ? LAUFEND_ZUSTAND.text : sel ? 'text-blue-500 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
                       }`}>
                         {e.heute ? 'heute' : `${fmtZahl(e.pv_kwh, 0)} kWh`}
                       </span>

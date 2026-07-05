@@ -16,6 +16,7 @@ import type { LucideIcon } from 'lucide-react'
 import { ChevronDown } from 'lucide-react'
 import { ScrollSchatten } from '../components/ui/ScrollSchatten'
 import Button from '../components/ui/Button'
+import { LAUFEND_ZUSTAND } from '../lib'
 
 /** Ein Player-Schritt (Pfeil-Button). `go=null` → am Rand deaktiviert. */
 export interface ZeitSchritt {
@@ -93,7 +94,7 @@ export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprun
         >
           <span className="truncate">{titel}</span>
           {badge && (
-            <span className="text-[10px] leading-none px-1 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">{badge}</span>
+            <span className={`text-[10px] leading-none px-1 py-0.5 rounded-full ${LAUFEND_ZUSTAND.badge}`}>{badge}</span>
           )}
           <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${offen ? 'rotate-180' : ''}`} />
         </button>
@@ -129,7 +130,7 @@ export function ZeitStepper({ zurueck, vor, titel, badge, eintraege, direktsprun
                   }`}
                 >
                   <span>{e.label}</span>
-                  <span className={`text-xs ${e.aktiv ? 'text-emerald-500 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500 tabular-nums'}`}>
+                  <span className={`text-xs ${e.aktiv ? LAUFEND_ZUSTAND.text : 'text-gray-400 dark:text-gray-500 tabular-nums'}`}>
                     {e.wert}
                   </span>
                 </button>

@@ -6,6 +6,7 @@
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { ReloadButton } from './ReloadButton'
 import { DATENQUELLE_LABELS } from '../lib/constants'
+import { LAUFEND_ZUSTAND } from '../lib'
 
 function provenanceQuellen(feldQuellen: AktuellerMonatResponse['feld_quellen']): string[] {
   if (!feldQuellen) return []
@@ -32,7 +33,7 @@ export function JahrHeader({ jahr, laufend, d, onReload, reloading }: {
         <h1 className="text-lg font-bold text-gray-900 dark:text-white">{jahr}</h1>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
           laufend
-            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+            ? LAUFEND_ZUSTAND.badge
             : 'bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
         }`}>
           {laufend ? 'läuft' : 'abgeschlossen'}

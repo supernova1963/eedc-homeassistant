@@ -481,6 +481,10 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
 
       {/* Tarif-Info */}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500 px-1">
+        {/* E4 (R3b, Regel-0a-STUFE-3-AUSNAHME, Gernot 2026-07-05): flexibler
+            Ø-Netzbezugspreis bewusst BLAU hervorgehoben (Hinweis „dynamischer Tarif
+            aktiv") statt Strompreis-Purple — dokumentierte Ausnahme (Style-Guide-
+            Ausnahmen-Liste); Zwilling in v4/MonatRahmen.tsx. */}
         {d.netzbezug_durchschnittspreis_cent != null
           ? <span>Netzbezug Ø <span className="text-blue-500 font-medium">{fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh</span> (flex)</span>
           : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>

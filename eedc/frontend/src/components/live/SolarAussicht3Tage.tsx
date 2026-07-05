@@ -10,7 +10,7 @@ import { Info } from 'lucide-react'
 import type { LiveWetterResponse } from '../../api/liveDashboard'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import { SimpleTooltip } from '../ui/FormelTooltip'
-import { fmtZahl } from '../../lib'
+import { fmtZahl, DATENROLLE } from '../../lib'
 
 export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }: {
   prognose3Tage: SolarPrognoseTag[]
@@ -30,7 +30,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
           <span className="text-[10px] text-right">
             <span className="text-amber-500">VM</span>
             <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
-            <span className="text-yellow-500">NM</span>
+            <span className="text-amber-400">NM</span>
           </span>
         </div>
       )}
@@ -66,7 +66,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
             }`}>
               <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
               <div className="flex flex-col items-end">
-                <span className={`font-bold text-yellow-600 dark:text-yellow-400 ${isProminent ? 'text-base' : 'text-xs'}`}>
+                <span className={`font-bold ${DATENROLLE.pv.text} ${isProminent ? 'text-base' : 'text-xs'}`}>
                   {fmtZahl(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : tag.pv_ertrag_kwh, 1)}
                   <span className="text-xs font-normal ml-0.5">kWh</span>
                 </span>
@@ -84,7 +84,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
                   <>
                     <span className="font-semibold text-amber-500">{fmtZahl(tag.pv_ertrag_morgens_kwh!, 1)}</span>
                     <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
-                    <span className="font-semibold text-yellow-500">{fmtZahl(tag.pv_ertrag_nachmittags_kwh ?? 0, 1)}</span>
+                    <span className="font-semibold text-amber-400">{fmtZahl(tag.pv_ertrag_nachmittags_kwh ?? 0, 1)}</span>
                   </>
                 ) : null}
               </span>

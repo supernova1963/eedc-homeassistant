@@ -25,6 +25,10 @@ import {
   type WerteMetrik, type WerteZeile, type Granularitaet,
 } from '../../lib/werte'
 
+// Dokumentierte KONVENTION (R3b E2, Gernot 2026-07-05): eigenes 2-stufiges
+// Urteil-Vokabular der WerteTabelle (bewerteDelta: gut/schlecht/neutral) —
+// bewusst NICHT aus AMPEL_TEXT_CLASS abgeleitet (das ist die 4-stufige
+// Gauge-Skala; hier gilt Delta-Semantik mit eigener Tönung gut=green-600).
 const URTEIL_KLASSE: Record<string, string> = {
   gut: 'text-green-600 dark:text-green-400',
   schlecht: 'text-red-500 dark:text-red-400',

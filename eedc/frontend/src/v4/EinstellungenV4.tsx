@@ -15,7 +15,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Home, type LucideIcon } from 'lucide-react'
-import { STATUS_ICONS } from '../lib'
+import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
 import { BlockShell, type Block } from '../components/blocks'
@@ -39,14 +39,14 @@ import {
 } from '../config/einstellungenKatalog'
 
 /**
- * Icon + Farbe je Badge-Status (Muster = IASkeleton `STATUS_META`, gespeist aus
- * dem echten Status-Kanon: grün/amber/blau). Farbe = Tailwind-Text-Klasse
- * (Status-Achse, kein Hex → check:design).
+ * Icon + Farbe je Badge-Status — beides aus dem Status-Kanon (STATUS_ICONS +
+ * STATUS_TEXT_CLASS, R3b A2-5/S18): grün/GELB/blau. Vorher stand warn hart auf
+ * amber-500 (= Solar-Rolle) — Drift gegen die F3-Status-Achse (warnung = yellow-500).
  */
 const STATUS_META: Record<KachelStatus, { icon: LucideIcon; farbe: string; titel: string }> = {
-  ok: { icon: STATUS_ICONS.ok, farbe: 'text-green-500', titel: 'eingerichtet' },
-  warn: { icon: STATUS_ICONS.warnung, farbe: 'text-amber-500', titel: 'braucht Aufmerksamkeit' },
-  neu: { icon: STATUS_ICONS.info, farbe: 'text-blue-500', titel: 'neu — noch nicht eingerichtet' },
+  ok: { icon: STATUS_ICONS.ok, farbe: STATUS_TEXT_CLASS.ok, titel: 'eingerichtet' },
+  warn: { icon: STATUS_ICONS.warnung, farbe: STATUS_TEXT_CLASS.warnung, titel: 'braucht Aufmerksamkeit' },
+  neu: { icon: STATUS_ICONS.info, farbe: STATUS_TEXT_CLASS.info, titel: 'neu — noch nicht eingerichtet' },
 }
 
 /** Status-Icon für den Block-Kopf (Tooltip = Grund, sonst Standardtitel). */

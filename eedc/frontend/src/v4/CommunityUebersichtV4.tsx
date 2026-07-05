@@ -9,7 +9,7 @@ import { Trophy, ThumbsUp, BarChart3, Sparkles, Battery } from 'lucide-react'
 import { BlockShell, type Block } from '../components/blocks'
 import { LoadingSpinner, Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
-import { fmtZahl } from '../lib'
+import { fmtZahl, KOMPONENTEN_IDENTITAET } from '../lib'
 import type { CommunityBenchmarkResponse } from '../api/community'
 import {
   useUebersichtDaten, RankingHauptKpi, StaerkenSchwaechen, PerformanceProfil,
@@ -74,7 +74,9 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
       render: () => <AchievementsBlock achievements={d.achievements} />,
     } : null,
     benchmark.benchmark_erweitert && !alleGeparkt(kompIds) ? {
-      id: 'komponenten', title: 'Komponenten-Benchmarks', icon: Battery, farbe: 'text-green-500',
+      // A2-4-Rest (R3b E3): Battery = Speicher-Identitäts-Icon → Identitätsfarbe des
+      // Icons (Sammel-Block), nicht hartes Grün.
+      id: 'komponenten', title: 'Komponenten-Benchmarks', icon: Battery, farbe: KOMPONENTEN_IDENTITAET['speicher'].farbe,
       summary: 'Speicher · BKW · WP · Wallbox · E-Auto vs. Community', defaultOpen: false,
       render: () => <KomponentenBenchmarks benchmark={benchmark} />,
     } : null,

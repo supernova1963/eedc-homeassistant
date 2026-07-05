@@ -13,7 +13,7 @@ import { ArrowRight, CalendarClock } from 'lucide-react'
 import { ReloadButton } from './ReloadButton'
 import { fmtCalc } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
-import { BLOCK_IDENTITAET, VERGLEICH_BADGE } from '../lib'
+import { BLOCK_IDENTITAET, VERGLEICH_BADGE, LAUFEND_ZUSTAND } from '../lib'
 import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -50,7 +50,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
         <h1 className="text-lg font-bold text-gray-900 dark:text-white">{titel}</h1>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
           laufend
-            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+            ? LAUFEND_ZUSTAND.badge
             : 'bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
         }`}>
           {laufend ? 'läuft' : 'abgeschlossen'}
@@ -111,6 +111,10 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
         {hatTarif && (
           <Parkbar id="el:finanzen-tarif" titel="Tarif-Info">
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+              {/* E4 (R3b, Regel-0a-STUFE-3-AUSNAHME, Gernot 2026-07-05): der flexible
+                  Ø-Netzbezugspreis wird bewusst BLAU hervorgehoben (Hinweis „dynamischer
+                  Tarif aktiv"), obwohl die Strompreis-Rolle Purple ist — dokumentierte
+                  Ausnahme (Style-Guide-Ausnahmen-Liste); Zwilling in finanzen/TKonto.tsx. */}
               {d.netzbezug_durchschnittspreis_cent != null
                 ? <span>Netzbezug Ø <span className="text-blue-500 dark:text-blue-400 font-medium">{fmtCalc(d.netzbezug_durchschnittspreis_cent, 2)} ct/kWh</span> (flex)</span>
                 : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>}

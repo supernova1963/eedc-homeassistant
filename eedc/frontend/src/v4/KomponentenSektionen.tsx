@@ -170,6 +170,9 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     })
     if (hat(d.speicher_ladung_kwh) && hat(d.speicher_entladung_kwh)) {
       const bilanz = d.speicher_entladung_kwh! - d.speicher_ladung_kwh!
+      // E3 (R3b, Gernot 2026-07-05): Amber = dokumentierte HINWEIS-Rolle
+      // („negativ, aber kein Fehler") — eine negative Speicher-Bilanz ist
+      // physikalisch normal (Wirkungsgrad), bewusst NICHT Kosten-/Signal-Rot.
       detail.push({
         label: 'Bilanz (Entladung − Ladung)',
         wert: `${bilanz >= 0 ? '+' : ''}${fmt(bilanz, 1)} kWh`,
@@ -188,6 +191,8 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
         </FormelTooltip>
       ),
       wert: `−${fmtCalc(wv.euro, 2)} €`,
+      // E3 (R3b, Gernot 2026-07-05): Wirkungsverluste-€ bewusst Amber =
+      // Hinweis-Rolle, NICHT Kosten-Rot (Opportunitätskosten, kein Fehler).
       akzent: 'text-amber-600 dark:text-amber-400',
     })
     const speicherKpis = mitParkId('speicher', kpis)

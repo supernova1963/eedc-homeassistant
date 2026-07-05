@@ -560,9 +560,11 @@ function HilfeView() {
 // App aus dem STATUS_ICONS/colors-SoT). `hinweis` = Daten-Checker-artiger
 // Tooltip, der bei ⚠ erklärt, WAS zu tun ist (OK/NOK mit Begründung).
 type KachelStatus = 'ok' | 'warn' | 'neu'
+// R3b A2-5: warn = Kanon-GELB (yellow-500, F3-Status-Achse) statt amber — die
+// Preview-SoT war der Drift-Ursprung der EinstellungenV4-STATUS_META.
 const STATUS_META: Record<KachelStatus, { icon: LucideIcon; farbe: string; standardTitel: string }> = {
   ok:   { icon: STATUS_ICONS.ok,   farbe: 'text-green-500', standardTitel: 'eingerichtet' },
-  warn: { icon: STATUS_ICONS.warnung, farbe: 'text-amber-500', standardTitel: 'braucht Aufmerksamkeit' },
+  warn: { icon: STATUS_ICONS.warnung, farbe: 'text-yellow-500', standardTitel: 'braucht Aufmerksamkeit' },
   neu:  { icon: STATUS_ICONS.info, farbe: 'text-blue-500',  standardTitel: 'neu — noch nicht eingerichtet' },
 }
 

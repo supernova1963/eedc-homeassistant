@@ -73,6 +73,30 @@ export function sollIstStufe(pct: number): 'gut' | 'maessig' | 'hoch' {
   return pct >= 100 ? 'gut' : pct >= 75 ? 'maessig' : 'hoch'
 }
 
+/** Tailwind-Text-Klassen-Zwilling zu {@link STATUS_COLORS} (R3b S18, 2026-07-05 —
+ *  Muster = AMPEL_TEXT_CLASS/Regel G): Status-Färbung von Icons/Legenden als EINE
+ *  Quelle statt harter Klassen (Drift-Beleg: EinstellungenV4-warn zeigte amber-500
+ *  = Solar-Rolle statt Kanon-Gelb). */
+export const STATUS_TEXT_CLASS = {
+  ok: 'text-green-500',
+  warnung: 'text-yellow-500',
+  kritisch: 'text-red-500',
+  info: 'text-blue-500',
+} as const
+
+/**
+ * Zustands-Token „laufender Zeitraum" (R3b S18, 2026-07-05): heute/läuft-Markierung
+ * der Zeit-Sichten (Badges der Sicht-Köpfe, Pulse-Dots + Wert-Färbung der Rails,
+ * ZeitStepper). Emerald — bewusst getrennt von STATUS_COLORS.ok (green-500); die
+ * farbliche Nähe zur Einspeisung-Rolle (feedin #10b981) ist bekannt und akzeptiert
+ * (unterschiedliche Kontexte: Zustands-Chip vs. Chart-Serie).
+ */
+export const LAUFEND_ZUSTAND = {
+  badge: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300',
+  punkt: 'bg-emerald-400 border-emerald-500 animate-pulse',
+  text: 'text-emerald-500 dark:text-emerald-400',
+} as const
+
 // ─── Geld-Logik — positiv = grün, negativ/Kosten = Signal-Rot ────────────────
 
 export const GELD_COLORS = {
@@ -90,6 +114,25 @@ export const GELD_TEXT_CLASS = {
   kosten: 'text-red-600 dark:text-red-400',
   netto: 'text-emerald-700 dark:text-emerald-400',
 } as const
+
+/**
+ * Trend-/Delta-Wertungsfärbung (R3b S18, 2026-07-05): „besser = grün, schlechter =
+ * rot" für Trends/Abweichungen/Korrekturfaktoren. WICHTIG: der KONSUMENT bestimmt
+ * die Richtung — Vorzeichen ≠ Wertung (steigende JAZ = positiv, steigender
+ * Verbrauch wäre negativ). Optisch identisch mit GELD_TEXT_CLASS.ersparnis/kosten,
+ * semantisch getrennte Rolle (späterer Paletten-/CSS-Var-Umbau stellt beide
+ * unabhängig um).
+ */
+export const TREND_TEXT_CLASS = {
+  positiv: 'text-green-600 dark:text-green-400',
+  negativ: 'text-red-600 dark:text-red-400',
+  neutral: 'text-gray-500 dark:text-gray-400',
+} as const
+
+/** CO₂-/Umwelt-Text-Zwilling (R3b S18, 2026-07-05) — an CHART_COLORS.co2Pv
+ *  (#10b981 Emerald) verankert; für Einsparungs-Werte in KPIs/Tabellen statt
+ *  harter green-600-Klassen. */
+export const CO2_TEXT_CLASS = 'text-emerald-600 dark:text-emerald-400'
 
 // ─── Chart-Farben (nach Metrik) ──────────────────────────────────────────────
 
@@ -418,9 +461,12 @@ export const CHART_LABELS: Record<string, string> = {
 
 /** Vergleichs-Badge (▲ besser / ▼ schlechter) — EIN Token statt 3× wortgleich in
  *  Monat-/Jahr-Bilanz + Rahmen (Regel H, 2026-06-25). Hell+Dunkel-Paar. */
+// R3b E3 (Folgepunkt aus Etappe-1-B17): Tönung von -100 auf den B17-Kanon -50
+// gehoben (+ dark auf /20) — der Token-Konflikt mit der Badge-Regel war in
+// Etappe 1 bewusst an S18 vertagt worden.
 export const VERGLEICH_BADGE = {
-  besser: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  schlechter: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  besser: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
+  schlechter: 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400',
 } as const
 
 /** Chart-Flächen-/Dimm-Opazitäten als benannte Tokens statt roher Magic-Numbers

@@ -7,6 +7,7 @@ import type { TagWerte } from '../api/energie_profil'
 import { ReloadButton } from './ReloadButton'
 // R3b S7: Provenance-Labels + Wochentage aus der SoT (vorher 3 gedriftete lokale Kopien).
 import { DATENQUELLE_LABELS, WT_LANG } from '../lib/constants'
+import { LAUFEND_ZUSTAND } from '../lib'
 
 function langesDatum(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
@@ -27,7 +28,7 @@ export function TagHeader({ datum, laufend, tag, onReload, reloading }: {
         <h1 className="text-lg font-bold text-gray-900 dark:text-white">{langesDatum(datum)}</h1>
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
           laufend
-            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+            ? LAUFEND_ZUSTAND.badge
             : 'bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
         }`}>
           {laufend ? 'heute' : 'abgeschlossen'}

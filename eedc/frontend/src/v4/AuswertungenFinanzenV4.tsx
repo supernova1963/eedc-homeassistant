@@ -24,7 +24,7 @@ import ChartTooltip from '../components/ui/ChartTooltip'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
-import { COLORS, GELD_COLORS, MONAT_NAMEN, STATUS_ICONS, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
+import { COLORS, GELD_COLORS, GELD_TEXT_CLASS, MONAT_NAMEN, STATUS_ICONS, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
 import { exportToCSV } from '../utils/export'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -224,7 +224,7 @@ function FinanzenInner() {
               </div>
               <div className="mt-2 flex items-center justify-center gap-3 text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Gesamt nach {monate} Monaten:</span>
-                <span className="text-lg font-semibold text-green-600 dark:text-green-400">{fmtZahl(gesamt.nettoNachSonderkosten, 0)} €</span>
+                <span className={`text-lg font-semibold ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten, 0)} €</span>
               </div>
             </div>
           </Parkbar>
@@ -252,13 +252,15 @@ function FinanzenInner() {
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
             <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Durchschnittswerte</p>
             <div className={`grid grid-cols-2 gap-3 text-sm ${gesamt.sonderkosten > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
-              <div><p className="text-gray-500 dark:text-gray-400">Ø Einspeiseerlös/Monat</p><p className="font-medium text-green-600 dark:text-green-400">{fmtZahl(gesamt.einspeiseErloes / monate, 0)} €</p></div>
-              <div><p className="text-gray-500 dark:text-gray-400">Ø EV-Ersparnis/Monat</p><p className="font-medium text-purple-600 dark:text-purple-400">{fmtZahl(gesamt.eigenverbrauchErsparnis / monate, 0)} €</p></div>
-              <div><p className="text-gray-500 dark:text-gray-400">Ø Netzbezug-Kosten/Monat</p><p className="font-medium text-red-600 dark:text-red-400">{fmtZahl(gesamt.netzbezugKosten / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Einspeiseerlös/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.ertrag}`}>{fmtZahl(gesamt.einspeiseErloes / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø EV-Ersparnis/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.ersparnis}`}>{fmtZahl(gesamt.eigenverbrauchErsparnis / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Netzbezug-Kosten/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.kosten}`}>{fmtZahl(gesamt.netzbezugKosten / monate, 0)} €</p></div>
+              {/* E3 (R3b, Gernot 2026-07-05): Sonderkosten bewusst Amber = Hinweis-Rolle
+                  („negativ, aber kein Fehler"), NICHT Kosten-Rot — dokumentierte Ausnahme. */}
               {gesamt.sonderkosten > 0 && (
                 <div><p className="text-gray-500 dark:text-gray-400">Ø Sonderkosten/Monat</p><p className="font-medium text-amber-600 dark:text-amber-400">{fmtZahl(gesamt.sonderkosten / monate, 0)} €</p></div>
               )}
-              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag/Monat</p><p className="font-medium text-blue-600 dark:text-blue-400">{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
             </div>
           </div>
         </div>

@@ -18,7 +18,7 @@ import {
 import ChartTooltip from '../ui/ChartTooltip'
 import ScrollSchatten from '../ui/ScrollSchatten'
 import { fmtCalc, ChartLegende } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, DATENROLLE, TREND_TEXT_CLASS, AMPEL_TEXT_CLASS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
@@ -196,9 +196,9 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
             <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
               <td className="py-2 px-3 font-medium">{formatDatum(tag.datum)}</td>
               <td className="py-2 px-3"><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
-              <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{fmtZahl(tag.pv_ertrag_kwh, 1)}</td>
-              {hasVmNm && <td className="py-2 px-3 text-right text-amber-500 tabular-nums">{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '—'}</td>}
-              {hasVmNm && <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '—'}</td>}
+              <td className={`py-2 px-3 text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(tag.pv_ertrag_kwh, 1)}</td>
+              {hasVmNm && <td className={`py-2 px-3 text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '—'}</td>}
+              {hasVmNm && <td className={`py-2 px-3 text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '—'}</td>}
               <td className="py-2 px-3 text-right tabular-nums">{tag.gti_kwh_m2 != null ? fmtZahl(tag.gti_kwh_m2, 2) : '—'}</td>
               <td className="py-2 px-3 text-right tabular-nums">{tag.bewoelkung_prozent != null ? fmtZahl(tag.bewoelkung_prozent, 0) : '—'}</td>
               <td className="py-2 px-3 text-right tabular-nums">{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '—'}</td>
@@ -271,7 +271,7 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
   // B2/C3: Einheit steht im Header „Hist. PR (%)", nicht mehr an der Zelle.
   const pr = (v: number | null) =>
     v == null ? <span className="text-gray-400 dark:text-gray-500">—</span>
-    : <span className={v > 1 ? 'text-green-600' : v < 0.9 ? 'text-red-600' : 'text-gray-600 dark:text-gray-300'}>{fmtZahl(v * 100, 0)}</span>
+    : <span className={v > 1 ? TREND_TEXT_CLASS.positiv : v < 0.9 ? TREND_TEXT_CLASS.negativ : TREND_TEXT_CLASS.neutral}>{fmtZahl(v * 100, 0)}</span>
   return (
     <div className="space-y-2">
       <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
@@ -292,7 +292,7 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
               <tr key={`${m.jahr}-${m.monat}`} className="border-b border-gray-100 dark:border-gray-800">
                 <td className="py-2 px-3 font-medium">{m.monat_name} {m.jahr}</td>
                 <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{fmtZahl(m.pvgis_prognose_kwh, 0)}</td>
-                <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{fmtZahl(m.trend_korrigiert_kwh, 0)}</td>
+                <td className={`py-2 px-3 text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(m.trend_korrigiert_kwh, 0)}</td>
                 <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(m.konfidenz_min_kwh, 0)}</td>
                 <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(m.konfidenz_max_kwh, 0)}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{pr(m.historische_performance_ratio)}</td>
@@ -303,7 +303,7 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
               <td className="py-2 px-3">Gesamt</td>
               <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{fmtZahl(prognose.monatswerte.reduce((s, m) => s + m.pvgis_prognose_kwh, 0), 0)}</td>
-              <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{fmtZahl(prognose.jahresprognose_kwh, 0)}</td>
+              <td className={`py-2 px-3 text-right ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(prognose.jahresprognose_kwh, 0)}</td>
               <td colSpan={3} />
             </tr>
           </tfoot>
@@ -357,11 +357,11 @@ export function DegradationsPrognose({ trend }: { trend: TrendAnalyseResponse })
           <div className="space-y-2">
             <p className="text-lg font-medium">
               {grad === 0 ? (
-                <span className="text-green-600">Keine messbare Degradation</span>
+                <span className={TREND_TEXT_CLASS.positiv}>Keine messbare Degradation</span>
               ) : grad < -1 ? (
-                <span className="text-red-600">{fmtZahl(grad, 2)} % pro Jahr</span>
+                <span className={TREND_TEXT_CLASS.negativ}>{fmtZahl(grad, 2)} % pro Jahr</span>
               ) : (
-                <span className="text-yellow-600 dark:text-yellow-400">{fmtZahl(grad, 2)} % pro Jahr</span>
+                <span className={AMPEL_TEXT_CLASS.maessig}>{fmtZahl(grad, 2)} % pro Jahr</span>
               )}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400">{d.hinweis}</p>
@@ -433,8 +433,9 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
         const avgStrom = mittel(heiz.map((m) => m.verbrauch_daten.stromverbrauch_kwh || 0))
         const avgWaerme = mittel(heiz.map((m) => (m.verbrauch_daten.heizenergie_kwh || 0) + (m.verbrauch_daten.warmwasser_kwh || 0)))
         const TrendIcon = t.richtung === 'steigend' ? TrendingUp : t.richtung === 'sinkend' ? TrendingDown : Minus
-        const trendFarbe = t.richtung === 'steigend' ? 'text-green-600 dark:text-green-400'
-          : t.richtung === 'sinkend' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'
+        // A2/S18: Trend-Wertung aus TREND_TEXT_CLASS — steigende JAZ = positiv (Richtung bestimmt der Konsument).
+        const trendFarbe = t.richtung === 'steigend' ? TREND_TEXT_CLASS.positiv
+          : t.richtung === 'sinkend' ? TREND_TEXT_CLASS.negativ : TREND_TEXT_CLASS.neutral
         return (
           <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
             <p className="font-medium text-gray-900 dark:text-white">{wp.investition.bezeichnung}</p>
