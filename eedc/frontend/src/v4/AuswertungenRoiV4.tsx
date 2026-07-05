@@ -103,7 +103,7 @@ function RoiInner() {
       ),
     },
     {
-      id: 'detail', title: 'Detailübersicht je Investition', icon: LayoutGrid, farbe: 'text-gray-400', defaultOpen: false,
+      id: 'detail', title: 'Detailübersicht je Investition', icon: LayoutGrid, farbe: 'text-gray-400 dark:text-gray-500', defaultOpen: false,
       summary: 'Kosten · ROI · Amortisation je Investition (+ Speicher-Detail #264)',
       render: () => (
         <div className="space-y-4">

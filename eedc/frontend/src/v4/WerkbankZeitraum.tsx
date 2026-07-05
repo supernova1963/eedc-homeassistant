@@ -87,7 +87,7 @@ export function WerkbankZeitraum({
           <DatumPicker modus={modus} value={von} min={minDatum} max={kleinerVon(bis, maxDatum)}
             onChange={(v) => onRange(v, bis)} ariaLabel="Von" className={`w-full sm:w-auto ${STEUER_H} text-sm`} />
         </label>
-        <span className="hidden sm:inline text-gray-400">–</span>
+        <span className="hidden sm:inline text-gray-400 dark:text-gray-500">–</span>
         <label className="flex items-center gap-1.5 w-full sm:w-auto">
           <span className="sm:hidden text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">Zeitraum bis:</span>
           {/* D12-8: bis-Feld nach unten durch `von`/`minDatum`, nach oben durch `maxDatum`. */}

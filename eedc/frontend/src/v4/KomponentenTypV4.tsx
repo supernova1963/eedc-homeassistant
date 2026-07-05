@@ -143,7 +143,7 @@ function KompKopf({ inv, rechts }: { inv: Investition; rechts?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2 font-medium text-gray-900 dark:text-white min-w-0">
-        <Icon className={`h-4 w-4 shrink-0 ${ident?.farbe ?? 'text-gray-400'}`} />
+        <Icon className={`h-4 w-4 shrink-0 ${ident?.farbe ?? 'text-gray-400 dark:text-gray-500'}`} />
         <span className="truncate">{inv.bezeichnung}</span>
         <span className="text-xs font-normal text-gray-500 dark:text-gray-400 whitespace-nowrap">{ident?.label ?? inv.typ}</span>
       </div>
@@ -321,7 +321,7 @@ function InfothekBlock({ invs }: { invs: Investition[] }) {
           return (
             <div key={kat} className="space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                <KatIcon className={`h-3.5 w-3.5 ${cfg?.color ?? 'text-gray-400'}`} /> {cfg?.label ?? kat}
+                <KatIcon className={`h-3.5 w-3.5 ${cfg?.color ?? 'text-gray-400 dark:text-gray-500'}`} /> {cfg?.label ?? kat}
               </div>
               <ul className="space-y-0.5">
                 {eintr.map((e) => (
@@ -350,7 +350,7 @@ function BefundRow({ e }: { e: CheckErgebnis }) {
   const Icon = cfg?.icon ?? AlertTriangle
   return (
     <li className="flex items-start gap-2 text-sm">
-      <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${cfg?.colorClass ?? 'text-gray-400'}`} />
+      <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${cfg?.colorClass ?? 'text-gray-400 dark:text-gray-500'}`} />
       <div className="min-w-0">
         <span className="text-gray-700 dark:text-gray-300">{e.meldung}</span>
         {e.details && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{e.details}</p>}
@@ -477,7 +477,7 @@ function StrukturInhalt({ s }: { s: KompStruktur }) {
       {s.wr.map((w, i) => (
         <div key={i} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
           <div className="flex items-center gap-2 font-medium text-gray-900 dark:text-white">
-            <Zap className="h-4 w-4 text-gray-400" />
+            <Zap className="h-4 w-4 text-gray-400 dark:text-gray-500" />
             <span>{w.label}</span>
             {w.detail && <span className="text-xs font-normal text-gray-500 dark:text-gray-400">· {w.detail}</span>}
           </div>

@@ -223,7 +223,7 @@ function FinanzenInner() {
                 </ResponsiveContainer>
               </div>
               <div className="mt-2 flex items-center justify-center gap-3 text-sm">
-                <span className="text-gray-500">Gesamt nach {monate} Monaten:</span>
+                <span className="text-gray-500 dark:text-gray-400">Gesamt nach {monate} Monaten:</span>
                 <span className="text-lg font-bold text-green-600 dark:text-green-400">{fmtZahl(gesamt.nettoNachSonderkosten, 0)} €</span>
               </div>
             </div>
@@ -252,13 +252,13 @@ function FinanzenInner() {
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
             <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Durchschnittswerte</p>
             <div className={`grid grid-cols-2 gap-3 text-sm ${gesamt.sonderkosten > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
-              <div><p className="text-gray-500">Ø Einspeiseerlös/Monat</p><p className="font-medium text-green-600 dark:text-green-400">{fmtZahl(gesamt.einspeiseErloes / monate, 0)} €</p></div>
-              <div><p className="text-gray-500">Ø EV-Ersparnis/Monat</p><p className="font-medium text-purple-600 dark:text-purple-400">{fmtZahl(gesamt.eigenverbrauchErsparnis / monate, 0)} €</p></div>
-              <div><p className="text-gray-500">Ø Netzbezug-Kosten/Monat</p><p className="font-medium text-red-600 dark:text-red-400">{fmtZahl(gesamt.netzbezugKosten / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Einspeiseerlös/Monat</p><p className="font-medium text-green-600 dark:text-green-400">{fmtZahl(gesamt.einspeiseErloes / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø EV-Ersparnis/Monat</p><p className="font-medium text-purple-600 dark:text-purple-400">{fmtZahl(gesamt.eigenverbrauchErsparnis / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Netzbezug-Kosten/Monat</p><p className="font-medium text-red-600 dark:text-red-400">{fmtZahl(gesamt.netzbezugKosten / monate, 0)} €</p></div>
               {gesamt.sonderkosten > 0 && (
-                <div><p className="text-gray-500">Ø Sonderkosten/Monat</p><p className="font-medium text-amber-600 dark:text-amber-400">{fmtZahl(gesamt.sonderkosten / monate, 0)} €</p></div>
+                <div><p className="text-gray-500 dark:text-gray-400">Ø Sonderkosten/Monat</p><p className="font-medium text-amber-600 dark:text-amber-400">{fmtZahl(gesamt.sonderkosten / monate, 0)} €</p></div>
               )}
-              <div><p className="text-gray-500">Ø Netto-Ertrag/Monat</p><p className="font-medium text-blue-600 dark:text-blue-400">{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag/Monat</p><p className="font-medium text-blue-600 dark:text-blue-400">{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
             </div>
           </div>
         </div>
@@ -272,7 +272,7 @@ function FinanzenInner() {
     }
 
     const blockBerichte: Block = {
-      id: 'berichte', title: 'Berichte & Dokumente', icon: FileText, farbe: 'text-gray-400',
+      id: 'berichte', title: 'Berichte & Dokumente', icon: FileText, farbe: 'text-gray-400 dark:text-gray-500',
       summary: 'Finanzbericht (PDF) · CSV-Export', defaultOpen: false,
       render: () => (
         <div className="space-y-3">

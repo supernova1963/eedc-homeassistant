@@ -247,7 +247,7 @@ function Co2Inner() {
     // ③ Berechnungsgrundlage (Methodik + Ø-Werte).
     const oProMonat = anzahlMonate > 0 ? gesamtCo2 / anzahlMonate : 0
     const blockBasis: Block = {
-      id: 'basis', title: 'Berechnungsgrundlage', icon: Leaf, farbe: 'text-gray-400',
+      id: 'basis', title: 'Berechnungsgrundlage', icon: Leaf, farbe: 'text-gray-400 dark:text-gray-500',
       summary: `Strommix ${fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh`, defaultOpen: false,
       render: () => (
         <div className="space-y-4">
@@ -257,10 +257,10 @@ function Co2Inner() {
             die fossilen Strom ersetzt, spart entsprechend CO₂.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div><p className="text-gray-500">Ø pro Monat</p><p className="font-medium text-green-600 dark:text-green-400">{formatCo2(oProMonat).text}</p></div>
-            <div><p className="text-gray-500">Ø pro kWh</p><p className="font-medium text-green-600 dark:text-green-400">{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g</p></div>
-            <div><p className="text-gray-500">Ø pro Jahr</p><p className="font-medium text-green-600 dark:text-green-400">{formatCo2(oProMonat * 12).text}</p></div>
-            <div><p className="text-gray-500">Hochgerechnet 20 J.</p><p className="font-medium text-green-600 dark:text-green-400">{formatCo2(oProMonat * 12 * 20).text}</p></div>
+            <div><p className="text-gray-500 dark:text-gray-400">Ø pro Monat</p><p className="font-medium text-green-600 dark:text-green-400">{formatCo2(oProMonat).text}</p></div>
+            <div><p className="text-gray-500 dark:text-gray-400">Ø pro kWh</p><p className="font-medium text-green-600 dark:text-green-400">{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g</p></div>
+            <div><p className="text-gray-500 dark:text-gray-400">Ø pro Jahr</p><p className="font-medium text-green-600 dark:text-green-400">{formatCo2(oProMonat * 12).text}</p></div>
+            <div><p className="text-gray-500 dark:text-gray-400">Hochgerechnet 20 J.</p><p className="font-medium text-green-600 dark:text-green-400">{formatCo2(oProMonat * 12 * 20).text}</p></div>
           </div>
         </div>
       ),

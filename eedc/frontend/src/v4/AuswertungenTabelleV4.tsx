@@ -123,7 +123,7 @@ function TabelleInner() {
   const bloecke: Block[] = []
   if (!monGeparkt) {
     bloecke.push({
-      id: 'monatswerte', title: 'Monatswerte', icon: Table, farbe: 'text-gray-400',
+      id: 'monatswerte', title: 'Monatswerte', icon: Table, farbe: 'text-gray-400 dark:text-gray-500',
       summary: `${monVon || '…'} – ${monBis || '…'}${monVergleich ? ' · vs. Vorjahr' : ''}`, defaultOpen: true,
       render: () => (
         <div className="space-y-3">
@@ -152,7 +152,7 @@ function TabelleInner() {
   }
   if (!tagGeparkt) {
     bloecke.push({
-      id: 'energieprofile', title: 'Tageswerte', icon: CalendarDays, farbe: 'text-gray-400',
+      id: 'energieprofile', title: 'Tageswerte', icon: CalendarDays, farbe: 'text-gray-400 dark:text-gray-500',
       summary: `${tagVon || '…'} – ${tagBis || '…'} · Vgl. ${vglLabel(vglModus, vglJahr)}`, defaultOpen: false,
       render: () => (
         <EnergieprofilBlock
