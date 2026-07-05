@@ -38,12 +38,11 @@ const GETEILTE_SOT = [
 /**
  * Dokumentierte Ausnahmen: Pfad → erlaubte Treffer-Zahl.
  *
- * Kontroll-Icon-Konvention (eingefroren, Entscheid-Kandidat R3b-E6): die v4-Block-
- * Kontroll-Icons (BlockShell ↑↓⤢⌄, Fokus-Schließen, Tabellen-Sortier-Pfeile) nutzen
- * bewusst `text-gray-400` als Basis in BEIDEN Modi + eigene dark:hover-Varianten —
- * konsistentes Muster aus dem BlockShell-SoT-Design, kein Drift. Ob es als
- * dokumentierte A8-Ausnahme in den Style-Guide kommt oder auf dark:text-gray-500
- * gedimmt wird, ist Maintainer-Entscheid (Etappe 3).
+ * Kontroll-Icon-Konvention (R3b-E6, ✅ ENTSCHIEDEN Gernot 2026-07-05 = dokumentierte
+ * Konvention, Style-Guide A8): die v4-Kontroll-Icons (BlockShell ↑↓⤢⌄/auf-zu/reset,
+ * Fokus-Icons, Tabellen-Sortier-Pfeile) nutzen bewusst `text-gray-400` als Ruhe-Farbe
+ * in BEIDEN Modi + eigene hover:/dark:hover:-Aufhellung — Interaktions-Affordanz,
+ * keine Muted-Text-Rolle; die A8-Paarung gilt dort nicht.
  */
 const ALLOW = new Map([
   ['src/components/blocks/BlockShell.tsx', 4], // Kontroll-Icons (s. o.)

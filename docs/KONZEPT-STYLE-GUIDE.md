@@ -238,6 +238,13 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 | `border-gray-200` | `dark:border-gray-700` | Rahmen |
 
 > Die Muted-Zeile (`text-gray-400 → dark:text-gray-500`) ist bewusst „dunkler im Dark Mode": gedämpfter Text/Icons sind auf Dunkelgrund sonst zu präsent. Das ist der dominante Bestand (P2-Sweep über 254 Stellen). Disabled-States (`text-gray-500 dark:text-gray-500`) sind eine bewusste Ausnahme (gewollt geringer Kontrast).
+>
+> **Dokumentierte Konvention — Kontroll-Icons (R3b E6, Gernot 2026-07-05):** die v4-Kontroll-Icons
+> (BlockShell-Kopf: alle auf-/zuklappen, zurücksetzen, ↑↓⤢⌄ · FokusKachel-/Live-Kachel-Fokus-Icons ·
+> WerteTabelle-Sortier-/Spalten-Controls) nutzen bewusst `text-gray-400` als Ruhe-Farbe in **beiden**
+> Modi mit eigener `hover:`/`dark:hover:`-Aufhellung — das ist Interaktions-Affordanz (ruhig bis zum
+> Hover), keine Muted-Text-Rolle; die A8-Paarung gilt dort NICHT. Wächter-seitig eingefroren
+> (`check:darkmode-paare`-Allowlist: BlockShell 4 · FokusKachel 1 · WerteTabelle 2 · CockpitLiveV4 1).
 
 **Charts — zwei klar getrennte Mechanismen (Regel Nr. 0):**
 
