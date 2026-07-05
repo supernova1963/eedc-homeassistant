@@ -1,6 +1,11 @@
 # Konzept: Auswertung PV-Speicher
 
-> **Status (2026-05-09): Konzept-Entwurf**, noch nicht implementiert. In Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Geplant" geführt — sinnvoll in Verbindung mit Etappe 5 Speicher-Simulation. **Trigger zur Umsetzung:** rapahl ist Issue-Author (#142, „waiting"-Label), aktuell wartet das Item auf Sprint-Kapazität nach Etappe 3c/3d-Konsolidierung. Datenbasis (Monatsdaten + TagesEnergieProfil + Investitions-Parameter) ist seit v3.19.0–v3.21.0 vollständig vorhanden.
+> **Status (2026-07-05): Konzept-Entwurf, Kern weiterhin offen — als Baustein B11 in [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) getrackt.** Einzel-Issue #142 (rapahl) wurde 2026-05-23 in die Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) verschoben. **Ort-Entscheid (IA-V4):** die Tiefe kommt als **Ausbau des Komponenten-Hubs Speicher** (SPEC-KOMPONENTEN K-O2), NICHT als eigener Auswertungen-Tab — Phase-1-Verortung unten entsprechend re-lesen. **Seit Konzept-Erstellung bereits geliefert (vor B11-Bau einarbeiten):**
+> - **#264 Etappen A–C (stlorenz, v3.31.x):** gemessener IST-Wirkungsgrad (SoC-korrigiert + Degradations-Alarm) und stundengewichteter effektiver Ladepreis mit Quelle-Transparenz → beantwortet die „Offenen Fragen" 1 + 2 unten.
+> - **R15-Scheiben (Rainer-PN #88625, 2026-07-05):** Kosten-Kacheln „Batterieladung Netz" + „Durchschnittspreis Netz" in Cockpit Monat/Tag/Jahr (`berechne_netzladung_kosten`, Preis-Kette TEP→IMD→Bezugspreis) · Ø-Ladepreis-**Vorschlag** im Monatsabschluss-Wizard · Netzladung-Kosten-**Ausweis** im Hub-Arbitrage-Block + T-Konto („davon"-Zeile) · Kanon-Key-Fix `get_speicher_netzladung_kwh` (Hub-Arbitrage war unsichtbar) → deckt die Sichtbarkeits-Seite von Frage 4 + 5 im Kleinen.
+> - **Phase-3-Grundstein:** `core/berechnungen/speicher_simulation.py` (`simuliere_speicher_tag`) existiert.
+>
+> **Offen (= B11-Kern):** Phase 1 (Monats-Tabelle + KPI-Kacheln + Sommer/Winter-Split), Phase 2 (SoC-Heatmap „ungenutztes Potential"), Phase 3 (Sizing-Simulator-UI), Phase 4 (#101-Kopplung) — **plus der geparkte Spread-Entscheid** (Drift-Audit Domäne A3: T-Konto-Speicher-Posten rechnet Voll-Strompreis statt Spread; Umstellung mit ADR-001-Besteck im B11-Rahmen).
 >
 > Zugehörig: [#101](https://github.com/supernova1963/eedc-homeassistant/issues/101) (Live-Restzeit), [Energieprofil Etappe 4](https://github.com/supernova1963/eedc-homeassistant/issues/110) (Saison)
 
