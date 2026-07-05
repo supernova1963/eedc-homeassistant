@@ -144,13 +144,23 @@ export function GeteilteFelderDetail({ v }: { v: CommunityDataPreview }) {
   if (v.bkw_wp) anlagenZeilen.push({ label: 'BKW-Leistung', wert: `${fmtZahl(v.bkw_wp, 0)} Wp` })
   if (v.sonstiges_bezeichnung) anlagenZeilen.push({ label: 'Sonstiges-Bezeichnung', wert: v.sonstiges_bezeichnung })
 
-  // Monats-Kennzahlen: nur Felder, die in mindestens einem Monat vorkommen;
-  // Beispielwert = jüngster vorhandener Wert. Der jüngste Monat steht EINMAL in
-  // der Überschrift (Gernot 2026-07-04); nur davon abweichende Werte (Feld im
-  // jüngsten Monat leer) tragen ihre Monatsangabe einzeln.
-  const juengster = v.monatswerte.length > 0 ? v.monatswerte[v.monatswerte.length - 1] : null
+  // Monats-Kennzahlen: nur Felder, die in mindestens einem Monat vorkommen.
+  // R15-8 (Rainer, GPN #160): Beispiel-Monat = letzter ABGESCHLOSSENER Monat —
+  // der jüngste geteilte kann der laufende (unvollständige) sein; ein
+  // abgeschlossener ist sofort gegen den Monatsabschluss prüfbar. Fallback:
+  // jüngster vorhandener. Der Referenz-Monat steht EINMAL in der Überschrift
+  // (Gernot 2026-07-04); nur davon abweichende Werte tragen ihre Monatsangabe
+  // einzeln (auch Werte, die es nur im laufenden Monat gibt).
+  const heute = new Date()
+  const istLaufend = (m: MonatswertPreview) =>
+    m.jahr === heute.getFullYear() && m.monat === heute.getMonth() + 1
+  const abgeschlossene = v.monatswerte.filter((m) => !istLaufend(m))
+  const werteBasis = abgeschlossene.length > 0 ? abgeschlossene : v.monatswerte
+  const juengster = werteBasis.length > 0 ? werteBasis[werteBasis.length - 1] : null
   const monatsZeilen = MONATSWERT_FELDER.flatMap((feld) => {
-    const w = letzterWert(v.monatswerte, feld.key)
+    // Bevorzugt aus abgeschlossenen Monaten; Felder, die nur im laufenden
+    // Monat existieren, fallen darauf zurück (mit Monatsangabe via `abweichend`).
+    const w = letzterWert(werteBasis, feld.key) ?? letzterWert(v.monatswerte, feld.key)
     if (!w) return []
     const nk = feld.einheit === '' ? 0 : 1
     const abweichend = !juengster || w.jahr !== juengster.jahr || w.monat !== juengster.monat
@@ -178,7 +188,7 @@ export function GeteilteFelderDetail({ v }: { v: CommunityDataPreview }) {
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Kennzahlen pro Monat
-            {juengster ? ` — jeweils jüngster geteilter Wert (${MONAT_NAMEN[juengster.monat]} ${juengster.jahr}) als Beispiel` : ''}
+            {juengster ? ` — Beispielwerte aus ${MONAT_NAMEN[juengster.monat]} ${juengster.jahr}${abgeschlossene.length > 0 ? ' (letzter abgeschlossener Monat)' : ''}` : ''}
           </p>
           <dl className="mt-1.5 grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
             {monatsZeilen.map((z) => <DetailZeile key={z.label} label={z.label} wert={z.wert} />)}

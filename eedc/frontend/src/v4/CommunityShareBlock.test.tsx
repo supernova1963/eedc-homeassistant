@@ -74,8 +74,9 @@ describe('GeteilteFelderDetail', () => {
     // Monats-Kennzahlen: vorhandene erscheinen (inkl. der „unbequemen")
     expect(screen.getByText('Netzbezug')).toBeInTheDocument()
     expect(screen.getByText('E-Auto gefahrene Kilometer')).toBeInTheDocument()
-    // Jüngster Monat steht EINMAL in der Überschrift, nicht hinter jedem Wert
-    expect(screen.getByText(/jüngster geteilter Wert \(Juni 2026\) als Beispiel/)).toBeInTheDocument()
+    // Referenz-Monat steht EINMAL in der Überschrift, nicht hinter jedem Wert
+    // (R15-8: letzter abgeschlossener Monat — Fixture-Juni liegt in der Vergangenheit)
+    expect(screen.getByText(/Beispielwerte aus Juni 2026 \(letzter abgeschlossener Monat\)/)).toBeInTheDocument()
     expect(screen.getByText('2.400,0 kWh')).toBeInTheDocument()
     // % mit Leerzeichen (Regel 0a)
     expect(screen.getByText('84,2 %')).toBeInTheDocument()
@@ -88,6 +89,27 @@ describe('GeteilteFelderDetail', () => {
 
     // Feld-Zähler in der Summary: 7 Anlagendaten + 9 Monats-Kennzahlen
     expect(screen.getByText(/16 Felder/)).toBeInTheDocument()
+  })
+
+  it('R15-8: der laufende Monat ist NICHT der Beispiel-Monat', () => {
+    const heute = new Date()
+    const lauf = { jahr: heute.getFullYear(), monat: heute.getMonth() + 1 }
+    const vor = lauf.monat === 1
+      ? { jahr: lauf.jahr - 1, monat: 12 }
+      : { jahr: lauf.jahr, monat: lauf.monat - 1 }
+    render(<GeteilteFelderDetail v={{
+      ...PAYLOAD,
+      monatswerte: [
+        { jahr: vor.jahr, monat: vor.monat, ertrag_kwh: 100, einspeisung_kwh: 80, netzbezug_kwh: 10, autarkie_prozent: 90, eigenverbrauch_prozent: 20 },
+        { jahr: lauf.jahr, monat: lauf.monat, ertrag_kwh: 50, einspeisung_kwh: 40, netzbezug_kwh: 5, autarkie_prozent: 91, eigenverbrauch_prozent: 21 },
+      ],
+    }} />)
+    // Überschrift referenziert den Vormonat (abgeschlossen), nicht den laufenden
+    expect(screen.getByText(new RegExp(`Beispielwerte aus \\S+ ${vor.jahr} \\(letzter abgeschlossener Monat\\)`))).toBeInTheDocument()
+    // Beispielwert kommt aus dem abgeschlossenen Monat …
+    expect(screen.getByText('100,0 kWh')).toBeInTheDocument()
+    // … der laufende Wert erscheint nicht als Beispiel
+    expect(screen.queryByText('50,0 kWh')).toBeNull()
   })
 })
 
