@@ -120,12 +120,15 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
         </div>
       </div>
 
-      {/* Monatsdaten-Tabelle (Monat · Ladung · Entladung · Zyklen). */}
-      <details className="border-t border-gray-200 dark:border-gray-700 pt-4">
+      {/* Monatsdaten-Tabelle (Monat · Ladung · Entladung · Zyklen).
+          B6/S9 (R3b E3): auf den details-Disclosure-Kanon gehoben (gray-100/pt-3,
+          Zähler in der Summary) — Komponente ist V4-geteilt (SpeicherVerlaufIST),
+          Änderung im V3-SpeicherDashboard mit-sichtbar (eine Code-Wahrheit). */}
+      <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-          Monatsdaten anzeigen
+          Monatsdaten anzeigen ({monatsdaten.length})
         </summary>
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">

@@ -167,8 +167,8 @@ export function GeteilteFelderDetail({ v }: { v: CommunityDataPreview }) {
   })
 
   return (
-    <details className="border-t border-gray-100 pt-3 dark:border-gray-800">
-      <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+    <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
+      <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
         Geteilte Felder im Detail anzeigen ({anlagenZeilen.length + monatsZeilen.length} Felder)
       </summary>
       <div className="mt-3 space-y-4">
