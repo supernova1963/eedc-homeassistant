@@ -14,7 +14,7 @@
  * docken später als weitere Blöcke an.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
+import { LoadingSpinner, Card, fmtCalc, FehlerZustand } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
@@ -136,7 +136,9 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     if (!anlageId || !gewaehlt) return
     setReloading(true)
     ladeMonatsdaten(anlageId, gewaehlt)
-      .then(([t, m]) => { setTage(t); setMonatData(m) })
+      // S15-Retry-Fix: Erfolg räumt einen stehenden Fehlerzustand ab — sonst bleibt
+      // die Fehler-Anzeige trotz gelungenem Refetch ewig stehen (error gewinnt im Render).
+      .then(([t, m]) => { setTage(t); setMonatData(m); setError(null) })
       .catch(() => {})
       .finally(() => setReloading(false))
   }, [anlageId, gewaehlt])
@@ -316,7 +318,9 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
           />
 
           {error ? (
-            <Card><p className="text-red-500">{error}</p></Card>
+            // B8-Fehler-Baustein (S15). Retry nur wenn reload greifen kann (Monat gewählt);
+            // beim Listen-Fetch-Fehler (gewaehlt==null) wäre reload no-op → kein Fassade-Knopf.
+            <FehlerZustand text={error} onRetry={gewaehlt ? reload : undefined} />
           ) : loading && !monatData ? (
             // Voll-Spinner NUR beim Erst-Load (noch keine Daten). Beim Monatswechsel
             // bleibt der bestehende Block-Stack stehen und aktualisiert sich in-place

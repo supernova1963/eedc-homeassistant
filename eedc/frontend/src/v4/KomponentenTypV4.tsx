@@ -14,7 +14,7 @@
  * (K-B5, kein Datums-Selektor). Mehrere Geräte → Geräte-Selektor (Art ①).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { LoadingSpinner, Card, Alert, fmtCalc } from '../components/ui'
+import { LoadingSpinner, Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
@@ -697,6 +697,9 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
   const [aktiv, setAktiv] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // S15-Retry: Zähler re-triggert den Lade-Effekt (verhaltenserhaltend — der Fetch
+  // lebt bewusst inline im Effekt, kein Refactor nötig).
+  const [retryKey, setRetryKey] = useState(0)
 
   const adapter = KOMPONENTEN_ADAPTER[typ]
   const ident = KOMPONENTEN_IDENTITAET[typ]
@@ -710,7 +713,7 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
       .catch(() => { if (!ab) setError('Fehler beim Laden der Komponente') })
       .finally(() => { if (!ab) setLoading(false) })
     return () => { ab = true }
-  }, [anlageId, adapter, typ])
+  }, [anlageId, adapter, typ, retryKey])
 
   const g = geraete[aktiv]
   const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0, park) : []), [g, typ, anlageId, park])
@@ -718,7 +721,14 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
   if (!anlageId) return <Hinweis text="Noch keine Anlage gewählt." />
   if (!adapter) return <Hinweis text={`Für „${ident?.label ?? typ}" gibt es noch keine Hub-Sicht.`} />
   if (loading) return <div className="p-3 sm:p-6"><LoadingSpinner text="Lade Komponente…" /></div>
-  if (error) return <Hinweis text={error} ton="error" />
+  if (error) {
+    // B8-Fehler-Baustein (S15) statt des grauen Hinweis-Helpers im error-Ton.
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <FehlerZustand text={error} onRetry={() => setRetryKey((k) => k + 1)} />
+      </div>
+    )
+  }
   if (geraete.length === 0) return <Hinweis text={`Keine ${ident?.label ?? typ}-Daten erfasst.`} />
 
   return (
@@ -756,10 +766,11 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
   )
 }
 
-function Hinweis({ text, ton }: { text: string; ton?: 'error' }) {
+/** Grauer Seiten-Hinweis (Leer-Territorium) — Fehler laufen über FehlerZustand (S15). */
+function Hinweis({ text }: { text: string }) {
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-      <Card><p className={`text-sm ${ton === 'error' ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>{text}</p></Card>
+      <Card><p className="text-sm text-gray-500 dark:text-gray-400">{text}</p></Card>
     </div>
   )
 }

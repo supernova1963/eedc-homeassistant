@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Table, CalendarDays } from 'lucide-react'
-import { LoadingSpinner, Card } from '../components/ui'
+import { LoadingSpinner, Card, FehlerZustand } from '../components/ui'
 import { BlockShell, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
@@ -97,7 +97,9 @@ function TabelleInner() {
   if (error) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-red-500">{error}</p></Card>
+        {/* B8-Fehler-Baustein (S15). Kein onRetry: useWerteZeitreihe liefert (noch)
+            kein reload — Hook-Erweiterung ist als Folge-Punkt notiert (VERIFIKATION-S15). */}
+        <FehlerZustand text={error} />
       </div>
     )
   }
@@ -291,7 +293,9 @@ function EnergieprofilBlock({
         // bestehende Tabelle stehen und aktualisiert sich in-place (detLAN D7-6).
         <LoadingSpinner text="Lade Tageswerte…" />
       ) : error ? (
-        <p className="text-red-500 text-sm">{error}</p>
+        // B8-Fehler-Baustein (S15). Implizites Retry: Zeitraum-/Vergleichswechsel in der
+        // stehenden Leiste re-triggert den Fetch; useTagesWerte hat kein explizites reload.
+        <FehlerZustand text={error} />
       ) : (
         <Parkbar id="tabelle:energieprofile" titel="Tageswerte">
           <WerteTabelle

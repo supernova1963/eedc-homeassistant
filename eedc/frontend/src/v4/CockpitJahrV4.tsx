@@ -19,7 +19,7 @@
  *    (Σ der IMD je Monat), einmal je Anlage geladen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
+import { LoadingSpinner, Card, fmtCalc, FehlerZustand } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
@@ -111,7 +111,9 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     if (!anlageId || jahr == null) return
     setReloading(true)
     ladeJahr(anlageId, jahr)
-      .then((jd) => setJahrData(jd))
+      // S15-Retry-Fix: Erfolg räumt einen stehenden Fehlerzustand ab — sonst bleibt
+      // die Fehler-Anzeige trotz gelungenem Refetch ewig stehen (error gewinnt im Render).
+      .then((jd) => { setJahrData(jd); setError(null) })
       .catch(() => {})
       .finally(() => setReloading(false))
   }, [anlageId, jahr, ladeJahr])
@@ -223,7 +225,9 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
           <JahrHeader jahr={jahr ?? 0} laufend={istLaufend} d={jahrData} onReload={reload} reloading={reloading} />
 
           {error ? (
-            <Card><p className="text-red-500">{error}</p></Card>
+            // B8-Fehler-Baustein (S15). Retry nur wenn reload greifen kann (Jahr gewählt);
+            // beim Listen-Fetch-Fehler (jahr==null) wäre reload no-op → kein Fassade-Knopf.
+            <FehlerZustand text={error} onRetry={jahr != null ? reload : undefined} />
           ) : loading && !jahrData ? (
             // Voll-Spinner NUR beim Erst-Load (detLAN D7-2, 2026-06-27; analog Tag T2).
             // Beim Jahreswechsel bleibt der Block-Stack stehen und aktualisiert sich

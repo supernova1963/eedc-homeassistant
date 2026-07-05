@@ -21,7 +21,7 @@
  *    Ø-gleicher-Wochentag-Rückblick ab dem gewählten Tag.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoadingSpinner, Card } from '../components/ui'
+import { LoadingSpinner, Card, FehlerZustand } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
@@ -284,7 +284,8 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
           <TagHeader datum={datum} laufend={istHeute} tag={tag} onReload={() => laden(true)} reloading={reloading} />
 
           {error ? (
-            <Card><p className="text-red-500">{error}</p></Card>
+            // B8-Fehler-Baustein (S15): laden(false) setzt setError(null) + refetcht alle Quellen.
+            <FehlerZustand text={error} onRetry={() => laden(false)} />
           ) : loading && !jeGeladen ? (
             // Voll-Spinner NUR beim allerersten Load (noch nie geladen). Beim
             // Tageswechsel bleibt der Block-Stack stehen und aktualisiert sich

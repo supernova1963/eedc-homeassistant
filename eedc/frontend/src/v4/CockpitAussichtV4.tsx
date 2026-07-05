@@ -20,7 +20,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, ArrowRight,
 } from 'lucide-react'
-import { Card, LoadingSpinner, buttonClasses, SegmentControl } from '../components/ui'
+import { Card, LoadingSpinner, buttonClasses, SegmentControl, FehlerZustand } from '../components/ui'
 import { ReloadButton } from './ReloadButton'
 import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
@@ -367,7 +367,9 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           </a>
         </Card>
       ) : error ? (
-        <Card><p className="text-red-500">{error}</p></Card>
+        // B8-Fehler-Baustein (S15): laden(false) = nicht-silent → Lade-Zustand statt
+        // Leer-Flash während des Retrys (laden setzt setError(null) selbst).
+        <FehlerZustand text={error} onRetry={() => laden(false)} />
       ) : loading ? (
         <LoadingSpinner text="Lade Aussicht…" />
       ) : bloecke.length === 0 ? (
