@@ -19,8 +19,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
-import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl } from '../components/ui'
-import ChartTooltip from '../components/ui/ChartTooltip'
+import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
@@ -196,7 +195,7 @@ function FinanzenInner() {
                     {/* D11-10: viele Monatslabels (bis ~37) → −45° auch auf Desktop */}
                     <XAxis dataKey="name" {...xAchse(schmal, true)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
-                    <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+                    <Tooltip {...eedcTooltipProps({ unit: '€', decimals: 2 })} />
                     <Legend content={<ChartLegende />} />
                     <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
                     <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
@@ -216,7 +215,7 @@ function FinanzenInner() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
-                    <Tooltip content={<ChartTooltip unit="€" decimals={0} />} />
+                    <Tooltip {...eedcTooltipProps({ unit: '€', decimals: 0, cursor: false })} />
                     <Area type="monotone" dataKey="kumuliert_ertrag" name="Kumulierter Ertrag"
                       stroke={COLORS.feedin} fill={COLORS.feedin} fillOpacity={0.3} />
                   </AreaChart>
@@ -239,7 +238,7 @@ function FinanzenInner() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
-                    <Tooltip content={<ChartTooltip unit="€" decimals={2} />} />
+                    <Tooltip {...eedcTooltipProps({ unit: '€', decimals: 2 })} />
                     {/* D12-5: Legende fehlte (2 Serien Netto-Ertrag + Trend) — wie Chart 1. */}
                     <Legend content={<ChartLegende />} />
                     <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />

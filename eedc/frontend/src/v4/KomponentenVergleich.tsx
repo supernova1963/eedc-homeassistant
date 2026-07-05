@@ -9,9 +9,9 @@
  */
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
+import { SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useSchmaleAchse } from '../hooks'
-import { fmtCalc, ChartTooltip, SegmentControl } from '../components/ui'
+import { fmtCalc, SegmentControl, eedcTooltipProps } from '../components/ui'
 import { STEUER_H } from '../lib/komponentenStyle'
 import { ExternalLink } from 'lucide-react'
 
@@ -79,7 +79,7 @@ export function KomponentenVergleich({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
               <YAxis {...yAchse(schmal, 44)} tickFormatter={achsenTick} label={achsenEinheit(einheit)} />
-              <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} />} />
+              <Tooltip {...eedcTooltipProps({ unit: einheit, decimals: 0 })} />
               <Bar dataKey="summe" name={label}>
                 {sortiert.map((j) => (
                   <Cell key={j.jahr} fill={farbe} fillOpacity={j.jahr === neuestes.jahr || j.jahr === ref.jahr ? 1 : SERIE_GEDIMMT} />

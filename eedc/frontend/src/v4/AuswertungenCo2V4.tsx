@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import { Leaf, Sprout } from 'lucide-react'
 import { LoadingSpinner, Card, fmtCalc } from '../components/ui'
-import ChartTooltip from '../components/ui/ChartTooltip'
+import { eedcTooltipProps } from '../components/ui'
 import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
@@ -146,7 +146,7 @@ function Co2Inner() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={monAchse.tick} {...yAchse(schmal)} label={achsenEinheit(monAchse.einheit)} />
-                    <Tooltip content={<ChartTooltip formatter={(v) => `${monAchse.tick(v)} ${monAchse.einheit}`} />} />
+                    <Tooltip {...eedcTooltipProps({ formatter: (v) => `${monAchse.tick(v)} ${monAchse.einheit}` })} />
                     <Bar dataKey="co2_einsparung" name="CO₂ eingespart" fill={CHART_COLORS.co2Pv} radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -202,7 +202,7 @@ function Co2Inner() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                     <XAxis dataKey="name" {...xAchse(schmal)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={kumAchse.tick} {...yAchse(schmal)} label={achsenEinheit(kumAchse.einheit)} />
-                    <Tooltip content={<ChartTooltip formatter={(v) => `${kumAchse.tick(v)} ${kumAchse.einheit}`} />} />
+                    <Tooltip {...eedcTooltipProps({ cursor: false, formatter: (v) => `${kumAchse.tick(v)} ${kumAchse.einheit}` })} />
                     <Area type="monotone" dataKey="kumuliert_co2" name="Kumulierte Einsparung"
                       stroke={CHART_COLORS.co2Pv} fill={CHART_COLORS.co2Pv} fillOpacity={0.3} />
                     <ReferenceLine y={graueLast} stroke={MARKER_WARNUNG.linie} strokeDasharray="6 4"

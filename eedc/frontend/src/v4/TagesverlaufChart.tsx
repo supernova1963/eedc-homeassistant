@@ -18,8 +18,8 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { ChartTooltip, ChartLegende, SegmentControl } from '../components/ui'
-import { CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
+import { ChartLegende, SegmentControl, eedcTooltipProps } from '../components/ui'
+import { CHART_COLORS, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -97,8 +97,8 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
             {showAutarkie && (
               <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             )}
-            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) =>
-              name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh`} />} />
+            <Tooltip {...eedcTooltipProps({ formatter: (value: number, name: string) =>
+              name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh` })} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
 
             {view === 'erzeugung' ? (

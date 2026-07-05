@@ -16,8 +16,8 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { ChartTooltip, ChartLegende, SegmentControl } from '../components/ui'
-import { CHART_COLORS, MONAT_KURZ, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
+import { ChartLegende, SegmentControl, eedcTooltipProps } from '../components/ui'
+import { CHART_COLORS, MONAT_KURZ, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 
@@ -96,8 +96,8 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
             {showAutarkie && (
               <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             )}
-            <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(value: number, name: string) =>
-              name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh`} />} />
+            <Tooltip {...eedcTooltipProps({ formatter: (value: number, name: string) =>
+              name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh` })} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
 
             {view === 'erzeugung' ? (

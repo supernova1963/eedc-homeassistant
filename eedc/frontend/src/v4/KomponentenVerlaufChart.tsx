@@ -7,9 +7,9 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
+import { xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useSchmaleAchse } from '../hooks'
-import { ChartTooltip, ChartLegende } from '../components/ui'
+import { ChartLegende, eedcTooltipProps } from '../components/ui'
 
 export interface VerlaufBar {
   key: string; label: string; farbe: string
@@ -40,7 +40,7 @@ export function KomponentenVerlaufChart({
           <YAxis {...yAchse(schmal, 44)} tickFormatter={achsenTick} label={achsenEinheit(einheit)} />
           {/* ChartTooltip-SoT (S1: Viereck-Swatch, monochromer Wert); Serien-Name
               gekürzt, Wert gerundet mit Einheit. */}
-          <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit={einheit} decimals={0} nameFormatter={kuerze} />} />
+          <Tooltip {...eedcTooltipProps({ unit: einheit, decimals: 0, nameFormatter: kuerze })} />
           <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
           {bars.map((b) => (
             // stapel-Gruppe gewinnt (paarweise Stapel); sonst gestapelt=false → gruppiert, true → ein Stapel.

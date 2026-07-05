@@ -25,7 +25,8 @@
     "check:buttons": "node scripts/check-buttons.mjs",
     "check:tabellen": "node scripts/check-tabellen.mjs",
     "check:label-maps": "node scripts/check-label-maps.mjs",
-    "check:details": "node scripts/check-details.mjs"
+    "check:details": "node scripts/check-details.mjs",
+    "check:chart-tooltip": "node scripts/check-chart-tooltip.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
