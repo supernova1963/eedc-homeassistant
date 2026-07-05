@@ -382,8 +382,16 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Leer (echte Datenlücke):** erklärender Leerzustand mit **CTA** („Noch keine Daten — jetzt einrichten/importieren"), nicht nur `—`. Abgrenzung: A3 ist *wert*-level, B8 ist *sektions-/seiten*-level.
 > **Strukturell N/A:** Sektion ausblenden statt leer zeigen (Komponente nicht vorhanden), vgl. A3 + IA-V4-Tab-Filter.
 > **Fehler:** einheitlicher Fehlerzustand (was ist schief, was tun) statt stiller Leere oder roher Exception; Retry-Affordance wo sinnvoll.
+>
+> **SoT-Bausteine (R3b S15-Slice, 2026-07-05 — Regel folgt gebautem Code):**
+> - **Laden = Skeleton-SoT:** `ui/Skeleton` (Primitive + `KpiStripSkeleton`/`ChartSkeleton`/`TabellenSkeleton` in Zielform) und `blocks/BlockStackSkeleton` (BlockShell-Maße: 44-px-Köpfe, `rounded-xl`, `space-y-3`; optional Pillen-Zeile für Tab-Platzhalter). Der IST-Ladetext („Lade Monat…") wandert als **sr-only/aria-label** an den Skeleton (Screenreader-Parität). Generisch 1-offen+n-zu, wo die Ziel-Blockzahl datenabhängig ist; exakte Blockzahl nur wo deterministisch. **Erst-Load-Guards nicht anfassen:** Skeleton ersetzt NUR den Erst-Load-Zweig, Folge-Loads aktualisieren in-place ohne Zustands-Flackern (detLAN T2/D7-2/D7-6/D12-1).
+> - **LoadingSpinner-Abgrenzung (bleibt legitim):** (a) Suspense-/Chunk-Fallbacks in Modals/Overlays mit fixiertem Rahmen (Code-Split ≠ Datenladen), (b) Klein-Widgets/Inline-Slots unterhalb einer Karten-Größe, (c) Button-interne Ladezustände (`ui/Button` `loading`) — überall dort, wo die Sicht-Struktur (Header/Rail/Tabs) steht und kein ganzer Karten-/Tabellen-/Block-Bereich ersetzt wird.
+> - **Fehler = `ui/FehlerZustand`:** dünner Wrapper über `Alert type="error"` + optionaler Retry-Knopf („Erneut versuchen"). IST-Fehlertext unverändert durchreichen; **Retry nur anbieten, wenn der Refetch wirklich greift** (kein Fassade-Knopf); layout-neutral — die Seiten-/Sektions-Shell stellt der Aufrufer.
+> - **Leer = `v4/OnboardingLeer`** (auf `ui/EmptyState`): Klasse **(a)** „Anlage fehlt" → `AnlageLeer` (CTA Einstellungen→Stammdaten) · Klasse **(b)** „Daten fehlen komplett" → `DatenLeer` (CTA Einstellungen→Daten) bzw. Komponenten-CTA. Klasse **(c)** — Blätter-Lücken beim Zeitraum-Navigieren („Keine Daten für diesen Tag", Sektions-Hinweise ohne sinnvollen CTA) — bleibt bewusst die **kleine graue Card** (großes Panel = genau der Layout-Sprung, den T2/D12-1 eliminiert haben).
+> - **Ausnahmen (dokumentiert, Wächter-Allowlist):** `EinstellungenModalHost`-Suspense-Fallback · CockpitLiveV4-Hand-Spinner/-Fehlerbanner/-Leerkarten (S11-IST-Ausnahme bis Flip).
+> **Wächter:** `check:b8` (Freeze-Zähler `<LoadingSpinner` · `animate-spin` · Fehlertext-Zeilen `text-red-500`+`{…}`-Slot · nackte Leer-Cards; Allowlist mit exakter Treffer-Zahl, blockt in beide Richtungen).
 
-**Betroffene Issues:** neue Norm; heute behandelt jede Seite Leer/Laden/Fehler eigen.
+**Betroffene Issues:** #243 B8-Norm; umgesetzt für v4 in der R3b-S15-Slice (2026-07-05, `VERIFIKATION-S15.md`).
 
 ---
 
