@@ -60,6 +60,8 @@ interface ZeitStepperProps {
   immerSichtbar?: boolean
 }
 
+// C1/S10 (R3b): rounded-md = dokumentierter Zeit-Nav-Kompakt-Radius (Familie
+// ZeitStepper/Zeitraum-Chips/SegmentControl radius="md"), bewusst nicht rounded-lg.
 const BTN_CLASS =
   'flex items-center justify-center h-9 w-8 shrink-0 rounded-md text-gray-600 dark:text-gray-300 ' +
   'hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-30 ' +

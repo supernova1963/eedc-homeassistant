@@ -461,6 +461,8 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 | `grid` | 16 px | `gap-4` | KPI-Grid ab `sm` |
 
 > **Radius:** `card` = 12 px (`rounded-xl`) für Karten/Icon-Chips · `control` = 8 px (`rounded-lg`) für Buttons/Inputs/Badges/Tooltips.
+> **Zeit-Nav-Kompakt-Radius (R3b S10, dokumentierte Konvention, 2026-07-05):** die **Zeit-Navigations-Familie** (ZeitStepper-Pfeile/Titel, Zeitraum-Schnellwahl-Chips der Werkbank, `SegmentControl radius="md"`) nutzt bewusst **`rounded-md` (6 px)** statt `control` — kompakte, dichte Bedien-Leisten; kein Drift, sondern Familien-Merkmal.
+> **Live-IST-Optik (R3b S11, dokumentierte A.3-IST-Ausnahme BIS FLIP, 2026-07-05):** `CockpitLiveV4`-Kacheln + `FokusKachel` tragen die V3-Live-Dashboard-Optik (`rounded-lg` + nacktes `shadow`, Kompakt-`p-3`) — Prinzip „IST-Layout in v4-Shell, kein Neubau". **Flip-Merker:** Angleichung an den Karten-Kanon (`rounded-xl` + `shadow-sm`) wird am v4.0.0-Flip gebündelt (wie der Netzbezug-Farbwechsel, R6 §6-Umfeld).
 > **Schatten:** Light = `shadow-sm` (Tailwind-Default, **kein** eigener boxShadow-Token). Dark = **Border-Abgrenzung** statt Schatten — **kein `dark:shadow-*`-Ausbau** (s. A8). Bewusst nur diese eine Stufe.
 
 **Betroffene Issues:** #243 B6, #209 P5.

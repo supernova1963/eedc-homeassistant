@@ -33,6 +33,8 @@ export function FokusKachel({ titel, icon: Icon, farbe, className = '', kompakt 
           {children}
         </FokusVollbild>
       )}
+      {/* C1/S11 (R3b, dokumentierte A.3-IST-Ausnahme BIS Flip): rounded-lg + nacktes
+          shadow + p-3 = V3-Live-Optik; Angleichung an rounded-xl/shadow-sm am Flip. */}
       <div className={`relative bg-white dark:bg-gray-800 rounded-lg shadow ${kompakt ? 'p-3' : 'p-4 sm:p-6'} ${className}`}>
         {/* ⤢ sitzt absolut oben rechts — in der Titelzeile, keine eigene Leerzeile.
             (Energiefluss bringt sein ⤢ über `kopfAktion` selbst mit.)
