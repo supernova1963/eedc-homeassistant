@@ -78,7 +78,7 @@ function KomponentenEinstellungen() {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
   }
   if (v.loading) {
-    return <LoadingSpinner text="Lade Komponenten..." />
+    return <LoadingSpinner text="Lade Komponenten…" />
   }
 
   const bloecke: Block[] = INVESTITION_TYP_ORDER.map((typ) => {
