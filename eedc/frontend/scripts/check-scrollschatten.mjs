@@ -36,6 +36,12 @@ const GETEILTE_SOT = [
   'src/components/ui/Table.tsx',
   'src/components/blocks/FokusVollbild.tsx',
   'src/components/blocks/BlockShell.tsx',
+  // R3b Etappe 1 (2026-07-05): V4-only-geteilte Inhalts-Container aus dem
+  // Konformitäts-Sweep (A9-Rest) — auf ScrollSchatten umgestellt, hier bewacht.
+  'src/components/aussicht/AussichtTeile.tsx',
+  'src/components/balkonkraftwerk/BkwJahresvergleich.tsx',
+  'src/components/eauto/EAutoJahresvergleich.tsx',
+  'src/components/speicher/SpeicherJahresbilanz.tsx',
 ]
 
 function tsxFiles(dir) {

@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { CHART_COLORS, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps } from '../ui'
+import ScrollSchatten from '../ui/ScrollSchatten'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 interface JahrVerwendung { jahr: number; eigenverbrauch: number; einspeisung: number; gesamt: number }
@@ -62,7 +63,7 @@ export function BkwJahresvergleich({ monatsdaten, embed = false }: { monatsdaten
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Werte anzeigen ({daten.length} Jahre)
         </summary>
-        <div className="mt-3 overflow-x-auto">
+        <ScrollSchatten achse="horizontal" aussenClassName="mt-3" fadeFrom="from-white dark:from-gray-800">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
@@ -81,7 +82,7 @@ export function BkwJahresvergleich({ monatsdaten, embed = false }: { monatsdaten
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
       </details>
     </div>
   )

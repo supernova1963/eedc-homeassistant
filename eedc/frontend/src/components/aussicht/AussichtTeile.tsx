@@ -16,6 +16,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
+import ScrollSchatten from '../ui/ScrollSchatten'
 import { fmtCalc, ChartLegende } from '../ui'
 import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -63,7 +64,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
   return (
     <div className="space-y-2">
       {/* ── Desktop (≥ lg): vertikale Säulen ── */}
-      <div className="hidden lg:block overflow-x-auto p-0.5">
+      <ScrollSchatten achse="horizontal" aussenClassName="hidden lg:block" className="p-0.5" fadeFrom="from-white dark:from-gray-800">
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${tage.length}, minmax(52px, 1fr))` }}>
           {tage.map((tag) => {
             const totalPx = (tag.pv_ertrag_kwh / maxKwh) * BALKEN_PX
@@ -81,7 +82,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                     1fr-Spalte, gedeckelt) — wächst mit, ohne die Spalte zu sprengen. */}
                 <div className="w-3/5 max-w-[44px]"><WetterIcon symbol={tag.wetter_symbol} className="w-full h-auto" /></div>
                 <span className="flex items-center gap-0.5 text-sm font-medium text-gray-600 dark:text-gray-300 tabular-nums">
-                  <Thermometer className="h-3.5 w-3.5" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
+                  <Thermometer className="h-3.5 w-3.5" />{tag.temperatur_max_c != null ? `${fmtZahl(tag.temperatur_max_c, 0)}°` : '—'}
                 </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
                 <div className="flex flex-col justify-end items-center w-full" style={{ height: BALKEN_PX }}>
@@ -100,7 +101,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
             )
           })}
         </div>
-      </div>
+      </ScrollSchatten>
 
       {/* ── Mobil (< lg): horizontale Balken (Gernot R12-4) ── */}
       <div className="lg:hidden space-y-1 p-0.5">
@@ -118,7 +119,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
               <div className="w-24 shrink-0 leading-tight">
                 <div className="text-xs font-medium text-gray-700 dark:text-gray-200">{formatDatum(tag.datum)}</div>
                 <div className="flex items-center gap-0.5 text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">
-                  <Thermometer className="h-3 w-3" />{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°
+                  <Thermometer className="h-3 w-3" />{tag.temperatur_max_c != null ? `${fmtZahl(tag.temperatur_max_c, 0)}°` : '—'}
                 </div>
               </div>
               {/* Horizontaler Balken (Balkenlänge = PV-Ertrag), wächst nach rechts */}
@@ -171,7 +172,7 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
   const hasVmNm = tage.some((t) => t.pv_ertrag_morgens_kwh != null)
   const hasKaskade = tage.some((t) => t.datenquelle && t.datenquelle !== 'best_match')
   return (
-    <div className="overflow-x-auto">
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
@@ -195,15 +196,15 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
               <td className="py-2 px-3 font-medium">{formatDatum(tag.datum)}</td>
               <td className="py-2 px-3"><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
               <td className="py-2 px-3 text-right font-semibold text-yellow-600 tabular-nums">{fmtZahl(tag.pv_ertrag_kwh, 1)} kWh</td>
-              {hasVmNm && <td className="py-2 px-3 text-right text-amber-500 tabular-nums">{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '-'}</td>}
-              {hasVmNm && <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '-'}</td>}
-              <td className="py-2 px-3 text-right tabular-nums">{tag.gti_kwh_m2 != null ? fmtZahl(tag.gti_kwh_m2, 2) : '-'} kWh/m²</td>
-              <td className="py-2 px-3 text-right tabular-nums">{tag.bewoelkung_prozent != null ? fmtZahl(tag.bewoelkung_prozent, 0) : '-'} %</td>
-              <td className="py-2 px-3 text-right tabular-nums">{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '-'}°C</td>
+              {hasVmNm && <td className="py-2 px-3 text-right text-amber-500 tabular-nums">{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '—'}</td>}
+              {hasVmNm && <td className="py-2 px-3 text-right text-yellow-600 tabular-nums">{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '—'}</td>}
+              <td className="py-2 px-3 text-right tabular-nums">{tag.gti_kwh_m2 != null ? `${fmtZahl(tag.gti_kwh_m2, 2)} kWh/m²` : '—'}</td>
+              <td className="py-2 px-3 text-right tabular-nums">{tag.bewoelkung_prozent != null ? `${fmtZahl(tag.bewoelkung_prozent, 0)} %` : '—'}</td>
+              <td className="py-2 px-3 text-right tabular-nums">{tag.temperatur_max_c != null ? `${fmtZahl(tag.temperatur_max_c, 0)}°C` : '—'}</td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {tag.niederschlag_mm != null && tag.niederschlag_mm > 0
                   ? <span className="text-blue-500">{fmtZahl(tag.niederschlag_mm, 1)} mm</span>
-                  : '-'}
+                  : '—'}
               </td>
               {hasKaskade && (
                 <td className="py-2 px-3 text-right">
@@ -216,7 +217,7 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollSchatten>
   )
 }
 
@@ -267,11 +268,11 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
  *  + Gesamt + Datenquellen) — IST LangfristTab, read-only Werte-Embed. */
 export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose }) {
   const pr = (v: number | null) =>
-    v == null ? <span className="text-gray-400 dark:text-gray-500">-</span>
+    v == null ? <span className="text-gray-400 dark:text-gray-500">—</span>
     : <span className={v > 1 ? 'text-green-600' : v < 0.9 ? 'text-red-600' : 'text-gray-600 dark:text-gray-300'}>{fmtZahl(v * 100, 0)} %</span>
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto">
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-400 dark:text-gray-500">
@@ -304,7 +305,7 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
             </tr>
           </tfoot>
         </table>
-      </div>
+      </ScrollSchatten>
       {prognose.datenquellen?.length > 0 && (
         <p className="text-xs text-gray-400 dark:text-gray-500">Datenquellen: {prognose.datenquellen.join(', ')}</p>
       )}
