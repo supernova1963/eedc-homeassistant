@@ -13,6 +13,7 @@ import pytest
 
 from backend.core.berechnungen import (
     assert_speicher_durchsatz_konsistent,
+    berechne_netzladung_kosten,
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
     speicher_effizienz_prozent,
@@ -108,3 +109,39 @@ def test_durchsatz_none_als_null():
 def test_durchsatz_assert_wirft_bei_verstoss():
     with pytest.raises(AssertionError):
         assert_speicher_durchsatz_konsistent(900.0, 1000.0)
+
+
+# ─── berechne_netzladung_kosten (R15-1 Kostenkachel) ─────────────────────────
+
+
+def test_netzladung_kosten_tep_hat_vorrang():
+    r = berechne_netzladung_kosten(
+        112.0, eff_ladepreis_cent=22.4, imd_preis_cent=25.0, netzbezug_preis_cent=30.0,
+    )
+    assert r is not None
+    assert r.quelle == "tep"
+    assert r.preis_cent == 22.4
+    assert r.kosten_euro == pytest.approx(25.09, abs=0.01)
+
+
+def test_netzladung_kosten_imd_fallback():
+    r = berechne_netzladung_kosten(31.6, imd_preis_cent=22.0, netzbezug_preis_cent=30.0)
+    assert r is not None
+    assert r.quelle == "imd"
+    assert r.kosten_euro == pytest.approx(6.95, abs=0.01)
+
+
+def test_netzladung_kosten_bezugspreis_fallback():
+    r = berechne_netzladung_kosten(40.0, netzbezug_preis_cent=29.21)
+    assert r is not None
+    assert r.quelle == "bezugspreis"
+    assert r.kosten_euro == pytest.approx(11.68, abs=0.01)
+
+
+def test_netzladung_kosten_ohne_netzladung_none():
+    assert berechne_netzladung_kosten(None, netzbezug_preis_cent=30.0) is None
+    assert berechne_netzladung_kosten(0.0, netzbezug_preis_cent=30.0) is None
+
+
+def test_netzladung_kosten_ohne_preis_none():
+    assert berechne_netzladung_kosten(50.0) is None

@@ -268,3 +268,48 @@ def ist_eta_degradation_alarm(
     """
     differenz = param_wirkungsgrad_prozent - ist_wirkungsgrad_prozent
     return differenz > ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE
+
+
+@dataclass
+class NetzladungKosten:
+    """Monats-Kosten der Speicher-Netzladung (R15-1, Rainer-Kostenkachel).
+
+    `quelle` benennt die Preis-Herkunft in absteigender Güte:
+    - "tep"         — stundengewichteter effektiver Ladepreis (#264 Etappe C)
+    - "imd"         — kWh-gewichteter Ø aus manuell erfassten IMD-Ladepreisen
+    - "bezugspreis" — Netzladung läuft zum normalen Bezugspreis (keine
+                      Arbitrage-Erfassung; Ø-Monatspreis vor festem Tarif)
+    """
+    kosten_euro: float
+    preis_cent: float
+    quelle: str
+
+
+def berechne_netzladung_kosten(
+    netzladung_kwh: Optional[float],
+    *,
+    eff_ladepreis_cent: Optional[float] = None,
+    imd_preis_cent: Optional[float] = None,
+    netzbezug_preis_cent: Optional[float] = None,
+) -> Optional[NetzladungKosten]:
+    """Kosten der Netzladung = Netzladung × bester verfügbarer Ladepreis.
+
+    Preis-Kette: TEP-effektiv → IMD-Ø (Monatsabschluss-Handeingabe) →
+    Bezugspreis (Ø-Monatspreis bzw. Tarif). Ohne Netzladung oder ohne
+    irgendeinen Preis → `None` (Kachel bleibt aus, kein 0-€-Rauschen).
+    """
+    if netzladung_kwh is None or netzladung_kwh <= 0:
+        return None
+    if eff_ladepreis_cent is not None and eff_ladepreis_cent > 0:
+        preis, quelle = eff_ladepreis_cent, "tep"
+    elif imd_preis_cent is not None and imd_preis_cent > 0:
+        preis, quelle = imd_preis_cent, "imd"
+    elif netzbezug_preis_cent is not None and netzbezug_preis_cent > 0:
+        preis, quelle = netzbezug_preis_cent, "bezugspreis"
+    else:
+        return None
+    return NetzladungKosten(
+        kosten_euro=round(netzladung_kwh * preis / 100, 2),
+        preis_cent=round(preis, 2),
+        quelle=quelle,
+    )

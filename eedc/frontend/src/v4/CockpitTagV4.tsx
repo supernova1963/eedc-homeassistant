@@ -201,7 +201,10 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte
       // werden im Strip ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen
       // (Monat-Referenz, Gernot-Abnahme 2026-06-25).
-      const kpiItems = baueTagKpis(tag, vortag, tagDetail?.soll_pv_kwh).map((k) => ({
+      const kpiItems = baueTagKpis(tag, vortag, tagDetail?.soll_pv_kwh, {
+        kwh: tagDetail?.speicher_ladung_netz_kwh,
+        preis_cent: tagDetail?.speicher_effektiver_ladepreis_cent,
+      }).map((k) => ({
         ...k,
         parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,
       }))

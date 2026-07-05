@@ -56,6 +56,8 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
   const gesamtverbrauch = summe(f('gesamtverbrauch_kwh'))
   const speicherLadung = summe(f('speicher_ladung_kwh'))
   const speicherEntladung = summe(f('speicher_entladung_kwh'))
+  const speicherLadungNetz = summe(f('speicher_ladung_netz_kwh'))
+  const speicherLadungNetzKosten = summe(f('speicher_ladung_netz_kosten_euro'))
   const wpWaerme = summe(f('wp_waerme_kwh'))
   const wpStrom = summe(f('wp_strom_kwh'))
   const emobLadung = summe(f('emob_ladung_kwh'))
@@ -152,7 +154,7 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     // Speicher
     speicher_ladung_kwh: speicherLadung,
     speicher_entladung_kwh: speicherEntladung,
-    speicher_ladung_netz_kwh: summe(f('speicher_ladung_netz_kwh')),
+    speicher_ladung_netz_kwh: speicherLadungNetz,
     speicher_wirkungsgrad_prozent: quote(speicherEntladung, speicherLadung),
     speicher_vollzyklen: summe(f('speicher_vollzyklen')),
     speicher_kapazitaet_kwh: max(f('speicher_kapazitaet_kwh')),
@@ -161,6 +163,12 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     speicher_effektiver_ladepreis_cent: mittel(f('speicher_effektiver_ladepreis_cent')),
     speicher_effektiver_ladepreis_quelle:
       monate.find((m) => m.speicher_effektiver_ladepreis_quelle)?.speicher_effektiver_ladepreis_quelle ?? null,
+    // R15-1: Netzladung-Kosten Σ; Jahres-Ø-Preis aus den Summen (kWh-gewichtet,
+    // €→ct via Faktor 100) statt Monats-Mittel der Preise.
+    speicher_ladung_netz_kosten_euro: speicherLadungNetzKosten,
+    speicher_ladung_netz_preis_cent: quote(speicherLadungNetzKosten, speicherLadungNetz, 100),
+    speicher_ladung_netz_preis_quelle:
+      monate.find((m) => m.speicher_ladung_netz_preis_quelle)?.speicher_ladung_netz_preis_quelle ?? null,
 
     // Wärmepumpe
     wp_strom_kwh: wpStrom,

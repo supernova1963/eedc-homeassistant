@@ -20,7 +20,7 @@ import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { DATENROLLE, VERGLEICH_BADGE } from '../lib'
-import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
+import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet, BatteryCharging, Coins } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -91,7 +91,40 @@ export function baueMonatKpis(
       subtitle: 'nach Betriebskosten',
       formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
     },
+    ...baueNetzKostenKpis(d),
   ]
+}
+
+/** R15-1 (Rainer-PN #88625): Kosten-Kacheln „Batterieladung Netz" +
+ *  „Durchschnittspreis Netz" — Stromkosten der Periode sichtbar machen.
+ *  Erscheinen nur, wenn Daten vorliegen (Netzladung erfasst bzw. Preis
+ *  bekannt). Geteilt von Monat + Jahr (Jahres-Aggregat hat denselben Shape). */
+export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
+  const kpis: KpiStripItem[] = []
+  if (d.speicher_ladung_netz_kosten_euro != null) {
+    kpis.push({
+      title: 'Batterieladung Netz',
+      value: fmtCalc(d.speicher_ladung_netz_kosten_euro, 2, '—'), unit: '€',
+      color: 'red', icon: BatteryCharging,
+      subtitle: `${fmt(d.speicher_ladung_netz_kwh)} kWh · Ø ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1, '—')} ct/kWh`,
+      formel: 'Netzladung × Ø-Ladepreis',
+      berechnung: `${fmt(d.speicher_ladung_netz_kwh)} kWh × ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1)} ct/kWh`,
+      ergebnis: `= ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} €`,
+    })
+  }
+  const netzPreis = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent
+  if (netzPreis != null && d.netzbezug_kwh != null) {
+    kpis.push({
+      title: 'Durchschnittspreis Netz',
+      value: fmtCalc(netzPreis, 1, '—'), unit: 'ct/kWh',
+      color: 'red', icon: Coins,
+      subtitle: `${fmt(d.netzbezug_kwh)} kWh · ${fmtCalc(d.netzbezug_kosten_euro, 2, '—')} €`,
+      formel: d.netzbezug_durchschnittspreis_cent != null
+        ? 'Ø-Bezugspreis (dynamischer Tarif, verbrauchsgewichtet) · Kosten inkl. Grundpreis'
+        : 'Arbeitspreis aus dem Strompreis-Tarif · Kosten inkl. Grundpreis',
+    })
+  }
+  return kpis
 }
 
 export function Delta({ a, b, inv = false, besser }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean; besser?: boolean }) {

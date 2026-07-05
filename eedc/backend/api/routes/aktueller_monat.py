@@ -29,6 +29,7 @@ from backend.core.berechnungen import (
     autarkie_prozent,
     berechne_grundlast,
     berechne_netzbezug_kosten,
+    berechne_netzladung_kosten,
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
@@ -157,6 +158,10 @@ class AktuellerMonatResponse(BaseModel):
     speicher_soc_drift_signifikant: bool = False
     speicher_effektiver_ladepreis_cent: Optional[float] = None
     speicher_effektiver_ladepreis_quelle: Optional[str] = None  # dyn-tarif | boersenpreis
+    # R15-1 (Rainer-Kostenkacheln): Kosten der Netzladung + verwendeter Preis
+    speicher_ladung_netz_kosten_euro: Optional[float] = None
+    speicher_ladung_netz_preis_cent: Optional[float] = None
+    speicher_ladung_netz_preis_quelle: Optional[str] = None  # tep | imd | bezugspreis
     hat_speicher: bool = False
 
     # Komponenten — Wärmepumpe
@@ -1292,6 +1297,7 @@ async def get_aktueller_monat(
     speicher_soc_drift_flag = False
     speicher_eff_ladepreis = None
     speicher_eff_ladepreis_quelle = None
+    speicher_imd_ladepreis = None
     if speicher_invs:
         # Kapazität aus parameter
         kap_sum = sum((i.parameter or {}).get("kapazitaet_kwh", 0) or 0 for i in speicher_invs)
@@ -1303,13 +1309,25 @@ async def get_aktueller_monat(
         )
 
         # Arbitrage-Ladung aus gespeicherten Daten (Kanon-Key + Legacy-Fallback,
-        # deckt frisch geschriebene Legacy-Rows vor dem nächsten Migrations-Lauf)
+        # deckt frisch geschriebene Legacy-Rows vor dem nächsten Migrations-Lauf).
+        # Parallel: kWh-gewichteter Ø der manuell erfassten IMD-Ladepreise als
+        # Preis-Fallback für die Netzladung-Kosten-Kachel (R15-1).
         ladung_netz_total = 0.0
+        imd_preis_gewichtet = 0.0
+        imd_preis_kwh = 0.0
         for imd in get_imd_for_invs(speicher_invs):
             data = imd.verbrauch_daten or {}
-            ladung_netz_total += get_speicher_netzladung_kwh(data)
+            nl = get_speicher_netzladung_kwh(data)
+            ladung_netz_total += nl
+            imd_preis = data.get("speicher_ladepreis_cent")
+            if nl > 0 and imd_preis is not None and imd_preis > 0:
+                imd_preis_gewichtet += nl * imd_preis
+                imd_preis_kwh += nl
         if ladung_netz_total > 0:
             speicher_ladung_netz = round(ladung_netz_total, 2)
+        speicher_imd_ladepreis = (
+            imd_preis_gewichtet / imd_preis_kwh if imd_preis_kwh > 0 else None
+        )
 
         # Wirkungsgrad und Vollzyklen
         sl = speicher_ladung or 0
@@ -1519,6 +1537,16 @@ async def get_aktueller_monat(
     md_flex = md_flex_result.scalar_one_or_none()
     if md_flex and md_flex.netzbezug_durchschnittspreis_cent is not None:
         netzbezug_durchschnittspreis = md_flex.netzbezug_durchschnittspreis_cent
+
+    # R15-1 (Rainer-Kostenkacheln): Kosten der Speicher-Netzladung.
+    # Preis-Kette TEP-effektiv → IMD-Ø (Handeingabe) → Bezugspreis
+    # (Ø-Monatspreis vor festem Tarif) — Berechnungs-Layer-Helper.
+    netzladung_kosten = berechne_netzladung_kosten(
+        speicher_ladung_netz,
+        eff_ladepreis_cent=speicher_eff_ladepreis,
+        imd_preis_cent=speicher_imd_ladepreis,
+        netzbezug_preis_cent=netzbezug_durchschnittspreis or netzbezug_preis_cent,
+    )
 
     # ── Komponenten-Flags ──
     # #239 detLAN: pro Monat filtern, nicht pro Anlage. Sonst wird die
@@ -1746,6 +1774,9 @@ async def get_aktueller_monat(
         speicher_soc_drift_signifikant=speicher_soc_drift_flag,
         speicher_effektiver_ladepreis_cent=speicher_eff_ladepreis,
         speicher_effektiver_ladepreis_quelle=speicher_eff_ladepreis_quelle,
+        speicher_ladung_netz_kosten_euro=netzladung_kosten.kosten_euro if netzladung_kosten else None,
+        speicher_ladung_netz_preis_cent=netzladung_kosten.preis_cent if netzladung_kosten else None,
+        speicher_ladung_netz_preis_quelle=netzladung_kosten.quelle if netzladung_kosten else None,
         hat_speicher=hat_speicher,
         # Komponenten — WP
         wp_strom_kwh=get_val("wp_strom_kwh"),

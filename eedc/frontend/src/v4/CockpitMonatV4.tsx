@@ -227,7 +227,7 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
               id: 'kpi',
               title: 'Kennzahlen',
               ...BLOCK_IDENTITAET.kennzahlen,
-              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis',
+              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis + Netz-Kosten',
               defaultOpen: true,
               render: () => <KpiStrip kpis={sichtbareKpi} />,
             }
@@ -236,7 +236,7 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
           id: 'kpi',
           title: 'Kennzahlen',
           ...BLOCK_IDENTITAET.kennzahlen,
-          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis',
+          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Monatsergebnis + Netz-Kosten',
           defaultOpen: true,
           render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Monats-Kennzahlen verfügbar.</p>,
         }

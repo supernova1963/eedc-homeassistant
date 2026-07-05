@@ -17,7 +17,7 @@ import { fmtCalc } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { DATENROLLE } from '../lib'
-import { Delta, VglChip } from './MonatBilanz'
+import { Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
 import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
@@ -69,6 +69,8 @@ export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null
       color: jahresergebnis != null && jahresergebnis < 0 ? 'red' : 'green', icon: Wallet,
       subtitle: 'nach Betriebskosten', formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
     },
+    // R15-1: Kosten-Kacheln (geteilter Bauer, Jahres-Aggregat = Monats-Shape).
+    ...baueNetzKostenKpis(d),
   ]
 }
 

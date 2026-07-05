@@ -20,7 +20,7 @@ import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken } from '../components/blocks'
 import { DATENROLLE, AMPEL_SKALA } from '../lib'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
-import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro } from 'lucide-react'
+import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, BatteryCharging, Coins } from 'lucide-react'
 import type { KpiStripItem } from '../components/blocks'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -31,12 +31,43 @@ const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 
 /** Energie-Strip: 5 Energie + Netto-Ertrag €. Vortag in der Zweitzeile.
  *  `sollPvKwh` (OM-Tagesprognose × eedc-Lernfaktor, optional) → SOLL-Annotation am
- *  PV-KPI wie im Monat. */
-export function baueTagKpis(t: TagWerte, vt: TagWerte | null, sollPvKwh?: number | null): KpiStripItem[] {
+ *  PV-KPI wie im Monat. `netzladung` (tagDetail, optional) → Kosten-Kacheln R15-1. */
+export function baueTagKpis(
+  t: TagWerte,
+  vt: TagWerte | null,
+  sollPvKwh?: number | null,
+  netzladung?: { kwh?: number | null; preis_cent?: number | null },
+): KpiStripItem[] {
   const sollTxt = sollPvKwh != null && sollPvKwh > 0
     ? `SOLL ${fmt(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %` : null
   const spezTxt = t.spezErtrag != null ? `${fmt(t.spezErtrag, 2)} kWh/kWp` : null
   const vtTxt = vt ? `VT: ${fmt(vt.erzeugung)} kWh` : null
+
+  // R15-1: Kosten-Kacheln — nur wenn die Tagesdaten es hergeben. Netzladung-
+  // Kosten brauchen den TEP-Tages-Ladepreis (#264); der Tages-Ø-Bezugspreis
+  // ist implizit exakt (Backend: kosten = netzbezug × Monats-Finanzzeilen-Preis).
+  const kostenKpis: KpiStripItem[] = []
+  if (netzladung?.kwh != null && netzladung.kwh > 0 && netzladung.preis_cent != null) {
+    const kosten = (netzladung.kwh * netzladung.preis_cent) / 100
+    kostenKpis.push({
+      title: 'Batterieladung Netz',
+      value: fmtCalc(kosten, 2, '—'), unit: '€', color: 'red', icon: BatteryCharging,
+      subtitle: `${fmt(netzladung.kwh, 1)} kWh · Ø ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`,
+      formel: 'Netzladung × Ø-Ladepreis (Tag)',
+      berechnung: `${fmt(netzladung.kwh, 1)} kWh × ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`,
+      ergebnis: `= ${fmtCalc(kosten, 2)} €`,
+    })
+  }
+  if (t.netzbezug > 0 && t.netzbezug_kosten != null) {
+    kostenKpis.push({
+      title: 'Durchschnittspreis Netz',
+      value: fmtCalc((t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'), unit: 'ct/kWh',
+      color: 'red', icon: Coins,
+      subtitle: `${fmt(t.netzbezug, 1)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,
+      formel: 'Netzbezug-Kosten ÷ Netzbezug',
+    })
+  }
+
   return [
     {
       title: 'PV-Erzeugung', value: fmt(t.erzeugung), unit: 'kWh', color: 'yellow', icon: Sun,
@@ -68,6 +99,7 @@ export function baueTagKpis(t: TagWerte, vt: TagWerte | null, sollPvKwh?: number
       berechnung: `${fmtCalc(t.einspeise_erloes, 2)} + ${fmtCalc(t.ev_ersparnis, 2)} €`,
       ergebnis: `= ${fmtCalc(t.netto_ertrag, 2)} €`,
     },
+    ...kostenKpis,
   ]
 }
 

@@ -166,14 +166,14 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       ? (sichtbareKpi.length > 0
           ? {
               id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis',
+              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
               defaultOpen: true,
               render: () => <KpiStrip kpis={sichtbareKpi} />,
             }
           : null)
       : {
           id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis',
+          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
           defaultOpen: true,
           render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahres-Kennzahlen verfügbar.</p>,
         }

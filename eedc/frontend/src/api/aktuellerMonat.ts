@@ -74,6 +74,10 @@ export interface AktuellerMonatResponse {
   speicher_soc_drift_signifikant: boolean
   speicher_effektiver_ladepreis_cent: number | null
   speicher_effektiver_ladepreis_quelle: string | null
+  // R15-1 (Rainer-Kostenkacheln): Kosten der Netzladung + verwendeter Preis
+  speicher_ladung_netz_kosten_euro: number | null
+  speicher_ladung_netz_preis_cent: number | null
+  speicher_ladung_netz_preis_quelle: string | null
 
   // Komponenten — Wärmepumpe
   wp_strom_kwh: number | null
