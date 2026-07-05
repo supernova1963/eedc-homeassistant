@@ -8,7 +8,8 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import { Card, LoadingSpinner } from '../components/ui'
+import { Card } from '../components/ui'
+import { BlockStackSkeleton } from '../components/blocks'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { useSelectedAnlage } from '../hooks'
 import { compareTyp } from '../lib/constants'
@@ -63,7 +64,9 @@ export default function KomponentenV4() {
   )
 
   if (vorhandeneTypen === null) {
-    return <ViewShell><div className="p-3 sm:p-6"><LoadingSpinner text="Lade Komponenten…" /></div></ViewShell>
+    // B8 (S15): Skeleton mit Tab-Pillen-Platzhalter — die SubTabBar erscheint erst
+    // nach dem Laden (vorhandeneTypen), sonst doppelter Layout-Sprung.
+    return <ViewShell><div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade Komponenten…" pillen={4} /></div></ViewShell>
   }
   if (verfuegbar.length === 0) {
     return (

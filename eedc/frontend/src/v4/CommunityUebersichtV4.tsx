@@ -6,8 +6,8 @@
  * `BlockShell` (einklappbar · Fokus/Vollbild · sortierbar) gehängt.
  */
 import { Trophy, ThumbsUp, BarChart3, Sparkles, Battery } from 'lucide-react'
-import { BlockShell, type Block } from '../components/blocks'
-import { LoadingSpinner, Alert, Card } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
+import { Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { fmtZahl, KOMPONENTEN_IDENTITAET } from '../lib'
 import type { CommunityBenchmarkResponse } from '../api/community'
@@ -35,7 +35,7 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
   const park = usePark()
   const d = useUebersichtDaten(benchmark)
 
-  if (loading) return <div className="p-3 sm:p-6"><LoadingSpinner text="Lade Community-Daten…" /></div>
+  if (loading) return <div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade Community-Daten…" /></div>
   if (error) return <div className="p-3 sm:p-6"><Alert type="error">{error}</Alert></div>
   if (!benchmark) return <div className="p-3 sm:p-6"><Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Community-Daten für diese Anlage.</p></Card></div>
 

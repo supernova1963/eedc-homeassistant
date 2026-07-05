@@ -14,8 +14,8 @@
  * docken später als weitere Blöcke an.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoadingSpinner, Card, fmtCalc, FehlerZustand } from '../components/ui'
-import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { Card, fmtCalc, FehlerZustand } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
@@ -322,11 +322,11 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
             // beim Listen-Fetch-Fehler (gewaehlt==null) wäre reload no-op → kein Fassade-Knopf.
             <FehlerZustand text={error} onRetry={gewaehlt ? reload : undefined} />
           ) : loading && !monatData ? (
-            // Voll-Spinner NUR beim Erst-Load (noch keine Daten). Beim Monatswechsel
+            // Skeleton NUR beim Erst-Load (noch keine Daten). Beim Monatswechsel
             // bleibt der bestehende Block-Stack stehen und aktualisiert sich in-place
             // → kein „Aufblitzen" (detLAN D7-2, 2026-06-27; analog Tag T2). Kein
             // `key={…}` mehr → BlockShell re-rendert statt zu remounten.
-            <LoadingSpinner text="Lade Monat…" />
+            <BlockStackSkeleton label="Lade Monat…" />
           ) : monate.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Monatsdaten erfasst.</p></Card>
           ) : (

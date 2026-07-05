@@ -19,8 +19,8 @@
  *    (Σ der IMD je Monat), einmal je Anlage geladen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoadingSpinner, Card, fmtCalc, FehlerZustand } from '../components/ui'
-import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { Card, fmtCalc, FehlerZustand } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET } from '../lib'
@@ -229,10 +229,10 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
             // beim Listen-Fetch-Fehler (jahr==null) wäre reload no-op → kein Fassade-Knopf.
             <FehlerZustand text={error} onRetry={jahr != null ? reload : undefined} />
           ) : loading && !jahrData ? (
-            // Voll-Spinner NUR beim Erst-Load (detLAN D7-2, 2026-06-27; analog Tag T2).
+            // Skeleton NUR beim Erst-Load (detLAN D7-2, 2026-06-27; analog Tag T2).
             // Beim Jahreswechsel bleibt der Block-Stack stehen und aktualisiert sich
             // in-place; kein `key={…}` mehr → BlockShell re-rendert statt zu remounten.
-            <LoadingSpinner text="Lade Jahr…" />
+            <BlockStackSkeleton label="Lade Jahr…" />
           ) : jahr == null ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Jahresdaten erfasst.</p></Card>
           ) : (

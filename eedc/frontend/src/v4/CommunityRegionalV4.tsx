@@ -4,8 +4,8 @@
  * mit dem IST-`RegionalTab`), hier in die `BlockShell` gehängt.
  */
 import { MapPin, Sun, Users } from 'lucide-react'
-import { BlockShell, type Block } from '../components/blocks'
-import { LoadingSpinner, Alert, Card } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
+import { Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { fmtZahl } from '../lib'
 import type { CommunityBenchmarkResponse } from '../api/community'
@@ -32,7 +32,7 @@ function CommunityRegionalInner({ benchmark, loading, error }: Props) {
   const park = usePark()
   const d = useRegionalDaten(benchmark)
 
-  if (loading || d.extraLoading) return <div className="p-3 sm:p-6"><LoadingSpinner text="Lade regionale Daten…" /></div>
+  if (loading || d.extraLoading) return <div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade regionale Daten…" /></div>
   if (error) return <div className="p-3 sm:p-6"><Alert type="error">{error}</Alert></div>
   if (!benchmark || !d.regionalStats) return <div className="p-3 sm:p-6"><Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Community-Daten für diese Anlage.</p></Card></div>
 

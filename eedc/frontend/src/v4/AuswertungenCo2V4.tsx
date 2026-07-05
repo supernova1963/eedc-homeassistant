@@ -17,9 +17,9 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Leaf, Sprout } from 'lucide-react'
-import { LoadingSpinner, Card, fmtCalc, FehlerZustand } from '../components/ui'
+import { Card, fmtCalc, FehlerZustand } from '../components/ui'
 import { eedcTooltipProps } from '../components/ui'
-import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
   CO2_FAKTOR_KG_KWH, CHART_COLORS, MARKER_WARNUNG, TYP_LABELS,
@@ -279,7 +279,14 @@ function Co2Inner() {
       </div>
     )
   }
-  if (anlagenLoading || basis.loading || !amortGeladen) return <LoadingSpinner text="Lade CO₂-Daten…" />
+  if (anlagenLoading || basis.loading || !amortGeladen) {
+    // B8 (S15): Sicht-Skeleton in BlockShell-Form (3 Blöcke) statt Vollseiten-Spinner.
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <BlockStackSkeleton label="Lade CO₂-Daten…" zu={2} />
+      </div>
+    )
+  }
   if (anlagen.length === 0) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">

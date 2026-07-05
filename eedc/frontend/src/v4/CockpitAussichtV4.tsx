@@ -20,10 +20,10 @@ import { useSearchParams } from 'react-router-dom'
 import {
   Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, ArrowRight,
 } from 'lucide-react'
-import { Card, LoadingSpinner, buttonClasses, SegmentControl, FehlerZustand } from '../components/ui'
+import { Card, buttonClasses, SegmentControl, FehlerZustand } from '../components/ui'
 import { ReloadButton } from './ReloadButton'
 import { DatumPicker } from '../components/ui/DatumPicker'
-import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_ICONS, fmtZahl } from '../lib'
 import {
@@ -371,7 +371,9 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
         // Leer-Flash während des Retrys (laden setzt setError(null) selbst).
         <FehlerZustand text={error} onRetry={() => laden(false)} />
       ) : loading ? (
-        <LoadingSpinner text="Lade Aussicht…" />
+        // B8-Skeleton (S15): faktisch Erst-Load/Anlagenwechsel-only (geladenFuer-Ref,
+        // D11-9); Chart-Form — der kurz-Default öffnet KPI- + Verlaufs-Block.
+        <BlockStackSkeleton label="Lade Aussicht…" offen="chart" />
       ) : bloecke.length === 0 ? (
         <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Prognose verfügbar.</p></Card>
       ) : (

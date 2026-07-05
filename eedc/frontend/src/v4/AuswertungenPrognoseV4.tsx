@@ -14,8 +14,8 @@
  * draußen, Solcast-Spalte) + Format (R1/R2/R3) stecken in den geteilten Teilen.
  */
 import { Target, Sun, TrendingUp, GitCompareArrows, Clock } from 'lucide-react'
-import { LoadingSpinner, Card, Alert, FehlerZustand } from '../components/ui'
-import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { Card, Alert, FehlerZustand, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
   usePrognoseVsIst, pvgisKpiItems,
@@ -40,7 +40,8 @@ const SICHT_KEY = 'v4-auswertungen-prognose'
 // ① Jahres-SOLL/IST gegen PVGIS ────────────────────────────────────────────────
 function BlockPvgis({ anlageId, jahr }: { anlageId: number; jahr: number | undefined }) {
   const vm = usePrognoseVsIst(anlageId, jahr)
-  if (vm.loading) return <LoadingSpinner text="Lade Prognose…" />
+  // B8 (S15): Block-Skeleton in Zielform (KPI-Strip + Chart) statt Sektions-Spinner.
+  if (vm.loading) return <div className="space-y-4"><KpiStripSkeleton label="Lade Prognose…" /><ChartSkeleton /></div>
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
   if (!vm.prognose) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PVGIS-Prognose verfügbar — bitte PV-Module unter Einstellungen → Investitionen anlegen.</p>
   if (vm.monatsdaten.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Monatsdaten für diese Anlage vorhanden.</p>
@@ -60,7 +61,7 @@ function BlockStrings({ anlageId, selectedYear, jahre, zeitraumLabel }: {
   anlageId: number; selectedYear: number | 'all'; jahre: number[]; zeitraumLabel: string
 }) {
   const { data, loading, error } = usePvStrings(anlageId, selectedYear, jahre)
-  if (loading) return <LoadingSpinner text="Lade PV-String-Daten…" />
+  if (loading) return <div className="space-y-4"><KpiStripSkeleton label="Lade PV-String-Daten…" /><ChartSkeleton /></div>
   if (error) return <Alert type="error">{error}</Alert>
   if (!data || data.strings.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PV-Module gefunden.</p>
   if (!data.hat_prognose) return <Alert type="warning">Keine PVGIS-Prognose vorhanden — bitte unter Einstellungen → PVGIS abrufen.</Alert>
@@ -88,7 +89,7 @@ function BlockMehrjahr({ anlageId, jahre, aktiv }: { anlageId: number; jahre: nu
 }
 function BlockMehrjahrInner({ anlageId, jahre }: { anlageId: number; jahre: number[] }) {
   const { data, loading, error, jahresvergleichData } = usePvStrings(anlageId, 'all', jahre)
-  if (loading) return <LoadingSpinner text="Lade Mehrjahres-Daten…" />
+  if (loading) return <ChartSkeleton label="Lade Mehrjahres-Daten…" />
   if (error) return <Alert type="error">{error}</Alert>
   if (!data || jahresvergleichData.length <= 1) return <p className="text-sm text-gray-500 dark:text-gray-400">Mehrjahres-Vergleich braucht mindestens zwei Jahre mit Daten.</p>
   return (
@@ -101,7 +102,7 @@ function BlockMehrjahrInner({ anlageId, jahre }: { anlageId: number; jahre: numb
 // ④ Quellen-Genauigkeit OM · eedc · Solcast ─────────────────────────────────────
 function BlockGenauigkeit({ anlageId }: { anlageId: number }) {
   const vm = usePrognoseVergleich(anlageId)
-  if (vm.loading) return <LoadingSpinner text="Lade Genauigkeits-Daten…" />
+  if (vm.loading) return <TabellenSkeleton label="Lade Genauigkeits-Daten…" />
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
   if (!vm.data) return null
   return (
@@ -119,7 +120,7 @@ function BlockGenauigkeit({ anlageId }: { anlageId: number }) {
 // ⑤ Tages-/Stundenprofil & Solcast-Roadmap ──────────────────────────────────────
 function BlockProfil({ anlageId }: { anlageId: number }) {
   const vm = usePrognoseVergleich(anlageId)
-  if (vm.loading) return <LoadingSpinner text="Lade Profil-Daten…" />
+  if (vm.loading) return <ChartSkeleton label="Lade Profil-Daten…" />
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
   if (!vm.data) return null
   return (
@@ -143,7 +144,15 @@ export default function AuswertungenPrognoseV4() {
       </div>
     )
   }
-  if (anlagenLoading || basis.loading) return <LoadingSpinner text="Lade Prognose-Daten…" />
+  if (anlagenLoading || basis.loading) {
+    // B8 (S15): Sicht-Skeleton in BlockShell-Form (5 Blöcke: ① offen + 4 zu) statt
+    // Vollseiten-Spinner — kein Komplett-Sprung beim Erscheinen des Inhalts.
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <BlockStackSkeleton label="Lade Prognose-Daten…" zu={4} />
+      </div>
+    )
+  }
   if (anlagen.length === 0 || !selectedAnlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">

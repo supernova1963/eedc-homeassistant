@@ -12,8 +12,8 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Table, CalendarDays } from 'lucide-react'
-import { LoadingSpinner, Card, FehlerZustand } from '../components/ui'
-import { BlockShell, type Block } from '../components/blocks'
+import { Card, FehlerZustand, TabellenSkeleton } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
 import { monatsZeile, tagesZeile, type WerteZeile } from '../lib/werte'
@@ -86,7 +86,14 @@ function TabelleInner() {
     setVglJahr(anker.jahr - 1)  // Default-Vergleichsjahr = Primär-Jahr − 1
   }, [anker, vglJahr])
 
-  if (anlagenLoading || loading) return <LoadingSpinner text="Lade Werte…" />
+  if (anlagenLoading || loading) {
+    // B8 (S15): Sicht-Skeleton in BlockShell-Form (Monatswerte offen + Energieprofile zu).
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <BlockStackSkeleton label="Lade Werte…" offen="tabelle" zu={1} />
+      </div>
+    )
+  }
   if (anlagen.length === 0) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
@@ -291,7 +298,7 @@ function EnergieprofilBlock({
       {loading && rows.length === 0 ? (
         // Spinner nur beim Erst-Load; bei Zeitraum-/Vergleichswechsel bleibt die
         // bestehende Tabelle stehen und aktualisiert sich in-place (detLAN D7-6).
-        <LoadingSpinner text="Lade Tageswerte…" />
+        <TabellenSkeleton label="Lade Tageswerte…" />
       ) : error ? (
         // B8-Fehler-Baustein (S15). Implizites Retry: Zeitraum-/Vergleichswechsel in der
         // stehenden Leiste re-triggert den Fetch; useTagesWerte hat kein explizites reload.

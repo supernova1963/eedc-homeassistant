@@ -3,6 +3,7 @@
  */
 export type { Block } from './types'
 export { BlockShell, ladeBlockState, speichereBlockState } from './BlockShell'
+export { BlockStackSkeleton } from './BlockStackSkeleton'
 export { FokusKachel } from './FokusKachel'
 export { FokusVollbild } from './FokusVollbild'
 export { KpiStrip } from './KpiStrip'

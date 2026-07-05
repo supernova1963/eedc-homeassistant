@@ -21,8 +21,8 @@
  *    Ø-gleicher-Wochentag-Rückblick ab dem gewählten Tag.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LoadingSpinner, Card, FehlerZustand } from '../components/ui'
-import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { Card, FehlerZustand } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG } from '../lib'
@@ -287,12 +287,12 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
             // B8-Fehler-Baustein (S15): laden(false) setzt setError(null) + refetcht alle Quellen.
             <FehlerZustand text={error} onRetry={() => laden(false)} />
           ) : loading && !jeGeladen ? (
-            // Voll-Spinner NUR beim allerersten Load (noch nie geladen). Beim
+            // Skeleton NUR beim allerersten Load (noch nie geladen). Beim
             // Tageswechsel bleibt der Block-Stack stehen und aktualisiert sich
             // in-place → kein Hochspringen, kein „Aufblitzen" (detLAN T2). D12-1:
             // `!jeGeladen` statt `!tag` — bei Lücke→Lücke ist tag null, würde sonst
-            // den Spinner flashen und das Vollbild wegreißen. Kein `key={datum}`.
-            <LoadingSpinner text="Lade Tag…" />
+            // den Lade-Zustand flashen und das Vollbild wegreißen. Kein `key={datum}`.
+            <BlockStackSkeleton label="Lade Tag…" />
           ) : bloecke.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Daten für diesen Tag vorhanden.</p></Card>
           ) : (

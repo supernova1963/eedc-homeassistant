@@ -5,8 +5,8 @@
  */
 import { Award, Sun, Calendar, Target } from 'lucide-react'
 import { STATUS_ICONS } from '../lib'
-import { BlockShell, type Block } from '../components/blocks'
-import { LoadingSpinner, Alert, Card } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
+import { Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import { fmtZahl } from '../lib'
 import type { CommunityBenchmarkResponse } from '../api/community'
@@ -33,7 +33,7 @@ function CommunityPVErtragInner({ benchmark, loading, error }: Props) {
   const park = usePark()
   const d = usePVErtragDaten(benchmark)
 
-  if (loading || d.extraLoading) return <div className="p-3 sm:p-6"><LoadingSpinner text="Lade PV-Ertragsdaten…" /></div>
+  if (loading || d.extraLoading) return <div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade PV-Ertragsdaten…" /></div>
   if (error) return <div className="p-3 sm:p-6"><Alert type="error">{error}</Alert></div>
   if (!benchmark) return <div className="p-3 sm:p-6"><Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Community-Daten für diese Anlage.</p></Card></div>
 

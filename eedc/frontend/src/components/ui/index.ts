@@ -13,6 +13,7 @@ export { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '.
 export { default as EmptyState } from './EmptyState'
 export { default as FehlerZustand } from './FehlerZustand'
 export { default as LoadingSpinner } from './LoadingSpinner'
+export { Skeleton, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from './Skeleton'
 export { default as FormelTooltip, SimpleTooltip, fmtCalc } from './FormelTooltip'
 export { KPICard } from './KPICard'
 export { default as QuelleBadge } from './QuelleBadge'

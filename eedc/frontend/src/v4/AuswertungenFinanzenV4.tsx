@@ -19,8 +19,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
-import { LoadingSpinner, Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps, FehlerZustand } from '../components/ui'
-import { BlockShell, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
+import { Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps, FehlerZustand, TabellenSkeleton } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
 import { COLORS, GELD_COLORS, GELD_TEXT_CLASS, MONAT_NAMEN, STATUS_ICONS, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
@@ -295,7 +295,14 @@ function FinanzenInner() {
       </div>
     )
   }
-  if (anlagenLoading || basis.loading) return <LoadingSpinner text="Lade Finanzdaten…" />
+  if (anlagenLoading || basis.loading) {
+    // B8 (S15): Sicht-Skeleton in BlockShell-Form (3 Blöcke) statt Vollseiten-Spinner.
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <BlockStackSkeleton label="Lade Finanzdaten…" zu={2} />
+      </div>
+    )
+  }
   if (anlagen.length === 0) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
@@ -394,7 +401,7 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
         // Spinner nur beim Erst-Load; beim Monat/Jahr-Umschalten bleibt das
         // bestehende T-Konto stehen und der Content tauscht in-place (detLAN D7-6,
         // 2026-06-27 — „ausschließlich den Content neu schreiben").
-        <LoadingSpinner text="Lade T-Konto…" />
+        <TabellenSkeleton label="Lade T-Konto…" />
       ) : d ? (
         <TKonto d={d} sonderkosten={sonderkosten} />
       ) : (

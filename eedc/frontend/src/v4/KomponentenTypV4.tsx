@@ -14,9 +14,9 @@
  * (K-B5, kein Datums-Selektor). Mehrere Geräte → Geräte-Selektor (Art ①).
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { LoadingSpinner, Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
+import { Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
-import { BlockShell, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
@@ -720,7 +720,9 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
 
   if (!anlageId) return <Hinweis text="Noch keine Anlage gewählt." />
   if (!adapter) return <Hinweis text={`Für „${ident?.label ?? typ}" gibt es noch keine Hub-Sicht.`} />
-  if (loading) return <div className="p-3 sm:p-6"><LoadingSpinner text="Lade Komponente…" /></div>
+  // B8 (S15): BlockStack-Skeleton (①Status offen + Analyse-Köpfe); Geräte-Selektor
+  // bewusst NICHT vorgetäuscht (Anzahl vor dem Laden unbekannt).
+  if (loading) return <div className="p-3 sm:p-6 max-w-[1920px] mx-auto"><BlockStackSkeleton label="Lade Komponente…" zu={4} /></div>
   if (error) {
     // B8-Fehler-Baustein (S15) statt des grauen Hinweis-Helpers im error-Ton.
     return (

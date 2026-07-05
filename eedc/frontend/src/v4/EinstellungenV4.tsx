@@ -18,9 +18,9 @@ import { Home, type LucideIcon } from 'lucide-react'
 import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
-import { BlockShell, type Block } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss } from '../components/park'
-import { Alert, LoadingSpinner, Input } from '../components/ui'
+import { Alert, Input } from '../components/ui'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { useSelectedAnlage } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
@@ -78,7 +78,8 @@ function KomponentenEinstellungen() {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>
   }
   if (v.loading) {
-    return <LoadingSpinner text="Lade Komponenten…" />
+    // B8 (S15): deterministische Nachlade-Struktur (1 zugeklappter Block je Typ).
+    return <BlockStackSkeleton label="Lade Komponenten…" offen={null} zu={7} />
   }
 
   const bloecke: Block[] = INVESTITION_TYP_ORDER.map((typ) => {

@@ -14,7 +14,8 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Users, ExternalLink, HelpCircle } from 'lucide-react'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
-import { Card, Alert, EmptyState, LoadingSpinner, Button } from '../components/ui'
+import { Card, Alert, EmptyState, Button } from '../components/ui'
+import { BlockStackSkeleton } from '../components/blocks'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { useSelectedAnlage } from '../hooks'
 import { anlagenApi } from '../api'
@@ -125,7 +126,7 @@ export default function CommunityV4() {
   // ── Gates ──
   let inhalt: React.ReactNode
   if (anlagenLoading || checkingAccess) {
-    inhalt = <div className="p-3 sm:p-6"><LoadingSpinner text="Lade…" /></div>
+    inhalt = <div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade…" /></div>
   } else if (anlagen.length === 0) {
     inhalt = <div className="p-3 sm:p-6"><Alert type="warning">Bitte lege zuerst eine PV-Anlage an.</Alert></div>
   } else if (!communityHash) {

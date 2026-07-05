@@ -18,8 +18,8 @@
  * Sicht-Sockel), von allen Blöcken geteilt.
  */
 import { TrendingUp, Clock, PieChart, LayoutGrid, PiggyBank } from 'lucide-react'
-import { LoadingSpinner, Card, Alert, EmptyState } from '../components/ui'
-import { BlockShell, KpiStrip, type Block } from '../components/blocks'
+import { Card, Alert, EmptyState } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
   useRoiAnalyse, roiKpiItems,
@@ -47,7 +47,14 @@ function RoiInner() {
     einspeiseverguetung: strompreis?.einspeiseverguetung_cent_kwh,
   })
 
-  if (anlagenLoading || vm.loading) return <LoadingSpinner text="Lade ROI-Daten…" />
+  if (anlagenLoading || vm.loading) {
+    // B8 (S15): Sicht-Skeleton in BlockShell-Form (4 Blöcke deterministisch).
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <BlockStackSkeleton label="Lade ROI-Daten…" zu={3} />
+      </div>
+    )
+  }
   if (anlagen.length === 0 || !selectedAnlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">

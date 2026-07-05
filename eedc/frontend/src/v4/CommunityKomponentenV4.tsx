@@ -7,8 +7,8 @@
  */
 import { Battery } from 'lucide-react'
 import { KOMPONENTEN_IDENTITAET } from '../lib'
-import { BlockShell, type Block } from '../components/blocks'
-import { LoadingSpinner, Alert, Card } from '../components/ui'
+import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
+import { Alert, Card } from '../components/ui'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
 import type { CommunityBenchmarkResponse } from '../api/community'
 import {
@@ -53,7 +53,7 @@ function CommunityKomponentenInner({ benchmark, loading, error }: Props) {
   const park = usePark()
   const d = useKomponentenDaten(benchmark)
 
-  if (loading || d.extraLoading) return <div className="p-3 sm:p-6"><LoadingSpinner text="Lade Komponenten-Daten…" /></div>
+  if (loading || d.extraLoading) return <div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade Komponenten-Daten…" /></div>
   if (error) return <div className="p-3 sm:p-6"><Alert type="error">{error}</Alert></div>
   if (!benchmark) return <div className="p-3 sm:p-6"><Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Community-Daten für diese Anlage.</p></Card></div>
 
