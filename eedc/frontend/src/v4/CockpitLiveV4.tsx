@@ -27,7 +27,7 @@ import WetterWidget from '../components/live/WetterWidget'
 import LiveAufEinenBlick from '../components/live/LiveAufEinenBlick'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
-import { Card } from '../components/ui'
+import { AnlageLeer } from './OnboardingLeer'
 import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
 
 const REFRESH_INTERVAL = 5_000
@@ -148,7 +148,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   if (!anlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage gewählt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage gewählt." />
       </div>
     )
   }

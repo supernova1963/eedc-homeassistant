@@ -12,7 +12,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Table, CalendarDays } from 'lucide-react'
-import { Card, FehlerZustand, TabellenSkeleton } from '../components/ui'
+import { FehlerZustand, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
@@ -20,6 +20,7 @@ import { monatsZeile, tagesZeile, type WerteZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
 import { useTagesWerte } from './useTagesWerte'
+import { AnlageLeer } from './OnboardingLeer'
 import { WerkbankZeitraum, VergleichLeisteTag, type ZeitChip, type TagVergleichModus } from './WerkbankZeitraum'
 
 const SICHT_KEY = 'v4-auswertungen-tabelle'
@@ -97,7 +98,7 @@ function TabelleInner() {
   if (anlagen.length === 0) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage angelegt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage angelegt." />
       </div>
     )
   }

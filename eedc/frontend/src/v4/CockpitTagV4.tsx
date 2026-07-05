@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, FehlerZustand } from '../components/ui'
+import { AnlageLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
@@ -261,7 +262,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
   if (!anlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage gewählt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage gewählt." />
       </div>
     )
   }

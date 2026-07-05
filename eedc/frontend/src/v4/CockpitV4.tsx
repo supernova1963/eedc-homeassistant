@@ -8,6 +8,7 @@
  */
 import { useParams } from 'react-router-dom'
 import { Card } from '../components/ui'
+import { BlockStackSkeleton } from '../components/blocks'
 import { useSelectedAnlage } from '../hooks'
 import CockpitMonatV4 from './CockpitMonatV4'
 import CockpitLiveV4 from './CockpitLiveV4'
@@ -27,12 +28,26 @@ const ZEITEN: { key: string; label: string }[] = [
 
 export default function CockpitV4() {
   const { zeit = 'monat' } = useParams<{ zeit: string }>()
-  const { selectedAnlageId } = useSelectedAnlage()
+  const { selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
 
   // Zeit-Achse (Sub-Tabs, route-getrieben) über die geteilte IASubTabBar (SoT).
   const zeitNav = (
     <IASubTabBar items={ZEITEN.map((z) => ({ key: z.key, label: z.label, to: `/v4/cockpit/${z.key}` }))} />
   )
+
+  // S15-Flash-Fix (B8): ohne gemerkte Anlagen-Auswahl steht selectedAnlageId erst
+  // nach dem Anlagen-Fetch (Auto-Select) — ohne Gate flasht in den Zeit-Sichten das
+  // große „Noch keine Anlage"-Panel trotz vorhandener Anlage. EIN Gate statt fünf;
+  // im Normalfall (gemerkte Anlage) greift es nie.
+  if (anlagenLoading && selectedAnlageId == null) {
+    return (
+      <ViewShell bar={zeitNav}>
+        <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+          <BlockStackSkeleton label="Lade Anlagen…" />
+        </div>
+      </ViewShell>
+    )
+  }
 
   const inhalt =
     zeit === 'monat' ? (

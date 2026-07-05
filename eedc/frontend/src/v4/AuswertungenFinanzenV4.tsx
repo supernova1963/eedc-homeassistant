@@ -35,6 +35,7 @@ import { STEUER_H } from '../lib/komponentenStyle'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
+import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-finanzen'
 const MONATE_1_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -306,7 +307,7 @@ function FinanzenInner() {
   if (anlagen.length === 0) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage angelegt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage angelegt." />
       </div>
     )
   }

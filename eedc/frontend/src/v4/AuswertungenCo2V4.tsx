@@ -17,7 +17,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Leaf, Sprout } from 'lucide-react'
-import { Card, fmtCalc, FehlerZustand } from '../components/ui'
+import { fmtCalc, FehlerZustand } from '../components/ui'
 import { eedcTooltipProps } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
@@ -31,6 +31,7 @@ import { createMonatsZeitreihe } from '../pages/auswertung/types'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
+import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-co2'
 // Anschauliche Äquivalenz-Faktoren (kg CO₂).
@@ -290,7 +291,7 @@ function Co2Inner() {
   if (anlagen.length === 0) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage angelegt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage angelegt." />
       </div>
     )
   }

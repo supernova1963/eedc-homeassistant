@@ -18,7 +18,7 @@
  * Sicht-Sockel), von allen Blöcken geteilt.
  */
 import { TrendingUp, Clock, PieChart, LayoutGrid, PiggyBank } from 'lucide-react'
-import { Card, Alert, EmptyState } from '../components/ui'
+import { Alert, EmptyState } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
@@ -27,6 +27,7 @@ import {
 } from '../components/roi/RoiAnalyse'
 import { formatGeld } from '../lib'
 import { useSelectedAnlage, useAktuellerStrompreis } from '../hooks'
+import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-roi'
 
@@ -58,7 +59,7 @@ function RoiInner() {
   if (anlagen.length === 0 || !selectedAnlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage angelegt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage angelegt." />
       </div>
     )
   }

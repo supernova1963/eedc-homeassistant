@@ -8,8 +8,9 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
-import { Card } from '../components/ui'
+import { Cpu } from 'lucide-react'
 import { BlockStackSkeleton } from '../components/blocks'
+import { AnlageLeer, OnboardingLeer } from './OnboardingLeer'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { useSelectedAnlage } from '../hooks'
 import { compareTyp } from '../lib/constants'
@@ -35,7 +36,7 @@ const HUB_TABS: { key: string; typ: string; label?: string }[] = [
 
 export default function KomponentenV4() {
   const { typ: routeKey } = useParams<{ typ: string }>()
-  const { selectedAnlageId } = useSelectedAnlage()
+  const { selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const [vorhandeneTypen, setVorhandeneTypen] = useState<Set<string> | null>(null)
 
   // Aktive Investitionen → welche Typen hat die Anlage (Tab-Sichtbarkeit, K-B2).
@@ -63,18 +64,30 @@ export default function KomponentenV4() {
     }))} />
   )
 
-  if (vorhandeneTypen === null) {
+  // S15-Flash-Fix: ohne gemerkte Anlagen-Auswahl steht selectedAnlageId erst nach
+  // dem Anlagen-Fetch (Auto-Select) — bis dahin Skeleton statt falschem Leer-Panel.
+  if (vorhandeneTypen === null || (!selectedAnlageId && anlagenLoading)) {
     // B8 (S15): Skeleton mit Tab-Pillen-Platzhalter — die SubTabBar erscheint erst
     // nach dem Laden (vorhandeneTypen), sonst doppelter Layout-Sprung.
     return <ViewShell><div className="p-3 sm:p-6"><BlockStackSkeleton label="Lade Komponenten…" pillen={4} /></div></ViewShell>
   }
   if (verfuegbar.length === 0) {
+    // B8 (S15): der Zweig deckte vorher auch „keine Anlage" mit ab (Text dann falsch)
+    // → trennen; beide Fälle als Onboarding-Leerzustand mit passendem CTA.
     return (
       <ViewShell>
         <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-          <Card><p className="text-sm text-gray-500 dark:text-gray-400">
-            Diese Anlage hat noch keine erfassten Komponenten.
-          </p></Card>
+          {!selectedAnlageId ? (
+            <AnlageLeer titel="Noch keine Anlage gewählt." />
+          ) : (
+            <OnboardingLeer
+              icon={Cpu}
+              titel="Diese Anlage hat noch keine erfassten Komponenten."
+              beschreibung="Erfasse deine Komponenten (PV, Speicher, Wärmepumpe, …) unter Einstellungen → Komponenten."
+              ctaHref="#/v4/einstellungen/komponenten"
+              ctaLabel="Komponenten erfassen"
+            />
+          )}
         </div>
       </ViewShell>
     )

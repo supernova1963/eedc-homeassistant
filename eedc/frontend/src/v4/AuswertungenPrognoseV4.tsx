@@ -14,7 +14,7 @@
  * draußen, Solcast-Spalte) + Format (R1/R2/R3) stecken in den geteilten Teilen.
  */
 import { Target, Sun, TrendingUp, GitCompareArrows, Clock } from 'lucide-react'
-import { Card, Alert, FehlerZustand, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../components/ui'
+import { Alert, FehlerZustand, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import {
@@ -34,6 +34,7 @@ import {
 import { useSelectedAnlage } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
+import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-prognose'
 
@@ -156,7 +157,7 @@ export default function AuswertungenPrognoseV4() {
   if (anlagen.length === 0 || !selectedAnlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage angelegt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage angelegt." />
       </div>
     )
   }

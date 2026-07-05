@@ -18,10 +18,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus, ArrowRight,
+  Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react'
-import { Card, buttonClasses, SegmentControl, FehlerZustand } from '../components/ui'
+import { Card, SegmentControl, FehlerZustand } from '../components/ui'
 import { ReloadButton } from './ReloadButton'
+import { AnlageLeer, OnboardingLeer } from './OnboardingLeer'
 import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark } from '../components/park'
@@ -332,7 +333,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   if (!anlageId) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        <Card><p className="text-sm text-gray-500 dark:text-gray-400">Noch keine Anlage gewählt.</p></Card>
+        <AnlageLeer titel="Noch keine Anlage gewählt." />
       </div>
     )
   }
@@ -356,16 +357,14 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
       </div>
 
       {!hatKoordinaten ? (
-        <Card className="text-center py-12">
-          <Sun className="h-12 w-12 mx-auto text-yellow-500 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Standort nicht konfiguriert</h3>
-          <p className="text-gray-500 dark:text-gray-400 mb-4">
-            Für Prognosen werden die Koordinaten der Anlage benötigt. Bitte konfiguriere den Standort in den Anlagen-Einstellungen.
-          </p>
-          <a href="#/v4/einstellungen/stammdaten" className={buttonClasses({ variant: 'primary', size: 'sm', className: 'gap-1.5' })}>
-            Anlage konfigurieren <ArrowRight className="h-4 w-4" />
-          </a>
-        </Card>
+        // B8 (S15): handgerollter EmptyState-Zwilling → SoT (Texte + CTA unverändert).
+        <OnboardingLeer
+          icon={Sun}
+          titel="Standort nicht konfiguriert"
+          beschreibung="Für Prognosen werden die Koordinaten der Anlage benötigt. Bitte konfiguriere den Standort in den Anlagen-Einstellungen."
+          ctaHref="#/v4/einstellungen/stammdaten"
+          ctaLabel="Anlage konfigurieren"
+        />
       ) : error ? (
         // B8-Fehler-Baustein (S15): laden(false) = nicht-silent → Lade-Zustand statt
         // Leer-Flash während des Retrys (laden setzt setError(null) selbst).
