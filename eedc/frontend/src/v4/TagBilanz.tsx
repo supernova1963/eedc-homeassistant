@@ -20,7 +20,8 @@ import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken } from '../components/blocks'
 import { DATENROLLE, AMPEL_SKALA } from '../lib'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
-import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, BatteryCharging, Coins } from 'lucide-react'
+// R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
+import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
 import type { TagWerte } from '../api/energie_profil'
 
@@ -51,7 +52,7 @@ export function baueTagKpis(
     const kosten = (netzladung.kwh * netzladung.preis_cent) / 100
     kostenKpis.push({
       title: 'Batterieladung Netz',
-      value: fmtCalc(kosten, 2, '—'), unit: '€', color: 'red', icon: BatteryCharging,
+      value: fmtCalc(kosten, 2, '—'), unit: '€', color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
       subtitle: `${fmt(netzladung.kwh, 1)} kWh · Ø ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`,
       formel: 'Netzladung × Ø-Ladepreis (Tag)',
       berechnung: `${fmt(netzladung.kwh, 1)} kWh × ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`,
@@ -62,7 +63,7 @@ export function baueTagKpis(
     kostenKpis.push({
       title: 'Durchschnittspreis Netz',
       value: fmtCalc((t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'), unit: 'ct/kWh',
-      color: 'red', icon: Coins,
+      color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
       subtitle: `${fmt(t.netzbezug, 1)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,
       formel: 'Netzbezug-Kosten ÷ Netzbezug',
     })
@@ -70,30 +71,30 @@ export function baueTagKpis(
 
   return [
     {
-      title: 'PV-Erzeugung', value: fmt(t.erzeugung), unit: 'kWh', color: 'yellow', icon: Sun,
+      title: 'PV-Erzeugung', value: fmt(t.erzeugung), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv,
       subtitle: [sollTxt, spezTxt, vtTxt].filter(Boolean).join(' · ') || undefined,
     },
     {
-      title: 'Autarkie', value: fmt(t.autarkie), unit: '%', color: 'green', icon: Activity,
+      title: 'Autarkie', value: fmt(t.autarkie), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vt ? `VT: ${fmt(vt.autarkie)} %` : undefined,
       formel: 'Eigenverbrauch ÷ Gesamtverbrauch × 100',
       berechnung: t.gesamtverbrauch > 0 ? `${fmt(t.eigenverbrauch)} ÷ ${fmt(t.gesamtverbrauch)} kWh` : undefined,
       ergebnis: t.autarkie != null ? `= ${fmtCalc(t.autarkie, 1)} %` : undefined,
     },
     {
-      title: 'Eigenverbrauch', value: fmt(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: Zap,
+      title: 'Eigenverbrauch', value: fmt(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
       subtitle: `EV-Quote ${fmt(t.evQuote)} %${vt ? ` · VT: ${fmt(vt.eigenverbrauch)} kWh` : ''}`,
     },
     {
-      title: 'Einspeisung', value: fmt(t.einspeisung), unit: 'kWh', color: 'green', icon: ArrowUpFromLine,
+      title: 'Einspeisung', value: fmt(t.einspeisung), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
       subtitle: vt ? `VT: ${fmt(vt.einspeisung)} kWh` : undefined,
     },
     {
-      title: 'Netzbezug', value: fmt(t.netzbezug), unit: 'kWh', color: 'red', icon: Plug,
+      title: 'Netzbezug', value: fmt(t.netzbezug), unit: 'kWh', color: 'red', icon: DATENROLLEN_ICONS.netzbezug,
       subtitle: vt ? `VT: ${fmt(vt.netzbezug)} kWh` : undefined,
     },
     {
-      title: 'Netto-Ertrag', value: fmtCalc(t.netto_ertrag, 2, '—'), unit: '€', color: 'blue', icon: Euro,
+      title: 'Netto-Ertrag', value: fmtCalc(t.netto_ertrag, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
       subtitle: 'Einspeise-Erlös + EV-Ersparnis',
       formel: 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
       berechnung: `${fmtCalc(t.einspeise_erloes, 2)} + ${fmtCalc(t.ev_ersparnis, 2)} €`,

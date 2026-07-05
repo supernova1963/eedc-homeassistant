@@ -10,19 +10,13 @@ import { Card, LoadingSpinner, Alert, Select, KPICard, ChartLegende } from '../c
 import ChartTooltip from '../components/ui/ChartTooltip'
 import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import type { Anlage } from '../types'
-import { MONAT_KURZ, CHART_COLORS, KATEGORIE_FARBEN, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
+import { MONAT_KURZ, CHART_COLORS, KATEGORIE_FARBEN, SONSTIGES_KATEGORIE_LABELS, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { investitionenApi } from '../api'
 import type { SonstigesDashboardResponse } from '../api/investitionen'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts'
-
-const kategorieLabels: Record<string, string> = {
-  erzeuger: 'Erzeuger',
-  verbraucher: 'Verbraucher',
-  speicher: 'Speicher',
-}
 
 export default function SonstigesDashboard() {
   const { anlagen, selectedAnlageId, setSelectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
@@ -152,7 +146,7 @@ function SonstigesBlockHeader({
               {bezeichnung}
             </h1>
             <span className={`px-2 py-0.5 text-xs ${badgeClass} rounded`}>
-              {kategorieLabels[kategorie]}
+              {SONSTIGES_KATEGORIE_LABELS[kategorie]}
             </span>
           </div>
           {beschreibung && (

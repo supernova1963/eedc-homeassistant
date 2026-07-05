@@ -319,6 +319,10 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
   const [sonderkosten, setSonderkosten] = useState<number | null>(null)
   const [laden, setLaden] = useState(false)
 
+  // Dokumentierte F10-AUSNAHME (R3b E5, Gernot 2026-07-05): das Monats-Select
+  // bleibt bewusst KALENDARISCH aufsteigend (Jan→Dez, Jahres-Kontext) — die
+  // Default-Auswahl ist ohnehin der neueste Monat. F10 „absteigend" gilt
+  // unverändert für Datums-LISTEN außerhalb eines Jahres-Rahmens.
   const monate = useMemo(
     () => (jahr == null ? [] : [...new Set(daten.filter((r) => r.jahr === jahr).map((r) => r.monat))].sort((a, b) => a - b)),
     [daten, jahr],

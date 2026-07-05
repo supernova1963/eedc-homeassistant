@@ -18,7 +18,8 @@ import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { DATENROLLE } from '../lib'
 import { Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
-import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet } from 'lucide-react'
+// R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
+import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { JahrVergleich } from './JahrAggregat'
@@ -39,9 +40,9 @@ export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null
     : null
 
   return [
-    { title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: Sun, subtitle: pvSoll },
+    { title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv, subtitle: pvSoll },
     {
-      title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: Activity,
+      title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vj?.autarkie != null ? `VJ: ${fmt(vj.autarkie)} %` : undefined,
       formel: 'Eigenverbrauch ÷ Gesamtverbrauch × 100',
       berechnung: d.eigenverbrauch_kwh != null && d.gesamtverbrauch_kwh != null
@@ -49,24 +50,24 @@ export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null
       ergebnis: d.autarkie_prozent != null ? `= ${fmtCalc(d.autarkie_prozent, 1)} %` : undefined,
     },
     {
-      title: 'Eigenverbrauch', value: fmt(d.eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: Zap,
+      title: 'Eigenverbrauch', value: fmt(d.eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
       subtitle: `EV-Quote ${fmt(d.eigenverbrauch_quote_prozent)} %${vj?.ev != null ? ` · VJ: ${fmt(vj.ev)} kWh` : ''}`,
     },
     {
-      title: 'Einspeisung', value: fmt(d.einspeisung_kwh), unit: 'kWh', color: 'green', icon: ArrowUpFromLine,
+      title: 'Einspeisung', value: fmt(d.einspeisung_kwh), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
       subtitle: vj?.einsp != null ? `VJ: ${fmt(vj.einsp)} kWh` : undefined,
     },
     {
-      title: 'Netzbezug', value: fmt(d.netzbezug_kwh), unit: 'kWh', color: 'red', icon: Plug,
+      title: 'Netzbezug', value: fmt(d.netzbezug_kwh), unit: 'kWh', color: 'red', icon: DATENROLLEN_ICONS.netzbezug,
       subtitle: vj?.netz != null ? `VJ: ${fmt(vj.netz)} kWh` : undefined,
     },
     {
-      title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: Euro,
+      title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
       subtitle: 'vor Betriebskosten', formel: 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
     },
     {
       title: 'Jahresergebnis', value: fmtCalc(jahresergebnis, 2, '—'), unit: '€',
-      color: jahresergebnis != null && jahresergebnis < 0 ? 'red' : 'green', icon: Wallet,
+      color: jahresergebnis != null && jahresergebnis < 0 ? 'red' : 'green', icon: DATENROLLEN_ICONS.ergebnis,
       subtitle: 'nach Betriebskosten', formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
     },
     // R15-1: Kosten-Kacheln (geteilter Bauer, Jahres-Aggregat = Monats-Shape).

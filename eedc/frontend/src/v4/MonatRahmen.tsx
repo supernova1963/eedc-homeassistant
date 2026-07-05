@@ -18,20 +18,17 @@ import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
+import { DATENQUELLE_LABELS } from '../lib/constants'
 
 const euro = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${fmtCalc(v, 2)} €`)
-
-// Roh-Enum → Label (Roh-Werte gehören nie in die UI, [[feedback_typ_labels_pattern]]).
-const QUELLE_LABEL: Record<string, string> = {
-  ha_sensor: 'HA', mqtt: 'MQTT', connector: 'Connector',
-  scheduler: 'gespeichert', monatsabschluss: 'Abschluss', manuell: 'manuell',
-}
 
 function provenanceQuellen(feldQuellen: AktuellerMonatResponse['feld_quellen']): string[] {
   if (!feldQuellen) return []
   const set = new Set<string>()
   for (const info of Object.values(feldQuellen)) {
-    if (info?.quelle) set.add(QUELLE_LABEL[info.quelle] ?? info.quelle)
+    // R3b S7: SoT-Map (die alte lokale 6-Key-Map kannte die echten
+    // feld_quellen-Enums nicht → Roh-Werte wie „ha_statistics" in der UI).
+    if (info?.quelle) set.add(DATENQUELLE_LABELS[info.quelle] ?? info.quelle)
   }
   return [...set]
 }

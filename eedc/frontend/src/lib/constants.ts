@@ -24,6 +24,19 @@ export const MONAT_KURZ = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul',
 /** Volle Monatsnamen, 1-basiert (Index 0 = leer). Für Überschriften, Formulare. */
 export const MONAT_NAMEN = ['', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 
+// ─── Wochentagsnamen (R3b S7: SoT statt 7 lokaler Kopien) ────────────────────
+
+/**
+ * Kurze Wochentagsnamen — **Index = `Date.getDay()` (0 = Sonntag)**.
+ * Mo-first-Ansichten (Kalender-Header, Backend-`wochentag` = Python-weekday
+ * 0 = Montag) leiten per Rotation ab: `[...WT_KURZ.slice(1), WT_KURZ[0]]` —
+ * KEINE zweite Basis-Konstante (Off-by-one-Falle, s. DatumPicker/EnergieprofilTab).
+ */
+export const WT_KURZ = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
+
+/** Volle Wochentagsnamen — Index = `Date.getDay()` (0 = Sonntag). */
+export const WT_LANG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
+
 // ─── Investitionstyp-Labels ──────────────────────────────────────────────────
 
 /** Lesbare Labels für Investitionstypen. */
@@ -45,6 +58,40 @@ export const WP_ART_LABELS: Record<string, string> = {
   sole_wasser: 'Sole/Wasser',
   grundwasser: 'Grundwasser',
   luft_luft: 'Luft/Luft',
+}
+
+/**
+ * Daten-Provenance: Roh-Enum → Klartext-Label (R3b S7/ORD-4 — vorher 3 lokale,
+ * bereits gedriftete Kopien in Tag-/Monat-/JahrRahmen). EINE Map für BEIDE
+ * Enums: `TagWerte.datenquelle` UND `feld_quellen[*].quelle`
+ * (`api/routes/aktueller_monat.py` emittiert ha_statistics/local_connector/
+ * gespeichert/mqtt_inbound — die alten 6-Key-Maps kannten KEINEN davon, daher
+ * standen Roh-Enums in der UI, [[feedback_typ_labels_pattern]]).
+ * Unbekannte Werte: Konsumenten fallen auf den Roh-Wert zurück (`?? quelle`).
+ */
+export const DATENQUELLE_LABELS: Record<string, string> = {
+  ha_sensor: 'HA',
+  ha_statistics: 'HA-Statistik',
+  ha_statistiken: 'HA-Statistik',
+  mqtt: 'MQTT',
+  mqtt_inbound: 'MQTT',
+  connector: 'Connector',
+  local_connector: 'Connector',
+  scheduler: 'gespeichert',
+  gespeichert: 'gespeichert',
+  monatsabschluss: 'Abschluss',
+  manuell: 'manuell',
+  wetter_prognose: 'Prognose',
+  csv: 'CSV',
+  custom_import: 'Import',
+  portal_import: 'Import',
+}
+
+/** Sonstiges-Investitionen: `kategorie`-Enum → Label (R3b S7/ORD-5 — vorher 3 lokale Kopien). */
+export const SONSTIGES_KATEGORIE_LABELS: Record<string, string> = {
+  erzeuger: 'Erzeuger',
+  verbraucher: 'Verbraucher',
+  speicher: 'Speicher',
 }
 
 /**

@@ -21,10 +21,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { WT_KURZ } from '../../lib/constants'
 
 const MONAT_LANG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 const MONAT_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
-const WT_KURZ = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+// R3b S7: Kalender-Header Mo-first als ROTATION der So-first-SoT (keine zweite
+// Basis) — reine Anzeige-Labels; die Tages-Platzierung läuft unabhängig über
+// `(getDay()+6)%7` und bleibt unberührt (kein Off-by-one möglich).
+const WT_KURZ_MO = [...WT_KURZ.slice(1), WT_KURZ[0]]
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const monatVal = (jahr: number, monat: number) => `${jahr}-${pad(monat)}`
@@ -224,7 +228,7 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
             </div>
           </div>
           <div className="grid grid-cols-7 gap-0.5 mb-1">
-            {WT_KURZ.map((wt) => (
+            {WT_KURZ_MO.map((wt) => (
               <span key={wt} className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">{wt}</span>
             ))}
           </div>

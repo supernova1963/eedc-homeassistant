@@ -5,7 +5,7 @@
  * beide Granularitäten läuft (IA v4 E3, O1: „gleiche Funktion + Aussehen, nur
  * Zeiträume variieren").
  */
-import { MONAT_KURZ } from '../constants'
+import { MONAT_KURZ, WT_KURZ } from '../constants'
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 import { getMonatWert, getTagWert } from './registry'
@@ -33,8 +33,6 @@ export function monatsZeile(r: MonatsZeitreihe): WerteZeile {
     wert: (key) => getMonatWert(r, key),
   }
 }
-
-const WT_KURZ = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 
 /** Tages-Werte → normalisierte Zeile. Vergleich = gleicher Tag-im-Monat. */
 export function tagesZeile(r: TagWerte): WerteZeile {

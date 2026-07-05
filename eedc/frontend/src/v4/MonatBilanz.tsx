@@ -20,7 +20,8 @@ import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { DATENROLLE, VERGLEICH_BADGE } from '../lib'
-import { Sun, Activity, Zap, ArrowUpFromLine, Plug, Euro, Wallet, BatteryCharging, Coins } from 'lucide-react'
+// R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
+import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -56,11 +57,11 @@ export function baueMonatKpis(
 
   return [
     {
-      title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: Sun,
+      title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv,
       subtitle: pvSoll,
     },
     {
-      title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: Activity,
+      title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vm ? `VM: ${fmt(vm.autarkie_prozent)} %` : undefined,
       formel: 'Eigenverbrauch ÷ Gesamtverbrauch × 100',
       berechnung: d.eigenverbrauch_kwh != null && d.gesamtverbrauch_kwh != null
@@ -68,26 +69,26 @@ export function baueMonatKpis(
       ergebnis: d.autarkie_prozent != null ? `= ${fmtCalc(d.autarkie_prozent, 1)} %` : undefined,
     },
     {
-      title: 'Eigenverbrauch', value: fmt(d.eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: Zap,
+      title: 'Eigenverbrauch', value: fmt(d.eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
       subtitle: `EV-Quote ${fmt(d.eigenverbrauch_quote_prozent)} %${vm ? ` · VM: ${fmt(vm.eigenverbrauch_kwh)} kWh` : ''}`,
     },
     {
-      title: 'Einspeisung', value: fmt(d.einspeisung_kwh), unit: 'kWh', color: 'green', icon: ArrowUpFromLine,
+      title: 'Einspeisung', value: fmt(d.einspeisung_kwh), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
       subtitle: vm ? `VM: ${fmt(vm.einspeisung_kwh)} kWh` : undefined,
     },
     {
-      title: 'Netzbezug', value: fmt(d.netzbezug_kwh), unit: 'kWh', color: 'red', icon: Plug,
+      title: 'Netzbezug', value: fmt(d.netzbezug_kwh), unit: 'kWh', color: 'red', icon: DATENROLLEN_ICONS.netzbezug,
       subtitle: vm ? `VM: ${fmt(vm.netzbezug_kwh)} kWh` : undefined,
     },
     {
-      title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: Euro,
+      title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
       subtitle: 'vor Betriebskosten',
       formel: 'Einspeise-Erlös + Eigenverbrauchs-Ersparnis',
     },
     {
       title: 'Monatsergebnis',
       value: fmtCalc(monatsergebnis, 2, '—'), unit: '€',
-      color: monatsergebnis != null && monatsergebnis < 0 ? 'red' : 'green', icon: Wallet,
+      color: monatsergebnis != null && monatsergebnis < 0 ? 'red' : 'green', icon: DATENROLLEN_ICONS.ergebnis,
       subtitle: 'nach Betriebskosten',
       formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
     },
@@ -105,7 +106,7 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
     kpis.push({
       title: 'Batterieladung Netz',
       value: fmtCalc(d.speicher_ladung_netz_kosten_euro, 2, '—'), unit: '€',
-      color: 'red', icon: BatteryCharging,
+      color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
       subtitle: `${fmt(d.speicher_ladung_netz_kwh)} kWh · Ø ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1, '—')} ct/kWh`,
       formel: 'Netzladung × Ø-Ladepreis',
       berechnung: `${fmt(d.speicher_ladung_netz_kwh)} kWh × ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1)} ct/kWh`,
@@ -117,7 +118,7 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
     kpis.push({
       title: 'Durchschnittspreis Netz',
       value: fmtCalc(netzPreis, 1, '—'), unit: 'ct/kWh',
-      color: 'red', icon: Coins,
+      color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
       subtitle: `${fmt(d.netzbezug_kwh)} kWh · ${fmtCalc(d.netzbezug_kosten_euro, 2, '—')} €`,
       formel: d.netzbezug_durchschnittspreis_cent != null
         ? 'Ø-Bezugspreis (dynamischer Tarif, verbrauchsgewichtet) · Kosten inkl. Grundpreis'

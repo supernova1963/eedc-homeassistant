@@ -7,7 +7,7 @@
  * (gruppiert nach Monat statt Jahr).
  */
 import { useMemo } from 'react'
-import { MONAT_KURZ, DATENROLLE, fmtZahl } from '../lib'
+import { MONAT_KURZ, WT_KURZ, DATENROLLE, fmtZahl } from '../lib'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { DatumPicker } from '../components/ui/DatumPicker'
 
@@ -26,7 +26,6 @@ interface TagesRailProps {
   aeltesterTag?: string
 }
 
-const WT_KURZ = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const monatKey = (d: string) => d.slice(0, 7)            // YYYY-MM
 const wochentag = (d: string) => WT_KURZ[new Date(d + 'T12:00:00').getDay()]
 const tagNr = (d: string) => new Date(d + 'T12:00:00').getDate()

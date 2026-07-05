@@ -22,7 +22,7 @@
 import { Activity, Battery, Clock, Droplet, Euro, Flame, Leaf, Percent, Power, TrendingUp, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
-import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG } from '../lib'
+import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG, SONSTIGES_KATEGORIE_LABELS } from '../lib'
 import { CHART_COLORS, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
 import { cockpitApi } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
@@ -595,10 +595,9 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   sonstiges: {
     async fetch(anlageId) {
       const ds = await investitionenApi.getSonstigesDashboard(anlageId)
-      const KAT_BADGE: Record<string, string> = { erzeuger: 'Erzeuger', verbraucher: 'Verbraucher', speicher: 'Speicher' }
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => {
-        // Kategorie-Badge (Selektor-Differenzierung) + Sonderkosten-Alert (IST-getreu).
-        const selektorBadge = KAT_BADGE[z.kategorie] ?? 'Sonstiges'
+        // Kategorie-Badge (Selektor-Differenzierung, SoT-Map R3b S7) + Sonderkosten-Alert (IST-getreu).
+        const selektorBadge = SONSTIGES_KATEGORIE_LABELS[z.kategorie] ?? 'Sonstiges'
         const hinweise: KompGeraet['hinweise'] = (z.sonderkosten_euro ?? 0) > 0
           ? [{ ton: 'warning', text: `Sonderkosten (Reparaturen, Wartung): ${n2(z.sonderkosten_euro)} €` }]
           : undefined

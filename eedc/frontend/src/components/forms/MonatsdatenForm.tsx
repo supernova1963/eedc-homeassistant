@@ -9,7 +9,7 @@ import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi } from '../../api'
 import type { Monatsdaten } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN } from '../../lib/fieldDefinitions'
-import { fmtZahl } from '../../lib'
+import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
 import { InvestitionSection } from './sections/InvestitionSection'
 import type { SonstigePosition } from './sections/types'
@@ -789,8 +789,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           felderFn={(inv) => getFelderFuerInvestition('sonstiges', inv.parameter)}
           hinweisFn={(inv) => {
             const kat = (inv.parameter?.kategorie as string) || 'erzeuger'
-            const katLabel: Record<string, string> = { erzeuger: 'Erzeuger', verbraucher: 'Verbraucher', speicher: 'Speicher' }
-            const label = katLabel[kat] || kat
+            // SoT-Map (R3b S7); Fallback bewusst der rohe kat-Wert (wie zuvor).
+            const label = SONSTIGES_KATEGORIE_LABELS[kat] || kat
             return inv.parameter?.beschreibung ? `${label} - ${String(inv.parameter.beschreibung)}` : label
           }}
         />

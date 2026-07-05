@@ -13,12 +13,15 @@ import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPu
 import { EnergieprofilMonat } from './EnergieprofilMonat'
 import { EnergieprofilPrognose } from './EnergieprofilPrognose'
 import {
-  DEDIZIERTE_KATEGORIEN, WOCHENTAG_FARBEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
+  DEDIZIERTE_KATEGORIEN, WOCHENTAG_FARBEN, WT_KURZ, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
 
 // ─── Konstanten ───────────────────────────────────────────────────────────────
 
-const WOCHENTAG_KURZ = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+// ⚠️ Index hier = Backend-`wochentag` = Python-weekday (0 = MONTAG) — deshalb
+// Mo-first-ROTATION der So-first-SoT (WT_KURZ, Index = Date.getDay()). Ein
+// naiver WT_KURZ-Import wäre ein stiller Um-eins-Versatz aller Spalten (R3b S7).
+const WOCHENTAG_KURZ = [...WT_KURZ.slice(1), WT_KURZ[0]]
 
 // Gruppierungen für Wochenvergleich
 const GRUPPEN = [

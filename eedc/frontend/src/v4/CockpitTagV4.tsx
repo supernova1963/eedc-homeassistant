@@ -25,7 +25,7 @@ import { LoadingSpinner, Card } from '../components/ui'
 import { BlockShell, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
-import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl } from '../lib'
+import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
 import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
 import { baueTagKomponentenUndFinanz } from './TagKomponenten'
@@ -47,7 +47,6 @@ function vorTagen(iso: string, tage: number): string {
   const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - tage); return toISODate(d)
 }
 function wochentagOf(iso: string): number { return new Date(iso + 'T12:00:00').getDay() }
-const WOCHENTAG_LANG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
 
 // (a) Gernot 2026-06-26: Picker/Liste (Rail) = letzte 90 Tage; ALLE verfügbaren
 // Tage erreicht man über die Datumsauswahl (Date-Input, ältester Tag aus
@@ -196,7 +195,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
     const list: Block[] = []
     // Extra-Serien (nicht-dedizierte) für Chart/Tabelle — wie IST-„Tagesdetail".
     const extraSerien = serien.filter((s) => !DEDIZIERTE_KATEGORIEN.has(s.kategorie))
-    const wochentag = WOCHENTAG_LANG[wochentagOf(datum)]
+    const wochentag = WT_LANG[wochentagOf(datum)]
     if (tag) {
       // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte
       // werden im Strip ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen

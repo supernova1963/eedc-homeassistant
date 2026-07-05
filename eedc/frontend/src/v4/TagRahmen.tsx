@@ -5,15 +5,9 @@
  */
 import type { TagWerte } from '../api/energie_profil'
 import { ReloadButton } from './ReloadButton'
+// R3b S7: Provenance-Labels + Wochentage aus der SoT (vorher 3 gedriftete lokale Kopien).
+import { DATENQUELLE_LABELS, WT_LANG } from '../lib/constants'
 
-// Roh-Enum → Label (Roh-Werte gehören nie in die UI, [[feedback_typ_labels_pattern]]).
-const QUELLE_LABEL: Record<string, string> = {
-  ha_sensor: 'HA', mqtt: 'MQTT', connector: 'Connector',
-  scheduler: 'gespeichert', monatsabschluss: 'Abschluss', manuell: 'manuell',
-  wetter_prognose: 'Prognose',
-}
-
-const WT_LANG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
 function langesDatum(iso: string): string {
   const d = new Date(iso + 'T12:00:00')
   return `${WT_LANG[d.getDay()]}, ${d.toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })}`
@@ -26,7 +20,7 @@ export function TagHeader({ datum, laufend, tag, onReload, reloading }: {
   onReload?: () => void
   reloading?: boolean
 }) {
-  const quelle = tag?.datenquelle ? (QUELLE_LABEL[tag.datenquelle] ?? tag.datenquelle) : null
+  const quelle = tag?.datenquelle ? (DATENQUELLE_LABELS[tag.datenquelle] ?? tag.datenquelle) : null
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-2.5">

@@ -49,7 +49,10 @@ export function KomponentenVergleich({
             value={vglJahr} onChange={(e) => setVglJahr(Number(e.target.value))}
             className={`input w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`}
           >
-            {sortiert.filter((j) => j.jahr !== neuestes.jahr).map((j) => (
+            {/* F10 (R3b ORD-2): Options absteigend (neueste zuerst) — nur die
+                Options-Quelle drehen; `sortiert` bleibt chronologisch (speist
+                Chart = erlaubte Verlaufs-Ausnahme + neuestes-Ableitung). */}
+            {[...sortiert].reverse().filter((j) => j.jahr !== neuestes.jahr).map((j) => (
               <option key={j.jahr} value={j.jahr}>{j.jahr}</option>
             ))}
           </select>

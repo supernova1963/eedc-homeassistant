@@ -15,8 +15,9 @@
  */
 
 import {
-  Activity, AlertTriangle, Battery, Car, CheckCircle, Flame, Hash, Home, Info,
-  Leaf, Plug, RotateCw, Sun, Thermometer, TrendingUp, Wrench, XCircle, Zap,
+  Activity, AlertTriangle, ArrowUpFromLine, Battery, BatteryCharging, Car,
+  CheckCircle, Coins, Euro, Flame, Hash, Home, Info, Leaf, Plug, RotateCw,
+  Sun, Thermometer, TrendingUp, Wallet, Wrench, XCircle, Zap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { TYP_TEXT_CLASS } from './colors'
@@ -44,6 +45,25 @@ export const STATUS_ICONS = {
  * hierher gehoben — Design-Konstante gehört ins lib-SoT-Modul, nicht in eine Sicht.)
  */
 export const STEUER_H = 'h-8'
+
+/**
+ * Datenrollen-Icon-Kanon (R3b S7/A5 — „eine Datenrolle = ein Icon", analog zur
+ * Farb-Regel in `lib/colors.ts`): EINE Map für die Energiebilanz-/Finanz-Rollen
+ * der KPI-Kacheln (vorher 3 unabhängige Copy-Paste-Sätze in Tag-/Monat-/JahrBilanz).
+ * Prognose-/Preview-Kontexte (z. B. CockpitAussicht) sind eigene Rollen und
+ * NICHT über diese Map gebunden.
+ */
+export const DATENROLLEN_ICONS = {
+  pv: Sun,
+  autarkie: Activity,
+  eigenverbrauch: Zap,
+  einspeisung: ArrowUpFromLine,
+  netzbezug: Plug,
+  nettoErtrag: Euro,
+  ergebnis: Wallet,
+  netzladungKosten: BatteryCharging,
+  netzpreis: Coins,
+} as const
 
 export type KomponentenColor = 'orange' | 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'cyan' | 'gray'
 

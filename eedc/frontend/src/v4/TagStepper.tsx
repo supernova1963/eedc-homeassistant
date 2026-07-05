@@ -10,7 +10,7 @@ import { ChevronFirst, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, C
 import type { TagRailEintrag } from './TagesRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
 import { DatumPicker } from '../components/ui/DatumPicker'
-import { fmtZahl } from '../lib'
+import { fmtZahl, WT_KURZ } from '../lib'
 
 interface TagStepperProps {
   entries: TagRailEintrag[]
@@ -23,7 +23,6 @@ interface TagStepperProps {
   immerSichtbar?: boolean
 }
 
-const WT_KURZ = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const verschieben = (iso: string, n: number) => {
   const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10)
 }
