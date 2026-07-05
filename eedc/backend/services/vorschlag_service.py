@@ -312,6 +312,38 @@ class VorschlagService:
                     details={"strom_heizen": strom_h, "strom_warmwasser": strom_w}
                 ))
 
+        # Speicher: Ø-Ladepreis der Netzladung stundengewichtet aus der
+        # Strompreis-Mitschrift (#264 Etappe C) — R15-2 (Rainer): errechneter
+        # Vorschlag statt reiner Handeingabe; bei Rechnungserhalt überschreibbar.
+        if inv.typ == "speicher" and feld == "speicher_ladepreis_cent":
+            from calendar import monthrange
+            from backend.services.speicher_wirtschaftlichkeit import (
+                berechne_effektiver_ladepreis,
+            )
+            try:
+                eff = await berechne_effektiver_ladepreis(
+                    self.db, anlage_id=anlage_id,
+                    von=date(jahr, monat, 1),
+                    bis=date(jahr, monat, monthrange(jahr, monat)[1]),
+                )
+                if eff.effektiver_ladepreis_cent is not None:
+                    belastbar = eff.quelle in ("dyn-tarif", "boersenpreis")
+                    abdeckung = round(eff.abdeckung_prozent) if eff.abdeckung_prozent is not None else None
+                    vorschlaege.append(Vorschlag(
+                        wert=round(eff.effektiver_ladepreis_cent, 2),
+                        quelle=VorschlagQuelle.BERECHNUNG,
+                        # Über den Vormonat-Vorschlag (80), wenn belastbar —
+                        # der Wert ist aus den ECHTEN Netzlade-Stunden gewichtet.
+                        konfidenz=90 if belastbar else 55,
+                        beschreibung=(
+                            "Stundengewichtet aus Netzladung × Strompreis-Mitschrift"
+                            + (f" ({abdeckung} % Abdeckung)" if abdeckung is not None and not belastbar else "")
+                        ),
+                        details={"quelle": eff.quelle},
+                    ))
+            except Exception:  # noqa: BLE001 — Vorschlag ist optional, Wizard darf nie daran sterben
+                pass
+
         # E-Auto: km aus Jahresfahrleistung
         if inv.typ == "e-auto" and feld == "km_gefahren":
             jahresfahrleistung = params.get("jahresfahrleistung_km")

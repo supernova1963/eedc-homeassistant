@@ -301,6 +301,10 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => {
       // η-Alarm färbt die Wirkungsgrad-Kachel rot (IST-getreu, #264).
       const wirkungsgradKpi = kpi(SPEICHER_KPI.wirkungsgrad, n0(z.ist_wirkungsgrad_prozent ?? z.effizienz_prozent), '%')
+      // R15-5a: Netzladung-Kosten als reiner AUSWEIS — die Energie läuft über
+      // den Hauszähler, die Kosten stecken bereits in den Netzbezug-Kosten der
+      // Anlage (kein neuer Kostenposten, sonst Doppelzählung).
+      const nlPreis = z.effektiver_ladepreis_cent ?? z.arbitrage_avg_preis_cent
       if (z.eta_degradation_alarm) wirkungsgradKpi.color = 'red'
       // ① Alarme (IST-getreu): Degradation + Durchsatz-Invariante.
       const hinweise: NonNullable<KompGeraet['hinweise']> = []
@@ -333,7 +337,11 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           titel: 'Arbitrage (Netzladung)',
           kpis: [
             k('Netzladung', n0(z.arbitrage_kwh), 'kWh', 'red', Zap),
-            k('Ø Ladepreis', n1(z.effektiver_ladepreis_cent ?? z.arbitrage_avg_preis_cent), 'ct/kWh', 'yellow', Euro),
+            k('Ø Ladepreis', n1(nlPreis), 'ct/kWh', 'yellow', Euro),
+            k('Netzladung-Kosten', nlPreis != null ? n2((z.arbitrage_kwh * nlPreis) / 100) : '—', '€', 'red', Euro, {
+              subtitle: 'in den Netzbezug-Kosten enthalten',
+              formel: 'Netzladung × Ø Ladepreis — reiner Ausweis, kein zusätzlicher Kostenposten',
+            }),
             k('Anteil an Ladung', z.gesamt_ladung_kwh > 0 ? n0((z.arbitrage_kwh / z.gesamt_ladung_kwh) * 100) : '—', '%', 'gray', Percent,
               { formel: 'Netzladung ÷ Gesamtladung × 100' }),
             k('Arbitrage-Gewinn', n0(z.arbitrage_gewinn_euro), '€', 'green', TrendingUp),

@@ -44,6 +44,8 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
     berechnung?: string
     ergebnis?: string
     color: string
+    /** Nachrichtliche Unterzeile („davon …") — reiner Ausweis, zählt NICHT in die Summe. */
+    hinweis?: string
   }
 
   // Farbe je Investitionstyp
@@ -188,6 +190,11 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
         d.netzbezug_durchschnittspreis_cent != null ? '(flex. Tarif, Monatsdurchschnitt)' : null,
       ].filter(Boolean).join('\n') : undefined,
       ergebnis: `= ${fmtCalc(d.netzbezug_kosten_euro, 2)} €`,
+      // R15-5b: nachrichtlicher Ausweis — die Netzladung des Speichers steckt
+      // bereits in diesen Kosten (Hauszähler), KEIN zusätzlicher Posten.
+      hinweis: d.speicher_ladung_netz_kosten_euro != null
+        ? `davon Batterieladung Netz: ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} € (${fmt(d.speicher_ladung_netz_kwh, 1)} kWh)`
+        : undefined,
     },
     // ── Betriebskosten: per Investition wenn Daten da, sonst Aggregat ──
     ...(hasPerInv
@@ -392,9 +399,14 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                         {sollPosten.map((s, i) => (
                           <React.Fragment key={i}>
                             {mobileRow(
-                              s.formel
-                                ? <FormelTooltip formel={s.formel} berechnung={s.berechnung} ergebnis={s.ergebnis}>{s.label}</FormelTooltip>
-                                : s.label,
+                              <>
+                                {s.formel
+                                  ? <FormelTooltip formel={s.formel} berechnung={s.berechnung} ergebnis={s.ergebnis}>{s.label}</FormelTooltip>
+                                  : s.label}
+                                {s.hinweis && (
+                                  <span className="block text-xs text-gray-400 dark:text-gray-500">{s.hinweis}</span>
+                                )}
+                              </>,
                               s.wert, s.vjWert, s.color, false, true,
                             )}
                           </React.Fragment>
