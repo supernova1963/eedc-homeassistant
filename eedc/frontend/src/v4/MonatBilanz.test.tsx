@@ -139,16 +139,16 @@ describe('baueNetzKostenKpis (via baueMonatKpis)', () => {
     expect(baueMonatKpis(d(), vm)).toHaveLength(7)
   })
 
-  it('Batterieladung Netz erscheint mit €-Wert und kWh·Ø-Zweitzeile', () => {
+  it('Batterieladung Netz zeigt Ø-Ladepreis als Hauptwert, kWh·€ als Zweitzeile (R16-A)', () => {
     const k = baueMonatKpis(d({
       speicher_ladung_netz_kwh: 112,
       speicher_ladung_netz_kosten_euro: 25.12,
       speicher_ladung_netz_preis_cent: 22.4,
       speicher_ladung_netz_preis_quelle: 'tep',
     }), vm).find((x) => x.title === 'Batterieladung Netz')!
-    expect(k.unit).toBe('€')
-    expect(k.value).toBe('25,12')
-    expect(k.subtitle).toBe('112 kWh · Ø 22,4 ct/kWh')
+    expect(k.unit).toBe('ct/kWh')
+    expect(k.value).toBe('22,4')
+    expect(k.subtitle).toBe('112 kWh · 25,12 €')
   })
 
   it('Durchschnittspreis Netz bevorzugt den dynamischen Monats-Ø vor dem Tarif', () => {

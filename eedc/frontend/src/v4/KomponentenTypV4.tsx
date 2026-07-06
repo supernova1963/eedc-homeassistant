@@ -567,8 +567,8 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
   if (g.struktur && !istGeparkt('el:struktur')) {
     const topo = g.struktur.art === 'topologie'
     bloecke.push({
-      id: 'struktur', title: topo ? 'System-Struktur' : 'Verknüpfung', icon: Network,
-      summary: topo ? 'Wechselrichter → Module / Speicher' : 'Zuordnung & Datenquelle',
+      id: 'struktur', title: topo ? 'System-Struktur' : 'Zuordnung & Datenquelle', icon: Network,
+      summary: topo ? 'Wechselrichter → Module / Speicher' : 'Kopplung und Herkunft der Werte',
       defaultOpen: false,
       render: () => <Parkbar id="el:struktur" titel="Struktur"><StrukturInhalt s={g.struktur!} /></Parkbar>,
     })

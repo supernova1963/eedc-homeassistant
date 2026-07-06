@@ -19,7 +19,7 @@
  * → lebt in Cockpit/Aussicht. Typ-spezifische IST-Analysen (PV-SOLL/IST je String)
  * kommen aus `komponentenAnalyse.tsx`, nicht aus diesem Daten-Adapter.
  */
-import { Activity, Battery, Clock, Droplet, Euro, Flame, Leaf, Percent, Power, TrendingUp, Zap } from 'lucide-react'
+import { Activity, Battery, Clock, Droplet, Euro, Flame, Leaf, Power, TrendingUp, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { formatEnergie, formatEffizienz } from '../lib/einheiten'
@@ -345,8 +345,6 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
               subtitle: 'in den Netzbezug-Kosten enthalten',
               formel: 'Netzladung × Ø Ladepreis — reiner Ausweis, kein zusätzlicher Kostenposten',
             }),
-            k('Anteil an Ladung', z.gesamt_ladung_kwh > 0 ? n0((z.arbitrage_kwh / z.gesamt_ladung_kwh) * 100) : '—', '%', 'gray', Percent,
-              { formel: 'Netzladung ÷ Gesamtladung × 100' }),
             k('Arbitrage-Gewinn', n0(z.arbitrage_gewinn_euro), '€', 'green', TrendingUp),
           ],
         } : undefined,

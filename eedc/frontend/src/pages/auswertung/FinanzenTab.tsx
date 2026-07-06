@@ -235,7 +235,7 @@ export function FinanzenTab({ data, stats, strompreis, alleTarife, anlageId, zei
               <Legend content={<ChartLegende />} />
               <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
               <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
-              <Bar dataKey="netzbezug_kosten" name="Netzbezug (negativ)" fill={COLORS.grid} />
+              <Bar dataKey="netzbezug_kosten" name="Netzbezug (Kosten)" fill={COLORS.grid} />
               {gesamt.sonderkosten > 0 && (
                 <Bar dataKey="sonderkosten" name="Sonderkosten" fill={GELD_COLORS.kosten} />
               )}

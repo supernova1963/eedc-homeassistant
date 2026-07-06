@@ -190,7 +190,8 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     list.mockResolvedValue([inv({ id: 10, typ: 'wechselrichter', bezeichnung: 'WR Nord' })])
     const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
     expect(g.sekundaer?.titel).toBe('Arbitrage (Netzladung)')
-    expect(titles(g.sekundaer!.kpis)).toEqual(['Netzladung', 'Ø Ladepreis', 'Netzladung-Kosten', 'Anteil an Ladung', 'Arbitrage-Gewinn'])
+    // R16-D-i: KPI „Anteil an Ladung" entfernt (redundant zum Balken „Ladung nach Quelle").
+    expect(titles(g.sekundaer!.kpis)).toEqual(['Netzladung', 'Ø Ladepreis', 'Netzladung-Kosten', 'Arbitrage-Gewinn'])
     // R15-5a: Kosten = 200 kWh × 12 ct ÷ 100 = 24 € — reiner Ausweis (in Netzbezug-Kosten enthalten)
     const kosten = g.sekundaer!.kpis.find((x) => x.title === 'Netzladung-Kosten')!
     expect(kosten.value).toBe('24,00')

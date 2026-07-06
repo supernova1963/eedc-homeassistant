@@ -104,13 +104,15 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
   const kpis: KpiStripItem[] = []
   if (d.speicher_ladung_netz_kosten_euro != null) {
     kpis.push({
+      // R16-A (Rainer #164): Ø-Ladepreis als Hauptwert, darunter kWh + Kosten —
+      // parallel zur Nachbarkachel „Durchschnittspreis Netz".
       title: 'Batterieladung Netz',
-      value: fmtCalc(d.speicher_ladung_netz_kosten_euro, 2, '—'), unit: '€',
+      value: fmtCalc(d.speicher_ladung_netz_preis_cent, 1, '—'), unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
-      subtitle: `${fmt(d.speicher_ladung_netz_kwh)} kWh · Ø ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1, '—')} ct/kWh`,
-      formel: 'Netzladung × Ø-Ladepreis',
+      subtitle: `${fmt(d.speicher_ladung_netz_kwh)} kWh · ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2, '—')} €`,
+      formel: 'Ø-Ladepreis der Netzladung (aus der Strompreis-Mitschrift) · Kosten = Netzladung × Ladepreis',
       berechnung: `${fmt(d.speicher_ladung_netz_kwh)} kWh × ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1)} ct/kWh`,
-      ergebnis: `= ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} €`,
+      ergebnis: `= ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} € Kosten`,
     })
   }
   const netzPreis = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent

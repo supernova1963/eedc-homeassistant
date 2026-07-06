@@ -58,7 +58,7 @@ export const EINSTELLUNGEN_KATEGORIEN: KategorieDef[] = [
   { key: 'stammdaten', label: 'Stammdaten', icon: Settings },
   { key: 'komponenten', label: 'Komponenten', icon: Boxes },
   { key: 'infothek', label: 'Infothek', icon: BookOpen },
-  { key: 'daten', label: 'Daten', icon: Table2 },
+  { key: 'daten', label: 'Werkzeuge', icon: Table2 },
   { key: 'integration', label: 'Integration', icon: Plug },
   { key: 'system', label: 'System', icon: Wrench },
 ]
