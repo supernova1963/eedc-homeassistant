@@ -16,7 +16,7 @@ import {
   AreaChart, Area, LineChart, Line,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende } from '../ui'
+import { ChartLegende, ScrollSchatten } from '../ui'
 import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
@@ -128,7 +128,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Monatsdaten anzeigen ({monatsdaten.length})
         </summary>
-        <div className="mt-3 overflow-x-auto">
+        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800" aussenClassName="mt-3">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -149,7 +149,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
       </details>
     </div>
   )

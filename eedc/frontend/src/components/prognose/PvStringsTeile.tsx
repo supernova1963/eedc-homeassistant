@@ -12,7 +12,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, GitCompare } from 'lucide-react'
-import { Card, ChartLegende, CsvExportButton } from '../ui'
+import { Card, ChartLegende, CsvExportButton, ScrollSchatten } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import type { KpiStripItem } from '../blocks'
 import { exportToCSV } from '../../utils/export'
@@ -271,7 +271,7 @@ export function PvStringTabelle({ data }: { data: PVStringsResponse }) {
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">String-Details</h3>
-      <div className="overflow-x-auto">
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
@@ -321,7 +321,7 @@ export function PvStringTabelle({ data }: { data: PVStringsResponse }) {
             </tfoot>
           )}
         </table>
-      </div>
+      </ScrollSchatten>
     </Card>
   )
 }

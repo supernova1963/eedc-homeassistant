@@ -300,7 +300,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
 
           {/* Heatmap */}
           {sicht !== 'saison' ? (
-            <div className="overflow-x-auto">
+            <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
               <table className="text-[10px] border-collapse">
                 <thead>
                   <tr>
@@ -353,9 +353,9 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollSchatten>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
               <table className="text-[10px] border-collapse">
                 <thead>
                   <tr>
@@ -407,7 +407,7 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollSchatten>
           )}
 
           {/* Legende */}

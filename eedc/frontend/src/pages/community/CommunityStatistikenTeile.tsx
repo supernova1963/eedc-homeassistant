@@ -22,6 +22,7 @@ import {
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, GlobaleStatistik, Ranking } from '../../api/community'
 import { Parkbar } from '../../components/park'
+import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { fmtZahl } from '../../lib'
 // Bundesland-Namen
 import { REGION_NAMEN } from '../../lib/constants'
@@ -436,7 +437,7 @@ export function Top10Bestenliste({ ranking }: { ranking: Ranking }) {
   return (
     <div>
       <Parkbar id="stat-top10-tabelle" titel="Top-10-Tabelle">
-      <div className="overflow-x-auto">
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -472,7 +473,7 @@ export function Top10Bestenliste({ ranking }: { ranking: Ranking }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollSchatten>
       </Parkbar>
 
       {ranking.eigener_rang && (

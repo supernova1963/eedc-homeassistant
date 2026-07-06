@@ -119,6 +119,48 @@ html.dark .recharts-legend-item-text {
   }
 }
 
+/* ── Moderne Scrollbars app-weit (G16-3, Regel 0a Fall 2 — eine Zentrale) ──
+   Ersetzt die klobigen Browser-Default-Balken durch einen schmalen, runden
+   „Pillen"-Thumb auf transparenter Spur (Spur zeigt die Flächenfarbe → wirkt
+   wie eine dezente Linie in Hintergrundfarbe). Wirkt auf ALLE Scroll-Container
+   — Seite, ViewShell, vertikale Tabellen/Dropdowns/Modals — in einem Guss.
+   `.scrollbar-none` (Klassen-Spezifität) übersteuert dies weiter dort, wo eine
+   Scrollleiste bewusst versteckt ist. Horizontaler Überlauf-Hinweis bleibt der
+   `ScrollSchatten`-Blur (A9), das hier ist die reine Balken-Optik. */
+* {
+  scrollbar-width: thin;                       /* Firefox: schmal */
+  scrollbar-color: #d1d5db transparent;        /* Firefox: Thumb gray-300 / Spur transparent */
+}
+html.dark * {
+  scrollbar-color: #4b5563 transparent;        /* Firefox dark: Thumb gray-600 */
+}
+/* WebKit/Blink (Chrome, Safari, Edge, HA-Companion-WebView) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;                    /* gray-300 */
+  border-radius: 9999px;                        /* runde Pille */
+  border: 2px solid transparent;                /* schmälert + „schwebt" im Rand */
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;                    /* gray-400 */
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: #4b5563;                    /* gray-600 */
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #6b7280;                    /* gray-500 */
+}
+
 /* Energiefluss — CSS-animierte Stromfluss-Linien im Lite-Modus.
    Ersetzt die SMIL-Partikel (die auf Mobile-Safari ruckelten) durch einen
    GPU-beschleunigten, Browser-nativen Dashoffset-Fluss analog zu

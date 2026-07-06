@@ -13,7 +13,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   ComposedChart, Line, ReferenceLine, Bar,
 } from 'recharts'
-import { Card, Button, ChartLegende } from '../ui'
+import { Card, Button, ChartLegende, ScrollSchatten } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import type { KpiStripItem } from '../blocks'
 import { pvgisApi, monatsdatenApi } from '../../api'
@@ -241,7 +241,7 @@ export function PvgisDetailTabelle({ vm }: { vm: PrognoseVsIstVM }) {
   return (
     <Card className="space-y-4">
       <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Monatliche Details</h2>
-      <div className="overflow-x-auto">
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -292,7 +292,7 @@ export function PvgisDetailTabelle({ vm }: { vm: PrognoseVsIstVM }) {
             </tr>
           </tfoot>
         </table>
-      </div>
+      </ScrollSchatten>
     </Card>
   )
 }

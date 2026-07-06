@@ -9,7 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende } from '../ui'
+import { ChartLegende, ScrollSchatten } from '../ui'
 import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
@@ -72,7 +72,7 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
 /** Monatsdaten-Tabelle: Strom · Heizung · Warmwasser · JAZ je Monat. */
 export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   return (
-    <div className="overflow-x-auto">
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -102,6 +102,6 @@ export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: Investi
           })}
         </tbody>
       </table>
-    </div>
+    </ScrollSchatten>
   )
 }

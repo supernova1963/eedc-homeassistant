@@ -8,7 +8,7 @@
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
-import { Card, Button, CsvExportButton } from '../ui'
+import { Card, Button, CsvExportButton, ScrollSchatten } from '../ui'
 import { exportToCSV } from '../../utils/export'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -252,8 +252,11 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
         </div>
       </div>
 
-      {/* Tabelle */}
-      <div className="overflow-auto max-h-[560px]">
+      {/* Tabelle — G16-1: alle 24 Stunden ohne vertikalen Scroll (max-h entfernt);
+          horizontaler Überlauf zeigt den ScrollSchatten-Fade (A9, G16-3). thead sticky
+          bleibt (klebt beim Seiten-Scroll, harmlos ohne vertikalen Eigen-Scroll); tfoot
+          NICHT sticky (schwebte sonst am Viewport-Boden). */}
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800">
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -290,7 +293,7 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold sticky bottom-0">
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold">
               <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Σ kWh</td>
               {allCols.map(c => (
                 <td key={c.key} className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">
@@ -300,7 +303,7 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
             </tr>
           </tfoot>
         </table>
-      </div>
+      </ScrollSchatten>
     </Card>
   )
 }

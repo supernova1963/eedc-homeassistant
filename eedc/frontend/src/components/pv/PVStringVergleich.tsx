@@ -13,7 +13,7 @@ import {
   ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, ScrollSchatten } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
@@ -425,7 +425,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
         </div>
 
         {/* Desktop (≥ sm): Tabelle */}
-        <div className="hidden sm:block overflow-x-auto">
+        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800" aussenClassName="hidden sm:block">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
@@ -485,7 +485,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
       </Sektion>
     </div>
   )

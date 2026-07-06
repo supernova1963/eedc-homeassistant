@@ -17,7 +17,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 } from 'lucide-react'
-import { Card, ChartLegende, buttonClasses } from '../ui'
+import { Card, ChartLegende, buttonClasses, ScrollSchatten } from '../ui'
 import { SimpleTooltip } from '../ui/FormelTooltip'
 import {
   aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag,
@@ -397,7 +397,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
   return (
     <Card>
       <DatendichtFallback>
-        <div className="overflow-x-auto">
+        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
           <table className="w-full text-sm table-fixed">
             <colgroup><col className="w-32" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
             <thead>
@@ -480,7 +480,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
               </tr>
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
       </DatendichtFallback>
     </Card>
   )
@@ -648,7 +648,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
         MAPE/Bias oben über {genauigkeit.anzahl_tage} Tage{vm.ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)` : ''} · Tabelle unten: letzte 7 Tage
       </div>
       <DatendichtFallback>
-        <div className="overflow-x-auto">
+        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
           <table className="w-full text-sm table-fixed">
             <colgroup><col className="w-28" /><col /><col /><col /><col /></colgroup>
             <thead><tr className="border-b border-gray-200 dark:border-gray-700">
@@ -678,7 +678,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
       </DatendichtFallback>
     </Card>
   )
@@ -784,7 +784,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>
       <DatendichtFallback>
-        <div className="overflow-x-auto">
+        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
           <table className="w-full text-sm table-fixed">
             <colgroup><col className="w-20" /><col className="w-24" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
             <thead><tr className="border-b border-gray-200 dark:border-gray-700">
@@ -815,7 +815,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollSchatten>
       </DatendichtFallback>
     </Card>
   )

@@ -9,6 +9,7 @@ import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
 import germanyGeoJson from '../../assets/deutschland-bundeslaender.geo.json'
 import { MapPin, Trophy, TrendingUp, TrendingDown, Users, Sun } from 'lucide-react'
 import { KPICard } from '../../components/ui'
+import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { Parkbar } from '../../components/park'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -503,7 +504,7 @@ export function RegionenTabelle({ allRegions, benchmark }: { allRegions: RegionS
 
   return (
     <Parkbar id="reg-tabelle" titel="Alle Regionen im Vergleich">
-    <div className="overflow-x-auto">
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -578,7 +579,7 @@ export function RegionenTabelle({ allRegions, benchmark }: { allRegions: RegionS
             })}
         </tbody>
       </table>
-    </div>
+    </ScrollSchatten>
     </Parkbar>
   )
 }

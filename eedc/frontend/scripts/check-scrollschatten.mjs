@@ -28,6 +28,10 @@ const ALLOW = new Map([
   ['src/v4/LayoutV4.tsx', 1], // Seiten-Scroller (main) — nativer Balken bleibt
   ['src/v4/ViewShell.tsx', 1], // Sicht-Scroller ab lg (data-sicht-scroll) — dito
   ['src/components/blocks/FokusVollbild.tsx', 1], // Vollbild-Overlay = Seite im Fokus-Modus
+  // G16-3 (2026-07-06): Datei ist im ScrollSchatten-Sweep, behält aber EINEN rohen
+  // overflow für ein Nicht-Tabellen-Element (kein Tabellen-Scroll) — dokumentiert:
+  ['src/components/tag/TagWerteTabelle.tsx', 1], // Spalten-Picker-Popover (Dropdown, max-h) — nicht die Tabelle
+  ['src/pages/aussichten/KurzfristTab.tsx', 1], // Prognose-Kachel-Flexleiste (keine <table>)
 ])
 
 /** Geteilte SoT-Komponenten außerhalb src/v4/, die V4 konsumiert (Regel gilt dort mit). */
@@ -42,6 +46,32 @@ const GETEILTE_SOT = [
   'src/components/balkonkraftwerk/BkwJahresvergleich.tsx',
   'src/components/eauto/EAutoJahresvergleich.tsx',
   'src/components/speicher/SpeicherJahresbilanz.tsx',
+  // G16-3 „Blur in allen Tabellen" (2026-07-06): V4-konsumierte Tabellen-Container
+  // auf ScrollSchatten umgestellt, hier bewacht (künftiger overflow-x-auto = Fehler).
+  'src/components/prognose/PrognoseVergleichTeile.tsx',
+  'src/components/prognose/PvStringsTeile.tsx',
+  'src/components/prognose/PrognoseVsIstTeile.tsx',
+  'src/components/pv/PVStringVergleich.tsx',
+  'src/components/speicher/SpeicherVerlaufCharts.tsx',
+  'src/components/waermepumpe/WaermepumpeCharts.tsx',
+  'src/components/eauto/EAutoCharts.tsx',
+  'src/components/balkonkraftwerk/BkwCharts.tsx',
+  'src/components/roi/RoiAnalyse.tsx',
+  'src/components/tag/TagWerteTabelle.tsx', // + ALLOW=1 (Picker-Popover)
+  'src/pages/auswertung/InvestitionenTab.tsx',
+  'src/pages/auswertung/EnergieprofilMonat.tsx',
+  'src/pages/auswertung/EnergieprofilTab.tsx',
+  'src/pages/community/CommunityStatistikenTeile.tsx',
+  'src/pages/community/CommunityPVErtragTeile.tsx',
+  'src/pages/community/CommunityRegionalTeile.tsx',
+  'src/pages/aussichten/LangfristTab.tsx',
+  'src/pages/aussichten/TrendTab.tsx',
+  'src/pages/aussichten/KurzfristTab.tsx', // + ALLOW=1 (Kachel-Flexleiste)
+  'src/pages/aussichten/FinanzenTab.tsx',
+  'src/pages/aussichten/KorrekturprofilHeatmapCard.tsx',
+  // Bewusst NICHT im Scope (Sonderfall max-h + sticky-Header — vertikaler Fade
+  // kollidiert mit stickem Kopf; behalten native Scrollbar mit G16-3-Pillen-Optik,
+  // Dev-Box-Entscheid offen): TabelleTab, EnergieprofilPrognose, EnergieprofilTageTabelle.
 ]
 
 function tsxFiles(dir) {

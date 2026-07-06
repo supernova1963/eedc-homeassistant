@@ -9,7 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende } from '../ui'
+import { ChartLegende, ScrollSchatten } from '../ui'
 import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
@@ -71,7 +71,7 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
 export function BkwMonatsTabelle({ monatsdaten, hatSpeicher }: { monatsdaten: InvestitionMonatsdaten[]; hatSpeicher?: boolean }) {
   const data = prepBkwMonate(monatsdaten)
   return (
-    <div className="overflow-x-auto">
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -101,6 +101,6 @@ export function BkwMonatsTabelle({ monatsdaten, hatSpeicher }: { monatsdaten: In
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollSchatten>
   )
 }

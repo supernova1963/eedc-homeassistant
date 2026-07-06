@@ -10,7 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende } from '../ui'
+import { ChartLegende, ScrollSchatten } from '../ui'
 import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, GELD_TEXT_CLASS, CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, EAutoDashboardResponse } from '../../api/investitionen'
@@ -101,7 +101,7 @@ export function EAutoKostenvergleich({ zusammenfassung: z }: { zusammenfassung: 
 /** Monatsdaten-Tabelle: km · kWh · PV · Netz · V2H je Monat. */
 export function EAutoMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   return (
-    <div className="overflow-x-auto">
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -127,6 +127,6 @@ export function EAutoMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMo
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollSchatten>
   )
 }

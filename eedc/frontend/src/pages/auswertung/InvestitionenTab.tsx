@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronRight, AlertTriangle
 } from 'lucide-react'
 import { Card, LoadingSpinner, FormelTooltip, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
+import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useInvestitionen } from '../../hooks'
 import { investitionenApi, cockpitApi, type ROIDashboardResponse, type ROIKomponente, type CockpitUebersicht } from '../../api'
@@ -328,7 +329,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
             </div>
           )}
 
-          <div className="overflow-x-auto">
+          <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead>
                 <tr>
@@ -508,7 +509,7 @@ export function InvestitionenTab({ anlageId, strompreis, selectedYear = 'all' }:
                 })}
               </tbody>
             </table>
-          </div>
+          </ScrollSchatten>
           </div>)}
         </Card>
         )

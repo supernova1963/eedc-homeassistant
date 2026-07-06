@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Sun, TrendingUp, TrendingDown, Calendar, Target, Award } from 'lucide-react'
 import { KPICard } from '../../components/ui'
+import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { Parkbar } from '../../components/park'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -177,7 +178,7 @@ export function MonatsErtragChart({ benchmark, chartData }: { benchmark: Communi
 export function JahresUebersicht({ benchmark, jahresStats }: { benchmark: CommunityBenchmarkResponse; jahresStats: NonNullable<PVErtragDaten['jahresStats']> }) {
   return (
     <Parkbar id="pv-jahresuebersicht-tabelle" titel="Jahresübersicht">
-    <div className="overflow-x-auto">
+    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
       <table className="w-full">
         <thead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -205,7 +206,7 @@ export function JahresUebersicht({ benchmark, jahresStats }: { benchmark: Commun
           })}
         </tbody>
       </table>
-    </div>
+    </ScrollSchatten>
     </Parkbar>
   )
 }

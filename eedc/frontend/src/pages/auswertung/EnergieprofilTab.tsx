@@ -8,6 +8,7 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { Card, KPICard, ChartLegende } from '../../components/ui'
+import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { TagVerlaufChart, TagWerteTabelle } from '../../components/tag'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
 import { EnergieprofilMonat } from './EnergieprofilMonat'
@@ -412,7 +413,7 @@ function WochenmusterTabelle({ daten }: { daten: WochenmusterPunkt[] }) {
       <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">
         Ø-Stundenwerte je Wochentag · alle Felder
       </div>
-      <div className="overflow-x-auto">
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -456,7 +457,7 @@ function WochenmusterTabelle({ daten }: { daten: WochenmusterPunkt[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollSchatten>
     </Card>
   )
 }
