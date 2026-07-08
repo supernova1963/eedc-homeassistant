@@ -1,16 +1,20 @@
 /**
- * VergleichBalken — Renderer für den „Vergleich"-Modus (R17-1/R17-2b).
+ * vergleichBalken — Render-Helfer für den „Vergleich"-Modus (R17-1/R17-2b).
  *
  * Gruppierte (ungestackte) Balken + optionale km-Rechtsachse für ein Preset.
- * Als Fragment direkt in den `<ComposedChart>` der Verlauf-Charts einsetzbar
- * (Recharts flacht Fragmente auf). Presets/Filter aus `./verlaufVergleich`.
- * `onBarClick` = Drill-in (B3, Balken-Klick → Tag/Monat).
+ * ⚠️ BEWUSST eine FUNKTION (kein `<Component/>`): Recharts erkennt Chart-Elemente
+ * (Bar/YAxis) nur als DIREKTE Kinder bzw. in Fragmenten/Arrays, die es aufflacht —
+ * eine Custom-Komponente `<VergleichBalken/>` würde es als unbekannten Kind-Typ
+ * ignorieren (Bars unsichtbar). Darum inline als `{vergleichBalken({…})}` aufrufen,
+ * damit das zurückgegebene Fragment DIREKTES Kind des `<ComposedChart>` wird —
+ * genau wie die gestackten Erzeugung/Verbrauch-Fragmente. Presets/Filter aus
+ * `./verlaufVergleich`. `onBarClick` = Drill-in (B3, Balken-Klick → Tag/Monat).
  */
 import { Bar, YAxis } from 'recharts'
 import { yAchse, achsenEinheit, achsenTick } from '../lib'
 import { sichtbareSerien, type VergleichPreset } from './verlaufVergleich'
 
-export function VergleichBalken({
+export function vergleichBalken({
   preset,
   istJahr,
   schmal,

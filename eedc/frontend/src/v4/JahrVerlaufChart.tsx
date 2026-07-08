@@ -21,7 +21,7 @@ import { ChartLegende, SegmentControl, eedcTooltipProps } from '../components/ui
 import { CHART_COLORS, MONAT_KURZ, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
-import { VergleichBalken } from './VergleichBalken'
+import { vergleichBalken } from './VergleichBalken'
 import { verfuegbarePresets, monatDrillInPfad } from './verlaufVergleich'
 
 type BilanzView = 'erzeugung' | 'verbrauch' | 'vergleich'
@@ -145,12 +145,14 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
 
             {view === 'vergleich' ? (
               // B3: Balken-Klick → Cockpit/Monat des geklickten Monats (Ausreißer „reinklicken").
-              <VergleichBalken
-                preset={aktPreset}
-                istJahr
-                schmal={schmal}
-                onBarClick={(i) => navigate(monatDrillInPfad(daten[i].jahr, daten[i].monatNr))}
-              />
+              // Als FUNKTION aufgerufen → Fragment wird direktes ComposedChart-Kind
+              // (Recharts erkennt Bars nur direkt/in Fragmenten, nicht in Custom-Komponenten).
+              vergleichBalken({
+                preset: aktPreset,
+                istJahr: true,
+                schmal,
+                onBarClick: (i) => navigate(monatDrillInPfad(daten[i].jahr, daten[i].monatNr)),
+              })
             ) : view === 'erzeugung' ? (
               <>
                 <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} />

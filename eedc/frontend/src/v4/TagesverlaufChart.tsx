@@ -23,7 +23,7 @@ import { ChartLegende, SegmentControl, eedcTooltipProps } from '../components/ui
 import { CHART_COLORS, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { useSchmaleAchse } from '../hooks'
 import type { TagWerte } from '../api/energie_profil'
-import { VergleichBalken } from './VergleichBalken'
+import { vergleichBalken } from './VergleichBalken'
 import { verfuegbarePresets, tagDrillInPfad } from './verlaufVergleich'
 
 type BilanzView = 'erzeugung' | 'verbrauch' | 'vergleich'
@@ -136,12 +136,14 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
 
             {view === 'vergleich' ? (
               // B3: Balken-Klick → Cockpit/Tag des geklickten Tages (Ausreißer „reinklicken").
-              <VergleichBalken
-                preset={aktPreset}
-                istJahr={false}
-                schmal={schmal}
-                onBarClick={(i) => navigate(tagDrillInPfad(daten[i].datum))}
-              />
+              // Als FUNKTION aufgerufen → Fragment wird direktes ComposedChart-Kind
+              // (Recharts erkennt Bars nur direkt/in Fragmenten, nicht in Custom-Komponenten).
+              vergleichBalken({
+                preset: aktPreset,
+                istJahr: false,
+                schmal,
+                onBarClick: (i) => navigate(tagDrillInPfad(daten[i].datum)),
+              })
             ) : view === 'erzeugung' ? (
               <>
                 <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} />
