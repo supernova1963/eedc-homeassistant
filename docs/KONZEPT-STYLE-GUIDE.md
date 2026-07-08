@@ -514,6 +514,50 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ---
 
+## Teil D — Formulare & Wizards
+
+> **SoT für ALLE V4-Formulare + Assistenten** (abgenommen Gernot 2026-07-08). Inventur + Detail-Begründung: internes `docs/drafts/KONZEPT-FORMULARE-V4.md`. Gilt für neue V4-Formulare **und** die slice-weise Umstellung der V3-Formulare/-Wizards (Auslöser u. a. R17: D17-7/-8/-10, R17-4/-8). Prinzip: SoT + Struktur vereinheitlichen, **kein Redesign der Inhalte**.
+
+### D1 — Control-Katalog + Entscheidungs-Matrix (welches Control wofür)
+
+| Datenlage | Control (SoT) | Regel |
+|---|---|---|
+| Kurztext | `ui/Input` | Placeholder nie als Label |
+| Langtext | `ui/Textarea` | feste `rows`, optional Zeichen-Zähler |
+| Zahl | `ui/Input`(number) + Einheit | `min/max/step`; **de-DE-Eingabe mit Komma `1,5`**; Einheit im Label |
+| Datum | `ui/DatumFeld` | nie native `type=date`; min/max klemmen |
+| Ja/Nein | `ui/Switch` | genau An/Aus |
+| Auswahl 2–5 | `SegmentControl` / `RadioGroup` | Segment=kompakt · Radio=Liste mit Beschreibung |
+| Auswahl >5 | `ui/Select` + `optgroup` | Label-Map, kein Roh-Enum |
+| Mehrfach | `Checkbox`-Gruppe | nur bei N-aus-viele |
+| Berechnet | Display (kein Input) | read-only |
+
+**Feld-Anatomie:** Label · **Pflicht-Marker `*`** · optional Einheit · Hint unter dem Feld · Fehler rot unter dem Feld · optional Hilfe-Tooltip (`FormelTooltip`) · einheitlicher Disabled/Read-only-Stil · a11y-verknüpft · Enter = Absenden.
+
+### D2 — Mechanik / SoT
+
+- **M1** nur SoT-Controls, keine rohen `<input>/<select>/<textarea>/<label>`. **M2** Datum immer `DatumFeld`. **M3** Kontroll-Höhen B15 (42/36 px), Feld+Button gleich hoch/zentriert. **M4** Feld-Anatomie (s. D1). **M5** Farben nur `lib/colors`, Hinweisboxen als SoT. **M6** Dirty/Validate/`onSave` (wie `FormBlock`), Buttons = `Button`-SoT. **M7** EIN Upload-SoT (persistente Thumbs). **M8** Lade-/Speicher-Zustände: `Skeleton`/`Button`-`loading`/`FehlerZustand` (B8). **M9** destruktive Aktionen → `DestructiveActionDialog`. **M10** Aktions-Button-Kanon (Speichern/Abbrechen/Weiter/Zurück).
+
+### D3 — Struktur / UX
+
+- **S1** thematische `FormSection`-Gruppen (einheitliches Shading) statt loser `<h3>`. **S2** optionale/Experten-Felder in aufklappbaren „Erweitert"-Gruppen (Standard eingeklappt). **S3** Pflichtfelder markieren (`*`), Kern-Pflicht nie in „Erweitert". **S4** Desktop mehrspaltig / mobil 1-spaltig, keine Gliederungs-Einrückung. **S5** Reihenfolge Pflicht/Kern zuerst, Optionales später. **S6** einheitlicher Disabled/Read-only-Stil. **S7** konditionale Felder ein-/ausblenden (nicht verwirrend disablen); Pflicht gilt erst wenn sichtbar.
+
+### D4 — Validierung & Absenden
+
+- **V1** Inline-Fehler erst nach Berührung. **V2** Absende-Check: blockieren + **alle betroffenen Felder markieren** + zum 1. Fehler scrollen. **V3** Fehler-Zusammenfassung bei langen Formularen/Wizards (klickbar → Feld). **V4** Async/Server-Fehler aufs Feld mappen, sonst `FehlerZustand`-Alert. **V5** Erfolg klar rückmelden. **V6** Dirty-Schutz beim Verlassen. **V7** Plausibilität = **Daten-Checker-Schwellen** (eine SoT, keine doppelten Limits); optional Post-Save-Hinweis auf Funde — nicht den vollen aggregierten Checker beim Absenden laufen.
+
+### D5 — Wizards / Assistenten (mehrstufig)
+
+Formular = EIN Screen (D1–D4). **Wizard** = mehrstufiger Ablauf; D1–D4 gelten je Schritt PLUS:
+- **W1** EIN Stepper-SoT (heilt D17-9). **W2** Overlay-Host (`EinstellungenModalHost`), nie `navigate`. **W3** Zurück/Weiter/Abbrechen fest; „Weiter" disabled bis Schritt valide. **W4** **grundsätzlich Eingaben-Zusammenfassung am Ende** (Review) + Ergebnis-Schritt. **W5** State über Schritte + Abbruch-Dirty-Nachfrage. **W6** einheitlicher Kopf, responsive. **W7** Fehler je Schritt (V1–V4).
+- **Als V4-Wizards:** Setup · Sensor-Zuordnung (#343) · MQTT-Inbound/Gateway · Cloud/CSV/Custom-Import · ConnectorSetup · Monatsabschluss (Donor).
+
+### D6 — Wächter (grep-bar)
+
+- neu **`check:form-controls`** (keine rohen Primitive in Formularen) · **`check:datumpicker`** (Scope erweitern, D17-8) · FormSection-statt-`<h3>` · Inline-Farben via `check:design`. Neue SoT-Bausteine entstehen lazy je Slice (`Textarea`/`FormSection`/`RadioGroup`/`Checkbox`/Upload-SoT/Hinweis-Box/`Stepper`).
+
+---
+
 ## Querverweise
 
 - **Informationsarchitektur v4.0.0** → [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md)
