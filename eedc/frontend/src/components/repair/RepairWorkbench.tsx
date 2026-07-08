@@ -27,7 +27,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, Trash2, Wrench } from 'lucide-react'
 
-import { Alert, Button, Card, Select } from '../ui'
+import { Alert, Button, Card, Select, DatumFeld, Checkbox } from '../ui'
 import {
   OPERATION_META,
   REAGGREGATE_RANGE_MAX_DAYS,
@@ -453,124 +453,83 @@ interface ParamsEditorProps {
 function OperationParamsEditor({ operation, params, setParams, disabled }: ParamsEditorProps) {
   if (operation === 'reaggregate_day') {
     return (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Tag
-        </label>
-        <input
-          type="date"
-          aria-label="Tag, der neu aggregiert werden soll"
+      <div className="space-y-3">
+        <DatumFeld
+          label="Tag"
           value={params.datum}
-          onChange={(e) => setParams((p) => ({ ...p, datum: e.target.value }))}
+          onChange={(v) => setParams((p) => ({ ...p, datum: v }))}
           disabled={disabled}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
         />
-        <label className="mt-2 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <input
-            type="checkbox"
-            checked={params.mit_resnap}
-            onChange={(e) => setParams((p) => ({ ...p, mit_resnap: e.target.checked }))}
-            disabled={disabled}
-          />
-          Snapshots vorher aus HA-Statistics frisch ziehen (Default an)
-        </label>
+        <Checkbox
+          checked={params.mit_resnap}
+          onChange={(e) => setParams((p) => ({ ...p, mit_resnap: e.target.checked }))}
+          disabled={disabled}
+          label="Snapshots vorher aus HA-Statistics frisch ziehen (Default an)"
+        />
       </div>
     )
   }
   if (operation === 'reaggregate_range') {
     return (
-      <div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Von
-            </label>
-            <input
-              type="date"
-              aria-label="Mehrere-Tage-Reaggregate Startdatum"
-              value={params.von}
-              onChange={(e) => setParams((p) => ({ ...p, von: e.target.value }))}
-              disabled={disabled}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Bis
-            </label>
-            <input
-              type="date"
-              aria-label="Mehrere-Tage-Reaggregate Enddatum"
-              value={params.bis}
-              onChange={(e) => setParams((p) => ({ ...p, bis: e.target.value }))}
-              disabled={disabled}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-            />
-          </div>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 items-start">
+          <DatumFeld
+            label="Von"
+            value={params.von}
+            onChange={(v) => setParams((p) => ({ ...p, von: v }))}
+            disabled={disabled}
+          />
+          <DatumFeld
+            label="Bis"
+            value={params.bis}
+            onChange={(v) => setParams((p) => ({ ...p, bis: v }))}
+            disabled={disabled}
+          />
         </div>
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           Max. {REAGGREGATE_RANGE_MAX_DAYS} Tage pro Lauf. Enddatum muss vor heute liegen.
         </p>
 
-        <label className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <input
-            type="checkbox"
-            checked={params.mit_resnap}
-            onChange={(e) => setParams((p) => ({ ...p, mit_resnap: e.target.checked }))}
-            disabled={disabled}
-          />
-          Snapshots pro Tag aus HA-Statistics frisch ziehen (Default an)
-        </label>
+        <Checkbox
+          checked={params.mit_resnap}
+          onChange={(e) => setParams((p) => ({ ...p, mit_resnap: e.target.checked }))}
+          disabled={disabled}
+          label="Snapshots pro Tag aus HA-Statistics frisch ziehen (Default an)"
+        />
 
-        <div className="mt-3 p-3 border border-amber-300 dark:border-amber-700 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-          <label className="inline-flex items-start gap-2 text-sm text-amber-900 dark:text-amber-200 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={params.range_confirmed}
-              onChange={(e) => setParams((p) => ({ ...p, range_confirmed: e.target.checked }))}
-              disabled={disabled}
-              className="mt-0.5"
-            />
-            <span>
-              <strong>Bestätigung:</strong> Per-Feld-Provenance älterer Verfahrensläufe wird überschrieben.
-              MQTT-Only-Daten und Strompreis-Sensor-Werte ohne HA-LTS-Pendant gehen verloren, falls vorhanden.
-              Prognosen + Korrekturprofil-Daten bleiben erhalten.
-              Reparatur erfolgt <strong>ohne Support-Anspruch</strong> auf Rekonstruktion überschriebener Felder.
-            </span>
-          </label>
+        <div className="p-3 border border-amber-300 dark:border-amber-700 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+          <Checkbox
+            checked={params.range_confirmed}
+            onChange={(e) => setParams((p) => ({ ...p, range_confirmed: e.target.checked }))}
+            disabled={disabled}
+            label={
+              <span className="text-amber-900 dark:text-amber-200">
+                <strong>Bestätigung:</strong> Per-Feld-Provenance älterer Verfahrensläufe wird überschrieben.
+                MQTT-Only-Daten und Strompreis-Sensor-Werte ohne HA-LTS-Pendant gehen verloren, falls vorhanden.
+                Prognosen + Korrekturprofil-Daten bleiben erhalten.
+                Reparatur erfolgt <strong>ohne Support-Anspruch</strong> auf Rekonstruktion überschriebener Felder.
+              </span>
+            }
+          />
         </div>
       </div>
     )
   }
   if (operation === 'vollbackfill') {
     return (
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Von (optional)
-          </label>
-          <input
-            type="date"
-            aria-label="Vollbackfill-Startdatum"
-            value={params.von}
-            onChange={(e) => setParams((p) => ({ ...p, von: e.target.value }))}
-            disabled={disabled}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Bis (optional)
-          </label>
-          <input
-            type="date"
-            aria-label="Vollbackfill-Enddatum"
-            value={params.bis}
-            onChange={(e) => setParams((p) => ({ ...p, bis: e.target.value }))}
-            disabled={disabled}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-          />
-        </div>
+      <div className="grid grid-cols-2 gap-2 items-start">
+        <DatumFeld
+          label="Von (optional)"
+          value={params.von}
+          onChange={(v) => setParams((p) => ({ ...p, von: v }))}
+          disabled={disabled}
+        />
+        <DatumFeld
+          label="Bis (optional)"
+          value={params.bis}
+          onChange={(v) => setParams((p) => ({ ...p, bis: v }))}
+          disabled={disabled}
+        />
       </div>
     )
   }

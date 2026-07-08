@@ -52,7 +52,7 @@ function triggerLabel(modus: 'monat' | 'tag', cur: Parsed | null): string {
   return `${MONAT_LANG[cur.monat - 1]} ${cur.jahr}`
 }
 
-export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, className = '' }: {
+export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, className = '', disabled = false }: {
   modus: 'monat' | 'tag'
   /** `YYYY-MM` (monat) bzw. `YYYY-MM-DD` (tag). */
   value: string
@@ -64,6 +64,8 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
   ariaLabel?: string
   /** Zusätzliche Klassen für den Trigger (Breite/Höhe). */
   className?: string
+  /** Trigger deaktivieren (z. B. während eines Reparatur-Laufs). */
+  disabled?: boolean
 }) {
   const [offen, setOffen] = useState(false)
   const cur = parse(value)
@@ -263,9 +265,10 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
   return (
     <div ref={wrapRef} className="relative inline-flex">
       <button
-        type="button" onClick={() => setOffen((o) => !o)}
+        type="button" onClick={() => { if (!disabled) setOffen((o) => !o) }}
+        disabled={disabled}
         aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={offen}
-        className={`inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 ${className}`}
+        className={`inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg border bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       >
         <span className="truncate">{label}</span>
         <Calendar className="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" />

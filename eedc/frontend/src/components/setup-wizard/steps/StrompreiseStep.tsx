@@ -3,8 +3,8 @@
  */
 
 import { useState, FormEvent } from 'react'
-import { Zap, ArrowLeft, ArrowRight, Info, Sparkles } from 'lucide-react'
-import { Alert } from '../../ui'
+import { Zap, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react'
+import { Alert, Input, DatumFeld } from '../../ui'
 import { DEFAULT_STROMPREISE, getEinspeiseverguetung } from '../../../hooks/useSetupWizard'
 import type { Anlage } from '../../../types'
 
@@ -142,127 +142,72 @@ export default function StrompreiseStep({
         {/* Formular */}
         <div className="space-y-6">
           {/* Hauptpreise */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Netzbezugspreis (ct/kWh) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="netzbezug_arbeitspreis_cent_kwh"
-                value={formData.netzbezug_arbeitspreis_cent_kwh}
-                onChange={handleChange}
-                step="0.01"
-                min="0"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                required
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Aktueller Durchschnitt: ~30 ct/kWh
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Einspeisevergütung (ct/kWh) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="einspeiseverguetung_cent_kwh"
-                value={formData.einspeiseverguetung_cent_kwh}
-                onChange={handleChange}
-                step="0.01"
-                min="0"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                required
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {anlage && anlage.leistung_kwp <= 10
-                  ? '≤10 kWp: 8,2 ct'
-                  : anlage && anlage.leistung_kwp <= 40
-                    ? '10-40 kWp: 7,1 ct'
-                    : '>40 kWp: 5,8 ct'
-                }
-              </p>
-            </div>
+          <div className="grid md:grid-cols-2 gap-4 items-start">
+            <Input
+              label="Netzbezugspreis (ct/kWh)"
+              name="netzbezug_arbeitspreis_cent_kwh"
+              type="number" step="0.01" min="0"
+              value={formData.netzbezug_arbeitspreis_cent_kwh}
+              onChange={handleChange}
+              required
+              hint="Aktueller Durchschnitt: ~30 ct/kWh"
+            />
+            <Input
+              label="Einspeisevergütung (ct/kWh)"
+              name="einspeiseverguetung_cent_kwh"
+              type="number" step="0.01" min="0"
+              value={formData.einspeiseverguetung_cent_kwh}
+              onChange={handleChange}
+              required
+              hint={anlage && anlage.leistung_kwp <= 10
+                ? '≤10 kWp: 8,2 ct'
+                : anlage && anlage.leistung_kwp <= 40
+                  ? '10-40 kWp: 7,1 ct'
+                  : '>40 kWp: 5,8 ct'}
+            />
           </div>
 
           {/* Zusätzliche Felder */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Grundpreis (€/Monat)
-              </label>
-              <input
-                type="number"
-                name="grundpreis_euro_monat"
-                value={formData.grundpreis_euro_monat}
-                onChange={handleChange}
-                step="0.01"
-                min="0"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Gültig ab <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                name="gueltig_ab"
-                min="2000-01-01"
-                max="2099-12-31"
-                value={formData.gueltig_ab}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                required
-              />
-            </div>
+          <div className="grid md:grid-cols-2 gap-4 items-start">
+            <Input
+              label="Grundpreis (€/Monat)"
+              name="grundpreis_euro_monat"
+              type="number" step="0.01" min="0"
+              value={formData.grundpreis_euro_monat}
+              onChange={handleChange}
+            />
+            <DatumFeld
+              label="Gültig ab"
+              required
+              value={formData.gueltig_ab}
+              onChange={(v) => { setFormData(prev => ({ ...prev, gueltig_ab: v })); setValidationError(null) }}
+            />
           </div>
 
           {/* Optionale Felder */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Tarifname
-              </label>
-              <input
-                type="text"
-                name="tarifname"
-                value={formData.tarifname}
-                onChange={handleChange}
-                placeholder="z.B. Ökostrom Flex"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Anbieter
-              </label>
-              <input
-                type="text"
-                name="anbieter"
-                value={formData.anbieter}
-                onChange={handleChange}
-                placeholder="z.B. Stadtwerke"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-            </div>
+          <div className="grid md:grid-cols-2 gap-4 items-start">
+            <Input
+              label="Tarifname"
+              name="tarifname"
+              value={formData.tarifname}
+              onChange={handleChange}
+              placeholder="z.B. Ökostrom Flex"
+            />
+            <Input
+              label="Anbieter"
+              name="anbieter"
+              value={formData.anbieter}
+              onChange={handleChange}
+              placeholder="z.B. Stadtwerke"
+            />
           </div>
 
           {/* Info-Box */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-            <p className="text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
-              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>
-                Sie können später weitere Stromtarife mit unterschiedlichen Gültigkeitszeiträumen
-                hinzufügen, z.B. bei Tarifwechsel oder Preisänderungen.
-                Spezialtarife für Warmepumpe oder Wallbox können ebenfalls unter Strompreise angelegt werden.
-              </span>
-            </p>
-          </div>
+          <Alert type="info">
+            Sie können später weitere Stromtarife mit unterschiedlichen Gültigkeitszeiträumen
+            hinzufügen, z.B. bei Tarifwechsel oder Preisänderungen.
+            Spezialtarife für Wärmepumpe oder Wallbox können ebenfalls unter Strompreise angelegt werden.
+          </Alert>
         </div>
       </div>
 

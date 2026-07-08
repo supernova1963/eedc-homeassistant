@@ -1,40 +1,19 @@
 /**
  * InvestitionenStep - Investitionen vervollständigen im Setup-Wizard
  *
- * v0.8.0 - Komplett neu: Alle Investitionen auf einer Seite bearbeiten,
- * gruppiert nach Typ, mit Möglichkeit zum Hinzufügen und Löschen.
+ * Slice 6 (Setup→V4-SoT): der Inline-Editor + Add-Menü sind nach
+ * `../sections/` ausgelagert; Felder auf SoT (Variante B), amber-Buttons/Header
+ * bleiben. Struktur/Empty-State/Grouping unverändert.
  */
 
 import { useState, useEffect, useRef } from 'react'
-import {
-  Car,
-  Battery,
-  Plug,
-  Cpu,
-  ArrowLeft,
-  ArrowRight,
-  Info,
-  Flame,
-  Sun,
-  Plus,
-  Trash2,
-  ChevronDown,
-  ChevronRight,
-  Package,
-  AlertCircle,
-} from 'lucide-react'
+import { ArrowLeft, ArrowRight, Sun, Plus } from 'lucide-react'
+import { Alert } from '../../ui'
 import type { Investition, Anlage, InvestitionTyp } from '../../../types'
-import { PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
-import {
-  PARAM_E_AUTO,
-  PARAM_SPEICHER,
-  PARAM_WAERMEPUMPE,
-  PARAM_WALLBOX,
-  PARAM_WECHSELRICHTER,
-  PARAM_BALKONKRAFTWERK,
-  PARAM_WAERMEPUMPE_DEFAULTS,
-} from '../../../lib'
+import { SetupInvestitionForm } from '../sections/SetupInvestitionForm'
+import { SetupInvestitionMenu } from '../sections/SetupInvestitionMenu'
+import { getDeviceIcon } from '../sections/setupInvestitionHelpers'
 
 interface InvestitionenStepProps {
   investitionen: Investition[]
@@ -47,638 +26,6 @@ interface InvestitionenStepProps {
   onCreateDefaultPVSystem?: () => Promise<void>
   onNext: () => void
   onBack: () => void
-}
-
-// Icon basierend auf Gerätetyp
-function getDeviceIcon(typ: InvestitionTyp) {
-  switch (typ) {
-    case 'e-auto':
-      return <Car className="w-5 h-5" />
-    case 'speicher':
-      return <Battery className="w-5 h-5" />
-    case 'wallbox':
-      return <Plug className="w-5 h-5" />
-    case 'wechselrichter':
-      return <Cpu className="w-5 h-5" />
-    case 'waermepumpe':
-      return <Flame className="w-5 h-5" />
-    case 'balkonkraftwerk':
-    case 'pv-module':
-      return <Sun className="w-5 h-5" />
-    default:
-      return <Package className="w-5 h-5" />
-  }
-}
-
-// Investition-Form für einzelne Investition
-function InvestitionForm({
-  investition,
-  allInvestitionen,
-  onUpdate,
-  onDelete,
-  isNew = false,
-}: {
-  investition: Investition
-  allInvestitionen: Investition[]
-  onUpdate: (data: Partial<Investition>) => void
-  onDelete: () => void
-  isNew?: boolean
-}) {
-  // Investitionen standardmäßig aufgeklappt, neue besonders hervorgehoben
-  const [expanded, setExpanded] = useState<boolean>(true)
-
-  // Bei neuen Investitionen sicherstellen, dass aufgeklappt
-  useEffect(() => {
-    if (isNew) {
-      setExpanded(true)
-    }
-  }, [isNew])
-  const [confirmDelete, setConfirmDelete] = useState(false)
-
-  // Mögliche Parents für diesen Typ
-  const parentTyp = PARENT_MAPPING[investition.typ]
-  const possibleParents = parentTyp
-    ? allInvestitionen.filter(i => i.typ === parentTyp && i.id !== investition.id)
-    : []
-
-  // Typ-spezifische Parameter aus dem parameter-Objekt extrahieren
-  const getParam = (key: string) => investition.parameter?.[key] as number | string | undefined
-  const getBoolParam = (key: string) => investition.parameter?.[key] === true
-
-  const updateParam = (key: string, value: unknown) => {
-    onUpdate({
-      parameter: {
-        ...investition.parameter,
-        [key]: value,
-      },
-    })
-  }
-
-  return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800">
-      {/* Header - klickbar zum Auf-/Zuklappen */}
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-      >
-        <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center text-amber-600 dark:text-amber-400 flex-shrink-0">
-          {getDeviceIcon(investition.typ)}
-        </div>
-        <div className="flex-1 text-left min-w-0">
-          <div className="font-medium text-gray-900 dark:text-white truncate">
-            {investition.bezeichnung || INVESTITION_TYP_LABELS[investition.typ]}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            {INVESTITION_TYP_LABELS[investition.typ]}
-            {investition.anschaffungskosten_gesamt ? (
-              <span className="ml-2">• {investition.anschaffungskosten_gesamt.toLocaleString('de-DE')} €</span>
-            ) : null}
-          </div>
-        </div>
-        {expanded ? (
-          <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-        )}
-      </button>
-
-      {/* Form Content */}
-      {expanded && (
-        <div className="p-4 pt-0 space-y-4 border-t border-gray-100 dark:border-gray-700">
-          {/* Basis-Felder */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Bezeichnung *
-              </label>
-              <input
-                type="text"
-                value={investition.bezeichnung}
-                onChange={(e) => onUpdate({ bezeichnung: e.target.value })}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                placeholder="z.B. SMA Sunny Tripower"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Anschaffungsdatum *
-              </label>
-              <input
-                type="date"
-                min="2000-01-01"
-                max="2099-12-31"
-                value={investition.anschaffungsdatum || ''}
-                onChange={(e) => onUpdate({ anschaffungsdatum: e.target.value || undefined })}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Kaufpreis (€) *
-              </label>
-              <input
-                type="number"
-                value={investition.anschaffungskosten_gesamt ?? ''}
-                onChange={(e) => onUpdate({ anschaffungskosten_gesamt: parseFloat(e.target.value) || 0 })}
-                placeholder="z.B. 5000"
-                min="0"
-                step="any"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          {/* Parent-Zuordnung wenn möglich */}
-          {parentTyp && (
-            <div>
-              {(() => {
-                const isRequired = PARENT_REQUIRED.includes(investition.typ)
-                const hasParents = possibleParents.length > 0
-                const missingParent = isRequired && !investition.parent_investition_id && hasParents
-
-                return (
-                  <>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Gehört zu ({INVESTITION_TYP_LABELS[parentTyp]})
-                      {isRequired ? ' *' : ' (optional)'}
-                    </label>
-                    {hasParents ? (
-                      <>
-                        <select
-                          value={investition.parent_investition_id || ''}
-                          onChange={(e) => onUpdate({ parent_investition_id: e.target.value ? parseInt(e.target.value) : undefined })}
-                          className={`w-full px-4 py-2.5 rounded-lg border bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent ${
-                            missingParent
-                              ? 'border-amber-500 dark:border-amber-500'
-                              : 'border-gray-300 dark:border-gray-600'
-                          }`}
-                        >
-                          <option value="">{isRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}</option>
-                          {possibleParents.map(p => (
-                            <option key={p.id} value={p.id}>{p.bezeichnung}</option>
-                          ))}
-                        </select>
-                        {missingParent && (
-                          <p className="mt-1 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                            <AlertCircle className="w-4 h-4" />
-                            PV-Module müssen einem Wechselrichter zugeordnet werden
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                        <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                          {isRequired ? (
-                            <span>
-                              Bitte legen Sie zuerst einen <strong>Wechselrichter</strong> an,
-                              bevor Sie PV-Module zuordnen können.
-                            </span>
-                          ) : (
-                            <span>
-                              Kein {INVESTITION_TYP_LABELS[parentTyp]} vorhanden.
-                              Zuordnung ist optional.
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
-            </div>
-          )}
-
-          {/* Typ-spezifische Felder */}
-          {investition.typ === 'wechselrichter' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Max. Leistung (kW) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_WECHSELRICHTER.MAX_LEISTUNG_KW) ?? ''}
-                  onChange={(e) => updateParam(PARAM_WECHSELRICHTER.MAX_LEISTUNG_KW, parseFloat(e.target.value) || undefined)}
-                  placeholder="z.B. 10"
-                  min="0"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          )}
-
-          {investition.typ === 'pv-module' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Leistung (kWp) *
-                </label>
-                <input
-                  type="number"
-                  value={investition.leistung_kwp ?? ''}
-                  onChange={(e) => onUpdate({ leistung_kwp: parseFloat(e.target.value) || undefined })}
-                  placeholder="z.B. 10"
-                  min="0"
-                  step="0.01"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Ausrichtung *
-                </label>
-                <select
-                  value={investition.ausrichtung || ''}
-                  onChange={(e) => onUpdate({ ausrichtung: e.target.value || undefined })}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                >
-                  <option value="">-- Wählen --</option>
-                  <option value="Süd">Süd (0°)</option>
-                  <option value="Südost">Südost (-45°)</option>
-                  <option value="Ost">Ost (-90°)</option>
-                  <option value="Nordost">Nordost (-135°)</option>
-                  <option value="Nord">Nord (180°)</option>
-                  <option value="Nordwest">Nordwest (135°)</option>
-                  <option value="West">West (90°)</option>
-                  <option value="Südwest">Südwest (45°)</option>
-                  <option value="Ost-West">Ost-West (gemischt)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Neigung (Grad) *
-                </label>
-                <input
-                  type="number"
-                  value={investition.neigung_grad ?? ''}
-                  onChange={(e) => onUpdate({ neigung_grad: parseFloat(e.target.value) || undefined })}
-                  placeholder="z.B. 35"
-                  min="0"
-                  max="90"
-                  step="1"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          )}
-
-          {investition.typ === 'speicher' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Kapazität (kWh) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_SPEICHER.KAPAZITAET_KWH) ?? ''}
-                  onChange={(e) => updateParam(PARAM_SPEICHER.KAPAZITAET_KWH, parseFloat(e.target.value) || undefined)}
-                  placeholder="z.B. 10"
-                  min="0"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex items-center">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={getBoolParam(PARAM_SPEICHER.ARBITRAGE_FAEHIG)}
-                    onChange={(e) => updateParam(PARAM_SPEICHER.ARBITRAGE_FAEHIG, e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Arbitrage</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Netzstrom günstig laden, teuer einspeisen</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {investition.typ === 'wallbox' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Max. Ladeleistung (kW) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_WALLBOX.MAX_LADELEISTUNG_KW) ?? ''}
-                  onChange={(e) => updateParam(PARAM_WALLBOX.MAX_LADELEISTUNG_KW, parseFloat(e.target.value) || undefined)}
-                  placeholder="z.B. 11"
-                  min="0"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-              <div className="flex items-center">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={getBoolParam(PARAM_WALLBOX.BIDIREKTIONAL)}
-                    onChange={(e) => updateParam(PARAM_WALLBOX.BIDIREKTIONAL, e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Bidirektional</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Bidirektionales Laden (Vehicle-to-Home)</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {investition.typ === 'e-auto' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Batteriekapazität (kWh) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_E_AUTO.BATTERIE_KAPAZITAET_KWH) ?? ''}
-                  onChange={(e) => updateParam(PARAM_E_AUTO.BATTERIE_KAPAZITAET_KWH, parseFloat(e.target.value) || undefined)}
-                  placeholder="z.B. 66"
-                  min="0"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Verbrauch (kWh/100km) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_E_AUTO.VERBRAUCH_KWH_100KM) ?? ''}
-                  onChange={(e) => updateParam(PARAM_E_AUTO.VERBRAUCH_KWH_100KM, parseFloat(e.target.value) || undefined)}
-                  placeholder="z.B. 15"
-                  min="0"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-              <div className="md:col-span-2 flex items-center">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={getBoolParam(PARAM_E_AUTO.V2H_FAEHIG)}
-                    onChange={(e) => updateParam(PARAM_E_AUTO.V2H_FAEHIG, e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">V2H-fähig</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Fahrzeug kann Strom ans Haus abgeben (Vehicle-to-Home)</p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          )}
-
-          {investition.typ === 'waermepumpe' && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Nennleistung (kW) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_WAERMEPUMPE.LEISTUNG_KW) ?? ''}
-                  onChange={(e) => updateParam(PARAM_WAERMEPUMPE.LEISTUNG_KW, parseFloat(e.target.value) || undefined)}
-                  placeholder="z.B. 9"
-                  min="0"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Jahresarbeitszahl (JAZ) *
-                </label>
-                <input
-                  type="number"
-                  value={getParam(PARAM_WAERMEPUMPE.JAZ) ?? PARAM_WAERMEPUMPE_DEFAULTS.jaz.toString()}
-                  onChange={(e) => {
-                    const value = parseFloat(e.target.value) || undefined
-                    onUpdate({
-                      parameter: {
-                        ...investition.parameter,
-                        [PARAM_WAERMEPUMPE.JAZ]: value,
-                        [PARAM_WAERMEPUMPE.EFFIZIENZ_MODUS]: PARAM_WAERMEPUMPE_DEFAULTS.effizienz_modus,
-                      },
-                    })
-                  }}
-                  placeholder="z.B. 3.5"
-                  min="1"
-                  max="10"
-                  step="any"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          )}
-
-          {investition.typ === 'balkonkraftwerk' && (
-            <div className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Leistung pro Modul (Wp) *
-                  </label>
-                  <input
-                    type="number"
-                    value={getParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP) ?? ''}
-                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.LEISTUNG_WP, parseFloat(e.target.value) || undefined)}
-                    placeholder="z.B. 400"
-                    min="0"
-                    step="any"
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Anzahl Module *
-                  </label>
-                  <input
-                    type="number"
-                    value={getParam(PARAM_BALKONKRAFTWERK.ANZAHL) ?? ''}
-                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.ANZAHL, parseInt(e.target.value) || undefined)}
-                    placeholder="z.B. 2"
-                    min="1"
-                    step="1"
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Ausrichtung *
-                  </label>
-                  <select
-                    value={getParam(PARAM_BALKONKRAFTWERK.AUSRICHTUNG) as string || ''}
-                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.AUSRICHTUNG, e.target.value || undefined)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  >
-                    <option value="">-- Wählen --</option>
-                    <option value="Süd">Süd (0°)</option>
-                    <option value="Südost">Südost (-45°)</option>
-                    <option value="Ost">Ost (-90°)</option>
-                    <option value="West">West (90°)</option>
-                    <option value="Südwest">Südwest (45°)</option>
-                    <option value="Ost-West">Ost-West (gemischt)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Neigung (Grad) *
-                  </label>
-                  <input
-                    type="number"
-                    value={getParam(PARAM_BALKONKRAFTWERK.NEIGUNG_GRAD) ?? ''}
-                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.NEIGUNG_GRAD, parseFloat(e.target.value) || undefined)}
-                    placeholder="z.B. 30"
-                    min="0"
-                    max="90"
-                    step="1"
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    0° = flach, 90° = senkrecht (Balkon)
-                  </p>
-                </div>
-              </div>
-
-              {/* Speicher-Option */}
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={getBoolParam(PARAM_BALKONKRAFTWERK.HAT_SPEICHER)}
-                    onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.HAT_SPEICHER, e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-amber-500 focus:ring-amber-500"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Mit Speicher</span>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">z.B. Anker SOLIX, Zendure, EcoFlow</p>
-                  </div>
-                </label>
-
-                {getBoolParam(PARAM_BALKONKRAFTWERK.HAT_SPEICHER) && (
-                  <div className="mt-3 ml-8">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Speicher-Kapazität (Wh) *
-                    </label>
-                    <input
-                      type="number"
-                      value={getParam(PARAM_BALKONKRAFTWERK.SPEICHER_KAPAZITAET_WH) ?? ''}
-                      onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.SPEICHER_KAPAZITAET_WH, parseFloat(e.target.value) || undefined)}
-                      placeholder="z.B. 1600"
-                      min="0"
-                      step="any"
-                      className="w-full max-w-xs px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                    />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      z.B. 1600 Wh für Anker SOLIX
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Löschen-Button */}
-          <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
-            {confirmDelete ? (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-red-600 dark:text-red-400">
-                  Wirklich löschen?
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDelete()
-                    setConfirmDelete(false)
-                  }}
-                  className="px-3 py-1.5 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  Ja, löschen
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                >
-                  Abbrechen
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Investition löschen
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Add Investment Button
-function AddInvestitionButton({ onAdd }: { onAdd: (typ: InvestitionTyp) => void }) {
-  const [showMenu, setShowMenu] = useState(false)
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setShowMenu(!showMenu)}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
-      >
-        <Plus className="w-5 h-5" />
-        Investition hinzufügen
-      </button>
-
-      {showMenu && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-10"
-            onClick={() => setShowMenu(false)}
-          />
-          {/* Menu */}
-          <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-20 py-2">
-            {INVESTITION_TYP_ORDER.map(typ => (
-              <button
-                key={typ}
-                type="button"
-                onClick={() => {
-                  onAdd(typ)
-                  setShowMenu(false)
-                }}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
-              >
-                <span className="text-amber-600 dark:text-amber-400">
-                  {getDeviceIcon(typ)}
-                </span>
-                <span className="text-gray-900 dark:text-white">
-                  {INVESTITION_TYP_LABELS[typ]}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  )
 }
 
 export default function InvestitionenStep({
@@ -701,7 +48,6 @@ export default function InvestitionenStep({
   useEffect(() => {
     if (newlyAddedId && newInvestitionRef.current) {
       newInvestitionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      // Animation-Highlight nach kurzer Zeit zurücksetzen
       const timer = setTimeout(() => setNewlyAddedId(null), 2000)
       return () => clearTimeout(timer)
     }
@@ -710,21 +56,15 @@ export default function InvestitionenStep({
   // Investitionen nach Typ gruppieren und sortieren
   const groupedInvestitionen = INVESTITION_TYP_ORDER.reduce((acc, typ) => {
     const items = investitionen.filter(i => i.typ === typ)
-    if (items.length > 0) {
-      acc.push({ typ, items })
-    }
+    if (items.length > 0) acc.push({ typ, items })
     return acc
   }, [] as { typ: InvestitionTyp; items: Investition[] }[])
 
-  // Handler für Hinzufügen
   const handleAdd = async (typ: InvestitionTyp) => {
     setAddingType(typ)
     try {
       const newInvestition = await onAddInvestition(typ)
-      // Markiere neue Investition für Scroll und Highlight
-      if (newInvestition?.id) {
-        setNewlyAddedId(newInvestition.id)
-      }
+      if (newInvestition?.id) setNewlyAddedId(newInvestition.id)
     } finally {
       setAddingType(null)
     }
@@ -747,7 +87,6 @@ export default function InvestitionenStep({
             </p>
           </div>
 
-          {/* Schnellstart: PV-System */}
           {onCreateDefaultPVSystem && (
             <div className="mb-8">
               <button
@@ -774,7 +113,6 @@ export default function InvestitionenStep({
             </div>
           )}
 
-          {/* Oder manuell */}
           <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-200 dark:border-gray-700" />
@@ -786,7 +124,6 @@ export default function InvestitionenStep({
             </div>
           </div>
 
-          {/* Schnell-Buttons für häufige Komponenten */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
             {(['balkonkraftwerk', 'speicher', 'wallbox', 'waermepumpe', 'e-auto'] as InvestitionTyp[]).map(typ => (
               <button
@@ -806,9 +143,8 @@ export default function InvestitionenStep({
             ))}
           </div>
 
-          {/* Alle Typen */}
           <div className="text-center">
-            <AddInvestitionButton onAdd={handleAdd} />
+            <SetupInvestitionMenu onAdd={handleAdd} />
           </div>
 
           {addingType && (
@@ -828,7 +164,6 @@ export default function InvestitionenStep({
             <ArrowLeft className="w-4 h-4" />
             Zurück
           </button>
-
           <button
             type="button"
             onClick={onNext}
@@ -861,14 +196,8 @@ export default function InvestitionenStep({
           </div>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <span className="text-red-700 dark:text-red-300">{error}</span>
-          </div>
-        )}
+        {error && <Alert type="error" className="mb-6">{error}</Alert>}
 
-        {/* Loading */}
         {isLoading && (
           <div className="text-center py-8">
             <div className="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mx-auto mb-4" />
@@ -881,17 +210,13 @@ export default function InvestitionenStep({
           <div className="space-y-6">
             {groupedInvestitionen.map(({ typ, items }) => (
               <div key={typ}>
-                {/* Typ-Header */}
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-amber-600 dark:text-amber-400">
-                    {getDeviceIcon(typ)}
-                  </span>
+                  <span className="text-amber-600 dark:text-amber-400">{getDeviceIcon(typ)}</span>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                     {INVESTITION_TYP_LABELS[typ]} ({items.length})
                   </h3>
                 </div>
 
-                {/* Investitionen dieses Typs */}
                 <div className="space-y-3">
                   {items.map(inv => (
                     <div
@@ -903,7 +228,7 @@ export default function InvestitionenStep({
                           : ''
                       }`}
                     >
-                      <InvestitionForm
+                      <SetupInvestitionForm
                         investition={inv}
                         allInvestitionen={investitionen}
                         onUpdate={(data) => onUpdateInvestition(inv.id, data)}
@@ -916,17 +241,15 @@ export default function InvestitionenStep({
               </div>
             ))}
 
-            {/* Weitere Komponenten hinzufügen - prominent */}
+            {/* Weitere Komponenten hinzufügen */}
             <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Plus className="w-4 h-4 text-amber-500" />
                 Weitere Komponenten hinzufügen
               </h3>
 
-              {/* Schnell-Buttons für häufige Komponenten */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                 {(['speicher', 'wallbox', 'waermepumpe', 'e-auto', 'balkonkraftwerk'] as InvestitionTyp[]).map(typ => {
-                  // Prüfen ob dieser Typ schon vorhanden ist
                   const hasType = investitionen.some(i => i.typ === typ)
                   return (
                     <button
@@ -956,8 +279,7 @@ export default function InvestitionenStep({
                 })}
               </div>
 
-              {/* Alle Typen - Dropdown */}
-              <AddInvestitionButton onAdd={handleAdd} />
+              <SetupInvestitionMenu onAdd={handleAdd} />
               {addingType && (
                 <span className="ml-3 text-sm text-amber-600 dark:text-amber-400">
                   Füge {INVESTITION_TYP_LABELS[addingType]} hinzu...
@@ -968,16 +290,11 @@ export default function InvestitionenStep({
         )}
 
         {/* Info-Box */}
-        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-          <p className="text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
-            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>
-              <strong>Pflichtfelder</strong> sind mit * markiert. Der Kaufpreis ist besonders wichtig
-              für die Amortisationsberechnung. Sie können alle Angaben später jederzeit unter
-              Einstellungen → Investitionen ändern.
-            </span>
-          </p>
-        </div>
+        <Alert type="info" className="mt-6">
+          <strong>Pflichtfelder</strong> sind mit * markiert. Der Kaufpreis ist besonders wichtig
+          für die Amortisationsberechnung. Sie können alle Angaben später jederzeit unter
+          Einstellungen → Investitionen ändern.
+        </Alert>
       </div>
 
       {/* Footer */}
@@ -990,7 +307,6 @@ export default function InvestitionenStep({
           <ArrowLeft className="w-4 h-4" />
           Zurück
         </button>
-
         <button
           type="button"
           onClick={onNext}

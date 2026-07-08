@@ -12,12 +12,11 @@
 
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, AlertCircle, Mountain, Upload } from 'lucide-react'
-import { LoadingSpinner, Alert, Button } from '../components/ui'
+import { LoadingSpinner, Alert, Button, Input } from '../components/ui'
 import { Parkbar } from '../components/park'
 import { STRING_COLORS, CHART_COLORS, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
-import { pvgisApi, wetterApi } from '../api'
+import { pvgisApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
-import type { WetterProviderList } from '../api/wetter'
 import type { Anlage } from '../types'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -41,7 +40,6 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
   const [gespeichertePrognosen, setGespeichertePrognosen] = useState<GespeichertePrognose[]>([])
   const [previewPrognose, setPreviewPrognose] = useState<PVGISPrognose | null>(null)
   const [optimum, setOptimum] = useState<PVGISOptimum | null>(null)
-  const [wetterProvider, setWetterProvider] = useState<WetterProviderList | null>(null)
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [optimumLoading, setOptimumLoading] = useState(false)
@@ -71,15 +69,13 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
     setSuccess(null)
 
     try {
-      const [aktive, gespeicherte, provider, horizont] = await Promise.all([
+      const [aktive, gespeicherte, horizont] = await Promise.all([
         pvgisApi.getAktivePrognose(anlageId),
         pvgisApi.listeGespeichertePrognosen(anlageId),
-        wetterApi.getProvider(anlageId).catch(() => null),
         pvgisApi.getHorizont(anlageId).catch(() => null)
       ])
       setAktivePrognose(aktive)
       setGespeichertePrognosen(gespeicherte)
-      setWetterProvider(provider)
       setHorizontStatus(horizont)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
@@ -349,20 +345,15 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
             {/* D14-7 (detLAN #113): Hinweis-Zeile liegt UNTER dem Grid — vorher
                 drückte sie das Eingabefeld über die items-end-Schaltfläche. */}
             <div className="grid md:grid-cols-2 gap-4 items-end">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Systemverluste (%)
-                </label>
-                <input
-                  type="number"
-                  value={systemLosses}
-                  onChange={(e) => setSystemLosses(parseFloat(e.target.value) || 14)}
-                  min={0}
-                  max={50}
-                  step={1}
-                  className="input w-full"
-                />
-              </div>
+              <Input
+                label="Systemverluste (%)"
+                type="number"
+                value={systemLosses}
+                onChange={(e) => setSystemLosses(parseFloat(e.target.value) || 14)}
+                min={0}
+                max={50}
+                step={1}
+              />
 
               <div className="flex items-end">
                 <Button
@@ -765,73 +756,6 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
             )}
             </div>
           </CollapsibleSection>
-          </Parkbar>
-
-          <Parkbar id="anzeige:wetter-provider" titel="Wetterdaten-Provider">
-          {/* Wetter-Provider Info */}
-          {wetterProvider && (
-            <CollapsibleSection title="Wetterdaten-Provider" storageKey="solarprognose-wetter" defaultOpen={false}>
-              <div className="space-y-4">
-
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Der Wetter-Provider bestimmt die Quelle für Globalstrahlungsdaten bei der Ist-Erfassung
-                und der Kurzfrist-Prognose. Die Einstellung kann in den Anlagen-Stammdaten geändert werden.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Aktueller Provider</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {wetterProvider.aktueller_provider === 'auto' ? 'Automatisch' :
-                     wetterProvider.aktueller_provider === 'brightsky' ? 'Bright Sky (DWD)' :
-                     wetterProvider.aktueller_provider === 'open-meteo' ? 'Open-Meteo' :
-                     wetterProvider.aktueller_provider === 'open-meteo-solar' ? 'Open-Meteo Solar (GTI)' :
-                     wetterProvider.aktueller_provider}
-                  </p>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Standort</p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {wetterProvider.standort.land || 'Unbekannt'}
-                    {wetterProvider.standort.in_deutschland && ' (DWD verfügbar)'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Verfügbare Provider</h4>
-                <div className="grid gap-2">
-                  {wetterProvider.provider.map(p => (
-                    <div
-                      key={p.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                        p.verfuegbar
-                          ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
-                          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 opacity-60'
-                      }`}
-                    >
-                      <div>
-                        <p className={`font-medium ${p.verfuegbar ? 'text-green-700 dark:text-green-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                          {p.name}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {p.beschreibung}
-                        </p>
-                      </div>
-                      <div className="text-sm">
-                        {p.verfuegbar ? (
-                          <span className="text-green-600 dark:text-green-400">✓ Verfügbar</span>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500">Nicht verfügbar</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              </div>
-            </CollapsibleSection>
-          )}
           </Parkbar>
 
           <Parkbar id="anzeige:ueber-solarprognose" titel="Über Solarprognose">

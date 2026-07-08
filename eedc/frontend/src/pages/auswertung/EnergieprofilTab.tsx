@@ -8,6 +8,7 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { Card, KPICard, ChartLegende } from '../../components/ui'
+import { DatumPicker } from '../../components/ui/DatumPicker'
 import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { TagVerlaufChart, TagWerteTabelle } from '../../components/tag'
 import { energieProfilApi, type StundenWert, type SerieInfo, type WochenmusterPunkt } from '../../api/energie_profil'
@@ -160,7 +161,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
           Maximum ist heute (rollierend via aggregate_today_all geschrieben).
           detLAN D#181: heutiger Tag muss erreichbar sein, war vorher disabled. */}
       <div className="flex items-center gap-2 flex-wrap">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tag:</label>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Tag:</span>
         <button
           type="button"
           onClick={() => setDatum(tagVerschieben(datum, -1))}
@@ -169,8 +170,7 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <input type="date" aria-label="Tag auswählen" value={datum} max={heuteISO()}
-          onChange={e => setDatum(e.target.value)} className="input w-auto text-sm" />
+        <DatumPicker modus="tag" value={datum} max={heuteISO()} onChange={setDatum} ariaLabel="Tag auswählen" />
         <button
           type="button"
           onClick={() => setDatum(tagVerschieben(datum, 1))}

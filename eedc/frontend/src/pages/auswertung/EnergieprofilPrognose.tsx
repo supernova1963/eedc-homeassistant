@@ -11,6 +11,7 @@ import {
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
 import { Card, Alert, KPICard, ChartLegende } from '../../components/ui'
+import { DatumPicker } from '../../components/ui/DatumPicker'
 import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
@@ -82,15 +83,14 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
     <div className="space-y-4">
       {/* Datum-Picker */}
       <div className="flex items-center gap-3 flex-wrap">
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Prognose für:</label>
-        <input
-          type="date"
-          aria-label="Prognose-Datum"
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Prognose für:</span>
+        <DatumPicker
+          modus="tag"
           value={datum}
           min={heuteISO()}
           max={maxDatum}
-          onChange={e => setDatum(e.target.value)}
-          className="input w-auto text-sm"
+          onChange={setDatum}
+          ariaLabel="Prognose-Datum"
         />
         <button
           type="button"

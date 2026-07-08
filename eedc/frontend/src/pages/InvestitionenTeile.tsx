@@ -233,7 +233,7 @@ export function useInvestitionenVerwaltung(anlageId?: number, anlagenname?: stri
         isOpen={showForm}
         onClose={schliesseForm}
         title={editingInvestition ? 'Investition bearbeiten' : 'Neue Investition'}
-        size="lg"
+        size="xl"
       >
         {selectedTyp && anlageId != null && (
           <InvestitionForm

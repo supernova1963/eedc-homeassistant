@@ -1,65 +1,23 @@
-import { useState, useEffect, useCallback, FormEvent } from 'react'
-import { Button, Input, Alert, DatumFeld } from '../ui'
-import { fmtZahl } from '../../lib'
+import { useState, useEffect, useRef, FormEvent } from 'react'
+import { Button, Input, Select, Alert, DatumFeld, FormSection } from '../ui'
+import type { SelectItem } from '../ui/Select'
 import type { Investition, InvestitionTyp } from '../../types'
 import type { InvestitionCreate, InvestitionUpdate } from '../../api'
 import { investitionenApi } from '../../api'
-import { infothekApi } from '../../api/infothek'
-import type { InfothekEintrag } from '../../types/infothek'
-import { AlertCircle, FileText, ExternalLink } from 'lucide-react'
 import {
-  PARAM_E_AUTO_DEFAULTS,
-  PARAM_SPEICHER_DEFAULTS,
-  PARAM_WAERMEPUMPE_DEFAULTS,
-  PARAM_WALLBOX_DEFAULTS,
-  PARAM_WECHSELRICHTER_DEFAULTS,
-  PARAM_BALKONKRAFTWERK_DEFAULTS,
-  PARAM_SONSTIGES_DEFAULTS,
-} from '../../lib'
-
-// Liefert einen Form-tauglichen String — Eingabewert wenn vorhanden, sonst Default.
-// Defaults stammen aus lib/investitionParameter.ts (Single Source of Truth, gemeinsam mit Backend).
-const paramStr = (val: unknown, fallback?: unknown): string => {
-  if (val !== undefined && val !== null && val !== '') return String(val)
-  if (fallback !== undefined && fallback !== null) return String(fallback)
-  return ''
-}
-
-// Azimut-Mapping: Himmelsrichtung → PVGIS-Grad (0=Süd, -90=Ost, 90=West, ±180=Nord)
-const AUSRICHTUNG_GRAD_MAP: Record<string, number> = {
-  'Süd': 0, 'Südost': -45, 'Ost': -90, 'Nordost': -135,
-  'Nord': 180, 'Nordwest': 135, 'West': 90, 'Südwest': 45,
-}
-
-function ausrichtungToGrad(ausrichtung: string): string {
-  return (AUSRICHTUNG_GRAD_MAP[ausrichtung] ?? 0).toString()
-}
-
-function gradToAusrichtung(grad: number): string {
-  let closest = 'Süd'
-  let minDiff = 360
-  for (const [name, deg] of Object.entries(AUSRICHTUNG_GRAD_MAP)) {
-    let diff = Math.abs(grad - deg)
-    if (diff > 180) diff = 360 - diff
-    if (diff < minDiff) {
-      minDiff = diff
-      closest = name
-    }
-  }
-  return closest
-}
-
-// Parent-Kind Beziehungen (analog zu useSetupWizard.ts)
-const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp | InvestitionTyp[]>> = {
-  'pv-module': 'wechselrichter',                          // Pflicht
-  'speicher': ['wechselrichter', 'balkonkraftwerk'],       // Optional — Hybrid-WR oder BKW mit integriertem Speicher
-}
-const PARENT_REQUIRED: InvestitionTyp[] = ['pv-module']
-
-const PARENT_TYPE_LABELS: Record<string, string> = {
-  'wechselrichter': 'Wechselrichter',
-  'balkonkraftwerk': 'Balkonkraftwerk',
-}
+  ausrichtungToGrad,
+  gradToAusrichtung,
+  AUSRICHTUNG_OPTIONEN,
+  PARENT_MAPPING,
+  PARENT_REQUIRED,
+  PARENT_TYPE_LABELS,
+  typLabels,
+  alternativkostenHints,
+  getInitialParamData,
+} from './sections/investitionFormHelpers'
+import { SchalterZeile } from './sections/SchalterZeile'
+import { InvestitionTypFelder } from './sections/InvestitionTypFelder'
+import { InfothekVerknuepfungen } from './sections/InfothekVerknuepfungen'
 
 interface InvestitionFormProps {
   investition?: Investition | null
@@ -67,30 +25,6 @@ interface InvestitionFormProps {
   typ: InvestitionTyp
   onSubmit: (data: InvestitionCreate | InvestitionUpdate) => Promise<void>
   onCancel: () => void
-}
-
-// Typ-Label Mapping
-const typLabels: Record<InvestitionTyp, string> = {
-  'e-auto': 'E-Auto',
-  'waermepumpe': 'Wärmepumpe',
-  'speicher': 'Speicher',
-  'wallbox': 'Wallbox',
-  'wechselrichter': 'Wechselrichter',
-  'pv-module': 'PV-Module',
-  'balkonkraftwerk': 'Balkonkraftwerk',
-  'sonstiges': 'Sonstiges',
-}
-
-// Kontextabhängige Hints für Alternative Kosten
-const alternativkostenHints: Record<InvestitionTyp, string> = {
-  'e-auto': 'Kosten eines vergleichbaren Verbrenners (für ROI-Berechnung)',
-  'waermepumpe': 'Kosten einer neuen Gas-/Ölheizung (für ROI-Berechnung)',
-  'speicher': 'Meist 0 - es gibt keine echte Alternative',
-  'wallbox': 'Meist 0 - es gibt keine echte Alternative',
-  'wechselrichter': 'Meist 0 - es gibt keine echte Alternative',
-  'pv-module': 'Meist 0 - es gibt keine echte Alternative',
-  'balkonkraftwerk': 'Meist 0 - es gibt keine echte Alternative',
-  'sonstiges': 'Kosten einer Alternative (falls vorhanden)',
 }
 
 export default function InvestitionForm({ investition, anlageId, typ, onSubmit, onCancel }: InvestitionFormProps) {
@@ -118,6 +52,17 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     ha_entity_id: investition?.ha_entity_id || '',
   })
 
+  const [paramData, setParamData] = useState<Record<string, string | boolean>>(
+    () => getInitialParamData(typ, investition?.parameter ?? {}),
+  )
+
+  // V1/V2: Inline-Fehler erst nach Berührung (touched) bzw. Absende-Versuch (Muster Slice 1–3).
+  const [touched, setTouched] = useState<Set<string>>(new Set())
+  const [submitted, setSubmitted] = useState(false)
+  const feldRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const setFeldRef = (name: string) => (el: HTMLDivElement | null) => { feldRefs.current[name] = el }
+  const markTouched = (name: string) => setTouched(prev => new Set(prev).add(name))
+
   // Parent-Typ(en) für diesen Investitions-Typ ermitteln
   const parentTypRaw = PARENT_MAPPING[typ]
   const parentTypen: InvestitionTyp[] = parentTypRaw
@@ -139,133 +84,71 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       .finally(() => setLoadingParents(false))
   }, [typ, anlageId, investition?.id])
 
-  // Typ-spezifische Parameter
-  const params = investition?.parameter || {}
-
-  const getInitialParamData = (): Record<string, string | boolean> => {
-    switch (typ) {
-      case 'e-auto':
-        return {
-          batteriekapazitaet_kwh: paramStr(params.batteriekapazitaet_kwh),
-          verbrauch_kwh_100km: paramStr(params.verbrauch_kwh_100km, PARAM_E_AUTO_DEFAULTS.verbrauch_kwh_100km),
-          jahresfahrleistung_km: paramStr(params.jahresfahrleistung_km, PARAM_E_AUTO_DEFAULTS.jahresfahrleistung_km),
-          pv_ladeanteil_prozent: paramStr(params.pv_ladeanteil_prozent, PARAM_E_AUTO_DEFAULTS.pv_ladeanteil_prozent),
-          vergleich_verbrauch_l_100km: paramStr(params.vergleich_verbrauch_l_100km, PARAM_E_AUTO_DEFAULTS.vergleich_verbrauch_l_100km),
-          benzinpreis_euro: paramStr(params.benzinpreis_euro, PARAM_E_AUTO_DEFAULTS.benzinpreis_euro),
-          v2h_faehig: (params.v2h_faehig as boolean) ?? PARAM_E_AUTO_DEFAULTS.v2h_faehig,
-          v2h_entladeleistung_kw: paramStr(params.v2h_entladeleistung_kw),
-          ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_E_AUTO_DEFAULTS.ist_dienstlich,
-        }
-      case 'speicher': {
-        const arbitrage = (params.arbitrage_faehig as boolean) ?? PARAM_SPEICHER_DEFAULTS.arbitrage_faehig
-        // Arbitrage impliziert Netzladung — Initial-State spiegelt die Implikation.
-        const laedtAusNetzGespeichert = (params.laedt_aus_netz as boolean) ?? PARAM_SPEICHER_DEFAULTS.laedt_aus_netz
-        return {
-          kapazitaet_kwh: paramStr(params.kapazitaet_kwh),
-          nutzbare_kapazitaet_kwh: paramStr(params.nutzbare_kapazitaet_kwh),
-          max_ladeleistung_kw: paramStr(params.max_ladeleistung_kw),
-          max_entladeleistung_kw: paramStr(params.max_entladeleistung_kw),
-          wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_SPEICHER_DEFAULTS.wirkungsgrad_prozent),
-          laedt_aus_netz: arbitrage ? true : laedtAusNetzGespeichert,
-          arbitrage_faehig: arbitrage,
-        }
-      }
-      case 'waermepumpe':
-        return {
-          leistung_kw: paramStr(params.leistung_kw),
-          // Wärmepumpenart für fairen Community-Vergleich
-          wp_art: paramStr(params.wp_art, PARAM_WAERMEPUMPE_DEFAULTS.wp_art),
-          // Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
-          effizienz_modus: paramStr(params.effizienz_modus, PARAM_WAERMEPUMPE_DEFAULTS.effizienz_modus),
-          // Für Modus "gesamt_jaz"
-          jaz: paramStr(params.jaz, PARAM_WAERMEPUMPE_DEFAULTS.jaz),
-          // Für Modus "scop" (EU-Label)
-          scop_heizung: paramStr(params.scop_heizung, PARAM_WAERMEPUMPE_DEFAULTS.scop_heizung),
-          scop_warmwasser: paramStr(params.scop_warmwasser, PARAM_WAERMEPUMPE_DEFAULTS.scop_warmwasser),
-          vorlauftemperatur: paramStr(params.vorlauftemperatur, PARAM_WAERMEPUMPE_DEFAULTS.vorlauftemperatur),
-          // Für Modus "getrennte_cops"
-          cop_heizung: paramStr(params.cop_heizung, PARAM_WAERMEPUMPE_DEFAULTS.cop_heizung),
-          cop_warmwasser: paramStr(params.cop_warmwasser, PARAM_WAERMEPUMPE_DEFAULTS.cop_warmwasser),
-          // Getrennte Strommessung (Heizen/Warmwasser) — Bug #8 historisch als String 'true'/'false';
-          // wird bei Phase 6 auf echten Boolean migriert. Bis dahin tolerieren wir beides beim Lesen.
-          getrennte_strommessung: (params.getrennte_strommessung === true || params.getrennte_strommessung === 'true') ? 'true' : 'false',
-          // Wärmebedarf (getrennt)
-          heizwaermebedarf_kwh: paramStr(params.heizwaermebedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.heizwaermebedarf_kwh),
-          warmwasserbedarf_kwh: paramStr(params.warmwasserbedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.warmwasserbedarf_kwh),
-          // Vergleich mit alter Heizung
-          pv_anteil_prozent: paramStr(params.pv_anteil_prozent, PARAM_WAERMEPUMPE_DEFAULTS.pv_anteil_prozent),
-          alter_energietraeger: paramStr(params.alter_energietraeger, PARAM_WAERMEPUMPE_DEFAULTS.alter_energietraeger),
-          alter_preis_cent_kwh: paramStr(params.alter_preis_cent_kwh, PARAM_WAERMEPUMPE_DEFAULTS.alter_preis_cent_kwh),
-          alternativ_zusatzkosten_jahr: paramStr(params.alternativ_zusatzkosten_jahr, PARAM_WAERMEPUMPE_DEFAULTS.alternativ_zusatzkosten_jahr),
-          sg_ready: (params.sg_ready as boolean) ?? PARAM_WAERMEPUMPE_DEFAULTS.sg_ready,
-        }
-      case 'wallbox':
-        return {
-          max_ladeleistung_kw: paramStr(params.max_ladeleistung_kw, PARAM_WALLBOX_DEFAULTS.max_ladeleistung_kw),
-          bidirektional: (params.bidirektional as boolean) ?? PARAM_WALLBOX_DEFAULTS.bidirektional,
-          pv_optimiert: (params.pv_optimiert as boolean) ?? PARAM_WALLBOX_DEFAULTS.pv_optimiert,
-          ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_WALLBOX_DEFAULTS.ist_dienstlich,
-        }
-      case 'wechselrichter':
-        return {
-          max_leistung_kw: paramStr(params.max_leistung_kw),
-          wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_WECHSELRICHTER_DEFAULTS.wirkungsgrad_prozent),
-          hybrid: (params.hybrid as boolean) ?? PARAM_WECHSELRICHTER_DEFAULTS.hybrid,
-        }
-      case 'pv-module':
-        return {
-          anzahl_module: paramStr(params.anzahl_module),
-          modul_leistung_wp: paramStr(params.modul_leistung_wp),
-          modul_typ: paramStr(params.modul_typ),
-        }
-      case 'balkonkraftwerk':
-        return {
-          leistung_wp: paramStr(params.leistung_wp),
-          anzahl: paramStr(params.anzahl, PARAM_BALKONKRAFTWERK_DEFAULTS.anzahl),
-          ausrichtung: paramStr(params.ausrichtung, PARAM_BALKONKRAFTWERK_DEFAULTS.ausrichtung),
-          neigung_grad: paramStr(params.neigung_grad, PARAM_BALKONKRAFTWERK_DEFAULTS.neigung_grad),
-          hat_speicher: (params.hat_speicher as boolean) ?? PARAM_BALKONKRAFTWERK_DEFAULTS.hat_speicher,
-          speicher_kapazitaet_wh: paramStr(params.speicher_kapazitaet_wh),
-        }
-      case 'sonstiges':
-        return {
-          kategorie: paramStr(params.kategorie, PARAM_SONSTIGES_DEFAULTS.kategorie),
-          beschreibung: paramStr(params.beschreibung),
-        }
-      default:
-        return {}
-    }
+  // ── Parameter-Setter (Switch/Select/RadioGroup) + Input-Event-Bridge ──
+  const applyParam = (paramName: string, value: string | boolean) => {
+    setParamData(prev => {
+      const next = { ...prev, [paramName]: value }
+      // Speicher: Arbitrage impliziert Netzladung — Flag mitziehen, damit das
+      // Monatsdaten-Feld `ladung_netz_kwh` sichtbar bleibt.
+      if (paramName === 'arbitrage_faehig' && value === true) next.laedt_aus_netz = true
+      return next
+    })
+  }
+  const setParam = (name: string, value: string | boolean) => applyParam(name, value)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    if (name.startsWith('param_')) applyParam(name.slice(6), value)
+    else setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const [paramData, setParamData] = useState<Record<string, string | boolean>>(getInitialParamData)
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target
-    if (name.startsWith('param_')) {
-      const paramName = name.replace('param_', '')
-      setParamData(prev => {
-        const next = { ...prev, [paramName]: type === 'checkbox' ? checked : value }
-        // Speicher: Arbitrage impliziert Netzladung — Flag mitziehen,
-        // damit das Monatsdaten-Feld `ladung_netz_kwh` sichtbar bleibt.
-        if (paramName === 'arbitrage_faehig' && type === 'checkbox' && checked) {
-          next.laedt_aus_netz = true
-        }
-        return next
+  // ── Validierung (V2): Pflichtfelder in DOM-Reihenfolge ──
+  const numFehler = (raw: string): string | undefined => {
+    if (!raw) return 'Pflichtfeld'
+    const n = parseFloat(raw)
+    if (Number.isNaN(n) || n <= 0) return 'Bitte einen gültigen Wert eingeben'
+    return undefined
+  }
+  const requiredParamNames = (): string[] => {
+    if (typ !== 'waermepumpe') return []
+    const m = paramData.effizienz_modus
+    if (m === 'gesamt_jaz') return ['jaz']
+    if (m === 'scop') return ['scop_heizung', 'scop_warmwasser']
+    if (m === 'getrennte_cops') return ['cop_heizung', 'cop_warmwasser']
+    return []
+  }
+  const pflichtFelder = (): { name: string; fehler: string | undefined }[] => {
+    const list = [{
+      name: 'bezeichnung',
+      fehler: formData.bezeichnung.trim() ? undefined : 'Bitte eine Bezeichnung eingeben',
+    }]
+    if (isParentRequired && possibleParents.length > 0) {
+      list.push({
+        name: 'parent',
+        fehler: formData.parent_investition_id ? undefined : 'PV-Module müssen einem Wechselrichter zugeordnet werden',
       })
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value
-      }))
     }
+    if (typ === 'pv-module') {
+      list.push({ name: 'leistung_kwp', fehler: numFehler(formData.leistung_kwp) })
+    }
+    for (const n of requiredParamNames()) {
+      list.push({ name: n, fehler: numFehler((paramData[n] as string) ?? '') })
+    }
+    return list
   }
+  const fehlerMap: Record<string, string | undefined> = Object.fromEntries(
+    pflichtFelder().map(p => [p.name, p.fehler]),
+  )
+  const zeige = (name: string): string | undefined =>
+    (submitted || touched.has(name)) ? fehlerMap[name] : undefined
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSubmitted(true)
 
-    if (!formData.bezeichnung.trim()) {
-      setError('Bitte eine Bezeichnung eingeben')
+    const ersterFehler = pflichtFelder().find(p => p.fehler)
+    if (ersterFehler) {
+      feldRefs.current[ersterFehler.name]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
 
@@ -301,12 +184,6 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         if (!isNaN(gradNum)) {
           convertedParams.ausrichtung_grad = gradNum
         }
-      }
-
-      // Validierung: Parent erforderlich?
-      if (isParentRequired && possibleParents.length > 0 && !formData.parent_investition_id) {
-        setError(`${typLabels[typ]} müssen einem ${parentLabel} zugeordnet werden`)
-        return
       }
 
       // Balkonkraftwerk: leistung_kwp aus Anzahl × Wp berechnen
@@ -364,27 +241,46 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     }
   }
 
+  // Parent-Auswahl (Select-SoT): Optionen aus möglichen Eltern-Investitionen.
+  const parentOptionen: SelectItem[] = possibleParents.map(p => ({ value: String(p.id), label: p.bezeichnung }))
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {error && <Alert type="error">{error}</Alert>}
 
-      {/* Basis-Daten */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Allgemein</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Bezeichnung"
-            name="bezeichnung"
-            value={formData.bezeichnung}
-            onChange={handleChange}
-            required
-          />
-          {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+      {/* ── Kern: Allgemein ── */}
+      <FormSection title="Allgemein">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <div ref={setFeldRef('bezeichnung')}>
+            <Input
+              label="Bezeichnung"
+              name="bezeichnung"
+              value={formData.bezeichnung}
+              onChange={handleInputChange}
+              onBlur={() => markTouched('bezeichnung')}
+              required
+              error={zeige('bezeichnung')}
+            />
+          </div>
           <DatumFeld
             label="Anschaffungsdatum"
             value={formData.anschaffungsdatum}
             onChange={(v) => setFormData(prev => ({ ...prev, anschaffungsdatum: v }))}
           />
+          <Input
+            label="Anschaffungskosten (€)"
+            name="anschaffungskosten_gesamt"
+            type="number" step="0.01" min="0"
+            value={formData.anschaffungskosten_gesamt}
+            onChange={handleInputChange}
+            hint="Gesamtkosten inkl. Installation"
+          />
+        </div>
+      </FormSection>
+
+      {/* ── Erweitert: Weitere Angaben & Kosten ── */}
+      <FormSection variant="erweitert" title="Weitere Angaben & Kosten">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           <DatumFeld
             label="Stilllegungsdatum (optional)"
             min={formData.anschaffungsdatum || '2000-01-01'}
@@ -393,169 +289,107 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             hint="Ab diesem Datum zählt die Komponente nicht mehr für Live/Prognose. Historische Werte bleiben erhalten."
           />
           <Input
-            label="Anschaffungskosten (€)"
-            name="anschaffungskosten_gesamt"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.anschaffungskosten_gesamt}
-            onChange={handleChange}
-            hint="Gesamtkosten inkl. Installation"
-          />
-          <Input
             label="Alternative Kosten (€)"
             name="anschaffungskosten_alternativ"
-            type="number"
-            step="0.01"
-            min="0"
+            type="number" step="0.01" min="0"
             value={formData.anschaffungskosten_alternativ}
-            onChange={handleChange}
+            onChange={handleInputChange}
             hint={alternativkostenHints[typ]}
           />
           <Input
             label="Betriebskosten/Jahr (€)"
             name="betriebskosten_jahr"
-            type="number"
-            step="0.01"
-            min="0"
+            type="number" step="0.01" min="0"
             value={formData.betriebskosten_jahr}
-            onChange={handleChange}
+            onChange={handleInputChange}
             hint="Wartung, Versicherung, etc."
           />
           <Input
             label="Graue CO2-Last (kg)"
             name="graue_last_kg"
-            type="number"
-            step="1"
-            min="0"
+            type="number" step="1" min="0"
             value={formData.graue_last_kg}
-            onChange={handleChange}
+            onChange={handleInputChange}
             hint="Herstellungs-CO2 (Datenblatt). Leer = Richtwert nach Typ/Größe (PV 1000 kg/kWp, Speicher 85 kg/kWh, WP 1100 kg, E-Auto 5000 kg)."
           />
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="aktiv"
+        <div className="mt-4">
+          <SchalterZeile
             checked={formData.aktiv}
-            onChange={handleChange}
-            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            onChange={(an) => setFormData(prev => ({ ...prev, aktiv: an }))}
+            label="Aktiv (in Berechnungen berücksichtigen)"
           />
-          <span className="text-gray-700 dark:text-gray-300">Aktiv (in Berechnungen berücksichtigen)</span>
-        </label>
-      </div>
-
-      {/* Parent-Zuordnung (z.B. PV-Module → Wechselrichter) */}
-      {parentTypen.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Zuordnung</h3>
-          <div>
-            <label htmlFor="parent_investition_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Gehört zu ({parentLabel})
-              {isParentRequired ? ' *' : ' (optional)'}
-              {loadingParents && <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">(Laden...)</span>}
-            </label>
-            {possibleParents.length > 0 ? (
-              <>
-                <select
-                  id="parent_investition_id"
-                  name="parent_investition_id"
-                  value={formData.parent_investition_id}
-                  onChange={(e) => setFormData(prev => ({ ...prev, parent_investition_id: e.target.value }))}
-                  className={`input w-full ${
-                    isParentRequired && !formData.parent_investition_id
-                      ? 'border-amber-500 dark:border-amber-500'
-                      : ''
-                  }`}
-                  required={isParentRequired}
-                >
-                  <option value="">{isParentRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}</option>
-                  {possibleParents.map(p => (
-                    <option key={p.id} value={p.id}>{p.bezeichnung}</option>
-                  ))}
-                </select>
-                {isParentRequired && !formData.parent_investition_id && (
-                  <p className="mt-1 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4" />
-                    {typ === 'pv-module' ? 'PV-Module müssen einem Wechselrichter zugeordnet werden' : 'Pflichtfeld'}
-                  </p>
-                )}
-              </>
-            ) : !loadingParents ? (
-              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {isParentRequired ? (
-                    <span>
-                      Bitte legen Sie zuerst einen <strong>{parentLabel}</strong> an,
-                      bevor Sie {typLabels[typ]} erstellen können.
-                    </span>
-                  ) : (
-                    <span>
-                      Kein {parentLabel} vorhanden.
-                      Zuordnung ist optional.
-                    </span>
-                  )}
-                </p>
-              </div>
-            ) : null}
-          </div>
         </div>
+      </FormSection>
+
+      {/* ── Kern: Zuordnung (z.B. PV-Module → Wechselrichter) ── */}
+      {parentTypen.length > 0 && (
+        <FormSection title="Zuordnung">
+          {possibleParents.length > 0 ? (
+            <div ref={setFeldRef('parent')}>
+              <Select
+                label={`Gehört zu (${parentLabel})${isParentRequired ? '' : ' (optional)'}`}
+                name="parent_investition_id"
+                value={formData.parent_investition_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, parent_investition_id: e.target.value }))}
+                onBlur={() => markTouched('parent')}
+                options={parentOptionen}
+                placeholder={isParentRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}
+                required={isParentRequired}
+                error={zeige('parent')}
+                hint={loadingParents ? 'Laden…' : undefined}
+              />
+            </div>
+          ) : !loadingParents ? (
+            <Alert type="warning">
+              {isParentRequired ? (
+                <>Bitte legen Sie zuerst einen <strong>{parentLabel}</strong> an, bevor Sie {typLabels[typ]} erstellen können.</>
+              ) : (
+                <>Kein {parentLabel} vorhanden. Zuordnung ist optional.</>
+              )}
+            </Alert>
+          ) : (
+            <p className="text-xs text-gray-400 dark:text-gray-500">Laden…</p>
+          )}
+        </FormSection>
       )}
 
-      {/* PV-Module spezifische Felder (direkte Felder, nicht in paramData) */}
+      {/* ── Kern: PV-Modul-Parameter (direkte Felder, nicht in paramData) ── */}
       {typ === 'pv-module' && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">PV-Modul Parameter</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Leistung (kWp)"
-              name="leistung_kwp"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.leistung_kwp}
-              onChange={handleChange}
-              required
-              hint="Gesamtleistung dieses PV-Moduls/Strings"
-            />
-            <div>
-              <label htmlFor="ausrichtung" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Ausrichtung
-              </label>
-              <select
-                id="ausrichtung"
-                name="ausrichtung"
-                value={formData.ausrichtung}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setFormData(prev => ({
-                    ...prev,
-                    ausrichtung: val,
-                    ...(val !== 'Ost-West' && { ausrichtung_grad: ausrichtungToGrad(val) }),
-                  }))
-                }}
-                className="input w-full"
-              >
-                <option value="Süd">Süd (0°)</option>
-                <option value="Südost">Südost (-45°)</option>
-                <option value="Ost">Ost (-90°)</option>
-                <option value="Nordost">Nordost (-135°)</option>
-                <option value="Nord">Nord (180°)</option>
-                <option value="Nordwest">Nordwest (135°)</option>
-                <option value="West">West (90°)</option>
-                <option value="Südwest">Südwest (45°)</option>
-                <option value="Ost-West">Ost-West (gemischt)</option>
-              </select>
+        <FormSection title="PV-Modul-Parameter">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <div ref={setFeldRef('leistung_kwp')}>
+              <Input
+                label="Leistung (kWp)"
+                name="leistung_kwp"
+                type="number" step="0.01" min="0"
+                value={formData.leistung_kwp}
+                onChange={handleInputChange}
+                onBlur={() => markTouched('leistung_kwp')}
+                required
+                error={zeige('leistung_kwp')}
+                hint="Gesamtleistung dieses PV-Moduls/Strings"
+              />
             </div>
+            <Select
+              label="Ausrichtung"
+              name="ausrichtung"
+              value={formData.ausrichtung}
+              onChange={(e) => {
+                const val = e.target.value
+                setFormData(prev => ({
+                  ...prev,
+                  ausrichtung: val,
+                  ...(val !== 'Ost-West' && { ausrichtung_grad: ausrichtungToGrad(val) }),
+                }))
+              }}
+              options={AUSRICHTUNG_OPTIONEN}
+            />
             {formData.ausrichtung !== 'Ost-West' && (
               <Input
                 label="Azimut (°)"
                 name="ausrichtung_grad"
-                type="number"
-                step="1"
-                min="-180"
-                max="180"
+                type="number" step="1" min="-180" max="180"
                 value={formData.ausrichtung_grad}
                 onChange={(e) => {
                   const gradValue = e.target.value
@@ -572,27 +406,30 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
             <Input
               label="Neigung (Grad)"
               name="neigung_grad"
-              type="number"
-              step="1"
-              min="0"
-              max="90"
+              type="number" step="1" min="0" max="90"
               value={formData.neigung_grad}
-              onChange={handleChange}
+              onChange={handleInputChange}
               hint="0° = flach, 90° = senkrecht"
             />
           </div>
-        </div>
+        </FormSection>
       )}
 
-      {/* Typ-spezifische Parameter */}
-      <TypSpecificFields typ={typ} paramData={paramData} onChange={handleChange} />
+      {/* ── Typ-spezifische Parameter ── */}
+      <InvestitionTypFelder
+        typ={typ}
+        paramData={paramData}
+        onInputChange={handleInputChange}
+        setParam={setParam}
+        zeige={zeige}
+        markTouched={markTouched}
+        setFeldRef={setFeldRef}
+      />
 
-      {/* Verknüpfte Infothek-Einträge */}
-      {investition && (
-        <InfothekVerknuepfungen investitionId={investition.id} />
-      )}
+      {/* ── Verknüpfte Infothek-Einträge (nur beim Bearbeiten) ── */}
+      {investition && <InfothekVerknuepfungen investitionId={investition.id} />}
 
-      {/* Actions */}
+      {/* ── Actions ── */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Abbrechen
@@ -602,859 +439,5 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         </Button>
       </div>
     </form>
-  )
-}
-
-interface TypSpecificFieldsProps {
-  typ: InvestitionTyp
-  paramData: Record<string, string | boolean>
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-}
-
-function TypSpecificFields({ typ, paramData, onChange }: TypSpecificFieldsProps) {
-  switch (typ) {
-    case 'e-auto':
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">E-Auto Parameter</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Batteriekapazität (kWh)"
-              name="param_batteriekapazitaet_kwh"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.batteriekapazitaet_kwh as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Verbrauch (kWh/100km)"
-              name="param_verbrauch_kwh_100km"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.verbrauch_kwh_100km as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Jahresfahrleistung (km)"
-              name="param_jahresfahrleistung_km"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.jahresfahrleistung_km as string}
-              onChange={onChange}
-            />
-            <Input
-              label="PV-Ladeanteil (%)"
-              name="param_pv_ladeanteil_prozent"
-              type="number"
-              step="1"
-              min="0"
-              max="100"
-              value={paramData.pv_ladeanteil_prozent as string}
-              onChange={onChange}
-              hint="Anteil der Ladung aus PV-Strom"
-            />
-          </div>
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-4">Vergleich mit Verbrenner</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Verbrenner-Verbrauch (L/100km)"
-              name="param_vergleich_verbrauch_l_100km"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.vergleich_verbrauch_l_100km as string}
-              onChange={onChange}
-              hint="Verbrauch des alternativen Verbrenners"
-            />
-            <Input
-              label="Benzinpreis (€/L)"
-              name="param_benzinpreis_euro"
-              type="number"
-              step="0.01"
-              min="0"
-              value={paramData.benzinpreis_euro as string}
-              onChange={onChange}
-              hint="Aktueller Benzin/Diesel-Preis"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm mt-4">
-            <input
-              type="checkbox"
-              name="param_v2h_faehig"
-              checked={paramData.v2h_faehig as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-gray-700 dark:text-gray-300">V2H-fähig (Vehicle-to-Home)</span>
-          </label>
-          {paramData.v2h_faehig && (
-            <Input
-              label="V2H Entladeleistung (kW)"
-              name="param_v2h_entladeleistung_kw"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.v2h_entladeleistung_kw as string}
-              onChange={onChange}
-            />
-          )}
-          <label className="flex items-center gap-2 text-sm mt-2">
-            <input
-              type="checkbox"
-              name="param_ist_dienstlich"
-              checked={paramData.ist_dienstlich as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-gray-700 dark:text-gray-300">Firmenwagen (dienstlich – kein Benzinvergleich im ROI)</span>
-          </label>
-          {paramData.ist_dienstlich && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 ml-6 -mt-1">
-              Die Kraftstoffersparnis geht an den Arbeitgeber. ROI-Berechnung: nur PV-Eigenverbrauchsvorteil
-              und AG-Erstattung (als "Sonstiger Ertrag" im Monatsabschluss erfassen).
-            </p>
-          )}
-        </div>
-      )
-
-    case 'speicher':
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Speicher Parameter</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Kapazität (kWh)"
-              name="param_kapazitaet_kwh"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.kapazitaet_kwh as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Nutzbare Kapazität (kWh)"
-              name="param_nutzbare_kapazitaet_kwh"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.nutzbare_kapazitaet_kwh as string}
-              onChange={onChange}
-              hint="Typisch 90-95% der Gesamtkapazität"
-            />
-            <Input
-              label="Max. Ladeleistung (kW)"
-              name="param_max_ladeleistung_kw"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.max_ladeleistung_kw as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Max. Entladeleistung (kW)"
-              name="param_max_entladeleistung_kw"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.max_entladeleistung_kw as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Wirkungsgrad (%)"
-              name="param_wirkungsgrad_prozent"
-              type="number"
-              step="any"
-              min="0"
-              max="100"
-              value={paramData.wirkungsgrad_prozent as string}
-              onChange={onChange}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="param_laedt_aus_netz"
-              checked={(paramData.laedt_aus_netz as boolean) || (paramData.arbitrage_faehig as boolean)}
-              disabled={paramData.arbitrage_faehig as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 disabled:opacity-60"
-            />
-            <span className="text-gray-700 dark:text-gray-300">
-              Lädt aus dem Netz (z. B. Backup-/Notladung)
-              {(paramData.arbitrage_faehig as boolean) && (
-                <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                  — automatisch aktiv durch Arbitrage
-                </span>
-              )}
-            </span>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="param_arbitrage_faehig"
-              checked={paramData.arbitrage_faehig as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-gray-700 dark:text-gray-300">Arbitrage-fähig (Netzladen bei Niedrigtarif)</span>
-          </label>
-        </div>
-      )
-
-    case 'waermepumpe': {
-      const effizienzModus = paramData.effizienz_modus as string
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Wärmepumpe Parameter</h3>
-
-          {/* Wärmepumpenart */}
-          <div>
-            <label htmlFor="param_wp_art" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Wärmepumpenart
-            </label>
-            <select
-              id="param_wp_art"
-              name="param_wp_art"
-              value={paramData.wp_art as string}
-              onChange={(e) => onChange({ target: { name: 'param_wp_art', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
-              className="input w-full"
-            >
-              <option value="luft_wasser">Luft-Wasser (Außenluft → Wasser)</option>
-              <option value="sole_wasser">Sole-Wasser (Erdwärme → Wasser)</option>
-              <option value="grundwasser">Grundwasser-Wärmepumpe</option>
-              <option value="luft_luft">Luft-Luft (Klimaanlage)</option>
-            </select>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Wird für den fairen JAZ-Vergleich in der Community verwendet
-            </p>
-            {paramData.wp_art === 'luft_luft' && (
-              <p className="text-xs text-blue-700 dark:text-blue-300 mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded px-2 py-1.5">
-                <strong>Split-Klimaanlage:</strong> Es genügt der Stromverbrauchs-Sensor.
-                Heizenergie/Warmwasser sind bei Klimas meist nicht gemessen — die JAZ-Kachel
-                bleibt dann leer („—"), die Stromauswertung funktioniert trotzdem.
-              </p>
-            )}
-          </div>
-
-          {/* Modus-Auswahl */}
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Berechnungsmodus für Effizienz
-            </label>
-            <div className="flex flex-col gap-2">
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="param_effizienz_modus"
-                  value="gesamt_jaz"
-                  checked={effizienzModus === 'gesamt_jaz'}
-                  onChange={onChange}
-                  className="text-primary-600 focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                  Jahresarbeitszahl (JAZ) - Gemessen vor Ort
-                </span>
-              </label>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="param_effizienz_modus"
-                  value="scop"
-                  checked={effizienzModus === 'scop'}
-                  onChange={onChange}
-                  className="text-primary-600 focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                  SCOP (EU-Energielabel) - Aus Datenblatt
-                </span>
-              </label>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="param_effizienz_modus"
-                  value="getrennte_cops"
-                  checked={effizienzModus === 'getrennte_cops'}
-                  onChange={onChange}
-                  className="text-primary-600 focus:ring-primary-500"
-                />
-                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                  Getrennte COPs (Heizung/Warmwasser)
-                </span>
-              </label>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {effizienzModus === 'getrennte_cops'
-                ? 'Separate COPs für Heizung (~3,9) und Warmwasser (~3,0) - präziser bei unterschiedlichen Betriebspunkten'
-                : effizienzModus === 'scop'
-                ? 'EU-genormter SCOP vom Energielabel - realistischer als Hersteller-COP, aber standortunabhängig'
-                : 'Gemessene Jahresarbeitszahl am eigenen Standort - der genaueste Wert, wenn verfügbar'}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Nennleistung (kW)"
-              name="param_leistung_kw"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.leistung_kw as string}
-              onChange={onChange}
-              hint="Thermische Leistung"
-            />
-
-            {/* Modus: gesamt_jaz */}
-            {effizienzModus === 'gesamt_jaz' && (
-              <Input
-                label="Jahresarbeitszahl (JAZ)"
-                name="param_jaz"
-                type="number"
-                step="any"
-                min="1"
-                max="10"
-                value={paramData.jaz as string}
-                onChange={onChange}
-                hint="Typisch 3-4 für Luft-WP, 4-5 für Sole-WP"
-                required
-              />
-            )}
-
-            {/* Modus: scop (EU-Label) */}
-            {effizienzModus === 'scop' && (
-              <>
-                <Input
-                  label="SCOP Heizung"
-                  name="param_scop_heizung"
-                  type="number"
-                  step="any"
-                  min="1"
-                  max="10"
-                  value={paramData.scop_heizung as string}
-                  onChange={onChange}
-                  hint="Vom EU-Energielabel (z.B. 4,5)"
-                  required
-                />
-                <Input
-                  label="SCOP Warmwasser"
-                  name="param_scop_warmwasser"
-                  type="number"
-                  step="any"
-                  min="1"
-                  max="10"
-                  value={paramData.scop_warmwasser as string}
-                  onChange={onChange}
-                  hint="Typisch 2,8-3,5"
-                  required
-                />
-                <div>
-                  <label htmlFor="param_vorlauftemperatur" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Vorlauftemperatur (EU-Label)
-                  </label>
-                  <select
-                    id="param_vorlauftemperatur"
-                    name="param_vorlauftemperatur"
-                    value={paramData.vorlauftemperatur as string}
-                    onChange={(e) => onChange({ target: { name: 'param_vorlauftemperatur', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
-                    className="input w-full"
-                  >
-                    <option value="35">35°C (Fußbodenheizung)</option>
-                    <option value="55">55°C (Heizkörper)</option>
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">SCOP-Wert muss zur Vorlauftemperatur passen</p>
-                </div>
-              </>
-            )}
-
-            {/* Modus: getrennte_cops */}
-            {effizienzModus === 'getrennte_cops' && (
-              <>
-                <Input
-                  label="COP Heizung"
-                  name="param_cop_heizung"
-                  type="number"
-                  step="any"
-                  min="1"
-                  max="10"
-                  value={paramData.cop_heizung as string}
-                  onChange={onChange}
-                  hint="Typisch 3,5-4,5 (Vorlauf 35°C)"
-                  required
-                />
-                <Input
-                  label="COP Warmwasser"
-                  name="param_cop_warmwasser"
-                  type="number"
-                  step="any"
-                  min="1"
-                  max="10"
-                  value={paramData.cop_warmwasser as string}
-                  onChange={onChange}
-                  hint="Typisch 2,5-3,5 (Vorlauf 55°C)"
-                  required
-                />
-              </>
-            )}
-
-            {/* Getrennte Strommessung */}
-            <label className="flex items-center gap-2 mt-2">
-              <input
-                type="checkbox"
-                name="param_getrennte_strommessung"
-                checked={paramData.getrennte_strommessung === 'true'}
-                onChange={(e) => onChange({ target: { name: 'param_getrennte_strommessung', value: e.target.checked ? 'true' : 'false', type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                Getrennte Strommessung (Heizen / Warmwasser)
-              </span>
-            </label>
-            <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-              Aktivieren wenn separate Stromzähler für Heizung und Warmwasser vorhanden sind. Ermöglicht getrennte COP-Berechnung.
-            </p>
-
-            {/* Wärmebedarf (immer anzeigen) */}
-            <Input
-              label="Heizwärmebedarf (kWh/Jahr)"
-              name="param_heizwaermebedarf_kwh"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.heizwaermebedarf_kwh as string}
-              onChange={onChange}
-              hint="Aus Energieausweis oder Schätzung"
-            />
-            <Input
-              label="Warmwasserbedarf (kWh/Jahr)"
-              name="param_warmwasserbedarf_kwh"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.warmwasserbedarf_kwh as string}
-              onChange={onChange}
-              hint="~500 kWh/Person/Jahr typisch"
-            />
-          </div>
-
-          {/* Vergleich mit alter Heizung */}
-          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            Vergleich mit alter Heizung (für ROI-Berechnung)
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Alter Energieträger
-              </label>
-              <select
-                name="param_alter_energietraeger"
-                value={paramData.alter_energietraeger as string}
-                onChange={(e) => onChange({ target: { name: 'param_alter_energietraeger', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
-                className="input w-full"
-              >
-                <option value="gas">Erdgas</option>
-                <option value="oel">Heizöl</option>
-                <option value="strom">Strom (Direktheizung)</option>
-              </select>
-            </div>
-            <Input
-              label="Alter Preis (ct/kWh)"
-              name="param_alter_preis_cent_kwh"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.alter_preis_cent_kwh as string}
-              onChange={onChange}
-              hint="Gas ~12 ct, Öl ~10 ct"
-            />
-            <Input
-              label="PV-Anteil (%)"
-              name="param_pv_anteil_prozent"
-              type="number"
-              step="1"
-              min="0"
-              max="100"
-              value={paramData.pv_anteil_prozent as string}
-              onChange={onChange}
-              hint="Anteil des WP-Stroms aus PV"
-            />
-            <Input
-              label="Zusatzkosten Alt-Heizung (€/Jahr)"
-              name="param_alternativ_zusatzkosten_jahr"
-              type="number"
-              step="1"
-              min="0"
-              value={paramData.alternativ_zusatzkosten_jahr as string}
-              onChange={onChange}
-              hint="Schornsteinfeger, Wartung, Grundpreis Gaszähler etc."
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="param_sg_ready"
-              checked={paramData.sg_ready as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-gray-700 dark:text-gray-300">SG Ready (Smart Grid fähig)</span>
-          </label>
-        </div>
-      )
-    }
-
-    case 'wallbox':
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Wallbox Parameter</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Max. Ladeleistung (kW)"
-              name="param_max_ladeleistung_kw"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.max_ladeleistung_kw as string}
-              onChange={onChange}
-              hint="Typisch 11 kW oder 22 kW"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="param_bidirektional"
-                checked={paramData.bidirektional as boolean}
-                onChange={onChange}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-gray-700 dark:text-gray-300">Bidirektional (V2H/V2G)</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="param_pv_optimiert"
-                checked={paramData.pv_optimiert as boolean}
-                onChange={onChange}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-gray-700 dark:text-gray-300">PV-Überschussladen möglich</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="param_ist_dienstlich"
-                checked={paramData.ist_dienstlich as boolean}
-                onChange={onChange}
-                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <span className="text-gray-700 dark:text-gray-300">Ausschließlich dienstliches Laden (Firmenwagen)</span>
-            </label>
-            {paramData.ist_dienstlich && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 ml-6 -mt-1">
-                ROI-Berechnung: Netzkosten + entgangene Einspeisung als Ausgaben.
-                Erträge (z. B. AG-Erstattung) als "Sonstige Erträge" im Monatsabschluss erfassen.
-                Für gemischte Nutzung (privat + dienstlich): zwei separate Wallbox-Einträge anlegen.
-              </p>
-            )}
-          </div>
-        </div>
-      )
-
-    case 'wechselrichter':
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Wechselrichter Parameter</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Max. Leistung (kW)"
-              name="param_max_leistung_kw"
-              type="number"
-              step="any"
-              min="0"
-              value={paramData.max_leistung_kw as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Wirkungsgrad (%)"
-              name="param_wirkungsgrad_prozent"
-              type="number"
-              step="any"
-              min="0"
-              max="100"
-              value={paramData.wirkungsgrad_prozent as string}
-              onChange={onChange}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="param_hybrid"
-              checked={paramData.hybrid as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-gray-700 dark:text-gray-300">Hybrid-Wechselrichter (mit Speicher-Anschluss)</span>
-          </label>
-        </div>
-      )
-
-    case 'pv-module':
-      // PV-Module: Anzahl und Modulleistung für Berechnung kWp = Anzahl × Wp / 1000
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-            Modul-Details (optional)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Anzahl Module"
-              name="param_anzahl_module"
-              type="number"
-              step="1"
-              min="1"
-              value={paramData.anzahl_module as string}
-              onChange={onChange}
-              hint="Anzahl der PV-Module in diesem String"
-            />
-            <Input
-              label="Leistung pro Modul (Wp)"
-              name="param_modul_leistung_wp"
-              type="number"
-              step="1"
-              min="0"
-              value={paramData.modul_leistung_wp as string}
-              onChange={onChange}
-              hint="z.B. 400 Wp, 500 Wp"
-            />
-            <Input
-              label="Modul-Typ"
-              name="param_modul_typ"
-              type="text"
-              value={paramData.modul_typ as string}
-              onChange={onChange}
-              placeholder="z.B. Longi Hi-MO 5"
-              hint="Hersteller und Modell"
-            />
-          </div>
-          {paramData.anzahl_module && paramData.modul_leistung_wp && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Berechnete Leistung: {fmtZahl((parseInt(paramData.anzahl_module as string) || 0) * (parseInt(paramData.modul_leistung_wp as string) || 0) / 1000, 2)} kWp
-            </p>
-          )}
-        </div>
-      )
-
-    case 'balkonkraftwerk': {
-      const bkwLeistungKwp = ((parseInt(paramData.anzahl as string) || 0) * (parseInt(paramData.leistung_wp as string) || 0) / 1000)
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-            Balkonkraftwerk Parameter
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              label="Anzahl Module"
-              name="param_anzahl"
-              type="number"
-              step="1"
-              min="1"
-              value={paramData.anzahl as string}
-              onChange={onChange}
-            />
-            <Input
-              label="Leistung pro Modul (Wp)"
-              name="param_leistung_wp"
-              type="number"
-              step="1"
-              min="0"
-              value={paramData.leistung_wp as string}
-              onChange={onChange}
-              hint={bkwLeistungKwp > 0 ? `= ${fmtZahl(bkwLeistungKwp, 2)} kWp` : undefined}
-            />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Ausrichtung
-              </label>
-              <select
-                name="param_ausrichtung"
-                value={paramData.ausrichtung as string}
-                onChange={(e) => onChange({ target: { name: 'param_ausrichtung', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
-                className="input w-full"
-              >
-                <option value="Süd">Süd (0°)</option>
-                <option value="Südost">Südost (-45°)</option>
-                <option value="Ost">Ost (-90°)</option>
-                <option value="Nordost">Nordost (-135°)</option>
-                <option value="Nord">Nord (180°)</option>
-                <option value="Nordwest">Nordwest (135°)</option>
-                <option value="West">West (90°)</option>
-                <option value="Südwest">Südwest (45°)</option>
-                <option value="Ost-West">Ost-West (gemischt)</option>
-              </select>
-            </div>
-            <Input
-              label="Neigung (Grad)"
-              name="param_neigung_grad"
-              type="number"
-              step="1"
-              min="0"
-              max="90"
-              value={paramData.neigung_grad as string}
-              onChange={onChange}
-              hint="0° = flach, 90° = senkrecht"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm mt-4">
-            <input
-              type="checkbox"
-              name="param_hat_speicher"
-              checked={paramData.hat_speicher as boolean}
-              onChange={onChange}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-gray-700 dark:text-gray-300">Mit Speicher (z.B. Anker SOLIX)</span>
-          </label>
-          {paramData.hat_speicher && (
-            <>
-              <Input
-                label="Speicher-Kapazität (Wh)"
-                name="param_speicher_kapazitaet_wh"
-                type="number"
-                step="1"
-                min="0"
-                value={paramData.speicher_kapazitaet_wh as string}
-                onChange={onChange}
-                hint="z.B. 1600 Wh für Anker SOLIX"
-              />
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                Für vollständige Auswertungen (Live-Dashboard, Cockpit, Tagesverlauf) bitte den Speicher
-                zusätzlich als separate <strong>Speicher-Investition</strong> erfassen und dort die
-                Batterieleistung sowie den SoC-Sensor zuordnen.
-              </p>
-            </>
-          )}
-        </div>
-      )
-    }
-
-    case 'sonstiges':
-      return (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-            Sonstige Investition
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Kategorie
-              </label>
-              <select
-                name="param_kategorie"
-                value={paramData.kategorie as string}
-                onChange={(e) => onChange({ target: { name: 'param_kategorie', value: e.target.value, type: 'text' } } as React.ChangeEvent<HTMLInputElement>)}
-                className="input w-full"
-              >
-                <option value="erzeuger">Erzeuger (z.B. Mini-BHKW, Mini-Wind)</option>
-                <option value="verbraucher">Verbraucher (z.B. Klimaanlage, Pool)</option>
-                <option value="speicher">Speicher (z.B. Wasserstoff)</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Bestimmt welche Monatsdaten erfasst werden
-              </p>
-            </div>
-            <Input
-              label="Beschreibung"
-              name="param_beschreibung"
-              value={paramData.beschreibung as string}
-              onChange={onChange}
-              placeholder="z.B. Mini-Blockheizkraftwerk Viessmann"
-              hint="Kurze Beschreibung der Investition"
-            />
-          </div>
-        </div>
-      )
-
-    default:
-      return null
-  }
-}
-
-// Kategorie-Labels für die Infothek-Verknüpfungen (Subset, kein eigener Import nötig)
-const KATEGORIE_LABELS: Record<string, string> = {
-  garantie: 'Komponente / Datenblatt',
-  ansprechpartner: 'Vertragspartner',
-  wartungsvertrag: 'Wartungsvertrag',
-  marktstammdatenregister: 'MaStR',
-  foerderung: 'Förderung',
-  versicherung: 'Versicherung',
-  stromvertrag: 'Stromvertrag',
-  einspeisevertrag: 'Einspeisevertrag',
-  steuerdaten: 'Steuerdaten',
-  sonstiges: 'Sonstiges',
-}
-
-function InfothekVerknuepfungen({ investitionId }: { investitionId: number }) {
-  const [eintraege, setEintraege] = useState<InfothekEintrag[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const refresh = useCallback(() => {
-    setLoading(true)
-    infothekApi.listFuerInvestition(investitionId)
-      .then(setEintraege)
-      .catch(() => setEintraege([]))
-      .finally(() => setLoading(false))
-  }, [investitionId])
-
-  useEffect(() => { refresh() }, [refresh])
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Verknüpfte Infothek-Einträge</h3>
-        <a
-          href="#/einstellungen/infothek"
-          className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
-        >
-          <ExternalLink className="w-3 h-3" />
-          Infothek öffnen
-        </a>
-      </div>
-
-      {loading ? (
-        <p className="text-xs text-gray-400 dark:text-gray-500">Laden...</p>
-      ) : eintraege.length === 0 ? (
-        <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Keine Infothek-Einträge verknüpft. Gerätedaten, Ansprechpartner und Wartungsverträge
-            können in der{' '}
-            <a href="#/einstellungen/infothek" className="underline text-primary-600 dark:text-primary-400">
-              Infothek
-            </a>{' '}
-            verwaltet und mit dieser Investition verknüpft werden.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {eintraege.map(e => (
-            <a
-              key={e.id}
-              href="#/einstellungen/infothek"
-              className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
-            >
-              <FileText className="w-3.5 h-3.5 text-primary-500 shrink-0" />
-              <span className="text-sm text-gray-900 dark:text-white truncate group-hover:underline">
-                {e.bezeichnung}
-              </span>
-              <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
-                {KATEGORIE_LABELS[e.kategorie] || e.kategorie}
-              </span>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }

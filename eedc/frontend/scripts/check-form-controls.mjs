@@ -3,11 +3,18 @@
  * check-form-controls.mjs — SoT-Garantie für Formular-Controls (Style-Guide
  * Teil D, M1 / D6; Fundament „Formulare V4").
  *
- * Regel (M1): In den dedizierten Formular-Komponenten (`src/components/forms/**`)
- * KEINE rohen `<select>` / `<textarea>` / `<input>` / `<label>` — dort sind die
- * SoT-Controls Pflicht: `Input` · `Select` · `Switch` · `Textarea` · `DatumFeld`
- * · `RadioGroup` (mit interner Feld-Anatomie inkl. Label). So kann der Drift, den
- * R17 einsammelte (D17-7/-8/-10, uneinheitliche Pflicht-Marker), nicht zurück.
+ * Regel (M1): In den dedizierten Formular-Komponenten (`src/components/forms/**`,
+ * **rekursiv** inkl. `sections/**`) KEINE rohen `<select>` / `<textarea>` /
+ * `<input>` / `<label>` — dort sind die SoT-Controls Pflicht: `Input` · `Select` ·
+ * `Switch` · `Textarea` · `DatumFeld` · `RadioGroup` (mit interner Feld-Anatomie
+ * inkl. Label). So kann der Drift, den R17 einsammelte (D17-7/-8/-10, uneinheitliche
+ * Pflicht-Marker), nicht zurück.
+ *
+ * Rekursions-Fund (Slice 5): der Scan lief zuvor NICHT rekursiv → ausgelagerte
+ * Sektionen (`sections/SonstigePositionenFields`) schmuggelten rohe Primitive am
+ * Wächter vorbei. Beim Split von InvestitionForm in `sections/**` muss der Guard
+ * rekursiv sein, sonst wären die ausgelagerten Dateien ungegatet
+ * ([[feedback_verifiziert_nur_was_check_abdeckt]]).
  *
  * Scope-Grenze (bewusst): nur `src/components/forms/**`. Formulare, die noch inline
  * in Seiten leben (z. B. StrompreisForm in `pages/StrompreiseTeile.tsx`), sind hier
@@ -16,31 +23,42 @@
  * `components/forms/`, greift der Wächter automatisch.
  *
  * Allowlist: Formulare, die noch nicht auf V4-SoT gehoben sind (kommen slice-weise).
- * Ein migriertes Formular wird HIER entfernt → ab dann bewacht. Ziel: leere Liste.
+ * Ein migriertes Formular wird HIER entfernt → ab dann bewacht. Ziel: leere Liste
+ * — mit Slice 5 (InvestitionForm-Split + SonstigePositionenFields) **erreicht**.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
-const FORMS = join(ROOT, 'src', 'components', 'forms')
+// Bewachte Formular-Pfade (rekursiv): dedizierte Formulare + Setup-Wizard-Steps
+// (Slice 6 auf V4-SoT gehoben → hier mit aufgenommen, damit der Drift nicht zurück).
+const FORM_ROOTS = [
+  join(ROOT, 'src', 'components', 'forms'),
+  join(ROOT, 'src', 'components', 'setup-wizard'),
+]
 
-// Noch nicht auf V4-SoT gehoben (Umbau-Reihenfolge KONZEPT-FORMULARE-V4 §3):
-//   InvestitionForm (+ SonstigePositionenFields) = Slice 5.
-// Beim Migrieren des jeweiligen Formulars den Eintrag entfernen (MonatsdatenForm
-// = Slice 3, InfothekForm = Slice 4 — migriert → entfernt).
-const ALLOWLIST = new Set([
-  'InvestitionForm.tsx',
-  'SonstigePositionenFields.tsx',
-])
+// Dauer-Ausnahme (kein pending-Migration): `WelcomeStep` nutzt einen versteckten
+// `<input type="file">` für den JSON-Restore — dafür gibt es kein SoT-Äquivalent
+// (BildUpload ist bildspezifisch). Sonst leer: alle Formulare SoT-rein.
+const ALLOWLIST = new Set(['WelcomeStep.tsx'])
 
 const ROH = /<(select|textarea|input|label)\b/g
 
 const lineOf = (src, index) => src.slice(0, index).split('\n').length
 
-const formFiles = readdirSync(FORMS)
-  .filter((n) => n.endsWith('.tsx') && !n.endsWith('.test.tsx'))
-  .map((n) => join(FORMS, n))
+/** Rekursiv alle .tsx (ohne Tests) unter `dir` einsammeln. */
+function tsxFiles(dir) {
+  const out = []
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name)
+    if (statSync(p).isDirectory()) out.push(...tsxFiles(p))
+    else if (name.endsWith('.tsx') && !name.endsWith('.test.tsx')) out.push(p)
+  }
+  return out
+}
+
+const formFiles = FORM_ROOTS.flatMap(tsxFiles)
 
 let bewacht = 0
 const violations = []

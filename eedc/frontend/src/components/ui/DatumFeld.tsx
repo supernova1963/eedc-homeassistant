@@ -3,9 +3,11 @@
  *
  * Gleiche Label-/Hint-Anatomie wie {@link Input}, aber statt des nativen
  * `<input type="date">` sitzt der DatumPicker-SoT im Feld — ein Kalender-Icon,
- * ein Popover-Stil, mobil feste Trigger-Höhe. Für die Einstellungen-Formulare
- * (Strompreise · Anlage · Komponenten); Setup-Wizard/Repair bleiben bewusst
- * nativ (Entscheid Gernot 2026-07-03).
+ * ein Popover-Stil, mobil feste Trigger-Höhe. Für Formularfelder mit gestapeltem
+ * Label (Einstellungen-Formulare, Setup-Wizard-Steps, Reparatur-Werkbank).
+ * Inline-Datumsfilter (Label links neben dem Feld) nutzen den {@link DatumPicker}
+ * direkt. (Die frühere Ausnahme „Setup/Repair bleiben nativ" vom 2026-07-03 ist
+ * durch die Forms→V4-Abnahme 2026-07-08 aufgehoben — Style-Guide Teil D, M2.)
  */
 import { DatumPicker } from './DatumPicker'
 
@@ -17,6 +19,7 @@ export function DatumFeld({
   max = '2099-12-31',
   required,
   hint,
+  disabled = false,
 }: {
   label: string
   /** `YYYY-MM-DD` oder leer. */
@@ -26,6 +29,8 @@ export function DatumFeld({
   max?: string
   required?: boolean
   hint?: string
+  /** Feld deaktivieren (z. B. während eines Reparatur-Laufs). */
+  disabled?: boolean
 }) {
   return (
     <div className="w-full">
@@ -39,6 +44,7 @@ export function DatumFeld({
         onChange={onChange}
         min={min}
         max={max}
+        disabled={disabled}
         ariaLabel={label}
         className="w-full min-h-[42px]"
       />

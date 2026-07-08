@@ -1,7 +1,7 @@
 import type { ElementType } from 'react'
 import type { Investition } from '../../../types'
 import type { SonstigePosition } from './types'
-import { SonstigePositionenFields } from './SonstigePositionenFields'
+import { SonstigePositionenFields } from '../SonstigePositionenFields'
 import { readFeldWert, type FeldDefinition } from '../../../lib/fieldDefinitions'
 import { Input, FormSection } from '../../ui'
 

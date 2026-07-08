@@ -1,10 +1,19 @@
 /**
- * Wiederverwendbare Komponente für "Sonstige Erträge & Ausgaben"
- * Wird in MonatsdatenForm und MonatsabschlussWizard verwendet.
+ * SonstigePositionenFields — EIN SoT für „Sonstige Erträge & Ausgaben".
+ *
+ * Konsolidiert (Slice 5, Forms→V4) die zwei früheren Near-Duplikate
+ * (`forms/SonstigePositionenFields` default + `forms/sections/…` named) zu einer
+ * SoT-reinen Komponente ([[feedback_bestehende_mechanik_nutzen_nicht_erfinden]]).
+ * Genutzt von `MonatsdatenForm` (via `sections/InvestitionSection`, mit `invId`
+ * für eindeutige aria-Labels) und `monatsabschluss/InvestitionStep` (ohne `invId`).
+ *
+ * Controls = SoT (Style-Guide Teil D, M1): `Input` (Bezeichnung/Betrag),
+ * `SegmentControl` (Ertrag/Ausgabe = Auswahl 2, D1), `Button` (Position entfernen).
  */
-
 import { useState } from 'react'
+import { Input, SegmentControl, Button } from '../ui'
 import { fmtZahl } from '../../lib'
+import { X } from 'lucide-react'
 
 export interface SonstigePosition {
   bezeichnung: string
@@ -13,12 +22,20 @@ export interface SonstigePosition {
 }
 
 interface Props {
+  /** Nur für eindeutige aria-Labels bei mehreren Instanzen (Monatsdaten je Investition). */
+  invId?: number
   positionen: SonstigePosition[]
   onChange: (positionen: SonstigePosition[]) => void
 }
 
-export default function SonstigePositionenFields({ positionen, onChange }: Props) {
+const TYP_OPTIONEN = [
+  { key: 'ertrag' as const, label: 'Ertrag' },
+  { key: 'ausgabe' as const, label: 'Ausgabe' },
+]
+
+export function SonstigePositionenFields({ invId, positionen, onChange }: Props) {
   const [expanded, setExpanded] = useState(positionen.length > 0)
+  const suffix = invId != null ? ` (Investition ${invId})` : ''
 
   const addPosition = () => {
     onChange([...positionen, { bezeichnung: '', betrag: 0, typ: 'ausgabe' }])
@@ -29,9 +46,9 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
     onChange(positionen.filter((_, i) => i !== index))
   }
 
-  const updatePosition = (index: number, field: keyof SonstigePosition, value: string | number) => {
+  const updatePosition = (index: number, patch: Partial<SonstigePosition>) => {
     const updated = [...positionen]
-    updated[index] = { ...updated[index], [field]: value }
+    updated[index] = { ...updated[index], ...patch }
     onChange(updated)
   }
 
@@ -47,13 +64,13 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
           onClick={addPosition}
           className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
         >
-          + Sonstige Ertr&auml;ge &amp; Ausgaben erfassen
+          + Sonstige Erträge &amp; Ausgaben erfassen
         </button>
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-              Sonstige Ertr&auml;ge &amp; Ausgaben
+              Sonstige Erträge &amp; Ausgaben
             </span>
             <button
               type="button"
@@ -67,59 +84,49 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
           {positionen.map((pos, index) => (
             <div key={index} className="grid grid-cols-12 gap-2 items-end">
               <div className="col-span-5">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Bezeichnung</label>
-                )}
-                <input
-                  type="text"
+                <Input
+                  label={index === 0 ? 'Bezeichnung' : undefined}
+                  aria-label={`Bezeichnung Position ${index + 1}${suffix}`}
                   value={pos.bezeichnung}
-                  onChange={(e) => updatePosition(index, 'bezeichnung', e.target.value)}
+                  onChange={(e) => updatePosition(index, { bezeichnung: e.target.value })}
                   placeholder="z.B. THG-Quote, Reparatur"
-                  aria-label={`Bezeichnung Position ${index + 1}`}
-                  className="input text-sm py-1.5"
                 />
               </div>
               <div className="col-span-3">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Betrag (EUR)</label>
-                )}
-                <input
+                <Input
+                  label={index === 0 ? 'Betrag (€)' : undefined}
+                  aria-label={`Betrag Position ${index + 1}${suffix}`}
                   type="number"
                   step="0.01"
                   min="0"
                   value={pos.betrag || ''}
-                  onChange={(e) => updatePosition(index, 'betrag', parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                  aria-label={`Betrag Position ${index + 1}`}
-                  className="input text-sm py-1.5"
+                  onChange={(e) => updatePosition(index, { betrag: parseFloat(e.target.value) || 0 })}
+                  placeholder="0,00"
                 />
               </div>
               <div className="col-span-3">
                 {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Typ</label>
+                  <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Typ</span>
                 )}
-                <select
+                <SegmentControl
+                  ariaLabel={`Typ Position ${index + 1}${suffix}`}
+                  optionen={TYP_OPTIONEN}
                   value={pos.typ}
-                  onChange={(e) => updatePosition(index, 'typ', e.target.value)}
-                  className="input text-sm py-1.5"
-                  aria-label={`Typ Position ${index + 1}`}
-                >
-                  <option value="ertrag">Ertrag</option>
-                  <option value="ausgabe">Ausgabe</option>
-                </select>
+                  onChange={(typ) => updatePosition(index, { typ })}
+                />
               </div>
               <div className="col-span-1 flex justify-center">
-                {index === 0 && (
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">&nbsp;</label>
-                )}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => removePosition(index)}
-                  className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 p-1 text-sm"
+                  title={`Position ${index + 1} entfernen`}
                   aria-label={`Position ${index + 1} entfernen`}
+                  className="text-red-500 hover:text-red-600 dark:text-red-400"
                 >
-                  &times;
-                </button>
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
             </div>
           ))}
@@ -127,13 +134,13 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
           {positionen.length > 0 && (
             <div className="text-xs flex gap-3 pt-1">
               <span className="text-green-600 dark:text-green-400">
-                Ertr&auml;ge: {fmtZahl(ertraege, 2)} &euro;
+                Erträge: {fmtZahl(ertraege, 2)} €
               </span>
               <span className="text-red-600 dark:text-red-400">
-                Ausgaben: {fmtZahl(ausgaben, 2)} &euro;
+                Ausgaben: {fmtZahl(ausgaben, 2)} €
               </span>
               <span className={`font-medium ${netto >= 0 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                Netto: {netto >= 0 ? '+' : ''}{fmtZahl(netto, 2)} &euro;
+                Netto: {netto >= 0 ? '+' : ''}{fmtZahl(netto, 2)} €
               </span>
             </div>
           )}
@@ -142,3 +149,5 @@ export default function SonstigePositionenFields({ positionen, onChange }: Props
     </div>
   )
 }
+
+export default SonstigePositionenFields
