@@ -22,6 +22,12 @@ DB = os.environ.get("EEDC_RESEED_DB", "/tmp/eedc_v4devbox.db")
 ANLAGE = 1
 WP_ID, WB_ID = "4", "5"
 
+# PV/BKW-Split der Tages-komponenten_kwh (R17/Verlauf-Vergleich): PV-Module
+# (inv 6/7/8) unter pv_-, Balkonkraftwerk (inv 9) unter bkw_-Präfix — identisch zu
+# den Default-Anteilen im Sommer-Seed, damit die Monat-Sicht „Erzeugung" über ALLE
+# Monate konsistent PV-Anlage vs. BKW trennt. Anteile summieren auf 1 (Σ = Tages-PV).
+TAGES_PV_SPLIT = {"pv_6": 0.26, "pv_7": 0.31, "pv_8": 0.38, "bkw_9": 0.05}
+
 con = sqlite3.connect(DB)
 cur = con.cursor()
 now = "2026-06-24 00:00:00"
@@ -49,7 +55,7 @@ for datum, pv, wp, wb, stunden in rows:
     pv = pv or 0.0
     # OM-Prognose leicht über IST → Lernfaktor ~0.95 (IST/Prognose).
     prognose = round(pv / 0.95, 1) if pv > 0 else 0.0
-    komp = json.dumps({"pv_6": round(pv, 2)})
+    komp = json.dumps({k: round(pv * a, 2) for k, a in TAGES_PV_SPLIT.items()})
     exists = cur.execute(
         "SELECT id FROM tages_zusammenfassung WHERE anlage_id=? AND datum=?", (ANLAGE, datum)
     ).fetchone()

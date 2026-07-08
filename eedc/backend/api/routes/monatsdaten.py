@@ -6,7 +6,7 @@ CRUD Endpoints für monatliche Energiedaten.
 
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,7 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
+from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
@@ -165,9 +166,13 @@ class AggregierteMonatsdatenResponse(BaseModel):
     netzbezug_durchschnittspreis_cent: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - PV
     pv_erzeugung_kwh: Optional[float]  # Summe PV-Module + BKW
+    # R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == pv_erzeugung_kwh).
+    pv_anlage_kwh: Optional[float]  # nur PV-Module (ohne BKW)
+    bkw_kwh: Optional[float]  # nur Balkonkraftwerk(e)
     # Aggregiert aus InvestitionMonatsdaten - Speicher
     speicher_ladung_kwh: Optional[float]  # Summe alle Speicher
     speicher_entladung_kwh: Optional[float]  # Summe alle Speicher
+    speicher_netzladung_kwh: Optional[float]  # Anteil Netzladung an speicher_ladung_kwh (R17/Verlauf)
     # Aggregiert aus InvestitionMonatsdaten - Wärmepumpe
     wp_strom_kwh: Optional[float]
     wp_strom_heizen_kwh: Optional[float]  # Nur > 0 wenn getrennte_strommessung=True (#191)
@@ -186,6 +191,10 @@ class AggregierteMonatsdatenResponse(BaseModel):
     gesamtverbrauch_kwh: float
     autarkie_prozent: float
     eigenverbrauchsquote_prozent: float
+    # §51 EEG: kWh, die bei negativem Börsenpreis eingespeist wurden (= fiktiver
+    # §51-Abzug-Volumen). Σ der Tages-`einspeisung_neg_preis_kwh` über den Monat
+    # (R17/Verlauf, Weg 1). None = Anlage unterliegt nicht §51 (`unterliegt_eeg_51`).
+    einspeisung_neg_preis_kwh: Optional[float]
     # Legacy-Felder (für Migration-Warnung)
     hat_legacy_daten: bool
 
@@ -254,6 +263,30 @@ async def list_monatsdaten_aggregiert(
             inv_data_by_month[key] = []
         inv_data_by_month[key].append((inv, imd.verbrauch_daten or {}))
 
+    # §51 EEG (R17/Verlauf, Weg 1): fiktives Abzug-Volumen = Σ der stündlichen
+    # Tages-`einspeisung_neg_preis_kwh`, je Monat gruppiert. Nur wenn die Anlage
+    # §51 unterliegt (sonst None-Ausweis) — einziger Gate wie im Erlös-Service.
+    unterliegt_51 = bool(
+        (await db.execute(
+            select(Anlage.unterliegt_eeg_51).where(Anlage.id == anlage_id)
+        )).scalar_one_or_none()
+    )
+    neg_preis_by_month: dict[tuple[int, int], float] = {}
+    if unterliegt_51:
+        # Quelle: TagesZusammenfassung (1 Zeile/Tag) — dort liegt das §51-Volumen.
+        _y = func.extract("year", TagesZusammenfassung.datum)
+        _m = func.extract("month", TagesZusammenfassung.datum)
+        neg_q = (
+            select(_y, _m, func.sum(TagesZusammenfassung.einspeisung_neg_preis_kwh))
+            .where(TagesZusammenfassung.anlage_id == anlage_id)
+            .group_by(_y, _m)
+        )
+        if jahr:
+            neg_q = neg_q.where(_y == jahr)
+        for y, m, s in (await db.execute(neg_q)).all():
+            if s is not None:
+                neg_preis_by_month[(int(y), int(m))] = float(s)
+
     # Aggregierte Daten erstellen
     result = []
     for md in monatsdaten_list:
@@ -264,8 +297,10 @@ async def list_monatsdaten_aggregiert(
         # IMD pro Komponenten-Familie beigetragen hat — sonst None statt 0
         # ausspielen (#236, CLAUDE.md "0-Werte prüfen": 0 ≠ nicht vorhanden).
         pv_erzeugung = 0.0
+        bkw_erzeugung = 0.0  # nur BKW (R17/Verlauf-Split); pv_anlage = pv_erzeugung - bkw
         speicher_ladung = 0.0
         speicher_entladung = 0.0
+        speicher_netzladung = 0.0  # Netz-Anteil an der Ladung (R17/Verlauf)
         wp_strom = 0.0
         wp_strom_heizen = 0.0
         wp_strom_warmwasser = 0.0
@@ -309,6 +344,7 @@ async def list_monatsdaten_aggregiert(
             elif inv.typ == "balkonkraftwerk":
                 hat_pv_imd = True
                 pv_erzeugung += b.bkw_erzeugung
+                bkw_erzeugung += b.bkw_erzeugung
                 # QUIRK (IST-Stand): BKW-Speicher fließt in DENSELBEN Speicher-Akku
                 # wie echte Speicher (siehe BLOCK1-FELD-MATRIX D2).
                 hat_speicher_imd = True
@@ -318,6 +354,7 @@ async def list_monatsdaten_aggregiert(
                 hat_speicher_imd = True
                 speicher_ladung += b.speicher_ladung
                 speicher_entladung += b.speicher_entladung
+                speicher_netzladung += b.speicher_arbitrage
             elif inv.typ == "waermepumpe":
                 hat_wp_imd = True
                 wp_strom += b.wp_strom
@@ -430,8 +467,11 @@ async def list_monatsdaten_aggregiert(
             # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
             # Sommer 0 kWh Heizung).
             pv_erzeugung_kwh=round(pv_erzeugung, 1) if hat_pv_imd else None,
+            pv_anlage_kwh=round(pv_erzeugung - bkw_erzeugung, 1) if hat_pv_imd else None,
+            bkw_kwh=round(bkw_erzeugung, 1) if hat_pv_imd else None,
             speicher_ladung_kwh=round(speicher_ladung, 1) if hat_speicher_imd else None,
             speicher_entladung_kwh=round(speicher_entladung, 1) if hat_speicher_imd else None,
+            speicher_netzladung_kwh=round(speicher_netzladung, 1) if hat_speicher_imd else None,
             wp_strom_kwh=round(wp_strom, 1) if hat_wp_imd else None,
             wp_strom_heizen_kwh=round(wp_strom_heizen, 1) if hat_wp_split_imd else None,
             wp_strom_warmwasser_kwh=round(wp_strom_warmwasser, 1) if hat_wp_split_imd else None,
@@ -446,6 +486,10 @@ async def list_monatsdaten_aggregiert(
             gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
             autarkie_prozent=round(autarkie, 1),
             eigenverbrauchsquote_prozent=round(ev_quote, 1),
+            einspeisung_neg_preis_kwh=(
+                round(neg_preis_by_month.get((md.jahr, md.monat), 0.0), 1)
+                if unterliegt_51 else None
+            ),
             hat_legacy_daten=hat_legacy,
         ))
 

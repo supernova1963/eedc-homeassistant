@@ -321,6 +321,10 @@ class TagWerteResponse(BaseModel):
     datenquelle: Optional[str] = None
     # Energie (additive kWh) — Registry-Keys
     erzeugung: float = 0.0
+    # R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == PV+BKW-Anteil der
+    # Erzeugung; ein evtl. sonstiger Erzeuger/BHKW steckt zusätzlich in `erzeugung`).
+    pv_anlage: float = 0.0
+    bkw: float = 0.0
     eigenverbrauch: float = 0.0
     einspeisung: float = 0.0
     netzbezug: float = 0.0

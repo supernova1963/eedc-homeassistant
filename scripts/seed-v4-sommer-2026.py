@@ -240,7 +240,17 @@ while d <= BIS:
         temperatur_max_c=round(tmax, 1),
         strahlung_summe_wh_m2=round(str_summe, 1),
         pv_prognose_kwh=round(pv_tag_ist / 0.95, 1),
-        komponenten_kwh=json.dumps({"pv": round(pv_tag_ist, 2)}),
+        # PV/BKW-Split je String (R17/Verlauf-Vergleich): dieselben Anteile wie die
+        # Stunden-komponenten, Balkonkraftwerk (inv 9) unter bkw_-Präfix — damit
+        # summe_pv_anlage_kwh/summe_bkw_kwh den Tages-Split trennen (statt bloßem
+        # {"pv": …}, das den Tages-Split auf 0 kollabieren ließ). Σ = pv_tag_ist bleibt
+        # (summe_pv_bkw_kwh/erzeugung/Invariante unberührt). NUR die Tages-Aggregat-
+        # Zeile — der Stunden-Write + pv_string_anteile bleiben pv_9 (sonst verlöre der
+        # nächste idempotente Re-Run den Balkon aus der Verteilung).
+        komponenten_kwh=json.dumps({
+            ("bkw_9" if k == "pv_9" else k): round(pv_tag_ist * anteil, 2)
+            for k, anteil in anteile.items()
+        }),
     )
     exists = cur.execute(
         "SELECT id FROM tages_zusammenfassung WHERE anlage_id=? AND datum=?",

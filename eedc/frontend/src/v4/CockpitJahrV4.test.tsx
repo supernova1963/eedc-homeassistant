@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../context/ThemeContext'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -53,11 +54,14 @@ vi.mock('../api/aktuellerMonat', () => ({
 
 import CockpitJahrV4 from './CockpitJahrV4'
 
+// CockpitJahrV4 rendert JahrVerlaufChart, das seit B3 useNavigate nutzt → Router nötig.
 function renderView() {
   return render(
-    <ThemeProvider>
-      <CockpitJahrV4 anlageId={1} />
-    </ThemeProvider>,
+    <MemoryRouter>
+      <ThemeProvider>
+        <CockpitJahrV4 anlageId={1} />
+      </ThemeProvider>
+    </MemoryRouter>,
   )
 }
 

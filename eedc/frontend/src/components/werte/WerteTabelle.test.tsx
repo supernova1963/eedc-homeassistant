@@ -28,6 +28,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
   return {
     datum, stunden_verfuegbar: 24, datenquelle: 'ha_sensor',
     erzeugung: 30, eigenverbrauch: 18, einspeisung: 12, netzbezug: 6,
+    pv_anlage: 24, bkw: 6,
     gesamtverbrauch: 24, direktverbrauch: 15,
     autarkie: 75, evQuote: 60, spezErtrag: 3,
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,

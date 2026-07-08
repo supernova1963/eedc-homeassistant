@@ -14,6 +14,7 @@
  * docken später als weitere Blöcke an.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { fmtCalc, FehlerZustand } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
@@ -29,6 +30,7 @@ import { MonatHeader, finanzTeaserBlock } from './MonatRahmen'
 import { energieProfilApi, type TagWerte, type VerfuegbarerMonat } from '../api/energie_profil'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
+import { monatRefAusQuery } from './verlaufVergleich'
 
 interface MonatRef { jahr: number; monat: number }
 
@@ -73,8 +75,12 @@ export default function CockpitMonatV4(props: { anlageId: number | undefined }) 
 
 function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
   const park = usePark()
+  // B3-Drill-in: Verlauf-Balken der Jahr-Sicht landet mit `?jahr=&monat=` hier. Beim
+  // Erst-Load dem Default (neuester Monat mit Daten) vorziehen; nur am Mount gelesen (Ref).
+  const [searchParams] = useSearchParams()
+  const initialGewaehltRef = useRef<MonatRef | null>(monatRefAusQuery(searchParams))
   const [monate, setMonate] = useState<VerfuegbarerMonat[]>([])
-  const [gewaehlt, setGewaehlt] = useState<MonatRef | null>(null)
+  const [gewaehlt, setGewaehlt] = useState<MonatRef | null>(initialGewaehltRef.current)
   const [tage, setTage] = useState<TagWerte[]>([])
   const [monatData, setMonatData] = useState<AktuellerMonatResponse | null>(null)
   const [alleMonate, setAlleMonate] = useState<AggregierteMonatsdaten[]>([])
@@ -102,6 +108,9 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
         if (ab) return
         setAlleMonate(agg)
         setMonate(ms)
+        // B3: Drill-in-`?jahr=&monat=` hat schon vorgewählt → Default nicht überschreiben
+        // (Ref ist mount-stabil, keine exhaustive-deps-Pflicht).
+        if (initialGewaehltRef.current) return
         // Default = neuester Monat MIT Monatsdaten — NICHT bloß die neueste TEP/TZ-
         // Zeile: ein laufender Monat ohne Abschluss (oder eine Snapshot-Streuzeile)
         // würde sonst leer vorgewählt. Fallback: neuester verfügbarer Monat.

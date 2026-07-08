@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../context/ThemeContext'
 import type { TagWerte, StundenAntwort } from '../api/energie_profil'
 
@@ -55,11 +56,14 @@ vi.mock('../api/energie_profil', () => ({
 
 import CockpitTagV4 from './CockpitTagV4'
 
-function renderView() {
+// CockpitTagV4 liest seit B3 `?datum=` via useSearchParams → Router-Context nötig.
+function renderView(initialEntry = '/v4/cockpit/tag') {
   return render(
-    <ThemeProvider>
-      <CockpitTagV4 anlageId={1} />
-    </ThemeProvider>,
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <ThemeProvider>
+        <CockpitTagV4 anlageId={1} />
+      </ThemeProvider>
+    </MemoryRouter>,
   )
 }
 

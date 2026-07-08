@@ -71,6 +71,20 @@ def summe_pv_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
     return _summe_prefix(komponenten_kwh, PV_KOMPONENTEN_PREFIXE, nur_positiv=True)
 
 
+def summe_pv_anlage_kwh(komponenten_kwh: Optional[dict]) -> float:
+    """Tages-Σ NUR der PV-Anlagen-Module (`pv_`-Keys), ohne BKW (R17/Verlauf-Split).
+
+    Zusammen mit {@link summe_bkw_kwh} == {@link summe_pv_bkw_kwh}: die beiden
+    Präfixe partitionieren `PV_KOMPONENTEN_PREFIXE` (`("pv_", "bkw_")`) disjunkt.
+    """
+    return _summe_prefix(komponenten_kwh, ("pv_",), nur_positiv=True)
+
+
+def summe_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
+    """Tages-Σ NUR der Balkonkraftwerk-Erzeugung (`bkw_`-Keys). Siehe {@link summe_pv_anlage_kwh}."""
+    return _summe_prefix(komponenten_kwh, ("bkw_",), nur_positiv=True)
+
+
 # ─── Netzpunkt-Bilanz: Gesamterzeugung hinter dem Hauszähler ────────────────
 
 

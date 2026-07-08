@@ -142,6 +142,10 @@ export const CHART_COLORS = {
   eigenverbrauch: COLORS.consumption,
   einspeisung: COLORS.feedin,
   netzbezug: COLORS.grid,
+  // R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (beide Amber-Familie,
+  // BKW heller abgesetzt) + §51-Abzug-Volumen (gedämpft = „nicht vergütet").
+  bkw: '#fbbf24',                // Amber-400 (BKW, abgesetzt von PV-Anlage-Solar)
+  einspeisungNeg51: '#94a3b8',   // Slate-400 (§51: eingespeist bei neg. Preis, nicht vergütet)
   autarkie: '#3b82f6',           // Blue (Metrik-Farbe, unabhängig von battery)
   evQuote: '#a855f7',            // Purple-500
   direktverbrauch: '#f97316',    // Orange

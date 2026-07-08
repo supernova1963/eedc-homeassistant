@@ -82,6 +82,9 @@ export interface TagWerte {
   datenquelle: string | null
   // Energie (kWh)
   erzeugung: number
+  // R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == PV+BKW-Anteil).
+  pv_anlage: number
+  bkw: number
   eigenverbrauch: number
   einspeisung: number
   netzbezug: number

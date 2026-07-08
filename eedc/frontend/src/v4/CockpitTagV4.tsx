@@ -21,6 +21,7 @@
  *    Ø-gleicher-Wochentag-Rückblick ab dem gewählten Tag.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card, FehlerZustand } from '../components/ui'
 import { AnlageLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
@@ -33,6 +34,7 @@ import { baueTagKomponentenUndFinanz } from './TagKomponenten'
 import { TagesRail, type TagRailEintrag } from './TagesRail'
 import { TagStepper } from './TagStepper'
 import { TagHeader } from './TagRahmen'
+import { datumAusQuery } from './verlaufVergleich'
 import {
   energieProfilApi, type StundenWert, type SerieInfo, type TagWerte, type TagDetail,
 } from '../api/energie_profil'
@@ -92,7 +94,12 @@ export default function CockpitTagV4(props: { anlageId: number | undefined }) {
 
 function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
   const park = usePark()
-  const [datum, setDatum] = useState(gesternISO())
+  // B3-Drill-in: Verlauf-Balken der Monat-Sicht landet mit `?datum=YYYY-MM-DD` hier.
+  // Beim Erst-Load dem Default (neuester Tag mit Daten) vorziehen; nur einmal am Mount
+  // gelesen (Ref) — spätere Stepper-Wahl bleibt lokaler State, kein URL-Rückschreiben.
+  const [searchParams] = useSearchParams()
+  const initialDatum = useRef(datumAusQuery(searchParams)).current
+  const [datum, setDatum] = useState(initialDatum ?? gesternISO())
   const [railEntries, setRailEntries] = useState<TagRailEintrag[]>([])
   const [stunden, setStunden] = useState<StundenWert[]>([])
   const [serien, setSerien] = useState<SerieInfo[]>([]) // volle Serien (Komponenten-Klassifikation)
@@ -112,7 +119,9 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
   // B1: Scroll-Position beim Tageswechsel halten (siehe CockpitMonatV4).
   const rootRef = useRef<HTMLDivElement>(null)
   const merkeScroll = useScrollErhalt(rootRef, loading)
-  const initialisiert = useRef(false)  // R5-1: Default einmalig auf „neuester Tag mit Daten"
+  // R5-1: Default einmalig auf „neuester Tag mit Daten" — bei Drill-in-`?datum=`
+  // aber schon gesetzt, dann NICHT umspringen (Ref startet true).
+  const initialisiert = useRef(initialDatum != null)
   const waehle = useCallback((d: string) => {
     initialisiert.current = true  // ab erster User-Wahl nicht mehr automatisch umspringen
     merkeScroll(); setDatum(d)

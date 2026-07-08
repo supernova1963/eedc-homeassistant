@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { TagesverlaufChart, baueChartDaten } from './TagesverlaufChart'
 import type { TagWerte } from '../api/energie_profil'
+
+// TagesverlaufChart nutzt seit B3 useNavigate (Drill-in) → Router-Context nötig.
+function renderChart(tage: TagWerte[]) {
+  return render(<MemoryRouter><TagesverlaufChart tage={tage} /></MemoryRouter>)
+}
 
 function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
   return {
     datum, stunden_verfuegbar: 24, datenquelle: 'ha_sensor',
     erzeugung: 30, eigenverbrauch: 18, einspeisung: 12, netzbezug: 6,
+    pv_anlage: 24, bkw: 6,
     gesamtverbrauch: 24, direktverbrauch: 15,
     autarkie: 75, evQuote: 60, spezErtrag: 3,
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
@@ -39,23 +46,28 @@ describe('baueChartDaten', () => {
     const d = baueChartDaten([tw('2026-05-10')])
     expect(d[0].speicherEntladung).toBe(0)
   })
+
+  it('trägt das ISO-Datum je Punkt (Drill-in-Ziel, B3)', () => {
+    const d = baueChartDaten([tw('2026-05-11'), tw('2026-05-10')])
+    expect(d.map((p) => p.datum)).toEqual(['2026-05-10', '2026-05-11'])
+  })
 })
 
 describe('TagesverlaufChart', () => {
   it('Toggle Erzeugung ⇄ Verbrauch ändert die Stapel-Beschreibung (Direktverbrauch)', () => {
-    render(<TagesverlaufChart tage={[tw('2026-05-10')]} />)
+    renderChart([tw('2026-05-10')])
     expect(screen.getByText(/Eigenverbrauch \+ Einspeisung = PV-Erzeugung/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Verbrauch' }))
     expect(screen.getByText(/Direktverbrauch \+ Speicher-Entladung \+ Netzbezug = Gesamtverbrauch/)).toBeInTheDocument()
   })
 
   it('Autarkie %-Toggle vorhanden', () => {
-    render(<TagesverlaufChart tage={[tw('2026-05-10')]} />)
+    renderChart([tw('2026-05-10')])
     expect(screen.getByRole('button', { name: 'Autarkie %' })).toBeInTheDocument()
   })
 
   it('leerer Monat → Hinweis statt Chart', () => {
-    render(<TagesverlaufChart tage={[]} />)
+    renderChart([])
     expect(screen.getByText(/Keine Tagesdaten/)).toBeInTheDocument()
   })
 })

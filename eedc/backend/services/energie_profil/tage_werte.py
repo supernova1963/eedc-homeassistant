@@ -25,7 +25,12 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.energie_profil._shared import TagWerteResponse
-from backend.core.berechnungen import berechne_finanz_aggregat, bilanz_aus_stundenrows
+from backend.core.berechnungen import (
+    berechne_finanz_aggregat,
+    bilanz_aus_stundenrows,
+    summe_bkw_kwh,
+    summe_pv_anlage_kwh,
+)
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.models.anlage import Anlage
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
@@ -107,6 +112,9 @@ async def baue_tage_werte(
             datenquelle=(tz.datenquelle if tz else None),
             # Energie
             erzeugung=round(bilanz.erzeugung_kwh, 3),
+            # PV/BKW-Split (R17/Verlauf) aus dem Tages-komponenten_kwh-JSON.
+            pv_anlage=round(summe_pv_anlage_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
+            bkw=round(summe_bkw_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
             eigenverbrauch=round(bilanz.eigenverbrauch_kwh, 3),
             einspeisung=round(bilanz.einspeisung_kwh, 3),
             netzbezug=round(bilanz.netzbezug_kwh, 3),
