@@ -4,7 +4,12 @@
  * 3-Schritt-Wizard zur direkten Verbindung mit Wechselrichtern über lokale REST-API.
  * Schritt 1: Verbindungsdaten eingeben + testen
  * Schritt 2: Gerät bestätigen + einrichten
- * Schritt 3: Status + manuelle Ablesung
+ * Schritt 3: Status + manuelle Ablesung (= Ergebnis/Betrieb)
+ *
+ * IA-V4 (Style-Guide Teil D): SoT-Controls (Input/Select/Stepper/Alert),
+ * Snapshot-/Zuordnungs-Helfer nach `components/connector/` ausgelagert. Overlay-
+ * tauglich über {@link useWizardHost} (W2/W5); Entfernen über {@link ConfirmDialog}
+ * statt nativem `confirm()` (M9).
  */
 
 import { useState, useEffect } from 'react'
@@ -19,11 +24,18 @@ import {
   WifiOff,
   Trash2,
   RefreshCw,
-  Info,
 } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import Stepper from '../components/ui/Stepper'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { useWizardHost } from '../v4/wizardHost'
+import SnapshotTable from '../components/connector/SnapshotTable'
+import InvestitionMapping from '../components/connector/InvestitionMapping'
+import { formatKwh, formatDate, fieldLabel } from '../components/connector/connectorFormat'
 import { anlagenApi } from '../api/anlagen'
 import { connectorApi } from '../api/connector'
 import { investitionenApi } from '../api/investitionen'
@@ -31,11 +43,9 @@ import type {
   ConnectorInfo,
   ConnectionTestResult,
   ConnectorStatus,
-  MeterSnapshot,
   FetchResult,
-  FieldInvMap,
 } from '../api/connector'
-import type { Anlage, Investition, InvestitionTyp } from '../types'
+import type { Anlage, Investition } from '../types'
 
 /** Connectors die read_live() implementieren und Echtzeit-Watt liefern können. */
 const LIVE_CONNECTORS = new Set([
@@ -46,22 +56,9 @@ const LIVE_CONNECTORS = new Set([
   'go_echarger',      // go-eCharger Wallbox
 ])
 
-function formatKwh(val: number | null | undefined): string {
-  if (val == null) return '–'
-  return val.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' kWh'
-}
-
-function formatDate(iso: string | undefined): string {
-  if (!iso) return '–'
-  try {
-    return new Date(iso).toLocaleString('de-DE')
-  } catch {
-    return iso
-  }
-}
-
 export default function ConnectorSetupWizard() {
   const navigate = useNavigate()
+  const wizardHost = useWizardHost()
 
   // Wizard state
   const [currentStep, setCurrentStep] = useState(0)
@@ -91,6 +88,7 @@ export default function ConnectorSetupWizard() {
   const [isFetching, setIsFetching] = useState(false)
   const [fetchResult, setFetchResult] = useState<FetchResult | null>(null)
   const [isRemoving, setIsRemoving] = useState(false)
+  const [removeDialogOffen, setRemoveDialogOffen] = useState(false)
 
   // Initialisierung
   useEffect(() => {
@@ -104,6 +102,13 @@ export default function ConnectorSetupWizard() {
       loadStatus(selectedAnlageId)
     }
   }, [selectedAnlageId])
+
+  // W5: ungespeicherte Verbindungsdaten melden, solange nicht eingerichtet.
+  const dirty = !status?.configured && (host !== '' || password !== '')
+  useEffect(() => {
+    wizardHost.setzeBlocker(dirty)
+    return () => wizardHost.setzeBlocker(false)
+  }, [dirty, wizardHost])
 
   async function loadAnlagen() {
     try {
@@ -226,10 +231,9 @@ export default function ConnectorSetupWizard() {
     }
   }
 
-  // Connector entfernen
+  // Connector entfernen (M9: ConfirmDialog statt nativem confirm)
   async function handleRemove() {
     if (!selectedAnlageId) return
-    if (!confirm('Connector-Konfiguration wirklich entfernen? Gespeicherte Snapshots gehen verloren.')) return
 
     setIsRemoving(true)
     setError(null)
@@ -244,10 +248,27 @@ export default function ConnectorSetupWizard() {
       setError(e instanceof Error ? e.message : 'Entfernen fehlgeschlagen')
     } finally {
       setIsRemoving(false)
+      setRemoveDialogOffen(false)
     }
   }
 
-  const steps = ['Verbindung', 'Einrichten', 'Status']
+  // W3: Abbrechen — im Overlay Dirty-geschützt schließen, sonst zurück navigieren.
+  function handleAbbrechen() {
+    if (wizardHost.imOverlay) wizardHost.abbrechen()
+    else navigate(-1)
+  }
+
+  // Terminal-„Zur Monatsübersicht" — im Overlay schließen (W2), sonst navigieren.
+  function handleMonatsuebersicht() {
+    if (wizardHost.imOverlay) wizardHost.schliessen()
+    else navigate('/einstellungen/monatsdaten')
+  }
+
+  const steps = [
+    { titel: 'Verbindung' },
+    { titel: 'Einrichten' },
+    { titel: 'Status' },
+  ]
 
   const selectedConnector = connectors.find(c => c.id === selectedConnectorId)
 
@@ -266,34 +287,8 @@ export default function ConnectorSetupWizard() {
         </div>
       </div>
 
-      {/* Stepper */}
-      <div className="flex items-center justify-center gap-2">
-        {steps.map((label, i) => (
-          <div key={label} className="flex items-center gap-2">
-            <div
-              className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                i < currentStep
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                  : i === currentStep
-                    ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
-                    : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
-              }`}
-            >
-              {i < currentStep ? <CheckCircle className="h-5 w-5" /> : i + 1}
-            </div>
-            <span className={`text-sm ${
-              i === currentStep ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500'
-            }`}>
-              {label}
-            </span>
-            {i < steps.length - 1 && (
-              <div className={`w-12 h-0.5 mx-1 ${
-                i < currentStep ? 'bg-green-300 dark:bg-green-700' : 'bg-gray-200 dark:bg-gray-700'
-              }`} />
-            )}
-          </div>
-        ))}
-      </div>
+      {/* Stepper (W1) */}
+      <Stepper schritte={steps} aktuell={currentStep} />
 
       {/* Error */}
       {error && (
@@ -310,63 +305,38 @@ export default function ConnectorSetupWizard() {
             <div className="space-y-4">
               {/* Anlage */}
               {anlagen.length > 1 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Anlage
-                  </label>
-                  <select
-                    value={selectedAnlageId ?? ''}
-                    onChange={e => setSelectedAnlageId(Number(e.target.value) || null)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    <option value="">Anlage wählen...</option>
-                    {anlagen.map(a => (
-                      <option key={a.id} value={a.id}>{a.anlagenname}</option>
-                    ))}
-                  </select>
-                </div>
+                <Select
+                  label="Anlage"
+                  value={selectedAnlageId ?? ''}
+                  onChange={e => setSelectedAnlageId(Number(e.target.value) || null)}
+                  placeholder="Anlage wählen…"
+                  options={anlagen.map(a => ({ value: String(a.id), label: a.anlagenname }))}
+                />
               )}
 
               {/* Connector-Typ */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Connector-Typ
-                </label>
-                <select
-                  value={selectedConnectorId}
-                  onChange={e => setSelectedConnectorId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  {connectors.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}{!c.getestet ? ' (*)' : ''}</option>
-                  ))}
-                </select>
-                {connectors.some(c => !c.getestet) && (
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    (*) Ungetestet – basiert auf Hersteller-Dokumentation, aber noch nicht mit echten
-                    Gerätedaten verifiziert. Feedback willkommen!
-                  </p>
-                )}
-              </div>
+              <Select
+                label="Connector-Typ"
+                value={selectedConnectorId}
+                onChange={e => setSelectedConnectorId(e.target.value)}
+                options={connectors.map(c => ({ value: c.id, label: `${c.name}${!c.getestet ? ' (*)' : ''}` }))}
+                hint={connectors.some(c => !c.getestet)
+                  ? '(*) Ungetestet – basiert auf Hersteller-Dokumentation, aber noch nicht mit echten Gerätedaten verifiziert. Feedback willkommen!'
+                  : undefined}
+              />
 
               {/* Live-Daten Info */}
               {selectedConnector && (
                 LIVE_CONNECTORS.has(selectedConnector.id) ? (
-                  <div className="flex items-start gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm text-green-700 dark:text-green-400">
-                    <span className="shrink-0 mt-0.5">⚡</span>
-                    <span>
-                      <strong>Live-Daten:</strong> Dieser Connector liefert Echtzeit-Leistungswerte (Watt).
-                      Bei aktiver MQTT-Verbindung erscheinen die Daten automatisch im Live-Dashboard und Energiefluss.
-                    </span>
-                  </div>
+                  <Alert type="success">
+                    <strong>Live-Daten:</strong> Dieser Connector liefert Echtzeit-Leistungswerte (Watt).
+                    Bei aktiver MQTT-Verbindung erscheinen die Daten automatisch im Live-Dashboard und Energiefluss.
+                  </Alert>
                 ) : (
-                  <div className="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm text-gray-500 dark:text-gray-400">
-                    <span className="shrink-0 mt-0.5">📊</span>
-                    <span>
-                      <strong>Nur Zählerstände:</strong> Dieser Connector liest kumulative kWh-Werte.
-                      Echtzeit-Leistungsdaten für das Live-Dashboard sind nicht verfügbar.
-                    </span>
-                  </div>
+                  <Alert type="info">
+                    <strong>Nur Zählerstände:</strong> Dieser Connector liest kumulative kWh-Werte.
+                    Echtzeit-Leistungsdaten für das Live-Dashboard sind nicht verfügbar.
+                  </Alert>
                 )
               )}
 
@@ -378,54 +348,41 @@ export default function ConnectorSetupWizard() {
               )}
 
               {/* IP-Adresse */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  IP-Adresse / Hostname
-                </label>
-                <input
-                  type="text"
-                  value={host}
-                  onChange={e => setHost(e.target.value)}
-                  placeholder="z.B. 192.168.1.100"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
-                />
-              </div>
+              <Input
+                label="IP-Adresse / Hostname"
+                value={host}
+                onChange={e => setHost(e.target.value)}
+                placeholder="z.B. 192.168.1.100"
+              />
 
               {/* Benutzername */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Benutzername
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                />
-              </div>
+              <Input
+                label="Benutzername"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+              />
 
               {/* Passwort */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Passwort
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Geräte-Passwort"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
-                />
-              </div>
+              <Input
+                label="Passwort"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Geräte-Passwort"
+              />
             </div>
 
-            <div className="flex justify-end mt-6">
+            {/* Navigation (W3) */}
+            <div className="flex items-center justify-between mt-6">
+              <Button variant="ghost" onClick={handleAbbrechen}>
+                Abbrechen
+              </Button>
               <Button
                 onClick={handleTest}
                 disabled={isTesting || !host || !password}
               >
                 {isTesting ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Teste Verbindung...</>
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Teste Verbindung…</>
                 ) : (
                   <><Wifi className="h-4 w-4 mr-2" /> Verbindung testen</>
                 )}
@@ -505,34 +462,32 @@ export default function ConnectorSetupWizard() {
 
               {/* Anlage auswählen (falls noch nicht) */}
               {!selectedAnlageId && anlagen.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Anlage für diesen Connector
-                  </label>
-                  <select
-                    value={selectedAnlageId ?? ''}
-                    onChange={e => setSelectedAnlageId(Number(e.target.value) || null)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    <option value="">Anlage wählen...</option>
-                    {anlagen.map(a => (
-                      <option key={a.id} value={a.id}>{a.anlagenname}</option>
-                    ))}
-                  </select>
-                </div>
+                <Select
+                  label="Anlage für diesen Connector"
+                  value={selectedAnlageId ?? ''}
+                  onChange={e => setSelectedAnlageId(Number(e.target.value) || null)}
+                  placeholder="Anlage wählen…"
+                  options={anlagen.map(a => ({ value: String(a.id), label: a.anlagenname }))}
+                />
               )}
             </div>
 
-            <div className="flex justify-between mt-6">
-              <Button variant="secondary" onClick={() => setCurrentStep(0)}>
-                <ChevronLeft className="h-4 w-4 mr-1" /> Zurück
-              </Button>
+            {/* Navigation (W3) */}
+            <div className="flex items-center justify-between mt-6">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={handleAbbrechen}>
+                  Abbrechen
+                </Button>
+                <Button variant="secondary" onClick={() => setCurrentStep(0)}>
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Zurück
+                </Button>
+              </div>
               <Button
                 onClick={handleSetup}
                 disabled={isSettingUp || !selectedAnlageId}
               >
                 {isSettingUp ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Richte ein...</>
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Richte ein…</>
                 ) : (
                   <>Connector einrichten <ChevronRight className="h-4 w-4 ml-1" /></>
                 )}
@@ -542,7 +497,7 @@ export default function ConnectorSetupWizard() {
         </Card>
       )}
 
-      {/* Step 2: Status & Ablesung */}
+      {/* Step 2: Status & Ablesung (= Ergebnis/Betrieb) */}
       {currentStep === 2 && status?.configured && (
         <div className="space-y-4">
           {/* Connector-Info */}
@@ -556,7 +511,7 @@ export default function ConnectorSetupWizard() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={handleRemove}
+                  onClick={() => setRemoveDialogOffen(true)}
                   disabled={isRemoving}
                 >
                   {isRemoving ? (
@@ -620,17 +575,14 @@ export default function ConnectorSetupWizard() {
                 Zählerstand ablesen
               </h2>
               <div className="space-y-3">
-                <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-                  <span className="text-sm text-blue-700 dark:text-blue-300">
-                    Liest die aktuellen kumulativen Zählerstände vom Wechselrichter und berechnet
-                    die Differenz zum letzten gespeicherten Snapshot.
-                  </span>
-                </div>
+                <Alert type="info">
+                  Liest die aktuellen kumulativen Zählerstände vom Wechselrichter und berechnet
+                  die Differenz zum letzten gespeicherten Snapshot.
+                </Alert>
 
                 <Button onClick={handleFetch} disabled={isFetching}>
                   {isFetching ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lese Zähler...</>
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Lese Zähler…</>
                   ) : (
                     <><RefreshCw className="h-4 w-4 mr-2" /> Jetzt ablesen</>
                   )}
@@ -670,11 +622,8 @@ export default function ConnectorSetupWizard() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate('/einstellungen/monatsdaten')}
-                >
-                  Zur Monatsübersicht
+                <Button variant="secondary" onClick={handleMonatsuebersicht}>
+                  {wizardHost.imOverlay ? 'Fertig' : 'Zur Monatsübersicht'}
                 </Button>
               </div>
             </div>
@@ -696,181 +645,17 @@ export default function ConnectorSetupWizard() {
           </div>
         </Card>
       )}
+
+      {/* Entfernen-Bestätigung (M9) */}
+      <ConfirmDialog
+        isOpen={removeDialogOffen}
+        onClose={() => setRemoveDialogOffen(false)}
+        onConfirm={handleRemove}
+        title="Connector entfernen?"
+        message="Connector-Konfiguration wirklich entfernen? Gespeicherte Snapshots gehen verloren."
+        confirmLabel="Entfernen"
+        variant="danger"
+      />
     </div>
-  )
-}
-
-// =============================================================================
-// Hilfskomponenten
-// =============================================================================
-
-function fieldLabel(key: string): string {
-  const labels: Record<string, string> = {
-    pv_erzeugung_kwh: 'PV-Erzeugung',
-    einspeisung_kwh: 'Einspeisung',
-    netzbezug_kwh: 'Netzbezug',
-    batterie_ladung_kwh: 'Batterie Ladung',
-    batterie_entladung_kwh: 'Batterie Entladung',
-    wallbox_ladung_kwh: 'Wallbox Ladung',
-  }
-  return labels[key] || key
-}
-
-function SnapshotTable({ snapshot }: { snapshot: MeterSnapshot }) {
-  const fields = [
-    { key: 'pv_erzeugung_kwh', label: 'PV-Erzeugung' },
-    { key: 'einspeisung_kwh', label: 'Einspeisung' },
-    { key: 'netzbezug_kwh', label: 'Netzbezug' },
-    { key: 'batterie_ladung_kwh', label: 'Batterie Ladung' },
-    { key: 'batterie_entladung_kwh', label: 'Batterie Entladung' },
-    { key: 'wallbox_ladung_kwh', label: 'Wallbox Ladung' },
-  ] as const
-
-  return (
-    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        {fields.map(({ key, label }) => {
-          const val = snapshot[key]
-          if (val == null) return null
-          return (
-            <div key={key} className="contents">
-              <dt className="text-gray-500 dark:text-gray-400">{label}</dt>
-              <dd className="font-medium text-gray-900 dark:text-white font-mono">
-                {formatKwh(val)}
-              </dd>
-            </div>
-          )
-        })}
-      </dl>
-    </div>
-  )
-}
-
-// =============================================================================
-// Investitions-Zuordnung (per Mess-Kategorie)
-// =============================================================================
-
-type MappingKategorie = 'pv' | 'speicher' | 'wallbox'
-
-const KATEGORIEN: {
-  key: MappingKategorie
-  label: string
-  typen: InvestitionTyp[]
-  present: (s: MeterSnapshot) => boolean
-}[] = [
-  { key: 'pv', label: 'PV-Erzeugung', typen: ['pv-module', 'balkonkraftwerk'], present: s => s.pv_erzeugung_kwh != null },
-  { key: 'speicher', label: 'Speicher (Ladung/Entladung)', typen: ['speicher'], present: s => s.batterie_ladung_kwh != null || s.batterie_entladung_kwh != null },
-  { key: 'wallbox', label: 'Wallbox (Ladung)', typen: ['wallbox'], present: s => s.wallbox_ladung_kwh != null },
-]
-
-function InvestitionMapping({
-  anlageId,
-  investitionen,
-  snapshot,
-  initialMap,
-  onSaved,
-  onError,
-}: {
-  anlageId: number
-  investitionen: Investition[]
-  snapshot: MeterSnapshot | null
-  initialMap: FieldInvMap
-  onSaved: (map: FieldInvMap) => void
-  onError: (msg: string | null) => void
-}) {
-  const [map, setMap] = useState<FieldInvMap>(initialMap)
-  const [isSaving, setIsSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    setMap(initialMap)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(initialMap)])
-
-  // Nur Kategorien anzeigen, die das Gerät auch misst (aus letztem Snapshot).
-  // Ohne Snapshot zeigen wir alle, damit die Zuordnung trotzdem möglich ist.
-  const aktiveKategorien = KATEGORIEN.filter(k => !snapshot || k.present(snapshot))
-
-  if (aktiveKategorien.length === 0) return null
-
-  async function handleSave() {
-    setIsSaving(true)
-    setSaved(false)
-    onError(null)
-    try {
-      const res = await connectorApi.saveMapping(anlageId, map)
-      onSaved(res.field_inv_map)
-      setSaved(true)
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Zuordnung fehlgeschlagen')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <Card>
-      <div className="p-5">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          Zuordnung zu Investitionen
-        </h2>
-        <div className="flex items-start gap-2 p-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <Info className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
-          <span className="text-sm text-blue-700 dark:text-blue-300">
-            Ordne jede gemessene Größe der passenden Investition zu, damit die
-            kWh-Werte gerätegenau in „Heute" und den Monatsabschluss einfließen.
-            Einspeisung und Netzbezug gelten anlagenweit und brauchen keine Zuordnung.
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {aktiveKategorien.map(kat => {
-            const optionen = investitionen.filter(i => kat.typen.includes(i.typ))
-            return (
-              <div key={kat.key} className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:items-center">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {kat.label}
-                </label>
-                {optionen.length > 0 ? (
-                  <select
-                    value={map[kat.key] ?? ''}
-                    onChange={e => {
-                      const v = e.target.value ? Number(e.target.value) : null
-                      setMap(prev => ({ ...prev, [kat.key]: v }))
-                      setSaved(false)
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  >
-                    <option value="">— keine Zuordnung —</option>
-                    {optionen.map(i => (
-                      <option key={i.id} value={i.id}>{i.bezeichnung}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className="text-sm text-gray-400 dark:text-gray-500">
-                    Keine passende Investition vorhanden
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="flex items-center gap-3 mt-4">
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? (
-              <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Speichere...</>
-            ) : (
-              'Zuordnung speichern'
-            )}
-          </Button>
-          {saved && (
-            <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
-              <CheckCircle className="h-4 w-4" /> Gespeichert
-            </span>
-          )}
-        </div>
-      </div>
-    </Card>
   )
 }

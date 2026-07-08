@@ -7,10 +7,25 @@
  * „welcher Wizard offen ist" + `onClose`. Lazy-Import je Wizard: bei Feature-Flag aus wirft
  * die DCE den ganzen v4-Baum (und damit diese Importe) weg.
  *
+ * Wizard-Host-Kontext (Style-Guide Teil D, W2/W5): der Host stellt den Wizards `schliessen`
+ * (Terminal-Aktion nach Commit, nie `navigate`) und `abbrechen` (Dirty-geschützter Abbruch)
+ * bereit sowie `setzeBlocker`, mit dem ein Wizard ungespeicherte Eingaben meldet. Auf der
+ * Standalone-Route (kein Host) liefert {@link useWizardHost} `imOverlay: false` → die Wizards
+ * fallen dort auf ihr `navigate`-Verhalten zurück.
+ *
  * Die Detail-Routen unter `/einstellungen/<seite>` bleiben als Deep-Link/Fallback bestehen.
  */
-import { lazy, Suspense, type ComponentType } from 'react'
-import { Modal, LoadingSpinner } from '../components/ui'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from 'react'
+import { Modal, LoadingSpinner, ConfirmDialog } from '../components/ui'
+import { WizardHostContext, type WizardHostCtx } from './wizardHost'
 
 export type WizardKey =
   | 'sensor-mapping'
@@ -54,14 +69,60 @@ export function EinstellungenModalHost({
   /** Test-/Sonderfall-Seam: überschreibbare Wizard-Registry. */
   registry?: Record<WizardKey, WizardDef>
 }) {
+  const blockerRef = useRef(false)
+  const [nachfrageOffen, setNachfrageOffen] = useState(false)
+
+  // Beim Wizard-Wechsel/Öffnen Blocker + Nachfrage zurücksetzen.
+  useEffect(() => {
+    blockerRef.current = false
+    setNachfrageOffen(false)
+  }, [offen])
+
+  const setzeBlocker = useCallback((aktiv: boolean) => {
+    blockerRef.current = aktiv
+  }, [])
+
+  const schliessen = useCallback(() => {
+    blockerRef.current = false
+    setNachfrageOffen(false)
+    onClose()
+  }, [onClose])
+
+  // Frame-Schluss (✕/ESC/Backdrop) und Abbrechen: bei ungespeicherten Eingaben nachfragen.
+  const versuchSchliessen = useCallback(() => {
+    if (blockerRef.current) setNachfrageOffen(true)
+    else schliessen()
+  }, [schliessen])
+
+  const hostCtx: WizardHostCtx = {
+    imOverlay: true,
+    schliessen,
+    abbrechen: versuchSchliessen,
+    setzeBlocker,
+  }
+
   if (!offen) return null
   const def = registry[offen]
   const Comp = def.Comp
   return (
-    <Modal isOpen title={def.titel} size="xl" onClose={onClose}>
-      <Suspense fallback={<div className="py-12"><LoadingSpinner text="Wird geladen …" /></div>}>
-        <Comp />
-      </Suspense>
-    </Modal>
+    <>
+      <Modal isOpen title={def.titel} size="xl" onClose={versuchSchliessen}>
+        <WizardHostContext.Provider value={hostCtx}>
+          <Suspense fallback={<div className="py-12"><LoadingSpinner text="Wird geladen …" /></div>}>
+            <Comp />
+          </Suspense>
+        </WizardHostContext.Provider>
+      </Modal>
+      <ConfirmDialog
+        isOpen={nachfrageOffen}
+        onClose={() => setNachfrageOffen(false)}
+        onConfirm={schliessen}
+        title="Assistent schließen?"
+        message="Es gibt noch nicht übernommene Eingaben. Beim Schließen gehen sie verloren."
+        confirmLabel="Verwerfen & schließen"
+        cancelLabel="Weiter bearbeiten"
+        variant="danger"
+      />
+    </>
   )
 }

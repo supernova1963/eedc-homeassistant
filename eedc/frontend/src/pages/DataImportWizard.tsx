@@ -5,6 +5,10 @@
  * Schritt 2: Vorschau & Monats-Auswahl
  * Schritt 3: Zuordnung (optional — nur wenn mehrere Investments gleichen Typs)
  * Schritt 4: Ergebnis
+ *
+ * IA-V4 (Style-Guide Teil D): SoT-Controls (Input/Select/Checkbox/RadioGroup/
+ * Stepper/Alert), Ergebnis-Schritt im geteilten `ImportErgebnis`. Overlay-tauglich
+ * über {@link useWizardHost} (W2/W5).
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
@@ -14,16 +18,20 @@ import {
   Upload,
   ChevronLeft,
   ChevronRight,
-  CheckCircle,
   Loader2,
-  Search,
-  Info,
   X,
   GitMerge,
 } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Alert from '../components/ui/Alert'
+import Input from '../components/ui/Input'
+import Select from '../components/ui/Select'
+import Checkbox from '../components/ui/Checkbox'
+import RadioGroup from '../components/ui/RadioGroup'
+import Stepper from '../components/ui/Stepper'
+import { useWizardHost } from '../v4/wizardHost'
+import ImportErgebnis from '../components/import/ImportErgebnis'
 import { anlagenApi } from '../api/anlagen'
 import { portalImportApi } from '../api/portalImport'
 import type {
@@ -108,21 +116,22 @@ function AnteilEingabe({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 w-32">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              aria-label={`Anteil ${inv.bezeichnung} in Prozent`}
-              value={zuordnung[inv.id] ?? 0}
-              onChange={(e) => {
-                const val = e.target.valueAsNumber
-                if (!isNaN(val)) onChange(inv.id, val)
-              }}
-              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded dark:border-gray-600
-                dark:bg-gray-700 dark:text-white text-right focus:ring-1 focus:ring-primary-500"
-            />
+          <div className="flex items-center gap-1.5">
+            <div className="w-24">
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                aria-label={`Anteil ${inv.bezeichnung} in Prozent`}
+                value={zuordnung[inv.id] ?? 0}
+                onChange={(e) => {
+                  const val = e.target.valueAsNumber
+                  if (!isNaN(val)) onChange(inv.id, val)
+                }}
+                className="text-right"
+              />
+            </div>
             <span className="text-sm text-gray-500">{einheit}</span>
           </div>
         </div>
@@ -134,39 +143,11 @@ function AnteilEingabe({
   )
 }
 
-// ── Auswahl-Radio für Wallbox / E-Auto ──────────────────────────────────────
-
-function AuswahlRadio({
-  investitionen,
-  selectedId,
-  onChange,
-}: {
-  investitionen: ZuordnungInvestition[]
-  selectedId: number | undefined
-  onChange: (id: number) => void
-}) {
-  return (
-    <div className="space-y-2">
-      {investitionen.map((inv) => (
-        <label key={inv.id} className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="radio"
-            name={`inv-${inv.id}`}
-            checked={selectedId === inv.id}
-            onChange={() => onChange(inv.id)}
-            className="text-primary-600 focus:ring-primary-500"
-          />
-          <span className="text-sm text-gray-800 dark:text-gray-200">{inv.bezeichnung}</span>
-        </label>
-      ))}
-    </div>
-  )
-}
-
 // ── Hauptkomponente ──────────────────────────────────────────────────────────
 
 export default function DataImportWizard() {
   const navigate = useNavigate()
+  const host = useWizardHost()
 
   const [currentStep, setCurrentStep] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -226,6 +207,13 @@ export default function DataImportWizard() {
       .finally(() => setIsLoadingZuordnung(false))
   }, [selectedAnlageId])
 
+  // W5: ungespeicherte Eingaben melden, solange noch nicht importiert wurde.
+  const dirty = result === null && (file !== null || preview !== null)
+  useEffect(() => {
+    host.setzeBlocker(dirty)
+    return () => host.setzeBlocker(false)
+  }, [dirty, host])
+
   // ── Step 1: Datei-Handling ────────────────────────────────────────────────
 
   const handleFile = useCallback(async (f: File) => {
@@ -280,16 +268,6 @@ export default function DataImportWizard() {
     )
   }, [preview])
 
-  // ── Step 2 → 3/4: Weiter-Button ──────────────────────────────────────────
-
-  const handleWeiter = useCallback(() => {
-    if (zuordnungInfo?.benoetigt_zuordnung) {
-      setCurrentStep(2)   // Zuordnungs-Schritt zeigen
-    } else {
-      handleImport()       // Direkt importieren
-    }
-  }, [zuordnungInfo])
-
   // ── Step 3/4: Import ausführen ────────────────────────────────────────────
 
   const handleImport = useCallback(async () => {
@@ -326,6 +304,16 @@ export default function DataImportWizard() {
   }, [preview, selectedAnlageId, selectedMonths, ueberschreiben, zuordnungInfo,
       pvZuordnung, batZuordnung, wallboxId, eautoId])
 
+  // ── Step 2 → 3/4: Weiter-Button ──────────────────────────────────────────
+
+  const handleWeiter = useCallback(() => {
+    if (zuordnungInfo?.benoetigt_zuordnung) {
+      setCurrentStep(2)   // Zuordnungs-Schritt zeigen
+    } else {
+      handleImport()       // Direkt importieren
+    }
+  }, [zuordnungInfo, handleImport])
+
   // ── Validierung Zuordnungs-Schritt ────────────────────────────────────────
 
   const pvGueltig = zuordnungInfo && zuordnungInfo.pv_module.length > 1
@@ -336,20 +324,26 @@ export default function DataImportWizard() {
     : true
   const zuordnungGueltig = pvGueltig && batGueltig
 
+  // W3: Abbrechen — im Overlay Dirty-geschützt schließen, sonst zurück navigieren.
+  const handleAbbrechen = useCallback(() => {
+    if (host.imOverlay) host.abbrechen()
+    else navigate(-1)
+  }, [host, navigate])
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const hatZuordnung = zuordnungInfo?.benoetigt_zuordnung ?? false
   const steps = hatZuordnung
     ? [
-        { title: 'Datei wählen', icon: <Upload className="w-4 h-4" /> },
-        { title: 'Vorschau', icon: <Search className="w-4 h-4" /> },
-        { title: 'Zuordnung', icon: <GitMerge className="w-4 h-4" /> },
-        { title: 'Ergebnis', icon: <CheckCircle className="w-4 h-4" /> },
+        { titel: 'Datei wählen' },
+        { titel: 'Vorschau' },
+        { titel: 'Zuordnung' },
+        { titel: 'Ergebnis' },
       ]
     : [
-        { title: 'Datei wählen', icon: <Upload className="w-4 h-4" /> },
-        { title: 'Vorschau', icon: <Search className="w-4 h-4" /> },
-        { title: 'Ergebnis', icon: <CheckCircle className="w-4 h-4" /> },
+        { titel: 'Datei wählen' },
+        { titel: 'Vorschau' },
+        { titel: 'Ergebnis' },
       ]
 
   // Ergebnis-Schritt-Index ist 2 ohne Zuordnung, 3 mit
@@ -369,27 +363,8 @@ export default function DataImportWizard() {
         </p>
       </div>
 
-      {/* Stepper */}
-      <div className="flex items-center gap-2 mb-6">
-        {steps.map((step, idx) => (
-          <div key={idx} className="flex items-center gap-2">
-            {idx > 0 && (
-              <div className={`h-px w-8 ${idx <= currentStep ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
-            )}
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium
-              ${idx === currentStep
-                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
-                : idx < currentStep
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                  : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-              }`}
-            >
-              {step.icon}
-              {step.title}
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Stepper (W1) */}
+      <Stepper schritte={steps} aktuell={currentStep} className="mb-6" />
 
       {error && (
         <Alert type="error" title="Fehler" onClose={() => setError(null)} className="mb-4">
@@ -405,41 +380,21 @@ export default function DataImportWizard() {
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
                 Hersteller wählen
               </h2>
-              <select
+              <Select
                 aria-label="Hersteller wählen"
                 value={selectedParserId}
                 onChange={(e) => setSelectedParserId(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white
-                  dark:bg-gray-700 dark:border-gray-600 dark:text-white
-                  focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="">Automatisch erkennen</option>
-                {parsers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.hersteller}){!p.getestet ? ' (*)' : ''}
-                  </option>
-                ))}
-              </select>
-              {parsers.some((p) => !p.getestet) && (
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  (*) Ungetestet – Feedback willkommen!
-                </p>
-              )}
+                placeholder="Automatisch erkennen"
+                options={parsers.map((p) => ({ value: p.id, label: `${p.name} (${p.hersteller})${!p.getestet ? ' (*)' : ''}` }))}
+                hint={parsers.some((p) => !p.getestet) ? '(*) Ungetestet – Feedback willkommen!' : undefined}
+              />
               {selectedParser && (
-                <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-blue-700 dark:text-blue-300">
-                      <p className="font-medium mb-1">{selectedParser.beschreibung}</p>
-                      <p className="text-blue-600 dark:text-blue-400 whitespace-pre-line">
-                        {selectedParser.anleitung}
-                      </p>
-                      <p className="mt-2 font-mono text-xs text-blue-500 dark:text-blue-400">
-                        Beispiel: {selectedParser.beispiel_header}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <Alert type="info" title={selectedParser.beschreibung} className="mt-3">
+                  <p className="whitespace-pre-line">{selectedParser.anleitung}</p>
+                  <p className="mt-2 font-mono text-xs">
+                    Beispiel: {selectedParser.beispiel_header}
+                  </p>
+                </Alert>
               )}
             </div>
           </Card>
@@ -463,7 +418,7 @@ export default function DataImportWizard() {
                 {isParsing ? (
                   <>
                     <Loader2 className="w-12 h-12 mx-auto text-primary-500 mb-3 animate-spin" />
-                    <p className="text-gray-700 dark:text-gray-300 font-medium">Datei wird analysiert...</p>
+                    <p className="text-gray-700 dark:text-gray-300 font-medium">Datei wird analysiert…</p>
                   </>
                 ) : (
                   <>
@@ -501,6 +456,13 @@ export default function DataImportWizard() {
               )}
             </div>
           </Card>
+
+          {/* Navigation (W3) */}
+          <div className="flex justify-start">
+            <Button variant="ghost" onClick={handleAbbrechen}>
+              Abbrechen
+            </Button>
+          </div>
         </div>
       )}
 
@@ -515,27 +477,17 @@ export default function DataImportWizard() {
             <div className="p-5">
               <div className="flex flex-wrap items-end gap-4">
                 <div className="flex-1 min-w-[200px]">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Ziel-Anlage
-                  </label>
-                  <select
+                  <Select
+                    label="Ziel-Anlage"
                     aria-label="Ziel-Anlage wählen"
                     value={selectedAnlageId ?? ''}
                     onChange={(e) => setSelectedAnlageId(Number(e.target.value) || null)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white
-                      dark:bg-gray-700 dark:border-gray-600 dark:text-white
-                      focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Anlage wählen...</option>
-                    {anlagen.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.anlagenname} ({a.leistung_kwp} kWp)
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Anlage wählen…"
+                    options={anlagen.map((a) => ({ value: String(a.id), label: `${a.anlagenname} (${a.leistung_kwp} kWp)` }))}
+                  />
                   {isLoadingZuordnung && (
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" /> Investitionen werden geprüft...
+                      <Loader2 className="w-3 h-3 animate-spin" /> Investitionen werden geprüft…
                     </p>
                   )}
                   {zuordnungInfo?.benoetigt_zuordnung && !isLoadingZuordnung && (
@@ -545,15 +497,13 @@ export default function DataImportWizard() {
                     </p>
                   )}
                 </div>
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 pb-2">
-                  <input
-                    type="checkbox"
+                <div className="pb-2">
+                  <Checkbox
+                    label="Bestehende Monate überschreiben"
                     checked={ueberschreiben}
                     onChange={(e) => setUeberschreiben(e.target.checked)}
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                   />
-                  Bestehende Monate überschreiben
-                </label>
+                </div>
               </div>
             </div>
           </Card>
@@ -564,15 +514,11 @@ export default function DataImportWizard() {
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
                     <th className="px-4 py-3 text-left">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedMonths.size === preview.monate.length}
-                          onChange={toggleAll}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="font-medium text-gray-700 dark:text-gray-300">Monat</span>
-                      </label>
+                      <Checkbox
+                        checked={selectedMonths.size === preview.monate.length}
+                        onChange={toggleAll}
+                        label={<span className="font-medium text-gray-700 dark:text-gray-300">Monat</span>}
+                      />
                     </th>
                     {visibleColumns.map((col) => (
                       <th key={col.key} className="px-4 py-3 text-right font-medium text-gray-700 dark:text-gray-300">
@@ -593,17 +539,13 @@ export default function DataImportWizard() {
                         onClick={() => toggleMonth(key)}
                       >
                         <td className="px-4 py-2.5">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
+                          <div onClick={e => e.stopPropagation()}>
+                            <Checkbox
                               checked={selected}
                               onChange={() => toggleMonth(key)}
-                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              label={<span className="text-gray-900 dark:text-white">{MONAT_NAMEN[m.monat]} {m.jahr}</span>}
                             />
-                            <span className="text-gray-900 dark:text-white">
-                              {MONAT_NAMEN[m.monat]} {m.jahr}
-                            </span>
-                          </label>
+                          </div>
                         </td>
                         {visibleColumns.map((col) => (
                           <td key={col.key} className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
@@ -619,25 +561,32 @@ export default function DataImportWizard() {
           </Card>
 
           <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => { setCurrentStep(0); setPreview(null); setFile(null) }}>
-              <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
-            </Button>
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {selectedMonths.size} von {preview.monate.length} Monaten ausgewählt
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={handleAbbrechen}>
+                Abbrechen
+              </Button>
+              <Button variant="ghost" onClick={() => { setCurrentStep(0); setPreview(null); setFile(null) }}>
+                <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
+              </Button>
             </div>
-            <Button
-              variant="primary"
-              onClick={handleWeiter}
-              loading={isImporting}
-              disabled={selectedMonths.size === 0 || !selectedAnlageId || isLoadingZuordnung}
-            >
-              {zuordnungInfo?.benoetigt_zuordnung
-                ? <>Weiter <ChevronRight className="w-4 h-4 ml-1" /></>
-                : isImporting
-                  ? 'Importiere...'
-                  : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
-              }
-            </Button>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {selectedMonths.size} von {preview.monate.length} Monaten
+              </span>
+              <Button
+                variant="primary"
+                onClick={handleWeiter}
+                loading={isImporting}
+                disabled={selectedMonths.size === 0 || !selectedAnlageId || isLoadingZuordnung}
+              >
+                {zuordnungInfo?.benoetigt_zuordnung
+                  ? <>Weiter <ChevronRight className="w-4 h-4 ml-1" /></>
+                  : isImporting
+                    ? 'Importiere…'
+                    : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
+                }
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -692,10 +641,11 @@ export default function DataImportWizard() {
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
                   Wallbox auswählen
                 </h3>
-                <AuswahlRadio
-                  investitionen={zuordnungInfo.wallboxen}
-                  selectedId={wallboxId}
-                  onChange={setWallboxId}
+                <RadioGroup
+                  name="wallbox-auswahl"
+                  value={wallboxId != null ? String(wallboxId) : ''}
+                  onChange={(v) => setWallboxId(Number(v))}
+                  options={zuordnungInfo.wallboxen.map((inv) => ({ value: String(inv.id), label: inv.bezeichnung }))}
                 />
               </div>
             </Card>
@@ -708,19 +658,25 @@ export default function DataImportWizard() {
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
                   E-Auto auswählen
                 </h3>
-                <AuswahlRadio
-                  investitionen={zuordnungInfo.eautos}
-                  selectedId={eautoId}
-                  onChange={setEautoId}
+                <RadioGroup
+                  name="eauto-auswahl"
+                  value={eautoId != null ? String(eautoId) : ''}
+                  onChange={(v) => setEautoId(Number(v))}
+                  options={zuordnungInfo.eautos.map((inv) => ({ value: String(inv.id), label: inv.bezeichnung }))}
                 />
               </div>
             </Card>
           )}
 
           <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={() => setCurrentStep(1)}>
-              <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={handleAbbrechen}>
+                Abbrechen
+              </Button>
+              <Button variant="ghost" onClick={() => setCurrentStep(1)}>
+                <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
+              </Button>
+            </div>
             <Button
               variant="primary"
               onClick={handleImport}
@@ -728,7 +684,7 @@ export default function DataImportWizard() {
               disabled={!zuordnungGueltig}
             >
               {isImporting
-                ? 'Importiere...'
+                ? 'Importiere…'
                 : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
               }
             </Button>
@@ -738,65 +694,22 @@ export default function DataImportWizard() {
 
       {/* ── Step 4 / 3: Ergebnis ─────────────────────────────────────────── */}
       {currentStep === ergebnisStep && result && (
-        <div className="space-y-4">
-          <Alert
-            type={result.erfolg ? 'success' : 'warning'}
-            title={result.erfolg ? 'Import erfolgreich' : 'Import mit Hinweisen'}
-          >
-            <div className="space-y-1">
-              <p>{result.importiert} Monate importiert</p>
-              {result.uebersprungen > 0 && (
-                <p>{result.uebersprungen} Monate übersprungen (bereits vorhanden)</p>
-              )}
-            </div>
-          </Alert>
-
-          {result.warnungen.length > 0 && (
-            <Alert type="info" title="Hinweise">
-              <ul className="list-disc list-inside space-y-1">
-                {result.warnungen.map((w, i) => <li key={i}>{w}</li>)}
-              </ul>
-            </Alert>
-          )}
-
-          {result.fehler.length > 0 && (
-            <Alert type="error" title="Fehler">
-              <ul className="list-disc list-inside space-y-1">
-                {result.fehler.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </Alert>
-          )}
-
-          {result.erfolg && (
-            <Alert type="info" title="Nächster Schritt: Monatsabschluss">
-              <p>
-                Der Portal-Import erfasst PV-Erzeugung, Einspeisung, Netzbezug und Batterie-Daten.
-                Für einen vollständigen Monatsabschluss müssen ggf. noch weitere Daten ergänzt werden
-                (z.B. Wärmepumpe, manuelle Korrekturen).
-              </p>
-            </Alert>
-          )}
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setCurrentStep(0); setFile(null); setPreview(null)
-                setResult(null); setError(null)
-              }}
-            >
-              <Upload className="w-4 h-4 mr-1" /> Weiteren Import starten
-            </Button>
-            {selectedAnlageId && (
-              <Button variant="secondary" onClick={() => navigate(`/monatsabschluss/${selectedAnlageId}`)}>
-                Monatsabschluss starten
-              </Button>
-            )}
-            <Button variant="primary" onClick={() => navigate('/einstellungen/monatsdaten')}>
-              <CheckCircle className="w-4 h-4 mr-1" /> Zur Monatsübersicht
-            </Button>
-          </div>
-        </div>
+        <ImportErgebnis
+          result={result}
+          selectedAnlageId={selectedAnlageId}
+          weiterIcon={<Upload className="w-4 h-4 mr-1" />}
+          hinweis={
+            <p>
+              Der Portal-Import erfasst PV-Erzeugung, Einspeisung, Netzbezug und Batterie-Daten.
+              Für einen vollständigen Monatsabschluss müssen ggf. noch weitere Daten ergänzt werden
+              (z.B. Wärmepumpe, manuelle Korrekturen).
+            </p>
+          }
+          onWeiter={() => {
+            setCurrentStep(0); setFile(null); setPreview(null)
+            setResult(null); setError(null)
+          }}
+        />
       )}
     </div>
   )

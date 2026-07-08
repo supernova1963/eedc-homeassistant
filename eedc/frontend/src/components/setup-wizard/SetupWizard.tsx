@@ -12,7 +12,7 @@
  */
 
 import { useEffect } from 'react'
-import { CheckCircle2 } from 'lucide-react'
+import Stepper from '../ui/Stepper'
 import { useSetupWizard, type WizardStep } from '../../hooks/useSetupWizard'
 import { importApi } from '../../api'
 import eedcIcon from '../../assets/eedc-icon.svg'
@@ -94,85 +94,15 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
       </header>
 
-      {/* Fortschrittsbalken */}
+      {/* Fortschritt — kanonischer Stepper-SoT (W1), amber-Akzent für das Setup-Chrome */}
       {showProgress && (
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="max-w-4xl mx-auto px-3 sm:px-4">
-            {/* Desktop: Alle Schritte */}
-            <div className="hidden md:flex items-center py-4">
-              {STEPS_CONFIG.map((stepConfig, index) => {
-                const isCompleted = index < currentStepIndex
-                const isCurrent = index === currentStepIndex
-
-                return (
-                  <div key={stepConfig.key} className="flex items-center flex-1">
-                    {/* Schritt-Indikator */}
-                    <div className="flex items-center">
-                      <div
-                        className={`
-                          w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
-                          transition-all duration-300
-                          ${isCompleted
-                            ? 'bg-green-500 text-white'
-                            : isCurrent
-                              ? 'bg-amber-500 text-white ring-4 ring-amber-500/30'
-                              : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                          }
-                        `}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle2 className="w-5 h-5" />
-                        ) : (
-                          index + 1
-                        )}
-                      </div>
-                      <span
-                        className={`
-                          ml-2 text-sm whitespace-nowrap
-                          ${isCurrent
-                            ? 'font-medium text-gray-900 dark:text-white'
-                            : 'text-gray-500 dark:text-gray-400'
-                          }
-                        `}
-                      >
-                        {stepConfig.label}
-                      </span>
-                    </div>
-
-                    {/* Verbindungslinie */}
-                    {index < STEPS_CONFIG.length - 1 && (
-                      <div
-                        className={`
-                          flex-1 h-0.5 mx-4
-                          ${isCompleted
-                            ? 'bg-green-500'
-                            : 'bg-gray-200 dark:bg-gray-700'
-                          }
-                        `}
-                      />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Mobile: Kompakte Anzeige */}
-            <div className="md:hidden py-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {STEPS_CONFIG[currentStepIndex]?.label}
-                </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  {currentStepIndex + 1}/{STEPS_CONFIG.length}
-                </span>
-              </div>
-              <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-sm overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-sm transition-all duration-500"
-                  style={{ width: `${wizard.progress}%` }}
-                />
-              </div>
-            </div>
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4">
+            <Stepper
+              schritte={STEPS_CONFIG.map((s) => ({ titel: s.label }))}
+              aktuell={currentStepIndex}
+              akzent="amber"
+            />
           </div>
         </div>
       )}
