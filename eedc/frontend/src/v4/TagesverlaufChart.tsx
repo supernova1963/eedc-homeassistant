@@ -13,7 +13,7 @@
  * Datenquelle: `TagWerte[]` (Tages-Werte-Endpoint) — dieselbe SoT wie die
  * Auswertungen/Tabelle, damit Chart und Zahlen nie auseinanderlaufen.
  */
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -71,6 +71,14 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
   const [view, setView] = useState<BilanzView>('erzeugung')
   const [presetKey, setPresetKey] = useState('verbrauch')
   const [showAutarkie, setShowAutarkie] = useState(false)
+  // Skalen-Lesbarkeit (Vergleich): einzelne Serien per Legenden-Klick aus-/einblenden
+  // (z. B. große PV-Anlage ausblenden, um BKW lesbar zu machen). Reset bei Modus-/
+  // Preset-Wechsel — geteilte SoT-Mechanik wie components/live/TagesverlaufChart.
+  const [versteckt, setVersteckt] = useState<Set<string>>(new Set())
+  useEffect(() => { setVersteckt(new Set()) }, [view, presetKey])
+  const toggleSerie = useCallback((key: string) => {
+    setVersteckt((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next })
+  }, [])
   const daten = useMemo(() => baueChartDaten(tage), [tage])
   const presets = verfuegbarePresets(false)
   const aktPreset = presets.find((p) => p.key === presetKey) ?? presets[0]
@@ -132,7 +140,10 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
             )}
             <Tooltip {...eedcTooltipProps({ formatter: (value: number, name: string) =>
               name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh` })} />
-            <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
+            <Legend wrapperStyle={{ fontSize: 12 }} content={
+              // Vergleich: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit).
+              <ChartLegende onItemClick={view === 'vergleich' ? (e) => toggleSerie(String(e.dataKey ?? e.value)) : undefined} />
+            } />
 
             {view === 'vergleich' ? (
               // B3: Balken-Klick → Cockpit/Tag des geklickten Tages (Ausreißer „reinklicken").
@@ -143,6 +154,7 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
                 istJahr: false,
                 schmal,
                 onBarClick: (i) => navigate(tagDrillInPfad(daten[i].datum)),
+                hidden: versteckt,
               })
             ) : view === 'erzeugung' ? (
               <>

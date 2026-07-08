@@ -19,14 +19,17 @@ export function vergleichBalken({
   istJahr,
   schmal,
   onBarClick,
+  hidden,
 }: {
   preset: VergleichPreset
   istJahr: boolean
   schmal: boolean
   onBarClick?: (index: number) => void
+  /** Per Legende ausgeblendete Serien-Keys (Skalen-Lesbarkeit: große Serie ausblenden). */
+  hidden?: Set<string>
 }) {
   const serien = sichtbareSerien(preset, istJahr)
-  const hatKm = serien.some((s) => s.achse === 'km')
+  const hatKm = serien.some((s) => s.achse === 'km' && !hidden?.has(s.key))
   return (
     <>
       {hatKm && (
@@ -45,6 +48,9 @@ export function vergleichBalken({
           dataKey={s.key}
           name={s.name}
           fill={s.color}
+          // `hide` (nicht Daten filtern) → Recharts dimmt den Legenden-Eintrag und
+          // reskaliert die Y-Achse auf die sichtbaren Serien; Re-Klick bringt sie zurück.
+          hide={hidden?.has(s.key)}
           onClick={onBarClick ? (_d, index) => onBarClick(index) : undefined}
           cursor={onBarClick ? 'pointer' : undefined}
         />

@@ -11,7 +11,7 @@
  * Quelle: `AggregierteMonatsdaten[]` (Σ der IMD je Monat) — dieselbe SoT wie die
  * Bilanz-Vergleichsspalten, damit Chart und Zahlen nie auseinanderlaufen.
  */
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -79,6 +79,13 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
   const [view, setView] = useState<BilanzView>('erzeugung')
   const [presetKey, setPresetKey] = useState('verbrauch')
   const [showAutarkie, setShowAutarkie] = useState(false)
+  // Skalen-Lesbarkeit (Vergleich): Serien per Legenden-Klick aus-/einblenden;
+  // Reset bei Modus-/Preset-Wechsel — geteilte SoT-Mechanik (ChartLegende.onItemClick).
+  const [versteckt, setVersteckt] = useState<Set<string>>(new Set())
+  useEffect(() => { setVersteckt(new Set()) }, [view, presetKey])
+  const toggleSerie = useCallback((key: string) => {
+    setVersteckt((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next })
+  }, [])
   const daten = useMemo(() => baueJahrChartDaten(monate), [monate])
   const presets = verfuegbarePresets(true)
   const aktPreset = presets.find((p) => p.key === presetKey) ?? presets[0]
@@ -141,7 +148,10 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
               name === 'Autarkie' ? `${fmtZahl(value, 1)} %`
                 : name === 'Fahrleistung' ? `${fmtZahl(value, 0)} km`
                 : `${fmtZahl(value, 1)} kWh` })} />
-            <Legend wrapperStyle={{ fontSize: 12 }} content={<ChartLegende />} />
+            <Legend wrapperStyle={{ fontSize: 12 }} content={
+              // Vergleich: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit).
+              <ChartLegende onItemClick={view === 'vergleich' ? (e) => toggleSerie(String(e.dataKey ?? e.value)) : undefined} />
+            } />
 
             {view === 'vergleich' ? (
               // B3: Balken-Klick → Cockpit/Monat des geklickten Monats (Ausreißer „reinklicken").
@@ -152,6 +162,7 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
                 istJahr: true,
                 schmal,
                 onBarClick: (i) => navigate(monatDrillInPfad(daten[i].jahr, daten[i].monatNr)),
+                hidden: versteckt,
               })
             ) : view === 'erzeugung' ? (
               <>
