@@ -7,9 +7,9 @@
  * Zahlen de-DE (`fmtZahl`), Preis-Farben aus der Zentrale (`GELD_TEXT_CLASS`:
  * Netzbezug = Kosten, Einspeisung = Erlös).
  */
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
-import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld } from '../components/ui'
+import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { useStrompreise } from '../hooks'
 import { GELD_TEXT_CLASS, fmtZahl } from '../lib'
@@ -459,6 +459,29 @@ interface StrompreisFormProps {
   error?: string | null
 }
 
+const VERWENDUNG_OPTIONEN: readonly { value: StrompreisVerwendung; label: string; description: string }[] = [
+  { value: 'allgemein', label: 'Standard (allgemein)', description: 'Für alle Berechnungen; Fallback für WP/Wallbox ohne eigenen Tarif.' },
+  { value: 'waermepumpe', label: 'Wärmepumpe (Spezialtarif)', description: 'Wird nur für die Wärmepumpe verwendet.' },
+  { value: 'wallbox', label: 'Wallbox (Spezialtarif)', description: 'Wird nur für die Wallbox verwendet.' },
+]
+
+// Roh-Enum nie sichtbar → Label-Map (Style-Guide D1 / TYP_LABELS-Muster).
+const VERTRAGSART_OPTIONEN: { value: string; label: string }[] = [
+  { value: 'grundversorgung', label: 'Grundversorgung' },
+  { value: 'sondervertrag', label: 'Sondervertrag' },
+  { value: 'dynamisch', label: 'Dynamischer Tarif' },
+  { value: 'oeko', label: 'Ökostrom' },
+]
+
+// V7-Plausibilität: dieselben Schwellen wie der Daten-Checker
+// (backend/services/daten_checker/stammdaten.py:_check_strompreise) — SoT dort;
+// hier nur als weicher Hinweis gespiegelt, NICHT als Blockier-Logik.
+const NETZBEZUG_MIN = 5
+const NETZBEZUG_MAX = 80
+const EINSPEISUNG_MAX = 30
+
+type PflichtFeld = 'netzbezug_arbeitspreis_cent_kwh' | 'einspeiseverguetung_cent_kwh' | 'gueltig_ab'
+
 export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, error }: StrompreisFormProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -473,15 +496,65 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
     verwendung: (strompreis?.verwendung || 'allgemein') as StrompreisVerwendung,
   })
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  // V1/V2: Inline-Fehler erst nach Berührung (touched) bzw. nach Absende-Versuch.
+  const [touched, setTouched] = useState<Set<string>>(new Set())
+  const [submitted, setSubmitted] = useState(false)
+  const feldRefs = useRef<Record<PflichtFeld, HTMLDivElement | null>>({
+    netzbezug_arbeitspreis_cent_kwh: null,
+    einspeiseverguetung_cent_kwh: null,
+    gueltig_ab: null,
+  })
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  const markTouched = (name: string) => setTouched(prev => new Set(prev).add(name))
+
+  // Harte Validierung (blockiert Absenden).
+  const feldFehler = (name: PflichtFeld): string | undefined => {
+    if (name === 'gueltig_ab') {
+      return formData.gueltig_ab ? undefined : 'Bitte ein Gültig-ab-Datum wählen'
+    }
+    const roh = formData[name]
+    if (roh === '') return 'Pflichtfeld'
+    const n = parseFloat(roh)
+    if (Number.isNaN(n)) return 'Bitte eine Zahl eingeben'
+    if (n < 0) return 'Darf nicht negativ sein'
+    return undefined
+  }
+
+  const zeigeFehler = (name: PflichtFeld): string | undefined =>
+    (submitted || touched.has(name)) ? feldFehler(name) : undefined
+
+  // V7 weiche Plausibilität (blockiert NICHT) — Schwellen s. o.
+  const plausibelWarnung = (name: 'netzbezug_arbeitspreis_cent_kwh' | 'einspeiseverguetung_cent_kwh'): string | undefined => {
+    if (feldFehler(name)) return undefined
+    const n = parseFloat(formData[name])
+    if (Number.isNaN(n)) return undefined
+    if (name === 'netzbezug_arbeitspreis_cent_kwh' && (n < NETZBEZUG_MIN || n > NETZBEZUG_MAX)) {
+      return `Ungewöhnlich – erwartet ${NETZBEZUG_MIN}–${NETZBEZUG_MAX} ct/kWh`
+    }
+    if (name === 'einspeiseverguetung_cent_kwh' && n > EINSPEISUNG_MAX) {
+      return `Ungewöhnlich – erwartet 0–${EINSPEISUNG_MAX} ct/kWh`
+    }
+    return undefined
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setSubmitted(true)
 
+    // V2: alle Pflichtfelder prüfen, bei Fehler blockieren + zum ersten scrollen.
+    const pflicht: PflichtFeld[] = ['netzbezug_arbeitspreis_cent_kwh', 'einspeiseverguetung_cent_kwh', 'gueltig_ab']
+    const ersterFehler = pflicht.find(feldFehler)
+    if (ersterFehler) {
+      feldRefs.current[ersterFehler]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+
+    setLoading(true)
     try {
       const baseData = {
         netzbezug_arbeitspreis_cent_kwh: parseFloat(formData.netzbezug_arbeitspreis_cent_kwh),
@@ -506,80 +579,66 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {/* V4: Async/Server-Fehler ohne Feld-Zuordnung als Formular-Alert. */}
       {error && <Alert type="error">{error}</Alert>}
 
-      {/* Tarif-Verwendung */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Tarif-Verwendung
-        </label>
-        <select
+      <FormSection title="Verwendung">
+        <RadioGroup
           name="verwendung"
+          options={VERWENDUNG_OPTIONEN}
           value={formData.verwendung}
-          onChange={handleChange}
-          className="input w-full"
-          title="Tarif-Verwendung"
-        >
-          <option value="allgemein">Standard (allgemein)</option>
-          <option value="waermepumpe">Wärmepumpe (Spezialtarif)</option>
-          <option value="wallbox">Wallbox (Spezialtarif)</option>
-        </select>
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {formData.verwendung === 'allgemein'
-            ? 'Standard-Tarif für alle Berechnungen. Wird auch als Fallback für WP/Wallbox ohne Spezialtarif genutzt.'
-            : 'Spezialtarif wird nur für diese Komponente verwendet. Ohne Spezialtarif gilt der Standard-Tarif.'}
-        </p>
-      </div>
-
-      {/* Tarif-Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input
-          label="Tarifname"
-          name="tarifname"
-          value={formData.tarifname}
-          onChange={handleChange}
-          placeholder="z.B. Grundversorgung, Öko-Strom"
+          onChange={(v) => setFormData(prev => ({ ...prev, verwendung: v }))}
         />
-        <Input
-          label="Anbieter"
-          name="anbieter"
-          value={formData.anbieter}
-          onChange={handleChange}
-          placeholder="z.B. Stadtwerke"
-        />
-      </div>
+      </FormSection>
 
-      {/* Preise */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Preise</h3>
-        {/* D14-6 (detLAN #113): items-end — das zweizeilig umbrechende
-            „Einspeisevergütung"-Label drückte sein Feld sonst unter die Nachbarn. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <Input
-            label="Netzbezug (ct/kWh)"
-            name="netzbezug_arbeitspreis_cent_kwh"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.netzbezug_arbeitspreis_cent_kwh}
-            onChange={handleChange}
-            required
-            hint="Arbeitspreis für Strombezug"
-          />
-          <Input
-            label="Einspeisevergütung (ct/kWh)"
-            name="einspeiseverguetung_cent_kwh"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.einspeiseverguetung_cent_kwh}
-            onChange={handleChange}
-            required
-            hint="EEG-Vergütung oder PPA-Preis"
-          />
+      <FormSection title="Preise">
+        {/* D17-7 / D14-6 (detLAN #113): labelClassName reserviert eine
+            Zwei-Zeilen-Höhe → das umbrechende „Einspeisevergütung"-Label
+            verschiebt die Felder nicht mehr; items-start hält die Felder oben
+            bündig, unabhängig von Hinweis/V7/Fehler-Höhe darunter. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+          <div ref={(el) => { feldRefs.current.netzbezug_arbeitspreis_cent_kwh = el }}>
+            <Input
+              label="Netzbezug (ct/kWh)"
+              labelClassName="md:min-h-[2.5rem]"
+              name="netzbezug_arbeitspreis_cent_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.netzbezug_arbeitspreis_cent_kwh}
+              onChange={handleChange}
+              onBlur={() => markTouched('netzbezug_arbeitspreis_cent_kwh')}
+              required
+              error={zeigeFehler('netzbezug_arbeitspreis_cent_kwh')}
+              hint={(zeigeFehler('netzbezug_arbeitspreis_cent_kwh') || plausibelWarnung('netzbezug_arbeitspreis_cent_kwh')) ? undefined : 'Arbeitspreis für Strombezug'}
+            />
+            {!zeigeFehler('netzbezug_arbeitspreis_cent_kwh') && plausibelWarnung('netzbezug_arbeitspreis_cent_kwh') && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{plausibelWarnung('netzbezug_arbeitspreis_cent_kwh')}</p>
+            )}
+          </div>
+          <div ref={(el) => { feldRefs.current.einspeiseverguetung_cent_kwh = el }}>
+            <Input
+              label="Einspeisevergütung (ct/kWh)"
+              labelClassName="md:min-h-[2.5rem]"
+              name="einspeiseverguetung_cent_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.einspeiseverguetung_cent_kwh}
+              onChange={handleChange}
+              onBlur={() => markTouched('einspeiseverguetung_cent_kwh')}
+              required
+              error={zeigeFehler('einspeiseverguetung_cent_kwh')}
+              hint={(zeigeFehler('einspeiseverguetung_cent_kwh') || plausibelWarnung('einspeiseverguetung_cent_kwh')) ? undefined : 'EEG-Vergütung oder PPA-Preis'}
+            />
+            {!zeigeFehler('einspeiseverguetung_cent_kwh') && plausibelWarnung('einspeiseverguetung_cent_kwh') && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{plausibelWarnung('einspeiseverguetung_cent_kwh')}</p>
+            )}
+          </div>
           <Input
             label="Grundpreis (€/Monat)"
+            labelClassName="md:min-h-[2.5rem]"
             name="grundpreis_euro_monat"
             type="number"
             step="0.01"
@@ -589,47 +648,56 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
             hint="Optional"
           />
         </div>
-      </div>
+      </FormSection>
 
-      {/* Gültigkeit */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Gültigkeit</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+      <FormSection title="Gültigkeit">
+        <div ref={(el) => { feldRefs.current.gueltig_ab = el }}>
           <DatumFeld
             label="Gültig ab"
             value={formData.gueltig_ab}
-            onChange={(v) => setFormData(prev => ({ ...prev, gueltig_ab: v }))}
+            onChange={(v) => { setFormData(prev => ({ ...prev, gueltig_ab: v })); markTouched('gueltig_ab') }}
             required
           />
+          {zeigeFehler('gueltig_ab') && (
+            <p className="mt-1 text-xs text-red-500">{zeigeFehler('gueltig_ab')}</p>
+          )}
+        </div>
+      </FormSection>
+
+      <FormSection variant="erweitert" title="Erweitert (optional)">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Tarifname"
+              name="tarifname"
+              value={formData.tarifname}
+              onChange={handleChange}
+              placeholder="z.B. Grundversorgung, Öko-Strom"
+            />
+            <Input
+              label="Anbieter"
+              name="anbieter"
+              value={formData.anbieter}
+              onChange={handleChange}
+              placeholder="z.B. Stadtwerke"
+            />
+          </div>
           <DatumFeld
             label="Gültig bis"
             value={formData.gueltig_bis}
             onChange={(v) => setFormData(prev => ({ ...prev, gueltig_bis: v }))}
             hint="Leer lassen für unbefristet"
           />
+          <Select
+            label="Vertragsart"
+            name="vertragsart"
+            value={formData.vertragsart}
+            onChange={(e) => setFormData(prev => ({ ...prev, vertragsart: e.target.value }))}
+            placeholder="Bitte wählen"
+            options={VERTRAGSART_OPTIONEN}
+          />
         </div>
-      </div>
-
-      {/* Vertragsart */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Vertragsart
-        </label>
-        <select
-          name="vertragsart"
-          value={formData.vertragsart}
-          onChange={handleChange}
-          className="input w-full"
-          title="Vertragsart"
-        >
-          <option value="">Bitte wählen</option>
-          <option value="grundversorgung">Grundversorgung</option>
-          <option value="sondervertrag">Sondervertrag</option>
-          <option value="dynamisch">Dynamischer Tarif</option>
-          <option value="oeko">Ökostrom</option>
-        </select>
-      </div>
+      </FormSection>
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

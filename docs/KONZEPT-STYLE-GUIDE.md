@@ -540,7 +540,8 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ### D3 — Struktur / UX
 
-- **S1** thematische `FormSection`-Gruppen (einheitliches Shading) statt loser `<h3>`. **S2** optionale/Experten-Felder in aufklappbaren „Erweitert"-Gruppen (Standard eingeklappt). **S3** Pflichtfelder markieren (`*`), Kern-Pflicht nie in „Erweitert". **S4** Desktop mehrspaltig / mobil 1-spaltig, keine Gliederungs-Einrückung. **S5** Reihenfolge Pflicht/Kern zuerst, Optionales später. **S6** einheitlicher Disabled/Read-only-Stil. **S7** konditionale Felder ein-/ausblenden (nicht verwirrend disablen); Pflicht gilt erst wenn sichtbar.
+- **S1** thematische `FormSection`-Gruppen (einheitliches Shading) statt loser `<h3>`. **S2** optionale/Experten-Felder in aufklappbaren „Erweitert"-Gruppen (Standard eingeklappt). **S3** Pflichtfelder markieren (`*`), Kern-Pflicht nie in „Erweitert". **S4** Desktop mehrspaltig / mobil 1-spaltig, keine Gliederungs-Einrückung. **Dichte Feld-Raster** (viele kurze Zahlenfelder, z. B. Investitions-Monatsdaten): **max 3 Spalten** + `Input denseRow` (CSS-**Subgrid**) → die Label-Höhe stellt sich **pro Raster-Zeile** ein (einzeilig, wo alle Titel kurz; zweizeilig nur dort, wo einer umbricht), Felder immer in einer Linie — **kein** globales `min-h`-Reserve (das erzeugt uneinheitliche Leerräume). Einzelne 2-spaltige Zeilen ohne Subgrid: `labelClassName="md:min-h-[2.5rem]"` als Fallback. **S5** Reihenfolge Pflicht/Kern zuerst, Optionales später. **S6** einheitlicher Disabled/Read-only-Stil. **S7** konditionale Felder ein-/ausblenden (nicht verwirrend disablen); Pflicht gilt erst wenn sichtbar.
+- **S8 Formular-Breite folgt dem dichtesten Feld-Layout** (nicht ad hoc pro Formular): **gleiches Layout = gleiche Breite**, appweit vorhersehbar. Modal-`size`-SoT (`sm/md/lg/xl` = 28/32/42/56 rem): **`lg`** = Standard 2-spaltige Formulare (AnlageForm, StrompreisForm) · **`xl`** = dichte mehrspaltige Formulare **+ alle Wizards** (MonatsdatenForm mit Investitions-Rastern, InvestitionForm, Setup-Wizard) · **`md`** = nur kurze 1-spaltige Formulare/Bestätigungen. Zu schmal quetscht mehrspaltige Raster → Titel-Umbruch (D17-7).
 
 ### D4 — Validierung & Absenden
 
@@ -554,7 +555,7 @@ Formular = EIN Screen (D1–D4). **Wizard** = mehrstufiger Ablauf; D1–D4 gelte
 
 ### D6 — Wächter (grep-bar)
 
-- neu **`check:form-controls`** (keine rohen Primitive in Formularen) · **`check:datumpicker`** (Scope erweitern, D17-8) · FormSection-statt-`<h3>` · Inline-Farben via `check:design`. Neue SoT-Bausteine entstehen lazy je Slice (`Textarea`/`FormSection`/`RadioGroup`/`Checkbox`/Upload-SoT/Hinweis-Box/`Stepper`).
+- **`check:form-controls`** ✅ implementiert (keine rohen `<select>/<textarea>/<input>/<label>` in `components/forms/**`; Allowlist für noch-nicht-migrierte Formulare, wandert leer) · **`check:datumpicker`** (Scope erweitern, D17-8) · FormSection-statt-`<h3>` · Inline-Farben via `check:design`. Neue SoT-Bausteine entstehen lazy je Slice: `FormSection`/`RadioGroup` (Slice 1) · `BildUpload` (Upload-SoT M7, Slice 2) · Select-Erweiterung optgroup/disabled/hint (Slice 2) · `Textarea` + FormSection-Icon + Input-`denseRow`-Subgrid (Slice 3) · `Checkbox` + `ConfirmDialog` (Slice 4, leichter Bestätigungsdialog — der schwere `DestructiveActionDialog` bleibt Anlage-Löschung) · Hinweis-Box = bestehender **`Alert`**-SoT; offen `Stepper` (Wizards).
 
 ---
 

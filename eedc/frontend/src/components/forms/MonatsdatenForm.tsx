@@ -3,8 +3,8 @@
  * Zeigt Felder basierend auf den vorhandenen Investitionen der Anlage an.
  */
 
-import { useState, useEffect, useMemo, FormEvent } from 'react'
-import { Button, Input, Alert, Select } from '../ui'
+import { useState, useEffect, useMemo, useRef, FormEvent } from 'react'
+import { Button, Input, Alert, Select, Textarea, FormSection } from '../ui'
 import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi } from '../../api'
 import type { Monatsdaten } from '../../types'
@@ -97,6 +97,8 @@ interface InvestitionMonatsdaten {
 
 // SonstigePosition wird aus ./sections/types importiert
 
+type PflichtFeld = 'einspeisung_kwh' | 'netzbezug_kwh'
+
 const monatOptions = [
   { value: '1', label: 'Januar' },
   { value: '2', label: 'Februar' },
@@ -118,6 +120,25 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // V1/V2: Inline-Fehler erst nach Berührung bzw. Absende-Versuch (Muster Slice 1/2).
+  const [touched, setTouched] = useState<Set<string>>(new Set())
+  const [submitted, setSubmitted] = useState(false)
+  const feldRefs = useRef<Record<PflichtFeld, HTMLDivElement | null>>({
+    einspeisung_kwh: null,
+    netzbezug_kwh: null,
+  })
+  const markTouched = (name: string) => setTouched(prev => new Set(prev).add(name))
+  const feldFehler = (name: PflichtFeld): string | undefined => {
+    const roh = formData[name]
+    if (roh === '') return 'Pflichtfeld'
+    const n = parseFloat(roh)
+    if (Number.isNaN(n)) return 'Bitte eine Zahl eingeben'
+    if (n < 0) return 'Darf nicht negativ sein'
+    return undefined
+  }
+  const zeigeFehler = (name: PflichtFeld): string | undefined =>
+    (submitted || touched.has(name)) ? feldFehler(name) : undefined
 
   // Investitionen für diese Anlage laden (nur aktive)
   const { investitionen, loading: invLoading } = useInvestitionen(anlageId)
@@ -418,9 +439,13 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSubmitted(true)
 
-    if (!formData.einspeisung_kwh || !formData.netzbezug_kwh) {
-      setError('Bitte Einspeisung und Netzbezug eingeben')
+    // V2: Pflichtfelder prüfen, bei Fehler blockieren + zum ersten scrollen.
+    const pflicht: PflichtFeld[] = ['einspeisung_kwh', 'netzbezug_kwh']
+    const ersterFehler = pflicht.find(feldFehler)
+    if (ersterFehler) {
+      feldRefs.current[ersterFehler]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
 
@@ -523,7 +548,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {error && <Alert type="error">{error}</Alert>}
 
       {/* HA-Vorausfüllung Hinweis */}
@@ -535,8 +560,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       )}
 
       {/* Zeitraum */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Zeitraum</h3>
+      <FormSection title="Zeitraum">
         <div className="grid grid-cols-2 gap-4">
           <Input
             label="Jahr"
@@ -559,34 +583,41 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             disabled={!!monatsdaten}
           />
         </div>
-      </div>
+      </FormSection>
 
       {/* Energie-Daten */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Energie-Daten (kWh)</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Einspeisung"
-            name="einspeisung_kwh"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.einspeisung_kwh}
-            onChange={handleChange}
-            placeholder="z.B. 450"
-            required
-          />
-          <Input
-            label="Netzbezug"
-            name="netzbezug_kwh"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.netzbezug_kwh}
-            onChange={handleChange}
-            placeholder="z.B. 120"
-            required
-          />
+      <FormSection title="Energie-Daten (kWh)">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <div ref={(el) => { feldRefs.current.einspeisung_kwh = el }}>
+            <Input
+              label="Einspeisung"
+              name="einspeisung_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.einspeisung_kwh}
+              onChange={handleChange}
+              onBlur={() => markTouched('einspeisung_kwh')}
+              placeholder="z.B. 450"
+              required
+              error={zeigeFehler('einspeisung_kwh')}
+            />
+          </div>
+          <div ref={(el) => { feldRefs.current.netzbezug_kwh = el }}>
+            <Input
+              label="Netzbezug"
+              name="netzbezug_kwh"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.netzbezug_kwh}
+              onChange={handleChange}
+              onBlur={() => markTouched('netzbezug_kwh')}
+              placeholder="z.B. 120"
+              required
+              error={zeigeFehler('netzbezug_kwh')}
+            />
+          </div>
           {hatDynamischenTarif && (
             <Input
               label="Ø Strompreis (dynamisch)"
@@ -626,19 +657,15 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               hint="ct/kWh — Monatsdurchschnitt für WP-Vergleich"
             />
           )}
-          {/* PV-Erzeugung: readonly wenn PV-Module mit Werten vorhanden, sonst editierbar (Legacy) */}
+          {/* PV-Erzeugung: berechnet → Display (D1, kein Input), sonst editierbar (Legacy) */}
           {(hatPVModule || hatWechselrichter) && berechneteWerte.pvErzeugung > 0 ? (
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 PV-Erzeugung (berechnet)
-              </label>
-              <input
-                type="text"
-                value={`${fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh`}
-                readOnly
-                disabled
-                className="input bg-gray-100 dark:bg-gray-800 cursor-not-allowed"
-              />
+              </span>
+              <div className="flex min-h-[42px] w-full items-center rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 px-3 py-2 text-gray-900 dark:text-gray-100">
+                {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
+              </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Aus {hatPVModule ? 'PV-Modulen' : 'Wechselrichtern'}: {fmtZahl(berechneteWerte.pvErzeugung, 1)} kWh
               </p>
@@ -657,7 +684,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             />
           )}
         </div>
-      </div>
+      </FormSection>
 
       {/* PV-Module (falls vorhanden) */}
       {hatPVModule && (
@@ -704,7 +731,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             felderFn={(inv) => getFelderFuerInvestition('speicher', inv.parameter)}
           />
           {(berechneteWerte.batterieLadung > 0 || berechneteWerte.batterieEntladung > 0) && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 -mt-2 ml-7">
+            <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
               Summe: Ladung {fmtZahl(berechneteWerte.batterieLadung, 1)} kWh | Entladung {fmtZahl(berechneteWerte.batterieEntladung, 1)} kWh
             </div>
           )}
@@ -798,8 +825,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
       {/* Batterie manuell (falls kein Speicher als Investition) */}
       {!hatSpeicher && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Batterie (optional)</h3>
+        <FormSection title="Batterie (optional)">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               label="Batterie Ladung"
@@ -822,16 +848,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               placeholder="z.B. 140"
             />
           </div>
-        </div>
+        </FormSection>
       )}
 
       {/* Wetterdaten */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
-            <Cloud className="w-4 h-4" />
-            Wetterdaten (optional)
-          </h3>
+      <FormSection variant="erweitert" title="Wetterdaten (optional)" icon={Cloud}>
+        <div className="flex justify-end mb-3">
           <Button
             type="button"
             variant="secondary"
@@ -847,7 +869,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           </Button>
         </div>
         {wetterInfo && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded">
+          <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded mb-3">
             {wetterInfo}
           </p>
         )}
@@ -885,44 +907,41 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             hint="°C (optional)"
           />
         </div>
-      </div>
+      </FormSection>
 
-      {/* Sonderkosten */}
-      <div className="grid grid-cols-2 gap-4">
-        <Input
-          label="Sonderkosten"
-          name="sonderkosten_euro"
-          type="number"
-          step="0.01"
-          min="0"
-          value={formData.sonderkosten_euro}
-          onChange={handleChange}
-          placeholder="z.B. 120.00"
-          hint="€ — Reparatur, Wartung, etc. (optional)"
-        />
-        <Input
-          label="Sonderkosten Beschreibung"
-          name="sonderkosten_beschreibung"
-          value={formData.sonderkosten_beschreibung}
-          onChange={handleChange}
-          placeholder="z.B. Wechselrichter-Wartung"
-        />
-      </div>
-
-      {/* Notizen */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Notizen
-        </label>
-        <textarea
-          name="notizen"
-          value={formData.notizen}
-          onChange={handleChange}
-          rows={2}
-          className="input"
-          placeholder="Optionale Bemerkungen..."
-        />
-      </div>
+      {/* Sonderkosten & Notizen */}
+      <FormSection variant="erweitert" title="Sonderkosten & Notizen">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            label="Sonderkosten"
+            name="sonderkosten_euro"
+            type="number"
+            step="0.01"
+            min="0"
+            value={formData.sonderkosten_euro}
+            onChange={handleChange}
+            placeholder="z.B. 120.00"
+            hint="€ — Reparatur, Wartung, etc. (optional)"
+          />
+          <Input
+            label="Sonderkosten Beschreibung"
+            name="sonderkosten_beschreibung"
+            value={formData.sonderkosten_beschreibung}
+            onChange={handleChange}
+            placeholder="z.B. Wechselrichter-Wartung"
+          />
+        </div>
+        <div className="mt-4">
+          <Textarea
+            label="Notizen"
+            name="notizen"
+            value={formData.notizen}
+            onChange={handleChange}
+            rows={2}
+            placeholder="Optionale Bemerkungen..."
+          />
+        </div>
+      </FormSection>
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

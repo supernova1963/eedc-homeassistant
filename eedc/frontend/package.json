@@ -15,6 +15,7 @@
     "check:achsen": "node scripts/check-achsen.mjs",
     "check:de-de": "node scripts/check-de-de.mjs",
     "check:datumpicker": "node scripts/check-datumpicker.mjs",
+    "check:form-controls": "node scripts/check-form-controls.mjs",
     "check:v4links": "node scripts/check-v4links.mjs",
     "check:scrollschatten": "node scripts/check-scrollschatten.mjs",
     "check:persistenz": "node scripts/check-persistenz.mjs",

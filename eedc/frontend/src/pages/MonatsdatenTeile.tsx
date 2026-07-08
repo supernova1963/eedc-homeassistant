@@ -817,7 +817,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
         isOpen={showForm}
         onClose={() => { setShowForm(false); setHaVorausfuellung(null) }}
         title={haVorausfuellung ? `Monatsdaten aus HA laden - ${haVorausfuellung.monat_name} ${haVorausfuellung.jahr}` : "Monatsdaten erfassen"}
-        size="lg"
+        size="xl"
       >
         <MonatsdatenForm
           anlageId={anlageId}
@@ -832,7 +832,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
         isOpen={!!editingData}
         onClose={() => { setEditingData(null); setHaVorausfuellung(null) }}
         title={haVorausfuellung ? `HA-Werte übernehmen - ${haVorausfuellung.monat_name} ${haVorausfuellung.jahr}` : "Monatsdaten bearbeiten"}
-        size="lg"
+        size="xl"
       >
         {editingData && (
           <MonatsdatenForm

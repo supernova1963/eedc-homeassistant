@@ -1,6 +1,7 @@
-import { useState, useEffect, FormEvent } from 'react'
-import { Info, ExternalLink, Cloud, Sun, Receipt, Mountain, Users, Zap } from 'lucide-react'
-import { Button, Input, Alert, DatumFeld } from '../ui'
+import { useState, useEffect, useRef, FormEvent } from 'react'
+import { ExternalLink } from 'lucide-react'
+import { Button, Input, Select, Switch, Alert, DatumFeld, FormSection } from '../ui'
+import type { SelectItem } from '../ui/Select'
 import VersorgerSection from './VersorgerSection'
 import AnlagenfotoSection from './AnlagenfotoSection'
 import { wetterApi, type WetterProvider, type WetterProviderOption } from '../../api/wetter'
@@ -12,6 +13,48 @@ interface AnlageFormProps {
   onSubmit: (data: AnlageCreate) => Promise<void>
   onCancel: () => void
 }
+
+const LAND_OPTIONEN: SelectItem[] = [
+  { value: 'DE', label: 'Deutschland' },
+  { value: 'AT', label: 'Österreich' },
+  { value: 'CH', label: 'Schweiz' },
+  { value: 'IT', label: 'Italien' },
+]
+
+const UST_BEHANDLUNG_OPTIONEN: SelectItem[] = [
+  { value: 'keine_ust', label: 'Keine USt-Auswirkung (Standard)' },
+  { value: 'regelbesteuerung', label: 'Regelbesteuerung (USt auf Eigenverbrauch)' },
+]
+
+const WETTER_MODELL_OPTIONEN: SelectItem[] = [
+  { value: 'auto', label: 'Automatisch (best_match)' },
+  {
+    label: '── Seamless (empfohlen) ──',
+    options: [
+      { value: 'icon_seamless', label: 'DWD ICON Seamless — Deutschland/Europa' },
+      { value: 'meteoswiss_seamless', label: 'MeteoSwiss Seamless — Alpenraum' },
+      { value: 'ecmwf_seamless', label: 'ECMWF Seamless — Global (15 Tage)' },
+    ],
+  },
+  {
+    label: '── Einzelmodelle ──',
+    options: [
+      { value: 'meteoswiss_icon_ch2', label: 'MeteoSwiss ICON-CH2 (2.1 km, 5 Tage)' },
+      { value: 'icon_d2', label: 'DWD ICON-D2 (2.2 km, 2 Tage)' },
+      { value: 'icon_eu', label: 'DWD ICON-EU (7 km, 5 Tage)' },
+      { value: 'ecmwf_ifs04', label: 'ECMWF IFS (9 km, 10 Tage)' },
+    ],
+  },
+]
+
+const WETTER_PROVIDER_FALLBACK: SelectItem[] = [
+  { value: 'auto', label: 'Automatisch (empfohlen)' },
+  { value: 'open-meteo', label: 'Open-Meteo' },
+  { value: 'brightsky', label: 'Bright Sky (DWD)' },
+  { value: 'open-meteo-solar', label: 'Open-Meteo Solar' },
+]
+
+type PflichtFeld = 'anlagenname' | 'leistung_kwp'
 
 export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormProps) {
   const [loading, setLoading] = useState(false)
@@ -38,6 +81,29 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     netz_puffer_w: anlage?.netz_puffer_w?.toString() || '100',
     prognose_quelle: anlage?.prognose_quelle || 'eedc',
   })
+
+  // V1/V2: Inline-Fehler erst nach Berührung (touched) bzw. nach Absende-Versuch (Muster Slice 1).
+  const [touched, setTouched] = useState<Set<string>>(new Set())
+  const [submitted, setSubmitted] = useState(false)
+  const feldRefs = useRef<Record<PflichtFeld, HTMLDivElement | null>>({
+    anlagenname: null,
+    leistung_kwp: null,
+  })
+
+  const markTouched = (name: string) => setTouched(prev => new Set(prev).add(name))
+
+  const feldFehler = (name: PflichtFeld): string | undefined => {
+    if (name === 'anlagenname') {
+      return formData.anlagenname.trim() ? undefined : 'Bitte einen Namen eingeben'
+    }
+    if (!formData.leistung_kwp) return 'Pflichtfeld'
+    const n = parseFloat(formData.leistung_kwp)
+    if (Number.isNaN(n) || n <= 0) return 'Bitte eine gültige Leistung eingeben'
+    return undefined
+  }
+
+  const zeigeFehler = (name: PflichtFeld): string | undefined =>
+    (submitted || touched.has(name)) ? feldFehler(name) : undefined
 
   // Track if user manually changed USt-Satz
   const [ustManuell, setUstManuell] = useState(false)
@@ -80,14 +146,13 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSubmitted(true)
 
-    if (!formData.anlagenname.trim()) {
-      setError('Bitte einen Namen eingeben')
-      return
-    }
-
-    if (!formData.leistung_kwp || parseFloat(formData.leistung_kwp) <= 0) {
-      setError('Bitte eine gültige Leistung eingeben')
+    // V2: alle Pflichtfelder prüfen, bei Fehler blockieren + zum ersten scrollen.
+    const pflicht: PflichtFeld[] = ['anlagenname', 'leistung_kwp']
+    const ersterFehler = pflicht.find(feldFehler)
+    if (ersterFehler) {
+      feldRefs.current[ersterFehler]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
 
@@ -121,33 +186,58 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
     }
   }
 
+  const providerOptionen: SelectItem[] = wetterProviderOptions.length > 0
+    ? wetterProviderOptions.map(p => ({
+        value: p.id,
+        label: `${p.name}${p.empfohlen ? ' (empfohlen)' : ''}${!p.verfuegbar ? ' (nicht verfügbar)' : ''}`,
+        disabled: !p.verfuegbar,
+      }))
+    : WETTER_PROVIDER_FALLBACK
+
+  const prognoseQuelleOptionen: SelectItem[] = [
+    { value: 'eedc', label: 'eedc-optimiert (Standard)' },
+    { value: 'solcast', label: 'Solcast (pur, ohne Korrektur)' },
+    {
+      value: 'sfml',
+      label: `Solar Forecast ML (pur${haAvailable ? ', nur HA-Add-on' : ' — nur im HA-Add-on verfügbar'})`,
+      disabled: !haAvailable,
+    },
+  ]
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {error && <Alert type="error">{error}</Alert>}
 
-      {/* Basis-Daten */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Basis-Daten</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Anlagenname"
-            name="anlagenname"
-            value={formData.anlagenname}
-            onChange={handleChange}
-            placeholder="z.B. Meine PV-Anlage"
-            required
-          />
-          <Input
-            label="Leistung (kWp)"
-            name="leistung_kwp"
-            type="number"
-            step="0.01"
-            min="0.1"
-            value={formData.leistung_kwp}
-            onChange={handleChange}
-            placeholder="z.B. 10.5"
-            required
-          />
+      {/* ── Kern: Basis-Daten ── */}
+      <FormSection title="Basis-Daten">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <div ref={(el) => { feldRefs.current.anlagenname = el }}>
+            <Input
+              label="Anlagenname"
+              name="anlagenname"
+              value={formData.anlagenname}
+              onChange={handleChange}
+              onBlur={() => markTouched('anlagenname')}
+              placeholder="z.B. Meine PV-Anlage"
+              required
+              error={zeigeFehler('anlagenname')}
+            />
+          </div>
+          <div ref={(el) => { feldRefs.current.leistung_kwp = el }}>
+            <Input
+              label="Leistung (kWp)"
+              name="leistung_kwp"
+              type="number"
+              step="0.01"
+              min="0.1"
+              value={formData.leistung_kwp}
+              onChange={handleChange}
+              onBlur={() => markTouched('leistung_kwp')}
+              placeholder="z.B. 10.5"
+              required
+              error={zeigeFehler('leistung_kwp')}
+            />
+          </div>
           {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
           <DatumFeld
             label="Installationsdatum"
@@ -155,46 +245,24 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             onChange={(v) => setFormData(prev => ({ ...prev, installationsdatum: v }))}
           />
         </div>
-      </div>
-
-      {/* Anlagenfoto — nur für bestehende Anlagen */}
-      {anlage?.id && (
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-          <AnlagenfotoSection anlageId={anlage.id} />
-        </div>
-      )}
-
-      {/* Hinweis zu technischen Daten */}
-      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex gap-2">
-        <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-blue-700 dark:text-blue-300">
-          <p className="font-medium mb-1">Ausrichtung & Neigung</p>
-          <p>
+        <div className="mt-4">
+          <Alert type="info" title="Ausrichtung & Neigung">
             Diese Werte werden pro <strong>PV-Modul</strong> unter <strong>Einstellungen → Investitionen</strong> gepflegt.
             So können auch Anlagen mit mehreren Dachflächen korrekt abgebildet werden.
-          </p>
+          </Alert>
         </div>
-      </div>
+      </FormSection>
 
-      {/* Standort */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Standort</h3>
+      {/* ── Kern: Standort ── */}
+      <FormSection title="Standort">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label htmlFor="standort_land" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Land</label>
-            <select
-              id="standort_land"
-              name="standort_land"
-              value={formData.standort_land}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="DE">Deutschland</option>
-              <option value="AT">Österreich</option>
-              <option value="CH">Schweiz</option>
-              <option value="IT">Italien</option>
-            </select>
-          </div>
+          <Select
+            label="Land"
+            name="standort_land"
+            value={formData.standort_land}
+            onChange={handleChange}
+            options={LAND_OPTIONEN}
+          />
           <Input
             label="PLZ"
             name="standort_plz"
@@ -217,14 +285,20 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             placeholder="z.B. Musterstraße 1"
           />
         </div>
-      </div>
+      </FormSection>
 
-      {/* Geokoordinaten */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-          Geokoordinaten
-          <span className="text-xs font-normal text-gray-500 ml-2">(für PVGIS-Prognose)</span>
-        </h3>
+      {/* ── Kern: Anlagenfoto (nur für bestehende Anlagen) ── */}
+      {anlage?.id && (
+        <FormSection
+          title="Anlagenfoto"
+          description="Erscheint auf der Titelseite der Anlagendokumentation (Phase 4 Beta). Ein Foto pro Anlage — ein neues Foto ersetzt das vorherige."
+        >
+          <AnlagenfotoSection anlageId={anlage.id} />
+        </FormSection>
+      )}
+
+      {/* ── Erweitert: Geokoordinaten ── */}
+      <FormSection variant="erweitert" title="Geokoordinaten (für PVGIS-Prognose)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Breitengrad (Latitude)"
@@ -247,13 +321,10 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             hint="Östliche Länge (positiv)"
           />
         </div>
-      </div>
+      </FormSection>
 
-      {/* Erweiterte Stammdaten */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">
-          Erweiterte Stammdaten
-        </h3>
+      {/* ── Erweitert: Erweiterte Stammdaten (MaStR) ── */}
+      <FormSection variant="erweitert" title="Erweiterte Stammdaten">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Input
@@ -277,34 +348,18 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             )}
           </div>
         </div>
-      </div>
+      </FormSection>
 
-      {/* Steuerliche Behandlung */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
-          <Receipt className="w-4 h-4 text-amber-500" />
-          Steuerliche Behandlung
-        </h3>
+      {/* ── Erweitert: Steuerliche Behandlung ── */}
+      <FormSection variant="erweitert" title="Steuerliche Behandlung">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="w-full">
-            <label
-              htmlFor="steuerliche_behandlung"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              USt-Behandlung
-            </label>
-            <select
-              id="steuerliche_behandlung"
-              name="steuerliche_behandlung"
-              title="USt-Behandlung"
-              value={formData.steuerliche_behandlung}
-              onChange={handleChange}
-              className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
-            >
-              <option value="keine_ust">Keine USt-Auswirkung (Standard)</option>
-              <option value="regelbesteuerung">Regelbesteuerung (USt auf Eigenverbrauch)</option>
-            </select>
-          </div>
+          <Select
+            label="USt-Behandlung"
+            name="steuerliche_behandlung"
+            value={formData.steuerliche_behandlung}
+            onChange={handleChange}
+            options={UST_BEHANDLUNG_OPTIONEN}
+          />
           {formData.steuerliche_behandlung === 'regelbesteuerung' && (
             <Input
               label="USt-Satz (%)"
@@ -320,9 +375,8 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             />
           )}
         </div>
-        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
-          <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-700 dark:text-amber-300">
+        <div className="mt-4">
+          <Alert type="warning">
             {formData.steuerliche_behandlung === 'regelbesteuerung' ? (
               <p>
                 Bei <strong>Regelbesteuerung</strong> wird USt auf den Eigenverbrauch (unentgeltliche Wertabgabe)
@@ -331,76 +385,42 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               </p>
             ) : (
               <p>
-                <strong>Keine USt</strong> gilt für PV-Anlagen ab 2023 mit Nullsteuersatz (&le;30 kWp),
-                Kleinunternehmer (&sect;19 UStG) oder wenn Sie keine steuerliche Erfassung wünschen.
+                <strong>Keine USt</strong> gilt für PV-Anlagen ab 2023 mit Nullsteuersatz (≤30 kWp),
+                Kleinunternehmer (§19 UStG) oder wenn Sie keine steuerliche Erfassung wünschen.
               </p>
             )}
-          </div>
+          </Alert>
         </div>
-        <label className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-          <input
-            type="checkbox"
+        <div className="mt-3 flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+          <Switch
             checked={formData.unterliegt_eeg_51}
-            onChange={(e) => setFormData(prev => ({ ...prev, unterliegt_eeg_51: e.target.checked }))}
-            className="mt-1 h-4 w-4 text-amber-500 border-gray-300 dark:border-gray-600 rounded focus:ring-amber-500"
+            onChange={(an) => setFormData(prev => ({ ...prev, unterliegt_eeg_51: an }))}
+            ariaLabel="Anlage unterliegt §51 EEG (Negativpreis-Regelung)"
           />
           <div>
             <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-              Anlage unterliegt &sect;51 EEG (Negativpreis-Regelung)
+              Anlage unterliegt §51 EEG (Negativpreis-Regelung)
             </span>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Bei Neuanlagen ab Solarpaket&nbsp;I (Inbetriebnahme i.&nbsp;d.&nbsp;R. ab 25.02.2025) entf&auml;llt die
-              Einspeiseverg&uuml;tung in Stunden mit negativem B&ouml;rsenpreis. Nur aktivieren, wenn Ihre Anlage
-              betroffen ist &mdash; der entgangene Erl&ouml;s wird dann im Cockpit als &bdquo;&sect;51-Verlust&ldquo; ausgewiesen.
+              Bei Neuanlagen ab Solarpaket I (Inbetriebnahme i. d. R. ab 25.02.2025) entfällt die
+              Einspeisevergütung in Stunden mit negativem Börsenpreis. Nur aktivieren, wenn Ihre Anlage
+              betroffen ist — der entgangene Erlös wird dann im Cockpit als „§51-Verlust" ausgewiesen.
             </p>
           </div>
-        </label>
-      </div>
+        </div>
+      </FormSection>
 
-      {/* Wetterdaten-Quelle */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
-          <Cloud className="w-4 h-4 text-blue-500" />
-          Wetterdaten-Quelle
-        </h3>
+      {/* ── Erweitert: Wetterdaten-Quelle ── */}
+      <FormSection variant="erweitert" title="Wetterdaten-Quelle">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="w-full">
-            <label
-              htmlFor="wetter_provider"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              Bevorzugter Provider
-            </label>
-            <select
-              id="wetter_provider"
-              name="wetter_provider"
-              value={formData.wetter_provider}
-              onChange={handleChange}
-              disabled={loadingProvider}
-              className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed border-gray-300 dark:border-gray-600"
-            >
-              {wetterProviderOptions.length > 0 ? (
-                wetterProviderOptions.map(p => (
-                  <option
-                    key={p.id}
-                    value={p.id}
-                    disabled={!p.verfuegbar}
-                  >
-                    {p.name}
-                    {p.empfohlen ? ' (empfohlen)' : ''}
-                    {!p.verfuegbar ? ' (nicht verfügbar)' : ''}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="auto">Automatisch (empfohlen)</option>
-                  <option value="open-meteo">Open-Meteo</option>
-                  <option value="brightsky">Bright Sky (DWD)</option>
-                  <option value="open-meteo-solar">Open-Meteo Solar</option>
-                </>
-              )}
-            </select>
-          </div>
+          <Select
+            label="Bevorzugter Provider"
+            name="wetter_provider"
+            value={formData.wetter_provider}
+            onChange={handleChange}
+            disabled={loadingProvider}
+            options={providerOptionen}
+          />
           <div className="flex items-end pb-1">
             <div className="text-xs text-gray-500 dark:text-gray-400">
               {formData.wetter_provider === 'auto' && (
@@ -419,50 +439,24 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
           </div>
         </div>
         {!anlage?.latitude && !anlage?.longitude && (
-          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
-            <Sun className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700 dark:text-amber-300">
+          <div className="mt-3">
+            <Alert type="warning">
               Bitte zuerst Geokoordinaten eintragen, um die verfügbaren Provider zu sehen.
-            </p>
+            </Alert>
           </div>
         )}
-      </div>
+      </FormSection>
 
-      {/* Prognose-Wettermodell */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-2">
-          <Mountain className="w-4 h-4 text-emerald-500" />
-          Prognose-Wettermodell
-        </h3>
+      {/* ── Erweitert: Prognose-Wettermodell ── */}
+      <FormSection variant="erweitert" title="Prognose-Wettermodell">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="w-full">
-            <label
-              htmlFor="wetter_modell"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              Modell für Solar-Prognose
-            </label>
-            <select
-              id="wetter_modell"
-              name="wetter_modell"
-              value={formData.wetter_modell}
-              onChange={handleChange}
-              className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
-            >
-              <option value="auto">Automatisch (best_match)</option>
-              <optgroup label="── Seamless (empfohlen) ──">
-                <option value="icon_seamless">DWD ICON Seamless — Deutschland/Europa</option>
-                <option value="meteoswiss_seamless">MeteoSwiss Seamless — Alpenraum</option>
-                <option value="ecmwf_seamless">ECMWF Seamless — Global (15 Tage)</option>
-              </optgroup>
-              <optgroup label="── Einzelmodelle ──">
-                <option value="meteoswiss_icon_ch2">MeteoSwiss ICON-CH2 (2.1 km, 5 Tage)</option>
-                <option value="icon_d2">DWD ICON-D2 (2.2 km, 2 Tage)</option>
-                <option value="icon_eu">DWD ICON-EU (7 km, 5 Tage)</option>
-                <option value="ecmwf_ifs04">ECMWF IFS (9 km, 10 Tage)</option>
-              </optgroup>
-            </select>
-          </div>
+          <Select
+            label="Modell für Solar-Prognose"
+            name="wetter_modell"
+            value={formData.wetter_modell}
+            onChange={handleChange}
+            options={WETTER_MODELL_OPTIONEN}
+          />
           <div className="flex items-end pb-1">
             <div className="text-xs text-gray-500 dark:text-gray-400">
               {formData.wetter_modell === 'auto' && (
@@ -493,73 +487,47 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
           </div>
         </div>
         {['icon_seamless', 'meteoswiss_seamless', 'ecmwf_seamless'].includes(formData.wetter_modell) && (
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex gap-2">
-            <Info className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+          <div className="mt-3">
+            <Alert type="success">
               Seamless-Modelle kaskadieren intern bei Open-Meteo automatisch zwischen Hoch- und Grobauflösung — für die beste Prognosequalität über den gesamten Vorhersagezeitraum. Die Herkunft der Daten wird in der Kurzfrist-Ansicht pro Tag angezeigt.
-            </p>
+            </Alert>
           </div>
         )}
         {['meteoswiss_icon_ch2', 'icon_d2', 'icon_eu', 'ecmwf_ifs04'].includes(formData.wetter_modell) && (
-          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg flex gap-2">
-            <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700 dark:text-amber-300">
+          <div className="mt-3">
+            <Alert type="warning">
               Einzelmodell: nach Ablauf des Modell-Horizonts wird automatisch auf best_match zurückgefallen. Für die meisten Standorte ist das entsprechende Seamless-Modell die bessere Wahl.
-            </p>
+            </Alert>
           </div>
         )}
-      </div>
+      </FormSection>
 
-      {/* Prognose-Basis */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Sun className="w-5 h-5 text-amber-500" />
-          Prognosequelle
-        </h3>
-        <div>
-          <label
-            htmlFor="prognose_quelle"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
-            PV-Prognose-Quelle für diese Anlage
-          </label>
-          <select
-            id="prognose_quelle"
-            name="prognose_quelle"
-            value={formData.prognose_quelle}
-            onChange={handleChange}
-            className="w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent border-gray-300 dark:border-gray-600"
-          >
-            <option value="eedc">eedc-optimiert (Standard)</option>
-            <option value="solcast">Solcast (pur, ohne Korrektur)</option>
-            <option value="sfml" disabled={!haAvailable}>
-              Solar Forecast ML (pur{!haAvailable ? ' — nur im HA-Add-on verfügbar' : ', nur HA-Add-on'})
-            </option>
-          </select>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {formData.prognose_quelle === 'eedc'
+      {/* ── Erweitert: Prognosequelle ── */}
+      <FormSection variant="erweitert" title="Prognosequelle">
+        <Select
+          label="PV-Prognose-Quelle für diese Anlage"
+          name="prognose_quelle"
+          value={formData.prognose_quelle}
+          onChange={handleChange}
+          options={prognoseQuelleOptionen}
+          hint={
+            formData.prognose_quelle === 'eedc'
               ? 'Open-Meteo Rohprognose mit anlagenspezifischem Lernfaktor (MOS-Verfahren). Funktioniert überall, auch standalone.'
               : formData.prognose_quelle === 'solcast'
                 ? haAvailable
                   ? 'Solcast-Prognose direkt über die HA-Integration, ohne eedc-Korrektur.'
                   : 'Solcast-Prognose direkt via API-Token, ohne eedc-Korrektur. API-Token muss konfiguriert sein.'
-                : 'Solar Forecast ML direkt aus der HA-Integration, ohne eedc-Korrektur. eedc nutzt dabei SFMLs echtes Stundenprofil (bis zu 3 Tage, aus dem evcc-Prognose-Sensor). Nur im HA-Add-on verfügbar.'}
-          </p>
-        </div>
-      </div>
+                : 'Solar Forecast ML direkt aus der HA-Integration, ohne eedc-Korrektur. eedc nutzt dabei SFMLs echtes Stundenprofil (bis zu 3 Tage, aus dem evcc-Prognose-Sensor). Nur im HA-Add-on verfügbar.'
+          }
+        />
+      </FormSection>
 
-      {/* Energiefluss-Einstellungen */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Zap className="w-5 h-5 text-green-500" />
-          Energiefluss
-        </h3>
+      {/* ── Erweitert: Energiefluss ── */}
+      <FormSection variant="erweitert" title="Energiefluss">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" htmlFor="netz_puffer_w">
-            Netz-Puffer (Watt)
-          </label>
           <div className="flex items-center gap-3">
             <Input
+              label="Netz-Puffer (Watt)"
               id="netz_puffer_w"
               name="netz_puffer_w"
               type="number"
@@ -570,25 +538,20 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               onChange={handleChange}
               className="w-28"
             />
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Unterhalb dieses Werts wird das Netz als Balance (grün) angezeigt. Standard: 100 W
-            </span>
           </div>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Unterhalb dieses Werts wird das Netz als Balance (grün) angezeigt. Standard: 100 W
+          </p>
         </div>
-      </div>
+      </FormSection>
 
-      {/* Community Auto-Share */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Users className="w-5 h-5 text-blue-500" />
-          Community
-        </h3>
-        <label className="flex items-start gap-3 cursor-pointer p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-          <input
-            type="checkbox"
+      {/* ── Erweitert: Community ── */}
+      <FormSection variant="erweitert" title="Community">
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+          <Switch
             checked={formData.community_auto_share}
-            onChange={(e) => setFormData(prev => ({ ...prev, community_auto_share: e.target.checked }))}
-            className="mt-1 h-4 w-4 text-orange-500 border-gray-300 dark:border-gray-600 rounded focus:ring-orange-500"
+            onChange={(an) => setFormData(prev => ({ ...prev, community_auto_share: an }))}
+            ariaLabel="Automatisch teilen nach Monatsabschluss"
           />
           <div>
             <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -598,11 +561,13 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
               Anonymisierte Monatsdaten werden nach jedem Abschluss automatisch an den Community-Benchmark gesendet.
             </p>
           </div>
-        </label>
-      </div>
+        </div>
+      </FormSection>
 
-      {/* Versorger & Zähler */}
-      <VersorgerSection value={versorgerDaten} onChange={setVersorgerDaten} />
+      {/* ── Erweitert: Versorger & Zähler ── */}
+      <FormSection variant="erweitert" title="Versorger & Zähler">
+        <VersorgerSection value={versorgerDaten} onChange={setVersorgerDaten} />
+      </FormSection>
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

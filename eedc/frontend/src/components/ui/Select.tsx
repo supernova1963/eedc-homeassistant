@@ -1,21 +1,42 @@
 import { forwardRef, SelectHTMLAttributes } from 'react'
 
-interface SelectOption {
+export interface SelectOption {
   value: string
   label: string
+  /** Nicht wählbar (z. B. „nicht verfügbar") — bleibt sichtbar (D1). */
+  disabled?: boolean
 }
+
+/** Optionsgruppe (`<optgroup>`) für Auswahl >5 mit Kategorien (D1). */
+export interface SelectOptgroup {
+  label: string
+  options: SelectOption[]
+}
+
+export type SelectItem = SelectOption | SelectOptgroup
+
+const istGruppe = (item: SelectItem): item is SelectOptgroup =>
+  (item as SelectOptgroup).options !== undefined
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   error?: string
-  options: SelectOption[]
+  hint?: string
+  /** Flache Optionen und/oder Optionsgruppen (gemischt erlaubt). */
+  options: SelectItem[]
   placeholder?: string
   /** Kompakte Breite (w-auto statt w-full) — für Header-Bereiche */
   compact?: boolean
 }
 
+const renderOption = (o: SelectOption) => (
+  <option key={o.value} value={o.value} disabled={o.disabled}>
+    {o.label}
+  </option>
+)
+
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className = '', label, error, options, placeholder, compact, id, ...props }, ref) => {
+  ({ className = '', label, error, hint, options, placeholder, compact, id, ...props }, ref) => {
     const selectId = id || props.name
 
     return (
@@ -44,12 +65,19 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           {placeholder && (
             <option value="">{placeholder}</option>
           )}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          {options.map((item) =>
+            istGruppe(item) ? (
+              <optgroup key={item.label} label={item.label}>
+                {item.options.map(renderOption)}
+              </optgroup>
+            ) : (
+              renderOption(item)
+            )
+          )}
         </select>
+        {hint && !error && (
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
+        )}
         {error && (
           <p className="mt-1 text-xs text-red-500">{error}</p>
         )}

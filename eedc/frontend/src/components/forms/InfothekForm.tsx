@@ -5,8 +5,8 @@
  * die kategorie-spezifischen Felder.
  */
 
-import { useState, useEffect, useCallback, type FormEvent } from 'react'
-import { Button, Alert } from '../ui'
+import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react'
+import { Button, Alert, Input, Select, Textarea, DatumFeld, Switch, Checkbox, FormSection } from '../ui'
 import { infothekApi } from '../../api/infothek'
 import { investitionenApi } from '../../api/investitionen'
 import { KATEGORIE_KEYS, getKategorieConfig } from '../../config/infothekKategorien'
@@ -40,7 +40,11 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
   const [schemas, setSchemas] = useState<KategorienResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showVertrag, setShowVertrag] = useState(false)
+
+  // V1/V2: Bezeichnung-Pflichtfehler erst nach Berührung/Absenden (Muster Slice 1–3).
+  const [bezeichnungTouched, setBezeichnungTouched] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const bezeichnungRef = useRef<HTMLDivElement>(null)
 
   // Lade Kategorie-Schemas, Investitionen und Ansprechpartner
   useEffect(() => {
@@ -71,48 +75,35 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Prüfe ob übergreifende Sektionen Daten haben (für Edit-Modus)
-  useEffect(() => {
-    if (eintrag?.parameter) {
-      const p = eintrag.parameter as Record<string, unknown>
-      if (p.vertragsnummer || p.vertragsbeginn || p.kuendigungsfrist_monate) {
-        setShowVertrag(true)
-      }
-    }
-  }, [eintrag])
+  const bezeichnungFehler = !bezeichnung.trim() ? 'Bitte eine Bezeichnung eingeben' : undefined
+  const zeigeBezeichnungFehler = (submitted || bezeichnungTouched) ? bezeichnungFehler : undefined
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setSubmitted(true)
     setError(null)
+    if (bezeichnungFehler) {
+      bezeichnungRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
 
+    setLoading(true)
     try {
       const params = Object.keys(parameter).length > 0 ? parameter : null
+      const gemeinsam = {
+        bezeichnung,
+        kategorie,
+        notizen: notizen || null,
+        parameter: params,
+        investition_ids: investitionIds,
+        ansprechpartner_id: ansprechpartnerId,
+        aktiv,
+        in_anlagendoku: inAnlagendoku,
+      }
       if (eintrag) {
-        const data: InfothekEintragUpdate = {
-          bezeichnung,
-          kategorie,
-          notizen: notizen || null,
-          parameter: params,
-          investition_ids: investitionIds,
-          ansprechpartner_id: ansprechpartnerId,
-          aktiv,
-          in_anlagendoku: inAnlagendoku,
-        }
-        await onSubmit(data)
+        await onSubmit(gemeinsam as InfothekEintragUpdate)
       } else {
-        const data: InfothekEintragCreate = {
-          anlage_id: anlageId,
-          bezeichnung,
-          kategorie,
-          notizen: notizen || null,
-          parameter: params,
-          investition_ids: investitionIds,
-          ansprechpartner_id: ansprechpartnerId,
-          aktiv,
-          in_anlagendoku: inAnlagendoku,
-        }
-        await onSubmit(data)
+        await onSubmit({ ...gemeinsam, anlage_id: anlageId } as InfothekEintragCreate)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
@@ -135,63 +126,69 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
 
   const kategorieFelder = schemas?.kategorien[kategorie]?.felder ?? {}
   const vertragFelder = schemas?.uebergreifende_felder?.vertrag?.felder ?? {}
+  const p = (eintrag?.parameter ?? {}) as Record<string, unknown>
+  const hatVertragsdaten = !!(p.vertragsnummer || p.vertragsbeginn || p.kuendigungsfrist_monate)
+  const istAnsprechpartner = kategorie === 'ansprechpartner'
+  const zeigeStatusSektion = !!eintrag || !istAnsprechpartner
+
+  const KATEGORIE_OPTIONEN = KATEGORIE_KEYS
+    .filter(k => k !== 'ansprechpartner')
+    .map(key => ({ value: key, label: getKategorieConfig(key).label }))
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {error && <Alert type="error">{error}</Alert>}
 
-      {/* Bezeichnung */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Bezeichnung *
-        </label>
-        <input
-          type="text"
-          value={bezeichnung}
-          onChange={e => setBezeichnung(e.target.value)}
-          className="input w-full"
-          placeholder="z.B. Stadtwerke Strom (Netzbetreiber)"
-          required
-        />
-      </div>
+      {/* ── Kern: Basis ── */}
+      <FormSection title="Basis">
+        <div className="space-y-4">
+          <div ref={bezeichnungRef}>
+            <Input
+              label="Bezeichnung"
+              name="bezeichnung"
+              value={bezeichnung}
+              onChange={e => setBezeichnung(e.target.value)}
+              onBlur={() => setBezeichnungTouched(true)}
+              placeholder="z.B. Stadtwerke Strom (Netzbetreiber)"
+              required
+              error={zeigeBezeichnungFehler}
+            />
+          </div>
 
-      {/* Kategorie (nicht bei Ansprechpartnern — dort ist sie fest) */}
-      {kategorie !== 'ansprechpartner' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Kategorie *
-          </label>
-          <select
-            value={kategorie}
-            title="Kategorie"
-            onChange={e => {
-              const newKat = e.target.value
-              setKategorie(newKat)
-              if (!eintrag) {
-                setParameter({})
-                loadVorbelegung(newKat)
-              }
-            }}
-            className="input w-full"
-          >
-            {KATEGORIE_KEYS.filter(k => k !== 'ansprechpartner').map(key => {
-              const config = getKategorieConfig(key)
-              return (
-                <option key={key} value={key}>
-                  {config.label}
-                </option>
-              )
-            })}
-          </select>
+          {!istAnsprechpartner && (
+            <Select
+              label="Kategorie"
+              name="kategorie"
+              value={kategorie}
+              onChange={e => {
+                const newKat = e.target.value
+                setKategorie(newKat)
+                if (!eintrag) {
+                  setParameter({})
+                  loadVorbelegung(newKat)
+                }
+              }}
+              required
+              options={KATEGORIE_OPTIONEN}
+            />
+          )}
+
+          {!istAnsprechpartner && ansprechpartnerList.length > 0 && (
+            <Select
+              label="Vertragspartner"
+              name="ansprechpartner_id"
+              value={ansprechpartnerId ?? ''}
+              onChange={e => setAnsprechpartnerId(e.target.value ? Number(e.target.value) : null)}
+              placeholder="— Kein Vertragspartner —"
+              options={ansprechpartnerList.map(asp => ({ value: String(asp.id), label: asp.bezeichnung }))}
+            />
+          )}
         </div>
-      )}
+      </FormSection>
 
-      {/* Kategorie-spezifische Felder */}
+      {/* ── Kern: Kategorie-spezifische Felder ── */}
       {Object.keys(kategorieFelder).length > 0 && (
-        <fieldset className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 px-2">
-            {schemas?.kategorien[kategorie]?.label ?? kategorie}
-          </legend>
+        <FormSection title={schemas?.kategorien[kategorie]?.label ?? kategorie}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {Object.entries(kategorieFelder).map(([key, feld]) => (
               <ParameterFeld
@@ -202,64 +199,43 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
               />
             ))}
           </div>
-        </fieldset>
+        </FormSection>
       )}
 
-      {/* Vertragspartner (Ansprechpartner-Verknüpfung) */}
-      {kategorie !== 'ansprechpartner' && ansprechpartnerList.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Vertragspartner
-          </label>
-          <select
-            value={ansprechpartnerId ?? ''}
-            onChange={e => setAnsprechpartnerId(e.target.value ? Number(e.target.value) : null)}
-            className="input w-full"
-            title="Vertragspartner"
-          >
-            <option value="">— Kein Vertragspartner —</option>
-            {ansprechpartnerList.map(asp => (
-              <option key={asp.id} value={asp.id}>{asp.bezeichnung}</option>
-            ))}
-          </select>
+      {/* ── Kern: Notizen ── */}
+      <FormSection title="Notizen">
+        <MarkdownNotizen value={notizen} onChange={setNotizen} />
+      </FormSection>
+
+      {/* ── Kern: Dateien (nur beim Bearbeiten — braucht eintrag_id) ── */}
+      {eintrag && (
+        <FormSection title="Dateien" description="max. 15 — Fotos + PDFs bis 10 MB">
+          <DateiUpload eintragId={eintrag.id} />
+        </FormSection>
+      )}
+
+      {/* ── Erweitert: Vertragsdaten ── */}
+      <FormSection variant="erweitert" title="Vertragsdaten (optional)" defaultOpen={hatVertragsdaten}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {Object.entries(vertragFelder).map(([key, feld]) => (
+            <ParameterFeld
+              key={key}
+              feld={feld}
+              value={parameter[key]}
+              onChange={val => updateParam(key, val)}
+            />
+          ))}
         </div>
-      )}
+      </FormSection>
 
-      {/* Übergreifende Vertrags-Sektion */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowVertrag(!showVertrag)}
-          className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
-        >
-          <span>{showVertrag ? '▾' : '▸'}</span>
-          Vertragsdaten (optional)
-        </button>
-        {showVertrag && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-            {Object.entries(vertragFelder).map(([key, feld]) => (
-              <ParameterFeld
-                key={key}
-                feld={feld}
-                value={parameter[key]}
-                onChange={val => updateParam(key, val)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Verknüpfte Investitionen (nicht bei Ansprechpartnern) */}
-      {kategorie !== 'ansprechpartner' && investitionen.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Verknüpfte Investitionen
-          </label>
-          <div className="space-y-1 max-h-48 overflow-y-auto border border-gray-600 rounded-lg p-2">
+      {/* ── Erweitert: Verknüpfte Investitionen ── */}
+      {!istAnsprechpartner && investitionen.length > 0 && (
+        <FormSection variant="erweitert" title="Verknüpfte Investitionen" defaultOpen={investitionIds.length > 0}>
+          <div className="space-y-1 max-h-48 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 p-2">
             {investitionen.map(inv => (
-              <label key={inv.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-700/30 rounded px-1 py-0.5">
-                <input
-                  type="checkbox"
+              <div key={inv.id} className="rounded px-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700/30">
+                <Checkbox
+                  name={`inv-${inv.id}`}
                   checked={investitionIds.includes(inv.id)}
                   onChange={e => {
                     if (e.target.checked) {
@@ -268,70 +244,53 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
                       setInvestitionIds(prev => prev.filter(id => id !== inv.id))
                     }
                   }}
-                  className="rounded border-gray-500"
+                  label={
+                    <span>
+                      {inv.bezeichnung}
+                      <span className="text-gray-500 text-xs ml-1">({inv.typ})</span>
+                    </span>
+                  }
                 />
-                <span className="text-gray-300">{inv.bezeichnung}</span>
-                <span className="text-gray-500 text-xs">({inv.typ})</span>
-              </label>
+              </div>
             ))}
           </div>
           {investitionIds.length > 0 && (
             <button
               type="button"
               onClick={() => setInvestitionIds([])}
-              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-200 mt-1"
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 mt-1"
             >
               Alle abwählen
             </button>
           )}
-        </div>
+        </FormSection>
       )}
 
-      {/* Notizen (Markdown) */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Notizen
-        </label>
-        <MarkdownNotizen
-          value={notizen}
-          onChange={setNotizen}
-        />
-      </div>
-
-      {/* Dateien (nur beim Bearbeiten — braucht eintrag_id) */}
-      {eintrag && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Dateien (max. 15 — Fotos + PDFs bis 10 MB)
-          </label>
-          <DateiUpload eintragId={eintrag.id} />
-        </div>
-      )}
-
-      {/* Aktiv-Status (nur beim Bearbeiten) */}
-      {eintrag && (
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input
-            type="checkbox"
-            checked={aktiv}
-            onChange={e => setAktiv(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          Aktiv (deaktivierte Einträge werden ausgegraut angezeigt)
-        </label>
-      )}
-
-      {/* In Anlagendokumentation anzeigen (nicht bei Ansprechpartnern) */}
-      {kategorie !== 'ansprechpartner' && (
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input
-            type="checkbox"
-            checked={inAnlagendoku}
-            onChange={e => setInAnlagendoku(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          In Anlagendokumentation anzeigen
-        </label>
+      {/* ── Erweitert: Status & Anzeige ── */}
+      {zeigeStatusSektion && (
+        <FormSection variant="erweitert" title="Status & Anzeige" defaultOpen={eintrag ? !aktiv : false}>
+          <div className="space-y-3">
+            {eintrag && (
+              <div className="flex items-start gap-3">
+                <Switch checked={aktiv} onChange={setAktiv} ariaLabel="Aktiv" />
+                <div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Aktiv</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Deaktivierte (archivierte) Einträge werden ausgegraut angezeigt.
+                  </p>
+                </div>
+              </div>
+            )}
+            {!istAnsprechpartner && (
+              <div className="flex items-start gap-3">
+                <Switch checked={inAnlagendoku} onChange={setInAnlagendoku} ariaLabel="In Anlagendokumentation anzeigen" />
+                <div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">In Anlagendokumentation anzeigen</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </FormSection>
       )}
 
       {/* Buttons */}
@@ -339,8 +298,8 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
         <Button type="button" variant="secondary" onClick={onCancel}>
           Abbrechen
         </Button>
-        <Button type="submit" disabled={loading || !bezeichnung.trim()}>
-          {loading ? 'Speichern...' : eintrag ? 'Speichern' : 'Erstellen'}
+        <Button type="submit" loading={loading}>
+          {eintrag ? 'Speichern' : 'Erstellen'}
         </Button>
       </div>
     </form>
@@ -348,7 +307,7 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
 }
 
 
-/** Dynamisches Feld basierend auf Typ (string, number, date, select) */
+/** Dynamisches Feld basierend auf Typ (string, number, date, select) — SoT-Controls. */
 function ParameterFeld({
   feld,
   value,
@@ -360,48 +319,47 @@ function ParameterFeld({
 }) {
   const strValue = value != null ? String(value) : ''
 
+  if (feld.type === 'select' && feld.options) {
+    return (
+      <Select
+        label={feld.label}
+        value={strValue}
+        onChange={e => onChange(e.target.value || null)}
+        placeholder="— Auswählen —"
+        options={feld.options.map(opt => ({ value: opt, label: opt }))}
+      />
+    )
+  }
+  if (feld.type === 'text') {
+    return (
+      <Textarea
+        label={feld.label}
+        value={strValue}
+        onChange={e => onChange(e.target.value || null)}
+        rows={4}
+      />
+    )
+  }
+  if (feld.type === 'date') {
+    return (
+      <DatumFeld
+        label={feld.label}
+        value={strValue}
+        onChange={v => onChange(v || null)}
+        min="1950-01-01"
+      />
+    )
+  }
   return (
-    <div>
-      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-        {feld.label}
-      </label>
-      {feld.type === 'select' && feld.options ? (
-        <select
-          value={strValue}
-          onChange={e => onChange(e.target.value || null)}
-          className="input w-full"
-          title={feld.label}
-        >
-          <option value="">— Auswählen —</option>
-          {feld.options.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
-      ) : feld.type === 'text' ? (
-        <textarea
-          value={strValue}
-          title={feld.label}
-          onChange={e => onChange(e.target.value || null)}
-          rows={4}
-          className="input w-full font-sans"
-        />
-      ) : (
-        <input
-          type={feld.type === 'number' ? 'number' : feld.type === 'date' ? 'date' : 'text'}
-          value={strValue}
-          title={feld.label}
-          onChange={e => {
-            const v = e.target.value
-            if (feld.type === 'number') {
-              onChange(v === '' ? null : parseFloat(v))
-            } else {
-              onChange(v || null)
-            }
-          }}
-          step={feld.type === 'number' ? 'any' : undefined}
-          className="input w-full"
-        />
-      )}
-    </div>
+    <Input
+      label={feld.label}
+      type={feld.type === 'number' ? 'number' : 'text'}
+      value={strValue}
+      onChange={e => {
+        const v = e.target.value
+        onChange(feld.type === 'number' ? (v === '' ? null : parseFloat(v)) : (v || null))
+      }}
+      step={feld.type === 'number' ? 'any' : undefined}
+    />
   )
 }

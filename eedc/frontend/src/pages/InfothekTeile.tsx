@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { Plus, Pencil, Trash2, Archive, BookOpen, FileText, User, Phone, Mail, Download } from 'lucide-react'
 import Markdown from 'react-markdown'
-import { Button, buttonClasses, Modal, Card, Alert, LoadingSpinner, EmptyState } from '../components/ui'
+import { Button, buttonClasses, Modal, Card, Alert, LoadingSpinner, EmptyState, ConfirmDialog } from '../components/ui'
 import InfothekForm from '../components/forms/InfothekForm'
 import DateiLightbox from '../components/infothek/DateiLightbox'
 import { infothekApi } from '../api/infothek'
@@ -35,6 +35,7 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
   const [editingEintrag, setEditingEintrag] = useState<InfothekEintrag | null>(null)
   const [initialKategorie, setInitialKategorie] = useState<string | undefined>()
   const [deleteConfirm, setDeleteConfirm] = useState<InfothekEintrag | null>(null)
+  const [archiveConfirm, setArchiveConfirm] = useState<InfothekEintrag | null>(null)
   const [filterKategorie, setFilterKategorie] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
 
@@ -117,21 +118,26 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
 
   const handleDelete = async () => {
     if (!deleteConfirm) return
-    try {
-      await infothekApi.delete(deleteConfirm.id)
-      setDeleteConfirm(null)
-      await loadEintraege()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Löschen')
-    }
+    // Fehler propagieren → der ConfirmDialog zeigt ihn im Dialog (bleibt offen).
+    await infothekApi.delete(deleteConfirm.id)
+    setDeleteConfirm(null)
+    await loadEintraege()
   }
 
-  const handleToggleAktiv = async (eintrag: InfothekEintrag) => {
-    try {
-      await infothekApi.update(eintrag.id, { aktiv: !eintrag.aktiv })
-      await loadEintraege()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Archivieren')
+  const doToggleAktiv = async (eintrag: InfothekEintrag) => {
+    await infothekApi.update(eintrag.id, { aktiv: !eintrag.aktiv })
+    await loadEintraege()
+  }
+
+  // Archivieren (aktiv→false) fragt nach (R17-4 #344: „Bearbeiten" liegt daneben →
+  // Fehlklick); Wiederherstellen (→aktiv) ist harmlos und läuft sofort.
+  const handleToggleAktiv = (eintrag: InfothekEintrag) => {
+    if (eintrag.aktiv) {
+      setArchiveConfirm(eintrag)
+    } else {
+      doToggleAktiv(eintrag).catch(err =>
+        setError(err instanceof Error ? err.message : 'Fehler beim Wiederherstellen'),
+      )
     }
   }
 
@@ -177,37 +183,43 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
         </div>
       ) : (
         <>
-          {/* Kategorie-Filter */}
-          {vorhandeneKategorien.length > 1 && (
+          {/* Kategorie-Filter + Archiv-Toggle. Der Archiv-Toggle hängt NICHT an der
+              Kategorie-Zahl (R17-4 #344: sonst verschwindet er bei nur 1 Kategorie →
+              archivierte Einträge unauffindbar). */}
+          {(vorhandeneKategorien.length > 1 || archivedCount > 0) && (
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setFilterKategorie(null)}
-                className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                  !filterKategorie
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                }`}
-              >
-                Alle ({showArchived ? eintraege.length : eintraege.filter(e => e.aktiv).length})
-              </button>
-              {vorhandeneKategorien.map(key => {
-                const config = getKategorieConfig(key)
-                const Icon = config.icon
-                return (
+              {vorhandeneKategorien.length > 1 && (
+                <>
                   <button
-                    key={key}
-                    onClick={() => setFilterKategorie(filterKategorie === key ? null : key)}
-                    className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
-                      filterKategorie === key
+                    onClick={() => setFilterKategorie(null)}
+                    className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                      !filterKategorie
                         ? 'bg-primary-600 text-white'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                   >
-                    <Icon className="h-3.5 w-3.5" />
-                    {config.label} ({kategorieCounts[key]})
+                    Alle ({showArchived ? eintraege.length : eintraege.filter(e => e.aktiv).length})
                   </button>
-                )
-              })}
+                  {vorhandeneKategorien.map(key => {
+                    const config = getKategorieConfig(key)
+                    const Icon = config.icon
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setFilterKategorie(filterKategorie === key ? null : key)}
+                        className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
+                          filterKategorie === key
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {config.label} ({kategorieCounts[key]})
+                      </button>
+                    )
+                  })}
+                </>
+              )}
               {archivedCount > 0 && (
                 <button
                   onClick={() => setShowArchived(!showArchived)}
@@ -218,7 +230,7 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
                   }`}
                 >
                   <Archive className="h-3.5 w-3.5 inline mr-1" />
-                  Archiviert ({archivedCount})
+                  {showArchived ? `Archiv ausblenden (${archivedCount})` : `Archivierte anzeigen (${archivedCount})`}
                 </button>
               )}
             </div>
@@ -329,26 +341,35 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
         />
       </Modal>
 
+      {/* Archivieren bestätigen (R17-4 #344) — reversibel, daher leichter Dialog */}
+      <ConfirmDialog
+        isOpen={!!archiveConfirm}
+        onClose={() => setArchiveConfirm(null)}
+        onConfirm={async () => {
+          if (archiveConfirm) await doToggleAktiv(archiveConfirm)
+          setArchiveConfirm(null)
+        }}
+        title="Eintrag archivieren"
+        confirmLabel="Archivieren"
+        message={
+          <>Möchtest du „{archiveConfirm?.bezeichnung}" archivieren? Du kannst ihn jederzeit
+          über „Archivierte anzeigen" wiederherstellen.</>
+        }
+      />
+
       {/* Löschen bestätigen */}
-      <Modal
+      <ConfirmDialog
         isOpen={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
         title="Eintrag löschen"
-        size="sm"
-      >
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          Möchtest du "{deleteConfirm?.bezeichnung}" wirklich endgültig löschen?
-          Alternativ kannst du den Eintrag archivieren.
-        </p>
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>
-            Abbrechen
-          </Button>
-          <Button variant="danger" onClick={handleDelete}>
-            Endgültig löschen
-          </Button>
-        </div>
-      </Modal>
+        confirmLabel="Endgültig löschen"
+        variant="danger"
+        message={
+          <>Möchtest du „{deleteConfirm?.bezeichnung}" wirklich endgültig löschen?
+          Alternativ kannst du den Eintrag archivieren.</>
+        }
+      />
     </div>
   )
 }
@@ -476,21 +497,22 @@ function InfothekKarte({
             )}
           </div>
 
-          {/* Actions */}
+          {/* Actions — Reihenfolge Bearbeiten · Archivieren · Löschen (#344):
+              destruktive Aktion ganz rechts, weg vom Bearbeiten. */}
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={onToggleAktiv}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              title={eintrag.aktiv ? 'Archivieren' : 'Wiederherstellen'}
-            >
-              <Archive className="h-4 w-4" />
-            </button>
             <button
               onClick={onEdit}
               className="p-2 text-gray-400 dark:text-gray-500 hover:text-primary-600 transition-colors"
               title="Bearbeiten"
             >
               <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onToggleAktiv}
+              className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              title={eintrag.aktiv ? 'Archivieren' : 'Wiederherstellen'}
+            >
+              <Archive className="h-4 w-4" />
             </button>
             <button
               onClick={onDelete}
