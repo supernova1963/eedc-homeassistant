@@ -109,6 +109,17 @@ describe('Element-Park (SLICE 1)', () => {
     expect(screen.queryByText(/lange drücken/)).not.toBeInTheDocument()
   })
 
+  it('R17-5-Nachzug: hinweis={false} unterdrückt den Tipp trotz parkbarem Element (Einstellungen)', () => {
+    render(
+      <ParkProvider persistKey={KEY}>
+        <Parkbar id="kpi:a" titel="Kennzahl A"><div>Inhalt A</div></Parkbar>
+        <ParkFuss hinweis={false} />
+      </ParkProvider>,
+    )
+    expect(screen.getByText('Inhalt A')).toBeInTheDocument()
+    expect(screen.queryByText(/lange drücken/)).not.toBeInTheDocument()
+  })
+
   it('lädt schema-robust: kaputter/fremder LS-Inhalt → leer, kein Crash', () => {
     localStorage.setItem(LS, '{"order":["a"]}') // alte BlockState-Form, kein Array
     render(<Harness />)

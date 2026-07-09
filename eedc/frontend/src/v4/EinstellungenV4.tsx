@@ -217,7 +217,9 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
               <Home className="h-4 w-4" /> Keine Einstellung gefunden.
             </p>
           )}
-          <ParkFuss />
+          {/* R17-5 (Gernot 2026-07-09): kein „lange drücken"-Tipp in den Einstellungen —
+              dort wirkt er fehl am Platz (Entparken via GeparktBlock bleibt). */}
+          <ParkFuss hinweis={false} />
         </div>
       </ViewShell>
 
