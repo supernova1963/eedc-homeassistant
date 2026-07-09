@@ -200,6 +200,11 @@ export const EIGENE_SERIE_FARBEN = {
   region: '#60a5fa',   // Zwischenebene Du ↔ Community
 }
 
+/** Hervorhebung einer einzelnen Scheibe/Serie als „die eigene" in Anteils-Charts
+ *  (Donut, Verteilungs-Pie) — kräftiger Ring statt Inline-`#000` (D17-6-SoT).
+ *  Als Recharts-`stroke` auf der eigenen `<Cell>` gesetzt; `breite` = strokeWidth. */
+export const SERIE_HERVORHEBUNG = { ring: '#111827', breite: 2 } // gray-900
+
 /** Karten-Darstellung (Choropleth). */
 export const KARTE_FARBEN = { grenze: '#ffffff' }
 

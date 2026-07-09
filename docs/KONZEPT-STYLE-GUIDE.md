@@ -372,8 +372,13 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > - **Tooltip:** **P3-Tooltip-Kanon** (`ChartTooltip`, dunkel, A6) — Wert + Einheit + Zeitpunkt; auf Touch tap-bar.
 > - **Chart-Typ pro Datenart:** Verlauf → Linie/Fläche · Zusammensetzung → gestapelt · Vergleich → Balken · Anteil → Donut. Konvention, nicht Seiten-Einzelfall.
 > - **Leerzustand:** keine Daten → klare Leer-Darstellung (B8), keine leeren Achsenkreuze.
+>
+> **SoT-Bausteine + Wächter (D17-6-Slice, 2026-07-09 — Regel folgt gebautem Code):**
+> - **Anteil = `ui/AnteilDonut`** (EINE SoT für Anteils-/Verteilungs-Charts): Donut (füllt Breite via %-Radien), KEINE Slice-Labels (Overflow-Quelle), EINE umbruchfähige `ChartLegende`-Legende mit Name + % darunter, „eigene" Scheibe via `SERIE_HERVORHEBUNG` (kein Inline-`#000`), Tooltip via `eedcTooltipProps`. Ersetzt die früheren Hand-Pies (ROI-Typ, Community Speicher/E-Auto). V3-only-IST-Pies folgen mit ihren V3→V4-Paketen (`check:charts`-Allowlist).
+> - **Legende = `ChartLegende`** (S1-Bildsprache: Swatch + monochromer Text) — nie roher Recharts-`<Legend>`, nie hand-gebaute Farb-Kästchen (die driften von der echten Serienfarbe, Beleg Community-„Du"-Bar).
+> - **Wächter:** `check:charts` (**statisch**, app-weit: R1 Pie-SoT-Pflicht · R2 keine rohe `<Legend>`) + `check:chart-audit` (**Laufzeit/Chromium**: Label-Overflow · Legende-Pflicht bei >1 *gerenderter* Serie — fängt `.map()`-Serien, die statisch unsichtbar sind). Einzelserien (per-Instanz-gefärbt, z. B. WP-Saison) sind bewusst legende-frei.
 
-**Betroffene Issues:** #247 P2; eedc ist chart-dicht, bislang ungeregelt.
+**Betroffene Issues:** #247 P2; eedc ist chart-dicht, bislang ungeregelt. D17-4/-6 (detLAN-Triage 2026-06-24).
 
 ---
 

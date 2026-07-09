@@ -29,6 +29,7 @@ import { WizardHostContext, type WizardHostCtx } from './wizardHost'
 
 export type WizardKey =
   | 'sensor-mapping'
+  | 'csv-import'
   | 'custom-import'
   | 'portal-import'
   | 'cloud-import'
@@ -45,6 +46,7 @@ interface WizardDef {
 /** Standard-Registry: Titel + lazy geladene IST-Wizard-Seite je Schlüssel. */
 const STANDARD_REGISTRY: Record<WizardKey, WizardDef> = {
   'sensor-mapping': { titel: 'Sensor-Zuordnung', Comp: lazy(() => import('../pages/SensorMappingWizard')) },
+  'csv-import': { titel: 'CSV importieren', Comp: lazy(() => import('../pages/CsvImportWizard')) },
   'custom-import': { titel: 'Eigene Datei importieren', Comp: lazy(() => import('../pages/CustomImportWizard')) },
   'portal-import': { titel: 'Portal-Import', Comp: lazy(() => import('../pages/DataImportWizard')) },
   'cloud-import': { titel: 'Cloud-Import', Comp: lazy(() => import('../pages/CloudImportWizard')) },

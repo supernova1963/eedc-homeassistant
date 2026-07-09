@@ -1,0 +1,124 @@
+#!/usr/bin/env node
+/**
+ * chart-audit.mjs — Laufzeit-Gate der Chart-Komposition (B7 / D17-4 / D17-6, 2026-07-09).
+ *
+ * Der statische `check:charts` deckt Pie-SoT + Legenden-Bildsprache grep-bar ab. Die
+ * ZWEI Chart-Regeln, die statisch prinzipiell unsichtbar sind, prüft dieser Gate am
+ * gerenderten DOM (Chromium) — genau die Gernot-Audit-Lehre „prüfe die Bild-Komposition":
+ *
+ *   L1 — Label-Overflow: KEIN Achsen-Tick-/Legenden-Text darf über seinen Chart-Container
+ *        hinausragen (D17-4 „Text abgeschnitten"). Statisch unsichtbar (Render-Geometrie).
+ *   L2 — Legende-Pflicht bei Multi-Serie: ein kartesischer Chart (Bar/Line/Area) mit >1
+ *        GERENDERTER Serie MUSS eine Legende tragen. Statisch unsichtbar, weil Serien oft
+ *        via `.map()` aus EINEM `<Bar>`-Literal entstehen ([[feedback_verifiziert_nur_was_check_abdeckt]]).
+ *        Einzelserien (WP-Saison) sind bewusst legende-frei → nicht geflaggt.
+ *
+ * Voraussetzung: flag-on gebautes `dist` auf $EEDC_BASE (Default :8200) + Chromium unter
+ * $PLAYWRIGHT_CHROMIUM. Kein CI-Pflichtlauf — Dev-Box-Kommando ([[reference_recharts_bars_jsdom]]):
+ *
+ *   VITE_IA_V4=true VITE_DEMO_DEFAULT=true npm run build
+ *   npm run check:chart-audit
+ */
+import { chromium } from 'playwright-core'
+
+const CHROME = process.env.PLAYWRIGHT_CHROMIUM
+  || '/home/gernot/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome'
+const BASE = process.env.EEDC_BASE || 'http://localhost:8200'
+const TOLERANZ = 2 // px Nachsicht gegen Sub-Pixel-Rundung
+
+// V4-Sichten mit Charts (Kompositions-relevant).
+const ROUTES = [
+  '#/v4/auswertungen/roi', '#/v4/auswertungen/finanzen', '#/v4/auswertungen/co2',
+  '#/v4/auswertungen/prognose',
+  '#/v4/komponenten/pv-module', '#/v4/komponenten/speicher', '#/v4/komponenten/waermepumpe',
+  '#/v4/komponenten/e-auto', '#/v4/komponenten/wallbox', '#/v4/komponenten/balkonkraftwerk',
+  '#/v4/cockpit/monat', '#/v4/cockpit/jahr', '#/v4/cockpit/tag', '#/v4/cockpit/aussicht',
+  '#/v4/community/uebersicht', '#/v4/community/komponenten',
+]
+
+async function alleAufklappen(page) {
+  for (let i = 0; i < 8; i++) {
+    const zu = await page.$$('button[aria-label="aufklappen"]')
+    if (!zu.length) break
+    for (const b of zu) { try { await b.click({ timeout: 500 }) } catch { /* Reflow */ } }
+    await page.waitForTimeout(300)
+  }
+  // Toggles innerhalb der Charts durchspielen (Saison-Modus, Vergleich …), damit auch
+  // die zunächst versteckten Chart-Varianten einmal gerendert + geprüft werden.
+  await page.waitForTimeout(900)
+}
+
+// Prüft im Browser jeden .recharts-wrapper der aktuellen Sicht.
+function auditDom() {
+  return page => page.evaluate((tol) => {
+    const treffer = []
+    const wraps = [...document.querySelectorAll('.recharts-wrapper')]
+    wraps.forEach((w, idx) => {
+      const box = w.getBoundingClientRect()
+      if (box.width < 4 || box.height < 4) return // nicht sichtbar gerendert
+      const kennung = `chart#${idx}`
+
+      // L1 — Overflow von Tick-/Legenden-Text über den Container.
+      const texte = [
+        ...w.querySelectorAll('.recharts-cartesian-axis-tick-value'),
+        ...w.querySelectorAll('.recharts-legend-item-text'),
+      ]
+      for (const t of texte) {
+        const r = t.getBoundingClientRect()
+        if (r.width === 0 && r.height === 0) continue
+        const raus = []
+        if (r.left < box.left - tol) raus.push('links')
+        if (r.right > box.right + tol) raus.push('rechts')
+        if (r.top < box.top - tol) raus.push('oben')
+        if (r.bottom > box.bottom + tol) raus.push('unten')
+        if (raus.length) {
+          treffer.push(`L1 Overflow (${raus.join('+')}): „${(t.textContent || '').trim()}" @ ${kennung}`)
+        }
+      }
+
+      // L2 — Multi-Serie ohne Legende (nur kartesisch; Pie/Donut trägt eigene ul-Legende).
+      const istPie = !!w.querySelector('.recharts-pie')
+      if (!istPie) {
+        const serien = w.querySelectorAll('.recharts-bar, .recharts-line, .recharts-area').length
+        // Legende = Recharts-`<Legend>`-Wrapper mit Inhalt. ChartLegende rendert eine
+        // eigene <ul><li>-Struktur (KEIN `.recharts-legend-item`) — daher am Wrapper +
+        // nicht-leerem Text erkennen, nicht am Default-Item.
+        const leg = w.querySelector('.recharts-legend-wrapper')
+        const hatLegende = !!leg && (leg.textContent || '').trim().length > 0
+        if (serien >= 2 && !hatLegende) {
+          treffer.push(`L2 Multi-Serie (${serien}) ohne Legende @ ${kennung}`)
+        }
+      }
+    })
+    return treffer
+  }, TOLERANZ)
+}
+
+async function main() {
+  const browser = await chromium.launch({ executablePath: CHROME })
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  const audit = auditDom()
+  const probleme = []
+
+  for (const route of ROUTES) {
+    try {
+      await page.goto(`${BASE}/${route}`, { waitUntil: 'networkidle', timeout: 20000 })
+    } catch { /* networkidle kann bei Live-Polling ausbleiben */ }
+    await page.waitForTimeout(700)
+    await alleAufklappen(page)
+    const treffer = await audit(page)
+    for (const t of treffer) probleme.push(`  ${route} — ${t}`)
+    process.stdout.write(`· ${route}: ${treffer.length ? treffer.length + ' Befund(e)' : 'ok'}\n`)
+  }
+
+  await browser.close()
+
+  if (probleme.length) {
+    console.error(`\nchart-audit — ${probleme.length} Kompositions-Befund(e):`)
+    console.error(probleme.join('\n'))
+    process.exit(1)
+  }
+  console.log('\n✅ chart-audit — kein Label-Overflow, jede Multi-Serie trägt eine Legende.')
+}
+
+main().catch((e) => { console.error(e); process.exit(1) })

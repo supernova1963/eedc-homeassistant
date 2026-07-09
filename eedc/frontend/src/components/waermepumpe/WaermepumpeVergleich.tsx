@@ -142,7 +142,14 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
                 ))}
               </BarChart>
             ) : (
-              <BarChart data={saisonData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
+              // D17-4: SoT-Margin wie der Monats-Modus (die früheren left:0/bottom:0-Overrides
+              // schnitten die längeren, −45°-gedrehten Saison-Labels „23/24 (3/4)" ab).
+              // BEWUSST OHNE Legende: der Saison-Modus ist EINE Serie (JAZ bzw. Strom) mit
+              // per-Instanz-Farben je Saison — jede Scheibe/Balken IST über die X-Achse +
+              // Wert-Label beschriftet; eine Farb-Legende dazu wäre eine Doppel-Beschriftung
+              // (Style-Guide B7). Die Blass-Dimmung erklärt der Fuß-Hinweis. (check:charts
+              // erlaubt Einzelserien ohne Legende.)
+              <BarChart data={saisonData} margin={{ top: ACHSEN_MARGIN_TOP }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Saison) */ />
                 <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit(modus === 'jaz' ? 'JAZ' : 'kWh')} />

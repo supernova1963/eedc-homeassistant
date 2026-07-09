@@ -27,6 +27,7 @@ import {
   MapPin,
 } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
+import { AnteilDonut, ChartLegende } from '../../components/ui'
 import { Parkbar } from '../../components/park'
 import { useChartTheme } from '../../context/ThemeContext'
 import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl } from '../../lib'
@@ -47,8 +48,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  PieChart,
-  Pie,
   LabelList,
   Legend,
 } from 'recharts'
@@ -229,7 +228,6 @@ export function SpeicherDeepDive({
   communityStats: SpeicherByClass | null
 }) {
   const achsen = useChartTheme()
-  const schmal = useSchmaleAchse()
   const speicher = benchmark.benchmark_erweitert?.speicher
   const kapazitaet = benchmark.anlage.speicher_kwh || 0
 
@@ -368,20 +366,14 @@ export function SpeicherDeepDive({
                   <XAxis type="number" domain={[0, 100]} tick={ACHSEN_TICK} tickFormatter={(v) => `${fmtZahl(v, 0)} %`} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
                   <YAxis type="category" dataKey="name" tick={ACHSEN_TICK} width={90} /* achsen-allow: Kategorie-Namen */ />
                   <Tooltip content={<ChartTooltip unit="%" decimals={1} />} />
+                  {/* Legende über ChartLegende (S1) statt hand-gebauter Farb-Kästchen —
+                      liest die echte Serienfarbe (die frühere Hand-Legende zeigte „Du"
+                      grün, obwohl die Bar EIGENE_SERIE_FARBEN.du = blau ist). */}
+                  <Legend content={<ChartLegende />} />
                   <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 2, 2, 0]} />
-                  <Bar dataKey="community" name="Community" fill={achsen.referenz} radius={[0, 2, 2, 0]} />
+                  <Bar dataKey="community" name="Community Ø" fill={achsen.referenz} radius={[0, 2, 2, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-            <div className="flex items-center justify-center gap-6 mt-2 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-green-500 rounded" />
-                <span className="text-gray-500">Du</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-gray-400 rounded" />
-                <span className="text-gray-500">Community Ø</span>
-              </div>
             </div>
           </div>
         </Parkbar>
@@ -400,35 +392,15 @@ export function SpeicherDeepDive({
             </span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Pie Chart */}
+            {/* Verteilungs-Donut (SoT) */}
             <Parkbar id="komp-speicher-pie" titel="Speicher · Verteilung (Diagramm)">
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={klassenData}
-                    dataKey="anzahl"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    label={schmal ? undefined : ({ name, percent }) => `${name} (${fmtZahl(percent * 100, 0)} %)`}
-                    labelLine={false}
-                  >
-                    {klassenData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.fill}
-                        stroke={entry.name === eigeneKlasse ? '#000' : 'none'}
-                        strokeWidth={entry.name === eigeneKlasse ? 2 : 0}
-                      />
-                    ))}
-                  </Pie>
-                  {schmal && <Legend />}
-                  <Tooltip content={<ChartTooltip unit="Anlagen" />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+              <AnteilDonut
+                data={klassenData.map((k) => ({ name: k.name, value: k.anzahl, color: k.fill }))}
+                unit="Anlagen"
+                hervorhebung={eigeneKlasse}
+                hervorhebungLabel="(Du)"
+                chartHoehe="h-48"
+              />
             </Parkbar>
             {/* Tabelle mit Details */}
             <Parkbar id="komp-speicher-tabelle" titel="Speicher · Verteilung (Tabelle)">
@@ -658,7 +630,6 @@ export function EAutoDeepDive({
   communityStats: EAutoByUsage | null
 }) {
   const achsen = useChartTheme()
-  const schmal = useSchmaleAchse()
   const eauto = benchmark.benchmark_erweitert?.eauto
 
   // Eigene Nutzungsklasse ermitteln (basierend auf km)
@@ -825,35 +796,15 @@ export function EAutoDeepDive({
             </span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Pie Chart */}
+            {/* Verteilungs-Donut (SoT) */}
             <Parkbar id="komp-eauto-pie" titel="E-Auto · Nutzungsintensität (Diagramm)">
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={nutzungData}
-                    dataKey="anzahl"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    label={schmal ? undefined : ({ name, percent }) => `${name} (${fmtZahl(percent * 100, 0)} %)`}
-                    labelLine={false}
-                  >
-                    {nutzungData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.fill}
-                        stroke={entry.name.toLowerCase() === eigeneKlasse?.toLowerCase() ? '#000' : 'none'}
-                        strokeWidth={entry.name.toLowerCase() === eigeneKlasse?.toLowerCase() ? 2 : 0}
-                      />
-                    ))}
-                  </Pie>
-                  {schmal && <Legend />}
-                  <Tooltip content={<ChartTooltip unit="E-Autos" />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+              <AnteilDonut
+                data={nutzungData.map((k) => ({ name: k.name, value: k.anzahl, color: k.fill }))}
+                unit="E-Autos"
+                hervorhebung={eigeneKlasse ?? undefined}
+                hervorhebungLabel="(Du)"
+                chartHoehe="h-48"
+              />
             </Parkbar>
             {/* Tabelle mit Details */}
             <Parkbar id="komp-eauto-tabelle" titel="E-Auto · Nutzungsintensität (Tabelle)">

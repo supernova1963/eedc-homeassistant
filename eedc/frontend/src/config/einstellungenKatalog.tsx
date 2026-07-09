@@ -173,18 +173,22 @@ function AllgemeinFormInhalt({ fokus }: { fokus: boolean }) {
   return <FormBlock felder={felder} onSave={onSave} fokus={fokus} />
 }
 
-/** Import-Assistenten-Bündel: jeder Assistent öffnet im Overlay (CSV/JSON per Route). */
+/** Import-Assistenten-Bündel: jeder Assistent öffnet im Overlay (D17-9: auch CSV,
+ *  kein navigate-Dead-End in die V3-Seite mehr). JSON-Restore ganzer Anlagen läuft
+ *  über den Backup-Block, nicht hier. */
 function ImportBuendelInhalt({ ctx }: { ctx: InhaltCtx }) {
   const assistenten: { key: WizardKey; label: string }[] = [
     { key: 'portal-import', label: 'Portal-Import' },
     { key: 'cloud-import', label: 'Cloud-Import (Anker, EcoFlow …)' },
     { key: 'connector', label: 'Geräte-Connector' },
     { key: 'custom-import', label: 'Eigene Datei / Vorlage' },
+    { key: 'csv-import', label: 'CSV-Import' },
   ]
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-600 dark:text-gray-300">
         Cloud- und Datei-Importe. Jeder Assistent öffnet im Overlay; die eigene Vorlage ist auch aus System/Backup erreichbar.
+        JSON-Restore ganzer Anlagen läuft über den Backup-Block.
       </p>
       <div className="flex flex-wrap gap-2">
         {assistenten.map((x) => (
@@ -192,9 +196,6 @@ function ImportBuendelInhalt({ ctx }: { ctx: InhaltCtx }) {
             {x.label}
           </Button>
         ))}
-        <Button type="button" variant="secondary" size="sm" onClick={() => ctx.navigate('einstellungen/import')}>
-          CSV / JSON
-        </Button>
       </div>
     </div>
   )
