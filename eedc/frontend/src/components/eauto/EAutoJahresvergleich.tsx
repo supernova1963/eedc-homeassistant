@@ -6,13 +6,18 @@
  * %-Anteile am Jahres-Ladungsvolumen im Tooltip + aufklappbare Werte-Tabelle.
  * (Das IST-Dashboard hat keinen Jahresvergleich — Hub-Mehrwert ohne IST-Verlust.)
  */
+import { useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { LADEQUELLEN_FARBEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps } from '../ui'
 import ScrollSchatten from '../ui/ScrollSchatten'
+import { Parkbar } from '../park'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
+
+const KEINE_IDS: string[] = []
+const JAHRES_IDS = ['info:eauto-jahres', 'chart:eauto-jahresvergleich', 'tabelle:eauto-jahre']
 
 interface JahrLadung { jahr: number; pv: number; netz: number; extern: number; gesamt: number }
 
@@ -38,17 +43,22 @@ export function prepEAutoJahresLadung(monatsdaten: InvestitionMonatsdaten[]): Ja
 const fmt = (v: number) => Math.round(v).toLocaleString('de-DE')
 const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100, 0)} %` : '—')
 
-export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean }) {
+export function EAutoJahresvergleich({ monatsdaten, embed = false, melde }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean; melde?: (ids: string[]) => void }) {
   const daten = prepEAutoJahresLadung(monatsdaten)
-  if (daten.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahresdaten erfasst.</p>
+  const leer = daten.length === 0
+  useEffect(() => { melde?.(leer ? KEINE_IDS : JAHRES_IDS) }, [melde, leer])
+  if (leer) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahresdaten erfasst.</p>
   const hatExtern = daten.some((d) => d.extern > 0)
   const serien = SERIEN.filter((s) => s.key !== 'extern' || hatExtern)
 
   return (
     <div className={embed ? 'space-y-4' : 'space-y-6'}>
+      <Parkbar id="info:eauto-jahres" titel="Jahresvergleich-Erklärung">
       <p className="text-sm text-gray-500 dark:text-gray-400">
         Ladung je Jahr nach Quelle — zeigt die Entwicklung des <span className="font-medium">PV-Anteils</span>.
       </p>
+      </Parkbar>
+      <Parkbar id="chart:eauto-jahresvergleich" titel="Ladung nach Quelle pro Jahr">
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
@@ -63,7 +73,9 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdat
           </BarChart>
         </ResponsiveContainer>
       </div>
+      </Parkbar>
 
+      <Parkbar id="tabelle:eauto-jahre" titel="Jahres-Tabelle">
       <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Werte anzeigen ({daten.length} Jahre)
@@ -92,6 +104,7 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false }: { monatsdat
           </table>
         </ScrollSchatten>
       </details>
+      </Parkbar>
     </div>
   )
 }

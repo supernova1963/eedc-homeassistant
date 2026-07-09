@@ -64,6 +64,15 @@ function mitParkId(prefix: string, kpis: KpiStripItem[]): KpiStripItem[] {
   return kpis.map((k) => ({ ...k, parkId: `kpi:${prefix}-${slug(k.title)}` }))
 }
 
+/** Pro-Gerät parkId + eindeutiger Chip-Titel (Geräte-Präfix). Doktrin „jede Anzeige
+ *  einzeln parkbar" (2026-06-27) jetzt auch INNERHALB der Sonstiges-Gerätegruppe
+ *  (Gernot 2026-07-08): der frühere Ein-Element-pro-Gerät-Sonderfall (2026-06-26)
+ *  wird durch getrennt parkbare Kacheln ersetzt. */
+function mitGeraetParkId(prefix: string, bezeichnung: string, kpis: KpiStripItem[]): KpiStripItem[] {
+  const gp = `${prefix}-${slug(bezeichnung)}`
+  return kpis.map((k) => ({ ...k, parkId: `kpi:${gp}-${slug(k.title)}`, parkTitel: `${bezeichnung} · ${k.title}` }))
+}
+
 /** Block ausblenden, wenn ALLE seine Element-IDs (KPIs + Zusatz-Elemente) geparkt
  *  sind (Gernot 2026-06-27: leeren Block ausblenden). */
 function alleGeparkt(park: ParkApi, kpis: KpiStripItem[], elemente: SektionElement[]): boolean {
@@ -72,21 +81,25 @@ function alleGeparkt(park: ParkApi, kpis: KpiStripItem[], elemente: SektionEleme
 }
 
 /** Sonder-Darstellung „Sonstiges": je Gerät eine beschriftete Werte-Gruppe
- *  (Gerätebezeichnung + KpiStrip) — je Gerät ein parkbares Element (Gernot
- *  2026-06-26/27). */
-function GeraeteSektionen({ prefix, geraete, kpisVon }: {
-  prefix: string; geraete: SonstigesGeraet[]; kpisVon: (g: SonstigesGeraet) => KpiStripItem[]
+ *  (Gerätebezeichnung + KpiStrip). Doktrin (Gernot 2026-07-08): JEDE Kachel einzeln
+ *  parkbar; die Geräte-Beschriftung bleibt, solange ≥1 Kachel des Geräts sichtbar
+ *  ist, und verschwindet mit der letzten geparkten Kachel. */
+function GeraeteSektionen({ prefix, geraete, kpisVon, park }: {
+  prefix: string; geraete: SonstigesGeraet[]; kpisVon: (g: SonstigesGeraet) => KpiStripItem[]; park: ParkApi
 }) {
   return (
     <div className="space-y-4">
-      {geraete.map((g) => (
-        <Parkbar key={g.bezeichnung} id={`el:${prefix}-${slug(g.bezeichnung)}`} titel={g.bezeichnung}>
-          <div className="space-y-2">
+      {geraete.map((g) => {
+        const kpis = mitGeraetParkId(prefix, g.bezeichnung, kpisVon(g))
+        const sichtbar = kpis.some((k) => !k.parkId || !park.istGeparkt(k.parkId))
+        if (!sichtbar) return null
+        return (
+          <div key={g.bezeichnung} className="space-y-2">
             <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{g.bezeichnung}</div>
-            <KpiStrip kpis={kpisVon(g)} />
+            <KpiStrip kpis={kpis} />
           </div>
-        </Parkbar>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -198,8 +211,11 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     const speicherKpis = mitParkId('speicher', kpis)
     const speicherEls: SektionElement[] = []
     if (detail.length > 0) speicherEls.push({ id: 'el:speicher-detail', titel: 'Speicher-Details', node: <DetailListe rows={detail} /> })
+    // Phantom-Fix (Gernot 2026-07-09): GeraeteHinweis rendert erst ab 2 Geräten
+    // (GeraeteHinweis.tsx:13) → nur dann als parkbares Element zählen, sonst bliebe
+    // der Block bei Einzelgerät mit einem gezählt-aber-unsichtbaren Element leer stehen.
     const speicherGeraete = geraeteNamen(d, 'speicher')
-    if (speicherGeraete.length > 0) speicherEls.push({ id: 'el:speicher-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={speicherGeraete} /> })
+    if (speicherGeraete.length >= 2) speicherEls.push({ id: 'el:speicher-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={speicherGeraete} /> })
     if (!alleGeparkt(park, speicherKpis, speicherEls)) bloecke.push({
       id: 'k-speicher', title: 'Speicher', ...ident('speicher'), defaultOpen: false,
       summary: `${fmt(d.speicher_ladung_kwh)} kWh geladen · ${fmtCalc(d.speicher_vollzyklen, 1, '—')} Zyklen · ${fmtCalc(d.speicher_wirkungsgrad_prozent, 0, '—')} % η`,
@@ -259,7 +275,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     })
     if (wpDetail.length > 0) wpEls.push({ id: 'el:wp-detail', titel: 'Strom-Aufteilung', node: <DetailListe rows={wpDetail} /> })
     const wpGeraete = geraeteNamen(d, 'waermepumpe')
-    if (wpGeraete.length > 0) wpEls.push({ id: 'el:wp-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={wpGeraete} /> })
+    if (wpGeraete.length >= 2) wpEls.push({ id: 'el:wp-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={wpGeraete} /> })
     if (!alleGeparkt(park, wpKpis, wpEls)) bloecke.push({
       id: 'k-waermepumpe', title: KOMPONENTEN_IDENTITAET['waermepumpe'].label, ...ident('waermepumpe'), defaultOpen: false,
       // Summary aus den vorhandenen Werten (Wärme/JAZ wenn da — Monat/Jahr/Tag-mit-WMZ;
@@ -298,7 +314,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     const emobEls: SektionElement[] = []
     if (emobDetail.length > 0) emobEls.push({ id: 'el:emob-detail', titel: 'Lade-Herkunft', node: <DetailListe rows={emobDetail} /> })
     const emobGeraete = geraeteNamen(d, 'e-auto', 'wallbox')
-    if (emobGeraete.length > 0) emobEls.push({ id: 'el:emob-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={emobGeraete} /> })
+    if (emobGeraete.length >= 2) emobEls.push({ id: 'el:emob-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={emobGeraete} /> })
     if (!alleGeparkt(park, emobKpis, emobEls)) bloecke.push({
       id: 'k-emob', title: 'E-Mobilität', ...ident('e-auto'), defaultOpen: false,
       summary: `${fmt(d.emob_ladung_kwh)} kWh geladen${hat(d.emob_km) ? ` · ${fmt(d.emob_km)} km` : ''}${hat(d.emob_ersparnis_euro) ? ` · +${fmt(d.emob_ersparnis_euro, 2)} € vs. Verbrenner` : ''}`,
@@ -327,7 +343,7 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     const bkwKpis = mitParkId('bkw', kpis)
     const bkwEls: SektionElement[] = []
     const bkwGeraete = geraeteNamen(d, 'balkonkraftwerk')
-    if (bkwGeraete.length > 0) bkwEls.push({ id: 'el:bkw-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={bkwGeraete} /> })
+    if (bkwGeraete.length >= 2) bkwEls.push({ id: 'el:bkw-geraete', titel: 'Geräte-Hinweis', node: <GeraeteHinweis namen={bkwGeraete} /> })
     if (!alleGeparkt(park, bkwKpis, bkwEls)) bloecke.push({
       id: 'k-bkw', title: 'Balkonkraftwerk', ...ident('balkonkraftwerk'), defaultOpen: false,
       summary: `${fmt(d.bkw_erzeugung_kwh)} kWh erzeugt · in Gesamt-PV enthalten`,
@@ -365,26 +381,28 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     return ks
   }
 
-  // Sonstiges: je Gerät ein parkbares Element; Block aus wenn alle Geräte geparkt.
-  const sonstigesAlleGeparkt = (prefix: string, gs: SonstigesGeraet[]) =>
-    gs.length > 0 && gs.every((g) => park.istGeparkt(`el:${prefix}-${slug(g.bezeichnung)}`))
+  // Sonstiges: je Kachel parkbar; Block aus, wenn ALLE Kacheln ALLER Geräte geparkt.
+  const sonstigesAlleGeparkt = (prefix: string, gs: SonstigesGeraet[], kpisVon: (g: SonstigesGeraet) => KpiStripItem[]) =>
+    gs.length > 0 && gs.every((g) =>
+      mitGeraetParkId(prefix, g.bezeichnung, kpisVon(g)).every((k) => !!k.parkId && park.istGeparkt(k.parkId)),
+    )
 
-  if (erzeugerGeraete.length > 0 && !sonstigesAlleGeparkt('sonstiges-erzeuger', erzeugerGeraete)) {
+  if (erzeugerGeraete.length > 0 && !sonstigesAlleGeparkt('sonstiges-erzeuger', erzeugerGeraete, erzeugerKpis)) {
     const summe = erzeugerGeraete.reduce((a, g) => a + (g.erzeugung_kwh ?? 0), 0)
     bloecke.push({
       // Eigene Identitätsfarbe (Lime) — sonstiger Erzeuger ist NICHT PV (Regel A).
       id: 'k-sonstiges-erzeuger', title: 'Sonstiges – Erzeuger', ...ident('sonstiges'), farbe: SONSTIGES_ERZEUGER_FARBE.text, defaultOpen: false,
       summary: `${fmt(summe)} kWh erzeugt`,
-      render: () => <GeraeteSektionen prefix="sonstiges-erzeuger" geraete={erzeugerGeraete} kpisVon={erzeugerKpis} />,
+      render: () => <GeraeteSektionen prefix="sonstiges-erzeuger" geraete={erzeugerGeraete} kpisVon={erzeugerKpis} park={park} />,
     })
   }
 
-  if (verbraucherGeraete.length > 0 && !sonstigesAlleGeparkt('sonstiges-verbraucher', verbraucherGeraete)) {
+  if (verbraucherGeraete.length > 0 && !sonstigesAlleGeparkt('sonstiges-verbraucher', verbraucherGeraete, verbraucherKpis)) {
     const summe = verbraucherGeraete.reduce((a, g) => a + (g.verbrauch_kwh ?? 0), 0)
     bloecke.push({
       id: 'k-sonstiges-verbraucher', title: 'Sonstiges – Verbraucher', ...ident('sonstiges'), defaultOpen: false,
       summary: `${fmt(summe)} kWh verbraucht`,
-      render: () => <GeraeteSektionen prefix="sonstiges-verbraucher" geraete={verbraucherGeraete} kpisVon={verbraucherKpis} />,
+      render: () => <GeraeteSektionen prefix="sonstiges-verbraucher" geraete={verbraucherGeraete} kpisVon={verbraucherKpis} park={park} />,
     })
   }
 

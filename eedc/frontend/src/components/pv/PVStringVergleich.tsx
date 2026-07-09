@@ -15,8 +15,11 @@ import {
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, ScrollSchatten } from '../ui'
 import ChartTooltip from '../ui/ChartTooltip'
+import { Parkbar } from '../park'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+
+const KEINE_IDS: string[] = []
 
 interface Props {
   anlageId: number
@@ -24,6 +27,8 @@ interface Props {
    *  ohne verschachtelte Cards + komponentengerechte Diagramme (SOLL/IST je Modul,
    *  Saison-Modulauswahl). Default false = IST-Dashboard-Darstellung (unverändert). */
   embed?: boolean
+  /** v4-Hub: meldet die real gerenderten Park-IDs hoch (Block-Auto-Hide). v3/IST: undefined. */
+  melde?: (ids: string[]) => void
 }
 
 /** Sektions-Rahmen: im Embed kompakte Überschrift (subordiniert dem Block-Titel),
@@ -53,7 +58,7 @@ function Sektion({ embed, icon: Icon, farbe, titel, hinweis, children }: {
   )
 }
 
-export function PVStringVergleich({ anlageId, embed = false }: Props) {
+export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
   const [data, setData] = useState<PVStringsGesamtlaufzeitResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -178,6 +183,22 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
     }
   }, [saisonalChartData])
 
+  // v4-Hub-Auto-Hide (D3, Gernot 2026-07-09): real gerenderte Park-IDs hochmelden.
+  // 4 KPIs + (Badges, wenn ≥2 Strings) + (SOLL/IST-Chart) + (Saison-Chart) + Tabelle;
+  // der Cross-Link wird vom Aufrufer (komponentenAnalyse) beigemischt.
+  const parkIds = useMemo(() => {
+    if (loading || error || !data || !data.strings || data.strings.length === 0 || !data.hat_prognose) return KEINE_IDS
+    const out: string[] = []
+    if (data.prognose_warnung) out.push('info:pv-warnung')
+    out.push('kpi:pv-soll', 'kpi:pv-ist', 'kpi:pv-abweichung', 'kpi:pv-zeitraum')
+    if (data.strings.length > 1 && (data.bester_string || data.schlechtester_string)) out.push('badge:pv-best-schlecht')
+    if (embed ? moduleVergleichData.length > 0 : jahresChartData.length > 0) out.push('chart:pv-soll-ist')
+    if (saisonalChartData.length > 0) out.push('chart:pv-saison')
+    out.push('tabelle:pv-strings')
+    return out
+  }, [loading, error, data, embed, moduleVergleichData, jahresChartData, saisonalChartData])
+  useEffect(() => { melde?.(parkIds) }, [melde, parkIds])
+
   // Loading State
   if (loading) {
     return <LoadingSpinner text="Lade String-Vergleich..." />
@@ -235,50 +256,53 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
     <div className="space-y-6">
       {/* Diagnose-Hinweis: stale/oversize PVGIS-Prognose (passt nicht zur kWp) */}
       {data.prognose_warnung && (
+        <Parkbar id="info:pv-warnung" titel="Prognose-Warnung">
         <Alert type="warning">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <span>{data.prognose_warnung}</span>
           </div>
         </Alert>
+        </Parkbar>
       )}
 
-      {/* KPI Übersicht */}
+      {/* KPI Übersicht — je Kachel einzeln parkbar (Element-Park-Doktrin). */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <KPICard
+        <Parkbar id="kpi:pv-soll" titel="SOLL (Prognose)"><KPICard
           title="SOLL (Prognose)"
           value={fmtZahl(data.prognose_gesamt_kwh / 1000, 1)}
           unit="MWh"
           color="blue"
           icon={TrendingUp}
           subtitle={`${data.anzahl_jahre} Jahre × PVGIS`}
-        />
-        <KPICard
+        /></Parkbar>
+        <Parkbar id="kpi:pv-ist" titel="IST (Erzeugt)"><KPICard
           title="IST (Erzeugt)"
           value={fmtZahl(data.ist_gesamt_kwh / 1000, 1)}
           unit="MWh"
           color="yellow"
           icon={Sun}
           subtitle={`${data.anzahl_monate} Monate erfasst`}
-        />
-        <KPICard
+        /></Parkbar>
+        <Parkbar id="kpi:pv-abweichung" titel="Abweichung"><KPICard
           title="Abweichung"
           value={`${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'}`}
           unit="%"
           color={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'green' : 'red'}
           icon={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? TrendingUp : TrendingDown}
-        />
-        <KPICard
+        /></Parkbar>
+        <Parkbar id="kpi:pv-zeitraum" titel="Zeitraum"><KPICard
           title="Zeitraum"
           value={`${data.erstes_jahr} - ${data.letztes_jahr}`}
           color="gray"
           icon={Calendar}
           subtitle={`${fmtZahl(data.anlagen_leistung_kwp, 1)} kWp`}
-        />
+        /></Parkbar>
       </div>
 
       {/* Beste/Schlechteste Performance */}
       {data.strings.length > 1 && (data.bester_string || data.schlechtester_string) && (
+        <Parkbar id="badge:pv-best-schlecht" titel="Beste/Schwächste Performance">
         <div className="flex flex-wrap gap-4 text-sm">
           {data.bester_string && (
             <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-full">
@@ -297,10 +321,12 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
             </div>
           )}
         </div>
+        </Parkbar>
       )}
 
       {/* SOLL vs IST — Embed: je Modul nebeneinander + Delta-Label; IST-Seite: pro Jahr */}
       {(embed ? moduleVergleichData.length > 0 : jahresChartData.length > 0) && (
+        <Parkbar id="chart:pv-soll-ist" titel="SOLL vs IST">
         <Sektion embed={embed} icon={Calendar} farbe="text-blue-500"
           titel={embed ? 'SOLL vs IST je Modul (Gesamtlaufzeit)' : 'SOLL vs IST pro Jahr'}
           hinweis={embed ? 'PVGIS-Prognose vs. erzeugt je Modul; Label = Abweichung.' : undefined}>
@@ -349,10 +375,12 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
             </ResponsiveContainer>
           </div>
         </Sektion>
+        </Parkbar>
       )}
 
       {/* Saisonaler Vergleich — Embed: Modulauswahl (Gesamt / einzelnes Modul) */}
       {saisonalChartData.length > 0 && (
+        <Parkbar id="chart:pv-saison" titel="Saisonaler Vergleich">
         <Sektion embed={embed} icon={BarChart3} farbe="text-green-500" titel="Saisonaler Vergleich (Jan – Dez)"
           hinweis="Monatliche PVGIS-Prognose vs. Durchschnitt der tatsächlichen Erzeugung über alle Jahre.">
           {embed && data.strings.length > 1 && (
@@ -397,9 +425,11 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
             </ResponsiveContainer>
           </div>
         </Sektion>
+        </Parkbar>
       )}
 
       {/* String-Detail-Tabelle */}
+      <Parkbar id="tabelle:pv-strings" titel="Einzelne Strings / Module">
       <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)">
         {/* Mobil (< sm): Karten je String/Modul statt Tabelle — Muster wie
             Cockpit-Energiebilanz (eine Datenliste, zwei Render-Pfade). */}
@@ -487,6 +517,7 @@ export function PVStringVergleich({ anlageId, embed = false }: Props) {
           </table>
         </ScrollSchatten>
       </Sektion>
+      </Parkbar>
     </div>
   )
 }

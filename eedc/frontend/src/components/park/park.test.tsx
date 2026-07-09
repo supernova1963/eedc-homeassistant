@@ -92,6 +92,23 @@ describe('Element-Park (SLICE 1)', () => {
     expect(screen.getByText('Parkplatz (1)')).toBeInTheDocument()
   })
 
+  it('R17-5: zeigt den „lange drücken"-Hinweis nur, wenn parkbare Elemente existieren', () => {
+    // Sicht MIT Parkbar → Hinweis sichtbar.
+    const { unmount } = render(<Harness />)
+    expect(screen.getByText(/lange drücken/)).toBeInTheDocument()
+    unmount()
+
+    // Reine Sicht OHNE Parkbar (z. B. Einstellungen) → kein irreführender Hinweis.
+    render(
+      <ParkProvider persistKey={KEY}>
+        <div>nur Text, nichts Parkbares</div>
+        <ParkFuss />
+      </ParkProvider>,
+    )
+    expect(screen.getByText('nur Text, nichts Parkbares')).toBeInTheDocument()
+    expect(screen.queryByText(/lange drücken/)).not.toBeInTheDocument()
+  })
+
   it('lädt schema-robust: kaputter/fremder LS-Inhalt → leer, kein Crash', () => {
     localStorage.setItem(LS, '{"order":["a"]}') // alte BlockState-Form, kein Array
     render(<Harness />)

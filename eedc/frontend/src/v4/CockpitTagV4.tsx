@@ -30,6 +30,7 @@ import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
 import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
+import { tagBilanzParkIds } from './bilanzParkIds'
 import { baueTagKomponentenUndFinanz } from './TagKomponenten'
 import { TagesRail, type TagRailEintrag } from './TagesRail'
 import { TagStepper } from './TagStepper'
@@ -226,12 +227,13 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
           render: () => <KpiStrip kpis={sichtbareKpi} />,
         })
       }
-      // Bilanz-Panel als parkbares Element; geparkt → ganzer Block weg.
-      if (!park.istGeparkt('el:bilanz')) list.push({
+      // Bilanz-Block: jede Teil-Anzeige einzeln parkbar (in TagBilanz); Block entfällt
+      // erst, wenn ALLE geparkt sind (Speicher-Muster `alleGeparkt`).
+      if (!tagBilanzParkIds(tag).every((id) => park.istGeparkt(id))) list.push({
         id: 'bilanz', title: 'Energie-Bilanz', ...BLOCK_IDENTITAET.energieBilanz,
         summary: `IST / Vortag${wtStats ? ` / Ø ${wochentag}` : ''}`,
         defaultOpen: false,
-        render: () => <Parkbar id="el:bilanz" titel="Energie-Bilanz"><TagBilanz t={tag} vt={vortag} wtStats={wtStats} wochentagName={wochentag} /></Parkbar>,
+        render: () => <TagBilanz t={tag} vt={vortag} wtStats={wtStats} wochentagName={wochentag} />,
       })
     } else {
       // D11-2: Tag ohne Daten (z. B. Lücken-Tag) — denselben `kpi`-Block mit Hinweis

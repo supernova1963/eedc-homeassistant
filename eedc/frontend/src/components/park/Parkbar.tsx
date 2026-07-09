@@ -12,7 +12,7 @@
  *
  * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
  */
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ParkingSquare } from 'lucide-react'
 import { usePark } from './ParkContext'
 
@@ -37,6 +37,12 @@ export function Parkbar({
   const [overlay, setOverlay] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
+
+  // R17-5: als parkbares Element anmelden (auch wenn gerade geparkt → diese Instanz
+  // rendert unten `null`, bleibt aber montiert und damit gezählt). Stabile
+  // `registriere`-Referenz → läuft einmal pro Mount, kein Churn bei Park-State-Wechsel.
+  const registriere = park.registriere
+  useEffect(() => registriere(id), [registriere, id])
 
   // Inert ohne Provider bzw. wenn geparkt → nichts an der kanonischen Stelle.
   if (!park.aktiv) return className ? <div className={className}>{children}</div> : <>{children}</>
@@ -75,6 +81,11 @@ export function Parkbar({
 
   return (
     <div
+      // Selbst-Entdeckung für den Laufzeit-Leerblock-Gate (scripts/park-leertest.mjs):
+      // jedes gerenderte parkbare Element trägt seine ID im DOM → keine Hand-ID-Liste,
+      // driftfrei. Nur im aktiven+ungeparkten Zweig (geparkt → null; ohne Provider → v3
+      // rendert ohne diesen Wrapper, also kein Attribut).
+      data-park-id={id}
       className={`relative h-full${className ? ` ${className}` : ''}`}
       onContextMenu={onContextMenu}
       onTouchStart={onTouchStart}

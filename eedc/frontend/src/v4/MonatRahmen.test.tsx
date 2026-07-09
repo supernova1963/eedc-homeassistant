@@ -40,6 +40,7 @@ describe('finanzTeaserBlock', () => {
   it('Element-Park: alle Finanz-Elemente geparkt → kein Block (null)', () => {
     const allesGeparkt: ParkApi = {
       aktiv: true, istGeparkt: () => true, park: () => {}, entparke: () => {}, zuruecksetzen: () => {}, geparkt: [],
+      registriere: () => () => {}, parkbareAnzahl: 0,
     }
     expect(finanzTeaserBlock(d, allesGeparkt)).toBeNull()
   })

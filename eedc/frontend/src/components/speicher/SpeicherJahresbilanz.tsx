@@ -8,13 +8,18 @@
  * zeigt Herkunft ⟷ Verwendung + Speicherverlust je Jahr. %-Anteile am
  * Jahres-Ladungsvolumen im Tooltip (und in der aufklappbaren Tabelle).
  */
+import { useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { CHART_COLORS, COLORS, VERLUST_FARBE, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps } from '../ui'
 import ScrollSchatten from '../ui/ScrollSchatten'
+import { Parkbar } from '../park'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
+
+const KEINE_IDS: string[] = []
+const BILANZ_IDS = ['info:speicher-bilanz', 'chart:speicher-jahresbilanz', 'tabelle:speicher-jahre']
 
 interface JahrBilanz {
   jahr: number
@@ -53,9 +58,12 @@ export function prepSpeicherJahresbilanz(monatsdaten: InvestitionMonatsdaten[]):
 const fmt = (v: number) => Math.round(v).toLocaleString('de-DE')
 const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100, 0)} %` : '—')
 
-export function SpeicherJahresbilanz({ monatsdaten, embed = false }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean }) {
+export function SpeicherJahresbilanz({ monatsdaten, embed = false, melde }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean; melde?: (ids: string[]) => void }) {
   const daten = prepSpeicherJahresbilanz(monatsdaten)
-  if (daten.length === 0) {
+  const leer = daten.length === 0
+  // v4-Hub-Auto-Hide: 3 feste Anzeigen (Hinweis · Chart · Tabelle); leer → nichts melden.
+  useEffect(() => { melde?.(leer ? KEINE_IDS : BILANZ_IDS) }, [melde, leer])
+  if (leer) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahresdaten erfasst.</p>
   }
   const hatNetz = daten.some((d) => d.netzLadung > 0)
@@ -63,10 +71,13 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false }: { monatsdat
 
   return (
     <div className={embed ? 'space-y-4' : 'space-y-6'}>
+      <Parkbar id="info:speicher-bilanz" titel="Bilanz-Erklärung">
       <p className="text-sm text-gray-500 dark:text-gray-400">
         Je Jahr links die <span className="font-medium">Ladung</span> nach Herkunft, rechts
         <span className="font-medium"> Entladung + Verlust</span> — beide Säulen gleich hoch (Ladung = Entladung + Verlust).
       </p>
+      </Parkbar>
+      <Parkbar id="chart:speicher-jahresbilanz" titel="Jahres-Energiebilanz">
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={daten} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 0 }}>
@@ -81,7 +92,9 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false }: { monatsdat
           </BarChart>
         </ResponsiveContainer>
       </div>
+      </Parkbar>
 
+      <Parkbar id="tabelle:speicher-jahre" titel="Jahres-Tabelle">
       <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Werte anzeigen ({daten.length} Jahre)
@@ -113,6 +126,7 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false }: { monatsdat
           </table>
         </ScrollSchatten>
       </details>
+      </Parkbar>
     </div>
   )
 }

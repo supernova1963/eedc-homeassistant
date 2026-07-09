@@ -48,6 +48,11 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
   const alleGeparkt = (ids: readonly string[]) => ids.length > 0 && ids.every((id) => park.istGeparkt(id))
   const achIds = uebAchievementParkIds(d.achievements)
   const kompIds = uebKomponentenParkIds(benchmark)
+  // Performance-Block-IDs datenabhängig (nur real gerenderte Sektionen; s. Teile-Kommentar).
+  const perfIds = [
+    ...(d.staerken.length > 0 ? ['ueb-staerken'] : []),
+    ...(d.schwaechen.length > 0 ? ['ueb-schwaechen'] : []),
+  ]
 
   const bloecke: (Block | null)[] = [
     !alleGeparkt(UEB_PARK_IDS.ranking) ? {
@@ -56,7 +61,7 @@ function CommunityUebersichtInner({ benchmark, loading, error }: Props) {
       defaultOpen: true,
       render: () => <RankingHauptKpi benchmark={benchmark} rankingBadge={d.rankingBadge} />,
     } : null,
-    (d.staerken.length > 0 || d.schwaechen.length > 0) && !alleGeparkt(UEB_PARK_IDS.performance) ? {
+    (d.staerken.length > 0 || d.schwaechen.length > 0) && !alleGeparkt(perfIds) ? {
       id: 'performance', title: 'Deine Performance', icon: ThumbsUp, farbe: 'text-green-500',
       summary: `${fmtZahl(d.staerken.length, 0)} Stärken · ${fmtZahl(d.schwaechen.length, 0)} mit Potenzial`,
       defaultOpen: true,

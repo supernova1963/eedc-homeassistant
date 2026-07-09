@@ -21,7 +21,7 @@ import {
 import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
 import { Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps, FehlerZustand, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
-import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
 import { COLORS, GELD_COLORS, GELD_TEXT_CLASS, MONAT_NAMEN, STATUS_ICONS, formatGeld, fmtZahl, xAchse, yAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../lib'
 import { exportToCSV } from '../utils/export'
@@ -50,6 +50,7 @@ export default function AuswertungenFinanzenV4() {
 }
 
 function FinanzenInner() {
+  const park = usePark()
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const basis = useAuswertungBasis(selectedAnlageId)
 
@@ -249,6 +250,7 @@ function FinanzenInner() {
               </div>
             </div>
           </Parkbar>
+          <Parkbar id="tabelle:durchschnitt" titel="Durchschnittswerte">
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
             <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Durchschnittswerte</p>
             <div className={`grid grid-cols-2 gap-3 text-sm ${gesamt.sonderkosten > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
@@ -263,6 +265,7 @@ function FinanzenInner() {
               <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
             </div>
           </div>
+          </Parkbar>
         </div>
       ),
     }
@@ -270,23 +273,41 @@ function FinanzenInner() {
     const blockTKonto: Block = {
       id: 'tkonto', title: 'SOLL/HABEN-T-Konto', icon: Wallet, farbe: 'text-blue-500',
       summary: 'Kosten vs. Erlöse + Einsparungen (Monat oder Jahr)', defaultOpen: true,
-      render: () => <TKontoPeriode anlageId={selectedAnlageId} daten={basis.daten} jahr={jahrFuerTKonto} />,
+      // D17-15: parkbar, damit der Block ganz weggeräumt werden kann (kein Rest).
+      render: () => (
+        <Parkbar id="tabelle:tkonto" titel="SOLL/HABEN-T-Konto">
+          <TKontoPeriode anlageId={selectedAnlageId} daten={basis.daten} jahr={jahrFuerTKonto} />
+        </Parkbar>
+      ),
     }
 
     const blockBerichte: Block = {
       id: 'berichte', title: 'Berichte & Dokumente', icon: FileText, farbe: 'text-gray-400 dark:text-gray-500',
       summary: 'Finanzbericht (PDF) · CSV-Export', defaultOpen: false,
+      // D17-15: parkbar, damit der Block ganz weggeräumt werden kann (kein Rest).
       render: () => (
-        <div className="space-y-3">
-          <FinanzberichtTeaser anlageId={selectedAnlageId} jahr={basis.jahr} />
-          {/* D13-10/D14-18: Icon + Wort IMMER (CsvExportButton-SoT). */}
-          <CsvExportButton onClick={handleCsv} label="CSV-Export (Monatswerte)" />
-        </div>
+        <Parkbar id="doku:berichte" titel="Berichte & Dokumente">
+          <div className="space-y-3">
+            <FinanzberichtTeaser anlageId={selectedAnlageId} jahr={basis.jahr} />
+            {/* D13-10/D14-18: Icon + Wort IMMER (CsvExportButton-SoT). */}
+            <CsvExportButton onClick={handleCsv} label="CSV-Export (Monatswerte)" />
+          </div>
+        </Parkbar>
       ),
     }
 
-    return [blockUebersicht, blockTKonto, blockBerichte]
-  }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId, schmal, handleCsv])
+    // Auto-Hide (Phase 3b, Gernot 2026-07-09): Block entfällt, wenn ALLE seine real
+    // gerenderten Park-Elemente geparkt sind (wie Cockpit-Bilanz via bilanzParkIds).
+    const uebersichtIds = ['kpi:einspeise', 'kpi:ev-ersparnis', 'kpi:netzbezug', 'kpi:netto',
+      ...(gesamt.sonderkosten > 0 ? ['hinweis:sonderkosten'] : []),
+      'chart:bilanz', 'chart:kumuliert', 'chart:netto', 'tabelle:durchschnitt']
+    const sichtbar = (ids: string[]) => !ids.every((id) => park.istGeparkt(id))
+    return [
+      ...(sichtbar(uebersichtIds) ? [blockUebersicht] : []),
+      ...(sichtbar(['tabelle:tkonto']) ? [blockTKonto] : []),
+      ...(sichtbar(['doku:berichte']) ? [blockBerichte] : []),
+    ]
+  }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId, schmal, handleCsv, park])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).

@@ -40,9 +40,14 @@ export const UEB_PARK_IDS = {
     'ueb-ranking-rang-gesamt',
     'ueb-ranking-rang-region',
   ],
-  performance: ['ueb-staerken', 'ueb-schwaechen'],
   profil: ['ueb-radar'],
 } as const
+// Performance-IDs (Stärken/Schwächen) sind datenabhängig → NICHT in UEB_PARK_IDS:
+// {@link StaerkenSchwaechen} rendert `ueb-staerken` nur bei ≥1 Stärke, `ueb-schwaechen`
+// nur bei ≥1 Schwäche. Die feste Liste hätte bei „3 Stärken · 0 Potenzial" ein nie
+// existierendes `ueb-schwaechen` verlangt → `alleGeparkt` nie true → leerer Block blieb
+// (Gernot 2026-07-09). Der Aufrufer leitet sie inline aus staerken/schwaechen ab (kein
+// weiterer Nicht-Komponenten-Export in dieser .tsx → react-refresh/lint Δ0).
 
 /** Element-IDs der Achievements-Sektion — genau die, die {@link AchievementsBlock}
  *  rendert (erreichte + bis zu 4 nicht erreichte; Slug = Achievement-ID). */

@@ -11,12 +11,14 @@
  * `embed` rendert ohne eigene Überschrift/Abstände-Rahmen für den Hub-Block;
  * die Datenaufbereitung ist hier zentral, damit beide Seiten identisch rechnen.
  */
+import { useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   AreaChart, Area, LineChart, Line,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende, ScrollSchatten } from '../ui'
+import { Parkbar } from '../park'
 import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
@@ -24,11 +26,16 @@ import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../ap
 type Zusammenfassung = SpeicherDashboardResponse['zusammenfassung']
 type EffizienzVerlauf = SpeicherDashboardResponse['effizienz_verlauf']
 
+/** Statische Park-IDs des Speicher-Verlaufs (4 feste Anzeigen; Hub-Auto-Hide). */
+const VERLAUF_IDS = ['chart:speicher-ladung', 'chart:speicher-zyklen', 'chart:speicher-effizienz', 'tabelle:speicher-monate']
+
 export interface SpeicherVerlaufProps {
   monatsdaten: InvestitionMonatsdaten[]
   zusammenfassung: Zusammenfassung
   effizienzVerlauf: EffizienzVerlauf
   embed?: boolean
+  /** v4-Hub: meldet die gerenderten Park-IDs hoch (Block-Auto-Hide). v3/IST: undefined. */
+  melde?: (ids: string[]) => void
 }
 
 /** Monatszeilen für die drei Charts + Tabelle (chronologisch, wie IST). */
@@ -50,8 +57,10 @@ function ChartKopf({ children }: { children: string }) {
   return <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">{children}</h3>
 }
 
-export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizienzVerlauf, embed = false }: SpeicherVerlaufProps) {
+export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizienzVerlauf, embed = false, melde }: SpeicherVerlaufProps) {
   const schmal = useSchmaleAchse()
+  // v4-Hub-Auto-Hide: die 4 Anzeigen sind fest → statische ID-Meldung (Gernot 2026-07-09).
+  useEffect(() => { melde?.(VERLAUF_IDS) }, [melde])
   const monthlyData = prepSpeicherMonate(monatsdaten, z)
   const effizienzData = effizienzVerlauf.map((e) => ({
     name: `${MONAT_KURZ[e.monat]} ${e.jahr.toString().slice(2)}`,
@@ -63,6 +72,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
     <div className={embed ? 'space-y-4' : 'space-y-6'}>
       <div className="grid md:grid-cols-2 gap-6">
         {/* Ladung/Entladung pro Monat (Arbitrage-Stapel bei Netzladung) */}
+        <Parkbar id="chart:speicher-ladung" titel="Ladung & Entladung pro Monat">
         <div>
           <ChartKopf>Ladung &amp; Entladung pro Monat</ChartKopf>
           <div className="h-64">
@@ -86,8 +96,10 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
             </ResponsiveContainer>
           </div>
         </div>
+        </Parkbar>
 
         {/* Vollzyklen pro Monat */}
+        <Parkbar id="chart:speicher-zyklen" titel="Vollzyklen pro Monat">
         <div>
           <ChartKopf>Vollzyklen pro Monat</ChartKopf>
           <div className="h-64">
@@ -102,9 +114,11 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
             </ResponsiveContainer>
           </div>
         </div>
+        </Parkbar>
       </div>
 
       {/* Effizienz — gleitende 12-Monats-Effizienz (carry-over-immun). */}
+      <Parkbar id="chart:speicher-effizienz" titel="Effizienz — gleitende 12 Monate">
       <div>
         <ChartKopf>Effizienz — gleitende 12 Monate</ChartKopf>
         <div className="h-48">
@@ -119,11 +133,13 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
           </ResponsiveContainer>
         </div>
       </div>
+      </Parkbar>
 
       {/* Monatsdaten-Tabelle (Monat · Ladung · Entladung · Zyklen).
           B6/S9 (R3b E3): auf den details-Disclosure-Kanon gehoben (gray-100/pt-3,
           Zähler in der Summary) — Komponente ist V4-geteilt (SpeicherVerlaufIST),
           Änderung im V3-SpeicherDashboard mit-sichtbar (eine Code-Wahrheit). */}
+      <Parkbar id="tabelle:speicher-monate" titel="Monatsdaten-Tabelle">
       <details className="border-t border-gray-100 dark:border-gray-800 pt-3">
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Monatsdaten anzeigen ({monatsdaten.length})
@@ -151,6 +167,7 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
           </table>
         </ScrollSchatten>
       </details>
+      </Parkbar>
     </div>
   )
 }

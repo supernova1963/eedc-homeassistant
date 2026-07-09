@@ -28,7 +28,10 @@
     "check:label-maps": "node scripts/check-label-maps.mjs",
     "check:details": "node scripts/check-details.mjs",
     "check:chart-tooltip": "node scripts/check-chart-tooltip.mjs",
-    "check:b8": "node scripts/check-b8.mjs"
+    "check:b8": "node scripts/check-b8.mjs",
+    "check:parkbar": "node scripts/check-parkbar.mjs",
+    "check:parkbar-vollstaendig": "node scripts/check-parkbar-vollstaendig.mjs",
+    "check:park-leertest": "node scripts/park-leertest.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
@@ -60,6 +63,7 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "jsdom": "^25.0.1",
+    "playwright-core": "^1.49.0",
     "postcss": "^8.4.33",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",

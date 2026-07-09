@@ -20,7 +20,7 @@
 import { TrendingUp, Clock, PieChart, LayoutGrid, PiggyBank } from 'lucide-react'
 import { Alert, EmptyState } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
-import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import {
   useRoiAnalyse, roiKpiItems,
   RoiAmortisationChart, RoiTypPie, RoiVergleichBar, RoiDetailTabelle, RoiHinweis,
@@ -40,6 +40,7 @@ export default function AuswertungenRoiV4() {
 }
 
 function RoiInner() {
+  const park = usePark()
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const { strompreis } = useAktuellerStrompreis(selectedAnlageId ?? null)
   const vm = useRoiAnalyse({
@@ -84,14 +85,17 @@ function RoiInner() {
   if (!vm.roiData) return null
   const roiData = vm.roiData
 
+  // Auto-Hide (Phase 3b, Gernot 2026-07-09): Block entfällt, wenn ALLE seine real
+  // gerenderten Park-Elemente geparkt sind (Block ① parkt je KPI via roiKpiItems-parkId).
+  const sichtbar = (ids: string[]) => !ids.every((id) => park.istGeparkt(id))
   const bloecke: Block[] = [
-    {
+    ...(sichtbar(['kpi:investition', 'kpi:einsparung', 'kpi:amortisation']) ? [{
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit auf einen Blick', icon: TrendingUp,
       farbe: 'text-green-500', defaultOpen: true,
       summary: `${formatGeld(roiData.gesamt_investition).text} investiert · ${roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J. Amortisation` : 'Amortisation offen'}`,
       render: () => <KpiStrip kpis={roiKpiItems(roiData, false)} />,
-    },
-    {
+    }] : []),
+    ...(sichtbar(['chart:amortisation']) ? [{
       id: 'amortisation', title: 'Amortisation', icon: Clock, farbe: 'text-orange-500', defaultOpen: false,
       summary: 'Break-Even-Kurve (kumulierte Einsparung vs. Investition)',
       render: () => (
@@ -99,8 +103,8 @@ function RoiInner() {
           <RoiAmortisationChart vm={vm} />
         </Parkbar>
       ),
-    },
-    {
+    }] : []),
+    ...(sichtbar(['chart:typ-pie', 'chart:vergleich-bar']) ? [{
       id: 'verteilung', title: 'Verteilung & Vergleich', icon: PieChart, farbe: 'text-blue-500', defaultOpen: false,
       summary: 'Einsparungen nach Typ (Pie) · Investitionen im Vergleich (Bar)',
       render: () => (
@@ -109,8 +113,8 @@ function RoiInner() {
           <Parkbar id="chart:vergleich-bar" titel="Investitionen im Vergleich"><RoiVergleichBar vm={vm} /></Parkbar>
         </div>
       ),
-    },
-    {
+    }] : []),
+    ...(sichtbar(['tabelle:detail', 'info:roi-hinweis']) ? [{
       id: 'detail', title: 'Detailübersicht je Investition', icon: LayoutGrid, farbe: 'text-gray-400 dark:text-gray-500', defaultOpen: false,
       summary: 'Kosten · ROI · Amortisation je Investition (+ Speicher-Detail #264)',
       render: () => (
@@ -119,7 +123,7 @@ function RoiInner() {
           <Parkbar id="info:roi-hinweis" titel="Hinweis zur Prognose"><RoiHinweis /></Parkbar>
         </div>
       ),
-    },
+    }] : []),
   ]
 
   return (

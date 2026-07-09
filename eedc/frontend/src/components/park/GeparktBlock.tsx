@@ -26,7 +26,7 @@ export function GeparktBlock() {
   // Grund) — NICHT der solide Karten-Look eines Inhalts-Blocks, damit die Sonderbreite/
   // Funktion (block-übergreifend) als gewollt liest.
   return (
-    <section className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-100/50 dark:bg-gray-800/30 overflow-hidden">
+    <section data-park-recovery className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-100/50 dark:bg-gray-800/30 overflow-hidden">
       <div className="flex items-center gap-2 px-3 min-h-[44px]">
         <button
           type="button"

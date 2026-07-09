@@ -13,7 +13,7 @@
  * (Verlauf/Vergleich) via `komponentenAnalyse`-Registry. Hub = Gesamtzeitraum
  * (K-B5, kein Datums-Selektor). Mehrere Geräte → Geräte-Selektor (Art ①).
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, BlockStackSkeleton, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
@@ -511,42 +511,91 @@ function KpiUnterblock({ titel, kpis }: { titel: string; kpis: KompGeraet['statu
  *  Alternativ-Vergleich: PV/Speicher/BKW/Sonstiges). Ertragsposten als €-Kennzahlen
  *  + (ab 2 Posten) €-Aufteilungsbalken; `nichtBewertet` zeigt einen ehrlichen
  *  Hinweis statt Fake-Zahlen (Sonstiger Erzeuger ohne Brennstoffmodell). */
-function WirtschaftlichkeitInhalt({ w }: { w: NonNullable<KompGeraet['wirtschaftlichkeit']> }) {
-  if (w.nichtBewertet) return <Alert type="info">{w.nichtBewertet}</Alert>
+/** Roh-KPIs der Ertrags-Zusammensetzung (ohne parkId) — der Aufrufer versieht sie mit
+ *  `mitParkId('wirt', …)`, damit jede Ertragsposten-Kachel einzeln parkbar ist. */
+function wirtKpis(w: NonNullable<KompGeraet['wirtschaftlichkeit']>): KompGeraet['status'] {
+  if (w.nichtBewertet) return []
   const posten = w.posten.filter((p) => (p.euro ?? 0) > 0)
   const kpis: KompGeraet['status'] = posten.map((p) => ({
     title: p.label, value: fmtCalc(p.euro, 0, '—'), unit: '€', color: 'green', icon: Euro, subtitle: p.hinweis,
   }))
   if (w.gesamt) kpis.push({ title: w.gesamt.label, value: fmtCalc(w.gesamt.euro, 0, '—'), unit: '€', color: 'blue', icon: Euro })
+  return kpis
+}
+
+/** Element-Park-IDs des generischen Wirtschaftlichkeits-Blocks (jede Anzeige einzeln). */
+function wirtParkIds(w: NonNullable<KompGeraet['wirtschaftlichkeit']>, kpis: KompGeraet['status']): string[] {
+  if (w.nichtBewertet) return ['el:wirt-nichtbewertet']
+  const posten = w.posten.filter((p) => (p.euro ?? 0) > 0)
+  const ids = kpis.map((k) => k.parkId).filter((x): x is string => !!x)
+  if (posten.length >= 2) ids.push('el:wirt-balken')
+  if (w.hinweis) ids.push('el:wirt-hinweis')
+  return ids
+}
+
+/** Generische Ertrags-Zusammensetzung — KpiStrip (je Posten parkbar) + Aufteilungs-
+ *  balken + Hinweis, JE eigene Parkbar (Doktrin, wie Block ① Status). `kpis` kommen
+ *  bereits parkId-versehen vom Aufrufer. */
+function WirtschaftlichkeitInhalt({ w, kpis }: {
+  w: NonNullable<KompGeraet['wirtschaftlichkeit']>; kpis: KompGeraet['status']
+}) {
+  if (w.nichtBewertet) return (
+    <Parkbar id="el:wirt-nichtbewertet" titel="Wirtschaftlichkeit"><Alert type="info">{w.nichtBewertet}</Alert></Parkbar>
+  )
+  const posten = w.posten.filter((p) => (p.euro ?? 0) > 0)
   return (
     <div className="space-y-4">
       {kpis.length > 0 && <KpiStrip kpis={kpis} />}
       {posten.length >= 2 && (
-        <VerteilungsBalken titel="Zusammensetzung des Ertrags" einheit="€"
-          segmente={posten.map((p) => ({ label: p.label, wert: p.euro, farbe: p.farbe }))} />
+        <Parkbar id="el:wirt-balken" titel="Zusammensetzung des Ertrags">
+          <VerteilungsBalken titel="Zusammensetzung des Ertrags" einheit="€"
+            segmente={posten.map((p) => ({ label: p.label, wert: p.euro, farbe: p.farbe }))} />
+        </Parkbar>
       )}
-      {w.hinweis && <p className="text-xs text-gray-400 dark:text-gray-500">{w.hinweis}</p>}
+      {w.hinweis && (
+        <Parkbar id="el:wirt-hinweis" titel="Wirtschaftlichkeit-Hinweis">
+          <p className="text-xs text-gray-400 dark:text-gray-500">{w.hinweis}</p>
+        </Parkbar>
+      )}
     </div>
   )
 }
 
-function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi): Block[] {
+type MeldeBlock = (block: string, ids: string[]) => void
+
+function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi, gemeldet: Record<string, string[]>, melde: MeldeBlock): Block[] {
   const analyse = KOMPONENTEN_ANALYSE[typ]
   const istGeparkt = (id: string) => park.istGeparkt(id)
   // Element-Park-Doktrin (Gernot 2026-06-27): JEDE Anzeige im Block einzeln parkbar
   // (KPIs, Charts, Tabellen, Balken, Hinweise); der Block selbst NICHT. Sind ALLE
   // Element-IDs eines Blocks geparkt → Block ausblenden.
   const alleGeparkt = (ids: string[]) => ids.length > 0 && ids.every(istGeparkt)
+  // Registry-Composites (④/⑤/Wirtschaftlichkeit) sind intern in Einzel-Parkbars
+  // zerlegt (Phase 2, Gernot 2026-07-09): das Composite MELDET seine real gerenderten
+  // Park-IDs hoch (`gemeldet[key]`). Block ausblenden, sobald ALLE gemeldeten geparkt
+  // sind — solange nichts gemeldet ist (Block noch nie geöffnet), bleibt er sichtbar.
+  const regVerstecken = (key: string) => {
+    const ids = gemeldet[key]
+    return ids != null && ids.length > 0 && ids.every(istGeparkt)
+  }
   const bloecke: Block[] = []
 
   // ① Status (Pflicht) — D2-KPIs + Hinweise + Sub-Strips + Aufteilung, je parkbar.
+  // B4 (Gernot 2026-07-09): die Sub-Strips (Kennzahlen/Sekundär) sind KEINE atomare
+  // Anzeige — jede KACHEL wird einzeln parkbar (`mitParkId`, Gold-Standard), statt den
+  // ganzen KpiStrip in EINE Parkbar zu hüllen. Die Sub-Überschrift verschwindet mit der
+  // letzten geparkten Kachel (wie GeraeteSektionen).
   const statusKpis = mitParkId('status', g.status)
+  const kennzahlenKpis = g.kennzahlen ? mitParkId('status-kennzahlen', g.kennzahlen.kpis) : []
+  const sekundaerKpis = g.sekundaer ? mitParkId('status-sekundaer', g.sekundaer.kpis) : []
+  const parkIdsVon = (kpis: KpiStripItem[]) => kpis.map((k) => k.parkId).filter((x): x is string => !!x)
+  const einSichtbar = (kpis: KpiStripItem[]) => kpis.some((k) => !k.parkId || !istGeparkt(k.parkId))
   const statusIds = [
-    ...statusKpis.map((k) => k.parkId).filter((x): x is string => !!x),
+    ...parkIdsVon(statusKpis),
     ...(g.hinweise?.map((_, i) => `el:status-hinweis-${i}`) ?? []),
-    ...(g.kennzahlen ? ['el:status-kennzahlen'] : []),
+    ...parkIdsVon(kennzahlenKpis),
     ...(g.aufteilung ? ['el:status-aufteilung'] : []),
-    ...(g.sekundaer ? ['el:status-sekundaer'] : []),
+    ...parkIdsVon(sekundaerKpis),
   ]
   if (!alleGeparkt(statusIds)) bloecke.push({
     id: 'status', title: 'Aktueller Status', ...BLOCK_IDENTITAET.kennzahlen,
@@ -556,9 +605,9 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
       <div className="space-y-4">
         <KpiStrip kpis={statusKpis} />
         {g.hinweise?.map((h, i) => <Parkbar key={i} id={`el:status-hinweis-${i}`} titel="Hinweis"><Alert type={h.ton}>{h.text}</Alert></Parkbar>)}
-        {g.kennzahlen && <Parkbar id="el:status-kennzahlen" titel={g.kennzahlen.titel}><KpiUnterblock titel={g.kennzahlen.titel} kpis={g.kennzahlen.kpis} /></Parkbar>}
+        {g.kennzahlen && einSichtbar(kennzahlenKpis) && <KpiUnterblock titel={g.kennzahlen.titel} kpis={kennzahlenKpis} />}
         {g.aufteilung && <Parkbar id="el:status-aufteilung" titel={g.aufteilung.titel}><VerteilungsBalken titel={g.aufteilung.titel} einheit={g.aufteilung.einheit} segmente={g.aufteilung.segmente} /></Parkbar>}
-        {g.sekundaer && <Parkbar id="el:status-sekundaer" titel={g.sekundaer.titel}><KpiUnterblock titel={g.sekundaer.titel} kpis={g.sekundaer.kpis} /></Parkbar>}
+        {g.sekundaer && einSichtbar(sekundaerKpis) && <KpiUnterblock titel={g.sekundaer.titel} kpis={sekundaerKpis} />}
       </div>
     ),
   })
@@ -591,18 +640,19 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
     })
   }
 
-  // ④ Verlauf — Registry-Analyse = EIN Element; generischer Verlauf = Chart + Verteilungen
-  //    + Monatstabelle, je parkbar; ohne Daten ein parkbarer Hinweis.
-  const verlaufIds = analyse?.verlauf
-    ? ['el:verlauf']
-    : g.verlauf
+  // ④ Verlauf — Registry-Analyse = intern zerlegtes Composite (meldet seine IDs hoch,
+  //    KEINE umhüllende Parkbar mehr); generischer Verlauf = Chart + Verteilungen +
+  //    Monatstabelle, je parkbar; ohne Daten ein parkbarer Hinweis.
+  const verlaufVerstecken = analyse?.verlauf
+    ? regVerstecken('verlauf')
+    : alleGeparkt(g.verlauf
       ? ['el:verlauf', ...(g.verlauf.verteilungen?.map((_, i) => `el:verlauf-vert-${i}`) ?? []), ...(typ !== 'pv-module' ? ['el:verlauf-tabelle'] : [])]
-      : ['el:verlauf-hinweis']
-  if (!alleGeparkt(verlaufIds)) bloecke.push({
+      : ['el:verlauf-hinweis'])
+  if (!verlaufVerstecken) bloecke.push({
     id: 'verlauf', title: 'Verlauf (gesamte Historie)', ...BLOCK_IDENTITAET.verlauf,
     summary: 'Zeitreihe über die gesamte Laufzeit', defaultOpen: false,
     render: (fokus) => (analyse?.verlauf
-      ? <Parkbar id="el:verlauf" titel="Verlauf">{analyse.verlauf(anlageId, g.inv)}</Parkbar>
+      ? analyse.verlauf(anlageId, g.inv, (ids) => melde('verlauf', ids))
       : g.verlauf
         ? (
           <div className="space-y-4">
@@ -628,13 +678,16 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
         : <Parkbar id="el:verlauf-hinweis" titel="Verlauf-Hinweis"><FolgtHinweis text="Für diesen Typ liegt keine eigene Zeitreihe vor (z. B. Wallbox = aus E-Auto-Ladung abgeleitet)." /></Parkbar>),
   })
 
-  // ⑤ Vergleich — Registry-/generische Analyse oder Hinweis, je ein parkbares Element.
-  const vergleichIds = (analyse?.vergleich || g.vergleich) ? ['el:vergleich'] : ['el:vergleich-hinweis']
-  if (!alleGeparkt(vergleichIds)) bloecke.push({
+  // ⑤ Vergleich — Registry-Analyse = intern zerlegtes Composite (meldet IDs hoch);
+  //    generische Analyse/Hinweis = je ein parkbares Element.
+  const vergleichVerstecken = analyse?.vergleich
+    ? regVerstecken('vergleich')
+    : alleGeparkt(g.vergleich ? ['el:vergleich'] : ['el:vergleich-hinweis'])
+  if (!vergleichVerstecken) bloecke.push({
     id: 'vergleich', title: 'Vergleich', icon: BarChart3,
     summary: analyse?.vergleich ? 'Komponentenspezifischer Vergleich' : 'Jahresvergleich · Diagramm ⇄ Tabelle', defaultOpen: false,
     render: () => (analyse?.vergleich
-      ? <Parkbar id="el:vergleich" titel="Vergleich">{analyse.vergleich(anlageId, g.inv)}</Parkbar>
+      ? analyse.vergleich(anlageId, g.inv, (ids) => melde('vergleich', ids))
       : g.vergleich
         ? <Parkbar id="el:vergleich" titel="Vergleich"><KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} /></Parkbar>
         : <Parkbar id="el:vergleich-hinweis" titel="Vergleich-Hinweis"><FolgtHinweis
@@ -643,15 +696,21 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
           /></Parkbar>),
   })
 
-  // Wirtschaftlichkeit — Registry-Vergleich ODER Ertrags-Zusammensetzung; ein parkbares Element.
-  if ((analyse?.wirtschaftlichkeit || g.wirtschaftlichkeit) && !istGeparkt('el:wirtschaftlichkeit')) {
-    bloecke.push({
+  // Wirtschaftlichkeit — Registry-Analyse = intern zerlegtes Composite (meldet IDs
+  // hoch); generische Ertrags-Zusammensetzung = KpiStrip (je Posten parkbar) + Balken
+  // + Hinweis, je eigene Parkbar; Block entfällt erst, wenn ALLE geparkt sind.
+  if (analyse?.wirtschaftlichkeit) {
+    if (!regVerstecken('wirtschaftlichkeit')) bloecke.push({
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit', icon: Euro,
-      summary: analyse?.wirtschaftlichkeit ? 'Kostenvergleich & Ersparnis' : 'Ertrags-Zusammensetzung',
-      defaultOpen: false,
-      render: () => <Parkbar id="el:wirtschaftlichkeit" titel="Wirtschaftlichkeit">{analyse?.wirtschaftlichkeit
-        ? analyse.wirtschaftlichkeit(anlageId, g.inv)
-        : <WirtschaftlichkeitInhalt w={g.wirtschaftlichkeit!} />}</Parkbar>,
+      summary: 'Kostenvergleich & Ersparnis', defaultOpen: false,
+      render: () => analyse.wirtschaftlichkeit!(anlageId, g.inv, (ids) => melde('wirtschaftlichkeit', ids)),
+    })
+  } else if (g.wirtschaftlichkeit) {
+    const wKpis = mitParkId('wirt', wirtKpis(g.wirtschaftlichkeit))
+    if (!alleGeparkt(wirtParkIds(g.wirtschaftlichkeit, wKpis))) bloecke.push({
+      id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit', icon: Euro,
+      summary: 'Ertrags-Zusammensetzung', defaultOpen: false,
+      render: () => <WirtschaftlichkeitInhalt w={g.wirtschaftlichkeit!} kpis={wKpis} />,
     })
   }
 
@@ -693,6 +752,17 @@ export default function KomponentenTypV4(props: { typ: string; anlageId: number 
 
 function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number | undefined }) {
   const park = usePark()
+  // Von den Registry-Composites hochgemeldete Park-IDs je Block (Auto-Hide, Phase 2).
+  // Überlebt das Unmounten eines versteckten Blocks → kein Oszillieren; Gleichheits-
+  // geschützt gegen Render-Schleifen.
+  const [gemeldet, setGemeldet] = useState<Record<string, string[]>>({})
+  const melde = useCallback<MeldeBlock>((block, ids) => {
+    setGemeldet((s) => {
+      const cur = s[block]
+      if (cur && cur.length === ids.length && cur.every((v, i) => v === ids[i])) return s
+      return { ...s, [block]: ids }
+    })
+  }, [])
   const [geraete, setGeraete] = useState<KompGeraet[]>([])
   const [aktiv, setAktiv] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -716,7 +786,7 @@ function KomponentenTypInner({ typ, anlageId }: { typ: string; anlageId: number 
   }, [anlageId, adapter, typ, retryKey])
 
   const g = geraete[aktiv]
-  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0, park) : []), [g, typ, anlageId, park])
+  const bloecke = useMemo(() => (g ? geraetBloecke(g, typ, anlageId ?? 0, park, gemeldet, melde) : []), [g, typ, anlageId, park, gemeldet, melde])
 
   if (!anlageId) return <Hinweis text="Noch keine Anlage gewählt." />
   if (!adapter) return <Hinweis text={`Für „${ident?.label ?? typ}" gibt es noch keine Hub-Sicht.`} />

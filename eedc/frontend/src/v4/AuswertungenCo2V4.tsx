@@ -20,7 +20,7 @@ import { Leaf, Sprout } from 'lucide-react'
 import { fmtCalc, FehlerZustand } from '../components/ui'
 import { eedcTooltipProps } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
-import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import {
   CO2_FAKTOR_KG_KWH, CHART_COLORS, MARKER_WARNUNG, TYP_LABELS,
   formatCo2, fmtZahl, formatProzent, co2Achse, xAchse, yAchse,
@@ -48,6 +48,7 @@ export default function AuswertungenCo2V4() {
 }
 
 function Co2Inner() {
+  const park = usePark()
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const basis = useAuswertungBasis(selectedAnlageId)
 
@@ -236,11 +237,13 @@ function Co2Inner() {
               </div>
             </Parkbar>
           )}
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Kumulierte Einsparung = vermiedene Netz-CO₂ der PV-Erzeugung ({fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh).
-            Graue Last für PV/Speicher = voller Herstellungs-Aufwand, für Wärmepumpe/E-Auto = Differenz zur Alternative.
-            Richtwerte, pro Investition per Datenblatt übersteuerbar.
-          </p>
+          <Parkbar id="info:co2-amort-methodik" titel="Amortisations-Methodik">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Kumulierte Einsparung = vermiedene Netz-CO₂ der PV-Erzeugung ({fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh).
+              Graue Last für PV/Speicher = voller Herstellungs-Aufwand, für Wärmepumpe/E-Auto = Differenz zur Alternative.
+              Richtwerte, pro Investition per Datenblatt übersteuerbar.
+            </p>
+          </Parkbar>
         </div>
       ),
     } : null
@@ -250,25 +253,41 @@ function Co2Inner() {
     const blockBasis: Block = {
       id: 'basis', title: 'Berechnungsgrundlage', icon: Leaf, farbe: 'text-gray-400 dark:text-gray-500',
       summary: `Strommix ${fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh`, defaultOpen: false,
+      // Methodik-Text + Ø-Werte-Grid = EINE kohäsive „Berechnungsgrundlage"-Anzeige
+      // → eine Parkbar (Vollständigkeit Phase 1, Gernot 2026-07-09). Ist sie geparkt,
+      // löst sich Block ③ per Park-Gate (parkIds) auf.
       render: () => (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Die CO₂-Einsparung rechnet mit dem deutschen Strommix von{' '}
-            <strong>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g CO₂/kWh</strong>. Jede selbst erzeugte kWh,
-            die fossilen Strom ersetzt, spart entsprechend CO₂.
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
-            <div><p className="text-gray-500 dark:text-gray-400">Ø pro Monat</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat).text}</p></div>
-            <div><p className="text-gray-500 dark:text-gray-400">Ø pro kWh</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g</p></div>
-            <div><p className="text-gray-500 dark:text-gray-400">Ø pro Jahr</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat * 12).text}</p></div>
-            <div><p className="text-gray-500 dark:text-gray-400">Hochgerechnet 20 J.</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat * 12 * 20).text}</p></div>
+        <Parkbar id="info:co2-berechnung" titel="Berechnungsgrundlage">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Die CO₂-Einsparung rechnet mit dem deutschen Strommix von{' '}
+              <strong>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g CO₂/kWh</strong>. Jede selbst erzeugte kWh,
+              die fossilen Strom ersetzt, spart entsprechend CO₂.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
+              <div><p className="text-gray-500 dark:text-gray-400">Ø pro Monat</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat).text}</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø pro kWh</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø pro Jahr</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat * 12).text}</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Hochgerechnet 20 J.</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat * 12 * 20).text}</p></div>
+            </div>
           </div>
-        </div>
+        </Parkbar>
       ),
     }
 
-    return [blockBilanz, ...(blockAmort ? [blockAmort] : []), blockBasis]
-  }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, schmal])
+    // Auto-Hide (Phase 3b, Gernot 2026-07-09): ein Block entfällt, wenn ALLE seine
+    // real gerenderten Park-Elemente geparkt sind (wie Cockpit-Bilanz via bilanzParkIds).
+    const bilanzIds = ['kpi:co2-eingespart', 'kpi:baeume', 'kpi:autokm', 'kpi:fluege', 'chart:co2-monat']
+    const amortIds = ['kpi:graue-last', 'kpi:ausgeglichen', 'kpi:klimapositiv', 'chart:co2-kumuliert',
+      ...(posten.length > 0 ? ['tabelle:graue-last'] : []), 'info:co2-amort-methodik']
+    const basisIds = ['info:co2-berechnung']
+    const sichtbar = (ids: string[]) => !ids.every((id) => park.istGeparkt(id))
+    return [
+      ...(sichtbar(bilanzIds) ? [blockBilanz] : []),
+      ...(blockAmort && sichtbar(amortIds) ? [blockAmort] : []),
+      ...(sichtbar(basisIds) ? [blockBasis] : []),
+    ]
+  }, [zeitreihe, kumuliert, gesamtCo2, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, schmal, park])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).

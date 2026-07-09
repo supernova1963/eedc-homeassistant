@@ -12,11 +12,18 @@
  * R6: jede KPI/Chart/Tabelle parkbar (`Parkbar`/KpiStrip-`parkId`). Datenladung je
  * Block lazy (BlockShell rendert eingeklappte Blöcke nicht). Feld-Sperren (SFML
  * draußen, Solcast-Spalte) + Format (R1/R2/R3) stecken in den geteilten Teilen.
+ *
+ * Auto-Hide (Phase 3b, Gernot 2026-07-09): weil die Block-DATEN hier lazy in den
+ * Kind-Komponenten liegen (nicht auf View-Ebene wie CO₂/Finanzen/ROI), MELDET jedes
+ * Kind seine real gerenderten Park-IDs hoch (`melde`). Der Parent behält die letzte
+ * Meldung je Block (überlebt das Unmounten des versteckten Blocks → kein Oszillieren)
+ * und lässt einen Block weg, sobald ALLE gemeldeten IDs geparkt sind.
  */
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Target, Sun, TrendingUp, GitCompareArrows, Clock } from 'lucide-react'
 import { Alert, FehlerZustand, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
-import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
+import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import {
   usePrognoseVsIst, pvgisKpiItems,
   PvgisSpeichern, PvgisMonatsChart, PvgisDetailTabelle, PvgisErklaerung,
@@ -38,9 +45,22 @@ import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-prognose'
 
+/** Reporter: ein Kind meldet dem Parent die IDs, die es GERADE parkbar rendert. */
+type MeldeFn = (block: string, ids: string[]) => void
+const nurStrings = (xs: (string | undefined)[]): string[] => xs.filter((x): x is string => !!x)
+
 // ① Jahres-SOLL/IST gegen PVGIS ────────────────────────────────────────────────
-function BlockPvgis({ anlageId, jahr }: { anlageId: number; jahr: number | undefined }) {
+function BlockPvgis({ anlageId, jahr, melde }: { anlageId: number; jahr: number | undefined; melde: MeldeFn }) {
   const vm = usePrognoseVsIst(anlageId, jahr)
+  const leer = vm.loading || !!vm.error || !vm.prognose || vm.monatsdaten.length === 0
+  const ids = useMemo(
+    () => (leer ? [] : nurStrings([
+      ...pvgisKpiItems(vm, jahr).map((k) => k.parkId),
+      'chart:pvgis-monat', 'tabelle:pvgis-detail', 'info:pvgis-erklaerung',
+    ])),
+    [leer, vm, jahr],
+  )
+  useEffect(() => melde('pvgis', ids), [melde, ids])
   // B8 (S15): Block-Skeleton in Zielform (KPI-Strip + Chart) statt Sektions-Spinner.
   if (vm.loading) return <div className="space-y-4"><KpiStripSkeleton label="Lade Prognose…" /><ChartSkeleton /></div>
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
@@ -58,10 +78,20 @@ function BlockPvgis({ anlageId, jahr }: { anlageId: number; jahr: number | undef
 }
 
 // ② SOLL/IST pro PV-String ──────────────────────────────────────────────────────
-function BlockStrings({ anlageId, selectedYear, jahre, zeitraumLabel }: {
-  anlageId: number; selectedYear: number | 'all'; jahre: number[]; zeitraumLabel: string
+function BlockStrings({ anlageId, selectedYear, jahre, zeitraumLabel, melde }: {
+  anlageId: number; selectedYear: number | 'all'; jahre: number[]; zeitraumLabel: string; melde: MeldeFn
 }) {
   const { data, loading, error } = usePvStrings(anlageId, selectedYear, jahre)
+  const leer = loading || !!error || !data || data.strings.length === 0 || !data.hat_prognose
+  const ids = useMemo(
+    () => (leer || !data ? [] : nurStrings([
+      ...pvStringsKpiItems(data, zeitraumLabel).map((k) => k.parkId),
+      ...(data.strings.length > 1 ? ['badge:best-schlecht'] : []),
+      'chart:soll-ist-bar', 'chart:string-monatsverlauf', 'tabelle:string-details',
+    ])),
+    [leer, data, zeitraumLabel],
+  )
+  useEffect(() => melde('pvstrings', ids), [melde, ids])
   if (loading) return <div className="space-y-4"><KpiStripSkeleton label="Lade PV-String-Daten…" /><ChartSkeleton /></div>
   if (error) return <Alert type="error">{error}</Alert>
   if (!data || data.strings.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PV-Module gefunden.</p>
@@ -82,14 +112,18 @@ function BlockStrings({ anlageId, selectedYear, jahre, zeitraumLabel }: {
 
 // ③ Mehrjahres-Performance — fester 3. Block (year-dependent Trio ①②③); zeigt den
 //    Mehrjahres-Chart nur bei Kopf-Jahr = „Alle Jahre", sonst einen Hinweis.
-function BlockMehrjahr({ anlageId, jahre, aktiv }: { anlageId: number; jahre: number[]; aktiv: boolean }) {
+function BlockMehrjahr({ anlageId, jahre, aktiv, melde }: { anlageId: number; jahre: number[]; aktiv: boolean; melde: MeldeFn }) {
+  useEffect(() => { if (!aktiv) melde('mehrjahr', []) }, [aktiv, melde])
   if (!aktiv) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Die Mehrjahres-Performance erscheint bei Jahr = „Alle Jahre" (und mindestens zwei Jahren mit Daten).</p>
   }
-  return <BlockMehrjahrInner anlageId={anlageId} jahre={jahre} />
+  return <BlockMehrjahrInner anlageId={anlageId} jahre={jahre} melde={melde} />
 }
-function BlockMehrjahrInner({ anlageId, jahre }: { anlageId: number; jahre: number[] }) {
+function BlockMehrjahrInner({ anlageId, jahre, melde }: { anlageId: number; jahre: number[]; melde: MeldeFn }) {
   const { data, loading, error, jahresvergleichData } = usePvStrings(anlageId, 'all', jahre)
+  const zeigt = !loading && !error && !!data && jahresvergleichData.length > 1
+  const ids = useMemo(() => (zeigt ? ['chart:mehrjahr'] : []), [zeigt])
+  useEffect(() => melde('mehrjahr', ids), [melde, ids])
   if (loading) return <ChartSkeleton label="Lade Mehrjahres-Daten…" />
   if (error) return <Alert type="error">{error}</Alert>
   if (!data || jahresvergleichData.length <= 1) return <p className="text-sm text-gray-500 dark:text-gray-400">Mehrjahres-Vergleich braucht mindestens zwei Jahre mit Daten.</p>
@@ -101,15 +135,35 @@ function BlockMehrjahrInner({ anlageId, jahre }: { anlageId: number; jahre: numb
 }
 
 // ④ Quellen-Genauigkeit OM · eedc · Solcast ─────────────────────────────────────
-function BlockGenauigkeit({ anlageId }: { anlageId: number }) {
+function BlockGenauigkeit({ anlageId, melde }: { anlageId: number; melde: MeldeFn }) {
   const vm = usePrognoseVergleich(anlageId)
+  const ids = useMemo(() => {
+    const d = vm.data
+    if (vm.loading || vm.error || !d) return []
+    // Spiegelt exakt die Null-Bedingung von PvgStatusHinweise (self-wrap) — die ID
+    // nur melden, wenn der Hinweis wirklich rendert, sonst hinge der Auto-Hide an
+    // einer nie parkbaren ID fest.
+    const hasEedc = d.eedc_lernfaktor !== null || d.eedc_heute_kwh !== null
+    const zeigeStatus = !!(d.solcast_status && d.solcast_status !== 'ok' && d.solcast_hinweis) || !hasEedc
+    return nurStrings([
+      'matrix:genauigkeit',
+      zeigeStatus ? 'hinweis:quellen-status' : undefined,
+      hatLernfaktorO12(vm) ? 'card:lernfaktor-o12' : undefined,
+      hatStratifizierung(vm) ? 'card:stratifizierung' : undefined,
+      'card:heatmap',
+      hatTracking(vm) ? 'card:genauigkeits-tracking' : undefined,
+    ])
+  }, [vm])
+  useEffect(() => melde('genauigkeit', ids), [melde, ids])
   if (vm.loading) return <TabellenSkeleton label="Lade Genauigkeits-Daten…" />
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
   if (!vm.data) return null
   return (
     <div className="space-y-4">
       <Parkbar id="matrix:genauigkeit" titel="KPI-Matrix (Quellen × Zeiträume)"><PvgKpiMatrix vm={vm} /></Parkbar>
-      <PvgStatusHinweise vm={vm} />
+      {/* D17-15: Status-/Leerzustand-Hinweise parkbar (self-wrap; rendert null bei
+          keinem Inhalt → kein leerer Rahmen, R17-5-konform). */}
+      <PvgStatusHinweise vm={vm} parkbar={{ id: 'hinweis:quellen-status', titel: 'Status-Hinweise' }} />
       {hatLernfaktorO12(vm) && <Parkbar id="card:lernfaktor-o12" titel="Lernfaktor O1+O2"><PvgLernfaktorO12 vm={vm} /></Parkbar>}
       {hatStratifizierung(vm) && <Parkbar id="card:stratifizierung" titel="Wetter-Stratifizierung"><PvgStratifizierung vm={vm} /></Parkbar>}
       <Parkbar id="card:heatmap" titel="Korrekturprofil-Heatmap"><PvgHeatmap vm={vm} /></Parkbar>
@@ -119,8 +173,13 @@ function BlockGenauigkeit({ anlageId }: { anlageId: number }) {
 }
 
 // ⑤ Tages-/Stundenprofil & Solcast-Roadmap ──────────────────────────────────────
-function BlockProfil({ anlageId }: { anlageId: number }) {
+function BlockProfil({ anlageId, melde }: { anlageId: number; melde: MeldeFn }) {
   const vm = usePrognoseVergleich(anlageId)
+  const ids = useMemo(
+    () => (vm.loading || vm.error || !vm.data ? [] : ['chart:stundenprofil', 'tabelle:24h', 'tabelle:7-tage']),
+    [vm],
+  )
+  useEffect(() => melde('profil', ids), [melde, ids])
   if (vm.loading) return <ChartSkeleton label="Lade Profil-Daten…" />
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
   if (!vm.data) return null
@@ -134,8 +193,34 @@ function BlockProfil({ anlageId }: { anlageId: number }) {
 }
 
 export default function AuswertungenPrognoseV4() {
+  return (
+    <ParkProvider persistKey={SICHT_KEY}>
+      <PrognoseInner />
+    </ParkProvider>
+  )
+}
+
+function PrognoseInner() {
+  const park = usePark()
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
   const basis = useAuswertungBasis(selectedAnlageId)
+
+  // Auto-Hide: letzte je-Block gemeldete Park-IDs (überlebt Unmount des versteckten
+  // Blocks → kein Oszillieren). Gleichheits-geschützt gegen Render-Schleifen.
+  const [blockIds, setBlockIds] = useState<Record<string, string[]>>({})
+  const melde = useCallback<MeldeFn>((block, ids) => {
+    setBlockIds((s) => {
+      const cur = s[block]
+      if (cur && cur.length === ids.length && cur.every((v, i) => v === ids[i])) return s
+      return { ...s, [block]: ids }
+    })
+  }, [])
+  const sichtbar = useCallback((block: string) => {
+    const ids = blockIds[block]
+    // Kein Parkbares gemeldet (Lade-/Leerzustand oder noch nie geöffnet) → Block bleibt
+    // (zeigt Chrome/Message). Sonst: verstecken, sobald ALLE gemeldeten IDs geparkt sind.
+    return !ids || ids.length === 0 || !ids.every((id) => park.istGeparkt(id))
+  }, [blockIds, park])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher stille Leere.
@@ -169,40 +254,38 @@ export default function AuswertungenPrognoseV4() {
   const zeigeMehrjahr = basis.jahr === 'alle' && basis.jahre.length > 1
 
   const bloecke: Block[] = [
-    {
+    ...(sichtbar('pvgis') ? [{
       id: 'pvgis', title: 'Jahres-SOLL/IST gegen PVGIS', icon: Target, farbe: 'text-purple-500', defaultOpen: true,
       summary: 'PVGIS-Jahresprognose vs. IST + Monats-Detail · „Prognose speichern"',
-      render: () => <BlockPvgis anlageId={anlageId} jahr={jahrFuerBlock} />,
-    },
-    {
+      render: () => <BlockPvgis anlageId={anlageId} jahr={jahrFuerBlock} melde={melde} />,
+    }] : []),
+    ...(sichtbar('pvstrings') ? [{
       id: 'pvstrings', title: 'SOLL/IST pro PV-String', icon: Sun, farbe: 'text-amber-500', defaultOpen: false,
       summary: 'String-Performance gegen PVGIS (KPIs · SOLL-IST · Monatsverlauf · Tabelle)',
-      render: () => <BlockStrings anlageId={anlageId} selectedYear={selectedYear} jahre={basis.jahre} zeitraumLabel={basis.zeitraumLabel} />,
-    },
-    {
+      render: () => <BlockStrings anlageId={anlageId} selectedYear={selectedYear} jahre={basis.jahre} zeitraumLabel={basis.zeitraumLabel} melde={melde} />,
+    }] : []),
+    ...(sichtbar('mehrjahr') ? [{
       id: 'mehrjahr', title: 'Mehrjahres-Performance', icon: TrendingUp, farbe: 'text-blue-500', defaultOpen: false,
       summary: 'Performance-Ratio pro String über die Jahre (bei „Alle Jahre")',
-      render: () => <BlockMehrjahr anlageId={anlageId} jahre={basis.jahre} aktiv={zeigeMehrjahr} />,
-    },
-    {
+      render: () => <BlockMehrjahr anlageId={anlageId} jahre={basis.jahre} aktiv={zeigeMehrjahr} melde={melde} />,
+    }] : []),
+    ...(sichtbar('genauigkeit') ? [{
       id: 'genauigkeit', title: 'Quellen-Genauigkeit (OM · eedc · Solcast)', icon: GitCompareArrows, farbe: 'text-orange-500', defaultOpen: false,
       summary: 'Multi-Quellen-Genauigkeit (MAPE/Bias), wetter-stratifiziert · Tage-Fenster 7/10/30',
-      render: () => <BlockGenauigkeit anlageId={anlageId} />,
-    },
-    {
+      render: () => <BlockGenauigkeit anlageId={anlageId} melde={melde} />,
+    }] : []),
+    ...(sichtbar('profil') ? [{
       id: 'profil', title: 'Tages-/Stundenprofil', icon: Clock, farbe: 'text-blue-400', defaultOpen: false,
       summary: 'Stundenprofil-Chart · 24h-Vergleich · 7-Tage-Vergleich',
-      render: () => <BlockProfil anlageId={anlageId} />,
-    },
+      render: () => <BlockProfil anlageId={anlageId} melde={melde} />,
+    }] : []),
   ]
 
   return (
-    <ParkProvider persistKey={SICHT_KEY}>
-      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-        <AuswertungKopf titel="Prognose" jahr={basis.jahr} setJahr={basis.setJahr} jahre={basis.jahre} />
-        <BlockShell key={`prog-${basis.jahr}`} persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
-        <ParkFuss />
-      </div>
-    </ParkProvider>
+    <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
+      <AuswertungKopf titel="Prognose" jahr={basis.jahr} setJahr={basis.setJahr} jahre={basis.jahre} />
+      <BlockShell key={`prog-${basis.jahr}`} persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
+      <ParkFuss />
+    </div>
   )
 }

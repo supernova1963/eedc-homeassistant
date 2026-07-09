@@ -7,9 +7,12 @@
 import { useEffect, useState } from 'react'
 import { WallboxWirtschaftlichkeit } from '../components/wallbox'
 import { investitionenApi, type WallboxDashboardResponse } from '../api/investitionen'
+import type { MeldeFn } from './komponentenAnalyse'
 import type { Investition } from '../types'
 
-export function WallboxWirtschaftlichkeitIST({ anlageId, inv }: { anlageId: number; inv?: Investition }) {
+const KEINE: string[] = []
+
+export function WallboxWirtschaftlichkeitIST({ anlageId, inv, melde }: { anlageId: number; inv?: Investition; melde?: MeldeFn }) {
   const [ds, setDs] = useState<WallboxDashboardResponse | null>(null)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
@@ -22,7 +25,9 @@ export function WallboxWirtschaftlichkeitIST({ anlageId, inv }: { anlageId: numb
     return () => { ab = true }
   }, [anlageId, inv?.id])
 
+  const leer = loading || !ds
+  useEffect(() => { if (leer) melde?.(KEINE) }, [leer, melde])
   if (loading) return <p className="text-sm text-gray-400 dark:text-gray-500">Lade…</p>
   if (!ds) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Wirtschaftlichkeitsdaten erfasst.</p>
-  return <WallboxWirtschaftlichkeit zusammenfassung={ds.zusammenfassung} investition={ds.investition} />
+  return <WallboxWirtschaftlichkeit zusammenfassung={ds.zusammenfassung} investition={ds.investition} melde={melde} />
 }

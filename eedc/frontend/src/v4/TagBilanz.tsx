@@ -18,6 +18,7 @@ import { fmtCalc } from '../components/ui'
 import FormelTooltip from '../components/ui/FormelTooltip'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken } from '../components/blocks'
+import { Parkbar } from '../components/park'
 import { DATENROLLE, AMPEL_TEXT_CLASS } from '../lib'
 import { BilanzKachel } from '../components/blocks/GrundlastSollIstKachel'
 import { Delta, VglChip, type GleicheMonatStats } from './MonatBilanz'
@@ -116,6 +117,8 @@ interface BilanzRow {
   besserWt?: boolean
 }
 
+// Park-IDs des Tag-Bilanz-Blocks → `./bilanzParkIds` (reines Modul, kein react-refresh-Treffer).
+
 export function TagBilanz({
   t, vt, wtStats, wochentagName,
 }: {
@@ -176,8 +179,8 @@ export function TagBilanz({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* IST / Vortag / Ø-Wochentag-Vergleich */}
-      <div className="lg:col-span-2">
+      {/* IST / Vortag / Ø-Wochentag-Vergleich — eigene Parkbar (Doktrin). */}
+      <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VT/Ø)" className="lg:col-span-2">
         {/* Mobil (< sm): gestapelte Karten + Vergleichs-Chips. */}
         <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/50">
           {rows.map((row) => (
@@ -227,13 +230,13 @@ export function TagBilanz({
             Ø aus {wtStats.count} {wochentagName}{wtStats.count !== 1 ? '-Tagen' : '-Tag'} (letzte 90 Tage)
           </p>
         )}
-      </div>
+      </Parkbar>
 
-      {/* PR-Ampel (prominent, Tages-Ersatz für Monats-SOLL/IST) + Spitzen + PV-Verteilung.
+      {/* PR-Ampel + Spitzen + PV-Verteilung — je eigene Parkbar (Doktrin), gestapelt.
           R3b S6: geteilter Kachel-Kern BilanzKachel (GrundlastSollIstKachel-SoT)
           statt Markup-Kopie; Wert-Farbe als AMPEL_TEXT_CLASS-Klasse statt Inline-Hex. */}
       <div className="space-y-4">
-        <div>
+        <Parkbar id="el:bilanz-pr" titel="Performance Ratio">
           {prPct != null && prStufe != null ? (
             <BilanzKachel
               label="Performance Ratio"
@@ -253,27 +256,31 @@ export function TagBilanz({
               <p className="text-xs text-gray-400 dark:text-gray-500">Keine Einstrahlungsdaten für diesen Tag — PR nicht berechenbar.</p>
             </>
           )}
-        </div>
+        </Parkbar>
 
         {spitzen.length > 0 && (
-          <dl className="space-y-1.5">
-            {spitzen.map((s) => (
-              <div key={s.label} className="flex justify-between text-sm">
-                <dt className="text-gray-500 dark:text-gray-400">{s.label}</dt>
-                <dd className="tabular-nums text-gray-800 dark:text-gray-200">{s.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <Parkbar id="el:bilanz-spitzen" titel="Tages-Spitzen">
+            <dl className="space-y-1.5">
+              {spitzen.map((s) => (
+                <div key={s.label} className="flex justify-between text-sm">
+                  <dt className="text-gray-500 dark:text-gray-400">{s.label}</dt>
+                  <dd className="tabular-nums text-gray-800 dark:text-gray-200">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Parkbar>
         )}
 
         {t.eigenverbrauch != null && t.einspeisung != null && t.erzeugung > 0 && (
-          <VerteilungsBalken
-            titel="PV-Verteilung"
-            segmente={[
-              { label: 'Eigenverbr.', wert: t.eigenverbrauch, farbe: DATENROLLE.eigenverbrauch.bg },
-              { label: 'Einspeisung', wert: t.einspeisung, farbe: DATENROLLE.einspeisung.bg },
-            ]}
-          />
+          <Parkbar id="el:bilanz-verteilung" titel="PV-Verteilung">
+            <VerteilungsBalken
+              titel="PV-Verteilung"
+              segmente={[
+                { label: 'Eigenverbr.', wert: t.eigenverbrauch, farbe: DATENROLLE.eigenverbrauch.bg },
+                { label: 'Einspeisung', wert: t.einspeisung, farbe: DATENROLLE.einspeisung.bg },
+              ]}
+            />
+          </Parkbar>
         )}
       </div>
     </div>

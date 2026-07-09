@@ -25,7 +25,7 @@ import { ReloadButton } from './ReloadButton'
 import { AnlageLeer, OnboardingLeer } from './OnboardingLeer'
 import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
-import { ParkProvider, ParkFuss, usePark } from '../components/park'
+import { ParkProvider, ParkFuss, usePark, Parkbar } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_ICONS, fmtZahl } from '../lib'
 import {
   TagesPrognose, KurzfristDetails, LangfristVerlaufChart, LangfristMonatswerte,
@@ -219,7 +219,10 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   const bloecke = useMemo<Block[]>(() => {
     // Vorwärts-Finanz-Teaser (D2) — in BEIDEN Horizonten ganz unten (analog
     // Cockpit/Monat); dezent, default eingeklappt. Jahresprognose, horizont-unabhängig.
-    const finanzTeaser: Block | null = finanz ? {
+    // Finanz-Teaser: Bilanz(+Tarif) und Cross-Link je eigene Parkbar (in AussichtFinanzTeaser);
+    // Block entfällt erst, wenn BEIDE geparkt sind.
+    const finanzTeaserGeparkt = park.istGeparkt('el:aussicht-finanz-bilanz') && park.istGeparkt('el:aussicht-finanz-link')
+    const finanzTeaser: Block | null = finanz && !finanzTeaserGeparkt ? {
       id: 'finanzen', title: 'Finanzen', ...BLOCK_IDENTITAET.finanzen,
       summary: `${euroVz(finanz.jahres_netto_ertrag_euro)} Netto-Ertrag (Jahresprognose)`,
       defaultOpen: false,
@@ -239,22 +242,26 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     if (istKurz) {
       if (!kurz) return []
       const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${fmtZahl(kurz.summe_kwh, 0)} kWh in ${kurz.tage.length} Tagen · Ø ${fmtZahl(kurz.durchschnitt_kwh_tag, 1)} kWh/Tag`)
+      // Aussicht-Anzeigen sind einzeln parkbar (Doktrin): render in `Parkbar`, und ist
+      // die Anzeige geparkt → ganzer Block weg (wie Cockpit/Monat-Verlauf).
       const list: Block[] = [
         ...(kpi ? [kpi] : []),
-        {
+        ...(park.istGeparkt('el:aussicht-tages') ? [] : [{
           id: 'verlauf', title: 'Tages-Prognose', ...BLOCK_IDENTITAET.wetter,
           summary: `${kurz.tage.length} Tage: Wetter, Temperatur & PV-Ertrag je Tag`,
           defaultOpen: true,
-          render: () => <TagesPrognose tage={kurz.tage} />,
-        },
-        {
+          render: () => <Parkbar id="el:aussicht-tages" titel="Tages-Prognose"><TagesPrognose tage={kurz.tage} /></Parkbar>,
+        }]),
+        ...(park.istGeparkt('el:aussicht-tage-tabelle') ? [] : [{
           id: 'details', title: `${kurz.tage.length}-Tage-Tabelle`, ...BLOCK_IDENTITAET.werte,
           summary: 'VM/NM · GTI · Bewölkung · Temp · Niederschlag · Quelle',
           defaultOpen: false,
-          render: () => <KurzfristDetails tage={kurz.tage} />,
-        },
+          render: () => <Parkbar id="el:aussicht-tage-tabelle" titel={`${kurz.tage.length}-Tage-Tabelle`}><KurzfristDetails tage={kurz.tage} /></Parkbar>,
+        }]),
         // Stunden-Ebene (1 Tag): Chart + Tabelle als GETRENNTE Blöcke, eine Quelle.
-        {
+        // Datum-Picker = Chrome (bleibt), nur der Chart ist die parkbare Anzeige →
+        // geparkt entfällt der ganze Stunden-Block (Picker ohne Chart sinnlos).
+        ...(park.istGeparkt('el:aussicht-stunden') ? [] : [{
           id: 'stunden', title: 'Stunden-Prognose', ...BLOCK_IDENTITAET.verlauf,
           summary: 'PV + Verbrauch + Speicher je Stunde (wählbarer Tag)',
           defaultOpen: false,
@@ -263,19 +270,19 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
               <StundenDatumPicker datum={pDatum} setDatum={setPDatum} />
               {pError
                 ? <p className="text-sm text-amber-600 dark:text-amber-400">{pError}</p>
-                : pDaten ? <PrognoseChartKarte daten={pDaten} />
+                : pDaten ? <Parkbar id="el:aussicht-stunden" titel="Stunden-Prognose"><PrognoseChartKarte daten={pDaten} /></Parkbar>
                 : <p className="text-sm text-gray-500 dark:text-gray-400">Lade Tagesprognose…</p>}
             </div>
           ),
-        },
-        {
+        }]),
+        ...(park.istGeparkt('el:aussicht-stundenwerte') ? [] : [{
           id: 'stundenwerte', title: 'Stundenwerte', ...BLOCK_IDENTITAET.werte,
           summary: 'Stundenprognose in kW · Summenzeile = kWh/Tag',
           defaultOpen: false,
           render: () => (pDaten
-            ? <PrognoseTabelle daten={pDaten} />
+            ? <Parkbar id="el:aussicht-stundenwerte" titel="Stundenwerte"><PrognoseTabelle daten={pDaten} /></Parkbar>
             : <p className="text-sm text-gray-500 dark:text-gray-400">{pError ?? 'Lade Tagesprognose…'}</p>),
-        },
+        }]),
       ]
       if (finanzTeaser) list.push(finanzTeaser)
       return list
@@ -283,47 +290,48 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     // 12 Monate
     if (!lang) return []
     const kpiLang = kennzahlenBlock(langKpis(lang), `${lang.jahresprognose_kwh.toLocaleString('de-DE')} kWh Jahresprognose`)
+    // Aussicht-Anzeigen einzeln parkbar (Doktrin): render in `Parkbar`, geparkt → Block weg.
     const list: Block[] = [
       ...(kpiLang ? [kpiLang] : []),
-      {
+      ...(park.istGeparkt('el:aussicht-monats') ? [] : [{
         id: 'verlauf', title: 'Monats-Prognose', ...BLOCK_IDENTITAET.verlauf,
         summary: 'PVGIS vs. Trend-korrigiert + Konfidenzband',
         defaultOpen: true,
-        render: () => <LangfristVerlaufChart prognose={lang} />,
-      },
-      {
+        render: () => <Parkbar id="el:aussicht-monats" titel="Monats-Prognose"><LangfristVerlaufChart prognose={lang} /></Parkbar>,
+      }]),
+      ...(park.istGeparkt('el:aussicht-monatswerte') ? [] : [{
         id: 'monatswerte', title: 'Monatswerte', ...BLOCK_IDENTITAET.werte,
         summary: 'PVGIS · Trend-korrigiert · Min/Max · Hist. PR + Gesamt',
         defaultOpen: false,
-        render: () => <LangfristMonatswerte prognose={lang} />,
-      },
-      {
+        render: () => <Parkbar id="el:aussicht-monatswerte" titel="Monatswerte"><LangfristMonatswerte prognose={lang} /></Parkbar>,
+      }]),
+      ...(park.istGeparkt('el:aussicht-saison') ? [] : [{
         id: 'saison', title: 'Saisonale Muster', ...BLOCK_IDENTITAET.saison,
         summary: trend ? `Beste: ${trend.saisonale_muster.beste_monate.slice(0, 2).join(', ')}` : 'Beste / schwächste Monate',
         defaultOpen: false,
         render: () => (trend
-          ? <SaisonMuster muster={trend.saisonale_muster} />
+          ? <Parkbar id="el:aussicht-saison" titel="Saisonale Muster"><SaisonMuster muster={trend.saisonale_muster} /></Parkbar>
           : <p className="text-sm text-gray-500 dark:text-gray-400">Noch keine saisonalen Muster verfügbar.</p>),
-      },
+      }]),
     ]
-    if (trend) {
+    if (trend && !park.istGeparkt('el:aussicht-degradation')) {
       const grad = trend.degradation.geschaetzt_prozent_jahr
       list.push({
         id: 'degradation', title: 'Degradations-Prognose', ...BLOCK_IDENTITAET.degradation,
         // C3/S19: Degradation = 2 NK (typisch 0,3–0,5 %/Jahr — 1 NK verlöre Information).
         summary: grad == null ? 'noch nicht bewertbar' : grad === 0 ? 'keine messbar' : `${fmtZahl(grad, 2)} % / Jahr`,
         defaultOpen: false,
-        render: () => <DegradationsPrognose trend={trend} />,
+        render: () => <Parkbar id="el:aussicht-degradation" titel="Degradations-Prognose"><DegradationsPrognose trend={trend} /></Parkbar>,
       })
     }
     // WP-Aussicht — data-gated (nur wenn die Anlage eine WP hat); Komponenten-
     // Temporales lebt in Cockpit/Aussicht (21.06.-Regel), nicht im Hub.
-    if (wp && wp.length > 0) {
+    if (wp && wp.length > 0 && !park.istGeparkt('el:aussicht-wp')) {
       list.push({
         id: 'wp-aussicht', title: 'Wärmepumpe — Ausblick', ...BLOCK_IDENTITAET.wpAussicht,
         summary: 'Effizienz-Trend (JAZ) + erwartete Heizsaison',
         defaultOpen: false,
-        render: () => <WpAussicht wpDashboards={wp} />,
+        render: () => <Parkbar id="el:aussicht-wp" titel="Wärmepumpe — Ausblick"><WpAussicht wpDashboards={wp} /></Parkbar>,
       })
     }
     if (finanzTeaser) list.push(finanzTeaser)

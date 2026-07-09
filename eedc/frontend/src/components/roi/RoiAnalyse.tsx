@@ -28,6 +28,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
 import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
+import { TYP_LABELS } from '../../lib/constants'
 
 const typIcons: Record<string, React.ElementType> = {
   'e-auto': Car,
@@ -40,17 +41,8 @@ const typIcons: Record<string, React.ElementType> = {
   'sonstiges': Settings2,
 }
 
-const typLabels: Record<string, string> = {
-  'e-auto': 'E-Auto',
-  'waermepumpe': 'Wärmepumpe',
-  'speicher': 'Speicher',
-  'wallbox': 'Wallbox',
-  'wechselrichter': 'Wechselrichter',
-  'pv-module': 'PV-Module',
-  'balkonkraftwerk': 'Balkonkraftwerk',
-  'sonstiges': 'Sonstiges',
-}
-
+// Typ-Labels: SoT `TYP_LABELS` (lib/constants) — die frühere lokale Kopie hier
+// driftete (fehlte 'pv-system' → ROI-Pie zeigte Roh-Key „pv-system", D17-5-Nebenfund).
 const geldTick = (v: number) => fmtZahl(v, 0)
 
 export interface RoiAnalyseProps {
@@ -151,7 +143,7 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
     })
     return Object.entries(grouped)
       .map(([typ, value]) => ({
-        name: typLabels[typ] || typ,
+        name: TYP_LABELS[typ] || typ,
         value: Math.round(value),
         color: TYP_COLORS[typ] || TYP_COLORS['sonstiges'],
       }))
@@ -410,7 +402,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                         <div>
                           <p className="text-sm font-medium text-gray-900 dark:text-white">{b.investition_bezeichnung}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {typLabels[b.investition_typ]}
+                            {TYP_LABELS[b.investition_typ] ?? b.investition_typ}
                             {/* R15-4: DC-Speicher hat KEINE eigene Zeile (System-Ansatz) —
                                 sein Enthaltensein hier kenntlich machen. */}
                             {(() => {

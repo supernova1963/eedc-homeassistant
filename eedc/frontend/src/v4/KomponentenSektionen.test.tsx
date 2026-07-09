@@ -10,6 +10,7 @@ import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 /** Park-Stub: alles geparkt (Element-Park-Doktrin — leerer Block verschwindet). */
 const ALLES_GEPARKT: ParkApi = {
   aktiv: true, istGeparkt: () => true, park: () => {}, entparke: () => {}, zuruecksetzen: () => {}, geparkt: [],
+  registriere: () => () => {}, parkbareAnzahl: 0,
 }
 
 function d(over: Partial<AktuellerMonatResponse> = {}): AktuellerMonatResponse {
@@ -81,6 +82,15 @@ describe('baueKomponentenBloecke — Aktiv-Gating', () => {
     // Pro-Gerät-Zeile: Bezeichnung erscheint im gerenderten Block-Inhalt.
     renderBlock(bloecke, 'k-sonstiges-verbraucher')
     expect(screen.getByText('Heizstab Warmwasser')).toBeInTheDocument()
+  })
+
+  it('Sonstiges (Doktrin 2026-07-08): alle Kacheln eines Geräts geparkt → Block verschwindet', () => {
+    // Je Kachel einzeln parkbar; sind ALLE Kacheln ALLER Geräte geparkt, blendet
+    // der Aufrufer den Block aus (früher: pro Gerät ein gebündeltes Park-Element).
+    const bloecke = baueKomponentenBloecke(d({
+      sonstiges_geraete: [{ bezeichnung: 'Heizstab Warmwasser', kategorie: 'verbraucher', verbrauch_kwh: 80 }],
+    }), ALLES_GEPARKT)
+    expect(bloecke.find((b) => b.id === 'k-sonstiges-verbraucher')).toBeUndefined()
   })
 
   it('Sonstiges nur Erzeuger → nur Erzeuger-Block (generischer Titel)', () => {

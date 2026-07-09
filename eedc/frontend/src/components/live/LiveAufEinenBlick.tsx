@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import { Calendar, Sunrise, Sun, Battery, Thermometer, LayoutGrid } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FokusKachel } from '../blocks'
-import { Parkbar } from '../park'
+import { Parkbar, usePark } from '../park'
 import LiveHeuteKacheln from './LiveHeuteKacheln'
 import SunProgressBar from './SunProgressBar'
 import SolarAussicht3Tage from './SolarAussicht3Tage'
@@ -44,6 +44,7 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage }: {
   wetter: LiveWetterResponse | null
   prognose3Tage: SolarPrognoseTag[] | null
 }) {
+  const park = usePark()
   const hatSonne = !!(wetter?.sunrise && wetter?.sunset)
   const hatAussicht = !!(prognose3Tage && prognose3Tage.length > 0)
   const hatSoc = !!data.gauges?.some((g) => g.key.startsWith('soc_'))
@@ -88,10 +89,19 @@ export default function LiveAufEinenBlick({ data, wetter, prognose3Tage }: {
     },
   ]
 
+  // Element-Park-Doktrin (Gernot 2026-07-09): der Container ist KEINE eigene Anzeige —
+  // sind ALLE verfügbaren Abschnitte geparkt, verschwindet die ganze „Auf einen Blick"-
+  // Hülle (sonst bliebe ein leerer Kachel-Kopf stehen). Ohne ParkProvider (v3-IST) ist
+  // `istGeparkt` immer false → nie versteckt, DOM unverändert.
+  const sichtbareAbschnitte = abschnitte.filter((a) => a.verfuegbar)
+  if (sichtbareAbschnitte.length > 0 && sichtbareAbschnitte.every((a) => park.istGeparkt(`live:${a.key}`))) {
+    return null
+  }
+
   return (
     <FokusKachel titel="Auf einen Blick" icon={LayoutGrid} zeigeTitel>
       <div className="space-y-4">
-        {abschnitte.filter((a) => a.verfuegbar).map((a) => (
+        {sichtbareAbschnitte.map((a) => (
           <Parkbar key={a.key} id={`live:${a.key}`} titel={a.titel}>
             <section>
               {!a.eigenerTitel && (

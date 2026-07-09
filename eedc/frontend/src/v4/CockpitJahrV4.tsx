@@ -26,6 +26,7 @@ import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET } from '../lib'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
+import { monatBilanzParkIds } from './bilanzParkIds'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
 import { JahrVerlaufChart } from './JahrVerlaufChart'
@@ -183,13 +184,14 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     const finanzBlock = d ? finanzTeaserBlock(d, park) : null
     return [
       ...(kennzahlenBlock ? [kennzahlenBlock] : []),
-      // Bilanz-/Verlauf-Element parkbar; geparkt → ganzer Block weg (Doktrin 2026-06-27).
-      ...(park.istGeparkt('el:bilanz') ? [] : [{
+      // Bilanz-Block: jede Teil-Anzeige einzeln parkbar (in JahrBilanz, gleiche IDs wie
+      // Monat — gleicher Aggregat-Shape); Block entfällt erst, wenn ALLE geparkt sind.
+      ...(d && monatBilanzParkIds(d).every((id) => park.istGeparkt(id)) ? [] : [{
         id: 'bilanz', title: 'Energie-Bilanz', ...BLOCK_IDENTITAET.energieBilanz,
         summary: bilanzSummary,
         defaultOpen: false,
         render: () => (d
-          ? <Parkbar id="el:bilanz" titel="Energie-Bilanz"><JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} /></Parkbar>
+          ? <JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} />
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
       }]),
       ...(park.istGeparkt('el:verlauf') ? [] : [{

@@ -23,6 +23,7 @@ import { useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
+import { monatBilanzParkIds } from './bilanzParkIds'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
 import { MonatStepper } from './MonatStepper'
@@ -260,14 +261,17 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
       ...(kennzahlenBlock ? [kennzahlenBlock] : []),
       // Bilanz-/Verlauf-Blöcke: ihr eines Element ist parkbar; ist es geparkt,
       // entfällt der ganze Block (Element-Park-Doktrin, Gernot 2026-06-27).
-      ...(park.istGeparkt('el:bilanz') ? [] : [{
+      // Bilanz-Block: jede Teil-Anzeige (Vergleich/Grundlast/Verteilung/Geräte) ist
+      // einzeln parkbar (in MonatBilanz); der Block entfällt erst, wenn ALLE geparkt
+      // sind (Speicher-Muster `alleGeparkt`).
+      ...(monatData && monatBilanzParkIds(monatData).every((id) => park.istGeparkt(id)) ? [] : [{
         id: 'bilanz',
         title: 'Energie-Bilanz',
         ...BLOCK_IDENTITAET.energieBilanz,
         summary: bilanzSummary,
         defaultOpen: false,
         render: () => (monatData
-          ? <Parkbar id="el:bilanz" titel="Energie-Bilanz"><MonatBilanz d={monatData} vm={vormonatAgg} glMonStats={glMonStats} monatName={MONAT_KURZ[gewaehlt.monat]} /></Parkbar>
+          ? <MonatBilanz d={monatData} vm={vormonatAgg} glMonStats={glMonStats} monatName={MONAT_KURZ[gewaehlt.monat]} />
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
       }]),
       ...(park.istGeparkt('el:verlauf') ? [] : [{

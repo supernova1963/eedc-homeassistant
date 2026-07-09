@@ -85,11 +85,12 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
 }
 
 /** Finanz-Teaser (B5): Netto-Ertrag + Aufschlüsselung + Cross-Link nach Auswertungen.
- *  Element-Park-Doktrin (Gernot 2026-06-27): jede Anzeige (Bilanz/Tarif/Cross-Link)
- *  einzeln parkbar; sind alle geparkt → kein Block (`null`). */
+ *  Element-Park-Doktrin: jede Anzeige einzeln parkbar; die ct/kWh-Tarif-Zeile ist
+ *  eine ANNOTATION zum Netto-Ertrag und parkt MIT der Finanz-Bilanz (Gernot
+ *  2026-07-09), nicht als eigenes Element. Sind alle geparkt → kein Block (`null`). */
 export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOOP_PARK): Block | null {
   const hatTarif = d.netzbezug_durchschnittspreis_cent != null || d.netzbezug_preis_cent != null || d.einspeise_preis_cent != null
-  const ids = ['el:finanzen-bilanz', ...(hatTarif ? ['el:finanzen-tarif'] : []), 'el:finanzen-link']
+  const ids = ['el:finanzen-bilanz', 'el:finanzen-link']
   if (ids.every((id) => park.istGeparkt(id))) return null
   return {
     id: 'finanzen',
@@ -99,6 +100,8 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
     defaultOpen: false,
     render: () => (
       <div className="space-y-3">
+        {/* Finanz-Bilanz + zugehörige Tarif-Info in EINER Parkbar (Annotation parkt
+            mit ihrem Bezugswert, Gernot 2026-07-09). */}
         <Parkbar id="el:finanzen-bilanz" titel="Finanz-Bilanz">
           <dl className="text-sm space-y-1.5">
             <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.einspeise_erloes_euro)}</dd></div>
@@ -106,11 +109,9 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
             <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Netzbezug-Kosten</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd></div>
             <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euro(d.netto_ertrag_euro)}</dd></div>
           </dl>
-        </Parkbar>
-        {/* C3: Tarif-Info-Zeile (Begleit-Info zum Finanz-Teaser, IST-Parität). */}
-        {hatTarif && (
-          <Parkbar id="el:finanzen-tarif" titel="Tarif-Info">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
+          {/* C3: Tarif-Info-Zeile (Begleit-Info zum Netto-Ertrag, IST-Parität). */}
+          {hatTarif && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500 mt-2">
               {/* E4 (R3b, Regel-0a-STUFE-3-AUSNAHME, Gernot 2026-07-05): der flexible
                   Ø-Netzbezugspreis wird bewusst BLAU hervorgehoben (Hinweis „dynamischer
                   Tarif aktiv"), obwohl die Strompreis-Rolle Purple ist — dokumentierte
@@ -120,8 +121,8 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
                 : d.netzbezug_preis_cent != null && <span>Netzbezug {fmtCalc(d.netzbezug_preis_cent, 2)} ct/kWh</span>}
               {d.einspeise_preis_cent != null && <span>Einspeisung {fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh</span>}
             </div>
-          </Parkbar>
-        )}
+          )}
+        </Parkbar>
         <Parkbar id="el:finanzen-link" titel="Cross-Link Finanzrechnung">
           <div className="space-y-3">
             <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
@@ -174,7 +175,7 @@ export function communityBlock(
     summary: `${anlagenWort} im ${monatName}${spezText}`,
     defaultOpen: false,
     render: () => (
-      <div>
+      <Parkbar id="el:community-tabelle" titel="Community-Vergleich">
       <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-sm">
           <thead>
@@ -211,7 +212,7 @@ export function communityBlock(
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
           Basis: {anlagenWort} · {monatName} {jahr}
         </p>
-      </div>
+      </Parkbar>
     ),
   }
 }

@@ -16,6 +16,7 @@
 import { fmtCalc } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
+import { Parkbar } from '../components/park'
 import { DATENROLLE } from '../lib'
 import { Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
@@ -129,8 +130,8 @@ export function JahrBilanz({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* IST / Vorjahr / Ø-Jahr-Vergleich */}
-      <div className="lg:col-span-2">
+      {/* IST / Vorjahr / Ø-Jahr-Vergleich — eigene Parkbar (Doktrin). */}
+      <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VJ/Ø)" className="lg:col-span-2">
         {/* Mobil (< sm): gestapelte Karten + Vergleichs-Chips. */}
         <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/50">
           {rows.map((row) => (
@@ -180,15 +181,17 @@ export function JahrBilanz({
             Ø aus {ojCount} {ojCount !== 1 ? 'Jahren' : 'Jahr'}
           </p>
         )}
-      </div>
+      </Parkbar>
 
-      {/* Grundlast (Nacht-Sockel, R12-1) — ersetzt Σ-PVGIS-SOLL/IST; PVGIS bleibt
-          Fallback ohne Stundendaten. Geteilte SoT-Kachel (Monat + Jahr). */}
+      {/* Rechte Spalte: Grundlast-Kachel + PV-Verteilung + Geräte-Hinweis — je eigene
+          Parkbar (Doktrin), gestapelt in EINER Grid-Zelle. */}
       <div>
-        <GrundlastSollIstKachel d={d} />
+        <Parkbar id="el:bilanz-grundlast" titel="Grundlast SOLL/IST">
+          <GrundlastSollIstKachel d={d} />
+        </Parkbar>
 
         {d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && (d.pv_erzeugung_kwh ?? 0) > 0 && (
-          <div className="mt-4">
+          <Parkbar id="el:bilanz-verteilung" titel="PV-Verteilung" className="mt-4">
             <VerteilungsBalken
               titel="PV-Verteilung"
               segmente={[
@@ -196,13 +199,13 @@ export function JahrBilanz({
                 { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: DATENROLLE.einspeisung.bg },
               ]}
             />
-          </div>
+          </Parkbar>
         )}
 
         {pvGeraete.length >= 2 && (
-          <div className="mt-3">
+          <Parkbar id="el:bilanz-geraete" titel="PV-Erzeugung aus" className="mt-3">
             <GeraeteHinweis label="PV-Erzeugung aus" namen={pvGeraete} />
-          </div>
+          </Parkbar>
         )}
       </div>
     </div>

@@ -35,6 +35,12 @@ export interface ParkApi {
   /** alle zurückholen (= Set leeren). */
   zuruecksetzen: () => void
   geparkt: GeparktesElement[]
+  /** Meldet ein montiertes {@link Parkbar}-Element an; Rückgabe = Abmelden (Unmount).
+   *  Damit weiß die Sicht, OB überhaupt parkbare Elemente existieren (R17-5). */
+  registriere: (id: string) => () => void
+  /** Anzahl aktuell montierter parkbarer Elemente (inkl. geparkter, die `null`
+   *  rendern, aber montiert bleiben) — 0 ⇒ Sicht hat nichts Parkbares. */
+  parkbareAnzahl: number
 }
 
 /** Inertes No-Op (kein Provider / kein Park-Kontext). Auch Default für Block-Bauer,
@@ -46,6 +52,8 @@ export const NOOP_PARK: ParkApi = {
   entparke: () => {},
   zuruecksetzen: () => {},
   geparkt: [],
+  registriere: () => () => {},
+  parkbareAnzahl: 0,
 }
 
 const ParkCtx = createContext<ParkApi>(NOOP_PARK)
@@ -93,6 +101,16 @@ export function ParkProvider({
     }
   }, [persistKey, geparkt])
 
+  // Registrierung montierter Parkbar-Elemente (R17-5): zählt, OB eine Sicht
+  // überhaupt Parkbares hat, damit der Discoverability-Hinweis nicht auf reinen
+  // Einstellungs-Sichten (nichts parkbar) erscheint. Stabile Callback-Referenz →
+  // kein Re-Registrieren, wenn sich der Park-State ändert.
+  const [registriert, setRegistriert] = useState<Set<string>>(() => new Set())
+  const registriere = useCallback((id: string) => {
+    setRegistriert((s) => { if (s.has(id)) return s; const n = new Set(s); n.add(id); return n })
+    return () => setRegistriert((s) => { if (!s.has(id)) return s; const n = new Set(s); n.delete(id); return n })
+  }, [])
+
   const istGeparkt = useCallback((id: string) => geparkt.some((e) => e.id === id), [geparkt])
   const park = useCallback((id: string, titel: string) => {
     setGeparkt((g) => (g.some((e) => e.id === id) ? g : [...g, { id, titel }]))
@@ -103,8 +121,8 @@ export function ParkProvider({
   const zuruecksetzen = useCallback(() => setGeparkt([]), [])
 
   const api = useMemo<ParkApi>(
-    () => ({ aktiv: true, istGeparkt, park, entparke, zuruecksetzen, geparkt }),
-    [istGeparkt, park, entparke, zuruecksetzen, geparkt],
+    () => ({ aktiv: true, istGeparkt, park, entparke, zuruecksetzen, geparkt, registriere, parkbareAnzahl: registriert.size }),
+    [istGeparkt, park, entparke, zuruecksetzen, geparkt, registriere, registriert],
   )
 
   return <ParkCtx.Provider value={api}>{children}</ParkCtx.Provider>

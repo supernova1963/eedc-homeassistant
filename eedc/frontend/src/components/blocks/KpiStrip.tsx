@@ -33,6 +33,10 @@ export interface KpiStripItem {
   /** Element-Park-id (IA-V4 SLICE 1). Nur gesetzt → Kachel wird parkbar umhüllt;
    *  ohne ParkProvider (Produktion/v3) bleibt {@link Parkbar} inert. */
   parkId?: string
+  /** Park-Chip-Beschriftung, falls sie sich vom Kachel-`title` unterscheiden soll
+   *  (z. B. Geräte-Präfix „Heizstab · Verbrauch" bei mehreren Sonstiges-Geräten,
+   *  damit die Parkplatz-Chips eindeutig bleiben). Default = `title`. */
+  parkTitel?: string
 }
 
 export function KpiStrip({ kpis }: { kpis: KpiStripItem[] }) {
@@ -63,7 +67,7 @@ export function KpiStrip({ kpis }: { kpis: KpiStripItem[] }) {
         // parkId gesetzt → parkbar umhüllen (inert ohne ParkProvider). Ohne parkId
         // bleibt die KPICard das direkte Grid-Kind → Produktion/v3 DOM-/verhaltensgleich.
         return k.parkId
-          ? <Parkbar key={k.title} id={k.parkId} titel={k.title}>{card}</Parkbar>
+          ? <Parkbar key={k.title} id={k.parkId} titel={k.parkTitel ?? k.title}>{card}</Parkbar>
           : <Fragment key={k.title}>{card}</Fragment>
       })}
     </div>

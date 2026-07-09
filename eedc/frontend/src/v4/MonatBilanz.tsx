@@ -19,6 +19,7 @@ import { fmtCalc } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
+import { Parkbar } from '../components/park'
 import { DATENROLLE, VERGLEICH_BADGE } from '../lib'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
@@ -188,6 +189,8 @@ interface BilanzRow {
   besserGm?: boolean
 }
 
+// Park-IDs des Bilanz-Blocks → `./bilanzParkIds` (reines Modul, kein react-refresh-Treffer).
+
 export function MonatBilanz({
   d, vm, glMonStats, monatName,
 }: {
@@ -238,8 +241,8 @@ export function MonatBilanz({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* IST/VM/VJ/Ø-Vergleich (B10) */}
-      <div className="lg:col-span-2">
+      {/* IST/VM/VJ/Ø-Vergleich (B10) — eigene Parkbar (Doktrin: jede Anzeige einzeln). */}
+      <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VM/VJ)" className="lg:col-span-2">
         {/* Mobil (< sm): gestapelte Kennzahl-Karten statt Tabelle — keine Spalten/
             Header, die verrutschen können; Vergleiche als umbruch-sichere Chips,
             Absolutwerte im Tooltip. */}
@@ -296,18 +299,22 @@ export function MonatBilanz({
             Ø aus {glMonStats.count} {monatName}-Monat{glMonStats.count !== 1 ? 'en' : ''}
           </p>
         )}
-      </div>
+      </Parkbar>
 
-      {/* Grundlast (Nacht-Sockel, R12-1) — ersetzt PVGIS-SOLL/IST; PVGIS bleibt
-          Fallback ohne Stundendaten. Geteilte SoT-Kachel (Monat + Jahr). */}
+      {/* Rechte Spalte: Grundlast-Kachel + PV-Verteilung + Geräte-Hinweis — je eigene
+          Parkbar (Doktrin), gestapelt in EINER Grid-Zelle. */}
       <div>
-        <GrundlastSollIstKachel d={d} />
+        {/* Grundlast (Nacht-Sockel, R12-1) — ersetzt PVGIS-SOLL/IST; PVGIS bleibt
+            Fallback ohne Stundendaten. Geteilte SoT-Kachel (Monat + Jahr). */}
+        <Parkbar id="el:bilanz-grundlast" titel="Grundlast SOLL/IST">
+          <GrundlastSollIstKachel d={d} />
+        </Parkbar>
 
         {/* PV-Verteilung (EV/Einspeisung) — VerteilungsBalken-SoT (B7-Revision 2026-06-19):
             wie IST als Balken, zusätzlich kWh; eine Bildsprache wie WP/Lade-Mix.
             O3-Revision: bewusst hier, nicht nur in der Fluss-Linse. */}
         {d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && (d.pv_erzeugung_kwh ?? 0) > 0 && (
-          <div className="mt-4">
+          <Parkbar id="el:bilanz-verteilung" titel="PV-Verteilung" className="mt-4">
             <VerteilungsBalken
               titel="PV-Verteilung"
               segmente={[
@@ -315,13 +322,13 @@ export function MonatBilanz({
                 { label: 'Einspeisung', wert: d.einspeisung_kwh, farbe: DATENROLLE.einspeisung.bg },
               ]}
             />
-          </div>
+          </Parkbar>
         )}
 
         {pvGeraete.length >= 2 && (
-          <div className="mt-3">
+          <Parkbar id="el:bilanz-geraete" titel="PV-Erzeugung aus" className="mt-3">
             <GeraeteHinweis label="PV-Erzeugung aus" namen={pvGeraete} />
-          </div>
+          </Parkbar>
         )}
       </div>
     </div>

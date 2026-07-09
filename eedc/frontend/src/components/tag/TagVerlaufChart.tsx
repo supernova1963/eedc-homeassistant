@@ -13,7 +13,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Card, ChartLegende, eedcTooltipProps } from '../ui'
-import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, COLORS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -85,7 +85,7 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
           <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
           <Tooltip {...eedcTooltipProps({
             unit: ' kW', decimals: 2,
-            nameFormatter: (name) => chartSerien.find(cs => cs.dataKey === name)?.label ?? name,
+            nameFormatter: (name) => chartSerien.find(cs => cs.dataKey === name)?.label ?? CHART_LABELS[name] ?? name,
             formatter: (v) => Math.abs(v) < 0.001 ? null : `${v > 0 ? '▲' : '▼'} ${fmtZahl(Math.abs(v), 2)} kW`,
           })} />
           <Legend content={<ChartLegende
@@ -108,9 +108,12 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
             />
           ))}
 
-          {/* Summen-/Hilfslinie (keine Prognose) → HILFSLINIE_DASH, nicht PROGNOSE_DASH (Regel C). */}
+          {/* Summen-/Hilfslinie (keine Prognose) → HILFSLINIE_DASH, nicht PROGNOSE_DASH (Regel C).
+              D17-1: neutrale Hilfslinien-Farbe (nicht COLORS.solar = PV-Rolle) — sonst wirkte
+              „Gesamterzeugung" im Tooltip wie eine Farb-/Wert-Dublette der PV-Zeile. Label
+              „Gesamterzeugung" (groß) kommt aus CHART_LABELS (nameFormatter-Fallback oben). */}
           <Line dataKey="gesamterzeugung" name="gesamterzeugung"
-            stroke={COLORS.solar} strokeWidth={2} strokeDasharray={HILFSLINIE_DASH}
+            stroke={achsen.referenz} strokeWidth={2} strokeDasharray={HILFSLINIE_DASH}
             dot={false} connectNulls legendType="none" />
         </ComposedChart>
       </ResponsiveContainer>

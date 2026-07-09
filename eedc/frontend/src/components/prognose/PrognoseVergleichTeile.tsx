@@ -19,6 +19,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 } from 'lucide-react'
 import { Card, ChartLegende, buttonClasses, ScrollSchatten } from '../ui'
 import { SimpleTooltip } from '../ui/FormelTooltip'
+import { Parkbar } from '../park'
 import {
   aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag,
 } from '../../api/aussichten'
@@ -486,13 +487,20 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
   )
 }
 
-export function PvgStatusHinweise({ vm }: { vm: PrognoseVergleichVM }) {
+export function PvgStatusHinweise({ vm, parkbar }: {
+  vm: PrognoseVergleichVM
+  /** v4: parkbar umhüllen (Chip-id/-titel). IST-Sicht ruft ohne Prop → DOM-gleich. */
+  parkbar?: { id: string; titel: string }
+}) {
   const { data, genauigkeit } = vm
   if (!data) return null
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
-  return (
+  const zeigeSolcast = !!(data.solcast_status && data.solcast_status !== 'ok' && data.solcast_hinweis)
+  // D17-15/R17-5: kein Inhalt → nichts rendern (kein leerer parkbarer Rahmen).
+  if (!zeigeSolcast && hasEedc) return null
+  const inhalt = (
     <>
-      {data.solcast_status && data.solcast_status !== 'ok' && data.solcast_hinweis && (
+      {zeigeSolcast && (
         <div className={`rounded-lg p-4 text-sm ${data.solcast_status === 'tageslimit' ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200'}`}>{data.solcast_hinweis}</div>
       )}
       {!hasEedc && (() => {
@@ -508,6 +516,7 @@ export function PvgStatusHinweise({ vm }: { vm: PrognoseVergleichVM }) {
       })()}
     </>
   )
+  return parkbar ? <Parkbar id={parkbar.id} titel={parkbar.titel}>{inhalt}</Parkbar> : inhalt
 }
 
 export function PvgLernfaktorO12({ vm }: { vm: PrognoseVergleichVM }) {

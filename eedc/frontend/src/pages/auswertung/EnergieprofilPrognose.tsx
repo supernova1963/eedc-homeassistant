@@ -10,7 +10,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
-import { Card, Alert, KPICard, ChartLegende } from '../../components/ui'
+import { Card, Alert, KPICard, ChartLegende, ScrollSchatten } from '../../components/ui'
 import { DatumPicker } from '../../components/ui/DatumPicker'
 import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -252,7 +252,11 @@ export function PrognoseTabelle({ daten }: { daten: TagesPrognose }) {
           Stundenprognose in kW · Summenzeile = kWh/Tag
         </span>
       </div>
-      <div className="overflow-auto max-h-[500px]">
+      {/* D17-2 (G16-1): alle 24 Stunden am Stück, kein innerer Vertikal-Scroll
+          (max-h entfernt) — wie die Cockpit/Tag-Stundentabelle. Horizontaler Überlauf
+          zeigt den ScrollSchatten-Fade; thead sticky bleibt (harmlos ohne Eigen-Scroll),
+          tfoot NICHT sticky (schwebte sonst am Viewport-Boden). */}
+      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800">
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -295,7 +299,7 @@ export function PrognoseTabelle({ daten }: { daten: TagesPrognose }) {
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold sticky bottom-0">
+            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold">
               <td className="px-3 py-2 text-gray-500 dark:text-gray-400">kWh</td>
               <td className="px-2 py-2 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{fmtZahl(daten.pv_summe_kwh, 1)}</td>
               <td className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtZahl(daten.verbrauch_summe_kwh, 1)}</td>
@@ -312,7 +316,7 @@ export function PrognoseTabelle({ daten }: { daten: TagesPrognose }) {
             </tr>
           </tfoot>
         </table>
-      </div>
+      </ScrollSchatten>
     </Card>
   )
 }

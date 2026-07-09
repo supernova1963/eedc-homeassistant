@@ -17,6 +17,7 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import ScrollSchatten from '../ui/ScrollSchatten'
+import { Parkbar } from '../park'
 import { fmtCalc, ChartLegende } from '../ui'
 import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, DATENROLLE, TREND_TEXT_CLASS, AMPEL_TEXT_CLASS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -488,24 +489,33 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
 // damit beide Finanz-Teaser EINE Darstellung teilen (eine Komponenten-Klasse = eine SoT).
 export const euroVz = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${fmtCalc(v, 2)} €`)
 
+// Park-IDs des Teasers (immer beide): 'el:aussicht-finanz-bilanz' + 'el:aussicht-finanz-link'
+// — im Block-Gate der Sicht inline geprüft (kein Export → kein react-refresh-Treffer).
 export function AussichtFinanzTeaser({ finanz }: { finanz: FinanzPrognose }) {
   return (
     <div className="space-y-3">
-      <dl className="text-sm space-y-1.5">
-        <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euroVz(finanz.jahres_einspeise_erloes_euro)}</dd></div>
-        <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">EV-Ersparnis</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euroVz(finanz.jahres_ev_ersparnis_euro)}</dd></div>
-        <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag (Jahresprognose)</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euroVz(finanz.jahres_netto_ertrag_euro)}</dd></div>
-      </dl>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500">
-        <span>Einspeisung {fmtCalc(finanz.einspeiseverguetung_cent_kwh, 2)} ct/kWh</span>
-        <span>Netzbezug {fmtCalc(finanz.netzbezug_preis_cent_kwh, 2)} ct/kWh</span>
-      </div>
-      <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
-        volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
-      </a>
-      <p className="text-xs text-gray-400 dark:text-gray-500">
-        Vorwärts-Schätzung auf Jahresbasis. Das vollständige SOLL/HABEN-T-Konto (zeitraum-parametrisiert) liegt in Auswertungen/Finanzen.
-      </p>
+      {/* Finanz-Bilanz + zugehörige Tarif-Info in EINER Parkbar (Annotation parkt mit Wert). */}
+      <Parkbar id="el:aussicht-finanz-bilanz" titel="Finanz-Prognose">
+        <dl className="text-sm space-y-1.5">
+          <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euroVz(finanz.jahres_einspeise_erloes_euro)}</dd></div>
+          <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">EV-Ersparnis</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euroVz(finanz.jahres_ev_ersparnis_euro)}</dd></div>
+          <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag (Jahresprognose)</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euroVz(finanz.jahres_netto_ertrag_euro)}</dd></div>
+        </dl>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500 mt-2">
+          <span>Einspeisung {fmtCalc(finanz.einspeiseverguetung_cent_kwh, 2)} ct/kWh</span>
+          <span>Netzbezug {fmtCalc(finanz.netzbezug_preis_cent_kwh, 2)} ct/kWh</span>
+        </div>
+      </Parkbar>
+      <Parkbar id="el:aussicht-finanz-link" titel="Cross-Link Finanzrechnung">
+        <div className="space-y-3">
+          <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+            volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
+          </a>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Vorwärts-Schätzung auf Jahresbasis. Das vollständige SOLL/HABEN-T-Konto (zeitraum-parametrisiert) liegt in Auswertungen/Finanzen.
+          </p>
+        </div>
+      </Parkbar>
     </div>
   )
 }
