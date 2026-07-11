@@ -241,7 +241,7 @@ export function MonatBilanz({
   ]
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       {/* IST/VM/VJ/Ø-Vergleich (B10) — eigene Parkbar (Doktrin: jede Anzeige einzeln). */}
       <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VM/VJ)" className="lg:col-span-2">
         {/* Mobil (< sm): gestapelte Kennzahl-Karten statt Tabelle — keine Spalten/

@@ -86,7 +86,13 @@ export function Parkbar({
       // driftfrei. Nur im aktiven+ungeparkten Zweig (geparkt → null; ohne Provider → v3
       // rendert ohne diesen Wrapper, also kein Attribut).
       data-park-id={id}
-      className={`relative h-full${className ? ` ${className}` : ''}`}
+      // D18-4 (detlan #210, @402px gemessen): KEIN h-full mehr — als direktes
+      // Grid-/Flex-Kind streckt der Container-Stretch (align-items) die Parkbar
+      // ohnehin; height:100% griff dagegen auch in GESTAPELTEN Spalten auf die
+      // Zeilenhöhe des Bilanz-Grids durch (224px-Wrapper um 16px Inhalt = detlans
+      // „halbe Bildschirmhöhe leere Karte"). Aufrufer, die Füllung brauchen,
+      // geben sie per className mit.
+      className={`relative${className ? ` ${className}` : ''}`}
       onContextMenu={onContextMenu}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}

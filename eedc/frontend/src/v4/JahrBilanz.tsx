@@ -130,7 +130,7 @@ export function JahrBilanz({
   ]
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       {/* IST / Vorjahr / Ø-Jahr-Vergleich — eigene Parkbar (Doktrin). */}
       <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VJ/Ø)" className="lg:col-span-2">
         {/* Mobil (< sm): gestapelte Karten + Vergleichs-Chips. */}

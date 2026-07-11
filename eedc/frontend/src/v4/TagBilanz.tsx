@@ -179,7 +179,7 @@ export function TagBilanz({
     spitzen.push({ label: 'Temperatur', value: `${fmtCalc(t.temperatur_min_c, 1)} / ${fmtCalc(t.temperatur_max_c, 1)} °C` })
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       {/* IST / Vortag / Ø-Wochentag-Vergleich — eigene Parkbar (Doktrin). */}
       <Parkbar id="el:bilanz-vergleich" titel="Vergleich (IST/VT/Ø)" className="lg:col-span-2">
         {/* Mobil (< sm): gestapelte Karten + Vergleichs-Chips. */}
