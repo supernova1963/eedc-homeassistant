@@ -51,17 +51,27 @@ export function xAchse(_schmal?: boolean, _immer45?: boolean): XAchsenProps {
 
 export interface YAchsenProps {
   tick: typeof ACHSEN_TICK
-  width?: number
+  width: number
 }
+
+/**
+ * ACHSEN_Y_BREITE — Default-Breite jeder Wert-Y-Achse (D18-3, detlan #210).
+ * Regel: die Y-Achsen-Breite kommt IMMER aus dieser Zentrale — `yAchse(schmal)`
+ * = 48 px, betragsabhängig pro Chart übersteuerbar (`yAchse(schmal, 44|52|…)`).
+ * NIE der Recharts-Default 60 px (verschwendeter Seitenrand). Wächter:
+ * check:charts R3. Kategorie-Y-Achsen (horizontale Balken) setzen ihre
+ * Label-Breite weiterhin hart per `width=`.
+ */
+export const ACHSEN_Y_BREITE = 48
 
 /**
  * yAchse — Y-Achsen-Props. R9-Nacharbeit (detLAN): Y-Tick-**Zahlen bleiben immer
  * waagerecht** (auch mobil — Zahlen sind kurz), kein 90°-Quer mehr. `breite` =
- * optionale feste Achsenbreite (auf allen Views durchgereicht).
+ * feste Achsenbreite (Default {@link ACHSEN_Y_BREITE}, auf allen Views durchgereicht).
  *   `<YAxis yAxisId="kwh" {...yAchse(schmal, 48)} label={achsenEinheit('kWh')} />`
  */
-export function yAchse(_schmal: boolean, breite?: number): YAchsenProps {
-  return { tick: ACHSEN_TICK, ...(breite != null ? { width: breite } : {}) }
+export function yAchse(_schmal: boolean, breite: number = ACHSEN_Y_BREITE): YAchsenProps {
+  return { tick: ACHSEN_TICK, width: breite }
 }
 
 // ── Achsen-EINHEIT (R9-Nacharbeit / detLAN+Rainer-Kompromiss) ────────────────

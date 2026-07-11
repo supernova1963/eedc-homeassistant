@@ -12,8 +12,8 @@ import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { Card, ChartLegende, eedcTooltipProps } from '../ui'
-import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { ChartLegende, eedcTooltipProps } from '../ui'
+import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -71,17 +71,21 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
     }), [daten, extraErzeuger, extraVerbraucher])
 
   return (
-    <Card>
+    // D18-3 (detlan #210): KEINE eigene <Card> mehr um den Chart — die
+    // Gliederungsebene (BlockShell-Body px-3) trägt den Seitenrand, die
+    // IST-Seite hüllt am Aufrufer. YAxis-Breite aus chartAchse (44, wie das
+    // Vorbild KomponentenVerlaufChart) statt Recharts-Default 60.
+    <div>
       <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between">
         <span>▲ Quellen (Erzeugung, Bezug)</span>
         <span>Stundenmittelwerte aus Energieprofil · gestrichelt = Verfügbare Energie</span>
         <span>▼ Senken (Verbrauch, Einspeisung)</span>
       </div>
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: 10, left: -10, bottom: 5 }}>
+        <ComposedChart data={chartDaten} margin={{ top: ACHSEN_MARGIN_TOP, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis dataKey="stunde" {...xAchse()} interval={2} /* achsen-allow: Zeit-/Kategorie-Achse (Stunde) */ />
-          <YAxis tick={{ fontSize: 10 }} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
+          <YAxis {...yAchse(false, 44)} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
           <ReferenceLine y={0} stroke={achsen.referenz} strokeWidth={1.5} />
           <Tooltip {...eedcTooltipProps({
             unit: ' kW', decimals: 2,
@@ -117,6 +121,6 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
             dot={false} connectNulls legendType="none" />
         </ComposedChart>
       </ResponsiveContainer>
-    </Card>
+    </div>
   )
 }

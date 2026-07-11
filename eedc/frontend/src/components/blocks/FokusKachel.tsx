@@ -14,13 +14,11 @@ import { Maximize2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FokusVollbild } from './FokusVollbild'
 
-export function FokusKachel({ titel, icon: Icon, farbe, className = '', kompakt = false, zeigeTitel = false, children }: {
+export function FokusKachel({ titel, icon: Icon, farbe, className = '', zeigeTitel = false, children }: {
   titel: string
   icon?: LucideIcon
   farbe?: string
   className?: string
-  /** Weniger Padding (für schmale Sidebar-Sektionen). */
-  kompakt?: boolean
   /** Titel auch in der Karten-Kopfzeile zeigen (sonst nur im Vollbild). */
   zeigeTitel?: boolean
   children: ReactNode
@@ -34,8 +32,11 @@ export function FokusKachel({ titel, icon: Icon, farbe, className = '', kompakt 
         </FokusVollbild>
       )}
       {/* C1/S11 (R3b, dokumentierte A.3-IST-Ausnahme BIS Flip): rounded-lg + nacktes
-          shadow + p-3 = V3-Live-Optik; Angleichung an rounded-xl/shadow-sm am Flip. */}
-      <div className={`relative bg-white dark:bg-gray-800 rounded-lg shadow ${kompakt ? 'p-3' : 'p-4 sm:p-6'} ${className}`}>
+          shadow + p-3 = V3-Live-Optik; Angleichung an rounded-xl/shadow-sm am Flip.
+          D18-3 (detlan #210): Innenpolsterung auf die Gliederungsebene (12 px = p-3)
+          statt p-4 sm:p-6 — Charts in Live-Kacheln bekommen denselben Seitenrand
+          wie Charts im BlockShell-Body (px-3), keine Doppel-/Überpolsterung. */}
+      <div className={`relative bg-white dark:bg-gray-800 rounded-lg shadow p-3 ${className}`}>
         {/* ⤢ sitzt absolut oben rechts — in der Titelzeile, keine eigene Leerzeile.
             (Energiefluss bringt sein ⤢ über `kopfAktion` selbst mit.)
             D14-16 (Gernot-Entscheid): unter 640 px ausgeblendet, NICHT entfernt —

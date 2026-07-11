@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
-import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 
@@ -156,7 +156,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
         <span>▼ Senken (Verbrauch, Einspeisung)</span>
       </div>
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: overlaySerien.length > 0 ? 10 : 10, left: -10, bottom: 5 }}>
+        <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: overlaySerien.length > 0 ? 10 : 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
           <XAxis
             dataKey="zeit"
@@ -167,7 +167,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
           />
           <YAxis
             yAxisId="left"
-            tick={{ fontSize: 10 }}
+            {...yAchse(false)}
             className="fill-gray-500 dark:fill-gray-400"
             tickFormatter={achsenTick}
             label={achsenEinheit(hauptEinheit)}
@@ -176,7 +176,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
             <YAxis
               yAxisId="right"
               orientation="right"
-              tick={{ fontSize: 10 }}
+              {...yAchse(false)}
               className="fill-gray-400 dark:fill-gray-500"
               tickFormatter={achsenTick}
               label={achsenEinheit(overlaySerien[0].einheit || '', 'rechts')}

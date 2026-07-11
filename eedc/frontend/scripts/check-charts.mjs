@@ -13,6 +13,13 @@
  *   R2 — Legenden-Bildsprache: jede Recharts-`<Legend>` MUSS `content={<ChartLegende`
  *        tragen (S1: Swatch + monochromer Text; roher `<Legend>` färbt die Schrift
  *        ein → „unseriös", detLAN/Rainer). Ein `<Legend>` ohne `ChartLegende` = Verstoß.
+ *   R3 — Y-Achsen-Breite aus der Zentrale (D18-3, detlan #210): jede `<YAxis>` in
+ *        src/v4 + src/components trägt ihre Breite explizit — `{...yAchse(…)}`
+ *        (Default `ACHSEN_Y_BREITE` aus lib/chartAchse) oder hartes `width=`
+ *        (Kategorie-Achsen horizontaler Balken). Der Recharts-Default 60 px ist
+ *        verboten (verschwendeter Seitenrand; genau die Lücke, mit der D17-3/D17-5
+ *        zweimal falsch „erledigt" gemeldet wurden). V3-Seiten (src/pages) ziehen
+ *        mit Donor→V4 nach.
  *
  * BEWUSSTER BLIND SPOT (ehrlich benannt, [[feedback_verifiziert_nur_was_check_abdeckt]]):
  * die **Legende-Pflicht bei Multi-Serie** und **Label-Overflow** sind STATISCH nicht
@@ -80,9 +87,13 @@ function openTag(src, start) {
   return src.slice(start)
 }
 
+/** R3-Scope: V4 + der von V4 konsumierte geteilte Komponenten-Raum. */
+const R3_SCOPE = ['src/v4/', 'src/components/']
+
 const fehler = []
 let pieOk = 0
 let legendOk = 0
+let yBreiteOk = 0
 
 for (const file of tsxFiles(SRC)) {
   const rel = relative(ROOT, file).replaceAll('\\', '/')
@@ -112,6 +123,18 @@ for (const file of tsxFiles(SRC)) {
     if (/<ChartLegende\b/.test(tag)) { legendOk++; continue }
     fehler.push(`✗ ${rel}:${zeileVon(lm.index)} — rohe <Legend> — R2: content={<ChartLegende />} (S1-Bildsprache, kein farbiger Legendentext).`)
   }
+
+  // ── R3: <YAxis> mit expliziter Breite — yAchse(…) (Zentrale) oder width= ──────
+  if (R3_SCOPE.some((p) => rel.startsWith(p))) {
+    const yRe = /<YAxis\b/g
+    let ym
+    while ((ym = yRe.exec(src)) !== null) {
+      if (istKommentar(ym.index)) continue
+      const tag = openTag(src, ym.index)
+      if (/yAchse\(/.test(tag) || /\bwidth=/.test(tag)) { yBreiteOk++; continue }
+      fehler.push(`✗ ${rel}:${zeileVon(ym.index)} — <YAxis> ohne Breite — R3: {...yAchse(schmal[, Breite])} aus lib/chartAchse oder explizites width= (kein Recharts-Default 60).`)
+    }
+  }
 }
 
 if (fehler.length) {
@@ -119,4 +142,4 @@ if (fehler.length) {
   console.error(`\ncheck:charts — ${fehler.length} Verstoß/Verstöße. (Laufzeit-Komposition: npm run check:chart-audit)`)
   process.exit(1)
 }
-console.log(`✅ check:charts — ${pieOk} Pie-Charts SoT/allowlist-konform, ${legendOk} Legenden über ChartLegende. (Multi-Serie-Legende + Overflow: check:chart-audit)`)
+console.log(`✅ check:charts — ${pieOk} Pie-Charts SoT/allowlist-konform, ${legendOk} Legenden über ChartLegende, ${yBreiteOk} Y-Achsen mit expliziter Breite (R3). (Multi-Serie-Legende + Overflow: check:chart-audit)`)

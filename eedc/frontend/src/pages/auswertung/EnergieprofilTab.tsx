@@ -202,7 +202,11 @@ function Tagesdetail({ anlageId }: TagesdetailProps) {
           Keine Daten für diesen Tag vorhanden.
         </Card>
       ) : (
-        <TagVerlaufChart daten={daten} extraSerien={extraSerien} />
+        /* D18-3: Card-Hülle liegt am IST-Aufrufer — im V4-Block trägt die
+           BlockShell die Gliederungsebene (keine Doppel-Polsterung). */
+        <Card>
+          <TagVerlaufChart daten={daten} extraSerien={extraSerien} />
+        </Card>
       )}
 
       {/* Detailtabelle — geteilte SoT-Komponente */}

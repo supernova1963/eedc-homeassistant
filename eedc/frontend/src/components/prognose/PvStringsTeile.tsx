@@ -21,7 +21,7 @@ import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
 import {
   SOLL_IST_COLORS, STRING_COLORS, KATEGORIE_FARBEN, HILFSLINIE_DASH,
   formatEnergie, energieAchse, formatProzent, formatSpezErtrag, fmtZahl,
-  xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
+  xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP,
 } from '../../lib'
 
 export interface PvStringsVM {
@@ -337,7 +337,7 @@ export function PvStringMehrjahr({ data, jahresvergleichData }: {
           <LineChart data={jahresvergleichData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
             <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
-            <YAxis label={achsenEinheit('%')} domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tickFormatter={achsenTick} tick={{ fontSize: 10 }} />
+            <YAxis label={achsenEinheit('%')} domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tickFormatter={achsenTick} {...yAchse(false)} />
             <Tooltip content={<ChartTooltip unit="%" />} />
             <Legend content={<ChartLegende />} />
             {data.strings.map((s, idx) => (
