@@ -11,7 +11,7 @@
  * Auto-km ohne Tsd-Transform) · R6 KPIs + Charts parkbar. Daten = `useAuswertungBasis`
  * (Jahr-Filter) + `getCO2Amortisation`; CO₂-Faktor aus lib-SoT (kein lokales 0,38).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -28,7 +28,7 @@ import {
 } from '../lib'
 import { investitionenApi, type CO2AmortisationResponse } from '../api/investitionen'
 import { createMonatsZeitreihe } from '../pages/auswertung/types'
-import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
+import { useApiData, useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 import { AnlageLeer } from './OnboardingLeer'
@@ -55,18 +55,15 @@ function Co2Inner() {
   // Graue Last lädt asynchron → erst rendern, wenn sie gesettled ist. Sonst mountet
   // BlockShell mit nur [①③] und nimmt den später ergänzten ②-Block (data-gated)
   // nicht mehr auf (Order wird nur beim Mount initialisiert).
-  const [co2Amort, setCo2Amort] = useState<CO2AmortisationResponse | null>(null)
-  const [amortGeladen, setAmortGeladen] = useState(false)
-  useEffect(() => {
-    if (!selectedAnlageId) { setCo2Amort(null); setAmortGeladen(true); return }
-    let aktiv = true
-    setAmortGeladen(false)
-    investitionenApi.getCO2Amortisation(selectedAnlageId)
-      .then((r) => { if (aktiv) setCo2Amort(r) })
-      .catch(() => { if (aktiv) setCo2Amort(null) })
-      .finally(() => { if (aktiv) setAmortGeladen(true) })
-    return () => { aktiv = false }
-  }, [selectedAnlageId])
+  // R18-2 (SWR): via Sicht-Cache — beim Sub-Tab-Wechsel sofort da; Soft-fail
+  // (catch → null) bleibt erhalten.
+  const amortQ = useApiData<CO2AmortisationResponse | null>(
+    () => investitionenApi.getCO2Amortisation(selectedAnlageId!).catch(() => null),
+    [selectedAnlageId],
+    { enabled: !!selectedAnlageId, swrKey: `v4-ausw-co2amort:${selectedAnlageId}` },
+  )
+  const co2Amort = selectedAnlageId ? (amortQ.data ?? null) : null
+  const amortGeladen = !selectedAnlageId || !amortQ.loading
 
   const schmal = useSchmaleAchse()
   const zeitreihe = useMemo(() => createMonatsZeitreihe(basis.gefiltert), [basis.gefiltert])

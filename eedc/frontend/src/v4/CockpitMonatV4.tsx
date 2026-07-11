@@ -19,7 +19,7 @@ import { fmtCalc, FehlerZustand } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
-import { useScrollErhalt } from '../hooks'
+import { useApiData, useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
 import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
@@ -28,8 +28,8 @@ import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
 import { MonatStepper } from './MonatStepper'
 import { MonatHeader, finanzTeaserBlock } from './MonatRahmen'
-import { energieProfilApi, type TagWerte, type VerfuegbarerMonat } from '../api/energie_profil'
-import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
+import { energieProfilApi, type VerfuegbarerMonat } from '../api/energie_profil'
+import { aktuellerMonatApi } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { monatRefAusQuery } from './verlaufVergleich'
 
@@ -80,79 +80,72 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
   // Erst-Load dem Default (neuester Monat mit Daten) vorziehen; nur am Mount gelesen (Ref).
   const [searchParams] = useSearchParams()
   const initialGewaehltRef = useRef<MonatRef | null>(monatRefAusQuery(searchParams))
-  const [monate, setMonate] = useState<VerfuegbarerMonat[]>([])
   const [gewaehlt, setGewaehlt] = useState<MonatRef | null>(initialGewaehltRef.current)
-  const [tage, setTage] = useState<TagWerte[]>([])
-  const [monatData, setMonatData] = useState<AktuellerMonatResponse | null>(null)
-  const [alleMonate, setAlleMonate] = useState<AggregierteMonatsdaten[]>([])
-  const [loading, setLoading] = useState(true)
-  const [reloading, setReloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // B1: Scroll-Position beim Monatswechsel halten (Container vom Wurzel-Element
-  // aus gefunden — mobil `main`, Desktop ViewShell). `merkeScroll` vor jedem
-  // setGewaehlt; Wiederherstellung nach dem Reload (Signal = loading-Flip).
-  const rootRef = useRef<HTMLDivElement>(null)
-  const merkeScroll = useScrollErhalt(rootRef, loading)
-  const waehle = useCallback((j: number, m: number) => { merkeScroll(); setGewaehlt({ jahr: j, monat: m }) }, [merkeScroll])
 
   // Verfügbare Monate + Monatsreihe (für Vormonat/Ø-Monat) laden → Default vorwählen.
   // Beide Quellen parallel, damit die Default-Wahl die Monatsdaten kennt.
+  // R18-2 (SWR): über den Sicht-Cache von useApiData — beim Tab-Wechsel stehen die
+  // alten Daten sofort (kein Skeleton), still revalidiert.
+  const monateQ = useApiData(
+    () => Promise.all([
+      monatsdatenApi.listAggregiert(anlageId!),
+      energieProfilApi.getVerfuegbareMonate(anlageId!),
+    ]),
+    [anlageId],
+    { enabled: !!anlageId, swrKey: `v4-monat-liste:${anlageId}` },
+  )
+  const alleMonate = useMemo<AggregierteMonatsdaten[]>(() => monateQ.data?.[0] ?? [], [monateQ.data])
+  const monate = useMemo<VerfuegbarerMonat[]>(() => monateQ.data?.[1] ?? [], [monateQ.data])
+
+  // Default vorwählen, sobald die Listen da sind.
   useEffect(() => {
-    if (!anlageId) return
-    let ab = false
-    Promise.all([
-      monatsdatenApi.listAggregiert(anlageId),
-      energieProfilApi.getVerfuegbareMonate(anlageId),
-    ])
-      .then(([agg, ms]) => {
-        if (ab) return
-        setAlleMonate(agg)
-        setMonate(ms)
-        // B3: Drill-in-`?jahr=&monat=` hat schon vorgewählt → Default nicht überschreiben
-        // (Ref ist mount-stabil, keine exhaustive-deps-Pflicht).
-        if (initialGewaehltRef.current) return
-        // Default = neuester Monat MIT Monatsdaten — NICHT bloß die neueste TEP/TZ-
-        // Zeile: ein laufender Monat ohne Abschluss (oder eine Snapshot-Streuzeile)
-        // würde sonst leer vorgewählt. Fallback: neuester verfügbarer Monat.
-        const desc = <T extends { jahr: number; monat: number }>(xs: T[]) =>
-          [...xs].sort((a, b) => (a.jahr !== b.jahr ? b.jahr - a.jahr : b.monat - a.monat))
-        const wahl = desc(agg)[0] ?? desc(ms)[0]
-        if (wahl) {
-          setGewaehlt({ jahr: wahl.jahr, monat: wahl.monat })
-        } else {
-          setLoading(false)
-        }
-      })
-      .catch(() => { if (!ab) { setError('Fehler beim Laden der Monate'); setLoading(false) } })
-    return () => { ab = true }
-  }, [anlageId])
+    if (!monateQ.data) return
+    // B3: Drill-in-`?jahr=&monat=` hat schon vorgewählt → Default nicht überschreiben
+    // (Ref ist mount-stabil, keine exhaustive-deps-Pflicht).
+    const [agg, ms] = monateQ.data
+    setGewaehlt((aktuell) => {
+      if (aktuell) return aktuell
+      // Default = neuester Monat MIT Monatsdaten — NICHT bloß die neueste TEP/TZ-
+      // Zeile: ein laufender Monat ohne Abschluss (oder eine Snapshot-Streuzeile)
+      // würde sonst leer vorgewählt. Fallback: neuester verfügbarer Monat.
+      const desc = <T extends { jahr: number; monat: number }>(xs: T[]) =>
+        [...xs].sort((a, b) => (a.jahr !== b.jahr ? b.jahr - a.jahr : b.monat - a.monat))
+      const wahl = desc(agg)[0] ?? desc(ms)[0]
+      return wahl ? { jahr: wahl.jahr, monat: wahl.monat } : null
+    })
+  }, [monateQ.data])
 
   // Tages-Werte (Monat + Vormonat) + Einzelmonats-KPIs (IST/Vorjahr/SOLL) laden.
-  useEffect(() => {
-    if (!anlageId || !gewaehlt) return
-    let ab = false
-    setLoading(true)
-    setError(null)
-    ladeMonatsdaten(anlageId, gewaehlt)
-      .then(([t, m]) => { if (!ab) { setTage(t); setMonatData(m) } })
-      .catch(() => { if (!ab) setError('Fehler beim Laden der Tageswerte') })
-      .finally(() => { if (!ab) setLoading(false) })
-    return () => { ab = true }
-  }, [anlageId, gewaehlt])
-
+  // keepPreviousData: Monatswechsel aktualisiert den Block-Stack in-place statt
+  // Skeleton (detLAN D7-2) — auch ohne Cache-Stand für den Ziel-Monat.
+  const tageQ = useApiData(
+    () => ladeMonatsdaten(anlageId!, gewaehlt!),
+    [anlageId, gewaehlt?.jahr, gewaehlt?.monat],
+    {
+      enabled: !!anlageId && !!gewaehlt,
+      swrKey: `v4-monat:${anlageId}:${gewaehlt?.jahr}-${gewaehlt?.monat}`,
+      keepPreviousData: true,
+    },
+  )
+  const tage = useMemo(() => tageQ.data?.[0] ?? [], [tageQ.data])
+  const monatData = tageQ.data?.[1] ?? null
+  const loading = monateQ.loading || (!!gewaehlt && tageQ.loading)
+  const reloading = tageQ.reloading
+  const error = monateQ.data == null && monateQ.error
+    ? 'Fehler beim Laden der Monate'
+    : tageQ.data == null && tageQ.error ? 'Fehler beim Laden der Tageswerte' : null
   // C1: Aktualisieren (nur laufender Monat) — refetcht dieselben Quellen wie der
-  // Initial-Load, ohne den Voll-Spinner (nur das Reload-Icon dreht).
-  const reload = useCallback(() => {
-    if (!anlageId || !gewaehlt) return
-    setReloading(true)
-    ladeMonatsdaten(anlageId, gewaehlt)
-      // S15-Retry-Fix: Erfolg räumt einen stehenden Fehlerzustand ab — sonst bleibt
-      // die Fehler-Anzeige trotz gelungenem Refetch ewig stehen (error gewinnt im Render).
-      .then(([t, m]) => { setTage(t); setMonatData(m); setError(null) })
-      .catch(() => {})
-      .finally(() => setReloading(false))
-  }, [anlageId, gewaehlt])
+  // Initial-Load, ohne den Voll-Spinner (refetch ist bei Cache-Stand still).
+  const reload = tageQ.refetch
+
+  // B1: Scroll-Position beim Monatswechsel halten (Container vom Wurzel-Element
+  // aus gefunden — mobil `main`, Desktop ViewShell). `merkeScroll` vor jedem
+  // setGewaehlt; Wiederherstellung nach dem Reload (Signal = loading-Flip; mit
+  // SWR-In-Place-Update flippt loading beim Monatswechsel nicht mehr → der
+  // Scroll bleibt ohnehin natürlich stehen, der Hook greift nur im Skeleton-Fall).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const merkeScroll = useScrollErhalt(rootRef, loading)
+  const waehle = useCallback((j: number, m: number) => { merkeScroll(); setGewaehlt({ jahr: j, monat: m }) }, [merkeScroll])
 
   // C2: „Abschluss starten" nur wenn Vergangenheits-Monate noch offen sind
   // (verhaltensgleich zu MonatsabschlussView.hatOffeneAbschluesse).

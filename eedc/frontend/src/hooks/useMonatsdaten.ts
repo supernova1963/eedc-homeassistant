@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { monatsdatenApi, type MonatsdatenCreate, type MonatsdatenUpdate, type AggregierteMonatsdaten } from '../api'
 import type { Monatsdaten } from '../types'
+import { swrCachePeek, swrCacheStore } from './useApiData'
 
 interface UseMonatsdatenReturn {
   monatsdaten: Monatsdaten[]
@@ -71,10 +72,19 @@ export function useMonatsdaten(anlageId?: number, jahr?: number): UseMonatsdaten
  *
  * WICHTIG: Dieser Hook sollte für Auswertungen verwendet werden,
  * da er die PV-Erzeugung aus InvestitionMonatsdaten korrekt aggregiert.
+ *
+ * `swrKeyBasis` (R18-2, Opt-in der v4-Sichten): Sicht-Cache — beim Remount
+ * stehen die alten Daten sofort (kein Skeleton), still revalidiert.
+ * V3-Aufrufer lassen den Parameter weg (Verhalten unverändert).
  */
-export function useAggregierteDaten(anlageId?: number, jahr?: number) {
-  const [daten, setDaten] = useState<AggregierteMonatsdaten[]>([])
-  const [loading, setLoading] = useState(true)
+export function useAggregierteDaten(anlageId?: number, jahr?: number, swrKeyBasis?: string) {
+  const swrKey = swrKeyBasis ? `${swrKeyBasis}:${anlageId}:${jahr}` : undefined
+  const [daten, setDaten] = useState<AggregierteMonatsdaten[]>(
+    () => (swrKey ? swrCachePeek<AggregierteMonatsdaten[]>(swrKey) : undefined) ?? [],
+  )
+  const [loading, setLoading] = useState(
+    () => !(swrKey && swrCachePeek(swrKey) !== undefined),
+  )
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -83,17 +93,20 @@ export function useAggregierteDaten(anlageId?: number, jahr?: number) {
       setLoading(false)
       return
     }
+    const cached = swrKey ? swrCachePeek<AggregierteMonatsdaten[]>(swrKey) : undefined
+    if (cached !== undefined) { setDaten(cached); setLoading(false) }
     try {
-      setLoading(true)
+      if (cached === undefined) setLoading(true)
       setError(null)
       const data = await monatsdatenApi.listAggregiert(anlageId, jahr)
       setDaten(data)
+      if (swrKey) swrCacheStore(swrKey, data)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden der aggregierten Daten')
     } finally {
       setLoading(false)
     }
-  }, [anlageId, jahr])
+  }, [anlageId, jahr, swrKey])
 
   useEffect(() => {
     refresh()

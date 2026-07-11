@@ -26,7 +26,7 @@ import { Card, FehlerZustand } from '../components/ui'
 import { AnlageLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
-import { useScrollErhalt } from '../hooks'
+import { useApiData, useScrollErhalt } from '../hooks'
 import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
 import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
@@ -101,106 +101,99 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
   const [searchParams] = useSearchParams()
   const initialDatum = useRef(datumAusQuery(searchParams)).current
   const [datum, setDatum] = useState(initialDatum ?? gesternISO())
-  const [railEntries, setRailEntries] = useState<TagRailEintrag[]>([])
-  const [stunden, setStunden] = useState<StundenWert[]>([])
-  const [serien, setSerien] = useState<SerieInfo[]>([]) // volle Serien (Komponenten-Klassifikation)
-  const [tag, setTag] = useState<TagWerte | null>(null)
-  const [tagDetail, setTagDetail] = useState<TagDetail | null>(null)
-  const [vortag, setVortag] = useState<TagWerte | null>(null)
-  const [wtStats, setWtStats] = useState<GleicheWochentagStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  // D12-1: „je geladen?" statt `!tag` als Voll-Spinner-Gate — sonst flasht der
-  // Spinner beim Wechsel Lücken-Tag → Lücken-Tag (tag bleibt null) und reißt das
-  // Vollbild weg. Erst-Load zeigt Spinner, danach nie wieder (in-place reload).
-  const [jeGeladen, setJeGeladen] = useState(false)
-  const [reloading, setReloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [aeltesterTag, setAeltesterTag] = useState<string>()  // (a) Date-Input-Untergrenze = ältester verfügbarer Tag
+  // R5-1: Default einmalig auf „neuester Tag mit Daten" — bei Drill-in-`?datum=`
+  // aber schon gesetzt, dann NICHT umspringen (Ref startet true).
+  const initialisiert = useRef(initialDatum != null)
+
+  // Rail-/Stepper-Liste = verfügbare Tage (letzte 90 Tage), einmal je Anlage —
+  // wie Monat seine verfügbaren Monate lädt (selektion-unabhängig).
+  // R18-2 (SWR): über den Sicht-Cache von useApiData — beim Tab-Wechsel steht die
+  // Rail sofort, still revalidiert.
+  const railQ = useApiData(
+    async () => {
+      const heute = heuteISO()
+      const tw = await energieProfilApi.getTageWerte(anlageId!, vorTagen(heute, FENSTER_TAGE), heute)
+      const entries: TagRailEintrag[] = tw.map((r) => ({ datum: r.datum, pv_kwh: r.erzeugung ?? 0, heute: r.datum === heute }))
+      if (!entries.some((e) => e.datum === heute)) entries.push({ datum: heute, pv_kwh: 0, heute: true })
+      const neuesterMitDaten = tw.reduce<string | null>((m, r) => (m && m >= r.datum ? m : r.datum), null)
+      return { entries, neuesterMitDaten }
+    },
+    [anlageId],
+    { enabled: !!anlageId, swrKey: `v4-tag-rail:${anlageId}` },
+  )
+  const railEntries = useMemo<TagRailEintrag[]>(() => railQ.data?.entries ?? [], [railQ.data])
+  useEffect(() => {
+    // R5-1 (Rainer): Default = neuester Tag MIT Daten (einheitlich mit Cockpit/
+    // Monat+Jahr), NICHT fix „gestern" — sonst landet man auf einem leeren
+    // Kalendertag, wenn die jüngsten Tagesdaten älter sind (Demo bis 23.06.;
+    // bzw. verzögerte HA-Aggregation). Nur beim Erst-Load, nie über eine
+    // bereits getroffene User-Wahl hinweg.
+    if (!railQ.data || initialisiert.current) return
+    if (railQ.data.neuesterMitDaten) {
+      initialisiert.current = true
+      setDatum(railQ.data.neuesterMitDaten)
+    }
+  }, [railQ.data])
+
+  // (a) Ältester verfügbarer Tag für die Datumsauswahl-Untergrenze — aus den
+  // verfügbaren Monaten (uncapped, leichtgewichtig); erster Tag des frühesten Monats.
+  const aeltesterQ = useApiData(
+    async () => {
+      const ms = await energieProfilApi.getVerfuegbareMonate(anlageId!)
+      if (ms.length === 0) return null
+      const frueh = [...ms].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))[0]
+      return `${frueh.jahr}-${String(frueh.monat).padStart(2, '0')}-01`
+    },
+    [anlageId],
+    { enabled: !!anlageId, swrKey: `v4-tag-aeltester:${anlageId}` },
+  )
+  const aeltesterTag = aeltesterQ.data ?? undefined
+
+  // Tages-Daten (Stunden + Fenster + Detail) in einem Zug. keepPreviousData:
+  // Tageswechsel aktualisiert in-place statt Skeleton (D12-1) — das frühere
+  // `jeGeladen`-Gate steckt jetzt im Hook (loading nur ohne Vor-Daten); der
+  // Wechsel Lücken-Tag → Lücken-Tag bleibt spinner-frei, weil das Wrapper-Objekt
+  // auch bei `tag == null` gesetzt ist.
+  const tagQ = useApiData(
+    async () => {
+      // tag-detail (snapshot-teuer) nur für den GEWÄHLTEN Tag; soft-fail, damit der
+      // Rest auch ohne die Zusatzwerte lädt (Bauer lassen fehlende Felder weg).
+      const [stundenAntwort, fenster, detail] = await Promise.all([
+        energieProfilApi.getStunden(anlageId!, datum),
+        energieProfilApi.getTageWerte(anlageId!, vorTagen(datum, FENSTER_TAGE), datum),
+        energieProfilApi.getTagDetail(anlageId!, datum).catch(() => null),
+      ])
+      const vortagISO = tagVerschieben(datum, -1)
+      return {
+        stunden: stundenAntwort.stunden,
+        serien: stundenAntwort.serien,
+        tagDetail: detail,
+        tag: fenster.find((r) => r.datum === datum) ?? null,
+        vortag: fenster.find((r) => r.datum === vortagISO) ?? null,
+        wtStats: berechneWochentagStats(fenster, datum),
+      }
+    },
+    [anlageId, datum],
+    { enabled: !!anlageId, swrKey: `v4-tag:${anlageId}:${datum}`, keepPreviousData: true }, /* de-de-allow: Cache-Key, keine Anzeige */
+  )
+  const stunden = useMemo<StundenWert[]>(() => tagQ.data?.stunden ?? [], [tagQ.data])
+  const serien = useMemo<SerieInfo[]>(() => tagQ.data?.serien ?? [], [tagQ.data]) // volle Serien (Komponenten-Klassifikation)
+  const tag: TagWerte | null = tagQ.data?.tag ?? null
+  const tagDetail: TagDetail | null = tagQ.data?.tagDetail ?? null
+  const vortag: TagWerte | null = tagQ.data?.vortag ?? null
+  const wtStats: GleicheWochentagStats | null = tagQ.data?.wtStats ?? null
+  const loading = tagQ.loading
+  const reloading = tagQ.reloading
+  const error = tagQ.data == null ? tagQ.error : null
+  const laden = tagQ.refetch
 
   // B1: Scroll-Position beim Tageswechsel halten (siehe CockpitMonatV4).
   const rootRef = useRef<HTMLDivElement>(null)
   const merkeScroll = useScrollErhalt(rootRef, loading)
-  // R5-1: Default einmalig auf „neuester Tag mit Daten" — bei Drill-in-`?datum=`
-  // aber schon gesetzt, dann NICHT umspringen (Ref startet true).
-  const initialisiert = useRef(initialDatum != null)
   const waehle = useCallback((d: string) => {
     initialisiert.current = true  // ab erster User-Wahl nicht mehr automatisch umspringen
     merkeScroll(); setDatum(d)
   }, [merkeScroll])
-
-  // Rail-/Stepper-Liste = verfügbare Tage (letzte 90 Tage), einmal je Anlage —
-  // wie Monat seine verfügbaren Monate lädt (selektion-unabhängig).
-  useEffect(() => {
-    if (!anlageId) return
-    let ab = false
-    const heute = heuteISO()
-    energieProfilApi.getTageWerte(anlageId, vorTagen(heute, FENSTER_TAGE), heute)
-      .then((tw) => {
-        if (ab) return
-        const entries: TagRailEintrag[] = tw.map((r) => ({ datum: r.datum, pv_kwh: r.erzeugung ?? 0, heute: r.datum === heute }))
-        if (!entries.some((e) => e.datum === heute)) entries.push({ datum: heute, pv_kwh: 0, heute: true })
-        setRailEntries(entries)
-        // R5-1 (Rainer): Default = neuester Tag MIT Daten (einheitlich mit Cockpit/
-        // Monat+Jahr), NICHT fix „gestern" — sonst landet man auf einem leeren
-        // Kalendertag, wenn die jüngsten Tagesdaten älter sind (Demo bis 23.06.;
-        // bzw. verzögerte HA-Aggregation). Nur beim Erst-Load, nie über eine
-        // bereits getroffene User-Wahl hinweg.
-        if (!initialisiert.current) {
-          const neuesterMitDaten = tw.reduce<string | null>((m, r) => (m && m >= r.datum ? m : r.datum), null)
-          if (neuesterMitDaten) { initialisiert.current = true; setDatum(neuesterMitDaten) }
-        }
-      })
-      .catch(() => { if (!ab) setRailEntries([]) })
-    return () => { ab = true }
-  }, [anlageId])
-
-  // (a) Ältester verfügbarer Tag für die Datumsauswahl-Untergrenze — aus den
-  // verfügbaren Monaten (uncapped, leichtgewichtig); erster Tag des frühesten Monats.
-  useEffect(() => {
-    if (!anlageId) return
-    let ab = false
-    energieProfilApi.getVerfuegbareMonate(anlageId)
-      .then((ms) => {
-        if (ab || ms.length === 0) return
-        const frueh = [...ms].sort((a, b) => (a.jahr !== b.jahr ? a.jahr - b.jahr : a.monat - b.monat))[0]
-        setAeltesterTag(`${frueh.jahr}-${String(frueh.monat).padStart(2, '0')}-01`)
-      })
-      .catch(() => {})
-    return () => { ab = true }
-  }, [anlageId])
-
-  const laden = useCallback(async (silent = false) => {
-    if (!anlageId) return
-    const reqId = anlageId
-    silent ? setReloading(true) : setLoading(true)
-    setError(null)
-    try {
-      // tag-detail (snapshot-teuer) nur für den GEWÄHLTEN Tag; soft-fail, damit der
-      // Rest auch ohne die Zusatzwerte lädt (Bauer lassen fehlende Felder weg).
-      const [stundenAntwort, fenster, detail] = await Promise.all([
-        energieProfilApi.getStunden(reqId, datum),
-        energieProfilApi.getTageWerte(reqId, vorTagen(datum, FENSTER_TAGE), datum),
-        energieProfilApi.getTagDetail(reqId, datum).catch(() => null),
-      ])
-      setStunden(stundenAntwort.stunden)
-      setSerien(stundenAntwort.serien)
-      setTagDetail(detail)
-      const vortagISO = tagVerschieben(datum, -1)
-      setTag(fenster.find((r) => r.datum === datum) ?? null)
-      setVortag(fenster.find((r) => r.datum === vortagISO) ?? null)
-      setWtStats(berechneWochentagStats(fenster, datum))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden des Tages')
-    } finally {
-      silent ? setReloading(false) : setLoading(false)
-      setJeGeladen(true)  // D12-1: ab jetzt nur noch in-place aktualisieren, kein Voll-Spinner
-    }
-  }, [anlageId, datum])
-
-  useEffect(() => {
-    if (!anlageId) { setLoading(false); return }
-    laden(false)
-  }, [anlageId, laden])
 
   const bloecke = useMemo<Block[]>(() => {
     const list: Block[] = []
@@ -293,17 +286,17 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
         </div>
 
         <div className="flex-1 min-w-0 space-y-4">
-          <TagHeader datum={datum} laufend={istHeute} tag={tag} onReload={() => laden(true)} reloading={reloading} />
+          <TagHeader datum={datum} laufend={istHeute} tag={tag} onReload={laden} reloading={reloading} />
 
           {error ? (
-            // B8-Fehler-Baustein (S15): laden(false) setzt setError(null) + refetcht alle Quellen.
-            <FehlerZustand text={error} onRetry={() => laden(false)} />
-          ) : loading && !jeGeladen ? (
-            // Skeleton NUR beim allerersten Load (noch nie geladen). Beim
+            // B8-Fehler-Baustein (S15): refetch räumt error ab + refetcht alle Quellen.
+            <FehlerZustand text={error} onRetry={laden} />
+          ) : loading ? (
+            // Skeleton NUR beim allerersten Load (noch nie geladen): der SWR-Hook
+            // setzt loading nur ohne Vor-Daten (keepPreviousData, R18-2). Beim
             // Tageswechsel bleibt der Block-Stack stehen und aktualisiert sich
-            // in-place → kein Hochspringen, kein „Aufblitzen" (detLAN T2). D12-1:
-            // `!jeGeladen` statt `!tag` — bei Lücke→Lücke ist tag null, würde sonst
-            // den Lade-Zustand flashen und das Vollbild wegreißen. Kein `key={datum}`.
+            // in-place → kein Hochspringen, kein „Aufblitzen" (detLAN T2, D12-1);
+            // Lücke→Lücke bleibt spinner-frei (Wrapper-Objekt ≠ null). Kein `key={datum}`.
             <BlockStackSkeleton label="Lade Tag…" />
           ) : bloecke.length === 0 ? (
             <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Daten für diesen Tag vorhanden.</p></Card>

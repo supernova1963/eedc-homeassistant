@@ -5,9 +5,9 @@
  * korrekten Monatstarifen). Gemeinsam genutzt von der /v4-Werkbank und dem
  * Cockpit-Embed, damit die Zeitreihen-Erzeugung nicht doppelt lebt.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
-import { useStrompreise, useAktuellerStrompreis } from '../hooks'
+import { useApiData, useStrompreise, useAktuellerStrompreis } from '../hooks'
 import { createMonatsZeitreihe, type MonatsZeitreihe, type TabProps } from '../pages/auswertung/types'
 
 export interface WerteZeitreiheResult {
@@ -22,25 +22,19 @@ export function useWerteZeitreihe(
   anlageId: number | undefined,
   anlage: TabProps['anlage'],
 ): WerteZeitreiheResult {
-  const [daten, setDaten] = useState<AggregierteMonatsdaten[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
   const { strompreise: alleTarife } = useStrompreise(anlageId)
   const { strompreis } = useAktuellerStrompreis(anlageId ?? null)
 
-  useEffect(() => {
-    if (!anlageId) return
-    let abgebrochen = false
-    setLoading(true)
-    setError(null)
-    monatsdatenApi
-      .listAggregiert(anlageId)
-      .then((d) => { if (!abgebrochen) setDaten(d) })
-      .catch(() => { if (!abgebrochen) setError('Fehler beim Laden der Werte') })
-      .finally(() => { if (!abgebrochen) setLoading(false) })
-    return () => { abgebrochen = true }
-  }, [anlageId])
+  // R18-2 (SWR): via Sicht-Cache — beim Sub-Tab-Wechsel stehen die alten Werte
+  // sofort (kein Skeleton), still revalidiert.
+  const datenQ = useApiData<AggregierteMonatsdaten[]>(
+    () => monatsdatenApi.listAggregiert(anlageId!),
+    [anlageId],
+    { enabled: !!anlageId, swrKey: `v4-werte-zeitreihe:${anlageId}` },
+  )
+  const daten = useMemo(() => datenQ.data ?? [], [datenQ.data])
+  const loading = datenQ.loading
+  const error = datenQ.data == null && datenQ.error ? 'Fehler beim Laden der Werte' : null
 
   const rows = useMemo(
     () => createMonatsZeitreihe(daten, anlage, strompreis, alleTarife),

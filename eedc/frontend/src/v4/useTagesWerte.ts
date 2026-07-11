@@ -3,8 +3,8 @@
  * optional denselben Zeitraum im Vorjahr (für den Werte-Werkbank-Vergleich).
  * Quelle: `energieProfilApi.getTageWerte` (ADR-001-konform, kein Frontend-Compute).
  */
-import { useEffect, useState } from 'react'
 import { energieProfilApi, type TagWerte } from '../api/energie_profil'
+import { useApiData } from '../hooks/useApiData'
 
 /** ISO 'YYYY-MM-DD' um ein Jahr zurück (string-sicher, ohne TZ-Drift). */
 export function minusEinJahr(iso: string): string {
@@ -27,26 +27,27 @@ export function useTagesWerte(
   vergleichVon: string | null,
   vergleichBis: string | null,
 ): TagesWerteResult {
-  const [rows, setRows] = useState<TagWerte[]>([])
-  const [vorjahrRows, setVorjahrRows] = useState<TagWerte[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!anlageId || !von || !bis) { setRows([]); setVorjahrRows(null); setLoading(false); return }
-    let aktiv = true
-    setLoading(true)
-    setError(null)
-    const primary = energieProfilApi.getTageWerte(anlageId, von, bis)
-    const vergleich = vergleichVon && vergleichBis
-      ? energieProfilApi.getTageWerte(anlageId, vergleichVon, vergleichBis).catch(() => [])
-      : Promise.resolve(null)
-    Promise.all([primary, vergleich])
-      .then(([r, v]) => { if (aktiv) { setRows(r); setVorjahrRows(v) } })
-      .catch((e) => { if (aktiv) setError(e instanceof Error ? e.message : 'Fehler beim Laden der Tageswerte') })
-      .finally(() => { if (aktiv) setLoading(false) })
-    return () => { aktiv = false }
-  }, [anlageId, von, bis, vergleichVon, vergleichBis])
-
-  return { rows, vorjahrRows, loading, error }
+  // R18-2 (SWR + keepPreviousData): Zeitraum-Wechsel aktualisiert in-place statt
+  // Skeleton; beim Sub-Tab-Wechsel steht der letzte Stand sofort (Sicht-Cache).
+  const q = useApiData<{ rows: TagWerte[]; vorjahrRows: TagWerte[] | null }>(
+    async () => {
+      const vergleich = vergleichVon && vergleichBis
+        ? energieProfilApi.getTageWerte(anlageId!, vergleichVon, vergleichBis).catch(() => [] as TagWerte[])
+        : Promise.resolve(null)
+      const [r, v] = await Promise.all([energieProfilApi.getTageWerte(anlageId!, von, bis), vergleich])
+      return { rows: r, vorjahrRows: v }
+    },
+    [anlageId, von, bis, vergleichVon, vergleichBis],
+    {
+      enabled: !!(anlageId && von && bis),
+      swrKey: `v4-tageswerte:${anlageId}:${von}:${bis}:${vergleichVon}:${vergleichBis}`,
+      keepPreviousData: true,
+    },
+  )
+  return {
+    rows: q.data?.rows ?? [],
+    vorjahrRows: q.data?.vorjahrRows ?? null,
+    loading: q.loading,
+    error: q.data == null ? q.error : null,
+  }
 }

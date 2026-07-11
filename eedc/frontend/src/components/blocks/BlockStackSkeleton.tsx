@@ -7,9 +7,16 @@
  * kein Layout-Sprung beim Nachladen. Bewusst generisch 1-offen+n-zu, wo die
  * Ziel-Blockzahl datenabhängig ist (falsche Struktur vortäuschen wäre schlechter
  * als ein neutraler Platzhalter); exakte Blockzahl nur wo deterministisch.
- * Der IST-Ladetext wandert als sr-only/aria-label mit.
+ * Der IST-Ladetext ist ab R18-13 (rapahl #213/#218) auch SICHTBAR: nach ~400 ms
+ * Verzögerung eingeblendet (schnelle Loads flackern nicht), Platz von Anfang an
+ * reserviert (kein Layout-Sprung). Screenreader bekommen ihn sofort (sr-only).
  */
+import { useEffect, useState } from 'react'
 import { Skeleton, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from '../ui/Skeleton'
+
+// R18-13: Einblende-Verzögerung des sichtbaren Ladetexts — kurz genug, dass er
+// bei echtem Warten früh erklärt, lang genug, dass warme Loads (<400 ms) still bleiben.
+const LABEL_DELAY_MS = 400
 
 function BlockKarte({ children }: { children?: React.ReactNode }) {
   return (
@@ -33,9 +40,23 @@ export function BlockStackSkeleton({ label, offen = 'kpi', zu = 3, pillen = 0 }:
   /** Optionale Pillen-Zeile darüber (Tab-/Selektor-Platzhalter, STEUER_H-Maß). */
   pillen?: number
 }) {
+  const [labelSichtbar, setLabelSichtbar] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setLabelSichtbar(true), LABEL_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [])
+
   return (
     <div className="space-y-3" role="status" aria-busy="true" aria-label={label}>
       <span className="sr-only">{label}</span>
+      {/* R18-13: sichtbarer Ladetext — immer gerendert (Platz reserviert), erst
+          nach LABEL_DELAY_MS eingeblendet; aria-hidden (sr-only-Zwilling oben). */}
+      <p
+        aria-hidden="true"
+        className={`text-sm text-center text-gray-500 dark:text-gray-400 transition-opacity duration-300 ${labelSichtbar ? 'opacity-100' : 'opacity-0'}`}
+      >
+        {label}
+      </p>
       {pillen > 0 && (
         <div className="flex items-center gap-2" aria-hidden="true">
           {Array.from({ length: pillen }, (_, i) => (

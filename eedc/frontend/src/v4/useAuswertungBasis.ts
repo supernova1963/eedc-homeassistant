@@ -21,7 +21,9 @@ function zeitraumLabelFuer(jahr: number | 'alle', jahre: number[]): string {
 export function useAuswertungBasis(anlageId: number | undefined | null) {
   // S15 (B8): error + refresh mit durchreichen — sonst rendern die Konsumenten bei
   // Fetch-Fehler 0-Wert-KPIs, die wie echte Daten aussehen (stille Leere).
-  const { daten, loading, error, refresh } = useAggregierteDaten(anlageId ?? undefined)
+  // R18-2 (SWR): Sicht-Cache — beim Sub-Tab-Wechsel stehen die alten Daten
+  // sofort (kein Skeleton), still revalidiert. V4-only (Opt-in-Parameter).
+  const { daten, loading, error, refresh } = useAggregierteDaten(anlageId ?? undefined, undefined, 'v4-ausw-basis')
   const { strompreis } = useAktuellerStrompreis(anlageId ?? null)
   const { strompreise: alleTarife } = useStrompreise(anlageId ?? undefined)
   const [jahr, setJahr] = useState<number | 'alle'>('alle')

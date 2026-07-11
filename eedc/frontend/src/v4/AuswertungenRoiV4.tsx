@@ -47,6 +47,8 @@ function RoiInner() {
     anlageId: selectedAnlageId ?? 0,
     strompreis: strompreis?.netzbezug_arbeitspreis_cent_kwh,
     einspeiseverguetung: strompreis?.einspeiseverguetung_cent_kwh,
+    // R18-2 (SWR): beim Tab-Wechsel stehen die alten Daten sofort, kein Skeleton.
+    swrKeyBasis: 'v4-ausw-roi',
   })
 
   if (anlagenLoading || vm.loading) {

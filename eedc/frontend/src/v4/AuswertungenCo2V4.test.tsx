@@ -6,7 +6,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
-vi.mock('../hooks', () => ({
+vi.mock('../hooks', async (importOriginal) => ({
+  // R18-2: useApiData (SWR-Sicht-Cache) läuft ECHT — nur Anlage/Achse gemockt.
+  ...(await importOriginal<typeof import('../hooks')>()),
   useSelectedAnlage: () => ({
     anlagen: [{ id: 1, anlagenname: 'Test' }], selectedAnlageId: 1,
     selectedAnlage: { id: 1, anlagenname: 'Test' }, loading: false,

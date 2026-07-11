@@ -15,7 +15,7 @@
  * Finanzen; volles Genauigkeits-Tracking → Auswertungen/Prognose-vs-IST;
  * Trend-Historie → Cockpit/Jahr (bewusst NICHT hier).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Zap, Sun, CloudSun, TrendingUp, TrendingDown, Minus,
@@ -33,7 +33,7 @@ import {
 } from '../components/aussicht'
 import { investitionenApi, type WaermepumpeDashboardResponse } from '../api/investitionen'
 import { PrognoseChartKarte, PrognoseTabelle, morgenISO, heuteISO, maxPrognoseDatum } from '../pages/auswertung/EnergieprofilPrognose'
-import { useSelectedAnlage } from '../hooks'
+import { useApiData, useSelectedAnlage } from '../hooks'
 import { wetterApi, type SolarPrognose } from '../api/wetter'
 import { aussichtenApi, type FinanzPrognose, type LangfristPrognose, type TrendAnalyseResponse } from '../api/aussichten'
 import { energieProfilApi, type TagesPrognose as TagesprognoseDaten } from '../api/energie_profil'
@@ -136,20 +136,9 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   const horizont: Horizont = istHorizont(searchParams.get('h')) ? (searchParams.get('h') as Horizont) : DEFAULT_HORIZONT
   const istKurz = horizont === 'kurz'
 
-  const [kurz, setKurz] = useState<SolarPrognose | null>(null)
-  const [eedcHeute, setEedcHeute] = useState<number | null>(null) // kanonischer eedc-„Heute"-Wert (R8-4), parallel zur SolarPrognose
-  const [lang, setLang] = useState<LangfristPrognose | null>(null)
-  // Tagesprognose (Stunden-Chart + Stundenwerte teilen Datum + Daten — getrennte
-  // Blöcke, eine Quelle, Gernot 2026-06-23).
+  // Tagesprognose-Datum (Stunden-Chart + Stundenwerte teilen Datum + Daten —
+  // getrennte Blöcke, eine Quelle, Gernot 2026-06-23).
   const [pDatum, setPDatum] = useState(morgenISO())
-  const [pDaten, setPDaten] = useState<TagesprognoseDaten | null>(null)
-  const [pError, setPError] = useState<string | null>(null)
-  const [trend, setTrend] = useState<TrendAnalyseResponse | null>(null)
-  const [wp, setWp] = useState<WaermepumpeDashboardResponse[] | null>(null) // data-gated WP-Aussicht (langfristig)
-  const [finanz, setFinanz] = useState<FinanzPrognose | null>(null) // Vorwärts-€-Teaser (D2), horizont-unabhängig
-  const [loading, setLoading] = useState(true)
-  const [reloading, setReloading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const setHorizont = (h: Horizont) => {
     const next = new URLSearchParams(searchParams)
@@ -159,62 +148,65 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
 
   const hatKoordinaten = !!(selectedAnlage?.latitude && selectedAnlage?.longitude)
 
-  const laden = useCallback(async (silent = false) => {
-    if (!anlageId) return
-    const reqId = anlageId
-    silent ? setReloading(true) : setLoading(true)
-    setError(null)
-    try {
-      // Vorwärts-Finanz-Teaser (D2) — horizont-unabhängig (Jahresprognose),
-      // Backend-Aggregat (ADR-001). Soft-fail: kein Teaser statt Sicht-Fehler.
-      const finanzP = aussichtenApi.getFinanzPrognose(reqId, 12).catch(() => null)
-      if (horizont === 'lang') {
-        const [l, t, w, f] = await Promise.all([
-          aussichtenApi.getLangfristPrognose(reqId, 12),
-          aussichtenApi.getTrendAnalyse(reqId, 5).catch(() => null),
-          investitionenApi.getWaermepumpeDashboard(reqId).catch(() => []),
-          finanzP,
-        ])
-        setLang(l); setTrend(t); setWp(w); setFinanz(f)
-      } else {
-        // Stunden-Prognose-Block lädt seine Daten selbst (EnergieprofilPrognose).
-        // `getPrognosenVergleich` liefert den kanonischen eedc-„Heute"-Wert (R8-4);
-        // Soft-fail → Fallback auf den puren SolarPrognose-Wert, kein Sicht-Fehler.
-        const [k, v, f] = await Promise.all([
-          wetterApi.getSolarPrognose(reqId, KURZ_TAGE, false),
-          aussichtenApi.getPrognosenVergleich(reqId).catch(() => null),
-          finanzP,
-        ])
-        setKurz(k); setEedcHeute(v?.eedc_heute_kwh ?? null); setFinanz(f)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Aussicht')
-    } finally {
-      silent ? setReloading(false) : setLoading(false)
-    }
-  }, [anlageId, horizont])
-
-  // D11-9: Horizont-Wechsel (kurz↔lang) soll NICHT den Voll-Spinner zeigen — sonst
-  // flackert die ganze Sicht. Nur beim echten Anlagenwechsel/Erstladen voll laden;
-  // bei reinem Horizont-Wechsel still nachladen (Kopf bleibt, Daten tauschen).
-  const geladenFuer = useRef<number | null>(null)
-  useEffect(() => {
-    if (!anlageId || !hatKoordinaten) { setLoading(false); return }
-    const silent = geladenFuer.current === anlageId
-    geladenFuer.current = anlageId
-    laden(silent)
-  }, [anlageId, hatKoordinaten, laden])
+  // R18-2 (SWR): Daten je Horizont über den Sicht-Cache von useApiData — beim
+  // Remount (Tab-Wechsel) stehen die alten Daten sofort, still revalidiert.
+  // Skeleton nur beim echten Erst-Load; das ersetzt die frühere geladenFuer-Ref
+  // (D11-9): Horizont-Wechsel mit Cache-Stand ist jetzt sofort, ohne Cache zeigt
+  // er den ehrlichen Skeleton statt des irreführenden „Keine Prognose verfügbar".
+  // Vorwärts-Finanz-Teaser (D2) — horizont-unabhängig (Jahresprognose),
+  // Backend-Aggregat (ADR-001). Soft-fail: kein Teaser statt Sicht-Fehler.
+  const finanzQ = useApiData<FinanzPrognose | null>(
+    () => aussichtenApi.getFinanzPrognose(anlageId!, 12).catch(() => null),
+    [anlageId],
+    { enabled: !!anlageId && hatKoordinaten, swrKey: `v4-aussicht-finanz:${anlageId}` },
+  )
+  // Kurzfristig: Solar-Prognose + kanonischer eedc-„Heute"-Wert (R8-4, Soft-fail →
+  // Fallback auf den puren SolarPrognose-Wert, kein Sicht-Fehler).
+  const kurzQ = useApiData<{ kurz: SolarPrognose; eedcHeute: number | null }>(
+    async () => {
+      const [k, v] = await Promise.all([
+        wetterApi.getSolarPrognose(anlageId!, KURZ_TAGE, false),
+        aussichtenApi.getPrognosenVergleich(anlageId!).catch(() => null),
+      ])
+      return { kurz: k, eedcHeute: v?.eedc_heute_kwh ?? null }
+    },
+    [anlageId],
+    { enabled: !!anlageId && hatKoordinaten && istKurz, swrKey: `v4-aussicht-kurz:${anlageId}` },
+  )
+  const langQ = useApiData<{ lang: LangfristPrognose; trend: TrendAnalyseResponse | null; wp: WaermepumpeDashboardResponse[] }>(
+    async () => {
+      const [l, t, w] = await Promise.all([
+        aussichtenApi.getLangfristPrognose(anlageId!, 12),
+        aussichtenApi.getTrendAnalyse(anlageId!, 5).catch(() => null),
+        investitionenApi.getWaermepumpeDashboard(anlageId!).catch(() => [] as WaermepumpeDashboardResponse[]),
+      ])
+      return { lang: l, trend: t, wp: w }
+    },
+    [anlageId],
+    { enabled: !!anlageId && hatKoordinaten && !istKurz, swrKey: `v4-aussicht-lang:${anlageId}` },
+  )
+  const kurz = kurzQ.data?.kurz ?? null
+  const eedcHeute = kurzQ.data?.eedcHeute ?? null
+  const lang = langQ.data?.lang ?? null
+  const trend = langQ.data?.trend ?? null
+  const wp = langQ.data?.wp ?? null
+  const finanz = finanzQ.data ?? null
+  const aktivQ = istKurz ? kurzQ : langQ
+  // Fehler nur ohne Daten als Sicht-Fehler zeigen; mit Cache-Stand bleiben die
+  // alten Daten stehen (SWR-Semantik, KONZEPT-LADEZEIT-CACHE-SWR §3).
+  const loading = hatKoordinaten && aktivQ.loading
+  const reloading = aktivQ.reloading || finanzQ.reloading
+  const error = aktivQ.data == null ? aktivQ.error : null
+  const laden = () => { aktivQ.refetch(); finanzQ.refetch() }
 
   // Tagesprognose laden (nur Kurzfristig; Stunden-Chart + Stundenwerte teilen sie).
-  useEffect(() => {
-    if (!anlageId || !hatKoordinaten || !istKurz) return
-    let ab = false
-    setPError(null)
-    energieProfilApi.getTagesprognose(anlageId, pDatum)
-      .then((d) => { if (!ab) { setPDaten(d); setPError(null) } })
-      .catch((err) => { if (!ab) { setPDaten(null); setPError(err?.response?.data?.detail || err?.message || 'Fehler beim Laden der Tagesprognose') } })
-    return () => { ab = true }
-  }, [anlageId, hatKoordinaten, istKurz, pDatum])
+  const tagesQ = useApiData<TagesprognoseDaten>(
+    () => energieProfilApi.getTagesprognose(anlageId!, pDatum),
+    [anlageId, pDatum],
+    { enabled: !!anlageId && hatKoordinaten && istKurz, swrKey: `v4-aussicht-stunden:${anlageId}:${pDatum}` }, /* de-de-allow: Cache-Key, keine Anzeige */
+  )
+  const pDaten = tagesQ.data
+  const pError = tagesQ.data == null ? tagesQ.error : null
 
   const bloecke = useMemo<Block[]>(() => {
     // Vorwärts-Finanz-Teaser (D2) — in BEIDEN Horizonten ganz unten (analog
@@ -360,7 +352,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <ReloadButton onClick={() => laden(true)} loading={reloading} disabled={loading} />
+          <ReloadButton onClick={laden} loading={reloading} disabled={loading} />
         </div>
       </div>
 
@@ -374,9 +366,9 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           ctaLabel="Anlage konfigurieren"
         />
       ) : error ? (
-        // B8-Fehler-Baustein (S15): laden(false) = nicht-silent → Lade-Zustand statt
-        // Leer-Flash während des Retrys (laden setzt setError(null) selbst).
-        <FehlerZustand text={error} onRetry={() => laden(false)} />
+        // B8-Fehler-Baustein (S15): refetch ohne Cache-Stand = nicht-silent →
+        // Lade-Zustand statt Leer-Flash während des Retrys.
+        <FehlerZustand text={error} onRetry={laden} />
       ) : loading ? (
         // B8-Skeleton (S15): faktisch Erst-Load/Anlagenwechsel-only (geladenFuer-Ref,
         // D11-9); Chart-Form — der kurz-Default öffnet KPI- + Verlaufs-Block.

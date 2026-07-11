@@ -10,7 +10,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../context/ThemeContext'
 
-vi.mock('../hooks', () => ({
+vi.mock('../hooks', async (importOriginal) => ({
+  // R18-2: useApiData (SWR-Sicht-Cache) läuft ECHT — nur Anlage/Achse gemockt.
+  ...(await importOriginal<typeof import('../hooks')>()),
   useSelectedAnlage: () => ({ selectedAnlage: { id: 1, latitude: 50.1, longitude: 8.7 } }),
   useSchmaleAchse: () => false,
 }))
@@ -83,6 +85,7 @@ vi.mock('../api/aussichten', () => ({
 }))
 
 import CockpitAussichtV4 from './CockpitAussichtV4'
+import { _clearSwrCacheForTests } from '../hooks/useApiData'
 
 function renderView() {
   return render(
@@ -97,6 +100,7 @@ function renderView() {
 describe('CockpitAussichtV4 — Vorwärts-Teleskop', () => {
   beforeEach(() => {
     localStorage.clear()
+    _clearSwrCacheForTests() // SWR-Modul-Cache je Test frisch (R18-2)
     // ThemeProvider liest window.matchMedia (in jsdom nicht implementiert).
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
       matches: false, media: '', onchange: null,

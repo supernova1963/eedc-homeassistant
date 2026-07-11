@@ -28,6 +28,7 @@ import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
+import { swrCachePeek, swrCacheStore } from '../../hooks/useApiData'
 import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
 import { TYP_LABELS } from '../../lib/constants'
 
@@ -58,6 +59,11 @@ export interface RoiAnalyseProps {
   /** Optionaler Rückkanal der geladenen Antwort (z. B. für den Benzinpreis-Hinweis
    *  im Slider der IST-Seite). */
   onLoaded?: (data: ROIDashboardResponse) => void
+  /** R18-2 (SWR, Opt-in der v4-Sicht): Basis des Sicht-Cache-Keys — bei Remount
+   *  stehen die alten Daten sofort (kein Skeleton), still revalidiert. Die
+   *  Berechnungs-Parameter werden an die Basis angehängt. IST/V3: weglassen
+   *  (Verhalten unverändert). */
+  swrKeyBasis?: string
 }
 
 export interface RoiAnalyseVM {
@@ -94,20 +100,34 @@ function getSpeicherCDetail(b: ROIBerechnung): SpeicherRoiDetail | null {
 
 /** Lädt das ROI-Dashboard (ein `getROIDashboard`-Call) und leitet Amortisations-
  *  Zeitreihe + Typ-/Investitions-Aggregate ab. Geteilt von IST + v4. */
-export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzinpreis, jahr, onLoaded }: RoiAnalyseProps): RoiAnalyseVM {
-  const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(null)
+export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzinpreis, jahr, onLoaded, swrKeyBasis }: RoiAnalyseProps): RoiAnalyseVM {
+  // Voller Cache-Key inkl. Berechnungs-Parameter (jede Variante = eigener Stand).
+  const swrKey = swrKeyBasis
+    ? `${swrKeyBasis}:${anlageId}:${strompreis}:${einspeiseverguetung}:${benzinpreis}:${jahr}`
+    : undefined
+  const [roiData, setRoiData] = useState<ROIDashboardResponse | null>(
+    () => (swrKey ? swrCachePeek<ROIDashboardResponse>(swrKey) : undefined) ?? null,
+  )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!anlageId) return
     let ab = false
+    // R18-2 (SWR, Opt-in v4): Cache-Stand sofort zeigen + still revalidieren —
+    // Skeleton nur ohne Cache-Stand (echter Erst-Load).
+    const cached = swrKey ? swrCachePeek<ROIDashboardResponse>(swrKey) : undefined
+    if (cached !== undefined) setRoiData(cached)
     const loadROI = async () => {
       try {
-        setLoading(true)
+        if (cached === undefined) setLoading(true)
         setError(null)
         const data = await investitionenApi.getROIDashboard(anlageId, strompreis, einspeiseverguetung, benzinpreis, jahr)
-        if (!ab) { setRoiData(data); onLoaded?.(data) }
+        if (!ab) {
+          setRoiData(data)
+          if (swrKey) swrCacheStore(swrKey, data)
+          onLoaded?.(data)
+        }
       } catch (e) {
         if (!ab) setError(e instanceof Error ? e.message : 'Fehler beim Laden der ROI-Daten')
       } finally {
@@ -118,7 +138,7 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
     return () => { ab = true }
     // onLoaded bewusst nicht in den Deps (Eltern reicht inline-Callback durch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anlageId, strompreis, einspeiseverguetung, benzinpreis, jahr])
+  }, [anlageId, strompreis, einspeiseverguetung, benzinpreis, jahr, swrKey])
 
   const amortisationData = useMemo(() => {
     if (!roiData || roiData.gesamt_relevante_kosten <= 0) return []

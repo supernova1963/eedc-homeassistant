@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Activity, CloudSun, LineChart, Maximize2, Workflow } from 'lucide-react'
 import { useSelectedAnlage } from '../hooks'
+import { swrCachePeek, swrCacheStore } from '../hooks/useApiData'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse } from '../api/liveDashboard'
 import { wetterApi } from '../api/wetter'
@@ -33,6 +34,18 @@ import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
 const REFRESH_INTERVAL = 5_000
 const WETTER_REFRESH_INTERVAL = 300_000
 const TAGESVERLAUF_REFRESH_INTERVAL = 60_000
+
+// R18-2 (SWR, Erst-Paint): Live pollt ohnehin — aber beim Tab-Wechsel (unmount →
+// remount) verlor die Sicht ihren State und zeigte den Spinner. Die letzten Werte
+// werden im Sicht-Cache (useApiData-Store, EINE Wahrheit) gehalten und beim
+// Remount sofort gezeigt; die Poll-Schleife aktualisiert dann in-place.
+interface LiveSeed {
+  data: LiveDashboardResponse | null
+  wetter: LiveWetterResponse | null
+  tagesverlauf: TagesverlaufResponse | null
+  prognose3Tage: SolarPrognoseTag[] | null
+  lastUpdate: string | null
+}
 
 // persistKey-SoT der Sicht (Element-Park-Scope `eedc-park:v4-cockpit-live`).
 const SICHT_KEY = 'v4-cockpit-live'
@@ -51,13 +64,15 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const { selectedAnlage } = useSelectedAnlage()
   // Demo-Modus ist global (Status-Fusszeile schaltet ihn); Live liest ihn nur.
   const { demoMode } = useDemoMode()
-  const [data, setData] = useState<LiveDashboardResponse | null>(null)
-  const [wetter, setWetter] = useState<LiveWetterResponse | null>(null)
-  const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(null)
-  const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(null)
+  const liveKey = `v4-live:${anlageId}:${demoMode}`
+  const seed = useRef(swrCachePeek<LiveSeed>(liveKey)).current // nur am Mount gelesen
+  const [data, setData] = useState<LiveDashboardResponse | null>(seed?.data ?? null)
+  const [wetter, setWetter] = useState<LiveWetterResponse | null>(seed?.wetter ?? null)
+  const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(seed?.tagesverlauf ?? null)
+  const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(seed?.prognose3Tage ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+  const [lastUpdate, setLastUpdate] = useState<string | null>(seed?.lastUpdate ?? null)
   const [eflFokus, setEflFokus] = useState(false) // Energiefluss-Vollbild (⤢ in seiner eigenen Kopfzeile)
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -66,10 +81,15 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const activeAnlageRef = useRef(anlageId)
   activeAnlageRef.current = anlageId
 
+  const dataRef = useRef(data)
+  dataRef.current = data
+
   const fetchData = useCallback(async (isAutoRefresh = false) => {
     if (!anlageId) return
     const reqId = anlageId
-    if (!isAutoRefresh) setLoading(true)
+    // Spinner nur ohne Vor-Daten (R18-2): mit Seed/Poll-Stand wird still
+    // aktualisiert — der Remount-Spinner beim Tab-Wechsel entfällt.
+    if (!isAutoRefresh && dataRef.current == null) setLoading(true)
     try {
       const result = await liveDashboardApi.getData(reqId, demoMode)
       if (activeAnlageRef.current !== reqId) return
@@ -108,6 +128,14 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       // still ignorieren
     }
   }, [anlageId, demoMode])
+
+  // R18-2: letzten Stand in den Sicht-Cache spiegeln (billiger Map-Write je
+  // Poll-Tick) — Quelle für den Erst-Paint-Seed beim nächsten Remount.
+  useEffect(() => {
+    if (data || wetter || tagesverlauf) {
+      swrCacheStore(liveKey, { data, wetter, tagesverlauf, prognose3Tage, lastUpdate } satisfies LiveSeed)
+    }
+  }, [liveKey, data, wetter, tagesverlauf, prognose3Tage, lastUpdate])
 
   useEffect(() => {
     fetchData(false)

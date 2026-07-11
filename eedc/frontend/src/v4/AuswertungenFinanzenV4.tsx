@@ -32,7 +32,7 @@ import { importApi } from '../api/import'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { baueJahrAlsMonat } from './JahrAggregat'
 import { STEUER_H } from '../lib/komponentenStyle'
-import { useSelectedAnlage, useSchmaleAchse } from '../hooks'
+import { useApiData, useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 import { AnlageLeer } from './OnboardingLeer'
@@ -55,15 +55,14 @@ function FinanzenInner() {
   const basis = useAuswertungBasis(selectedAnlageId)
 
   // Sonderkosten/Sonstige (#310) je Monat — wie FinanzenTab aus der Komponenten-Zeitreihe.
-  const [sonderkostenData, setSonderkostenData] = useState<KomponentenZeitreihe | null>(null)
-  useEffect(() => {
-    if (!selectedAnlageId) { setSonderkostenData(null); return }
-    let aktiv = true
-    cockpitApi.getKomponentenZeitreihe(selectedAnlageId)
-      .then((r) => { if (aktiv) setSonderkostenData(r) })
-      .catch(() => { if (aktiv) setSonderkostenData(null) })
-    return () => { aktiv = false }
-  }, [selectedAnlageId])
+  // R18-2 (SWR): via Sicht-Cache — beim Sub-Tab-Wechsel sofort da; Soft-fail
+  // (catch → null) bleibt erhalten.
+  const sonderkostenQ = useApiData<KomponentenZeitreihe | null>(
+    () => cockpitApi.getKomponentenZeitreihe(selectedAnlageId!).catch(() => null),
+    [selectedAnlageId],
+    { enabled: !!selectedAnlageId, swrKey: `v4-ausw-sonderkosten:${selectedAnlageId}` },
+  )
+  const sonderkostenData = selectedAnlageId ? (sonderkostenQ.data ?? null) : null
 
   const schmal = useSchmaleAchse()
   const zeitreihe = useMemo(
@@ -353,9 +352,6 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
 }) {
   const [modus, setModus] = useState<'monat' | 'jahr'>('monat')
   const [monat, setMonat] = useState<number | null>(null)
-  const [d, setD] = useState<AktuellerMonatResponse | null>(null)
-  const [sonderkosten, setSonderkosten] = useState<number | null>(null)
-  const [laden, setLaden] = useState(false)
 
   // Dokumentierte F10-AUSNAHME (R3b E5, Gernot 2026-07-05): das Monats-Select
   // bleibt bewusst KALENDARISCH aufsteigend (Jan→Dez, Jahres-Kontext) — die
@@ -371,33 +367,34 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
     if (monat == null || !monate.includes(monat)) setMonat(monate[monate.length - 1])
   }, [monate, monat])
 
-  useEffect(() => {
-    if (!anlageId || jahr == null) return
-    let ab = false
-    setLaden(true)
-    if (modus === 'monat') {
-      if (monat == null) { setLaden(false); return }
-      Promise.all([
-        aktuellerMonatApi.getData(anlageId, jahr, monat),
-        cockpitApi.getKomponentenZeitreihe(anlageId, jahr)
-          .then((kt) => kt.monatswerte?.find((v) => v.monat === monat)?.sonstige_ausgaben_euro ?? null)
-          .catch(() => null),
-      ])
-        .then(([resp, sk]) => { if (!ab) { setD(resp); setSonderkosten(sk) } })
-        .catch(() => { if (!ab) setD(null) })
-        .finally(() => { if (!ab) setLaden(false) })
-    } else {
-      Promise.all(MONATE_1_12.map((m) => aktuellerMonatApi.getData(anlageId, jahr, m).catch(() => null)))
-        .then((resps) => {
-          if (ab) return
-          const ok = resps.filter((r): r is AktuellerMonatResponse => r != null)
-          setD(ok.length ? baueJahrAlsMonat(ok, jahr) : null)
-          setSonderkosten(null)
-        })
-        .finally(() => { if (!ab) setLaden(false) })
-    }
-    return () => { ab = true }
-  }, [anlageId, modus, jahr, monat])
+  // R18-2 (SWR + keepPreviousData): beim Monat/Jahr-Umschalten bleibt das
+  // bestehende T-Konto stehen und der Content tauscht in-place (detLAN D7-6);
+  // beim Sub-Tab-Wechsel steht der letzte Stand sofort (Sicht-Cache).
+  const tkQ = useApiData<{ d: AktuellerMonatResponse | null; sonderkosten: number | null }>(
+    async () => {
+      if (modus === 'monat') {
+        const [resp, sk] = await Promise.all([
+          aktuellerMonatApi.getData(anlageId!, jahr!, monat!).catch(() => null),
+          cockpitApi.getKomponentenZeitreihe(anlageId!, jahr!)
+            .then((kt) => kt.monatswerte?.find((v) => v.monat === monat)?.sonstige_ausgaben_euro ?? null)
+            .catch(() => null),
+        ])
+        return { d: resp, sonderkosten: sk }
+      }
+      const resps = await Promise.all(MONATE_1_12.map((m) => aktuellerMonatApi.getData(anlageId!, jahr!, m).catch(() => null)))
+      const ok = resps.filter((r): r is AktuellerMonatResponse => r != null)
+      return { d: ok.length ? baueJahrAlsMonat(ok, jahr!) : null, sonderkosten: null }
+    },
+    [anlageId, modus, jahr, monat],
+    {
+      enabled: !!anlageId && jahr != null && (modus === 'jahr' || monat != null),
+      swrKey: `v4-ausw-tkonto:${anlageId}:${jahr}:${modus}:${monat}`,
+      keepPreviousData: true,
+    },
+  )
+  const d = tkQ.data?.d ?? null
+  const sonderkosten = tkQ.data?.sonderkosten ?? null
+  const laden = tkQ.loading
 
   return (
     <div className="space-y-3">
@@ -419,10 +416,10 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
           <span className={`text-sm text-gray-500 dark:text-gray-400 px-2 inline-flex items-center ${STEUER_H}`}>Ganzes Jahr {jahr ?? '—'}</span>
         )}
       </div>
-      {laden && !d ? (
-        // Spinner nur beim Erst-Load; beim Monat/Jahr-Umschalten bleibt das
-        // bestehende T-Konto stehen und der Content tauscht in-place (detLAN D7-6,
-        // 2026-06-27 — „ausschließlich den Content neu schreiben").
+      {laden ? (
+        // Spinner nur beim Erst-Load (SWR-Hook: loading nur ohne Vor-Daten);
+        // beim Monat/Jahr-Umschalten bleibt das bestehende T-Konto stehen und der
+        // Content tauscht in-place (detLAN D7-6, 2026-06-27).
         <TabellenSkeleton label="Lade T-Konto…" />
       ) : d ? (
         <TKonto d={d} sonderkosten={sonderkosten} />
