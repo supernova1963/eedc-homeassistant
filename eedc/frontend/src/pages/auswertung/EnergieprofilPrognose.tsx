@@ -10,7 +10,8 @@ import {
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-react'
-import { Card, Alert, KPICard, ChartLegende, ScrollSchatten } from '../../components/ui'
+import { Card, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, TableFoot } from '../../components/ui'
+import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { DatumPicker } from '../../components/ui/DatumPicker'
 import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -242,81 +243,84 @@ function PrognoseTooltip({ active, payload, label }: {
 
 // ── Stundentabelle ───────────────────────────────────────────────────────────
 
-export function PrognoseTabelle({ daten }: { daten: TagesPrognose }) {
+export function PrognoseTabelle({ daten, ohneCaption }: { daten: TagesPrognose; ohneCaption?: boolean }) {
   const hatSpeicher = daten.speicher_kapazitaet_kwh != null
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          Stundenprognose in kW · Summenzeile = kWh/Tag
-        </span>
-      </div>
+      {/* Caption unterdrückbar (`ohneCaption`), wenn ein Block-Header denselben Text
+          schon als Summary zeigt (Cockpit/Aussicht „Stundenwerte") — sonst doppelt.
+          Standalone (Energieprofil-Seite) bleibt sie die einzige Beschriftung. */}
+      {!ohneCaption && (
+        <div className={`${ZELLE} border-b border-gray-200 dark:border-gray-700`}>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Stundenprognose in kW · Summenzeile = kWh/Tag
+          </span>
+        </div>
+      )}
       {/* D17-2 (G16-1): alle 24 Stunden am Stück, kein innerer Vertikal-Scroll
           (max-h entfernt) — wie die Cockpit/Tag-Stundentabelle. Horizontaler Überlauf
           zeigt den ScrollSchatten-Fade; thead sticky bleibt (harmlos ohne Eigen-Scroll),
           tfoot NICHT sticky (schwebte sonst am Viewport-Boden). */}
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800">
+      <Table zeilen={24} mitFuss flaeche="karte">
+          <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400">Std</th>
-              <th className="px-2 py-2 text-right font-medium text-yellow-600 dark:text-yellow-400">PV</th>
-              <th className="px-2 py-2 text-right font-medium text-gray-600 dark:text-gray-300">Verbr.</th>
-              <th className="px-2 py-2 text-right font-medium text-green-600 dark:text-green-400">Netto</th>
-              <th className="px-2 py-2 text-right font-medium text-red-600 dark:text-red-400">Bezug</th>
-              <th className="px-2 py-2 text-right font-medium text-cyan-600 dark:text-cyan-400">Einsp.</th>
+              <th className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400`}>Std</th>
+              <th className={`${KOPF_ZELLE} text-right text-yellow-600 dark:text-yellow-400`}>PV</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-600 dark:text-gray-300`}>Verbr.</th>
+              <th className={`${KOPF_ZELLE} text-right text-green-600 dark:text-green-400`}>Netto</th>
+              <th className={`${KOPF_ZELLE} text-right text-red-600 dark:text-red-400`}>Bezug</th>
+              <th className={`${KOPF_ZELLE} text-right text-cyan-600 dark:text-cyan-400`}>Einsp.</th>
               {hatSpeicher && (
-                <th className="px-2 py-2 text-right font-medium text-blue-600 dark:text-blue-400">SoC %</th>
+                <th className={`${KOPF_ZELLE} text-right text-blue-600 dark:text-blue-400`}>SoC %</th>
               )}
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {daten.stunden.map(s => (
               <tr key={s.stunde} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                <td className="px-3 py-1.5 font-medium text-gray-600 dark:text-gray-300 tabular-nums">{s.stunde}:00</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{fmtZahl(s.pv_kw, 2)}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtZahl(s.verbrauch_kw, 2)}</td>
-                <td className={`px-2 py-1.5 text-right tabular-nums font-medium ${
+                <td className={`${ZELLE} font-medium text-gray-600 dark:text-gray-300 tabular-nums`}>{s.stunde}:00</td>
+                <td className={`${ZELLE} text-right tabular-nums text-yellow-700 dark:text-yellow-300`}>{fmtZahl(s.pv_kw, 2)}</td>
+                <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtZahl(s.verbrauch_kw, 2)}</td>
+                <td className={`${ZELLE} text-right tabular-nums font-medium ${
                   s.netto_kw >= 0
                     ? 'text-green-600 dark:text-green-400'
                     : 'text-red-600 dark:text-red-400'
                 }`}>
                   {s.netto_kw >= 0 ? '+' : ''}{fmtZahl(s.netto_kw, 2)}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-red-600 dark:text-red-400">
+                <td className={`${ZELLE} text-right tabular-nums text-red-600 dark:text-red-400`}>
                   {s.netzbezug_kw > 0.005 ? fmtZahl(s.netzbezug_kw, 2) : <Dash />}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-cyan-600 dark:text-cyan-400">
+                <td className={`${ZELLE} text-right tabular-nums text-cyan-600 dark:text-cyan-400`}>
                   {s.einspeisung_kw > 0.005 ? fmtZahl(s.einspeisung_kw, 2) : <Dash />}
                 </td>
                 {hatSpeicher && (
-                  <td className="px-2 py-1.5 text-right tabular-nums text-blue-600 dark:text-blue-400">
+                  <td className={`${ZELLE} text-right tabular-nums text-blue-600 dark:text-blue-400`}>
                     {s.soc_prozent != null ? fmtZahl(s.soc_prozent, 1) : <Dash />}
                   </td>
                 )}
               </tr>
             ))}
-          </tbody>
-          <tfoot>
+          </TableBody>
+          <TableFoot>
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold">
-              <td className="px-3 py-2 text-gray-500 dark:text-gray-400">kWh</td>
-              <td className="px-2 py-2 text-right tabular-nums text-yellow-700 dark:text-yellow-300">{fmtZahl(daten.pv_summe_kwh, 1)}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">{fmtZahl(daten.verbrauch_summe_kwh, 1)}</td>
-              <td className={`px-2 py-2 text-right tabular-nums ${
+              <td className={`${ZELLE} text-gray-500 dark:text-gray-400`}>kWh</td>
+              <td className={`${ZELLE} text-right tabular-nums text-yellow-700 dark:text-yellow-300`}>{fmtZahl(daten.pv_summe_kwh, 1)}</td>
+              <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtZahl(daten.verbrauch_summe_kwh, 1)}</td>
+              <td className={`${ZELLE} text-right tabular-nums ${
                 daten.pv_summe_kwh - daten.verbrauch_summe_kwh >= 0
                   ? 'text-green-600 dark:text-green-400'
                   : 'text-red-600 dark:text-red-400'
               }`}>
                 {fmtZahl(daten.pv_summe_kwh - daten.verbrauch_summe_kwh, 1)}
               </td>
-              <td className="px-2 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{fmtZahl(daten.netzbezug_summe_kwh, 1)}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-cyan-600 dark:text-cyan-400">{fmtZahl(daten.einspeisung_summe_kwh, 1)}</td>
+              <td className={`${ZELLE} text-right tabular-nums text-red-600 dark:text-red-400`}>{fmtZahl(daten.netzbezug_summe_kwh, 1)}</td>
+              <td className={`${ZELLE} text-right tabular-nums text-cyan-600 dark:text-cyan-400`}>{fmtZahl(daten.einspeisung_summe_kwh, 1)}</td>
               {hatSpeicher && <td />}
             </tr>
-          </tfoot>
-        </table>
-      </ScrollSchatten>
+          </TableFoot>
+        </Table>
     </Card>
   )
 }

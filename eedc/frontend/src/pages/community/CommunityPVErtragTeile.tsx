@@ -6,8 +6,8 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Sun, TrendingUp, TrendingDown, Calendar, Target, Award } from 'lucide-react'
-import { KPICard } from '../../components/ui'
-import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
+import { KPICard, Table, TableHead, TableBody } from '../../components/ui'
+import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -178,35 +178,33 @@ export function MonatsErtragChart({ benchmark, chartData }: { benchmark: Communi
 export function JahresUebersicht({ benchmark, jahresStats }: { benchmark: CommunityBenchmarkResponse; jahresStats: NonNullable<PVErtragDaten['jahresStats']> }) {
   return (
     <Parkbar id="pv-jahresuebersicht-tabelle" titel="Jahresübersicht">
-    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">Jahr</th>
-            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">Spez. Ertrag</th>
-            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">vs. Community</th>
-            <th className="text-right py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">Monate</th>
-          </tr>
-        </thead>
-        <tbody>
-          {jahresStats.map((js) => {
-            const abweichung = ((js.spezErtrag - benchmark.benchmark.spez_ertrag_durchschnitt) / benchmark.benchmark.spez_ertrag_durchschnitt) * 100
-            const isPositive = abweichung >= 0
-            return (
-              <tr key={js.jahr} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                <td className="py-3 px-4">
-                  <span className="font-medium text-gray-900 dark:text-white">{js.jahr}</span>
-                  {!js.vollstaendig && <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">(unvollständig)</span>}
-                </td>
-                <td className="text-right py-3 px-4"><span className="font-semibold text-gray-900 dark:text-white">{fmtZahl(js.spezErtrag, 0)} kWh/kWp</span></td>
-                <td className="text-right py-3 px-4"><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{isPositive ? '+' : ''}{fmtZahl(abweichung, 1)} %</span></td>
-                <td className="text-right py-3 px-4 text-gray-500 dark:text-gray-400">{fmtZahl(js.anzahlMonate, 0)}/12</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </ScrollSchatten>
+    <Table>
+      <TableHead>
+        <tr className="border-b border-gray-200 dark:border-gray-700">
+          <th className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400`}>Jahr</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Spez. Ertrag</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>vs. Community</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Monate</th>
+        </tr>
+      </TableHead>
+      <TableBody>
+        {jahresStats.map((js) => {
+          const abweichung = ((js.spezErtrag - benchmark.benchmark.spez_ertrag_durchschnitt) / benchmark.benchmark.spez_ertrag_durchschnitt) * 100
+          const isPositive = abweichung >= 0
+          return (
+            <tr key={js.jahr} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
+              <td className={ZELLE}>
+                <span className="font-medium text-gray-900 dark:text-white">{js.jahr}</span>
+                {!js.vollstaendig && <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">(unvollständig)</span>}
+              </td>
+              <td className={`${ZELLE} text-right`}><span className="font-semibold text-gray-900 dark:text-white">{fmtZahl(js.spezErtrag, 0)} kWh/kWp</span></td>
+              <td className={`${ZELLE} text-right`}><span className={`font-medium ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{isPositive ? '+' : ''}{fmtZahl(abweichung, 1)} %</span></td>
+              <td className={`${ZELLE} text-right text-gray-500 dark:text-gray-400`}>{fmtZahl(js.anzahlMonate, 0)}/12</td>
+            </tr>
+          )
+        })}
+      </TableBody>
+    </Table>
     </Parkbar>
   )
 }

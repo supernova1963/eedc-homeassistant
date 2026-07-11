@@ -18,7 +18,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
 import { Button, CsvExportButton } from '../ui'
-import ScrollSchatten from '../ui/ScrollSchatten'
+// Tabellen-SoT (Regel T): Container liefert Höhenfenster, klebenden Kopf/Fuß und
+// sichtbare Leisten. Zellen nutzen die exportierte Typo — `TableCell`/`TableHeader`
+// würden hier mit den Farbvarianten (Vorjahr grau, Delta klein) kollidieren.
+import { Table, TableBody, TableFoot, TableHead } from '../ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
   fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
@@ -325,53 +329,53 @@ export function WerteTabelle({
         </div>
       )}
 
-      {/* ── Tabelle — Überlauf per ScrollSchatten (A9) ─────────────────────── */}
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className="px-3 py-2 font-medium whitespace-nowrap">
+      {/* ── Tabelle — Zentrale `ui/Table` (Regel T, D18-2 + G18-1) ──────────── */}
+      <Table zeilen={12} mitFuss={sorted.length > 1} flaeche="karte" className="w-full">
+          <TableHead>
+            <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+              <th className={`${KOPF_ZELLE}`}>
                 <button type="button" onClick={() => toggleSort('__zeit')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
                   Zeitraum {sortKey === '__zeit' && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                 </button>
               </th>
               {aktiveMetriken.map((m) => (
-                <th key={m.key} colSpan={zeigeVergleich ? 3 : 1} className="px-3 py-2 text-right font-medium whitespace-nowrap">
+                <th key={m.key} colSpan={zeigeVergleich ? 3 : 1} className={`${KOPF_ZELLE} text-right`}>
                   <button type="button" onClick={() => toggleSort(m.key)} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
                     {m.label}{m.unit ? ` (${m.unit})` : ''} {sortKey === m.key && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
                   </button>
                 </th>
               ))}
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {sorted.map((r) => {
               const prev = zeigeVergleich ? vorjahrLookup[r.vergleichKey] : undefined
               return (
                 <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600 dark:text-gray-400">{r.label}</td>
+                  <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{r.label}</td>
                   {aktiveMetriken.map((m) => {
                     const v = r.wert(m.key)
                     if (zeigeVergleich) {
                       const pv = prev ? prev.wert(m.key) : null
                       return (
                         <Fragment key={m.key}>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtWert(pv, m.decimals)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-xs border-r border-gray-100 dark:border-gray-800"><DeltaZelle current={v} prev={pv} metrik={m} /></td>
+                          <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtWert(v, m.decimals)}</td>
+                          <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{fmtWert(pv, m.decimals)}</td>
+                          <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-100 dark:border-gray-800`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                         </Fragment>
                       )
                     }
-                    return <td key={m.key} className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-gray-700 dark:text-gray-300">{fmtWert(v, m.decimals)}</td>
+                    return <td key={m.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtWert(v, m.decimals)}</td>
                   })}
                 </tr>
               )
             })}
-          </tbody>
+          </TableBody>
           {sorted.length > 1 && (
-            <tfoot>
-              <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/40 font-semibold">
-                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 text-xs uppercase tracking-wide whitespace-nowrap">
+            <TableFoot>
+              {/* Betonung + deckender Grund kommen aus der Zentrale (FUSS_GRUND). */}
+              <tr>
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-300 text-xs uppercase tracking-wide`}>
                   {sorted.length} {einheitLabel}
                 </td>
                 {aktiveMetriken.map((m) => {
@@ -381,19 +385,18 @@ export function WerteTabelle({
                     const pv = vorjahrAggregat?.[m.key] ?? null
                     return (
                       <Fragment key={m.key}>
-                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-800 dark:text-gray-100">{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-500 dark:text-gray-400">{pv != null ? `${prefix}${fmtWert(pv, m.decimals)}` : '—'}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-xs border-r border-gray-300 dark:border-gray-600"><DeltaZelle current={v} prev={pv} metrik={m} /></td>
+                        <td className={`${ZELLE} text-right tabular-nums text-gray-800 dark:text-gray-100`}>{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
+                        <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{pv != null ? `${prefix}${fmtWert(pv, m.decimals)}` : '—'}</td>
+                        <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-300 dark:border-gray-600`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                       </Fragment>
                     )
                   }
-                  return <td key={m.key} className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-gray-800 dark:text-gray-100">{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
+                  return <td key={m.key} className={`${ZELLE} text-right tabular-nums text-gray-800 dark:text-gray-100`}>{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
                 })}
               </tr>
-            </tfoot>
+            </TableFoot>
           )}
-        </table>
-      </ScrollSchatten>
+      </Table>
     </div>
   )
 }

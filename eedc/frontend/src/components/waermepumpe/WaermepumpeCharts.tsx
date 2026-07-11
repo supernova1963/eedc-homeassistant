@@ -9,7 +9,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende, ScrollSchatten } from '../ui'
+import { ChartLegende, Table, TableHead, TableBody } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
@@ -72,36 +73,34 @@ export function WaermepumpeKostenvergleich({ zusammenfassung: z }: { zusammenfas
 /** Monatsdaten-Tabelle: Strom · Heizung · Warmwasser · JAZ je Monat. */
 export function WaermepumpeMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   return (
-    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-2 px-2">Monat</th>
-            <th className="text-right py-2 px-2">Strom (kWh)</th>
-            <th className="text-right py-2 px-2">Heizung (kWh)</th>
-            <th className="text-right py-2 px-2">Warmwasser (kWh)</th>
-            <th className="text-right py-2 px-2">JAZ</th>
-          </tr>
-        </thead>
-        <tbody>
-          {monatsdaten.map((md) => {
-            const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
-            const heiz = md.verbrauch_daten.heizenergie_kwh || 0
-            const ww = md.verbrauch_daten.warmwasser_kwh || 0
-            const cop = strom > 0 ? (heiz + ww) / strom : 0
-            return (
-              <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
-                <td className="text-right py-2 px-2">{fmtZahl(strom, 0)}</td>
-                {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
-                <td className="text-right py-2 px-2 text-red-600">{fmtZahl(heiz, 0)}</td>
-                <td className="text-right py-2 px-2 text-blue-600">{fmtZahl(ww, 0)}</td>
-                <td className="text-right py-2 px-2 text-orange-600">{fmtZahl(cop, 2)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </ScrollSchatten>
+    <Table>
+      <TableHead>
+        <tr className="border-b border-gray-200 dark:border-gray-700">
+          <th className={`${KOPF_ZELLE} text-left`}>Monat</th>
+          <th className={`${KOPF_ZELLE} text-right`}>Strom (kWh)</th>
+          <th className={`${KOPF_ZELLE} text-right`}>Heizung (kWh)</th>
+          <th className={`${KOPF_ZELLE} text-right`}>Warmwasser (kWh)</th>
+          <th className={`${KOPF_ZELLE} text-right`}>JAZ</th>
+        </tr>
+      </TableHead>
+      <TableBody>
+        {monatsdaten.map((md) => {
+          const strom = md.verbrauch_daten.stromverbrauch_kwh || 0
+          const heiz = md.verbrauch_daten.heizenergie_kwh || 0
+          const ww = md.verbrauch_daten.warmwasser_kwh || 0
+          const cop = strom > 0 ? (heiz + ww) / strom : 0
+          return (
+            <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE}>{MONAT_KURZ[md.monat]} {md.jahr}</td>
+              <td className={`${ZELLE} text-right`}>{fmtZahl(strom, 0)}</td>
+              {/* Heizung = WP-Rot, Warmwasser = blau (= CHART_COLORS.wpWaerme/wpWarmwasser; Gernot 2026-06-25 nach detLAN). */}
+              <td className={`${ZELLE} text-right text-red-600`}>{fmtZahl(heiz, 0)}</td>
+              <td className={`${ZELLE} text-right text-blue-600`}>{fmtZahl(ww, 0)}</td>
+              <td className={`${ZELLE} text-right text-orange-600`}>{fmtZahl(cop, 2)}</td>
+            </tr>
+          )
+        })}
+      </TableBody>
+    </Table>
   )
 }

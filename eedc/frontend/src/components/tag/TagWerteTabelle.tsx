@@ -8,7 +8,8 @@
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { ChevronUp, ChevronDown, ChevronsUpDown, Columns } from 'lucide-react'
-import { Card, Button, CsvExportButton, ScrollSchatten } from '../ui'
+import { Card, Button, CsvExportButton, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { exportToCSV } from '../../utils/export'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
@@ -252,23 +253,26 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
         </div>
       </div>
 
-      {/* Tabelle — G16-1: alle 24 Stunden ohne vertikalen Scroll (max-h entfernt);
-          horizontaler Überlauf zeigt den ScrollSchatten-Fade (A9, G16-3). thead sticky
-          bleibt (klebt beim Seiten-Scroll, harmlos ohne vertikalen Eigen-Scroll); tfoot
-          NICHT sticky (schwebte sonst am Viewport-Boden). */}
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800">
+      {/* Tabelle — Zentrale `ui/Table` (Regel T). Vorher: `sticky thead` in einem
+          ScrollSchatten OHNE Höhe ⇒ der Kopf klebte nie (der alte Kommentar
+          „klebt beim Seiten-Scroll" beruhte auf einer CSS-Fehlannahme: sticky
+          haftet am Scroll-Container, nicht am Viewport). Mit dem Höhenfenster
+          (24 Zeilen = fachliche Fenstergröße) kleben Kopf UND Summe.
+          G16-1 („alle 24 h ohne inneres Scrollen") gilt damit nur noch, solange
+          das Fenster unter dem 70dvh-Deckel bleibt — auf flachen Bildschirmen
+          scrollt die Tabelle intern. Bewusst abgenommen (Gernot 2026-07-10). */}
+      <Table zeilen={24} mitFuss flaeche="karte" className="w-full">
+          <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
               <th
-                className="px-3 py-2 text-left font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-pointer select-none"
+                className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400 cursor-pointer select-none`}
                 onClick={() => { setSortKey(null); setSortDir('asc') }}
               >
                 <span className="flex items-center gap-1">Std {!sortKey && <ChevronUp className="h-3 w-3 text-primary-500" />}</span>
               </th>
               {allCols.map(c => (
                 <th key={c.key}
-                  className="px-2 py-2 text-right font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200"
+                  className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200`}
                   onClick={() => handleSort(c.key)}
                 >
                   <span className="flex items-center justify-end gap-1">
@@ -279,31 +283,31 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
                 </th>
               ))}
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {rows.map(({ h, vals }) => (
               <tr key={h} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                <td className="px-3 py-1.5 font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{h}:00</td>
+                <td className={`${ZELLE} font-medium text-gray-600 dark:text-gray-300 tabular-nums`}>{h}:00</td>
                 {allCols.map(c => (
-                  <td key={c.key} className="px-2 py-1.5 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                  <td key={c.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>
                     {cell(vals[c.key], c.decimals)}
                   </td>
                 ))}
               </tr>
             ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold">
-              <td className="px-3 py-2 text-gray-500 dark:text-gray-400">Σ kWh</td>
+          </TableBody>
+          <TableFoot>
+            {/* Betonung + deckender Grund kommen aus der Zentrale (FUSS_GRUND). */}
+            <tr>
+              <td className={`${ZELLE} text-gray-500 dark:text-gray-400`}>Σ kWh</td>
               {allCols.map(c => (
-                <td key={c.key} className="px-2 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">
+                <td key={c.key} className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-200`}>
                   {cell(summen[c.key], c.decimals)}
                 </td>
               ))}
             </tr>
-          </tfoot>
-        </table>
-      </ScrollSchatten>
+          </TableFoot>
+      </Table>
     </Card>
   )
 }

@@ -14,6 +14,8 @@ import { useSchmaleAchse } from '../hooks'
 import { fmtCalc, SegmentControl, eedcTooltipProps } from '../components/ui'
 import { STEUER_H } from '../lib/komponentenStyle'
 import { ExternalLink } from 'lucide-react'
+import { Table, TableHead, TableBody } from '../components/ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 
 export interface VergleichJahr { jahr: number; summe: number }
 
@@ -89,29 +91,29 @@ export function KomponentenVergleich({
           </ResponsiveContainer>
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
+        <Table flaeche="karte">
+          <TableHead>
             <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className="py-1 font-medium">Jahr</th>
-              <th className="py-1 font-medium text-right">{label} ({einheit})</th>
-              <th className="py-1 font-medium text-right">Δ vs. {ref.jahr}</th>
+              <th className={`${KOPF_ZELLE} text-left`}>Jahr</th>
+              <th className={`${KOPF_ZELLE} text-right`}>{label} ({einheit})</th>
+              <th className={`${KOPF_ZELLE} text-right`}>Δ vs. {ref.jahr}</th>
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {[...sortiert].reverse().map((j) => {
               const d = ref.summe > 0 ? ((j.summe - ref.summe) / ref.summe) * 100 : null
               return (
                 <tr key={j.jahr} className={`border-b border-gray-100 dark:border-gray-800 ${j.jahr === neuestes.jahr ? 'font-semibold' : ''}`}>
-                  <td className="py-1">{j.jahr}</td>
-                  <td className="py-1 text-right tabular-nums">{fmtCalc(j.summe, 0)}</td>
-                  <td className="py-1 text-right tabular-nums text-gray-500 dark:text-gray-400">
+                  <td className={ZELLE}>{j.jahr}</td>
+                  <td className={`${ZELLE} text-right tabular-nums`}>{fmtCalc(j.summe, 0)}</td>
+                  <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>
                     {j.jahr === ref.jahr || d == null ? '—' : `${d >= 0 ? '+' : ''}${fmtCalc(d, 1)} %`}
                   </td>
                 </tr>
               )
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
       <Crosslink />
     </div>

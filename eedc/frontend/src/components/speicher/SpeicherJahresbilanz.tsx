@@ -13,8 +13,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { CHART_COLORS, COLORS, VERLUST_FARBE, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
-import { ChartLegende, eedcTooltipProps } from '../ui'
-import ScrollSchatten from '../ui/ScrollSchatten'
+import { ChartLegende, eedcTooltipProps, Table, TableHead, TableBody } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
@@ -99,32 +99,30 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false, melde }: { mo
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Werte anzeigen ({daten.length} Jahre)
         </summary>
-        <ScrollSchatten achse="horizontal" aussenClassName="mt-3" fadeFrom="from-white dark:from-gray-800">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
-                {/* B2/C3 (#237): Einheit im Header — Zellen tragen nur Zahl + %-Anteil
-                    (Anteil am Jahres-Ladungsvolumen, eigene Einheit → bleibt in der Zelle). */}
-                <th className="text-left py-2 px-2 font-medium">Jahr</th>
-                <th className="text-right py-2 px-2 font-medium">PV-Ladung (kWh)</th>
-                {hatNetz && <th className="text-right py-2 px-2 font-medium">Netz-Ladung (kWh)</th>}
-                <th className="text-right py-2 px-2 font-medium">Entladung (kWh)</th>
-                <th className="text-right py-2 px-2 font-medium">Verlust (kWh)</th>
+        <Table aussenClassName="mt-3">
+          <TableHead>
+            <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+              {/* B2/C3 (#237): Einheit im Header — Zellen tragen nur Zahl + %-Anteil
+                  (Anteil am Jahres-Ladungsvolumen, eigene Einheit → bleibt in der Zelle). */}
+              <th className={`${KOPF_ZELLE} text-left`}>Jahr</th>
+              <th className={`${KOPF_ZELLE} text-right`}>PV-Ladung (kWh)</th>
+              {hatNetz && <th className={`${KOPF_ZELLE} text-right`}>Netz-Ladung (kWh)</th>}
+              <th className={`${KOPF_ZELLE} text-right`}>Entladung (kWh)</th>
+              <th className={`${KOPF_ZELLE} text-right`}>Verlust (kWh)</th>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {[...daten].reverse().map((d) => (
+              <tr key={d.jahr} className="border-b border-gray-100 dark:border-gray-800">
+                <td className={`${ZELLE} text-gray-700 dark:text-gray-300`}>{d.jahr}</td>
+                <td className={`${ZELLE} text-right tabular-nums text-gray-900 dark:text-white`}>{fmt(d.pvLadung)} <span className="text-gray-400 dark:text-gray-500">({pct(d.pvLadung, d.ladungGesamt)})</span></td>
+                {hatNetz && <td className={`${ZELLE} text-right tabular-nums text-gray-900 dark:text-white`}>{fmt(d.netzLadung)} <span className="text-gray-400 dark:text-gray-500">({pct(d.netzLadung, d.ladungGesamt)})</span></td>}
+                <td className={`${ZELLE} text-right tabular-nums text-gray-900 dark:text-white`}>{fmt(d.entladung)} <span className="text-gray-400 dark:text-gray-500">({pct(d.entladung, d.ladungGesamt)})</span></td>
+                <td className={`${ZELLE} text-right tabular-nums text-gray-900 dark:text-white`}>{fmt(d.verlust)} <span className="text-gray-400 dark:text-gray-500">({pct(d.verlust, d.ladungGesamt)})</span></td>
               </tr>
-            </thead>
-            <tbody>
-              {[...daten].reverse().map((d) => (
-                <tr key={d.jahr} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-1.5 px-2 text-gray-700 dark:text-gray-300">{d.jahr}</td>
-                  <td className="text-right py-1.5 px-2 tabular-nums text-gray-900 dark:text-white">{fmt(d.pvLadung)} <span className="text-gray-400 dark:text-gray-500">({pct(d.pvLadung, d.ladungGesamt)})</span></td>
-                  {hatNetz && <td className="text-right py-1.5 px-2 tabular-nums text-gray-900 dark:text-white">{fmt(d.netzLadung)} <span className="text-gray-400 dark:text-gray-500">({pct(d.netzLadung, d.ladungGesamt)})</span></td>}
-                  <td className="text-right py-1.5 px-2 tabular-nums text-gray-900 dark:text-white">{fmt(d.entladung)} <span className="text-gray-400 dark:text-gray-500">({pct(d.entladung, d.ladungGesamt)})</span></td>
-                  <td className="text-right py-1.5 px-2 tabular-nums text-gray-900 dark:text-white">{fmt(d.verlust)} <span className="text-gray-400 dark:text-gray-500">({pct(d.verlust, d.ladungGesamt)})</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollSchatten>
+            ))}
+          </TableBody>
+        </Table>
       </details>
       </Parkbar>
     </div>

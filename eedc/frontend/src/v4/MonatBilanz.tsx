@@ -16,7 +16,8 @@
  * (`monatsdatenApi.listAggregiert`).
  */
 import { fmtCalc } from '../components/ui'
-import ScrollSchatten from '../components/ui/ScrollSchatten'
+import { Table, TableHead, TableBody } from '../components/ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { Parkbar } from '../components/park'
@@ -224,10 +225,10 @@ export function MonatBilanz({
   // (rechtsbündig). Getrennte Zellen, damit Zahlen zeilenübergreifend fluchten (#4).
   const vglZellen = (val: number | null | undefined, row: BilanzRow, besser?: boolean) => (
     <>
-      <td className="py-1.5 pl-3 text-right tabular-nums text-gray-400 dark:text-gray-500 hidden sm:table-cell">
+      <td className={`${ZELLE} text-right tabular-nums text-gray-400 dark:text-gray-500 hidden sm:table-cell`}>
         {val != null ? fmt(val, dec(row)) : dash}
       </td>
-      <td className="py-1.5 pr-1 text-right tabular-nums">
+      <td className={`${ZELLE} text-right tabular-nums`}>
         {val != null ? <Delta a={row.ist} b={val} inv={row.inv} besser={besser} /> : dash}
       </td>
     </>
@@ -264,36 +265,38 @@ export function MonatBilanz({
           ))}
         </div>
 
-        {/* Desktop (≥ sm): die aligned Tabelle. Überlauf per ScrollSchatten (A9). */}
-        <ScrollSchatten achse="horizontal" aussenClassName="hidden sm:block" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-xs">
-          <thead>
+        {/* Desktop (≥ sm): aligned Tabelle über die Zentrale `ui/Table` (Regel T).
+            Mobil zeigt der Block darüber die Kachel-Variante. */}
+        <Table aussenClassName="hidden sm:block" flaeche="karte">
+          <TableHead>
             <tr className="text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-              <th className="text-left pb-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
+              <th className={`${KOPF_ZELLE} text-left`}><span className="sr-only">Kennzahl</span></th>
               {/* Jede Wertspalte überspannt 2 Sub-Spalten (Zahl + Einheit/Δ%), Header zentriert (#4). */}
-              <th colSpan={2} className="text-center pb-1.5 font-medium">IST</th>
-              <th colSpan={2} className="text-center pb-1.5 font-medium">Vormonat</th>
-              <th colSpan={2} className="text-center pb-1.5 font-medium">Vorjahr</th>
-              {glMonStats && <th colSpan={2} className="text-center pb-1.5 font-medium">Ø {monatName}</th>}
+              <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>IST</th>
+              <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Vormonat</th>
+              <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Vorjahr</th>
+              {glMonStats && <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Ø {monatName}</th>}
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {rows.map((row) => (
-              <tr key={row.label} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
-                <td className="py-1.5 text-gray-600 dark:text-gray-400">{row.label}</td>
+              // Kein eigener `border-b` — Zeilen-Trenner aus TableBody (`divide-y`,
+              // Regel T); ein zusätzlicher `border-b` kollidiert damit (Dark-Mode-
+              // Linie nur unter Zeile 1, gemessen 2026-07-11).
+              <tr key={row.label}>
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{row.label}</td>
                 {/* IST: Zahl rechtsbündig + Einheit als eigene linksbündige Spalte. */}
-                <td className="py-1.5 pl-3 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
+                <td className={`${ZELLE} text-right font-semibold text-gray-900 dark:text-white tabular-nums`}>
                   {fmt(row.ist, dec(row))}
                 </td>
-                <td className="py-1.5 pr-1 text-left text-gray-500 dark:text-gray-400">{row.unit}</td>
+                <td className={`${ZELLE} text-left text-gray-500 dark:text-gray-400`}>{row.unit}</td>
                 {vglZellen(row.vm, row, row.besserVm)}
                 {vglZellen(row.vj, row, row.besserVj)}
                 {glMonStats && vglZellen(row.gm, row, row.besserGm)}
               </tr>
             ))}
-          </tbody>
-        </table>
-        </ScrollSchatten>
+          </TableBody>
+        </Table>
         {glMonStats && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {glMonStats.count} {monatName}-Monat{glMonStats.count !== 1 ? 'en' : ''}

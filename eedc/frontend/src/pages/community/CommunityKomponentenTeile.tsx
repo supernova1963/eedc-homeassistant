@@ -27,7 +27,8 @@ import {
   MapPin,
 } from 'lucide-react'
 import ChartTooltip from '../../components/ui/ChartTooltip'
-import { AnteilDonut, ChartLegende } from '../../components/ui'
+import { AnteilDonut, ChartLegende, Table, TableHead, TableBody } from '../../components/ui'
+import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import { useChartTheme } from '../../context/ThemeContext'
 import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl } from '../../lib'
@@ -405,31 +406,31 @@ export function SpeicherDeepDive({
             {/* Tabelle mit Details */}
             <Parkbar id="komp-speicher-tabelle" titel="Speicher · Verteilung (Tabelle)">
             <div className="text-sm">
-              <table className="w-full">
-                <thead>
+              <Table>
+                <TableHead>
                   <tr className="text-gray-500 dark:text-gray-400">
-                    <th className="text-left pb-2">Klasse</th>
-                    <th className="text-right pb-2">Ø Zyklen/Jahr</th>
-                    <th className="text-right pb-2">Ø Wirkungsgrad</th>
+                    <th className={`${KOPF_ZELLE} text-left`}>Klasse</th>
+                    <th className={`${KOPF_ZELLE} text-right`}>Ø Zyklen/Jahr</th>
+                    <th className={`${KOPF_ZELLE} text-right`}>Ø Wirkungsgrad</th>
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {klassenData.map((k) => (
                     <tr
                       key={k.name}
                       className={k.name === eigeneKlasse ? 'bg-primary-50 dark:bg-primary-900/20 font-medium' : ''}
                     >
-                      <td className="py-1 flex items-center gap-2">
+                      <td className={`${ZELLE} flex items-center gap-2`}>
                         <div className="w-3 h-3 rounded" style={{ backgroundColor: k.fill }} />
                         {k.name}
                         {k.name === eigeneKlasse && <span className="text-xs text-primary-500">(Du)</span>}
                       </td>
-                      <td className="text-right py-1">{fmtZahl(k.avg_zyklen, 0)}</td>
-                      <td className="text-right py-1">{fmtZahl(k.avg_wirkungsgrad, 1)} %</td>
+                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_zyklen, 0)}</td>
+                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_wirkungsgrad, 1)} %</td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             </Parkbar>
           </div>
@@ -809,31 +810,31 @@ export function EAutoDeepDive({
             {/* Tabelle mit Details */}
             <Parkbar id="komp-eauto-tabelle" titel="E-Auto · Nutzungsintensität (Tabelle)">
             <div className="text-sm">
-              <table className="w-full">
-                <thead>
+              <Table>
+                <TableHead>
                   <tr className="text-gray-500 dark:text-gray-400">
-                    <th className="text-left pb-2">Nutzung</th>
-                    <th className="text-right pb-2">Ø Verbrauch</th>
-                    <th className="text-right pb-2">Ø PV-Anteil</th>
+                    <th className={`${KOPF_ZELLE} text-left`}>Nutzung</th>
+                    <th className={`${KOPF_ZELLE} text-right`}>Ø Verbrauch</th>
+                    <th className={`${KOPF_ZELLE} text-right`}>Ø PV-Anteil</th>
                   </tr>
-                </thead>
-                <tbody>
+                </TableHead>
+                <TableBody>
                   {nutzungData.map((k) => (
                     <tr
                       key={k.name}
                       className={k.name.toLowerCase() === eigeneKlasse?.toLowerCase() ? 'bg-primary-50 dark:bg-primary-900/20 font-medium' : ''}
                     >
-                      <td className="py-1 flex items-center gap-2">
+                      <td className={`${ZELLE} flex items-center gap-2`}>
                         <div className="w-3 h-3 rounded" style={{ backgroundColor: k.fill }} />
                         <span title={k.beschreibung}>{k.name}</span>
                         {k.name.toLowerCase() === eigeneKlasse?.toLowerCase() && <span className="text-xs text-primary-500">(Du)</span>}
                       </td>
-                      <td className="text-right py-1">{fmtZahl(k.avg_verbrauch, 1)} kWh/100km</td>
-                      <td className="text-right py-1">{fmtZahl(k.avg_pv_anteil, 0)} %</td>
+                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_verbrauch, 1)} kWh/100km</td>
+                      <td className={`${ZELLE} text-right`}>{fmtZahl(k.avg_pv_anteil, 0)} %</td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             </Parkbar>
           </div>

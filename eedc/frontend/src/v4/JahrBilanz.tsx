@@ -14,7 +14,8 @@
  * Ø-Jahr = Σ der aggregierten Monatszeilen je Jahr (`jahrVergleichAus`).
  */
 import { fmtCalc } from '../components/ui'
-import ScrollSchatten from '../components/ui/ScrollSchatten'
+import { Table, TableHead, TableBody } from '../components/ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { Parkbar } from '../components/park'
 import { DATENROLLE } from '../lib'
@@ -114,10 +115,10 @@ export function JahrBilanz({
 
   const vglZellen = (val: number | null | undefined, row: BilanzRow, besser?: boolean) => (
     <>
-      <td className="py-1.5 pl-3 text-right tabular-nums text-gray-400 dark:text-gray-500 hidden sm:table-cell">
+      <td className={`${ZELLE} text-right tabular-nums text-gray-400 dark:text-gray-500 hidden sm:table-cell`}>
         {val != null ? fmt(val, dec(row)) : dash}
       </td>
-      <td className="py-1.5 pr-1 text-right tabular-nums">
+      <td className={`${ZELLE} text-right tabular-nums`}>
         {val != null ? <Delta a={row.ist} b={val} inv={row.inv} besser={besser} /> : dash}
       </td>
     </>
@@ -150,32 +151,34 @@ export function JahrBilanz({
           ))}
         </div>
 
-        {/* Desktop (≥ sm): aligned Tabelle. Überlauf per ScrollSchatten (A9). */}
-        <ScrollSchatten achse="horizontal" aussenClassName="hidden sm:block" fadeFrom="from-white dark:from-gray-800">
-          <table className="w-full text-xs">
-            <thead>
+        {/* Desktop (≥ sm): aligned Tabelle über die Zentrale `ui/Table` (Regel T).
+            Mobil zeigt der Block darüber die Kachel-Variante. */}
+        <Table aussenClassName="hidden sm:block" flaeche="karte">
+            <TableHead>
               <tr className="text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
-                <th className="text-left pb-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
-                <th colSpan={2} className="text-center pb-1.5 font-medium">IST</th>
-                <th colSpan={2} className="text-center pb-1.5 font-medium">Vorjahr</th>
-                {oj && <th colSpan={2} className="text-center pb-1.5 font-medium">Ø Jahre</th>}
+                <th className={`${KOPF_ZELLE} text-left`}><span className="sr-only">Kennzahl</span></th>
+                <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>IST</th>
+                <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Vorjahr</th>
+                {oj && <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Ø Jahre</th>}
               </tr>
-            </thead>
-            <tbody>
+            </TableHead>
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.label} className="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
-                  <td className="py-1.5 text-gray-600 dark:text-gray-400">{row.label}</td>
-                  <td className="py-1.5 pl-3 text-right font-semibold text-gray-900 dark:text-white tabular-nums">
+                // Kein eigener `border-b` — Zeilen-Trenner aus TableBody (`divide-y`,
+                // Regel T); zusätzlicher `border-b` kollidiert (Dark-Mode-Linie nur
+                // unter Zeile 1, gemessen 2026-07-11).
+                <tr key={row.label}>
+                  <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{row.label}</td>
+                  <td className={`${ZELLE} text-right font-semibold text-gray-900 dark:text-white tabular-nums`}>
                     {fmt(row.ist, dec(row))}
                   </td>
-                  <td className="py-1.5 pr-1 text-left text-gray-500 dark:text-gray-400">{row.unit}</td>
+                  <td className={`${ZELLE} text-left text-gray-500 dark:text-gray-400`}>{row.unit}</td>
                   {vglZellen(row.vj, row, row.besserVj)}
                   {oj && vglZellen(row.oj, row, row.besserOj)}
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </ScrollSchatten>
+            </TableBody>
+          </Table>
         {oj && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             Ø aus {ojCount} {ojCount !== 1 ? 'Jahren' : 'Jahr'}

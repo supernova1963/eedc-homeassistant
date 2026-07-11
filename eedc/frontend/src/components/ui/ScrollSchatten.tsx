@@ -34,8 +34,13 @@ export function ScrollSchatten({
   className = '',
   aussenClassName = '',
   fadeFrom = 'from-gray-50 dark:from-gray-900',
+  leisten = 'versteckt',
+  containerStyle,
 }: {
   children: ReactNode
+  /** Inline-Stil für den Scroll-Container — für Werte, die keine Tailwind-Klasse
+   *  sein können (z. B. das berechnete `max-height`-Fenster der Tabellen-SoT). */
+  containerStyle?: React.CSSProperties
   /** Welche Richtungen Schatten zeigen dürfen. Default horizontal (Leisten). */
   achse?: Achse
   /** Klassen für den Scroll-Container selbst (Höhe, gap, overflow-Variante …). */
@@ -46,6 +51,11 @@ export function ScrollSchatten({
   /** Fade-Grundfarbe = Flächenfarbe der Leiste (Tailwind `from-…`). Default
    *  Layout-/Leisten-Fläche gray-50/gray-900; für Karten `from-white dark:from-gray-800`. */
   fadeFrom?: string
+  /** Regel T4 (Tabellen-SoT): Scroll-Leisten sichtbar, wo die Scrollrichtung NICHT
+   *  die der Seite ist — also in Datentabellen (`ui/Table`). Für Chip-/Tab-Leisten
+   *  bleibt `versteckt` (Default), dort ist Scrollen erwartbar und der Fade genügt.
+   *  Sichtbare Leisten erben den app-weiten G16-3-Pillenstil aus `index.css`. */
+  leisten?: 'sichtbar' | 'versteckt'
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [k, setK] = useState<Kanten>({ top: false, bottom: false, left: false, right: false })
@@ -106,7 +116,13 @@ export function ScrollSchatten({
 
   return (
     <div className={`relative ${aussenClassName}`}>
-      <div ref={ref} className={`overflow-auto scrollbar-none ${className}`}>{children}</div>
+      <div
+        ref={ref}
+        style={containerStyle}
+        className={`overflow-auto ${leisten === 'versteckt' ? 'scrollbar-none' : ''} ${className}`}
+      >
+        {children}
+      </div>
       {/* D5-2 (detLAN): breiterer, weicher Fade → erkennbarer als Scroll-Affordanz,
           aber durch die Flächenfarben-Maske nicht aufdringlich (Gernot: „erkennbarer,
           nicht auffälliger"). Etwas größere Fläche (h-7/w-12) liest sich klarer. */}

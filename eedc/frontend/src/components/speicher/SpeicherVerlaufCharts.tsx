@@ -17,7 +17,8 @@ import {
   AreaChart, Area, LineChart, Line,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende, ScrollSchatten } from '../ui'
+import { ChartLegende, Table, TableHead, TableBody } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
@@ -144,28 +145,26 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
         <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
           Monatsdaten anzeigen ({monatsdaten.length})
         </summary>
-        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800" aussenClassName="mt-3">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-2">Monat</th>
-                <th className="text-right py-2 px-2">Ladung</th>
-                <th className="text-right py-2 px-2">Entladung</th>
-                <th className="text-right py-2 px-2">Zyklen</th>
+        <Table aussenClassName="mt-3">
+          <TableHead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className={`${KOPF_ZELLE} text-left`}>Monat</th>
+              <th className={`${KOPF_ZELLE} text-right`}>Ladung</th>
+              <th className={`${KOPF_ZELLE} text-right`}>Entladung</th>
+              <th className={`${KOPF_ZELLE} text-right`}>Zyklen</th>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {monthlyData.map((md, idx) => (
+              <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
+                <td className={ZELLE}>{md.name}</td>
+                <td className={`${ZELLE} text-right ${DATENROLLE.speicherLadung.text}`}>{fmtZahl(md.ladung, 1)}</td>
+                <td className={`${ZELLE} text-right ${DATENROLLE.speicherEntladung.text}`}>{fmtZahl(md.entladung, 1)}</td>
+                <td className={`${ZELLE} text-right`}>{fmtZahl(md.zyklen, 1)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {monthlyData.map((md, idx) => (
-                <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className="py-2 px-2">{md.name}</td>
-                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherLadung.text}`}>{fmtZahl(md.ladung, 1)}</td>
-                  <td className={`text-right py-2 px-2 ${DATENROLLE.speicherEntladung.text}`}>{fmtZahl(md.entladung, 1)}</td>
-                  <td className="text-right py-2 px-2">{fmtZahl(md.zyklen, 1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollSchatten>
+            ))}
+          </TableBody>
+        </Table>
       </details>
       </Parkbar>
     </div>

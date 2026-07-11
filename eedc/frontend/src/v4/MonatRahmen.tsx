@@ -12,7 +12,8 @@
 import { ArrowRight, CalendarClock } from 'lucide-react'
 import { ReloadButton } from './ReloadButton'
 import { fmtCalc } from '../components/ui'
-import ScrollSchatten from '../components/ui/ScrollSchatten'
+import { Table, TableHead, TableBody } from '../components/ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { BLOCK_IDENTITAET, VERGLEICH_BADGE, LAUFEND_ZUSTAND } from '../lib'
 import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
@@ -176,23 +177,22 @@ export function communityBlock(
     defaultOpen: false,
     render: () => (
       <Parkbar id="el:community-tabelle" titel="Community-Vergleich">
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-sm">
-          <thead>
+      <Table flaeche="karte">
+          <TableHead>
             <tr className="text-left text-xs text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className="py-1.5 font-medium"><span className="sr-only">Kennzahl</span></th>
-              <th className="py-1.5 text-right font-medium">Deine Anlage</th>
-              <th className="py-1.5 text-right font-medium">Ø Community (Median)</th>
-              <th className="py-1.5 pl-2 text-right font-medium"><span className="sr-only">Vergleich</span></th>
+              <th className={`${KOPF_ZELLE} text-left`}><span className="sr-only">Kennzahl</span></th>
+              <th className={`${KOPF_ZELLE} text-right`}>Deine Anlage</th>
+              <th className={`${KOPF_ZELLE} text-right`}>Ø Community (Median)</th>
+              <th className={`${KOPF_ZELLE} text-right`}><span className="sr-only">Vergleich</span></th>
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {zeilen.map((z) => (
               <tr key={z.label} className="border-b border-gray-100 dark:border-gray-800 last:border-0">
-                <td className="py-1.5 text-gray-600 dark:text-gray-400">{z.label}</td>
-                <td className="py-1.5 text-right tabular-nums font-semibold text-gray-900 dark:text-white">{fmt(z.du, z.unit)}</td>
-                <td className="py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmt(z.median, z.unit)}</td>
-                <td className="py-1.5 pl-2 text-right">
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{z.label}</td>
+                <td className={`${ZELLE} text-right tabular-nums font-semibold text-gray-900 dark:text-white`}>{fmt(z.du, z.unit)}</td>
+                <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{fmt(z.median, z.unit)}</td>
+                <td className={`${ZELLE} text-right`}>
                   {z.du != null && z.median != null && (() => {
                     const better = z.inv ? z.du <= z.median : z.du >= z.median
                     return (
@@ -206,9 +206,8 @@ export function communityBlock(
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </ScrollSchatten>
+          </TableBody>
+        </Table>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
           Basis: {anlagenWort} · {monatName} {jahr}
         </p>

@@ -17,7 +17,8 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 } from 'lucide-react'
-import { Card, ChartLegende, buttonClasses, ScrollSchatten } from '../ui'
+import { Card, ChartLegende, buttonClasses, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { SimpleTooltip } from '../ui/FormelTooltip'
 import { Parkbar } from '../park'
 import {
@@ -398,90 +399,88 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
   return (
     <Card>
       <DatendichtFallback>
-        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-          <table className="w-full text-sm table-fixed">
-            <colgroup><col className="w-32" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
-            <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-2 px-3 font-medium text-gray-500 dark:text-gray-400"></th>
-                <th className={`text-right py-2 px-3 font-medium ${Q.openmeteo}`}>
-                  <SimpleTooltip text="Open-Meteo: GTI-basierte Prognose aus Wettermodell (ICON/ECMWF), 14 Tage Horizont"><span>OpenMeteo</span></SimpleTooltip>
+        <Table className="table-fixed">
+          <colgroup><col className="w-32" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
+          <TableHead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400`}></th>
+              <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>
+                <SimpleTooltip text="Open-Meteo: GTI-basierte Prognose aus Wettermodell (ICON/ECMWF), 14 Tage Horizont"><span>OpenMeteo</span></SimpleTooltip>
+              </th>
+              <th className={`${KOPF_ZELLE} text-right ${eedcKlasse(hasEedc)}`}>
+                <SimpleTooltip text={hasEedc && lf != null ? `eedc: ${progBasisLabel} × Lernfaktor ${fmtZahl(lf, 3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})` : `eedc: Lernfaktor noch nicht verfügbar — siehe Hinweis unten`}>
+                  <span>eedc {hasEedc && lf != null && <span className="text-xs font-normal">×{fmtZahl(lf, 2)}</span>}</span>
+                </SimpleTooltip>
+              </th>
+              {hasSolcast && (
+                <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>
+                  <SimpleTooltip text={`Solcast: Satellitenbasierte PV-Prognose mit Konfidenzband, 7 Tage (${data.solcast_quelle === 'solcast_api' ? 'API' : 'HA-Sensor'})`}><span>Solcast</span></SimpleTooltip>
                 </th>
-                <th className={`text-right py-2 px-3 font-medium ${eedcKlasse(hasEedc)}`}>
-                  <SimpleTooltip text={hasEedc && lf != null ? `eedc: ${progBasisLabel} × Lernfaktor ${fmtZahl(lf, 3)} (MOS-kalibriert${data.eedc_lernfaktor_stufe ? ', ' + data.eedc_lernfaktor_stufe : ''})` : `eedc: Lernfaktor noch nicht verfügbar — siehe Hinweis unten`}>
-                    <span>eedc {hasEedc && lf != null && <span className="text-xs font-normal">×{fmtZahl(lf, 2)}</span>}</span>
-                  </SimpleTooltip>
-                </th>
-                {hasSolcast && (
-                  <th className={`text-right py-2 px-3 font-medium ${Q.solcast}`}>
-                    <SimpleTooltip text={`Solcast: Satellitenbasierte PV-Prognose mit Konfidenzband, 7 Tage (${data.solcast_quelle === 'solcast_api' ? 'API' : 'HA-Sensor'})`}><span>Solcast</span></SimpleTooltip>
-                  </th>
+              )}
+              <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>
+                <SimpleTooltip text="IST: Tatsächliche PV-Erzeugung aus Sensor-Daten (TagesEnergieProfil)"><span>IST</span></SimpleTooltip>
+              </th>
+            </tr>
+          </TableHead>
+          <TableBody>
+            <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+              <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Heute</td>
+              <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.openmeteo_heute_kwh)}</td>
+              <td className={`${ZELLE} text-right font-mono ${hasEedc ? `font-semibold ${Q.eedc}` : 'text-gray-400 dark:text-gray-500'}`}>{hasEedc ? fmtKwh(data.eedc_heute_kwh) : '—'}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwhBand(data.solcast_heute_kwh, data.solcast_p10_kwh, data.solcast_p90_kwh)}</td>}
+              <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>
+                {fmtKwh(data.ist_heute_kwh)}
+                {data.ist_unvollstaendig && (
+                  <IstUnvollstaendigPopover fehlendeStunden={data.ist_stundenprofil.filter(s => s.kw === null && s.stunde < new Date().getHours()).map(s => s.stunde)} anlageId={vm.anlageId} onReloaded={vm.reload} />
                 )}
-                <th className={`text-right py-2 px-3 font-medium ${Q.ist}`}>
-                  <SimpleTooltip text="IST: Tatsächliche PV-Erzeugung aus Sensor-Daten (TagesEnergieProfil)"><span>IST</span></SimpleTooltip>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
-                <td className="py-2 px-3 font-medium text-gray-900 dark:text-white">Heute</td>
-                <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_heute_kwh)}</td>
-                <td className={`py-2 px-3 text-right font-mono ${hasEedc ? `font-semibold ${Q.eedc}` : 'text-gray-400 dark:text-gray-500'}`}>{hasEedc ? fmtKwh(data.eedc_heute_kwh) : '—'}</td>
-                {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwhBand(data.solcast_heute_kwh, data.solcast_p10_kwh, data.solcast_p90_kwh)}</td>}
-                <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">
-                  {fmtKwh(data.ist_heute_kwh)}
-                  {data.ist_unvollstaendig && (
-                    <IstUnvollstaendigPopover fehlendeStunden={data.ist_stundenprofil.filter(s => s.kw === null && s.stunde < new Date().getHours()).map(s => s.stunde)} anlageId={vm.anlageId} onReloaded={vm.reload} />
-                  )}
-                </td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 px-3 text-gray-500 dark:text-gray-400 text-xs">
-                  <SimpleTooltip text="Tagesprojektion: IST bisher + Prognose für die restlichen Stunden. Pro Spalte mit der jeweiligen Quelle; Gesamtspalte mit der in den Einstellungen gewählten Prognosequelle."><span>↳ Verbleibend</span></SimpleTooltip>
-                </td>
-                <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_om_kwh)}</td>
-                <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtKwh(data.verbleibend_eedc_kwh) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                {hasSolcast && <td className="py-2 px-3 text-right font-mono text-xs text-gray-500">{fmtKwh(data.verbleibend_solcast_kwh)}</td>}
-                <td className="py-2 px-3 text-right font-mono text-emerald-500">{fmtKwh(data.verbleibend_kwh)}</td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-1 px-3 text-gray-400 dark:text-gray-500 text-xs">↳ VM / NM</td>
-                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.openmeteo_tageshaelften?.[0])}</td>
-                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[0]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                {hasSolcast && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.solcast_tageshaelften?.[0])}</td>}
-                <td className="py-1 px-3 text-right font-mono text-xs text-green-500">{fmtVmNm(data.ist_tageshaelfte)}</td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 px-3 font-medium text-gray-900 dark:text-white">Morgen</td>
-                <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_morgen_kwh)}</td>
-                <td className={`py-2 px-3 text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? fmtKwh(data.eedc_morgen_kwh) : '—'}</td>
-                {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwhBand(data.solcast_morgen_kwh, data.solcast_morgen_p10_kwh, data.solcast_morgen_p90_kwh)}</td>}
-                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500">—</td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-1 px-3 text-gray-400 dark:text-gray-500 text-xs">↳ VM / NM</td>
-                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.openmeteo_tageshaelften?.[1])}</td>
-                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[1]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                {hasSolcast && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.solcast_tageshaelften?.[1])}</td>}
-                <td className="py-1 px-3"></td>
-              </tr>
-              <tr className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 px-3 font-medium text-gray-900 dark:text-white">Übermorgen</td>
-                <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.openmeteo_uebermorgen_kwh)}</td>
-                <td className={`py-2 px-3 text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? fmtKwh(data.eedc_uebermorgen_kwh) : '—'}</td>
-                {hasSolcast && <td className="py-2 px-3 text-right font-mono">{fmtKwh(data.solcast_uebermorgen_kwh)}</td>}
-                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500">—</td>
-              </tr>
-              <tr>
-                <td className="py-1 px-3 text-gray-400 dark:text-gray-500 text-xs">↳ VM / NM</td>
-                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.openmeteo_tageshaelften?.[2])}</td>
-                <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[2]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                {hasSolcast && <td className="py-1 px-3 text-right font-mono text-xs text-gray-500">{fmtVmNm(data.solcast_tageshaelften?.[2])}</td>}
-                <td className="py-1 px-3"></td>
-              </tr>
-            </tbody>
-          </table>
-        </ScrollSchatten>
+              </td>
+            </tr>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={`${ZELLE} text-gray-500 dark:text-gray-400`}>
+                <SimpleTooltip text="Tagesprojektion: IST bisher + Prognose für die restlichen Stunden. Pro Spalte mit der jeweiligen Quelle; Gesamtspalte mit der in den Einstellungen gewählten Prognosequelle."><span>↳ Verbleibend</span></SimpleTooltip>
+              </td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtKwh(data.verbleibend_om_kwh)}</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtKwh(data.verbleibend_eedc_kwh) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtKwh(data.verbleibend_solcast_kwh)}</td>}
+              <td className={`${ZELLE} text-right font-mono text-emerald-500`}>{fmtKwh(data.verbleibend_kwh)}</td>
+            </tr>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={`${ZELLE} text-gray-400 dark:text-gray-500`}>↳ VM / NM</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.openmeteo_tageshaelften?.[0])}</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[0]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[0])}</td>}
+              <td className={`${ZELLE} text-right font-mono text-green-500`}>{fmtVmNm(data.ist_tageshaelfte)}</td>
+            </tr>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Morgen</td>
+              <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.openmeteo_morgen_kwh)}</td>
+              <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? fmtKwh(data.eedc_morgen_kwh) : '—'}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwhBand(data.solcast_morgen_kwh, data.solcast_morgen_p10_kwh, data.solcast_morgen_p90_kwh)}</td>}
+              <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
+            </tr>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={`${ZELLE} text-gray-400 dark:text-gray-500`}>↳ VM / NM</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.openmeteo_tageshaelften?.[1])}</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[1]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[1])}</td>}
+              <td className={ZELLE}></td>
+            </tr>
+            <tr className="border-b border-gray-100 dark:border-gray-800">
+              <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Übermorgen</td>
+              <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.openmeteo_uebermorgen_kwh)}</td>
+              <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? fmtKwh(data.eedc_uebermorgen_kwh) : '—'}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono`}>{fmtKwh(data.solcast_uebermorgen_kwh)}</td>}
+              <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
+            </tr>
+            <tr>
+              <td className={`${ZELLE} text-gray-400 dark:text-gray-500`}>↳ VM / NM</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.openmeteo_tageshaelften?.[2])}</td>
+              <td className={`${ZELLE} text-right font-mono text-gray-500`}>{hasEedc ? fmtVmNm(data.eedc_tageshaelften?.[2]) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              {hasSolcast && <td className={`${ZELLE} text-right font-mono text-gray-500`}>{fmtVmNm(data.solcast_tageshaelften?.[2])}</td>}
+              <td className={ZELLE}></td>
+            </tr>
+          </TableBody>
+        </Table>
       </DatendichtFallback>
     </Card>
   )
@@ -555,6 +554,9 @@ export function PvgStratifizierung({ vm }: { vm: PrognoseVergleichVM }) {
         <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
           Stündliche Day-Ahead-Genauigkeit pro Wetter-Klasse, letzte {stratifizierung.tage_zeitraum} Tage, {stratifizierung.stunden_klassifiziert} Tageslicht-Stunden. MAPE = Streuung, MPE = systematischer Bias (positiv = IST &gt; Prognose).
         </div>
+        {/* tabelle-allow: Kennzahlen-Mini-Tabelle (max. 3 Zeilen klar/diffus/wechselhaft),
+            kein Datensatz-Raster. Höhenfenster/sticky-Kopf greifen nie, eigene text-xs-Dichte
+            bewusst — Regel-T-Sonderfall (Gernot 2026-07-10, KONZEPT-TABELLEN-SOT §6b.8). */}
         <table className="w-full text-xs">
           <thead><tr className="border-b border-gray-200 dark:border-gray-700">
             <th className="text-left py-1 pr-2 font-medium text-gray-500">Klasse</th>
@@ -657,37 +659,37 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
         MAPE/Bias oben über {genauigkeit.anzahl_tage} Tage{vm.ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)` : ''} · Tabelle unten: letzte 7 Tage
       </div>
       <DatendichtFallback>
-        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-          <table className="w-full text-sm table-fixed">
-            <colgroup><col className="w-28" /><col /><col /><col /><col /></colgroup>
-            <thead><tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="text-left py-2 px-3 font-medium text-gray-500">Datum</th>
-              <th className={`text-right py-2 px-3 font-medium ${Q.openmeteo}`}>OpenMeteo</th>
-              <th className={`text-right py-2 px-3 font-medium ${lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500'}`}>
+        <Table className="table-fixed">
+          <colgroup><col className="w-28" /><col /><col /><col /><col /></colgroup>
+          <TableHead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Datum</th>
+              <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>OpenMeteo</th>
+              <th className={`${KOPF_ZELLE} text-right ${lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500'}`}>
                 <SimpleTooltip text={lf == null ? 'Lernfaktor noch nicht verfügbar — siehe Hinweis oben' : `eedc = OpenMeteo × Lernfaktor ${fmtZahl(lf, 3)}`}><span>eedc</span></SimpleTooltip>
               </th>
-              <th className={`text-right py-2 px-3 font-medium ${Q.solcast}`}>Solcast</th>
-              <th className={`text-right py-2 px-3 font-medium ${Q.ist}`}>IST</th>
-            </tr></thead>
-            <tbody>
-              {genauigkeit.tage.slice(-7).reverse().map((tag) => {
-                const ausgeschlossen = vm.ausreisserAusblenden && tag.ist_ausreisser
-                return (
-                  <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800 ${tag.ist_ausreisser ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''} ${ausgeschlossen ? 'opacity-40' : ''}`}>
-                    <td className="py-2 px-3 text-gray-900 dark:text-white">
-                      {formatDatum(tag.datum)}
-                      {tag.ist_ausreisser && (<SimpleTooltip text={ausgeschlossen ? 'Ausreißer — aus MAE/MBE ausgeschlossen' : 'Ausreißer — große Abweichung, bleibt in der Statistik'}><span className="ml-1 text-amber-500 text-[10px]">⚠</span></SimpleTooltip>)}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono">{tag.openmeteo_kwh !== null ? <AbweichungCell prognose={tag.openmeteo_kwh} ist={tag.ist_kwh} /> : '—'}</td>
-                    <td className="py-2 px-3 text-right font-mono">{tag.eedc_kwh !== null ? <AbweichungCell prognose={tag.eedc_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                    <td className="py-2 px-3 text-right font-mono">{tag.solcast_kwh !== null ? <AbweichungCell prognose={tag.solcast_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                    <td className="py-2 px-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{tag.ist_kwh !== null ? fmtZahl(tag.ist_kwh, 1) : '—'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </ScrollSchatten>
+              <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>Solcast</th>
+              <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>IST</th>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {genauigkeit.tage.slice(-7).reverse().map((tag) => {
+              const ausgeschlossen = vm.ausreisserAusblenden && tag.ist_ausreisser
+              return (
+                <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800 ${tag.ist_ausreisser ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''} ${ausgeschlossen ? 'opacity-40' : ''}`}>
+                  <td className={`${ZELLE} text-gray-900 dark:text-white`}>
+                    {formatDatum(tag.datum)}
+                    {tag.ist_ausreisser && (<SimpleTooltip text={ausgeschlossen ? 'Ausreißer — aus MAE/MBE ausgeschlossen' : 'Ausreißer — große Abweichung, bleibt in der Statistik'}><span className="ml-1 text-amber-500 text-[10px]">⚠</span></SimpleTooltip>)}
+                  </td>
+                  <td className={`${ZELLE} text-right font-mono`}>{tag.openmeteo_kwh !== null ? <AbweichungCell prognose={tag.openmeteo_kwh} ist={tag.ist_kwh} /> : '—'}</td>
+                  <td className={`${ZELLE} text-right font-mono`}>{tag.eedc_kwh !== null ? <AbweichungCell prognose={tag.eedc_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+                  <td className={`${ZELLE} text-right font-mono`}>{tag.solcast_kwh !== null ? <AbweichungCell prognose={tag.solcast_kwh} ist={tag.ist_kwh} /> : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+                  <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{tag.ist_kwh !== null ? fmtZahl(tag.ist_kwh, 1) : '—'}</td>
+                </tr>
+              )
+            })}
+          </TableBody>
+        </Table>
       </DatendichtFallback>
     </Card>
   )
@@ -734,51 +736,51 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Stundenvergleich heute</h3>
-      <div>
-        <table className="w-full text-xs table-fixed">
-          <colgroup><col className="w-16" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
-          <thead className="bg-white dark:bg-gray-900"><tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-1.5 px-2 font-medium text-gray-500">Std.</th>
-            <th className={`text-right py-1.5 px-2 font-medium ${Q.openmeteo}`}>OM</th>
-            <th className={`text-right py-1.5 px-2 font-medium ${eedcKlasse(hasEedc)}`}>eedc</th>
-            {hasSolcast && <th className={`text-right py-1.5 px-2 font-medium ${Q.solcast}`}>SC</th>}
-            <th className={`text-right py-1.5 pl-2 pr-3 font-medium ${Q.ist}`}>IST</th>
-          </tr></thead>
-          <tbody>
-            {chartData.filter(r => r.openmeteo > 0.01 || r.solcast > 0.01 || (r.ist !== null && r.ist > 0.01)).map((row) => {
-              const h = parseInt(row.stunde)
-              const isPast = data.aktuelle_stunde !== null && h <= data.aktuelle_stunde
-              const istVal = row.ist
-              return (
-                <tr key={row.stunde} className={`border-b border-gray-50 dark:border-gray-800 ${isPast ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}`}>
-                  <td className="py-1 px-2 font-mono text-gray-900 dark:text-white">{row.stunde}</td>
-                  <td className="py-1 px-2 text-right font-mono">{fmtZahl(row.openmeteo, 2)}{istVal !== null && <DevBadge prognose={row.openmeteo} ist={istVal} />}</td>
-                  <td className={`py-1 px-2 text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{row.eedc != null ? fmtZahl(row.eedc, 2) : '—'}{istVal !== null && row.eedc !== null && <DevBadge prognose={row.eedc} ist={istVal} />}</>) : '—'}</td>
-                  {hasSolcast && (<td className="py-1 px-2 text-right font-mono">{fmtZahl(row.solcast, 2)}{istVal !== null && <DevBadge prognose={row.solcast} ist={istVal} />}</td>)}
-                  <td className="py-1 pl-2 pr-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{istVal !== null ? fmtZahl(istVal, 2) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-          <tfoot className="bg-white dark:bg-gray-900">
-            {(() => {
-              const omSum = chartData.reduce((s, r) => s + r.openmeteo, 0)
-              const eedcSum = chartData.reduce((s, r) => s + (r.eedc ?? 0), 0)
-              const scSum = chartData.reduce((s, r) => s + r.solcast, 0)
-              const istSum = data.ist_heute_kwh
-              return (
-                <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-                  <td className="py-1.5 px-2 text-gray-900 dark:text-white">Σ</td>
-                  <td className={`py-1.5 px-2 text-right font-mono ${Q.openmeteo}`}>{fmtZahl(omSum, 1)}{istSum !== null && <DevBadge prognose={omSum} ist={istSum} />}</td>
-                  <td className={`py-1.5 px-2 text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{fmtZahl(eedcSum, 1)}{istSum !== null && <DevBadge prognose={eedcSum} ist={istSum} />}</>) : '—'}</td>
-                  {hasSolcast && (<td className={`py-1.5 px-2 text-right font-mono ${Q.solcast}`}>{fmtZahl(scSum, 1)}{istSum !== null && <DevBadge prognose={scSum} ist={istSum} />}</td>)}
-                  <td className={`py-1.5 pl-2 pr-3 text-right font-mono ${Q.ist}`}>{istSum !== null ? fmtZahl(istSum, 1) : '—'}</td>
-                </tr>
-              )
-            })()}
-          </tfoot>
-        </table>
-      </div>
+      <Table zeilen={24} mitFuss className="table-fixed">
+        <colgroup><col className="w-16" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
+        <TableHead>
+          <tr className="border-b border-gray-200 dark:border-gray-700">
+            <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Std.</th>
+            <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>OM</th>
+            <th className={`${KOPF_ZELLE} text-right ${eedcKlasse(hasEedc)}`}>eedc</th>
+            {hasSolcast && <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>SC</th>}
+            <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>IST</th>
+          </tr>
+        </TableHead>
+        <TableBody>
+          {chartData.filter(r => r.openmeteo > 0.01 || r.solcast > 0.01 || (r.ist !== null && r.ist > 0.01)).map((row) => {
+            const h = parseInt(row.stunde)
+            const isPast = data.aktuelle_stunde !== null && h <= data.aktuelle_stunde
+            const istVal = row.ist
+            return (
+              <tr key={row.stunde} className={`border-b border-gray-50 dark:border-gray-800 ${isPast ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}`}>
+                <td className={`${ZELLE} font-mono text-gray-900 dark:text-white`}>{row.stunde}</td>
+                <td className={`${ZELLE} text-right font-mono`}>{fmtZahl(row.openmeteo, 2)}{istVal !== null && <DevBadge prognose={row.openmeteo} ist={istVal} />}</td>
+                <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{row.eedc != null ? fmtZahl(row.eedc, 2) : '—'}{istVal !== null && row.eedc !== null && <DevBadge prognose={row.eedc} ist={istVal} />}</>) : '—'}</td>
+                {hasSolcast && (<td className={`${ZELLE} text-right font-mono`}>{fmtZahl(row.solcast, 2)}{istVal !== null && <DevBadge prognose={row.solcast} ist={istVal} />}</td>)}
+                <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{istVal !== null ? fmtZahl(istVal, 2) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
+              </tr>
+            )
+          })}
+        </TableBody>
+        <TableFoot>
+          {(() => {
+            const omSum = chartData.reduce((s, r) => s + r.openmeteo, 0)
+            const eedcSum = chartData.reduce((s, r) => s + (r.eedc ?? 0), 0)
+            const scSum = chartData.reduce((s, r) => s + r.solcast, 0)
+            const istSum = data.ist_heute_kwh
+            return (
+              <tr>
+                <td className={`${ZELLE} text-gray-900 dark:text-white`}>Σ</td>
+                <td className={`${ZELLE} text-right font-mono ${Q.openmeteo}`}>{fmtZahl(omSum, 1)}{istSum !== null && <DevBadge prognose={omSum} ist={istSum} />}</td>
+                <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{fmtZahl(eedcSum, 1)}{istSum !== null && <DevBadge prognose={eedcSum} ist={istSum} />}</>) : '—'}</td>
+                {hasSolcast && (<td className={`${ZELLE} text-right font-mono ${Q.solcast}`}>{fmtZahl(scSum, 1)}{istSum !== null && <DevBadge prognose={scSum} ist={istSum} />}</td>)}
+                <td className={`${ZELLE} text-right font-mono ${Q.ist}`}>{istSum !== null ? fmtZahl(istSum, 1) : '—'}</td>
+              </tr>
+            )
+          })()}
+        </TableFoot>
+      </Table>
     </Card>
   )
 }
@@ -793,38 +795,38 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>
       <DatendichtFallback>
-        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-          <table className="w-full text-sm table-fixed">
-            <colgroup><col className="w-20" /><col className="w-24" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
-            <thead><tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="py-2 px-2" aria-label="Wetter"></th>
-              <th className="text-left py-2 px-2 font-medium text-gray-500">Datum</th>
-              <th className={`text-right py-2 px-2 font-medium ${Q.openmeteo}`}>OM</th>
-              <th className={`text-right py-2 px-2 font-medium ${eedcKlasse(hasEedc)}`}>eedc</th>
-              {hasSolcast && <th className={`text-right py-2 px-2 font-medium ${Q.solcast}`}>Solcast</th>}
-              <th className={`text-right py-2 pl-2 pr-3 font-medium ${Q.ist}`}>IST</th>
-            </tr></thead>
-            <tbody>
-              {vergleichsTage.map((tag, idx) => {
-                const ref = tag.ist_kwh
-                const prognosen = [tag.om_kwh, tag.eedc_kwh, tag.sc_kwh].filter((v): v is number => v !== null)
-                const mean = prognosen.length > 1 ? prognosen.reduce((a, b) => a + b, 0) / prognosen.length : null
-                const devRef = tag.ist_partiell ? mean : (ref ?? mean)
-                const isFirstFuture = idx > 0 && vergleichsTage[idx - 1].ist_kwh !== null && tag.ist_kwh === null
-                return (
-                  <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800${isFirstFuture ? ' border-t-2 border-t-gray-300 dark:border-t-gray-600' : ''}`}>
-                    <td className="py-2 px-2 text-center">{tag.wetter_symbol !== null ? (<div className="flex items-center justify-center gap-1"><WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />{tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}</div>) : null}</td>
-                    <td className="py-2 px-2 text-gray-900 dark:text-white">{formatDatum(tag.datum)}</td>
-                    <td className="py-2 px-2 text-right font-mono">{tag.om_kwh !== null ? fmtZahl(tag.om_kwh, 1) : '—'}{devRef !== null && tag.om_kwh !== null && <DevBadge prognose={tag.om_kwh} ist={devRef} />}</td>
-                    <td className={`py-2 px-2 text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{tag.eedc_kwh != null ? fmtZahl(tag.eedc_kwh, 1) : '—'}{devRef !== null && tag.eedc_kwh !== null && <DevBadge prognose={tag.eedc_kwh} ist={devRef} />}</>) : '—'}</td>
-                    {hasSolcast && (<td className="py-2 px-2 text-right font-mono">{tag.sc_kwh !== null ? (<><span className="font-semibold">{fmtZahl(tag.sc_kwh, 1)}</span>{devRef !== null && <DevBadge prognose={tag.sc_kwh} ist={devRef} />}{tag.sc_p10 !== null && tag.sc_p90 !== null && (<span className="text-gray-400 dark:text-gray-500 text-xs ml-1">({fmtZahl(tag.sc_p10, 0)}–{fmtZahl(tag.sc_p90, 0)})</span>)}</>) : '—'}</td>)}
-                    <td className="py-2 pl-2 pr-3 text-right font-mono font-semibold text-green-600 dark:text-green-400">{tag.ist_kwh !== null ? (<>{fmtZahl(tag.ist_kwh, 1)}{tag.ist_partiell && <span className="text-gray-400 dark:text-gray-500 text-[10px] font-normal ml-1">bisher</span>}</>) : <span className="text-gray-400 dark:text-gray-500 text-xs">⌀{mean != null ? fmtZahl(mean, 0) : '—'}</span>}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </ScrollSchatten>
+        <Table className="table-fixed">
+          <colgroup><col className="w-20" /><col className="w-24" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
+          <TableHead>
+            <tr className="border-b border-gray-200 dark:border-gray-700">
+              <th className={KOPF_ZELLE} aria-label="Wetter"></th>
+              <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Datum</th>
+              <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>OM</th>
+              <th className={`${KOPF_ZELLE} text-right ${eedcKlasse(hasEedc)}`}>eedc</th>
+              {hasSolcast && <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>Solcast</th>}
+              <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>IST</th>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {vergleichsTage.map((tag, idx) => {
+              const ref = tag.ist_kwh
+              const prognosen = [tag.om_kwh, tag.eedc_kwh, tag.sc_kwh].filter((v): v is number => v !== null)
+              const mean = prognosen.length > 1 ? prognosen.reduce((a, b) => a + b, 0) / prognosen.length : null
+              const devRef = tag.ist_partiell ? mean : (ref ?? mean)
+              const isFirstFuture = idx > 0 && vergleichsTage[idx - 1].ist_kwh !== null && tag.ist_kwh === null
+              return (
+                <tr key={tag.datum} className={`border-b border-gray-100 dark:border-gray-800${isFirstFuture ? ' border-t-2 border-t-gray-300 dark:border-t-gray-600' : ''}`}>
+                  <td className={`${ZELLE} text-center`}>{tag.wetter_symbol !== null ? (<div className="flex items-center justify-center gap-1"><WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />{tag.temp_max !== null && <span className="text-xs text-gray-500">{tag.temp_max}°</span>}</div>) : null}</td>
+                  <td className={`${ZELLE} text-gray-900 dark:text-white`}>{formatDatum(tag.datum)}</td>
+                  <td className={`${ZELLE} text-right font-mono`}>{tag.om_kwh !== null ? fmtZahl(tag.om_kwh, 1) : '—'}{devRef !== null && tag.om_kwh !== null && <DevBadge prognose={tag.om_kwh} ist={devRef} />}</td>
+                  <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{tag.eedc_kwh != null ? fmtZahl(tag.eedc_kwh, 1) : '—'}{devRef !== null && tag.eedc_kwh !== null && <DevBadge prognose={tag.eedc_kwh} ist={devRef} />}</>) : '—'}</td>
+                  {hasSolcast && (<td className={`${ZELLE} text-right font-mono`}>{tag.sc_kwh !== null ? (<><span className="font-semibold">{fmtZahl(tag.sc_kwh, 1)}</span>{devRef !== null && <DevBadge prognose={tag.sc_kwh} ist={devRef} />}{tag.sc_p10 !== null && tag.sc_p90 !== null && (<span className="text-gray-400 dark:text-gray-500 text-xs ml-1">({fmtZahl(tag.sc_p10, 0)}–{fmtZahl(tag.sc_p90, 0)})</span>)}</>) : '—'}</td>)}
+                  <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{tag.ist_kwh !== null ? (<>{fmtZahl(tag.ist_kwh, 1)}{tag.ist_partiell && <span className="text-gray-400 dark:text-gray-500 text-[10px] font-normal ml-1">bisher</span>}</>) : <span className="text-gray-400 dark:text-gray-500 text-xs">⌀{mean != null ? fmtZahl(mean, 0) : '—'}</span>}</td>
+                </tr>
+              )
+            })}
+          </TableBody>
+        </Table>
       </DatendichtFallback>
     </Card>
   )

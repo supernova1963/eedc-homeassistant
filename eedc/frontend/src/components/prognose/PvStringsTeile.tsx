@@ -12,7 +12,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, GitCompare } from 'lucide-react'
-import { Card, ChartLegende, CsvExportButton, ScrollSchatten } from '../ui'
+import { Card, ChartLegende, CsvExportButton, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import type { KpiStripItem } from '../blocks'
 import { exportToCSV } from '../../utils/export'
@@ -271,57 +272,55 @@ export function PvStringTabelle({ data }: { data: PVStringsResponse }) {
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">String-Details</h3>
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-800">
+      <Table mitFuss flaeche="karte">
+          <TableHead>
             <tr>
-              <th className="px-3 py-2 text-left font-medium text-gray-500">String</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500">kWp</th>
-              <th className="px-3 py-2 text-left font-medium text-gray-500">Ausrichtung</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500">SOLL</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500">IST</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500">Abweichung</th>
-              <th className="px-3 py-2 text-right font-medium text-gray-500">kWh/kWp</th>
+              <th className={`${KOPF_ZELLE} text-left text-gray-500`}>String</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWp</th>
+              <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Ausrichtung</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>SOLL</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>IST</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Abweichung</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWh/kWp</th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+          </TableHead>
+          <TableBody>
             {stringsSortedByPerf.map((s) => (
               <tr key={s.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                <td className="px-3 py-3">
+                <td className={ZELLE}>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: STRING_COLORS[data.strings.findIndex(x => x.investition_id === s.investition_id) % STRING_COLORS.length] }} />
                     <span className="font-medium text-gray-900 dark:text-white">{s.bezeichnung}</span>
                   </div>
                   {s.wechselrichter_name && <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>}
                 </td>
-                <td className="px-3 py-3 text-right">{fmtZahl(s.leistung_kwp, 1)}</td>
-                <td className="px-3 py-3">{s.ausrichtung || '-'}{s.neigung_grad ? ` / ${s.neigung_grad}°` : ''}</td>
-                <td className="px-3 py-3 text-right text-blue-600">{e(s.prognose_jahr_kwh)}</td>
-                <td className="px-3 py-3 text-right text-amber-600 font-medium">{e(s.ist_jahr_kwh)}</td>
-                <td className={`px-3 py-3 text-right font-medium ${(s.abweichung_jahr_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <td className={`${ZELLE} text-right`}>{fmtZahl(s.leistung_kwp, 1)}</td>
+                <td className={ZELLE}>{s.ausrichtung || '-'}{s.neigung_grad ? ` / ${s.neigung_grad}°` : ''}</td>
+                <td className={`${ZELLE} text-right text-blue-600`}>{e(s.prognose_jahr_kwh)}</td>
+                <td className={`${ZELLE} text-right text-amber-600 font-medium`}>{e(s.ist_jahr_kwh)}</td>
+                <td className={`${ZELLE} text-right font-medium ${(s.abweichung_jahr_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {(s.abweichung_jahr_prozent || 0) >= 0 ? '+' : ''}{s.abweichung_jahr_prozent != null ? formatProzent(s.abweichung_jahr_prozent).text : '0 %'}
                 </td>
-                <td className="px-3 py-3 text-right text-purple-600">{s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}</td>
+                <td className={`${ZELLE} text-right text-purple-600`}>{s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}</td>
               </tr>
             ))}
-          </tbody>
+          </TableBody>
           {data.strings.length > 1 && (
-            <tfoot className="bg-gray-100 dark:bg-gray-800 font-medium">
+            <TableFoot>
               <tr>
-                <td className="px-3 py-2">Gesamt</td>
-                <td className="px-3 py-2 text-right">{fmtZahl(data.anlagen_leistung_kwp, 1)}</td>
-                <td className="px-3 py-2">-</td>
-                <td className="px-3 py-2 text-right text-blue-600">{e(data.prognose_gesamt_kwh)}</td>
-                <td className="px-3 py-2 text-right text-amber-600">{e(data.ist_gesamt_kwh)}</td>
-                <td className={`px-3 py-2 text-right ${(data.abweichung_gesamt_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <td className={ZELLE}>Gesamt</td>
+                <td className={`${ZELLE} text-right`}>{fmtZahl(data.anlagen_leistung_kwp, 1)}</td>
+                <td className={ZELLE}>-</td>
+                <td className={`${ZELLE} text-right text-blue-600`}>{e(data.prognose_gesamt_kwh)}</td>
+                <td className={`${ZELLE} text-right text-amber-600`}>{e(data.ist_gesamt_kwh)}</td>
+                <td className={`${ZELLE} text-right ${(data.abweichung_gesamt_prozent || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {(data.abweichung_gesamt_prozent || 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent != null ? formatProzent(data.abweichung_gesamt_prozent).text : '0 %'}
                 </td>
-                <td className="px-3 py-2 text-right text-purple-600">{fmtZahl(data.anlagen_leistung_kwp > 0 ? data.ist_gesamt_kwh / data.anlagen_leistung_kwp : 0, 0)}</td>
+                <td className={`${ZELLE} text-right text-purple-600`}>{fmtZahl(data.anlagen_leistung_kwp > 0 ? data.ist_gesamt_kwh / data.anlagen_leistung_kwp : 0, 0)}</td>
               </tr>
-            </tfoot>
+            </TableFoot>
           )}
-        </table>
-      </ScrollSchatten>
+        </Table>
     </Card>
   )
 }

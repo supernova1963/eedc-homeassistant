@@ -13,7 +13,8 @@ import {
   ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, ScrollSchatten } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { Parkbar } from '../park'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
@@ -455,67 +456,65 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
         </div>
 
         {/* Desktop (≥ sm): Tabelle */}
-        <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800" aussenClassName="hidden sm:block">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">String / Modul</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500">kWp</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Ausrichtung</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500">SOLL</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500">IST</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500">Abw.</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500">Performance</th>
-                <th className="px-3 py-2 text-right font-medium text-gray-500">kWh/kWp</th>
+        <Table aussenClassName="hidden sm:block">
+          <TableHead>
+            <tr>
+              <th className={`${KOPF_ZELLE} text-left text-gray-500`}>String / Modul</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWp</th>
+              <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Ausrichtung</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>SOLL</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>IST</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Abw.</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Performance</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWh/kWp</th>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {data.strings.map((s, idx) => (
+              <tr key={s.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                <td className={ZELLE}>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: STRING_COLORS[idx % STRING_COLORS.length] }}
+                    />
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {s.bezeichnung}
+                    </span>
+                  </div>
+                  {s.wechselrichter_name && (
+                    <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>
+                  )}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {fmtZahl(s.leistung_kwp, 1)}
+                </td>
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>
+                  {s.ausrichtung || '-'}
+                  {s.neigung_grad != null && ` / ${s.neigung_grad}°`}
+                </td>
+                <td className={`${ZELLE} text-right text-blue-600 dark:text-blue-400`}>
+                  {fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh
+                </td>
+                <td className={`${ZELLE} text-right font-medium`} style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>
+                  {fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh
+                </td>
+                <td className={`${ZELLE} text-right ${
+                  (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
+                  {s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %
+                </td>
+                <td className={`${ZELLE} text-right`}>
+                  <PerformanceBadge ratio={s.performance_ratio_gesamt} />
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.strings.map((s, idx) => (
-                <tr key={s.investition_id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: STRING_COLORS[idx % STRING_COLORS.length] }}
-                      />
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {s.bezeichnung}
-                      </span>
-                    </div>
-                    {s.wechselrichter_name && (
-                      <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-right text-gray-600 dark:text-gray-400">
-                    {fmtZahl(s.leistung_kwp, 1)}
-                  </td>
-                  <td className="px-3 py-3 text-gray-600 dark:text-gray-400">
-                    {s.ausrichtung || '-'}
-                    {s.neigung_grad != null && ` / ${s.neigung_grad}°`}
-                  </td>
-                  <td className="px-3 py-3 text-right text-blue-600 dark:text-blue-400">
-                    {fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh
-                  </td>
-                  <td className="px-3 py-3 text-right font-medium" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>
-                    {fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh
-                  </td>
-                  <td className={`px-3 py-3 text-right ${
-                    (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
-                    {s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <PerformanceBadge ratio={s.performance_ratio_gesamt} />
-                  </td>
-                  <td className="px-3 py-3 text-right text-gray-600 dark:text-gray-400">
-                    {s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollSchatten>
+            ))}
+          </TableBody>
+        </Table>
       </Sektion>
       </Parkbar>
     </div>

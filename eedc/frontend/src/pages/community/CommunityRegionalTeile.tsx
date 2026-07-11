@@ -8,8 +8,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
 import germanyGeoJson from '../../assets/deutschland-bundeslaender.geo.json'
 import { MapPin, Trophy, TrendingUp, TrendingDown, Users, Sun } from 'lucide-react'
-import { KPICard } from '../../components/ui'
-import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
+import { KPICard, Table, TableHead, TableBody } from '../../components/ui'
+import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
@@ -504,82 +504,80 @@ export function RegionenTabelle({ allRegions, benchmark }: { allRegions: RegionS
 
   return (
     <Parkbar id="reg-tabelle" titel="Alle Regionen im Vergleich">
-    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-2 px-3 text-gray-500 font-medium">Region</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium">Anlagen</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium">Ø kWp</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium">Ø kWh/kWp</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Ladung ↓ / Entladung ↑ pro Monat (kWh)">🔋 Ladung/Entl.</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø Jahresarbeitszahl (Σ Wärme ÷ Σ Strom)">♨️ JAZ</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø km/Mon · Ø kWh zuhause geladen">🚗 km / kWh</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø kWh geladen/Mon · davon PV-Anteil (wo messbar)">🔌 kWh / PV%</th>
-            <th className="text-right py-2 px-3 text-gray-500 font-medium" title="Ø BKW-Ertrag pro Monat (kWh)">🪟 kWh/Mon</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allRegions
-            .sort((a, b) => b.durchschnitt_spez_ertrag - a.durchschnitt_spez_ertrag)
-            .map((region, index) => {
-              const isOwn = region.region === benchmark?.anlage.region
-              return (
-                <tr
-                  key={region.region}
-                  className={`border-b border-gray-100 dark:border-gray-800 ${
-                    isOwn ? 'bg-primary-50 dark:bg-primary-900/20' : ''
-                  }`}
-                >
-                  <td className="py-2 px-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-medium w-5 text-center ${
-                        index < 3 ? 'text-yellow-600' : 'text-gray-400 dark:text-gray-500'
-                      }`}>
-                        {index + 1}
-                      </span>
-                      <span className={`font-medium ${isOwn ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'}`}>
-                        {BUNDESLAENDER[region.region]?.name || region.region}
-                      </span>
-                      {isOwn && <span className="text-xs text-primary-500">(Du)</span>}
-                    </div>
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
-                    {region.anzahl_anlagen}
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
-                    {fmtZahl(region.durchschnitt_kwp, 1)}
-                  </td>
-                  <td className="py-2 px-3 text-right font-medium text-gray-900 dark:text-white">
-                    {fmtZahl(region.durchschnitt_spez_ertrag, 0)}
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
-                    {region.avg_speicher_ladung_kwh != null
-                      ? <><div>{fmtZahl(region.avg_speicher_ladung_kwh, 0)} ↓</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_speicher_entladung_kwh != null ? fmtZahl(region.avg_speicher_entladung_kwh, 0) : '–'} ↑ kWh</div></>
-                      : '-'}
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
-                    {region.avg_wp_jaz != null ? fmtZahl(region.avg_wp_jaz, 1) : '-'}
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
-                    {region.avg_eauto_km != null
-                      ? <><div>{fmtZahl(region.avg_eauto_km, 0)} km</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_eauto_ladung_kwh != null ? `${fmtZahl(region.avg_eauto_ladung_kwh, 0)} kWh` : '–'}</div></>
-                      : '-'}
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400 leading-tight">
-                    {region.avg_wallbox_kwh != null
-                      ? <><div>{fmtZahl(region.avg_wallbox_kwh, 0)} kWh</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_wallbox_pv_anteil != null ? `${fmtZahl(region.avg_wallbox_pv_anteil, 0)} % PV` : '–'}</div></>
-                      : '-'}
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
-                    {region.avg_bkw_kwh != null ? `${fmtZahl(region.avg_bkw_kwh, 0)} kWh` : '-'}
-                  </td>
-                </tr>
-              )
-            })}
-        </tbody>
-      </table>
-    </ScrollSchatten>
+    <Table>
+      <TableHead>
+        <tr className="border-b border-gray-200 dark:border-gray-700">
+          <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Region</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Anlagen</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Ø kWp</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Ø kWh/kWp</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø Ladung ↓ / Entladung ↑ pro Monat (kWh)">🔋 Ladung/Entl.</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø Jahresarbeitszahl (Σ Wärme ÷ Σ Strom)">♨️ JAZ</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø km/Mon · Ø kWh zuhause geladen">🚗 km / kWh</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø kWh geladen/Mon · davon PV-Anteil (wo messbar)">🔌 kWh / PV%</th>
+          <th className={`${KOPF_ZELLE} text-right text-gray-500`} title="Ø BKW-Ertrag pro Monat (kWh)">🪟 kWh/Mon</th>
+        </tr>
+      </TableHead>
+      <TableBody>
+        {allRegions
+          .sort((a, b) => b.durchschnitt_spez_ertrag - a.durchschnitt_spez_ertrag)
+          .map((region, index) => {
+            const isOwn = region.region === benchmark?.anlage.region
+            return (
+              <tr
+                key={region.region}
+                className={`border-b border-gray-100 dark:border-gray-800 ${
+                  isOwn ? 'bg-primary-50 dark:bg-primary-900/20' : ''
+                }`}
+              >
+                <td className={ZELLE}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium w-5 text-center ${
+                      index < 3 ? 'text-yellow-600' : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      {index + 1}
+                    </span>
+                    <span className={`font-medium ${isOwn ? 'text-primary-600 dark:text-primary-400' : 'text-gray-900 dark:text-white'}`}>
+                      {BUNDESLAENDER[region.region]?.name || region.region}
+                    </span>
+                    {isOwn && <span className="text-xs text-primary-500">(Du)</span>}
+                  </div>
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {region.anzahl_anlagen}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {fmtZahl(region.durchschnitt_kwp, 1)}
+                </td>
+                <td className={`${ZELLE} text-right font-medium text-gray-900 dark:text-white`}>
+                  {fmtZahl(region.durchschnitt_spez_ertrag, 0)}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400 leading-tight`}>
+                  {region.avg_speicher_ladung_kwh != null
+                    ? <><div>{fmtZahl(region.avg_speicher_ladung_kwh, 0)} ↓</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_speicher_entladung_kwh != null ? fmtZahl(region.avg_speicher_entladung_kwh, 0) : '–'} ↑ kWh</div></>
+                    : '-'}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {region.avg_wp_jaz != null ? fmtZahl(region.avg_wp_jaz, 1) : '-'}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400 leading-tight`}>
+                  {region.avg_eauto_km != null
+                    ? <><div>{fmtZahl(region.avg_eauto_km, 0)} km</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_eauto_ladung_kwh != null ? `${fmtZahl(region.avg_eauto_ladung_kwh, 0)} kWh` : '–'}</div></>
+                    : '-'}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400 leading-tight`}>
+                  {region.avg_wallbox_kwh != null
+                    ? <><div>{fmtZahl(region.avg_wallbox_kwh, 0)} kWh</div><div className="text-xs text-gray-400 dark:text-gray-500">{region.avg_wallbox_pv_anteil != null ? `${fmtZahl(region.avg_wallbox_pv_anteil, 0)} % PV` : '–'}</div></>
+                    : '-'}
+                </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {region.avg_bkw_kwh != null ? `${fmtZahl(region.avg_bkw_kwh, 0)} kWh` : '-'}
+                </td>
+              </tr>
+            )
+          })}
+      </TableBody>
+    </Table>
     </Parkbar>
   )
 }

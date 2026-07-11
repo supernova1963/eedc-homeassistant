@@ -17,6 +17,8 @@ import {
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
 import ScrollSchatten from '../ui/ScrollSchatten'
+import { Table, TableHead, TableBody, TableFoot } from '../ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import { fmtCalc, ChartLegende } from '../ui'
 import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, DATENROLLE, TREND_TEXT_CLASS, AMPEL_TEXT_CLASS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
@@ -173,43 +175,42 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
   const hasVmNm = tage.some((t) => t.pv_ertrag_morgens_kwh != null)
   const hasKaskade = tage.some((t) => t.datenquelle && t.datenquelle !== 'best_match')
   return (
-    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-      <table className="w-full text-sm">
-        <thead>
+    <Table mitFuss flaeche="karte">
+        <TableHead>
           <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
-            <th className="text-left py-2 px-3 font-medium">Datum</th>
-            <th className="text-left py-2 px-3 font-medium">Wetter</th>
+            <th className={`${KOPF_ZELLE}`}>Datum</th>
+            <th className={`${KOPF_ZELLE}`}>Wetter</th>
             {/* B2/C3 (#237): Einheit im Header „Name (Einheit)", nicht pro Zelle. */}
-            <th className="text-right py-2 px-3 font-medium">PV-Prognose (kWh)</th>
-            {hasVmNm && <th className="text-right py-2 px-3 font-medium">VM (kWh)</th>}
-            {hasVmNm && <th className="text-right py-2 px-3 font-medium">NM (kWh)</th>}
-            <th className="text-right py-2 px-3 font-medium">GTI (kWh/m²)</th>
-            <th className="text-right py-2 px-3 font-medium">Bewölkung (%)</th>
-            <th className="text-right py-2 px-3 font-medium">Temperatur (°C)</th>
-            <th className="text-right py-2 px-3 font-medium">Niederschlag (mm)</th>
-            {hasKaskade && <th className="text-right py-2 px-3 font-medium">Quelle</th>}
+            <th className={`${KOPF_ZELLE}`}>PV-Prognose (kWh)</th>
+            {hasVmNm && <th className={`${KOPF_ZELLE}`}>VM (kWh)</th>}
+            {hasVmNm && <th className={`${KOPF_ZELLE}`}>NM (kWh)</th>}
+            <th className={`${KOPF_ZELLE}`}>GTI (kWh/m²)</th>
+            <th className={`${KOPF_ZELLE}`}>Bewölkung (%)</th>
+            <th className={`${KOPF_ZELLE}`}>Temperatur (°C)</th>
+            <th className={`${KOPF_ZELLE}`}>Niederschlag (mm)</th>
+            {hasKaskade && <th className={`${KOPF_ZELLE}`}>Quelle</th>}
           </tr>
-        </thead>
-        <tbody>
+        </TableHead>
+        <TableBody>
           {/* R13-4a-Folge: keine grüne „heute"-Zeile (1. Zeile) — konsistent mit
               der entfärbten Tages-Prognose (Gernot 2026-07-01). */}
           {tage.map((tag) => (
             <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
-              <td className="py-2 px-3 font-medium">{formatDatum(tag.datum)}</td>
-              <td className="py-2 px-3"><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
-              <td className={`py-2 px-3 text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(tag.pv_ertrag_kwh, 1)}</td>
-              {hasVmNm && <td className={`py-2 px-3 text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '—'}</td>}
-              {hasVmNm && <td className={`py-2 px-3 text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '—'}</td>}
-              <td className="py-2 px-3 text-right tabular-nums">{tag.gti_kwh_m2 != null ? fmtZahl(tag.gti_kwh_m2, 2) : '—'}</td>
-              <td className="py-2 px-3 text-right tabular-nums">{tag.bewoelkung_prozent != null ? fmtZahl(tag.bewoelkung_prozent, 0) : '—'}</td>
-              <td className="py-2 px-3 text-right tabular-nums">{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '—'}</td>
-              <td className="py-2 px-3 text-right tabular-nums">
+              <td className={`${ZELLE} font-medium`}>{formatDatum(tag.datum)}</td>
+              <td className={ZELLE}><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
+              <td className={`${ZELLE} text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(tag.pv_ertrag_kwh, 1)}</td>
+              {hasVmNm && <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '—'}</td>}
+              {hasVmNm && <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '—'}</td>}
+              <td className={`${ZELLE} text-right tabular-nums`}>{tag.gti_kwh_m2 != null ? fmtZahl(tag.gti_kwh_m2, 2) : '—'}</td>
+              <td className={`${ZELLE} text-right tabular-nums`}>{tag.bewoelkung_prozent != null ? fmtZahl(tag.bewoelkung_prozent, 0) : '—'}</td>
+              <td className={`${ZELLE} text-right tabular-nums`}>{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '—'}</td>
+              <td className={`${ZELLE} text-right tabular-nums`}>
                 {tag.niederschlag_mm != null && tag.niederschlag_mm > 0
                   ? <span className="text-blue-500">{fmtZahl(tag.niederschlag_mm, 1)}</span>
                   : '—'}
               </td>
               {hasKaskade && (
-                <td className="py-2 px-3 text-right">
+                <td className={`${ZELLE} text-right`}>
                   <span className={`text-xs font-mono ${QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.color || 'text-gray-400 dark:text-gray-500'}`}>
                     {QUELLEN_KUERZEL[tag.datenquelle || 'best_match']?.label || tag.datenquelle}
                   </span>
@@ -217,9 +218,8 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
               )}
             </tr>
           ))}
-        </tbody>
-      </table>
-    </ScrollSchatten>
+        </TableBody>
+      </Table>
   )
 }
 
@@ -277,41 +277,39 @@ export function LangfristMonatswerte({ prognose }: { prognose: LangfristPrognose
     : <span className={v > 1 ? TREND_TEXT_CLASS.positiv : v < 0.9 ? TREND_TEXT_CLASS.negativ : TREND_TEXT_CLASS.neutral}>{fmtZahl(v * 100, 0)}</span>
   return (
     <div className="space-y-2">
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-sm">
-          <thead>
+      <Table mitFuss flaeche="karte">
+          <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
               {/* B2/C3 (#237): Einheit im Header „Name (Einheit)", nicht pro Zelle. */}
-              <th className="text-left py-2 px-3 font-medium">Monat</th>
-              <th className="text-right py-2 px-3 font-medium">PVGIS (kWh)</th>
-              <th className="text-right py-2 px-3 font-medium">Trend-korrigiert (kWh)</th>
-              <th className="text-right py-2 px-3 font-medium">Min (kWh)</th>
-              <th className="text-right py-2 px-3 font-medium">Max (kWh)</th>
-              <th className="text-right py-2 px-3 font-medium">Hist. PR (%)</th>
+              <th className={`${KOPF_ZELLE}`}>Monat</th>
+              <th className={`${KOPF_ZELLE}`}>PVGIS (kWh)</th>
+              <th className={`${KOPF_ZELLE}`}>Trend-korrigiert (kWh)</th>
+              <th className={`${KOPF_ZELLE}`}>Min (kWh)</th>
+              <th className={`${KOPF_ZELLE}`}>Max (kWh)</th>
+              <th className={`${KOPF_ZELLE}`}>Hist. PR (%)</th>
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {prognose.monatswerte.map((m) => (
               <tr key={`${m.jahr}-${m.monat}`} className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 px-3 font-medium">{m.monat_name} {m.jahr}</td>
-                <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{fmtZahl(m.pvgis_prognose_kwh, 0)}</td>
-                <td className={`py-2 px-3 text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(m.trend_korrigiert_kwh, 0)}</td>
-                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(m.konfidenz_min_kwh, 0)}</td>
-                <td className="py-2 px-3 text-right text-gray-400 dark:text-gray-500 tabular-nums">{fmtZahl(m.konfidenz_max_kwh, 0)}</td>
-                <td className="py-2 px-3 text-right tabular-nums">{pr(m.historische_performance_ratio)}</td>
+                <td className={`${ZELLE} font-medium`}>{m.monat_name} {m.jahr}</td>
+                <td className={`${ZELLE} text-right text-gray-500 dark:text-gray-400 tabular-nums`}>{fmtZahl(m.pvgis_prognose_kwh, 0)}</td>
+                <td className={`${ZELLE} text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(m.trend_korrigiert_kwh, 0)}</td>
+                <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500 tabular-nums`}>{fmtZahl(m.konfidenz_min_kwh, 0)}</td>
+                <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500 tabular-nums`}>{fmtZahl(m.konfidenz_max_kwh, 0)}</td>
+                <td className={`${ZELLE} text-right tabular-nums`}>{pr(m.historische_performance_ratio)}</td>
               </tr>
             ))}
-          </tbody>
-          <tfoot>
+          </TableBody>
+          <TableFoot>
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-semibold">
-              <td className="py-2 px-3">Gesamt</td>
-              <td className="py-2 px-3 text-right text-gray-500 dark:text-gray-400 tabular-nums">{fmtZahl(prognose.monatswerte.reduce((s, m) => s + m.pvgis_prognose_kwh, 0), 0)}</td>
-              <td className={`py-2 px-3 text-right ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(prognose.jahresprognose_kwh, 0)}</td>
+              <td className={ZELLE}>Gesamt</td>
+              <td className={`${ZELLE} text-right text-gray-500 dark:text-gray-400 tabular-nums`}>{fmtZahl(prognose.monatswerte.reduce((s, m) => s + m.pvgis_prognose_kwh, 0), 0)}</td>
+              <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(prognose.jahresprognose_kwh, 0)}</td>
               <td colSpan={3} />
             </tr>
-          </tfoot>
-        </table>
-      </ScrollSchatten>
+          </TableFoot>
+        </Table>
       {prognose.datenquellen?.length > 0 && (
         <p className="text-xs text-gray-400 dark:text-gray-500">Datenquellen: {prognose.datenquellen.join(', ')}</p>
       )}

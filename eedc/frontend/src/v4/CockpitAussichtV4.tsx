@@ -280,7 +280,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           summary: 'Stundenprognose in kW · Summenzeile = kWh/Tag',
           defaultOpen: false,
           render: () => (pDaten
-            ? <Parkbar id="el:aussicht-stundenwerte" titel="Stundenwerte"><PrognoseTabelle daten={pDaten} /></Parkbar>
+            ? <Parkbar id="el:aussicht-stundenwerte" titel="Stundenwerte"><PrognoseTabelle daten={pDaten} ohneCaption /></Parkbar>
             : <p className="text-sm text-gray-500 dark:text-gray-400">{pError ?? 'Lade Tagesprognose…'}</p>),
         }]),
       ]

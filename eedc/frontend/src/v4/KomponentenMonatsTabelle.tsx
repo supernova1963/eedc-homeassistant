@@ -7,7 +7,8 @@
  * via `<details>` wie die IST-Dashboards („Monatsdaten anzeigen").
  */
 import type { VerlaufBar, VerlaufRow } from './KomponentenVerlaufChart'
-import ScrollSchatten from '../components/ui/ScrollSchatten'
+import { Table, TableHead, TableBody } from '../components/ui/Table'
+import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 
 export function KomponentenMonatsTabelle({
   rows, bars, einheit = 'kWh',
@@ -23,13 +24,12 @@ export function KomponentenMonatsTabelle({
       <summary className="cursor-pointer text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
         Monatsdaten anzeigen ({rows.length})
       </summary>
-      <ScrollSchatten achse="horizontal" aussenClassName="mt-3" fadeFrom="from-white dark:from-gray-800">
-        <table className="min-w-full text-sm">
-          <thead>
+      <Table aussenClassName="mt-3" flaeche="karte">
+          <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
-              <th className="text-left py-2 px-2 font-medium">Monat</th>
+              <th className={`${KOPF_ZELLE} text-left`}>Monat</th>
               {bars.map((b) => (
-                <th key={b.key} className="text-right py-2 px-2 font-medium whitespace-nowrap">
+                <th key={b.key} className={`${KOPF_ZELLE} text-right`}>
                   <span className="inline-flex items-center gap-1.5 justify-end">
                     <span className="inline-block w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: b.farbe }} />
                     {b.label} <span className="font-normal text-gray-400 dark:text-gray-500">({einheit})</span>
@@ -37,21 +37,20 @@ export function KomponentenMonatsTabelle({
                 </th>
               ))}
             </tr>
-          </thead>
-          <tbody>
+          </TableHead>
+          <TableBody>
             {zeilen.map((r, i) => (
               <tr key={`${r.name}-${i}`} className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-1.5 px-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">{r.name}</td>
+                <td className={`${ZELLE} text-gray-700 dark:text-gray-300`}>{r.name}</td>
                 {bars.map((b) => (
-                  <td key={b.key} className="text-right py-1.5 px-2 text-gray-900 dark:text-white tabular-nums">
+                  <td key={b.key} className={`${ZELLE} text-right text-gray-900 dark:text-white tabular-nums`}>
                     {fmt(r[b.key])}
                   </td>
                 ))}
               </tr>
             ))}
-          </tbody>
-        </table>
-      </ScrollSchatten>
+          </TableBody>
+        </Table>
     </details>
   )
 }

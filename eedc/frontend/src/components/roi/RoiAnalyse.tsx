@@ -23,7 +23,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
-import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, ChartLegende, ScrollSchatten, AnteilDonut } from '../ui'
+import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, ChartLegende, AnteilDonut, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
@@ -326,19 +327,18 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detailübersicht</h3>
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead>
+      <Table mitFuss flaeche="karte">
+          <TableHead>
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Investition</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Kosten</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Einsparung/Jahr</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ROI</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amortisation</th>
-              {zeigeCo2 && <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">CO2</th>}
+              <th className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400`}>Investition</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Kosten</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Einsparung/Jahr</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>ROI</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Amortisation</th>
+              {zeigeCo2 && <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>CO2</th>}
             </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+          </TableHead>
+          <TableBody>
             {roiData.berechnungen.map((b) => {
               const Icon = typIcons[b.investition_typ] || Settings2
               const cDetail = getSpeicherCDetail(b)
@@ -346,7 +346,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
               return (
                 <Fragment key={b.investition_id}>
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className={ZELLE}>
                       <div className="flex items-center gap-2">
                         {cDetail ? (
                           <button
@@ -380,16 +380,16 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                    <td className={`${ZELLE} text-right`}>
                       <p className="text-sm text-gray-900 dark:text-white">{formatGeld(b.relevante_kosten).text}</p>
                       {b.anschaffungskosten_alternativ > 0 && (
                         <p className="text-xs text-gray-500 dark:text-gray-400">({formatGeld(b.anschaffungskosten).text} gesamt)</p>
                       )}
                     </td>
-                    <td className={`px-4 py-3 whitespace-nowrap text-right text-sm font-medium ${GELD_TEXT_CLASS.ersparnis}`}>
+                    <td className={`${ZELLE} text-right font-medium ${GELD_TEXT_CLASS.ersparnis}`}>
                       {formatGeld(b.jahres_einsparung).text}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                    <td className={`${ZELLE} text-right`}>
                       {b.roi_prozent ? (
                         <FormelTooltip
                           sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
@@ -405,7 +405,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                         <span className="text-gray-400 dark:text-gray-500">-</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                    <td className={`${ZELLE} text-right`}>
                       {b.amortisation_jahre ? (
                         <FormelTooltip
                           sicht="Pro Investition · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
@@ -422,7 +422,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                       )}
                     </td>
                     {zeigeCo2 && (
-                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-emerald-600 dark:text-emerald-400">
+                      <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>
                         {b.co2_einsparung_kg ? `${fmtZahl(b.co2_einsparung_kg, 0)} kg` : '-'}
                       </td>
                     )}
@@ -435,21 +435,20 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                 </Fragment>
               )
             })}
-          </tbody>
-          <tfoot>
+          </TableBody>
+          <TableFoot>
             <tr className="bg-gray-50 dark:bg-gray-800 font-semibold">
-              <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">Gesamt</td>
-              <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-white">{formatGeld(roiData.gesamt_relevante_kosten).text}</td>
-              <td className={`px-4 py-3 text-right text-sm ${GELD_TEXT_CLASS.ersparnis}`}>{formatGeld(roiData.gesamt_jahres_einsparung).text}</td>
-              <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-white">{roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent} %` : '-'}</td>
-              <td className="px-4 py-3 text-right text-sm text-gray-900 dark:text-white">{roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J.` : '-'}</td>
+              <td className={`${ZELLE} text-gray-900 dark:text-white`}>Gesamt</td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{formatGeld(roiData.gesamt_relevante_kosten).text}</td>
+              <td className={`${ZELLE} text-right ${GELD_TEXT_CLASS.ersparnis}`}>{formatGeld(roiData.gesamt_jahres_einsparung).text}</td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent} %` : '-'}</td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J.` : '-'}</td>
               {zeigeCo2 && (
-                <td className="px-4 py-3 text-right text-sm text-emerald-600 dark:text-emerald-400">{fmtZahl(roiData.gesamt_co2_einsparung_kg, 0)} kg</td>
+                <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>{fmtZahl(roiData.gesamt_co2_einsparung_kg, 0)} kg</td>
               )}
             </tr>
-          </tfoot>
-        </table>
-      </ScrollSchatten>
+          </TableFoot>
+        </Table>
     </Card>
   )
 }

@@ -10,7 +10,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende, ScrollSchatten } from '../ui'
+import { ChartLegende, Table, TableHead, TableBody } from '../ui'
+import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, GELD_TEXT_CLASS, CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, EAutoDashboardResponse } from '../../api/investitionen'
@@ -101,32 +102,30 @@ export function EAutoKostenvergleich({ zusammenfassung: z }: { zusammenfassung: 
 /** Monatsdaten-Tabelle: km · kWh · PV · Netz · V2H je Monat. */
 export function EAutoMonatsTabelle({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   return (
-    <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-      <table className="min-w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-2 px-2">Monat</th>
-            <th className="text-right py-2 px-2">km</th>
-            <th className="text-right py-2 px-2">kWh</th>
-            <th className="text-right py-2 px-2">PV</th>
-            <th className="text-right py-2 px-2">Netz</th>
-            <th className="text-right py-2 px-2">V2H</th>
+    <Table>
+      <TableHead>
+        <tr className="border-b border-gray-200 dark:border-gray-700">
+          <th className={`${KOPF_ZELLE} text-left`}>Monat</th>
+          <th className={`${KOPF_ZELLE} text-right`}>km</th>
+          <th className={`${KOPF_ZELLE} text-right`}>kWh</th>
+          <th className={`${KOPF_ZELLE} text-right`}>PV</th>
+          <th className={`${KOPF_ZELLE} text-right`}>Netz</th>
+          <th className={`${KOPF_ZELLE} text-right`}>V2H</th>
+        </tr>
+      </TableHead>
+      <TableBody>
+        {monatsdaten.map((md) => (
+          <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
+            <td className={ZELLE}>{MONAT_KURZ[md.monat]} {md.jahr}</td>
+            <td className={`${ZELLE} text-right`}>{md.verbrauch_daten.km_gefahren || 0}</td>
+            <td className={`${ZELLE} text-right`}>{fmtZahl(md.verbrauch_daten.verbrauch_kwh || 0, 1)}</td>
+            <td className={`${ZELLE} text-right text-green-600`}>{fmtZahl(md.verbrauch_daten.ladung_pv_kwh || 0, 1)}</td>
+            <td className={`${ZELLE} text-right text-red-600`}>{fmtZahl(md.verbrauch_daten.ladung_netz_kwh || 0, 1)}</td>
+            {/* V2H = emobV2h-Identität (cyan), war fälschlich violett (Audit-E). */}
+            <td className={`${ZELLE} text-right text-cyan-600`}>{fmtZahl(md.verbrauch_daten.v2h_entladung_kwh || 0, 1)}</td>
           </tr>
-        </thead>
-        <tbody>
-          {monatsdaten.map((md) => (
-            <tr key={md.id ?? `${md.jahr}-${md.monat}`} className="border-b border-gray-100 dark:border-gray-800">
-              <td className="py-2 px-2">{MONAT_KURZ[md.monat]} {md.jahr}</td>
-              <td className="text-right py-2 px-2">{md.verbrauch_daten.km_gefahren || 0}</td>
-              <td className="text-right py-2 px-2">{fmtZahl(md.verbrauch_daten.verbrauch_kwh || 0, 1)}</td>
-              <td className="text-right py-2 px-2 text-green-600">{fmtZahl(md.verbrauch_daten.ladung_pv_kwh || 0, 1)}</td>
-              <td className="text-right py-2 px-2 text-red-600">{fmtZahl(md.verbrauch_daten.ladung_netz_kwh || 0, 1)}</td>
-              {/* V2H = emobV2h-Identität (cyan), war fälschlich violett (Audit-E). */}
-              <td className="text-right py-2 px-2 text-cyan-600">{fmtZahl(md.verbrauch_daten.v2h_entladung_kwh || 0, 1)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ScrollSchatten>
+        ))}
+      </TableBody>
+    </Table>
   )
 }

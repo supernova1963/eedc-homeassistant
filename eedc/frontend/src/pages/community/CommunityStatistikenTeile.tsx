@@ -22,7 +22,8 @@ import {
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, GlobaleStatistik, Ranking } from '../../api/community'
 import { Parkbar } from '../../components/park'
-import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
+import { Table, TableHead, TableBody } from '../../components/ui'
+import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { fmtZahl } from '../../lib'
 // Bundesland-Namen
 import { REGION_NAMEN } from '../../lib/constants'
@@ -437,43 +438,41 @@ export function Top10Bestenliste({ ranking }: { ranking: Ranking }) {
   return (
     <div>
       <Parkbar id="stat-top10-tabelle" titel="Top-10-Tabelle">
-      <ScrollSchatten achse="horizontal" fadeFrom="from-white dark:from-gray-800">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-700">
-              <th className="text-left py-2 px-3 text-gray-500 font-medium">Rang</th>
-              <th className="text-left py-2 px-3 text-gray-500 font-medium">Region</th>
-              <th className="text-right py-2 px-3 text-gray-500 font-medium">kWp</th>
-              <th className="text-right py-2 px-3 text-gray-500 font-medium">kWh/kWp</th>
+      <Table>
+        <TableHead>
+          <tr className="border-b border-gray-200 dark:border-gray-700">
+            <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Rang</th>
+            <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Region</th>
+            <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWp</th>
+            <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWh/kWp</th>
+          </tr>
+        </TableHead>
+        <TableBody>
+          {ranking.ranking.map((eintrag) => (
+            <tr key={eintrag.rang} className="border-b border-gray-100 dark:border-gray-800">
+              <td className={ZELLE}>
+                <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                  eintrag.rang === 1 ? 'bg-yellow-100 text-yellow-700' :
+                  eintrag.rang === 2 ? 'bg-gray-200 text-gray-700' :
+                  eintrag.rang === 3 ? 'bg-orange-100 text-orange-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {eintrag.rang}
+                </span>
+              </td>
+              <td className={`${ZELLE} text-gray-900 dark:text-white`}>
+                {REGION_NAMEN[eintrag.region] || eintrag.region}
+              </td>
+              <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                {fmtZahl(eintrag.kwp, 1)}
+              </td>
+              <td className={`${ZELLE} text-right font-medium text-gray-900 dark:text-white`}>
+                {fmtZahl(eintrag.wert, 0)}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {ranking.ranking.map((eintrag) => (
-              <tr key={eintrag.rang} className="border-b border-gray-100 dark:border-gray-800">
-                <td className="py-2 px-3">
-                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                    eintrag.rang === 1 ? 'bg-yellow-100 text-yellow-700' :
-                    eintrag.rang === 2 ? 'bg-gray-200 text-gray-700' :
-                    eintrag.rang === 3 ? 'bg-orange-100 text-orange-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {eintrag.rang}
-                  </span>
-                </td>
-                <td className="py-2 px-3 text-gray-900 dark:text-white">
-                  {REGION_NAMEN[eintrag.region] || eintrag.region}
-                </td>
-                <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
-                  {fmtZahl(eintrag.kwp, 1)}
-                </td>
-                <td className="py-2 px-3 text-right font-medium text-gray-900 dark:text-white">
-                  {fmtZahl(eintrag.wert, 0)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollSchatten>
+          ))}
+        </TableBody>
+      </Table>
       </Parkbar>
 
       {ranking.eigener_rang && (
