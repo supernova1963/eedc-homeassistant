@@ -6,12 +6,18 @@
  *      + Kumuliert-Area + Netto-Composed + Ø-Karte (recompute via createMonatsZeitreihe
  *      + getKomponentenZeitreihe, NICHT der FinanzenTab-Verbatim-Embed)
  *   ② SOLL/HABEN-T-Konto — geteilter `TKonto`-SoT mit Monat|Jahr-Umschalter, der das
- *      Jahr vom Sicht-Kopf ERBT (R5: kein zweiter Jahr-`<select>`); Jahr = Σ-12.
+ *      Jahr vom Filter ERBT (R5: kein zweiter Jahr-`<select>`); Jahr = Σ-12.
  *   ③ Berichte & Dokumente — PDF-Finanzbericht-Teaser (G10) + CSV.
  *
  * Regel-SoT: R1 alle Zahlen via `fmtZahl`/`formatGeld` (kein `.toFixed`) · R2 Geld in €
- * ohne k€-Transform · R5 EINE Zeit-Steuerung (Kopf-Jahr; T-Konto erbt) · R6 KPIs +
+ * ohne k€-Transform · R5 EINE Zeit-Steuerung (Dispatcher-Jahr; T-Konto erbt) · R6 KPIs +
  * Charts parkbar.
+ *
+ * R18-3 (Option B): `basis` (Daten + Jahr-Filter) kommt als Prop aus dem
+ * Dispatcher (`AuswertungenV4`) — der Filter sitzt in dessen Steuerleiste,
+ * die Auswahl überlebt den Sub-Tab-Wechsel. R18-3b: bei „Alle Jahre" zeigt das
+ * T-Konto sichtbar gekennzeichnet das neueste Jahr (`ZeitraumHinweis`) statt
+ * still zu verengen.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -33,26 +39,26 @@ import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { baueJahrAlsMonat } from './JahrAggregat'
 import { STEUER_H } from '../lib/komponentenStyle'
 import { useApiData, useSelectedAnlage, useSchmaleAchse } from '../hooks'
-import { useAuswertungBasis } from './useAuswertungBasis'
+import type { AuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
+import { ZeitraumHinweis } from './ZeitraumHinweis'
 import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-finanzen'
 const MONATE_1_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 const euroTick = (v: number) => fmtZahl(v, 0)
 
-export default function AuswertungenFinanzenV4() {
+export default function AuswertungenFinanzenV4({ basis }: { basis: AuswertungBasis }) {
   return (
     <ParkProvider persistKey={SICHT_KEY}>
-      <FinanzenInner />
+      <FinanzenInner basis={basis} />
     </ParkProvider>
   )
 }
 
-function FinanzenInner() {
+function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
   const park = usePark()
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
-  const basis = useAuswertungBasis(selectedAnlageId)
 
   // Sonderkosten/Sonstige (#310) je Monat — wie FinanzenTab aus der Komponenten-Zeitreihe.
   // R18-2 (SWR): via Sicht-Cache — beim Sub-Tab-Wechsel sofort da; Soft-fail
@@ -115,7 +121,8 @@ function FinanzenInner() {
     exportToCSV(headers, rows, 'finanzen_export.csv')
   }, [chartData])
 
-  // T-Konto erbt das Jahr vom Kopf (R5). 'alle' → neuestes Jahr.
+  // T-Konto erbt das Jahr vom Filter (R5). 'alle' → neuestes Jahr, sichtbar
+  // gekennzeichnet (R18-3b: vorher stille Verengung ohne Hinweis).
   const jahrFuerTKonto = basis.jahr === 'alle' ? (basis.jahre[0] ?? null) : basis.jahr
 
   const bloecke: Block[] = useMemo(() => {
@@ -275,7 +282,12 @@ function FinanzenInner() {
       // D17-15: parkbar, damit der Block ganz weggeräumt werden kann (kein Rest).
       render: () => (
         <Parkbar id="tabelle:tkonto" titel="SOLL/HABEN-T-Konto">
-          <TKontoPeriode anlageId={selectedAnlageId} daten={basis.daten} jahr={jahrFuerTKonto} />
+          <div className="space-y-3">
+            {basis.jahr === 'alle' && jahrFuerTKonto != null && (
+              <ZeitraumHinweis text={`Filter „Alle Jahre“: das T-Konto bildet einen Monat oder ein Jahr ab und zeigt das Jahr ${jahrFuerTKonto}.`} />
+            )}
+            <TKontoPeriode anlageId={selectedAnlageId} daten={basis.daten} jahr={jahrFuerTKonto} />
+          </div>
         </Parkbar>
       ),
     }
@@ -334,7 +346,7 @@ function FinanzenInner() {
 
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-      <AuswertungKopf titel="Finanzen" jahr={basis.jahr} setJahr={basis.setJahr} jahre={basis.jahre} />
+      <AuswertungKopf titel="Finanzen" />
       {/* Kein `key={jahr}` → BlockShell re-rendert in-place beim Jahreswechsel
           (detLAN D7-6, 2026-06-27), statt sichtbar zu remounten. */}
       <BlockShell persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />

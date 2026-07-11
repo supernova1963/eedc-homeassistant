@@ -8,7 +8,11 @@
  *   ① Jahres-SOLL/IST gegen PVGIS · ② SOLL/IST pro PV-String · ③ Mehrjahres-
  *   Performance (data-gated „Alle Jahre") · ④ Quellen-Genauigkeit · ⑤ Tages-/Stundenprofil.
  *
- * R5: EINE Jahr-Steuerung im Kopf speist ①②③ (bei „Alle Jahre" → ① neuestes Jahr).
+ * R5: EINE Jahr-Steuerung speist ①②③ — seit R18-3 (Option B) sitzt sie in der
+ * Dispatcher-Steuerleiste (`AuswertungenV4`), `basis` kommt als Prop. R18-3a:
+ * bei „Alle Jahre" zeigt ① sichtbar gekennzeichnet das neueste Jahr
+ * (`ZeitraumHinweis`) statt still zu verengen; ④/⑤ folgen dem Filter nicht
+ * (eigene Tage-Fenster) und kennzeichnen das ebenso.
  * R6: jede KPI/Chart/Tabelle parkbar (`Parkbar`/KpiStrip-`parkId`). Datenladung je
  * Block lazy (BlockShell rendert eingeklappte Blöcke nicht). Feld-Sperren (SFML
  * draußen, Solcast-Spalte) + Format (R1/R2/R3) stecken in den geteilten Teilen.
@@ -39,8 +43,9 @@ import {
   PvgStundenprofil, Pvg24hTabelle, Pvg7TageTabelle, PvgGenauigkeitsTracking,
 } from '../components/prognose/PrognoseVergleichTeile'
 import { useSelectedAnlage } from '../hooks'
-import { useAuswertungBasis } from './useAuswertungBasis'
+import type { AuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
+import { ZeitraumHinweis } from './ZeitraumHinweis'
 import { AnlageLeer } from './OnboardingLeer'
 
 const SICHT_KEY = 'v4-auswertungen-prognose'
@@ -192,18 +197,17 @@ function BlockProfil({ anlageId, melde }: { anlageId: number; melde: MeldeFn }) 
   )
 }
 
-export default function AuswertungenPrognoseV4() {
+export default function AuswertungenPrognoseV4({ basis }: { basis: AuswertungBasis }) {
   return (
     <ParkProvider persistKey={SICHT_KEY}>
-      <PrognoseInner />
+      <PrognoseInner basis={basis} />
     </ParkProvider>
   )
 }
 
-function PrognoseInner() {
+function PrognoseInner({ basis }: { basis: AuswertungBasis }) {
   const park = usePark()
   const { anlagen, selectedAnlageId, loading: anlagenLoading } = useSelectedAnlage()
-  const basis = useAuswertungBasis(selectedAnlageId)
 
   // Auto-Hide: letzte je-Block gemeldete Park-IDs (überlebt Unmount des versteckten
   // Blocks → kein Oszillieren). Gleichheits-geschützt gegen Render-Schleifen.
@@ -247,9 +251,11 @@ function PrognoseInner() {
     )
   }
 
-  // R5: das Kopf-Jahr speist ①②③.
+  // R5: das Filter-Jahr (Dispatcher-Steuerleiste) speist ①②③.
   const anlageId = selectedAnlageId
   const selectedYear: number | 'all' = basis.jahr === 'alle' ? 'all' : basis.jahr
+  // R18-3a: ① ist ein Einzeljahr-Vergleich — bei „Alle Jahre" neuestes Jahr,
+  // aber sichtbar gekennzeichnet (ZeitraumHinweis) statt still.
   const jahrFuerBlock = basis.jahr === 'alle' ? basis.jahre[0] : basis.jahr
   const zeigeMehrjahr = basis.jahr === 'alle' && basis.jahre.length > 1
 
@@ -257,7 +263,14 @@ function PrognoseInner() {
     ...(sichtbar('pvgis') ? [{
       id: 'pvgis', title: 'Jahres-SOLL/IST gegen PVGIS', icon: Target, farbe: 'text-purple-500', defaultOpen: true,
       summary: 'PVGIS-Jahresprognose vs. IST + Monats-Detail · „Prognose speichern"',
-      render: () => <BlockPvgis anlageId={anlageId} jahr={jahrFuerBlock} melde={melde} />,
+      render: () => (
+        <div className="space-y-4">
+          {basis.jahr === 'alle' && jahrFuerBlock != null && (
+            <ZeitraumHinweis text={`Filter „Alle Jahre“: der SOLL/IST-Vergleich gegen PVGIS ist ein Einzeljahr-Vergleich und zeigt das Jahr ${jahrFuerBlock}.`} />
+          )}
+          <BlockPvgis anlageId={anlageId} jahr={jahrFuerBlock} melde={melde} />
+        </div>
+      ),
     }] : []),
     ...(sichtbar('pvstrings') ? [{
       id: 'pvstrings', title: 'SOLL/IST pro PV-String', icon: Sun, farbe: 'text-amber-500', defaultOpen: false,
@@ -272,18 +285,32 @@ function PrognoseInner() {
     ...(sichtbar('genauigkeit') ? [{
       id: 'genauigkeit', title: 'Quellen-Genauigkeit (OM · eedc · Solcast)', icon: GitCompareArrows, farbe: 'text-orange-500', defaultOpen: false,
       summary: 'Multi-Quellen-Genauigkeit (MAPE/Bias), wetter-stratifiziert · Tage-Fenster 7/10/30',
-      render: () => <BlockGenauigkeit anlageId={anlageId} melde={melde} />,
+      render: () => (
+        <div className="space-y-4">
+          {basis.jahr !== 'alle' && (
+            <ZeitraumHinweis text="Der Jahr-Filter wirkt hier nicht — die Genauigkeits-Fenster (7/10/30 Tage) beziehen sich immer auf die jüngste Zeit." />
+          )}
+          <BlockGenauigkeit anlageId={anlageId} melde={melde} />
+        </div>
+      ),
     }] : []),
     ...(sichtbar('profil') ? [{
       id: 'profil', title: 'Tages-/Stundenprofil', icon: Clock, farbe: 'text-blue-400', defaultOpen: false,
       summary: 'Stundenprofil-Chart · 24h-Vergleich · 7-Tage-Vergleich',
-      render: () => <BlockProfil anlageId={anlageId} melde={melde} />,
+      render: () => (
+        <div className="space-y-4">
+          {basis.jahr !== 'alle' && (
+            <ZeitraumHinweis text="Der Jahr-Filter wirkt hier nicht — Tages-/Stundenprofil zeigt immer die aktuellen Tage." />
+          )}
+          <BlockProfil anlageId={anlageId} melde={melde} />
+        </div>
+      ),
     }] : []),
   ]
 
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-      <AuswertungKopf titel="Prognose" jahr={basis.jahr} setJahr={basis.setJahr} jahre={basis.jahre} />
+      <AuswertungKopf titel="Prognose" />
       <BlockShell key={`prog-${basis.jahr}`} persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
       <ParkFuss />
     </div>
