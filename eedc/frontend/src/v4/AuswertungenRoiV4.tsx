@@ -6,7 +6,7 @@
  *   ① Wirtschaftlichkeit auf einen Blick — 3 KPIs (Investition · Einsparung ·
  *      Amortisation; CO₂-KPI entfällt, R4)
  *   ② Amortisation — Break-Even-Kurve
- *   ③ Verteilung & Vergleich — Pie nach Typ + Bar je Investition
+ *   ③ Verteilung & Vergleich — Typ-Balken (R18-5: Rangfolge + Werte) + Bar je Investition
  *   ④ Detailübersicht je Investition — Tabelle (+ Speicher-C-Panel #264,
  *      Formel-Tooltips) ohne CO₂-Spalte (R4) + Disclaimer
  *
@@ -23,7 +23,7 @@ import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../compone
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import {
   useRoiAnalyse, roiKpiItems,
-  RoiAmortisationChart, RoiTypPie, RoiVergleichBar, RoiDetailTabelle, RoiHinweis,
+  RoiAmortisationChart, RoiTypBalken, RoiVergleichBar, RoiDetailTabelle, RoiHinweis,
 } from '../components/roi/RoiAnalyse'
 import { formatGeld } from '../lib'
 import { useSelectedAnlage, useAktuellerStrompreis } from '../hooks'
@@ -108,10 +108,10 @@ function RoiInner() {
     }] : []),
     ...(sichtbar(['chart:typ-pie', 'chart:vergleich-bar']) ? [{
       id: 'verteilung', title: 'Verteilung & Vergleich', icon: PieChart, farbe: 'text-blue-500', defaultOpen: false,
-      summary: 'Einsparungen nach Typ (Pie) · Investitionen im Vergleich (Bar)',
+      summary: 'Einsparungen nach Typ · Investitionen im Vergleich (Balken)',
       render: () => (
         <div className="space-y-4">
-          <Parkbar id="chart:typ-pie" titel="Einsparungen nach Typ"><RoiTypPie vm={vm} /></Parkbar>
+          <Parkbar id="chart:typ-pie" titel="Einsparungen nach Typ"><RoiTypBalken vm={vm} /></Parkbar>
           <Parkbar id="chart:vergleich-bar" titel="Investitionen im Vergleich"><RoiVergleichBar vm={vm} /></Parkbar>
         </div>
       ),

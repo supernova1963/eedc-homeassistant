@@ -20,10 +20,10 @@ import {
   Settings2, Sun, LayoutGrid, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, Cell, LabelList, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line,
 } from 'recharts'
-import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, ChartLegende, AnteilDonut, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, ChartLegende, Table, TableHead, TableBody, TableFoot } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { KpiStrip, type KpiStripItem } from '../blocks'
@@ -262,12 +262,33 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
   )
 }
 
-/** Block ③a — Einsparungen nach Investitionstyp (Anteils-Donut, SoT). */
-export function RoiTypPie({ vm }: { vm: RoiAnalyseVM }) {
+/** Block ③a — Einsparungen nach Investitionstyp: horizontale Balken mit Werten
+ * (R18-5, rapahl #208 + Gernot-Entscheid 2026-07-10). Kriterium (B7-Schärfung):
+ * absolute Werte + Rangfolge → horizontale Balken · reiner Anteil am Ganzen →
+ * AnteilDonut. Hier sind es absolute €/Jahr mit Rangfolge — daher Balken nach
+ * der Mechanik der Nachbar-Kachel „Investitionen im Vergleich" (keine dritte
+ * Komponente). Sortierung bewusst nach Wert absteigend (Rangfolge IST die
+ * Aussage) — nicht INVESTITION_TYP_ORDER (die gilt für Typ-LISTEN). */
+export function RoiTypBalken({ vm }: { vm: RoiAnalyseVM }) {
+  const daten = [...vm.einsparungenByTyp].sort((a, b) => b.value - a.value)
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Einsparungen nach Typ</h3>
-      <AnteilDonut data={vm.einsparungenByTyp} unit="€/Jahr" decimals={0} chartHoehe="h-72" />
+      <div className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={daten} layout="vertical" margin={{ right: 56 }}>
+            <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+            <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
+            <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Typen) */ />
+            <Tooltip content={<ChartTooltip formatter={(value: number) => `${fmtZahl(value, 0)} €/Jahr`} />} />
+            <Bar dataKey="value" name="Jährliche Einsparung" radius={[0, 2, 2, 0]}>
+              {daten.map((d) => <Cell key={d.name} fill={d.color} />)}
+              {/* Rainers Kern: „Balken MIT Werten" — Wert am Balkenende. */}
+              <LabelList dataKey="value" position="right" formatter={(v: number) => `${fmtZahl(v, 0)} €`} className="fill-gray-500 dark:fill-gray-400" fontSize={10} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </Card>
   )
 }
@@ -514,7 +535,7 @@ export function RoiAnalyse(props: RoiAnalyseProps) {
       <KpiStrip kpis={roiKpiItems(vm.roiData, zeigeCo2)} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RoiAmortisationChart vm={vm} />
-        <RoiTypPie vm={vm} />
+        <RoiTypBalken vm={vm} />
       </div>
       <RoiVergleichBar vm={vm} />
       <RoiDetailTabelle vm={vm} zeigeCo2={zeigeCo2} />

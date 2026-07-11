@@ -2,8 +2,14 @@
  * AnteilDonut — SoT-Darstellung für Anteils-/Verteilungs-Charts (B7 „Anteil → Donut",
  * D17-6 „drei Torten, dreimal anders" → EINE Bildsprache).
  *
- * EINE Chart-Klasse = EINE Komponente (Regel 0a): ersetzt die früheren Hand-Pies in
- * `RoiTypPie` + den Community-Deep-Dives. Kanonische Eigenschaften, überall gleich:
+ * EINE Chart-Klasse = EINE Komponente (Regel 0a): ersetzt die früheren Hand-Pies der
+ * Community-Deep-Dives. Kanonische Eigenschaften, überall gleich:
+ *
+ * WANN Donut, wann Balken (B7-Kriterium, R18-5 Gernot 2026-07-10): der Donut ist
+ * NUR für den **reinen Anteil am Ganzen** (Verteilungs-Aussage, z. B. Community-
+ * Speicher/E-Auto-Quoten). Tragen die Daten **absolute Werte mit Rangfolge**
+ * (z. B. €/Jahr je Typ), sind **horizontale Balken mit Werten** die richtige Form
+ * (Vorlage: `RoiVergleichBar`/`RoiTypBalken` in components/roi) — kein Donut.
  *  - **Form:** Donut (`innerRadius`), Radien in %-→ füllt die Container-Breite (D17-5b).
  *  - **Keine Slice-Labels** (ragten über schmale Container, detLAN 2026-06-28). Name + %
  *    stehen in EINER umbruchfähigen Swatch-Legende darunter — auf jeder Breite vollständig.
