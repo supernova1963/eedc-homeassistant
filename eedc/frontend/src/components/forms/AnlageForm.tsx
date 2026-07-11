@@ -264,10 +264,14 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             />
           </div>
           {/* D14-13: DatumPicker-SoT statt nativem Datumsfeld (Einstellungen-Formulare). */}
+          {/* R18-9 (rapahl #208): Label geschärft — das Feld ist das Stammdatum der
+              GESAMT-Anlage (geht in Community-Hash + Benchmark-Zeitraum ein), nicht
+              das älteste Gerät; genau diese Fehldeutung soll der Hinweis verhindern. */}
           <DatumFeld
-            label="Installationsdatum"
+            label="Inbetriebnahme (Anlage)"
             value={formData.installationsdatum}
             onChange={(v) => setFormData(prev => ({ ...prev, installationsdatum: v }))}
+            hint="Stammdatum der Gesamt-Anlage (nicht das älteste Gerät) — steuert u. a. den Community-Vergleichszeitraum „seit Installation“"
           />
         </div>
         <div className="mt-4">

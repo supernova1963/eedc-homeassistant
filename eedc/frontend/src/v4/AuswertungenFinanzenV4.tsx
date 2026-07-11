@@ -20,6 +20,7 @@
  * still zu verengen.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   BarChart, Bar, ComposedChart, AreaChart, Area, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -442,19 +443,27 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
   )
 }
 
-/** G10 — Cross-Link-Teaser auf den PDF-Finanzbericht. */
+/** G10 — Cross-Link-Teaser auf den PDF-Finanzbericht.
+ *  R18-8 (rapahl #208, Gernot-Entscheid): KEIN neuer Menüpunkt, kein zweiter
+ *  Berichts-Ort — hier nur der EINE Wegweiser zur vollständigen Berichtsübersicht
+ *  (seit jeher Einstellungen · Stammdaten · Anlage). */
 function FinanzberichtTeaser({ anlageId, jahr }: { anlageId: number | undefined | null; jahr: number | 'alle' }) {
   if (!anlageId) return null
   const url = importApi.getPdfZipExportUrl(anlageId, ['finanzbericht'], jahr === 'alle' ? null : jahr)
   return (
     <div className="space-y-2">
       <p className="text-sm text-gray-600 dark:text-gray-300">
-        Finanzbericht als PDF{jahr !== 'alle' ? ` (Jahr ${jahr})` : ' (Gesamtzeitraum)'} — die zentrale
-        Berichts-/Dokumentenverwaltung folgt in den Einstellungen.
+        Finanzbericht als PDF{jahr !== 'alle' ? ` (Jahr ${jahr})` : ' (Gesamtzeitraum)'}.
       </p>
       <a href={url} className={buttonClasses({ variant: 'primary', className: 'gap-2 no-underline' })}>
         <FileText className="h-4 w-4" /> Finanzbericht (PDF)
       </a>
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        Alle Berichte:{' '}
+        <Link to="/v4/einstellungen/stammdaten" className="text-primary-600 dark:text-primary-400 hover:underline">
+          Einstellungen · Stammdaten · Anlage
+        </Link>
+      </p>
     </div>
   )
 }

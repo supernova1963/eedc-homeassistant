@@ -152,13 +152,14 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
             />
           </div>
 
-          {/* Installationsdatum */}
+          {/* Inbetriebnahme (Anlage) — R18-9: Stammdatum der Gesamt-Anlage, Label
+              gegen die Fehldeutung „ältestes Gerät" geschärft. */}
           <div className="grid md:grid-cols-2 gap-4 items-start">
             <DatumFeld
-              label="Installationsdatum"
+              label="Inbetriebnahme (Anlage)"
               value={formData.installationsdatum}
               onChange={(v) => { setFormData(prev => ({ ...prev, installationsdatum: v })); setValidationError(null) }}
-              hint="Für korrekten Start der Stromtarif-Gültigkeit"
+              hint="Stammdatum der Gesamt-Anlage (nicht das älteste Gerät) — für Stromtarif-Gültigkeit und Community-Vergleichszeitraum"
             />
           </div>
 

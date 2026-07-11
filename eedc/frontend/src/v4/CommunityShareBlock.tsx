@@ -252,6 +252,12 @@ export function CommunityShareBlockInhalt() {
         Geteilt werden ausschließlich <strong>monatlich aggregierte Werte</strong> (keine
         Live- oder Tagesdaten): beim Einschalten einmalig alle vorhandenen Monatswerte,
         danach automatisch mit jedem Monatsabschluss.
+        {/* R18-10 (rapahl #208): Rainers Annahme war „nur der letzte Monatsabschluss
+            wird übertragen" — tatsächlich sendet JEDE Übertragung alle Monate erneut
+            (Server-Upsert), rückwirkende Korrekturen kommen also an. Das hier
+            sichtbar machen ersetzt das (entschieden verworfene) Submit-Log. */}
+        {' '}Jede Übertragung sendet dabei <strong>alle Monatsdaten in dieser Form erneut</strong> —
+        nicht nur den neuen Monat; rückwirkende Korrekturen erreichen die Community automatisch.
       </p>
 
       <div>
