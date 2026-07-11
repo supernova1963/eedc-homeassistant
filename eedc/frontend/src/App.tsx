@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
+import LoadingSpinner from './components/ui/LoadingSpinner'
 import { LEGACY_REDIRECTS } from './routes/routeManifest'
 import { useTouchTitleTooltip } from './hooks/useTouchTitleTooltip'
 
@@ -86,7 +88,22 @@ function App() {
   // HashRouter für HA Ingress Support (Ingress-Pfad ist dynamisch)
   return (
     <HashRouter>
-      <Suspense fallback={null}>
+      {/* R18-1 (rapahl #207): ErrorBoundary um den GANZEN Routenbaum (V3+V4) —
+          ChunkLoadError nach Deploy / Render-Fehler enden in einem Reload-Angebot
+          statt im dauerhaft schwarzen Bildschirm. */}
+      <AppErrorBoundary>
+        {/* R18-1: Fallback nicht mehr `null` — beim Erst-Load über langsame Wege
+            (Ingress, Companion-App, Guest-Box übers Internet) laden LayoutV4→
+            Cockpit→Live als Lazy-Chunks nacheinander; bis dahin rendert React
+            sonst NICHTS (dunkler Body = „schwarzer Bildschirm"). h-dvh, nicht
+            h-screen (iOS Safari, [[feedback_ios_companion_app]]). */}
+        <Suspense
+          fallback={
+            <div className="min-h-dvh flex items-center justify-center">
+              <LoadingSpinner size="lg" text="eedc lädt…" />
+            </div>
+          }
+        >
         <Routes>
           <Route path="/" element={<Layout />}>
             {/* Root-Redirect: Release → Live-Dashboard; flag-on Build (VITE_IA_V4)
@@ -197,7 +214,8 @@ function App() {
             </Route>
           )}
         </Routes>
-      </Suspense>
+        </Suspense>
+      </AppErrorBoundary>
     </HashRouter>
   )
 }
