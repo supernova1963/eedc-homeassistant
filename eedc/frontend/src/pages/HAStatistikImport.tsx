@@ -5,7 +5,7 @@
  * Home Assistant Statistik-Datenbank mit Konflikt-Erkennung.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Download,
@@ -22,8 +22,13 @@ import { haStatisticsApi } from '../api'
 import type { ImportVorschau, MonatImportStatus } from '../api'
 import type { MonatFeldAuswahl } from '../api/haStatistics'
 import Alert from '../components/ui/Alert'
+import Button from '../components/ui/Button'
+import Checkbox from '../components/ui/Checkbox'
+import Select from '../components/ui/Select'
+import SegmentControl from '../components/ui/SegmentControl'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage, useApiData } from '../hooks'
+import { useWizardHost } from '../v4/wizardHost'
 import { TYP_LABELS, INVESTITION_TYP_ORDER } from '../lib/constants'
 
 // Import-Modus für schnelle Auswahl
@@ -37,6 +42,10 @@ interface FeldAuswahl {
 
 export default function HAStatistikImport() {
   const navigate = useNavigate()
+  // Teil D (D3): im Overlay-Host laufen die Fuß-Navigationen über den Host
+  // (Cross-Wizard zu Sensor-Zuordnung, schliessen + V4-Route für Monatsdaten);
+  // die Standalone-Route (V3) behält ihr navigate-Verhalten.
+  const host = useWizardHost()
   const { anlagen, selectedAnlageId: selectedAnlage, setSelectedAnlageId: setSelectedAnlage, loading } = useSelectedAnlage()
 
   const [loadingVorschau, setLoadingVorschau] = useState(false)
@@ -52,6 +61,12 @@ export default function HAStatistikImport() {
   const [vorschau, setVorschau] = useState<ImportVorschau | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // W5: geladene Vorschau + Auswahl gelten bis zum Import als offene Eingaben.
+  useEffect(() => {
+    host.setzeBlocker(vorschau !== null && success === null)
+    return () => host.setzeBlocker(false)
+  }, [vorschau, success, host])
 
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   // Ausgewählte Monate für Import: Map von "jahr-monat" -> boolean
@@ -373,40 +388,25 @@ export default function HAStatistikImport() {
 
             <div className="flex items-end gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Anlage
-                </label>
-                <select
-                  value={selectedAnlage ?? ''}
+                <Select
+                  label="Anlage"
+                  value={selectedAnlage != null ? String(selectedAnlage) : ''}
                   onChange={(e) => {
                     setSelectedAnlage(Number(e.target.value))
                     setVorschau(null)
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                >
-                  {anlagen.map(a => (
-                    <option key={a.id} value={a.id}>{a.anlagenname}</option>
-                  ))}
-                </select>
+                  options={anlagen.map(a => ({ value: String(a.id), label: a.anlagenname }))}
+                />
               </div>
 
-              <button
+              <Button
+                type="button"
                 onClick={loadVorschau}
                 disabled={!selectedAnlage || loadingVorschau}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
+                loading={loadingVorschau}
               >
-                {loadingVorschau ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Lade...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    Vorschau laden
-                  </>
-                )}
-              </button>
+                {loadingVorschau ? 'Lade...' : <><Download className="w-4 h-4 mr-2" />Vorschau laden</>}
+              </Button>
             </div>
 
             {!vorschau && (
@@ -457,37 +457,19 @@ export default function HAStatistikImport() {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Import-Modus
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => changeImportModus('alle')}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      importModus === 'alle'
-                        ? 'bg-primary-100 border-primary-500 text-primary-700 dark:bg-primary-900/30 dark:border-primary-400 dark:text-primary-300'
-                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    Alles importieren
-                  </button>
-                  <button
-                    onClick={() => changeImportModus('nur_basis')}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      importModus === 'nur_basis'
-                        ? 'bg-primary-100 border-primary-500 text-primary-700 dark:bg-primary-900/30 dark:border-primary-400 dark:text-primary-300'
-                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    Nur Basis (Einspeisung/Netzbezug)
-                  </button>
-                  <button
-                    onClick={() => changeImportModus('nur_komponenten')}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      importModus === 'nur_komponenten'
-                        ? 'bg-primary-100 border-primary-500 text-primary-700 dark:bg-primary-900/30 dark:border-primary-400 dark:text-primary-300'
-                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    Nur Komponenten
-                  </button>
+                {/* B15/S4: 1-aus-N-Umschalter → SegmentControl-SoT; 'manuell' hat
+                    bewusst keine Option (value ohne Treffer = alle inaktiv, erlaubt). */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <SegmentControl
+                    ariaLabel="Import-Modus"
+                    optionen={[
+                      { key: 'alle', label: 'Alles importieren' },
+                      { key: 'nur_basis', label: 'Nur Basis (Einspeisung/Netzbezug)' },
+                      { key: 'nur_komponenten', label: 'Nur Komponenten' },
+                    ]}
+                    value={importModus}
+                    onChange={(k) => changeImportModus(k as ImportModus)}
+                  />
                   {importModus === 'manuell' && (
                     <span className="px-3 py-1.5 text-sm rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
                       Manuell (individuelle Auswahl)
@@ -533,45 +515,48 @@ export default function HAStatistikImport() {
                 </div>
               </div>
 
-              {/* Import Button */}
+              {/* Import Button — Button-SoT (primary = Kanon statt lokalem green-600). */}
               <div className="flex justify-end">
-                <button
+                <Button
+                  type="button"
                   onClick={handleImport}
                   disabled={importing || selectedCount === 0}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 font-medium"
+                  loading={importing}
+                  size="lg"
                 >
-                  {importing ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      Importiere...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5" />
-                      {selectedCount} Monate importieren
-                    </>
-                  )}
-                </button>
+                  {importing ? 'Importiere...' : <><Download className="w-5 h-5 mr-2" />{selectedCount} Monate importieren</>}
+                </Button>
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* Navigation */}
+      {/* Navigation — im Overlay: Cross-Wizard (Sensor-Zuordnung) bzw.
+          schliessen + V4-Daten-Reiter (Monatsdaten-Block); V3-Route unverändert. */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mt-6 flex justify-between">
-        <button
-          onClick={() => navigate('/einstellungen/sensor-mapping')}
-          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+        <Button
+          type="button" variant="ghost" size="sm"
+          onClick={() =>
+            host.imOverlay ? host.oeffneWizard('sensor-mapping') : navigate('/einstellungen/sensor-mapping')
+          }
         >
           ← Zurück zu Sensor-Zuordnung
-        </button>
-        <button
-          onClick={() => navigate('/einstellungen/monatsdaten')}
+        </Button>
+        <Button
+          type="button" variant="ghost" size="sm"
           className="text-primary-600 hover:text-primary-700"
+          onClick={() => {
+            if (host.imOverlay) {
+              host.schliessen()
+              navigate('/v4/einstellungen/daten')
+            } else {
+              navigate('/einstellungen/monatsdaten')
+            }
+          }}
         >
           Zu Monatsdaten →
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -641,24 +626,25 @@ function MonatRow({
         {/* Checkbox */}
         <div className="px-3 py-3">
           {canSelect ? (
-            <input
-              type="checkbox"
+            <Checkbox
               checked={selected}
               onChange={(e) => {
                 e.stopPropagation()
                 onSelectionChange()
               }}
-              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              label={<span className="sr-only">Monat auswählen</span>}
             />
           ) : (
             <div className="w-4 h-4" />
           )}
         </div>
 
-        {/* Rest der Zeile */}
-        <button
+        {/* Rest der Zeile — Disclosure-Kopf (B15-Muster: ghost + justify-between + aria-expanded) */}
+        <Button
+          type="button" variant="ghost"
           onClick={onToggle}
-          className="flex-1 px-2 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          aria-expanded={expanded}
+          className="flex-1 px-2 py-3 justify-between rounded-none"
         >
           <div className="flex items-center gap-3">
             {hasDetails ? (
@@ -679,7 +665,7 @@ function MonatRow({
             {getAktionIcon(monat.aktion)}
             {getAktionBadge(monat.aktion)}
           </div>
-        </button>
+        </Button>
       </div>
 
       {expanded && hasDetails && (
@@ -721,11 +707,10 @@ function MonatRow({
                           onClick={() => onToggleBasisFeld(key)}
                         >
                           <td className="py-1 pl-2">
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={isSelected}
                               onChange={() => {}}
-                              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              label={<span className="sr-only">{key} übernehmen</span>}
                             />
                           </td>
                           <td className="py-1 pr-4 text-gray-700 dark:text-gray-300">{key}</td>
@@ -809,11 +794,10 @@ function MonatRow({
                                 onClick={() => onToggleInvFeld(inv.investition_id, key)}
                               >
                                 <td className="py-1 pl-2">
-                                  <input
-                                    type="checkbox"
+                                  <Checkbox
                                     checked={isSelected}
                                     onChange={() => {}}
-                                    className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    label={<span className="sr-only">{key} übernehmen</span>}
                                   />
                                 </td>
                                 <td className="py-1 pr-4 text-gray-700 dark:text-gray-300">{key}</td>

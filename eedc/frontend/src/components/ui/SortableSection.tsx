@@ -7,6 +7,9 @@
  * injiziert.
  *
  * Bewusst page-agnostisch: keine Anlage-Reads, keine Page-spezifischen Hooks.
+ *
+ * Wächter-Ausnahme: die rohen <button> (Klapp-/Sortier-Tasten) SIND die SoT-Implementierung —
+ * check:v4-migration-Infra-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
  */
 
 import React, { useState } from 'react'

@@ -27,7 +27,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity, AlertTriangle, ChevronDown, ChevronRight, Clock, FileWarning, History, Loader2, Play, Trash2, Wrench } from 'lucide-react'
 
-import { Alert, Button, Card, Select, DatumFeld, Checkbox } from '../ui'
+import { Alert, Button, Card, Input, Select, DatumFeld, Checkbox } from '../ui'
 import {
   OPERATION_META,
   REAGGREGATE_RANGE_MAX_DAYS,
@@ -358,15 +358,15 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
         {/* Plan erstellen bzw. D14-8: direkter Lösch-Pfad (Gefahren-Stil) */}
         {istDelete ? (
           <div className="flex justify-end">
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              size="sm"
               onClick={handleDeleteEnergieprofil}
-              disabled={deleteRunning}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-50"
+              loading={deleteRunning}
             >
-              {deleteRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {!deleteRunning && <Trash2 className="w-4 h-4 mr-2" />}
               Energieprofil-Daten löschen
-            </button>
+            </Button>
           </div>
         ) : !plan && !executeResult && (
           <div className="flex justify-end">
@@ -411,15 +411,16 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
 
         {/* Verlauf */}
         <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-          <button
-            type="button"
-            className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setHistoryOpen((v) => !v)}
+            aria-expanded={historyOpen}
           >
-            {historyOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            <History className="h-4 w-4" />
+            {historyOpen ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
+            <History className="h-4 w-4 mr-2" />
             Verlauf der letzten {history.length} Reparaturen
-          </button>
+          </Button>
           {historyOpen && (
             <div className="mt-3">
               {historyLoading ? (
@@ -555,20 +556,15 @@ function OperationParamsEditor({ operation, params, setParams, disabled }: Param
   if (operation === 'reset_cloud_import') {
     return (
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Provider-Filter (optional, kommagetrennt)
-        </label>
-        <input
+        <Input
           type="text"
+          label="Provider-Filter (optional, kommagetrennt)"
           placeholder="z. B. solaredge,fronius_solarweb (leer = alle)"
           value={params.providers}
           onChange={(e) => setParams((p) => ({ ...p, providers: e.target.value }))}
           disabled={disabled}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+          hint="Setzt alle von dem/den Provider(n) geschriebenen Felder auf Default zurück."
         />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Setzt alle von dem/den Provider(n) geschriebenen Felder auf Default zurück.
-        </p>
       </div>
     )
   }
@@ -638,22 +634,13 @@ function PlanPreviewBlock({
             ? `Diese ${totalDiff} ${totalDiff === 1 ? 'Änderung' : 'Änderungen'} anwenden`
             : 'Operation ausführen'}
         </Button>
-        <button
-          type="button"
-          onClick={onDiscard}
-          disabled={executeRunning}
-          className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-50"
-        >
+        <Button variant="ghost" size="sm" onClick={onDiscard} disabled={executeRunning}>
           Plan verwerfen
-        </button>
+        </Button>
         {executeRunning && showCancelHint && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="ml-auto px-3 py-2 text-sm text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/30"
-          >
+          <Button variant="secondary" size="sm" className="ml-auto" onClick={onCancel}>
             Abbrechen
-          </button>
+          </Button>
         )}
       </div>
     </div>

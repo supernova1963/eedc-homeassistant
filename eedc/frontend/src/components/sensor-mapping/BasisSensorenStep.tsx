@@ -14,8 +14,26 @@ import { Zap, Download, Upload, Activity, Thermometer, TrendingUp, Sun } from 'l
 import type { FeldMapping, HASensorInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import Button from '../ui/Button'
+import Checkbox from '../ui/Checkbox'
+import Input from '../ui/Input'
+import Switch from '../ui/Switch'
+import SegmentControl from '../ui/SegmentControl'
 import { useHAAvailable } from '../../hooks/useHAAvailable'
 import { useFeldHinweise } from '../../hooks/useFeldHinweise'
+
+/** Vorzeichen-Invertierung (×−1) — 4× identisch unter den Live-Sensor-Feldern. */
+function InvertCheckbox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="mt-2">
+      <Checkbox
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        label={<span className="text-xs text-gray-600 dark:text-gray-400">Vorzeichen invertieren (×−1)</span>}
+      />
+    </div>
+  )
+}
 
 interface BasisSensorenStepProps {
   value: {
@@ -217,17 +235,7 @@ export default function BasisSensorenStep({
                 requireStatistics={false}
               />
               {basisLive.pv_gesamt_w && onBasisLiveInvertChange && (
-                <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!basisLiveInvert.pv_gesamt_w}
-                    onChange={e => onBasisLiveInvertChange('pv_gesamt_w', e.target.checked)}
-                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    Vorzeichen invertieren (&times;&minus;1)
-                  </span>
-                </label>
+                <InvertCheckbox checked={!!basisLiveInvert.pv_gesamt_w} onChange={(v) => onBasisLiveInvertChange('pv_gesamt_w', v)} />
               )}
               <p className="mt-2 text-xs text-gray-500">
                 Optional: Nur nötig wenn kein Live-Sensor pro PV-String konfiguriert ist.
@@ -317,29 +325,14 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
           <span className="text-xs text-gray-500">(W)</span>
         </div>
 
-        <div className="flex gap-2 mb-4">
-          <button
-            type="button"
-            onClick={() => handleModusChange(false)}
-            className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
-              !kombiModus
-                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-            }`}
-          >
-            Getrennte Sensoren
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModusChange(true)}
-            className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
-              kombiModus
-                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 ring-1 ring-amber-500'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-            }`}
-          >
-            Kombinierter Sensor
-          </button>
+        {/* B15/S4: 1-aus-2-Umschalter → SegmentControl-SoT (statt amber-Pillen-Paar). */}
+        <div className="mb-4">
+          <SegmentControl
+            ariaLabel="Netz-Sensor-Modus"
+            optionen={[{ key: 'getrennt', label: 'Getrennte Sensoren' }, { key: 'kombi', label: 'Kombinierter Sensor' }]}
+            value={kombiModus ? 'kombi' : 'getrennt'}
+            onChange={(k) => handleModusChange(k === 'kombi')}
+          />
         </div>
 
         {kombiModus ? (
@@ -355,17 +348,7 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
               requireStatistics={false}
             />
             {basisLive.netz_kombi_w && onBasisLiveInvertChange && (
-              <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!!basisLiveInvert.netz_kombi_w}
-                  onChange={e => onBasisLiveInvertChange('netz_kombi_w', e.target.checked)}
-                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-xs text-gray-600 dark:text-gray-400">
-                  Vorzeichen invertieren (&times;&minus;1)
-                </span>
-              </label>
+              <InvertCheckbox checked={!!basisLiveInvert.netz_kombi_w} onChange={(v) => onBasisLiveInvertChange('netz_kombi_w', v)} />
             )}
           </div>
         ) : (
@@ -382,17 +365,7 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
                 requireStatistics={false}
               />
               {basisLive.einspeisung_w && onBasisLiveInvertChange && (
-                <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!basisLiveInvert.einspeisung_w}
-                    onChange={e => onBasisLiveInvertChange('einspeisung_w', e.target.checked)}
-                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    Vorzeichen invertieren (&times;&minus;1)
-                  </span>
-                </label>
+                <InvertCheckbox checked={!!basisLiveInvert.einspeisung_w} onChange={(v) => onBasisLiveInvertChange('einspeisung_w', v)} />
               )}
             </div>
             <div>
@@ -407,17 +380,7 @@ function NetzLiveSensoren({ basisLive, onBasisLiveChange, basisLiveInvert = {}, 
                 requireStatistics={false}
               />
               {basisLive.netzbezug_w && onBasisLiveInvertChange && (
-                <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!basisLiveInvert.netzbezug_w}
-                    onChange={e => onBasisLiveInvertChange('netzbezug_w', e.target.checked)}
-                    className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-                  />
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    Vorzeichen invertieren (&times;&minus;1)
-                  </span>
-                </label>
+                <InvertCheckbox checked={!!basisLiveInvert.netzbezug_w} onChange={(v) => onBasisLiveInvertChange('netzbezug_w', v)} />
               )}
             </div>
           </div>
@@ -468,17 +431,11 @@ function SolcastConfigBlock({
       {haAvailable ? (
         /* HA-Modus: Toggle für automatische Sensor-Erkennung */
         <>
+          {/* B15/S3: Schalter → ui/Switch-SoT (löst die dritte, abweichende
+              sr-only/peer-Switch-Optik ab — S3-Restweg-Notiz). */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700 dark:text-gray-300">HA-Integration (BJReplay)</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={solcastHaAktiv}
-                onChange={e => onSolcastHaChange(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-500" />
-            </label>
+            <Switch checked={solcastHaAktiv} onChange={onSolcastHaChange} ariaLabel="Solcast HA-Integration" />
           </div>
           {solcastHaAktiv && (
             <p className="text-xs text-blue-500 mt-2">
@@ -489,18 +446,13 @@ function SolcastConfigBlock({
       ) : (
         /* Standalone-Modus: API-Token + Resource-IDs */
         <div className="space-y-3 mt-2">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-              API-Token (solcast.com → API Keys)
-            </label>
-            <input
-              type="password"
-              value={solcastApiKey}
-              onChange={e => onSolcastApiKeyChange?.(e.target.value)}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+          <Input
+            type="password"
+            label="API-Token (solcast.com → API Keys)"
+            value={solcastApiKey}
+            onChange={e => onSolcastApiKeyChange?.(e.target.value)}
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          />
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
               Resource-IDs (solcast.com → My Sites)
@@ -508,23 +460,26 @@ function SolcastConfigBlock({
             {solcastResourceIds.map((r, i) => (
               <div key={r.id} className="flex items-center gap-2 mb-1">
                 <span className="text-xs text-gray-600 dark:text-gray-400 flex-1 truncate">{r.id}</span>
-                <button
-                  type="button"
+                <Button
+                  type="button" variant="ghost" size="icon"
                   onClick={() => onSolcastResourceIdsChange?.(solcastResourceIds.filter((_, j) => j !== i))}
-                  className="text-xs text-red-500 hover:text-red-700"
-                >×</button>
+                  aria-label={`Resource-ID ${r.id} entfernen`} title="Resource-ID entfernen"
+                  className="text-red-500 hover:text-red-700"
+                >×</Button>
               </div>
             ))}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newResourceId}
-                onChange={e => setNewResourceId(e.target.value)}
-                placeholder="xxxx-xxxx-xxxx-xxxx"
-                className="flex-1 px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-              <button
-                type="button"
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
+                <Input
+                  type="text"
+                  value={newResourceId}
+                  onChange={e => setNewResourceId(e.target.value)}
+                  placeholder="xxxx-xxxx-xxxx-xxxx"
+                  aria-label="Neue Resource-ID"
+                />
+              </div>
+              <Button
+                type="button" variant="primary" size="sm"
                 disabled={!newResourceId.trim()}
                 onClick={() => {
                   if (newResourceId.trim()) {
@@ -532,8 +487,8 @@ function SolcastConfigBlock({
                     setNewResourceId('')
                   }
                 }}
-                className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >+</button>
+                aria-label="Resource-ID hinzufügen" title="Resource-ID hinzufügen"
+              >+</Button>
             </div>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">

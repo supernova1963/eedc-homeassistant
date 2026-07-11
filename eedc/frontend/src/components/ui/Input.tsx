@@ -5,6 +5,12 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string
   hint?: string
   /**
+   * Warn-Zustand (amber-Rand) — für Plausibilitäts-WARNUNGEN unterhalb der
+   * Fehler-Schwelle (F3-Status-Achse: warnung ≠ error). Die Warn-MELDUNG
+   * rendert der Aufrufer (z. B. Liste mehrerer Warnungen); `error` gewinnt.
+   */
+  warnung?: boolean
+  /**
    * Zusatz-Klassen für das Label — v. a. `md:min-h-[2.5rem]` in mehrspaltigen
    * Feld-Zeilen ohne Subgrid, damit ein umbrechendes Label die Ausrichtung nicht
    * bricht (D17-7). In dichten Rastern besser `denseRow` (per-Zeile automatisch).
@@ -29,9 +35,9 @@ const FELD_KLASSEN =
   "[&[type='date']]:text-left [&::-webkit-datetime-edit]:text-left"
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className = '', label, error, hint, labelClassName = '', denseRow = false, id, ...props }, ref) => {
+  ({ className = '', label, error, hint, warnung = false, labelClassName = '', denseRow = false, id, ...props }, ref) => {
     const inputId = id || props.name
-    const feldKlassen = `${FELD_KLASSEN} ${error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} ${className}`
+    const feldKlassen = `${FELD_KLASSEN} ${error ? 'border-red-500' : warnung ? 'border-amber-300 dark:border-amber-700' : 'border-gray-300 dark:border-gray-600'} ${className}`
 
     const feld = (
       <input

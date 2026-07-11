@@ -18,6 +18,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import type { FeldMapping, InvestitionInfo, StrategieTyp } from '../../api/sensorMapping'
+import Button from '../ui/Button'
 import { energieProfilApi, type VollbackfillResult } from '../../api/energie_profil'
 import { TYP_LABELS, INVESTITION_TYP_ORDER } from '../../lib/constants'
 
@@ -330,17 +331,17 @@ export default function MappingSummaryStep({
                 <p className="text-sm text-red-700 dark:text-red-300 mt-2">{backfillError}</p>
               )}
             </div>
-            <button
-              type="button"
+            {/* B15: Aktions-Button → Button-SoT (primary statt lokalem blue-600). */}
+            <Button
+              type="button" variant="primary" size="sm" className="shrink-0"
               onClick={handleVollbackfill}
               disabled={isBackfilling}
-              className="shrink-0 flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isBackfilling
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Wird berechnet…</>
-                : <><History className="w-4 h-4" /> Lücken nachfüllen</>
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Wird berechnet…</>
+                : <><History className="w-4 h-4 mr-2" /> Lücken nachfüllen</>
               }
-            </button>
+            </Button>
           </div>
         </div>
       )}

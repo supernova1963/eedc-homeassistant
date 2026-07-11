@@ -14,7 +14,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Users, ExternalLink, HelpCircle } from 'lucide-react'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
-import { Card, Alert, EmptyState, Button } from '../components/ui'
+import { Card, Alert, EmptyState, Button, Select } from '../components/ui'
 import { BlockStackSkeleton } from '../components/blocks'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { useSelectedAnlage } from '../hooks'
@@ -102,16 +102,25 @@ export default function CommunityV4() {
         >
           <ExternalLink className="h-5 w-5" />
         </a>
+        {/* B15: Filter-Leisten-Kontrollen → Select-SoT in der 32-px-steuer-Variante. */}
         {anlagen.length > 1 && (
-          <select value={anlageId ?? ''} onChange={(e) => setSelectedAnlageId(Number(e.target.value))} aria-label="Anlage wählen" className="input w-auto">
-            {anlagen.map((a) => <option key={a.id} value={a.id}>{a.anlagenname}</option>)}
-          </select>
+          <Select
+            steuer
+            value={anlageId != null ? String(anlageId) : ''}
+            onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
+            aria-label="Anlage wählen"
+            options={anlagen.map((a) => ({ value: String(a.id), label: a.anlagenname }))}
+          />
         )}
         {ZEITRAUM_SUBS.has(sub) && (
           <div className="flex items-center gap-1">
-            <select value={zeitraum} onChange={(e) => setZeitraum(e.target.value as ZeitraumTyp)} aria-label="Zeitraum wählen" className="input w-auto">
-              {ZEITRAUM_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-            </select>
+            <Select
+              steuer
+              value={zeitraum}
+              onChange={(e) => setZeitraum(e.target.value as ZeitraumTyp)}
+              aria-label="Zeitraum wählen"
+              options={ZEITRAUM_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+            />
             <SimpleTooltip text={ZEITRAUM_OPTIONS.find((o) => o.value === zeitraum)?.tooltip || 'Betrachtungszeitraum wählen'}>
               <HelpCircle className="h-4 w-4 text-gray-400 dark:text-gray-500 cursor-help" />
             </SimpleTooltip>

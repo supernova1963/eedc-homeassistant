@@ -444,14 +444,14 @@ export default function DataImportWizard() {
                 <div className="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                   <FileSpreadsheet className="w-4 h-4" />
                   {file.name}
-                  <button
-                    type="button"
-                    aria-label="Datei entfernen"
+                  <Button
+                    type="button" variant="ghost" size="icon"
+                    aria-label="Datei entfernen" title="Datei entfernen"
                     onClick={() => { setFile(null); setPreview(null) }}
-                    className="ml-auto text-gray-400 dark:text-gray-500 hover:text-gray-600"
+                    className="ml-auto"
                   >
                     <X className="w-4 h-4" />
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

@@ -1,6 +1,9 @@
 /**
  * DatumPicker — der EINE Custom-Datums-/Monatspicker (SoT, D13-4/9/11/12).
  *
+ * Wächter-Ausnahme: die rohen <button> (Kalender-Tasten) SIND die SoT-Implementierung —
+ * check:v4-migration-Infra-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
+ *
  * Löst den app-weiten Picker-Zwiespalt, den detLAN meldete (#105/#106/#107):
  * bis dato standen ein helles Custom-Monatsraster (D12-7) UND native
  * `<input type=date/month>` (dunkler OS-Kalender, anderes Icon) nebeneinander.

@@ -8,6 +8,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
+import SegmentControl from '../ui/SegmentControl'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
 import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
@@ -402,27 +403,17 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 : chartView === 'verbrauch' ? 'Verbrauch — IST + Prognose'
                 : 'PV-Ertrag vs. Verbrauch — IST + Prognose'}
             </div>
-            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] overflow-hidden shrink-0">
-              {([
-                { k: 'pv', label: 'Nur PV' },
-                { k: 'verbrauch', label: 'Nur Verbrauch' },
-                { k: 'beides', label: 'Beides' },
-              ] as const).map(({ k, label }) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => updateChartView(k)}
-                  className={`px-2 py-1 transition-colors ${
-                    chartView === k
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-                  }`}
-                  title={`Chart: ${label}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* B15/S4: 1-aus-3-Umschalter → SegmentControl-SoT (statt handgebauter Pillen-Gruppe). */}
+            <SegmentControl
+              ariaLabel="Chart-Ansicht" size="sm" className="shrink-0"
+              optionen={[
+                { key: 'pv', label: 'Nur PV' },
+                { key: 'verbrauch', label: 'Nur Verbrauch' },
+                { key: 'beides', label: 'Beides' },
+              ]}
+              value={chartView}
+              onChange={(k) => updateChartView(k as 'pv' | 'verbrauch' | 'beides')}
+            />
           </div>
           {/* Wetter-Timeline: 24h-Grid, aligned mit Chart-X-Achse.
               Recharts plot-area startet bei container_x + margin.left + YAxis.width.

@@ -8,6 +8,10 @@
  * aufgelöste `anlageId` und – im Mehr-Anlagen-Fall – einen `kopfZusatz`
  * (Anlage-Auswahl). Zahlen de-DE über `fmtZahl`. Investition≠Infothek strikt
  * getrennt (nur `infothekApi`; N:M-Verknüpfung läuft über `InfothekForm`).
+ *
+ * Wächter-Ausnahme: die Datei-Thumbnail-Kachel (56×56-Bildvorschau als Klick-
+ * fläche zur Lightbox) ist ein roher <button> (Kachel-Optik, kein ui/Button-Fall) —
+ * check:v4-migration-Fall-3-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
  */
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { Plus, Pencil, Trash2, Archive, BookOpen, FileText, User, Phone, Mail, Download } from 'lucide-react'
@@ -190,48 +194,45 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
             <div className="flex flex-wrap gap-2">
               {vorhandeneKategorien.length > 1 && (
                 <>
-                  <button
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!filterKategorie ? 'primary' : 'secondary'}
+                    aria-pressed={!filterKategorie}
                     onClick={() => setFilterKategorie(null)}
-                    className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                      !filterKategorie
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                    }`}
                   >
                     Alle ({showArchived ? eintraege.length : eintraege.filter(e => e.aktiv).length})
-                  </button>
+                  </Button>
                   {vorhandeneKategorien.map(key => {
                     const config = getKategorieConfig(key)
                     const Icon = config.icon
                     return (
-                      <button
+                      <Button
                         key={key}
+                        type="button"
+                        size="sm"
+                        variant={filterKategorie === key ? 'primary' : 'secondary'}
+                        aria-pressed={filterKategorie === key}
                         onClick={() => setFilterKategorie(filterKategorie === key ? null : key)}
-                        className={`px-3 py-1.5 text-sm rounded-full transition-colors flex items-center gap-1.5 ${
-                          filterKategorie === key
-                            ? 'bg-primary-600 text-white'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-                        }`}
                       >
-                        <Icon className="h-3.5 w-3.5" />
+                        <Icon className="h-3.5 w-3.5 mr-1.5" />
                         {config.label} ({kategorieCounts[key]})
-                      </button>
+                      </Button>
                     )
                   })}
                 </>
               )}
               {archivedCount > 0 && (
-                <button
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={showArchived ? 'primary' : 'secondary'}
+                  aria-pressed={showArchived}
                   onClick={() => setShowArchived(!showArchived)}
-                  className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                    showArchived
-                      ? 'bg-gray-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                  }`}
                 >
-                  <Archive className="h-3.5 w-3.5 inline mr-1" />
+                  <Archive className="h-3.5 w-3.5 mr-1" />
                   {showArchived ? `Archiv ausblenden (${archivedCount})` : `Archivierte anzeigen (${archivedCount})`}
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -264,20 +265,28 @@ export function InfothekVerwaltung({ anlageId, kopfZusatz }: { anlageId: number;
                           <Mail className="h-3.5 w-3.5" />
                         </a>
                       ) : null}
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => handleEdit(vp)}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-primary-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Vertragspartner bearbeiten"
                         title="Bearbeiten"
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => setDeleteConfirm(vp)}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label="Vertragspartner löschen"
                         title="Löschen"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                      </Button>
                     </div>
                   )
                 })}
@@ -500,27 +509,36 @@ function InfothekKarte({
           {/* Actions — Reihenfolge Bearbeiten · Archivieren · Löschen (#344):
               destruktive Aktion ganz rechts, weg vom Bearbeiten. */}
           <div className="flex items-center gap-1 shrink-0">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={onEdit}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-primary-600 transition-colors"
+              aria-label="Eintrag bearbeiten"
               title="Bearbeiten"
             >
               <Pencil className="h-4 w-4" />
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={onToggleAktiv}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              aria-label={eintrag.aktiv ? 'Eintrag archivieren' : 'Eintrag wiederherstellen'}
               title={eintrag.aktiv ? 'Archivieren' : 'Wiederherstellen'}
             >
               <Archive className="h-4 w-4" />
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={onDelete}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 transition-colors"
+              aria-label="Eintrag löschen"
               title="Löschen"
             >
-              <Trash2 className="h-4 w-4" />
-            </button>
+              <Trash2 className="h-4 w-4 text-red-500" />
+            </Button>
           </div>
         </div>
       </Card>

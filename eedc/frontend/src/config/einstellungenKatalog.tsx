@@ -18,11 +18,12 @@ import {
   Settings, Zap, Sun, BookOpen, FileText, Table2, Activity,
   ClipboardCheck, Wand2, MapPin, BarChart3, Share2, Boxes, Radio,
   SlidersHorizontal, DatabaseBackup, ScrollText, Users, Plug, Wrench,
-  ArrowRight,
+  ArrowRight, Sparkles, Trash2,
 } from 'lucide-react'
 import { FormBlock, type FormBlockFeld, type FormBlockWert } from '../components/blocks/FormBlock'
-import { Button } from '../components/ui'
+import { Alert, Button, DestructiveActionDialog } from '../components/ui'
 import { useSelectedAnlage, useTheme } from '../hooks'
+import { importApi, type DemoDataResult } from '../api/import'
 import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
@@ -329,6 +330,76 @@ function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
   )
 }
 
+/** F2 (2026-07-11): Demo-Daten erstellen/löschen im V4-Block (Onboarding-Parität
+ *  zur V3-Import-Seite; gleiche API `importApi.createDemoData/deleteDemoData`).
+ *  Löschen läuft über den M9-Kanon `DestructiveActionDialog` (Tipp-Bestätigung). */
+function DemoDatenInhalt() {
+  const { anlagen, refresh } = useSelectedAnlage()
+  const [laeuft, setLaeuft] = useState(false)
+  const [ergebnis, setErgebnis] = useState<DemoDataResult | null>(null)
+  const [fehler, setFehler] = useState<string | null>(null)
+  const [loeschDialog, setLoeschDialog] = useState(false)
+  const demoAnlage = anlagen.find((a) => a.anlagenname === 'Demo-Anlage')
+
+  const erstellen = async () => {
+    setLaeuft(true); setFehler(null); setErgebnis(null)
+    try {
+      setErgebnis(await importApi.createDemoData())
+      refresh()
+    } catch (e) {
+      setFehler(e instanceof Error ? e.message : 'Fehler beim Erstellen der Demo-Daten')
+    } finally { setLaeuft(false) }
+  }
+
+  const loeschen = async () => {
+    setLaeuft(true); setFehler(null); setErgebnis(null)
+    try {
+      await importApi.deleteDemoData()
+      setLoeschDialog(false)
+      refresh()
+    } catch (e) {
+      setFehler(e instanceof Error ? e.message : 'Fehler beim Löschen der Demo-Daten')
+    } finally { setLaeuft(false) }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600 dark:text-gray-300">
+        {demoAnlage
+          ? 'Demo-Anlage ist vorhanden. Du kannst sie löschen, um sie neu zu erstellen.'
+          : 'Erstelle eine komplette Demo-Anlage mit allen Investitionstypen und 31 Monaten Testdaten — zum gefahrlosen Ausprobieren.'}
+      </p>
+      {fehler && <Alert type="error">{fehler}</Alert>}
+      {ergebnis && <Alert type="success">{ergebnis.message}</Alert>}
+      {demoAnlage ? (
+        <Button type="button" variant="danger" loading={laeuft} onClick={() => setLoeschDialog(true)}>
+          <Trash2 className="h-4 w-4 mr-2" />
+          Demo-Anlage löschen
+        </Button>
+      ) : (
+        <Button type="button" loading={laeuft} onClick={erstellen}>
+          <Sparkles className="h-4 w-4 mr-2" />
+          Demo-Daten erstellen
+        </Button>
+      )}
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        <strong>Enthält:</strong> 20 kWp PV-Anlage (3 Strings), 15 kWh Speicher, E-Auto mit V2H,
+        Wärmepumpe, Wallbox, Balkonkraftwerk mit Speicher, Mini-BHKW, Strompreise 2023–2025.
+      </p>
+      <DestructiveActionDialog
+        isOpen={loeschDialog}
+        onClose={() => setLoeschDialog(false)}
+        onConfirm={loeschen}
+        title="Demo-Anlage löschen?"
+        itemLabel="die Demo-Anlage mit allen Testdaten"
+        warningMessage="Alle Demo-Monatsdaten, -Komponenten und -Strompreise werden entfernt. Echte Anlagen bleiben unberührt."
+        anlageId={demoAnlage?.id}
+        anlageName={demoAnlage?.anlagenname ?? 'Demo-Anlage'}
+      />
+    </div>
+  )
+}
+
 // ─── Katalog ───────────────────────────────────────────────────────────────────
 
 export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
@@ -478,6 +549,14 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   },
 
   // ── System ──
+  {
+    id: 'demo-daten', name: 'Demo-Daten', icon: Sparkles, kategorie: 'system',
+    route: 'einstellungen/import',
+    schlagworte: ['demo', 'testdaten', 'beispiel', 'onboarding', 'ausprobieren'],
+    // F2 (Mängelbehebung 2026-07-11): V4-Zugang für Erstellen/Löschen der
+    // Demo-Anlage (Onboarding-Parität zur V3-Import-Seite).
+    inhalt: () => <DemoDatenInhalt />,
+  },
   {
     id: 'allgemein', name: 'Allgemein', icon: SlidersHorizontal, kategorie: 'system',
     route: 'einstellungen/allgemein',

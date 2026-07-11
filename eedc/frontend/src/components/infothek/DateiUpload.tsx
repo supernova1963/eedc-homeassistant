@@ -4,11 +4,15 @@
  * Unterstützt Bilder (JPEG, PNG, HEIC) und PDFs.
  * Max 15 Dateien pro Eintrag, Drag & Drop oder Klick.
  * Pro ausgewählte Datei kann eine optionale Beschreibung vergeben werden.
+ *
+ * Wächter-Ausnahme: das rote Lösch-Overlay-Badge auf der Thumbnail-Ecke ist ein
+ * roher <button> (Overlay-Mikro-Optik, kein ui/Button-Fall) — check:v4-migration-
+ * Fall-3-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Upload, FileText, Image as ImageIcon, Trash2, X } from 'lucide-react'
-import { Alert } from '../ui'
+import { Alert, Button, Input } from '../ui'
 import { infothekApi } from '../../api/infothek'
 import type { InfothekDatei } from '../../types/infothek'
 
@@ -184,42 +188,45 @@ export default function DateiUpload({ eintragId, onDateiChange }: DateiUploadPro
               <span className="text-xs text-gray-600 dark:text-gray-400 truncate max-w-[140px]" title={item.file.name}>
                 {item.file.name}
               </span>
-              <input
+              <Input
                 type="text"
                 placeholder="Beschreibung (optional)"
                 value={item.beschreibung}
                 onChange={e => updatePendingBeschreibung(item.id, e.target.value)}
-                className="input flex-1 text-xs py-1"
+                className="flex-1 text-xs"
                 disabled={uploading}
               />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => removePending(item.id)}
-                className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 disabled:opacity-50"
+                aria-label="Datei aus der Warteschlange entfernen"
                 title="Entfernen"
                 disabled={uploading}
               >
                 <X className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           ))}
           <div className="flex justify-end gap-2 pt-1">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setPending([])}
               disabled={uploading}
-              className="btn-secondary text-xs py-1 px-2"
             >
               Abbrechen
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              size="sm"
               onClick={handleUploadPending}
-              disabled={uploading}
-              className="btn-primary text-xs py-1 px-2"
+              loading={uploading}
             >
               {uploading ? 'Wird hochgeladen…' : `${pending.length} hochladen`}
-            </button>
+            </Button>
           </div>
         </div>
       )}

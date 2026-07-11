@@ -10,7 +10,7 @@
  */
 import { useState, useRef, type DragEvent, type ChangeEvent, type ReactNode } from 'react'
 import { Download, Upload, Check, FileJson, AlertTriangle, Info } from 'lucide-react'
-import { Button, Alert, Card, LoadingSpinner } from '../components/ui'
+import { Button, Alert, Card, LoadingSpinner, Switch } from '../components/ui'
 import { importApi } from '../api'
 import { downloadFile } from '../lib'
 import type { JSONImportResult } from '../types'
@@ -221,15 +221,14 @@ export function BackupVerwaltung({
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <Switch
               checked={ueberschreiben}
-              onChange={(e) => setUeberschreiben(e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              onChange={setUeberschreiben}
+              ariaLabel="Existierende Anlage mit gleichem Namen überschreiben"
             />
             Existierende Anlage mit gleichem Namen überschreiben
-          </label>
+          </div>
         </div>
       </Card>
     </div>

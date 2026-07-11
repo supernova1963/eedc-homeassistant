@@ -15,6 +15,7 @@ import { IATopNav, type IANavItem } from '../components/layout/IATopNav'
 import { AnlagenSelektor } from './AnlagenSelektor'
 import { AppStatusProvider } from './status/AppStatusContext'
 import { StatusFusszeile } from './status/StatusFusszeile'
+import { WizardOverlayProvider } from './EinstellungenModalHost'
 
 export default function LayoutV4() {
   const { pathname } = useLocation()
@@ -55,6 +56,9 @@ export default function LayoutV4() {
 
   return (
     <AppStatusProvider>
+      {/* Mängelbehebung D/E: EIN app-weiter Wizard-Overlay-Host (oeffneWizard mit
+          Payload) — auch für Fusszeile/Teile außerhalb der Einstellungen-Sicht. */}
+      <WizardOverlayProvider>
       <div className="h-dvh bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
         <IATopNav inhalt={inhalt} meta={meta} modusBadge={badge} anlagenSelektor={<AnlagenSelektor />} />
         {/* Ab lg gibt main keine eigene Scroll-Leiste mehr her, sondern wird flex-
@@ -71,6 +75,7 @@ export default function LayoutV4() {
         {/* G11 Shell-Slice: app-weite Status-Fusszeile (klebt unten via flex-col). */}
         <StatusFusszeile />
       </div>
+      </WizardOverlayProvider>
     </AppStatusProvider>
   )
 }

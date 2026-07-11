@@ -1,6 +1,10 @@
 /**
  * IATopNav — geteilte IA-v4-Top-Nav-Schale (Struktur-SoT).
  *
+ * Wächter-Ausnahme: die rohen <button> (Nav-Tabs/Burger/Theme-Cycle) SIND die
+ * Infra-Implementierung — check:v4-migration-Infra-Allowlist (Regel 0a Fall 3,
+ * Gernot-Freigabe 2026-07-11).
+ *
  * EINE Quelle für die obere Leiste der IA-v4: konsumiert von der öffentlichen
  * Vorschau (`components/preview/IASkeleton`, state-getrieben) UND vom echten
  * /v4-Routenbaum (`v4/LayoutV4`, router-getrieben). Damit gibt es keine zwei

@@ -22,6 +22,7 @@
  *  - Eine Zell-Typo: `text-sm` + `py-1.5`.
  */
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import ScrollSchatten from './ScrollSchatten'
 import { DECKEL, FLAECHE, FUSS_GRUND, KOPF_ZELLE, ZELLE, fensterHoehe, type Flaeche } from './tabelleMasse'
 
@@ -168,6 +169,32 @@ export function TableHeader({ children, className = '' }: { children: ReactNode;
     <th scope="col" className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400 ${className}`}>
       {children}
     </th>
+  )
+}
+
+/**
+ * TableSortKopf — klickbarer Sortier-Spaltenkopf der Zentrale (Regel T).
+ * Der rohe `<button>` ist hier die SoT-Implementierung (wie SegmentControl/Switch);
+ * Pfeil-Icons folgen der Kontroll-Icon-Konvention E6 (erben die Kopf-Textfarbe).
+ * In einen `<th>` des Aufrufers setzen — Ausrichtung/Padding bleiben Sache der Zelle.
+ */
+export function TableSortKopf({
+  children, aktiv, richtung, onClick,
+}: {
+  children: ReactNode
+  /** Ist DIESE Spalte die aktuelle Sortier-Spalte? (Pfeil nur dann) */
+  aktiv: boolean
+  richtung: 'asc' | 'desc'
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200"
+    >
+      {children} {aktiv && (richtung === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+    </button>
   )
 }
 

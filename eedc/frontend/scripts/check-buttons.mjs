@@ -31,6 +31,10 @@ const SCOPE = join(ROOT, 'src', 'v4')
  * - Rails (Tages/Monats/Jahres): Rail-Einträge (Listen-Buttons)
  * - KomponentenTypV4: Geräteselektor (Pill-/Tab-Selektor, B3-Territorium — s. Kommentar dort)
  * - CockpitLiveV4: Kachel-Fokus-Button (FokusKachel-IST-Layout, S11-Ausnahme bis Flip)
+ *
+ * Session 4 (2026-07-11): Gernot hat diese 15 Vorkommen als Fall-3-Mikro-Optik
+ * bestätigt und zusätzlich in `check-v4-migration.mjs` (ROH_INFRA) freigegeben.
+ * Kein Zähler-Wechsel — der belegte Bestand bleibt hier exakt eingefroren.
  */
 const ALLOW = new Map([
   ['src/v4/ZeitStepper.tsx', 3],

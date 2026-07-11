@@ -5,17 +5,36 @@
  * über den Live-Leistungsdaten empfangen werden.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Radio, CheckCircle, XCircle, Loader2, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen, Trash2, Wand2 } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Radio, CheckCircle, XCircle, Info, Copy, Check, Activity, RefreshCw, ChevronDown, BookOpen, Trash2, Wand2 } from 'lucide-react'
 import Input from '../components/ui/Input'
+import Button from '../components/ui/Button'
+import Select from '../components/ui/Select'
+import Switch from '../components/ui/Switch'
+import Stepper from '../components/ui/Stepper'
+import RadioGroup from '../components/ui/RadioGroup'
 import { liveDashboardApi } from '../api/liveDashboard'
 import type { MqttTestResult, MqttInboundStatus, MqttTopic, MqttCacheWert } from '../api/liveDashboard'
 import { DataLoadingState } from '../components/common'
 import { useSelectedAnlage } from '../hooks'
+import { useWizardHost } from '../v4/wizardHost'
 import MqttGateway from '../components/live/MqttGateway'
 
+/**
+ * Teil D (D4, Gernot 2026-07-09): im V4-Overlay ist das EIN Kombi-Wizard
+ * „Live-Daten via MQTT" — Schritt 1 = Modus-Wahl (Empfangen = Inbound /
+ * Senden = Gateway), Schritt 2 = der jeweilige Zweig. Die V3-Standalone-Route
+ * behält ihr lineares IST-Layout (V3-Release-Grenze: Strukturumbau nur /v4).
+ */
+type MqttModus = 'inbound' | 'gateway'
+
 export default function MqttInboundSetup() {
+  const wizardHost = useWizardHost()
   const { anlagen, selectedAnlageId, setSelectedAnlageId } = useSelectedAnlage()
+
+  // Kombi-Wizard-State (nur im Overlay wirksam)
+  const [modus, setModus] = useState<MqttModus | null>(null)
+  const [schritt, setSchritt] = useState(0)
 
   // Form State
   const [enabled, setEnabled] = useState(false)
@@ -54,6 +73,9 @@ export default function MqttInboundSetup() {
   const [cacheValues, setCacheValues] = useState<MqttCacheWert[]>([])
   const [monitorLoading, setMonitorLoading] = useState(false)
 
+  // W5-Dirty-Referenz: Broker-Form-Snapshot nach Laden/Speichern.
+  const geladenRef = useRef('')
+
   // Settings laden
   useEffect(() => {
     Promise.all([
@@ -67,6 +89,10 @@ export default function MqttInboundSetup() {
       setPassword(settings.password)
       setQuelle(settings.quelle || '')
       setStatus(mqttStatus)
+      geladenRef.current = JSON.stringify({
+        enabled: settings.enabled, host: settings.host, port: settings.port,
+        username: settings.username, password: settings.password,
+      })
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
@@ -100,6 +126,7 @@ export default function MqttInboundSetup() {
             : 'Gespeichert. MQTT-Inbound deaktiviert.'
         )
         setQuelle('db')
+        geladenRef.current = JSON.stringify({ enabled, host, port, username, password })
         // Status neu laden
         liveDashboardApi.getMqttStatus().then(setStatus).catch(() => {})
       }
@@ -157,6 +184,16 @@ export default function MqttInboundSetup() {
     }
   }
 
+  // W5: ungespeicherte Broker-Eingaben melden (Overlay-Verwerfen-Nachfrage).
+  const formDirty =
+    !!geladenRef.current &&
+    JSON.stringify({ enabled, host, port, username, password }) !== geladenRef.current &&
+    saveResult === null
+  useEffect(() => {
+    wizardHost.setzeBlocker(formDirty)
+    return () => wizardHost.setzeBlocker(false)
+  }, [formDirty, wizardHost])
+
   if (loading) {
     return <DataLoadingState loading={true} error={null}><div /></DataLoadingState>
   }
@@ -164,43 +201,19 @@ export default function MqttInboundSetup() {
   // Erstes konkretes Topic für Beispiel-Befehl
   const erstesInvTopic = topics.find(t => t.topic.includes('/inv/'))
 
-  return (
-    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-3">
-          <Radio className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-            MQTT-Inbound
-          </h1>
-          {status?.subscriber_aktiv && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-              aktiv
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Empfange Live-Leistungsdaten von jedem Smarthome-System via MQTT.
-          Funktioniert mit Node-RED, Home Assistant, ioBroker, FHEM, openHAB.
-        </p>
-      </div>
-
+  const inboundKern = (
+    <>
       {/* Broker-Konfiguration */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 space-y-4">
         <h2 className="font-semibold text-gray-900 dark:text-white">Broker-Verbindung</h2>
 
-        {/* Enabled Toggle */}
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-            className="w-4 h-4 text-primary-600 rounded border-gray-300 dark:border-gray-600 focus:ring-primary-500"
-          />
+        {/* Enabled Toggle — B15/S3: Switch-SoT (An-Aus-Schalter) */}
+        <div className="flex items-center gap-3">
+          <Switch checked={enabled} onChange={setEnabled} ariaLabel="MQTT-Inbound aktivieren" />
           <span className="text-sm text-gray-700 dark:text-gray-300">
             MQTT-Inbound aktivieren
           </span>
-        </label>
+        </div>
 
         {enabled && (
           <>
@@ -245,26 +258,26 @@ export default function MqttInboundSetup() {
           </>
         )}
 
-        {/* Actions */}
+        {/* Actions — Button-SoT */}
         <div className="flex flex-wrap gap-3 pt-2">
           {enabled && (
-            <button
+            <Button
+              type="button" variant="secondary"
               onClick={testConnection}
               disabled={testing || !host}
-              className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
+              loading={testing}
             >
-              {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
-              Verbindung testen
-            </button>
+              {!testing && <Radio className="w-4 h-4 mr-2" />}Verbindung testen
+            </Button>
           )}
-          <button
+          <Button
+            type="button"
             onClick={saveSettings}
             disabled={saving || (enabled && !host)}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
+            loading={saving}
           >
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Speichern{enabled ? ' & Verbinden' : ''}
-          </button>
+          </Button>
         </div>
 
         {/* Test Result */}
@@ -330,27 +343,27 @@ export default function MqttInboundSetup() {
               <h2 className="font-semibold text-gray-900 dark:text-white">Empfangene Werte</h2>
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
+                type="button" variant="ghost" size="sm"
                 onClick={loadCacheValues}
                 disabled={monitorLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 transition-colors"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${monitorLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${monitorLoading ? 'animate-spin' : ''}`} />
                 Aktualisieren
-              </button>
+              </Button>
               {cacheValues.length > 0 && (
-                <button
+                <Button
+                  type="button" variant="danger" size="sm"
                   onClick={async () => {
                     await liveDashboardApi.deleteMqttCache(undefined, true)
                     setCacheValues([])
                     liveDashboardApi.getMqttStatus().then(setStatus).catch(() => {})
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                   title="Löscht Cache und Retained Messages am Broker"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
                   Cache leeren
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -394,15 +407,13 @@ export default function MqttInboundSetup() {
             <h2 className="font-semibold text-gray-900 dark:text-white">Topic-Struktur</h2>
           </div>
           {anlagen.length > 1 && (
-            <select
-              value={selectedAnlageId ?? ''}
+            <Select
+              steuer
+              value={selectedAnlageId != null ? String(selectedAnlageId) : ''}
               onChange={(e) => setSelectedAnlageId(Number(e.target.value))}
-              className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              {anlagen.map(a => (
-                <option key={a.id} value={a.id}>{a.anlagenname || `Anlage ${a.id}`}</option>
-              ))}
-            </select>
+              aria-label="Anlage wählen"
+              options={anlagen.map(a => ({ value: String(a.id), label: a.anlagenname || `Anlage ${a.id}` }))}
+            />
           )}
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -445,12 +456,89 @@ export default function MqttInboundSetup() {
 
       {/* Beispiel-Flows für andere Systeme */}
       <AndereSystemeFlows topics={topics} host={host || 'localhost'} />
+    </>
+  )
+
+  const gatewayKern = (
+    <MqttGateway
+      anlageId={selectedAnlageId ?? null}
+      mqttAktiv={!!status?.subscriber_aktiv}
+    />
+  )
+
+  // ── Overlay (V4): Kombi-Wizard „Live-Daten via MQTT" — Schritt 1 = Modus-Wahl ──
+  if (wizardHost.imOverlay) {
+    return (
+      <div className="space-y-6">
+        <Stepper
+          schritte={[
+            { titel: 'Modus' },
+            { titel: modus === 'gateway' ? 'Senden (Gateway)' : 'Empfangen (Inbound)' },
+          ]}
+          aktuell={schritt}
+          onSchrittKlick={setSchritt}
+        />
+        {schritt === 0 ? (
+          <div className="space-y-4">
+            <RadioGroup
+              label="Was möchtest du einrichten?"
+              name="mqtt-modus"
+              value={modus ?? ''}
+              onChange={(k) => setModus(k as MqttModus)}
+              options={[
+                {
+                  value: 'inbound',
+                  label: 'Live-Daten empfangen (MQTT-Inbound)',
+                  description: 'eedc empfängt Live-Leistungsdaten von deinem Smarthome-System (Node-RED, HA, ioBroker, FHEM, openHAB) über einen MQTT-Broker.',
+                },
+                {
+                  value: 'gateway',
+                  label: 'Werte an eedc senden (Gateway-Mapping)',
+                  description: 'Fremde MQTT-Topics (z. B. Zendure, Shelly) auf eedc-Topics umlenken — inkl. Presets und JSON-Pfaden.',
+                },
+              ]}
+            />
+            <div className="flex justify-end">
+              <Button type="button" disabled={modus == null} onClick={() => setSchritt(1)}>
+                Weiter
+              </Button>
+            </div>
+          </div>
+        ) : modus === 'gateway' ? (
+          gatewayKern
+        ) : (
+          <div className="space-y-6">{inboundKern}</div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Standalone-Route (V3): lineares IST-Layout unverändert ──
+  return (
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-3">
+          <Radio className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+            MQTT-Inbound
+          </h1>
+          {status?.subscriber_aktiv && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+              aktiv
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          Empfange Live-Leistungsdaten von jedem Smarthome-System via MQTT.
+          Funktioniert mit Node-RED, Home Assistant, ioBroker, FHEM, openHAB.
+        </p>
+      </div>
+
+      {inboundKern}
 
       {/* MQTT Gateway */}
-      <MqttGateway
-        anlageId={selectedAnlageId ?? null}
-        mqttAktiv={!!status?.subscriber_aktiv}
-      />
+      {gatewayKern}
     </div>
   )
 }
@@ -468,13 +556,13 @@ function TopicRow({ label, beschreibung, topic, copied, onCopy }: {
       <code className="flex-1 text-xs bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded text-gray-800 dark:text-gray-200 font-mono truncate">
         {topic}
       </code>
-      <button
+      <Button
+        type="button" variant="ghost" size="icon" className="shrink-0"
         onClick={() => onCopy(topic)}
-        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
-        title="Topic kopieren"
+        aria-label="Topic kopieren" title="Topic kopieren"
       >
         {copied === topic ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -588,9 +676,12 @@ ${actions}`
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-      <button
+      {/* Disclosure-Kopf (B15-Muster: ghost + w-full + justify-between + aria-expanded) */}
+      <Button
+        type="button" variant="ghost"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-5 text-left"
+        aria-expanded={open}
+        className="w-full justify-between p-5 text-left"
       >
         <div className="flex items-center gap-2">
           <Wand2 className="w-5 h-5 text-purple-500" />
@@ -598,7 +689,7 @@ ${actions}`
           <span className="text-xs text-gray-400 dark:text-gray-500">Home Assistant YAML erzeugen</span>
         </div>
         <ChevronDown className={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      </Button>
 
       {open && (
         <div className="px-5 pb-5 space-y-6">
@@ -612,32 +703,32 @@ ${actions}`
             {anlagen.length > 1 && (
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600 dark:text-gray-400">Anlage:</label>
-                <select
-                  value={selectedAnlageId ?? ''}
+                <Select
+                  steuer
+                  value={selectedAnlageId != null ? String(selectedAnlageId) : ''}
                   onChange={(e) => {
                     setSelectedAnlageId(Number(e.target.value))
                     setEntityMap({})
                   }}
-                  className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {anlagen.map(a => (
-                    <option key={a.id} value={a.id}>{a.anlagenname || `Anlage ${a.id}`}</option>
-                  ))}
-                </select>
+                  aria-label="Anlage wählen"
+                  options={anlagen.map(a => ({ value: String(a.id), label: a.anlagenname || `Anlage ${a.id}` }))}
+                />
               </div>
             )}
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-600 dark:text-gray-400">Live-Intervall:</label>
-              <select
+              <Select
+                steuer
                 value={interval}
                 onChange={(e) => setInterval(e.target.value)}
-                className="text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="5">Alle 5 Sekunden</option>
-                <option value="10">Alle 10 Sekunden</option>
-                <option value="30">Alle 30 Sekunden</option>
-                <option value="60">Jede Minute</option>
-              </select>
+                aria-label="Live-Intervall"
+                options={[
+                  { value: '5', label: 'Alle 5 Sekunden' },
+                  { value: '10', label: 'Alle 10 Sekunden' },
+                  { value: '30', label: 'Alle 30 Sekunden' },
+                  { value: '60', label: 'Jede Minute' },
+                ]}
+              />
             </div>
           </div>
 
@@ -735,13 +826,16 @@ function TopicMappingSection({ title, description, badge, topics, entityMap, get
               </span>
             </div>
             <span className="text-gray-300 dark:text-gray-600 shrink-0">→</span>
-            <input
-              type="text"
-              value={entityMap[t.topic] || ''}
-              onChange={(e) => onUpdate(t.topic, e.target.value)}
-              placeholder={getPlaceholder(t)}
-              className="flex-1 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder:text-gray-400 dark:placeholder:text-gray-600 font-mono"
-            />
+            <div className="flex-1">
+              <Input
+                type="text"
+                value={entityMap[t.topic] || ''}
+                onChange={(e) => onUpdate(t.topic, e.target.value)}
+                placeholder={getPlaceholder(t)}
+                aria-label={`Entity für ${t.label}`}
+                className="font-mono"
+              />
+            </div>
           </div>
         ))}
       </div>
@@ -760,13 +854,13 @@ function YamlOutput({ id, title, yaml, copied, onCopy }: {
     <div className="space-y-1">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{title}</span>
-        <button
+        <Button
+          type="button" variant="ghost" size="sm"
           onClick={() => onCopy(id, yaml)}
-          className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200"
         >
-          {copied === id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+          {copied === id ? <Check className="w-3 h-3 mr-1 text-green-500" /> : <Copy className="w-3 h-3 mr-1" />}
           {copied === id ? 'Kopiert!' : 'Kopieren'}
-        </button>
+        </Button>
       </div>
       <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded-lg overflow-x-auto text-gray-800 dark:text-gray-200 max-h-80 overflow-y-auto">
         <code>{yaml}</code>
@@ -844,9 +938,11 @@ end`,
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-      <button
+      <Button
+        type="button" variant="ghost"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-5 text-left"
+        aria-expanded={open}
+        className="w-full justify-between p-5 text-left"
       >
         <div className="flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-gray-400 dark:text-gray-500" />
@@ -854,7 +950,7 @@ end`,
           <span className="text-xs text-gray-400 dark:text-gray-500">Node-RED, ioBroker, FHEM, openHAB</span>
         </div>
         <ChevronDown className={`w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+      </Button>
 
       {open && (
         <div className="px-5 pb-5 space-y-4">
@@ -863,17 +959,12 @@ end`,
               <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
                 Beispiel generieren für:
               </label>
-              <select
-                value={selectedIdx}
+              <Select
+                value={String(selectedIdx)}
                 onChange={(e) => setSelectedIdx(Number(e.target.value))}
-                className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                {topics.map((t, i) => (
-                  <option key={t.topic} value={i}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
+                aria-label="Topic für Beispiel wählen"
+                options={topics.map((t, i) => ({ value: String(i), label: t.label }))}
+              />
             </div>
           )}
 
@@ -887,13 +978,13 @@ end`,
             <div key={s.id} className="space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{s.label}</span>
-                <button
+                <Button
+                  type="button" variant="ghost" size="sm"
                   onClick={() => copySnippet(s.id, s.code)}
-                  className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200"
                 >
-                  {copiedSnippet === s.id ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                  {copiedSnippet === s.id ? <Check className="w-3 h-3 mr-1 text-green-500" /> : <Copy className="w-3 h-3 mr-1" />}
                   {copiedSnippet === s.id ? 'Kopiert' : 'Kopieren'}
-                </button>
+                </Button>
               </div>
               <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded-lg overflow-x-auto text-gray-800 dark:text-gray-200">
                 <code>{s.code}</code>

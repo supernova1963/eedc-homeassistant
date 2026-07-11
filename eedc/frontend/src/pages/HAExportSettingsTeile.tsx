@@ -65,7 +65,7 @@ import {
   mdiHelpCircleOutline
 } from '@mdi/js'
 import { haApi, anlagenApi } from '../api'
-import { Button } from '../components/ui'
+import { Button, Input, SegmentControl } from '../components/ui'
 
 const MDI_ICON_MAP: Record<string, string> = {
   'mdi:solar-power': mdiSolarPower,
@@ -480,7 +480,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="number"
               min={0}
               max={50}
@@ -490,7 +490,8 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                 setGuenstigProzent(e.target.value)
                 setGuenstigSaved(false)
               }}
-              className="w-24 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+              aria-label="Günstig-Schwelle in Prozent"
+              className="w-24"
             />
             <span className="text-sm text-gray-500 dark:text-gray-400">%</span>
             <Button
@@ -509,31 +510,16 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex gap-4 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('mqtt')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'mqtt'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            MQTT Discovery (empfohlen)
-          </button>
-          <button
-            onClick={() => setActiveTab('rest')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'rest'
-                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            REST API (YAML)
-          </button>
-        </nav>
-      </div>
+      {/* Export-Weg-Umschalter (C2: SegmentControl-SoT statt Hand-Tab-Bar) */}
+      <SegmentControl
+        optionen={[
+          { key: 'mqtt', label: 'MQTT Discovery (empfohlen)' },
+          { key: 'rest', label: 'REST API (YAML)' },
+        ]}
+        value={activeTab}
+        onChange={(key) => setActiveTab(key)}
+        ariaLabel="Export-Weg wählen"
+      />
 
       {/* MQTT Tab */}
       {activeTab === 'mqtt' && (
@@ -553,51 +539,37 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Host
-                </label>
-                <input
+                <Input
                   type="text"
+                  label="Host"
                   value={mqttHost}
                   onChange={(e) => setMqttHost(e.target.value)}
                   placeholder="core-mosquitto"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                  hint="Bei HA-App: core-mosquitto"
                 />
-                <p className="mt-1 text-xs text-gray-500">
-                  Bei HA-App: core-mosquitto
-                </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Port
-                </label>
-                <input
+                <Input
                   type="number"
+                  label="Port"
                   value={mqttPort}
                   onChange={(e) => setMqttPort(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Benutzername (optional)
-                </label>
-                <input
+                <Input
                   type="text"
+                  label="Benutzername (optional)"
                   value={mqttUser}
                   onChange={(e) => setMqttUser(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Passwort (optional)
-                </label>
-                <input
+                <Input
                   type="password"
+                  label="Passwort (optional)"
                   value={mqttPassword}
                   onChange={(e) => setMqttPassword(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
                 />
               </div>
             </div>
@@ -656,42 +628,34 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
             )}
 
             <div className="flex flex-wrap gap-3">
-              <button
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={testMqttConnection}
-                disabled={mqttTesting}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                loading={mqttTesting}
               >
-                {mqttTesting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
+                {!mqttTesting && <RefreshCw className="w-4 h-4 mr-2" />}
                 Verbindung testen
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
                 onClick={publishMqttSensors}
-                disabled={mqttPublishing || !anlageId}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50"
+                disabled={!anlageId}
+                loading={mqttPublishing}
               >
-                {mqttPublishing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
+                {!mqttPublishing && <Send className="w-4 h-4 mr-2" />}
                 Sensoren publizieren
-              </button>
-              <button
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
                 onClick={removeMqttSensors}
-                disabled={mqttRemoving || !anlageId}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/30 transition-colors disabled:opacity-50"
+                disabled={!anlageId}
+                loading={mqttRemoving}
               >
-                {mqttRemoving ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
+                {!mqttRemoving && <Trash2 className="w-4 h-4 mr-2" />}
                 Sensoren entfernen
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -733,29 +697,23 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                 YAML für configuration.yaml
               </h2>
               <div className="flex gap-2">
-                <button
-                  onClick={copyYaml}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                >
+                <Button type="button" variant="secondary" size="sm" onClick={copyYaml}>
                   {copiedYaml ? (
                     <>
-                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
                       Kopiert!
                     </>
                   ) : (
                     <>
-                      <Copy className="w-4 h-4" />
+                      <Copy className="w-4 h-4 mr-1" />
                       Kopieren
                     </>
                   )}
-                </button>
-                <button
-                  onClick={downloadYaml}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={downloadYaml}>
+                  <Download className="w-4 h-4 mr-1" />
                   Download
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -792,23 +750,28 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
           <div className="space-y-4">
             {sortCategories(Object.entries(groupSensorsByCategory(anlageExport.sensors))).map(([category, sensors]) => (
               <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                <button
+                <div className="bg-gray-50 dark:bg-gray-800">
+                <Button
+                  type="button"
+                  variant="ghost"
                   onClick={() => toggleCategory(category)}
-                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  aria-expanded={expandedCategories.has(category)}
+                  className="w-full justify-between text-left"
                 >
-                  <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-2">
                     <span>{categoryIcons[category] || '📌'}</span>
                     <span className="font-medium text-gray-900 dark:text-white">
                       {categoryLabels[category] || category}
                     </span>
                     <span className="text-sm text-gray-500">({sensors.length})</span>
-                  </div>
+                  </span>
                   {expandedCategories.has(category) ? (
                     <ChevronDown className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                   ) : (
                     <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                   )}
-                </button>
+                </Button>
+                </div>
 
                 {expandedCategories.has(category) && (
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">

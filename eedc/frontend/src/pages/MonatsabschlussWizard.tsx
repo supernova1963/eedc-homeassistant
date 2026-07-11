@@ -7,7 +7,7 @@
  * - Integration mit Sensor-Mapping
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ChevronLeft,
@@ -33,6 +33,8 @@ import type {
 } from '../api'
 import Alert from '../components/ui/Alert'
 import Button from '../components/ui/Button'
+import Stepper from '../components/ui/Stepper'
+import { useWizardHost, type MonatsabschlussPayload } from '../v4/wizardHost'
 import { useHAAvailable } from '../hooks/useHAAvailable'
 import { MONAT_NAMEN } from '../lib/constants'
 import {
@@ -47,13 +49,26 @@ import {
 import type { WizardState } from '../components/monatsabschluss'
 
 export default function MonatsabschlussWizard() {
-  const { anlageId, jahr, monat } = useParams<{
+  const params = useParams<{
     anlageId?: string
     jahr?: string
     monat?: string
   }>()
   const navigate = useNavigate()
   const haAvailable = useHAAvailable()
+  // E2: im Overlay kommen die Aufruf-Parameter über den Payload-Kanal des
+  // Wizard-Hosts (aus Monatsdaten-Zeile/Button/Fusszeile — Muster wie die
+  // V3-URL-Params); auf der V3-Route weiter aus useParams.
+  const wizardHost = useWizardHost()
+  const payload = wizardHost.imOverlay
+    ? (wizardHost.payload as MonatsabschlussPayload | undefined)
+    : undefined
+  const anlageId = payload?.anlageId != null ? String(payload.anlageId) : params.anlageId
+  const jahr = payload?.jahr != null ? String(payload.jahr) : params.jahr
+  const monat = payload?.monat != null ? String(payload.monat) : params.monat
+  // Overlay ohne anlageId im Payload: erste Anlage lokal auflösen (statt navigate).
+  const [fallbackAnlageId, setFallbackAnlageId] = useState<string | null>(null)
+  const effektiveAnlageId = anlageId ?? fallbackAnlageId ?? undefined
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -76,6 +91,15 @@ export default function MonatsabschlussWizard() {
     sonstigePositionen: {},
   })
 
+  // W5-Dirty-Referenz: Snapshot der geladenen Werte — Abweichung = offene Eingaben.
+  const geladenRef = useRef('')
+  useEffect(() => {
+    wizardHost.setzeBlocker(
+      success === null && !!geladenRef.current && JSON.stringify(values) !== geladenRef.current,
+    )
+    return () => wizardHost.setzeBlocker(false)
+  }, [values, success, wizardHost])
+
   // Jahr und Monat aus URL oder automatisch ermitteln
   // WICHTIG: getMonth() gibt 0-11 zurück, aber API erwartet 1-12
   const [selectedJahr, setSelectedJahr] = useState<number>(
@@ -88,12 +112,13 @@ export default function MonatsabschlussWizard() {
   // Daten laden
   useEffect(() => {
     const loadData = async () => {
-      if (!anlageId) {
-        // Erste Anlage laden
+      if (!effektiveAnlageId) {
+        // Erste Anlage laden — Overlay: lokal auflösen; V3-Route: URL vervollständigen.
         try {
           const anlagen = await anlagenApi.list()
           if (anlagen.length > 0) {
-            navigate(`/monatsabschluss/${anlagen[0].id}`)
+            if (wizardHost.imOverlay) setFallbackAnlageId(String(anlagen[0].id))
+            else navigate(`/monatsabschluss/${anlagen[0].id}`)
           } else {
             setError('Keine Anlage gefunden')
           }
@@ -113,7 +138,7 @@ export default function MonatsabschlussWizard() {
         let targetMonat = selectedMonat
 
         if (!jahr || !monat) {
-          const naechster = await monatsabschlussApi.getNaechsterMonat(parseInt(anlageId))
+          const naechster = await monatsabschlussApi.getNaechsterMonat(parseInt(effektiveAnlageId))
           if (naechster) {
             targetJahr = naechster.jahr
             targetMonat = naechster.monat
@@ -123,7 +148,7 @@ export default function MonatsabschlussWizard() {
         }
 
         const response = await monatsabschlussApi.getStatus(
-          parseInt(anlageId),
+          parseInt(effektiveAnlageId),
           targetJahr,
           targetMonat
         )
@@ -156,12 +181,14 @@ export default function MonatsabschlussWizard() {
           invSonstigePos[inv.id] = inv.sonstige_positionen || []
         }
 
-        setValues({
+        const geladeneWerte: WizardState = {
           basis: basisValues,
           optionale: optionaleValues,
           investitionen: invValues,
           sonstigePositionen: invSonstigePos,
-        })
+        }
+        setValues(geladeneWerte)
+        geladenRef.current = JSON.stringify(geladeneWerte)
 
         // Wetterdaten automatisch im Hintergrund holen, falls noch nicht vorhanden.
         // Pro Feld nur dann übernehmen, wenn der Tester den Wert noch nicht selbst
@@ -171,19 +198,24 @@ export default function MonatsabschlussWizard() {
           basisValues.sonnenstunden == null ||
           basisValues.durchschnittstemperatur == null
         if (fehltWetter) {
-          wetterApi.getMonatsdaten(parseInt(anlageId!), targetJahr, targetMonat)
+          wetterApi.getMonatsdaten(parseInt(effektiveAnlageId!), targetJahr, targetMonat)
             .then(wetter => {
-              setValues(prev => ({
-                ...prev,
-                basis: {
-                  ...prev.basis,
-                  globalstrahlung_kwh_m2:
-                    prev.basis.globalstrahlung_kwh_m2 ?? wetter.globalstrahlung_kwh_m2,
-                  sonnenstunden: prev.basis.sonnenstunden ?? wetter.sonnenstunden,
-                  durchschnittstemperatur:
-                    prev.basis.durchschnittstemperatur ?? wetter.durchschnittstemperatur_c ?? null,
-                },
-              }))
+              setValues(prev => {
+                const next = {
+                  ...prev,
+                  basis: {
+                    ...prev.basis,
+                    globalstrahlung_kwh_m2:
+                      prev.basis.globalstrahlung_kwh_m2 ?? wetter.globalstrahlung_kwh_m2,
+                    sonnenstunden: prev.basis.sonnenstunden ?? wetter.sonnenstunden,
+                    durchschnittstemperatur:
+                      prev.basis.durchschnittstemperatur ?? wetter.durchschnittstemperatur_c ?? null,
+                  },
+                }
+                // Auto-Wetterwerte = keine Nutzer-Eingabe → W5-Dirty-Referenz mitziehen.
+                geladenRef.current = JSON.stringify(next)
+                return next
+              })
             })
             .catch(() => { /* optional, kein Fehler anzeigen */ })
         }
@@ -195,7 +227,7 @@ export default function MonatsabschlussWizard() {
     }
 
     loadData()
-  }, [anlageId, jahr, monat, selectedJahr, selectedMonat, navigate])
+  }, [effektiveAnlageId, jahr, monat, selectedJahr, selectedMonat, navigate, wizardHost.imOverlay])
 
   // Step-Typ für TypeScript
   interface WizardStep {
@@ -285,7 +317,7 @@ export default function MonatsabschlussWizard() {
 
   // HA-Werte für diesen Monat laden
   const handleLoadHAValues = async () => {
-    if (!anlageId) return
+    if (!effektiveAnlageId) return
 
     setLoadingHA(true)
     setError(null)
@@ -301,7 +333,7 @@ export default function MonatsabschlussWizard() {
 
       // Monatswerte laden
       const monatswerte = await haStatisticsApi.getMonatswerte(
-        parseInt(anlageId),
+        parseInt(effektiveAnlageId),
         selectedJahr,
         selectedMonat
       )
@@ -348,7 +380,7 @@ export default function MonatsabschlussWizard() {
 
   // Connector-Werte für diesen Monat laden
   const handleLoadConnectorValues = async () => {
-    if (!anlageId) return
+    if (!effektiveAnlageId) return
 
     setLoadingConnector(true)
     setError(null)
@@ -356,7 +388,7 @@ export default function MonatsabschlussWizard() {
 
     try {
       const monatswerte = await connectorApi.getMonatswerte(
-        parseInt(anlageId),
+        parseInt(effektiveAnlageId),
         selectedJahr,
         selectedMonat
       )
@@ -403,7 +435,7 @@ export default function MonatsabschlussWizard() {
 
   // Cloud-Daten für diesen Monat laden
   const handleLoadCloudValues = async () => {
-    if (!anlageId) return
+    if (!effektiveAnlageId) return
 
     setLoadingCloud(true)
     setError(null)
@@ -411,7 +443,7 @@ export default function MonatsabschlussWizard() {
 
     try {
       const monatswerte = await monatsabschlussApi.cloudFetch(
-        parseInt(anlageId),
+        parseInt(effektiveAnlageId),
         selectedJahr,
         selectedMonat
       )
@@ -455,7 +487,7 @@ export default function MonatsabschlussWizard() {
   }
 
   const handleSave = async () => {
-    if (!data || !anlageId) return
+    if (!data || !effektiveAnlageId) return
 
     setSaving(true)
     setError(null)
@@ -523,7 +555,7 @@ export default function MonatsabschlussWizard() {
       }
 
       const result = await monatsabschlussApi.save(
-        parseInt(anlageId),
+        parseInt(effektiveAnlageId),
         selectedJahr,
         selectedMonat,
         input
@@ -552,16 +584,18 @@ export default function MonatsabschlussWizard() {
           setSuccess(result.message)
           // Community-Nudge: Anlage laden und prüfen ob Auto-Share aktiv
           try {
-            const anlageObj = await anlagenApi.get(parseInt(anlageId!))
+            const anlageObj = await anlagenApi.get(parseInt(effektiveAnlageId!))
             if (!anlageObj.community_hash && !anlageObj.community_auto_share) {
               setSuccess(result.message + ' — Tipp: Teile deine Daten anonym mit der Community!')
             } else if (anlageObj.community_auto_share) {
               setSuccess(result.message + ' — Daten werden automatisch an die Community gesendet.')
             }
           } catch { /* ignore */ }
-          // Nach 3s zur nächsten Seite navigieren (etwas mehr Zeit für Community-Hinweis)
+          // Nach 3s Terminal-Schluss (etwas mehr Zeit für Community-Hinweis):
+          // Overlay → Host schließen; V3-Route → Monatsdaten-Seite.
           setTimeout(() => {
-            navigate('/einstellungen/monatsdaten')
+            if (wizardHost.imOverlay) wizardHost.schliessen()
+            else navigate('/einstellungen/monatsdaten')
           }, 3000)
         }
       } else {
@@ -610,13 +644,20 @@ export default function MonatsabschlussWizard() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Monatsabschluss {MONAT_NAMEN[selectedMonat]} {selectedJahr}
         </h1>
-        <button
-          type="button"
-          onClick={() => navigate(`/monatsdaten`)}
-          className="mt-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-500 dark:hover:text-primary-400 underline underline-offset-2"
+        <Button
+          type="button" variant="ghost" size="sm"
+          className="mt-1 text-xs text-gray-400 dark:text-gray-500"
+          onClick={() => {
+            if (wizardHost.imOverlay) {
+              wizardHost.schliessen()
+              navigate('/v4/einstellungen/daten')
+            } else {
+              navigate('/monatsdaten')
+            }
+          }}
         >
           Anderen Monat bearbeiten → Monatsdaten-Tabelle
-        </button>
+        </Button>
 
         {/* Datenquellen-Status & Aktionen */}
         <div className="mt-4 space-y-3">
@@ -680,59 +721,49 @@ export default function MonatsabschlussWizard() {
                 <span>
                   Keine Datenquellen konfiguriert. Richten Sie mindestens eine Quelle ein, um Werte automatisch zu laden.
                 </span>
-                <Link
-                  to="/einstellungen/einrichtung"
-                  className="flex items-center gap-1 text-primary-600 hover:underline whitespace-nowrap"
-                >
-                  <Cpu className="w-4 h-4" />
-                  Einrichten
-                </Link>
+                {wizardHost.imOverlay ? (
+                  /* I9: im Overlay kein V3-Link — Einrichtungs-Hub im selben Overlay öffnen. */
+                  <Button
+                    type="button" variant="ghost" size="sm"
+                    className="text-primary-600 whitespace-nowrap"
+                    onClick={() => wizardHost.oeffneWizard('einrichtung')}
+                  >
+                    <Cpu className="w-4 h-4 mr-1" />
+                    Einrichten
+                  </Button>
+                ) : (
+                  <Link
+                    to="/einstellungen/einrichtung"
+                    className="flex items-center gap-1 text-primary-600 hover:underline whitespace-nowrap"
+                  >
+                    <Cpu className="w-4 h-4" />
+                    Einrichten
+                  </Link>
+                )}
               </div>
             </Alert>
           )}
 
           {/* Lade-Buttons (nur konfigurierte Quellen) */}
+          {/* Lade-Aktionen — Button-SoT (secondary; die frühere Quell-Farbcodierung
+              blau/grün/violett war lokale Improvisation, die Icons tragen die Quelle). */}
           <div className="flex flex-wrap items-center gap-3">
             {data.ha_mapping_konfiguriert && (
-              <button
-                onClick={handleLoadHAValues}
-                disabled={loadingHA}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-              >
-                {loadingHA ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Lade HA-Werte...</>
-                ) : (
-                  <><Database className="w-4 h-4" /> HA-Statistik laden</>
-                )}
-              </button>
+              <Button type="button" variant="secondary" onClick={handleLoadHAValues} disabled={loadingHA} loading={loadingHA}>
+                {loadingHA ? 'Lade HA-Werte...' : <><Database className="w-4 h-4 mr-2" />HA-Statistik laden</>}
+              </Button>
             )}
 
             {data.connector_konfiguriert && (
-              <button
-                onClick={handleLoadConnectorValues}
-                disabled={loadingConnector}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
-              >
-                {loadingConnector ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Lade WR-Werte...</>
-                ) : (
-                  <><Zap className="w-4 h-4" /> Wechselrichter laden</>
-                )}
-              </button>
+              <Button type="button" variant="secondary" onClick={handleLoadConnectorValues} disabled={loadingConnector} loading={loadingConnector}>
+                {loadingConnector ? 'Lade WR-Werte...' : <><Zap className="w-4 h-4 mr-2" />Wechselrichter laden</>}
+              </Button>
             )}
 
             {data.cloud_import_konfiguriert && (
-              <button
-                onClick={handleLoadCloudValues}
-                disabled={loadingCloud}
-                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 disabled:opacity-50 text-sm"
-              >
-                {loadingCloud ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Lade Cloud-Werte...</>
-                ) : (
-                  <><Cloud className="w-4 h-4" /> Cloud-Daten abrufen</>
-                )}
-              </button>
+              <Button type="button" variant="secondary" onClick={handleLoadCloudValues} disabled={loadingCloud} loading={loadingCloud}>
+                {loadingCloud ? 'Lade Cloud-Werte...' : <><Cloud className="w-4 h-4 mr-2" />Cloud-Daten abrufen</>}
+              </Button>
             )}
           </div>
 
@@ -753,48 +784,15 @@ export default function MonatsabschlussWizard() {
         </div>
       </div>
 
-      {/* Step Navigation */}
+      {/* Step Navigation — Stepper-SoT (Teil D, W1) statt handgerolltem Balken;
+          die dynamische Step-Liste (pro Investitionstyp) bleibt, nur das
+          Rendering tauscht (E2). */}
       <div className="mb-8">
-        <div className="flex items-center">
-          {steps.map((step, idx) => {
-            const isActive = currentStep === idx
-            const isCompleted = idx < currentStep
-            const isLast = idx === steps.length - 1
-            return (
-              <div key={step.id} className={`flex items-center ${!isLast ? 'flex-1' : ''}`}>
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(idx)}
-                  className="flex flex-col items-center gap-1.5 group"
-                >
-                  <div className={`flex items-center justify-center w-9 h-9 rounded-full border-2 transition-all ${
-                    isCompleted
-                      ? 'bg-green-500 border-green-500 text-white'
-                      : isActive
-                        ? 'bg-primary-600 border-primary-600 text-white'
-                        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
-                  }`}>
-                    {isCompleted ? <CheckCircle className="w-4 h-4" /> : step.icon}
-                  </div>
-                  <span className={`hidden sm:block text-xs font-medium whitespace-nowrap transition-colors ${
-                    isActive
-                      ? 'text-primary-700 dark:text-primary-300'
-                      : isCompleted
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-gray-400 dark:text-gray-500'
-                  }`}>
-                    {step.title}
-                  </span>
-                </button>
-                {!isLast && (
-                  <div className={`flex-1 h-0.5 mx-2 mb-5 transition-colors ${
-                    idx < currentStep ? 'bg-green-400' : 'bg-gray-200 dark:bg-gray-700'
-                  }`} />
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <Stepper
+          schritte={steps.map((s) => ({ titel: s.title }))}
+          aktuell={currentStep}
+          onSchrittKlick={setCurrentStep}
+        />
       </div>
 
       {/* Alerts */}
@@ -856,31 +854,22 @@ export default function MonatsabschlussWizard() {
         </Button>
 
         {currentStep < steps.length - 1 ? (
-          <button
+          <Button
+            type="button"
             onClick={() => setCurrentStep(s => Math.min(steps.length - 1, s + 1))}
-            className="flex items-center gap-2 px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
           >
             Weiter
-            <ChevronRight className="w-4 h-4" />
-          </button>
+            <ChevronRight className="w-4 h-4 ml-2" />
+          </Button>
         ) : (
-          <button
+          <Button
+            type="button"
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            loading={saving}
           >
-            {saving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Speichern...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                Speichern
-              </>
-            )}
-          </button>
+            {saving ? 'Speichern...' : <><Save className="w-4 h-4 mr-2" />Speichern</>}
+          </Button>
         )}
       </div>
     </div>

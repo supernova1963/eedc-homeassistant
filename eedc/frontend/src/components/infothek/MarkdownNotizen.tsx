@@ -3,6 +3,11 @@
  *
  * Unterstützt: Bold, Italic, Liste, Link.
  * Toggle zwischen Bearbeiten und Vorschau.
+ *
+ * Wächter-Ausnahme: Editor-Toolbar-<button> + rahmenlose <textarea> SIND die
+ * Implementierung dieses Composite-Controls (ui/Textarea gäbe Doppelrahmen; wie
+ * DatumPicker) — check:v4-migration-Fall-3-Allowlist (Regel 0a Fall 3,
+ * Gernot-Freigabe 2026-07-11).
  */
 
 import { useState, useRef, useCallback } from 'react'

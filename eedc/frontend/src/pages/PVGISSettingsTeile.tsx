@@ -477,23 +477,27 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                     </div>
                     <div className="mt-2 border-t border-gray-100 dark:border-gray-700 pt-1 flex justify-end gap-2">
                       {!p.ist_aktiv && (
-                        <button
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="sm"
                           onClick={() => aktivierePrognose(p.id)}
-                          className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                          aria-label="Prognose aktivieren"
                           title="Aktivieren"
                         >
-                          <Check className="h-4 w-4" />
-                        </button>
+                          <Check className="h-4 w-4 text-blue-500" />
+                        </Button>
                       )}
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => loeschePrognose(p.id)}
-                        className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        aria-label="Prognose löschen"
                         title="Löschen"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -546,23 +550,27 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                         <td className="text-right py-2 px-2">
                           <div className="flex items-center justify-end gap-2">
                             {!p.ist_aktiv && (
-                              <button
+                              <Button
                                 type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => aktivierePrognose(p.id)}
-                                className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                                aria-label="Prognose aktivieren"
                                 title="Aktivieren"
                               >
-                                <Check className="h-4 w-4" />
-                              </button>
+                                <Check className="h-4 w-4 text-blue-500" />
+                              </Button>
                             )}
-                            <button
+                            <Button
                               type="button"
+                              variant="ghost"
+                              size="sm"
                               onClick={() => loeschePrognose(p.id)}
-                              className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                              aria-label="Prognose löschen"
                               title="Löschen"
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
                           </div>
                         </td>
                       </tr>

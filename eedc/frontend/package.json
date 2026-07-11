@@ -33,7 +33,8 @@
     "check:parkbar-vollstaendig": "node scripts/check-parkbar-vollstaendig.mjs",
     "check:park-leertest": "node scripts/park-leertest.mjs",
     "check:charts": "node scripts/check-charts.mjs",
-    "check:chart-audit": "node scripts/chart-audit.mjs"
+    "check:chart-audit": "node scripts/chart-audit.mjs",
+    "check:v4-migration": "node scripts/check-v4-migration.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

@@ -12,11 +12,12 @@
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, Fuel } from 'lucide-react'
-import { Button, Card, Modal, EmptyState, Alert } from '../components/ui'
+import { Button, Card, Checkbox, Modal, EmptyState, Alert, Select } from '../components/ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { MonatsdatenForm } from '../components/forms'
 import { DataLoadingState } from '../components/common'
 import { useMonatsdaten, useInvestitionen, useApiData, useV4Basis } from '../hooks'
+import { useOeffneWizard } from '../v4/wizardHost'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
@@ -78,6 +79,14 @@ const COLUMNS_STORAGE_KEY = 'eedc-monatsdaten-columns-v3'
  */
 export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: number; kopfZusatz?: ReactNode }) {
   const navigate = useNavigate()
+  // E1 (Donor-Kanten): unter LayoutV4 öffnen Monatsabschluss/CSV-Import im
+  // Overlay (oeffneWizard mit Payload); ohne Provider (V3) bleibt navigate.
+  const oeffneWizard = useOeffneWizard()
+  const monatsabschlussOeffnen = (jahr?: number, monat?: number) => {
+    if (oeffneWizard) oeffneWizard('monatsabschluss', { anlageId, jahr, monat })
+    else if (jahr != null && monat != null) navigate(`/monatsabschluss/${anlageId}/${jahr}/${monat}`)
+    else navigate(`/monatsabschluss/${anlageId}`)
+  }
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(anlageId)
   // Hook wird für MonatsdatenForm benötigt
   const { investitionen } = useInvestitionen(anlageId)
@@ -336,7 +345,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
           )}
           <Button
             variant="secondary"
-            onClick={() => navigate(`/monatsabschluss/${anlageId}`)}
+            onClick={() => monatsabschlussOeffnen()}
           >
             <Calendar className="h-5 w-5 mr-2" />
             Monatsabschluss
@@ -381,11 +390,11 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                 </Button>
                 <Button
                   variant="secondary"
-                  onClick={() => navigate(`/monatsabschluss/${anlageId}`)}
+                  onClick={() => monatsabschlussOeffnen()}
                 >
                   Monatsabschluss starten
                 </Button>
-                <Button variant="secondary" onClick={() => navigate('/import')}>CSV importieren</Button>
+                <Button variant="secondary" onClick={() => (oeffneWizard ? oeffneWizard('csv-import') : navigate('/import'))}>CSV importieren</Button>
               </div>
             }
           />
@@ -417,26 +426,19 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                     <div key={groupKey}>
                       <div className="flex items-center gap-2 mb-2">
                         <span className={`w-3 h-3 rounded-full ${group.color}`} />
-                        <button
-                          onClick={() => toggleGroup(groupKey)}
-                          className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600"
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => toggleGroup(groupKey)}>
                           {group.label} ({visibleCount}/{groupColumns.length})
-                        </button>
+                        </Button>
                       </div>
-                      <div className="flex flex-wrap gap-2 ml-5">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 ml-5">
                         {groupColumns.map((col) => (
-                          <button
+                          <Checkbox
                             key={col.key}
-                            onClick={() => toggleColumn(col.key)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                              visibleColumns.has(col.key)
-                                ? 'bg-primary-500 text-white'
-                                : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            {col.label}
-                          </button>
+                            id={`monatsdaten-spalte-${col.key}`}
+                            label={col.label}
+                            checked={visibleColumns.has(col.key)}
+                            onChange={() => toggleColumn(col.key)}
+                          />
                         ))}
                       </div>
                     </div>
@@ -490,7 +492,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                             variant="ghost"
                             size="sm"
                             title="Monatsabschluss-Assistent"
-                            onClick={() => navigate(`/monatsabschluss/${anlageId}/${md.jahr}/${md.monat}`)}
+                            onClick={() => monatsabschlussOeffnen(md.jahr, md.monat)}
                           >
                             <Calendar className="h-4 w-4 text-primary-500" />
                           </Button>
@@ -596,39 +598,30 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="ha-jahr" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Jahr
-                  </label>
-                  <select
+                  <Select
                     id="ha-jahr"
-                    value={selectedHaJahr}
+                    label="Jahr"
+                    value={String(selectedHaJahr)}
                     onChange={(e) => setSelectedHaJahr(parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  >
-                    {[...new Set(verfuegbareMonate.map(m => m.jahr))].sort((a, b) => b - a).map(jahr => (
-                      <option key={jahr} value={jahr}>{jahr}</option>
-                    ))}
-                  </select>
+                    options={[...new Set(verfuegbareMonate.map(m => m.jahr))]
+                      .sort((a, b) => b - a)
+                      .map(jahr => ({ value: String(jahr), label: String(jahr) }))}
+                  />
                 </div>
                 <div>
-                  <label htmlFor="ha-monat" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Monat
-                  </label>
-                  <select
+                  <Select
                     id="ha-monat"
-                    value={selectedHaMonat}
+                    label="Monat"
+                    value={String(selectedHaMonat)}
                     onChange={(e) => setSelectedHaMonat(parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  >
-                    {verfuegbareMonate
+                    options={verfuegbareMonate
                       .filter(m => m.jahr === selectedHaJahr)
                       .sort((a, b) => b.monat - a.monat)
-                      .map(m => (
-                        <option key={m.monat} value={m.monat}>
-                          {m.monat_name} {m.hat_daten ? '' : '(keine Daten)'}
-                        </option>
-                      ))}
-                  </select>
+                      .map(m => ({
+                        value: String(m.monat),
+                        label: m.hat_daten ? m.monat_name : `${m.monat_name} (keine Daten)`,
+                      }))}
+                  />
                 </div>
               </div>
 

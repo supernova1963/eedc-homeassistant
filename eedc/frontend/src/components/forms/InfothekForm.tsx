@@ -255,13 +255,9 @@ export default function InfothekForm({ eintrag, anlageId, initialKategorie, init
             ))}
           </div>
           {investitionIds.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setInvestitionIds([])}
-              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 mt-1"
-            >
+            <Button type="button" variant="ghost" size="sm" className="mt-1" onClick={() => setInvestitionIds([])}>
               Alle abwählen
-            </button>
+            </Button>
           )}
         </FormSection>
       )}

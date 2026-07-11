@@ -10,6 +10,7 @@ import { DatumPicker } from '../components/ui/DatumPicker'
 // STEUER_H (32-px-Toolbar-Höhe) lebt seit R3b S5 im lib-SoT-Modul `komponentenStyle`.
 import { STEUER_H } from '../lib/komponentenStyle'
 import { SegmentControl } from '../components/ui/SegmentControl'
+import Select from '../components/ui/Select'
 
 // D12-8: kleinerer/größerer der beiden ISO-Werte (lexikografisch, gilt für YYYY-MM
 // wie YYYY-MM-DD) — `undefined`, wenn keiner gesetzt ist, damit `max`/`min` entfällt.
@@ -144,10 +145,12 @@ export function VergleichLeisteTag({
         ))}
       </div>
       {modus === 'periodeImJahr' && (
-        <select value={jahr} onChange={(e) => onJahr(Number(e.target.value))}
-          aria-label="Vergleichsjahr" className={`input w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`}>
-          {jahre.map((j) => <option key={j} value={j}>{j}</option>)}
-        </select>
+        <Select
+          steuer
+          value={String(jahr)} onChange={(e) => onJahr(Number(e.target.value))}
+          aria-label="Vergleichsjahr"
+          options={jahre.map((j) => ({ value: String(j), label: String(j) }))}
+        />
       )}
     </div>
   )

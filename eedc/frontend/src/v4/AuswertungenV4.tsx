@@ -19,6 +19,7 @@
 import { Navigate, useParams } from 'react-router-dom'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
 import { ViewShell } from './ViewShell'
+import { Select } from '../components/ui'
 import { useSelectedAnlage } from '../hooks'
 import { useAuswertungBasis } from './useAuswertungBasis'
 import AuswertungenTabelleV4 from './AuswertungenTabelleV4'
@@ -57,15 +58,14 @@ export default function AuswertungenV4() {
   const steuerleiste = FILTER_SUBS.has(sub) ? (
     <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6">
       <div className="max-w-[1920px] mx-auto flex items-center justify-end gap-3 py-2 flex-wrap">
-        <select
-          value={basis.jahr === 'alle' ? '' : basis.jahr}
+        {/* B15: Filter-Leisten-Kontrolle → Select-SoT in der 32-px-steuer-Variante. */}
+        <Select
+          steuer
+          value={basis.jahr === 'alle' ? '' : String(basis.jahr)}
           onChange={(e) => basis.setJahr(e.target.value ? Number(e.target.value) : 'alle')}
           aria-label="Jahr filtern"
-          className="input w-auto"
-        >
-          <option value="">Alle Jahre</option>
-          {basis.jahre.map((j) => <option key={j} value={j}>{j}</option>)}
-        </select>
+          options={[{ value: '', label: 'Alle Jahre' }, ...basis.jahre.map((j) => ({ value: String(j), label: String(j) }))]}
+        />
       </div>
     </div>
   ) : null

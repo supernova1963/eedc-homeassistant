@@ -11,6 +11,7 @@ import { Sun, Activity } from 'lucide-react'
 import type { FeldMapping, HASensorInfo, InvestitionInfo } from '../../api/sensorMapping'
 import FeldMappingInput, { SensorAutocomplete, type StrategieOption } from './FeldMappingInput'
 import Alert from '../ui/Alert'
+import Checkbox from '../ui/Checkbox'
 import { useFeldHinweise } from '../../hooks/useFeldHinweise'
 import { fmtZahl } from '../../lib'
 
@@ -127,17 +128,13 @@ export default function PVModuleStep({
                     requireStatistics={false}
                   />
                   {liveMappings[inv.id.toString()]?.leistung_w && onLiveInvertChange && (
-                    <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <div className="mt-2">
+                      <Checkbox
                         checked={!!liveInvertMappings[inv.id.toString()]?.leistung_w}
                         onChange={e => onLiveInvertChange(inv.id, 'leistung_w', e.target.checked)}
-                        className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                        label={<span className="text-xs text-gray-600 dark:text-gray-400">Vorzeichen invertieren (×−1)</span>}
                       />
-                      <span className="text-xs text-gray-600 dark:text-gray-400">
-                        Vorzeichen invertieren (&times;&minus;1)
-                      </span>
-                    </label>
+                    </div>
                   )}
                 </div>
               )}

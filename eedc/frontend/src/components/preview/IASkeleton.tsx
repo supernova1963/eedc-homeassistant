@@ -1,6 +1,12 @@
 /**
  * IASkeleton — klickbares Vorschau-Skelett der IA-v4.0.0-Struktur
- * (Etappenziel 1/2). **Guard-frei** und damit in zwei Kontexten lauffähig:
+ * (Etappenziel 1/2).
+ *
+ * Wächter-Ausnahme: rohe Controls (Klick-Attrappen der Dev-Preview, nicht
+ * user-erreichbar) — check:v4-migration-Infra-Allowlist (Regel 0a Fall 3,
+ * Gernot-Freigabe 2026-07-11).
+ *
+ * **Guard-frei** und damit in zwei Kontexten lauffähig:
  *   1. lokal über `pages/DesignPreview.tsx` (DEV-Guard davor) auf
  *      `/dev/design-preview`;
  *   2. als eigenständiger Vorschau-Entry (`preview-main.tsx` + `preview.html`,

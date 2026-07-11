@@ -18,6 +18,7 @@ import {
   CheckCircle, XCircle, ChevronLeft, ChevronRight, Pause, Play, Check,
   Bug, RotateCw, AlertTriangle,
 } from 'lucide-react'
+import { Button, Input, Select, SegmentControl } from '../components/ui'
 import { systemLogsApi } from '../api/systemLogs'
 import type { LogEntry, ActivityEntry, ActivityKategorie } from '../api/systemLogs'
 
@@ -134,73 +135,80 @@ function SystemLogsTab() {
     <div className="space-y-4">
       {/* Filter */}
       <div className="flex flex-wrap gap-3 items-center">
-        <select
+        <Select
+          compact
           value={level}
           onChange={(e) => setLevel(e.target.value)}
-          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-        >
-          <option value="">Alle Level</option>
-          <option value="DEBUG">DEBUG</option>
-          <option value="INFO">INFO</option>
-          <option value="WARNING">WARNING</option>
-          <option value="ERROR">ERROR</option>
-        </select>
-        <input
+          aria-label="Log-Level filtern"
+          options={[
+            { value: '', label: 'Alle Level' },
+            { value: 'DEBUG', label: 'DEBUG' },
+            { value: 'INFO', label: 'INFO' },
+            { value: 'WARNING', label: 'WARNING' },
+            { value: 'ERROR', label: 'ERROR' },
+          ]}
+        />
+        <Input
           type="text"
           value={module}
           onChange={(e) => setModule(e.target.value)}
           placeholder="Modul..."
-          className="w-40 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+          className="w-40"
         />
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Suche in Nachrichten..."
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 pl-9 pr-3 py-2 text-sm"
+            className="pl-9"
           />
         </div>
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => copy(formatLogsMarkdown())}
           disabled={logs.length === 0}
-          className={`p-2 rounded-lg transition-colors ${
-            copied
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-          } disabled:opacity-30`}
+          aria-label="Logs als Markdown kopieren"
           title="Als Markdown kopieren (für GitHub Issue)"
         >
-          {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
-        </button>
-        <button
+          {copied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={downloadLogs}
           disabled={logs.length === 0}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
+          aria-label="Logs als Textdatei herunterladen"
           title="Als Textdatei herunterladen"
         >
           <Download className="h-4 w-4" />
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant={autoRefresh ? 'primary' : 'ghost'}
+          size="sm"
           onClick={() => setAutoRefresh(!autoRefresh)}
-          className={`p-2 rounded-lg transition-colors ${
-            autoRefresh
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-          }`}
+          aria-pressed={autoRefresh}
+          aria-label={autoRefresh ? 'Auto-Refresh stoppen' : 'Auto-Refresh starten'}
           title={autoRefresh ? 'Auto-Refresh stoppen' : 'Auto-Refresh starten (5s)'}
         >
           {autoRefresh ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={loadLogs}
           disabled={loading}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+          aria-label="Logs aktualisieren"
           title="Aktualisieren"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        </Button>
       </div>
 
       {error && (
@@ -335,48 +343,54 @@ function AktivitaetenTab() {
     <div className="space-y-4">
       {/* Filter */}
       <div className="flex flex-wrap gap-3 items-center">
-        <select
+        <Select
+          compact
           value={kategorie}
           onChange={(e) => { setKategorie(e.target.value); setOffset(0) }}
-          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-        >
-          <option value="">Alle Kategorien</option>
-          {kategorien.map((k) => (
-            <option key={k.id} value={k.id}>{k.label}</option>
-          ))}
-        </select>
-        <select
+          aria-label="Kategorie filtern"
+          options={[
+            { value: '', label: 'Alle Kategorien' },
+            ...kategorien.map((k) => ({ value: k.id, label: k.label })),
+          ]}
+        />
+        <Select
+          compact
           value={erfolg}
           onChange={(e) => { setErfolg(e.target.value); setOffset(0) }}
-          className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-        >
-          <option value="">Alle Status</option>
-          <option value="true">Erfolgreich</option>
-          <option value="false">Fehlgeschlagen</option>
-        </select>
+          aria-label="Status filtern"
+          options={[
+            { value: '', label: 'Alle Status' },
+            { value: 'true', label: 'Erfolgreich' },
+            { value: 'false', label: 'Fehlgeschlagen' },
+          ]}
+        />
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-500" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <Input
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Suche in Aktionen..."
-            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 pl-9 pr-3 py-2 text-sm"
+            className="pl-9"
           />
         </div>
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => copy(formatActivitiesMarkdown())}
           disabled={activities.length === 0}
-          className={`p-2 rounded-lg transition-colors ${
-            copied
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-              : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-          } disabled:opacity-30`}
+          aria-label="Aktivitäten als Markdown kopieren"
           title="Als Markdown kopieren (für GitHub Issue)"
         >
-          {copied ? <Check className="h-4 w-4" /> : <ClipboardCopy className="h-4 w-4" />}
-        </button>
-        <button
+          {copied ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardCopy className="h-4 w-4" />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label="Alte Einträge bereinigen"
+          title="Alte Einträge bereinigen (>90 Tage)"
           onClick={async () => {
             if (!confirm('Alte Einträge (>90 Tage) bereinigen?')) return
             try {
@@ -389,19 +403,20 @@ function AktivitaetenTab() {
               setError('Bereinigung fehlgeschlagen')
             }
           }}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-          title="Alte Einträge bereinigen (>90 Tage)"
         >
           <Trash2 className="h-4 w-4" />
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           onClick={loadData}
           disabled={loading}
-          className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+          aria-label="Aktivitäten aktualisieren"
           title="Aktualisieren"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        </Button>
       </div>
 
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
@@ -458,20 +473,26 @@ function AktivitaetenTab() {
         <div className="flex items-center justify-between text-sm text-gray-500">
           <span>Seite {currentPage} von {totalPages} ({total} gesamt)</span>
           <div className="flex gap-2">
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setOffset(Math.max(0, offset - limit))}
               disabled={offset === 0}
-              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
+              aria-label="Vorherige Seite"
             >
               <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setOffset(offset + limit)}
               disabled={offset + limit >= total}
-              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30"
+              aria-label="Nächste Seite"
             >
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -525,52 +546,37 @@ export function ProtokolleVerwaltung() {
         </div>
       )}
 
-      {/* Tab Bar + Action-Buttons in einer Reihe (#233 P17/P18) */}
-      <div className="flex items-center border-b border-gray-200 dark:border-gray-700">
-        <div className="flex flex-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-700 dark:text-blue-300'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            )
-          })}
-        </div>
-        <div className="flex items-center gap-2 pb-1">
-          <button
+      {/* Umschalter + Action-Buttons in einer Reihe (#233 P17/P18; C1: SegmentControl-SoT statt Hand-Tab-Bar) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+        <SegmentControl
+          optionen={tabs.map((t) => ({ key: t.id, label: t.label }))}
+          value={activeTab}
+          onChange={(key) => setActiveTab(key)}
+          ariaLabel="Protokoll-Ansicht wählen"
+        />
+        <div className="flex items-center gap-2">
+          <Button
             type="button"
+            variant={isDebug ? 'primary' : 'ghost'}
+            size="sm"
             onClick={toggleDebug}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              isDebug
-                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 ring-1 ring-amber-300 dark:ring-amber-700'
-                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }`}
+            aria-pressed={isDebug}
             title={isDebug ? 'Debug-Modus deaktivieren (zurück auf INFO)' : 'Debug-Modus aktivieren (zeigt alle Detail-Meldungen)'}
           >
-            <Bug className="h-4 w-4" />
+            <Bug className="h-4 w-4 mr-1.5" />
             {isDebug ? 'Debug aktiv' : 'Debug'}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={handleRestart}
             disabled={restarting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
             title="eedc neu starten"
           >
-            <RotateCw className={`h-4 w-4 ${restarting ? 'animate-spin' : ''}`} />
+            <RotateCw className={`h-4 w-4 mr-1.5 ${restarting ? 'animate-spin' : ''}`} />
             {restarting ? 'Startet neu...' : 'Neustart'}
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -26,7 +26,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { Euro, TrendingUp, Wallet, FileText } from 'lucide-react'
-import { Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, eedcTooltipProps, FehlerZustand, TabellenSkeleton } from '../components/ui'
+import { Card, buttonClasses, ChartLegende, CsvExportButton, SegmentControl, Select, eedcTooltipProps, FehlerZustand, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { TKonto } from '../components/finanzen/TKonto'
@@ -421,10 +421,13 @@ function TKontoPeriode({ anlageId, daten, jahr }: {
             Selects → kein Vertikal-Sprung des T-Kontos beim Monat↔Jahr-Wechsel;
             Content-Swap bleibt in-place wie D7-6). */}
         {modus === 'monat' ? (
-          <select value={monat ?? ''} onChange={(e) => setMonat(e.target.value ? Number(e.target.value) : null)}
-            aria-label="Monat wählen" className={`input w-auto ${STEUER_H} py-0`}>
-            {monate.map((m) => <option key={m} value={m}>{MONAT_NAMEN[m]} {jahr}</option>)}
-          </select>
+          <Select
+            steuer
+            value={monat != null ? String(monat) : ''}
+            onChange={(e) => setMonat(e.target.value ? Number(e.target.value) : null)}
+            aria-label="Monat wählen"
+            options={monate.map((m) => ({ value: String(m), label: `${MONAT_NAMEN[m]} ${jahr}` }))}
+          />
         ) : (
           <span className={`text-sm text-gray-500 dark:text-gray-400 px-2 inline-flex items-center ${STEUER_H}`}>Ganzes Jahr {jahr ?? '—'}</span>
         )}

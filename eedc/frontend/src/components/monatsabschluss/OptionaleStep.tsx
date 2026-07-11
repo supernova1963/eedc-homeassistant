@@ -1,5 +1,7 @@
 import { FileText } from 'lucide-react'
 import type { FeldStatus } from '../../api'
+import Input from '../ui/Input'
+import Textarea from '../ui/Textarea'
 
 export default function OptionaleStep({
   felder,
@@ -28,21 +30,22 @@ export default function OptionaleStep({
               {feld.einheit && <span className="text-gray-400 dark:text-gray-500 ml-1">({feld.einheit})</span>}
             </label>
 
+            {/* E3: Textarea-/Input-SoT statt roher Controls. */}
             {feld.typ === 'text' ? (
-              <textarea
+              <Textarea
                 value={(values[feld.feld] as string) || ''}
                 onChange={(e) => onChange(feld.feld, e.target.value || null)}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                aria-label={feld.label}
                 placeholder={feld.label}
               />
             ) : (
-              <input
+              <Input
                 type="number"
                 step="0.01"
                 value={values[feld.feld] ?? ''}
                 onChange={(e) => onChange(feld.feld, e.target.value ? parseFloat(e.target.value) : null)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                aria-label={feld.label}
                 placeholder={feld.label}
               />
             )}

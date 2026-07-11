@@ -10,6 +10,9 @@
  * schlichte, feste, einklappbare Section.
  *
  * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
+ *
+ * Wächter-Ausnahme: die rohen <button> (Park-Mechanik/Chips) SIND die Infra-Implementierung —
+ * check:v4-migration-Infra-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
  */
 import { useState } from 'react'
 import { ChevronDown, RotateCcw, ParkingSquare, Undo2 } from 'lucide-react'

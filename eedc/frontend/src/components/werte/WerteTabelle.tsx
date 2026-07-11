@@ -17,11 +17,11 @@
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
-import { Button, CsvExportButton } from '../ui'
+import { Button, Checkbox, CsvExportButton } from '../ui'
 // Tabellen-SoT (Regel T): Container liefert Höhenfenster, klebenden Kopf/Fuß und
 // sichtbare Leisten. Zellen nutzen die exportierte Typo — `TableCell`/`TableHeader`
 // würden hier mit den Farbvarianten (Vorjahr grau, Delta klein) kollidieren.
-import { Table, TableBody, TableFoot, TableHead } from '../ui/Table'
+import { Table, TableBody, TableFoot, TableHead, TableSortKopf } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
@@ -289,18 +289,17 @@ export function WerteTabelle({
                   const an = visible.has(k)
                   return (
                     <li key={k} className="flex items-center gap-1 text-sm">
-                      <label className="flex-1 flex items-center gap-2 cursor-pointer min-w-0">
-                        <input
-                          type="checkbox"
+                      <div className="flex-1 min-w-0">
+                        <Checkbox
                           checked={an}
                           onChange={() => setVisible((prev) => {
                             const n = new Set(prev)
                             n.has(k) ? n.delete(k) : n.add(k)
                             return n
                           })}
+                          label={<span className="block truncate">{m.label}</span>}
                         />
-                        <span className="truncate text-gray-700 dark:text-gray-300">{m.label}</span>
-                      </label>
+                      </div>
                       <button type="button" aria-label="nach oben" onClick={() => verschiebe(k, 'up')}
                         className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
                         <ChevronUp className="h-3.5 w-3.5" />
@@ -334,15 +333,15 @@ export function WerteTabelle({
           <TableHead>
             <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
               <th className={`${KOPF_ZELLE}`}>
-                <button type="button" onClick={() => toggleSort('__zeit')} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
-                  Zeitraum {sortKey === '__zeit' && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                </button>
+                <TableSortKopf aktiv={sortKey === '__zeit'} richtung={sortDir} onClick={() => toggleSort('__zeit')}>
+                  Zeitraum
+                </TableSortKopf>
               </th>
               {aktiveMetriken.map((m) => (
                 <th key={m.key} colSpan={zeigeVergleich ? 3 : 1} className={`${KOPF_ZELLE} text-right`}>
-                  <button type="button" onClick={() => toggleSort(m.key)} className="inline-flex items-center gap-1 hover:text-gray-700 dark:hover:text-gray-200">
-                    {m.label}{m.unit ? ` (${m.unit})` : ''} {sortKey === m.key && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
-                  </button>
+                  <TableSortKopf aktiv={sortKey === m.key} richtung={sortDir} onClick={() => toggleSort(m.key)}>
+                    {m.label}{m.unit ? ` (${m.unit})` : ''}
+                  </TableSortKopf>
                 </th>
               ))}
             </tr>

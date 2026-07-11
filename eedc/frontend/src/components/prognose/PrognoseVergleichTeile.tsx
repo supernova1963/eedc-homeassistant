@@ -17,9 +17,11 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 } from 'lucide-react'
-import { Card, ChartLegende, buttonClasses, Table, TableHead, TableBody, TableFoot } from '../ui'
+import { Button, Card, ChartLegende, Checkbox, SegmentControl, buttonClasses, Table, TableHead, TableBody, TableFoot } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { SimpleTooltip } from '../ui/FormelTooltip'
+import { useV4Basis } from '../../hooks/useV4Basis'
+import { v3RouteZuV4 } from '../../config/v3ZuV4Route'
 import { Parkbar } from '../park'
 import {
   aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag,
@@ -227,6 +229,7 @@ function DatendichtFallback({ children }: { children: React.ReactNode }) {
   )
 }
 function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { fehlendeStunden: number[]; anlageId: number; onReloaded: () => void }) {
+  const v4Basis = useV4Basis()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'warning' | 'error'; msg: string } | null>(null)
@@ -268,8 +271,14 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
             <div className={`text-xs mb-2 px-2 py-1 rounded ${feedback.tone === 'success' ? 'bg-green-900/30 text-green-300' : feedback.tone === 'warning' ? 'bg-amber-900/30 text-amber-300' : 'bg-red-900/30 text-red-300'}`}>{feedback.msg}</div>
           )}
           <div className="flex gap-2">
-            <button type="button" onClick={handleReaggregate} disabled={busy} className={buttonClasses({ variant: 'primary', size: 'sm', className: 'flex-1' })}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</button>
-            <a href="#/einstellungen/sensor-mapping" className={buttonClasses({ variant: 'secondary', size: 'sm' })}>Sensor-Mapping</a>
+            <Button type="button" variant="primary" size="sm" className="flex-1" onClick={handleReaggregate} loading={busy}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</Button>
+            {/* I9: geteilte Datei — unter /v4 auf den re-kategorisierten Reiter
+                (Integration) umbiegen, V3 behält sein Original-Ziel (Purge-Mechanik
+                useV4Basis + v3RouteZuV4 wie DatenCheckerTeile). */}
+            <a
+              href={v4Basis ? `#${v3RouteZuV4('einstellungen/sensor-mapping')}` : '#/einstellungen/sensor-mapping'}
+              className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+            >Sensor-Mapping</a>
           </div>
         </div>
       )}
@@ -590,7 +599,11 @@ export function PvgStratifizierung({ vm }: { vm: PrognoseVergleichVM }) {
         <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
           Wetter-Historie (Bewölkung, Niederschlag, WMO-Code) für {Math.max(stratifizierung.tage_ohne_wetter, stratifizierung.tep_tage_ohne_wetter)} Tage noch nicht geladen. eedc kann sie kostenlos aus dem Open-Meteo-Archiv nachholen. {stratifizierung.tage_mit_prognose > 0 ? (<>Danach zeigt diese Card MAPE/MPE getrennt nach <em>klar</em>, <em>diffus</em> und <em>wechselhaft</em>.</>) : (<>Solange noch keine Day-Ahead-Stundenprofile gespeichert sind, bleibt die Stratifizierungs-Tabelle leer — die Wetter-Daten dienen dann der Vorbereitung für das stündliche Korrekturprofil (Päckchen 2).</>)}
         </div>
-        <button type="button" onClick={vm.handleWetterBackfill} disabled={vm.backfillRunning} className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded transition-colors">{vm.backfillRunning ? 'Lädt Wetter-Historie…' : 'Wetter-Historie nachladen (2 Jahre)'}</button>
+        {/* B15: Aktions-Button → Button-SoT (primary; das frühere bg-blue-600 war
+            eine lokale Improvisation neben dem primary-Kanon). */}
+        <Button type="button" variant="primary" size="sm" onClick={vm.handleWetterBackfill} loading={vm.backfillRunning}>
+          {vm.backfillRunning ? 'Lädt Wetter-Historie…' : 'Wetter-Historie nachladen (2 Jahre)'}
+        </Button>
         {/* D11-9(a)/R12 (Gernot): Status-Zeile IMMER rendern — vorher (kein Ergebnis)
             ein neutraler Zustands-Hinweis, nach dem Klick Ergebnis/Fehler im selben Slot.
             So entsteht beim Erst-Klick kein „Zucken" (0→1 Zeile) mehr. */}
@@ -623,20 +636,28 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
             klemmte das `overflow-hidden` der Toggle-Gruppe „Diagnostisch" auf
             „Diagnost" und die Ausreißer-Checkbox lief mobil rechts aus dem Bild. */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex shrink-0 rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
-            {([7, 10, 30] as const).map(t => (
-              <button key={t} type="button" onClick={() => vm.setGenauigkeitsTage(t)} className={`px-3 py-1 transition-colors ${vm.genauigkeitsTage === t ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>{t} T</button>
-            ))}
-          </div>
-          <div className="flex shrink-0 rounded-lg border border-gray-300 dark:border-gray-600 text-xs overflow-hidden">
-            <button type="button" onClick={() => vm.setGenauigkeitsModus('kompakt')} className={`px-3 py-1 transition-colors ${vm.genauigkeitsModus === 'kompakt' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Kompakt</button>
-            <button type="button" onClick={() => vm.setGenauigkeitsModus('diagnostisch')} className={`px-3 py-1 transition-colors ${vm.genauigkeitsModus === 'diagnostisch' ? 'bg-primary-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Diagnostisch</button>
-          </div>
+          {/* B15/S4: 1-aus-N-Umschalter → SegmentControl-SoT (löst zwei handgebaute
+              Pillen-Gruppen ab); Ausreißer-Filter → Checkbox-SoT. */}
+          <SegmentControl
+            ariaLabel="Zeitraum (Tage)" size="sm"
+            optionen={([7, 10, 30] as const).map((t) => ({ key: String(t), label: `${t} T` }))}
+            value={String(vm.genauigkeitsTage)}
+            onChange={(k) => vm.setGenauigkeitsTage(Number(k) as 7 | 10 | 30)}
+          />
+          <SegmentControl
+            ariaLabel="Darstellung" size="sm"
+            optionen={[{ key: 'kompakt', label: 'Kompakt' }, { key: 'diagnostisch', label: 'Diagnostisch' }]}
+            value={vm.genauigkeitsModus}
+            onChange={(k) => vm.setGenauigkeitsModus(k as 'kompakt' | 'diagnostisch')}
+          />
           <SimpleTooltip text={`Ausreißer = Tage, an denen eine Quelle > ${fmtZahl(genauigkeit.ausreisser_schwelle_prozent ?? 50, 0)} % daneben lag (z. B. Sensor-Aussetzer). Standardmäßig bleiben sie in der Statistik — gerade Schlechtprognose-Tage haben Erkenntniswert. Hier optional ausblenden.`}>
-            <label className={`flex items-center gap-1.5 text-xs cursor-pointer select-none ${(genauigkeit.anzahl_ausreisser ?? 0) === 0 ? 'opacity-50' : ''}`}>
-              <input type="checkbox" checked={vm.ausreisserAusblenden} onChange={e => vm.setAusreisserAusblenden(e.target.checked)} className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500" />
-              <span className="text-gray-600 dark:text-gray-400">Ausreißer ausblenden{(genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (${genauigkeit.anzahl_ausreisser})` : ''}</span>
-            </label>
+            <span className={`inline-block select-none ${(genauigkeit.anzahl_ausreisser ?? 0) === 0 ? 'opacity-50' : ''}`}>
+              <Checkbox
+                checked={vm.ausreisserAusblenden}
+                onChange={(e) => vm.setAusreisserAusblenden(e.target.checked)}
+                label={<span className="text-xs text-gray-600 dark:text-gray-400">Ausreißer ausblenden{(genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (${genauigkeit.anzahl_ausreisser})` : ''}</span>}
+              />
+            </span>
           </SimpleTooltip>
         </div>
       </div>

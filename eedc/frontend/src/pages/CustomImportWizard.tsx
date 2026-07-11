@@ -432,21 +432,16 @@ export default function CustomImportWizard() {
                 <div className="flex flex-wrap gap-2">
                   {templates.map(t => (
                     <div key={t.name} className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => applyTemplate(t)}
-                        className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
-                      >
+                      <Button type="button" variant="secondary" size="sm" onClick={() => applyTemplate(t)}>
                         {t.name}
-                      </button>
-                      <button
-                        type="button"
+                      </Button>
+                      <Button
+                        type="button" variant="ghost" size="icon"
                         onClick={() => handleDeleteTemplate(t.name)}
-                        className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500"
-                        title="Template löschen"
+                        aria-label="Template löschen" title="Template löschen"
                       >
                         <X className="w-3 h-3" />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>

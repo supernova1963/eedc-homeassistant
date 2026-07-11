@@ -3,6 +3,10 @@
  *
  * Zeigt Bilder im Vollbild-Modus. PDFs werden in neuem Tab geöffnet.
  * Navigation mit Pfeiltasten und Klick.
+ *
+ * Wächter-Ausnahme: die rohen <button> (Schließen-X + ‹/›-Pfeile, weiß auf
+ * Schwarz-Overlay) SIND die Lightbox-Overlay-Implementierung — check:v4-migration-
+ * Fall-3-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
  */
 
 import { useEffect, useCallback } from 'react'

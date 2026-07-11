@@ -1,4 +1,5 @@
 import { forwardRef, SelectHTMLAttributes } from 'react'
+import { STEUER_H } from '../../lib/komponentenStyle'
 
 export interface SelectOption {
   value: string
@@ -27,6 +28,12 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   placeholder?: string
   /** Kompakte Breite (w-auto statt w-full) — für Header-Bereiche */
   compact?: boolean
+  /**
+   * 32-px-Steuerleisten-Variante (B15 dritte Höhenklasse `STEUER_H`) für
+   * Filter-/Toolbar-Leisten — Rand wie die Toolbar-Familie (SegmentControl:
+   * gray-200/700), impliziert `compact`. Formulare/Wizards bleiben bei 42 px.
+   */
+  steuer?: boolean
 }
 
 const renderOption = (o: SelectOption) => (
@@ -36,11 +43,11 @@ const renderOption = (o: SelectOption) => (
 )
 
 const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className = '', label, error, hint, options, placeholder, compact, id, ...props }, ref) => {
+  ({ className = '', label, error, hint, options, placeholder, compact, steuer, id, ...props }, ref) => {
     const selectId = id || props.name
 
     return (
-      <div className={compact ? 'shrink-0' : 'w-full'}>
+      <div className={compact || steuer ? 'shrink-0' : 'w-full'}>
         {label && (
           <label htmlFor={selectId} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             {label}
@@ -51,13 +58,14 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={selectId}
           className={`
-            ${compact ? 'w-auto' : 'w-full'} px-3 py-2 rounded-lg border
-            min-h-[42px] leading-6
+            ${steuer
+              ? `w-auto px-2 py-0 ${STEUER_H} text-sm rounded-lg border`
+              : `${compact ? 'w-auto' : 'w-full'} px-3 py-2 rounded-lg border min-h-[42px] leading-6`}
             bg-white dark:bg-gray-800
             text-gray-900 dark:text-gray-100
             focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
             disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
-            ${error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}
+            ${error ? 'border-red-500' : steuer ? 'border-gray-200 dark:border-gray-700' : 'border-gray-300 dark:border-gray-600'}
             ${className}
           `}
           {...props}

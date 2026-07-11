@@ -10,8 +10,12 @@
  * 6. Zusammenfassung
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useWizardHost } from '../v4/wizardHost'
+import { useSelectedAnlage } from '../hooks'
+import Stepper from '../components/ui/Stepper'
+import Select from '../components/ui/Select'
 import {
   CheckCircle2,
   ChevronLeft,
@@ -165,10 +169,18 @@ const initialState: WizardState = {
 export default function SensorMappingWizard() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  // Teil D (D2): im Overlay-Host laufen Terminal-/Abbruch-/Cross-Wizard-Aktionen
+  // über den Host (schliessen/abbrechen/oeffneWizard) statt navigate; die
+  // Standalone-Route (V3) behält ihr navigate-Verhalten.
+  const host = useWizardHost()
+  const { selectedAnlageId } = useSelectedAnlage()
 
   // Anlage ID aus URL
   const anlageIdParam = searchParams.get('anlage')
   const anlageId = anlageIdParam ? parseInt(anlageIdParam, 10) : null
+  // Overlay-Anlage-Wechsel: ohne Route kein ?anlage=-Roundtrip → lokaler State;
+  // Start = global gewählte Anlage (im Overlay), sonst wie bisher erste Anlage.
+  const [overlayAnlageId, setOverlayAnlageId] = useState<number | null>(null)
 
   // State
   const [currentStep, setCurrentStep] = useState(0)
@@ -203,7 +215,16 @@ export default function SensorMappingWizard() {
   const [extendedLoading, setExtendedLoading] = useState(false)
   const [extendedError, setExtendedError] = useState<string | null>(null)
 
-  const effectiveAnlageId = anlageId || anlagen?.[0]?.id
+  const effectiveAnlageId =
+    anlageId || overlayAnlageId || (host.imOverlay ? selectedAnlageId : null) || anlagen?.[0]?.id
+
+  // W5-Dirty-Referenz: Snapshot des geladenen (bzw. auto-vorbefüllten) States —
+  // Abweichung davon = ungespeicherte Eingaben → Verwerfen-Nachfrage beim Schließen.
+  const geladenRef = useRef(JSON.stringify(initialState))
+  useEffect(() => {
+    host.setzeBlocker(postSave == null && JSON.stringify(state) !== geladenRef.current)
+    return () => host.setzeBlocker(false)
+  }, [state, postSave, host])
 
   // Load data
   useEffect(() => {
@@ -220,11 +241,17 @@ export default function SensorMappingWizard() {
           return
         }
 
-        const targetAnlageId = anlageId || anlagenList[0]?.id
+        const targetAnlageId =
+          anlageId || overlayAnlageId || (host.imOverlay ? selectedAnlageId : null) || anlagenList[0]?.id
         if (!targetAnlageId) {
           // Need to wait for anlagen to load first
           return
         }
+
+        // Frischer Anlage-Kontext: State auf Anfang, sonst bleibt beim
+        // Anlage-Wechsel der Zustand der vorigen Anlage stehen.
+        setState(initialState)
+        geladenRef.current = JSON.stringify(initialState)
 
         // Load mapping and sensors in parallel
         const [mapping, sensors] = await Promise.all([
@@ -252,7 +279,7 @@ export default function SensorMappingWizard() {
             Object.keys(existingMapping.investitionen || {}).length > 0
           )
 
-          setState({
+          const geladen: WizardState = {
             basis: {
               einspeisung: existingMapping.basis?.einspeisung || null,
               netzbezug: existingMapping.basis?.netzbezug || null,
@@ -280,7 +307,9 @@ export default function SensorMappingWizard() {
             solcastHaAktiv: existingMapping.solcast_config?.modus === 'ha_auto',
             solcastApiKey: existingMapping.solcast_config?.api_key || '',
             solcastResourceIds: existingMapping.solcast_config?.resource_ids || [],
-          })
+          }
+          setState(geladen)
+          geladenRef.current = JSON.stringify(geladen)
         }
 
         // Auto-Vorbefüllung aus HA-Energy nur bei Erstkonfig (leeres Mapping).
@@ -292,7 +321,13 @@ export default function SensorMappingWizard() {
               suggest.available &&
               (Object.keys(suggest.basis).length > 0 || Object.keys(suggest.investitionen).length > 0)
             if (hasAnything) {
-              setState(prev => applyHAEnergySuggestions(prev, suggest))
+              setState(prev => {
+                const next = applyHAEnergySuggestions(prev, suggest)
+                // Auto-Vorschläge zählen nicht als Nutzer-Eingabe → Dirty-Referenz
+                // mitziehen (sonst fragt der Overlay-Schluss sofort nach Verwerfen).
+                geladenRef.current = JSON.stringify(next)
+                return next
+              })
               setAppliedHAEnergy({ basis: suggest.basis, investitionen: suggest.investitionen })
             }
           } catch (err) {
@@ -310,7 +345,7 @@ export default function SensorMappingWizard() {
     }
 
     loadData()
-  }, [anlageId])
+  }, [anlageId, overlayAnlageId, host.imOverlay, selectedAnlageId])
 
   // Steps dynamisch generieren basierend auf Investitionen
   const steps = useMemo<StepConfig[]>(() => {
@@ -568,9 +603,14 @@ export default function SensorMappingWizard() {
 
       await sensorMappingApi.saveMapping(effectiveAnlageId, request)
 
+      // Gespeichert = keine offenen Eingaben mehr (W5-Dirty-Referenz nachziehen).
+      geladenRef.current = JSON.stringify(state)
+
       // Post-Save-Dialog anzeigen wenn etwas geändert wurde
       if (liveChanged || felderChanged) {
         setPostSave({ liveChanged, felderChanged, backfillRunning: false, backfillResult: null, backfillError: null })
+      } else if (host.imOverlay) {
+        host.schliessen()
       } else {
         navigate('/einstellungen/ha-export?saved=true')
       }
@@ -579,7 +619,7 @@ export default function SensorMappingWizard() {
     } finally {
       setIsSaving(false)
     }
-  }, [state, effectiveAnlageId, mappingData, availableSensors])
+  }, [state, effectiveAnlageId, mappingData, availableSensors, host, navigate])
 
   // Reset der HA-Energy-Vorschläge (#197): entfernt nur Sensoren, die unverändert
   // dem ursprünglichen Vorschlag entsprechen. Manuelle Anpassungen bleiben erhalten.
@@ -745,17 +785,24 @@ export default function SensorMappingWizard() {
                   Vergangene Monatsabschlüsse können mit den neuen Sensoren neu importiert werden.
                   Nur sinnvoll wenn sich der Sensor-Name geändert hat und die Daten korrekt sein sollen.
                 </p>
+                {/* Alt-2 (Gernot 2026-07-11): `?ueberschreiben=true`/Payload entfernt —
+                    HAStatistikImport liest den Param auf keinem Pfad (No-op, schon in V3).
+                    Die Überschreiben-Wahl trifft der Nutzer in der Import-Konflikt-UI. */}
                 <Button
-                  onClick={() => navigate('/einstellungen/ha-statistik-import?ueberschreiben=true')}
+                  onClick={() =>
+                    host.imOverlay
+                      ? host.oeffneWizard('ha-statistik-import')
+                      : navigate('/einstellungen/ha-statistik-import')
+                  }
                   variant="secondary"
                 >
-                  Zum HA Statistik-Import (mit Überschreiben)
+                  Zum HA Statistik-Import
                 </Button>
               </div>
             )}
 
             <div className="pt-2">
-              <Button onClick={() => navigate('/einstellungen/ha-export?saved=true')}>
+              <Button onClick={() => (host.imOverlay ? host.schliessen() : navigate('/einstellungen/ha-export?saved=true'))}>
                 Fertig
               </Button>
             </div>
@@ -774,19 +821,20 @@ export default function SensorMappingWizard() {
           <p className="text-gray-500 dark:text-gray-400">
             {anlagen && anlagen.length > 1 ? (
               <span className="inline-flex items-center gap-2">
-                <select
+                {/* B15: Select-SoT (steuer-Leisten-Variante); im Overlay wechselt der
+                    lokale Anlage-State (kein ?anlage=-Roundtrip möglich). */}
+                <Select
+                  steuer
                   title="Anlage auswählen"
-                  value={effectiveAnlageId ?? ''}
+                  aria-label="Anlage auswählen"
+                  value={effectiveAnlageId != null ? String(effectiveAnlageId) : ''}
                   onChange={(e) => {
                     const id = Number(e.target.value)
-                    navigate(`/einstellungen/sensor-mapping?anlage=${id}`, { replace: true })
+                    if (host.imOverlay) setOverlayAnlageId(id)
+                    else navigate(`/einstellungen/sensor-mapping?anlage=${id}`, { replace: true })
                   }}
-                  className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-0.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                >
-                  {anlagen.map((a) => (
-                    <option key={a.id} value={a.id}>{a.anlagenname}</option>
-                  ))}
-                </select>
+                  options={anlagen.map((a) => ({ value: String(a.id), label: a.anlagenname }))}
+                />
                 <span>— Home Assistant Sensoren konfigurieren</span>
               </span>
             ) : (
@@ -806,7 +854,7 @@ export default function SensorMappingWizard() {
               Mapping löschen
             </Button>
           )}
-          <Button variant="secondary" onClick={() => navigate(-1)}>
+          <Button variant="secondary" onClick={() => (host.imOverlay ? host.abbrechen() : navigate(-1))}>
             Abbrechen
           </Button>
         </div>
@@ -894,49 +942,16 @@ export default function SensorMappingWizard() {
         )
       })()}
 
-      {/* Progress */}
+      {/* Progress — Stepper-SoT (Teil D, W1) statt handgerolltem Step-Balken;
+          amber-Akzent = bestehendes Wizard-Chrome dieser Seite. */}
       <Card padding="sm">
-        <div className="flex items-center overflow-x-auto py-2">
-          {steps.map((step, index) => {
-            const isCompleted = index < currentStep
-            const isCurrent = index === currentStep
-
-            return (
-              <div key={step.id} className="flex items-center flex-shrink-0">
-                <button
-                  onClick={() => setCurrentStep(index)}
-                  className={`
-                    flex items-center gap-2 px-3 py-2 rounded-lg transition-all
-                    ${isCurrent
-                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                      : isCompleted
-                        ? 'text-green-600 dark:text-green-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                        : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }
-                  `}
-                >
-                  <div
-                    className={`
-                      w-7 h-7 rounded-full flex items-center justify-center text-sm
-                      ${isCompleted
-                        ? 'bg-green-500 text-white'
-                        : isCurrent
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700'
-                      }
-                    `}
-                  >
-                    {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : index + 1}
-                  </div>
-                  <span className="text-sm font-medium whitespace-nowrap">{step.title}</span>
-                </button>
-                {index < steps.length - 1 && (
-                  <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 mx-1" />
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <Stepper
+          schritte={steps.map((s) => ({ titel: s.title }))}
+          aktuell={currentStep}
+          akzent="amber"
+          onSchrittKlick={setCurrentStep}
+          className="py-2"
+        />
       </Card>
 
       {/* Erweiterte Suche: Fallback wenn der Energy-Filter den gesuchten Sensor versteckt
@@ -950,14 +965,14 @@ export default function SensorMappingWizard() {
                 Alle Sensoren geladen ({availableSensors.length}) — Hinweis beachten
               </span>
             ) : (
-              <button
-                type="button"
+              <Button
+                type="button" variant="ghost" size="sm"
                 onClick={loadExtendedSensors}
-                disabled={extendedLoading}
-                className="text-amber-600 dark:text-amber-400 hover:underline disabled:opacity-50"
+                loading={extendedLoading}
+                className="text-amber-600 dark:text-amber-400"
               >
                 {extendedLoading ? 'Lädt…' : 'Alle Sensoren ohne Filter anzeigen'}
-              </button>
+              </Button>
             )}
             {extendedError && (
               <span className="text-red-600 dark:text-red-400">{extendedError}</span>

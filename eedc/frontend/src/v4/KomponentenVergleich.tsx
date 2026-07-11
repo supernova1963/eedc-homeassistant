@@ -11,8 +11,7 @@ import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
 import { useSchmaleAchse } from '../hooks'
-import { fmtCalc, SegmentControl, eedcTooltipProps } from '../components/ui'
-import { STEUER_H } from '../lib/komponentenStyle'
+import { fmtCalc, SegmentControl, Select, eedcTooltipProps } from '../components/ui'
 import { ExternalLink } from 'lucide-react'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
@@ -45,19 +44,16 @@ export function KomponentenVergleich({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
           Vergleichsjahr
-          {/* B15/S5: Toolbar-Kontext → 32-px-Klasse STEUER_H im .input-Muster
-              (wie WerkbankZeitraum-Vergleichsjahr), keine lokale 36-px-Improvisation. */}
-          <select
-            value={vglJahr} onChange={(e) => setVglJahr(Number(e.target.value))}
-            className={`input w-auto ${STEUER_H} py-0 text-sm border-gray-200 dark:border-gray-700`}
-          >
-            {/* F10 (R3b ORD-2): Options absteigend (neueste zuerst) — nur die
-                Options-Quelle drehen; `sortiert` bleibt chronologisch (speist
-                Chart = erlaubte Verlaufs-Ausnahme + neuestes-Ableitung). */}
-            {[...sortiert].reverse().filter((j) => j.jahr !== neuestes.jahr).map((j) => (
-              <option key={j.jahr} value={j.jahr}>{j.jahr}</option>
-            ))}
-          </select>
+          {/* B15/S5: Toolbar-Kontext → Select-SoT in der 32-px-steuer-Variante.
+              F10 (R3b ORD-2): Options absteigend (neueste zuerst) — nur die
+              Options-Quelle drehen; `sortiert` bleibt chronologisch (speist
+              Chart = erlaubte Verlaufs-Ausnahme + neuestes-Ableitung). */}
+          <Select
+            steuer
+            value={String(vglJahr)} onChange={(e) => setVglJahr(Number(e.target.value))}
+            aria-label="Vergleichsjahr"
+            options={[...sortiert].reverse().filter((j) => j.jahr !== neuestes.jahr).map((j) => ({ value: String(j.jahr), label: String(j.jahr) }))}
+          />
         </label>
         <SegmentControl
           ariaLabel="Darstellung"

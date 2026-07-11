@@ -59,26 +59,18 @@ export function SonstigePositionenFields({ invId, positionen, onChange }: Props)
   return (
     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
       {!expanded && positionen.length === 0 ? (
-        <button
-          type="button"
-          onClick={addPosition}
-          className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={addPosition}>
           + Sonstige Erträge &amp; Ausgaben erfassen
-        </button>
+        </Button>
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
               Sonstige Erträge &amp; Ausgaben
             </span>
-            <button
-              type="button"
-              onClick={addPosition}
-              className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={addPosition}>
               + Position
-            </button>
+            </Button>
           </div>
 
           {positionen.map((pos, index) => (

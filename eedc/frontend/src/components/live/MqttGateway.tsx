@@ -7,8 +7,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Edit3, Play, Check, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Loader2, Radio, AlertCircle, Zap, Tag } from 'lucide-react'
+import { Plus, Trash2, Edit3, Play, Check, ChevronDown, ChevronRight, Loader2, Radio, AlertCircle, Zap, Tag } from 'lucide-react'
 import Input from '../ui/Input'
+import Button from '../ui/Button'
+import Select from '../ui/Select'
+import Switch from '../ui/Switch'
+import SegmentControl from '../ui/SegmentControl'
 import { liveDashboardApi } from '../../api/liveDashboard'
 import type { GatewayMapping, GatewayMappingCreate, GatewayStatus, TestTopicResult, MqttPreset } from '../../api/liveDashboard'
 import { investitionenApi } from '../../api/investitionen'
@@ -111,14 +115,14 @@ function MappingForm({
           />
         </div>
         <div className="flex items-end">
-          <button
+          <Button
+            type="button" variant="secondary" size="sm"
             onClick={handleTestTopic}
             disabled={!form.quell_topic || testing}
-            className="flex items-center gap-1 px-3 py-2 text-sm rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 disabled:opacity-50"
+            loading={testing}
           >
-            {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            Testen
-          </button>
+            {!testing && <Play className="w-4 h-4 mr-1" />}Testen
+          </Button>
         </div>
       </div>
 
@@ -147,24 +151,19 @@ function MappingForm({
         </div>
       )}
 
-      {/* Payload-Typ */}
+      {/* Payload-Typ — B15/S4: 1-aus-3 → SegmentControl-SoT */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payload-Typ</label>
-        <div className="flex gap-2">
-          {(['plain', 'json', 'json_array'] as const).map(typ => (
-            <button
-              key={typ}
-              onClick={() => setForm({ ...form, payload_typ: typ })}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                form.payload_typ === typ
-                  ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 dark:border-primary-600'
-                  : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-              }`}
-            >
-              {typ === 'plain' ? 'Zahl' : typ === 'json' ? 'JSON-Pfad' : 'JSON-Array'}
-            </button>
-          ))}
-        </div>
+        <SegmentControl
+          ariaLabel="Payload-Typ" size="sm"
+          optionen={[
+            { key: 'plain', label: 'Zahl' },
+            { key: 'json', label: 'JSON-Pfad' },
+            { key: 'json_array', label: 'JSON-Array' },
+          ]}
+          value={form.payload_typ}
+          onChange={(k) => setForm({ ...form, payload_typ: k })}
+        />
       </div>
 
       {/* JSON-Pfad / Array-Index */}
@@ -190,10 +189,9 @@ function MappingForm({
 
       {/* Ziel-Key */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Ziel-Feld <span className="text-red-500">*</span>
-        </label>
-        <select
+        <Select
+          label="Ziel-Feld"
+          required
           value={isCustomZiel ? '__custom__' : form.ziel_key}
           onChange={e => {
             const val = e.target.value
@@ -203,13 +201,11 @@ function MappingForm({
               setForm({ ...form, ziel_key: val, ziel_key_custom: '' })
             }
           }}
-          className="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2"
-        >
-          {ZIEL_KEY_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-          <option value="__custom__">Benutzerdefiniert...</option>
-        </select>
+          options={[
+            ...ZIEL_KEY_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+            { value: '__custom__', label: 'Benutzerdefiniert...' },
+          ]}
+        />
         {(form.ziel_key === '__custom__' || isCustomZiel) && (
           <Input
             className="mt-2"
@@ -221,14 +217,15 @@ function MappingForm({
         )}
       </div>
 
-      {/* Erweiterte Optionen */}
-      <button
+      {/* Erweiterte Optionen — Disclosure (B15: ghost + aria-expanded) */}
+      <Button
+        type="button" variant="ghost" size="sm"
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+        aria-expanded={showAdvanced}
       >
-        {showAdvanced ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        {showAdvanced ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
         Erweitert (Faktor, Offset, Invertierung)
-      </button>
+      </Button>
 
       {showAdvanced && (
         <div className="grid grid-cols-3 gap-2">
@@ -250,17 +247,15 @@ function MappingForm({
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Invertieren</label>
-            <button
-              onClick={() => setForm({ ...form, invertieren: !form.invertieren })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${
-                form.invertieren
-                  ? 'border-amber-400 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                  : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400'
-              }`}
-            >
-              {form.invertieren ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-              {form.invertieren ? '×(−1)' : 'Nein'}
-            </button>
+            {/* B15/S3: Ja/Nein-Schalter → Switch-SoT */}
+            <div className="flex items-center gap-2 h-[42px]">
+              <Switch
+                checked={form.invertieren}
+                onChange={(an) => setForm({ ...form, invertieren: an })}
+                ariaLabel="Vorzeichen invertieren"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">{form.invertieren ? '×(−1)' : 'Nein'}</span>
+            </div>
           </div>
         </div>
       )}
@@ -273,22 +268,19 @@ function MappingForm({
         placeholder="z.B. Shelly 3EM Phase 1"
       />
 
-      {/* Buttons */}
+      {/* Buttons — M10-Kanon: Abbrechen ghost, Speichern primary + loading */}
       <div className="flex gap-2 justify-end">
-        <button
-          onClick={onCancel}
-          className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Abbrechen
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button" variant="primary" size="sm"
           onClick={() => onSave({ ...form, ziel_key: effectiveZielKey })}
           disabled={saving || !form.quell_topic || !effectiveZielKey}
-          className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+          loading={saving}
         >
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-          Speichern
-        </button>
+          {!saving && <Check className="w-3 h-3 mr-1" />}Speichern
+        </Button>
       </div>
     </div>
   )
@@ -380,23 +372,17 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
         Geräte-Preset (Schnelleinrichtung)
       </h3>
 
-      {/* Preset-Auswahl gruppiert */}
-      <div>
-        <select
-          value={selectedId}
-          onChange={e => handleSelect(e.target.value)}
-          className="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-        >
-          <option value="">Gerät auswählen…</option>
-          {gruppen.map(gruppe => (
-            <optgroup key={gruppe} label={gruppe}>
-              {presets.filter(p => p.gruppe === gruppe).map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
-      </div>
+      {/* Preset-Auswahl gruppiert — Select-SoT mit Optgroups */}
+      <Select
+        value={selectedId}
+        onChange={e => handleSelect(e.target.value)}
+        aria-label="Geräte-Preset wählen"
+        placeholder="Gerät auswählen…"
+        options={gruppen.map(gruppe => ({
+          label: gruppe,
+          options: presets.filter(p => p.gruppe === gruppe).map(p => ({ value: p.id, label: p.name })),
+        }))}
+      />
 
       {/* Gewähltes Preset: Beschreibung + Variablen */}
       {selected && (
@@ -409,22 +395,14 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
 
           {/* Investitions-Auswahl (nur wenn erfordert_investition) */}
           {selected.erfordert_investition && (
-            <div>
-              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Investition
-              </label>
-              <select
-                value={selectedInvId ?? ''}
-                onChange={e => setSelectedInvId(e.target.value ? Number(e.target.value) : null)}
-                title="Investition auswählen"
-                className="w-full text-sm rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="">Investition auswählen…</option>
-                {investitionen.map(inv => (
-                  <option key={inv.id} value={inv.id}>{inv.bezeichnung}</option>
-                ))}
-              </select>
-            </div>
+            <Select
+              label="Investition"
+              value={selectedInvId != null ? String(selectedInvId) : ''}
+              onChange={e => setSelectedInvId(e.target.value ? Number(e.target.value) : null)}
+              title="Investition auswählen"
+              placeholder="Investition auswählen…"
+              options={investitionen.map(inv => ({ value: String(inv.id), label: inv.bezeichnung }))}
+            />
           )}
 
           {/* Variablen-Eingabe */}
@@ -475,15 +453,15 @@ function PresetSection({ anlageId, onApplied }: { anlageId: number; onApplied: (
             </div>
           )}
 
-          {/* Anwenden-Button */}
-          <button
+          {/* Anwenden — Button-SoT (primary statt lokalem purple-600) */}
+          <Button
+            type="button" variant="primary" size="sm"
             onClick={handleApply}
             disabled={!canApply || applying}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+            loading={applying}
           >
-            {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            Anwenden
-          </button>
+            {!applying && <Zap className="w-3.5 h-3.5 mr-1.5" />}Anwenden
+          </Button>
         </>
       )}
     </div>
@@ -606,7 +584,7 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
           <Radio className="w-4 h-4" />
           <span className="text-sm">
             MQTT-Gateway benötigt eine aktive MQTT-Broker-Verbindung.
-            Konfiguriere oben zuerst den Broker.
+            Konfiguriere zuerst die Broker-Verbindung (Live-Daten empfangen / MQTT-Inbound).
           </span>
         </div>
       </div>
@@ -676,13 +654,13 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
         <div className="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
           Noch keine Mappings konfiguriert.
           <br />
-          <button
+          <Button
+            type="button" variant="ghost" size="sm" className="mt-2 text-primary-600 dark:text-primary-400"
             onClick={() => { setEditId(null); setShowForm(true) }}
-            className="mt-2 inline-flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 mr-1" />
             Erstes Mapping anlegen
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -695,13 +673,14 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
                   : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200/50 dark:border-gray-700/50 opacity-60'
               }`}
             >
-              {/* Toggle */}
-              <button onClick={() => handleToggle(m)} className="shrink-0" title={m.aktiv ? 'Deaktivieren' : 'Aktivieren'}>
-                {m.aktiv
-                  ? <ToggleRight className="w-5 h-5 text-green-500" />
-                  : <ToggleLeft className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                }
-              </button>
+              {/* Toggle — B15/S3: Switch-SoT statt Toggle-Icon-Button */}
+              <div className="shrink-0" title={m.aktiv ? 'Deaktivieren' : 'Aktivieren'}>
+                <Switch
+                  checked={m.aktiv}
+                  onChange={() => handleToggle(m)}
+                  ariaLabel={m.aktiv ? `Mapping ${m.quell_topic} deaktivieren` : `Mapping ${m.quell_topic} aktivieren`}
+                />
+              </div>
 
               {/* Info */}
               <div className="flex-1 min-w-0">
@@ -744,26 +723,27 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
                 )}
               </div>
 
-              {/* Actions */}
+              {/* Actions — Icon-only → Button ghost icon + aria-label */}
               <div className="flex items-center gap-1 shrink-0">
-                <button
+                <Button
+                  type="button" variant="ghost" size="icon"
                   onClick={() => startEdit(m)}
-                  className="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  title="Bearbeiten"
+                  aria-label="Mapping bearbeiten" title="Bearbeiten"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button
+                  type="button" variant="ghost" size="icon"
                   onClick={() => handleDelete(m.id)}
                   disabled={deleting === m.id}
-                  className="p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  title="Löschen"
+                  aria-label="Mapping löschen" title="Löschen"
+                  className="hover:text-red-500"
                 >
                   {deleting === m.id
                     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     : <Trash2 className="w-3.5 h-3.5" />
                   }
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -787,13 +767,13 @@ export default function MqttGateway({ anlageId, mqttAktiv }: MqttGatewayProps) {
 
       {/* Neues Mapping Button (wenn Liste nicht leer) */}
       {!showForm && mappings.length > 0 && (
-        <button
+        <Button
+          type="button" variant="ghost" size="sm" className="text-primary-600 dark:text-primary-400"
           onClick={() => { setEditId(null); setShowForm(true) }}
-          className="flex items-center gap-1.5 text-sm text-primary-600 dark:text-primary-400 hover:underline"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4 mr-1.5" />
           Mapping hinzufügen
-        </button>
+        </Button>
       )}
     </div>
   )

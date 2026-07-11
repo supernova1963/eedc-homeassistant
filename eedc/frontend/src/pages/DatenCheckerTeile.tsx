@@ -14,7 +14,7 @@ import { useV4Basis } from '../hooks'
 import { v3RouteZuV4 } from '../config/v3ZuV4Route'
 import {
   RefreshCw, XCircle, AlertTriangle, Info,
-  CheckCircle, ChevronRight, ChevronDown, Wrench, Loader2,
+  CheckCircle, ChevronRight, ChevronDown, Wrench,
 } from 'lucide-react'
 import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
@@ -85,28 +85,33 @@ function KategorieSektion({
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors text-left"
-      >
-        <div className="flex items-center gap-2">
-          {open ? (
-            <ChevronDown className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-          )}
-          <span className="font-medium text-sm text-gray-900 dark:text-white">
-            {kategorieLabels[kategorie] || kategorie}
+      <div className="bg-gray-50 dark:bg-gray-800">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="w-full justify-between text-left"
+        >
+          <span className="flex items-center gap-2">
+            {open ? (
+              <ChevronDown className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+            )}
+            <span className="font-medium text-sm text-gray-900 dark:text-white">
+              {kategorieLabels[kategorie] || kategorie}
+            </span>
           </span>
-        </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${
-          hasIssues
-            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-            : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-        }`}>
-          {severityBadge(counts)}
-        </span>
-      </button>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${
+            hasIssues
+              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+          }`}>
+            {severityBadge(counts)}
+          </span>
+        </Button>
+      </div>
 
       {open && (
         <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -143,41 +148,44 @@ function KategorieSektion({
                   )}
                 </div>
                 {e.action_kind === 'reaggregate_day' && onReaggregate && actionAnlageId && actionDatum && (
-                  <button
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-shrink-0"
                     onClick={() => onReaggregate(actionAnlageId, actionDatum)}
                     disabled={!!reparaturBusy}
-                    className="flex-shrink-0 text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    loading={!!isReparaturBusy}
                   >
-                    {isReparaturBusy ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Wrench className="h-3 w-3" />
-                    )}
+                    {!isReparaturBusy && <Wrench className="h-3 w-3 mr-1" />}
                     {e.action_label ?? 'Tag reparieren'}
-                  </button>
+                  </Button>
                 )}
                 {e.action_kind === 'reaggregate_range' && onReaggregateBereich && rangeAnlageId && rangeVon && rangeBis && (
-                  <button
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-shrink-0"
                     onClick={() => onReaggregateBereich(rangeAnlageId, rangeVon, rangeBis)}
                     disabled={!!reparaturBusy}
-                    className="flex-shrink-0 text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                    loading={!!isRangeBusy}
                   >
-                    {isRangeBusy ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Wrench className="h-3 w-3" />
-                    )}
+                    {!isRangeBusy && <Wrench className="h-3 w-3 mr-1" />}
                     {e.action_label ?? 'Zeitraum neu aggregieren'}
-                  </button>
+                  </Button>
                 )}
                 {e.link && !e.action_kind && (
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="flex-shrink-0"
                     onClick={() => navigate((v4Basis && v3RouteZuV4(e.link!)) || e.link!)}
-                    className="flex-shrink-0 text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
                   >
                     Beheben
-                    <ChevronRight className="h-3 w-3" />
-                  </button>
+                    <ChevronRight className="h-3 w-3 ml-0.5" />
+                  </Button>
                 )}
               </div>
             )

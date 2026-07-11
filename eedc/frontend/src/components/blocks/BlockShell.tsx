@@ -5,6 +5,10 @@
  *
  * Promoviert aus `components/preview/IASkeleton.tsx` (dort `BloeckeView`).
  * Hier die echte, getestete Variante für den IA-v4-Routenbaum.
+ *
+ * Wächter-Ausnahme: die rohen <button> (Klapp-/Fokus-/Park-Mechanik) SIND die
+ * Infra-Implementierung — check:v4-migration-Infra-Allowlist (Regel 0a Fall 3,
+ * Gernot-Freigabe 2026-07-11).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {

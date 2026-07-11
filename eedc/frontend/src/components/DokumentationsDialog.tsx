@@ -5,13 +5,17 @@
  * und Finanzbericht (Beta) in einer einzigen Stelle. Die beiden neuen
  * Dokumente werden in v3.15.0 als Beta eingeführt (Issue #121).
  *
+ * Wächter-Ausnahme: die Download-Karten-KACHEL ist ein roher <button> (ganze
+ * Karte als Klickfläche, Akzent-Rahmen-Optik — kein ui/Button-Fall) —
+ * check:v4-migration-Fall-3-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).
+ *
  * PDFs werden per fetch() geladen und als Blob-Download angeboten,
  * damit der HA-Ingress-Auth-Token nicht verloren geht (Mobile 401-Fix).
  */
 
 import { useState, useEffect } from 'react'
 import { FileText, Award, Euro, BookOpen, Download, FolderArchive, Loader2 } from 'lucide-react'
-import { Modal, Alert } from './ui'
+import { Modal, Alert, Button, Checkbox, Select } from './ui'
 import { importApi } from '../api/import'
 import { infothekApi } from '../api/infothek'
 import { monatsdatenApi } from '../api/monatsdaten'
@@ -183,17 +187,16 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
             <label htmlFor="jahresbericht-jahr" className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Jahresbericht-Zeitraum:
             </label>
-            <select
+            <Select
               id="jahresbericht-jahr"
+              compact
               value={jahresberichtJahr ?? ''}
               onChange={(e) => setJahresberichtJahr(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-            >
-              <option value="">Gesamtzeitraum (alle Jahre)</option>
-              {verfuegbareJahre.map(jahr => (
-                <option key={jahr} value={jahr}>{jahr}</option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'Gesamtzeitraum (alle Jahre)' },
+                ...verfuegbareJahre.map(jahr => ({ value: String(jahr), label: String(jahr) })),
+              ]}
+            />
           </div>
         )}
 
@@ -210,18 +213,17 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
             return (
               <div key={card.titel} className="relative flex flex-col">
                 {!isDisabled && (
-                  <label
-                    className="absolute -top-2 -right-2 z-10 flex items-center justify-center h-7 w-7 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm cursor-pointer"
+                  <div
+                    className="absolute -top-2 -right-2 z-10 flex items-center justify-center h-7 w-7 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm"
                     title="Für ZIP-Download auswählen"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
+                      id={`zip-${card.zipKey}`}
+                      label={<span className="sr-only">{card.titel} für ZIP-Download auswählen</span>}
                       checked={zipAuswahl.has(card.zipKey)}
                       onChange={() => toggleZipAuswahl(card.zipKey)}
-                      className="h-4 w-4 accent-orange-500 cursor-pointer"
-                      aria-label={`${card.titel} für ZIP-Download auswählen`}
                     />
-                  </label>
+                  </div>
                 )}
                 <button
                   type="button"
@@ -278,20 +280,16 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
         </div>
 
         {zipBerichte.length >= 2 && (
-          <button
+          <Button
             type="button"
+            className="w-full"
             onClick={handleZipDownload}
             disabled={!!loading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
-              bg-orange-500 hover:bg-orange-600 text-white font-medium text-sm
-              transition-colors disabled:opacity-60 disabled:cursor-wait"
+            loading={loading === 'ZIP'}
           >
-            {loading === 'ZIP'
-              ? <Loader2 className="h-4 w-4 animate-spin" />
-              : <FolderArchive className="h-4 w-4" />
-            }
+            {loading !== 'ZIP' && <FolderArchive className="h-4 w-4 mr-2" />}
             Als ZIP herunterladen ({zipBerichte.length} Berichte)
-          </button>
+          </Button>
         )}
 
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">

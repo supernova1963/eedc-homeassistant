@@ -23,20 +23,14 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type ReactNode,
 } from 'react'
 import { Modal, LoadingSpinner, ConfirmDialog } from '../components/ui'
-import { WizardHostContext, type WizardHostCtx } from './wizardHost'
+import { WizardHostContext, WizardSteuerungContext, type WizardHostCtx, type WizardKey } from './wizardHost'
 
-export type WizardKey =
-  | 'sensor-mapping'
-  | 'csv-import'
-  | 'custom-import'
-  | 'portal-import'
-  | 'cloud-import'
-  | 'connector'
-  | 'ha-statistik-import'
-  | 'einrichtung'
-  | 'mqtt-inbound'
+// Union lebt jetzt im (komponentenfreien) wizardHost-Modul; Re-Export hält die
+// bestehenden Importe (`einstellungenKatalog`, Sichten) stabil.
+export type { WizardKey } from './wizardHost'
 
 interface WizardDef {
   titel: string
@@ -53,7 +47,10 @@ const STANDARD_REGISTRY: Record<WizardKey, WizardDef> = {
   connector: { titel: 'Geräte-Connector', Comp: lazy(() => import('../pages/ConnectorSetupWizard')) },
   'ha-statistik-import': { titel: 'Statistik-Import', Comp: lazy(() => import('../pages/HAStatistikImport')) },
   einrichtung: { titel: 'Ersteinrichtung', Comp: lazy(() => import('../pages/Einrichtung')) },
-  'mqtt-inbound': { titel: 'MQTT-Inbound', Comp: lazy(() => import('../pages/MqttInboundSetup')) },
+  // D4 (2026-07-11): Kombi-Wizard — Schritt 1 wählt Inbound (Empfangen) / Gateway (Senden).
+  'mqtt-inbound': { titel: 'Live-Daten via MQTT', Comp: lazy(() => import('../pages/MqttInboundSetup')) },
+  // E2 (2026-07-11): DER monatliche Erfassungs-Dialog — Payload {anlageId, jahr?, monat?}.
+  monatsabschluss: { titel: 'Monatsabschluss', Comp: lazy(() => import('../pages/MonatsabschlussWizard')) },
 }
 
 /** Titel eines Wizards (für Katalog-Buttons „<Titel> öffnen"). */
@@ -64,10 +61,16 @@ export function wizardTitel(key: WizardKey, registry: Record<WizardKey, WizardDe
 export function EinstellungenModalHost({
   offen,
   onClose,
+  onWechsel,
+  payload,
   registry = STANDARD_REGISTRY,
 }: {
   offen: WizardKey | null
   onClose: () => void
+  /** Cross-Wizard-Sprung (D2/E1): ersetzt den offenen Wizard im selben Overlay. */
+  onWechsel?: (key: WizardKey, payload?: unknown) => void
+  /** Aufruf-Parameter für den offenen Wizard (E1-Payload-Kanal). */
+  payload?: unknown
   /** Test-/Sonderfall-Seam: überschreibbare Wizard-Registry. */
   registry?: Record<WizardKey, WizardDef>
 }) {
@@ -101,6 +104,8 @@ export function EinstellungenModalHost({
     schliessen,
     abbrechen: versuchSchliessen,
     setzeBlocker,
+    oeffneWizard: onWechsel ?? (() => {}),
+    payload,
   }
 
   if (!offen) return null
@@ -126,5 +131,28 @@ export function EinstellungenModalHost({
         variant="danger"
       />
     </>
+  )
+}
+
+/**
+ * WizardOverlayProvider — DER app-weite Overlay-Kanal (Mängelbehebung D/E).
+ * Hält den EINEN offenen Wizard (+ Payload) und stellt `oeffneWizard` über den
+ * {@link WizardSteuerungContext} bereit — für die StatusFusszeile, Katalog-Blöcke
+ * und `*Teile` außerhalb des Overlays. Sitzt in LayoutV4, damit es genau EINEN
+ * Host gibt (kein zweites Modal-Exemplar pro Sicht).
+ */
+export function WizardOverlayProvider({ children }: { children: ReactNode }) {
+  const [offen, setOffen] = useState<{ key: WizardKey; payload?: unknown } | null>(null)
+  const oeffne = useCallback((key: WizardKey, payload?: unknown) => setOffen({ key, payload }), [])
+  return (
+    <WizardSteuerungContext.Provider value={oeffne}>
+      {children}
+      <EinstellungenModalHost
+        offen={offen?.key ?? null}
+        payload={offen?.payload}
+        onClose={() => setOffen(null)}
+        onWechsel={oeffne}
+      />
+    </WizardSteuerungContext.Provider>
   )
 }

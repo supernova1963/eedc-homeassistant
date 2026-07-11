@@ -1,5 +1,7 @@
 import { AlertTriangle, Info } from 'lucide-react'
 import type { FeldStatus } from '../../api'
+import Button from '../ui/Button'
+import Input from '../ui/Input'
 import { getQuelleLabel } from './helpers'
 
 export default function FeldInput({
@@ -26,29 +28,29 @@ export default function FeldInput({
       {/* Eingabefeld + Übernehmen daneben — der Übernehmen-Button saß früher
           absolute-overlay im Input und überdeckte die Number-Spinner-Pfeile
           (#213 detLAN). Jetzt nebeneinander, Spinner bleiben bedienbar. */}
+      {/* E3: Input-/Button-SoT — die Vorschlagswerte-Mechanik (Placeholder,
+          Übernehmen, Vorschlags-Chips) bleibt 1:1 erhalten. */}
       <div className="flex items-stretch gap-2">
-        <input
-          type="number"
-          step="0.01"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
-          className={`flex-1 min-w-0 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white ${
-            hasWarnings
-              ? 'border-amber-300 focus:border-amber-500'
-              : 'border-gray-300'
-          }`}
-          placeholder={hasVorschlaege ? `Vorschlag: ${feld.vorschlaege[0].wert}` : ''}
-        />
+        <div className="flex-1 min-w-0">
+          <Input
+            type="number"
+            step="0.01"
+            value={value ?? ''}
+            onChange={(e) => onChange(e.target.value ? parseFloat(e.target.value) : null)}
+            warnung={hasWarnings}
+            aria-label={feld.label}
+            placeholder={hasVorschlaege ? `Vorschlag: ${feld.vorschlaege[0].wert}` : ''}
+          />
+        </div>
 
         {/* Vorschlag-Übernehmen-Button — nur sichtbar wenn Wert leer ist */}
         {hasVorschlaege && value === null && (
-          <button
-            type="button"
+          <Button
+            type="button" variant="secondary" size="sm" className="flex-shrink-0"
             onClick={() => onChange(feld.vorschlaege[0].wert)}
-            className="flex-shrink-0 px-3 py-2 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20"
           >
             Übernehmen
-          </button>
+          </Button>
         )}
       </div>
 
@@ -56,16 +58,16 @@ export default function FeldInput({
       {hasVorschlaege && !compact && (
         <div className="flex flex-wrap gap-2 mt-1">
           {feld.vorschlaege.slice(0, 3).map((v, idx) => (
-            <button
+            <Button
               key={idx}
-              type="button"
+              type="button" variant="secondary" size="sm"
               onClick={() => onChange(v.wert)}
-              className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
               title={v.beschreibung}
+              className="text-xs"
             >
               {v.wert} {feld.einheit}
               <span className="text-gray-400 dark:text-gray-500 ml-1">({getQuelleLabel(v.quelle)})</span>
-            </button>
+            </Button>
           ))}
         </div>
       )}

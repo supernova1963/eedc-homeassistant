@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { StatusFusszeile } from './StatusFusszeile'
 import { AppStatusProvider, useReportDatenStatus, type SichtStatus } from './AppStatusContext'
+import { WizardSteuerungContext } from '../wizardHost'
 
 // Global-Zone-Quellen mocken (Shell-Ebene, P2).
 const checkUpdate = vi.fn()
@@ -35,10 +36,14 @@ function MeldeSicht({ status }: { status: SichtStatus }) {
 function renderMit(status: SichtStatus, search = '') {
   return render(
     <MemoryRouter initialEntries={[`/v4/cockpit/live${search}`]}>
-      <AppStatusProvider>
-        <MeldeSicht status={status} />
-        <StatusFusszeile />
-      </AppStatusProvider>
+      {/* E1: der Monatsabschluss-Deep-Link hängt am app-weiten Wizard-Öffner
+          (WizardOverlayProvider in LayoutV4) — im Test als leichter Stub. */}
+      <WizardSteuerungContext.Provider value={vi.fn()}>
+        <AppStatusProvider>
+          <MeldeSicht status={status} />
+          <StatusFusszeile />
+        </AppStatusProvider>
+      </WizardSteuerungContext.Provider>
     </MemoryRouter>,
   )
 }

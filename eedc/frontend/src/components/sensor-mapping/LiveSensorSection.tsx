@@ -7,6 +7,7 @@
 import { Activity } from 'lucide-react'
 import type { HASensorInfo } from '../../api/sensorMapping'
 import { SensorAutocomplete } from './FeldMappingInput'
+import Checkbox from '../ui/Checkbox'
 
 interface LiveSensorField {
   key: string
@@ -61,17 +62,13 @@ export default function LiveSensorSection({
               requireStatistics={false}
             />
             {showInvert && (
-              <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
+              <div className="mt-2">
+                <Checkbox
                   checked={isInverted}
                   onChange={e => onLiveInvertChange(invId, field.key, e.target.checked)}
-                  className="rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+                  label={<span className="text-xs text-gray-600 dark:text-gray-400">Vorzeichen invertieren (×−1)</span>}
                 />
-                <span className="text-xs text-gray-600 dark:text-gray-400">
-                  Vorzeichen invertieren (×&minus;1)
-                </span>
-              </label>
+              </div>
             )}
           </div>
         )

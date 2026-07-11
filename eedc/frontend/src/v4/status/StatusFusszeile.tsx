@@ -17,6 +17,7 @@ import { useState, useRef, useEffect, type ComponentType } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, Radio, ArrowUpCircle, CalendarClock, ListChecks, Database, Users, Slash } from 'lucide-react'
 import { SEVERITY_CONFIG, type CheckSchwere } from '../../config/datenCheckerKategorien'
+import { useOeffneWizard } from '../wizardHost'
 import { useAppStatus } from './AppStatusContext'
 import { useGlobalStatus } from './useGlobalStatus'
 import { APP_VERSION } from '../../config/version'
@@ -108,6 +109,9 @@ export function StatusFusszeile() {
   const { update, offenerMonat, mqtt, datencheck, communityGeteilt, anlageId } = useGlobalStatus()
   const installiert = update?.aktuelle_version ?? APP_VERSION
   const navigate = useNavigate()
+  // E1: Monatsabschluss öffnet im app-weiten Overlay (Payload = anlageId) —
+  // die frühere Donor-Kante navigate('/monatsabschluss/…') ist damit weg.
+  const oeffneWizard = useOeffneWizard()
   const [offen, setOffen] = useState<string | null>(null)
   const ref = useRef<HTMLElement | null>(null)
 
@@ -183,7 +187,7 @@ export function StatusFusszeile() {
           detail={offenerMonat
             ? `${offenerMonat.monat_name} ${offenerMonat.jahr} ist noch nicht abgeschlossen.`
             : 'Alle Monate sind abgeschlossen.'}
-          onOeffnen={anlageId ? () => navigate(`/monatsabschluss/${anlageId}`) : undefined}
+          onOeffnen={anlageId && oeffneWizard ? () => oeffneWizard('monatsabschluss', { anlageId }) : undefined}
           ausrichtung="links"
           offen={offen}
           setOffen={setOffen}

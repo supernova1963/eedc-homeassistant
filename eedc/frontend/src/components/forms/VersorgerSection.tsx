@@ -95,15 +95,16 @@ export default function VersorgerSection({ value, onChange }: VersorgerSectionPr
 
           if (!versorger) {
             return (
-              <button
+              <Button
                 key={key}
                 type="button"
+                variant="secondary"
+                className="w-full"
                 onClick={() => addVersorger(key)}
-                className="w-full p-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors flex items-center justify-center gap-2"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 mr-2" />
                 <span>{icon} {label}-Versorger hinzufügen</span>
-              </button>
+              </Button>
             )
           }
 
@@ -133,17 +134,19 @@ export default function VersorgerSection({ value, onChange }: VersorgerSectionPr
                     </span>
                   )}
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Versorger entfernen"
+                  title="Versorger entfernen"
                   onClick={(e) => {
                     e.stopPropagation()
                     removeVersorger(key)
                   }}
-                  className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
-                  title="Versorger entfernen"
                 >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
               </div>
 
               {/* Content */}
@@ -246,14 +249,17 @@ export default function VersorgerSection({ value, onChange }: VersorgerSectionPr
                                 placeholder="Optional..."
                               />
                             </div>
-                            <button
+                            <Button
                               type="button"
-                              onClick={() => removeZaehler(key, index)}
-                              className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors mt-6"
+                              variant="ghost"
+                              size="sm"
+                              className="mt-6"
+                              aria-label="Zähler entfernen"
                               title="Zähler entfernen"
+                              onClick={() => removeZaehler(key, index)}
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                            </Button>
                           </div>
                         ))}
                       </div>

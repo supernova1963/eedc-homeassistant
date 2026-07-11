@@ -29,6 +29,7 @@ import {
 } from '../pages/InvestitionenTeile'
 import { useEinstellungenStatus, type KachelStatus } from '../hooks/useEinstellungenStatus'
 import { EinstellungenModalHost, type WizardKey } from './EinstellungenModalHost'
+import { useOeffneWizard } from './wizardHost'
 
 // Berichte-/Dokumente-Hub: eigenes Modal (kein Wizard) → lazy, damit die DCE ihn
 // bei Feature-Flag aus mit dem v4-Baum wegwirft.
@@ -138,11 +139,15 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   const { selectedAnlage } = useSelectedAnlage()
   const statusMap = useEinstellungenStatus()
   const [suche, setSuche] = useState('')
+  // Wizard-Öffner: normal der app-weite Overlay-Kanal (WizardOverlayProvider in
+  // LayoutV4, EIN Host). Der lokale Host bleibt als Fallback, wenn die Sicht ohne
+  // LayoutV4 rendert (Tests/isolierte Einbettung) — nie beide gleichzeitig.
+  const globalOeffne = useOeffneWizard()
   const [offenerWizard, setOffenerWizard] = useState<WizardKey | null>(null)
   const [berichteOffen, setBerichteOffen] = useState(false)
 
   const ctx: InhaltCtx = {
-    oeffneWizard: setOffenerWizard,
+    oeffneWizard: globalOeffne ?? setOffenerWizard,
     navigate: (route) => navigate(`/${route}`),
     oeffneBerichte: () => setBerichteOffen(true),
   }
@@ -223,7 +228,9 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
         </div>
       </ViewShell>
 
-      <EinstellungenModalHost offen={offenerWizard} onClose={() => setOffenerWizard(null)} />
+      {!globalOeffne && (
+        <EinstellungenModalHost offen={offenerWizard} onClose={() => setOffenerWizard(null)} onWechsel={setOffenerWizard} />
+      )}
 
       {berichteOffen && (
         <Suspense fallback={null}>
