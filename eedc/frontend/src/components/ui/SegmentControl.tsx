@@ -12,6 +12,13 @@ import { STEUER_H } from '../../lib/komponentenStyle'
  *
  * `value`, das keiner Option entspricht, ist erlaubt (alle inaktiv) — z. B.
  * Heute/Morgen-Shortcuts, wenn der DatumPicker auf +2..+14 steht.
+ *
+ * D18-1 (detlan #210, Regel im SoT): Passen die Optionen nicht in die verfügbare
+ * Breite, BRECHEN sie um (`flex-wrap` + `max-w-full`) — nie hart abschneiden
+ * (vorher: `inline-flex … overflow-hidden` ohne Wrap ⇒ letzte Pille mobil
+ * gekappt, z. B. Vergleich-Presets in Tages-/JahrVerlaufChart). Umbruch statt
+ * horizontalem Scrollen: bei einem Umschalter müssen ALLE Optionen sichtbar
+ * sein. Der Fix lebt in der Zentrale — jeder Aufrufer erbt ihn.
  */
 interface SegmentOption<K extends string> {
   key: K
@@ -37,7 +44,7 @@ export function SegmentControl<K extends string>({
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`inline-flex ${radius === 'md' ? 'rounded-md' : 'rounded-lg'} border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
+      className={`inline-flex flex-wrap max-w-full ${radius === 'md' ? 'rounded-md' : 'rounded-lg'} border border-gray-200 dark:border-gray-700 overflow-hidden ${className}`}
     >
       {optionen.map((o) => (
         <button
