@@ -670,7 +670,14 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               )}
             </AreaChart>
           </ResponsiveContainer>
-          {/* Legende */}
+          {/* Legende — DOKUMENTIERTER EINZELFALL (D18-5, Gernot 2026-07-11):
+              handgebaut statt ChartLegende-SoT, weil die Linien-Marker hier echte
+              Information tragen (durchgezogen = IST vs. gestrichelt = Prognose bei
+              gleicher Farbe) — reine Quadrat-Swatches (ChartLegende) würden
+              IST/Prognose ununterscheidbar machen. Flächen-Kategorien nutzen den
+              SoT-Swatch (w-2.5 h-2.5, echtes Quadrat = ChartLegende.tsx). Offener
+              Entscheid D18-5b: ChartLegende um Linien-/Flächen-Marker für
+              Composite-Charts erweitern (Regel 0a Fall 2) — nur mit Gernot. */}
           {/* Schrift wie der ChartLegende-Standard (text-xs / gray-600/300), detLAN T5. */}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300 mt-1 justify-center">
             {showPv && (
@@ -685,7 +692,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
             )}
             {showVerbrauch && aktiveKategorien.map(k => (
               <span key={k.key} className="flex items-center gap-1">
-                <span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: k.farbe, opacity: 0.7 }} /> {k.label}
+                {/* D18-5 (detlan #217 „Quadratisch sieht anders aus"): SoT-Maß
+                    w-2.5 h-2.5 — vorher h-2 = gestauchtes Rechteck. */}
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: k.farbe, opacity: 0.7 }} /> {k.label}
               </span>
             ))}
             {showVerbrauch && (
