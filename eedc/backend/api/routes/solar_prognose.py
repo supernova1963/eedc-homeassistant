@@ -256,6 +256,11 @@ async def get_solar_prognose_endpoint(
             days=tage,
             system_losses=system_losses,
             wetter_modell=wetter_modell,
+            # Interaktiver User-Request: der 1-30s-Random-Jitter ist nur für
+            # Hintergrund-Abrufe gedacht (Prefetch jittert selbst einmal pro
+            # Durchlauf). Bei Multi-String zahlte der User sonst das MAXIMUM
+            # mehrerer paralleler Jitter-Würfe (~25 s bei 4 Strings, R18-13).
+            skip_jitter=True,
         )
 
         if not multi_result:
@@ -303,6 +308,8 @@ async def get_solar_prognose_endpoint(
             days=tage,
             system_losses=system_losses,
             wetter_modell=wetter_modell,
+            # Interaktiver User-Request → kein Random-Jitter (siehe oben).
+            skip_jitter=True,
         )
 
         if not prognose:

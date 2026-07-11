@@ -1107,6 +1107,10 @@ async def get_tagesprognose(
                     ausrichtung=get_pv_azimut(aktive_invs[0]),
                     days=forecast_days,
                     system_losses=system_losses,
+                    # Interaktiver User-Request (Stunden-/Tagesprognose der
+                    # Aussicht): der 1-30s-Random-Jitter gilt nur für
+                    # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+                    skip_jitter=True,
                 )
                 if prognose:
                     ziel_str = datum.isoformat()

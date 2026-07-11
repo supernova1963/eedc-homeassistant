@@ -1259,7 +1259,9 @@ async def get_live_wetter(
         # MQTT/persistiertem TZ-Wert. Verbrauchsprofil/Grundlast bleiben aus dem
         # lokalen GTI-Pfad; nur der PV-Anteil wird kanonisch ersetzt.
         from backend.services.prognose_kanon import kanon_tagesprognose
-        kanon = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=False)
+        # skip_jitter: interaktiver User-Request — der 1-30s-Random-Jitter ist
+        # nur für Hintergrund-Abrufe gedacht (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+        kanon = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=True)
         kanon_heute = kanon.tage[0] if (kanon and kanon.tage) else None
         if kanon_heute is not None:
             if kanon_heute.eedc_kwh is not None:
