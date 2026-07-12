@@ -11,6 +11,7 @@ import type { MonatsabschlussResponse, FeldStatus } from '../../api/monatsabschl
 import type { Monatsdaten, Investition } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert } from '../../lib/fieldDefinitions'
 import { prefillWert, ermittleZustand, zaehleAmpel, type ErfassungZustand } from '../../lib/erfassungZustand'
+import { istAktivImMonat } from '../../lib/investitionAktiv'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
 import { InvestitionSection } from './sections/InvestitionSection'
@@ -25,6 +26,9 @@ interface MonatsdatenFormProps {
   anlageId: number
   onSubmit: (data: MonatsdatenSubmitData) => Promise<void>
   onCancel: () => void
+  /** Voreingestellter Monat beim Erfassen einer Tabellen-Lücke (§7, Bündel 4).
+   *  Setzt nur die initiale Jahr/Monat-Wahl beim Neuanlegen — sonst frei wählbar. */
+  voreingestellterMonat?: { jahr: number; monat: number } | null
   /** Vorausgefüllte Werte aus HA-Statistik */
   haVorausfuellung?: {
     jahr: number
@@ -120,7 +124,7 @@ const monatOptions = [
   { value: '12', label: 'Dezember' },
 ]
 
-export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung }: MonatsdatenFormProps) {
+export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung, voreingestellterMonat }: MonatsdatenFormProps) {
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
 
@@ -146,26 +150,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   const zeigeFehler = (name: PflichtFeld): string | undefined =>
     (submitted || touched.has(name)) ? feldFehler(name) : undefined
 
-  // Investitionen für diese Anlage laden (nur aktive)
+  // Investitionen für diese Anlage laden.
   const { investitionen, loading: invLoading } = useInvestitionen(anlageId)
-  const aktiveInvestitionen = useMemo(
-    () => investitionen.filter(i => i.aktiv),
-    [investitionen]
-  )
 
   // Strompreis für dynamischen Tarif prüfen
   const { strompreis } = useAktuellerStrompreis(anlageId)
   const hatDynamischenTarif = strompreis?.vertragsart === 'dynamisch'
-
-  // Welche Investitionstypen sind vorhanden?
-  const hatSpeicher = aktiveInvestitionen.some(i => i.typ === 'speicher')
-  const hatEAuto = aktiveInvestitionen.some(i => i.typ === 'e-auto')
-  const hatWallbox = aktiveInvestitionen.some(i => i.typ === 'wallbox')
-  const hatWaermepumpe = aktiveInvestitionen.some(i => i.typ === 'waermepumpe')
-  const hatWechselrichter = aktiveInvestitionen.some(i => i.typ === 'wechselrichter')
-  const hatPVModule = aktiveInvestitionen.some(i => i.typ === 'pv-module')
-  const hatBalkonkraftwerk = aktiveInvestitionen.some(i => i.typ === 'balkonkraftwerk')
-  const hatSonstiges = aktiveInvestitionen.some(i => i.typ === 'sonstiges')
 
   // Hilfsfunktion um HA-Basiswert zu finden
   const getHaBasisWert = (feld: string): string => {
@@ -176,8 +166,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
   // Basis-Formulardaten
   const [formData, setFormData] = useState({
-    jahr: haVorausfuellung?.jahr?.toString() || monatsdaten?.jahr?.toString() || currentYear.toString(),
-    monat: haVorausfuellung?.monat?.toString() || monatsdaten?.monat?.toString() || currentMonth.toString(),
+    jahr: haVorausfuellung?.jahr?.toString() || monatsdaten?.jahr?.toString() || voreingestellterMonat?.jahr?.toString() || currentYear.toString(),
+    monat: haVorausfuellung?.monat?.toString() || monatsdaten?.monat?.toString() || voreingestellterMonat?.monat?.toString() || currentMonth.toString(),
     einspeisung_kwh: getHaBasisWert('einspeisung') || monatsdaten?.einspeisung_kwh?.toString() || '',
     netzbezug_kwh: getHaBasisWert('netzbezug') || monatsdaten?.netzbezug_kwh?.toString() || '',
     pv_erzeugung_kwh: monatsdaten?.pv_erzeugung_kwh?.toString() || '',
@@ -193,6 +183,25 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     sonderkosten_beschreibung: monatsdaten?.sonderkosten_beschreibung || '',
     notizen: monatsdaten?.notizen || '',
   })
+
+  // Nur die im GEWÄHLTEN Monat betriebenen Geräte (Anschaffungs-/Stilllegungs-
+  // Fenster, Backend-SoT `ist_aktiv_im_monat`) — steuert Anzeige UND Prüfungen.
+  // Das aktiv-Flag allein reicht nicht ([[feedback_anschaffungsdatum_grenze]],
+  // [[feedback_aktiv_inaktiv_semantik]]). Reagiert live auf die Zeitraum-Auswahl.
+  const aktiveInvestitionen = useMemo(
+    () => investitionen.filter(i => istAktivImMonat(i, parseInt(formData.jahr), parseInt(formData.monat))),
+    [investitionen, formData.jahr, formData.monat],
+  )
+
+  // Welche Investitionstypen sind im gewählten Monat vorhanden?
+  const hatSpeicher = aktiveInvestitionen.some(i => i.typ === 'speicher')
+  const hatEAuto = aktiveInvestitionen.some(i => i.typ === 'e-auto')
+  const hatWallbox = aktiveInvestitionen.some(i => i.typ === 'wallbox')
+  const hatWaermepumpe = aktiveInvestitionen.some(i => i.typ === 'waermepumpe')
+  const hatWechselrichter = aktiveInvestitionen.some(i => i.typ === 'wechselrichter')
+  const hatPVModule = aktiveInvestitionen.some(i => i.typ === 'pv-module')
+  const hatBalkonkraftwerk = aktiveInvestitionen.some(i => i.typ === 'balkonkraftwerk')
+  const hatSonstiges = aktiveInvestitionen.some(i => i.typ === 'sonstiges')
 
   // Wetter-Daten Auto-Fill
   const [wetterLoading, setWetterLoading] = useState(false)

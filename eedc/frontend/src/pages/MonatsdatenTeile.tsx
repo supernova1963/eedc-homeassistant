@@ -11,12 +11,13 @@
  */
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, Fuel } from 'lucide-react'
+import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, Fuel, PenLine, ArrowRight } from 'lucide-react'
 import { Button, Card, Checkbox, Modal, EmptyState, Alert, Select } from '../components/ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
+import ErfassungZustandBadge from '../components/ui/ErfassungZustandBadge'
 import { MonatsdatenForm } from '../components/forms'
 import { DataLoadingState } from '../components/common'
-import { useMonatsdaten, useInvestitionen, useApiData, useV4Basis } from '../hooks'
+import { useMonatsdaten, useInvestitionen, useApiData, useV4Basis, useAnlage } from '../hooks'
 import { useOeffneWizard } from '../v4/wizardHost'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
@@ -24,6 +25,13 @@ import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitio
 import { energieProfilApi, type KraftstoffpreisStatus } from '../api/energie_profil'
 import type { Monatsdaten } from '../types'
 import { MONAT_KURZ, fmtZahl } from '../lib'
+import {
+  ermittleStartAnker,
+  ermittleFehlendeMonate,
+  naechsterOffenerMonat,
+  monatIndex,
+  type MonatRef,
+} from '../lib/monatsLuecken'
 
 // ─── Spalten-SoT ──────────────────────────────────────────────────────────────
 
@@ -90,6 +98,8 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(anlageId)
   // Hook wird für MonatsdatenForm benötigt
   const { investitionen } = useInvestitionen(anlageId)
+  // Anlage-Installationsdatum als Fallback-Anker für den erwarteten Monatsbereich.
+  const { anlage } = useAnlage(anlageId)
   const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
   // D14-8-Gate: Kraftstoff-Monats-Karte nur in V3 (V4 = Werkbank).
   const istV4 = !!useV4Basis()
@@ -101,6 +111,8 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   )
 
   const [showForm, setShowForm] = useState(false)
+  // Voreingestellter Monat beim Erfassen einer Lücke (§7) — sonst null (freie Wahl).
+  const [createPreset, setCreatePreset] = useState<MonatRef | null>(null)
   const [editingData, setEditingData] = useState<Monatsdaten | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Monatsdaten | null>(null)
   const [showColumnSelector, setShowColumnSelector] = useState(false)
@@ -288,6 +300,51 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const activeColumns = COLUMNS.filter(c => visibleColumns.has(c.key))
   const daten = aggregierteDaten ?? []
 
+  // ── Vollständigkeits-Quelle (§7, V-b): fehlende Monate + „nächster offener" ──
+  // EINE Ableitung für Tabellen-Färbung UND Sprung. Bereich = [Anschaffungs-Anker
+  // … Vormonat(heute)]. NICHT der naive Backend-`getNaechsterMonat` (verfehlt
+  // innere Lücken). Anker: frühestes Investitions-Anschaffungsdatum → Anlage-
+  // Installationsdatum → erste vorhandene Zeile (feedback_anschaffungsdatum_grenze).
+  const { fehlendeMonate, naechsterOffen } = useMemo(() => {
+    const vorhandene: MonatRef[] = daten.map(md => ({ jahr: md.jahr, monat: md.monat }))
+    const start = ermittleStartAnker({
+      anschaffungsdaten: investitionen.map(i => i.anschaffungsdatum),
+      anlageInstallationsdatum: anlage?.installationsdatum,
+      vorhandene,
+    })
+    const jetzt = new Date()
+    const params = { vorhandene, start, heute: { jahr: jetzt.getFullYear(), monat: jetzt.getMonth() + 1 } }
+    return {
+      fehlendeMonate: ermittleFehlendeMonate(params),
+      naechsterOffen: naechsterOffenerMonat(params),
+    }
+  }, [daten, investitionen, anlage])
+
+  // Tabellenzeilen: vorhandene Daten + fehlende-Monat-Platzhalter, absteigend
+  // (neueste zuerst — CLAUDE.md Datums-Listen-Default). Platzhalter nur, wenn
+  // bereits ≥1 Zeile existiert (kein Explodieren bei brandneuer Anlage).
+  type TabellenZeile =
+    | { kind: 'daten'; md: AggregierteMonatsdaten; idx: number }
+    | { kind: 'fehlt'; jahr: number; monat: number; idx: number }
+  const tabellenZeilen = useMemo<TabellenZeile[]>(() => {
+    const zeilen: TabellenZeile[] = daten.map(md => ({
+      kind: 'daten' as const, md, idx: monatIndex(md.jahr, md.monat),
+    }))
+    if (daten.length > 0) {
+      for (const m of fehlendeMonate) {
+        zeilen.push({ kind: 'fehlt' as const, jahr: m.jahr, monat: m.monat, idx: monatIndex(m.jahr, m.monat) })
+      }
+    }
+    return zeilen.sort((a, b) => b.idx - a.idx)
+  }, [daten, fehlendeMonate])
+
+  // Erfassen-Icon einer Lücke / Sprung → Form für GENAU diesen Monat öffnen.
+  const oeffneErfassung = (jahr: number, monat: number) => {
+    setHaVorausfuellung(null)
+    setCreatePreset({ jahr, monat })
+    setShowForm(true)
+  }
+
   // Prüfe ob Legacy-Daten existieren
   const legacyCount = useMemo(() => {
     return daten.filter(md => md.hat_legacy_daten).length
@@ -296,6 +353,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const handleCreate = async (data: Parameters<typeof createMonatsdaten>[0]) => {
     await createMonatsdaten(data)
     setShowForm(false)
+    setCreatePreset(null)
   }
 
   const handleUpdate = async (data: Parameters<typeof createMonatsdaten>[0]) => {
@@ -335,7 +393,21 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">{kopfZusatz}</div>
+        <div className="flex items-center gap-2">
+          {kopfZusatz}
+          {/* „Nächster offener Monat"-Sprung (§7/P11) — aus DERSELBEN
+              Vollständigkeits-Quelle wie die Tabellen-Färbung. */}
+          {naechsterOffen && (
+            <Button
+              variant="secondary"
+              onClick={() => oeffneErfassung(naechsterOffen.jahr, naechsterOffen.monat)}
+              title="Zum nächsten offenen Monat springen und erfassen"
+            >
+              <ArrowRight className="h-5 w-5 mr-2 text-gray-500" />
+              Nächster offener: {MONAT_KURZ[naechsterOffen.monat]} {naechsterOffen.jahr}
+            </Button>
+          )}
+        </div>
         <div className="flex items-center justify-end gap-2 flex-wrap">
           {haVerfuegbar && (
             <Button variant="secondary" onClick={() => setShowHaModal(true)}>
@@ -350,7 +422,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
             <Calendar className="h-5 w-5 mr-2" />
             Monatsabschluss
           </Button>
-          <Button onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}>
+          <Button onClick={() => { setHaVorausfuellung(null); setCreatePreset(null); setShowForm(true) }}>
             <Plus className="h-5 w-5 mr-2" />
             Monat einfügen
           </Button>
@@ -384,7 +456,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
             description="Erfasse deine ersten Monatsdaten manuell oder importiere eine CSV-Datei."
             action={
               <div className="flex gap-4 flex-wrap justify-center">
-                <Button onClick={() => { setHaVorausfuellung(null); setShowForm(true) }}>
+                <Button onClick={() => { setHaVorausfuellung(null); setCreatePreset(null); setShowForm(true) }}>
                   <Plus className="h-5 w-5 mr-2" />
                   Monat einfügen
                 </Button>
@@ -468,58 +540,96 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {daten.map((md) => (
-                    <TableRow key={md.id} className={md.hat_legacy_daten ? 'bg-amber-50 dark:bg-amber-900/10' : ''}>
-                      <TableCell>
-                        <span className="font-medium">{MONAT_KURZ[md.monat]} {md.jahr}</span>
-                        {md.hat_legacy_daten && (
-                          <span title="Legacy-Daten">
-                            <AlertTriangle className="h-3 w-3 text-amber-500 inline ml-1" />
-                          </span>
-                        )}
-                      </TableCell>
-                      {activeColumns.map((col) => {
-                        const value = col.getValue(md)
-                        return (
-                          <TableCell key={col.key} className={`text-right font-mono ${col.className || ''}`}>
-                            {formatValue(value, col.format)}
+                  {tabellenZeilen.map((zeile) => {
+                    // Lücken-Zeile (§7): fehlender Monat, dieselbe Ampel-Farbsprache
+                    // (§5 „offen"/grau) + Erfassen-Icon → Form für GENAU diesen Monat.
+                    if (zeile.kind === 'fehlt') {
+                      return (
+                        <TableRow
+                          key={`fehlt-${zeile.idx}`}
+                          className="bg-gray-50 dark:bg-gray-800/40"
+                        >
+                          <TableCell>
+                            <span className="font-medium text-gray-500 dark:text-gray-400">
+                              {MONAT_KURZ[zeile.monat]} {zeile.jahr}
+                            </span>
+                            <ErfassungZustandBadge zustand="fehlt" className="ml-2 align-middle" />
                           </TableCell>
-                        )
-                      })}
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Monatsabschluss-Assistent"
-                            onClick={() => monatsabschlussOeffnen(md.jahr, md.monat)}
-                          >
-                            <Calendar className="h-4 w-4 text-primary-500" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const original = findOriginalMonatsdaten(md)
-                              if (original) setEditingData(original)
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const original = findOriginalMonatsdaten(md)
-                              if (original) setDeleteConfirm(original)
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          {activeColumns.map((col) => (
+                            <TableCell key={col.key} className="text-right font-mono text-gray-400 dark:text-gray-600">
+                              —
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Diesen Monat erfassen"
+                                onClick={() => oeffneErfassung(zeile.jahr, zeile.monat)}
+                              >
+                                <PenLine className="h-4 w-4 text-gray-500 mr-1" />
+                                Erfassen
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }
+                    const md = zeile.md
+                    return (
+                      <TableRow key={md.id} className={md.hat_legacy_daten ? 'bg-amber-50 dark:bg-amber-900/10' : ''}>
+                        <TableCell>
+                          <span className="font-medium">{MONAT_KURZ[md.monat]} {md.jahr}</span>
+                          {md.hat_legacy_daten && (
+                            <span title="Legacy-Daten">
+                              <AlertTriangle className="h-3 w-3 text-amber-500 inline ml-1" />
+                            </span>
+                          )}
+                        </TableCell>
+                        {activeColumns.map((col) => {
+                          const value = col.getValue(md)
+                          return (
+                            <TableCell key={col.key} className={`text-right font-mono ${col.className || ''}`}>
+                              {formatValue(value, col.format)}
+                            </TableCell>
+                          )
+                        })}
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Monatsabschluss-Assistent"
+                              onClick={() => monatsabschlussOeffnen(md.jahr, md.monat)}
+                            >
+                              <Calendar className="h-4 w-4 text-primary-500" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const original = findOriginalMonatsdaten(md)
+                                if (original) setEditingData(original)
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const original = findOriginalMonatsdaten(md)
+                                if (original) setDeleteConfirm(original)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </table>
             </div>
@@ -808,15 +918,22 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
       {/* Create Modal */}
       <Modal
         isOpen={showForm}
-        onClose={() => { setShowForm(false); setHaVorausfuellung(null) }}
-        title={haVorausfuellung ? `Monatsdaten aus HA laden - ${haVorausfuellung.monat_name} ${haVorausfuellung.jahr}` : "Monatsdaten erfassen"}
+        onClose={() => { setShowForm(false); setHaVorausfuellung(null); setCreatePreset(null) }}
+        title={
+          haVorausfuellung
+            ? `Monatsdaten aus HA laden - ${haVorausfuellung.monat_name} ${haVorausfuellung.jahr}`
+            : createPreset
+              ? `Monatsdaten erfassen - ${MONAT_KURZ[createPreset.monat]} ${createPreset.jahr}`
+              : "Monatsdaten erfassen"
+        }
         size="xl"
       >
         <MonatsdatenForm
           anlageId={anlageId}
           onSubmit={handleCreate}
-          onCancel={() => { setShowForm(false); setHaVorausfuellung(null) }}
+          onCancel={() => { setShowForm(false); setHaVorausfuellung(null); setCreatePreset(null) }}
           haVorausfuellung={haVorausfuellung}
+          voreingestellterMonat={createPreset}
         />
       </Modal>
 
