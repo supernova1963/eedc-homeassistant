@@ -27,9 +27,11 @@ export type WizardKey =
   | 'ha-statistik-import'
   | 'einrichtung'
   | 'mqtt-inbound'
-  | 'monatsabschluss'
+// Monatsabschluss-V4 Bündel 6 (2026-07-12): `'monatsabschluss'` ist als V4-Overlay
+// stillgelegt (Registry-Eintrag entfernt) — V4-Einstiege öffnen die MonatsdatenForm.
 
-/** E1/E2-Payload des Monatsabschluss-Wizards (aus Zeile/Button/Fusszeile, wie V3-URL-Params). */
+/** Payload des V3-Monatsabschluss-Wizards (nur noch V3-Route; im Overlay stillgelegt).
+ *  Bleibt, solange `pages/MonatsabschlussWizard` auf der V3-Route lebt (bis Flip). */
 export interface MonatsabschlussPayload {
   anlageId: number
   jahr?: number

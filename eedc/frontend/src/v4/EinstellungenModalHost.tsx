@@ -49,8 +49,10 @@ const STANDARD_REGISTRY: Record<WizardKey, WizardDef> = {
   einrichtung: { titel: 'Ersteinrichtung', Comp: lazy(() => import('../pages/Einrichtung')) },
   // D4 (2026-07-11): Kombi-Wizard — Schritt 1 wählt Inbound (Empfangen) / Gateway (Senden).
   'mqtt-inbound': { titel: 'Live-Daten via MQTT', Comp: lazy(() => import('../pages/MqttInboundSetup')) },
-  // E2 (2026-07-11): DER monatliche Erfassungs-Dialog — Payload {anlageId, jahr?, monat?}.
-  monatsabschluss: { titel: 'Monatsabschluss', Comp: lazy(() => import('../pages/MonatsabschlussWizard')) },
+  // Monatsabschluss-V4 Bündel 6 (2026-07-12): als V4-Fläche stillgelegt — der
+  // Wizard-Overlay-Eintrag ist entfernt, alle V4-Einstiege öffnen jetzt die
+  // assistierte `MonatsdatenForm` (Bündel 5). Die V3-Route `/monatsabschluss/…`
+  // + `pages/MonatsabschlussWizard` bleiben unberührt bis zum Flip (PLAN-IA-V4-RESTWEG).
 }
 
 /** Titel eines Wizards (für Katalog-Buttons „<Titel> öffnen"). */

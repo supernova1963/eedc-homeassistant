@@ -767,7 +767,7 @@ Für jeden Monat mit WP-Daten:
     Ersparnis     = Gas_Kosten - WP_Netzkosten
 ```
 
-> **Monats-Gaspreis (v3.21.0):** Wenn `Monatsdaten.gaspreis_cent_kwh` pro Monat gepflegt ist, wird er Monat für Monat verwendet — ein Tarifwechsel ändert dann nicht mehr rückwirkend die ganze Historie. Ohne Eintrag bleibt es beim statischen `alter_preis_cent_kwh` der Investition. Anzeige & Pflege im Monatsabschluss-Wizard und im `MonatsdatenForm` (über `BEDINGTE_BASIS_FELDER` mit `bedingung_basis: hat_waermepumpe`).
+> **Monats-Gaspreis (v3.21.0):** Wenn `Monatsdaten.gaspreis_cent_kwh` pro Monat gepflegt ist, wird er Monat für Monat verwendet — ein Tarifwechsel ändert dann nicht mehr rückwirkend die ganze Historie. Ohne Eintrag bleibt es beim statischen `alter_preis_cent_kwh` der Investition. Pflege in der assistierten `MonatsdatenForm` (über `BEDINGTE_BASIS_FELDER` mit `bedingung_basis: hat_waermepumpe`) — in V4 der EINE Erfassungsweg; der frühere Monatsabschluss-Wizard ist als V4-Fläche stillgelegt und läuft nur noch über die V3-Route (bis zum Flip).
 
 #### E-Auto-Ersparnis (historisch, in Finanzen)
 

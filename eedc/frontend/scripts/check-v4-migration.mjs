@@ -54,7 +54,9 @@ const REGISTRY_MIGRIERT = new Set([
   'DataImportWizard', 'CustomImportWizard', // D0: Rest-Roh → Button-SoT (2026-07-11)
   'HAStatistikImport', // D3 (2026-07-11): host+Blocker, SoT-Controls, Fuß-Nav Overlay-fähig
   'MqttInboundSetup', // D4 (2026-07-11): Kombi-Wizard „Live-Daten via MQTT" (Modus-Wahl → Inbound/Gateway)
-  'MonatsabschlussWizard', // E2 (2026-07-11): Overlay-Pendant mit Payload {anlageId, jahr?, monat?}
+  // MonatsabschlussWizard: Monatsabschluss-V4 Bündel 6 (2026-07-12) — als V4-Fläche
+  // stillgelegt, Registry-Eintrag entfernt. V4 nutzt die assistierte MonatsdatenForm.
+  // Die V3-Route/-Komponente bleibt bis zum Flip (nicht mehr Teil dieser Registry).
   // Session 4 (2026-07-11): strukturell migriert; ihr EINZIGER Roh-Rest ist ein
   // Fall-3-Mikro-Control (SensorMapping → FeldMappingInput-Combobox · Einrichtung →
   // Karten-Kachel), von Gernot freigegeben (→ ROH_INFRA). Damit MIGRIERT.
