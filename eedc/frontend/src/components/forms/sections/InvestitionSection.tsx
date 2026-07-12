@@ -6,7 +6,7 @@ import type { SonstigePosition } from './types'
 import { SonstigePositionenFields } from '../SonstigePositionenFields'
 import { readFeldWert, type FeldDefinition } from '../../../lib/fieldDefinitions'
 import { ermittleZustand, rollupBadge } from '../../../lib/erfassungZustand'
-import { FormSection, ErfassungZustandBadge } from '../../ui'
+import { FormSection, ErfassungZustandBadge, InlineAktion } from '../../ui'
 import AssistenzFeld from '../AssistenzFeld'
 
 interface InvestitionSectionProps {
@@ -99,13 +99,9 @@ export function InvestitionSection({
               {hinweis && <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">{hinweis}</p>}
               {/* Eintrags-Schnellweg: alle Schätzungen dieses Geräts als geprüft bestätigen. */}
               {zuPruefen.length > 1 && onBestaetigen && (
-                <button
-                  type="button"
-                  onClick={() => onBestaetigen(inv.id, zuPruefen)}
-                  className="mb-2 inline-flex items-center gap-0.5 text-[11px] text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-                >
+                <InlineAktion ton="bestaetigen" className="mb-2" onClick={() => onBestaetigen(inv.id, zuPruefen)}>
                   <Check className="w-3 h-3" /> alle {zuPruefen.length} Schätzungen bestätigen
-                </button>
+                </InlineAktion>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2 items-start">
                 {felderMitZustand.map(({ f, wert, fs, bestaetigt }) => (

@@ -7,7 +7,7 @@
  */
 import type { AmpelZaehlung } from '../../lib/erfassungZustand'
 import { ERFASSUNG_ZUSTAND } from '../../lib/colors'
-import { ZUSTAND_META } from '../ui'
+import { ZUSTAND_META, InlineAktion } from '../ui'
 
 export default function KopfAmpel({
   ampel,
@@ -28,13 +28,9 @@ export default function KopfAmpel({
         <Pruefen className="w-4 h-4" /> {ampel.pruefen} prüfen
       </span>
       {ampel.offen > 0 ? (
-        <button
-          type="button"
-          onClick={onSpringeZuOffen}
-          className={`inline-flex items-center gap-1 hover:underline ${ERFASSUNG_ZUSTAND.fehlt.text}`}
-        >
+        <InlineAktion ton="offen" groesse="sm" onClick={onSpringeZuOffen}>
           <Offen className="w-4 h-4" /> {ampel.offen} offen
-        </button>
+        </InlineAktion>
       ) : (
         <span className={`inline-flex items-center gap-1 ${ERFASSUNG_ZUSTAND.fehlt.text}`}>
           <Offen className="w-4 h-4" /> 0 offen

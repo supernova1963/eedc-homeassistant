@@ -8,7 +8,7 @@
  * nennen das Feld + „zum Feld"-Sprung.
  */
 import { AlertTriangle } from 'lucide-react'
-import { FormSection, ErfassungZustandBadge } from '../ui'
+import { FormSection, ErfassungZustandBadge, InlineAktion } from '../ui'
 import type { AmpelZaehlung, ErfassungZustand } from '../../lib/erfassungZustand'
 import { STATUS_TEXT_CLASS, ERFASSUNG_ZUSTAND } from '../../lib/colors'
 
@@ -76,13 +76,9 @@ export default function AbschlussReview({
                 </span>
                 <span className="text-gray-600 dark:text-gray-300">{w.meldung}</span>
                 {w.basis && (
-                  <button
-                    type="button"
-                    onClick={() => onSpringeZuFeld(w.feld)}
-                    className="text-xs text-primary-600 hover:underline dark:text-primary-400"
-                  >
+                  <InlineAktion ton="aktion" onClick={() => onSpringeZuFeld(w.feld)}>
                     zum Feld
-                  </button>
+                  </InlineAktion>
                 )}
               </li>
             ))}

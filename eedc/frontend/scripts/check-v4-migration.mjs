@@ -101,6 +101,7 @@ const ROH_REST = new Map([])
  */
 const ROH_INFRA = new Map([
   ['src/components/ui/DatumPicker.tsx', 9], // SoT-Impl (Kalender-Grid-Buttons)
+  ['src/components/ui/InlineAktion.tsx', 1], // SoT-Impl (schlanker Inline-Aktion-/Disclosure-Baustein; ersetzt rohe <button> in den V4-Erfassungs-Formularen, Monatsabschluss-V4)
   // Fall-3-Gruppe „Implementierungs-Interna" (Gernot-Freigabe 2026-07-11, C3/C9):
   ['src/components/DokumentationsDialog.tsx', 1], // Download-Karten-Kachel als <button>
   ['src/pages/InfothekTeile.tsx', 1], // Datei-Thumbnail-Kachel (56×56, → Lightbox)

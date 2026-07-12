@@ -7,7 +7,7 @@
  */
 import { useState } from 'react'
 import { HelpCircle } from 'lucide-react'
-import { ErfassungZustandBadge } from '../ui'
+import { ErfassungZustandBadge, InlineAktion } from '../ui'
 import type { ErfassungZustand } from '../../lib/erfassungZustand'
 
 const EINTRAEGE: { zustand: ErfassungZustand; text: string }[] = [
@@ -23,14 +23,9 @@ export default function ZustandLegende() {
   const [offen, setOffen] = useState(false)
   return (
     <div className="mt-2">
-      <button
-        type="button"
-        onClick={() => setOffen((o) => !o)}
-        aria-expanded={offen}
-        className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-      >
+      <InlineAktion ton="neutral" ariaExpanded={offen} onClick={() => setOffen((o) => !o)}>
         <HelpCircle className="w-3 h-3" /> Was bedeuten die Zustände?
-      </button>
+      </InlineAktion>
       {offen && (
         <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
           {EINTRAEGE.map((e) => (

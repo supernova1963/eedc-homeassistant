@@ -19,6 +19,7 @@ export { default as FormelTooltip, SimpleTooltip, fmtCalc } from './FormelToolti
 export { KPICard } from './KPICard'
 export { default as QuelleBadge } from './QuelleBadge'
 export { default as ErfassungZustandBadge, ZUSTAND_META, type ErfassungZustand } from './ErfassungZustandBadge'
+export { default as InlineAktion, type InlineTon } from './InlineAktion'
 export { default as ChartTooltip } from './ChartTooltip'
 export { eedcTooltipProps } from './eedcTooltip'
 export { default as ChartLegende } from './ChartLegende'

@@ -10,12 +10,11 @@
  * Prefill selbst macht die Form (Lücken füllen, R1/R2) — dieses Feld VISUALISIERT
  * nur den Zustand des aktuellen Werts und bietet Alternativen an.
  *
- * Design-Hinweis (bewusst): die drei Klick-Affordanzen (▾ „andere Quelle",
- * „Sensorwert übernehmen", Alternativ-Chips) sind schlanke 11-px-Inline-Disclosures
- * (Konzept §4.1: „aufklappbares ▾", NICHT die entfernte Chip-Button-Reihe von P5).
- * Der SoT-`Button` erzwingt min-h-36px und wäre pro Feld zu schwer; `check:buttons`
- * regelt ausschließlich `src/v4`. Bleiben daher bewusst rohe <button> (Freigabe-
- * fähig am Dev-Box-Sicht-Gate).
+ * Design-Hinweis: die Klick-Affordanzen (▾ „andere Quelle", „Sensorwert übernehmen",
+ * „✓ passt", Alternativ-Chips) sind schlanke 11-px-Inline-Disclosures (Konzept §4.1:
+ * „aufklappbares ▾", NICHT die entfernte Chip-Button-Reihe von P5). Der volle SoT-
+ * `Button` erzwingt min-h-36px und wäre pro Feld zu schwer → sie nutzen den schlanken
+ * SoT-Baustein {@link InlineAktion} (eine Komponenten-Klasse für die Inline-Gattung).
  */
 
 import { useState } from 'react'
@@ -24,7 +23,7 @@ import type { FeldStatus } from '../../api/monatsabschluss'
 import { getQuelleLabel } from '../monatsabschluss/helpers'
 import { ermittleZustand, besterVorschlag, gleich } from '../../lib/erfassungZustand'
 import { STATUS_TEXT_CLASS } from '../../lib/colors'
-import { Input, ErfassungZustandBadge } from '../ui'
+import { Input, ErfassungZustandBadge, InlineAktion } from '../ui'
 
 interface AssistenzFeldProps {
   label: string
@@ -114,23 +113,19 @@ export default function AssistenzFeld({
           <ErfassungZustandBadge zustand={erg.zustand} quelleLabel={quelleLabel} />
           {/* „✓ passt": eine Schätzung bewusst als geprüft bestätigen (ohne Wertänderung). */}
           {erg.zustand === 'geschaetzt' && onBestaetigen && (
-            <button
-              type="button"
-              onClick={onBestaetigen}
-              className="inline-flex items-center gap-0.5 text-[11px] text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-            >
+            <InlineAktion ton="bestaetigen" onClick={onBestaetigen}>
               <Check className="w-3 h-3" /> passt
-            </button>
+            </InlineAktion>
           )}
           {alternativen.length > 0 && (
-            <button
-              type="button"
+            <InlineAktion
+              ton="neutral"
+              ariaExpanded={zeigeAlternativen}
               onClick={() => setZeigeAlternativen((v) => !v)}
-              className="inline-flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
               andere Quelle
               <ChevronDown className={`w-3 h-3 transition-transform ${zeigeAlternativen ? 'rotate-180' : ''}`} />
-            </button>
+            </InlineAktion>
           )}
         </div>
       )}
@@ -140,21 +135,13 @@ export default function AssistenzFeld({
       {erg.weichtAb && (
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-orange-600 dark:text-orange-400">
           <span>Sensor meldet {erg.weichtAb.sensorWert} · gespeichert {erg.weichtAb.gespeichert}</span>
-          <button
-            type="button"
-            onClick={() => onChange(String(erg.weichtAb!.sensorWert))}
-            className="underline hover:no-underline"
-          >
+          <InlineAktion ton="warnung" unterstrichen onClick={() => onChange(String(erg.weichtAb!.sensorWert))}>
             Sensorwert übernehmen
-          </button>
+          </InlineAktion>
           {onBestaetigen && (
-            <button
-              type="button"
-              onClick={onBestaetigen}
-              className="inline-flex items-center gap-0.5 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
-            >
+            <InlineAktion ton="bestaetigen" onClick={onBestaetigen}>
               <Check className="w-3 h-3" /> gespeicherten behalten
-            </button>
+            </InlineAktion>
           )}
         </div>
       )}
@@ -163,15 +150,14 @@ export default function AssistenzFeld({
       {zeigeAlternativen && alternativen.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1.5">
           {alternativen.map((v, i) => (
-            <button
+            <InlineAktion
               key={i}
-              type="button"
+              variant="chip"
               title={v.beschreibung}
               onClick={() => { onChange(String(v.wert)); setZeigeAlternativen(false) }}
-              className="rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 text-[11px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50"
             >
               {v.wert} <span className="text-gray-400 dark:text-gray-500">({getQuelleLabel(v.quelle)})</span>
-            </button>
+            </InlineAktion>
           ))}
         </div>
       )}
