@@ -13,7 +13,7 @@
  * (Schritt 4) folgt separat.
  */
 import { lazy, Suspense, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Home, type LucideIcon } from 'lucide-react'
 import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
 import { IASubTabBar } from '../components/layout/IASubTabBar'
@@ -145,6 +145,11 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   const globalOeffne = useOeffneWizard()
   const [offenerWizard, setOffenerWizard] = useState<WizardKey | null>(null)
   const [berichteOffen, setBerichteOffen] = useState(false)
+  // B5-Deep-Link: die Fusszeile navigiert mit `?erfassen=YYYY-MM` hierher, um den
+  // Monatsabschluss zu öffnen → dann muss der Monatsdaten-Block aufklappen (sonst
+  // ist seine Form nicht gemountet). MonatsdatenVerwaltung liest denselben Param.
+  const [searchParams] = useSearchParams()
+  const erfassenBlock = searchParams.get('erfassen') ? 'monatsdaten' : undefined
 
   const ctx: InhaltCtx = {
     oeffneWizard: globalOeffne ?? setOffenerWizard,
@@ -216,6 +221,7 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
               persistKey={suchModus ? 'v4-einst-suche' : `v4-einst-${kategorie}`}
               bloecke={bloecke}
               sortierbar={!suchModus}
+              oeffneBeimMount={suchModus ? undefined : erfassenBlock}
             />
           ) : (
             <p className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">

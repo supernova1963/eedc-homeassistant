@@ -17,7 +17,6 @@ import { useState, useRef, useEffect, type ComponentType } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, Radio, ArrowUpCircle, CalendarClock, ListChecks, Database, Users, Slash } from 'lucide-react'
 import { SEVERITY_CONFIG, type CheckSchwere } from '../../config/datenCheckerKategorien'
-import { useOeffneWizard } from '../wizardHost'
 import { useAppStatus } from './AppStatusContext'
 import { useGlobalStatus } from './useGlobalStatus'
 import { APP_VERSION } from '../../config/version'
@@ -106,12 +105,12 @@ function StatusItem({ id, icon: Icon, schwere, label, detail, wert, onOeffnen, a
 
 export function StatusFusszeile() {
   const { status, demoMode, setDemoMode, isDebug } = useAppStatus()
-  const { update, offenerMonat, mqtt, datencheck, communityGeteilt, anlageId } = useGlobalStatus()
+  const { update, offenerMonat, mqtt, datencheck, communityGeteilt } = useGlobalStatus()
   const installiert = update?.aktuelle_version ?? APP_VERSION
   const navigate = useNavigate()
-  // E1: Monatsabschluss öffnet im app-weiten Overlay (Payload = anlageId) —
-  // die frühere Donor-Kante navigate('/monatsabschluss/…') ist damit weg.
-  const oeffneWizard = useOeffneWizard()
+  // B5: Monatsabschluss öffnet nicht mehr den Wizard-Overlay, sondern navigiert zur
+  // Werkzeuge-Kategorie und öffnet dort die assistierte Form für den offenen Monat
+  // (`?erfassen=YYYY-MM`); der Monatsdaten-Block klappt dabei auf.
   const [offen, setOffen] = useState<string | null>(null)
   const ref = useRef<HTMLElement | null>(null)
 
@@ -187,7 +186,11 @@ export function StatusFusszeile() {
           detail={offenerMonat
             ? `${offenerMonat.monat_name} ${offenerMonat.jahr} ist noch nicht abgeschlossen.`
             : 'Alle Monate sind abgeschlossen.'}
-          onOeffnen={anlageId && oeffneWizard ? () => oeffneWizard('monatsabschluss', { anlageId }) : undefined}
+          onOeffnen={() => navigate(
+            offenerMonat
+              ? `/v4/einstellungen/daten?erfassen=${offenerMonat.jahr}-${String(offenerMonat.monat).padStart(2, '0')}`
+              : '/v4/einstellungen/daten',
+          )}
           ausrichtung="links"
           offen={offen}
           setOffen={setOffen}

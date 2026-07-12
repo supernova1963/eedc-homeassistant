@@ -10,7 +10,7 @@
  * einen `kopfZusatz` (Anlage-Auswahl) in die Kopfleiste. Zahlen de-DE über `fmtZahl`.
  */
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, Fuel, PenLine, ArrowRight } from 'lucide-react'
 import { Button, Card, Checkbox, Modal, EmptyState, Alert, Select } from '../components/ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
@@ -90,9 +90,11 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   // E1 (Donor-Kanten): unter LayoutV4 öffnen Monatsabschluss/CSV-Import im
   // Overlay (oeffneWizard mit Payload); ohne Provider (V3) bleibt navigate.
   const oeffneWizard = useOeffneWizard()
+  // Nur noch V3: der Monatsabschluss-Wizard läuft in V3 über seine Route. Unter V4
+  // ist der Wizard als Fläche stillgelegt (B5) — die Öffner-Buttons sind dort
+  // ausgeblendet, die assistierte Form übernimmt (Edit / „Erfassen" / Sprung).
   const monatsabschlussOeffnen = (jahr?: number, monat?: number) => {
-    if (oeffneWizard) oeffneWizard('monatsabschluss', { anlageId, jahr, monat })
-    else if (jahr != null && monat != null) navigate(`/monatsabschluss/${anlageId}/${jahr}/${monat}`)
+    if (jahr != null && monat != null) navigate(`/monatsabschluss/${anlageId}/${jahr}/${monat}`)
     else navigate(`/monatsabschluss/${anlageId}`)
   }
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(anlageId)
@@ -338,12 +340,41 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
     return zeilen.sort((a, b) => b.idx - a.idx)
   }, [daten, fehlendeMonate])
 
-  // Erfassen-Icon einer Lücke / Sprung → Form für GENAU diesen Monat öffnen.
+  // Erfassen-Icon einer Lücke / Sprung → Form für GENAU diesen Monat öffnen (Lücke
+  // = garantiert ohne Zeile → Create-Preset).
   const oeffneErfassung = (jahr: number, monat: number) => {
     setHaVorausfuellung(null)
     setCreatePreset({ jahr, monat })
     setShowForm(true)
   }
+
+  // Deep-Link/Öffner für einen beliebigen Monat (B5): existiert eine Zeile →
+  // Bearbeiten-Form, sonst Create-Preset. EINE Form-Wahrheit für alle Einstiege.
+  const oeffneMonat = (jahr: number, monat: number) => {
+    setHaVorausfuellung(null)
+    const original = monatsdaten.find(md => md.jahr === jahr && md.monat === monat)
+    if (original) {
+      setEditingData(original)
+    } else {
+      setCreatePreset({ jahr, monat })
+      setShowForm(true)
+    }
+  }
+
+  // B5-Deep-Link: die V4-Fusszeile navigiert mit `?erfassen=YYYY-MM` hierher →
+  // Form für den offenen Monat öffnen. Param danach entfernen, damit Reload/Zurück
+  // ihn nicht erneut auslöst. EinstellungenV4 klappt parallel den Block auf.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const roh = searchParams.get('erfassen')
+    if (!roh) return
+    const [j, m] = roh.split('-').map(Number)
+    if (j && m >= 1 && m <= 12) oeffneMonat(j, m)
+    const next = new URLSearchParams(searchParams)
+    next.delete('erfassen')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // Prüfe ob Legacy-Daten existieren
   const legacyCount = useMemo(() => {
@@ -415,13 +446,17 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
               Aus HA laden
             </Button>
           )}
-          <Button
-            variant="secondary"
-            onClick={() => monatsabschlussOeffnen()}
-          >
-            <Calendar className="h-5 w-5 mr-2" />
-            Monatsabschluss
-          </Button>
+          {/* B5: Wizard-Einstieg nur in V3 — unter V4 übernehmen Edit +
+              „Nächster offener"-Sprung (assistierte Form), kein Doppel-Einstieg. */}
+          {!istV4 && (
+            <Button
+              variant="secondary"
+              onClick={() => monatsabschlussOeffnen()}
+            >
+              <Calendar className="h-5 w-5 mr-2" />
+              Monatsabschluss
+            </Button>
+          )}
           <Button onClick={() => { setHaVorausfuellung(null); setCreatePreset(null); setShowForm(true) }}>
             <Plus className="h-5 w-5 mr-2" />
             Monat einfügen
@@ -460,12 +495,14 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                   <Plus className="h-5 w-5 mr-2" />
                   Monat einfügen
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => monatsabschlussOeffnen()}
-                >
-                  Monatsabschluss starten
-                </Button>
+                {!istV4 && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => monatsabschlussOeffnen()}
+                  >
+                    Monatsabschluss starten
+                  </Button>
+                )}
                 <Button variant="secondary" onClick={() => (oeffneWizard ? oeffneWizard('csv-import') : navigate('/import'))}>CSV importieren</Button>
               </div>
             }
@@ -597,14 +634,18 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                         })}
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              title="Monatsabschluss-Assistent"
-                              onClick={() => monatsabschlussOeffnen(md.jahr, md.monat)}
-                            >
-                              <Calendar className="h-4 w-4 text-primary-500" />
-                            </Button>
+                            {/* B5: per-Zeile-Wizard nur in V3 — unter V4 öffnet Edit
+                                dieselbe assistierte Form für den Monat. */}
+                            {!istV4 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Monatsabschluss-Assistent"
+                                onClick={() => monatsabschlussOeffnen(md.jahr, md.monat)}
+                              >
+                                <Calendar className="h-4 w-4 text-primary-500" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"

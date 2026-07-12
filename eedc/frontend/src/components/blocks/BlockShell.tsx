@@ -42,6 +42,7 @@ export function BlockShell({
   sortierbar = false,
   persistKey,
   fokusKopf,
+  oeffneBeimMount,
 }: {
   bloecke: Block[]
   sortierbar?: boolean
@@ -49,6 +50,11 @@ export function BlockShell({
   /** D10-2: Kopf-Slot, der im Fokus/Vollbild oben mitläuft (z. B. die Datums-Nav
    *  der Seite). Reicht ihn an {@link FokusVollbild} durch — kein Nav-Neubau. */
   fokusKopf?: import('react').ReactNode
+  /** Deep-Link-Öffner (B5): klappt diesen Block beim Landen auf, auch wenn der
+   *  gemerkte Zustand „zu" war (überstimmt Persistenz) — z. B. Fusszeile →
+   *  Monatsabschluss öffnet den Monatsdaten-Block, damit dessen Form sichtbar
+   *  wird. Ändert sich der Wert, wird erneut aufgeklappt. */
+  oeffneBeimMount?: string
 }) {
   const ids = useMemo(() => bloecke.map((b) => b.id), [bloecke])
   const [order, setOrder] = useState<string[]>(() => {
@@ -69,6 +75,19 @@ export function BlockShell({
       ? new Set(gespeichert)  // Lücken-fest: Klappzustand auch absenter Blöcke behalten
       : new Set(bloecke.filter((b) => b.defaultOpen === false).map((b) => b.id))
   })
+  // B5-Deep-Link: gewünschten Block beim Landen/Änderung aufklappen (überstimmt
+  // den gemerkten „zu"-Zustand), damit ein extern angesteuerter Block (mit seiner
+  // Form/Inhalt) tatsächlich mountet.
+  useEffect(() => {
+    if (!oeffneBeimMount) return
+    setZu((prev) => {
+      if (!prev.has(oeffneBeimMount)) return prev
+      const next = new Set(prev)
+      next.delete(oeffneBeimMount)
+      return next
+    })
+  }, [oeffneBeimMount])
+
   const [fokus, setFokus] = useState<string | null>(null)
   // Letzte Meta des fokussierten Blocks — damit das Vollbild Titel/Icon behält,
   // falls der Block kurzzeitig aus der Liste fällt (Lücken-Tag).
