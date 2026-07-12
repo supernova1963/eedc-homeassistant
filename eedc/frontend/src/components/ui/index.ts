@@ -18,6 +18,7 @@ export { Skeleton, KpiStripSkeleton, ChartSkeleton, TabellenSkeleton } from './S
 export { default as FormelTooltip, SimpleTooltip, fmtCalc } from './FormelTooltip'
 export { KPICard } from './KPICard'
 export { default as QuelleBadge } from './QuelleBadge'
+export { default as ErfassungZustandBadge, ZUSTAND_META, type ErfassungZustand } from './ErfassungZustandBadge'
 export { default as ChartTooltip } from './ChartTooltip'
 export { eedcTooltipProps } from './eedcTooltip'
 export { default as ChartLegende } from './ChartLegende'

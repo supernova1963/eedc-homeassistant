@@ -6,12 +6,15 @@
 import { useState, useEffect, useMemo, useRef, FormEvent } from 'react'
 import { Button, Input, Alert, Select, Textarea, FormSection } from '../ui'
 import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
-import { investitionenApi, wetterApi } from '../../api'
-import type { Monatsdaten } from '../../types'
+import { investitionenApi, wetterApi, monatsabschlussApi } from '../../api'
+import type { MonatsabschlussResponse, FeldStatus } from '../../api/monatsabschluss'
+import type { Monatsdaten, Investition } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN } from '../../lib/fieldDefinitions'
+import { prefillWert } from '../../lib/erfassungZustand'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
 import { InvestitionSection } from './sections/InvestitionSection'
+import AssistenzFeld from './AssistenzFeld'
 import type { SonstigePosition } from './sections/types'
 
 interface MonatsdatenFormProps {
@@ -397,6 +400,99 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     return { batterieLadung, batterieEntladung, pvErzeugung }
   }, [aktiveInvestitionen, investitionsDaten])
 
+  // ─── Erfassungs-Assistenz (Monatsabschluss-V4 §4) ──────────────────────────
+  // Die Form hängt an DEMSELBEN Backend-Status wie der Wizard (V-a): Felder,
+  // Vorschläge, Quelle und Warnungen kommen aus einer Quelle
+  // (GET /monatsabschluss/{id}/{jahr}/{monat}). Client-Aggregate (PV-berechnet,
+  // Batterie-manuell) bleiben unberührt — die kennt der Status nicht.
+  const [status, setStatus] = useState<MonatsabschlussResponse | null>(null)
+
+  useEffect(() => {
+    const j = parseInt(formData.jahr)
+    const m = parseInt(formData.monat)
+    if (!anlageId || !j || !m) return
+    let abgebrochen = false
+    monatsabschlussApi.getStatus(anlageId, j, m)
+      .then(res => { if (!abgebrochen) setStatus(res) })
+      .catch(() => { if (!abgebrochen) setStatus(null) })
+    return () => { abgebrochen = true }
+  }, [anlageId, formData.jahr, formData.monat])
+
+  // Lookups Feld → FeldStatus (Basis/Optionale) bzw. invId → feld → FeldStatus
+  const basisStatus = useMemo(() => {
+    const map: Record<string, FeldStatus> = {}
+    if (status) {
+      for (const f of status.basis_felder) map[f.feld] = f
+      for (const f of status.optionale_felder) map[f.feld] = f
+    }
+    return map
+  }, [status])
+
+  const invStatus = useMemo(() => {
+    const map: Record<number, Record<string, FeldStatus>> = {}
+    if (status) for (const inv of status.investitionen) {
+      map[inv.id] = {}
+      for (const f of inv.felder) map[inv.id][f.feld] = f
+    }
+    return map
+  }, [status])
+
+  // D1-Fix (Gernot 2026-07-12): der Backend-Status hat `bedingung_anlage` bereits
+  // aufgelöst (z. B. E-Auto „Heim: PV/Netz" fehlt, wenn eine Wallbox existiert).
+  // Ist der Status geladen, ist SEINE Feldmenge maßgeblich; sonst Fallback auf die
+  // clientseitige Registry.
+  const felderFuer = (inv: Investition) => {
+    const alle = getFelderFuerInvestition(inv.typ, inv.parameter)
+    const erlaubt = invStatus[inv.id]
+    if (!erlaubt || Object.keys(erlaubt).length === 0) return alle
+    return alle.filter(f => f.feld in erlaubt)
+  }
+
+  // Prefill R1/R2/R3: sobald Status geladen UND die Investitionsdaten initialisiert
+  // sind, NUR LEERE Felder mit dem besten Vorschlag füllen (Lücken füllen). Bereits
+  // befüllte (gespeicherte/manuelle) Werte bleiben unangetastet → kein stiller
+  // Overwrite (P4/P3b). Einmal je Monat.
+  const prefillRef = useRef<string>('')
+  useEffect(() => {
+    if (!status) return
+    const invReady =
+      aktiveInvestitionen.length === 0 ||
+      aktiveInvestitionen.every(i => investitionsDaten[i.id])
+    if (!invReady) return
+    const key = `${status.jahr}-${status.monat}`
+    if (prefillRef.current === key) return
+    prefillRef.current = key
+
+    setFormData(prev => {
+      const next = { ...prev } as Record<string, string>
+      for (const f of [...status.basis_felder, ...status.optionale_felder]) {
+        if (f.typ === 'text') continue
+        if (f.feld in next && (next[f.feld] ?? '') === '') {
+          const w = prefillWert(f)
+          if (w != null) next[f.feld] = String(w)
+        }
+      }
+      return next as typeof prev
+    })
+
+    setInvestitionsDaten(prev => {
+      const next = { ...prev }
+      for (const inv of status.investitionen) {
+        const cur = next[inv.id]
+        if (!cur) continue
+        const nc = { ...cur }
+        for (const f of inv.felder) {
+          if ((nc[f.feld] ?? '') === '') {
+            const w = prefillWert(f)
+            if (w != null) nc[f.feld] = String(w)
+          }
+        }
+        next[inv.id] = nc
+      }
+      return next
+    })
+  }, [status, investitionsDaten, aktiveInvestitionen])
+
   // Wetterdaten automatisch abrufen
   const fetchWetterdaten = async () => {
     if (!formData.jahr || !formData.monat) {
@@ -588,73 +684,62 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       {/* Energie-Daten */}
       <FormSection title="Energie-Daten (kWh)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-          <div ref={(el) => { feldRefs.current.einspeisung_kwh = el }}>
-            <Input
-              label="Einspeisung"
-              name="einspeisung_kwh"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.einspeisung_kwh}
-              onChange={handleChange}
-              onBlur={() => markTouched('einspeisung_kwh')}
-              placeholder="z.B. 450"
-              required
-              error={zeigeFehler('einspeisung_kwh')}
-            />
-          </div>
-          <div ref={(el) => { feldRefs.current.netzbezug_kwh = el }}>
-            <Input
-              label="Netzbezug"
-              name="netzbezug_kwh"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.netzbezug_kwh}
-              onChange={handleChange}
-              onBlur={() => markTouched('netzbezug_kwh')}
-              placeholder="z.B. 120"
-              required
-              error={zeigeFehler('netzbezug_kwh')}
-            />
-          </div>
+          <AssistenzFeld
+            label="Einspeisung"
+            name="einspeisung_kwh"
+            min="0"
+            value={formData.einspeisung_kwh}
+            onChange={(v) => setFormData(prev => ({ ...prev, einspeisung_kwh: v }))}
+            onBlur={() => markTouched('einspeisung_kwh')}
+            required
+            error={zeigeFehler('einspeisung_kwh')}
+            feldStatus={basisStatus.einspeisung_kwh}
+            containerRef={(el) => { feldRefs.current.einspeisung_kwh = el }}
+          />
+          <AssistenzFeld
+            label="Netzbezug"
+            name="netzbezug_kwh"
+            min="0"
+            value={formData.netzbezug_kwh}
+            onChange={(v) => setFormData(prev => ({ ...prev, netzbezug_kwh: v }))}
+            onBlur={() => markTouched('netzbezug_kwh')}
+            required
+            error={zeigeFehler('netzbezug_kwh')}
+            feldStatus={basisStatus.netzbezug_kwh}
+            containerRef={(el) => { feldRefs.current.netzbezug_kwh = el }}
+          />
           {hatDynamischenTarif && (
-            <Input
+            <AssistenzFeld
               label="Ø Strompreis (dynamisch)"
               name="netzbezug_durchschnittspreis_cent"
-              type="number"
-              step="0.01"
               min="0"
               value={formData.netzbezug_durchschnittspreis_cent}
-              onChange={handleChange}
-              placeholder="z.B. 25.3"
+              onChange={(v) => setFormData(prev => ({ ...prev, netzbezug_durchschnittspreis_cent: v }))}
               hint="Monatsdurchschnitt bei dynamischem Tarif (ct/kWh)"
+              feldStatus={basisStatus.netzbezug_durchschnittspreis_cent}
             />
           )}
           {hatEAuto && (
-            <Input
+            <AssistenzFeld
               label="Ø Benzinpreis"
               name="kraftstoffpreis_euro"
-              type="number"
               step="0.001"
               min="0"
               value={formData.kraftstoffpreis_euro}
-              onChange={handleChange}
-              placeholder="z.B. 1.85"
+              onChange={(v) => setFormData(prev => ({ ...prev, kraftstoffpreis_euro: v }))}
               hint="€/L — Monatsdurchschnitt für E-Auto-Vergleich"
+              feldStatus={basisStatus.kraftstoffpreis_euro}
             />
           )}
           {hatWaermepumpe && (
-            <Input
+            <AssistenzFeld
               label="Ø Gas-/Ölpreis"
               name="gaspreis_cent_kwh"
-              type="number"
-              step="0.01"
               min="0"
               value={formData.gaspreis_cent_kwh}
-              onChange={handleChange}
-              placeholder="z.B. 11.5"
+              onChange={(v) => setFormData(prev => ({ ...prev, gaspreis_cent_kwh: v }))}
               hint="ct/kWh — Monatsdurchschnitt für WP-Vergleich"
+              feldStatus={basisStatus.gaspreis_cent_kwh}
             />
           )}
           {/* PV-Erzeugung: berechnet → Display (D1, kein Input), sonst editierbar (Legacy) */}
@@ -697,7 +782,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('pv-module', inv.parameter)}
+          felderFn={felderFuer}
         />
       )}
 
@@ -712,7 +797,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('wechselrichter', inv.parameter)}
+          felderFn={felderFuer}
         />
       )}
 
@@ -728,7 +813,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onInvChange={handleInvChange}
             sonstigePositionen={sonstigePositionen}
             onPositionenChange={handlePositionenChange}
-            felderFn={(inv) => getFelderFuerInvestition('speicher', inv.parameter)}
+            felderFn={felderFuer}
           />
           {(berechneteWerte.batterieLadung > 0 || berechneteWerte.batterieEntladung > 0) && (
             <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
@@ -749,7 +834,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('e-auto', inv.parameter)}
+          felderFn={felderFuer}
         />
       )}
 
@@ -764,7 +849,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('wallbox', inv.parameter)}
+          felderFn={felderFuer}
         />
       )}
 
@@ -779,7 +864,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('waermepumpe', inv.parameter)}
+          felderFn={felderFuer}
         />
       )}
 
@@ -794,7 +879,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('balkonkraftwerk', inv.parameter)}
+          felderFn={felderFuer}
           subtitleFn={(inv) => inv.leistung_kwp ? `${inv.leistung_kwp} kWp` : null}
           hinweisFn={(inv) => inv.parameter?.hat_speicher
             ? 'Mit Speicher: Bei Nulleinspeisung entspricht Eigenverbrauch meist der Erzeugung.'
@@ -813,7 +898,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           onInvChange={handleInvChange}
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
-          felderFn={(inv) => getFelderFuerInvestition('sonstiges', inv.parameter)}
+          felderFn={felderFuer}
           hinweisFn={(inv) => {
             const kat = (inv.parameter?.kategorie as string) || 'erzeuger'
             // SoT-Map (R3b S7); Fallback bewusst der rohe kat-Wert (wie zuvor).
@@ -873,38 +958,35 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             {wetterInfo}
           </p>
         )}
-        <div className="grid grid-cols-3 gap-4">
-          <Input
+        <div className="grid grid-cols-3 gap-4 items-start">
+          <AssistenzFeld
             label="Globalstrahlung"
             name="globalstrahlung_kwh_m2"
-            type="number"
             step="0.1"
             min="0"
             value={formData.globalstrahlung_kwh_m2}
-            onChange={handleChange}
-            placeholder="z.B. 152"
+            onChange={(v) => setFormData(prev => ({ ...prev, globalstrahlung_kwh_m2: v }))}
             hint="kWh/m²"
+            feldStatus={basisStatus.globalstrahlung_kwh_m2}
           />
-          <Input
+          <AssistenzFeld
             label="Sonnenstunden"
             name="sonnenstunden"
-            type="number"
             step="0.1"
             min="0"
             value={formData.sonnenstunden}
-            onChange={handleChange}
-            placeholder="z.B. 245"
+            onChange={(v) => setFormData(prev => ({ ...prev, sonnenstunden: v }))}
             hint="Stunden"
+            feldStatus={basisStatus.sonnenstunden}
           />
-          <Input
+          <AssistenzFeld
             label="Ø Temperatur"
             name="durchschnittstemperatur"
-            type="number"
             step="0.1"
             value={formData.durchschnittstemperatur}
-            onChange={handleChange}
-            placeholder="z.B. 14.5"
+            onChange={(v) => setFormData(prev => ({ ...prev, durchschnittstemperatur: v }))}
             hint="°C (optional)"
+            feldStatus={basisStatus.durchschnittstemperatur}
           />
         </div>
       </FormSection>

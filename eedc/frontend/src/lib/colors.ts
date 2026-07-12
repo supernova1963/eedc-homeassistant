@@ -85,6 +85,29 @@ export const STATUS_TEXT_CLASS = {
 } as const
 
 /**
+ * Erfassungs-Zustände Monatsabschluss-V4 (V-c, Gernot 2026-07-12) — die vier
+ * Feld-Zustände der Erfassung als EIN Vokabular, wiederholt an Feld · Kopf-Ampel ·
+ * Monatsdaten-Tabelle (Konzept `KONZEPT-MONATSABSCHLUSS-V4.md` §5). Bewusst aus der
+ * bestehenden Status-Achse abgeleitet, kein neuer Farbsatz (Regel 0a Stufe 2):
+ * - `gemessen`  = {@link STATUS_COLORS}.ok (grün, vertrauenswürdig)
+ * - `geschaetzt`= {@link STATUS_COLORS}.warnung (gelb, prüfen)
+ * - `weicht_ab` = {@link AMPEL_SKALA}.hoch (orange, bewusst entscheiden) — eine Stufe
+ *   UNTER Signal-Rot; Rot bleibt exklusiv für harte Blockier-Fehler (negative Zähler)
+ * - `fehlt`     = neutral-grau (ruhig; Frischmonat hat viele leere Felder und soll
+ *   nicht brüllen — Gernot 2026-07-12)
+ *
+ * `hex` für Recharts/Inline; `text`/`badge` als Tailwind-Zwillinge (Badge-Tönung wie
+ * VERGLEICH_BADGE/QuelleBadge). Icons liegen NICHT hier, sondern in der Zustands-
+ * Komponente (`ErfassungZustandBadge`) — colors.ts bleibt rein (tailwind.config via jiti).
+ */
+export const ERFASSUNG_ZUSTAND = {
+  gemessen:   { hex: STATUS_COLORS.ok,      text: 'text-green-500',                   badge: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' },
+  geschaetzt: { hex: STATUS_COLORS.warnung, text: 'text-yellow-500',                  badge: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300' },
+  fehlt:      { hex: '#9ca3af', /* gray-400 */ text: 'text-gray-500 dark:text-gray-400', badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+  weicht_ab:  { hex: AMPEL_SKALA.hoch,      text: 'text-orange-500',                  badge: 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300' },
+} as const
+
+/**
  * Zustands-Token „laufender Zeitraum" (R3b S18, 2026-07-05): heute/läuft-Markierung
  * der Zeit-Sichten (Badges der Sicht-Köpfe, Pulse-Dots + Wert-Färbung der Rails,
  * ZeitStepper). Emerald — bewusst getrennt von STATUS_COLORS.ok (green-500); die
