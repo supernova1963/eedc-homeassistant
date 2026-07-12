@@ -11,16 +11,18 @@ import ErfassungZustandBadge, { ZUSTAND_META, type ErfassungZustand } from './Er
 import { ERFASSUNG_ZUSTAND } from '../../lib/colors'
 
 describe('ErfassungZustandBadge — Zustands-Vokabular', () => {
-  it('deckt genau die vier Zustände ab (Meta ≡ Farb-SoT)', () => {
+  it('deckt genau die sechs Zustände ab (Meta ≡ Farb-SoT)', () => {
     const zustaende = Object.keys(ZUSTAND_META).sort()
-    expect(zustaende).toEqual(['fehlt', 'gemessen', 'geschaetzt', 'weicht_ab'])
+    expect(zustaende).toEqual(['fehlt', 'gemessen', 'geprueft', 'geschaetzt', 'optional', 'weicht_ab'])
     expect(Object.keys(ERFASSUNG_ZUSTAND).sort()).toEqual(zustaende)
   })
 
   it('bildet die abgestimmten Töne ab und meidet Signal-Rot', () => {
     expect(ERFASSUNG_ZUSTAND.gemessen.text).toContain('green')
+    expect(ERFASSUNG_ZUSTAND.geprueft.text).toContain('green') // geprüft teilt das Grün
     expect(ERFASSUNG_ZUSTAND.geschaetzt.text).toContain('yellow')
     expect(ERFASSUNG_ZUSTAND.fehlt.text).toContain('gray')
+    expect(ERFASSUNG_ZUSTAND.optional.text).toContain('gray')
     expect(ERFASSUNG_ZUSTAND.weicht_ab.text).toContain('orange')
     // kein Zustand trägt Signal-Rot (bleibt harten Blockier-Fehlern vorbehalten)
     for (const z of Object.values(ERFASSUNG_ZUSTAND)) {

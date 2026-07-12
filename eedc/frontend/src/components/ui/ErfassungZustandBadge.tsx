@@ -11,24 +11,33 @@
  * Badge-Art (Regel 0a; [[feedback_kpicard_drei_versionen]]).
  */
 
-import { CheckCircle2, AlertTriangle, Circle, AlertCircle, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, BadgeCheck, AlertTriangle, Circle, CircleDashed, AlertCircle, type LucideIcon } from 'lucide-react'
 import { ERFASSUNG_ZUSTAND } from '../../lib/colors'
 
-/** Die vier Erfassungs-Zustände (aus `FeldStatus.quelle` + Vergleich abgeleitet). */
-export type ErfassungZustand = 'gemessen' | 'geschaetzt' | 'fehlt' | 'weicht_ab'
+/**
+ * Erfassungs-Zustände (aus `FeldStatus.quelle` + Vergleich + Bestätigung abgeleitet).
+ * 6 Labels auf 4 Farb-Achsen (Gernot 2026-07-12): grün = fertig (gemessen | geprüft),
+ * gelb = prüfen (geschätzt), orange = weicht ab, grau = offen; „optional" = leises Grau
+ * für quellenlose Leerfelder (zählt nicht).
+ */
+export type ErfassungZustand = 'gemessen' | 'geprueft' | 'geschaetzt' | 'weicht_ab' | 'fehlt' | 'optional'
 
 /** Zentrale Icon-/Label-Quelle je Zustand — von Badge, Kopf-Ampel und Tabelle geteilt. */
 export const ZUSTAND_META: Record<ErfassungZustand, { label: string; Icon: LucideIcon }> = {
-  gemessen:   { label: 'gemessen',  Icon: CheckCircle2 },
-  geschaetzt: { label: 'geschätzt', Icon: AlertTriangle },
-  fehlt:      { label: 'offen',     Icon: Circle },
+  gemessen:   { label: 'gemessen',  Icon: CheckCircle2 },  // automatisch (Sensor/Import)
+  geprueft:   { label: 'geprüft',   Icon: BadgeCheck },    // von dir eingegeben/bestätigt
+  geschaetzt: { label: 'geschätzt', Icon: AlertTriangle }, // Schätzung → „prüfen"
   weicht_ab:  { label: 'weicht ab', Icon: AlertCircle },
+  fehlt:      { label: 'offen',     Icon: Circle },
+  optional:   { label: 'optional',  Icon: CircleDashed },
 }
 
 interface ErfassungZustandBadgeProps {
   zustand: ErfassungZustand
   /** Optionaler Quell-Zusatz, z. B. „Vorjahr" bei geschätzt (getQuelleLabel). */
   quelleLabel?: string
+  /** Überschreibt den Standard-Zustandstext (z. B. Rollup „alles gemessen" / „1 offen"). */
+  label?: string
   /** Nur Icon (für dichte Sektions-Köpfe/Tabellenzellen), ohne Text-Pill. */
   iconOnly?: boolean
   className?: string
@@ -37,10 +46,12 @@ interface ErfassungZustandBadgeProps {
 export default function ErfassungZustandBadge({
   zustand,
   quelleLabel,
+  label: labelOverride,
   iconOnly = false,
   className = '',
 }: ErfassungZustandBadgeProps) {
-  const { label, Icon } = ZUSTAND_META[zustand]
+  const { label: defaultLabel, Icon } = ZUSTAND_META[zustand]
+  const label = labelOverride ?? defaultLabel
   const farbe = ERFASSUNG_ZUSTAND[zustand]
   const text = quelleLabel ? `${label} (${quelleLabel})` : label
 

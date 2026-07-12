@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { FeldStatus, Vorschlag } from '../api/monatsabschluss'
-import { ermittleZustand, prefillWert, besterVorschlag, istGemesseneQuelle } from './erfassungZustand'
+import { ermittleZustand, prefillWert, besterVorschlag, istGemesseneQuelle, rollupZustand, zaehleAmpel } from './erfassungZustand'
 
 function feld(partial: Partial<FeldStatus>): FeldStatus {
   return {
@@ -53,9 +53,9 @@ describe('ermittleZustand', () => {
     expect(r.quelle).toBe('portal_import')
   })
 
-  it('manuell gespeicherter Wert → gemessen (manuell)', () => {
+  it('manuell gespeicherter Wert → geprüft (von Hand = bewusste Bestätigung)', () => {
     const r = ermittleZustand('9.43', feld({ aktueller_wert: 9.43, quelle: 'manuell' }))
-    expect(r.zustand).toBe('gemessen')
+    expect(r.zustand).toBe('geprueft')
     expect(r.quelle).toBe('manuell')
   })
 
@@ -71,10 +71,22 @@ describe('ermittleZustand', () => {
     expect(r.quelle).toBe('vorjahr')
   })
 
-  it('vom Nutzer eingetippt (≠ gespeichert, ≠ Vorschlag) → gemessen (manuell)', () => {
+  it('vom Nutzer eingetippt (≠ gespeichert, ≠ Vorschlag) → geprüft', () => {
     const r = ermittleZustand('500', feld({ aktueller_wert: 1318.13, quelle: 'portal_import', vorschlaege: [vorschlag(1318.13, 'portal_import', 90)] }))
-    expect(r.zustand).toBe('gemessen')
+    expect(r.zustand).toBe('geprueft')
     expect(r.quelle).toBe('manuell')
+  })
+
+  it('bestätigte Schätzung (✓ passt) → geprüft', () => {
+    const f = feld({ vorschlaege: [vorschlag(95, 'vorjahr', 60)] })
+    expect(ermittleZustand('95', f, false).zustand).toBe('geschaetzt')
+    expect(ermittleZustand('95', f, true).zustand).toBe('geprueft')
+  })
+
+  it('leeres Feld: erwartet (Zähler/Sensor) → offen, sonst → optional', () => {
+    expect(ermittleZustand('', feld({ gruppe: 'zaehler' })).zustand).toBe('fehlt')
+    expect(ermittleZustand('', feld({ gruppe: null, sensor_id: 'sensor.x' })).zustand).toBe('fehlt')
+    expect(ermittleZustand('', feld({ gruppe: null, sensor_id: null, vorschlaege: [] })).zustand).toBe('optional')
   })
 
   it('weicht ab: gespeicherter Wert + abweichender gemessener Vorschlag, form noch == gespeichert', () => {
@@ -91,7 +103,7 @@ describe('ermittleZustand', () => {
       aktueller_wert: 9.43, quelle: 'manuell',
       vorschlaege: [vorschlag(11.0, 'vorjahr', 60)],
     }))
-    expect(r.zustand).toBe('gemessen') // gespeicherter manueller Wert bleibt
+    expect(r.zustand).toBe('geprueft') // gespeicherter manueller Wert bleibt (geprüft)
   })
 
   it('weicht ab entfällt, sobald der Nutzer den Sensorwert übernommen hat (form == Sensor)', () => {
@@ -101,5 +113,35 @@ describe('ermittleZustand', () => {
     }))
     expect(r.zustand).toBe('gemessen')
     expect(r.quelle).toBe('ha_statistics')
+  })
+})
+
+describe('rollupZustand (§6.7 schlechtester Zustand)', () => {
+  it('leere Gruppe → gemessen (grün, klappt zu)', () => {
+    expect(rollupZustand([])).toBe('gemessen')
+  })
+  it('alle gemessen → gemessen', () => {
+    expect(rollupZustand(['gemessen', 'gemessen'])).toBe('gemessen')
+  })
+  it('ein offener Wert schlägt alles', () => {
+    expect(rollupZustand(['gemessen', 'geschaetzt', 'weicht_ab', 'fehlt'])).toBe('fehlt')
+  })
+  it('weicht_ab schlägt geschätzt/gemessen', () => {
+    expect(rollupZustand(['gemessen', 'geschaetzt', 'weicht_ab'])).toBe('weicht_ab')
+  })
+  it('geschätzt schlägt gemessen', () => {
+    expect(rollupZustand(['gemessen', 'geschaetzt'])).toBe('geschaetzt')
+  })
+  it('optional wird ignoriert; nur optional/leer → gemessen (grün, klappt zu)', () => {
+    expect(rollupZustand(['gemessen', 'optional'])).toBe('gemessen')
+    expect(rollupZustand(['optional', 'optional'])).toBe('gemessen')
+    expect(rollupZustand(['geprueft', 'optional'])).toBe('geprueft')
+  })
+})
+
+describe('zaehleAmpel (§6.2)', () => {
+  it('fertig = gemessen+geprüft, prüfen = geschätzt+weicht_ab, offen = fehlt, optional zählt nicht', () => {
+    const z = zaehleAmpel(['gemessen', 'geprueft', 'geschaetzt', 'weicht_ab', 'fehlt', 'optional'])
+    expect(z).toEqual({ fertig: 2, pruefen: 2, offen: 1 })
   })
 })

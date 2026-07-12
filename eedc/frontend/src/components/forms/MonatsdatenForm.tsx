@@ -9,12 +9,15 @@ import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi, monatsabschlussApi } from '../../api'
 import type { MonatsabschlussResponse, FeldStatus } from '../../api/monatsabschluss'
 import type { Monatsdaten, Investition } from '../../types'
-import { getFelderFuerInvestition, LEGACY_FELDNAMEN } from '../../lib/fieldDefinitions'
-import { prefillWert } from '../../lib/erfassungZustand'
+import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert } from '../../lib/fieldDefinitions'
+import { prefillWert, ermittleZustand, zaehleAmpel, type ErfassungZustand } from '../../lib/erfassungZustand'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
 import { InvestitionSection } from './sections/InvestitionSection'
 import AssistenzFeld from './AssistenzFeld'
+import KopfAmpel from './KopfAmpel'
+import ZustandLegende from './ZustandLegende'
+import AbschlussReview, { type ReviewWarnung } from './AbschlussReview'
 import type { SonstigePosition } from './sections/types'
 
 interface MonatsdatenFormProps {
@@ -406,6 +409,18 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // (GET /monatsabschluss/{id}/{jahr}/{monat}). Client-Aggregate (PV-berechnet,
   // Batterie-manuell) bleiben unberührt — die kennt der Status nicht.
   const [status, setStatus] = useState<MonatsabschlussResponse | null>(null)
+  // Vom Nutzer per „✓ passt" bestätigte Felder (§6.6): geschätzt/weicht-ab → geprüft.
+  // Basis-Felder unter ihrem Namen, Investitionsfelder unter `${invId}:${feld}`.
+  const [bestaetigteFelder, setBestaetigteFelder] = useState<Set<string>>(new Set())
+  const bestaetigeFeld = (name: string) => setBestaetigteFelder(prev => new Set(prev).add(name))
+  const invKey = (invId: number, feld: string) => `${invId}:${feld}`
+  const istInvBestaetigt = (invId: number, feld: string) => bestaetigteFelder.has(invKey(invId, feld))
+  const bestaetigeInvFelder = (invId: number, felder: string[]) =>
+    setBestaetigteFelder(prev => {
+      const n = new Set(prev)
+      felder.forEach(f => n.add(invKey(invId, f)))
+      return n
+    })
 
   useEffect(() => {
     const j = parseInt(formData.jahr)
@@ -437,6 +452,9 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     return map
   }, [status])
 
+  // Wechselt beim Statusladen → Ampel-Blöcke remounten mit korrektem Einklapp-Default.
+  const statusMonthKey = status ? `${status.jahr}-${status.monat}` : 'nostatus'
+
   // D1-Fix (Gernot 2026-07-12): der Backend-Status hat `bedingung_anlage` bereits
   // aufgelöst (z. B. E-Auto „Heim: PV/Netz" fehlt, wenn eine Wallbox existiert).
   // Ist der Status geladen, ist SEINE Feldmenge maßgeblich; sonst Fallback auf die
@@ -446,6 +464,43 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     const erlaubt = invStatus[inv.id]
     if (!erlaubt || Object.keys(erlaubt).length === 0) return alle
     return alle.filter(f => f.feld in erlaubt)
+  }
+
+  // Kopf-Ampel (§6.2) + Review (§6.6): Zustände über den Pflicht-Kern (Zähler +
+  // Investitionsfelder; Wetter/Preise/Sonderkosten zählen nicht als „offen") und
+  // die vom Status gelieferten Plausibilitäts-Warnungen.
+  const { ampel, reviewWarnungen } = useMemo(() => {
+    const zustaende: ErfassungZustand[] = []
+    const warnungen: ReviewWarnung[] = []
+    if (status) {
+      // Alle Basis-Felder zählen mit ihrem Zustand; leere quellenlose Felder werden
+      // 'optional' und von zaehleAmpel ignoriert (§6.2) → Feld-Badge ≡ Kopf-Ampel.
+      for (const f of status.basis_felder) {
+        const wert = (formData as Record<string, string>)[f.feld] ?? ''
+        zustaende.push(ermittleZustand(wert, f, bestaetigteFelder.has(f.feld)).zustand)
+        for (const w of f.warnungen) {
+          warnungen.push({ feld: f.feld, feldLabel: f.label, meldung: w.meldung, schwere: w.schwere, basis: true })
+        }
+      }
+      for (const inv of aktiveInvestitionen) {
+        const daten = investitionsDaten[inv.id] ?? {}
+        for (const f of felderFuer(inv)) {
+          const fs = invStatus[inv.id]?.[f.feld]
+          zustaende.push(ermittleZustand(readFeldWert(daten, f.feld), fs, istInvBestaetigt(inv.id, f.feld)).zustand)
+          if (fs) for (const w of fs.warnungen) {
+            warnungen.push({ feld: f.feld, feldLabel: `${inv.bezeichnung} · ${f.label}`, meldung: w.meldung, schwere: w.schwere, basis: false })
+          }
+        }
+      }
+    }
+    return { ampel: zaehleAmpel(zustaende), reviewWarnungen: warnungen }
+  }, [status, formData, investitionsDaten, aktiveInvestitionen, invStatus, bestaetigteFelder])
+
+  const springeZuFeld = (feld: string) => {
+    document.querySelector(`[data-feld="${feld}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  const springeZuOffen = () => {
+    document.querySelector('[data-erfassung-offen]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   // Prefill R1/R2/R3: sobald Status geladen UND die Investitionsdaten initialisiert
@@ -655,6 +710,14 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         </Alert>
       )}
 
+      {/* Kopf-Ampel (§6.2) — Gesamtüberblick statt Step-Zähler */}
+      {status && (
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/40 px-4 py-2.5">
+          <KopfAmpel ampel={ampel} onSpringeZuOffen={springeZuOffen} />
+          <ZustandLegende />
+        </div>
+      )}
+
       {/* Zeitraum */}
       <FormSection title="Zeitraum">
         <div className="grid grid-cols-2 gap-4">
@@ -694,6 +757,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             required
             error={zeigeFehler('einspeisung_kwh')}
             feldStatus={basisStatus.einspeisung_kwh}
+            bestaetigt={bestaetigteFelder.has('einspeisung_kwh')}
+            onBestaetigen={() => bestaetigeFeld('einspeisung_kwh')}
             containerRef={(el) => { feldRefs.current.einspeisung_kwh = el }}
           />
           <AssistenzFeld
@@ -706,6 +771,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             required
             error={zeigeFehler('netzbezug_kwh')}
             feldStatus={basisStatus.netzbezug_kwh}
+            bestaetigt={bestaetigteFelder.has('netzbezug_kwh')}
+            onBestaetigen={() => bestaetigeFeld('netzbezug_kwh')}
             containerRef={(el) => { feldRefs.current.netzbezug_kwh = el }}
           />
           {hatDynamischenTarif && (
@@ -717,6 +784,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               onChange={(v) => setFormData(prev => ({ ...prev, netzbezug_durchschnittspreis_cent: v }))}
               hint="Monatsdurchschnitt bei dynamischem Tarif (ct/kWh)"
               feldStatus={basisStatus.netzbezug_durchschnittspreis_cent}
+            bestaetigt={bestaetigteFelder.has('netzbezug_durchschnittspreis_cent')}
+            onBestaetigen={() => bestaetigeFeld('netzbezug_durchschnittspreis_cent')}
             />
           )}
           {hatEAuto && (
@@ -729,6 +798,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               onChange={(v) => setFormData(prev => ({ ...prev, kraftstoffpreis_euro: v }))}
               hint="€/L — Monatsdurchschnitt für E-Auto-Vergleich"
               feldStatus={basisStatus.kraftstoffpreis_euro}
+            bestaetigt={bestaetigteFelder.has('kraftstoffpreis_euro')}
+            onBestaetigen={() => bestaetigeFeld('kraftstoffpreis_euro')}
             />
           )}
           {hatWaermepumpe && (
@@ -740,6 +811,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
               onChange={(v) => setFormData(prev => ({ ...prev, gaspreis_cent_kwh: v }))}
               hint="ct/kWh — Monatsdurchschnitt für WP-Vergleich"
               feldStatus={basisStatus.gaspreis_cent_kwh}
+            bestaetigt={bestaetigteFelder.has('gaspreis_cent_kwh')}
+            onBestaetigen={() => bestaetigeFeld('gaspreis_cent_kwh')}
             />
           )}
           {/* PV-Erzeugung: berechnet → Display (D1, kein Input), sonst editierbar (Legacy) */}
@@ -783,6 +856,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
         />
       )}
 
@@ -798,6 +875,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
         />
       )}
 
@@ -814,6 +895,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             sonstigePositionen={sonstigePositionen}
             onPositionenChange={handlePositionenChange}
             felderFn={felderFuer}
+            feldStatus={(id, f) => invStatus[id]?.[f]}
+            statusMonthKey={statusMonthKey}
+            istBestaetigt={istInvBestaetigt}
+            onBestaetigen={bestaetigeInvFelder}
           />
           {(berechneteWerte.batterieLadung > 0 || berechneteWerte.batterieEntladung > 0) && (
             <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
@@ -835,6 +920,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
         />
       )}
 
@@ -850,6 +939,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
         />
       )}
 
@@ -865,6 +958,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
         />
       )}
 
@@ -880,6 +977,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
           subtitleFn={(inv) => inv.leistung_kwp ? `${inv.leistung_kwp} kWp` : null}
           hinweisFn={(inv) => inv.parameter?.hat_speicher
             ? 'Mit Speicher: Bei Nulleinspeisung entspricht Eigenverbrauch meist der Erzeugung.'
@@ -899,6 +1000,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           sonstigePositionen={sonstigePositionen}
           onPositionenChange={handlePositionenChange}
           felderFn={felderFuer}
+          feldStatus={(id, f) => invStatus[id]?.[f]}
+          statusMonthKey={statusMonthKey}
+          istBestaetigt={istInvBestaetigt}
+          onBestaetigen={bestaetigeInvFelder}
           hinweisFn={(inv) => {
             const kat = (inv.parameter?.kategorie as string) || 'erzeuger'
             // SoT-Map (R3b S7); Fallback bewusst der rohe kat-Wert (wie zuvor).
@@ -968,6 +1073,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onChange={(v) => setFormData(prev => ({ ...prev, globalstrahlung_kwh_m2: v }))}
             hint="kWh/m²"
             feldStatus={basisStatus.globalstrahlung_kwh_m2}
+            bestaetigt={bestaetigteFelder.has('globalstrahlung_kwh_m2')}
+            onBestaetigen={() => bestaetigeFeld('globalstrahlung_kwh_m2')}
           />
           <AssistenzFeld
             label="Sonnenstunden"
@@ -978,6 +1085,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onChange={(v) => setFormData(prev => ({ ...prev, sonnenstunden: v }))}
             hint="Stunden"
             feldStatus={basisStatus.sonnenstunden}
+            bestaetigt={bestaetigteFelder.has('sonnenstunden')}
+            onBestaetigen={() => bestaetigeFeld('sonnenstunden')}
           />
           <AssistenzFeld
             label="Ø Temperatur"
@@ -987,6 +1096,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onChange={(v) => setFormData(prev => ({ ...prev, durchschnittstemperatur: v }))}
             hint="°C (optional)"
             feldStatus={basisStatus.durchschnittstemperatur}
+            bestaetigt={bestaetigteFelder.has('durchschnittstemperatur')}
+            onBestaetigen={() => bestaetigeFeld('durchschnittstemperatur')}
           />
         </div>
       </FormSection>
@@ -1025,13 +1136,22 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         </div>
       </FormSection>
 
+      {/* Abschluss-Review (§6.6) — das Tor des „Abschlusses", kein eigener Schritt */}
+      {status && (
+        <AbschlussReview
+          ampel={ampel}
+          warnungen={reviewWarnungen}
+          onSpringeZuFeld={springeZuFeld}
+        />
+      )}
+
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Abbrechen
         </Button>
         <Button type="submit" loading={loading}>
-          {monatsdaten ? 'Speichern' : 'Monat erfassen'}
+          {monatsdaten ? 'Speichern & abschließen' : 'Monat erfassen & abschließen'}
         </Button>
       </div>
     </form>

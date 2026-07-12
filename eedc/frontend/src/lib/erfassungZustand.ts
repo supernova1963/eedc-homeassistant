@@ -15,6 +15,7 @@
 
 import type { FeldStatus, Vorschlag } from '../api/monatsabschluss'
 import type { ErfassungZustand } from '../components/ui/ErfassungZustandBadge'
+export type { ErfassungZustand } from '../components/ui/ErfassungZustandBadge'
 
 /** Quellen, die einen GEMESSENEN Wert markieren (Sensor/Import/Connector). */
 export const GEMESSENE_QUELLEN: ReadonlySet<string> = new Set([
@@ -60,7 +61,11 @@ export interface ZustandErgebnis {
  * @param feld     Backend-FeldStatus (gespeicherter Wert, Quelle, Vorschläge) —
  *                 `undefined` für Client-Only-Felder (dann nur leer/manuell möglich)
  */
-export function ermittleZustand(formWert: string, feld: FeldStatus | undefined): ZustandErgebnis {
+export function ermittleZustand(
+  formWert: string,
+  feld: FeldStatus | undefined,
+  bestaetigt = false,
+): ZustandErgebnis {
   const best = besterVorschlag(feld?.vorschlaege)
   const gespeichert = feld?.aktueller_wert ?? null
   const hatForm = formWert.trim() !== ''
@@ -69,7 +74,10 @@ export function ermittleZustand(formWert: string, feld: FeldStatus | undefined):
   // „Weicht ab": es gibt einen gespeicherten Wert UND einen gemessenen Vorschlag,
   // der abweicht, und der Eingabewert entspricht noch dem gespeicherten (der
   // Nutzer hat also noch nicht bewusst entschieden). Nur beim Bearbeiten (R2).
+  // Hat der Nutzer „gespeicherten behalten" bestätigt (bestaetigt), entfällt der
+  // Hinweis → der gespeicherte Wert gilt als bewusst geprüft.
   if (
+    !bestaetigt &&
     gespeichert != null && best && istGemesseneQuelle(best.quelle) &&
     !gleich(best.wert, gespeichert) &&
     hatForm && !Number.isNaN(formNum) && gleich(formNum, gespeichert)
@@ -77,29 +85,78 @@ export function ermittleZustand(formWert: string, feld: FeldStatus | undefined):
     return { zustand: 'weicht_ab', quelle: best.quelle, weichtAb: { sensorWert: best.wert, gespeichert } }
   }
 
+  // Leeres Feld → „offen" nur wenn erwartet (Zähler ODER gemappter Sensor); sonst
+  // „optional" (leer, aber nicht nötig — zählt nicht, nagt nicht; Gernot 2026-07-12).
   if (!hatForm || Number.isNaN(formNum)) {
-    return { zustand: 'fehlt' }
+    const erwartet = feld?.gruppe === 'zaehler' || !!feld?.sensor_id
+    return { zustand: erwartet ? 'fehlt' : 'optional' }
   }
 
-  // Entspricht dem gespeicherten Wert → dessen Quelle. Gespeicherte Werte sind
-  // nie „geschätzt" (Schätzung existiert nur als Prefill) → immer 'gemessen'.
+  // Entspricht dem gespeicherten Wert → dessen Quelle. Sensor/Import = gemessen,
+  // manuell = geprüft (von Hand ist eine bewusste Bestätigung, Gernot 2026-07-12).
   if (gespeichert != null && gleich(formNum, gespeichert)) {
-    return { zustand: 'gemessen', quelle: feld?.quelle ?? 'manuell' }
+    const q = feld?.quelle ?? null
+    if (q && MANUELLE_QUELLEN.has(q)) return { zustand: 'geprueft', quelle: q }
+    return { zustand: 'gemessen', quelle: q ?? 'gemessen' }
   }
 
-  // Entspricht dem besten Vorschlag → Prefill; dessen Quelle bestimmt den Zustand.
+  // Entspricht dem besten Vorschlag → Prefill. Gemessene Quelle = gemessen; eine
+  // Schätzung ist „prüfen", nach Bestätigen (✓ passt) „geprüft".
   if (best && gleich(formNum, best.wert)) {
-    return istGemesseneQuelle(best.quelle)
-      ? { zustand: 'gemessen', quelle: best.quelle }
-      : { zustand: 'geschaetzt', quelle: best.quelle }
+    if (istGemesseneQuelle(best.quelle)) return { zustand: 'gemessen', quelle: best.quelle }
+    return { zustand: bestaetigt ? 'geprueft' : 'geschaetzt', quelle: best.quelle }
   }
 
-  // Sonst: vom Nutzer eingetippt (≠ gespeichert, ≠ Vorschlag) → manuell → gemessen.
-  return { zustand: 'gemessen', quelle: 'manuell' }
+  // Sonst: vom Nutzer eingetippt (≠ gespeichert, ≠ Vorschlag) → geprüft.
+  return { zustand: 'geprueft', quelle: 'manuell' }
 }
 
 /** Prefill-Wert für ein leeres Feld (R1/R2 „Lücken füllen"): bester Vorschlag. */
 export function prefillWert(feld: FeldStatus | undefined): number | null {
   const best = besterVorschlag(feld?.vorschlaege)
   return best ? best.wert : null
+}
+
+// ─── Rollup + Kopf-Ampel-Zählung (§6.2 / §6.7) ──────────────────────────────
+
+/** Schweregrad für den Rollup: fehlt > weicht_ab > geschätzt > (gemessen=geprüft).
+ *  `optional` ist neutral (−1) und wird vom Rollup ignoriert. */
+const RANG: Record<ErfassungZustand, number> = {
+  fehlt: 3, weicht_ab: 2, geschaetzt: 1, gemessen: 0, geprueft: 0, optional: -1,
+}
+
+/**
+ * Rollup einer Gruppe (§6.7): der **schlechteste** relevante Zustand. `optional`
+ * bleibt außen vor (leere Optionalfelder machen eine Sektion nicht unfertig). Nur
+ * Optional/leer → 'gemessen' (nichts zu tun → grün, klappt zu).
+ */
+export function rollupZustand(zustaende: ErfassungZustand[]): ErfassungZustand {
+  const relevant = zustaende.filter((z) => z !== 'optional')
+  if (relevant.length === 0) return 'gemessen'
+  return relevant.reduce((a, b) => (RANG[b] > RANG[a] ? b : a), relevant[0])
+}
+
+/** Kopf-Ampel-Zählung (§6.2): fertig (gemessen+geprüft) · prüfen (geschätzt+weicht_ab)
+ *  · offen (fehlt). `optional` zählt nicht. */
+export interface AmpelZaehlung { fertig: number; pruefen: number; offen: number }
+
+export function zaehleAmpel(zustaende: ErfassungZustand[]): AmpelZaehlung {
+  const z: AmpelZaehlung = { fertig: 0, pruefen: 0, offen: 0 }
+  for (const s of zustaende) {
+    if (s === 'gemessen' || s === 'geprueft') z.fertig++
+    else if (s === 'geschaetzt' || s === 'weicht_ab') z.pruefen++
+    else if (s === 'fehlt') z.offen++
+    // optional → ignoriert
+  }
+  return z
+}
+
+/** Rollup-Badge (§6.7): Farb-Zustand (schlechtester) + Kurz-Label mit Anzahl. */
+export function rollupBadge(zustaende: ErfassungZustand[]): { zustand: ErfassungZustand; label: string } {
+  const roll = rollupZustand(zustaende)
+  const z = zaehleAmpel(zustaende)
+  const label = (roll === 'gemessen' || roll === 'geprueft') ? 'vollständig'
+    : z.offen > 0 ? `${z.offen} offen`
+    : `${z.pruefen} prüfen`
+  return { zustand: roll, label }
 }

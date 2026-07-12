@@ -102,9 +102,14 @@ export const STATUS_TEXT_CLASS = {
  */
 export const ERFASSUNG_ZUSTAND = {
   gemessen:   { hex: STATUS_COLORS.ok,      text: 'text-green-500',                   badge: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' },
+  // geprüft teilt bewusst das Grün von gemessen (Farb-Achse bleibt bei 4, Gernot
+  // 2026-07-12) — Icon/Label unterscheiden „von dir" von „vom Sensor".
+  geprueft:   { hex: STATUS_COLORS.ok,      text: 'text-green-500',                   badge: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' },
   geschaetzt: { hex: STATUS_COLORS.warnung, text: 'text-yellow-500',                  badge: 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300' },
-  fehlt:      { hex: '#9ca3af', /* gray-400 */ text: 'text-gray-500 dark:text-gray-400', badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
   weicht_ab:  { hex: AMPEL_SKALA.hoch,      text: 'text-orange-500',                  badge: 'bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300' },
+  fehlt:      { hex: '#9ca3af', /* gray-400 */ text: 'text-gray-500 dark:text-gray-400', badge: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+  // optional = leiser als „offen" (gray-400, hellere Pille) → leer, aber nicht nötig.
+  optional:   { hex: '#9ca3af', /* gray-400 */ text: 'text-gray-400 dark:text-gray-500', badge: 'bg-gray-50 text-gray-400 dark:bg-gray-800 dark:text-gray-500' },
 } as const
 
 /**

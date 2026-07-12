@@ -19,7 +19,7 @@
  */
 
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Check } from 'lucide-react'
 import type { FeldStatus } from '../../api/monatsabschluss'
 import { getQuelleLabel } from '../monatsabschluss/helpers'
 import { ermittleZustand, besterVorschlag, gleich } from '../../lib/erfassungZustand'
@@ -41,6 +41,13 @@ interface AssistenzFeldProps {
   onBlur?: () => void
   /** Wrapper-Ref (Pflichtfeld-Scroll-Ziel der Form). */
   containerRef?: (el: HTMLDivElement | null) => void
+  /** Nutzer hat die Schätzung bewusst bestätigt (✓ passt) → geprüft statt geschätzt. */
+  bestaetigt?: boolean
+  /** „✓ passt"-Klick: die aktuelle Schätzung als geprüft markieren. */
+  onBestaetigen?: () => void
+  /** Nur bei Aufmerksamkeit (geschätzt/weicht-ab/offen) Badge+Aktionen zeigen —
+   *  ruhige Felder (gemessen/geprüft/optional) bleiben leer (dichtes Inv-Raster). */
+  nurBeiAufmerksamkeit?: boolean
 }
 
 const WARN_KLASSE: Record<string, string> = {
@@ -51,19 +58,23 @@ const WARN_KLASSE: Record<string, string> = {
 
 export default function AssistenzFeld({
   label, name, value, onChange, feldStatus,
-  step = '0.01', min, placeholder, hint, required, error, onBlur, containerRef,
+  step = '0.01', min, placeholder, hint, required, error, onBlur, containerRef, bestaetigt, onBestaetigen,
+  nurBeiAufmerksamkeit = false,
 }: AssistenzFeldProps) {
   const [zeigeAlternativen, setZeigeAlternativen] = useState(false)
-  const erg = ermittleZustand(value ?? '', feldStatus)
+  const erg = ermittleZustand(value ?? '', feldStatus, bestaetigt)
   const best = besterVorschlag(feldStatus?.vorschlaege)
   const hatWert = (value ?? '').trim() !== ''
+  // Ruhige Zustände (fertig/optional) → im „nur bei Aufmerksamkeit"-Modus kein Badge.
+  const istRuhig = erg.zustand === 'gemessen' || erg.zustand === 'geprueft' || erg.zustand === 'optional'
+  const zeigeZustand = !!feldStatus && !error && (!nurBeiAufmerksamkeit || !istRuhig)
 
-  // Quell-Zusatz am Badge: geschätzt → Quelle nennen; gemessen nur „(manuell)"
-  // wenn von Hand (Kanon-Wireframe: reines „gemessen" ohne Quell-Suffix).
+  // Quell-Zusatz am Badge: geschätzt → Quelle nennen; geprüft nur „(manuell)"
+  // wenn von Hand (reines „gemessen" ohne Quell-Suffix).
   const quelleLabel =
     erg.zustand === 'geschaetzt'
       ? getQuelleLabel(erg.quelle ?? '')
-      : (erg.zustand === 'gemessen' && (erg.quelle === 'manuell' || erg.quelle === 'manual'))
+      : (erg.zustand === 'geprueft' && (erg.quelle === 'manuell' || erg.quelle === 'manual'))
         ? 'manuell'
         : undefined
 
@@ -76,7 +87,11 @@ export default function AssistenzFeld({
   const platzhalter = best ? `Vorschlag: ${best.wert}` : placeholder
 
   return (
-    <div ref={containerRef}>
+    <div
+      ref={containerRef}
+      data-feld={name}
+      data-erfassung-offen={erg.zustand === 'fehlt' ? 'true' : undefined}
+    >
       <Input
         label={label}
         name={name}
@@ -93,10 +108,20 @@ export default function AssistenzFeld({
         warnung={(feldStatus?.warnungen?.length ?? 0) > 0 && !error}
       />
 
-      {/* Zustands-Zeile (nur wenn Backend-Feld bekannt und kein harter Formfehler) */}
-      {feldStatus && !error && (
+      {/* Zustands-Zeile (bei Aufmerksamkeit bzw. immer, je nach Modus) */}
+      {zeigeZustand && (
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           <ErfassungZustandBadge zustand={erg.zustand} quelleLabel={quelleLabel} />
+          {/* „✓ passt": eine Schätzung bewusst als geprüft bestätigen (ohne Wertänderung). */}
+          {erg.zustand === 'geschaetzt' && onBestaetigen && (
+            <button
+              type="button"
+              onClick={onBestaetigen}
+              className="inline-flex items-center gap-0.5 text-[11px] text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+            >
+              <Check className="w-3 h-3" /> passt
+            </button>
+          )}
           {alternativen.length > 0 && (
             <button
               type="button"
@@ -110,7 +135,8 @@ export default function AssistenzFeld({
         </div>
       )}
 
-      {/* „Weicht ab": Sensor meldet X, gespeichert Y — bewusste Übernahme. */}
+      {/* „Weicht ab": Sensor meldet X, gespeichert Y — bewusst entscheiden (§4.1):
+          Sensorwert übernehmen (→ gemessen) ODER gespeicherten behalten (→ geprüft). */}
       {erg.weichtAb && (
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-orange-600 dark:text-orange-400">
           <span>Sensor meldet {erg.weichtAb.sensorWert} · gespeichert {erg.weichtAb.gespeichert}</span>
@@ -121,6 +147,15 @@ export default function AssistenzFeld({
           >
             Sensorwert übernehmen
           </button>
+          {onBestaetigen && (
+            <button
+              type="button"
+              onClick={onBestaetigen}
+              className="inline-flex items-center gap-0.5 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+            >
+              <Check className="w-3 h-3" /> gespeicherten behalten
+            </button>
+          )}
         </div>
       )}
 
