@@ -2,13 +2,14 @@
  * InvestitionenStep - Investitionen vervollständigen im Setup-Wizard
  *
  * Slice 6 (Setup→V4-SoT): der Inline-Editor + Add-Menü sind nach
- * `../sections/` ausgelagert; Felder auf SoT (Variante B), amber-Buttons/Header
- * bleiben. Struktur/Empty-State/Grouping unverändert.
+ * `../sections/` ausgelagert; Felder auf SoT (Variante B).
+ * Paket F (2026-07-17): Aktions-Buttons auf `Button`-SoT (amber = Setup-Identitäts-
+ * Variante); Auswahl-Karten/Typ-Kacheln bleiben rohe Struktur-Elemente (ROH_INFRA).
  */
 
 import { useState, useEffect, useRef } from 'react'
 import { ArrowLeft, ArrowRight, Sun, Plus } from 'lucide-react'
-import { Alert } from '../../ui'
+import { Alert, Button } from '../../ui'
 import type { Investition, Anlage, InvestitionTyp } from '../../../types'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
 import { SetupInvestitionForm } from '../sections/SetupInvestitionForm'
@@ -87,6 +88,9 @@ export default function InvestitionenStep({
             </p>
           </div>
 
+          {/* Schnellstart-Karte + Typ-Kacheln unten: Struktur-Elemente (mehrzeilige
+              Auswahl-Karten), keine Aktions-Buttons — rohe <button> sind hier die
+              Impl (ROH_INFRA-Freigabe Gernot 2026-07-17, Paket F). */}
           {onCreateDefaultPVSystem && (
             <div className="mb-8">
               <button
@@ -156,22 +160,14 @@ export default function InvestitionenStep({
 
         {/* Footer */}
         <div className="px-6 md:px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
+          <Button type="button" variant="ghost" onClick={onBack}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
             Zurück
-          </button>
-          <button
-            type="button"
-            onClick={onNext}
-            className="inline-flex items-center gap-2 px-6 py-2.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-          >
+          </Button>
+          <Button type="button" variant="ghost" onClick={onNext}>
             Überspringen
-            <ArrowRight className="w-4 h-4" />
-          </button>
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
         </div>
       </div>
     )
@@ -248,6 +244,7 @@ export default function InvestitionenStep({
                 Weitere Komponenten hinzufügen
               </h3>
 
+              {/* Typ-Kacheln: Struktur-Elemente, rohes <button> = Impl (ROH_INFRA, s. o.) */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                 {(['speicher', 'wallbox', 'waermepumpe', 'e-auto', 'balkonkraftwerk'] as InvestitionTyp[]).map(typ => {
                   const hasType = investitionen.some(i => i.typ === typ)
@@ -299,23 +296,14 @@ export default function InvestitionenStep({
 
       {/* Footer */}
       <div className="px-6 md:px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
+        <Button type="button" variant="ghost" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Zurück
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={isLoading}
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        </Button>
+        <Button type="button" variant="amber" onClick={onNext} disabled={isLoading}>
           Weiter
-          <ArrowRight className="w-4 h-4" />
-        </button>
+          <ArrowRight className="w-4 h-4 ml-2" />
+        </Button>
       </div>
     </div>
   )

@@ -1,31 +1,30 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
+import { Button } from '../../ui'
 import type { InvestitionTyp } from '../../../types'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
 import { getDeviceIcon } from './setupInvestitionHelpers'
 
 /**
  * „Investition hinzufügen"-Dropdown im Setup-Wizard (ausgelagert aus
- * InvestitionenStep, Slice 6). Reine Aktions-Buttons (amber-Theme bleibt,
- * keine Formular-Controls).
+ * InvestitionenStep, Slice 6). Paket F (2026-07-17): Trigger = `Button`-SoT,
+ * Dropdown-Einträge bleiben rohe Menü-Struktur-Elemente (ROH_INFRA).
  */
 export function SetupInvestitionMenu({ onAdd }: { onAdd: (typ: InvestitionTyp) => void }) {
   const [showMenu, setShowMenu] = useState(false)
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setShowMenu(!showMenu)}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 font-medium rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
-      >
-        <Plus className="w-5 h-5" />
+      <Button type="button" variant="secondary" onClick={() => setShowMenu(!showMenu)} aria-expanded={showMenu}>
+        <Plus className="w-4 h-4 mr-2" />
         Investition hinzufügen
-      </button>
+      </Button>
 
       {showMenu && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+          {/* Dropdown-Einträge: Menü-Struktur-Elemente, rohes <button> = Impl
+              (ROH_INFRA-Freigabe Gernot 2026-07-17, Paket F). */}
           <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-20 py-2">
             {INVESTITION_TYP_ORDER.map(typ => (
               <button

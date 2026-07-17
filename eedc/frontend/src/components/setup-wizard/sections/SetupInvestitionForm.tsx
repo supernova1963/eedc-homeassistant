@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Trash2, ChevronDown, ChevronRight } from 'lucide-react'
-import { Input, Select, Alert, DatumFeld } from '../../ui'
+import { Button, Input, Select, Alert, DatumFeld } from '../../ui'
 import { SchalterZeile } from '../../forms/sections/SchalterZeile'
 import type { Investition } from '../../../types'
 import { PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
@@ -20,7 +20,8 @@ import { getDeviceIcon, PV_AUSRICHTUNG_OPTIONEN, BKW_AUSRICHTUNG_OPTIONEN } from
  * SetupInvestitionForm — aufklappbarer Editor EINER Investition im Setup-Wizard
  * (ausgelagert aus InvestitionenStep, Slice 6). Bewusst **reduzierter** Feldsatz
  * (Setup ≠ voller Modal-Form) + Live-Update pro Feld ([[feedback_ist_anzeigen_nur_aendern_wo_noetig]]).
- * Controls = SoT (Variante B: Felder SoT-grün, amber Header/Löschen bleiben).
+ * Controls = SoT; Paket F (2026-07-17): Lösch-Aktionen auf `Button`-SoT, nur der
+ * Aufklapp-Header bleibt rohes Struktur-Element (ROH_INFRA).
  */
 export function SetupInvestitionForm({
   investition,
@@ -53,7 +54,9 @@ export function SetupInvestitionForm({
 
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800">
-      {/* Header - klickbar zum Auf-/Zuklappen (amber-Theme bleibt) */}
+      {/* Header - klickbar zum Auf-/Zuklappen (amber-Theme bleibt). Disclosure-
+          Struktur-Element: rohes <button> = Impl (ROH_INFRA-Freigabe Gernot
+          2026-07-17, Paket F — Gattung BlockShell-Aufklapp-Kopf). */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -322,35 +325,24 @@ export function SetupInvestitionForm({
             </div>
           )}
 
-          {/* Löschen (amber/rot bleibt — Aktions-Button, kein Formular-Control) */}
+          {/* Löschen — Button-SoT; Bestätigungs-Reihe im Abbrechen-Kanon
+              [Abbrechen secondary][destruktiv danger] (D19-6). */}
           <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
             {confirmDelete ? (
               <div className="flex items-center gap-3">
                 <span className="text-sm text-red-600 dark:text-red-400">Wirklich löschen?</span>
-                <button
-                  type="button"
-                  onClick={() => { onDelete(); setConfirmDelete(false) }}
-                  className="px-3 py-1.5 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
-                >
-                  Ja, löschen
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                >
+                <Button type="button" variant="secondary" size="sm" onClick={() => setConfirmDelete(false)}>
                   Abbrechen
-                </button>
+                </Button>
+                <Button type="button" variant="danger" size="sm" onClick={() => { onDelete(); setConfirmDelete(false) }}>
+                  Ja, löschen
+                </Button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="w-4 h-4 mr-2" />
                 Investition löschen
-              </button>
+              </Button>
             )}
           </div>
         </div>

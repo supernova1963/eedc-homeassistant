@@ -1,7 +1,7 @@
 import { forwardRef, ButtonHTMLAttributes } from 'react'
 import { Loader2 } from 'lucide-react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'amber'
 type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -28,6 +28,10 @@ const variants: Record<ButtonVariant, string> = {
   secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 focus:ring-gray-500',
   danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
   ghost: 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 focus:ring-gray-500',
+  // amber: Identitäts-Variante des Erst-Setup-Gates (Setup-Wizard) — dieselbe
+  // Achse wie Stepper `akzent="amber"` (Gernot 2026-07-17). Außerhalb des
+  // Setup-Chromes nicht verwenden; Primäraktionen der App bleiben `primary`.
+  amber: 'bg-amber-500 text-white hover:bg-amber-600 focus:ring-amber-500',
 }
 
 const sizes: Record<ButtonSize, string> = {

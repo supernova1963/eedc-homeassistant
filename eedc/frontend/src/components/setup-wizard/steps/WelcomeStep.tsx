@@ -5,7 +5,8 @@
  */
 
 import { useState, useRef } from 'react'
-import { Sun, TrendingUp, PiggyBank, BarChart3, ArrowRight, Play, Loader2, Upload } from 'lucide-react'
+import { Sun, TrendingUp, PiggyBank, BarChart3, ArrowRight, Play, Upload } from 'lucide-react'
+import { Button } from '../../ui'
 import { importApi } from '../../../api'
 
 interface WelcomeStepProps {
@@ -114,13 +115,10 @@ export default function WelcomeStep({ onNext, onLoadDemo, onImportComplete }: We
 
       {/* CTA */}
       <div className="text-center space-y-3 sm:space-y-4">
-        <button
-          onClick={onNext}
-          className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-amber-600 hover:to-orange-600 transition-all"
-        >
+        <Button variant="amber" size="lg" onClick={onNext}>
           Einrichtung starten
-          <ArrowRight className="w-5 h-5" />
-        </button>
+          <ArrowRight className="w-5 h-5 ml-2" />
+        </Button>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Die Einrichtung dauert etwa 2-3 Minuten
         </p>
@@ -137,23 +135,16 @@ export default function WelcomeStep({ onNext, onLoadDemo, onImportComplete }: We
             onChange={handleFileSelect}
             className="hidden"
           />
-          <button
-            onClick={handleImportClick}
-            disabled={importLoading}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium rounded-xl hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={handleImportClick} loading={importLoading}>
             {importLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Importiere...
-              </>
+              'Importiere...'
             ) : (
               <>
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4 mr-2 max-sm:hidden" />
                 JSON-Backup importieren
               </>
             )}
-          </button>
+          </Button>
           {importError && (
             <p className="mt-2 text-sm text-red-500">{importError}</p>
           )}
@@ -171,23 +162,16 @@ export default function WelcomeStep({ onNext, onLoadDemo, onImportComplete }: We
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
               Oder erkunden Sie die App mit vorbereiteten Demo-Daten:
             </p>
-            <button
-              onClick={handleLoadDemo}
-              disabled={demoLoading}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all disabled:opacity-50"
-            >
+            <Button variant="secondary" onClick={handleLoadDemo} loading={demoLoading}>
               {demoLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Demo wird geladen...
-                </>
+                'Demo wird geladen...'
               ) : (
                 <>
-                  <Play className="w-5 h-5" />
+                  <Play className="w-4 h-4 mr-2 max-sm:hidden" />
                   Demo-Anlage laden
                 </>
               )}
-            </button>
+            </Button>
             {demoError && (
               <p className="mt-2 text-sm text-red-500">{demoError}</p>
             )}

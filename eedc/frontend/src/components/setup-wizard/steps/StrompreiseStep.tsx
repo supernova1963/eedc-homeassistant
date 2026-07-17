@@ -4,7 +4,7 @@
 
 import { useState, FormEvent } from 'react'
 import { Zap, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react'
-import { Alert, Input, DatumFeld } from '../../ui'
+import { Alert, Button, Input, DatumFeld } from '../../ui'
 import { DEFAULT_STROMPREISE, getEinspeiseverguetung } from '../../../hooks/useSetupWizard'
 import type { Anlage } from '../../../types'
 
@@ -106,7 +106,9 @@ export default function StrompreiseStep({
           <Alert type="error" className="mb-6">{displayError}</Alert>
         )}
 
-        {/* Standard-Werte Button */}
+        {/* Standard-Werte Auswahl-Karte — Struktur-Element (mehrzeilig), kein
+            Aktions-Button: rohes <button> ist hier die Impl (ROH_INFRA-Freigabe
+            Gernot 2026-07-17, Paket F). */}
         <div className="mb-6">
           <button
             type="button"
@@ -213,32 +215,21 @@ export default function StrompreiseStep({
 
       {/* Footer */}
       <div className="px-6 md:px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
+        <Button type="button" variant="ghost" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Zurück
-        </button>
+        </Button>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-500 text-white font-medium rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <Button type="submit" variant="amber" loading={isLoading}>
           {isLoading ? (
-            <>
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Speichern...
-            </>
+            'Speichern...'
           ) : (
             <>
               Weiter
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}
-        </button>
+        </Button>
       </div>
     </form>
   )

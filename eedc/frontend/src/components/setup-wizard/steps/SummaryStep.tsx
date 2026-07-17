@@ -20,8 +20,8 @@ import {
   Info,
   CloudSun,
   FileSpreadsheet,
-  Loader2,
 } from 'lucide-react'
+import { Button } from '../../ui'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../../../types'
 import type { GespeichertePrognose } from '../../../api/pvgis'
 import { fmtZahl } from '../../../lib'
@@ -240,24 +240,22 @@ export default function SummaryStep({
                     {pvgisError}
                   </p>
                 )}
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={handleFetchPvgis}
-                  disabled={isFetchingPvgis || isLoading}
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors disabled:opacity-50"
+                  loading={isFetchingPvgis}
+                  disabled={isLoading}
                 >
                   {isFetchingPvgis ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Rufe PVGIS ab...
-                    </>
+                    'Rufe PVGIS ab...'
                   ) : (
                     <>
-                      <CloudSun className="w-4 h-4" />
+                      <CloudSun className="w-4 h-4 mr-2 max-sm:hidden" />
                       PVGIS-Prognose abrufen
                     </>
                   )}
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="text-amber-600 dark:text-amber-400 text-sm">
@@ -278,23 +276,15 @@ export default function SummaryStep({
 
       {/* Footer */}
       <div className="px-6 md:px-8 py-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
+        <Button type="button" variant="ghost" onClick={onBack}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Zurück
-        </button>
+        </Button>
 
-        <button
-          type="button"
-          onClick={onComplete}
-          className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl hover:from-green-600 hover:to-emerald-600 transition-all"
-        >
-          <FileSpreadsheet className="w-5 h-5" />
+        <Button type="button" variant="primary" size="lg" onClick={onComplete}>
+          <FileSpreadsheet className="w-5 h-5 mr-2 max-sm:hidden" />
           Weiter zur Datenerfassung
-        </button>
+        </Button>
       </div>
     </div>
   )

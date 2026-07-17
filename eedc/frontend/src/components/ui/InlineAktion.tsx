@@ -35,6 +35,9 @@ const TON: Record<InlineTon, string> = {
 
 const CHIP =
   'rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+/** Chip im Auswahl-Zustand (Mehrfach-Auswahl-Pillen, z. B. Spalten-Picker). */
+const CHIP_AKTIV =
+  'rounded border border-primary-500 bg-primary-500 px-1.5 py-0.5 text-white hover:bg-primary-600'
 
 interface InlineAktionProps {
   onClick: MouseEventHandler<HTMLButtonElement>
@@ -43,12 +46,16 @@ interface InlineAktionProps {
   ton?: InlineTon
   /** Form: schlanker Textlink (Default) oder umrandeter Auswahl-Chip. */
   variant?: 'link' | 'chip'
+  /** Auswahl-Zustand (nur `variant="chip"`): gewählt = primary-gefüllt. */
+  aktiv?: boolean
   /** Textgröße: `xs` = 11 px (Default), `sm` = passt sich einer text-sm-Zeile an (Kopf-Ampel). */
   groesse?: 'xs' | 'sm'
   /** Dauerhaft unterstrichen (Hover hebt auf) — für „übernehmen"-Aktionen. */
   unterstrichen?: boolean
   /** Disclosure-Zustand für Aufklapper (setzt `aria-expanded`). */
   ariaExpanded?: boolean
+  /** Aktion gesperrt (z. B. während eines laufenden Vorgangs). */
+  disabled?: boolean
   title?: string
   className?: string
 }
@@ -58,24 +65,27 @@ export default function InlineAktion({
   children,
   ton = 'neutral',
   variant = 'link',
+  aktiv = false,
   groesse = 'xs',
   unterstrichen = false,
   ariaExpanded,
+  disabled = false,
   title,
   className = '',
 }: InlineAktionProps) {
   const base = 'inline-flex items-center gap-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-sm'
   const size = groesse === 'sm' ? 'text-sm' : 'text-[11px]'
   const look = variant === 'chip'
-    ? CHIP
+    ? (aktiv ? CHIP_AKTIV : CHIP)
     : `${TON[ton]}${unterstrichen ? ' underline hover:no-underline' : ''}`
   return (
     <button
       type="button"
       onClick={onClick}
       aria-expanded={ariaExpanded}
+      disabled={disabled}
       title={title}
-      className={`${base} ${size} ${look} ${className}`.trim()}
+      className={`${base} ${size} ${look} disabled:opacity-30 disabled:cursor-not-allowed ${className}`.trim()}
     >
       {children}
     </button>

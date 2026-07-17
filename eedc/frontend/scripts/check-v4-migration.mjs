@@ -33,10 +33,10 @@
  *    `components/{werte,prognose,repair,infothek,live,sensor-mapping,
  *    monatsabschluss,forms}/**`) + die sechs Infra-Dateien (§H-Infra).
  *
- * Bewusst NICHT im Scope (offene Verortung, PLAN §L):
- *   §L5 `components/energieprofil/EnergieprofilTageTabelle` (Verortung klären) ·
- *   §L6 `components/setup-wizard/**` (V4-Erreichbarkeit bestätigen; roh-seitig
- *   deckt `check:form-controls` select/input/textarea/label dort schon ab).
+ * §L5/§L6 GESCHLOSSEN (Paket F, 2026-07-17): `components/energieprofil/**` und
+ * `components/setup-wizard/**` sind jetzt im Sweep-Scope. Setup-Wizard auf
+ * Button-SoT gehoben (Rest = 6 Struktur-Elemente, Gernot-Freigabe → ROH_INFRA);
+ * EnergieprofilTageTabelle auf InlineAktion/Select-SoT gehoben (0 roh).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -136,6 +136,14 @@ const ROH_INFRA = new Map([
   ['src/components/prognose/PrognoseVergleichTeile.tsx', 1], // ⚠-Popover-Trigger in Zelle (Inline-Mikro-Trigger) — /#/v4/auswertungen/prognose + V3 /#/aussichten/prognosen
   ['src/components/sensor-mapping/FeldMappingInput.tsx', 4], // SensorAutocomplete-Combobox (Such-Input/Optionen/Clear-X/Strategie-Radio; Gattung DatumPicker-Impl) — Sensor-Zuordnung (haOnly)
   ['src/pages/Einrichtung.tsx', 1], // Datenquellen-Karten-Kachel (Kachel-Gattung wie DokumentationsDialog) — /#/v4/einstellungen/daten + V3 /#/einstellungen/einrichtung
+  // ── Fall-3-Freigabe „Setup-Wizard-Struktur-Elemente" (Gernot 2026-07-17, Paket F):
+  //    Aktions-Buttons sind auf Button-SoT (inkl. neuer `amber`-Identitäts-Variante);
+  //    diese Reste sind mehrzeilige Auswahl-Karten/Kacheln/Menü-Einträge/Disclosure —
+  //    rohes <button> = Impl (Gattung DokumentationsDialog/BlockShell) ─────────
+  ['src/components/setup-wizard/steps/StrompreiseStep.tsx', 1], // „Standardwerte verwenden"-Auswahl-Karte (mehrzeilig)
+  ['src/components/setup-wizard/steps/InvestitionenStep.tsx', 3], // PV-Schnellstart-Karte + 2× Typ-Kachel-Grid
+  ['src/components/setup-wizard/sections/SetupInvestitionForm.tsx', 1], // Aufklapp-Header (Disclosure, Gattung BlockShell-Kopf)
+  ['src/components/setup-wizard/sections/SetupInvestitionMenu.tsx', 1], // Dropdown-Menü-Einträge
 ])
 
 // ---------------------------------------------------------------------------
@@ -150,8 +158,10 @@ const KATALOG_TEILE = [
 ]
 /** Über die Wizard-Registry erreichbare pages/ (Teil 1 hält diese Liste synchron). */
 const REGISTRY_PAGES = [...REGISTRY_MIGRIERT, ...REGISTRY_REST]
-/** Transitive Composite-Verzeichnisse (Inventur §H). */
-const COMPOSITE_DIRS = ['werte', 'prognose', 'repair', 'infothek', 'live', 'sensor-mapping', 'monatsabschluss', 'forms']
+/** Transitive Composite-Verzeichnisse (Inventur §H; + §L5 energieprofil und
+ *  §L6 setup-wizard seit Paket F 2026-07-17 — Setup-Gate rendert VOR dem Router,
+ *  also auch unter V4/nach Flip). */
+const COMPOSITE_DIRS = ['werte', 'prognose', 'repair', 'infothek', 'live', 'sensor-mapping', 'monatsabschluss', 'forms', 'energieprofil', 'setup-wizard']
 
 function tsxFiles(dir) {
   const out = []
