@@ -29,6 +29,9 @@ from backend.services.snapshot.keys import (
     BASIS_ZAEHLER_FELDER,
     KUMULATIVE_COUNTER_FELDER,
     KUMULATIVE_ZAEHLER_FELDER,
+    extract_quellen_energy,
+    resolve_energy_ha_eid,
+    resolve_energy_snapshot_eid,
 )
 from backend.services.snapshot.writer import (
     cleanup_5min_snapshots,
@@ -67,6 +70,10 @@ __all__ = [
     "BASIS_ZAEHLER_FELDER",
     "KUMULATIVE_COUNTER_FELDER",
     "KUMULATIVE_ZAEHLER_FELDER",
+    # Datenquellen-V4 C2b — Energie-Read-Through-Resolver
+    "extract_quellen_energy",
+    "resolve_energy_ha_eid",
+    "resolve_energy_snapshot_eid",
     # Writer
     "cleanup_5min_snapshots",
     "snapshot_anlage",

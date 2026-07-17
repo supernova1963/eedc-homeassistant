@@ -12,19 +12,18 @@
  * Kacheln Infothek · Berichte · MQTT-Inbound · Import-Bündel). Status-Badges
  * (Schritt 3) und der Voll-Ausbau der neuen Kacheln (Schritt 4) folgen separat.
  */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Settings, Zap, Sun, BookOpen, FileText, Table2, Activity,
-  ClipboardCheck, Wand2, MapPin, BarChart3, Share2, Boxes, Radio,
+  ClipboardCheck, Wand2, BarChart3, Share2, Boxes,
   SlidersHorizontal, DatabaseBackup, ScrollText, Users, Plug, Wrench,
-  ArrowRight, Sparkles, Trash2,
+  ArrowRight, Sparkles, Trash2, Home, Network,
 } from 'lucide-react'
 import { FormBlock, type FormBlockFeld, type FormBlockWert } from '../components/blocks/FormBlock'
 import { Alert, Button, DestructiveActionDialog } from '../components/ui'
 import { useSelectedAnlage, useTheme } from '../hooks'
 import { importApi, type DemoDataResult } from '../api/import'
-import { liveDashboardApi, type MqttInboundStatus } from '../api/liveDashboard'
 import { StrompreiseVerwaltung } from '../pages/StrompreiseTeile'
 import { AnlagenVerwaltung } from '../pages/AnlagenTeile'
 import { MonatsdatenVerwaltung } from '../pages/MonatsdatenTeile'
@@ -35,12 +34,16 @@ import { BackupVerwaltung } from '../pages/BackupTeile'
 import { ProtokolleVerwaltung } from '../pages/ProtokolleTeile'
 import { SolarprognoseVerwaltung } from '../pages/PVGISSettingsTeile'
 import { MqttExportVerwaltung } from '../pages/HAExportSettingsTeile'
+import MqttBrokerForm from '../components/live/MqttBrokerForm'
+import HaVerbindungForm from '../components/live/HaVerbindungForm'
+import VerbindungStatusBadge from '../components/live/VerbindungStatusBadge'
+import DatenquellenZuordnung from '../components/live/DatenquellenZuordnung'
 import { CommunityTeilenSchalter, CommunityShareBlockInhalt } from '../v4/CommunityShareBlock'
 import type { WizardKey } from '../v4/EinstellungenModalHost'
 
 // ─── Katalog-Typen ────────────────────────────────────────────────────────────
 
-export type KategorieKey = 'stammdaten' | 'komponenten' | 'infothek' | 'daten' | 'integration' | 'system'
+export type KategorieKey = 'stammdaten' | 'komponenten' | 'infothek' | 'daten' | 'integration' | 'datenquellen' | 'system'
 
 export interface KategorieDef {
   key: KategorieKey
@@ -54,13 +57,20 @@ export interface KategorieDef {
  *  Investitionen) als eigener Reiter, direkt nach Stammdaten (Gernot 2026-07-02, P8);
  *  bewusst gleicher Name wie das Top-Menü „Komponenten" (Analyse), das hierher zur
  *  Bearbeitung verweist. Die Blöcke dieser Kategorie sind datengetrieben (ein Block
- *  pro Investitionstyp) — kein statischer Katalog-Eintrag (s. EinstellungenV4). */
+ *  pro Investitionstyp) — kein statischer Katalog-Eintrag (s. EinstellungenV4).
+ *  „Datenquellen" = die feld-zentrische Zuordnungs-Fläche (Datenquellen-V4 §2g, B7),
+ *  aus „Integration" herausgehoben: sie bringt eine eigene Block-Ebene pro
+ *  Investitionstyp mit und lag als Katalog-Block eine Ebene zu tief (BlockShell in
+ *  BlockShell). Eigener Zweig wie „Komponenten" (s. EinstellungenV4); der
+ *  Katalog-Eintrag bleibt für Suche/Route/Ampel bestehen. Steht NACH „Integration",
+ *  weil die Verbindungen (Broker · HA) dort die Voraussetzung der Zuordnung sind. */
 export const EINSTELLUNGEN_KATEGORIEN: KategorieDef[] = [
   { key: 'stammdaten', label: 'Stammdaten', icon: Settings },
   { key: 'komponenten', label: 'Komponenten', icon: Boxes },
   { key: 'infothek', label: 'Infothek', icon: BookOpen },
   { key: 'daten', label: 'Werkzeuge', icon: Table2 },
   { key: 'integration', label: 'Integration', icon: Plug },
+  { key: 'datenquellen', label: 'Datenquellen', icon: Network },
   { key: 'system', label: 'System', icon: Wrench },
 ]
 
@@ -260,8 +270,8 @@ function EnergieprofilPflegeInhalt() {
 }
 
 /** MQTT-Export: native V4-Verwaltung inline im Block (REST-YAML · MQTT-Discovery
- *  Publish/Remove · Sensor-Übersicht · Günstig-Schwelle, kein navigate). `haOnly` →
- *  der Eintrag ist im Standalone deaktiviert, dieser Inhalt rendert nur mit HA. */
+ *  Publish/Remove · Sensor-Übersicht · Günstig-Schwelle, kein navigate).
+ *  B7-5: nicht mehr `haOnly` — Broker kommt aus dem gemeinsamen Broker-Block. */
 function MqttExportInhalt() {
   const { selectedAnlage, selectedAnlageId, refresh } = useSelectedAnlage()
   if (selectedAnlageId == null) {
@@ -295,37 +305,6 @@ function BackupInhalt() {
       anlageId={selectedAnlageId}
       anlagenname={selectedAnlage?.anlagenname}
       onRestored={refresh}
-    />
-  )
-}
-
-/** MQTT-Inbound: Status + Cache-Zähler (1× gelesen), Einrichten öffnet im Modal. */
-function MqttInboundInhalt({ ctx }: { ctx: InhaltCtx }) {
-  const [status, setStatus] = useState<MqttInboundStatus | null>(null)
-  const [anzahlWerte, setAnzahlWerte] = useState<number | null>(null)
-  useEffect(() => {
-    let aktiv = true
-    liveDashboardApi.getMqttStatus().then((s) => { if (aktiv) setStatus(s) }).catch(() => {})
-    liveDashboardApi.getMqttValues().then((v) => { if (aktiv) setAnzahlWerte(v.werte.length) }).catch(() => {})
-    return () => { aktiv = false }
-  }, [])
-  const statusText = !status
-    ? 'wird geladen …'
-    : status.subscriber_aktiv
-      ? `verbunden${status.broker ? ` · ${status.broker}` : ''}`
-      : status.verfuegbar
-        ? (status.grund ?? 'verfügbar, kein aktiver Subscriber')
-        : (status.grund ?? 'nicht konfiguriert')
-  const punkte = [
-    `Status: ${statusText}`,
-    anzahlWerte !== null ? `Empfangene Werte im Cache: ${anzahlWerte}` : 'Empfangene Werte: —',
-  ]
-  return (
-    <StandardInhalt
-      beschreibung="Live-Werte per MQTT empfangen und eedc-Feldern zuordnen."
-      punkte={punkte}
-      aktion="Einrichten öffnen" aktionIcon={ArrowRight}
-      onAktion={() => ctx.oeffneWizard('mqtt-inbound')}
     />
   )
 }
@@ -498,17 +477,43 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   },
 
   // ── Integration (HA-only = im Standalone deaktiviert) ──
+  // Datenquellen-V4 / B1 (§2a): Verbindungs-Block ZUERST — „Verbindung" getrennt von
+  // „was darüber fließt". EIN Broker für Inbound/Gateway/Export. NICHT haOnly (der
+  // MQTT-Broker ist gerade der Standalone-Pfad, unabhängig von Home Assistant).
   {
-    id: 'sensor-mapping', name: 'Sensor-Zuordnung', icon: MapPin, kategorie: 'integration',
-    route: 'einstellungen/sensor-mapping', hilfe: 'Hilfe: Sensor-Zuordnung', haOnly: true,
-    schlagworte: ['home assistant', 'entity', 'feld', 'mapping'],
-    inhalt: (_f, ctx) => (
-      <StandardInhalt
-        beschreibung="Home-Assistant-Entities den eedc-Feldern zuordnen."
-        aktion="Assistent öffnen" aktionIcon={ArrowRight}
-        onAktion={() => ctx.oeffneWizard('sensor-mapping')}
-      />
-    ),
+    id: 'mqtt-broker', name: 'MQTT-Broker-Verbindung', icon: Plug, kategorie: 'integration',
+    route: 'einstellungen/mqtt-broker',
+    schlagworte: ['mqtt', 'broker', 'verbindung', 'host', 'port', 'benutzer', 'passwort'],
+    // Verbindung + Import-Richtung im Block-Kopf (auch zugeklappt sichtbar) —
+    // beides wird in DIESEM Block gepflegt. Der Export hat sein eigenes Badge.
+    kopfRender: () => <VerbindungStatusBadge kind="mqtt" />,
+    inhalt: () => <MqttBrokerForm />,
+  },
+  // Datenquellen-V4 / B4a (§2a): zweiter Verbindungs-Block. NICHT haOnly — im
+  // Standalone das URL/Token-Formular, in der HA-App nur Supervisor-Status. Nur
+  // Basis (einrichten/testen); HA-Sensoren als Quelle nutzbar machen = P3.
+  {
+    id: 'ha-verbindung', name: 'HA-Verbindung', icon: Home, kategorie: 'integration',
+    route: 'einstellungen/ha-verbindung',
+    schlagworte: ['home assistant', 'verbindung', 'token', 'long-lived', 'url', 'remote', 'standalone'],
+    // Aktiv/Inaktiv im Block-Kopf; HA-App/Supervisor = immer aktiv (auch ohne Token).
+    kopfRender: () => <VerbindungStatusBadge kind="ha" />,
+    inhalt: () => <HaVerbindungForm />,
+  },
+  // Datenquellen-V4 / §2g (B7): Export NACH den Verbindungs-Blöcken, Import zuletzt.
+  {
+    id: 'ha-export', name: 'MQTT-Export', icon: Share2, kategorie: 'integration',
+    route: 'einstellungen/ha-export', hilfe: 'Hilfe: MQTT-Export',
+    schlagworte: ['mqtt', 'broker', 'topic', 'sensoren', 'home assistant', 'discovery', 'yaml', 'rest'],
+    // B7-5d: eigenes Badge — jedes Badge beschreibt nur seinen eigenen Block
+    // (der Export-Toggle sitzt hier, also gehört sein Zustand auch hierher).
+    kopfRender: () => <VerbindungStatusBadge kind="mqtt-export" />,
+    // Gernot 2026-07-02: volle Export-Verwaltung inline IM Block (kein navigate).
+    // B7-5 (§2g): NICHT mehr haOnly — der Export nutzt jetzt den gemeinsamen
+    // DB-Broker (ENV nur Fallback) statt der HA-Add-on-ENV. Damit kann auch eine
+    // Standalone-Instanz ihre Sensoren an einen beliebigen Broker publizieren;
+    // die MQTT-Discovery dort ist HA-Konvention, aber kein HA-Zwang.
+    inhalt: () => <MqttExportInhalt />,
   },
   {
     id: 'ha-statistik-import', name: 'Statistik-Import', icon: BarChart3, kategorie: 'integration',
@@ -524,14 +529,6 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     ),
   },
   {
-    id: 'ha-export', name: 'MQTT-Export', icon: Share2, kategorie: 'integration',
-    route: 'einstellungen/ha-export', hilfe: 'Hilfe: MQTT-Export', haOnly: true,
-    schlagworte: ['mqtt', 'broker', 'topic', 'sensoren', 'home assistant', 'discovery', 'yaml', 'rest'],
-    // Gernot 2026-07-02: volle Export-Verwaltung inline IM Block (kein navigate).
-    // haOnly → im Standalone deaktiviert, rendert nur mit HA-Integration.
-    inhalt: () => <MqttExportInhalt />,
-  },
-  {
     id: 'import-buendel', name: 'Import-Assistenten', icon: Boxes, kategorie: 'integration',
     route: 'einstellungen/portal-import',
     weitereRouten: [
@@ -541,11 +538,23 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
     schlagworte: ['cloud', 'anker', 'ecoflow', 'csv', 'json', 'vorlage', 'connector'],
     inhalt: (_f, ctx) => <ImportBuendelInhalt ctx={ctx} />,
   },
+
+  // ── Datenquellen (eigene Kategorie, Datenquellen-V4 §2g/B7) ──
+  // Die Fläche ist datengetrieben (ein Block je Investitionstyp) und rendert im
+  // Kategorie-Zweig von EinstellungenV4 direkt — dieser Eintrag trägt nur noch
+  // Suche, Route (v3ZuV4Route-Ziel) und Status-Ampel.
   {
-    id: 'mqtt-inbound', name: 'MQTT-Inbound', icon: Radio, kategorie: 'integration',
-    route: 'einstellungen/mqtt-inbound',
-    schlagworte: ['mqtt', 'empfangen', 'inbound', 'live'],
-    inhalt: (_f, ctx) => <MqttInboundInhalt ctx={ctx} />,
+    id: 'datenquellen', name: 'Datenquellen-Zuordnung', icon: Network, kategorie: 'datenquellen',
+    route: 'einstellungen/datenquellen',
+    // B7: die Routen der aufgelösten Alt-Wizards zeigen auf die Fläche — hält die
+    // Routen-Abdeckung vollständig und führt V3-Deep-Links (v3ZuV4Route) hierher.
+    weitereRouten: ['einstellungen/sensor-mapping', 'einstellungen/mqtt-inbound'],
+    schlagworte: [
+      'datenquelle', 'zuordnung', 'feld', 'sensor', 'topic', 'mqtt', 'live', 'energie',
+      // B7: die aufgelösten Alt-Wizards bleiben über ihre Begriffe auffindbar.
+      'sensor-zuordnung', 'mapping', 'entity', 'home assistant', 'inbound', 'gateway',
+    ],
+    inhalt: () => <DatenquellenZuordnung />,
   },
 
   // ── System ──

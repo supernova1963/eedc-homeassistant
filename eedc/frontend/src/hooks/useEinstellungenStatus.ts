@@ -126,25 +126,24 @@ export function useEinstellungenStatus(): EinstellungStatusMap {
     }
   }
 
-  // ── Integration ──
-  // Sensor-Zuordnung: HA-Statistics- + Einheiten-Befunde (still = vollständig).
+  // ── Datenquellen ──
+  // Zuordnungs-Fläche (B7): erbt das Signal der aufgelösten Sensor-Zuordnung —
+  // HA-Statistics- + Einheiten-Befunde (still = vollständig).
   if (selectedAnlage && erg) {
     const s = schlimmster(erg, ['sensor_mapping_lts', 'sensor_mapping_einheit'])
-    map['sensor-mapping'] = s ? ausSchwere(s) : { status: 'ok' }
+    map.datenquellen = s ? ausSchwere(s) : { status: 'ok' }
   }
 
-  // MQTT (Export + Inbound): gemeinsamer MQTT-Inbound-Status.
+  // ── Integration ──
+  // MQTT-Export: MQTT-Inbound-Status (gemeinsamer Broker).
   if (mqtt) {
-    let mqttStatus: EinstellungStatus
     if (mqtt.subscriber_aktiv) {
-      mqttStatus = { status: 'ok' }
+      map['ha-export'] = { status: 'ok' }
     } else if (mqtt.verfuegbar) {
-      mqttStatus = { status: 'warn', hinweis: mqtt.grund ?? 'MQTT verfügbar, kein aktiver Subscriber.' }
+      map['ha-export'] = { status: 'warn', hinweis: mqtt.grund ?? 'MQTT verfügbar, kein aktiver Subscriber.' }
     } else {
-      mqttStatus = { status: 'neu', hinweis: mqtt.grund ?? 'Nicht konfiguriert.' }
+      map['ha-export'] = { status: 'neu', hinweis: mqtt.grund ?? 'Nicht konfiguriert.' }
     }
-    map['ha-export'] = mqttStatus
-    map['mqtt-inbound'] = mqttStatus
   }
 
   // ── Daten teilen ──

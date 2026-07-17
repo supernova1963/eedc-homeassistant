@@ -93,6 +93,9 @@ export interface MQTTConfigFromAddon {
   password: string  // Maskiert wenn gesetzt
   auto_publish: boolean
   publish_interval_minutes: number
+  /** Ist überhaupt ein Broker hinterlegt? `host` taugt dafür nicht — die
+   *  Auflösung liefert immer einen (Default `core-mosquitto`). */
+  broker_konfiguriert: boolean
 }
 
 export interface MQTTTestResult {
@@ -154,10 +157,22 @@ export const haApi = {
   // ===========================================================================
 
   /**
-   * MQTT-Konfiguration aus Add-on Optionen abrufen
+   * Aufgelöste MQTT-Broker-Konfiguration abrufen (B7-5: gemeinsamer Broker aus
+   * dem Broker-Block, ENV/Add-on-Optionen nur noch als Fallback).
    */
   async getMqttConfig(): Promise<MQTTConfigFromAddon> {
     return api.get<MQTTConfigFromAddon>('/ha/export/mqtt/config')
+  },
+
+  /**
+   * Automatischen Export (Auto-Publish) ein-/ausschalten — B7-5b.
+   * Wirkt sofort: der Scheduler-Job prüft die Einstellung bei jedem Lauf.
+   */
+  async setAutoPublish(enabled: boolean): Promise<{ gespeichert: boolean; enabled: boolean }> {
+    return api.post<{ gespeichert: boolean; enabled: boolean }>(
+      '/ha/export/mqtt/auto-publish',
+      { enabled },
+    )
   },
 
   /**
@@ -189,7 +204,8 @@ export const haApi = {
   },
 
   /**
-   * MQTT-Verbindung testen
+   * MQTT-Verbindung testen. Ohne `config` nimmt der Server den gemeinsamen
+   * Broker (B7-5) — der Regelfall; `config` bleibt für Ad-hoc-Tests.
    */
   async testMqtt(config?: MQTTConfig): Promise<MQTTTestResult> {
     return api.post<MQTTTestResult>('/ha/export/mqtt/test', config || {})

@@ -53,14 +53,16 @@ const REGISTRY_MIGRIERT = new Set([
   'CloudImportWizard', 'ConnectorSetupWizard', 'CsvImportWizard',
   'DataImportWizard', 'CustomImportWizard', // D0: Rest-Roh → Button-SoT (2026-07-11)
   'HAStatistikImport', // D3 (2026-07-11): host+Blocker, SoT-Controls, Fuß-Nav Overlay-fähig
-  'MqttInboundSetup', // D4 (2026-07-11): Kombi-Wizard „Live-Daten via MQTT" (Modus-Wahl → Inbound/Gateway)
   // MonatsabschlussWizard: Monatsabschluss-V4 Bündel 6 (2026-07-12) — als V4-Fläche
   // stillgelegt, Registry-Eintrag entfernt. V4 nutzt die assistierte MonatsdatenForm.
   // Die V3-Route/-Komponente bleibt bis zum Flip (nicht mehr Teil dieser Registry).
+  // MqttInboundSetup + SensorMappingWizard: Datenquellen-V4 B7 (2026-07-16) — dito als
+  // V4-Flächen stillgelegt (Registry-Einträge entfernt), V4 nutzt die feld-zentrische
+  // Datenquellen-Fläche (§2g). V3-Routen/-Komponenten bleiben bis zum Flip; dass kein
+  // V4-Code sie wieder öffnet, sichert `check:datenquellen-aufloesung`.
   // Session 4 (2026-07-11): strukturell migriert; ihr EINZIGER Roh-Rest ist ein
-  // Fall-3-Mikro-Control (SensorMapping → FeldMappingInput-Combobox · Einrichtung →
-  // Karten-Kachel), von Gernot freigegeben (→ ROH_INFRA). Damit MIGRIERT.
-  'SensorMappingWizard', // D2
+  // Fall-3-Mikro-Control (Einrichtung → Karten-Kachel), von Gernot freigegeben
+  // (→ ROH_INFRA). Damit MIGRIERT.
   'Einrichtung', // D1
 ])
 /** Rest: leer — alle Registry-Wizards sind migriert (Session 4, 2026-07-11). */

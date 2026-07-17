@@ -34,6 +34,7 @@ from backend.utils.investition_filter import aktiv_jetzt
 from backend.services.live_sensor_config import (
     normalize_to_w,
     extract_live_config,
+    extract_quellen_live,
 )
 from backend.services.live_history_service import safe_get_tages_kwh
 
@@ -52,9 +53,16 @@ class LivePowerService:
         sensor_values: dict[str, Optional[float]],
         basis_invert: dict[str, bool] | None = None,
         inv_invert_map: dict[str, dict[str, bool]] | None = None,
+        quellen_basis: dict[str, tuple] | None = None,
+        quellen_inv: dict[str, dict[str, tuple]] | None = None,
     ) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
         """
         Sammelt Werte aus HA-Sensoren und MQTT-Inbound (MQTT überschreibt HA).
+
+        `quellen_basis`/`quellen_inv` (C2a): explizite Datenquellen-Zuordnungen —
+        für Felder mit Eintrag gilt GENAU die zugeordnete Quelle (kein Merge/
+        Fallback); Felder ohne Eintrag bleiben dem heutigen Merge überlassen
+        (Read-Through, Regressionsschutz).
 
         Returns:
             (basis_values, inv_values)
@@ -66,20 +74,17 @@ class LivePowerService:
         _basis_invert = basis_invert or {}
         _inv_invert = inv_invert_map or {}
 
-        # 1. HA-Sensor-Werte (Prio 2)
+        # 1. HA-Sensor-Werte (Prio 2). Invert wird NICHT hier angewendet, sondern
+        # EINMAL am final aufgelösten Wert (Schritt 2.6) — quellen-unabhängig.
         for key, entity_id in basis_live.items():
             val = sensor_values.get(entity_id)
             if val is not None:
-                if _basis_invert.get(key):
-                    val = -val
                 basis_values[key] = val
 
         for inv_id, live in inv_live_map.items():
             for key, entity_id in live.items():
                 val = sensor_values.get(entity_id)
                 if val is not None:
-                    if _inv_invert.get(inv_id, {}).get(key):
-                        val = -val
                     if inv_id not in inv_values:
                         inv_values[inv_id] = {}
                     inv_values[inv_id][key] = val
@@ -87,6 +92,8 @@ class LivePowerService:
         # 2. MQTT-Inbound-Werte (Prio 1 — überschreibt HA)
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
         mqtt_svc = get_mqtt_inbound_service()
+        mqtt_basis: dict[str, float] = {}
+        mqtt_inv: dict[str, dict[str, float]] = {}
         if mqtt_svc and mqtt_svc.cache.has_data(anlage.id):
             mqtt_basis = mqtt_svc.cache.get_live_basis(anlage.id)
             basis_values.update(mqtt_basis)
@@ -96,6 +103,36 @@ class LivePowerService:
                 if inv_id not in inv_values:
                     inv_values[inv_id] = {}
                 inv_values[inv_id].update(values)
+
+        # 2.5 Explizite Datenquellen-Zuordnungen anwenden (C2a): pro zugeordnetem
+        # Feld GENAU die gewählte Quelle, ohne Merge/Fallback. Nur Felder mit
+        # Eintrag werden angefasst → Anlagen ohne neue Zuordnung bleiben identisch.
+        self._apply_quellen_overrides(basis_values, quellen_basis, sensor_values, mqtt_basis)
+        for inv_id, keys in (quellen_inv or {}).items():
+            d = inv_values.get(inv_id) or {}
+            self._apply_quellen_overrides(d, keys, sensor_values, mqtt_inv.get(inv_id) or {})
+            if d:
+                inv_values[inv_id] = d
+            else:
+                inv_values.pop(inv_id, None)
+
+        # 2.6 Vereinheitlichter Invert (Datenquellen-V4-SoT): Vorzeichen-Flip EINMAL
+        # am final aufgelösten Wert — quellen-unabhängig, egal ob der Wert aus HA,
+        # MQTT-Inbound oder MQTT-Gateway stammt (Gateway invertiert NICHT mehr im
+        # Republish-Transform). `_basis_invert`/`_inv_invert` kommen aus
+        # `extract_live_config` = Union(Store `sensor_mapping.invertieren`,
+        # Legacy `live_invert`). VOR dem netz_kombi-Split (Schritt 3), damit ein
+        # invertierter Kombi-Netzsensor mit korrektem Vorzeichen gesplittet wird.
+        for key in _basis_invert:
+            if basis_values.get(key) is not None:
+                basis_values[key] = -basis_values[key]
+        for inv_id, keys in _inv_invert.items():
+            d = inv_values.get(inv_id)
+            if not d:
+                continue
+            for key in keys:
+                if d.get(key) is not None:
+                    d[key] = -d[key]
 
         # 3. Kombinierten Netz-Sensor auflösen (positiv=Bezug, negativ=Einspeisung)
         netz_kombi = basis_values.pop("netz_kombi_w", None)
@@ -109,6 +146,75 @@ class LivePowerService:
 
         return basis_values, inv_values
 
+    @staticmethod
+    def _resolve_quelle_value(quelle, entity_id, sensor_values, mqtt_val):
+        """Wert der EINEN zugeordneten Quelle (C2a) — kein Fallback auf andere Quellen.
+
+        HA (ha_app/ha_connector): der (W-normalisierte) HA-State der Entity.
+        MQTT-Inbound/-Gateway: der Inbound-Cache-Wert (Gateway fließt nach dem
+        ziel_key-Fix ebenfalls durch den Inbound-Cache). „keine": None (Feld leer).
+
+        Vorzeichen-Invert ist NICHT hier — er ist quellen-unabhängig im
+        vereinheitlichten `sensor_mapping.invertieren`-Store und wird als finaler
+        Pass in `_collect_values` (Schritt 2.6) angewendet.
+        """
+        if quelle in ("ha_app", "ha_connector"):
+            return sensor_values.get(entity_id) if entity_id else None
+        if quelle in ("mqtt_inbound_standard", "mqtt_gateway"):
+            return mqtt_val
+        return None  # "keine" oder unbekannt → kein Wert
+
+    def _apply_quellen_overrides(self, values, overrides, sensor_values, mqtt_values):
+        """Setzt/entfernt je zugeordnetem Feld den Wert der gewählten Quelle (in-place).
+
+        Invert bleibt hier außen vor — er wird quellen-unabhängig im finalen Pass
+        (`_collect_values` Schritt 2.6) auf den Endwert angewendet.
+        """
+        if not overrides:
+            return
+        for key, tup in overrides.items():
+            quelle, entity_id = tup[0], tup[1]
+            val = self._resolve_quelle_value(
+                quelle, entity_id, sensor_values, mqtt_values.get(key)
+            )
+            if val is None:
+                values.pop(key, None)
+            else:
+                values[key] = val
+
+    async def _fetch_ha_states(self, db: AsyncSession, entity_ids: set) -> dict:
+        """W-normalisierte States einer Entity-Menge über die aktive HA-Verbindung.
+
+        Nutzt den zentralen `resolve_ha_connection` (Supervisor ODER Remote-HA),
+        EIN `/states`-Batch. Nur für explizit zugeordnete quellen-HA-Entities (C2a);
+        der alte sensor_mapping-Pfad bleibt Supervisor-gebunden.
+        """
+        if not entity_ids:
+            return {}
+        from backend.services.ha_connection import resolve_ha_connection
+        api_url, token, _ = await resolve_ha_connection(db)
+        if not api_url or not token:
+            return {}
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{api_url}/states", headers={"Authorization": f"Bearer {token}"})
+        except Exception:  # noqa: BLE001 — Netzwerk-/TLS-Fehler → keine Werte
+            return {}
+        if resp.status_code != 200:
+            return {}
+        out: dict = {}
+        for st in resp.json():
+            eid = st.get("entity_id")
+            if eid in entity_ids:
+                attrs = st.get("attributes", {}) or {}
+                unit = attrs.get("unit_of_measurement", "")
+                try:
+                    out[eid] = normalize_to_w(float(st.get("state")), unit)
+                except (ValueError, TypeError):
+                    out[eid] = None
+        return out
+
     async def get_live_data(self, anlage: Anlage, db: AsyncSession) -> dict:
         """
         Holt Live-Daten für eine Anlage.
@@ -118,13 +224,16 @@ class LivePowerService:
             dict mit Komponenten, Gauges, Summen und Metadaten.
         """
         basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
+        # C2a: explizite Datenquellen-Zuordnungen der Live-Felder (Read-Through).
+        quellen_basis, quellen_inv, quellen_ha = extract_quellen_live(anlage)
 
         # Prüfe ob MQTT-Daten vorliegen (auch ohne sensor_mapping)
         from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
         mqtt_svc = get_mqtt_inbound_service()
         has_mqtt = mqtt_svc and mqtt_svc.cache.has_data(anlage.id)
 
-        if not basis_live and not inv_live_map and not has_mqtt:
+        if (not basis_live and not inv_live_map and not has_mqtt
+                and not quellen_basis and not quellen_inv):
             return self._empty_response(anlage)
 
         # Investitionen aus DB laden
@@ -136,8 +245,9 @@ class LivePowerService:
         )
         investitionen = {str(inv.id): inv for inv in result.scalars().all()}
 
-        # HA-Sensor-Werte abrufen
-        all_entity_ids: set[str] = set()
+        # HA-Sensor-Werte abrufen (alte sensor_mapping-Entities + explizit
+        # zugeordnete quellen-HA-Entities).
+        all_entity_ids: set[str] = set(quellen_ha)
         for eid in basis_live.values():
             if eid:
                 all_entity_ids.add(eid)
@@ -162,10 +272,20 @@ class LivePowerService:
                 else:
                     sensor_values[entity_id] = None
 
-        # Werte aus HA + MQTT zusammenführen
+        # C2a: explizit zugeordnete HA-Entities auch OHNE Supervisor lesen
+        # (Remote-HA per LL-Token) — additiv, das Supervisor-Gate für den alten
+        # sensor_mapping-Pfad bleibt unberührt (Remote dafür = P3).
+        if quellen_ha and not HA_INTEGRATION_AVAILABLE:
+            remote = await self._fetch_ha_states(db, quellen_ha)
+            for entity_id, val in remote.items():
+                if val is not None:
+                    sensor_values[entity_id] = val
+
+        # Werte aus HA + MQTT zusammenführen (+ explizite quellen-Overrides, C2a)
         basis_values, inv_values = self._collect_values(
             anlage, basis_live, inv_live_map, sensor_values,
             basis_invert, inv_invert_map,
+            quellen_basis, quellen_inv,
         )
 
         # Komponenten + Gauges aufbauen

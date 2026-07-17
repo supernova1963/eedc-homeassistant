@@ -27,6 +27,7 @@ import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../
 import {
   useInvestitionenVerwaltung, TYP_ICON_STYLE, TypNeuButton, TypGeraeteListe,
 } from '../pages/InvestitionenTeile'
+import DatenquellenZuordnung from '../components/live/DatenquellenZuordnung'
 import { useEinstellungenStatus, type KachelStatus } from '../hooks/useEinstellungenStatus'
 import { EinstellungenModalHost, type WizardKey } from './EinstellungenModalHost'
 import { useOeffneWizard } from './wizardHost'
@@ -162,6 +163,11 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   // KEINE statischen Katalog-Einträge → eigener Zweig (nur außerhalb der Suche; die Suche
   // läuft weiter über den statischen Katalog).
   const istKomponenten = !suchModus && kategorie === 'komponenten'
+  // Kategorie „Datenquellen" (Datenquellen-V4 §2g/B7): die Fläche bringt ihre eigene
+  // Block-Ebene je Investitionstyp mit → direkt rendern statt in einen Katalog-Block
+  // zu hüllen (sonst BlockShell in BlockShell). Ihr Katalog-Eintrag bleibt für
+  // Suche/Route/Ampel; im Suchmodus rendert er wie jeder andere Treffer.
+  const istDatenquellen = !suchModus && kategorie === 'datenquellen'
   const eintraege: EinstellungEintrag[] = suchModus ? sucheEintraege(suche) : eintraegeDerKategorie(kategorie)
 
   const bloecke: Block[] = eintraege.map((e) => {
@@ -214,6 +220,8 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
         <div className="p-3 sm:p-6 pt-3 max-w-[1920px] mx-auto">
           {istKomponenten ? (
             <KomponentenEinstellungen />
+          ) : istDatenquellen ? (
+            <DatenquellenZuordnung />
           ) : bloecke.length > 0 ? (
             // D14-2: Klapp-Zustand pro Kategorie gemerkt (A3-Flüchtigkeit zurückgenommen).
             <BlockShell

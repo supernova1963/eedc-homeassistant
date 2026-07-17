@@ -56,6 +56,13 @@ from backend.services.ha_export_prognose import berechne_prognose_export
 from backend.services.ha_export_preis import berechne_preis_export
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
 from backend.services.ha_mqtt_sync import resolve_mqtt_config, publish_anlage_sensors
+from backend.services.mqtt_broker_settings import (
+    resolve_broker_config,
+    broker_aktiviert,
+    broker_konfiguriert,
+    export_aktiviert,
+    MQTT_EXPORT_SETTINGS_KEY,
+)
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
@@ -138,14 +145,23 @@ class HAYamlSnippet(BaseModel):
 
 
 class MQTTConfigResponse(BaseModel):
-    """MQTT-Konfiguration aus Add-on Optionen."""
-    enabled: bool
+    """Aufgelöste MQTT-Verbindung + Export-Richtung (B7-5/B7-5b/B7-5d)."""
+    enabled: bool  # Verbindung wird genutzt = mindestens eine Richtung an
     host: str
     port: int
     username: str
     password: str  # Wird als Maske zurückgegeben wenn gesetzt
-    auto_publish: bool
+    auto_publish: bool  # Export-Toggle (Eigenwert) — nicht mit `enabled` verundet
     publish_interval_minutes: int
+    # Ist überhaupt ein Broker hinterlegt? `host` allein taugt nicht als Antwort:
+    # die Auflösung liefert IMMER einen (Default `core-mosquitto`). Ohne Broker
+    # kann der Export nichts publizieren — die Sensoren erscheinen dann nie in HA.
+    broker_konfiguriert: bool
+
+
+class AutoPublishRequest(BaseModel):
+    """Body für den Export-Toggle (B7-5b)."""
+    enabled: bool
 
 
 # =============================================================================
@@ -1043,27 +1059,62 @@ async def calculate_investition_sensors(
 # =============================================================================
 
 @router.get("/mqtt/config", response_model=MQTTConfigResponse)
-async def get_mqtt_config():
-    """
-    Gibt die MQTT-Konfiguration aus den Add-on Optionen zurück.
+async def get_mqtt_config(db: AsyncSession = Depends(get_db)):
+    """Gibt die aufgelöste MQTT-Broker-Konfiguration zurück.
 
-    Diese Werte werden in der HA Add-on Konfiguration gesetzt und
-    können im Frontend für die MQTT-Einstellungen vorausgefüllt werden.
+    B7-5: Quelle ist jetzt der **gemeinsame Broker** (DB-Broker-Block → ENV-Fallback
+    = Add-on-Optionen), nicht mehr ENV allein — sonst zeigt der Export-Block einen
+    anderen Broker an als den, auf den er publiziert (#655-Klasse).
+
+    B7-5b: ``auto_publish`` ist der **Eigenwert des Export-Toggles** (DB → ENV),
+    bewusst NICHT mit ``enabled`` (Broker) verundet: der Switch im Block soll den
+    eigenen Zustand zeigen und nicht umspringen, wenn jemand den Broker abschaltet.
+    Die Und-Verknüpfung „darf jetzt publiziert werden" macht der Job selbst.
     """
     from backend.core.config import settings
 
+    cfg = await resolve_broker_config(db)
+
     # Passwort als Maske zurückgeben wenn gesetzt
-    password_masked = "••••••" if settings.mqtt_password else ""
+    password_masked = "••••••" if cfg.password else ""
 
     return MQTTConfigResponse(
-        enabled=settings.mqtt_enabled,
-        host=settings.mqtt_host,
-        port=settings.mqtt_port,
-        username=settings.mqtt_username,
+        enabled=await broker_aktiviert(db),
+        host=cfg.host,
+        port=cfg.port,
+        username=cfg.username or "",
         password=password_masked,
-        auto_publish=settings.mqtt_auto_publish,
+        auto_publish=await export_aktiviert(db),
         publish_interval_minutes=settings.mqtt_publish_interval,
+        broker_konfiguriert=await broker_konfiguriert(db),
     )
+
+
+@router.post("/mqtt/auto-publish")
+async def set_auto_publish(payload: AutoPublishRequest, db: AsyncSession = Depends(get_db)):
+    """Schaltet den automatischen Export (Auto-Publish) ein/aus — B7-5b.
+
+    Schreibt den DB-Settings-Key ``mqtt_export``; ENV bleibt reiner Fallback für
+    Bestandsinstallationen ohne Eintrag. Wirkt sofort — der Scheduler-Job prüft
+    die Einstellung bei jedem Lauf, ein Neustart ist nicht nötig.
+    """
+    from backend.models.settings import Settings as SettingsModel
+    from sqlalchemy.orm.attributes import flag_modified
+
+    setting = (
+        await db.execute(
+            select(SettingsModel).where(SettingsModel.key == MQTT_EXPORT_SETTINGS_KEY)
+        )
+    ).scalar_one_or_none()
+
+    if setting:
+        setting.value = {"enabled": payload.enabled}
+        flag_modified(setting, "value")
+    else:
+        db.add(SettingsModel(key=MQTT_EXPORT_SETTINGS_KEY, value={"enabled": payload.enabled}))
+    await db.commit()
+
+    return {"gespeichert": True, "enabled": payload.enabled}
 
 
 @router.get("/sensors", response_model=FullExportResponse)
@@ -1330,9 +1381,13 @@ async def get_sensor_definitions():
 # =============================================================================
 
 @router.post("/mqtt/test")
-async def test_mqtt_connection(config: Optional[MQTTConfigRequest] = None):
-    """Testet die MQTT-Verbindung zum Broker."""
-    mqtt_config = resolve_mqtt_config(
+async def test_mqtt_connection(
+    config: Optional[MQTTConfigRequest] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Testet die MQTT-Verbindung zum Broker (gemeinsamer Broker, B7-5)."""
+    mqtt_config = await resolve_broker_config(
+        db,
         config.host if config else None,
         config.port if config else None,
         config.username if config else None,
@@ -1366,8 +1421,10 @@ async def publish_sensors_mqtt(
     if not anlage:
         raise not_found("Anlage")
 
-    # Broker-Config: Override-Felder aus dem Request, sonst ENV (#655).
-    mqtt_config = resolve_mqtt_config(
+    # Broker-Config: Override-Felder aus dem Request, sonst gemeinsamer Broker
+    # (DB-Broker-Block → ENV, #655/B7-5).
+    mqtt_config = await resolve_broker_config(
+        db,
         config.host if config else None,
         config.port if config else None,
         config.username if config else None,
@@ -1430,12 +1487,15 @@ async def remove_sensors_mqtt(
     if not anlage:
         raise not_found("Anlage")
 
-    # MQTT Client konfigurieren
-    mqtt_config = MQTTConfig(
-        host=config.host if config else os.environ.get("MQTT_HOST", "core-mosquitto"),
-        port=config.port if config else int(os.environ.get("MQTT_PORT", "1883")),
-        username=config.username if config else os.environ.get("MQTT_USER"),
-        password=config.password if config else os.environ.get("MQTT_PASSWORD"),
+    # B7-5: baute den MQTTConfig bisher von Hand aus ENV und umging damit den
+    # Resolver — genau der Broker-Mismatch aus #655 (Remove traf einen anderen
+    # Broker als Publish). Jetzt der gemeinsame Weg.
+    mqtt_config = await resolve_broker_config(
+        db,
+        config.host if config else None,
+        config.port if config else None,
+        config.username if config else None,
+        config.password if config else None,
     )
 
     client = MQTTClient(mqtt_config)

@@ -34,7 +34,8 @@
     "check:park-leertest": "node scripts/park-leertest.mjs",
     "check:charts": "node scripts/check-charts.mjs",
     "check:chart-audit": "node scripts/chart-audit.mjs",
-    "check:v4-migration": "node scripts/check-v4-migration.mjs"
+    "check:v4-migration": "node scripts/check-v4-migration.mjs",
+    "check:datenquellen-aufloesung": "node scripts/check-datenquellen-aufloesung.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

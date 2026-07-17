@@ -112,15 +112,25 @@ async def delete_mqtt_cache(
 
 @router.get("/mqtt/settings")
 async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
-    """Gibt die gespeicherten MQTT-Inbound-Einstellungen zurück."""
+    """Gibt Broker-Zugangsdaten + Import-Richtung zurück.
+
+    B7-5c: `enabled` ist die **Import-Richtung** („Daten über MQTT empfangen"),
+    nicht mehr ein vermengter Verbindungs-Schalter — und kommt aus `import_aktiviert`,
+    damit die Default-Regel (HA vorhanden → Import aus) hier genauso gilt wie in
+    Engine und Fläche. Die Zugangsdaten sind richtungs-neutral: der Export nutzt
+    sie auch, wenn der Import aus ist.
+    """
+    from backend.services.mqtt_broker_settings import import_aktiviert
+
     from backend.models.settings import Settings as SettingsModel
     result = await db.execute(
         select(SettingsModel).where(SettingsModel.key == MQTT_SETTINGS_KEY)
     )
     setting = result.scalar_one_or_none()
+    enabled = await import_aktiviert(db)
     if not setting or not setting.value:
         return {
-            "enabled": settings.mqtt_enabled,
+            "enabled": enabled,
             "host": settings.mqtt_host,
             "port": settings.mqtt_port,
             "username": settings.mqtt_username,
@@ -129,7 +139,7 @@ async def get_mqtt_settings(db: AsyncSession = Depends(get_db)):
         }
     val = setting.value
     return {
-        "enabled": val.get("enabled", False),
+        "enabled": enabled,
         "host": val.get("host", "localhost"),
         "port": val.get("port", 1883),
         "username": val.get("username", ""),

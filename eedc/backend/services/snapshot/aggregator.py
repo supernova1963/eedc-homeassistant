@@ -29,6 +29,7 @@ from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     FLOAT_COUNTER_FELDER,
     _mqtt_key_to_sensor_key,
+    extract_quellen_energy,
 )
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
@@ -102,6 +103,7 @@ async def get_hourly_kwh_by_category(
         nur wenn pv, einspeisung, netzbezug alle verfügbar sind.
     """
     sensor_mapping = anlage.sensor_mapping or {}
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
 
     # 1. Zähler-Entities sammeln mit Kategorien
     # (sensor_key, entity_id | None, kategorie, fallback_gruppe)
@@ -194,7 +196,10 @@ async def get_hourly_kwh_by_category(
         snaps[sensor_key] = {}
         for offset in rng.boundary_offsets:
             ts = rng.boundary_at(offset)
-            wert = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
+            wert = await get_snapshot(
+                db, anlage.id, sensor_key, entity_id, ts,
+                quellen_energy=quellen_energy,
+            )
             snaps[sensor_key][offset] = wert
 
     # 2b. Lücken durch lineare Interpolation füllen (Issue #145).
@@ -343,6 +348,7 @@ async def get_daily_counter_deltas_by_inv(
     """
     sensor_mapping = anlage.sensor_mapping or {}
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
 
     tag_start = datetime.combine(datum, datetime.min.time())
     tag_ende = tag_start + timedelta(days=1)
@@ -365,8 +371,14 @@ async def get_daily_counter_deltas_by_inv(
                 continue
             sensor_id = config.get("sensor_id")
             sensor_key = f"inv:{inv_id_str}:{feld}"
-            snap_start = await get_snapshot(db, anlage.id, sensor_key, sensor_id, tag_start)
-            snap_ende = await get_snapshot(db, anlage.id, sensor_key, sensor_id, tag_ende)
+            snap_start = await get_snapshot(
+                db, anlage.id, sensor_key, sensor_id, tag_start,
+                quellen_energy=quellen_energy,
+            )
+            snap_ende = await get_snapshot(
+                db, anlage.id, sensor_key, sensor_id, tag_ende,
+                quellen_energy=quellen_energy,
+            )
             if snap_start is None or snap_ende is None:
                 continue
             delta_count = snap_ende - snap_start
@@ -426,14 +438,21 @@ async def get_komponenten_tageskwh(
     `heizenergie_kwh`-Mapping).
     """
     sensor_mapping = anlage.sensor_mapping or {}
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
     rng = BoundaryRange.for_day_total(datum)
     start_off, end_off = rng.boundary_offsets  # (0, 24)
     ts_start = rng.boundary_at(start_off)
     ts_ende = rng.boundary_at(end_off)
 
     async def _diff(sensor_key: str, sensor_id: Optional[str]) -> Optional[float]:
-        s0 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_start)
-        s1 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_ende)
+        s0 = await get_snapshot(
+            db, anlage.id, sensor_key, sensor_id, ts_start,
+            quellen_energy=quellen_energy,
+        )
+        s1 = await get_snapshot(
+            db, anlage.id, sensor_key, sensor_id, ts_ende,
+            quellen_energy=quellen_energy,
+        )
         if s0 is None or s1 is None:
             return None
         d = s1 - s0
@@ -524,14 +543,21 @@ async def get_tagesdetail_kwh(
     """
     sensor_mapping = anlage.sensor_mapping or {}
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
     rng = BoundaryRange.for_day_total(datum)
     start_off, end_off = rng.boundary_offsets  # (0, 24)
     ts_start = rng.boundary_at(start_off)
     ts_ende = rng.boundary_at(end_off)
 
     async def _diff(sensor_key: str, sensor_id: Optional[str]) -> Optional[float]:
-        s0 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_start)
-        s1 = await get_snapshot(db, anlage.id, sensor_key, sensor_id, ts_ende)
+        s0 = await get_snapshot(
+            db, anlage.id, sensor_key, sensor_id, ts_start,
+            quellen_energy=quellen_energy,
+        )
+        s1 = await get_snapshot(
+            db, anlage.id, sensor_key, sensor_id, ts_ende,
+            quellen_energy=quellen_energy,
+        )
         if s0 is None or s1 is None:
             return None
         d = s1 - s0
@@ -621,6 +647,7 @@ async def get_hourly_counter_sum_by_feld(
     """
     sensor_mapping = anlage.sensor_mapping or {}
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through
 
     relevant_invs: list[tuple[str, Optional[str]]] = []  # (sensor_key, sensor_id)
     for inv_id_str, inv_data in investitionen_map.items():
@@ -647,7 +674,10 @@ async def get_hourly_counter_sum_by_feld(
         snaps: dict[int, Optional[float]] = {}
         for offset in rng.boundary_offsets:
             ts = rng.boundary_at(offset)
-            snaps[offset] = await get_snapshot(db, anlage.id, sensor_key, entity_id, ts)
+            snaps[offset] = await get_snapshot(
+                db, anlage.id, sensor_key, entity_id, ts,
+                quellen_energy=quellen_energy,
+            )
         snaps_per_inv[sensor_key] = snaps
 
     # Plausibilitäts-Cap pro Stunde: Counter wie WP-Kompressor-Starts haben

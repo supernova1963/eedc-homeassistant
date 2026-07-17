@@ -87,26 +87,27 @@ class EEDCScheduler:
             # Connector-Bridge (beide in main.py darin verschachtelt), daher
             # erfasst dieser Schalter alle MQTT-Pfade inkl. Standalone/Connectoren.
 
-            # MQTT Auto-Publish: läuft automatisch mit, sobald der MQTT-Export
-            # aktiviert ist (mqtt.enabled) — die separate Option mqtt.auto_publish
-            # bleibt als Schalter für env-Setups ohne MQTT_ENABLED gültig.
-            # M-B-Entscheid Gernot 2026-06-10: Default-aus-Auto-Publish führte
-            # dazu, dass Export-Sensoren nur beim manuellen Klick aktualisierten.
+            # MQTT Auto-Publish: Job wird IMMER registriert, der Aktiv-Check läuft
+            # IM Job (`auto_publish_aktiv` = Broker-Toggle UND Export-Toggle).
+            # B7-5b: Der Export-Toggle liegt seit Datenquellen-V4 in der DB, der
+            # Scheduler startet aber nur beim Boot — hinge die Registrierung an der
+            # Einstellung, wirkte der Schalter erst nach einem Neustart.
+            # M-B-Entscheid Gernot 2026-06-10 („Export an ⇒ Auto-Publish an") lebt
+            # im ENV-Fallback von `export_aktiviert` weiter (Bestandsschutz).
             from backend.core.config import settings as app_settings
-            if app_settings.mqtt_auto_publish or app_settings.mqtt_enabled:
-                interval = max(5, app_settings.mqtt_publish_interval)  # Minimum 5 Minuten
-                self._scheduler.add_job(
-                    mqtt_auto_publish_job,
-                    IntervalTrigger(minutes=interval),
-                    id="mqtt_auto_publish",
-                    name=f"MQTT Auto-Publish (alle {interval} Min)",
-                    replace_existing=True,
-                    # Start-Publish: IntervalTrigger feuert sonst erst nach einem
-                    # vollen Intervall — neue Sensor-Definitionen wären nach einem
-                    # Add-on-Update bis zu 60 min unsichtbar (Rainer/Gernot 2026-06-10).
-                    next_run_time=datetime.now() + timedelta(minutes=2),
-                )
-                logger.info(f"MQTT Auto-Publish aktiviert: alle {interval} Minuten")
+            interval = max(5, app_settings.mqtt_publish_interval)  # Minimum 5 Minuten
+            self._scheduler.add_job(
+                mqtt_auto_publish_job,
+                IntervalTrigger(minutes=interval),
+                id="mqtt_auto_publish",
+                name=f"MQTT Auto-Publish (alle {interval} Min)",
+                replace_existing=True,
+                # Start-Publish: IntervalTrigger feuert sonst erst nach einem
+                # vollen Intervall — neue Sensor-Definitionen wären nach einem
+                # Add-on-Update bis zu 60 min unsichtbar (Rainer/Gernot 2026-06-10).
+                next_run_time=datetime.now() + timedelta(minutes=2),
+            )
+            logger.info(f"MQTT Auto-Publish registriert: alle {interval} Minuten (Aktiv-Check je Lauf)")
 
             # Sensor-Snapshots: Stündlich 5 Min nach voller Stunde (Issue #135)
             # Liest kumulative kWh-Zählerstände aus HA Statistics in sensor_snapshots.
@@ -928,13 +929,16 @@ async def mqtt_auto_publish_job() -> None:
     """
     Publiziert EEDC-KPIs für alle Anlagen via MQTT nach Home Assistant.
 
-    Wird periodisch ausgeführt wenn MQTT_AUTO_PUBLISH=true gesetzt ist.
+    Der Job ist immer registriert und prüft bei JEDEM Lauf selbst, ob er laufen
+    darf (B7-5b): Broker-Verbindung aktiviert UND Export-Toggle an. Nur so wirkt
+    der DB-Toggle sofort statt erst nach einem Neustart.
     Interval: MQTT_PUBLISH_INTERVAL Minuten (Default: 60).
     """
     try:
         from backend.core.database import get_session
         from backend.models.anlage import Anlage
         from backend.services.ha_mqtt_sync import publish_anlage_sensors
+        from backend.services.mqtt_broker_settings import auto_publish_aktiv
         from sqlalchemy import select
 
         published_total = 0
@@ -943,6 +947,10 @@ async def mqtt_auto_publish_job() -> None:
         fehler_beispiele: list[str] = []
 
         async with get_session() as db:
+            if not await auto_publish_aktiv(db):
+                logger.debug("MQTT Auto-Publish übersprungen: Broker oder Export deaktiviert")
+                return
+
             result = await db.execute(select(Anlage))
             anlagen = result.scalars().all()
 

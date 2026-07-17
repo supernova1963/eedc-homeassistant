@@ -337,20 +337,12 @@ class SensorChecks:
         → Fehlalarm-Risiko). Deterministisch + zeitunabhängig (HA-Einheit statt
         Live-Werte).
         """
-        from backend.core.field_definitions import FELD_EINHEITEN, FELD_LABELS
+        from backend.core.field_definitions import (
+            FELD_EINHEITEN, FELD_LABELS, einheit_klasse as _klasse,
+        )
         from backend.services.live_sensor_config import extract_live_config
 
         kat = CheckKategorie.SENSOR_MAPPING_EINHEIT
-
-        _POWER = {"W", "kW", "MW"}
-        _ENERGY = {"kWh", "Wh", "MWh"}
-
-        def _klasse(unit: Optional[str]) -> Optional[str]:
-            if unit in _POWER:
-                return "leistung"
-            if unit in _ENERGY:
-                return "energie"
-            return None
 
         mapping = anlage.sensor_mapping or {}
         inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}

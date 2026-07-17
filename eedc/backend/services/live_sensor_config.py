@@ -245,6 +245,8 @@ def extract_live_config(anlage: Anlage) -> tuple[
     basis = mapping.get("basis", {})
     if isinstance(basis.get("live"), dict):
         basis_live = {k: v for k, v in basis["live"].items() if v}
+    # Legacy-Invert (`basis.live_invert`) — wird unten mit dem vereinheitlichten
+    # Store (`sensor_mapping.invertieren`) vereinigt (Datenquellen-V4-Invert-SoT).
     if isinstance(basis.get("live_invert"), dict):
         basis_invert = {k: v for k, v in basis["live_invert"].items() if v}
 
@@ -257,6 +259,24 @@ def extract_live_config(anlage: Anlage) -> tuple[
             invert = {k: v for k, v in inv_data["live_invert"].items() if v}
             if invert:
                 inv_invert_map[inv_id] = invert
+
+    # Vereinheitlichter Invert-Store (Datenquellen-V4): `sensor_mapping.invertieren`
+    # = {field_id: true}, feld-/wert-level und QUELLEN-UNABHÄNGIG. EINE Wahrheit für
+    # ALLE Consumer (Live-Power finaler Pass + apply_invert_to_history in
+    # tagesverlauf/verbrauchsprofil/history). Union mit dem Legacy-`live_invert`
+    # oben (defensiv für noch nicht migrierte Installationen; Invert ist idempotent
+    # boolesch → Union appliziert genau einmal). Nur W-/Live-Felder (`*_live_*`).
+    invert_store = mapping.get("invertieren")
+    if isinstance(invert_store, dict):
+        for field_id, flag in invert_store.items():
+            if not flag or not isinstance(field_id, str):
+                continue
+            if field_id.startswith("basis_live_"):
+                basis_invert[field_id[len("basis_live_"):]] = True
+            elif field_id.startswith("inv_live_"):
+                inv_id, sep, key = field_id[len("inv_live_"):].partition("_")
+                if sep and inv_id.isdigit() and key:
+                    inv_invert_map.setdefault(inv_id, {})[key] = True
 
     # Fallback: altes live_sensors-Dict (Migration)
     if not basis_live and not inv_live_map:
@@ -274,3 +294,58 @@ def extract_live_config(anlage: Anlage) -> tuple[
                 )
 
     return basis_live, inv_live_map, basis_invert, inv_invert_map
+
+
+def extract_quellen_live(anlage: Anlage) -> tuple[
+    dict[str, tuple], dict[str, dict[str, tuple]], set[str],
+]:
+    """Explizite Datenquellen-Zuordnungen (`quellen`-Map) der LIVE-Felder (C2a).
+
+    Read-Through-Resolver-Eingabe: NUR Felder mit ausdrücklichem `quellen`-Eintrag;
+    Felder ohne Eintrag bleiben dem heutigen Merge überlassen (Regressionsschutz).
+    Energie-Felder (`basis_energy_*`/`inv_energy_*`) werden hier ignoriert (C2b).
+
+    Returns:
+        (basis_overrides, inv_overrides, ha_entities)
+        basis_overrides: {live_key: (quelle, entity_id|None, invertieren)}
+        inv_overrides:   {inv_id: {live_key: (quelle, entity_id|None, invertieren)}}
+        ha_entities:     set der HA-Entity-IDs, die für ha_app/ha_connector zu lesen sind
+
+    `invertieren` (Datenquellen-V4-Invert-Modell): Per-Feld-Vorzeichen-Flip als
+    Eigenschaft der Quellen-Zuordnung. Wird am Read (HA/Inbound) angewendet; beim
+    Gateway lebt der Sign im Republish-Transform (`mqtt_gateway_mappings`) → hier
+    für Gateway-Felder bewusst False, kein Doppel-Invert.
+    """
+    mapping = anlage.sensor_mapping or {}
+    quellen = mapping.get("quellen") if isinstance(mapping, dict) else None
+    basis_ov: dict[str, tuple] = {}
+    inv_ov: dict[str, dict[str, tuple]] = {}
+    ha_entities: set[str] = set()
+    if not isinstance(quellen, dict):
+        return basis_ov, inv_ov, ha_entities
+
+    for field_id, entry in quellen.items():
+        if not isinstance(entry, dict):
+            continue
+        quelle = entry.get("quelle")
+        entity_id = entry.get("entity_id")
+        # Invert ist NICHT mehr quellen-gekoppelt (Datenquellen-V4): das Vorzeichen
+        # lebt im vereinheitlichten `sensor_mapping.invertieren`-Store und wird als
+        # finaler Pass in `_collect_values` angewendet (einmal, quellen-unabhängig).
+        # Der 3-Tuple-Slot bleibt zur Kompatibilität, trägt aber konstant False.
+        invertieren = False
+        if isinstance(field_id, str) and field_id.startswith("basis_live_"):
+            key = field_id[len("basis_live_"):]
+            basis_ov[key] = (quelle, entity_id, invertieren)
+        elif isinstance(field_id, str) and field_id.startswith("inv_live_"):
+            rest = field_id[len("inv_live_"):]
+            inv_id, sep, key = rest.partition("_")
+            if not sep or not inv_id.isdigit() or not key:
+                continue
+            inv_ov.setdefault(inv_id, {})[key] = (quelle, entity_id, invertieren)
+        else:
+            continue  # Energie-Felder → C2b
+        if quelle in ("ha_app", "ha_connector") and entity_id:
+            ha_entities.add(entity_id)
+
+    return basis_ov, inv_ov, ha_entities

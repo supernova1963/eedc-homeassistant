@@ -105,10 +105,7 @@ async def test_mqtt_auto_publish_job_feuert_zeitnah_nach_boot(monkeypatch):
     Intervall-Default."""
     from datetime import datetime, timedelta
 
-    from backend.core.config import settings as app_settings
     from backend.services.scheduler import EEDCScheduler
-
-    monkeypatch.setattr(app_settings, "mqtt_auto_publish", True, raising=False)
 
     scheduler = EEDCScheduler()
     assert scheduler.start(), "Scheduler-Start fehlgeschlagen (APScheduler fehlt?)"
@@ -123,21 +120,12 @@ async def test_mqtt_auto_publish_job_feuert_zeitnah_nach_boot(monkeypatch):
         scheduler._scheduler.shutdown(wait=False)
 
 
-async def test_mqtt_export_aktiviert_impliziert_auto_publish(monkeypatch):
-    """M-B (Gernot 2026-06-10): Wer den MQTT-Export einschaltet (mqtt.enabled),
-    bekommt Auto-Publish automatisch — die separate Default-aus-Option
-    mqtt.auto_publish war die Ursache für „Sensoren aktualisieren nur per Klick"."""
-    from backend.core.config import settings as app_settings
-    from backend.services.scheduler import EEDCScheduler
-
-    monkeypatch.setattr(app_settings, "mqtt_auto_publish", False, raising=False)
-    monkeypatch.setattr(app_settings, "mqtt_enabled", True, raising=False)
-
-    scheduler = EEDCScheduler()
-    assert scheduler.start()
-    try:
-        assert scheduler._scheduler.get_job("mqtt_auto_publish") is not None, (
-            "mqtt.enabled=true muss den Auto-Publish-Job registrieren"
-        )
-    finally:
-        scheduler._scheduler.shutdown(wait=False)
+# M-B (Gernot 2026-06-10) „mqtt.enabled=true ⇒ Auto-Publish an" wurde hier früher
+# über die Job-REGISTRIERUNG gepinnt. Seit B7-5b registriert der Scheduler den Job
+# unbedingt und entscheidet zur Laufzeit (sonst wirkte der neue DB-Toggle erst nach
+# einem Neustart) — der Test wäre an dieser Stelle grün geblieben, selbst wenn die
+# Implikation komplett bräche. Der Pin ist deshalb dorthin umgezogen, wo die Regel
+# jetzt wohnt (ENV-Fallback von `export_aktiviert`):
+#   backend/tests/test_mqtt_export_toggle_b7_5b.py
+#     ::test_ohne_db_eintrag_mqtt_enabled_impliziert_export  (Regel)
+#     ::test_job_immer_registriert_auch_ohne_env             (neuer Registrierungs-Kontrakt)

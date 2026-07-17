@@ -110,6 +110,111 @@ def _is_kumulativ_feld(feld_name: str) -> bool:
     return feld_name in alle
 
 
+# ─── Datenquellen-V4 C2b: feld-zentrische Quellen-Zuordnung (Energie-Pfad) ───
+#
+# Read-Through-Resolver für den kWh-/Snapshot-Pfad, analog zum Live-W-Resolver
+# (`live_sensor_config.extract_quellen_live`, C2a). Eine explizite `quellen`-
+# Zuordnung eines ENERGIE-Feldes gilt; ohne Eintrag bleibt das heutige,
+# modus-basierte Verhalten UNVERÄNDERT (Regressionsschutz, keine erzwungene
+# Migration, keine stille MQTT↔HA-Prioritäts-Umkehr). SoT-Konzept §2b1/§2d.
+
+QUELLE_HA_ENERGY = ("ha_app", "ha_connector")
+QUELLE_MQTT_ENERGY = ("mqtt_inbound_standard", "mqtt_gateway")
+QUELLE_KEINE_ENERGY = "keine"
+
+
+def _energy_field_id_to_sensor_key(field_id: str) -> Optional[str]:
+    """`quellen`-Feld-ID (`basis_energy_*`/`inv_energy_{id}_{feld}`) → sensor_key.
+
+    Nutzt die bestehende Key-Übersetzungs-SoT `_mqtt_key_to_sensor_key`, damit
+    kein zweites Mapping driftet: `basis_energy_einspeisung_kwh` → (mqtt
+    `einspeisung_kwh`) → `basis:einspeisung`; `inv_energy_2_pv_erzeugung_kwh` →
+    (mqtt `inv/2/pv_erzeugung_kwh`) → `inv:2:pv_erzeugung_kwh`. Felder ohne
+    Snapshot-Counterpart (z. B. `basis_energy_pv_gesamt_kwh` — PV läuft pro
+    Investition) liefern None und werden ignoriert.
+    """
+    if field_id.startswith("basis_energy_"):
+        return _mqtt_key_to_sensor_key(field_id[len("basis_energy_"):])
+    if field_id.startswith("inv_energy_"):
+        rest = field_id[len("inv_energy_"):]
+        inv_id, sep, feld = rest.partition("_")
+        if sep and inv_id.isdigit() and feld:
+            return _mqtt_key_to_sensor_key(f"inv/{inv_id}/{feld}")
+    return None
+
+
+def extract_quellen_energy(anlage) -> dict[str, tuple[Optional[str], Optional[str]]]:
+    """Explizite Datenquellen-Zuordnungen (`quellen`-Map) der ENERGIE-Felder (C2b).
+
+    Read-Through-Resolver-Eingabe: NUR Energie-Felder mit ausdrücklichem
+    `quellen`-Eintrag; Live-Felder (`basis_live_*`/`inv_live_*`) gehören zu C2a
+    und werden hier ignoriert.
+
+    Returns:
+        {sensor_key: (quelle, entity_id|None)} — z. B.
+        {"basis:einspeisung": ("ha_connector", "sensor.zaehler"),
+         "inv:2:pv_erzeugung_kwh": ("mqtt_inbound_standard", None),
+         "inv:5:ladung_kwh": ("keine", None)}
+    """
+    mapping = anlage.sensor_mapping or {}
+    quellen = mapping.get("quellen") if isinstance(mapping, dict) else None
+    out: dict[str, tuple[Optional[str], Optional[str]]] = {}
+    if not isinstance(quellen, dict):
+        return out
+    for field_id, entry in quellen.items():
+        if not isinstance(field_id, str) or not isinstance(entry, dict):
+            continue
+        sk = _energy_field_id_to_sensor_key(field_id)
+        if sk is None:
+            continue
+        out[sk] = (entry.get("quelle"), entry.get("entity_id"))
+    return out
+
+
+def resolve_energy_snapshot_eid(
+    quellen_energy: dict[str, tuple[Optional[str], Optional[str]]],
+    sensor_key: str,
+    raw_eid: Optional[str],
+) -> tuple[Optional[str], bool]:
+    """Read-Through für den SNAPSHOT-Pfad (Writer + `get_snapshot`).
+
+    Returns `(effektive_entity_id, behalten)`:
+      - kein `quellen`-Eintrag → `(raw_eid, True)` (heutiges Verhalten, bitgleich)
+      - HA-Quelle → `(entity_id, True)` (Self-Heal/Write gegen zugeordnete Entity)
+      - MQTT-Quelle → `(None, True)` (kein HA-Read; MQTT-Fallback via sensor_key)
+      - keine → `(None, False)` (kein Wert, strikt kein Fallback)
+    """
+    if sensor_key not in quellen_energy:
+        return raw_eid, True
+    quelle, entity = quellen_energy[sensor_key]
+    if quelle in QUELLE_HA_ENERGY:
+        return entity, True
+    if quelle in QUELLE_MQTT_ENERGY:
+        return None, True
+    return None, False  # keine
+
+
+def resolve_energy_ha_eid(
+    quellen_energy: dict[str, tuple[Optional[str], Optional[str]]],
+    sensor_key: str,
+    raw_eid: Optional[str],
+) -> tuple[Optional[str], bool]:
+    """Read-Through für reine HA-Pfade ohne MQTT-Fallback (LTS-direkt, Preview).
+
+    Returns `(effektive_entity_id, behalten)`:
+      - kein `quellen`-Eintrag → `(raw_eid, True)` (heutiges Verhalten)
+      - HA-Quelle → `(entity_id, True)`
+      - MQTT- oder keine-Quelle → `(None, False)` (HA-Pfad liest das Feld nicht;
+        der Wert kommt aus dem MQTT-/Snapshot-Pfad bzw. gar nicht)
+    """
+    if sensor_key not in quellen_energy:
+        return raw_eid, True
+    quelle, entity = quellen_energy[sensor_key]
+    if quelle in QUELLE_HA_ENERGY:
+        return entity, True
+    return None, False  # mqtt oder keine → HA-Pfad überspringt
+
+
 def _categorize_counter(
     feld: str,
     inv_typ: Optional[str],

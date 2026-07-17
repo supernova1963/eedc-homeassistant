@@ -4,8 +4,9 @@
  *
  * EINE Code-Wahrheit für IST (`pages/HAExportSettings.tsx`, dünner Komposer) und
  * IA-V4 (Einstellungen-Katalog-Block „MQTT-Export", inline wie Strompreise/
- * Solarprognose — Gernot 2026-07-01). `haOnly` → im Standalone deaktiviert; der
- * V4-Block rendert nur mit HA-Integration. Der Aufrufer reicht die bereits
+ * Solarprognose — Gernot 2026-07-01). B7-5: der Broker kommt aus dem gemeinsamen
+ * Broker-Block (DB → ENV-Fallback), nicht mehr aus eigenen Feldern → der Block ist
+ * NICHT mehr `haOnly` und läuft auch standalone. Der Aufrufer reicht die bereits
  * aufgelöste `anlageId` (+ die `anlage` für die Günstig-Schwelle), im Mehr-Anlagen-
  * Fall einen `kopfZusatz` (Anlage-Auswahl) und `onAnlageUpdated` (Refresh nach dem
  * Speichern der Günstig-Schwelle). Sensor-Werte bleiben `toLocaleString('de-DE',
@@ -65,7 +66,8 @@ import {
   mdiHelpCircleOutline
 } from '@mdi/js'
 import { haApi, anlagenApi } from '../api'
-import { Button, Input, SegmentControl } from '../components/ui'
+import { Button, Input, SegmentControl, Switch } from '../components/ui'
+import { VERBINDUNG_GEAENDERT_EVENT } from '../api/datenquellen'
 
 const MDI_ICON_MAP: Record<string, string> = {
   'mdi:solar-power': mdiSolarPower,
@@ -132,17 +134,19 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // MQTT State - wird aus Add-on Config geladen
+  // MQTT State — B7-5: nur noch die AUFGELÖSTE Broker-Config zur Anzeige
+  // (gepflegt wird sie im Broker-Block). Die vier Eingabe-States sind entfallen.
   const [mqttConfig, setMqttConfig] = useState<MQTTConfigFromAddon | null>(null)
-  const [mqttHost, setMqttHost] = useState('core-mosquitto')
-  const [mqttPort, setMqttPort] = useState(1883)
-  const [mqttUser, setMqttUser] = useState('')
-  const [mqttPassword, setMqttPassword] = useState('')
   const [mqttTestResult, setMqttTestResult] = useState<MQTTTestResult | null>(null)
   const [mqttPublishResult, setMqttPublishResult] = useState<MQTTPublishResult | null>(null)
   const [mqttTesting, setMqttTesting] = useState(false)
   const [mqttPublishing, setMqttPublishing] = useState(false)
   const [mqttRemoving, setMqttRemoving] = useState(false)
+  // B7-5b: Export-Richtung als DB-Toggle (vorher nur per ENV/Add-on-Option, für
+  // Standalone gar nicht erreichbar). Schaltet ausschließlich den Auto-Publish —
+  // die Aktions-Buttons darunter bleiben bewusst immer nutzbar.
+  const [autoPublishSaving, setAutoPublishSaving] = useState(false)
+  const [autoPublishFehler, setAutoPublishFehler] = useState<string | null>(null)
 
   // Günstig-Schwelle der Börsenpreis-Sensoren (pro Anlage, % unter Ø ohne 3 Peaks)
   const [guenstigProzent, setGuenstigProzent] = useState<string>('10')
@@ -167,14 +171,8 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
 
       setExportData(exportDataResult)
 
-      // MQTT-Config aus Add-on Optionen laden
-      if (mqttConfigResult) {
-        setMqttConfig(mqttConfigResult)
-        setMqttHost(mqttConfigResult.host)
-        setMqttPort(mqttConfigResult.port)
-        setMqttUser(mqttConfigResult.username)
-        // Passwort nicht übernehmen (ist maskiert), Benutzer muss es neu eingeben
-      }
+      // Aufgelöste Broker-Config (DB-Broker-Block → ENV) — nur zur Anzeige.
+      if (mqttConfigResult) setMqttConfig(mqttConfigResult)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden')
     } finally {
@@ -239,16 +237,32 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
   }
 
   // MQTT Verbindung testen
+  /** B7-5b: Export-Richtung schalten. Optimistisch anzeigen, bei Fehler zurück —
+   *  und das Status-Badge im Block-Kopf über das Verbindungs-Event mitziehen. */
+  const setzeAutoPublish = async (enabled: boolean) => {
+    if (!mqttConfig) return
+    const vorher = mqttConfig.auto_publish
+    setMqttConfig({ ...mqttConfig, auto_publish: enabled })
+    setAutoPublishSaving(true)
+    setAutoPublishFehler(null)
+    try {
+      await haApi.setAutoPublish(enabled)
+      window.dispatchEvent(new CustomEvent(VERBINDUNG_GEAENDERT_EVENT))
+    } catch (e) {
+      setMqttConfig({ ...mqttConfig, auto_publish: vorher })
+      setAutoPublishFehler(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
+    } finally {
+      setAutoPublishSaving(false)
+    }
+  }
+
   const testMqttConnection = async () => {
     setMqttTesting(true)
     setMqttTestResult(null)
     try {
-      const result = await haApi.testMqtt({
-        host: mqttHost,
-        port: mqttPort,
-        username: mqttUser || undefined,
-        password: mqttPassword || undefined
-      })
+      // B7-5: ohne Config-Body — der Server nimmt den gemeinsamen Broker
+      // (Broker-Block → ENV-Fallback). Kein zweiter Broker-Zustand im Frontend.
+      const result = await haApi.testMqtt()
       setMqttTestResult(result)
     } catch (e) {
       setMqttTestResult({
@@ -266,12 +280,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
     setMqttPublishing(true)
     setMqttPublishResult(null)
     try {
-      const result = await haApi.publishMqtt(anlageId, {
-        host: mqttHost,
-        port: mqttPort,
-        username: mqttUser || undefined,
-        password: mqttPassword || undefined
-      })
+      const result = await haApi.publishMqtt(anlageId)
       setMqttPublishResult(result)
     } catch (e) {
       setMqttPublishResult({
@@ -293,12 +302,7 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
 
     setMqttRemoving(true)
     try {
-      await haApi.removeMqtt(anlageId, {
-        host: mqttHost,
-        port: mqttPort,
-        username: mqttUser || undefined,
-        password: mqttPassword || undefined
-      })
+      await haApi.removeMqtt(anlageId)
       setMqttPublishResult(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Entfernen')
@@ -524,55 +528,64 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
       {/* MQTT Tab */}
       {activeTab === 'mqtt' && (
         <div className="space-y-6">
-          {/* MQTT Konfiguration */}
+          {/* MQTT-Broker — B7-5 (Datenquellen-V4 §2g): EIN Broker für Inbound,
+              Gateway und Export. Die Verbindung wird ausschließlich im Block
+              „MQTT-Broker-Verbindung" gepflegt; hier nur noch die Anzeige, wohin
+              exportiert wird. Vorher standen hier vier eigene Felder — zwei
+              Wahrheiten über denselben Broker (#655-Mismatch-Klasse). */}
           <div className="card p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                MQTT-Broker Konfiguration
+                MQTT-Broker
               </h2>
-              {mqttConfig && (
-                <span className="text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded">
-                  Aus App-Optionen geladen
-                </span>
+              <a
+                href="#/v4/einstellungen/integration"
+                className="text-xs text-primary-700 dark:text-primary-300 hover:underline"
+              >
+                Verbindung bearbeiten
+              </a>
+            </div>
+
+            <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+              {mqttConfig ? (
+                <>
+                  Export geht an{' '}
+                  <code className="text-xs text-gray-700 dark:text-gray-300">
+                    {mqttConfig.host}:{mqttConfig.port}
+                  </code>
+                  {mqttConfig.username ? <> als <code className="text-xs">{mqttConfig.username}</code></> : null}
+                  {' '}— dieselbe Verbindung, über die eedc auch Daten empfängt.
+                </>
+              ) : (
+                'Broker-Verbindung wird geladen …'
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <Input
-                  type="text"
-                  label="Host"
-                  value={mqttHost}
-                  onChange={(e) => setMqttHost(e.target.value)}
-                  placeholder="core-mosquitto"
-                  hint="Bei HA-App: core-mosquitto"
-                />
+            {/* Export-Richtung (B7-5b/B7-5c): eine Verbindung, zwei UNABHÄNGIGE
+                Richtungen (§2g). Der Toggle schaltet NUR den automatischen
+                Publish — die Aktionen unten bleiben Nutzer-Sache, „Sensoren
+                entfernen" braucht man gerade nach dem Abschalten.
+                Bewusst KEIN Hinweis „Broker deaktiviert → nichts wird publiziert":
+                der Export hängt nicht am Import-Schalter, sonst wäre „nur Export"
+                (= Default der HA App) tot. */}
+            {mqttConfig && (
+              <div className="mb-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={mqttConfig.auto_publish}
+                    onChange={setzeAutoPublish}
+                    disabled={autoPublishSaving}
+                    ariaLabel="Werte automatisch publizieren"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Werte automatisch publizieren (alle {mqttConfig.publish_interval_minutes} Minuten)
+                  </span>
+                </div>
+                {autoPublishFehler && (
+                  <p className="mt-2 text-xs text-red-700 dark:text-red-300">{autoPublishFehler}</p>
+                )}
               </div>
-              <div>
-                <Input
-                  type="number"
-                  label="Port"
-                  value={mqttPort}
-                  onChange={(e) => setMqttPort(Number(e.target.value))}
-                />
-              </div>
-              <div>
-                <Input
-                  type="text"
-                  label="Benutzername (optional)"
-                  value={mqttUser}
-                  onChange={(e) => setMqttUser(e.target.value)}
-                />
-              </div>
-              <div>
-                <Input
-                  type="password"
-                  label="Passwort (optional)"
-                  value={mqttPassword}
-                  onChange={(e) => setMqttPassword(e.target.value)}
-                />
-              </div>
-            </div>
+            )}
 
             {/* Test Ergebnis */}
             {mqttTestResult && (
@@ -680,7 +693,10 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
                 {mqttConfig?.auto_publish ? (
                   <> Die automatische Publizierung ist aktiviert (alle {mqttConfig.publish_interval_minutes} Minuten).</>
                 ) : (
-                  <> Um die Werte aktuell zu halten, muss die Publizierung regelmäßig erfolgen (manuell oder via Automatisierung). Aktiviere <strong>auto_publish</strong> in den App-Optionen für automatische Updates.</>
+                  // B7-5b: Der Hinweis zeigte früher auf „auto_publish in den
+                  // App-Optionen" — eine ENV-Option, die es standalone gar nicht
+                  // gibt. Der Schalter sitzt jetzt direkt darüber.
+                  <> Um die Werte aktuell zu halten, muss die Publizierung regelmäßig erfolgen — schalte oben <strong>Werte automatisch publizieren</strong> ein oder publiziere manuell.</>
                 )}
               </p>
             </div>

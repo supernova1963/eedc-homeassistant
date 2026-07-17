@@ -20,8 +20,7 @@ import { BlockShell, BlockStackSkeleton, KpiStrip, VerteilungsBalken, type Block
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
-import { sensorMappingApi } from '../api/sensorMapping'
-import { liveDashboardApi } from '../api/liveDashboard'
+import { datenquellenApi, type DatenquelleGruppe } from '../api/datenquellen'
 import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
@@ -59,54 +58,38 @@ function paramFelder(inv: Investition): { label: string; wert: string }[] {
   return felder
 }
 
-interface FeldM { strategie?: string; sensor_id?: string | null }
-type LiveMap = Record<string, string | null> | null
-interface InvMap { felder?: Record<string, FeldM>; live?: LiveMap }
-interface MappingShape {
-  basis?: Record<string, FeldM | LiveMap | undefined> & { live?: LiveMap }
-  investitionen?: Record<string, InvMap>
-}
+interface SensorZeile { feld: string; sensor: string; live?: boolean; mqtt?: boolean }
 
-interface SensorZeile { feld: string; sensor: string; live?: boolean }
-
-/** Sensor-Zuordnungen einer Investition: Statistik-Felder (strategie 'sensor') +
- *  Live-Sensoren (`live`-Block) + Legacy `ha_entity_id`. */
-function invSensoren(inv: Investition, mapping: MappingShape | null): SensorZeile[] {
+/**
+ * Zuordnungs-Zeilen einer Gruppe (Investition oder Anlagen-Basis) aus der
+ * **Datenquellen-V4-Wahrheit** (`/datenquellen/{id}/felder`, B7-4).
+ *
+ * Vorher las dieser Block das alte `sensor_mapping`-JSON direkt (strategie
+ * 'sensor' · `live`-Block · Legacy `inv.ha_entity_id`) und driftete damit gegen
+ * das `quellen`-Modell: MQTT-Inbound-Felder fehlten ganz, und `ha_entity_id` wurde
+ * als aktive Zuordnung gezeigt, obwohl es KEINE Engine liest (nur Speichern/
+ * Export/Import — verifiziert 2026-07-16). Jetzt gilt pro Feld die EINE aufgelöste
+ * Quelle (§2d): HA-Entity · Gateway-Topic · Inbound-Standard-Topic; „keine" fällt raus.
+ */
+function zeilenDerGruppe(g: DatenquelleGruppe | undefined): SensorZeile[] {
   const out: SensorZeile[] = []
-  const invMap = mapping?.investitionen?.[String(inv.id)]
-  for (const [feld, m] of Object.entries(invMap?.felder ?? {})) {
-    if (m?.strategie === 'sensor' && m.sensor_id) out.push({ feld: feld.replace(/_/g, ' '), sensor: m.sensor_id })
-  }
-  for (const [feld, sid] of Object.entries(invMap?.live ?? {})) {
-    if (sid) out.push({ feld: feld.replace(/_/g, ' '), sensor: sid, live: true })
-  }
-  if (inv.ha_entity_id) out.push({ feld: 'HA-Sensor', sensor: inv.ha_entity_id })
-  return out
-}
-
-/** Anlagen-Basis-Sensoren: Statistik-Rollen (strategie 'sensor') + Live-Rollen. */
-function basisSensoren(mapping: MappingShape | null): SensorZeile[] {
-  const basis = mapping?.basis
-  if (!basis) return []
-  const out: SensorZeile[] = []
-  for (const [rolle, m] of Object.entries(basis)) {
-    if (rolle === 'live' || rolle === 'live_invert') continue
-    const fm = m as FeldM
-    if (fm?.strategie === 'sensor' && fm.sensor_id) out.push({ feld: rolle.replace(/_/g, ' '), sensor: fm.sensor_id })
-  }
-  for (const [rolle, sid] of Object.entries(basis.live ?? {})) {
-    if (sid) out.push({ feld: rolle.replace(/_/g, ' '), sensor: sid, live: true })
+  for (const f of g?.felder ?? []) {
+    if (f.quelle === 'keine') continue
+    const ziel = f.ha_entity ?? f.gateway_topic ?? f.standard_topic
+    if (!ziel) continue
+    out.push({ feld: f.label || f.feld, sensor: ziel, live: f.kategorie === 'live', mqtt: !f.ha_entity })
   }
   return out
 }
 
-/** Eine Sensor-Zeile (Feld → entity_id, Live-Marker). */
+/** Eine Zuordnungs-Zeile (Feld → Quelle; Live-Marker, MQTT-Icon bei Topic-Quellen). */
 function SensorRow({ z }: { z: SensorZeile }) {
   return (
     <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5">
+      <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1.5 min-w-0">
         {z.live && <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: STATUS_COLORS.ok }} title="Live-Sensor" />}
-        {z.feld}{z.live ? ' (live)' : ''}
+        {z.mqtt && <Radio className="h-3 w-3 shrink-0" aria-label="MQTT-Quelle" />}
+        <span className="truncate">{z.feld}{z.live ? ' (live)' : ''}</span>
       </span>
       {/* D12-12: min-w-0 — sonst greift `truncate` im Flex-Row nicht und lange
           entity_ids schieben die Zeile mobil über den Rand. title = voller Wert. */}
@@ -120,8 +103,9 @@ function SensorRow({ z }: { z: SensorZeile }) {
 // (IST Investitionen); die V4-Einstellungen re-kategorisieren die Ziele (Zuordnung =
 // config/v3ZuV4Route). KomponentenTypV4 ist v4-only → feste V4-Ziele (kein V3-Sprung).
 const EDIT_INVEST = '#/v4/einstellungen/komponenten'
-const EDIT_SENSOR = '#/v4/einstellungen/integration'
-const EDIT_MQTT = '#/v4/einstellungen/integration'
+// B7: Sensor- und MQTT-Zuordnung sind zur EINEN Datenquellen-Fläche verschmolzen
+// (eigene Kategorie, §2g) — vorher zwei Links auf denselben Integration-Reiter.
+const EDIT_DATENQUELLEN = '#/v4/einstellungen/datenquellen'
 const EDIT_INFOTHEK = '#/v4/einstellungen/infothek'
 const EDIT_DATENCHECKER = '#/v4/einstellungen/daten'
 
@@ -169,23 +153,25 @@ function GruppenKopf({ icon: Icon, titel, edit }: { icon: typeof Cpu; titel: str
  *  (HA-Sensoren inkl. Live + MQTT-Topics → Sensor-Mapping/MQTT). Für die
  *  PV-Anlage über WR + Module + Speicher (sonst die eine Komponente). */
 function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Investition[] }) {
-  const [mapping, setMapping] = useState<MappingShape | null>(null)
-  const [topics, setTopics] = useState<{ ziel_key: string; quell_topic: string }[]>([])
+  const [gruppen, setGruppen] = useState<DatenquelleGruppe[]>([])
   const [loading, setLoading] = useState(true)
 
+  // B7-4: EIN Call auf die Datenquellen-Fläche — er trägt Quelle je Feld inkl.
+  // Gateway-Topic, damit entfällt der frühere zweite Call (getGatewayMappings).
   useEffect(() => {
     let ab = false
     setLoading(true)
-    Promise.all([
-      sensorMappingApi.getMapping(anlageId).then((r) => r.mapping as MappingShape | null).catch(() => null),
-      liveDashboardApi.getGatewayMappings(anlageId).catch(() => [] as { ziel_key: string; quell_topic: string }[]),
-    ]).then(([m, t]) => { if (!ab) { setMapping(m); setTopics(t); setLoading(false) } })
+    datenquellenApi.getFelder(anlageId)
+      .then((r) => r.gruppen)
+      .catch(() => [] as DatenquelleGruppe[])
+      .then((g) => { if (!ab) { setGruppen(g); setLoading(false) } })
     return () => { ab = true }
   }, [anlageId])
 
   const echteInvs = invs.filter((i) => i.id !== 0) // PV-UI-Aggregat (id 0) selbst hat keine Parameter
-  const basis = basisSensoren(mapping)
-  const hatZuordnungen = echteInvs.some((i) => invSensoren(i, mapping).length > 0) || basis.length > 0 || topics.length > 0
+  const gruppeVon = (id: string) => gruppen.find((g) => g.id === id)
+  const basis = zeilenDerGruppe(gruppeVon('basis'))
+  const hatZuordnungen = echteInvs.some((i) => zeilenDerGruppe(gruppeVon(`inv:${i.id}`)).length > 0) || basis.length > 0
 
   return (
     <div className="space-y-6">
@@ -217,20 +203,20 @@ function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Invest
         })}
       </div>
 
-      {/* Zuordnungen — bearbeitbar über Sensor-Mapping / MQTT */}
+      {/* Zuordnungen — bearbeitbar über die Datenquellen-Fläche (B7: EIN Ziel statt
+          getrennter Sensor-/MQTT-Wizards). */}
       <div className="space-y-3">
-        <GruppenKopf icon={Cpu} titel="Zuordnungen — Sensoren & MQTT" edit={<>
-          <EditLink href={EDIT_SENSOR}>Sensoren</EditLink>
-          <EditLink href={EDIT_MQTT}>MQTT</EditLink>
-        </>} />
+        <GruppenKopf icon={Cpu} titel="Zuordnungen — Datenquellen" edit={
+          <EditLink href={EDIT_DATENQUELLEN}>Datenquellen</EditLink>
+        } />
         {loading ? (
           <p className="text-xs text-gray-400 dark:text-gray-500">Lade Zuordnungen…</p>
         ) : !hatZuordnungen ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Keine Sensor-/MQTT-Zuordnungen hinterlegt.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Keine Datenquellen zugeordnet.</p>
         ) : (
           <>
             {echteInvs.map((inv) => {
-              const sensoren = invSensoren(inv, mapping)
+              const sensoren = zeilenDerGruppe(gruppeVon(`inv:${inv.id}`))
               if (!sensoren.length) return null
               return (
                 <div key={inv.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-1.5">
@@ -239,17 +225,10 @@ function EinstellungenBlock({ anlageId, invs }: { anlageId: number; invs: Invest
                 </div>
               )
             })}
-            {(basis.length > 0 || topics.length > 0) && (
+            {basis.length > 0 && (
               <div className="rounded-lg border border-gray-100 dark:border-gray-800 p-3 space-y-1 bg-gray-50/50 dark:bg-gray-800/30">
                 <div className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Anlagen-Datenquellen</div>
                 {basis.map((b) => <SensorRow key={`b-${b.feld}-${b.sensor}`} z={b} />)}
-                {topics.map((t) => (
-                  <div key={`${t.ziel_key}-${t.quell_topic}`} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-gray-500 dark:text-gray-400 capitalize flex items-center gap-1.5 shrink-0 min-w-0"><Radio className="h-3 w-3 shrink-0" /><span className="truncate">{t.ziel_key.replace(/_/g, ' ')}</span></span>
-                    {/* D12-12: min-w-0 → langes MQTT-Topic truncatet statt überzulaufen. */}
-                    <code className="text-xs text-gray-700 dark:text-gray-300 truncate min-w-0" title={t.quell_topic}>{t.quell_topic}</code>
-                  </div>
-                ))}
               </div>
             )}
           </>
@@ -730,10 +709,10 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
     render: () => <Parkbar id="el:daten-checker" titel="Daten-Qualität"><DatenCheckerBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} /></Parkbar>,
   })
 
-  // ⑦ Einstellungen (Pflicht) — Parameter + Sensor-/MQTT-Zuordnungen (ein Element).
+  // ⑦ Einstellungen (Pflicht) — Parameter + Datenquellen-Zuordnungen (ein Element).
   if (!istGeparkt('el:einstellungen')) bloecke.push({
     id: 'einstellungen', title: 'Einstellungen', icon: Settings,
-    summary: 'Parameter, Sensoren & MQTT dieser Komponente — mit Bearbeiten-Links', defaultOpen: false,
+    summary: 'Parameter & Datenquellen dieser Komponente — mit Bearbeiten-Links', defaultOpen: false,
     render: () => <Parkbar id="el:einstellungen" titel="Einstellungen"><EinstellungenBlock anlageId={anlageId} invs={g.verknuepfteInvs ?? [g.inv]} /></Parkbar>,
   })
 

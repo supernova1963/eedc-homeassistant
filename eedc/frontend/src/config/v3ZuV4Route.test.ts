@@ -9,8 +9,10 @@ describe('v3RouteZuV4 (V3→V4-Einstellungs-Routen-Map)', () => {
     expect(v3RouteZuV4('/einstellungen/anlage')).toBe('/v4/einstellungen/stammdaten')
     expect(v3RouteZuV4('/einstellungen/strompreise')).toBe('/v4/einstellungen/stammdaten')
     expect(v3RouteZuV4('/einstellungen/solarprognose')).toBe('/v4/einstellungen/stammdaten')
-    expect(v3RouteZuV4('/einstellungen/sensor-mapping')).toBe('/v4/einstellungen/integration')
-    expect(v3RouteZuV4('/einstellungen/mqtt-inbound')).toBe('/v4/einstellungen/integration')
+    // B7: die aufgelösten Alt-Wizards landen auf der Datenquellen-Fläche.
+    expect(v3RouteZuV4('/einstellungen/sensor-mapping')).toBe('/v4/einstellungen/datenquellen')
+    expect(v3RouteZuV4('/einstellungen/mqtt-inbound')).toBe('/v4/einstellungen/datenquellen')
+    expect(v3RouteZuV4('/einstellungen/ha-export')).toBe('/v4/einstellungen/integration')
   })
 
   it('mappt investitionen auf den datengetriebenen Komponenten-Reiter', () => {

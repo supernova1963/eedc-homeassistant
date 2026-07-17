@@ -18,7 +18,6 @@ import { createContext, useContext } from 'react'
 
 /** Schlüssel der im Overlay-Host registrierten Wizards (Registry im ModalHost). */
 export type WizardKey =
-  | 'sensor-mapping'
   | 'csv-import'
   | 'custom-import'
   | 'portal-import'
@@ -26,9 +25,10 @@ export type WizardKey =
   | 'connector'
   | 'ha-statistik-import'
   | 'einrichtung'
-  | 'mqtt-inbound'
 // Monatsabschluss-V4 Bündel 6 (2026-07-12): `'monatsabschluss'` ist als V4-Overlay
 // stillgelegt (Registry-Eintrag entfernt) — V4-Einstiege öffnen die MonatsdatenForm.
+// Datenquellen-V4 B7 (2026-07-16): dito `'sensor-mapping'` + `'mqtt-inbound'` — die
+// V4-Einstiege öffnen die Datenquellen-Fläche (§2g). V3-Routen bleiben bis zum Flip.
 
 /** Payload des V3-Monatsabschluss-Wizards (nur noch V3-Route; im Overlay stillgelegt).
  *  Bleibt, solange `pages/MonatsabschlussWizard` auf der V3-Route lebt (bis Flip). */

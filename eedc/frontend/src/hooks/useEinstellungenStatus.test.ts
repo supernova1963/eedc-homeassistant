@@ -41,13 +41,14 @@ describe('useEinstellungenStatus — Signal → Status', () => {
     expect(result.current.strompreise).toEqual({ status: 'warn', hinweis: 'Tarif-Lücke ab Mai' })
   })
 
-  it('meldet ✓ für Anlage/Strompreise/Sensor-Mapping, wenn keine Befunde vorliegen', async () => {
+  it('meldet ✓ für Anlage/Strompreise/Datenquellen, wenn keine Befunde vorliegen', async () => {
     globalStatus.mockReturnValue(gs({ datencheckErgebnisse: [] }))
     const { result } = renderHook(() => useEinstellungenStatus())
     await waitFor(() => expect(result.current.solarprognose).toBeDefined())
     expect(result.current.anlage).toEqual({ status: 'ok' })
     expect(result.current.strompreise).toEqual({ status: 'ok' })
-    expect(result.current['sensor-mapping']).toEqual({ status: 'ok' })
+    // B7: die Sensor-Mapping-Befunde tragen jetzt die Datenquellen-Ampel.
+    expect(result.current.datenquellen).toEqual({ status: 'ok' })
   })
 
   it('meldet „neu" für Anlage, wenn keine Anlage ausgewählt ist', () => {
@@ -66,17 +67,18 @@ describe('useEinstellungenStatus — Signal → Status', () => {
     expect(result.current.datenchecker).toEqual({ status: 'warn', hinweis: '1 Fehler, 1 Warnung.' })
   })
 
-  it('leitet MQTT-Export + -Inbound aus demselben MQTT-Status ab', () => {
+  it('leitet MQTT-Export aus dem MQTT-Status ab', () => {
     globalStatus.mockReturnValue(gs({ mqtt: { verfuegbar: true, subscriber_aktiv: true } }))
     const { result } = renderHook(() => useEinstellungenStatus())
     expect(result.current['ha-export']).toEqual({ status: 'ok' })
-    expect(result.current['mqtt-inbound']).toEqual({ status: 'ok' })
+    // B7: kein eigener mqtt-inbound-Block mehr → keine Ampel dafür.
+    expect(result.current['mqtt-inbound']).toBeUndefined()
   })
 
   it('meldet „neu" für MQTT ohne Konfiguration (mit Grund)', () => {
     globalStatus.mockReturnValue(gs({ mqtt: { verfuegbar: false, subscriber_aktiv: false, grund: 'Kein Broker' } }))
     const { result } = renderHook(() => useEinstellungenStatus())
-    expect(result.current['mqtt-inbound']).toEqual({ status: 'neu', hinweis: 'Kein Broker' })
+    expect(result.current['ha-export']).toEqual({ status: 'neu', hinweis: 'Kein Broker' })
   })
 
   it('leitet Solarprognose aus dem Alter der aktiven Prognose ab', async () => {

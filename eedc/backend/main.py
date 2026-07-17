@@ -87,6 +87,8 @@ from backend.api.routes import (
     dokumentation,
     korrekturprofil,
     repair,
+    ha_remote,
+    datenquellen,
 )
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
@@ -96,11 +98,14 @@ from backend.models.strompreis import Strompreis
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.scheduler import start_scheduler, stop_scheduler, get_scheduler
 
+# MQTT-Export: B7-5 — kein HA/Supervisor nötig (gemeinsamer DB-Broker), darum
+# unbedingt importieren; der Router wird auch im Standalone gemountet.
+from backend.api.routes import ha_export
+
 # HA-spezifische Imports (nur wenn HA verfügbar)
 if HA_INTEGRATION_AVAILABLE:
     from backend.api.routes import (
         ha_integration,
-        ha_export,
         ha_import,
         ha_statistics,
         sensor_mapping,
@@ -108,29 +113,37 @@ if HA_INTEGRATION_AVAILABLE:
 
 
 async def _load_mqtt_config() -> dict | None:
-    """Lädt MQTT-Config: DB-Settings (Priorität) → Env-Vars (Fallback)."""
+    """Lädt die MQTT-Inbound-Config, falls die **Import-Richtung** aktiv ist.
+
+    B7-5c: Vorher entschied hier eine eigene Kopie der DB→ENV-Logik, ob der
+    Subscriber startet. Das driftete gegen die Datenquellen-Fläche, sobald die
+    Default-Regel greift (HA vorhanden → Import aus): die Fläche hätte MQTT-
+    Quellen ausgeblendet, während der Subscriber weiterlief — „Import aus" wäre
+    eine Lüge gewesen. Jetzt entscheiden beide über `import_aktiviert`, und die
+    Zugangsdaten kommen aus `resolve_broker_config` (Override → DB → ENV).
+    """
     try:
-        from backend.models.settings import Settings as SettingsModel
+        from backend.services.mqtt_broker_settings import (
+            import_aktiviert,
+            resolve_broker_config,
+        )
 
         async with get_session() as session:
-            result = await session.execute(
-                select(SettingsModel).where(SettingsModel.key == "mqtt_inbound")
-            )
-            setting = result.scalar_one_or_none()
-            if setting and setting.value and setting.value.get("host"):
-                return setting.value
+            if not await import_aktiviert(session):
+                return None
+            cfg = await resolve_broker_config(session)
     except Exception:
-        pass
-    # Fallback: Env-Vars
-    if settings.mqtt_enabled:
-        return {
-            "enabled": True,
-            "host": settings.mqtt_host,
-            "port": settings.mqtt_port,
-            "username": settings.mqtt_username,
-            "password": settings.mqtt_password,
-        }
-    return None
+        return None
+
+    if not cfg.host:
+        return None
+    return {
+        "enabled": True,
+        "host": cfg.host,
+        "port": cfg.port,
+        "username": cfg.username or "",
+        "password": cfg.password or "",
+    }
 
 
 @asynccontextmanager
@@ -434,6 +447,11 @@ app.include_router(live_mqtt_inbound.router, prefix="/api/live", tags=["MQTT Inb
 app.include_router(live_wetter.router, prefix="/api/live", tags=["Live Wetter"])
 app.include_router(live_dashboard.router, prefix="/api/live", tags=["Live Dashboard"])
 app.include_router(mqtt_gateway.router, prefix="/api/live", tags=["MQTT Gateway"])
+# HA-Remote-Verbindung (Basis) — IMMER gemountet (Standalone-Pfad), unabhängig vom
+# HA-Supervisor-Gate. Datenquellen-V4 / B4a (§2a). Gate-Nutzbarmachung = P3.
+app.include_router(ha_remote.router, prefix="/api/ha", tags=["HA Remote"])
+# Datenquellen-Zuordnung (feld-zentrische Fläche) — Datenquellen-V4 / B2.
+app.include_router(datenquellen.router, prefix="/api/datenquellen", tags=["Datenquellen"])
 app.include_router(
     mqtt_presets.router, prefix="/api/live", tags=["MQTT Gateway Presets"]
 )
@@ -450,12 +468,24 @@ app.include_router(
 app.include_router(repair.router, prefix="/api/repair", tags=["Reparatur-Werkbank"])
 
 # =============================================================================
+# API Routes - MQTT-Export (IMMER — auch Standalone)
+# =============================================================================
+# B7-5 (Datenquellen-V4 §2g): der Export war nur deshalb HA-gegated, weil er seinen
+# Broker aus den HA-Add-on-ENV-Variablen zog. Seit er den gemeinsamen Broker aus dem
+# DB-Broker-Block nutzt (`services/mqtt_broker_settings`, ENV nur noch Fallback),
+# braucht er weder Supervisor noch HA — er publiziert auf einen beliebigen Broker
+# (MQTT-Discovery ist HA-Konvention, aber kein HA-Zwang). Verifiziert: das Modul hat
+# keinerlei Supervisor-/HA-Client-Abhängigkeit. Ohne diesen Mount wäre das entfernte
+# `haOnly` im Frontend eine Lüge — der Block würde rendern, aber jeder Call liefe in
+# den SPA-Fallback („Unexpected token '<'").
+app.include_router(ha_export.router, prefix="/api", tags=["HA Export"])
+
+# =============================================================================
 # API Routes - Home Assistant (nur mit SUPERVISOR_TOKEN)
 # =============================================================================
 
 if HA_INTEGRATION_AVAILABLE:
     app.include_router(ha_integration.router, prefix="/api/ha", tags=["Home Assistant"])
-    app.include_router(ha_export.router, prefix="/api", tags=["HA Export"])
     app.include_router(ha_import.router, prefix="/api/ha-import", tags=["HA Import"])
     app.include_router(
         sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"]

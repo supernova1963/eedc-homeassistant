@@ -532,16 +532,19 @@ export default function HAStatistikImport() {
         </>
       )}
 
-      {/* Navigation — im Overlay: Cross-Wizard (Sensor-Zuordnung) bzw.
-          schliessen + V4-Daten-Reiter (Monatsdaten-Block); V3-Route unverändert. */}
+      {/* Navigation — im Overlay: schliessen + V4-Fläche/-Reiter; V3-Route unverändert.
+          B7: die Sensor-Zuordnung ist in V4 die Datenquellen-Fläche (kein Wizard mehr)
+          → schliessen + navigate statt Cross-Wizard. */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 mt-6 flex justify-between">
         <Button
           type="button" variant="ghost" size="sm"
-          onClick={() =>
-            host.imOverlay ? host.oeffneWizard('sensor-mapping') : navigate('/einstellungen/sensor-mapping')
-          }
+          onClick={() => {
+            if (!host.imOverlay) return navigate('/einstellungen/sensor-mapping')
+            host.schliessen()
+            navigate('/v4/einstellungen/datenquellen')
+          }}
         >
-          ← Zurück zu Sensor-Zuordnung
+          ← Zurück zu {host.imOverlay ? 'Datenquellen' : 'Sensor-Zuordnung'}
         </Button>
         <Button
           type="button" variant="ghost" size="sm"

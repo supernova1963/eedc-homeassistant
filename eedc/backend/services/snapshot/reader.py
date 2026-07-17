@@ -26,6 +26,7 @@ from backend.services.ha_statistics_service import get_ha_statistics_service
 from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     _sensor_key_to_mqtt_key,
+    resolve_energy_snapshot_eid,
 )
 from backend.services.snapshot.source import SnapshotSource
 from backend.services.snapshot.writer import _upsert_snapshot
@@ -84,6 +85,7 @@ async def get_snapshot(
     zeitpunkt: datetime,
     toleranz_minuten: int = 5,
     ha_toleranz_minuten: int = 10,
+    quellen_energy: Optional[dict] = None,
 ) -> Optional[float]:
     """
     Holt den kumulativen Zählerstand zu einem bestimmten Zeitpunkt.
@@ -106,10 +108,23 @@ async def get_snapshot(
             fast immer, dass der Zielzeitpunkt in HA gar keinen Eintrag hat —
             ein nearest-Lookup würde den Nachbar-Wert liefern und zu
             Stunde-Null-mit-Folge-Spike-Artefakten führen (Issue #145).
+        quellen_energy: Datenquellen-V4-C2b-Read-Through-Map
+            (`extract_quellen_energy(anlage)`). None/leer → heutiges Verhalten
+            bitgleich. Mit Eintrag für `sensor_key`: HA → Self-Heal gegen die
+            zugeordnete Entity; MQTT → HA-Self-Heal aus (Wert kommt via
+            sensor_key aus MQTT-Backup); keine → sofort None (kein Wert, strikt
+            kein Fallback — Monatsabschluss manuell, §2d).
 
     Returns:
         Zählerstand in kWh oder None (kein Datenpunkt verfügbar).
     """
+    if quellen_energy:
+        sensor_id, behalten = resolve_energy_snapshot_eid(
+            quellen_energy, sensor_key, sensor_id
+        )
+        if not behalten:
+            return None  # „keine"-Zuordnung → kein Wert (auch kein DB-Altbestand)
+
     von = zeitpunkt - timedelta(minutes=toleranz_minuten)
     bis = zeitpunkt + timedelta(minutes=toleranz_minuten)
 
@@ -170,6 +185,7 @@ async def delta(
     sensor_id: str,
     von: datetime,
     bis: datetime,
+    quellen_energy: Optional[dict] = None,
 ) -> Optional[float]:
     """
     Berechnet Zähler-Delta zwischen zwei Zeitpunkten.
@@ -178,11 +194,17 @@ async def delta(
     Firmware-Update) werden als None zurückgegeben, damit sie nicht als
     echter Wert durchschlagen.
 
+    `quellen_energy` wird an `get_snapshot` durchgereicht (C2b-Read-Through).
+
     Returns:
         Delta in kWh (≥ 0) oder None.
     """
-    snap_von = await get_snapshot(db, anlage_id, sensor_key, sensor_id, von)
-    snap_bis = await get_snapshot(db, anlage_id, sensor_key, sensor_id, bis)
+    snap_von = await get_snapshot(
+        db, anlage_id, sensor_key, sensor_id, von, quellen_energy=quellen_energy
+    )
+    snap_bis = await get_snapshot(
+        db, anlage_id, sensor_key, sensor_id, bis, quellen_energy=quellen_energy
+    )
     if snap_von is None or snap_bis is None:
         return None
     d = snap_bis - snap_von

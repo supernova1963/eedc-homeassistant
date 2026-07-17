@@ -36,11 +36,17 @@ def transform_payload(
     array_index: int | None,
     faktor: float,
     offset: float,
-    invertieren: bool,
+    invertieren: bool = False,
 ) -> float | None:
     """Transformiert einen MQTT-Payload in einen Float-Wert.
 
-    Pipeline: Rohwert → JSON-Extraktion → × Faktor → + Offset → × (-1 wenn invertieren)
+    Pipeline: Rohwert → JSON-Extraktion → × Faktor → + Offset [→ × (-1 wenn invertieren)].
+
+    `invertieren` ist im Datenquellen-V4-Modell DEPRECATED: das Vorzeichen ist
+    quellen-unabhängig in `sensor_mapping.invertieren` und wird am Read-Endwert
+    angewendet (kein Republish-Invert mehr → kein Doppel-Invert). Der Runtime-
+    Republish übergibt es nicht mehr; Default False. Param bleibt nur für die
+    (mit B7 entfallende) Alt-Wizard-Vorschau signaturkompatibel.
     """
     try:
         if payload_typ == "plain":
@@ -215,6 +221,9 @@ class MqttGatewayService:
         self._stats.empfangen += 1
 
         for mapping in mappings:
+            # Kein Republish-Invert mehr (Datenquellen-V4): Vorzeichen liegt
+            # quellen-unabhängig in `sensor_mapping.invertieren`, angewendet am
+            # Read-Endwert → hier bewusst OHNE mapping.invertieren (Doppel-Invert-Schutz).
             wert = transform_payload(
                 payload,
                 mapping.payload_typ,
@@ -222,7 +231,6 @@ class MqttGatewayService:
                 mapping.array_index,
                 mapping.faktor,
                 mapping.offset,
-                mapping.invertieren,
             )
             if wert is None:
                 self._stats.transform_fehler += 1

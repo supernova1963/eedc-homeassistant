@@ -39,7 +39,6 @@ interface WizardDef {
 
 /** Standard-Registry: Titel + lazy geladene IST-Wizard-Seite je Schlüssel. */
 const STANDARD_REGISTRY: Record<WizardKey, WizardDef> = {
-  'sensor-mapping': { titel: 'Sensor-Zuordnung', Comp: lazy(() => import('../pages/SensorMappingWizard')) },
   'csv-import': { titel: 'CSV importieren', Comp: lazy(() => import('../pages/CsvImportWizard')) },
   'custom-import': { titel: 'Eigene Datei importieren', Comp: lazy(() => import('../pages/CustomImportWizard')) },
   'portal-import': { titel: 'Portal-Import', Comp: lazy(() => import('../pages/DataImportWizard')) },
@@ -47,8 +46,11 @@ const STANDARD_REGISTRY: Record<WizardKey, WizardDef> = {
   connector: { titel: 'Geräte-Connector', Comp: lazy(() => import('../pages/ConnectorSetupWizard')) },
   'ha-statistik-import': { titel: 'Statistik-Import', Comp: lazy(() => import('../pages/HAStatistikImport')) },
   einrichtung: { titel: 'Ersteinrichtung', Comp: lazy(() => import('../pages/Einrichtung')) },
-  // D4 (2026-07-11): Kombi-Wizard — Schritt 1 wählt Inbound (Empfangen) / Gateway (Senden).
-  'mqtt-inbound': { titel: 'Live-Daten via MQTT', Comp: lazy(() => import('../pages/MqttInboundSetup')) },
+  // Datenquellen-V4 B7 (2026-07-16): `sensor-mapping` + `mqtt-inbound` sind als
+  // V4-Flächen stillgelegt — beide Overlay-Einträge entfernt, alle V4-Einstiege
+  // führen auf die feld-zentrische Datenquellen-Fläche (`v4/einstellungen/
+  // datenquellen`, §2g). Die V3-Routen + `pages/SensorMappingWizard` /
+  // `pages/MqttInboundSetup` bleiben unberührt bis zum Flip (PLAN-IA-V4-RESTWEG).
   // Monatsabschluss-V4 Bündel 6 (2026-07-12): als V4-Fläche stillgelegt — der
   // Wizard-Overlay-Eintrag ist entfernt, alle V4-Einstiege öffnen jetzt die
   // assistierte `MonatsdatenForm` (Bündel 5). Die V3-Route `/monatsabschluss/…`

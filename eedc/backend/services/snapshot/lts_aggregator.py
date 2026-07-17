@@ -27,6 +27,10 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.ha_statistics_service import get_ha_statistics_service
+from backend.services.snapshot.keys import (
+    extract_quellen_energy,
+    resolve_energy_ha_eid,
+)
 from backend.services.snapshot.komponenten_beitraege import (
     basis_beitraege,
     basis_hourly_eintraege,
@@ -77,6 +81,7 @@ async def get_hourly_kwh_by_category_lts(
     # Snapshot-Variante: HA-LTS hat keine MQTT-Zähler, also nur HA-gemappte
     # Sensoren.
     eintraege: list[tuple[str, str, Optional[str]]] = []  # (entity_id, kategorie, gruppe)
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through (HA-only-Pfad)
 
     basis = sensor_mapping.get("basis", {}) or {}
     for he in basis_hourly_eintraege(sensor_mapping):
@@ -84,7 +89,11 @@ async def get_hourly_kwh_by_category_lts(
         if isinstance(cfg, dict):
             eid = cfg.get("sensor_id")
             if eid:
-                eintraege.append((eid, he.kategorie, he.fallback_gruppe))
+                eid, behalten = resolve_energy_ha_eid(
+                    quellen_energy, f"basis:{he.feld}", eid
+                )
+                if behalten and eid:
+                    eintraege.append((eid, he.kategorie, he.fallback_gruppe))
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -99,7 +108,11 @@ async def get_hourly_kwh_by_category_lts(
             if isinstance(cfg, dict):
                 eid = cfg.get("sensor_id")
                 if eid:
-                    eintraege.append((eid, he.kategorie, he.fallback_gruppe))
+                    eid, behalten = resolve_energy_ha_eid(
+                        quellen_energy, f"inv:{inv_id_str}:{he.feld}", eid
+                    )
+                    if behalten and eid:
+                        eintraege.append((eid, he.kategorie, he.fallback_gruppe))
 
     if not eintraege:
         return {}
@@ -247,6 +260,7 @@ async def get_komponenten_tageskwh_lts(
     # mapping_quelle: das Per-Investition-/Per-Basis-Dict, aus dem die
     # sensor_id für ein Feld gezogen wird.
     eintraege: list[tuple[str, object, dict]] = []
+    quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through (HA-only-Pfad)
 
     basis_map = sensor_mapping.get("basis", {}) or {}
     for b in basis_beitraege(sensor_mapping):
@@ -254,7 +268,11 @@ async def get_komponenten_tageskwh_lts(
         if isinstance(cfg, dict):
             eid = cfg.get("sensor_id")
             if eid:
-                eintraege.append((eid, b, basis_map))
+                eid, behalten = resolve_energy_ha_eid(
+                    quellen_energy, f"basis:{b.feld}", eid
+                )
+                if behalten and eid:
+                    eintraege.append((eid, b, basis_map))
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
     for inv_id_str, inv_data in investitionen_map.items():
@@ -269,7 +287,11 @@ async def get_komponenten_tageskwh_lts(
             if isinstance(cfg, dict):
                 eid = cfg.get("sensor_id")
                 if eid:
-                    eintraege.append((eid, b, felder))
+                    eid, behalten = resolve_energy_ha_eid(
+                        quellen_energy, f"inv:{inv_id_str}:{b.feld}", eid
+                    )
+                    if behalten and eid:
+                        eintraege.append((eid, b, felder))
 
     if not eintraege:
         return {}

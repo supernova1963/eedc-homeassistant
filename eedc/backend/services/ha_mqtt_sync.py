@@ -11,6 +11,7 @@ import os
 from typing import Optional, Any
 
 from backend.services.mqtt_client import MQTTClient, MQTTConfig
+from backend.services.mqtt_broker_settings import resolve_broker_config
 
 
 def resolve_mqtt_config(
@@ -65,7 +66,9 @@ async def publish_anlage_sensors(
     # Import erzeugte einen Zyklus (die Route importiert diesen Service).
     from backend.api.routes.ha_export import calculate_anlage_sensors
 
-    client = MQTTClient(mqtt_config or _get_mqtt_config_from_env())
+    # B7-5: Broker aus der EINEN Wahrheit (DB-Broker-Block → ENV → Default) statt
+    # nur ENV — Export und Inbound/Gateway teilen sich denselben Broker (§2g, #655).
+    client = MQTTClient(mqtt_config or await resolve_broker_config(db))
     if not client.is_available:
         return {"available": False, "no_data": False, "total": 0, "success": 0, "failed": 0, "errors": []}
 
@@ -88,11 +91,20 @@ class HAMqttSyncService:
     """Publiziert EEDC-Ergebnisse nach HA via MQTT."""
 
     def __init__(self, mqtt_client: Optional[MQTTClient] = None):
-        if mqtt_client:
-            self.mqtt = mqtt_client
-        else:
-            config = _get_mqtt_config_from_env()
-            self.mqtt = MQTTClient(config)
+        # B7-5: kein Client-Cache mehr. Der Broker kommt jetzt aus den DB-Settings
+        # und kann sich zur Laufzeit ändern (Broker-Block) — ein im Konstruktor
+        # gebauter Client würde den alten Broker festhalten (das Singleton lebt bis
+        # zum Neustart). Injizierter Client (Tests) gewinnt weiterhin.
+        self._injected = mqtt_client
+
+    async def _client(self) -> MQTTClient:
+        """Broker frisch auflösen: DB-Broker-Block → ENV → Default."""
+        if self._injected is not None:
+            return self._injected
+        from backend.core.database import get_session
+
+        async with get_session() as db:
+            return MQTTClient(await resolve_broker_config(db))
 
     async def publish_final_month_data(
         self,
@@ -113,7 +125,8 @@ class HAMqttSyncService:
         Returns:
             True wenn erfolgreich
         """
-        return await self.mqtt.publish_monatsdaten(
+        client = await self._client()
+        return await client.publish_monatsdaten(
             anlage_id=anlage_id,
             jahr=jahr,
             monat=monat,

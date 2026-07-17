@@ -25,8 +25,11 @@ from backend.services.ha_statistics_service import get_ha_statistics_service
 
 from backend.services.snapshot.keys import (
     BASIS_ZAEHLER_FELDER,
+    QUELLE_HA_ENERGY,
+    QUELLE_KEINE_ENERGY,
     _is_kumulativ_feld,
     _mqtt_key_to_sensor_key,
+    extract_quellen_energy,
 )
 from backend.services.snapshot.source import (
     SnapshotSource,
@@ -81,6 +84,24 @@ def _build_counter_map(anlage) -> dict[str, str]:
             # Whitelist-basiert statt per Typ, weil wir inv.typ hier nicht haben
             if _is_kumulativ_feld(feld):
                 result[f"inv:{inv_id_str}:{feld}"] = eid
+
+    # Datenquellen-V4 C2b: feld-zentrische `quellen`-Zuordnung honorieren
+    # (Read-Through). Ohne Eintrag bleibt der oben aus sensor_mapping gebaute
+    # HA-Zähler unverändert (Regressionsschutz). Mit Eintrag:
+    #   HA   → zugeordnete Entity schreiben (Swap; bzw. Feld ERGÄNZEN, wenn im
+    #          alten sensor_mapping gar kein Sensor stand — neue Fläche-Zuordnung)
+    #   MQTT → aus der HA-Schreib-Map ENTFERNEN (MQTT-Step 2 deckt es)
+    #   keine → aus der HA-Schreib-Map ENTFERNEN (kein Snapshot → Monatsabschluss
+    #          manuell/Durchschnitt/Vorjahr, §2d)
+    quellen_energy = extract_quellen_energy(anlage)
+    for sensor_key, (quelle, entity_id) in quellen_energy.items():
+        if quelle in QUELLE_HA_ENERGY:
+            if entity_id:
+                result[sensor_key] = entity_id
+            else:
+                result.pop(sensor_key, None)
+        else:  # MQTT-Quellen oder keine → HA-Schreib-Map lässt das Feld aus
+            result.pop(sensor_key, None)
 
     return result
 
@@ -240,9 +261,18 @@ async def snapshot_anlage(
             )
         ).distinct()
     )
+    # C2b: Felder, die per `quellen` explizit HA oder „keine" zugeordnet sind,
+    # dürfen NICHT aus dem MQTT-Backup geschrieben werden — strikt eine Quelle
+    # (§2d). MQTT-zugeordnete Felder (und Felder ganz ohne Eintrag) laufen wie
+    # bisher durch. Verhalten für nicht-zugeordnete Felder bleibt unverändert.
+    quellen_energy = extract_quellen_energy(anlage)
     for (mqtt_key,) in mqtt_keys_result.all():
         sensor_key = _mqtt_key_to_sensor_key(mqtt_key)
         if not sensor_key:
+            continue
+        # C2b: HA- oder keine-zugeordnetes Feld → MQTT-Backup schreibt es nicht.
+        zuord = quellen_energy.get(sensor_key)
+        if zuord and (zuord[0] in QUELLE_HA_ENERGY or zuord[0] == QUELLE_KEINE_ENERGY):
             continue
         # Sensor-Snapshot existiert schon aus HA-Pfad? Dann überspringen
         existing = await db.execute(

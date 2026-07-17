@@ -39,10 +39,13 @@ _HEUTE_HINWEIS = (
     "das Tagesdelta gegen den Mitternachtswert (täglich resettende oder "
     "fortlaufende Zähler funktionieren beide)."
 )
+# (key, feld_label, einheit, beschreibung). feld_label + einheit getrennt, damit
+# die Datenquellen-Fläche nach Einheit gruppieren kann (Energie-Sensoren kWh) —
+# das Anzeige-`label` setzt die Einheit wieder in Klammern (rückwärtskompatibel).
 BASIS_ENERGY_TOPICS = [
-    ("pv_gesamt_kwh", "PV-Erzeugung Zählerstand (kWh)", _HEUTE_HINWEIS),
-    ("einspeisung_kwh", "Einspeisung Zählerstand (kWh)", _HEUTE_HINWEIS),
-    ("netzbezug_kwh", "Netzbezug Zählerstand (kWh)", _HEUTE_HINWEIS),
+    ("pv_gesamt_kwh", "PV-Erzeugung Zählerstand", "kWh", _HEUTE_HINWEIS),
+    ("einspeisung_kwh", "Einspeisung Zählerstand", "kWh", _HEUTE_HINWEIS),
+    ("netzbezug_kwh", "Netzbezug Zählerstand", "kWh", _HEUTE_HINWEIS),
 ]
 
 
@@ -91,7 +94,10 @@ async def build_expected_topics(
 
     topics: list[dict] = []
 
-    # Basis-Live aus Registry
+    # Basis-Live aus Registry.
+    # Die zusätzlichen Keys `feld`/`feld_label`/`einheit`/`gruppe_*` speisen die
+    # feld-zentrische Datenquellen-Zuordnung (Datenquellen-V4 B2) — rückwärts-
+    # kompatibel (bestehende Konsumenten lesen topic/label/kategorie/typ/match_key).
     for feld in BASIS_LIVE_FELDER:
         einheit_str = f" ({feld['einheit']})" if feld.get("einheit") else ""
         topics.append({
@@ -100,17 +106,29 @@ async def build_expected_topics(
             "kategorie": "live",
             "typ": "basis",
             "match_key": ("basis_live", feld["key"]),
+            "feld": feld["key"],
+            "feld_label": feld["label"],
+            "einheit": feld.get("einheit", ""),
+            "hinweis": feld.get("hinweis", ""),
+            "gruppe_id": "basis",
+            "gruppe_titel": "Anlage (Basis)",
         })
 
     # Basis-Energy
-    for key, label, beschreibung in BASIS_ENERGY_TOPICS:
+    for key, feld_label, einheit, beschreibung in BASIS_ENERGY_TOPICS:
         topics.append({
             "topic": f"{energy_prefix}/{key}",
-            "label": label,
+            "label": f"{feld_label} ({einheit})",
             "beschreibung": beschreibung,
             "kategorie": "energy",
             "typ": "basis",
             "match_key": ("basis_energy", key),
+            "feld": key,
+            "feld_label": feld_label,
+            "einheit": einheit,
+            "hinweis": beschreibung,
+            "gruppe_id": "basis",
+            "gruppe_titel": "Anlage (Basis)",
         })
 
     # Investitionen
@@ -129,6 +147,10 @@ async def build_expected_topics(
         islug = _mqtt_slug(inv.bezeichnung)
         inv_live_prefix = f"{live_prefix}/inv/{inv.id}_{islug}"
         inv_energy_prefix = f"{energy_prefix}/inv/{inv.id}_{islug}"
+        gruppe_id = f"inv:{inv.id}"
+        # Nur der Gerätename; das lesbare Typ-Label (TYP_LABELS-SoT) setzt das
+        # Frontend voran — kein Roh-Enum in der UI ([[feedback_typ_labels_pattern]]).
+        gruppe_titel = inv.bezeichnung
 
         for live_feld in get_live_felder_fuer_investition(inv.typ, inv.parameter):
             topics.append({
@@ -137,6 +159,12 @@ async def build_expected_topics(
                 "kategorie": "live",
                 "typ": inv.typ,
                 "match_key": ("inv_live", str(inv.id), live_feld["key"]),
+                "feld": live_feld["key"],
+                "feld_label": live_feld["label"],
+                "einheit": live_feld.get("einheit", ""),
+                "hinweis": live_feld.get("hinweis", ""),
+                "gruppe_id": gruppe_id,
+                "gruppe_titel": gruppe_titel,
             })
 
         for feld in get_alle_felder_fuer_investition(inv.typ, inv.parameter):
@@ -147,6 +175,12 @@ async def build_expected_topics(
                 "kategorie": "energy",
                 "typ": inv.typ,
                 "match_key": ("inv_energy", str(inv.id), feld["feld"]),
+                "feld": feld["feld"],
+                "feld_label": feld["label"],
+                "einheit": feld.get("einheit", ""),
+                "hinweis": feld.get("hinweis", ""),
+                "gruppe_id": gruppe_id,
+                "gruppe_titel": gruppe_titel,
             })
 
     return topics

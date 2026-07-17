@@ -7,7 +7,7 @@ import { EinstellungenModalHost, wizardTitel, type WizardKey } from './Einstellu
 // Host-Mechanik: geschlossen = nichts, offen = Modal mit Titel + Inhalt, Schließen ruft onClose.
 
 const stubRegistry = {
-  'sensor-mapping': { titel: 'Sensor-Zuordnung', Comp: () => <div>WIZARD-INHALT</div> },
+  'csv-import': { titel: 'CSV importieren', Comp: () => <div>WIZARD-INHALT</div> },
 } as unknown as Record<WizardKey, { titel: string; Comp: React.ComponentType }>
 
 describe('EinstellungenModalHost (IA-V4 Einstellungen)', () => {
@@ -17,19 +17,19 @@ describe('EinstellungenModalHost (IA-V4 Einstellungen)', () => {
   })
 
   it('öffnet den Wizard im Modal mit Titel und Inhalt', () => {
-    render(<EinstellungenModalHost offen="sensor-mapping" onClose={vi.fn()} registry={stubRegistry} />)
-    expect(screen.getByRole('heading', { name: 'Sensor-Zuordnung' })).toBeInTheDocument()
+    render(<EinstellungenModalHost offen="csv-import" onClose={vi.fn()} registry={stubRegistry} />)
+    expect(screen.getByRole('heading', { name: 'CSV importieren' })).toBeInTheDocument()
     expect(screen.getByText('WIZARD-INHALT')).toBeInTheDocument()
   })
 
   it('ruft onClose beim Schließen', () => {
     const onClose = vi.fn()
-    render(<EinstellungenModalHost offen="sensor-mapping" onClose={onClose} registry={stubRegistry} />)
+    render(<EinstellungenModalHost offen="csv-import" onClose={onClose} registry={stubRegistry} />)
     fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
     expect(onClose).toHaveBeenCalled()
   })
 
   it('wizardTitel liefert den Klartext-Titel', () => {
-    expect(wizardTitel('sensor-mapping', stubRegistry)).toBe('Sensor-Zuordnung')
+    expect(wizardTitel('csv-import', stubRegistry)).toBe('CSV importieren')
   })
 })

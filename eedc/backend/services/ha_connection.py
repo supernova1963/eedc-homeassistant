@@ -1,0 +1,41 @@
+"""
+HA-Verbindungs-Auflösung (Datenquellen-V4) — EIN zentraler Helper.
+
+Liefert (api_url, token, quelle_kind) der aktiven HA-Verbindung:
+Supervisor-Token (HA-App) hat Vorrang, sonst die konfigurierte Remote-HA-
+Verbindung (`ha_remote`/B4a, Long-Lived-Token). Genutzt von der Datenquellen-
+Route (Entity-Discovery + Wert-Anzeige) UND der Live-Engine (C2a: HA-Felder
+lesen) — eine Quelle der Wahrheit, kein Drift zwischen den Aufrufern.
+"""
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+HA_APP = "ha_app"
+HA_CONNECTOR = "ha_connector"
+HA_REMOTE_SETTINGS_KEY = "ha_remote"
+
+
+async def resolve_ha_connection(db: AsyncSession) -> tuple:
+    """(api_url, token, kind) der aktiven HA-Verbindung — sonst (None, None, None).
+
+    kind ∈ {"ha_app", "ha_connector"}. Supervisor bevorzugt (mit LTS-Zugriff),
+    sonst Remote-HA per LL-Token (nur REST). Unabhängig vom Supervisor-gebundenen
+    `HA_INTEGRATION_AVAILABLE`-Gate (das bleibt P3).
+    """
+    from backend.core.config import settings
+    if settings.supervisor_token:
+        return (settings.ha_api_url, settings.supervisor_token, HA_APP)
+
+    from backend.models.settings import Settings as SettingsModel
+    row = (
+        await db.execute(select(SettingsModel).where(SettingsModel.key == HA_REMOTE_SETTINGS_KEY))
+    ).scalar_one_or_none()
+    val = dict(row.value) if row and row.value else {}
+    if val.get("enabled") and val.get("base_url") and val.get("token"):
+        base = (val["base_url"] or "").strip().rstrip("/")
+        if base.endswith("/api"):
+            base = base[: -len("/api")]
+        return (f"{base}/api", val["token"], HA_CONNECTOR)
+
+    return (None, None, None)

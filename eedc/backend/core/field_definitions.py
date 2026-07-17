@@ -802,6 +802,24 @@ def build_feld_einheiten() -> dict[str, str]:
 FELD_EINHEITEN: dict[str, str] = build_feld_einheiten()
 
 
+# ─── Einheiten-Dimension (SoT für Leistung↔Energie-Verwechslung) ────────────
+# Gemeinsam genutzt vom Daten-Checker (`SENSOR_MAPPING_EINHEIT`) UND der
+# Datenquellen-V4-Zuordnungs-Validierung (§2i, kWh-Sensor in W-Feld = #200).
+# Bewusst NUR Leistung/Energie: SoC (%)/Temperatur (°C)/Preis/km sind legitime
+# Einheiten-Varianten → kein Fehlalarm.
+_POWER_EINHEITEN = {"W", "kW", "MW"}
+_ENERGY_EINHEITEN = {"kWh", "Wh", "MWh"}
+
+
+def einheit_klasse(unit: Optional[str]) -> Optional[str]:
+    """Dimensions-Klasse einer Einheit: 'leistung' | 'energie' | None (egal)."""
+    if unit in _POWER_EINHEITEN:
+        return "leistung"
+    if unit in _ENERGY_EINHEITEN:
+        return "energie"
+    return None
+
+
 # =============================================================================
 # Reader-Helper für `verbrauch_daten`-JSON
 #

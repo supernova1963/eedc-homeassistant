@@ -26,6 +26,8 @@ from backend.services.ha_statistics_service import get_ha_statistics_service
 from backend.services.snapshot.keys import (
     KUMULATIVE_COUNTER_FELDER,
     _mqtt_key_to_sensor_key,
+    extract_quellen_energy,
+    resolve_energy_ha_eid,
 )
 from backend.services.snapshot.komponenten_beitraege import (
     basis_hourly_eintraege,
@@ -91,6 +93,11 @@ async def get_reaggregate_preview(
     # Spalte (alt/neu) auf, deckungsgleich mit dem späteren Reload-Schreibwert.
     eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
     seen_keys: set[str] = set()
+    # C2b-Read-Through (HA-only-Pfad): die „neu"-Spalte (HA-Stats-Projektion des
+    # Reloads) liest die zugeordnete Entity; MQTT-/keine-zugeordnete Felder haben
+    # keine HA-„neu"-Projektion (entity → None). Die „alt"-Spalte (DB-Lookup per
+    # sensor_key) bleibt quellen-agnostisch unverändert.
+    quellen_energy = extract_quellen_energy(anlage)
 
     basis = sensor_mapping.get("basis", {}) or {}
     for he in basis_hourly_eintraege(sensor_mapping):
@@ -99,7 +106,9 @@ async def get_reaggregate_preview(
             eid = cfg.get("sensor_id")
             if eid:
                 sk = f"basis:{he.feld}"
-                eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
+                eid_eff, behalten = resolve_energy_ha_eid(quellen_energy, sk, eid)
+                eintraege.append((sk, eid_eff if behalten else None,
+                                  he.kategorie, he.fallback_gruppe))
                 seen_keys.add(sk)
 
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
@@ -116,7 +125,9 @@ async def get_reaggregate_preview(
                 eid = cfg.get("sensor_id")
                 if eid:
                     sk = f"inv:{inv_id_str}:{he.feld}"
-                    eintraege.append((sk, eid, he.kategorie, he.fallback_gruppe))
+                    eid_eff, behalten = resolve_energy_ha_eid(quellen_energy, sk, eid)
+                    eintraege.append((sk, eid_eff if behalten else None,
+                                      he.kategorie, he.fallback_gruppe))
                     seen_keys.add(sk)
 
     cutoff = datetime.now() - timedelta(days=7)
@@ -317,9 +328,12 @@ async def get_reaggregate_preview(
                 if d >= 0:
                     counter_alt_per_feld[feld] = counter_alt_per_feld.get(feld, 0) + int(round(d))
 
-            if ha_verfuegbar:
-                neu_start = ha_svc.get_value_at(entity_id, tag_0, toleranz_minuten=10)
-                neu_ende = ha_svc.get_value_at(entity_id, tag_ende, toleranz_minuten=10)
+            # C2b: „neu"-Projektion liest die zugeordnete HA-Entity; MQTT-/keine-
+            # zugeordnete Counter haben keine HA-„neu"-Projektion.
+            neu_entity, behalten = resolve_energy_ha_eid(quellen_energy, sensor_key, entity_id)
+            if ha_verfuegbar and behalten and neu_entity:
+                neu_start = ha_svc.get_value_at(neu_entity, tag_0, toleranz_minuten=10)
+                neu_ende = ha_svc.get_value_at(neu_entity, tag_ende, toleranz_minuten=10)
                 if neu_start is not None and neu_ende is not None:
                     d = neu_ende - neu_start
                     if d >= 0:

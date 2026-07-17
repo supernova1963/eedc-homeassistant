@@ -881,6 +881,40 @@ async def _run_data_migrations() -> None:
             migrate_emob_canonical_source,
         )
 
+        # Datenquellen-V4 B8: effektive Quelle jedes Feldes explizit machen
+        # (§2h HA-first, konservativ Inbound). Additiv/idempotent, kein HTTP →
+        # Fundament für den keine-Default-Flip (B8-2).
+        from backend.services.migrations.migrate_datenquellen_materialisieren import (
+            materialisiere_datenquellen,
+        )
+        await _apply_once(
+            "datenquellen_v4_b8_materialisieren",
+            materialisiere_datenquellen,
+        )
+
+        # Datenquellen-V4: Vorzeichen-Umkehr vereinheitlichen — Legacy live_invert
+        # + quellen[].invertieren + Gateway-Transform-Invert in EINEN quellen-
+        # unabhängigen Store `sensor_mapping.invertieren`. Additiv/idempotent, kein HTTP.
+        from backend.services.migrations.migrate_invert_vereinheitlichen import (
+            migrate_invert_vereinheitlichen,
+        )
+        await _apply_once(
+            "datenquellen_v4_invert_vereinheitlichen",
+            migrate_invert_vereinheitlichen,
+        )
+
+        # Datenquellen-V4 B7-5c: Import-/Export-Richtung explizit festschreiben,
+        # BEVOR der neue Default greift (HA vorhanden → Import aus). Ohne diesen
+        # Schritt verstummte ein Bestands-Add-on, das heute per ENV-Flag über MQTT
+        # importiert, still. Additiv/idempotent, kein HTTP.
+        from backend.services.migrations.migrate_mqtt_richtungen import (
+            migriere_mqtt_richtungen,
+        )
+        await _apply_once(
+            "datenquellen_v4_b7_5c_mqtt_richtungen",
+            migriere_mqtt_richtungen,
+        )
+
         # HINWEIS (v3.45.8): Die in v3.45.7 hier registrierte Migration
         # `batterie_kw_entladung_positiv` wurde ENTFERNT. Sie reaggregierte beim
         # Start ALLE historischen Tage über externe HTTP-Calls (HA-History +

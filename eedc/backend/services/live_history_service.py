@@ -30,6 +30,10 @@ from backend.services.live_sensor_config import (
     TAGESVERLAUF_KATEGORIE,
     extract_live_config,
 )
+from backend.services.snapshot.keys import (
+    extract_quellen_energy,
+    resolve_energy_ha_eid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -239,13 +243,29 @@ async def get_tages_kwh(
         if basis_live.get("netzbezug_w"):
             category_entities["netzbezug"].append(basis_live["netzbezug_w"])
 
-    # kWh-Sensoren aus Monatsabschluss-Mapping für exakte Tageswerte (#64)
+    # kWh-Sensoren aus Monatsabschluss-Mapping für exakte Tageswerte (#64).
+    # Diese kWh-Sensoren SIND die Energie-Quellen-Sensoren (`sensor_mapping.
+    # basis/felder[feld].sensor_id`), dieselben, die `_build_counter_map` und
+    # die Datenquellen-Fläche nutzen → Datenquellen-V4-C2b-Read-Through greift
+    # hier (kWh-Sensor-Zweig): HA → zugeordnete Entity; MQTT/keine → diesen
+    # kWh-Sensor nicht verwenden (Wert kommt über den Trapez-Fallback des
+    # Live-W-Sensors bzw. den MQTT-Pfad). Der W-Trapez-Fallback selbst gehört
+    # zur Live-Zuordnung (C2a), nicht hierher.
     mapping_full = anlage.sensor_mapping or {}
+    quellen_energy = extract_quellen_energy(anlage)
+
+    def _eov(sensor_key: str, eid: Optional[str]) -> Optional[str]:
+        """Energie-quellen-Override auf einen kWh-Sensor-Eid anwenden."""
+        if not eid:
+            return None
+        eff, behalten = resolve_energy_ha_eid(quellen_energy, sensor_key, eid)
+        return eff if behalten else None
+
     basis_map = mapping_full.get("basis", {})
     basis_kwh_sensors: dict[str, str] = {}
-    if (eid := _feld_eid(basis_map.get("einspeisung", {}))):
+    if (eid := _eov("basis:einspeisung", _feld_eid(basis_map.get("einspeisung", {})))):
         basis_kwh_sensors["einspeisung"] = eid
-    if (eid := _feld_eid(basis_map.get("netzbezug", {}))):
+    if (eid := _eov("basis:netzbezug", _feld_eid(basis_map.get("netzbezug", {})))):
         basis_kwh_sensors["netzbezug"] = eid
 
     separate_battery_sensors: dict[str, dict[str, Optional[str]]] = {}
@@ -262,21 +282,25 @@ async def get_tages_kwh(
             ladung_eid = inv_live.get("ladung_kwh") or None
             entladung_eid = inv_live.get("entladung_kwh") or None
             if not ladung_eid:
-                ladung_eid = _feld_eid(inv_felder.get("ladung_kwh", {}))
+                ladung_eid = _eov(f"inv:{inv_id}:ladung_kwh",
+                                  _feld_eid(inv_felder.get("ladung_kwh", {})))
             if not entladung_eid:
-                entladung_eid = _feld_eid(inv_felder.get("entladung_kwh", {}))
+                entladung_eid = _eov(f"inv:{inv_id}:entladung_kwh",
+                                     _feld_eid(inv_felder.get("entladung_kwh", {})))
             if ladung_eid or entladung_eid:
                 separate_battery_sensors[inv_id] = {
                     "ladung": ladung_eid,
                     "entladung": entladung_eid,
                 }
         elif typ in ERZEUGER_TYPEN:
-            pv_eid = _feld_eid(inv_felder.get("pv_erzeugung_kwh", {}))
+            pv_eid = _eov(f"inv:{inv_id}:pv_erzeugung_kwh",
+                          _feld_eid(inv_felder.get("pv_erzeugung_kwh", {})))
             if pv_eid:
                 separate_kwh_sensors[f"pv_{inv_id}"] = pv_eid
         elif typ in _MONATSABSCHLUSS_KWH:
             sensor_field, prefix = _MONATSABSCHLUSS_KWH[typ]
-            kwh_eid = _feld_eid(inv_felder.get(sensor_field, {}))
+            kwh_eid = _eov(f"inv:{inv_id}:{sensor_field}",
+                           _feld_eid(inv_felder.get(sensor_field, {})))
             if kwh_eid:
                 separate_kwh_sensors[f"{prefix}_{inv_id}"] = kwh_eid
 

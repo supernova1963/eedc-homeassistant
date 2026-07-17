@@ -36,12 +36,15 @@ const V3_EINSTELLUNG_ZU_V4_KATEGORIE: Record<string, string> = {
   'einstellungen/daten-checker': 'daten',
   'einstellungen/einrichtung': 'daten',
   // Integration
-  'einstellungen/sensor-mapping': 'integration',
   'einstellungen/ha-statistik-import': 'integration',
   'einstellungen/ha-export': 'integration',
-  'einstellungen/mqtt-inbound': 'integration',
   'einstellungen/portal-import': 'integration',
   'einstellungen/import': 'integration',
+  // Datenquellen (B7): die beiden Alt-Wizards sind in die feld-zentrische Fläche
+  // aufgelöst — ihre V3-Routen landen dort, nicht mehr auf „Integration".
+  'einstellungen/datenquellen': 'datenquellen',
+  'einstellungen/sensor-mapping': 'datenquellen',
+  'einstellungen/mqtt-inbound': 'datenquellen',
   // System
   'einstellungen/allgemein': 'system',
   'einstellungen/backup': 'system',
