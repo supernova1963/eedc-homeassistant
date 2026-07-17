@@ -1,7 +1,7 @@
 /**
  * Trend-Tab: Historische Analyse und Degradation
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { TrendingDown, Minus, Calendar, Zap, AlertTriangle, Award } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
@@ -32,11 +32,7 @@ export default function TrendTab({ anlageId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [jahre, setJahre] = useState(3)
 
-  useEffect(() => {
-    loadTrend()
-  }, [anlageId, jahre])
-
-  async function loadTrend() {
+  const loadTrend = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -47,7 +43,11 @@ export default function TrendTab({ anlageId }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [anlageId, jahre])
+
+  useEffect(() => {
+    loadTrend()
+  }, [loadTrend])
 
   if (loading) {
     return <LoadingSpinner text="Lade Trend-Analyse..." />

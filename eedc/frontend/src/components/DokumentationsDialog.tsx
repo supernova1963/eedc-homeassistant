@@ -55,10 +55,12 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
   // (Dirk-PN 2026-06-12). null = unbekannt/lädt → Karte bleibt aktiv.
   const [infothekAnzahl, setInfothekAnzahl] = useState<number | null>(null)
 
+  // Nur die ID ist der Trigger — das Anlage-Objekt selbst wird hier nicht gelesen.
+  const anlageId = anlage?.id
   useEffect(() => {
-    if (!anlage) return
+    if (!anlageId) return
     let abgebrochen = false
-    monatsdatenApi.list(anlage.id)
+    monatsdatenApi.list(anlageId)
       .then(monate => {
         if (abgebrochen) return
         const jahre = Array.from(new Set(monate.map(m => m.jahr))).sort((a, b) => b - a)
@@ -66,11 +68,11 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
       })
       .catch(() => { /* Jahresauswahl bleibt leer -> nur Gesamtzeitraum */ })
     // aktiv=true zählt dieselbe Menge wie der Dossier-Export
-    infothekApi.getCount(anlage.id, true)
+    infothekApi.getCount(anlageId, true)
       .then(count => { if (!abgebrochen) setInfothekAnzahl(count) })
       .catch(() => { /* unbekannt → Karte bleibt aktiv, Backend-Meldung greift */ })
     return () => { abgebrochen = true }
-  }, [anlage?.id])
+  }, [anlageId])
 
   // Falls die Infothek-Karte bereits angekreuzt war, Auswahl bereinigen
   useEffect(() => {

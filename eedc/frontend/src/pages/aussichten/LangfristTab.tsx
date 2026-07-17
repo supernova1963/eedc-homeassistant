@@ -1,7 +1,7 @@
 /**
  * Langfrist-Tab: Monatsprognosen basierend auf PVGIS und Trends
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { TrendingUp, TrendingDown, Minus, Calendar, Zap, Info } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
@@ -44,11 +44,7 @@ export default function LangfristTab({ anlageId }: Props) {
   const [showKonfidenz, setShowKonfidenz] = useState(true)
   const achsen = useChartTheme()
 
-  useEffect(() => {
-    loadPrognose()
-  }, [anlageId, monate])
-
-  async function loadPrognose() {
+  const loadPrognose = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -59,7 +55,11 @@ export default function LangfristTab({ anlageId }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [anlageId, monate])
+
+  useEffect(() => {
+    loadPrognose()
+  }, [loadPrognose])
 
   if (loading) {
     return <LoadingSpinner text="Lade Langfrist-Prognose..." />

@@ -3,7 +3,7 @@
  * Zeigt Felder basierend auf den vorhandenen Investitionen der Anlage an.
  */
 
-import { useState, useEffect, useMemo, useRef, FormEvent } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, FormEvent } from 'react'
 import { Button, Input, Alert, Select, Textarea, FormSection } from '../ui'
 import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi, monatsabschlussApi } from '../../api'
@@ -123,6 +123,11 @@ const monatOptions = [
   { value: '11', label: 'November' },
   { value: '12', label: 'Dezember' },
 ]
+
+/** Schlüssel eines Investitionsfeldes in `bestaetigteFelder`. Rein aus den
+ *  Argumenten gebildet — auf Modul-Ebene, damit die Funktion stabil ist und
+ *  Hook-Deps nicht bei jedem Render neu anschlagen. */
+const invKey = (invId: number, feld: string) => `${invId}:${feld}`
 
 export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung, voreingestellterMonat }: MonatsdatenFormProps) {
   const currentYear = new Date().getFullYear()
@@ -361,6 +366,14 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     }
 
     initializeAndLoad()
+    // Bewusst OHNE `monatsdaten?.batterie_ladung_kwh`/`batterie_entladung_kwh`:
+    // Trigger dieses Effekts ist die IDENTITÄT des Datensatzes (jahr/monat/anlage),
+    // nicht sein Inhalt. Die beiden Legacy-Werte werden beim Initialisieren nur als
+    // Startwert gelesen (einmalige Verteilung auf Speicher ohne InvestitionMonats-
+    // daten, siehe oben). Als Dep würden sie den Effekt bei jedem Neuladen des
+    // Datensatzes erneut feuern und dabei ungespeicherte Eingaben in
+    // `investitionsDaten` überschreiben.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aktiveInvestitionen, monatsdaten?.jahr, monatsdaten?.monat, anlageId, haVorausfuellung])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -422,8 +435,10 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // Basis-Felder unter ihrem Namen, Investitionsfelder unter `${invId}:${feld}`.
   const [bestaetigteFelder, setBestaetigteFelder] = useState<Set<string>>(new Set())
   const bestaetigeFeld = (name: string) => setBestaetigteFelder(prev => new Set(prev).add(name))
-  const invKey = (invId: number, feld: string) => `${invId}:${feld}`
-  const istInvBestaetigt = (invId: number, feld: string) => bestaetigteFelder.has(invKey(invId, feld))
+  const istInvBestaetigt = useCallback(
+    (invId: number, feld: string) => bestaetigteFelder.has(invKey(invId, feld)),
+    [bestaetigteFelder],
+  )
   const bestaetigeInvFelder = (invId: number, felder: string[]) =>
     setBestaetigteFelder(prev => {
       const n = new Set(prev)
@@ -468,12 +483,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // aufgelöst (z. B. E-Auto „Heim: PV/Netz" fehlt, wenn eine Wallbox existiert).
   // Ist der Status geladen, ist SEINE Feldmenge maßgeblich; sonst Fallback auf die
   // clientseitige Registry.
-  const felderFuer = (inv: Investition) => {
+  const felderFuer = useCallback((inv: Investition) => {
     const alle = getFelderFuerInvestition(inv.typ, inv.parameter)
     const erlaubt = invStatus[inv.id]
     if (!erlaubt || Object.keys(erlaubt).length === 0) return alle
     return alle.filter(f => f.feld in erlaubt)
-  }
+  }, [invStatus])
 
   // Kopf-Ampel (§6.2) + Review (§6.6): Zustände über den Pflicht-Kern (Zähler +
   // Investitionsfelder; Wetter/Preise/Sonderkosten zählen nicht als „offen") und
@@ -503,7 +518,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
       }
     }
     return { ampel: zaehleAmpel(zustaende), reviewWarnungen: warnungen }
-  }, [status, formData, investitionsDaten, aktiveInvestitionen, invStatus, bestaetigteFelder])
+  }, [status, formData, investitionsDaten, aktiveInvestitionen, invStatus, bestaetigteFelder, felderFuer, istInvBestaetigt])
 
   const springeZuFeld = (feld: string) => {
     document.querySelector(`[data-feld="${feld}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })

@@ -623,8 +623,10 @@ function HaAutomationGenerator({ anlagen }: { anlagen: { id: number; anlagenname
     setEntityMap(prev => ({ ...prev, [topic]: value }))
   }
 
-  // YAML generieren für eine Gruppe von Topics
-  const generateYaml = (
+  // YAML generieren für eine Gruppe von Topics. useCallback, damit die beiden
+  // useMemo unten es als Dep führen können — es schließt über `entityMap`, das
+  // dort ohnehin schon in den Deps steht.
+  const generateYaml = useCallback((
     groupTopics: MqttTopic[],
     alias: string,
     triggerSeconds: string,
@@ -652,15 +654,15 @@ function HaAutomationGenerator({ anlagen }: { anlagen: { id: number; anlagenname
         value_template: "{{ true }}"
     action:
 ${actions}`
-  }
+  }, [entityMap])
 
   const liveYaml = useMemo(
     () => generateYaml(liveTopics, 'eedc Live-Daten senden', interval),
-    [liveTopics, entityMap, interval],
+    [liveTopics, interval, generateYaml],
   )
   const energyYaml = useMemo(
     () => generateYaml(energyTopics, 'eedc Energy-Daten senden', '60'),
-    [energyTopics, entityMap],
+    [energyTopics, generateYaml],
   )
 
   const copyYaml = (id: string, yaml: string) => {

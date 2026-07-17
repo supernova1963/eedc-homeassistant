@@ -43,7 +43,7 @@ describe('ErfassungZustandBadge — Zustands-Vokabular', () => {
   })
 
   it('nutzt für jeden Zustand ein Icon aus der zentralen Meta-Quelle', () => {
-    ;(Object.keys(ZUSTAND_META) as ErfassungZustand[]).forEach((z) => {
+    (Object.keys(ZUSTAND_META) as ErfassungZustand[]).forEach((z) => {
       expect(ZUSTAND_META[z].Icon).toBeTypeOf('object')
     })
   })

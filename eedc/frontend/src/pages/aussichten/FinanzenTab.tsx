@@ -1,7 +1,7 @@
 /**
  * Finanzen-Tab: Finanzprognose mit ROI und Amortisation
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Euro, TrendingUp, PiggyBank, CheckCircle, Clock, Battery, Car, Flame, Fuel } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, FormelTooltip, fmtCalc, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
@@ -64,11 +64,7 @@ export default function FinanzenTab({ anlageId }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [monate, setMonate] = useState(12)
 
-  useEffect(() => {
-    loadPrognose()
-  }, [anlageId, monate])
-
-  async function loadPrognose() {
+  const loadPrognose = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -79,7 +75,11 @@ export default function FinanzenTab({ anlageId }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [anlageId, monate])
+
+  useEffect(() => {
+    loadPrognose()
+  }, [loadPrognose])
 
   if (loading) {
     return <LoadingSpinner text="Lade Finanzprognose..." />

@@ -231,6 +231,8 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
   const bis = toISODate(new Date())
   const von = vorTagenISO(zeitraumTage)
 
+  // `von`/`bis` sind ISO-STRINGS — als Deps lösen sie keinen Render-Loop aus
+  // (Wertvergleich) und decken `zeitraumTage` mit ab, aus dem `von` entsteht.
   useEffect(() => {
     if (!anlageId) return
     setLoading(true)
@@ -238,7 +240,7 @@ function Wochenvergleich({ anlageId }: WochenvergleichProps) {
       .then(setDaten)
       .catch(() => setDaten([]))
       .finally(() => setLoading(false))
-  }, [anlageId, zeitraumTage])
+  }, [anlageId, von, bis])
 
   // Chart-Daten: eine Zeile pro Stunde, eine Spalte pro aktiver Gruppe
   const chartDaten = useMemo(() => {

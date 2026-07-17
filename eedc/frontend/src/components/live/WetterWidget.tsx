@@ -283,16 +283,18 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
     [vorhandeneKategorien, sonstigeLabel]
   )
 
-  // Stunden-Index für 24h-Timeline (Wetter-Icons über dem Chart)
+  // Stunden-Index für 24h-Timeline (Wetter-Icons über dem Chart). Nur die
+  // Stunden-Liste ist der Trigger — nicht das ganze Wetter-Objekt.
+  const wetterStunden = wetter?.stunden
   const stundenMap = useMemo(() => {
-    if (!wetter?.stunden) return {}
-    const map: Record<number, (typeof wetter.stunden)[0]> = {}
-    for (const s of wetter.stunden) {
+    if (!wetterStunden) return {}
+    const map: Record<number, NonNullable<typeof wetterStunden>[0]> = {}
+    for (const s of wetterStunden) {
       const h = parseInt(s.zeit.split(':')[0])
       map[h] = s
     }
     return map
-  }, [wetter?.stunden])
+  }, [wetterStunden])
 
   if (loading) {
     return (

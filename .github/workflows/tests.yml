@@ -93,6 +93,14 @@ jobs:
         working-directory: eedc/frontend
         run: npx tsc --noEmit
 
+      # --max-warnings 0 (im lint-Script): der Zähler stand bei 101 und ist auf 0
+      # abgearbeitet — react-refresh abgeschaltet (kollidiert mit dem *Teile.tsx-
+      # Muster), die 19 echten exhaustive-deps einzeln bereinigt. Ohne dieses Gate
+      # wächst er unbemerkt wieder zu, und stale-closure-Bugs verstecken sich im Rauschen.
+      - name: Lint (ESLint, keine Warnungen erlaubt)
+        working-directory: eedc/frontend
+        run: npm run lint
+
       - name: Design-Konformität (Inline-Hex-Wächter)
         working-directory: eedc/frontend
         run: npm run check:design

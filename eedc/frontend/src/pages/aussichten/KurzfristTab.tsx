@@ -4,7 +4,7 @@
  * Nutzt Open-Meteo Solar API mit GTI-Berechnung (Global Tilted Irradiance),
  * die Modulneigung und -ausrichtung für genauere Prognosen berücksichtigt.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer, Zap } from 'lucide-react'
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende } from '../../components/ui'
 import ChartTooltip from '../../components/ui/ChartTooltip'
@@ -92,11 +92,7 @@ export default function KurzfristTab({ anlageId }: Props) {
   const schmal = useSchmaleAchse()
   const tage = 14
 
-  useEffect(() => {
-    loadPrognose()
-  }, [anlageId])
-
-  async function loadPrognose() {
+  const loadPrognose = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -115,7 +111,11 @@ export default function KurzfristTab({ anlageId }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [anlageId])
+
+  useEffect(() => {
+    loadPrognose()
+  }, [loadPrognose])
 
   if (loading) {
     return <LoadingSpinner text="Lade Kurzfrist-Prognose..." />

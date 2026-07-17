@@ -10,7 +10,7 @@
  * als geografische Nicht-Menge `toFixed(4)`).
  */
 
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, AlertCircle, Mountain, Upload } from 'lucide-react'
 import { LoadingSpinner, Alert, Button, Input } from '../components/ui'
 import { Parkbar } from '../components/park'
@@ -54,14 +54,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
   // Parameter für Vorschau
   const [systemLosses, setSystemLosses] = useState(14)
 
-  // Daten laden wenn Anlage gewechselt wird
-  useEffect(() => {
-    if (anlageId) {
-      loadData()
-    }
-  }, [anlageId])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!anlageId) return
 
     setLoading(true)
@@ -82,7 +75,12 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
     } finally {
       setLoading(false)
     }
-  }
+  }, [anlageId])
+
+  // Daten laden wenn Anlage gewechselt wird (loadData bricht ohne anlageId selbst ab)
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const loadPreview = async () => {
     if (!anlageId) return

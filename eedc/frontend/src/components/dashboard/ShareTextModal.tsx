@@ -46,13 +46,15 @@ export default function ShareTextModal({ anlageId, availableYears, monatsdaten, 
       .finally(() => setLoading(false))
   }, [anlageId, monat, jahr, variante])
 
-  // Jahr-Wechsel: Monat auf verfügbaren Monat setzen
+  // Gewählten Monat gültig halten (greift v. a. beim Jahr-Wechsel). Läuft mit
+  // `monat`/`monatsdaten` in den Deps auch dann, wenn sich die Datenlage ändert,
+  // und konvergiert: gesetzt wird nur ein Monat, der danach selbst gültig ist.
   useEffect(() => {
     const monate = monatsdaten.filter(m => m.jahr === jahr).map(m => m.monat)
     if (monate.length > 0 && !monate.includes(monat)) {
       setMonat(Math.max(...monate))
     }
-  }, [jahr])
+  }, [jahr, monat, monatsdaten])
 
   const handleCopy = async () => {
     if (!text) return

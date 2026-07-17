@@ -300,7 +300,10 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   }
 
   const activeColumns = COLUMNS.filter(c => visibleColumns.has(c.key))
-  const daten = aggregierteDaten ?? []
+  // Memoisiert, weil `?? []` sonst bei JEDEM Render ein neues Array erzeugt,
+  // solange noch nichts geladen ist — die drei useMemo unten hingen daran und
+  // rechneten dadurch jedes Mal neu (genau der Fall, den exhaustive-deps meldet).
+  const daten = useMemo(() => aggregierteDaten ?? [], [aggregierteDaten])
 
   // ── Vollständigkeits-Quelle (§7, V-b): fehlende Monate + „nächster offener" ──
   // EINE Ableitung für Tabellen-Färbung UND Sprung. Bereich = [Anschaffungs-Anker

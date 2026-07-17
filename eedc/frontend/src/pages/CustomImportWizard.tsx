@@ -137,7 +137,9 @@ export default function CustomImportWizard() {
     } finally {
       setIsAnalyzing(false)
     }
-  }, [])
+    // `selectedAnlageId` MUSS in den Deps stehen: ohne sie analysiert ein Anlage-
+    // Wechsel mitten im Wizard weiter gegen die alte Anlage (stale closure).
+  }, [selectedAnlageId])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -259,7 +261,8 @@ export default function CustomImportWizard() {
     } finally {
       setIsPreviewing(false)
     }
-  }, [file, buildMappingConfig])
+    // s. o.: sonst zeigt die Vorschau die Werte der zuvor gewählten Anlage.
+  }, [file, buildMappingConfig, selectedAnlageId])
 
   const toggleMonth = useCallback((key: string) => {
     setSelectedMonths(prev => {

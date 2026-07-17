@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent } from 'react'
+import { useState, useEffect, useRef, useMemo, FormEvent } from 'react'
 import { Button, Input, Select, Alert, DatumFeld, FormSection } from '../ui'
 import type { SelectItem } from '../ui/Select'
 import type { Investition, InvestitionTyp } from '../../types'
@@ -63,11 +63,14 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
   const setFeldRef = (name: string) => (el: HTMLDivElement | null) => { feldRefs.current[name] = el }
   const markTouched = (name: string) => setTouched(prev => new Set(prev).add(name))
 
-  // Parent-Typ(en) für diesen Investitions-Typ ermitteln
-  const parentTypRaw = PARENT_MAPPING[typ]
-  const parentTypen: InvestitionTyp[] = parentTypRaw
-    ? (Array.isArray(parentTypRaw) ? parentTypRaw : [parentTypRaw])
-    : []
+  // Parent-Typ(en) für diesen Investitions-Typ ermitteln. Memoisiert, weil das
+  // Array sonst bei jedem Render neu entsteht — als Dep des Lade-Effekts unten
+  // hieße das: ein Parent-Fetch pro Render. Hängt allein an `typ`.
+  const parentTypen: InvestitionTyp[] = useMemo(() => {
+    const raw = PARENT_MAPPING[typ]
+    if (!raw) return []
+    return Array.isArray(raw) ? raw : [raw]
+  }, [typ])
   const isParentRequired = PARENT_REQUIRED.includes(typ)
   const parentLabel = parentTypen.map(t => PARENT_TYPE_LABELS[t] || t).join(' / ')
 
@@ -82,7 +85,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
       })
       .catch(() => setPossibleParents([]))
       .finally(() => setLoadingParents(false))
-  }, [typ, anlageId, investition?.id])
+  }, [parentTypen, anlageId, investition?.id])
 
   // ── Parameter-Setter (Switch/Select/RadioGroup) + Input-Event-Bridge ──
   const applyParam = (paramName: string, value: string | boolean) => {
