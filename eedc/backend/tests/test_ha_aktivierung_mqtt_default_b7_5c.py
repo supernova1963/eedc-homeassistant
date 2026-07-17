@@ -20,7 +20,12 @@ from backend.services.mqtt_broker_settings import MQTT_SETTINGS_KEY, import_akti
 
 HA_KEY = "ha_remote"
 TOKEN = "t" * 20
-URL = "http://hass.iot:8123"
+# CI-hermetisch: private IP-LITERAL statt DNS-Name — der SSRF-Guard
+# (_validate_connector_host) löst Hostnamen echt via getaddrinfo auf; ein nur
+# im Heimnetz existierender Name (hass.iot) schlug im GitHub-Runner mit
+# gaierror fehl (Run 29559960668). IP-Literale brauchen keine DNS-Query,
+# private LAN-Bereiche sind im Guard ausdrücklich erlaubt.
+URL = "http://192.168.1.13:8123"
 
 
 async def _setze(db, key, value):
