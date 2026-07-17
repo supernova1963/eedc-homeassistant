@@ -101,7 +101,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
         ? `jahresbericht_${safeName}_${jahresberichtJahr}.pdf`
         : `jahresbericht_${safeName}.pdf`,
       zipKey: 'jahresbericht',
-      accent: 'text-orange-500 border-orange-200 dark:border-orange-900/40',
+      accent: 'text-orange-500',
     },
     {
       icon: <BookOpen className="h-8 w-8" />,
@@ -110,7 +110,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
       url: `./api/infothek/export/pdf?anlage_id=${anlage.id}`,
       filename: `infothek_${safeName}.pdf`,
       zipKey: 'infothek',
-      accent: 'text-blue-500 border-blue-200 dark:border-blue-900/40',
+      accent: 'text-blue-500',
       disabled: infothekAnzahl === 0,
       disabledHint: 'Keine Infothek-Einträge vorhanden — das Dossier hätte keinen Inhalt. Einträge anlegen unter Einstellungen → Infothek.',
     },
@@ -123,7 +123,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
       zipKey: 'anlagendokumentation',
       beta: true,
       feedbackUrl: 'https://github.com/supernova1963/eedc-homeassistant/issues/121',
-      accent: 'text-emerald-600 border-emerald-200 dark:border-emerald-900/40',
+      accent: 'text-emerald-600',
     },
     {
       icon: <Euro className="h-8 w-8" />,
@@ -134,7 +134,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
       zipKey: 'finanzbericht',
       beta: true,
       feedbackUrl: 'https://github.com/supernova1963/eedc-homeassistant/issues/121',
-      accent: 'text-amber-600 border-amber-200 dark:border-amber-900/40',
+      accent: 'text-amber-600',
     },
   ]
 
@@ -214,11 +214,11 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
             const isDisabled = !!card.disabled
             return (
               <div key={card.titel} className="relative flex flex-col">
+                {/* D19-2 (detlan): Checkbox OHNE Kreis-Badge direkt auf der Karte;
+                    Karten-Ränder neutral (Typ-Farbe nur noch am Icon) und ohne
+                    Hover-Lift — dezenter Rahmen-Hover statt Schweben. */}
                 {!isDisabled && (
-                  <div
-                    className="absolute -top-2 -right-2 z-10 flex items-center justify-center h-7 w-7 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm"
-                    title="Für ZIP-Download auswählen"
-                  >
+                  <div className="absolute top-2 right-2 z-10" title="Für ZIP-Download auswählen">
                     <Checkbox
                       id={`zip-${card.zipKey}`}
                       label={<span className="sr-only">{card.titel} für ZIP-Download auswählen</span>}
@@ -232,16 +232,15 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
                   onClick={() => handleDownload(card)}
                   disabled={!!loading || isDisabled}
                   className={`
-                    group flex-1 p-4 rounded-lg border-2 bg-white dark:bg-gray-800 text-left
-                    ${card.accent}
+                    group flex-1 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-left
                     ${card.feedbackUrl ? 'rounded-b-none border-b-0' : ''}
                     ${isDisabled
                       ? 'opacity-50 cursor-not-allowed disabled:cursor-not-allowed'
-                      : 'hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-wait'}
+                      : 'hover:border-gray-300 dark:hover:border-gray-600 transition-colors disabled:opacity-60 disabled:cursor-wait'}
                   `}
                 >
                   <div className="flex items-start gap-3 mb-2">
-                    <div className={card.accent.split(' ')[0]}>{card.icon}</div>
+                    <div className={card.accent}>{card.icon}</div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-gray-900 dark:text-white">{card.titel}</h3>
@@ -265,7 +264,7 @@ export default function DokumentationsDialog({ anlage, onClose }: Dokumentations
                   )}
                 </button>
                 {card.feedbackUrl && (
-                  <div className={`px-4 py-2 border-2 border-t-0 rounded-b-lg bg-white dark:bg-gray-800 ${card.accent}`}>
+                  <div className="px-4 py-2 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-lg bg-white dark:bg-gray-800">
                     <a
                       href={card.feedbackUrl}
                       target="_blank"

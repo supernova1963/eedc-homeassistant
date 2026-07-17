@@ -375,8 +375,8 @@ export default function CloudImportWizard() {
           )}
 
           {/* Navigation (W3) */}
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" onClick={handleAbbrechen}>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="secondary" onClick={handleAbbrechen}>
               Abbrechen
             </Button>
             <Button
@@ -454,15 +454,14 @@ export default function CloudImportWizard() {
 
           {/* Navigation (W3) */}
           <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => setCurrentStep(0)}>
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Zurück
+            </Button>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleAbbrechen}>
-                Abbrechen
-              </Button>
-              <Button variant="ghost" onClick={() => setCurrentStep(0)}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Zurück
-              </Button>
-            </div>
+            <Button variant="secondary" onClick={handleAbbrechen}>
+              Abbrechen
+            </Button>
             <Button
               variant="primary"
               onClick={handleFetch}
@@ -472,6 +471,7 @@ export default function CloudImportWizard() {
               {isFetching ? 'Daten werden abgerufen…' : 'Daten abrufen'}
               {!isFetching && <ChevronRight className="w-4 h-4 ml-1" />}
             </Button>
+            </div>
           </div>
         </div>
       )}
@@ -570,19 +570,17 @@ export default function CloudImportWizard() {
 
           {/* Navigation (W3) */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleAbbrechen}>
-                Abbrechen
-              </Button>
-              <Button variant="ghost" onClick={() => { setCurrentStep(1); setPreview(null) }}>
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Zurück
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={() => { setCurrentStep(1); setPreview(null) }}>
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Zurück
+            </Button>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 {selectedMonths.size} von {preview.monate.length} Monaten
               </span>
+              <Button variant="secondary" onClick={handleAbbrechen}>
+                Abbrechen
+              </Button>
               <Button
                 variant="primary"
                 onClick={handleImport}

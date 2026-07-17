@@ -67,7 +67,7 @@ function renderAt(path: string) {
 describe('EinstellungenV4 (Einstellungen-Shell)', () => {
   it('zeigt alle 6 Kategorien in der Leiste', () => {
     renderAt('/v4/einstellungen/stammdaten')
-    for (const label of ['Stammdaten', 'Komponenten', 'Infothek', 'Werkzeuge', 'Integration', 'System']) {
+    for (const label of ['Stammdaten', 'Komponenten', 'Infothek', 'Daten', 'Integration', 'System']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     }
   })

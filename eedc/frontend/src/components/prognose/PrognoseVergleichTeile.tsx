@@ -631,7 +631,10 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
   return (
     <Card>
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Genauigkeits-Tracking <span className="text-sm font-normal text-gray-500 ml-2">(letzte {genauigkeit.anzahl_tage} Tage)</span></h3>
+        {/* D19-1 (detlan): Kopf zeigt das GEWÄHLTE Fenster; weicht die Datenlage ab,
+            steht das ehrlich daneben (vorher: Kopf = Backend-anzahl_tage → „7 T"
+            gewählt, aber „(letzte 1 Tage)" — drei widersprüchliche Zeitangaben). */}
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Genauigkeits-Tracking <span className="text-sm font-normal text-gray-500 ml-2">(letzte {vm.genauigkeitsTage} Tage{genauigkeit.anzahl_tage < vm.genauigkeitsTage ? ` · ${genauigkeit.anzahl_tage} ${genauigkeit.anzahl_tage === 1 ? 'Tag' : 'Tage'} mit Daten` : ''})</span></h3>
         {/* D14-19 (detLAN #107 v7): Controls umbruchfähig + Gruppen shrink-0 — vorher
             klemmte das `overflow-hidden` der Toggle-Gruppe „Diagnostisch" auf
             „Diagnost" und die Ausreißer-Checkbox lief mobil rechts aus dem Bild. */}
@@ -677,7 +680,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
         )}
       </div>
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-        MAPE/Bias oben über {genauigkeit.anzahl_tage} Tage{vm.ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)` : ''} · Tabelle unten: letzte 7 Tage
+        MAPE/Bias oben über {genauigkeit.anzahl_tage} {genauigkeit.anzahl_tage === 1 ? 'Tag' : 'Tage'} mit Daten{vm.ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)` : ''} · Tabelle unten: {Math.min(7, genauigkeit.tage.length) === 1 ? 'letzter Tag' : `letzte ${Math.min(7, genauigkeit.tage.length)} Tage`}
       </div>
       <DatendichtFallback>
         <Table className="table-fixed">

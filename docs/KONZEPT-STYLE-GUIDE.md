@@ -425,7 +425,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 ### B16 — Modals + Wizards
 
 > **Ein Dialog-Muster:** `components/ui/Modal.tsx` als SoT (Overlay `z-50`, zentriert, `bg-white dark:bg-gray-800`, `rounded-xl`, Schließen-`✕` oben rechts als Icon-Button B15). Kein zweites Dialog-Layout.
-> **Schließen/Abbrechen-Konvention:** `✕` oben rechts **und** „Abbrechen" (ghost) unten links; Primär-Aktion unten rechts. ESC + Backdrop-Klick schließen (außer bei ungespeicherten Eingaben).
+> **Schließen/Abbrechen-Konvention (präzisiert D19-6, Gernot 2026-07-17):** `✕` oben rechts **und** unten **rechtsgebündelt** `[„Abbrechen" (secondary)][Primär-Aktion]` — Abbrechen immer `secondary` (nicht ghost) und DIREKT links neben der Primär-Aktion. ESC + Backdrop-Klick schließen (außer bei ungespeicherten Eingaben). (Frühere Fassung „ghost unten links" war vom gebauten Teil-D-Bestand überholt.)
 > **Ein Wizard-Layout:** Schritt-Indikator oben, Inhalt mittig, „Zurück"(ghost)/„Weiter"(primary) unten; mobil scrollbarer Inhalt mit fixierter Button-Leiste (#213 P5 belegte zwei abweichende Wizard-Layouts → ein Muster). **Bauliche** Vereinheitlichung der bestehenden Wizards = eigener Punkt nach dem v4-Flip (nicht Fundament); die **Regel** gilt ab sofort für Neues.
 
 **Betroffene Issues:** #213 P5.

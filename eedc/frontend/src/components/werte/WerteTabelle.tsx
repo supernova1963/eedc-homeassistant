@@ -338,7 +338,13 @@ export function WerteTabelle({
                 </TableSortKopf>
               </th>
               {aktiveMetriken.map((m) => (
-                <th key={m.key} colSpan={zeigeVergleich ? 3 : 1} className={`${KOPF_ZELLE} text-right`}>
+                // R19-4a (Rainer): im Vergleich-Modus sitzt der Gruppen-Kopf ZENTRIERT
+                // über seinen 3 Spalten (Wert · Vergleich · Δ) + feine Gruppen-Trennlinie.
+                <th
+                  key={m.key}
+                  colSpan={zeigeVergleich ? 3 : 1}
+                  className={`${KOPF_ZELLE} ${zeigeVergleich ? 'text-center border-r border-gray-200 dark:border-gray-700' : 'text-right'}`}
+                >
                   <TableSortKopf aktiv={sortKey === m.key} richtung={sortDir} onClick={() => toggleSort(m.key)}>
                     {m.label}{m.unit ? ` (${m.unit})` : ''}
                   </TableSortKopf>
@@ -360,7 +366,8 @@ export function WerteTabelle({
                         <Fragment key={m.key}>
                           <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtWert(v, m.decimals)}</td>
                           <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{fmtWert(pv, m.decimals)}</td>
-                          <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-100 dark:border-gray-800`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
+                          {/* R19-4b: Gruppen-Trennlinie im Zeilen-Ton (gray-100/800 war im Dark-Mode unsichtbar). */}
+                          <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-200 dark:border-gray-700`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                         </Fragment>
                       )
                     }

@@ -457,9 +457,9 @@ export default function DataImportWizard() {
             </div>
           </Card>
 
-          {/* Navigation (W3) */}
-          <div className="flex justify-start">
-            <Button variant="ghost" onClick={handleAbbrechen}>
+          {/* Navigation (W3) — D19-6-Kanon: Abbrechen secondary, rechtsgebündelt. */}
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={handleAbbrechen}>
               Abbrechen
             </Button>
           </div>
@@ -560,19 +560,18 @@ export default function DataImportWizard() {
             </div>
           </Card>
 
+          {/* D19-6-Kanon: links Zurück · rechts [Abbrechen secondary][Primär]. */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleAbbrechen}>
-                Abbrechen
-              </Button>
-              <Button variant="ghost" onClick={() => { setCurrentStep(0); setPreview(null); setFile(null) }}>
-                <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
-              </Button>
-            </div>
+            <Button variant="ghost" onClick={() => { setCurrentStep(0); setPreview(null); setFile(null) }}>
+              <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
+            </Button>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 {selectedMonths.size} von {preview.monate.length} Monaten
               </span>
+              <Button variant="secondary" onClick={handleAbbrechen}>
+                Abbrechen
+              </Button>
               <Button
                 variant="primary"
                 onClick={handleWeiter}
@@ -669,14 +668,13 @@ export default function DataImportWizard() {
           )}
 
           <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => setCurrentStep(1)}>
+              <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
+            </Button>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleAbbrechen}>
-                Abbrechen
-              </Button>
-              <Button variant="ghost" onClick={() => setCurrentStep(1)}>
-                <ChevronLeft className="w-4 h-4 mr-1" /> Zurück
-              </Button>
-            </div>
+            <Button variant="secondary" onClick={handleAbbrechen}>
+              Abbrechen
+            </Button>
             <Button
               variant="primary"
               onClick={handleImport}
@@ -688,6 +686,7 @@ export default function DataImportWizard() {
                 : <>{selectedMonths.size} Monate importieren <ChevronRight className="w-4 h-4 ml-1" /></>
               }
             </Button>
+            </div>
           </div>
         </div>
       )}

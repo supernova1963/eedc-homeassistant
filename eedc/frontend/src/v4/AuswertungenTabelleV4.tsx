@@ -182,7 +182,8 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
 
   return (
     <div className="p-3 sm:p-6 max-w-[1920px] mx-auto space-y-4">
-      <h1 className="text-lg font-bold text-gray-900 dark:text-white">Werte-Werkbank</h1>
+      {/* R19-4c (Rainer, Gernot-Entscheid 2026-07-17): kein „Werkbank"-Jargon im Titel. */}
+      <h1 className="text-lg font-bold text-gray-900 dark:text-white">Monats- &amp; Tageswerte</h1>
       <BlockShell key="werkbank" persistKey={SICHT_KEY} bloecke={bloecke} sortierbar />
       <ParkFuss />
     </div>

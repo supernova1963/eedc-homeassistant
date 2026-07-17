@@ -373,8 +373,9 @@ export default function ConnectorSetupWizard() {
             </div>
 
             {/* Navigation (W3) */}
-            <div className="flex items-center justify-between mt-6">
-              <Button variant="ghost" onClick={handleAbbrechen}>
+            {/* D19-6-Kanon: [Abbrechen secondary][Primär] rechtsgebündelt. */}
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <Button variant="secondary" onClick={handleAbbrechen}>
                 Abbrechen
               </Button>
               <Button
@@ -474,14 +475,13 @@ export default function ConnectorSetupWizard() {
 
             {/* Navigation (W3) */}
             <div className="flex items-center justify-between mt-6">
+              <Button variant="ghost" onClick={() => setCurrentStep(0)}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Zurück
+              </Button>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={handleAbbrechen}>
-                  Abbrechen
-                </Button>
-                <Button variant="secondary" onClick={() => setCurrentStep(0)}>
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Zurück
-                </Button>
-              </div>
+              <Button variant="secondary" onClick={handleAbbrechen}>
+                Abbrechen
+              </Button>
               <Button
                 onClick={handleSetup}
                 disabled={isSettingUp || !selectedAnlageId}
@@ -492,6 +492,7 @@ export default function ConnectorSetupWizard() {
                   <>Connector einrichten <ChevronRight className="h-4 w-4 ml-1" /></>
                 )}
               </Button>
+              </div>
             </div>
           </div>
         </Card>

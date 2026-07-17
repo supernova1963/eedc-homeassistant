@@ -560,7 +560,11 @@ export default function CommunityShare() {
             Alle deine geteilten Daten werden vom Community-Server entfernt.
             Dies kann nicht rückgängig gemacht werden.
           </p>
-          <div className="flex gap-3">
+          {/* D19-6-Kanon: [Abbrechen secondary][Primär/danger] rechtsgebündelt. */}
+          <div className="flex gap-3 justify-end">
+            <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
+              Abbrechen
+            </Button>
             <Button variant="danger" onClick={handleDelete} loading={deleting} className="gap-2">
               {deleting ? 'Wird gelöscht...' : (
                 <>
@@ -568,9 +572,6 @@ export default function CommunityShare() {
                   Ja, löschen
                 </>
               )}
-            </Button>
-            <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>
-              Abbrechen
             </Button>
           </div>
         </div>

@@ -268,9 +268,9 @@ function MappingForm({
         placeholder="z.B. Shelly 3EM Phase 1"
       />
 
-      {/* Buttons — M10-Kanon: Abbrechen ghost, Speichern primary + loading */}
+      {/* Buttons — M10/D19-6-Kanon: [Abbrechen secondary][Speichern primary] rechtsgebündelt */}
       <div className="flex gap-2 justify-end">
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
           Abbrechen
         </Button>
         <Button

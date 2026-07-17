@@ -321,62 +321,92 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
           {anlagenname ? ` Anlage: ${anlagenname}.` : ''}
         </p>
 
-        {/* Operation-Auswahl */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Operation
-            </label>
-            <Select
-              value={selectedOp}
-              onChange={(e) => handleOpChange(e.target.value as WorkbenchOp)}
-              disabled={planLoading || executeRunning || deleteRunning}
-              options={[
-                ...WORKBENCH_OPERATIONS.map((o) => ({ value: o.type as string, label: o.label })),
-                // D14-8: Lösch-Aktion als Werkbank-Eintrag (direkter Pfad, nur /v4).
-                ...(istV4 ? [{ value: DELETE_ENERGIEPROFIL as string, label: 'Energieprofil-Daten löschen' }] : []),
-              ]}
-            />
-            {opBeschreibung && (
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {opBeschreibung}
-              </p>
+        {/* D19-4 (detlan): Operation → Parameter → Aktion als EINE linke Spalte
+            (Parameter erscheinen UNTER dem Auswahlfeld), Verlauf rechts daneben. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Operation
+              </label>
+              <Select
+                value={selectedOp}
+                onChange={(e) => handleOpChange(e.target.value as WorkbenchOp)}
+                disabled={planLoading || executeRunning || deleteRunning}
+                options={[
+                  ...WORKBENCH_OPERATIONS.map((o) => ({ value: o.type as string, label: o.label })),
+                  // D14-8: Lösch-Aktion als Werkbank-Eintrag (direkter Pfad, nur /v4).
+                  ...(istV4 ? [{ value: DELETE_ENERGIEPROFIL as string, label: 'Energieprofil-Daten löschen' }] : []),
+                ]}
+              />
+              {opBeschreibung && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {opBeschreibung}
+                </p>
+              )}
+            </div>
+
+            {/* Operation-spezifische Parameter — unter dem Auswahlfeld */}
+            {!istDelete && (
+              <OperationParamsEditor
+                operation={selectedOp as RepairOperationType}
+                params={params}
+                setParams={setParams}
+                disabled={planLoading || executeRunning}
+              />
+            )}
+
+            {/* Plan erstellen bzw. D14-8: direkter Lösch-Pfad (Gefahren-Stil) */}
+            {istDelete ? (
+              <div className="flex justify-end">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={handleDeleteEnergieprofil}
+                  loading={deleteRunning}
+                >
+                  {!deleteRunning && <Trash2 className="w-4 h-4 mr-2" />}
+                  Energieprofil-Daten löschen
+                </Button>
+              </div>
+            ) : !plan && !executeResult && (
+              <div className="flex justify-end">
+                <Button onClick={handleCreatePlan} disabled={planLoading}>
+                  {/* D14-14: Icon mobil weg (Kontext-Regel; Spinner bleibt als Aktivitäts-Signal). */}
+                  {planLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="max-sm:hidden h-4 w-4 mr-2" />}
+                  Plan erstellen
+                </Button>
+              </div>
             )}
           </div>
 
-          {/* Operation-spezifische Parameter */}
-          {!istDelete && (
-            <OperationParamsEditor
-              operation={selectedOp as RepairOperationType}
-              params={params}
-              setParams={setParams}
-              disabled={planLoading || executeRunning}
-            />
-          )}
-        </div>
-
-        {/* Plan erstellen bzw. D14-8: direkter Lösch-Pfad (Gefahren-Stil) */}
-        {istDelete ? (
-          <div className="flex justify-end">
+          {/* Verlauf — rechte Spalte (mobil: unter dem Operations-Block) */}
+          <div className="md:border-l md:border-gray-200 md:dark:border-gray-700 md:pl-6">
             <Button
-              variant="danger"
+              variant="ghost"
               size="sm"
-              onClick={handleDeleteEnergieprofil}
-              loading={deleteRunning}
+              onClick={() => setHistoryOpen((v) => !v)}
+              aria-expanded={historyOpen}
             >
-              {!deleteRunning && <Trash2 className="w-4 h-4 mr-2" />}
-              Energieprofil-Daten löschen
+              {historyOpen ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
+              <History className="h-4 w-4 mr-2" />
+              Verlauf der letzten {history.length} Reparaturen
             </Button>
+            {historyOpen && (
+              <div className="mt-3">
+                {historyLoading ? (
+                  <div className="text-sm text-gray-500"><Loader2 className="inline h-4 w-4 mr-1 animate-spin" /> wird geladen …</div>
+                ) : history.length === 0 ? (
+                  <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+                    Noch kein Verlauf — neue Pläne erscheinen hier (max. 20 Einträge, 1h Cache).
+                  </div>
+                ) : (
+                  <HistoryList views={history} />
+                )}
+              </div>
+            )}
           </div>
-        ) : !plan && !executeResult && (
-          <div className="flex justify-end">
-            <Button onClick={handleCreatePlan} disabled={planLoading}>
-              {/* D14-14: Icon mobil weg (Kontext-Regel; Spinner bleibt als Aktivitäts-Signal). */}
-              {planLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="max-sm:hidden h-4 w-4 mr-2" />}
-              Plan erstellen
-            </Button>
-          </div>
-        )}
+        </div>
 
         {deleteMessage && (
           <div className="mt-4">
@@ -409,32 +439,6 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
           </div>
         )}
 
-        {/* Verlauf */}
-        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setHistoryOpen((v) => !v)}
-            aria-expanded={historyOpen}
-          >
-            {historyOpen ? <ChevronDown className="h-4 w-4 mr-2" /> : <ChevronRight className="h-4 w-4 mr-2" />}
-            <History className="h-4 w-4 mr-2" />
-            Verlauf der letzten {history.length} Reparaturen
-          </Button>
-          {historyOpen && (
-            <div className="mt-3">
-              {historyLoading ? (
-                <div className="text-sm text-gray-500"><Loader2 className="inline h-4 w-4 mr-1 animate-spin" /> wird geladen …</div>
-              ) : history.length === 0 ? (
-                <div className="text-sm text-gray-500 dark:text-gray-400 italic">
-                  Noch kein Verlauf — neue Pläne erscheinen hier (max. 20 Einträge, 1h Cache).
-                </div>
-              ) : (
-                <HistoryList views={history} />
-              )}
-            </div>
-          )}
-        </div>
       </div>
     </Card>
   )

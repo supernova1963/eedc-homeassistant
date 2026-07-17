@@ -119,7 +119,7 @@ export default function DatenquellenHaPicker({
         )}
 
         <div className="flex justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>Abbrechen</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>Abbrechen</Button>
         </div>
       </div>
     </Modal>

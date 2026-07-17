@@ -441,7 +441,7 @@ export default function DatenquellenGatewayPicker({
         )}
 
         <div className="flex justify-end gap-2 border-t border-gray-100 dark:border-gray-800 pt-3">
-          <Button type="button" variant="ghost" onClick={onClose}>Abbrechen</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>Abbrechen</Button>
           <Button type="button" onClick={speichern} disabled={!gewaehlt}>Quelle speichern</Button>
         </div>
       </div>
