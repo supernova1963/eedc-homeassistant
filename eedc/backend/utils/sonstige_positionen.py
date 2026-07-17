@@ -113,6 +113,37 @@ def berechne_sonstige_netto(verbrauch_daten: dict[str, Any] | None) -> float:
     return berechne_sonstige_summen(verbrauch_daten)["netto_euro"]
 
 
+def get_md_sonstige_positionen(md: Any) -> list[dict]:
+    """
+    Basis-Ebene (G19-1): liest sonstige_positionen von einem ``Monatsdaten``-Row.
+    Legacy-Fallback: Spalten ``sonderkosten_euro``/``sonderkosten_beschreibung``
+    → einzelne Ausgabe-Position (Spiegel von ``get_sonstige_positionen``; greift
+    nur, solange die Start-Migration die Zeile noch nicht materialisiert hat,
+    z. B. direkt nach einem Restore eines Alt-Backups).
+    """
+    if md is None:
+        return []
+
+    positionen = getattr(md, "sonstige_positionen", None)
+    if positionen is not None:
+        return positionen or []
+
+    legacy_euro = _safe_float(getattr(md, "sonderkosten_euro", None))
+    if legacy_euro is not None and legacy_euro > 0:
+        return [{
+            "bezeichnung": getattr(md, "sonderkosten_beschreibung", None) or "Sonderkosten (migriert)",
+            "betrag": legacy_euro,
+            "typ": "ausgabe",
+        }]
+
+    return []
+
+
+def berechne_md_sonstige_summen(md: Any) -> dict:
+    """Basis-Ebene: Aufschlüsselung ertraege/ausgaben/netto für EIN Monatsdaten-Row."""
+    return berechne_sonstige_summen({"sonstige_positionen": get_md_sonstige_positionen(md)})
+
+
 def aggregiere_sonstige_je_monat(imd_rows: Any) -> dict[tuple[int, int], dict[str, float]]:
     """Summiert Sonstige Erträge/Ausgaben/Netto je ``(jahr, monat)`` über IMD-Rows.
 

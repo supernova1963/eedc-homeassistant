@@ -34,6 +34,10 @@ class Strompreis(Base):
     netzbezug_arbeitspreis_cent_kwh: Mapped[float] = mapped_column(Float, nullable=False)
     einspeiseverguetung_cent_kwh: Mapped[float] = mapped_column(Float, nullable=False)
     grundpreis_euro_monat: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=0)
+    # G19-1 K3 (R19-3): jährliche Zähler-/Messstellengebühr — reiner AUSWEIS in
+    # der Jahresaufstellung (Cockpit/Jahr-Finanzen), wird NICHT in Netto-Ertrag/
+    # Kosten verrechnet (Kennzahlen-Änderung wäre ein eigener Entscheid).
+    zaehlergebuehr_euro_jahr: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Gültigkeit
     gueltig_ab: Mapped[date] = mapped_column(Date, nullable=False)

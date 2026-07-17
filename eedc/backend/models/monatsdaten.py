@@ -80,9 +80,16 @@ class Monatsdaten(Base):
     peak_netzbezug_kw: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # Maximaler Netzbezug im Monat (kW)
 
-    # Sonderkosten (manuelle Eingabe)
+    # Sonderkosten (Legacy, deprecated seit G19-1) — NICHT entfernen (bestehende
+    # Installationen/Backups). Neuer Code liest/schreibt ausschließlich
+    # sonstige_positionen; Lese-Fallback: utils/sonstige_positionen.get_md_sonstige_positionen.
     sonderkosten_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     sonderkosten_beschreibung: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # G19-1: Strukturierte sonstige Erträge & Ausgaben auf Anlage-Ebene —
+    # gleiche Positions-Mechanik wie InvestitionMonatsdaten.verbrauch_daten
+    # ["sonstige_positionen"]: [{bezeichnung, betrag, typ: ertrag|ausgabe}]
+    sonstige_positionen: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     # Metadaten
     datenquelle: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # manual, csv, ha_import

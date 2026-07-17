@@ -42,11 +42,9 @@ export interface FeldStatus {
   gruppe: string | null  // zaehler, wetter, preise
 }
 
-export interface SonstigePosition {
-  bezeichnung: string
-  betrag: number
-  typ: 'ertrag' | 'ausgabe'
-}
+// SoT-Kanon in types/index.ts (G19-1) — hier nur Re-Export für Bestand
+import type { SonstigePosition } from '../types'
+export type { SonstigePosition }
 
 export interface InvestitionStatus {
   id: number

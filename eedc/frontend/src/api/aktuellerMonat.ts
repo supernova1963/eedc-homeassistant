@@ -135,6 +135,11 @@ export interface AktuellerMonatResponse {
   sonstige_ertraege_euro: number
   sonstige_ausgaben_euro: number
   sonstige_netto_euro: number
+  // G19-1: davon Anlage-Ebene (Monatsdaten.sonstige_positionen) — reiner
+  // Ausweis für die T-Konto-Zeile „Anlage — Sonstige …", bereits in den
+  // sonstige_*-Totals enthalten.
+  anlage_sonstige_ertraege_euro: number
+  anlage_sonstige_ausgaben_euro: number
   gesamtnettoertrag_euro: number | null
   betriebskosten_anteilig_euro: number | null
 
@@ -142,6 +147,11 @@ export interface AktuellerMonatResponse {
   netzbezug_preis_cent: number | null
   einspeise_preis_cent: number | null
   netzbezug_durchschnittspreis_cent: number | null
+  // G19-1 K3: Grundgebühr des Monats (steckt bereits in netzbezug_kosten_euro,
+  // reiner Ausweis) + jährliche Zählergebühr vom Tarif (nur Jahresaufstellung,
+  // nicht verrechnet).
+  grundgebuehr_euro: number | null
+  zaehlergebuehr_euro_jahr: number | null
 
   // Vergleiche
   vorjahr: {

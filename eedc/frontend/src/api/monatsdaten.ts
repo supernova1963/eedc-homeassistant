@@ -3,7 +3,7 @@
  */
 
 import { api } from './client'
-import type { Monatsdaten, MonatsKennzahlen } from '../types'
+import type { Monatsdaten, MonatsKennzahlen, SonstigePosition } from '../types'
 
 export interface MonatsdatenCreate {
   anlage_id: number
@@ -23,6 +23,8 @@ export interface MonatsdatenCreate {
   sonnenstunden?: number
   datenquelle?: string
   notizen?: string
+  // G19-1: Anlage-Ebene Sonstige Erträge & Ausgaben ([] = bewusst geleert)
+  sonstige_positionen?: SonstigePosition[]
 }
 
 export interface MonatsdatenUpdate {
@@ -39,6 +41,8 @@ export interface MonatsdatenUpdate {
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
   notizen?: string
+  // G19-1: Anlage-Ebene Sonstige Erträge & Ausgaben ([] = bewusst geleert)
+  sonstige_positionen?: SonstigePosition[]
 }
 
 export interface MonatsdatenMitKennzahlen extends Monatsdaten {

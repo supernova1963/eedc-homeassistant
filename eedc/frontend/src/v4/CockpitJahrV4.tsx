@@ -169,7 +169,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
           defaultOpen: true,
           render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahres-Kennzahlen verfügbar.</p>,
         }
-    const finanzBlock = d ? finanzTeaserBlock(d, park) : null
+    const finanzBlock = d ? finanzTeaserBlock(d, park, 'jahr') : null
     return [
       ...(kennzahlenBlock ? [kennzahlenBlock] : []),
       // Bilanz-Block: jede Teil-Anzeige einzeln parkbar (in JahrBilanz, gleiche IDs wie

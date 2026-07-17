@@ -60,7 +60,11 @@ from backend.core.field_definitions import (
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
-from backend.utils.sonstige_positionen import berechne_sonstige_summen, aggregiere_sonstige_je_monat
+from backend.utils.sonstige_positionen import (
+    berechne_sonstige_summen,
+    berechne_md_sonstige_summen,
+    aggregiere_sonstige_je_monat,
+)
 from backend.core.investition_parameter import ist_dienstlich
 
 logger = logging.getLogger(__name__)
@@ -227,12 +231,23 @@ class AktuellerMonatResponse(BaseModel):
     sonstige_ertraege_euro: float = 0.0
     sonstige_ausgaben_euro: float = 0.0
     sonstige_netto_euro: float = 0.0
+    # G19-1: davon Anlage-Ebene (Monatsdaten.sonstige_positionen) — reiner
+    # Ausweis für die T-Konto-Zeile „Anlage — Sonstige …", bereits in den
+    # sonstige_*-Totals enthalten (kein zweiter Posten, R15-5-Muster).
+    anlage_sonstige_ertraege_euro: float = 0.0
+    anlage_sonstige_ausgaben_euro: float = 0.0
     gesamtnettoertrag_euro: Optional[float] = None  # Erlöse + Einsparungen − Kosten
 
     # Tarif-Info
     netzbezug_preis_cent: Optional[float] = None      # Verwendeter Tarif
     einspeise_preis_cent: Optional[float] = None
     netzbezug_durchschnittspreis_cent: Optional[float] = None  # Flexibler Tarif (Monatsdurchschnitt)
+    # G19-1 K3 (R19-3): Grundgebühr des Monats — steckt bereits in
+    # netzbezug_kosten_euro (reiner Ausweis, kein zweiter Posten).
+    grundgebuehr_euro: Optional[float] = None
+    # G19-1 K3: jährliche Zähler-/Messstellengebühr vom Tarif — reiner Ausweis
+    # in der Jahresaufstellung, NICHT in Kosten/Netto-Ertrag verrechnet.
+    zaehlergebuehr_euro_jahr: Optional[float] = None
 
     # Vergleiche
     vorjahr: Optional[dict] = None
@@ -1120,9 +1135,15 @@ async def get_aktueller_monat(
     netto_ertrag = None
     netzbezug_preis_cent = None
     einspeise_cent = None
+    grundgebuehr = None
+    zaehlergebuehr_jahr = None
 
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
+    if allgemein_tarif:
+        # G19-1 K3: jährliche Zählergebühr (Ausweis in der Jahresaufstellung,
+        # NICHT verrechnet) — Frontend zeigt sie nur im Jahres-Finanzblock.
+        zaehlergebuehr_jahr = allgemein_tarif.zaehlergebuehr_euro_jahr
     if allgemein_tarif:
         netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else NETZBEZUG_DEFAULT_CENT
         einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
@@ -1143,6 +1164,9 @@ async def get_aktueller_monat(
             netzbezug_kosten = round(
                 berechne_netzbezug_kosten(netzbezug, netzbezug_preis_cent, grundpreis), 2
             )
+            # G19-1 K3 (R19-3): Grundgebühr separat ausweisen — steckt bereits
+            # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
+            grundgebuehr = round(grundpreis, 2)
         if eigenverbrauch is not None:
             ev_ersparnis = round(eigenverbrauch * netzbezug_preis_cent / 100, 2)
 
@@ -1250,6 +1274,17 @@ async def get_aktueller_monat(
     _sonstige_agg = aggregiere_sonstige_je_monat(_sonstige_rows).get((jahr, monat), {})
     sonstige_ertraege_total = round(_sonstige_agg.get("ertraege_euro", 0.0), 2)
     sonstige_ausgaben_total = round(_sonstige_agg.get("ausgaben_euro", 0.0), 2)
+
+    # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen, Anlage-Ebene)
+    # wirken GENAU wie IMD-Positionen: eigene T-Konto-Zeile „Anlage — Sonstige …"
+    # (anlage_*-Felder, reiner Ausweis) + einmalig in die Totals gefaltet
+    # (R15-5-Muster: kein zweiter Kostenposten). md_for_gas ist der bereits
+    # geladene Monatsdaten-Row dieses Monats.
+    _anlage_sonstige = berechne_md_sonstige_summen(md_for_gas)
+    anlage_sonstige_ertraege = round(_anlage_sonstige["ertraege_euro"], 2)
+    anlage_sonstige_ausgaben = round(_anlage_sonstige["ausgaben_euro"], 2)
+    sonstige_ertraege_total = round(sonstige_ertraege_total + anlage_sonstige_ertraege, 2)
+    sonstige_ausgaben_total = round(sonstige_ausgaben_total + anlage_sonstige_ausgaben, 2)
     sonstige_netto_total = round(sonstige_ertraege_total - sonstige_ausgaben_total, 2)
 
     # ── Gesamtnettoertrag = Erlöse + Einsparungen − Kosten ──
@@ -1823,12 +1858,16 @@ async def get_aktueller_monat(
         sonstige_ertraege_euro=sonstige_ertraege_total,
         sonstige_ausgaben_euro=sonstige_ausgaben_total,
         sonstige_netto_euro=sonstige_netto_total,
+        anlage_sonstige_ertraege_euro=anlage_sonstige_ertraege,
+        anlage_sonstige_ausgaben_euro=anlage_sonstige_ausgaben,
         gesamtnettoertrag_euro=gesamtnettoertrag,
         betriebskosten_anteilig_euro=betriebskosten_anteilig,
         # Tarif-Info
         netzbezug_preis_cent=netzbezug_preis_cent if allgemein_tarif else None,
         einspeise_preis_cent=einspeise_cent if allgemein_tarif else None,
         netzbezug_durchschnittspreis_cent=netzbezug_durchschnittspreis,
+        grundgebuehr_euro=grundgebuehr,
+        zaehlergebuehr_euro_jahr=zaehlergebuehr_jahr,
         # Vergleiche
         vorjahr=vorjahr,
         soll_pv_kwh=soll_pv,

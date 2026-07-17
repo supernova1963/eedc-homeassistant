@@ -14,12 +14,10 @@ import { useState } from 'react'
 import { Input, SegmentControl, Button } from '../ui'
 import { fmtZahl } from '../../lib'
 import { X } from 'lucide-react'
+import type { SonstigePosition } from '../../types'
 
-export interface SonstigePosition {
-  bezeichnung: string
-  betrag: number
-  typ: 'ertrag' | 'ausgabe'
-}
+// SoT-Kanon in types/index.ts (G19-1) — hier nur Re-Export für Bestand
+export type { SonstigePosition }
 
 interface Props {
   /** Nur für eindeutige aria-Labels bei mehreren Instanzen (Monatsdaten je Investition). */

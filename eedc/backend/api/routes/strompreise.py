@@ -26,6 +26,8 @@ class StrompreisBase(BaseModel):
     netzbezug_arbeitspreis_cent_kwh: float = Field(..., ge=0)
     einspeiseverguetung_cent_kwh: float = Field(..., ge=0)
     grundpreis_euro_monat: Optional[float] = Field(0, ge=0)
+    # G19-1 K3: jährliche Zähler-/Messstellengebühr (Ausweis in der Jahresaufstellung)
+    zaehlergebuehr_euro_jahr: Optional[float] = Field(None, ge=0)
     gueltig_ab: date
     gueltig_bis: Optional[date] = None
     tarifname: Optional[str] = Field(None, max_length=255)
@@ -44,6 +46,7 @@ class StrompreisUpdate(BaseModel):
     netzbezug_arbeitspreis_cent_kwh: Optional[float] = Field(None, ge=0)
     einspeiseverguetung_cent_kwh: Optional[float] = Field(None, ge=0)
     grundpreis_euro_monat: Optional[float] = Field(None, ge=0)
+    zaehlergebuehr_euro_jahr: Optional[float] = Field(None, ge=0)
     gueltig_ab: Optional[date] = None
     gueltig_bis: Optional[date] = None
     tarifname: Optional[str] = Field(None, max_length=255)

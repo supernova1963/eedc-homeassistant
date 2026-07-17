@@ -490,6 +490,7 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
     netzbezug_arbeitspreis_cent_kwh: strompreis?.netzbezug_arbeitspreis_cent_kwh?.toString() || '30',
     einspeiseverguetung_cent_kwh: strompreis?.einspeiseverguetung_cent_kwh?.toString() || '8.2',
     grundpreis_euro_monat: strompreis?.grundpreis_euro_monat?.toString() || '',
+    zaehlergebuehr_euro_jahr: strompreis?.zaehlergebuehr_euro_jahr?.toString() || '',
     gueltig_ab: strompreis?.gueltig_ab || new Date().toISOString().split('T')[0],
     gueltig_bis: strompreis?.gueltig_bis || '',
     vertragsart: strompreis?.vertragsart || '',
@@ -560,6 +561,7 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
         netzbezug_arbeitspreis_cent_kwh: parseFloat(formData.netzbezug_arbeitspreis_cent_kwh),
         einspeiseverguetung_cent_kwh: parseFloat(formData.einspeiseverguetung_cent_kwh),
         grundpreis_euro_monat: formData.grundpreis_euro_monat ? parseFloat(formData.grundpreis_euro_monat) : undefined,
+        zaehlergebuehr_euro_jahr: formData.zaehlergebuehr_euro_jahr ? parseFloat(formData.zaehlergebuehr_euro_jahr) : undefined,
         gueltig_ab: formData.gueltig_ab,
         gueltig_bis: formData.gueltig_bis || undefined,
         tarifname: formData.tarifname || undefined,
@@ -646,6 +648,20 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
             value={formData.grundpreis_euro_monat}
             onChange={handleChange}
             hint="Optional"
+          />
+          {/* G19-1 K3 (R19-3): jährliche Zähler-/Messstellengebühr — erscheint
+              als nachrichtliche Zeile in der Jahresaufstellung (Cockpit/Jahr),
+              wird NICHT in Kosten/Netto-Ertrag verrechnet. */}
+          <Input
+            label="Zählergebühr (€/Jahr)"
+            labelClassName="md:min-h-[2.5rem]"
+            name="zaehlergebuehr_euro_jahr"
+            type="number"
+            step="0.01"
+            min="0"
+            value={formData.zaehlergebuehr_euro_jahr}
+            onChange={handleChange}
+            hint="Optional — Ausweis in der Jahresaufstellung"
           />
         </div>
       </FormSection>

@@ -221,6 +221,8 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     sonstige_ertraege_euro: summe(f('sonstige_ertraege_euro')) ?? 0,
     sonstige_ausgaben_euro: summe(f('sonstige_ausgaben_euro')) ?? 0,
     sonstige_netto_euro: summe(f('sonstige_netto_euro')) ?? 0,
+    anlage_sonstige_ertraege_euro: summe(f('anlage_sonstige_ertraege_euro')) ?? 0,
+    anlage_sonstige_ausgaben_euro: summe(f('anlage_sonstige_ausgaben_euro')) ?? 0,
     gesamtnettoertrag_euro: summe(f('gesamtnettoertrag_euro')),
     betriebskosten_anteilig_euro: summe(f('betriebskosten_anteilig_euro')),
 
@@ -228,6 +230,10 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     netzbezug_preis_cent: mittel(f('netzbezug_preis_cent')),
     einspeise_preis_cent: mittel(f('einspeise_preis_cent')),
     netzbezug_durchschnittspreis_cent: mittel(f('netzbezug_durchschnittspreis_cent')),
+    // G19-1 K3: Grundgebühr = Σ der Monats-Grundgebühren; Zählergebühr ist ein
+    // JAHRES-Wert vom Tarif → letzter vorhandener Wert, NICHT summieren.
+    grundgebuehr_euro: summe(f('grundgebuehr_euro')),
+    zaehlergebuehr_euro_jahr: f('zaehlergebuehr_euro_jahr').filter((v): v is number => v != null).at(-1) ?? null,
 
     // SOLL (Σ Monats-PVGIS); Vorjahr-Vergleich liefert die Jahr-Sicht separat.
     soll_pv_kwh: summe(f('soll_pv_kwh')),

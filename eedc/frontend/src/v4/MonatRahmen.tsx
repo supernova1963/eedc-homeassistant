@@ -89,7 +89,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
  *  Element-Park-Doktrin: jede Anzeige einzeln parkbar; die ct/kWh-Tarif-Zeile ist
  *  eine ANNOTATION zum Netto-Ertrag und parkt MIT der Finanz-Bilanz (Gernot
  *  2026-07-09), nicht als eigenes Element. Sind alle geparkt → kein Block (`null`). */
-export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOOP_PARK): Block | null {
+export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOOP_PARK, zeitraum: 'monat' | 'jahr' = 'monat'): Block | null {
   const hatTarif = d.netzbezug_durchschnittspreis_cent != null || d.netzbezug_preis_cent != null || d.einspeise_preis_cent != null
   const ids = ['el:finanzen-bilanz', 'el:finanzen-link']
   if (ids.every((id) => park.istGeparkt(id))) return null
@@ -107,9 +107,26 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
           <dl className="text-sm space-y-1.5">
             <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.einspeise_erloes_euro)}</dd></div>
             <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">EV-Ersparnis</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.ev_ersparnis_euro)}</dd></div>
-            <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Netzbezug-Kosten</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd></div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500 dark:text-gray-400">
+                Netzbezug-Kosten
+                {/* G19-1 K3 (R19-3): Grundgebühr steckt bereits in den Kosten —
+                    reiner Ausweis (R15-5-Muster wie Netzladung im T-Konto). */}
+                {(d.grundgebuehr_euro ?? 0) > 0 && (
+                  <span className="block text-xs text-gray-400 dark:text-gray-500">davon Grundgebühr: {fmtCalc(d.grundgebuehr_euro, 2)} €</span>
+                )}
+              </dt>
+              <dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd>
+            </div>
             <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euro(d.netto_ertrag_euro)}</dd></div>
           </dl>
+          {/* G19-1 K3: Zählergebühr — JAHRES-Wert vom Tarif, nur in der
+              Jahresaufstellung, nachrichtlich (nicht im Netto-Ertrag verrechnet). */}
+          {zeitraum === 'jahr' && d.zaehlergebuehr_euro_jahr != null && d.zaehlergebuehr_euro_jahr > 0 && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+              Zählergebühr: {fmtCalc(d.zaehlergebuehr_euro_jahr, 2)} €/Jahr (nachrichtlich, nicht im Netto-Ertrag verrechnet)
+            </p>
+          )}
           {/* C3: Tarif-Info-Zeile (Begleit-Info zum Netto-Ertrag, IST-Parität). */}
           {hatTarif && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500 mt-2">

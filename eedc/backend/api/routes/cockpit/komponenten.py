@@ -20,7 +20,10 @@ from backend.core.berechnungen import (
     imd_typ_beitrag,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.utils.sonstige_positionen import aggregiere_sonstige_je_monat
+from backend.utils.sonstige_positionen import (
+    aggregiere_sonstige_je_monat,
+    berechne_md_sonstige_summen,
+)
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
@@ -78,6 +81,10 @@ class KomponentenMonat(BaseModel):
     sonstige_ertraege_euro: float = 0
     sonstige_ausgaben_euro: float = 0
     sonstige_netto_euro: float = 0
+    # G19-1: davon Anlage-Ebene (Monatsdaten.sonstige_positionen) — reiner
+    # Ausweis für die Zeile „Anlage (Sonstiges)", bereits in sonstige_* enthalten.
+    anlage_sonstige_ertraege_euro: float = 0
+    anlage_sonstige_ausgaben_euro: float = 0
     netzbezug_kosten_euro: float = 0
     einspeise_erloes_euro: float = 0
 
@@ -130,18 +137,10 @@ async def get_komponenten_zeitreihe(
     hat_balkonkraftwerk = len(bkw_ids) > 0
     hat_sonstiges = len(sonstiges_ids) > 0
 
-    # Early-Return nur bei GAR keiner Investition. Bei reinen PV-/WR-Anlagen
-    # (all_inv_ids leer, aber investitionen vorhanden) NICHT abbrechen — sonst
-    # gingen am PV-Modul/Wechselrichter gepflegte Sonstige-Positionen verloren
-    # (#310). Der Energie-Loop bleibt dann leer, die Sonstige-Aggregation läuft.
-    if not investitionen:
-        return KomponentenZeitreiheResponse(
-            anlage_id=anlage_id,
-            hat_speicher=False, hat_waermepumpe=False, hat_emobilitaet=False,
-            hat_balkonkraftwerk=False, hat_sonstiges=False, hat_arbitrage=False,
-            hat_v2h=False, monatswerte=[], anzahl_monate=0,
-        )
-
+    # KEIN Early-Return mehr — auch nicht bei GAR keiner Investition. Bei reinen
+    # PV-/WR-Anlagen (all_inv_ids leer) liefe sonst die Sonstige-Aggregation
+    # nicht (#310), und seit G19-1 existieren Basis-Positionen (Anlage-Ebene)
+    # auch komplett ohne Investitionen. Alle Loops sind leer-sicher.
     imd_query = select(InvestitionMonatsdaten).where(
         InvestitionMonatsdaten.investition_id.in_(all_inv_ids)
     )
@@ -179,6 +178,7 @@ async def get_komponenten_zeitreihe(
             "bkw_erzeugung": 0, "bkw_eigenverbrauch": 0, "bkw_speicher_ladung": 0, "bkw_speicher_entladung": 0,
             "sonstiges_erzeugung": 0, "sonstiges_verbrauch": 0,
             "sonderkosten": 0, "sonstige_ertraege": 0, "sonstige_ausgaben": 0,
+            "anlage_sonstige_ertraege": 0, "anlage_sonstige_ausgaben": 0,
         }
 
     inv_data_by_month: dict[tuple[int, int], dict] = {}
@@ -286,6 +286,22 @@ async def get_komponenten_zeitreihe(
             d["sonstige_ertraege"] = summen["ertraege_euro"]
             d["sonstige_ausgaben"] = summen["ausgaben_euro"]
             d["sonderkosten"] = summen["ausgaben_euro"]
+
+    # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen, Anlage-Ebene)
+    # wirken GENAU wie IMD-Positionen — gleiche Summen-Helper-Familie, gleiche
+    # Sicht. Separat als anlage_* ausgewiesen (Zeile „Anlage (Sonstiges)" im
+    # Frontend), zusätzlich in die Gesamt-Sonstige-Summen gefaltet (EIN Betrag,
+    # kein zweiter Kostenposten — R15-5-Muster: Ausweis + Summe).
+    for (m_jahr, m_monat), md in monatsdaten_by_key.items():
+        md_summen = berechne_md_sonstige_summen(md)
+        if not (md_summen["ertraege_euro"] or md_summen["ausgaben_euro"]):
+            continue
+        d = inv_data_by_month.setdefault((m_jahr, m_monat), empty_month_data())
+        d["anlage_sonstige_ertraege"] = md_summen["ertraege_euro"]
+        d["anlage_sonstige_ausgaben"] = md_summen["ausgaben_euro"]
+        d["sonstige_ertraege"] += md_summen["ertraege_euro"]
+        d["sonstige_ausgaben"] += md_summen["ausgaben_euro"]
+        d["sonderkosten"] += md_summen["ausgaben_euro"]
 
     for key in sorted(inv_data_by_month.keys()):
         jahr, monat = key
@@ -412,6 +428,8 @@ async def get_komponenten_zeitreihe(
             sonstige_ertraege_euro=round(d["sonstige_ertraege"], 2),
             sonstige_ausgaben_euro=round(d["sonstige_ausgaben"], 2),
             sonstige_netto_euro=round(d["sonstige_ertraege"] - d["sonstige_ausgaben"], 2),
+            anlage_sonstige_ertraege_euro=round(d["anlage_sonstige_ertraege"], 2),
+            anlage_sonstige_ausgaben_euro=round(d["anlage_sonstige_ausgaben"], 2),
             netzbezug_kosten_euro=round(m_netzbezug_kosten, 2),
             einspeise_erloes_euro=round(m_einspeise_erloes, 2),
         ))

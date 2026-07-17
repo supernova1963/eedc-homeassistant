@@ -27,6 +27,7 @@ from backend.core.berechnungen import (
     PV_QUELLE_FEHLT,
 )
 from backend.utils.investition_value import get_inv_value
+from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.core.field_definitions import get_feld_hinweise
 from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
@@ -70,6 +71,10 @@ class MonatsdatenBase(BaseModel):
     sonnenstunden: Optional[float] = Field(None, ge=0)
     datenquelle: Optional[str] = Field(None, max_length=50)
     notizen: Optional[str] = Field(None, max_length=1000)
+    # G19-1: Strukturierte sonstige Erträge & Ausgaben auf Anlage-Ebene
+    # ([{bezeichnung, betrag, typ: ertrag|ausgabe}]). Leere Liste = bewusst
+    # alle Positionen gelöscht; None = Feld nicht angefasst.
+    sonstige_positionen: Optional[list[dict]] = None
 
 
 class MonatsdatenCreate(MonatsdatenBase):
@@ -96,6 +101,8 @@ class MonatsdatenUpdate(BaseModel):
     globalstrahlung_kwh_m2: Optional[float] = Field(None, ge=0)
     sonnenstunden: Optional[float] = Field(None, ge=0)
     notizen: Optional[str] = Field(None, max_length=1000)
+    # G19-1: siehe MonatsdatenBase
+    sonstige_positionen: Optional[list[dict]] = None
 
 
 class KennzahlenResponse(BaseModel):
@@ -627,6 +634,12 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
     # investitionen_daten separat extrahieren (nicht Teil des Monatsdaten-Models)
     investitionen_daten = data.investitionen_daten
     md_data = data.model_dump(exclude={'investitionen_daten'})
+    # G19-1: nur gültige Positionen persistieren (Bezeichnung nicht leer;
+    # 0-€-Beträge sind legitim — gleiche Regel wie IMD, #286).
+    if md_data.get('sonstige_positionen') is not None:
+        md_data['sonstige_positionen'] = [
+            p for p in md_data['sonstige_positionen'] if ist_gueltige_position(p)
+        ]
     md = Monatsdaten(**md_data)
 
     # Berechnete Felder (werden berechnet wenn pv_erzeugung vorhanden)
@@ -756,6 +769,12 @@ async def update_monatsdaten(
     # investitionen_daten separat behandeln
     investitionen_daten = data.investitionen_daten
     update_data = data.model_dump(exclude_unset=True, exclude={'investitionen_daten'})
+    # G19-1: nur gültige Positionen persistieren (leere Liste = bewusst geleert,
+    # gleiche Semantik wie der IMD-Pfad in _save_investitionen_monatsdaten).
+    if update_data.get('sonstige_positionen') is not None:
+        update_data['sonstige_positionen'] = [
+            p for p in update_data['sonstige_positionen'] if ist_gueltige_position(p)
+        ]
 
     # User-Eingaben durch Resolver — manuelle Werte gewinnen gegen alle
     # niedriger priorisierten Quellen (auto/external/fallback/legacy).

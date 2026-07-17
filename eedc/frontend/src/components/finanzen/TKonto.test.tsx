@@ -37,4 +37,36 @@ describe('TKonto', () => {
     render(<TKonto d={verlust} />)
     expect(screen.getAllByText(/Verlust/).length).toBeGreaterThan(0)
   })
+
+  // G19-1: Basis-Positionen (Anlage-Ebene) — eigene Zeilen NUR im per-Inv-Modus
+  // (im Fallback stecken sie bereits im Aggregat, R15-5: kein zweiter Posten).
+  it('zeigt Anlage-Zeilen für Basis-Positionen im per-Inv-Modus', () => {
+    const d = {
+      ...basis,
+      investitionen_financials: [{
+        investition_id: 7, bezeichnung: 'Speicher', typ: 'speicher',
+        betriebskosten_monat_euro: 0, erloes_euro: null, ersparnis_euro: 10,
+        ersparnis_label: 'Ersparnis', formel: null, berechnung: null,
+        sonstige_ertraege_euro: 0, sonstige_ausgaben_euro: 0,
+      }],
+      sonstige_ertraege_euro: 120, sonstige_ausgaben_euro: 30, sonstige_netto_euro: 90,
+      anlage_sonstige_ertraege_euro: 120, anlage_sonstige_ausgaben_euro: 30,
+    } as unknown as AktuellerMonatResponse
+    render(<TKonto d={d} />)
+    expect(screen.getAllByText(/Anlage — Sonstige Erträge/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Anlage — Sonstige Ausgaben/).length).toBeGreaterThan(0)
+  })
+
+  it('zeigt im Fallback-Modus KEINE Anlage-Zeilen (Aggregat deckt sie ab)', () => {
+    const d = {
+      ...basis,
+      investitionen_financials: [],
+      sonstige_ertraege_euro: 120, sonstige_ausgaben_euro: 0, sonstige_netto_euro: 120,
+      anlage_sonstige_ertraege_euro: 120, anlage_sonstige_ausgaben_euro: 0,
+    } as unknown as AktuellerMonatResponse
+    render(<TKonto d={d} />)
+    expect(screen.queryByText(/Anlage — Sonstige Erträge/)).toBeNull()
+    // Aggregat-Fallback-Zeile trägt den Wert stattdessen.
+    expect(screen.getAllByText(/Sonstige Erträge/).length).toBeGreaterThan(0)
+  })
 })

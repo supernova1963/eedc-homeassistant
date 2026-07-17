@@ -129,10 +129,22 @@ export interface Monatsdaten {
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
   durchschnittstemperatur?: number
+  // Legacy (deprecated seit G19-1) — nur noch lesbar, neuer Kanal ist sonstige_positionen
   sonderkosten_euro?: number
   sonderkosten_beschreibung?: string
+  // G19-1: Strukturierte sonstige Erträge & Ausgaben auf Anlage-Ebene
+  sonstige_positionen?: SonstigePosition[]
   datenquelle?: string
   notizen?: string
+}
+
+// G19-1: KANONISCHE Definition der Positions-Mechanik (Ertrag/Ausgabe) —
+// forms/SonstigePositionenFields, forms/sections/types und api/monatsabschluss
+// re-exportieren von hier (vorher 3 strukturgleiche Duplikate, Regel 0a).
+export interface SonstigePosition {
+  bezeichnung: string
+  betrag: number
+  typ: 'ertrag' | 'ausgabe'
 }
 
 export interface MonatsKennzahlen {
@@ -192,6 +204,8 @@ export interface Strompreis {
   netzbezug_arbeitspreis_cent_kwh: number
   einspeiseverguetung_cent_kwh: number
   grundpreis_euro_monat?: number
+  // G19-1 K3: jährliche Zähler-/Messstellengebühr (Ausweis in der Jahresaufstellung)
+  zaehlergebuehr_euro_jahr?: number
   gueltig_ab: string
   gueltig_bis?: string
   tarifname?: string

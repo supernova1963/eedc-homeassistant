@@ -77,6 +77,7 @@ class StrompreisExport(BaseModel):
     netzbezug_arbeitspreis_cent_kwh: float
     einspeiseverguetung_cent_kwh: float
     grundpreis_euro_monat: Optional[float] = None
+    zaehlergebuehr_euro_jahr: Optional[float] = None
     gueltig_ab: date
     gueltig_bis: Optional[date] = None
     vertragsart: Optional[str] = None
@@ -106,6 +107,8 @@ class MonatsdatenExport(BaseModel):
     durchschnittstemperatur: Optional[float] = None
     sonderkosten_euro: Optional[float] = None
     sonderkosten_beschreibung: Optional[str] = None
+    # G19-1: Strukturierte sonstige Erträge & Ausgaben (Anlage-Ebene)
+    sonstige_positionen: Optional[list] = None
     datenquelle: Optional[str] = None
     notizen: Optional[str] = None
 
@@ -308,6 +311,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             netzbezug_arbeitspreis_cent_kwh=sp.netzbezug_arbeitspreis_cent_kwh,
             einspeiseverguetung_cent_kwh=sp.einspeiseverguetung_cent_kwh,
             grundpreis_euro_monat=sp.grundpreis_euro_monat,
+            zaehlergebuehr_euro_jahr=sp.zaehlergebuehr_euro_jahr,
             gueltig_ab=sp.gueltig_ab,
             gueltig_bis=sp.gueltig_bis,
             vertragsart=sp.vertragsart,
@@ -410,6 +414,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             durchschnittstemperatur=md.durchschnittstemperatur,
             sonderkosten_euro=md.sonderkosten_euro,
             sonderkosten_beschreibung=md.sonderkosten_beschreibung,
+            sonstige_positionen=md.sonstige_positionen,
             datenquelle=md.datenquelle,
             notizen=md.notizen,
         )
@@ -608,6 +613,7 @@ async def import_json(
                 netzbezug_arbeitspreis_cent_kwh=sp_data.get("netzbezug_arbeitspreis_cent_kwh", 0),
                 einspeiseverguetung_cent_kwh=sp_data.get("einspeiseverguetung_cent_kwh", 0),
                 grundpreis_euro_monat=sp_data.get("grundpreis_euro_monat"),
+                zaehlergebuehr_euro_jahr=sp_data.get("zaehlergebuehr_euro_jahr"),
                 gueltig_ab=_parse_date(sp_data.get("gueltig_ab")),
                 gueltig_bis=_parse_date(sp_data.get("gueltig_bis")),
                 vertragsart=sp_data.get("vertragsart"),
@@ -727,6 +733,7 @@ async def import_json(
                 durchschnittstemperatur=md_data.get("durchschnittstemperatur"),
                 sonderkosten_euro=md_data.get("sonderkosten_euro"),
                 sonderkosten_beschreibung=md_data.get("sonderkosten_beschreibung"),
+                sonstige_positionen=md_data.get("sonstige_positionen"),
                 datenquelle=md_data.get("datenquelle") or "json_import",
                 notizen=md_data.get("notizen"),
             )
@@ -740,7 +747,7 @@ async def import_json(
                 "batterie_ladung_netz_kwh", "batterie_ladepreis_cent",
                 "netzbezug_durchschnittspreis_cent",
                 "globalstrahlung_kwh_m2", "sonnenstunden", "durchschnittstemperatur",
-                "sonderkosten_euro",
+                "sonderkosten_euro", "sonstige_positionen",
             ]
             seed_provenance(
                 monatsdaten,

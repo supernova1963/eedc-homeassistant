@@ -10,6 +10,7 @@ export interface StrompreisCreate {
   netzbezug_arbeitspreis_cent_kwh: number
   einspeiseverguetung_cent_kwh: number
   grundpreis_euro_monat?: number
+  zaehlergebuehr_euro_jahr?: number
   gueltig_ab: string
   gueltig_bis?: string
   tarifname?: string
@@ -22,6 +23,7 @@ export interface StrompreisUpdate {
   netzbezug_arbeitspreis_cent_kwh?: number
   einspeiseverguetung_cent_kwh?: number
   grundpreis_euro_monat?: number
+  zaehlergebuehr_euro_jahr?: number
   gueltig_ab?: string
   gueltig_bis?: string
   tarifname?: string

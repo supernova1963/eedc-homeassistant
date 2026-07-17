@@ -32,7 +32,10 @@ from datetime import date
 
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.utils.sonstige_positionen import berechne_sonstige_netto
+from backend.utils.sonstige_positionen import (
+    berechne_sonstige_netto,
+    berechne_md_sonstige_summen,
+)
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import (
     attribute_month_share,
@@ -435,6 +438,11 @@ async def calculate_anlage_sensors(
             if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
             sonstige_netto_gesamt += berechne_sonstige_netto(imd.verbrauch_daten)
+
+    # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen) wirken wie
+    # IMD-Positionen — gleiche Netto-Faltung wie Cockpit/Jahresbericht.
+    for m in monatsdaten:
+        sonstige_netto_gesamt += berechne_md_sonstige_summen(m)["netto_euro"]
 
     einspeise_erloes = 0
     ev_ersparnis = 0

@@ -15,6 +15,7 @@ import { istAktivImMonat } from '../../lib/investitionAktiv'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
 import { InvestitionSection } from './sections/InvestitionSection'
+import { SonstigePositionenFields } from './SonstigePositionenFields'
 import AssistenzFeld from './AssistenzFeld'
 import KopfAmpel from './KopfAmpel'
 import ZustandLegende from './ZustandLegende'
@@ -59,8 +60,9 @@ export interface MonatsdatenSubmitData {
   globalstrahlung_kwh_m2?: number
   sonnenstunden?: number
   durchschnittstemperatur?: number
-  sonderkosten_euro?: number
-  sonderkosten_beschreibung?: string
+  // G19-1: Anlage-Ebene Sonstige Erträge & Ausgaben (ersetzt die Legacy-Felder
+  // sonderkosten_euro/_beschreibung; [] = bewusst geleert)
+  sonstige_positionen?: SonstigePosition[]
   notizen?: string
   // Investitions-spezifische Daten
   investitionen_daten?: Record<string, InvestitionMonatsdaten>
@@ -184,10 +186,29 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
     netzbezug_durchschnittspreis_cent: monatsdaten?.netzbezug_durchschnittspreis_cent?.toString() || '',
     kraftstoffpreis_euro: monatsdaten?.kraftstoffpreis_euro?.toString() || '',
     gaspreis_cent_kwh: monatsdaten?.gaspreis_cent_kwh?.toString() || '',
-    sonderkosten_euro: monatsdaten?.sonderkosten_euro?.toString() || '',
-    sonderkosten_beschreibung: monatsdaten?.sonderkosten_beschreibung || '',
     notizen: monatsdaten?.notizen || '',
   })
+
+  // G19-1: Basis-Positionen (Anlage-Ebene) — DERSELBE Baustein wie je
+  // Investition. Legacy-Fallback fürs Bearbeiten von Alt-Daten, die die
+  // Start-Migration noch nicht gesehen hat (gleiche Regel wie IMD unten).
+  const [basisPositionen, setBasisPositionen] = useState<SonstigePosition[]>(() => {
+    if (monatsdaten?.sonstige_positionen) return monatsdaten.sonstige_positionen
+    if (monatsdaten?.sonderkosten_euro && monatsdaten.sonderkosten_euro > 0) {
+      return [{
+        bezeichnung: monatsdaten.sonderkosten_beschreibung || 'Sonderkosten (migriert)',
+        betrag: monatsdaten.sonderkosten_euro,
+        typ: 'ausgabe' as const,
+      }]
+    }
+    return []
+  })
+  // Löschsignal-Spur wie bei den IMD-Positionen (#286): hatte der Monat beim
+  // Laden Positionen, muss beim Leeren eine leere Liste ans Backend.
+  const [initialHatteBasisPositionen] = useState(() => (
+    (monatsdaten?.sonstige_positionen?.length ?? 0) > 0
+    || !!(monatsdaten?.sonderkosten_euro && monatsdaten.sonderkosten_euro > 0)
+  ))
 
   // Nur die im GEWÄHLTEN Monat betriebenen Geräte (Anschaffungs-/Stilllegungs-
   // Fenster, Backend-SoT `ist_aktiv_im_monat`) — steuert Anzeige UND Prüfungen.
@@ -704,8 +725,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         globalstrahlung_kwh_m2: formData.globalstrahlung_kwh_m2 ? parseFloat(formData.globalstrahlung_kwh_m2) : undefined,
         sonnenstunden: formData.sonnenstunden ? parseFloat(formData.sonnenstunden) : undefined,
         durchschnittstemperatur: formData.durchschnittstemperatur ? parseFloat(formData.durchschnittstemperatur) : undefined,
-        sonderkosten_euro: formData.sonderkosten_euro ? parseFloat(formData.sonderkosten_euro) : undefined,
-        sonderkosten_beschreibung: formData.sonderkosten_beschreibung || undefined,
+        // G19-1: Basis-Positionen — gleiche Gültigkeits-/Löschsignal-Regel wie
+        // die IMD-Positionen oben (0-€ mit Bezeichnung legitim, #286).
+        sonstige_positionen: (() => {
+          const gueltige = basisPositionen.filter(p => p.bezeichnung.trim())
+          return (gueltige.length > 0 || initialHatteBasisPositionen) ? gueltige : undefined
+        })(),
         notizen: formData.notizen || undefined,
         investitionen_daten: Object.keys(invDaten).length > 0 ? invDaten : undefined,
       })
@@ -1126,28 +1151,21 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         </div>
       </FormSection>
 
-      {/* Sonderkosten & Notizen */}
-      <FormSection variant="erweitert" title="Sonderkosten & Notizen">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            label="Sonderkosten"
-            name="sonderkosten_euro"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.sonderkosten_euro}
-            onChange={handleChange}
-            placeholder="z.B. 120.00"
-            hint="€ — Reparatur, Wartung, etc. (optional)"
-          />
-          <Input
-            label="Sonderkosten Beschreibung"
-            name="sonderkosten_beschreibung"
-            value={formData.sonderkosten_beschreibung}
-            onChange={handleChange}
-            placeholder="z.B. Wechselrichter-Wartung"
-          />
-        </div>
+      {/* G19-1: Sonstige Erträge & Ausgaben (Anlage-Ebene) + Notizen —
+          DERSELBE Positions-Baustein wie je Investition (eine Code-Wahrheit). */}
+      <FormSection variant="erweitert" title="Sonstige Erträge & Ausgaben + Notizen">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Für Zahlungen auf Anlagen-Ebene, die keiner Komponente zuzuordnen sind —
+          beide Richtungen: Abschlag an den Versorger = Ausgabe · Einspeise-Abschlag
+          vom Netzbetreiber = Ertrag · Guthaben-Auszahlung aus der Jahresabrechnung =
+          Ertrag · Nachzahlung = Ausgabe. Wichtig: Wer Abschläge oder Guthaben erfasst,
+          erfasst die Jahresabrechnung entsprechend reduziert — eedc rechnet Abschläge
+          nicht gegen (sonst zählt derselbe Betrag doppelt).
+        </p>
+        <SonstigePositionenFields
+          positionen={basisPositionen}
+          onChange={setBasisPositionen}
+        />
         <div className="mt-4">
           <Textarea
             label="Notizen"

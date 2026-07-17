@@ -25,7 +25,10 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.utils.sonstige_positionen import berechne_sonstige_netto
+from backend.utils.sonstige_positionen import (
+    berechne_sonstige_netto,
+    berechne_md_sonstige_summen,
+)
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
 from backend.core.calculations import (
@@ -202,6 +205,13 @@ async def build_jahresbericht_context(
         if netto:
             key = (imd.jahr, imd.monat)
             sonstige_by_ym[key] = sonstige_by_ym.get(key, 0) + netto
+    # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen) wirken wie
+    # IMD-Positionen — gleiche per-Monat-Faltung, gleiche Summary-Symmetrie.
+    for m in monatsdaten_list:
+        md_netto = berechne_md_sonstige_summen(m)["netto_euro"]
+        if md_netto:
+            key = (m.jahr, m.monat)
+            sonstige_by_ym[key] = sonstige_by_ym.get(key, 0) + md_netto
 
     # ── 7. Aggregate Wärmepumpe / E-Mob / Speicher ──────────────────────
     pv_gesamt = 0.0
@@ -359,10 +369,10 @@ async def build_jahresbericht_context(
 
     # #326: Sonstige Erträge/Ausgaben (manuell gepflegt) gehören in den
     # Netto-Ertrag — exakt wie Cockpit/Auswertungen. `all_imd` ist bereits auf
-    # den Einsatzzeitraum (ist_aktiv_im_monat, #236) gefiltert.
-    sonstige_netto_gesamt = sum(
-        berechne_sonstige_netto(imd.verbrauch_daten) for imd in all_imd
-    )
+    # den Einsatzzeitraum (ist_aktiv_im_monat, #236) gefiltert. Summe über die
+    # per-Monat-Faltung (IMD + G19-1-Basis-Positionen) — per Konstruktion
+    # deckungsgleich mit den Monatszeilen.
+    sonstige_netto_gesamt = sum(sonstige_by_ym.values())
     # #326: Finanz-Summary über den SoT-Helper = Σ der per-Monat-Zeilen (EV mit
     # Monats-Flexpreis + §51-bereinigter Einspeise-Erlös) + Sonstige.
     _finanz = berechne_finanz_aggregat(

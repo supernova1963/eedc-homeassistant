@@ -2,13 +2,10 @@
  * Gemeinsame Typen für alle Monats-Section-Komponenten.
  */
 
-import type { Investition } from '../../../types'
+import type { Investition, SonstigePosition } from '../../../types'
 
-export interface SonstigePosition {
-  bezeichnung: string
-  betrag: number
-  typ: 'ertrag' | 'ausgabe'
-}
+// SoT-Kanon in types/index.ts (G19-1) — hier nur Re-Export für Bestand
+export type { SonstigePosition }
 
 export interface SectionProps {
   investitionen: Investition[]

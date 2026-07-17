@@ -31,7 +31,10 @@ from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
 )
-from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.utils.sonstige_positionen import (
+    berechne_sonstige_summen,
+    berechne_md_sonstige_summen,
+)
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
 from backend.core.field_definitions import get_emob_pv_netz_kwh
@@ -340,6 +343,14 @@ async def get_cockpit_uebersicht(
     md_result = await db.execute(md_query)
     monatsdaten_list = md_result.scalars().all()
     monatsdaten_by_ym = {(m.jahr, m.monat): m for m in monatsdaten_list}
+
+    # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen, Anlage-Ebene)
+    # wirken GENAU wie IMD-Positionen — einmalig in die Sonstige-Summen falten
+    # (fließt unten in sonstige_netto → netto_ertrag, #326-Pfad).
+    for m in monatsdaten_list:
+        md_summen = berechne_md_sonstige_summen(m)
+        sonstige_ertraege_gesamt += md_summen["ertraege_euro"]
+        sonstige_ausgaben_gesamt += md_summen["ausgaben_euro"]
 
     # Dienstliche Ladekosten: Netzbezug-Anteil per-Monat über den Flexpreis
     # (`resolve_netzbezug_preis_cent`), Fallback Wallbox-Tarif; entgangene
