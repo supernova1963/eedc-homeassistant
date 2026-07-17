@@ -43,6 +43,7 @@ import {
   PvgStundenprofil, Pvg24hTabelle, Pvg7TageTabelle, PvgGenauigkeitsTracking,
 } from '../components/prognose/PrognoseVergleichTeile'
 import { useSelectedAnlage } from '../hooks'
+import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 import { ZeitraumHinweis } from './ZeitraumHinweis'
@@ -55,8 +56,10 @@ type MeldeFn = (block: string, ids: string[]) => void
 const nurStrings = (xs: (string | undefined)[]): string[] => xs.filter((x): x is string => !!x)
 
 // ① Jahres-SOLL/IST gegen PVGIS ────────────────────────────────────────────────
-function BlockPvgis({ anlageId, jahr, melde }: { anlageId: number; jahr: number | undefined; melde: MeldeFn }) {
-  const vm = usePrognoseVsIst(anlageId, jahr)
+function BlockPvgis({ anlageId, jahr, monatsdaten, melde }: { anlageId: number; jahr: number | undefined; monatsdaten: AggregierteMonatsdaten[]; melde: MeldeFn }) {
+  // Monatsdaten kommen vorgeladen aus der Dispatcher-Basis (kein Doppel-Fetch);
+  // sicher, weil PrognoseInner bei basis.loading früh returnt.
+  const vm = usePrognoseVsIst(anlageId, jahr, monatsdaten)
   const leer = vm.loading || !!vm.error || !vm.prognose || vm.monatsdaten.length === 0
   const ids = useMemo(
     () => (leer ? [] : nurStrings([
@@ -268,7 +271,7 @@ function PrognoseInner({ basis }: { basis: AuswertungBasis }) {
           {basis.jahr === 'alle' && jahrFuerBlock != null && (
             <ZeitraumHinweis text={`Filter „Alle Jahre“: der SOLL/IST-Vergleich gegen PVGIS ist ein Einzeljahr-Vergleich und zeigt das Jahr ${jahrFuerBlock}.`} />
           )}
-          <BlockPvgis anlageId={anlageId} jahr={jahrFuerBlock} melde={melde} />
+          <BlockPvgis anlageId={anlageId} jahr={jahrFuerBlock} monatsdaten={basis.daten} melde={melde} />
         </div>
       ),
     }] : []),

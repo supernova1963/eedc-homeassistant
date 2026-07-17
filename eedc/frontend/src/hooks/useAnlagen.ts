@@ -41,6 +41,24 @@ async function fetchAnlagen(): Promise<Anlage[]> {
   return cachePromise
 }
 
+/**
+ * Cache-first-Loader für Nicht-Hook-Kontexte (z. B. das AppWithSetup-Gate).
+ * Muss cache-first sein: nach Auflösung von `fetchAnlagen` ist `cachePromise`
+ * wieder null — nur `cachedAnlagen` verhindert dann einen zweiten API-Call.
+ */
+export function ladeAnlagen(): Promise<Anlage[]> {
+  return cachedAnlagen !== null ? Promise.resolve(cachedAnlagen) : fetchAnlagen()
+}
+
+/**
+ * Cache verwerfen — für Anlage-Anlage AUSSERHALB des Hooks (Setup-Wizard legt
+ * per `anlagenApi.create()` direkt an, ohne `notifyChange`) sowie für Tests.
+ */
+export function invalidateAnlagenCache(): void {
+  cachedAnlagen = null
+  cachePromise = null
+}
+
 // ── Hook ────────────────────────────────────────────────────────────────────
 
 interface UseAnlagenReturn {

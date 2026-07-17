@@ -29,10 +29,19 @@ vi.mock('./useTagesWerte', () => ({
 }))
 
 import AuswertungenTabelleV4 from './AuswertungenTabelleV4'
+import type { AuswertungBasis } from './useAuswertungBasis'
+
+// Paket Q: Tabelle bekommt die Dispatcher-Basis als Prop (kein Eigen-Fetch);
+// useWerteZeitreihe ist gestubbt → Stub-Basis reicht (Muster AuswertungenPrognoseV4.test).
+const basisMock = {
+  daten: [], gefiltert: [], strompreis: null, alleTarife: [], jahr: 'alle',
+  setJahr: () => {}, jahre: [2026, 2025], zeitraumLabel: '2025–2026',
+  loading: false, error: null, refresh: async () => {},
+} as unknown as AuswertungBasis
 
 describe('AuswertungenTabelleV4 (Werte-Werkbank)', () => {
   it('rendert beide Blöcke mit block-interner Zeitraum/Vergleich-Leiste', () => {
-    render(<AuswertungenTabelleV4 />)
+    render(<AuswertungenTabelleV4 basis={basisMock} />)
     expect(screen.getByText('Monatswerte')).toBeInTheDocument()
     expect(screen.getByText('Tageswerte')).toBeInTheDocument()
     // Monats-Block ist default offen → seine Zeitraum-Leiste rendert.

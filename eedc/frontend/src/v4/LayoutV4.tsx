@@ -14,6 +14,7 @@ import { LayoutDashboard, Boxes, BarChart3, Users, HelpCircle, Settings } from '
 import { IATopNav, type IANavItem } from '../components/layout/IATopNav'
 import { AnlagenSelektor } from './AnlagenSelektor'
 import { AppStatusProvider } from './status/AppStatusContext'
+import { GlobalStatusProvider } from './status/GlobalStatusProvider'
 import { StatusFusszeile } from './status/StatusFusszeile'
 import { WizardOverlayProvider } from './EinstellungenModalHost'
 
@@ -56,6 +57,8 @@ export default function LayoutV4() {
 
   return (
     <AppStatusProvider>
+      {/* Paket Q: EINE fetchende Global-Status-Instanz für Fusszeile + Einstellungen-Ampeln. */}
+      <GlobalStatusProvider>
       {/* Mängelbehebung D/E: EIN app-weiter Wizard-Overlay-Host (oeffneWizard mit
           Payload) — auch für Fusszeile/Teile außerhalb der Einstellungen-Sicht. */}
       <WizardOverlayProvider>
@@ -76,6 +79,7 @@ export default function LayoutV4() {
         <StatusFusszeile />
       </div>
       </WizardOverlayProvider>
+      </GlobalStatusProvider>
     </AppStatusProvider>
   )
 }

@@ -2,7 +2,7 @@
  * Hooks Module - Re-exports all hooks
  */
 
-export { useAnlagen, useAnlage } from './useAnlagen'
+export { useAnlagen, useAnlage, ladeAnlagen, invalidateAnlagenCache } from './useAnlagen'
 export { useMonatsdaten, useMonatsdatenStats, useAggregierteDaten, useAggregierteStats } from './useMonatsdaten'
 export { useInvestitionen, useInvestitionenByTyp } from './useInvestitionen'
 export { useStrompreise, useAktuellerStrompreis } from './useStrompreise'

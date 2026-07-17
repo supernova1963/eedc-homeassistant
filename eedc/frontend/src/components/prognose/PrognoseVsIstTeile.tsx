@@ -61,8 +61,17 @@ export interface PrognoseVsIstVM {
 }
 
 /** Lädt PVGIS-Prognose (gespeichert ∨ live) + Monatsdaten und berechnet den
- *  Jahres-SOLL/IST-Vergleich für ein konkretes Jahr. Geteilt von IST + v4. */
-export function usePrognoseVsIst(anlageId: number | null | undefined, jahr: number | undefined): PrognoseVsIstVM {
+ *  Jahres-SOLL/IST-Vergleich für ein konkretes Jahr. Geteilt von IST + v4.
+ *  `vorgeladeneMonatsdaten`: bereits geladene aggregierte Monatsdaten (alle
+ *  Jahre) — der V4-Dispatcher hält sie in `useAuswertungBasis`; wenn übergeben
+ *  (auch leer!), entfällt der eigene listAggregiert-Fetch (Doppel-Fetch).
+ *  ⚠️ Muss render-stabil sein (State/useMemo, ist Effekt-Dependency) — ein
+ *  Inline-Literal erzeugt eine Refetch-Schleife. */
+export function usePrognoseVsIst(
+  anlageId: number | null | undefined,
+  jahr: number | undefined,
+  vorgeladeneMonatsdaten?: AggregierteMonatsdaten[],
+): PrognoseVsIstVM {
   const [prognose, setPrognose] = useState<PrognoseData | null>(null)
   const [monatsdaten, setMonatsdaten] = useState<AggregierteMonatsdaten[]>([])
   const [loading, setLoading] = useState(false)
@@ -74,7 +83,11 @@ export function usePrognoseVsIst(anlageId: number | null | undefined, jahr: numb
     setLoading(true)
     setError(null)
     try {
-      const md = await monatsdatenApi.listAggregiert(anlageId)
+      // `!== undefined` bewusst: ein leeres Array gilt als vorgeladen (Basis
+      // fertig geladen, ehrlich leer) — kein Fallback-Fetch.
+      const md = vorgeladeneMonatsdaten !== undefined
+        ? vorgeladeneMonatsdaten
+        : await monatsdatenApi.listAggregiert(anlageId)
       setMonatsdaten(md)
       const gespeichert = await pvgisApi.getAktivePrognose(anlageId)
       if (gespeichert) {
@@ -99,7 +112,7 @@ export function usePrognoseVsIst(anlageId: number | null | undefined, jahr: numb
     } finally {
       setLoading(false)
     }
-  }, [anlageId])
+  }, [anlageId, vorgeladeneMonatsdaten])
 
   useEffect(() => { void load() }, [load, jahr])
 

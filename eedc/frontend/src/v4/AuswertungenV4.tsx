@@ -78,7 +78,8 @@ export default function AuswertungenV4() {
       <AuswertungenFinanzenV4 basis={basis} />
     ) : sub === 'tabelle' ? (
       // SoT der Wie-Achse — volle Werte-Werkbank (WerteTabelle, eigene Bereichswahl).
-      <AuswertungenTabelleV4 />
+      // basis liefert Monatsdaten/Strompreise (Paket Q: kein Eigen-Fetch-Trio mehr).
+      <AuswertungenTabelleV4 basis={basis} />
     ) : sub === 'co2' ? (
       // CO₂-Bilanz/Äquivalente/Klimapositiv (IST-Tab CO2Tab, lose eingepasst).
       <AuswertungenCo2V4 basis={basis} />

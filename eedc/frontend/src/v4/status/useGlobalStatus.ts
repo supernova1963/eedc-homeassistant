@@ -10,8 +10,15 @@
  *     dieselbe Quelle wie die Produktiv-`TopNavigation`-Badge.
  *   - **MQTT-Inbound**: `liveDashboardApi.getMqttStatus()` (global gepollt, nicht
  *     mehr Live-gebunden wie in P1).
+ *
+ * Paket Q (Doppel-Fetch-Bereinigung): das „einmal auf Shell-Ebene" wird jetzt
+ * technisch ERZWUNGEN — `GlobalStatusProvider` (in `LayoutV4`) hält die EINE
+ * fetchende Instanz, `useGlobalStatus()` liest den Context. Vorher fetchte
+ * jede Hook-Instanz selbst (Fusszeile + useEinstellungenStatus = alle 5
+ * Endpunkte ×2 + doppeltes MQTT-Polling auf einstellungen/*). Ohne Provider
+ * (Tests, exotische Mounts) fällt der Hook aufs lokale Fetching zurück.
  */
-import { useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 import { systemApi, type UpdateCheckResponse } from '../../api/system'
 import { monatsabschlussApi, type NaechsterMonat } from '../../api/monatsabschluss'
 import { liveDashboardApi, type MqttInboundStatus } from '../../api/liveDashboard'
@@ -44,7 +51,14 @@ export interface GlobalStatus {
   anlageId: number | undefined
 }
 
-export function useGlobalStatus(): GlobalStatus {
+/** Context der EINEN fetchenden Instanz (Provider: `GlobalStatusProvider` in LayoutV4). */
+export const GlobalStatusContext = createContext<GlobalStatus | null>(null)
+
+/**
+ * Interner Fetch-Kern — läuft nur bei `enabled` (Provider bzw. Provider-loser
+ * Fallback). Bei enabled=false bleiben alle States null und werden nie gelesen.
+ */
+function useGlobalStatusFetch(enabled: boolean): GlobalStatus {
   const { selectedAnlage } = useSelectedAnlage()
   const anlageId = selectedAnlage?.id
   const [update, setUpdate] = useState<UpdateCheckResponse | null>(null)
@@ -56,11 +70,13 @@ export function useGlobalStatus(): GlobalStatus {
 
   // Update-Check einmal (wie Produktiv-Layout; ändert sich selten).
   useEffect(() => {
+    if (!enabled) return
     systemApi.checkUpdate().then(setUpdate).catch(() => {})
-  }, [])
+  }, [enabled])
 
   // Offener Monatsabschluss + Daten-Checker-Zusammenfassung je gewählter Anlage.
   useEffect(() => {
+    if (!enabled) return
     if (!anlageId) { setOffenerMonat(null); setDatencheck(null); setDatencheckErgebnisse(null); setCommunityGeteilt(null); return }
     monatsabschlussApi.getNaechsterMonat(anlageId).then(setOffenerMonat).catch(() => {})
     // Community-Teilen-Status frisch je Anlage (community_hash), Fehler = unbekannt.
@@ -70,16 +86,33 @@ export function useGlobalStatus(): GlobalStatus {
     datenCheckerApi.check(anlageId)
       .then((r) => { setDatencheck(r.zusammenfassung); setDatencheckErgebnisse(r.ergebnisse) })
       .catch(() => {})
-  }, [anlageId])
+  }, [anlageId, enabled])
 
   // MQTT-Inbound global gepollt; bei inaktivem Subscriber blendet die Fusszeile aus.
   useEffect(() => {
+    if (!enabled) return
     let aktiv = true
     const laden = () => liveDashboardApi.getMqttStatus().then((s) => { if (aktiv) setMqtt(s) }).catch(() => {})
     laden()
     const iv = setInterval(laden, MQTT_POLL_MS)
     return () => { aktiv = false; clearInterval(iv) }
-  }, [])
+  }, [enabled])
 
   return { update, offenerMonat, mqtt, datencheck, datencheckErgebnisse, communityGeteilt, anlageId }
+}
+
+/** NUR für den Provider: die eine fetchende Instanz. */
+export function useGlobalStatusQuelle(): GlobalStatus {
+  return useGlobalStatusFetch(true)
+}
+
+/**
+ * Öffentliche API (Signatur unverändert): liest die Provider-Instanz; ohne
+ * Provider (Tests, Mounts außerhalb der V4-Shell) fetcht lokal wie zuvor.
+ * `ctx` ist pro Mount-Position konstant → `enabled` flackert nicht.
+ */
+export function useGlobalStatus(): GlobalStatus {
+  const ctx = useContext(GlobalStatusContext)
+  const lokal = useGlobalStatusFetch(ctx === null)
+  return ctx ?? lokal
 }

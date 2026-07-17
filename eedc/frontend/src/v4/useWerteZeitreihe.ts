@@ -1,14 +1,15 @@
 /**
- * useWerteZeitreihe — lädt die Bausteine für die WerteTabelle (monatliche
- * Granularität) und baut die `MonatsZeitreihe[]` über den BESTEHENDEN
- * Cockpit-/Auswertungs-Datenpfad (`createMonatsZeitreihe` mit historisch
- * korrekten Monatstarifen). Gemeinsam genutzt von der /v4-Werkbank und dem
- * Cockpit-Embed, damit die Zeitreihen-Erzeugung nicht doppelt lebt.
+ * useWerteZeitreihe — baut die `MonatsZeitreihe[]` für die WerteTabelle aus der
+ * bereits im Auswertungen-Dispatcher geladenen Basis (`useAuswertungBasis`):
+ * aggregierte Monatsdaten + Strompreis + Tarif-Historie. Reine Ableitung über
+ * den BESTEHENDEN Datenpfad `createMonatsZeitreihe` (historisch korrekte
+ * Monatstarife) — KEINE eigenen Fetches mehr (Paket Q, Doppel-Fetch-Bereinigung:
+ * vorher holte der Hook listAggregiert + /strompreise/ + /strompreise/aktuell
+ * parallel zur Basis nochmal). Einziger Konsument: AuswertungenTabelleV4.
  */
 import { useMemo } from 'react'
-import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
-import { useApiData, useStrompreise, useAktuellerStrompreis } from '../hooks'
 import { createMonatsZeitreihe, type MonatsZeitreihe, type TabProps } from '../pages/auswertung/types'
+import type { AuswertungBasis } from './useAuswertungBasis'
 
 export interface WerteZeitreiheResult {
   rows: MonatsZeitreihe[]
@@ -18,23 +19,17 @@ export interface WerteZeitreiheResult {
   error: string | null
 }
 
+/** Basis-Ausschnitt, den die Ableitung braucht (Prop-Typ des Dispatchers). */
+export type WerteZeitreiheBasis = Pick<AuswertungBasis, 'daten' | 'strompreis' | 'alleTarife' | 'loading' | 'error'>
+
 export function useWerteZeitreihe(
-  anlageId: number | undefined,
+  basis: WerteZeitreiheBasis,
   anlage: TabProps['anlage'],
 ): WerteZeitreiheResult {
-  const { strompreise: alleTarife } = useStrompreise(anlageId)
-  const { strompreis } = useAktuellerStrompreis(anlageId ?? null)
-
-  // R18-2 (SWR): via Sicht-Cache — beim Sub-Tab-Wechsel stehen die alten Werte
-  // sofort (kein Skeleton), still revalidiert.
-  const datenQ = useApiData<AggregierteMonatsdaten[]>(
-    () => monatsdatenApi.listAggregiert(anlageId!),
-    [anlageId],
-    { enabled: !!anlageId, swrKey: `v4-werte-zeitreihe:${anlageId}` },
-  )
-  const daten = useMemo(() => datenQ.data ?? [], [datenQ.data])
-  const loading = datenQ.loading
-  const error = datenQ.data == null && datenQ.error ? 'Fehler beim Laden der Werte' : null
+  const { daten, strompreis, alleTarife, loading } = basis
+  // Fehler-Semantik wie zuvor: nur ohne Daten anzeigen (bei Fehl-Revalidierung
+  // bleiben die alten Daten stehen — SWR-Verhalten der Basis).
+  const error = daten.length === 0 && basis.error ? 'Fehler beim Laden der Werte' : null
 
   const rows = useMemo(
     () => createMonatsZeitreihe(daten, anlage, strompreis, alleTarife),

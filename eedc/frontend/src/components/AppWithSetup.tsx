@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react'
 import { SetupWizard } from './setup-wizard'
-import { anlagenApi } from '../api/anlagen'
+import { ladeAnlagen, invalidateAnlagenCache } from '../hooks/useAnlagen'
 
 interface AppWithSetupProps {
   children: React.ReactNode
@@ -30,7 +30,9 @@ export default function AppWithSetup({ children }: AppWithSetupProps) {
       // WICHTIG: Datenbank hat Priorität über LocalStorage!
       // Bei Neuinstallation (keine Anlagen) soll Wizard IMMER starten,
       // auch wenn LocalStorage noch "completed" enthält.
-      const anlagen = await anlagenApi.list()
+      // Cache-first über den useAnlagen-Shared-Cache — die App-Shell fetcht
+      // die Liste danach nicht erneut.
+      const anlagen = await ladeAnlagen()
 
       if (anlagen.length === 0) {
         // Keine Anlagen in DB -> Wizard anzeigen (LocalStorage ignorieren)
@@ -52,6 +54,10 @@ export default function AppWithSetup({ children }: AppWithSetupProps) {
   }
 
   const handleWizardComplete = () => {
+    // Der Wizard legt die Anlage per anlagenApi.create() DIREKT an (useSetupWizard),
+    // am Shared Cache vorbei — ohne Invalidierung zeigte die App danach die
+    // beim Gate-Check gecachte leere Liste.
+    invalidateAnlagenCache()
     localStorage.setItem(WIZARD_COMPLETED_KEY, 'true')
     setShowWizard(false)
   }

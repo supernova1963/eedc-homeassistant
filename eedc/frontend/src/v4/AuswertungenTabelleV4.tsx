@@ -18,6 +18,7 @@ import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
 import { monatsZeile, tagesZeile, type WerteZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
+import type { AuswertungBasis } from './useAuswertungBasis'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
 import { useTagesWerte } from './useTagesWerte'
 import { AnlageLeer } from './OnboardingLeer'
@@ -43,18 +44,20 @@ function vergleichLabelVon(von: string, bis: string): string {
   return vy === by ? `${vy - 1}` : 'Vorjahr'
 }
 
-export default function AuswertungenTabelleV4() {
+export default function AuswertungenTabelleV4({ basis }: { basis: AuswertungBasis }) {
   return (
     <ParkProvider persistKey={SICHT_KEY}>
-      <TabelleInner />
+      <TabelleInner basis={basis} />
     </ParkProvider>
   )
 }
 
-function TabelleInner() {
+function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   const park = usePark()
   const { anlagen, selectedAnlageId, selectedAnlage, loading: anlagenLoading } = useSelectedAnlage()
-  const { rows, jahre, loading, error } = useWerteZeitreihe(selectedAnlageId, selectedAnlage)
+  // Monatswerte/Strompreise kommen aus der Dispatcher-Basis (EIN Fetch je Achse,
+  // Paket Q) — der Hook leitet nur noch ab.
+  const { rows, jahre, loading, error } = useWerteZeitreihe(basis, selectedAnlage)
 
   // Neuestes (Jahr, Monat) als Default-Anker.
   const anker = useMemo(() => {
@@ -105,9 +108,9 @@ function TabelleInner() {
   if (error) {
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
-        {/* B8-Fehler-Baustein (S15). Kein onRetry: useWerteZeitreihe liefert (noch)
-            kein reload — Hook-Erweiterung ist als Folge-Punkt notiert (VERIFIKATION-S15). */}
-        <FehlerZustand text={error} />
+        {/* B8-Fehler-Baustein (S15) — Retry über den Basis-Refresh des Dispatchers
+            (schließt den in VERIFIKATION-S15 notierten reload-Folge-Punkt). */}
+        <FehlerZustand text={error} onRetry={basis.refresh} />
       </div>
     )
   }
