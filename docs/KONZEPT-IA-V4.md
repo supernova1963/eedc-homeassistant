@@ -265,6 +265,37 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 
 ---
 
+## Invarianten (Phase B — Flip-Gate) — ⚠️ ENTWURF zur Abnahme
+
+> **Status: ENTWURF (2026-07-03) — noch NICHT abgenommen.** Gate-Funktion (R3, Restweg-Plan):
+> **ohne Gernot-Abnahme dieses Kapitels kein Flip.** Destilliert aus den **gebauten** Mustern
+> (Cockpit Monat/Live/Aussicht/Tag/Jahr · Komponenten-Hub · Auswertungen · Community ·
+> Einstellungen P1–P8) — hier steht nichts Neues, nur das Verbindliche daraus. **Pointer-Prinzip:**
+> jede Invariante = Kurzregel + SoT-Ort + Wächter; das Detail lebt im Style-Guide/SPEC, nicht hier.
+> Jede v4-Sicht (auch künftige) MUSS jede Zeile erfüllen; Ausnahme nur per Regel 0a Stufe 3
+> (Maintainer-Freigabe + Code-Kommentar + Allowlist).
+
+| # | Invariante | SoT | Wächter/Gate |
+|---|---|---|---|
+| I1 | **Block-Modell:** Inhaltssichten rendern ihre Blöcke über `BlockShell` (`Block[]`: einklappen · „alle auf/zu" · Fokus ⤢ · optional ↑↓). Klapp+Reihenfolge = EIN Persistenz-Eintrag je Sicht (`eedc-bloecke:<persistKey>`). Block-Identität (Icon+Farbe) aus `BLOCK_IDENTITAET`. Komponenten-Hub bleibt fix-linear (Variante-C-Entscheid). | `components/blocks/BlockShell.tsx` · `lib/blockStyle.ts` | BlockShell-Tests; Keys via `check:persistenz` |
+| I2 | **Fokus/Vollbild:** EIN geteilter Baustein — `FokusVollbild` (Portal an `body`); Konsumenten: BlockShell (⤢ je Block) + `FokusKachel` (IST-treue Layouts ohne Block-Stack). Keine zweite Fokus-Implementierung; eigene Kopfzeilen reichen ⤢ per `kopfAktion`-Slot ein. ⤢ unter 640 px aus (D14-16). | `components/blocks/FokusVollbild.tsx` / `FokusKachel.tsx` | Review (Regel 0a) |
+| I3 | **Element-Park:** einzelne Anzeigen parken/entparken (Geste + „Geparkt (n)"), feste kanonische Position — KEIN freies Umsortieren auf Element-Ebene. Persistenz `eedc-park:<key>`; ohne Provider inert. | `components/park/` · [`SPEC-ELEMENT-LAYOUT-PAPIERKORB`](drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md) (Abnahme 2026-06-25) | `park.test.tsx` |
+| I4 | **Status-Achse:** EINE Severity-Quelle (`SEVERITY_CONFIG`/`CheckSchwere`: error/warning/info/ok, neutral=grau) für Fusszeile, Badges, Alerts, Icons (`STATUS_COLORS`/`STATUS_ICONS`). System-Status NUR über die `StatusFusszeile` (global einmal via `useGlobalStatus`; Sichten melden Frische/Quelle via `useReportDatenStatus`) — keine verstreuten Eigen-Indikatoren. | `config/datenCheckerKategorien.ts` · `v4/status/` · [`SPEC-STATUS-FUSSZEILE`](drafts/SPEC-STATUS-FUSSZEILE.md) | StatusFusszeile-Tests |
+| I5 | **Farb-Invariante:** eine Datenrolle = eine Farbe (`DATENROLLE`), eine Komponenten-Klasse = eine Identitätsfarbe (`KOMPONENTEN_FARBEN`, abgeleitete Klassen, kein zweiter Satz). Signal-Rot `#ef4444` exklusiv Kosten/negativ/Fehler. Keine Inline-Hex außerhalb `lib/colors.ts`. | `lib/colors.ts` · Style-Guide A2 | `check:design` + Farb-Guard-Tests |
+| I6 | **Zeit-Steuerung:** Cockpit-Zeitsichten navigieren über die EINE `ZeitStepper`-SoT (mobil) + Rails (Desktop). Zeit-Navigation INNERHALB einer Sicht ändert den `pathname` nicht und erhält die Scroll-Position (`useScrollErhalt`). Datums-Eingaben nur `DatumPicker`/`DatumFeld`. | `v4/ZeitStepper.tsx` (+Adapter) · `ui/DatumPicker`/`DatumFeld` | `check:datumpicker` |
+| I7 | **Scroll & Überlauf:** Fade statt Scroll-Balken (ScrollSchatten inkl. Rad-Umleitung); Scroll-to-top NUR auf gerouteten Ebenen (Haupt + 1. Sub), zentral in `LayoutV4` — tiefere Ebenen positionstreu. Seiten-Scroller-Ausnahmen dokumentiert. | Style-Guide **A9** · `ui/ScrollSchatten.tsx` | `check:scrollschatten` |
+| I8 | **Format-SoT (de-DE):** Zahlen/Datum über die Format-Helfer (`fmtZahl`/`fmtCalc`: Komma, Tausenderpunkt, „% mit Leerzeichen", Display-Token `—`); Chart-Achsen uniform (EINE Einheit, de-DE-Ticks, 10-px-Tick, −45°-X). | `lib/einheiten.ts` · `ui/fmtCalc` · Style-Guide C2/C3 | `check:de-de` + `check:achsen` |
+| I9 | **Navigations-Invariante:** V4 verlinkt NIE nach V3 — kein `'#/…'`-Hash-Literal ≠ `#/v4/` unter `src/v4/**`; geteilte `*Teile` nutzen `useV4Basis`, re-kategorisierte Ziele `v3RouteZuV4`. (Bekannte Rest-Ausnahme bis R6: Donor-Ziele Monatsabschluss/CSV-Import.) | `hooks/useV4Basis.ts` · `config/v3ZuV4Route.ts` | `check:v4links` |
+| I10 | **Persistenz:** Keys nach `eedc-<bereich>[:<zweck>]`, Zugriff nur über die SoT-Module; Bestand eingefroren. | Style-Guide **C4** | `check:persistenz` |
+| I11 | **Berechnung ≠ UI:** v4 KONSUMIERT den Berechnungs-Layer (`core/berechnungen/`, ADR-001) und definiert keine Aggregat-Logik neu. Zwei SoT-Regime, nie vermischt: Berechnung = Berechnungs-Layer · Darstellung = Style-Guide + SoT-Komponenten. Jede Sicht zieht ihren eigenen Read-Query mit. | [`KONZEPT-BERECHNUNGS-LAYER`](KONZEPT-BERECHNUNGS-LAYER.md) (ADR-001) | Backend-Konformitäts-Test |
+| I12 | **SoT-Komponenten-Pflicht (Regel 0/0a):** eine Komponenten-Klasse = EINE Komponente (KPICard, Button, CsvExportButton, Modal, ChartTooltip/-Legende, Table/WerteTabelle, KpiStrip …). Register: [`IA-V4-SOT-INVENTAR`](drafts/IA-V4-SOT-INVENTAR.md). Neues erweitert die Zentrale — nie ein Zweitbau fürs bestehende Pattern. | Style-Guide Regel 0/0a + Teil B · SoT-Inventar | Review + die 7 Checks |
+
+**Bau-Invariante bis zum Flip (stirbt mit R6):** alles v4-Neue dormant hinter `VITE_IA_V4`; Prod-Build flag-rein; flag-on-`dist` NIE committen; Demo-DB hängt hinter ECHTEN Endpoints (kein Rewiring — „echte Daten" = Anlage wechseln).
+
+**Abnahme-Vermerk:** ⬜ offen — nach Gernot-Abnahme dieses Banner auf „✅ abgenommen (Datum)" setzen; erst dann ist das R3-Gate erfüllt.
+
+---
+
 ## Migrations-Plan
 
 **Strategie:** Großer Schnitt zur Version 4.0.0, vorbereitet durch Token- und Komponenten-Pflicht-Arbeiten.
