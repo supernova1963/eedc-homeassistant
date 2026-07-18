@@ -11,12 +11,13 @@
  * 5. Zusammenfassung
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Stepper from '../ui/Stepper'
 import { Button } from '../ui'
 import { HelpCircle } from 'lucide-react'
-import { useSetupWizard, type WizardStep } from '../../hooks/useSetupWizard'
+import { useSetupWizard, STEP_ORDER, type WizardStep } from '../../hooks/useSetupWizard'
 import { importApi } from '../../api'
+import { IA_V4 } from '../../lib/flags'
 import eedcIcon from '../../assets/eedc-icon.svg'
 
 // Schritt-Komponenten
@@ -33,15 +34,19 @@ interface SetupWizardProps {
   onComplete: () => void
 }
 
-// Schritt-Konfiguration für Fortschrittsanzeige (v1.0: ohne HA)
-const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
-  { key: 'welcome', label: 'Willkommen', shortLabel: 'Start' },
-  { key: 'anlage', label: 'Anlage erstellen', shortLabel: 'Anlage' },
-  { key: 'strompreise', label: 'Strompreise', shortLabel: 'Preise' },
-  { key: 'investitionen', label: 'Komponenten', shortLabel: 'Komp.' },
-  { key: 'integration', label: 'Integration', shortLabel: 'Integ.' },
-  { key: 'summary', label: 'Zusammenfassung', shortLabel: 'Fertig' },
-]
+// Labels für die Fortschrittsanzeige — Umfang UND Reihenfolge kommen aus
+// STEP_ORDER (SoT in useSetupWizard; 'integration' dort nur unter IA_V4).
+const STEP_LABELS: Record<Exclude<WizardStep, 'complete'>, { label: string; shortLabel: string }> = {
+  welcome: { label: 'Willkommen', shortLabel: 'Start' },
+  anlage: { label: 'Anlage erstellen', shortLabel: 'Anlage' },
+  strompreise: { label: 'Strompreise', shortLabel: 'Preise' },
+  investitionen: { label: 'Komponenten', shortLabel: 'Komp.' },
+  integration: { label: 'Integration', shortLabel: 'Integ.' },
+  summary: { label: 'Zusammenfassung', shortLabel: 'Fertig' },
+}
+const STEPS_CONFIG = STEP_ORDER
+  .filter((s): s is Exclude<WizardStep, 'complete'> => s !== 'complete')
+  .map((key) => ({ key, ...STEP_LABELS[key] }))
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const wizard = useSetupWizard()
@@ -65,6 +70,14 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   // Topic-Pflege / Cockpit, Spec §2 D2 „Abfrage nächster Schritt"). Vorher
   // feuerte ein 100-ms-Timer onComplete und der CompleteStep war faktisch
   // unsichtbar. Jede der drei Aktionen ruft onComplete selbst auf.
+  // Ohne IA_V4 gilt bis zum Flip der v3.x-Auslieferungsstand (Auto-Weiterleitung) —
+  // v3.46-Scope-Entscheid: D2-Wizard-Änderungen nicht in V3-Releases.
+  useEffect(() => {
+    if (!IA_V4 && wizard.step === 'complete') {
+      const timer = setTimeout(onComplete, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [wizard.step, onComplete])
 
   // Aktueller Schritt-Index für Fortschrittsanzeige
   const currentStepIndex = STEPS_CONFIG.findIndex(s => s.key === wizard.step)

@@ -6,6 +6,7 @@
 import { useState, FormEvent } from 'react'
 import { Sun, MapPin, ArrowLeft, ArrowRight, Search, CheckCircle2 } from 'lucide-react'
 import { Alert, Button, Input, DatumFeld } from '../../ui'
+import { IA_V4 } from '../../../lib/flags'
 
 interface AnlageStepProps {
   isLoading: boolean
@@ -191,16 +192,20 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
                   placeholder="z.B. Berlin"
                 />
               </div>
-              {/* D2: EIN Feld Straße & Hausnummer → präzisere Koordinaten (standort_strasse). */}
-              <div className="md:col-span-3">
-                <Input
-                  label="Straße & Hausnummer (optional)"
-                  name="standort_strasse"
-                  value={formData.standort_strasse}
-                  onChange={handleChange}
-                  placeholder="z.B. Musterweg 12"
-                />
-              </div>
+              {/* D2: EIN Feld Straße & Hausnummer → präzisere Koordinaten (standort_strasse).
+                  Nur unter IA_V4 (v3.46-Scope-Entscheid) — ohne Feld bleibt der Wert ''
+                  und Geocoding läuft wie vor D2 über PLZ/Ort. */}
+              {IA_V4 && (
+                <div className="md:col-span-3">
+                  <Input
+                    label="Straße & Hausnummer (optional)"
+                    name="standort_strasse"
+                    value={formData.standort_strasse}
+                    onChange={handleChange}
+                    placeholder="z.B. Musterweg 12"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Geocoding Button */}

@@ -84,10 +84,14 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
           Monatsdaten erfassen
         </Button>
 
-        <Button variant="secondary" size="lg" onClick={handleGoToDatenquellen}>
-          <Plug className="w-5 h-5 mr-2 max-sm:hidden" />
-          Sensor- & Topic-Pflege
-        </Button>
+        {/* D2-Absprung nur unter IA_V4 (v3.46-Scope-Entscheid) — V3-Neuinstallationen
+            sehen den Alt-Umfang ohne Datenquellen-Einstieg. */}
+        {IA_V4 && (
+          <Button variant="secondary" size="lg" onClick={handleGoToDatenquellen}>
+            <Plug className="w-5 h-5 mr-2 max-sm:hidden" />
+            Sensor- & Topic-Pflege
+          </Button>
+        )}
 
         <Button variant="secondary" size="lg" onClick={onGoToDashboard}>
           <LayoutDashboard className="w-5 h-5 mr-2 max-sm:hidden" />
