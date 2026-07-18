@@ -25,6 +25,10 @@ from backend.core.investition_parameter import PARAM_WAERMEPUMPE
 from backend.models.anlage import Anlage
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.services.activity_service import log_activity
+from backend.services.datenquellen_wizard_sync import (
+    sync_stores_nach_wizard_save,
+    uebernehme_fremde_mapping_keys,
+)
 from backend.services.ha_energy_service import (
     DeviceConsumptionCandidate,
     get_ha_energy_suggestions,
@@ -446,9 +450,17 @@ async def save_sensor_mapping(
         # Timestamp setzen
         mapping_dict["updated_at"] = datetime.now().isoformat()
 
+        # Datenquellen-V4-Stores (`quellen`/`invertieren`, künftige Keys)
+        # überleben den Voll-Rewrite und werden gegen das neue Mapping
+        # abgeglichen — sonst löschte jeder Wizard-Save die Ergebnisse der
+        # marker-einmaligen B8-/Invert-Migrationen (Gateway-Invert wäre
+        # irreversibel weg), naives Erhalten hielte stale entity_ids.
+        uebernehme_fremde_mapping_keys(anlage.sensor_mapping, mapping_dict)
+
         # In Anlage speichern
         anlage.sensor_mapping = mapping_dict
         flag_modified(anlage, "sensor_mapping")
+        await sync_stores_nach_wizard_save(session, anlage)
 
         await session.commit()
 

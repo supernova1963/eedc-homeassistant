@@ -74,5 +74,51 @@ if (violations.length > 0) {
   process.exit(1)
 }
 
+// ── Regel 2: V3→V4-Totlinks (Fund 2026-07-18, HAExportSettingsTeile:542) ──
+// AUSSERHALB src/v4 ist ein hartes '#/v4/…'-Literal im flag-off-Release-Build
+// eine TOTE Route (kein Catch-all → leere Seite). Erlaubt nur mit Flag-/
+// Kontext-Gate in unmittelbarer Nähe (IA_V4 / v4Basis / imOverlay) oder per
+// Allowlist für Dateien, die ausschließlich von src/v4 importiert werden
+// (flag-off tree-geshaked — Eintrag = belegte Import-Kette, nicht Bequemlichkeit).
+
+const V4LINK_ALLOWLIST = new Set([
+  // Nur von v4/cockpit/CockpitAussichtV4 importiert; im V3-Build nicht im Bundle.
+  'src/components/aussicht/AussichtTeile.tsx',
+])
+const GATE = /IA_V4|v4Basis|imOverlay/
+const V4HASH = /['"]#\/v4\/[^'"]*['"]/g
+const SRC = join(ROOT, 'src')
+
+const totlinks = []
+for (const file of tsxFiles(SRC)) {
+  const rel = relative(ROOT, file).split('\\').join('/')
+  if (rel.startsWith('src/v4/') || rel.startsWith('src/test/')) continue
+  if (V4LINK_ALLOWLIST.has(rel)) continue
+  const src = readFileSync(file, 'utf8')
+  const lines = src.split('\n')
+  let m
+  while ((m = V4HASH.exec(src)) !== null) {
+    const ln = lineOf(src, m.index)
+    const zeile = (lines[ln - 1] || '').trim()
+    if (zeile.startsWith('*') || zeile.startsWith('//')) continue
+    const kontext = lines.slice(Math.max(0, ln - 6), ln + 5).join('\n')
+    if (!GATE.test(kontext)) {
+      totlinks.push(`${rel}:${ln}  ${m[0]} → ohne IA_V4-/v4Basis-/imOverlay-Gate = tote Route im V3-Build`)
+    }
+  }
+}
+
+if (totlinks.length > 0) {
+  console.log(`check:v4links — ${totlinks.length} ungegatete(r) #/v4-Link(s) außerhalb src/v4/`)
+  console.error(`\n❌ ${totlinks.length} harte(r) #/v4-Link(s) in V3-erreichbarem Code (flag-off = leere Seite):`)
+  for (const v of totlinks) console.error('  · ' + v)
+  console.error(
+    '\nFix: Link per `IA_V4 ? \'#/v4/…\' : \'#/<v3-route>\'` (bzw. useV4Basis in geteilten ' +
+      'Teile-Dateien) gaten. Datei nachweislich v4-only importiert → V4LINK_ALLOWLIST ' +
+      'mit Import-Kette im Kommentar.',
+  )
+  process.exit(1)
+}
+
 console.log(`check:v4links — ${treffer} v4-interne Hash-Links, alle /v4/-relativ (kein V3-Sprung).`)
-console.log('✅ IA-V4: keine V4→V3-Hash-Links unter src/v4/.')
+console.log('✅ IA-V4: keine V4→V3-Hash-Links unter src/v4/ und keine ungegateten V3→V4-Totlinks.')

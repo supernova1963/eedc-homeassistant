@@ -138,6 +138,31 @@ def test_migration_idempotent():
         {"bezeichnung": "WR-Wartung (migriert)", "betrag": 120.0, "typ": "ausgabe"}]
 
 
+def test_migration_uebersteht_korrupte_legacy_werte():
+    """Boot-Härtung: SQLite ist dynamisch typisiert und wertet TEXT > 0 als wahr —
+    korrupte String-Werte in `sonderkosten_euro` erreichen die Migration. Sie läuft
+    im ungeschützten Boot-Pfad (run_migrations) und darf NICHT werfen
+    (Add-on-Restart-Schleife, v3.45.8-Klasse): Komma-Strings werden gerettet,
+    Unrettbares wird übersprungen und bleibt via Legacy-Fallback lesbar."""
+    engine = _mig_db()
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO monatsdaten (id, anlage_id, jahr, monat, sonderkosten_euro, "
+            "sonderkosten_beschreibung, sonstige_positionen) VALUES "
+            "(6, 1, 2026, 8, '150,00', 'Komma-String', NULL), "
+            "(7, 1, 2026, 9, 'kaputt', 'Unrettbar', NULL)"
+        ))
+    with engine.begin() as conn:
+        _migrate_monatsdaten_sonderkosten_zu_positionen(conn)  # darf nicht werfen
+    with engine.connect() as conn:
+        rows = {r[0]: r[1] for r in conn.execute(text(
+            "SELECT id, sonstige_positionen FROM monatsdaten WHERE id IN (6, 7)"
+        )).fetchall()}
+    assert json.loads(rows[6]) == [
+        {"bezeichnung": "Komma-String (migriert)", "betrag": 150.0, "typ": "ausgabe"}]
+    assert rows[7] is None  # übersprungen statt Boot-Abbruch
+
+
 # ── C. Read-Site-Symmetrie: Basis wirkt wie IMD, genau EINMAL ───────────────
 
 async def _komp_monat(db, anlage_id, jahr, monat):

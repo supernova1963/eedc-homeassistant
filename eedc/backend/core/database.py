@@ -194,6 +194,8 @@ def _migrate_monatsdaten_sonderkosten_zu_positionen(connection) -> None:
     import json
     from sqlalchemy import text as _text
 
+    from backend.utils.sonstige_positionen import _safe_float
+
     rows = connection.execute(_text(
         "SELECT id, sonderkosten_euro, sonderkosten_beschreibung FROM monatsdaten "
         "WHERE sonstige_positionen IS NULL "
@@ -201,10 +203,24 @@ def _migrate_monatsdaten_sonderkosten_zu_positionen(connection) -> None:
     )).fetchall()
 
     for md_id, euro, beschreibung in rows:
+        # SQLite ist dynamisch typisiert und wertet TEXT > 0 als wahr — ein
+        # korrupter String-Wert in der Spalte erreicht diese Schleife. Die
+        # Migration läuft im ungeschützten Boot-Pfad (run_migrations): ein
+        # nackter float()-Wurf hieße Add-on-Restart-Schleife (v3.45.8-Klasse).
+        # Daher _safe_float (rettet '150,00'); Unrettbares überspringen —
+        # die Zeile bleibt über den Legacy-Fallback des Helpers lesbar.
+        betrag = _safe_float(euro)
+        if betrag is None or betrag <= 0:
+            logger.warning(
+                "G19-1-Migration: monatsdaten.id=%s sonderkosten_euro=%r "
+                "nicht numerisch — übersprungen",
+                md_id, euro,
+            )
+            continue
         bezeichnung = (beschreibung or "").strip() or "Sonderkosten"
         position = [{
             "bezeichnung": f"{bezeichnung} (migriert)",
-            "betrag": round(float(euro), 2),
+            "betrag": round(betrag, 2),
             "typ": "ausgabe",
         }]
         connection.execute(
