@@ -103,7 +103,7 @@ def _read_energy_file() -> Optional[dict]:
 
 
 def get_ha_energy_suggestions() -> HAEnergySuggestions:
-    """Liest HA-Energy-Konfig und liefert Vorschläge für den Wizard."""
+    """Liest HA-Energy-Konfig (Supervisor-Datei) und liefert Vorschläge."""
     if not settings.supervisor_token:
         return HAEnergySuggestions(
             available=False,
@@ -117,7 +117,12 @@ def get_ha_energy_suggestions() -> HAEnergySuggestions:
             reason_unavailable="HA-Energy-Konfiguration nicht gefunden",
         )
 
-    data = raw.get("data") or {}
+    return _suggestions_aus_prefs(raw.get("data") or {})
+
+
+def _suggestions_aus_prefs(data: dict) -> HAEnergySuggestions:
+    """Gemeinsames Parsing der Energy-Prefs — Supervisor-Datei (`data`-Teil von
+    core.energy) und Remote-WS (`energy/get_prefs`-Result) haben dieselbe Form."""
     sources = data.get("energy_sources") or []
     devices = data.get("device_consumption") or []
 
@@ -167,3 +172,52 @@ def get_ha_energy_suggestions() -> HAEnergySuggestions:
         battery=battery,
         device_consumption=candidates,
     )
+
+
+async def get_ha_energy_suggestions_remote(base_url: str, token: str) -> HAEnergySuggestions:
+    """D2 (2026-07-18): Energy-Dashboard-Prefs über eine Remote-HA-Instanz.
+
+    Die Prefs liegen NICHT hinter REST — einziger Weg ist die WebSocket-API
+    (`energy/get_prefs`). Einmaliger One-Shot-Call mit LL-Token-Auth; jede
+    Fehlerklasse degradiert weich zu available=False (kein Blocker im Wizard).
+    """
+    import asyncio
+
+    import websockets
+
+    ws_url = base_url.rstrip("/")
+    if ws_url.startswith("https://"):
+        ws_url = "wss://" + ws_url[len("https://"):]
+    elif ws_url.startswith("http://"):
+        ws_url = "ws://" + ws_url[len("http://"):]
+    ws_url += "/api/websocket"
+
+    async def _empfange(ws) -> dict:
+        return json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+
+    try:
+        async with websockets.connect(ws_url, open_timeout=10, close_timeout=5) as ws:
+            await _empfange(ws)  # auth_required
+            await ws.send(json.dumps({"type": "auth", "access_token": token}))
+            auth = await _empfange(ws)
+            if auth.get("type") != "auth_ok":
+                return HAEnergySuggestions(
+                    available=False, reason_unavailable="Remote-HA: Token abgelehnt",
+                )
+            await ws.send(json.dumps({"id": 1, "type": "energy/get_prefs"}))
+            while True:
+                msg = await _empfange(ws)
+                if msg.get("id") == 1 and msg.get("type") == "result":
+                    break
+    except Exception as e:  # noqa: BLE001 — Netz/TLS/Timeout → weiche Degradation
+        logger.info("Remote-Energy-Prefs nicht erreichbar: %s", e)
+        return HAEnergySuggestions(
+            available=False, reason_unavailable="Remote-HA nicht erreichbar",
+        )
+
+    if not msg.get("success"):
+        return HAEnergySuggestions(
+            available=False,
+            reason_unavailable="Energy-Dashboard in der Remote-HA nicht konfiguriert",
+        )
+    return _suggestions_aus_prefs(msg.get("result") or {})

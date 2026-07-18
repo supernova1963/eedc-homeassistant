@@ -11,7 +11,7 @@ interface AnlageStepProps {
   isLoading: boolean
   error: string | null
   onSubmit: (data: AnlageCreateData) => Promise<void>
-  onGeocode: (plz: string, ort?: string) => Promise<{ latitude: number; longitude: number } | null>
+  onGeocode: (plz: string, ort?: string, strasse?: string) => Promise<{ latitude: number; longitude: number } | null>
   onBack: () => void
 }
 
@@ -21,6 +21,7 @@ interface AnlageCreateData {
   installationsdatum?: string
   standort_plz?: string
   standort_ort?: string
+  standort_strasse?: string
   latitude?: number
   longitude?: number
 }
@@ -32,6 +33,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
     installationsdatum: '',
     standort_plz: '',
     standort_ort: '',
+    standort_strasse: '',
     latitude: '',
     longitude: '',
   })
@@ -45,7 +47,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
     setFormData(prev => ({ ...prev, [name]: value }))
     setValidationError(null)
     // Reset geocode success wenn PLZ/Ort geändert wird
-    if (name === 'standort_plz' || name === 'standort_ort') {
+    if (name === 'standort_plz' || name === 'standort_ort' || name === 'standort_strasse') {
       setGeocodeSuccess(false)
     }
   }
@@ -61,7 +63,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
     setGeocodeSuccess(false)
 
     try {
-      const result = await onGeocode(formData.standort_plz, formData.standort_ort || undefined)
+      const result = await onGeocode(formData.standort_plz, formData.standort_ort || undefined, formData.standort_strasse || undefined)
       if (result) {
         setFormData(prev => ({
           ...prev,
@@ -100,6 +102,7 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
       installationsdatum: formData.installationsdatum || undefined,
       standort_plz: formData.standort_plz || undefined,
       standort_ort: formData.standort_ort || undefined,
+      standort_strasse: formData.standort_strasse || undefined,
       latitude: formData.latitude ? parseFloat(formData.latitude) : undefined,
       longitude: formData.longitude ? parseFloat(formData.longitude) : undefined,
     })
@@ -186,6 +189,16 @@ export default function AnlageStep({ isLoading, error, onSubmit, onGeocode, onBa
                   value={formData.standort_ort}
                   onChange={handleChange}
                   placeholder="z.B. Berlin"
+                />
+              </div>
+              {/* D2: EIN Feld Straße & Hausnummer → präzisere Koordinaten (standort_strasse). */}
+              <div className="md:col-span-3">
+                <Input
+                  label="Straße & Hausnummer (optional)"
+                  name="standort_strasse"
+                  value={formData.standort_strasse}
+                  onChange={handleChange}
+                  placeholder="z.B. Musterweg 12"
                 />
               </div>
             </div>

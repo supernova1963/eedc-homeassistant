@@ -324,7 +324,8 @@ async def update_sensor_config(
 async def geocode_address(
     plz: str,
     ort: Optional[str] = None,
-    land: str = "Germany"
+    land: str = "Germany",
+    strasse: Optional[str] = None,
 ):
     """
     Ermittelt Koordinaten aus PLZ/Ort via OpenStreetMap Nominatim.
@@ -333,6 +334,9 @@ async def geocode_address(
         plz: Postleitzahl
         ort: Ortsname (optional, verbessert Genauigkeit)
         land: Land (default: Germany)
+        strasse: Straße + Hausnummer (optional, D2 2026-07-18 — nutzt das bis
+            dahin vom Geocoding ignorierte `standort_strasse`; Nominatim
+            versteht „Musterweg 12" vorangestellt)
 
     Returns:
         GeocodeResponse: Koordinaten und Anzeigename
@@ -344,8 +348,9 @@ async def geocode_address(
     # Nominatim API URL
     base_url = "https://nominatim.openstreetmap.org/search"
 
-    # Query aufbauen
-    query_parts = [plz]
+    # Query aufbauen (Straße zuerst — präzisiert den Treffer)
+    query_parts = [strasse] if strasse else []
+    query_parts.append(plz)
     if ort:
         query_parts.append(ort)
     query_parts.append(land)

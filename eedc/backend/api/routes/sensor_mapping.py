@@ -627,6 +627,19 @@ async def get_ha_energy_suggest(anlage_id: int):
     """
     suggestions = get_ha_energy_suggestions()
 
+    # D2 (2026-07-18): Standalone mit konfigurierter Remote-HA → Energy-Prefs
+    # über den einmaligen WebSocket-Call holen (LL-Token); sonst wie bisher.
+    if not suggestions.available and suggestions.reason_unavailable == "standalone":
+        from backend.services.ha_connection import resolve_ha_connection
+        from backend.services.ha_energy_service import get_ha_energy_suggestions_remote
+
+        async with get_session() as session:
+            api_url, token, kind = await resolve_ha_connection(session)
+        if api_url and token and kind == "ha_connector":
+            # api_url endet auf /api — die WS-Funktion braucht die Basis-URL.
+            basis_url = api_url[:-4] if api_url.endswith("/api") else api_url
+            suggestions = await get_ha_energy_suggestions_remote(basis_url, token)
+
     if not suggestions.available:
         return HAEnergySuggestResponse(
             available=False,

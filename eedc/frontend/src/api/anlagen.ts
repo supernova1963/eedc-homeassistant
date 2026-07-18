@@ -58,9 +58,11 @@ export const anlagenApi = {
   /**
    * Koordinaten aus PLZ/Ort ermitteln
    */
-  async geocode(plz: string, ort?: string): Promise<GeocodeResult> {
+  async geocode(plz: string, ort?: string, strasse?: string): Promise<GeocodeResult> {
     const params = new URLSearchParams({ plz })
     if (ort) params.append('ort', ort)
+    // D2: Straße + Hausnummer präzisiert den Nominatim-Treffer (standort_strasse).
+    if (strasse) params.append('strasse', strasse)
     return api.get<GeocodeResult>(`/anlagen/geocode/lookup?${params}`)
   },
 }

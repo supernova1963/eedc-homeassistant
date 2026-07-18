@@ -11,8 +11,10 @@
  * 5. Zusammenfassung
  */
 
-import { useEffect } from 'react'
+import { useState } from 'react'
 import Stepper from '../ui/Stepper'
+import { Button } from '../ui'
+import { HelpCircle } from 'lucide-react'
 import { useSetupWizard, type WizardStep } from '../../hooks/useSetupWizard'
 import { importApi } from '../../api'
 import eedcIcon from '../../assets/eedc-icon.svg'
@@ -22,6 +24,8 @@ import WelcomeStep from './steps/WelcomeStep'
 import AnlageStep from './steps/AnlageStep'
 import StrompreiseStep from './steps/StrompreiseStep'
 import InvestitionenStep from './steps/InvestitionenStep'
+import IntegrationStep from './steps/IntegrationStep'
+import WizardHilfeOverlay, { WIZARD_HILFE_AKTIV } from './WizardHilfeOverlay'
 import SummaryStep from './steps/SummaryStep'
 import CompleteStep from './steps/CompleteStep'
 
@@ -35,11 +39,14 @@ const STEPS_CONFIG: { key: WizardStep; label: string; shortLabel: string }[] = [
   { key: 'anlage', label: 'Anlage erstellen', shortLabel: 'Anlage' },
   { key: 'strompreise', label: 'Strompreise', shortLabel: 'Preise' },
   { key: 'investitionen', label: 'Komponenten', shortLabel: 'Komp.' },
+  { key: 'integration', label: 'Integration', shortLabel: 'Integ.' },
   { key: 'summary', label: 'Zusammenfassung', shortLabel: 'Fertig' },
 ]
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const wizard = useSetupWizard()
+  // D2-Kontext-Hilfe (Mechanik; Button scharf erst mit R2a — s. WizardHilfeOverlay).
+  const [hilfeOffen, setHilfeOffen] = useState(false)
 
   // Demo-Daten laden Handler
   const handleLoadDemo = async () => {
@@ -53,14 +60,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     onComplete()
   }
 
-  // Bei Abschluss Callback aufrufen
-  useEffect(() => {
-    if (wizard.step === 'complete') {
-      // Kleine Verzögerung für Animation
-      const timer = setTimeout(onComplete, 100)
-      return () => clearTimeout(timer)
-    }
-  }, [wizard.step, onComplete])
+  // D2 (2026-07-18): KEIN Auto-onComplete mehr beim Erreichen von 'complete' —
+  // der Abschluss-Screen ist jetzt eine echte Wahl (Monatsdaten / Sensor- &
+  // Topic-Pflege / Cockpit, Spec §2 D2 „Abfrage nächster Schritt"). Vorher
+  // feuerte ein 100-ms-Timer onComplete und der CompleteStep war faktisch
+  // unsichtbar. Jede der drei Aktionen ruft onComplete selbst auf.
 
   // Aktueller Schritt-Index für Fortschrittsanzeige
   const currentStepIndex = STEPS_CONFIG.findIndex(s => s.key === wizard.step)
@@ -83,6 +87,13 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                 </p>
               </div>
             </div>
+
+            {/* D2-Kontext-Hilfe — erst mit R2a scharf (V4-Anker in der Hilfe). */}
+            {WIZARD_HILFE_AKTIV && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setHilfeOffen(true)} aria-label="Hilfe zur Einrichtung">
+                <HelpCircle className="w-4 h-4 mr-1" /> Hilfe
+              </Button>
+            )}
 
             {/* Fortschritt */}
             {showProgress && (
@@ -155,6 +166,15 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             />
           )}
 
+          {wizard.step === 'integration' && (
+            <IntegrationStep
+              anlageId={wizard.anlage?.id ?? null}
+              onNext={wizard.nextStep}
+              onBack={wizard.prevStep}
+              onSkip={wizard.skipStep}
+            />
+          )}
+
           {wizard.step === 'summary' && (
             <SummaryStep
               anlage={wizard.anlage}
@@ -178,6 +198,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           )}
         </div>
       </main>
+
+      <WizardHilfeOverlay isOpen={hilfeOffen} step={wizard.step} onClose={() => setHilfeOffen(false)} />
 
       {/* Footer */}
       <footer className="text-center py-3 sm:py-6 text-xs sm:text-sm text-gray-400 dark:text-gray-500">

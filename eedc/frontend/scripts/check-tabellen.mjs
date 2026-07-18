@@ -94,6 +94,7 @@ const T_ALLOWLIST = new Set([
   'src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', // Heatmap-Matrix, keine Datensatz-Semantik
   'src/components/preview/IASkeleton.tsx', // Design-Attrappe, nicht Teil der App
   'src/pages/Hilfe.tsx', // statische Info-/Layout-Tabelle
+  'src/components/ui/MarkdownDoc.tsx', // Markdown-Render-Tabelle (aus Hilfe.tsx extrahiert, D2)
   // Gernot 2026-07-10: T-Konto bleibt Sonderfall, KEINE Zentralisierung planen.
   // Es ist kein Tabellenraster, sondern ein Layout aus vier Tabellen (Desktop mit
   // unsichtbarer Trenn-Spalte, drei `table-fixed`-Teiltabellen mit <colgroup>,

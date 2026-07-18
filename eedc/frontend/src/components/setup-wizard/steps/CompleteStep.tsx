@@ -4,7 +4,7 @@
  * v1.0.0 - Leitet zur Monatsdaten-Erfassung weiter
  */
 
-import { Sun, PartyPopper, FileSpreadsheet, LayoutDashboard } from 'lucide-react'
+import { Sun, PartyPopper, FileSpreadsheet, LayoutDashboard, Plug } from 'lucide-react'
 import { Button } from '../../ui'
 import { IA_V4 } from '../../../lib/flags'
 import { v3RouteZuV4 } from '../../../config/v3ZuV4Route'
@@ -19,16 +19,19 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
   // Navigation zur Monatsdaten-Seite. Das Gate rendert VOR dem Router (kein
   // navigate/useV4Basis) — unter IA_V4 auf die V4-Kategorie „Daten" umbiegen
   // (v3RouteZuV4-SoT), sonst V3-Route (bleibt bis Flip).
-  const handleGoToMonatsdaten = () => {
+  const springeZu = (v3Ziel: string) => {
     // Wizard als abgeschlossen markieren (wird von onGoToDashboard gemacht)
     onGoToDashboard()
-    const v3Ziel = '/einstellungen/monatsdaten'
     const ziel = IA_V4 ? (v3RouteZuV4(v3Ziel) ?? v3Ziel) : v3Ziel
-    // Nach kurzem Delay zur Monatsdaten-Seite navigieren
+    // Nach kurzem Delay zur Zielseite navigieren
     setTimeout(() => {
       window.location.hash = '#' + ziel
     }, 100)
   }
+  const handleGoToMonatsdaten = () => springeZu('/einstellungen/monatsdaten')
+  // D2: direkter Absprung in die Sensor-/Topic-Pflege (Datenquellen-Fläche;
+  // V3 = Sensor-Mapping-Route, unter IA_V4 via v3RouteZuV4 → datenquellen).
+  const handleGoToDatenquellen = () => springeZu('/einstellungen/sensor-mapping')
 
   return (
     <div className="p-8 md:p-12 text-center">
@@ -79,6 +82,11 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
         <Button variant="amber" size="lg" onClick={handleGoToMonatsdaten}>
           <FileSpreadsheet className="w-5 h-5 mr-2 max-sm:hidden" />
           Monatsdaten erfassen
+        </Button>
+
+        <Button variant="secondary" size="lg" onClick={handleGoToDatenquellen}>
+          <Plug className="w-5 h-5 mr-2 max-sm:hidden" />
+          Sensor- & Topic-Pflege
         </Button>
 
         <Button variant="secondary" size="lg" onClick={onGoToDashboard}>

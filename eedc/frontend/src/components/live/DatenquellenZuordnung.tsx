@@ -449,6 +449,8 @@ export default function DatenquellenZuordnung() {
           anlageId={selectedAnlageId}
           feldLabel={haFeld.einheit ? `${haFeld.label} (${haFeld.einheit})` : haFeld.label}
           feldEinheit={haFeld.einheit}
+          feldKey={haFeld.feld}
+          invTyp={haFeld.typ}
           initialEntity={haFeld.ha_entity}
           onClose={() => setHaFeld(null)}
           onSpeichern={speichereHa}

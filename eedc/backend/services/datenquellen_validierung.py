@@ -6,12 +6,15 @@ Zuordnungszeit erkennbaren) Zuordnungsfehler ab; datenbasierte Checks bleiben
 im Daten-Checker. Reuse statt Neubau: der Einheiten-Dimensions-Klassifikator
 (`einheit_klasse`) ist die gemeinsame SoT mit `SENSOR_MAPPING_EINHEIT`.
 
-Vier Prüfungen (Gernot 2026-07-16):
+Fünf Prüfungen (Gernot 2026-07-16; Takt: D2/#343, 2026-07-18):
 1. **Einheit** — kWh-Sensor in W-Feld / W-Sensor in kWh-Feld (#200).
 2. **Aggregat-Redundanz** — Aggregat (PV gesamt / Netz kombi) neben Komponenten
    belegt → Aggregat wirkungslos (Engine-Vorrang), Inline „auf keine".
 3. **state_class** — HA-Energie-Sensor ohne `state_class` → keine History/LTS.
 4. **Doppelmapping** — dieselbe HA-Entity in ≥2 Feldern → Doppelzählung (#314).
+5. **Takt** — kWh-Zähler mit nur sprunghaften Updates (Session-Ende-Statistik,
+   #343) — Kernlogik hier, Datenbeschaffung (REST-History) im Aufrufer; läuft
+   nur ON-DEMAND im Pick-Moment (nicht im /felder-Batch — History-Kosten).
 """
 
 from __future__ import annotations
@@ -129,3 +132,33 @@ def finde_doppelmappings(ha_zuordnungen: dict[str, str]) -> dict[str, dict]:
                             f"zugeordnet → Doppelzählung. Nur einem Feld zuordnen.",
                 }
     return out
+
+
+# ─── Takt-Check (#343 Baustein B, D2 2026-07-18) ────────────────────────────
+# Heuristik über ~48 h REST-History (funktioniert Supervisor UND Remote-LL-Token;
+# die evcc-Fehlerklasse hatte Einheit UND state_class KORREKT — nur der Update-
+# Takt war unbrauchbar: Wertsprung erst am Lade-Session-Ende → Nadel im Live-Tag).
+_TAKT_MIN_AENDERUNGEN = 12   # unter ~1 Zuwachs je 4 h gilt als sprunghaft
+_TAKT_SPRUNG_ANTEIL = 0.5    # EIN Einzelsprung trägt ≥ 50 % des Gesamt-Zuwachses
+
+
+def takt_problem(werte: list[float]) -> Optional[dict]:
+    """Sprunghafter kWh-Zähler (#343). `werte` = numerische History-States
+    (zeitlich sortiert, ~48 h). None bei zu dünner Datenlage oder ohne Zuwachs —
+    „nicht prüfbar" bleibt still (Muster MQTT-Checker v3.23.8), nie Pseudo-Grün.
+    """
+    if len(werte) < 4:
+        return None
+    zuwaechse = [b - a for a, b in zip(werte, werte[1:]) if b > a]
+    gesamt = sum(zuwaechse)
+    if gesamt <= 0:
+        return None
+    sprunghaft = len(zuwaechse) < _TAKT_MIN_AENDERUNGEN or (max(zuwaechse) / gesamt) >= _TAKT_SPRUNG_ANTEIL
+    if not sprunghaft:
+        return None
+    return {
+        "art": "takt", "schwere": "warning",
+        "text": "Dieser Zähler aktualisiert sich nur sprunghaft (z. B. am Ende "
+                "einer Lade-Session) — Live- und Tageskurven zeigen dann Nadeln. "
+                "Für Monatssummen ist er ok.",
+    }

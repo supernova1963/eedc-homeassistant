@@ -106,3 +106,38 @@ def test_doppelmapping_gleiche_entity():
 
 def test_doppelmapping_leer_bei_eindeutig():
     assert finde_doppelmappings({"a": "sensor.x", "b": "sensor.y"}) == {}
+
+
+# ─── Takt-Check (#343 Baustein B, D2 2026-07-18) ─────────────────────────
+
+def test_takt_gesunder_zaehler_ok():
+    from backend.services.datenquellen_validierung import takt_problem
+    # 48 h à ~15 gleichmäßige kleine Zuwächse → kein Problem
+    werte, w = [], 100.0
+    for _ in range(40):
+        w += 0.25
+        werte.append(w)
+    assert takt_problem(werte) is None
+
+
+def test_takt_session_ende_sprung_warnt():
+    from backend.services.datenquellen_validierung import takt_problem
+    # evcc-Klasse: flach, EIN großer Sprung am Lade-Session-Ende
+    werte = [100.0] * 20 + [128.6] * 20
+    p = takt_problem(werte)
+    assert p is not None and p["art"] == "takt" and p["schwere"] == "warning"
+
+
+def test_takt_wenige_grosse_schritte_warnt():
+    from backend.services.datenquellen_validierung import takt_problem
+    # Nur 3 Zuwächse in 48 h (< _TAKT_MIN_AENDERUNGEN) → sprunghaft
+    werte = [100.0] * 5 + [110.0] * 5 + [122.0] * 5 + [130.0] * 5
+    p = takt_problem(werte)
+    assert p is not None and p["art"] == "takt"
+
+
+def test_takt_duenne_datenlage_still():
+    from backend.services.datenquellen_validierung import takt_problem
+    assert takt_problem([]) is None
+    assert takt_problem([100.0, 101.0]) is None          # < 4 Werte
+    assert takt_problem([100.0, 100.0, 100.0, 100.0]) is None  # kein Zuwachs

@@ -56,6 +56,9 @@ const ROUTE_ERLAUBT = new Set([
   'src/pages/SensorMappingWizard.tsx',            // Selbst-Navigation (V3-intern)
   'src/pages/DatenerfassungGuide.tsx',            // V3-Leiche (nirgends gerendert)
   'src/components/prognose/PrognoseVergleichTeile.tsx', // V3-Link, V4 via v3RouteZuV4
+  // D2 (2026-07-18): Setup-Abschluss „Sensor- & Topic-Pflege" — V3-Fallback-
+  // Literal, unter IA_V4 biegt v3RouteZuV4 auf /v4/einstellungen/datenquellen um.
+  'src/components/setup-wizard/steps/CompleteStep.tsx',
 ])
 
 function files(dir) {

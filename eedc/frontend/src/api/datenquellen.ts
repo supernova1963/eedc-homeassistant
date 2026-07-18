@@ -11,6 +11,8 @@ export interface DatenquelleFeld {
   /** Stabile Feld-Kennung (späterer Zuordnungs-Schlüssel). */
   id: string
   feld: string
+  /** Investitionstyp der Gruppe ('basis' für Anlagen-Felder) — #343-Vorschläge. */
+  typ: string
   label: string
   einheit: string
   kategorie: 'live' | 'energy'
@@ -36,7 +38,7 @@ export interface DatenquelleFeld {
 
 /** Diagnostisches Zuordnungs-Problem (§2i) — rein informativ, keine Sperre. */
 export interface FeldProblem {
-  art: 'einheit' | 'state_class' | 'redundant' | 'doppelmapping'
+  art: 'einheit' | 'state_class' | 'redundant' | 'doppelmapping' | 'takt'
   schwere: 'error' | 'warning'
   text: string
   /** nur art==='redundant': die wirksamen Komponenten-Felder. */
@@ -78,11 +80,29 @@ export interface HaSensor {
   state: string | null
 }
 
+/** Kuratierter Feld-Vorschlag aus der Integrations-Wissensbasis (#343 A, D2). */
+export interface HaVorschlag {
+  integration: string
+  label: string
+  entity_id: string
+  hinweis: string
+}
+
 export interface HaSensorenResponse {
   verfuegbar: boolean
   quelle: string | null
   sensoren: HaSensor[]
   fehler: string | null
+  /** #343 A: erkannte Integrationen + Feld-Vorschläge + Anti-Empfehlungen. */
+  integrationen: string[]
+  vorschlaege: HaVorschlag[]
+  warnungen: Record<string, string>
+}
+
+/** Takt-Check-Ergebnis (#343 B): geprueft=false = nicht prüfbar (still). */
+export interface TaktCheckResponse {
+  geprueft: boolean
+  problem: { art: string; schwere: string; text: string } | null
 }
 
 export interface QuelleSaveResult {
@@ -169,9 +189,27 @@ export const datenquellenApi = {
       { invertieren },
     ),
 
-  /** HA-Entities für den HA-Sensor-Picker (Supervisor ODER Remote-HA). */
-  haSensoren: (anlageId: number) =>
-    api.get<HaSensorenResponse>(`/datenquellen/${anlageId}/ha/sensoren`),
+  /** HA-Entities für den HA-Sensor-Picker (Supervisor ODER Remote-HA).
+   *  feld/invTyp aktivieren die Wissensbasis-Vorschläge (#343 A). */
+  haSensoren: (anlageId: number, feld?: string, invTyp?: string) => {
+    const q = new URLSearchParams()
+    if (feld) q.set('feld', feld)
+    if (invTyp) q.set('inv_typ', invTyp)
+    const suffix = q.toString() ? `?${q.toString()}` : ''
+    return api.get<HaSensorenResponse>(`/datenquellen/${anlageId}/ha/sensoren${suffix}`)
+  },
+
+  /** D2: bestätigte Energy-Dashboard-Vorschläge (#197) in die Quellen übernehmen. */
+  uebernehmeEnergyVorschlaege: (
+    anlageId: number, basis: Record<string, string>, investitionen: Record<string, Record<string, string>>,
+  ) =>
+    api.post<{ gespeichert: boolean; anzahl: number; felder: string[] }>(
+      `/datenquellen/${anlageId}/energy-vorschlaege/uebernehmen`, { basis, investitionen },
+    ),
+
+  /** On-Demand-Takt-Check eines kWh-Kandidaten im Pick-Moment (#343 B). */
+  taktCheck: (anlageId: number, entityId: string) =>
+    api.post<TaktCheckResponse>(`/datenquellen/${anlageId}/ha/takt-check`, { entity_id: entityId }),
 
   /**
    * `#`-Scan des Brokers (zeit-/mengenbegrenzt) für den Gateway-Quell-Picker.

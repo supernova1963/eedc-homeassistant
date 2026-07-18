@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
+from backend.core.ha_integrations_wissen import analysiere_vorschlaege
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
@@ -514,16 +515,33 @@ class HaSensor(BaseModel):
     state: str | None = None
 
 
+class HaVorschlag(BaseModel):
+    """Kuratierter Feld-Vorschlag aus der Integrations-Wissensbasis (#343 A)."""
+    integration: str
+    label: str
+    entity_id: str
+    hinweis: str
+
+
 class HaSensorenResponse(BaseModel):
     verfuegbar: bool = False
     quelle: str | None = None  # ha_app | ha_connector
     sensoren: list[HaSensor] = []
     fehler: str | None = None
+    # #343 Baustein A (D2): erkannte Integrationen + Feld-Vorschlaege + Anti-
+    # Empfehlungen (entity_id -> Warntext) - Assistenz, nie Auto-Auswahl.
+    integrationen: list[str] = []
+    vorschlaege: list[HaVorschlag] = []
+    warnungen: dict[str, str] = {}
 
 
 @router.get("/{anlage_id}/ha/sensoren", response_model=HaSensorenResponse)
 async def get_ha_sensoren(
-    anlage_id: int, filter_energy: bool = True, db: AsyncSession = Depends(get_db)
+    anlage_id: int,
+    filter_energy: bool = True,
+    feld: str | None = None,
+    inv_typ: str | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> HaSensorenResponse:
     """HA-Entities für den HA-Sensor-Picker — Supervisor ODER Remote-HA (verbindungs-transparent).
 
@@ -556,7 +574,69 @@ async def get_ha_sensoren(
             state=st.get("state"),
         ))
     sensoren.sort(key=lambda s: s.entity_id)
-    return HaSensorenResponse(verfuegbar=True, quelle=kind, sensoren=sensoren)
+    # #343 A: Wissensbasis-Vorschlaege fuer das Ziel-Feld + Anti-Empfehlungen.
+    assistenz = analysiere_vorschlaege([se.entity_id for se in sensoren], feld=feld, inv_typ=inv_typ)
+    return HaSensorenResponse(
+        verfuegbar=True, quelle=kind, sensoren=sensoren,
+        integrationen=assistenz["integrationen"],
+        vorschlaege=[HaVorschlag(**v) for v in assistenz["vorschlaege"]],
+        warnungen=assistenz["warnungen"],
+    )
+
+
+# --- Takt-Check beim Waehlen (#343 Baustein B, D2) ---------------------------
+class TaktCheckRequest(BaseModel):
+    entity_id: str
+
+
+class TaktCheckResponse(BaseModel):
+    geprueft: bool = False
+    problem: dict | None = None
+
+
+@router.post("/{anlage_id}/ha/takt-check", response_model=TaktCheckResponse)
+async def ha_takt_check(
+    anlage_id: int, req: TaktCheckRequest, db: AsyncSession = Depends(get_db)
+) -> TaktCheckResponse:
+    """On-Demand-Taktpruefung eines kWh-Kandidaten im Pick-Moment (#343).
+
+    REST /history/period der aktiven HA-Verbindung (Supervisor ODER Remote) -
+    bewusst NICHT im /felder-Batch (n x History je Seitenaufruf). Nicht
+    pruefbar (keine HA, keine History) -> geprueft=false, still (v3.23.8-Muster).
+    """
+    from datetime import datetime, timedelta
+
+    from backend.services.datenquellen_validierung import takt_problem
+
+    api_url, token, _kind = await _resolve_ha(db)
+    if not api_url or not token:
+        return TaktCheckResponse(geprueft=False)
+    start = (datetime.now() - timedelta(hours=48)).isoformat()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{api_url}/history/period/{start}",
+                headers={"Authorization": f"Bearer {token}"},
+                params={
+                    "filter_entity_id": req.entity_id,
+                    "minimal_response": "",
+                    "no_attributes": "",
+                },
+            )
+    except Exception:  # noqa: BLE001 - Netzwerkfehler = nicht pruefbar, still
+        return TaktCheckResponse(geprueft=False)
+    if resp.status_code != 200:
+        return TaktCheckResponse(geprueft=False)
+    reihen = resp.json() or []
+    werte: list[float] = []
+    for eintrag in (reihen[0] if reihen else []):
+        try:
+            werte.append(float(eintrag.get("state")))
+        except (TypeError, ValueError):
+            continue
+    if len(werte) < 4:
+        return TaktCheckResponse(geprueft=False)
+    return TaktCheckResponse(geprueft=True, problem=takt_problem(werte))
 
 
 @router.get("/{anlage_id}/felder")
@@ -713,6 +793,9 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         gruppe["felder"].append({
             "id": fid,
             "feld": e.get("feld", ""),
+            # Investitionstyp der Gruppe — für die Wissensbasis-Vorschläge im
+            # HA-Picker (#343 A; 'basis' für Anlagen-Felder).
+            "typ": gruppe.get("typ", ""),
             "label": e.get("feld_label", e.get("label", "")),
             "einheit": e.get("einheit", ""),
             "kategorie": e.get("kategorie", "energy"),
@@ -912,3 +995,68 @@ async def set_feld_quelle(
         logger.warning("Gateway-Reload nach Quelle-Änderung fehlgeschlagen", exc_info=True)
 
     return {"gespeichert": True, "field_id": field_id, "quelle": quelle}
+
+
+# --- D2: Wizard-Uebernahme der Energy-Dashboard-Vorschlaege ------------------
+class EnergyUebernahmeRequest(BaseModel):
+    """Auswahl aus GET /sensor-mapping/{id}/suggest — nach Nutzer-Bestaetigung."""
+    basis: dict[str, str] = {}                      # feld (einspeisung|netzbezug|pv_gesamt) -> entity_id
+    investitionen: dict[str, dict[str, str]] = {}   # inv_id -> {feld -> entity_id}
+
+
+# Suggest-Basis-Felder -> Datenquellen-Feld-IDs (energy-Registry).
+_ENERGY_BASIS_FELD_IDS = {
+    "einspeisung": "basis_energy_einspeisung_kwh",
+    "netzbezug": "basis_energy_netzbezug_kwh",
+    "pv_gesamt": "basis_energy_pv_gesamt_kwh",
+}
+
+
+@router.post("/{anlage_id}/energy-vorschlaege/uebernehmen")
+async def uebernehme_energy_vorschlaege(
+    anlage_id: int, body: EnergyUebernahmeRequest, db: AsyncSession = Depends(get_db)
+):
+    """D2 (2026-07-18): Uebernimmt BESTAETIGTE Energy-Dashboard-Vorschlaege (#197)
+    in die Datenquellen-Quellen — nie stumm, der Wizard zeigt die Auswahl vorher.
+
+    Schreibt in denselben Store wie /felder/{fid}/quelle (HA-Transport = aktive
+    Verbindung); nur Feld-IDs, die die Registry der Anlage wirklich kennt.
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    anlage = (
+        await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    ).scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    _api_url, _token, kind = await _resolve_ha(db)
+    if kind not in ("ha_app", "ha_connector"):
+        raise HTTPException(status_code=400, detail="Keine aktive HA-Verbindung")
+
+    # Gueltige Feld-IDs der Anlage aus der Registry (wie /felder).
+    erwartete = await build_expected_topics(db, anlage)
+    gueltig = {_feld_id(e["match_key"]) for e in erwartete}
+
+    zuordnungen: list[tuple[str, str]] = []
+    for feld, entity in (body.basis or {}).items():
+        fid = _ENERGY_BASIS_FELD_IDS.get(feld)
+        if fid and entity and fid in gueltig:
+            zuordnungen.append((fid, entity))
+    for inv_id, felder in (body.investitionen or {}).items():
+        for feld, entity in (felder or {}).items():
+            fid = f"inv_energy_{inv_id}_{feld}"
+            if entity and fid in gueltig:
+                zuordnungen.append((fid, entity))
+
+    mapping = dict(anlage.sensor_mapping or {})
+    quellen = dict(mapping.get(QUELLEN_KEY) or {})
+    for fid, entity in zuordnungen:
+        quellen[fid] = {"quelle": kind, "entity_id": entity}
+    mapping[QUELLEN_KEY] = quellen
+    anlage.sensor_mapping = mapping
+    flag_modified(anlage, "sensor_mapping")
+    await db.commit()
+
+    return {"gespeichert": True, "anzahl": len(zuordnungen),
+            "felder": [fid for fid, _ in zuordnungen]}
