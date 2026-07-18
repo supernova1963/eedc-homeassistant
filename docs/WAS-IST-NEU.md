@@ -1,11 +1,33 @@
 # Was ist neu
 
-> **Stand:** Juni 2026 (v3.45.9)
+> **Stand:** Juli 2026 (v3.46.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v3.46 — Sonstige Erträge & Ausgaben zählen jetzt mit (Juli 2026)
+
+> Diese Version bringt eine wichtige **Finanz-Korrektur** (bitte den ersten Punkt lesen — deine Summen können sich ändern), klickbare Chart-Legenden und flüssigere Ladezeiten. Außerdem steckt viel Unterbau für die kommende neue Oberfläche darin — der ist für dich noch unsichtbar.
+
+### Deine Finanz-Summen können sich ändern — das ist die Korrektur, nicht der Fehler
+
+- **Sonstige Erträge & Ausgaben rechnen jetzt mit.** Monatliche Sonderposten (z. B. Versicherung, Reparatur, THG-Prämie), die du beim Monatsabschluss als „Sonderkosten" erfasst hast, wurden bisher **nirgends** in den Finanz-Summen berücksichtigt. Jetzt fließen sie ins T-Konto und in alle Finanz-Auswertungen ein — und du kannst pro Monat mehrere benannte Positionen erfassen, jeweils als Ertrag **oder** Ausgabe. Bestehende Sonderkosten-Einträge werden beim ersten Start einmalig übernommen. **Wenn deine Summen nach dem Update anders aussehen: Sie waren vorher unvollständig — jetzt stimmen sie.**
+- **Grundgebühr & Zählergebühr getrennt:** Die Zählergebühr ist jetzt ein eigenes Feld im Stromtarif und wird neben der Grundgebühr separat ausgewiesen (Cockpit Monat/Jahr).
+
+### Weitere Verbesserungen
+
+- **Chart-Legenden sind jetzt klickbar:** In Diagrammen mit mehreren Serien blendet ein Klick auf einen Legenden-Eintrag die Serie aus und wieder ein — die Achsen skalieren mit. Praktisch, um z. B. eine dominante Serie auszublenden und die kleinen zu vergleichen.
+- **Community: rückwirkend entfernte Monate verschwinden jetzt auch auf dem Server.** Hast du Monatsdaten lokal gelöscht (z. B. eine Fehlbuchung), blieben sie im Community-Vergleich bisher stehen — ab jetzt räumt die nächste Übertragung sie auch dort weg.
+- **Speicher: Netzladung wieder überall sichtbar.** Das Speicher-Dashboard las den Wert unter einem veralteten Schlüssel — Netzladungs-Werte, die dort fehlten, tauchen wieder auf. Dazu: Ø-Netz-Ladepreis-Vorschlag im Speicher-Formular und Ausweis der Netzladung-Kosten im T-Konto.
+- **Live & Aussicht laden gleichmäßiger:** Eine interne Zufalls-Wartezeit (bis zu 30 s) beim Prognose-Abruf ist aus dem interaktiven Pfad entfernt — sie gehörte nur in Hintergrund-Jobs.
+- **MQTT intern aufgeräumt:** eine Broker-Verbindung für beide Richtungen (Empfangen + Export). Bestehende Einstellungen werden automatisch übernommen — es ist nichts zu tun.
+- **Kleinere Politur:** einheitliche „Abbrechen"-Knöpfe, bessere Dialog-Abstände auf Mobilgeräten, weniger doppelte Datenabrufe beim Navigieren.
+
+> **Intern:** Ein Großteil dieser Version ist Vorbereitung der neuen Oberfläche (hinter Build-Flag, für dich nicht aktiv) — sichtbar wird sie erst mit v4.0.
 
 ---
 

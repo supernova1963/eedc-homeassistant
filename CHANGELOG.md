@@ -9,6 +9,30 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [3.46.0] - 2026-07-18 — Sonstige Erträge & Ausgaben in den Finanz-Summen + Backend-Unterbau der neuen Oberfläche
+
+### Added
+
+- **Sonstige Erträge & Ausgaben auf Anlage-Ebene (G19-1):** Neues Feld `Monatsdaten.sonstige_positionen` — pro Monat mehrere benannte Positionen, jeweils Ertrag oder Ausgabe, erfasst über einen geteilten Formular-Baustein; wirkt in allen fünf Anlage-Finanz-Lese-Pfaden (T-Konto-Zeilen „Anlage — Sonstige …"). **Einmalige Migration übernimmt bestehende Alt-Sonderkosten als Positionen. Wichtig: Diese Werte wurden bisher in KEINER Finanz-Summe berücksichtigt — ab jetzt rechnen sie mit. Veränderte Summen nach dem Update sind die Korrektur, nicht der Fehler.** Dazu K3: Zählergebühr als eigenes Tarif-Feld + getrennter Grundgebühr-/Zählergebühr-Ausweis (Cockpit Monat/Jahr).
+- **Community — rückwirkend entfernte Monate (N18-2):** Der Client deklariert Voll-Übertragungen (`monate_vollstaendig: true`); der Community-Server entfernt damit Monate, die lokal nicht mehr existieren (Server-Seite ist live; ältere Server ignorieren das Feld unverändert).
+- **Klickbare Chart-Legenden als Standard (B7):** Legenden-Einträge blenden ihre Serie aus/ein (inkl. Achsen-Reskalierung), umgesetzt über einen geteilten Hook (`useLegendenToggle`) in den gemeinsamen Chart-Bausteinen — wirkt damit auch in den bestehenden Sichten.
+- **Speicher:** Ø-Netz-Ladepreis-Vorschlag im Investitions-Formular (R15-2) + Netzladung-Kosten-Ausweis im T-Konto (R15-5).
+
+### Changed
+
+- **Datenquellen-Backend konsolidiert (Unterbau der V4-Fläche, UI bleibt dormant):** vier additive/idempotente Start-Migrationen (Materialisierung bestehender Sensor-Mapping-/MQTT-Zuordnungen), **EIN MQTT-Broker für beide Richtungen** mit Import-/Export-Richtungs-Defaults (Bestandsschutz über ENV `MQTT_ENABLED`), HA-Export nicht mehr HA-only-gated.
+- **Weniger Doppel-Abrufe:** App-Start/Setup-Gate teilen den Anlagen-Fetch (`useAnlagen`-Cache) — `/api/anlagen/` pro Seitenaufruf 2→1.
+- **UI-Politur in geteilten Komponenten (T19):** „Abbrechen"-Kanon (secondary, rechts) über 15 Stellen, Modal-/Alert-Padding mobil, Dialog-/Werkbank-Feinschliff.
+
+### Fixed
+
+- **Speicher-Dashboard las Netzladung nur unter dem Legacy-Schlüssel (R15-3):** Netzladungs-Werte fehlten dadurch in Sichten — behoben, kanonischer Schlüssel mit Fallback.
+- **Ladezeiten Live/Aussicht (R18-13):** 1–30-s-Zufalls-Jitter aus dem interaktiven Prognose-Pfad entfernt (bleibt bewusst für Hintergrund-Jobs erhalten).
+
+### Notes
+
+- **Die neue Oberfläche (IA V4) bleibt unsichtbar:** Der Großteil der ~100 Commits dieser Version ist V4-Vorbereitung hinter dem Build-Flag `VITE_IA_V4` (Standard-Build ohne Flag). Die oben genannten Backend-Anteile fahren bewusst vorab mit (additiv/idempotent, ENV-Bestandsschutz, 1366 Backend-Tests) — das härtet die Migrationen im Feld, bevor v4.0 die Oberfläche umstellt. Dazu gehören auch Backend-Erweiterungen für kommende V4-Sichten (Verlauf-Vergleich-Endpoints, Grundlast-/Tages-Prognose-Korrekturen R11/12, Sensor-Zuordnungs-Assistenz #343: Integrations-Wissensbasis, Takt-Check `POST /ha/takt-check`, Energy-Dashboard-Vorschläge, Geocode-`strasse`-Parameter), die im ausgelieferten Frontend ungenutzt bleiben. Auch der Setup-Wizard behält in dieser Version bewusst den bisherigen Schritt-Umfang — die V4-Erweiterungen (Integrations-Schritt, Straßen-Feld, Abschluss-Wahl) sind flag-gated.
+
 ## [3.45.9] - 2026-06-29 — Speicher-Vorzeichen-Historie: schonende Selbstkorrektur per Daten-Checker (statt Start-Migration)
 
 ### Added
