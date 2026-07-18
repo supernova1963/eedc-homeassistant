@@ -20,7 +20,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Changed
 
-- **Datenquellen-Backend konsolidiert (Unterbau der V4-Fläche, UI bleibt dormant):** vier additive/idempotente Start-Migrationen (Materialisierung bestehender Sensor-Mapping-/MQTT-Zuordnungen), **EIN MQTT-Broker für beide Richtungen** mit Import-/Export-Richtungs-Defaults (Bestandsschutz über ENV `MQTT_ENABLED`), HA-Export nicht mehr HA-only-gated.
+- **Datenquellen-Backend konsolidiert (Unterbau der V4-Fläche, UI bleibt dormant):** drei additive/idempotente Start-Migrationen (Materialisierung bestehender Sensor-Mapping-/MQTT-Zuordnungen, Invert-Vereinheitlichung, Richtungs-Festschreibung), **EIN MQTT-Broker für beide Richtungen** mit Import-/Export-Richtungs-Defaults (Bestandsschutz über ENV `MQTT_ENABLED`), HA-Export nicht mehr HA-only-gated. **Zwei bewusste Verhaltensänderungen für Bestand:** (1) Export-Default = an, sobald HA-Verbindung + Broker vorhanden (vorher ENV-abhängig) — abschaltbar unter Einstellungen → HA-Export → Auto-Publish; (2) je Feld gilt strikt EINE Quelle, HA vor MQTT (vorher überschrieb MQTT den HA-Wert; kein stiller Fallback mehr bei Sensor-Ausfall).
 - **Weniger Doppel-Abrufe:** App-Start/Setup-Gate teilen den Anlagen-Fetch (`useAnlagen`-Cache) — `/api/anlagen/` pro Seitenaufruf 2→1.
 - **UI-Politur in geteilten Komponenten (T19):** „Abbrechen"-Kanon (secondary, rechts) über 15 Stellen, Modal-/Alert-Padding mobil, Dialog-/Werkbank-Feinschliff.
 
