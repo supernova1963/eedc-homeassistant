@@ -11,7 +11,7 @@
 
 ## v3.46 — Sonstige Erträge & Ausgaben zählen jetzt mit (Juli 2026)
 
-> Diese Version bringt eine wichtige **Finanz-Korrektur** (bitte den ersten Punkt lesen — deine Summen können sich ändern), klickbare Chart-Legenden und flüssigere Ladezeiten. Außerdem steckt viel Unterbau für die kommende neue Oberfläche darin — der ist für dich noch unsichtbar.
+> Diese Version bringt eine wichtige **Finanz-Korrektur** (bitte den ersten Punkt lesen — deine Summen können sich ändern), klickbare Chart-Legenden und flüssigere Ladezeiten. Außerdem steckt viel Unterbau für die neue Oberfläche darin — der ist hier noch unsichtbar: **die neue Oberfläche folgt in wenigen Tagen als v4.0.**
 
 ### Deine Finanz-Summen können sich ändern — das ist die Korrektur, nicht der Fehler
 
@@ -28,7 +28,7 @@
 - **Ein Feld, eine Quelle:** Ist dasselbe Feld sowohl über einen HA-Sensor als auch über MQTT beliefert, gilt ab jetzt fest der HA-Sensor (bisher überschrieb der MQTT-Wert den HA-Wert). Fällt der HA-Sensor aus, springt nicht mehr still der MQTT-Wert ein — prüfe bei Live-Lücken also zuerst den HA-Sensor.
 - **Kleinere Politur:** einheitliche „Abbrechen"-Knöpfe, bessere Dialog-Abstände auf Mobilgeräten, weniger doppelte Datenabrufe beim Navigieren.
 
-> **Intern:** Ein Großteil dieser Version ist Vorbereitung der neuen Oberfläche (hinter Build-Flag, für dich nicht aktiv) — sichtbar wird sie erst mit v4.0.
+> **Intern:** Ein Großteil dieser Version ist Vorbereitung der neuen Oberfläche (hinter Build-Flag, für dich nicht aktiv) — **v4.0 folgt in wenigen Tagen** und bringt sie sichtbar, inklusive „Wo ist was hin?"-Tabelle.
 
 ---
 
