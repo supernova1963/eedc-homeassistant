@@ -11,7 +11,7 @@
  * Quelle: `AggregierteMonatsdaten[]` (Σ der IMD je Monat) — dieselbe SoT wie die
  * Bilanz-Vergleichsspalten, damit Chart und Zahlen nie auseinanderlaufen.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -19,7 +19,7 @@ import {
 } from 'recharts'
 import { ChartLegende, SegmentControl, eedcTooltipProps } from '../components/ui'
 import { CHART_COLORS, MONAT_KURZ, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
-import { useSchmaleAchse } from '../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { vergleichBalken } from './VergleichBalken'
 import { verfuegbarePresets, monatDrillInPfad } from './verlaufVergleich'
@@ -79,13 +79,9 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
   const [view, setView] = useState<BilanzView>('erzeugung')
   const [presetKey, setPresetKey] = useState('verbrauch')
   const [showAutarkie, setShowAutarkie] = useState(false)
-  // Skalen-Lesbarkeit (Vergleich): Serien per Legenden-Klick aus-/einblenden;
-  // Reset bei Modus-/Preset-Wechsel — geteilte SoT-Mechanik (ChartLegende.onItemClick).
-  const [versteckt, setVersteckt] = useState<Set<string>>(new Set())
-  useEffect(() => { setVersteckt(new Set()) }, [view, presetKey])
-  const toggleSerie = useCallback((key: string) => {
-    setVersteckt((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next })
-  }, [])
+  // Skalen-Lesbarkeit: Serien per Legenden-Klick aus-/einblenden (B7-Standard,
+  // SoT-Hook). Reset bei Modus-/Preset-Wechsel — der Serien-Satz ändert sich.
+  const legende = useLegendenToggle(`${view}:${presetKey}`)
   const daten = useMemo(() => baueJahrChartDaten(monate), [monate])
   const presets = verfuegbarePresets(true)
   const aktPreset = presets.find((p) => p.key === presetKey) ?? presets[0]
@@ -149,8 +145,8 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
                 : name === 'Fahrleistung' ? `${fmtZahl(value, 0)} km`
                 : `${fmtZahl(value, 1)} kWh` })} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={
-              // Vergleich: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit).
-              <ChartLegende onItemClick={view === 'vergleich' ? (e) => toggleSerie(String(e.dataKey ?? e.value)) : undefined} />
+              // B7: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit) — alle Modi.
+              <ChartLegende onItemClick={legende.onItemClick} />
             } />
 
             {view === 'vergleich' ? (
@@ -162,25 +158,25 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
                 istJahr: true,
                 schmal,
                 onBarClick: (i) => navigate(monatDrillInPfad(daten[i].jahr, daten[i].monatNr)),
-                hidden: versteckt,
+                hidden: legende.versteckt,
               })
             ) : view === 'erzeugung' ? (
               <>
-                <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} />
-                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} />
-                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} />
+                <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} hide={legende.istVersteckt('eigenverbrauch')} />
+                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} hide={legende.istVersteckt('einspeisung')} />
+                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} hide={legende.istVersteckt('netzbezug')} />
               </>
             ) : (
               <>
-                <Bar yAxisId="kwh" dataKey="direktverbrauch" name="Direktverbrauch" stackId="vb" fill={CHART_COLORS.direktverbrauch} />
-                <Bar yAxisId="kwh" dataKey="speicherEntladung" name="Speicher-Entladung" stackId="vb" fill={CHART_COLORS.speicherEntladung} />
-                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" stackId="vb" fill={CHART_COLORS.netzbezug} />
-                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} />
+                <Bar yAxisId="kwh" dataKey="direktverbrauch" name="Direktverbrauch" stackId="vb" fill={CHART_COLORS.direktverbrauch} hide={legende.istVersteckt('direktverbrauch')} />
+                <Bar yAxisId="kwh" dataKey="speicherEntladung" name="Speicher-Entladung" stackId="vb" fill={CHART_COLORS.speicherEntladung} hide={legende.istVersteckt('speicherEntladung')} />
+                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" stackId="vb" fill={CHART_COLORS.netzbezug} hide={legende.istVersteckt('netzbezug')} />
+                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} hide={legende.istVersteckt('einspeisung')} />
               </>
             )}
 
             {showAutarkie && view !== 'vergleich' && (
-              <Line yAxisId="pct" type="monotone" dataKey="autarkie" name="Autarkie" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} connectNulls />
+              <Line yAxisId="pct" type="monotone" dataKey="autarkie" name="Autarkie" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} connectNulls hide={legende.istVersteckt('autarkie')} />
             )}
           </ComposedChart>
         </ResponsiveContainer>

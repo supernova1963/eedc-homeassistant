@@ -12,14 +12,15 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { Sun, Download, Trash2, Check, RefreshCw, TrendingUp, MapPin, AlertCircle, Mountain, Upload } from 'lucide-react'
-import { LoadingSpinner, Alert, Button, Input } from '../components/ui'
+import { ChartLegende, LoadingSpinner, Alert, Button, Input } from '../components/ui'
+import { useLegendenToggle } from '../hooks'
 import { Parkbar } from '../components/park'
 import { STRING_COLORS, CHART_COLORS, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
 import { pvgisApi } from '../api'
 import type { PVGISPrognose, GespeichertePrognose, AktivePrognoseResponse, PVGISOptimum, HorizontStatus } from '../api/pvgis'
 import type { Anlage } from '../types'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts'
 import ChartTooltip from '../components/ui/ChartTooltip'
 import CollapsibleSection from '../components/ui/CollapsibleSection'
@@ -36,6 +37,8 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
   anlage?: Anlage
   kopfZusatz?: ReactNode
 }) {
+  // B7-Legenden-Toggle für den Multi-String-Monatschart (Serie = String/Modul).
+  const stringLegende = useLegendenToggle()
   const [aktivePrognose, setAktivePrognose] = useState<AktivePrognoseResponse | null>(null)
   const [gespeichertePrognosen, setGespeichertePrognosen] = useState<GespeichertePrognose[]>([])
   const [previewPrognose, setPreviewPrognose] = useState<PVGISPrognose | null>(null)
@@ -655,6 +658,8 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                             label={achsenEinheit('kWh')}
                           />
                           <Tooltip content={<ChartTooltip unit="kWh" />} />
+                          {/* B7: Multi-String → Legende + Toggle (Einzelserie bleibt bewusst legende-frei). */}
+                          {multiString && <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={stringLegende.onItemClick} />} />}
                           {multiString ? (
                             module.map((mod, idx) => (
                               <Bar
@@ -663,6 +668,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
                                 stackId="prognose"
                                 fill={stringFarben[idx % stringFarben.length]}
                                 name={`${mod.bezeichnung} (${mod.ausrichtung_richtung})`}
+                                hide={stringLegende.istVersteckt(`m_${mod.investition_id}`)}
                               />
                             ))
                           ) : (

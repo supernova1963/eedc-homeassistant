@@ -13,7 +13,7 @@ import { ChartLegende } from '../../components/ui'
 import { Parkbar } from '../../components/park'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
-import { useSchmaleAchse } from '../../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, TrendDaten, DegradationsAnalyse } from '../../api/community'
 import {
@@ -436,6 +436,7 @@ export function CommunityEntwicklung({ communityTrends }: {
 }) {
   const achsen = useChartTheme()
   const schmal = useSchmaleAchse()
+  const legende = useLegendenToggle()
   return (
     <div>
       <Parkbar id="tr-community-chart" titel="Community-Entwicklung (Diagramm)">
@@ -473,6 +474,7 @@ export function CommunityEntwicklung({ communityTrends }: {
               }}
             />} />
             <Legend content={<ChartLegende
+              onItemClick={legende.onItemClick}
               formatter={(value) => {
                 const labels: Record<string, string> = {
                   speicher: 'Speicher-Quote',
@@ -482,9 +484,9 @@ export function CommunityEntwicklung({ communityTrends }: {
                 return labels[value] || value
               }}
             />} />
-            <Line type="monotone" dataKey="speicher" stroke={TYP_COLORS['speicher']} strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="waermepumpe" stroke={TYP_COLORS['waermepumpe']} strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="eauto" stroke={TYP_COLORS['e-auto']} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="speicher" stroke={TYP_COLORS['speicher']} strokeWidth={2} dot={false} hide={legende.istVersteckt('speicher')} />
+            <Line type="monotone" dataKey="waermepumpe" stroke={TYP_COLORS['waermepumpe']} strokeWidth={2} dot={false} hide={legende.istVersteckt('waermepumpe')} />
+            <Line type="monotone" dataKey="eauto" stroke={TYP_COLORS['e-auto']} strokeWidth={2} dot={false} hide={legende.istVersteckt('eauto')} />
           </LineChart>
         </ResponsiveContainer>
       </div>

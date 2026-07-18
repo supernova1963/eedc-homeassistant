@@ -15,6 +15,7 @@ import { Card, ChartLegende } from '../../components/ui'
 import { Parkbar } from '../../components/park'
 import { SimpleTooltip } from '../../components/ui/FormelTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 import type { CommunityBenchmarkResponse, KPIVergleich } from '../../api/community'
 import {
   ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend,
@@ -323,6 +324,7 @@ export function StaerkenSchwaechen({ staerken, schwaechen }: { staerken: Perform
 
 export function PerformanceProfil({ radarData }: { radarData: UebersichtDaten['radarData'] }) {
   const achsen = useChartTheme()
+  const legende = useLegendenToggle()
   return (
     <Parkbar id="ueb-radar" titel="Performance-Profil">
       <div className="h-64">
@@ -331,9 +333,9 @@ export function PerformanceProfil({ radarData }: { radarData: UebersichtDaten['r
             <PolarGrid stroke={achsen.grid} />
             <PolarAngleAxis dataKey="kategorie" tick={ACHSEN_TICK} />
             <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: achsen.referenz, fontSize: 10 }} />
-            <Radar name="Du" dataKey="du" stroke={EIGENE_SERIE_FARBEN.du} fill={EIGENE_SERIE_FARBEN.du} fillOpacity={0.3} />
-            <Radar name="Community" dataKey="community" stroke={SERIEN_PALETTE[0]} fill={SERIEN_PALETTE[0]} fillOpacity={0.15} />
-            <Legend content={<ChartLegende />} />
+            <Radar name="Du" dataKey="du" stroke={EIGENE_SERIE_FARBEN.du} fill={EIGENE_SERIE_FARBEN.du} fillOpacity={0.3} hide={legende.istVersteckt('du')} />
+            <Radar name="Community" dataKey="community" stroke={SERIEN_PALETTE[0]} fill={SERIEN_PALETTE[0]} fillOpacity={0.15} hide={legende.istVersteckt('community')} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
           </RadarChart>
         </ResponsiveContainer>
       </div>

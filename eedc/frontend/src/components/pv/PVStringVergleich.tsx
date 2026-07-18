@@ -16,6 +16,7 @@ import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } fro
 import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
+import { useLegendenToggle } from '../../hooks'
 import { Parkbar } from '../park'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
 import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
@@ -60,6 +61,9 @@ function Sektion({ embed, icon: Icon, farbe, titel, hinweis, children }: {
 }
 
 export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
+  // B7-Legenden-Toggle — je Chart eine Instanz (SOLL/IST-Vergleich + Saison).
+  const vergleichLegende = useLegendenToggle()
+  const saisonLegende = useLegendenToggle()
   const [data, setData] = useState<PVStringsGesamtlaufzeitResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -339,11 +343,11 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Kategorie-Achse (Modul-Name) */ />
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={70} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
-                  <Legend content={<ChartLegende />} />
+                  <Legend content={<ChartLegende onItemClick={vergleichLegende.onItemClick} />} />
                   {/* SOLL deckend (S4: Balken nicht transparent); als Prognose nur
                       über den gestrichelten Rand markiert. */}
-                  <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} />
-                  <Bar dataKey="IST" name="IST (erzeugt)" fill={SOLL_IST_COLORS.ist}>
+                  <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} hide={vergleichLegende.istVersteckt('SOLL')} />
+                  <Bar dataKey="IST" name="IST (erzeugt)" fill={SOLL_IST_COLORS.ist} hide={vergleichLegende.istVersteckt('IST')}>
                     <LabelList dataKey="deltaLabel" position="top" fontSize={11} />
                   </Bar>
                 </BarChart>
@@ -353,14 +357,14 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
-                  <Legend content={<ChartLegende />} />
+                  <Legend content={<ChartLegende onItemClick={vergleichLegende.onItemClick} />} />
                   {data.strings.map((s, idx) => {
                     const single = data.strings.length === 1
                     const baseColor = single ? SOLL_IST_COLORS.soll : STRING_COLORS[idx % STRING_COLORS.length]
                     return (
                       <Bar key={`${s.investition_id}-soll`} dataKey={`${s.bezeichnung} SOLL`}
                         fill={baseColor} stroke={baseColor} strokeWidth={1} strokeDasharray={PROGNOSE_DASH}
-                        name={`${s.bezeichnung} SOLL`} />
+                        name={`${s.bezeichnung} SOLL`} hide={vergleichLegende.istVersteckt(`${s.bezeichnung} SOLL`)} />
                     )
                   })}
                   {data.strings.map((s, idx) => {
@@ -368,7 +372,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                     const baseColor = single ? SOLL_IST_COLORS.ist : STRING_COLORS[idx % STRING_COLORS.length]
                     return (
                       <Bar key={`${s.investition_id}-ist`} dataKey={`${s.bezeichnung} IST`}
-                        fill={baseColor} name={`${s.bezeichnung} IST`} />
+                        fill={baseColor} name={`${s.bezeichnung} IST`} hide={vergleichLegende.istVersteckt(`${s.bezeichnung} IST`)} />
                     )
                   })}
                 </BarChart>
@@ -404,7 +408,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                 <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis tickFormatter={saisonalAchse.tick} label={achsenEinheit(saisonalAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
-                <Legend content={<ChartLegende />} />
+                <Legend content={<ChartLegende onItemClick={saisonLegende.onItemClick} />} />
                 <Area
                   type="monotone"
                   dataKey="SOLL"
@@ -413,6 +417,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   strokeDasharray={PROGNOSE_DASH}
                   fillOpacity={0.2}
                   name="PVGIS Prognose"
+                  hide={saisonLegende.istVersteckt('SOLL')}
                 />
                 <Line
                   type="monotone"
@@ -421,6 +426,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   strokeWidth={3}
                   dot={{ r: 4 }}
                   name="IST Durchschnitt"
+                  hide={saisonLegende.istVersteckt('IST Ø')}
                 />
               </ComposedChart>
             </ResponsiveContainer>

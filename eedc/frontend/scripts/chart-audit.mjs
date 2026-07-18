@@ -3,7 +3,7 @@
  * chart-audit.mjs — Laufzeit-Gate der Chart-Komposition (B7 / D17-4 / D17-6, 2026-07-09).
  *
  * Der statische `check:charts` deckt Pie-SoT + Legenden-Bildsprache grep-bar ab. Die
- * ZWEI Chart-Regeln, die statisch prinzipiell unsichtbar sind, prüft dieser Gate am
+ * DREI Chart-Regeln, die statisch prinzipiell unsichtbar sind, prüft dieser Gate am
  * gerenderten DOM (Chromium) — genau die Gernot-Audit-Lehre „prüfe die Bild-Komposition":
  *
  *   L1 — Label-Overflow: KEIN Achsen-Tick-/Legenden-Text darf über seinen Chart-Container
@@ -12,6 +12,9 @@
  *        GERENDERTER Serie MUSS eine Legende tragen. Statisch unsichtbar, weil Serien oft
  *        via `.map()` aus EINEM `<Bar>`-Literal entstehen ([[feedback_verifiziert_nur_was_check_abdeckt]]).
  *        Einzelserien (WP-Saison) sind bewusst legende-frei → nicht geflaggt.
+ *   L3 — Legenden-Toggle-Pflicht: die Legende einer Multi-Serie MUSS klickbar sein
+ *        (B7-Standard `useLegendenToggle`, 2026-07-18) — erkennbar am role="button",
+ *        das `ChartLegende` nur bei gesetztem `onItemClick` rendert.
  *
  * Voraussetzung: flag-on gebautes `dist` auf $EEDC_BASE (Default :8200) + Chromium unter
  * $PLAYWRIGHT_CHROMIUM. Kein CI-Pflichtlauf — Dev-Box-Kommando ([[reference_recharts_bars_jsdom]]):
@@ -88,6 +91,17 @@ function auditDom() {
         if (serien >= 2 && !hatLegende) {
           treffer.push(`L2 Multi-Serie (${serien}) ohne Legende @ ${kennung}`)
         }
+        // L3 — Legenden-Toggle-Pflicht bei Multi-Serie (B7-Standard, 2026-07-18):
+        // ChartLegende rendert die Einträge mit role="button", sobald onItemClick
+        // gesetzt ist — fehlt das, ist der Toggle nicht verdrahtet. Statisch
+        // unsichtbar (`.map()`-Serien), daher hier am gerenderten DOM.
+        if (serien >= 2 && hatLegende) {
+          const eintraege = leg.querySelectorAll('li').length
+          const klickbar = leg.querySelectorAll('li[role="button"]').length
+          if (eintraege > 0 && klickbar === 0) {
+            treffer.push(`L3 Multi-Serie (${serien}) mit Legende ohne Toggle (kein role="button") @ ${kennung}`)
+          }
+        }
       }
     })
     return treffer
@@ -118,7 +132,7 @@ async function main() {
     console.error(probleme.join('\n'))
     process.exit(1)
   }
-  console.log('\n✅ chart-audit — kein Label-Overflow, jede Multi-Serie trägt eine Legende.')
+  console.log('\n✅ chart-audit — kein Label-Overflow, jede Multi-Serie trägt eine klickbare Legende (Toggle).')
 }
 
 main().catch((e) => { console.error(e); process.exit(1) })

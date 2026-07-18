@@ -13,7 +13,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, LADEQUELLEN_FARBEN, GELD_COLORS, GELD_TEXT_CLASS, CHART_COLORS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, EAutoDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = EAutoDashboardResponse['zusammenfassung']
@@ -52,6 +52,7 @@ export function EAutoKmVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonats
 /** Ladung pro Monat nach Quelle (PV/Netz/Extern, gestapelt). */
 export function EAutoLadungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   const schmal = useSchmaleAchse()
+  const legende = useLegendenToggle()
   const data = prepEAutoMonate(monatsdaten)
   return (
     <div className="h-64">
@@ -61,10 +62,10 @@ export function EAutoLadungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis label={achsenEinheit('kWh')} tickFormatter={achsenTick} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
-          <Legend content={<ChartLegende />} />
-          <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" />
-          <Bar dataKey="netz" stackId="a" fill={LADEQUELLEN_FARBEN.netz} name="Heim: Netz" />
-          <Bar dataKey="extern" stackId="a" fill={LADEQUELLEN_FARBEN.extern} name="Extern" />
+          <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+          <Bar dataKey="pv" stackId="a" fill={LADEQUELLEN_FARBEN.pv} name="Heim: PV" hide={legende.istVersteckt('pv')} />
+          <Bar dataKey="netz" stackId="a" fill={LADEQUELLEN_FARBEN.netz} name="Heim: Netz" hide={legende.istVersteckt('netz')} />
+          <Bar dataKey="extern" stackId="a" fill={LADEQUELLEN_FARBEN.extern} name="Extern" hide={legende.istVersteckt('extern')} />
         </BarChart>
       </ResponsiveContainer>
     </div>

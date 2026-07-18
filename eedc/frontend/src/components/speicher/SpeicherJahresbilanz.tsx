@@ -14,6 +14,7 @@ import {
 } from 'recharts'
 import { CHART_COLORS, COLORS, VERLUST_FARBE, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps, Table, TableHead, TableBody } from '../ui'
+import { useLegendenToggle } from '../../hooks'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
@@ -60,6 +61,7 @@ const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100
 
 export function SpeicherJahresbilanz({ monatsdaten, embed = false, melde }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean; melde?: (ids: string[]) => void }) {
   const daten = prepSpeicherJahresbilanz(monatsdaten)
+  const legende = useLegendenToggle()
   const leer = daten.length === 0
   // v4-Hub-Auto-Hide: 3 feste Anzeigen (Hinweis · Chart · Tabelle); leer → nichts melden.
   useEffect(() => { melde?.(leer ? KEINE_IDS : BILANZ_IDS) }, [melde, leer])
@@ -85,9 +87,9 @@ export function SpeicherJahresbilanz({ monatsdaten, embed = false, melde }: { mo
             <XAxis dataKey="jahr" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
             <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
             <Tooltip {...eedcTooltipProps({ unit: ' kWh', decimals: 0, percentOf: 'ladungGesamt' })} />
-            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={legende.onItemClick} />} />
             {serien.map((s) => (
-              <Bar key={s.key} dataKey={s.key} name={s.name} stackId={s.stapel} fill={s.farbe} />
+              <Bar key={s.key} dataKey={s.key} name={s.name} stackId={s.stapel} fill={s.farbe} hide={legende.istVersteckt(s.key)} />
             ))}
           </BarChart>
         </ResponsiveContainer>

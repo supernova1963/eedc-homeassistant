@@ -6,7 +6,6 @@
  * Card-Hülle (die `BlockShell`-Sektion rahmt). Farben ausschließlich aus
  * `lib/colors.ts` (kein Inline-Hex, Regel 0a).
  */
-import { useState } from 'react'
 import {
   Sun, Cloud, CloudSun, CloudRain, CloudSnow, CloudLightning, Thermometer,
   TrendingDown, TrendingUp, Minus, ArrowRight,
@@ -23,6 +22,7 @@ import { Parkbar } from '../park'
 import { fmtCalc, ChartLegende } from '../ui'
 import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, DATENROLLE, TREND_TEXT_CLASS, AMPEL_TEXT_CLASS, achsenEinheit, achsenTick, yAchse, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import type { FinanzPrognose, LangfristPrognose, TrendAnalyseResponse } from '../../api/aussichten'
 import type { WaermepumpeDashboardResponse, InvestitionMonatsdaten } from '../../api/investitionen'
@@ -227,7 +227,9 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
 
 /** Monats-Balken PVGIS vs. Trend-korrigiert + Konfidenzband — IST LangfristTab-Chart. */
 export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognose }) {
-  const [showKonfidenz, setShowKonfidenz] = useState(true)
+  // B7-Legenden-Toggle — ersetzt die frühere separate „Konfidenzband"-Checkbox
+  // (EIN Mechanismus, Regel 0; Gernot-Abnahme 2026-07-18).
+  const { istVersteckt, onItemClick } = useLegendenToggle()
   const achsen = useChartTheme()
   const chartData = prognose.monatswerte.map((m) => ({
     name: `${m.monat_name.substring(0, 3)} ${m.jahr}`,
@@ -237,10 +239,6 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
   }))
   return (
     <div>
-      <label className="flex items-center gap-2 text-sm mb-2 justify-end">
-        <input type="checkbox" checked={showKonfidenz} onChange={(e) => setShowKonfidenz(e.target.checked)} className="rounded border-gray-300" />
-        <span className="text-gray-600 dark:text-gray-400">Konfidenzband</span>
-      </label>
       <div className="h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP }}>
@@ -251,14 +249,12 @@ export function LangfristVerlaufChart({ prognose }: { prognose: LangfristPrognos
               if (name === 'Konfidenzband') return null
               return `${fmtCalc(value, 0)} kWh`
             }} />} />
-            <Legend content={<ChartLegende />} />
-            {showKonfidenz && (
-              <Area type="monotone" dataKey="konfidenz" name="Konfidenzband" fill={SOLL_IST_COLORS.soll} fillOpacity={KONFIDENZ_BAND_OPACITY} stroke="none" />
-            )}
+            <Legend content={<ChartLegende onItemClick={onItemClick} />} />
+            <Area type="monotone" dataKey="konfidenz" name="Konfidenzband" fill={SOLL_IST_COLORS.soll} fillOpacity={KONFIDENZ_BAND_OPACITY} stroke="none" hide={istVersteckt('konfidenz')} />
             {/* PVGIS = Referenz/Basis-Modell, KEINE IST-Serie im Chart (vs. die genauere
                 trend-korrigierte Prognose) → HILFSLINIE_DASH statt PROGNOSE_DASH (Regel C). */}
-            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={HILFSLINIE_DASH} radius={[2, 2, 0, 0]} />
-            <Bar dataKey="trend" name="Trend-korrigiert" fill={CHART_COLORS.erzeugung} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="pvgis" name="PVGIS-Prognose" fill={achsen.referenz} stroke={achsen.referenz} strokeWidth={1} strokeDasharray={HILFSLINIE_DASH} radius={[2, 2, 0, 0]} hide={istVersteckt('pvgis')} />
+            <Bar dataKey="trend" name="Trend-korrigiert" fill={CHART_COLORS.erzeugung} radius={[2, 2, 0, 0]} hide={istVersteckt('trend')} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

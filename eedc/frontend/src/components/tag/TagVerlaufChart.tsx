@@ -15,6 +15,7 @@ import {
 import { ChartLegende, eedcTooltipProps } from '../ui'
 import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
 
 function round2(v: number): number {
@@ -25,6 +26,10 @@ interface ChartSerie { dataKey: string; label: string; farbe: string; stackId: '
 
 export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; extraSerien: SerieInfo[] }) {
   const achsen = useChartTheme()
+  // B7-Legenden-Toggle; Paar-Mapping: bidirektionale _pos/_neg-Serien (Batterie/Netz)
+  // schalten gemeinsam über ihren Basis-Key (Legende zeigt nur den _pos-Eintrag).
+  const { istVersteckt, toggleSerie } = useLegendenToggle()
+  const basisKey = (k: string) => k.replace(/_(pos|neg)$/, '')
   const extraErzeuger    = useMemo(() => extraSerien.filter(s => s.seite === 'quelle'), [extraSerien])
   const extraVerbraucher = useMemo(() => extraSerien.filter(s => s.seite === 'senke'), [extraSerien])
 
@@ -94,6 +99,7 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
           })} />
           <Legend content={<ChartLegende
             formatter={(value) => chartSerien.find(cs => cs.dataKey === value)?.label ?? value}
+            onItemClick={(e) => toggleSerie(basisKey(String(e.dataKey ?? e.value)))}
           />} />
 
           {chartSerien.map(cs => (
@@ -109,6 +115,7 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
               stackId={cs.stackId}
               isAnimationActive={false}
               legendType={cs.hideLabel ? 'none' : undefined}
+              hide={istVersteckt(basisKey(cs.dataKey))}
             />
           ))}
 

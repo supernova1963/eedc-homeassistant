@@ -12,7 +12,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, CHART_COLORS, GELD_COLORS, GELD_TEXT_CLASS, CHART_HOVER_CURSOR, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, WaermepumpeDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
@@ -20,6 +20,7 @@ type Zusammenfassung = WaermepumpeDashboardResponse['zusammenfassung']
 /** Wärmeerzeugung pro Monat (Heizung + Warmwasser gestapelt). */
 export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   const schmal = useSchmaleAchse()
+  const legende = useLegendenToggle()
   const data = monatsdaten.map((md) => ({
     name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
     heizung: md.verbrauch_daten.heizenergie_kwh || 0,
@@ -33,9 +34,9 @@ export function WaermepumpeMonatsverlauf({ monatsdaten }: { monatsdaten: Investi
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
           <YAxis label={achsenEinheit('kWh')} tickFormatter={achsenTick} {...yAchse(schmal)} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
-          <Legend content={<ChartLegende />} />
-          <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" />
-          <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" />
+          <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+          <Area type="monotone" dataKey="heizung" stackId="1" fill={CHART_COLORS.wpWaerme} stroke={CHART_COLORS.wpWaerme} name="Heizung" hide={legende.istVersteckt('heizung')} />
+          <Area type="monotone" dataKey="warmwasser" stackId="1" fill={CHART_COLORS.wpWarmwasser} stroke={CHART_COLORS.wpWarmwasser} name="Warmwasser" hide={legende.istVersteckt('warmwasser')} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

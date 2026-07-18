@@ -17,6 +17,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
 import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
+import { useLegendenToggle } from '../../hooks'
 
 function Toggle({ aktiv, aktivKlasse, onClick, children, title }: {
   aktiv: boolean; aktivKlasse: string; onClick: () => void; children: string; title?: string
@@ -35,6 +36,8 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
   const [modus, setModus] = useState<'jaz' | 'strom'>('strom')
   const [achse, setAchse] = useState<'monate' | 'saison'>('monate')
   const [fenster, setFenster] = useState<keyof typeof SAISON_FENSTER>('winter')
+  // B7-Legenden-Toggle (Monate-Zweig, Serie = Jahr); Reset bei Modus-/Achsen-Wechsel.
+  const legende = useLegendenToggle(`${modus}:${achse}`)
 
   const jahre = [...new Set(monatsdaten.map((md) => md.jahr))].sort((a, b) => a - b)
   const jahrFarben = SERIEN_PALETTE
@@ -136,9 +139,9 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
                 <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis domain={modus === 'jaz' ? [0, 6] : undefined} {...yAchse(false)} tickFormatter={achsenTick} label={achsenEinheit(modus === 'jaz' ? 'JAZ' : 'kWh')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip formatter={(v) => modus === 'jaz' ? fmtZahl(v, 2) : `${v} kWh`} />} />
-                <Legend content={<ChartLegende />} />
+                <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
                 {jahre.map((jahr, i) => (
-                  <Bar key={jahr} dataKey={`val_${jahr}`} name={`${jahr}`} fill={jahrFarben[i % jahrFarben.length]} />
+                  <Bar key={jahr} dataKey={`val_${jahr}`} name={`${jahr}`} fill={jahrFarben[i % jahrFarben.length]} hide={legende.istVersteckt(`val_${jahr}`)} />
                 ))}
               </BarChart>
             ) : (

@@ -13,7 +13,7 @@
  * Datenquelle: `TagWerte[]` (Tages-Werte-Endpoint) — dieselbe SoT wie die
  * Auswertungen/Tabelle, damit Chart und Zahlen nie auseinanderlaufen.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -21,7 +21,7 @@ import {
 } from 'recharts'
 import { ChartLegende, SegmentControl, eedcTooltipProps } from '../components/ui'
 import { CHART_COLORS, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../lib'
-import { useSchmaleAchse } from '../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 import type { TagWerte } from '../api/energie_profil'
 import { vergleichBalken } from './VergleichBalken'
 import { verfuegbarePresets, tagDrillInPfad } from './verlaufVergleich'
@@ -71,14 +71,9 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
   const [view, setView] = useState<BilanzView>('erzeugung')
   const [presetKey, setPresetKey] = useState('verbrauch')
   const [showAutarkie, setShowAutarkie] = useState(false)
-  // Skalen-Lesbarkeit (Vergleich): einzelne Serien per Legenden-Klick aus-/einblenden
-  // (z. B. große PV-Anlage ausblenden, um BKW lesbar zu machen). Reset bei Modus-/
-  // Preset-Wechsel — geteilte SoT-Mechanik wie components/live/TagesverlaufChart.
-  const [versteckt, setVersteckt] = useState<Set<string>>(new Set())
-  useEffect(() => { setVersteckt(new Set()) }, [view, presetKey])
-  const toggleSerie = useCallback((key: string) => {
-    setVersteckt((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next })
-  }, [])
+  // Skalen-Lesbarkeit: einzelne Serien per Legenden-Klick aus-/einblenden (B7-Standard,
+  // SoT-Hook). Reset bei Modus-/Preset-Wechsel — der Serien-Satz ändert sich.
+  const legende = useLegendenToggle(`${view}:${presetKey}`)
   const daten = useMemo(() => baueChartDaten(tage), [tage])
   const presets = verfuegbarePresets(false)
   const aktPreset = presets.find((p) => p.key === presetKey) ?? presets[0]
@@ -141,8 +136,8 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
             <Tooltip {...eedcTooltipProps({ formatter: (value: number, name: string) =>
               name === 'Autarkie' ? `${fmtZahl(value, 1)} %` : `${fmtZahl(value, 1)} kWh` })} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={
-              // Vergleich: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit).
-              <ChartLegende onItemClick={view === 'vergleich' ? (e) => toggleSerie(String(e.dataKey ?? e.value)) : undefined} />
+              // B7: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit) — alle Modi.
+              <ChartLegende onItemClick={legende.onItemClick} />
             } />
 
             {view === 'vergleich' ? (
@@ -154,25 +149,25 @@ export function TagesverlaufChart({ tage }: { tage: TagWerte[] }) {
                 istJahr: false,
                 schmal,
                 onBarClick: (i) => navigate(tagDrillInPfad(daten[i].datum)),
-                hidden: versteckt,
+                hidden: legende.versteckt,
               })
             ) : view === 'erzeugung' ? (
               <>
-                <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} />
-                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} />
-                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} />
+                <Bar yAxisId="kwh" dataKey="eigenverbrauch" name="Eigenverbrauch" stackId="pv" fill={CHART_COLORS.eigenverbrauch} hide={legende.istVersteckt('eigenverbrauch')} />
+                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" stackId="pv" fill={CHART_COLORS.einspeisung} hide={legende.istVersteckt('einspeisung')} />
+                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} hide={legende.istVersteckt('netzbezug')} />
               </>
             ) : (
               <>
-                <Bar yAxisId="kwh" dataKey="direktverbrauch" name="Direktverbrauch" stackId="vb" fill={CHART_COLORS.direktverbrauch} />
-                <Bar yAxisId="kwh" dataKey="speicherEntladung" name="Speicher-Entladung" stackId="vb" fill={CHART_COLORS.speicherEntladung} />
-                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" stackId="vb" fill={CHART_COLORS.netzbezug} />
-                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} />
+                <Bar yAxisId="kwh" dataKey="direktverbrauch" name="Direktverbrauch" stackId="vb" fill={CHART_COLORS.direktverbrauch} hide={legende.istVersteckt('direktverbrauch')} />
+                <Bar yAxisId="kwh" dataKey="speicherEntladung" name="Speicher-Entladung" stackId="vb" fill={CHART_COLORS.speicherEntladung} hide={legende.istVersteckt('speicherEntladung')} />
+                <Bar yAxisId="kwh" dataKey="netzbezug" name="Netzbezug" stackId="vb" fill={CHART_COLORS.netzbezug} hide={legende.istVersteckt('netzbezug')} />
+                <Bar yAxisId="kwh" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} hide={legende.istVersteckt('einspeisung')} />
               </>
             )}
 
             {showAutarkie && view !== 'vergleich' && (
-              <Line yAxisId="pct" type="monotone" dataKey="autarkie" name="Autarkie" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} connectNulls />
+              <Line yAxisId="pct" type="monotone" dataKey="autarkie" name="Autarkie" stroke={CHART_COLORS.autarkie} strokeWidth={2} dot={false} connectNulls hide={legende.istVersteckt('autarkie')} />
             )}
           </ComposedChart>
         </ResponsiveContainer>

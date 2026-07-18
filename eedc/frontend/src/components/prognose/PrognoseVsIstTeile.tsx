@@ -21,7 +21,7 @@ import { pvgisApi, monatsdatenApi } from '../../api'
 import type { PVModulPrognose } from '../../api/pvgis'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
 import { SOLL_IST_COLORS, formatEnergie, energieAchse, formatProzent, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
 import { useChartTheme } from '../../context/ThemeContext'
 
 const monatNamen = ['', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -216,6 +216,7 @@ export function PvgisSpeichern({ vm }: { vm: PrognoseVsIstVM }) {
 
 /** Monatlicher SOLL/IST-Vergleich (Balken) + Abweichungs-Linie. */
 export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: number | undefined }) {
+  const legende = useLegendenToggle()
   const achsen = useChartTheme()
   const schmal = useSchmaleAchse()
   const maxKwh = Math.max(0, ...vm.vergleichsDaten.flatMap(d => [d.prognose, d.ist]))
@@ -234,13 +235,13 @@ export function PvgisMonatsChart({ vm, jahr }: { vm: PrognoseVsIstVM; jahr: numb
             <YAxis yAxisId="right" orientation="right" {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) =>
               name.includes('%') ? formatProzent(value).text : formatEnergie(value, maxKwh).text} />} />
-            <Legend content={<ChartLegende />} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
             <ReferenceLine yAxisId="right" y={0} stroke={achsen.referenz} strokeDasharray="3 3" />
             {/* D14-10 (detLAN #113): Balken ohne gestrichelte Umrandung — der Dash-Kanon
                 (PROGNOSE_DASH) gilt nur für LINIEN-Serien, nicht als Bar-Border. */}
-            <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} name="PVGIS Prognose" />
-            <Bar yAxisId="left" dataKey="ist" fill={SOLL_IST_COLORS.ist} name="IST-Erzeugung" />
-            <Line yAxisId="right" type="monotone" dataKey="abweichungProzent" stroke={SOLL_IST_COLORS.abweichung} strokeWidth={2} name="Abweichung %" dot={{ fill: SOLL_IST_COLORS.abweichung }} />
+            <Bar yAxisId="left" dataKey="prognose" fill={SOLL_IST_COLORS.soll} name="PVGIS Prognose" hide={legende.istVersteckt('prognose')} />
+            <Bar yAxisId="left" dataKey="ist" fill={SOLL_IST_COLORS.ist} name="IST-Erzeugung" hide={legende.istVersteckt('ist')} />
+            <Line yAxisId="right" type="monotone" dataKey="abweichungProzent" stroke={SOLL_IST_COLORS.abweichung} strokeWidth={2} name="Abweichung %" dot={{ fill: SOLL_IST_COLORS.abweichung }} hide={legende.istVersteckt('abweichungProzent')} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

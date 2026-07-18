@@ -11,6 +11,7 @@ import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import ChartTooltip from '../../components/ui/ChartTooltip'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 import { communityApi } from '../../api'
 import type { CommunityBenchmarkResponse, Verteilung, MonatlicheDurchschnitte } from '../../api/community'
 import {
@@ -137,6 +138,10 @@ export function PvKpiStrip({ perzentil, performanceStats }: Pick<PVErtragDaten, 
 
 export function MonatsErtragChart({ benchmark, chartData }: { benchmark: CommunityBenchmarkResponse; chartData: PVErtragDaten['chartData'] }) {
   const achsen = useChartTheme()
+  // B7-Legenden-Toggle: einzige echte Zweitserie ist die Community-Ø-Linie — deren
+  // Hand-Legenden-Eintrag (eigene Parkbar, D14-11) wird klickbar; die Werteklassen-
+  // Einträge (Über/Unter Ø = Cell-Färbung EINER Serie) bleiben statisch.
+  const { istVersteckt, toggleSerie } = useLegendenToggle()
   return (
     <div>
       <Parkbar id="pv-monatsertrag-chart" titel="Monatlicher Ertrag (Diagramm)">
@@ -152,7 +157,7 @@ export function MonatsErtragChart({ benchmark, chartData }: { benchmark: Communi
               {/* D13-16: Serien-Namen ausgeschrieben (Tooltip zeigt „Ertrag"/
                   „Community Ø" statt Roh-Keys) — Tooltip ≙ Legende (S1). */}
               <Tooltip content={<ChartTooltip formatter={(value: number) => `${fmtZahl(value, 1)} kWh/kWp`} />} />
-              <Line type="monotone" dataKey="durchschnitt" stroke={achsen.referenz} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Community Ø" />
+              <Line type="monotone" dataKey="durchschnitt" stroke={achsen.referenz} strokeWidth={2} strokeDasharray="5 5" dot={false} name="Community Ø" hide={istVersteckt('durchschnitt')} />
               <Bar dataKey="ertrag" radius={[2, 2, 0, 0]} name="Ertrag">
                 {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.isPositive ? STATUS_COLORS.ok : STATUS_COLORS.kritisch} fillOpacity={0.8} />)}
               </Bar>
@@ -166,7 +171,12 @@ export function MonatsErtragChart({ benchmark, chartData }: { benchmark: Communi
             (w-2.5 h-2.5 rounded-sm) — vorher 16×12-Rechteck („nicht mehr quadratisch"). */}
         <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: STATUS_COLORS.ok }} /><span className="text-gray-600 dark:text-gray-400">Über Monats-Ø</span></span>
         <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: STATUS_COLORS.kritisch }} /><span className="text-gray-600 dark:text-gray-400">Unter Monats-Ø</span></span>
-        <span className="flex items-center gap-2"><span className="w-6 h-0 border-t-2 border-dashed border-gray-400" /><span className="text-gray-600 dark:text-gray-400">Community Monats-Ø</span></span>
+        <span
+          role="button" tabIndex={0}
+          onClick={() => toggleSerie('durchschnitt')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSerie('durchschnitt') } }}
+          className={`flex items-center gap-2 cursor-pointer select-none ${istVersteckt('durchschnitt') ? 'opacity-40' : ''}`}
+        ><span className="w-6 h-0 border-t-2 border-dashed border-gray-400" /><span className="text-gray-600 dark:text-gray-400">Community Monats-Ø</span></span>
       </div>
       </Parkbar>
     </div>

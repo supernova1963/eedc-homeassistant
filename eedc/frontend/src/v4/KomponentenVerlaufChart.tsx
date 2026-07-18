@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../lib'
-import { useSchmaleAchse } from '../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../hooks'
 import { ChartLegende, eedcTooltipProps } from '../components/ui'
 
 export interface VerlaufBar {
@@ -28,6 +28,8 @@ export function KomponentenVerlaufChart({
   rows, bars, einheit = 'kWh', tall, gestapelt = true,
 }: { rows: VerlaufRow[]; bars: VerlaufBar[]; einheit?: string; tall?: boolean; gestapelt?: boolean }) {
   const schmal = useSchmaleAchse()
+  // B7-Legenden-Toggle; Reset wenn der Serien-Satz wechselt (z. B. Typ-Wechsel im Hub).
+  const legende = useLegendenToggle(bars.map((b) => b.key).join('|'))
   if (rows.length === 0) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Verlaufsdaten erfasst.</p>
   }
@@ -41,10 +43,10 @@ export function KomponentenVerlaufChart({
           {/* ChartTooltip-SoT (S1: Viereck-Swatch, monochromer Wert); Serien-Name
               gekürzt, Wert gerundet mit Einheit. */}
           <Tooltip {...eedcTooltipProps({ unit: einheit, decimals: 0, nameFormatter: kuerze })} />
-          <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
+          <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={bars.length > 1 ? legende.onItemClick : undefined} />} />
           {bars.map((b) => (
             // stapel-Gruppe gewinnt (paarweise Stapel); sonst gestapelt=false → gruppiert, true → ein Stapel.
-            <Bar key={b.key} dataKey={b.key} name={b.label} stackId={b.stapel ?? (gestapelt ? 'a' : undefined)} fill={b.farbe} />
+            <Bar key={b.key} dataKey={b.key} name={b.label} stackId={b.stapel ?? (gestapelt ? 'a' : undefined)} fill={b.farbe} hide={legende.istVersteckt(b.key)} />
           ))}
         </BarChart>
       </ResponsiveContainer>

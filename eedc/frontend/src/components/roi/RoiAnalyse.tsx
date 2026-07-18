@@ -26,6 +26,7 @@ import {
 import { Card, Alert, LoadingSpinner, EmptyState, FormelTooltip, QuelleBadge, ChartLegende, Table, TableHead, TableBody, TableFoot } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
+import { useLegendenToggle } from '../../hooks'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
 import { swrCachePeek, swrCacheStore } from '../../hooks/useApiData'
@@ -235,6 +236,7 @@ export function roiKpiItems(roiData: ROIDashboardResponse, zeigeCo2 = false): Kp
 
 /** Block ② — Amortisationsverlauf (Break-Even-Kurve, 25–30 Jahre). */
 export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
+  const legende = useLegendenToggle()
   const roiData = vm.roiData
   if (!roiData) return null
   return (
@@ -247,9 +249,9 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
             <XAxis dataKey="jahr" tickFormatter={geldTick} {...xAchse()} /* achsen-allow: Jahres-Index (0–30), Einheit „Jahre" steht im Break-Even-Text + KPI; Achsen-Label kollidierte mit Legende (#29-15) */ />
             <YAxis tickFormatter={geldTick} tick={{ fontSize: 10 }} width={70} label={achsenEinheit('€')} />
             <Tooltip content={<ChartTooltip labelFormatter={(label) => `Jahr ${label}`} unit="€" />} />
-            <Legend content={<ChartLegende />} />
-            <Line type="monotone" dataKey="kumulierte_einsparung" name="Kumulierte Einsparung" stroke={GELD_COLORS.ersparnis} strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="investition" name="Investition" stroke={GELD_COLORS.kosten} strokeWidth={2} strokeDasharray="5 5" dot={false} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+            <Line type="monotone" dataKey="kumulierte_einsparung" name="Kumulierte Einsparung" stroke={GELD_COLORS.ersparnis} strokeWidth={2} dot={false} hide={legende.istVersteckt('kumulierte_einsparung')} />
+            <Line type="monotone" dataKey="investition" name="Investition" stroke={GELD_COLORS.kosten} strokeWidth={2} strokeDasharray="5 5" dot={false} hide={legende.istVersteckt('investition')} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -295,6 +297,7 @@ export function RoiTypBalken({ vm }: { vm: RoiAnalyseVM }) {
 
 /** Block ③b — Investitionen im Vergleich (Kosten vs. Einsparung, horizontale Bars). */
 export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
+  const legende = useLegendenToggle()
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Investitionen im Vergleich</h3>
@@ -306,9 +309,9 @@ export function RoiVergleichBar({ vm }: { vm: RoiAnalyseVM }) {
             <XAxis type="number" domain={[0, 'auto']} tickFormatter={(v) => `${fmtZahl(v, 0)} €`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
             <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (Investitionen) */ />
             <Tooltip content={<ChartTooltip formatter={(value: number, name: string) => name === 'Relevante Kosten' ? `${fmtZahl(value, 0)} €` : `${fmtZahl(value, 0)} €/Jahr`} />} />
-            <Legend content={<ChartLegende />} />
-            <Bar dataKey="kosten" fill={GELD_COLORS.kosten} name="Relevante Kosten" />
-            <Bar dataKey="einsparung" fill={GELD_COLORS.ersparnis} name="Jährliche Einsparung" />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+            <Bar dataKey="kosten" fill={GELD_COLORS.kosten} name="Relevante Kosten" hide={legende.istVersteckt('kosten')} />
+            <Bar dataKey="einsparung" fill={GELD_COLORS.ersparnis} name="Jährliche Einsparung" hide={legende.istVersteckt('einsparung')} />
           </BarChart>
         </ResponsiveContainer>
       </div>

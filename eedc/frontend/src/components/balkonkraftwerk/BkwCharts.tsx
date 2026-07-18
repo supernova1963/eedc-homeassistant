@@ -12,7 +12,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { MONAT_KURZ, CHART_COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 
 export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
@@ -29,6 +29,7 @@ export function prepBkwMonate(monatsdaten: InvestitionMonatsdaten[]) {
 /** Erzeugung pro Monat (Eigenverbrauch + Einspeisung gestapelt). */
 export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   const schmal = useSchmaleAchse()
+  const legende = useLegendenToggle()
   const data = prepBkwMonate(monatsdaten)
   return (
     <div className="h-64">
@@ -38,9 +39,9 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
-          <Legend content={<ChartLegende />} />
-          <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" />
-          <Area type="monotone" dataKey="einspeisung" stackId="1" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} name="Einspeisung" />
+          <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+          <Area type="monotone" dataKey="eigenverbrauch" stackId="1" fill={CHART_COLORS.eigenverbrauch} stroke={CHART_COLORS.eigenverbrauch} name="Eigenverbrauch" hide={legende.istVersteckt('eigenverbrauch')} />
+          <Area type="monotone" dataKey="einspeisung" stackId="1" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} name="Einspeisung" hide={legende.istVersteckt('einspeisung')} />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -50,6 +51,7 @@ export function BkwErzeugungVerlauf({ monatsdaten }: { monatsdaten: InvestitionM
 /** Integrierter Speicher: Ladung/Entladung pro Monat (Bar). */
 export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMonatsdaten[] }) {
   const schmal = useSchmaleAchse()
+  const legende = useLegendenToggle()
   const data = prepBkwMonate(monatsdaten)
   return (
     <div className="h-48">
@@ -59,9 +61,9 @@ export function BkwSpeicherVerlauf({ monatsdaten }: { monatsdaten: InvestitionMo
           <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse */ />
           <YAxis {...yAchse(schmal)} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
           <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
-          <Legend content={<ChartLegende />} />
-          <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
-          <Bar dataKey="speicher_entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
+          <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+          <Bar dataKey="speicher_ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" hide={legende.istVersteckt('speicher_ladung')} />
+          <Bar dataKey="speicher_entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" hide={legende.istVersteckt('speicher_entladung')} />
         </BarChart>
       </ResponsiveContainer>
     </div>

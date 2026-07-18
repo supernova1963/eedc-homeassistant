@@ -31,6 +31,7 @@ import { AnteilDonut, ChartLegende, Table, TableHead, TableBody } from '../../co
 import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { Parkbar } from '../../components/park'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 import { SERIEN_PALETTE, EIGENE_SERIE_FARBEN, LADEQUELLEN_FARBEN, ACHSEN_TICK, fmtZahl } from '../../lib'
 import { communityApi } from '../../api'
 import type {
@@ -229,6 +230,7 @@ export function SpeicherDeepDive({
   communityStats: SpeicherByClass | null
 }) {
   const achsen = useChartTheme()
+  const legende = useLegendenToggle()
   const speicher = benchmark.benchmark_erweitert?.speicher
   const kapazitaet = benchmark.anlage.speicher_kwh || 0
 
@@ -370,9 +372,9 @@ export function SpeicherDeepDive({
                   {/* Legende über ChartLegende (S1) statt hand-gebauter Farb-Kästchen —
                       liest die echte Serienfarbe (die frühere Hand-Legende zeigte „Du"
                       grün, obwohl die Bar EIGENE_SERIE_FARBEN.du = blau ist). */}
-                  <Legend content={<ChartLegende />} />
-                  <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 2, 2, 0]} />
-                  <Bar dataKey="community" name="Community Ø" fill={achsen.referenz} radius={[0, 2, 2, 0]} />
+                  <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
+                  <Bar dataKey="du" name="Du" fill={EIGENE_SERIE_FARBEN.du} radius={[0, 2, 2, 0]} hide={legende.istVersteckt('du')} />
+                  <Bar dataKey="community" name="Community Ø" fill={achsen.referenz} radius={[0, 2, 2, 0]} hide={legende.istVersteckt('community')} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

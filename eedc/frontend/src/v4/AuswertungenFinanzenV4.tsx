@@ -39,7 +39,7 @@ import { importApi } from '../api/import'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
 import { baueJahrAlsMonat } from './JahrAggregat'
 import { STEUER_H } from '../lib/komponentenStyle'
-import { useApiData, useSelectedAnlage, useSchmaleAchse } from '../hooks'
+import { useApiData, useLegendenToggle, useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
 import { ZeitraumHinweis } from './ZeitraumHinweis'
@@ -72,6 +72,9 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
   const sonderkostenData = selectedAnlageId ? (sonderkostenQ.data ?? null) : null
 
   const schmal = useSchmaleAchse()
+  // B7-Legenden-Toggle; Netto-Chart: Bar+Line teilen den dataKey → Name als Toggle-Key.
+  const bilanzLegende = useLegendenToggle()
+  const nettoLegende = useLegendenToggle()
   const zeitreihe = useMemo(
     () => (basis.strompreis ? createMonatsZeitreihe(basis.gefiltert, undefined, basis.strompreis, basis.alleTarife) : []),
     [basis.gefiltert, basis.strompreis, basis.alleTarife],
@@ -205,11 +208,11 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
                     <XAxis dataKey="name" {...xAchse(schmal, true)} interval="preserveStartEnd" /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip {...eedcTooltipProps({ unit: '€', decimals: 2 })} />
-                    <Legend content={<ChartLegende />} />
-                    <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" />
-                    <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" />
-                    <Bar dataKey="netzbezug_kosten" name="Netzbezug (Kosten)" fill={COLORS.grid} />
-                    {gesamt.sonderkosten > 0 && <Bar dataKey="sonderkosten" name="Sonderkosten" fill={GELD_COLORS.kosten} />}
+                    <Legend content={<ChartLegende onItemClick={bilanzLegende.onItemClick} />} />
+                    <Bar dataKey="einspeise_erloes" name="Einspeiseerlös" fill={COLORS.feedin} stackId="pos" hide={bilanzLegende.istVersteckt('einspeise_erloes')} />
+                    <Bar dataKey="ev_ersparnis" name="EV-Ersparnis" fill={COLORS.consumption} stackId="pos" hide={bilanzLegende.istVersteckt('ev_ersparnis')} />
+                    <Bar dataKey="netzbezug_kosten" name="Netzbezug (Kosten)" fill={COLORS.grid} hide={bilanzLegende.istVersteckt('netzbezug_kosten')} />
+                    {gesamt.sonderkosten > 0 && <Bar dataKey="sonderkosten" name="Sonderkosten" fill={GELD_COLORS.kosten} hide={bilanzLegende.istVersteckt('sonderkosten')} />}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -249,9 +252,9 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
                     <YAxis tickFormatter={euroTick} {...yAchse(schmal)} label={achsenEinheit('€')} />
                     <Tooltip {...eedcTooltipProps({ unit: '€', decimals: 2 })} />
                     {/* D12-5: Legende fehlte (2 Serien Netto-Ertrag + Trend) — wie Chart 1. */}
-                    <Legend content={<ChartLegende />} />
-                    <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} />
-                    <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} />
+                    <Legend content={<ChartLegende onItemClick={(e) => nettoLegende.toggleSerie(String(e.value))} />} />
+                    <Bar dataKey="netto_nach_sonderkosten" name="Netto-Ertrag" fill={COLORS.feedin} opacity={0.7} hide={nettoLegende.istVersteckt('Netto-Ertrag')} />
+                    <Line type="monotone" dataKey="netto_nach_sonderkosten" name="Trend" stroke={COLORS.solar} strokeWidth={2} dot={false} hide={nettoLegende.istVersteckt('Trend')} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -319,7 +322,9 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
       ...(sichtbar(['tabelle:tkonto']) ? [blockTKonto] : []),
       ...(sichtbar(['doku:berichte']) ? [blockBerichte] : []),
     ]
-  }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId, schmal, handleCsv, park])
+    // bilanzLegende/nettoLegende in den Deps: `istVersteckt` wechselt Identität genau
+    // beim Toggle → die memoisierten render-Closures sehen nie stalen Versteck-Zustand.
+  }, [strompreis, gesamt, chartData, monate, hatMehrereTarife, basis.stats, basis.daten, basis.jahr, jahrFuerTKonto, selectedAnlageId, schmal, handleCsv, park, bilanzLegende, nettoLegende])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).

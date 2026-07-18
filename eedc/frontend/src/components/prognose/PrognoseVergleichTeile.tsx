@@ -21,6 +21,7 @@ import { Button, Card, ChartLegende, Checkbox, SegmentControl, buttonClasses, Ta
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { SimpleTooltip } from '../ui/FormelTooltip'
 import { useV4Basis } from '../../hooks/useV4Basis'
+import { useLegendenToggle } from '../../hooks'
 import { v3RouteZuV4 } from '../../config/v3ZuV4Route'
 import { Parkbar } from '../park'
 import {
@@ -722,6 +723,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
 // ════ BLOCK ⑤ — Profil ═════════════════════════════════════════════════════════
 export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
   const achsen = useChartTheme()
+  const legende = useLegendenToggle()
   const { data } = vm
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
@@ -738,12 +740,12 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
             <XAxis dataKey="stunde" {...xAchse()} tickFormatter={(v) => v.replace(':00', '')} padding={{ left: 8, right: 8 }} /* achsen-allow: Zeit-/Kategorie-Achse */ />
             <YAxis {...yAchse(false)} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
             <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
-            <Legend content={<ChartLegende formatter={(v) => ({ ist: 'IST', eedc: `eedc${lf != null ? ` (OpenMeteo ×${fmtZahl(lf, 2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)' }[v] || v)} />} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} formatter={(v) => ({ ist: 'IST', eedc: `eedc${lf != null ? ` (OpenMeteo ×${fmtZahl(lf, 2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)' }[v] || v)} />} />
             {data.aktuelle_stunde !== null && (<ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke={achsen.referenz} strokeDasharray="3 3" label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: achsen.achse }} />)}
-            <Area dataKey="ist" stroke={PROGNOSE_QUELLEN_COLORS.ist} fill={PROGNOSE_QUELLEN_COLORS.ist} fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} />
-            {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="solcast" />}
-            {hasEedc && <Line dataKey="eedc" stroke={PROGNOSE_QUELLEN_COLORS.eedc} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="eedc" />}
-            <Line dataKey="openmeteo" stroke={PROGNOSE_QUELLEN_COLORS.openmeteo} strokeWidth={1.5} strokeDasharray={PROGNOSE_DASH} dot={false} name="openmeteo" />
+            <Area dataKey="ist" stroke={PROGNOSE_QUELLEN_COLORS.ist} fill={PROGNOSE_QUELLEN_COLORS.ist} fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} hide={legende.istVersteckt('ist')} />
+            {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="solcast" hide={legende.istVersteckt('solcast')} />}
+            {hasEedc && <Line dataKey="eedc" stroke={PROGNOSE_QUELLEN_COLORS.eedc} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="eedc" hide={legende.istVersteckt('eedc')} />}
+            <Line dataKey="openmeteo" stroke={PROGNOSE_QUELLEN_COLORS.openmeteo} strokeWidth={1.5} strokeDasharray={PROGNOSE_DASH} dot={false} name="openmeteo" hide={legende.istVersteckt('openmeteo')} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

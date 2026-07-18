@@ -15,6 +15,7 @@ import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { DatumPicker } from '../../components/ui/DatumPicker'
 import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
 
 interface Props {
@@ -149,15 +150,9 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
     soc: s.soc_prozent,
   })), [daten])
   // R5-5c (Rainer): Serien per Legende an/aus — insb. die SoC-Linie, die manche
-  // im Prognose-Chart nicht brauchen. Klick auf einen Legenden-Eintrag blendet
-  // die Serie aus (Recharts `hide` → Eintrag wird gedimmt); SoT-Muster aus
-  // components/live/TagesverlaufChart. Nicht entfernen, nur abschaltbar.
-  const [versteckt, setVersteckt] = useState<Set<string>>(new Set())
-  const toggleSerie = (key: string) => setVersteckt((prev) => {
-    const next = new Set(prev)
-    if (next.has(key)) next.delete(key); else next.add(key)
-    return next
-  })
+  // im Prognose-Chart nicht brauchen (B7-Standard, SoT-Hook). Nicht entfernen,
+  // nur abschaltbar.
+  const { istVersteckt, onItemClick } = useLegendenToggle()
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -191,13 +186,13 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
             )}
             <ReferenceLine yAxisId="kw" y={0} stroke={achsen.referenz} strokeWidth={1.5} />
             <Tooltip content={<PrognoseTooltip hatSpeicher={hatSpeicher} />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={(e) => { const k = String(e.dataKey ?? ''); if (k) toggleSerie(k) }} />} />
-            <Area yAxisId="kw" type="monotone" dataKey="pv" name="PV-Prognose" fill={COLORS.solar} stroke={COLORS.solar} fillOpacity={0.3} strokeWidth={2} isAnimationActive={false} hide={versteckt.has('pv')} />
-            <Area yAxisId="kw" type="monotone" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} fillOpacity={0.2} strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} hide={versteckt.has('einspeisung')} />
-            <Area yAxisId="kw" type="monotone" dataKey="verbrauch" name="Verbrauch" fill={COLORS.consumption} stroke={COLORS.consumption} fillOpacity={0.25} strokeWidth={2} isAnimationActive={false} hide={versteckt.has('verbrauch')} />
-            <Area yAxisId="kw" type="monotone" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} stroke={CHART_COLORS.netzbezug} fillOpacity={0.2} strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} hide={versteckt.has('netzbezug')} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={onItemClick} />} />
+            <Area yAxisId="kw" type="monotone" dataKey="pv" name="PV-Prognose" fill={COLORS.solar} stroke={COLORS.solar} fillOpacity={0.3} strokeWidth={2} isAnimationActive={false} hide={istVersteckt('pv')} />
+            <Area yAxisId="kw" type="monotone" dataKey="einspeisung" name="Einspeisung" fill={CHART_COLORS.einspeisung} stroke={CHART_COLORS.einspeisung} fillOpacity={0.2} strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} hide={istVersteckt('einspeisung')} />
+            <Area yAxisId="kw" type="monotone" dataKey="verbrauch" name="Verbrauch" fill={COLORS.consumption} stroke={COLORS.consumption} fillOpacity={0.25} strokeWidth={2} isAnimationActive={false} hide={istVersteckt('verbrauch')} />
+            <Area yAxisId="kw" type="monotone" dataKey="netzbezug" name="Netzbezug" fill={CHART_COLORS.netzbezug} stroke={CHART_COLORS.netzbezug} fillOpacity={0.2} strokeWidth={1} strokeDasharray="4 2" isAnimationActive={false} hide={istVersteckt('netzbezug')} />
             {hatSpeicher && (
-              <Line yAxisId="soc" type="monotone" dataKey="soc" name="SoC" stroke={COLORS.battery} strokeWidth={2} dot={false} connectNulls hide={versteckt.has('soc')} />
+              <Line yAxisId="soc" type="monotone" dataKey="soc" name="SoC" stroke={COLORS.battery} strokeWidth={2} dot={false} connectNulls hide={istVersteckt('soc')} />
             )}
           </ComposedChart>
         </ResponsiveContainer>

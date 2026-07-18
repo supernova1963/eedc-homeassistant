@@ -26,7 +26,7 @@ export function vergleichBalken({
   schmal: boolean
   onBarClick?: (index: number) => void
   /** Per Legende ausgeblendete Serien-Keys (Skalen-Lesbarkeit: große Serie ausblenden). */
-  hidden?: Set<string>
+  hidden?: ReadonlySet<string>
 }) {
   const serien = sichtbareSerien(preset, istJahr)
   const hatKm = serien.some((s) => s.achse === 'km' && !hidden?.has(s.key))

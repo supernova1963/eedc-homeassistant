@@ -15,6 +15,7 @@ import { Sun, TrendingUp, TrendingDown, GitCompare } from 'lucide-react'
 import { Card, ChartLegende, CsvExportButton, Table, TableHead, TableBody, TableFoot } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
+import { useLegendenToggle } from '../../hooks'
 import type { KpiStripItem } from '../blocks'
 import { exportToCSV } from '../../utils/export'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
@@ -201,6 +202,7 @@ export function PvStringBestSchlecht({ data }: { data: PVStringsResponse }) {
 }
 
 export function PvStringSollIstBar({ data }: { data: PVStringsResponse }) {
+  const legende = useLegendenToggle()
   const maxKwh = Math.max(0, ...data.strings.flatMap(s => [s.prognose_jahr_kwh, s.ist_jahr_kwh]))
   const eAchse = energieAchse(maxKwh)
   return (
@@ -222,10 +224,10 @@ export function PvStringSollIstBar({ data }: { data: PVStringsResponse }) {
             <XAxis type="number" tickFormatter={(v) => `${eAchse.tick(v)} ${eAchse.einheit}`} tick={{ fontSize: 10 }} /* achsen-allow: Wert-Achse waagerecht, Einheit/Format pro Tick (de-DE) */ />
             <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 10 }} /* achsen-allow: Kategorie-Namen (String) */ />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
-            <Legend content={<ChartLegende />} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
             {/* D14-10: kein Dash-Border an Balken (Dash-Kanon nur für Linien-Serien). */}
-            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL (Prognose)" />
-            <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST (Erzeugt)" />
+            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL (Prognose)" hide={legende.istVersteckt('SOLL')} />
+            <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST (Erzeugt)" hide={legende.istVersteckt('IST')} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -234,6 +236,7 @@ export function PvStringSollIstBar({ data }: { data: PVStringsResponse }) {
 }
 
 export function PvStringMonatsverlauf({ data, selectedYear }: { data: PVStringsResponse; selectedYear: number | 'all' }) {
+  const legende = useLegendenToggle()
   const chartData = (data.strings[0]?.monatswerte.map((m, mIdx) => {
     const soll = data.strings.reduce((sum, s) => sum + (s.monatswerte[mIdx]?.prognose_kwh || 0), 0)
     const ist = data.strings.reduce((sum, s) => sum + (s.monatswerte[mIdx]?.ist_kwh || 0), 0)
@@ -253,11 +256,11 @@ export function PvStringMonatsverlauf({ data, selectedYear }: { data: PVStringsR
             <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
             <YAxis width={60} tick={{ fontSize: 10 }} tickFormatter={eAchse.tick} label={achsenEinheit(eAchse.einheit)} />
             <Tooltip content={<ChartTooltip formatter={(v: number) => formatEnergie(v, maxKwh).text} />} />
-            <Legend content={<ChartLegende />} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
             {/* D14-10: kein Dash-Border an Balken (Dash-Kanon nur für Linien-Serien). */}
-            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL" />
-            <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST" />
-            <Line type="monotone" dataKey="Abweichung" stroke={SOLL_IST_COLORS.abweichung} strokeWidth={2} dot={{ r: 3 }} name="Abweichung" />
+            <Bar dataKey="SOLL" fill={SOLL_IST_COLORS.soll} name="SOLL" hide={legende.istVersteckt('SOLL')} />
+            <Bar dataKey="IST" fill={SOLL_IST_COLORS.ist} name="IST" hide={legende.istVersteckt('IST')} />
+            <Line type="monotone" dataKey="Abweichung" stroke={SOLL_IST_COLORS.abweichung} strokeWidth={2} dot={{ r: 3 }} name="Abweichung" hide={legende.istVersteckt('Abweichung')} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -329,6 +332,7 @@ export function PvStringTabelle({ data }: { data: PVStringsResponse }) {
 export function PvStringMehrjahr({ data, jahresvergleichData }: {
   data: PVStringsResponse; jahresvergleichData: Array<Record<string, number | string>>
 }) {
+  const legende = useLegendenToggle()
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Performance-Entwicklung über Jahre</h3>
@@ -339,12 +343,12 @@ export function PvStringMehrjahr({ data, jahresvergleichData }: {
             <XAxis dataKey="name" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
             <YAxis label={achsenEinheit('%')} domain={[80, 120]} ticks={[80, 90, 100, 110, 120]} tickFormatter={achsenTick} {...yAchse(false)} />
             <Tooltip content={<ChartTooltip unit="%" />} />
-            <Legend content={<ChartLegende />} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
             {data.strings.map((s, idx) => (
               <Line key={s.investition_id} type="monotone" dataKey={s.bezeichnung}
-                stroke={STRING_COLORS[idx % STRING_COLORS.length]} strokeWidth={2} dot={{ r: 4 }} />
+                stroke={STRING_COLORS[idx % STRING_COLORS.length]} strokeWidth={2} dot={{ r: 4 }} hide={legende.istVersteckt(s.bezeichnung)} />
             ))}
-            <Line type="monotone" dataKey="Gesamt" stroke={KATEGORIE_FARBEN.sonstige} strokeWidth={3} strokeDasharray={HILFSLINIE_DASH} dot={{ r: 4 }} />
+            <Line type="monotone" dataKey="Gesamt" stroke={KATEGORIE_FARBEN.sonstige} strokeWidth={3} strokeDasharray={HILFSLINIE_DASH} dot={{ r: 4 }} hide={legende.istVersteckt('Gesamt')} />
           </LineChart>
         </ResponsiveContainer>
       </div>

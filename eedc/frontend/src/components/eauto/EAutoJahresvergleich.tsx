@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import { LADEQUELLEN_FARBEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende, eedcTooltipProps, Table, TableHead, TableBody } from '../ui'
+import { useLegendenToggle } from '../../hooks'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
@@ -45,6 +46,7 @@ const pct = (v: number, ganz: number) => (ganz > 0 ? `${fmtZahl((v / ganz) * 100
 
 export function EAutoJahresvergleich({ monatsdaten, embed = false, melde }: { monatsdaten: InvestitionMonatsdaten[]; embed?: boolean; melde?: (ids: string[]) => void }) {
   const daten = prepEAutoJahresLadung(monatsdaten)
+  const legende = useLegendenToggle()
   const leer = daten.length === 0
   useEffect(() => { melde?.(leer ? KEINE_IDS : JAHRES_IDS) }, [melde, leer])
   if (leer) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahresdaten erfasst.</p>
@@ -66,9 +68,9 @@ export function EAutoJahresvergleich({ monatsdaten, embed = false, melde }: { mo
             <XAxis dataKey="jahr" {...xAchse()} /* achsen-allow: Zeit-/Kategorie-Achse (Jahr) */ />
             <YAxis tick={{ fontSize: 10 }} width={56} tickFormatter={achsenTick} label={achsenEinheit('kWh')} />
             <Tooltip {...eedcTooltipProps({ unit: ' kWh', decimals: 0, percentOf: 'gesamt' })} />
-            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende />} />
+            <Legend wrapperStyle={{ fontSize: 11 }} content={<ChartLegende onItemClick={legende.onItemClick} />} />
             {serien.map((s) => (
-              <Bar key={s.key} dataKey={s.key} name={s.name} stackId="lad" fill={s.farbe} />
+              <Bar key={s.key} dataKey={s.key} name={s.name} stackId="lad" fill={s.farbe} hide={legende.istVersteckt(s.key)} />
             ))}
           </BarChart>
         </ResponsiveContainer>

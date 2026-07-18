@@ -11,7 +11,7 @@
  * positive und negative Werte nicht gegenseitig aufheben.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import {
   ComposedChart, Area, Line, XAxis, YAxis, ResponsiveContainer,
   Tooltip, ReferenceLine, Legend, CartesianGrid,
@@ -21,6 +21,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import { ChartLegende } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
+import { useLegendenToggle } from '../../hooks'
 
 interface TagesverlaufChartProps {
   serien: TagesverlaufSerie[]
@@ -40,16 +41,9 @@ interface RenderSerie {
 
 export default function TagesverlaufChart({ serien, punkte, uebersprungen }: TagesverlaufChartProps) {
   const achsen = useChartTheme()
-  const [hidden, setHidden] = useState<Set<string>>(new Set())
-
-  const toggleSerie = useCallback((origKey: string) => {
-    setHidden((prev) => {
-      const next = new Set(prev)
-      if (next.has(origKey)) next.delete(origKey)
-      else next.add(origKey)
-      return next
-    })
-  }, [])
+  // B7-Legenden-Toggle (SoT-Hook); Key = origKey, damit bidirektionale _pos/_neg-Paare
+  // gemeinsam schalten (Legende zeigt nur den _pos-Eintrag).
+  const { istVersteckt, toggleSerie } = useLegendenToggle()
 
   // Overlay-Serien (z.B. Strompreis) — separate Achse, als Linie
   const overlaySerien = useMemo(() => serien.filter((s) => s.seite === 'overlay'), [serien])
@@ -248,7 +242,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 stackId={rs.stackId}
                 isAnimationActive={false}
                 legendType={legendHide ? 'none' : undefined}
-                hide={hidden.has(rs.origKey)}
+                hide={istVersteckt(rs.origKey)}
               />
             )
           })}
@@ -269,7 +263,7 @@ export default function TagesverlaufChart({ serien, punkte, uebersprungen }: Tag
                 dot={false}
                 isAnimationActive={false}
                 connectNulls={false}
-                hide={hidden.has(s.key)}
+                hide={istVersteckt(s.key)}
               />
             )
           })}

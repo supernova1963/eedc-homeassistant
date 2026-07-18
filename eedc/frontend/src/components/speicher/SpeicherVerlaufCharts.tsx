@@ -21,7 +21,7 @@ import { ChartLegende, Table, TableHead, TableBody } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import { MONAT_KURZ, CHART_COLORS, COLORS, CHART_HOVER_CURSOR, DATENROLLE, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
-import { useSchmaleAchse } from '../../hooks'
+import { useLegendenToggle, useSchmaleAchse } from '../../hooks'
 import type { InvestitionMonatsdaten, SpeicherDashboardResponse } from '../../api/investitionen'
 
 type Zusammenfassung = SpeicherDashboardResponse['zusammenfassung']
@@ -60,6 +60,7 @@ function ChartKopf({ children }: { children: string }) {
 
 export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizienzVerlauf, embed = false, melde }: SpeicherVerlaufProps) {
   const schmal = useSchmaleAchse()
+  const legende = useLegendenToggle()
   // v4-Hub-Auto-Hide: die 4 Anzeigen sind fest → statische ID-Meldung (Gernot 2026-07-09).
   useEffect(() => { melde?.(VERLAUF_IDS) }, [melde])
   const monthlyData = prepSpeicherMonate(monatsdaten, z)
@@ -83,16 +84,16 @@ export function SpeicherVerlaufCharts({ monatsdaten, zusammenfassung: z, effizie
                 <XAxis dataKey="name" {...xAchse(schmal)} /* achsen-allow: Zeit-/Kategorie-Achse (Monat) */ />
                 <YAxis tickFormatter={achsenTick} {...yAchse(schmal, 70)} label={achsenEinheit('kWh')} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip />} />
-                <Legend content={<ChartLegende />} />
+                <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
                 {arbitrageAktiv ? (
                   <>
-                    <Bar dataKey="pvLadung" stackId="ladung" fill={CHART_COLORS.speicherLadung} name="PV-Ladung" />
-                    <Bar dataKey="arbitrage" stackId="ladung" fill={COLORS.grid} name="Netz-Ladung" />
+                    <Bar dataKey="pvLadung" stackId="ladung" fill={CHART_COLORS.speicherLadung} name="PV-Ladung" hide={legende.istVersteckt('pvLadung')} />
+                    <Bar dataKey="arbitrage" stackId="ladung" fill={COLORS.grid} name="Netz-Ladung" hide={legende.istVersteckt('arbitrage')} />
                   </>
                 ) : (
-                  <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" />
+                  <Bar dataKey="ladung" fill={CHART_COLORS.speicherLadung} name="Ladung" hide={legende.istVersteckt('ladung')} />
                 )}
-                <Bar dataKey="entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" />
+                <Bar dataKey="entladung" fill={CHART_COLORS.speicherEntladung} name="Entladung" hide={legende.istVersteckt('entladung')} />
               </BarChart>
             </ResponsiveContainer>
           </div>
