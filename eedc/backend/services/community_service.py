@@ -225,6 +225,11 @@ async def prepare_community_data(
         "bkw_wp": bkw_wp,
         "sonstiges_bezeichnung": sonstiges_bezeichnung,
         "monatswerte": [],
+        # N18-2: Der Payload enthält ALLE teilbaren Monate (Voll-Submit) — der
+        # Server darf serverseitig vorhandene Monate, die hier fehlen (Monat
+        # gelöscht bzw. vom PV-0-Filter aussortiert), rückwirkend löschen.
+        # Alt-Server ignorieren das Feld folgenlos.
+        "monate_vollstaendig": bool(include_monatswerte),
     }
 
     # Monatswerte laden wenn gewünscht

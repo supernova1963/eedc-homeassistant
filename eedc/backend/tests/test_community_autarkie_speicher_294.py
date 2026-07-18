@@ -121,3 +121,30 @@ async def test_community_submit_ohne_speicher_unveraendert(db):
     naiv_eigen = pv_kwh - einspeisung                       # 480
     naiv_autarkie = naiv_eigen / (naiv_eigen + netzbezug) * 100   # 480/840
     assert mw["autarkie_prozent"] == pytest.approx(round(naiv_autarkie, 1))
+
+
+async def test_community_submit_sendet_monate_vollstaendig_flag(db):
+    """N18-2: Der Voll-Submit deklariert `monate_vollstaendig: true`, damit der
+    Community-Server rückwirkend entfernte Monate löschen darf (Server-Seite
+    eedc-community f4d2f04; Alt-Server ignorieren das Feld folgenlos)."""
+    anlage = Anlage(anlagenname="N18-2", leistung_kwp=10.0, standort_plz="80331")
+    db.add(anlage)
+    await db.flush()
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2025, monat=6,
+        einspeisung_kwh=100.0, netzbezug_kwh=100.0,
+    ))
+    pv = Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+        anschaffungsdatum=date(2024, 1, 1), leistung_kwp=10.0,
+    )
+    db.add(pv)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(
+        investition_id=pv.id, jahr=2025, monat=6,
+        verbrauch_daten={"pv_erzeugung_kwh": 500.0},
+    ))
+    await db.flush()
+
+    data = await prepare_community_data(db, anlage.id)
+    assert data["monate_vollstaendig"] is True
