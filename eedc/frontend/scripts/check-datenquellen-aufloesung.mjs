@@ -53,6 +53,11 @@ const ROUTE_ERLAUBT = new Set([
   'src/components/layout/TopNavigation.tsx',      // V3-Navigation (nur im V3-Layout)
   'src/pages/Einrichtung.tsx',                    // V3-Karten (nur: 'v3')
   'src/pages/HAStatistikImport.tsx',              // V3-Fallback-Link
+  // B7-5 (2026-07-18, HA-Export): „Verbindung bearbeiten" ist flag-gegatet —
+  // V4 → /v4/einstellungen/integration (Broker-Pflegeort der Integration-Kategorie,
+  // NICHT der Alt-Wizard), V3-Fallback-Literal nur im flag-off-Build (harter
+  // /v4-Link wäre dort tote Route). Legitime V3-Stelle, kein neuer V4-Einstieg.
+  'src/pages/HAExportSettingsTeile.tsx',
   'src/pages/SensorMappingWizard.tsx',            // Selbst-Navigation (V3-intern)
   'src/pages/DatenerfassungGuide.tsx',            // V3-Leiche (nirgends gerendert)
   'src/components/prognose/PrognoseVergleichTeile.tsx', // V3-Link, V4 via v3RouteZuV4
