@@ -5,12 +5,14 @@
  * {@link BlockShell} (⤢ je Block) UND der {@link FokusKachel} (⤢ je Karte ohne
  * Block-Stack). Ein Verhalten + ein Look app-weit — keine zweite Kopie.
  */
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Minimize2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { SegmentControl } from '../ui'
 
-export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, children }: {
+export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, tabelle, children }: {
   titel: string
   icon?: LucideIcon
   farbe?: string
@@ -18,8 +20,14 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, childre
   /** D10-2: optionaler Kopf-Slot unter der Titelzeile (z. B. Datums-Navigation der
    *  Seite). Die Seite reicht ihren bestehenden Stepper durch — kein Nav-Neubau. */
   kopf?: ReactNode
+  /** Paket CT: Tabellen-Ablesung des Chart-Inhalts (i. d. R. `ChartDatenTabelle`).
+   *  Gesetzt → Chart-⇄-Tabelle-Umschalter in der Kopfzeile; der Zugang zur
+   *  Chart-Tabelle lebt NUR hier (kein Kartenkopf-Icon, Gernot 2026-07-18). */
+  tabelle?: ReactNode
   children: ReactNode
 }) {
+  // Flüchtig wie der Fokus selbst: jedes Öffnen startet beim Chart.
+  const [ansicht, setAnsicht] = useState<'chart' | 'tabelle'>('chart')
   // D10-1 (detLAN R10): Portal an `document.body`. Ein Ancestor der Block-Zone
   // erzeugt einen Containing-Block (transform/filter/backdrop-blur/contain) → ein
   // `fixed inset-0` klemmt sonst relativ dazu statt zum Viewport (Sliver oben).
@@ -35,16 +43,32 @@ export function FokusVollbild({ titel, icon: Icon, farbe, onClose, kopf, childre
           {titel}
           <span className="text-xs font-normal text-gray-400 dark:text-gray-500">Fokus / Vollbild</span>
         </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
-        >
-          <Minimize2 className="h-4 w-4" /> Zurück
-        </button>
+        <div className="flex items-center gap-2">
+          {tabelle != null && (
+            <SegmentControl
+              ariaLabel="Darstellung"
+              size="sm"
+              optionen={[
+                { key: 'chart', label: 'Chart' },
+                { key: 'tabelle', label: 'Tabelle' },
+              ]}
+              value={ansicht}
+              onChange={setAnsicht}
+            />
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[44px] flex items-center gap-2 px-3 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+          >
+            <Minimize2 className="h-4 w-4" /> Zurück
+          </button>
+        </div>
       </div>
       {kopf != null && <div className="flex-shrink-0">{kopf}</div>}
-      <div className="flex-1 min-h-0">{children}</div>
+      <div className="flex-1 min-h-0">
+        {tabelle != null && ansicht === 'tabelle' ? tabelle : children}
+      </div>
     </div>
   )
   return typeof document !== 'undefined' ? createPortal(overlay, document.body) : overlay

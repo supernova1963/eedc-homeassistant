@@ -19,7 +19,7 @@
  *    (Σ der IMD je Monat), einmal je Anlage geladen.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fmtCalc, FehlerZustand } from '../components/ui'
+import { fmtCalc, FehlerZustand, ChartDatenTabelle } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
@@ -29,7 +29,8 @@ import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
 import { monatBilanzParkIds } from './bilanzParkIds'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
-import { JahrVerlaufChart } from './JahrVerlaufChart'
+import { JahrVerlaufChart, baueJahrChartDaten } from './JahrVerlaufChart'
+import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
 import { JahrHeader } from './JahrRahmen'
@@ -187,6 +188,17 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         summary: 'Monats-Bilanz: Erzeugung / Verbrauch / Autarkie',
         defaultOpen: false,
         render: () => <Parkbar id="el:verlauf" titel="Verlauf"><JahrVerlaufChart monate={monatsZeilen} /></Parkbar>,
+        // Paket CT (Pilot): Tabellen-Ablesung im Fokus-Overlay — dieselbe Datenreihe
+        // wie der Chart (baueJahrChartDaten), Spalten = Union der Chart-Serien.
+        renderTabelle: () => (
+          <ChartDatenTabelle
+            xLabel="Monat"
+            xKey="monat"
+            spalten={verlaufTabellenSpalten(true)}
+            daten={baueJahrChartDaten(monatsZeilen)}
+            csvDateiname={`verlauf_${jahr}.csv`}
+          />
+        ),
       }]),
       ...(d ? baueKomponentenBloecke(d, park, 'jahr') : []),
       ...(finanzBlock ? [finanzBlock] : []),

@@ -14,20 +14,23 @@ import { Maximize2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FokusVollbild } from './FokusVollbild'
 
-export function FokusKachel({ titel, icon: Icon, farbe, className = '', zeigeTitel = false, children }: {
+export function FokusKachel({ titel, icon: Icon, farbe, className = '', zeigeTitel = false, tabelle, children }: {
   titel: string
   icon?: LucideIcon
   farbe?: string
   className?: string
   /** Titel auch in der Karten-Kopfzeile zeigen (sonst nur im Vollbild). */
   zeigeTitel?: boolean
+  /** Paket CT: Tabellen-Ablesung des Karten-Charts — durchgereicht ans
+   *  {@link FokusVollbild} (Chart-⇄-Tabelle-Umschalter nur dort). */
+  tabelle?: ReactNode
   children: ReactNode
 }) {
   const [fokus, setFokus] = useState(false)
   return (
     <>
       {fokus && (
-        <FokusVollbild titel={titel} icon={Icon} farbe={farbe} onClose={() => setFokus(false)}>
+        <FokusVollbild titel={titel} icon={Icon} farbe={farbe} tabelle={tabelle} onClose={() => setFokus(false)}>
           {children}
         </FokusVollbild>
       )}

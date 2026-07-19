@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  VERLAUF_PRESETS, verfuegbarePresets, sichtbareSerien,
+  VERLAUF_PRESETS, verfuegbarePresets, sichtbareSerien, verlaufTabellenSpalten,
   tagDrillInPfad, monatDrillInPfad, datumAusQuery, monatRefAusQuery,
 } from './verlaufVergleich'
 
@@ -52,5 +52,29 @@ describe('verlaufVergleich — Drill-in (B3)', () => {
     expect(monatRefAusQuery(new URLSearchParams('jahr=2026&monat=0'))).toBeNull()
     expect(monatRefAusQuery(new URLSearchParams('jahr=1822&monat=5'))).toBeNull()
     expect(monatRefAusQuery(new URLSearchParams('monat=5'))).toBeNull()
+  })
+})
+
+describe('verlaufVergleich — Tabellen-Spalten (Paket CT)', () => {
+  it('Monat-Sicht: Union der Chart-Serien ohne nurJahr-Spalten, Autarkie zuletzt', () => {
+    const keys = verlaufTabellenSpalten(false).map((s) => s.key)
+    expect(keys).toEqual([
+      'eigenverbrauch', 'einspeisung', 'netzbezug', 'direktverbrauch', 'speicherEntladung',
+      'pvAnlage', 'bkw', 'neg51', 'speicherLadung', 'autarkie',
+    ])
+  })
+
+  it('Jahr-Sicht ergänzt Netzladung + E-Auto (gleiche Datengrenze wie der Chart)', () => {
+    const keys = verlaufTabellenSpalten(true).map((s) => s.key)
+    expect(keys).toContain('netzladung')
+    expect(keys).toContain('eautoLadung')
+    expect(keys).toContain('eautoKm')
+  })
+
+  it('Einheiten: kWh-Mengen + Fahrleistung km + Autarkie %', () => {
+    const spalten = verlaufTabellenSpalten(true)
+    expect(spalten.find((s) => s.key === 'eautoKm')?.einheit).toBe('km')
+    expect(spalten.find((s) => s.key === 'autarkie')?.einheit).toBe('%')
+    expect(spalten.filter((s) => s.einheit === 'kWh').length).toBeGreaterThanOrEqual(9)
   })
 })

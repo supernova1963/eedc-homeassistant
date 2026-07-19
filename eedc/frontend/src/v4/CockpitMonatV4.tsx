@@ -15,13 +15,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fmtCalc, FehlerZustand } from '../components/ui'
+import { fmtCalc, FehlerZustand, ChartDatenTabelle } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useApiData, useScrollErhalt } from '../hooks'
 import { MONAT_KURZ, BLOCK_IDENTITAET } from '../lib'
-import { TagesverlaufChart } from './TagesverlaufChart'
+import { TagesverlaufChart, baueChartDaten } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
 import { monatBilanzParkIds } from './bilanzParkIds'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
@@ -32,7 +32,7 @@ import { MonatHeader, finanzTeaserBlock } from './MonatRahmen'
 import { energieProfilApi, type VerfuegbarerMonat } from '../api/energie_profil'
 import { aktuellerMonatApi } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
-import { monatRefAusQuery } from './verlaufVergleich'
+import { monatRefAusQuery, verlaufTabellenSpalten } from './verlaufVergleich'
 
 interface MonatRef { jahr: number; monat: number }
 
@@ -291,6 +291,18 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
         summary: 'Tages-Bilanz: Erzeugung / Verbrauch / Autarkie',
         defaultOpen: false,
         render: () => <Parkbar id="el:verlauf" titel="Verlauf"><TagesverlaufChart tage={tage} /></Parkbar>,
+        // Paket CT (Pilot): Tabellen-Ablesung im Fokus-Overlay — dieselbe Datenreihe
+        // wie der Chart (baueChartDaten), Spalten = Union der Chart-Serien.
+        renderTabelle: () => (
+          <ChartDatenTabelle
+            xLabel="Tag"
+            xKey="tag"
+            spalten={verlaufTabellenSpalten(false)}
+            daten={baueChartDaten(tage)}
+            zeilen={31}
+            csvDateiname={gewaehlt ? `verlauf_${gewaehlt.jahr}-${String(gewaehlt.monat).padStart(2, '0')}.csv` : 'verlauf.csv'} /* de-de-allow: Dateiname (ISO sortierbar) */
+          />
+        ),
       }]),
       // Wiederhergestellte Energieprofil-Analysen (M4/M8/M9/M3, ante-flip) — fertig
       // aus getMonat berechnet; jeder Block versteckt sich selbst bei leerer Daten-

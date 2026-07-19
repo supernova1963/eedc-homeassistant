@@ -10,6 +10,7 @@
  * Reine Logik/Konstanten (kein JSX) — der Renderer lebt in `VergleichBalken.tsx`.
  */
 import { CHART_COLORS } from '../lib'
+import type { ChartTabelleSpalte } from '../components/ui'
 
 export interface VergleichSerie {
   /** dataKey im ChartPunkt (beide Charts liefern denselben Key). */
@@ -74,6 +75,36 @@ export const VERLAUF_PRESETS: VergleichPreset[] = [
     ],
   },
 ]
+
+// ─── Tabellen-Ablesung (Paket CT) ────────────────────────────────────────────
+
+/**
+ * Spalten der Chart-Daten-Tabelle beider Verlauf-Blöcke (Monat=Tage, Jahr=Monate):
+ * Union der Chart-Serien über alle Modi (Bilanz gestapelt + Vergleich-Presets +
+ * Autarkie-Linie), Labels identisch zu den Chart-Serien (Regel D). `nurJahr`-Serien
+ * fehlen in der Monat-Sicht — dieselbe Datengrenze wie im Chart.
+ */
+export function verlaufTabellenSpalten(istJahr: boolean): ChartTabelleSpalte[] {
+  return [
+    { key: 'eigenverbrauch', label: 'Eigenverbrauch', einheit: 'kWh' },
+    { key: 'einspeisung', label: 'Einspeisung', einheit: 'kWh' },
+    { key: 'netzbezug', label: 'Netzbezug', einheit: 'kWh' },
+    { key: 'direktverbrauch', label: 'Direktverbrauch', einheit: 'kWh' },
+    { key: 'speicherEntladung', label: 'Speicher-Entladung', einheit: 'kWh' },
+    { key: 'pvAnlage', label: 'PV-Anlage', einheit: 'kWh' },
+    { key: 'bkw', label: 'Balkonkraftwerk', einheit: 'kWh' },
+    { key: 'neg51', label: '§51-Abzug', einheit: 'kWh' },
+    { key: 'speicherLadung', label: 'Speicher-Ladung', einheit: 'kWh' },
+    ...(istJahr
+      ? [
+          { key: 'netzladung', label: 'Speicher-Netzladung', einheit: 'kWh' },
+          { key: 'eautoLadung', label: 'E-Auto-Ladung', einheit: 'kWh' },
+          { key: 'eautoKm', label: 'Fahrleistung', einheit: 'km', nachkomma: 0 },
+        ]
+      : []),
+    { key: 'autarkie', label: 'Autarkie', einheit: '%' },
+  ]
+}
 
 /** Presets für die Sicht: in der Monat-Sicht fallen `nurJahr`-Presets weg. */
 export function verfuegbarePresets(istJahr: boolean): VergleichPreset[] {

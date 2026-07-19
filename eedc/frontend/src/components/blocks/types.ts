@@ -25,4 +25,7 @@ export interface Block {
   defaultOpen?: boolean
   /** `fokus` = Vollbild-Render (Charts groß). Param mit _ wenn ungenutzt. */
   render: (fokus: boolean) => ReactNode
+  /** Paket CT: Tabellen-Ablesung des Block-Charts (i. d. R. `ChartDatenTabelle`).
+   *  Gesetzt → das Fokus-Overlay zeigt den Chart-⇄-Tabelle-Umschalter. */
+  renderTabelle?: () => ReactNode
 }

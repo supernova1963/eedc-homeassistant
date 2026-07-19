@@ -19,6 +19,8 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 
 const GETEILTE_SOT = [
+  // Paket CT: die generische Chart-Tabellen-Ablesung ist B2-pflichtig wie jede Tabelle.
+  'src/components/ui/ChartDatenTabelle.tsx',
   'src/components/werte/WerteTabelle.tsx',
   // Pfad-Bug behoben 2026-07-10: stand als `components/werte/TagWerteTabelle.tsx`
   // in der Liste, liegt aber unter `components/tag/` ⇒ der Wächter hat die Datei

@@ -179,7 +179,11 @@ export function BlockShell({
     const meta = b ?? lastFokusMeta.current
     if (meta) {
       return (
-        <FokusVollbild titel={meta.title} icon={meta.icon} farbe={meta.farbe} kopf={fokusKopf} onClose={() => setFokus(null)}>
+        <FokusVollbild
+          titel={meta.title} icon={meta.icon} farbe={meta.farbe} kopf={fokusKopf}
+          tabelle={b?.renderTabelle?.()}
+          onClose={() => setFokus(null)}
+        >
           {b
             ? b.render(true)
             : (

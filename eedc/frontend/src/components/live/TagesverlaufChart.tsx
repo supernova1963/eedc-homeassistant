@@ -19,7 +19,7 @@ import {
 import type { TagesverlaufSerie, TagesverlaufPunkt } from '../../api/liveDashboard'
 import ChartTooltip from '../ui/ChartTooltip'
 import { CHART_HOVER_CURSOR, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
-import { ChartLegende } from '../ui'
+import { ChartLegende, type ChartTabelleSpalte } from '../ui'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
 
@@ -27,6 +27,34 @@ interface TagesverlaufChartProps {
   serien: TagesverlaufSerie[]
   punkte: TagesverlaufPunkt[]
   uebersprungen?: string[]
+}
+
+/**
+ * Paket CT: Tabellen-Ablesung des Live-Tagesverlaufs — 1 Zeile je 10-Min-Slot,
+ * 1 Spalte je Backend-Serie. Bidirektionale Serien bleiben EINE Spalte mit
+ * Vorzeichen (der _pos/_neg-Split ist reine Render-Mechanik des Butterfly);
+ * Overlay-Serien (Strompreis) behalten ihre eigene Einheit. Werte wie im Chart:
+ * fehlend → 0 (Flächen), Overlay fehlend → null (Lücke).
+ */
+export function tagesverlaufTabelle(serien: TagesverlaufSerie[], punkte: TagesverlaufPunkt[]): {
+  spalten: ChartTabelleSpalte[]
+  daten: Array<Record<string, string | number | null>>
+} {
+  const spalten: ChartTabelleSpalte[] = serien.map((s) => ({
+    key: s.key,
+    label: s.label,
+    einheit: s.seite === 'overlay' ? (s.einheit || undefined) : (s.einheit || 'kW'),
+    nachkomma: 2,
+  }))
+  const daten = punkte.map((p) => {
+    const row: Record<string, string | number | null> = { zeit: p.zeit }
+    for (const s of serien) {
+      const raw = p.werte[s.key]
+      row[s.key] = s.seite === 'overlay' ? (raw ?? null) : (raw ?? 0)
+    }
+    return row
+  })
+  return { spalten, daten }
 }
 
 /** Interne Darstellung einer Render-Serie (nach Aufspaltung bidirektionaler Serien). */

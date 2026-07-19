@@ -23,10 +23,11 @@ import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse } 
 import { wetterApi } from '../api/wetter'
 import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
-import TagesverlaufChart from '../components/live/TagesverlaufChart'
+import TagesverlaufChart, { tagesverlaufTabelle } from '../components/live/TagesverlaufChart'
 import WetterWidget from '../components/live/WetterWidget'
 import LiveAufEinenBlick from '../components/live/LiveAufEinenBlick'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
+import { ChartDatenTabelle } from '../components/ui'
 import { ParkProvider, ParkFuss, Parkbar } from '../components/park'
 import { AnlageLeer } from './OnboardingLeer'
 import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
@@ -275,7 +276,25 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           )}
           {hatTagesverlauf && (
             <Parkbar id="live:tagesverlauf" titel="Tagesverlauf">
-              <FokusKachel titel="Tagesverlauf" icon={LineChart}>
+              <FokusKachel
+                titel="Tagesverlauf"
+                icon={LineChart}
+                // Paket CT (Pilot): Tabellen-Ablesung im Fokus-Overlay — dieselben
+                // Serien/Punkte wie der Butterfly-Chart, Vorzeichen statt _pos/_neg.
+                tabelle={(() => {
+                  const t = tagesverlaufTabelle(tagesverlauf!.serien, tagesverlauf!.punkte)
+                  return (
+                    <ChartDatenTabelle
+                      xLabel="Zeit"
+                      xKey="zeit"
+                      spalten={t.spalten}
+                      daten={t.daten}
+                      zeilen={24}
+                      csvDateiname="live_tagesverlauf.csv"
+                    />
+                  )
+                })()}
+              >
                 <TagesverlaufChart serien={tagesverlauf!.serien} punkte={tagesverlauf!.punkte} uebersprungen={tagesverlauf!.uebersprungen} />
               </FokusKachel>
             </Parkbar>
