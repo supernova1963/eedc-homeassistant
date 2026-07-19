@@ -12,7 +12,7 @@ import type { WerteZeile } from '../lib/werte'
 
 const zeile = (datum: string): WerteZeile => {
   const [y, m, d] = datum.split('-').map(Number)
-  return { id: datum, sortKey: y * 10000 + m * 100 + d, label: datum, vergleichKey: d, wert: () => null }
+  return { id: datum, sortKey: y * 10000 + m * 100 + d, label: datum, zeitLinks: '', zeitRechts: datum, vergleichKey: d, wert: () => null }
 }
 
 describe('tagVergleich — Bereich + Ausrichtung je Modus', () => {

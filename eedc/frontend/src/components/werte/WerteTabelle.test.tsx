@@ -94,12 +94,41 @@ describe('WerteTabelle', () => {
   it('Spalten-Sortierung: Klick auf Metrik-Header sortiert absteigend, Default bleibt chronologisch (IST-Parität)', () => {
     render(<WerteTabelle rows={monatsRows} granularitaet="monat" />)
     // Default chronologisch aufsteigend: Jan (erzeugung 100) vor Feb (200).
+    // Zeitraum ist R20-1b in Monatskürzel + Jahr gesplittet → „Jan" statt „Jan 2025".
     let rows = screen.getAllByRole('row')
-    expect(within(rows[1]).getByText('Jan 2025')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Jan')).toBeInTheDocument()
     // Klick auf „PV-Erzeugung" → absteigend nach Wert → Feb (200) zuerst.
     fireEvent.click(screen.getByRole('button', { name: /PV-Erzeugung/ }))
     rows = screen.getAllByRole('row')
-    expect(within(rows[1]).getByText('Feb 2025')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Feb')).toBeInTheDocument()
+  })
+
+  it('R20-1b: Zeitraum-Split — Monatskürzel und Jahr als getrennte Teil-Spalten', () => {
+    render(<WerteTabelle rows={monatsRows} granularitaet="monat" />)
+    // Monatskürzel links, Jahr rechts — nicht mehr ein zusammenhängendes „Jan 2025".
+    expect(screen.getByText('Jan')).toBeInTheDocument()
+    expect(screen.getByText('Feb')).toBeInTheDocument()
+    expect(screen.getAllByText('2025').length).toBe(2)
+    expect(screen.queryByText('Jan 2025')).not.toBeInTheDocument()
+  })
+
+  it('R20-1a: Vergleich beschriftet die Sub-Spalten (aktuell · Vergleich · Δ)', () => {
+    render(
+      <WerteTabelle
+        rows={monatsRows}
+        vorjahrRows={[mz(1, 2024), mz(2, 2024)].map(monatsZeile)}
+        granularitaet="monat"
+        jahrLabel={2025}
+        vergleichLabel={2024}
+        vergleichDefaultAn
+      />,
+    )
+    // Δ-Sub-Header je Metrik-Gruppe.
+    expect(screen.getAllByText('Δ').length).toBeGreaterThan(0)
+    // Perioden-Label als eigener Spaltenkopf (aktuell = 2025, Vergleich = 2024).
+    const heads = screen.getAllByRole('columnheader')
+    expect(heads.some((h) => h.textContent === '2025')).toBe(true)
+    expect(heads.some((h) => h.textContent === '2024')).toBe(true)
   })
 
   it('Tages-Granularität: Tag-native Spalte sichtbar, Footer „Tage", kein WP-Wärme', () => {

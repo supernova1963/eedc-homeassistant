@@ -185,6 +185,9 @@ export function WerteTabelle({
 
   const vergleichVerfuegbar = vorjahrRows != null && vorjahrRows.length > 0 && vergleichLabel != null
   const zeigeVergleich = vergleichVerfuegbar && vergleichAn
+  // Sub-Label der „aktuellen" Vergleichs-Spalte (R20-1a): explizites Perioden-Label
+  // (z. B. „2026"), sonst neutral „Aktuell". Die Vergleichs-Spalte trägt `vergleichLabel`.
+  const aktuellLabel = jahrLabel !== '' && jahrLabel != null ? String(jahrLabel) : 'Aktuell'
 
   const vorjahrLookup = useMemo<Record<number, WerteZeile>>(() => {
     const m: Record<number, WerteZeile> = {}
@@ -332,7 +335,10 @@ export function WerteTabelle({
       <Table zeilen={12} mitFuss={sorted.length > 1} flaeche="karte" className="w-full">
           <TableHead>
             <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-              <th className={`${KOPF_ZELLE}`}>
+              {/* R20-1b (Rainer): vertikale Trennlinie nach der Zeitraum-Spalte
+                  (Stil = Gruppen-Trennlinien R19-4b). Im Vergleich-Modus überspannt
+                  der Zeitraum-Kopf beide Kopfzeilen (Sub-Labels sitzen unter den Metriken). */}
+              <th rowSpan={zeigeVergleich ? 2 : 1} className={`${KOPF_ZELLE} border-r border-gray-200 dark:border-gray-700`}>
                 <TableSortKopf aktiv={sortKey === '__zeit'} richtung={sortDir} onClick={() => toggleSort('__zeit')}>
                   Zeitraum
                 </TableSortKopf>
@@ -351,13 +357,35 @@ export function WerteTabelle({
                 </th>
               ))}
             </tr>
+            {/* R20-1a (Rainer „2 Spalten ?"): Sub-Label-Zeile beschriftet die drei
+                Vergleichs-Spalten je Metrik (aktuell · Vergleichsperiode · Δ), damit
+                erkennbar ist, welcher Wert welcher ist. Nicht klickbar (Sortierung
+                bleibt am Gruppen-Kopf oben). */}
+            {zeigeVergleich && (
+              <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                {aktiveMetriken.map((m) => (
+                  <Fragment key={m.key}>
+                    <th className={`${KOPF_ZELLE} font-normal text-right`}>{aktuellLabel}</th>
+                    <th className={`${KOPF_ZELLE} font-normal text-right`}>{vergleichLabel}</th>
+                    <th className={`${KOPF_ZELLE} font-normal text-right border-r border-gray-200 dark:border-gray-700`}>Δ</th>
+                  </Fragment>
+                ))}
+              </tr>
+            )}
           </TableHead>
           <TableBody>
             {sorted.map((r) => {
               const prev = zeigeVergleich ? vorjahrLookup[r.vergleichKey] : undefined
               return (
                 <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800">
-                  <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>{r.label}</td>
+                  {/* R20-1b: Wochentag/Monat linksbündig, Datum/Jahr rechtsbündig,
+                      danach die Zeitraum-Trennlinie (Kopf trägt sie ebenso). */}
+                  <td className={`${ZELLE} text-gray-600 dark:text-gray-400 border-r border-gray-100 dark:border-gray-800`}>
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span>{r.zeitLinks}</span>
+                      <span className="tabular-nums">{r.zeitRechts}</span>
+                    </span>
+                  </td>
                   {aktiveMetriken.map((m) => {
                     const v = r.wert(m.key)
                     if (zeigeVergleich) {
@@ -381,7 +409,7 @@ export function WerteTabelle({
             <TableFoot>
               {/* Betonung + deckender Grund kommen aus der Zentrale (FUSS_GRUND). */}
               <tr>
-                <td className={`${ZELLE} text-gray-600 dark:text-gray-300 text-xs uppercase tracking-wide`}>
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-300 text-xs uppercase tracking-wide border-r border-gray-300 dark:border-gray-600`}>
                   {sorted.length} {einheitLabel}
                 </td>
                 {aktiveMetriken.map((m) => {

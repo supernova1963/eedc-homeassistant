@@ -43,6 +43,11 @@ function vergleichLabelVon(von: string, bis: string): string {
   const vy = Number(von.slice(0, 4)); const by = Number(bis.slice(0, 4))
   return vy === by ? `${vy - 1}` : 'Vorjahr'
 }
+/** Label der „aktuellen" Spalte (R20-1a): bei Einzeljahr das Jahr, sonst „Aktuell". */
+function jahrLabelVon(von: string, bis: string): string {
+  const vy = Number(von.slice(0, 4)); const by = Number(bis.slice(0, 4))
+  return vy === by ? `${vy}` : 'Aktuell'
+}
 
 export default function AuswertungenTabelleV4({ basis }: { basis: AuswertungBasis }) {
   return (
@@ -153,6 +158,7 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
               rows={monRows.map(monatsZeile)}
               vorjahrRows={monVorjahr ? monVorjahr.map(monatsZeile) : null}
               granularitaet="monat"
+              jahrLabel={jahrLabelVon(monVon, monBis)}
               vergleichLabel={monVergleich ? vergleichLabelVon(monVon, monBis) : null}
               vergleichDefaultAn={monVergleich}
               scope={SCOPE} defaultSpalten={DEFAULT_SPALTEN}
@@ -314,6 +320,9 @@ function EnergieprofilBlock({
             rows={primZeilen}
             vorjahrRows={vglZeilen}
             granularitaet="tag"
+            // R20-1a: bei „Periode im Jahr" das Primär-Jahr als Spalten-Label; bei
+            // „Vorperiode" neutral „Aktuell" (WerteTabelle-Default) — beide Spalten klar.
+            jahrLabel={vglModus === 'periodeImJahr' ? von.slice(0, 4) : undefined}
             vergleichLabel={vgl ? vglLabel(vglModus, vglJahr) : null}
             vergleichDefaultAn={!!vgl}
             scope={SCOPE} defaultSpalten={DEFAULT_SPALTEN}

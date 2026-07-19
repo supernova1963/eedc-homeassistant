@@ -17,6 +17,11 @@ export interface WerteZeile {
   sortKey: number
   /** Anzeige-Label der Zeitraum-Spalte (z. B. „Mai 2026" / „Mo 10.05."). */
   label: string
+  /** Zeitraum-Teil links (Wochentag / Monatskürzel) — R20-1: eigene Teil-Spalte,
+   *  linksbündig, damit Datum/Jahr sauber rechtsbündig danebensteht. */
+  zeitLinks: string
+  /** Zeitraum-Teil rechts (Datum / Jahr) — R20-1: rechtsbündig. */
+  zeitRechts: string
   /** Schlüssel zum Matchen der Vergleichszeile (Monat 1–12 / Tag-im-Monat 1–31). */
   vergleichKey: number
   /** Metrik-Wert-Accessor (Registry-key → Wert). */
@@ -29,6 +34,8 @@ export function monatsZeile(r: MonatsZeitreihe): WerteZeile {
     id: `${r.jahr}-${r.monat}`,
     sortKey: r.jahr * 100 + r.monat,
     label: `${MONAT_KURZ[r.monat]} ${r.jahr}`,
+    zeitLinks: MONAT_KURZ[r.monat],
+    zeitRechts: String(r.jahr),
     vergleichKey: r.monat,
     wert: (key) => getMonatWert(r, key),
   }
@@ -45,6 +52,8 @@ export function tagesZeile(r: TagWerte): WerteZeile {
     id: r.datum,
     sortKey: y * 10000 + m * 100 + d,
     label: `${WT_KURZ[wt]} ${dd}.${mm}.`,
+    zeitLinks: WT_KURZ[wt],
+    zeitRechts: `${dd}.${mm}.`,
     vergleichKey: d,
     wert: (key) => getTagWert(r, key),
   }

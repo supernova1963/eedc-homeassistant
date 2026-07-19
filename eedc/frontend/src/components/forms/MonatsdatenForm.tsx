@@ -837,33 +837,6 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
             onBestaetigen={() => bestaetigeFeld('netzbezug_durchschnittspreis_cent')}
             />
           )}
-          {hatEAuto && (
-            <AssistenzFeld
-              label="Ø Benzinpreis"
-              name="kraftstoffpreis_euro"
-              step="0.001"
-              min="0"
-              value={formData.kraftstoffpreis_euro}
-              onChange={(v) => setFormData(prev => ({ ...prev, kraftstoffpreis_euro: v }))}
-              hint="€/L — Monatsdurchschnitt für E-Auto-Vergleich"
-              feldStatus={basisStatus.kraftstoffpreis_euro}
-            bestaetigt={bestaetigteFelder.has('kraftstoffpreis_euro')}
-            onBestaetigen={() => bestaetigeFeld('kraftstoffpreis_euro')}
-            />
-          )}
-          {hatWaermepumpe && (
-            <AssistenzFeld
-              label="Ø Gas-/Ölpreis"
-              name="gaspreis_cent_kwh"
-              min="0"
-              value={formData.gaspreis_cent_kwh}
-              onChange={(v) => setFormData(prev => ({ ...prev, gaspreis_cent_kwh: v }))}
-              hint="ct/kWh — Monatsdurchschnitt für WP-Vergleich"
-              feldStatus={basisStatus.gaspreis_cent_kwh}
-            bestaetigt={bestaetigteFelder.has('gaspreis_cent_kwh')}
-            onBestaetigen={() => bestaetigeFeld('gaspreis_cent_kwh')}
-            />
-          )}
           {/* PV-Erzeugung: berechnet → Display (D1, kein Input), sonst editierbar (Legacy) */}
           {(hatPVModule || hatWechselrichter) && berechneteWerte.pvErzeugung > 0 ? (
             <div>
@@ -892,6 +865,46 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           )}
         </div>
       </FormSection>
+
+      {/* R20-8 (Rainer): Vergleichspreise NICHT unter „Energie-Daten (kWh)" (sind
+          keine kWh-Bilanz-Größen) → eigene optionale Untergruppe. Reine Gruppierung,
+          Felder/Hinweise/Badges unverändert. Nur wenn eine Vergleichsgröße greift. */}
+      {(hatEAuto || hatWaermepumpe) && (
+        <FormSection
+          title="Vergleichspreise (optional)"
+          description="Monatsdurchschnitte für die Alternativ-Vergleiche (E-Auto / Wärmepumpe) — nicht Teil der kWh-Bilanz."
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            {hatEAuto && (
+              <AssistenzFeld
+                label="Ø Benzinpreis"
+                name="kraftstoffpreis_euro"
+                step="0.001"
+                min="0"
+                value={formData.kraftstoffpreis_euro}
+                onChange={(v) => setFormData(prev => ({ ...prev, kraftstoffpreis_euro: v }))}
+                hint="€/L — Monatsdurchschnitt für E-Auto-Vergleich"
+                feldStatus={basisStatus.kraftstoffpreis_euro}
+                bestaetigt={bestaetigteFelder.has('kraftstoffpreis_euro')}
+                onBestaetigen={() => bestaetigeFeld('kraftstoffpreis_euro')}
+              />
+            )}
+            {hatWaermepumpe && (
+              <AssistenzFeld
+                label="Ø Gas-/Ölpreis"
+                name="gaspreis_cent_kwh"
+                min="0"
+                value={formData.gaspreis_cent_kwh}
+                onChange={(v) => setFormData(prev => ({ ...prev, gaspreis_cent_kwh: v }))}
+                hint="ct/kWh — Monatsdurchschnitt für WP-Vergleich"
+                feldStatus={basisStatus.gaspreis_cent_kwh}
+                bestaetigt={bestaetigteFelder.has('gaspreis_cent_kwh')}
+                onBestaetigen={() => bestaetigeFeld('gaspreis_cent_kwh')}
+              />
+            )}
+          </div>
+        </FormSection>
+      )}
 
       {/* PV-Module (falls vorhanden) */}
       {hatPVModule && (

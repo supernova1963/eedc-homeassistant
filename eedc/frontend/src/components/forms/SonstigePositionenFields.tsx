@@ -10,7 +10,7 @@
  * Controls = SoT (Style-Guide Teil D, M1): `Input` (Bezeichnung/Betrag),
  * `SegmentControl` (Ertrag/Ausgabe = Auswahl 2, D1), `Button` (Position entfernen).
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Input, SegmentControl, Button } from '../ui'
 import { fmtZahl } from '../../lib'
 import { X } from 'lucide-react'
@@ -18,6 +18,58 @@ import type { SonstigePosition } from '../../types'
 
 // SoT-Kanon in types/index.ts (G19-1) — hier nur Re-Export für Bestand
 export type { SonstigePosition }
+
+/** de-DE-Betrag parsen: akzeptiert „1.234,56" (Tausenderpunkt + Komma) UND „1234.56"
+ *  (Punkt-Dezimal); nie negativ (min 0 wie zuvor). Leer → 0. */
+function parseBetrag(text: string): number {
+  const s = text.trim()
+  if (!s) return 0
+  // Mit Komma: Punkte = Tausendertrenner entfernen, Komma → Dezimalpunkt.
+  const normalisiert = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
+  const n = parseFloat(normalisiert)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+/**
+ * Betrag-Feld (R20-6, Rainer): zeigt den Wert im Ruhezustand/bei Blur immer mit
+ * 2 Nachkommastellen (de-DE, „8" → „8,00"); während der Eingabe bleibt die Rohschrift
+ * stehen (Komma ODER Punkt erlaubt). Bewusst `type="text"` + `inputMode="decimal"`,
+ * weil `type="number"` kein „8,00"-Komma-Format erzwingen kann.
+ */
+function BetragInput({
+  value, onChange, label, ariaLabel,
+}: {
+  value: number
+  onChange: (n: number) => void
+  label?: string
+  ariaLabel: string
+}) {
+  const [text, setText] = useState(() => (value ? fmtZahl(value, 2) : ''))
+  const [fokus, setFokus] = useState(false)
+  // Externe Wert-Änderungen (Reset/Preset) übernehmen, solange nicht getippt wird.
+  useEffect(() => {
+    if (!fokus) setText(value ? fmtZahl(value, 2) : '')
+  }, [value, fokus])
+
+  return (
+    <Input
+      label={label}
+      aria-label={ariaLabel}
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onFocus={() => setFokus(true)}
+      onChange={(e) => { setText(e.target.value); onChange(parseBetrag(e.target.value)) }}
+      onBlur={() => {
+        setFokus(false)
+        const n = parseBetrag(text)
+        setText(n ? fmtZahl(n, 2) : '')
+        onChange(n)
+      }}
+      placeholder="0,00"
+    />
+  )
+}
 
 interface Props {
   /** Nur für eindeutige aria-Labels bei mehreren Instanzen (Monatsdaten je Investition). */
@@ -83,15 +135,11 @@ export function SonstigePositionenFields({ invId, positionen, onChange }: Props)
                 />
               </div>
               <div className="col-span-3">
-                <Input
+                <BetragInput
                   label={index === 0 ? 'Betrag (€)' : undefined}
-                  aria-label={`Betrag Position ${index + 1}${suffix}`}
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={pos.betrag || ''}
-                  onChange={(e) => updatePosition(index, { betrag: parseFloat(e.target.value) || 0 })}
-                  placeholder="0,00"
+                  ariaLabel={`Betrag Position ${index + 1}${suffix}`}
+                  value={pos.betrag}
+                  onChange={(betrag) => updatePosition(index, { betrag })}
                 />
               </div>
               <div className="col-span-3">

@@ -57,6 +57,7 @@ function formatDatum(datum: string): string {
 // HÖHER; mobil (< lg) Wechsel Säulen → horizontale Balken (löst die Schmal-Enge).
 
 const BALKEN_PX = 170 // Höhe der vertikalen Balken-Spur (Desktop) — R12-4: deutlich höher (war 110)
+const BALKEN_LABEL_PX = 22 // R20-3a: Kopfraum in der Spur für den kWh-Wert direkt über dem Balken
 
 // R13-4a (Rainer #77): die grüne „heute"-Umrandung (1. Spalte) ersatzlos entfernt
 // (überstimmt D12-3). „Heute" ist ohnehin die erste Spalte/Zeile.
@@ -70,7 +71,9 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
       <ScrollSchatten achse="horizontal" aussenClassName="hidden lg:block" className="p-0.5" fadeFrom="from-white dark:from-gray-800">
         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${tage.length}, minmax(52px, 1fr))` }}>
           {tage.map((tag) => {
-            const totalPx = (tag.pv_ertrag_kwh / maxKwh) * BALKEN_PX
+            // R20-3a: Balken skaliert auf die Spur MINUS Label-Kopfraum, damit der
+            // kWh-Wert immer direkt ÜBER dem Balken sitzt (auch beim höchsten Tag).
+            const totalPx = (tag.pv_ertrag_kwh / maxKwh) * (BALKEN_PX - BALKEN_LABEL_PX)
             const vm = tag.pv_ertrag_morgens_kwh ?? 0
             const nm = tag.pv_ertrag_nachmittags_kwh ?? 0
             const summe = vm + nm
@@ -87,8 +90,11 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                 <span className="flex items-center gap-0.5 text-sm font-medium text-gray-600 dark:text-gray-300 tabular-nums">
                   <Thermometer className="h-3.5 w-3.5" />{tag.temperatur_max_c != null ? `${fmtZahl(tag.temperatur_max_c, 0)}°` : '—'}
                 </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
+                {/* R20-3a (Rainer): kWh-Wert sitzt jetzt DIREKT über dem Balken (in der
+                    Spur, justify-end) statt frei zwischen Temperatur und Balken — klare
+                    Zuordnung; Einheit steht in der Fuß-Legende „Balkenlänge = … (kWh)". */}
                 <div className="flex flex-col justify-end items-center w-full" style={{ height: BALKEN_PX }}>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums leading-none mb-0.5">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
                   {hasVmNm && summe > 0 ? (
                     <>
                       <div className="w-1/2 rounded-t" style={{ height: nmPx, backgroundColor: SOLAR_INTENSITAET[1] }} title={`Nachmittag ${fmtCalc(nm, 1)} kWh`} />
@@ -144,13 +150,17 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
         })}
       </div>
 
-      {hasVmNm && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400 dark:text-gray-500">
-          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: SOLAR_INTENSITAET[2] }} /> Vormittag</span>
-          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: SOLAR_INTENSITAET[1] }} /> Nachmittag</span>
-          <span>· Balkenlänge = PV-Ertrag (kWh)</span>
-        </div>
-      )}
+      {/* R20-3a: Einheit-Hinweis IMMER sichtbar (nicht nur im VM/NM-Fall), damit der
+          kWh-Wert am Balken eindeutig zugeordnet ist. VM/NM-Chips nur bei Teilung. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400 dark:text-gray-500">
+        {hasVmNm && (
+          <>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: SOLAR_INTENSITAET[2] }} /> Vormittag</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: SOLAR_INTENSITAET[1] }} /> Nachmittag</span>
+          </>
+        )}
+        <span>Balkenlänge = PV-Ertrag (kWh)</span>
+      </div>
     </div>
   )
 }
@@ -178,17 +188,19 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
     <Table mitFuss flaeche="karte">
         <TableHead>
           <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+            {/* R20-3b (Rainer): Header-Ausrichtung == Wert-Ausrichtung (Regel-T-Kanon)
+                — Zahlenspalten rechtsbündig wie ihre Zellen, Datum/Wetter linksbündig. */}
             <th className={`${KOPF_ZELLE}`}>Datum</th>
             <th className={`${KOPF_ZELLE}`}>Wetter</th>
             {/* B2/C3 (#237): Einheit im Header „Name (Einheit)", nicht pro Zelle. */}
-            <th className={`${KOPF_ZELLE}`}>PV-Prognose (kWh)</th>
-            {hasVmNm && <th className={`${KOPF_ZELLE}`}>VM (kWh)</th>}
-            {hasVmNm && <th className={`${KOPF_ZELLE}`}>NM (kWh)</th>}
-            <th className={`${KOPF_ZELLE}`}>GTI (kWh/m²)</th>
-            <th className={`${KOPF_ZELLE}`}>Bewölkung (%)</th>
-            <th className={`${KOPF_ZELLE}`}>Temperatur (°C)</th>
-            <th className={`${KOPF_ZELLE}`}>Niederschlag (mm)</th>
-            {hasKaskade && <th className={`${KOPF_ZELLE}`}>Quelle</th>}
+            <th className={`${KOPF_ZELLE} text-right`}>PV-Prognose (kWh)</th>
+            {hasVmNm && <th className={`${KOPF_ZELLE} text-right`}>VM (kWh)</th>}
+            {hasVmNm && <th className={`${KOPF_ZELLE} text-right`}>NM (kWh)</th>}
+            <th className={`${KOPF_ZELLE} text-right`}>GTI (kWh/m²)</th>
+            <th className={`${KOPF_ZELLE} text-right`}>Bewölkung (%)</th>
+            <th className={`${KOPF_ZELLE} text-right`}>Temperatur (°C)</th>
+            <th className={`${KOPF_ZELLE} text-right`}>Niederschlag (mm)</th>
+            {hasKaskade && <th className={`${KOPF_ZELLE} text-right`}>Quelle</th>}
           </tr>
         </TableHead>
         <TableBody>
