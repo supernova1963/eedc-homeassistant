@@ -53,8 +53,8 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 43 Metriken (33 Monat + 10 Tag-native), jede mit gültiger Gruppe + granular', () => {
-    expect(WERTE_METRIKEN).toHaveLength(43)
+  it('hat 44 Metriken (33 Monat + 11 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    expect(WERTE_METRIKEN).toHaveLength(44)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)

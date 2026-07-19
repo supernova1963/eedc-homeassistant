@@ -25,6 +25,7 @@ import { TagesverlaufChart } from './TagesverlaufChart'
 import { baueMonatKpis, MonatBilanz, type GleicheMonatStats } from './MonatBilanz'
 import { monatBilanzParkIds } from './bilanzParkIds'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
+import { baueMonatAuswertungBloecke } from './MonatAuswertungBloecke'
 import { MonatsRail, type RailEintrag } from './MonatsRail'
 import { MonatStepper } from './MonatStepper'
 import { MonatHeader, finanzTeaserBlock } from './MonatRahmen'
@@ -129,6 +130,22 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
   )
   const tage = useMemo(() => tageQ.data?.[0] ?? [], [tageQ.data])
   const monatData = tageQ.data?.[1] ?? null
+
+  // Monats-Auswertung (getMonat) — fertig berechnete Analyse-Werte für die vor dem
+  // Flip wiederhergestellten Energieprofil-Blöcke (Peaks/Tagesprofil/Kategorien/§51 +
+  // PR Ø). EIGENER Fetch/swrKey, an `gewaehlt` gebunden (kein Doppel-Fetch); getMonat
+  // respektiert das Installationsdatum backend-seitig. Fehlt die Antwort (Fehler/
+  // laden), bleiben die Blöcke einfach aus — sie sind additiv zur Monatsbilanz.
+  const auswQ = useApiData(
+    () => energieProfilApi.getMonat(anlageId!, gewaehlt!.jahr, gewaehlt!.monat),
+    [anlageId, gewaehlt?.jahr, gewaehlt?.monat],
+    {
+      enabled: !!anlageId && !!gewaehlt,
+      swrKey: `v4-monat-auswertung:${anlageId}:${gewaehlt?.jahr}-${gewaehlt?.monat}`,
+      keepPreviousData: true,
+    },
+  )
+  const monatAusw = auswQ.data ?? null
   const loading = monateQ.loading || (!!gewaehlt && tageQ.loading)
   const reloading = tageQ.reloading
   const error = monateQ.data == null && monateQ.error
@@ -221,7 +238,7 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     // werden im Strip ausgeblendet. Sind ALLE geparkt → Block-Hülle ausblenden
     // (Gernot-Abnahme 2026-06-25, Entscheidung 2).
     const kpiItems = monatData
-      ? baueMonatKpis(monatData, vormonatAgg).map((k) => ({
+      ? baueMonatKpis(monatData, vormonatAgg, monatAusw?.performance_ratio_avg).map((k) => ({
           ...k,
           parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,
         }))
@@ -275,13 +292,17 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
         defaultOpen: false,
         render: () => <Parkbar id="el:verlauf" titel="Verlauf"><TagesverlaufChart tage={tage} /></Parkbar>,
       }]),
+      // Wiederhergestellte Energieprofil-Analysen (M4/M8/M9/M3, ante-flip) — fertig
+      // aus getMonat berechnet; jeder Block versteckt sich selbst bei leerer Daten-
+      // /Park-Lage (Element-Park-Doktrin).
+      ...(monatAusw ? baueMonatAuswertungBloecke(monatAusw, park) : []),
       // Komponenten-Detailblöcke (aktiv-gegatet, B6/B7).
       ...(monatData ? baueKomponentenBloecke(monatData, park) : []),
       // Finanz-Teaser (B5) — bewusst GANZ UNTEN: Netto-Ertrag/Monatsergebnis stehen
       // bereits in den Kennzahlen (D), hier nur Aufschlüsselung + Tarif + Cross-Link.
       ...(finanzBlock ? [finanzBlock] : []),
     ]
-  }, [gewaehlt, tage, monatData, vormonatAgg, glMonStats, park])
+  }, [gewaehlt, tage, monatData, monatAusw, vormonatAgg, glMonStats, park])
 
   if (!anlageId) {
     return (

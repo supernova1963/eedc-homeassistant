@@ -15,6 +15,7 @@
  * + SOLL aus `aktuellerMonatApi.getData`, Vormonat + Ø-Monat aus der Monatsreihe
  * (`monatsdatenApi.listAggregiert`).
  */
+import { Gauge } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
@@ -41,10 +42,15 @@ export interface GleicheMonatStats {
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 
-/** D1-Strip: 5 Energie + Netto-Ertrag €. Vormonat in der Zweitzeile, SOLL am PV. */
+/** D1-Strip: 5 Energie + Netto-Ertrag €. Vormonat in der Zweitzeile, SOLL am PV.
+ *  `prAvg` (Monats-Ø der Performance Ratio, aus `getMonat.performance_ratio_avg`,
+ *  M1-Wiederherstellung 2026-07-19): eine zusätzliche neutrale Kachel, nur wenn
+ *  gesetzt — die Datenquelle ist die Auswertung, nicht das Monats-Aggregat, daher
+ *  als eigener Parameter durchgereicht statt aus `d` gelesen. */
 export function baueMonatKpis(
   d: AktuellerMonatResponse,
   vm: AggregierteMonatsdaten | null,
+  prAvg?: number | null,
 ): KpiStripItem[] {
   const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null
     ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
@@ -94,6 +100,16 @@ export function baueMonatKpis(
       subtitle: 'nach Betriebskosten',
       formel: 'Gesamt-Nettoertrag − Betriebskosten + Sonstiges',
     },
+    // Performance Ratio Ø des Monats (M1-Wiederherstellung) — neutrale Kachel, nur
+    // wenn ableitbar. Physikalische Kennzahl (keine Datenrolle) → raw Gauge-Icon
+    // wie die Komponenten-KPIs (Battery/Power/Clock in KomponentenSektionen).
+    ...(prAvg != null
+      ? [{
+          title: 'Performance Ratio', value: fmtCalc(prAvg, 2, '—'), color: 'gray' as const, icon: Gauge,
+          subtitle: 'Monats-Ø',
+          formel: 'Ø der täglichen Performance Ratio (Ertrag ÷ Einstrahlung × kWp)',
+        }]
+      : []),
     ...baueNetzKostenKpis(d),
   ]
 }

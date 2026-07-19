@@ -453,6 +453,25 @@ export const KATEGORIE_FARBEN: Record<string, string> = {
 }
 
 /**
+ * Energiefluss-Kategorien der Monats-Auswertung (Backend `KategorieSumme.kategorie`,
+ * `getMonat`) → Label · Balken-Farbe (Tailwind-bg) · Erzeuger/Verbraucher-Gruppe.
+ * EINE Quelle für die Kategorien-Anteils-Leiste (M4-Wiederherstellung 2026-07-19,
+ * war in `pages/auswertung/EnergieprofilMonat.tsx` inline). Farben aus der
+ * Komponenten-Identität ({@link KOMPONENTEN_FARBEN}/{@link SONSTIGES_ERZEUGER_FARBE})
+ * bzw. Haushalt-Slate wie {@link KATEGORIE_FARBEN}.haushalt — keine neuen Töne.
+ * Backend-Producer: `api/routes/energie_profil/views.py` (ERZEUGER_KAT/VERBRAUCHER_KAT).
+ */
+export const ENERGIE_KATEGORIE: Record<string, { label: string; bg: string; gruppe: 'erzeuger' | 'verbraucher' }> = {
+  pv_module:            { label: 'PV-Module',            bg: KOMPONENTEN_FARBEN['pv-module'].bg,       gruppe: 'erzeuger' },
+  bkw:                  { label: 'Balkonkraftwerk',      bg: KOMPONENTEN_FARBEN['balkonkraftwerk'].bg, gruppe: 'erzeuger' },
+  sonstige_erzeuger:    { label: 'Sonstige Erzeuger',    bg: SONSTIGES_ERZEUGER_FARBE.bg,              gruppe: 'erzeuger' },
+  waermepumpe:          { label: 'Wärmepumpe',           bg: KOMPONENTEN_FARBEN['waermepumpe'].bg,     gruppe: 'verbraucher' },
+  wallbox_eauto:        { label: 'Wallbox / E-Auto',     bg: KOMPONENTEN_FARBEN['wallbox'].bg,          gruppe: 'verbraucher' },
+  haushalt:             { label: 'Haushalt',             bg: 'bg-slate-500',                            gruppe: 'verbraucher' },
+  sonstige_verbraucher: { label: 'Sonstige Verbraucher', bg: KOMPONENTEN_FARBEN['sonstiges'].bg,        gruppe: 'verbraucher' },
+}
+
+/**
  * Kategorien die KEINE Energieflüsse darstellen (z.B. Preise, virtuelle Serien).
  * Werden im Verbrauchs-Stacking (WetterWidget etc.) ignoriert.
  * → Neue nicht-Energie-Kategorien hier ergänzen, nicht in einzelnen Komponenten.

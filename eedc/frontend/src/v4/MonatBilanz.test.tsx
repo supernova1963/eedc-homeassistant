@@ -60,6 +60,18 @@ describe('baueMonatKpis', () => {
     expect(ne.unit).toBe('€')
     expect(ne.value).toBe('128,00')
   })
+
+  // M1-Wiederherstellung: PR Ø des Monats als neutrale Kachel, nur wenn gesetzt.
+  it('fügt PR-Ø-Kachel hinzu, wenn prAvg gesetzt', () => {
+    const pr = baueMonatKpis(d(), vm, 0.86).find((x) => x.title === 'Performance Ratio')!
+    expect(pr.value).toBe('0,86')
+    expect(pr.subtitle).toBe('Monats-Ø')
+  })
+
+  it('ohne prAvg (null/undefined) keine PR-Kachel', () => {
+    expect(baueMonatKpis(d(), vm, null).find((x) => x.title === 'Performance Ratio')).toBeUndefined()
+    expect(baueMonatKpis(d(), vm).find((x) => x.title === 'Performance Ratio')).toBeUndefined()
+  })
 })
 
 describe('MonatBilanz — Mobil-Ansicht (gestapelte Karten < sm)', () => {
