@@ -644,59 +644,48 @@ async def get_naechster_monat(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Findet den nächsten unvollständigen Monat.
+    Findet den frühesten offenen (fehlenden/unvollständigen) Monat.
 
-    Rückgabe:
-    - Nächster Monat nach dem letzten vollständigen
-    - Oder aktueller Monat wenn vergangen und nicht vollständig
+    Deckungsgleich mit der Frontend-Ableitung (`lib/monatsLuecken.ts`): derselbe
+    Bereich [Anschaffungs-Anker … Vormonat(heute)], dieselbe Lücken-Logik — damit
+    Status-Fusszeile und Monatsdaten-Block NICHT auseinanderdriften (§7 „eine
+    Quelle"). Der frühere naive „letzter Monat + 1"-Sprung war blind für
+    Binnen-Lücken (R20-2, [[feedback_aggregations_drift]]).
+
+    Rückgabe: der früheste offene Monat, oder ``None`` bei lückenlosem Bereich.
     """
     from datetime import date
 
-    # Anlage laden
+    from backend.core.monats_luecken import naechster_offener_monat_fuer
+
+    # Anlage inkl. Investitionen laden (Investitions-anschaffungsdatum = Start-Anker).
     result = await db.execute(
-        select(Anlage).where(Anlage.id == anlage_id)
+        select(Anlage)
+        .where(Anlage.id == anlage_id)
+        .options(selectinload(Anlage.investitionen))
     )
     anlage = result.scalar_one_or_none()
     if not anlage:
         raise not_found("Anlage")
 
-    heute = date.today()
-
-    # Letzten vollständigen Monat finden
+    # Vorhandene Monate = alle Monatsdaten-Zeilen (jahr, monat). Entspricht dem,
+    # was das Frontend aus `listAggregiert` als `vorhandene` sieht.
     md_result = await db.execute(
-        select(Monatsdaten)
+        select(Monatsdaten.jahr, Monatsdaten.monat)
         .where(Monatsdaten.anlage_id == anlage_id)
-        .order_by(Monatsdaten.jahr.desc(), Monatsdaten.monat.desc())
-        .limit(1)
     )
-    letzter = md_result.scalar_one_or_none()
+    vorhandene: set[tuple[int, int]] = {(jahr, monat) for jahr, monat in md_result.all()}
 
-    if letzter:
-        # Nächster Monat nach dem letzten
-        if letzter.monat == 12:
-            naechster_jahr = letzter.jahr + 1
-            naechster_monat = 1
-        else:
-            naechster_jahr = letzter.jahr
-            naechster_monat = letzter.monat + 1
-    else:
-        # Kein Monat vorhanden - vorherigen Monat vorschlagen
-        if heute.month == 1:
-            naechster_jahr = heute.year - 1
-            naechster_monat = 12
-        else:
-            naechster_jahr = heute.year
-            naechster_monat = heute.month - 1
-
-    # Nur zurückgeben wenn Monat in der Vergangenheit liegt
-    monat_ende = date(naechster_jahr, naechster_monat + 1 if naechster_monat < 12 else 1, 1)
-    if naechster_monat == 12:
-        monat_ende = date(naechster_jahr + 1, 1, 1)
-
-    if heute < monat_ende:
-        # Monat ist noch nicht vorbei
+    offen = naechster_offener_monat_fuer(
+        vorhandene=vorhandene,
+        anschaffungsdaten=[inv.anschaffungsdatum for inv in anlage.investitionen],
+        anlage_installationsdatum=anlage.installationsdatum,
+        heute=date.today(),
+    )
+    if offen is None:
         return None
 
+    naechster_jahr, naechster_monat = offen
     sensor_mapping = anlage.sensor_mapping or {}
 
     return NaechsterMonatResponse(
