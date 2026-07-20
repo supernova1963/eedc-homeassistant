@@ -245,6 +245,34 @@ export function KomponentenFinanzTabelle({ d, zeitraum = 'monat' }: {
         </div>
       </div>
 
+      {/* ── G20-4: Haushaltsperspektive (zweite Sicht, NICHT Teil des Komponenten-Saldos) ──
+          Transparente Zusatz-Rechnung: Komponenten-Saldo − Stromrechnung (Netzbezug-Kosten)
+          = Ergebnis nach Stromrechnung. Reine Darstellung, beide Zahlen liegen im Payload
+          (Gernot 2026-07-20, Folge zu G20-1). Nur wenn Netzbezug-Kosten vorhanden. */}
+      {d.netzbezug_kosten_euro != null && (
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 p-2.5 mt-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1.5">
+            Haushaltsperspektive
+          </p>
+          <dl className="space-y-0.5 text-sm">
+            <div className="flex items-center justify-between gap-2 text-gray-600 dark:text-gray-300">
+              <dt>Komponenten-Saldo</dt>
+              <dd className="tabular-nums">{num(gesamtSaldo)} €</dd>
+            </div>
+            <div className="flex items-center justify-between gap-2 text-gray-600 dark:text-gray-300">
+              <dt>− Stromrechnung (Netzbezug)</dt>
+              <dd className="tabular-nums">{num(d.netzbezug_kosten_euro)} €</dd>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t border-gray-200 dark:border-gray-700 pt-1 mt-1 font-semibold">
+              <dt className="text-gray-700 dark:text-gray-200">= Ergebnis nach Stromrechnung</dt>
+              <dd className={`tabular-nums ${saldoFarbe(gesamtSaldo - d.netzbezug_kosten_euro)}`}>
+                {num(gesamtSaldo - d.netzbezug_kosten_euro)} €
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
       {/* ── Nachrichtlich (NICHT verrechnet): Netzbezug + Zählergebühr ── */}
       <div className="text-xs text-gray-400 dark:text-gray-500 space-y-0.5 pt-1">
         {d.netzbezug_kosten_euro != null && (

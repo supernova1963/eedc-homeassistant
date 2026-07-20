@@ -51,6 +51,27 @@ describe('finanzTeaserBlock', () => {
     expect(screen.getByText('Saldo (€)')).toBeInTheDocument()
   })
 
+  it('G20-4: Haushaltsperspektive — Ergebnis nach Stromrechnung = Saldo − Netzbezug', () => {
+    // PV-Anlage-Saldo 135 (15 + 120), Netzbezug-Kosten 7 → Ergebnis 128,00 €.
+    const node = finanzTeaserBlock(d)!.render(false)
+    if (!isValidElement(node)) throw new Error('render() ergab kein Element')
+    render(node)
+    expect(screen.getByText('Haushaltsperspektive')).toBeInTheDocument()
+    expect(screen.getByText('= Ergebnis nach Stromrechnung')).toBeInTheDocument()
+    // Kopf-Kennzahl (Komponenten-Saldo) bleibt unverändert 135,00 €.
+    expect(finanzTeaserBlock(d)!.summary).toMatch(/\+135,00 € Saldo/)
+    // Zusatz-Zeile trägt das Haushaltsergebnis (135 − 7).
+    expect(screen.getByText(/^128,00 €$/)).toBeInTheDocument()
+  })
+
+  it('G20-4: keine Haushaltsperspektive ohne Netzbezug-Kosten', () => {
+    const dd = { ...d, netzbezug_kosten_euro: null } as unknown as AktuellerMonatResponse
+    const node = finanzTeaserBlock(dd)!.render(false)
+    if (!isValidElement(node)) throw new Error('render() ergab kein Element')
+    render(node)
+    expect(screen.queryByText('Haushaltsperspektive')).not.toBeInTheDocument()
+  })
+
   it('C3: Tarif-Info-Zeile zeigt flexiblen Netzbezug-Ø + Einspeisepreis', () => {
     const dd = { ...d, netzbezug_durchschnittspreis_cent: 32.5, einspeise_preis_cent: 8.2 } as AktuellerMonatResponse
     const block = finanzTeaserBlock(dd)!
