@@ -33,6 +33,10 @@ from datetime import date
 
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
+from backend.api.routes.strompreise import (
+    lade_tarife_fuer_anlage,
+    resolve_strompreis_for_komponente,
+)
 from backend.utils.sonstige_positionen import (
     berechne_sonstige_netto,
     berechne_md_sonstige_summen,
@@ -547,6 +551,14 @@ async def calculate_anlage_sensors(
     # Monatsdaten-Dict für Monats-Gaspreis / -Benzinpreis
     md_by_periode = {(md.jahr, md.monat): md for md in monatsdaten}
 
+    # DI-4: WP-Strom mit dem WP-Spezialtarif bewerten (Fallback allgemein), wie
+    # in aktueller_monat.py — sonst rechnet der HA-Export die WP-Ersparnis mit
+    # dem allgemeinen Netzbezugspreis, obwohl ein günstigerer WP-Tarif gepflegt ist.
+    _tarife = await lade_tarife_fuer_anlage(db, anlage.id)
+    wp_netzbezug_preis_cent = resolve_strompreis_for_komponente(
+        _tarife, "waermepumpe", fallback=netzbezug_preis_cent
+    )
+
     # WP-Alternativkosten (vs. Gas/Öl) über den Berechnungs-Layer (ADR-001):
     # per-WP-Parameter (kein last-write-wins über waermepumpen), per-Monat-
     # Gaspreis aus Monatsdaten mit Fallback auf den WP-Parameter-Default.
@@ -554,7 +566,7 @@ async def calculate_anlage_sensors(
         waermepumpen,
         historische_inv_daten,
         {k: md.gaspreis_cent_kwh for k, md in md_by_periode.items()},
-        netzbezug_preis_cent,
+        wp_netzbezug_preis_cent,
     )
 
     # Per-E-Auto-Aufschlüsselung der bisherige-Ersparnis. Vorher las eine
@@ -1008,6 +1020,12 @@ async def calculate_investition_sensors(
 
     # Wärmepumpe Sensoren
     elif investition.typ == "waermepumpe":
+        # DI-4: WP-Strom mit dem WP-Spezialtarif bewerten (Fallback allgemein),
+        # deckungsgleich mit aktueller_monat.py und der Anlage-Aggregation oben.
+        _wp_tarife = await lade_tarife_fuer_anlage(db, investition.anlage_id)
+        wp_netzbezug_preis = resolve_strompreis_for_komponente(
+            _wp_tarife, "waermepumpe", fallback=netzbezug_preis
+        )
         gesamt_strom = 0.0
         gesamt_heizung = 0.0
         gesamt_warmwasser = 0.0
@@ -1076,7 +1094,7 @@ async def calculate_investition_sensors(
                         alte_kosten += gas_kosten_altanlage(waerme, alter_wirkungsgrad, gp)
                     # Fixe Zusatzkosten anteilig
                     alte_kosten += zusatzkosten_jahr * len(monatsdaten) / 12
-                    wp_kosten = gesamt_strom * netzbezug_preis / 100
+                    wp_kosten = gesamt_strom * wp_netzbezug_preis / 100
                     value = round(alte_kosten - wp_kosten, 2)
                     berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"
             elif sensor.key == "wp_kompressor_starts":
