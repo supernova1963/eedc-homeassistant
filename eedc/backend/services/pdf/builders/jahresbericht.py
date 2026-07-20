@@ -30,6 +30,7 @@ from backend.utils.sonstige_positionen import (
     berechne_md_sonstige_summen,
 )
 from backend.core.field_definitions import get_wp_strom_kwh
+from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
@@ -111,7 +112,12 @@ async def build_jahresbericht_context(
 
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
-    hat_emobilitaet = any(i.typ in ("e-auto", "wallbox") for i in investitionen)
+    # DI-3: Dienstwagen zählen nicht als (private) E-Mobilität — konsistent zum
+    # Cockpit (`hat_emobilitaet` schließt dienstliche Fahrzeuge aus).
+    hat_emobilitaet = any(
+        i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
+        for i in investitionen
+    )
     hat_bkw = any(i.typ == "balkonkraftwerk" for i in investitionen)
 
     speicher_kapazitaet = 0.0
@@ -255,14 +261,17 @@ async def build_jahresbericht_context(
             wp_warmwasser += ww
             wp_waerme += d.get("waerme_kwh", 0) or (heiz + ww)
             wp_strom += get_wp_strom_kwh(d, inv.parameter)
-        elif inv.typ == "e-auto":
+        elif inv.typ == "e-auto" and not ist_dienstlich(inv):
+            # DI-3: Dienstwagen zählen NICHT in km/CO₂/Heimladung/V2H des Berichts
+            # (konsistent zum Cockpit, das dienstliche E-Autos aus der Emob-
+            # Aggregation nimmt — ihre Ladung ist eine Ausgabe, kein Ertrag).
             eauto_imd_data.append(d)
             emob_km += d.get("km_gefahren", 0) or 0
             v2h = d.get("v2h_entladung_kwh", 0) or 0
             emob_v2h += v2h
             key = (imd.jahr, imd.monat)
             v2h_by_ym[key] = v2h_by_ym.get(key, 0) + v2h
-        elif inv.typ == "wallbox":
+        elif inv.typ == "wallbox" and not ist_dienstlich(inv):
             wb_imd_data.append(d)
 
     emob_pool = get_emob_heimladung_canonical(
