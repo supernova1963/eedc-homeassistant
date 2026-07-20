@@ -60,8 +60,8 @@ from backend.services.speicher_wirtschaftlichkeit import (
 )
 from backend.core.calculations import (
     CO2_FAKTOR_BENZIN_KG_LITER,
-    CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
+    co2_wp_ersparnis_kg,
 )
 from backend.core.field_definitions import (
     get_emob_pv_netz_kwh,
@@ -571,10 +571,13 @@ async def get_waermepumpe_dashboard(
         alte_heizung_kosten = wp_result.alte_heizung_kosten_euro
         ersparnis = wp_result.ersparnis_euro
 
-        # CO2: Gas vs. Strommix (kanon. 0.201 / 0.38 kg/kWh)
-        gas_co2 = gesamt_waerme * CO2_FAKTOR_GAS_KG_KWH
-        strom_co2 = gesamt_strom * CO2_FAKTOR_STROM_KG_KWH
-        co2_ersparnis = gas_co2 - strom_co2
+        # CO2-Ersparnis: kanonischer Helfer (ADR-001, DI-1/DI-2-A). Vorher rechnete
+        # dieser Endpoint `wärme × f_gas − strom × f_strom` OHNE den Gas-Kessel-
+        # Wirkungsgrad (η_gas) — die vermiedene Gas-Wärme muss aber erst über η_gas
+        # in Brennstoff zurückgerechnet werden. Als 4. WP-CO₂-Read-Site driftete das
+        # Dashboard nach DI-1 sichtbar gegen Cockpit/Jahresbericht/Nachhaltigkeit
+        # (Demo lifetime: 2303,6 → 2744,3 kg, = Σ der Cockpit-Jahreswerte).
+        co2_ersparnis = co2_wp_ersparnis_kg(gesamt_waerme, gesamt_strom)
 
         # Kompressor-Starts: Σ Lebensdauer kommt direkt aus dem Hersteller-
         # Sensor (Hersteller zählt seit Werks-Inbetriebnahme, das ist die

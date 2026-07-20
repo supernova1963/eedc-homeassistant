@@ -108,6 +108,36 @@ def test_inline_wp_co2_formel_nur_im_helper():
     )
 
 
+def test_gas_co2_faktor_nur_im_helper():
+    """Der Gas-CO₂-Faktor `CO2_FAKTOR_GAS_KG_KWH` darf nur in
+    `core/calculations.py` referenziert werden.
+
+    DI-2-A: Das WP-Dashboard (`investitionen/dashboards.py`) rechnete die
+    vermiedene Gas-CO₂ als `wärme × f_gas` — mit dem korrekten Faktor, aber
+    OHNE die η_gas-Rückrechnung des Helpers → als 4. WP-CO₂-Read-Site driftete
+    es sichtbar gegen die 3 DI-1-Stellen. Der `/η_gas × f_gas`-Wächter oben
+    fing diese Variante NICHT (ihr fehlte gerade `WP_WIRKUNGSGRAD_GAS_DEFAULT`).
+    Da vermiedenes Gas-CO₂ ausschließlich in `co2_wp_ersparnis_kg` gebildet
+    wird, gehört der Faktor selbst nur dorthin (die Alternativkosten-Tabelle in
+    `berechne_wärmepumpe_einsparung` liegt in derselben Datei = erlaubt)."""
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in _ALLOWED_WP_CO2_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if "CO2_FAKTOR_GAS_KG_KWH" in line:
+                verstoesse.append((rel, line_no, line.strip()))
+    assert not verstoesse, (
+        "`CO2_FAKTOR_GAS_KG_KWH` außerhalb von core/calculations.py gefunden — "
+        "die vermiedene Gas-CO₂ gehört in `co2_wp_ersparnis_kg` (ADR-001/DI-2-A):\n"
+        + "\n".join(f"  {r}:{n}  {t}" for r, n, t in verstoesse)
+    )
+
+
 # ── C. Cross-Endpoint-Symmetrie: Cockpit == Jahresbericht ───────────────────
 
 async def _seed_wp_anlage(db) -> tuple[int, int]:
@@ -127,7 +157,9 @@ async def _seed_wp_anlage(db) -> tuple[int, int]:
     db.add(InvestitionMonatsdaten(
         investition_id=wp.id, jahr=2025, monat=1,
         verbrauch_daten={
-            "heizung_kwh": 10000, "warmwasser_kwh": 2000,
+            # kanonischer Wärme-Key (`heizenergie_kwh`) — das WP-Dashboard liest
+            # ihn roh, Cockpit/Jahresbericht über `get_wp_heizenergie_kwh`.
+            "heizenergie_kwh": 10000, "warmwasser_kwh": 2000,
             "stromverbrauch_kwh": 3000,
         },
     ))
@@ -136,10 +168,16 @@ async def _seed_wp_anlage(db) -> tuple[int, int]:
 
 
 async def test_cross_endpoint_wp_co2_symmetrisch(db):
-    """Cockpit-Übersicht und Jahresbericht liefern für dieselbe WP-Anlage
-    dieselbe WP-CO₂-Ersparnis (= Helper-Wert). Erwartung:
-    12000/0,9×0,201 − 3000×0,38 = 2680 − 1140 = 1540,0 kg."""
+    """Cockpit-Übersicht, Jahresbericht UND WP-Dashboard liefern für dieselbe
+    WP-Anlage dieselbe WP-CO₂-Ersparnis (= Helper-Wert). Erwartung:
+    12000/0,9×0,201 − 3000×0,38 = 2680 − 1140 = 1540,0 kg.
+
+    DI-2-A: das WP-Dashboard ist die 4. Read-Site — vor dem Fix rechnete es
+    `wärme × f_gas − strom × f_strom` OHNE η_gas und wich damit ab."""
     from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+    from backend.api.routes.investitionen.dashboards import (
+        get_waermepumpe_dashboard,
+    )
     from backend.services.pdf.builders.jahresbericht import (
         build_jahresbericht_context,
     )
@@ -154,5 +192,15 @@ async def test_cross_endpoint_wp_co2_symmetrisch(db):
     ctx = await build_jahresbericht_context(db, anlage_id, jahr)
     assert ctx["co2"]["wp_kg"] == pytest.approx(erwartet, abs=0.05)
 
-    # Deckungsgleich (der eine Wert, nicht zwei Formeln)
+    # WP-Dashboard aggregiert alle Monate der WP (hier genau einer) → Helfer
+    # auf denselben Eingaben.
+    dash = await get_waermepumpe_dashboard(
+        anlage_id=anlage_id, strompreis_cent=None, db=db
+    )
+    assert len(dash) == 1
+    dash_co2 = dash[0].zusammenfassung["co2_ersparnis_kg"]
+    assert dash_co2 == pytest.approx(round(erwartet, 1), abs=0.05)
+
+    # Deckungsgleich (der eine Wert, nicht drei Formeln)
     assert ueb.co2_wp_kg == pytest.approx(round(ctx["co2"]["wp_kg"], 1), abs=0.05)
+    assert dash_co2 == pytest.approx(ueb.co2_wp_kg, abs=0.05)
