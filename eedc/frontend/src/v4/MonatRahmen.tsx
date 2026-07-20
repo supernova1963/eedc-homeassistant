@@ -14,6 +14,7 @@ import { ReloadButton } from './ReloadButton'
 import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
+import { KomponentenFinanzTabelle, komponentenFinanzSaldo } from '../components/finanzen/KomponentenFinanzTabelle'
 import { BLOCK_IDENTITAET, VERGLEICH_BADGE, LAUFEND_ZUSTAND } from '../lib'
 import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
@@ -85,49 +86,30 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
   )
 }
 
-/** Finanz-Teaser (B5): Netto-Ertrag + Aufschlüsselung + Cross-Link nach Auswertungen.
- *  Element-Park-Doktrin: jede Anzeige einzeln parkbar; die ct/kWh-Tarif-Zeile ist
- *  eine ANNOTATION zum Netto-Ertrag und parkt MIT der Finanz-Bilanz (Gernot
- *  2026-07-09), nicht als eigenes Element. Sind alle geparkt → kein Block (`null`). */
+/** Finanz-Teaser (B5 → G20-1): Komponenten-Finanz-Tabelle + Cross-Link nach
+ *  Auswertungen. Kopf-Kennzahl = Tabellen-Saldo (Kopf == sichtbare Summe). Die
+ *  ct/kWh-Tarif-Zeile ist eine ANNOTATION zur Bilanz und parkt MIT ihr (Gernot
+ *  2026-07-09). Sind alle geparkt → kein Block (`null`). */
 export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOOP_PARK, zeitraum: 'monat' | 'jahr' = 'monat'): Block | null {
   const hatTarif = d.netzbezug_durchschnittspreis_cent != null || d.netzbezug_preis_cent != null || d.einspeise_preis_cent != null
   const ids = ['el:finanzen-bilanz', 'el:finanzen-link']
   if (ids.every((id) => park.istGeparkt(id))) return null
+  // G20-1: Kopf-Kennzahl = der Tabellen-Saldo (nicht die kanonische netto_ertrag —
+  // die Tabelle ist eine komponenten-attribuierte Sicht; Kopf == sichtbare Summe).
+  const saldo = komponentenFinanzSaldo(d)
   return {
     id: 'finanzen',
     title: 'Finanzen',
     ...BLOCK_IDENTITAET.finanzen,
-    summary: `${euro(d.netto_ertrag_euro)} Netto-Ertrag`,
+    summary: `${euro(saldo)} Saldo`,
     defaultOpen: false,
     render: () => (
       <div className="space-y-3">
-        {/* Finanz-Bilanz + zugehörige Tarif-Info in EINER Parkbar (Annotation parkt
-            mit ihrem Bezugswert, Gernot 2026-07-09). */}
+        {/* G20-1: Komponenten-Finanz-Tabelle (1 Zeile je Komponente, Spalten
+            Erträge/Einsparungen/Aufwand/Saldo) + Tarif-Info in EINER Parkbar. */}
         <Parkbar id="el:finanzen-bilanz" titel="Finanz-Bilanz">
-          <dl className="text-sm space-y-1.5">
-            <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">Einspeise-Erlös</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.einspeise_erloes_euro)}</dd></div>
-            <div className="flex justify-between"><dt className="text-gray-500 dark:text-gray-400">EV-Ersparnis</dt><dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.ev_ersparnis_euro)}</dd></div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500 dark:text-gray-400">
-                Netzbezug-Kosten
-                {/* G19-1 K3 (R19-3): Grundgebühr steckt bereits in den Kosten —
-                    reiner Ausweis (R15-5-Muster wie Netzladung im T-Konto). */}
-                {(d.grundgebuehr_euro ?? 0) > 0 && (
-                  <span className="block text-xs text-gray-400 dark:text-gray-500">davon Grundgebühr: {fmtCalc(d.grundgebuehr_euro, 2)} €</span>
-                )}
-              </dt>
-              <dd className="tabular-nums text-gray-800 dark:text-gray-200">{euro(d.netzbezug_kosten_euro != null ? -d.netzbezug_kosten_euro : null)}</dd>
-            </div>
-            <div className="flex justify-between border-t border-gray-200 dark:border-gray-700 pt-1.5 font-semibold"><dt className="text-gray-700 dark:text-gray-200">Netto-Ertrag</dt><dd className="tabular-nums text-gray-900 dark:text-white">{euro(d.netto_ertrag_euro)}</dd></div>
-          </dl>
-          {/* G19-1 K3: Zählergebühr — JAHRES-Wert vom Tarif, nur in der
-              Jahresaufstellung, nachrichtlich (nicht im Netto-Ertrag verrechnet). */}
-          {zeitraum === 'jahr' && d.zaehlergebuehr_euro_jahr != null && d.zaehlergebuehr_euro_jahr > 0 && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-              Zählergebühr: {fmtCalc(d.zaehlergebuehr_euro_jahr, 2)} €/Jahr (nachrichtlich, nicht im Netto-Ertrag verrechnet)
-            </p>
-          )}
-          {/* C3: Tarif-Info-Zeile (Begleit-Info zum Netto-Ertrag, IST-Parität). */}
+          <KomponentenFinanzTabelle d={d} zeitraum={zeitraum} />
+          {/* C3: Tarif-Info-Zeile (Begleit-Info zur Bilanz, IST-Parität). */}
           {hatTarif && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 dark:text-gray-500 mt-2">
               {/* E4 (R3b, Regel-0a-STUFE-3-AUSNAHME, Gernot 2026-07-05): der flexible
