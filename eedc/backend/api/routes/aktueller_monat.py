@@ -45,7 +45,6 @@ from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis,
     compute_emob_pool_attribution,
     get_emob_heimladung_canonical,
-    pick_emob_ref_parameter,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -1212,26 +1211,13 @@ async def get_aktueller_monat(
         )
         wp_ersparnis = round(wp_ersparnis_result.ersparnis_euro, 2)
 
-    emob_ladung = get_val("emob_ladung_kwh")
-    emob_km = get_val("emob_km")
-    emob_pv_ladung = get_val("emob_pv_ladung_kwh") or 0.0
-    emob_extern_euro = get_val("emob_ladung_extern_euro") or 0.0
-    if emob_km is not None and emob_km > 0 and allgemein_tarif:
-        wallbox_tarif = tarife.get("wallbox")
-        wallbox_preis_cent = (
-            wallbox_tarif.netzbezug_arbeitspreis_cent_kwh
-            if wallbox_tarif and wallbox_tarif.netzbezug_arbeitspreis_cent_kwh is not None
-            else netzbezug_preis_cent
-        )
-        emob_result = berechne_eauto_ersparnis(
-            km_gefahren=emob_km,
-            ladung_netz_kwh=(emob_ladung or 0) - emob_pv_ladung,
-            ladung_extern_euro=emob_extern_euro,
-            wallbox_strompreis_cent=wallbox_preis_cent,
-            eauto_parameter=pick_emob_ref_parameter(investitionen),
-            monats_benzinpreis_euro=monats_benzinpreis,
-        )
-        emob_ersparnis = round(emob_result.ersparnis_euro, 2)
+    # G20-2 (Gernot 2026-07-20): Die eMob-Ersparnis-Aggregation folgt weiter unten
+    # als **Summe der Per-Fahrzeug-Ersparnisse** (dieselben Werte wie die
+    # investitionen_financials-Zeilen), NACHDEM diese gebaut sind. Der frühere
+    # Einmal-Lauf über die Gesamt-km mit dem parameter-Satz des ERSTEN E-Autos
+    # (pick_emob_ref_parameter) rechnete bei unterschiedlichem Verbrauch je Fahrzeug
+    # falsch (Demo: 167,79 € statt 65,37 + 85,59 = 150,96 €).
+    # [[feedback_aggregator_symmetrie]] [[feedback_aggregations_drift]]
 
     # BKW-Ersparnis wird NICHT separat ausgewiesen — BKW-Erzeugung fließt in
     # pv_erzeugung_total und damit in eigenverbrauch ein → bereits in ev_ersparnis enthalten.
@@ -1288,17 +1274,11 @@ async def get_aktueller_monat(
     sonstige_netto_total = round(sonstige_ertraege_total - sonstige_ausgaben_total, 2)
 
     # ── Gesamtnettoertrag = Erlöse + Einsparungen − Kosten ──
-    # Sonstige Positionen werden NICHT eingerechnet — sie werden separat im
-    # T-Konto gerendert und im Monatsergebnis (nettoNachAllem) addiert.
+    # G20-2: erst NACH den Per-Investition-Financials berechnet, damit
+    # `emob_ersparnis` die Summe der Fahrzeug-Zeilen ist (siehe unten). Sonstige
+    # Positionen werden NICHT eingerechnet — sie werden separat im T-Konto
+    # gerendert und im Monatsergebnis (nettoNachAllem) addiert.
     gesamtnettoertrag = None
-    if einspeise_erloes is not None and ev_ersparnis is not None and netzbezug_kosten is not None:
-        gesamtnettoertrag = round(
-            einspeise_erloes + ev_ersparnis
-            + (wp_ersparnis or 0)
-            + (emob_ersparnis or 0)
-            - netzbezug_kosten,
-            2,
-        )
 
     # ── Komponenten-Detail aus gespeicherten InvestitionMonatsdaten ──
     # Batch-Query: Alle InvestitionMonatsdaten für diesen Monat auf einmal laden
@@ -1768,6 +1748,32 @@ async def get_aktueller_monat(
             )
             if detail is not None:
                 investitionen_financials.append(detail)
+
+    # ── G20-2: eMob-Ersparnis-Aggregat = Σ der Per-Fahrzeug-Ersparnisse ──
+    # Deckungsgleich mit den investitionen_financials-Zeilen (jede mit dem
+    # parameter-Satz IHRES Fahrzeugs), statt Einmal-Lauf über die Gesamt-km mit
+    # dem Referenz-Parameter des ersten E-Autos. Nur die vs-Verbrenner-Zeilen
+    # (E-Auto + km-fahrende Wallbox) — die Wallbox-PV-Ladung-Ersparnis gehört
+    # nicht in dieses Aggregat (wie zuvor). Dienstwagen sind bereits durch
+    # `_baue_investition_financial` ausgeschlossen ([[feedback_aggregator_symmetrie]]).
+    _emob_rows = [
+        d for d in investitionen_financials
+        if d.typ in ("e-auto", "wallbox")
+        and d.ersparnis_label == "Ersparnis vs. Verbrenner"
+        and d.ersparnis_euro is not None
+    ]
+    if _emob_rows:
+        emob_ersparnis = round(sum(d.ersparnis_euro for d in _emob_rows), 2)
+
+    # Gesamtnettoertrag jetzt bilden (emob_ersparnis = Summe der Fahrzeug-Zeilen).
+    if einspeise_erloes is not None and ev_ersparnis is not None and netzbezug_kosten is not None:
+        gesamtnettoertrag = round(
+            einspeise_erloes + ev_ersparnis
+            + (wp_ersparnis or 0)
+            + (emob_ersparnis or 0)
+            - netzbezug_kosten,
+            2,
+        )
 
     # Ø Verbrauch (kWh/100 km) via zentralem Helper aus den FINALEN (ggf. connector-
     # überschriebenen) Werten — gemessener Fahrverbrauch hat Vorrang vor Ladung.

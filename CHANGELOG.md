@@ -26,6 +26,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ### Fixed
 
+- **E-Auto-Ersparnis bei mehreren Fahrzeugen überschätzt (G20-2):** Das Monats-/Jahres-Aggregat der E-Auto-Ersparnis rechnete alle gefahrenen Kilometer mit dem Vergleichsverbrauch des **ersten** E-Autos. Bei unterschiedlichem Verbrauch je Fahrzeug ergab das einen zu hohen Wert (Demo: 167,79 € statt 65,37 + 85,59 = 150,96 €). Jetzt ist das Aggregat die **Summe der Einzelfahrzeug-Ersparnisse** (jedes mit seinem eigenen Verbrauch) — identisch zu den Komponenten-Zeilen. Folge: der Gesamt-Nettoertrag sinkt entsprechend. Betrifft Cockpit Monat/Jahr und die Übersichts-Kennzahlen (auch bisherige Oberfläche).
 - **„Nächster offener Monat" übersah Lücken mitten in der Historie (R20-2):** Der Endpoint hinter der Status-Anzeige sprang naiv auf „letzter erfasster Monat + 1" und meldete „alle Monate abgeschlossen", obwohl frühere Monate fehlten. Er ermittelt jetzt den **frühesten** offenen Monat nach derselben Logik wie die Monatsdaten-Tabelle (Bereich ab Anschaffungsdatum bis Vormonat) — Fusszeile/Navigations-Hinweis und Tabelle zeigen wieder dasselbe.
 - **Speicher-Dashboard las Netzladung nur unter dem Legacy-Schlüssel (R15-3):** Netzladungs-Werte fehlten dadurch in Sichten — behoben, kanonischer Schlüssel mit Fallback.
 - **Ladezeiten Live/Aussicht (R18-13):** 1–30-s-Zufalls-Jitter aus dem interaktiven Prognose-Pfad entfernt (bleibt bewusst für Hintergrund-Jobs erhalten).

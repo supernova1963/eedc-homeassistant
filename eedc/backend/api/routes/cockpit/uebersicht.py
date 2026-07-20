@@ -48,7 +48,6 @@ from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
     get_emob_heimladung_canonical,
-    pick_emob_ref_parameter,
 )
 
 router = APIRouter()
@@ -220,6 +219,13 @@ async def get_cockpit_uebersicht(
     # #260: km pro (jahr, monat) für die per-Monat-korrekte Benzinpreis-
     # Gewichtung (EU-OB-Monatspreis aus Monatsdaten statt statischem Param).
     eauto_km_pro_monat: dict[tuple[int, int], float] = {}
+    # G20-2: dieselben km auch PRO FAHRZEUG (inv.id) gehalten, damit das
+    # eMob-Ersparnis-Aggregat = Σ der Per-Fahrzeug-Läufe (jeder mit dem
+    # Verbrauchs-Parameter SEINES Fahrzeugs) ist statt EIN Lauf mit dem
+    # Referenz-Parameter des ersten Autos ([[feedback_aggregator_symmetrie]]).
+    eauto_km_by_inv: dict[int, float] = {}
+    eauto_km_pro_monat_by_inv: dict[int, dict[tuple[int, int], float]] = {}
+    eauto_param_by_inv: dict[int, Optional[dict]] = {}
     # #326: per-Monat-Aggregate für die korrekte EV-/BKW-Ersparnis. Die Ersparnis
     # muss `Σ(eigenverbrauch_m × flexpreis_m)` sein — NICHT `Σ(EV) × netzbezug-
     # gewichteter Ø-Preis`, sonst driftet das Cockpit bei Flex-Tarifen gegen die
@@ -290,10 +296,14 @@ async def get_cockpit_uebersicht(
                 eauto_verbrauch += b.eauto_verbrauch
                 v2h_entladung += b.eauto_v2h
                 v2h_by_ym[key] = v2h_by_ym.get(key, 0) + b.eauto_v2h
+                eauto_param_by_inv.setdefault(inv.id, inv.parameter)
                 if b.eauto_km:
                     eauto_km_pro_monat[(imd.jahr, imd.monat)] = (
                         eauto_km_pro_monat.get((imd.jahr, imd.monat), 0.0) + b.eauto_km
                     )
+                    eauto_km_by_inv[inv.id] = eauto_km_by_inv.get(inv.id, 0.0) + b.eauto_km
+                    _pm = eauto_km_pro_monat_by_inv.setdefault(inv.id, {})
+                    _pm[(imd.jahr, imd.monat)] = _pm.get((imd.jahr, imd.monat), 0.0) + b.eauto_km
             else:  # wallbox (nicht-dienstlich)
                 wb_imd_data.append(data)
 
@@ -538,16 +548,32 @@ async def get_cockpit_uebersicht(
     benzinpreis_lookup = {
         (m.jahr, m.monat): m.kraftstoffpreis_euro for m in monatsdaten_list
     }
-    emob_result = berechne_eauto_ersparnis_periode(
-        km_pro_monat=[(j, mo, km) for (j, mo), km in eauto_km_pro_monat.items()],
-        ladung_netz_kwh_gesamt=emob_netz_ladung,
-        ladung_extern_euro_gesamt=emob_extern_euro_total,
-        wallbox_strompreis_cent=wallbox_preis_cent,
-        eauto_parameter=pick_emob_ref_parameter(emob_invs),
-        monats_benzinpreis_lookup=benzinpreis_lookup,
-    )
-    emob_ersparnis = emob_result.ersparnis_euro
-    benzin_verbrauch = (emob_km / 100) * emob_result.verwendeter_verbrauch_l_100km
+    # G20-2 (Gernot 2026-07-20): eMob-Ersparnis = Σ der Per-Fahrzeug-Läufe (jeder
+    # mit dem Verbrauchs-Parameter SEINES Fahrzeugs), statt EIN Lauf über die
+    # Gesamt-km mit dem Referenz-Parameter des ersten E-Autos (der bei
+    # unterschiedlichem Verbrauch je Fahrzeug falsch rechnete). Die gepoolte
+    # Heim-Netzladung + externen Kosten werden km-anteilig auf die Fahrzeuge
+    # verteilt (Pool bleibt EINE Quelle). Bei genau EINEM E-Auto ist der 100 %-
+    # Anteil == der frühere Einmal-Lauf → bitgleich. [[feedback_aggregator_symmetrie]]
+    total_eauto_km = sum(eauto_km_by_inv.values())
+    emob_ersparnis = 0.0
+    benzin_verbrauch = 0.0
+    if total_eauto_km > 0:
+        for _inv_id, _km_total in eauto_km_by_inv.items():
+            if _km_total <= 0:
+                continue
+            _share = _km_total / total_eauto_km
+            _car_result = berechne_eauto_ersparnis_periode(
+                km_pro_monat=[(j, mo, km) for (j, mo), km in eauto_km_pro_monat_by_inv[_inv_id].items()],
+                ladung_netz_kwh_gesamt=emob_netz_ladung * _share,
+                ladung_extern_euro_gesamt=emob_extern_euro_total * _share,
+                wallbox_strompreis_cent=wallbox_preis_cent,
+                eauto_parameter=eauto_param_by_inv.get(_inv_id),
+                monats_benzinpreis_lookup=benzinpreis_lookup,
+            )
+            emob_ersparnis += _car_result.ersparnis_euro
+            benzin_verbrauch += (_km_total / 100) * _car_result.verwendeter_verbrauch_l_100km
+    emob_ersparnis = round(emob_ersparnis, 2)
 
     bkw_invs = [i for i in investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(today)]
     hat_balkonkraftwerk = len(bkw_invs) > 0
