@@ -25,6 +25,7 @@ from backend.core.berechnungen import (
     berechne_spez_ertrag_annualisiert,
     gas_kosten_altanlage,
     berechne_verbrauchs_kennzahlen,
+    erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
 )
@@ -313,6 +314,40 @@ async def calculate_anlage_sensors(
             pv_erzeugung += pv_kwh
             pv_by_ym[(imd.jahr, imd.monat)] = pv_by_ym.get((imd.jahr, imd.monat), 0.0) + pv_kwh
 
+    # DI-2-B: Erzeuger hinter dem EINEN Hauszähler in die EV-/Autarkie-/CO₂-
+    # Bilanz aufnehmen — deckungsgleich mit dem Cockpit (uebersicht.py:309-322,
+    # Layer-SoT `erzeugung_hinter_zaehler_kwh`, v3.45.4). Vorher zählte der
+    # HA-Export nur `pv-module` zur Erzeugung → bei BKW-Anlagen wichen
+    # Eigenverbrauch/Autarkie/EV-Quote und der daraus abgeleitete CO₂-Sensor
+    # vom Cockpit ab (Demo lifetime: EV 14.465 vs. 17.366 kWh).
+    #   • Balkonkraftwerk zählt als PV (Erzeugung + kWp, Cockpit-Konvention):
+    #     fällt in `pv_erzeugung` (Sensor, spez. Ertrag, EV/Autarkie/CO₂).
+    #   • Sonstige Erzeuger (Mini-BHKW/KWK) speisen ebenfalls hinter den Zähler →
+    #     zählen in EV/Autarkie, bleiben aber aus den PV-eigenen Kennzahlen
+    #     (spez. Ertrag/PR) und aus der PV-Erzeugungs-Anzeige draußen.
+    # Der Finanz-Pfad (`pv_by_ym`) bleibt REIN pv-module — die BKW-Ersparnis läuft
+    # separat über `bisherige_bkw_ersparnis` (kein Doppel-Ansatz); CO₂/Wirtschaft-
+    # lichkeit eines Brennstoff-Erzeugers bleibt bewusst neutral.
+    bkw_erzeugung = 0.0
+    sonstiges_erzeugung = 0.0
+    erzeuger_ids = [
+        inv.id for inv in investitionen
+        if inv.typ in ("balkonkraftwerk", "sonstiges")
+    ]
+    if erzeuger_ids:
+        erz_result = await db.execute(
+            select(InvestitionMonatsdaten)
+            .where(InvestitionMonatsdaten.investition_id.in_(erzeuger_ids))
+        )
+        for imd in erz_result.scalars().all():
+            inv = inv_by_id.get(imd.investition_id)
+            if not inv or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
+            b = imd_typ_beitrag(inv, imd.verbrauch_daten or {})
+            bkw_erzeugung += b.bkw_erzeugung
+            sonstiges_erzeugung += b.sonstiges_erzeugung
+    pv_erzeugung += bkw_erzeugung
+
     # Fallback: Falls keine InvestitionMonatsdaten vorhanden, berechne aus Einspeisung
     einspeisung = sum(m.einspeisung_kwh or 0 for m in monatsdaten)
     if pv_erzeugung == 0:
@@ -376,8 +411,13 @@ async def calculate_anlage_sensors(
     # den SoT-Helper aus IMD-gesourcten Energiemengen (PV + Speicher + V2H) und
     # den Zählerwerten (Einspeisung/Netzbezug) — kanonische Formel, deckungs-
     # gleich mit cockpit/uebersicht.py.
+    # DI-2-B: Netzpunkt-Bilanz-Eingang = PV(inkl. BKW) + sonstige Erzeuger,
+    # deckungsgleich mit dem Cockpit (`erzeugung_bilanz`, uebersicht.py:416).
+    # `pv_erzeugung` selbst (inkl. BKW, ohne BHKW) bleibt für die PV-eigenen
+    # Kennzahlen (spez. Ertrag) und die PV-Erzeugungs-Anzeige.
+    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_erzeugung, sonstiges_erzeugung)
     kennzahlen = berechne_verbrauchs_kennzahlen(
-        pv_erzeugung_kwh=pv_erzeugung,
+        pv_erzeugung_kwh=erzeugung_bilanz,
         einspeisung_kwh=einspeisung,
         netzbezug_kwh=netzbezug,
         speicher_ladung_kwh=batterie_ladung,
@@ -715,7 +755,9 @@ async def calculate_anlage_sensors(
             berechnung = f"{eigenverbrauch:.0f} ÷ {gesamtverbrauch:.0f} × 100"
         elif sensor.key == "eigenverbrauch_quote_prozent":
             value = round(ev_quote, 1)
-            berechnung = f"{eigenverbrauch:.0f} ÷ {pv_erzeugung:.0f} × 100"
+            # DI-2-B: Nenner = Netzpunkt-Erzeugung (PV inkl. BKW + sonstige
+            # Erzeuger), deckungsgleich mit der Cockpit-EV-Quote.
+            berechnung = f"{eigenverbrauch:.0f} ÷ {erzeugung_bilanz:.0f} × 100"
         elif sensor.key == "spezifischer_ertrag_kwh_kwp":
             value = round(spez_ertrag, 0) if spez_ertrag else None
             if value is not None:

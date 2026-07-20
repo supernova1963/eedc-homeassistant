@@ -8,10 +8,15 @@ App-Headline-Wert (Cockpit-Konvention). Umgesetzt über den kanonischen Helper
 `berechne_co2_bilanz` (ADR-001), den auch das Cockpit nutzt.
 
 Symmetrie-Test: für eine Anlage mit PV + WP + E-Auto liefern Cockpit-Übersicht
-und HA-Export denselben CO₂-Gesamtwert. (Bewusst OHNE Balkonkraftwerk: die
-HA-Export-Eigenverbrauchs-Aggregation zählt BKW-Erzeugung heute nicht zur PV —
-eine separate, breitere HA-Export↔Cockpit-Drift, die auch autarkie/EV/spez_ertrag
-betrifft und außerhalb von DI-2 bleibt.)
+und HA-Export denselben CO₂-Gesamtwert.
+
+DI-2-B (2026-07-20) hat die breitere HA-Export↔Cockpit-Drift geschlossen: die
+Eigenverbrauchs-Aggregation zählte NUR `pv-module` zur Erzeugung — Balkonkraft-
+werk und sonstige Erzeuger (Mini-BHKW hinter dem EINEN Hauszähler) fehlten, so
+dass Eigenverbrauch/Autarkie/EV-Quote und der daraus abgeleitete CO₂-Sensor bei
+solchen Anlagen vom Cockpit abwichen. Der HA-Export nutzt jetzt dieselbe
+Netzpunkt-Bilanz (`erzeugung_hinter_zaehler_kwh`, v3.45.4) wie das Cockpit;
+`test_cockpit_ha_export_kennzahlen_symmetrisch_mit_bkw_bhkw` deckt das ab.
 """
 
 from __future__ import annotations
@@ -133,3 +138,74 @@ async def test_cockpit_ha_export_co2_symmetrisch(db):
 
     assert ueb.co2_gesamt_kg > 0
     assert co2_sensor.value == pytest.approx(ueb.co2_gesamt_kg, abs=0.1)
+
+
+# ── DI-2-B: HA-Export == Cockpit bei Balkonkraftwerk + sonstigem Erzeuger ────
+
+async def _seed_bkw_bhkw(db) -> int:
+    """Anlage mit PV + Balkonkraftwerk + sonstigem Erzeuger (Mini-BHKW).
+
+    Alle drei speisen hinter den EINEN Hauszähler → ihre Erzeugung gehört in
+    die Eigenverbrauchs-/Autarkie-Bilanz (Netzpunkt-Bilanz)."""
+    anlage = Anlage(anlagenname="BKW-BHKW-Symmetrie", leistung_kwp=8.0)
+    db.add(anlage)
+    await db.flush()
+
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="PV",
+                     anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+    bkw = Investition(anlage_id=anlage.id, typ="balkonkraftwerk", bezeichnung="Balkon",
+                      anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+    bhkw = Investition(anlage_id=anlage.id, typ="sonstiges", bezeichnung="Mini-BHKW",
+                       parameter={"kategorie": "erzeuger"},
+                       anschaffungsdatum=date(2024, 1, 1), aktiv=True)
+    db.add_all([pv, bkw, bhkw])
+    await db.flush()
+
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2025, monat=1,
+        einspeisung_kwh=2000, netzbezug_kwh=1200,
+    ))
+    db.add(InvestitionMonatsdaten(
+        investition_id=pv.id, jahr=2025, monat=1,
+        verbrauch_daten={"pv_erzeugung_kwh": 4000},
+    ))
+    db.add(InvestitionMonatsdaten(
+        investition_id=bkw.id, jahr=2025, monat=1,
+        verbrauch_daten={"pv_erzeugung_kwh": 800, "eigenverbrauch_kwh": 700},
+    ))
+    db.add(InvestitionMonatsdaten(
+        investition_id=bhkw.id, jahr=2025, monat=1,
+        verbrauch_daten={"erzeugung_kwh": 1500},
+    ))
+    await db.commit()
+    return anlage.id
+
+
+async def test_cockpit_ha_export_kennzahlen_symmetrisch_mit_bkw_bhkw(db):
+    """DI-2-B: Bei Balkonkraftwerk + sonstigem Erzeuger liefern Cockpit und
+    HA-Export dieselbe PV-Erzeugung (inkl. BKW), Eigenverbrauch, Autarkie,
+    EV-Quote und CO₂-Bilanz — die Netzpunkt-Erzeugung geht in beide Bilanzen."""
+    from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
+    from backend.api.routes.ha_export import calculate_anlage_sensors
+    from backend.models import Anlage as _Anlage
+    from sqlalchemy import select
+
+    anlage_id = await _seed_bkw_bhkw(db)
+
+    ueb = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
+    anlage = (await db.execute(
+        select(_Anlage).where(_Anlage.id == anlage_id)
+    )).scalar_one()
+    svs = {s.definition.key: s.value for s in await calculate_anlage_sensors(db, anlage)}
+
+    # BKW zählt zur PV-Erzeugung (Cockpit-Konvention), BHKW nicht.
+    assert svs["pv_erzeugung_gesamt_kwh"] == pytest.approx(ueb.pv_erzeugung_kwh, abs=0.1)
+    assert svs["eigenverbrauch_gesamt_kwh"] == pytest.approx(ueb.eigenverbrauch_kwh, abs=0.1)
+    assert svs["autarkie_prozent"] == pytest.approx(ueb.autarkie_prozent, abs=0.1)
+    assert svs["eigenverbrauch_quote_prozent"] == pytest.approx(
+        ueb.eigenverbrauch_quote_prozent, abs=0.1
+    )
+    assert svs["co2_ersparnis_kg"] == pytest.approx(ueb.co2_gesamt_kg, abs=0.1)
+    # Die Erzeuger hinter dem Zähler heben den Eigenverbrauch über die reine
+    # PV-Modul-Bilanz — sonst würde der Test die Drift nicht fangen.
+    assert ueb.eigenverbrauch_kwh > 4000 - 2000
