@@ -136,3 +136,43 @@ async def test_vorjahr_wp_respektiert_anschaffungsdatum(db):
     vj = (await get_aktueller_monat(anlage_id=anlage.id, jahr=2025, monat=1, db=db)).vorjahr
     assert vj is not None
     assert vj.get("wp_ersparnis_euro") is None  # inaktiv → keine WP-Ersparnis
+
+
+async def test_vorjahr_energie_respektiert_anschaffungsdatum(db):
+    """DI-2-C: Auch die VJ-ENERGIEANZEIGE (wp_strom/wp_waerme, PV, eMob) zählt
+    nur im Vorjahres-Monat aktive Komponenten — nicht nur die Finanz (DI-5).
+
+    Vorher zeigte der VJ-Energie-Loop `wp_strom_kwh`/`wp_waerme_kwh` einer erst
+    später angeschafften WP (Demo: 320 / 1400 kWh), obwohl die Komponente im
+    Vorjahres-Monat noch gar nicht in Betrieb war (#236-Rest)."""
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+
+    anlage = Anlage(anlagenname="VJ-Energie-Anschaffung", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    # PV seit 2022 (aktiv im VJ), WP erst ab Juni 2024 (im VJ-Monat Jan 2024 inaktiv)
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="PV",
+                     anschaffungsdatum=date(2022, 1, 1), aktiv=True)
+    wp = Investition(anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP",
+                     anschaffungsdatum=date(2024, 6, 1), aktiv=True, parameter={})
+    db.add_all([pv, wp])
+    await db.flush()
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2024, monat=1,
+                       einspeisung_kwh=200, netzbezug_kwh=400))
+    db.add(InvestitionMonatsdaten(
+        investition_id=pv.id, jahr=2024, monat=1,
+        verbrauch_daten={"pv_erzeugung_kwh": 600}))
+    # WP-Verbrauch im Januar 2024 — VOR Anschaffung (Juni 2024)
+    db.add(InvestitionMonatsdaten(
+        investition_id=wp.id, jahr=2024, monat=1,
+        verbrauch_daten={"heizenergie_kwh": 1400, "warmwasser_kwh": 0,
+                         "stromverbrauch_kwh": 320}))
+    await db.commit()
+
+    vj = (await get_aktueller_monat(anlage_id=anlage.id, jahr=2025, monat=1, db=db)).vorjahr
+    assert vj is not None
+    # WP war im VJ-Monat inaktiv → ihre Energie darf NICHT erscheinen
+    assert not vj.get("wp_strom_kwh")
+    assert not vj.get("wp_waerme_kwh")
+    # PV war aktiv → bleibt sichtbar (der Filter trifft nur die inaktive WP)
+    assert vj.get("pv_erzeugung_kwh") == pytest.approx(600.0, abs=0.1)

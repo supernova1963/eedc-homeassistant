@@ -631,6 +631,16 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             inv = inv_by_id_vj.get(imd.investition_id)
             if not inv:
                 continue
+            # DI-2-C: Vor-Anschaffungs-/Nach-Stilllegungs-Monate überspringen —
+            # die Anschaffungsdatum-Grenze gilt für ALLE Auswertungen, nicht nur
+            # die Finanz (DI-5 filterte nur den Finanz-Loop unten). Sonst zeigt die
+            # VJ-Energieanzeige (wp_strom/wp_waerme, PV, eMob …) Werte einer im
+            # Vorjahres-Monat noch nicht aktiven Komponente (#236-Rest, Demo:
+            # WP-IMD 2024-01..03 vor Inbetriebnahme 04/2024 → wp_strom 320 kWh,
+            # wp_waerme 1400 kWh im VJ-Vergleich 2025→2024).
+            # [[feedback_anschaffungsdatum_grenze]]
+            if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
+                continue
             data = imd.verbrauch_daten or {}
             imd_data_by_inv_vj[imd.investition_id] = data  # DI-5: für WP-/eMob-Ersparnis
             # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
