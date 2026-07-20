@@ -32,8 +32,8 @@ from backend.utils.sonstige_positionen import (
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
 from backend.core.calculations import (
-    CO2_FAKTOR_GAS_KG_KWH,
     CO2_FAKTOR_STROM_KG_KWH,
+    co2_wp_ersparnis_kg,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -397,10 +397,15 @@ async def build_jahresbericht_context(
     rendite = (netto_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else None
     amortisation_pct = (netto_nach_bk / investition_mehrkosten * 100) if investition_mehrkosten > 0 else 0
 
+    # DI-1: WP-CO₂ über den kanonischen Helper — vermiedenes Gas-CO₂ MINUS
+    # WP-Strom-CO₂, deckungsgleich mit Cockpit/Social. Früher `wp_waerme × f_gas`
+    # (ohne Wirkungsgrad, ohne Strom-Abzug) → WP-Ersparnis deutlich zu hoch.
+    # Komponente roh (kann bei schlechter JAZ negativ sein), Gesamt-Bilanz per
+    # max(0, …) geklammert — exakt wie das Cockpit.
     co2_pv = ev_gesamt * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = wp_waerme * CO2_FAKTOR_GAS_KG_KWH if hat_waermepumpe else 0
+    co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom) if hat_waermepumpe else 0
     co2_emob = emob_km * 0.12 if hat_emobilitaet else 0
-    co2_gesamt = co2_pv + co2_wp + co2_emob
+    co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 
     speicher_zyklen = _safe_div(speicher_ladung, speicher_kapazitaet) if speicher_kapazitaet else None
     speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None

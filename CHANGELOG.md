@@ -9,6 +9,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Drift-Inventur Tier-1 (Paket DI) — bekannte Kennzahl-Abweichungen vor dem großen Release bereinigt.** Einzelne Kennzahlen wurden an verschiedenen Stellen leicht unterschiedlich gerechnet. Korrektur, kein Rechenfehler in der Kern-Bilanz — aber betroffene Werte ändern sich sichtbar:
+  - **DI-1 — CO₂-Ersparnis der Wärmepumpe im Jahres-/Anlagenbericht (PDF) war zu hoch.** Der Bericht rechnete nur die vermiedene Gas-Menge (`Wärme × Gas-Faktor`) und zog weder den Gas-Kessel-Wirkungsgrad noch das **tatsächlich verbrauchte WP-Strom-CO₂** ab. Cockpit und Teilen-Funktion rechneten längst korrekt. Jetzt nutzen **alle** Sichten denselben kanonischen Helper `co2_wp_ersparnis_kg` (`Wärme/η_gas × f_gas − Strom × f_strom`). Wirkung an den Demo-Zahlen (2025): WP-CO₂-Ersparnis **2280,7 → 1567,1 kg** (deckungsgleich mit dem Cockpit), CO₂-Gesamt im Bericht entsprechend **7062 → 6348 kg**. Ein statischer Wächter + Symmetrie-Test halten die vier Read-Sites (Cockpit, Teilen, Jahresbericht, Nachhaltigkeit) künftig auf einem Wert.
+
 ## [3.46.0] - 2026-07-18 — Sonstige Erträge & Ausgaben in den Finanz-Summen + Backend-Unterbau der neuen Oberfläche
 
 ### Added

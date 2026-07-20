@@ -21,12 +21,11 @@ from backend.core.berechnungen import (
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.core.calculations import (
-    CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER,
+    CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER, co2_wp_ersparnis_kg,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
-    WP_WIRKUNGSGRAD_GAS_DEFAULT,
 )
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
@@ -195,7 +194,7 @@ async def get_share_text(
     emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else 0
 
     co2_pv = eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = (wp_waerme / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH) - (wp_strom * CO2_FAKTOR_STROM_KG_KWH) if wp_waerme > 0 else 0
+    co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom)  # DI-1: kanonischer Helper
     benzin_verbrauch = emob_km * 7 / 100
     co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - ((emob_ladung - emob_pv_ladung) * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)

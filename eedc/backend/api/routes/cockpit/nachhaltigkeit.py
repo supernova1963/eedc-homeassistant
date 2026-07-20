@@ -13,9 +13,8 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.berechnungen import autarkie_prozent
 from backend.core.calculations import (
-    CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER,
+    CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER, co2_wp_ersparnis_kg,
 )
-from backend.core.wirtschaftlichkeit_defaults import WP_WIRKUNGSGRAD_GAS_DEFAULT
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_pv_erzeugung_kwh,
@@ -151,7 +150,7 @@ async def get_nachhaltigkeit(
 
         wp_waerme = d["wp_waerme"]
         wp_strom = d["wp_strom"]
-        co2_wp = (wp_waerme / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH) - (wp_strom * CO2_FAKTOR_STROM_KG_KWH) if wp_waerme > 0 else 0
+        co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom)  # DI-1: kanonischer Helper
         co2_wp = max(0, co2_wp)
 
         emob_km = d["emob_km"]

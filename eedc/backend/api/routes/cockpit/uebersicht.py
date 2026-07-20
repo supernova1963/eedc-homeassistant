@@ -28,8 +28,9 @@ from backend.core.berechnungen import (
     monatsgewichte_aus_pvgis,
 )
 from backend.core.calculations import (
-    CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_GAS_KG_KWH,
+    CO2_FAKTOR_STROM_KG_KWH,
     CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
+    co2_wp_ersparnis_kg,
 )
 from backend.utils.sonstige_positionen import (
     berechne_sonstige_summen,
@@ -41,7 +42,6 @@ from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
-    WP_WIRKUNGSGRAD_GAS_DEFAULT,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
@@ -707,7 +707,7 @@ async def get_cockpit_uebersicht(
 
     # CO2-Bilanz
     co2_pv = eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = (wp_waerme / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH) - (wp_strom * CO2_FAKTOR_STROM_KG_KWH) if wp_waerme > 0 else 0
+    co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom)  # DI-1: kanonischer Helper
     co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - (emob_netz_ladung * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 

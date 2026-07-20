@@ -14,6 +14,7 @@ from backend.core.berechnungen import (
     einspeise_erloes_euro,
     spezifischer_ertrag_kwh_kwp,
 )
+from backend.core.wirtschaftlichkeit_defaults import WP_WIRKUNGSGRAD_GAS_DEFAULT
 
 
 # =============================================================================
@@ -479,6 +480,38 @@ def berechne_waermepumpe_einsparung(
         alte_heizung_kosten_euro=round(alte_kosten, 2),
         co2_einsparung_kg=round(co2_einsparung, 1),
     )
+
+
+def co2_wp_ersparnis_kg(wp_waerme_kwh: float, wp_strom_kwh: float) -> float:
+    """Kanonische CO₂-Ersparnis einer Wärmepumpe aus GEMESSENEN Werten (kg).
+
+    Vermiedenes Gas-CO₂ (die abgegebene Wärme über den Gas-Kessel-Wirkungsgrad
+    in Brennstoff zurückgerechnet) MINUS das tatsächliche Strom-CO₂ der WP:
+
+        wärme / η_gas × f_gas  −  strom × f_strom
+
+    Einzige erlaubte Konstruktions-Stelle dieser Kennzahl (ADR-001, DI-1).
+    Cockpit, Social-Share und der WeasyPrint-Jahresbericht rufen ausschließlich
+    hier auf — sonst driftet der Wert: der Jahresbericht rechnete früher
+    `wärme × f_gas` OHNE Wirkungsgrad-Umrechnung UND OHNE Strom-Abzug und wies
+    die WP-CO₂-Ersparnis dadurch deutlich zu hoch aus (Demo 2025: 2280,7 → 1567,1 kg).
+
+    Args:
+        wp_waerme_kwh: Gemessene abgegebene Wärme (Heizung + Warmwasser).
+        wp_strom_kwh: Gemessener Stromverbrauch der WP.
+
+    Returns:
+        CO₂-Ersparnis in kg, ungerundet. Kann bei sehr schlechter JAZ negativ
+        werden; die Anzeige-Sites zeigen die Komponente roh, klammern aber die
+        CO₂-Gesamtbilanz per ``max(0, …)``.
+    """
+    if wp_waerme_kwh <= 0:
+        return 0.0
+    vermiedenes_gas_co2 = (
+        wp_waerme_kwh / WP_WIRKUNGSGRAD_GAS_DEFAULT * CO2_FAKTOR_GAS_KG_KWH
+    )
+    wp_strom_co2 = wp_strom_kwh * CO2_FAKTOR_STROM_KG_KWH
+    return vermiedenes_gas_co2 - wp_strom_co2
 
 
 def berechne_roi(
