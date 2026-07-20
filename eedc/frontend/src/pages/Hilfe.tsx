@@ -5,29 +5,24 @@
  * mit react-markdown. Sidebar listet alle Dokumente, URL-Parameter
  * `?doc=<slug>` macht Direktlinks teilbar.
  *
+ * Daten-/Link-Logik liegt seit R2b im geteilten Hook {@link useHelpKatalog}
+ * (EINE Code-Wahrheit mit `v4/HilfeV4.tsx`) — hier bleibt nur die V3-Optik.
+ *
  * Sync-Quelle: docs/ — siehe scripts/sync-help.sh
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { BookOpen, ChevronDown, ExternalLink } from 'lucide-react'
 import MarkdownDoc from '../components/ui/MarkdownDoc'
-
-interface HelpDoc {
-  slug: string
-  title: string
-  category: string
-  filename: string
-}
-
-const HELP_BASE = 'help/'  // relativ — Vite base ist './'
-const DEFAULT_SLUG = 'benutzerhandbuch'
+import {
+  useHelpKatalog,
+  makeHelpLinkComponent,
+  scrollToHashInArticle,
+  DEFAULT_SLUG,
+} from '../hooks/useHelpKatalog'
 
 export default function Hilfe() {
-  const [docs, setDocs] = useState<HelpDoc[] | null>(null)
-  const [content, setContent] = useState<string>('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -36,117 +31,28 @@ export default function Hilfe() {
   const activeSlug = searchParams.get('doc') || DEFAULT_SLUG
   const targetHash = location.hash ? location.hash.slice(1) : ''
 
-  const scrollToHash = (hash: string) => {
-    const article = contentRef.current
-    if (!hash || !article) return
-    const decoded = (() => { try { return decodeURIComponent(hash) } catch { return hash } })()
-    let el: HTMLElement | null = article.ownerDocument.getElementById(decoded)
-    if (!el) {
-      const escaped = decoded.replace(/"/g, '\\"')
-      el = article.querySelector<HTMLElement>(`a[name="${escaped}"]`)
-    }
-    if (!el || !article.contains(el)) return
-    // Tatsächlich scrollbaren Vorfahren finden — Layout hat verschachtelte
-    // overflow-Container (main > article); je nach Höhen-Constraint scrollt
-    // mal das eine, mal das andere.
-    let container: HTMLElement = article
-    let node: HTMLElement | null = article
-    while (node) {
-      if (node.scrollHeight > node.clientHeight + 1) { container = node; break }
-      node = node.parentElement
-    }
-    const offset = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
-    container.scrollTo({ top: Math.max(0, offset - 8), behavior: 'auto' })
-  }
+  const scrollToHash = useCallback(
+    (hash: string) => scrollToHashInArticle(contentRef.current, hash),
+    [],
+  )
 
-  // Index laden
-  useEffect(() => {
-    fetch(`${HELP_BASE}index.json`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then((data: HelpDoc[]) => setDocs(data))
-      .catch((e) => setError(`Hilfe-Inhalte konnten nicht geladen werden: ${e.message}`))
-  }, [])
-
-  // Aktuelles Dokument laden
-  useEffect(() => {
-    if (!docs) return
-    const doc = docs.find((d) => d.slug === activeSlug)
-    if (!doc) {
-      setError(`Hilfe-Dokument "${activeSlug}" nicht gefunden.`)
-      setContent('')
-      return
-    }
-    setLoading(true)
-    setError(null)
-    fetch(`${HELP_BASE}${doc.slug}.md`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.text()
-      })
-      .then((md) => {
-        setContent(md)
-        // Nach Dokumentenwechsel: zu Hash scrollen oder an den Anfang
-        requestAnimationFrame(() => {
-          if (targetHash) scrollToHash(targetHash)
-          else contentRef.current?.scrollTo({ top: 0, behavior: 'auto' })
-        })
-      })
-      .catch((e) => setError(`Dokument konnte nicht geladen werden: ${e.message}`))
-      .finally(() => setLoading(false))
-  }, [docs, activeSlug, targetHash])
-
-  // Filename → slug für interne Link-Rewrites
-  const filenameToSlug = useMemo(() => {
-    const map = new Map<string, string>()
-    docs?.forEach((d) => map.set(d.filename, d.slug))
-    return map
-  }, [docs])
-
-  // Kategorien für Sidebar gruppieren (Reihenfolge wie im index)
-  const grouped = useMemo(() => {
-    if (!docs) return []
-    const order: string[] = []
-    const byCat = new Map<string, HelpDoc[]>()
-    docs.forEach((d) => {
-      if (!byCat.has(d.category)) {
-        order.push(d.category)
-        byCat.set(d.category, [])
-      }
-      byCat.get(d.category)!.push(d)
-    })
-    return order.map((cat) => ({ category: cat, items: byCat.get(cat)! }))
-  }, [docs])
+  const { grouped, activeDoc, content, loading, error, rewriteLink } = useHelpKatalog(
+    activeSlug,
+    targetHash,
+    (hash) => {
+      if (hash) scrollToHash(hash)
+      else contentRef.current?.scrollTo?.({ top: 0, behavior: 'auto' })
+    },
+  )
 
   const selectDoc = (slug: string) => {
     setSearchParams({ doc: slug })
   }
 
-  // Link-Rewriting für Markdown
-  const rewriteLink = (href: string | undefined): { type: 'internal' | 'anchor' | 'external'; target: string } => {
-    if (!href) return { type: 'external', target: '#' }
-    if (href.startsWith('#')) return { type: 'anchor', target: href }
-    // Absolute URLs (http/https/mailto/…) immer extern
-    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return { type: 'external', target: href }
-    // Relative .md-Links: bekannt → intern, unbekannt → GitHub-URL der Doku
-    const mdMatch = href.match(/^([^#?]+\.md)(#.*)?$/)
-    if (mdMatch) {
-      const [, file, hash] = mdMatch
-      const slug = filenameToSlug.get(file)
-      if (slug) {
-        return { type: 'internal', target: `?doc=${slug}${hash || ''}` }
-      }
-      return {
-        type: 'external',
-        target: `https://github.com/supernova1963/eedc-homeassistant/blob/main/docs/${file}${hash || ''}`,
-      }
-    }
-    return { type: 'external', target: href }
-  }
-
-  const activeDoc = docs?.find((d) => d.slug === activeSlug)
+  const linkComponent = useMemo(
+    () => makeHelpLinkComponent({ rewriteLink, navigate, basePath: '/hilfe', scrollToHash }),
+    [rewriteLink, navigate, scrollToHash],
+  )
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
@@ -246,44 +152,7 @@ export default function Hilfe() {
             {activeDoc && (
               <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{activeDoc.category}</p>
             )}
-            <MarkdownDoc
-              markdown={content}
-              linkComponent={(href, children, name) => {
-                if (!href && name) return <a id={name} />
-                if (!href) return null
-                const { type, target } = rewriteLink(href)
-                if (type === 'internal') {
-                  return (
-                    <a
-                      href={target}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        const [params, hash] = target.replace(/^\?/, '').split('#')
-                        navigate(`/hilfe?${params}${hash ? '#' + hash : ''}`)
-                      }}
-                      className="text-primary-600 dark:text-primary-400 hover:underline"
-                    >
-                      {children}
-                    </a>
-                  )
-                }
-                if (type === 'anchor') {
-                  return (
-                    <a
-                      href={target}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        scrollToHash(target.slice(1))
-                      }}
-                      className="text-primary-600 dark:text-primary-400 hover:underline"
-                    >
-                      {children}
-                    </a>
-                  )
-                }
-                return null  // extern → MarkdownDoc-Default (neuer Tab + Icon)
-              }}
-            />
+            <MarkdownDoc markdown={content} linkComponent={linkComponent} />
           </div>
         )}
       </article>

@@ -34,9 +34,12 @@ const GETEILTE_SOT = [
  * CommunityUebersichtV4: `Sparkles` als DEKORATIVES Block-Themen-Icon des
  * Achievements-Blocks (kein Status-Kontext ok/warnung/kritisch/info) — belegte
  * Nicht-Status-Verwendung, kein Drift.
+ * HilfeV4 (R2b): `Sparkles` als DEKORATIVES Themen-Icon des „Was ist neu"-
+ * Einstiegs (Neuheiten-Marker, kein Status) — analog CommunityUebersichtV4.
  */
 const ALLOW = new Map([
   ['src/v4/CommunityUebersichtV4.tsx', 1],
+  ['src/v4/HilfeV4.tsx', 1],
 ])
 
 const STATUS_NAMEN = ['CheckCircle', 'CheckCircle2', 'AlertTriangle', 'XCircle', 'AlertCircle', 'Info', 'Sparkles']

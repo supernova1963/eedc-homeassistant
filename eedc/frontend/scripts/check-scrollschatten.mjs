@@ -27,6 +27,7 @@ const SRC = join(ROOT, 'src')
 const ALLOW = new Map([
   ['src/v4/LayoutV4.tsx', 1], // Seiten-Scroller (main) — nativer Balken bleibt
   ['src/v4/ViewShell.tsx', 1], // Sicht-Scroller ab lg (data-sicht-scroll) — dito
+  ['src/v4/HilfeV4.tsx', 2], // R2b: TOC-Sidebar + Inhalts-Artikel = Sicht-Scroller ab lg (native Balken) — dito ViewShell
   ['src/components/blocks/FokusVollbild.tsx', 1], // Vollbild-Overlay = Seite im Fokus-Modus
   // G16-3 (2026-07-06): Datei ist im ScrollSchatten-Sweep, behält aber EINEN rohen
   // overflow für ein Nicht-Tabellen-Element (kein Tabellen-Scroll) — dokumentiert:
