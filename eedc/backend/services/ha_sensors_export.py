@@ -180,7 +180,7 @@ ANLAGE_SENSOREN = [
         unit="kg",
         icon="mdi:molecule-co2",
         category=SensorCategory.UMWELT,
-        formel="PV-Erzeugung × 0.38 kg/kWh",
+        formel="PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)",
         state_class="total_increasing",
     ),
 ]

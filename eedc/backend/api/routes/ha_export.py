@@ -25,6 +25,7 @@ from backend.core.berechnungen import (
     berechne_spez_ertrag_annualisiert,
     gas_kosten_altanlage,
     berechne_verbrauchs_kennzahlen,
+    imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
 )
 from backend.models.pvgis_prognose import PVGISPrognose
@@ -74,7 +75,7 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE_DEFAULTS,
     ist_dienstlich,
 )
-from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
+from backend.core.calculations import berechne_co2_bilanz
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -483,8 +484,10 @@ async def calculate_anlage_sensors(
         ev_ersparnis = _finanz.ev_ersparnis_euro
         netto_ertrag = _finanz.netto_ertrag_euro
 
-    # CO2
-    co2_ersparnis = pv_erzeugung * CO2_FAKTOR_STROM_KG_KWH
+    # CO2 (DI-2): der HA-Sensor „CO2 Einsparung" trägt jetzt die volle
+    # Cockpit-Bilanz (PV-Eigenverbrauch + WP + E-Mobilität) statt nur
+    # `pv_erzeugung × f_strom`. Berechnung weiter unten, nachdem WP- und
+    # E-Mob-Aggregate stehen (kanonischer Helper `berechne_co2_bilanz`).
 
     # Investitions-KPIs berechnen
     investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
@@ -564,6 +567,12 @@ async def calculate_anlage_sensors(
     # Sensor driftete deshalb auch gegen den per-Investition-Sensor
     # `e_auto_ersparnis_vs_benzin_euro` (Zeile 583+, der hatte den Fallback).
     bisherige_eauto_ersparnis = 0.0
+    # DI-2: E-Mob-CO₂-Aggregate (Dienstwagen bereits über e_autos ausgeschlossen,
+    # deckungsgleich mit der Cockpit-Bilanz): gefahrene km, Heim-Netzladung und
+    # der Benzin-Vergleichsverbrauch in Litern (je Fahrzeug sein eigener Wert).
+    co2_emob_km = 0.0
+    co2_emob_netz_kwh = 0.0
+    co2_benzin_liter = 0.0
     for ea in e_autos:
         params = ea.parameter or {}
         ea_benzinpreis_default = params.get(
@@ -593,6 +602,33 @@ async def calculate_anlage_sensors(
             bisherige_eauto_ersparnis += (
                 benzin_liter * monats_benzinpreis - netz * netzbezug_preis_cent / 100
             )
+            # DI-2: CO₂-Aggregate mitziehen (gleicher Netz-/km-/Benzin-Pfad).
+            co2_emob_km += km
+            co2_emob_netz_kwh += netz
+            co2_benzin_liter += benzin_liter
+
+    # DI-2: WP-CO₂-Aggregate (gemessene Wärme/Strom) über den kanonischen
+    # Zeilen-Helper `imd_typ_beitrag` — dieselbe Wärme-/Strom-Auflösung wie das
+    # Cockpit (waerme_kwh-Vorrang, sonst Heizung+Warmwasser; WP-Split-Strom).
+    wp_ids = {w.id for w in waermepumpen}
+    co2_wp_waerme_kwh = 0.0
+    co2_wp_strom_kwh = 0.0
+    for (inv_id, _j, _m), daten in historische_inv_daten.items():
+        if inv_id in wp_ids:
+            _b = imd_typ_beitrag(inv_by_id_export[inv_id], daten)
+            co2_wp_waerme_kwh += _b.wp_waerme
+            co2_wp_strom_kwh += _b.wp_strom
+
+    # DI-2: Gesamt-CO₂-Bilanz (PV-Eigenverbrauch + WP + E-Mob) über den
+    # kanonischen Helper — deckungsgleich mit der Cockpit-Kachel `co2_gesamt_kg`.
+    co2_ersparnis = berechne_co2_bilanz(
+        eigenverbrauch_kwh=eigenverbrauch,
+        wp_waerme_kwh=co2_wp_waerme_kwh,
+        wp_strom_kwh=co2_wp_strom_kwh,
+        emob_km=co2_emob_km,
+        emob_netz_ladung_kwh=co2_emob_netz_kwh,
+        benzin_verbrauch_liter=co2_benzin_liter,
+    ).co2_gesamt_kg
 
     # BKW-Alternativkosten: Eigenverbrauch zum Netzbezugspreis (Berechnungs-Layer).
     bisherige_bkw_ersparnis = berechne_bkw_alternativkosten_ersparnis(
@@ -688,7 +724,7 @@ async def calculate_anlage_sensors(
                 berechnung = f"{eigenverbrauch:.0f} × {strompreis.netzbezug_arbeitspreis_cent_kwh:.2f} ct/kWh"
         elif sensor.key == "co2_ersparnis_kg":
             value = round(co2_ersparnis, 1)
-            berechnung = f"{pv_erzeugung:.0f} × 0.38"
+            berechnung = "PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)"
 
         if value is not None:
             sensor_values.append(SensorValue(

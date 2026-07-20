@@ -28,9 +28,8 @@ from backend.core.berechnungen import (
     monatsgewichte_aus_pvgis,
 )
 from backend.core.calculations import (
-    CO2_FAKTOR_STROM_KG_KWH,
-    CO2_FAKTOR_BENZIN_KG_LITER, berechne_ust_eigenverbrauch,
-    co2_wp_ersparnis_kg,
+    berechne_ust_eigenverbrauch,
+    berechne_co2_bilanz,
 )
 from backend.utils.sonstige_positionen import (
     berechne_sonstige_summen,
@@ -705,11 +704,19 @@ async def get_cockpit_uebersicht(
     # Eigenverbrauch, nicht die Finanzpositionen).
     netto_ertrag += sonstige_netto
 
-    # CO2-Bilanz
-    co2_pv = eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom)  # DI-1: kanonischer Helper
-    co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - (emob_netz_ladung * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
-    co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
+    # CO2-Bilanz (DI-2: kanonischer Helper — dieselbe Bilanz wie der HA-Export)
+    _co2 = berechne_co2_bilanz(
+        eigenverbrauch_kwh=eigenverbrauch,
+        wp_waerme_kwh=wp_waerme,
+        wp_strom_kwh=wp_strom,
+        emob_km=emob_km,
+        emob_netz_ladung_kwh=emob_netz_ladung,
+        benzin_verbrauch_liter=benzin_verbrauch,
+    )
+    co2_pv = _co2.co2_pv_kg
+    co2_wp = _co2.co2_wp_kg
+    co2_emob = _co2.co2_emob_kg
+    co2_gesamt = _co2.co2_gesamt_kg
 
     # Zeitraum
     zeitraum_von = None
