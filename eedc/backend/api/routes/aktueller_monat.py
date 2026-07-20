@@ -605,6 +605,11 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     sonstiges_inv_ids = [i.id for i in investitionen if i.typ == "sonstiges"]
     all_inv_ids = pv_inv_ids + bat_inv_ids + wp_inv_ids + eauto_inv_ids + wb_inv_ids + sonstiges_inv_ids
     sonstiges_vj = 0.0
+    # DI-5: für die symmetrische gesamtnettoertrag-Formel (WP-/eMob-Ersparnis
+    # auch im Vorjahr) außerhalb des `if all_inv_ids`-Blocks vorbelegt.
+    wp_strom_vj = 0.0
+    wp_waerme_vj = 0.0
+    imd_data_by_inv_vj: dict[int, dict] = {}
 
     if all_inv_ids:
         imd_result = await db.execute(
@@ -617,8 +622,6 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         pv_vj = 0.0
         bat_ladung_vj = 0.0
         bat_entladung_vj = 0.0
-        wp_strom_vj = 0.0
-        wp_waerme_vj = 0.0
         eauto_ladung_vj = 0.0
         wb_ladung_vj = 0.0
         emob_km_vj = 0.0
@@ -629,6 +632,7 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             if not inv:
                 continue
             data = imd.verbrauch_daten or {}
+            imd_data_by_inv_vj[imd.investition_id] = data  # DI-5: für WP-/eMob-Ersparnis
             # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
             b = imd_typ_beitrag(inv, data)
             if imd.investition_id in pv_inv_ids:
@@ -725,8 +729,98 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             einspeise_e = result.get("einspeise_erloes_euro", 0) or 0
             ev_e = result.get("ev_ersparnis_euro", 0) or 0
             netz_k = result.get("netzbezug_kosten_euro", 0) or 0
+
+            # DI-5 (G20-3): gesamtnettoertrag SYMMETRISCH zum aktuellen Monat —
+            # inkl. WP- und E-Mob-Ersparnis. Vorher fehlten beide im Vorjahr →
+            # das T-Konto-Δ verglich Äpfel (Monat mit WP/eMob) mit Birnen
+            # (Vorjahr ohne). Es werden dieselben Leaf-Helfer wie im aktuellen
+            # Monat mit den Vorjahres-Tarifen/-Preisen genutzt (kein Formel-Dupli).
+            monats_gaspreis_vj = md.gaspreis_cent_kwh
+            monats_benzinpreis_vj = md.kraftstoffpreis_euro
+
+            # WP-Ersparnis nur über die im Vorjahres-Monat AKTIVEN WPs summieren
+            # (ist_aktiv_im_monat, #236/[[feedback_anschaffungsdatum_grenze]]) —
+            # der aktuelle Monat filtert ebenso; sonst zählte Vor-Anschaffungs-
+            # Verbrauch mit (Demo: WP-IMD 2024-01..03 vor Inbetriebnahme 04/2024).
+            wp_waerme_fin = 0.0
+            wp_strom_fin = 0.0
+            for i in investitionen:
+                if (i.typ == "waermepumpe"
+                        and i.ist_aktiv_im_monat(vj, monat)
+                        and i.id in imd_data_by_inv_vj):
+                    _bwp = imd_typ_beitrag(i, imd_data_by_inv_vj[i.id])
+                    wp_waerme_fin += _bwp.wp_waerme
+                    wp_strom_fin += _bwp.wp_strom
+
+            wp_ersparnis_vj = 0.0
+            if wp_waerme_fin > 0 and wp_strom_fin > 0:
+                wp_tarif_vj = tarife_vj.get("waermepumpe")
+                wp_p_vj = (
+                    wp_tarif_vj.netzbezug_arbeitspreis_cent_kwh
+                    if wp_tarif_vj and wp_tarif_vj.netzbezug_arbeitspreis_cent_kwh is not None
+                    else netz_preis
+                )
+                wp_invs_vj = [
+                    i for i in investitionen
+                    if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(vj, monat)
+                ]
+                wp_r_vj = berechne_wp_ersparnis(
+                    wp_waerme_kwh=wp_waerme_fin,
+                    wp_strom_kwh=wp_strom_fin,
+                    wp_strompreis_cent=wp_p_vj,
+                    wp_parameter=wp_invs_vj[0].parameter if wp_invs_vj else None,
+                    monats_gaspreis_cent=monats_gaspreis_vj,
+                )
+                wp_ersparnis_vj = round(wp_r_vj.ersparnis_euro, 2)
+
+            emob_ersparnis_vj = 0.0
+            wb_tarif_vj = tarife_vj.get("wallbox")
+            wb_p_vj = (
+                wb_tarif_vj.netzbezug_arbeitspreis_cent_kwh
+                if wb_tarif_vj and wb_tarif_vj.netzbezug_arbeitspreis_cent_kwh is not None
+                else netz_preis
+            )
+            _emob_aktiv = [
+                i for i in investitionen
+                if i.typ in ("e-auto", "wallbox")
+                and not ist_dienstlich(i)
+                and i.ist_aktiv_im_monat(vj, monat)
+                and i.id in imd_data_by_inv_vj
+            ]
+            _ea_data_vj = [imd_data_by_inv_vj[i.id] for i in _emob_aktiv if i.typ == "e-auto"]
+            _wb_data_vj = [imd_data_by_inv_vj[i.id] for i in _emob_aktiv if i.typ == "wallbox"]
+            _emob_pool_attr_vj = compute_emob_pool_attribution(
+                eauto_imd_data=_ea_data_vj,
+                wallbox_imd_data=_wb_data_vj,
+            )
+            for i in _emob_aktiv:
+                _d_vj = _baue_investition_financial(
+                    i,
+                    imd_data_by_inv_vj[i.id],
+                    netz_p=netz_preis,
+                    einsp_p=einsp_preis,
+                    wp_p=netz_preis,     # für eMob-Zweig irrelevant
+                    wb_p=wb_p_vj,
+                    monats_gaspreis=monats_gaspreis_vj,
+                    monats_benzinpreis=monats_benzinpreis_vj,
+                    emob_pool_attr=_emob_pool_attr_vj,
+                )
+                if (
+                    _d_vj is not None
+                    and _d_vj.ersparnis_label == "Ersparnis vs. Verbrenner"
+                    and _d_vj.ersparnis_euro is not None
+                ):
+                    emob_ersparnis_vj += _d_vj.ersparnis_euro
+            emob_ersparnis_vj = round(emob_ersparnis_vj, 2)
+
+            if wp_ersparnis_vj:
+                result["wp_ersparnis_euro"] = wp_ersparnis_vj
+            if emob_ersparnis_vj:
+                result["emob_ersparnis_euro"] = emob_ersparnis_vj
             if einspeise_e or ev_e:
-                result["gesamtnettoertrag_euro"] = round(einspeise_e + ev_e - netz_k, 2)
+                result["gesamtnettoertrag_euro"] = round(
+                    einspeise_e + ev_e + wp_ersparnis_vj + emob_ersparnis_vj - netz_k, 2
+                )
     except Exception:
         logger.warning("Vorjahr-Finanzen konnten nicht berechnet werden")
 
