@@ -64,7 +64,7 @@ export function baueTagKpis(
   }
   if (t.netzbezug > 0 && t.netzbezug_kosten != null) {
     kostenKpis.push({
-      title: 'Durchschnittspreis Netz',
+      title: 'Ø-Preis Netz',
       value: fmtCalc((t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'), unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
       subtitle: `${fmt(t.netzbezug, 1)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,

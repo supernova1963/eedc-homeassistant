@@ -163,22 +163,22 @@ describe('baueNetzKostenKpis (via baueMonatKpis)', () => {
     expect(k.subtitle).toBe('112 kWh · 25,12 €')
   })
 
-  it('Durchschnittspreis Netz bevorzugt den dynamischen Monats-Ø vor dem Tarif', () => {
+  it('Ø-Preis Netz bevorzugt den dynamischen Monats-Ø vor dem Tarif', () => {
     const k = baueMonatKpis(d({
       netzbezug_kwh: 1153,
       netzbezug_kosten_euro: 266.12,
       netzbezug_durchschnittspreis_cent: 26.1,
       netzbezug_preis_cent: 30,
-    }), vm).find((x) => x.title === 'Durchschnittspreis Netz')!
+    }), vm).find((x) => x.title === 'Ø-Preis Netz')!
     expect(k.unit).toBe('ct/kWh')
     expect(k.value).toBe('26,1')
     expect(k.subtitle).toBe('1.153 kWh · 266,12 €')
   })
 
-  it('Durchschnittspreis Netz fällt ohne dynamischen Ø auf den Tarif-Arbeitspreis zurück', () => {
+  it('Ø-Preis Netz fällt ohne dynamischen Ø auf den Tarif-Arbeitspreis zurück', () => {
     const k = baueMonatKpis(d({
       netzbezug_kwh: 143, netzbezug_kosten_euro: 42.9, netzbezug_preis_cent: 30,
-    }), vm).find((x) => x.title === 'Durchschnittspreis Netz')!
+    }), vm).find((x) => x.title === 'Ø-Preis Netz')!
     expect(k.value).toBe('30,0')
   })
 })

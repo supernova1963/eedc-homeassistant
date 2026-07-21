@@ -136,7 +136,7 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
   const netzPreis = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent
   if (netzPreis != null && d.netzbezug_kwh != null) {
     kpis.push({
-      title: 'Durchschnittspreis Netz',
+      title: 'Ø-Preis Netz',
       value: fmtCalc(netzPreis, 1, '—'), unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
       subtitle: `${fmt(d.netzbezug_kwh)} kWh · ${fmtCalc(d.netzbezug_kosten_euro, 2, '—')} €`,
