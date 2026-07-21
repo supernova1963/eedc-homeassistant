@@ -265,9 +265,9 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 
 ---
 
-## Invarianten (Phase B — Flip-Gate) — ⚠️ ENTWURF zur Abnahme
+## Invarianten (Phase B — Flip-Gate) — ✅ ABGENOMMEN (Gernot, 2026-07-21)
 
-> **Status: ENTWURF (2026-07-03) — noch NICHT abgenommen.** Gate-Funktion (R3, Restweg-Plan):
+> **Status: ✅ ABGENOMMEN (Gernot, 2026-07-21) — R3-Gate erfüllt.** Gate-Funktion (R3, Restweg-Plan):
 > **ohne Gernot-Abnahme dieses Kapitels kein Flip.** Destilliert aus den **gebauten** Mustern
 > (Cockpit Monat/Live/Aussicht/Tag/Jahr · Komponenten-Hub · Auswertungen · Community ·
 > Einstellungen P1–P8) — hier steht nichts Neues, nur das Verbindliche daraus. **Pointer-Prinzip:**
@@ -299,7 +299,7 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 
 **Bau-Invariante bis zum Flip (stirbt mit R6):** alles v4-Neue dormant hinter `VITE_IA_V4`; Prod-Build flag-rein; flag-on-`dist` NIE committen; Demo-DB hängt hinter ECHTEN Endpoints (kein Rewiring — „echte Daten" = Anlage wechseln). **Ebenfalls flip-temporär:** der Migrations-Riegel `check:datenquellen-aufloesung` (s. Register-Notiz) — er bewacht die Alt-Wizard-Auflösung nur bis R6.
 
-**Abnahme-Vermerk:** ⬜ offen — nach Gernot-Abnahme dieses Banner auf „✅ abgenommen (Datum)" setzen; erst dann ist das R3-Gate erfüllt.
+**Abnahme-Vermerk:** ✅ abgenommen (Gernot, 2026-07-21) — R3-Gate erfüllt.
 
 ---
 
