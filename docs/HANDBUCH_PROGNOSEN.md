@@ -1,10 +1,10 @@
 
 # eedc Handbuch — Prognosen
 
-**Version 3.34.1** | Stand: Mai 2026
+**Version 4.0** | Stand: 2026-07-25
 
 > Dieses Handbuch ist Teil der eedc-Dokumentation.
-> Siehe auch: [Energieprofil](HANDBUCH_ENERGIEPROFIL.md) | [Teil III: Einstellungen & Sensormapping](HANDBUCH_EINSTELLUNGEN.md) | [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) | [Berechnungen & Kennzahlen](BERECHNUNGEN.md) | [Sensor-Referenz](SENSOR-REFERENZ.md) | [Glossar](GLOSSAR.md)
+> Siehe auch: [Energieprofil](HANDBUCH_ENERGIEPROFIL.md) | [Teil III: Einstellungen & Datenquellen](HANDBUCH_EINSTELLUNGEN.md) | [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) | [Berechnungen & Kennzahlen](BERECHNUNGEN.md) | [Sensor-Referenz](SENSOR-REFERENZ.md) | [Glossar](GLOSSAR.md)
 
 ---
 
@@ -16,7 +16,7 @@
 4. [Die Physik dahinter — GTI, Ausrichtung, Wettermodell](#4-die-physik-dahinter--gti-ausrichtung-wettermodell)
 5. [Lernfaktor & Korrekturprofil — wie eedc dazulernt](#5-lernfaktor--korrekturprofil--wie-eedc-dazulernt)
 6. [Genauigkeits-Tracking (MAE & Bias)](#6-genauigkeits-tracking-mae--bias)
-7. [Was du konfigurieren musst (Abhängigkeiten)](#7-was-du-konfigurieren-musst-abhaengigkeiten)
+7. [Was du konfigurieren musst (Abhängigkeiten)](#7-was-du-konfigurieren-musst-abhängigkeiten)
 8. [Bekannte Probleme & Fehlerbilder](#8-bekannte-probleme--fehlerbilder)
 
 ---
@@ -27,7 +27,7 @@ Die Prognosen schätzen, **wie viel PV-Strom deine Anlage erzeugen wird** — f�
 
 Der Kern-Gedanke: Eine Prognose ist nur so gut, wie sie zur Realität passt. Deshalb stellt eedc jeder Prognose den **tatsächlich gemessenen Ertrag (IST)** gegenüber, lernt aus der Abweichung (**Lernfaktor / Korrekturprofil**) und macht die verbleibende Ungenauigkeit transparent sichtbar (**Genauigkeits-Tracking**).
 
-> **Wichtigste Abhängigkeit vorweg:** Ohne **gemappte PV-Zähler** gibt es kein IST — und ohne IST kann eedc weder lernen noch die Genauigkeit zeigen. Die Prognosen hängen also direkt am [Energieprofil](HANDBUCH_ENERGIEPROFIL.md).
+> **Wichtigste Abhängigkeit vorweg:** Ohne **zugeordnete PV-Zähler** gibt es kein IST — und ohne IST kann eedc weder lernen noch die Genauigkeit zeigen. Die Prognosen hängen also direkt am [Energieprofil](HANDBUCH_ENERGIEPROFIL.md). Die Feld-Zuordnung pflegst du unter [Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung).
 
 ---
 
@@ -52,14 +52,14 @@ eedc holt von Open-Meteo die **GTI** (Strahlung auf die geneigte Modulfläche), 
 
 Die „eedc"-Spalte ist **kein eigenes Wettermodell**, sondern die OpenMeteo-Prognose, korrigiert um das, was eedc aus dem Vergleich Prognose↔IST über deine konkrete Anlage gelernt hat. Im Live-Pfad wird statt eines einzelnen Faktors sogar ein **stündliches Korrekturprofil** angewendet (siehe [§5](#5-lernfaktor--korrekturprofil--wie-eedc-dazulernt)). Diese Quelle ist der Standard.
 
-> **Ein Wert überall.** Die „PV-Tagesprognose heute" (und Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird über **einen** kanonischen Rechenweg gebildet und ist deshalb auf **allen** Sichten identisch — Cockpit/Live, Aussicht, Kurzfrist-Karte, Auswertungen, die „eedc"-Spalte im Prognosen-Vergleich, der gespeicherte Tageswert **und** die MQTT-Sensoren. Bei mehreren Dachflächen (z. B. Ost/West) wird jede Orientierung getrennt gerechnet und dann summiert (Multi-String); die Korrektur sitzt **pro Stunden-Slot auf der Energie** (Tageswert = Summe der Stunden-Slots). Der Wert **rollt** über den Tag mit OpenMeteo mit — aber überall **synchron**, nicht mehr je Seite anders.
+> **Ein Wert überall.** Die „PV-Tagesprognose heute" (und Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird über **einen** kanonischen Rechenweg gebildet und ist deshalb auf **allen** Sichten identisch — Cockpit/Live, Aussicht, Auswertungen, die „eedc"-Spalte im Prognosen-Vergleich, der gespeicherte Tageswert **und** die MQTT-Sensoren. Bei mehreren Dachflächen (z. B. Ost/West) wird jede Orientierung getrennt gerechnet und dann summiert (Multi-String); die Korrektur sitzt **pro Stunden-Slot auf der Energie** (Tageswert = Summe der Stunden-Slots). Der Wert **rollt** über den Tag mit OpenMeteo mit — aber überall **synchron**, nicht mehr je Seite anders.
 
 ### 2.3 Solcast — optional, dritte Meinung
 
 Solcast ist ein spezialisierter PV-Forecast-Dienst und liefert ein Konfidenzband (p10/p50/p90). Wie eedc ihn anbindet, hängt von der Installation ab:
 
 - **HA-Add-on:** über die Solcast-HACS-Integration (BJReplay), automatisch erkannt. **Kein** eigener Key in eedc nötig.
-- **Standalone:** über die Solcast-REST-API mit eigenem `api_key` + `resource_ids` (im Sensor-Mapping hinterlegt). Achtung Free-Tier-Limit (10 Abrufe/Tag) — eedc cached entsprechend.
+- **Standalone:** über die Solcast-REST-API mit eigenem `api_key` + `resource_ids`, hinterlegt in den Anlagenstammdaten ([Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)). Achtung Free-Tier-Limit (10 Abrufe/Tag) — eedc cached entsprechend.
 
 Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Dienst). Fehlt der Key oder ist HA nicht erreichbar, fällt eedc still auf die eedc-Quelle zurück und zeigt einen Hinweistext.
 
@@ -69,13 +69,13 @@ Der tatsächliche Ertrag kommt aus dem [Energieprofil](HANDBUCH_ENERGIEPROFIL.md
 
 ### 2.5 SFML (Solar Forecast ML) — wählbar, aber bewusst nicht im Vergleich
 
-> **Zwei verschiedene Dinge nicht verwechseln:** Die **vier Spalten oben** sind der *Vergleich* (was steht nebeneinander zur Beurteilung). Davon getrennt gibt es die **operative Prognosequelle** — die *eine* Quelle, die deine Tagesprognose, Batteriesimulation und (geplant) den HA-Export tatsächlich speist. Diese wählst du unter **Einstellungen → Anlage → Prognosequelle**.
+> **Zwei verschiedene Dinge nicht verwechseln:** Die **vier Spalten oben** sind der *Vergleich* (was steht nebeneinander zur Beurteilung). Davon getrennt gibt es die **operative Prognosequelle** — die *eine* Quelle, die deine Tagesprognose, Batteriesimulation und den HA-Export tatsächlich speist. Diese wählst du unter **Einstellungen → Stammdaten → Anlage** im Feld **„PV-Prognose-Quelle für diese Anlage"**.
 
 Als operative Prognosequelle stehen zur Wahl:
 
-- **eedc** (Default) — OpenMeteo × Lernfaktor.
-- **Solcast** — Solcast pur, ohne eedc-Korrektur.
-- **SFML (Solar Forecast ML)** — die HA-Integration von Tom-HA, pur und ohne eedc-Korrektur (das ML-Modell kalibriert sich selbst). **Nur im HA-Add-on auswählbar**; im Standalone ist die Option deaktiviert. Ist SFML gewählt, aber kein HA verfügbar, fällt eedc neutral auf die eedc-Quelle zurück.
+- **eedc-optimiert** (Default) — OpenMeteo × Lernfaktor.
+- **Solcast** (pur, ohne eedc-Korrektur).
+- **Solar Forecast ML (SFML)** — die HA-Integration von Tom-HA, pur und ohne eedc-Korrektur (das ML-Modell kalibriert sich selbst). **Nur im HA-Add-on auswählbar**; im Standalone ist die Option deaktiviert. Ist SFML gewählt, aber kein HA verfügbar, fällt eedc neutral auf die eedc-Quelle zurück.
 
 **SFML erscheint absichtlich *nicht* in der Vier-Spalten-Vergleichsmatrix.** eedc positioniert sich bewusst nicht vergleichend gegen eine spezialisierte Profi-Prognosequelle. SFML wirkt also als *aktive* Quelle (treibt deine operative Prognose), wird aber nicht Spalte an Spalte gegen OpenMeteo/eedc/Solcast gestellt. Das ist so gewollt — kein Fehler.
 
@@ -83,15 +83,36 @@ Als operative Prognosequelle stehen zur Wahl:
 
 - **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil der Vier-Spalten-Matrix.
 
+<!-- [T20-Review] Cross-Doc-Konsistenz: HANDBUCH_EINSTELLUNGEN.md §2.1 beschreibt dasselbe Feld
+     als „Prognose-Basis (OpenMeteo/Solcast); SFML im Code als künftige Erweiterung vorbereitet".
+     Der GEBAUTE Code (frontend/src/components/forms/AnlageForm.tsx:222-230, Feld `prognose_quelle`)
+     bietet real die drei operativen Optionen eedc / solcast / sfml (sfml nur im HA-Add-on,
+     sonst disabled). Beide Formulierungen im Flip-Push-Zug angleichen — hier steht die
+     code-genaue Fassung. -->
+
 ---
 
 ## 3. Wo die Prognosen in der App erscheinen
 
-### Aussichten → Prognosen — die Vergleichssicht
+In der neuen Oberfläche sind die Prognose-Sichten nach dem Grundsatz **„Vorschau vorwärts / Bewertung gegen IST"** getrennt:
 
-Das Herzstück. Von oben nach unten:
+- **Cockpit → Aussicht** — die *vorwärtsgerichtete* Sicht (heute bis Jahresprognose).
+- **Auswertungen → Prognose** — die *Vergleichs- und Genauigkeits-Fläche* (mehrere Quellen gegen IST).
 
-- **KPI-Matrix:** Quellen (Spalten) × Zeiträume (Zeilen: Heute, ↳ Verbleibend, Vormittag/Nachmittag, Morgen, Übermorgen).
+### Cockpit → Aussicht — die Vorschau
+
+Die [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) bündelt alle vorwärtsgerichteten Analysen auf einer Seite; über einen **Horizont-Selektor** wählst du, wie weit du blickst:
+
+- **Kurzfristig (7–14 Tage):** tägliche Erzeugungsschätzung aus OpenMeteo, kalibriert mit dem eedc-Lernfaktor, mit Wettersymbolen und Datenquelle-Kürzel je Tag (MS/D2/EU/EC/BM). Ist **SFML** als Quelle konfiguriert, erscheint eine zweite KI-basierte Ertragslinie.
+- **Langfristig:** PVGIS-basierte 12-Monats-Prognose (Erwartungswerte/TMY) mit historischer Performance Ratio (GTI-basiert) und monatlicher Aufschlüsselung.
+- **Degradation:** geschätzter Leistungsrückgang pro Jahr — primär aus vollständigen Jahren (12 Monate), Fallback über TMY-Auffüllung für unvollständige Jahre.
+- **Tagesprognose mit Batteriesimulation:** die stündliche Bilanz aus PV-Prognose und typischem Verbrauchsprofil — inklusive geschätztem „Speicher voll um" / „Speicher leer um", Autarkie und Eigenverbrauch für den Tag. eedc wählt Prognosebasis und Wetterquelle automatisch; die gewählte Basis steht als Beschriftung an der Karte.
+
+### Auswertungen → Prognose — die Vergleichssicht
+
+Die [Prognose-Auswertung](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-ist) ist das Herzstück der Bewertung. Von oben nach unten:
+
+- **Kennzahl-Matrix:** Quellen (Spalten) × Zeiträume (Zeilen: Heute, ↳ Verbleibend, Vormittag/Nachmittag, Morgen, Übermorgen).
   - **„Verbleibend"** = bereits gemessener IST + beste Prognose für die Reststunden.
   - **„Vormittag / Nachmittag"** wird am **Sonnenhöchststand** (Solar Noon) getrennt, nicht stur um 12:00 Uhr.
 - **Lernfaktor-/Restzeit-Banner:** Solange noch keine valide Lerngrundlage da ist, steht hier „benötigt mindestens 7 Tage mit IST-Ertragsdaten (X von 7 Tagen)".
@@ -101,18 +122,11 @@ Das Herzstück. Von oben nach unten:
 - **Genauigkeits-Tracking** (siehe [§6](#6-genauigkeits-tracking-mae--bias)).
 - **Korrekturprofil-Heatmap:** Sonnenstand (Azimut × Höhe) × Wetterklasse als Farbkacheln — rein diagnostisch.
 
-### Aussichten → Kurzfrist / Langfrist / Trend / Finanzen
+### Auswertungen → Finanzen — die Ertragsprognose
 
-- **Kurzfrist:** 7–16-Tage-Prognose aus OpenMeteo.
-- **Langfrist:** 12-Monats-Prognose aus PVGIS-Meteojahren × historischer Performance Ratio, mit Konfidenzband ±15 %.
-- **Trend:** Jahresvergleich, spezifischer Ertrag, geschätzte Degradation.
-- **Finanzen:** Amortisations-/Ertragsprognose (folgt der PVGIS-Langfristsicht).
+Die frühere „Aussichten → Finanzen"-Sicht ist in die [Finanz-Auswertung](HANDBUCH_BEDIENUNG.md#41-finanzen) gezogen: Amortisations-/Ertragsprognose auf Basis der PVGIS-Langfristsicht, jetzt zeitraum-fähig neben dem Finanz-Abschluss (T-Konto).
 
-### Auswertung → Energieprofil → Prognose
-
-Die **Tagesprognose mit Batteriesimulation**: stündliche Bilanz aus PV-Prognose und typischem Verbrauchsprofil, inklusive geschätztem „Speicher voll um" / „Speicher leer um", Autarkie und Eigenverbrauch für den Tag.
-
-> **Hinweis (geplant, noch nicht verfügbar):** Der Export von Prognosewerten **als HA-Sensoren** (z. B. `eedc_speicher_voll_um`) ist vorgesehen (#150), aber noch nicht umgesetzt. Aktuell sind diese Werte nur in der App sichtbar, nicht als HA-Entität.
+> **Hinweis (geplant):** Der Export der Tagesprognose als HA-Sensoren (`eedc_prognose_*`, `eedc_speicher_voll_um`) ist umgesetzt und läuft über [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export) — Details in der [Sensor-Referenz §8a/§11](SENSOR-REFERENZ.md#8a-eedc-pv-prognose-nach-ha-exportieren-mqtt--ha-sensoren).
 
 ---
 
@@ -142,11 +156,11 @@ Damit die GTI-Projektion stimmt, braucht eedc pro PV-String **Azimut und Neigung
 
 > **0° = Süd, −90° = Ost, +90° = West, 180° = Nord.**
 
-Fehlen die Werte, nimmt eedc **Süd / 35°** als Default an — das funktioniert, erzeugt bei abweichender realer Ausrichtung aber einen **systematischen Fehler**. Bei Ost-West- oder Mehrfach-Strings rechnet eedc je Orientierungsgruppe getrennt und kombiniert kWp-gewichtet.
+Fehlen die Werte, nimmt eedc **Süd / 35°** als Default an — das funktioniert, erzeugt bei abweichender realer Ausrichtung aber einen **systematischen Fehler**. Bei Ost-West- oder Mehrfach-Strings rechnet eedc je Orientierungsgruppe getrennt und kombiniert kWp-gewichtet. Ausrichtung und Neigung pflegst du **pro PV-Modul** unter [Einstellungen → Komponenten](HANDBUCH_EINSTELLUNGEN.md#34-typ-spezifische-parameter) (nicht mehr an der Anlage).
 
 ### 4.3 Wettermodell-Kaskade
 
-eedc kann verschiedene Open-Meteo-Modelle nutzen (`auto` = bestes Match, oder gezielt ICON-D2/EU, ECMWF, MeteoSwiss …). Modelle mit kurzem Horizont (z. B. ICON-D2 = 2 Tage) werden automatisch durch ein längerreichendes Fallback-Modell ergänzt, damit die Mehrtagessicht nicht abreißt. Das Modell wählst du pro Anlage.
+eedc kann verschiedene Open-Meteo-Modelle nutzen (`auto` = bestes Match, oder gezielt ICON-D2/EU, ECMWF, MeteoSwiss …). Modelle mit kurzem Horizont (z. B. ICON-D2 = 2 Tage) werden automatisch durch ein längerreichendes Fallback-Modell ergänzt, damit die Mehrtagessicht nicht abreißt. Das Modell wählst du pro Anlage unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) („Modell für Solar-Prognose").
 
 ---
 
@@ -182,7 +196,7 @@ Ein einzelner Faktor korrigiert nur die *Tagessumme*, nicht den *Tagesgang*. Wen
 - Pro Kombination lernt eedc einen eigenen Korrekturfaktor (`Σ IST / Σ Prognose`, begrenzt auf [0,5 ; 1,3]).
 - Im Live-Pfad gilt eine **Fallback-Kaskade**: erst das feine Sonnenstand-×-Wetter-Profil, dann ein gröberes Sonnenstand-Profil, dann der Skalar-Lernfaktor — je nachdem, wie viele Datenpunkte schon vorliegen.
 
-Die **Korrekturprofil-Heatmap** im Prognosen-Tab visualisiert genau das (rot = Prognose war zu hoch, grün = zu niedrig, grau = passt).
+Die **Korrekturprofil-Heatmap** in der Prognose-Auswertung visualisiert genau das (rot = Prognose war zu hoch, grün = zu niedrig, grau = passt).
 
 ---
 
@@ -215,13 +229,13 @@ Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie st
 | **Koordinaten** (Breite/Länge) | jede OpenMeteo-/eedc-/PVGIS-Prognose | keine Prognose; Daten-Checker meldet es |
 | **PV-Leistung (kWp)** | jede Ertragsumrechnung, Performance Ratio | keine Prognose; Daten-Checker meldet „Anlagenleistung fehlt" |
 | **Ausrichtung & Neigung je String** | korrekte GTI-Projektion | Default Süd/35° → systematischer Bias |
-| **Systemverluste** (PVGIS-Eintrag) | Ertragshöhe | Default 14 %; bei PR > 1,1 Hinweis im Daten-Checker |
-| **Gemappte PV-Zähler (IST)** | IST-Spalte, Lernfaktor, Korrekturprofil, Genauigkeit | alles Lern-/Vergleichsbezogene bleibt leer |
+| **Systemverluste** (Solarprognose-Eintrag) | Ertragshöhe | Default 14 %; bei PR > 1,1 Hinweis im Daten-Checker |
+| **Zugeordnete PV-Zähler (IST)** | IST-Spalte, Lernfaktor, Korrekturprofil, Genauigkeit | alles Lern-/Vergleichsbezogene bleibt leer |
 | **≥ 7 Tage mit IST > 0,5 kWh** | eedc-Lernfaktor | eedc-Spalte zeigt „—", Restzeit-Banner |
 | **Solcast-Key / HA-Integration** (optional) | Solcast-Spalte | still Fallback auf eedc + Hinweistext |
 | **Wettermodell** (pro Anlage) | Mehrtagessicht | `auto` = sinnvoller Default |
 
-Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + gemappte PV-Zähler** sind die Pflicht. Solcast ist Kür.
+Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + zugeordnete PV-Zähler** sind die Pflicht. Solcast ist Kür. Stammdaten pflegst du unter [Einstellungen → Stammdaten](HANDBUCH_EINSTELLUNGEN.md#2-stammdaten), die Zähler-Zuordnung unter [Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung).
 
 ---
 
@@ -229,17 +243,21 @@ Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + gemappte PV-Zähler** sind 
 
 | Symptom | Ursache | Was tun |
 |---------|---------|---------|
-| **eedc-Spalte leer / „X von 7 Tagen"** | noch keine 7 verwertbaren IST-Tage | abwarten — eedc zeigt solange die OpenMeteo-Basis. Prüfen, dass PV-Zähler gemappt ist. |
+| **eedc-Spalte leer / „X von 7 Tagen"** | noch keine 7 verwertbaren IST-Tage | abwarten — eedc zeigt solange die OpenMeteo-Basis. Prüfen, dass der PV-Zähler zugeordnet ist. |
 | **Prognose systematisch zu hoch/niedrig** | falsche Ausrichtung/Neigung, oder Lernfaktor noch im Aufbau | Ausrichtung/Neigung je String korrekt pflegen; Bias im Genauigkeits-Tracking beobachten — das Korrekturprofil zieht nach. |
 | **Vormittags daneben, Tagessumme stimmt** | OpenMeteo-Tagesgang-Bias; ein Skalar korrigiert nur die Summe | das Sonnenstand-×-Wetter-Korrekturprofil greift hier — sichtbar in der Heatmap und der Asymmetrie-Diagnose. |
 | **Performance Ratio > 1** | nur bei alten Versionen (GHI statt GTI) | auf aktuelle Version updaten; danach betroffene Tage neu aggregieren. |
 | **Prognose-/IST-Linien um eine Stunde versetzt** | Slot-Versatz zwischen Quellen (Backward-Konvention) | in aktuellen Versionen einheitlich; nach Update auf v3.20.0 ggf. einmal den Verlauf neu berechnen. |
-| **Solcast-Spalte fehlt** | kein Key (Standalone) / HA-Integration nicht da / Tageslimit erreicht | Status-Hinweis im Tab beachten; Key + Resource-IDs im Sensor-Mapping prüfen. |
-| **IST-Lücken im Tagesverlauf** | PV-Stundenwert fehlt (kein Zähler / HA-Neustart) | betroffenen Tag über die [Reparatur-Werkbank](HANDBUCH_ENERGIEPROFIL.md#6-die-reparatur-werkzeuge) neu aggregieren. |
-| **Keine Prognose, „keine Koordinaten"** | Standort fehlt in den Stammdaten | Koordinaten in den Anlagen-Stammdaten eintragen. |
+| **Solcast-Spalte fehlt** | kein Key (Standalone) / HA-Integration nicht da / Tageslimit erreicht | Status-Hinweis im Tab beachten; Key + Resource-IDs unter [Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose) prüfen. |
+| **IST-Lücken im Tagesverlauf** | PV-Stundenwert fehlt (kein Zähler / HA-Neustart) | betroffenen Tag über die [Reparatur-Werkbank](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege) neu aggregieren. |
+| **Keine Prognose, „keine Koordinaten"** | Standort fehlt in den Stammdaten | Koordinaten unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) eintragen. |
 
 ### Robustheit
 
 Die Vergleichssicht ruft alle Quellen **parallel** ab. Hängt eine Quelle (Solcast-Timeout, OpenMeteo langsam), bricht nicht der ganze Tab ab — die betroffene Spalte bleibt einfach leer, die übrigen werden angezeigt.
 
 > **Zusammenhang im Blick behalten:** Prognose-Probleme haben oft ihre Wurzel im IST. Wenn die Genauigkeit unerklärlich schlecht ist, lohnt der Blick ins [Energieprofil](HANDBUCH_ENERGIEPROFIL.md) und den [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) — stimmt das IST nicht, kann auch die beste Prognose nicht „richtig" aussehen.
+
+---
+
+*Letzte Aktualisierung: 2026-07-25 (v4.0)*

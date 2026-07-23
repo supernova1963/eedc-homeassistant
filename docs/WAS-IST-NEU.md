@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v3.46.0)
+> **Stand:** Juli 2026 (v4.0.0)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,28 +9,88 @@
 
 ---
 
-## v3.46 — Sonstige Erträge & Ausgaben zählen jetzt mit (Juli 2026)
+## v4.0.0 — Neue Oberfläche: Cockpit · Komponenten · Auswertungen (Juli 2026)
 
-> Diese Version bringt eine wichtige **Finanz-Korrektur** (bitte den ersten Punkt lesen — deine Summen können sich ändern), klickbare Chart-Legenden und flüssigere Ladezeiten. Außerdem steckt viel Unterbau für die neue Oberfläche darin — der ist hier noch unsichtbar: **die neue Oberfläche folgt in wenigen Tagen als v4.0.**
+> eedc hat eine neue Menüstruktur. **Alle Funktionen und alle deine Daten bleiben erhalten** — sie sind nur neu sortiert, nach drei einfachen Fragen: **Wann?** (Cockpit), **Was?** (Komponenten), **Wie ausgewertet?** (Auswertungen). Alte Lesezeichen-Links leiten automatisch auf die neue Heimat um. Die Tabelle „Wo ist was hin?" unten beantwortet die häufigsten Such-Fälle.
+>
+> Diese Version bringt außerdem einige **Berechnungs-Korrekturen** bei Finanzen und CO₂ mit — **deine Zahlen können sich nach dem Update ändern.** Das ist gewollt: Bitte lies den Abschnitt „Deine Zahlen können sich ändern" weiter unten, bevor du eine Abweichung für einen Fehler hältst.
 
-### Deine Finanz-Summen können sich ändern — das ist die Korrektur, nicht der Fehler
+### Die neue Struktur in 60 Sekunden
 
-- **Sonstige Erträge & Ausgaben rechnen jetzt mit.** Monatliche Sonderposten (z. B. Versicherung, Reparatur, THG-Prämie), die du beim Monatsabschluss als „Sonderkosten" erfasst hast, wurden bisher **nirgends** in den Finanz-Summen berücksichtigt. Jetzt fließen sie ins T-Konto und in alle Finanz-Auswertungen ein — und du kannst pro Monat mehrere benannte Positionen erfassen, jeweils als Ertrag **oder** Ausgabe. Bestehende Sonderkosten-Einträge werden beim ersten Start einmalig übernommen. **Wenn deine Summen nach dem Update anders aussehen: Sie waren vorher unvollständig — jetzt stimmen sie.**
+- **Cockpit** = die Zeit-Achse: **Live · Tag · Monat · Jahr/Gesamt · Aussicht**. Jede Sicht hat denselben Aufbau (Kennzahlen oben, Verlauf/Energiefluss in der Mitte, Komponenten-Sektionen darunter). **Neu: die Tag-Sicht** — jeden einzelnen Tag mit Stundenverlauf und Tagesbilanz durchblättern.
+- **Komponenten** = deine Geräte: PV-Anlage, Speicher, Wärme/Klima, E-Auto, Wallbox, Balkonkraftwerk, Sonstiges — jede mit fester Struktur **Status → Verlauf → Vergleich → Wirtschaftlichkeit**. Die bisherigen Cockpit-Dashboards und Auswertungs-Tabs pro Gerät sind hier zusammengeführt: eine Zahl, eine Heimat. (Die Zukunfts-Prognose je Gerät liegt gebündelt unter Cockpit → Aussicht.)
+- **Auswertungen** = analytische Schnitte über die ganze Anlage: **Finanzen · ROI · Prognose-vs-IST · CO₂ · Tabelle**. Das Finanz-T-Konto aus dem Monatsabschluss lebt jetzt hier — mit wählbarem Zeitraum.
+- **Einstellungen** = Kachel-Übersicht mit Suche statt langem Dropdown; jede Kachel zeigt ihren Status.
+- **Überall:** Blöcke lassen sich verschieben, einklappen und auf Vollbild fokussieren — und einzelne Anzeigen auf einen „Parkplatz" legen (s. u.).
+
+### Du gestaltest jede Sicht selbst
+
+Neu in v4: Du bestimmst, was wo steht — eedc merkt sich deine Anordnung pro Sicht.
+
+- **Blöcke verschieben:** Jeder Block lässt sich per ↑/↓ nach oben oder unten sortieren — das Wichtigste nach vorn.
+- **Fokus/Vollbild:** Per ⤢ öffnet ein Block bildschirmfüllend — ideal, um einen Chart oder eine Tabelle groß zu lesen.
+- **Einklappen:** Selten Gebrauchtes per ⌄ zuklappen.
+- **Parkplatz:** Anzeigen, die du gar nicht brauchst, per Langdruck (bzw. Rechtsklick) auf den „Parkplatz" am Seitenende legen — dort gesammelt und jederzeit zurückholbar. Nichts geht verloren, du blendest nur aus, was dich nicht interessiert.
+
+### Wo ist was hin?
+
+| Gesucht | Neue Heimat |
+|---|---|
+| Live-Dashboard | Cockpit → Live (weiterhin die Startseite) |
+| Aussichten (Prognosen) | Cockpit → Aussicht |
+| Übersicht (Cockpit) | Cockpit → Jahr/Gesamt |
+| Monatsabschluss-Wizard | Einstellungen → Daten → Monatsdaten — **ein Formular statt Wizard** (s. u.) |
+| Finanz-T-Konto des Monats | Auswertungen → Finanzen (Zeitraum wählbar) |
+| Geräte-Dashboards (PV, Speicher, WP, …) | Komponenten → ‹Gerät› |
+| Sensor-Mapping- & MQTT-Inbound-Wizard | Einstellungen → Datenquellen (s. u.) |
+| Energieprofil (Beta-Tab) | Tagessicht → Cockpit → Tag · Tabelle → Auswertungen → Tabelle · Pflege → Einstellungen → Daten |
+| Infothek | Einstellungen → Infothek |
+
+*(Vollständige Tabelle: Hilfe → „Was ist neu".)*
+
+### Monatsabschluss: ein Formular statt sieben Wizard-Schritten
+
+Der Monatsabschluss-Wizard ist Geschichte. Monatswerte erfasst und korrigierst du jetzt in **einem** Formular (Einstellungen → Daten → Monatsdaten) — dasselbe Formular für Neuanlage und Korrektur, mit Status-Anzeige je Monat, den bekannten Datenquellen (HA-Statistik, Connector, MQTT, manuell) und dem T-Konto als Gegenprobe in den Auswertungen.
+
+### Datenquellen: eine Fläche statt zwei Wizards
+
+Sensor-Zuordnung neu gedacht: Unter **Einstellungen → Datenquellen** ordnest du **jedem Feld genau eine Quelle** zu — HA-Sensor, MQTT-Topic oder Geräte-Connector. Mit Sensor-Suche, Themen-Baum, Vorzeichen-Invertierung und einer Prüfung je Feld, die Probleme (falsche Einheit, fehlende Statistik …) direkt anzeigt. Die alten Wizards (Sensor-Mapping, MQTT-Inbound) sind damit abgelöst; **bestehende Zuordnungen wurden automatisch übernommen.** Die Richtungs-Schalter (Empfangen + Export über **einen** Broker) findest du unter Einstellungen → Integration.
+
+### Erste Einrichtung im neuen Gewand
+
+Der Setup-Wizard beim ersten Start führt in neuer Optik durch Anlage, Tarif, PV-System und die Verbindung zu Home Assistant — inklusive Schnellstart-Karte und Sensor-Vorschlägen aus dem HA-Energie-Dashboard. (Bestehende Installationen sehen ihn nicht.)
+
+### Deine Zahlen können sich ändern — das sind Korrekturen, keine Fehler
+
+> Mehrere Berechnungen sind in dieser Version genauer geworden. Wenn eine Kennzahl nach dem Update anders aussieht als vorher, war sie **vorher unvollständig** — jetzt stimmt sie.
+
+- **Sonstige Erträge & Ausgaben rechnen jetzt mit.** Monatliche Sonderposten (z. B. Versicherung, Reparatur, THG-Prämie), die du beim Monatsabschluss als „Sonderkosten" erfasst hast, wurden bisher **nirgends** in den Finanz-Summen berücksichtigt. Jetzt fließen sie ins T-Konto und in alle Finanz-Auswertungen ein — und du kannst pro Monat mehrere benannte Positionen erfassen, jeweils als Ertrag **oder** Ausgabe. Bestehende Sonderkosten-Einträge werden beim ersten Start einmalig übernommen.
 - **Grundgebühr & Zählergebühr getrennt:** Die Zählergebühr ist jetzt ein eigenes Feld im Stromtarif und wird neben der Grundgebühr separat ausgewiesen (Cockpit Monat/Jahr).
+- **CO₂-Ersparnis der Wärmepumpe wird genauer berechnet** — sie kann dadurch **niedriger** ausfallen. Bisher wurde nur das vermiedene Gas grob angesetzt; jetzt zählt der Wirkungsgrad des ersetzten Gaskessels **und** der Stromverbrauch der Wärmepumpe wird gegengerechnet. Cockpit, PDF-Jahresbericht und das WP-Dashboard zeigen jetzt überall denselben Wert.
+- **E-Auto-Ersparnis bei mehreren Fahrzeugen korrekt.** Hattest du mehr als ein E-Auto, wurde die Ersparnis aller Fahrzeuge am Vergleichsverbrauch des ersten Autos gemessen. Jetzt rechnet jedes Fahrzeug mit seinem eigenen Vergleichswert — die Gesamt-Ersparnis kann sich dadurch ändern.
+- **Dienstwagen zählen nicht in die E-Mobilitäts-Bilanz** (konsistent mit dem Cockpit): Ein als dienstlich markiertes Fahrzeug fließt nicht mehr in Ersparnis-/CO₂-Summen ein.
+- **Vorjahres-Vergleich sauberer:** Der Vergleich mit dem Vorjahr berücksichtigt jetzt bei Wärmepumpe, E-Mobilität **und** Energie das Anschaffungs- und Stilllegungsdatum — Geräte, die es im Vorjahr noch nicht (oder nicht mehr) gab, verfälschen den Vergleich nicht länger.
+- **Finanz-Block im Cockpit als Komponenten-Tabelle:** Der Finanz-Überblick in Cockpit → Monat/Jahr zeigt jetzt eine Zeile je Komponente (Erträge · Einsparungen · Aufwendungen · Saldo) mit Summenzeile, plus eine Zeile „Ergebnis nach Stromrechnung". Das ersetzt den bisherigen verkürzten Teaser, der optisch eine andere Summe suggerieren konnte.
 
 ### Weitere Verbesserungen
 
-- **Chart-Legenden sind jetzt klickbar:** In Diagrammen mit mehreren Serien blendet ein Klick auf einen Legenden-Eintrag die Serie aus und wieder ein — die Achsen skalieren mit. Praktisch, um z. B. eine dominante Serie auszublenden und die kleinen zu vergleichen.
+- **Chart-Legenden sind klickbar:** In Diagrammen mit mehreren Serien blendet ein Klick auf einen Legenden-Eintrag die Serie aus und wieder ein — die Achsen skalieren mit. Praktisch, um eine dominante Serie auszublenden und die kleinen zu vergleichen.
+- **Diagramme als Tabelle ablesen:** In der Vollbild-Ansicht (⤢) lässt sich ein Diagramm per Umschalter als Tabelle anzeigen und als CSV exportieren (zunächst in Cockpit-Monat/-Jahr-Verlauf und Live-Tagesverlauf).
+- **Netzbezug hat eine neue Farbe** (dunkles Rot statt Signal-Rot) — Signal-Rot ist jetzt exklusiv für Kosten und Fehler reserviert. Einheitlich in allen Charts.
 - **Community: rückwirkend entfernte Monate verschwinden jetzt auch auf dem Server.** Hast du Monatsdaten lokal gelöscht (z. B. eine Fehlbuchung), blieben sie im Community-Vergleich bisher stehen — ab jetzt räumt die nächste Übertragung sie auch dort weg.
-- **Speicher: Netzladung wieder überall sichtbar.** Das Speicher-Dashboard las den Wert unter einem veralteten Schlüssel — Netzladungs-Werte, die dort fehlten, tauchen wieder auf. Dazu: Ø-Netz-Ladepreis-Vorschlag im Speicher-Formular und Ausweis der Netzladung-Kosten im T-Konto.
-- **Live & Aussicht laden gleichmäßiger:** Eine interne Zufalls-Wartezeit (bis zu 30 s) beim Prognose-Abruf ist aus dem interaktiven Pfad entfernt — sie gehörte nur in Hintergrund-Jobs.
-- **MQTT intern aufgeräumt:** eine Broker-Verbindung für beide Richtungen (Empfangen + Export). Bestehende Einstellungen werden automatisch übernommen — es ist nichts zu tun. **Neu dabei:** Sobald eine HA-Verbindung und ein Broker vorhanden sind, veröffentlicht eedc seine HA-Sensoren jetzt standardmäßig automatisch (vorher nur, wenn MQTT in den Add-on-Optionen aktiv war) — es können also neue eedc-Entitäten in HA auftauchen. Wer das nicht möchte: Einstellungen → HA-Export → Auto-Publish ausschalten.
-- **Ein Feld, eine Quelle:** Ist dasselbe Feld sowohl über einen HA-Sensor als auch über MQTT beliefert, gilt ab jetzt fest der HA-Sensor (bisher überschrieb der MQTT-Wert den HA-Wert). Fällt der HA-Sensor aus, springt nicht mehr still der MQTT-Wert ein — prüfe bei Live-Lücken also zuerst den HA-Sensor.
-- **Kleinere Politur:** einheitliche „Abbrechen"-Knöpfe, bessere Dialog-Abstände auf Mobilgeräten, weniger doppelte Datenabrufe beim Navigieren.
+- **Speicher: Netzladung wieder überall sichtbar** (das Dashboard las den Wert unter einem veralteten Schlüssel), Ø-Netz-Ladepreis-Vorschlag im Speicher-Formular und Ausweis der Netzladung-Kosten im T-Konto.
+- **Live & Aussicht laden gleichmäßiger:** Eine interne Zufalls-Wartezeit beim Prognose-Abruf ist aus dem interaktiven Pfad entfernt — sie gehörte nur in Hintergrund-Jobs. Dazu weniger doppelte Datenabrufe beim Navigieren.
+- **Ein Feld, eine Quelle:** Ist dasselbe Feld über HA-Sensor **und** MQTT beliefert, gilt ab jetzt fest der HA-Sensor (bisher überschrieb der MQTT-Wert den HA-Wert). Fällt der HA-Sensor aus, springt nicht mehr still der MQTT-Wert ein — prüfe bei Live-Lücken also zuerst den HA-Sensor.
+- **Kleinere Politur:** einheitliche „Abbrechen"-Knöpfe, bessere Dialog-Abstände auf Mobilgeräten, Vergleichspreise als eigene Untergruppe im Monatsdaten-Formular, und die Fußzeile findet jetzt auch übersprungene Monate mitten in der Historie.
 
-> **Intern:** Ein Großteil dieser Version ist Vorbereitung der neuen Oberfläche (hinter Build-Flag, für dich nicht aktiv) — **v4.0 folgt in wenigen Tagen** und bringt sie sichtbar, inklusive „Wo ist was hin?"-Tabelle.
+### Für HA-Add-on-Nutzer
+
+- Das Update ist als **Breaking Change** markiert (neue Menüstruktur) — der Add-on-Store zeigt deshalb einen Hinweis vor dem Update. Es gehen **keine Daten verloren**; „Breaking" heißt hier: die Oberfläche sieht anders aus, Links/Lesezeichen werden umgeleitet.
+- **MQTT intern aufgeräumt:** eine Broker-Verbindung für beide Richtungen (Empfangen + Export), bestehende Einstellungen werden automatisch übernommen. **Sobald eine HA-Verbindung und ein Broker vorhanden sind, veröffentlicht eedc seine HA-Sensoren jetzt standardmäßig automatisch** (vorher nur bei aktiver MQTT-Option) — es können also neue eedc-Entitäten in HA auftauchen. Nicht gewünscht? Einstellungen → HA-Export → Auto-Publish ausschalten.
+- **Die exportierten HA-Sensoren rechnen jetzt vollständiger:** Der CO₂-Ersparnis-Sensor trägt die **volle** Bilanz (PV-Eigenverbrauch inkl. Balkonkraftwerk und sonstiger Erzeuger + Wärmepumpe + E-Mobilität) statt nur des PV-Anteils; Autarkie und Eigenverbrauchsquote enthalten jetzt auch Erzeuger hinter dem Hauszähler — beide sind damit deckungsgleich mit dem Cockpit. **Hinweis:** Weil sich der Wert des CO₂-Sensors dadurch einmalig ändert, kann die HA-Langzeitstatistik an der Update-Stelle einen einmaligen Sprung zeigen.
 
 ---
+
 
 ## v3.45.9 — Speicher-Vergangenheit selbst geradeziehen (Juni 2026)
 
