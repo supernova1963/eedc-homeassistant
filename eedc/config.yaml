@@ -7,10 +7,13 @@ version: "3.45.9"
 slug: "eedc"
 url: "https://github.com/supernova1963/eedc-homeassistant"
 
-# Breaking Change Warnung für v2.0.0
-# Erfordert Neuinstallation wegen geändertem Volume-Mapping (config:ro)
+# Breaking Change Warnung
+# 2.0.0: Neuinstallation wegen geändertem Volume-Mapping (config:ro)
+# 4.0.0: komplett neue Oberfläche (Cockpit · Komponenten · Auswertungen) —
+#        keine Daten betroffen, alte Links werden umgeleitet; Hinweis vor dem Update.
 breaking_versions:
   - "2.0.0"
+  - "4.0.0"
 
 # Unterstützte Architekturen
 arch:
