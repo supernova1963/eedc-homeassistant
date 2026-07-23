@@ -83,7 +83,7 @@ describe('Bestands-Redirects — Render (keine 404)', () => {
   })
 
   it('eine Auswahl echter Routen rendert direkt (Stichprobe)', () => {
-    for (const p of ['/live', '/auswertungen/energie', '/aussichten/kurzfristig', '/community/uebersicht', '/cockpit/monatsberichte']) {
+    for (const p of ['/cockpit/live', '/auswertungen/finanzen', '/komponenten/pv-anlage', '/community/uebersicht', '/einstellungen/daten']) {
       const { unmount } = renderPfad(p)
       expect(screen.getByText('OK')).toBeInTheDocument()
       unmount()

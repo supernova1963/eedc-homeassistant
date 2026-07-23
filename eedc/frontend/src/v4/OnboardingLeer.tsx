@@ -43,7 +43,7 @@ export function AnlageLeer({ titel }: { titel: string }) {
       icon={Sun}
       titel={titel}
       beschreibung="Lege deine Anlage unter Einstellungen → Stammdaten an — die Sichten füllen sich dann automatisch."
-      ctaHref="#/v4/einstellungen/stammdaten"
+      ctaHref="#/einstellungen/stammdaten"
       ctaLabel="Anlage anlegen"
     />
   )
@@ -56,7 +56,7 @@ export function DatenLeer({ titel }: { titel: string }) {
       icon={Database}
       titel={titel}
       beschreibung="Importiere Statistik-Daten aus Home Assistant oder erfasse Monatswerte unter Einstellungen → Daten."
-      ctaHref="#/v4/einstellungen/daten"
+      ctaHref="#/einstellungen/daten"
       ctaLabel="Daten importieren"
     />
   )

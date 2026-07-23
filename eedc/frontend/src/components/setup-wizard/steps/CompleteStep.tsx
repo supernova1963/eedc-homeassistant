@@ -6,7 +6,6 @@
 
 import { Sun, PartyPopper, FileSpreadsheet, LayoutDashboard, Plug } from 'lucide-react'
 import { Button } from '../../ui'
-import { IA_V4 } from '../../../lib/flags'
 import { v3RouteZuV4 } from '../../../config/v3ZuV4Route'
 import type { Anlage } from '../../../types'
 
@@ -17,12 +16,12 @@ interface CompleteStepProps {
 
 export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepProps) {
   // Navigation zur Monatsdaten-Seite. Das Gate rendert VOR dem Router (kein
-  // navigate/useV4Basis) — unter IA_V4 auf die V4-Kategorie „Daten" umbiegen
-  // (v3RouteZuV4-SoT), sonst V3-Route (bleibt bis Flip).
+  // navigate) — die Alt-Route-Strings werden über die Re-Kategorisierungs-Map
+  // (v3RouteZuV4-SoT) auf die V4-Kategorie umgebogen (z. B. „Daten").
   const springeZu = (v3Ziel: string) => {
     // Wizard als abgeschlossen markieren (wird von onGoToDashboard gemacht)
     onGoToDashboard()
-    const ziel = IA_V4 ? (v3RouteZuV4(v3Ziel) ?? v3Ziel) : v3Ziel
+    const ziel = v3RouteZuV4(v3Ziel) ?? v3Ziel
     // Nach kurzem Delay zur Zielseite navigieren
     setTimeout(() => {
       window.location.hash = '#' + ziel
@@ -84,14 +83,11 @@ export default function CompleteStep({ anlage, onGoToDashboard }: CompleteStepPr
           Monatsdaten erfassen
         </Button>
 
-        {/* D2-Absprung nur unter IA_V4 (v3.46-Scope-Entscheid) — V3-Neuinstallationen
-            sehen den Alt-Umfang ohne Datenquellen-Einstieg. */}
-        {IA_V4 && (
-          <Button variant="secondary" size="lg" onClick={handleGoToDatenquellen}>
-            <Plug className="w-5 h-5 mr-2 max-sm:hidden" />
-            Sensor- & Topic-Pflege
-          </Button>
-        )}
+        {/* D2-Absprung in die Datenquellen-Fläche (Sensor-/Topic-Pflege). */}
+        <Button variant="secondary" size="lg" onClick={handleGoToDatenquellen}>
+          <Plug className="w-5 h-5 mr-2 max-sm:hidden" />
+          Sensor- & Topic-Pflege
+        </Button>
 
         <Button variant="secondary" size="lg" onClick={onGoToDashboard}>
           <LayoutDashboard className="w-5 h-5 mr-2 max-sm:hidden" />

@@ -87,9 +87,9 @@ export default function CommunityV4() {
   }, [anlageId, zeitraum, communityHash])
 
   // Index / unbekannter Sub → Default (Übersicht).
-  if (!SUBS.some((s) => s.key === sub)) return <Navigate to="/v4/community/uebersicht" replace />
+  if (!SUBS.some((s) => s.key === sub)) return <Navigate to="/community/uebersicht" replace />
 
-  const nav = <IASubTabBar items={SUBS.map((s) => ({ key: s.key, label: s.label, to: `/v4/community/${s.key}` }))} />
+  const nav = <IASubTabBar items={SUBS.map((s) => ({ key: s.key, label: s.label, to: `/community/${s.key}` }))} />
 
   // Steuerleiste (Anlage · Zeitraum · Community-Server) unter den Sub-Tabs.
   const steuerleiste = (
@@ -148,7 +148,7 @@ export default function CommunityV4() {
             description="Um den Community-Vergleich nutzen zu können, musst du zuerst deine anonymisierten Anlagendaten mit der Community teilen."
             action={
               /* B15: ui/Button-SoT (size="lg" = px-6 py-3 wie vorher, Töne 600/700 statt 500/600). */
-              <Button variant="primary" size="lg" className="gap-2" onClick={() => navigate('/v4/einstellungen/stammdaten')}>
+              <Button variant="primary" size="lg" className="gap-2" onClick={() => navigate('/einstellungen/stammdaten')}>
                 <Users className="h-5 w-5 max-sm:hidden" /> Jetzt teilen
               </Button>
             }

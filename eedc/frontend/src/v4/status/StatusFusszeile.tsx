@@ -148,7 +148,7 @@ export function StatusFusszeile() {
               datencheck.info > 0 ? `${datencheck.info} ${datencheck.info === 1 ? 'Hinweis' : 'Hinweise'}` : null,
             ].filter(Boolean).join(' · ')}
             wert={`${checkBefunde}`}
-            onOeffnen={() => navigate('/v4/einstellungen/daten')}
+            onOeffnen={() => navigate('/einstellungen/daten')}
             ausrichtung="links"
             offen={offen}
             setOffen={setOffen}
@@ -188,8 +188,8 @@ export function StatusFusszeile() {
             : 'Alle Monate sind abgeschlossen.'}
           onOeffnen={() => navigate(
             offenerMonat
-              ? `/v4/einstellungen/daten?erfassen=${offenerMonat.jahr}-${String(offenerMonat.monat).padStart(2, '0')}`
-              : '/v4/einstellungen/daten',
+              ? `/einstellungen/daten?erfassen=${offenerMonat.jahr}-${String(offenerMonat.monat).padStart(2, '0')}`
+              : '/einstellungen/daten',
           )}
           ausrichtung="links"
           offen={offen}
@@ -209,7 +209,7 @@ export function StatusFusszeile() {
             detail={communityGeteilt
               ? 'Anonymisierte Monatswerte fließen in den Community-Benchmark ein.'
               : 'Diese Anlage teilt keine Daten mit der Community. Teilen lässt sich im Community-Block der Stammdaten aktivieren.'}
-            onOeffnen={() => navigate('/v4/einstellungen/stammdaten')}
+            onOeffnen={() => navigate('/einstellungen/stammdaten')}
             ausrichtung="links"
             offen={offen}
             setOffen={setOffen}
@@ -225,7 +225,7 @@ export function StatusFusszeile() {
               mqtt!.letzte_nachricht ? ` · Letzte: ${new Date(mqtt!.letzte_nachricht).toLocaleTimeString('de-DE')}` : ''
             }`}
             wert={mqtt!.empfangene_nachrichten ? `MQTT (${mqtt!.empfangene_nachrichten})` : 'MQTT'}
-            onOeffnen={() => navigate('/v4/einstellungen/integration')}
+            onOeffnen={() => navigate('/einstellungen/integration')}
             ausrichtung="links"
             offen={offen}
             setOffen={setOffen}

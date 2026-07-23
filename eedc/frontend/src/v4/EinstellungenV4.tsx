@@ -130,7 +130,7 @@ export default function EinstellungenV4() {
   const { kategorie } = useParams<{ kategorie: string }>()
   const gueltig = EINSTELLUNGEN_KATEGORIEN.some((k) => k.key === kategorie)
   // Index / unbekannte Kategorie → Default (Stammdaten).
-  if (!gueltig) return <Navigate to="/v4/einstellungen/stammdaten" replace />
+  if (!gueltig) return <Navigate to="/einstellungen/stammdaten" replace />
   return <EinstellungenInner kategorie={kategorie as KategorieKey} />
 }
 
@@ -193,7 +193,7 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   const nav = (
     <IASubTabBar
       items={EINSTELLUNGEN_KATEGORIEN.map((k) => ({
-        key: k.key, label: k.label, to: `/v4/einstellungen/${k.key}`,
+        key: k.key, label: k.label, to: `/einstellungen/${k.key}`,
       }))}
     />
   )

@@ -362,7 +362,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           icon={Sun}
           titel="Standort nicht konfiguriert"
           beschreibung="Für Prognosen werden die Koordinaten der Anlage benötigt. Bitte konfiguriere den Standort in den Anlagen-Einstellungen."
-          ctaHref="#/v4/einstellungen/stammdaten"
+          ctaHref="#/einstellungen/stammdaten"
           ctaLabel="Anlage konfigurieren"
         />
       ) : error ? (

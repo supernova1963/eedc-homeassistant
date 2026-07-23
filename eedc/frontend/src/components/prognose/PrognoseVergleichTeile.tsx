@@ -20,9 +20,7 @@ import { Sun, CloudSun, Cloud, CloudRain, CloudSnow, CloudLightning, BarChart3 }
 import { Button, Card, ChartLegende, Checkbox, SegmentControl, buttonClasses, Table, TableHead, TableBody, TableFoot } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { SimpleTooltip } from '../ui/FormelTooltip'
-import { useV4Basis } from '../../hooks/useV4Basis'
 import { useLegendenToggle } from '../../hooks'
-import { v3RouteZuV4 } from '../../config/v3ZuV4Route'
 import { Parkbar } from '../park'
 import {
   aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag,
@@ -230,7 +228,6 @@ function DatendichtFallback({ children }: { children: React.ReactNode }) {
   )
 }
 function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { fehlendeStunden: number[]; anlageId: number; onReloaded: () => void }) {
-  const v4Basis = useV4Basis()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'warning' | 'error'; msg: string } | null>(null)
@@ -273,11 +270,9 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
           )}
           <div className="flex gap-2">
             <Button type="button" variant="primary" size="sm" className="flex-1" onClick={handleReaggregate} loading={busy}>{busy ? 'Berechne…' : 'Tag neu berechnen'}</Button>
-            {/* I9: geteilte Datei — unter /v4 auf den re-kategorisierten Reiter
-                (Integration) umbiegen, V3 behält sein Original-Ziel (Purge-Mechanik
-                useV4Basis + v3RouteZuV4 wie DatenCheckerTeile). */}
+            {/* Absprung in die Datenquellen-Fläche (Sensor-/Topic-Zuordnung). */}
             <a
-              href={v4Basis ? `#${v3RouteZuV4('einstellungen/sensor-mapping')}` : '#/einstellungen/sensor-mapping'}
+              href="#/einstellungen/datenquellen"
               className={buttonClasses({ variant: 'secondary', size: 'sm' })}
             >Sensor-Mapping</a>
           </div>

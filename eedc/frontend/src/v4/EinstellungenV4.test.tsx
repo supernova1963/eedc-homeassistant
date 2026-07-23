@@ -57,8 +57,8 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/v4/einstellungen" element={<Navigate to="/v4/einstellungen/stammdaten" replace />} />
-        <Route path="/v4/einstellungen/:kategorie" element={<EinstellungenV4 />} />
+        <Route path="/einstellungen" element={<Navigate to="/einstellungen/stammdaten" replace />} />
+        <Route path="/einstellungen/:kategorie" element={<EinstellungenV4 />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -66,25 +66,25 @@ function renderAt(path: string) {
 
 describe('EinstellungenV4 (Einstellungen-Shell)', () => {
   it('zeigt alle 6 Kategorien in der Leiste', () => {
-    renderAt('/v4/einstellungen/stammdaten')
+    renderAt('/einstellungen/stammdaten')
     for (const label of ['Stammdaten', 'Komponenten', 'Infothek', 'Daten', 'Integration', 'System']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     }
   })
 
   it('rendert die Blöcke der aktiven Kategorie (Stammdaten → Anlage)', () => {
-    renderAt('/v4/einstellungen/stammdaten')
+    renderAt('/einstellungen/stammdaten')
     expect(screen.getByText('Anlage')).toBeInTheDocument()
     expect(screen.getByText('Strompreise')).toBeInTheDocument()
   })
 
   it('unbekannte Kategorie → Redirect auf Stammdaten', () => {
-    renderAt('/v4/einstellungen/quatsch')
+    renderAt('/einstellungen/quatsch')
     expect(screen.getByText('Anlage')).toBeInTheDocument()
   })
 
   it('Komponenten-Reiter rendert einen Block pro Investitionstyp (datengetrieben)', () => {
-    renderAt('/v4/einstellungen/komponenten')
+    renderAt('/einstellungen/komponenten')
     // Block-Titel = Typ-Labels (alle 8 Typen, auch ohne Geräte); Inhalt ist per
     // defaultOpen:false eingeklappt → Geräte-Namen erst nach Aufklappen.
     expect(screen.getByText('Speicher')).toBeInTheDocument()
@@ -96,7 +96,7 @@ describe('EinstellungenV4 (Einstellungen-Shell)', () => {
   })
 
   it('globale Suche filtert über alle Kategorien', () => {
-    renderAt('/v4/einstellungen/stammdaten')
+    renderAt('/einstellungen/stammdaten')
     const suchfeld = screen.getByLabelText('Einstellungen durchsuchen')
     fireEvent.change(suchfeld, { target: { value: 'community' } })
     expect(screen.getByText('Community-Share')).toBeInTheDocument()

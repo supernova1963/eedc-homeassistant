@@ -40,7 +40,7 @@ const datenquellen: DatenquelleCard[] = [
     description: 'Jedem eedc-Feld seine Quelle zuordnen: Home-Assistant-Sensor oder MQTT (Inbound-Topic bzw. eigenes Broker-Topic).',
     icon: Network,
     href: '/einstellungen/datenquellen',
-    v4Route: '/v4/einstellungen/datenquellen',
+    v4Route: '/einstellungen/datenquellen',
     nur: 'v4',
     color: 'text-green-600 dark:text-green-400',
     bgColor: 'bg-green-50 dark:bg-green-900/20',

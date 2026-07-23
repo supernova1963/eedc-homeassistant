@@ -102,12 +102,12 @@ function SensorRow({ z }: { z: SensorZeile }) {
 // P8-Kurskorrektur: die Geräte-Bearbeitung ist der Einstellungs-Reiter „Komponenten"
 // (IST Investitionen); die V4-Einstellungen re-kategorisieren die Ziele (Zuordnung =
 // config/v3ZuV4Route). KomponentenTypV4 ist v4-only → feste V4-Ziele (kein V3-Sprung).
-const EDIT_INVEST = '#/v4/einstellungen/komponenten'
+const EDIT_INVEST = '#/einstellungen/komponenten'
 // B7: Sensor- und MQTT-Zuordnung sind zur EINEN Datenquellen-Fläche verschmolzen
 // (eigene Kategorie, §2g) — vorher zwei Links auf denselben Integration-Reiter.
-const EDIT_DATENQUELLEN = '#/v4/einstellungen/datenquellen'
-const EDIT_INFOTHEK = '#/v4/einstellungen/infothek'
-const EDIT_DATENCHECKER = '#/v4/einstellungen/daten'
+const EDIT_DATENQUELLEN = '#/einstellungen/datenquellen'
+const EDIT_INFOTHEK = '#/einstellungen/infothek'
+const EDIT_DATENCHECKER = '#/einstellungen/daten'
 
 /** Severity-Rang für die Sortierung der Daten-Checker-Befunde (error zuerst). */
 const SCHWERE_RANG: Record<CheckSchwere, number> = { error: 0, warning: 1, info: 2, ok: 3 }
@@ -671,7 +671,7 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
         ? <Parkbar id="el:vergleich" titel="Vergleich"><KomponentenVergleich label={g.vergleich.label} einheit={g.vergleich.einheit} farbe={g.vergleich.farbe} jahre={g.vergleich.jahre} /></Parkbar>
         : <Parkbar id="el:vergleich-hinweis" titel="Vergleich-Hinweis"><FolgtHinweis
             text="Für diesen Typ liegt noch kein Jahresvergleich vor."
-            crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/v4/auswertungen/tabelle' }}
+            crossLink={{ label: 'Alle Werte / Tabelle →', href: '#/auswertungen/tabelle' }}
           /></Parkbar>),
   })
 

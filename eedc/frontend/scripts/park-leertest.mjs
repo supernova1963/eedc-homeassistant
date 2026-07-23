@@ -30,14 +30,14 @@ const BASE = process.env.EEDC_BASE || 'http://localhost:8200'
 
 // Die park-fähigen v4-Sichten (Persist-Key wird zur Laufzeit selbst entdeckt).
 const ROUTES = [
-  '#/v4/komponenten/pv-module', '#/v4/komponenten/speicher', '#/v4/komponenten/waermepumpe',
-  '#/v4/komponenten/e-auto', '#/v4/komponenten/wallbox', '#/v4/komponenten/balkonkraftwerk',
-  '#/v4/komponenten/sonstiges',
-  '#/v4/auswertungen/co2', '#/v4/auswertungen/finanzen', '#/v4/auswertungen/roi',
-  '#/v4/auswertungen/prognose', '#/v4/auswertungen/tabelle',
-  '#/v4/cockpit/monat', '#/v4/cockpit/jahr', '#/v4/cockpit/tag', '#/v4/cockpit/aussicht',
-  '#/v4/cockpit/live',
-  '#/v4/community/uebersicht',
+  '#/komponenten/pv-anlage', '#/komponenten/speicher', '#/komponenten/waermepumpe',
+  '#/komponenten/e-auto', '#/komponenten/wallbox', '#/komponenten/bkw',
+  '#/komponenten/sonstiges',
+  '#/auswertungen/co2', '#/auswertungen/finanzen', '#/auswertungen/roi',
+  '#/auswertungen/prognose', '#/auswertungen/tabelle',
+  '#/cockpit/monat', '#/cockpit/jahr', '#/cockpit/tag', '#/cockpit/aussicht',
+  '#/cockpit/live',
+  '#/community/uebersicht',
 ]
 
 async function alleAufklappen(page) {

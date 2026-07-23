@@ -10,7 +10,6 @@
  */
 import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useV4Basis } from '../hooks'
 import { v3RouteZuV4 } from '../config/v3ZuV4Route'
 import {
   RefreshCw, XCircle, AlertTriangle, Info,
@@ -73,7 +72,6 @@ function KategorieSektion({
   const navigate = useNavigate()
   // Geteilte Datei (V3-Seite + V4-Daten-Block): „Beheben"-Links unter /v4 auf den
   // re-kategorisierten V4-Reiter umbiegen (Donor-Ziele bleiben V3 → R6).
-  const v4Basis = useV4Basis()
 
   const counts = useMemo(() => {
     const c = { error: 0, warning: 0, info: 0, ok: 0 }
@@ -181,7 +179,7 @@ function KategorieSektion({
                     variant="ghost"
                     size="sm"
                     className="flex-shrink-0"
-                    onClick={() => navigate((v4Basis && v3RouteZuV4(e.link!)) || e.link!)}
+                    onClick={() => navigate(v3RouteZuV4(e.link!) ?? e.link!)}
                   >
                     Beheben
                     <ChevronRight className="h-3 w-3 ml-0.5" />

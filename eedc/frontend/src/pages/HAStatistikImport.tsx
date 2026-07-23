@@ -541,7 +541,7 @@ export default function HAStatistikImport() {
           onClick={() => {
             if (!host.imOverlay) return navigate('/einstellungen/sensor-mapping')
             host.schliessen()
-            navigate('/v4/einstellungen/datenquellen')
+            navigate('/einstellungen/datenquellen')
           }}
         >
           ← Zurück zu {host.imOverlay ? 'Datenquellen' : 'Sensor-Zuordnung'}
@@ -552,7 +552,7 @@ export default function HAStatistikImport() {
           onClick={() => {
             if (host.imOverlay) {
               host.schliessen()
-              navigate('/v4/einstellungen/daten')
+              navigate('/einstellungen/daten')
             } else {
               navigate('/einstellungen/monatsdaten')
             }

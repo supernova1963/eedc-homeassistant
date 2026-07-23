@@ -60,7 +60,7 @@ export const KOMPONENTEN_ANALYSE: Record<string, KompAnalyse> = {
         <PVStringVergleich anlageId={anlageId} embed
           melde={melde ? (ids) => melde([...ids, 'link:pv-prognose']) : undefined} />
         <Parkbar id="link:pv-prognose" titel="Cross-Link volle Prognose-Analyse">
-          <a href="#/v4/auswertungen/prognose" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+          <a href="#/auswertungen/prognose" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
             <ExternalLink className="h-4 w-4" /> Volle Prognose-Analyse (Quellen-Vergleich, MAE/MAPE) →
           </a>
         </Parkbar>

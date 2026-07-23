@@ -64,7 +64,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
         {/* C2: Cross-Link zu Einstellungen/Daten (Abschluss) statt Inline-Wizard (B5/SPEC). */}
         {laufend && zeigeAbschlussLink && (
           <a
-            href="#/v4/einstellungen/daten"
+            href="#/einstellungen/daten"
             className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
           >
             <CalendarClock className="h-3.5 w-3.5" />
@@ -125,7 +125,7 @@ export function finanzTeaserBlock(d: AktuellerMonatResponse, park: ParkApi = NOO
         </Parkbar>
         <Parkbar id="el:finanzen-link" titel="Cross-Link Finanzrechnung">
           <div className="space-y-3">
-            <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+            <a href="#/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
               volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
             </a>
             <p className="text-xs text-gray-400 dark:text-gray-500">

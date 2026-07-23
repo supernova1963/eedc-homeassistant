@@ -2,7 +2,7 @@
  * KomponentenV4 — Dispatcher der Komponenten-(Was-)Achse.
  *
  * Sub-Tabs pro Komponententyp, **nur wenn die Anlage den Typ hat** (K-B2),
- * Reihenfolge via `compareTyp` (K-B3). `/v4/komponenten` (ohne Typ) leitet auf
+ * Reihenfolge via `compareTyp` (K-B3). `/komponenten` (ohne Typ) leitet auf
  * den ersten verfügbaren Typ; `:typ` rendert {@link KomponentenTypV4}. Label/Icon
  * aus dem Identitäts-SoT `KOMPONENTEN_IDENTITAET`.
  */
@@ -60,7 +60,7 @@ export default function KomponentenV4() {
 
   const nav = (
     <IASubTabBar items={verfuegbar.map((t) => ({
-      key: t.key, label: t.label ?? KOMPONENTEN_IDENTITAET[t.typ].label, to: `/v4/komponenten/${t.key}`,
+      key: t.key, label: t.label ?? KOMPONENTEN_IDENTITAET[t.typ].label, to: `/komponenten/${t.key}`,
     }))} />
   )
 
@@ -84,7 +84,7 @@ export default function KomponentenV4() {
               icon={Cpu}
               titel="Diese Anlage hat noch keine erfassten Komponenten."
               beschreibung="Erfasse deine Komponenten (PV, Speicher, Wärmepumpe, …) unter Einstellungen → Komponenten."
-              ctaHref="#/v4/einstellungen/komponenten"
+              ctaHref="#/einstellungen/komponenten"
               ctaLabel="Komponenten erfassen"
             />
           )}
@@ -95,7 +95,7 @@ export default function KomponentenV4() {
 
   // Index oder unbekannter Typ → erster verfügbarer Typ.
   const aktiv = verfuegbar.find((t) => t.key === routeKey)
-  if (!aktiv) return <Navigate to={`/v4/komponenten/${verfuegbar[0].key}`} replace />
+  if (!aktiv) return <Navigate to={`/komponenten/${verfuegbar[0].key}`} replace />
 
   return (
     <ViewShell bar={nav}>

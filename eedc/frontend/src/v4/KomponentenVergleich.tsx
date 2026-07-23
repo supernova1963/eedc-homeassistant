@@ -118,7 +118,7 @@ export function KomponentenVergleich({
 
 function Crosslink() {
   return (
-    <a href="#/v4/auswertungen/tabelle" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+    <a href="#/auswertungen/tabelle" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
       <ExternalLink className="h-4 w-4" /> Voller Mehrjahres-Vergleich + Export → Auswertungen / Tabelle
     </a>
   )

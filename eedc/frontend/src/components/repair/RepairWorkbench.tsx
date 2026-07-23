@@ -40,7 +40,6 @@ import {
   repairApi,
 } from '../../api/repair'
 import { energieProfilApi } from '../../api/energie_profil'
-import { useV4Basis } from '../../hooks'
 
 // D14-8 (detLAN #113/#123, Gernot #128): „Energieprofil-Daten löschen" wandert als
 // Eintrag ins Werkbank-Auswahlfeld — EINE Reparatur-UI. Technisch bleibt es der
@@ -92,7 +91,6 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
   // D14-8: Zustand des direkten Energieprofil-Löschens (kein Plan/Execute).
   const [deleteRunning, setDeleteRunning] = useState(false)
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null)
-  const istV4 = !!useV4Basis()
   const [params, setParams] = useState<OperationParamsState>(DEFAULT_PARAMS)
   const [plan, setPlan] = useState<RepairPlan | null>(null)
   const [planLoading, setPlanLoading] = useState(false)
@@ -335,8 +333,8 @@ export default function RepairWorkbench({ anlageId, anlagenname }: Props) {
                 disabled={planLoading || executeRunning || deleteRunning}
                 options={[
                   ...WORKBENCH_OPERATIONS.map((o) => ({ value: o.type as string, label: o.label })),
-                  // D14-8: Lösch-Aktion als Werkbank-Eintrag (direkter Pfad, nur /v4).
-                  ...(istV4 ? [{ value: DELETE_ENERGIEPROFIL as string, label: 'Energieprofil-Daten löschen' }] : []),
+                  // D14-8: Lösch-Aktion als Werkbank-Eintrag (direkter Pfad).
+                  { value: DELETE_ENERGIEPROFIL as string, label: 'Energieprofil-Daten löschen' },
                 ]}
               />
               {opBeschreibung && (

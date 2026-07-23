@@ -20,7 +20,6 @@
  */
 
 import { useState, useEffect, type ReactNode } from 'react'
-import { IA_V4 } from '../lib/flags'
 import {
   RefreshCw,
   Loader2,
@@ -539,11 +538,9 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 MQTT-Broker
               </h2>
-              {/* Broker-Pflegeort: V4 = Kategorie Integration; V3 (bis Flip) =
-                  MQTT-Empfang-Seite (dort liegen die Broker-Felder). Ein harter
-                  /v4-Link wäre im flag-off-Build eine tote Route. */}
+              {/* Broker-Pflegeort: Kategorie Integration (dort liegen die Broker-Felder). */}
               <a
-                href={IA_V4 ? '#/v4/einstellungen/integration' : '#/einstellungen/mqtt-inbound'}
+                href="#/einstellungen/integration"
                 className="text-xs text-primary-700 dark:text-primary-300 hover:underline"
               >
                 Verbindung bearbeiten

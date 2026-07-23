@@ -18,7 +18,6 @@ import { strompreiseApi } from '../api/strompreise'
 import { investitionenApi, type InvestitionCreate } from '../api/investitionen'
 import { pvgisApi, type GespeichertePrognose } from '../api/pvgis'
 import { TYP_LABELS } from '../lib/constants'
-import { IA_V4 } from '../lib/flags'
 import type { Anlage, Strompreis, Investition, InvestitionTyp } from '../types'
 
 // Wizard-Schritte (v1.0: ohne HA)
@@ -93,15 +92,13 @@ const INITIAL_STATE: WizardState = {
 // Schritt-Reihenfolge (v1.0: ohne HA)
 // D2 (2026-07-18): 'integration' nach den Investitionen — die Energy-Dashboard-
 // Vorschläge mappen auf Investitionen und brauchen sie daher zuerst.
-// Nur unter IA_V4: v3.x-Releases liefern den Wizard ohne Integrations-Schritt
-// aus (Gernot-Entscheid 2026-07-18, v3.46-Scope); Flag-Entfernung am Flip (R6).
 // SoT für Umfang UND Reihenfolge — SetupWizard leitet seine Anzeige hieraus ab.
 export const STEP_ORDER: WizardStep[] = [
   'welcome',
   'anlage',
   'strompreise',
   'investitionen',
-  ...(IA_V4 ? (['integration'] as WizardStep[]) : []),
+  'integration',
   'summary',
   'complete',
 ]

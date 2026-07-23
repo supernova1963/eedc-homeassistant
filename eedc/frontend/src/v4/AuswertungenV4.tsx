@@ -48,11 +48,11 @@ export default function AuswertungenV4() {
 
   // Wie-Achse (Sub-Tabs, route-getrieben) über die geteilte IASubTabBar (SoT).
   const nav = (
-    <IASubTabBar items={SUBS.map((s) => ({ key: s.key, label: s.label, to: `/v4/auswertungen/${s.key}` }))} />
+    <IASubTabBar items={SUBS.map((s) => ({ key: s.key, label: s.label, to: `/auswertungen/${s.key}` }))} />
   )
 
   // Index oder unbekannter Sub → Default (Finanzen).
-  if (!SUBS.some((s) => s.key === sub)) return <Navigate to="/v4/auswertungen/finanzen" replace />
+  if (!SUBS.some((s) => s.key === sub)) return <Navigate to="/auswertungen/finanzen" replace />
 
   // Steuerleiste (Jahr-Filter) unter den Sub-Tabs — nur für Subs, die ihn befolgen.
   const steuerleiste = FILTER_SUBS.has(sub) ? (

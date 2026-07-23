@@ -130,9 +130,8 @@ const T_MIGRATION_OFFEN = new Set([
   'src/pages/auswertung/EnergieprofilMonat.tsx', 'src/pages/auswertung/EnergieprofilTab.tsx',
   'src/pages/auswertung/InvestitionenTab.tsx', 'src/pages/auswertung/TabelleTab.tsx',
   'src/pages/CloudImportWizard.tsx', 'src/pages/CustomImportWizard.tsx', 'src/pages/DataImportWizard.tsx',
-  'src/pages/HAStatistikImport.tsx', 'src/pages/MonatsabschlussView.tsx', 'src/pages/MonatsdatenTeile.tsx',
-  'src/pages/ProtokolleTeile.tsx', 'src/pages/PVGISSettingsTeile.tsx', 'src/pages/Settings.tsx',
-  'src/pages/SonstigesDashboard.tsx',
+  'src/pages/HAStatistikImport.tsx', 'src/pages/MonatsdatenTeile.tsx',
+  'src/pages/ProtokolleTeile.tsx', 'src/pages/PVGISSettingsTeile.tsx',
 ])
 
 const alleTsx = tsxFiles(join(ROOT, 'src'))

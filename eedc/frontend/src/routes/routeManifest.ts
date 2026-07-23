@@ -8,9 +8,18 @@
  *    darüber: jeder Alt-Pfad landet ohne 404 auf einer echten Route, keine
  *    Redirect-Ketten. Fundament für den vollständigen Redirect-Test in 3.8.
  *
- * Der Index-Redirect (`/` → `/live`) bleibt in `App.tsx` inline (Sonderfall
- * der `index`-Route). `REAL_ROUTE_PATHS` muss mit den echten `<Route>`-Pfaden
- * in `App.tsx` synchron gehalten werden (der Test schlägt sonst sichtbar an).
+ * IA-V4-Flip (v4.0.0): die V4-Oberfläche ist prefix-frei kanonisch (Redirect-
+ * Mechanik „Option B" — der frühere `/v4`-Präfix ist gefallen). Die Alt-Welt
+ * (V3-Seiten + `/v4`-Vorschau-Pfade) existiert nicht mehr → alle Redirects zeigen
+ * auf die prefix-freien V4-Heimaten. **Gerätepfade wechseln die Achse** (Cockpit-
+ * Geräte-Dashboards → Komponenten-Hub); die Einstellungs-Alt-Routen werden
+ * re-kategorisiert (Zuordnung = die frühere `config/v3ZuV4Route`-Tabelle).
+ *
+ * Der Index-Redirect (`/` → `/cockpit/live`) bleibt in `App.tsx` inline (Sonderfall
+ * der `index`-Route), ebenso die Splat-Fänger für gelöschte dynamische Alt-Sektionen
+ * (`aussichten/*`, `monatsabschluss/*`) und die `/v4/*`-Stray-Bookmark-Versicherung.
+ * `REAL_ROUTE_PATHS` muss mit den echten `<Route>`-Pfaden in `App.tsx` synchron
+ * gehalten werden (der Test schlägt sonst sichtbar an).
  */
 
 export interface RedirectEntry {
@@ -21,104 +30,101 @@ export interface RedirectEntry {
 }
 
 export const LEGACY_REDIRECTS: RedirectEntry[] = [
-  // — Bestands-Redirects aus früheren Umbauten —
-  { from: 'cockpit/aktueller-monat', to: '/cockpit/monatsberichte' },
-  { from: 'einstellungen/monatsabschluss', to: '/einstellungen/monatsdaten' },
-  { from: 'einstellungen/datenerfassung', to: '/einstellungen/monatsdaten' },
-  { from: 'einstellungen/demo', to: '/einstellungen/import' },
-  { from: 'einstellungen/ha-import', to: '/einstellungen/monatsdaten' },
-  { from: 'einstellungen/pvgis', to: '/einstellungen/solarprognose' },
-  // Ziel auf den Default-Sub-Tab gezogen (war `/community`), um eine Kette
-  // über den neuen `community`-Basis-Redirect (s. u.) zu vermeiden.
-  { from: 'auswertungen/community', to: '/community/uebersicht' },
-  { from: 'dashboard', to: '/cockpit' },
-  { from: 'anlagen', to: '/einstellungen/anlage' },
-  { from: 'monatsdaten', to: '/einstellungen/monatsdaten' },
-  { from: 'strompreise', to: '/einstellungen/strompreise' },
-  { from: 'investitionen', to: '/einstellungen/investitionen' },
-  // Direkt auf den Default-Sub-Tab (war `/auswertungen` → wäre jetzt Kette).
-  { from: 'auswertung', to: '/auswertungen/energie' },
+  // — Alt-Sektions-Basen (frühere Umbauten + V3-Top-Level) → V4-Heimaten —
+  { from: 'dashboard', to: '/cockpit/live' },
+  { from: 'live', to: '/cockpit/live' },
+  { from: 'auswertung', to: '/auswertungen/finanzen' },
+  { from: 'auswertungen', to: '/auswertungen/finanzen' },
   { from: 'roi', to: '/auswertungen/roi' },
-  { from: 'e-auto', to: '/cockpit/e-auto' },
-  { from: 'waermepumpe', to: '/cockpit/waermepumpe' },
-  { from: 'speicher', to: '/cockpit/speicher' },
-  { from: 'wallbox', to: '/cockpit/wallbox' },
-  { from: 'balkonkraftwerk', to: '/cockpit/balkonkraftwerk' },
-  { from: 'sonstiges', to: '/cockpit/sonstiges' },
-  { from: 'import', to: '/einstellungen/import' },
-  { from: 'settings', to: '/einstellungen/allgemein' },
-  // — B1 (E1-P3): Sektions-Basis → Default-Sub-Tab (URL-getriebene Sub-Nav) —
-  { from: 'auswertungen', to: '/auswertungen/energie' },
-  { from: 'aussichten', to: '/aussichten/kurzfristig' },
+  { from: 'aussichten', to: '/cockpit/aussicht' },
   { from: 'community', to: '/community/uebersicht' },
+  { from: 'auswertungen/community', to: '/community/uebersicht' },
+  { from: 'settings', to: '/einstellungen/system' },
+  { from: 'anlagen', to: '/einstellungen/stammdaten' },
+  { from: 'strompreise', to: '/einstellungen/stammdaten' },
+  { from: 'monatsdaten', to: '/einstellungen/daten' },
+  { from: 'investitionen', to: '/einstellungen/komponenten' },
+  { from: 'import', to: '/einstellungen/integration' },
+
+  // — Geräte wechseln die Achse: Cockpit-Geräte-Dashboards → Komponenten-Hub —
+  { from: 'cockpit/pv-anlage', to: '/komponenten/pv-anlage' },
+  { from: 'cockpit/e-auto', to: '/komponenten/e-auto' },
+  { from: 'cockpit/waermepumpe', to: '/komponenten/waermepumpe' },
+  { from: 'cockpit/speicher', to: '/komponenten/speicher' },
+  { from: 'cockpit/wallbox', to: '/komponenten/wallbox' },
+  { from: 'cockpit/balkonkraftwerk', to: '/komponenten/bkw' },
+  { from: 'cockpit/sonstiges', to: '/komponenten/sonstiges' },
+  { from: 'cockpit/monatsberichte', to: '/cockpit/monat' },
+  { from: 'cockpit/aktueller-monat', to: '/cockpit/monat' },
+  // nackte Geräte-Kürzel (Alt-Bestand)
+  { from: 'e-auto', to: '/komponenten/e-auto' },
+  { from: 'waermepumpe', to: '/komponenten/waermepumpe' },
+  { from: 'speicher', to: '/komponenten/speicher' },
+  { from: 'wallbox', to: '/komponenten/wallbox' },
+  { from: 'balkonkraftwerk', to: '/komponenten/bkw' },
+  { from: 'sonstiges', to: '/komponenten/sonstiges' },
+
+  // — Alt-Einstellungs-Routen → V4-Kategorien (Re-Kategorisierung, ex-v3ZuV4Route) —
+  // Stammdaten
+  { from: 'einstellungen/anlage', to: '/einstellungen/stammdaten' },
+  { from: 'einstellungen/strompreise', to: '/einstellungen/stammdaten' },
+  { from: 'einstellungen/solarprognose', to: '/einstellungen/stammdaten' },
+  { from: 'einstellungen/pvgis', to: '/einstellungen/stammdaten' },
+  { from: 'einstellungen/community', to: '/einstellungen/stammdaten' },
+  // Komponenten (datengetriebener Reiter)
+  { from: 'einstellungen/investitionen', to: '/einstellungen/komponenten' },
+  // Daten
+  { from: 'einstellungen/monatsdaten', to: '/einstellungen/daten' },
+  { from: 'einstellungen/monatsabschluss', to: '/einstellungen/daten' },
+  { from: 'einstellungen/datenerfassung', to: '/einstellungen/daten' },
+  { from: 'einstellungen/ha-import', to: '/einstellungen/daten' },
+  { from: 'einstellungen/energieprofil', to: '/einstellungen/daten' },
+  { from: 'einstellungen/daten-checker', to: '/einstellungen/daten' },
+  { from: 'einstellungen/einrichtung', to: '/einstellungen/daten' },
+  { from: 'einstellungen/demo', to: '/einstellungen/daten' },
+  // Integration
+  { from: 'einstellungen/import', to: '/einstellungen/integration' },
+  { from: 'einstellungen/portal-import', to: '/einstellungen/integration' },
+  { from: 'einstellungen/cloud-import', to: '/einstellungen/integration' },
+  { from: 'einstellungen/custom-import', to: '/einstellungen/integration' },
+  { from: 'einstellungen/connector', to: '/einstellungen/integration' },
+  { from: 'einstellungen/ha-statistik-import', to: '/einstellungen/integration' },
+  { from: 'einstellungen/ha-export', to: '/einstellungen/integration' },
+  // Datenquellen (Alt-Wizards in die feld-zentrische Fläche aufgelöst)
+  { from: 'einstellungen/sensor-mapping', to: '/einstellungen/datenquellen' },
+  { from: 'einstellungen/mqtt-inbound', to: '/einstellungen/datenquellen' },
+  // System
+  { from: 'einstellungen/backup', to: '/einstellungen/system' },
+  { from: 'einstellungen/allgemein', to: '/einstellungen/system' },
+  { from: 'einstellungen/protokolle', to: '/einstellungen/system' },
 ]
 
 /**
  * Inventar aller echten (nicht-Redirect-)Routen-Pfade — `:param`-Segmente
  * wie in `App.tsx`. Genutzt vom Redirect-Test zur 404-Prüfung der Ziele.
+ *
+ * IA-V4-Flip: die V4-Achsen sind prefix-frei kanonisch (kein `/v4` mehr). Die
+ * Sub-Ebenen sind route-getrieben (`:zeit`/`:typ`/`:sub`/`:kategorie`); die
+ * Dispatcher normalisieren unbekannte Sub-Werte selbst auf ihren Default.
  */
 export const REAL_ROUTE_PATHS: string[] = [
-  // Cockpit
+  // Cockpit (Zeit-Achse: live·tag·monat·jahr·aussicht)
   'cockpit',
-  'cockpit/pv-anlage',
-  'cockpit/e-auto',
-  'cockpit/waermepumpe',
-  'cockpit/speicher',
-  'cockpit/wallbox',
-  'cockpit/balkonkraftwerk',
-  'cockpit/monatsberichte',
-  'cockpit/sonstiges',
-  // Live
-  'live',
-  // Auswertungen (B1: Sub-Tabs route-getrieben)
-  'auswertungen/:tab',
-  'auswertungen/roi',
-  'auswertungen/prognose',
-  'auswertungen/export',
-  // Aussichten + Community (B1)
-  'aussichten/:tab',
-  'community/:tab',
+  'cockpit/:zeit',
+  // Komponenten (Was-Achse: pv-anlage·speicher·bkw·waermepumpe·wallbox·e-auto·sonstiges)
+  'komponenten',
+  'komponenten/:typ',
+  // Auswertungen (Wie-Achse: finanzen·roi·prognose·co2·tabelle)
+  'auswertungen',
+  'auswertungen/:sub',
+  // Community (uebersicht·pv-ertrag·komponenten·regional·trends·statistiken)
+  'community',
+  'community/:sub',
   // Hilfe
   'hilfe',
-  // Einstellungen — Stammdaten
-  'einstellungen/anlage',
-  'einstellungen/strompreise',
-  'einstellungen/investitionen',
-  'einstellungen/infothek',
-  'einstellungen/solarprognose',
-  // Einstellungen — Daten
-  'einstellungen/monatsdaten',
-  'monatsabschluss/:anlageId',
-  'monatsabschluss/:anlageId/:jahr/:monat',
-  'einstellungen/energieprofil',
-  'einstellungen/daten-checker',
-  'einstellungen/einrichtung',
-  'einstellungen/import',
-  'einstellungen/portal-import',
-  'einstellungen/cloud-import',
-  'einstellungen/custom-import',
-  'einstellungen/connector',
-  'einstellungen/mqtt-inbound',
-  // Einstellungen — Home Assistant
-  'einstellungen/sensor-mapping',
-  'einstellungen/ha-statistik-import',
-  'einstellungen/ha-export',
-  // Einstellungen — System
-  'einstellungen/backup',
-  'einstellungen/allgemein',
-  'einstellungen/protokolle',
-  // Einstellungen — Community
-  'einstellungen/community',
+  // Einstellungen (Kategorien: stammdaten·komponenten·infothek·daten·integration·datenquellen·system)
+  'einstellungen',
+  'einstellungen/:kategorie',
   // Dev-only
   'dev/design-preview',
-  // IA-v4-Vorschau (flag-gated hinter VITE_IA_V4; eigenes LayoutV4)
-  'v4',
-  'v4/cockpit',
-  'v4/cockpit/:zeit',
-  'v4/auswertungen',
-  'v4/auswertungen/tabelle',
-  'v4/komponenten',
-  'v4/community',
-  'v4/hilfe',
-  'v4/einstellungen',
 ]

@@ -34,12 +34,11 @@ export function FokusKachel({ titel, icon: Icon, farbe, className = '', zeigeTit
           {children}
         </FokusVollbild>
       )}
-      {/* C1/S11 (R3b, dokumentierte A.3-IST-Ausnahme BIS Flip): rounded-lg + nacktes
-          shadow + p-3 = V3-Live-Optik; Angleichung an rounded-xl/shadow-sm am Flip.
+      {/* C1/S11 (Flip v4.0.0): auf den Block-Standard rounded-xl/shadow-sm angeglichen.
           D18-3 (detlan #210): Innenpolsterung auf die Gliederungsebene (12 px = p-3)
           statt p-4 sm:p-6 — Charts in Live-Kacheln bekommen denselben Seitenrand
           wie Charts im BlockShell-Body (px-3), keine Doppel-/Überpolsterung. */}
-      <div className={`relative bg-white dark:bg-gray-800 rounded-lg shadow p-3 ${className}`}>
+      <div className={`relative bg-white dark:bg-gray-800 rounded-xl shadow-sm p-3 ${className}`}>
         {/* ⤢ sitzt absolut oben rechts — in der Titelzeile, keine eigene Leerzeile.
             (Energiefluss bringt sein ⤢ über `kopfAktion` selbst mit.)
             D14-16 (Gernot-Entscheid): unter 640 px ausgeblendet, NICHT entfernt —

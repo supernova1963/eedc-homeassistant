@@ -1,7 +1,7 @@
 /**
  * HilfeV4 — Hilfe-Sicht der IA-V4 (R2b, 2026-07-20).
  *
- * Ersetzt den `V4Platzhalter` unter `/v4/hilfe`. Fläche auf demselben statischen
+ * Ersetzt den `V4Platzhalter` unter `/hilfe`. Fläche auf demselben statischen
  * `help/`-System wie die V3-Seite (`pages/Hilfe.tsx`) — die Daten-/Link-Logik
  * teilen sich beide über den Hook {@link useHelpKatalog} (EINE Code-Wahrheit,
  * keine zweite Fetch-/Rewrite-Kopie). Inhalt rendert die geteilte
@@ -14,7 +14,7 @@
  *
  * `?doc=<slug>`+`#hash`-Deep-Links bleiben kompatibel (Bestands-/Foren-Links):
  * die Sub-Navigation setzt denselben `?doc=`-Parameter, Querverweise laufen über
- * den geteilten Link-Rewriter mit `/v4/hilfe`-Basispfad.
+ * den geteilten Link-Rewriter mit `/hilfe`-Basispfad.
  */
 import { useCallback, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
@@ -57,7 +57,7 @@ export default function HilfeV4() {
   )
 
   const linkComponent = useMemo(
-    () => makeHelpLinkComponent({ rewriteLink, navigate, basePath: '/v4/hilfe', scrollToHash }),
+    () => makeHelpLinkComponent({ rewriteLink, navigate, basePath: '/hilfe', scrollToHash }),
     [rewriteLink, navigate, scrollToHash],
   )
 
@@ -100,7 +100,7 @@ export default function HilfeV4() {
           {/* „Was ist neu" — eigener, prominenter Einstieg (Desktop + Mobile) */}
           {neuDoc && (
             <Link
-              to={`/v4/hilfe?doc=${NEU_SLUG}`}
+              to={`/hilfe?doc=${NEU_SLUG}`}
               className={`flex items-center gap-2 px-3 py-2.5 mb-3 rounded-lg border text-sm font-medium transition-colors ${
                 activeSlug === NEU_SLUG
                   ? 'bg-primary-600 text-white border-primary-600'
@@ -120,7 +120,7 @@ export default function HilfeV4() {
             <Select
               id="hilfe-v4-doc-select"
               value={activeSlug}
-              onChange={(e) => navigate(`/v4/hilfe?doc=${e.target.value}`)}
+              onChange={(e) => navigate(`/hilfe?doc=${e.target.value}`)}
               aria-label="Hilfe-Dokument wählen"
               options={selectItems}
             />
@@ -140,7 +140,7 @@ export default function HilfeV4() {
                 <ul className="space-y-0.5">
                   {g.items.map((d) => (
                     <li key={d.slug}>
-                      <Link to={`/v4/hilfe?doc=${d.slug}`} className={tocLinkCls(d.slug)}>
+                      <Link to={`/hilfe?doc=${d.slug}`} className={tocLinkCls(d.slug)}>
                         {d.title}
                       </Link>
                     </li>

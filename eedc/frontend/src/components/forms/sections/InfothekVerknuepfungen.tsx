@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { FileText, ExternalLink } from 'lucide-react'
 import { infothekApi } from '../../../api/infothek'
 import type { InfothekEintrag } from '../../../types/infothek'
-import { useV4Basis } from '../../../hooks'
 
 // Kategorie-Labels für die Infothek-Verknüpfungen (Subset, kein eigener Import nötig)
 const KATEGORIE_LABELS: Record<string, string> = {
@@ -20,14 +19,12 @@ const KATEGORIE_LABELS: Record<string, string> = {
 
 /**
  * Zeigt die mit einer Investition verknüpften Infothek-Einträge (nur im
- * Bearbeiten-Modus). Der Link folgt der Welt (V3/V4) über `useV4Basis` — in
- * der V4-Shell darf nicht auf die V3-Route gesprungen werden (sonst Sackgasse).
+ * Bearbeiten-Modus).
  */
 export function InfothekVerknuepfungen({ investitionId }: { investitionId: number }) {
   const [eintraege, setEintraege] = useState<InfothekEintrag[]>([])
   const [loading, setLoading] = useState(true)
-  const v4Basis = useV4Basis()
-  const infothekLink = `#${v4Basis}/einstellungen/infothek`
+  const infothekLink = '#/einstellungen/infothek'
 
   const refresh = useCallback(() => {
     setLoading(true)

@@ -398,7 +398,7 @@ export function DegradationsPrognose({ trend }: { trend: TrendAnalyseResponse })
           </div>
         )}
       </div>
-      <a href="#/v4/cockpit/jahr" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+      <a href="#/cockpit/jahr" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
         Jahres-/Mehrjahres-Rückblick (Erträge, PR, Degradations-Analyse) <ArrowRight className="h-4 w-4" />
       </a>
       <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1">
@@ -474,7 +474,7 @@ export function WpAussicht({ wpDashboards }: { wpDashboards: WaermepumpeDashboar
           </div>
         )
       })}
-      <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+      <a href="#/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
         WP-Kosten &amp; Ersparnis (Vergleich Gas/Öl) <ArrowRight className="h-4 w-4" />
       </a>
       <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -514,7 +514,7 @@ export function AussichtFinanzTeaser({ finanz }: { finanz: FinanzPrognose }) {
       </Parkbar>
       <Parkbar id="el:aussicht-finanz-link" titel="Cross-Link Finanzrechnung">
         <div className="space-y-3">
-          <a href="#/v4/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
+          <a href="#/auswertungen/finanzen" className="inline-flex items-center gap-1 text-sm text-primary-700 dark:text-primary-300 hover:underline">
             volle Finanzrechnung (T-Konto) <ArrowRight className="h-4 w-4" />
           </a>
           <p className="text-xs text-gray-400 dark:text-gray-500">

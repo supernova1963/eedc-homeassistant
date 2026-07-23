@@ -468,7 +468,7 @@ function FinanzberichtTeaser({ anlageId, jahr }: { anlageId: number | undefined 
       </a>
       <p className="text-sm text-gray-600 dark:text-gray-300">
         Alle Berichte:{' '}
-        <Link to="/v4/einstellungen/stammdaten" className="text-primary-600 dark:text-primary-400 hover:underline">
+        <Link to="/einstellungen/stammdaten" className="text-primary-600 dark:text-primary-400 hover:underline">
           Einstellungen · Stammdaten · Anlage
         </Link>
       </p>

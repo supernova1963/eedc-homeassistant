@@ -19,7 +19,7 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { Activity, BarChart3, History, RefreshCw, Trash2, Loader2, Info, Fuel } from 'lucide-react'
 import { Button, Card, Alert } from '../components/ui'
 import { Parkbar } from '../components/park'
-import { useInvestitionen, useV4Basis } from '../hooks'
+import { useInvestitionen } from '../hooks'
 import { energieProfilApi, type KraftstoffpreisStatus, type AnlageStats } from '../api/energie_profil'
 import RepairWorkbench from '../components/repair/RepairWorkbench'
 import { fmtZahl } from '../lib'
@@ -44,7 +44,9 @@ export function EnergieprofilPflege({
   const { investitionen } = useInvestitionen(anlageId)
   const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
   // D14-8-Gate: im V4-Daten-Block übernimmt die Werkbank; V3 behält die Karten.
-  const istV4 = !!useV4Basis()
+  // IA-V4 ist die einzige Oberfläche (Flip v4.0.0). Der `!istV4`-Zweig unten ist
+  // toter V3-Bestand → Entfernung als Flip-Nacharbeit (siehe PLAN-IA-V4-UMSETZUNG-FLIP §2a).
+  const istV4 = true
 
   const [stats, setStats] = useState<AnlageStats | null>(null)
   const [kpStatus, setKpStatus] = useState<KraftstoffpreisStatus | null>(null)

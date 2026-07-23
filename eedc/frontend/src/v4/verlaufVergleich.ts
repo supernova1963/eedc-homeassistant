@@ -125,12 +125,12 @@ export function sichtbareSerien(preset: VergleichPreset, istJahr: boolean): Verg
 
 /** Drill-in-Pfad zum Einzeltag (Monat-Sicht → Cockpit/Tag). */
 export function tagDrillInPfad(datum: string): string {
-  return `/v4/cockpit/tag?datum=${datum}` /* de-de-allow: ISO-Datum als URL-Query-Param (Routing), keine Nutzer-Anzeige. */
+  return `/cockpit/tag?datum=${datum}` /* de-de-allow: ISO-Datum als URL-Query-Param (Routing), keine Nutzer-Anzeige. */
 }
 
 /** Drill-in-Pfad zum Einzelmonat (Jahr-Sicht → Cockpit/Monat). */
 export function monatDrillInPfad(jahr: number, monat: number): string {
-  return `/v4/cockpit/monat?jahr=${jahr}&monat=${monat}`
+  return `/cockpit/monat?jahr=${jahr}&monat=${monat}`
 }
 
 const DATUM_RE = /^\d{4}-\d{2}-\d{2}$/

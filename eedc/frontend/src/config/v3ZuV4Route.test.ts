@@ -4,24 +4,24 @@ import { EINSTELLUNGEN_KATALOG, EINSTELLUNGEN_KATEGORIEN } from './einstellungen
 
 describe('v3RouteZuV4 (V3→V4-Einstellungs-Routen-Map)', () => {
   it('mappt die Daten-Checker-Ziele auf ihren V4-Reiter', () => {
-    expect(v3RouteZuV4('/einstellungen/monatsdaten')).toBe('/v4/einstellungen/daten')
-    expect(v3RouteZuV4('/einstellungen/energieprofil')).toBe('/v4/einstellungen/daten')
-    expect(v3RouteZuV4('/einstellungen/anlage')).toBe('/v4/einstellungen/stammdaten')
-    expect(v3RouteZuV4('/einstellungen/strompreise')).toBe('/v4/einstellungen/stammdaten')
-    expect(v3RouteZuV4('/einstellungen/solarprognose')).toBe('/v4/einstellungen/stammdaten')
+    expect(v3RouteZuV4('/einstellungen/monatsdaten')).toBe('/einstellungen/daten')
+    expect(v3RouteZuV4('/einstellungen/energieprofil')).toBe('/einstellungen/daten')
+    expect(v3RouteZuV4('/einstellungen/anlage')).toBe('/einstellungen/stammdaten')
+    expect(v3RouteZuV4('/einstellungen/strompreise')).toBe('/einstellungen/stammdaten')
+    expect(v3RouteZuV4('/einstellungen/solarprognose')).toBe('/einstellungen/stammdaten')
     // B7: die aufgelösten Alt-Wizards landen auf der Datenquellen-Fläche.
-    expect(v3RouteZuV4('/einstellungen/sensor-mapping')).toBe('/v4/einstellungen/datenquellen')
-    expect(v3RouteZuV4('/einstellungen/mqtt-inbound')).toBe('/v4/einstellungen/datenquellen')
-    expect(v3RouteZuV4('/einstellungen/ha-export')).toBe('/v4/einstellungen/integration')
+    expect(v3RouteZuV4('/einstellungen/sensor-mapping')).toBe('/einstellungen/datenquellen')
+    expect(v3RouteZuV4('/einstellungen/mqtt-inbound')).toBe('/einstellungen/datenquellen')
+    expect(v3RouteZuV4('/einstellungen/ha-export')).toBe('/einstellungen/integration')
   })
 
   it('mappt investitionen auf den datengetriebenen Komponenten-Reiter', () => {
-    expect(v3RouteZuV4('/einstellungen/investitionen')).toBe('/v4/einstellungen/komponenten')
+    expect(v3RouteZuV4('/einstellungen/investitionen')).toBe('/einstellungen/komponenten')
   })
 
   it('normalisiert führenden Slash + Query (Tages-Deep-Link verworfen)', () => {
-    expect(v3RouteZuV4('einstellungen/monatsdaten')).toBe('/v4/einstellungen/daten')
-    expect(v3RouteZuV4('/einstellungen/energieprofil?datum=2026-06-23')).toBe('/v4/einstellungen/daten')
+    expect(v3RouteZuV4('einstellungen/monatsdaten')).toBe('/einstellungen/daten')
+    expect(v3RouteZuV4('/einstellungen/energieprofil?datum=2026-06-23')).toBe('/einstellungen/daten')
   })
 
   it('liefert null für Nicht-Einstellungs-Ziele (Donor ohne V4-Heimat)', () => {

@@ -2,8 +2,6 @@
 
 // Build-Feature-Flags (siehe src/lib/flags.ts)
 interface ImportMetaEnv {
-  /** Schaltet den IA-v4-Vorschau-Routenbaum (`/v4/…`) frei. `.env.local`. */
-  readonly VITE_IA_V4?: string
   /** Startet Echtzeit-Sichten im Demo-Modus (Guest-Box-Tester). `deploy-guest.sh`. */
   readonly VITE_DEMO_DEFAULT?: string
 }

@@ -32,7 +32,7 @@ export default function CockpitV4() {
 
   // Zeit-Achse (Sub-Tabs, route-getrieben) über die geteilte IASubTabBar (SoT).
   const zeitNav = (
-    <IASubTabBar items={ZEITEN.map((z) => ({ key: z.key, label: z.label, to: `/v4/cockpit/${z.key}` }))} />
+    <IASubTabBar items={ZEITEN.map((z) => ({ key: z.key, label: z.label, to: `/cockpit/${z.key}` }))} />
   )
 
   // S15-Flash-Fix (B8): ohne gemerkte Anlagen-Auswahl steht selectedAnlageId erst

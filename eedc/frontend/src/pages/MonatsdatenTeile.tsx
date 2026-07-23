@@ -17,7 +17,7 @@ import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../compo
 import ErfassungZustandBadge from '../components/ui/ErfassungZustandBadge'
 import { MonatsdatenForm } from '../components/forms'
 import { DataLoadingState } from '../components/common'
-import { useMonatsdaten, useInvestitionen, useApiData, useV4Basis, useAnlage } from '../hooks'
+import { useMonatsdaten, useInvestitionen, useApiData, useAnlage } from '../hooks'
 import { useOeffneWizard } from '../v4/wizardHost'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
@@ -104,7 +104,9 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const { anlage } = useAnlage(anlageId)
   const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
   // D14-8-Gate: Kraftstoff-Monats-Karte nur in V3 (V4 = Werkbank).
-  const istV4 = !!useV4Basis()
+  // IA-V4 ist die einzige Oberfläche (Flip v4.0.0). Die `!istV4`-Zweige unten sind
+  // toter V3-Bestand → Entfernung als Flip-Nacharbeit (siehe PLAN-IA-V4-UMSETZUNG-FLIP §2a).
+  const istV4 = true
 
   // Aggregierte Daten
   const { data: aggregierteDaten, loading: aggregiertLoading } = useApiData(

@@ -16,7 +16,6 @@
     "check:de-de": "node scripts/check-de-de.mjs",
     "check:datumpicker": "node scripts/check-datumpicker.mjs",
     "check:form-controls": "node scripts/check-form-controls.mjs",
-    "check:v4links": "node scripts/check-v4links.mjs",
     "check:scrollschatten": "node scripts/check-scrollschatten.mjs",
     "check:persistenz": "node scripts/check-persistenz.mjs",
     "check:badges": "node scripts/check-badges.mjs",
@@ -33,9 +32,7 @@
     "check:parkbar-vollstaendig": "node scripts/check-parkbar-vollstaendig.mjs",
     "check:park-leertest": "node scripts/park-leertest.mjs",
     "check:charts": "node scripts/check-charts.mjs",
-    "check:chart-audit": "node scripts/chart-audit.mjs",
-    "check:v4-migration": "node scripts/check-v4-migration.mjs",
-    "check:datenquellen-aufloesung": "node scripts/check-datenquellen-aufloesung.mjs"
+    "check:chart-audit": "node scripts/chart-audit.mjs"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",

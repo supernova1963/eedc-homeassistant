@@ -1,25 +1,24 @@
 /**
- * V3→V4-Einstellungs-Routen-Map.
+ * Alt-Einstellungs-Route → V4-Einstellungs-Kategorie (Re-Kategorisierungs-Map).
  *
- * Die IA-V4-Einstellungen **re-kategorisieren** die IST-Seiten: die alten
- * `einstellungen/<seite>`-Routen werden zu `v4/einstellungen/<kategorie>`-Reitern
- * (z. B. `monatsdaten`/`energieprofil`/`daten-checker` → **daten**; `anlage`/
+ * Die IA-V4-Einstellungen **re-kategorisieren** die früheren Einzel-Seiten: die
+ * alten `einstellungen/<seite>`-Route-Strings werden zu `einstellungen/<kategorie>`-
+ * Reitern (z. B. `monatsdaten`/`energieprofil`/`daten-checker` → **daten**; `anlage`/
  * `strompreise`/`solarprognose` → **stammdaten**; `sensor-mapping`/`mqtt-inbound` →
- * **integration**; `investitionen` → **komponenten**). Ein reiner Präfix (`/v4` davor)
- * reicht darum NICHT — es braucht diese Zuordnung.
+ * **datenquellen**; `investitionen` → **komponenten**).
  *
- * Nutzung: geteilte `pages/*Teile.tsx`, die dynamische V3-Ziele verlinken (z. B. die
- * „Beheben"-Links des Daten-Checkers, `CheckErgebnis.link`), biegen unter `/v4` über
- * {@link v3RouteZuV4} auf den passenden V4-Reiter um (mit {@link useV4Basis} gegatet).
+ * Nutzung: geteilte Bausteine, die dynamische Alt-Route-Strings verlinken (z. B. die
+ * „Beheben"-Links des Daten-Checkers, `CheckErgebnis.link`, oder der Setup-Wizard-
+ * Absprung), biegen über {@link v3RouteZuV4} auf den passenden V4-Reiter um.
  *
  * **SoT-Abgleich:** die Kategorie-Zuordnung spiegelt `EINSTELLUNGEN_KATALOG`
  * (`route`→`kategorie`); ein Konsistenz-Test (`v3ZuV4Route.test.ts`) sichert gegen
  * Drift. `investitionen` ist bewusst NICHT im Katalog (datengetriebener Komponenten-
  * Reiter) → hier als Sonderfall. **Nicht-Einstellungs-Ziele** (z. B.
- * `/monatsabschluss/…`, CSV-`/import`) haben keine V4-Heimat → `null` (Donor, Flip).
+ * `/monatsabschluss/…`, CSV-`/import`) haben keine Kategorie → `null`.
  */
 
-/** V3-Einstellungs-Route (ohne führenden `/`, ohne Query) → V4-Einstellungs-Kategorie. */
+/** Alt-Einstellungs-Route (ohne führenden `/`, ohne Query) → V4-Einstellungs-Kategorie. */
 const V3_EINSTELLUNG_ZU_V4_KATEGORIE: Record<string, string> = {
   // Stammdaten
   'einstellungen/community': 'stammdaten',
@@ -54,13 +53,13 @@ const V3_EINSTELLUNG_ZU_V4_KATEGORIE: Record<string, string> = {
 export { V3_EINSTELLUNG_ZU_V4_KATEGORIE }
 
 /**
- * V3-Einstellungs-Link (mit/ohne führenden `/`, optional mit Query) → V4-Kategorie-
- * Route `/v4/einstellungen/<kategorie>`. `null`, wenn kein Einstellungs-Ziel mit
- * V4-Heimat (z. B. `/monatsabschluss/…` = Donor). Der Query wird verworfen (die
- * V4-Reiter kennen keine Tages-Deep-Links).
+ * Alt-Einstellungs-Link (mit/ohne führenden `/`, optional mit Query) → V4-Kategorie-
+ * Route `/einstellungen/<kategorie>`. `null`, wenn kein Einstellungs-Ziel mit
+ * Kategorie (z. B. `/monatsabschluss/…`). Der Query wird verworfen (die V4-Reiter
+ * kennen keine Tages-Deep-Links).
  */
 export function v3RouteZuV4(v3link: string): string | null {
   const clean = v3link.replace(/^\/+/, '').split('?')[0]
   const kategorie = V3_EINSTELLUNG_ZU_V4_KATEGORIE[clean]
-  return kategorie ? `/v4/einstellungen/${kategorie}` : null
+  return kategorie ? `/einstellungen/${kategorie}` : null
 }

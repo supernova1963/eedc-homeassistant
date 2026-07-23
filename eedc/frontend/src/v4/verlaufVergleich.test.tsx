@@ -33,11 +33,11 @@ describe('verlaufVergleich — Presets + Jahr-only-Filter', () => {
 
 describe('verlaufVergleich — Drill-in (B3)', () => {
   it('tagDrillInPfad → Cockpit/Tag mit ?datum=', () => {
-    expect(tagDrillInPfad('2026-05-10')).toBe('/v4/cockpit/tag?datum=2026-05-10')
+    expect(tagDrillInPfad('2026-05-10')).toBe('/cockpit/tag?datum=2026-05-10')
   })
 
   it('monatDrillInPfad → Cockpit/Monat mit ?jahr=&monat=', () => {
-    expect(monatDrillInPfad(2026, 5)).toBe('/v4/cockpit/monat?jahr=2026&monat=5')
+    expect(monatDrillInPfad(2026, 5)).toBe('/cockpit/monat?jahr=2026&monat=5')
   })
 
   it('datumAusQuery: gültiges ISO-Datum durchreichen, sonst null', () => {

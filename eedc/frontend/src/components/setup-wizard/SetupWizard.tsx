@@ -11,13 +11,12 @@
  * 5. Zusammenfassung
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Stepper from '../ui/Stepper'
 import { Button } from '../ui'
 import { HelpCircle } from 'lucide-react'
 import { useSetupWizard, STEP_ORDER, type WizardStep } from '../../hooks/useSetupWizard'
 import { importApi } from '../../api'
-import { IA_V4 } from '../../lib/flags'
 import eedcIcon from '../../assets/eedc-icon.svg'
 
 // Schritt-Komponenten
@@ -35,7 +34,7 @@ interface SetupWizardProps {
 }
 
 // Labels für die Fortschrittsanzeige — Umfang UND Reihenfolge kommen aus
-// STEP_ORDER (SoT in useSetupWizard; 'integration' dort nur unter IA_V4).
+// STEP_ORDER (SoT in useSetupWizard).
 const STEP_LABELS: Record<Exclude<WizardStep, 'complete'>, { label: string; shortLabel: string }> = {
   welcome: { label: 'Willkommen', shortLabel: 'Start' },
   anlage: { label: 'Anlage erstellen', shortLabel: 'Anlage' },
@@ -67,17 +66,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   // D2 (2026-07-18): KEIN Auto-onComplete mehr beim Erreichen von 'complete' —
   // der Abschluss-Screen ist jetzt eine echte Wahl (Monatsdaten / Sensor- &
-  // Topic-Pflege / Cockpit, Spec §2 D2 „Abfrage nächster Schritt"). Vorher
-  // feuerte ein 100-ms-Timer onComplete und der CompleteStep war faktisch
-  // unsichtbar. Jede der drei Aktionen ruft onComplete selbst auf.
-  // Ohne IA_V4 gilt bis zum Flip der v3.x-Auslieferungsstand (Auto-Weiterleitung) —
-  // v3.46-Scope-Entscheid: D2-Wizard-Änderungen nicht in V3-Releases.
-  useEffect(() => {
-    if (!IA_V4 && wizard.step === 'complete') {
-      const timer = setTimeout(onComplete, 100)
-      return () => clearTimeout(timer)
-    }
-  }, [wizard.step, onComplete])
+  // Topic-Pflege / Cockpit, Spec §2 D2 „Abfrage nächster Schritt"). Jede der
+  // drei Aktionen ruft onComplete selbst auf.
 
   // Aktueller Schritt-Index für Fortschrittsanzeige
   const currentStepIndex = STEPS_CONFIG.findIndex(s => s.key === wizard.step)

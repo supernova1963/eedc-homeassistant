@@ -1,12 +1,10 @@
 /**
- * LayoutV4 — Schale für den IA-v4-Routenbaum (`/v4/…`), nur hinter `VITE_IA_V4`.
+ * LayoutV4 — die kanonische App-Schale (IA-V4, `/`-Routenbaum).
  *
- * Bewusst PARALLEL zur Produktiv-`components/layout/Layout`. Die obere Leiste ist
- * jetzt die geteilte {@link IATopNav} (Struktur-SoT, auch von der Vorschau
- * konsumiert) — volle 3-Achsen-Nav (Cockpit · Komponenten · Auswertungen ·
- * Community) + Meta (Hilfe · Einstellungen) + Theme-Cycle + Hamburger. Noch nicht
- * gebaute Achsen zeigen einen Platzhalter ({@link V4Platzhalter}); ihr echter
- * Bau folgt nach Phase 3. Mobile-Querschnitt: `h-dvh`, Touch-Targets ≥ 44 px.
+ * Die obere Leiste ist die geteilte {@link IATopNav} (Struktur-SoT) — volle
+ * 3-Achsen-Nav (Cockpit · Komponenten · Auswertungen · Community) + Meta (Hilfe ·
+ * Einstellungen) + Theme-Cycle + Hamburger. Mobile-Querschnitt: `h-dvh`,
+ * Touch-Targets ≥ 44 px.
  */
 import { useLayoutEffect, useRef } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
@@ -39,21 +37,15 @@ export default function LayoutV4() {
   // Inhalts-Achse (Struktur-SoT: KONZEPT-IA-V4). Achsen-Aktivität via Pfad-Präfix
   // (eine Achse bleibt aktiv über all ihre Sub-Routen).
   const inhalt: IANavItem[] = [
-    { key: 'cockpit',      label: 'Cockpit',      icon: LayoutDashboard, to: '/v4/cockpit/live',         active: aktiv('/v4/cockpit') },
-    { key: 'komponenten',  label: 'Komponenten',  icon: Boxes,           to: '/v4/komponenten',          active: aktiv('/v4/komponenten') },
-    { key: 'auswertungen', label: 'Auswertungen', icon: BarChart3,       to: '/v4/auswertungen',         active: aktiv('/v4/auswertungen') },
-    { key: 'community',    label: 'Community',    icon: Users,           to: '/v4/community',            active: aktiv('/v4/community') },
+    { key: 'cockpit',      label: 'Cockpit',      icon: LayoutDashboard, to: '/cockpit/live',         active: aktiv('/cockpit') },
+    { key: 'komponenten',  label: 'Komponenten',  icon: Boxes,           to: '/komponenten',          active: aktiv('/komponenten') },
+    { key: 'auswertungen', label: 'Auswertungen', icon: BarChart3,       to: '/auswertungen',         active: aktiv('/auswertungen') },
+    { key: 'community',    label: 'Community',    icon: Users,           to: '/community',            active: aktiv('/community') },
   ]
   const meta: IANavItem[] = [
-    { key: 'hilfe',         label: 'Hilfe',         icon: HelpCircle, to: '/v4/hilfe',         active: aktiv('/v4/hilfe') },
-    { key: 'einstellungen', label: 'Einstellungen', icon: Settings,   to: '/v4/einstellungen', active: aktiv('/v4/einstellungen') },
+    { key: 'hilfe',         label: 'Hilfe',         icon: HelpCircle, to: '/hilfe',         active: aktiv('/hilfe') },
+    { key: 'einstellungen', label: 'Einstellungen', icon: Settings,   to: '/einstellungen', active: aktiv('/einstellungen') },
   ]
-
-  const badge = (
-    <span className="ml-3 px-2 py-0.5 text-[10px] font-mono rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300">
-      Vorschau
-    </span>
-  )
 
   return (
     <AppStatusProvider>
@@ -63,7 +55,7 @@ export default function LayoutV4() {
           Payload) — auch für Fusszeile/Teile außerhalb der Einstellungen-Sicht. */}
       <WizardOverlayProvider>
       <div className="h-dvh bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
-        <IATopNav inhalt={inhalt} meta={meta} modusBadge={badge} anlagenSelektor={<AnlagenSelektor />} />
+        <IATopNav inhalt={inhalt} meta={meta} anlagenSelektor={<AnlagenSelektor />} />
         {/* Ab lg gibt main keine eigene Scroll-Leiste mehr her, sondern wird flex-
             Container für die ViewShell (fixe 2. Leiste). Mobile: alles scrollt.
             D6-1: `scrollbar-gutter:stable` (nur mobil) reserviert eine eigene
