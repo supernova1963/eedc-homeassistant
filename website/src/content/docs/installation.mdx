@@ -3,8 +3,8 @@ title: Installation
 description: eedc als Home Assistant Add-on oder Standalone installieren
 ---
 
-import { Image } from 'astro:assets';
-import sensormappingImg from '../../assets/screenshots/einstellungen_sensormapping.png';
+import einrichtungLight from '../../assets/screenshots/einstellungen_datenquellen.png';
+import einrichtungDark from '../../assets/screenshots/einstellungen_datenquellen-dark.png';
 
 eedc kann als Home Assistant Add-on oder standalone betrieben werden.
 
@@ -61,12 +61,15 @@ Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://git
 
 ## Nach der Installation
 
-<Image src={sensormappingImg} alt="eedc Sensor-Mapping Wizard" quality={85} />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={einrichtungDark.src} />
+  <img src={einrichtungLight.src} alt="eedc Datenquellen – ein Feld, eine Quelle" />
+</picture>
 
 1. **Anlage anlegen:** Standort, Koordinaten und Grunddaten eingeben
 2. **Komponenten erfassen:** Wechselrichter, PV-Module, Speicher, etc. mit Investitionskosten
 3. **Strompreise hinterlegen:** Bezugspreis, Einspeisevergütung, ggf. Spezialtarife
-4. **Sensor-Mapping (HA):** Zuordnung deiner HA-Sensoren zu eedc-Feldern
+4. **Datenquellen zuordnen (HA):** Unter *Einstellungen → Datenquellen* ordnest du jedem eedc-Feld genau eine Quelle zu – HA-Sensor, MQTT-Topic oder Geräte-Connector
 5. **Monatsdaten importieren:** Via HA-Statistik-Import, CSV oder manuelle Eingabe
 
 ---
@@ -75,7 +78,7 @@ Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://git
 
 | Methode | Beschreibung | Voraussetzung |
 |---------|-------------|---------------|
-| Monatsabschluss-Wizard | Zentrale monatliche Datenerfassung mit Quellen-Status und Vorschlägen | Keine |
+| Monatsabschluss-Formular | Zentrale monatliche Datenerfassung – ein Formular für Neuanlage und Korrektur, mit Quellen-Status | Keine |
 | HA-Statistik-Import | Bulk-Import aller Monate aus HA-Langzeitstatistiken | Home Assistant + Volume-Mapping |
 | Portal-Import | CSV-Upload aus SMA Sunny Portal, Fronius, EVCC u.a. | Keine |
 | Cloud-Import | Direktabruf aus Hersteller-Cloud-APIs (SolarEdge, Fronius, Huawei, Growatt, Deye, EcoFlow) | API-Zugangsdaten |
@@ -84,6 +87,6 @@ Das Standalone-Deployment nutzt das eigenständige [eedc Repository](https://git
 | CSV-Import | Import aus personalisierter CSV-Vorlage | Keine |
 | Manuelle Eingabe | Direkte Erfassung im Formular | Keine |
 
-:::tip[Einrichtung-Hub]
-Unter **Einstellungen → Daten → Einrichtung** findest du alle Datenquellen-Optionen zentral an einem Ort.
+:::tip[Alle Quellen an einem Ort]
+Unter **Einstellungen → Datenquellen** ordnest du jedem Feld genau eine Quelle zu – mit Sensor-Suche, Themen-Baum, Vorzeichen-Invertierung und einer Prüfung je Feld, die Probleme (falsche Einheit, fehlende Statistik …) direkt anzeigt.
 :::

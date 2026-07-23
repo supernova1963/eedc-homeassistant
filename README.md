@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Dokumentationsstand 3.25.2</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
+  <strong>Dokumentationsstand 4.0.0</strong> | Standalone PV-Analyse mit optionaler Home Assistant Integration
 </p>
 
 <p align="center">
@@ -30,6 +30,18 @@
 
 ---
 
+## Die Oberfläche: drei Achsen
+
+eedc sortiert alle Funktionen nach drei einfachen Fragen. Alle Daten bleiben erhalten, alte Lesezeichen werden umgeleitet.
+
+| Achse | Frage | Inhalt |
+|---|---|---|
+| **Cockpit** | Wann? | Zeit-Achse: Live · Tag · Monat · Jahr/Gesamt · Aussicht |
+| **Komponenten** | Was? | Deine Geräte, je Status → Verlauf → Vergleich → Wirtschaftlichkeit |
+| **Auswertungen** | Wie ausgewertet? | Anlagenweite Schnitte: Finanzen · ROI · Prognose-vs-IST · CO₂ · Tabelle |
+
+---
+
 ## Empfohlene Nutzung
 
 eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachsige Charts, Tabellen mit vielen Spalten. Optimal nutzbar auf **Desktop**. Smartphone in Standard-Anzeigegröße funktioniert für Live-Dashboard und einfache Sichten; für die datendichten Auswertungs-Bereiche ist ein größerer Bildschirm sinnvoll. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom über Standard) können einzelne Layouts eng werden.
@@ -38,55 +50,54 @@ eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachs
 
 ## Features
 
-### Live Dashboard
+### Cockpit – Die Zeit-Achse
 
-- **Animiertes Energiefluss-Diagramm** – SVG mit Flusslinien, SoC-Pegelanzeige, Tooltips mit Tages-kWh
-- **Tagesverlauf** – 24h-Chart mit PV, Verbrauch, Netz, Speicher (auch historisch abrufbar)
-- **Wetter-Widget** – Stunden-Prognose mit IST/Prognose-Overlay und Solar Forecast ML (SFML) Vergleich
-- **Heute/Gestern kWh** – Tagessummen pro Komponente
-- **Demo-Modus** für Erstnutzer ohne konfigurierte Sensoren
+Ein Aufbau, fünf Zeitfenster (Kennzahlen oben, Verlauf/Energiefluss in der Mitte, Komponenten-Sektionen darunter):
+
+- **Live** – animiertes Energiefluss-Diagramm (SVG mit Flusslinien, SoC-Pegelanzeige, Tages-kWh-Tooltips), 24h-Tagesverlauf mit PV/Verbrauch/Netz/Speicher, Wetter-Widget mit IST/Prognose-Overlay, Heute/Gestern-kWh je Komponente. Demo-Modus für Erstnutzer ohne Sensoren.
+- **Tag** – jeden einzelnen Tag mit Stundenverlauf und Tagesbilanz durchblättern (auch historisch).
+- **Monat** – Energie-Bilanz mit Datenquellen-Indikatoren pro Feld, Vorjahres- und SOLL/IST-Vergleich, Finanz-Überblick je Komponente, Social-Media-Textvorlage.
+- **Jahr / Gesamt** – Hero-Leiste (Top-KPIs + Jahres-Trend), Energie-Fluss-Diagramm, Ring-Gauges, Sparklines, Amortisations-Fortschrittsbalken und Jahres-Rendite je Investition, Formel-Tooltips.
+- **Aussicht** – 14-Tage-Kurzfristprognose (Open-Meteo, mehrere Wettermodelle: ICON-CH2/D2/EU, ECMWF IFS, auto), 12-Monats-Langfristprognose (PVGIS + Performance-Ratio), Trend-Analyse mit Degradations- und Saison-Erkennung, Finanzprognose bis zur Amortisation.
+
+### Komponenten – Deine Geräte
+
+Jedes Gerät mit fester Gliederung **Status → Verlauf → Vergleich → Wirtschaftlichkeit** – die früheren Geräte-Dashboards und Geräte-Tabs sind hier zusammengeführt:
+
+- **PV-Anlage** – SOLL-IST-Vergleich pro String, Degradationsanalyse, spezifischer Ertrag, Performance Ratio
+- **Speicher** – Lade-/Entladezyklen, Netzladungsanteil und -kosten, Kapazität, Wirkungsgrad
+- **Wärmepumpe** – COP/JAZ/SCOP, Heiz- vs. Warmwasseranteil, Kompressor-Starts
+- **E-Auto** – Fahrleistung, PV-Ladeanteil, V2H-Entladung, Firmenwagen-Unterstützung
+- **Wallbox** – geladene Energie, PV-Anteil, Ladekosten
+- **Balkonkraftwerk & sonstige Erzeuger** – fließen in Autarkie und Eigenverbrauch ein
+
+### Auswertungen – Analytische Schnitte über die Anlage
+
+Anlagenweite Auswertungen (Geräte-Details liegen unter *Komponenten*):
+
+- **Finanzen** – T-Konto mit wählbarem Zeitraum: Erträge · Einsparungen · Aufwendungen · Saldo je Komponente, inkl. „Ergebnis nach Stromrechnung"
+- **ROI** – Amortisationskurve und Parent-Child-Aggregation, Realisierungsquote (Prognose vs. Realität)
+- **Prognose vs. IST** – Genauigkeits-Vergleich der Prognosequellen (Open-Meteo / eedc kalibriert / Solcast) gegen den IST-Ertrag, mit MAE und Bias
+- **CO₂** – vermiedene Emissionen über die ganze Anlage (PV-Eigenverbrauch, Wärmepumpe, E-Mobilität)
+- **Tabelle (Energie-Explorer)** – alle 22 Monatsspalten sortierbar, Spaltenauswahl per localStorage, Vorjahresvergleich mit Δ-Farbkodierung, CSV/JSON-Export
+
+### Du gestaltest jede Sicht selbst
+
+- **Blöcke verschieben** (↑/↓), **Fokus/Vollbild** (⤢), **Einklappen** (⌄)
+- **Parkplatz** – nicht benötigte Anzeigen per Langdruck/Rechtsklick auf den Parkplatz legen; jederzeit zurückholbar, nichts geht verloren
+- eedc merkt sich deine Anordnung pro Sicht
 
 ### MQTT-Inbound – Universelle Datenbrücke
 
 - **Jedes Smarthome-System** – HA, Node-RED, ioBroker, FHEM, openHAB
 - **HA Automation Generator** – Wizard erstellt fertige YAML-Automationen
-- **Energy → Monatsabschluss** – MQTT-Energiedaten als Vorschläge (Konfidenz 91%)
+- **Energy → Monatsdaten** – MQTT-Energiedaten als Vorschläge (Konfidenz 91%)
 
-### MQTT-Gateway – Geräte direkt anbinden
+### Datenquellen – Geräte direkt anbinden
 
-- **Topic-Translator** – Eigene MQTT-Topics von Shelly, OpenDTU, Tasmota und Co. auf eedc-Felder mappen
-- **Geräte-Presets** – Vordefinierte Mappings für gängige Geräte (Shelly, OpenDTU, Tasmota, ...)
-- **9 Geräte-Connectors** – SMA, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota, EcoFlow
-
-### Aktueller Monat
-
-- **Energie-Bilanz** mit Datenquellen-Indikatoren pro Feld
-- **Vorjahresvergleich** und SOLL/IST-Vergleich
-- **Komponenten-Karten** und Finanz-Übersicht
-
-### Cockpit & Dashboards
-
-- **Modernisiertes Cockpit** mit Hero-Leiste (Top-KPIs + Jahres-Trend), Energie-Fluss-Diagramm, Ring-Gauges und Sparkline
-- **8 spezialisierte Dashboards** für jede Komponente
-- **Amortisations-Fortschrittsbalken** – Investitionsrückfluss auf einen Blick
-- **Formel-Tooltips** zeigen Berechnungsgrundlagen per Hover
-- **Mobile-optimiert** – Responsive Cockpit-Tabs, angepasste KPI-Darstellung auf Smartphones
-
-### Auswertungen & Reporting
-
-- **7 Analyse-Tabs**: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen, **Tabelle (Energie-Explorer)**
-- **Interaktiver Energie-Explorer** – Alle 22 Monatsspalten in sortierbarer Tabelle, Spaltenauswahl per localStorage, Vorjahresvergleich mit Δ-Farbkodierung
-- **ROI-Dashboard** mit Amortisationskurve und Parent-Child Aggregation
-- **SOLL-IST Vergleich** gegen PVGIS-Prognosen
-- **CSV/JSON Export** für externe Weiterverarbeitung
-
-### Aussichten (Prognosen)
-
-- **4 Prognose-Tabs**: Kurzfristig (7 Tage), Langfristig (12 Monate), Trend-Analyse, Finanzen
-- **Kurzfrist-Prognose** mit Wetter-Daten (Open-Meteo) und mehreren Wettermodellen (MeteoSwiss ICON-CH2, ICON-D2, ICON-EU, ECMWF IFS, auto)
-- **Solar Forecast ML (SFML)** – KI-basierter Ertragsprognose-Vergleich: eedc vs. SFML vs. IST
-- **Langfrist-Prognose** mit PVGIS-Daten und Performance-Ratio
-- **Trend-Analyse** mit Degradationsberechnung und saisonalen Mustern
+- **Ein Feld, eine Quelle** – jedem eedc-Feld genau eine Quelle zuordnen (HA-Sensor, MQTT-Topic oder Geräte-Connector), mit Sensor-Suche, Themen-Baum, Vorzeichen-Invertierung und Prüfung je Feld
+- **Geräte-Presets** – vordefinierte Mappings für gängige Geräte (Shelly, OpenDTU, Tasmota, ...)
+- **9 Geräte-Connectors** – SMA ennexOS, SMA WebConnect, Fronius, go-eCharger, Shelly, OpenDTU, Kostal, sonnenBatterie, Tasmota SML
 
 ### Datenerfassung – Viele Wege führen nach eedc
 
@@ -95,7 +106,7 @@ eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachs
 - **Custom-Import** – Beliebige CSV/JSON-Dateien mit flexiblem Feld-Mapping
 - **MQTT Energy** – Monatswerte aus MQTT-Topics (91% Konfidenz)
 - **Portal-Import** – CSV-Upload von Herstellerportalen (SMA Sunny Portal, Fronius Solarweb, evcc)
-- **Monatsabschluss-Wizard** – Geführte monatliche Datenerfassung mit Datenquellen-Status
+- **Monatsabschluss-Formular** – ein Formular für die monatliche Datenerfassung (Neuanlage und Korrektur), mit Datenquellen-Status
 - **Demo-Daten** zum Ausprobieren
 
 ### Infothek – Verträge & Dokumente
@@ -121,7 +132,7 @@ eedc ist eine **datendichte Analyse-App** — viele KPIs nebeneinander, feinachs
 ### Community-Vergleich (optional)
 
 - **Anonymer Benchmark** mit anderen PV-Anlagen auf [energy.raunet.eu](https://energy.raunet.eu)
-- **6 Analyse-Tabs**: Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
+- **Analyse-Sichten**: Übersicht, PV-Ertrag, Komponenten, Regional, Statistiken
 - **Achievements** und Rang-Badges
 - Jederzeit löschbar – ein Klick entfernt alle geteilten Daten
 
@@ -188,21 +199,27 @@ open http://localhost:3000
 
 ## Screenshots
 
-### Cockpit Übersicht
-Die Hauptansicht zeigt alle wichtigen KPIs auf einen Blick:
+### Cockpit
+Die Zeit-Achse zeigt alle wichtigen KPIs auf einen Blick:
 - Energiebilanz (Erzeugung, Verbrauch, Einspeisung)
 - Effizienz-Kennzahlen (Autarkie, Eigenverbrauchsquote)
 - Komponenten-Status (Speicher, E-Auto, Wärmepumpe)
 - Finanzielle Auswertung (Einsparungen, ROI)
-![Cockpit Übersicht](https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/images/cockpit_main.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/images/cockpit_main-dark.png">
+  <img src="https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/images/cockpit_main.png" alt="eedc Cockpit">
+</picture>
 
-### Auswertungen
-Detaillierte Analysen in 7 Kategorien:
-- Jahresvergleich mit Delta-Indikatoren
+### Komponenten
+Jedes Gerät mit fester Gliederung Status → Verlauf → Vergleich → Wirtschaftlichkeit:
 - PV-String-Performance nach Ausrichtung
-- Interaktiver Energie-Explorer (Tabellen-Tab)
+- Speicher-Zyklen und Netzladungsanteil
+- Wärmepumpen-JAZ und E-Auto-Bilanz
 - Amortisationskurven für alle Investitionen
-![Auswertungen - Komponenten](https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/images/auswertungen_komponenten.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/images/komponenten_speicher-dark.png">
+  <img src="https://raw.githubusercontent.com/supernova1963/eedc-homeassistant/main/docs/images/komponenten_speicher.png" alt="eedc Komponenten – Speicher">
+</picture>
 
 ---
 
@@ -237,15 +254,17 @@ Detaillierte Analysen in 7 Kategorien:
 
 eedc bietet flexible Home Assistant Integration mit mehreren Ansätzen:
 
-### Sensor-Mapping (Empfohlen)
+### Datenquellen (Empfohlen)
 
-Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den eedc-Feldern zu:
-- Basis-Sensoren: PV-Erzeugung, Einspeisung, Netzbezug, Außentemperatur
+Unter **Einstellungen → Datenquellen** ordnest du jedem eedc-Feld genau eine Quelle zu – eine Fläche statt zweier Wizards:
+- Basis-Felder: PV-Erzeugung, Einspeisung, Netzbezug, Außentemperatur
 - PV-Module: Pro String oder kWp-Verteilung
 - Speicher: Ladung, Entladung, Netz-Ladung
 - E-Auto: km, Ladung (PV/Netz/Extern), V2H
 - Wärmepumpe: Strom, Heizung (COP-Berechnung möglich)
-- **Vorzeichen-Inversion** pro Sensor (bei bidirektionalen Sensoren)
+- **Quelle je Feld**: HA-Sensor, MQTT-Topic oder Geräte-Connector
+- **Vorzeichen-Inversion** pro Feld (bei bidirektionalen Sensoren)
+- **Prüfung je Feld** zeigt Probleme (falsche Einheit, fehlende Statistik …) direkt an
 
 ### MQTT-Inbound (Universell)
 
@@ -253,10 +272,11 @@ Mit dem **Sensor-Mapping-Wizard** ordnest du deine bestehenden HA-Sensoren den e
 - Integrierter **HA Automation Generator** erstellt fertige YAML-Automationen
 - Beispiel-Flows für Node-RED, ioBroker, FHEM, openHAB
 - Auch für HA-Nutzer mit **MariaDB/MySQL** als Recorder-DB empfohlen
+- **Ein Broker für beide Richtungen** (Empfangen + Export) – Richtungs-Schalter unter *Einstellungen → Integration*
 
 ### Monatlicher Abschluss
 
-Der **Monatsabschluss-Wizard** unterstützt dich bei der monatlichen Datenerfassung:
+Der **Monatsabschluss** ist ein Formular für die monatliche Datenerfassung:
 - Automatische Vorschläge aus HA-Statistik, MQTT, Connectors, Vormonat oder Vorjahr
 - COP-basierte Berechnungen für Wärmepumpen
 - Datenquellen-Status mit Konfidenz-Anzeige

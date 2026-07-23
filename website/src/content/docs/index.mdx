@@ -21,28 +21,33 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
-import { Image } from 'astro:assets';
-import cockpitImg from '../../assets/screenshots/cockpit_uebersicht.png';
+import cockpitLight from '../../assets/screenshots/cockpit_main.png';
+import cockpitDark from '../../assets/screenshots/cockpit_main-dark.png';
 
-<Image src={cockpitImg} alt="eedc Cockpit Dashboard" quality={85} />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={cockpitDark.src} />
+  <img src={cockpitLight.src} alt="eedc Cockpit Dashboard" />
+</picture>
 
 ## Was eedc für dich tut
 
+eedc sortiert alles nach drei einfachen Fragen: **Wann?** · **Was?** · **Wie ausgewertet?**
+
 <CardGrid stagger>
-  <Card title="Cockpit" icon="sun">
-    Alle wichtigen Kennzahlen auf einen Blick: Autarkiegrad, Eigenverbrauch, Einspeisung, Rendite und Amortisation – übersichtlich auf einem Dashboard.
+  <Card title="Cockpit – Wann?" icon="sun">
+    Die Zeit-Achse: Live, Tag, Monat, Jahr/Gesamt und Aussicht. Ein Aufbau für jeden Zeitraum – Kennzahlen, Energiefluss und Komponenten auf einen Blick.
   </Card>
-  <Card title="Auswertungen" icon="document">
-    Detaillierte Analysen deiner PV-Anlage, Speicher, Wärmepumpe, E-Auto und Wallbox. SOLL-IST-Vergleich für jeden PV-String.
+  <Card title="Komponenten – Was?" icon="star">
+    Deine Geräte mit fester Gliederung Status → Verlauf → Vergleich → Wirtschaftlichkeit: PV-Anlage, Speicher, Wärmepumpe, E-Auto, Wallbox, Balkonkraftwerk.
   </Card>
-  <Card title="Prognosen" icon="star">
-    7-Tage Wetterprognose, 12-Monats-Vorhersage, Trend-Analyse mit Degradationserkennung und Finanzprognose bis zur Amortisation.
+  <Card title="Auswertungen – Wie ausgewertet?" icon="document">
+    Anlagenweite Schnitte: Finanzen, ROI, Prognose vs. IST, CO₂ und die exportierbare Tabelle. SOLL-IST-Vergleich pro PV-String inklusive.
   </Card>
   <Card title="Community" icon="approve-check-circle">
     Vergleiche deine Anlage anonym mit anderen. Regionale Benchmarks und Performance-Vergleiche auf Bundesland-Ebene – live unter [energy.raunet.eu](https://energy.raunet.eu).
   </Card>
   <Card title="Home Assistant" icon="setting">
-    Nahtlose Integration als HA Add-on. Automatischer Datenimport aus Langzeitstatistiken, MQTT Auto-Discovery und Sensor-Mapping.
+    Nahtlose Integration als HA Add-on. Automatischer Datenimport aus Langzeitstatistiken, MQTT Auto-Discovery und feld-zentrische Datenquellen-Zuordnung.
   </Card>
   <Card title="Standalone" icon="laptop">
     Kein Home Assistant? Kein Problem. eedc läuft auch komplett eigenständig mit manueller Dateneingabe oder CSV-Import.

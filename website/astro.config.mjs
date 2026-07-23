@@ -45,6 +45,9 @@ export default defineConfig({
 						{ label: 'Teil II: Bedienung', slug: 'handbuch-bedienung' },
 						{ label: 'Teil III: Einstellungen', slug: 'handbuch-einstellungen' },
 						{ label: 'Modul: Infothek', slug: 'handbuch-infothek' },
+						{ label: 'Modul: Daten-Checker', slug: 'handbuch-daten-checker' },
+						{ label: 'Modul: Energieprofil', slug: 'handbuch-energieprofil' },
+						{ label: 'Modul: Prognosen', slug: 'handbuch-prognosen' },
 						{ label: 'Glossar', slug: 'glossar' },
 					],
 				},
@@ -53,9 +56,14 @@ export default defineConfig({
 					items: [
 						{ label: 'Architektur', slug: 'architektur' },
 						{ label: 'Berechnungsreferenz', slug: 'berechnungen' },
+						{ label: 'Sensor-Referenz', slug: 'sensor-referenz' },
 						{ label: 'Entwicklung', slug: 'entwicklung' },
 						{ label: 'Dev-Machine Setup', slug: 'setup-devmachine' },
 					],
+				},
+				{
+					label: 'Was ist neu',
+					slug: 'was-ist-neu',
 				},
 				{
 					label: 'Changelog',

@@ -3,47 +3,45 @@ title: Features
 description: Alle Features von eedc im Überblick
 ---
 
-import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
-import { Image } from 'astro:assets';
-import cockpitImg from '../../assets/screenshots/cockpit_uebersicht.png';
-import auswertungenImg from '../../assets/screenshots/auswertungen_pv_anlage.png';
-import aussichtenImg from '../../assets/screenshots/aussichten_langfristig.png';
-import communityImg from '../../assets/screenshots/community_trends.png';
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import cockpitLight from '../../assets/screenshots/cockpit_main.png';
+import cockpitDark from '../../assets/screenshots/cockpit_main-dark.png';
+import aussichtLight from '../../assets/screenshots/aussichten_langfristig.png';
+import aussichtDark from '../../assets/screenshots/aussichten_langfristig-dark.png';
+import komponentenLight from '../../assets/screenshots/komponenten_speicher.png';
+import komponentenDark from '../../assets/screenshots/komponenten_speicher-dark.png';
+import fokusLight from '../../assets/screenshots/block_fokus.png';
+import fokusDark from '../../assets/screenshots/block_fokus-dark.png';
+import communityLight from '../../assets/screenshots/community_uebersicht.png';
+import communityDark from '../../assets/screenshots/community_uebersicht-dark.png';
 
-## Cockpit – Dein Dashboard
+> **Neue Oberfläche seit v4.0.0:** eedc sortiert alle Funktionen nach drei einfachen Fragen — **Wann?** (Cockpit) · **Was?** (Komponenten) · **Wie ausgewertet?** (Auswertungen). Alle Daten bleiben erhalten, alte Lesezeichen werden umgeleitet.
 
-<Image src={cockpitImg} alt="eedc Cockpit Dashboard" quality={85} />
+## Cockpit – Die Zeit-Achse
 
-- **Hero-Leiste** mit den wichtigsten Kennzahlen: Autarkiegrad, Eigenverbrauchsquote, Gesamtertrag
-- **Energie-Flussdiagramm** – Wohin fließt dein Strom?
-- **Amortisations-Fortschritt** pro Komponente mit Methodenhinweis
-- **Jahres-Rendite** (p.a.) für jede Investition
-- **Sparklines** für Monatsverläufe
-- **Social-Media-Textvorlage** – Kopierfertige Monatsübersicht für Twitter/X und Facebook
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={cockpitDark.src} />
+  <img src={cockpitLight.src} alt="eedc Cockpit" />
+</picture>
 
----
+Ein Aufbau, fünf Zeitfenster – dieselbe Anordnung (Kennzahlen oben, Verlauf/Energiefluss in der Mitte, Komponenten-Sektionen darunter) für jeden Zeitraum:
 
-## Auswertungen – 7 Analyse-Tabs
+- **Live** – der aktuelle Tag in Echtzeit: Energiefluss, Momentanleistung, günstige Stunden. Weiterhin die Startseite.
+- **Tag** – jeden einzelnen Tag mit Stundenverlauf und Tagesbilanz durchblättern.
+- **Monat** – Monatsbilanz mit Finanz-Überblick je Komponente und Social-Media-Textvorlage (kopierfertige Monatsübersicht für X und Facebook).
+- **Jahr / Gesamt** – Jahres- und Lebensdauer-Sicht: Autarkiegrad, Eigenverbrauchsquote, Gesamtertrag, Amortisations-Fortschritt und Jahres-Rendite (p.a.) je Investition.
+- **Aussicht** – der Blick nach vorn (siehe unten).
 
-<Image src={auswertungenImg} alt="eedc Auswertungen PV-Anlage" quality={85} />
+### Cockpit → Aussicht: Prognosen
 
-- **Energie-Übersicht:** Monatliche Aufschlüsselung von Erzeugung, Verbrauch, Einspeisung, Netzbezug
-- **PV-Anlage:** SOLL-IST-Vergleich pro String, Degradationsanalyse
-- **Speicher:** Lade-/Entladezyklen, Netzladungsanteil
-- **Wärmepumpe:** COP/JAZ/SCOP-Auswertung, Heiz- vs. Warmwasseranteil
-- **E-Auto & Wallbox:** Fahrleistung, PV-Ladeanteil, V2H-Entladung, Firmenwagen-Unterstützung
-- **Investitionen:** ROI pro Komponente, Realisierungsquote (Prognose vs. Realität)
-- **Community:** Anonymer Vergleich mit anderen eedc-Nutzern
-
----
-
-## Aussichten – 4 Prognose-Module
-
-<Image src={aussichtenImg} alt="eedc Aussichten Langfristprognose" quality={85} />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={aussichtDark.src} />
+  <img src={aussichtLight.src} alt="eedc Aussicht – Prognosen" />
+</picture>
 
 <CardGrid>
   <Card title="Kurzfristig" icon="sun">
-    7-Tage Wetterprognose mit erwarteter PV-Erzeugung basierend auf GTI (Global Tilted Irradiance) für deine spezifische Modulneigung und -ausrichtung.
+    14-Tage-Wetterprognose mit erwarteter PV-Erzeugung basierend auf GTI (Global Tilted Irradiance) für deine spezifische Modulneigung und -ausrichtung.
   </Card>
   <Card title="Langfristig" icon="star">
     12-Monats-Prognose basierend auf PVGIS-Daten, angepasst an deine historischen Erträge und saisonale Muster.
@@ -58,9 +56,60 @@ import communityImg from '../../assets/screenshots/community_trends.png';
 
 ---
 
+## Komponenten – Deine Geräte
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={komponentenDark.src} />
+  <img src={komponentenLight.src} alt="eedc Komponenten – Speicher" />
+</picture>
+
+Jedes Gerät hat eine feste Heimat mit derselben Gliederung: **Status → Verlauf → Vergleich → Wirtschaftlichkeit**. Eine Zahl, eine Heimat – die früheren Geräte-Dashboards und Geräte-Tabs sind hier zusammengeführt.
+
+- **PV-Anlage:** SOLL-IST-Vergleich pro String, Degradationsanalyse, spezifischer Ertrag und Performance Ratio.
+- **Speicher:** Lade-/Entladezyklen, Netzladungsanteil und -kosten, Kapazität und Wirkungsgrad.
+- **Wärme / Klima (Wärmepumpe):** COP/JAZ/SCOP-Auswertung, Heiz- vs. Warmwasseranteil, Kompressor-Starts.
+- **E-Auto:** Fahrleistung, PV-Ladeanteil, V2H-Entladung, Firmenwagen-Unterstützung.
+- **Wallbox:** geladene Energie, PV-Anteil, Ladekosten.
+- **Balkonkraftwerk & Sonstiges:** eigene Erzeuger hinter dem Hauszähler fließen in Autarkie und Eigenverbrauch ein.
+
+> Die Zukunfts-Prognose je Gerät liegt gebündelt unter **Cockpit → Aussicht**.
+
+---
+
+## Auswertungen – Analytische Schnitte über die ganze Anlage
+
+Anlagenweite Auswertungen statt Geräte-Details (die liegen jetzt unter *Komponenten*):
+
+- **Finanzen:** Das Finanz-T-Konto mit wählbarem Zeitraum – Erträge, Einsparungen, Aufwendungen und Saldo je Komponente, inklusive „Ergebnis nach Stromrechnung".
+- **ROI:** Rentabilität pro Komponente und Realisierungsquote (Prognose vs. Realität).
+- **Prognose vs. IST:** Genauigkeits-Vergleich der Prognosequellen (Open-Meteo / eedc kalibriert / Solcast) gegen den tatsächlichen Ertrag, mit MAE und Bias.
+- **CO₂:** Vermiedene Emissionen über die ganze Anlage (PV-Eigenverbrauch, Wärmepumpe, E-Mobilität).
+- **Tabelle:** Tages-Energieprofil mit Spalten-Selektor, exportierbar.
+
+---
+
+## Du gestaltest jede Sicht selbst
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={fokusDark.src} />
+  <img src={fokusLight.src} alt="eedc Block im Fokus-/Vollbild-Modus" />
+</picture>
+
+Neu in v4: Du bestimmst, was wo steht – eedc merkt sich deine Anordnung pro Sicht.
+
+- **Blöcke verschieben:** Jeder Block lässt sich per ↑/↓ sortieren – das Wichtigste nach vorn.
+- **Fokus / Vollbild:** Per ⤢ öffnet ein Block bildschirmfüllend – ideal, um einen Chart oder eine Tabelle groß zu lesen.
+- **Einklappen:** Selten Gebrauchtes per ⌄ zuklappen.
+- **Parkplatz:** Anzeigen, die du nicht brauchst, per Langdruck (bzw. Rechtsklick) auf den „Parkplatz" am Seitenende legen – dort gesammelt und jederzeit zurückholbar. Nichts geht verloren, du blendest nur aus, was dich nicht interessiert.
+
+---
+
 ## Community – Vergleiche dich
 
-<Image src={communityImg} alt="eedc Community Trends" quality={85} />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset={communityDark.src} />
+  <img src={communityLight.src} alt="eedc Community-Übersicht" />
+</picture>
 
 - **Anonymer Benchmark:** Deine Anlage vs. Community-Durchschnitt
 - **Radar-Chart:** Performance auf 6 Achsen im Vergleich
@@ -72,8 +121,8 @@ import communityImg from '../../assets/screenshots/community_trends.png';
 
 ## Datenerfassung – Alle Quellen an einem Ort
 
-- **Einrichtung-Hub:** Zentrale Seite zur Konfiguration aller Datenquellen (HA, Connector, Cloud, CSV)
-- **Monatsabschluss-Wizard:** Zentrale Anlaufstelle für monatliche Daten mit Status-Chips für alle Quellen
+- **Datenquellen-Fläche:** Unter *Einstellungen → Datenquellen* ordnest du **jedem Feld genau eine Quelle** zu – HA-Sensor, MQTT-Topic oder Geräte-Connector – mit Sensor-Suche, Themen-Baum, Vorzeichen-Invertierung und einer Prüfung je Feld.
+- **Monatsabschluss als ein Formular:** Monatswerte erfasst und korrigierst du in **einem** Formular (*Einstellungen → Daten → Monatsdaten*) – dasselbe für Neuanlage und Korrektur, mit Status-Anzeige je Monat.
 - **Schnellzugriff:** Kalender-Icon mit Badge zeigt offene Monate direkt in der Hauptnavigation
 - **Portal-Import:** CSV-Upload von SMA Sunny Portal, SMA eCharger, EVCC, Fronius Solarweb
 - **Cloud-Import:** Daten direkt aus Hersteller-Cloud-APIs abrufen (SolarEdge, Fronius, Huawei, Growatt, Deye/Solarman, EcoFlow)
