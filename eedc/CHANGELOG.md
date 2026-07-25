@@ -7,7 +7,58 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.0] - 2026-07-25 — Neue Oberfläche (Cockpit · Komponenten · Auswertungen) + Finanz-/CO₂-Korrekturen
+
+> **Breaking Change (nur Oberfläche, keine Daten):** Die Menüstruktur ist neu — sortiert nach *Wann?* (Cockpit), *Was?* (Komponenten), *Wie ausgewertet?* (Auswertungen). Alle Funktionen und Daten bleiben erhalten; alte Links/Lesezeichen werden automatisch umgeleitet. Das HA-Add-on zeigt vor dem Update den Breaking-Hinweis (`config.yaml breaking_versions 4.0.0`).
+
+### Added
+
+- **Neue Informationsarchitektur (IA V4)** — die bisher hinter dem Build-Flag `VITE_IA_V4` dormante Oberfläche ist jetzt die ausgelieferte:
+  - **Cockpit** (Zeit-Achse): Live · Tag · Monat · Jahr/Gesamt · Aussicht — jede Sicht mit gleichem Aufbau (Kennzahlen · Verlauf/Energiefluss · Komponenten-Sektionen). **Neu: die Tag-Sicht** (Stundenverlauf + Tagesbilanz je Einzeltag).
+  - **Komponenten** (Geräte): PV · Speicher · Wärme/Klima · E-Auto · Wallbox · Balkonkraftwerk · Sonstiges — je feste Struktur Status → Verlauf → Vergleich → Wirtschaftlichkeit (bisherige Geräte-Dashboards + Auswertungs-Tabs zusammengeführt).
+  - **Auswertungen** (analytische Schnitte): Finanzen · ROI · Prognose-vs-IST · CO₂ · Tabelle — das Finanz-T-Konto lebt hier mit wählbarem Zeitraum.
+  - **Einstellungen** als durchsuchbare Kachel-/Reiter-Übersicht mit Status je Bereich.
+- **Individualisierung je Sicht:** Blöcke per ↑/↓ verschieben, per ⤢ auf Vollbild fokussieren, einklappen — Anordnung wird pro Sicht gemerkt. Einzelne Anzeigen lassen sich per Langdruck/Rechtsklick auf einen „Parkplatz" am Seitenende ausblenden (jederzeit zurückholbar).
+- **Monatsabschluss als ein Formular** (statt siebenteiligem Wizard): Neuanlage und Korrektur im selben Formular (Einstellungen → Daten → Monatsdaten), Status je Monat, T-Konto als Gegenprobe in den Auswertungen.
+- **Datenquellen als eine Fläche** (Einstellungen → Datenquellen): jedem Feld genau eine Quelle (HA-Sensor · MQTT-Topic · Geräte-Connector), mit Sensor-Suche, Themen-Baum, Vorzeichen-Invertierung und Prüfung je Feld. Löst die Alt-Wizards (Sensor-Mapping, MQTT-Inbound) ab; bestehende Zuordnungen werden automatisch übernommen.
+- **Setup-Wizard im neuen Design** (Anlage · Tarif · PV-System · HA-Verbindung, inkl. Schnellstart-Karte + Sensor-Vorschlägen aus dem HA-Energie-Dashboard).
+- **Diagramme als Tabelle ablesen + CSV-Export** in der Vollbild-Ansicht (zunächst Cockpit-Monat/-Jahr-Verlauf + Live-Tagesverlauf).
+- **Sonstige Erträge & Ausgaben auf Anlage-Ebene (G19-1):** Feld `Monatsdaten.sonstige_positionen` — pro Monat mehrere benannte Positionen (Ertrag oder Ausgabe), wirkt in allen fünf Anlage-Finanz-Lese-Pfaden. **Einmalige Migration übernimmt Alt-Sonderkosten; diese Werte rechnen ab jetzt in den Finanz-Summen mit (vorher in KEINER Summe) — veränderte Summen sind die Korrektur, nicht der Fehler.** Dazu K3: Zählergebühr als eigenes Tarif-Feld, getrennter Grund-/Zählergebühr-Ausweis (Cockpit Monat/Jahr).
+- **Community — rückwirkend entfernte Monate (N18-2):** Client deklariert Voll-Übertragungen (`monate_vollstaendig: true`); der Server entfernt damit lokal gelöschte Monate (Server-Seite live; ältere Server ignorieren das Feld).
+- **Klickbare Chart-Legenden als Standard (B7):** Legenden-Eintrag blendet Serie aus/ein (inkl. Achsen-Reskalierung), über geteilten Hook in den gemeinsamen Chart-Bausteinen.
+- **Speicher:** Ø-Netz-Ladepreis-Vorschlag im Investitions-Formular (R15-2) + Netzladung-Kosten-Ausweis im T-Konto (R15-5).
+
+### Changed
+
+- **Netzbezug-Farbe** von Signal-Rot auf dunkles Rot (`#ef4444` → `#b91c1c`) umgestellt — Signal-Rot ist jetzt exklusiv für Kosten/Fehler reserviert, einheitlich in allen Charts.
+- **Datenquellen-Backend konsolidiert** (jetzt mit sichtbarer V4-Fläche): drei additive/idempotente Start-Migrationen (Materialisierung bestehender Zuordnungen, Invert-Vereinheitlichung, Richtungs-Festschreibung), **EIN MQTT-Broker für beide Richtungen** mit Import-/Export-Defaults (Bestandsschutz über ENV `MQTT_ENABLED`), HA-Export nicht mehr HA-only-gated. **Zwei bewusste Verhaltensänderungen für Bestand:** (1) Export-Default = an, sobald HA-Verbindung + Broker vorhanden (abschaltbar unter Einstellungen → HA-Export → Auto-Publish) — es können neue eedc-Entitäten in HA auftauchen; (2) je Feld strikt EINE Quelle, HA vor MQTT (vorher überschrieb MQTT den HA-Wert; kein stiller Fallback mehr bei Sensor-Ausfall).
+- **HA-Export-Sensoren rechnen vollständiger:** CO₂-Ersparnis trägt die volle Bilanz (PV-Eigenverbrauch inkl. Balkonkraftwerk + sonstige Erzeuger + WP + E-Mobilität); Autarkie/Eigenverbrauchsquote enthalten Erzeuger hinter dem Hauszähler — deckungsgleich mit dem Cockpit. Hinweis: der `total_increasing`-CO₂-Sensor macht dadurch einmalig einen Sprung in der HA-Langzeitstatistik.
+- **Weniger Doppel-Abrufe:** App-Start/Setup-Gate teilen den Anlagen-Fetch (`useAnlagen`-Cache) — `/api/anlagen/` pro Seitenaufruf 2→1; weniger Refetch beim Navigieren.
+- **UI-Politur in geteilten Komponenten (T19):** „Abbrechen"-Kanon (secondary, rechts) über 15 Stellen, Modal-/Alert-Padding mobil, Dialog-/Werkbank-Feinschliff.
+
+### Fixed
+
+- **Drift-Inventur Tier-1 (Paket DI)** — bekannte Kennzahl-Abweichungen vor dem Release bereinigt (Korrektur, kein Kern-Bilanz-Fehler; betroffene Werte ändern sich sichtbar):
+  - **DI-1 — WP-CO₂-Ersparnis im Jahres-/Anlagenbericht (PDF) war zu hoch.** Bericht rechnete nur vermiedenes Gas, ohne Gas-Kessel-Wirkungsgrad und ohne WP-Strom-CO₂-Abzug. Alle Sichten nutzen jetzt den Helper `co2_wp_ersparnis_kg`. Demo 2025: WP-CO₂ **2280,7 → 1567,1 kg**, CO₂-Gesamt im Bericht **7062 → 6348 kg**. Wächter + Symmetrie-Test sichern die vier Read-Sites.
+  - **DI-2 — HA-Export-Sensor „CO2 Einsparung" umfasst jetzt die volle Bilanz** (vorher nur `PV × 0,38`). Über `berechne_co2_bilanz`; Demo (Anlage 1, gesamt): **12.538 → 11.226 kg**. (`total_increasing` → einmaliger LTS-Sprung.)
+  - **DI-3 — Dienstwagen zählten im Bericht (PDF) fälschlich als private E-Mobilität.** Bericht filtert jetzt per `ist_dienstlich` wie Cockpit/Export. Betrifft nur Anlagen mit dienstlichem Fahrzeug.
+  - **DI-4 — HA-Export-WP-Kosten bewerten WP-Strom jetzt mit dem WP-Spezialtarif** (§14a) via `resolve_strompreis_for_komponente`. Betrifft nur Anlagen mit eigenem WP-Tarif.
+  - **DI-5 — Vorjahres-Vergleich des Gesamt-Nettoertrags war unvollständig** (Vorjahr ohne WP-/E-Mob-Ersparnis). Vorjahrespfad bildet die Kennzahl jetzt gleich zusammengesetzt (Anschaffungsdatum je Komponente respektiert). Demo: Vorjahres-Nettoertrag Juni **253,32 → 324,02 €**, Januar **−13,38 → 72,97 €**.
+- **Drift-Inventur Folge-Paket (DI-2)** — die drei beim DI-Bau aufgetauchten Folge-Abweichungen geschlossen:
+  - **DI-2-A — WP-CO₂ im WP-Dashboard war zu niedrig** (ohne Gas-Kessel-Wirkungsgrad). Nutzt jetzt `co2_wp_ersparnis_kg`. Demo (Anlage 1, gesamt): **2303,6 → 2744,3 kg**. Zweiter Wächter + erweiterter Symmetrie-Test sichern alle vier Read-Sites.
+  - **DI-2-B — HA-Export: Balkonkraftwerk + sonstige Erzeuger zählen jetzt zum Eigenverbrauch** (via `erzeugung_hinter_zaehler_kwh`). Demo (Anlage 1, gesamt): PV **38.451,8 → 39.692,4 kWh**, Eigenverbrauch **14.465,4 → 17.366,0 kWh**, Autarkie **79,1 → 82,0 %**, EV-Quote **37,6 → 42,0 %**, CO₂ **12.800,1 → 13.902,3 kg** — deckungsgleich mit Cockpit. Betrifft Anlagen mit BKW/sonstigem Erzeuger.
+  - **DI-2-C — Vorjahres-Energieanzeige zeigte Werte vor dem Anschaffungsdatum.** Anschaffungsdatum-Grenze gilt jetzt auch dort. Demo (WP ab 04/2024): im Vorjahres-Januar entfallen 320 kWh WP-Strom / 1400 kWh WP-Wärme.
+- **E-Auto-Ersparnis bei mehreren Fahrzeugen überschätzt (G20-2):** Aggregat rechnete alle km mit dem Vergleichsverbrauch des ersten Autos; jetzt Summe der Einzelfahrzeug-Ersparnisse. Demo: **167,79 → 150,96 €** (Gesamt-Nettoertrag sinkt entsprechend). Betrifft Cockpit Monat/Jahr + Übersichts-Kennzahlen.
+- **„Nächster offener Monat" übersah Binnen-Lücken (R20-2):** ermittelt jetzt den frühesten offenen Monat wie die Monatsdaten-Tabelle — Fußzeile/Navigation und Tabelle zeigen wieder dasselbe.
+- **Speicher-Dashboard las Netzladung nur unter dem Legacy-Schlüssel (R15-3):** kanonischer Schlüssel mit Fallback.
+- **Ladezeiten Live/Aussicht (R18-13):** 1–30-s-Zufalls-Jitter aus dem interaktiven Prognose-Pfad entfernt (bleibt für Hintergrund-Jobs).
+- Diverse Tester-Runde-18/20-Meldungen: schwarzer Ladebildschirm beim ersten Aufruf (Ladezustand statt Leere), Flackern beim Rubrikenwechsel, Tabellen-Scrollverhalten + Sticky-Kopf, abgeschnittene Umschalt-Pillen, KPI-Titel „Durchschnittspreis Netz" → „Ø-Preis Netz".
+
+### Notes
+
+- **Backend-Substanz fährt mit (ehrlich benannt):** Der Großteil dieser Version ist die zuvor flag-dormante IA V4, jetzt sichtbar. Zusätzlich fahren backend-wirksame, additiv/idempotente Änderungen mit (G19-1-Migration, Datenquellen-P1-Migrationen + Broker-Konsolidierung, R15-3 Netzladung-Key, Jitter-Fix, DI/DI-2-Korrekturen) — abgesichert durch ENV-Bestandsschutz und die Backend-Test-Suite. Einziger Rückweg bei Problemen ist v3.45.9.
+- **Kein separates v3.46:** Der gesamte Stand seit v3.45.9 fährt unter diesem v4.0.0-Tag (Entscheid 2026-07-20).
+
 
 ## [3.45.9] - 2026-06-29 — Speicher-Vorzeichen-Historie: schonende Selbstkorrektur per Daten-Checker (statt Start-Migration)
 

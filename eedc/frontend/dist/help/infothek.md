@@ -1,10 +1,10 @@
 
 # eedc Handbuch — Infothek
 
-**Version 3.24.1** | Stand: April 2026
+**Version 4.0** | Stand: 2026-07-25
 
 > Dieses Handbuch ist Teil der eedc-Dokumentation.
-> Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Glossar](GLOSSAR.md)
+> Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) | [Glossar](GLOSSAR.md)
 
 ---
 
@@ -16,7 +16,7 @@
 4. [Kategorien und Vorlagen](#4-kategorien-und-vorlagen)
 5. [Komponenten-Akte / Datenblatt](#5-komponenten-akte--datenblatt)
 6. [Dateien: Fotos und PDFs](#6-dateien-fotos-und-pdfs)
-7. [Verknüpfung mit Investitionen (N:M)](#7-verknüpfung-mit-investitionen-nm)
+7. [Verknüpfung mit Komponenten (N:M)](#7-verknüpfung-mit-komponenten-nm)
 8. [Archivieren und Löschen](#8-archivieren-und-löschen)
 9. [PDF-Dokumente](#9-pdf-dokumente)
 10. [Best Practices](#10-best-practices)
@@ -25,7 +25,7 @@
 
 ## 1. Was ist die Infothek?
 
-Die **Infothek** ist ein optionales Modul innerhalb von eedc für die Verwaltung aller Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung.
+Die **Infothek** ist ein Modul innerhalb von eedc für die Verwaltung aller Verträge, Zähler, Kontakte und Dokumente rund um deine Energieversorgung.
 
 PV-Anlagenbetreiber haben typischerweise viele Beteiligte:
 - Stromanbieter und Netzbetreiber (oft unterschiedliche!)
@@ -39,10 +39,10 @@ Diese Informationen sind verstreut — mal in Ordnern, mal in E-Mails, mal im Ko
 
 ### Was die Infothek kann
 
-- **15 Kategorien** mit passenden Vorlagen-Feldern (Strom, Gas, Wasser, Versicherung, ...)
+- **15 Kategorien** mit passenden Vorlagen-Feldern (Strom, Gas, Wasser, Versicherung, …)
 - **Komponenten-Akte** mit technischen Daten, Seriennummern, Prüfterminen
-- **Bis zu 15 Fotos und PDFs** pro Eintrag speichern (z.B. Datenblätter, Zählerfotos, Vertragsscans)
-- **Mehrfach-Verknüpfung (N:M)** mit eedc-Investitionen (z.B. ein Datenblatt für alle 6 PV-Strings)
+- **Bis zu 15 Fotos und PDFs** pro Eintrag speichern (z. B. Datenblätter, Zählerfotos, Vertragsscans)
+- **Mehrfach-Verknüpfung (N:M)** mit eedc-Komponenten (z. B. ein Datenblatt für alle 6 PV-Strings)
 - **Anlagendokumentation + Finanzbericht** als PDF — ziehen automatisch Infothek-Daten
 - **Infothek-Dossier** als PDF-Export aller Einträge
 - **Archivierung** statt Löschung — alte Einträge bleiben auffindbar
@@ -55,17 +55,22 @@ Die Infothek ist kein Dokumentenmanagementsystem mit Volltextsuche oder Versioni
 
 ## 2. Navigation & Zugang
 
-### Menüpunkt
+### Zugang
 
-Der Menüpunkt **"Infothek"** erscheint in der Hauptnavigation, sobald du den ersten Eintrag angelegt hast. Vorher ist er ausgeblendet, um die Navigation nicht zu überfrachten.
+Die Infothek ist eine eigene Kachel-Kategorie in den Einstellungen:
 
-Um die Infothek zum ersten Mal zu öffnen:
-- **Einstellungen → Anlage** → Button "Infothek einrichten"
-- Oder direkt über URL: `/infothek`
+**Einstellungen → Infothek**
 
-### Übersichtsseite
+Das Kachel-Raster der Einstellungen führt die Kategorie **Infothek** als eigenen Reiter (neben Stammdaten, Komponenten, Daten, Integration, Datenquellen, System). Sie enthält zwei Kacheln:
 
-Die Infothek-Übersicht zeigt alle Einträge als Karten:
+- **Infothek** — die vollständige Verwaltung aller Einträge, **inline im Block**. Der große Voll-Blick läuft über die Vollbild-Ansicht (⤢).
+- **Berichte & Dokumente** — der PDF-Export (siehe [§9](#9-pdf-dokumente)).
+
+> **Aus der Komponenten-Achse:** Aus jeder Komponenten-Sicht ([Teil II §3](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse)) führt der Block **Dokumente & Infos** direkt zu den verknüpften Infothek-Einträgen; beim Bearbeiten einer Komponente unter *Einstellungen → Komponenten* siehst du dieselbe Verknüpfungs-Liste mit Direktlink.
+
+### Übersicht im Block
+
+Die Infothek-Verwaltung zeigt alle Einträge als Karten:
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -86,7 +91,7 @@ Die Infothek-Übersicht zeigt alle Einträge als Karten:
 
 ### Kategorie-Filter
 
-Oberhalb der Karten gibt es einen Filter-Bereich. Klicke auf eine Kategorie (z.B. "Strom"), um nur Einträge dieser Kategorie anzuzeigen. "Alle" zeigt wieder alle Einträge.
+Oberhalb der Karten gibt es einen Filter-Bereich. Klicke auf eine Kategorie (z. B. „Strom"), um nur Einträge dieser Kategorie anzuzeigen. „Alle" zeigt wieder alle Einträge.
 
 ---
 
@@ -94,18 +99,18 @@ Oberhalb der Karten gibt es einen Filter-Bereich. Klicke auf eine Kategorie (z.B
 
 ### Neuen Eintrag anlegen
 
-Klicke auf **"+ Neuer Eintrag"** oben rechts. Ein Formular öffnet sich mit folgenden Bereichen:
+Klicke auf **„+ Neuer Eintrag"** oben rechts im Infothek-Block. Ein Formular öffnet sich mit folgenden Bereichen:
 
 #### Pflichtfelder
 
 | Feld | Beschreibung |
 |------|--------------|
-| **Bezeichnung** | Freier Name des Eintrags, z.B. "Stadtwerke Strom (Netzbetreiber)" |
+| **Bezeichnung** | Freier Name des Eintrags, z. B. „Stadtwerke Strom (Netzbetreiber)" |
 | **Kategorie** | Bestimmt die Vorlage mit passenden Zusatzfeldern |
 
 #### Kategorie-spezifische Felder
 
-Je nach gewählter Kategorie erscheinen passende Vorlagen-Felder (z.B. Zählernummer und Anbieter bei "Stromvertrag"). Diese Felder sind alle optional — fülle nur aus, was du hast.
+Je nach gewählter Kategorie erscheinen passende Vorlagen-Felder (z. B. Zählernummer und Anbieter bei „Stromvertrag"). Diese Felder sind alle optional — fülle nur aus, was du hast.
 
 #### Kontakt-Sektion (aufklappbar)
 
@@ -120,13 +125,13 @@ Großes Freitext-Feld für alles Weitere: Besonderheiten, Gesprächsnotizen, Lin
 
 Upload von bis zu 15 Fotos oder PDFs pro Eintrag (je bis zu 10 MB). Siehe [§6 Dateien](#6-dateien-fotos-und-pdfs).
 
-#### Verknüpfte Investitionen
+#### Verknüpfte Komponenten
 
-Mehrfach-Verknüpfung mit eedc-Investitionen per Checkbox-Liste. Siehe [§7 Verknüpfung](#7-verknüpfung-mit-investitionen-nm).
+Mehrfach-Verknüpfung mit eedc-Komponenten per Checkbox-Liste. Siehe [§7 Verknüpfung](#7-verknüpfung-mit-komponenten-nm).
 
 #### In Anlagendokumentation anzeigen
 
-Häkchen (Standard: an), das steuert ob dieser Eintrag in der Anlagendokumentation (PDF) erscheint. Das Infothek-Dossier zeigt immer alle Einträge.
+Häkchen (Standard: an), das steuert, ob dieser Eintrag in der Anlagendokumentation (PDF) erscheint. Das Infothek-Dossier zeigt immer alle Einträge.
 
 ### Bestehenden Eintrag bearbeiten
 
@@ -146,8 +151,8 @@ Jede Kategorie liefert passende Zusatzfelder. Alle Felder sind optional.
 
 | Feld | Beschreibung |
 |------|--------------|
-| Zählernummer | OBIS-konforme Zählpunktnummer (DE...) |
-| Anbieter | Stromlieferant (z.B. "Octopus Energy") |
+| Zählernummer | OBIS-konforme Zählpunktnummer (DE…) |
+| Anbieter | Stromlieferant (z. B. „Octopus Energy") |
 | Netzbetreiber | Netzbetreibergesellschaft (oft ein anderes Unternehmen!) |
 | Tarif (ct/kWh) | Aktueller Arbeitspreis |
 | Vertragsbeginn | Datum des Vertragsbeginns |
@@ -155,7 +160,7 @@ Jede Kategorie liefert passende Zusatzfelder. Alle Felder sind optional.
 | Kündigungsfrist | In Monaten |
 | Kundennummer | Beim Stromanbieter |
 
-> **Tipp**: Netzbetreiber und Stromanbieter sind in Deutschland häufig verschiedene Unternehmen. Lege für beide je einen eigenen Eintrag an.
+> **Tipp:** Netzbetreiber und Stromanbieter sind in Deutschland häufig verschiedene Unternehmen. Lege für beide je einen eigenen Eintrag an.
 
 ### Einspeisevertrag ☀️
 
@@ -236,7 +241,7 @@ Für Heizöl, Flüssiggas, Pellets, Holz:
 | E-Mail | |
 | Ticketsystem-URL | Support-Portal mit direktem Link |
 | Kundennummer | |
-| Position | Funktion (z.B. "Service-Techniker") |
+| Position | Funktion (z. B. „Service-Techniker") |
 
 ### Wartungs-/Pflegevertrag 🔧
 
@@ -254,9 +259,9 @@ Für Heizöl, Flüssiggas, Pellets, Holz:
 | Feld | Beschreibung |
 |------|--------------|
 | MaStR-Nummer | Eindeutige MaStR-ID der Anlage |
-| Anlage-Typ | PV / Speicher / WP / ... |
+| Anlage-Typ | PV / Speicher / WP / … |
 | Inbetriebnahmedatum | |
-| Status | in Betrieb / abgemeldet / ... |
+| Status | in Betrieb / abgemeldet / … |
 | Letzte Aktualisierung | Datum der letzten Meldung |
 
 ### Förderung 💰
@@ -272,7 +277,7 @@ Für Heizöl, Flüssiggas, Pellets, Holz:
 
 ### Komponente / Datenblatt ✅
 
-Ehemals "Garantie" — seit v3.14.0 zum vollwertigen Datenblatt ausgebaut. Details und Best Practices: siehe [§5 Komponenten-Akte](#5-komponenten-akte--datenblatt).
+Vollwertiges Datenblatt. Details und Best Practices: siehe [§5 Komponenten-Akte](#5-komponenten-akte--datenblatt).
 
 | Feld | Beschreibung |
 |------|--------------|
@@ -285,7 +290,7 @@ Ehemals "Garantie" — seit v3.14.0 zum vollwertigen Datenblatt ausgebaut. Detai
 | Garantie gültig bis | Ablaufdatum |
 | Garantie-Erweiterung | Ja / Nein |
 | Garantie-Bedingungen | Mehrzeiliger Freitext |
-| Technische Daten | Mehrzeiliger Freitext (z.B. Wp, Kabelquerschnitt, COP) |
+| Technische Daten | Mehrzeiliger Freitext (z. B. Wp, Kabelquerschnitt, COP) |
 | Letzte Prüfung / Wartung | Datum |
 | Nächste Prüfung / Wartung | Datum |
 | Link zum Hersteller-Datenblatt | URL |
@@ -318,7 +323,7 @@ Nur Kernfelder (Bezeichnung, Notizen, Dateien). Für alles, was in keine andere 
 
 ## 5. Komponenten-Akte / Datenblatt
 
-Die Kategorie **"Komponente / Datenblatt"** ist das Herzstück der technischen Dokumentation. Hier werden Datenblätter, Seriennummern, Garantien und Prüftermine für jede Komponente deiner Anlage erfasst.
+Die Kategorie **„Komponente / Datenblatt"** ist das Herzstück der technischen Dokumentation. Hier werden Datenblätter, Seriennummern, Garantien und Prüftermine für jede Komponente deiner Anlage erfasst.
 
 ### Wozu?
 
@@ -329,32 +334,32 @@ Die Kategorie **"Komponente / Datenblatt"** ist das Herzstück der technischen D
 
 ### Eintrag anlegen
 
-1. Infothek → **"+ Neuer Eintrag"**
-2. Kategorie: **"Komponente / Datenblatt"**
-3. Bezeichnung: z.B. "Trina Vertex S 430Wp" oder "Fronius Symo GEN24 10.0"
+1. Einstellungen → Infothek → **„+ Neuer Eintrag"**
+2. Kategorie: **„Komponente / Datenblatt"**
+3. Bezeichnung: z. B. „Trina Vertex S 430Wp" oder „Fronius Symo GEN24 10.0"
 4. Felder ausfüllen (alle optional, aber: je mehr, desto besser das PDF)
-5. **Verknüpfung setzen**: Haken bei allen Investitionen, für die dieses Datenblatt gilt
+5. **Verknüpfung setzen**: Haken bei allen Komponenten, für die dieses Datenblatt gilt
 
 ### Mehrfach-Verknüpfung (N:M)
 
-Ein Datenblatt kann **gleichzeitig mit mehreren Investitionen** verknüpft werden. Das vermeidet Duplikate:
+Ein Datenblatt kann **gleichzeitig mit mehreren Komponenten** verknüpft werden. Das vermeidet Duplikate:
 
-- Ein "Trina Vertex S 430Wp"-Datenblatt gilt für Süddach, Ostdach und Garage → ein Eintrag, drei Haken
-- Ein "SMA Sunny Tripower"-Datenblatt gilt nur für den einen Wechselrichter → ein Eintrag, ein Haken
+- Ein „Trina Vertex S 430Wp"-Datenblatt gilt für Süddach, Ostdach und Garage → ein Eintrag, drei Haken
+- Ein „SMA Sunny Tripower"-Datenblatt gilt nur für den einen Wechselrichter → ein Eintrag, ein Haken
 
-### Schnellzugang über Investitions-Übersicht
+### Schnellzugang über die Komponenten-Einstellungen
 
-In der **Investitions-Übersicht** (Cockpit → Investitionen) gibt es pro Investition einen kontextabhängigen Button:
+In den **Komponenten-Einstellungen** (Einstellungen → Komponenten) gibt es pro Komponente einen kontextabhängigen Button:
 
 | Situation | Button |
 |-----------|--------|
-| Keine Akte verknüpft | **"Komponenten-Akte anlegen"** → öffnet Quick-Create Modal |
-| Genau 1 Akte verknüpft | **"Komponenten-Akte öffnen"** → öffnet direkt den Eintrag |
-| Mehrere Akten verknüpft | **Dropdown** mit Direktlinks + "Weitere verknüpfen" |
+| Keine Akte verknüpft | **„Komponenten-Akte anlegen"** → öffnet Quick-Create Modal |
+| Genau 1 Akte verknüpft | **„Komponenten-Akte öffnen"** → öffnet direkt den Eintrag |
+| Mehrere Akten verknüpft | **Dropdown** mit Direktlinks + „Weitere verknüpfen" |
 
 ### Verknüpfungen im Bearbeitungsformular
 
-Beim **Bearbeiten einer Investition** zeigt das Formular am Ende eine kompakte Liste aller verknüpften Infothek-Einträge mit Kategorie-Label und Direktlink zur Infothek. Falls keine Einträge verknüpft sind, erscheint ein Hinweis mit Link zur Infothek.
+Beim **Bearbeiten einer Komponente** (Einstellungen → Komponenten) zeigt das Formular am Ende eine kompakte Liste aller verknüpften Infothek-Einträge mit Kategorie-Label und Direktlink zur Infothek. Falls keine Einträge verknüpft sind, erscheint ein Hinweis mit Link zur Infothek.
 
 ---
 
@@ -373,10 +378,10 @@ Pro Eintrag können bis zu **15 Dateien** hochgeladen werden — Fotos und/oder 
 
 ### Upload
 
-Im Formular findest du den Bereich **"Dateien (max. 15)"**:
-1. Klicke auf "📎 Datei hochladen" oder ziehe Dateien per Drag & Drop in den Bereich
+Im Formular findest du den Bereich **„Dateien (max. 15)"**:
+1. Klicke auf „📎 Datei hochladen" oder ziehe Dateien per Drag & Drop in den Bereich
 2. Bilder werden vom Server automatisch verkleinert (max. 500 KB, EXIF-Rotation wird berücksichtigt)
-3. Pro Datei kann eine optionale **Beschreibung** eingegeben werden (z.B. "Zähler Keller links")
+3. Pro Datei kann eine optionale **Beschreibung** eingegeben werden (z. B. „Zähler Keller links")
 4. Für PDFs wird ein PDF-Icon als Platzhalter angezeigt
 5. Klicke auf das Papierkorb-Icon (🗑️) an einem Vorschaubild, um eine Datei zu entfernen
 
@@ -395,30 +400,31 @@ Alle Dateien werden direkt in der eedc-Datenbank gespeichert (BLOB). Das bedeute
 
 ---
 
-## 7. Verknüpfung mit Investitionen (N:M)
+## 7. Verknüpfung mit Komponenten (N:M)
 
-Seit v3.15.2 unterstützt die Infothek **Mehrfach-Verknüpfungen**: Ein Eintrag kann mit beliebig vielen Investitionen verknüpft werden und umgekehrt.
+Die Infothek unterstützt **Mehrfach-Verknüpfungen**: Ein Eintrag kann mit beliebig vielen Komponenten verknüpft werden und umgekehrt.
 
 **Beispiele:**
-- Ein Datenblatt "Trina Vertex S 430Wp" → gilt für 6 PV-Strings gleichzeitig
+- Ein Datenblatt „Trina Vertex S 430Wp" → gilt für 6 PV-Strings gleichzeitig
 - Ein Wartungsvertrag → verknüpft mit Wechselrichter + Speicher
 - Ein Ansprechpartner (Installateur) → verknüpft mit allen PV-Modulen
 
 ### Verknüpfung setzen
 
-Im Formular-Bereich **"Verknüpfte Investitionen"** erscheint eine **Checkbox-Liste** mit allen Investitionen der Anlage. Setze Haken bei allen zutreffenden. "Alle abwählen" entfernt alle Verknüpfungen.
+Im Formular-Bereich **„Verknüpfte Komponenten"** erscheint eine **Checkbox-Liste** mit allen Komponenten der Anlage. Setze Haken bei allen zutreffenden. „Alle abwählen" entfernt alle Verknüpfungen.
 
 ### Wo wird die Verknüpfung angezeigt?
 
-- **Infothek-Karte**: Badge(s) "→ [Investitionsname]" für jede Verknüpfung
-- **Investitions-Übersicht**: Kontextabhängiger Button (siehe [§5 Komponenten-Akte](#5-komponenten-akte--datenblatt))
-- **Anlagendokumentation (PDF)**: Verknüpfte Komponenten-Akten werden unter der jeweiligen Investition gerendert
+- **Infothek-Karte**: Badge(s) „→ [Komponentenname]" für jede Verknüpfung
+- **Komponenten-Einstellungen**: Kontextabhängiger Button (siehe [§5 Komponenten-Akte](#5-komponenten-akte--datenblatt))
+- **Komponenten-Achse**: der Block *Dokumente & Infos* jeder Komponenten-Sicht listet die verknüpften Einträge
+- **Anlagendokumentation (PDF)**: Verknüpfte Komponenten-Akten werden unter der jeweiligen Komponente gerendert
 
 ### Migration von Altdaten
 
-**N:M-Migration (v3.15.2):** Bestehende 1:1-Verknüpfungen wurden automatisch in die neue N:M-Struktur migriert. Es ist keine manuelle Nacharbeit nötig.
+**N:M-Verknüpfung:** Bestehende 1:1-Verknüpfungen wurden automatisch in die N:M-Struktur migriert. Es ist keine manuelle Nacharbeit nötig.
 
-**Stammdaten-Migration:** Ältere eedc-Versionen hatten Gerätedaten, Ansprechpartner und Wartungsverträge direkt im Investitionsformular. Diese Felder wurden entfernt — alle Daten werden jetzt über die Infothek verwaltet. Falls noch alte Daten vorhanden sind, erscheint in der **Investitions-Übersicht** ein blauer Hinweis "Stammdaten in Infothek übernehmen?". Ein Klick auf **"Übernehmen"** migriert alle Einträge automatisch in die passenden Infothek-Kategorien (Komponente/Datenblatt, Vertragspartner, Wartungsvertrag).
+**Stammdaten-Migration:** Ältere eedc-Versionen hatten Gerätedaten, Ansprechpartner und Wartungsverträge direkt im Komponenten-Formular. Diese Felder wurden entfernt — alle Daten werden jetzt über die Infothek verwaltet. Falls noch alte Daten vorhanden sind, erscheint in den **Komponenten-Einstellungen** ein Hinweis „Stammdaten in Infothek übernehmen?". Ein Klick auf **„Übernehmen"** migriert alle Einträge automatisch in die passenden Infothek-Kategorien (Komponente/Datenblatt, Vertragspartner, Wartungsvertrag).
 
 ---
 
@@ -426,9 +432,9 @@ Im Formular-Bereich **"Verknüpfte Investitionen"** erscheint eine **Checkbox-Li
 
 ### Archivieren (empfohlen)
 
-Klicke auf das Papierkorb-Icon (🗑️) auf einer Karte und bestätige mit **"Archivieren"**. Der Eintrag verschwindet aus der normalen Ansicht, bleibt aber in der Datenbank.
+Klicke auf das Papierkorb-Icon (🗑️) auf einer Karte und bestätige mit **„Archivieren"**. Der Eintrag verschwindet aus der normalen Ansicht, bleibt aber in der Datenbank.
 
-Archivierte Einträge anzeigen: Aktiviere den Filter **"Archivierte anzeigen"** unterhalb der Kategorien.
+Archivierte Einträge anzeigen: Aktiviere den Filter **„Archivierte anzeigen"** unterhalb der Kategorien.
 
 **Wann archivieren?**
 - Vertrag ist ausgelaufen, war aber relevant für die Geschichte der Anlage
@@ -436,19 +442,19 @@ Archivierte Einträge anzeigen: Aktiviere den Filter **"Archivierte anzeigen"** 
 
 ### Endgültig löschen
 
-In der archivierten Ansicht erscheint zusätzlich ein **"Endgültig löschen"**-Button. Damit werden Eintrag und alle verknüpften Dateien unwiderruflich gelöscht.
+In der archivierten Ansicht erscheint zusätzlich ein **„Endgültig löschen"**-Button. Damit werden Eintrag und alle verknüpften Dateien unwiderruflich gelöscht.
 
 ---
 
 ## 9. PDF-Dokumente
 
-Die Infothek liefert Daten für drei verschiedene PDF-Dokumente. Alle sind über den **Dokumente-Dialog** erreichbar (Anlagen-Seite → orangefarbenes Ordner-Icon).
+Die Infothek liefert Daten für drei verschiedene PDF-Dokumente. Alle sind über die Kachel **Berichte & Dokumente** erreichbar (Einstellungen → Infothek → Berichte & Dokumente), die den Dokumente-Dialog der Anlage öffnet — einzeln oder als ZIP, mit Jahr-Auswahl.
 
 ### Infothek-Dossier
 
 Exportiert **alle** Infothek-Einträge als strukturiertes PDF — ideal für den klassischen Hefter oder als Backup.
 
-**Pfad:** Dokumente-Dialog → "Infothek-Dossier"
+**Pfad:** Einstellungen → Infothek → Berichte & Dokumente → „Infothek-Dossier"
 
 **Inhalt:**
 - Titelseite mit Anlagenname und Exportdatum
@@ -458,32 +464,34 @@ Exportiert **alle** Infothek-Einträge als strukturiertes PDF — ideal für den
   - Kontakt-Daten (wenn vorhanden)
   - Notizen als Freitext
   - Dateien: Bilder als Miniaturansicht, PDFs als Verweis
-- Verknüpfte Investitionen werden namentlich genannt
+- Verknüpfte Komponenten werden namentlich genannt
 
-### Anlagendokumentation (Beta)
+### Anlagendokumentation
 
 Technische Dokumentation der Anlage — für Versicherung, Nachlass, Archiv. **Enthält keine Geldbeträge.**
 
-**Pfad:** Dokumente-Dialog → "Anlagendokumentation"
+**Pfad:** Einstellungen → Infothek → Berichte & Dokumente → „Anlagendokumentation"
 
 **Inhalt:**
 - Titelseite mit Anlagenfoto (falls hochgeladen), Leistung, Inbetriebnahme, MaStR-Nummer
-- Je eine Folgeseite pro Investitionstyp (PV-Module gruppiert, dann WR, Speicher, WP, etc.)
-- Unter jeder Investition: Daten aus verknüpften **Komponenten-Akten** (Hersteller, Seriennummer, Garantie, Prüftermine, technische Daten)
-- Infrastruktur-Sektion: Komponenten-Akten ohne Investment-Verknüpfung (z.B. Zähler, Verkabelung)
+- Je eine Folgeseite pro Komponententyp (PV-Module gruppiert, dann WR, Speicher, WP, etc.)
+- Unter jeder Komponente: Daten aus verknüpften **Komponenten-Akten** (Hersteller, Seriennummer, Garantie, Prüftermine, technische Daten)
+- Infrastruktur-Sektion: Komponenten-Akten ohne Komponenten-Verknüpfung (z. B. Zähler, Verkabelung)
 
-**Steuerung:** Das Häkchen **"In Anlagendokumentation anzeigen"** am Infothek-Eintrag steuert, ob er ins PDF kommt (Standard: an).
+**Steuerung:** Das Häkchen **„In Anlagendokumentation anzeigen"** am Infothek-Eintrag steuert, ob er ins PDF kommt (Standard: an).
 
-### Finanzbericht (Beta)
+### Finanzbericht
 
 Alle monetären Kennzahlen — Investitionskosten, Förderungen, Versicherung, Steuerdaten.
 
-**Pfad:** Dokumente-Dialog → "Finanzbericht"
+**Pfad:** Einstellungen → Infothek → Berichte & Dokumente → „Finanzbericht"
 
 **Inhalt:**
-- Investitions-Tabelle mit Kosten, Alternativkosten, Jahres-Ersparnis
+- Komponenten-Tabelle mit Kosten, Alternativkosten, Jahres-Ersparnis
 - KPIs: Amortisations-Prognose, Netto-Kosten nach Förderung
 - Sektionen aus Infothek-Kategorien: Förderungen, Versicherung, Steuerdaten
+
+> **HA-Companion:** PDF-, CSV- und Backup-Downloads laufen über `fetch + Blob` — damit funktionieren sie in der iOS-HA-Companion-App ohne 401-/Ingress-Probleme.
 
 ---
 
@@ -491,7 +499,7 @@ Alle monetären Kennzahlen — Investitionskosten, Förderungen, Versicherung, S
 
 ### Komponenten-Akte optimal pflegen
 
-1. **Pro Komponententyp ein Datenblatt**: "Trina Vertex S 430Wp" statt "PV-Module allgemein"
+1. **Pro Komponententyp ein Datenblatt**: „Trina Vertex S 430Wp" statt „PV-Module allgemein"
 2. **Mehrfach verknüpfen statt duplizieren**: Ein Datenblatt, N Haken — nicht 6 identische Einträge
 3. **Seriennummer immer eintragen**: Unverzichtbar im Versicherungsfall
 4. **Hersteller-Datenblatt-URL**: Direktlink zum PDF beim Hersteller — bleibt auch nach Jahren erreichbar
@@ -502,21 +510,21 @@ Alle monetären Kennzahlen — Investitionskosten, Förderungen, Versicherung, S
 
 Damit die **Anlagendokumentation (PDF)** aussagekräftig wird:
 
-1. **Anlagenfoto hochladen**: Anlagen-Stammdaten → Foto-Upload (erscheint auf der Titelseite)
-2. **Jede Investition braucht eine Komponenten-Akte**: Klicke auf "Komponenten-Akte anlegen" in der Investitions-Übersicht
+1. **Anlagenfoto hochladen**: Einstellungen → Stammdaten → Anlage → Foto-Upload (erscheint auf der Titelseite)
+2. **Jede Komponente braucht eine Komponenten-Akte**: Klicke auf „Komponenten-Akte anlegen" in den Komponenten-Einstellungen
 3. **Felder ausfüllen**: Hersteller + Produkt + Seriennummer sind das Minimum, Garantie + Prüftermine der Bonus
 4. **Datenblatt-PDF anhängen**: Als Datei an die Komponenten-Akte → erscheint als Verweis im PDF
-5. **Infrastruktur-Einträge**: Für Zähler, Zählerschränke oder Verkabelung: Komponenten-Akte ohne Investment-Verknüpfung anlegen → eigene Seite im PDF
+5. **Infrastruktur-Einträge**: Für Zähler, Zählerschränke oder Verkabelung: Komponenten-Akte ohne Komponenten-Verknüpfung anlegen → eigene Seite im PDF
 
 ### Empfohlene Reihenfolge beim Einrichten
 
-1. Anlage mit Stammdaten und Anlagenfoto anlegen
-2. Investitionen anlegen (PV-Module, Wechselrichter, Speicher, ...)
-3. Pro Investition eine **Komponenten-Akte** anlegen (Quick-Create über Investitions-Übersicht)
+1. Anlage mit Stammdaten und Anlagenfoto anlegen (Einstellungen → Stammdaten → Anlage)
+2. Komponenten anlegen (Einstellungen → Komponenten: PV-Module, Wechselrichter, Speicher, …)
+3. Pro Komponente eine **Komponenten-Akte** anlegen (Quick-Create über die Komponenten-Einstellungen)
 4. Verträge (Strom, Einspeisung, Versicherung, Förderung) als eigene Infothek-Einträge
 5. **Anlagendokumentation als PDF testen** → zeigt, wo noch Daten fehlen
-6. **Finanzbericht testen** → prüft ob Förderungen und Versicherung korrekt erscheinen
+6. **Finanzbericht testen** → prüft, ob Förderungen und Versicherung korrekt erscheinen
 
 ---
 
-*Letzte Aktualisierung: April 2026*
+*Letzte Aktualisierung: 2026-07-25 (v4.0)*

@@ -1,10 +1,10 @@
 
 # eedc Glossar & Support
 
-**Version 3.24.1** | Stand: April 2026
+**Version 4.0** | Stand: 2026-07-25
 
 > Dieses Glossar ist Teil der eedc-Dokumentation.
-> Siehe auch: [Teil I: Installation](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Berechnungen](BERECHNUNGEN.md) | [Sensor-Referenz](SENSOR-REFERENZ.md)
+> Siehe auch: [Teil I: Installation](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Berechnungen](BERECHNUNGEN.md) | [Prognosen](HANDBUCH_PROGNOSEN.md) | [Sensor-Referenz](SENSOR-REFERENZ.md)
 
 ---
 
@@ -20,6 +20,7 @@
 | **Einspeisung** | Ins Netz abgegebener PV-Überschuss |
 | **Netzbezug** | Aus dem Netz bezogener Strom |
 | **EV-Quote** | Eigenverbrauchsquote = Eigenverbrauch / PV-Erzeugung × 100 % |
+| **Erzeugung hinter dem Zähler** | Summe **aller** lokalen Erzeuger am EINEN Netzanschluss (PV + Balkonkraftwerk + sonstige Erzeuger wie BHKW). Sie geht in Eigenverbrauch/Autarkie ein, nicht nur die PV-Erzeugung. |
 | **kWp** | Kilowatt Peak — Nennleistung der PV-Anlage unter Standardtestbedingungen |
 | **kWh** | Kilowattstunde — Energiemenge |
 
@@ -30,7 +31,7 @@
 | **GHI** | Global Horizontal Irradiance — Globalstrahlung auf horizontaler Fläche (W/m²). In Open-Meteo das Feld `shortwave_radiation`. |
 | **GTI** | Global Tilted Irradiance — auf die Modul-Fläche projizierte Globalstrahlung (mit Tilt + Azimut). Bei steilen Modulen und tiefstehender Wintersonne 2–3× höher als GHI. eedc nutzt GTI seit v3.20.0 für PV-Prognose und Performance Ratio. |
 | **TMY** | Typical Meteorological Year — statistisches Durchschnittswetterjahr als Prognosebasis |
-| **Wettermodell-Kaskade** | Bei spezifischer Modellauswahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück. Datenquelle pro Tag wird mit Kürzel angezeigt (MS/D2/EU/EC/BM). |
+| **Wettermodell-Kaskade** | Bei spezifischer Modellauswahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück. Datenquelle pro Tag wird mit Kürzel angezeigt (MS/D2/EU/EC/BM). Wahl unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage). |
 | **Solar Noon** | Astronomische Tagesmitte — Zeitpunkt des höchsten Sonnenstands. Weicht je nach Standort und Datum bis ~30 min von 12:00 Clockzeit ab. eedc splittet VM/NM-Tageshälften daran. |
 | **Heizgradtage** | Heuristik für die WP-Temperaturkorrektur: Differenz zwischen Innenraum-Solltemperatur (typ. 20 °C) und Außentemperatur, summiert über die Heizperiode. |
 
@@ -38,12 +39,13 @@
 
 | Begriff | Bedeutung |
 |---------|-----------|
-| **PVGIS** | Photovoltaic Geographical Information System — EU-Dienst für standortbezogene PV-Ertragsprognosen |
+| **PVGIS** | Photovoltaic Geographical Information System — EU-Dienst für standortbezogene PV-Ertragsprognosen (Langfrist-/Jahressicht) |
 | **Open-Meteo** | Offene Wetter-API mit globaler Abdeckung. Liefert GHI, GTI, Temperatur, Cloud Cover für Live + Kurzfrist-Prognose. |
 | **Solcast** | Kommerzielle PV-Prognose-Quelle. eedc unterstützt sowohl Solcast-API (Free/Paid Key) als auch HA-Integration (BJReplay). 30-Min-Buckets, p10/p50/p90-Konfidenzbänder. |
-| **SFML** | Solar Forecast ML — KI-basierte Ertragsprognose eines externen Dienstes (forecast.solar oder solcast.com) |
+| **SFML** | Solar Forecast ML — KI-basierte Ertragsprognose eines externen Dienstes (HA-Integration von Tom-HA). In eedc als **operative** Prognosequelle wählbar (nur im HA-Add-on), aber bewusst **nicht** Teil des Vier-Spalten-Genauigkeits-Vergleichs. Siehe [Prognosen §2.5](HANDBUCH_PROGNOSEN.md#25-sfml-solar-forecast-ml--wählbar-aber-bewusst-nicht-im-vergleich). |
 | **Lernfaktor** | Anlagenspezifischer Korrekturfaktor `IST / OpenMeteo-Roh-Prognose`. eedc-kalibrierte Prognose = OpenMeteo × Lernfaktor. |
-| **Prognose-Kanon** | EIN kanonischer Rechenweg (`services/prognose_kanon.py`) für die „PV-Tagesprognose heute" (+ Rest, morgen/übermorgen, VM/NM, Stundenprofil). Liefert allen Sichten denselben Wert — Cockpit/Live, Aussicht, Kurzfrist-Karte, Auswertungen, Vergleich-„eedc"-Spalte, persistierter Tageswert und MQTT. Multi-String-Fan-out pro Orientierung + Korrektur pro Energie-Slot; rollt synchron mit OpenMeteo. |
+| **Korrekturprofil** | Mehrdimensionale Weiterentwicklung des Lernfaktors: pro Sonnenstand × Wetterklasse ein eigener Faktor — korrigiert den Tages*gang*, nicht nur die Tagessumme. Siehe [Prognosen §5.3](HANDBUCH_PROGNOSEN.md#53-das-korrekturprofil-sonnenstand--wetter). |
+| **Prognose-Kanon** | EIN kanonischer Rechenweg (`services/prognose_kanon.py`) für die „PV-Tagesprognose heute" (+ Rest, morgen/übermorgen, VM/NM, Stundenprofil). Liefert allen Sichten denselben Wert — Cockpit/Live, Aussicht, Auswertungen, Vergleich-„eedc"-Spalte, persistierter Tageswert und MQTT-Sensoren. Multi-String-Fan-out pro Orientierung + Korrektur pro Energie-Slot; rollt synchron mit OpenMeteo. |
 | **Tracking-Endwert (`pv_prognose_final_kwh`)** | Der für das Genauigkeits-Ranking eingefrorene Tagesprognose-Wert: rollt mit, bis OpenMeteo nach Sonnenuntergang konvergiert ist, dann fix (`pv_prognose_final_at`). Trennt den *rollenden* Anzeige-Wert vom *fertigen* Vergleichswert. |
 | **MOS-Kaskade** | Saisonale Lernfaktor-Berechnung: Monatsfaktor (≥ 15 Tage gleicher Kalendermonat) → Quartalsfaktor (≥ 15 Tage) → 30-Tage-Fenster (≥ 7 Tage). Aktive Stufe wird oberhalb der Genauigkeits-Card angezeigt. |
 | **MAE** | Mean Absolute Error — `Ø |err_rel|`. Misst Streuung/Schwankungsbreite, unabhängig von der Richtung. |
@@ -56,11 +58,13 @@
 
 | Begriff | Bedeutung |
 |---------|-----------|
+| **Komponente** | Ein erfasstes Gerät der Anlage (PV-Modul, Wechselrichter, Speicher, Wärmepumpe, E-Auto, Wallbox, Balkonkraftwerk, Sonstiges). In der v4-Oberfläche der durchgängige Begriff für das, was im Datenmodell **Investition** heißt: Angelegt/konfiguriert unter [Einstellungen → Komponenten](HANDBUCH_EINSTELLUNGEN.md#3-komponenten), ausgewertet in der [Komponenten-Achse](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse). *(ehemals als „Investitionen-Tab" bezeichnet.)* |
+| **Investition** | Datenmodell-Begriff für eine Komponente (Kosten, Parameter, Monatsdaten). In Berechnungen und Sensor-Namen weiterhin so benannt; in der Oberfläche „Komponente". |
 | **COP** | Coefficient of Performance — momentane Effizienz der Wärmepumpe (Wärme / Strom). In eedc reserviert für mathematisch-technische Berechnungs-Variablen. |
 | **SCOP** | Seasonal COP — saisonale Effizienz vom EU-Energielabel, standortunabhängig |
-| **JAZ** | Jahresarbeitszahl — gemessene Effizienz der Wärmepumpe am eigenen Standort über ein Jahr. eedc zeigt Periodenkennzahlen (Cockpit, Auswertung, Monatsabschluss) seit v3.23.4 konsistent als JAZ, nicht COP. |
+| **JAZ** | Jahresarbeitszahl — gemessene Effizienz der Wärmepumpe am eigenen Standort über ein Jahr. eedc zeigt Periodenkennzahlen (Cockpit, Auswertungen, Monatsdaten) seit v3.23.4 konsistent als JAZ, nicht COP. |
 | **Kompressor-Starts** | Wie oft der WP-Kompressor anläuft (optionaler Total-Increasing-Zähler pro Wärmepumpe). **Verschleiß-Indikator:** viele Starts = häufiges Takten, mechanisch belastend. Allein wenig aussagekräftig — erst im Verhältnis zu den Betriebsstunden (siehe dort). |
-| **Betriebsstunden** | Wie lange die Wärmepumpe tatsächlich läuft (optionaler Total-Increasing-Zähler pro WP, Stunden). **Auslegungs-Indikator:** 10 Starts bei 23 h Laufzeit/Tag sind harmloser als 10 Starts bei nur 4 h. Erst Starts ÷ Betriebsstunden („Takte pro Stunde") bzw. Betriebsstunden ÷ Starts („Ø Laufzeit pro Start") zeigen, ob die Heizkurve/Hysterese passt. Sichtbar im WP-Dashboard, Monatsbericht, Energieprofil und PDF-Jahresbericht (#238). |
+| **Betriebsstunden** | Wie lange die Wärmepumpe tatsächlich läuft (optionaler Total-Increasing-Zähler pro WP, Stunden). **Auslegungs-Indikator:** 10 Starts bei 23 h Laufzeit/Tag sind harmloser als 10 Starts bei nur 4 h. Erst Starts ÷ Betriebsstunden („Takte pro Stunde") bzw. Betriebsstunden ÷ Starts („Ø Laufzeit pro Start") zeigen, ob die Heizkurve/Hysterese passt. Sichtbar in der Wärmepumpe-Komponentensicht, den Auswertungen und im PDF-Jahresbericht (#238). |
 | **Vollzyklen** | Batterie-Lade-/Entladezyklen, normiert: `Σ |ΔSoC| / 200` (0→100→0 = 200 % = 1 Vollzyklus). Werden seit v3.22.0 ausschließlich aus stationären Speicher-SoCs berechnet — E-Auto-SoC ist ausgeschlossen. |
 | **Performance Ratio** | Verhältnis IST-Ertrag zu theoretisch möglichem Ertrag (`PV_kWh / (GTI × kWp)`). Qualitätskennzahl der Anlage. Plausible Werte 0.7–0.95. |
 | **V2H** | Vehicle-to-Home — E-Auto speist Strom ins Haus zurück |
@@ -68,52 +72,71 @@
 | **Kanonische Quelle** | Die eine, strukturell festgelegte Investition, aus der eedc einen Wert liest, wenn ihn mehrere Komponenten messen könnten. Für die Heimladung: Wallbox vorhanden → Wallbox, sonst E-Auto. Ersetzt das frühere magnitudenabhängige „Poolen" (größerer Wert gewinnt), das bei Streudaten falsch wählen konnte. |
 | **Arbitrage** | Speicher-Strategie: Bei günstigem Netzstrom laden, bei teurem Strom entladen |
 | **BKW** | Balkonkraftwerk — kleine steckfertige PV-Anlage (auch: Steckersolaranlage) |
-| **Anschaffungsdatum / Stilllegungsdatum** | Lebenszyklus-Marker pro Investition. Aggregate ignorieren Monatsdaten vor dem Anschaffungsdatum bzw. ab dem Stilllegungsdatum — verhindert Verfälschung bei Erfassungs-Migration oder ausgemusterten Komponenten. |
+| **Anschaffungsdatum / Stilllegungsdatum** | Lebenszyklus-Marker pro Komponente. Aggregate ignorieren Monatsdaten vor dem Anschaffungsdatum bzw. ab dem Stilllegungsdatum — verhindert Verfälschung bei Erfassungs-Migration oder ausgemusterten Komponenten. Gepflegt unter [Einstellungen → Komponenten](HANDBUCH_EINSTELLUNGEN.md#32-anschaffungs--und-stilllegungsdatum). |
 
 ### Strompreise & Tarife
 
 | Begriff | Bedeutung |
 |---------|-----------|
 | **EPEX** | European Power Exchange — Strombörse, Quelle für Day-Ahead-Spotpreise. eedc lädt EPEX-Börsenpreise (DE/AT) automatisch via aWATTar API als Tagesverlauf-Overlay. |
-| **Dynamischer Strompreis** | Sensor-Mapping-Feld für Tibber, aWATTar, EPEX oder eigene Template-Sensoren. Akzeptiert ct/kWh, EUR/kWh, EUR/MWh (×0.1), Cent, €. |
-| **§51 EEG (Negativpreis-Regel)** | Seit 2023: Ab 4 Stunden negativer Day-Ahead-Strompreise entfällt für neue PV-Anlagen die Einspeisevergütung in dieser Stunde. eedc trackt pro Tag Anzahl negativer Stunden + Einspeisung bei Negativpreis. |
+| **Dynamischer Strompreis** | Datenquellen-Feld für Tibber, aWATTar, EPEX oder eigene Template-Sensoren. Akzeptiert ct/kWh, EUR/kWh, EUR/MWh (×0.1), Cent, €. Zuordnung unter [Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) (Feld „Strompreis"). |
+| **§51 EEG (Negativpreis-Regel)** | Seit 2023: Ab 4 Stunden negativer Day-Ahead-Strompreise entfällt für neue PV-Anlagen die Einspeisevergütung in dieser Stunde. eedc trackt pro Tag Anzahl negativer Stunden + Einspeisung bei Negativpreis (sichtbar in [Cockpit → Monat](HANDBUCH_BEDIENUNG.md#23-monat)). |
 | **Spezialtarif** | Tarif mit Zuordnung zu Standard / Wärmepumpe / Wallbox. Ohne Spezialtarif fällt eedc auf den allgemeinen Tarif zurück. |
+| **Grundgebühr / Zählergebühr** | Feste monatliche bzw. jährliche Tarif-Bestandteile. Die **Grundgebühr** ist in den Netzbezugskosten enthalten; die **Zählergebühr** (optionales Tarif-Feld ab v4.0) wird getrennt ausgewiesen, aber **nicht** in Kosten/Netto verrechnet. |
 | **Kraftstoffpreis** | Monatlicher Benzin-/Dieseldurchschnittspreis (€/L) aus dem EU Weekly Oil Bulletin. Ersetzt seit v3.17.0 den statischen Parameter für E-Auto-ROI. |
-| **Monats-Gaspreis** | Optionales `Monatsdaten.gaspreis_cent_kwh`-Feld (ab v3.21.0) für die WP-Ersparnis-Historie. Ohne Eintrag fällt eedc auf `alter_preis_cent_kwh` der WP-Investition zurück. |
+| **Monats-Gaspreis** | Optionales `Monatsdaten.gaspreis_cent_kwh`-Feld (ab v3.21.0) für die WP-Ersparnis-Historie. Ohne Eintrag fällt eedc auf `alter_preis_cent_kwh` der WP-Komponente zurück. |
 | **MaStR** | Marktstammdatenregister — amtliches Register aller Energieerzeugungsanlagen in Deutschland |
 
 ### Energieprofil & Snapshots
 
 | Begriff | Bedeutung |
 |---------|-----------|
-| **Snapshot** | Stündlich erfasster kumulativer Zählerstand pro Anlage und gemapptem kWh-Sensor (Tabelle `sensor_snapshots`). Quellen: HA Long-Term Statistics (Add-on) oder MQTT-Energy-Snapshots (Standalone/Docker). Stunden-kWh = Differenz benachbarter Snapshots. |
+| **Energieprofil** | Die feinste zeitliche Auflösung der Anlagendaten: eine Zeile pro Stunde, verdichtet zu einer Zusammenfassung pro Tag. Datengrundlage fast aller anderen Auswertungen. In v4 kein eigener Tab mehr — die Anzeigen sind über die [Cockpit-Achsen](HANDBUCH_BEDIENUNG.md#2-cockpit--die-zeit-achse) verteilt, die Pflege liegt unter [Einstellungen → Daten](HANDBUCH_EINSTELLUNGEN.md#52-energieprofil-pflege). Siehe [Handbuch Energieprofil](HANDBUCH_ENERGIEPROFIL.md). |
+| **Snapshot** | Stündlich erfasster kumulativer Zählerstand pro Anlage und zugeordnetem kWh-Sensor (Tabelle `sensor_snapshots`). Quellen: HA Long-Term Statistics (Add-on) oder MQTT-Energy-Snapshots (Standalone/Docker). Stunden-kWh = Differenz benachbarter Snapshots. |
 | **Sensor-Snapshot-Job** | Scheduler-Job (`:05` und `:55`). `:05` schreibt regulär aus HA-Statistics, `:55` schreibt einen Live-Preview für die anstehende volle Stunde — die laufende Stunde wird damit sofort am Stundenende sichtbar. |
 | **Self-Healing** | Bei fehlenden Snapshots holt eedc sie on-demand aus HA Long-Term Statistics nach (Toleranz 10 min, vorher 120 min). Echte Lücken werden linear zwischen Nachbar-Stunden interpoliert. |
 | **Restart-Recovery** | Beim Scheduler-Start (Add-on-Update / Watchdog) holt eedc für die letzten 6 Stunden je Anlage Snapshots nach — verpasste `:05`/`:55`-Jobs werden idempotent ausgeholt. |
 | **Tagesreset-Heuristik** | Erkennt HA-`utility_meter`-Sensoren mit täglichem 0-Reset am Muster `s1 < 0.5 ∧ s0 > 0.5` und nimmt `max(0, s1)` als Slot-0-Wert. Verhindert „IST unvollständig"-Flag um Mitternacht. |
-| **Pro-Tag-Reaggregation** | Selbsthilfe-Knopf in der Tages-Tabelle. Triggert `aggregate_day` für einen einzelnen Tag (idempotent: delete + insert). Erfolgsmeldung zeigt Slots mit echten Messdaten (grün > 0, amber = 0). |
+| **Reaggregation (Tag / mehrere Tage)** | Selbsthilfe in der Reparatur-Werkbank ([Einstellungen → Daten](HANDBUCH_EINSTELLUNGEN.md#52-energieprofil-pflege)). „Tag neu aggregieren" bzw. „Mehrere Tage neu aggregieren" (max. 31) berechnet Tage neu (idempotent: delete + insert). Erfolgsmeldung zeigt Slots mit echten Messdaten (grün > 0, amber = 0). |
+| **Vollbackfill** | „Lücken aus HA-LTS nachfüllen" — ergänzt **nur fehlende** Tage aus den HA-Long-Term-Statistics, strikt additiv (kein Overwrite-Modus). |
 | **Counter-Feld** | Total-Increasing-Sensor ohne Energie-Einheit (z. B. WP-Kompressor-Starts). Strikt getrennt von kWh-Feldern in `KUMULATIVE_COUNTER_FELDER` — fließt nicht in die Energie-Bilanz. |
-| **HA Long-Term Statistics (LTS)** | HA's `statistics`-Tabelle mit `sum`-Spalte (reset-bereinigte Kumulation) und stundengranularen `state`/`mean`/`min`/`max`. Sensoren ohne `state_class` sind **nicht** in LTS — wichtig für die Mapping-Wahl. |
+| **HA Long-Term Statistics (LTS)** | HA's `statistics`-Tabelle mit `sum`-Spalte (reset-bereinigte Kumulation) und stundengranularen `state`/`mean`/`min`/`max`. Sensoren ohne `state_class` sind **nicht** in LTS — wichtig für die Datenquellen-Wahl. |
 
-### Integration & Tools
+### Integration & Datenquellen
 
 | Begriff | Bedeutung |
 |---------|-----------|
 | **MQTT** | Message Queuing Telemetry Transport — schlankes Protokoll für IoT- und Smarthome-Kommunikation |
-| **MQTT-Inbound** | eedc-Funktion zum Empfang von Echtzeitdaten aus beliebigen Smarthome-Systemen via MQTT (`eedc/{anlage_id}/live/...` und `…/energy/...`). |
-| **MQTT-Gateway** | eedc-Funktion zum Übersetzen eigener Geräte-Topics (Shelly, OpenDTU, Tasmota …) auf eedc-Felder |
-| **Sensor-Mapping** | Zuordnung von Home-Assistant-Sensoren zu eedc-Feldern im Wizard |
-| **Connector** | Geräte-Modul in eedc für direkten API-Abruf von Wechselrichtern, Speichern und Ladesäulen |
-| **Daten-Checker** | eedc-System für Datenqualitäts-Prüfung in 8 Kategorien — von Stammdaten über Plausibilität bis MQTT-Topic-Abdeckung und HA-Statistics-Verfügbarkeit. |
-| **Heatmap** | Tabellen-Darstellung mit Zellfärbung nach Wertgröße. eedc nutzt sie in Auswertung → Energieprofil → Monat (24h × N Tage) und in der Tage-Tabelle (pro Spalte). |
+| **Datenquellen-Zuordnung** | Die zentrale feld-zentrische Fläche in v4: **jedes** eedc-Feld bezieht seinen Wert aus **genau einer** Quelle (HA-Sensor / MQTT-Gateway / MQTT-Inbound / keine). Löst die früheren getrennten Assistenten ab. Siehe [Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung). *(ehemals: „Sensor-Mapping-Wizard" + „MQTT-Inbound/-Gateway-Wizard".)* |
+| **MQTT-Inbound** | eedc-Funktion zum Empfang von Echtzeitdaten via die kanonischen eedc-Standard-Topics (`eedc/{anlage_id}/live/...` und `…/energy/...`). In v4 eine **Quellen-Art** je Feld in der Datenquellen-Zuordnung; die Verbindung richtest du einmal unter [Integration → MQTT-Broker](HANDBUCH_EINSTELLUNGEN.md#61-mqtt-broker-verbindung) ein. |
+| **MQTT-Gateway** | eedc-Funktion zum Übersetzen eigener Geräte-Topics (Shelly, OpenDTU, Tasmota …) auf eedc-Felder. In v4 die „Gateway"-Quelle je Feld in der Datenquellen-Zuordnung. |
+| **Sensor-Mapping** | *ehemals:* Zuordnung von Home-Assistant-Sensoren zu eedc-Feldern im eigenen Wizard. In v4 in die [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) aufgegangen (Quellen-Art „HA-Sensor" je Feld). Sensor-Namen/Topics unverändert. |
+| **Connector** | Geräte-Modul in eedc für direkten API-Abruf von Wechselrichtern, Speichern und Ladesäulen. Startbar über die [Import-Assistenten](HANDBUCH_EINSTELLUNGEN.md#65-import-assistenten); kann seine Werte optional als MQTT-Bridge auf eedc-Topics publishen. |
+| **Daten-Checker** | eedc-System für Datenqualitäts-Prüfung in mehreren Kategorien — von Stammdaten über Plausibilität bis Datenquellen-Konsistenz und HA-Statistics-Verfügbarkeit. In v4 unter [Einstellungen → Daten](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker). Details: [Handbuch Daten-Checker](HANDBUCH_DATEN_CHECKER.md). |
+| **Heatmap** | Tabellen-Darstellung mit Zellfärbung nach Wertgröße. eedc nutzt sie in der [Werte-Werkbank](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) (pro Spalte). Die Tag×Stunde-Heatmap des alten Energieprofils kommt später neu gestaltet zurück (Cockpit → Monat). |
+
+### Oberfläche (v4)
+
+| Begriff | Bedeutung |
+|---------|-----------|
+| **Cockpit** | Die **Zeit-Achse** der v4-Navigation: dieselbe Anlage nach Zeit-Ebene — Live · Tag · Monat · Jahr/Gesamt · Aussicht. Siehe [Bedienung §2](HANDBUCH_BEDIENUNG.md#2-cockpit--die-zeit-achse). |
+| **Komponenten (Achse)** | Die **Was-Achse**: jeder Gerätetyp einzeln und in der Tiefe (ein Reiter je vorhandenem Typ). Siehe [Bedienung §3](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse). |
+| **Auswertungen** | Die **Wie-Achse**: auswertende Gesamtsichten quer über die Zeit — Finanzen · ROI · Prognose · CO₂ · Tabelle. Siehe [Bedienung §4](HANDBUCH_BEDIENUNG.md#4-auswertungen--die-wie-achse). |
+| **Aussicht** | Die vorwärtsgerichtete Cockpit-Sicht (Kurzfrist, Langfrist, Degradation) mit **Horizont-Selektor**. Der tiefere Prognose-Vergleich mit Genauigkeit liegt in [Auswertungen → Prognose](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-ist). |
+| **Block-Modell** | Jede Sicht ist aus **Blöcken** aufgebaut, die sich klappen, umsortieren, fokussieren und parken lassen. |
+| **Fokus / Vollbild** | Ein Block lässt sich in den **Fokus** heben (⤢ Vollbild-Ansicht) — z. B. eine inline gezeigte Tabelle oder die Infothek im großen Blick. Geteilte Overlay-Mechanik über alle Sichten. |
+| **Parken (Parkbar)** | Einzelne Anzeigen (Kacheln, Charts) lassen sich **parken** (ausblenden) und später wiederherstellen. Eine Parkbar = eine atomare Anzeige. |
+| **Monatsdaten-Formular** | Der EINE Erfassungsweg für die monatlichen Zählerwerte in v4 (`MonatsdatenForm`) — datengetrieben, mit Assistenz je Feld. Löst den mehrstufigen [Monatsabschluss-Wizard](#sonstiges) ab. Unter [Einstellungen → Daten → Monatsdaten](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss). |
+| **Status-Fußzeile** | Die dauerhaft sichtbare Zeile mit Anlagen-Auswahl, Datenquellen-/Teilen-Status und Verbindungshinweisen. |
 | **CollapsibleSection** | Wiederverwendbare UI-Komponente mit localStorage-Persistenz pro `storageKey`. Status der Sektionen (offen/zu) bleibt pro Browser erhalten. |
 
 ### Sonstiges
 
 | Begriff | Bedeutung |
 |---------|-----------|
-| **Infothek** | Optionales eedc-Modul zur Verwaltung von Verträgen, Zählern, Kontakten und Dokumenten. N:M-Verknüpfung mit Investitionen seit v3.15.2. |
-| **Monatsabschluss** | Monatliche Datenerfassung via geführtem Wizard mit automatischen Vorschlägen aus HA-Statistik / MQTT / Connector / Gespeichert (Konfidenz 85–95). |
+| **Infothek** | Optionales eedc-Modul zur Verwaltung von Verträgen, Zählern, Kontakten und Dokumenten. N:M-Verknüpfung mit Komponenten seit v3.15.2. In v4 eine eigene Kachel-Kategorie unter [Einstellungen → Infothek](HANDBUCH_EINSTELLUNGEN.md#41-infothek). Siehe [Handbuch Infothek](HANDBUCH_INFOTHEK.md). |
+| **Monatsabschluss** | Die monatliche Datenerfassung. In v4 als **Monatsdaten-Formular** umgesetzt (ein Formular, datengetrieben, mit Assistenz je Feld und automatischen Vorschlägen aus HA-Statistik / Datenquelle / Vorjahr). *(ehemals: mehrstufiger „Monatsabschluss-Wizard" — als v4-Fläche stillgelegt, bis zum Flip nur noch über die alte Route erreichbar.)* |
+| **Sonstige Positionen** | Frei erfassbare Kosten und Erlöse je Monat (Reparaturen, Wartung, THG-Quote, Guthaben-Auszahlung …), Typ Ertrag/Ausgabe. Ab v4.0 auch auf **Anlage-Ebene** (nicht nur pro Komponente); sie fließen in Netto-Ertrag und T-Konto ein. Siehe [Berechnungen §3.10](BERECHNUNGEN.md#310-sonstige-positionen). |
 | **Community-Hash** | Anonymer Identifier für die Community-Benchmark-Funktion; kein Rückschluss auf Person oder Adresse |
 | **In-App-Hilfe** | Hilfe-Seite (Hauptmenü „Hilfe") seit v3.24.0. Rendert die kuratierten Markdown-Dokumente direkt in der App — funktioniert in der HA-Companion-App identisch zum Browser. URL-Parameter `?doc=<slug>` macht Direktlinks teilbar. |
 | **ICON-CH2** | MeteoSwiss-Wettermodell mit 2 km Auflösung; empfohlen für alpine Standorte (CH, AT, Südtirol) |
@@ -128,10 +151,10 @@ Bei Fragen oder Problemen:
 
 1. **In-App-Hilfe** (Hauptmenü → Hilfe): Vollständiges Handbuch direkt in der App
 2. **GitHub Issues**: [github.com/supernova1963/eedc-homeassistant/issues](https://github.com/supernova1963/eedc-homeassistant/issues)
-3. **Protokolle-Seite** (Einstellungen → System → Protokolle): Debug-Modus aktivieren, Logs kopieren, in Issue einfügen
-4. **Daten-Checker** (Einstellungen → System → Daten-Checker): Zeigt 8 Prüfkategorien — von Stammdaten über Plausibilität bis MQTT-Topic-Abdeckung und HA-Statistics-Verfügbarkeit
+3. **Protokolle** ([Einstellungen → System → Protokolle](HANDBUCH_EINSTELLUNGEN.md#84-protokolle)): Debug-Modus aktivieren, Problem reproduzieren, Logs als Markdown-Tabelle kopieren, in Issue einfügen
+4. **Daten-Checker** ([Einstellungen → Daten → Daten-Checker](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker)): prüft Datenqualität in mehreren Kategorien — von Stammdaten über Plausibilität bis Datenquellen-Konsistenz und HA-Statistics-Verfügbarkeit
 5. **Web-Dokumentation**: [supernova1963.github.io/eedc-homeassistant](https://supernova1963.github.io/eedc-homeassistant/)
 
 ---
 
-*Letzte Aktualisierung: April 2026 (v3.24.1)*
+*Letzte Aktualisierung: 2026-07-25 (v4.0)*

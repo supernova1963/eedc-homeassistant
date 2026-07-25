@@ -1,8 +1,8 @@
 # Sensor-Referenz: Feldnamen, Einheiten, Anforderungen
 
-**Version 3.36.0** | Stand: Juni 2026 — Referenz für UI-Beschreibungen in Sensor-Zuordnung und MQTT-Setup
+**Version 4.0** | Stand: 2026-07-25 — Referenz für UI-Beschreibungen in der Datenquellen-Zuordnung und im MQTT-Setup
 
-> **Single Source of Truth:** Die Feld-Hilfetexte (Spalte „Beschreibung") werden im Code als `hinweis`-Attribut in `backend/core/field_definitions.py` gepflegt und über `GET /api/monatsdaten/feld-hinweise` an den Sensor-Zuordnungs- (und künftigen MQTT-Inbound-) Wizard ausgeliefert. Diese Referenz und die `hinweis`-Texte konsistent halten.
+> **Single Source of Truth:** Die Feld-Hilfetexte (Spalte „Beschreibung") werden im Code als `hinweis`-Attribut in `backend/core/field_definitions.py` gepflegt und über `GET /api/monatsdaten/feld-hinweise` an die Datenquellen-Zuordnung ausgeliefert. Diese Referenz und die `hinweis`-Texte konsistent halten. Die Export-Sensoren (§8a, §11) spiegeln `backend/services/ha_sensors_export.py` bzw. `GET /api/ha/export/definitions`.
 
 ## Legende
 
@@ -14,6 +14,8 @@
 | **Counter** | Kumulativer Anzahl-Zähler (Total-Increasing, kein kWh). Wird strikt von kWh-Feldern getrennt — siehe „Counter vs. kWh" unten. |
 | **Bidirektional** | Positiv/negativ kodiert die Richtung (z.B. +Ladung/−Entladung) |
 | **`state_class`** | HA-Attribut. `total_increasing`/`total` markieren kumulative Sensoren — von HA in Long-Term Statistics persistiert. Sensoren ohne `state_class` haben **keine** LTS-Einträge → für kWh-Felder ungeeignet (siehe „LTS-Verfügbarkeit"). |
+
+> **Wo ordne ich Sensoren zu?** In v4 unter **Einstellungen → Datenquellen** — jedes Feld bekommt **genau eine** Quelle (HA-Sensor, MQTT-Gateway, MQTT-Inbound oder keine). Details zur Fläche: [Handbuch Einstellungen §7](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung). Voraussetzung ist eine stehende Verbindung ([Integration](HANDBUCH_EINSTELLUNGEN.md#6-integration)).
 
 ---
 
@@ -35,7 +37,7 @@
 |------|-------|---------|-----------|-------------|
 | `einspeisung_w` | Einspeisung | W | Momentan | Aktuelle Einspeiseleistung. Muss ≥ 0 sein. Wird alle paar Sekunden abgefragt. |
 | `netzbezug_w` | Netzbezug | W | Momentan | Aktuelle Netzbezugsleistung. Muss ≥ 0 sein. |
-| `pv_gesamt_w` | PV Gesamt | W | Momentan | Gesamte aktuelle PV-Leistung. Nur nötig wenn keine individuellen PV-Investitions-Sensoren konfiguriert sind. |
+| `pv_gesamt_w` | PV Gesamt | W | Momentan | Gesamte aktuelle PV-Leistung. Nur nötig wenn keine individuellen PV-Komponenten-Sensoren konfiguriert sind. |
 | `netz_kombi_w` | Kombinierter Netz-Sensor | W | Momentan, bidirektional | Alternative zu getrennt `einspeisung_w`/`netzbezug_w`. Positiv = Netzbezug, negativ = Einspeisung. Nur verwenden wenn kein getrennter Zähler vorhanden. |
 | `strompreis` | Strompreis (dynamischer Tarif) | ct/kWh | Momentan | **Optional, ab v3.16.0.** Aktueller Strompreis aus Tibber, aWATTar, EPEX oder eigenem Template-Sensor. Akzeptierte Einheiten: `ct/kWh`, `EUR/kWh`, `EUR/MWh` (×0.1 → ct/kWh), `Cent`, `€`. Wird im Live-Tagesverlauf als gepunktete Linie auf sekundärer Y-Achse gezeigt. Ohne eigenen Sensor lädt eedc automatisch den EPEX-Börsenpreis (DE/AT) via aWATTar API als Fallback. |
 
@@ -89,14 +91,14 @@
 |------|-------|---------|-----------|-------------|
 | `ladung_kwh` | Ladung | kWh | Kumulativ oder Tagessensor | Gesamte im Monat in den Speicher geladene Energie. Muss ≥ 0 sein. |
 | `entladung_kwh` | Entladung | kWh | Kumulativ oder Tagessensor | Gesamte im Monat aus dem Speicher entladene Energie. Muss ≥ 0 sein. |
-| `ladung_netz_kwh` | Netzladung | kWh | Kumulativ oder Tagessensor | Anteil der Ladung aus dem Netz (Arbitrage). Optional. Muss ≤ `ladung_kwh` sein. |
-| `speicher_ladepreis_cent` | Ø Ladepreis | ct/kWh | Manuell | Ø Preis der Netzladung. Nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis. Manuell im Monatsabschluss. |
+| `ladung_netz_kwh` | Netzladung | kWh | Kumulativ oder Tagessensor | Anteil der Ladung aus dem Netz (Arbitrage). Optional. Muss ≤ `ladung_kwh` sein. **Kanonischer Schlüssel** `ladung_netz_kwh` (Legacy-Fallback `speicher_ladung_netz_kwh` wird noch gelesen). |
+| `speicher_ladepreis_cent` | Ø Ladepreis | ct/kWh | Manuell | Ø Preis der Netzladung. Nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis. Manuell im Monatsdaten-Formular. |
 
 ### Live-Dashboard
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
 |------|-------|---------|-----------|-------------|
-| `leistung_w` | Leistung | W | Momentan, **bidirektional** | Positiv = Ladung (Senke), negativ = Entladung (Quelle). ⚠️ Manche WR liefern umgekehrtes Vorzeichen — dann "Invertieren" aktivieren. |
+| `leistung_w` | Leistung | W | Momentan, **bidirektional** | Positiv = Ladung (Senke), negativ = Entladung (Quelle). ⚠️ Manche WR liefern umgekehrtes Vorzeichen — dann in der Datenquellen-Zuordnung „±" (Vorzeichen umkehren) aktivieren. |
 | `ladung_kwh` | Ladung heute | kWh | Tagessensor | Tages-Ladeenergie. Optional — wenn vorhanden, wird für heute-kWh-Anzeige bevorzugt (genauer als Trapez-Integration aus W-Sensor). Wird täglich um 0:00 auf 0 zurückgesetzt. |
 | `entladung_kwh` | Entladung heute | kWh | Tagessensor | Tages-Entladeenergie. Optional — wie `ladung_kwh`. Wird täglich auf 0 zurückgesetzt. |
 | `soc` | Ladezustand | % | Momentan | State of Charge. 0–100%. |
@@ -122,7 +124,7 @@
 | `strom_warmwasser_kwh` | Strom Warmwasser | kWh | Kumulativ oder Tagessensor | Nur bei getrennter Strommessung. Elektrische Energie für Warmwasserbereitung. |
 | `heizenergie_kwh` | Heizwärme | kWh | Kumulativ oder Tagessensor | Bereitgestellte Wärmeenergie (thermisch, **nicht** Strom). Für JAZ-Berechnung: `heizenergie / stromverbrauch`. Kann alternativ via JAZ-Strategie aus Strom × JAZ berechnet werden. |
 | `warmwasser_kwh` | Warmwasser | kWh | Kumulativ oder Tagessensor | Bereitgestellte Warmwasserenergie (thermisch). Optional. |
-| `wp_starts_anzahl` | Kompressor-Starts | Anzahl | Counter (Total-Increasing) | **Optional, ab v3.24.0 (#136).** Kumulativer Anzahl-Zähler für Kompressor-Starts der Wärmepumpe. Z. B. aus der lokalen „Nibe Heat Pump"-Integration: `sensor.compressor_number_of_starts_…`. Stündlicher Snapshot-Job erfasst den Counter wie kWh-Zähler; Tagesabschluss berechnet Stunden- und Tages-Differenzen. **Bewusst kein Fallback** aus `leistung_w` oder Compressor-Binary — würde gerade kurze Takte (wo der KPI sticht) systematisch unterzählen. Anzeige: Auswertung → Energieprofil → Tagesdetail (Spalte „WP-Starts", default ausgeblendet) und Auswertung → Energieprofil → Monat (Komponenten-Gruppe). |
+| `wp_starts_anzahl` | Kompressor-Starts | Anzahl | Counter (Total-Increasing) | **Optional, ab v3.24.0 (#136).** Kumulativer Anzahl-Zähler für Kompressor-Starts der Wärmepumpe. Z. B. aus der lokalen „Nibe Heat Pump"-Integration: `sensor.compressor_number_of_starts_…`. Stündlicher Snapshot-Job erfasst den Counter wie kWh-Zähler; Tagesabschluss berechnet Stunden- und Tages-Differenzen. **Bewusst kein Fallback** aus `leistung_w` oder Compressor-Binary — würde gerade kurze Takte (wo der KPI sticht) systematisch unterzählen. Anzeige: [Cockpit → Tag](HANDBUCH_BEDIENUNG.md#22-tag) (Spalte „WP-Starts", default ausgeblendet) und Wärmepumpe-Komponentensicht ([Bedienung §3.4](HANDBUCH_BEDIENUNG.md#34-wärmepumpe)). |
 | `wp_betriebsstunden` | Betriebsstunden | h | Counter (Total-Increasing) | **Optional, ab v3.34 (#238).** Kumulativer Zähler der Gesamt-Betriebsstunden der WP. Kombiniert mit `wp_starts_anzahl` ergibt sich „Ø Laufzeit pro Start" als Auslegungs-/Verschleiß-Maß. Wird wie ein Counter behandelt — keine Energie-Einheit, keine Aufnahme in die Energie-Bilanz (siehe §9). |
 
 ### Live-Dashboard
@@ -147,7 +149,7 @@
 
 ## 5. E-Auto
 
-> **Heimladung gehört kanonisch an die Wallbox (ab Phase 2a).** Existiert eine Wallbox-Investition, ist sie die Quelle der Heimladung — die folgenden Felder `ladung_pv_kwh`/`ladung_netz_kwh` werden dann am E-Auto **nicht** erfasst (das Formular blendet sie aus). Sie gelten nur für Setups **ohne** Wallbox (Steckerlader/Schuko). Km-, Verbrauchs-, Extern- und V2H-Felder bleiben in jedem Fall am E-Auto.
+> **Heimladung gehört kanonisch an die Wallbox (ab Phase 2a).** Existiert eine Wallbox-Komponente, ist sie die Quelle der Heimladung — die folgenden Felder `ladung_pv_kwh`/`ladung_netz_kwh` werden dann am E-Auto **nicht** erfasst (das Formular blendet sie aus). Sie gelten nur für Setups **ohne** Wallbox (Steckerlader/Schuko). Km-, Verbrauchs-, Extern- und V2H-Felder bleiben in jedem Fall am E-Auto.
 
 ### Monatserfassung
 
@@ -172,7 +174,7 @@
 
 | MQTT-Topic | Feld | Hinweis |
 |------------|------|---------|
-| `eedc/.../energy/inv/{inv_id}_{name}/ladung_kwh` | — | ⚠️ Gesamt-Ladung, **nicht** PV/Netz-Split. Aufteilung nur beim Monatsabschluss via EV-Quote. |
+| `eedc/.../energy/inv/{inv_id}_{name}/ladung_kwh` | — | ⚠️ Gesamt-Ladung, **nicht** PV/Netz-Split. Aufteilung nur im Monatsdaten-Formular via EV-Quote. |
 | `eedc/.../energy/inv/{inv_id}_{name}/km_gefahren` | `km_gefahren` | |
 | `eedc/.../energy/inv/{inv_id}_{name}/v2h_entladung_kwh` | `v2h_entladung_kwh` | |
 | ⚠️ `ladung_pv_kwh` / `ladung_netz_kwh` | — | **Kein MQTT-Topic** — Split wird berechnet, nicht gemessen |
@@ -181,7 +183,7 @@
 
 ## 6. Wallbox
 
-> **Wallbox = kanonische Heimladungs-Quelle (ab Phase 2a).** Ist eine Wallbox angelegt, liefert sie die zu Hause geladene Energie (gesamt/PV/Netz) für alle Auswertungen; die km-anteilige Aufteilung auf ein oder mehrere Fahrzeuge berechnet eedc daraus. Mehrere Wallboxen werden summiert (jeder Ladepunkt zählt). Mappe den Loadpoint-/Wallbox-Energiesensor daher hier, nicht am E-Auto.
+> **Wallbox = kanonische Heimladungs-Quelle (ab Phase 2a).** Ist eine Wallbox angelegt, liefert sie die zu Hause geladene Energie (gesamt/PV/Netz) für alle Auswertungen; die km-anteilige Aufteilung auf ein oder mehrere Fahrzeuge berechnet eedc daraus. Mehrere Wallboxen werden summiert (jeder Ladepunkt zählt). Ordne den Loadpoint-/Wallbox-Energiesensor daher hier zu, nicht am E-Auto.
 
 ### Monatserfassung
 
@@ -213,7 +215,7 @@
 
 | Feld | Kategorie | Label | Einheit | Beschreibung |
 |------|-----------|-------|---------|-------------|
-| `erzeugung_kwh` | Erzeuger | Erzeugung | kWh | Erzeugte Energie (z.B. BHKW, Windrad). |
+| `erzeugung_kwh` | Erzeuger | Erzeugung | kWh | Erzeugte Energie (z.B. BHKW, Windrad). Zählt hinter dem Hauszähler in die Eigenverbrauchs-/Autarkie-Bilanz. |
 | `verbrauch_sonstig_kwh` | Verbraucher | Verbrauch | kWh | Verbrauchte Energie (z.B. Sauna, Pool). |
 | `bezug_pv_kwh` | Verbraucher | davon PV | kWh | PV-gedeckter Anteil des Verbrauchs. Optional. |
 | `bezug_netz_kwh` | Verbraucher | davon Netz | kWh | Netz-gedeckter Anteil des Verbrauchs. Optional. |
@@ -230,7 +232,7 @@
 
 ## 8. Solcast PV Forecast (optional, ab v3.16.5)
 
-Zwei alternative Pfade — Toggle „Solcast PV Forecast" am Ende von Schritt 1 im Sensor-Mapping-Wizard.
+Solcast als dritte Prognose-Quelle wird über die Datenquellen/Anlagenstammdaten angebunden — zwei alternative Pfade. Wie eedc die Solcast-Werte im Vergleich nutzt, steht im [Handbuch Prognosen §2.3](HANDBUCH_PROGNOSEN.md#23-solcast--optional-dritte-meinung).
 
 ### Variante A: HA-Integration (BJReplay)
 
@@ -251,17 +253,17 @@ Filter (v3.16.11): nur Sensoren mit `unit_of_measurement=kWh` und ohne „verble
 
 ### Variante B: Solcast-API (Free/Paid Key)
 
-Direkter API-Aufruf für Standalone-Nutzer ohne HA-Integration. Konfiguration in den Anlagenstammdaten. L1-Cache (in-memory) und L2-Cache (DB) überleben Neustarts.
+Direkter API-Aufruf für Standalone-Nutzer ohne HA-Integration. Konfiguration in den Anlagenstammdaten ([Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)). L1-Cache (in-memory) und L2-Cache (DB) überleben Neustarts.
 
 ### Slot-Konvention
 
-30-Min-Buckets aus Solcast werden per `ceil(bucket_ende)` dem **Backward-Slot** zugeordnet (siehe BERECHNUNGEN.md §6b). Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des Folgetags.
+30-Min-Buckets aus Solcast werden per `ceil(bucket_ende)` dem **Backward-Slot** zugeordnet (siehe [BERECHNUNGEN §6b](BERECHNUNGEN.md#6b-energieprofil-berechnungen-tages-aggregation)). Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des Folgetags.
 
 ---
 
 ## 8a. eedc-PV-Prognose nach HA exportieren (MQTT / HA-Sensoren)
 
-eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die **eedc**-Quelle, nie Solcast/SFML — die liegen via eigene HA-Integration bereits in HA). Alle Werte stammen aus dem **Prognose-Kanon** und sind damit identisch mit der App-Anzeige und der „eedc"-Spalte im Vergleich.
+eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die **eedc**-Quelle, nie Solcast/SFML — die liegen via eigene HA-Integration bereits in HA). Alle Werte stammen aus dem **Prognose-Kanon** und sind damit identisch mit der App-Anzeige und der „eedc"-Spalte im Vergleich. Einrichtung: [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export).
 
 | Sensor / Schlüssel | Bedeutung |
 |---|---|
@@ -281,7 +283,7 @@ eedc unterscheidet seit v3.24.0 zwei Klassen kumulativer Sensoren:
 | Klasse | Beispiele | Verarbeitung |
 |---|---|---|
 | **kWh-Felder** | `pv_erzeugung_kwh`, `ladung_kwh`, `entladung_kwh`, `stromverbrauch_kwh`, `einspeisung_kwh`, `netzbezug_kwh` | Fließen in die Energie-Bilanz, Performance Ratio, Lernfaktor. Wh→kWh, MWh→kWh werden automatisch konvertiert. |
-| **Counter-Felder** (`KUMULATIVE_COUNTER_FELDER`) | `wp_starts_anzahl` | Reine Zähler — **keine** Energie-Einheit, **keine** Aufnahme in die Energie-Bilanz. Faktor 1.0 statt 0.001 bei unbekannter Einheit im HA-Statistics-Pfad. |
+| **Counter-Felder** (`KUMULATIVE_COUNTER_FELDER`) | `wp_starts_anzahl`, `wp_betriebsstunden` | Reine Zähler — **keine** Energie-Einheit, **keine** Aufnahme in die Energie-Bilanz. Faktor 1.0 statt 0.001 bei unbekannter Einheit im HA-Statistics-Pfad. |
 
 > **Warum getrennt?** Würde ein Counter-Sensor versehentlich als kWh-Feld konsumiert (z. B. weil seine Unit fehlt), würde er die Energie-Bilanz mit physikalisch sinnlosen Werten (z. B. 50 000 „kWh"-Kompressor-Starts) verfälschen. Die strikte Klassen-Trennung ist Voraussetzung für die Roh-Counter-Unterstützung der Nibe-Integration in v3.24.1.
 
@@ -295,19 +297,19 @@ HA persistiert nur Sensoren mit gesetztem `state_class` in seiner `statistics_me
 
 - Bulk-Import historischer Monate
 - Vollbackfill der Tageszusammenfassungen
-- Snapshot-basierte Stunden-kWh-Berechnung (siehe BERECHNUNGEN.md §6b)
+- Snapshot-basierte Stunden-kWh-Berechnung (siehe [BERECHNUNGEN §6b](BERECHNUNGEN.md#6b-energieprofil-berechnungen-tages-aggregation))
 
-### Filter im Sensor-Mapping-Wizard (v3.24.1)
+### Filter in der Datenquellen-Zuordnung (HA-Sensor-Picker)
 
-Seit v3.24.1 zeigt der Wizard:
+Bei der HA-Sensor-Auswahl zeigt eedc:
 
 - `state_class` ∈ `total_increasing`/`total` → **immer** zugelassen, Unit egal.
 - Sensor mit ganzzahligem State **ohne** Metadaten → zugelassen für Roh-Counter (z. B. Nibe Coils).
 - **Fallback-Link** „Sensor nicht in der Auswahl? Alle Sensoren ohne Filter anzeigen" lädt on-demand alle `sensor.*`-Entities mit `filter_energy=false`.
 
-### „ohne Statistik"-Badge (v3.24.1)
+### „ohne Statistik"-Badge
 
-Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"** im Wizard-Dropdown. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch." Im Backend trägt `HASensorInfo.has_statistics: bool` (= `state_class is not None`) diese Information.
+Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"** im Picker-Dropdown. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch." Im Backend trägt `HASensorInfo.has_statistics: bool` (= `state_class is not None`) diese Information. Zur Zuordnungszeit meldet die Datenquellen-Fläche das zusätzlich als Feld-Warnung ([Einstellungen §7.5](HANDBUCH_EINSTELLUNGEN.md#75-validierung--probleme-je-feld)).
 
 #### Anleitung zum Nachrüsten
 
@@ -326,21 +328,21 @@ Nach **HA-Neustart** landet der Sensor in HA-Long-Term-Statistics und steht dami
 
 ### Daten-Checker-Kategorie „Sensor-Mapping – HA-Statistics"
 
-Prüft pro Anlage, ob alle im Mapping verwendeten **kWh-Sensoren** tatsächlich in HA-LTS landen:
+Prüft pro Anlage, ob alle in der Datenquellen-Zuordnung verwendeten **kWh-Sensoren** tatsächlich in HA-LTS landen (siehe [Handbuch Daten-Checker §4.9](HANDBUCH_DATEN_CHECKER.md#49-sensor-mapping--ha-statistics)):
 
 | Befund | Bedeutung |
 |---|---|
 | **OK** | Alle kWh-Sensoren in LTS verfügbar |
 | **WARNING** | kWh-Feld zeigt auf LTS-losen Sensor — Monatsabschluss bleibt leer (still kritisch) |
-| **WARNING** | Counter-Feld zeigt auf LTS-losen Sensor — Snapshot läuft, aber Korrektur-Werkzeuge in der Datenverwaltung wirken nicht |
+| **WARNING** | Counter-Feld zeigt auf LTS-losen Sensor — Snapshot läuft, aber Korrektur-Werkzeuge in der Energieprofil-Pflege wirken nicht |
 
-Live-Mappings (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` direkt und brauchen kein LTS.
+Live-Zuordnungen (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `state` direkt und brauchen kein LTS.
 
 ---
 
 ## 11. Export-Sensoren (eedc → HA)
 
-Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Dieser Abschnitt beschreibt die umgekehrte Richtung: berechnete eedc-Werte, die als **HA-Entitäten** bereitgestellt werden — per MQTT Discovery (empfohlen) oder REST. Einrichtung: *Einstellungen → Home Assistant → MQTT-Export* (siehe Handbuch Einstellungen, Kap. 5).
+Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Dieser Abschnitt beschreibt die umgekehrte Richtung: berechnete eedc-Werte, die als **HA-Entitäten** bereitgestellt werden — per MQTT Discovery (empfohlen) oder REST. Einrichtung: [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export).
 
 > **Zeithorizont:** Sofern nicht anders angegeben, beziehen sich die Werte auf die **Gesamtlaufzeit** (alle erfassten Monate, jeweils ab Anschaffungsdatum der Komponenten). Der laufende Monat fließt erst nach dem Monatsabschluss ein. Einzige Ausnahme: der **Spezifische Ertrag** ist aufs Jahr normiert (siehe unten).
 
@@ -353,16 +355,22 @@ Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Diese
 | `eigenverbrauch_gesamt_kwh` | kWh | Direktverbrauch + Speicher-Entladung + V2H |
 | `einspeisung_gesamt_kwh` / `netzbezug_gesamt_kwh` | kWh | Zählerwerte |
 | `gesamtverbrauch_kwh` | kWh | Eigenverbrauch + Netzbezug |
-| `autarkie_prozent` / `eigenverbrauch_quote_prozent` | % | Quoten über die Gesamtlaufzeit |
+| `autarkie_prozent` / `eigenverbrauch_quote_prozent` | % | Quoten über die Gesamtlaufzeit — cockpit-gleich, inkl. Erzeuger hinter dem Zähler (siehe Wertsemantik unten) |
 | `spezifischer_ertrag_kwh_kwp` | kWh/kWp | **Aufs Jahr normiert** — siehe Hinweis unten |
-| `netto_ertrag_euro` | € | Einspeiseerlös + EV-Ersparnis + Sonstige Erträge/Ausgaben |
+| `netto_ertrag_euro` | € | **Einspeiseerlös + EV-Ersparnis + BKW-Ersparnis + Sonstige (Erträge − Ausgaben)** — siehe Wertsemantik unten |
 | `einspeise_erloes_euro` / `eigenverbrauch_ersparnis_euro` | € | Finanz-Bausteine (deckungsgleich mit Cockpit/Berichten) |
-| `co2_ersparnis_kg` | kg | CO₂-Einsparung |
+| `co2_ersparnis_kg` | kg | **Volle CO₂-Bilanz** (PV-Eigenverbrauch inkl. BKW/sonstige Erzeuger + Wärmepumpe + E-Mobilität) — siehe Wertsemantik unten |
 | `investition_gesamt_euro`, `jahres_ersparnis_euro`, `roi_prozent`, `amortisation_jahre` | €, €/Jahr, %, Jahre | Investitions-KPIs |
 | `speicher_zyklen`, `speicher_effizienz_prozent` | —, % | Speicher-KPIs |
 | `letzter_import_jahr/_monat/_monat_name`, `anzahl_monate_erfasst` | — | Status der Datenbasis (Diagnose-Kategorie — erscheint in HA im Diagnose-Bereich des Geräts) |
 
-Zusätzlich erscheinen **pro Investition** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`) — jeweils unter einem eigenen HA-Gerät.
+Zusätzlich erscheinen **pro Komponente** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`) — jeweils unter einem eigenen HA-Gerät.
+
+> **Wertsemantik `netto_ertrag_euro` (ab v4.0):** Der Sensor trägt den kanonischen Netto-Ertrag aus dem Finanz-Aggregat-SoT: **Einspeiseerlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto** (Erträge − Ausgaben aus den Sonstigen Positionen, inklusive der auf **Anlage-Ebene** erfassten Positionen ab v4.0). Der Sensor-Name und die Einheit sind unverändert; nur der **Wert** enthält jetzt die Sonstigen Positionen. Achtung: die frühere Kurzformel „Einspeiseerlös + EV-Ersparnis" (noch als statisches `formel`-Label in der Definition) beschreibt nur zwei der vier Bausteine — maßgeblich ist die Summe in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit). Der USt-Eigenverbrauchs-Abzug (nur bei Regelbesteuerung) bleibt eine Cockpit-Zusatzlogik und ist im Export-Sensor **nicht** enthalten.
+
+> **Wertsemantik `co2_ersparnis_kg` (ab v4.0, DI-2/DI-2-B):** Der Sensor trägt die **volle CO₂-Bilanz** aus dem kanonischen Helfer `berechne_co2_bilanz` — **PV-Eigenverbrauch** (inkl. der Erzeugung von BKW/sonstigen Erzeugern hinter dem Zähler) **+ Wärmepumpe** (vermiedenes Gas mit η_gas = 0,90 minus WP-Strom-CO₂) **+ E-Mobilität** (vermiedener Benziner minus Netzladung). Damit ist er **exakt deckungsgleich** mit der Cockpit-CO₂-Kachel (früher rechnete der Sensor nur `PV-Eigenverbrauch × Strom-Faktor`). Ein Brennstoff-Erzeuger (BHKW) zählt zwar in EV/Autarkie, erzeugt aber bewusst **keine** CO₂-Gutschrift. Herleitung: [Berechnungen §3.8](BERECHNUNGEN.md#38-co2-bilanz).
+
+> **Wertsemantik `autarkie_prozent` / `eigenverbrauch_quote_prozent` (ab v4.0, DI-2-B):** Beide Quoten werden **identisch zum Cockpit** gerechnet und beziehen die **Erzeugung hinter dem Zähler** ein (`erzeugung_hinter_zaehler_kwh` = PV inkl. Balkonkraftwerk + sonstige Erzeuger, die in denselben Hauszähler speisen). Der Nenner der Eigenverbrauchsquote ist diese Gesamt-Erzeugung, nicht „nur PV". Der **spezifische Ertrag** bleibt bewusst eine reine PV-Kennzahl (nur `pv_erzeugung`).
 
 > **Spezifischer Ertrag — warum nicht einfach kWh ÷ kWp?** Der Sensor ist **annualisiert** und damit deckungsgleich mit der Cockpit-Kachel: saisonal gewichtet (PVGIS-Monatsverteilung) und mit der pro Monat tatsächlich aktiven PV-Leistung (Erweiterung/Teil-Rückbau wird korrekt gewichtet). Die naive Division *Gesamterzeugung ÷ heutiges kWp* würde bei 3 Jahren Historie etwa das Dreifache des gewohnten Jahreswerts anzeigen.
 
@@ -370,7 +378,7 @@ Zusätzlich erscheinen **pro Investition** (E-Auto, Wärmepumpe, Speicher, Wallb
 
 Quelle ist **immer die eedc-eigene Prognose** (OpenMeteo × Korrekturprofil) — nie Solcast/SFML, denn deren Werte liegen über die jeweilige HA-Integration ohnehin nativ in HA (kein Doppel-Export, keine Drift).
 
-Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenstand × Wetter → Saison-Stunde → Sonnenstand → Skalar; bei Anlagen ohne gelerntes Profil greift wie bisher der Lernfaktor-Skalar). Der Tagessensor ist dabei stets die Σ seiner korrigierten Stundenwerte — Sensor-State und `stundenprofil_kwh`-Attribut passen exakt zusammen. Dieselbe Berechnung speist die Spalte „eedc" im Prognosen-Vergleich: Add-on-Ansicht und HA-Sensor zeigen denselben Tageswert.
+Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenstand × Wetter → Saison-Stunde → Sonnenstand → Skalar; bei Anlagen ohne gelerntes Profil greift wie bisher der Lernfaktor-Skalar). Der Tagessensor ist dabei stets die Σ seiner korrigierten Stundenwerte — Sensor-State und `stundenprofil_kwh`-Attribut passen exakt zusammen. Dieselbe Berechnung speist die Spalte „eedc" im Prognosen-Vergleich: App-Ansicht und HA-Sensor zeigen denselben Tageswert.
 
 | Sensor | Bedeutung |
 |---|---|
@@ -385,7 +393,7 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 
 Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — der variiert je Vertrag/Region, die Kurvenform ist dieselbe). Tag- und Nacht-Fenster werden **solar-basiert getrennt** bewertet (Sonnenauf-/-untergang, wandert saisonal).
 
-**Günstig-Definition (zweistufig):** Eine Stunde gilt als günstig, wenn sie (1) zu den 5 billigsten ihres Fensters gehört **und** (2) ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden. Der Prozentsatz ist je Anlage einstellbar (MQTT-Export-Seite). Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
+**Günstig-Definition (zweistufig):** Eine Stunde gilt als günstig, wenn sie (1) zu den 5 billigsten ihres Fensters gehört **und** (2) ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden. Der Prozentsatz ist je Anlage einstellbar ([MQTT-Export-Seite](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export)). Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
 
 | Sensor | Bedeutung |
 |---|---|
@@ -416,7 +424,7 @@ HA Utility Meter setzen den Zählerstand täglich um 0:00 auf 0 zurück. **eedc 
 | Batterie-Leistung | Ladung (Senke) | Entladung (Quelle) |
 | E-Auto V2H | Ladung | Entladung ins Haus |
 
-⚠️ Manche Wechselrichter liefern das Vorzeichen umgekehrt. In der Sensor-Zuordnung gibt es dafür die Option **"Invertieren"** (`live_invert`).
+⚠️ Manche Wechselrichter liefern das Vorzeichen umgekehrt. In der [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) gibt es dafür am signierten Leistungs-Feld das **±**-Symbol (Vorzeichen umkehren, `live_invert`) — quellen-unabhängig direkt am Wert.
 
 ### Einheiten-Konvertierung
 
@@ -424,4 +432,4 @@ Live-Leistungssensoren werden automatisch konvertiert: `kW → W`, `MW → W`. F
 
 ---
 
-*Letzte Aktualisierung: Juni 2026 (v3.44.x — Prognose-Export: Korrekturprofil-Kaskade + Stundenprofil-Attribute Tag+1/2/3)*
+*Letzte Aktualisierung: 2026-07-25 (v4.0)*
