@@ -16,6 +16,14 @@ import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 
 const fmt = (v: number | null | undefined, d = 1) => fmtCalc(v, d, '—')
 
+// R18-9 (Rainer-PN 2026-07-25): Die Ergebniszeile war die einzige Zeile ohne
+// Herleitung — und sie trägt einen ANDEREN Netto-Begriff als die Kachel
+// „Netto-Ertrag (PV)" im Block darüber. Beides steht jetzt im Tooltip.
+const ERGEBNIS_FORMEL =
+  'HABEN − SOLL = Einspeiseerlös + EV-Ersparnis + Wärmepumpen-/E-Mobilitäts-Ersparnis − Netzbezug-Kosten − Sonstige Ausgaben'
+const ERGEBNIS_ABGRENZUNG =
+  'Andere Abgrenzung als „Netto-Ertrag (PV)" oben: hier zählen Netzbezug-Kosten und Wärmepumpe/E-Mobilität mit.'
+
 function Δ({ a, b, inv = false }: { a: number | null | undefined; b: number | null | undefined; inv?: boolean }) {
   if (a == null || b == null || b === 0) return null
   const pct = ((a - b) / Math.abs(b)) * 100
@@ -306,7 +314,9 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
               const isGewinn = seite === 'soll'
               return <>
                 <td className="py-2 pl-4 pr-2 font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-600">
-                  {isGewinn ? 'Gewinn' : 'Verlust'}
+                  <FormelTooltip formel={ERGEBNIS_FORMEL} berechnung={ERGEBNIS_ABGRENZUNG}>
+                    {isGewinn ? 'Gewinn (Haushalt)' : 'Verlust (Haushalt)'}
+                  </FormelTooltip>
                 </td>
                 <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-bold border-b border-gray-200 dark:border-gray-600 ${isGewinn ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                   {fmtCalc(Math.abs(nettoT), 2)} €
@@ -478,7 +488,9 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                       <tbody>
                         <tr className="bg-gray-100 dark:bg-gray-700/60">
                           <td className="py-2 pl-2 pr-2 text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
-                            {nettoT >= 0 ? 'Gewinn' : 'Verlust'}
+                            <FormelTooltip formel={ERGEBNIS_FORMEL} berechnung={ERGEBNIS_ABGRENZUNG}>
+                              {nettoT >= 0 ? 'Gewinn (Haushalt)' : 'Verlust (Haushalt)'}
+                            </FormelTooltip>
                           </td>
                           <td className="py-2 pr-2 text-right align-top">
                             <div className={`tabular-nums whitespace-nowrap font-bold ${nettoT >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>

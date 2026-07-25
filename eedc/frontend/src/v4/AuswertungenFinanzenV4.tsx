@@ -119,7 +119,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
 
   const handleCsv = useCallback(() => {
     const headers = ['Monat', 'Einspeiseerlös (€)', 'EV-Ersparnis (€)', 'Netzbezug-Kosten (€)',
-      'Netto-Ertrag (€)', 'Sonderkosten (€)', 'Netto nach Sonderkosten (€)', 'Kumulierter Ertrag (€)']
+      'Netto-Ertrag PV (€)', 'Sonderkosten (€)', 'Netto nach Sonderkosten (€)', 'Kumulierter Ertrag (€)']
     const rows = chartData.map((z) => [z.name, z.einspeise_erloes, z.ev_ersparnis, z.netzbezug_kosten,
       z.netto_ertrag, z.sonderkosten, z.netto_nach_sonderkosten, z.kumuliert_ertrag])
     exportToCSV(headers, rows, 'finanzen_export.csv')
@@ -161,14 +161,20 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
         berechnung: `${fmtZahl(basis.stats.gesamtNetzbezug, 0)} kWh gesamt`, ergebnis: `= ${fmtZahl(gesamt.netzbezugKosten, 2)} €`,
       },
       {
-        title: 'Netto-Ertrag', value: formatGeld(gesamt.nettoNachSonderkosten).wert, unit: '€', color: 'blue', icon: Euro,
+        // R18-9 (Rainer-PN 2026-07-25): „Netto-Ertrag (PV)" grenzt gegen die
+        // Ergebniszeile des T-Kontos darunter ab — dort zählen Netzbezug-Kosten
+        // und Wärmepumpe/E-Mobilität mit, hier bewusst nicht (BERECHNUNGEN.md:
+        // Netzbezug-Kosten fielen auch ohne PV an).
+        title: 'Netto-Ertrag (PV)', value: formatGeld(gesamt.nettoNachSonderkosten).wert, unit: '€', color: 'blue', icon: Euro,
         parkId: 'kpi:netto',
         subtitle: gesamt.sonstigeErtraege > 0 && gesamt.sonderkosten > 0
           ? `inkl. +${fmtZahl(gesamt.sonstigeErtraege, 0)} € / −${fmtZahl(gesamt.sonderkosten, 0)} € Sonstige`
           : gesamt.sonstigeErtraege > 0 ? `inkl. +${fmtZahl(gesamt.sonstigeErtraege, 0)} € Sonstige Erträge`
           : gesamt.sonderkosten > 0 ? `nach ${fmtZahl(gesamt.sonderkosten, 0)} € Sonderkosten` : 'Gesamt',
-        formel: gesamt.sonstigeErtraege > 0 || gesamt.sonderkosten > 0
-          ? 'Einspeiseerlös + EV-Ersparnis + Sonstige Erträge − Sonderkosten' : 'Einspeiseerlös + EV-Ersparnis',
+        formel: (gesamt.sonstigeErtraege > 0 || gesamt.sonderkosten > 0
+          ? 'Einspeiseerlös + EV-Ersparnis + Sonstige Erträge − Sonderkosten'
+          : 'Einspeiseerlös + EV-Ersparnis')
+          + ' · ohne Netzbezug-Kosten, ohne Wärmepumpe/E-Mobilität',
         berechnung: `${fmtZahl(gesamt.einspeiseErloes, 2)} € + ${fmtZahl(gesamt.eigenverbrauchErsparnis, 2)} €`,
         ergebnis: `= ${fmtZahl(gesamt.nettoNachSonderkosten, 2)} €`,
       },
@@ -218,9 +224,9 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
               </div>
             </div>
           </Parkbar>
-          <Parkbar id="chart:kumuliert" titel="Kumulierter Netto-Ertrag">
+          <Parkbar id="chart:kumuliert" titel="Kumulierter Netto-Ertrag (PV)">
             <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Kumulierter Netto-Ertrag</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Kumulierter Netto-Ertrag (PV)</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData} margin={{ top: ACHSEN_MARGIN_TOP, right: 8, left: 0, bottom: 5 }}>
@@ -239,10 +245,10 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
               </div>
             </div>
           </Parkbar>
-          <Parkbar id="chart:netto" titel="Netto-Ertrag pro Monat">
+          <Parkbar id="chart:netto" titel="Netto-Ertrag (PV) pro Monat">
             <div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-                Netto-Ertrag pro Monat {gesamt.sonderkosten > 0 && '(nach Sonderkosten)'}
+                Netto-Ertrag (PV) pro Monat {gesamt.sonderkosten > 0 && '(nach Sonderkosten)'}
               </p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -272,7 +278,7 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
               {gesamt.sonderkosten > 0 && (
                 <div><p className="text-gray-500 dark:text-gray-400">Ø Sonderkosten/Monat</p><p className="font-medium text-amber-600 dark:text-amber-400">{fmtZahl(gesamt.sonderkosten / monate, 0)} €</p></div>
               )}
-              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
+              <div><p className="text-gray-500 dark:text-gray-400">Ø Netto-Ertrag (PV)/Monat</p><p className={`font-medium ${GELD_TEXT_CLASS.netto}`}>{fmtZahl(gesamt.nettoNachSonderkosten / monate, 0)} €</p></div>
             </div>
           </div>
           </Parkbar>
