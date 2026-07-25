@@ -20,9 +20,8 @@
  * ODER Abbau — muss die Liste hier anfassen):
  *   ROH_INFRA    — bewusste SoT-/Infra-Freigaben (Gernot 2026-07-11/17,
  *                  aus dem Vorgänger übernommen; Zählstände neu geeicht).
- *   ROH_BASELINE — durch die Scope-Ausweitung neu erfasste Dateien, Ist-Stand
- *                  v4.0.0 eingefroren. Klassifizierung (→ INFRA-Freigabe oder
- *                  → REST-Migrationsschuld) steht aus — P0b-Aufräum-Paket.
+ *   ROH_BASELINE — Auffangbecken für künftige Scope-/Muster-Erweiterungen
+ *                  (seit der Klassifizierungs-Runde 2026-07-25 leer).
  *   ROH_REST     — Migrationsschuld; die schrumpfende Liste IST die Arbeitsliste.
  *
  * `--inventur` gibt den Ist-Bestand als Map-Zeilen aus (zum Eichen/Klassifizieren).
@@ -67,13 +66,9 @@ const ROH_INFRA = new Map([
   ['src/components/setup-wizard/steps/InvestitionenStep.tsx', 3], // Schnellstart-Karte + Typ-Kacheln
   ['src/components/setup-wizard/sections/SetupInvestitionForm.tsx', 1], // Aufklapp-Header
   ['src/components/setup-wizard/sections/SetupInvestitionMenu.tsx', 1], // Dropdown-Menü-Einträge
-])
-
-/** Scope-Ausweitungs-Baseline v4.0.0 (2026-07-25) — Ist-Stand eingefroren,
- *  Klassifizierung (→ INFRA oder → REST) ausstehend, P0b-Aufräum-Paket. */
-const ROH_BASELINE = new Map([
-  // — Gruppe 1: ui/-SoT-Implementierungen (Gattung DatumPicker — das rohe
-  //   Control IST hier die SoT-Komponente; Freigabe vermutlich Formsache):
+  // ── Baseline-Klassifizierung 2026-07-25 (Gernot-Delegation „folge deiner
+  //    Empfehlung"; Gattungs-Kriterien des Alt-Freeze) ──────────────────────
+  // Gruppe 1 — ui/-SoT-Implementierungen (das rohe Control IST die SoT-Komponente):
   ['src/components/ui/Alert.tsx', 1],
   ['src/components/ui/BildUpload.tsx', 1],
   ['src/components/ui/Button.tsx', 1],
@@ -92,41 +87,48 @@ const ROH_BASELINE = new Map([
   ['src/components/ui/Switch.tsx', 1],
   ['src/components/ui/Table.tsx', 1],
   ['src/components/ui/Textarea.tsx', 1],
-  // — Gruppe 2: Shell-/Layout-/Park-Mechanik (Gattung BlockShell/IATopNav):
-  ['src/components/blocks/FokusKachel.tsx', 1],
-  ['src/components/blocks/FokusVollbild.tsx', 1],
-  ['src/components/layout/AnlagenSelektorView.tsx', 2],
-  ['src/components/layout/Header.tsx', 1],
-  ['src/components/layout/IASubTabBar.tsx', 1],
-  ['src/components/park/Parkbar.tsx', 2],
-  ['src/components/common/DataLoadingState.tsx', 1],
-  // — Gruppe 3: Fach-Composites/Pages (echte Klassifizierung nötig —
-  //   Kandidaten für REST/Migration auf SoT-Komponenten):
-  ['src/components/dashboard/CommunityNudge.tsx', 2],
-  ['src/components/dashboard/CommunityTeaser.tsx', 1],
-  ['src/components/dashboard/QuickLink.tsx', 1],
-  ['src/components/dashboard/Section.tsx', 1],
-  ['src/components/dashboard/ShareTextModal.tsx', 5],
-  ['src/components/import/custom/MappingTabelle.tsx', 1],
-  ['src/components/pv/PVStringVergleich.tsx', 1],
-  ['src/components/roi/RoiAnalyse.tsx', 1],
-  ['src/components/tag/TagWerteTabelle.tsx', 2],
-  ['src/components/waermepumpe/WaermepumpeVergleich.tsx', 1],
-  ['src/pages/InvestitionenTeile.tsx', 6],
-  ['src/pages/aussichten/FinanzenTab.tsx', 1],
-  ['src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', 2],
-  ['src/pages/aussichten/LangfristTab.tsx', 2],
-  ['src/pages/aussichten/TrendTab.tsx', 1],
-  ['src/pages/auswertung/EnergieTab.tsx', 3],
-  ['src/pages/auswertung/EnergieprofilMonat.tsx', 5],
-  ['src/pages/auswertung/EnergieprofilPrognose.tsx', 1],
-  ['src/pages/auswertung/EnergieprofilTab.tsx', 7],
-  ['src/pages/auswertung/InvestitionenTab.tsx', 2],
-  ['src/pages/auswertung/TabelleTab.tsx', 6],
+  // Gruppe 2 — Shell-/Layout-/Park-Mechanik (Gattung BlockShell/IATopNav):
+  ['src/components/blocks/FokusKachel.tsx', 1], // ⤢ Fokus-Icon (Gattung CockpitLiveV4)
+  ['src/components/blocks/FokusVollbild.tsx', 1], // „Zurück" im Vollbild-Overlay
+  ['src/components/layout/AnlagenSelektorView.tsx', 2], // Listbox-Combobox-Impl (Gattung FeldMappingInput)
+  ['src/components/layout/Header.tsx', 1], // Theme-Toggle (Shell)
+  ['src/components/layout/IASubTabBar.tsx', 1], // Tab-Leisten-SoT selbst
+  ['src/components/park/Parkbar.tsx', 2], // Park-Overlay-Mechanik (Gattung GeparktBlock)
+  ['src/components/common/DataLoadingState.tsx', 1], // Retry im Fehlerzustand (Impl des geteilten Ladezustand-Bausteins)
+  // Gruppe 3 — freigegebene Gattungen in Fach-Composites:
+  ['src/components/dashboard/CommunityNudge.tsx', 2], // Karten-Kachel + Dismiss-X (Gattung DateiUpload-Badge)
+  ['src/components/dashboard/CommunityTeaser.tsx', 1], // Karten-Kachel
+  ['src/components/dashboard/QuickLink.tsx', 1], // Karten-Kachel
+  ['src/components/dashboard/Section.tsx', 1], // klickbarer Sektions-Header (Disclosure-Gattung)
+  ['src/components/import/custom/MappingTabelle.tsx', 1], // Invert-Mikro-Trigger in Zelle (Gattung ⚠-Popover)
+  ['src/components/roi/RoiAnalyse.tsx', 1], // Zeilen-Disclosure in Tabelle
+  ['src/components/tag/TagWerteTabelle.tsx', 2], // Spalten-Picker (Gattung WerteTabelle)
+  ['src/pages/auswertung/InvestitionenTab.tsx', 2], // 2× Aufklapp-Header (Gattung BlockShell-Kopf)
+  ['src/pages/auswertung/EnergieprofilPrognose.tsx', 1], // „Morgen"-Schnellwahl-Chip (Gattung WerkbankZeitraum)
 ])
 
-/** Migrationsschuld (Abbau-Arbeitsliste). Ziel: leer halten. */
-const ROH_REST = new Map([])
+/** Scope-Ausweitungs-Baseline — seit der Klassifizierung 2026-07-25 leer
+ *  (alle Einträge nach ROH_INFRA bzw. ROH_REST einsortiert); bleibt als
+ *  Mechanik für künftige Scope-/Muster-Erweiterungen bestehen. */
+const ROH_BASELINE = new Map([])
+
+/** Migrationsschuld (Abbau-Arbeitsliste; Klassifizierung 2026-07-25). Ziel: leer.
+ *  Bei Abbau in Misch-Dateien: freigebbare Gattungs-Reste (Chips/Nav-Pfeile/
+ *  Kacheln) nach ROH_INFRA umziehen statt erzwungen migrieren. */
+const ROH_REST = new Map([
+  ['src/components/dashboard/ShareTextModal.tsx', 5], // 2× Select · 2× SegmentControl · 1× Button (Kopieren)
+  ['src/components/pv/PVStringVergleich.tsx', 1], // Modul-Filter → Select
+  ['src/components/waermepumpe/WaermepumpeVergleich.tsx', 1], // Umschalt-Pill-Gruppe → SegmentControl
+  ['src/pages/InvestitionenTeile.tsx', 6], // Edit/Delete → InlineAktion · Akte-/Menü-Buttons; Typ-Kachel freigebbar
+  ['src/pages/aussichten/FinanzenTab.tsx', 1], // Zeitraum → Select
+  ['src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', 2], // Aggregieren → Button; Klassen-Chips freigebbar
+  ['src/pages/aussichten/LangfristTab.tsx', 2], // Konfidenz → Checkbox · Monate → Select
+  ['src/pages/aussichten/TrendTab.tsx', 1], // Jahre → Select
+  ['src/pages/auswertung/EnergieTab.tsx', 3], // Erzeugung/Verbrauch → SegmentControl; Autarkie-Solo-Toggle freigebbar
+  ['src/pages/auswertung/EnergieprofilMonat.tsx', 5], // Monat/Jahr → Select; Nav-Pfeile/Metrik-Chips freigebbar
+  ['src/pages/auswertung/EnergieprofilTab.tsx', 7], // SubTab-Leiste → IASubTabBar; Chips/Nav-Pfeile/Disclosure freigebbar
+  ['src/pages/auswertung/TabelleTab.tsx', 6], // Vergleichsjahr → Select · Checkbox → SoT; Spalten-Picker-Teile freigebbar
+])
 
 // ---------------------------------------------------------------------------
 
@@ -186,5 +188,5 @@ const sum = (m) => [...m.values()].reduce((a, b) => a + b, 0)
 console.log(
   `✓ check:roh-controls — ${sum(ROH_REST)} Rest (${ROH_REST.size} Dateien) · ` +
   `${sum(ROH_INFRA)} Infra-freigegeben (${ROH_INFRA.size}) · ` +
-  `${sum(ROH_BASELINE)} Baseline unklassifiziert (${ROH_BASELINE.size}, P0b). Die REST-/BASELINE-Listen sind die Arbeitsliste.`,
+  `${sum(ROH_BASELINE)} Baseline unklassifiziert (${ROH_BASELINE.size}). Die REST-/BASELINE-Listen sind die Arbeitsliste.`,
 )
