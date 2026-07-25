@@ -21,6 +21,7 @@
 | **Netzbezug** | Aus dem Netz bezogener Strom |
 | **EV-Quote** | Eigenverbrauchsquote = Eigenverbrauch / PV-Erzeugung × 100 % |
 | **Erzeugung hinter dem Zähler** | Summe **aller** lokalen Erzeuger am EINEN Netzanschluss (PV + Balkonkraftwerk + sonstige Erzeuger wie BHKW). Sie geht in Eigenverbrauch/Autarkie ein, nicht nur die PV-Erzeugung. |
+| **Gesamtverbrauch** | Was das Haus insgesamt verbraucht hat: Eigenverbrauch + Netzbezug. eedc bilanziert den Wert aus deinen Zähler- und Komponentenwerten, es gibt keinen eigenen Hausverbrauchs-Sensor. Messen Wechselrichter PV und Speicher DC-seitig, das Netz aber AC-seitig (z. B. E3DC), enthält der Gesamtverbrauch die Wandlungsverluste und liegt ~3–5 % der Erzeugung über dem „Hausverbrauch" im Herstellerportal — beide Werte sind richtig, sie beantworten verschiedene Fragen (siehe [Berechnungsreferenz 3.1](BERECHNUNGEN.md#31-energie-bilanz-monatskennzahlen)). |
 | **kWp** | Kilowatt Peak — Nennleistung der PV-Anlage unter Standardtestbedingungen |
 | **kWh** | Kilowattstunde — Energiemenge |
 

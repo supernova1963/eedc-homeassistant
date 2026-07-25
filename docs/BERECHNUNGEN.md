@@ -176,6 +176,36 @@ PV-artige CO₂-Ersparnis (bewertet als „nicht bewertet", bis ein eigenes BHKW
 existiert). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
 fallen nicht unter diese Bilanz — das ist ein Anlagen-Merkmal (eigenes KZ, geplant).
 
+**Messpunkt der Sensoren (DC vs. AC):** Die Bilanz rechnet mit den Werten, die die Geräte
+liefern — sie kann nicht wissen, **wo** gemessen wurde. Viele Hybrid-Wechselrichter (z. B.
+E3DC) melden PV-Erzeugung und Speicher-Ladung/-Entladung **DC-seitig** (Modul- bzw.
+Batterieklemme), Einspeisung und Netzbezug dagegen **AC-seitig** (Zähler). Dann stecken die
+Wandlungsverluste der PV- und Speicherstrecke im bilanzierten `Gesamtverbrauch`: er liegt
+typischerweise **3–5 % der Erzeugung** über dem „Hausverbrauch", den das Herstellerportal
+ausweist — das rechnet seine Verluste intern heraus. Keiner der beiden Werte ist falsch, sie
+beantworten verschiedene Fragen: eedc „was musste die Anlage liefern" (**inklusive** Verluste
+— die richtige Basis für Autarkie, EV-Quote und Wirtschaftlichkeit, denn erzeugt und bezahlt
+werden muss auch der Verlust), das Portal „was zogen die Verbraucher".
+
+*Diagnose-Rezept* für einen abgeschlossenen Tag:
+
+```
+Residuum = PV + Netzbezug + Entladung − Einspeisung − Ladung − Hausverbrauch(Portal)
+```
+
+Liegt das Residuum bei wenigen Prozent der Erzeugung, ist es der Verlustanteil und kein
+Rechenfehler. Gemessenes Beispiel (E3DC, 03.07.2026, Issues #200/#340): 60,83 + 0,31 + 7,17
+− 48,19 − 7,59 − 10,26 = **2,27 kWh = 3,7 % der Erzeugung** — davon 0,42 kWh Batterie-
+Rundlauf (DC), der Rest DC→AC-Wandlung. Da die Verluste mit dem Durchsatz skalieren, liegt
+ein ertragsstarker Tag über dem Monatsschnitt.
+
+**Bewusst kein Hausverbrauchs-Sensor:** eedc bietet **kein** Mapping eines fremden
+Hausverbrauchs-Sensors an. „Hausverbrauch" ist je Hersteller anders definiert (Verluste drin
+oder herausgerechnet, Wallbox enthalten oder nicht) — zwei Definitionen derselben Kennzahl
+würden Cockpit, Berichte und Community-Vergleich auseinanderlaufen lassen. Die Bilanz aus
+Zähler- und Komponentenwerten bleibt die eine Wahrheit; die Differenz wird erklärt, nicht
+durch eine zweite Datenquelle ersetzt.
+
 **Wichtig:** `Netto_Ertrag` enthält NICHT den Abzug der Netzbezugskosten, da diese auch ohne PV angefallen wären.
 
 ### 3.2 Finanzen (Cockpit)
