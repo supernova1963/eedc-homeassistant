@@ -14,21 +14,11 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
-import { ChartLegende } from '../ui'
+import { ChartLegende, SegmentControl } from '../ui'
 import { MONAT_KURZ, SAISON_FENSTER, SERIEN_PALETTE, CHART_HOVER_CURSOR, SERIE_GEDIMMT, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
 import type { InvestitionMonatsdaten } from '../../api/investitionen'
 import { useLegendenToggle } from '../../hooks'
 
-function Toggle({ aktiv, aktivKlasse, onClick, children, title }: {
-  aktiv: boolean; aktivKlasse: string; onClick: () => void; children: string; title?: string
-}) {
-  return (
-    <button
-      type="button" onClick={onClick} title={title}
-      className={`px-3 py-1 transition-colors ${aktiv ? aktivKlasse : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-    >{children}</button>
-  )
-}
 
 export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
   monatsdaten: InvestitionMonatsdaten[]; hatGetrennteStrom: boolean
@@ -106,23 +96,28 @@ export function WaermepumpeVergleich({ monatsdaten, hatGetrennteStrom }: {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end flex-wrap gap-2">
-        <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-          <Toggle aktiv={modus === 'strom'} aktivKlasse="bg-yellow-500 text-white" onClick={() => setModus('strom')}>Strom</Toggle>
-          <Toggle aktiv={modus === 'jaz'} aktivKlasse="bg-orange-500 text-white" onClick={() => setModus('jaz')}>JAZ</Toggle>
-        </div>
-        <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-          <Toggle aktiv={achse === 'monate'} aktivKlasse="bg-purple-500 text-white" onClick={() => setAchse('monate')}>Monate</Toggle>
-          <Toggle aktiv={achse === 'saison'} aktivKlasse="bg-purple-500 text-white" onClick={() => setAchse('saison')}>Saison</Toggle>
-        </div>
+        <SegmentControl
+          ariaLabel="Kennzahl"
+          optionen={[{ key: 'strom', label: 'Strom' }, { key: 'jaz', label: 'JAZ' }] as const}
+          value={modus}
+          onChange={setModus}
+        />
+        <SegmentControl
+          ariaLabel="Achse"
+          optionen={[{ key: 'monate', label: 'Monate' }, { key: 'saison', label: 'Saison' }] as const}
+          value={achse}
+          onChange={setAchse}
+        />
         {achse === 'saison' && (
-          <div className="flex rounded-lg border border-gray-300 dark:border-gray-600 text-sm overflow-hidden">
-            {(Object.keys(SAISON_FENSTER) as (keyof typeof SAISON_FENSTER)[]).map((key) => (
-              <Toggle key={key} aktiv={fenster === key} aktivKlasse="bg-purple-500 text-white"
-                onClick={() => setFenster(key)} title={`${SAISON_FENSTER[key].label} (${SAISON_FENSTER[key].bereich})`}>
-                {SAISON_FENSTER[key].label}
-              </Toggle>
-            ))}
-          </div>
+          <SegmentControl
+            ariaLabel="Saison-Fenster"
+            optionen={(Object.keys(SAISON_FENSTER) as (keyof typeof SAISON_FENSTER)[]).map((key) => ({
+              key, label: SAISON_FENSTER[key].label,
+              title: `${SAISON_FENSTER[key].label} (${SAISON_FENSTER[key].bereich})`,
+            }))}
+            value={fenster}
+            onChange={setFenster}
+          />
         )}
       </div>
 

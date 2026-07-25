@@ -13,7 +13,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Sigma, RefreshCw } from 'lucide-react'
-import { Card } from '../../components/ui'
+import { Button, Card } from '../../components/ui'
 import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { fmtZahl } from '../../lib'
 import {
@@ -230,15 +230,10 @@ export function KorrekturprofilHeatmapCard({ anlageId }: Props) {
         {/* D12-13: kein nativer `title` mehr — der lange Hinweis ragte am rechten
             Seitenrand aus dem Viewport. Dieselbe Erklärung („Datenbasis: Day-Ahead-
             Snapshots + stündliche Wetter-Historie") steht sichtbar im Kartentext unten. */}
-        <button
-          type="button"
-          onClick={handleAggregate}
-          disabled={aggregating}
-          className="flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded transition-colors"
-        >
-          <RefreshCw className={`h-3 w-3 ${aggregating ? 'animate-spin' : ''}`} />
+        <Button size="sm" onClick={handleAggregate} loading={aggregating}>
+          {!aggregating && <RefreshCw className="h-3.5 w-3.5 mr-1.5 max-sm:hidden" />}
           {aggregating ? 'Aggregiert…' : 'Neu aggregieren'}
-        </button>
+        </Button>
       </div>
 
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">

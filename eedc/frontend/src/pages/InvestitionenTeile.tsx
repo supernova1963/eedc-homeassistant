@@ -13,7 +13,7 @@
  */
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { Plus, Car, Flame, Battery, Plug, Settings2, Sun, LayoutGrid, Pencil, Trash2, PiggyBank, ArrowRight, FileText, ChevronDown, type LucideIcon } from 'lucide-react'
-import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState, DestructiveActionDialog } from '../components/ui'
+import { Button, Modal, Card, Alert, LoadingSpinner, EmptyState, DestructiveActionDialog, InlineAktion } from '../components/ui'
 import { useInvestitionen, useInvestitionenByTyp } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
 import InvestitionForm from '../components/forms/InvestitionForm'
@@ -552,14 +552,10 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
         {/* Komponenten-Akte: kontextabhängiger Button */}
         <div className="flex items-center gap-1 mt-1 text-xs">
           {infothekEintraege.length === 0 ? (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1 text-amber-500 hover:text-amber-400 transition-colors"
-              title="Komponenten-Akte anlegen"
-            >
+            <InlineAktion onClick={() => setShowCreateModal(true)} ton="hinweis" title="Komponenten-Akte anlegen">
               <FileText className="h-3 w-3" />
               Komponenten-Akte anlegen
-            </button>
+            </InlineAktion>
           ) : infothekEintraege.length === 1 ? (
             <a
               href={`#/einstellungen/infothek`}
@@ -571,14 +567,11 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
             </a>
           ) : (
             <div className="relative">
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-1 text-primary-600 dark:text-primary-400 hover:underline"
-              >
+              <InlineAktion onClick={() => setShowDropdown(!showDropdown)} ton="aktion" ariaExpanded={showDropdown}>
                 <FileText className="h-3 w-3" />
                 {infothekEintraege.length} Komponenten-Akten
                 <ChevronDown className="h-3 w-3" />
-              </button>
+              </InlineAktion>
               {showDropdown && (
                 <div className="absolute left-0 top-full mt-1 z-10 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-1 min-w-48">
                   {infothekEintraege.map(e => (
@@ -604,20 +597,12 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
         </div>
       </div>
       <div className="flex items-center gap-1 ml-4">
-        <button
-          onClick={onEdit}
-          className="p-2 text-gray-400 dark:text-gray-500 hover:text-primary-600 transition-colors"
-          title="Bearbeiten"
-        >
+        <Button variant="ghost" size="icon" onClick={onEdit} title="Bearbeiten" className="hover:text-primary-600 dark:hover:text-primary-400">
           <Pencil className="h-4 w-4" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 transition-colors"
-          title="Löschen"
-        >
+        </Button>
+        <Button variant="ghost" size="icon" onClick={onDelete} title="Löschen" className="hover:text-red-600 dark:hover:text-red-400">
           <Trash2 className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Quick-Create Modal für Komponenten-Akte */}

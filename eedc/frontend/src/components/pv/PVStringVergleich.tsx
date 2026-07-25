@@ -13,7 +13,7 @@ import {
   ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, Select } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
@@ -391,14 +391,16 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
           {embed && data.strings.length > 1 && (
             <div className="flex items-center gap-2">
               <label className="text-xs text-gray-500 dark:text-gray-400">Modul:</label>
-              <select
+              <Select
+                steuer
+                aria-label="Modul"
                 value={saisonModul}
                 onChange={(e) => setSaisonModul(e.target.value)}
-                className="min-h-[36px] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-2 text-gray-700 dark:text-gray-300"
-              >
-                <option value="gesamt">Gesamt (alle Module)</option>
-                {data.strings.map(s => <option key={s.investition_id} value={String(s.investition_id)}>{s.bezeichnung}</option>)}
-              </select>
+                options={[
+                  { value: 'gesamt', label: 'Gesamt (alle Module)' },
+                  ...data.strings.map(s => ({ value: String(s.investition_id), label: s.bezeichnung })),
+                ]}
+              />
             </div>
           )}
           <div className="h-64">

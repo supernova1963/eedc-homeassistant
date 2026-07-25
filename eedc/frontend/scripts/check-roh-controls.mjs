@@ -105,6 +105,9 @@ const ROH_INFRA = new Map([
   ['src/components/tag/TagWerteTabelle.tsx', 2], // Spalten-Picker (Gattung WerteTabelle)
   ['src/pages/auswertung/InvestitionenTab.tsx', 2], // 2× Aufklapp-Header (Gattung BlockShell-Kopf)
   ['src/pages/auswertung/EnergieprofilPrognose.tsx', 1], // „Morgen"-Schnellwahl-Chip (Gattung WerkbankZeitraum)
+  // — REST-Abbau-Reste 2026-07-25 (Misch-Dateien, freigebbare Gattungen):
+  ['src/pages/InvestitionenTeile.tsx', 2], // Typ-Karten-Kachel + Dropdown-Menü-Eintrag (Gattung SetupInvestitionMenu)
+  ['src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', 1], // Klassen-Tab-Chips (Gattung WerkbankZeitraum)
 ])
 
 /** Scope-Ausweitungs-Baseline — seit der Klassifizierung 2026-07-25 leer
@@ -112,23 +115,15 @@ const ROH_INFRA = new Map([
  *  Mechanik für künftige Scope-/Muster-Erweiterungen bestehen. */
 const ROH_BASELINE = new Map([])
 
-/** Migrationsschuld (Abbau-Arbeitsliste; Klassifizierung 2026-07-25). Ziel: leer.
- *  Bei Abbau in Misch-Dateien: freigebbare Gattungs-Reste (Chips/Nav-Pfeile/
- *  Kacheln) nach ROH_INFRA umziehen statt erzwungen migrieren. */
-const ROH_REST = new Map([
-  ['src/components/dashboard/ShareTextModal.tsx', 5], // 2× Select · 2× SegmentControl · 1× Button (Kopieren)
-  ['src/components/pv/PVStringVergleich.tsx', 1], // Modul-Filter → Select
-  ['src/components/waermepumpe/WaermepumpeVergleich.tsx', 1], // Umschalt-Pill-Gruppe → SegmentControl
-  ['src/pages/InvestitionenTeile.tsx', 6], // Edit/Delete → InlineAktion · Akte-/Menü-Buttons; Typ-Kachel freigebbar
-  ['src/pages/aussichten/FinanzenTab.tsx', 1], // Zeitraum → Select
-  ['src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', 2], // Aggregieren → Button; Klassen-Chips freigebbar
-  ['src/pages/aussichten/LangfristTab.tsx', 2], // Konfidenz → Checkbox · Monate → Select
-  ['src/pages/aussichten/TrendTab.tsx', 1], // Jahre → Select
-  ['src/pages/auswertung/EnergieTab.tsx', 3], // Erzeugung/Verbrauch → SegmentControl; Autarkie-Solo-Toggle freigebbar
-  ['src/pages/auswertung/EnergieprofilMonat.tsx', 5], // Monat/Jahr → Select; Nav-Pfeile/Metrik-Chips freigebbar
-  ['src/pages/auswertung/EnergieprofilTab.tsx', 7], // SubTab-Leiste → IASubTabBar; Chips/Nav-Pfeile/Disclosure freigebbar
-  ['src/pages/auswertung/TabelleTab.tsx', 6], // Vergleichsjahr → Select · Checkbox → SoT; Spalten-Picker-Teile freigebbar
-])
+/** Migrationsschuld (Abbau-Arbeitsliste). Ziel: leer — Stand 2026-07-25: LEER.
+ *  REST-Abbau-Runde 2026-07-25: 8 der 12 Dateien waren nach dem Flip toter Code
+ *  (nirgends importiert) und wurden GELÖSCHT (ShareTextModal, EnergieprofilTab/
+ *  -Monat, TabelleTab, EnergieTab, aussichten/{FinanzenTab,LangfristTab,TrendTab});
+ *  die 4 lebenden wurden auf SoT migriert (Select/SegmentControl/Button/
+ *  InlineAktion), ihre freigebbaren Gattungs-Reste stehen in ROH_INFRA.
+ *  Bei künftigem Abbau in Misch-Dateien: freigebbare Gattungs-Reste (Chips/
+ *  Nav-Pfeile/Kacheln) nach ROH_INFRA umziehen statt erzwungen migrieren. */
+const ROH_REST = new Map([])
 
 // ---------------------------------------------------------------------------
 

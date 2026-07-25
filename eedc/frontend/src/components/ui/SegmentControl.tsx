@@ -23,6 +23,8 @@ import { STEUER_H } from '../../lib/komponentenStyle'
 interface SegmentOption<K extends string> {
   key: K
   label: string
+  /** Optionaler Tooltip je Option (z. B. Saison-Fenster-Zeitbereich). */
+  title?: string
 }
 
 export function SegmentControl<K extends string>({
@@ -50,6 +52,7 @@ export function SegmentControl<K extends string>({
         <button
           key={o.key}
           type="button"
+          title={o.title}
           aria-pressed={value === o.key}
           onClick={() => onChange(o.key)}
           className={`${pad} ${STEUER_H} inline-flex items-center font-medium transition-colors ${

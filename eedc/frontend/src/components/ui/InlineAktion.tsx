@@ -18,7 +18,7 @@ import type { ReactNode, MouseEventHandler } from 'react'
 import { ERFASSUNG_ZUSTAND } from '../../lib/colors'
 
 /** Farbrolle der Aktion (nur `variant="link"`). */
-export type InlineTon = 'neutral' | 'aktion' | 'bestaetigen' | 'offen' | 'warnung'
+export type InlineTon = 'neutral' | 'aktion' | 'bestaetigen' | 'offen' | 'warnung' | 'hinweis'
 
 const TON: Record<InlineTon, string> = {
   // muted: Aufklapper/„andere Quelle", Legende
@@ -31,6 +31,9 @@ const TON: Record<InlineTon, string> = {
   offen: `${ERFASSUNG_ZUSTAND.fehlt.text} hover:underline`,
   // Abweichungs-Kontext („Sensorwert übernehmen") — Orange wie die Zeile
   warnung: 'text-orange-600 dark:text-orange-400',
+  // „Fehlt noch — anlegen"-Aufforderung (z. B. Komponenten-Akte) — dieselbe
+  // Amber-Achse wie Stepper/Setup-Gate (Button `amber`).
+  hinweis: 'text-amber-500 hover:text-amber-400 dark:text-amber-400 dark:hover:text-amber-300',
 }
 
 const CHIP =
