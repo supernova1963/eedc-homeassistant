@@ -88,7 +88,7 @@ class KanonPrognose:
     """Kanonische Prognose über mehrere Tage. ``tage[i]`` = heute + i Tage."""
 
     tage: list[Optional[KanonTag]]
-    rest_heute_kwh: Optional[float]    # Σ korrigierte Slots der Reststunden
+    rest_heute_kwh: Optional[float]    # laufende Stunde anteilig + Σ Slots danach (#339)
     ist_bisher_kwh: Optional[float]    # IST heute bis jetzt (TagesEnergieProfil)
     heute_rollend_kwh: Optional[float]  # ist_bisher + rest_heute
     skalar_fallback: Optional[float]   # Legacy-Lernfaktor (Diagnose/Fallback)
@@ -257,7 +257,16 @@ async def kanon_tagesprognose(
         from backend.services.prognose_adapter import ist_profil
         now = datetime.now(_BERLIN_TZ)
         slots = heute_tag.profil.stunden_kwh
-        rest_heute = round(sum(slots[h] for h in range(now.hour + 1, 24)), 1)
+        # #339: laufende Stunde anteilig nach verstrichenen Minuten. Backward-
+        # Konvention (#144): Slot N = Energie [N-1, N), also ist slots[now.hour]
+        # bereits abgelaufen und slots[now.hour + 1] die laufende Stunde. Ohne den
+        # frac-Term sinkt der Rest nur einmal je Stunde in EINEM Sprung (bei
+        # kleinen Anlagen 5–8 kWh) statt gleichmäßig.
+        frac = 1.0 - now.minute / 60.0
+        laufend = frac * slots[now.hour + 1] if now.hour + 1 < len(slots) else 0.0
+        rest_heute = round(
+            laufend + sum(slots[h] for h in range(now.hour + 2, len(slots))), 1
+        )
         ist_res = await db.execute(
             select(TagesEnergieProfil).where(
                 TagesEnergieProfil.anlage_id == anlage.id,

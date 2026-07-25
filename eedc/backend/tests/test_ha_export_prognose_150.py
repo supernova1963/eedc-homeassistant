@@ -153,9 +153,64 @@ async def test_rest_heute_ist_echter_rest(db, _patch_prognose, monkeypatch):
     # Profil heute: 2.0 kWh in Stunden 8–17 (roh 20), Skalar 0.9 → 1.8/Slot,
     # Tageswert 18.0. „heute" = volle Tagesprognose = 18.0 (NEU: kanonischer
     # Wert, NICHT mehr IST+Rest). Um 12:00 sind die Rest-Slots 13..17 →
-    # 5 × 1.8 = 9.0 kWh.
+    # 5 × 1.8 = 9.0 kWh. Zur vollen Stunde (Minute 0) geht die laufende Stunde
+    # vollständig ein, der #339-frac-Term ändert diesen Wert also nicht.
     assert by_key["eedc_prognose_rest_today_kwh"].value == pytest.approx(9.0, abs=0.05)
     assert by_key["eedc_prognose_heute_kwh"].value == pytest.approx(18.0, abs=0.05)
+
+
+@pytest.mark.parametrize(
+    "minute,erwartet",
+    [
+        (0, 9.0),    # laufende Stunde (Slot 13) voll: 1.8 + 4 × 1.8
+        (30, 8.1),   # halbe Stunde verstrichen: 0.5 × 1.8 + 7.2
+        (55, 7.4),   # 5 Minuten Rest: (5/60) × 1.8 + 7.2 = 7.35, auf 1 Dezimale gerundet
+    ],
+)
+async def test_rest_heute_laufende_stunde_anteilig(db, _patch_prognose, monkeypatch, minute, erwartet):
+    """#339: Der Rest sinkt innerhalb der Stunde gleichmäßig statt in EINEM Sprung.
+
+    Backward-Konvention (#144): um 12:xx ist Slot 12 abgelaufen, Slot 13 die
+    laufende Stunde. Rest = Restanteil von Slot 13 + Slots 14..17.
+    """
+    from datetime import datetime as real_datetime, time as dt_time
+    import backend.services.prognose_kanon as kanon
+    from backend.api.routes.ha_export import calculate_anlage_sensors
+
+    class _Fixed(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime.combine(date.today(), dt_time(12, minute), tzinfo=tz)
+
+    monkeypatch.setattr(kanon, "datetime", _Fixed)
+
+    anlage = await _seed_pv_anlage(db)
+    sensors = await calculate_anlage_sensors(db, anlage)
+    by_key = {sv.definition.key: sv for sv in sensors}
+
+    assert by_key["eedc_prognose_rest_today_kwh"].value == pytest.approx(erwartet, abs=0.05)
+    # Die Tagesprognose bleibt davon unberührt — sie rollt nur mit OpenMeteo.
+    assert by_key["eedc_prognose_heute_kwh"].value == pytest.approx(18.0, abs=0.05)
+
+
+async def test_rest_heute_letzte_tagesstunde_ohne_indexfehler(db, _patch_prognose, monkeypatch):
+    """23:xx: es gibt keinen Slot 24 mehr — der Rest ist 0, kein IndexError."""
+    from datetime import datetime as real_datetime, time as dt_time
+    import backend.services.prognose_kanon as kanon
+    from backend.api.routes.ha_export import calculate_anlage_sensors
+
+    class _FixedNacht(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime.combine(date.today(), dt_time(23, 40), tzinfo=tz)
+
+    monkeypatch.setattr(kanon, "datetime", _FixedNacht)
+
+    anlage = await _seed_pv_anlage(db)
+    sensors = await calculate_anlage_sensors(db, anlage)
+    by_key = {sv.definition.key: sv for sv in sensors}
+
+    assert by_key["eedc_prognose_rest_today_kwh"].value == pytest.approx(0.0, abs=0.05)
 
 
 async def test_quellen_regel_nur_eedc_kein_solcast_sfml(db, _patch_prognose):

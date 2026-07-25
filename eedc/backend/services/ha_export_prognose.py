@@ -48,8 +48,10 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
     """Berechnet die eedc-eigenen PV-Prognose-Exportwerte einer Anlage.
 
     Returns:
-        dict mit ``heute_kwh`` (rollender Tageswert = IST bisher + Rest),
-        ``rest_today_kwh`` (nur Σ verbleibende Stunden), ``day_plus_1_kwh``,
+        dict mit ``heute_kwh`` (kanonische eedc-Tagesprognose, rollt mit den
+        OpenMeteo-Aktualisierungen — **nicht** IST bisher + Rest),
+        ``rest_today_kwh`` (verbleibende Stunden ab jetzt, laufende Stunde
+        anteilig nach verstrichenen Minuten, #339), ``day_plus_1_kwh``,
         ``day_plus_2_kwh``, ``day_plus_3_kwh``, ``speicher_voll_um``
         (str "HH:00" | None), ``stundenprofil_heute`` und
         ``stundenprofil_day_plus_1/2/3`` (je 24 kWh-Slots) — oder ``None``.
@@ -86,11 +88,10 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         # OM). „Rest heute" + „heute" aus DEMSELBEN Kanon-Helper (§5.4).
         now = datetime.now(_BERLIN_TZ)
         heute_kwh = heute_tag.eedc_kwh if heute_tag else None
-        rest_today = (
-            prognose.rest_heute_kwh
-            if prognose.rest_heute_kwh is not None
-            else round(sum(stunden_kwh_heute[h] for h in range(now.hour + 1, 24)), 1)
-        )
+        # Rest NUR aus dem Kanon (#339: laufende Stunde anteilig). Ohne Profil ist
+        # `stunden_kwh_heute` ohnehin [0.0]*24 — eine zweite Rest-Formel hier wäre
+        # eine zweite Wahrheit, die beim nächsten Konventionswechsel driftet.
+        rest_today = prognose.rest_heute_kwh if prognose.rest_heute_kwh is not None else 0.0
 
         # „Speicher voll um" — Simulation ab aktuellem SoC (nicht Mitternacht).
         speicher_voll_um = None
