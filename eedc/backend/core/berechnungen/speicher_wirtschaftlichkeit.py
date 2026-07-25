@@ -279,9 +279,13 @@ class NetzladungKosten:
     - "imd"         — kWh-gewichteter Ø aus manuell erfassten IMD-Ladepreisen
     - "bezugspreis" — Netzladung läuft zum normalen Bezugspreis (keine
                       Arbitrage-Erfassung; Ø-Monatspreis vor festem Tarif)
+    - "keine"       — 0 kWh Netzladung: Kosten 0 €, ein Preis existiert nicht
+
+    `preis_cent` ist bei 0 kWh Netzladung `None` — ein erfundener Nullpreis wäre
+    schlechter als das Anzeige-Token „—".
     """
     kosten_euro: float
-    preis_cent: float
+    preis_cent: Optional[float]
     quelle: str
 
 
@@ -295,11 +299,21 @@ def berechne_netzladung_kosten(
     """Kosten der Netzladung = Netzladung × bester verfügbarer Ladepreis.
 
     Preis-Kette: TEP-effektiv → IMD-Ø (Monatsabschluss-Handeingabe) →
-    Bezugspreis (Ø-Monatspreis bzw. Tarif). Ohne Netzladung oder ohne
-    irgendeinen Preis → `None` (Kachel bleibt aus, kein 0-€-Rauschen).
+    Bezugspreis (Ø-Monatspreis bzw. Tarif).
+
+    `netzladung_kwh is None` → `None`: es gibt keinen Speicher bzw. keine Daten,
+    die Kachel bleibt aus. **0 kWh ist dagegen eine Aussage** („diesen Monat
+    nichts aus dem Netz geladen") und liefert 0,00 € — sonst muss der Nutzer an
+    anderer Stelle nachsehen, ob wirklich nichts gelaufen ist (Rainer-PN
+    2026-07-25; korrigiert die ursprüngliche R15-1-Regel „kein 0-€-Rauschen").
+    Netzladung > 0 ohne jeden ermittelbaren Preis → `None`: die Kosten sind dann
+    unbekannt, nicht 0 (praktisch unerreichbar, da der Bezugspreis aus der
+    Finanzzeile immer trägt).
     """
-    if netzladung_kwh is None or netzladung_kwh <= 0:
+    if netzladung_kwh is None:
         return None
+    if netzladung_kwh <= 0:
+        return NetzladungKosten(kosten_euro=0.0, preis_cent=None, quelle="keine")
     if eff_ladepreis_cent is not None and eff_ladepreis_cent > 0:
         preis, quelle = eff_ladepreis_cent, "tep"
     elif imd_preis_cent is not None and imd_preis_cent > 0:

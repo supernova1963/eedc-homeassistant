@@ -138,9 +138,23 @@ def test_netzladung_kosten_bezugspreis_fallback():
     assert r.kosten_euro == pytest.approx(11.68, abs=0.01)
 
 
-def test_netzladung_kosten_ohne_netzladung_none():
+def test_netzladung_kosten_ohne_speicher_none():
+    """Kein Speicher / keine Daten → None (Kachel bleibt aus)."""
     assert berechne_netzladung_kosten(None, netzbezug_preis_cent=30.0) is None
-    assert berechne_netzladung_kosten(0.0, netzbezug_preis_cent=30.0) is None
+
+
+def test_netzladung_kosten_null_kwh_ist_eine_aussage():
+    """0 kWh Netzladung → 0,00 € statt None (Rainer-PN 2026-07-25).
+
+    „Diesen Monat nichts aus dem Netz geladen" ist eine Information; früher fiel
+    die Kachel weg und der Nutzer musste anderswo nachsehen, ob wirklich nichts
+    lief. Ein Ladepreis existiert dabei nicht → `preis_cent is None` („—").
+    """
+    r = berechne_netzladung_kosten(0.0, netzbezug_preis_cent=30.0)
+    assert r is not None
+    assert r.kosten_euro == 0.0
+    assert r.preis_cent is None
+    assert r.quelle == "keine"
 
 
 def test_netzladung_kosten_ohne_preis_none():

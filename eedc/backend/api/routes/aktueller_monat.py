@@ -1434,7 +1434,8 @@ async def get_aktueller_monat(
         ladung_netz_total = 0.0
         imd_preis_gewichtet = 0.0
         imd_preis_kwh = 0.0
-        for imd in get_imd_for_invs(speicher_invs):
+        speicher_imds = get_imd_for_invs(speicher_invs)
+        for imd in speicher_imds:
             data = imd.verbrauch_daten or {}
             nl = get_speicher_netzladung_kwh(data)
             ladung_netz_total += nl
@@ -1442,7 +1443,10 @@ async def get_aktueller_monat(
             if nl > 0 and imd_preis is not None and imd_preis > 0:
                 imd_preis_gewichtet += nl * imd_preis
                 imd_preis_kwh += nl
-        if ladung_netz_total > 0:
+        # Sobald Speicher-Monatsdaten existieren, ist auch 0 kWh ein Ergebnis
+        # („nichts aus dem Netz geladen", Rainer-PN 2026-07-25). Nur ganz ohne
+        # IMD-Zeilen bleibt es None = „keine Daten" und die Kachel aus.
+        if speicher_imds:
             speicher_ladung_netz = round(ladung_netz_total, 2)
         speicher_imd_ladepreis = (
             imd_preis_gewichtet / imd_preis_kwh if imd_preis_kwh > 0 else None

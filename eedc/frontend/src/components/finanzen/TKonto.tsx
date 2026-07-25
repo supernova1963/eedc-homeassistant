@@ -203,7 +203,10 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       ergebnis: `= ${fmtCalc(d.netzbezug_kosten_euro, 2)} €`,
       // R15-5b: nachrichtlicher Ausweis — die Netzladung des Speichers steckt
       // bereits in diesen Kosten (Hauszähler), KEIN zusätzlicher Posten.
-      hinweis: d.speicher_ladung_netz_kosten_euro != null
+      // Hier bewusst `> 0`: „davon Batterieladung Netz: 0,00 €" wäre eine
+      // Aufgliederung ohne Inhalt. Die Kennzahlen-Kachel zeigt die 0 dagegen,
+      // weil dort die Abwesenheit selbst die Information ist.
+      hinweis: (d.speicher_ladung_netz_kosten_euro ?? 0) > 0
         ? `davon Batterieladung Netz: ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} € (${fmt(d.speicher_ladung_netz_kwh, 1)} kWh)`
         : undefined,
     },

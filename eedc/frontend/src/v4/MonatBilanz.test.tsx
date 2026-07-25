@@ -151,6 +151,26 @@ describe('baueNetzKostenKpis (via baueMonatKpis)', () => {
     expect(baueMonatKpis(d(), vm)).toHaveLength(7)
   })
 
+  it('0 kWh Netzladung zeigt die Kachel trotzdem — mit „—" als Ladepreis', () => {
+    // Rainer-PN 2026-07-25: „Nichtverbrauch" ist auch eine Aussage. Früher fiel
+    // die Kachel bei 0 weg und man musste in HA nachsehen, ob wirklich nichts lief.
+    const k = baueMonatKpis(d({
+      speicher_ladung_netz_kwh: 0,
+      speicher_ladung_netz_kosten_euro: 0,
+      speicher_ladung_netz_preis_cent: null,
+    }), vm).find((x) => x.title === 'Batterieladung Netz')!
+    expect(k).toBeDefined()
+    expect(k.value).toBe('—')
+    expect(k.subtitle).toBe('0 kWh · 0,00 €')
+    // Keine Pseudo-Herleitung „0 kWh × — ct/kWh".
+    expect(k.berechnung).toBeUndefined()
+  })
+
+  it('ohne Speicher bleibt die Kachel aus (null ≠ 0)', () => {
+    const kpis = baueMonatKpis(d({ speicher_ladung_netz_kwh: null }), vm)
+    expect(kpis.find((x) => x.title === 'Batterieladung Netz')).toBeUndefined()
+  })
+
   it('Batterieladung Netz zeigt Ø-Ladepreis als Hauptwert, kWh·€ als Zweitzeile (R16-A)', () => {
     const k = baueMonatKpis(d({
       speicher_ladung_netz_kwh: 112,

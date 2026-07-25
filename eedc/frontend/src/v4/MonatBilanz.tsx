@@ -116,11 +116,13 @@ export function baueMonatKpis(
 
 /** R15-1 (Rainer-PN #88625): Kosten-Kacheln „Batterieladung Netz" +
  *  „Durchschnittspreis Netz" — Stromkosten der Periode sichtbar machen.
- *  Erscheinen nur, wenn Daten vorliegen (Netzladung erfasst bzw. Preis
- *  bekannt). Geteilt von Monat + Jahr (Jahres-Aggregat hat denselben Shape). */
+ *  Gate ist „Komponente vorhanden", nicht „Wert > 0": eine Netzladung von
+ *  0 kWh ist eine Aussage und bleibt sichtbar (Rainer-PN 2026-07-25), ein
+ *  fehlender Speicher blendet die Kachel aus. Geteilt von Monat + Jahr
+ *  (Jahres-Aggregat hat denselben Shape). */
 export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
   const kpis: KpiStripItem[] = []
-  if (d.speicher_ladung_netz_kosten_euro != null) {
+  if (d.speicher_ladung_netz_kwh != null) {
     kpis.push({
       // R16-A (Rainer #164): Ø-Ladepreis als Hauptwert, darunter kWh + Kosten —
       // parallel zur Nachbarkachel „Durchschnittspreis Netz".
@@ -129,8 +131,14 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
       subtitle: `${fmt(d.speicher_ladung_netz_kwh)} kWh · ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2, '—')} €`,
       formel: 'Ø-Ladepreis der Netzladung (aus der Strompreis-Mitschrift) · Kosten = Netzladung × Ladepreis',
-      berechnung: `${fmt(d.speicher_ladung_netz_kwh)} kWh × ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1)} ct/kWh`,
-      ergebnis: `= ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} € Kosten`,
+      // Ohne Ladepreis (u. a. bei 0 kWh Netzladung) bleibt die Herleitung leer —
+      // „0 kWh × — ct/kWh" wäre keine Rechnung, sondern Rauschen.
+      berechnung: d.speicher_ladung_netz_preis_cent != null
+        ? `${fmt(d.speicher_ladung_netz_kwh)} kWh × ${fmtCalc(d.speicher_ladung_netz_preis_cent, 1)} ct/kWh`
+        : undefined,
+      ergebnis: d.speicher_ladung_netz_preis_cent != null
+        ? `= ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2)} € Kosten`
+        : undefined,
     })
   }
   const netzPreis = d.netzbezug_durchschnittspreis_cent ?? d.netzbezug_preis_cent

@@ -50,18 +50,27 @@ export function baueTagKpis(
   // R15-1: Kosten-Kacheln — nur wenn die Tagesdaten es hergeben. Netzladung-
   // Kosten brauchen den TEP-Tages-Ladepreis (#264); der Tages-Ø-Bezugspreis
   // ist implizit exakt (Backend: kosten = netzbezug × Monats-Finanzzeilen-Preis).
+  // Gate ist `!= null` (= Speicher vorhanden), NICHT `> 0`: „0 kWh aus dem Netz
+  // geladen" ist eine Aussage und muss sichtbar sein, sonst muss der Nutzer
+  // woanders nachsehen, ob wirklich nichts lief (Rainer-PN 2026-07-25).
   const kostenKpis: KpiStripItem[] = []
-  if (netzladung?.kwh != null && netzladung.kwh > 0 && netzladung.preis_cent != null) {
-    const kosten = (netzladung.kwh * netzladung.preis_cent) / 100
+  if (netzladung?.kwh != null) {
+    const kosten = netzladung.preis_cent != null ? (netzladung.kwh * netzladung.preis_cent) / 100 : null
+    const preisTxt = netzladung.preis_cent != null ? ` · Ø ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh` : ''
     kostenKpis.push({
       title: 'Batterieladung Netz',
       value: fmtCalc(kosten, 2, '—'), unit: '€', color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
-      subtitle: `${fmt(netzladung.kwh, 1)} kWh · Ø ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`,
+      subtitle: `${fmt(netzladung.kwh, 1)} kWh${preisTxt}`,
       formel: 'Netzladung × Ø-Ladepreis (Tag)',
-      berechnung: `${fmt(netzladung.kwh, 1)} kWh × ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`,
-      ergebnis: `= ${fmtCalc(kosten, 2)} €`,
+      berechnung: netzladung.preis_cent != null
+        ? `${fmt(netzladung.kwh, 1)} kWh × ${fmtCalc(netzladung.preis_cent, 1)} ct/kWh`
+        : undefined,
+      ergebnis: kosten != null ? `= ${fmtCalc(kosten, 2)} €` : undefined,
     })
   }
+  // Hier bleibt `> 0` richtig: der Tages-Ø-Preis wird aus Kosten ÷ Menge
+  // abgeleitet und ist ohne Bezugsmenge undefiniert (0/0). Im Monat trägt die
+  // gleichnamige Kachel dagegen den Tarif-/Ø-Preis, der auch ohne Bezug existiert.
   if (t.netzbezug > 0 && t.netzbezug_kosten != null) {
     kostenKpis.push({
       title: 'Ø-Preis Netz',
