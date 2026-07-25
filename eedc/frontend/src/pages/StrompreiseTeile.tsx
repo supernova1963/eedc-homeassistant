@@ -302,6 +302,7 @@ export function StrompreisHinweise() {
         <li>Für historische Auswertungen werden die zum jeweiligen Zeitpunkt gültigen Preise herangezogen</li>
         <li>Bei Tarifwechsel: Neuen Tarif anlegen und Gültigkeitszeitraum korrekt setzen</li>
         <li><strong>Spezialtarife:</strong> Für Wärmepumpe oder Wallbox mit separatem Stromtarif kann ein eigener Tarif angelegt werden. Ohne Spezialtarif wird automatisch der Standard-Tarif verwendet.</li>
+        <li><strong>Dynamische Tarife:</strong> Der Netzbezugspreis bleibt auch hier Pflicht — er ist der Referenzwert. Vorrang hat immer der stündlich mitgeschriebene Preis; der eingetragene Wert greift für Monate ohne Aufzeichnung und für ROI-/Investitionsrechnungen, die keinen Stundenpreis kennen.</li>
       </ul>
     </Card>
   )
@@ -613,7 +614,15 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
               onBlur={() => markTouched('netzbezug_arbeitspreis_cent_kwh')}
               required
               error={zeigeFehler('netzbezug_arbeitspreis_cent_kwh')}
-              hint={(zeigeFehler('netzbezug_arbeitspreis_cent_kwh') || plausibelWarnung('netzbezug_arbeitspreis_cent_kwh')) ? undefined : 'Arbeitspreis für Strombezug'}
+              hint={(zeigeFehler('netzbezug_arbeitspreis_cent_kwh') || plausibelWarnung('netzbezug_arbeitspreis_cent_kwh'))
+                ? undefined
+                // Bei dynamischem Tarif ist der feste Preis kein „der Preis",
+                // sondern der Referenzwert (Rainer-PN 2026-07-25). Er bleibt
+                // Pflicht: der mitgeschriebene Stundenpreis fehlt für Monate ohne
+                // Aufzeichnung und für ROI-/Investitionsrechnungen komplett.
+                : formData.vertragsart === 'dynamisch'
+                  ? 'Referenzpreis — der mitgeschriebene Stundenpreis geht vor'
+                  : 'Arbeitspreis für Strombezug'}
             />
             {!zeigeFehler('netzbezug_arbeitspreis_cent_kwh') && plausibelWarnung('netzbezug_arbeitspreis_cent_kwh') && (
               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{plausibelWarnung('netzbezug_arbeitspreis_cent_kwh')}</p>
