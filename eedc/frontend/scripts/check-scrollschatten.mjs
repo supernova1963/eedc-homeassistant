@@ -60,15 +60,10 @@ const GETEILTE_SOT = [
   'src/components/roi/RoiAnalyse.tsx',
   'src/components/tag/TagWerteTabelle.tsx', // + ALLOW=1 (Picker-Popover)
   'src/pages/auswertung/InvestitionenTab.tsx',
-  'src/pages/auswertung/EnergieprofilMonat.tsx',
-  'src/pages/auswertung/EnergieprofilTab.tsx',
   'src/pages/community/CommunityStatistikenTeile.tsx',
   'src/pages/community/CommunityPVErtragTeile.tsx',
   'src/pages/community/CommunityRegionalTeile.tsx',
-  'src/pages/aussichten/LangfristTab.tsx',
-  'src/pages/aussichten/TrendTab.tsx',
   'src/pages/aussichten/KurzfristTab.tsx', // + ALLOW=1 (Kachel-Flexleiste)
-  'src/pages/aussichten/FinanzenTab.tsx',
   'src/pages/aussichten/KorrekturprofilHeatmapCard.tsx',
   // Bewusst NICHT im Scope (Sonderfall max-h + sticky-Header — vertikaler Fade
   // kollidiert mit stickem Kopf; behalten native Scrollbar mit G16-3-Pillen-Optik,

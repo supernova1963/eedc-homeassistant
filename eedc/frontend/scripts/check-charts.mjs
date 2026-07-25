@@ -53,7 +53,6 @@ const PIE_ALLOWLIST = new Set([
   'src/pages/EAutoDashboard.tsx',
   'src/pages/BalkonkraftwerkDashboard.tsx',
   'src/pages/SonstigesDashboard.tsx',
-  'src/pages/aussichten/FinanzenTab.tsx',
   'src/pages/auswertung/InvestitionenTab.tsx',
 ])
 

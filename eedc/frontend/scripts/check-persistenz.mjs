@@ -47,7 +47,6 @@ const BESTAND = new Map([
   ['src/hooks/useSectionOrder.ts', 5],
   ['src/hooks/useSelectedAnlage.ts', 5],
   ['src/hooks/useSetupWizard.ts', 3],
-  ['src/pages/auswertung/TabelleTab.tsx', 5], // LEGACY V3
   ['src/pages/CommunityShare.tsx', 2], // Altlast-Key eedc_community_reset_dismissed (Unterstrich) — Migration vertagt
   ['src/pages/MonatsabschlussView.tsx', 1], // LEGACY V3 (Donor → R6)
   ['src/pages/MonatsdatenTeile.tsx', 2],
