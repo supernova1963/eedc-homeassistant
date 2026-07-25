@@ -81,6 +81,9 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
   const pvEvResidual = Math.max(0, (d.ev_ersparnis_euro ?? 0) - evInErsparnis)
 
   const preisBez = d.netzbezug_durchschnittspreis_cent != null ? 'Ø-Preis flex' : 'Netzbezugspreis'
+  // §51 EEG greift nur, wenn tatsächlich zu Negativpreisen eingespeist wurde —
+  // bei 0 kWh gäbe es sonst einen „§51-Verlust: 0,00 €"-Hinweis ohne Inhalt.
+  const hatNeg51 = (d.einspeisung_neg_preis_kwh ?? 0) > 0
 
   const habenPosten: TKontoPosten[] = [
     // ── Einspeise-Erlöse (immer) ──
@@ -89,11 +92,21 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
       wert: d.einspeise_erloes_euro ?? 0,
       vjWert: vj?.einspeise_erloes_euro,
       color: 'text-green-600 dark:text-green-400',
-      formel: 'Einspeisung × Einspeisevergütung',
+      // §51 EEG: der Erlös oben ist bereits gekürzt — dann muss auch die
+      // Herleitung die gekürzte Menge zeigen, sonst passt „1000 kWh × 8,2 ct"
+      // nicht zum Ergebnis darunter.
+      formel: hatNeg51
+        ? 'Vergütete Einspeisung × Einspeisevergütung (§51 EEG: Negativpreis-Stunden ohne Vergütung)'
+        : 'Einspeisung × Einspeisevergütung',
       berechnung: d.einspeisung_kwh != null && d.einspeise_preis_cent != null
-        ? `${fmt(d.einspeisung_kwh, 1)} kWh × ${fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh`
+        ? (hatNeg51
+          ? `(${fmt(d.einspeisung_kwh, 1)} − ${fmt(d.einspeisung_neg_preis_kwh, 1)}) kWh × ${fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh`
+          : `${fmt(d.einspeisung_kwh, 1)} kWh × ${fmtCalc(d.einspeise_preis_cent, 2)} ct/kWh`)
         : undefined,
       ergebnis: `= ${fmtCalc(d.einspeise_erloes_euro, 2)} €`,
+      hinweis: hatNeg51
+        ? `§51-Verlust: ${fmt(d.einspeisung_neg_preis_kwh, 1)} kWh ohne Vergütung — ${fmtCalc(d.nicht_vergueteter_erloes_euro, 2)} € entgangen`
+        : undefined,
     },
     // ── PV-Eigenverbrauch ──
     // Mit per-Inv-Daten: Residual (ohne BKW/Speicher die separat gezeigt werden)
@@ -335,6 +348,11 @@ export function TKonto({ d, sonderkosten = null }: { d: AktuellerMonatResponse; 
                 {item.formel
                   ? <FormelTooltip formel={item.formel} berechnung={item.berechnung} ergebnis={item.ergebnis}>{item.label}</FormelTooltip>
                   : item.label}
+                {/* Nachrichtlicher Zusatz (§51-Verlust, „davon Batterieladung Netz"):
+                    stand bisher NUR in der Mobil-Tabelle — am Desktop war er unsichtbar. */}
+                {item.hinweis && (
+                  <span className="block text-xs text-gray-400 dark:text-gray-500">{item.hinweis}</span>
+                )}
               </td>
               <td className={`py-2 pr-3 text-right tabular-nums whitespace-nowrap font-semibold border-b border-gray-100 dark:border-gray-700/50 ${item.color}`}>
                 {fmtCalc(item.wert, 2)} €

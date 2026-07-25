@@ -218,6 +218,13 @@ class AktuellerMonatResponse(BaseModel):
 
     # Finanzen (Euro)
     einspeise_erloes_euro: Optional[float] = None
+    # §51 EEG: was der Abzug gekostet hat. `None` = keine Tages-Aggregate bzw.
+    # Anlage unterliegt nicht §51; `0.0` = betroffen, aber in dem Monat keine
+    # Einspeisung zu Negativpreisen. Der Erlös oben ist bereits gekürzt — ohne
+    # diesen Ausweis bliebe die Kürzung unsichtbar (Versprechen im Anlage-
+    # Formular: „der entgangene Erlös wird im Cockpit als §51-Verlust ausgewiesen").
+    einspeisung_neg_preis_kwh: Optional[float] = None
+    nicht_vergueteter_erloes_euro: Optional[float] = None
     netzbezug_kosten_euro: Optional[float] = None
     ev_ersparnis_euro: Optional[float] = None
     netto_ertrag_euro: Optional[float] = None
@@ -1233,6 +1240,8 @@ async def get_aktueller_monat(
 
     # ── Finanzen ──
     einspeise_erloes = None
+    einspeisung_neg_preis = None
+    nicht_vergueteter_erloes = None
     netzbezug_kosten = None
     ev_ersparnis = None
     netto_ertrag = None
@@ -1262,6 +1271,11 @@ async def get_aktueller_monat(
                 verguetung_ct_kwh=einspeise_cent,
             )
             einspeise_erloes = round(m_erloes.erloes_euro, 2)
+            # Den Abzug mitgeben, sonst ist die Kürzung im Erlös unsichtbar.
+            # `m_neg is None` = Anlage nicht §51-pflichtig / keine Mitschrift.
+            if m_neg is not None:
+                einspeisung_neg_preis = round(m_erloes.nicht_verguetete_kwh, 1)
+                nicht_vergueteter_erloes = round(m_erloes.nicht_vergueteter_erloes_euro, 2)
         if netzbezug is not None:
             grundpreis = allgemein_tarif.grundpreis_euro_monat or 0
             netzbezug_kosten = round(
@@ -1964,6 +1978,8 @@ async def get_aktueller_monat(
         hat_sonstiges=hat_sonstiges,
         # Finanzen
         einspeise_erloes_euro=einspeise_erloes,
+        einspeisung_neg_preis_kwh=einspeisung_neg_preis,
+        nicht_vergueteter_erloes_euro=nicht_vergueteter_erloes,
         netzbezug_kosten_euro=netzbezug_kosten,
         ev_ersparnis_euro=ev_ersparnis,
         netto_ertrag_euro=netto_ertrag,

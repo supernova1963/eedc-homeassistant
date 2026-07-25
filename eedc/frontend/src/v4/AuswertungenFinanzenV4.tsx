@@ -108,9 +108,13 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     const eigenverbrauchErsparnis = chartData.reduce((s, z) => s + z.ev_ersparnis, 0)
     const sonderkosten = chartData.reduce((s, z) => s + (z.sonderkosten || 0), 0)
     const sonstigeErtraege = chartData.reduce((s, z) => s + (sonstigeByMonth.get(`${z.jahr}-${z.monat}`)?.ertraege || 0), 0)
+    // §51 EEG: der Erlös oben ist bereits gekürzt — der Abzug wird am KPI
+    // ausgewiesen, sonst wirkt die kleinere Zahl wie ein Fehler.
+    const nichtVerguetet = chartData.reduce((s, z) => s + (z.einspeise_nicht_verguetet_euro || 0), 0)
+    const neg51Kwh = chartData.reduce((s, z) => s + (z.einspeise_neg_preis_kwh || 0), 0)
     const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
     const nettoNachSonderkosten = nettoErtrag + sonstigeErtraege - sonderkosten
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, nettoErtrag, nettoNachSonderkosten }
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, nettoErtrag, nettoNachSonderkosten, nichtVerguetet, neg51Kwh }
   }, [chartData, sonstigeByMonth])
 
   const monate = basis.stats.anzahlMonate || 1
@@ -144,9 +148,16 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     const kpis: KpiStripItem[] = [
       {
         title: 'Einspeiseerlös', value: formatGeld(gesamt.einspeiseErloes).wert, unit: '€', color: 'green', icon: TrendingUp,
-        subtitle: hatMehrereTarife ? 'historische Tarife' : `${fmtZahl(strompreis.einspeiseverguetung_cent_kwh, 1)} ct/kWh`,
-        parkId: 'kpi:einspeise', formel: hatMehrereTarife ? 'Σ (Einspeisung × Tarif) pro Monat' : 'Einspeisung × Einspeisevergütung',
-        berechnung: `${fmtZahl(basis.stats.gesamtEinspeisung, 0)} kWh gesamt`, ergebnis: `= ${fmtZahl(gesamt.einspeiseErloes, 2)} €`,
+        subtitle: gesamt.nichtVerguetet > 0
+          ? `nach §51: −${fmtZahl(gesamt.nichtVerguetet, 2)} €`
+          : hatMehrereTarife ? 'historische Tarife' : `${fmtZahl(strompreis.einspeiseverguetung_cent_kwh, 1)} ct/kWh`,
+        parkId: 'kpi:einspeise',
+        formel: (hatMehrereTarife ? 'Σ (Einspeisung × Tarif) pro Monat' : 'Einspeisung × Einspeisevergütung')
+          + (gesamt.nichtVerguetet > 0 ? ' · ohne Stunden mit negativem Börsenpreis (§51 EEG)' : ''),
+        berechnung: gesamt.nichtVerguetet > 0
+          ? `${fmtZahl(basis.stats.gesamtEinspeisung, 0)} kWh gesamt, davon ${fmtZahl(gesamt.neg51Kwh, 1)} kWh ohne Vergütung`
+          : `${fmtZahl(basis.stats.gesamtEinspeisung, 0)} kWh gesamt`,
+        ergebnis: `= ${fmtZahl(gesamt.einspeiseErloes, 2)} €`,
       },
       {
         title: 'EV-Ersparnis', value: formatGeld(gesamt.eigenverbrauchErsparnis).wert, unit: '€', color: 'purple', icon: Euro,

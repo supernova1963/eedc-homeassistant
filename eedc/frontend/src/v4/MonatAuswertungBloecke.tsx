@@ -38,7 +38,12 @@ import type { MonatsAuswertung, PeakStunde, TagesprofilStunde } from '../api/ene
 
 /** Baut die wiederhergestellten Monats-Auswertungs-Blöcke (M4/M8/M9/M3) aus der
  *  `getMonat`-Antwort. Reihenfolge = Standard-Sortierung (BlockShell ist sortierbar). */
-export function baueMonatAuswertungBloecke(a: MonatsAuswertung, park: ParkApi): Block[] {
+export function baueMonatAuswertungBloecke(
+  a: MonatsAuswertung,
+  park: ParkApi,
+  /** §51-Verlust in € aus der Monats-Antwort — die Auswertung selbst kennt keinen Tarif. */
+  nichtVerguetetEuro?: number | null,
+): Block[] {
   const bloecke: Block[] = []
 
   // M4 — Kategorien-Anteils-Leiste (Erzeuger/Verbraucher getrennt).
@@ -118,7 +123,7 @@ export function baueMonatAuswertungBloecke(a: MonatsAuswertung, park: ParkApi): 
   // M3 — §51-EEG-Negativpreis (nur wenn negative Preisstunden vorliegen). Jede
   // KPI-Kachel einzeln parkbar (KpiStrip-parkId-Muster wie im Kennzahlen-Block);
   // der Block entfällt, wenn alle drei geparkt sind.
-  const negKpis = negativpreisKpis(a)
+  const negKpis = negativpreisKpis(a, nichtVerguetetEuro)
   const negSichtbar = negKpis.filter((k) => !park.istGeparkt(k.parkId!))
   if ((a.negative_preis_stunden ?? 0) > 0 && negSichtbar.length > 0) {
     bloecke.push({
@@ -151,7 +156,7 @@ function kategorieSegmente(a: MonatsAuswertung, gruppe: 'erzeuger' | 'verbrauche
 
 /** §51-KPIs — Neg.-Preisstunden · eingespeiste kWh bei neg. Preis · Ø-Börsenpreis.
  *  `parkId` je Kachel → einzeln parkbar (KpiStrip-Muster). */
-function negativpreisKpis(a: MonatsAuswertung): KpiStripItem[] {
+function negativpreisKpis(a: MonatsAuswertung, nichtVerguetetEuro?: number | null): KpiStripItem[] {
   return [
     {
       title: 'Neg. Börsenpreis', value: `${a.negative_preis_stunden}`, unit: 'h',
@@ -162,6 +167,15 @@ function negativpreisKpis(a: MonatsAuswertung): KpiStripItem[] {
       color: 'yellow', icon: Zap, parkId: 'kpi:51-einspeisung',
       formel: 'Eingespeiste Energie in Stunden mit negativem Börsenpreis (§51 EEG: keine Vergütung)',
     },
+    // Der €-Wert dazu: bis v4.0.0 wurde er im Anlage-Formular versprochen
+    // („wird im Cockpit als §51-Verlust ausgewiesen"), aber nirgends gezeigt.
+    ...(nichtVerguetetEuro != null ? [{
+      title: '§51-Verlust', value: fmtCalc(nichtVerguetetEuro, 2, '—'), unit: '€',
+      color: 'red' as const, icon: Coins, parkId: 'kpi:51-verlust',
+      formel: 'Einspeisung bei negativem Börsenpreis × Einspeisevergütung',
+      berechnung: `${fmtCalc(a.einspeisung_neg_preis_kwh, 1)} kWh ohne Vergütung`,
+      ergebnis: `= ${fmtCalc(nichtVerguetetEuro, 2)} € entgangen`,
+    }] : []),
     {
       title: 'Börsenpreis Ø', value: fmtCalc(a.boersenpreis_avg_cent, 1, '—'), unit: 'ct',
       color: 'gray', icon: Coins, parkId: 'kpi:51-boersenpreis',

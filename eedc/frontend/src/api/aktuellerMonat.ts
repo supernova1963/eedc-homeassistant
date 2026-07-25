@@ -125,6 +125,10 @@ export interface AktuellerMonatResponse {
 
   // Finanzen (Euro)
   einspeise_erloes_euro: number | null
+  // §51 EEG: Abzugsvolumen + entgangener Erlös. null = Anlage nicht §51-pflichtig
+  // bzw. keine Börsenpreis-Mitschrift; 0 = betroffen, aber nichts abgezogen.
+  einspeisung_neg_preis_kwh: number | null
+  nicht_vergueteter_erloes_euro: number | null
   netzbezug_kosten_euro: number | null
   ev_ersparnis_euro: number | null
   netto_ertrag_euro: number | null

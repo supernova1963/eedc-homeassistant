@@ -307,7 +307,7 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
       // Wiederhergestellte Energieprofil-Analysen (M4/M8/M9/M3, ante-flip) — fertig
       // aus getMonat berechnet; jeder Block versteckt sich selbst bei leerer Daten-
       // /Park-Lage (Element-Park-Doktrin).
-      ...(monatAusw ? baueMonatAuswertungBloecke(monatAusw, park) : []),
+      ...(monatAusw ? baueMonatAuswertungBloecke(monatAusw, park, monatData?.nicht_vergueteter_erloes_euro) : []),
       // Komponenten-Detailblöcke (aktiv-gegatet, B6/B7).
       ...(monatData ? baueKomponentenBloecke(monatData, park) : []),
       // Finanz-Teaser (B5) — bewusst GANZ UNTEN: Netto-Ertrag/Monatsergebnis stehen

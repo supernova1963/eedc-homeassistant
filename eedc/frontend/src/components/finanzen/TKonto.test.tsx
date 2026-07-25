@@ -32,6 +32,23 @@ describe('TKonto', () => {
     expect(screen.getAllByText(/Gewinn/).length).toBeGreaterThan(0)
   })
 
+  it('weist den §51-Verlust an der Einspeise-Zeile aus und kürzt die Herleitung', () => {
+    // Bis v4.0.0 versprach das Anlage-Formular den Ausweis „im Cockpit", ohne
+    // dass ihn irgendeine Sicht rendert; die Herleitung zeigte zudem die volle
+    // Einspeisung, obwohl der Erlös bereits gekürzt war.
+    const mit51 = {
+      ...basis, einspeise_erloes_euro: 6.4,
+      einspeisung_neg_preis_kwh: 20, nicht_vergueteter_erloes_euro: 1.6,
+    } as AktuellerMonatResponse
+    render(<TKonto d={mit51} />)
+    expect(screen.getAllByText(/§51-Verlust: 20,0 kWh ohne Vergütung — 1,60 € entgangen/).length).toBeGreaterThan(0)
+  })
+
+  it('ohne Negativpreis-Einspeisung bleibt der §51-Hinweis weg', () => {
+    render(<TKonto d={{ ...basis, einspeisung_neg_preis_kwh: 0, nicht_vergueteter_erloes_euro: 0 } as AktuellerMonatResponse} />)
+    expect(screen.queryByText(/§51-Verlust/)).toBeNull()
+  })
+
   it('zeigt Verlust, wenn Kosten die Erlöse übersteigen', () => {
     const verlust = { ...basis, einspeise_erloes_euro: 2, ev_ersparnis_euro: 3, netzbezug_kosten_euro: 40 } as AktuellerMonatResponse
     render(<TKonto d={verlust} />)

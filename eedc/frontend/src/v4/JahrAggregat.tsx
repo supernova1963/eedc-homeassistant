@@ -213,6 +213,8 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
 
     // Finanzen (Σ)
     einspeise_erloes_euro: summe(f('einspeise_erloes_euro')),
+    einspeisung_neg_preis_kwh: summe(f('einspeisung_neg_preis_kwh')),
+    nicht_vergueteter_erloes_euro: summe(f('nicht_vergueteter_erloes_euro')),
     netzbezug_kosten_euro: summe(f('netzbezug_kosten_euro')),
     ev_ersparnis_euro: summe(f('ev_ersparnis_euro')),
     netto_ertrag_euro: summe(f('netto_ertrag_euro')),

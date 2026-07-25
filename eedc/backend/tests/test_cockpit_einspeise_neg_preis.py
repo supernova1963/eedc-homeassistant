@@ -137,3 +137,48 @@ async def test_ohne_eeg51_flag_kein_abzug_trotz_tages_aggregaten(db):
     assert resp.einspeise_neg_preis_kwh is None
     assert resp.nicht_vergueteter_erloes_euro is None
     assert resp.einspeise_erloes_euro == 82.0
+
+
+# ── Monats-Endpoint: derselbe Ausweis, damit das T-Konto den Abzug zeigen kann ──
+
+
+async def test_monats_endpoint_exponiert_51_abzug(db):
+    """`/aktueller-monat` gibt Abzugsvolumen + entgangenen Erlös mit aus.
+
+    Bis v4.0.0 rechnete der Endpoint den Abzug zwar (der Erlös war gekürzt),
+    warf die Diagnose-Werte aber weg — das T-Konto zeigte deshalb als Herleitung
+    die volle Einspeisung, und der im Anlage-Formular versprochene Ausweis des
+    „§51-Verlusts" existierte nirgends.
+    """
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+
+    anlage_id = await _seed_minimal(db, einspeisung_kwh=1000.0, unterliegt_eeg_51=True)
+    db.add(TagesZusammenfassung(
+        anlage_id=anlage_id, datum=date(2026, 4, 10),
+        einspeisung_neg_preis_kwh=120.0,
+    ))
+    await db.commit()
+
+    resp = await get_aktueller_monat(anlage_id=anlage_id, jahr=2026, monat=4, db=db)
+
+    assert resp.einspeisung_neg_preis_kwh == 120.0
+    assert resp.nicht_vergueteter_erloes_euro == round(120 * 8.2 / 100, 2)
+    assert resp.einspeise_erloes_euro == round((1000 - 120) * 8.2 / 100, 2)
+
+
+async def test_monats_endpoint_ohne_eeg51_flag_keine_diagnose(db):
+    """Ohne §51-Flag bleiben die Felder None — die Kachel erscheint gar nicht."""
+    from backend.api.routes.aktueller_monat import get_aktueller_monat
+
+    anlage_id = await _seed_minimal(db, einspeisung_kwh=1000.0, unterliegt_eeg_51=False)
+    db.add(TagesZusammenfassung(
+        anlage_id=anlage_id, datum=date(2026, 4, 10),
+        einspeisung_neg_preis_kwh=120.0,
+    ))
+    await db.commit()
+
+    resp = await get_aktueller_monat(anlage_id=anlage_id, jahr=2026, monat=4, db=db)
+
+    assert resp.einspeisung_neg_preis_kwh is None
+    assert resp.nicht_vergueteter_erloes_euro is None
+    assert resp.einspeise_erloes_euro == 82.0
