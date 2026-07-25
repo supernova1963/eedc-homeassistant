@@ -7,6 +7,22 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased] — Tester-Rückmeldungen zu v4.0.0 (Rainer)
+
+### Fixed
+
+- **Kennzahlen zeigen 0-Werte wieder an** — die Kachel „Batterieladung Netz" verschwand bei 0 kWh komplett, sodass man in HA nachsehen musste, ob wirklich nichts geladen wurde. Die Kachel erscheint jetzt, sobald ein Speicher mit Monatsdaten existiert (0 kWh → 0,00 €, Ladepreis „—"); ohne Speicher bleibt sie weg. Gilt für Tag, Monat und Jahr/Gesamt. *(Der Tages-Ø-Preis „Ø-Preis Netz" entfällt ohne Netzbezug weiterhin — er wird aus Kosten ÷ Menge abgeleitet und ist bei 0 undefiniert.)*
+- **Einspeiseerlös in Auswertungen → Finanzen: §51-EEG-Abzug fehlte.** Die Seite rechnete `Einspeisung × Vergütung`, während das T-Konto darunter (und alle anderen Sichten) die in Negativpreis-Stunden eingespeisten kWh abzieht — derselbe Erlös stand mit zwei Zahlen auf einer Seite. **Betroffen sind nur Anlagen mit aktivem §51-Schalter und Negativpreis-Volumen; dort sinken Einspeiseerlös, Netto-Ertrag und die Netto-Bilanz auch in der Werte-Tabelle. Veränderte Summen sind die Korrektur, nicht der Fehler.** Für alle anderen Anlagen ändert sich nichts.
+- **PV-Prognose „Rest heute" sinkt gleichmäßig (#339)** — der Sensor `eedc_prognose_rest_today_kwh` zählte die laufende Stunde immer voll mit und fiel deshalb nur einmal je Stunde in einem Sprung (bei kleinen Anlagen 5–8 kWh). Die laufende Stunde geht jetzt anteilig nach den verbleibenden Minuten ein. *(Die Spalte „Verbleibend" im Prognose-Vergleich bleibt bewusst bei der vollen Stunde — sie ist eine Tagesprojektion, in der das IST die laufende Stunde noch nicht enthält.)*
+
+### Changed
+
+- **Zwei Netto-Begriffe auf der Finanz-Seite sind jetzt unterscheidbar:** „Netto-Ertrag (PV)" (Einspeiseerlös + EV-Ersparnis + Sonstige − Sonderkosten, **ohne** Netzbezug-Kosten und **ohne** Wärmepumpe/E-Mobilität) gegen „Gewinn/Verlust (Haushalt)" in der T-Konto-Ergebniszeile, die beides mitrechnet. Namen in KPI, Charts, Ø-Karte, CSV und Werte-Tabelle wortgleich; die T-Konto-Ergebniszeile hat als letzte Zeile nun ebenfalls eine Herleitung im Tooltip. Beide Begriffe stehen im Glossar. Keine Zahl ändert sich.
+- **Netzbezugspreis bei dynamischem Tarif erklärt:** Das Feld bleibt Pflicht — es ist der Referenzwert für Monate ohne Preis-Mitschrift und für ROI-/Investitionsrechnungen —, sagt das jetzt aber im Feld-Hinweis und in den Hinweisen der Strompreis-Sektion. Vorrang hat weiterhin der stündlich mitgeschriebene Preis.
+- **Sensor-Referenz korrigiert:** `eedc_prognose_heute_kwh` wurde dort noch als „IST bisher + Rest" beschrieben; seit dem Prognose-Kanon ist es die volle Tagesprognose (identisch zur App-Anzeige).
+
+---
+
 ## [4.0.0] - 2026-07-25 — Neue Oberfläche (Cockpit · Komponenten · Auswertungen) + Finanz-/CO₂-Korrekturen
 
 > **Breaking Change (nur Oberfläche, keine Daten):** Die Menüstruktur ist neu — sortiert nach *Wann?* (Cockpit), *Was?* (Komponenten), *Wie ausgewertet?* (Auswertungen). Alle Funktionen und Daten bleiben erhalten; alte Links/Lesezeichen werden automatisch umgeleitet. Das HA-Add-on zeigt vor dem Update den Breaking-Hinweis (`config.yaml breaking_versions 4.0.0`).
