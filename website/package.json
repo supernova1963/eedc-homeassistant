@@ -6,7 +6,7 @@
     "dev": "astro dev",
     "start": "astro dev",
     "prebuild": "bash scripts/sync-docs.sh",
-    "build": "npm run prebuild && astro build",
+    "build": "bash scripts/build-retry.sh",
     "preview": "astro preview",
     "astro": "astro"
   },
