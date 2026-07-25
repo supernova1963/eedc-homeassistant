@@ -113,6 +113,14 @@ jobs:
         working-directory: eedc/frontend
         run: npm run check:de-de
 
+      # Roh-Control-Freeze repo-weit (Regel 0a) — Nachfolger des mit dem
+      # v4.0.0-Flip retired check:v4-migration (Teil 3). Ohne dieses Gate ist
+      # die Invariante „rohe Controls nur als freigegebene SoT-/Infra-Impl"
+      # außerhalb von check:buttons/check:form-controls ungewächtert.
+      - name: Roh-Control-Freeze (SoT-Komponenten-Pflicht)
+        working-directory: eedc/frontend
+        run: npm run check:roh-controls
+
       - name: Vitest (Routing/Redirects + Komponenten + Wächter)
         working-directory: eedc/frontend
         run: npm test
