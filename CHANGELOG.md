@@ -17,6 +17,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **T-Konto: nachrichtliche Zusätze waren am Desktop unsichtbar** — Hinweise wie „davon Batterieladung Netz" wurden nur in der Mobil-Tabelle gerendert.
 - **PV-Prognose „Rest heute" sinkt gleichmäßig (#339)** — der Sensor `eedc_prognose_rest_today_kwh` zählte die laufende Stunde immer voll mit und fiel deshalb nur einmal je Stunde in einem Sprung (bei kleinen Anlagen 5–8 kWh). Die laufende Stunde geht jetzt anteilig nach den verbleibenden Minuten ein. *(Die Spalte „Verbleibend" im Prognose-Vergleich bleibt bewusst bei der vollen Stunde — sie ist eine Tagesprojektion, in der das IST die laufende Stunde noch nicht enthält.)*
 
+### Added
+
+- **Amortisation mit Kalenderjahr** (Forum-Wunsch Radiocarbonat): Unter Auswertungen → ROI steht neben der Dauer jetzt auch das voraussichtliche Break-Even-**Jahr** — in der Kachel „Amortisation", unter der Kurve und als Beschriftung der X-Achse (Kalenderjahre statt Jahres-Index). Anker ist das früheste Anschaffungsjahr der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt alles wie bisher beim Jahres-Index.
+- **Sensor-Auswahl optional auf passende Einheiten verengen** (Forum-Wunsch fridolin22): Checkbox „Nur passende Einheit" im Sensor-Picker der Datenquellen-Zuordnung, mit Anzahl der abweichenden Sensoren. **Standardmäßig aus** — wer keinen passenden Sensor besitzt, soll die vorhandenen sehen und daraus in Home Assistant einen Helfer bauen können. Sensoren ohne Einheitsangabe bleiben immer sichtbar.
+
 ### Changed
 
 - **Zwei Netto-Begriffe auf der Finanz-Seite sind jetzt unterscheidbar:** „Netto-Ertrag (PV)" (Einspeiseerlös + EV-Ersparnis + Sonstige − Sonderkosten, **ohne** Netzbezug-Kosten und **ohne** Wärmepumpe/E-Mobilität) gegen „Gewinn/Verlust (Haushalt)" in der T-Konto-Ergebniszeile, die beides mitrechnet. Namen in KPI, Charts, Ø-Karte, CSV und Werte-Tabelle wortgleich; die T-Konto-Ergebniszeile hat als letzte Zeile nun ebenfalls eine Herleitung im Tooltip. Beide Begriffe stehen im Glossar. Keine Zahl ändert sich.

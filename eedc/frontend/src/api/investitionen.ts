@@ -81,6 +81,10 @@ export interface ROIDashboardResponse {
   gesamt_jahres_einsparung: number
   gesamt_roi_prozent: number | null
   gesamt_amortisation_jahre: number | null
+  /** Frühestes Anschaffungsjahr = „Jahr 0" der Break-Even-Kurve; null ohne gepflegtes Datum. */
+  basis_jahr: number | null
+  /** Voraussichtliches Break-Even-Kalenderjahr (basis_jahr + Amortisationsdauer). */
+  gesamt_amortisation_jahr: number | null
   gesamt_co2_einsparung_kg: number
   berechnungen: ROIBerechnung[]
   // Vorgeschlagener Slider-Wert: letzter Monatsdaten-Preis (EU Weekly Oil

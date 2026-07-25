@@ -14,7 +14,7 @@
  */
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Search, Loader2, Check, AlertTriangle, Lightbulb } from 'lucide-react'
-import { Modal, Input, Button, Alert } from '../ui'
+import { Modal, Input, Button, Alert, Checkbox } from '../ui'
 import { datenquellenApi, type HaSensor, type HaVorschlag } from '../../api/datenquellen'
 
 interface Props {
@@ -50,6 +50,10 @@ export default function DatenquellenHaPicker({
   const [loading, setLoading] = useState(true)
   const [fehler, setFehler] = useState<string | null>(null)
   const [suche, setSuche] = useState('')
+  // fridolin22 (Forum v4.0.0): optionale Verengung der Liste auf Sensoren mit
+  // passender Einheiten-Klasse. Default AUS — wer keinen geeigneten Sensor hat,
+  // soll die vorhandenen sehen und daraus einen HA-Helper ableiten können.
+  const [nurPassende, setNurPassende] = useState(false)
   // #343 B: Takt-Check-Zustand — pruefend (Spinner an der Zeile) bzw. eine
   // ausstehende Warnung mit „Trotzdem übernehmen"-Bestätigung.
   const [taktPrueft, setTaktPrueft] = useState<string | null>(null)
@@ -72,12 +76,27 @@ export default function DatenquellenHaPicker({
       .finally(() => setLoading(false))
   }, [isOpen, anlageId, feldKey, invTyp])
 
-  const gefiltert = useMemo(() => {
+  /** Sensor mit bekannter, aber anderer Einheiten-Klasse als das Feld erwartet (§2i). */
+  const istMismatch = useCallback((s: HaSensor) => {
+    const k = einheitKlasse(s.unit)
+    return erwartet != null && k != null && k !== erwartet
+  }, [erwartet])
+
+  const gesucht = useMemo(() => {
     const q = suche.trim().toLowerCase()
     if (!q) return sensoren
     return sensoren.filter((s) =>
       s.entity_id.toLowerCase().includes(q) || (s.friendly_name ?? '').toLowerCase().includes(q))
   }, [sensoren, suche])
+
+  // Sensoren OHNE Einheit bleiben immer sichtbar — der Filter entfernt nur
+  // nachweislich falsche Klassen (kWh-Sensor für ein W-Feld, #200). Die
+  // v3.24.1-Aufweichung (Roh-Counter ohne state_class) bleibt damit erhalten.
+  const ausgeblendet = useMemo(() => gesucht.filter(istMismatch).length, [gesucht, istMismatch])
+  const gefiltert = useMemo(
+    () => (nurPassende ? gesucht.filter((s) => !istMismatch(s)) : gesucht),
+    [gesucht, nurPassende, istMismatch],
+  )
 
   // #343 B: kWh-Felder → Takt-Check vor dem Speichern (nicht prüfbar = still
   // durchwinken, v3.23.8-Muster). W-/sonstige Felder speichern direkt.
@@ -97,8 +116,7 @@ export default function DatenquellenHaPicker({
   const sensorZeile = (s: HaSensor) => {
     const aktiv = s.entity_id === initialEntity
     // §2i: Dimensions-Mismatch (kWh-Sensor für W-Feld etc.) beim Wählen.
-    const sensorKlasse = einheitKlasse(s.unit)
-    const mismatch = erwartet != null && sensorKlasse != null && sensorKlasse !== erwartet
+    const mismatch = istMismatch(s)
     const antiEmpfehlung = warnungen[s.entity_id]
     return (
       <Button
@@ -146,6 +164,19 @@ export default function DatenquellenHaPicker({
             aria-label="HA-Sensor suchen"
           />
         </div>
+
+        {/* Nur anbieten, wenn es überhaupt etwas zu verengen gibt. */}
+        {!loading && erwartet != null && (ausgeblendet > 0 || nurPassende) && (
+          <Checkbox
+            name="nur-passende-einheit"
+            checked={nurPassende}
+            onChange={(e) => setNurPassende(e.target.checked)}
+            label={`Nur passende Einheit (${erwartet === 'energie' ? 'kWh' : 'W'})`}
+            hint={nurPassende
+              ? `${ausgeblendet} Sensor(en) mit abweichender Einheit ausgeblendet`
+              : `${ausgeblendet} Sensor(en) haben eine abweichende Einheit`}
+          />
+        )}
 
         {loading && (
           <p className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -207,7 +238,11 @@ export default function DatenquellenHaPicker({
         )}
 
         {!loading && !fehler && gefiltert.length === 0 && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Keine passenden Sensoren gefunden.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {nurPassende && ausgeblendet > 0
+              ? 'Kein Sensor mit passender Einheit. Haken entfernen, um alle zu sehen — oder in Home Assistant einen Helfer anlegen, der den Wert umrechnet.'
+              : 'Keine passenden Sensoren gefunden.'}
+          </p>
         )}
 
         {!loading && gefiltert.length > 0 && (

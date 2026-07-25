@@ -214,7 +214,11 @@ export function roiKpiItems(roiData: ROIDashboardResponse, zeigeCo2 = false): Kp
       title: 'Amortisation', value: roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre}` : '-',
       unit: roiData.gesamt_amortisation_jahre ? 'Jahre' : undefined,
       color: 'orange', icon: Clock, parkId: 'kpi:amortisation',
-      subtitle: 'Bis zur Kostendeckung',
+      // Radiocarbonat (Forum v4.0.0): „Ich fand es schöner mit der voraussichtlichen
+      // Jahreszahl der Amortisierung." Dauer bleibt der Hauptwert, das Jahr steht dabei.
+      subtitle: roiData.gesamt_amortisation_jahr
+        ? `Kostendeckung voraussichtlich ${roiData.gesamt_amortisation_jahr}`
+        : 'Bis zur Kostendeckung',
       sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)',
       formel: 'Relevante Kosten ÷ Jährliche Einsparung',
       berechnung: roiData.gesamt_jahres_einsparung > 0 ? `${formatGeld(roiData.gesamt_relevante_kosten).text} ÷ ${formatGeld(roiData.gesamt_jahres_einsparung).text}/Jahr` : undefined,
@@ -239,6 +243,7 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
   const legende = useLegendenToggle()
   const roiData = vm.roiData
   if (!roiData) return null
+  const basisJahr = roiData.basis_jahr
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Amortisationsverlauf</h3>
@@ -246,9 +251,15 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={vm.amortisationData} margin={{ top: ACHSEN_MARGIN_TOP }}>
             <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-            <XAxis dataKey="jahr" tickFormatter={geldTick} {...xAchse()} /* achsen-allow: Jahres-Index (0–30), Einheit „Jahre" steht im Break-Even-Text + KPI; Achsen-Label kollidierte mit Legende (#29-15) */ />
+            {/* Mit gepflegtem Anschaffungsdatum zeigen die Ticks Kalenderjahre
+                (Radiocarbonat), sonst wie bisher den Jahres-Index ab 0. */}
+            <XAxis
+              dataKey="jahr"
+              tickFormatter={(j: number) => (basisJahr != null ? `${basisJahr + j}` : `${j}`)}
+              {...xAchse()} /* achsen-allow: Jahres-Index bzw. Kalenderjahr; Einheit steht im Break-Even-Text + KPI, Achsen-Label kollidierte mit Legende (#29-15) */
+            />
             <YAxis tickFormatter={geldTick} tick={{ fontSize: 10 }} width={70} label={achsenEinheit('€')} />
-            <Tooltip content={<ChartTooltip labelFormatter={(label) => `Jahr ${label}`} unit="€" />} />
+            <Tooltip content={<ChartTooltip labelFormatter={(label) => (basisJahr != null ? `${basisJahr + Number(label)}` : `Jahr ${label}`)} unit="€" />} />
             <Legend content={<ChartLegende onItemClick={legende.onItemClick} />} />
             <Line type="monotone" dataKey="kumulierte_einsparung" name="Kumulierte Einsparung" stroke={GELD_COLORS.ersparnis} strokeWidth={2} dot={false} hide={legende.istVersteckt('kumulierte_einsparung')} />
             <Line type="monotone" dataKey="investition" name="Investition" stroke={GELD_COLORS.kosten} strokeWidth={2} strokeDasharray="5 5" dot={false} hide={legende.istVersteckt('investition')} />
@@ -258,6 +269,7 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
       {roiData.gesamt_amortisation_jahre && (
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 text-center">
           Break-Even nach ca. {fmtZahl(roiData.gesamt_amortisation_jahre, 1)} Jahren
+          {roiData.gesamt_amortisation_jahr ? ` — voraussichtlich ${roiData.gesamt_amortisation_jahr}` : ''}
         </p>
       )}
     </Card>

@@ -4,6 +4,7 @@ Investitionen API Routes
 CRUD Endpoints für Investitionen (E-Auto, Wärmepumpe, Speicher, etc.).
 """
 
+import math
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -590,6 +591,13 @@ class ROIDashboardResponse(BaseModel):
     gesamt_jahres_einsparung: float
     gesamt_roi_prozent: Optional[float]
     gesamt_amortisation_jahre: Optional[float]
+    # Kalender-Anker für die Amortisations-Kurve (Radiocarbonat, Forum v4.0.0):
+    # frühestes Anschaffungsjahr der berücksichtigten Investitionen = „Jahr 0"
+    # der Break-Even-Kurve. `gesamt_amortisation_jahr` ist das daraus abgeleitete
+    # voraussichtliche Break-Even-Kalenderjahr. Beide `None`, wenn kein
+    # Anschaffungsdatum gepflegt ist bzw. die Amortisation offen bleibt.
+    basis_jahr: Optional[int] = None
+    gesamt_amortisation_jahr: Optional[int] = None
     gesamt_co2_einsparung_kg: float
     berechnungen: list[ROIBerechnung]
     # Vorgeschlagener Default-Wert für den Benzinpreis-Slider (UI): letzter
@@ -1526,6 +1534,22 @@ async def get_roi_dashboard(
     # Gesamt-ROI
     gesamt_roi = berechne_roi(gesamt_investition, gesamt_einsparung, gesamt_investition - gesamt_relevante)
 
+    # Kalender-Anker: Die Kurve modelliert ab „Jahr 0" = der Zeitpunkt, zu dem
+    # investiert wurde. Bei mehreren Investitionen mit verschiedenen Daten ist
+    # das früheste Anschaffungsjahr der einzig sinnvolle Anker — dieselbe
+    # Näherung, die die Kurve mit ihrer konstanten Jahres-Einsparung ohnehin macht.
+    inst_jahre = [
+        inv.anschaffungsdatum.year for inv in investitionen
+        if inv.anschaffungsdatum is not None
+    ]
+    basis_jahr = min(inst_jahre) if inst_jahre else None
+    amort_jahre = gesamt_roi['amortisation_jahre']
+    gesamt_amortisation_jahr = (
+        basis_jahr + math.ceil(amort_jahre)
+        if basis_jahr is not None and amort_jahre is not None
+        else None
+    )
+
     return ROIDashboardResponse(
         anlage_id=anlage_id,
         anlage_name=anlage.anlagenname,
@@ -1534,6 +1558,8 @@ async def get_roi_dashboard(
         gesamt_jahres_einsparung=round(gesamt_einsparung, 2),
         gesamt_roi_prozent=gesamt_roi['roi_prozent'],
         gesamt_amortisation_jahre=gesamt_roi['amortisation_jahre'],
+        basis_jahr=basis_jahr,
+        gesamt_amortisation_jahr=gesamt_amortisation_jahr,
         gesamt_co2_einsparung_kg=round(gesamt_co2, 1),
         berechnungen=berechnungen,
         benzinpreis_hinweis_euro=round(benzinpreis_hinweis_euro, 3),

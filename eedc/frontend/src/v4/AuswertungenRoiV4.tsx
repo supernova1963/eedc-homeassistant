@@ -94,7 +94,9 @@ function RoiInner() {
     ...(sichtbar(['kpi:investition', 'kpi:einsparung', 'kpi:amortisation']) ? [{
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit auf einen Blick', icon: TrendingUp,
       farbe: 'text-green-500', defaultOpen: true,
-      summary: `${formatGeld(roiData.gesamt_investition).text} investiert · ${roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J. Amortisation` : 'Amortisation offen'}`,
+      summary: `${formatGeld(roiData.gesamt_investition).text} investiert · ${roiData.gesamt_amortisation_jahre
+        ? `${roiData.gesamt_amortisation_jahre} J. Amortisation${roiData.gesamt_amortisation_jahr ? ` (≈ ${roiData.gesamt_amortisation_jahr})` : ''}`
+        : 'Amortisation offen'}`,
       render: () => <KpiStrip kpis={roiKpiItems(roiData, false)} />,
     }] : []),
     ...(sichtbar(['chart:amortisation']) ? [{
