@@ -6,7 +6,7 @@ import {
   MONAT_KURZ, TYP_LABELS, CO2_FAKTOR_KG_KWH,
   COLORS, CHART_COLORS, TYP_COLORS,
   calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
-  calcSpeicherEffizienz, calcCOP,
+  calcSpeicherEffizienz, calcCOP, calcEinspeiseErloes,
 } from '../../lib'
 
 // Re-Export für Rückwärtskompatibilität (bestehende Imports brechen nicht)
@@ -71,6 +71,10 @@ export interface MonatsZeitreihe {
   netto_bilanz: number
   /** Real verrechneter Monats-Ø-Netzbezugspreis (Flex-Ø oder statischer Tarif, #326). */
   netzbezug_preis_cent: number | null
+  /** Durch §51 EEG entgangener Erlös in € (0, wenn die Anlage nicht betroffen ist). */
+  einspeise_nicht_verguetet_euro?: number
+  /** Eingespeiste kWh ohne Vergütung (§51-Volumen); null = Anlage unterliegt nicht §51. */
+  einspeise_neg_preis_kwh?: number | null
   // CO2
   co2_einsparung: number
 }
@@ -162,9 +166,15 @@ export function createMonatsZeitreihe(
     // sonst den statischen Tarif — gleiche SoT-Quelle wie das Cockpit
     // (resolve_netzbezug_preis_cent), sonst driften die €-Werte auseinander (#326).
     const netzPreisCent = md.netzbezug_durchschnittspreis_cent ?? (tarif ? tarif.netzbezug_arbeitspreis_cent_kwh : null)
-    const einspeise_erloes = tarif
-      ? md.einspeisung_kwh * tarif.einspeiseverguetung_cent_kwh / 100
-      : 0
+    // §51 EEG: Stunden mit negativem Börsenpreis werden nicht vergütet. Der
+    // Abzug muss hier genauso passieren wie im Backend-SoT (finanz_aggregat →
+    // einspeise_erloes_euro) — sonst zeigt die Finanz-Übersicht einen höheren
+    // Einspeiseerlös als das T-Konto direkt darunter. `null` (keine §51-Anlage,
+    // keine Strompreis-Mitschrift) bedeutet: kein Abzug.
+    const erloes = tarif
+      ? calcEinspeiseErloes(md.einspeisung_kwh, md.einspeisung_neg_preis_kwh, tarif.einspeiseverguetung_cent_kwh)
+      : null
+    const einspeise_erloes = erloes ? erloes.erloes_euro : 0
     const ev_ersparnis = netzPreisCent != null
       ? eigenverbrauch * netzPreisCent / 100
       : 0
@@ -214,6 +224,8 @@ export function createMonatsZeitreihe(
       netto_ertrag,
       netto_bilanz,
       netzbezug_preis_cent: netzPreisCent,
+      einspeise_nicht_verguetet_euro: erloes ? erloes.nicht_verguetet_euro : 0,
+      einspeise_neg_preis_kwh: md.einspeisung_neg_preis_kwh,
       co2_einsparung,
     }
   })

@@ -152,12 +152,20 @@ EV-Quote (%)        = Eigenverbrauch / Erzeugung_gesamt * 100   (wenn Erzeugung 
 Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100    (wenn GV > 0)
 Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV)
 
-Einspeise-Erlös (EUR)    = Einspeisung * Einspeisevergütung / 100
+Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisevergütung / 100
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (nur PV/BKW; s. u.)
 ```
+
+**§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
+mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
+die Vergütung (Herleitung des Volumens: Abschnitt „§51 EEG (Negativpreis-Analyse)"). Ist
+die Anlage nicht §51-pflichtig oder liegt keine Strompreis-Mitschrift vor, ist der
+Wert `null` und es wird nichts abgezogen. Der Abzug gilt **überall** gleich:
+Backend-SoT `core/berechnungen/einspeise_erloes.py` und der Frontend-Spiegel
+`lib/calculations.ts::calcEinspeiseErloes` (Auswertungen → Finanzen + Tabelle).
 
 **Netzpunkt-Bilanz (Erzeugung_gesamt):** Am EINEN Netzanschluss messen die Zähler
 (`Einspeisung`/`Netzbezug`) die Summe **aller** dahinter liegenden Erzeuger. Deshalb
