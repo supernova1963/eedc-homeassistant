@@ -23,7 +23,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.solar_forecast_service import (
     get_solar_prognose,
     get_multi_string_prognose,
@@ -326,14 +326,8 @@ async def get_solar_prognose_endpoint(
             detail="Keine PV-Module oder Balkonkraftwerke konfiguriert."
         )
 
-    # System-Verluste aus PVGIS laden (mit limit(1) falls mehrere aktiv)
-    result = await db.execute(
-        select(PVGISPrognose).where(
-            PVGISPrognose.anlage_id == anlage_id,
-            PVGISPrognose.ist_aktiv == True
-        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
-    )
-    pvgis = result.scalar_one_or_none()
+    # System-Verluste aus der aktiven PVGIS-Prognose (Auswahl-SoT, P5)
+    pvgis = await lade_aktive_prognose(db, anlage_id)
     system_losses = resolve_system_losses(pvgis)
 
     # String-Konfigurationen erstellen

@@ -22,7 +22,7 @@ from backend.core.database import get_session
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.solar_forecast_service import (
     get_solar_prognose,
     get_multi_string_prognose,
@@ -111,13 +111,7 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
         return {"status": "keine_strings"}
 
     # System-Verluste aus PVGIS
-    pvgis_result = await db.execute(
-        select(PVGISPrognose).where(
-            PVGISPrognose.anlage_id == anlage.id,
-            PVGISPrognose.ist_aktiv == True,
-        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
-    )
-    pvgis = pvgis_result.scalar_one_or_none()
+    pvgis = await lade_aktive_prognose(db, anlage.id)
     system_losses = resolve_system_losses(pvgis)
 
     # Alle Prefetch-Calls parallel starten (skip_jitter=True)

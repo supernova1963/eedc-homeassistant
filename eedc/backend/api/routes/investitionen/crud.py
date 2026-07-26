@@ -640,7 +640,7 @@ async def get_roi_dashboard(
         berechne_ust_eigenverbrauch,
     )
     from sqlalchemy import func
-    from backend.models.pvgis_prognose import PVGISPrognose
+    from backend.services.prognose_auswahl import lade_aktive_prognose
 
     # Anlage prüfen
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -845,14 +845,7 @@ async def get_roi_dashboard(
 
             if anzahl_monate > 0:
                 # PVGIS-Hochrechnung versuchen
-                pvgis_result = await db.execute(
-                    select(PVGISPrognose)
-                    .where(PVGISPrognose.anlage_id == anlage_id)
-                    .where(PVGISPrognose.ist_aktiv == True)
-                    .order_by(PVGISPrognose.abgerufen_am.desc())
-                    .limit(1)
-                )
-                pvgis_prognose = pvgis_result.scalar_one_or_none()
+                pvgis_prognose = await lade_aktive_prognose(db, anlage_id)
 
                 methode = 'linear'
                 faktor = 12.0 / anzahl_monate

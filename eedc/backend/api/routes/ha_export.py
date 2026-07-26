@@ -29,7 +29,7 @@ from backend.core.berechnungen import (
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
 )
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
 
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
@@ -442,16 +442,7 @@ async def calculate_anlage_sensors(
         }
     spez_gewichte = None
     if spez_covered_months:
-        pvgis_res = await db.execute(
-            select(PVGISPrognose)
-            .where(
-                PVGISPrognose.anlage_id == anlage.id,
-                PVGISPrognose.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
-            )
-            .order_by(PVGISPrognose.abgerufen_am.desc())
-            .limit(1)
-        )
-        pvgis = pvgis_res.scalar_one_or_none()
+        pvgis = await lade_aktive_prognose(db, anlage.id)
         spez_gewichte = monatsgewichte_aus_pvgis(
             pvgis.monatswerte if pvgis else None
         ) or None

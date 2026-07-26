@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose_sync
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
 from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.pvgis import fetch_pvgis_tmy_monat, get_pvgis_tmy_defaults
@@ -152,10 +152,7 @@ async def get_kurzfrist_prognose(
         return None
 
     # Systemverluste aus PVGIS-Prognose oder Default
-    pvgis = db.query(PVGISPrognose).filter(
-        PVGISPrognose.anlage_id == anlage_id,
-        PVGISPrognose.ist_aktiv == True
-    ).first()
+    pvgis = lade_aktive_prognose_sync(db, anlage_id)
     system_losses = resolve_system_losses(pvgis)
 
     # Wettervorhersage abrufen (Wettermodell der Anlage berücksichtigen)
@@ -260,10 +257,7 @@ async def get_langfrist_prognose(
         return None
 
     # PVGIS-Prognose laden (für Monatswerte)
-    pvgis = db.query(PVGISPrognose).filter(
-        PVGISPrognose.anlage_id == anlage_id,
-        PVGISPrognose.ist_aktiv == True
-    ).first()
+    pvgis = lade_aktive_prognose_sync(db, anlage_id)
 
     pvgis_monatswerte = {}
     if pvgis and pvgis.monatswerte:
@@ -405,10 +399,7 @@ async def get_trend_analyse(
     anlagenleistung_kwp = sum(m.leistung_kwp or 0 for m in pv_module) or anlage.leistung_kwp or 0
 
     # PVGIS-Prognose
-    pvgis = db.query(PVGISPrognose).filter(
-        PVGISPrognose.anlage_id == anlage_id,
-        PVGISPrognose.ist_aktiv == True
-    ).first()
+    pvgis = lade_aktive_prognose_sync(db, anlage_id)
 
     pvgis_jahresertrag = pvgis.jahresertrag_kwh if pvgis else 0
 

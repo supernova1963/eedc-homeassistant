@@ -1,8 +1,8 @@
-"""Konformitäts-Wächter gegen zwei der sechs Wurzelmuster (A14).
+"""Konformitäts-Wächter gegen drei der sechs Wurzelmuster (A14/A17).
 
 Hintergrund: Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
 Commits der v4.0.1-Runde haben Fundstellen einzeln geheilt, jeder Fix erzeugte
-den nächsten Fund. Diese Datei macht zwei der Muster maschinell prüfbar, damit
+den nächsten Fund. Diese Datei macht drei der Muster maschinell prüfbar, damit
 sie nicht neu entstehen. Sie prüft **Struktur, keine Werte** — deshalb kein
 `db`-Fixture, kein I/O, kein Netz.
 
@@ -31,6 +31,13 @@ Gewächterte Muster:
        Feld→Investition-Zuordnung. Genau das war #352: der Monatsabschluss rief
        ihn direkt auf und übersprang die Zuordnung (`0a08cca6`). Zuordnungs-SoT
        ist `_mapped_or_distribute`.
+
+  P5 — Auswahlregel der aktiven PVGIS-Prognose. Die vier Zeilen
+       (`ist_aktiv == True` · `ORDER BY abgerufen_am DESC` · `LIMIT 1`) standen
+       23-mal als Kopie im Repo; 6 Kopien wichen ab, auf drei verschiedene Arten
+       (2× HTTP 500, 1× verdoppelte Summe, 3× älteste statt aktiver). Seit A17
+       liegt die Regel in `services/prognose_auswahl.py`; dieser Wächter hält die
+       Lesestellen darauf, damit keine 24. Kopie entsteht.
 """
 
 from __future__ import annotations
@@ -266,4 +273,116 @@ def test_p3_zuordnungs_sot_existiert_noch():
             f"{erwartet} existiert nicht mehr in {N48_DEFINITIONS_MODUL}. "
             "Wurde umbenannt oder verschoben? Dann diesen Wächter mitziehen — "
             "sonst prüft er ab jetzt nichts mehr."
+        )
+
+
+# ============================================================================
+# P5 — Auswahl der aktiven PVGIS-Prognose nur über den Auswahl-SoT
+# ============================================================================
+
+# Der SoT: `services/prognose_auswahl.py`. Alles andere liest die aktive Prognose
+# über `lade_aktive_prognose` / `lade_aktive_prognose_sync` /
+# `lade_aktive_monatsprognosen` — nie über eine eigene Query.
+P5_SOT_MODUL = "backend/services/prognose_auswahl.py"
+
+# Klassifizierte Baseline (A17): die einzigen Module, die `ist_aktiv` legitim
+# selbst anfassen. Beide SETZEN das Flag oder listen es, sie WÄHLEN keinen Wert
+# damit aus — das ist die Grenze, die dieser Wächter zieht.
+#
+#   api/routes/pvgis.py
+#       Verwaltungs-/Schreibpfad: beim Neu-Abrufen die alten deaktivieren, beim
+#       Aktivieren umschalten, alle Prognosen listen. Hier ENTSTEHT der
+#       Nutzerwille, den der SoT anschließend liest.
+#   api/routes/import_export/json_operations.py
+#       Export (alle Prognosen inkl. Flag) und Import (normalisiert die Datei auf
+#       genau eine aktive, s. `tests/test_wurzelmuster_p5_invariante.py`).
+#   api/routes/import_export/demo_data.py
+#       Legt Demo-Prognosen an — Schreibpfad.
+#
+# Wer hier etwas hinzufügt, begründet im Klartext, warum die Stelle das Flag
+# SETZT statt einen Wert damit AUSZUWÄHLEN. Ein Lesepfad gehört nicht hierher,
+# sondern auf den Helper.
+P5_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
+    "backend/api/routes/pvgis.py",
+    "backend/api/routes/import_export/json_operations.py",
+    "backend/api/routes/import_export/demo_data.py",
+})
+
+# Der Modellname und seine im Bestand vorkommenden Import-Aliase.
+_PVGIS_MODELL_NAMEN = ("PVGISPrognose", "PVGISPrognoseModel")
+
+
+def _pvgis_ist_aktiv_zugriffe() -> list[str]:
+    """Alle `<PVGISPrognose|Alias>.ist_aktiv`-Zugriffe außerhalb von SoT/Baseline."""
+    treffer: list[str] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if modul == P5_SOT_MODUL or modul in P5_BASELINE_AUSNAHMEN:
+            continue
+        for knoten in ast.walk(baum):
+            if not (isinstance(knoten, ast.Attribute) and knoten.attr == "ist_aktiv"):
+                continue
+            ziel = knoten.value
+            name = ziel.id if isinstance(ziel, ast.Name) else None
+            if name in _PVGIS_MODELL_NAMEN:
+                treffer.append(_ort(pfad, knoten))
+    return treffer
+
+
+def test_p5_aktive_prognose_nur_ueber_den_auswahl_sot():
+    """Kein Lesepfad darf die Auswahlregel selbst formulieren.
+
+    Baseline 0 seit A17. Der Wächter verhindert nicht „irgendeine Query", sondern
+    genau die Wiederholung der REGEL: sobald ein Modul `PVGISPrognose.ist_aktiv`
+    in ein eigenes `select`/`filter` schreibt, entscheidet es selbst über
+    Tiebreak und `limit` — und dort entstanden alle 6 Abweichungen.
+    """
+    verstoesse = _pvgis_ist_aktiv_zugriffe()
+
+    assert not verstoesse, (
+        "Eigene Auswahl der aktiven PVGIS-Prognose außerhalb von "
+        f"{P5_SOT_MODUL}:\n" + "\n".join(f"  {ort}" for ort in verstoesse) + "\n\n"
+        "Stattdessen `lade_aktive_prognose(db, anlage_id)` (async), "
+        "`lade_aktive_prognose_sync(db, anlage_id)` oder — für die normalisierten "
+        "Monatszeilen — `lade_aktive_monatsprognosen(db, anlage_id, monat=…)` aus "
+        "backend/services/prognose_auswahl.py verwenden. Wer das Flag SETZT statt "
+        "damit auszuwählen, gehört mit Begründung in P5_BASELINE_AUSNAHMEN."
+    )
+
+
+def test_p5_auswahl_sot_traegt_die_regel_noch():
+    """Gegenprobe: der Wächter wäre wertlos, wenn der SoT die Regel verliert.
+
+    Ohne diese Prüfung wird das Gate still grün, sobald jemand im Helper das
+    `limit(1)` oder das `order_by(abgerufen_am.desc())` entfernt — dann gilt
+    zwar noch „nur eine Stelle", aber nicht mehr „die richtige Regel".
+    """
+    quelle = (_BACKEND / "services/prognose_auswahl.py").read_text()
+    baum = ast.parse(quelle)
+
+    definiert = {
+        knoten.name
+        for knoten in ast.walk(baum)
+        if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    for erwartet in (
+        "aktive_prognose_query",
+        "lade_aktive_prognose",
+        "lade_aktive_prognose_sync",
+        "lade_aktive_monatsprognosen",
+    ):
+        assert erwartet in definiert, (
+            f"{erwartet} existiert nicht mehr in {P5_SOT_MODUL} — umbenannt oder "
+            "verschoben? Dann diesen Wächter mitziehen, sonst prüft er nichts mehr."
+        )
+
+    for bestandteil, bedeutung in (
+        ("ist_aktiv.is_(True)", "der Aktiv-Filter (Nutzerwille)"),
+        ("abgerufen_am.desc()", "der Tiebreak „zuletzt abgerufene“"),
+        (".limit(1)", "die Absicherung gegen verletzte Invarianten"),
+    ):
+        assert bestandteil in quelle, (
+            f"{bestandteil} fehlt im Auswahl-SoT — {bedeutung} ist damit weg. "
+            "Genau diese drei Bestandteile sind die Regel P5; ohne sie ist der "
+            "Wächter oben ein grünes Gate über einem offenen Bug."
         )

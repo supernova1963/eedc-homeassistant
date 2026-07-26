@@ -25,7 +25,7 @@ from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
 from backend.services.wetter.utils import wetter_symbol_aus_tag
@@ -358,13 +358,7 @@ async def get_prognosen_vergleich(
         raise bad_request("Keine PV-Leistung konfiguriert")
 
     # Systemverluste aus PVGIS
-    result = await db.execute(
-        select(PVGISPrognose).where(
-            PVGISPrognose.anlage_id == anlage_id,
-            PVGISPrognose.ist_aktiv == True
-        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
-    )
-    pvgis = result.scalar_one_or_none()
+    pvgis = await lade_aktive_prognose(db, anlage_id)
     system_losses = resolve_system_losses(pvgis)
 
     # Wettermodell (nur noch für die 14-Tage-Wettertabelle unten). Die

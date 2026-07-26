@@ -43,7 +43,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.models.strompreis import Strompreis
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
@@ -126,22 +126,10 @@ async def build_jahresbericht_context(
             speicher_kapazitaet += (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
 
     # ── 4. PVGIS-Prognose (die aktive) ──────────────────────────────────
-    # Auswahlregel 1:1 wie im restlichen Repo (`services/prognose_kanon.py`,
-    # Cockpit, Aussichten, Energieprofil, HA-Export): `ist_aktiv == True`, und
-    # falls doch mehrere aktiv sind, die zuletzt abgerufene. `ist_aktiv` ist der
-    # Nutzerwille — über `POST /api/pvgis/prognose/{id}/aktivieren` kann bewusst
-    # eine ÄLTERE Prognose aktiv sein; dann gewinnt sie, nicht die neueste.
+    # Auswahlregel über den SoT `services/prognose_auswahl.py` — dieselbe
+    # Funktion wie Cockpit, Aussichten, Energieprofil und HA-Export nutzen.
     # Der Monatswert-Key heißt `e_m` (so schreibt ihn `api/routes/pvgis.py`).
-    res = await db.execute(
-        select(PVGISPrognose)
-        .where(
-            PVGISPrognose.anlage_id == anlage_id,
-            PVGISPrognose.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
-        )
-        .order_by(PVGISPrognose.abgerufen_am.desc())
-        .limit(1)
-    )
-    pvgis_prognose = res.scalar_one_or_none()
+    pvgis_prognose = await lade_aktive_prognose(db, anlage_id)
     pvgis_by_month: dict[int, float] = {}
     if pvgis_prognose and pvgis_prognose.monatswerte:
         for mw in pvgis_prognose.monatswerte:

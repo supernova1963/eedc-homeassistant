@@ -1138,7 +1138,7 @@ async def get_tagesprognose(
                     get_pv_kwp, get_pv_neigung, get_pv_azimut,
                     resolve_system_losses,
                 )
-                from backend.models.pvgis_prognose import PVGISPrognose
+                from backend.services.prognose_auswahl import lade_aktive_prognose
                 total_kwp = sum(get_pv_kwp(inv) for inv in aktive_invs)
 
                 # system_losses aus aktuellem PVGIS-Eintrag (gleicher Pfad wie
@@ -1146,13 +1146,7 @@ async def get_tagesprognose(
                 # system_losses-Attribut auf Anlage — der frühere Zugriff
                 # `anlage.system_losses` warf einen AttributeError, der im
                 # try/except geschluckt wurde und pv_stunden auf [0] * 24 ließ.
-                pvgis_result = await db.execute(
-                    select(PVGISPrognose).where(
-                        PVGISPrognose.anlage_id == anlage_id,
-                        PVGISPrognose.ist_aktiv == True,
-                    ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
-                )
-                pvgis = pvgis_result.scalar_one_or_none()
+                pvgis = await lade_aktive_prognose(db, anlage_id)
                 system_losses = resolve_system_losses(pvgis)
 
                 # Tage bis zum Zieldatum berechnen

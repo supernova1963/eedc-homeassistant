@@ -13,7 +13,7 @@ from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_im_jahr
-from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.core.field_definitions import get_pv_erzeugung_kwh
 
@@ -74,14 +74,7 @@ async def get_prognose_vs_ist(
     db: AsyncSession = Depends(get_db)
 ):
     """Vergleicht PVGIS-Prognose mit tatsächlichen Monatsdaten."""
-    prognose_result = await db.execute(
-        select(PVGISPrognoseModel)
-        .where(PVGISPrognoseModel.anlage_id == anlage_id)
-        .where(PVGISPrognoseModel.ist_aktiv == True)
-        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
-        .limit(1)
-    )
-    prognose = prognose_result.scalar_one_or_none()
+    prognose = await lade_aktive_prognose(db, anlage_id)
 
     pv_result = await db.execute(
         select(Investition.id)

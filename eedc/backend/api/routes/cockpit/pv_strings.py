@@ -21,7 +21,7 @@ from backend.core.berechnungen import (
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.utils.investition_value import get_inv_value
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
@@ -359,21 +359,10 @@ async def get_pv_strings(
         for wr in result.scalars().all():
             wechselrichter_map[wr.id] = wr.bezeichnung
 
-    # Die AKTIVE Prognose (b2025e0e): `ist_aktiv` ist der Nutzerwille — über
-    # `POST /api/pvgis/prognose/{id}/aktivieren` (api/routes/pvgis.py:810-834)
-    # kann bewusst eine ÄLTERE Prognose aktiv sein. Nur „neueste" hat diese Wahl
-    # still übersteuert. `abgerufen_am.desc()` bleibt als Tiebreak, falls doch
-    # mehrere aktiv sind — dieselbe Kombination wie im gesamten übrigen Repo.
-    result = await db.execute(
-        select(PVGISPrognoseModel)
-        .where(
-            PVGISPrognoseModel.anlage_id == anlage_id,
-            PVGISPrognoseModel.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
-        )
-        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
-        .limit(1)
-    )
-    prognose = result.scalar_one_or_none()
+    # Die AKTIVE Prognose (b2025e0e) über den Auswahl-SoT
+    # `services/prognose_auswahl.py` — dort steht die Regel samt Begründung
+    # (`ist_aktiv` ist Nutzerwille, „neueste" wäre stumme Übersteuerung).
+    prognose = await lade_aktive_prognose(db, anlage_id)
     hat_prognose = prognose is not None
 
     prognose_monate = {}
@@ -524,19 +513,10 @@ async def get_pv_strings_gesamtlaufzeit(
         for wr in result.scalars().all():
             wechselrichter_map[wr.id] = wr.bezeichnung
 
-    # Dieselbe Auswahlregel wie in der Jahressicht darüber: die AKTIVE Prognose,
-    # bei mehreren die zuletzt abgerufene. Zwei Sichten derselben Anlage dürfen
-    # nicht auf verschiedenen Prognosen stehen.
-    result = await db.execute(
-        select(PVGISPrognoseModel)
-        .where(
-            PVGISPrognoseModel.anlage_id == anlage_id,
-            PVGISPrognoseModel.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
-        )
-        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
-        .limit(1)
-    )
-    prognose = result.scalar_one_or_none()
+    # Dieselbe Auswahlregel wie in der Jahressicht darüber — beide über den
+    # Auswahl-SoT, damit zwei Sichten derselben Anlage nicht auf
+    # verschiedenen Prognosen stehen können.
+    prognose = await lade_aktive_prognose(db, anlage_id)
     hat_prognose = prognose is not None
 
     prognose_monate = {}

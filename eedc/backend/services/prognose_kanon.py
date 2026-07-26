@@ -53,7 +53,7 @@ from backend.core.berechnungen.prognose_korrektur import (
     korrigiere_tagesprofil,
 )
 from backend.models.investition import Investition
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.models.tages_energie_profil import TagesEnergieProfil
 from backend.services import solar_forecast_service as sfs
 from backend.services.korrekturprofil_lookup import korrekturfaktoren_fuer_tag
@@ -210,13 +210,7 @@ async def kanon_tagesprognose(
             return None
         gruppen = [Orientierungsgruppe(neigung=35, ausrichtung=0, kwp=kwp)]
 
-    pvgis_res = await db.execute(
-        select(PVGISPrognose).where(
-            PVGISPrognose.anlage_id == anlage.id,
-            PVGISPrognose.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
-        ).order_by(PVGISPrognose.abgerufen_am.desc()).limit(1)
-    )
-    system_losses = resolve_system_losses(pvgis_res.scalar_one_or_none())
+    system_losses = resolve_system_losses(await lade_aktive_prognose(db, anlage.id))
 
     # Fan-out: pro Orientierungsgruppe ein get_solar_prognose (eigener Cache-
     # Eintrag, parallel). Aufruf über das Modul (sfs.) — Monkeypatch-fähig.

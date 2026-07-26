@@ -14,7 +14,7 @@ from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
@@ -485,13 +485,7 @@ async def get_cockpit_uebersicht(
     # ([[feedback_aggregator_symmetrie]], Rainer-PN 2026-06-11).
     monatsgewichte: Optional[dict[int, float]] = None
     if covered_months and anlagenleistung_kwp > 0:
-        pvgis_res = await db.execute(
-            select(PVGISPrognose)
-            .where(PVGISPrognose.anlage_id == anlage_id, PVGISPrognose.ist_aktiv == True)
-            .order_by(PVGISPrognose.abgerufen_am.desc())
-            .limit(1)
-        )
-        pvgis = pvgis_res.scalar_one_or_none()
+        pvgis = await lade_aktive_prognose(db, anlage_id)
         monatsgewichte = monatsgewichte_aus_pvgis(
             pvgis.monatswerte if pvgis else None
         ) or None
