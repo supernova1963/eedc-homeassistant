@@ -415,12 +415,23 @@ class EnergieprofilChecks:
             return txt
 
         if fehlt:
+            # A16/N44: dieser Zustand kann auch entstanden sein, ohne dass der
+            # Nutzer je etwas gelöscht hat — die frühere Start-Migration
+            # `_migrate_pv_erzeugung_aggregat_clear` hat den Gesamtwert bei
+            # Anlagen mit eigenem BKW-Sensor mitgeleert. Deshalb nennt der
+            # Befund jetzt den Weg zurück statt nur den Zustand. Kein zweiter
+            # Check daneben — der Zustand war hier schon abgedeckt.
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.ERROR,
                 meldung=f"PV-Erzeugung fehlt in {len(fehlt)} Monat(en)",
                 details=(
                     "Keine PV-Quelle (weder Pro-Modul-Werte noch ein "
-                    f"Gesamtwert): {_monate(fehlt)}"
+                    f"Gesamtwert): {_monate(fehlt)}. Wo ein PV-Sensor zugeordnet "
+                    "ist, lassen sich diese Monate neu befüllen — über "
+                    "Einstellungen → Datenverwaltung → Import aus HA-Statistik "
+                    "oder über den Monatsabschluss des betreffenden Monats; "
+                    "beide schreiben die Werte je Modul. Ohne zugeordneten "
+                    "Sensor müssen die Werte von Hand nachgetragen werden."
                 ),
                 link="/einstellungen/monatsdaten",
             ))

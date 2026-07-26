@@ -229,58 +229,135 @@ def _migrate_monatsdaten_sonderkosten_zu_positionen(connection) -> None:
         )
 
 
+def _parse_iso_datum(wert):
+    """`date` aus einem DB-Wert (ISO-String oder bereits `date`); None bei Murks."""
+    from datetime import date as _d, datetime as _dt
+    if wert is None or isinstance(wert, _d) and not isinstance(wert, _dt):
+        return wert
+    if isinstance(wert, _dt):
+        return wert.date()
+    try:
+        return _d.fromisoformat(str(wert)[:10])
+    except ValueError:
+        return None
+
+
+def _pv_quelle_aktiv_im_monat(aktiv, anschaffung, stilllegung, jahr, monat) -> bool:
+    """Roh-SQL-Variante von `Investition.ist_aktiv_im_monat` (models/investition.py:145)."""
+    from calendar import monthrange
+    from datetime import date as _d
+    if aktiv is not None and not aktiv:
+        return False
+    start, end = _d(jahr, monat, 1), _d(jahr, monat, monthrange(jahr, monat)[1])
+    a, s = _parse_iso_datum(anschaffung), _parse_iso_datum(stilllegung)
+    if a and a > end:
+        return False
+    if s and s < start:
+        return False
+    return True
+
+
 def _migrate_pv_erzeugung_aggregat_clear(connection) -> None:
     """kWp-Verteilung-Etappe: `monatsdaten.pv_erzeugung_kwh` als rein manuelles
     Aggregat etablieren (Invariante, [[project_kwp_verteilung_aggregator]]).
 
-    Bestandszeilen, bei denen für denselben Monat Pro-Modul-IMD-Werte
-    (pv-module/balkonkraftwerk mit `pv_erzeugung_kwh`) existieren, hatten das
-    Feld bislang als Auto-Summe der Module befüllt (alter Form-Pfad
-    MonatsdatenForm). Diese Auto-Summen werden geleert — die Pro-Modul-Werte
-    sind die Wahrheit und werden zur Lesezeit aggregiert/verteilt. Feldwerte
-    OHNE Pro-Modul-Werte bleiben erhalten (echtes Aggregat, z. B. JayJayX #651).
-    Kriterium ist „Pro-Modul vorhanden ja/nein", NICHT die Herkunft.
+    Geleert wird ausschließlich, was **ohne Verlust weg kann**: eine Auto-Summe
+    des alten Form-Pfads (MonatsdatenForm vor `ba0d8d9d`). Zwei Bedingungen,
+    beide nötig:
 
-    Idempotent (No-Op nach erstem Lauf — danach gibt es keine Zeile mehr mit
-    Feldwert UND Pro-Modul-Werten). Verifiziert 2026-06-06: kein Code-Pfad
-    schrieb je verteilte Werte in die Modul-IMD, Bestands-Pro-Modul-Werte sind
-    gemessen/importiert → Migration sicher.
+    1. **Signatur.** Der Feldwert entspricht (Rundungstoleranz) der Summe der
+       Pro-Quellen-Werte dieses Monats — genau das schrieb die alte Auto-Summe.
+       Weicht er ab, ist es ein gepflegtes Aggregat und bleibt stehen.
+    2. **Redundanz.** JEDE im Monat aktive PV-Quelle (pv-module +
+       balkonkraftwerk) hat einen eigenen Wert. Nur dann ist die Information
+       nach dem Leeren noch vollständig vorhanden; sonst wäre das Feld die
+       letzte Quelle und der Monat stünde danach auf `fehlt`.
+
+    A16/N44 — warum das Kriterium geschärft wurde: vorher genügte, dass für den
+    Monat IRGENDEINE pv-module/balkonkraftwerk-IMD einen Wert hat (`break` beim
+    ersten Treffer). Wer ein echtes Gesamt-Aggregat pflegt UND ein
+    Balkonkraftwerk mit eigenem Sensor hat, verlor damit das Aggregat für jeden
+    Monat mit BKW-Daten — die Dachflächen standen anschließend auf `fehlt`.
+    Der Docstring versprach dabei das Gegenteil („Feldwerte OHNE Pro-Modul-Werte
+    bleiben erhalten, z. B. JayJayX #651"); genau dieser Nutzer war der Fall,
+    der zerstört wurde.
+
+    Die alte Auto-Summe umfasste `pv-module` + `wechselrichter` +
+    `balkonkraftwerk` + `sonstiges`/Erzeuger (Git: MonatsdatenForm vor
+    `ba0d8d9d`, Zeilen 352-375). Verglichen wird hier bewusst nur gegen die
+    Quellen, deren Werte auch GELESEN werden (pv-module + balkonkraftwerk):
+    Wechselrichter- und BHKW-Werte fließen in keinen PV-Lesepfad, eine Summe,
+    die sie enthält, ist deshalb nicht redundant und bleibt stehen. Das ist die
+    sichere Richtung — Stehenlassen ist korrigierbar, Löschen nicht.
+
+    KEINE rückwirkende Reparatur: bereits geleerte Monate stellt diese Migration
+    nicht wieder her (Projekt-Doktrin — Historien-Korrekturen laufen als
+    Daten-Checker-Aktion, nie als Start-Migration). Der Daten-Checker
+    (`_check_pv_erzeugung`) weist solche Monate als Fehler aus und nennt den
+    Weg; der Wert selbst ist nicht rekonstruierbar, weil die frühere Migration
+    als rohes SQL ohne `write_with_provenance` lief (kein `old_value`).
+
+    Idempotent: nach dem Leeren ist die Zeile NULL und taucht in der Auswahl
+    nicht mehr auf; bleibende Zeilen erfüllen die Bedingungen weiterhin nicht.
     """
     import json
     from sqlalchemy import text as _text
 
     md_rows = connection.execute(_text(
-        "SELECT id, anlage_id, jahr, monat FROM monatsdaten "
+        "SELECT id, anlage_id, jahr, monat, pv_erzeugung_kwh FROM monatsdaten "
         "WHERE pv_erzeugung_kwh IS NOT NULL"
     )).fetchall()
     if not md_rows:
         return
 
-    for md_id, anlage_id, jahr, monat in md_rows:
-        imd_rows = connection.execute(_text(
-            "SELECT imd.verbrauch_daten FROM investition_monatsdaten imd "
-            "JOIN investitionen i ON i.id = imd.investition_id "
-            "WHERE i.anlage_id = :aid AND i.typ IN ('pv-module', 'balkonkraftwerk') "
-            "AND imd.jahr = :j AND imd.monat = :m"
+    def _wert(typ, vd_raw):
+        """Gelesener Pro-Quellen-Wert (None = nicht erfasst) — Keys wie `imd_typ_beitrag`."""
+        if not vd_raw:
+            return None
+        try:
+            vd = json.loads(vd_raw) if isinstance(vd_raw, str) else dict(vd_raw)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(vd, dict):
+            return None
+        wert = vd.get("pv_erzeugung_kwh")
+        if wert is None and typ == "balkonkraftwerk":
+            wert = vd.get("erzeugung_kwh")  # Legacy-Key wie get_pv_erzeugung_kwh
+        try:
+            return float(wert) if wert is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    for md_id, anlage_id, jahr, monat, feldwert in md_rows:
+        quellen = connection.execute(_text(
+            "SELECT i.typ, i.aktiv, i.anschaffungsdatum, i.stilllegungsdatum, "
+            "       imd.verbrauch_daten "
+            "FROM investitionen i "
+            "LEFT JOIN investition_monatsdaten imd "
+            "  ON imd.investition_id = i.id AND imd.jahr = :j AND imd.monat = :m "
+            "WHERE i.anlage_id = :aid AND i.typ IN ('pv-module', 'balkonkraftwerk')"
         ), {"aid": anlage_id, "j": jahr, "m": monat}).fetchall()
 
-        hat_pro_modul = False
-        for (vd_raw,) in imd_rows:
-            if not vd_raw:
-                continue
-            try:
-                vd = json.loads(vd_raw) if isinstance(vd_raw, str) else dict(vd_raw)
-            except (TypeError, ValueError):
-                continue
-            if isinstance(vd, dict) and vd.get("pv_erzeugung_kwh") is not None:
-                hat_pro_modul = True
-                break
+        werte = [
+            _wert(typ, vd_raw)
+            for typ, aktiv, anschaffung, stilllegung, vd_raw in quellen
+            if _pv_quelle_aktiv_im_monat(aktiv, anschaffung, stilllegung, jahr, monat)
+        ]
+        # Keine aktive Quelle oder eine ohne eigenen Wert → das Feld ist (auch)
+        # Träger von Information, die sonst nirgends steht. Stehen lassen.
+        if not werte or any(w is None for w in werte):
+            continue
 
-        if hat_pro_modul:
-            connection.execute(
-                _text("UPDATE monatsdaten SET pv_erzeugung_kwh = NULL WHERE id = :id"),
-                {"id": md_id},
-            )
+        summe = sum(werte)
+        # Toleranz gegen Rundung beim Speichern (0,1er-Schritte je Quelle);
+        # relativer Anteil fängt sehr große Summen ab.
+        if abs((feldwert or 0) - summe) > max(0.5, abs(summe) * 0.0005):
+            continue
+
+        connection.execute(
+            _text("UPDATE monatsdaten SET pv_erzeugung_kwh = NULL WHERE id = :id"),
+            {"id": md_id},
+        )
 
 
 _DEAD_STRATEGIEN = {"kwp_verteilung", "ev_quote", "cop_berechnung", "manuell"}

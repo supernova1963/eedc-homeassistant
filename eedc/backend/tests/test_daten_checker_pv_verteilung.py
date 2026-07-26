@@ -76,6 +76,21 @@ async def test_keine_quelle_ist_error(db):
     assert any(r.schwere == CheckSeverity.ERROR and "fehlt" in r.meldung for r in res), res
 
 
+async def test_keine_quelle_nennt_den_reparaturweg(db):
+    """A16/N44: Der Zustand kann auch aus der früheren Start-Migration stammen
+    (PV-Gesamtwert bei Anlagen mit BKW-Sensor mitgeleert). Der Befund muss
+    deshalb den Weg zurück nennen, nicht nur den Zustand — aufgewertet im
+    bestehenden Check statt als zweiter Check daneben."""
+    anlage = await _seed(db, aggregat=None)
+    fehlt = next(r for r in await _pv_ergebnisse(db, anlage)
+                 if r.schwere == CheckSeverity.ERROR and "fehlt" in r.meldung)
+    assert "HA-Statistik" in (fehlt.details or "")
+    assert "Monatsabschluss" in (fehlt.details or "")
+    # Ohne zugeordneten Sensor gibt es keinen automatischen Weg — das muss
+    # dastehen, statt eine Reparatur zu versprechen, die es nicht gibt.
+    assert "von Hand" in (fehlt.details or "")
+
+
 async def test_teil_luecke_ohne_aggregat_ist_warning(db):
     anlage = await _seed(db, aggregat=None, pro_modul={"Süd": 600.0})
     res = await _pv_ergebnisse(db, anlage)
