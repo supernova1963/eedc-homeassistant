@@ -1128,8 +1128,11 @@ async def get_tagesprognose(
         pv_profil_vorhanden = True
     elif pv_quelle == "openmeteo":
         # Fallback (Kanon ohne Ergebnis: kein OpenMeteo, keine kWp, Zieltag
-        # jenseits des Abrufs): bisheriger Ein-Abruf-Pfad, damit die Prognose
-        # nicht ganz ausfällt. Bewusst unverändert inkl. Legacy-Skalar.
+        # jenseits des Abrufs): eigener Abruf-Pfad, damit die Prognose nicht
+        # ganz ausfällt. Seit `49954860` (P1/N51) fächert er wie der Kanon je
+        # Orientierungsgruppe auf; was bleibt, ist der flache Legacy-Skalar
+        # (`_get_lernfaktor`) statt der Kaskade pro Energie-Slot — deshalb
+        # kann seine Tagessumme weiter leicht vom Kanon abweichen.
         try:
             from backend.services.solar_forecast_service import get_solar_prognose
 

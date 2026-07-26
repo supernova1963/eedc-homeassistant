@@ -14,6 +14,7 @@ from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
 from backend.core.field_definitions import get_speicher_netzladung_kwh
+from backend.services.pv_orientation import get_pv_kwp
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 
@@ -105,7 +106,11 @@ class StammdatenChecks:
         else:
             # kWp-Vergleich (PV-Module + BKW)
             bkw_inv = [i for i in anlage.investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(heute)]
-            summe_kwp = sum((m.leistung_kwp or 0) for m in pv_module)
+            # kWp über den SoT-Helper (#229-Klasse, N66): wer die Nennleistung
+            # nur im Detail-Feld (`parameter`) gepflegt hat, hat in der Spalte
+            # NULL stehen. Der frühere Spalten-Direktzugriff las dort 0 und
+            # meldete eine Abweichung, die es nicht gibt.
+            summe_kwp = sum(get_pv_kwp(m) for m in pv_module)
             summe_kwp += sum(
                 b.leistung_kwp or ((b.parameter or {}).get("leistung_wp", 0) * ((b.parameter or {}).get("anzahl", 1) or 1) / 1000)
                 for b in bkw_inv
@@ -262,7 +267,7 @@ class StammdatenChecks:
 
             # Typ-spezifische Prüfungen
             if inv.typ == "pv-module":
-                if not inv.leistung_kwp:
+                if not get_pv_kwp(inv):  # #229-Klasse (N66): Spalte ODER Detail-Feld
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Leistung (kWp) fehlt",
