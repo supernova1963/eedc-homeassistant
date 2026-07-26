@@ -13,6 +13,7 @@ GET /api/energie-profil/{anlage_id}/kraftstoffpreis-status — Anzahl offener Ze
 GET /api/energie-profil/{anlage_id}/tagesprognose — Kombinierte Tagesprognose
 """
 
+import asyncio
 import calendar
 import re
 from collections import defaultdict
@@ -1155,11 +1156,22 @@ async def get_tagesprognose(
                 # Top-Level-Spalten (Investition.neigung_grad, .ausrichtung)
                 # liegen statt im parameter-JSON.
                 from backend.services.pv_orientation import (
-                    get_pv_kwp, get_pv_neigung, get_pv_azimut,
-                    resolve_system_losses,
+                    orientierungs_gruppen, resolve_system_losses,
                 )
                 from backend.services.prognose_auswahl import lade_aktive_prognose
-                total_kwp = sum(get_pv_kwp(inv) for inv in aktive_invs)
+
+                # P1 (N51): EIN Abruf je Orientierungsgruppe statt eines Abrufs
+                # über die Gesamt-kWp mit der Orientierung der zufällig ersten
+                # Investition (`aktive_invs[0]`, Query ohne `ORDER BY`). Eine
+                # Ost/West-Anlage bekam so den Tagesgang EINER Himmelsrichtung
+                # auf die volle Leistung gerechnet — bei ausgeglichener
+                # Verteilung ein Fehler in der Summenzeile, der sich NICHT
+                # herausmittelt. Der Kanon-Pfad darüber fächert längst auf; hier
+                # lief der Fallback als einzige Sicht daneben.
+                # Bei genau EINER Gruppe ist der eine Abruf die korrekte Form —
+                # dann ist bewiesen, dass alle Module dieselbe Orientierung
+                # haben (dieselbe Guard-Form wie prefetch_service/solar_prognose).
+                gruppen = orientierungs_gruppen(aktive_invs)
 
                 # system_losses aus aktuellem PVGIS-Eintrag (gleicher Pfad wie
                 # solar_prognose.py und prefetch_service.py). Es gibt KEIN
@@ -1173,26 +1185,51 @@ async def get_tagesprognose(
                 tage_bis_ziel = (datum - date.today()).days
                 forecast_days = max(tage_bis_ziel + 1, 2)
 
-                prognose = await get_solar_prognose(
-                    latitude=anlage.latitude,
-                    longitude=anlage.longitude,
-                    kwp=total_kwp,
-                    neigung=get_pv_neigung(aktive_invs[0]),
-                    ausrichtung=get_pv_azimut(aktive_invs[0]),
-                    days=forecast_days,
-                    system_losses=system_losses,
-                    # Interaktiver User-Request (Stunden-/Tagesprognose der
-                    # Aussicht): der 1-30s-Random-Jitter gilt nur für
-                    # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
-                    skip_jitter=True,
-                )
-                if prognose:
-                    ziel_str = datum.isoformat()
+                ergebnisse = await asyncio.gather(*[
+                    get_solar_prognose(
+                        latitude=anlage.latitude,
+                        longitude=anlage.longitude,
+                        kwp=g.kwp,
+                        neigung=g.neigung,
+                        ausrichtung=g.ausrichtung,
+                        days=forecast_days,
+                        system_losses=system_losses,
+                        # Interaktiver User-Request (Stunden-/Tagesprognose der
+                        # Aussicht): der 1-30s-Random-Jitter gilt nur für
+                        # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+                        skip_jitter=True,
+                    )
+                    for g in gruppen
+                ])
+
+                ziel_str = datum.isoformat()
+                summe = [0.0] * 24
+                geliefert = 0
+                for prognose in ergebnisse:
+                    if not prognose:
+                        continue
                     for tag in prognose.tageswerte:
                         if tag.datum == ziel_str and tag.stunden_kw:
-                            pv_stunden = tag.stunden_kw
-                            pv_profil_vorhanden = True
+                            for i, v in enumerate(tag.stunden_kw[:24]):
+                                summe[i] += v or 0.0
+                            geliefert += 1
                             break
+
+                if geliefert:
+                    pv_stunden = [round(v, 3) for v in summe]
+                    pv_profil_vorhanden = True
+
+                    # P4: eine Teilsumme sagt es selbst. Fällt eine
+                    # Orientierungsgruppe aus, fehlt ihr kWp-Anteil im
+                    # Tagesverlauf — der Wert bleibt (beste verfügbare
+                    # Information), aber nicht ungekennzeichnet.
+                    if geliefert < len(gruppen):
+                        pv_hinweise.append(
+                            f"Nur {geliefert} von {len(gruppen)} Dachflächen "
+                            "(Orientierungsgruppen) haben eine Prognose geliefert. "
+                            "Der PV-Tagesverlauf ist deshalb eine Teilsumme und zu "
+                            "niedrig — bitte später erneut laden."
+                        )
 
                     # Lernfaktor anwenden (MOS-Kaskade)
                     from backend.api.routes.live_wetter import _get_lernfaktor

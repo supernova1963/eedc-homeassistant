@@ -27,10 +27,10 @@ from typing import Any
 # Mapping für Ausrichtung-Strings → Azimut-Grad (EEDC/PVGIS-Konvention:
 # 0=Süd, -90=Ost, 90=West, 180/-180=Nord).
 AUSRICHTUNG_MAP = {
-    "sued": 0, "süd": 0, "s": 0,
-    "ost": -90, "o": -90, "e": -90,
+    "sued": 0, "süd": 0, "s": 0, "south": 0,
+    "ost": -90, "o": -90, "e": -90, "east": -90,
     "west": 90, "w": 90,
-    "nord": 180, "n": 180,
+    "nord": 180, "n": 180, "north": 180,
     "suedost": -45, "südost": -45, "so": -45, "se": -45,
     "suedwest": 45, "südwest": 45, "sw": 45,
     "nordost": -135, "no": -135, "ne": -135,

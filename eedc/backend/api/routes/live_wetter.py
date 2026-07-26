@@ -173,72 +173,72 @@ def _format_solar_noon(longitude: Optional[float]) -> Optional[str]:
 TEMP_COEFFICIENT = 0.004  # -0.4%/°C über 25°C (typisch Silizium)
 HEIZGRENZE = 15.0  # °C — unterhalb wird geheizt (Standard Deutschland)
 
-# Ausrichtungs-Text → Azimut (0=Süd, -90=Ost, 90=West)
-_AUSRICHTUNG_ZU_AZIMUT = {
-    "süd": 0, "s": 0, "south": 0, "sued": 0,
-    "südost": -45, "so": -45, "suedost": -45,
-    "ost": -90, "o": -90, "east": -90,
-    "nordost": -135, "no": -135,
-    "nord": 180, "n": 180, "north": 180,
-    "nordwest": 135, "nw": 135,
-    "west": 90, "w": 90,
-    "südwest": 45, "sw": 45, "suedwest": 45,
-}
+# Die lokale Ausrichtungs-Text→Azimut-Tabelle stand hier bis A20 als zweite
+# Kopie neben `pv_orientation.AUSRICHTUNG_MAP`; ihre drei englischen Schlüssel
+# (`south`/`east`/`north`) sind beim Zusammenlegen in den SoT gewandert.
 
 
 def _get_pv_orientierungsgruppen(pv_module: list) -> list[dict]:
+    """Orientierungsgruppen als dicts — dünner Adapter auf den Gruppen-SoT.
+
+    Die Gruppierungs-Logik selbst steht in
+    ``services/pv_orientation.orientierungs_gruppen`` (geteilt mit
+    ``prognose_kanon``). Diese Funktion war bis A20 eine **zweite Kopie**
+    davon und ist ihr an zwei Stellen davongelaufen (P1/P3):
+
+    1. Sie las die Leistung als ``pv.leistung_kwp`` **direkt aus der Spalte**.
+       Ein Modul, dessen kWp nur im ``parameter``-JSON gepflegt ist, hatte
+       damit ``kwp = 0`` und fiel **ganz aus der Gruppierung** — die Live-Seite
+       rechnete GTI-Gewichte und Gesamt-kWp ohne dieses Dach. Der SoT liest
+       über ``get_pv_kwp`` (Spalte → ``parameter.kwp``).
+    2. Ihre Reihenfolge war die **Einfüge-Reihenfolge der DB-Query** (kein
+       ``ORDER BY``). ``gruppen[0]`` — Cache-Key und, im Ein-Gruppen-Fall,
+       Tilt/Azimut des Haupt-Abrufs — konnte sich damit nach einem Neustart
+       ändern. Der SoT sortiert deterministisch nach kWp (stärkste Gruppe
+       zuerst).
+
+    Rückgabe-Form (Liste von dicts) bleibt, weil ``_fetch_multi_string_gti``
+    und ``services/energie_profil/_helpers`` darauf lesen.
     """
-    Gruppiert PV-Module nach Orientierung (Neigung + Ausrichtung).
-
-    Returns:
-        Liste von Gruppen: [{"neigung": int, "ausrichtung": int, "kwp": float}, ...]
-        Bei nur einer Gruppe = alle Module gleich ausgerichtet.
-        Leere Liste falls keine PV-Module vorhanden.
-    """
-    if not pv_module:
-        return []
-
-    # Module einzeln auflösen
-    module_configs = []
-    for pv in pv_module:
-        kwp = pv.leistung_kwp or 0
-        if kwp <= 0:
-            continue
-
-        # Neigung: Direkt-Feld > Parameter > Default 35°
-        neigung = pv.neigung_grad
-        if neigung is None:
-            params = pv.parameter or {}
-            neigung = params.get("neigung_grad")
-            if neigung is None:
-                neigung = params.get("neigung", 35)
-
-        # Ausrichtung: parameter.ausrichtung_grad (numerisch) > Direkt-Feld (Text) > 0
-        params = pv.parameter or {}
-        azimut = params.get("ausrichtung_grad")
-        if azimut is None:
-            text = pv.ausrichtung or ""
-            azimut = _AUSRICHTUNG_ZU_AZIMUT.get(text.lower(), 0)
-
-        module_configs.append({
-            "neigung": round(float(neigung)),
-            "ausrichtung": round(float(azimut)),
-            "kwp": kwp,
-        })
-
-    if not module_configs:
-        return []
-
-    # Nach (neigung, ausrichtung) gruppieren und kWp summieren
-    gruppen: dict[tuple[int, int], float] = {}
-    for m in module_configs:
-        key = (m["neigung"], m["ausrichtung"])
-        gruppen[key] = gruppen.get(key, 0) + m["kwp"]
+    from backend.services.pv_orientation import orientierungs_gruppen
 
     return [
-        {"neigung": n, "ausrichtung": a, "kwp": kwp}
-        for (n, a), kwp in gruppen.items()
+        {"neigung": g.neigung, "ausrichtung": g.ausrichtung, "kwp": g.kwp}
+        for g in orientierungs_gruppen(pv_module)
     ]
+
+
+# Live-Wetter-Cache: 60 Min TTL (Open-Meteo aktualisiert stündlich, ICON-D2
+# 3-stündlich).
+LIVE_WETTER_CACHE_TTL = 3600
+
+
+def live_wetter_cache_key(
+    latitude: float, longitude: float, gruppen: list[dict], wetter_modell: str,
+) -> str:
+    """Cache-Key des Live-Wetters — EINE Formel für Endpoint und Prefetch.
+
+    Der Key stand als Format-String zweimal im Repo (hier und in
+    `prefetch_service._prefetch_live_wetter`), mit dem Kommentar „muss exakt
+    übereinstimmen" als einziger Sicherung. Jede Key-Änderung an einer Stelle
+    hätte den Prefetch stumm ins Leere wärmen lassen (N56).
+
+    Der Key trägt die **ganze** Gruppen-Signatur, nicht nur die stärkste
+    Gruppe: der Eintrag enthält bei Multi-String das über ALLE Gruppen
+    kWp-gewichtete GTI. Mit nur der ersten Gruppe im Key konnten zwei Anlagen
+    am selben (auf 0,01° gerundeten) Standort mit gleicher stärkster, aber
+    verschiedener zweiter Dachfläche denselben Eintrag benutzen.
+    """
+    haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
+    haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
+    signatur = ";".join(
+        f"{g['neigung']}/{g['ausrichtung']}/{g['kwp']:.2f}" for g in gruppen
+    )
+    return (
+        f"live_wetter:{latitude:.2f}:{longitude:.2f}"
+        f":{haupt_neigung}:{haupt_azimut}:multi={len(gruppen) > 1}"
+        f":g={signatur}:m={wetter_modell}"
+    )
 
 
 def _berechne_verbrauchsprofil(
@@ -1029,17 +1029,19 @@ async def get_live_wetter(
         return {"anlage_id": anlage.id, "verfuegbar": False, "grund": "keine_koordinaten", "stunden": []}
 
     # Haupt-Wetter-Request (Wetterdaten + GHI)
-    # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen
+    # Bei nur einer Orientierungsgruppe: GTI direkt mit abfragen.
+    # P1: `gruppen[0]` geht als Tilt/Azimut NUR in den Ein-Gruppen-Zweig unten
+    # (`if not hat_multi_string`) — dort ist bewiesen, dass es genau eine
+    # Orientierung gibt, die Gruppe ist also repräsentativ. Im Multi-Fall liefert
+    # `_fetch_multi_string_gti` das kWp-gewichtete GTI über ALLE Gruppen.
     hat_multi_string = len(gruppen) > 1
     haupt_neigung = gruppen[0]["neigung"] if gruppen else 35
     haupt_azimut = gruppen[0]["ausrichtung"] if gruppen else 0
 
-    # Cache prüfen (60 Min TTL — Open-Meteo aktualisiert stündlich, ICON-D2 3-stündlich)
-    LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten
+    # Cache prüfen — Key aus dem geteilten Bauer (gleiche Formel im Prefetch)
     wetter_modell_key = getattr(anlage, "wetter_modell", "auto") or "auto"
-    cache_key = (
-        f"live_wetter:{anlage.latitude:.2f}:{anlage.longitude:.2f}"
-        f":{haupt_neigung}:{haupt_azimut}:multi={hat_multi_string}:m={wetter_modell_key}"
+    cache_key = live_wetter_cache_key(
+        anlage.latitude, anlage.longitude, gruppen, wetter_modell_key
     )
 
     try:

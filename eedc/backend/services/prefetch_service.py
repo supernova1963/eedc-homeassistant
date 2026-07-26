@@ -152,13 +152,13 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
         anlage.latitude, anlage.longitude, days=16, skip_jitter=True, model=model_name,
     ))
 
-    # Live-Wetter (für WetterWidget auf Live-Seite)
-    haupt_neigung = strings[0].neigung if strings else 35
-    haupt_azimut = strings[0].ausrichtung if strings else 0
-    hat_multi = len(unique_orientations) > 1
+    # Live-Wetter (für WetterWidget auf Live-Seite) — Gruppen aus demselben SoT,
+    # aus dem der Endpoint seine baut (N52/N56: sonst wärmt der Prefetch einen
+    # anderen Key, als der Endpoint liest).
+    from backend.api.routes.live_wetter import _get_pv_orientierungsgruppen
     coros.append(_prefetch_live_wetter(
         anlage.latitude, anlage.longitude,
-        haupt_neigung, haupt_azimut, hat_multi,
+        _get_pv_orientierungsgruppen(alle_pv),
         wetter_modell=wetter_modell,
     ))
 
@@ -244,7 +244,7 @@ def _extract_heute_kwh(result, is_multi: bool) -> float | None:
 
 async def _prefetch_live_wetter(
     latitude: float, longitude: float,
-    neigung: int, azimut: int, hat_multi: bool,
+    gruppen: list[dict],
     wetter_modell: str = "auto",
 ) -> None:
     """
@@ -252,13 +252,21 @@ async def _prefetch_live_wetter(
 
     Füllt den Cache mit den gleichen Parametern wie /api/live/{id}/wetter,
     damit der erste Seitenaufruf sofort bedient werden kann.
+
+    N56: Key und TTL kommen aus dem Endpoint-Modul (`live_wetter_cache_key`),
+    nicht mehr aus einer zweiten Format-String-Kopie hier — sonst wärmt der
+    Prefetch nach einer Key-Änderung stumm einen Eintrag, den niemand liest.
+    Aus demselben Grund kommen auch die Orientierungsgruppen aus dem Gruppen-SoT
+    statt aus `strings[0]`.
     """
-    LIVE_WETTER_CACHE_TTL = 3600  # 60 Minuten (wie im Endpoint)
-    # Cache-Key muss exakt mit live_wetter.py übereinstimmen (inkl. :m= Suffix)
-    cache_key = (
-        f"live_wetter:{latitude:.2f}:{longitude:.2f}"
-        f":{neigung}:{azimut}:multi={hat_multi}:m={wetter_modell}"
+    from backend.api.routes.live_wetter import (
+        LIVE_WETTER_CACHE_TTL, live_wetter_cache_key,
     )
+
+    hat_multi = len(gruppen) > 1
+    neigung = gruppen[0]["neigung"] if gruppen else 35
+    azimut = gruppen[0]["ausrichtung"] if gruppen else 0
+    cache_key = live_wetter_cache_key(latitude, longitude, gruppen, wetter_modell)
 
     # Nur holen wenn nicht bereits im Cache
     if _cache_get(cache_key) is not None:

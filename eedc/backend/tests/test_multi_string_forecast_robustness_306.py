@@ -184,14 +184,25 @@ class _FakeClient:
         return _FakeResp()
 
 
+# A20/N56: Der Cache-Key kommt aus dem Endpoint-Modul, nicht aus einer
+# Format-String-Kopie im Test — sonst prüft der Test eine dritte Wahrheit.
+_EINE_GRUPPE = [{"neigung": 30, "ausrichtung": 0, "kwp": 10.0}]
+_ZWEI_GRUPPEN = [
+    {"neigung": 30, "ausrichtung": -90, "kwp": 5.0},
+    {"neigung": 30, "ausrichtung": 90, "kwp": 5.0},
+]
+
+
 async def test_prefetch_cache_ist_3er_tupel_single_vollstaendig(monkeypatch):
+    from backend.api.routes.live_wetter import live_wetter_cache_key
+
     monkeypatch.setattr(prefetch_service.httpx, "AsyncClient", _FakeClient)
 
     await prefetch_service._prefetch_live_wetter(
-        50.0, 8.0, 30, 0, hat_multi=False, wetter_modell="auto",
+        50.0, 8.0, _EINE_GRUPPE, wetter_modell="auto",
     )
 
-    cached = _cache_get("live_wetter:50.00:8.00:30:0:multi=False:m=auto")
+    cached = _cache_get(live_wetter_cache_key(50.0, 8.0, _EINE_GRUPPE, "auto"))
     assert cached is not None
     # 3er-Unpack wie im Endpoint (live_wetter.py:1011) darf NICHT mehr crashen
     data, multi_gti, multi_vollstaendig = cached
@@ -200,13 +211,15 @@ async def test_prefetch_cache_ist_3er_tupel_single_vollstaendig(monkeypatch):
 
 
 async def test_prefetch_cache_3er_tupel_multi_markiert_unvollstaendig(monkeypatch):
+    from backend.api.routes.live_wetter import live_wetter_cache_key
+
     monkeypatch.setattr(prefetch_service.httpx, "AsyncClient", _FakeClient)
 
     await prefetch_service._prefetch_live_wetter(
-        51.0, 9.0, 30, 0, hat_multi=True, wetter_modell="auto",
+        51.0, 9.0, _ZWEI_GRUPPEN, wetter_modell="auto",
     )
 
-    cached = _cache_get("live_wetter:51.00:9.00:30:0:multi=True:m=auto")
+    cached = _cache_get(live_wetter_cache_key(51.0, 9.0, _ZWEI_GRUPPEN, "auto"))
     assert cached is not None
     data, multi_gti, multi_vollstaendig = cached
     # Prefetch macht keinen Multi-String-Fan-out → als unvollständig markiert,
