@@ -9,8 +9,14 @@
  * Farben als Tailwind-bg-Klassen (Inline-Hex verboten); der Aufrufer gibt die
  * Rollenfarbe je Segment. Prozent = Anteil an der Segment-Summe; rendert nichts,
  * wenn die Summe 0 ist.
+ *
+ * Optionales `herkunft` kennzeichnet Aufteilungen, deren Werte gerechnet statt
+ * gemessen sind (PV je Modul nach kWp) — über das Zustands-SoT-Badge, siehe
+ * {@link WertHerkunft}.
  */
 import { fmtCalc } from '../ui'
+import ErfassungZustandBadge from '../ui/ErfassungZustandBadge'
+import type { WertHerkunft } from './types'
 
 export interface VerteilungSegment {
   label: string
@@ -23,18 +29,31 @@ export function VerteilungsBalken({
   segmente,
   einheit = 'kWh',
   titel,
+  herkunft,
 }: {
   segmente: VerteilungSegment[]
   einheit?: string
   titel?: string
+  /** Kennzeichnet gerechnete (nicht gemessene) Werte — Badge + Erklärsatz. */
+  herkunft?: WertHerkunft
 }) {
   const werte = segmente.map((s) => Math.max(0, s.wert ?? 0))
   const total = werte.reduce((a, b) => a + b, 0)
   if (total <= 0) return null
   return (
     <div>
-      {titel && (
-        <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">{titel}</p>
+      {(titel || herkunft) && (
+        <div className="flex items-center gap-1.5 mb-2">
+          {titel && (
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{titel}</p>
+          )}
+          {herkunft && (
+            <ErfassungZustandBadge zustand={herkunft.zustand} quelleLabel={herkunft.quelleLabel} iconOnly />
+          )}
+        </div>
+      )}
+      {herkunft?.hinweis && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{herkunft.hinweis}</p>
       )}
       {/* S2: feste Label- UND Wert-Spalte (`w-20`/`w-28`) → die Grau-Tracks sind
           dazwischen IMMER gleich lang (100 %-Baseline), unabhängig von der Länge

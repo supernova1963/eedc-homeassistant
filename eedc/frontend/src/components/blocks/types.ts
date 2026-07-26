@@ -11,6 +11,32 @@
  */
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
+import type { ErfassungZustand } from '../ui/ErfassungZustandBadge'
+
+/**
+ * Herkunft der Werte einer Anzeige (Chart, Verteilungsbalken …) — für Blöcke,
+ * deren Zahlen NICHT gemessen, sondern gerechnet sind (z. B. PV je Modul
+ * anteilig nach kWp aus der Anlagen-Erzeugung).
+ *
+ * Gerendert wird ausschließlich über das SoT-Badge `ErfassungZustandBadge`
+ * (Regel 0a: keine zweite Zustands-Bildsprache), bewusst als `iconOnly` —
+ * „nach kWp gerechnet" ist eine Eigenschaft der Anzeige, kein Handlungsauftrag
+ * wie der gelbe Monatsabschluss-Zustand.
+ */
+export interface WertHerkunft {
+  /** Zustand fürs Badge — für gerechnete Werte `geschaetzt`. */
+  zustand: ErfassungZustand
+  /** Quell-Zusatz im Badge-Label, z. B. „kWp-Anteil". */
+  quelleLabel?: string
+  /** Worauf sich die Kennzeichnung bezieht, wenn die Anzeige gemischt ist —
+   *  im PV-Verlauf gilt sie nur für den Erzeugungs-Stapel, die Verwendung
+   *  daneben ist gemessen. */
+  bezug?: string
+  /** Sichtbarer Erklärsatz (Wortlaut-SoT: Daten-Checker), inkl. Verweis auf
+   *  den Block mit den gemessenen Werten. Auch auf Touch lesbar — deshalb
+   *  sichtbar statt nur als Hover-Tooltip. */
+  hinweis?: string
+}
 
 export interface Block {
   id: string

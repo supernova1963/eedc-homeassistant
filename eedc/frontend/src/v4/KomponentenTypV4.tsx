@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
+import ErfassungZustandBadge from '../components/ui/ErfassungZustandBadge'
 import { BlockShell, BlockStackSkeleton, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl } from '../lib'
@@ -546,7 +547,8 @@ function WirtschaftlichkeitInhalt({ w, kpis }: {
 
 type MeldeBlock = (block: string, ids: string[]) => void
 
-function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi, gemeldet: Record<string, string[]>, melde: MeldeBlock): Block[] {
+/** Blöcke eines Geräts — exportiert für Block-Tests (Muster `baueKomponentenBloecke`). */
+export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkApi, gemeldet: Record<string, string[]>, melde: MeldeBlock): Block[] {
   const analyse = KOMPONENTEN_ANALYSE[typ]
   const istGeparkt = (id: string) => park.istGeparkt(id)
   // Element-Park-Doktrin (Gernot 2026-06-27): JEDE Anzeige im Block einzeln parkbar
@@ -640,12 +642,34 @@ function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park: ParkA
         ? (
           <div className="space-y-4">
             <Parkbar id="el:verlauf" titel="Verlauf">
+              {/* Gerechnete statt gemessene Werte werden am Chart-Kopf ausgewiesen
+                  (PV: Modul-Stapel = kWp-Anteil) — dasselbe Zustands-Badge wie am
+                  Verteilungsbalken, kein zweiter Satz Bildsprache (Regel 0a). */}
+              {g.verlauf.herkunft && (
+                <div className="mb-2 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <ErfassungZustandBadge
+                      zustand={g.verlauf.herkunft.zustand}
+                      quelleLabel={g.verlauf.herkunft.quelleLabel}
+                      iconOnly
+                    />
+                    {g.verlauf.herkunft.bezug && (
+                      <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                        {g.verlauf.herkunft.bezug}
+                      </span>
+                    )}
+                  </div>
+                  {g.verlauf.herkunft.hinweis && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{g.verlauf.herkunft.hinweis}</p>
+                  )}
+                </div>
+              )}
               <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} gestapelt={g.verlauf.gestapelt} tall={fokus} />
             </Parkbar>
             {g.verlauf.verteilungen && g.verlauf.verteilungen.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {g.verlauf.verteilungen.map((v, i) => (
-                  <Parkbar key={v.titel} id={`el:verlauf-vert-${i}`} titel={v.titel}><VerteilungsBalken titel={v.titel} einheit={v.einheit} segmente={v.segmente} /></Parkbar>
+                  <Parkbar key={v.titel} id={`el:verlauf-vert-${i}`} titel={v.titel}><VerteilungsBalken titel={v.titel} einheit={v.einheit} segmente={v.segmente} herkunft={v.herkunft} /></Parkbar>
                 ))}
               </div>
             )}

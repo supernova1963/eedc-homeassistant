@@ -155,6 +155,33 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(titles(g.status)).toEqual(['Anlagenleistung', 'Gesamterzeugung', 'Spez. Ertrag', 'Eigenverbrauch'])
     expect(g.aufteilung?.segmente.map((s) => [s.label, s.wert])).toEqual([['Eigenverbrauch', 250], ['Einspeisung', 250]])
   })
+
+  it('PV ④ Verlauf: Modul-Werte sind kWp-verteilt und an BEIDEN Stellen gekennzeichnet (A3/a1)', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
+    list.mockResolvedValue([
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4 }),
+    ])
+    listAggregiert.mockResolvedValue([
+      { jahr: 2025, pv_erzeugung_kwh: 1000, eigenverbrauch_kwh: 400, einspeisung_kwh: 600 },
+    ])
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    // Werte bleiben unverändert kWp-proportional (6/4 kWp → 600/400) — a1 ändert
+    // keine Zahl, nur die Kennzeichnung. Der Umbau auf Messwerte ist A4.
+    expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400 })
+    // Stelle 1: Chart-Kopf (Modul-Stapel)
+    expect(g.verlauf?.herkunft?.zustand).toBe('geschaetzt')
+    expect(g.verlauf?.herkunft?.quelleLabel).toBe('kWp-Anteil')
+    expect(g.verlauf?.herkunft?.hinweis).toContain('anteilig nach kWp')
+    expect(g.verlauf?.herkunft?.hinweis).toContain('Vergleich')       // Cross-Link zu Block ⑤
+    // Stelle 2: Verteilungsbalken „Erzeugung nach Modul" — gleiche Quelle (modulAnteil)
+    const erzeugung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Erzeugung nach Modul')
+    expect(erzeugung?.herkunft).toBe(g.verlauf?.herkunft)
+    expect(erzeugung?.segmente.map((s) => s.wert)).toEqual([600, 400])
+    // Die gemessene Verwendungs-Aufteilung daneben bleibt UNgekennzeichnet
+    const verwendung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Verwendung der Erzeugung')
+    expect(verwendung?.herkunft).toBeUndefined()
+  })
 })
 
 describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {

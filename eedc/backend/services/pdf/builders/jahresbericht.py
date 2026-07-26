@@ -476,6 +476,22 @@ async def build_jahresbericht_context(
     if pvgis_neueste and pvgis_neueste.monatswerte:
         for mw in pvgis_neueste.monatswerte:
             prognose_monate[mw.get("monat", 0)] = mw.get("e_m", 0) or 0
+    # Exakte Pro-Modul-Prognosen (v2.3.2): PVGIS wird je Modulfeld mit dessen
+    # eigener Ausrichtung/Neigung abgerufen und unter `module_monatswerte`
+    # abgelegt. Ohne sie bleibt nur die kWp-Verteilung des Anlagen-Gesamtwerts —
+    # die ignoriert Ausrichtungsunterschiede und liefert bei Ost-West-Dächern
+    # ~20–25 % zu hohe SOLL-Werte (CHANGELOG v2.3.2). Muster 1:1 aus dem
+    # API-Pfad `api/routes/cockpit/pv_strings.py` (dort seit v2.3.2 in Gebrauch),
+    # damit PDF und Cockpit denselben SOLL-Wert zeigen.
+    prognose_per_modul: dict[int, dict[int, float]] = {}
+    if pvgis_neueste and pvgis_neueste.module_monatswerte:
+        for inv_id_str, monatsdaten in pvgis_neueste.module_monatswerte.items():
+            try:
+                prognose_per_modul[int(inv_id_str)] = {
+                    mw["monat"]: mw.get("e_m", 0) or 0 for mw in monatsdaten
+                }
+            except (ValueError, TypeError, KeyError):
+                pass
     anzahl_jahre = len(alle_jahre) if ist_gesamtzeitraum else 1
 
     string_vergleiche = []
@@ -487,7 +503,11 @@ async def build_jahresbericht_context(
             for imd in all_imd
             if imd.investition_id == inv.id
         )
-        prognose_kwh = sum(prognose_monate.values()) * anteil * anzahl_jahre
+        modul_prognose = prognose_per_modul.get(inv.id)
+        if modul_prognose is not None:
+            prognose_kwh = sum(modul_prognose.values()) * anzahl_jahre
+        else:
+            prognose_kwh = sum(prognose_monate.values()) * anteil * anzahl_jahre
         if prognose_kwh > 0 or ist_kwh > 0:
             abw = ist_kwh - prognose_kwh
             abw_pct = (abw / prognose_kwh * 100) if prognose_kwh > 0 else 0

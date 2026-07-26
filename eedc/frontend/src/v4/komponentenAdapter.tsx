@@ -34,7 +34,7 @@ import {
   type KpiStyle, type KomponentenColor,
 } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
-import type { VerteilungSegment } from '../components/blocks'
+import type { VerteilungSegment, WertHerkunft } from '../components/blocks'
 import type { VerlaufBar, VerlaufRow } from './KomponentenVerlaufChart'
 import type { Investition } from '../types'
 
@@ -74,10 +74,14 @@ export interface KompGeraet {
   subKomponente?: { titel: string; kpis: KpiStripItem[]; hinweis?: string }
   /** Block ④ Verlauf: Zeitreihe (gesamte Historie). `gestapelt=false` = gruppierte
    *  Balken, sonst gestapelt; Bars mit `stapel`-Gruppe stehen paarweise nebeneinander.
-   *  `verteilungen` = optionale %-Aufteilungs-Balken (Gesamtzeitraum) unter dem Chart. */
+   *  `verteilungen` = optionale %-Aufteilungs-Balken (Gesamtzeitraum) unter dem Chart.
+   *  `herkunft` = Kennzeichnung am Chart, wenn dessen Werte gerechnet sind (PV je
+   *  Modul nach kWp) — je Verteilung separat, weil in derselben Zeile gemessene
+   *  und gerechnete Aufteilungen nebeneinander stehen können. */
   verlauf?: {
     bars: VerlaufBar[]; rows: VerlaufRow[]; einheit?: string; gestapelt?: boolean
-    verteilungen?: { titel: string; einheit?: string; segmente: VerteilungSegment[] }[]
+    herkunft?: WertHerkunft
+    verteilungen?: { titel: string; einheit?: string; segmente: VerteilungSegment[]; herkunft?: WertHerkunft }[]
   }
   /** Block ⑤ Vergleich (dünn): Jahressummen einer Leitkennzahl je Jahr. */
   vergleich?: { label: string; einheit: string; farbe: string; jahre: { jahr: number; summe: number }[] }
@@ -201,6 +205,23 @@ function bauePvTopologie(invs: Investition[]): KompStruktur {
   }
 }
 
+/** Kennzeichnung der Modul-Werte in Block ④ (Rainer/rapahl 2026-07-25): Die
+ *  Quelle dieses Blocks ist `/monatsdaten/aggregiert` — eine ANLAGENWEITE
+ *  Response ohne Modul-Zerlegung. Aus ihr ist die kWp-Verteilung die einzig
+ *  mögliche Zerlegung; gemessene Pro-String-Werte liegen zwar vor, aber in einer
+ *  anderen Response (Block ⑤ „Vergleich"). Bis der Adapter darauf umgestellt ist
+ *  (A4), steht wenigstens dran, dass hier gerechnet wird. Wortlaut aus dem
+ *  Daten-Checker (`services/daten_checker/energieprofil.py`), nicht neu erfunden. */
+const PV_MODUL_HERKUNFT: WertHerkunft = {
+  zustand: 'geschaetzt',
+  quelleLabel: 'kWp-Anteil',
+  // Gilt nur für den Erzeugungs-Stapel; die Verwendung daneben ist gemessen.
+  bezug: 'Erzeugung je Modul',
+  hinweis: 'Werte je Modul sind nicht gemessen, sondern anteilig nach kWp aus der '
+    + 'Gesamterzeugung verteilt — Pro-String-Genauigkeit eingeschränkt. Die gemessenen '
+    + 'Werte je String stehen im Block „Vergleich".',
+}
+
 /** PV-Verlauf = pro Jahr zwei Stapel nebeneinander: **Erzeugung je Modul** (Σ =
  *  Gesamterzeugung, kWp-verteilt) ⟷ **Verwendung** (Direktverbrauch = EV −
  *  Speicher-Entladung · Speicherladung · Einspeisung; Σ ≈ Erzeugung). Plus zwei
@@ -232,8 +253,11 @@ function pvVerlauf(agg: AggregierteMonatsdaten[], module: Investition[]): NonNul
   const ges = [...jahr.values()].reduce((a, v) => ({ erz: a.erz + v.erz, direkt: a.direkt + v.direkt, speicher: a.speicher + v.speicher, einsp: a.einsp + v.einsp }), { erz: 0, direkt: 0, speicher: 0, einsp: 0 })
   return {
     bars, rows, gestapelt: true,
+    // Die Modul-Stapel des Charts speisen sich aus demselben `modulAnteil` wie
+    // der Verteilungsbalken → beide tragen dieselbe Kennzeichnung.
+    herkunft: PV_MODUL_HERKUNFT,
     verteilungen: [
-      { titel: 'Erzeugung nach Modul', segmente: module.map((m, i) => ({ label: m.bezeichnung, wert: modulAnteil(m, ges.erz), farbe: PV_MODUL_BG[i % PV_MODUL_BG.length] })) },
+      { titel: 'Erzeugung nach Modul', herkunft: PV_MODUL_HERKUNFT, segmente: module.map((m, i) => ({ label: m.bezeichnung, wert: modulAnteil(m, ges.erz), farbe: PV_MODUL_BG[i % PV_MODUL_BG.length] })) },
       { titel: 'Verwendung der Erzeugung', segmente: [
         { label: 'Direktverbrauch', wert: ges.direkt, farbe: SEG.ev },
         { label: 'Speicherladung', wert: ges.speicher, farbe: SEG.ladung },

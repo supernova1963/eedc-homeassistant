@@ -1,11 +1,19 @@
 /**
- * ErfassungZustandBadge — kleines Zustands-Etikett der Monatsabschluss-V4-Erfassung.
+ * ErfassungZustandBadge — kleines Zustands-Etikett für die Herkunft eines Werts.
  *
  * DIE eine Zustands-Anzeige (Feld-Badge) für das Vokabular gemessen/geschätzt/
  * fehlt/weicht-ab (Konzept `KONZEPT-MONATSABSCHLUSS-V4.md` §5). Farb-/Tönungs-SoT
  * kommt aus `ERFASSUNG_ZUSTAND` (lib/colors.ts) — keine Inline-Farben. Icon + Label
  * liegen zentral in {@link ZUSTAND_META}, damit Kopf-Ampel und Monatsdaten-Tabelle
  * (spätere Bündel) dieselbe Icon-/Text-Quelle nutzen — kein zweiter Satz.
+ *
+ * Zwei Gebrauchslagen, gleiches Vokabular, unterschiedliche Lautstärke:
+ *  • **Monatsabschluss-Erfassung** (Feld-Badges, Kopf-Ampel): voller Pill —
+ *    `geschaetzt` gelb heißt dort „prüfen", also ein Handlungsauftrag.
+ *  • **Anzeige-Herkunft in Blöcken/Charts** (`WertHerkunft`, z. B. PV je Modul
+ *    nach kWp gerechnet): bewusst `iconOnly` + Erklärsatz daneben. Dort ist
+ *    „geschätzt" eine Eigenschaft der Anzeige, kein Auftrag — ein halb gelber
+ *    Block wäre ein Fehlsignal.
  *
  * Modelliert nach `QuelleBadge` (gleiches Pill-Muster, hell/dunkel), keine zweite
  * Badge-Art (Regel 0a; [[feedback_kpicard_drei_versionen]]).
