@@ -51,6 +51,8 @@ export interface ZuordnungInvestition {
   kwp?: number
   kwh?: number
   default_anteil: number
+  /** true = kWp/kWh nicht gepflegt, `default_anteil` ist reine Gleichverteilung. */
+  anteil_geschaetzt?: boolean
 }
 
 export interface ZuordnungInfo {

@@ -30,6 +30,8 @@ from backend.api.routes.import_export.helpers import (
 )
 from backend.services.activity_service import log_activity
 from backend.services.provenance import write_with_provenance
+from backend.services.pv_orientation import get_pv_kwp
+from backend.utils.investition_value import get_inv_value
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,10 @@ class ZuordnungInvestition(BaseModel):
     kwp: Optional[float] = None       # PV-Module
     kwh: Optional[float] = None       # Speicher
     default_anteil: float = 0.0       # vorberechneter Default-Anteil in %
+    # True = die Bezugsgröße (kWp bzw. kWh) ist NICHT gepflegt, der Vorschlag
+    # ist reine Gleichverteilung `100/N`. Der Wizard muss das sagen, statt eine
+    # gleichmäßige Aufteilung als errechneten Vorschlag auszugeben (N59/P4).
+    anteil_geschaetzt: bool = False
 
 
 class ZuordnungInfo(BaseModel):
@@ -171,19 +177,30 @@ async def get_zuordnung_info(
 
     benoetigt = len(pv_module) > 1 or len(speicher) > 1 or len(wallboxen) > 1 or len(eautos) > 1
 
-    def pv_anteil(inv: Investition, alle: list[Investition]) -> float:
-        total = sum((i.parameter or {}).get("leistung_kwp", 0) or 0 for i in alle)
-        kwp = (inv.parameter or {}).get("leistung_kwp", 0) or 0
+    # P3/P6 (N59): Nennleistung und Kapazität kommen über die SoT-Helper.
+    # Bis A20 stand hier `parameter["leistung_kwp"]` — ein Schlüssel, den KEINES
+    # der drei Regime kennt (die kWp ist eine Spalte, der Legacy-JSON-Key heißt
+    # `kwp`). Der falsche Schlüssel lieferte still 0, 0 sah aus wie „keine
+    # Daten", und der Wizard schlug deshalb IMMER Gleichverteilung vor und ließ
+    # die kWp-Spalte leer — bei 12/3 kWp also 50/50 statt 80/20. Wer den
+    # Vorschlag übernahm, schrieb falsche Monatswerte in die IMD.
+    def _kwp(inv: Investition) -> float:
+        return get_pv_kwp(inv)
+
+    def _kapazitaet(inv: Investition) -> float:
+        return get_inv_value(inv, "kapazitaet_kwh")
+
+    def _anteil(wert: float, alle: list[Investition], groesse) -> float:
+        total = sum(groesse(i) for i in alle)
         if total > 0:
-            return round(kwp / total * 100, 1)
+            return round(wert / total * 100, 1)
+        # Gleichverteilung ist nur zulässig, wenn die Bezugsgröße WIRKLICH
+        # unbekannt ist — und dann sagt der Wizard es (P4), statt stillschweigend
+        # gleich zu verteilen (`anteil_geschaetzt`).
         return round(100.0 / len(alle), 1) if alle else 0.0
 
-    def bat_anteil(inv: Investition, alle: list[Investition]) -> float:
-        total = sum((i.parameter or {}).get("kapazitaet_kwh", 0) or 0 for i in alle)
-        kwh = (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
-        if total > 0:
-            return round(kwh / total * 100, 1)
-        return round(100.0 / len(alle), 1) if alle else 0.0
+    pv_total = sum(_kwp(i) for i in pv_module)
+    bat_total = sum(_kapazitaet(i) for i in speicher)
 
     return ZuordnungInfo(
         benoetigt_zuordnung=benoetigt,
@@ -191,16 +208,18 @@ async def get_zuordnung_info(
             ZuordnungInvestition(
                 id=i.id,
                 bezeichnung=i.bezeichnung or i.typ,
-                kwp=(i.parameter or {}).get("leistung_kwp"),
-                default_anteil=pv_anteil(i, pv_module),
+                kwp=_kwp(i) or None,
+                default_anteil=_anteil(_kwp(i), pv_module, _kwp),
+                anteil_geschaetzt=pv_total <= 0,
             ) for i in pv_module
         ],
         speicher=[
             ZuordnungInvestition(
                 id=i.id,
                 bezeichnung=i.bezeichnung or i.typ,
-                kwh=(i.parameter or {}).get("kapazitaet_kwh"),
-                default_anteil=bat_anteil(i, speicher),
+                kwh=_kapazitaet(i) or None,
+                default_anteil=_anteil(_kapazitaet(i), speicher, _kapazitaet),
+                anteil_geschaetzt=bat_total <= 0,
             ) for i in speicher
         ],
         wallboxen=[

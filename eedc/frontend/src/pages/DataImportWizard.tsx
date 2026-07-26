@@ -95,17 +95,31 @@ function AnteilEingabe({
   zuordnung,
   onChange,
   einheit,
+  bezugsgroesse,
 }: {
   investitionen: ZuordnungInvestition[]
   zuordnung: Record<number, number>
   onChange: (id: number, wert: number) => void
   einheit: string
+  bezugsgroesse: string
 }) {
   const summe = summeAnteil(zuordnung)
   const fehler = Math.abs(summe - 100) > 0.5
+  // N59: Ohne gepflegte Bezugsgröße ist die Vorauswahl reine Gleichverteilung
+  // (100/N) und kein errechneter Vorschlag — das steht dann dran, statt sie
+  // wie eine proportionale Aufteilung aussehen zu lassen.
+  const geschaetzt = investitionen.some((i) => i.anteil_geschaetzt)
 
   return (
     <div className="space-y-2">
+      {geschaetzt && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Ohne gepflegte {bezugsgroesse} verteilt die Vorauswahl gleichmäßig
+          ({(100 / investitionen.length).toFixed(1)} % je Eintrag) — das ist
+          keine proportionale Aufteilung. Bitte prüfen oder die {bezugsgroesse}
+          {' '}bei den Komponenten nachtragen.
+        </p>
+      )}
       {investitionen.map((inv) => (
         <div key={inv.id} className="flex items-center gap-3">
           <div className="flex-1 text-sm text-gray-800 dark:text-gray-200">
@@ -611,6 +625,7 @@ export default function DataImportWizard() {
                   zuordnung={pvZuordnung}
                   onChange={(id, wert) => setPvZuordnung((prev) => ({ ...prev, [id]: wert }))}
                   einheit="%"
+                  bezugsgroesse="Nennleistung (kWp)"
                 />
               </div>
             </Card>
@@ -628,6 +643,7 @@ export default function DataImportWizard() {
                   zuordnung={batZuordnung}
                   onChange={(id, wert) => setBatZuordnung((prev) => ({ ...prev, [id]: wert }))}
                   einheit="%"
+                  bezugsgroesse="Kapazität (kWh)"
                 />
               </div>
             </Card>
