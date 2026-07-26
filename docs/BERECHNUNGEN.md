@@ -1343,7 +1343,7 @@ API: GET /api/cockpit/pv-strings/{anlage_id}?jahr=2025
 
 1. **JSON-Felder in SQLAlchemy:** Änderungen an `verbrauch_daten` oder `parameter` werden nur persistiert mit `flag_modified(obj, "feldname")`
 2. **0-Werte:** `if val:` wertet 0 als False aus → immer `if val is not None:` verwenden
-3. **Legacy-Felder:** `Monatsdaten.pv_erzeugung_kwh` und `Monatsdaten.batterie_*` sind deprecated. PV-Erzeugung kommt aus `InvestitionMonatsdaten` (Typ: pv-module)
+3. **Legacy-Felder:** `Monatsdaten.batterie_*` ist deprecated. `Monatsdaten.pv_erzeugung_kwh` ist es **nicht** — kein Schreibziel für neuen Code, aber gültige Lesequelle (Anlagen-Aggregat, s. [Schicht 1](#schicht-1-rohdaten-eingabe)); Pro-Modul-Werte kommen aus `InvestitionMonatsdaten` (Typ: pv-module)
 4. **PVGIS E_m vs e_m:** Ältere Prognosen verwenden `E_m` (Großbuchstabe), neuere `e_m`
 5. **Grundpreis:** Wird zu den Netzbezugskosten addiert, NICHT vom Netto-Ertrag abgezogen
 6. **Cockpit vs ROI-Dashboard:** Cockpit berechnet inline (vereinfacht), ROI-Dashboard nutzt `calculations.py` (detaillierter)

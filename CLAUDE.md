@@ -119,7 +119,8 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 
 1. **Standalone-First:** Keine HA-Abhängigkeit für Kernfunktionen
 2. **Datenquellen getrennt:** `Monatsdaten` = Zählerwerte, `InvestitionMonatsdaten` = Komponenten-Details
-3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.pv_erzeugung_kwh` und `Monatsdaten.batterie_*` → Nutze `InvestitionMonatsdaten`
+3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.batterie_*` und das computed-Trio (`eigenverbrauch_kwh`, `direktverbrauch_kwh`, `gesamtverbrauch_kwh`) → erst `InvestitionMonatsdaten`, Legacy nur als expliziter Fallback
+4. **`Monatsdaten.pv_erzeugung_kwh` ist KEIN Legacy-Feld** (seit `ba0d8d9d`/v4.0.0): manuelles bzw. importiertes Anlagen-Aggregat und Eingang von `resolve_pv_je_modul` — **lesen ist der vorgesehene Weg**, programmatisch füllen bleibt verboten. Detail: [BERECHNUNGEN §1](docs/BERECHNUNGEN.md), [ADR-002](docs/ADR-002-WURZELMUSTER.md)
 
 ## Design-Konventionen (Regel 0a — Pflicht bei allem Neuen)
 
@@ -156,7 +157,7 @@ db.commit()
 | JSON-Änderungen werden nicht gespeichert | `flag_modified(obj, "field_name")` aufrufen |
 | 0-Werte verschwinden | `is not None` statt `if val` |
 | SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
-| Legacy pv_erzeugung_kwh wird verwendet | InvestitionMonatsdaten abfragen |
+| `Monatsdaten.pv_erzeugung_kwh` programmatisch gefüllt | Nur manuell/Import; Pro-Modul-Werte nach `InvestitionMonatsdaten` (Lesen ist erlaubt, s. Prinzip 4) |
 | ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
 
 ## Community-Datenfluss
