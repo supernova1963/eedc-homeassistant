@@ -3,7 +3,7 @@ Cockpit PV-Strings — SOLL vs. IST Vergleich pro PV-Modul (Jahressicht + Gesamt
 """
 
 from datetime import date
-from typing import Optional
+from typing import Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,12 +11,165 @@ from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
+from backend.core.berechnungen import (
+    resolve_pv_je_modul,
+    PvModul,
+    PV_QUELLE_GEMESSEN,
+    PV_QUELLE_VERTEILT,
+    PV_QUELLE_FEHLT,
+)
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel
+from backend.utils.investition_value import get_inv_value
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
+
+
+# Ein Vergleich einzelner Strings setzt gemessene Pro-String-Werte voraus. Sind
+# die Modulwerte (auch nur teilweise) aus dem Anlagen-Aggregat nach kWp
+# verteilt, haben alle Module per Konstruktion denselben spezifischen Ertrag —
+# eine Platzierung wäre dann eine Aussage, die die Daten nicht hergeben
+# (Gernot 2026-07-26, A4/E3). Statt „bester/schwächster String" steht dieser Satz.
+RANKING_NICHT_MOEGLICH = (
+    "Die Werte je Modul sind nicht gemessen, sondern anteilig nach kWp aus der "
+    "Gesamterzeugung verteilt. Damit hat rechnerisch jedes Modul denselben "
+    "spezifischen Ertrag — ein Vergleich einzelner Strings ist mit diesen Werten "
+    "nicht möglich. Dafür braucht jedes Modul einen eigenen Erzeugungs-Sensor "
+    "(Einstellungen → Sensor-Zuordnung)."
+)
+
+
+def _rollup_quelle(quellen: Iterable[str]) -> str:
+    """Fasst Monats-Quellen zu einer Jahres-/Gesamt-Quelle zusammen.
+
+    Konservativ: ein einziger verteilter Monat macht den Zeitraum „verteilt" —
+    der Zeitraumwert ist dann eben nicht durchgängig gemessen. Ohne beitragende
+    Monate: ``fehlt``.
+    """
+    qs = [q for q in quellen]
+    if not qs:
+        return PV_QUELLE_FEHLT
+    if any(q == PV_QUELLE_VERTEILT for q in qs):
+        return PV_QUELLE_VERTEILT
+    if all(q == PV_QUELLE_GEMESSEN for q in qs):
+        return PV_QUELLE_GEMESSEN
+    return PV_QUELLE_FEHLT
+
+
+def _ranking(
+    kandidaten: list[tuple[str, Optional[float], str]],
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Bester/schwächster String — nur bei durchgängig gemessenen IST-Werten.
+
+    Args:
+        kandidaten: ``[(bezeichnung, performance_ratio, ist_quelle), …]``.
+
+    Returns:
+        ``(bester, schlechtester, hinweis)``. Ist auch nur ein String nicht
+        gemessen, bleibt die Platzierung leer und stattdessen steht der
+        Erklärsatz {@link RANKING_NICHT_MOEGLICH} in ``hinweis``.
+    """
+    if len(kandidaten) <= 1:
+        return None, None, None
+    if any(quelle != PV_QUELLE_GEMESSEN for _, _, quelle in kandidaten):
+        return None, None, RANKING_NICHT_MOEGLICH
+    mit_perf = [(name, perf) for name, perf, _ in kandidaten if perf]
+    if not mit_perf:
+        return None, None, None
+    sortiert = sorted(mit_perf, key=lambda x: x[1] or 0, reverse=True)
+    schlechtester = sortiert[-1][0] if len(sortiert) > 1 else None
+    return sortiert[0][0], schlechtester, None
+
+
+async def _lade_ist_je_modul(
+    db: AsyncSession,
+    anlage_id: int,
+    pv_module: list[Investition],
+    jahr: Optional[int] = None,
+) -> tuple[dict[int, dict[int, dict[int, float]]], dict[tuple[int, int], str]]:
+    """IST-Erzeugung je Modul/Monat über den Read-time-SoT ``resolve_pv_je_modul``.
+
+    Vorher las diese Sicht roh aus den IMD und kannte die Aggregat-Präzedenz
+    nicht: wer nur EINEN Gesamt-Sensor hat (≥ 50 % der Multi-String-Anlagen,
+    #289/#651), sah hier 0 bzw. eine leere Antwort, während
+    ``/monatsdaten/aggregiert`` längst den verteilten Wert lieferte. Jetzt
+    liefern beide Pfade dieselbe Zerlegung — Σ je Monat identisch
+    ([[feedback_aggregator_symmetrie]]).
+
+    Returns:
+        ``(werte, quellen)`` mit ``werte[inv_id][jahr][monat] = kwh`` und
+        ``quellen[(jahr, monat)]`` = ``gemessen`` | ``verteilt``. Monate ohne
+        jede PV-Quelle tauchen in beiden Strukturen nicht auf.
+    """
+    pv_ids = [m.id for m in pv_module]
+
+    imd_query = select(InvestitionMonatsdaten).where(
+        InvestitionMonatsdaten.investition_id.in_(pv_ids)
+    )
+    md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+    if jahr is not None:
+        imd_query = imd_query.where(InvestitionMonatsdaten.jahr == jahr)
+        md_query = md_query.where(Monatsdaten.jahr == jahr)
+
+    roh: dict[tuple[int, int], dict[int, float]] = {}
+    for imd in (await db.execute(imd_query)).scalars().all():
+        data = imd.verbrauch_daten or {}
+        wert = data.get("pv_erzeugung_kwh")
+        if wert is None:
+            continue
+        roh.setdefault((imd.jahr, imd.monat), {})[imd.investition_id] = wert
+
+    # Anlagen-Aggregat je Monat (manuell/importiert, NIE programmatisch gefüllt).
+    aggregat: dict[tuple[int, int], Optional[float]] = {
+        (md.jahr, md.monat): md.pv_erzeugung_kwh
+        for md in (await db.execute(md_query)).scalars().all()
+    }
+
+    werte: dict[int, dict[int, dict[int, float]]] = {m.id: {} for m in pv_module}
+    quellen: dict[tuple[int, int], str] = {}
+
+    kandidaten = set(roh.keys()) | {k for k, v in aggregat.items() if v is not None}
+    for (j, monat) in sorted(kandidaten):
+        # #236: nur im Monat aktive Module (Anschaffungs-/Stilllegungsdatum) —
+        # sonst verteilt das Aggregat auf Module, die es noch nicht gab.
+        aktive = [m for m in pv_module if m.ist_aktiv_im_monat(j, monat)]
+        if not aktive:
+            continue
+        roh_monat = roh.get((j, monat), {})
+        aufgeloest = resolve_pv_je_modul(
+            aggregat_kwh=aggregat.get((j, monat)),
+            module=[
+                PvModul(
+                    inv_id=m.id,
+                    leistung_kwp=get_inv_value(m, "leistung_kwp"),
+                    eigen_kwh=roh_monat.get(m.id),
+                )
+                for m in aktive
+            ],
+        )
+        monatswerte = {i: w.pv_erzeugung_kwh for i, w in aufgeloest.items()}
+        quelle = _rollup_quelle([w.quelle for w in aufgeloest.values()])
+
+        if quelle == PV_QUELLE_FEHLT:
+            # Teil-Lücke ohne Aggregat: der Helper liefert für die ANLAGEN-Summe
+            # bewusst nichts (eine Teilsumme wäre als Gesamt-PV irreführend). Die
+            # Pro-Modul-Sicht kennt keine Gesamtsumme und darf einen vorhandenen
+            # Messwert deshalb nicht verwerfen — sonst nähme dieser Umbau dem
+            # Nutzer echte Zahlen weg. Modul ohne Wert bleibt leer (Lücke sichtbar,
+            # Daten-Checker meldet sie als WARNING).
+            monatswerte = {i: v for i, v in roh_monat.items() if v is not None}
+            if not monatswerte:
+                continue
+            quelle = PV_QUELLE_GEMESSEN
+
+        quellen[(j, monat)] = quelle
+        for inv_id, wert in monatswerte.items():
+            werte.setdefault(inv_id, {}).setdefault(j, {})[monat] = wert
+
+    return werte, quellen
 
 
 def _pruefe_prognose_plausibilitaet(prognose, gesamt_kwp: float) -> Optional[str]:
@@ -65,6 +218,8 @@ class PVStringMonat(BaseModel):
     abweichung_kwh: float
     abweichung_prozent: Optional[float]
     performance_ratio: Optional[float]
+    # Herkunft des IST-Werts: gemessen | verteilt | fehlt (pv_verteilung-SoT).
+    ist_quelle: str = PV_QUELLE_FEHLT
 
 
 class PVStringDaten(BaseModel):
@@ -81,6 +236,8 @@ class PVStringDaten(BaseModel):
     abweichung_jahr_prozent: Optional[float]
     performance_ratio_jahr: Optional[float]
     spezifischer_ertrag_kwh_kwp: Optional[float]
+    # Herkunft der IST-Jahreswerte (Rollup über die beitragenden Monate).
+    ist_quelle: str = PV_QUELLE_FEHLT
     monatswerte: list[PVStringMonat]
 
 
@@ -98,6 +255,10 @@ class PVStringsResponse(BaseModel):
     strings: list[PVStringDaten]
     bester_string: Optional[str]
     schlechtester_string: Optional[str]
+    # Herkunft der IST-Werte über alle Strings (Rollup) + Erklärung, warum es
+    # bei verteilten Werten keine Platzierung gibt (None = Ranking gültig).
+    ist_quelle: str = PV_QUELLE_FEHLT
+    vergleich_hinweis: Optional[str] = None
 
 
 class PVStringJahreswert(BaseModel):
@@ -106,6 +267,7 @@ class PVStringJahreswert(BaseModel):
     ist_kwh: float
     abweichung_prozent: Optional[float]
     performance_ratio: Optional[float]
+    ist_quelle: str = PV_QUELLE_FEHLT
 
 
 class PVStringSaisonalwert(BaseModel):
@@ -129,6 +291,8 @@ class PVStringGesamtlaufzeit(BaseModel):
     abweichung_gesamt_prozent: Optional[float]
     performance_ratio_gesamt: Optional[float]
     spezifischer_ertrag_kwh_kwp: Optional[float]
+    # Herkunft der IST-Werte über die gesamte Laufzeit (Rollup).
+    ist_quelle: str = PV_QUELLE_FEHLT
     jahreswerte: list[PVStringJahreswert]
     saisonalwerte: list[PVStringSaisonalwert]
 
@@ -151,6 +315,8 @@ class PVStringsGesamtlaufzeitResponse(BaseModel):
     saisonal_aggregiert: list[PVStringSaisonalwert]
     bester_string: Optional[str]
     schlechtester_string: Optional[str]
+    ist_quelle: str = PV_QUELLE_FEHLT
+    vergleich_hinweis: Optional[str] = None
 
 
 @router.get("/pv-strings/{anlage_id}", response_model=PVStringsResponse)
@@ -220,24 +386,11 @@ async def get_pv_strings(
     if gesamt_kwp == 0:
         gesamt_kwp = anlage.leistung_kwp or 1
 
-    pv_ids = [m.id for m in pv_module]
-    result = await db.execute(
-        select(InvestitionMonatsdaten)
-        .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
-        .where(InvestitionMonatsdaten.jahr == jahr)
-    )
-    inv_monatsdaten = result.scalars().all()
-
-    md_by_inv: dict[int, dict[int, float]] = {m.id: {} for m in pv_module}
-    pv_by_id = {m.id: m for m in pv_module}
-    for imd in inv_monatsdaten:
-        # #236: Vor anschaffungs- / nach stilllegungsdatum überspringen
-        modul = pv_by_id.get(imd.investition_id)
-        if not modul or not modul.ist_aktiv_im_monat(imd.jahr, imd.monat):
-            continue
-        data = imd.verbrauch_daten or {}
-        pv_erzeugt = data.get("pv_erzeugung_kwh", 0) or 0
-        md_by_inv[imd.investition_id][imd.monat] = pv_erzeugt
+    # IST je Modul über den Read-time-SoT (A4/b1) statt roh aus den IMD.
+    werte_je_modul, ist_quellen = await _lade_ist_je_modul(db, anlage_id, pv_module, jahr=jahr)
+    md_by_inv: dict[int, dict[int, float]] = {
+        m.id: werte_je_modul.get(m.id, {}).get(jahr, {}) for m in pv_module
+    }
 
     strings_data = []
     prognose_gesamt = 0
@@ -273,10 +426,15 @@ async def get_pv_strings(
                 abweichung_kwh=round(abweichung, 1),
                 abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
                 performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
+                ist_quelle=ist_quellen.get((jahr, monat), PV_QUELLE_FEHLT)
+                if monat in months_with_data else PV_QUELLE_FEHLT,
             ))
             prognose_jahr += prog_monat
             ist_jahr += ist_monat
 
+        modul_quelle = _rollup_quelle(
+            ist_quellen[(jahr, m)] for m in sorted(months_with_data) if (jahr, m) in ist_quellen
+        )
         abweichung_jahr = ist_jahr - prognose_jahr
         abweichung_jahr_pct = (abweichung_jahr / prognose_jahr * 100) if prognose_jahr > 0 else None
         perf_ratio_jahr = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
@@ -292,6 +450,7 @@ async def get_pv_strings(
             abweichung_jahr_prozent=round(abweichung_jahr_pct, 1) if abweichung_jahr_pct is not None else None,
             performance_ratio_jahr=round(perf_ratio_jahr, 3) if perf_ratio_jahr is not None else None,
             spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
+            ist_quelle=modul_quelle,
             monatswerte=monatswerte,
         ))
         prognose_gesamt += prognose_jahr
@@ -299,13 +458,9 @@ async def get_pv_strings(
 
     abweichung_gesamt = ist_gesamt - prognose_gesamt
     abweichung_gesamt_pct = (abweichung_gesamt / prognose_gesamt * 100) if prognose_gesamt > 0 else None
-    strings_with_perf = [(s.bezeichnung, s.performance_ratio_jahr) for s in strings_data if s.performance_ratio_jahr]
-    bester_string = None
-    schlechtester_string = None
-    if strings_with_perf:
-        strings_sorted = sorted(strings_with_perf, key=lambda x: x[1] or 0, reverse=True)
-        bester_string = strings_sorted[0][0]
-        schlechtester_string = strings_sorted[-1][0] if len(strings_sorted) > 1 else None
+    bester_string, schlechtester_string, vergleich_hinweis = _ranking(
+        [(s.bezeichnung, s.performance_ratio_jahr, s.ist_quelle) for s in strings_data]
+    )
 
     return PVStringsResponse(
         anlage_id=anlage_id, jahr=jahr, hat_prognose=hat_prognose,
@@ -316,6 +471,8 @@ async def get_pv_strings(
         abweichung_gesamt_kwh=round(abweichung_gesamt, 1),
         abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
         strings=strings_data, bester_string=bester_string, schlechtester_string=schlechtester_string,
+        ist_quelle=_rollup_quelle([s.ist_quelle for s in strings_data]),
+        vergleich_hinweis=vergleich_hinweis,
     )
 
 
@@ -386,38 +543,19 @@ async def get_pv_strings_gesamtlaufzeit(
     if gesamt_kwp == 0:
         gesamt_kwp = anlage.leistung_kwp or 1
 
-    pv_ids = [m.id for m in pv_module]
-    result = await db.execute(
-        select(InvestitionMonatsdaten)
-        .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
-        .order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
-    )
-    alle_monatsdaten = result.scalars().all()
+    # IST je Modul über den Read-time-SoT (A4/b1) statt roh aus den IMD: die
+    # Laufzeit-Jahre entstehen jetzt aus allen Monaten MIT PV-Quelle — also auch
+    # aus reinen Aggregat-Monaten, die vorher zu einer leeren Antwort führten.
+    md_by_inv, ist_quellen = await _lade_ist_je_modul(db, anlage_id, pv_module)
 
-    jahre_set = set()
-    for imd in alle_monatsdaten:
-        jahre_set.add(imd.jahr)
-    jahre = sorted(jahre_set)
-
+    jahre = sorted({j for (j, _) in ist_quellen})
     if not jahre:
         return _empty
 
     erstes_jahr = jahre[0]
     letztes_jahr = jahre[-1]
     anzahl_jahre = len(jahre)
-
-    md_by_inv: dict[int, dict[int, dict[int, float]]] = {m.id: {} for m in pv_module}
-    pv_by_id_total = {m.id: m for m in pv_module}
-    for imd in alle_monatsdaten:
-        # #236: Vor anschaffungs- / nach stilllegungsdatum überspringen
-        modul = pv_by_id_total.get(imd.investition_id)
-        if not modul or not modul.ist_aktiv_im_monat(imd.jahr, imd.monat):
-            continue
-        data = imd.verbrauch_daten or {}
-        pv_erzeugt = data.get("pv_erzeugung_kwh", 0) or 0
-        if imd.jahr not in md_by_inv[imd.investition_id]:
-            md_by_inv[imd.investition_id][imd.jahr] = {}
-        md_by_inv[imd.investition_id][imd.jahr][imd.monat] = pv_erzeugt
+    anzahl_monate = len(ist_quellen)
 
     strings_data = []
     prognose_gesamt_total = 0
@@ -435,6 +573,7 @@ async def get_pv_strings_gesamtlaufzeit(
         ist_string_gesamt = 0
         string_saisonal: dict[int, dict] = {m: {"ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
         modul_prognose = prognose_per_modul.get(modul.id)
+        modul_quellen: list[str] = []
 
         for jahr in jahre:
             months_with_data_year = set(md_by_inv.get(modul.id, {}).get(jahr, {}).keys())
@@ -445,11 +584,19 @@ async def get_pv_strings_gesamtlaufzeit(
             ist_jahr = sum(md_by_inv.get(modul.id, {}).get(jahr, {}).get(m, 0) for m in range(1, 13))
             abweichung_pct = ((ist_jahr - prognose_jahr) / prognose_jahr * 100) if prognose_jahr > 0 else None
             perf_ratio = (ist_jahr / prognose_jahr) if prognose_jahr > 0 else None
+            jahr_quelle = _rollup_quelle(
+                ist_quellen[(jahr, m)] for m in sorted(months_with_data_year) if (jahr, m) in ist_quellen
+            )
             jahreswerte.append(PVStringJahreswert(
                 jahr=jahr, prognose_kwh=round(prognose_jahr, 1), ist_kwh=round(ist_jahr, 1),
                 abweichung_prozent=round(abweichung_pct, 1) if abweichung_pct is not None else None,
                 performance_ratio=round(perf_ratio, 3) if perf_ratio is not None else None,
+                ist_quelle=jahr_quelle,
             ))
+            # Jahre ohne PV-Quelle zählen für den Modul-Rollup nicht mit (sonst
+            # zöge ein leeres Jahr die Herkunft der Laufzeit auf „fehlt").
+            if jahr_quelle != PV_QUELLE_FEHLT:
+                modul_quellen.append(jahr_quelle)
             prognose_string_gesamt += prognose_jahr
             ist_string_gesamt += ist_jahr
             for monat in range(1, 13):
@@ -489,6 +636,7 @@ async def get_pv_strings_gesamtlaufzeit(
             abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
             performance_ratio_gesamt=round(perf_ratio_gesamt, 3) if perf_ratio_gesamt is not None else None,
             spezifischer_ertrag_kwh_kwp=round(spez_ertrag, 0) if spez_ertrag is not None else None,
+            ist_quelle=_rollup_quelle(modul_quellen),
             jahreswerte=jahreswerte, saisonalwerte=saisonalwerte,
         ))
         prognose_gesamt_total += prognose_string_gesamt
@@ -509,24 +657,22 @@ async def get_pv_strings_gesamtlaufzeit(
 
     abweichung_gesamt = ist_gesamt_total - prognose_gesamt_total
     abweichung_gesamt_pct = (abweichung_gesamt / prognose_gesamt_total * 100) if prognose_gesamt_total > 0 else None
-    strings_with_perf = [(s.bezeichnung, s.performance_ratio_gesamt) for s in strings_data if s.performance_ratio_gesamt]
-    bester_string = None
-    schlechtester_string = None
-    if strings_with_perf:
-        strings_sorted = sorted(strings_with_perf, key=lambda x: x[1] or 0, reverse=True)
-        bester_string = strings_sorted[0][0]
-        schlechtester_string = strings_sorted[-1][0] if len(strings_sorted) > 1 else None
+    bester_string, schlechtester_string, vergleich_hinweis = _ranking(
+        [(s.bezeichnung, s.performance_ratio_gesamt, s.ist_quelle) for s in strings_data]
+    )
 
     return PVStringsGesamtlaufzeitResponse(
         anlage_id=anlage_id, hat_prognose=hat_prognose,
         prognose_warnung=_pruefe_prognose_plausibilitaet(prognose, gesamt_kwp),
         anlagen_leistung_kwp=gesamt_kwp,
         erstes_jahr=erstes_jahr, letztes_jahr=letztes_jahr,
-        anzahl_jahre=anzahl_jahre, anzahl_monate=len(alle_monatsdaten),
+        anzahl_jahre=anzahl_jahre, anzahl_monate=anzahl_monate,
         prognose_gesamt_kwh=round(prognose_gesamt_total, 1),
         ist_gesamt_kwh=round(ist_gesamt_total, 1),
         abweichung_gesamt_kwh=round(abweichung_gesamt, 1),
         abweichung_gesamt_prozent=round(abweichung_gesamt_pct, 1) if abweichung_gesamt_pct is not None else None,
         strings=strings_data, saisonal_aggregiert=saisonal_aggregiert,
         bester_string=bester_string, schlechtester_string=schlechtester_string,
+        ist_quelle=_rollup_quelle([s.ist_quelle for s in strings_data]),
+        vergleich_hinweis=vergleich_hinweis,
     )

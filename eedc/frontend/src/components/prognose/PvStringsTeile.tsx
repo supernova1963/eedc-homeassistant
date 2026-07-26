@@ -16,7 +16,8 @@ import { Card, ChartLegende, CsvExportButton, Table, TableHead, TableBody, Table
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
-import type { KpiStripItem } from '../blocks'
+import { HerkunftZeile, type KpiStripItem } from '../blocks'
+import { pvVerteiltHerkunft } from '../../lib/pvHerkunft'
 import { exportToCSV } from '../../utils/export'
 import { cockpitApi, PVStringsResponse } from '../../api/cockpit'
 import {
@@ -79,12 +80,25 @@ export function usePvStrings(anlageId: number, selectedYear: number | 'all', ver
             const totalI = aggStrings.reduce((s, x) => s + x.ist_jahr_kwh, 0)
             const sortedByPerf = [...aggStrings].filter(s => s.performance_ratio_jahr !== null)
               .sort((a, b) => (b.performance_ratio_jahr || 0) - (a.performance_ratio_jahr || 0))
+            // A4/b1: Das „alle Jahre"-Aggregat entsteht hier im Client — die
+            // Ranking-Sperre des Backends muss deshalb hier mitgezogen werden,
+            // sonst käme die Platzierung über diesen Pfad zurück. Ein einziges
+            // verteiltes Jahr genügt (konservativer Rollup wie im Backend).
+            const jahresDaten = [...dataMap.values()]
+            const istQuelle = jahresDaten.some(d => d.ist_quelle === 'verteilt')
+              ? 'verteilt' as const
+              : jahresDaten.every(d => d.ist_quelle === 'gemessen') ? 'gemessen' as const : 'fehlt' as const
+            const hinweis = istQuelle === 'gemessen'
+              ? null
+              : (jahresDaten.find(d => d.vergleich_hinweis)?.vergleich_hinweis ?? null)
             setData({
               ...firstYearData, strings: aggStrings,
               prognose_gesamt_kwh: totalP, ist_gesamt_kwh: totalI, abweichung_gesamt_kwh: totalI - totalP,
               abweichung_gesamt_prozent: totalP > 0 ? ((totalI - totalP) / totalP) * 100 : null,
-              bester_string: sortedByPerf[0]?.bezeichnung || null,
-              schlechtester_string: sortedByPerf[sortedByPerf.length - 1]?.bezeichnung || null,
+              ist_quelle: istQuelle,
+              vergleich_hinweis: hinweis,
+              bester_string: hinweis ? null : (sortedByPerf[0]?.bezeichnung || null),
+              schlechtester_string: hinweis ? null : (sortedByPerf[sortedByPerf.length - 1]?.bezeichnung || null),
             })
           }
         }
@@ -177,6 +191,12 @@ export function PvStringHeaderZeile({ data, zeitraumLabel, onCsv }: {
 
 export function PvStringBestSchlecht({ data }: { data: PVStringsResponse }) {
   if (data.strings.length <= 1) return null
+  // A4/b1: Sind die IST-Werte nach kWp verteilt, hat rechnerisch jedes Modul
+  // denselben spezifischen Ertrag — dann gibt es keine Platzierung, sondern die
+  // Erklärung warum (Backend-Satz, dieselbe Zeile wie im Komponenten-Hub).
+  if (data.vergleich_hinweis) {
+    return <HerkunftZeile herkunft={pvVerteiltHerkunft('IST je Modul', data.vergleich_hinweis)} />
+  }
   return (
     <div className="flex flex-wrap gap-3">
       {data.bester_string && (

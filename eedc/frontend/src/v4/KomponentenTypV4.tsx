@@ -16,8 +16,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
-import ErfassungZustandBadge from '../components/ui/ErfassungZustandBadge'
-import { BlockShell, BlockStackSkeleton, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, HerkunftZeile, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
 import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
@@ -645,25 +644,7 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
               {/* Gerechnete statt gemessene Werte werden am Chart-Kopf ausgewiesen
                   (PV: Modul-Stapel = kWp-Anteil) — dasselbe Zustands-Badge wie am
                   Verteilungsbalken, kein zweiter Satz Bildsprache (Regel 0a). */}
-              {g.verlauf.herkunft && (
-                <div className="mb-2 space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <ErfassungZustandBadge
-                      zustand={g.verlauf.herkunft.zustand}
-                      quelleLabel={g.verlauf.herkunft.quelleLabel}
-                      iconOnly
-                    />
-                    {g.verlauf.herkunft.bezug && (
-                      <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-                        {g.verlauf.herkunft.bezug}
-                      </span>
-                    )}
-                  </div>
-                  {g.verlauf.herkunft.hinweis && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500">{g.verlauf.herkunft.hinweis}</p>
-                  )}
-                </div>
-              )}
+              <HerkunftZeile herkunft={g.verlauf.herkunft} className="mb-2" />
               <KomponentenVerlaufChart rows={g.verlauf.rows} bars={g.verlauf.bars} einheit={g.verlauf.einheit} gestapelt={g.verlauf.gestapelt} tall={fokus} />
             </Parkbar>
             {g.verlauf.verteilungen && g.verlauf.verteilungen.length > 0 && (

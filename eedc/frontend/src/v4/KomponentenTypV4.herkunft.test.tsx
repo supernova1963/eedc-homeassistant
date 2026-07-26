@@ -26,6 +26,10 @@ const HERKUNFT = {
     + 'Die gemessenen Werte je String stehen im Block „Vergleich".',
 }
 
+// Der Verteilungsbalken trägt seinen Titel schon in der Kopfzeile — dort liefert
+// der Adapter die Herkunft ohne `bezug` (sonst stünde „Erzeugung …" doppelt).
+const HERKUNFT_BALKEN = { ...HERKUNFT, bezug: undefined }
+
 function geraet(mitHerkunft: boolean): KompGeraet {
   return {
     inv: { id: 0, anlage_id: 1, typ: 'pv-module', bezeichnung: 'PV-Anlage', aktiv: true } as Investition,
@@ -37,7 +41,7 @@ function geraet(mitHerkunft: boolean): KompGeraet {
       gestapelt: true,
       herkunft: mitHerkunft ? HERKUNFT : undefined,
       verteilungen: [
-        { titel: 'Erzeugung nach Modul', herkunft: mitHerkunft ? HERKUNFT : undefined,
+        { titel: 'Erzeugung nach Modul', herkunft: mitHerkunft ? HERKUNFT_BALKEN : undefined,
           segmente: [{ label: 'Süd', wert: 600, farbe: 'bg-red-500' }] },
         { titel: 'Verwendung der Erzeugung',
           segmente: [{ label: 'Direktverbrauch', wert: 400, farbe: 'bg-green-500' }] },
@@ -58,8 +62,10 @@ describe('Block ④ Verlauf — Herkunft der Modul-Werte', () => {
     render(<>{verlaufBlock(true).render(false)}</>)
     // Beide Stellen tragen dasselbe SoT-Badge (iconOnly, aria-label aus ZUSTAND_META)
     expect(screen.getAllByLabelText('geschätzt (kWp-Anteil)')).toHaveLength(2)
-    // Chart-Kopf sagt, WORAUF sich die Kennzeichnung bezieht (Verwendung ist gemessen)
+    // Chart-Kopf sagt, WORAUF sich die Kennzeichnung bezieht (Verwendung ist
+    // gemessen) — genau EINMAL, der Balken trägt stattdessen seinen Titel.
     expect(screen.getByText('Erzeugung je Modul')).toBeInTheDocument()
+    expect(screen.getByText('Erzeugung nach Modul')).toBeInTheDocument()
     // Erklärsatz sichtbar (nicht nur Hover) inkl. Verweis auf Block ⑤
     const saetze = screen.getAllByText(/anteilig nach kWp verteilt/)
     expect(saetze.length).toBe(2)

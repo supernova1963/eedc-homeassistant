@@ -230,6 +230,14 @@ export interface KomponentenZeitreihe {
 // PV-String-Vergleich Types
 // =============================================================================
 
+/**
+ * Herkunft eines IST-Werts je PV-Modul (Backend-SoT `core/berechnungen/
+ * pv_verteilung.py`): `gemessen` = eigener Pro-String-Sensor/Eintrag,
+ * `verteilt` = anteilig nach kWp aus der Anlagen-Gesamterzeugung gerechnet,
+ * `fehlt` = keine Quelle. Steuert Kennzeichnung UND Ranking-Sperre.
+ */
+export type PVIstQuelle = 'gemessen' | 'verteilt' | 'fehlt'
+
 export interface PVStringMonat {
   monat: number
   monat_name: string
@@ -238,6 +246,7 @@ export interface PVStringMonat {
   abweichung_kwh: number
   abweichung_prozent: number | null
   performance_ratio: number | null
+  ist_quelle: PVIstQuelle
 }
 
 export interface PVStringDaten {
@@ -256,6 +265,8 @@ export interface PVStringDaten {
   abweichung_jahr_prozent: number | null
   performance_ratio_jahr: number | null
   spezifischer_ertrag_kwh_kwp: number | null
+  /** Herkunft der IST-Jahreswerte (Rollup über die beitragenden Monate). */
+  ist_quelle: PVIstQuelle
 
   // Monatswerte
   monatswerte: PVStringMonat[]
@@ -278,9 +289,13 @@ export interface PVStringsResponse {
   // Einzelne Strings
   strings: PVStringDaten[]
 
-  // Beste/schlechteste Performance
+  // Beste/schlechteste Performance — leer, wenn die Werte verteilt sind
   bester_string: string | null
   schlechtester_string: string | null
+  /** Herkunft der IST-Werte über alle Strings. */
+  ist_quelle: PVIstQuelle
+  /** Erklärt, warum es keine Platzierung gibt (null = Ranking gültig). */
+  vergleich_hinweis: string | null
 }
 
 // =============================================================================
@@ -293,6 +308,7 @@ export interface PVStringJahreswert {
   ist_kwh: number
   abweichung_prozent: number | null
   performance_ratio: number | null
+  ist_quelle: PVIstQuelle
 }
 
 export interface PVStringSaisonalwert {
@@ -318,6 +334,8 @@ export interface PVStringGesamtlaufzeit {
   abweichung_gesamt_prozent: number | null
   performance_ratio_gesamt: number | null
   spezifischer_ertrag_kwh_kwp: number | null
+  /** Herkunft der IST-Werte über die gesamte Laufzeit. */
+  ist_quelle: PVIstQuelle
 
   // Jahreswerte für Chart
   jahreswerte: PVStringJahreswert[]
@@ -351,9 +369,13 @@ export interface PVStringsGesamtlaufzeitResponse {
   // Saisonale Aggregation
   saisonal_aggregiert: PVStringSaisonalwert[]
 
-  // Performance-Ranking
+  // Performance-Ranking — leer, wenn die Werte verteilt sind
   bester_string: string | null
   schlechtester_string: string | null
+  /** Herkunft der IST-Werte über alle Strings. */
+  ist_quelle: PVIstQuelle
+  /** Erklärt, warum es keine Platzierung gibt (null = Ranking gültig). */
+  vergleich_hinweis: string | null
 }
 
 // =============================================================================

@@ -9,6 +9,7 @@ const getBalkonkraftwerkDashboard = vi.fn()
 const getSonstigesDashboard = vi.fn()
 const list = vi.fn()
 const getUebersicht = vi.fn()
+const getPVStringsGesamtlaufzeit = vi.fn()
 const listAggregiert = vi.fn()
 
 vi.mock('../api/investitionen', () => ({
@@ -22,7 +23,10 @@ vi.mock('../api/investitionen', () => ({
     list: (...a: unknown[]) => list(...a),
   },
 }))
-vi.mock('../api/cockpit', () => ({ cockpitApi: { getUebersicht: (...a: unknown[]) => getUebersicht(...a) } }))
+vi.mock('../api/cockpit', () => ({ cockpitApi: {
+  getUebersicht: (...a: unknown[]) => getUebersicht(...a),
+  getPVStringsGesamtlaufzeit: (...a: unknown[]) => getPVStringsGesamtlaufzeit(...a),
+} }))
 vi.mock('../api/monatsdaten', () => ({ monatsdatenApi: { listAggregiert: (...a: unknown[]) => listAggregiert(...a) } }))
 
 import { KOMPONENTEN_ADAPTER } from './komponentenAdapter'
@@ -30,7 +34,26 @@ import { KOMPONENTEN_ADAPTER } from './komponentenAdapter'
 const inv = (over = {}) => ({ id: 1, anlage_id: 1, typ: 'x', bezeichnung: 'Gerät A', aktiv: true, ...over })
 const titles = (ks: { title: string }[]) => ks.map((k) => k.title)
 
-beforeEach(() => { vi.clearAllMocks(); list.mockResolvedValue([]); listAggregiert.mockResolvedValue([]) })
+beforeEach(() => {
+  vi.clearAllMocks(); list.mockResolvedValue([]); listAggregiert.mockResolvedValue([])
+  // Default: keine Pro-String-Antwort → `pvVerlauf` fällt auf die kWp-Zerlegung
+  // zurück (Fallback-Pfad, siehe eigener Test).
+  getPVStringsGesamtlaufzeit.mockResolvedValue(null)
+})
+
+/** Antwort von `/cockpit/pv-strings-gesamtlaufzeit` — nur die Felder, die
+ *  `pvVerlauf` liest (Modul × Jahr + Herkunft). */
+const pvStringsAntwort = (
+  strings: { id: number; jahr: number; ist: number }[],
+  ist_quelle: 'gemessen' | 'verteilt' | 'fehlt' = 'gemessen',
+) => ({
+  ist_quelle,
+  strings: strings.map((s) => ({
+    investition_id: s.id,
+    ist_gesamt_kwh: s.ist,
+    jahreswerte: [{ jahr: s.jahr, ist_kwh: s.ist }],
+  })),
+})
 
 describe('KOMPONENTEN_ADAPTER', () => {
   it('Speicher: D2-KPIs + Ladequellen-Aufteilung (PV/Netz aus Arbitrage) + Verlauf', async () => {
@@ -156,7 +179,10 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.aufteilung?.segmente.map((s) => [s.label, s.wert])).toEqual([['Eigenverbrauch', 250], ['Einspeisung', 250]])
   })
 
-  it('PV ④ Verlauf: Modul-Werte sind kWp-verteilt und an BEIDEN Stellen gekennzeichnet (A3/a1)', async () => {
+  /** Fixture-Muster aus `backend/tests/test_aggregiert_kwp_verteilung.py`:
+   *  6/4 kWp, gemessen 700/300 gegen kWp-Anteil 600/400. Der Kontrast ist das
+   *  Regressions-Gate — fällt jemand auf die kWp-Zerlegung zurück, steht hier 600. */
+  const zweiModule = () => {
     getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
     list.mockResolvedValue([
       inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6 }),
@@ -165,22 +191,46 @@ describe('KOMPONENTEN_ADAPTER', () => {
     listAggregiert.mockResolvedValue([
       { jahr: 2025, pv_erzeugung_kwh: 1000, eigenverbrauch_kwh: 400, einspeisung_kwh: 600 },
     ])
+  }
+
+  it('PV ④ Verlauf: Modul-Balken sind GEMESSEN (700/300), nicht kWp-verteilt (600/400) — A4/b2', async () => {
+    zweiModule()
+    getPVStringsGesamtlaufzeit.mockResolvedValue(
+      pvStringsAntwort([{ id: 11, jahr: 2025, ist: 700 }, { id: 12, jahr: 2025, ist: 300 }]))
     const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
-    // Werte bleiben unverändert kWp-proportional (6/4 kWp → 600/400) — a1 ändert
-    // keine Zahl, nur die Kennzeichnung. Der Umbau auf Messwerte ist A4.
+    expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 700, m12: 300 })
+    const erzeugung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Erzeugung nach Modul')
+    expect(erzeugung?.segmente.map((s) => s.wert)).toEqual([700, 300])
+    // Gemessen ⇒ KEINE Kennzeichnung (weder am Chart-Kopf noch am Balken)
+    expect(g.verlauf?.herkunft).toBeUndefined()
+    expect(erzeugung?.herkunft).toBeUndefined()
+  })
+
+  it('PV ④ Verlauf: quelle = verteilt ⇒ Werte vom Endpoint MIT Kennzeichnung (A4/b2)', async () => {
+    zweiModule()
+    getPVStringsGesamtlaufzeit.mockResolvedValue(
+      pvStringsAntwort([{ id: 11, jahr: 2025, ist: 600 }, { id: 12, jahr: 2025, ist: 400 }], 'verteilt'))
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
     expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400 })
     // Stelle 1: Chart-Kopf (Modul-Stapel)
     expect(g.verlauf?.herkunft?.zustand).toBe('geschaetzt')
     expect(g.verlauf?.herkunft?.quelleLabel).toBe('kWp-Anteil')
     expect(g.verlauf?.herkunft?.hinweis).toContain('anteilig nach kWp')
-    expect(g.verlauf?.herkunft?.hinweis).toContain('Vergleich')       // Cross-Link zu Block ⑤
-    // Stelle 2: Verteilungsbalken „Erzeugung nach Modul" — gleiche Quelle (modulAnteil)
+    // Stelle 2: Verteilungsbalken — gleiche Aussage, ohne doppeltes Bezugs-Label
     const erzeugung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Erzeugung nach Modul')
-    expect(erzeugung?.herkunft).toBe(g.verlauf?.herkunft)
-    expect(erzeugung?.segmente.map((s) => s.wert)).toEqual([600, 400])
+    expect(erzeugung?.herkunft?.hinweis).toBe(g.verlauf?.herkunft?.hinweis)
+    expect(erzeugung?.herkunft?.bezug).toBeUndefined()
     // Die gemessene Verwendungs-Aufteilung daneben bleibt UNgekennzeichnet
     const verwendung = g.verlauf?.verteilungen?.find((v) => v.titel === 'Verwendung der Erzeugung')
     expect(verwendung?.herkunft).toBeUndefined()
+  })
+
+  it('PV ④ Verlauf: ohne String-Antwort bleibt die kWp-Zerlegung als Fallback (gekennzeichnet)', async () => {
+    zweiModule()
+    getPVStringsGesamtlaufzeit.mockResolvedValue(null)   // Endpoint-Ausfall
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400 })
+    expect(g.verlauf?.herkunft?.zustand).toBe('geschaetzt')
   })
 })
 

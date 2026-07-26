@@ -25,7 +25,8 @@ import { fmtCalc } from '../components/ui'
 import { formatEnergie, formatEffizienz } from '../lib/einheiten'
 import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG, SONSTIGES_KATEGORIE_LABELS } from '../lib'
 import { CHART_COLORS, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
-import { cockpitApi } from '../api/cockpit'
+import { pvVerteiltHerkunft } from '../lib/pvHerkunft'
+import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import {
@@ -205,28 +206,35 @@ function bauePvTopologie(invs: Investition[]): KompStruktur {
   }
 }
 
-/** Kennzeichnung der Modul-Werte in Block ④ (Rainer/rapahl 2026-07-25): Die
- *  Quelle dieses Blocks ist `/monatsdaten/aggregiert` — eine ANLAGENWEITE
- *  Response ohne Modul-Zerlegung. Aus ihr ist die kWp-Verteilung die einzig
- *  mögliche Zerlegung; gemessene Pro-String-Werte liegen zwar vor, aber in einer
- *  anderen Response (Block ⑤ „Vergleich"). Bis der Adapter darauf umgestellt ist
- *  (A4), steht wenigstens dran, dass hier gerechnet wird. Wortlaut aus dem
- *  Daten-Checker (`services/daten_checker/energieprofil.py`), nicht neu erfunden. */
-const PV_MODUL_HERKUNFT: WertHerkunft = {
-  zustand: 'geschaetzt',
-  quelleLabel: 'kWp-Anteil',
-  // Gilt nur für den Erzeugungs-Stapel; die Verwendung daneben ist gemessen.
-  bezug: 'Erzeugung je Modul',
-  hinweis: 'Werte je Modul sind nicht gemessen, sondern anteilig nach kWp aus der '
-    + 'Gesamterzeugung verteilt — Pro-String-Genauigkeit eingeschränkt. Die gemessenen '
-    + 'Werte je String stehen im Block „Vergleich".',
-}
+/** Kennzeichnung der Modul-Werte in Block ④, wenn sie NICHT gemessen sind
+ *  (Rainer/rapahl 2026-07-25): Modulwerte kommen seit A4 aus
+ *  `/cockpit/pv-strings-gesamtlaufzeit`, also aus den Pro-String-Sensoren. Wer nur
+ *  einen Gesamt-Sensor hat, bekommt dort die nach kWp verteilten Werte — dann
+ *  (und nur dann) steht diese Kennzeichnung dran, datengetrieben über
+ *  `ist_quelle`. Wortlaut-SoT: `lib/pvHerkunft` (geteilt mit Block ⑤).
+ *  `bezug` gilt nur für den Erzeugungs-Stapel — die Verwendung daneben ist
+ *  gemessen. */
+const PV_MODUL_HERKUNFT: WertHerkunft = pvVerteiltHerkunft('Erzeugung je Modul')
 
-/** PV-Verlauf = pro Jahr zwei Stapel nebeneinander: **Erzeugung je Modul** (Σ =
- *  Gesamterzeugung, kWp-verteilt) ⟷ **Verwendung** (Direktverbrauch = EV −
- *  Speicher-Entladung · Speicherladung · Einspeisung; Σ ≈ Erzeugung). Plus zwei
- *  %-Aufteilungs-Balken (Gesamtzeitraum) für Erzeugung und Verwendung. */
-function pvVerlauf(agg: AggregierteMonatsdaten[], module: Investition[]): NonNullable<KompGeraet['verlauf']> {
+/** PV-Verlauf = pro Jahr zwei Stapel nebeneinander: **Erzeugung je Modul** ⟷
+ *  **Verwendung** (Direktverbrauch = EV − Speicher-Entladung · Speicherladung ·
+ *  Einspeisung; Σ ≈ Erzeugung). Plus zwei %-Aufteilungs-Balken (Gesamtzeitraum).
+ *
+ *  Die Modul-Stapel kommen aus `strings[].jahreswerte[].ist_kwh` — der Achse
+ *  Jahr × Modul, die dieser Block braucht (A4/b2). Fehlt die Antwort (alte
+ *  Instanz, Fehler), bleibt die kWp-Zerlegung aus der anlagenweiten
+ *  `/monatsdaten/aggregiert`-Response als Fallback — dann gekennzeichnet.
+ *
+ *  Mit Balkonkraftwerk sind die beiden Stapel bewusst nicht mehr summengleich:
+ *  die Modul-Stapel zeigen die PV-Module dieser Karte, die Verwendung daneben
+ *  die Netzpunkt-Bilanz der Anlage (inkl. BKW). Vorher fiel das nicht auf, weil
+ *  die kWp-Zerlegung die BKW-Erzeugung stillschweigend auf die PV-Module
+ *  mitverteilt hat — das BKW hat seine eigene Karte im Hub. */
+function pvVerlauf(
+  agg: AggregierteMonatsdaten[],
+  module: Investition[],
+  pvStrings?: PVStringsGesamtlaufzeitResponse | null,
+): NonNullable<KompGeraet['verlauf']> {
   const totalKwp = module.reduce((s, m) => s + (m.leistung_kwp ?? 0), 0)
   const jahr = new Map<number, { erz: number; direkt: number; speicher: number; einsp: number }>()
   for (const r of agg) {
@@ -237,7 +245,21 @@ function pvVerlauf(agg: AggregierteMonatsdaten[], module: Investition[]): NonNul
     y.einsp += r.einspeisung_kwh ?? 0
     jahr.set(r.jahr, y)
   }
-  const modulAnteil = (m: Investition, erz: number) => totalKwp > 0 ? erz * (m.leistung_kwp ?? 0) / totalKwp : 0
+  // Gemessene Modulwerte je Jahr, sofern der String-Endpoint sie liefert.
+  const gemessen = new Map<number, Map<number, number>>()  // invId → jahr → kWh
+  for (const s of pvStrings?.strings ?? []) {
+    gemessen.set(s.investition_id, new Map(s.jahreswerte.map((j) => [j.jahr, j.ist_kwh])))
+  }
+  const hatModulwerte = module.some((m) => gemessen.has(m.id))
+  const kwpAnteil = (m: Investition, erz: number) => totalKwp > 0 ? erz * (m.leistung_kwp ?? 0) / totalKwp : 0
+  const modulWert = (m: Investition, j: number, erz: number) => hatModulwerte
+    ? (gemessen.get(m.id)?.get(j) ?? 0)
+    : kwpAnteil(m, erz)
+  // Kennzeichnung datengetrieben: nur wenn das Backend die Werte als verteilt
+  // meldet (oder der Fallback greift), ist hier gerechnet statt gemessen.
+  const herkunft: WertHerkunft | undefined = hatModulwerte
+    ? (pvStrings?.ist_quelle === 'verteilt' ? PV_MODUL_HERKUNFT : undefined)
+    : PV_MODUL_HERKUNFT
   const bars: VerlaufBar[] = [
     ...module.map((m, i) => ({ key: `m${m.id}`, label: m.bezeichnung, farbe: PV_MODUL_FARBEN[i % PV_MODUL_FARBEN.length], stapel: 'erz' })),
     { key: 'direkt', label: 'Direktverbrauch', farbe: CHART_COLORS.eigenverbrauch, stapel: 'verw' },
@@ -247,17 +269,21 @@ function pvVerlauf(agg: AggregierteMonatsdaten[], module: Investition[]): NonNul
   const rows: VerlaufRow[] = [...jahr.keys()].sort((a, b) => a - b).map((j) => {
     const y = jahr.get(j)!
     const row: VerlaufRow = { name: String(j), direkt: Math.round(y.direkt), sladung: Math.round(y.speicher), einsp: Math.round(y.einsp) }
-    for (const m of module) row[`m${m.id}`] = Math.round(modulAnteil(m, y.erz))
+    for (const m of module) row[`m${m.id}`] = Math.round(modulWert(m, j, y.erz))
     return row
   })
   const ges = [...jahr.values()].reduce((a, v) => ({ erz: a.erz + v.erz, direkt: a.direkt + v.direkt, speicher: a.speicher + v.speicher, einsp: a.einsp + v.einsp }), { erz: 0, direkt: 0, speicher: 0, einsp: 0 })
+  const modulSumme = (m: Investition) => hatModulwerte
+    ? (pvStrings?.strings.find((s) => s.investition_id === m.id)?.ist_gesamt_kwh ?? 0)
+    : kwpAnteil(m, ges.erz)
   return {
     bars, rows, gestapelt: true,
-    // Die Modul-Stapel des Charts speisen sich aus demselben `modulAnteil` wie
-    // der Verteilungsbalken → beide tragen dieselbe Kennzeichnung.
-    herkunft: PV_MODUL_HERKUNFT,
+    // Chart-Stapel und Verteilungsbalken speisen sich aus derselben Quelle →
+    // beide tragen dieselbe Kennzeichnung (oder eben keine).
+    herkunft,
     verteilungen: [
-      { titel: 'Erzeugung nach Modul', herkunft: PV_MODUL_HERKUNFT, segmente: module.map((m, i) => ({ label: m.bezeichnung, wert: modulAnteil(m, ges.erz), farbe: PV_MODUL_BG[i % PV_MODUL_BG.length] })) },
+      // Ohne `bezug`: der Balken trägt den Titel schon in der Kopfzeile.
+      { titel: 'Erzeugung nach Modul', herkunft: herkunft && { ...herkunft, bezug: undefined }, segmente: module.map((m, i) => ({ label: m.bezeichnung, wert: modulSumme(m), farbe: PV_MODUL_BG[i % PV_MODUL_BG.length] })) },
       { titel: 'Verwendung der Erzeugung', segmente: [
         { label: 'Direktverbrauch', wert: ges.direkt, farbe: SEG.ev },
         { label: 'Speicherladung', wert: ges.speicher, farbe: SEG.ladung },
@@ -272,17 +298,20 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
   // für die EV/Einspeisung-Aufteilung). Genau ein „Gerät".
   'pv-module': {
     async fetch(anlageId) {
-      const [u, agg, invs] = await Promise.all([
+      // Vierter paralleler Call (A4/b2): die Pro-Modul-Messwerte für Block ④.
+      // Fällt er aus, bleibt der kWp-Fallback in `pvVerlauf` — kein leerer Block.
+      const [u, agg, invs, pvStrings] = await Promise.all([
         cockpitApi.getUebersicht(anlageId),
         monatsdatenApi.listAggregiert(anlageId).catch(() => []),
         investitionenApi.list(anlageId).catch(() => [] as Investition[]),
+        cockpitApi.getPVStringsGesamtlaufzeit(anlageId).catch(() => null),
       ])
       const ev = agg.reduce((s, m) => s + (m.eigenverbrauch_kwh ?? 0), 0)
       const einsp = agg.reduce((s, m) => s + (m.einspeisung_kwh ?? 0), 0)
       const topo = bauePvTopologie(invs)
       const hatTopo = topo.art === 'topologie' && (topo.wr.length > 0 || topo.orphanModule.length > 0 || topo.orphanSpeicher.length > 0)
       const pvModule = invs.filter((i) => i.aktiv && i.typ === 'pv-module')
-      const mv = pvModule.length ? pvVerlauf(agg, pvModule) : null
+      const mv = pvModule.length ? pvVerlauf(agg, pvModule, pvStrings) : null
       return [{
         inv: { id: 0, anlage_id: anlageId, typ: 'pv-module', bezeichnung: 'PV-Anlage', aktiv: true } as Investition,
         label: 'PV-Anlage',

@@ -11,11 +11,11 @@
  * wenn die Summe 0 ist.
  *
  * Optionales `herkunft` kennzeichnet Aufteilungen, deren Werte gerechnet statt
- * gemessen sind (PV je Modul nach kWp) — über das Zustands-SoT-Badge, siehe
- * {@link WertHerkunft}.
+ * gemessen sind (PV je Modul nach kWp) — über die geteilte {@link HerkunftZeile},
+ * siehe {@link WertHerkunft}.
  */
 import { fmtCalc } from '../ui'
-import ErfassungZustandBadge from '../ui/ErfassungZustandBadge'
+import { HerkunftZeile } from './HerkunftZeile'
 import type { WertHerkunft } from './types'
 
 export interface VerteilungSegment {
@@ -42,19 +42,7 @@ export function VerteilungsBalken({
   if (total <= 0) return null
   return (
     <div>
-      {(titel || herkunft) && (
-        <div className="flex items-center gap-1.5 mb-2">
-          {titel && (
-            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{titel}</p>
-          )}
-          {herkunft && (
-            <ErfassungZustandBadge zustand={herkunft.zustand} quelleLabel={herkunft.quelleLabel} iconOnly />
-          )}
-        </div>
-      )}
-      {herkunft?.hinweis && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">{herkunft.hinweis}</p>
-      )}
+      <HerkunftZeile titel={titel} herkunft={herkunft} className="mb-2" />
       {/* S2: feste Label- UND Wert-Spalte (`w-20`/`w-28`) → die Grau-Tracks sind
           dazwischen IMMER gleich lang (100 %-Baseline), unabhängig von der Länge
           des Werttextes. Klare Kanten (`rounded-sm` statt Pille) = sachlicher. */}
