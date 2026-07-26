@@ -723,7 +723,6 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
-  const lf = data.eedc_lernfaktor
   const visibleChartData = sichtbareStunden(chartDatenVon(data))
   return (
     <Card>
@@ -735,7 +734,11 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
             <XAxis dataKey="stunde" {...xAchse()} tickFormatter={(v) => v.replace(':00', '')} padding={{ left: 8, right: 8 }} /* achsen-allow: Zeit-/Kategorie-Achse */ />
             <YAxis {...yAchse(false)} tickFormatter={achsenTick} label={achsenEinheit('kW')} />
             <Tooltip content={<StundenTooltip hasEedc={hasEedc} />} />
-            <Legend content={<ChartLegende onItemClick={legende.onItemClick} formatter={(v) => ({ ist: 'IST', eedc: `eedc${lf != null ? ` (OpenMeteo ×${fmtZahl(lf, 2)})` : ''}`, solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)' }[v] || v)} />} />
+            {/* Roh- und Korrektur-Kurve müssen in der Legende unterscheidbar
+                sein (Backlog-Beifang R21-1). „×Faktor" stand hier noch aus der
+                Zeit des reinen Skalars; korrigiert wird längst pro Stunden-Slot
+                (Korrekturprofil-Kaskade) — der Skalar ist nur noch Fallback. */}
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} formatter={(v) => ({ ist: 'IST', eedc: 'eedc (kalibriert)', solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)' }[v] || v)} />} />
             {data.aktuelle_stunde !== null && (<ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke={achsen.referenz} strokeDasharray="3 3" label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: achsen.achse }} />)}
             <Area dataKey="ist" stroke={PROGNOSE_QUELLEN_COLORS.ist} fill={PROGNOSE_QUELLEN_COLORS.ist} fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} hide={legende.istVersteckt('ist')} />
             {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="solcast" hide={legende.istVersteckt('solcast')} />}

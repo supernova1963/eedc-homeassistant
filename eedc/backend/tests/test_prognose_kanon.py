@@ -111,20 +111,29 @@ def _patch(monkeypatch):
     _cache.clear()
 
 
-async def _seed(db, *, module: list[tuple[float, int]] | None = None) -> Anlage:
-    """module = Liste von (kwp, ausrichtung_grad). Default: ein 10-kWp-Süd-Modul."""
+async def _seed(db, *, module: list[tuple] | None = None) -> Anlage:
+    """module = Liste von ``(kwp, ausrichtung_grad)`` oder ``(kwp, azi, neigung)``.
+
+    Default: ein 10-kWp-Süd-Modul @35°. Die optionale Neigung braucht der
+    A11/N34-Fall: erst unterschiedliche Neigungen ergeben eine Anlage mit
+    VIER Orientierungsgruppen wie die Demo-Anlage (Süd 30° · Ost 25° ·
+    West 25° · Balkon 35°).
+    """
+    module = module or [(10.0, 0)]
     anlage = Anlage(
-        anlagenname="Kanon-Test", leistung_kwp=sum(m[0] for m in (module or [(10.0, 0)])),
+        anlagenname="Kanon-Test", leistung_kwp=sum(m[0] for m in module),
         latitude=48.8, longitude=9.2, standort_land="DE", prognose_quelle="eedc",
     )
     db.add(anlage)
     await db.flush()
     db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=1,
                        netzbezug_kwh=100.0, einspeisung_kwh=200.0))
-    for kwp, azi in (module or [(10.0, 0)]):
+    for m in module:
+        kwp, azi = m[0], m[1]
+        neigung = m[2] if len(m) > 2 else 35
         db.add(Investition(
-            anlage_id=anlage.id, typ="pv-module", bezeichnung=f"String {azi}",
-            leistung_kwp=kwp, neigung_grad=35,
+            anlage_id=anlage.id, typ="pv-module", bezeichnung=f"String {azi}/{neigung}",
+            leistung_kwp=kwp, neigung_grad=neigung,
             anschaffungsdatum=date(2024, 1, 1),
             parameter={"ausrichtung_grad": azi},
         ))
@@ -168,16 +177,19 @@ async def _seed_verbrauchsprofil(db, anlage_id: int, tage: int = 6) -> None:
 @pytest.fixture
 def _keine_netzabrufe(monkeypatch):
     """Der Prognosen-Vergleich holt neben dem Kanon eigene OpenMeteo-/Solcast-
-    Daten (Wetter-Tabelle, GTI-Roh-Kurve, Solcast-Spalte). Im Test hermetisch
-    auf ``None`` — der Endpoint liefert dann die Kanon-Spalten, um die es hier
-    geht, und der Test braucht kein Netz."""
+    Daten (Wetter-Tabelle, Solcast-Spalte). Im Test hermetisch auf ``None`` —
+    der Endpoint liefert dann die Kanon-Spalten, um die es hier geht, und der
+    Test braucht kein Netz.
+
+    Die OM-Roh-Kurve ist seit A11 KEIN eigener Abruf mehr (sie kommt aus
+    ``kanon.om_stundenprofil_kwh``), deshalb steht hier kein ``fetch_gti_
+    forecast`` mehr."""
     import backend.api.routes.prognosen as pr
 
     async def _none(*args, **kwargs):
         return None
 
     monkeypatch.setattr(pr, "fetch_open_meteo_forecast", _none)
-    monkeypatch.setattr(pr, "fetch_gti_forecast", _none)
     monkeypatch.setattr(pr, "get_solcast_forecast", _none)
 
 
@@ -441,6 +453,143 @@ async def test_multistring_summe_der_gruppen(db, _patch):
     assert any(abs(om[h] - single_avg[h]) > 0.05 for h in range(24))
     # Energieerhaltung: Tagessumme bleibt gleich (orientierungs-unabhängig).
     assert sum(om) == pytest.approx(20.0, abs=0.2)
+
+
+# ── A11 / N34: Demo-Anlage mit vier Orientierungen ──────────────────────────
+
+# Demo-Anlage (``import_export/demo_data.py``): Süd 12 kWp @30°, Ost 5 kWp @25°,
+# West 3 kWp @25°, Balkon 0,8 kWp @35° = 20,8 kWp in VIER Orientierungsgruppen.
+_DEMO_MODULE = [(12.0, 0, 30), (5.0, -90, 25), (3.0, 90, 25), (0.8, 0, 35)]
+_DEMO_KWP = sum(m[0] for m in _DEMO_MODULE)
+# Ertragsfaktor je Ausrichtung — ohne ihn normiert `_fake_slots` die Tagesenergie
+# orientierungs-unabhängig, und ein Orientierungs-Kollaps bliebe unsichtbar.
+_AZI_FAKTOR = {-90: 0.7, 90: 0.8}
+
+
+@pytest.fixture
+def _patch_orientierungs_abhaengig(monkeypatch):
+    """Wie ``_patch``, aber Ost/West liefern weniger als Süd (0,7 / 0,8)."""
+    import backend.services.solar_forecast_service as sfs
+    import backend.api.routes.live_wetter as lw
+    from backend.services.korrekturprofil_lookup import _cache
+
+    async def fake(**kwargs):
+        faktor = _AZI_FAKTOR.get(kwargs["ausrichtung"], 1.0)
+        p = _fake_prognose(kwargs["kwp"], kwargs["ausrichtung"], kwargs.get("days"))
+        for tag in p.tageswerte:
+            tag.stunden_kw = [v * faktor for v in tag.stunden_kw]
+            tag.pv_ertrag_kwh = round(sum(tag.stunden_kw), 3)
+            tag.gti_kwh_m2 = round(tag.gti_kwh_m2 * faktor, 4)
+        return p
+
+    async def fake_lernfaktor(anlage_id, db_, quelle="openmeteo"):
+        return 0.9
+
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake)
+    monkeypatch.setattr(lw, "_get_lernfaktor", fake_lernfaktor)
+    _cache.clear()
+
+
+def _erwartetes_om_kwh(tagesfaktor: float) -> float:
+    """Multi-String-Tagessumme der Demo-Anlage (richtiger Fan-out)."""
+    return sum(kwp * tagesfaktor * _AZI_FAKTOR.get(azi, 1.0)
+               for kwp, azi, _ in _DEMO_MODULE)
+
+
+async def test_om_roh_kurve_folgt_allen_ausrichtungen(
+    db, _patch_orientierungs_abhaengig, _keine_netzabrufe
+):
+    """A11/R21-1: Σ OM-Roh-Kurve == OM-Tageswert derselben Antwort == ``om_kwh``.
+
+    Rainer-PN 89608: die Kurve „OpenMeteo" im Prognosen-Vergleich passte bei
+    einer Anlage mit mehreren Ausrichtungen nicht zur Anlage. Sie kam aus EINEM
+    eigenen GTI-Abruf mit der Orientierung des ERSTEN PV-Moduls (hartcodierte
+    Defaults 35°/Süd, wenn dort nichts gepflegt war) und der Gesamt-kWp, während
+    der OM-Tageswert derselben Spalte längst aus dem Multi-String-Fan-out des
+    Kanons stammte — Kurve und Summenzeile widersprachen sich also innerhalb
+    einer Spalte. Jetzt speist ``kanon.om_stundenprofil_kwh`` beides.
+    """
+    from backend.api.routes.prognosen import get_prognosen_vergleich
+    from backend.services.prognose_kanon import kanon_tagesprognose
+
+    anlage = await _seed(db, module=_DEMO_MODULE)
+    vergleich = await get_prognosen_vergleich(anlage.id, db=db)
+    kanon = await kanon_tagesprognose(db, anlage, days=4)
+
+    # Heute: die Kurve selbst liegt in der Antwort.
+    kurve_heute = sum(s.kw for s in vergleich.openmeteo_stundenprofil)
+    assert vergleich.openmeteo_stundenprofil, "OM-Kurve fehlt"
+    assert kurve_heute == pytest.approx(vergleich.openmeteo_heute_kwh, abs=0.05)
+    assert kurve_heute == pytest.approx(kanon.tage[0].om_kwh, abs=0.05)
+
+    # Morgen/Übermorgen über die Tageshälften (VM+NM == Σ Kurve des Tages).
+    tageswerte = [vergleich.openmeteo_heute_kwh, vergleich.openmeteo_morgen_kwh,
+                  vergleich.openmeteo_uebermorgen_kwh]
+    for idx in range(3):
+        th = vergleich.openmeteo_tageshaelften[idx]
+        assert th is not None, f"Tag {idx} ohne OM-Kurve"
+        assert th.vormittag_kwh + th.nachmittag_kwh == pytest.approx(
+            tageswerte[idx], abs=0.15
+        )
+        assert tageswerte[idx] == pytest.approx(kanon.tage[idx].om_kwh, abs=0.05)
+        # … und der Wert ist wirklich der Fan-out, nicht der Ein-Abruf-Kollaps
+        # über die Gesamt-kWp mit der Orientierung des ersten Moduls (Süd).
+        tf = _TAGESFAKTOREN[idx]
+        assert tageswerte[idx] == pytest.approx(_erwartetes_om_kwh(tf), abs=0.2)
+        assert abs(tageswerte[idx] - _DEMO_KWP * tf) > 1.0
+
+    # Beide Kurven im selben Chart liegen slot-gleich (24 Backward-Slots).
+    assert [s.stunde for s in vergleich.openmeteo_stundenprofil] == list(range(24))
+    assert [s.stunde for s in vergleich.eedc_stundenprofil] == list(range(24))
+    # Und die eedc-Kurve bleibt die korrigierte Variante DIESER Roh-Kurve.
+    assert vergleich.eedc_heute_kwh == pytest.approx(kanon.tage[0].eedc_kwh)
+
+
+async def test_om_kurve_ohne_kanon_bleibt_leer(db, monkeypatch, _keine_netzabrufe):
+    """Fällt der Kanon aus, zeigt der Vergleich KEINE OM-Kurve.
+
+    Bewusst kein Ersatz-Rechenweg: eine Kurve aus einem zweiten Abruf neben
+    Tageswerten aus dem Kanon ist genau der Mischbetrieb, den A11 beseitigt.
+    """
+    import backend.api.routes.prognosen as pr
+    from backend.api.routes.prognosen import get_prognosen_vergleich
+
+    async def kein_kanon(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(pr, "kanon_tagesprognose", kein_kanon)
+    anlage = await _seed(db, module=_DEMO_MODULE)
+    vergleich = await get_prognosen_vergleich(anlage.id, db=db)
+
+    assert vergleich.openmeteo_stundenprofil == []
+    assert vergleich.eedc_stundenprofil == []
+    assert vergleich.verbleibend_om_kwh is None
+
+
+async def test_gti_spalte_ist_kwp_gewichtet(db, _patch_orientierungs_abhaengig):
+    """N34: die GTI-Spalte der 14-Tage-Tabelle mittelt kWp-gewichtet.
+
+    Vorher ``Σ gti / Anzahl Strings`` — ein 0,8-kWp-Balkonmodul zählte damit
+    genauso viel wie ein 12-kWp-Süddach, während der Ertrag daneben summiert
+    wurde. Die Spalte passte zu keiner Größe ihrer eigenen Zeile.
+    """
+    from backend.api.routes.solar_prognose import get_solar_prognose_endpoint
+
+    anlage = await _seed(db, module=_DEMO_MODULE)
+    solar = await get_solar_prognose_endpoint(anlage.id, tage=14, db=db)
+
+    for idx, tag in enumerate(solar.tageswerte[:4]):
+        tf = _TAGESFAKTOREN[idx % len(_TAGESFAKTOREN)]
+        # `_fake_tag`: gti_kwh_m2 == Tagesfaktor × Ausrichtungsfaktor.
+        gewichtet = sum(
+            kwp * tf * _AZI_FAKTOR.get(azi, 1.0) for kwp, azi, _ in _DEMO_MODULE
+        ) / _DEMO_KWP
+        ungewichtet = sum(
+            tf * _AZI_FAKTOR.get(azi, 1.0) for _, azi, _ in _DEMO_MODULE
+        ) / len(_DEMO_MODULE)
+        assert tag.gti_kwh_m2 == pytest.approx(gewichtet, abs=0.01)
+        assert abs(gewichtet - ungewichtet) > 0.02  # Fall trennt die Verfahren
+        assert tag.gti_kwh_m2 != pytest.approx(ungewichtet, abs=0.01)
 
 
 async def test_stilllegung_im_horizont_wirkt_ab_dem_tag(db, _patch):

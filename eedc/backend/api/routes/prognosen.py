@@ -32,14 +32,13 @@ from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.models import WETTER_MODELLE
 from backend.services.prognose_service import berechne_pv_ertrag_tag
 from backend.services.solcast_service import get_solcast_forecast, get_solcast_status
-from backend.services.solar_forecast_service import fetch_gti_forecast, _solar_noon_hour
+from backend.services.solar_forecast_service import _solar_noon_hour
 from backend.services.prognose_kanon import kanon_tagesprognose
 from backend.api.routes.live_wetter import _get_lernfaktor, _get_lernfaktor_detail
 from backend.services.pv_orientation import resolve_system_losses
 from backend.services.prognose_adapter import (
     StundenProfil,
     ist_profil,
-    openmeteo_gti_profil,
     sfml_profil,
     sfml_stundenprofil_aus_hours,
     sfml_stundenprofile_aus_forecast,
@@ -353,7 +352,7 @@ async def get_prognosen_vergleich(
     Evaluierungs-Cockpit mit Vormittag/Nachmittag-Split.
     Ziel: Optimales Zusammenspiel beider Quellen erarbeiten.
     """
-    anlage, pv_module, _, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
+    anlage, _, _, anlagenleistung_kwp = await _lade_anlage_mit_pv(db, anlage_id)
 
     if anlagenleistung_kwp <= 0:
         raise bad_request("Keine PV-Leistung konfiguriert")
@@ -368,19 +367,13 @@ async def get_prognosen_vergleich(
     pvgis = result.scalar_one_or_none()
     system_losses = resolve_system_losses(pvgis)
 
-    # Wettermodell + Orientierung
+    # Wettermodell (nur noch für die 14-Tage-Wettertabelle unten). Die
+    # Orientierung der Anlage wird hier bewusst NICHT mehr abgeleitet: bis
+    # v4.0.0 stand hier ein „Haupt"-Neigung/-Azimut aus dem ERSTEN PV-Modul
+    # (mit Defaults 35°/Süd) für einen eigenen GTI-Abruf — siehe die
+    # Roh-Kurve weiter unten (R21-1).
     wetter_modell = anlage.wetter_modell or "auto"
     model_name, max_days = WETTER_MODELLE.get(wetter_modell, (None, 16))
-
-    haupt_neigung = 35
-    haupt_azimut = 0
-    for pv in pv_module:
-        if pv.neigung_grad is not None:
-            haupt_neigung = int(pv.neigung_grad)
-        params = pv.parameter or {}
-        if params.get("ausrichtung_grad") is not None:
-            haupt_azimut = int(params["ausrichtung_grad"])
-        break
 
     now = datetime.now(ZoneInfo("Europe/Berlin"))
     heute = date.today()
@@ -414,15 +407,10 @@ async def get_prognosen_vergleich(
         return {**primary, "tage": merged_tage}
 
     # ── Parallele Datenabrufe (return_exceptions: ein API-Timeout crasht nicht alles) ──
-    wetter, gti_data, solcast, ist_rows = await asyncio.gather(
+    wetter, solcast, ist_rows = await asyncio.gather(
         _fetch_wetter_mit_fallback() if needs_fallback else fetch_open_meteo_forecast(
             latitude=anlage.latitude, longitude=anlage.longitude,
             days=14, skip_jitter=True, model=model_name,
-        ),
-        fetch_gti_forecast(
-            latitude=anlage.latitude, longitude=anlage.longitude,
-            neigung=haupt_neigung, ausrichtung=haupt_azimut,
-            days=3, skip_jitter=True, model=model_name,
         ),
         get_solcast_forecast(anlage),
         db.execute(
@@ -437,9 +425,6 @@ async def get_prognosen_vergleich(
     if isinstance(wetter, BaseException):
         logger.warning(f"OpenMeteo Forecast fehlgeschlagen: {wetter}")
         wetter = None
-    if isinstance(gti_data, BaseException):
-        logger.warning(f"GTI Forecast fehlgeschlagen: {gti_data}")
-        gti_data = None
     if isinstance(solcast, BaseException):
         logger.warning(f"Solcast Forecast fehlgeschlagen: {solcast}")
         solcast = None
@@ -477,28 +462,22 @@ async def get_prognosen_vergleich(
     openmeteo_morgen_kwh = openmeteo_tage[1].pv_prognose_kwh if len(openmeteo_tage) >= 2 else None
     openmeteo_uebermorgen_kwh = openmeteo_tage[2].pv_prognose_kwh if len(openmeteo_tage) >= 3 else None
 
-    # ── OpenMeteo GTI-Stundenprofile (3 Tage, zentraler Adapter) ──
-    # gti_data enthält bis zu 72 Stundenwerte (3×24h). OpenMeteo-GTI ist
-    # preceding-hour-Mittel: Wert@Index h deckt [h-1, h) ab = bereits Backward-
-    # Slot h (Issue #297, KEIN Shift — slot_konvention). Solcast/IST nutzen
-    # dasselbe Raster, daher liegen alle Quellen im Vergleich deckungsgleich.
-    # Formel + Temperatur-Korrektur in prognose_adapter.openmeteo_gti_profil.
+    # ── OpenMeteo-Roh-Stundenprofile (3 Tage) — Quelle: Prognose-Kanon ──
+    # Gefüllt wird unten aus `kanon_prog.tage[i].om_stundenprofil_kwh` (Slot-
+    # Summe des Multi-String-Fan-outs), NICHT aus einem eigenen GTI-Abruf.
+    # Bis v4.0.0 holte diese Kurve OpenMeteo selbst: EIN Abruf mit der
+    # Orientierung des ERSTEN PV-Moduls (Defaults 35°/Süd) und der Gesamt-kWp
+    # der Anlage. Bei mehreren Ausrichtungen zeigte sie damit weder die Anlage
+    # noch die eigene Tagessumme — der OM-Tageswert derselben Spalte kommt
+    # längst aus dem Kanon (Rainer-PN 89608, R21-1). Jetzt gilt per
+    # Konstruktion: Σ Kurve == OM-Tageswert == `kanon.om_kwh`.
+    # Slot-Raster bleibt Backward (#144/#297) — der Kanon füllt
+    # `om_stundenprofil_kwh` aus `SolarPrognoseTag.stunden_kw`, das dieselbe
+    # `openmeteo_preceding_hour_slot`-Zuordnung nutzt; Stunden-kWh == Ø-kW,
+    # also passt es unverändert in das kW-Feld des Vergleichs (wie die
+    # eedc-Kurve, die schon so gebaut wird).
     openmeteo_stundenprofil = []  # Heute (erste 24h)
     openmeteo_tagesprofile: list[list[StundenProfilEintrag]] = [[], [], []]  # [heute, morgen, übermorgen]
-    if gti_data:
-        hourly = gti_data.get("hourly", {})
-        gti_values = hourly.get("global_tilted_irradiance", [])
-        temps = hourly.get("temperature_2m", [])
-        for tag_idx in range(3):
-            profil = openmeteo_gti_profil(
-                gti_values, temps, tag_idx,
-                kwp=anlagenleistung_kwp, system_losses=system_losses,
-                datum=heute + timedelta(days=tag_idx),
-            )
-            eintraege = _profil_zu_eintraegen(profil)
-            openmeteo_tagesprofile[tag_idx] = eintraege
-            if tag_idx == 0:
-                openmeteo_stundenprofil = eintraege
 
     # ── EEDC = OpenMeteo × Korrekturprofil-Kaskade — gemeinsamer Pfad mit dem
     # HA-Export #150 (`eedc_prognose_service`): Vergleichs-Spalte „eedc" und
@@ -540,7 +519,17 @@ async def get_prognosen_vergleich(
                     )
                     for h in range(24)
                 ]
+            # OM-Roh-Kurve aus demselben Kanon-Tag (R21-1). `None` heißt: der
+            # Kanon hatte für diesen Tag keine Stundenbasis (OpenMeteo-Schätz-
+            # pfad ohne hourly) — dann bleibt die Kurve leer, statt hier einen
+            # zweiten Rechenweg ins selbe Chart zu mischen.
+            if tag.om_stundenprofil_kwh is not None:
+                openmeteo_tagesprofile[tag_idx] = [
+                    StundenProfilEintrag(stunde=h, kw=tag.om_stundenprofil_kwh[h])
+                    for h in range(24)
+                ]
         eedc_stundenprofil = eedc_tagesprofile[0]
+        openmeteo_stundenprofil = openmeteo_tagesprofile[0]
         eedc_heute_kwh, eedc_morgen_kwh, eedc_uebermorgen_kwh = eedc_tagessummen
 
         # OM-Spalte (Headline + 7-Tage-Tabelle) = kanon-OM, damit sie die Basis
@@ -562,17 +551,12 @@ async def get_prognosen_vergleich(
                 # Tage jenseits des Kanon-Horizonts (Tag 4–6): Skalar-Fallback.
                 ot.eedc_kwh = round(ot.pv_prognose_kwh * lernfaktor, 1)
     elif lernfaktor is not None:
-        # Fallback (OpenMeteo-Solar-Abruf nicht verfügbar): bisheriger
-        # Skalar-Pfad auf dem GTI-Profil des Vergleichs.
-        for s in openmeteo_stundenprofil:
-            eedc_stundenprofil.append(StundenProfilEintrag(
-                stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
-            ))
-        for tag_idx, profil in enumerate(openmeteo_tagesprofile):
-            for s in profil:
-                eedc_tagesprofile[tag_idx].append(StundenProfilEintrag(
-                    stunde=s.stunde, kw=round(s.kw * lernfaktor, 2)
-                ))
+        # Fallback: der OpenMeteo-Solar-Abruf des Kanons ist ausgefallen. Die
+        # Tageswerte der Wettertabelle (`fetch_open_meteo_forecast`, eigener
+        # Endpunkt) können trotzdem dastehen → eedc-Tageswerte per Skalar.
+        # Stundenkurven gibt es in diesem Zustand für KEINE der beiden Spalten:
+        # sie kämen sonst aus einem anderen Rechenweg als die Tageswerte
+        # darüber (genau die Drift, die A11 beseitigt).
         eedc_heute_kwh = round(openmeteo_heute_kwh * lernfaktor, 1) if openmeteo_heute_kwh is not None else None
         eedc_morgen_kwh = round(openmeteo_morgen_kwh * lernfaktor, 1) if openmeteo_morgen_kwh is not None else None
         eedc_uebermorgen_kwh = round(openmeteo_uebermorgen_kwh * lernfaktor, 1) if openmeteo_uebermorgen_kwh is not None else None

@@ -84,6 +84,15 @@ def openmeteo_gti_profil(
 
     OpenMeteos preceding-hour-Wert@Index ``h`` IST bereits Backward-Slot ``h``
     (``openmeteo_preceding_hour_slot`` = Identität, #297, KEIN Shift).
+
+    **Achtung (A11/R21-1):** dieser Normalizer rechnet EINE Orientierung mit
+    EINER kWp — er ist die Ein-String-Form. Der Prognosen-Vergleich nutzt ihn
+    seit v4.0.1 NICHT mehr; seine OM-Roh-Kurve kommt aus dem Multi-String-
+    Fan-out des Prognose-Kanons (``KanonTag.om_stundenprofil_kwh``), damit
+    Kurve und Tageswert derselben Spalte zusammenpassen. Wer ihn neu einsetzt,
+    muss ihn **pro Orientierungsgruppe** aufrufen und die Slots summieren —
+    sonst ist der Ein-Abruf-Kollaps zurück. Bleibt hier als Roh-GTI-Baustein
+    (und trägt den quellenübergreifenden Slot-Symmetrie-Test).
     """
     slots: list[float | None] = [0.0] * 24
     present: list[int] = []

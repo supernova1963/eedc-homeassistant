@@ -15,6 +15,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import ChartTooltip from '../ui/ChartTooltip'
+import { SimpleTooltip } from '../ui/FormelTooltip'
 import ScrollSchatten from '../ui/ScrollSchatten'
 import { Table, TableHead, TableBody, TableFoot } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
@@ -202,7 +203,14 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
             <th className={`${KOPF_ZELLE} text-right`}>PV-Prognose (kWh)</th>
             {hasVmNm && <th className={`${KOPF_ZELLE} text-right`}>VM (kWh)</th>}
             {hasVmNm && <th className={`${KOPF_ZELLE} text-right`}>NM (kWh)</th>}
-            <th className={`${KOPF_ZELLE} text-right`}>GTI (kWh/m²)</th>
+            {/* N34: kWp-gewichtetes Mittel über alle Ausrichtungen = die
+                Einstrahlung auf die Modulflächen DIESER Anlage. Vorher stand
+                hier ein ungewichteter Strings-Durchschnitt. */}
+            <th className={`${KOPF_ZELLE} text-right`}>
+              <SimpleTooltip text="GTI (Global Tilted Irradiance) — Einstrahlung auf die geneigte Modulfläche. Bei mehreren Ausrichtungen das kWp-gewichtete Mittel über alle Strings, passend zur Ertragssumme derselben Zeile.">
+                <span>GTI Modulfläche (kWh/m²)</span>
+              </SimpleTooltip>
+            </th>
             <th className={`${KOPF_ZELLE} text-right`}>Bewölkung (%)</th>
             <th className={`${KOPF_ZELLE} text-right`}>Temperatur (°C)</th>
             <th className={`${KOPF_ZELLE} text-right`}>Niederschlag (mm)</th>

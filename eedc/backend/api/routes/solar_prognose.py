@@ -50,7 +50,18 @@ ANZEIGE_QUELLE_GEMISCHT = "gemischt"
 def _aggregate_string_tageswerte(
     string_prognosen: list[dict],
 ) -> list["SolarPrognoseTagSchema"]:
-    """Aggregiert Tageswerte aus mehreren Strings zu einer Gesamtliste."""
+    """Aggregiert Tageswerte aus mehreren Strings zu einer Gesamtliste.
+
+    GTI (N34): **kWp-gewichtetes** Mittel über die Strings = die effektive
+    Einstrahlung auf die Modulfläche der Anlage. Vorher stand hier das
+    ungewichtete arithmetische Mittel (``Σ gti / Anzahl Strings``), während der
+    Ertrag daneben summiert wurde — bei gemischten Orientierungen zählte damit
+    ein 0,8-kWp-Balkonmodul genauso viel wie ein 12-kWp-Süddach, und die Spalte
+    passte zu keiner Größe der Zeile. Gewichtet ist sie konsistent zur
+    Ertragssumme (``Ertrag ≈ GTI × kWp × (1 − Verluste)``, linear in kWp).
+    Ohne kWp-Angaben bleibt es beim ungewichteten Mittel; liegt gar kein GTI
+    vor, steht 0 → die Anzeige zeigt „—".
+    """
     if not string_prognosen:
         return []
 
@@ -62,11 +73,18 @@ def _aggregate_string_tageswerte(
             for sp in string_prognosen
             if i < len(sp["tageswerte"])
         )
-        total_gti = sum(
-            sp["tageswerte"][i]["gti_kwh_m2"]
+        beitraege = [
+            (sp["tageswerte"][i]["gti_kwh_m2"], sp.get("kwp") or 0.0)
             for sp in string_prognosen
             if i < len(sp["tageswerte"])
-        ) / len(string_prognosen)
+        ]
+        kwp_summe = sum(kwp for _, kwp in beitraege)
+        if kwp_summe > 0:
+            total_gti = sum(gti * kwp for gti, kwp in beitraege) / kwp_summe
+        elif beitraege:
+            total_gti = sum(gti for gti, _ in beitraege) / len(beitraege)
+        else:
+            total_gti = 0.0
 
         total_morgens = sum(
             sp["tageswerte"][i].get("pv_ertrag_morgens_kwh") or 0
@@ -170,7 +188,12 @@ class SolarPrognoseTagSchema(BaseModel):
     """Prognose für einen Tag."""
     datum: str
     pv_ertrag_kwh: float
-    gti_kwh_m2: float = Field(description="Global Tilted Irradiance")
+    gti_kwh_m2: float = Field(
+        description=(
+            "Global Tilted Irradiance auf der Modulfläche. Bei mehreren "
+            "Ausrichtungen kWp-gewichtetes Mittel über die Strings (N34)"
+        )
+    )
     ghi_kwh_m2: float = Field(description="Global Horizontal Irradiance (Vergleich)")
     sonnenstunden: float
     temperatur_max_c: float | None
