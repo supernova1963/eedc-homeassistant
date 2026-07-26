@@ -359,9 +359,17 @@ async def get_pv_strings(
         for wr in result.scalars().all():
             wechselrichter_map[wr.id] = wr.bezeichnung
 
+    # Die AKTIVE Prognose (b2025e0e): `ist_aktiv` ist der Nutzerwille — über
+    # `POST /api/pvgis/prognose/{id}/aktivieren` (api/routes/pvgis.py:810-834)
+    # kann bewusst eine ÄLTERE Prognose aktiv sein. Nur „neueste" hat diese Wahl
+    # still übersteuert. `abgerufen_am.desc()` bleibt als Tiebreak, falls doch
+    # mehrere aktiv sind — dieselbe Kombination wie im gesamten übrigen Repo.
     result = await db.execute(
         select(PVGISPrognoseModel)
-        .where(PVGISPrognoseModel.anlage_id == anlage_id)
+        .where(
+            PVGISPrognoseModel.anlage_id == anlage_id,
+            PVGISPrognoseModel.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
+        )
         .order_by(PVGISPrognoseModel.abgerufen_am.desc())
         .limit(1)
     )
@@ -516,9 +524,15 @@ async def get_pv_strings_gesamtlaufzeit(
         for wr in result.scalars().all():
             wechselrichter_map[wr.id] = wr.bezeichnung
 
+    # Dieselbe Auswahlregel wie in der Jahressicht darüber: die AKTIVE Prognose,
+    # bei mehreren die zuletzt abgerufene. Zwei Sichten derselben Anlage dürfen
+    # nicht auf verschiedenen Prognosen stehen.
     result = await db.execute(
         select(PVGISPrognoseModel)
-        .where(PVGISPrognoseModel.anlage_id == anlage_id)
+        .where(
+            PVGISPrognoseModel.anlage_id == anlage_id,
+            PVGISPrognoseModel.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
+        )
         .order_by(PVGISPrognoseModel.abgerufen_am.desc())
         .limit(1)
     )
