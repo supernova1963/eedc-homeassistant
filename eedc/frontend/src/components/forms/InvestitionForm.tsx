@@ -203,15 +203,24 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         balkonkraftwerkNeigung = paramData.neigung_grad ? parseFloat(paramData.neigung_grad as string) : undefined
       }
 
+      // Ein geleertes Feld muss beim BEARBEITEN als `null` gehen: `undefined`
+      // fällt aus dem JSON, und das Backend behält mit `model_dump(exclude_unset=True)`
+      // den Altwert — Zuordnung, Datum & Co. ließen sich dadurch nie wieder
+      // entfernen (JayJay-Meldung Forum v4.0.0). Beim ANLEGEN bleibt `undefined`
+      // richtig, damit die Backend-Defaults greifen.
+      const leer = investition ? null : undefined
+      const txt = (v: string) => v.trim() || leer
+      const zahl = (v: string) => (v ? parseFloat(v) : leer)
+
       const data: InvestitionCreate | InvestitionUpdate = {
         ...(investition ? {} : { anlage_id: anlageId, typ }),
         bezeichnung: formData.bezeichnung.trim(),
-        anschaffungsdatum: formData.anschaffungsdatum || undefined,
-        stilllegungsdatum: formData.stilllegungsdatum || undefined,
-        anschaffungskosten_gesamt: formData.anschaffungskosten_gesamt ? parseFloat(formData.anschaffungskosten_gesamt) : undefined,
-        anschaffungskosten_alternativ: formData.anschaffungskosten_alternativ ? parseFloat(formData.anschaffungskosten_alternativ) : undefined,
-        betriebskosten_jahr: formData.betriebskosten_jahr ? parseFloat(formData.betriebskosten_jahr) : undefined,
-        graue_last_kg: formData.graue_last_kg ? parseFloat(formData.graue_last_kg) : undefined,
+        anschaffungsdatum: txt(formData.anschaffungsdatum),
+        stilllegungsdatum: txt(formData.stilllegungsdatum),
+        anschaffungskosten_gesamt: zahl(formData.anschaffungskosten_gesamt),
+        anschaffungskosten_alternativ: zahl(formData.anschaffungskosten_alternativ),
+        betriebskosten_jahr: zahl(formData.betriebskosten_jahr),
+        graue_last_kg: zahl(formData.graue_last_kg),
         aktiv: formData.aktiv,
         // Wizard-only-Keys (von sensor_mapping.py oder anderen Pfaden in parameter
         // geschrieben) mit existing parameter mergen — sonst löscht jeder Form-Save
@@ -220,13 +229,15 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
           ? { ...(investition?.parameter ?? {}), ...convertedParams }
           : undefined,
         // Parent-Zuordnung (PV-Module → Wechselrichter, etc.)
-        parent_investition_id: formData.parent_investition_id ? parseInt(formData.parent_investition_id) : undefined,
+        parent_investition_id: formData.parent_investition_id
+          ? parseInt(formData.parent_investition_id)
+          : leer,
         // PV-Module spezifische Felder
         ...(typ === 'pv-module' && {
-          leistung_kwp: formData.leistung_kwp ? parseFloat(formData.leistung_kwp) : undefined,
-          ausrichtung: formData.ausrichtung || undefined,
-          neigung_grad: formData.neigung_grad ? parseFloat(formData.neigung_grad) : undefined,
-          ha_entity_id: formData.ha_entity_id || undefined,
+          leistung_kwp: zahl(formData.leistung_kwp),
+          ausrichtung: txt(formData.ausrichtung),
+          neigung_grad: zahl(formData.neigung_grad),
+          ha_entity_id: txt(formData.ha_entity_id),
         }),
         // Balkonkraftwerk: leistung_kwp berechnet, Ausrichtung/Neigung aus Parametern
         ...(typ === 'balkonkraftwerk' && {

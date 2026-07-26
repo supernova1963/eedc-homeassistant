@@ -177,8 +177,10 @@ export interface Investition {
   anlage_id: number
   typ: InvestitionTyp
   bezeichnung: string
-  anschaffungsdatum?: string
-  stilllegungsdatum?: string
+  // `null` = „Feld leeren" (Update-Nutzlast, siehe InvestitionUpdate); vom
+  // Server kommt entweder ein Wert oder der Schlüssel fehlt.
+  anschaffungsdatum?: string | null
+  stilllegungsdatum?: string | null
   anschaffungskosten_gesamt?: number
   anschaffungskosten_alternativ?: number
   betriebskosten_jahr?: number
@@ -186,7 +188,7 @@ export interface Investition {
   einsparung_prognose_jahr?: number
   co2_einsparung_prognose_kg?: number
   aktiv: boolean
-  parent_investition_id?: number
+  parent_investition_id?: number | null
   // PV-Module spezifische Felder
   leistung_kwp?: number
   ausrichtung?: string

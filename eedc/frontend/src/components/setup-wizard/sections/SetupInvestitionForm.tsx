@@ -98,7 +98,9 @@ export function SetupInvestitionForm({
               label="Anschaffungsdatum"
               required
               value={investition.anschaffungsdatum || ''}
-              onChange={(v) => onUpdate({ anschaffungsdatum: v || undefined })}
+              // `null` statt `undefined`: sonst fällt der Schlüssel aus dem JSON und das
+              // Backend behält (exclude_unset) den alten Wert — Leeren wäre unmöglich.
+              onChange={(v) => onUpdate({ anschaffungsdatum: v || null })}
             />
             <Input
               label="Kaufpreis (€)"
@@ -121,7 +123,7 @@ export function SetupInvestitionForm({
                 label={label}
                 required={isRequired}
                 value={investition.parent_investition_id ? String(investition.parent_investition_id) : ''}
-                onChange={(e) => onUpdate({ parent_investition_id: e.target.value ? parseInt(e.target.value) : undefined })}
+                onChange={(e) => onUpdate({ parent_investition_id: e.target.value ? parseInt(e.target.value) : null })}
                 placeholder={isRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}
                 options={possibleParents.map(p => ({ value: String(p.id), label: p.bezeichnung }))}
                 error={missingParent ? 'PV-Module müssen einem Wechselrichter zugeordnet werden' : undefined}

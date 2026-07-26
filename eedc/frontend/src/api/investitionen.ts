@@ -25,22 +25,31 @@ export interface InvestitionCreate {
   graue_last_kg?: number  // #284: Override graue Herstellungs-Last (CO2)
 }
 
+/**
+ * Update-Nutzlast.
+ *
+ * `null` heißt „Feld leeren", `undefined` heißt „nicht anfassen". Das Backend
+ * arbeitet mit `model_dump(exclude_unset=True)` — ein weggelassener Schlüssel
+ * behält den Altwert. Wer ein optionales Feld zurücksetzen will, MUSS deshalb
+ * `null` senden (JayJay-Meldung Forum v4.0.0: Wechselrichter-Zuordnung eines
+ * Speichers ließ sich nicht mehr lösen).
+ */
 export interface InvestitionUpdate {
   bezeichnung?: string
-  anschaffungsdatum?: string
-  stilllegungsdatum?: string
-  anschaffungskosten_gesamt?: number
-  anschaffungskosten_alternativ?: number
-  betriebskosten_jahr?: number
+  anschaffungsdatum?: string | null
+  stilllegungsdatum?: string | null
+  anschaffungskosten_gesamt?: number | null
+  anschaffungskosten_alternativ?: number | null
+  betriebskosten_jahr?: number | null
   parameter?: Record<string, unknown>
   aktiv?: boolean
-  parent_investition_id?: number
+  parent_investition_id?: number | null
   // PV-Module Felder
-  leistung_kwp?: number
-  ausrichtung?: string
-  neigung_grad?: number
-  ha_entity_id?: string
-  graue_last_kg?: number  // #284: Override graue Herstellungs-Last (CO2)
+  leistung_kwp?: number | null
+  ausrichtung?: string | null
+  neigung_grad?: number | null
+  ha_entity_id?: string | null
+  graue_last_kg?: number | null  // #284: Override graue Herstellungs-Last (CO2)
 }
 
 /**
