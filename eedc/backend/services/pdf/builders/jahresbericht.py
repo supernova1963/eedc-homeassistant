@@ -22,6 +22,8 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
+    erzeugung_hinter_zaehler_kwh,
+    imd_typ_beitrag,
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
@@ -44,6 +46,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.services.pv_orientation import get_pv_kwp
 from backend.models.strompreis import Strompreis
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
@@ -198,6 +201,27 @@ async def build_jahresbericht_context(
             key = (imd.jahr, imd.monat)
             pv_by_year_month[key] = pv_by_year_month.get(key, 0) + pv
 
+    # N93: Sonstige Erzeuger (z. B. Mini-BHKW) speisen hinter DENSELBEN
+    # Hauszähler — ihre Erzeugung gehört in die EV-/Autarkie-Ableitung, sonst
+    # drückt der gemessene Einspeise-Zähler die Bilanz still zu niedrig.
+    # v3.45.4 hat das in Cockpit, HA-Export, Live und Tagesprofil umgestellt;
+    # dieser Builder war nicht dabei (dritter Vorfall dieser Art nach DI-1 und
+    # N24). Kategorie-Auflösung über den SoT `imd_typ_beitrag` — dieselbe
+    # Funktion, die auch `uebersicht.py`/`ha_export.py` nutzen.
+    # **Bewusst getrennt von `pv_by_year_month`:** die PV-EIGENEN Kennzahlen
+    # (spezifischer Ertrag, SOLL/IST, String-Vergleich) bleiben rein PV — ein
+    # Brennstoff-Erzeuger im PV-Nenner wäre ein stiller Rechenfehler.
+    sonstige_erz_by_ym: dict[tuple[int, int], float] = {}
+    for imd in all_imd:
+        inv = inv_by_id.get(imd.investition_id)
+        if inv and inv.typ == "sonstiges":
+            beitrag = imd_typ_beitrag(inv, imd.verbrauch_daten or {})
+            if beitrag.sonstiges_erzeugung:
+                key = (imd.jahr, imd.monat)
+                sonstige_erz_by_ym[key] = (
+                    sonstige_erz_by_ym.get(key, 0) + beitrag.sonstiges_erzeugung
+                )
+
     # #326: Sonstige Erträge/Ausgaben pro Jahr/Monat — damit die Monats-
     # Ertragsspalte deckungsgleich mit dem Jahres-Netto ist (rilmor-mhrs:
     # Dez 2022 musste negativ werden, Monatszeilen müssen auf den Summary
@@ -219,6 +243,7 @@ async def build_jahresbericht_context(
 
     # ── 7. Aggregate Wärmepumpe / E-Mob / Speicher ──────────────────────
     pv_gesamt = 0.0
+    erz_bilanz_gesamt = 0.0  # N93: Σ Erzeugung hinter dem Zähler (PV + BHKW)
     einsp_gesamt = 0.0
     netz_gesamt = 0.0
     ev_gesamt = 0.0
@@ -294,7 +319,7 @@ async def build_jahresbericht_context(
     finanz_zeilen: list[FinanzMonatsZeile] = []
 
     async def _zeile_fuer(j: int, m: int) -> dict:
-        nonlocal pv_gesamt, einsp_gesamt, netz_gesamt, ev_gesamt
+        nonlocal pv_gesamt, erz_bilanz_gesamt, einsp_gesamt, netz_gesamt, ev_gesamt
         md = md_by_year_month.get((j, m))
         pv = pv_by_year_month.get((j, m), 0)
         einsp = (md.einspeisung_kwh or 0) if md else 0
@@ -303,8 +328,14 @@ async def build_jahresbericht_context(
         # der naiven Formel PV − Einspeisung, die den Speicher ignorierte —
         # deckungsgleich mit Cockpit/HA-Export/Aussichten.
         key = (j, m)
+        # N93: Bilanz-Eingang = ALLE Erzeuger hinter dem Zähler (Layer-SoT
+        # `erzeugung_hinter_zaehler_kwh`, v3.45.4), nicht nur die PV.
+        # `pv` selbst bleibt rein PV und trägt weiter die PV-Kennzahlen.
+        erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(
+            pv, sonstige_erz_by_ym.get(key, 0)
+        )
         kennzahlen = berechne_verbrauchs_kennzahlen(
-            pv_erzeugung_kwh=pv,
+            pv_erzeugung_kwh=erzeugung_bilanz,
             einspeisung_kwh=einsp,
             netzbezug_kwh=netz,
             speicher_ladung_kwh=speicher_ladung_by_ym.get(key, 0),
@@ -335,6 +366,7 @@ async def build_jahresbericht_context(
         ev_eur = ev * zeile.netzbezug_preis_cent / 100
         sonstige_eur = sonstige_by_ym.get((j, m), 0)
         pv_gesamt += pv
+        erz_bilanz_gesamt += erzeugung_bilanz
         einsp_gesamt += einsp
         netz_gesamt += netz
         ev_gesamt += ev
@@ -371,7 +403,11 @@ async def build_jahresbericht_context(
     # ── 9. Jahres-KPIs / Finanzen / CO₂ ─────────────────────────────────
     gesamtverbrauch = ev_gesamt + netz_gesamt
     autarkie_jahr = autarkie_prozent(ev_gesamt, gesamtverbrauch)
-    ev_quote = eigenverbrauchsquote_prozent(ev_gesamt, pv_gesamt)  # cappt jetzt 100 %
+    # N93: Nenner der EV-Quote ist die Erzeugung hinter dem Zähler — dieselbe
+    # Größe, aus der der Eigenverbrauch oben abgeleitet wurde. Mit `pv_gesamt`
+    # als Nenner stünde bei einem BHKW ein zu großer Zähler über einem zu
+    # kleinen Nenner (Quote > 100 %, gedeckelt = still falsch).
+    ev_quote = eigenverbrauchsquote_prozent(ev_gesamt, erz_bilanz_gesamt)  # cappt 100 %
     spez_ertrag_jahr = spezifischer_ertrag_kwh_kwp(pv_gesamt, anlage.leistung_kwp or 0) or 0.0
 
     # #326: Sonstige Erträge/Ausgaben (manuell gepflegt) gehören in den
@@ -468,7 +504,11 @@ async def build_jahresbericht_context(
 
     # ── 10. String-Vergleich SOLL/IST ───────────────────────────────────
     pv_module = [i for i in investitionen if i.typ == "pv-module"]
-    gesamt_kwp = sum(i.leistung_kwp or 0 for i in pv_module) or (anlage.leistung_kwp or 1)
+    # kWp über den SoT-Helper (Spalte → parameter-JSON) — sonst ist der
+    # SOLL-Verteilungs-Nenner bei `parameter`-gepflegten Modulen eine
+    # Teilsumme, und der `or anlage.leistung_kwp`-Fallback greift nur bei
+    # Summe 0, nicht bei gemischter Pflege (N73/P3).
+    gesamt_kwp = sum(get_pv_kwp(i) for i in pv_module) or (anlage.leistung_kwp or 1)
     # Dieselbe Prognose wie in Abschnitt 4 — sonst widerspräche der
     # String-Vergleich der Monatstabelle desselben PDFs.
     prognose_monate: dict[int, float] = {}
@@ -495,7 +535,7 @@ async def build_jahresbericht_context(
 
     string_vergleiche = []
     for inv in pv_module:
-        kwp = inv.leistung_kwp or 0
+        kwp = get_pv_kwp(inv)
         anteil = kwp / gesamt_kwp if gesamt_kwp else 0
         ist_kwh = sum(
             (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0

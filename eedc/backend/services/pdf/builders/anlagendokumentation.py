@@ -34,6 +34,7 @@ from backend.api.routes.infothek import INFOTHEK_KATEGORIEN
 from backend.models.anlage import Anlage, AnlageFoto
 from backend.models.infothek import InfothekDatei, InfothekEintrag, InfothekInvestition
 from backend.models.investition import Investition
+from backend.services.pv_orientation import get_pv_kwp
 
 
 TYP_LABELS = {
@@ -244,7 +245,10 @@ async def build_anlagendokumentation_context(
 
     # PV-Sammel-Seite
     if pv_module:
-        pv_gesamt_kwp = sum((i.leistung_kwp or 0) for i in pv_module)
+        # kWp über den SoT-Helper: die Zeile „PV-Gesamtleistung" war sonst
+        # eine Teilsumme, sobald ein Modul die kWp nur im parameter-JSON
+        # gepflegt hat (N64/P3).
+        pv_gesamt_kwp = sum(get_pv_kwp(i) for i in pv_module)
         pv_items = []
         # Komponenten deduplizieren: gleiche Komponente kann mit mehreren
         # PV-Modulfeldern verknüpft sein (n:m) → nur einmal anzeigen,
@@ -339,7 +343,7 @@ async def build_anlagendokumentation_context(
     # Anlagenarten-Liste für die Titelseite
     anlagenarten: list[str] = []
     if pv_module:
-        kwp_sum = sum((i.leistung_kwp or 0) for i in pv_module)
+        kwp_sum = sum(get_pv_kwp(i) for i in pv_module)
         anlagenarten.append(f"Photovoltaik · {kwp_sum:.2f} kWp · {len(pv_module)} Modulfeld(er)")
     typ_counts: dict[str, int] = {}
     for inv in einzel:

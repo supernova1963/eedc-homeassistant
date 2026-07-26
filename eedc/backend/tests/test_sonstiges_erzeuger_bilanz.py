@@ -234,3 +234,52 @@ def test_live_sonstiger_verbraucher_bleibt_verbraucher():
     assert komp["verbrauch_kw"] == pytest.approx(0.8)
     assert komp["erzeugung_kw"] is None
     assert res["pv_total_w"] == pytest.approx(3000.0)
+
+
+# ── PDF-Jahresbericht (N93) ────────────────────────────────────────────────
+
+async def test_pdf_jahresbericht_zaehlt_sonstige_erzeuger_in_die_bilanz(db):
+    """N93: `services/pdf/builders/jahresbericht.py` übergab `pv` (rein PV) an
+    `berechne_verbrauchs_kennzahlen` statt der Netzpunkt-Erzeugung. Eigenverbrauch
+    und Autarkie im PDF waren bei BHKW-Anlagen deshalb zu niedrig — v3.45.4 hat
+    „alle Bilanz-Pfade" umgestellt, dieser Builder war nicht dabei.
+
+    Fixture PV 1000 + BHKW 400, Einspeisung 300, Netzbezug 200:
+      vorher  direkt = max(0, 1000 − 300) = 700 → EV 700, Autarkie 700/900 = 77,8 %
+      nachher direkt = max(0, 1400 − 300) = 1100 → EV 1100, Autarkie 1100/1300 = 84,6 %
+    """
+    from backend.services.pdf.builders.jahresbericht import build_jahresbericht_context
+
+    anlage_id = await _seed(db, mit_sonstiges=True)
+    ctx = await build_jahresbericht_context(db, anlage_id, jahr=2026)
+
+    assert ctx["kpis"]["eigenverbrauch_kwh"] == pytest.approx(1100.0, abs=0.5)
+    assert ctx["kpis"]["autarkie_prozent"] == pytest.approx(84.6, abs=0.2)
+    assert ctx["kpis"]["ev_quote_prozent"] == pytest.approx(78.6, abs=0.2)
+
+    # Die PV-Erzeugungs-Anzeige bleibt rein PV (Achsen-Trennung).
+    assert ctx["kpis"]["pv_erzeugung_kwh"] == pytest.approx(1000.0, abs=0.5)
+
+    mai = next(z for z in ctx["monats_zeilen"] if z["monat"] == 5)
+    assert mai["eigenverbrauch_kwh"] == pytest.approx(1100.0, abs=0.5)
+    assert mai["autarkie_prozent"] == pytest.approx(84.6, abs=0.2)
+
+
+async def test_pdf_jahresbericht_spez_ertrag_bleibt_rein_pv(db):
+    """Die Falle von v3.45.4, hier für den PDF-Pfad: zwei identische Anlagen,
+    eine mit BHKW ⇒ **gleicher** spezifischer Ertrag. Wäre die Netzpunkt-
+    Erzeugung sein Zähler, läge er um den Faktor 1400/1000 höher."""
+    from backend.services.pdf.builders.jahresbericht import build_jahresbericht_context
+
+    mit_id = await _seed(db, mit_sonstiges=True)
+    ohne_id = await _seed(db, mit_sonstiges=False)
+
+    mit = await build_jahresbericht_context(db, mit_id, jahr=2026)
+    ohne = await build_jahresbericht_context(db, ohne_id, jahr=2026)
+
+    assert mit["kpis"]["spezifischer_ertrag"] == pytest.approx(
+        ohne["kpis"]["spezifischer_ertrag"]
+    ), "Der sonstige Erzeuger ist in eine PV-Kennzahl geraten (v3.45.4-Verstoß)."
+    assert mit["kpis"]["pv_erzeugung_kwh"] == pytest.approx(
+        ohne["kpis"]["pv_erzeugung_kwh"]
+    )
