@@ -463,10 +463,21 @@ class StammdatenChecks:
 
             # Allgemeine Prüfungen für alle Typen
             if inv.anschaffungsdatum is None:
+                # v4.0.1: von INFO auf ERROR hochgestuft. Ohne das Datum zählt die
+                # Komponente in JEDER Auswertung über den gesamten Zeitraum mit —
+                # auch vor der Anschaffung ([[feedback_anschaffungsdatum_grenze]])
+                # — und die Amortisationskurve hat keinen Nullpunkt (`basis_jahr`).
+                # Für neue Investitionen ist das Feld seither Pflicht; hier geht es
+                # um Bestand, deshalb Sprung direkt in dessen Formular.
                 ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.INFO,
+                    kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"{name}: Anschaffungsdatum fehlt",
-                    link="/einstellungen/investitionen",
+                    details=(
+                        "Ohne Anschaffungsdatum zählt die Komponente auch für Zeiträume "
+                        "vor der Anschaffung mit, und die Amortisationsrechnung hat "
+                        "keinen Startpunkt."
+                    ),
+                    link=f"/einstellungen/komponenten?bearbeiten={inv.id}",
                 ))
 
             if inv.anschaffungskosten_gesamt is None:

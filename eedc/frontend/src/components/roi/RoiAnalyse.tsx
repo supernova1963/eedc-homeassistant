@@ -270,6 +270,15 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 text-center">
           Break-Even nach ca. {fmtZahl(roiData.gesamt_amortisation_jahre, 1)} Jahren
           {roiData.gesamt_amortisation_jahr ? ` — voraussichtlich ${roiData.gesamt_amortisation_jahr}` : ''}
+          {/* Ehrlichkeit zum Nullpunkt: die Kurve rechnet ab dem FRÜHESTEN
+              Anschaffungsjahr mit der heutigen Jahres-Einsparung. Wer über
+              mehrere Jahre erweitert hat, liest damit ein optimistisches Jahr. */}
+          {basisJahr != null && (
+            <span className="block text-xs mt-0.5">
+              Startjahr {basisJahr} (früheste Anschaffung); bei über mehrere Jahre verteilten
+              Anschaffungen ist das Jahr eher optimistisch.
+            </span>
+          )}
         </p>
       )}
     </Card>

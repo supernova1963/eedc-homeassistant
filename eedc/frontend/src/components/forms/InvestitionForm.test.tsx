@@ -62,13 +62,30 @@ describe('InvestitionForm — Submit-Nutzlast', () => {
     expect(nutzlast.anschaffungsdatum).toBe('2024-06-01')
   })
 
+  it('blockiert das Anlegen ohne Anschaffungsdatum', async () => {
+    // v4.0.1: Das Datum ist die Grenze jeder Auswertung und der Nullpunkt der
+    // Amortisationskurve — ohne es darf keine Komponente mehr entstehen.
+    const onSubmit = vi.fn(() => Promise.resolve())
+    render(<InvestitionForm anlageId={1} typ="speicher" onSubmit={onSubmit} onCancel={() => {}} />)
+
+    fireEvent.change(screen.getByLabelText(/Bezeichnung/i), { target: { value: 'Neuer Speicher' } })
+    fireEvent.submit(document.querySelector('form')!)
+
+    await waitFor(() => expect(screen.getByText(/Bitte das Anschaffungsdatum angeben/i)).toBeInTheDocument())
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it('sendet beim Anlegen undefined statt null (Backend-Defaults greifen)', async () => {
     const onSubmit = vi.fn(() => Promise.resolve())
     render(<InvestitionForm anlageId={1} typ="speicher" onSubmit={onSubmit} onCancel={() => {}} />)
 
     fireEvent.change(screen.getByLabelText(/Bezeichnung/i), { target: { value: 'Neuer Speicher' } })
+    // Datum über den Kalender setzen (DatumPicker ist ein Dialog, kein Input).
+    fireEvent.click(screen.getByLabelText('Anschaffungsdatum'))
+    fireEvent.click(await screen.findByRole('button', { name: '15' }))
 
     const nutzlast = await submit(onSubmit)
+    expect(nutzlast.anschaffungsdatum).toBeTruthy()
     expect(nutzlast.anschaffungskosten_alternativ).toBeUndefined()
     expect(nutzlast.parent_investition_id).toBeUndefined()
   })

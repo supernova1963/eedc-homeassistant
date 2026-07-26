@@ -123,6 +123,13 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
     const list = [{
       name: 'bezeichnung',
       fehler: formData.bezeichnung.trim() ? undefined : 'Bitte eine Bezeichnung eingeben',
+    }, {
+      // Pflicht, weil das Datum die Grenze JEDER Auswertung ist (vor der
+      // Anschaffung zählt die Komponente nirgends mit) und den Nullpunkt der
+      // Amortisations-Kurve setzt. Bestandsdaten ohne Datum meldet der
+      // Daten-Checker mit Sprung hierher.
+      name: 'anschaffungsdatum',
+      fehler: formData.anschaffungsdatum ? undefined : 'Bitte das Anschaffungsdatum angeben',
     }]
     if (isParentRequired && possibleParents.length > 0) {
       list.push({
@@ -276,11 +283,19 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
               error={zeige('bezeichnung')}
             />
           </div>
-          <DatumFeld
-            label="Anschaffungsdatum"
-            value={formData.anschaffungsdatum}
-            onChange={(v) => setFormData(prev => ({ ...prev, anschaffungsdatum: v }))}
-          />
+          <div ref={setFeldRef('anschaffungsdatum')}>
+            <DatumFeld
+              label="Anschaffungsdatum"
+              value={formData.anschaffungsdatum}
+              onChange={(v) => {
+                markTouched('anschaffungsdatum')
+                setFormData(prev => ({ ...prev, anschaffungsdatum: v }))
+              }}
+            />
+            {zeige('anschaffungsdatum') && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{zeige('anschaffungsdatum')}</p>
+            )}
+          </div>
           <Input
             label="Anschaffungskosten (€)"
             name="anschaffungskosten_gesamt"

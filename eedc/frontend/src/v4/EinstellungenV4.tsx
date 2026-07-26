@@ -12,7 +12,7 @@
  * vorhandene Signale, kein 2. Severity-Kanon); der Voll-Ausbau der neuen Kacheln
  * (Schritt 4) folgt separat.
  */
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Home, type LucideIcon } from 'lucide-react'
 import { STATUS_ICONS, STATUS_TEXT_CLASS } from '../lib'
@@ -75,6 +75,24 @@ function StatusBadge({ status, hinweis }: { status: KachelStatus; hinweis?: stri
 function KomponentenEinstellungen() {
   const { selectedAnlage, selectedAnlageId } = useSelectedAnlage()
   const v = useInvestitionenVerwaltung(selectedAnlageId ?? undefined, selectedAnlage?.anlagenname)
+
+  // Deep-Link `?bearbeiten=<id>` (Muster wie `?erfassen=`): der Daten-Checker
+  // verlinkt damit direkt auf die Komponente, der etwas fehlt — sonst muss der
+  // Nutzer sie in sieben Typ-Blöcken selbst suchen.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const bearbeitenId = searchParams.get('bearbeiten')
+  const geoeffnetRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!bearbeitenId || v.loading || geoeffnetRef.current === bearbeitenId) return
+    const ziel = v.investitionen.find((i) => String(i.id) === bearbeitenId)
+    if (!ziel) return
+    geoeffnetRef.current = bearbeitenId
+    v.oeffneBearbeiten(ziel)
+    // Parameter entfernen, damit ein späteres Schließen das Modal nicht erneut öffnet.
+    const next = new URLSearchParams(searchParams)
+    next.delete('bearbeiten')
+    setSearchParams(next, { replace: true })
+  }, [bearbeitenId, v, searchParams, setSearchParams])
 
   if (selectedAnlageId == null) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Anlage ausgewählt.</p>

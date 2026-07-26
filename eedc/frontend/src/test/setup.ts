@@ -13,6 +13,12 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   } as unknown as typeof ResizeObserver
 }
 
+// Formulare springen bei Validierungsfehlern zum ersten Feld — jsdom kennt
+// scrollIntoView nicht und wirft sonst eine unhandled rejection.
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
+
 afterEach(() => {
   cleanup()
 })
