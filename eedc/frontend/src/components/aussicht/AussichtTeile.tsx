@@ -20,7 +20,7 @@ import { Table, TableHead, TableBody, TableFoot } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import { Parkbar } from '../park'
 import { fmtCalc, ChartLegende } from '../ui'
-import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, DATENROLLE, TREND_TEXT_CLASS, AMPEL_TEXT_CLASS, achsenEinheit, achsenTick, yAchse, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, SOLL_IST_COLORS, CHART_HOVER_CURSOR, HILFSLINIE_DASH, KONFIDENZ_BAND_OPACITY, STATUS_ICONS, DATENROLLE, TREND_TEXT_CLASS, AMPEL_TEXT_CLASS, achsenEinheit, achsenTick, yAchse, ACHSEN_MARGIN_TOP, fmtZahl, pvErtragKwh, pvVormittagKwh, pvNachmittagKwh } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
 import type { SolarPrognoseTag } from '../../api/wetter'
@@ -62,9 +62,12 @@ const BALKEN_LABEL_PX = 22 // R20-3a: Kopfraum in der Spur für den kWh-Wert dir
 // R13-4a (Rainer #77): die grüne „heute"-Umrandung (1. Spalte) ersatzlos entfernt
 // (überstimmt D12-3). „Heute" ist ohnehin die erste Spalte/Zeile.
 
-export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
-  const maxKwh = Math.max(...tage.map((t) => t.pv_ertrag_kwh), 0.1)
-  const hasVmNm = tage.some((t) => t.pv_ertrag_morgens_kwh != null)
+// `quelleLabel`: welche Zahl der Balken zeigt (eedc-korrigiert oder OpenMeteo
+// roh). Steht in der Fuß-Legende direkt bei der Einheit — wo der Fallback
+// greift, darf nicht „eedc" darüberstehen (Rainer-Nachtrag 2026-07-25).
+export function TagesPrognose({ tage, quelleLabel }: { tage: SolarPrognoseTag[]; quelleLabel?: string }) {
+  const maxKwh = Math.max(...tage.map(pvErtragKwh), 0.1)
+  const hasVmNm = tage.some((t) => pvVormittagKwh(t) != null)
   return (
     <div className="space-y-2">
       {/* ── Desktop (≥ lg): vertikale Säulen ── */}
@@ -73,9 +76,10 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
           {tage.map((tag) => {
             // R20-3a: Balken skaliert auf die Spur MINUS Label-Kopfraum, damit der
             // kWh-Wert immer direkt ÜBER dem Balken sitzt (auch beim höchsten Tag).
-            const totalPx = (tag.pv_ertrag_kwh / maxKwh) * (BALKEN_PX - BALKEN_LABEL_PX)
-            const vm = tag.pv_ertrag_morgens_kwh ?? 0
-            const nm = tag.pv_ertrag_nachmittags_kwh ?? 0
+            const kwh = pvErtragKwh(tag)
+            const totalPx = (kwh / maxKwh) * (BALKEN_PX - BALKEN_LABEL_PX)
+            const vm = pvVormittagKwh(tag) ?? 0
+            const nm = pvNachmittagKwh(tag) ?? 0
             const summe = vm + nm
             const vmPx = summe > 0 ? totalPx * (vm / summe) : 0
             const nmPx = summe > 0 ? totalPx * (nm / summe) : 0
@@ -94,14 +98,14 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                     Spur, justify-end) statt frei zwischen Temperatur und Balken — klare
                     Zuordnung; Einheit steht in der Fuß-Legende „Balkenlänge = … (kWh)". */}
                 <div className="flex flex-col justify-end items-center w-full" style={{ height: BALKEN_PX }}>
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums leading-none mb-0.5">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums leading-none mb-0.5">{fmtCalc(kwh, 0)}</span>
                   {hasVmNm && summe > 0 ? (
                     <>
                       <div className="w-1/2 rounded-t" style={{ height: nmPx, backgroundColor: SOLAR_INTENSITAET[1] }} title={`Nachmittag ${fmtCalc(nm, 1)} kWh`} />
                       <div className="w-1/2" style={{ height: vmPx, backgroundColor: SOLAR_INTENSITAET[2] }} title={`Vormittag ${fmtCalc(vm, 1)} kWh`} />
                     </>
                   ) : (
-                    <div className="w-1/2 rounded-t" style={{ height: totalPx, backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(tag.pv_ertrag_kwh, 1)} kWh`} />
+                    <div className="w-1/2 rounded-t" style={{ height: totalPx, backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(kwh, 1)} kWh`} />
                   )}
                 </div>
                 {/* R13-4j: Datums-Zeile fetter/abgesetzter (Rainer #77) */}
@@ -115,9 +119,10 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
       {/* ── Mobil (< lg): horizontale Balken (Gernot R12-4) ── */}
       <div className="lg:hidden space-y-1 p-0.5">
         {tage.map((tag) => {
-          const totalPct = (tag.pv_ertrag_kwh / maxKwh) * 100
-          const vm = tag.pv_ertrag_morgens_kwh ?? 0
-          const nm = tag.pv_ertrag_nachmittags_kwh ?? 0
+          const kwh = pvErtragKwh(tag)
+          const totalPct = (kwh / maxKwh) * 100
+          const vm = pvVormittagKwh(tag) ?? 0
+          const nm = pvNachmittagKwh(tag) ?? 0
           const summe = vm + nm
           const vmPct = summe > 0 ? totalPct * (vm / summe) : 0
           const nmPct = summe > 0 ? totalPct * (nm / summe) : 0
@@ -140,11 +145,11 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
                       <div className="h-full" style={{ width: `${(nmPct / Math.max(totalPct, 0.01)) * 100}%`, backgroundColor: SOLAR_INTENSITAET[1] }} title={`Nachmittag ${fmtCalc(nm, 1)} kWh`} />
                     </>
                   ) : (
-                    <div className="h-full w-full" style={{ backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(tag.pv_ertrag_kwh, 1)} kWh`} />
+                    <div className="h-full w-full" style={{ backgroundColor: CHART_COLORS.erzeugung }} title={`${fmtCalc(kwh, 1)} kWh`} />
                   )}
                 </div>
               </div>
-              <span className="w-14 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(tag.pv_ertrag_kwh, 0)}</span>
+              <span className="w-14 shrink-0 text-right text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{fmtCalc(kwh, 0)}</span>
             </div>
           )
         })}
@@ -160,6 +165,7 @@ export function TagesPrognose({ tage }: { tage: SolarPrognoseTag[] }) {
           </>
         )}
         <span>Balkenlänge = PV-Ertrag (kWh)</span>
+        {quelleLabel && <span>Quelle: {quelleLabel}</span>}
       </div>
     </div>
   )
@@ -182,7 +188,7 @@ const QUELLEN_KUERZEL: Record<string, { label: string; color: string }> = {
 /** 14-Tage-Detail-Tabelle (Datum · Wetter · PV · VM/NM · GTI · Bewölkung · Temp ·
  *  Niederschlag · Quelle) — IST KurzfristTab „Details", read-only Werte-Embed. */
 export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
-  const hasVmNm = tage.some((t) => t.pv_ertrag_morgens_kwh != null)
+  const hasVmNm = tage.some((t) => pvVormittagKwh(t) != null)
   const hasKaskade = tage.some((t) => t.datenquelle && t.datenquelle !== 'best_match')
   return (
     <Table mitFuss flaeche="karte">
@@ -210,9 +216,9 @@ export function KurzfristDetails({ tage }: { tage: SolarPrognoseTag[] }) {
             <tr key={tag.datum} className="border-b border-gray-100 dark:border-gray-800">
               <td className={`${ZELLE} font-medium`}>{formatDatum(tag.datum)}</td>
               <td className={ZELLE}><WetterIcon symbol={tag.wetter_symbol} className="h-5 w-5" /></td>
-              <td className={`${ZELLE} text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(tag.pv_ertrag_kwh, 1)}</td>
-              {hasVmNm && <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_morgens_kwh != null ? fmtCalc(tag.pv_ertrag_morgens_kwh, 1) : '—'}</td>}
-              {hasVmNm && <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{tag.pv_ertrag_nachmittags_kwh != null ? fmtCalc(tag.pv_ertrag_nachmittags_kwh, 1) : '—'}</td>}
+              <td className={`${ZELLE} text-right font-semibold ${DATENROLLE.pv.text} tabular-nums`}>{fmtZahl(pvErtragKwh(tag), 1)}</td>
+              {hasVmNm && <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{pvVormittagKwh(tag) != null ? fmtCalc(pvVormittagKwh(tag)!, 1) : '—'}</td>}
+              {hasVmNm && <td className={`${ZELLE} text-right ${DATENROLLE.pv.text} tabular-nums`}>{pvNachmittagKwh(tag) != null ? fmtCalc(pvNachmittagKwh(tag)!, 1) : '—'}</td>}
               <td className={`${ZELLE} text-right tabular-nums`}>{tag.gti_kwh_m2 != null ? fmtZahl(tag.gti_kwh_m2, 2) : '—'}</td>
               <td className={`${ZELLE} text-right tabular-nums`}>{tag.bewoelkung_prozent != null ? fmtZahl(tag.bewoelkung_prozent, 0) : '—'}</td>
               <td className={`${ZELLE} text-right tabular-nums`}>{tag.temperatur_max_c != null ? fmtZahl(tag.temperatur_max_c, 0) : '—'}</td>

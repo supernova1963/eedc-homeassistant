@@ -99,7 +99,17 @@ export interface SolarPrognoseTag {
   pv_ertrag_morgens_kwh?: number
   pv_ertrag_nachmittags_kwh?: number
   datenquelle?: string
+  // eedc-korrigierte Werte (Prognose-Kanon) — Anzeige-Wert der Balken/Tabelle/
+  // KPI. Fehlt der Wert, fällt die Anzeige auf `pv_ertrag_kwh` (OpenMeteo roh)
+  // zurück; die Rohwerte bleiben immer erhalten. Zugriff NUR über
+  // `pvErtragKwh`/`pvVormittagKwh`/`pvNachmittagKwh` aus `lib` (SoT).
+  eedc_kwh?: number | null
+  eedc_morgens_kwh?: number | null
+  eedc_nachmittags_kwh?: number | null
 }
+
+/** Werte-Quelle der Tages-Anzeige (Backend `anzeige_quelle`). */
+export type PrognoseAnzeigeQuelle = 'eedc' | 'openmeteo' | 'gemischt'
 
 export interface StringPrognose {
   name: string
@@ -134,6 +144,11 @@ export interface SolarPrognose {
   datenquelle: string
   abgerufen_am: string
   hinweise: string[]
+  // Aggregate über die ANGEZEIGTEN Tageswerte (eedc mit OM-Fallback) — Zugriff
+  // über `prognoseSummeKwh`/`prognoseDurchschnittKwh` aus `lib`.
+  eedc_summe_kwh?: number | null
+  eedc_durchschnitt_kwh_tag?: number | null
+  anzeige_quelle?: PrognoseAnzeigeQuelle
   // Convenience accessor für Anlage-Info
   anlage: {
     id: number

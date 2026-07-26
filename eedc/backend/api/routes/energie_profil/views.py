@@ -996,22 +996,23 @@ async def _pv_stunden_aus_kanon(db, anlage, datum: date) -> Optional[list[float]
     Beides weicht vom Kanon ab (Multi-String-Fan-out + Kaskade pro Energie-Slot)
     — dieselbe Anlage bekam so je nach Pfad verschiedene Tagessummen.
 
-    ``days``: mindestens 4, damit für heute/morgen/übermorgen **derselbe**
-    OpenMeteo-Cache-Eintrag (Key enthält ``days``) und damit derselbe Snapshot
-    gezogen wird wie im Prognosen-Vergleich und im HA-/MQTT-Export. Für spätere
-    Zieltage aus dem Datum abgeleitet — der Picker erlaubt +14 Tage, also
-    ``days`` ≤ 15 und damit innerhalb des OpenMeteo-Maximums (16).
+    ``days`` kommt aus ``kanon_days`` (Horizont-Formel-SoT, geteilt mit
+    ``/solar-prognose``): mindestens 4, damit für heute/morgen/übermorgen
+    **derselbe** OpenMeteo-Cache-Eintrag (Key enthält ``days``) und damit
+    derselbe Snapshot gezogen wird wie im Prognosen-Vergleich und im HA-/
+    MQTT-Export. Für spätere Zieltage aus dem Datum abgeleitet — der Picker
+    erlaubt +14 Tage, also ``days`` ≤ 15 (OpenMeteo-Maximum 16).
     """
     tage_bis_ziel = (datum - date.today()).days
     if tage_bis_ziel < 0:
         return None
 
-    from backend.services.prognose_kanon import kanon_tagesprognose
+    from backend.services.prognose_kanon import kanon_days, kanon_tagesprognose
 
     try:
         kanon = await kanon_tagesprognose(
             db, anlage,
-            days=max(tage_bis_ziel + 1, 4),
+            days=kanon_days(tage_bis_ziel + 1),
             # Interaktiver User-Request: der 1-30s-Random-Jitter gilt nur für
             # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
             skip_jitter=True,

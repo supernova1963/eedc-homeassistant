@@ -10,7 +10,7 @@ import { Info } from 'lucide-react'
 import type { LiveWetterResponse } from '../../api/liveDashboard'
 import type { SolarPrognoseTag } from '../../api/wetter'
 import { SimpleTooltip } from '../ui/FormelTooltip'
-import { fmtZahl, DATENROLLE } from '../../lib'
+import { fmtZahl, DATENROLLE, pvErtragKwh, pvVormittagKwh, pvNachmittagKwh } from '../../lib'
 
 export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }: {
   prognose3Tage: SolarPrognoseTag[]
@@ -18,12 +18,22 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
   heutePvKwh: number | null
 }) {
   if (!prognose3Tage || prognose3Tage.length === 0) return null
+  // „Heute" folgt der gewählten Prognosequelle (`wetter.pv_prognose_kwh` —
+  // Solcast/SFML/eedc); Morgen/Übermorgen kommen immer aus der Solar-Prognose
+  // und zeigen dort seit v4.0.1 den eedc-korrigierten Wert (Fallback: OpenMeteo
+  // roh). Der Tooltip sagt beides, damit Zahl und Beschriftung zusammenpassen.
+  const heuteQuelle = wetter?.prognose_quelle === 'solcast' ? 'Solcast-Prognose (pur)'
+    : wetter?.prognose_quelle === 'sfml' ? 'Solar Forecast ML (pur)'
+    : 'eedc-Prognose (Open-Meteo + Korrektur)'
+  const folgetageQuelle = prognose3Tage.slice(1).some(t => t.eedc_kwh != null)
+    ? 'eedc-Prognose (Open-Meteo + Korrektur)'
+    : 'Open-Meteo (ohne Korrektur)'
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-        Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`${wetter?.prognose_quelle === 'solcast' ? 'Solcast-Prognose (pur)' : wetter?.prognose_quelle === 'sfml' ? 'Solar Forecast ML (pur)' : 'GTI-basierte Prognose (Open-Meteo) mit Lernfaktor'}. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 dark:text-gray-500 opacity-50 cursor-help" /></SimpleTooltip>
+        Solar-Aussicht{wetter?.prognose_quelle && wetter.prognose_quelle !== 'eedc' && ` (${wetter.prognose_quelle === 'solcast' ? 'Solcast' : 'SFML'})`} <SimpleTooltip text={`Heute: ${heuteQuelle}. Morgen/Übermorgen: ${folgetageQuelle}. VM/NM = Split an Solar Noon.`}><Info className="inline w-3 h-3 text-gray-400 dark:text-gray-500 opacity-50 cursor-help" /></SimpleTooltip>
       </h3>
-      {prognose3Tage.some(t => t.pv_ertrag_morgens_kwh != null) && (
+      {prognose3Tage.some(t => pvVormittagKwh(t) != null) && (
         <div className="grid grid-cols-[auto_1fr_7rem] px-3 mb-0.5">
           <span />
           <span />
@@ -37,7 +47,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
       <div className="space-y-1.5">
         {prognose3Tage.map((tag, i) => {
           const label = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : 'Übermorgen'
-          const hasVmNm = tag.pv_ertrag_morgens_kwh != null
+          const hasVmNm = pvVormittagKwh(tag) != null
           const isProminent = i < 3
           const verbrPrognKwh = i === 0 && wetter?.verbrauchsprofil?.length
             ? wetter.verbrauchsprofil.reduce((s, v) => s + v.verbrauch_kw, 0)
@@ -67,7 +77,7 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
               <span className={`shrink-0 ${isProminent ? 'text-sm font-medium text-gray-600 dark:text-gray-300' : 'text-xs text-gray-400 dark:text-gray-500'}`}>{label}</span>
               <div className="flex flex-col items-end">
                 <span className={`font-bold ${DATENROLLE.pv.text} ${isProminent ? 'text-base' : 'text-xs'}`}>
-                  {fmtZahl(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : tag.pv_ertrag_kwh, 1)}
+                  {fmtZahl(i === 0 && wetter?.pv_prognose_kwh != null ? wetter.pv_prognose_kwh : pvErtragKwh(tag), 1)}
                   <span className="text-xs font-normal ml-0.5">kWh</span>
                 </span>
                 {verbleibenKwh != null && (
@@ -82,9 +92,9 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
               <span className="text-right text-xs w-28">
                 {hasVmNm ? (
                   <>
-                    <span className="font-semibold text-amber-500">{fmtZahl(tag.pv_ertrag_morgens_kwh!, 1)}</span>
+                    <span className="font-semibold text-amber-500">{fmtZahl(pvVormittagKwh(tag)!, 1)}</span>
                     <span className="text-gray-400 dark:text-gray-500 mx-0.5">/</span>
-                    <span className="font-semibold text-amber-400">{fmtZahl(tag.pv_ertrag_nachmittags_kwh ?? 0, 1)}</span>
+                    <span className="font-semibold text-amber-400">{fmtZahl(pvNachmittagKwh(tag) ?? 0, 1)}</span>
                   </>
                 ) : null}
               </span>

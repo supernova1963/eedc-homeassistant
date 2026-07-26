@@ -206,6 +206,15 @@ export const QUELLE_BELASTBAR: ReadonlySet<string> = new Set([
   'dyn-tarif', 'boersenpreis', 'fenster_lang', 'soc_korrigiert',
 ])
 
+/** Werte-Quelle der Solar-Prognose-Anzeige (Backend `anzeige_quelle`).
+ *  Beschriftung muss zur Zahl passen: wo der eedc-korrigierte Wert steht, darf
+ *  nicht „Open-Meteo" darüberstehen — und beim Fallback nicht „eedc". */
+export const PROGNOSE_QUELLE_LABEL: Record<string, string> = {
+  'eedc': 'eedc-Prognose (Open-Meteo + Korrektur)',
+  'openmeteo': 'Open-Meteo (ohne Korrektur)',
+  'gemischt': 'teils eedc-Prognose, teils Open-Meteo',
+}
+
 // ─── Sonstige Konstanten ─────────────────────────────────────────────────────
 
 /** CO2-Emissionsfaktor Strommix Deutschland (kg CO2 pro kWh). */

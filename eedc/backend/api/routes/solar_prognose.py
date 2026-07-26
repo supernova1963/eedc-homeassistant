@@ -3,8 +3,15 @@ Solar-Prognose API Routes
 
 Direkte PV-Ertragsprognose basierend auf Open-Meteo Solar API.
 Nutzt GTI (Global Tilted Irradiance) für geneigte PV-Module.
+
+Angezeigt wird der **eedc-korrigierte** Tageswert (``eedc_kwh``, Prognose-Kanon)
+mit Fallback auf den OpenMeteo-Rohwert (``pv_ertrag_kwh``). Der Rohwert bleibt
+in der Response — er ist die Basis der Korrektur und die „OpenMeteo"-Spalte im
+Prognosen-Vergleich; ergänzt, nicht ersetzt. ``anzeige_quelle`` sagt, welche
+Werte die Anzeige tatsächlich zeigt (Beschriftung muss zur Zahl passen).
 """
 
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -22,9 +29,18 @@ from backend.services.solar_forecast_service import (
     get_multi_string_prognose,
     PVStringConfig,
 )
+from backend.services.prognose_kanon import kanon_days, kanon_tagesprognose
 from backend.services.pv_orientation import resolve_system_losses
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+# Werte-Quelle der Tages-Anzeige (Balken, Tabelle, KPI). Kein Wettermodell —
+# das steht je Tag in `datenquelle`.
+ANZEIGE_QUELLE_EEDC = "eedc"
+ANZEIGE_QUELLE_OPENMETEO = "openmeteo"
+ANZEIGE_QUELLE_GEMISCHT = "gemischt"
 
 
 # =============================================================================
@@ -82,6 +98,70 @@ def _aggregate_string_tageswerte(
     return tageswerte
 
 
+async def _mit_eedc_werten(
+    db, anlage, tageswerte: list["SolarPrognoseTagSchema"], tage: int,
+) -> tuple[Optional[float], Optional[float], str]:
+    """Hängt die eedc-korrigierten Tageswerte an ``tageswerte`` (in-place).
+
+    Rückgabe: ``(summe, durchschnitt, anzeige_quelle)`` über die tatsächlich
+    angezeigten Werte (``eedc_kwh ?? pv_ertrag_kwh``).
+
+    Warum hier und nicht im Frontend: Balken und 14-Tage-Tabelle iterieren über
+    ``tageswerte`` — käme der korrigierte Wert aus einer zweiten Antwort, müsste
+    er über das Datum gejoint werden, und genau solche Joins sind in diesem
+    Projekt wiederholt zur Drift-Quelle geworden ([[feedback_aggregations_drift]]).
+
+    Kosten: KEIN zusätzlicher OpenMeteo-Abruf im Regelfall — der Kanon fragt
+    dieselben GTI-Cache-Keys ab wie der Fan-out oben (Key =
+    ``lat:lon:neigung:ausrichtung:days:model``, ohne kWp), und ``kanon_days``
+    trifft für ``tage`` ≤ 3 genau den ``days=4``-Satz von Vergleich/MQTT/Live.
+    Ausnahme: bei gewähltem Wettermodell ≠ „auto" nutzt der Kanon (noch) das
+    Standardmodell → eigener Key-Satz. Das ist bewusst offen (Wettermodell in
+    den Kanon durchreichen ändert auch die HA-Sensor-Werte → eigenes Päckchen).
+    """
+    kanon = None
+    try:
+        kanon = await kanon_tagesprognose(
+            db, anlage, days=kanon_days(tage),
+            # Interaktiver User-Request → kein Random-Jitter (R18-13).
+            skip_jitter=True,
+        )
+    except Exception as e:  # pragma: no cover — Soft-fail, Anzeige bleibt OM
+        logger.warning("Kanon-Prognose für /solar-prognose fehlgeschlagen: %s", e)
+
+    kanon_by_datum = {
+        t.datum: t for t in (kanon.tage if kanon else []) if t is not None
+    }
+    mit_eedc = 0
+    for tw in tageswerte:
+        kt = kanon_by_datum.get(tw.datum)
+        if kt is None or kt.eedc_kwh is None:
+            continue
+        tw.eedc_kwh = kt.eedc_kwh
+        mit_eedc += 1
+        # VM/NM nur gemeinsam ersetzen — sonst summierten korrigierter Tageswert
+        # und rohe Hälften nicht mehr auf (der Schätzpfad des Kanons liefert
+        # einen Tageswert ohne Stundenprofil und damit ohne VM/NM).
+        if kt.vm_kwh is not None and kt.nm_kwh is not None:
+            tw.eedc_morgens_kwh = kt.vm_kwh
+            tw.eedc_nachmittags_kwh = kt.nm_kwh
+
+    if not tageswerte:
+        return None, None, ANZEIGE_QUELLE_OPENMETEO
+    quelle = (
+        ANZEIGE_QUELLE_EEDC if mit_eedc == len(tageswerte)
+        else ANZEIGE_QUELLE_OPENMETEO if mit_eedc == 0
+        else ANZEIGE_QUELLE_GEMISCHT
+    )
+    if mit_eedc == 0:
+        return None, None, quelle
+    summe = sum(
+        (tw.eedc_kwh if tw.eedc_kwh is not None else tw.pv_ertrag_kwh)
+        for tw in tageswerte
+    )
+    return round(summe, 1), round(summe / len(tageswerte), 2), quelle
+
+
 # =============================================================================
 # Pydantic Schemas
 # =============================================================================
@@ -102,6 +182,14 @@ class SolarPrognoseTagSchema(BaseModel):
     pv_ertrag_morgens_kwh: float | None = None
     pv_ertrag_nachmittags_kwh: float | None = None
     datenquelle: str = "best_match"
+    # eedc-korrigierte Werte (Prognose-Kanon). `None` = für diesen Tag lag keine
+    # Korrektur vor → die Anzeige fällt auf `pv_ertrag_kwh` (OpenMeteo roh)
+    # zurück. Die Rohwerte oben bleiben unverändert erhalten.
+    eedc_kwh: float | None = Field(
+        None, description="eedc-korrigierter Tagesertrag (Kanon) — Anzeige-Wert"
+    )
+    eedc_morgens_kwh: float | None = None
+    eedc_nachmittags_kwh: float | None = None
 
 
 class StringPrognoseSchema(BaseModel):
@@ -133,6 +221,15 @@ class SolarPrognoseResponse(BaseModel):
     datenquelle: str
     abgerufen_am: str
     hinweise: List[str] = []
+    # Aggregate über die ANGEZEIGTEN Tageswerte (`eedc_kwh ?? pv_ertrag_kwh`) —
+    # damit Summenzeile/Ø je Konstruktion zu den Balken passen und die Seite
+    # sich nicht an anderer Stelle selbst widerspricht.
+    eedc_summe_kwh: float | None = None
+    eedc_durchschnitt_kwh_tag: float | None = None
+    anzeige_quelle: str = Field(
+        ANZEIGE_QUELLE_OPENMETEO,
+        description="'eedc' | 'openmeteo' | 'gemischt' — Quelle der Tages-Anzeigewerte",
+    )
 
 
 # =============================================================================
@@ -272,6 +369,9 @@ async def get_solar_prognose_endpoint(
         # Aggregierte Tageswerte aus allen Strings erstellen
         string_prognosen = multi_result["string_prognosen"]
         tageswerte = _aggregate_string_tageswerte(string_prognosen)
+        eedc_summe, eedc_schnitt, anzeige_quelle = await _mit_eedc_werten(
+            db, anlage, tageswerte, tage
+        )
 
         return SolarPrognoseResponse(
             anlage_id=anlage_id,
@@ -293,6 +393,9 @@ async def get_solar_prognose_endpoint(
             datenquelle=multi_result["datenquelle"],
             abgerufen_am=multi_result["abgerufen_am"],
             hinweise=hinweise,
+            eedc_summe_kwh=eedc_summe,
+            eedc_durchschnitt_kwh_tag=eedc_schnitt,
+            anzeige_quelle=anzeige_quelle,
         )
 
     else:
@@ -318,6 +421,29 @@ async def get_solar_prognose_endpoint(
                 detail="Solar-Prognose konnte nicht abgerufen werden."
             )
 
+        tageswerte = [
+            SolarPrognoseTagSchema(
+                datum=t.datum,
+                pv_ertrag_kwh=t.pv_ertrag_kwh,
+                gti_kwh_m2=t.gti_kwh_m2,
+                ghi_kwh_m2=t.ghi_kwh_m2,
+                sonnenstunden=t.sonnenstunden,
+                temperatur_max_c=t.temperatur_max_c,
+                temperatur_min_c=t.temperatur_min_c,
+                bewoelkung_prozent=t.bewoelkung_prozent,
+                niederschlag_mm=t.niederschlag_mm,
+                schnee_cm=t.schnee_cm,
+                wetter_symbol=t.wetter_symbol,
+                pv_ertrag_morgens_kwh=t.pv_ertrag_morgens_kwh,
+                pv_ertrag_nachmittags_kwh=t.pv_ertrag_nachmittags_kwh,
+                datenquelle=t.datenquelle,
+            )
+            for t in prognose.tageswerte
+        ]
+        eedc_summe, eedc_schnitt, anzeige_quelle = await _mit_eedc_werten(
+            db, anlage, tageswerte, tage
+        )
+
         return SolarPrognoseResponse(
             anlage_id=anlage_id,
             anlagenname=anlage.anlagenname or f"Anlage {anlage_id}",
@@ -328,27 +454,12 @@ async def get_solar_prognose_endpoint(
             prognose_zeitraum=prognose.prognose_zeitraum,
             summe_kwh=prognose.summe_kwh,
             durchschnitt_kwh_tag=prognose.durchschnitt_kwh_tag,
-            tageswerte=[
-                SolarPrognoseTagSchema(
-                    datum=t.datum,
-                    pv_ertrag_kwh=t.pv_ertrag_kwh,
-                    gti_kwh_m2=t.gti_kwh_m2,
-                    ghi_kwh_m2=t.ghi_kwh_m2,
-                    sonnenstunden=t.sonnenstunden,
-                    temperatur_max_c=t.temperatur_max_c,
-                    temperatur_min_c=t.temperatur_min_c,
-                    bewoelkung_prozent=t.bewoelkung_prozent,
-                    niederschlag_mm=t.niederschlag_mm,
-                    schnee_cm=t.schnee_cm,
-                    wetter_symbol=t.wetter_symbol,
-                    pv_ertrag_morgens_kwh=t.pv_ertrag_morgens_kwh,
-                    pv_ertrag_nachmittags_kwh=t.pv_ertrag_nachmittags_kwh,
-                    datenquelle=t.datenquelle,
-                )
-                for t in prognose.tageswerte
-            ],
+            tageswerte=tageswerte,
             string_prognosen=None,
             datenquelle=prognose.datenquelle,
             abgerufen_am=prognose.abgerufen_am,
             hinweise=hinweise,
+            eedc_summe_kwh=eedc_summe,
+            eedc_durchschnitt_kwh_tag=eedc_schnitt,
+            anzeige_quelle=anzeige_quelle,
         )

@@ -22,9 +22,12 @@ const solar = {
   system_losses_prozent: 14, prognose_zeitraum: { von: null, bis: null },
   summe_kwh: 120, durchschnitt_kwh_tag: 8.6, datenquelle: 'Open-Meteo Solar (GTI)',
   abgerufen_am: '2026-06-23T06:00:00Z', hinweise: [],
+  // eedc-korrigierte Werte + Aggregate (v4.0.1): die Anzeige zeigt DIESE,
+  // die Rohwerte daneben bleiben als Fallback/Basis erhalten.
+  eedc_summe_kwh: 108, eedc_durchschnitt_kwh_tag: 7.7, anzeige_quelle: 'eedc',
   tage: [
-    { datum: '2026-06-23', pv_ertrag_kwh: 9.1, gti_kwh_m2: 5, ghi_kwh_m2: 5, sonnenstunden: 8, temperatur_max_c: 24, wetter_symbol: 'sunny', pv_ertrag_morgens_kwh: 4, pv_ertrag_nachmittags_kwh: 5.1 },
-    { datum: '2026-06-24', pv_ertrag_kwh: 7.3, gti_kwh_m2: 4, ghi_kwh_m2: 4, sonnenstunden: 6, temperatur_max_c: 22, wetter_symbol: 'partly_cloudy', pv_ertrag_morgens_kwh: 3, pv_ertrag_nachmittags_kwh: 4.3 },
+    { datum: '2026-06-23', pv_ertrag_kwh: 9.1, gti_kwh_m2: 5, ghi_kwh_m2: 5, sonnenstunden: 8, temperatur_max_c: 24, wetter_symbol: 'sunny', pv_ertrag_morgens_kwh: 4, pv_ertrag_nachmittags_kwh: 5.1, eedc_kwh: 8.2, eedc_morgens_kwh: 3.6, eedc_nachmittags_kwh: 4.6 },
+    { datum: '2026-06-24', pv_ertrag_kwh: 7.3, gti_kwh_m2: 4, ghi_kwh_m2: 4, sonnenstunden: 6, temperatur_max_c: 22, wetter_symbol: 'partly_cloudy', pv_ertrag_morgens_kwh: 3, pv_ertrag_nachmittags_kwh: 4.3, eedc_kwh: 6.6, eedc_morgens_kwh: 2.7, eedc_nachmittags_kwh: 3.9 },
   ],
   tageswerte: [], anlage: { id: 1, name: 'Demo', leistung_kwp: 10, neigung: 30, azimut: 0 },
 }
@@ -138,6 +141,24 @@ describe('CockpitAussichtV4 — Vorwärts-Teleskop', () => {
     expect(screen.queryByText('Aussicht je Komponente')).not.toBeInTheDocument()
     // Quellen-Vergleich gehört nicht in Aussicht (Gernot 2026-06-23).
     expect(screen.queryByText(/Quellen-Vergleich/)).not.toBeInTheDocument()
+  })
+
+  it('KPI „Morgen" und die Summenzeile zeigen die eedc-Werte, nicht die Rohwerte', async () => {
+    renderView()
+    await screen.findByText('Kennzahlen')
+    // „Morgen" = eedc-Wert des zweiten Tages (6,6), nicht der Rohwert 7,3.
+    expect(screen.getByText('6,6')).toBeInTheDocument()
+    expect(screen.queryByText('7,3')).not.toBeInTheDocument()
+    // „Heute" bleibt der Vergleichs-Wert (days=4-Snapshot wie Live/MQTT).
+    expect(screen.getByText('8,5')).toBeInTheDocument()
+    // Summe/Ø der Kachel UND die Block-Zusammenfassung ziehen mit — sonst
+    // widerspräche sich die Seite an anderer Stelle erneut.
+    expect(screen.getByText('108')).toBeInTheDocument()
+    expect(screen.queryByText('120')).not.toBeInTheDocument()
+    expect(screen.getByText(/108 kWh in 2 Tagen · Ø 7,7 kWh\/Tag/)).toBeInTheDocument()
+    // Beschriftung passt zur Zahl: BEIDE Blockköpfe (Balken + Tabelle) nennen
+    // die Quelle der gezeigten Werte.
+    expect(screen.getAllByText(/Quelle eedc-Prognose \(Open-Meteo \+ Korrektur\)/)).toHaveLength(2)
   })
 
   it('Wechsel auf Langfristig zieht Langfrist-Blöcke (Saison/Degradation) nach', async () => {
