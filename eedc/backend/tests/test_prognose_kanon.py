@@ -24,7 +24,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.core.berechnungen.prognose_final import soll_final_einfrieren
-from backend.models import Anlage, Investition, Monatsdaten
+from backend.models import Anlage, Investition, Monatsdaten, TagesEnergieProfil
 
 
 # ── Fake OpenMeteo: ausrichtungs-abhängige Kurvenform, kWp-skaliert ──────────
@@ -115,6 +115,157 @@ async def test_symmetrie_kanon_eedc_service_mqtt(db, _patch):
     # Folgetage ebenfalls deckungsgleich.
     for off in (1, 2, 3):
         assert export[f"day_plus_{off}_kwh"] == pytest.approx(eedc.tage[off].tageswert_kwh)
+
+
+async def _seed_verbrauchsprofil(db, anlage_id: int, tage: int = 6) -> None:
+    """24 Stundenzeilen je Tag — ohne mindestens 3 vollständige Tage antwortet
+    ``/tagesprognose`` mit 422 (Verbrauchsprognose). Für den PV-Wert irrelevant."""
+    heute = date.today()
+    for d in range(1, tage + 1):
+        for stunde in range(24):
+            db.add(TagesEnergieProfil(
+                anlage_id=anlage_id, datum=heute - timedelta(days=d),
+                stunde=stunde, verbrauch_kw=0.4,
+            ))
+    await db.flush()
+
+
+@pytest.fixture
+def _keine_netzabrufe(monkeypatch):
+    """Der Prognosen-Vergleich holt neben dem Kanon eigene OpenMeteo-/Solcast-
+    Daten (Wetter-Tabelle, GTI-Roh-Kurve, Solcast-Spalte). Im Test hermetisch
+    auf ``None`` — der Endpoint liefert dann die Kanon-Spalten, um die es hier
+    geht, und der Test braucht kein Netz."""
+    import backend.api.routes.prognosen as pr
+
+    async def _none(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(pr, "fetch_open_meteo_forecast", _none)
+    monkeypatch.setattr(pr, "fetch_gti_forecast", _none)
+    monkeypatch.setattr(pr, "get_solcast_forecast", _none)
+
+
+async def test_symmetrie_morgen_tagesprognose_vergleich_mqtt(db, _patch, _keine_netzabrufe):
+    """„Morgen" über alle Kanon-Pfade: Σ Stundenprofil der /tagesprognose ==
+    eedc-Morgenwert im Prognosen-Vergleich == MQTT ``day_plus_1_kwh``.
+
+    Rainer-PN „Nachtrag" 2026-07-25: die Summenzeile der Stundenwerte zeigte
+    einen anderen Tageswert als die übrigen Anzeigen, weil sie über einen
+    eigenen Ein-Abruf-Pfad lief. Ohne diesen Test driftet „morgen" wieder weg
+    ([[feedback_aggregator_symmetrie]] — bisher war nur ``tage[0]`` gedeckt).
+    """
+    from backend.api.routes.energie_profil.views import get_tagesprognose
+    from backend.api.routes.prognosen import get_prognosen_vergleich
+    from backend.services.ha_export_prognose import berechne_prognose_export
+    from backend.services.prognose_kanon import kanon_tagesprognose
+
+    anlage = await _seed(db, module=[(6.0, 0), (4.0, 90)])
+    await _seed_verbrauchsprofil(db, anlage.id)
+    morgen = date.today() + timedelta(days=1)
+
+    resp = await get_tagesprognose(anlage.id, datum=morgen, db=db)
+    vergleich = await get_prognosen_vergleich(anlage.id, db=db)
+    export = await berechne_prognose_export(db, anlage)
+    kanon = await kanon_tagesprognose(db, anlage, days=4)
+
+    morgen_kanon = kanon.tage[1].eedc_kwh
+    assert vergleich.eedc_morgen_kwh == pytest.approx(morgen_kanon)
+    assert export["day_plus_1_kwh"] == pytest.approx(morgen_kanon)
+
+    # Die Summenzeile selbst (das ist die Zahl aus Rainers Meldung) — der
+    # Tageswert des Kanon ist auf 1 NK gerundet, die Summenzeile auf 2.
+    assert resp.pv_summe_kwh == pytest.approx(morgen_kanon, abs=0.05)
+    # … und sie ist wirklich die Summe der angezeigten Stundenwerte.
+    assert sum(s.pv_kw for s in resp.stunden) == pytest.approx(resp.pv_summe_kwh, abs=0.005)
+    # Slot für Slot deckungsgleich mit dem MQTT-Attribut `stundenprofil_kwh`.
+    assert [s.pv_kw for s in resp.stunden] == pytest.approx(export["stundenprofil_day_plus_1"])
+
+
+async def test_morgen_ohne_orientierungs_kollaps(db, monkeypatch):
+    """Regression: /tagesprognose holte OpenMeteo mit EINEM Abruf über die
+    Gesamt-kWp und der Orientierung der zufällig ersten Investition. Bei einer
+    Anlage mit ertragsschwächerem Ost-Dach liegt dieser Wert deutlich daneben.
+    """
+    import backend.services.solar_forecast_service as sfs
+    import backend.api.routes.live_wetter as lw
+    from backend.services.korrekturprofil_lookup import _cache
+    from backend.api.routes.energie_profil.views import get_tagesprognose
+
+    async def fake_ost_schwaecher(**kwargs):
+        # Ost-Dach (Azimut < 0) liefert 70 % der Süd-Energie.
+        faktor = 0.7 if kwargs["ausrichtung"] < 0 else 1.0
+        p = _fake_prognose(kwargs["kwp"], kwargs["ausrichtung"])
+        for tag in p.tageswerte:
+            tag.stunden_kw = [v * faktor for v in tag.stunden_kw]
+            tag.pv_ertrag_kwh = round(sum(tag.stunden_kw), 3)
+        return p
+
+    async def fake_lernfaktor(anlage_id, db_, quelle="openmeteo"):
+        return 0.9
+
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake_ost_schwaecher)
+    monkeypatch.setattr(lw, "_get_lernfaktor", fake_lernfaktor)
+    _cache.clear()
+
+    anlage = await _seed(db, module=[(6.0, 0), (4.0, -90)])  # 6 Süd + 4 Ost
+    await _seed_verbrauchsprofil(db, anlage.id)
+    morgen = date.today() + timedelta(days=1)
+
+    resp = await get_tagesprognose(anlage.id, datum=morgen, db=db)
+
+    tf = _TAGESFAKTOREN[1]  # morgen
+    fan_out = (6.0 * tf + 4.0 * tf * 0.7) * 0.9      # Multi-String (richtig)
+    kollaps = 10.0 * tf * 0.9                        # EIN Abruf, Orientierung invs[0]
+    assert resp.pv_summe_kwh == pytest.approx(fan_out, abs=0.1)
+    assert abs(resp.pv_summe_kwh - kollaps) > 1.0
+
+
+async def test_tagesprognose_ferner_tag_bleibt_im_kanon(db, monkeypatch):
+    """Der Datums-Picker erlaubt +14 Tage. ``days`` wird aus dem Zieldatum
+    abgeleitet (hier 15, OpenMeteo-Maximum ist 16) — auch ferne Tage rechnen
+    kanonisch, statt still auf den Ein-Abruf-Pfad zurückzufallen. Kosten: ein
+    OpenMeteo-Abruf **pro Orientierungsgruppe** (parallel, eigener Cache-Key).
+    """
+    import backend.services.solar_forecast_service as sfs
+    import backend.api.routes.live_wetter as lw
+    from backend.services.korrekturprofil_lookup import _cache
+    from backend.api.routes.energie_profil.views import get_tagesprognose
+
+    calls: list[tuple] = []
+
+    async def fake_langer_horizont(**kwargs):
+        calls.append((kwargs["kwp"], kwargs["ausrichtung"], kwargs["days"]))
+        heute = date.today()
+        tage = []
+        for i in range(kwargs["days"]):
+            slots = _fake_slots(kwargs["kwp"], kwargs["ausrichtung"], 1.5)
+            tage.append(SimpleNamespace(
+                datum=(heute + timedelta(days=i)).isoformat(),
+                pv_ertrag_kwh=round(sum(slots), 3),
+                stunden_kw=slots,
+                stunden_bewoelkung=[0.0] * 24,
+                stunden_niederschlag=[0.0] * 24,
+                stunden_wetter_code=[0] * 24,
+            ))
+        return SimpleNamespace(tageswerte=tage)
+
+    async def fake_lernfaktor(anlage_id, db_, quelle="openmeteo"):
+        return 0.9
+
+    monkeypatch.setattr(sfs, "get_solar_prognose", fake_langer_horizont)
+    monkeypatch.setattr(lw, "_get_lernfaktor", fake_lernfaktor)
+    _cache.clear()
+
+    anlage = await _seed(db, module=[(6.0, 0), (4.0, 90)])
+    await _seed_verbrauchsprofil(db, anlage.id)
+    ziel = date.today() + timedelta(days=14)
+
+    resp = await get_tagesprognose(anlage.id, datum=ziel, db=db)
+
+    assert resp.pv_summe_kwh == pytest.approx(10.0 * 1.5 * 0.9, abs=0.1)
+    # Zwei Orientierungsgruppen → zwei Abrufe, beide über den vollen Horizont.
+    assert [c[2] for c in calls] == [15, 15]
 
 
 async def test_eedc_ist_om_mal_skalar(db, _patch):

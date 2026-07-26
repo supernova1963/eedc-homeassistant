@@ -984,6 +984,54 @@ async def kraftstoffpreis_status(
 # ── Tagesprognose (Etappe 3b) ──────────────────────────────────────────────
 
 
+async def _pv_stunden_aus_kanon(db, anlage, datum: date) -> Optional[list[float]]:
+    """Korrigierte 24 kWh-Slots des Zieltages aus dem Prognose-Kanon.
+
+    ``None`` = der Kanon hat für diesen Tag kein Stundenprofil (kein Abruf,
+    kein Treffer, Schätzpfad ohne Hourly) → der Aufrufer nutzt seinen Fallback.
+
+    Warum überhaupt: der frühere Eigenweg holte OpenMeteo mit **einem** Abruf
+    für die Gesamt-kWp und der Orientierung der zufällig ersten Investition
+    (kein ``ORDER BY``) und multiplizierte den flachen Legacy-Skalar darauf.
+    Beides weicht vom Kanon ab (Multi-String-Fan-out + Kaskade pro Energie-Slot)
+    — dieselbe Anlage bekam so je nach Pfad verschiedene Tagessummen.
+
+    ``days``: mindestens 4, damit für heute/morgen/übermorgen **derselbe**
+    OpenMeteo-Cache-Eintrag (Key enthält ``days``) und damit derselbe Snapshot
+    gezogen wird wie im Prognosen-Vergleich und im HA-/MQTT-Export. Für spätere
+    Zieltage aus dem Datum abgeleitet — der Picker erlaubt +14 Tage, also
+    ``days`` ≤ 15 und damit innerhalb des OpenMeteo-Maximums (16).
+    """
+    tage_bis_ziel = (datum - date.today()).days
+    if tage_bis_ziel < 0:
+        return None
+
+    from backend.services.prognose_kanon import kanon_tagesprognose
+
+    try:
+        kanon = await kanon_tagesprognose(
+            db, anlage,
+            days=max(tage_bis_ziel + 1, 4),
+            # Interaktiver User-Request: der 1-30s-Random-Jitter gilt nur für
+            # Hintergrund-Abrufe (R18-13, KONZEPT-LADEZEIT-CACHE-SWR).
+            skip_jitter=True,
+        )
+    except Exception as e:
+        logger.warning("Kanon-Tagesprognose fehlgeschlagen: %s", e)
+        return None
+    if not kanon:
+        return None
+
+    ziel_iso = datum.isoformat()
+    for tag in kanon.tage:
+        if tag is not None and tag.datum == ziel_iso and tag.profil is not None:
+            # Export-Slots (2 NK) — exakt die Werte, die auch als MQTT-Attribut
+            # `stundenprofil_kwh` rausgehen. Damit gilt die Kanon-Invariante
+            # `Tageswert == Σ Export-Slots` auch für die Summenzeile hier.
+            return list(tag.profil.stundenprofil_export_kwh)
+    return None
+
+
 @router.get("/{anlage_id}/tagesprognose", response_model=TagesPrognoseResponse)
 async def get_tagesprognose(
     anlage_id: int,
@@ -1047,8 +1095,19 @@ async def get_tagesprognose(
         except Exception as e:
             logger.warning("Solcast für Tagesprognose fehlgeschlagen: %s", e)
 
-    # Fallback: OpenMeteo GTI
-    if pv_quelle == "openmeteo":
+    # Fallback: OpenMeteo GTI — kanonischer Weg zuerst (Multi-String-Fan-out +
+    # Korrektur pro Energie-Slot), damit Chart/Tabelle denselben Tag zeigen wie
+    # Prognosen-Vergleich und HA-/MQTT-Export.
+    kanon_stunden = (
+        await _pv_stunden_aus_kanon(db, anlage, datum)
+        if pv_quelle == "openmeteo" else None
+    )
+    if kanon_stunden is not None:
+        pv_stunden = kanon_stunden
+    elif pv_quelle == "openmeteo":
+        # Fallback (Kanon ohne Ergebnis: kein OpenMeteo, keine kWp, Zieltag
+        # jenseits des Abrufs): bisheriger Ein-Abruf-Pfad, damit die Prognose
+        # nicht ganz ausfällt. Bewusst unverändert inkl. Legacy-Skalar.
         try:
             from backend.services.solar_forecast_service import get_solar_prognose
 
