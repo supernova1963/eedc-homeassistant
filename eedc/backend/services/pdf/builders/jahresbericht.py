@@ -125,17 +125,27 @@ async def build_jahresbericht_context(
         if inv.typ == "speicher":
             speicher_kapazitaet += (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
 
-    # ── 4. PVGIS-Prognose (letzte aktive) ───────────────────────────────
+    # ── 4. PVGIS-Prognose (die aktive) ──────────────────────────────────
+    # Auswahlregel 1:1 wie im restlichen Repo (`services/prognose_kanon.py`,
+    # Cockpit, Aussichten, Energieprofil, HA-Export): `ist_aktiv == True`, und
+    # falls doch mehrere aktiv sind, die zuletzt abgerufene. `ist_aktiv` ist der
+    # Nutzerwille — über `POST /api/pvgis/prognose/{id}/aktivieren` kann bewusst
+    # eine ÄLTERE Prognose aktiv sein; dann gewinnt sie, nicht die neueste.
+    # Der Monatswert-Key heißt `e_m` (so schreibt ihn `api/routes/pvgis.py`).
     res = await db.execute(
-        select(PVGISPrognose).where(PVGISPrognose.anlage_id == anlage_id)
+        select(PVGISPrognose)
+        .where(
+            PVGISPrognose.anlage_id == anlage_id,
+            PVGISPrognose.ist_aktiv == True,  # noqa: E712 (SQLAlchemy-Vergleich)
+        )
+        .order_by(PVGISPrognose.abgerufen_am.desc())
+        .limit(1)
     )
-    pvgis_prognosen = res.scalars().all()
+    pvgis_prognose = res.scalar_one_or_none()
     pvgis_by_month: dict[int, float] = {}
-    for p in pvgis_prognosen:
-        if p.monatswerte:
-            for mw in p.monatswerte:
-                m = mw.get("monat", 0)
-                pvgis_by_month[m] = pvgis_by_month.get(m, 0) + (mw.get("e_month_kwh", 0) or 0)
+    if pvgis_prognose and pvgis_prognose.monatswerte:
+        for mw in pvgis_prognose.monatswerte:
+            pvgis_by_month[mw.get("monat", 0)] = mw.get("e_m", 0) or 0
 
     # ── 5. InvestitionMonatsdaten ───────────────────────────────────────
     inv_ids = [i.id for i in investitionen]
@@ -471,10 +481,11 @@ async def build_jahresbericht_context(
     # ── 10. String-Vergleich SOLL/IST ───────────────────────────────────
     pv_module = [i for i in investitionen if i.typ == "pv-module"]
     gesamt_kwp = sum(i.leistung_kwp or 0 for i in pv_module) or (anlage.leistung_kwp or 1)
-    pvgis_neueste = max(pvgis_prognosen, key=lambda p: p.abgerufen_am) if pvgis_prognosen else None
+    # Dieselbe Prognose wie in Abschnitt 4 — sonst widerspräche der
+    # String-Vergleich der Monatstabelle desselben PDFs.
     prognose_monate: dict[int, float] = {}
-    if pvgis_neueste and pvgis_neueste.monatswerte:
-        for mw in pvgis_neueste.monatswerte:
+    if pvgis_prognose and pvgis_prognose.monatswerte:
+        for mw in pvgis_prognose.monatswerte:
             prognose_monate[mw.get("monat", 0)] = mw.get("e_m", 0) or 0
     # Exakte Pro-Modul-Prognosen (v2.3.2): PVGIS wird je Modulfeld mit dessen
     # eigener Ausrichtung/Neigung abgerufen und unter `module_monatswerte`
@@ -484,8 +495,8 @@ async def build_jahresbericht_context(
     # API-Pfad `api/routes/cockpit/pv_strings.py` (dort seit v2.3.2 in Gebrauch),
     # damit PDF und Cockpit denselben SOLL-Wert zeigen.
     prognose_per_modul: dict[int, dict[int, float]] = {}
-    if pvgis_neueste and pvgis_neueste.module_monatswerte:
-        for inv_id_str, monatsdaten in pvgis_neueste.module_monatswerte.items():
+    if pvgis_prognose and pvgis_prognose.module_monatswerte:
+        for inv_id_str, monatsdaten in pvgis_prognose.module_monatswerte.items():
             try:
                 prognose_per_modul[int(inv_id_str)] = {
                     mw["monat"]: mw.get("e_m", 0) or 0 for mw in monatsdaten
