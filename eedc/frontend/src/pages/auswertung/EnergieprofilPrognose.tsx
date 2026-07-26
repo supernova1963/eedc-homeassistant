@@ -13,7 +13,8 @@ import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-re
 import { Card, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, TableFoot } from '../../components/ui'
 import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { DatumPicker } from '../../components/ui/DatumPicker'
-import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, unvollstaendigHerkunft } from '../../lib'
+import { HerkunftZeile } from '../../components/blocks'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
 import { energieProfilApi, type TagesPrognose } from '../../api/energie_profil'
@@ -153,8 +154,12 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
   // im Prognose-Chart nicht brauchen (B7-Standard, SoT-Hook). Nicht entfernen,
   // nur abschaltbar.
   const { istVersteckt, onItemClick } = useLegendenToggle()
+  // P4: sagt die Antwort selbst, dass ihr PV-Profil unvollständig ist, steht das
+  // DORT, wo die Zahl steht — über der PV-Kachel und der Summenzeile, nicht im Log.
+  const herkunft = unvollstaendigHerkunft(daten.hinweise, 'PV-Prognose')
   return (
     <div className="space-y-4">
+      <HerkunftZeile herkunft={herkunft} />
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <KPICard size="sm" icon={Sun} title="PV-Prognose" value={`${fmt1(daten.pv_summe_kwh)} kWh`} color="yellow" />
         <KPICard size="sm" icon={Zap} title="Verbrauch" value={`${fmt1(daten.verbrauch_summe_kwh)} kWh`} color="gray" />
@@ -240,9 +245,18 @@ function PrognoseTooltip({ active, payload, label }: {
 
 export function PrognoseTabelle({ daten, ohneCaption }: { daten: TagesPrognose; ohneCaption?: boolean }) {
   const hatSpeicher = daten.speicher_kapazitaet_kwh != null
+  // P4: die Summenzeile unten IST die Zahl, um die es geht — die Kennzeichnung
+  // muss auch hier stehen, nicht nur am Chart daneben (die Tabelle wird im
+  // Fokus-Overlay allein gezeigt).
+  const herkunft = unvollstaendigHerkunft(daten.hinweise, 'PV-Prognose')
 
   return (
     <Card padding="none" className="overflow-hidden">
+      {herkunft && (
+        <div className={`${ZELLE} border-b border-gray-200 dark:border-gray-700`}>
+          <HerkunftZeile herkunft={herkunft} />
+        </div>
+      )}
       {/* Caption unterdrückbar (`ohneCaption`), wenn ein Block-Header denselben Text
           schon als Summary zeigt (Cockpit/Aussicht „Stundenwerte") — sonst doppelt.
           Standalone (Energieprofil-Seite) bleibt sie die einzige Beschriftung. */}

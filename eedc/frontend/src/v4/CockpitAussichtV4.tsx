@@ -24,12 +24,13 @@ import { Card, SegmentControl, FehlerZustand } from '../components/ui'
 import { ReloadButton } from './ReloadButton'
 import { AnlageLeer, OnboardingLeer } from './OnboardingLeer'
 import { DatumPicker } from '../components/ui/DatumPicker'
-import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, HerkunftZeile, KpiStrip, type Block, type KpiStripItem, type WertHerkunft } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark, Parkbar } from '../components/park'
 import {
   BLOCK_IDENTITAET, STATUS_ICONS, WT_KURZ, fmtZahl,
   pvErtragKwh, pvVormittagKwh, pvNachmittagKwh,
   prognoseSummeKwh, prognoseDurchschnittKwh, prognoseQuelleLabel,
+  unvollstaendigHerkunft,
 } from '../lib'
 import {
   TagesPrognose, KurzfristDetails, LangfristVerlaufChart, LangfristMonatswerte,
@@ -238,13 +239,20 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     } : null
     // R5-5a (Rainer): Kennzahlen-Kacheln parkbar (SLICE 1) — stabile parkId je
     // Titel, geparkte raus; sind ALLE geparkt → Block ganz weg (wie Cockpit/Monat).
-    const kennzahlenBlock = (items: KpiStripItem[], summary: string): Block | null => {
+    const kennzahlenBlock = (
+      items: KpiStripItem[], summary: string, herkunft?: WertHerkunft,
+    ): Block | null => {
       const mit = items.map((k) => ({ ...k, parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}` }))
       const sichtbar = mit.filter((k) => !park.istGeparkt(k.parkId!))
       if (!sichtbar.length) return null
       return {
         id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-        summary, defaultOpen: true, render: () => <KpiStrip kpis={sichtbar} />,
+        summary, defaultOpen: true, render: () => (
+          <div className="space-y-2">
+            <HerkunftZeile herkunft={herkunft} />
+            <KpiStrip kpis={sichtbar} />
+          </div>
+        ),
       }
     }
     if (istKurz) {
@@ -252,7 +260,11 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
       // Summenzeile == Σ der Balken: dieselben Aggregate wie die KPIs (SoT),
       // sonst widerspräche sich die Seite an anderer Stelle erneut.
       const quelleLabel = prognoseQuelleLabel(kurz)
-      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${fmtZahl(prognoseSummeKwh(kurz), 0)} kWh in ${kurz.tage.length} Tagen · Ø ${fmtZahl(prognoseDurchschnittKwh(kurz), 1)} kWh/Tag`)
+      // P4 (N77): war der Multi-String-Fan-out unvollständig, sind Summe, Ø/Tag und
+      // alle Tagesbalken eine Teilsumme. Das Backend sagt es in `hinweise`; hier
+      // steht es an beiden Stellen, wo die betroffenen Zahlen stehen.
+      const kurzHerkunft = unvollstaendigHerkunft(kurz.hinweise, 'PV-Prognose')
+      const kpi = kennzahlenBlock(kurzKpis(kurz, eedcHeute), `${fmtZahl(prognoseSummeKwh(kurz), 0)} kWh in ${kurz.tage.length} Tagen · Ø ${fmtZahl(prognoseDurchschnittKwh(kurz), 1)} kWh/Tag`, kurzHerkunft)
       // Aussicht-Anzeigen sind einzeln parkbar (Doktrin): render in `Parkbar`, und ist
       // die Anzeige geparkt → ganzer Block weg (wie Cockpit/Monat-Verlauf).
       const list: Block[] = [
@@ -261,7 +273,14 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           id: 'verlauf', title: 'Tages-Prognose', ...BLOCK_IDENTITAET.wetter,
           summary: `${kurz.tage.length} Tage: Wetter, Temperatur & PV-Ertrag je Tag · Quelle ${quelleLabel}`,
           defaultOpen: true,
-          render: () => <Parkbar id="el:aussicht-tages" titel="Tages-Prognose"><TagesPrognose tage={kurz.tage} quelleLabel={quelleLabel} /></Parkbar>,
+          render: () => (
+            <Parkbar id="el:aussicht-tages" titel="Tages-Prognose">
+              <div className="space-y-2">
+                <HerkunftZeile herkunft={kurzHerkunft} />
+                <TagesPrognose tage={kurz.tage} quelleLabel={quelleLabel} />
+              </div>
+            </Parkbar>
+          ),
         }]),
         ...(park.istGeparkt('el:aussicht-tage-tabelle') ? [] : [{
           id: 'details', title: `${kurz.tage.length}-Tage-Tabelle`, ...BLOCK_IDENTITAET.werte,

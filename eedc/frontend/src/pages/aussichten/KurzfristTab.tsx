@@ -11,7 +11,8 @@ import ChartTooltip from '../../components/ui/ChartTooltip'
 import { ScrollSchatten } from '../../components/ui/ScrollSchatten'
 import { wetterApi, SolarPrognose } from '../../api/wetter'
 import { aussichtenApi } from '../../api/aussichten'
-import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
+import { CHART_COLORS, SOLAR_INTENSITAET, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, unvollstaendigHerkunft } from '../../lib'
+import { HerkunftZeile } from '../../components/blocks'
 import { useSchmaleAchse } from '../../hooks'
 import {
   ResponsiveContainer,
@@ -152,8 +153,14 @@ export default function KurzfristTab({ anlageId }: Props) {
   const summeKwh = prognose.tage.reduce((sum, t) => sum + (t.pv_ertrag_kwh || 0), 0)
   const durchschnittKwh = chartData.length > 0 ? summeKwh / chartData.length : 0
 
+  // P4 (N77): war der Multi-String-Fan-out unvollständig, sind Summe, Ø/Tag und
+  // alle Balken eine Teilsumme. Das Backend sagt es in `hinweise` — hier steht
+  // es über den Kacheln, also dort, wo die Zahl steht.
+  const herkunft = unvollstaendigHerkunft(prognose.hinweise, 'PV-Prognose')
+
   return (
     <div className="space-y-6">
+      <HerkunftZeile herkunft={herkunft} />
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <KPICard

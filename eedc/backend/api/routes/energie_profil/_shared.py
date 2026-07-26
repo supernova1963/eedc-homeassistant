@@ -457,3 +457,11 @@ class TagesPrognoseResponse(BaseModel):
     verbrauch_basis: str        # "gleicher_wochentag", "tagestyp", "alle"
     pv_quelle: str              # "openmeteo" oder "solcast"
     daten_tage: int
+    # P4 (N78/N79): Unvollständigkeit gehört in die ANTWORT, nicht ins Log.
+    # Liefert dieser Endpoint ein PV-Profil, das nicht das ist, was der Name
+    # verspricht — 24 Nullen weil jeder Prognose-Pfad ausgefallen ist, oder das
+    # Stundenprofil von HEUTE als Näherung für morgen —, dann sagt er es hier.
+    # Eine 0 kWh ohne Kennzeichnung ist die Aussage „die Anlage erzeugt morgen
+    # nichts"; die Speicher-Simulation daneben rechnet damit weiter („Speicher
+    # lädt nicht"). Der Wert wird nicht ersetzt, nur beschriftet.
+    hinweise: list[str] = []

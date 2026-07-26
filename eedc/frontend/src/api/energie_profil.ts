@@ -294,6 +294,10 @@ export interface TagesPrognose {
   verbrauch_basis: string
   pv_quelle: string
   daten_tage: number
+  /** P4: nichtleer, wenn das PV-Profil nicht das ist, was der Name verspricht
+   *  (keine Prognose → 24 Nullen; Solcast-Profil von heute als Näherung).
+   *  Angezeigt über `unvollstaendigHerkunft` + `HerkunftZeile`. */
+  hinweise: string[]
 }
 
 export interface ReaggregatePreviewBoundary {

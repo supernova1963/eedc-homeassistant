@@ -1076,8 +1076,12 @@ async def get_tagesprognose(
     verbrauch_stunden = vp["stunden_kw"]
 
     # ── 2. PV-Stundenprofil ──
+    # `pv_hinweise` begleitet das Profil: jede Abweichung von „das ist die
+    # Prognose für DIESEN Tag" wird hier vermerkt und geht in die Response (P4).
     pv_stunden = [0.0] * 24
     pv_quelle = "openmeteo"
+    pv_hinweise: list[str] = []
+    pv_profil_vorhanden = False
 
     # Versuche Solcast zuerst (wenn als Quelle gewählt)
     from backend.services.prognose_router import resolve_prognose_quelle
@@ -1088,13 +1092,28 @@ async def get_tagesprognose(
             from backend.services.solcast_service import get_solcast_forecast
             solcast = await get_solcast_forecast(anlage)
             if solcast and solcast.hourly_kw and len(solcast.hourly_kw) == 24:
-                # Solcast hourly_kw enthält Werte für heute
-                # Für morgen: tage_voraus nutzen (falls verfügbar mit Stundenwerten)
-                # Sonst: hourly als Approximation
+                # `solcast.hourly_kw` ist das Stundenprofil von HEUTE. Für einen
+                # anderen Zieltag ist es eine Näherung — bisher stand das nur als
+                # Code-Kommentar, während die Antwort `pv_quelle = "solcast"`
+                # meldete wie bei einem echten Profil dieses Tages (N79). Der Wert
+                # bleibt (er ist die beste verfügbare Information), aber die
+                # Antwort sagt jetzt, worauf man sieht.
                 pv_stunden = list(solcast.hourly_kw)
                 pv_quelle = "solcast"
+                pv_profil_vorhanden = True
+                if datum != date.today():
+                    pv_hinweise.append(
+                        "Solcast liefert das Stundenprofil nur für heute. Der "
+                        "Tagesverlauf ist deshalb das heutige Profil als Näherung "
+                        f"für den {datum.strftime('%d.%m.%Y')} — die Tagessumme "
+                        "kann abweichen."
+                    )
         except Exception as e:
             logger.warning("Solcast für Tagesprognose fehlgeschlagen: %s", e)
+            pv_hinweise.append(
+                "Die Solcast-Prognose war nicht abrufbar; für den PV-Tagesverlauf "
+                "liegt keine Solcast-Quelle vor."
+            )
 
     # Fallback: OpenMeteo GTI — kanonischer Weg zuerst (Multi-String-Fan-out +
     # Korrektur pro Energie-Slot), damit Chart/Tabelle denselben Tag zeigen wie
@@ -1105,6 +1124,7 @@ async def get_tagesprognose(
     )
     if kanon_stunden is not None:
         pv_stunden = kanon_stunden
+        pv_profil_vorhanden = True
     elif pv_quelle == "openmeteo":
         # Fallback (Kanon ohne Ergebnis: kein OpenMeteo, keine kWp, Zieltag
         # jenseits des Abrufs): bisheriger Ein-Abruf-Pfad, damit die Prognose
@@ -1171,6 +1191,7 @@ async def get_tagesprognose(
                     for tag in prognose.tageswerte:
                         if tag.datum == ziel_str and tag.stunden_kw:
                             pv_stunden = tag.stunden_kw
+                            pv_profil_vorhanden = True
                             break
 
                     # Lernfaktor anwenden (MOS-Kaskade)
@@ -1181,6 +1202,20 @@ async def get_tagesprognose(
 
         except Exception as e:
             logger.warning("PV-Prognose für Tagesprognose fehlgeschlagen: %s", e)
+
+    # P4 (N78): Bis hierher konnte die Antwort mit der Vorbelegung `[0.0] * 24`
+    # herauskommen — als PV-Prognose „0 kWh", nicht als „keine Prognose". Die
+    # Speicher-Simulation unten rechnet mit diesen Nullen weiter und meldet dann
+    # „Speicher lädt nicht". Die Zahlen bleiben (kein geschätzter Ersatz), aber
+    # die Antwort sagt jetzt, dass sie keine Prognose sind.
+    if not pv_profil_vorhanden:
+        pv_hinweise.append(
+            "Für diesen Tag liegt keine PV-Prognose vor — der Wetterabruf ist "
+            "ausgefallen oder der Tag liegt außerhalb des Prognose-Horizonts. Die "
+            "PV-Werte im Verlauf sind deshalb 0 und bedeuten NICHT, dass die "
+            "Anlage nichts erzeugt; auch die Speicher-Vorschau darunter ist damit "
+            "ohne Aussage."
+        )
 
     # ── 3. Batterie-Info laden ──
     inv_result = await db.execute(
@@ -1273,4 +1308,5 @@ async def get_tagesprognose(
         verbrauch_basis=vp["basis"],
         pv_quelle=pv_quelle,
         daten_tage=vp["daten_tage"],
+        hinweise=pv_hinweise,
     )

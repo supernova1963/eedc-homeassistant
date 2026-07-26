@@ -386,6 +386,25 @@ async def get_solar_prognose_endpoint(
         # Aggregierte Tageswerte aus allen Strings erstellen
         string_prognosen = multi_result["string_prognosen"]
         tageswerte = _aggregate_string_tageswerte(string_prognosen)
+
+        # P4 (N77): hat eine Orientierungsgruppe keinen Forecast geliefert
+        # (transienter OpenMeteo-Aussetzer, z. B. HTTP 429 auf einem der
+        # parallelen /forecast-Calls), enthalten `summe_kwh`, `durchschnitt_kwh_tag`
+        # und alle Tagesbalken nur die ÜBERLEBENDEN Gruppen. Der Service markiert
+        # das seit #306 als `vollstaendig: False` und loggt es — die HTTP-Antwort
+        # sagte es nicht, `hinweise` blieb leer. Eine Teilsumme ohne Kennzeichnung
+        # ist eine falsche Aussage: bei 4 Gruppen und einem Aussetzer fehlt grob
+        # ein Viertel, und 3,0 kWp statt 20,8 kWp sieht wie ein schlechter Tag aus.
+        # Der Wert bleibt stehen (kein Ersatz durch Schätzung, keine Kappung), er
+        # wird nur ehrlich beschriftet. Vorhandenes Signal, kein zweites.
+        if not multi_result.get("vollstaendig", True):
+            geliefert, erwartet = len(string_prognosen), len(strings)
+            hinweise.append(
+                f"Der Wetterabruf war unvollständig: nur {geliefert} von {erwartet} "
+                "PV-Teilanlagen haben eine Prognose geliefert. Summe, Ø/Tag und die "
+                "Tagesbalken sind deshalb eine Teilsumme und zu niedrig — bitte "
+                "später erneut laden."
+            )
         eedc_summe, eedc_schnitt, anzeige_quelle = await _mit_eedc_werten(
             db, anlage, tageswerte, tage
         )
