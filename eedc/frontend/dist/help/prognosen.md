@@ -63,6 +63,12 @@ Solcast ist ein spezialisierter PV-Forecast-Dienst und liefert ein Konfidenzband
 
 Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Dienst). Fehlt der Key oder ist HA nicht erreichbar, fällt eedc still auf die eedc-Quelle zurück und zeigt einen Hinweistext.
 
+> **Der Stundenverlauf für morgen ist bei Solcast eine Näherung.** Solcast liefert eedc ein
+> Stundenprofil nur für **heute**. Fragst du den Tagesverlauf für einen anderen Tag ab, zeigt eedc das
+> heutige Profil als Näherung — der Wert bleibt (er ist die beste verfügbare Information), aber die
+> Anzeige sagt es jetzt dazu, und die Tagessumme kann davon abweichen. Bis v4.0.0 stand das nur als
+> Kommentar im Quelltext, während die Anzeige aussah wie ein echtes Profil dieses Tages.
+
 ### 2.4 IST — die Referenz
 
 Der tatsächliche Ertrag kommt aus dem [Energieprofil](HANDBUCH_ENERGIEPROFIL.md): stündlich aus den PV-Stundenwerten, als Tagessumme über alle Komponenten mit Präfix `pv_`/`bkw_`. Fehlt der PV-Zähler, ist IST unvollständig (eedc markiert betroffene Stunden als Lücke) — und damit fällt die Lerngrundlage weg.
@@ -82,6 +88,18 @@ Als operative Prognosequelle stehen zur Wahl:
 > **Echte Stundenauflösung:** Ist SFML als Quelle gewählt, nutzt eedc SFMLs **eigenes Stundenprofil** (bis zu 3 Tage, stündlich — aus dem evcc-Prognose-Sensor `…_evcc_solar_prognose`). Die SFML-Kurve im Tagesverlauf zeigt also SFMLs eigene Form, nicht die über die OpenMeteo-Strahlungskurve „verschmierte" Tagessumme. Fehlt dieser Sensor, fällt eedc auf das Tagesprofil `prognose_heute` (24 h) und notfalls auf die alte GTI-Verteilung zurück. (Das ist reine Treue zur selbstgewählten Quelle, **kein** Genauigkeits-Vergleich.)
 
 - **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil der Vier-Spalten-Matrix.
+
+### 2.6 Die aktive PVGIS-Prognose — eine, und du bestimmst welche
+
+eedc bewahrt **beliebig viele** PVGIS-Abrufe deiner Anlage auf (Historie unter [Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)). Genau **eine** davon ist die *aktive* — sie liefert die SOLL-Werte in Cockpit, Aussicht, String-Vergleich, PDF-Berichten und HA-Sensoren.
+
+- **Aktiv heißt: von dir gewählt.** Ein neuer Abruf wird automatisch aktiv; du kannst aber jederzeit bewusst eine **ältere** aktivieren (z. B. weil sie mit einem genaueren Horizontprofil geholt wurde). „Die neueste gewinnt" gilt bewusst **nicht** — das wäre eine stumme Übersteuerung deiner Wahl.
+- **Es kann nicht mehr als eine aktiv sein.** Das sichert seit v4.0.1 die Datenbank selbst, nicht mehr nur die Programmlogik. Vorher konnte ein Zustand mit **mehreren** aktiven entstehen — und der hatte sichtbare Folgen: der SOLL-PV-Wert im Monatsbericht war verdoppelt (bei drei aktiven verdreifacht), und Daten-Checker sowie Social-Karte zeigten statt ihres Inhalts eine Fehlerseite.
+- **Bestand wird beim nächsten Start einmalig bereinigt:** die zuletzt abgerufene bleibt aktiv, die übrigen werden **deaktiviert, nicht gelöscht** — sie bleiben als Historie und lassen sich jederzeit wieder aktivieren.
+- **Beim Wiederherstellen einer Sicherung** wird genau eine Prognose aktiviert (die zuletzt abgerufene, wenn die Sicherung selbst keine oder mehrere nennt); der Import sagt es in seinen Hinweisen. Die wiederhergestellte Historie behält dabei ihre echten Abrufzeitpunkte.
+- **Ist gar keine Prognose aktiv,** bleibt die SOLL-Seite leer, statt eine beliebige zu zeigen.
+
+Wer nur eine Prognose gespeichert hat oder nie eine Sicherung eingelesen hat, merkt von alldem nichts.
 
 <!-- [T20-Review] Cross-Doc-Konsistenz: HANDBUCH_EINSTELLUNGEN.md §2.1 beschreibt dasselbe Feld
      als „Prognose-Basis (OpenMeteo/Solcast); SFML im Code als künftige Erweiterung vorbereitet".
@@ -104,9 +122,29 @@ In der neuen Oberfläche sind die Prognose-Sichten nach dem Grundsatz **„Vorsc
 Die [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) bündelt alle vorwärtsgerichteten Analysen auf einer Seite; über einen **Horizont-Selektor** wählst du, wie weit du blickst:
 
 - **Kurzfristig (7–14 Tage):** tägliche Erzeugungsschätzung aus OpenMeteo, kalibriert mit dem eedc-Lernfaktor, mit Wettersymbolen und Datenquelle-Kürzel je Tag (MS/D2/EU/EC/BM). Ist **SFML** als Quelle konfiguriert, erscheint eine zweite KI-basierte Ertragslinie.
+  - Balken, Tabelle und die Kacheln „Morgen"/„Summe"/„Ø_Tag" zeigen seit v4.0.1 die **kalibrierte** eedc-Prognose — dieselbe Zahl wie im Prognosen-Vergleich und in den HA-Sensoren. Vorher stand hier die **unkorrigierte** Wetterdienst-Zahl, während die Stundenwerte darunter schon kalibriert rechneten: zwei Zahlen für denselben Tag auf einer Seite. Liegt für deine Anlage noch keine Korrektur vor, bleibt der Wetterdienst-Wert stehen und die Kopfzeile sagt es („Quelle: Open-Meteo (ohne Korrektur)").
+  - Die Spalte **„GTI Modulfläche"** ist das **kWp-gewichtete** Mittel über deine Ausrichtungen — also die Einstrahlung auf *deine* Modulflächen, passend zur Ertragssumme derselben Zeile. Bis v4.0.0 wurde ungewichtet gemittelt; ein 0,8-kWp-Balkonmodul zählte damit so viel wie ein 12-kWp-Süddach.
+  - **Rückbauten und Erweiterungen wirken je Prognosetag:** ein String mit Stilllegungsdatum in der Zukunft zählt nur bis dahin mit, ein später angeschaffter erst ab seinem Datum. Betrifft nur Anlagen mit einem solchen Datum in der Zukunft — dort ändern sich auch die HA-Sensorwerte ab dem betreffenden Tag.
 - **Langfristig:** PVGIS-basierte 12-Monats-Prognose (Erwartungswerte/TMY) mit historischer Performance Ratio (GTI-basiert) und monatlicher Aufschlüsselung.
 - **Degradation:** geschätzter Leistungsrückgang pro Jahr — primär aus vollständigen Jahren (12 Monate), Fallback über TMY-Auffüllung für unvollständige Jahre.
-- **Tagesprognose mit Batteriesimulation:** die stündliche Bilanz aus PV-Prognose und typischem Verbrauchsprofil — inklusive geschätztem „Speicher voll um" / „Speicher leer um", Autarkie und Eigenverbrauch für den Tag. eedc wählt Prognosebasis und Wetterquelle automatisch; die gewählte Basis steht als Beschriftung an der Karte.
+- **Tagesprognose mit Batteriesimulation:** die stündliche Bilanz aus PV-Prognose und typischem Verbrauchsprofil — inklusive geschätztem „Speicher voll um" / „Speicher leer um", Autarkie und Eigenverbrauch für den Tag. eedc wählt Prognosebasis und Wetterquelle automatisch; die gewählte Basis steht als Beschriftung an der Karte. Die Blöcke „Stunden-Prognose" und „Stundenwerte" zeigen standardmäßig **morgen** und tragen Datum und Prognosequelle in der Kopfzeile — auch wenn du nur einen der beiden aufklappst.
+
+> **Wenn eine Prognose unvollständig ist, steht es dran.** Bei mehreren Dachflächen holt eedc die
+> Wetterprognose für **jede** Ausrichtung getrennt. Fällt einer dieser Abrufe aus (der Wetterdienst
+> bremst zeitweise), enthielten Summe, Ø_Tag und die Tagesbalken bis v4.0.0 nur die Flächen, die
+> geantwortet hatten — bei vier Flächen und einem Aussetzer fehlte grob ein Viertel, und nichts sagte
+> es. **Die Zahlen bleiben unverändert** — sie werden weder hochgerechnet noch gekappt —, aber die
+> 14-Tage-Prognose trägt jetzt einen sichtbaren Hinweis, wie viele Teilanlagen geliefert haben und
+> dass der Wert deshalb zu niedrig ist. Ein Neuladen später ist die Prognose meist vollständig.
+> Dasselbe gilt für den Stunden-Tagesverlauf: fällt jede Prognosequelle aus, zeigte er 24 Nullen wie
+> eine echte Prognose „0 kWh" — samt Speicher-Vorschau, die daraus „Speicher lädt nicht" ableitete.
+> Auch das steht jetzt dran.
+>
+> Fällt der reguläre Rechenweg aus (Wetterdienst nicht erreichbar, Zieltag jenseits des
+> Abruf-Horizonts), springt ein Ersatz-Weg ein. Der rechnete bis v4.0.0 die **Gesamtleistung** deiner
+> Anlage mit Neigung und Ausrichtung **einer beliebigen** PV-Zeile — bei einer ausgeglichenen
+> Ost/West-Anlage (5 + 5 kWp) sind das 14,0 statt 17,0 kWh Tagessumme, oder 20,0, je nachdem, welche
+> Zeile die Datenbank zuerst lieferte. Der Ersatz-Weg fächert jetzt wie der reguläre auf.
 
 ### Auswertungen → Prognose — die Vergleichssicht
 
@@ -228,6 +266,7 @@ Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie st
 |---------------|-------|---------|
 | **Koordinaten** (Breite/Länge) | jede OpenMeteo-/eedc-/PVGIS-Prognose | keine Prognose; Daten-Checker meldet es |
 | **PV-Leistung (kWp)** | jede Ertragsumrechnung, Performance Ratio | keine Prognose; Daten-Checker meldet „Anlagenleistung fehlt" |
+| **Anschaffungs-/Stilllegungsdatum je Komponente** | Prognose je Tag (Rückbau/Erweiterung), Amortisationskurve | ohne Anschaffungsdatum zählt die Komponente auch vor der Anschaffung mit — der Daten-Checker meldet es als **Fehler** |
 | **Ausrichtung & Neigung je String** | korrekte GTI-Projektion | Default Süd/35° → systematischer Bias |
 | **Systemverluste** (Solarprognose-Eintrag) | Ertragshöhe | Default 14 %; bei PR > 1,1 Hinweis im Daten-Checker |
 | **Zugeordnete PV-Zähler (IST)** | IST-Spalte, Lernfaktor, Korrekturprofil, Genauigkeit | alles Lern-/Vergleichsbezogene bleibt leer |
@@ -251,6 +290,9 @@ Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + zugeordnete PV-Zähler** si
 | **Solcast-Spalte fehlt** | kein Key (Standalone) / HA-Integration nicht da / Tageslimit erreicht | Status-Hinweis im Tab beachten; Key + Resource-IDs unter [Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose) prüfen. |
 | **IST-Lücken im Tagesverlauf** | PV-Stundenwert fehlt (kein Zähler / HA-Neustart) | betroffenen Tag über die [Reparatur-Werkbank](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege) neu aggregieren. |
 | **Keine Prognose, „keine Koordinaten"** | Standort fehlt in den Stammdaten | Koordinaten unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) eintragen. |
+| **Die 14-Tage-Balken sind seit dem Update kleiner** | sie zeigen jetzt die **kalibrierte** eedc-Prognose statt der rohen Wetterdienst-Zahl | kein Fehler — die Balken stimmen jetzt mit dem Prognosen-Vergleich und den HA-Sensoren überein. Typisch 5–15 % niedriger, je nach gelernter Korrektur. |
+| **Hinweis „nur N von M Teilanlagen geliefert"** | ein Wetterabruf für eine Ausrichtung ist ausgefallen | neu laden; die Prognose ist meist beim nächsten Versuch vollständig. Der angezeigte Wert ist echt, aber zu niedrig. |
+| **Stundenwerte weichen von früher ab (mehrere Ausrichtungen)** | Ersatz-Rechenweg und Roh-Kurve fächern seit v4.0.1 je Ausrichtung auf, statt die Gesamtleistung auf *eine* Dachfläche zu rechnen | kein Fehler — Kurve, Summenzeile und Tageswert sind jetzt deckungsgleich. Anlagen mit einer Ausrichtung sehen keinen Unterschied. |
 
 ### Robustheit
 
