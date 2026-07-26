@@ -444,13 +444,16 @@ function StrukturInhalt({ s }: { s: KompStruktur }) {
       </dl>
     )
   }
+  // Nur PV-Module BRAUCHEN einen Wechselrichter (Backend: PARENT_REQUIRED).
+  // Ein Speicher ohne Zuordnung ist der Normalfall eines AC-gekoppelten Speichers
+  // — die frühere Warnung forderte den falschen Zustand ein und trieb Tester in
+  // eine Zuordnung, die sie danach nicht mehr lösen konnten (JayJay, Forum v4.0.0).
   const hatOrphan = s.orphanModule.length > 0 || s.orphanSpeicher.length > 0
   return (
     <div className="space-y-3">
-      {hatOrphan && (
+      {s.orphanModule.length > 0 && (
         <Alert type="warning">
-          {s.orphanModule.length > 0 && `${s.orphanModule.length} PV-Modul(e) ohne Wechselrichter-Zuordnung. `}
-          {s.orphanSpeicher.length > 0 && `${s.orphanSpeicher.length} Speicher ohne Wechselrichter-Zuordnung.`}
+          {`${s.orphanModule.length} PV-Modul(e) ohne Wechselrichter-Zuordnung.`}
         </Alert>
       )}
       {s.wr.map((w, i) => (
@@ -469,7 +472,8 @@ function StrukturInhalt({ s }: { s: KompStruktur }) {
       {hatOrphan && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
           <TopoListe titel="Module ohne Zuordnung" items={s.orphanModule} />
-          <TopoListe titel="Speicher ohne Zuordnung" items={s.orphanSpeicher} />
+          {/* Neutral formuliert: eigenständig ist für Speicher ein gültiger Zustand. */}
+          <TopoListe titel="Eigenständige Speicher" items={s.orphanSpeicher} />
         </div>
       )}
     </div>

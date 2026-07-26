@@ -198,7 +198,28 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(kosten.subtitle).toContain('enthalten')
     expect(g.struktur?.art).toBe('referenz')
     if (g.struktur?.art !== 'referenz') throw new Error('referenz erwartet')
-    expect(g.struktur.zeilen[0].hinweis).toContain('WR Nord')
+    // Der Wechselrichter-Name ist der WERT der Zeile; als Label steht dort
+    // „Zuordnung", nicht mehr „DC-gekoppelt" — eedc kennt kein Kopplungs-Feld,
+    // und ein AC-Speicher am Hybrid-WR wäre so falsch beschriftet worden
+    // (JayJay, Forum v4.0.0).
+    expect(g.struktur.zeilen[0].label).toBe('Zuordnung')
+    expect(g.struktur.zeilen[0].wert).toBe('WR Nord')
+    expect(g.struktur.zeilen[0].hinweis).not.toContain('DC-gekoppelt')
+  })
+
+  it('Speicher ohne Wechselrichter: „Eigenständig" statt Fehlerzustand', async () => {
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ id: 5, typ: 'speicher', parent_investition_id: undefined }),
+      zusammenfassung: { vollzyklen: 100, effizienz_prozent: 90, gesamt_entladung_kwh: 1000,
+        gesamt_ladung_kwh: 1000, ersparnis_euro: 100, arbitrage_faehig: false },
+      monatsdaten: [],
+    }])
+    list.mockResolvedValue([])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    if (g.struktur?.art !== 'referenz') throw new Error('referenz erwartet')
+    expect(g.struktur.zeilen[0].wert).toBe('Eigenständig')
+    // Für AC-gekoppelte Speicher ist das der Normalfall — der Hinweis sagt das.
+    expect(g.struktur.zeilen[0].hinweis).toContain('AC-gekoppelte')
   })
 
   it('Speicher: keine Arbitrage-Sekundär wenn nicht fähig', async () => {

@@ -348,12 +348,24 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             k('Arbitrage-Gewinn', n0(z.arbitrage_gewinn_euro), '€', 'green', TrendingUp),
           ],
         } : undefined,
-        // ② Verknüpfung (dünn): DC-Kopplung an einen Wechselrichter (parent_investition_id).
+        // ② Verknüpfung (dünn): Zuordnung zu einem Wechselrichter (parent_investition_id).
+        // BEWUSST nicht „DC-/AC-gekoppelt": eedc kennt kein Kopplungs-Feld, die
+        // Zuordnung sagt nur, ob der Speicher in der Wirtschaftlichkeit als Teil
+        // des PV-Systems oder eigenständig geführt wird. Ein AC-Speicher an einem
+        // Hybrid-Wechselrichter wäre sonst falsch beschriftet (JayJay, Forum v4.0.0).
         struktur: {
           art: 'referenz',
           zeilen: [inv.parent_investition_id != null
-            ? { label: 'Kopplung', wert: 'DC-gekoppelt', hinweis: `Wechselrichter: ${invs.find((i) => i.id === inv.parent_investition_id)?.bezeichnung ?? '—'}` }
-            : { label: 'Kopplung', wert: 'Eigenständig', hinweis: 'Keinem Wechselrichter zugeordnet.' }],
+            ? {
+              label: 'Zuordnung',
+              wert: invs.find((i) => i.id === inv.parent_investition_id)?.bezeichnung ?? '—',
+              hinweis: 'Einem Wechselrichter zugeordnet — die Wirtschaftlichkeit wird als Teil des PV-Systems gerechnet.',
+            }
+            : {
+              label: 'Zuordnung',
+              wert: 'Eigenständig',
+              hinweis: 'Keinem Wechselrichter zugeordnet — eigene Wirtschaftlichkeits-Rechnung. Für AC-gekoppelte Speicher der Normalfall.',
+            }],
         } as KompStruktur,
         aufteilung: z.gesamt_ladung_kwh > 0 ? {
           titel: 'Ladung nach Quelle', segmente: [
