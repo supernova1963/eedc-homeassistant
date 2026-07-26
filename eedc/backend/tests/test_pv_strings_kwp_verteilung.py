@@ -123,7 +123,20 @@ async def test_gemessen_hat_vorrang_vor_aggregat(db):
 async def test_teilluecke_ohne_aggregat_behaelt_messwert(db):
     """Ein Modul gemessen, kein Aggregat: die ANLAGEN-Summe bleibt leer (eine
     Teilsumme wäre als Gesamt-PV irreführend) — der gemessene MODULWERT bleibt
-    aber stehen. Kein Datenverlust durch den SoT-Umbau."""
+    aber stehen. Kein Datenverlust durch den SoT-Umbau.
+
+    **Dieser Test hält eine gewollte Asymmetrie fest, keine Symmetrie (N42):**
+    hier ist `Σ pv_strings` (700) ungleich `Σ /monatsdaten/aggregiert` (0), und
+    das ist die richtige Antwort — die Pro-Modul-Sicht zeigt, was gemessen
+    wurde, die Anlagen-Summe verschweigt eine Teilsumme, die wie die
+    Gesamterzeugung aussähe. **Kein Aggregations-Drift**, also nichts, was
+    „geheilt" werden darf.
+
+    Wer die Assertion auf `700` in Zeile darunter ändert oder `_pv_summe_aggregiert`
+    hier auf `700` zieht, dreht die Regel um. Begründung und Präzedenz stehen im
+    Docstring von `core/berechnungen/pv_verteilung.resolve_pv_je_modul`; ein
+    künftiger Σ-Symmetrie-Wächter für diese zwei Endpoints muss den Fall
+    ausnehmen (A14/N42, Sweep-Befund §3.2)."""
     anlage_id = await _anlage_mit_zwei_strings(db, pro_modul={"Süd": 700.0})
 
     jahr = await get_pv_strings(anlage_id=anlage_id, jahr=2026, db=db)

@@ -115,6 +115,29 @@ def resolve_pv_je_modul(
 
     Returns:
         ``{inv_id: PvModulWert}``. Σ der Werte == Gesamterzeugung.
+
+    **Teil-Lücke ohne Aggregat — die Σ-Abweichung dort ist GEWOLLT (N42):**
+
+    Messen nur MANCHE Module und es gibt kein Aggregat, liefert dieser Helper
+    für alle Module ``QUELLE_FEHLT``/``0.0`` — bewusst: als **Anlagen-Summe**
+    wäre eine Teilsumme irreführend, sie sähe wie die Gesamterzeugung aus und
+    wäre systematisch zu klein.
+
+    Eine **Pro-Modul-Sicht** kennt aber keine Anlagen-Summe und darf einen
+    vorhandenen Messwert deshalb nicht wegwerfen. Read-Sites dürfen in genau
+    diesem Fall (und nur in ihm) auf die Rohwerte zurückfallen — so gebaut in
+    ``api/routes/cockpit/pv_strings.py`` (``if quelle == PV_QUELLE_FEHLT``).
+
+    Folge: **Σ pv_strings ≠ Σ /monatsdaten/aggregiert** — die Pro-Modul-Sicht
+    zeigt den Messwert, die Anlagen-Summe zeigt nichts. Das ist **kein
+    Aggregations-Drift** und darf nicht „geheilt" werden: die beiden Sichten
+    antworten auf verschiedene Fragen. Festgehalten in
+    ``test_teilluecke_ohne_aggregat_behaelt_messwert``.
+
+    Wer einen Σ-Symmetrie-Wächter für diese beiden Endpoints baut
+    ([[feedback_aggregator_symmetrie]] verlangt einen), **muss diesen Fall
+    ausnehmen** — sonst schlägt er auf der gewollten Asymmetrie an, und der
+    nächste Durchgang „korrigiert" die Ausnahme zurück (A14/N42).
     """
     if not module:
         return {}
