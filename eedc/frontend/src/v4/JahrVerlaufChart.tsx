@@ -63,7 +63,7 @@ export function baueJahrChartDaten(monate: AggregierteMonatsdaten[]): ChartPunkt
       direktverbrauch: round1(m.direktverbrauch_kwh),
       speicherEntladung: round1(m.speicher_entladung_kwh),
       autarkie: m.autarkie_prozent != null ? round1(m.autarkie_prozent) : null,
-      pvAnlage: round1(m.pv_anlage_kwh),
+      pvAnlage: round1(m.pv_module_kwh),
       bkw: round1(m.bkw_kwh),
       neg51: round1(m.einspeisung_neg_preis_kwh),
       speicherLadung: round1(m.speicher_ladung_kwh),

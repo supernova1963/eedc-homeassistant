@@ -172,9 +172,27 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # zurück (gleiche Quelle wie Cockpit via resolve_netzbezug_preis_cent, #326).
     netzbezug_durchschnittspreis_cent: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - PV
-    pv_erzeugung_kwh: Optional[float]  # Summe PV-Module + BKW
-    # R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == pv_erzeugung_kwh).
-    pv_anlage_kwh: Optional[float]  # nur PV-Module (ohne BKW)
+    #
+    # ⚠️ ZWEI BEDEUTUNGEN, EIN NAME — bewusst so (A17, Namens-Schritt 1):
+    # DIESES Response-Feld = **PV-Module + Balkonkraftwerk(e)**, gerechnet aus den
+    # InvestitionMonatsdaten. Die DB-Spalte `Monatsdaten.pv_erzeugung_kwh` heißt
+    # gleich, ist aber etwas anderes: das **manuell/importiert gepflegte
+    # Gesamt-Aggregat der PV-Module** (Legacy-Feld, Eingang der Read-time-kWp-
+    # Verteilung, siehe `core/berechnungen/pv_verteilung.py`). Beide liegen in
+    # dieser Datei nebeneinander: das Feld entsteht unten aus den IMD, die Spalte
+    # geht als `aggregat_kwh` in `resolve_pv_je_modul`.
+    # **Nicht umbenannt**, weil der Identifier nach außen wirkt: MQTT-Topic-Segment
+    # (`connector_mqtt_bridge.py`: `{prefix}/inv/{pv_inv}/pv_erzeugung_kwh`),
+    # CSV-Spaltenname, JSON-Backup-Feld und `field_definitions`-Key. Eine
+    # Umbenennung wäre ein Bruch nach außen, unabhängig von der Semantik-Frage.
+    pv_erzeugung_kwh: Optional[float]  # Summe PV-Module + BKW (NICHT die DB-Spalte!)
+    # R17/Verlauf-Vergleich: Module vs. BKW getrennt (Σ == pv_erzeugung_kwh).
+    # Hieß bis A17 `pv_anlage_kwh` — irreführend, weil „PV-Anlage" im Produkt
+    # überall die GANZE Anlage ist (der Komponenten-Hub „PV-Anlage" enthält
+    # Wechselrichter, Module, Speicher UND Balkonkraftwerk), das Feld aber das
+    # Gegenteil meint: Module OHNE BKW. Genau diese Verwechslung kostete `4ec3db60`
+    # (zwei Stapel, die nicht zusammenpassten).
+    pv_module_kwh: Optional[float]  # nur PV-Module (ohne BKW)
     bkw_kwh: Optional[float]  # nur Balkonkraftwerk(e)
     # Sonstige Erzeuger (typ=`sonstiges` + Kategorie `erzeuger`, z. B. BHKW) —
     # NICHT in `pv_erzeugung_kwh` enthalten (die bleibt rein PV), aber Teil der
@@ -182,6 +200,18 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # direktverbrauch/eigenverbrauch unten gerechnet werden. Ohne dieses Feld
     # kann eine UI die Verwendungsseite nicht in ihre Erzeuger zerlegen (A15/N43).
     sonstige_erzeugung_kwh: Optional[float]
+    # Die Netzpunkt-Größe: ALLES, was hinter dem einen Hauszähler erzeugt wird
+    # (`pv_module_kwh + bkw_kwh + sonstige_erzeugung_kwh`). Name aus dem Layer-SoT
+    # `core/berechnungen/energie.py::erzeugung_hinter_zaehler_kwh` — bewusst nicht
+    # „gesamt_erzeugung_kwh": „gesamt" beantwortet nicht, WOVON gesamt, und genau
+    # der Netzpunkt-Bezug ist der Grund, dass es die Größe gibt (ein Erzeuger vor
+    # dem Zähler oder an einem zweiten Netzpunkt gehörte nicht hinein).
+    # Bisher musste jeder Konsument selbst summieren — zwei taten es schon
+    # (`v4/komponentenAdapter.tsx`, `test_sonstiges_erzeuger_bilanz.py`).
+    # ⚠️ Diese Größe darf NIE in eine PV-Kennzahl einfließen: spezifischer Ertrag
+    # und Performance Ratio bleiben rein PV (v3.45.4) — der Brennstoff-Erzeuger
+    # hätte im PV-Nenner nichts zu suchen und wäre ein stiller Rechenfehler.
+    erzeugung_hinter_zaehler_kwh: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - Speicher
     speicher_ladung_kwh: Optional[float]  # Summe alle Speicher
     speicher_entladung_kwh: Optional[float]  # Summe alle Speicher
@@ -485,9 +515,17 @@ async def list_monatsdaten_aggregiert(
             # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
             # Sommer 0 kWh Heizung).
             pv_erzeugung_kwh=round(pv_erzeugung, 1) if hat_pv_imd else None,
-            pv_anlage_kwh=round(pv_erzeugung - bkw_erzeugung, 1) if hat_pv_imd else None,
+            pv_module_kwh=round(pv_erzeugung - bkw_erzeugung, 1) if hat_pv_imd else None,
             bkw_kwh=round(bkw_erzeugung, 1) if hat_pv_imd else None,
             sonstige_erzeugung_kwh=round(sonstiges_erzeugung, 1) if hat_sonstiges_erz_imd else None,
+            # Dieselbe Zahl, mit der direktverbrauch/eigenverbrauch oben gerechnet
+            # wurden (`erzeugung_bilanz`) — nicht neu summiert, sonst driftet die
+            # ausgelieferte Größe von der intern verwendeten ab. `None`, wenn
+            # WEDER PV noch ein sonstiger Erzeuger beigetragen hat.
+            erzeugung_hinter_zaehler_kwh=(
+                round(erzeugung_bilanz, 1)
+                if (hat_pv_imd or hat_sonstiges_erz_imd) else None
+            ),
             speicher_ladung_kwh=round(speicher_ladung, 1) if hat_speicher_imd else None,
             speicher_entladung_kwh=round(speicher_entladung, 1) if hat_speicher_imd else None,
             speicher_netzladung_kwh=round(speicher_netzladung, 1) if hat_speicher_imd else None,

@@ -20,7 +20,14 @@ class Monatsdaten(Base):
         jahr/monat: Zeitraum
         einspeisung_kwh: Ins Netz eingespeiste Energie
         netzbezug_kwh: Aus dem Netz bezogene Energie
-        pv_erzeugung_kwh: Gesamte PV-Erzeugung (kann berechnet werden)
+        pv_erzeugung_kwh: MANUELLES/importiertes Gesamt-Aggregat der PV-MODULE
+            (Legacy-Feld). ⚠️ Nicht zu verwechseln mit dem gleichnamigen
+            Response-Feld von `/monatsdaten/aggregiert`, das **Module + BKW**
+            aus den InvestitionMonatsdaten meint — siehe dort. Diese Spalte ist
+            der Eingang der Read-time-kWp-Verteilung
+            (`core/berechnungen/pv_verteilung.py::resolve_pv_je_modul`,
+            Parameter `aggregat_kwh`) und wird NICHT automatisch gefüllt
+            ([[feedback_legacy_felder]]).
         batterie_*: Speicher-Daten falls vorhanden
         globalstrahlung_kwh_m2: Wetterdaten (optional)
     """
@@ -40,6 +47,13 @@ class Monatsdaten(Base):
     # Kern-Messwerte (kWh)
     einspeisung_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     netzbezug_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    # ⚠️ ZWEI BEDEUTUNGEN, EIN NAME (A17, Namens-Schritt 1): diese SPALTE ist das
+    # manuell/importiert gepflegte Gesamt-Aggregat der PV-MODULE; das
+    # gleichnamige RESPONSE-Feld von `/monatsdaten/aggregiert`
+    # (`api/routes/monatsdaten.py`) ist **Module + Balkonkraftwerk** aus den
+    # InvestitionMonatsdaten. Bewusst nicht umbenannt: der Identifier ist
+    # MQTT-Topic-Segment, CSV-Spaltenname, JSON-Backup-Feld und
+    # `field_definitions`-Key — jede Umbenennung wäre nach außen breaking.
     pv_erzeugung_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Berechnete Werte (werden bei Speichern berechnet)

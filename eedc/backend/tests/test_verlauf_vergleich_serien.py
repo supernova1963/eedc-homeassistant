@@ -1,7 +1,7 @@
 """B1 (R17/Verlauf-Vergleich): neue Serien im `/aggregiert`-Endpoint + Layer-Split.
 
 - PV-Anlage/BKW-Split partitioniert `summe_pv_bkw_kwh` (Σ-Invariante).
-- Endpoint: pv_anlage_kwh + bkw_kwh == pv_erzeugung_kwh.
+- Endpoint: pv_module_kwh + bkw_kwh == pv_erzeugung_kwh.
 - §51-Abzug-Volumen je Monat = Σ der Tages-`einspeisung_neg_preis_kwh` (Weg 1),
   gegatet über `Anlage.unterliegt_eeg_51`.
 [[feedback_aggregator_symmetrie]], ADR-001.
@@ -67,7 +67,7 @@ async def test_pv_anlage_bkw_split_summiert_auf_pv_erzeugung(db):
     mai = next(r for r in rows if r.monat == 5)
     assert mai.bkw_kwh == pytest.approx(120.0)
     # Partition: pv_anlage + bkw == pv_erzeugung (Gesamt)
-    assert mai.pv_anlage_kwh + mai.bkw_kwh == pytest.approx(mai.pv_erzeugung_kwh)
+    assert mai.pv_module_kwh + mai.bkw_kwh == pytest.approx(mai.pv_erzeugung_kwh)
 
 
 # ── Endpoint: §51-Abzug-Volumen je Monat (Weg 1) ─────────────────────────────

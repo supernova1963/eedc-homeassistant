@@ -265,7 +265,7 @@ function pvVerlauf(
     // Bezugsgröße der Modul-Zerlegung ist die PV-Anlage OHNE BKW — sonst
     // verteilt der Fallback die BKW-Erzeugung auf die Dachflächen mit und
     // doppelt sie gegen das eigene BKW-Segment.
-    y.erz += r.pv_anlage_kwh ?? r.pv_erzeugung_kwh ?? 0
+    y.erz += r.pv_module_kwh ?? r.pv_erzeugung_kwh ?? 0
     // Direktverbrauch kanonisch aus der Response statt lokal aus
     // EV − Speicher-Entladung: der Eigenverbrauch enthält zusätzlich V2H
     // (E-Auto → Haus), das keine Verwendung der Erzeugung dieses Monats ist und

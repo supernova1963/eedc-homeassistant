@@ -70,15 +70,26 @@ export interface AggregierteMonatsdaten {
   // nicht). 0 = "Komponente aktiv, IMD vorhanden, Wert echt 0" (z.B.
   // WP-Heizung im Sommer). UI muss die Unterscheidung respektieren —
   // null als "—" rendern, nicht als "0 kWh" (#236).
+  // ⚠️ Zwei Bedeutungen, ein Name: DIESES Feld ist Module + BKW. Die
+  // DB-Spalte `Monatsdaten.pv_erzeugung_kwh` heißt gleich, meint aber das
+  // manuell gepflegte Gesamt-Aggregat der Module (Legacy). Nicht umbenannt,
+  // weil der Identifier MQTT-Topic, CSV-Spalte und Backup-Feld ist.
   pv_erzeugung_kwh: number | null
-  // R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == pv_erzeugung_kwh) +
+  // R17/Verlauf-Vergleich: Module vs. BKW getrennt (Σ == pv_erzeugung_kwh) +
   // Netzladung-Anteil + §51-Abzug-Volumen (nur wenn Anlage §51 unterliegt).
-  pv_anlage_kwh: number | null
+  // Hieß bis A17 `pv_anlage_kwh` — „PV-Anlage" ist im Produkt überall die
+  // GANZE Anlage (inkl. BKW), das Feld meint aber Module OHNE BKW.
+  pv_module_kwh: number | null
   bkw_kwh: number | null
   // Sonstige Erzeuger (typ `sonstiges` + Kategorie `erzeuger`, z. B. BHKW).
   // NICHT in pv_erzeugung_kwh (die bleibt rein PV), aber Teil der
   // Netzpunkt-Bilanz, aus der direktverbrauch/eigenverbrauch gerechnet sind.
   sonstige_erzeugung_kwh: number | null
+  // Netzpunkt-Größe: alles hinter dem Hauszähler Erzeugte
+  // (`pv_module_kwh + bkw_kwh + sonstige_erzeugung_kwh`) — genau die Zahl, mit
+  // der das Backend direktverbrauch/eigenverbrauch gerechnet hat. NIE als
+  // Zähler einer PV-Kennzahl verwenden (spez. Ertrag/PR bleiben rein PV).
+  erzeugung_hinter_zaehler_kwh: number | null
   speicher_ladung_kwh: number | null
   speicher_entladung_kwh: number | null
   speicher_netzladung_kwh: number | null

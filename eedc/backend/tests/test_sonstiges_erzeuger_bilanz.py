@@ -104,17 +104,58 @@ async def test_aggregiert_weist_sonstige_erzeugung_aus(db):
     assert mai.sonstige_erzeugung_kwh == pytest.approx(400.0)
     assert mai.pv_erzeugung_kwh == pytest.approx(1000.0)  # bleibt rein PV
     # Σ aller ausgewiesenen Erzeuger == Bezugsgröße der Verwendungsseite.
-    erzeuger = (mai.pv_anlage_kwh or 0) + (mai.bkw_kwh or 0) + (mai.sonstige_erzeugung_kwh or 0)
+    erzeuger = (mai.pv_module_kwh or 0) + (mai.bkw_kwh or 0) + (mai.sonstige_erzeugung_kwh or 0)
     verwendung = mai.direktverbrauch_kwh + (mai.speicher_ladung_kwh or 0) + mai.einspeisung_kwh
     assert erzeuger == pytest.approx(1400.0)
     assert erzeuger == pytest.approx(verwendung)
+    # A17 Namens-Schritt 1: dieselbe Größe steht jetzt als eigenes Feld in der
+    # Response — bis dahin musste jeder Konsument sie von Hand summieren (genau
+    # diese Zeile, und `v4/komponentenAdapter.tsx`). Die Handrechnung bleibt als
+    # Gegenprobe stehen: das Feld muss ihr entsprechen, sonst hat es keinen Wert.
+    assert mai.erzeugung_hinter_zaehler_kwh == pytest.approx(erzeuger, abs=0.15), (
+        "Das neue Feld weicht von der Summe seiner Einzelfelder ab — dann ist es "
+        "eine zweite Wahrheit statt einer geteilten."
+    )
+    assert mai.erzeugung_hinter_zaehler_kwh == pytest.approx(1400.0, abs=0.15)
 
 
 async def test_ohne_sonstiges_erzeuger_bleibt_das_feld_none(db):
     """None = „keine solche Komponente", nicht 0 (CLAUDE.md 0-Werte-Regel)."""
     anlage_id = await _seed(db, mit_sonstiges=False)
     rows = await list_monatsdaten_aggregiert(anlage_id=anlage_id, jahr=2026, db=db)
-    assert next(r for r in rows if r.monat == 5).sonstige_erzeugung_kwh is None
+    mai = next(r for r in rows if r.monat == 5)
+    assert mai.sonstige_erzeugung_kwh is None
+    # Ohne BHKW ist die Netzpunkt-Erzeugung genau die PV-Erzeugung — das Feld
+    # erfindet keinen Aufschlag, es fasst nur zusammen.
+    assert mai.erzeugung_hinter_zaehler_kwh == pytest.approx(mai.pv_erzeugung_kwh)
+
+
+async def test_erzeugung_hinter_zaehler_fliesst_in_keine_pv_kennzahl(db):
+    """Harte Randbedingung (v3.45.4): spez. Ertrag und PR bleiben rein PV.
+
+    Das neue Response-Feld darf die PV-Kennzahlen nicht bewegen. Geprüft am
+    Cockpit-Wert, der über den annualisierten SoT läuft: sein Zähler ist die
+    PV-Erzeugung (1000 kWh), nicht die Netzpunkt-Erzeugung (1400 kWh) — ein
+    Brennstoff-Erzeuger im PV-Nenner wäre ein stiller Rechenfehler.
+    """
+    mit_id = await _seed(db, mit_sonstiges=True)
+    ohne_id = await _seed(db, mit_sonstiges=False)
+
+    rows = await list_monatsdaten_aggregiert(anlage_id=mit_id, jahr=2026, db=db)
+    mai = next(r for r in rows if r.monat == 5)
+    assert mai.erzeugung_hinter_zaehler_kwh == pytest.approx(1400.0, abs=0.15)
+
+    mit = await get_cockpit_uebersicht(anlage_id=mit_id, jahr=2026, db=db)
+    ohne = await get_cockpit_uebersicht(anlage_id=ohne_id, jahr=2026, db=db)
+
+    # Zwei identische PV-Anlagen, eine zusätzlich mit BHKW: der spezifische
+    # Ertrag muss GLEICH sein. Wäre die Netzpunkt-Erzeugung sein Zähler, wäre er
+    # bei der BHKW-Anlage um den Faktor 1400/1000 größer. Kein nachgerechneter
+    # Erwartungswert, damit der Test nicht die Annualisierungs-Formel doppelt.
+    assert mit.pv_erzeugung_kwh == pytest.approx(ohne.pv_erzeugung_kwh)
+    assert mit.spezifischer_ertrag_kwh_kwp == pytest.approx(
+        ohne.spezifischer_ertrag_kwh_kwp
+    ), "Der sonstige Erzeuger ist in eine PV-Kennzahl geraten (v3.45.4-Verstoß)."
 
 
 async def test_pv_kennzahlen_bleiben_rein(db):

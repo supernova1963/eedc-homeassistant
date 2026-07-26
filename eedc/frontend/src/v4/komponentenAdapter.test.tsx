@@ -253,7 +253,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
       inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4 }),
     ])
     listAggregiert.mockResolvedValue([{
-      jahr: 2025, pv_erzeugung_kwh: 1200, pv_anlage_kwh: 1000, bkw_kwh: 200,
+      jahr: 2025, pv_erzeugung_kwh: 1200, pv_module_kwh: 1000, bkw_kwh: 200,
       sonstige_erzeugung_kwh: 300, direktverbrauch_kwh: 600, eigenverbrauch_kwh: 900,
       speicher_ladung_kwh: 300, speicher_entladung_kwh: 250, einspeisung_kwh: 600,
     }])
@@ -287,7 +287,7 @@ describe('KOMPONENTEN_ADAPTER', () => {
     mitBkwUndBhkw()
     getPVStringsGesamtlaufzeit.mockResolvedValue(null)   // Endpoint-Ausfall
     const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
-    // 1000 (pv_anlage_kwh) nach 6/4 kWp — NICHT 1200 (inkl. BKW → 720/480),
+    // 1000 (pv_module_kwh) nach 6/4 kWp — NICHT 1200 (inkl. BKW → 720/480),
     // sonst zählte das BKW doppelt (eigenes Segment + Mitverteilung).
     expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400, bkw: 200 })
     const erzeugung = g.verlauf!.verteilungen!.find((v) => v.titel === 'Erzeugung nach Quelle')!
