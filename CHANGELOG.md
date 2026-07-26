@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased] — Tester-Rückmeldungen zu v4.0.0 (Rainer)
+## [4.0.1] - 2026-07-26 — Prognose-Werte vereinheitlicht · PV-Modulwerte gemessen · Tester-Korrekturen
 
 ### Fixed
 
