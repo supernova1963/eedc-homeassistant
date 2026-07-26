@@ -1,11 +1,163 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.0)
+> **Stand:** Juli 2026 (v4.0.1)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.1 — Dieselbe Zahl an jeder Stelle (Juli 2026)
+
+> Die erste Rückmelde-Runde nach der neuen Oberfläche. Fast alles hier geht auf einen Satz zurück:
+> **eine Größe darf nicht an zwei Stellen zwei verschiedene Zahlen haben.** Prognosen, Modulwerte und
+> die Bilanz im PDF sind deshalb an mehreren Stellen zusammengeführt worden — **und deine Zahlen
+> ändern sich dadurch sichtbar.** Der nächste Abschnitt erklärt, wo und warum. Besonderer Dank an
+> Rainer (rapahl) für die genauen Meldungen.
+
+### Deine Zahlen können sich ändern — das sind Korrekturen, keine Fehler
+
+- **Die Prognose-Balken und -Kacheln sind kleiner geworden.** In Cockpit → Aussicht zeigen der
+  14-Tage-Balken, die Tabelle darunter und die Kacheln „Morgen", „Summe" und „Ø_Tag" jetzt die
+  **kalibrierte eedc-Prognose** — dieselbe Zahl, die schon immer im Prognosen-Vergleich und in den
+  Home-Assistant-Sensoren stand. Vorher stand dort die **rohe Wetterdienst-Zahl**, während die
+  Stundenwerte auf derselben Seite bereits kalibriert rechneten: zwei Zahlen für denselben Tag,
+  nebeneinander. Typisch sinken die Werte um **5–15 %**, je nachdem, was eedc über deine Anlage
+  gelernt hat. **Die Prognose ist nicht schlechter geworden — sie sagt jetzt überall dasselbe.**
+  Liegt für deine Anlage noch keine Korrektur vor, bleibt der Wetterdienst-Wert stehen und die
+  Kopfzeile sagt es. Die HA-Sensoren ändern sich **nicht** — sie rechneten schon vorher so.
+- **Die Werte je PV-Modul sind gemessen statt gerechnet.** Wer seine Dachflächen einzeln erfasst,
+  sieht im Komponenten-Hub → PV endlich die **eigenen Messwerte** je Modul; bisher zerlegte der Block
+  „Verlauf" die Gesamterzeugung stur nach Nennleistung, sodass ein verschatteter oder abgeschalteter
+  String unsichtbar blieb und alle Module rechnerisch gleich gut dastanden. **Die Modul-Balken
+  verschieben sich dadurch** (an der Demo-Anlage gewinnt das bisher zu schwach gerechnete Westdach
+  9 %). Wer **nur einen Gesamt-Sensor** hat, sieht dort erstmals Werte, wo vorher 0 stand — die
+  Gesamterzeugung anteilig verteilt und sichtbar als **„geschätzt (kWp-Anteil)"** gekennzeichnet. Die
+  0 war die unehrlichere Anzeige. Solange die Werte verteilt sind, nennt eedc bewusst **keinen besten
+  oder schwächsten String** mehr — eine Platzierung wäre dort nur die Reihenfolge der
+  Nennleistungen. Wer sie zurück will, gibt jedem Modul einen eigenen Erzeugungs-Sensor
+  (Einstellungen → Datenquellen).
+- **Eigenverbrauch und Autarkie im PDF-Jahresbericht steigen — bei Anlagen mit einem weiteren
+  Erzeuger.** Hast du neben der PV z. B. ein Mini-BHKW (erfasst als „Sonstiges" mit Kategorie
+  *Erzeuger*), rechnete der Bericht Eigenverbrauch, Autarkie und EV-Quote allein aus der
+  PV-Erzeugung, während der Einspeise-Zähler daneben die Summe **aller** Erzeuger misst. Cockpit,
+  HA-Sensoren und Live-Ansicht rechnen das seit v3.45.4 richtig; der Bericht war nicht mit
+  umgestellt. Beispiel-Anlage: Eigenverbrauch 700 → 1.100 kWh, Autarkie 77,8 → 84,6 %. Die
+  PV-eigenen Kennzahlen (spezifischer Ertrag, SOLL/IST, String-Vergleich) bleiben unverändert rein
+  PV — ein Brennstoff-Erzeuger gehört nicht in eine PV-Kennzahl. Ohne sonstigen Erzeuger ändert sich
+  nichts.
+- **Eine frühere Version hat bei manchen Anlagen den monatlichen PV-Gesamtwert entfernt.** Betroffen:
+  wer die PV-Erzeugung als **einen Gesamtwert** pro Monat pflegt **und** zusätzlich ein
+  Balkonkraftwerk mit eigenem Sensor hat. Beim Start von eedc verschwand der Gesamtwert für jeden
+  Monat, in dem Balkonkraftwerk-Daten vorlagen; die Dachflächen stehen in diesen Monaten seither ohne
+  Erzeugung da. **Das war ein Fehler, keine gewollte Bereinigung** — und **eedc kann diese Werte
+  nicht zurückholen**, es gibt keinen alten Stand. Ab jetzt wird der Gesamtwert nur noch entfernt,
+  wenn er exakt der Summe der einzeln erfassten Komponenten entspricht und wirklich nichts mehr
+  trägt, was nicht woanders steht; im Zweifel bleibt er stehen. **Was du tun kannst:** Der
+  Daten-Checker listet die betroffenen Monate („PV-Erzeugung fehlt in N Monat(en)"). Wo ein PV-Sensor
+  zugeordnet ist, lassen sie sich über **Einstellungen → Datenverwaltung → Import aus HA-Statistik**
+  oder den **Monatsabschluss** des jeweiligen Monats neu befüllen — beide schreiben die Werte je
+  Modul. **Von Hand erfasste Werte sind verloren** und müssen von Hand nachgetragen werden.
+- **Import-Wizard: die Aufteilung auf mehrere Module war immer 50/50.** Der Schritt „Zuordnung" soll
+  die importierten Monatswerte **proportional zur Nennleistung** vorschlagen — er tat es nie, weil er
+  die kWp unter einem Namen suchte, den eedc gar nicht kennt. Bei 12 kWp Süddach + 3 kWp Garage also
+  50/50 statt 80/20. **Wer bereits importiert und den Vorschlag übernommen hat, sollte die Aufteilung
+  prüfen** (Komponenten → PV-Modul → Monatswerte); ein erneuter Import mit korrigierten Anteilen
+  überschreibt die Werte. Gleiches gilt für Speicher mit der Kapazität.
+- **Kleinere Zahlen-Korrekturen:** Bei Anlagen mit **mehreren Ausrichtungen** rechnen jetzt auch die
+  letzten Prognose-Anzeigen jede Dachfläche getrennt (Stundenwerte, Roh-Kurve im Prognosen-Vergleich,
+  Ersatz-Rechenweg bei Ausfall) — die Stundenwerte und Tagessummen dieser Anzeigen verschieben sich
+  spürbar. Die Spalte **„GTI Modulfläche"** ist jetzt nach Nennleistung gewichtet. Ist der
+  **§51-Schalter** aktiv, zieht auch der Kennwert „Einspeiseerlös" in Auswertungen → Finanzen die
+  Negativpreis-Stunden ab (bisher nur das T-Konto darunter). Und wer eine **ältere PVGIS-Prognose**
+  bewusst aktiviert hat, sieht sie jetzt auch im PV-String-Vergleich und im PDF-Jahresbericht.
+
+### Damit Prognosen nicht mehr schweigen, wenn etwas fehlt
+
+- **Unvollständige Wetter-Abrufe werden ausgewiesen.** Bei mehreren Dachflächen holt eedc die
+  Prognose für jede Ausrichtung getrennt. Fiel einer dieser Abrufe aus, enthielten Summe, Ø_Tag und
+  alle Tagesbalken nur die Flächen, die geantwortet hatten — bei vier Flächen und einem Aussetzer
+  fehlte grob ein Viertel, und **nichts sagte es**. Die Zahlen werden weiterhin weder hochgerechnet
+  noch gekappt, aber die Anzeige trägt jetzt einen Hinweis, wie viele Teilanlagen geliefert haben.
+  Ein Neuladen später ist die Prognose meist vollständig.
+- **24 Nullen sind keine Prognose.** Fällt jede Prognosequelle aus, zeigte der Stunden-Tagesverlauf
+  24 Nullen wie eine echte Prognose „0 kWh" — samt Speicher-Vorschau, die daraus „Speicher lädt
+  nicht" ableitete. Auch das steht jetzt dran.
+- **Solcast-Nutzer erfahren, dass der Stundenverlauf für morgen eine Näherung ist:** Solcast liefert
+  eedc ein Stundenprofil nur für **heute**; für einen anderen Tag zeigt eedc das heutige Profil, und
+  die Tagessumme kann davon abweichen.
+- **Mehrere aktive PVGIS-Prognosen brechen nichts mehr.** Wer eine Sicherung wiederhergestellt hat,
+  deren Datei den Aktiv-Zustand nicht mitbrachte, hatte danach **alle** Prognosen aktiv — mit drei
+  Folgen: der SOLL-PV-Wert im Monatsbericht war verdoppelt, und **Daten-Checker sowie Social-Karte
+  zeigten eine Fehlerseite** statt ihres Inhalts. Ab jetzt ist immer genau eine aktiv; Bestände
+  werden beim nächsten Start einmalig bereinigt (die übrigen werden **deaktiviert, nicht gelöscht**),
+  und beim Wiederherstellen sagt der Import, was er normalisiert hat.
+- **Beide Prognose-Blöcke nennen ihren Tag.** „Stunden-Prognose" und „Stundenwerte" zeigen
+  standardmäßig morgen; der Datumswähler saß aber nur im einen Block. Jetzt trägt jede Kopfzeile
+  Datum und Prognosequelle.
+- **Geplante Rückbauten und Erweiterungen wirken in der Prognose.** Ein PV-String mit
+  Stilllegungsdatum in der Zukunft zählte über den ganzen 14-Tage-Horizont mit, ein erst später
+  angeschaffter noch gar nicht.
+
+### Was sich sonst noch ändert
+
+- **Neu: Amortisation mit Kalenderjahr** (Forum-Wunsch Radiocarbonat). Unter Auswertungen → ROI steht
+  neben der Dauer jetzt auch das voraussichtliche **Break-Even-Jahr** — in der Kachel, unter der Kurve
+  und als Beschriftung der Zeitachse. Anker ist dein frühestes Anschaffungsjahr.
+- **Neu: Sensor-Auswahl auf passende Einheiten verengen** (Forum-Wunsch fridolin22). Eine Checkbox
+  „Nur passende Einheit" im Sensor-Picker blendet abweichende Sensoren aus und nennt deren Anzahl —
+  **standardmäßig aus**, damit du bei fehlendem passenden Sensor die vorhandenen siehst und daraus in
+  Home Assistant einen Helfer bauen kannst.
+- **Das Anschaffungsdatum ist Pflicht.** Es ist die Grenze jeder Auswertung — ohne Datum zählt eine
+  Komponente auch für Zeiträume vor ihrer Anschaffung mit — und der Nullpunkt der
+  Amortisationskurve. Neue Komponenten brauchen es; für vorhandene meldet es der Daten-Checker jetzt
+  als **Fehler** und springt per Klick direkt in das Formular.
+- **Ein Klick auf die aktive Datenquelle löscht sie nicht mehr.** Bisher bedeutete derselbe Knopf
+  zweierlei — bei inaktiver Quelle „auswählen", bei aktiver „Zuordnung verwerfen", ohne Rückfrage.
+  Jetzt öffnet der Klick immer die Zuordnung; entfernt wird ausschließlich über „Keine". Die Zeile
+  zeigt außerdem wieder den **Klarnamen** des Sensors neben der Entity-ID.
+- **Optionale Felder lassen sich wieder leeren.** Eine einmal gesetzte Wechselrichter-Zuordnung, ein
+  Anschaffungs- oder Stilllegungsdatum, alternative Kosten — das Formular meldete Erfolg, der alte
+  Wert blieb aber stehen.
+- **AC-gekoppelte Speicher sind kein Fehlerzustand mehr.** Der Hinweis „Speicher ohne
+  Wechselrichter-Zuordnung" erschien auch dort, wo gar keine Zuordnung nötig ist — und verleitete
+  dazu, eine falsche anzulegen. Speicher ohne Zuordnung heißen jetzt neutral „Eigenständige
+  Speicher"; gewarnt wird nur noch bei PV-Modulen. Auch die Beschriftung „DC-gekoppelt" ist weg — sie
+  war **geraten** (eedc kennt kein Kopplungs-Feld); die Zeile heißt jetzt „Zuordnung" und nennt den
+  Wechselrichter beim Namen.
+- **§51-Verlust wird wieder ausgewiesen.** Das Anlage-Formular verspricht am §51-Schalter, den
+  entgangenen Erlös im Cockpit zu zeigen — seit der neuen Oberfläche tat es das nirgends. Jetzt gibt
+  es eine Kachel „§51-Verlust" (€) unter Cockpit → Monat und einen Hinweis an der Einspeise-Zeile des
+  T-Kontos.
+- **Kennzahlen zeigen 0-Werte wieder an** — die Kachel „Batterieladung Netz" verschwand bei 0 kWh
+  ganz, sodass man in Home Assistant nachsehen musste, ob wirklich nichts geladen wurde.
+- **PDF-Jahresbericht: die Spalte „PVGIS-Prognose" war immer leer** und die SOLL-Linie im PV-Diagramm
+  fehlte deshalb ganz — der Bericht suchte den Monatswert unter einem Namen, den die gespeicherte
+  Prognose gar nicht kennt. Die Zahlen sind nicht neu berechnet, sie waren nur nie angekommen. Im
+  String-Vergleich desselben PDFs nutzt der Bericht jetzt außerdem die für **jede Dachfläche
+  gespeicherte** Prognose statt einer kWp-Verteilung; bei Ost-West-Dächern lagen die SOLL-Werte je
+  String dadurch um ~20–25 % daneben.
+- **Der spezifische Ertrag im PDF heißt jetzt „Spez. Ertrag (Zeitraum)".** Unter demselben Namen
+  standen zwei verschiedene Größen: Cockpit und HA-Sensor rechnen den Wert aufs Jahr hoch, das PDF
+  teilt schlicht die Erzeugung des Berichtszeitraums durch die Nennleistung — über die
+  Gesamtlaufzeit summiert sich das auf. **Die Rechnung ist unverändert, nur die Beschriftung sagt
+  jetzt, welche der beiden Größen dasteht.**
+- **PV-Rest heute sinkt gleichmäßig** (#339): Der Sensor `eedc_prognose_rest_today_kwh` zählte die
+  laufende Stunde immer voll mit und fiel deshalb nur einmal je Stunde in einem Sprung. Die laufende
+  Stunde geht jetzt anteilig nach den verbleibenden Minuten ein.
+- **Ab vier Modulfeldern waren zwei Balken gleich eingefärbt** — die vierte Modul-Farbe war exakt die
+  Farbe des Balkonkraftwerks. Betroffen war die Kombination „mehrere Dachsegmente + Balkonkraftwerk".
+  Es ändert sich nur die Farbe, keine Zahl.
+- **Warum weicht mein Gesamtverbrauch vom Herstellerportal ab?** Diese häufige Frage ist jetzt
+  beantwortet — mit Rechenrezept zum Nachprüfen: Misst dein Hybrid-Wechselrichter PV und Speicher
+  DC-seitig, das Netz aber AC-seitig, stecken die Wandlungsverluste im bilanzierten Gesamtverbrauch
+  (typisch 3–5 % der Erzeugung). Beide Werte sind richtig, sie beantworten verschiedene Fragen —
+  siehe [Berechnungen §3.1](BERECHNUNGEN.md#31-energie-bilanz-monatskennzahlen).
+- **Netzbezugspreis bei dynamischem Tarif erklärt:** Das Feld bleibt Pflicht — es ist der
+  Referenzwert für Monate ohne Preis-Mitschrift und für ROI-Rechnungen. Vorrang hat weiterhin der
+  stündlich mitgeschriebene Preis.
 
 ---
 
@@ -71,6 +223,7 @@ Der Setup-Wizard beim ersten Start führt in neuer Optik durch Anlage, Tarif, PV
 - **Dienstwagen zählen nicht in die E-Mobilitäts-Bilanz** (konsistent mit dem Cockpit): Ein als dienstlich markiertes Fahrzeug fließt nicht mehr in Ersparnis-/CO₂-Summen ein.
 - **Vorjahres-Vergleich sauberer:** Der Vergleich mit dem Vorjahr berücksichtigt jetzt bei Wärmepumpe, E-Mobilität **und** Energie das Anschaffungs- und Stilllegungsdatum — Geräte, die es im Vorjahr noch nicht (oder nicht mehr) gab, verfälschen den Vergleich nicht länger.
 - **Finanz-Block im Cockpit als Komponenten-Tabelle:** Der Finanz-Überblick in Cockpit → Monat/Jahr zeigt jetzt eine Zeile je Komponente (Erträge · Einsparungen · Aufwendungen · Saldo) mit Summenzeile, plus eine Zeile „Ergebnis nach Stromrechnung". Das ersetzt den bisherigen verkürzten Teaser, der optisch eine andere Summe suggerieren konnte.
+- **Ältere Jahre werden mit ihrem damaligen Strompreis bewertet** (nachgetragen): Der PDF-Anlagenbericht und die HA-Sensoren rechneten die Eigenverbrauchs-Ersparnis vergangener Jahre mit dem **heutigen** Tarif statt mit dem damals gültigen — bei vier Tarif-Jahren im gemeldeten Fall rund 174 € Abweichung. Cockpit, Auswertungen, Bericht und HA-Export zeigen jetzt denselben Netto-Ertrag.
 
 ### Weitere Verbesserungen
 
