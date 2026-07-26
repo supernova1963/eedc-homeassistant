@@ -102,9 +102,24 @@
 <div>
   <span class="kpi"><span class="label">Autarkie</span><span class="value">{{ fmt_pct(kpis.autarkie_prozent) }}</span></span>
   <span class="kpi"><span class="label">Eigenverbrauchsquote</span><span class="value">{{ fmt_pct(kpis.ev_quote_prozent) }}</span></span>
-  <span class="kpi"><span class="label">Spez. Ertrag</span><span class="value">{{ fmt_num(kpis.spezifischer_ertrag) }} kWh/kWp</span></span>
+  {# N70: „Spez. Ertrag" heißt im Cockpit und im HA-Sensor die auf ein volles
+     Jahr hochgerechnete Kennzahl (saisonal gewichtet, mit der pro Monat aktiven
+     Leistung — `core/berechnungen/spez_ertrag.py`). HIER steht die Roh-Division
+     Σ Erzeugung ÷ Anlagen-Nennleistung über den Berichtszeitraum. Über mehrere
+     Jahre ist das ein aufkumulierter Wert (Rainer-PN 2026-06-11: 1.955 statt
+     ~980), bei einem Teiljahr ein zu niedriger. Zwei Größen, ein Name — bis die
+     Rechnung angeglichen ist (eigenes Paket, die Zahl steht im
+     Community-Benchmark), macht wenigstens das Etikett den Unterschied
+     sichtbar. #}
+  <span class="kpi"><span class="label">Spez. Ertrag (Zeitraum)</span><span class="value">{{ fmt_num(kpis.spezifischer_ertrag) }} kWh/kWp</span></span>
   <span class="kpi"><span class="label">Netto-Ertrag</span><span class="value">{{ fmt_eur(kpis.netto_ertrag_euro) }}</span></span>
 </div>
+<p class="muted" style="font-size:8pt; margin-top:2mm;">
+  Spez. Ertrag (Zeitraum) = Erzeugung dieses Berichtszeitraums ÷ Anlagen-Nennleistung.
+  Die Kachel „Spez. Ertrag" im Cockpit und der gleichnamige Sensor rechnen den Wert auf
+  ein volles Jahr hoch und weichen deshalb ab{% if ist_gesamtzeitraum %} — über mehrere Jahre
+  deutlich, weil sich der Wert hier aufsummiert{% endif %}.
+</p>
 
 {% if charts.pv_erzeugung %}
 <h2>PV-Erzeugung</h2>

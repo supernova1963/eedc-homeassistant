@@ -332,9 +332,20 @@ export const DATENROLLE = {
  *  UND Rollen im selben Chart liegen (Komponenten-Hub PV-Verlauf). Eigenständige
  *  String-/Modul-Charts ohne Rollen (z. B. `PVStringVergleich` SOLL/IST pro
  *  String) behalten die distinkten {@link STRING_COLORS} — dort trennen bunte
- *  Töne mehrere Strings besser und es gibt keine Kollision. */
-export const PV_MODUL_FARBEN = ['#b45309', '#f59e0b', '#fcd34d', '#fbbf24', '#78350f', '#fde68a']
-export const PV_MODUL_BG = ['bg-amber-700', 'bg-amber-500', 'bg-amber-300', 'bg-amber-400', 'bg-amber-900', 'bg-amber-200']
+ *  Töne mehrere Strings besser und es gibt keine Kollision.
+ *
+ *  **Keine Identitätsfarbe in der Palette (A20/N49).** Index 3 war `#fbbf24`
+ *  (Amber-400) — exakt die BKW-Identität ({@link KOMPONENTEN_FARBEN}
+ *  `balkonkraftwerk` / {@link CHART_COLORS}.bkw). Ab dem **vierten** Modul lagen
+ *  im Komponenten-Hub-PV-Verlauf zwei Reihen desselben Stapels auf demselben
+ *  Ton („mehrere Dachsegmente + BKW"). Jetzt Amber-600. Geprüft wurde die ganze
+ *  Palette gegen alle Farben, die in DIESEM Chart vorkommen können — BKW
+ *  (#fbbf24), sonstige Erzeuger (#84cc16) und die drei Verwendungs-Serien
+ *  Direktverbrauch (#8b5cf6) · Speicherladung (#f97316) · Einspeisung (#10b981);
+ *  engster verbleibender Abstand des neuen Tons: ΔE 15,4 gegen Speicherladung
+ *  (anderer Stapel). Der Wächter `check-farbkollision.test.ts` hält den Zustand. */
+export const PV_MODUL_FARBEN = ['#b45309', '#f59e0b', '#fcd34d', '#d97706', '#78350f', '#fde68a']
+export const PV_MODUL_BG = ['bg-amber-700', 'bg-amber-500', 'bg-amber-300', 'bg-amber-600', 'bg-amber-900', 'bg-amber-200']
 
 /** Datenrollen → Tailwind-bg-Klasse für Aufteilungs-Segmente (VerteilungsBalken).
  *  Leitet aus {@link DATENROLLE} ab (keine Parallel-Definition mehr); WP-Roh-
