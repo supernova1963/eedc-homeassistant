@@ -75,6 +75,7 @@ Jeder Befund hat genau eine von vier Schweregraden. Sie sind nicht zu addieren �
 Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 
 - **Counter-Sensoren ohne `state_class`** wurden von INFO → WARNING hochgestuft, weil ohne `state_class` die Reparatur-Werkzeuge in der Energieprofil-Pflege nicht greifen (vorher beruhigend als „Snapshot-Service erfasst's trotzdem" beschrieben). Siehe §4.9.
+- **Fehlendes Anschaffungsdatum** wurde mit v4.0.1 von INFO → **ERROR** hochgestuft: ohne das Datum zählt eine Komponente in *jeder* Auswertung über den ganzen Zeitraum mit — auch vor ihrer Anschaffung — und die Amortisationskurve hat keinen Nullpunkt. Der Befund springt per Klick direkt in das Formular der betroffenen Komponente. Siehe §4.3.8.
 - **Kategorien werden still übersprungen**, wenn ihre technische Voraussetzung fehlt (HA-LTS nicht erreichbar, MQTT-Import nicht aktiviert) — du siehst dann gar keine Befunde dieser Kategorie, nicht „OK".
 
 > **Daten-Checker kennt kein „Akzeptiert".** Ein Befund lässt sich nicht wegklicken oder als „gesehen" markieren — er verschwindet erst, wenn die Ursache behoben ist (oder, bei anlagenbedingten Warnungen, bewusst bestehen bleibt). Das ist Absicht: der Checker ist Diagnose, kein Aufgaben-Abhaken.
@@ -166,7 +167,19 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **\[Name\]: Leistung (kWp) fehlt** | ⚠️ WARNING | Ohne `leistung_kwp` greift die kWp-Konsistenzprüfung in §4.1 nicht und PVGIS-Soll pro String fehlt. | Komponente öffnen, Leistung in kWp eintragen. |
 | **\[Name\]: Ausrichtung/Neigung fehlt** | ℹ️ INFO | Wird für PVGIS-Solarprognose pro String benötigt. Ohne sie nutzt die Prognose Anlagen-Defaults. | Komponente öffnen, Ausrichtung (Süd/Ost/West) und Neigung in Grad eintragen. |
-| **\[Name\]: PV-Erzeugung fehlt in N Monat(en)** | ⚠️ WARNING | `pv_erzeugung_kwh` fehlt in den Monatsdaten für mindestens einen Monat ab Anschaffungsdatum. Aufschlüsselung pro String funktioniert für diese Monate nicht. | Monatsdaten-Formular für die genannten Monate erneut öffnen (Einstellungen → Daten → Monatsdaten). |
+
+**PV-Erzeugung wird anlagenweit geprüft, nicht pro Modul.** Ein einzelner Gesamtwert deckt alle Strings ab (er wird zur Lesezeit nach kWp verteilt) — eine Prüfung pro Modul meldete deshalb „fehlt" für jeden String, obwohl die Anlage vollständig gepflegt ist. Vier Zustände je Monat:
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **PV-Erzeugung: Monatsdaten vollständig (N Monate)** | ✅ OK | Jedes im Monat aktive Modul hat einen **eigenen** Messwert. | – |
+| **PV-Erzeugung über kWp-Anteil geschätzt in N Monat(en)** | ℹ️ INFO | Es liegt nur ein **Gesamtwert** vor; er wird anteilig nach Nennleistung auf die Strings verteilt. Die Zahlen stimmen in der Summe, die Pro-String-Genauigkeit ist eingeschränkt — deshalb nennen die String-Sichten in diesen Monaten bewusst keinen besten/schwächsten String. | Kein Mangel. Wer echte Pro-String-Werte will, gibt jedem Modul einen eigenen Erzeugungs-Sensor (Einstellungen → Datenquellen). |
+| **PV-Erzeugung unvollständig in N Monat(en)** | ⚠️ WARNING | Nur ein **Teil** der Strings ist erfasst und es gibt **keinen** Gesamtwert zum Verteilen. Die Pro-Modul-Sicht behält ihre Messwerte, die Anlagen-Summe bleibt für diese Monate bewusst leer — eine Teilsumme als „Gesamt-PV" wäre systematisch zu klein. | Entweder die fehlenden Module nachtragen **oder** den Monats-Gesamtwert eintragen. |
+| **PV-Erzeugung fehlt in N Monat(en)** | ❌ ERROR | Für diese Monate gibt es **gar keine** PV-Quelle — weder Pro-Modul-Werte noch einen Gesamtwert. | Wo ein PV-Sensor zugeordnet ist: **Einstellungen → Datenverwaltung → Import aus HA-Statistik** oder der **Monatsabschluss** des betreffenden Monats — beide schreiben die Werte je Modul. Ohne zugeordneten Sensor von Hand nachtragen. |
+
+> **Nicht die Reparatur-Werkbank dafür nehmen.** „Tag neu aggregieren" / „Mehrere Tage neu aggregieren" (§4.7, §5.6) baut das **stündliche Energieprofil** neu — es schreibt weder den Monats-Gesamtwert noch die Monatswerte je Komponente. Für fehlende **Monats**-PV-Werte sind die beiden oben genannten Wege die richtigen.
+>
+> **Warum ein Monat ohne dein Zutun leer sein kann:** Eine Start-Migration früherer Versionen hat den Gesamtwert bei Anlagen mit eigenem Balkonkraftwerk-Sensor mitgeleert. Details und was sich retten lässt: [Was ist neu](WAS-IST-NEU.md).
 
 #### 4.3.2 Balkonkraftwerk
 
@@ -227,7 +240,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
-| **\[Name\]: Anschaffungsdatum fehlt** | ℹ️ INFO | `anschaffungsdatum` fehlt — Aggregate ab Inbetriebnahme können nicht eingegrenzt werden, Monatsdaten-Vollständigkeitsprüfung greift für diese Komponente nicht. | Komponente öffnen, Anschaffungsdatum eintragen. |
+| **\[Name\]: Anschaffungsdatum fehlt** | ❌ ERROR | Das Datum ist die **Grenze jeder Auswertung** — ohne es zählt die Komponente auch für Zeiträume **vor** der Anschaffung mit — und der Nullpunkt der Amortisationskurve. Für neue Komponenten ist es seit v4.0.1 Pflichtfeld; dieser Befund betrifft den Bestand. *(Bis v4.0.0 nur ℹ️ INFO.)* | Der „Beheben"-Link springt direkt in das Formular **dieser** Komponente. |
 | **\[Name\]: Anschaffungskosten fehlen** | ℹ️ INFO | `anschaffungskosten_gesamt` fehlt. ROI- und Amortisations-Berechnung greift mit 0 €. | Komponente öffnen, Brutto-Anschaffungskosten eintragen. |
 | **\[Name\]: Monatsdaten vollständig (N Monate)** | ✅ OK | Alle Pflicht-Monatsfelder ab Anschaffungsdatum sind erfasst. | – |
 | **Keine aktiven Komponenten vorhanden** | ℹ️ INFO | Anlage hat keine aktive Komponente. Cockpit, ROI und Aufschlüsselungen sind leer. | Einstellungen → Komponenten → mindestens PV-Module oder Balkonkraftwerk anlegen. |

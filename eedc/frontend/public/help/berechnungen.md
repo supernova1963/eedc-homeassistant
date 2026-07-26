@@ -51,9 +51,11 @@ und zum Verständnis der Datenflüsse.
 | `TagesEnergieProfil` | `pv_kw`, `verbrauch_kw`, `einspeisung_kw`, `netzbezug_kw`, `batterie_kw`, `soc_prozent`, `komponenten` (JSON) | Scheduler/Monatsabschluss | 24 Zeilen/Tag, stündliche kW-Werte + Wetter |
 | `TagesZusammenfassung` | `ueberschuss_kwh`, `defizit_kwh`, `peak_pv_kw`, `batterie_vollzyklen`, `performance_ratio` | Aggregiert aus TagesEnergieProfil | 1 Zeile/Tag, Tagessummen + KPIs |
 
-**Legacy-Felder (NICHT verwenden):**
-- `Monatsdaten.pv_erzeugung_kwh` - Nutze `InvestitionMonatsdaten` (PV-Module)
+**Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
+- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`), aber weiterhin eine **gültige Lesequelle**: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats. Wer nur einen Gesamt-Sensor hat, pflegt ausschließlich hier — der Read-time-SoT `core/berechnungen/pv_verteilung.py` verteilt den Wert dann nach kWp auf die Module und kennzeichnet ihn als gerechnet.
+
+> **Achtung, ein Name für zwei Größen:** `pv_erzeugung_kwh` bezeichnet **drei verschiedene Dinge**, je nachdem, wo es steht — die **DB-Spalte** `Monatsdaten.pv_erzeugung_kwh` (manuelles Gesamt-Aggregat, s. o.), den **Schlüssel in `InvestitionMonatsdaten.verbrauch_daten`** (Erzeugung *dieses einen* Moduls) und das **Response-Feld** von `/monatsdaten/aggregiert` (PV-Module **+** Balkonkraftwerk). Der Identifier bleibt bewusst unverändert — er ist zugleich MQTT-Topic-Segment, CSV-Spaltenname und Backup-Feld. Siehe [Glossar](GLOSSAR.md#energie--bilanzen).
 
 ### Schicht 2: Berechnungslogik
 
@@ -150,14 +152,22 @@ Eigenverbrauch      = Direktverbrauch + Batterie_Entladung + V2H_Entladung
 Gesamtverbrauch     = Eigenverbrauch + Netzbezug
 EV-Quote (%)        = Eigenverbrauch / Erzeugung_gesamt * 100   (wenn Erzeugung > 0)
 Autarkie (%)        = Eigenverbrauch / Gesamtverbrauch * 100    (wenn GV > 0)
-Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV)
+Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV; zwei Varianten, s. u.)
 
-Einspeise-Erlös (EUR)    = Einspeisung * Einspeisevergütung / 100
+Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisevergütung / 100
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (nur PV/BKW; s. u.)
 ```
+
+**§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
+mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
+die Vergütung (Herleitung des Volumens: Abschnitt „§51 EEG (Negativpreis-Analyse)"). Ist
+die Anlage nicht §51-pflichtig oder liegt keine Strompreis-Mitschrift vor, ist der
+Wert `null` und es wird nichts abgezogen. Der Abzug gilt **überall** gleich:
+Backend-SoT `core/berechnungen/einspeise_erloes.py` und der Frontend-Spiegel
+`lib/calculations.ts::calcEinspeiseErloes` (Auswertungen → Finanzen + Tabelle).
 
 **Netzpunkt-Bilanz (Erzeugung_gesamt):** Am EINEN Netzanschluss messen die Zähler
 (`Einspeisung`/`Netzbezug`) die Summe **aller** dahinter liegenden Erzeuger. Deshalb
@@ -167,6 +177,35 @@ Erzeuger ignoriert, drückte der gemessene Einspeise-Zähler `Direktverbrauch` z
 niedrig (auf 0 geklemmt) und Autarkie/EV-Quote würden unterschätzt. SoT-Helper:
 `core/berechnungen/energie.erzeugung_hinter_zaehler_kwh` (ADR-001).
 
+**Die Größe ist ein eigenes Response-Feld, kein Rechenschritt je Sicht.** `/monatsdaten/aggregiert`
+liefert sie als `erzeugung_hinter_zaehler_kwh` mit — vorher summierte jede Sicht die Einzelteile
+selbst, und genau dort entstand die Drift (zwei unterschiedlich hohe Stapel im Komponenten-Hub).
+Die Felder derselben Antwort:
+
+| Feld | Bedeutung |
+|---|---|
+| `pv_module_kwh` | nur die PV-Module (bis v4.0.0 `pv_anlage_kwh` — irreführend, weil „PV-Anlage" im Produkt sonst die *ganze* Anlage inklusive Balkonkraftwerk meint) |
+| `bkw_kwh` | nur Balkonkraftwerk(e) |
+| `sonstige_erzeugung_kwh` | „Sonstiges" mit Kategorie *Erzeuger* (z. B. Mini-BHKW) |
+| `pv_erzeugung_kwh` | `pv_module_kwh + bkw_kwh` — **nicht** die gleichnamige DB-Spalte (s. [Schicht 1](#schicht-1-rohdaten-eingabe)) |
+| **`erzeugung_hinter_zaehler_kwh`** | Σ **aller** drei Erzeuger-Felder = der Nenner der EV-Quote |
+
+**Auch die PDF-Berichte rechnen so.** Der Jahresbericht leitete Eigenverbrauch, Autarkie und
+EV-Quote bis v4.0.0 allein aus der PV-Erzeugung ab, während der Einspeise-Zähler daneben die Summe
+**aller** Erzeuger misst — bei einer Anlage mit sonstigem Erzeuger fielen die Werte dort zu niedrig
+aus und widersprachen dem Cockpit. Seit v4.0.1 nutzen alle Bilanz-Pfade (Cockpit, Monatsbericht,
+Live, PDF-Jahresbericht, HA-Sensoren) dieselbe Größe.
+
+**Spezifischer Ertrag — zwei Größen, ein Formelname.** Die Roh-Division oben ist nur eine davon:
+
+| Größe | Rechenweg | Wo |
+|---|---|---|
+| **Annualisiert** | saisonal gewichtet (PVGIS-Monatsverteilung) und mit der im jeweiligen Monat **tatsächlich installierten** Leistung — vergleichbar über verschieden lange Zeiträume | Cockpit, HA-Export, Community-Vergleich (SoT `core/berechnungen/spez_ertrag.py`) |
+| **Zeitraum** | Erzeugung des Berichtszeitraums ÷ Anlagen-Nennleistung, ohne Normierung — summiert sich über mehrere Jahre auf | PDF-Jahresbericht (dort seit v4.0.1 als **„Spez. Ertrag (Zeitraum)"** beschriftet), Monatsbericht |
+
+Beide Zahlen sind richtig, sie beantworten verschiedene Fragen. Eine Angleichung der Rechnung steht
+aus, weil dieselbe Kennzahl im Community-Vergleich steht.
+
 **Achsen-Trennung (bewusst):** PV-**eigene** Kennzahlen (spez. Ertrag, Performance-
 Ratio, SOLL/IST, kWp) nutzen **nur** `PV_Erzeugung`, nicht `Erzeugung_gesamt` — ein
 sonstiger Erzeuger ist energetisch Erzeuger, aber kein PV-Modul. Ebenso bleibt
@@ -175,6 +214,36 @@ spart kein CO₂, sondern emittiert, und hat Brennstoffkosten — er bekommt dah
 PV-artige CO₂-Ersparnis (bewertet als „nicht bewertet", bis ein eigenes BHKW-Modell
 existiert). **Insel-Anlagen** (kein Netzanschluss, kein Bezug/keine Einspeisung)
 fallen nicht unter diese Bilanz — das ist ein Anlagen-Merkmal (eigenes KZ, geplant).
+
+**Messpunkt der Sensoren (DC vs. AC):** Die Bilanz rechnet mit den Werten, die die Geräte
+liefern — sie kann nicht wissen, **wo** gemessen wurde. Viele Hybrid-Wechselrichter (z. B.
+E3DC) melden PV-Erzeugung und Speicher-Ladung/-Entladung **DC-seitig** (Modul- bzw.
+Batterieklemme), Einspeisung und Netzbezug dagegen **AC-seitig** (Zähler). Dann stecken die
+Wandlungsverluste der PV- und Speicherstrecke im bilanzierten `Gesamtverbrauch`: er liegt
+typischerweise **3–5 % der Erzeugung** über dem „Hausverbrauch", den das Herstellerportal
+ausweist — das rechnet seine Verluste intern heraus. Keiner der beiden Werte ist falsch, sie
+beantworten verschiedene Fragen: eedc „was musste die Anlage liefern" (**inklusive** Verluste
+— die richtige Basis für Autarkie, EV-Quote und Wirtschaftlichkeit, denn erzeugt und bezahlt
+werden muss auch der Verlust), das Portal „was zogen die Verbraucher".
+
+*Diagnose-Rezept* für einen abgeschlossenen Tag:
+
+```
+Residuum = PV + Netzbezug + Entladung − Einspeisung − Ladung − Hausverbrauch(Portal)
+```
+
+Liegt das Residuum bei wenigen Prozent der Erzeugung, ist es der Verlustanteil und kein
+Rechenfehler. Gemessenes Beispiel (E3DC, 03.07.2026, Issues #200/#340): 60,83 + 0,31 + 7,17
+− 48,19 − 7,59 − 10,26 = **2,27 kWh = 3,7 % der Erzeugung** — davon 0,42 kWh Batterie-
+Rundlauf (DC), der Rest DC→AC-Wandlung. Da die Verluste mit dem Durchsatz skalieren, liegt
+ein ertragsstarker Tag über dem Monatsschnitt.
+
+**Bewusst kein Hausverbrauchs-Sensor:** eedc bietet **kein** Mapping eines fremden
+Hausverbrauchs-Sensors an. „Hausverbrauch" ist je Hersteller anders definiert (Verluste drin
+oder herausgerechnet, Wallbox enthalten oder nicht) — zwei Definitionen derselben Kennzahl
+würden Cockpit, Berichte und Community-Vergleich auseinanderlaufen lassen. Die Bilanz aus
+Zähler- und Komponentenwerten bleibt die eine Wahrheit; die Differenz wird erklärt, nicht
+durch eine zweite Datenquelle ersetzt.
 
 **Wichtig:** `Netto_Ertrag` enthält NICHT den Abzug der Netzbezugskosten, da diese auch ohne PV angefallen wären.
 
@@ -476,6 +545,17 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
 | **Amortisations-Fortschritt** | Auswertungen → Finanzen | Bisherige Erträge / Investition * 100 | Kumulierter Fortschritt |
 
+**Und zwei verschiedene Amortisations-Angaben:**
+
+| Angabe | Wo | Grundlage |
+|---|---|---|
+| **Amortisation (Ist)** — Dauer **und Break-Even-Jahr** | Auswertungen → ROI | die tatsächlich erfassten Erträge, fortgeschrieben. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
+| **Amortisation (Prognose)** | PDF-Finanzbericht | `Gesamt-Kosten ÷ prognostizierte Jahres-Einsparung` — eine Projektion, kein gemessener Verlauf. |
+
+> Verteilen sich die Anschaffungen über mehrere Jahre, ist das ausgewiesene Amortisationsjahr
+> **optimistisch** (der Anker ist die *erste* Anschaffung, die Kosten sind die Summe). Der
+> Break-Even-Text sagt das dazu.
+
 ### 3.7 USt auf Eigenverbrauch
 
 **Funktion:** `berechne_ust_eigenverbrauch()` in `core/calculations.py`
@@ -533,6 +613,13 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 
 #### SOLL-Berechnung (PVGIS)
 
+> **Genau eine Prognose ist die aktive.** eedc bewahrt beliebig viele PVGIS-Abrufe einer Anlage auf;
+> gelesen wird ausschließlich die als *aktiv* markierte — auch wenn das bewusst eine ältere ist
+> (Nutzerwille, [Einstellungen → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)).
+> Auswahlregel: `ist_aktiv == True`, `ORDER BY abgerufen_am DESC`, `LIMIT 1`; SoT
+> `services/prognose_auswahl.py`, datenbankseitig gesichert durch einen partiellen Unique-Index
+> (ADR-002/P5). Ist **keine** Prognose aktiv, bleibt die SOLL-Seite leer, statt eine beliebige zu zeigen.
+
 **Ab v2.3.2 (Per-Modul PVGIS-Daten vorhanden):**
 ```
 SOLL_Monat = PVGISPrognose.module_monatswerte[modul_id][monat].e_m
@@ -544,15 +631,48 @@ kWp_Anteil = Modul_kWp / Gesamt_kWp
 SOLL_Monat = PVGISPrognose.monatswerte[monat].e_m * kWp_Anteil
 ```
 
+Der PDF-Jahresbericht nutzt seit v4.0.1 denselben Weg (vorher verteilte sein String-Vergleich die
+Prognose *immer* nach kWp, obwohl die Pro-Modul-Werte gespeichert sind — bei Ost-West-Dächern ~20–25 %
+Abweichung gegenüber dem Cockpit).
+
 **Faire Vergleichsbasis (ab v2.3.2):**
 SOLL wird NUR für Monate gezählt, die auch IST-Daten haben. Verhindert aufgeblähten SOLL bei Teil-Jahren.
 
+**SOLL im Monatsbericht:** derselbe Grundsatz — der Monatswert kommt aus den Monatszeilen **genau der
+aktiven** Prognose. Vor v4.0.1 stand dort eine Summe über *alle* aktiven Prognosen; bei einem
+Bestand mit zwei aktiven war der SOLL-PV-Wert verdoppelt, und mit ihm die SOLL/IST-Abweichung und die
+Grundlast-SOLL-Kachel.
+
 #### IST-Berechnung
 
+Der IST-Wert je Modul kommt aus dem Read-time-SoT `core/berechnungen/pv_verteilung.py`
+(`resolve_pv_je_modul`) — **nicht** aus einem rohen Feldzugriff. Präzedenz:
+
 ```
-IST_Monat = InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]
-            (pro PV-Modul, für das gewählte Jahr)
+1. Messwert       InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]
+                  → Quelle „gemessen"
+2. Verteilung     Monatsdaten.pv_erzeugung_kwh (Gesamtwert) × kWp_Anteil
+                  → Quelle „geschätzt (kWp-Anteil)", in der Anzeige gekennzeichnet
+3. keine Quelle   kein Wert (kein 0)
 ```
+
+**Der kWp-Anteil ist ein Prognose-, kein Ertragsschlüssel** (ADR-002/P2): auf der IST-Seite verteilt
+er nur, wenn kein Messwert existiert — und dann sichtbar beschriftet. Solange die Werte verteilt sind,
+nennen die String-Sichten bewusst **keinen besten oder schwächsten String**: eine Platzierung wäre
+dort nur die Reihenfolge der Nennleistungen.
+
+> **Benannte Ausnahme (ADR-002/P2-A):** Ist nur ein Teil der Module gemessen und **kein** Gesamtwert
+> hinterlegt, behält die Pro-Modul-Sicht ihre Messwerte, während die Anlagen-Summe bewusst nichts
+> zeigt. `Σ Strings ≠ Σ Anlage` ist dort **gewollt** — eine Teilsumme als „Gesamt-PV" auszuweisen wäre
+> systematisch zu klein.
+
+**Beim Import und beim Monatsabschluss** gilt dieselbe Rangfolge auf der *Vorschlags*-Seite: Ist ein
+Connector-Feld einer Komponente zugeordnet, geht der volle Zählerstand dorthin („Vom Wechselrichter
+(Zählerstand-Differenz)"); ohne Zuordnung wird nach Nennleistung verteilt und heißt dann „Gesamtwert,
+anteilig nach kWp auf die Strings verteilt" — mit niedrigerer Konfidenz als jede gemessene Quelle.
+Der Zuordnungs-Schritt des Import-Wizards schlägt die Anteile ebenfalls **nach Nennleistung** vor
+(bzw. nach Kapazität bei Speichern); ist die Bezugsgröße nirgends gepflegt, verteilt er gleichmäßig
+**und sagt dazu, dass das keine proportionale Aufteilung ist**.
 
 #### Kennzahlen pro String
 
@@ -612,6 +732,22 @@ Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Einspeisevergütung
 
 > **Prognose-Kanon — „PV-Tagesprognose heute" ist EIN Wert.** Der „heute"-Wert (sowie Rest heute, morgen/übermorgen, Vor-/Nachmittag, Stundenprofil) wird seit dem Prognose-Kanon-Fix über **einen** Service (`services/prognose_kanon.py`) gebildet und an alle Konsumenten geliefert: Live/Cockpit (`live_wetter`), die „eedc"-Spalte im Vergleich (`api/routes/prognosen`), die HA-/MQTT-Sensoren (`ha_export_prognose`) und den persistierten Tageswert (`TagesZusammenfassung.pv_prognose_kwh`). Rechenweg: **Multi-String-Fan-out** pro Orientierungsgruppe (`pv_orientation.orientierungs_gruppen` → je ein `get_solar_prognose`) → slot-weise Summe = rohes OpenMeteo-kWh-Profil → **eedc-Korrektur pro Energie-Slot** (`core/berechnungen/prognose_korrektur.korrigiere_tagesprofil`, Kaskade `korrekturprofil_lookup`) mit Invariante `Tageswert == Σ Export-Slots`. Der Wert **rollt** mit OpenMeteo, aber überall synchron. Mathematik in `core/berechnungen/` (ADR-001), Orchestrierung im Kanon-Service. Symmetrie-Test: `tests/test_prognose_kanon.py`.
 >
+> **Was seit v4.0.1 zusätzlich am Kanon hängt.** Der 14-Tage-Balken in Cockpit → Aussicht samt
+> 14-Tage-Tabelle und den Kacheln „Morgen"/„Summe"/„Ø_Tag", die Zeilen Morgen/Übermorgen der
+> Live-Solar-Aussicht sowie die Blöcke „Stunden-Prognose"/„Stundenwerte" lasen bis dahin die
+> **unkorrigierte** OpenMeteo-Zahl bzw. gingen einen eigenen Ein-Abruf-Weg mit der Orientierung einer
+> beliebigen PV-Zeile. Sie kommen jetzt aus derselben Rechnung wie der Prognosen-Vergleich und der
+> Sensor `eedc_prognose_day_plus_1_kwh`. *(Ausgenommen: die Spalte „OpenMeteo" im Prognosen-Vergleich
+> — sie ist der Rohwert und bleibt es.)* Fehlt eine Korrektur, bleibt der Wetterdienst-Wert stehen und
+> die Kopfzeile sagt es („Quelle: Open-Meteo (ohne Korrektur)").
+>
+> **Fällt der Kanon aus** (kein OpenMeteo-Ergebnis, keine kWp, Zieltag jenseits des Abruf-Horizonts),
+> springt ein Ersatz-Weg ein — der **fächert seit v4.0.1 ebenfalls je Orientierungsgruppe auf** statt
+> die Gesamtleistung mit der Orientierung einer beliebigen PV-Zeile zu rechnen (ADR-002/P1: kein
+> Anlagen-Kennwert aus EINER Investition). Liefert eine Gruppe nichts, trägt die **Antwort** den
+> Hinweis auf die Teilsumme — nicht das Log (ADR-002/P4). Dasselbe gilt, wenn gar keine Prognose
+> vorliegt: 24 Nullen werden als „keine Prognose" ausgewiesen, nicht als Prognose „0 kWh".
+>
 > **Genauigkeits-Endwert (§6).** Das Genauigkeits-Ranking vergleicht IST gegen `TagesZusammenfassung.pv_prognose_final_kwh` (Fallback `pv_prognose_kwh`): dieser rollt mit, bis OpenMeteo für den Tag nach Sonnenuntergang konvergiert ist (`core/berechnungen/prognose_final.soll_final_einfrieren`), und wird dann via `pv_prognose_final_at` eingefroren. Der Anzeige-Wert bleibt rollend (Drei-Größen-Modell: Anzeige rollend · Lern-Snapshot gefroren · Tracking-Endwert konvergenz-gefroren).
 
 ### 4.1 Kurzfrist-Prognose (7-16 Tage)
@@ -630,8 +766,16 @@ Wenn Temperatur > 25°C:
 | Parameter | Quelle | Default |
 |-----------|--------|---------|
 | `System_Losses` | `PVGISPrognose.system_losses / 100` | 0.14 (14%) |
-| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW) | `Anlage.leistung_kwp` |
+| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Helper `get_pv_kwp` (Spalte → `parameter`-JSON, ADR-002/P3) | `Anlage.leistung_kwp` |
 | `GTI_kWh_m2` | **Global Tilted Irradiance** aus Open-Meteo Solar (modul-projiziert mit Tilt + Azimut). Bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert. | – |
+
+> **GTI-Spalte der 14-Tage-Tabelle ist ein kWp-gewichtetes Mittel** („GTI Modulfläche"): die
+> Einstrahlung auf die Modulflächen *dieser* Anlage, konsistent zur Ertragssumme derselben Zeile
+> (`Ertrag ≈ GTI × kWp × (1 − Verluste)` ist linear in kWp). Bis v4.0.0 wurde ungewichtet gemittelt —
+> ein 0,8-kWp-Balkonmodul zählte so viel wie ein 12-kWp-Süddach, und die Spalte passte zu keiner
+> anderen Zahl ihrer Zeile. Anlagen mit nur einer Ausrichtung sind nicht betroffen. *(Die Performance
+> Ratio läuft über einen anderen Pfad — die Tages-GTI aus der Aggregation, dort schon immer
+> kWp-gewichtet.)*
 | `Lernfaktor` | Anlagenspezifischer Korrekturfaktor (siehe §4.1c) | 1.0 (vor 7 Tagen Daten) |
 
 > **GTI vs. GHI:** Bis v3.19.x rechnete eedc mit GHI (`shortwave_radiation`, horizontal). Bei steilen Modulen und tiefstehender Wintersonne ist die Modul-projizierte GTI 2–3× höher — der GHI-basierte „theoretische Ertrag" lag im Winter systematisch zu niedrig (PR-Werte > 1 möglich). Seit v3.20.0 werden GTI-Werte für Prognose und Performance Ratio verwendet.
@@ -700,14 +844,16 @@ Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
 
 | Quelle | Bedeutung |
 |---|---|
-| **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus Globalstrahlung × kWp × (1 − System_Losses) |
-| **eedc (kalibriert)** | OM × aktueller Lernfaktor — die anlagenspezifisch korrigierte Prognose |
+| **OpenMeteo (OM)** | Wetterbasierte Roh-Prognose aus GTI × kWp × (1 − System_Losses). **Auch die Stundenkurve „OpenMeteo (roh)" fächert seit v4.0.1 je Orientierungsgruppe auf** — vorher rechnete sie die Gesamtleistung so, als hinge sie an *einer* Dachfläche (Neigung/Ausrichtung der zufällig ersten PV-Zeile, sonst stillschweigend 35° Süd), während der OM-**Tageswert** derselben Spalte längst auffächerte. Kurve, Summenzeile und Tageswert sind jetzt deckungsgleich. |
+| **eedc (kalibriert)** | die anlagenspezifisch korrigierte Prognose. Legende und Beschriftung sagen seit v4.0.1 „eedc (kalibriert)" statt „eedc (OpenMeteo × Faktor)" — korrigiert wird **pro Stunden-Slot auf der Energie**, nicht mit einem Tagesfaktor. |
 | **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet. |
 | **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
 
 #### Lernfaktor (saisonale MOS-Kaskade, ab v3.16.15)
 
-Die eedc-Prognose ist `OpenMeteo × Lernfaktor`. Der Lernfaktor wird aus historischen `(Prognose, IST)`-Tag-Paaren berechnet — nur Tage mit gültiger OpenMeteo-Prognose **UND** IST-Ertrag > 0.5 kWh fließen ein (Schlechtwetter-Tage mit ~0 kWh würden den Faktor sonst verzerren).
+Die eedc-Prognose ist die korrigierte OpenMeteo-Prognose; der Skalar-Lernfaktor unten ist die
+**gröbste Stufe** der Korrektur-Kaskade (feiner: Sonnenstand × Wetter je Stunden-Slot, siehe
+[Prognosen §5.3](HANDBUCH_PROGNOSEN.md#53-das-korrekturprofil-sonnenstand--wetter)). Der Lernfaktor wird aus historischen `(Prognose, IST)`-Tag-Paaren berechnet — nur Tage mit gültiger OpenMeteo-Prognose **UND** IST-Ertrag > 0.5 kWh fließen ein (Schlechtwetter-Tage mit ~0 kWh würden den Faktor sonst verzerren).
 
 ```
 faktor = Σ(IST_kWh) / Σ(EEDC_Roh_Prognose_kWh)

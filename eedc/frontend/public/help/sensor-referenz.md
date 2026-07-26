@@ -66,6 +66,14 @@
 | `speicher_ladung_kwh` | Speicher Ladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Optional. |
 | `speicher_entladung_kwh` | Speicher Entladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Optional. |
 
+> **`pv_erzeugung_kwh` steht für drei verschiedene Größen — je nachdem, wo es auftaucht.** Hier in der
+> Monatserfassung ist es die Erzeugung **dieses einen** Moduls. Daneben gibt es den monatlichen
+> **PV-Gesamtwert** der Anlage (gleicher Name, Anlagen-Ebene — Grundlage der kWp-Verteilung, wenn kein
+> Pro-Modul-Wert existiert) und ein **Auswertungs-Feld** gleichen Namens, das PV-Module **+**
+> Balkonkraftwerk zusammenfasst. Der Name bleibt bewusst unverändert, weil er zugleich MQTT-Topic,
+> CSV-Spalte und Backup-Feld ist — eine Umbenennung wäre nach außen ein Bruch. Siehe
+> [Glossar](GLOSSAR.md#energie--bilanzen).
+
 ### Live-Dashboard
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
@@ -268,7 +276,7 @@ eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die *
 | Sensor / Schlüssel | Bedeutung |
 |---|---|
 | `eedc_prognose_heute_kwh` | **PV-Tagesprognose heute** — voller Tageswert (kanonisch, rollt mit OpenMeteo, == Anzeige). |
-| `eedc_prognose_rest_today_kwh` | **Rest heute** — nur Σ der Prognose für die verbleibenden Stunden (aus demselben Kanon → rollt synchron mit „heute"). |
+| `eedc_prognose_rest_today_kwh` | **Rest heute** — Prognose der verbleibenden Stunden, laufende Stunde anteilig nach Restminuten (#339); aus demselben Kanon → rollt synchron mit „heute". |
 | `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Attribut `stundenprofil_kwh` = 24 Backward-Slots (kWh); Sensor-State == Σ Slots. |
 | `eedc_speicher_voll_um` | Uhrzeit „Speicher voll" aus der SoC-Simulation ab aktuellem Speicherstand. |
 
@@ -382,8 +390,8 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 
 | Sensor | Bedeutung |
 |---|---|
-| `eedc_prognose_heute_kwh` | **Rollender Tageswert**: bisheriges IST + Prognose der verbleibenden Stunden. Läuft im Tagesverlauf mit dem IST mit — abends ≈ tatsächlicher Tagesertrag. Trägt das Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 Werte; Slot N = Energie der Stunde N−1 → N). |
-| `eedc_prognose_rest_today_kwh` | **Echter Rest**: nur die Σ Prognose der verbleibenden Stunden (ohne IST). Der Steuerungswert für Automationen — „wie viel PV kommt heute noch?" |
+| `eedc_prognose_heute_kwh` | **Kanonische Tagesprognose** (== App-Anzeige): die volle Prognose für den ganzen Tag, **nicht** IST + Rest. Ändert sich, wenn OpenMeteo einen neuen Modelllauf liefert. Trägt das Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 Werte; Slot N = Energie der Stunde N−1 → N). |
+| `eedc_prognose_rest_today_kwh` | **Echter Rest**: Prognose der verbleibenden Stunden ab jetzt (ohne IST) — die **laufende Stunde geht anteilig** nach den noch verbleibenden Minuten ein (#339), der Wert sinkt also gleichmäßig statt in Stundensprüngen. Der Steuerungswert für Automationen — „wie viel PV kommt heute noch?" |
 | `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Trägt jeweils das korrigierte Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 kWh-Werte, Slot-Konvention wie oben) — z. B. für Lade-Planung per Template. Werte ändern sich, wenn OpenMeteo einen neuen Modelllauf liefert (alle paar Stunden) **oder** das gelernte Korrekturprofil aktualisiert wird (nächtlich) — stundenlang unveränderte Werte sind normal. |
 | `eedc_speicher_voll_um` | Uhrzeit, zu der der Speicher voraussichtlich voll ist (Simulation ab **aktuellem** Ladestand). |
 

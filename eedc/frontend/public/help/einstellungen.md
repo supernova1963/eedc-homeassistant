@@ -99,6 +99,7 @@ Diese Kachel kombiniert die PVGIS-Langfristprognose mit den Wetter-Provider-Eins
 
   Ist ein Profil hinterlegt, zeigt die Karte Datenpunkte sowie min/max-Elevation; **Löschen** kehrt zu den automatischen Geländedaten zurück. Das Profil bildet **feste** Hindernisse ab — eine jahreszeitlich wechselnde Verschattung (Laubbäume) ändert sich damit nicht mit.
 - **Wetter-Provider** (für Autofill/historische Werte): Auto (Bright Sky DE, sonst Open-Meteo), Bright Sky (DWD), Open-Meteo, Open-Meteo Solar (GTI-basiert für geneigte Module).
+- **Prognose-Historie:** Jeder Abruf wird gespeichert und bleibt erhalten. **Genau einer ist „Aktiv"** und liefert die SOLL-Werte in *allen* Sichten und Berichten; über „Aktivieren" schaltest du bewusst auf einen anderen — auch auf einen **älteren**, etwa weil er mit einem genaueren Horizontprofil geholt wurde. Mehr dazu: [Prognosen §2.6](HANDBUCH_PROGNOSEN.md#26-die-aktive-pvgis-prognose--eine-und-du-bestimmst-welche).
 
 ### 2.4 Community-Share
 
@@ -118,18 +119,21 @@ Unter **Einstellungen → Komponenten** legst du deine Geräte an und pflegst ih
 
 ### 3.1 Parent-Child-Beziehungen
 
-| Typ | Parent | Pflicht? |
-|-----|--------|----------|
-| PV-Module | Wechselrichter | **Ja** |
-| DC-Speicher | Wechselrichter (Hybrid) | Optional |
-| AC-Speicher | – (eigenständig) | – |
+| Typ | Wechselrichter-Zuordnung | Pflicht? |
+|-----|--------------------------|----------|
+| PV-Module | ja | **Ja** — ohne sie fehlt der Bezug zwischen Modulfläche und Umrichter |
+| Speicher | optional | **Nein** — ein Speicher **ohne** Zuordnung ist der Normalfall (AC-gekoppelt) |
 | E-Auto · Wärmepumpe · Wallbox · Balkonkraftwerk · Sonstiges | – | – |
 
-PV-Module ohne Wechselrichter-Zuordnung tragen ein Warnsymbol.
+**Nur PV-Module ohne Wechselrichter tragen ein Warnsymbol.** Bis v4.0.0 wurde auch bei Speichern „Speicher ohne Wechselrichter-Zuordnung" gemeldet — und verleitete dazu, eine falsche Zuordnung anzulegen. Speicher ohne Zuordnung heißen jetzt neutral **„Eigenständige Speicher"**.
+
+> **Die Zeile heißt „Zuordnung", nicht „Kopplung".** eedc kennt **kein** Feld für AC-/DC-Kopplung; die frühere Anzeige „DC-gekoppelt" leitete sich allein daraus ab, *ob* ein Wechselrichter zugeordnet ist — ein AC-Speicher am Hybrid-Wechselrichter war damit falsch beschriftet. Die Zeile nennt jetzt den Wechselrichter beim Namen und erklärt, was die Zuordnung bewirkt.
 
 ### 3.2 Anschaffungs- und Stilllegungsdatum
 
 Jede Investition hat zwei Lebenszyklus-Daten, die für **alle** Auswertungen gelten:
+
+> **Das Anschaffungsdatum ist Pflicht** (seit v4.0.1). Es ist die Grenze jeder Auswertung — ohne Datum zählt eine Komponente auch für Zeiträume vor der Anschaffung mit — und der Nullpunkt der Amortisationskurve. Neue Komponenten lassen sich nur noch mit Datum anlegen; für vorhandene meldet es der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#438-allgemein-alle-komponententypen) als **Fehler** und springt per Klick direkt in das Formular der betroffenen Komponente.
 
 - **Anschaffungsdatum:** ab hier zählt die Investition. Aggregate (JAZ, Wärme, Strom, Ersparnis usw.) ignorieren Monatsdaten **vor** diesem Datum. Nützlich beim Wechsel der Erfassungsmethode (z. B. von WP-eigener Strommessung auf einen Shelly-Zähler): alte Werte bleiben historisch erhalten, verfälschen aber die aktuelle JAZ nicht.
 - **Stilllegungsdatum:** Endmarker — ab hier zählt die Investition nicht mehr für aktuelle/künftige Auswertungen; historische Aggregate behalten sie.
@@ -186,6 +190,7 @@ Der Block zeigt die Tabelle aller erfassten Monate inline (sortierbar, mit Spalt
 
 - **„Neuer Monat"** öffnet das Formular. Es zeigt datengetrieben genau die Felder, die zu deinen Komponenten passen (neue Felder erscheinen automatisch, sobald sie zentral definiert sind).
 - **Assistenz je Feld:** Statt den gemessenen Wert in den Feldtitel zu schreiben, führt eedc ihn in einer Assistenz-Zone: ein Badge „gemessen / geschätzt (Quelle)", ein Platzhalter „Vorschlag: …" (Durchschnitt / Vorjahresmonat) und, wo eine Datenquelle zugeordnet ist, „Sensor meldet X · gespeichert Y" mit einer Inline-Übernahme. Ein Kopf-Ampel und ein Abschluss-Review rahmen das Formular.
+- **Vorschläge sind nach Herkunft gewichtet — und die Zuordnung schlägt die Verteilung.** Ein Wechselrichter-Connector liefert genau **einen** Zählerstand. Hast du dieses Feld einer bestimmten Komponente zugeordnet (Einstellungen → Connector), geht der volle Wert dorthin und heißt „Vom Wechselrichter (Zählerstand-Differenz)" — die anderen Module bekommen aus dieser Quelle keinen Vorschlag mehr, denn der Zähler ist bereits vollständig zugeordnet. **Ohne** Zuordnung wird nach Nennleistung verteilt; der Vorschlag heißt dann ehrlich „Gesamtwert, anteilig nach kWp auf die Strings verteilt" und wird **niedriger gewichtet als jede gemessene Quelle**. Für Speicher gilt dasselbe mit der Kapazität. Bei nur einer Komponente ändert sich nichts. **Vorschläge werden wie immer erst durch Bestätigen übernommen** — nichts wird automatisch geschrieben.
 - **Verschachtelte Sektionen:** Die Felder sind in einklappbare Abschnitte je Komponententyp/Gerät gegliedert, jeweils mit einem Rollup-Badge.
 
 **Felder (Auswahl):**
@@ -288,6 +293,8 @@ Ein Sammel-Einstieg für die einmaligen und wiederkehrenden Importe. Jeder Assis
 - **Eigene Datei / Vorlage (Custom-Import)** — beliebige CSV/JSON mit Spalten-Mapping (Auto-Detect, Einheiten Wh/kWh/MWh, Dezimalzeichen, Datumsspalte, speicherbare Mapping-Vorlagen).
 - **CSV-Import** — eedc-Template mit dynamischen Komponenten-Spalten; Plausibilitätsprüfung (negative Werte, Legacy-Spalten-Mismatch = Abbruch; redundante Legacy-Spalten / unplausible Wetterwerte = Warnung). Duplikate werden überschrieben.
 
+> **Der Schritt „Zuordnung" verteilt nach Nennleistung.** Hast du mehrere PV-Modulfelder (oder mehrere Speicher, Wallboxen, E-Autos), fragt der Assistent, wie die importierten Monatswerte auf die Komponenten aufzuteilen sind. Die Vorauswahl ist **proportional zur Nennleistung** (bei Speichern zur Kapazität) — bei 12 kWp Süddach + 3 kWp Garage also 80/20. Bis v4.0.0 war die Vorauswahl **immer** eine Gleichverteilung, weil der Wizard die Nennleistung unter einem Namen suchte, den eedc gar nicht kennt; die kWp-Spalte blieb dabei leer. **Wer vorher importiert und den Vorschlag übernommen hat, sollte die Aufteilung prüfen** (Komponenten → PV-Modul → Monatswerte); ein erneuter Import mit korrigierten Anteilen überschreibt die Werte. Ist die Bezugsgröße tatsächlich nirgends gepflegt, verteilt der Assistent weiterhin gleichmäßig — sagt aber dazu, dass das **keine** proportionale Aufteilung ist.
+
 > **Ganze Anlage sichern/wiederherstellen:** Der JSON-Export/-Import ganzer Anlagen läuft über den Backup-Block (siehe [§8.3](#83-backup)), nicht über die Import-Assistenten.
 
 ---
@@ -323,12 +330,14 @@ Die Zuordnung spiegelt die Struktur von **Einstellungen → Komponenten**:
 - Darunter je Gerät eine einklappbare Sektion mit einem Rollup-Badge (Felder mit / ohne Quelle).
 - Die Felder je Gerät sind in drei Abschnitte nach Einheit gegliedert: **Energie-Sensoren (kWh)**, **Leistung-Sensoren (W)**, **Sonstige Sensoren** (SoC in %, Temperatur, km, €, Ladevorgänge). Leere Abschnitte entfallen.
 
-**Jede Feld-Zeile** zeigt: Feldname (+ Einheit), die **aktive Zuordnung** (z. B. „HA: sensor.pv_leistung" oder „Gateway: solar/…/power"), den zuletzt **empfangenen Wert** und rechts die Quellen-Wahl. Ein Info-Symbol blendet den Feld-Hinweis aus der Registry ein.
+**Jede Feld-Zeile** zeigt: Feldname (+ Einheit), die **aktive Zuordnung** — mit dem **Klarnamen** des Sensors neben der Entity-ID —, den zuletzt **empfangenen Wert** und rechts die Quellen-Wahl. Ein Info-Symbol blendet den Feld-Hinweis aus der Registry ein.
 
 **Quellen-Wahl (Buttons):** Je Feld ist immer genau eine Quelle aktiv (gefüllter Button):
 
 - **HA-Sensor**, **Gateway**, **Inbound** — erscheinen nur, wenn die zugehörige Verbindung besteht (ohne HA-Verbindung kein HA-Button; ohne MQTT-Broker keine Gateway-/Inbound-Buttons). Eine bestehende Zuordnung bleibt sichtbar, auch wenn die Verbindung gerade fehlt.
-- **Keine** — schaltet das Feld auf „keine Quelle". Ein erneuter Klick auf die **aktive** Quelle schaltet ebenfalls auf „keine".
+- **Keine** — der **einzige** Weg, eine Zuordnung wieder zu entfernen.
+
+> **Ein Klick auf die aktive Quelle löscht sie nicht.** Er öffnet die Zuordnung — den Picker mit dem bereits hinterlegten Sensor als Vorauswahl. Bis v4.0.0 bedeutete derselbe Knopf zweierlei (bei inaktiver Quelle „auswählen", bei aktiver „Zuordnung verwerfen", ohne Rückfrage); wer nur nachsehen wollte, welcher Sensor hinterlegt ist, verlor ihn. Entfernt wird ausschließlich über **Keine**.
 
 **Wert-Anzeige:** Ein zugeordnetes Feld ohne empfangenen Wert wird **amber** markiert (Zuordnung + Wert) — so ist ein Quellen-Ausfall sofort sichtbar. Ein grüner Wert bedeutet: Quelle liefert.
 
@@ -341,6 +350,7 @@ Die Zuordnung spiegelt die Struktur von **Einstellungen → Komponenten**:
 Klick auf **HA-Sensor** öffnet einen Picker mit allen Entities der aktiven HA-Verbindung — durchsuchbar nach Entity-ID oder Name; jede Zeile zeigt Einheit und aktuellen State. Der Picker assistiert beim Wählen:
 
 - **Einheiten-Warnung:** Passt die Sensor-Einheit nicht zur erwarteten Feld-Dimension (z. B. ein kWh-Zähler für ein W-Feld), erscheint ein amber Hinweis an der Zeile — Warnung, keine Sperre.
+- **Filter „Nur passende Einheit" (Forum-Wunsch fridolin22):** eine Checkbox über der Liste blendet Sensoren mit abweichender Einheit aus und nennt deren Anzahl. **Standardmäßig aus** — wer keinen passenden Sensor besitzt, soll die vorhandenen sehen und daraus in Home Assistant einen Helfer bauen können. Sensoren **ohne** Einheitsangabe bleiben immer sichtbar.
 - **Integrations-Vorschläge (Zuordnungs-Assistenz, #343):** Erkennt eedc eine bekannte Integration (Muster-Match auf die Entity-Liste), erscheint über der Suchliste ein Abschnitt „Vorschläge — Integration erkannt: …" mit den passenden Entities und einem Hinweis-Text, welcher Sensor der richtige ist. Die Vorschläge sind reine **Assistenz** — die Auswahl trifft immer du; die volle Suchliste bleibt sichtbar. Bekannte Fehlgriffe (z. B. ein Zähler, der erst am Session-Ende springt) werden als amber Warnhinweis in der Liste markiert.
 - **Takt-Check bei kWh-Zählern:** Wählst du einen Energie-Zähler, prüft eedc einmalig dessen jüngsten Verlauf. Ein Zähler, der sich nur sprunghaft aktualisiert (z. B. erst am Ladeende), erzeugt in Tages-/Live-Kurven Nadeln — eedc warnt dann („Für Monatssummen ok") mit **„Trotzdem übernehmen"** oder „Anderen wählen". Ist HA nicht erreichbar oder gibt es keinen numerischen Verlauf, wird der Check stillschweigend übersprungen (keine Pseudo-Bestätigung).
 

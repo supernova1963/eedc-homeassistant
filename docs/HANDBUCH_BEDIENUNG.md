@@ -146,7 +146,7 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 - **Erzeugung & Verbrauch nach Kategorie** — eine kompakte Anteils-Leiste über alle Erzeuger- und Verbraucher-Kategorien
 - **Typisches Tagesprofil** — der stündliche Mittelwert von PV und Verbrauch über die Tage des Monats
 - **Top-Stunden** — die stärksten Netzbezugs- und Einspeise-Stunden (Datum + Uhrzeit), nützlich zur Tarif-Optimierung
-- **§51-EEG-Negativpreis** — Stunden mit negativem Börsenpreis, die dabei eingespeiste Energie und der Ø-Börsenpreis
+- **§51-EEG-Negativpreis** — Stunden mit negativem Börsenpreis, die dabei eingespeiste Energie, der Ø-Börsenpreis und der **§51-Verlust** (€): der Erlös, der dir für diese kWh entgeht. Das Anlage-Formular verspricht diesen Ausweis am §51-Schalter; von der neuen Oberfläche bis v4.0.0 zeigte ihn keine Sicht. Denselben Abzug tragen jetzt auch die Einspeise-Zeile des T-Kontos (`§51-Verlust: X kWh ohne Vergütung — Y € entgangen`) und der Kennwert „Einspeiseerlös" in [Auswertungen → Finanzen](#41-finanzen).
 
 > **Aus der alten „Energieprofil (Beta)"-Sicht bewusst nicht übernommen:** die Tag×Stunde-Heatmap (kommt später neu gestaltet zurück) und der Wochentag-Wochenvergleich (entfällt — der Ø-gleiche-Wochentag-Rückblick in der Tag-Sicht deckt den Kern).
 
@@ -266,6 +266,28 @@ Der PV-Reiter fasst **Wechselrichter, zugeordnete Module und DC-Speicher** zu ei
 
 Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die redundante „Stringsumme"-Zeile.
 
+> **Die Modulwerte sind gemessen, wo sie gemessen sind — und gekennzeichnet, wo sie gerechnet sind.**
+> Der Block **„Verlauf"** zeigt seit v4.0.1 die **eigenen Messwerte** je Modul; bis v4.0.0 zerlegte er
+> die Gesamterzeugung stur nach Nennleistung, wodurch ein verschatteter oder abgeschalteter String
+> unsichtbar blieb und alle Module rechnerisch denselben spezifischen Ertrag hatten. Der Block
+> **„Vergleich"** zeigt dieselben Messwerte — **beide Blöcke einer Karte sagen jetzt dasselbe.**
+>
+> Wer **nur einen Gesamt-Sensor** für mehrere Strings hat, sieht in beiden Blöcken erstmals Werte, wo
+> vorher 0 bzw. eine leere Sicht stand: die Gesamterzeugung anteilig nach Nennleistung verteilt und
+> mit einer **Herkunfts-Zeile „geschätzt (kWp-Anteil)"** gekennzeichnet. Die 0 war die unehrlichere
+> Anzeige — erzeugt wurde ja etwas.
+>
+> **Solange die Werte verteilt sind, nennt eedc bewusst keinen besten und keinen schwächsten String.**
+> Eine Platzierung wäre dort nur die Reihenfolge der Nennleistungen. Wer das Ranking zurückhaben will,
+> gibt jedem Modul einen eigenen Erzeugungs-Sensor
+> ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung)).
+>
+> **Der Erzeugungs-Stapel im Verlauf zeigt alle Erzeuger hinter dem Zähler** — Module,
+> Balkonkraftwerk und sonstige Erzeuger je als eigenes Segment; er heißt bei mehreren Quellen
+> „Erzeugung nach Quelle" statt „nach Modul". So sind der Erzeugungs- und der Verwendungs-Stapel
+> daneben **summengleich**; vorher stand links nur die Modul-Erzeugung und rechts die Verwendung der
+> *gesamten* Erzeugung.
+
 **SOLL/IST verstehen:**
 
 | Kennzahl | Bedeutung |
@@ -340,11 +362,17 @@ Beim Öffnen landest du auf **Finanzen**.
 
 Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amortisation** — hierher ist auch der monatliche **Finanz-Abschluss** (T-Konto) aus dem alten Monatsbericht gezogen, jetzt zeitraum-fähig, sowie die frühere Finanz-Prognose.
 
-- **Einspeiseerlös** = Einspeisung × Einspeisevergütung
+- **Einspeiseerlös** = **vergütete** Einspeisung × Einspeisevergütung. Bei Anlagen mit aktivem §51-Schalter sind die in Negativpreis-Stunden eingespeisten kWh **abgezogen** — auch im Kennwert und in der Werte-Tabelle, nicht nur im T-Konto darunter (bis v4.0.0 stand derselbe Erlös mit zwei Zahlen auf einer Seite).
 - **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis
 - **Sonstige Positionen** — frei erfassbare Kosten und Erlöse je Monat (Reparaturen, Wartung, sonstige Erträge); sie fließen als eigene T-Konto-Zeilen in die Summen ein
 - **Grund- und Zählergebühren** — separat ausgewiesen
 - **Netto-Einsparung** = Erlöse + Einsparungen − Kosten
+
+> **Zwei Netto-Begriffe, wortgleich in KPI, Charts, Ø-Karte, CSV und Werte-Tabelle:**
+> **„Netto-Ertrag (PV)"** = Einspeiseerlös + Eigenverbrauchs-Ersparnis + Sonstige − Sonderkosten,
+> **ohne** Netzbezug-Kosten und **ohne** Wärmepumpe/E-Mobilität. **„Gewinn/Verlust (Haushalt)"** ist
+> die Ergebniszeile des T-Kontos und rechnet beides mit. Beide stehen bewusst nebeneinander und im
+> [Glossar](GLOSSAR.md#strompreise--tarife); jede Zeile trägt ihre Herleitung im Tooltip.
 - **T-Konto** — Erlöse und Einsparungen den Kosten gegenübergestellt, mit Vorjahresvergleich (Δ). Auf Mobilgeräten als 2-Spalten-Layout (Label | Wert + Vorjahr + Δ).
 - **Amortisations-Fortschritt** — wie viel % der Investition bereits zurückgeflossen sind (kumuliert, nicht Jahres-Rendite)
 
@@ -360,7 +388,13 @@ Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amorti
 
 Zwei klar getrennte Sichten statt vieler paralleler ROI-Zahlen ohne Bezug:
 
-**Amortisationskurve** — X-Achse Zeit (Jahre), Y-Achse kumulierte Einsparung vs. Investition, mit **Break-Even-Punkt**.
+**Amortisationskurve** — X-Achse Zeit, Y-Achse kumulierte Einsparung vs. Investition, mit **Break-Even-Punkt**.
+
+> **Mit Kalenderjahr** (Forum-Wunsch Radiocarbonat): Neben der Dauer steht das voraussichtliche
+> Break-Even-**Jahr** — in der Kachel „Amortisation", unter der Kurve und als X-Achsen-Beschriftung
+> (Kalenderjahre statt Jahres-Index). Anker ist das **früheste Anschaffungsjahr** deiner Komponenten;
+> ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index. Verteilen sich die Anschaffungen über
+> mehrere Jahre, ist das genannte Jahr **optimistisch** — der Text sagt das dazu.
 
 **ROI pro Komponente — zwei Sichten:**
 

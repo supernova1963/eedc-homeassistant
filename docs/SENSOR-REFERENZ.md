@@ -66,6 +66,14 @@
 | `speicher_ladung_kwh` | Speicher Ladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Optional. |
 | `speicher_entladung_kwh` | Speicher Entladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Optional. |
 
+> **`pv_erzeugung_kwh` steht für drei verschiedene Größen — je nachdem, wo es auftaucht.** Hier in der
+> Monatserfassung ist es die Erzeugung **dieses einen** Moduls. Daneben gibt es den monatlichen
+> **PV-Gesamtwert** der Anlage (gleicher Name, Anlagen-Ebene — Grundlage der kWp-Verteilung, wenn kein
+> Pro-Modul-Wert existiert) und ein **Auswertungs-Feld** gleichen Namens, das PV-Module **+**
+> Balkonkraftwerk zusammenfasst. Der Name bleibt bewusst unverändert, weil er zugleich MQTT-Topic,
+> CSV-Spalte und Backup-Feld ist — eine Umbenennung wäre nach außen ein Bruch. Siehe
+> [Glossar](GLOSSAR.md#energie--bilanzen).
+
 ### Live-Dashboard
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung |

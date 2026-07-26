@@ -152,6 +152,17 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > - **`LAUFEND_ZUSTAND`** (badge/punkt/text, Emerald) — Zustandsfarbe „laufender Zeitraum/heute" der Zeit-Sichten; bewusst getrennt von Status-ok; die farbliche Nähe zur Einspeisungs-Rolle ist bekannt und akzeptiert (Chip- vs. Chart-Kontext).
 > - **Amber = HINWEIS-Rolle** („negativ, aber kein Fehler" — R3b E3, Gernot 2026-07-05): Wirkungsverluste-€, negative Speicher-Bilanz, Ø-Sonderkosten — bewusst NICHT Kosten-/Signal-Rot.
 
+> **Keine Identitätsfarbe in einer Reihen-Palette (A20/N49, 2026-07-26 — Regel folgt gebautem Code):**
+> Eine **Reihen-Palette** (Abstufungen für „Modul 1…n", „String 1…n" — die Reihen sind austauschbar und
+> tragen keine eigene Bedeutung) darf **keinen Ton enthalten, der anderswo eine feste Identität hat**
+> (Komponenten-/Rollen-Farbe). Sonst kollidieren im selben Diagramm zwei Reihen, sobald die Palette weit
+> genug durchläuft: `PV_MODUL_FARBEN[3]` war exakt die BKW-Identität (`#fbbf24`), also lagen ab dem
+> **vierten** Modul zwei Reihen desselben Stapels auf demselben Ton — genau bei der Kombination
+> „mehrere Dachsegmente + Balkonkraftwerk". Jetzt Amber-600 (`#d97706`).
+> **Pflicht beim Erweitern einer Palette:** gegen **alle** Farben prüfen, die in *diesem* Chart
+> vorkommen können (Identitäten **und** Rollen-Serien), nicht nur gegen die Palette selbst.
+> Gewächtert: `src/test/check-farbkollision.test.ts` (Vitest, kein `check:*`-Skript).
+
 **Keine Farbtabelle im Doc** — die verbindlichen Werte stehen in `lib/colors.ts` (SoT); Doc-Tabellen driften (§9-Lehre). A2 bleibt **Pointer** (löst den Doc-Konflikt K1 mit Fundament-P6.1 auf).
 
 **Betroffene Issues:** *(noch keine direkten)*
@@ -223,6 +234,26 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 > **Quellen-Vokabular:** HA-LTS · Live-Snapshot · Custom-/Cloud-Import · Prognose-Quelle (OpenMeteo / eedc / Solcast). Konsistente Kurzlabels/Icons.
 > **Live vs. LTS:** Live-Werte (5-Min/Power) sichtbar von aggregierten LTS-Tageswerten unterscheidbar machen — die Frische-Differenz ist ein wiederkehrender Verwechslungs-Punkt.
 > **Platzierung:** dezent am Sektions-/Karten-Header oder via A6-Tooltip, nicht pro Zelle.
+
+> **SoT-Baustein `blocks/HerkunftZeile` (A4/A20, 2026-07-26 — Regel folgt gebautem Code):** die
+> Kopfzeile „woher kommen diese Zahlen?" über einem Chart, Verteilungsbalken oder String-Vergleich ist
+> **eine** Komponente — Zustands-Badge (`ErfassungZustandBadge`, `iconOnly`) + optionaler Titel +
+> `bezug`-Label + sichtbarer Erklärsatz. **Nie ein zweites Markup daneben** (Regel 0a): der Text kam
+> schon aus einer Quelle (`WertHerkunft`), das Markup nicht — an der dritten Verwendungsstelle wurde
+> daraus Drift.
+>
+> - **Zustands-Vokabular ist geteilt** (`ErfassungZustand`, s. A3): `geschaetzt` = der Wert ist
+>   **gerechnet statt gemessen** (z. B. „geschätzt (kWp-Anteil)"), `weicht_ab` = der Wert ist
+>   **unvollständig** und damit systematisch zu niedrig (z. B. ein ausgefallener Wetter-Teilabruf).
+>   Die zwei nicht verwechseln — eine gerechnete Zahl ist vollständig, eine unvollständige nicht
+>   geschätzt.
+> - **Im Anzeige-Kontext bewusst leiser als im Erfassungs-Kontext:** `iconOnly` + Erklärsatz statt
+>   voller Pille. In der Monatsabschluss-Erfassung ist „geschätzt" ein Handlungsauftrag, in einer
+>   Auswertung nur eine Eigenschaft der Anzeige — ein halb gelber Block wäre dort ein Fehlsignal.
+> - **Sichtbar, nicht nur Hover:** der Erklärsatz steht im Fluss, damit er auf Touch lesbar ist.
+> - **Wortlaut kommt aus einer Quelle:** `lib/pvHerkunft.ts` (kWp-Verteilung, Wortlaut-SoT =
+>   Daten-Checker) bzw. `lib/prognoseHinweise.ts` (Unvollständigkeit aus den Backend-`hinweise`).
+>   Ein `hinweise`-Feld, das keine Sicht rendert, wäre dasselbe Schweigen mit mehr Code.
 
 **Betroffene Issues:** Daten-Provenance-/Daten-Checker-Linie, Live-vs-LTS-Konsistenz (#135-Folge).
 
