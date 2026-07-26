@@ -232,6 +232,67 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400 })
     expect(g.verlauf?.herkunft?.zustand).toBe('geschaetzt')
   })
+
+  it('PV ④ Verlauf: reine PV-Anlage bekommt KEINE toten Zusatz-Erzeuger-Balken', async () => {
+    zweiModule()
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    expect(g.verlauf?.bars.map((b) => b.key)).toEqual(['m11', 'm12', 'direkt', 'sladung', 'einsp'])
+    expect(g.verlauf?.verteilungen?.[0].titel).toBe('Erzeugung nach Modul')
+  })
+
+  /** A15/N43: 1000 kWh Module + 200 BKW + 300 BHKW = 1500 hinter dem Hauszähler.
+   *  Genau aus dieser Bilanz rechnet das Backend den Direktverbrauch
+   *  (1500 − 600 Einspeisung − 300 Speicherladung = 600), also muss der
+   *  Erzeugungs-Stapel dieselben 1500 zeigen. `eigenverbrauch_kwh` = 900 enthält
+   *  zusätzlich 50 kWh V2H — der alte Weg (EV − Entladung) hätte 650 statt 600
+   *  Direktverbrauch ergeben und die Verwendung über die Erzeugung gehoben. */
+  const mitBkwUndBhkw = () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
+    list.mockResolvedValue([
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4 }),
+    ])
+    listAggregiert.mockResolvedValue([{
+      jahr: 2025, pv_erzeugung_kwh: 1200, pv_anlage_kwh: 1000, bkw_kwh: 200,
+      sonstige_erzeugung_kwh: 300, direktverbrauch_kwh: 600, eigenverbrauch_kwh: 900,
+      speicher_ladung_kwh: 300, speicher_entladung_kwh: 250, einspeisung_kwh: 600,
+    }])
+  }
+
+  it('PV ④ Verlauf: Erzeugungs- und Verwendungs-Stapel sind summengleich (BKW + BHKW) — A15/N43', async () => {
+    mitBkwUndBhkw()
+    getPVStringsGesamtlaufzeit.mockResolvedValue(
+      pvStringsAntwort([{ id: 11, jahr: 2025, ist: 700 }, { id: 12, jahr: 2025, ist: 300 }]))
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    const row = g.verlauf!.rows[0]
+    const stapelSumme = (stapel: string) => g.verlauf!.bars
+      .filter((b) => b.stapel === stapel)
+      .reduce((s, b) => s + (row[b.key] as number), 0)
+    expect(row).toMatchObject({ name: '2025', m11: 700, m12: 300, bkw: 200, sonstErz: 300, direkt: 600 })
+    expect(stapelSumme('erz')).toBe(1500)
+    expect(stapelSumme('verw')).toBe(1500)
+
+    // Gleiche Summengleichheit im %-Aufteilungs-Balken darunter
+    const erzeugung = g.verlauf!.verteilungen!.find((v) => v.titel === 'Erzeugung nach Quelle')!
+    const verwendung = g.verlauf!.verteilungen!.find((v) => v.titel === 'Verwendung der Erzeugung')!
+    expect(erzeugung.segmente.map((s) => [s.label, s.wert])).toEqual([
+      ['Süd', 700], ['Nord', 300], ['Balkonkraftwerk', 200], ['Sonstige Erzeuger', 300],
+    ])
+    const summe = (segmente: { wert?: number | null }[]) => segmente.reduce((s, x) => s + (x.wert ?? 0), 0)
+    expect(summe(erzeugung.segmente)).toBe(1500)
+    expect(summe(verwendung.segmente)).toBe(1500)
+  })
+
+  it('PV ④ Verlauf: kWp-Fallback verteilt nur die Modul-Erzeugung, nicht das BKW — A15/N43', async () => {
+    mitBkwUndBhkw()
+    getPVStringsGesamtlaufzeit.mockResolvedValue(null)   // Endpoint-Ausfall
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+    // 1000 (pv_anlage_kwh) nach 6/4 kWp — NICHT 1200 (inkl. BKW → 720/480),
+    // sonst zählte das BKW doppelt (eigenes Segment + Mitverteilung).
+    expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400, bkw: 200 })
+    const erzeugung = g.verlauf!.verteilungen!.find((v) => v.titel === 'Erzeugung nach Quelle')!
+    expect(erzeugung.segmente.reduce((s, x) => s + (x.wert ?? 0), 0)).toBe(1500)
+  })
 })
 
 describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {

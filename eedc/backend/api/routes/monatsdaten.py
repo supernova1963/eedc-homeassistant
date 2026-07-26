@@ -176,6 +176,12 @@ class AggregierteMonatsdatenResponse(BaseModel):
     # R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == pv_erzeugung_kwh).
     pv_anlage_kwh: Optional[float]  # nur PV-Module (ohne BKW)
     bkw_kwh: Optional[float]  # nur Balkonkraftwerk(e)
+    # Sonstige Erzeuger (typ=`sonstiges` + Kategorie `erzeuger`, z. B. BHKW) —
+    # NICHT in `pv_erzeugung_kwh` enthalten (die bleibt rein PV), aber Teil der
+    # Netzpunkt-Bilanz `erzeugung_hinter_zaehler_kwh` (v3.45.4), aus der
+    # direktverbrauch/eigenverbrauch unten gerechnet werden. Ohne dieses Feld
+    # kann eine UI die Verwendungsseite nicht in ihre Erzeuger zerlegen (A15/N43).
+    sonstige_erzeugung_kwh: Optional[float]
     # Aggregiert aus InvestitionMonatsdaten - Speicher
     speicher_ladung_kwh: Optional[float]  # Summe alle Speicher
     speicher_entladung_kwh: Optional[float]  # Summe alle Speicher
@@ -333,6 +339,7 @@ async def list_monatsdaten_aggregiert(
         hat_wp_split_imd = False  # für strom_heizen / strom_warmwasser
         hat_eauto_imd = False
         hat_wallbox_imd = False
+        hat_sonstiges_erz_imd = False
 
         for inv, data in inv_data:
             # D3 (Block 1): Dienstwagen-E-Autos/Wallboxen gehören wie überall
@@ -387,6 +394,10 @@ async def list_monatsdaten_aggregiert(
                 # Erzeugung gehört in die Netzpunkt-Bilanz (Resolver ist
                 # kategorie-bewusst: nur erzeuger liefert sonstiges_erzeugung).
                 sonstiges_erzeugung += b.sonstiges_erzeugung
+                # None vs. 0 wie bei den anderen Aggregaten: ein Erzeuger mit 0 kWh
+                # im Monat ist ein echter 0-Wert, kein „nicht vorhanden".
+                if b.sonstiges_erzeugung or (inv.parameter or {}).get("kategorie") == "erzeuger":
+                    hat_sonstiges_erz_imd = True
 
         # PV-Module: kWp-Verteilung (Read-time, [[project_kwp_verteilung_aggregator]]).
         # Aktive Module des Monats aus der vollständigen Investitions-Liste —
@@ -476,6 +487,7 @@ async def list_monatsdaten_aggregiert(
             pv_erzeugung_kwh=round(pv_erzeugung, 1) if hat_pv_imd else None,
             pv_anlage_kwh=round(pv_erzeugung - bkw_erzeugung, 1) if hat_pv_imd else None,
             bkw_kwh=round(bkw_erzeugung, 1) if hat_pv_imd else None,
+            sonstige_erzeugung_kwh=round(sonstiges_erzeugung, 1) if hat_sonstiges_erz_imd else None,
             speicher_ladung_kwh=round(speicher_ladung, 1) if hat_speicher_imd else None,
             speicher_entladung_kwh=round(speicher_entladung, 1) if hat_speicher_imd else None,
             speicher_netzladung_kwh=round(speicher_netzladung, 1) if hat_speicher_imd else None,

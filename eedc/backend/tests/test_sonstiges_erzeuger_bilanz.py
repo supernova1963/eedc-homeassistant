@@ -89,6 +89,34 @@ async def test_ohne_sonstiges_reine_pv_bilanz_unveraendert(db):
     assert mai.gesamtverbrauch_kwh == pytest.approx(900.0)
 
 
+async def test_aggregiert_weist_sonstige_erzeugung_aus(db):
+    """A15/N43: die Bilanz muss in ihre Erzeuger zerlegbar sein.
+
+    `/monatsdaten/aggregiert` spielte bisher nur PV (inkl. BKW-Split) aus. Wer
+    die Verwendungsseite (Direktverbrauch/Speicherladung/Einspeisung) einem
+    Erzeugungs-Stapel gegenüberstellt — Komponenten-Hub Block ④ —, konnte die
+    Differenz durch einen sonstigen Erzeuger nicht auflösen und zeigte zwei
+    Stapel, die nicht zusammenpassen.
+    """
+    anlage_id = await _seed(db, mit_sonstiges=True)
+    rows = await list_monatsdaten_aggregiert(anlage_id=anlage_id, jahr=2026, db=db)
+    mai = next(r for r in rows if r.monat == 5)
+    assert mai.sonstige_erzeugung_kwh == pytest.approx(400.0)
+    assert mai.pv_erzeugung_kwh == pytest.approx(1000.0)  # bleibt rein PV
+    # Σ aller ausgewiesenen Erzeuger == Bezugsgröße der Verwendungsseite.
+    erzeuger = (mai.pv_anlage_kwh or 0) + (mai.bkw_kwh or 0) + (mai.sonstige_erzeugung_kwh or 0)
+    verwendung = mai.direktverbrauch_kwh + (mai.speicher_ladung_kwh or 0) + mai.einspeisung_kwh
+    assert erzeuger == pytest.approx(1400.0)
+    assert erzeuger == pytest.approx(verwendung)
+
+
+async def test_ohne_sonstiges_erzeuger_bleibt_das_feld_none(db):
+    """None = „keine solche Komponente", nicht 0 (CLAUDE.md 0-Werte-Regel)."""
+    anlage_id = await _seed(db, mit_sonstiges=False)
+    rows = await list_monatsdaten_aggregiert(anlage_id=anlage_id, jahr=2026, db=db)
+    assert next(r for r in rows if r.monat == 5).sonstige_erzeugung_kwh is None
+
+
 async def test_pv_kennzahlen_bleiben_rein(db):
     """Achsen-Trennung: die Anzeige-PV-Erzeugung zählt das BHKW NICHT mit,
     während die Autarkie die Gesamterzeugung nutzt."""

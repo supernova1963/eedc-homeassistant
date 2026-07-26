@@ -75,6 +75,10 @@ export interface AggregierteMonatsdaten {
   // Netzladung-Anteil + §51-Abzug-Volumen (nur wenn Anlage §51 unterliegt).
   pv_anlage_kwh: number | null
   bkw_kwh: number | null
+  // Sonstige Erzeuger (typ `sonstiges` + Kategorie `erzeuger`, z. B. BHKW).
+  // NICHT in pv_erzeugung_kwh (die bleibt rein PV), aber Teil der
+  // Netzpunkt-Bilanz, aus der direktverbrauch/eigenverbrauch gerechnet sind.
+  sonstige_erzeugung_kwh: number | null
   speicher_ladung_kwh: number | null
   speicher_entladung_kwh: number | null
   speicher_netzladung_kwh: number | null
