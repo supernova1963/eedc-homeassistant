@@ -26,7 +26,7 @@ import { AnlageLeer, OnboardingLeer } from './OnboardingLeer'
 import { DatumPicker } from '../components/ui/DatumPicker'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, usePark, Parkbar } from '../components/park'
-import { BLOCK_IDENTITAET, STATUS_ICONS, fmtZahl } from '../lib'
+import { BLOCK_IDENTITAET, STATUS_ICONS, WT_KURZ, fmtZahl } from '../lib'
 import {
   TagesPrognose, KurzfristDetails, LangfristVerlaufChart, LangfristMonatswerte,
   SaisonMuster, DegradationsPrognose, WpAussicht, AussichtFinanzTeaser, euroVz,
@@ -46,6 +46,15 @@ const HORIZONTE: { key: Horizont; label: string }[] = [
   { key: 'lang', label: 'Langfristig' },
 ]
 const DEFAULT_HORIZONT: Horizont = 'kurz'
+
+/** „So., 26.07." — beide Prognose-Blöcke tragen damit sichtbar IHREN Tag.
+ *  Der Datumswähler sitzt nur im Stunden-Block; wer den Stundenwerte-Block
+ *  allein aufklappt, sah sonst nicht, dass er standardmäßig MORGEN zeigt
+ *  (Rainer-PN „Nachtrag" 2026-07-25). */
+const tagLabel = (iso: string) => {
+  const d = new Date(iso + 'T12:00:00')
+  return `${WT_KURZ[d.getDay()]}., ${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`
+}
 const KURZ_TAGE = 14
 
 function istHorizont(v: string | null): v is Horizont {
@@ -254,8 +263,8 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
         // Datum-Picker = Chrome (bleibt), nur der Chart ist die parkbare Anzeige →
         // geparkt entfällt der ganze Stunden-Block (Picker ohne Chart sinnlos).
         ...(park.istGeparkt('el:aussicht-stunden') ? [] : [{
-          id: 'stunden', title: 'Stunden-Prognose', ...BLOCK_IDENTITAET.verlauf,
-          summary: 'PV + Verbrauch + Speicher je Stunde (wählbarer Tag)',
+          id: 'stunden', title: `Stunden-Prognose · ${tagLabel(pDatum)}`, ...BLOCK_IDENTITAET.verlauf,
+          summary: `PV + Verbrauch + Speicher je Stunde${pDaten?.pv_quelle ? ` · Quelle ${pDaten.pv_quelle}` : ''} (wählbarer Tag)`,
           defaultOpen: false,
           render: () => (
             <div className="space-y-4">
@@ -268,8 +277,8 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
           ),
         }]),
         ...(park.istGeparkt('el:aussicht-stundenwerte') ? [] : [{
-          id: 'stundenwerte', title: 'Stundenwerte', ...BLOCK_IDENTITAET.werte,
-          summary: 'Stundenprognose in kW · Summenzeile = kWh/Tag',
+          id: 'stundenwerte', title: `Stundenwerte · ${tagLabel(pDatum)}`, ...BLOCK_IDENTITAET.werte,
+          summary: `Stundenprognose in kW · Summenzeile = kWh/Tag${pDaten?.pv_quelle ? ` · Quelle ${pDaten.pv_quelle}` : ''}`,
           defaultOpen: false,
           render: () => (pDaten
             ? <Parkbar id="el:aussicht-stundenwerte" titel="Stundenwerte"><PrognoseTabelle daten={pDaten} ohneCaption /></Parkbar>

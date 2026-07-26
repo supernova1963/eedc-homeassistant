@@ -152,15 +152,20 @@ export default function DatenquellenZuordnung() {
     datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle).catch(neuLaden)
   }, [selectedAnlageId, setzeFeld, neuLaden])
 
-  const toggleInbound = useCallback((f: DatenquelleFeld) => {
-    setzeQuelleDirekt(f, f.quelle === Q_INBOUND ? Q_KEINE : Q_INBOUND)
+  // Der Klick auf eine Quelle WÄHLT sie — er löscht nie. Bis v4.0.0 schaltete ein
+  // erneuter Klick auf die aktive Quelle auf „keine" zurück; damit bedeutete
+  // derselbe Knopf je nach Zustand „Picker öffnen" oder „Zuordnung verwerfen",
+  // und wer nur nachsehen wollte, welcher Sensor hinterlegt ist, verlor ihn
+  // (Rainer-PN 2026-07-25). Zum Entfernen gibt es den eigenen „Keine"-Knopf.
+  const waehleInbound = useCallback((f: DatenquelleFeld) => {
+    if (f.quelle === Q_INBOUND) return
+    setzeQuelleDirekt(f, Q_INBOUND)
   }, [setzeQuelleDirekt])
 
-  const toggleGateway = useCallback((f: DatenquelleFeld) => {
-    // Aktiv → auf „keine" zurück; sonst Picker (Topic + Transform) öffnen.
-    if (f.quelle === Q_GATEWAY) { setzeQuelleDirekt(f, Q_KEINE); return }
+  const waehleGateway = useCallback((f: DatenquelleFeld) => {
+    // Auch bei aktivem Gateway: Picker öffnen (Topic + Transform ansehen/ändern).
     setGatewayFeld(f)
-  }, [setzeQuelleDirekt])
+  }, [])
 
   const speichereGateway = useCallback((config: GatewayQuelleConfig) => {
     const feld = gatewayFeld
@@ -170,11 +175,12 @@ export default function DatenquellenZuordnung() {
     datenquellenApi.setQuelle(selectedAnlageId, feld.id, Q_GATEWAY, config).catch(neuLaden)
   }, [selectedAnlageId, gatewayFeld, setzeFeld, neuLaden])
 
-  const toggleHa = useCallback((f: DatenquelleFeld) => {
-    // Aktiv → auf „keine" zurück; sonst den HA-Entity-Picker öffnen.
-    if (Q_HA.has(f.quelle)) { setzeQuelleDirekt(f, Q_KEINE); return }
+  const waehleHa = useCallback((f: DatenquelleFeld) => {
+    // Immer den Picker öffnen — auch wenn HA bereits aktiv ist. Der Picker zeigt
+    // die aktuelle Entity vorausgewählt, also ist das zugleich der Weg zum
+    // Nachsehen und zum Wechseln.
     setHaFeld(f)
-  }, [setzeQuelleDirekt])
+  }, [])
 
   // Vorzeichen-Umkehr — QUELLEN-UNABHÄNGIG (Wert-Eigenschaft, gilt für jede Quelle
   // inkl. Gateway; am Read-Endwert angewendet). Eigener /invert-Endpoint, kein
@@ -214,10 +220,13 @@ export default function DatenquellenZuordnung() {
     // gilt für jede aktive Quelle (HA/Inbound/Gateway). „keine" hat keinen Wert.
     const zeigInvert = f.einheit === 'W' && !istKeine
 
+    // Klarname vor Entity-ID: „HA: Zähler Einspeisung · sensor.einspeis_kw_monat".
+    // Die nackte ID allein war für Tester nicht wiedererkennbar (Rainer-PN
+    // 2026-07-25); V3 zeigte hier den Friendly Name.
     let istText: string
     if (f.quelle === Q_KEINE) istText = 'keine Quelle'
     else if (istGateway) istText = `Gateway: ${f.gateway_topic ?? '…'}`
-    else if (istHA) istText = `HA: ${f.ha_entity ?? '…'}`
+    else if (istHA) istText = f.ha_name ? `HA: ${f.ha_name} · ${f.ha_entity}` : `HA: ${f.ha_entity ?? '…'}`
     else istText = f.standard_topic
 
     let wertText = '–'
@@ -314,8 +323,8 @@ export default function DatenquellenZuordnung() {
               icon={Home}
               label="HA-Sensor"
               active={istHA}
-              title="HA-Sensor (Entity) zuordnen"
-              onClick={() => toggleHa(f)}
+              title={istHA ? "Zugeordneten HA-Sensor ansehen oder wechseln" : "HA-Sensor (Entity) zuordnen"}
+              onClick={() => waehleHa(f)}
             />
           )}
           {verfuegbarkeit.mqtt && (
@@ -323,8 +332,8 @@ export default function DatenquellenZuordnung() {
               icon={Waypoints}
               label="Gateway"
               active={istGateway}
-              title="Fremd-Topic vom Broker zuordnen"
-              onClick={() => toggleGateway(f)}
+              title={istGateway ? "Zugeordnetes Topic ansehen oder wechseln" : "Fremd-Topic vom Broker zuordnen"}
+              onClick={() => waehleGateway(f)}
             />
           )}
           {verfuegbarkeit.mqtt && (
@@ -333,7 +342,7 @@ export default function DatenquellenZuordnung() {
               label="Inbound"
               active={istInbound}
               title="eedc-Standard-Topic verwenden"
-              onClick={() => toggleInbound(f)}
+              onClick={() => waehleInbound(f)}
             />
           )}
           <span className="hidden w-px self-stretch bg-gray-200 dark:bg-gray-700 sm:block" aria-hidden="true" />
@@ -425,9 +434,9 @@ export default function DatenquellenZuordnung() {
     <div className="space-y-3">
       <p className="text-sm text-gray-600 dark:text-gray-300">
         Pro eedc-Feld genau eine Datenquelle. Wählbar sind HA-Sensor, MQTT-Gateway
-        (Fremd-Topic vom Broker) und MQTT-Inbound (Standard-Topic). Erneuter Klick auf
-        die aktive Quelle schaltet auf „keine Quelle". Zugeordnet, aber ohne empfangenen
-        Wert = Hinweis in Amber.
+        (Fremd-Topic vom Broker) und MQTT-Inbound (Standard-Topic). Ein Klick auf die
+        aktive Quelle öffnet ihre Zuordnung zum Ansehen oder Wechseln; zum Entfernen
+        dient „Keine". Zugeordnet, aber ohne empfangenen Wert = Hinweis in Amber.
       </p>
 
       <BlockShell persistKey="v4-einst-datenquellen" bloecke={bloecke} />

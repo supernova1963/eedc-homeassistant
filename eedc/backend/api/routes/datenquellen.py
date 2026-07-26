@@ -106,6 +106,10 @@ async def _ha_states_detail(db: AsyncSession, entity_ids: set) -> dict:
             "wert": wert,
             "einheit": attrs.get("unit_of_measurement"),
             "state_class": attrs.get("state_class"),
+            # Klarname für die Zeilen-Anzeige: die nackte entity_id sagt vielen
+            # nichts, und die V3-Fläche zeigte hier den Friendly Name
+            # (Rainer-PN 2026-07-25). Kommt aus demselben Batch — kein Zusatzabruf.
+            "friendly_name": attrs.get("friendly_name"),
         }
     return out
 
@@ -727,6 +731,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     }
     ha_detail = await _ha_states_detail(db, ha_entities)
     ha_werte = {eid: d.get("wert") for eid, d in ha_detail.items()}
+    ha_namen = {eid: d.get("friendly_name") for eid, d in ha_detail.items()}
 
     # §2i — proaktive Zuordnungs-Validierung (rein diagnostisch): pro Feld eine
     # Liste `probleme`. Einheit-Mismatch (#200) + fehlendes state_class je HA-Feld;
@@ -806,6 +811,8 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             "gateway_topic": gateway_topics.get(eintrag.get("mapping_id")),
             # Zugeordnete HA-Entity (nur bei quelle ha_app/ha_connector).
             "ha_entity": eintrag.get("entity_id"),
+            # Klarname derselben Entity (None, wenn HA sie nicht kennt).
+            "ha_name": ha_namen.get(eintrag.get("entity_id")),
             # Invert-Modell (Datenquellen-V4): Vorzeichen-Flip ist quellen-
             # UNABHÄNGIG, aus dem vereinheitlichten Store gelesen (nicht aus dem
             # quellen-Eintrag), am Read-Endwert angewendet.

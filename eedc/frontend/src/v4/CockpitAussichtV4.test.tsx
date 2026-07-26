@@ -128,8 +128,10 @@ describe('CockpitAussichtV4 — Vorwärts-Teleskop', () => {
     // Prognose-Verlauf + Wetter sind zu EINEM „Tages-Prognose"-Block gemergt (Gernot 2026-06-23).
     expect(screen.getByText('Tages-Prognose')).toBeInTheDocument()
     expect(screen.queryByText('Wetter & PV je Tag')).not.toBeInTheDocument()
-    expect(screen.getByText('Stunden-Prognose')).toBeInTheDocument()
-    expect(screen.getByText('Stundenwerte')).toBeInTheDocument()
+    // Beide Blöcke tragen ihren Tag im Kopf — der Stundenwerte-Block zeigt
+    // standardmäßig MORGEN und sagt das jetzt auch (Rainer-Nachtrag 2026-07-25).
+    expect(screen.getByText(/^Stunden-Prognose · /)).toBeInTheDocument()
+    expect(screen.getByText(/^Stundenwerte · /)).toBeInTheDocument()
     // Dezenter Vorwärts-€-Teaser ganz unten (D2, Gernot 2026-06-23).
     expect(screen.getByText('Finanzen')).toBeInTheDocument()
     // Kein generischer Komponenten-Teaser (AO3 verworfen, Gernot 2026-06-23).
@@ -146,6 +148,6 @@ describe('CockpitAussichtV4 — Vorwärts-Teleskop', () => {
     expect(screen.getByText('Degradations-Prognose')).toBeInTheDocument()
     // Kurzfrist-spezifische Blöcke sind im Langfrist-Horizont weg.
     expect(screen.queryByText('Tages-Prognose')).not.toBeInTheDocument()
-    expect(screen.queryByText('Stunden-Prognose')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Stunden-Prognose/)).not.toBeInTheDocument()
   })
 })

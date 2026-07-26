@@ -25,6 +25,8 @@ export interface DatenquelleFeld {
   gateway_topic: string | null
   /** Zugeordnete HA-Entity (nur bei quelle ha_app/ha_connector). */
   ha_entity: string | null
+  /** Klarname der Entity aus HA (null, wenn HA sie nicht kennt). */
+  ha_name?: string | null
   /** Invert-Modell: Vorzeichen der Zuordnung umkehren (HA/Inbound; am Read
    *  angewendet). Bei Gateway steckt der Sign im Transform-Modal. */
   invertieren: boolean
