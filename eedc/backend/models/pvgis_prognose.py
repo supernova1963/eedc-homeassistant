@@ -7,10 +7,16 @@ Ermöglicht "Prognose vs. IST" Auswertungen.
 
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, JSON
+from sqlalchemy import String, Float, Integer, DateTime, ForeignKey, Index, JSON, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+
+# Name des partiellen Unique-Index (siehe `PVGISPrognose.__table_args__`).
+# Als Konstante, weil `core/database.py` ihn für Bestands-Datenbanken nachträglich
+# anlegt und `tests/test_wurzelmuster_p5_invariante.py` ihn gezielt fallen lässt,
+# um den Zustand einer Installation ohne Index nachzustellen.
+INDEX_EINE_AKTIVE_PROGNOSE = "ix_pvgis_prognosen_eine_aktive_je_anlage"
 
 
 class PVGISPrognose(Base):
@@ -39,6 +45,33 @@ class PVGISPrognose(Base):
     """
 
     __tablename__ = "pvgis_prognosen"
+
+    # Invariante „genau eine aktive Prognose je Anlage" (Wurzelmuster P5, A17).
+    #
+    # Bewusst ein **partieller** Unique-Index (`WHERE ist_aktiv = 1`) und kein
+    # `UniqueConstraint`: die Regel gilt nur für aktive Zeilen — beliebig viele
+    # inaktive Prognosen je Anlage sind erwünscht (die Historie ist das Archiv,
+    # aus dem der Nutzer eine ältere reaktivieren kann). Ein
+    # `UniqueConstraint(anlage_id, ist_aktiv)` würde zusätzlich verbieten, zwei
+    # INAKTIVE zu haben, und wäre damit falsch. Zweiter Grund: SQLite erzwingt
+    # für ein nachträgliches Table-Constraint einen kompletten Table-Rebuild
+    # (CREATE-COPY-DROP-RENAME), ein Index kommt mit einem `CREATE UNIQUE INDEX`
+    # ohne Anfassen der Tabelle.
+    #
+    # Bestandsdaten können die Invariante heute verletzen (der JSON-Backup-Import
+    # konnte N aktive erzeugen, s. `import_export/json_operations.py`). Deshalb
+    # bereinigt `core/database.py::_migrate_pvgis_eine_aktive_prognose` VOR dem
+    # Anlegen des Index — und legt ihn nicht-blockierend an: schlägt es doch fehl,
+    # startet die App trotzdem, und die Lesepfade bleiben über den Auswahl-SoT
+    # (`services/prognose_auswahl.py`, `LIMIT 1`) deterministisch.
+    __table_args__ = (
+        Index(
+            INDEX_EINE_AKTIVE_PROGNOSE,
+            "anlage_id",
+            unique=True,
+            sqlite_where=text("ist_aktiv = 1"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     anlage_id: Mapped[int] = mapped_column(Integer, ForeignKey("anlagen.id", ondelete="CASCADE"), nullable=False)

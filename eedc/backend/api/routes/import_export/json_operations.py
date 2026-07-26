@@ -29,7 +29,7 @@ from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, P
 from backend.services.provenance import seed_provenance
 
 from .schemas import JSONImportResult
-from .helpers import _parse_date
+from .helpers import _parse_date, _parse_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -759,7 +759,53 @@ async def import_json(
             importiert["monatsdaten"] += 1
 
         # 9. PVGIS-Prognosen importieren
-        for pvgis_data in data.get("pvgis_prognosen", []):
+        #
+        # Invariante „genau eine aktive Prognose je Anlage" (P5/A17). Der Import
+        # legt immer eine NEUE Anlage an (oben: überschreiben ⇒ Kaskaden-Löschung,
+        # sonst eindeutiger Name), es gibt also keine Bestands-Prognosen, gegen die
+        # zu deaktivieren wäre — die Invariante kann nur die Backup-Datei selbst
+        # verletzen. Genau das tat sie: `ist_aktiv` wurde mit Default `True`
+        # gelesen, ein Backup ohne dieses Feld erzeugte damit N aktive Prognosen
+        # (Wurzel der HTTP-500- und Verdopplungs-Befunde N83–N85).
+        #
+        # Bewusste Entscheidung gegen beide Extreme:
+        #  * NICHT die Datei ablehnen — ein Restore ist ein Wiederherstellungspfad;
+        #    er darf nicht an einem redundanten Flag scheitern, während die
+        #    Energiedaten daneben fehlerfrei sind.
+        #  * NICHT stillschweigend zurechtbiegen — das wäre dasselbe Schweigen wie
+        #    das Übernehmen. Deshalb: deterministisch normalisieren UND es in
+        #    `warnungen` sagen, damit der Nutzer die Auswahl prüfen kann.
+        #
+        # `ist_aktiv` fehlt ⇒ **False** (nicht True): ein Backup, das nichts über
+        # den Aktiv-Zustand sagt, behauptet ihn auch nicht. Bleibt danach keine
+        # aktive übrig, wird die zuletzt abgerufene aktiviert — dieselbe Regel wie
+        # im Auswahl-SoT und in der Bestands-Bereinigung.
+        pvgis_alle = list(data.get("pvgis_prognosen", []))
+        aktiv_flags = [bool(p.get("ist_aktiv", False)) for p in pvgis_alle]
+
+        def _abgerufen_am(eintrag: dict):
+            return _parse_datetime(eintrag.get("abgerufen_am")) or datetime.min
+
+        gewaehlt_idx: Optional[int] = None
+        aktiv_indizes = [i for i, flag in enumerate(aktiv_flags) if flag]
+        if len(aktiv_indizes) > 1:
+            gewaehlt_idx = max(aktiv_indizes, key=lambda i: _abgerufen_am(pvgis_alle[i]))
+            warnungen.append(
+                f"Das Backup enthielt {len(aktiv_indizes)} als aktiv markierte "
+                "PVGIS-Prognosen — es kann nur eine aktiv sein. Die zuletzt "
+                "abgerufene wurde aktiviert, die übrigen bleiben als inaktive "
+                "Historie erhalten (Auswertungen → Prognose)."
+            )
+        elif len(aktiv_indizes) == 1:
+            gewaehlt_idx = aktiv_indizes[0]
+        elif pvgis_alle:
+            gewaehlt_idx = max(range(len(pvgis_alle)), key=lambda i: _abgerufen_am(pvgis_alle[i]))
+            warnungen.append(
+                "Das Backup enthielt PVGIS-Prognosen ohne Aktiv-Kennzeichnung. "
+                "Die zuletzt abgerufene wurde aktiviert."
+            )
+
+        for idx, pvgis_data in enumerate(pvgis_alle):
             pvgis = PVGISPrognoseModel(
                 anlage_id=anlage_id,
                 latitude=pvgis_data.get("latitude", 0),
@@ -773,8 +819,15 @@ async def import_json(
                 horizont_verwendet=pvgis_data.get("horizont_verwendet", False),
                 monatswerte=pvgis_data.get("monatswerte"),
                 module_monatswerte=pvgis_data.get("module_monatswerte"),
-                ist_aktiv=pvgis_data.get("ist_aktiv", True),
+                ist_aktiv=(idx == gewaehlt_idx),
             )
+            # `abgerufen_am` stand im Export, wurde beim Import aber verworfen —
+            # alle Prognosen bekamen den Zeitpunkt des Restores. Damit war die
+            # Historie nach einem Restore nicht mehr unterscheidbar und der
+            # Tiebreak `abgerufen_am DESC` beliebig. Nachbefund A17.
+            abgerufen = _parse_datetime(pvgis_data.get("abgerufen_am"))
+            if abgerufen is not None:
+                pvgis.abgerufen_am = abgerufen
             db.add(pvgis)
             await db.flush()
             pvgis_id = pvgis.id

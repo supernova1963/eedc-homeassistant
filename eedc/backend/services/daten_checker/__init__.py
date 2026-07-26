@@ -21,7 +21,7 @@ from sqlalchemy.orm import selectinload
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
-from backend.models.pvgis_prognose import PVGISPrognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 
 from .kategorien import (
     CheckSeverity,
@@ -79,12 +79,13 @@ class DatenChecker(
         )
         monatsdaten = list(md_result.scalars().all())
 
-        # Aktive PVGIS-Prognose laden (für Plausibilitätsprüfung)
-        pvgis_result = await self.db.execute(
-            select(PVGISPrognose)
-            .where(PVGISPrognose.anlage_id == anlage_id, PVGISPrognose.ist_aktiv == True)
-        )
-        pvgis_prognose = pvgis_result.scalar_one_or_none()
+        # Aktive PVGIS-Prognose laden (für Plausibilitätsprüfung) — über den
+        # Auswahl-SoT. Vorher stand hier `scalar_one_or_none()` auf eine Query
+        # OHNE `limit`: bei zwei aktiven Prognosen warf SQLAlchemy
+        # `MultipleResultsFound` und die ganze Daten-Checker-Seite antwortete mit
+        # HTTP 500 — eine Fehlerseite genau dort, wo der Nutzer Datenprobleme
+        # nachsehen will (N84/P5).
+        pvgis_prognose = await lade_aktive_prognose(self.db, anlage_id)
 
         # PV-Erzeugung und PVGIS-Lookup vorab berechnen (wird mehrfach benötigt)
         pv_erzeugung_map = self._get_pv_erzeugung_map(anlage)

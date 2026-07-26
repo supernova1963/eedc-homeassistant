@@ -59,6 +59,32 @@ def _parse_date(date_str: Optional[str]) -> Optional[date]:
         return None
 
 
+def _parse_datetime(wert) -> Optional["datetime"]:
+    """Parst einen Zeitstempel aus einem ISO-String — **naiv**, ohne `tzinfo`.
+
+    Die betroffenen Spalten (`pvgis_prognosen.abgerufen_am`) sind `DateTime` ohne
+    Zeitzone. Ein tz-aware Wert daneben ist nicht vergleichbar („can't compare
+    offset-naive and offset-aware datetimes", [[feedback_datetime_tz_aware]]) und
+    würde beim Tiebreak `abgerufen_am DESC` genau dort zuschlagen, wo dieser
+    Vergleich stattfindet. Deshalb wird ein Offset in UTC umgerechnet und dann
+    abgeschnitten.
+    """
+    from datetime import datetime, timezone
+
+    if wert is None or wert == "":
+        return None
+    if isinstance(wert, datetime):
+        dt = wert
+    else:
+        try:
+            dt = datetime.fromisoformat(str(wert).replace('Z', '+00:00'))
+        except (ValueError, AttributeError):
+            return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 async def _upsert_investition_monatsdaten(
     db: AsyncSession,
     investition_id: int,

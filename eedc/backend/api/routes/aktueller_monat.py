@@ -22,7 +22,7 @@ from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.pvgis_prognose import PVGISPrognose, PVGISMonatsprognose
+from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
@@ -845,17 +845,15 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
 
 
 async def _load_soll_pv(anlage_id: int, monat: int, db: AsyncSession) -> Optional[float]:
-    """Lädt PVGIS SOLL-Wert für den Monat."""
-    result = await db.execute(
-        select(PVGISMonatsprognose)
-        .join(PVGISPrognose)
-        .where(
-            PVGISPrognose.anlage_id == anlage_id,
-            PVGISPrognose.ist_aktiv == True,
-            PVGISMonatsprognose.monat == monat,
-        )
-    )
-    prognosen = result.scalars().all()
+    """Lädt PVGIS SOLL-Wert für den Monat — aus der AKTIVEN Prognose (P5).
+
+    Vorher stand hier ein `JOIN` auf `ist_aktiv` **ohne `limit`** und ein `sum()`
+    darüber: bei zwei aktiven Prognosen kam der Monatswert doppelt zurück (N83).
+    Der Fehler war nicht sichtbar, weil die Summe plausibel aussah — sie war nur
+    doppelt so groß, und die SOLL/IST-Abweichung sowie die Grundlast-SOLL-Kachel
+    rechneten mit. Der Auswahl-SoT trägt das `LIMIT 1` in der Subquery.
+    """
+    prognosen = await lade_aktive_monatsprognosen(db, anlage_id, monat=monat)
     if not prognosen:
         return None
     return round(sum(p.ertrag_kwh for p in prognosen), 1)

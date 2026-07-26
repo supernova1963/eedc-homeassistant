@@ -94,10 +94,18 @@ async def test_beide_endpoints_sind_symmetrisch(db):
 async def test_umschalten_der_aktiven_prognose_wirkt(db):
     """Aktiviert der Nutzer die neuere, folgen beide Endpoints — `ist_aktiv` entscheidet."""
     anlage_id = await _seed(db)
-    for p in (await db.execute(
+    prognosen = list((await db.execute(
         select(PVGISPrognose).where(PVGISPrognose.anlage_id == anlage_id)
-    )).scalars().all():
-        p.ist_aktiv = p.jahresertrag_kwh == NEU_INAKTIV_JAHR
+    )).scalars().all())
+    # Zwei Phasen wie im Aktivieren-Endpoint: erst deaktivieren + flushen, dann
+    # aktivieren. Der partielle Unique-Index (A17) lässt keine zwei aktiven
+    # Prognosen je Anlage zu, auch nicht kurzzeitig innerhalb eines Flushes.
+    for p in prognosen:
+        p.ist_aktiv = False
+    await db.flush()
+    for p in prognosen:
+        if p.jahresertrag_kwh == NEU_INAKTIV_JAHR:
+            p.ist_aktiv = True
     await db.flush()
 
     jahr = await get_pv_strings(anlage_id=anlage_id, jahr=2026, db=db)

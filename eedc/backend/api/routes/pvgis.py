@@ -30,6 +30,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
+from backend.services.prognose_auswahl import lade_aktive_prognose
 
 # =============================================================================
 # PVGIS API Constants
@@ -654,6 +655,14 @@ async def speichere_pvgis_prognose(
     for alte_prognose in result.scalars().all():
         alte_prognose.ist_aktiv = False
 
+    # Die Deaktivierung muss VOR dem Insert der neuen aktiven Prognose in der DB
+    # stehen: seit A17 trägt `pvgis_prognosen` einen partiellen Unique-Index auf
+    # (anlage_id) WHERE ist_aktiv = 1. Ohne dieses Flush ordnet die Unit of Work
+    # den INSERT vor die UPDATEs und der Index schlägt zu — ein DB-Fehler bei einer
+    # völlig korrekten Operation. Das Flush macht die Reihenfolge explizit statt
+    # sie der SQLAlchemy-Sortierung zu überlassen.
+    await db.flush()
+
     # Monatswerte als JSON vorbereiten (Gesamt-Summe aller Module)
     monatswerte = [
         {"monat": m.monat, "e_m": m.e_m, "h_m": m.h_m, "sd_m": m.sd_m}
@@ -745,14 +754,7 @@ async def get_aktive_prognose(
     """
     Gibt die aktive Prognose für eine Anlage zurück.
     """
-    result = await db.execute(
-        select(PVGISPrognoseModel)
-        .where(PVGISPrognoseModel.anlage_id == anlage_id)
-        .where(PVGISPrognoseModel.ist_aktiv == True)
-        .order_by(PVGISPrognoseModel.abgerufen_am.desc())
-        .limit(1)
-    )
-    prognose = result.scalar_one_or_none()
+    prognose = await lade_aktive_prognose(db, anlage_id)
 
     if not prognose:
         return None
@@ -827,6 +829,14 @@ async def aktiviere_prognose(
     )
     for alte_prognose in result.scalars().all():
         alte_prognose.ist_aktiv = False
+
+    # Erst deaktivieren, dann aktivieren — in zwei Flushes. Der partielle
+    # Unique-Index (A17) verbietet zwei aktive Prognosen je Anlage; in EINEM Flush
+    # sortiert die Unit of Work die UPDATEs nach Primärschlüssel, und genau der
+    # Kernfall dieses Endpoints (eine ÄLTERE Prognose aktivieren, also eine mit
+    # kleinerer id) würde das Aktivieren vor das Deaktivieren stellen und mit
+    # einem IntegrityError enden.
+    await db.flush()
 
     prognose.ist_aktiv = True
     await db.flush()

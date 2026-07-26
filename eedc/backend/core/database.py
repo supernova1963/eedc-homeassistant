@@ -360,6 +360,87 @@ def _migrate_pv_erzeugung_aggregat_clear(connection) -> None:
         )
 
 
+def _migrate_pvgis_eine_aktive_prognose(connection) -> None:
+    """Invariante „genau eine aktive PVGIS-Prognose je Anlage" herstellen (P5/A17).
+
+    **Warum überhaupt Bestandsdaten betroffen sind:** der JSON-Backup-Import
+    (`import_export/json_operations.py`) setzte `ist_aktiv` je importierter
+    Prognose auf `pvgis_data.get("ist_aktiv", True)` — bei einem Backup, in dem
+    das Feld fehlt, wurden damit ALLE Prognosen der Anlage aktiv. Ein solcher
+    Zustand ließ danach den Daten-Checker und die Social-Karte mit HTTP 500
+    antworten und verdoppelte den SOLL-PV-Wert im Monatsbericht.
+
+    **Was hier passiert:** je Anlage bleibt die **zuletzt abgerufene** aktive
+    Prognose aktiv (`abgerufen_am DESC`, bei Gleichstand die höhere `id` — genau
+    die Reihenfolge, die der Auswahl-SoT `services/prognose_auswahl.py` liest,
+    damit Bereinigung und Lesepfad dieselbe Zeile wählen). Alle weiteren aktiven
+    werden **deaktiviert**.
+
+    **Was hier NICHT passiert:** nichts wird gelöscht (A16/N44 — eine Migration,
+    die Daten entfernt, ist nicht korrigierbar). `ist_aktiv = 0` ist über
+    „Prognose aktivieren" jederzeit rückholbar, die Prognose selbst bleibt in
+    der Historie stehen. Kein HTTP, kein externer Abruf, keine Rückrechnung
+    ([[feedback_migration_startup_kein_http]]).
+
+    Idempotent: nach dem Durchlauf hat jede Anlage höchstens eine aktive
+    Prognose, die Auswahl unten findet dann keine Anlage mehr.
+    """
+    from sqlalchemy import text as _text
+
+    mehrfach = connection.execute(_text(
+        "SELECT anlage_id FROM pvgis_prognosen WHERE ist_aktiv = 1 "
+        "GROUP BY anlage_id HAVING COUNT(*) > 1"
+    )).fetchall()
+    if not mehrfach:
+        return
+
+    for (anlage_id,) in mehrfach:
+        behalten = connection.execute(_text(
+            "SELECT id FROM pvgis_prognosen WHERE anlage_id = :aid AND ist_aktiv = 1 "
+            "ORDER BY abgerufen_am DESC, id DESC LIMIT 1"
+        ), {"aid": anlage_id}).scalar()
+        connection.execute(_text(
+            "UPDATE pvgis_prognosen SET ist_aktiv = 0 "
+            "WHERE anlage_id = :aid AND ist_aktiv = 1 AND id != :behalten"
+        ), {"aid": anlage_id, "behalten": behalten})
+        logger.info(
+            "PVGIS-Invariante hergestellt: Anlage %s hatte mehrere aktive Prognosen, "
+            "Prognose %s bleibt aktiv (zuletzt abgerufene), die übrigen wurden "
+            "deaktiviert (nicht gelöscht).",
+            anlage_id, behalten,
+        )
+
+
+def _migrate_pvgis_index_eine_aktive(connection) -> None:
+    """Partiellen Unique-Index auf „eine aktive Prognose je Anlage" nachrüsten.
+
+    Für Bestands-Datenbanken; frische DBs bekommen ihn über `create_all` aus
+    `PVGISPrognose.__table_args__`. Läuft NACH der Bereinigung oben — auf
+    verletzten Daten würde `CREATE UNIQUE INDEX` scheitern.
+
+    **Nicht blockierend:** ein Fehlschlag wird geloggt und verschluckt, statt den
+    Start zu verhindern. Der Index ist die Ursachenbehebung, die Absicherung im
+    Lesepfad steht unabhängig davon (`services/prognose_auswahl.py` führt überall
+    `LIMIT 1` mit). Eine App, die wegen eines Index nicht mehr startet, wäre der
+    schlechtere Zustand als eine, die eine Warnung schreibt.
+    """
+    from sqlalchemy import text as _text
+    from backend.models.pvgis_prognose import INDEX_EINE_AKTIVE_PROGNOSE
+
+    try:
+        connection.execute(_text(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {INDEX_EINE_AKTIVE_PROGNOSE} "
+            "ON pvgis_prognosen (anlage_id) WHERE ist_aktiv = 1"
+        ))
+    except Exception as exc:  # pragma: no cover — nur bei weiterhin verletzten Daten
+        logger.warning(
+            "Unique-Index für „eine aktive PVGIS-Prognose je Anlage“ konnte nicht "
+            "angelegt werden (%s). Die Lesepfade bleiben über den Auswahl-SoT "
+            "deterministisch; die Invariante ist aber nicht DB-seitig erzwungen.",
+            exc,
+        )
+
+
 _DEAD_STRATEGIEN = {"kwp_verteilung", "ev_quote", "cop_berechnung", "manuell"}
 
 
@@ -718,6 +799,13 @@ async def run_migrations(conn):
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:
                     connection.execute(text(f'ALTER TABLE pvgis_prognosen ADD COLUMN {col_name} {col_type}'))
+
+            # A17/P5: Invariante „genau eine aktive Prognose je Anlage".
+            # Reihenfolge ist zwingend — erst bereinigen, dann der Index, sonst
+            # scheitert `CREATE UNIQUE INDEX` auf Bestandsdaten. Beides idempotent,
+            # beides ohne Löschen (deaktivieren ≠ entfernen) und nicht blockierend.
+            _migrate_pvgis_eine_aktive_prognose(connection)
+            _migrate_pvgis_index_eine_aktive(connection)
 
         # v0.9.5+: Neue Spalten zur investitionen Tabelle (PV-Module spezifisch)
         if 'investitionen' in inspector.get_table_names():

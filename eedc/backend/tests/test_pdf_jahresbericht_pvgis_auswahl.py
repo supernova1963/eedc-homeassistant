@@ -110,8 +110,19 @@ async def test_aeltere_aber_aktivierte_prognose_gewinnt(db):
     res = await db.execute(
         select(PVGISPrognose).where(PVGISPrognose.anlage_id == anlage_id)
     )
-    for p in res.scalars().all():
-        p.ist_aktiv = p.jahresertrag_kwh == ALT_JAHR
+    prognosen = list(res.scalars().all())
+    # Zwei Phasen mit eigenem Flush — dieselbe Reihenfolge wie
+    # `PUT /api/pvgis/prognose/{id}/aktivieren`: erst alle deaktivieren, dann die
+    # gewünschte aktivieren. Seit A17 verbietet ein partieller Unique-Index zwei
+    # aktive Prognosen je Anlage; in EINEM Flush sortiert die Unit of Work die
+    # UPDATEs nach id und würde das Aktivieren der ÄLTEREN (kleinere id) vor das
+    # Deaktivieren stellen.
+    for p in prognosen:
+        p.ist_aktiv = False
+    await db.flush()
+    for p in prognosen:
+        if p.jahresertrag_kwh == ALT_JAHR:
+            p.ist_aktiv = True
     await db.flush()
 
     ctx = await build_jahresbericht_context(db, anlage_id, jahr=2025)
