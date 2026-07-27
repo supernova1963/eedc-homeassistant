@@ -15,7 +15,8 @@ Formel:
     wp_kosten = strom × wp_strompreis_cent / 100
     ersparnis = alte_heizung_kosten − wp_kosten
 
-Wirkungsgrad: 0.90 für Gas, 0.85 für Öl (kanon. in WP_WIRKUNGSGRAD_*_DEFAULT).
+Wirkungsgrad: über den Layer-SoT `alter_wirkungsgrad` — 0.90 Gas, 0.85 Öl,
+1.0 Strom-Direktheizung (kanon. in WP_WIRKUNGSGRAD_*_DEFAULT).
 Gaspreis: monatlicher Override (Monatsdaten.gaspreis_cent_kwh) > params.alter_preis_cent_kwh > Default 12 ct.
 WP-Strompreis: separater WP-Tarif > allgemeiner Tarif > Default 30 ct.
 """
@@ -29,12 +30,11 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
 )
-from backend.core.berechnungen import gas_kosten_altanlage
+from backend.core.berechnungen import alter_wirkungsgrad, gas_kosten_altanlage
 from backend.core.wirtschaftlichkeit_defaults import (
     GASPREIS_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
-    WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
 
 
@@ -50,12 +50,16 @@ class WPErsparnisErgebnis:
 
 
 def _wp_alter_wirkungsgrad(wp_parameter: Optional[dict]) -> float:
-    """0.85 für Öl, 0.90 sonst (Gas/Default)."""
+    """η der Altanlage aus den WP-Parametern — Wahl über den Layer-SoT.
+
+    Vorher lokal als „0.85 für Öl, 0.90 sonst" — das traf die im Formular
+    wählbare Strom-Direktheizung mit dem Gas-Kessel-Wirkungsgrad.
+    """
     if wp_parameter is None:
-        return WP_WIRKUNGSGRAD_GAS_DEFAULT
-    if wp_parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel":
-        return WP_WIRKUNGSGRAD_OEL_DEFAULT
-    return WP_WIRKUNGSGRAD_GAS_DEFAULT
+        return alter_wirkungsgrad(None)
+    return alter_wirkungsgrad(
+        wp_parameter.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
+    )
 
 
 def _wp_alter_preis_cent(wp_parameter: Optional[dict]) -> float:

@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 from backend.core.berechnungen import (
+    alter_wirkungsgrad,
     autarkie_prozent,
     berechne_netzbezug_kosten,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
+    gas_kosten_altanlage,
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.core.wirtschaftlichkeit_defaults import WP_WIRKUNGSGRAD_GAS_DEFAULT
@@ -407,7 +409,10 @@ def berechne_waermepumpe_einsparung(
         strompreis_cent: Strompreis in Cent
         pv_anteil_prozent: Anteil PV-Strom am WP-Verbrauch
         alter_energietraeger: "gas", "oel" oder "strom"
-        alter_preis_cent_kwh: Preis des alten Energieträgers in Cent/kWh
+        alter_preis_cent_kwh: Preis des alten Energieträgers in Cent je kWh
+            **Brennstoff** (so steht er auf der Gas-/Ölrechnung), nicht je kWh
+            abgegebener Wärme — die Umrechnung macht `gas_kosten_altanlage`
+            über den Wirkungsgrad der Altanlage.
         alternativ_zusatzkosten_jahr: Fixe Jahreskosten der Alt-Heizung
             (Schornsteinfeger, Wartung, Grundpreis Gaszähler etc.)
 
@@ -461,16 +466,33 @@ def berechne_waermepumpe_einsparung(
 
     wp_kosten = wp_strom_kwh * netz_anteil * strompreis_cent / 100
 
-    # Alte Heizung Kosten: Energiepreis + fixe Zusatzkosten (Schornsteinfeger, Wartung etc.)
-    alte_kosten = gesamt_waermebedarf * alter_preis_cent_kwh / 100 + alternativ_zusatzkosten_jahr
+    # Alte Heizung: Brennstoffkosten über den Layer-SoT + fixe Zusatzkosten
+    # (Schornsteinfeger, Wartung, Zähler-Grundpreis).
+    #
+    # `gesamt_waermebedarf` ist ABGEGEBENE WÄRME, keine Brennstoffmenge — das
+    # belegt `wp_strom_kwh = gesamt_waermebedarf / jaz` oben (die JAZ ist als
+    # Wärme/Strom definiert) ebenso wie das Formular-Label „Heizwärmebedarf
+    # (kWh/Jahr) — aus Energieausweis". Ein Kessel muss dafür `wärme / η`
+    # Brennstoff verfeuern; diese Rückrechnung fehlte hier und ließ die
+    # ROI-Seite eine andere WP-Ersparnis nennen als Aussichten, HA-Export und
+    # WP-Dashboard, die alle über `gas_kosten_altanlage` laufen.
+    wirkungsgrad = alter_wirkungsgrad(alter_energietraeger)
+    alte_kosten = (
+        gas_kosten_altanlage(gesamt_waermebedarf, wirkungsgrad, alter_preis_cent_kwh)
+        + alternativ_zusatzkosten_jahr
+    )
 
-    # CO2-Einsparung
+    # CO2-Einsparung — dieselbe η-Rückrechnung wie bei den Kosten und wie im
+    # gemessenen Pfad (`co2_wp_ersparnis_kg`, DI-1): verbrannt wird der
+    # Brennstoff, nicht die Nutzwärme.
     co2_faktoren = {
         "gas": CO2_FAKTOR_GAS_KG_KWH,
         "oel": CO2_FAKTOR_OEL_KG_KWH,
         "strom": CO2_FAKTOR_STROM_KG_KWH,
     }
-    co2_alt = gesamt_waermebedarf * co2_faktoren.get(alter_energietraeger, 0)
+    co2_alt = (
+        gesamt_waermebedarf / wirkungsgrad * co2_faktoren.get(alter_energietraeger, 0)
+    )
     co2_wp = wp_strom_kwh * netz_anteil * CO2_FAKTOR_STROM_KG_KWH
     co2_einsparung = co2_alt - co2_wp
 

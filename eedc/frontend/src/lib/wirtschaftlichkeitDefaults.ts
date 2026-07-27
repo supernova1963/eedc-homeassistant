@@ -8,9 +8,13 @@
  * — bei Änderungen dort spiegeln.
  */
 
-// Wärmepumpen-Wirkungsgrade (alter Energieträger)
+// Wärmepumpen-Wirkungsgrade (alter Energieträger).
+// Die Auswahl je Energieträger trifft ausschließlich das Backend
+// (`core/berechnungen/alternativkosten.py::alter_wirkungsgrad`) — hier stehen
+// nur die Werte als Spiegel. Strom-Direktheizung heizt verlustfrei: 1,0.
 export const WP_WIRKUNGSGRAD_GAS_DEFAULT = 0.90
 export const WP_WIRKUNGSGRAD_OEL_DEFAULT = 0.85
+export const WP_WIRKUNGSGRAD_STROM_DEFAULT = 1.0
 
 // Energiepreise (Defaults wenn nichts gepflegt)
 export const GASPREIS_DEFAULT_CENT = 12.0

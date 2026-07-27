@@ -23,6 +23,7 @@ from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
     berechne_spez_ertrag_annualisiert,
+    alter_wirkungsgrad,
     gas_kosten_altanlage,
     berechne_verbrauchs_kennzahlen,
     erzeugung_hinter_zaehler_kwh,
@@ -85,8 +86,6 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
     WP_PV_ANTEIL_DEFAULT,
-    WP_WIRKUNGSGRAD_GAS_DEFAULT,
-    WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
 
 router = APIRouter(prefix="/ha/export", tags=["HA Export"])
@@ -1107,7 +1106,7 @@ async def calculate_investition_sensors(
             elif sensor.key == "wp_ersparnis_euro":
                 if gesamt_waerme > 0:
                     fallback_alter_preis = params.get(PARAM_WAERMEPUMPE["ALTER_PREIS_CENT_KWH"], PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"])
-                    alter_wirkungsgrad = WP_WIRKUNGSGRAD_OEL_DEFAULT if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel" else WP_WIRKUNGSGRAD_GAS_DEFAULT
+                    wirkungsgrad_alt = alter_wirkungsgrad(params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]))
                     zusatzkosten_jahr = params.get(PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0) or 0
                     # Monatliche Gaspreise laden (Fallback: statischer Parameter)
                     anlage_md_result = await db.execute(
@@ -1124,7 +1123,7 @@ async def calculate_investition_sensors(
                         gp = (amd.gaspreis_cent_kwh
                               if amd and amd.gaspreis_cent_kwh is not None
                               else fallback_alter_preis)
-                        alte_kosten += gas_kosten_altanlage(waerme, alter_wirkungsgrad, gp)
+                        alte_kosten += gas_kosten_altanlage(waerme, wirkungsgrad_alt, gp)
                     # Fixe Zusatzkosten anteilig
                     alte_kosten += zusatzkosten_jahr * len(monatsdaten) / 12
                     wp_kosten = gesamt_strom * wp_netzbezug_preis / 100

@@ -36,6 +36,17 @@ Ein gemeinsamer Aggregat-Helper (z. B. `berechne_finanz_aggregat`) liefert nur d
 
 Symmetrie-Test allein reicht nicht (er kennt nur die eingetragenen Sites); statischer Wächter allein reicht nicht (er fängt Formel-, nicht Wert-Drift). Erst der Builder macht Drift strukturell unmöglich; Wächter + Symmetrie-Test sichern es ab.
 
+## Datei-Allowlists bewachen die Datei, nicht die Frage (Lehre WP-η, 2026-07-27)
+
+Wächter der Bauart „diese Formel darf nur in Datei X stehen" (`test_inline_gas_kosten_altanlage_nur_im_layer`, `test_gas_co2_faktor_nur_im_helper`) haben einen blinden Fleck: **innerhalb** von X. Genau dort saß die WP-Alternativkosten-Drift. `core/calculations.py` beherbergt den CO₂-SoT `co2_wp_ersparnis_kg` (rechnet `wärme / η_gas × f_gas`) — und zwanzig Zeilen weiter rechnete `berechne_waermepumpe_einsparung` für dieselbe Frage `wärme × f` **ohne η**. Der Wächter-Kommentar hielt das sogar fest („liegt in derselben Datei = erlaubt"), womit die zweite Formel als geprüft *aussah*, obwohl nur ihr Ort geprüft war. Die ROI-Seite nannte dadurch eine andere WP-Ersparnis als Aussichten, HA-Export und WP-Dashboard.
+
+**Regel:** Der Wächter-Scope gehört an die **Frage** („was hätte die Altanlage gekostet?"), nicht an die Datei. Praktisch:
+
+1. **Symmetrie-Test über die Pfade**, nicht nur Formel-Regex: der Parameter-/Prognose-Pfad muss für dieselbe Eingabe denselben Wert liefern wie der gemessene (`test_altkosten_identisch_zum_layer_sot`).
+2. **Aufruf-Wächter statt Text-Wächter**, wo möglich: per AST prüfen, dass die Funktion den Layer-Helper *aufruft* (`test_keine_eta_freie_altkosten_formel`) — das fängt auch einen Rückbau, den keine Regex kennt.
+3. **Zeilenweise Regex nur mit Gegenprobe.** Eine Regex auf `== "oel"` hätte drei von vier Duplikaten durchgelassen, weil sie `WIRKUNGSGRAD` erst in der Folgezeile nannten. Wer einen Muster-Wächter schreibt, prüft ihn gegen die realen Altfälle, bevor er ihn für Deckung hält.
+4. **Restlücken benennen.** Der η-Wächter greift über die Konstanten; eine hartkodierte `0.85` fängt er nicht — das steht so in seinem Docstring, statt als Deckung durchzugehen.
+
 ## Migration bestehender Konsumenten
 
 Step-by-step, opportunistisch beim nächsten Touch des betroffenen Codes. Übersicht der bekannten offenen Stellen: siehe Memory `project_berechnungs_layer_offen.md` und `INLINE_PATTERN_GRANDFATHERED` in `tests/test_berechnungs_layer_konformitaet.py`.

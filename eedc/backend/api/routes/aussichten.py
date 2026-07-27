@@ -28,6 +28,7 @@ from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
     berechne_verbrauchs_kennzahlen,
+    alter_wirkungsgrad,
     berechne_wp_alternativkosten_ersparnis,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
@@ -42,8 +43,6 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
     WP_PV_ANTEIL_DEFAULT,
-    WP_WIRKUNGSGRAD_GAS_DEFAULT,
-    WP_WIRKUNGSGRAD_OEL_DEFAULT,
 )
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     berechne_speicher_ersparnis,
@@ -1179,10 +1178,8 @@ async def get_finanz_prognose(
                     PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
                 ) or PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
             ),
-            "alter_wirkungsgrad": (
-                WP_WIRKUNGSGRAD_OEL_DEFAULT
-                if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel"
-                else WP_WIRKUNGSGRAD_GAS_DEFAULT
+            "alter_wirkungsgrad": alter_wirkungsgrad(
+                params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
             ),
             "zusatzkosten_jahr": params.get(
                 PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0,

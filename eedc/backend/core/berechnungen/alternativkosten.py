@@ -35,7 +35,38 @@ from backend.core.wirtschaftlichkeit_defaults import (
     WP_PV_ANTEIL_DEFAULT,
     WP_WIRKUNGSGRAD_GAS_DEFAULT,
     WP_WIRKUNGSGRAD_OEL_DEFAULT,
+    WP_WIRKUNGSGRAD_STROM_DEFAULT,
 )
+
+
+def alter_wirkungsgrad(energietraeger: Optional[str]) -> float:
+    """Erzeugungs-Wirkungsgrad der ersetzten Altanlage je Energieträger.
+
+    Single Source der η-Wahl, die vorher an drei Stellen als
+    ``OEL if traeger == "oel" else GAS`` dupliziert war (`_wp_aggregate` hier,
+    `services.wp_wirtschaftlichkeit._wp_alter_wirkungsgrad`, das WP-Aggregat in
+    `api/routes/aussichten.py`). Alle drei kannten nur Gas und Öl — die im
+    Formular wählbare **Strom-Direktheizung** („Strom (Direktheizung)",
+    `WaermepumpeFelder.tsx`) bekam damit stillschweigend den Gas-Kessel-Wirkungsgrad
+    0,90 und wurde dadurch um gut 11 % zu teuer gerechnet (= zu hohe WP-Ersparnis).
+
+    Eine Widerstands-/Direktheizung setzt Strom praktisch verlustfrei in Wärme um,
+    deshalb **1,0**: ``waerme / 1.0`` lässt `gas_kosten_altanlage` für diesen
+    Energieträger zur reinen ``waerme × preis``-Rechnung werden — genau richtig,
+    denn der eingetragene Preis ist dort der Strompreis je kWh Wärme.
+
+    Args:
+        energietraeger: ``"gas"``, ``"oel"``, ``"strom"`` oder ``None``
+            (unbekannt/ungesetzt → Gas als bisheriger Default).
+
+    Returns:
+        Wirkungsgrad als Faktor (0 < η ≤ 1).
+    """
+    if energietraeger == "oel":
+        return WP_WIRKUNGSGRAD_OEL_DEFAULT
+    if energietraeger == "strom":
+        return WP_WIRKUNGSGRAD_STROM_DEFAULT
+    return WP_WIRKUNGSGRAD_GAS_DEFAULT
 
 
 def gas_kosten_altanlage(
@@ -67,10 +98,8 @@ def _wp_aggregate(parameter: Optional[dict]) -> dict:
                 PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"],
             ) or PARAM_WAERMEPUMPE_DEFAULTS["alter_preis_cent_kwh"]
         ),
-        "alter_wirkungsgrad": (
-            WP_WIRKUNGSGRAD_OEL_DEFAULT
-            if params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"]) == "oel"
-            else WP_WIRKUNGSGRAD_GAS_DEFAULT
+        "alter_wirkungsgrad": alter_wirkungsgrad(
+            params.get(PARAM_WAERMEPUMPE["ALTER_ENERGIETRAEGER"])
         ),
         "zusatzkosten_jahr": params.get(
             PARAM_WAERMEPUMPE["ALTERNATIV_ZUSATZKOSTEN_JAHR"], 0,
