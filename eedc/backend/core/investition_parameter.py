@@ -263,6 +263,11 @@ LEGACY_PARAM_KEYS: Final[dict[str, str]] = {
     "nutzt_arbitrage": "arbitrage_faehig",
     # Wallbox
     "leistung_kw": "max_ladeleistung_kw",  # nur in Wallbox-Kontext, nicht WP
+    # A27/N115: fehlte hier, während die Migration ihn sehr wohl umschreibt
+    # (`core/database.py::_migrate_investitionen_parameter_keys_v325`,
+    # Kommentar dort „community_service-Drift"). Genau diese Sorte Lücke hält
+    # `test_p3b_kanon_deckt_die_v325_migration_ab` ab jetzt fest.
+    "ladeleistung_kw": "max_ladeleistung_kw",  # nur in Wallbox-Kontext
     # Wechselrichter
     "leistung_ac_kw": "max_leistung_kw",  # nur im toten Schema
     # PV-Module / Balkonkraftwerk — Legacy-Nennleistung. Als einziger Eintrag

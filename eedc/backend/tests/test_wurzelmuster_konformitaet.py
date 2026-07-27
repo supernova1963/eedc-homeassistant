@@ -1,8 +1,8 @@
-"""Konformitäts-Wächter gegen vier der sechs Wurzelmuster (A14/A17/A24).
+"""Konformitäts-Wächter gegen fünf der sechs Wurzelmuster (A14/A17/A24/A27).
 
 Hintergrund: Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
 Commits der v4.0.1-Runde haben Fundstellen einzeln geheilt, jeder Fix erzeugte
-den nächsten Fund. Diese Datei macht vier der Muster maschinell prüfbar, damit
+den nächsten Fund. Diese Datei macht fünf der Muster maschinell prüfbar, damit
 sie nicht neu entstehen. Sie prüft **Struktur, keine Werte** — deshalb kein
 `db`-Fixture, kein I/O, kein Netz.
 
@@ -39,6 +39,14 @@ Gewächterte Muster:
        liegt die Regel in `services/prognose_auswahl.py`; dieser Wächter hält die
        Lesestellen darauf, damit keine 24. Kopie entsteht.
 
+  P3-b — Literal-Schlüssel im `parameter`-JSON gegen den Kanon
+       `core/investition_parameter.py` (A27). Dieselbe stille Null wie bei P6,
+       nur auf dem anderen JSON-Feld: `inv.parameter.get("ladeleistung_kw")`
+       liefert nach der v3.25.0-Migration `None`, und der Aufrufer rechnet mit
+       0 weiter. Genau so waren die 7 Drift-Bugs entstanden, die v3.25.0
+       aufgeräumt hat. Dazu N115: der Kanon und die ausgeführte Migration
+       hingen bis A27 an nichts und wichen bereits voneinander ab.
+
   P3-a — Investitions-Kennwerte nur über den SoT-Helper (A24-3, die
        **#229-Klasse**). Die Nennleistung liegt je nach Herkunft in der Spalte
        `Investition.leistung_kwp` **oder** im `parameter`-JSON; wer nur die
@@ -56,6 +64,7 @@ from pathlib import Path
 from typing import Iterator
 
 from backend.core import field_definitions as fd
+from backend.core import investition_parameter as ip
 
 # Repo-relativer Wurzelpfad des Backends (`conftest.py` legt `eedc/` in sys.path).
 _BACKEND = Path(__file__).resolve().parents[1]
@@ -692,3 +701,404 @@ def test_p3a_kennwert_sot_traegt_die_regel_noch():
             "Read-Site ihre eigene Fallunterscheidung, und die neunte Variante "
             "der BKW-Formel entsteht."
         )
+
+
+# ============================================================================
+# P3-b — Literal-Schlüssel im `parameter`-JSON gegen den Kanon (A27)
+# ============================================================================
+
+# Der Kanon: `core/investition_parameter.py`. Er wird **introspektiv** gelesen,
+# nicht als Liste nachgebaut — ein neuer Schlüssel in einer `PARAM_<TYP>`-Map
+# und sogar eine ganz neue `PARAM_<TYP>`-Map sind damit automatisch gültig, ohne
+# dass jemand diesen Wächter anfassen muss (dasselbe Prinzip wie bei P6, der
+# `field_definitions` liest statt eine Feldliste zu kopieren).
+P3B_KANON_MODUL = "backend/core/investition_parameter.py"
+
+
+def _p3b_kanon_maps() -> dict[str, dict[str, str]]:
+    """Alle `PARAM_<TYP>`-Schlüsselmaps des Kanons (ohne die `_DEFAULTS`-Maps).
+
+    Die `_DEFAULTS`-Maps bleiben bewusst draußen: dort stehen WERTE unter den
+    kanonischen Schlüsseln, nicht Schlüsselnamen. Sie mit hineinzuziehen machte
+    jeden Default-Wert zu einem gültigen Schlüssel.
+    """
+    return {
+        name: getattr(ip, name)
+        for name in dir(ip)
+        if name.startswith("PARAM_")
+        and not name.endswith("_DEFAULTS")
+        and isinstance(getattr(ip, name), dict)
+    }
+
+
+def _p3b_kanon() -> set[str]:
+    """Alle Schlüssel, die in einem `parameter`-JSON gelesen werden dürfen.
+
+    Zwei Quellen:
+      - die Werte aller `PARAM_<TYP>`-Maps — der gültige Kanon von heute
+      - die **Schlüssel** von `LEGACY_PARAM_KEYS` — dokumentierte Altnamen.
+        Sie zu LESEN ist legitim (Bestandsdaten, die die v3.25.0-Migration nicht
+        erwischt hat; `kwp` wird sogar aktiv gelesen). Zu SCHREIBEN sind sie
+        nicht — diese Grenze zieht dieser Wächter nicht, sie steht als Prosa im
+        Kanon-Modul.
+    """
+    schluessel: set[str] = set()
+    for karte in _p3b_kanon_maps().values():
+        schluessel |= set(karte.values())
+    return schluessel | set(ip.LEGACY_PARAM_KEYS)
+
+
+# Klassifizierte Baseline (A27, Stand 2026-07-27): **leer**. 66 Literal-Zugriffe
+# im Baum, alle 66 im Kanon — daneben 75 Zugriffe in der gewünschten
+# Konstanten-Form (`.get(PARAM_SPEICHER["KAPAZITAET_KWH"])`), der Sollzustand ist
+# also bereits die Mehrheit. Der Wächter hält diesen Zustand, er dokumentiert
+# keine Altlast.
+#
+# **Vorentscheidung E12, hier bewusst NICHT als Eintrag:** `services/
+# infothek_migration.py` liest `stamm_*`-Schlüssel (`stamm_notizen` u. a.), die
+# nicht in den Investitions-Kanon gehören — die Map dort (Z. 22-58) bildet sie
+# auf (Infothek-Kategorie, Feld) ab, es sind also MIGRATIONS-QUELLSCHLÜSSEL auf
+# dem Weg ins Infothek-Modell, keine lebenden Investitions-Parameter. Sie in den
+# Investitions-Kanon zu ziehen vermischte zwei Domänen in einer SoT; das Modul
+# ist als benannte Zweit-SoT freigestellt. Ein Eintrag ist heute trotzdem falsch:
+# die Stelle liest über `params = dict(inv.parameter)`, und die **enge**
+# Alias-Form unten erfasst das nicht — der Eintrag wäre von Geburt an verwaist
+# und `::test_p3b_baseline_ausnahmen_sind_noch_belegt` schlüge an. Wandert die
+# Stelle je in Reichweite (z. B. `params = inv.parameter or {}`), ist
+# `"backend/services/infothek_migration.py"` mit genau dieser Begründung die
+# dokumentierte Antwort — als MODUL-Eintrag, nicht als ein Eintrag je Schlüssel.
+#
+# Wer hier etwas hinzufügt, begründet im Klartext, warum der Schlüssel kein
+# Investitions-Parameter ist. Ein echter Parameter gehört in den Kanon, nicht
+# hierher (dort hängen Frontend-Pendant, Defaults und die Migration dran).
+P3B_BASELINE_AUSNAHMEN: frozenset[str] = frozenset()
+
+
+def _p3b_entpacke_or_leer(knoten: ast.AST) -> ast.AST:
+    """`(x or {})` → `x`; alles andere unverändert.
+
+    Die Form `(inv.parameter or {}).get(…)` ist im Bestand häufiger als der
+    blanke Zugriff; ohne dieses Entpacken sähe der Wächter zwei Drittel der
+    Stellen nicht.
+    """
+    if isinstance(knoten, ast.BoolOp) and isinstance(knoten.op, ast.Or):
+        if len(knoten.values) == 2:
+            rechts = knoten.values[1]
+            if isinstance(rechts, ast.Dict) and not rechts.keys:
+                return knoten.values[0]
+    return knoten
+
+
+def _p3b_aliase(baum: ast.Module) -> set[str]:
+    """Lokale Namen, die ein `parameter`-JSON UNVERÄNDERT halten.
+
+    **Bewusst eng (Entscheidung E11):** nur `x = inv.parameter` und
+    `x = inv.parameter or {}`. Die naheliegende weite Fassung — „irgendwo
+    `.parameter` im Zuweisungsausdruck" — macht auch
+    `wp_agg = _wp_aggregate(wp.parameter)` zum Alias, obwohl dort ein
+    ABGELEITETES Dict mit eigenen Schlüsseln entsteht. Gemessen sind das 3 von 4
+    Treffern in `core/berechnungen/alternativkosten.py`: ein Wächter, der beim
+    ersten Lauf zu 75 % danebenliegt, wird abgeschaltet.
+
+    Preis der Enge, am Code gemessen und keine Fußnote: **4 identitätswahrende
+    Alias-Formen bleiben unerkannt** — `params = dict(inv.parameter)`
+    (`services/infothek_migration.py:195`) und dreimal
+    `x = invs[0].parameter if invs else None` (`api/routes/aktueller_monat.py`,
+    `api/routes/cockpit/komponenten.py`, `api/routes/cockpit/uebersicht.py`).
+    Dazu kommt die Klasse „JSON als Funktionsargument" (`get_wp_strom_kwh(daten,
+    wp.parameter)`, `get_felder_fuer_investition(inv.typ, inv.parameter)`), die
+    ein AST-Formwächter grundsätzlich nicht verfolgt. Dieselbe bewusste Grenze
+    wie die Empfänger-Namensheuristik bei P3-a und die Modellnamen-Liste bei P5.
+    """
+    aliase: set[str] = set()
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            continue
+        wert = getattr(knoten, "value", None)
+        if wert is None:  # `x: dict` ohne Zuweisung
+            continue
+        entpackt = _p3b_entpacke_or_leer(wert)
+        if not (isinstance(entpackt, ast.Attribute) and entpackt.attr == "parameter"):
+            continue
+        ziele = knoten.targets if isinstance(knoten, ast.Assign) else [knoten.target]
+        for ziel in ziele:
+            if isinstance(ziel, ast.Name):
+                aliase.add(ziel.id)
+    return aliase
+
+
+def _p3b_ist_parameter_json(knoten: ast.AST, aliase: set[str]) -> bool:
+    """Hält dieser Ausdruck ein `parameter`-JSON — direkt oder über einen Alias?"""
+    entpackt = _p3b_entpacke_or_leer(knoten)
+    if isinstance(entpackt, ast.Attribute) and entpackt.attr == "parameter":
+        return True
+    return isinstance(entpackt, ast.Name) and entpackt.id in aliase
+
+
+def _p3b_zugriffe() -> list[tuple[str, str, str]]:
+    """Alle Literal-Zugriffe auf ein `parameter`-JSON als `(ort, modul, schlüssel)`.
+
+    Zwei Formen:
+      - `…parameter.get("literal")`  — der Bestand, 66 Stellen
+      - `…parameter["literal"]`      — Subscript, Lesen **und** Schreiben. Heute
+        existiert keine einzige (gemessen); der Zweig ist trotzdem drin, weil er
+        sonst der lautlose Ausweg wäre, sobald der Wächter jemandem im Weg steht.
+    """
+    treffer: list[tuple[str, str, str]] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        aliase = _p3b_aliase(baum)
+        for knoten in ast.walk(baum):
+            if isinstance(knoten, ast.Subscript):
+                if not _p3b_ist_parameter_json(knoten.value, aliase):
+                    continue
+                schluessel_knoten = knoten.slice
+            elif isinstance(knoten, ast.Call):
+                funktion = knoten.func
+                if not (isinstance(funktion, ast.Attribute) and funktion.attr == "get"):
+                    continue
+                if not knoten.args:
+                    continue
+                if not _p3b_ist_parameter_json(funktion.value, aliase):
+                    continue
+                schluessel_knoten = knoten.args[0]
+            else:
+                continue
+
+            if isinstance(schluessel_knoten, ast.Constant) and isinstance(
+                schluessel_knoten.value, str
+            ):
+                treffer.append((_ort(pfad, knoten), modul, schluessel_knoten.value))
+            # `.get(PARAM_SPEICHER["KAPAZITAET_KWH"])` ist die gewünschte Form —
+            # dort kann kein Tippfehler still durchrutschen, der Kanon-Zugriff
+            # wirft selbst. Nichts zu prüfen.
+    return treffer
+
+
+def test_p3b_parameter_schluessel_stehen_im_kanon():
+    """Jeder Literal-Schlüssel auf einem `parameter`-JSON muss im Kanon stehen.
+
+    Verhindert dieselbe stille Null wie P6, nur auf dem anderen JSON-Feld:
+    ein Schlüssel, den kein Schreibpfad erzeugt, liefert `None`/Default, und der
+    Aufrufer rechnet mit 0 weiter. Genau das waren die 7 Drift-Bugs, die
+    v3.25.0 aufgeräumt hat (E-Auto V2H, Fahrleistung, Speicher-Arbitrage,
+    Wallbox-Leistung … — alle „effektiv tot", keiner laut).
+
+    Baseline 0 (A27): 66 Literal-Zugriffe in 21 Dateien, alle im Kanon.
+    """
+    kanon = _p3b_kanon()
+    unbekannt = [
+        (ort, schluessel)
+        for ort, modul, schluessel in _p3b_zugriffe()
+        if schluessel not in kanon
+        and modul not in P3B_BASELINE_AUSNAHMEN
+    ]
+
+    assert not unbekannt, (
+        "Literal-Schlüssel auf einem parameter-JSON, die nicht im Kanon "
+        f"{P3B_KANON_MODUL} stehen — ein Tippfehler liefert hier still None/0 "
+        "(dieselbe Klasse wie P6/N38):\n"
+        + "\n".join(f"  {ort} → {schluessel!r}" for ort, schluessel in unbekannt)
+        + "\n\nEntweder den Schlüssel in die passende PARAM_<TYP>-Map in "
+        f"{P3B_KANON_MODUL} aufnehmen (und im Frontend-Pendant "
+        "frontend/src/lib/investitionParameter.ts mitziehen) und hier die "
+        "Konstante statt des Literals lesen — oder, wenn es gar kein "
+        "Investitions-Parameter ist, das Modul mit Klartext-Begründung in "
+        "P3B_BASELINE_AUSNAHMEN eintragen."
+    )
+
+
+def test_p3b_baseline_ausnahmen_sind_noch_belegt():
+    """Die Baseline darf nicht über ihre Fundstellen hinaus wachsen.
+
+    Heute leer — der Test ist damit trivial grün und trotzdem nicht überflüssig:
+    er ist die Absicherung, die einen künftigen Eintrag (etwa den in
+    P3B_BASELINE_AUSNAHMEN vorbereiteten E12-Fall) wieder herausdrängt, sobald
+    seine Fundstelle verschwindet. Ohne ihn deckte eine verwaiste Ausnahme
+    später einen echten Treffer im selben Modul.
+    """
+    module_mit_treffern = {modul for _, modul, _ in _p3b_zugriffe()}
+    verwaist = P3B_BASELINE_AUSNAHMEN - module_mit_treffern
+
+    assert not verwaist, (
+        f"Baseline-Ausnahmen ohne Fundstelle: {sorted(verwaist)}. "
+        "Der Zugriff ist weg — den Eintrag aus P3B_BASELINE_AUSNAHMEN entfernen."
+    )
+
+
+def test_p3b_kanon_traegt_die_regel_noch():
+    """Gegenprobe: der Wächter wäre wertlos, wenn der Kanon entkernt würde.
+
+    Die introspektive Kanon-Bildung ist bequem und genau deshalb gefährlich —
+    wird eine `PARAM_<TYP>`-Map umbenannt oder verschoben, schrumpft die
+    Kanon-Menge stillschweigend, und der Wächter oben schlägt plötzlich an
+    Stellen an, die korrekt sind (oder, nach einer bequemen Allowlist-Runde,
+    an gar nichts mehr). Deshalb hier die Anker festgenagelt.
+    """
+    maps = _p3b_kanon_maps()
+    for erwartet in (
+        "PARAM_E_AUTO",
+        "PARAM_SPEICHER",
+        "PARAM_WAERMEPUMPE",
+        "PARAM_WALLBOX",
+        "PARAM_WECHSELRICHTER",
+        "PARAM_PV_MODULE",
+        "PARAM_BALKONKRAFTWERK",
+        "PARAM_SONSTIGES",
+    ):
+        assert erwartet in maps, (
+            f"{erwartet} existiert nicht mehr in {P3B_KANON_MODUL} — umbenannt "
+            "oder verschoben? Dann diesen Wächter mitziehen; die introspektive "
+            "Kanon-Bildung merkt den Verlust sonst nicht."
+        )
+
+    kanon = _p3b_kanon()
+    for schluessel, herkunft in (
+        # Die A24-1-Ergänzung: ohne sie wäre P3-b gar nicht baubar gewesen.
+        ("leistung_kwp", "PARAM_PV_MODULE['LEISTUNG_KWP'] (A24-1, die #229-Datenlage)"),
+        # Der einzige Legacy-Key, der aktiv gelesen wird.
+        (ip.LEGACY_KWP_KEY, "LEGACY_PARAM_KEYS (aktiv gelesen, s. get_pv_kwp)"),
+    ):
+        assert schluessel in kanon, (
+            f"{schluessel!r} fehlt im Kanon — Herkunft war {herkunft}. Ohne ihn "
+            "meldet der Wächter oben eine korrekte Lesestelle als Verstoß."
+        )
+
+
+# ============================================================================
+# N115 — der Kanon und die ausgeführte v3.25.0-Migration hängen aneinander
+# ============================================================================
+
+# `LEGACY_PARAM_KEYS` ist reine Dokumentation, `KEY_MAPPING_BY_TYP` in
+# `core/database.py::_migrate_investitionen_parameter_keys_v325` ist der Umbau,
+# der auf jeder Bestands-DB tatsächlich gelaufen ist. Bis A27 hingen die zwei an
+# nichts — und wichen bereits ab: die Migration schrieb `ladeleistung_kw →
+# max_ladeleistung_kw` (Wallbox, „community_service-Drift"), was in
+# `LEGACY_PARAM_KEYS` schlicht fehlte. Eine Doku-Liste, die den ausgeführten
+# Umbau unvollständig wiedergibt, ist genau die Sorte Behauptung, gegen die die
+# Spalte „gesichert durch" in ADR-002 gebaut wurde.
+N115_MIGRATIONS_MODUL = "backend/core/database.py"
+N115_MIGRATIONS_FUNKTION = "_migrate_investitionen_parameter_keys_v325"
+N115_MIGRATIONS_MAP = "KEY_MAPPING_BY_TYP"
+
+# Die Gegenrichtung ist erlaubt — der Kanon darf mehr Altnamen kennen als die
+# Migration angefasst hat —, aber jeder solche Eintrag ist BENANNT, sonst wächst
+# die Doku-Liste unbemerkt in eine zweite Wahrheit.
+#
+#   kwp  Bewusst nie migriert: die Nennleistung liegt primär in der SPALTE
+#        `Investition.leistung_kwp`; ein Umschreiben des JSON-Schlüssels hätte
+#        nichts geheilt und Bestandsdaten angefasst, die noch gelesen werden.
+#        Stattdessen liest `core/investition_kennwerte.py::get_pv_kwp` ihn
+#        aktiv weiter (#229/N66) — der einzige Legacy-Key mit Lesepfad.
+N115_KANON_OHNE_MIGRATION: frozenset[str] = frozenset({ip.LEGACY_KWP_KEY})
+
+
+def _n115_migrations_paare() -> dict[str, str]:
+    """`{alter_key: neuer_key}` aus der v3.25.0-Migration, per AST gelesen.
+
+    `KEY_MAPPING_BY_TYP` ist eine LOKALE Variable in der Migrationsfunktion —
+    importierbar ist sie nicht. Der AST-Weg ist zugleich die Gegenprobe: wird
+    die Funktion oder die Map umbenannt, schlägt dieser Helper fehl, statt eine
+    leere Menge zu liefern und das Gate still grün zu färben.
+    """
+    quelle = (_BACKEND / "core/database.py").read_text()
+    baum = ast.parse(quelle)
+
+    funktion = next(
+        (
+            knoten
+            for knoten in ast.walk(baum)
+            if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and knoten.name == N115_MIGRATIONS_FUNKTION
+        ),
+        None,
+    )
+    assert funktion is not None, (
+        f"{N115_MIGRATIONS_FUNKTION} existiert nicht mehr in "
+        f"{N115_MIGRATIONS_MODUL} — umbenannt oder verschoben? Dann diesen Test "
+        "mitziehen, sonst prüft er ab jetzt nichts mehr (ADR-002 Pflicht Nr. 3)."
+    )
+
+    roh = next(
+        (
+            knoten.value
+            for knoten in ast.walk(funktion)
+            if isinstance(knoten, ast.Assign)
+            and any(
+                isinstance(ziel, ast.Name) and ziel.id == N115_MIGRATIONS_MAP
+                for ziel in knoten.targets
+            )
+        ),
+        None,
+    )
+    assert roh is not None, (
+        f"{N115_MIGRATIONS_MAP} existiert nicht mehr in "
+        f"{N115_MIGRATIONS_FUNKTION} — umbenannt oder in eine andere Struktur "
+        "überführt? Dann diesen Test mitziehen."
+    )
+
+    paare: dict[str, str] = {}
+    for karte in ast.literal_eval(roh).values():
+        paare.update(karte)
+    return paare
+
+
+def test_p3b_kanon_deckt_die_v325_migration_ab():
+    """Jeder Quellschlüssel der Migration steht mit demselben Ziel im Kanon.
+
+    Gerichtet geprüft: die Doku-Liste `LEGACY_PARAM_KEYS` darf nicht hinter dem
+    zurückbleiben, was auf den DBs der Nutzer tatsächlich gelaufen ist. Die
+    Gegenrichtung (Kanon kennt mehr als die Migration) ist erlaubt und in
+    `N115_KANON_OHNE_MIGRATION` benannt.
+
+    Gefunden hat diese Prüfung bei ihrer Einführung genau eine Lücke:
+    `ladeleistung_kw` (Wallbox) — im selben Commit geschlossen.
+    """
+    fehlend: list[str] = []
+    abweichend: list[str] = []
+    for alt_key, neu_key in sorted(_n115_migrations_paare().items()):
+        if alt_key not in ip.LEGACY_PARAM_KEYS:
+            fehlend.append(f"  {alt_key!r} → {neu_key!r}")
+        elif ip.LEGACY_PARAM_KEYS[alt_key] != neu_key:
+            abweichend.append(
+                f"  {alt_key!r}: Migration → {neu_key!r}, "
+                f"Kanon → {ip.LEGACY_PARAM_KEYS[alt_key]!r}"
+            )
+
+    assert not fehlend and not abweichend, (
+        "LEGACY_PARAM_KEYS gibt die ausgeführte v3.25.0-Migration nicht "
+        f"vollständig wieder ({N115_MIGRATIONS_MODUL}::{N115_MIGRATIONS_FUNKTION}):\n"
+        + ("Fehlt im Kanon:\n" + "\n".join(fehlend) + "\n" if fehlend else "")
+        + ("Anderes Ziel:\n" + "\n".join(abweichend) + "\n" if abweichend else "")
+        + "\nDie Migration ist auf den DBs der Nutzer bereits gelaufen — der "
+        "alte Schlüssel kann dort also noch in unmigrierten Beständen liegen. "
+        "Ein Lese-Fallback ohne Kanon-Eintrag ist ein Literal ohne SoT (P3-b); "
+        "ein Kanon ohne den Eintrag ist eine Doku, die den Umbau verschweigt."
+    )
+
+
+def test_p3b_kanon_eintraege_ohne_migration_sind_benannt():
+    """Umgekehrt: jeder Legacy-Key ohne Migrations-Paar ist begründet.
+
+    Ohne diese Richtung könnte `LEGACY_PARAM_KEYS` beliebig um Altnamen wachsen,
+    die nie jemand umgeschrieben hat — die Liste sähe nach Migrations-Protokoll
+    aus und wäre eine Sammlung. Der Test erzwingt die Entscheidung: entweder das
+    Paar steht in der Migration, oder es steht mit Grund in
+    N115_KANON_OHNE_MIGRATION.
+    """
+    migriert = set(_n115_migrations_paare())
+    unbegruendet = set(ip.LEGACY_PARAM_KEYS) - migriert - N115_KANON_OHNE_MIGRATION
+    verwaist = N115_KANON_OHNE_MIGRATION - set(ip.LEGACY_PARAM_KEYS)
+
+    assert not unbegruendet, (
+        f"Legacy-Keys ohne Migrations-Paar und ohne Begründung: "
+        f"{sorted(unbegruendet)}. Entweder gehören sie in "
+        f"{N115_MIGRATIONS_MAP} (dann läuft die Migration sie um) — oder mit "
+        "Klartext-Begründung in N115_KANON_OHNE_MIGRATION, so wie `kwp`."
+    )
+    assert not verwaist, (
+        f"Benannte Ausnahmen ohne Kanon-Eintrag: {sorted(verwaist)}. Der "
+        "Legacy-Key ist aus LEGACY_PARAM_KEYS verschwunden — die Ausnahme aus "
+        "N115_KANON_OHNE_MIGRATION mit entfernen, sonst deckt sie später einen "
+        "gleichnamigen neuen Eintrag."
+    )
