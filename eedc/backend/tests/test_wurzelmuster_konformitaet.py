@@ -1,4 +1,4 @@
-"""Konformitäts-Wächter gegen fünf der sechs Wurzelmuster (A14/A17/A24/A27).
+"""Konformitäts-Wächter gegen fünf der sechs Wurzelmuster (A14/A17/A24/A25/A27).
 
 Hintergrund: Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
 Commits der v4.0.1-Runde haben Fundstellen einzeln geheilt, jeder Fix erzeugte
@@ -24,7 +24,11 @@ Gewächterte Muster:
        liest `api/routes/data_import.py:174` bis heute `parameter["leistung_kwp"]`
        — ein Schlüssel, den es in keinem Regime gibt (N59, Abfluss A17).
        Hier gewächtert: `InvestitionMonatsdaten.verbrauch_daten` /
-       `Monatsdaten.verbrauch_daten` gegen die Feld-SoT `core/field_definitions`.
+       `Monatsdaten.verbrauch_daten` gegen die Feld-SoT `core/field_definitions`
+       — seit A25 in allen drei Zugriffsformen (`.get()`, Subscript **lesend
+       wie schreibend**, Dict-Literal bei Zuweisung). Die Schreibseite ist der
+       schärfere Fall: ein Tippfehler dort legt einen Schlüssel an, den kein
+       Leser liest, und der korrekte Leser bekommt still `0`.
 
   P3 — SoT-Helper umgangen. `_distribute_by_param` verteilt einen Gesamtwert
        nach kWp/Kapazität und ignoriert dabei eine explizite
@@ -123,14 +127,19 @@ def _kanonische_feldnamen() -> set[str]:
     )
 
 
-# Klassifizierte Baseline (A14, Stand 2026-07-26): Schlüssel, die bewusst NICHT
-# in `field_definitions` stehen, weil sie keine Messfelder sind. Beide sind
-# geprüft und dokumentiert — kein Bug, keine Nachziehschuld.
+# Klassifizierte Baseline (A14, Reichweite erweitert A25/2026-07-27): Schlüssel,
+# die bewusst NICHT in `field_definitions` stehen, weil sie keine Messfelder
+# sind. Beide sind geprüft und dokumentiert — kein Bug, keine Nachziehschuld.
+# Die A25-Erweiterung auf Subscript- und Dict-Literal-Form hat **keine dritte
+# Ausnahme** nötig gemacht: alle 18 Schreib- und 8 Lese-Subscripts sowie alle 6
+# Dict-Literal-Schlüssel im Baum stehen im Kanon, bis auf `sonstige_positionen`.
 #
 #   sonstige_positionen  — LISTE von Sonderposten-Dicts, kein Skalar-Feld.
 #                          `field_definitions` beschreibt Eingabefelder mit
 #                          Einheit/Label; eine Positionsliste hat beides nicht.
-#                          Gelesen in api/routes/monatsabschluss/views.py:540.
+#                          Gelesen in api/routes/monatsabschluss/views.py:540f.
+#                          und utils/sonstige_positionen.py:72, geschrieben in
+#                          api/routes/import_export/demo_data.py:445/449/454.
 #   sonderkosten_notiz   — FREITEXT zur Sonderkosten-Zeile, kein Messwert.
 #                          Gelesen in utils/sonstige_positionen.py:76.
 #
@@ -142,41 +151,117 @@ P6_BASELINE_AUSNAHMEN: frozenset[str] = frozenset(
 )
 
 
-def _nennt_verbrauch_daten(knoten: ast.AST) -> bool:
-    """Greift der Ausdruck auf ein `verbrauch_daten`-Feld zu?
+def _p6_entpacke_or_leer(knoten: ast.AST) -> ast.AST:
+    """`(x or {})` → `x`; alles andere unverändert.
 
-    Erfasst die im Bestand vorkommenden Formen — `imd.verbrauch_daten.get(...)`,
-    `(imd.verbrauch_daten or {}).get(...)` und die lokale Variable
-    `verbrauch_daten.get(...)` — indem der Teilbaum vor dem `.get` nach dem
-    Namen durchsucht wird, statt eine feste Aufrufform zu erwarten.
+    Die Form `(imd.verbrauch_daten or {}).get(…)` ist im Bestand häufig; ohne
+    dieses Entpacken sähe der Wächter einen Großteil der Stellen nicht.
     """
-    for teil in ast.walk(knoten):
-        if isinstance(teil, ast.Attribute) and teil.attr == "verbrauch_daten":
-            return True
-        if isinstance(teil, ast.Name) and teil.id == "verbrauch_daten":
-            return True
-    return False
+    if isinstance(knoten, ast.BoolOp) and isinstance(knoten.op, ast.Or):
+        if len(knoten.values) == 2:
+            rechts = knoten.values[1]
+            if isinstance(rechts, ast.Dict) and not rechts.keys:
+                return knoten.values[0]
+    return knoten
+
+
+def _ist_verbrauch_daten(knoten: ast.AST) -> bool:
+    """Hält dieser Ausdruck DIREKT ein `verbrauch_daten`-JSON?
+
+    Erfasst die im Bestand vorkommenden Formen — `imd.verbrauch_daten`,
+    `(imd.verbrauch_daten or {})`, die lokale Variable `verbrauch_daten` und
+    die **präfigierte** lokale Variable `eauto_verbrauch_daten` (Suffix-Regel).
+    Das Suffix ist nicht kosmetisch: 5 der 18 Schreibstellen des Bestands
+    (`api/routes/import_export/demo_data.py:441-454`) hängen ausschließlich
+    daran, das Dict wandert dort unverändert in `_add_demo_imd`.
+
+    **Bewusst DIREKT statt Teilbaum-Suche (A25):** die Vorgänger-Fassung lief
+    mit `ast.walk` über den ganzen Ausdruck vor dem `.get` und hätte damit auch
+    `berechne_sonstige_summen(verbrauch_daten)["netto_euro"]`
+    (`utils/sonstige_positionen.py:113`) getroffen — ein ABGELEITETES Dict mit
+    eigenen Schlüsseln, kein `verbrauch_daten`. Beim `.get()`-Zweig war das
+    folgenlos (beide Fassungen erfassen dort dieselben 32 Stellen, gemessen);
+    mit dem neuen Subscript-Zweig wäre daraus eine Falschmeldung geworden, die
+    nur eine unberechtigte dritte Baseline-Ausnahme (`netto_euro`) hätte
+    stillstellen können. Dieselbe enge Empfänger-Form wie bei P3-b (E11).
+    """
+    entpackt = _p6_entpacke_or_leer(knoten)
+    if isinstance(entpackt, ast.Attribute):
+        name = entpackt.attr
+    elif isinstance(entpackt, ast.Name):
+        name = entpackt.id
+    else:
+        return False
+    return name == "verbrauch_daten" or name.endswith("_verbrauch_daten")
 
 
 def _verbrauch_daten_zugriffe() -> list[tuple[str, str]]:
-    """Alle `verbrauch_daten…get("literal")`-Zugriffe als `(ort, schlüssel)`."""
+    """Alle Literal-Schlüssel auf einem `verbrauch_daten`-JSON als `(ort, schlüssel)`.
+
+    Drei Formen, seit A25 alle drei (vorher nur die erste):
+
+      - `…verbrauch_daten.get("literal")` — der Lesepfad, 32 Stellen.
+      - `…verbrauch_daten["literal"]` — Subscript, **Lesen und Schreiben**
+        (Entscheidung E13: eine Regel statt einer Fallunterscheidung). Der alte
+        ADR-Satz „beim Lesen wirft ein fehlender Schlüssel `KeyError`, also laut
+        statt still `0`" trägt nur, solange die Stelle nicht in einem
+        `try/except` sitzt — und das prüft niemand nach. Bestand: 18 schreibend
+        (`import_export/helpers.py`, `import_export/demo_data.py`), 8 lesend
+        (`custom_import/apply.py`, `monatsabschluss/views.py`,
+        `utils/sonstige_positionen.py`).
+      - `…verbrauch_daten = {"literal": …}` — Dict-Literal bei Zuweisung
+        (Entscheidung E14). Es ist die naheliegendste Umgehung der
+        Subscript-Regel; bei P3-a war genau die nicht abgedeckte Form
+        (`getattr`) die Stelle, an der ein Defekt durchfiel. Bestand: 6
+        Schlüssel an 2 Zuweisungen, alle im Kanon.
+
+    Die Schreibseite ist der schärfere Fall: ein Tippfehler in
+    `verbrauch_daten["typo_kwh"] = …` wirft nichts, sondern legt einen Schlüssel
+    an, den kein Leser liest — der korrekt lesende Aufrufer bekommt still `0`.
+    """
     treffer: list[tuple[str, str]] = []
+
+    def nimm(pfad: Path, ort_knoten: ast.AST, schluessel_knoten: ast.AST) -> None:
+        if isinstance(schluessel_knoten, ast.Constant) and isinstance(
+            schluessel_knoten.value, str
+        ):
+            treffer.append((_ort(pfad, ort_knoten), schluessel_knoten.value))
+        # `.get(KONSTANTE)` bzw. ein berechneter Schlüssel ist die gewünschte
+        # Form — dort kann kein Tippfehler still durchrutschen.
+
     for pfad, baum in _quelldateien():
         for knoten in ast.walk(baum):
-            if not isinstance(knoten, ast.Call):
-                continue
-            funktion = knoten.func
-            if not (isinstance(funktion, ast.Attribute) and funktion.attr == "get"):
-                continue
-            if not _nennt_verbrauch_daten(funktion.value):
-                continue
-            if not knoten.args:
-                continue
-            erstes = knoten.args[0]
-            if not (isinstance(erstes, ast.Constant) and isinstance(erstes.value, str)):
-                # `.get(KONSTANTE)` ist die gewünschte Form — nichts zu prüfen.
-                continue
-            treffer.append((_ort(pfad, knoten), erstes.value))
+            if isinstance(knoten, ast.Call):
+                funktion = knoten.func
+                if not (isinstance(funktion, ast.Attribute) and funktion.attr == "get"):
+                    continue
+                if not knoten.args:
+                    continue
+                if not _ist_verbrauch_daten(funktion.value):
+                    continue
+                nimm(pfad, knoten, knoten.args[0])
+
+            elif isinstance(knoten, ast.Subscript):
+                # Beide `ctx` — Load wie Store (E13).
+                if not _ist_verbrauch_daten(knoten.value):
+                    continue
+                nimm(pfad, knoten, knoten.slice)
+
+            elif isinstance(knoten, (ast.Assign, ast.AnnAssign)):
+                ziele = (
+                    knoten.targets if isinstance(knoten, ast.Assign) else [knoten.target]
+                )
+                if not any(_ist_verbrauch_daten(ziel) for ziel in ziele):
+                    continue
+                wert = getattr(knoten, "value", None)
+                if not isinstance(wert, ast.Dict):
+                    continue
+                for schluessel_knoten in wert.keys:
+                    # Ort = die Schlüsselzeile, nicht die Zuweisung: mehrzeilige
+                    # Dict-Literale sind der Normalfall.
+                    if schluessel_knoten is not None:
+                        nimm(pfad, schluessel_knoten, schluessel_knoten)
+
     return treffer
 
 
@@ -184,7 +269,10 @@ def test_p6_verbrauch_daten_schluessel_stehen_in_der_feld_sot():
     """Jeder Literal-Schlüssel auf `verbrauch_daten` muss ein bekanntes Feld sein.
 
     Verhindert den N38-/N59-Mechanismus: falscher Schlüssel → still `0` → `0`
-    liest sich als „keine Daten" → der Fehler fällt jahrelang nicht auf.
+    liest sich als „keine Daten" → der Fehler fällt jahrelang nicht auf. Seit
+    A25 auf der **Schreibseite** genauso wie beim Lesen — dort ist die stille
+    Null sogar zwangsläufig, weil der falsch geschriebene Schlüssel nie gelesen
+    und der richtig gelesene nie geschrieben wird.
     """
     kanon = _kanonische_feldnamen()
     unbekannt = [
