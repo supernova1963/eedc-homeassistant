@@ -1,8 +1,8 @@
-"""Konformitäts-Wächter gegen drei der sechs Wurzelmuster (A14/A17).
+"""Konformitäts-Wächter gegen vier der sechs Wurzelmuster (A14/A17/A24).
 
 Hintergrund: Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
 Commits der v4.0.1-Runde haben Fundstellen einzeln geheilt, jeder Fix erzeugte
-den nächsten Fund. Diese Datei macht drei der Muster maschinell prüfbar, damit
+den nächsten Fund. Diese Datei macht vier der Muster maschinell prüfbar, damit
 sie nicht neu entstehen. Sie prüft **Struktur, keine Werte** — deshalb kein
 `db`-Fixture, kein I/O, kein Netz.
 
@@ -38,6 +38,15 @@ Gewächterte Muster:
        (2× HTTP 500, 1× verdoppelte Summe, 3× älteste statt aktiver). Seit A17
        liegt die Regel in `services/prognose_auswahl.py`; dieser Wächter hält die
        Lesestellen darauf, damit keine 24. Kopie entsteht.
+
+  P3-a — Investitions-Kennwerte nur über den SoT-Helper (A24-3, die
+       **#229-Klasse**). Die Nennleistung liegt je nach Herkunft in der Spalte
+       `Investition.leistung_kwp` **oder** im `parameter`-JSON; wer nur die
+       Spalte liest, sieht bei param-gepflegten Modulen still 0. Daraus sind N52
+       (14,0 statt 10,0 kWp in der Live-Gesamtleistung), N66 (Falschmeldung des
+       Daten-Checkers) und ein HTTP 400 in der PVGIS-Prognose entstanden — jedes
+       einzeln geheilt, jedes Mal ohne Wächter, jedes Mal entstand die nächste
+       Kopie. SoT ist `core/investition_kennwerte.py`.
 """
 
 from __future__ import annotations
@@ -385,4 +394,288 @@ def test_p5_auswahl_sot_traegt_die_regel_noch():
             f"{bestandteil} fehlt im Auswahl-SoT — {bedeutung} ist damit weg. "
             "Genau diese drei Bestandteile sind die Regel P5; ohne sie ist der "
             "Wächter oben ein grünes Gate über einem offenen Bug."
+        )
+
+
+# ============================================================================
+# P3-a — Investitions-Kennwerte nur über den SoT-Helper (die #229-Klasse)
+# ============================================================================
+
+# Der SoT: `core/investition_kennwerte.py` mit `get_pv_kwp` / `get_bkw_kwp` /
+# `get_erzeuger_kwp`. Jeder liest erst die Spalte, dann das `parameter`-JSON.
+P3A_SOT_MODUL = "backend/core/investition_kennwerte.py"
+
+# Die bewachten Attributnamen als Konstante, nicht als Literal im Prüfcode:
+# eine Erweiterung auf `neigung_grad` / `ausrichtung` ist damit ein
+# Listeneintrag plus Allowlist, kein Neubau. Bewusst **nicht** in A24 gemacht —
+# `get_pv_neigung` defaultet auf 35°, `get_pv_azimut` auf Süd, und beide können
+# „fehlt" nicht von „gepflegt" unterscheiden. Eine blanke Migration der
+# Anzeige-Stellen machte aus einem heute korrekt leeren Feld eine erfundene
+# Zahl (Befund-Sweep §5.5); das braucht eine eigene Erhebung mit eigener
+# Vorfrage (default-freie Helper-Variante?).
+P3A_KENNWERT_ATTRIBUTE: frozenset[str] = frozenset({"leistung_kwp"})
+
+# Empfänger-Namen, die außerhalb der Regel stehen. Keine Typinferenz — dieselbe
+# bewusste Grenze, die der P5-Wächter mit seiner Modellnamen-Liste zieht.
+#
+#   anlage       Die ANLAGE hat kein `parameter`-JSON. Es gibt dort keinen
+#                „effektiven Wert", von dem die Spalte abwiche — `anlage.leistung_kwp`
+#                IST der Wert (und der Vergleichsmaßstab, gegen den die Summe der
+#                Investitionen geprüft wird). 40 Zugriffe, alle außerhalb von P3-a.
+#   Investition  Der Spaltenausdruck in `select()/where()/order_by()` liest keinen
+#                Wert, sondern benennt eine Spalte. Heute gibt es **null** solcher
+#                Stellen; der Eintrag hält die leere Kategorie offen, damit ein
+#                künftiges `.where(Investition.leistung_kwp > 0)` nicht falsch
+#                anschlägt.
+P3A_ERLAUBTE_EMPFAENGER: frozenset[str] = frozenset({"anlage", "Investition"})
+
+# Klassifizierte Baseline (A24-3, Stand 2026-07-27): 6 Einträge, jeder eine
+# Stelle, die das Muster SETZT statt es zu verletzen (ADR-002 Pflicht Nr. 2).
+# Form: `Modul::Empfängername` — feiner als die Modul-Granularität des
+# P5-Wächters, weil `pvgis.py` beide Sorten enthält (10 migrierte Investitions-
+# Zugriffe **und** die Response-Objekte der gespeicherten Prognose). `Modul`
+# allein stellt das ganze Modul frei und ist nur für den SoT selbst zulässig.
+#
+# Ein Lesepfad, der den effektiven Wert braucht, gehört NIE hierher, sondern auf
+# `get_pv_kwp` / `get_bkw_kwp` / `get_erzeuger_kwp`.
+P3A_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
+    # Spaltendefinition und `__repr__` des Anlage-Modells selbst.
+    "backend/models/anlage.py::self",
+    # `m` ist ein Feld der PvModul-DATACLASS (`module: list[PvModul]`), kein
+    # ORM-Objekt; der Aufrufer füllt es — und zwar bereits über den Helper.
+    "backend/core/berechnungen/pv_verteilung.py::m",
+    # `prog_modul` läuft über `prognose.module`, also über PVModulPrognose-
+    # Pydantic-Objekte einer gespeicherten Prognose, nicht über Investitionen.
+    # Die Schleifenvariable heißt seit A24-2 bewusst anders als die 9
+    # Investitions-Schleifen derselben Datei, damit die zwei Bedeutungen
+    # auseinandergehalten werden.
+    "backend/api/routes/pvgis.py::prog_modul",
+    # Der Export spiegelt die ROHSPALTE: `InvestitionExport` schreibt Feld für
+    # Feld, und der Import liest Feld für Feld in dieselbe Spalte zurück
+    # (Z. 377 ↔ Z. 640). Der effektive Wert würde beim Re-Import in eine bis
+    # dahin NULL-Spalte wandern — der Export VERÄNDERTE die Daten, statt sie zu
+    # spiegeln.
+    "backend/api/routes/import_export/json_operations.py::inv",
+    # Typgeschützter Rohspalten-Zweig: `Investition.leistung_kwp` trägt für
+    # `speicher` kWh und für `wechselrichter` kW (AC) — dort ist die PV-Semantik
+    # der Helper schlicht die falsche Größe (Befund-Sweep N-G). Der Erzeuger-
+    # Zweig derselben Stelle läuft über `get_erzeuger_kwp`; A24-2 hat beide
+    # Builder auf je EINEN kommentierten Rohzugriff gebündelt.
+    "backend/services/pdf/builders/anlagendokumentation.py::inv",
+    "backend/services/pdf/builders/jahresbericht.py::i",
+    # Der SoT selbst — er IST der Spalten-Fallback und liest sie per `getattr`.
+    # Als einziger Eintrag ganzes Modul statt `Modul::Empfänger`.
+    P3A_SOT_MODUL,
+})
+
+
+def _p3a_empfaengername(knoten: ast.AST) -> str:
+    """Empfänger-Name eines Zugriffs — oder eine Typmarke, wenn es keiner ist.
+
+    `anlagen[0].leistung_kwp`, `self.anlage.leistung_kwp` und
+    `lade_inv().leistung_kwp` liefern `<Subscript>` / `<Attribute>` / `<Call>`;
+    diese Marken matchen keinen Allowlist-Eintrag und gelten damit als Verstoß.
+    Das ist Absicht: genau diese Formen hebelten die Namensheuristik aus. Heute
+    existiert keine einzige davon (gemessen) — fail-loud kostet also nichts und
+    erzwingt eine Entscheidung, statt sie stillschweigend durchzulassen.
+    """
+    return knoten.id if isinstance(knoten, ast.Name) else f"<{type(knoten).__name__}>"
+
+
+def _p3a_fundstellen() -> list[tuple[str, str, str, str]]:
+    """Alle Kennwert-Lesezugriffe als `(ort, form, modul, empfänger)`.
+
+    Zwei Formen, weil eine allein den Wächter still grün ließe:
+      - `inv.leistung_kwp`               → `ast.Attribute` mit `ast.Load`
+      - `getattr(inv, "leistung_kwp")`   → `ast.Call`; der Attributname steht als
+        STRING da, ein Attribut-Wächter sieht ihn gar nicht.
+    """
+    treffer: list[tuple[str, str, str, str]] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        for knoten in ast.walk(baum):
+            if isinstance(knoten, ast.Attribute):
+                # Schreibzugriffe (`ast.Store`) sind legitim — der Schreibpfad
+                # läuft über `model_dump`/`setattr` in `crud.py`. Heute existiert
+                # ohnehin kein einziger (gemessen).
+                if knoten.attr in P3A_KENNWERT_ATTRIBUTE and isinstance(
+                    knoten.ctx, ast.Load
+                ):
+                    treffer.append(
+                        (
+                            _ort(pfad, knoten),
+                            "Attributzugriff",
+                            modul,
+                            _p3a_empfaengername(knoten.value),
+                        )
+                    )
+            elif isinstance(knoten, ast.Call):
+                funktion = knoten.func
+                if not (isinstance(funktion, ast.Name) and funktion.id == "getattr"):
+                    continue
+                if len(knoten.args) < 2:
+                    continue
+                attribut = knoten.args[1]
+                if not (
+                    isinstance(attribut, ast.Constant)
+                    and attribut.value in P3A_KENNWERT_ATTRIBUTE
+                ):
+                    continue
+                treffer.append(
+                    (
+                        _ort(pfad, knoten),
+                        "getattr",
+                        modul,
+                        _p3a_empfaengername(knoten.args[0]),
+                    )
+                )
+    return treffer
+
+
+def _p3a_verstoesse(form: str) -> list[str]:
+    """Fundstellen einer Form, die weder Allowlist noch Empfänger-Regel deckt.
+
+    Die Meldung nennt den Allowlist-Schlüssel `modul::empfaenger` mit, damit ein
+    bewusst freigestellter Fall ohne Nachschlagen eingetragen werden kann.
+    """
+    return [
+        f"  {ort} — {form} auf {empfaenger!r}  (Allowlist-Schlüssel: {modul}::{empfaenger})"
+        for ort, gefundene_form, modul, empfaenger in _p3a_fundstellen()
+        if gefundene_form == form
+        and modul not in P3A_BASELINE_AUSNAHMEN
+        and f"{modul}::{empfaenger}" not in P3A_BASELINE_AUSNAHMEN
+        and empfaenger not in P3A_ERLAUBTE_EMPFAENGER
+    ]
+
+
+_P3A_HINWEIS = (
+    "\n\nStattdessen aus backend/core/investition_kennwerte.py lesen: "
+    "`get_pv_kwp(inv)` (PV-Modul), `get_bkw_kwp(inv)` (Balkonkraftwerk) oder "
+    "`get_erzeuger_kwp(inv)` (Typ-Dispatcher für Σ über beide). Die Spalte allein "
+    "liefert bei einer nur im `parameter`-JSON gepflegten Nennleistung still 0 — "
+    "das ist die #229-Klasse (N52, N66).\n"
+    "Wer bewusst die ROHSPALTE will (Export-Spiegelung) oder gar keine Investition "
+    "liest (Anlage, Dataclass, Pydantic-Response), trägt sich mit Klartext-"
+    "Begründung in P3A_BASELINE_AUSNAHMEN ein — Form `modul.py::empfaenger`."
+)
+
+
+def test_p3a_investitions_kwp_nur_ueber_den_sot_helper():
+    """Kein direkter Attributzugriff auf einen Investitions-Kennwert.
+
+    Baseline 0 seit A24-2 (46 Zugriffe im Baum: 40 auf `anlage`, 6 in der
+    Allowlist). Der Wächter prüft **Form, nicht Wert** und kann den Empfänger
+    nicht typisieren — ein Empfänger, der `anlage` heißt, aber eine Investition
+    hält, ist per Konstruktion falsch-negativ.
+    """
+    verstoesse = _p3a_verstoesse("Attributzugriff")
+
+    assert not verstoesse, (
+        "Direkter Attributzugriff auf einen Investitions-Kennwert (P3-a):\n"
+        + "\n".join(verstoesse)
+        + _P3A_HINWEIS
+    )
+
+
+def test_p3a_investitions_kwp_nicht_per_getattr_umgehen():
+    """Dieselbe Regel für die `getattr`-Form — sonst ist der Wächter trivial zu
+    unterlaufen.
+
+    Kein optionaler Zweig: `core/berechnungen/co2_amortisation.py:79` las
+    `getattr(inv, "leistung_kwp", None) or 0` und tauchte deshalb in **keiner**
+    Erhebungszahl auf — weder im Grep noch im Attribut-AST. Ohne diesen Test
+    bliebe der Wächter grün, während eine Stelle unmigriert ist; genau den
+    stillen Zustand schließt ADR-002 Pflicht Nr. 3 aus. Erschwerend: `getattr`
+    ist die Form, die der SoT-Helper **selbst** benutzt — wer ihn kopiert, hätte
+    den Wächter lautlos umgangen.
+
+    Baseline: 3 Fundstellen, alle gedeckt — 2× Empfänger `anlage`
+    (`services/snapshot/*aggregator.py`), 1× der Helper selbst.
+    """
+    verstoesse = _p3a_verstoesse("getattr")
+
+    assert not verstoesse, (
+        "Investitions-Kennwert per getattr gelesen — das umgeht den "
+        "Attribut-Wächter (P3-a):\n" + "\n".join(verstoesse) + _P3A_HINWEIS
+    )
+
+
+def test_p3a_baseline_ausnahmen_sind_noch_belegt():
+    """Die Baseline darf nicht über ihre Fundstellen hinaus wachsen.
+
+    Verschwindet ein freigestellter Zugriff, muss der Eintrag mit — sonst deckt
+    er später einen echten neuen Treffer mit demselben Empfängernamen (dieselbe
+    Absicherung wie `test_p6_baseline_ausnahmen_sind_noch_belegt`).
+    """
+    belegt = set()
+    for _, _, modul, empfaenger in _p3a_fundstellen():
+        belegt.add(modul)
+        belegt.add(f"{modul}::{empfaenger}")
+    verwaist = P3A_BASELINE_AUSNAHMEN - belegt
+
+    assert not verwaist, (
+        f"Baseline-Ausnahmen ohne Fundstelle: {sorted(verwaist)}. "
+        "Der Zugriff ist weg — den Eintrag aus P3A_BASELINE_AUSNAHMEN entfernen."
+    )
+
+
+def test_p3a_kennwert_sot_traegt_die_regel_noch():
+    """Gegenprobe: der Wächter wäre wertlos, wenn der SoT entkernt würde.
+
+    Ohne diese Prüfung wird das Gate still grün, sobald jemand aus `get_pv_kwp`
+    den `parameter`-Fallback entfernt oder den Dispatcher auf `get_pv_kwp`
+    verkürzt — dann gilt zwar noch „nur eine Stelle", aber nicht mehr „die
+    richtige Regel", und der Wächter bewachte eine leere Regel.
+    """
+    quelle = (_BACKEND / "core/investition_kennwerte.py").read_text()
+    baum = ast.parse(quelle)
+    funktionen = {
+        knoten.name: ast.unparse(knoten)
+        for knoten in ast.walk(baum)
+        if isinstance(knoten, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    for name in ("get_pv_kwp", "get_bkw_kwp", "get_erzeuger_kwp"):
+        assert name in funktionen, (
+            f"{name} existiert nicht mehr in {P3A_SOT_MODUL} — umbenannt oder "
+            "verschoben? Dann diesen Wächter mitziehen, sonst prüft er nichts mehr."
+        )
+
+    # Stufe 1+2: Spalte, dann die `parameter`-Keys aus dem Kanon.
+    for bestandteil, bedeutung in (
+        ("'leistung_kwp'", "die Spalten-Stufe"),
+        ("KWP_PARAM_KEYS", "der `parameter`-JSON-Fallback (die #229-Datenlage)"),
+    ):
+        assert bestandteil in funktionen["get_pv_kwp"], (
+            f"{bestandteil} fehlt in get_pv_kwp — {bedeutung} ist damit weg. "
+            "Ohne beide Stufen liest der SoT dieselbe halbe Wahrheit wie die "
+            "Stellen, die er ersetzt hat."
+        )
+    kwp_keys = ast.unparse(baum)
+    for kanon_bestandteil in ("LEGACY_KWP_KEY", "PARAM_PV_MODULE['LEISTUNG_KWP']"):
+        assert kanon_bestandteil in kwp_keys, (
+            f"KWP_PARAM_KEYS bezieht {kanon_bestandteil} nicht mehr aus dem Kanon "
+            "core/investition_parameter.py — ein Literal-Schlüssel daneben wäre "
+            "genau der P3-b-Verstoß, den A24-1 aufgelöst hat."
+        )
+
+    # Stufe 3: die BKW-Formel — und zwar NACH den kWp-Stufen, sonst fällt ein
+    # wie ein PV-Modul gepflegtes BKW auf 0.
+    for bestandteil, bedeutung in (
+        ("get_pv_kwp(", "die vorgelagerten kWp-Stufen (get_bkw_kwp ⊇ get_pv_kwp)"),
+        ("PARAM_BALKONKRAFTWERK['LEISTUNG_WP']", "der Wp-Zweig"),
+        ("PARAM_BALKONKRAFTWERK['ANZAHL']", "die Modul-Anzahl"),
+        ("ANZAHL_LESE_DEFAULT", "der Lese-Default 1 (nicht die Formular-Vorbelegung 2)"),
+    ):
+        assert bestandteil in funktionen["get_bkw_kwp"], (
+            f"{bestandteil} fehlt in get_bkw_kwp — {bedeutung} ist damit weg. "
+            "Die acht erhobenen BKW-Varianten sind genau so entstanden."
+        )
+
+    for bestandteil in ("get_bkw_kwp(", "get_pv_kwp(", "BALKONKRAFTWERK"):
+        assert bestandteil in funktionen["get_erzeuger_kwp"], (
+            f"{bestandteil} fehlt in get_erzeuger_kwp — der Typ-Dispatcher "
+            "unterscheidet BKW und PV-Modul nicht mehr. Dann schreibt jede "
+            "Read-Site ihre eigene Fallunterscheidung, und die neunte Variante "
+            "der BKW-Formel entsteht."
         )
