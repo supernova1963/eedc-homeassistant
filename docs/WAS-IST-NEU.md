@@ -1,11 +1,65 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.1)
+> **Stand:** Juli 2026 (v4.0.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.2 — Die Nennleistung zählt überall mit (Juli 2026)
+
+> Ein Nachzügler zu v4.0.1, und wieder derselbe Satz dahinter: **eine Größe darf nicht an zwei
+> Stellen zwei verschiedene Zahlen haben.** Diesmal geht es um die **Nennleistung deiner
+> PV-Komponenten** — und um drei Fehler, die dabei ans Licht kamen.
+
+### Betrifft dich das?
+
+Die Nennleistung kann in eedc an zwei Stellen stehen: im Feld **Leistung (kWp)** der Komponente
+oder in ihren **Detail-Feldern**. Fast alle Auswertungen lasen bisher nur das Leistungsfeld und
+sahen dort still eine 0.
+
+**Wer seine Komponenten im Formular oder im Setup-Assistenten angelegt hat, ist nicht betroffen** —
+beide schreiben die Leistung ins Leistungsfeld, und kein heutiger Eingabeweg erzeugt den anderen
+Zustand. Betroffen sind **importierte und sehr alte Bestände**. Wenn du dazugehörst, ändern sich
+Zahlen — nach oben, weil vorher etwas fehlte:
+
+- **PVGIS-Prognose:** Ein betroffenes Modulfeld fiel bisher **komplett** aus der Prognose. Jetzt
+  zählt es mit — Jahresertrag, Monatswerte und Gesamtleistung steigen entsprechend.
+- **PVGIS für ein einzelnes Modul** meldete den Fehler „PV-Modul hat keine Leistung (kWp)
+  definiert" für ein Modul, dessen Leistung gepflegt ist. Das ist weg.
+- **PV-Strings-Vergleich:** Der betroffene String hatte SOLL 0 und damit −100 % Abweichung, **alle
+  anderen bekamen zu viel**. Die Werte stimmen jetzt.
+- **Cockpit:** Die Kachel „Anlagenleistung" steigt, der **spezifische Ertrag sinkt** entsprechend —
+  sein Nenner war zu klein. Der Home-Assistant-Sensor ändert sich mit.
+- **ROI und CO₂ je Komponente:** Das betroffene Modul bekam 0 € Einsparung und 0 kg CO₂.
+- **Live-Dashboard, PDFs und Daten-Checker** zeigten die Leistung an einzelnen Stellen gar nicht
+  oder meldeten eine Abweichung, die keine war.
+
+**Das sind Korrekturen, keine Fehler:** Die Leistung war immer gepflegt, sie kam nur nicht überall
+an. Wer bisher schon überall dieselben Werte sah, merkt nichts.
+
+### Drei Fehler, die dabei aufgefallen sind
+
+- **ROI-Auswertung brach ab.** Hatte auch nur **ein** PV-Modul keine Leistung hinterlegt, während
+  ein anderes eine hatte, lief die gesamte ROI-Seite auf einen Serverfehler — nicht nur die eine
+  Zeile. Jetzt bleibt die Seite stehen: das Modul ohne Leistung bekommt 0 % Anteil, alle anderen
+  ihren korrekten.
+- **Balkonkraftwerk-Dashboard rechnete mit zwei Modulen.** Wer die **Anzahl** nicht gepflegt hat,
+  bekam dort stillschweigend zwei Module unterstellt — doppelte Leistung, halber spezifischer
+  Ertrag. Alle anderen Sichten rechnen in dem Fall mit einem. **Für betroffene Balkonkraftwerke
+  halbiert sich die angezeigte Leistung** und der spezifische Ertrag verdoppelt sich.
+- **PDF-Anlagendokumentation:** Speicher und Wechselrichter waren mit „Nennleistung … kWp"
+  beschriftet, obwohl dort die Kapazität in kWh bzw. die AC-Leistung in kW steht. Jetzt richtig.
+
+### Kleinigkeit am Rande
+
+Unter **Komponenten → Einstellungen** stand die Nennleistung bei betroffenen Komponenten doppelt —
+einmal sauber beschriftet, einmal als rohes Detail-Feld. Die Dublette ist weg. Außerdem rundete
+diese Liste alle Werte auf ganze Zahlen: ein Wirkungsgrad von 20,75 % stand dort als „21". Das
+betrifft **alle** Anlagen, nicht nur Import-Bestände.
 
 ---
 
