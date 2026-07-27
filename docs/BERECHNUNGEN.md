@@ -405,6 +405,28 @@ Arbitrage-Einsparung  = Arbitrage-Anteil * Arbitrage_Spread / 100
 Jahres-Einsparung     = PV-Einsparung + Arbitrage-Einsparung
 ```
 
+#### Kapazitäts-Basis: Brutto, nicht nutzbar
+
+Alle Zyklen- und Einsparungs-Rechnungen teilen durch die **Brutto**-Kapazität
+`parameter["kapazitaet_kwh"]`. `parameter["nutzbare_kapazitaet_kwh"]` (optional, DoD-Reserve —
+wer 10/90 fährt, trägt bei 10 kWh brutto 8 kWh ein) wirkt **ausschließlich** auf das
+η-SoC-Delta in `services/speicher_wirtschaftlichkeit.py`; im HA-Export ist es nur der
+**Fallback**, wenn die Brutto-Kapazität nicht gepflegt ist.
+
+> eedc kennt und braucht keinen Ziel-SOC: Vollzyklen und Wirkungsgrad kommen aus
+> **gemessenen** Lade-/Entlademengen. Eine Annahme steckt nur in der Wirtschaftlichkeits-
+> **Prognose** (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem
+> Vorliegen von Messdaten greift — wer dort realistischer rechnen will, pflegt die nutzbare
+> Kapazität.
+
+Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py`.
+
+**Offen (Nebenbefund R22-4):** die Pfade zählen unterschiedliche **Größen** — Speicher-Dashboard
+und Monatsbericht rechnen `Ladung ÷ Kapazität`, HA-Sensor und Jahresbericht
+`Entladung ÷ Kapazität`. Bei 95 % Wirkungsgrad sind das ~5 % Unterschied auf derselben Anlage.
+Eine Angleichung ändert sichtbare Zahlen und ist deshalb eine bewusste Entscheidung; der
+Ist-Zustand ist im o. g. Test festgehalten.
+
 ### 3.4 E-Auto-Einsparung
 
 **Funktion:** `berechne_eauto_einsparung()` in `core/calculations.py`

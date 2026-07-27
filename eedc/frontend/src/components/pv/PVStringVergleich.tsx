@@ -13,7 +13,7 @@ import {
   ComposedChart, Line, Area, LabelList
 } from 'recharts'
 import { Sun, TrendingUp, TrendingDown, AlertTriangle, Calendar, BarChart3 } from 'lucide-react'
-import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, Select } from '../ui'
+import { Card, LoadingSpinner, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, TableFoot, Select } from '../ui'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
@@ -21,9 +21,28 @@ import { Parkbar } from '../park'
 import { HerkunftZeile } from '../blocks'
 import { pvVerteiltHerkunft } from '../../lib/pvHerkunft'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../../api/cockpit'
-import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { SOLL_IST_COLORS, STRING_COLORS, CHART_HOVER_CURSOR, PROGNOSE_DASH, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, fmtZahl, formatProzent } from '../../lib'
 
 const KEINE_IDS: string[] = []
+
+/**
+ * Wortlaut zur Spalte „Performance" (R22-3, PN 89782 Rainer).
+ *
+ * Die Spalte misst `IST ÷ PVGIS-Prognose DES JEWEILIGEN STRINGS` — Ausrichtung
+ * und Neigung stecken damit schon in der SOLL-Basis. Ohne diesen Satz liest man
+ * sie als Rangliste der Dächer („das kleine Dach ist 20 % besser") und wundert
+ * sich, dass der Gesamtertrag das Gegenteil sagt. Die Kennzahl für den
+ * Dach-gegen-Dach-Vergleich ist kWh/kWp, der Ertragsanteil zeigt das Gewicht.
+ */
+const PERFORMANCE_ERKLAERUNG =
+  'Performance misst jeden String gegen seine eigene Prognose — Ausrichtung und '
+  + 'Neigung sind darin bereits berücksichtigt. Für den Vergleich der Dächer '
+  + 'untereinander zählt kWh/kWp, für das Gewicht am Gesamtertrag die Spalte „Anteil".'
+
+/** Ertragsanteil eines Strings am Gesamt-IST. Ohne Messwerte kein Anteil (R22-3). */
+function anteilText(kwh: number, gesamt: number): string {
+  return gesamt > 0 ? formatProzent((kwh / gesamt) * 100).text : '—'
+}
 
 interface Props {
   anlageId: number
@@ -453,7 +472,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
 
       {/* String-Detail-Tabelle */}
       <Parkbar id="tabelle:pv-strings" titel="Einzelne Strings / Module">
-      <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)">
+      <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)" hinweis={PERFORMANCE_ERKLAERUNG}>
         {/* Mobil (< sm): Karten je String/Modul statt Tabelle — Muster wie
             Cockpit-Energiebilanz (eine Datenliste, zwei Render-Pfade). */}
         <div className="sm:hidden space-y-2">
@@ -470,11 +489,25 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Ausrichtung</dt><dd className="text-gray-700 dark:text-gray-300">{s.ausrichtung || '-'}{s.neigung_grad != null && ` / ${s.neigung_grad}°`}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium tabular-nums" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>{fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Anteil</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{anteilText(s.ist_gesamt_kwh, data.ist_gesamt_kwh)}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}</dd></div>
               </dl>
             </div>
           ))}
+          {/* Summenkarte — dasselbe Datenpaar wie der Tabellenfuß (R22-3). */}
+          {data.strings.length > 1 && (
+            <div className="rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/60 p-3">
+              <span className="font-medium text-gray-900 dark:text-white">Gesamt</span>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{fmtZahl(data.anlagen_leistung_kwp, 1)}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium text-gray-900 dark:text-white tabular-nums">{fmtZahl(data.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—'}</dd></div>
+              </dl>
+            </div>
+          )}
         </div>
 
         {/* Desktop (≥ sm): Tabelle */}
@@ -486,6 +519,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
               <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Ausrichtung</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>SOLL</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>IST</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Anteil</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Abw.</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Performance</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWh/kWp</th>
@@ -521,6 +555,9 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                 <td className={`${ZELLE} text-right font-medium`} style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>
                   {fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh
                 </td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {anteilText(s.ist_gesamt_kwh, data.ist_gesamt_kwh)}
+                </td>
                 <td className={`${ZELLE} text-right ${
                   (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
@@ -536,6 +573,31 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
               </tr>
             ))}
           </TableBody>
+          {/* Σ-Zeile (R22-3): erledigt zugleich Rainers „Summe der Modul-Leistung".
+              Die kWp-Summe ist `anlagen_leistung_kwp` aus derselben Response —
+              nicht clientseitig nachaddiert (eine Zahl, eine Quelle). */}
+          {data.strings.length > 1 && (
+            <TableFoot>
+              <tr>
+                <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Gesamt</td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>{fmtZahl(data.anlagen_leistung_kwp, 1)}</td>
+                <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>-</td>
+                <td className={`${ZELLE} text-right text-blue-600 dark:text-blue-400`}>{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</td>
+                <td className={`${ZELLE} text-right font-medium text-gray-900 dark:text-white`}>{fmtZahl(data.ist_gesamt_kwh / 1000, 1)} MWh</td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>{data.ist_gesamt_kwh > 0 ? formatProzent(100).text : '—'}</td>
+                <td className={`${ZELLE} text-right ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
+                  {data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %
+                </td>
+                {/* Kein Gesamt-Performance-Badge: die SOLL-Basen der Strings sind
+                    verschieden gewichtet — ein Mittelwert daraus wäre erfunden. */}
+                <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
+                <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
+                  {data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—'}
+                </td>
+              </tr>
+            </TableFoot>
+          )}
         </Table>
       </Sektion>
       </Parkbar>

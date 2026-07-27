@@ -706,8 +706,14 @@ async def calculate_anlage_sensors(
     speicher_kapazitaet = 0
     for inv in investitionen:
         if inv.typ == 'speicher' and inv.parameter:
-            # Defensive Doppel-Read: kapazitaet_kwh ist Brutto, nutzbare_kapazitaet_kwh
-            # ist optionaler User-Override (DOD-Reserve). Wenn beides leer → kein Speicher gepflegt.
+            # Zyklen-Basis ist die BRUTTO-Kapazität — dieselbe Konvention wie in
+            # Monatsbericht, Speicher-Dashboard und Jahresbericht
+            # (docs/BERECHNUNGEN.md §Speicher). Der Kommentar behauptete hier
+            # früher, `nutzbare_kapazitaet_kwh` sei ein Override; der Code liest
+            # aber bewusst zuerst Brutto. Ein Dreher hätte den HA-Sensor gegen
+            # den Monatsbericht laufen lassen (R22-4). `nutzbare_kapazitaet_kwh`
+            # ist nur der Fallback, wenn Brutto nicht gepflegt ist; ist beides
+            # leer → kein Speicher gepflegt.
             kap = inv.parameter.get(PARAM_SPEICHER["KAPAZITAET_KWH"]) or inv.parameter.get(PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"])
             if kap:
                 speicher_kapazitaet += float(kap)

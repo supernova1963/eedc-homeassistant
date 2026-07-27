@@ -179,13 +179,26 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   )
   // Kurzfristig: Solar-Prognose + kanonischer eedc-„Heute"-Wert (R8-4, Soft-fail →
   // Fallback auf den puren SolarPrognose-Wert, kein Sicht-Fehler).
-  const kurzQ = useApiData<{ kurz: SolarPrognose; eedcHeute: number | null }>(
+  // R22-6: `ist_stundenprofil` + `aktuelle_stunde` kommen aus DERSELBEN Antwort,
+  // die hier ohnehin schon für `eedc_heute_kwh` geholt wird — die IST-Spalte der
+  // Stundenwerte kostet keinen zweiten Fetch (Doppel-Fetch-Doktrin).
+  const kurzQ = useApiData<{
+    kurz: SolarPrognose
+    eedcHeute: number | null
+    istStunden: { stunde: number; kw: number | null }[] | null
+    aktuelleStunde: number | null
+  }>(
     async () => {
       const [k, v] = await Promise.all([
         wetterApi.getSolarPrognose(anlageId!, KURZ_TAGE, false),
         aussichtenApi.getPrognosenVergleich(anlageId!).catch(() => null),
       ])
-      return { kurz: k, eedcHeute: v?.eedc_heute_kwh ?? null }
+      return {
+        kurz: k,
+        eedcHeute: v?.eedc_heute_kwh ?? null,
+        istStunden: v?.ist_stundenprofil ?? null,
+        aktuelleStunde: v?.aktuelle_stunde ?? null,
+      }
     },
     [anlageId],
     { enabled: !!anlageId && hatKoordinaten && istKurz, swrKey: `v4-aussicht-kurz:${anlageId}` },
@@ -204,6 +217,8 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
   )
   const kurz = kurzQ.data?.kurz ?? null
   const eedcHeute = kurzQ.data?.eedcHeute ?? null
+  // IST nur für heute — für morgen gibt es keine gemessenen Stunden (R22-6).
+  const istHeute = pDatum === heuteISO() ? kurzQ.data?.istStunden ?? null : null
   const lang = langQ.data?.lang ?? null
   const trend = langQ.data?.trend ?? null
   const wp = langQ.data?.wp ?? null
@@ -307,10 +322,17 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
         }]),
         ...(park.istGeparkt('el:aussicht-stundenwerte') ? [] : [{
           id: 'stundenwerte', title: `Stundenwerte · ${tagLabel(pDatum)}`, ...BLOCK_IDENTITAET.werte,
-          summary: `Stundenprognose in kW · Summenzeile = kWh/Tag${pDaten?.pv_quelle ? ` · Quelle ${pDaten.pv_quelle}` : ''}`,
+          summary: `Stundenprognose in kW${istHeute ? ' + gemessenes IST' : ''} · Summenzeile = kWh/Tag${pDaten?.pv_quelle ? ` · Quelle ${pDaten.pv_quelle}` : ''}`,
           defaultOpen: false,
           render: () => (pDaten
-            ? <Parkbar id="el:aussicht-stundenwerte" titel="Stundenwerte"><PrognoseTabelle daten={pDaten} ohneCaption /></Parkbar>
+            ? <Parkbar id="el:aussicht-stundenwerte" titel="Stundenwerte">
+                <PrognoseTabelle
+                  daten={pDaten}
+                  ohneCaption
+                  istStunden={istHeute ?? undefined}
+                  aktuelleStunde={kurzQ.data?.aktuelleStunde ?? null}
+                />
+              </Parkbar>
             : <p className="text-sm text-gray-500 dark:text-gray-400">{pError ?? 'Lade Tagesprognose…'}</p>),
         }]),
       ]
@@ -366,7 +388,7 @@ function CockpitAussichtInner({ anlageId }: { anlageId: number | undefined }) {
     }
     if (finanzTeaser) list.push(finanzTeaser)
     return list
-  }, [istKurz, kurz, eedcHeute, lang, trend, wp, finanz, pDatum, pDaten, pError, park])
+  }, [istKurz, kurz, eedcHeute, istHeute, kurzQ.data?.aktuelleStunde, lang, trend, wp, finanz, pDatum, pDaten, pError, park])
 
   if (!anlageId) {
     return (

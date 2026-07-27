@@ -243,8 +243,24 @@ function PrognoseTooltip({ active, payload, label }: {
 
 // ── Stundentabelle ───────────────────────────────────────────────────────────
 
-export function PrognoseTabelle({ daten, ohneCaption }: { daten: TagesPrognose; ohneCaption?: boolean }) {
+export function PrognoseTabelle({ daten, ohneCaption, istStunden, aktuelleStunde }: {
+  daten: TagesPrognose
+  ohneCaption?: boolean
+  /**
+   * Gemessene PV-Stundenwerte des HEUTIGEN Tages (R22-6, PN 89768 Rainer):
+   * „Mit den IST-Einträgen meinte ich die bisherigen Stunden. Dann müsste man
+   * nicht in die Auswertungen springen." Nur setzen, wenn das gewählte Datum
+   * heute ist — für morgen gibt es kein IST. Undefined ⇒ Spalte entfällt,
+   * die Tabelle bleibt exakt wie vorher.
+   */
+  istStunden?: { stunde: number; kw: number | null }[]
+  /** Trennt vergangene von künftigen Stunden (dezente Hinterlegung). */
+  aktuelleStunde?: number | null
+}) {
   const hatSpeicher = daten.speicher_kapazitaet_kwh != null
+  const istMap = new Map((istStunden ?? []).map(e => [e.stunde, e.kw]))
+  const zeigtIst = istStunden != null
+  const istSumme = (istStunden ?? []).reduce((s, e) => s + (e.kw ?? 0), 0)
   // P4: die Summenzeile unten IST die Zahl, um die es geht — die Kennzeichnung
   // muss auch hier stehen, nicht nur am Chart daneben (die Tabelle wird im
   // Fokus-Overlay allein gezeigt).
@@ -276,6 +292,9 @@ export function PrognoseTabelle({ daten, ohneCaption }: { daten: TagesPrognose; 
             <tr className="border-b border-gray-200 dark:border-gray-700">
               <th className={`${KOPF_ZELLE} text-left text-gray-500 dark:text-gray-400`}>Std</th>
               <th className={`${KOPF_ZELLE} text-right text-yellow-600 dark:text-yellow-400`}>PV</th>
+              {zeigtIst && (
+                <th className={`${KOPF_ZELLE} text-right text-gray-600 dark:text-gray-300`}>PV IST</th>
+              )}
               <th className={`${KOPF_ZELLE} text-right text-gray-600 dark:text-gray-300`}>Verbr.</th>
               <th className={`${KOPF_ZELLE} text-right text-green-600 dark:text-green-400`}>Netto</th>
               <th className={`${KOPF_ZELLE} text-right text-red-600 dark:text-red-400`}>Bezug</th>
@@ -287,9 +306,21 @@ export function PrognoseTabelle({ daten, ohneCaption }: { daten: TagesPrognose; 
           </TableHead>
           <TableBody>
             {daten.stunden.map(s => (
-              <tr key={s.stunde} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40">
+              <tr
+                key={s.stunde}
+                className={`border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/40${
+                  zeigtIst && aktuelleStunde != null && s.stunde < aktuelleStunde
+                    ? ' bg-gray-50/60 dark:bg-gray-800/30'
+                    : ''
+                }`}
+              >
                 <td className={`${ZELLE} font-medium text-gray-600 dark:text-gray-300 tabular-nums`}>{s.stunde}:00</td>
                 <td className={`${ZELLE} text-right tabular-nums text-yellow-700 dark:text-yellow-300`}>{fmtZahl(s.pv_kw, 2)}</td>
+                {zeigtIst && (
+                  <td className={`${ZELLE} text-right tabular-nums font-medium text-gray-700 dark:text-gray-200`}>
+                    {istMap.get(s.stunde) != null ? fmtZahl(istMap.get(s.stunde), 2) : <Dash />}
+                  </td>
+                )}
                 <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtZahl(s.verbrauch_kw, 2)}</td>
                 <td className={`${ZELLE} text-right tabular-nums font-medium ${
                   s.netto_kw >= 0
@@ -316,6 +347,11 @@ export function PrognoseTabelle({ daten, ohneCaption }: { daten: TagesPrognose; 
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-semibold">
               <td className={`${ZELLE} text-gray-500 dark:text-gray-400`}>kWh</td>
               <td className={`${ZELLE} text-right tabular-nums text-yellow-700 dark:text-yellow-300`}>{fmtZahl(daten.pv_summe_kwh, 1)}</td>
+              {zeigtIst && (
+                // Summe der bisher gemessenen Stunden — bewusst kein Tages-IST:
+                // die künftigen Stunden fehlen darin und sollen es auch.
+                <td className={`${ZELLE} text-right tabular-nums font-medium text-gray-700 dark:text-gray-200`}>{fmtZahl(istSumme, 1)}</td>
+              )}
               <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtZahl(daten.verbrauch_summe_kwh, 1)}</td>
               <td className={`${ZELLE} text-right tabular-nums ${
                 daten.pv_summe_kwh - daten.verbrauch_summe_kwh >= 0

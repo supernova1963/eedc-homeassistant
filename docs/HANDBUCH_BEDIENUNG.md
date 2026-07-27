@@ -212,6 +212,8 @@ Die **Aussicht** bündelt alle vorwärtsgerichteten Analysen auf einer Seite. Ü
 - Ist **Solar Forecast ML (SFML)** konfiguriert, erscheint eine zweite KI-basierte Ertragslinie
 - Das Wettermodell lässt sich pro Anlage fest wählen (Einstellungen → Stammdaten → Anlage → Wettermodell); ohne Auswahl entscheidet eedc automatisch.
 
+**Stundenwerte mit IST:** Steht der Tages-Picker auf **heute**, zeigt die Stundentabelle neben der Prognose eine Spalte **PV IST** mit den bereits gemessenen Stunden; die Summenzeile addiert nur das Gemessene, künftige Stunden bleiben leer. Für andere Tage entfällt die Spalte — dort gibt es kein IST.
+
 **Prognose-Vergleich / Genauigkeit:** Die tiefergehende Bewertung mehrerer Prognosequellen (OpenMeteo, eedc kalibriert, Solcast, IST) mit MAE/Bias und Stundenprofilen findest du in [Auswertungen → Prognose](#43-prognose-genauigkeit-gegen-ist).
 
 **Langfristig:**
@@ -265,6 +267,15 @@ Der PV-Reiter fasst **Wechselrichter, zugeordnete Module und DC-Speicher** zu ei
 - **Performance Ratio** auf Basis der Global Tilted Irradiance (GTI) — bei steilen Modulen und tiefer Wintersonne realistischer als auf GHI-Basis (verhindert physikalisch unmögliche PR-Werte > 1)
 
 Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die redundante „Stringsumme"-Zeile.
+
+> **Drei Zahlen, drei Fragen — die Spalten der String-Tabelle:**
+> **Performance** misst jeden String gegen **seine eigene** Prognose; Ausrichtung und Neigung stecken
+> also schon in der Vorgabe. Ein Nordwest-Dach mit 100 % erfüllt genau das, was für Nordwest zu
+> erwarten war — es ist damit *nicht* so gut wie ein Süd-Dach mit 100 %.
+> **kWh/kWp** ist die Kennzahl für den Vergleich der Dächer untereinander (dort liegt die bessere
+> Ausrichtung vorn, auch mit weniger Modulen).
+> **Anteil** zeigt das Gewicht am Gesamtertrag — hier gewinnt in der Regel die größere Fläche.
+> Die Fußzeile summiert kWp, SOLL und IST der ganzen Anlage.
 
 > **Die Modulwerte sind gemessen, wo sie gemessen sind — und gekennzeichnet, wo sie gerechnet sind.**
 > Der Block **„Verlauf"** zeigt seit v4.0.1 die **eigenen Messwerte** je Modul; bis v4.0.0 zerlegte er

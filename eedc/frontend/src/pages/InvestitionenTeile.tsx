@@ -28,6 +28,7 @@ import {
   waermepumpeParameter,
   wallboxParameter,
   wechselrichterParameter,
+  pvModuleParameter,
   balkonkraftwerkParameter,
   fmtZahl,
   formatDatum,
@@ -492,7 +493,20 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
         if (p.max_leistung_kw) details.push(`${p.max_leistung_kw} kW`)
         break
       }
-      case 'pv-module':
+      case 'pv-module': {
+        // Eigener Zweig, NICHT mit dem Balkonkraftwerk geteilt (R22-1): der
+        // BKW-Helper liest `leistung_wp`/`anzahl`, ein PV-Modul führt aber
+        // `anzahl_module`/`modul_leistung_wp` — die Zeile blieb deshalb leer.
+        // kWp als ANZEIGE-Wert über `leistung_kwp_effektiv` (A26/N106), sonst
+        // fehlt sie bei Import-/Altbestand mit kWp nur im `parameter` (#229).
+        const p = pvModuleParameter(investition.parameter)
+        if (investition.leistung_kwp_effektiv != null) {
+          details.push(`${fmtZahl(investition.leistung_kwp_effektiv, 1)} kWp`)
+        }
+        if (p.anzahl_module) details.push(`${p.anzahl_module} Module`)
+        if (p.modul_leistung_wp) details.push(`${p.modul_leistung_wp} Wp`)
+        break
+      }
       case 'balkonkraftwerk': {
         const p = balkonkraftwerkParameter(investition.parameter)
         if (p.leistung_wp) details.push(`${p.leistung_wp} Wp`)

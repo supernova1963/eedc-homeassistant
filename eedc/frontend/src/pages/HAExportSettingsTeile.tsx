@@ -482,6 +482,16 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
               Eine Stunde gilt als „günstig", wenn ihr Börsenpreis mindestens diesen Prozentsatz
               unter dem Tagesdurchschnitt (ohne die 3 teuersten Stunden) liegt. Standard: 10&nbsp;%.
             </p>
+            {/* 0 ist ein gültiger, aber folgenreicher Wert: der Schwellen-Faktor
+                wird 1,0, die Schwelle greift nicht mehr und es zählen wieder
+                pauschal die 5 günstigsten Stunden je Fenster. Das stand bisher
+                nirgends (R22-5, PN 89820). */}
+            {parseFloat(guenstigProzent) === 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                0&nbsp;% schaltet die Schwelle ab — dann zählen wieder die 5 günstigsten
+                Stunden je Fenster, unabhängig vom Preisabstand.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Input

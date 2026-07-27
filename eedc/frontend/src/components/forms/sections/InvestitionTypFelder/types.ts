@@ -15,4 +15,11 @@ export interface TypFelderProps {
   zeige: (name: string) => string | undefined
   markTouched: (name: string) => void
   setFeldRef: (name: string) => (el: HTMLDivElement | null) => void
+  /**
+   * Rohwert des Shell-Felds `leistung_kwp` — nur das PV-Modul nutzt ihn, für
+   * die Querprüfung „Anzahl × Wp ↔ eingetragene kWp" (R22-1/R22-2, PN 89782).
+   * Bewusst der Roh-String der Eingabe (nicht `leistung_kwp_effektiv`): die
+   * Warnung soll das vergleichen, was gerade im Formular steht.
+   */
+  leistungKwp?: string
 }

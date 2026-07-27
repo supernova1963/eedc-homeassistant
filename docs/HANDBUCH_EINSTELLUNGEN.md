@@ -144,8 +144,8 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 
 ### 3.4 Typ-spezifische Parameter
 
-- **PV-Module:** Anzahl Module, Leistung pro Modul (Wp), Ausrichtung (Süd = 0°, Ost = −90°, West = +90°), Neigung (0° flach … 90° senkrecht).
-- **Speicher:** Kapazität (kWh), max. Leistung (kW), arbitrage-fähig (Ja/Nein).
+- **PV-Module:** Anzahl Module, Leistung pro Modul (Wp), Ausrichtung (Süd = 0°, Ost = −90°, West = +90°), Neigung (0° flach … 90° senkrecht). Anzahl und Wp sind optional; sind beide gepflegt, vergleicht eedc `Anzahl × Wp` mit der eingetragenen Leistung (kWp) und weist eine Abweichung direkt im Formular aus — der Daten-Checker nennt denselben String dann beim Namen, statt nur die Anlagensumme zu bemängeln.
+- **Speicher:** Kapazität (kWh), **nutzbare Kapazität (kWh)**, max. Leistung (kW), arbitrage-fähig (Ja/Nein). Die nutzbare Kapazität ist die Reserve-bereinigte Größe (wer 10/90 fährt, trägt bei 10 kWh brutto 8 kWh ein); sie verfeinert den gemessenen Wirkungsgrad. Vollzyklen und die Wirtschaftlichkeits-Prognose rechnen weiterhin mit der Brutto-Kapazität ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
 - **E-Auto:** Batteriekapazität (kWh), V2H-fähig, „nutzt V2H aktiv".
 - **Wärmepumpe:** **JAZ** (Standardwert, falls kein Wärmemengenzähler), **Alternativkosten** (Gas/Öl als Mehrkosten-Basis), **jährliche Zusatzkosten der Alt-Heizung** (Schornsteinfeger, Wartung, Gaszähler-Grundpreis), **Alt-Tarif Gas/Öl** (ct/kWh, Fallback wenn ein Monat keinen eigenen Gaspreis führt).
 - **Wallbox:** max. Ladeleistung (kW), bidirektional.
@@ -263,7 +263,7 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 - **Auto-Discovery:** Für jedes über eine Datenquelle mit HA-Sensor bequellte Feld erzeugt eedc zwei Entities: eine `number.eedc_…_start` (Zählerstand vom Monatsanfang) und einen `sensor.eedc_…_monat` (berechneter Monatswert = aktueller Stand − Startwert). Die Friendly Names tragen den Komponentennamen zur besseren Lesbarkeit.
 - **KPI-Export:** zusätzlich exportiert eedc Kennzahlen-Gruppen (Energie & Quoten, Finanzen & Investition, spezifischer Ertrag [aufs Jahr normiert], PV-Prognose, Börsenpreis-Trigger). Die vollständige Liste mit Bedeutung und Einheiten steht in der **[Sensor-Referenz](SENSOR-REFERENZ.md)**.
-- **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn sie zu den 5 billigsten ihres Tag-/Nacht-Fensters gehört **und** ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt (ohne die 3 teuersten Stunden) liegt. Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %). eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
+- **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn sie zu den 5 billigsten ihres Tag-/Nacht-Fensters gehört **und** ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt (ohne die 3 teuersten Stunden) liegt. Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %). **0 % schaltet die Schwelle ab** — dann zählen wieder allein die 5 günstigsten Stunden je Fenster, unabhängig vom Preisabstand. eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
 - **Alternative REST-API:** Statt MQTT kannst du die Sensoren auch per REST-Sensor aus `…/api/ha/export/sensors/{id}` in HA ziehen (YAML-Beispiel im Block).
 
 > **Zu viele Entitäten?** Nicht benötigte Sensoren in HA deaktivieren — oder per `recorder:`-`exclude` nur von der Aufzeichnung ausnehmen (aktuelle Werte bleiben sichtbar, keine DB-Historie).

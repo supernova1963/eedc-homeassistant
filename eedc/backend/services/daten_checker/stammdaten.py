@@ -11,7 +11,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.utils.investition_filter import sort_investitionen_nach_typ
-from backend.core.investition_parameter import ist_dienstlich
+from backend.core.investition_parameter import PARAM_PV_MODULE, ist_dienstlich
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.investition_kennwerte import get_bkw_kwp, get_pv_kwp
@@ -128,6 +128,31 @@ class StammdatenChecks:
                     kategorie=kat, schwere=CheckSeverity.OK,
                     meldung=f"PV-Module: {summe_kwp:.1f} kWp ({len(pv_module)} Modul-Gruppen{', inkl. BKW' if bkw_inv else ''})",
                 ))
+
+            # Ursache benennen statt nur die Summe (R22-2b, PN 89782 Rainer):
+            # die Regel oben sagt „Summe passt nicht zur Anlage" und lässt den
+            # Nutzer alle Strings durchsuchen. Wo Modul-Details gepflegt sind,
+            # ist die Rechenprobe eindeutig — sie zeigt den verursachenden
+            # String. Ergänzung, kein Ersatz: ohne Modul-Details (optionale
+            # Felder) bleibt die Summenregel die einzige Prüfung.
+            for modul in pv_module:
+                params = modul.parameter or {}
+                anzahl = params.get(PARAM_PV_MODULE["ANZAHL_MODULE"])
+                wp = params.get(PARAM_PV_MODULE["MODUL_LEISTUNG_WP"])
+                if not anzahl or not wp:
+                    continue
+                berechnet = float(anzahl) * float(wp) / 1000
+                gepflegt = get_pv_kwp(modul)
+                if gepflegt and abs(berechnet - gepflegt) > 0.1:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{modul.bezeichnung}: Modul-Details passen nicht zur Leistung",
+                        details=(
+                            f"{int(anzahl)} Module × {int(wp)} Wp = {berechnet:.2f} kWp, "
+                            f"eingetragen: {gepflegt:.2f} kWp"
+                        ),
+                        link="/einstellungen/investitionen",
+                    ))
 
         # Performance Ratio Hinweis (PVGIS-Systemverluste ggf. zu hoch)
         if pr_count >= 6 and pr > 1.1 and pvgis_prognose:

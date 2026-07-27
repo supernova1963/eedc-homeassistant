@@ -403,7 +403,7 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 
 Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — der variiert je Vertrag/Region, die Kurvenform ist dieselbe). Tag- und Nacht-Fenster werden **solar-basiert getrennt** bewertet (Sonnenauf-/-untergang, wandert saisonal).
 
-**Günstig-Definition (zweistufig):** Eine Stunde gilt als günstig, wenn sie (1) zu den 5 billigsten ihres Fensters gehört **und** (2) ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden. Der Prozentsatz ist je Anlage einstellbar ([MQTT-Export-Seite](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export)). Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
+**Günstig-Definition (zweistufig):** Eine Stunde gilt als günstig, wenn sie (1) zu den 5 billigsten ihres Fensters gehört **und** (2) ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden. Der Prozentsatz ist je Anlage einstellbar ([MQTT-Export-Seite](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export)); **0 % deaktiviert Stufe (2)**, dann greift wieder allein die Rang-Regel. Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
 
 | Sensor | Bedeutung |
 |---|---|
