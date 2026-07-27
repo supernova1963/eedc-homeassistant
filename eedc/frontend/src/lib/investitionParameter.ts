@@ -232,6 +232,17 @@ export const PARAM_PV_MODULE = {
   MODUL_LEISTUNG_WP: 'modul_leistung_wp',
   MODUL_TYP: 'modul_typ',
   AUSRICHTUNG_GRAD: 'ausrichtung_grad',
+  // Nennleistung: SoT ist das Top-Level-Feld `leistung_kwp` (= DB-Spalte).
+  // Dieser Schlüssel ist ausschließlich LESE-Fallback für Bestands- und
+  // Importdaten (#229) — kein Schreibpfad erzeugt ihn: InvestitionForm und
+  // SetupInvestitionForm schreiben beide `leistung_kwp` als Top-Level-Feld
+  // (beim BKW berechnet aus Anzahl × Wp). Die ältere Schreibweise `kwp` steht
+  // backend-seitig in LEGACY_PARAM_KEYS und wird dort ebenfalls gelesen.
+  //
+  // ACHTUNG: `Investition.leistung_kwp` ist ein Mehrzweckfeld — bei `speicher`
+  // steht dort kWh, bei `wechselrichter` kW (AC), erst sonst kWp. Eine Regel
+  // „leistung_kwp = PV-Nennleistung" gilt nur typgefiltert.
+  LEISTUNG_KWP: 'leistung_kwp',
 } as const
 
 export interface PvModuleParameter {
@@ -239,6 +250,8 @@ export interface PvModuleParameter {
   modul_leistung_wp?: number
   modul_typ?: string
   ausrichtung_grad?: number
+  /** Nur Lese-Fallback für Bestandsdaten — SoT ist das Top-Level-Feld. */
+  leistung_kwp?: number
 }
 
 // ============================================================================
@@ -255,6 +268,9 @@ export const PARAM_BALKONKRAFTWERK = {
 } as const
 
 export const PARAM_BALKONKRAFTWERK_DEFAULTS = {
+  // Formular-VORBELEGUNG (typisches BKW = 2 Module), KEIN Lese-Default —
+  // backend-seitig rechnet `get_bkw_kwp` mit 1, damit eine ungepflegte Anzahl
+  // nicht still die doppelte Leistung ausweist.
   anzahl: 2,
   ausrichtung: 'Süd' as const,
   neigung_grad: 30,

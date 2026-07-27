@@ -4,8 +4,10 @@ jeder Investition.
 
 Hintergrund: das `parameter`-Feld auf einer Investition ist ein unstrukturiertes
 JSON. Über mehrere Iterationen sind Schlüsselnamen zwischen Form, Wizard und
-Backend-Lese-Code gedriftet — siehe Inventur in
-`docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md`.
+Backend-Lese-Code gedriftet. Die damalige Inventur lag unter `docs/drafts/`
+(gitignored, nicht mehr vorhanden); was von ihr trägt, steht als Ergebnis in
+diesem Modul, in der Migration `core/database.py::_migrate_investitionen_
+parameter_keys_v325` und im CHANGELOG zu v3.25.0.
 
 Dieses Modul macht die Keys statisch typisiert + auffindbar:
   - `PARAM_<TYP>` exportiert die kanonischen Schlüsselnamen pro Investitions-Typ
@@ -176,6 +178,21 @@ PARAM_PV_MODULE: Final[dict[str, str]] = {
     "MODUL_LEISTUNG_WP": "modul_leistung_wp",
     "MODUL_TYP": "modul_typ",
     "AUSRICHTUNG_GRAD": "ausrichtung_grad",
+    # Nennleistung: SoT ist die SPALTE `Investition.leistung_kwp`. Dieser
+    # Schlüssel ist ausschließlich LESE-Fallback für Bestands- und Importdaten
+    # (#229/N52/N66) — kein Schreibpfad erzeugt ihn (Formular und Setup-Wizard
+    # schreiben die Spalte). Gelesen wird er NUR über
+    # `core/investition_kennwerte.py` bzw. `utils/investition_value.py`, nie als
+    # Literal. Der ältere Schreibweise-Variante `kwp` steht in LEGACY_PARAM_KEYS
+    # und wird dort ebenfalls noch gelesen.
+    #
+    # ACHTUNG, die Spalte trägt NICHT überall kWp: `Investition.leistung_kwp`
+    # ist ein Mehrzweckfeld — für `speicher` steht dort kWh, für
+    # `wechselrichter` kW (AC), erst für den Rest kWp
+    # (`services/pdf/templates/jahresbericht.html:30-33` rendert genau diese
+    # drei Einheiten aus demselben Feld). Eine Regel „`leistung_kwp` ist die
+    # PV-Nennleistung" gilt deshalb nur typgefiltert.
+    "LEISTUNG_KWP": "leistung_kwp",
 }
 
 
@@ -193,6 +210,10 @@ PARAM_BALKONKRAFTWERK: Final[dict[str, str]] = {
 }
 
 PARAM_BALKONKRAFTWERK_DEFAULTS: Final[dict[str, object]] = {
+    # Formular-VORBELEGUNG (typisches BKW = 2 Module), KEIN Lese-Default.
+    # Wer `anzahl` nie gepflegt hat, darf beim LESEN nicht stillschweigend die
+    # doppelte Leistung ausgewiesen bekommen — `get_bkw_kwp` rechnet deshalb
+    # mit 1 (s. `core/investition_kennwerte.py::ANZAHL_LESE_DEFAULT`).
     "anzahl": 2,
     "ausrichtung": "Süd",
     "neigung_grad": 30,
@@ -218,10 +239,20 @@ PARAM_SONSTIGES_DEFAULTS: Final[dict[str, object]] = {
 # Legacy-Keys (deprecated, aber Migrations-Code muss sie weiter erkennen)
 # ============================================================================
 
+# Als Konstante, weil dieser eine Legacy-Key zur Laufzeit gelesen wird und der
+# Lese-Helper ihn nicht als Literal wiederholen soll.
+LEGACY_KWP_KEY: Final[str] = "kwp"
+
 # In v3.25.0 entstandene Migration: Diese alten Keys werden in der
-# DB-Migration auf die neuen Schlüssel umgeschrieben. Sie dürfen nirgends
-# mehr aktiv gelesen oder geschrieben werden — die Liste hier dient nur
-# als Bezugsanker für die einmalige Migration.
+# DB-Migration auf die neuen Schlüssel umgeschrieben. Geschrieben werden darf
+# hier keiner mehr.
+#
+# GELESEN werden sie mit EINER Ausnahme ebenfalls nicht mehr — die Liste ist
+# sonst nur Bezugsanker für die einmalige Migration:
+#   `kwp` wird weiterhin AKTIV gelesen (`core/investition_kennwerte.py`), weil
+#   die v3.25.0-Migration ihn nie umgeschrieben hat. Ohne diesen Lesepfad
+#   fielen Bestandsdaten, die die Nennleistung nur im `parameter`-JSON tragen,
+#   stumm auf 0 (#229/N66).
 LEGACY_PARAM_KEYS: Final[dict[str, str]] = {
     # E-Auto
     "km_jahr": "jahresfahrleistung_km",
@@ -234,6 +265,9 @@ LEGACY_PARAM_KEYS: Final[dict[str, str]] = {
     "leistung_kw": "max_ladeleistung_kw",  # nur in Wallbox-Kontext, nicht WP
     # Wechselrichter
     "leistung_ac_kw": "max_leistung_kw",  # nur im toten Schema
+    # PV-Module / Balkonkraftwerk — Legacy-Nennleistung. Als einziger Eintrag
+    # dieser Liste noch AKTIV gelesen (s. Kopfkommentar).
+    LEGACY_KWP_KEY: "leistung_kwp",
 }
 
 

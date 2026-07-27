@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Ein PV-Modul mit „0" im Leistungsfeld fällt nicht mehr aus der kWp-Verteilung.** Steht im Feld **Leistung (kWp)** eine ausdrückliche 0, die Nennleistung aber im Detail-Feld (`kwp` bzw. `leistung_kwp`, typisch bei importierten Bestandsdaten), lasen die beiden internen Lesewege verschiedene Zahlen: die Prognose-Seite fand die gepflegte Leistung, das Aufteilen eines PV-Gesamtwerts auf die einzelnen Strings las 0 — das Modul bekam nichts, die übrigen entsprechend zu viel. Betroffen waren Import-Zuordnung, Connector/MQTT-Verteilung, Monatsdaten und die PV-Strings-Sicht. Beide Wege lesen jetzt gleich. Ein **leeres** Leistungsfeld verhielt sich schon immer richtig — nur die ausdrückliche 0 nicht.
+
+---
+
 ## [4.0.1] - 2026-07-26 — Prognose-Werte vereinheitlicht · PV-Modulwerte gemessen · Tester-Korrekturen
 
 ### Fixed

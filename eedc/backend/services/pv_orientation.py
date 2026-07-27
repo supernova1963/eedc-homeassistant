@@ -20,9 +20,20 @@ Defaults (Neigung=35°, Azimut=0°) zurück, wenn die Werte nur in den
 Top-Level-Spalten vorhanden waren.
 
 Dieser Helper vereinheitlicht das Lesen über alle drei Pfade.
+
+Die kWp-Helper selbst liegen seit A24-1 in `core/investition_kennwerte.py`
+(`get_pv_kwp` · `get_bkw_kwp` · `get_erzeuger_kwp`) und werden hier
+re-exportiert; Neigung und Azimut bleiben hier.
 """
 from dataclasses import dataclass
 from typing import Any
+
+# `get_pv_kwp` lebt seit A24-1 in `core/investition_kennwerte.py` (zusammen mit
+# `get_bkw_kwp`/`get_erzeuger_kwp`), weil der Berechnungs-Layer die Helper
+# braucht und `core/` laut ADR-001 nicht auf `services/` zeigen darf. Hier steht
+# nur noch der Re-Export, damit die bestehenden Importeure unberührt bleiben —
+# KEINE Kopie, es gibt genau eine Implementierung.
+from backend.core.investition_kennwerte import get_pv_kwp  # noqa: F401
 
 # Mapping für Ausrichtung-Strings → Azimut-Grad (EEDC/PVGIS-Konvention:
 # 0=Süd, -90=Ost, 90=West, 180/-180=Nord).
@@ -36,31 +47,6 @@ AUSRICHTUNG_MAP = {
     "nordost": -135, "no": -135, "ne": -135,
     "nordwest": 135, "nw": 135,
 }
-
-
-def get_pv_kwp(inv: Any) -> float:
-    """Leistung in kWp. Priorität: Top-Level-Spalte → parameter.kwp →
-    parameter.leistung_kwp → 0.
-
-    Die drei Konventionen sind historisch (Befund-Sweep §4.1): die Spalte ist
-    SoT, `kwp` ist der Legacy-Key dieses Helpers, `leistung_kwp` der des
-    Verteilungs-Helpers `utils.investition_value.get_inv_value`. Dass beide
-    Helper verschiedene JSON-Keys lasen, war der Nährboden für N59 — deshalb
-    liest dieser hier jetzt BEIDE. `get_pv_kwp ⊇ get_inv_value("leistung_kwp")`:
-    wer eine kWp gepflegt hat, wird von beiden Wegen gefunden.
-    """
-    direct = getattr(inv, "leistung_kwp", None)
-    if direct:
-        return float(direct)
-    params = getattr(inv, "parameter", None) or {}
-    for key in ("kwp", "leistung_kwp"):
-        try:
-            wert = float(params.get(key) or 0)
-        except (TypeError, ValueError):
-            continue
-        if wert:
-            return wert
-    return 0.0
 
 
 def get_pv_neigung(inv: Any, default: int = 35) -> int:
