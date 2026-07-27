@@ -40,10 +40,14 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/gi, '-')
 const mitParkId = (prefix: string, kpis: KpiStripItem[]): KpiStripItem[] =>
   kpis.map((k) => ({ ...k, parkId: `kpi:${prefix}-${slug(k.title)}` }))
 
-/** Parameter-Zeilen einer Investition (Stammdaten + JSON-Parameter). */
+/** Parameter-Zeilen einer Investition (Stammdaten + JSON-Parameter).
+ *
+ *  Anzeige-Stelle ⇒ `leistung_kwp_effektiv` statt der Rohspalte (A26/N106):
+ *  eine nur im `parameter`-JSON gepflegte Nennleistung (#229) fehlte hier
+ *  ganz. Die Eingabe daneben (Investitionen-Formular) liest weiter roh. */
 function paramFelder(inv: Investition): { label: string; wert: string }[] {
   const felder: { label: string; wert: string }[] = []
-  if (inv.leistung_kwp != null) felder.push({ label: 'Leistung', wert: `${fmtCalc(inv.leistung_kwp, 1)} kWp` })
+  if (inv.leistung_kwp_effektiv != null) felder.push({ label: 'Leistung', wert: `${fmtCalc(inv.leistung_kwp_effektiv, 1)} kWp` })
   if (inv.ausrichtung) felder.push({ label: 'Ausrichtung', wert: inv.ausrichtung })
   if (inv.neigung_grad != null) felder.push({ label: 'Neigung', wert: `${inv.neigung_grad}°` })
   if (inv.anschaffungsdatum) felder.push({ label: 'Anschaffung', wert: formatDatum(inv.anschaffungsdatum) })

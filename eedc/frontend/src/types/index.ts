@@ -190,7 +190,29 @@ export interface Investition {
   aktiv: boolean
   parent_investition_id?: number | null
   // PV-Module spezifische Felder
+  /**
+   * ROHSPALTE — für FORMULARE und WIZARDS, nicht für die Anzeige.
+   *
+   * Wer die Nennleistung nur im `parameter`-JSON gepflegt hat (Import-/
+   * Altbestand, #229), hat hier `undefined`. Zum ANZEIGEN und RECHNEN
+   * deshalb {@link Investition.leistung_kwp_effektiv} lesen.
+   */
   leistung_kwp?: number
+  /**
+   * Effektive Nennleistung — für ANZEIGE und RECHNUNG (A26/N106).
+   *
+   * Vom Server berechnet (`InvestitionResponse.leistung_kwp_effektiv`): bei
+   * Erzeugern inkl. Fallback auf das `parameter`-JSON, bei allen anderen Typen
+   * unverändert die Rohspalte (dieselbe Mehrzweck-Einheit — Speicher kWh,
+   * Wechselrichter kW AC).
+   *
+   * **Nicht in ein Eingabefeld schreiben.** Läse ein Formular diesen Wert,
+   * schriebe das nächste Speichern den abgeleiteten Wert in die Spalte — der
+   * Client machte aus einer Ableitung dauerhaft Stammdaten. Der Schreibpfad
+   * (`InvestitionCreate`/`InvestitionUpdate`) kennt das Feld deshalb nicht.
+   * Gewächtert von `npm run check:kennwert-roh`.
+   */
+  leistung_kwp_effektiv?: number | null
   ausrichtung?: string
   neigung_grad?: number
   ha_entity_id?: string  // Home Assistant Sensor für String-Daten

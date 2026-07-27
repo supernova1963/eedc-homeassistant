@@ -131,6 +131,15 @@ const monatOptions = [
  *  Hook-Deps nicht bei jedem Render neu anschlagen. */
 const invKey = (invId: number, feld: string) => `${invId}:${feld}`
 
+/** Sektions-Untertitel „x,x kWp" eines Balkonkraftwerks.
+ *
+ *  ANZEIGE, kein Eingabefeld ⇒ `leistung_kwp_effektiv` statt der Rohspalte
+ *  (A26/N106): ein BKW, dessen Leistung als `leistung_wp × anzahl` im
+ *  `parameter`-JSON steht, hatte hier bisher gar keinen Untertitel.
+ *  Zahl über die `fmtZahl`-SoT (de-DE) statt roher Interpolation. */
+const bkwLeistung = (inv: Investition) =>
+  inv.leistung_kwp_effektiv != null ? `${fmtZahl(inv.leistung_kwp_effektiv, 1)} kWp` : null
+
 export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCancel, haVorausfuellung, voreingestellterMonat }: MonatsdatenFormProps) {
   const currentYear = new Date().getFullYear()
   const currentMonth = new Date().getMonth() + 1
@@ -1043,7 +1052,7 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           statusMonthKey={statusMonthKey}
           istBestaetigt={istInvBestaetigt}
           onBestaetigen={bestaetigeInvFelder}
-          subtitleFn={(inv) => inv.leistung_kwp ? `${inv.leistung_kwp} kWp` : null}
+          subtitleFn={bkwLeistung}
           hinweisFn={(inv) => inv.parameter?.hat_speicher
             ? 'Mit Speicher: Bei Nulleinspeisung entspricht Eigenverbrauch meist der Erzeugung.'
             : 'Ohne Speicher: Eigenverbrauch ist der direkt genutzte Anteil (typisch 30-40% der Erzeugung).'}

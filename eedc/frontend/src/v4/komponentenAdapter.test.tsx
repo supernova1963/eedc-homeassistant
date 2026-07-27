@@ -181,12 +181,17 @@ describe('KOMPONENTEN_ADAPTER', () => {
 
   /** Fixture-Muster aus `backend/tests/test_aggregiert_kwp_verteilung.py`:
    *  6/4 kWp, gemessen 700/300 gegen kWp-Anteil 600/400. Der Kontrast ist das
-   *  Regressions-Gate — fällt jemand auf die kWp-Zerlegung zurück, steht hier 600. */
+   *  Regressions-Gate — fällt jemand auf die kWp-Zerlegung zurück, steht hier 600.
+   *
+   *  Beide kWp-Felder gesetzt, weil die echte Antwort beide trägt (A26/N106):
+   *  `leistung_kwp` = Rohspalte für Formulare, `leistung_kwp_effektiv` = der
+   *  Wert, den Anzeige und Rechnung lesen. Der #229-Fall (nur `_effektiv`
+   *  gefüllt) hat einen eigenen Test weiter unten. */
   const zweiModule = () => {
     getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
     list.mockResolvedValue([
-      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6 }),
-      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4 }),
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6, leistung_kwp_effektiv: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4, leistung_kwp_effektiv: 4 }),
     ])
     listAggregiert.mockResolvedValue([
       { jahr: 2025, pv_erzeugung_kwh: 1000, eigenverbrauch_kwh: 400, einspeisung_kwh: 600 },
@@ -233,6 +238,26 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.verlauf?.herkunft?.zustand).toBe('geschaetzt')
   })
 
+  /** #229 an der API-Grenze (A26/N106): die Nennleistung des Süd-Moduls steht
+   *  NUR im `parameter`-JSON, die Rohspalte ist leer. Auf der Rohspalte gerechnet
+   *  wäre totalKwp = 4 → Süd bekäme 0 und Nord die vollen 1000 kWh. */
+  it('PV ④ Verlauf: kWp-Fallback nutzt die EFFEKTIVE Nennleistung (#229) — A26/N106', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
+    list.mockResolvedValue([
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', parameter: { kwp: 6 }, leistung_kwp_effektiv: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4, leistung_kwp_effektiv: 4 }),
+    ])
+    listAggregiert.mockResolvedValue([
+      { jahr: 2025, pv_erzeugung_kwh: 1000, eigenverbrauch_kwh: 400, einspeisung_kwh: 600 },
+    ])
+    getPVStringsGesamtlaufzeit.mockResolvedValue(null)   // Not-Fallback greift
+
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+
+    // 600/400 nach 6/4 kWp — NICHT 0/1000, wie es die Rohspalte ergäbe.
+    expect(g.verlauf?.rows[0]).toMatchObject({ name: '2025', m11: 600, m12: 400 })
+  })
+
   it('PV ④ Verlauf: reine PV-Anlage bekommt KEINE toten Zusatz-Erzeuger-Balken', async () => {
     zweiModule()
     const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
@@ -249,8 +274,8 @@ describe('KOMPONENTEN_ADAPTER', () => {
   const mitBkwUndBhkw = () => {
     getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
     list.mockResolvedValue([
-      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6 }),
-      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4 }),
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Süd', leistung_kwp: 6, leistung_kwp_effektiv: 6 }),
+      inv({ id: 12, typ: 'pv-module', bezeichnung: 'Nord', leistung_kwp: 4, leistung_kwp_effektiv: 4 }),
     ])
     listAggregiert.mockResolvedValue([{
       jahr: 2025, pv_erzeugung_kwh: 1200, pv_module_kwh: 1000, bkw_kwh: 200,
@@ -300,7 +325,7 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
     list.mockResolvedValue([
       inv({ id: 10, typ: 'wechselrichter', bezeichnung: 'WR Süd', parameter: { max_leistung_kw: 8 } }),
-      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Dach Süd', parent_investition_id: 10, leistung_kwp: 6, ausrichtung: 'Süd' }),
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Dach Süd', parent_investition_id: 10, leistung_kwp: 6, leistung_kwp_effektiv: 6, ausrichtung: 'Süd' }),
       inv({ id: 12, typ: 'speicher', bezeichnung: 'DC-Speicher', parent_investition_id: 10, parameter: { kapazitaet_kwh: 10 } }),
       inv({ id: 13, typ: 'pv-module', bezeichnung: 'Garage (verwaist)' }), // ohne parent → Orphan
       inv({ id: 14, typ: 'pv-module', bezeichnung: 'inaktiv', parent_investition_id: 10, aktiv: false }), // raus
@@ -312,10 +337,25 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
     expect(g.struktur.wr[0].label).toBe('WR Süd')
     expect(g.struktur.wr[0].detail).toBe('8,0 kW')
     expect(g.struktur.wr[0].module.map((m) => m.label)).toEqual(['Dach Süd'])
+    expect(g.struktur.wr[0].module[0].detail).toBe('6,0 kWp · Süd')
     expect(g.struktur.wr[0].speicher.map((s) => s.label)).toEqual(['DC-Speicher'])
     expect(g.struktur.orphanModule.map((m) => m.label)).toEqual(['Garage (verwaist)']) // inaktiv NICHT dabei
     // PV: verknüpfte Investitionen für den Einstellungen-Block (aktiv, ohne inaktiv)
     expect(g.verknuepfteInvs?.map((i) => i.id).sort()).toEqual([10, 11, 12, 13])
+  })
+
+  it('PV ② Topologie: kWp-Detail kommt aus dem effektiven Feld (#229) — A26/N106', async () => {
+    getUebersicht.mockResolvedValue({ anlagenleistung_kwp: 10 })
+    list.mockResolvedValue([
+      // Rohspalte leer, kWp nur im parameter-JSON — vor A26 stand hier nur „Süd".
+      inv({ id: 11, typ: 'pv-module', bezeichnung: 'Dach Süd', parameter: { kwp: 8.4 },
+        leistung_kwp_effektiv: 8.4, ausrichtung: 'Süd' }),
+    ])
+
+    const [g] = await KOMPONENTEN_ADAPTER['pv-module'].fetch(1)
+
+    if (g.struktur?.art !== 'topologie') throw new Error('topologie erwartet')
+    expect(g.struktur.orphanModule[0].detail).toBe('8,4 kWp · Süd')
   })
 
   it('Speicher ① Arbitrage-Sekundär (nur wenn fähig+Netzladung) + ② Kopplungs-Referenz', async () => {

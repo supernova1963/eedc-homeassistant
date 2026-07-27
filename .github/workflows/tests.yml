@@ -121,6 +121,15 @@ jobs:
         working-directory: eedc/frontend
         run: npm run check:roh-controls
 
+      # Client-Hälfte von ADR-002/P3-a (A26/N106). Der Backend-Wächter
+      # (test_wurzelmuster_konformitaet.py) endet an der API-Grenze — im
+      # Frontend rechnete die kWp-Verteilung ein zweites Mal auf der ROHSPALTE.
+      # Regel: Anzeige/Rechnung lesen `leistung_kwp_effektiv`, nur Eingabefelder
+      # lesen `leistung_kwp`.
+      - name: Kennwert-Rohzugriffe (Investitions-kWp nur effektiv anzeigen)
+        working-directory: eedc/frontend
+        run: npm run check:kennwert-roh
+
       - name: Vitest (Routing/Redirects + Komponenten + Wächter)
         working-directory: eedc/frontend
         run: npm test

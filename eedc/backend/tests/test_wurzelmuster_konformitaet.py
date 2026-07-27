@@ -463,6 +463,15 @@ P3A_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Builder auf je EINEN kommentierten Rohzugriff gebündelt.
     "backend/services/pdf/builders/anlagendokumentation.py::inv",
     "backend/services/pdf/builders/jahresbericht.py::i",
+    # A26/N106: `self` ist hier das **Pydantic-Response-Schema**
+    # `InvestitionResponse`, nicht das ORM-Objekt — genau der falsch-positive
+    # Fall, den die Grenze (a) der P3-a-Zeile vorhergesagt hat („jedes neue
+    # Response-Schema mit einem `leistung_kwp`-Feld"). Die Stelle IST der
+    # Erzeuger dieses Kennwerts: `leistung_kwp_effektiv` liest den Rohwert, um
+    # ihn bei Erzeugern über `get_erzeuger_kwp` zu heilen und bei allen anderen
+    # Typen (Mehrzweckfeld N-G: Speicher = kWh, WR = kW AC) unverändert
+    # durchzureichen. Ein Helper-Aufruf statt des Rohzugriffs wäre hier zirkulär.
+    "backend/api/routes/investitionen/crud.py::self",
     # Der SoT selbst — er IST der Spalten-Fallback und liest sie per `getattr`.
     # Als einziger Eintrag ganzes Modul statt `Modul::Empfänger`.
     P3A_SOT_MODUL,
@@ -563,10 +572,14 @@ _P3A_HINWEIS = (
 def test_p3a_investitions_kwp_nur_ueber_den_sot_helper():
     """Kein direkter Attributzugriff auf einen Investitions-Kennwert.
 
-    Baseline 0 seit A24-2 (46 Zugriffe im Baum: 40 auf `anlage`, 6 in der
-    Allowlist). Der Wächter prüft **Form, nicht Wert** und kann den Empfänger
-    nicht typisieren — ein Empfänger, der `anlage` heißt, aber eine Investition
-    hält, ist per Konstruktion falsch-negativ.
+    Baseline 0 seit A24-2 (47 Zugriffe im Baum: 40 auf `anlage`, 7 in der
+    Allowlist — der siebte kam mit A26 dazu, dem Response-Schema, das den
+    effektiven Kennwert erzeugt). Der Wächter prüft **Form, nicht Wert** und
+    kann den Empfänger nicht typisieren — ein Empfänger, der `anlage` heißt,
+    aber eine Investition hält, ist per Konstruktion falsch-negativ.
+
+    Er endet an der **API-Grenze**: was der Client mit der Antwort macht, sieht
+    er nicht. Diese Hälfte deckt seit A26 `frontend/scripts/check-kennwert-roh.mjs`.
     """
     verstoesse = _p3a_verstoesse("Attributzugriff")
 

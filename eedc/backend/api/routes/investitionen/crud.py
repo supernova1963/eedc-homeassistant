@@ -10,11 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from datetime import date
 
 from backend.core.exceptions import not_found
-from backend.core.investition_kennwerte import get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_jahr, sort_investitionen_nach_typ
@@ -48,7 +48,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     resolve_eauto_benzinpreis,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
-from backend.core.berechnungen import einspeise_erloes_euro
+from backend.core.berechnungen import PV_ERZEUGER_TYPEN, einspeise_erloes_euro
 
 
 # ============================================================================
@@ -161,6 +161,47 @@ class InvestitionResponse(InvestitionBase):
 
     class Config:
         from_attributes = True
+
+    @computed_field(  # type: ignore[prop-decorator]
+        description=(
+            "Nennleistung zur ANZEIGE/RECHNUNG — bei Erzeugern inkl. Fallback auf "
+            "das `parameter`-JSON (#229). Nur lesend: der Schreibpfad (POST/PUT) "
+            "kennt das Feld nicht. Einheit wie bei `leistung_kwp`."
+        )
+    )
+    @property
+    def leistung_kwp_effektiv(self) -> Optional[float]:
+        """Der effektive Nennleistungs-Wert dieser Investition (A26/N106).
+
+        **Warum es dieses Feld gibt:** `leistung_kwp` ist die ROHSPALTE. Wer
+        seine Nennleistung nur im `parameter`-JSON gepflegt hat (Import-/
+        Altbestand), hat dort `None` — im Client sah das aus wie „nicht
+        gepflegt", und `v4/komponentenAdapter.tsx` verteilte die Erzeugung
+        danach anteilig (das Modul bekam 0, die übrigen zu viel). Das ist die
+        #229-Klasse jenseits jedes Backend-Wächters (ADR-002/P3-a Grenze (c)).
+
+        **Die Trennlinie:** ANZEIGE und RECHNUNG lesen dieses Feld,
+        FORMULARE und WIZARDS die Rohspalte `leistung_kwp` — läse ein
+        Eingabefeld den abgeleiteten Wert, schriebe das nächste Speichern ihn
+        in die Spalte. Genau deshalb steht das Feld in `InvestitionResponse`
+        und **nicht** in `InvestitionBase`: `InvestitionCreate`/`-Update`
+        erben es damit nicht und nehmen es auch nicht entgegen.
+
+        **Typabhängigkeit (N-G):** `Investition.leistung_kwp` ist ein
+        Mehrzweckfeld — beim Speicher kWh, beim Wechselrichter kW (AC). Die
+        SoT-Helper tragen PV-Semantik und sind laut ihrem eigenen Docstring
+        nur für Erzeuger-Typen zuständig. Für alle anderen Typen ist dieses
+        Feld deshalb unverändert die Rohspalte; es „heilt" nur dort, wo
+        Heilung definiert ist, und ist nirgends kleiner als `leistung_kwp`.
+
+        `or roh` hält die Semantik „nicht gepflegt": die Helper liefern `0.0`,
+        wenn sie nichts finden — eine 0,0-kWp-Zeile statt einer fehlenden wäre
+        eine erfundene Zahl. Eine echte 0 in der Spalte bleibt eine 0.
+        """
+        roh = self.leistung_kwp
+        if self.typ in PV_ERZEUGER_TYPEN:
+            return get_erzeuger_kwp(self) or roh
+        return roh
 
 
 def _gruppiere_investitionen(
