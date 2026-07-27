@@ -554,7 +554,7 @@ Diese Abschnitte definieren das gemeinsame Fundament, auf dem alle Komponenten i
 
 ## Teil D — Formulare & Wizards
 
-> **SoT für ALLE V4-Formulare + Assistenten** (abgenommen Gernot 2026-07-08). Inventur + Detail-Begründung: internes `docs/drafts/KONZEPT-FORMULARE-V4.md`. Gilt für neue V4-Formulare **und** die slice-weise Umstellung der V3-Formulare/-Wizards (Auslöser u. a. R17: D17-7/-8/-10, R17-4/-8). Prinzip: SoT + Struktur vereinheitlichen, **kein Redesign der Inhalte**.
+> **SoT für ALLE V4-Formulare + Assistenten** (abgenommen Gernot 2026-07-08). Inventur + Detail-Begründung: internes `docs/drafts/archive/flip-v4/KONZEPT-FORMULARE-V4.md` (nach dem v4.0.0-Flip archiviert — die Regeln leben hier weiter). Gilt für neue V4-Formulare **und** die slice-weise Umstellung der V3-Formulare/-Wizards (Auslöser u. a. R17: D17-7/-8/-10, R17-4/-8). Prinzip: SoT + Struktur vereinheitlichen, **kein Redesign der Inhalte**.
 
 ### D1 — Control-Katalog + Entscheidungs-Matrix (welches Control wofür)
 
