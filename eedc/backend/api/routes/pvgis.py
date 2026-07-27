@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 import httpx
 
 from backend.core.exceptions import not_found
+from backend.core.investition_kennwerte import get_pv_kwp
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
@@ -373,7 +374,12 @@ async def get_pvgis_prognose(
     gesamt_leistung = 0.0
 
     for modul in pv_module:
-        if not modul.leistung_kwp or modul.leistung_kwp <= 0:
+        # kWp über den SoT-Helper (ADR-002/P3-a): wer die Nennleistung nur im
+        # Detail-Feld (`parameter`) gepflegt hat — Import-/Altbestand, #229 —
+        # hat in der Spalte NULL stehen. Der frühere Spalten-Direktzugriff ließ
+        # das Modul hier komplett aus der Anlagen-Prognose fallen.
+        modul_kwp = get_pv_kwp(modul)
+        if modul_kwp <= 0:
             continue  # Modul ohne Leistung überspringen
 
         tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
@@ -386,7 +392,7 @@ async def get_pvgis_prognose(
         modul_monatsdaten, jahresertrag = await _berechne_pvgis_modul(
             latitude=anlage.latitude,
             longitude=anlage.longitude,
-            leistung_kwp=modul.leistung_kwp,
+            leistung_kwp=modul_kwp,
             ausrichtung=modul.ausrichtung,
             neigung_grad=tilt,
             system_losses=system_losses,
@@ -400,13 +406,13 @@ async def get_pvgis_prognose(
             gesamt_monatsdaten[md.monat]["h_m"] = md.h_m  # Einstrahlung gleich für alle Module am Standort
             gesamt_monatsdaten[md.monat]["sd_m"] += md.sd_m
 
-        spezifischer_ertrag = jahresertrag / modul.leistung_kwp if modul.leistung_kwp > 0 else 0
+        spezifischer_ertrag = jahresertrag / modul_kwp if modul_kwp > 0 else 0
         azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
 
         module_prognosen.append(PVModulPrognose(
             investition_id=modul.id,
             bezeichnung=modul.bezeichnung,
-            leistung_kwp=modul.leistung_kwp,
+            leistung_kwp=modul_kwp,
             ausrichtung=modul.ausrichtung or _azimut_zu_richtung(azimuth),
             ausrichtung_grad=azimuth,
             neigung_grad=tilt,
@@ -416,7 +422,7 @@ async def get_pvgis_prognose(
         ))
 
         gesamt_jahresertrag += jahresertrag
-        gesamt_leistung += modul.leistung_kwp
+        gesamt_leistung += modul_kwp
 
     # Gesamt-Monatsdaten zusammenstellen
     gesamt_monatsdaten_list = [
@@ -477,7 +483,11 @@ async def get_pvgis_modul_prognose(
             detail=f"Investition ist kein PV-Modul (Typ: {modul.typ})"
         )
 
-    if not modul.leistung_kwp or modul.leistung_kwp <= 0:
+    # kWp über den SoT-Helper (ADR-002/P3-a): mit dem Spalten-Direktzugriff
+    # bekam ein nur im `parameter` gepflegtes Modul (#229) hier einen harten
+    # 400er — für eine Nennleistung, die gepflegt ist.
+    modul_kwp = get_pv_kwp(modul)
+    if modul_kwp <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="PV-Modul hat keine Leistung (kWp) definiert"
@@ -505,7 +515,7 @@ async def get_pvgis_modul_prognose(
     monatsdaten_list, jahresertrag = await _berechne_pvgis_modul(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
-        leistung_kwp=modul.leistung_kwp,
+        leistung_kwp=modul_kwp,
         ausrichtung=modul.ausrichtung,
         neigung_grad=tilt,
         system_losses=system_losses,
@@ -514,12 +524,12 @@ async def get_pvgis_modul_prognose(
     )
 
     azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
-    spezifischer_ertrag = jahresertrag / modul.leistung_kwp if modul.leistung_kwp > 0 else 0
+    spezifischer_ertrag = jahresertrag / modul_kwp if modul_kwp > 0 else 0
 
     return {
         "investition_id": modul.id,
         "bezeichnung": modul.bezeichnung,
-        "leistung_kwp": modul.leistung_kwp,
+        "leistung_kwp": modul_kwp,
         "ausrichtung": modul.ausrichtung or _azimut_zu_richtung(azimuth),
         "ausrichtung_grad": azimuth,
         "neigung_grad": tilt,
@@ -683,10 +693,15 @@ async def speichere_pvgis_prognose(
     # Gewichtete Durchschnittswerte für Speicherung berechnen
     gesamt_neigung = 0.0
     gesamt_azimut = 0.0
-    for modul in prognose.module:
-        gewicht = modul.leistung_kwp / prognose.gesamt_leistung_kwp if prognose.gesamt_leistung_kwp > 0 else 0
-        gesamt_neigung += modul.neigung_grad * gewicht
-        gesamt_azimut += modul.ausrichtung_grad * gewicht
+    # `prog_modul` läuft über PVModulPrognose-Pydantic-Objekte, NICHT über
+    # Investitionen — dieselbe Datei benutzt `modul` sonst durchgehend für
+    # Investitionen. Der eigene Name hält die beiden Bedeutungen auseinander
+    # (A24-2): `.leistung_kwp` ist hier ein Response-Feld, kein DB-Kennwert,
+    # und darf deshalb nicht über die SoT-Helper laufen.
+    for prog_modul in prognose.module:
+        gewicht = prog_modul.leistung_kwp / prognose.gesamt_leistung_kwp if prognose.gesamt_leistung_kwp > 0 else 0
+        gesamt_neigung += prog_modul.neigung_grad * gewicht
+        gesamt_azimut += prog_modul.ausrichtung_grad * gewicht
 
     # Horizont-Status prüfen
     result_anlage = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -771,7 +786,10 @@ async def get_aktive_prognose(
         for inv_id_str, monatsdaten in prognose.module_monatswerte.items():
             inv_id = int(inv_id_str)
             inv = inv_by_id.get(inv_id)
-            leistung_kwp = float(inv.leistung_kwp) if inv and inv.leistung_kwp else 0.0
+            # kWp über den SoT-Helper (ADR-002/P3-a): sonst zeigt die
+            # gespeicherte Prognose für ein nur im `parameter` gepflegtes
+            # Modul (#229) „0,0 kWp".
+            leistung_kwp = get_pv_kwp(inv) if inv else 0.0
             neigung = float(inv.neigung_grad) if inv and inv.neigung_grad is not None else 0.0
             ausrichtung_str = (inv.ausrichtung if inv and inv.ausrichtung else "Süd")
             jahres_kwh = sum(float(m.get("e_m", 0) or 0) for m in monatsdaten)

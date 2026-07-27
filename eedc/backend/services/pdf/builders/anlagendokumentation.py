@@ -34,7 +34,7 @@ from backend.api.routes.infothek import INFOTHEK_KATEGORIEN
 from backend.models.anlage import Anlage, AnlageFoto
 from backend.models.infothek import InfothekDatei, InfothekEintrag, InfothekInvestition
 from backend.models.investition import Investition
-from backend.services.pv_orientation import get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
 
 
 TYP_LABELS = {
@@ -117,8 +117,28 @@ def _build_investition_tech_grid(inv: Investition) -> list[tuple[str, str]]:
     grid: list[tuple[str, str]] = []
     if inv.anschaffungsdatum:
         grid.append(("Anschaffungsdatum", inv.anschaffungsdatum.strftime("%d.%m.%Y")))
-    if inv.leistung_kwp:
-        grid.append(("Nennleistung", f"{inv.leistung_kwp:.2f} kWp"))
+    # `Investition.leistung_kwp` ist ein Mehrzweckfeld: kWp bei den Erzeugern,
+    # kWh beim Speicher, kW (AC) beim Wechselrichter (N-G, so rendert es auch
+    # `templates/jahresbericht.html`). Diese Funktion baut das Grid für JEDEN
+    # Typ (auch alle Einzelseiten) und labelte bisher pauschal
+    # „Nennleistung … kWp" — bei einem Speicher also kWh mit kWp-Einheit (N-I).
+    # Nur für die Erzeuger-Typen läuft der Wert über den SoT-Helper: ihre
+    # Nennleistung kann auch nur im `parameter` gepflegt sein (#229) und fehlte
+    # dann ganz im Dokumentations-PDF. Für Speicher/Wechselrichter wäre die
+    # PV-Semantik der Helper falsch — dort bleibt die Rohspalte.
+    if inv.typ in ("pv-module", "balkonkraftwerk"):
+        erzeuger_kwp = get_erzeuger_kwp(inv)
+        if erzeuger_kwp:
+            grid.append(("Nennleistung", f"{erzeuger_kwp:.2f} kWp"))
+    else:
+        roh_leistung = inv.leistung_kwp  # bewusst die Rohspalte, s. Kommentar oben
+        if roh_leistung:
+            if inv.typ == "speicher":
+                grid.append(("Kapazität", f"{roh_leistung:.1f} kWh"))
+            elif inv.typ == "wechselrichter":
+                grid.append(("Nennleistung", f"{roh_leistung:.1f} kW (AC)"))
+            else:
+                grid.append(("Nennleistung", f"{roh_leistung:.2f} kWp"))
     if inv.ausrichtung:
         if inv.neigung_grad is not None:
             grid.append(("Ausrichtung", f"{inv.ausrichtung} · {inv.neigung_grad:.0f}° Neigung"))

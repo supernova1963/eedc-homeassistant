@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping, Optional, Sequence
 
+from backend.core.investition_kennwerte import get_erzeuger_kwp
+
 # Typische 52°N-Monatsverteilung (Prozent des Jahresertrags) — Fallback,
 # wenn keine PVGIS-Prognose mit Monatswerten vorliegt. Summe ≈ 100.
 MONATSGEWICHTE_52N: dict[int, float] = {
@@ -52,15 +54,12 @@ def kwp_aktiv_im_monat(investitionen: Sequence, jahr: int, monat: int) -> float:
             continue
         if not inv.ist_aktiv_im_monat(jahr, monat):
             continue
-        if inv.typ == "pv-module" and inv.leistung_kwp:
-            kwp += inv.leistung_kwp
-        elif inv.typ == "balkonkraftwerk":
-            if inv.leistung_kwp:
-                kwp += inv.leistung_kwp
-            else:
-                params = inv.parameter or {}
-                bkw_anzahl = params.get("anzahl", 1) or 1
-                kwp += (params.get("leistung_wp", 0) or 0) * bkw_anzahl / 1000
+        # kWp über den SoT-Dispatcher (ADR-002/P3-a). Wer die Nennleistung nur
+        # im Detail-Feld (`parameter`) gepflegt hat (#229), zählte hier 0 —
+        # damit wurde der NENNER des spez. Ertrags zu klein und die Kennzahl in
+        # Cockpit UND HA-Sensor zu hoch. Der Dispatcher kennt für PV-Module
+        # Spalte → `parameter` und für BKW zusätzlich `leistung_wp × anzahl`.
+        kwp += get_erzeuger_kwp(inv)
     return kwp
 
 

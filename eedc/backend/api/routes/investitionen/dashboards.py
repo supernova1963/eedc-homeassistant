@@ -28,6 +28,7 @@ from backend.api.routes.strompreise import (
     resolve_strompreis_for_komponente,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.investition_kennwerte import ANZAHL_LESE_DEFAULT, get_bkw_kwp
 from backend.core.investition_parameter import (
     PARAM_SPEICHER,
     PARAM_SPEICHER_DEFAULTS,
@@ -1181,12 +1182,17 @@ async def get_balkonkraftwerk_dashboard(
         # Parameter
         params = bkw.parameter or {}
         leistung_wp = params.get('leistung_wp', 0)
-        anzahl = params.get('anzahl', 2)
+        # Lese-Default 1 (`ANZAHL_LESE_DEFAULT`), nicht die Formular-Vorbelegung 2:
+        # ein BKW ohne gepflegte `anzahl` wurde hier mit DOPPELTER Leistung und
+        # damit halbem spez. Ertrag ausgewiesen (N-D).
+        anzahl = params.get('anzahl') or ANZAHL_LESE_DEFAULT
         hat_speicher = params.get('hat_speicher', False)
         speicher_kapazitaet = params.get('speicher_kapazitaet_wh', 0)
 
-        # Berechnungen
-        gesamt_leistung_wp = leistung_wp * anzahl if leistung_wp else (bkw.leistung_kwp or 0) * 1000
+        # Berechnungen — kWp über den SoT-Helper (ADR-002/P3-a). Die frühere
+        # Formel hatte die Priorität UMGEKEHRT (`parameter` vor Spalte) und
+        # ignorierte damit den vom Formular gepflegten Spaltenwert.
+        gesamt_leistung_wp = get_bkw_kwp(bkw) * 1000
 
         # Einspeisung berechnen falls nicht explizit erfasst
         # Einspeisung = Erzeugung - Eigenverbrauch (unvergütet ins Netz)

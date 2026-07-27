@@ -46,7 +46,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
-from backend.services.pv_orientation import get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
 from backend.models.strompreis import Strompreis
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
@@ -676,7 +676,19 @@ async def build_jahresbericht_context(
                 "typ_label": _INV_TYP_LABELS.get(i.typ, i.typ),
                 "bezeichnung": i.bezeichnung,
                 "anschaffungsdatum": i.anschaffungsdatum,
-                "leistung_kwp": i.leistung_kwp,
+                # `leistung_kwp` ist ein Mehrzweckfeld (N-G): `jahresbericht.html`
+                # rendert dieselbe Spalte als kWh (Speicher), kW AC
+                # (Wechselrichter) und kWp (Rest). Nur für die Erzeuger-Typen
+                # trägt sie PV-Semantik — dort läuft sie über den SoT-Helper,
+                # damit eine nur im `parameter` gepflegte Nennleistung (#229)
+                # nicht als leere Spalte im PDF landet. Für Speicher und
+                # Wechselrichter bleibt die Rohspalte stehen: ein
+                # PV-kWp-Fallback wäre dort schlicht die falsche Größe.
+                "leistung_kwp": (
+                    (get_erzeuger_kwp(i) or None)
+                    if i.typ in ("pv-module", "balkonkraftwerk")
+                    else i.leistung_kwp
+                ),
                 "ausrichtung": i.ausrichtung,
                 "neigung_grad": i.neigung_grad,
                 "parameter": i.parameter or {},

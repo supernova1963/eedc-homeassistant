@@ -9,6 +9,7 @@ from typing import Optional
 
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.investition_parameter import PARAM_E_AUTO
 from backend.core.berechnungen.energie import PV_KOMPONENTEN_PREFIXE
 from backend.services.live_sensor_config import (
@@ -170,7 +171,12 @@ def build_komponenten(
                 "icon": TYP_ICON.get(typ, "sun"),
                 "erzeugung_kw": round(kw, 3),
                 "verbrauch_kw": None,
-                "leistung_kwp": inv.leistung_kwp,
+                # kWp über den SoT-Dispatcher (ADR-002/P3-a): ohne ihn fehlte
+                # bei nur im `parameter` gepflegter Nennleistung (#229) der
+                # Auslastungsbalken im Live-Dashboard ersatzlos. `or None`
+                # hält die Semantik „nicht ermittelbar" (statt 0 kWp) — das
+                # Frontend blendet die Auslastung dann wie bisher aus.
+                "leistung_kwp": get_erzeuger_kwp(inv) or None,
             })
             summe_erzeugung += kw
             pv_total_w += val_w

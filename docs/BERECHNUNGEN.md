@@ -766,7 +766,7 @@ Wenn Temperatur > 25°C:
 | Parameter | Quelle | Default |
 |-----------|--------|---------|
 | `System_Losses` | `PVGISPrognose.system_losses / 100` | 0.14 (14%) |
-| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Helper `get_pv_kwp` (ADR-002/P3). Reihenfolge: Feld **Leistung (kWp)** der Investition → ersatzweise die Detail-Felder `kwp` bzw. `leistung_kwp` (nur Bestands-/Importdaten). Ein Balkonkraftwerk, das seine Leistung ausschließlich als `leistung_wp` × `anzahl` im Detail-Feld trägt, ist hier **nicht** erfasst — das Formular schreibt die kWp beim Speichern automatisch aus Anzahl × Wp in das Leistungsfeld. | `Anlage.leistung_kwp` |
+| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Dispatcher `get_erzeuger_kwp` (ADR-002/P3). Reihenfolge: Feld **Leistung (kWp)** der Investition → ersatzweise die Detail-Felder `kwp` bzw. `leistung_kwp` (nur Bestands-/Importdaten) → beim Balkonkraftwerk zusätzlich `leistung_wp` × `anzahl` (Anzahl fehlt ⇒ **1**, nicht die Formular-Vorbelegung 2). Seit v4.0.2 gilt dieselbe Kette an **allen** Lesestellen der Nennleistung — Prognose, Cockpit, PV-Strings, ROI, CO₂, Live und PDF. | `Anlage.leistung_kwp` |
 | `GTI_kWh_m2` | **Global Tilted Irradiance** aus Open-Meteo Solar (modul-projiziert mit Tilt + Azimut). Bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert. | – |
 
 > **GTI-Spalte der 14-Tage-Tabelle ist ein kWp-gewichtetes Mittel** („GTI Modulfläche"): die

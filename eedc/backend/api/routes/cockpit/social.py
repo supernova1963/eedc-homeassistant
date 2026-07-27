@@ -14,7 +14,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
-from backend.services.pv_orientation import get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.berechnungen import (
     autarkie_prozent,
@@ -102,13 +102,16 @@ async def get_share_text(
         if len(labels) == 1:
             ausrichtung_anzeigen = next(iter(labels))
 
-    # kWp über den SoT-Helper (Spalte → `parameter.kwp`): mit dem direkten
+    # kWp über den SoT-Dispatcher (ADR-002/P3-a): mit dem direkten
     # Spalten-Zugriff fehlte ein nur im `parameter` gepflegtes Modul in der
-    # Summe, und der daraus gerechnete spez. Ertrag wurde zu groß.
-    kwp = sum(get_pv_kwp(i) for i in investitionen if i.typ == "pv-module")
-    for i in investitionen:
-        if i.typ == "balkonkraftwerk":
-            kwp += (i.parameter or {}).get("leistung_wp", 0) / 1000
+    # Summe, und der daraus gerechnete spez. Ertrag wurde zu groß. Der
+    # BKW-Zweig las zusätzlich weder die Spalte noch `anzahl` — ein 2×400-Wp-BKW
+    # erschien als 0,4 statt 0,8 kWp.
+    kwp = sum(
+        get_erzeuger_kwp(i)
+        for i in investitionen
+        if i.typ in ("pv-module", "balkonkraftwerk")
+    )
     if kwp == 0 and anlage.leistung_kwp:
         kwp = anlage.leistung_kwp
 

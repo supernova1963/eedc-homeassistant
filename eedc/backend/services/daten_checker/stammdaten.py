@@ -14,7 +14,7 @@ from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import ist_dienstlich
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
 from backend.core.field_definitions import get_speicher_netzladung_kwh
-from backend.services.pv_orientation import get_pv_kwp
+from backend.core.investition_kennwerte import get_bkw_kwp, get_pv_kwp
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 
@@ -111,10 +111,11 @@ class StammdatenChecks:
             # NULL stehen. Der frühere Spalten-Direktzugriff las dort 0 und
             # meldete eine Abweichung, die es nicht gibt.
             summe_kwp = sum(get_pv_kwp(m) for m in pv_module)
-            summe_kwp += sum(
-                b.leistung_kwp or ((b.parameter or {}).get("leistung_wp", 0) * ((b.parameter or {}).get("anzahl", 1) or 1) / 1000)
-                for b in bkw_inv
-            )
+            # BKW über `get_bkw_kwp` statt der hier ausgeschriebenen Formel: die
+            # Duplikat-Formel kannte den `parameter`-kWp-Zweig nicht, ein BKW mit
+            # kWp unter `parameter["kwp"]` fiel deshalb auf den
+            # `leistung_wp`-Zweig oder auf 0 durch (ADR-002/P3-a).
+            summe_kwp += sum(get_bkw_kwp(b) for b in bkw_inv)
             if anlage.leistung_kwp and abs(summe_kwp - anlage.leistung_kwp) > 0.1:
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.WARNING,

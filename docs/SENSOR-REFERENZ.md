@@ -381,6 +381,8 @@ Zusätzlich erscheinen **pro Komponente** (E-Auto, Wärmepumpe, Speicher, Wallbo
 > **Wertsemantik `autarkie_prozent` / `eigenverbrauch_quote_prozent` (ab v4.0, DI-2-B):** Beide Quoten werden **identisch zum Cockpit** gerechnet und beziehen die **Erzeugung hinter dem Zähler** ein (`erzeugung_hinter_zaehler_kwh` = PV inkl. Balkonkraftwerk + sonstige Erzeuger, die in denselben Hauszähler speisen). Der Nenner der Eigenverbrauchsquote ist diese Gesamt-Erzeugung, nicht „nur PV". Der **spezifische Ertrag** bleibt bewusst eine reine PV-Kennzahl (nur `pv_erzeugung`).
 
 > **Spezifischer Ertrag — warum nicht einfach kWh ÷ kWp?** Der Sensor ist **annualisiert** und damit deckungsgleich mit der Cockpit-Kachel: saisonal gewichtet (PVGIS-Monatsverteilung) und mit der pro Monat tatsächlich aktiven PV-Leistung (Erweiterung/Teil-Rückbau wird korrekt gewichtet). Die naive Division *Gesamterzeugung ÷ heutiges kWp* würde bei 3 Jahren Historie etwa das Dreifache des gewohnten Jahreswerts anzeigen.
+>
+> **Woher die kWp im Nenner kommt (ab v4.0.2):** aus dem Feld **Leistung (kWp)** der jeweiligen Investition; ist es leer, aus den Detail-Feldern der Komponente (`kwp`/`leistung_kwp`, bei Balkonkraftwerken auch `leistung_wp` × `anzahl`). Vorher zählte nur das Leistungsfeld — bei importierten oder sehr alten Komponenten stand dort nichts, der Nenner war zu klein und der Sensorwert entsprechend **zu hoch**. Wer das betrifft, sieht nach dem Update einen einmaligen Sprung nach unten auf den richtigen Wert; Cockpit-Kachel und Sensor bleiben dabei deckungsgleich.
 
 ### PV-Prognose-Sensoren (`eedc_prognose_*`)
 

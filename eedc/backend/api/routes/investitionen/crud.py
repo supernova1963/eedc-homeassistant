@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from datetime import date
 
 from backend.core.exceptions import not_found
+from backend.core.investition_kennwerte import get_pv_kwp
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
 from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_jahr, sort_investitionen_nach_typ
@@ -983,13 +984,16 @@ async def get_roi_dashboard(
     # PV-Einsparung einmal berechnen (wird auf Module verteilt)
     pv_jahres_einsparung, pv_co2, pv_detail = await berechne_pv_einsparung_aus_monatsdaten()
 
-    # Gesamt-kWp aller PV-Module für proportionale Verteilung
+    # Gesamt-kWp aller PV-Module für proportionale Verteilung.
+    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
+    # Modul (#229) bekam sonst `anteil = 0` — also 0 € Einsparung, 0 kg CO₂ und
+    # keine Amortisation, während die übrigen Module zu viel zugerechnet bekamen.
     gesamt_kwp = sum(
-        inv.leistung_kwp or 0
+        get_pv_kwp(inv)
         for system in pv_systeme.values()
         for inv in system["pv_module"]
     )
-    gesamt_kwp += sum(inv.leistung_kwp or 0 for inv in orphan_pv_module)
+    gesamt_kwp += sum(get_pv_kwp(inv) for inv in orphan_pv_module)
 
     for wr_id, system in pv_systeme.items():
         wr = system["wr"]
@@ -1025,7 +1029,7 @@ async def get_roi_dashboard(
         ))
 
         # PV-Module Einsparung proportional nach kWp verteilen
-        system_kwp = sum(inv.leistung_kwp or 0 for inv in pv_module)
+        system_kwp = sum(get_pv_kwp(inv) for inv in pv_module)
         system_einsparung = 0.0
         system_co2 = 0.0
 
@@ -1036,8 +1040,12 @@ async def get_roi_dashboard(
             system_alternativ += inv_alternativ
             system_betriebskosten += (inv.betriebskosten_jahr or 0)
 
-            # Einsparung proportional nach kWp
-            inv_kwp = inv.leistung_kwp or 0
+            # Einsparung proportional nach kWp.
+            # `anteil` vor dem Zweig setzen: Zeile 1066 liest es, sobald
+            # `gesamt_kwp > 0` — bei einem Modul ganz ohne Nennleistung war es
+            # dort ungebunden ⇒ 500er im ROI-Dashboard (an der Box gemessen).
+            inv_kwp = get_pv_kwp(inv)
+            anteil = 0.0
             if gesamt_kwp > 0 and inv_kwp > 0:
                 anteil = inv_kwp / gesamt_kwp
                 inv_einsparung = pv_jahres_einsparung * anteil
@@ -1197,8 +1205,14 @@ async def get_roi_dashboard(
         alternativ = inv.anschaffungskosten_alternativ or 0
         relevante = kosten - alternativ
 
-        # Einsparung proportional nach kWp
-        inv_kwp = inv.leistung_kwp or 0
+        # Einsparung proportional nach kWp.
+        # `anteil` wird VOR dem Zweig gesetzt: Zeile 1231 liest es, sobald
+        # `gesamt_kwp > 0` — bei einem Orphan-Modul ganz ohne Nennleistung war
+        # es dort ungebunden und das ROI-Dashboard antwortete mit einem 500er
+        # (an der Box gemessen). Die Migration auf `get_pv_kwp` nimmt dem
+        # Fehler die häufigste Ursache (#229), beseitigt ihn aber nicht.
+        inv_kwp = get_pv_kwp(inv)
+        anteil = 0.0
         if gesamt_kwp > 0 and inv_kwp > 0:
             anteil = inv_kwp / gesamt_kwp
             jahres_einsparung = pv_jahres_einsparung * anteil

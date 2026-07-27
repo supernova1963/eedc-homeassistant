@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
@@ -439,15 +440,13 @@ async def get_cockpit_uebersicht(
     for inv in investitionen:
         if not inv.ist_aktiv_an(today):
             continue
-        if inv.typ == "pv-module" and inv.leistung_kwp:
-            anlagenleistung_kwp += inv.leistung_kwp
-        elif inv.typ == "balkonkraftwerk":
-            if inv.leistung_kwp:
-                anlagenleistung_kwp += inv.leistung_kwp
-            else:
-                params = inv.parameter or {}
-                bkw_anzahl = params.get("anzahl", 1) or 1
-                anlagenleistung_kwp += params.get("leistung_wp", 0) * bkw_anzahl / 1000
+        # kWp über den SoT-Dispatcher (ADR-002/P3-a): er kennt für PV-Module
+        # Spalte → `parameter` (#229) und für BKW zusätzlich
+        # `leistung_wp × anzahl`. Die frühere Handschrift hier las bei
+        # `leistung_wp: null` `None * anzahl` und warf einen TypeError — ein
+        # 500er in der Cockpit-Übersicht (N-H).
+        if inv.typ in ("pv-module", "balkonkraftwerk"):
+            anlagenleistung_kwp += get_erzeuger_kwp(inv)
 
     if anlagenleistung_kwp == 0 and anlage.leistung_kwp:
         anlagenleistung_kwp = anlage.leistung_kwp

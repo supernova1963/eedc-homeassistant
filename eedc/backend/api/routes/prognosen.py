@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import bad_request, not_found
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import summe_pv_bkw_kwh
 from backend.models.anlage import Anlage
@@ -279,7 +280,11 @@ async def _lade_anlage_mit_pv(db: AsyncSession, anlage_id: int):
     alle_pv = result.scalars().all()
     pv_module = [i for i in alle_pv if i.typ == "pv-module"]
     balkonkraftwerke = [i for i in alle_pv if i.typ == "balkonkraftwerk"]
-    kwp = sum(m.leistung_kwp or 0 for m in pv_module) + sum(b.leistung_kwp or 0 for b in balkonkraftwerke)
+    # kWp über den SoT-Dispatcher (ADR-002/P3-a): die frühere Summe las nur die
+    # Spalte — weder den `parameter`-Fallback der #229-Klasse noch, beim BKW,
+    # `leistung_wp × anzahl`. `kwp` ist hier der Multiplikator des Ertrags,
+    # eine zu kleine Summe zieht die ganze Prognosen-Seite mit nach unten (N-J).
+    kwp = sum(get_erzeuger_kwp(i) for i in alle_pv)
     if kwp <= 0:
         kwp = anlage.leistung_kwp or 0
     return anlage, pv_module, balkonkraftwerke, kwp

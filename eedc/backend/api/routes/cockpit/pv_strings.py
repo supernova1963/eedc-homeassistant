@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
+from backend.core.investition_kennwerte import get_pv_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
     resolve_pv_je_modul,
@@ -379,7 +380,10 @@ async def get_pv_strings(
             except (ValueError, TypeError):
                 pass
 
-    gesamt_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
+    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
+    # Modul (#229) zählte hier 0 — damit war der Nenner zu klein und ALLE
+    # übrigen Strings bekamen zu viel SOLL zugerechnet.
+    gesamt_kwp = sum(get_pv_kwp(m) for m in pv_module)
     if gesamt_kwp == 0:
         gesamt_kwp = anlage.leistung_kwp or 1
 
@@ -394,7 +398,7 @@ async def get_pv_strings(
     ist_gesamt = 0
 
     for modul in pv_module:
-        modul_kwp = modul.leistung_kwp or 0
+        modul_kwp = get_pv_kwp(modul)
         kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
         params = modul.parameter or {}
         ausrichtung = modul.ausrichtung or params.get("ausrichtung")
@@ -533,7 +537,10 @@ async def get_pv_strings_gesamtlaufzeit(
             except (ValueError, TypeError):
                 pass
 
-    gesamt_kwp = sum(m.leistung_kwp or 0 for m in pv_module)
+    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
+    # Modul (#229) zählte hier 0 — damit war der Nenner zu klein und ALLE
+    # übrigen Strings bekamen zu viel SOLL zugerechnet.
+    gesamt_kwp = sum(get_pv_kwp(m) for m in pv_module)
     if gesamt_kwp == 0:
         gesamt_kwp = anlage.leistung_kwp or 1
 
@@ -557,7 +564,7 @@ async def get_pv_strings_gesamtlaufzeit(
     saisonal_agg: dict[int, dict] = {m: {"prognose": 0, "ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
 
     for modul in pv_module:
-        modul_kwp = modul.leistung_kwp or 0
+        modul_kwp = get_pv_kwp(modul)
         kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
         params = modul.parameter or {}
         ausrichtung = modul.ausrichtung or params.get("ausrichtung")
