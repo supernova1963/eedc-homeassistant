@@ -18,7 +18,7 @@ import { Card, Alert, fmtCalc, FehlerZustand } from '../components/ui'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { BlockShell, BlockStackSkeleton, HerkunftZeile, KpiStrip, VerteilungsBalken, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../components/park'
-import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl } from '../lib'
+import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { datenquellenApi, type DatenquelleGruppe } from '../api/datenquellen'
 import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
@@ -40,6 +40,13 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/gi, '-')
 const mitParkId = (prefix: string, kpis: KpiStripItem[]): KpiStripItem[] =>
   kpis.map((k) => ({ ...k, parkId: `kpi:${prefix}-${slug(k.title)}` }))
 
+/** `parameter`-Schlüssel, die oben schon als benannte Zeile stehen — der
+ *  Roh-Dump darunter überspringt sie (N119). Ohne das zeigte ein #229-Modul
+ *  „Leistung 8,4 kWp" und darunter „kwp 8": dieselbe Größe zweimal, die zweite
+ *  auf 0 Nachkommastellen gerundet und damit schlicht falsch. Beide Schlüssel
+ *  aus dem Kanon, nicht als Literal wiederholt. */
+const STAMM_DUBLETTEN: ReadonlySet<string> = new Set([PARAM_PV_MODULE.LEISTUNG_KWP, LEGACY_KWP_KEY])
+
 /** Parameter-Zeilen einer Investition (Stammdaten + JSON-Parameter).
  *
  *  Anzeige-Stelle ⇒ `leistung_kwp_effektiv` statt der Rohspalte (A26/N106):
@@ -54,9 +61,12 @@ function paramFelder(inv: Investition): { label: string; wert: string }[] {
   if (inv.stilllegungsdatum) felder.push({ label: 'Stilllegung', wert: formatDatum(inv.stilllegungsdatum) })
   if (inv.anschaffungskosten_gesamt != null) felder.push({ label: 'Anschaffungskosten', wert: `${fmtCalc(inv.anschaffungskosten_gesamt, 0)} €` })
   for (const [k, v] of Object.entries(inv.parameter ?? {})) {
-    if (v == null || typeof v === 'object') continue
+    if (v == null || typeof v === 'object' || STAMM_DUBLETTEN.has(k)) continue
     // de-DE-Anzeige: Boolean → Ja/Nein, Zahl → Tausenderpunkt, sonst roh (Enum/Text).
-    const wert = typeof v === 'boolean' ? jaNein(v) : typeof v === 'number' ? fmtZahl(v, 0) : String(v)
+    // Nachkommastellen aus dem Wert, gedeckelt auf 2 — ein fester `nk = 0` machte
+    // aus 8,4 eine 8 (N119). Der Dump kennt die Größe nicht, darf also nicht runden.
+    const nk = typeof v === 'number' ? Math.min(2, (String(v).split('.')[1] ?? '').length) : 0
+    const wert = typeof v === 'boolean' ? jaNein(v) : typeof v === 'number' ? fmtZahl(v, nk) : String(v)
     felder.push({ label: k.replace(/_/g, ' '), wert })
   }
   return felder

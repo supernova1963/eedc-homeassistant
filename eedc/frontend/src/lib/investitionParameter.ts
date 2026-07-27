@@ -245,6 +245,12 @@ export const PARAM_PV_MODULE = {
   LEISTUNG_KWP: 'leistung_kwp',
 } as const
 
+/** Ältere Schreibweise derselben Nennleistung im `parameter`-JSON.
+ *  Pendant zu `LEGACY_KWP_KEY` im Backend-Kanon (`core/investition_parameter.py`),
+ *  wo der Lese-Helper sie über `KWP_PARAM_KEYS` mit auswertet. Als Konstante,
+ *  damit Anzeige-Code den Schlüssel nicht als Literal wiederholt. */
+export const LEGACY_KWP_KEY = 'kwp' as const
+
 export interface PvModuleParameter {
   anzahl_module?: number
   modul_leistung_wp?: number

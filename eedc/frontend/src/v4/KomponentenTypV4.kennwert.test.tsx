@@ -80,3 +80,47 @@ describe('Komponenten-Hub ⑦ — Nennleistung an der API-Grenze', () => {
     expect(screen.queryByText(/kWp/)).not.toBeInTheDocument()
   })
 })
+
+/**
+ * N119 — der Roh-Dump der `parameter`-Schlüssel unter den benannten Zeilen.
+ *
+ * Sichtbar geworden durch A26: seit die Zeile „Leistung" auch bei einer nur im
+ * JSON gepflegten kWp erscheint, stand dieselbe Größe zweimal untereinander —
+ * und die zweite war auf 0 Nachkommastellen gerundet, also falsch.
+ */
+describe('Komponenten-Hub ⑦ — Roh-Dump der parameter-Schlüssel', () => {
+  it('#229: die kWp erscheint genau EINMAL, nicht zusätzlich als roher Schlüssel', async () => {
+    await zeigeEinstellungen(modul({
+      leistung_kwp: undefined,
+      leistung_kwp_effektiv: 8.4,
+      parameter: { kwp: 8.4 },
+    }))
+
+    expect(screen.getByText('8,4 kWp')).toBeInTheDocument()
+    // Der Dump zeigte hier früher zusätzlich „kwp" / „8".
+    expect(screen.queryByText('kwp')).not.toBeInTheDocument()
+    expect(screen.queryByText('8')).not.toBeInTheDocument()
+  })
+
+  it('die neuere Schreibweise `leistung_kwp` im JSON wird ebenso nicht gedoppelt', async () => {
+    await zeigeEinstellungen(modul({
+      leistung_kwp: undefined,
+      leistung_kwp_effektiv: 8.4,
+      parameter: { leistung_kwp: 8.4 },
+    }))
+
+    expect(screen.getByText('8,4 kWp')).toBeInTheDocument()
+    expect(screen.queryByText('leistung kwp')).not.toBeInTheDocument()
+  })
+
+  it('andere Zahlen behalten ihre Nachkommastellen (kein erzwungenes Runden)', async () => {
+    await zeigeEinstellungen(modul({
+      leistung_kwp_effektiv: 8.4,
+      parameter: { modul_leistung_wp: 425, wirkungsgrad_prozent: 20.75, anzahl_module: 20 },
+    }))
+
+    expect(screen.getByText('20,75')).toBeInTheDocument()   // vorher: „21"
+    expect(screen.getByText('425')).toBeInTheDocument()      // ganze Zahl bleibt ganz
+    expect(screen.getByText('20')).toBeInTheDocument()
+  })
+})
