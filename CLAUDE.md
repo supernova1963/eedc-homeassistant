@@ -6,7 +6,7 @@
 
 **eedc** (Energie Effizienz Data Center) - Standalone PV-Analyse mit optionaler HA-Integration.
 
-**Version:** 3.45.5 | **Status:** Stable Release
+**Version:** hier bewusst **keine Zahl** — Versions-SoT ist [CHANGELOG.md](CHANGELOG.md) (oberster released Abschnitt) bzw. `eedc/backend/core/config.py::APP_VERSION`. `release.sh` bumpt CLAUDE.md **nicht**; eine Zahl an dieser Stelle veraltet daher garantiert (sie stand bis 2026-07-27 auf 3.45.5, während v4.0.1 released war).
 
 ## Verbundene Repositories
 
@@ -76,11 +76,22 @@ cd eedc/frontend && npm run dev
 # URLs: Frontend http://localhost:3000 | API Docs http://localhost:8099/api/docs
 ```
 
+### Gates (vor jedem Commit-Paket vollständig laufen lassen)
+
+```bash
+cd eedc && source backend/venv/bin/activate && python -m pytest backend/tests -q
+cd eedc/frontend && npm run test && npx tsc --noEmit && npm run check:design && \
+  npm run check:de-de && npm run check:roh-controls && npm run check:parkbar && \
+  npm run check:form-controls && npm run check:typografie && npm run check:kennwert-roh
+```
+
+Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline. `check:park-leertest` ist ein Playwright-Livetest gegen eine laufende Box und verlangt ein `VITE_DEMO_DEFAULT=true`-Build; **danach zwingend** `git checkout -- eedc/frontend/dist/ && git clean -fdq eedc/frontend/dist/` — `dist/` ist versioniert, sonst landet ein Demo-Build im Release.
+
 ### Release-Workflow (ein Script für alles!)
 
 ```bash
 cd /home/gernot/claude/eedc-homeassistant
-./scripts/release.sh 3.17.0
+./scripts/release.sh <version>   # Zielversion, z. B. die nächste Patch-Nummer laut CHANGELOG
 ```
 
 Das Script macht automatisch:
@@ -122,6 +133,18 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.batterie_*` und das computed-Trio (`eigenverbrauch_kwh`, `direktverbrauch_kwh`, `gesamtverbrauch_kwh`) → erst `InvestitionMonatsdaten`, Legacy nur als expliziter Fallback
 4. **`Monatsdaten.pv_erzeugung_kwh` ist KEIN Legacy-Feld** (seit `ba0d8d9d`/v4.0.0): manuelles bzw. importiertes Anlagen-Aggregat und Eingang von `resolve_pv_je_modul` — **lesen ist der vorgesehene Weg**, programmatisch füllen bleibt verboten. Detail: [BERECHNUNGEN §1](docs/BERECHNUNGEN.md), [ADR-002](docs/ADR-002-WURZELMUSTER.md)
 
+## Drei SoT-Regime — nicht mischen
+
+| Dokument | Regelt | Maschinelles Gegenstück |
+| --- | --- | --- |
+| [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel 0/0a) | **Darstellung** — Farben, Komponenten, Typografie, Chart-Konventionen | die `check:*`-Skripte im Frontend (`eedc/frontend/scripts/check-*.mjs`) |
+| [`docs/ADR-001-BERECHNUNGS-LAYER.md`](docs/ADR-001-BERECHNUNGS-LAYER.md) | **Schichtung** — *wo* eine Aggregat-Formel definiert wird (`core/berechnungen/`) | `backend/tests/test_berechnungs_layer_konformitaet.py` |
+| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P6) | `backend/tests/test_wurzelmuster_*.py` |
+
+> **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. Ausnahme mit eigener Begründung: `check:kennwert-roh` bewacht die Client-Hälfte von ADR-002/P3-a.
+>
+> ADR-002 trägt die Pflicht-Spalte **„gesichert durch"** mit der Unterscheidung **Wächter** (baumweit, fängt auch eine Stelle, die es heute noch nicht gibt) und **Regression** (schützt nur die namentlich aufgerufenen Stellen). Wer die Spalte fortschreibt, trägt die Art der Deckung mit ein — eine Regel ohne Code-Beleg gilt als nicht gesichert.
+
 ## Design-Konventionen (Regel 0a — Pflicht bei allem Neuen)
 
 > SoT: [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel Nr. 0 + 0a am Anfang). Farb-SoT: `frontend/src/lib/colors.ts`.
@@ -150,6 +173,22 @@ db.commit()
 # RICHTIG: if val is not None:
 ```
 
+### Investitions-Kennwerte nur über den SoT-Helper (ADR-002/P3-a)
+
+SoT ist `eedc/backend/core/investition_kennwerte.py`:
+
+```python
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp, get_bkw_kwp
+
+kwp = get_erzeuger_kwp(inv)          # RICHTIG — Typ-Dispatcher (BKW vs. PV-Modul)
+kwp = inv.leistung_kwp               # FALSCH — Spalte allein, die #229-Klasse
+kwp = getattr(inv, "leistung_kwp")   # FALSCH — der Wächter erfasst auch diese Form
+```
+
+Die Nennleistung liegt je nach Herkunft in der **Spalte** `Investition.leistung_kwp` **oder** im `parameter`-JSON. Beide Formen sind gewächtert (`test_wurzelmuster_konformitaet.py::test_p3a_*`, Baseline 0 mit klassifizierten Ausnahmen); im Frontend hält `npm run check:kennwert-roh` dieselbe Trennlinie (**Anzeige/Rechnung** lesen `leistung_kwp_effektiv` aus der Response, **Formulare/Wizards** die Rohspalte). Der `getattr`-Zweig ist nicht optional — über ihn fiel `co2_amortisation.py` durch jede Erhebung.
+
+> `Investition.leistung_kwp` ist ein **Mehrzweckfeld**: beim Speicher trägt dieselbe Spalte kWh, beim Wechselrichter kW (AC). Die Helper gelten nur für Erzeuger-Typen; der Aufrufer filtert.
+
 ## Bekannte Fallstricke
 
 | Problem | Lösung |
@@ -159,18 +198,22 @@ db.commit()
 | SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
 | `Monatsdaten.pv_erzeugung_kwh` programmatisch gefüllt | Nur manuell/Import; Pro-Modul-Werte nach `InvestitionMonatsdaten` (Lesen ist erlaubt, s. Prinzip 4) |
 | ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
+| Nennleistung ist plötzlich 0 | Bei Import-/Altbestand (#229) steht die kWp **nur im `parameter`-JSON** (`kwp` / `leistung_kwp`) — die Spalte allein zu lesen liefert dort still 0. `get_erzeuger_kwp` statt `inv.leistung_kwp` |
 
 ## Community-Datenfluss
 
 ```
-EEDC Add-on                              Community Server
-┌──────────────────────┐                 ┌──────────────────┐
-│ CommunityShare.tsx   │ ── POST ──────→ │ /api/submit      │
-│ CommunityVergleich   │ ── Proxy ─────→ │ /api/benchmark/  │
-│   .tsx (embedded)    │                 │   anlage/{hash}  │
-│ "Im Browser öffnen"  │ ── Link ──────→ │ /?anlage=HASH    │
-└──────────────────────┘                 └──────────────────┘
+eedc Add-on                                   Community Server
+┌───────────────────────────────┐             ┌────────────────────────┐
+│ v4/CommunityShareBlock.tsx    │ ─ POST ───→ │ /api/submit            │
+│   (teilen / rückw. entfernen) │ ─ DELETE ─→ │ /api/submit/{hash}     │
+│ v4/CommunityV4.tsx +          │ ─ Proxy ──→ │ /api/benchmark/        │
+│   pages/community/*Teile.tsx  │             │   anlage/{hash}        │
+│ "Im Browser öffnen"           │ ─ Link ───→ │ /?anlage=HASH          │
+└───────────────────────────────┘             └────────────────────────┘
 ```
+
+> Der Client spricht den Community-Server **nie direkt** an — alles läuft über `backend/api/routes/community.py` (Proxy + Aufbereitung).
 
 > **Beachte:** Änderungen am Datenmodell müssen in **beiden** Repositories synchron angepasst werden:
 > Schemas in `eedc-community/backend/schemas.py` und Aufbereitung in `eedc/backend/services/community_service.py`.
@@ -181,9 +224,26 @@ EEDC Add-on                              Community Server
 
 ## Letzte Änderungen
 
-> **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`.
+> **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`. **Stand des Digests: v4.0.1** (fortgeschrieben 2026-07-27).
 
-**v3.45.5** (2026-06-22) — Live-Tagesverlauf: Nadel-Spikes bei grobem Energie-Zähler weg (#680). Kurve rekonstruiert Leistung aus kWh-Zähler (`ΔkWh×12000`, 5-Min-Annahme); meldet der Zähler seltener, landet der ganze Zuwachs in EINEM Slot → 13-kW-Nadel. Fix: nur die **Kurvenform** fällt stundenweise auf den Live-Leistungssensor zurück (Phantom-Null-Detektor), Stunden-Energie = Zählersumme bleibt LTS-treu (Σ normiert). Intern (flag-off-dormant): **IA-V4 A.3 Cockpit/Live** (IST-Layout in v4-Shell, kein Neubau; durchgängig Fokus/Vollbild via geteiltem `FokusVollbild`/`FokusKachel`, BlockShell auf dasselbe Overlay umgestellt) + Komponenten-Hub-Korrekturen.
+**v4.0.1** (2026-07-26) — Prognose-Werte vereinheitlicht + gemessene PV-Modulwerte:
+
+- **Ein Prognose-Kanon für alle Sichten:** 14-Tage-Balken, Stundenwerte, Kacheln „Morgen/Summe/Ø" und die OM-roh-Kurve rechnen jetzt **jede Ausrichtung getrennt** und mit der gelernten eedc-Korrektur — wie Prognosen-Vergleich und HA-Sensoren. Vorher standen für denselben Tag zwei Zahlen auf einer Seite (Rainer). Bei Mehrfach-Ausrichtung ändern sich die Werte sichtbar; GTI in der 14-Tage-Tabelle ist jetzt **kWp-gewichtet** („GTI Modulfläche").
+- **PV-Modulwerte gemessen statt gerechnet:** der Hub-Block „Verlauf" zeigt die Pro-String-Messwerte; wo nur ein Gesamt-Sensor existiert, wird nach kWp verteilt **und gekennzeichnet** („geschätzt (kWp-Anteil)"), statt 0 anzuzeigen. Kein bester/schwächster String, solange verteilt wird.
+- **PVGIS: überall die *aktive* Prognose** (P5) — inkl. DB-Invariante gegen „mehrere aktiv" nach Backup-Restore; Monatsbericht-SOLL war dort verdoppelt.
+- **Unvollständige Antworten sagen es** (P4): Teil-Fan-out der Wetterabrufe wird ausgewiesen statt still zu niedrig geliefert.
+- **Intern:** neue [ADR-002](docs/ADR-002-WURZELMUSTER.md) (sechs Invarianten P1–P6 + Wächter), Anschaffungsdatum ist Pflichtfeld.
+
+**v4.0.0** (2026-07-25) — **IA-V4-Flip: die neue Oberfläche ist ausgeliefert** (Breaking Change, nur UI — Daten unberührt, alte Links werden umgeleitet):
+
+- **Cockpit** (Wann? Live · Tag · Monat · Jahr · Aussicht) · **Komponenten** (Was? je Gerätetyp Status → Verlauf → Vergleich → Wirtschaftlichkeit) · **Auswertungen** (Wie? Finanzen · ROI · Prognose-vs-IST · CO₂ · Tabelle) · Einstellungen als Kachel-Übersicht. Blöcke sind verschiebbar, fokussierbar (⤢) und parkbar.
+- **Monatsabschluss als ein Formular** (statt 7-Schritt-Wizard) · **Datenquellen als eine Fläche** (ein Feld = eine Quelle: HA-Sensor · MQTT · Connector; löst Sensor-Mapping- und MQTT-Wizard ab).
+- **Drift-Inventur Tier-1 (DI/DI-2):** WP-CO₂, HA-Export-CO₂, Dienstwagen-Filter, §14a-WP-Tarif, Vorjahres-Nettoertrag — sichtbare Zahlenkorrekturen inkl. einmaligem LTS-Sprung beim CO₂-Sensor. Historische Tarife im PDF/HA-Export (#326).
+- Der Rückweg bei Problemen ist v3.45.9; ein separates v3.46 gibt es bewusst nicht.
+
+**v3.45.6–v3.45.9** (2026-06-27/29) — Prognose-Kanon „heute" · Speicher-Vorzeichen-Historie als Daten-Checker-Selbstkorrektur (**keine** Start-Migration) · Hotfix Add-on-Startschleife.
+
+**v3.45.5** (2026-06-22) — Live-Tagesverlauf: Nadel-Spikes bei grobem Energie-Zähler weg (#680). Kurve rekonstruiert Leistung aus kWh-Zähler (`ΔkWh×12000`, 5-Min-Annahme); meldet der Zähler seltener, landet der ganze Zuwachs in EINEM Slot → 13-kW-Nadel. Fix: nur die **Kurvenform** fällt stundenweise auf den Live-Leistungssensor zurück (Phantom-Null-Detektor), Stunden-Energie = Zählersumme bleibt LTS-treu (Σ normiert). Intern (damals hinter `VITE_IA_V4` dormant, **ausgeliefert mit v4.0.0**): **IA-V4 A.3 Cockpit/Live** (IST-Layout in v4-Shell, kein Neubau; durchgängig Fokus/Vollbild via geteiltem `FokusVollbild`/`FokusKachel`, BlockShell auf dasselbe Overlay umgestellt) + Komponenten-Hub-Korrekturen.
 
 **v3.45.4** (2026-06-22) — Sonstige Erzeuger (BHKW) in der Energiebilanz: ein Erzeuger unter „Sonstiges" (Kategorie *Erzeuger*) speist hinter den EINEN Hauszähler → seine Erzeugung zählt jetzt in EV/Autarkie in **allen** Bilanz-Pfaden (Monat + Vorjahr, Live, Tag/Energieprofil) via Layer-SoT `erzeugung_hinter_zaehler_kwh`. PV-Kennzahlen (spez. Ertrag/PR) bleiben rein; CO₂/Wirtschaftlichkeit eines Brennstoff-Erzeugers bewusst „nicht bewertet". Lehre: Bilanz-Drift saß in drei getrennten Pfaden — Symptom-Patch hätte nur den Monat erwischt.
 
