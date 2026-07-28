@@ -200,6 +200,10 @@ Fehlen die Werte, nimmt eedc **Süd / 35°** als Default an — das funktioniert
 
 eedc kann verschiedene Open-Meteo-Modelle nutzen (`auto` = bestes Match, oder gezielt ICON-D2/EU, ECMWF, MeteoSwiss …). Modelle mit kurzem Horizont (z. B. ICON-D2 = 2 Tage) werden automatisch durch ein längerreichendes Fallback-Modell ergänzt, damit die Mehrtagessicht nicht abreißt. Das Modell wählst du pro Anlage unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) („Modell für Solar-Prognose").
 
+**Das gewählte Modell gilt seit v4.0.2 für *alle* Prognose-Sichten** — auch für die „eedc"-Spalte, die Tagesprognose, die Stundenprofile und die Prognose-Sensoren in Home Assistant. Vorher rechneten diese mit `auto`, während die Wettertabelle daneben schon dein Modell zeigte. Wenn du ein anderes Modell als `auto` eingestellt hast, ändern sich die Zahlen dieser Sichten einmalig.
+
+> **Antwortet das gewählte Modell leer, rechnet eedc mit `auto` weiter** (und protokolliert es). Stand Juli 2026 betrifft das **ECMWF Seamless**, **MeteoSwiss Seamless** und **ECMWF IFS (9 km)** — für diese liefert Open-Meteo keine Strahlungsdaten mehr. Die Modellwahl greift dort also nicht; die Prognose selbst bleibt vollständig.
+
 ---
 
 ## 5. Lernfaktor & Korrekturprofil — wie eedc dazulernt

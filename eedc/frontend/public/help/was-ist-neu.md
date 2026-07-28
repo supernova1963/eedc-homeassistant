@@ -1,11 +1,181 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.1)
+> **Stand:** Juli 2026 (v4.0.2)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.2 — Die Nennleistung zählt überall mit (Juli 2026)
+
+> Ein Nachzügler zu v4.0.1, und wieder derselbe Satz dahinter: **eine Größe darf nicht an zwei
+> Stellen zwei verschiedene Zahlen haben.** Diesmal geht es um die **Nennleistung deiner
+> PV-Komponenten** — und um drei Fehler, die dabei ans Licht kamen.
+
+### Betrifft dich das?
+
+Die Nennleistung kann in eedc an zwei Stellen stehen: im Feld **Leistung (kWp)** der Komponente
+oder in ihren **Detail-Feldern**. Fast alle Auswertungen lasen bisher nur das Leistungsfeld und
+sahen dort still eine 0.
+
+**Wer seine Komponenten im Formular oder im Setup-Assistenten angelegt hat, ist nicht betroffen** —
+beide schreiben die Leistung ins Leistungsfeld, und kein heutiger Eingabeweg erzeugt den anderen
+Zustand. Betroffen sind **importierte und sehr alte Bestände**. Wenn du dazugehörst, ändern sich
+Zahlen — nach oben, weil vorher etwas fehlte:
+
+- **PVGIS-Prognose:** Ein betroffenes Modulfeld fiel bisher **komplett** aus der Prognose. Jetzt
+  zählt es mit — Jahresertrag, Monatswerte und Gesamtleistung steigen entsprechend.
+- **PVGIS für ein einzelnes Modul** meldete den Fehler „PV-Modul hat keine Leistung (kWp)
+  definiert" für ein Modul, dessen Leistung gepflegt ist. Das ist weg.
+- **PV-Strings-Vergleich:** Der betroffene String hatte SOLL 0 und damit −100 % Abweichung, **alle
+  anderen bekamen zu viel**. Die Werte stimmen jetzt.
+- **Cockpit:** Die Kachel „Anlagenleistung" steigt, der **spezifische Ertrag sinkt** entsprechend —
+  sein Nenner war zu klein. Der Home-Assistant-Sensor ändert sich mit.
+- **ROI und CO₂ je Komponente:** Das betroffene Modul bekam 0 € Einsparung und 0 kg CO₂.
+- **Live-Dashboard, PDFs und Daten-Checker** zeigten die Leistung an einzelnen Stellen gar nicht
+  oder meldeten eine Abweichung, die keine war.
+
+**Das sind Korrekturen, keine Fehler:** Die Leistung war immer gepflegt, sie kam nur nicht überall
+an. Wer bisher schon überall dieselben Werte sah, merkt nichts.
+
+### Drei Fehler, die dabei aufgefallen sind
+
+- **ROI-Auswertung brach ab.** Hatte auch nur **ein** PV-Modul keine Leistung hinterlegt, während
+  ein anderes eine hatte, lief die gesamte ROI-Seite auf einen Serverfehler — nicht nur die eine
+  Zeile. Jetzt bleibt die Seite stehen: das Modul ohne Leistung bekommt 0 % Anteil, alle anderen
+  ihren korrekten.
+- **Balkonkraftwerk-Dashboard rechnete mit zwei Modulen.** Wer die **Anzahl** nicht gepflegt hat,
+  bekam dort stillschweigend zwei Module unterstellt — doppelte Leistung, halber spezifischer
+  Ertrag. Alle anderen Sichten rechnen in dem Fall mit einem. **Für betroffene Balkonkraftwerke
+  halbiert sich die angezeigte Leistung** und der spezifische Ertrag verdoppelt sich.
+- **PDF-Anlagendokumentation:** Speicher und Wechselrichter waren mit „Nennleistung … kWp"
+  beschriftet, obwohl dort die Kapazität in kWh bzw. die AC-Leistung in kW steht. Jetzt richtig.
+
+### Kleinigkeit am Rande
+
+Unter **Komponenten → Einstellungen** stand die Nennleistung bei betroffenen Komponenten doppelt —
+einmal sauber beschriftet, einmal als rohes Detail-Feld. Die Dublette ist weg. Außerdem rundete
+diese Liste alle Werte auf ganze Zahlen: ein Wirkungsgrad von 20,75 % stand dort als „21". Das
+betrifft **alle** Anlagen, nicht nur Import-Bestände.
+
+### Speicher: eine Zyklenzahl statt drei
+
+**Wenn du einen Speicher hast, ändert sich hier eine Zahl.** Die Kachel **„Vollzyklen"** rechnete
+je nach Sicht verschieden: im Tages-Cockpit zählte sie Ladestands-Bewegungen, im Monat und im
+Komponenten-Bereich die **geladene** Energie, der Home-Assistant-Sensor die **entladene**. Drei
+Antworten auf dieselbe Frage — und die Tageswerte summierten sich nie auf den Monat.
+
+Ab jetzt gilt überall dasselbe: **Vollzyklen = entladene Energie ÷ Kapazität**. Das ist die Größe,
+auf die auch Hersteller-Garantien zielen.
+
+- **Was du siehst:** In **Komponenten → Speicher**, **Cockpit → Monat/Jahr** und im
+  **PDF-Jahresbericht** sinkt die Zyklenzahl um den Wirkungsgradverlust — typisch 5–10 %.
+  **Der Home-Assistant-Sensor bleibt unverändert**, er rechnete schon immer so.
+- **Die Ladestands-Bewegungen sind nicht weg**, sie heißen jetzt **„SoC-Hübe"** (Energieprofil,
+  Tages-Tabelle, Spalte einblendbar). Sie sind die einzige Zahl, die eine schonende Fahrweise
+  abbildet: Wer den Speicher zwischen 10 und 90 % fährt, sieht dort 0,8 statt 1,0 pro Hub. Dafür
+  braucht es einen SoC-Sensor.
+
+> **Und der gewünschte Ladestand?** eedc nimmt keinen an. Zyklen und Wirkungsgrad kommen aus deinen
+> **gemessenen** Lade- und Entlademengen — eine schonende Fahrweise steckt dort schon drin.
+> Geschätzt wird nur, wo noch nichts gemessen ist: in der Wirtschaftlichkeits-Vorschau und in der
+> Tagesvorschau „Speicher voll um …". Beide rechnen jetzt mit deiner **nutzbaren** Kapazität —
+> siehe den nächsten Abschnitt.
+
+### Speicher: die nutzbare Kapazität zählt jetzt mit
+
+**Nur wenn du beim Speicher das Feld „nutzbare Kapazität (kWh)" ausgefüllt hast.** Es ist
+freiwillig — wer es nie angefasst hat, sieht hier **keine einzige veränderte Zahl**.
+
+Dein Speicher hat zwei Kapazitäten: die vom **Typenschild** und die, die nach Entladetiefe und
+Reserve wirklich durch ihn hindurchgeht. Zwei Rechnungen meinen eindeutig die zweite, benutzten
+aber die erste:
+
+- Die Vorschau **„Speicher voll um …"** lud von 0 auf 100 % der Typenschild-Zahl. Wer bei 90 %
+  abriegelt, ist real früher voll — und genau das zeigt sie jetzt.
+- Die **Wirtschaftlichkeits-Vorschau** rechnete mit der Typenschild-Zahl mal 250 Zyklen. Durch den
+  Speicher geht aber nur der nutzbare Teil.
+
+**Was du siehst** (Demo-Anlage, 15,4 kWh Typenschild gegen 13,9 kWh nutzbar, sechs Prognosetage):
+
+- In **Cockpit → Aussicht** und **Auswertungen → Prognose** rückt die Kachel **„Speicher voll"** an
+  einem der sechs Tage von 11:00 auf 10:00. An den anderen bleibt sie gleich — die Vorschau rechnet
+  in ganzen Stunden. Unter dem Chart steht jetzt „13,9 kWh nutzbar".
+- **Mit der Uhrzeit ändern sich die Nachbar-Kacheln desselben Tages:** ein kleinerer Puffer nimmt
+  weniger Überschuss auf. **Einspeisung rund 1 kWh höher**, **Eigenverbrauch entsprechend
+  niedriger**. Das ist die Korrektur — vorher unterstellte die Vorschau deinem Speicher eine
+  Aufnahme, die er nicht leistet. An Tagen, an denen der Speicher abends früher leer ist, kann
+  auch die **Autarkie** etwas niedriger ausfallen; an Tagen ganz ohne Netzbezug bleibt sie
+  unverändert bei 100 %.
+- **Die Autarkie der Tages-Vorschau zeigte an sonnigen Tagen mehr als 100 %** — gemessen bis 125 %.
+  Das ist behoben: sie rechnet jetzt wie überall sonst „Verbrauch minus Netzbezug, geteilt durch
+  Verbrauch". Vorher zählte die Vorschau die **Speicherladung** zum Eigenverbrauch des Tages, und an
+  einem Tag mit viel Sonne und wenig Last wurde der Zähler größer als der Nenner. Die Werte sinken
+  dadurch auf plausible Größen; an Tagen ohne Netzbezug stehen weiter 100 %. **Monat, Jahr und Live
+  waren nie betroffen.**
+- Der Home-Assistant-Sensor **`eedc_speicher_voll_um`** zieht mit. Er zeigt dieselbe Vorschau und
+  darf keine zweite Uhrzeit nennen.
+- In **Auswertungen → ROI** sinkt die jährliche Einsparung des Speichers — **aber nur, solange du
+  keine Lade- und Entladewerte erfasst hast.** Bei der Demo-Anlage ohne Messdaten: 431,59 € →
+  389,55 € im Jahr. **Sobald Messdaten da sind — der Regelfall —, ändert sich nichts**, denn dann
+  rechnet eedc ohnehin aus deinen gemessenen Werten und braucht die Kapazität gar nicht.
+
+**Die Vollzyklen bleiben, wie sie sind** — sie rechnen weiter gegen die Typenschild-Kapazität.
+Sonst hinge diese Zahl davon ab, ob jemand ein freiwilliges Feld ausgefüllt hat, und deine Anlage
+wäre nicht mehr mit sich selbst vergleichbar.
+
+**Die angezeigte Kapazität deiner Komponente bleibt ebenfalls die Typenschild-Zahl** — sie
+beschreibt das Gerät und ist keine Rechengröße.
+
+### Wettermodell: die Prognose folgt jetzt deiner Wahl
+
+**Nur wenn du in den Anlagen-Einstellungen ein anderes Wettermodell als „Automatisch" gewählt
+hast — sonst ändert sich hier gar nichts.**
+
+Das Live-Wetter und die 14-Tage-Wettertabelle nutzten dein Modell längst. Die **eedc-eigene
+Tagesprognose** nicht: sie rechnete überall mit „Automatisch". Auf **Cockpit → Aussicht** standen
+dadurch der OpenMeteo-Balken aus deinem Modell und der eedc-Wert daneben aus einem anderen — und
+die Prognose-Sensoren in Home Assistant folgten dem eedc-Wert. Das ist jetzt eine Rechnung.
+
+- **Was du siehst:** Tagesprognose für heute/morgen/übermorgen, das Stundenprofil, die Vorschau
+  „Speicher voll um …" und die Prognose-Sensoren in Home Assistant springen **einmalig** auf dein
+  Modell. An der Demo-Anlage nachgemessen (München, 20,8 kWp): mit **ICON-EU** heute 1,7 kWh
+  weniger und morgen 14,0 kWh weniger, mit **MeteoSwiss ICON-CH2** in beide Richtungen bis zu
+  12 kWh. Wie stark es bei dir ausfällt, hängt vom Standort und vom Wetter des Tages ab.
+- **Modelle mit kurzem Horizont** (ICON-D2 reicht 2 Tage, ICON-EU 5) decken weiterhin nur ihre
+  eigenen Tage ab — die weiter entfernten kommen wie bisher aus „Automatisch".
+- **Drei Modelle sind nicht mehr da.** Für **ECMWF Seamless**, **MeteoSwiss Seamless** und
+  **ECMWF IFS (9 km)** liefert Open-Meteo keine Strahlungsdaten mehr. eedc merkt das und rechnet
+  dort weiter mit „Automatisch" — du bekommst also dieselben Zahlen wie bisher, deine Modellwahl
+  greift nur nicht. Wenn du eines davon eingestellt hast, wähle am besten **ICON Seamless** (für
+  Deutschland) oder **MeteoSwiss ICON-CH2** (Alpenraum). Die Auswahlliste wird noch aufgeräumt.
+
+### Rund um die PV-Module
+
+- **Komponenten-Liste:** Bei PV-Modulen blieb die graue Zeile mit den Eckdaten leer, während jeder
+  andere Gerätetyp seine Werte zeigte. Jetzt steht dort „12,0 kWp • 24 Module • 500 Wp".
+- **Vertippt beim Anlegen?** Wenn du Modulanzahl und Wattzahl pflegst, vergleicht eedc das Ergebnis
+  jetzt mit der eingetragenen Leistung und sagt es dir **direkt im Formular**. Der Daten-Checker
+  nennt außerdem den **betroffenen String beim Namen**, statt nur zu melden, dass die Anlagensumme
+  nicht passt. Die Modul-Details bleiben freiwillig — maßgeblich ist weiter das Feld „Leistung (kWp)".
+- **String-Vergleich verständlicher:** Über der Tabelle steht jetzt, was **Performance** eigentlich
+  misst — jeden String gegen **seine eigene** Prognose, in der Ausrichtung und Neigung schon
+  stecken. Ein Nordwest-Dach mit 100 % ist damit nicht so gut wie ein Süd-Dach mit 100 %. Für den
+  Vergleich der Dächer untereinander zählt **kWh/kWp**. Neu daneben: die Spalte **Anteil** (Gewicht
+  am Gesamtertrag) und eine **Summenzeile** mit Gesamt-kWp, SOLL und IST.
+- **Stundenwerte mit IST:** Steht der Tag in **Cockpit → Aussicht → Stundenwerte** auf **heute**,
+  zeigt die Tabelle neben der Prognose die bereits gemessenen Stunden. Kein Wechsel mehr in die
+  Auswertungen für einen Blick auf „wie lief es bisher".
+- **Günstig-Schwelle:** Der Wert **0 %** war schon immer erlaubt, schaltet die Schwelle aber ab —
+  dann zählen wieder allein die 5 günstigsten Stunden je Fenster. Das steht jetzt am Feld. Der
+  Standard war und ist 10 %.
+- **Neu installiert?** Die Tagesprognose zeigt dir jetzt vom ersten Tag an die **PV-Vorschau**,
+  statt die ganze Ansicht mit „zu wenig historische Daten" zu verweigern. Verbrauch, Netzbezug und
+  die Speicher-Vorschau bleiben dabei leer („—"), bis drei Tage aufgezeichnet sind — sie kommen
+  dann von selbst dazu.
 
 ---
 

@@ -71,6 +71,10 @@ Der Anlage-Block zeigt eine Tabelle deiner Anlagen mit einem Bearbeiten-Modal (a
 
 Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Quelle wird pro Tag in der [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) mit einem Kürzel (MS/D2/EU/EC/BM) angezeigt.
 
+> **Seit v4.0.2 wirkt die Modellwahl auf *alle* Prognose-Sichten** — auch auf die eedc-Tagesprognose, die Stundenprofile und die Prognose-Sensoren in Home Assistant. Bis dahin rechneten diese unabhängig von der Einstellung mit `auto`. Wer ein anderes Modell gewählt hat, sieht dort einmalig andere Zahlen.
+>
+> **Nicht mehr verfügbar (Stand Juli 2026):** Für **ECMWF Seamless**, **MeteoSwiss Seamless** und **ECMWF IFS (9 km)** liefert Open-Meteo keine Strahlungsdaten mehr. eedc erkennt das und rechnet für diese Anlagen mit `auto` weiter — die Prognose bleibt vollständig, die Modellwahl greift aber nicht. Empfehlung: **ICON Seamless** (Deutschland) bzw. **MeteoSwiss ICON-CH2** (Alpenraum).
+
 **Prognose-Basis:** Hier wählst du, auf welcher Quelle der eedc-Lernfaktor und die kalibrierte Prognose aufbauen — OpenMeteo (Standard) oder Solcast (wenn konfiguriert). SFML ist im Code als künftige Erweiterung vorbereitet, geht aber bewusst nicht ins Genauigkeits-Ranking ein.
 
 **Steuerliche Behandlung:**
@@ -144,8 +148,8 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 
 ### 3.4 Typ-spezifische Parameter
 
-- **PV-Module:** Anzahl Module, Leistung pro Modul (Wp), Ausrichtung (Süd = 0°, Ost = −90°, West = +90°), Neigung (0° flach … 90° senkrecht).
-- **Speicher:** Kapazität (kWh), max. Leistung (kW), arbitrage-fähig (Ja/Nein).
+- **PV-Module:** Anzahl Module, Leistung pro Modul (Wp), Ausrichtung (Süd = 0°, Ost = −90°, West = +90°), Neigung (0° flach … 90° senkrecht). Anzahl und Wp sind optional; sind beide gepflegt, vergleicht eedc `Anzahl × Wp` mit der eingetragenen Leistung (kWp) und weist eine Abweichung direkt im Formular aus — der Daten-Checker nennt denselben String dann beim Namen, statt nur die Anlagensumme zu bemängeln.
+- **Speicher:** Kapazität (kWh), **nutzbare Kapazität (kWh)**, max. Leistung (kW), arbitrage-fähig (Ja/Nein). Die nutzbare Kapazität ist die Reserve-bereinigte Größe (wer 10/90 fährt, trägt bei 10 kWh brutto 8 kWh ein); sie verfeinert den gemessenen Wirkungsgrad. Vollzyklen und die Wirtschaftlichkeits-Prognose rechnen weiterhin mit der Brutto-Kapazität ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
 - **E-Auto:** Batteriekapazität (kWh), V2H-fähig, „nutzt V2H aktiv".
 - **Wärmepumpe:** **JAZ** (Standardwert, falls kein Wärmemengenzähler), **Alternativkosten** (Gas/Öl als Mehrkosten-Basis), **jährliche Zusatzkosten der Alt-Heizung** (Schornsteinfeger, Wartung, Gaszähler-Grundpreis), **Alt-Tarif Gas/Öl** (ct/kWh, Fallback wenn ein Monat keinen eigenen Gaspreis führt).
 - **Wallbox:** max. Ladeleistung (kW), bidirektional.
@@ -263,7 +267,7 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 - **Auto-Discovery:** Für jedes über eine Datenquelle mit HA-Sensor bequellte Feld erzeugt eedc zwei Entities: eine `number.eedc_…_start` (Zählerstand vom Monatsanfang) und einen `sensor.eedc_…_monat` (berechneter Monatswert = aktueller Stand − Startwert). Die Friendly Names tragen den Komponentennamen zur besseren Lesbarkeit.
 - **KPI-Export:** zusätzlich exportiert eedc Kennzahlen-Gruppen (Energie & Quoten, Finanzen & Investition, spezifischer Ertrag [aufs Jahr normiert], PV-Prognose, Börsenpreis-Trigger). Die vollständige Liste mit Bedeutung und Einheiten steht in der **[Sensor-Referenz](SENSOR-REFERENZ.md)**.
-- **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn sie zu den 5 billigsten ihres Tag-/Nacht-Fensters gehört **und** ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt (ohne die 3 teuersten Stunden) liegt. Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %). eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
+- **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn sie zu den 5 billigsten ihres Tag-/Nacht-Fensters gehört **und** ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt (ohne die 3 teuersten Stunden) liegt. Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %). **0 % schaltet die Schwelle ab** — dann zählen wieder allein die 5 günstigsten Stunden je Fenster, unabhängig vom Preisabstand. eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
 - **Alternative REST-API:** Statt MQTT kannst du die Sensoren auch per REST-Sensor aus `…/api/ha/export/sensors/{id}` in HA ziehen (YAML-Beispiel im Block).
 
 > **Zu viele Entitäten?** Nicht benötigte Sensoren in HA deaktivieren — oder per `recorder:`-`exclude` nur von der Aufzeichnung ausnehmen (aktuelle Werte bleiben sichtbar, keine DB-Historie).
@@ -326,9 +330,30 @@ Jedes eedc-Feld (Energie- wie Live-Feld) bezieht seinen Wert aus **genau einer**
 
 Die Zuordnung spiegelt die Struktur von **Einstellungen → Komponenten**:
 
-- **Ein Block je Investitionstyp** (mit den farbigen Typ-Icons und einer Zusammenfassung wie „3 Geräte · 2 Felder ohne Quelle"), dazu ganz oben ein Zusatz-Block **„Anlage / Zähler"** für die Basis-Felder (Einspeisung, Netzbezug, Wetter).
-- Darunter je Gerät eine einklappbare Sektion mit einem Rollup-Badge (Felder mit / ohne Quelle).
+- **Ein Block je Investitionstyp** (mit den farbigen Typ-Icons und einer Zusammenfassung wie „3 Geräte · 2 Felder noch ohne Quelle"), dazu ganz oben ein Zusatz-Block **„Anlage / Zähler"** für die Basis-Felder (Einspeisung, Netzbezug, Wetter).
+- Darunter je Gerät eine einklappbare Sektion mit einem Rollup-Badge.
 - Die Felder je Gerät sind in drei Abschnitte nach Einheit gegliedert: **Energie-Sensoren (kWh)**, **Leistung-Sensoren (W)**, **Sonstige Sensoren** (SoC in %, Temperatur, km, €, Ladevorgänge). Leere Abschnitte entfallen.
+
+### 7.3 Was muss zugeordnet werden — und was nicht?
+
+Nicht jedes Feld braucht eine Quelle. Die Fläche sagt dir bei jedem, woran du bist:
+
+| Darstellung | Bedeutung | Was tun? |
+|-------------|-----------|----------|
+| roter `*` am Feldnamen | **Pflichtfeld** — ohne diesen Wert fehlt eine Kernauswertung | zuordnen, oder den Wert im Monatsabschluss manuell pflegen |
+| roter `*` **und** roter, offener Hinweis | Pflichtfeld **ohne** Quelle, und auch kein Ersatzweg belegt | hier liegt echter Nachholbedarf — der aufgeklappte Hinweis sagt, welcher Sensortyp passt |
+| „optional" in grau | schön zu haben, aber nichts hängt daran | leer lassen ist in Ordnung |
+| grauer Erklärsatz statt „keine Quelle" | wird **an anderer Stelle** erfasst | nichts tun — die Angabe hier hätte keine Wirkung |
+
+Der Zähler im Block-Kopf („2 Felder noch ohne Quelle") zählt **nur die offenen Pflichtfelder**. Steht dort nichts, ist die Zuordnung fertig — auch wenn einzelne Felder leer sind.
+
+**Wann wird ein Feld „an anderer Stelle erfasst"?** Immer dann, wenn zwei Wege dasselbe abdecken und eedc einen davon als maßgeblich ansieht:
+
+- **PV-Erzeugung und PV-Leistung:** entweder anlagenweit (ein Sensor für alles) **oder** je PV-Modul. Sobald ein Modul einen eigenen Sensor hat, gilt dieser — die anlagenweite Angabe wird dann ignoriert. Wer mehrere Strings getrennt auswerten will, ordnet je Modul zu; wer nur einen Gesamtzähler hat, nutzt das Modul-Feld ebenfalls (bei einem Modul ist beides gleichwertig).
+- **Netz-Leistung:** entweder **ein** vorzeichenbehafteter Sensor unter „Netz kombiniert (±)" **oder** „Einspeisung (W)" und „Netzbezug (W)" getrennt. Der Kombi-Sensor wirkt nur, wenn die beiden getrennten Felder leer sind.
+- **Heimladung des E-Autos:** hat deine Anlage eine **Wallbox**, ist sie die maßgebliche Quelle — die Felder „Heim: PV" und „Heim: Netz" am Fahrzeug bleiben dann ungenutzt. (Sind sie bei dir noch belegt, weist die Fläche darauf hin und bietet an, sie auf „keine" zu setzen.)
+
+> **„Keine Quelle" ist kein Fehler.** Alle kWh-Felder lassen sich im Monatsabschluss auch von Hand erfassen — rot heißt „hier fehlt noch etwas", nicht „falsch".
 
 **Jede Feld-Zeile** zeigt: Feldname (+ Einheit), die **aktive Zuordnung** — mit dem **Klarnamen** des Sensors neben der Entity-ID —, den zuletzt **empfangenen Wert** und rechts die Quellen-Wahl. Ein Info-Symbol blendet den Feld-Hinweis aus der Registry ein.
 
@@ -345,7 +370,7 @@ Die Zuordnung spiegelt die Struktur von **Einstellungen → Komponenten**:
 
 > **Mobil:** Statt einer Tabelle erscheint pro Feld eine Karte (Feldname + Wert, darunter die Zuordnung, darunter die Quellen als Chip-Reihe).
 
-### 7.3 Eine HA-Entity zuordnen (Picker)
+### 7.4 Eine HA-Entity zuordnen (Picker)
 
 Klick auf **HA-Sensor** öffnet einen Picker mit allen Entities der aktiven HA-Verbindung — durchsuchbar nach Entity-ID oder Name; jede Zeile zeigt Einheit und aktuellen State. Der Picker assistiert beim Wählen:
 
@@ -356,14 +381,14 @@ Klick auf **HA-Sensor** öffnet einen Picker mit allen Entities der aktiven HA-V
 
 > **Wissensbasis wächst kuratiert.** Die Integrations-Vorschläge starten bewusst klein (evcc mit belegten Feld-Mustern; go-eCharger/openWB/Keba/Zappi als Erkennung) und werden mit Tester-Wissen erweitert — nichts wird geraten.
 
-### 7.4 Ein MQTT-Topic zuordnen
+### 7.5 Ein MQTT-Topic zuordnen
 
 - **Gateway (Fremd-Topic):** Klick auf **Gateway** öffnet den Topic-Picker mit einer **Broker-Discovery** (`#`-Scan mit Suche) — du wählst ein vorhandenes Topic deines Geräts (Shelly, OpenDTU, Tasmota …), gibst bei JSON-Payloads den Pfad an und optional Faktor/Einheit. eedc übersetzt das auf sein Feld.
 - **Inbound (Standard-Topic):** Klick auf **Inbound** setzt direkt das kanonische eedc-Topic (`eedc/{anlage}/…`), auf das du selbst aus deinem Smarthome (HA-Automation, Node-RED, ioBroker, FHEM, openHAB) publishst. Live-Topics speisen das Live-Dashboard, Energy-Topics (monoton steigende Zählerstände) den Monatsabschluss.
 
 > **Topic-Drift:** Kommen in eedc Felder dazu oder wechseln Komponenten-IDs nach einem Re-Import, kann ein statischer Publisher gegen die erwarteten Topics driften. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) meldet das in der Kategorie MQTT-Topic-Abdeckung.
 
-### 7.5 Validierung & Probleme je Feld
+### 7.6 Validierung & Probleme je Feld
 
 Zur Zuordnungszeit erkennbare Fehler zeigt eedc **direkt an der Feld-Zeile** — diagnostisch, nie blockierend (rot = Fehler, amber = Warnung):
 
@@ -374,11 +399,11 @@ Zur Zuordnungszeit erkennbare Fehler zeigt eedc **direkt an der Feld-Zeile** —
 
 Die datenbasierten (rückblickenden) Prüfungen — Über-Erfassung, Datenquellen-Drift, Vorzeichen-Historie — bleiben im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md).
 
-### 7.6 Voraussetzung: die Verbindungen
+### 7.7 Voraussetzung: die Verbindungen
 
 Damit HA-Sensoren bzw. MQTT-Topics überhaupt wählbar sind, muss die jeweilige Verbindung stehen — MQTT-Broker und HA-Verbindung richtest du unter [Integration](#6-integration) ein. Änderst du dort etwas, blenden sich die Quellen-Buttons in der Datenquellen-Fläche sofort passend ein oder aus.
 
-### 7.7 Was aus den alten Assistenten wurde
+### 7.8 Was aus den alten Assistenten wurde
 
 | Früher | Jetzt |
 |--------|-------|

@@ -378,7 +378,7 @@ Investition_gesamt   = PV-System + WP-Mehrkosten + E-Auto-Mehrkosten + Sonstige
 
 | Feld | Quelle |
 |------|--------|
-| `kapazitaet_kwh` | `Investition.parameter["kapazitaet_kwh"]` |
+| `kapazitaet_kwh` | `get_speicher_nutzbare_kapazitaet_kwh(inv)` — **netto**, still auf brutto zurückfallend (A31-2/E17, s. u.). Greift nur im Prognose-Modus; mit gemessener Entladung übernimmt der Spread-Service und liest gar keine Kapazität. |
 | `wirkungsgrad_prozent` | `Investition.parameter["wirkungsgrad_prozent"]` (Default: 95) |
 | `nutzt_arbitrage` | `Investition.parameter["nutzt_arbitrage"]` (Default: false) |
 | `lade_preis_cent` | `Investition.parameter["lade_durchschnittspreis_cent"]` (Default: 12) |
@@ -404,6 +404,78 @@ Arbitrage-Spread      = Entlade_Preis - Lade_Preis
 Arbitrage-Einsparung  = Arbitrage-Anteil * Arbitrage_Spread / 100
 Jahres-Einsparung     = PV-Einsparung + Arbitrage-Einsparung
 ```
+
+#### Vollzyklen — eine Definition für alle Sichten
+
+```
+Vollzyklen = Entladung_kWh ÷ Kapazität_brutto_kWh
+```
+
+**SoT:** `core/berechnungen/speicher.py::vollzyklen`. Alle Sichten rufen ihn auf —
+Komponenten-Hub (`investitionen/dashboards.py`), Cockpit Tag (`energie_profil/tage_werte.py`) und
+Monat/Jahr (`aktueller_monat.py`), PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
+Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie)
+und `test_tage_werte_symmetrie.py`.
+
+**Warum die Entladung:** Ein Vollzyklus meint die einmal *entnommene* Kapazität — die Größe, auf die
+sich Hersteller-Garantien beziehen, und unabhängig von den Wandlungsverlusten des Ladepfads. Sie ist
+außerdem ein Energiedurchsatz und damit über Tag → Monat → Jahr additiv.
+
+**Warum Brutto im Nenner:** `nutzbare_kapazitaet_kwh` ist optional und meist nicht gepflegt; ein
+Nenner, der je nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend leicht konservativer
+Wert. Im HA-Export ist das Netto-Feld reiner **Fallback**, falls die Brutto-Kapazität fehlt — die
+Lese-Reihenfolge dort ist bewusst brutto → netto und bleibt es auch nach A31-2.
+
+#### Brutto oder netto — wann welche Kapazität gilt
+
+Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft **nicht** zwischen
+„genau" und „ungefähr", sondern zwischen zwei Fragen:
+
+| Frage | Kapazität | Warum | Stellen |
+| --- | --- | --- | --- |
+| **Wie oft wurde der Speicher umgeschlagen?** | **brutto** (`kapazitaet_kwh`) | Bezugsgröße der Hersteller-Garantie; ein Nenner, der am Pflegezustand hängt, macht dieselbe Anlage unvergleichbar | Vollzyklen (alle Sichten), graue Last, Community-Datensatz, Anzeige/Beschreibung der Komponente |
+| **Wie viel Energie geht durch den Speicher?** | **netto** (`nutzbare_kapazitaet_kwh`, still auf brutto zurückfallend) | Simuliert bzw. prognostiziert wird eine *durchgefahrene Menge* — und durch den Speicher geht nur der nutzbare Hub | Tages-Vorschau „Speicher voll um …" (Planungs-Tab **und** HA-Sensor `eedc_speicher_voll_um`), Wirtschaftlichkeits-**Prognose** ohne IST-Aggregat, η-SoC-Delta |
+
+**SoT netto (seit A31-2):** `core/investition_kennwerte.py::get_speicher_nutzbare_kapazitaet_kwh` —
+netto, sonst brutto, sonst `None`. Der Brutto-Fallback ist **still** (Entscheidung **E17**): kein
+Hinweis, keine Kennzeichnung, **kein P4-Fall**. Der Brutto-Wert ist nicht *unvollständig*, er ist die
+andere gültige Lesart derselben Größe; die Zahlenänderung aus A31-2 trifft deshalb ausschließlich
+Anlagen, die das optionale Feld bewusst gepflegt haben. Die Leserichtung geht nur netto → brutto und
+**nie** zurück — ein Brutto-Helper mit Netto-Fallback wäre genau die Verwechslung, die die Vollzyklen
+wieder vom Pflegezustand abhängig machte.
+
+**Nebenwirkung der Vorschau, die dazugehört:** dieselbe Simulation liefert auch Einspeisung,
+Eigenverbrauch und Autarkie des Vorschautags. Ein kleinerer Puffer nimmt weniger Überschuss auf —
+mehr geht ins Netz, weniger bleibt im Haus. Gemessen an der Demo-Anlage (15,4 kWh brutto gegen
+13,9 kWh netto, 28.07.–02.08.2026): Einspeisung +0,75 bis +1,08 kWh/Tag, Eigenverbrauch entsprechend
+niedriger, Autarkie −1,7 bis −3,2 Prozentpunkte, „Speicher voll" an einem der sechs Tage eine Stunde
+früher (die Stundenauflösung verschluckt den Effekt an den übrigen).
+
+**Woher die Kapazität kommt (SoT seit A31-1):** `core/investition_kennwerte.py::get_speicher_kapazitaet_kwh`
+— brutto (`kapazitaet_kwh`), nur aus dem `parameter`-JSON, **ohne Default**. Ist nichts gepflegt,
+liefert er `None`, und der Aufrufer entscheidet (summieren mit `or 0`, Zahl unterdrücken, Rechnung
+auslassen); eine Zahl erfindet er nicht (Entscheidung **E16**, ADR-002/P3-a). Bis dahin stand an drei
+Stellen ein `.get(…, 10)`: ein Speicher ohne gepflegte Kapazität bekam still 10 kWh und daraus
+Vollzyklen und eine Jahres-Ersparnis (**N127**). Der fehlende Wert wird stattdessen ausgewiesen —
+Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_fehlt` + Hinweis, P4).
+
+> **Abgrenzung „SoC-Hübe"** (`TagesZusammenfassung.batterie_vollzyklen` = ΣΔSoC ÷ 200): eine andere
+> Kennzahl, die reale Lade-Hübe misst und damit als einzige eine 10/90-Fahrweise abbildet (ein voller
+> Hub = 160 pp = 0,8). Sie ist ein Bestandsmaß, hängt an einem SoC-Sensor und ist **kein** Ersatz für
+> die Vollzyklen. Sichtbar in der Energieprofil-Tagestabelle unter diesem Namen.
+
+> **Historie:** Bis 2026-07-28 rechneten vier von fünf Stellen mit der **Ladung** und nur der
+> HA-Sensor mit der Entladung; die Tages-Kachel zeigte sogar die ΔSoC-Größe unter dem Namen
+> „Vollzyklen". Auf derselben Anlage standen dadurch Zahlen, die um den Speicher-Wirkungsgrad
+> auseinanderlagen (gemessen 10,97 gegen 8,57 bei η 78 %). Kein Test hat das bemerkt — daher jetzt
+> der Symmetrie-Test über alle Pfade.
+
+> eedc kennt und braucht keinen Ziel-SOC: Vollzyklen und Wirkungsgrad kommen aus **gemessenen**
+> Lade-/Entlademengen. Eine Annahme steckt nur in der Wirtschaftlichkeits-**Prognose**
+> (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem Vorliegen von
+> Messdaten greift, sowie in der Tages-**Vorschau** („Speicher voll um …",
+> `core/berechnungen/speicher_simulation.py`), die von 0 bis 100 % der Brutto-Kapazität simuliert —
+> wer bei 90 % abriegelt, ist real früher voll. Beides offen — als Zeile in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §P2/B11 („nutzbare Kapazität konsequent").
 
 ### 3.4 E-Auto-Einsparung
 
@@ -492,17 +564,24 @@ WP_Strom_kWh         = Strom_Heizung + Strom_Warmwasser
 ```
 PV_Anteil            = pv_anteil_prozent / 100
 Netz_Anteil          = 1 - PV_Anteil
+η_alt                = alter_wirkungsgrad(Energieträger)   # 0,90 Gas · 0,85 Öl · 1,0 Strom
 
 WP_Kosten            = WP_Strom * Netz_Anteil * Strompreis / 100
-Alte_Kosten          = Gesamtwärmebedarf * Alter_Preis / 100
+Alte_Kosten          = Gesamtwärmebedarf / η_alt * Alter_Preis / 100
                      + alternativ_zusatzkosten_jahr        # Schornsteinfeger / Wartung / Grundpreis Gaszähler
 
 Jahres-Einsparung    = Alte_Kosten - WP_Kosten
 
-CO2_alt               = Gesamtwärmebedarf * CO2_Faktor[gas|oel|strom]
+CO2_alt               = Gesamtwärmebedarf / η_alt * CO2_Faktor[gas|oel|strom]
 CO2_WP                = WP_Strom * Netz_Anteil * 0.38
 CO2-Einsparung        = CO2_alt - CO2_WP
 ```
+
+> **Wirkungsgrad der Altanlage (η_alt):** `Gesamtwärmebedarf` ist **abgegebene Wärme**, nicht Brennstoff — das Eingabefeld heißt „Heizwärmebedarf (kWh/Jahr) — aus Energieausweis", und derselbe Wert wird oben durch die JAZ geteilt (JAZ = Wärme/Strom). Ein Kessel muss dafür `Wärme / η` verfeuern; `Alter_Preis` ist der Preis je kWh **Brennstoff** (so steht er auf der Rechnung). Die Umrechnung macht der Layer-SoT `gas_kosten_altanlage`, die η-Wahl der Resolver `alter_wirkungsgrad` — beide in `core/berechnungen/alternativkosten.py`.
+>
+> Bis v4.0.1 fehlte die η-Rückrechnung in diesem Pfad: die ROI-Seite wies für dieselbe Wärmepumpe eine niedrigere Ersparnis (und CO₂-Einsparung) aus als Aussichten, HA-Export und WP-Dashboard, die alle über `gas_kosten_altanlage` laufen. **Die fixen Zusatzkosten werden nicht durch η geteilt** — sie sind keine Energie.
+>
+> **Strom-Direktheizung:** η = 1,0. Eine Widerstandsheizung (Nachtspeicher, Infrarot) setzt Strom verlustfrei in Wärme um; ihr einen Kesselverlust anzurechnen, würde die WP-Ersparnis überhöhen. Die η-Wahl lag vorher an vier Stellen dupliziert vor und kannte diesen Fall nirgends.
 
 > **Alternativ-Zusatzkosten (v3.21.0, #141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Alt-Heizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Wird in **fünf** Berechnungs-Pfaden berücksichtigt: Aussichten historisch + Prognose, HA-Sensor-Export inkl. WP-Sensor, PDF-Jahresbericht, Investitions-Vorschau. In historischen Aggregaten anteilig pro erfasstem Monat (`alternativ_zusatzkosten_jahr / 12`).
 
@@ -766,7 +845,7 @@ Wenn Temperatur > 25°C:
 | Parameter | Quelle | Default |
 |-----------|--------|---------|
 | `System_Losses` | `PVGISPrognose.system_losses / 100` | 0.14 (14%) |
-| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Helper `get_pv_kwp` (Spalte → `parameter`-JSON, ADR-002/P3) | `Anlage.leistung_kwp` |
+| `Anlagenleistung_kWp` | Σ(PV-Module) + Σ(BKW), gelesen über den SoT-Dispatcher `get_erzeuger_kwp` (ADR-002/P3). Reihenfolge: Feld **Leistung (kWp)** der Investition → ersatzweise die Detail-Felder `kwp` bzw. `leistung_kwp` (nur Bestands-/Importdaten) → beim Balkonkraftwerk zusätzlich `leistung_wp` × `anzahl` (Anzahl fehlt ⇒ **1**, nicht die Formular-Vorbelegung 2). Seit v4.0.2 gilt dieselbe Kette an **allen** Lesestellen der Nennleistung — Prognose, Cockpit, PV-Strings, ROI, CO₂, Live und PDF. | `Anlage.leistung_kwp` |
 | `GTI_kWh_m2` | **Global Tilted Irradiance** aus Open-Meteo Solar (modul-projiziert mit Tilt + Azimut). Bei Multi-String-Anlagen werden parallele Calls pro Orientierungsgruppe abgesetzt und kWp-gewichtet kombiniert. | – |
 
 > **GTI-Spalte der 14-Tage-Tabelle ist ein kWp-gewichtetes Mittel** („GTI Modulfläche"): die
@@ -795,6 +874,10 @@ Das verwendete Wettermodell ist pro Anlage konfigurierbar (`Anlage.wettermodell`
 | `ecmwf_ifs04` | ECMWF IFS | 0,25° | Global |
 
 Bei einem spezifischen Modell versucht eedc zuerst dieses Modell. Schlägt der Abruf fehl oder liefert es keine Daten für den Standort, fällt es auf `best_match` zurück (Kaskade). Die verwendete Quelle pro Tag wird im Response als `datenquelle`-Kürzel (MS/D2/EU/EC/BM) mitgeliefert.
+
+**Geltungsbereich (seit v4.0.2, A30):** Die Modellwahl wirkt auf **alle** Prognose-Pfade, weil der Prognose-Kanon (`services/prognose_kanon.py`) `Anlage.wetter_modell` an `get_solar_prognose` durchreicht — also auch auf die eedc-korrigierte Tagesprognose, die Stundenprofile, die Live-/Persistenz-Werte und den HA-/MQTT-Export (`services/ha_export_prognose.py`). Bis v4.0.1 rechnete dieser Pfad unabhängig von der Einstellung mit `best_match`, während Live-Wetter, 14-Tage-Wettertabelle und die OpenMeteo-Spalte von `/solar-prognose` das Modell bereits nutzten — dieselbe Seite zeigte damit zwei Modelle nebeneinander.
+
+**„Keine Daten" schließt die leere Antwort ein.** Open-Meteo kann für ein Modell mit HTTP 200 antworten und trotzdem für jede Stunde `null` liefern; `_hat_nutzbares_gti` behandelt das wie einen Fehlschlag, damit die `best_match`-Kaskade greift statt einen 0-kWh-Tag zu bauen. **Am 2026-07-28 gemessen betrifft das drei der acht wählbaren Werte:** `ecmwf_ifs04` (HTTP 200, 0 von 72 Stundenwerten gesetzt — das Modell läuft nicht mehr, der Name wird noch akzeptiert) sowie `ecmwf_seamless` und `meteoswiss_seamless` (keine gültigen Modellnamen mehr, HTTP-Fehler). Für diese drei rechnet eedc faktisch mit `best_match`; die Bereinigung der Auswahlliste steht aus.
 
 ### 4.1b Solar Forecast ML (SFML)
 
