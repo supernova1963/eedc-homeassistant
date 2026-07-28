@@ -61,6 +61,50 @@ einmal sauber beschriftet, einmal als rohes Detail-Feld. Die Dublette ist weg. A
 diese Liste alle Werte auf ganze Zahlen: ein Wirkungsgrad von 20,75 % stand dort als „21". Das
 betrifft **alle** Anlagen, nicht nur Import-Bestände.
 
+### Speicher: eine Zyklenzahl statt drei
+
+**Wenn du einen Speicher hast, ändert sich hier eine Zahl.** Die Kachel **„Vollzyklen"** rechnete
+je nach Sicht verschieden: im Tages-Cockpit zählte sie Ladestands-Bewegungen, im Monat und im
+Komponenten-Bereich die **geladene** Energie, der Home-Assistant-Sensor die **entladene**. Drei
+Antworten auf dieselbe Frage — und die Tageswerte summierten sich nie auf den Monat.
+
+Ab jetzt gilt überall dasselbe: **Vollzyklen = entladene Energie ÷ Kapazität**. Das ist die Größe,
+auf die auch Hersteller-Garantien zielen.
+
+- **Was du siehst:** In **Komponenten → Speicher**, **Cockpit → Monat/Jahr** und im
+  **PDF-Jahresbericht** sinkt die Zyklenzahl um den Wirkungsgradverlust — typisch 5–10 %.
+  **Der Home-Assistant-Sensor bleibt unverändert**, er rechnete schon immer so.
+- **Die Ladestands-Bewegungen sind nicht weg**, sie heißen jetzt **„SoC-Hübe"** (Energieprofil,
+  Tages-Tabelle, Spalte einblendbar). Sie sind die einzige Zahl, die eine schonende Fahrweise
+  abbildet: Wer den Speicher zwischen 10 und 90 % fährt, sieht dort 0,8 statt 1,0 pro Hub. Dafür
+  braucht es einen SoC-Sensor.
+
+> **Und der gewünschte Ladestand?** eedc nimmt keinen an. Zyklen und Wirkungsgrad kommen aus deinen
+> **gemessenen** Lade- und Entlademengen — eine schonende Fahrweise steckt dort schon drin.
+> Geschätzt wird nur, wo noch nichts gemessen ist: in der Wirtschaftlichkeits-Vorschau und in der
+> Tagesvorschau „Speicher voll um …", die von 0 bis 100 % rechnet. Wer bei 90 % abriegelt, ist real
+> etwas früher voll.
+
+### Rund um die PV-Module
+
+- **Komponenten-Liste:** Bei PV-Modulen blieb die graue Zeile mit den Eckdaten leer, während jeder
+  andere Gerätetyp seine Werte zeigte. Jetzt steht dort „12,0 kWp • 24 Module • 500 Wp".
+- **Vertippt beim Anlegen?** Wenn du Modulanzahl und Wattzahl pflegst, vergleicht eedc das Ergebnis
+  jetzt mit der eingetragenen Leistung und sagt es dir **direkt im Formular**. Der Daten-Checker
+  nennt außerdem den **betroffenen String beim Namen**, statt nur zu melden, dass die Anlagensumme
+  nicht passt. Die Modul-Details bleiben freiwillig — maßgeblich ist weiter das Feld „Leistung (kWp)".
+- **String-Vergleich verständlicher:** Über der Tabelle steht jetzt, was **Performance** eigentlich
+  misst — jeden String gegen **seine eigene** Prognose, in der Ausrichtung und Neigung schon
+  stecken. Ein Nordwest-Dach mit 100 % ist damit nicht so gut wie ein Süd-Dach mit 100 %. Für den
+  Vergleich der Dächer untereinander zählt **kWh/kWp**. Neu daneben: die Spalte **Anteil** (Gewicht
+  am Gesamtertrag) und eine **Summenzeile** mit Gesamt-kWp, SOLL und IST.
+- **Stundenwerte mit IST:** Steht der Tag in **Cockpit → Aussicht → Stundenwerte** auf **heute**,
+  zeigt die Tabelle neben der Prognose die bereits gemessenen Stunden. Kein Wechsel mehr in die
+  Auswertungen für einen Blick auf „wie lief es bisher".
+- **Günstig-Schwelle:** Der Wert **0 %** war schon immer erlaubt, schaltet die Schwelle aber ab —
+  dann zählen wieder allein die 5 günstigsten Stunden je Fenster. Das steht jetzt am Feld. Der
+  Standard war und ist 10 %.
+
 ---
 
 ## v4.0.1 — Dieselbe Zahl an jeder Stelle (Juli 2026)
