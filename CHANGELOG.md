@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.2] - 2026-07-28 — Speicher rechnet mit der nutzbaren Kapazität · Prognose folgt dem Wettermodell · Autarkie wieder plausibel
 
 ### Added
 
