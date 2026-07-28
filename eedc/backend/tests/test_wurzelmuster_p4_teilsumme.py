@@ -235,6 +235,97 @@ async def test_mit_pv_prognose_bleibt_die_antwort_still(db, monkeypatch):
 
     assert resp.pv_summe_kwh == pytest.approx(12.0, abs=0.1)
     assert resp.hinweise == []
+    # A28-Gegenprobe: mit Historie bleibt die Antwort die volle Antwort — die
+    # verbrauchsabhängigen Felder sind gefüllt, nicht None.
+    assert resp.verbrauch_summe_kwh is not None
+    assert resp.autarkie_prozent is not None
+    assert resp.verbrauch_basis is not None
+    assert resp.daten_tage is not None
+    assert all(s.verbrauch_kw is not None for s in resp.stunden)
+
+
+async def _anlage_ohne_verbrauchshistorie(db) -> int:
+    """Frische Installation: PV konfiguriert, aber noch kein Energieprofil."""
+    from backend.models import Anlage, Investition
+
+    anlage = Anlage(
+        anlagenname="P4-Frischling", leistung_kwp=10.0,
+        latitude=48.0, longitude=11.0,
+    )
+    db.add(anlage)
+    await db.flush()
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Süd",
+        anschaffungsdatum=date(2024, 1, 1), leistung_kwp=10.0,
+        neigung_grad=30.0,
+    ))
+    await db.commit()
+    return anlage.id
+
+
+async def test_ohne_verbrauchshistorie_kommt_die_pv_haelfte_statt_422(db, monkeypatch):
+    """N122/A28: der 422 nahm das PV-Profil mit, das gar keine Historie braucht.
+
+    Betroffen war jede frische Installation in den ersten drei Tagen — also
+    genau die Gruppe, die nach v4.0.0 dazukommt.
+    """
+    from backend.api.routes.energie_profil import views
+
+    anlage_id = await _anlage_ohne_verbrauchshistorie(db)
+
+    async def kanon_liefert(*a, **kw):
+        return [0.0] * 8 + [1.5] * 8 + [0.0] * 8
+
+    monkeypatch.setattr(views, "_pv_stunden_aus_kanon", kanon_liefert)
+
+    resp = await views.get_tagesprognose(anlage_id=anlage_id, datum=MORGEN, db=db)
+
+    # Die PV-Hälfte ist vollständig da — Stundenprofil UND Summe.
+    assert resp.pv_summe_kwh == pytest.approx(12.0, abs=0.1)
+    assert len(resp.stunden) == 24
+    assert resp.stunden[10].pv_kw == pytest.approx(1.5, abs=0.001)
+
+    # Und die Antwort sagt, was fehlt (P4).
+    assert resp.hinweise, "Halbe Antwort ohne Kennzeichnung wäre der P4-Verstoß."
+    text = " ".join(resp.hinweise)
+    assert "Verbrauchsprognose" in text
+    assert "3 vollständige Tage" in text
+
+
+async def test_ohne_verbrauchshistorie_behauptet_kein_feld_eine_null(db, monkeypatch):
+    """Der heiklere Teil: 0 sähe aus wie ein Messwert — also None.
+
+    Betrifft Bilanz, Netzbezug, Einspeisung, Eigenverbrauch, Autarkie, die
+    Speicher-Simulation und die Meta-Felder der Verbrauchsseite.
+    """
+    from backend.api.routes.energie_profil import views
+
+    anlage_id = await _anlage_ohne_verbrauchshistorie(db)
+
+    async def kanon_liefert(*a, **kw):
+        return [0.0] * 8 + [1.5] * 8 + [0.0] * 8
+
+    monkeypatch.setattr(views, "_pv_stunden_aus_kanon", kanon_liefert)
+
+    resp = await views.get_tagesprognose(anlage_id=anlage_id, datum=MORGEN, db=db)
+
+    assert resp.verbrauch_summe_kwh is None
+    assert resp.netzbezug_summe_kwh is None
+    assert resp.einspeisung_summe_kwh is None
+    assert resp.eigenverbrauch_kwh is None
+    assert resp.autarkie_prozent is None, (
+        "0 % Autarkie ist eine Aussage — und ohne Verbrauchsprognose eine falsche."
+    )
+    assert resp.verbrauch_basis is None
+    assert resp.daten_tage is None
+    assert resp.speicher_voll_um is None and resp.speicher_leer_um is None
+
+    for s in resp.stunden:
+        assert s.verbrauch_kw is None
+        assert s.netto_kw is None
+        assert s.netzbezug_kw is None
+        assert s.einspeisung_kw is None
+        assert s.soc_prozent is None
 
 
 async def test_solcast_profil_von_heute_wird_als_naeherung_ausgewiesen(db, monkeypatch):

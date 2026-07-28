@@ -274,30 +274,37 @@ export interface AnlageStats {
 export interface StundenPrognose {
   stunde: number
   pv_kw: number
-  verbrauch_kw: number
-  netto_kw: number
-  netzbezug_kw: number
-  einspeisung_kw: number
+  /** null, solange keine Verbrauchsprognose vorliegt (A28) — genau wie die
+   *  vier Folgefelder. Nicht 0: eine 0 stünde in der Tabelle wie ein Messwert. */
+  verbrauch_kw: number | null
+  netto_kw: number | null
+  netzbezug_kw: number | null
+  einspeisung_kw: number | null
   soc_prozent: number | null
 }
 
 export interface TagesPrognose {
   datum: string
   stunden: StundenPrognose[]
+  /** Die PV-Hälfte steht immer — sie braucht nur Wetterdienst + kWp. */
   pv_summe_kwh: number
-  verbrauch_summe_kwh: number
-  netzbezug_summe_kwh: number
-  einspeisung_summe_kwh: number
-  eigenverbrauch_kwh: number
-  autarkie_prozent: number
+  /** A28: alle verbrauchsabhängigen Felder sind null, solange die Historie für
+   *  die Verbrauchsprognose fehlt (< 3 vollständige Tage, frische Installation).
+   *  Der Grund steht dann in `hinweise`; die Anzeige zeigt „—". */
+  verbrauch_summe_kwh: number | null
+  netzbezug_summe_kwh: number | null
+  einspeisung_summe_kwh: number | null
+  eigenverbrauch_kwh: number | null
+  autarkie_prozent: number | null
   speicher_kapazitaet_kwh: number | null
   speicher_voll_um: string | null
   speicher_leer_um: string | null
-  verbrauch_basis: string
+  verbrauch_basis: string | null
   pv_quelle: string
-  daten_tage: number
-  /** P4: nichtleer, wenn das PV-Profil nicht das ist, was der Name verspricht
-   *  (keine Prognose → 24 Nullen; Solcast-Profil von heute als Näherung).
+  daten_tage: number | null
+  /** P4: nichtleer, wenn die Antwort nicht das ist, was ihr Name verspricht
+   *  (keine PV-Prognose → 24 Nullen; Solcast-Profil von heute als Näherung;
+   *  seit A28 auch: keine Verbrauchshistorie → PV-Hälfte allein).
    *  Angezeigt über `unvollstaendigHerkunft` + `HerkunftZeile`. */
   hinweise: string[]
 }

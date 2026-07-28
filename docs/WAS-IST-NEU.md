@@ -104,6 +104,10 @@ auf die auch Hersteller-Garantien zielen.
 - **Günstig-Schwelle:** Der Wert **0 %** war schon immer erlaubt, schaltet die Schwelle aber ab —
   dann zählen wieder allein die 5 günstigsten Stunden je Fenster. Das steht jetzt am Feld. Der
   Standard war und ist 10 %.
+- **Neu installiert?** Die Tagesprognose zeigt dir jetzt vom ersten Tag an die **PV-Vorschau**,
+  statt die ganze Ansicht mit „zu wenig historische Daten" zu verweigern. Verbrauch, Netzbezug und
+  die Speicher-Vorschau bleiben dabei leer („—"), bis drei Tage aufgezeichnet sind — sie kommen
+  dann von selbst dazu.
 
 ---
 

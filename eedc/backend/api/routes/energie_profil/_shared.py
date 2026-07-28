@@ -434,35 +434,50 @@ class ReaggregatePreviewResponse(BaseModel):
 
 
 class StundenPrognose(BaseModel):
-    """Prognose für eine Stunde: PV, Verbrauch, Netto-Bilanz, Batterie-SoC."""
+    """Prognose für eine Stunde: PV, Verbrauch, Netto-Bilanz, Batterie-SoC.
+
+    Alles außer ``pv_kw`` hängt an der Verbrauchsprognose. Fehlt die (frische
+    Installation ohne Historie, A28/N122), bleiben diese Felder ``None`` — eine
+    0 stünde in der Tabelle wie ein Messwert „kein Verbrauch" (P4).
+    """
     stunde: int
     pv_kw: float
-    verbrauch_kw: float
-    netto_kw: float           # pv - verbrauch (positiv=Überschuss)
-    netzbezug_kw: float       # max(0, Bedarf nach Batterie-Entladung)
-    einspeisung_kw: float     # max(0, Überschuss nach Batterie-Ladung)
+    verbrauch_kw: Optional[float] = None
+    netto_kw: Optional[float] = None       # pv - verbrauch (positiv=Überschuss)
+    netzbezug_kw: Optional[float] = None   # max(0, Bedarf nach Batterie-Entladung)
+    einspeisung_kw: Optional[float] = None  # max(0, Überschuss nach Batterie-Ladung)
     soc_prozent: Optional[float] = None  # Simulierter Batterie-SoC
 
 
 class TagesPrognoseResponse(BaseModel):
-    """Kombinierte Verbrauchs- + PV- + Batterie-Prognose für einen Tag."""
+    """Kombinierte Verbrauchs- + PV- + Batterie-Prognose für einen Tag.
+
+    **Die PV-Hälfte steht immer** (sie braucht nur Wetterdienst + kWp). Die
+    verbrauchsabhängige Hälfte — Bilanz, Netzbezug, Einspeisung, Eigenverbrauch,
+    Autarkie, Speicher-Simulation, `verbrauch_basis`/`daten_tage` — ist
+    ``None``, solange keine Verbrauchsprognose vorliegt (< 3 vollständige Tage
+    Energieprofil). Vor A28 gab es in dem Fall HTTP 422 für den ganzen
+    Endpoint, also auch für das PV-Profil, das gar keine Historie braucht.
+    Warum ``None`` statt 0: eine 0 ist eine Aussage („Verbrauch = 0 kWh",
+    „Autarkie = 0 %"), die Anzeige zeigt darauf ein „—" (P4, ADR-002).
+    """
     datum: str
     stunden: list[StundenPrognose]
     # Zusammenfassung
     pv_summe_kwh: float
-    verbrauch_summe_kwh: float
-    netzbezug_summe_kwh: float
-    einspeisung_summe_kwh: float
-    eigenverbrauch_kwh: float
-    autarkie_prozent: float
+    verbrauch_summe_kwh: Optional[float] = None
+    netzbezug_summe_kwh: Optional[float] = None
+    einspeisung_summe_kwh: Optional[float] = None
+    eigenverbrauch_kwh: Optional[float] = None
+    autarkie_prozent: Optional[float] = None
     # Speicher (optional)
     speicher_kapazitaet_kwh: Optional[float] = None
     speicher_voll_um: Optional[str] = None
     speicher_leer_um: Optional[str] = None
     # Meta
-    verbrauch_basis: str        # "gleicher_wochentag", "tagestyp", "alle"
+    verbrauch_basis: Optional[str] = None  # "gleicher_wochentag", "tagestyp", "alle"
     pv_quelle: str              # "openmeteo" oder "solcast"
-    daten_tage: int
+    daten_tage: Optional[int] = None
     # P4 (N78/N79): Unvollständigkeit gehört in die ANTWORT, nicht ins Log.
     # Liefert dieser Endpoint ein PV-Profil, das nicht das ist, was der Name
     # verspricht — 24 Nullen weil jeder Prognose-Pfad ausgefallen ist, oder das

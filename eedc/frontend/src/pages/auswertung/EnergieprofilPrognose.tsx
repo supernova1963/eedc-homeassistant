@@ -141,13 +141,17 @@ export function EnergieprofilPrognose({ anlageId }: Props) {
 export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
   const achsen = useChartTheme()
   const hatSpeicher = daten.speicher_kapazitaet_kwh != null
+  // A28: ohne Verbrauchshistorie liefert das Backend nur die PV-Hälfte. `null`
+  // statt 0 durchreichen — Recharts zeichnet dann KEINE Fläche; eine 0-Linie
+  // würde „Verbrauch = 0" behaupten (P4).
+  const hatVerbrauch = daten.verbrauch_summe_kwh != null
   const chartDaten = useMemo(() => daten.stunden.map(s => ({
     stunde: `${s.stunde}:00`,
     pv: s.pv_kw,
-    verbrauch: -s.verbrauch_kw,  // negativ für Senken-Darstellung
+    verbrauch: s.verbrauch_kw != null ? -s.verbrauch_kw : null,  // negativ für Senken-Darstellung
     netto: s.netto_kw,
-    netzbezug: s.netzbezug_kw > 0 ? -s.netzbezug_kw : null,
-    einspeisung: s.einspeisung_kw > 0 ? s.einspeisung_kw : null,
+    netzbezug: s.netzbezug_kw != null && s.netzbezug_kw > 0 ? -s.netzbezug_kw : null,
+    einspeisung: s.einspeisung_kw != null && s.einspeisung_kw > 0 ? s.einspeisung_kw : null,
     soc: s.soc_prozent,
   })), [daten])
   // R5-5c (Rainer): Serien per Legende an/aus — insb. die SoC-Linie, die manche
@@ -156,7 +160,7 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
   const { istVersteckt, onItemClick } = useLegendenToggle()
   // P4: sagt die Antwort selbst, dass ihr PV-Profil unvollständig ist, steht das
   // DORT, wo die Zahl steht — über der PV-Kachel und der Summenzeile, nicht im Log.
-  const herkunft = unvollstaendigHerkunft(daten.hinweise, 'PV-Prognose')
+  const herkunft = unvollstaendigHerkunft(daten.hinweise, hatVerbrauch ? 'PV-Prognose' : 'Prognose')
   return (
     <div className="space-y-4">
       <HerkunftZeile herkunft={herkunft} />
@@ -168,14 +172,20 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
         <KPICard size="sm" icon={Sun} title="Eigenverbrauch" value={`${fmt1(daten.eigenverbrauch_kwh)} kWh`} color="green" />
         <KPICard size="sm" icon={Zap} title="Autarkie" value={`${fmt0(daten.autarkie_prozent)} %`} color="green" />
         {hatSpeicher && (
-          <KPICard size="sm" icon={Battery} title="Speicher voll" value={daten.speicher_voll_um ?? 'nicht erreicht'} color="blue" />
+          // Ohne Verbrauchsprognose gibt es keine Speicher-Simulation — „nicht
+          // erreicht" wäre dann eine Aussage über einen Lauf, der nie stattfand.
+          <KPICard size="sm" icon={Battery} title="Speicher voll" value={hatVerbrauch ? (daten.speicher_voll_um ?? 'nicht erreicht') : '—'} color="blue" />
         )}
       </div>
 
       <Card>
         <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-1 flex justify-between">
           <span>PV-Prognose: {PV_QUELLE_LABELS[daten.pv_quelle] ?? daten.pv_quelle}</span>
-          <span>Verbrauch: {VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis} ({daten.daten_tage} Tage)</span>
+          <span>
+            {daten.verbrauch_basis != null
+              ? `Verbrauch: ${VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis} (${daten.daten_tage} Tage)`
+              : 'Verbrauch: noch keine Historie'}
+          </span>
         </div>
         <ResponsiveContainer width="100%" height={360}>
           {/* D11-16 (detLAN „krassestes Beispiel"): right war 50 → großer Leerraum rechts
@@ -206,10 +216,11 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
       <div className="flex items-start gap-2 text-xs text-gray-400 dark:text-gray-500">
         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
-          Verbrauchsprognose basiert auf dem Ø-Stundenprofil der letzten {daten.daten_tage} Tage
-          ({VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis}).
-          PV-Prognose: {PV_QUELLE_LABELS[daten.pv_quelle] ?? daten.pv_quelle}.
-          {hatSpeicher && ` Batterie-Simulation: ${fmt1(daten.speicher_kapazitaet_kwh)} kWh, vereinfachtes Modell ohne Wirkungsgradverluste.`}
+          {daten.verbrauch_basis != null
+            ? `Verbrauchsprognose basiert auf dem Ø-Stundenprofil der letzten ${daten.daten_tage} Tage (${VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis}).`
+            : 'Für die Verbrauchsprognose fehlt noch die Historie — sie startet, sobald 3 vollständige Tage aufgezeichnet sind.'}
+          {' '}PV-Prognose: {PV_QUELLE_LABELS[daten.pv_quelle] ?? daten.pv_quelle}.
+          {hatSpeicher && hatVerbrauch && ` Batterie-Simulation: ${fmt1(daten.speicher_kapazitaet_kwh)} kWh, vereinfachtes Modell ohne Wirkungsgradverluste.`}
         </span>
       </div>
     </div>
@@ -264,7 +275,8 @@ export function PrognoseTabelle({ daten, ohneCaption, istStunden, aktuelleStunde
   // P4: die Summenzeile unten IST die Zahl, um die es geht — die Kennzeichnung
   // muss auch hier stehen, nicht nur am Chart daneben (die Tabelle wird im
   // Fokus-Overlay allein gezeigt).
-  const herkunft = unvollstaendigHerkunft(daten.hinweise, 'PV-Prognose')
+  const hatVerbrauch = daten.verbrauch_summe_kwh != null
+  const herkunft = unvollstaendigHerkunft(daten.hinweise, hatVerbrauch ? 'PV-Prognose' : 'Prognose')
 
   return (
     <Card padding="none" className="overflow-hidden">
@@ -321,19 +333,28 @@ export function PrognoseTabelle({ daten, ohneCaption, istStunden, aktuelleStunde
                     {istMap.get(s.stunde) != null ? fmtZahl(istMap.get(s.stunde), 2) : <Dash />}
                   </td>
                 )}
-                <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtZahl(s.verbrauch_kw, 2)}</td>
+                {/* A28: ohne Verbrauchsprognose sind Verbrauch/Netto/Bezug/
+                    Einspeisung `null` — „—" statt einer 0, die wie ein Messwert
+                    aussähe (P4). */}
+                <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>
+                  {s.verbrauch_kw != null ? fmtZahl(s.verbrauch_kw, 2) : <Dash />}
+                </td>
                 <td className={`${ZELLE} text-right tabular-nums font-medium ${
-                  s.netto_kw >= 0
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-red-600 dark:text-red-400'
+                  s.netto_kw == null
+                    ? ''
+                    : s.netto_kw >= 0
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
                 }`}>
-                  {s.netto_kw >= 0 ? '+' : ''}{fmtZahl(s.netto_kw, 2)}
+                  {s.netto_kw != null
+                    ? `${s.netto_kw >= 0 ? '+' : ''}${fmtZahl(s.netto_kw, 2)}`
+                    : <Dash />}
                 </td>
                 <td className={`${ZELLE} text-right tabular-nums text-red-600 dark:text-red-400`}>
-                  {s.netzbezug_kw > 0.005 ? fmtZahl(s.netzbezug_kw, 2) : <Dash />}
+                  {s.netzbezug_kw != null && s.netzbezug_kw > 0.005 ? fmtZahl(s.netzbezug_kw, 2) : <Dash />}
                 </td>
                 <td className={`${ZELLE} text-right tabular-nums text-cyan-600 dark:text-cyan-400`}>
-                  {s.einspeisung_kw > 0.005 ? fmtZahl(s.einspeisung_kw, 2) : <Dash />}
+                  {s.einspeisung_kw != null && s.einspeisung_kw > 0.005 ? fmtZahl(s.einspeisung_kw, 2) : <Dash />}
                 </td>
                 {hatSpeicher && (
                   <td className={`${ZELLE} text-right tabular-nums text-blue-600 dark:text-blue-400`}>
@@ -352,16 +373,26 @@ export function PrognoseTabelle({ daten, ohneCaption, istStunden, aktuelleStunde
                 // die künftigen Stunden fehlen darin und sollen es auch.
                 <td className={`${ZELLE} text-right tabular-nums font-medium text-gray-700 dark:text-gray-200`}>{fmtZahl(istSumme, 1)}</td>
               )}
-              <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>{fmtZahl(daten.verbrauch_summe_kwh, 1)}</td>
-              <td className={`${ZELLE} text-right tabular-nums ${
-                daten.pv_summe_kwh - daten.verbrauch_summe_kwh >= 0
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
-              }`}>
-                {fmtZahl(daten.pv_summe_kwh - daten.verbrauch_summe_kwh, 1)}
+              <td className={`${ZELLE} text-right tabular-nums text-gray-700 dark:text-gray-300`}>
+                {daten.verbrauch_summe_kwh != null ? fmtZahl(daten.verbrauch_summe_kwh, 1) : <Dash />}
               </td>
-              <td className={`${ZELLE} text-right tabular-nums text-red-600 dark:text-red-400`}>{fmtZahl(daten.netzbezug_summe_kwh, 1)}</td>
-              <td className={`${ZELLE} text-right tabular-nums text-cyan-600 dark:text-cyan-400`}>{fmtZahl(daten.einspeisung_summe_kwh, 1)}</td>
+              <td className={`${ZELLE} text-right tabular-nums ${
+                daten.verbrauch_summe_kwh == null
+                  ? ''
+                  : daten.pv_summe_kwh - daten.verbrauch_summe_kwh >= 0
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-600 dark:text-red-400'
+              }`}>
+                {daten.verbrauch_summe_kwh != null
+                  ? fmtZahl(daten.pv_summe_kwh - daten.verbrauch_summe_kwh, 1)
+                  : <Dash />}
+              </td>
+              <td className={`${ZELLE} text-right tabular-nums text-red-600 dark:text-red-400`}>
+                {daten.netzbezug_summe_kwh != null ? fmtZahl(daten.netzbezug_summe_kwh, 1) : <Dash />}
+              </td>
+              <td className={`${ZELLE} text-right tabular-nums text-cyan-600 dark:text-cyan-400`}>
+                {daten.einspeisung_summe_kwh != null ? fmtZahl(daten.einspeisung_summe_kwh, 1) : <Dash />}
+              </td>
               {hatSpeicher && <td />}
             </tr>
           </TableFoot>
