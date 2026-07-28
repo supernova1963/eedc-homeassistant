@@ -16,11 +16,17 @@ Drei Dinge werden hier gesichert:
    (`investitionen/crud.py` DC- und AC-Pfad, `investitionen/dashboards.py`),
    und was stattdessen passiert, steht in der Antwort statt im Log (P4).
 
-Bewusst **kein baumweiter Wächter**: die Dateiliste unten ist eine Regression
-über die namentlich migrierten Stellen. Ein echter Wächter für die
-Kapazitäts-Leseregel bleibt A31-3 — seine Vorbedingung ist seit A31-2 aber
-erfüllt: die drei Brutto-mit-Netto-Fallback-Konstrukte sind aufgelöst, alle
-13 + 3 Stellen lesen über die Helper, die Baseline im Backend-Baum ist 0.
+Seit **A31-3 ein baumweiter Wächter** (Abschnitt 3), nicht mehr eine Regression
+über eine Dateiliste. Die Vorbedingung dafür kam mit A31-2: die drei
+Brutto-mit-Netto-Fallback-Konstrukte sind aufgelöst, alle migrierten Stellen
+lesen über die Helper, die Baseline im Backend-Baum ist 0.
+
+**Die namentliche Dateiliste ist mit A31-3 entfallen**, nicht vergessen: der
+baumweite Test deckte jede ihrer 13 Einträge vollständig ab. Eine Liste, die
+nichts mehr sichert, aber bei jeder neuen Datei nachgepflegt werden müsste, ist
+Wartungslast ohne Gegenwert — und sie hätte den Wächter daneben schwächer
+aussehen lassen, als er ist. Was migriert wurde, steht im Commit und im
+Register, nicht in einer Testkonstante.
 
 Die **Netto**-Seite (`get_speicher_nutzbare_kapazitaet_kwh`, A31-2) hat ihre
 eigene Datei: `test_speicher_netto_kapazitaet.py`. Hier steht nur, was brutto
@@ -298,62 +304,70 @@ def test_graue_last_bleibt_unermittelt():
 
 
 # ============================================================================
-# 3. Regression über die migrierten Stellen (kein Wächter — s. Modul-Docstring)
+# 3. Wächter: die Kapazität wird baumweit nur über den SoT-Helper gelesen
+#    (ADR-002 P3-a, zweites Kennwert-Feld neben `leistung_kwp` — A31-3)
 # ============================================================================
 
 _BACKEND = Path(__file__).resolve().parent.parent
-
-# Die in A31-1 migrierten Lesestellen plus die drei, die A31-2 nachgezogen hat
-# (`investitionen/crud.py`, `investitionen/dashboards.py`, `api/routes/ha_export.py`
-# — vorher trugen sie je ein inline ausgeschriebenes Brutto-mit-Netto-Konstrukt).
-# Fällt eine zurück auf den Literal-/Kanon-Zugriff, ist der Helper nicht mehr SoT.
-_MIGRIERTE_DATEIEN = [
-    "services/pdf/builders/jahresbericht.py",
-    "services/energie_profil/tage_werte.py",
-    "services/daten_checker/stammdaten.py",
-    "api/routes/aktueller_monat.py",
-    "api/routes/cockpit/uebersicht.py",
-    "services/ha_export_prognose.py",
-    "api/routes/energie_profil/views.py",
-    "api/routes/import_export/helpers.py",
-    "services/community_service.py",
-    "core/berechnungen/co2_amortisation.py",
-    "api/routes/investitionen/crud.py",
-    "api/routes/investitionen/dashboards.py",
-    "api/routes/ha_export.py",
-]
 
 _ROH_ZUGRIFF = re.compile(
     r'(get\(\s*"kapazitaet_kwh"|\[\s*"kapazitaet_kwh"\s*\]'
     r'|PARAM_SPEICHER\[\s*"KAPAZITAET_KWH"\s*\])'
 )
 
+# Zwei Dateien dürfen den Schlüssel tragen — beide sind die Regel selbst, nicht
+# ihre Umgehung. Klartext statt stiller Auslassung (ADR-002 Pflicht Nr. 2):
+_WAECHTER_AUSNAHMEN = {
+    # Der Kanon führt die Schlüssel-Konstanten; ohne ihn gäbe es nichts zu prüfen.
+    "core/investition_parameter.py",
+    # Der SoT-Helper MUSS roh lesen — er ist die eine Stelle, die es darf.
+    "core/investition_kennwerte.py",
+}
 
-def test_migrierte_stellen_lesen_die_kapazitaet_nicht_mehr_roh():
-    treffer = {
-        pfad: len(_ROH_ZUGRIFF.findall((_BACKEND / pfad).read_text(encoding="utf-8")))
-        for pfad in _MIGRIERTE_DATEIEN
-    }
-    assert all(n == 0 for n in treffer.values()), (
-        f"Roh-Zugriff zurück: { {p: n for p, n in treffer.items() if n} }"
-    )
 
+def test_p3a_kapazitaet_nur_ueber_den_sot_helper():
+    """Baumweit: niemand außer dem SoT-Helper liest die Kapazität roh.
 
-def test_keine_ausnahmen_mehr_offen():
-    """Die A31-2-Vorbedingung für den Wächter (A31-3): im Backend-Baum liest
-    **niemand** die Kapazität mehr roh — Baseline 0, nicht „0 bis auf drei".
+    **Warum baumweit und nicht über eine Dateiliste** (so stand es bis A31-2):
+    eine namentliche Liste sichert nur die Stellen, die es beim Schreiben des
+    Tests schon gab. Genau daran ist die #229-Klasse jahrelang vorbeigelaufen —
+    `co2_amortisation.py` las per `getattr` und tauchte in keiner Erhebung auf
+    (ADR-002, P3-a-Zeile). Ein Wächter fängt auch die Stelle, die es heute noch
+    nicht gibt; eine Regression tut das nicht, und der Unterschied gehört
+    benannt statt behauptet.
 
-    Bewusst baumweit formuliert, obwohl der eigentliche Wächter noch aussteht:
-    fällt zwischen A31-2 und A31-3 eine neue Roh-Lesung an, ist sie hier zu
-    sehen, statt bis zum Wächter-Paket zu wachsen.
+    **Warum die Schreibseite hier kein Thema ist:** der Regex erfasst auch
+    `parameter["kapazitaet_kwh"] = …`, und die Baseline ist trotzdem 0 — im
+    Backend schreibt niemand den Schlüssel als Literal (Formular und Import
+    laufen über die Pydantic-Modelle). Fällt dieser Test künftig mit einem
+    Schreibpfad an, ist das eine echte neue Stelle, keine Falschmeldung.
     """
     treffer = {
         str(p.relative_to(_BACKEND)): len(_ROH_ZUGRIFF.findall(p.read_text(encoding="utf-8")))
         for p in _BACKEND.rglob("*.py")
-        if "tests" not in p.parts and p.name != "investition_parameter.py"
+        if "tests" not in p.parts
     }
-    offen = {p: n for p, n in treffer.items() if n and p != "core/investition_kennwerte.py"}
+    offen = {
+        p: n for p, n in treffer.items()
+        if n and p not in _WAECHTER_AUSNAHMEN
+    }
     assert offen == {}, f"Roh-Zugriff auf die Kapazität außerhalb des SoT-Helpers: {offen}"
+
+
+def test_p3a_kapazitaet_ausnahmen_sind_noch_belegt():
+    """Verhindert eine verwaiste Ausnahme, die später einen echten Treffer deckt.
+
+    Dieselbe Mechanik wie `test_p3a_baseline_ausnahmen_sind_noch_belegt` in
+    `test_wurzelmuster_konformitaet.py`: wer eine Ausnahme stehen lässt, deren
+    Grund weggefallen ist, hat ein Loch im Wächter statt einer Ausnahme.
+    """
+    for pfad in _WAECHTER_AUSNAHMEN:
+        datei = _BACKEND / pfad
+        assert datei.exists(), f"Ausnahme zeigt ins Leere: {pfad}"
+        assert _ROH_ZUGRIFF.search(datei.read_text(encoding="utf-8")), (
+            f"{pfad} steht als Ausnahme, trägt aber keinen Roh-Zugriff mehr — "
+            f"Eintrag löschen, sonst deckt er künftig einen echten Treffer."
+        )
 
 
 def test_der_zehn_kwh_default_ist_nirgends_zurueck():
