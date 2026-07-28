@@ -442,7 +442,7 @@ ist im HA-Export reiner **Fallback**, falls die Brutto-Kapazität fehlt.
 > (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem Vorliegen von
 > Messdaten greift, sowie in der Tages-**Vorschau** („Speicher voll um …",
 > `core/berechnungen/speicher_simulation.py`), die von 0 bis 100 % der Brutto-Kapazität simuliert —
-> wer bei 90 % abriegelt, ist real früher voll. Beides offen, siehe Backlog P2/B11.
+> wer bei 90 % abriegelt, ist real früher voll. Beides offen — als Zeile in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §P2/B11 („nutzbare Kapazität konsequent").
 
 ### 3.4 E-Auto-Einsparung
 
