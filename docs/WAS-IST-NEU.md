@@ -106,8 +106,16 @@ aber die erste:
   in ganzen Stunden. Unter dem Chart steht jetzt „13,9 kWh nutzbar".
 - **Mit der Uhrzeit ändern sich die Nachbar-Kacheln desselben Tages:** ein kleinerer Puffer nimmt
   weniger Überschuss auf. **Einspeisung rund 1 kWh höher**, **Eigenverbrauch entsprechend
-  niedriger**, **Autarkie 2–3 Prozentpunkte niedriger**. Das ist die Korrektur — vorher unterstellte
-  die Vorschau deinem Speicher eine Aufnahme, die er nicht leistet.
+  niedriger**. Das ist die Korrektur — vorher unterstellte die Vorschau deinem Speicher eine
+  Aufnahme, die er nicht leistet. An Tagen, an denen der Speicher abends früher leer ist, kann
+  auch die **Autarkie** etwas niedriger ausfallen; an Tagen ganz ohne Netzbezug bleibt sie
+  unverändert bei 100 %.
+- **Die Autarkie der Tages-Vorschau zeigte an sonnigen Tagen mehr als 100 %** — gemessen bis 125 %.
+  Das ist behoben: sie rechnet jetzt wie überall sonst „Verbrauch minus Netzbezug, geteilt durch
+  Verbrauch". Vorher zählte die Vorschau die **Speicherladung** zum Eigenverbrauch des Tages, und an
+  einem Tag mit viel Sonne und wenig Last wurde der Zähler größer als der Nenner. Die Werte sinken
+  dadurch auf plausible Größen; an Tagen ohne Netzbezug stehen weiter 100 %. **Monat, Jahr und Live
+  waren nie betroffen.**
 - Der Home-Assistant-Sensor **`eedc_speicher_voll_um`** zieht mit. Er zeigt dieselbe Vorschau und
   darf keine zweite Uhrzeit nennen.
 - In **Auswertungen → ROI** sinkt die jährliche Einsparung des Speichers — **aber nur, solange du

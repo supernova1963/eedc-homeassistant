@@ -24,6 +24,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.kennzahlen import (
+    autarkie_prozent,
+    eigenverbrauchsquote_prozent,
+)
 from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 from backend.core.exceptions import bad_request, not_found
 from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
@@ -565,13 +569,17 @@ async def get_monatsauswertung(
     einspeisung_kandidaten.sort(key=lambda p: p.wert_kw, reverse=True)
 
     # ── KPIs ──
+    # Beide Quoten über den Layer-SoT (ADR-001) statt inline: die Formeln standen
+    # hier ausgeschrieben und stimmten, aber dieselbe Kennzahl inline zu rechnen
+    # ist genau der Weg, auf dem N129 entstanden ist — an der dritten Stelle
+    # (Tagesvorschau) wich der Zähler ab, und kein Test sah es.
     eigenverbrauch_pv = pv_sum - einspeisung_sum
     autarkie = (
-        round((verbrauch_sum - netzbezug_sum) / verbrauch_sum * 100, 1)
+        round(autarkie_prozent(verbrauch_sum - netzbezug_sum, verbrauch_sum), 1)
         if verbrauch_sum > 0 else None
     )
     eigenverbrauch = (
-        round(eigenverbrauch_pv / pv_sum * 100, 1)
+        round(eigenverbrauchsquote_prozent(eigenverbrauch_pv, pv_sum), 1)
         if pv_sum > 0 else None
     )
 
@@ -1372,8 +1380,24 @@ async def get_tagesprognose(
                 soc_prozent=b.soc_prozent,
             ))
 
+        # `eigenverbrauch` ist der PV-Eigenverbrauch (was die Anlage selbst nutzt,
+        # inklusive der Speicherladung) — dieselbe Größe wie in
+        # `core/berechnungen/tagesbilanz.py`, deshalb gleich benannt.
         eigenverbrauch = sum_pv - sum_einspeisung
-        autarkie = (eigenverbrauch / sum_verbrauch * 100) if sum_verbrauch > 0 else 0.0
+        # N129: die Autarkie hat einen ANDEREN Zähler — den netzunabhängig
+        # gedeckten Verbrauch. Bis 2026-07-28 stand hier der PV-Eigenverbrauch,
+        # und weil der bei ladendem Speicher den Tagesverbrauch übersteigen kann,
+        # meldete die Vorschau Autarkiegrade bis 125 %. Der Layer-SoT
+        # (`kennzahlen.autarkie_prozent`) verzichtet ausdrücklich auf einen Cap
+        # mit der Begründung „strukturell ≤ 100 %, weil Eigenverbrauch Teilmenge
+        # des Gesamtverbrauchs ist" — diese Zusicherung gilt nur für den
+        # richtigen Zähler. Ein Cap wäre hier die falsche Antwort gewesen: er
+        # hätte 125 % auf 100 % gedrückt und den Fehler unsichtbar gemacht,
+        # statt ihn zu beheben (ADR-001: Formel im Layer, nicht inline).
+        autarkie = (
+            autarkie_prozent(sum_verbrauch - sum_netzbezug, sum_verbrauch)
+            if sum_verbrauch > 0 else 0.0
+        )
 
     return TagesPrognoseResponse(
         datum=datum.isoformat(),

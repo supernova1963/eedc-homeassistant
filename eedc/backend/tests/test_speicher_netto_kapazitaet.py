@@ -236,10 +236,24 @@ async def test_tagesvorschau_riegelt_bei_der_nutzbaren_kapazitaet_ab(db, monkeyp
     assert ohne_netto.speicher_kapazitaet_kwh == pytest.approx(_BRUTTO_KWH)
 
     # Die Nebenwirkung ist real und geht in die Antwort: weniger Puffer ⇒ mehr
-    # Einspeisung, weniger Eigenverbrauch, niedrigere Autarkie.
+    # Einspeisung, weniger PV-Eigenverbrauch.
     assert mit_netto.einspeisung_summe_kwh > ohne_netto.einspeisung_summe_kwh
     assert mit_netto.eigenverbrauch_kwh < ohne_netto.eigenverbrauch_kwh
-    assert mit_netto.autarkie_prozent < ohne_netto.autarkie_prozent
+
+    # Die AUTARKIE dagegen bleibt hier beidseitig 100 % — und das ist richtig:
+    # dieser Tag kommt in beiden Fällen ohne Netzbezug aus, und wer nichts aus
+    # dem Netz zieht, ist vollständig autark, egal wie groß sein Speicher ist.
+    #
+    # Bis zum N129-Fix (2026-07-28) stand hier `assert mit_netto.autarkie <
+    # ohne_netto.autarkie` und war grün — weil die Vorschau die Autarkie damals
+    # aus dem PV-Eigenverbrauch rechnete statt aus dem netzunabhängig gedeckten
+    # Verbrauch. Die Assertion prüfte also nicht die Autarkie, sondern den
+    # Fehler. Sie ist bewusst ersetzt statt gelockert: eine Autarkie, die mit
+    # der Speichergröße sinkt, OBWOHL kein Netzbezug entsteht, wäre wieder N129.
+    assert mit_netto.netzbezug_summe_kwh == pytest.approx(0.0, abs=0.01)
+    assert ohne_netto.netzbezug_summe_kwh == pytest.approx(0.0, abs=0.01)
+    assert mit_netto.autarkie_prozent == pytest.approx(100.0)
+    assert ohne_netto.autarkie_prozent == pytest.approx(100.0)
 
     # E17: die Zahlen ändern sich, die Antwort schweigt dazu (kein P4-Hinweis).
     assert mit_netto.hinweise == []

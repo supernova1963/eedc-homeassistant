@@ -373,3 +373,100 @@ async def test_solcast_profil_von_heute_wird_als_naeherung_ausgewiesen(db, monke
     heute = await views.get_tagesprognose(anlage_id=anlage_id, datum=HEUTE, db=db)
     assert heute.pv_quelle == "solcast"
     assert heute.hinweise == []
+
+
+# ============================================================================
+# N129 — die Autarkie der Tagesvorschau kann nicht über 100 % steigen
+# ============================================================================
+
+async def _anlage_mit_speicher(db) -> int:
+    """Anlage mit Speicher UND Verbrauchshistorie — der Fall, der 125 % erzeugte.
+
+    Der Speicher ist der Auslöser: seine Ladung ist PV-Eigenverbrauch, aber
+    kein Verbrauch DES TAGES. Wer den PV-Eigenverbrauch durch den Tagesverbrauch
+    teilt, bekommt an einem sonnigen Tag mit vollem Laden mehr als 100 %.
+    """
+    from backend.models import Anlage, Investition, TagesEnergieProfil
+
+    anlage = Anlage(
+        anlagenname="N129", leistung_kwp=10.0, latitude=48.0, longitude=11.0,
+    )
+    db.add(anlage)
+    await db.flush()
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Süd",
+        anschaffungsdatum=date(2024, 1, 1), leistung_kwp=10.0, neigung_grad=30.0,
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="speicher", bezeichnung="Speicher",
+        anschaffungsdatum=date(2024, 1, 1),
+        parameter={"kapazitaet_kwh": 10.0},
+    ))
+    # Verbrauchsprognose braucht >= 3 vollständige Tage Historie; das Modell
+    # hält EINE Zeile je Stunde, nicht ein JSON je Tag.
+    for i in range(1, 8):
+        tag = HEUTE - timedelta(days=i)
+        for h in range(24):
+            db.add(TagesEnergieProfil(
+                anlage_id=anlage.id, datum=tag, stunde=h,
+                verbrauch_kw=0.3, pv_kw=0.0, netzbezug_kw=0.3, einspeisung_kw=0.0,
+            ))
+    await db.commit()
+    return anlage.id
+
+
+async def test_autarkie_der_vorschau_bleibt_unter_100_prozent(db, monkeypatch):
+    """N129: der Zähler ist der netzunabhängig gedeckte Verbrauch, nicht der
+    PV-Eigenverbrauch.
+
+    Bis 2026-07-28 stand hier `(pv - einspeisung) / verbrauch`. Die Speicher-
+    ladung steckt im Zähler, gehört aber nicht in den Nenner desselben Tages —
+    gemessen kamen so 96,8 bis 125,1 % heraus. Der Layer-SoT
+    (`kennzahlen.autarkie_prozent`) verzichtet ausdrücklich auf einen Cap mit
+    der Begründung „strukturell <= 100 %"; diese Zusicherung gilt nur für den
+    richtigen Zähler. Deshalb prüft dieser Test die ZAHL, nicht den Cap.
+    """
+    from backend.api.routes.energie_profil import views
+
+    anlage_id = await _anlage_mit_speicher(db)
+
+    # Viel PV, wenig Verbrauch: der Speicher lädt, die Einspeisung bleibt klein.
+    async def kanon_liefert(*a, **kw):
+        return [0.0] * 7 + [3.0] * 10 + [0.0] * 7
+
+    monkeypatch.setattr(views, "_pv_stunden_aus_kanon", kanon_liefert)
+
+    resp = await views.get_tagesprognose(anlage_id=anlage_id, datum=MORGEN, db=db)
+
+    assert resp.autarkie_prozent is not None
+    assert 0.0 <= resp.autarkie_prozent <= 100.0, (
+        f"Autarkie {resp.autarkie_prozent} % — der Zähler ist wieder der "
+        f"PV-Eigenverbrauch statt des netzunabhängig gedeckten Verbrauchs (N129)."
+    )
+
+
+async def test_autarkie_der_vorschau_rechnet_wie_die_monatsauswertung(db, monkeypatch):
+    """Symmetrie: dieselbe Kennzahl, derselbe Layer-SoT.
+
+    N129 entstand, weil drei Stellen die Autarkie inline rechneten und eine
+    davon abwich, ohne dass ein Test es sah ([[feedback_aggregator_symmetrie]]).
+    Dieser Test bindet die Vorschau an die Definition statt an eine Zahl:
+    Autarkie == (Verbrauch - Netzbezug) / Verbrauch, über den SoT gerechnet.
+    """
+    from backend.api.routes.energie_profil import views
+    from backend.core.berechnungen.kennzahlen import autarkie_prozent
+
+    anlage_id = await _anlage_mit_speicher(db)
+
+    async def kanon_liefert(*a, **kw):
+        return [0.0] * 7 + [3.0] * 10 + [0.0] * 7
+
+    monkeypatch.setattr(views, "_pv_stunden_aus_kanon", kanon_liefert)
+
+    resp = await views.get_tagesprognose(anlage_id=anlage_id, datum=MORGEN, db=db)
+
+    erwartet = autarkie_prozent(
+        resp.verbrauch_summe_kwh - resp.netzbezug_summe_kwh,
+        resp.verbrauch_summe_kwh,
+    )
+    assert resp.autarkie_prozent == pytest.approx(round(erwartet, 1), abs=0.11)
