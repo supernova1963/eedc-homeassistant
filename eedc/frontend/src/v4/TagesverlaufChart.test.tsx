@@ -17,6 +17,7 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
     gesamtverbrauch: 24, direktverbrauch: 15,
     autarkie: 75, evQuote: 60, spezErtrag: 3,
     speicher_ladung: null, speicher_entladung: null, speicher_effizienz: null,
+    speicher_vollzyklen: null,
     wp_strom: null,
     einspeise_erloes: 1, ev_ersparnis: 2, netzbezug_kosten: 1.5,
     netto_ertrag: 3, netto_bilanz: 1.5, co2_einsparung: 11.4,

@@ -311,7 +311,8 @@ Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung?
 
 ### 3.3 Speicher
 
-- **Ladezyklen** (Vollzyklen) — ausschließlich aus dem stationären Speicher-SoC; E-Auto-SoC ist zuverlässig ausgeschlossen
+- **Vollzyklen** = entladene Energie ÷ Kapazität — dieselbe Zahl in Tag, Monat, Jahr, PDF und HA-Sensor. Gezählt wird die *entnommene* Energie (darauf zielen Hersteller-Garantien), geteilt durch die **Brutto**-Kapazität. Wer eine „nutzbare Kapazität" gepflegt hat, findet sie beim Wirkungsgrad wieder, nicht hier ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
+- **SoC-Hübe** (Energieprofil-Tagestabelle, optionale Spalte) — die zweite, andere Zahl: sie summiert die tatsächlichen Ladestands-Bewegungen (ein voller Hub 0→100→0 = 1). Wer den Speicher zwischen 10 und 90 % fährt, sieht hier 0,8 pro Hub. Sie braucht einen SoC-Sensor und ist ausschließlich aus dem **stationären** Speicher-SoC gebildet; E-Auto-SoC ist zuverlässig ausgeschlossen.
 - **Effizienz** = Entladung / Ladung × 100 % (durchgängig cyan)
 - **Degradation** (Kapazitätsverlust über die Zeit)
 - **Arbitrage-Analyse** (wenn aktiviert): Netzladung zu günstigem Strom, Entladung bei hohem Preis, Arbitrage-Gewinn

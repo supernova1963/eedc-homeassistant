@@ -18,7 +18,7 @@ from datetime import date
 import pytest
 
 from backend.api.routes.energie_profil.views import get_monatsauswertung
-from backend.models import Anlage, Strompreis
+from backend.models import Anlage, Investition, Strompreis
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.energie_profil.tage_werte import baue_tage_werte
 
@@ -31,7 +31,7 @@ def _stunde(anlage_id: int, tag: date, h: int, pv, vb, ei, nz, batt=None, wp=Non
     )
 
 
-async def _anlage_mit_tagesprofil(db) -> int:
+async def _anlage_mit_tagesprofil(db, *, speicher_kwh: float | None = None) -> int:
     """3 Maitage, je 4 belegte Stunden, gemischte Bilanz inkl. NULL-Stunde,
     Batterie-Lade/Entlade und WP-Last."""
     anlage = Anlage(anlagenname="TageWerteSym", leistung_kwp=10.0)
@@ -65,6 +65,13 @@ async def _anlage_mit_tagesprofil(db) -> int:
         _stunde(aid, t3, 21, 0.0, 1.5, 0.0, 1.5, batt=0.0, wp=0.5),
     ]
     db.add_all(rows)
+
+    if speicher_kwh:
+        db.add(Investition(
+            anlage_id=aid, typ="speicher", bezeichnung="Testspeicher",
+            anschaffungsdatum=date(2024, 1, 1),
+            parameter={"kapazitaet_kwh": speicher_kwh},
+        ))
 
     # Eine Tageszusammenfassung mit tag-nativen Feldern (Tag 1)
     db.add(TagesZusammenfassung(
@@ -121,3 +128,39 @@ async def test_tage_werte_finanz_additiv_und_quoten(db):
     assert t1.peak_pv_kw == 6.0
     assert t1.performance_ratio == 0.85
     assert t1.spezErtrag is not None  # PV vorhanden, kWp=10
+
+
+@pytest.mark.asyncio
+async def test_tages_vollzyklen_folgen_dem_kanon(db):
+    """Tages-Kachel „Vollzyklen" = Entladung ÷ Kapazität — wie Monat und Sensor.
+
+    Bis 2026-07-28 zeigte dieselbe Kachel auf Tagesebene `batterie_vollzyklen`
+    (ΣΔSoC ÷ 200, hier bewusst auf 0,4 geseedet) — eine andere Größe, die sich
+    über die Tage nicht zum Monatswert summiert. Der ΔSoC-Wert bleibt als
+    „SoC-Hübe" erhalten und darf die neue Zahl nicht mehr beeinflussen.
+    """
+    aid = await _anlage_mit_tagesprofil(db, speicher_kwh=10.0)
+    anlage = await db.get(Anlage, aid)
+
+    tage = await baue_tage_werte(db, anlage, date(2026, 5, 1), date(2026, 5, 31))
+    je_tag = {t.datum: t for t in tage}
+
+    # Tag 1 entlädt 1,0 kWh (batt=+1.0), Tag 2 0,5 kWh, Tag 3 gar nicht.
+    assert je_tag[date(2026, 5, 10)].speicher_vollzyklen == 0.1
+    assert je_tag[date(2026, 5, 11)].speicher_vollzyklen == 0.05
+    assert je_tag[date(2026, 5, 12)].speicher_vollzyklen is None
+
+    # Die ΔSoC-Größe steht unabhängig daneben und wurde NICHT übernommen.
+    assert je_tag[date(2026, 5, 10)].batterie_vollzyklen == 0.4
+
+
+@pytest.mark.asyncio
+async def test_tages_vollzyklen_ohne_speicher_bleiben_leer(db):
+    """Ohne gepflegte Kapazität kein 0-Ersatz — sonst läse sich „nicht
+    gepflegt" wie „nie zyklisiert"."""
+    aid = await _anlage_mit_tagesprofil(db)
+    anlage = await db.get(Anlage, aid)
+
+    tage = await baue_tage_werte(db, anlage, date(2026, 5, 1), date(2026, 5, 31))
+
+    assert all(t.speicher_vollzyklen is None for t in tage)

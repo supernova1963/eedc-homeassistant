@@ -154,6 +154,7 @@ from backend.core.berechnungen.speicher import (
     MonatsEffizienz,
     gleitende_effizienz,
     speicher_effizienz_prozent,
+    vollzyklen,
 )
 from backend.core.berechnungen.speicher_simulation import (
     SpeicherSimErgebnis,
@@ -272,6 +273,7 @@ __all__ = [
     "MonatsEffizienz",
     "gleitende_effizienz",
     "speicher_effizienz_prozent",
+    "vollzyklen",
     "SPEICHER_IST_MIN_MONATE",
     "SOC_DRIFT_SCHWELLE_PROZENTPUNKTE",
     "ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE",

@@ -78,6 +78,7 @@ from backend.core.berechnungen import (
     speicher_effizienz_prozent,
     spezifischer_ertrag_kwh_kwp,
     summe_graue_last,
+    vollzyklen as berechne_vollzyklen,
 )
 from backend.api.routes.investitionen.crud import InvestitionResponse
 
@@ -822,11 +823,13 @@ async def get_speicher_dashboard(
                 f"{durchsatz}"
             )
 
-        # Zyklen (basierend auf Kapazität)
+        # Vollzyklen über den Layer-SoT — ENTLADUNG ÷ Kapazität (Kanon seit
+        # 2026-07-28). Vorher stand hier die Ladung, während der HA-Sensor
+        # schon die Entladung nahm: zwei Zahlen unter demselben Namen.
         params = speicher.parameter or {}
         kapazitaet = params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 10)
         arbitrage_faehig = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
-        vollzyklen = gesamt_ladung / kapazitaet if kapazitaet > 0 else 0
+        vollzyklen = berechne_vollzyklen(gesamt_entladung, kapazitaet) or 0
 
         # Etappe C (#264): SoC-korrigierter η-IST pro Speicher.
         # aggregiere_speicher_ist als SoT-Helper statt Parallel-Summe.

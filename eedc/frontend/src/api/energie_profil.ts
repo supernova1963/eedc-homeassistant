@@ -97,6 +97,8 @@ export interface TagWerte {
   // Speicher
   speicher_ladung: number | null
   speicher_entladung: number | null
+  /** Vollzyklen des Tages = Entladung ÷ Kapazität (Backend-SoT). */
+  speicher_vollzyklen: number | null
   speicher_effizienz: number | null
   // Wärmepumpe (nur Strom je Tag)
   wp_strom: number | null

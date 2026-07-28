@@ -405,27 +405,44 @@ Arbitrage-Einsparung  = Arbitrage-Anteil * Arbitrage_Spread / 100
 Jahres-Einsparung     = PV-Einsparung + Arbitrage-Einsparung
 ```
 
-#### Kapazitäts-Basis: Brutto, nicht nutzbar
+#### Vollzyklen — eine Definition für alle Sichten
 
-Alle Zyklen- und Einsparungs-Rechnungen teilen durch die **Brutto**-Kapazität
-`parameter["kapazitaet_kwh"]`. `parameter["nutzbare_kapazitaet_kwh"]` (optional, DoD-Reserve —
-wer 10/90 fährt, trägt bei 10 kWh brutto 8 kWh ein) wirkt **ausschließlich** auf das
-η-SoC-Delta in `services/speicher_wirtschaftlichkeit.py`; im HA-Export ist es nur der
-**Fallback**, wenn die Brutto-Kapazität nicht gepflegt ist.
+```
+Vollzyklen = Entladung_kWh ÷ Kapazität_brutto_kWh
+```
 
-> eedc kennt und braucht keinen Ziel-SOC: Vollzyklen und Wirkungsgrad kommen aus
-> **gemessenen** Lade-/Entlademengen. Eine Annahme steckt nur in der Wirtschaftlichkeits-
-> **Prognose** (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem
-> Vorliegen von Messdaten greift — wer dort realistischer rechnen will, pflegt die nutzbare
-> Kapazität.
+**SoT:** `core/berechnungen/speicher.py::vollzyklen`. Alle Sichten rufen ihn auf —
+Komponenten-Hub (`investitionen/dashboards.py`), Cockpit Tag (`energie_profil/tage_werte.py`) und
+Monat/Jahr (`aktueller_monat.py`), PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
+Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie)
+und `test_tage_werte_symmetrie.py`.
 
-Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py`.
+**Warum die Entladung:** Ein Vollzyklus meint die einmal *entnommene* Kapazität — die Größe, auf die
+sich Hersteller-Garantien beziehen, und unabhängig von den Wandlungsverlusten des Ladepfads. Sie ist
+außerdem ein Energiedurchsatz und damit über Tag → Monat → Jahr additiv.
 
-**Offen (Nebenbefund R22-4):** die Pfade zählen unterschiedliche **Größen** — Speicher-Dashboard
-und Monatsbericht rechnen `Ladung ÷ Kapazität`, HA-Sensor und Jahresbericht
-`Entladung ÷ Kapazität`. Bei 95 % Wirkungsgrad sind das ~5 % Unterschied auf derselben Anlage.
-Eine Angleichung ändert sichtbare Zahlen und ist deshalb eine bewusste Entscheidung; der
-Ist-Zustand ist im o. g. Test festgehalten.
+**Warum Brutto im Nenner:** `nutzbare_kapazitaet_kwh` ist optional und meist nicht gepflegt; ein
+Nenner, der je nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend leicht konservativer
+Wert. Das Feld wirkt deshalb nur auf das η-SoC-Delta (`services/speicher_wirtschaftlichkeit.py`) und
+ist im HA-Export reiner **Fallback**, falls die Brutto-Kapazität fehlt.
+
+> **Abgrenzung „SoC-Hübe"** (`TagesZusammenfassung.batterie_vollzyklen` = ΣΔSoC ÷ 200): eine andere
+> Kennzahl, die reale Lade-Hübe misst und damit als einzige eine 10/90-Fahrweise abbildet (ein voller
+> Hub = 160 pp = 0,8). Sie ist ein Bestandsmaß, hängt an einem SoC-Sensor und ist **kein** Ersatz für
+> die Vollzyklen. Sichtbar in der Energieprofil-Tagestabelle unter diesem Namen.
+
+> **Historie:** Bis 2026-07-28 rechneten vier von fünf Stellen mit der **Ladung** und nur der
+> HA-Sensor mit der Entladung; die Tages-Kachel zeigte sogar die ΔSoC-Größe unter dem Namen
+> „Vollzyklen". Auf derselben Anlage standen dadurch Zahlen, die um den Speicher-Wirkungsgrad
+> auseinanderlagen (gemessen 10,97 gegen 8,57 bei η 78 %). Kein Test hat das bemerkt — daher jetzt
+> der Symmetrie-Test über alle Pfade.
+
+> eedc kennt und braucht keinen Ziel-SOC: Vollzyklen und Wirkungsgrad kommen aus **gemessenen**
+> Lade-/Entlademengen. Eine Annahme steckt nur in der Wirtschaftlichkeits-**Prognose**
+> (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem Vorliegen von
+> Messdaten greift, sowie in der Tages-**Vorschau** („Speicher voll um …",
+> `core/berechnungen/speicher_simulation.py`), die von 0 bis 100 % der Brutto-Kapazität simuliert —
+> wer bei 90 % abriegelt, ist real früher voll. Beides offen, siehe Backlog P2/B11.
 
 ### 3.4 E-Auto-Einsparung
 

@@ -55,6 +55,46 @@ def speicher_effizienz_prozent(
     return entladung_kwh / ladung_kwh * 100.0
 
 
+def vollzyklen(
+    entladung_kwh: Optional[float], kapazitaet_kwh: Optional[float]
+) -> Optional[float]:
+    """Vollzyklen-Äquivalent: **entladene** Energie ÷ Kapazität.
+
+    Der Kanon für alle Sichten (Komponenten-Hub, Cockpit Tag/Monat/Jahr,
+    PDF-Jahresbericht, HA-Sensor `speicher_zyklen`). Entscheidung Gernot
+    2026-07-28 nach der Erhebung zur Rainer-PN 89768.
+
+    **Warum die Entladung und nicht die Ladung:** ein Vollzyklus meint die
+    einmal *entnommene* Kapazität — das ist die Größe, auf die sich
+    Hersteller-Garantien beziehen, und sie ist unabhängig von den
+    Wandlungsverlusten des Ladepfads. Bis 2026-07-28 rechneten vier von fünf
+    Stellen mit der **Ladung** und nur der HA-Sensor mit der Entladung; auf
+    derselben Anlage standen dadurch zwei Zahlen unter demselben Namen, die
+    genau um den Speicher-Wirkungsgrad auseinanderlagen (gemessen: 10,97 vs.
+    8,57 bei η 78 %).
+
+    **Warum die BRUTTO-Kapazität im Nenner:** `nutzbare_kapazitaet_kwh` ist
+    optional und bei den meisten Anlagen nicht gepflegt — ein Nenner, der je
+    nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend etwas
+    konservativer. Siehe `docs/BERECHNUNGEN.md` §3.3.
+
+    **Abgrenzung:** Die ΔSoC-Größe aus dem Energieprofil-Aggregator
+    (`TagesZusammenfassung.batterie_vollzyklen`) misst etwas anderes — reale
+    SoC-Hübe, die eine 10/90-Fahrweise abbilden. Sie ist ein Bestandsmaß und
+    damit nicht additiv über Tage; sie heißt deshalb „SoC-Hübe" und ist
+    bewusst KEIN Ersatz für diesen Wert.
+
+    Gibt `None` zurück, wenn keine Kapazität gepflegt ist oder keine Entladung
+    vorliegt — bewusst kein 0-Ersatz, sonst sähe „nicht gepflegt" wie „nie
+    zyklisiert" aus. Ungerundet; die Anzeige rundet.
+    """
+    if not kapazitaet_kwh or kapazitaet_kwh <= 0:
+        return None
+    if not entladung_kwh or entladung_kwh <= 0:
+        return None
+    return entladung_kwh / kapazitaet_kwh
+
+
 def gleitende_effizienz(
     monats_reihe: list[tuple[int, int, float, float]],
     fenster: int = EFFIZIENZ_FENSTER_MONATE,

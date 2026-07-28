@@ -25,6 +25,7 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     spezifischer_ertrag_kwh_kwp,
+    vollzyklen as berechne_vollzyklen,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.utils.sonstige_positionen import (
@@ -450,7 +451,8 @@ async def build_jahresbericht_context(
     co2_emob = emob_km * 0.12 if hat_emobilitaet else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 
-    speicher_zyklen = _safe_div(speicher_ladung, speicher_kapazitaet) if speicher_kapazitaet else None
+    # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon 2026-07-28).
+    speicher_zyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
     speicher_eff = _safe_div(speicher_entladung, speicher_ladung) * 100 if speicher_ladung else None
     # JAZ/COP nur wenn beide Seiten gemessen sind (Klima ohne Wärmemengenzähler).
     wp_cop = _safe_div(wp_waerme, wp_strom) if (wp_strom and wp_waerme) else None

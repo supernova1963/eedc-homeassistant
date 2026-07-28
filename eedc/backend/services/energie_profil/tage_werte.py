@@ -30,9 +30,11 @@ from backend.core.berechnungen import (
     bilanz_aus_stundenrows,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
+    vollzyklen as berechne_vollzyklen,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 
@@ -78,6 +80,17 @@ async def baue_tage_werte(
     tz_pro_tag: dict[date, TagesZusammenfassung] = {
         t.datum: t for t in tz_result.scalars().all()
     }
+
+    # Speicher-Kapazität für die Tages-Vollzyklen. Pro Tag ausgewertet, weil ein
+    # Speicher mitten im Zeitraum dazukommen oder stillgelegt werden kann
+    # ([[feedback_anschaffungsdatum_grenze]]).
+    speicher_result = await db.execute(
+        select(Investition).where(and_(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == "speicher",
+        ))
+    )
+    speicher_invs = list(speicher_result.scalars().all())
 
     alle_tage = sorted(set(tep_pro_tag) | set(tz_pro_tag))
     tarif_cache: dict[date, dict] = {}
@@ -128,6 +141,13 @@ async def baue_tage_werte(
             speicher_ladung=_nz(bilanz.speicher_ladung_kwh),
             speicher_entladung=_nz(bilanz.speicher_entladung_kwh),
             speicher_effizienz=_r(bilanz.speicher_effizienz_prozent, 1),
+            speicher_vollzyklen=_r(berechne_vollzyklen(
+                bilanz.speicher_entladung_kwh,
+                sum(
+                    (i.parameter or {}).get("kapazitaet_kwh", 0) or 0
+                    for i in speicher_invs if i.ist_aktiv_an(tag)
+                ),
+            ), 2),
             wp_strom=_nz(bilanz.wp_strom_kwh),
             # Finanzen
             einspeise_erloes=round(finanz.einspeise_erloes_euro, 2),

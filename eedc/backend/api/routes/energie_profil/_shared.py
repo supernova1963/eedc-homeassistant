@@ -338,6 +338,12 @@ class TagWerteResponse(BaseModel):
     speicher_ladung: Optional[float] = None
     speicher_entladung: Optional[float] = None
     speicher_effizienz: Optional[float] = None
+    # Vollzyklen des Tages = Entladung ÷ Kapazität (Kanon, Layer-SoT
+    # `core/berechnungen/speicher.vollzyklen`). Bis 2026-07-28 zeigte die
+    # Tages-Kachel stattdessen `batterie_vollzyklen` (ΔSoC ÷ 200) — eine
+    # andere Größe unter demselben Namen, die sich über Tage nicht zum
+    # Monatswert aufsummiert.
+    speicher_vollzyklen: Optional[float] = None
     # Wärmepumpe (nur Strom je Tag ableitbar; Wärme/COP bleiben monat-only)
     wp_strom: Optional[float] = None
     # Finanzen (€) — einfaches lineares Modell wie createMonatsZeitreihe

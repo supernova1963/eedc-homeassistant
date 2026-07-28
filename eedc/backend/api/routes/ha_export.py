@@ -29,6 +29,7 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
     monatsgewichte_aus_pvgis,
+    vollzyklen as berechne_vollzyklen,
 )
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from datetime import date
@@ -720,8 +721,8 @@ async def calculate_anlage_sensors(
 
     if batterie_ladung > 0:
         speicher_effizienz = (batterie_entladung / batterie_ladung) * 100
-    if speicher_kapazitaet > 0 and batterie_entladung > 0:
-        speicher_zyklen = batterie_entladung / speicher_kapazitaet
+    # Layer-SoT statt eigener Division — dieselbe Zahl wie Hub/Monat/PDF.
+    speicher_zyklen = berechne_vollzyklen(batterie_entladung, speicher_kapazitaet)
 
     # Sensor-Werte erstellen
     sensor_values = []

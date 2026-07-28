@@ -1,21 +1,24 @@
-"""Vollzyklen rechnen überall gegen dieselbe Kapazitäts-Basis: BRUTTO.
+"""Vollzyklen: EINE Definition für alle Sichten — Entladung ÷ Brutto-Kapazität.
 
-R22-4 (PN 89768, Rainer): „eedc nimmt 100 % SOC an" — tatsächlich rechnet eedc
-die Zyklen aus GEMESSENEN Werten, teilt sie aber durch die BRUTTO-Kapazität.
-`nutzbare_kapazitaet_kwh` (DoD-Reserve, bei Rainers 10/90-Fahrweise also 8 von
-10 kWh) wirkt bewusst NUR auf das η-SoC-Delta, nicht auf die Zyklen.
+Erhebung zur Rainer-PN 89768 (2026-07-28) förderte drei parallele Definitionen
+unter demselben Namen „Vollzyklen" zutage:
 
-Ein Kommentar in `ha_export.py` behauptete das Gegenteil („optionaler
-User-Override") — wer ihm folgte und die `or`-Kette drehte, hätte den HA-Sensor
-gegen Dashboard und Monatsbericht laufen lassen, ohne dass ein Test angeschlagen
-hätte. Genau diese Basis pinnen die Tests hier.
+* Komponenten-Hub, Cockpit-Monat/Jahr, PDF-Jahresbericht → ``Ladung ÷ Kapazität``
+* HA-Sensor ``speicher_zyklen``                          → ``Entladung ÷ Kapazität``
+* Cockpit-**Tag** (dieselbe KPI-Kachel!)                 → ``ΣΔSoC ÷ 200``
 
-NICHT gepinnt, sondern nur festgehalten: die beiden Pfade zählen unterschiedliche
-GRÖSSEN — Dashboard/Monatsbericht die Ladung, der HA-Sensor die Entladung. Bei
-95 % Wirkungsgrad sind das ~5 % Unterschied auf derselben Anlage. Das ist ein
-offener Punkt (R22-4 Nebenbefund), keine beschlossene Konvention; der letzte Test
-hält den Ist-Zustand fest, damit eine Angleichung eine sichtbare Entscheidung
-wird und kein stiller Nebeneffekt (docs/BERECHNUNGEN.md §Speicher).
+Auf derselben Anlage standen dadurch zwei Zahlen unter einem Namen, die genau
+um den Speicher-Wirkungsgrad auseinanderlagen (gemessen an der Demo-Anlage:
+10,97 gegen 8,57 bei η 78 %) — und die Tages-Kachel summierte sich systematisch
+nicht auf den Monatswert, weil ΔSoC ein Bestandsmaß ist und kein Durchsatz.
+
+Entscheidung Gernot 2026-07-28: Kanon ist **Entladung ÷ Brutto-Kapazität**
+(`core/berechnungen/speicher.vollzyklen`, docs/BERECHNUNGEN.md §3.3). Die
+ΔSoC-Größe bleibt als eigene Kennzahl „SoC-Hübe" erhalten — sie ist die
+einzige, die eine 10/90-Fahrweise abbildet.
+
+Diese Tests sichern beides: den Nenner (brutto, nicht `nutzbare_kapazitaet_kwh`)
+und die Symmetrie der Pfade. Fällt einer, ist eine Sicht ausgeschert.
 """
 
 from __future__ import annotations
@@ -25,21 +28,23 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from backend.core.berechnungen import vollzyklen
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.api.routes.investitionen.dashboards import get_speicher_dashboard
 from backend.api.routes.ha_export import calculate_anlage_sensors
+from backend.api.routes.aktueller_monat import get_aktueller_monat
 
-# 10 kWh brutto, 8 kWh nutzbar (Rainers 10/90). Ladung 1100, Entladung 1000 kWh.
+# 10 kWh brutto, 8 kWh nutzbar (Rainers 10/90). Ladung 1100, Entladung 1000 kWh
+# ⇒ Kanon 100,0 Zyklen. Die verworfenen Lesarten lägen bei 110,0 (Ladung) bzw.
+# 125,0 (Entladung ÷ nutzbar) — weit genug auseinander, um jede Verwechslung
+# auffallen zu lassen.
 _BRUTTO_KWH = 10.0
 _NUTZBAR_KWH = 8.0
 _LADUNG_KWH = 1100.0
 _ENTLADUNG_KWH = 1000.0
-# Erwartungen gegen Brutto …
-_ZYKLEN_LADUNG_BRUTTO = 110.0
-_ZYKLEN_ENTLADUNG_BRUTTO = 100.0
-# … und die Werte, die bei einer Netto-Basis herauskämen (dürfen NICHT auftreten).
-_ZYKLEN_LADUNG_NETTO = 137.5
-_ZYKLEN_ENTLADUNG_NETTO = 125.0
+_KANON = 100.0
+_LADUNGS_LESART = 110.0
+_NETTO_LESART = 125.0
 
 
 async def _lade(db, anlage_id: int) -> Anlage:
@@ -78,7 +83,16 @@ async def _seed(db) -> Anlage:
     return await _lade(db, anlage.id)
 
 
-async def test_speicher_dashboard_teilt_durch_die_bruttokapazitaet(db):
+def test_helper_rechnet_gegen_die_entladung():
+    assert vollzyklen(_ENTLADUNG_KWH, _BRUTTO_KWH) == _KANON
+    # Ohne Kapazität oder ohne Entladung: None statt 0 — „nicht gepflegt" darf
+    # nicht wie „nie zyklisiert" aussehen.
+    assert vollzyklen(_ENTLADUNG_KWH, 0) is None
+    assert vollzyklen(None, _BRUTTO_KWH) is None
+    assert vollzyklen(0, _BRUTTO_KWH) is None
+
+
+async def test_speicher_dashboard_folgt_dem_kanon(db):
     anlage = await _seed(db)
 
     result = await get_speicher_dashboard(
@@ -88,23 +102,53 @@ async def test_speicher_dashboard_teilt_durch_die_bruttokapazitaet(db):
 
     zus = result[0].zusammenfassung
     assert zus["kapazitaet_kwh"] == _BRUTTO_KWH
-    assert zus["vollzyklen"] == _ZYKLEN_LADUNG_BRUTTO, (
-        f"Zyklen gegen die nutzbare Kapazität gerechnet? {zus['vollzyklen']} "
-        f"(brutto {_ZYKLEN_LADUNG_BRUTTO}, netto {_ZYKLEN_LADUNG_NETTO})"
+    assert zus["vollzyklen"] == _KANON, (
+        f"{zus['vollzyklen']} — Ladungs-Lesart wäre {_LADUNGS_LESART}, "
+        f"Netto-Nenner {_NETTO_LESART}"
     )
 
 
-async def test_ha_sensor_teilt_durch_die_bruttokapazitaet(db):
+async def test_monatsbericht_folgt_dem_kanon(db):
+    anlage = await _seed(db)
+
+    result = await get_aktueller_monat(anlage_id=anlage.id, jahr=2026, monat=4, db=db)
+
+    assert result.speicher_vollzyklen == _KANON, (
+        f"{result.speicher_vollzyklen} — Ladungs-Lesart wäre {_LADUNGS_LESART}"
+    )
+
+
+async def test_ha_sensor_folgt_dem_kanon(db):
     anlage = await _seed(db)
 
     sensoren = await calculate_anlage_sensors(db, anlage)
 
     zyklen = [s for s in sensoren if s.definition.key == "speicher_zyklen"]
     assert len(zyklen) == 1, "Zyklen-Sensor fehlt im Export"
-    assert zyklen[0].value == _ZYKLEN_ENTLADUNG_BRUTTO, (
-        f"HA-Sensor auf Netto-Basis? {zyklen[0].value} "
-        f"(brutto {_ZYKLEN_ENTLADUNG_BRUTTO}, netto {_ZYKLEN_ENTLADUNG_NETTO})"
-    )
+    assert zyklen[0].value == _KANON
+
+
+async def test_alle_pfade_liefern_dieselbe_zahl(db):
+    """Der eigentliche Punkt: eine Anlage, eine Zahl — egal welche Sicht.
+
+    Vor dem 2026-07-28-Kanon lieferten Dashboard und HA-Sensor hier 110 gegen
+    100, ohne dass ein Test angeschlagen hätte.
+    """
+    anlage = await _seed(db)
+
+    dash = (await get_speicher_dashboard(
+        anlage_id=anlage.id, strompreis_cent=None,
+        einspeiseverguetung_cent=None, db=db,
+    ))[0].zusammenfassung["vollzyklen"]
+    monat = (await get_aktueller_monat(
+        anlage_id=anlage.id, jahr=2026, monat=4, db=db,
+    )).speicher_vollzyklen
+    sensor = [
+        s for s in await calculate_anlage_sensors(db, await _lade(db, anlage.id))
+        if s.definition.key == "speicher_zyklen"
+    ][0].value
+
+    assert dash == monat == sensor == _KANON, f"{dash} / {monat} / {sensor}"
 
 
 async def test_ohne_bruttowert_faellt_der_export_auf_die_nutzbare_kapazitaet_zurueck(db):
@@ -122,26 +166,4 @@ async def test_ohne_bruttowert_faellt_der_export_auf_die_nutzbare_kapazitaet_zur
 
     zyklen = [s for s in sensoren if s.definition.key == "speicher_zyklen"]
     assert len(zyklen) == 1
-    assert zyklen[0].value == _ZYKLEN_ENTLADUNG_NETTO
-
-
-async def test_zaehlgroesse_dashboard_vs_export_ist_bekannt_verschieden(db):
-    """Ist-Zustand, keine Billigung: Dashboard zählt Ladung, der Sensor Entladung.
-
-    Fällt dieser Test, wurde eine der beiden Seiten angefasst — dann gehört die
-    Entscheidung dokumentiert (welche Größe ist ein „Vollzyklus"?) statt still
-    übernommen. Ein Angleichen ändert sichtbare Zahlen bei jedem Nutzer.
-    """
-    anlage = await _seed(db)
-
-    dash = (await get_speicher_dashboard(
-        anlage_id=anlage.id, strompreis_cent=None,
-        einspeiseverguetung_cent=None, db=db,
-    ))[0].zusammenfassung["vollzyklen"]
-    sensor = [
-        s for s in await calculate_anlage_sensors(db, await _lade(db, anlage.id))
-        if s.definition.key == "speicher_zyklen"
-    ][0].value
-
-    assert dash == _ZYKLEN_LADUNG_BRUTTO and sensor == _ZYKLEN_ENTLADUNG_BRUTTO
-    assert dash != sensor, "Angleichung passiert? Dann bitte bewusst + dokumentiert."
+    assert zyklen[0].value == _NETTO_LESART

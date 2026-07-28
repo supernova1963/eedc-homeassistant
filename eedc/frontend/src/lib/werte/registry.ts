@@ -101,7 +101,7 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'peak_netzbezug_kw',      label: 'Peak Bezug',     unit: 'kW',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'none', defaultVisible: false, granular: NUR_TAG, higherIsBetter: false },
   { key: 'peak_einspeisung_kw',    label: 'Peak Einsp.',    unit: 'kW',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'none', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'performance_ratio',      label: 'Performance Ratio', unit: '',    gruppe: 'tagdetail',   decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: true },
-  { key: 'batterie_vollzyklen',    label: 'Batt.-Vollzyklen', unit: '',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
+  { key: 'batterie_vollzyklen',    label: 'SoC-Hübe', unit: '',     gruppe: 'tagdetail',   decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'boersenpreis_avg_cent',  label: 'Börsenpreis Ø',  unit: 'ct/kWh', gruppe: 'tagdetail',   decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_TAG, higherIsBetter: false },
   { key: 'negative_preis_stunden', label: 'Neg. Preisstd.', unit: 'h',      gruppe: 'tagdetail',   decimals: 0, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'einspeisung_neg_preis_kwh', label: 'Einsp. neg. Preis', unit: 'kWh', gruppe: 'tagdetail', decimals: 1, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: undefined },

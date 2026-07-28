@@ -65,7 +65,10 @@ export function baueTagAlsMonat(
     speicher_ladung_kwh: tag.speicher_ladung,
     speicher_entladung_kwh: tag.speicher_entladung,
     speicher_wirkungsgrad_prozent: tag.speicher_effizienz,
-    speicher_vollzyklen: tag.batterie_vollzyklen,
+    // Kanon seit 2026-07-28: Entladung ÷ Kapazität, im Backend gerechnet.
+    // `batterie_vollzyklen` (ΔSoC ÷ 200) ist eine ANDERE Größe — sie heißt
+    // jetzt „SoC-Hübe" und steht in der Energieprofil-Tabelle.
+    speicher_vollzyklen: tag.speicher_vollzyklen,
     speicher_ladung_netz_kwh: tagDetail?.speicher_ladung_netz_kwh ?? null,
     speicher_effektiver_ladepreis_cent: tagDetail?.speicher_effektiver_ladepreis_cent ?? null,
     speicher_effektiver_ladepreis_quelle: tagDetail?.speicher_effektiver_ladepreis_quelle ?? null,

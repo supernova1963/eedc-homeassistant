@@ -95,7 +95,7 @@ const STATIC_COLUMNS: ColumnConfig[] = [
   { key: 'defizit',           label: 'Defizit',         group: 'summen',      getValue: (t) => t.defizit_kwh,          format: 'kwh', defaultVisible: true, agg: 'sum', tone: 'red'    },
   // Performance
   { key: 'performance_ratio', label: 'Performance Ratio', group: 'performance', getValue: (t) => t.performance_ratio,  format: 'percent', className: 'text-green-600 dark:text-green-400', defaultVisible: false, agg: 'avg', tone: 'green' },
-  { key: 'batterie_zyklen',   label: 'Batterie-Zyklen', group: 'performance', getValue: (t) => t.batterie_vollzyklen,  format: 'zyklen', defaultVisible: false, agg: 'sum', tone: 'blue' },
+  { key: 'batterie_zyklen',   label: 'SoC-Hübe', group: 'performance', getValue: (t) => t.batterie_vollzyklen,  format: 'zyklen', defaultVisible: false, agg: 'sum', tone: 'blue' },
   { key: 'stunden_verfuegbar',label: 'Stunden verfügbar', group: 'performance', getValue: (t) => t.stunden_verfuegbar, format: 'stunden', defaultVisible: true, agg: 'avg', tone: null },
   // Wetter (Temperaturen nicht-additiv → kein Coloring, kein Footer)
   { key: 'temp_min',          label: 'Temp. min',       group: 'wetter',      getValue: (t) => t.temperatur_min_c,     format: 'temp', defaultVisible: false, agg: 'min',  tone: null },
