@@ -14,7 +14,7 @@
 | **BL-3** | Layer-Grundbestand `energie.py` + `invarianten.py` (§4) | ✅ | beide vorhanden |
 | **BL-4** | **Konsumenten-Migration** (§2-Liste) | ✅ **für die sechs namentlich genannten Module** — die „(offen)"-Marker in §2 waren am 2026-07-28 **falsch**: `prognosen.py` · `energie_profil/{repair,views}.py` · `live_wetter.py` · `live_history_service.py` · `live_komponenten_builder.py` importieren alle aus `core.berechnungen` | Liste korrigiert. **Rest bleibt:** die vollständige Inventur (~30 Konsumenten) in `project_berechnungs_layer_offen` — opportunistisch beim Touch |
 | **BL-5** | **Geplante Submodule** (§4-Tabelle) | 🟡 **teilweise** — `counter.py` ✅ · `kennzahlen.py` ✅ · Einsparungen ✅ (anders geschnitten: `speicher*.py`, `emob.py`, `alternativkosten.py`) · **`peaks.py` ❌** (steht seit v3.31.5 als geplant in `__init__.py:30`) · **`roi.py` ❌** — `berechne_roi` lebt weiter in `core/calculations.py:620` | → Backlog **DOK-3**, opportunistisch |
-| **BL-6** | **Herleitungs-Transparenz §6** (Vertrag zu Style-Guide A6) | ⬜ **offen — Trigger ist gefeuert.** §6 sagt „Durchsetzung: separater Zukunfts-Punkt **nach Projektabschluss**"; der Projektabschluss (IA-V4-Flip, v4.0.0) ist seit 2026-07-25 durch. Im Backend existiert **keine** `Herleitung`-Struktur (0 Treffer `eingesetzte_werte` in `core/`), die 9 `FormelTooltip`-Konsumenten tragen ihre Formeln frontend-seitig hart — genau die Drift, die §6 verhindern soll | → Backlog **DOK-2** (Q) |
+| **BL-6** | **Herleitungs-Transparenz §6** (Vertrag zu Style-Guide A6) | ⛔ **verworfen (Gernot, 2026-07-28)** — der Trigger war gefeuert, die Entscheidung fiel gegen den Bau. Formel-SoT bleibt [`BERECHNUNGEN.md`](BERECHNUNGEN.md); die Tooltip-Texte sind **Anzeige**, keine zweite Rechnung. Begründung + Preis stehen in §6 | § 6 umgeschrieben; Backlog-Punkt **DOK-2 geschlossen** |
 | **BL-7** | Alt-JSONs mit BKW-Doppel-Bug migrieren (§8) | ⏸ bewusst nicht automatisch — Reparatur-Werkbank (`feedback_kein_grosser_heiler_knopf`) | unverändert gültig |
 
 **Was dieses Dokument NICHT ist:** die Regel (→ [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)) und nicht die Invarianten-Liste (→ [`ADR-002`](ADR-002-WURZELMUSTER.md)).
@@ -127,14 +127,34 @@ Herleitung = { wert, einheit, formel, eingesetzte_werte[], quelle, zeitraum }
 
 **Durchsetzung — separater Zukunfts-Punkt (nach Projektabschluss):** analog zu den Schutzmechanismen (Abschnitt 5) ist ein Konformitäts-Check denkbar (neuer Kennzahl-Helfer ohne Herleitungs-Feld → Test schlägt an). Bewusst NICHT jetzt umgesetzt — erst nach Abschluss des laufenden Umbaus als eigener Punkt bewerten. Bis dahin gilt die Erwartung dokumentarisch (dieser Abschnitt + Style-Guide A6).
 
-> **⏰ Trigger gefeuert (2026-07-28).** „Nach Projektabschluss" war der IA-V4-Flip — der ist seit
-> v4.0.0 (2026-07-25) durch. Stand der Umsetzung: **nichts davon existiert.** `eingesetzte_werte`
-> hat 0 Treffer in `core/`; die neun `FormelTooltip`-Konsumenten (`KPICard`, `TKonto`,
-> `AmortisationsBar`, `RingGaugeCard`, `HeroLeiste`, `AussichtTeile`, `ChartTooltip`,
-> `PrognoseVergleichTeile`) tragen Formel und eingesetzte Werte **im Frontend hart** — Wert und
-> Erklärung haben also zwei Quellen, genau der Zustand, den §6 ausschließen wollte.
-> Als Punkt **DOK-2** im Backlog (Q, Wartungsfenster). Zuerst zu entscheiden: Rückgabe-Erweiterung
-> aller Kennzahl-Helfer (breit, invasiv) vs. eigener Herleitungs-Helfer je Kennzahl (additiv).
+---
+
+> ## ⛔ Dieser Abschnitt ist verworfen (Gernot, 2026-07-28) — er bleibt als Begründung stehen
+>
+> **Der Trigger ist gefeuert und die Antwort lautet Nein.** „Nach Projektabschluss" war der
+> IA-V4-Flip; der ist seit v4.0.0 (2026-07-25) durch. Der Vertrag oben wird **nicht gebaut.**
+>
+> **Stand, der die Entscheidung getragen hat (gemessen 2026-07-28):** im Backend existiert keine
+> `Herleitung`-Struktur — `eingesetzte_werte` hat **0 Treffer** in `core/`. Stattdessen tragen
+> **10 Dateien mit zusammen 23 Verwendungsstellen** die Formel als Frontend-String
+> (`<FormelTooltip formel=… berechnung=…>`): `pages/auswertung/InvestitionenTab.tsx` (8) ·
+> `components/finanzen/TKonto.tsx` (5) · `components/roi/RoiAnalyse.tsx` (2) ·
+> `components/ui/KPICard.tsx` (2) · `RingGaugeCard` · `HeroLeiste` · `GrundlastSollIstKachel` ·
+> `v4/KomponentenSektionen.tsx` · `v4/TagBilanz.tsx` · `components/dashboard/AmortisationsBar.tsx`.
+>
+> **Warum verworfen:** der Vertrag würde jeden Kennzahl-Helfer in seiner Rückgabe ändern **und**
+> alle 23 Aufrufstellen anfassen — für eine Drift, die in über einem Jahr nie als Fehler aufgetreten
+> ist. Die Tooltip-Texte sind **Anzeige**, keine zweite Rechnung: sie beschreiben die Formel, sie
+> führen sie nicht aus. Der Formel-SoT ist und bleibt [`BERECHNUNGEN.md`](BERECHNUNGEN.md).
+>
+> **Der Preis, ehrlich benannt:** Wert und Erklärung haben weiterhin zwei Quellen. Ändert jemand
+> eine Formel im Layer und vergisst den Tooltip-Text, erklärt die UI eine Rechnung, die so nicht
+> mehr stattfindet — und **kein Wächter merkt es.** Wer eine Formel in `core/berechnungen/` ändert,
+> prüft die Tooltip-Texte und `BERECHNUNGEN.md` **von Hand** mit.
+>
+> **Wiederaufnahme nur mit neuem Anlass:** ein gemeldeter Fall, in dem ein Tooltip nachweislich
+> etwas anderes erklärt als der Code rechnet. Ohne den ist diese Zeile abgeschlossen — nicht
+> vertagt (`feedback_keine_regel_behaupten_ohne_code_beleg`).
 
 ## 7. Anwender-Kommunikation
 
