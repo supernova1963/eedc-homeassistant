@@ -16,6 +16,10 @@ from dataclasses import dataclass
 import os
 
 from backend.core.exceptions import not_found
+from backend.core.investition_kennwerte import (
+    get_speicher_kapazitaet_kwh,
+    get_speicher_nutzbare_kapazitaet_kwh,
+)
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
@@ -77,7 +81,6 @@ from backend.services.mqtt_broker_settings import (
 from backend.core.investition_parameter import (
     PARAM_E_AUTO,
     PARAM_E_AUTO_DEFAULTS,
-    PARAM_SPEICHER,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
     ist_dienstlich,
@@ -709,13 +712,24 @@ async def calculate_anlage_sensors(
         if inv.typ == 'speicher' and inv.parameter:
             # Zyklen-Basis ist die BRUTTO-Kapazität — dieselbe Konvention wie in
             # Monatsbericht, Speicher-Dashboard und Jahresbericht
-            # (docs/BERECHNUNGEN.md §Speicher). Der Kommentar behauptete hier
+            # (docs/BERECHNUNGEN.md §3.3). Der Kommentar behauptete hier
             # früher, `nutzbare_kapazitaet_kwh` sei ein Override; der Code liest
             # aber bewusst zuerst Brutto. Ein Dreher hätte den HA-Sensor gegen
             # den Monatsbericht laufen lassen (R22-4). `nutzbare_kapazitaet_kwh`
             # ist nur der Fallback, wenn Brutto nicht gepflegt ist; ist beides
             # leer → kein Speicher gepflegt.
-            kap = inv.parameter.get(PARAM_SPEICHER["KAPAZITAET_KWH"]) or inv.parameter.get(PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"])
+            #
+            # A31-2: die Lese-REIHENFOLGE bleibt genau so — dies ist der
+            # Vollzyklen-Nenner, und der ist brutto (Kanon
+            # `core/berechnungen/speicher.py::vollzyklen`, Entscheidung Gernot
+            # 2026-07-28). Der Netto-Umstieg von A31-2 gilt für Simulation und
+            # Wirtschaftlichkeits-Prognose, NICHT hier. Migriert ist nur der
+            # Zugriffsweg: statt zweier Roh-Lesungen die beiden SoT-Helper —
+            # `get_speicher_nutzbare_kapazitaet_kwh` greift erst, wenn brutto
+            # `None` ist, und liefert dann den Netto-Wert (sein eigener
+            # Brutto-Fallback läuft in diesem Fall ins Leere). Identisches
+            # Verhalten, nur ohne Literal-Zugriff.
+            kap = get_speicher_kapazitaet_kwh(inv) or get_speicher_nutzbare_kapazitaet_kwh(inv)
             if kap:
                 speicher_kapazitaet += float(kap)
 

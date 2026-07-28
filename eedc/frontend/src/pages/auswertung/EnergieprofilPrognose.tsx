@@ -220,7 +220,10 @@ export function PrognoseChartKarte({ daten }: { daten: TagesPrognose }) {
             ? `Verbrauchsprognose basiert auf dem Ø-Stundenprofil der letzten ${daten.daten_tage} Tage (${VERBRAUCH_BASIS_LABELS[daten.verbrauch_basis] ?? daten.verbrauch_basis}).`
             : 'Für die Verbrauchsprognose fehlt noch die Historie — sie startet, sobald 3 vollständige Tage aufgezeichnet sind.'}
           {' '}PV-Prognose: {PV_QUELLE_LABELS[daten.pv_quelle] ?? daten.pv_quelle}.
-          {hatSpeicher && hatVerbrauch && ` Batterie-Simulation: ${fmt1(daten.speicher_kapazitaet_kwh)} kWh, vereinfachtes Modell ohne Wirkungsgradverluste.`}
+          {/* A31-2: die Simulation läuft auf der nutzbaren Kapazität. Das muss
+              hier stehen — sonst liest sich die Zahl als Tippfehler, wenn im
+              Komponenten-Hub die (größere) Nennkapazität steht. */}
+          {hatSpeicher && hatVerbrauch && ` Batterie-Simulation: ${fmt1(daten.speicher_kapazitaet_kwh)} kWh nutzbar, vereinfachtes Modell ohne Wirkungsgradverluste.`}
         </span>
       </div>
     </div>

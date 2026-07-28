@@ -18,6 +18,7 @@ from backend.core.investition_kennwerte import (
     get_erzeuger_kwp,
     get_pv_kwp,
     get_speicher_kapazitaet_kwh,
+    get_speicher_nutzbare_kapazitaet_kwh,
 )
 from backend.api.deps import get_db
 from backend.models.investition import Investition, InvestitionTyp, InvestitionMonatsdaten
@@ -1010,11 +1011,9 @@ async def get_roi_dashboard(
                 ist = speicher_ist_by_inv.get(sp.id)
                 if ist is None:
                     continue
-                params_sp = sp.parameter or {}
-                nutzbar = params_sp.get(
-                    PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"],
-                    params_sp.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0),
-                ) or 0
+                # A31-2: netto mit stillem Brutto-Fallback — bisher hier inline,
+                # jetzt der SoT-Helper. Identisches Verhalten.
+                nutzbar = get_speicher_nutzbare_kapazitaet_kwh(sp) or 0
                 speicher_eta_by_inv[sp.id] = await berechne_ist_wirkungsgrad(
                     db,
                     anlage_id=anlage_id,
@@ -1133,6 +1132,12 @@ async def get_roi_dashboard(
             # im IST-Modus rechnet `berechne_speicher_einsparung` aus der
             # gemessenen Entladung und die Kapazität bleibt ungelesen.
             kapazitaet = get_speicher_kapazitaet_kwh(inv)
+            # A31-2/E-1: der Prognose-Modus rechnet NETTO — Kapazität × 250
+            # Zyklen × η ist eine durchgefahrene Energiemenge, und durch den
+            # Speicher geht nur der nutzbare Hub. `kapazitaet` (brutto) bleibt
+            # daneben stehen: sie ist die *Beschreibung* der Komponente
+            # (Detail-Feld und Label unten), nicht die Rechengröße.
+            kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
             wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
             # Bug #5 v3.25.0: vorher 'nutzt_arbitrage' (toter Schema-Key), Form/Wizard schreiben 'arbitrage_faehig'.
             nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
@@ -1163,9 +1168,9 @@ async def get_roi_dashboard(
             # die Komponente bleibt in der Liste (die Kosten sind ja real), aber
             # Einsparung und CO₂ sind `None` („—" im UI) statt einer Zahl, und
             # der Grund steht als Hinweis in `detail` (P4).
-            kapazitaet_fehlt = kapazitaet is None and ist_aggregat is None
+            kapazitaet_fehlt = kapazitaet_netto is None and ist_aggregat is None
             result = None if kapazitaet_fehlt else berechne_speicher_einsparung(
-                kapazitaet_kwh=kapazitaet or 0,
+                kapazitaet_kwh=kapazitaet_netto or 0,
                 wirkungsgrad_prozent=wirkungsgrad_eff,
                 netzbezug_preis_cent=strompreis_cent,
                 einspeiseverguetung_cent=einspeiseverguetung_cent,
@@ -1334,9 +1339,10 @@ async def get_roi_dashboard(
 
         if inv.typ == InvestitionTyp.SPEICHER.value:
             # AC-gekoppelter Speicher — Bug #5 v3.25.0 fix wie oben (DC-Speicher)
-            # N127: BRUTTO-Kapazität über den SoT-Helper, ohne Default — s. den
-            # DC-Pfad oben. Sie geht nur in den Prognose-Modus ein.
-            kapazitaet = get_speicher_kapazitaet_kwh(inv)
+            # N127 + A31-2: Kapazität über die SoT-Helper, ohne Default — s. den
+            # DC-Pfad oben. Der Prognose-Modus rechnet NETTO; hier gibt es kein
+            # Detail-Feld mit der Brutto-Zahl, also wird sie auch nicht gelesen.
+            kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
             wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
             nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
             lade_preis = params.get(PARAM_SPEICHER["LADE_DURCHSCHNITTSPREIS_CENT"], PARAM_SPEICHER_DEFAULTS["lade_durchschnittspreis_cent"])
@@ -1359,9 +1365,9 @@ async def get_roi_dashboard(
 
             # N127: siehe DC-Pfad — ohne Kapazität und ohne IST-Messung gibt es
             # keine Prognose-Basis, also keinen Beitrag statt eines erfundenen.
-            kapazitaet_fehlt = kapazitaet is None and ist_aggregat is None
+            kapazitaet_fehlt = kapazitaet_netto is None and ist_aggregat is None
             result = None if kapazitaet_fehlt else berechne_speicher_einsparung(
-                kapazitaet_kwh=kapazitaet or 0,
+                kapazitaet_kwh=kapazitaet_netto or 0,
                 wirkungsgrad_prozent=wirkungsgrad_eff,
                 netzbezug_preis_cent=strompreis_cent,
                 einspeiseverguetung_cent=einspeiseverguetung_cent,

@@ -378,7 +378,7 @@ Investition_gesamt   = PV-System + WP-Mehrkosten + E-Auto-Mehrkosten + Sonstige
 
 | Feld | Quelle |
 |------|--------|
-| `kapazitaet_kwh` | `Investition.parameter["kapazitaet_kwh"]` |
+| `kapazitaet_kwh` | `get_speicher_nutzbare_kapazitaet_kwh(inv)` — **netto**, still auf brutto zurückfallend (A31-2/E17, s. u.). Greift nur im Prognose-Modus; mit gemessener Entladung übernimmt der Spread-Service und liest gar keine Kapazität. |
 | `wirkungsgrad_prozent` | `Investition.parameter["wirkungsgrad_prozent"]` (Default: 95) |
 | `nutzt_arbitrage` | `Investition.parameter["nutzt_arbitrage"]` (Default: false) |
 | `lade_preis_cent` | `Investition.parameter["lade_durchschnittspreis_cent"]` (Default: 12) |
@@ -423,8 +423,33 @@ außerdem ein Energiedurchsatz und damit über Tag → Monat → Jahr additiv.
 
 **Warum Brutto im Nenner:** `nutzbare_kapazitaet_kwh` ist optional und meist nicht gepflegt; ein
 Nenner, der je nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend leicht konservativer
-Wert. Das Feld wirkt deshalb nur auf das η-SoC-Delta (`services/speicher_wirtschaftlichkeit.py`) und
-ist im HA-Export reiner **Fallback**, falls die Brutto-Kapazität fehlt.
+Wert. Im HA-Export ist das Netto-Feld reiner **Fallback**, falls die Brutto-Kapazität fehlt — die
+Lese-Reihenfolge dort ist bewusst brutto → netto und bleibt es auch nach A31-2.
+
+#### Brutto oder netto — wann welche Kapazität gilt
+
+Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft **nicht** zwischen
+„genau" und „ungefähr", sondern zwischen zwei Fragen:
+
+| Frage | Kapazität | Warum | Stellen |
+| --- | --- | --- | --- |
+| **Wie oft wurde der Speicher umgeschlagen?** | **brutto** (`kapazitaet_kwh`) | Bezugsgröße der Hersteller-Garantie; ein Nenner, der am Pflegezustand hängt, macht dieselbe Anlage unvergleichbar | Vollzyklen (alle Sichten), graue Last, Community-Datensatz, Anzeige/Beschreibung der Komponente |
+| **Wie viel Energie geht durch den Speicher?** | **netto** (`nutzbare_kapazitaet_kwh`, still auf brutto zurückfallend) | Simuliert bzw. prognostiziert wird eine *durchgefahrene Menge* — und durch den Speicher geht nur der nutzbare Hub | Tages-Vorschau „Speicher voll um …" (Planungs-Tab **und** HA-Sensor `eedc_speicher_voll_um`), Wirtschaftlichkeits-**Prognose** ohne IST-Aggregat, η-SoC-Delta |
+
+**SoT netto (seit A31-2):** `core/investition_kennwerte.py::get_speicher_nutzbare_kapazitaet_kwh` —
+netto, sonst brutto, sonst `None`. Der Brutto-Fallback ist **still** (Entscheidung **E17**): kein
+Hinweis, keine Kennzeichnung, **kein P4-Fall**. Der Brutto-Wert ist nicht *unvollständig*, er ist die
+andere gültige Lesart derselben Größe; die Zahlenänderung aus A31-2 trifft deshalb ausschließlich
+Anlagen, die das optionale Feld bewusst gepflegt haben. Die Leserichtung geht nur netto → brutto und
+**nie** zurück — ein Brutto-Helper mit Netto-Fallback wäre genau die Verwechslung, die die Vollzyklen
+wieder vom Pflegezustand abhängig machte.
+
+**Nebenwirkung der Vorschau, die dazugehört:** dieselbe Simulation liefert auch Einspeisung,
+Eigenverbrauch und Autarkie des Vorschautags. Ein kleinerer Puffer nimmt weniger Überschuss auf —
+mehr geht ins Netz, weniger bleibt im Haus. Gemessen an der Demo-Anlage (15,4 kWh brutto gegen
+13,9 kWh netto, 28.07.–02.08.2026): Einspeisung +0,75 bis +1,08 kWh/Tag, Eigenverbrauch entsprechend
+niedriger, Autarkie −1,7 bis −3,2 Prozentpunkte, „Speicher voll" an einem der sechs Tage eine Stunde
+früher (die Stundenauflösung verschluckt den Effekt an den übrigen).
 
 **Woher die Kapazität kommt (SoT seit A31-1):** `core/investition_kennwerte.py::get_speicher_kapazitaet_kwh`
 — brutto (`kapazitaet_kwh`), nur aus dem `parameter`-JSON, **ohne Default**. Ist nichts gepflegt,

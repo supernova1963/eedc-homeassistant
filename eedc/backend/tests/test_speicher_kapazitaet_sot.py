@@ -18,10 +18,13 @@ Drei Dinge werden hier gesichert:
 
 Bewusst **kein baumweiter Wächter**: die Dateiliste unten ist eine Regression
 über die namentlich migrierten Stellen. Ein echter Wächter für die
-Kapazitäts-Leseregel braucht Baseline 0, und die gibt es erst, wenn A31-2 die
-drei verbliebenen Brutto-mit-Netto-Fallback-Konstrukte aufgelöst hat
-(`api/routes/ha_export.py`, `investitionen/crud.py`, `investitionen/dashboards.py`
-— sie stehen unten als benannte Ausnahmen). Der Wächter ist A31-3.
+Kapazitäts-Leseregel bleibt A31-3 — seine Vorbedingung ist seit A31-2 aber
+erfüllt: die drei Brutto-mit-Netto-Fallback-Konstrukte sind aufgelöst, alle
+13 + 3 Stellen lesen über die Helper, die Baseline im Backend-Baum ist 0.
+
+Die **Netto**-Seite (`get_speicher_nutzbare_kapazitaet_kwh`, A31-2) hat ihre
+eigene Datei: `test_speicher_netto_kapazitaet.py`. Hier steht nur, was brutto
+bleiben muss.
 """
 
 from __future__ import annotations
@@ -300,8 +303,10 @@ def test_graue_last_bleibt_unermittelt():
 
 _BACKEND = Path(__file__).resolve().parent.parent
 
-# Die 13 in A31-1 migrierten Lesestellen. Fällt eine zurück auf den
-# Literal-/Kanon-Zugriff, ist der Helper nicht mehr SoT.
+# Die in A31-1 migrierten Lesestellen plus die drei, die A31-2 nachgezogen hat
+# (`investitionen/crud.py`, `investitionen/dashboards.py`, `api/routes/ha_export.py`
+# — vorher trugen sie je ein inline ausgeschriebenes Brutto-mit-Netto-Konstrukt).
+# Fällt eine zurück auf den Literal-/Kanon-Zugriff, ist der Helper nicht mehr SoT.
 _MIGRIERTE_DATEIEN = [
     "services/pdf/builders/jahresbericht.py",
     "services/energie_profil/tage_werte.py",
@@ -313,16 +318,10 @@ _MIGRIERTE_DATEIEN = [
     "api/routes/import_export/helpers.py",
     "services/community_service.py",
     "core/berechnungen/co2_amortisation.py",
+    "api/routes/investitionen/crud.py",
+    "api/routes/investitionen/dashboards.py",
+    "api/routes/ha_export.py",
 ]
-
-# Zwei Dateien tragen migrierte Stellen UND je ein Brutto-mit-Netto-Fallback-
-# Konstrukt, das erst A31-2 auflöst. Sie sind hier ausgenommen, damit die
-# Ausnahme benannt ist statt stillschweigend zu fehlen.
-_A31_2_OFFEN = {
-    "api/routes/investitionen/crud.py": 1,
-    "api/routes/investitionen/dashboards.py": 1,
-    "api/routes/ha_export.py": 1,
-}
 
 _ROH_ZUGRIFF = re.compile(
     r'(get\(\s*"kapazitaet_kwh"|\[\s*"kapazitaet_kwh"\s*\]'
@@ -340,15 +339,21 @@ def test_migrierte_stellen_lesen_die_kapazitaet_nicht_mehr_roh():
     )
 
 
-def test_die_a31_2_ausnahmen_sind_noch_da_und_nicht_mehr_geworden():
-    """Verhindert beides: eine verwaiste Ausnahme (A31-2 hat aufgeräumt, die
-    Zeile hier nicht) und eine neue Stelle, die sich hinter ihr versteckt."""
-    for pfad, erwartet in _A31_2_OFFEN.items():
-        n = len(_ROH_ZUGRIFF.findall((_BACKEND / pfad).read_text(encoding="utf-8")))
-        assert n == erwartet, (
-            f"{pfad}: {n} statt {erwartet} Rest-Zugriffe. Mehr = neue Stelle, "
-            f"weniger = A31-2 ist durch und diese Ausnahme gehört gelöscht."
-        )
+def test_keine_ausnahmen_mehr_offen():
+    """Die A31-2-Vorbedingung für den Wächter (A31-3): im Backend-Baum liest
+    **niemand** die Kapazität mehr roh — Baseline 0, nicht „0 bis auf drei".
+
+    Bewusst baumweit formuliert, obwohl der eigentliche Wächter noch aussteht:
+    fällt zwischen A31-2 und A31-3 eine neue Roh-Lesung an, ist sie hier zu
+    sehen, statt bis zum Wächter-Paket zu wachsen.
+    """
+    treffer = {
+        str(p.relative_to(_BACKEND)): len(_ROH_ZUGRIFF.findall(p.read_text(encoding="utf-8")))
+        for p in _BACKEND.rglob("*.py")
+        if "tests" not in p.parts and p.name != "investition_parameter.py"
+    }
+    offen = {p: n for p, n in treffer.items() if n and p != "core/investition_kennwerte.py"}
+    assert offen == {}, f"Roh-Zugriff auf die Kapazität außerhalb des SoT-Helpers: {offen}"
 
 
 def test_der_zehn_kwh_default_ist_nirgends_zurueck():
@@ -362,17 +367,38 @@ def test_der_zehn_kwh_default_ist_nirgends_zurueck():
     assert treffer == [], f"10-kWh-Default zurück in: {treffer}"
 
 
+def _funktions_koerper(quelle: str, name: str) -> str:
+    """Code einer Top-Level-Funktion **ohne** Docstring und ohne Nachbarn.
+
+    Seit A31-2 stehen zwei Kapazitäts-Helper in derselben Datei; ein Schnitt
+    nur am `def` würde den Nachbarn mitlesen und die Zusicherungen unten still
+    entwerten (der Netto-Helper *darf* `NUTZBARE_KAPAZITAET_KWH` enthalten).
+    """
+    rumpf = quelle.split(f"def {name}(")[1]
+    rumpf = re.split(r"\n(?=def |@)", rumpf)[0]
+    return rumpf.split('"""')[2] if '"""' in rumpf else rumpf
+
+
 def test_helper_traegt_die_regel_noch():
     """Gegenprobe wie bei P3-a: die Zusicherungen stehen im Quelltext, nicht nur
     im Test. Ein späterer „Verbesserer", der einen Netto- oder Spalten-Fallback
     einbaut, ändert genau diese Datei."""
     quelle = (_BACKEND / "core/investition_kennwerte.py").read_text(encoding="utf-8")
-    körper = quelle.split("def get_speicher_kapazitaet_kwh")[1]
+    brutto = _funktions_koerper(quelle, "get_speicher_kapazitaet_kwh")
     # Genau eine Quelle: das parameter-JSON, Schlüssel aus dem Kanon.
-    assert 'PARAM_SPEICHER["KAPAZITAET_KWH"]' in körper
-    assert "NUTZBARE_KAPAZITAET_KWH" not in körper.split('"""')[2], (
-        "Netto-Fallback im Helper-Körper — brutto und netto sind zwei Zahlen"
+    assert 'PARAM_SPEICHER["KAPAZITAET_KWH"]' in brutto
+    assert "NUTZBARE_KAPAZITAET_KWH" not in brutto, (
+        "Netto-Fallback im Brutto-Helper — brutto und netto sind zwei Zahlen. "
+        "Die erlaubte Richtung ist netto → brutto und steht im NETTO-Helper."
     )
-    assert "leistung_kwp" not in körper.split('"""')[2], (
+    assert "leistung_kwp" not in brutto, (
         "Spalten-Fallback im Helper-Körper — s. test_kein_fallback_auf_die_mehrzweck_spalte"
+    )
+    # Der seit A31-2 geteilte Körper darf ebenfalls keinen Fallback tragen —
+    # sonst wanderte die Regelverletzung eine Ebene tiefer und beide Helper
+    # bekämen sie stillschweigend mit.
+    geteilt = _funktions_koerper(quelle, "_speicher_param_kwh")
+    assert "NUTZBARE_KAPAZITAET_KWH" not in geteilt and "leistung_kwp" not in geteilt, (
+        "Fallback im geteilten Körper `_speicher_param_kwh` — er liest EINEN "
+        "übergebenen Schlüssel und sonst nichts."
     )

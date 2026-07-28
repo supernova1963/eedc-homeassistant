@@ -36,7 +36,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
+from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -146,7 +146,12 @@ async def _aktueller_speicher(db, anlage_id: int, heute: date) -> tuple[float, O
         i for i in res.scalars().all()
         if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
     ]
-    kap = sum(get_speicher_kapazitaet_kwh(i) or 0 for i in speicher)
+    # A31-2/E18: NETTO wie im Planungs-Tab. Der Sensor `eedc_speicher_voll_um`
+    # und die KPI-Kachel „Speicher voll" tragen denselben Namen und dieselbe
+    # Simulation — sie dürfen nicht auf verschiedenen Kapazitäten laufen.
+    # (Der abweichende Start-SoC und die abweichende Start-Stunde bleiben
+    # bewusst, s. Modul-Docstring von `speicher_simulation`.)
+    kap = sum(get_speicher_nutzbare_kapazitaet_kwh(i) or 0 for i in speicher)
     if kap <= 0:
         return 0.0, None
 

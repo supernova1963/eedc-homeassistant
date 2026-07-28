@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 from backend.core.exceptions import bad_request, not_found
-from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
+from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
@@ -1285,8 +1285,13 @@ async def get_tagesprognose(
         if not inv.stilllegungsdatum or inv.stilllegungsdatum >= datum
     ]
 
+    # A31-2/E-1: NETTO-Kapazität. Die Simulation unten fährt den Speicher von
+    # 0 auf 100 % der übergebenen Zahl; mit der Brutto-Kapazität ist er
+    # rechnerisch später voll als real. Stiller Brutto-Fallback (E17) — bei
+    # ungepflegtem Netto-Feld bleibt alles wie bisher, deshalb hier bewusst
+    # KEIN `hinweise`-Eintrag.
     speicher_kap = sum(
-        get_speicher_kapazitaet_kwh(inv) or 0
+        get_speicher_nutzbare_kapazitaet_kwh(inv) or 0
         for inv in speicher_invs
     )
 

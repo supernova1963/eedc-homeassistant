@@ -66,7 +66,11 @@ def simuliere_speicher_tag(
     Args:
         pv_stunden: 24-Slot kWh-Profil (Backward-Slot h = [h-1, h)).
         verbrauch_stunden: 24-Slot kWh-Verbrauchsprofil.
-        speicher_kap_kwh: nutzbare Speicherkapazität in kWh (≤ 0 → keine Sim).
+        speicher_kap_kwh: **nutzbare** (Netto-)Speicherkapazität in kWh, aus
+            `investition_kennwerte.get_speicher_nutzbare_kapazitaet_kwh`
+            (≤ 0 → keine Sim). Die Simulation fährt von 0 auf 100 % dieser
+            Zahl — mit der Brutto-Kapazität wäre der Speicher rechnerisch
+            später voll als real (A31-2/E-1).
         start_soc_prozent: SoC zu Beginn von ``start_stunde`` (0–100).
         start_stunde: erste simulierte Stunde (0–23).
 

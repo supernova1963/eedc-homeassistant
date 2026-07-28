@@ -193,9 +193,70 @@ def get_speicher_kapazitaet_kwh(inv: Any) -> Optional[float]:
     `typ == "speicher"`. Ein E-Auto trägt seine Batterie unter dem eigenen
     Schlüssel `batteriekapazitaet_kwh` und liefert hier korrekt `None`.
     """
+    return _speicher_param_kwh(inv, PARAM_SPEICHER["KAPAZITAET_KWH"])
+
+
+def get_speicher_nutzbare_kapazitaet_kwh(inv: Any) -> Optional[float]:
+    """**NETTO**-Kapazität eines Speichers in kWh — der real fahrbare SoC-Hub,
+    mit stillem Brutto-Fallback. `None`, wenn keine der beiden gepflegt ist.
+
+    Das Gegenstück zu `get_speicher_kapazitaet_kwh` (dort steht die
+    Brutto/Netto-Abgrenzung ausführlich). Kurz: `kapazitaet_kwh` ist die
+    Nennkapazität des Herstellers, `nutzbare_kapazitaet_kwh` das, was nach
+    Entladetiefe und Reserve tatsächlich durch den Speicher geht.
+
+    **Wofür der Netto-Wert gilt** — überall dort, wo eine Rechnung den Speicher
+    *durchfährt*, also eine Energiemenge simuliert oder prognostiziert:
+
+    * die Tages-Vorschau „Speicher voll um …"
+      (`core/berechnungen/speicher_simulation.py`, Planungs-Tab und HA-Sensor
+      `eedc_speicher_voll_um`) — sie lädt von 0 auf 100 % der übergebenen
+      Kapazität; mit Brutto ist der Speicher rechnerisch später voll als real;
+    * die Wirtschaftlichkeits-**Prognose** ohne IST-Aggregat
+      (`core/calculations.py::berechne_speicher_einsparung`, Kapazität × 250
+      Zyklen × η) — mit Brutto ist die Jahres-Ersparnis zu hoch;
+    * das η-SoC-Delta (`services/speicher_wirtschaftlichkeit.py`), die einzige
+      Verwendung, die es schon vor A31-2 gab.
+
+    **Wofür er ausdrücklich NICHT gilt:** die **Vollzyklen**. Deren Nenner ist
+    und bleibt brutto — begründet im Kanon `core/berechnungen/speicher.py::
+    vollzyklen` (Entscheidung Gernot 2026-07-28, Commit `f1644cc8`) und in
+    `docs/BERECHNUNGEN.md` §3.3. Wer hier „vereinheitlicht", macht die
+    Zyklenzahl derselben Anlage davon abhängig, ob jemand ein optionales Feld
+    ausgefüllt hat.
+
+    **Warum der Brutto-Fallback still ist (Entscheidung E17, Gernot
+    2026-07-28):** `nutzbare_kapazitaet_kwh` ist optional und bei den meisten
+    Anlagen nicht gepflegt. Ohne den Fallback müssten die drei Rechnungen oben
+    dort aussetzen — obwohl die Brutto-Zahl keine *unvollständige* Angabe ist,
+    sondern die andere gültige Lesart derselben Größe. Deshalb ist das
+    **bewusst kein P4-Fall**: kein `hinweise`-Eintrag, keine Kennzeichnung in
+    der Antwort, keine Badge. Der Effekt ist gewollt: die Zahlenänderung aus
+    A31-2 trifft ausschließlich Anlagen, die das Feld bewusst gepflegt haben —
+    wer es nie angefasst hat, sieht keinen Sprung und braucht keine Erklärung.
+
+    Anders als beim Brutto-Helper ist ein Fallback hier also nicht die
+    verbotene Verwechslung, sondern die Entscheidung: die Leserichtung geht
+    **nur** netto → brutto und **nie** zurück.
+
+    Eine 0 zählt auch hier als ungepflegt (s. Brutto-Helper). Kein Typfilter —
+    der Aufrufer filtert auf `typ == "speicher"`.
+    """
+    netto = _speicher_param_kwh(inv, PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"])
+    if netto is not None:
+        return netto
+    return get_speicher_kapazitaet_kwh(inv)
+
+
+def _speicher_param_kwh(inv: Any, schluessel: str) -> Optional[float]:
+    """Ein kWh-Wert aus dem `parameter`-JSON — `None` bei fehlend, 0 oder Müll.
+
+    Gemeinsamer Körper der beiden Speicher-Kapazitäts-Helper; die Semantik
+    (E16: keine erfundene Zahl) steht in deren Docstrings.
+    """
     params = getattr(inv, "parameter", None) or {}
     try:
-        wert = float(params.get(PARAM_SPEICHER["KAPAZITAET_KWH"]) or 0)
+        wert = float(params.get(schluessel) or 0)
     except (TypeError, ValueError):
         return None
     return wert or None

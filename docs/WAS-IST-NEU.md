@@ -82,8 +82,45 @@ auf die auch Hersteller-Garantien zielen.
 > **Und der gewünschte Ladestand?** eedc nimmt keinen an. Zyklen und Wirkungsgrad kommen aus deinen
 > **gemessenen** Lade- und Entlademengen — eine schonende Fahrweise steckt dort schon drin.
 > Geschätzt wird nur, wo noch nichts gemessen ist: in der Wirtschaftlichkeits-Vorschau und in der
-> Tagesvorschau „Speicher voll um …", die von 0 bis 100 % rechnet. Wer bei 90 % abriegelt, ist real
-> etwas früher voll.
+> Tagesvorschau „Speicher voll um …". Beide rechnen jetzt mit deiner **nutzbaren** Kapazität —
+> siehe den nächsten Abschnitt.
+
+### Speicher: die nutzbare Kapazität zählt jetzt mit
+
+**Nur wenn du beim Speicher das Feld „nutzbare Kapazität (kWh)" ausgefüllt hast.** Es ist
+freiwillig — wer es nie angefasst hat, sieht hier **keine einzige veränderte Zahl**.
+
+Dein Speicher hat zwei Kapazitäten: die vom **Typenschild** und die, die nach Entladetiefe und
+Reserve wirklich durch ihn hindurchgeht. Zwei Rechnungen meinen eindeutig die zweite, benutzten
+aber die erste:
+
+- Die Vorschau **„Speicher voll um …"** lud von 0 auf 100 % der Typenschild-Zahl. Wer bei 90 %
+  abriegelt, ist real früher voll — und genau das zeigt sie jetzt.
+- Die **Wirtschaftlichkeits-Vorschau** rechnete mit der Typenschild-Zahl mal 250 Zyklen. Durch den
+  Speicher geht aber nur der nutzbare Teil.
+
+**Was du siehst** (Demo-Anlage, 15,4 kWh Typenschild gegen 13,9 kWh nutzbar, sechs Prognosetage):
+
+- In **Cockpit → Aussicht** und **Auswertungen → Prognose** rückt die Kachel **„Speicher voll"** an
+  einem der sechs Tage von 11:00 auf 10:00. An den anderen bleibt sie gleich — die Vorschau rechnet
+  in ganzen Stunden. Unter dem Chart steht jetzt „13,9 kWh nutzbar".
+- **Mit der Uhrzeit ändern sich die Nachbar-Kacheln desselben Tages:** ein kleinerer Puffer nimmt
+  weniger Überschuss auf. **Einspeisung rund 1 kWh höher**, **Eigenverbrauch entsprechend
+  niedriger**, **Autarkie 2–3 Prozentpunkte niedriger**. Das ist die Korrektur — vorher unterstellte
+  die Vorschau deinem Speicher eine Aufnahme, die er nicht leistet.
+- Der Home-Assistant-Sensor **`eedc_speicher_voll_um`** zieht mit. Er zeigt dieselbe Vorschau und
+  darf keine zweite Uhrzeit nennen.
+- In **Auswertungen → ROI** sinkt die jährliche Einsparung des Speichers — **aber nur, solange du
+  keine Lade- und Entladewerte erfasst hast.** Bei der Demo-Anlage ohne Messdaten: 431,59 € →
+  389,55 € im Jahr. **Sobald Messdaten da sind — der Regelfall —, ändert sich nichts**, denn dann
+  rechnet eedc ohnehin aus deinen gemessenen Werten und braucht die Kapazität gar nicht.
+
+**Die Vollzyklen bleiben, wie sie sind** — sie rechnen weiter gegen die Typenschild-Kapazität.
+Sonst hinge diese Zahl davon ab, ob jemand ein freiwilliges Feld ausgefüllt hat, und deine Anlage
+wäre nicht mehr mit sich selbst vergleichbar.
+
+**Die angezeigte Kapazität deiner Komponente bleibt ebenfalls die Typenschild-Zahl** — sie
+beschreibt das Gerät und ist keine Rechengröße.
 
 ### Wettermodell: die Prognose folgt jetzt deiner Wahl
 

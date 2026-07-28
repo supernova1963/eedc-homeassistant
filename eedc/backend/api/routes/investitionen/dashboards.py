@@ -32,6 +32,7 @@ from backend.core.investition_kennwerte import (
     ANZAHL_LESE_DEFAULT,
     get_bkw_kwp,
     get_speicher_kapazitaet_kwh,
+    get_speicher_nutzbare_kapazitaet_kwh,
 )
 from backend.core.investition_parameter import (
     PARAM_SPEICHER,
@@ -853,10 +854,9 @@ async def get_speicher_dashboard(
                     [md.verbrauch_daten or {} for md in monatsdaten]
                 )
                 if ist_agg.jahres_faktor > 0:
-                    nutzbar = params.get(
-                        PARAM_SPEICHER["NUTZBARE_KAPAZITAET_KWH"],
-                        params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0),
-                    ) or 0
+                    # A31-2: netto mit stillem Brutto-Fallback über den SoT-
+                    # Helper (bisher inline). Identisches Verhalten.
+                    nutzbar = get_speicher_nutzbare_kapazitaet_kwh(speicher) or 0
                     eta_ist = await berechne_ist_wirkungsgrad(
                         db, anlage_id=anlage_id, von=periode_von, bis=periode_bis,
                         ladung_kwh=ist_agg.ladung_kwh_jahr / ist_agg.jahres_faktor,
