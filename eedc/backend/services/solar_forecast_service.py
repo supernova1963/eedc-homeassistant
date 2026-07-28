@@ -425,6 +425,34 @@ async def get_solar_prognose(
     )
 
 
+def _hat_nutzbares_gti(data: Optional[dict]) -> bool:
+    """Trägt die Antwort überhaupt einen GTI-Wert? (A30)
+
+    Ein Wettermodell kann bei Open-Meteo mit HTTP 200 antworten und trotzdem
+    für JEDE Stunde ``null`` liefern — dann rechnet ``_build_prognose`` einen
+    0-kWh-Tag, der wie eine Prognose aussieht, aber keine ist. Am 2026-07-28
+    gemessen für ``ecmwf_ifs04`` (München, 3 Tage): 0 von 72 Stundenwerten
+    gesetzt, auch ``temperature_2m`` und ``shortwave_radiation_sum`` leer — das
+    Modell läuft bei Open-Meteo nicht mehr, der Name wird aber weiter
+    akzeptiert. Ein leeres Ergebnis ist deshalb wie „kein Ergebnis" zu
+    behandeln, damit die bestehende best_match-Kaskade greift.
+    """
+    if not data:
+        return False
+    werte = (data.get("hourly") or {}).get("global_tilted_irradiance") or []
+    return any(v is not None for v in werte)
+
+
+async def _modell_gti_oder_none(*args, **kwargs) -> Optional[dict]:
+    """``fetch_gti_forecast`` für ein GEWÄHLTES Modell; GTI-los zählt als ``None``.
+
+    Bewusst nur für den Modell-Abruf: best_match bleibt unangetastet, damit die
+    Kontrollprobe „``wetter_modell='auto'`` ändert sich nicht" wörtlich gilt.
+    """
+    data = await fetch_gti_forecast(*args, **kwargs)
+    return data if _hat_nutzbares_gti(data) else None
+
+
 async def _solar_prognose_snapshot(
     latitude: float,
     longitude: float,
@@ -441,6 +469,9 @@ async def _solar_prognose_snapshot(
 
     Bei wetter_modell != "auto" wird eine Kaskade verwendet:
     bevorzugtes Modell (begrenzte Tage) + best_match Fallback für den Rest.
+    Liefert das gewählte Modell GAR KEIN GTI (``_hat_nutzbares_gti``), gilt es
+    als ausgefallen und best_match trägt den ganzen Horizont — sichtbar an
+    ``datenquelle``, nicht still.
 
     Liefert den vollen Snapshot (≥ ``days`` Tage) — den Zuschnitt macht
     ``get_solar_prognose``.
@@ -462,18 +493,38 @@ async def _solar_prognose_snapshot(
 
     if wetter_modell == "auto" or days <= max_days:
         # Einfacher Fall: ein Call reicht
-        data = await fetch_gti_forecast(
-            latitude, longitude, neigung, ausrichtung, days,
-            model=model_name, skip_jitter=skip_jitter,
-        )
+        datenquelle_tag = wetter_modell if wetter_modell != "auto" else "best_match"
+        if model_name is None:
+            data = await fetch_gti_forecast(
+                latitude, longitude, neigung, ausrichtung, days,
+                model=None, skip_jitter=skip_jitter,
+            )
+        else:
+            data = await _modell_gti_oder_none(
+                latitude, longitude, neigung, ausrichtung, days,
+                model=model_name, skip_jitter=skip_jitter,
+            )
+            if data is None:
+                # Innerhalb des Modell-Horizonts gibt es keine Kaskade, die
+                # einspränge — den best_match-Fallback deshalb hier holen. Ohne
+                # ihn verlöre ein Nutzer mit ausgefallenem Modell nicht die
+                # Modellwahl, sondern die Prognose komplett (A30).
+                logger.warning(
+                    "Wettermodell %s lieferte kein GTI (%s Tage) — nutze best_match",
+                    wetter_modell, days,
+                )
+                data = await fetch_gti_forecast(
+                    latitude, longitude, neigung, ausrichtung, days,
+                    model=None, skip_jitter=skip_jitter,
+                )
+                datenquelle_tag = "best_match"
         if not data:
             return None
-        datenquelle_tag = wetter_modell if wetter_modell != "auto" else "best_match"
         return _build_prognose(data, kwp, neigung, ausrichtung, days, system_losses,
                                longitude, datenquelle_tag=datenquelle_tag)
 
     # Kaskade: bevorzugtes Modell + best_match Fallback (parallel)
-    primary_coro = fetch_gti_forecast(
+    primary_coro = _modell_gti_oder_none(
         latitude, longitude, neigung, ausrichtung, max_days,
         model=model_name, skip_jitter=skip_jitter,
     )

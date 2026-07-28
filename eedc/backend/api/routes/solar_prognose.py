@@ -134,9 +134,10 @@ async def _mit_eedc_werten(
     ``lat:lon:neigung:ausrichtung:days:model``, ohne kWp). Seit E15/A29 ist
     ``days`` darin der Modell-Snapshot statt des angefragten Horizonts, der
     Treffer also unabhängig davon, ob hier 2, 7 oder 14 Tage angefragt sind.
-    Ausnahme: bei gewähltem Wettermodell ≠ „auto" nutzt der Kanon (noch) das
-    Standardmodell → eigener Key-Satz. Das ist bewusst offen (Wettermodell in
-    den Kanon durchreichen ändert auch die HA-Sensor-Werte → eigenes Päckchen).
+    Seit A30/N16 gilt das auch bei gewähltem Wettermodell ≠ „auto": der Kanon
+    liest dasselbe ``Anlage.wetter_modell`` wie der Fan-out oben, OM-Balken und
+    eedc-Wert stammen also aus demselben Modell (vorher: OM aus dem gewählten
+    Modell, eedc aus best_match — zwei Modelle in einem Balken).
     """
     kanon = None
     try:

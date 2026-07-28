@@ -85,6 +85,29 @@ auf die auch Hersteller-Garantien zielen.
 > Tagesvorschau „Speicher voll um …", die von 0 bis 100 % rechnet. Wer bei 90 % abriegelt, ist real
 > etwas früher voll.
 
+### Wettermodell: die Prognose folgt jetzt deiner Wahl
+
+**Nur wenn du in den Anlagen-Einstellungen ein anderes Wettermodell als „Automatisch" gewählt
+hast — sonst ändert sich hier gar nichts.**
+
+Das Live-Wetter und die 14-Tage-Wettertabelle nutzten dein Modell längst. Die **eedc-eigene
+Tagesprognose** nicht: sie rechnete überall mit „Automatisch". Auf **Cockpit → Aussicht** standen
+dadurch der OpenMeteo-Balken aus deinem Modell und der eedc-Wert daneben aus einem anderen — und
+die Prognose-Sensoren in Home Assistant folgten dem eedc-Wert. Das ist jetzt eine Rechnung.
+
+- **Was du siehst:** Tagesprognose für heute/morgen/übermorgen, das Stundenprofil, die Vorschau
+  „Speicher voll um …" und die Prognose-Sensoren in Home Assistant springen **einmalig** auf dein
+  Modell. An der Demo-Anlage nachgemessen (München, 20,8 kWp): mit **ICON-EU** heute 1,7 kWh
+  weniger und morgen 14,0 kWh weniger, mit **MeteoSwiss ICON-CH2** in beide Richtungen bis zu
+  12 kWh. Wie stark es bei dir ausfällt, hängt vom Standort und vom Wetter des Tages ab.
+- **Modelle mit kurzem Horizont** (ICON-D2 reicht 2 Tage, ICON-EU 5) decken weiterhin nur ihre
+  eigenen Tage ab — die weiter entfernten kommen wie bisher aus „Automatisch".
+- **Drei Modelle sind nicht mehr da.** Für **ECMWF Seamless**, **MeteoSwiss Seamless** und
+  **ECMWF IFS (9 km)** liefert Open-Meteo keine Strahlungsdaten mehr. eedc merkt das und rechnet
+  dort weiter mit „Automatisch" — du bekommst also dieselben Zahlen wie bisher, deine Modellwahl
+  greift nur nicht. Wenn du eines davon eingestellt hast, wähle am besten **ICON Seamless** (für
+  Deutschland) oder **MeteoSwiss ICON-CH2** (Alpenraum). Die Auswahlliste wird noch aufgeräumt.
+
 ### Rund um die PV-Module
 
 - **Komponenten-Liste:** Bei PV-Modulen blieb die graue Zeile mit den Eckdaten leer, während jeder

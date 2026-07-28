@@ -88,9 +88,8 @@ def snapshot_days(model: Optional[str] = None) -> int:
     Tag 3–16 wären auf den 0-Ertrag der leeren Antwort gefallen statt auf
     best_match.
 
-    Solange ``wetter_modell`` nicht im Prognose-Kanon ankommt, ist ``model``
-    dort immer ``None``/``auto`` → 16 und die Grenze fällt nicht auf; sie steht
-    trotzdem hier, damit sie beim Nachziehen des Modells (A30/N16) schon greift.
+    Seit A30/N16 reicht der Prognose-Kanon ``Anlage.wetter_modell`` durch —
+    die Grenze greift dort seither in echt, nicht mehr nur vorsorglich.
 
     Args:
         model: OpenMeteo-**Modellname** wie im Cache-Key (``icon_d2``,

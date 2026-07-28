@@ -71,6 +71,10 @@ Der Anlage-Block zeigt eine Tabelle deiner Anlagen mit einem Bearbeiten-Modal (a
 
 Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei fehlenden Daten auf den besten verfügbaren Anbieter zurück (Kaskade). Die verwendete Quelle wird pro Tag in der [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) mit einem Kürzel (MS/D2/EU/EC/BM) angezeigt.
 
+> **Seit v4.0.2 wirkt die Modellwahl auf *alle* Prognose-Sichten** — auch auf die eedc-Tagesprognose, die Stundenprofile und die Prognose-Sensoren in Home Assistant. Bis dahin rechneten diese unabhängig von der Einstellung mit `auto`. Wer ein anderes Modell gewählt hat, sieht dort einmalig andere Zahlen.
+>
+> **Nicht mehr verfügbar (Stand Juli 2026):** Für **ECMWF Seamless**, **MeteoSwiss Seamless** und **ECMWF IFS (9 km)** liefert Open-Meteo keine Strahlungsdaten mehr. eedc erkennt das und rechnet für diese Anlagen mit `auto` weiter — die Prognose bleibt vollständig, die Modellwahl greift aber nicht. Empfehlung: **ICON Seamless** (Deutschland) bzw. **MeteoSwiss ICON-CH2** (Alpenraum).
+
 **Prognose-Basis:** Hier wählst du, auf welcher Quelle der eedc-Lernfaktor und die kalibrierte Prognose aufbauen — OpenMeteo (Standard) oder Solcast (wenn konfiguriert). SFML ist im Code als künftige Erweiterung vorbereitet, geht aber bewusst nicht ins Genauigkeits-Ranking ein.
 
 **Steuerliche Behandlung:**

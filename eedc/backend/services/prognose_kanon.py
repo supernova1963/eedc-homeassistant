@@ -13,7 +13,8 @@ Kanon-Rechenweg (abgenommen):
 
 1. **Orientierungsgruppen** (``pv_orientation.orientierungs_gruppen``) — Multi-
    String-Fan-out wie der Live-Pfad: pro Gruppe ein OpenMeteo-Abruf
-   (``get_solar_prognose``, PVGIS-Losses via ``resolve_system_losses``).
+   (``get_solar_prognose``, PVGIS-Losses via ``resolve_system_losses``,
+   Wettermodell aus ``Anlage.wetter_modell`` — A30/N16).
 2. **Gruppen slot-weise summieren** → rohes OM-kWh-Stundenprofil/Tag
    (= „OpenMeteo"-Spalte überall, multi-string, unkorrigiert).
 3. **eedc-Korrektur PRO ENERGIE-SLOT** (``korrigiere_tagesprofil`` +
@@ -192,8 +193,9 @@ async def kanon_tagesprognose(
     """Berechnet die kanonische PV-Tagesprognose einer Anlage.
 
     Quelle ist IMMER die eedc-eigene Prognose (OpenMeteo-Basis × Korrektur) —
-    Solcast/SFML sind eigene Pfade. ``None`` bei fehlenden Koordinaten,
-    fehlender PV-Leistung oder fehlgeschlagenem OpenMeteo-Abruf.
+    Solcast/SFML sind eigene Pfade. Als OpenMeteo-Basis dient das in der Anlage
+    gewählte ``wetter_modell`` (A30/N16, s. u.). ``None`` bei fehlenden
+    Koordinaten, fehlender PV-Leistung oder fehlgeschlagenem OpenMeteo-Abruf.
     """
     if not anlage.latitude or not anlage.longitude:
         return None
@@ -217,6 +219,19 @@ async def kanon_tagesprognose(
 
     system_losses = resolve_system_losses(await lade_aktive_prognose(db, anlage.id))
 
+    # A30/N16: das in der Anlage gewählte Wettermodell — in derselben Form wie
+    # `prefetch_service` und `/solar-prognose` (WETTER_MODELLE-Key; die Kaskade
+    # „bevorzugtes Modell + best_match für die Tage jenseits seines Horizonts"
+    # steckt in `get_solar_prognose`, hier wird nichts nachgebaut).
+    #
+    # Bis dahin rechnete der Kanon IMMER mit best_match, während Live-Wetter,
+    # 14-Tage-Wettertabelle und die OpenMeteo-Spalte in `/solar-prognose` das
+    # gewählte Modell schon nutzten: dieselbe Seite zeigte für denselben Tag
+    # OM-Balken aus Modell A und den eedc-Wert aus Modell B, und der MQTT-/HA-
+    # Export folgte dem Kanon (= best_match). Für `wetter_modell="auto"` — den
+    # Default — ändert sich dadurch nichts.
+    wetter_modell = getattr(anlage, "wetter_modell", None) or "auto"
+
     # Fan-out: pro Orientierungsgruppe ein get_solar_prognose (eigener Cache-
     # Eintrag, parallel). Aufruf über das Modul (sfs.) — Monkeypatch-fähig.
     coros = [
@@ -228,6 +243,7 @@ async def kanon_tagesprognose(
             ausrichtung=g.ausrichtung,
             days=days,
             system_losses=system_losses,
+            wetter_modell=wetter_modell,
             skip_jitter=skip_jitter,
         )
         for g in gruppen
