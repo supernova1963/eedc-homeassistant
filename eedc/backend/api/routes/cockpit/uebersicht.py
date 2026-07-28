@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
-from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_speicher_kapazitaet_kwh
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
@@ -501,7 +501,7 @@ async def get_cockpit_uebersicht(
     speicher_invs = [i for i in investitionen if i.typ == "speicher" and i.ist_aktiv_an(today)]
     hat_speicher = len(speicher_invs) > 0
     speicher_kapazitaet = sum(
-        (i.parameter or {}).get("kapazitaet_kwh", 0) for i in speicher_invs
+        get_speicher_kapazitaet_kwh(i) or 0 for i in speicher_invs
     )
     speicher_effizienz = (speicher_entladung / speicher_ladung * 100) if speicher_ladung > 0 else None
     speicher_vollzyklen = (speicher_ladung / speicher_kapazitaet) if speicher_kapazitaet > 0 else None

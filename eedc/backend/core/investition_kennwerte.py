@@ -1,4 +1,5 @@
-"""SoT-Helper für Investitions-Kennwerte — heute: die Nennleistung in kWp.
+"""SoT-Helper für Investitions-Kennwerte — die Nennleistung in kWp und die
+Speicher-Kapazität in kWh.
 
 Regel ADR-002/P3-a: die Nennleistung einer Investition wird **nur** über diese
 Helper gelesen, nie als direkter Attributzugriff `inv.leistung_kwp` und nie als
@@ -24,12 +25,13 @@ Spalte und mit dem Export-Feld). Kein Schreibpfad erzeugt einen der beiden —
 Formular und Setup-Wizard schreiben die Spalte.
 """
 
-from typing import Any, Final
+from typing import Any, Final, Optional
 
 from backend.core.investition_parameter import (
     LEGACY_KWP_KEY,
     PARAM_BALKONKRAFTWERK,
     PARAM_PV_MODULE,
+    PARAM_SPEICHER,
 )
 from backend.models.investition import InvestitionTyp
 
@@ -129,3 +131,71 @@ def get_erzeuger_kwp(inv: Any) -> float:
     if getattr(inv, "typ", None) == InvestitionTyp.BALKONKRAFTWERK.value:
         return get_bkw_kwp(inv)
     return get_pv_kwp(inv)
+
+
+def get_speicher_kapazitaet_kwh(inv: Any) -> Optional[float]:
+    """**BRUTTO**-Kapazität eines Speichers in kWh — oder `None`, wenn keine
+    gepflegt ist.
+
+    **Brutto oder netto — die Verwechslung ist der Anlass dieses Helpers.**
+    Ein Speicher trägt ZWEI Kapazitäten, beide im Kanon
+    (`core/investition_parameter.py::PARAM_SPEICHER`) und beide im Formular
+    (`SpeicherFelder.tsx`):
+
+    * **brutto** = `kapazitaet_kwh` — die Nennkapazität des Herstellers. Das ist
+      der Wert, den dieser Helper liefert, und die Bezugsgröße für **alles**,
+      was im Baum „Kapazität" heißt: Vollzyklen (`core/berechnungen/speicher.py::
+      vollzyklen`, dort begründet), Speicher-ROI, graue Last, Community-Datensatz,
+      HA-Sensoren, PDF-Berichte.
+    * **netto** = `nutzbare_kapazitaet_kwh` — der tatsächlich nutzbare SoC-Hub
+      (Entladetiefe). **Optional und bei den meisten Anlagen nicht gepflegt.**
+      Er hat heute genau eine Verwendung: das η-SoC-Delta in
+      `services/speicher_wirtschaftlichkeit.py`. Wer ihn irgendwo sonst in einen
+      Nenner setzt, erzeugt eine Zahl, die je nach Pflegezustand der Anlage
+      springt.
+
+    Es gibt bewusst **keinen** Fallback der einen auf die andere Größe: netto
+    statt brutto ist keine konservativere Schätzung, sondern eine andere Zahl
+    unter demselben Namen. Ein Helper für netto entsteht getrennt (A31-2).
+
+    **Warum `None` und nicht `0.0` (Entscheidung E16, Gernot 2026-07-28):**
+    ein Speicher ohne gepflegte Kapazität ist ein *unbekannter*, kein leerer
+    Speicher. Der Aufrufer entscheidet, was er damit tut — summieren (`or 0`),
+    die Zahl unterdrücken oder die Rechnung auslassen —, aber er darf keine
+    erfinden. Vorher stand an drei Stellen ein `.get(…, 10)`: ein ungepflegter
+    Speicher bekam still 10 kWh und daraus eine Jahres-Ersparnis, die es nie
+    gab (N127). Freigegeben wurde `None` unter der Bedingung, dass der fehlende
+    Wert sichtbar ist — er ist es:
+    `services/daten_checker/stammdaten.py` meldet für jeden Speicher ohne
+    Kapazität WARNING „…: Kapazität (kWh) fehlt" mit Link auf die
+    Investitionspflege.
+
+    **Eine 0 zählt als ungepflegt** und liefert ebenfalls `None`. Das ist die
+    hier begründete Ausnahme von der Projektregel „0-Werte mit `is not None`
+    prüfen" (dieselbe wie bei `get_pv_kwp`): ein 0-kWh-Speicher ist keine
+    Messung, sondern ein leeres Feld. Anders als bei `leistung_kwp` entsteht
+    daraus **kein** N107-Widerspruch — es gibt hier nur eine einzige Quelle
+    (s. u.), also keinen zweiten Helper, der dieselbe Investition anders
+    beantworten könnte.
+
+    **Nur das `parameter`-JSON, nicht die Spalte** — obwohl
+    `Investition.leistung_kwp` ein Mehrzweckfeld ist und beim Speicher kWh
+    trägt (`pdf/templates/jahresbericht.html` rendert genau das). Gemessen
+    (A31-1): **kein Schreibpfad füllt sie beim Speicher** —
+    `InvestitionForm.tsx` bietet das Spaltenfeld nur für `pv-module` an, der
+    Speicher schreibt ausschließlich `param_kapazitaet_kwh`, und
+    `import_export/json_operations.py` reicht die Spalte beim Roundtrip nur
+    durch. Es gibt hier also keine #229-Datenlage, die einen Spalten-Fallback
+    rechtfertigte; ihn einzubauen wäre keine Härtung, sondern eine
+    Verhaltensänderung an jeder der 13 Lesestellen.
+
+    Kein Typfilter (wie bei `get_erzeuger_kwp`): der Aufrufer filtert auf
+    `typ == "speicher"`. Ein E-Auto trägt seine Batterie unter dem eigenen
+    Schlüssel `batteriekapazitaet_kwh` und liefert hier korrekt `None`.
+    """
+    params = getattr(inv, "parameter", None) or {}
+    try:
+        wert = float(params.get(PARAM_SPEICHER["KAPAZITAET_KWH"]) or 0)
+    except (TypeError, ValueError):
+        return None
+    return wert or None

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 from backend.core.exceptions import bad_request, not_found
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
@@ -1285,7 +1286,7 @@ async def get_tagesprognose(
     ]
 
     speicher_kap = sum(
-        (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        get_speicher_kapazitaet_kwh(inv) or 0
         for inv in speicher_invs
     )
 

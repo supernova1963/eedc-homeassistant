@@ -65,6 +65,7 @@ from backend.utils.sonstige_positionen import (
     berechne_md_sonstige_summen,
     aggregiere_sonstige_je_monat,
 )
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 
 logger = logging.getLogger(__name__)
@@ -1436,7 +1437,7 @@ async def get_aktueller_monat(
         # zusätzlich gebildete Netto-Summe (`nutzbare_kapazitaet_kwh` mit
         # Brutto-Fallback) wurde nirgends gelesen — sie suggerierte eine
         # zweite Basis, die es an dieser Stelle nicht gibt (R22-4).
-        kap_sum = sum((i.parameter or {}).get("kapazitaet_kwh", 0) or 0 for i in speicher_invs)
+        kap_sum = sum(get_speicher_kapazitaet_kwh(i) or 0 for i in speicher_invs)
         if kap_sum > 0:
             speicher_kapazitaet = round(kap_sum, 1)
 

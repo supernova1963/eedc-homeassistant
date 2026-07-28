@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import Anlage, Monatsdaten, Investition, InvestitionMonatsdaten
 from backend.core.berechnungen import berechne_verbrauchs_kennzahlen
 from backend.core.config import settings
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import (
-    PARAM_SPEICHER,
     PARAM_WALLBOX,
     PARAM_BALKONKRAFTWERK,
     PARAM_WAERMEPUMPE,
@@ -138,7 +138,7 @@ async def prepare_community_data(
 
     # Speicherkapazität summieren
     speicher_kwh = sum(
-        (inv.parameter or {}).get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0) or 0
+        get_speicher_kapazitaet_kwh(inv) or 0
         for inv in investitionen
         if inv.typ == "speicher"
     )

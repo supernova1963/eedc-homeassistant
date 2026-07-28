@@ -28,7 +28,11 @@ from backend.api.routes.strompreise import (
     resolve_strompreis_for_komponente,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
-from backend.core.investition_kennwerte import ANZAHL_LESE_DEFAULT, get_bkw_kwp
+from backend.core.investition_kennwerte import (
+    ANZAHL_LESE_DEFAULT,
+    get_bkw_kwp,
+    get_speicher_kapazitaet_kwh,
+)
 from backend.core.investition_parameter import (
     PARAM_SPEICHER,
     PARAM_SPEICHER_DEFAULTS,
@@ -827,9 +831,18 @@ async def get_speicher_dashboard(
         # 2026-07-28). Vorher stand hier die Ladung, während der HA-Sensor
         # schon die Entladung nahm: zwei Zahlen unter demselben Namen.
         params = speicher.parameter or {}
-        kapazitaet = params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 10)
+        # N127: BRUTTO-Kapazität über den SoT-Helper, ohne Default. Hier stand
+        # `.get(…, 10)` — ein Speicher ohne gepflegte Kapazität bekam still
+        # 10 kWh und daraus eine Zyklenzahl, die es nie gab. Ohne Kapazität
+        # gibt es keine Zyklenzahl: `None` („unbekannt"), nicht 0 („nie
+        # zyklisiert"). Bei gepflegter Kapazität bleibt der bisherige
+        # 0-Ersatz für „keine Entladung" unverändert.
+        kapazitaet = get_speicher_kapazitaet_kwh(speicher)
         arbitrage_faehig = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
-        vollzyklen = berechne_vollzyklen(gesamt_entladung, kapazitaet) or 0
+        vollzyklen = (
+            (berechne_vollzyklen(gesamt_entladung, kapazitaet) or 0)
+            if kapazitaet is not None else None
+        )
 
         # Etappe C (#264): SoC-korrigierter η-IST pro Speicher.
         # aggregiere_speicher_ist als SoT-Helper statt Parallel-Summe.
@@ -869,9 +882,16 @@ async def get_speicher_dashboard(
             'gesamt_ladung_kwh': round(gesamt_ladung, 1),
             'gesamt_entladung_kwh': round(gesamt_entladung, 1),
             'effizienz_prozent': round(effizienz, 1),
-            'vollzyklen': round(vollzyklen, 1),
-            'zyklen_pro_monat': round(vollzyklen / len(monatsdaten), 1) if monatsdaten else 0,
+            'vollzyklen': round(vollzyklen, 1) if vollzyklen is not None else None,
+            'zyklen_pro_monat': (
+                (round(vollzyklen / len(monatsdaten), 1) if monatsdaten else 0)
+                if vollzyklen is not None else None
+            ),
             'kapazitaet_kwh': kapazitaet,
+            # P4: die fehlende Kapazität sagt sich selbst, statt als 0 oder als
+            # erfundene 10 durchzulaufen (N127). Das Frontend hängt daraus einen
+            # Hinweis in das bestehende `hinweise`-Array des Speicher-Geräts.
+            'kapazitaet_fehlt': kapazitaet is None,
             'ersparnis_euro': round(ersparnis, 2),
             'anzahl_monate': len(monatsdaten),
             # Arbitrage-Daten

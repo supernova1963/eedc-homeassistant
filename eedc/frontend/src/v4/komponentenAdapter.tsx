@@ -423,6 +423,12 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       if (z.durchsatz_inkonsistent) {
         hinweise.push({ ton: 'warning', text: 'Die kumulierte Entladung übersteigt die kumulierte Ladung — über die gesamte Historie physikalisch unmöglich. Bitte die erfassten Lade- und Entlade-Werte prüfen (beim Datenübertrag leicht vertauscht).' })
       }
+      // N127 / P4: ohne gepflegte Kapazität stehen Vollzyklen und Zyklen/Monat
+      // auf „—" statt auf einer Zahl, die aus 10 kWh Annahme entstand. Der
+      // Grund gehört sichtbar daneben, sonst liest sich das „—" wie ein Bug.
+      if (z.kapazitaet_fehlt) {
+        hinweise.push({ ton: 'warning', text: 'Für diesen Speicher ist keine Kapazität gepflegt — Vollzyklen und Zyklen pro Monat lassen sich daraus nicht berechnen. Kapazität in den Einstellungen unter Investitionen nachtragen.' })
+      }
       return {
         inv, label: inv.bezeichnung,
         status: [

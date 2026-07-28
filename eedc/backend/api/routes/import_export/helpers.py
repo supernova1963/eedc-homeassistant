@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.investition import Investition
 from backend.core.field_definitions import get_alle_felder_fuer_investition, IMPORT_SUMMEN_KEYS
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.services.import_writer import (
     UpsertResult,
     upsert_investition_monatsdaten_with_provenance,
@@ -397,12 +398,12 @@ async def _distribute_legacy_battery_to_storages(
 
     # Gesamt-Kapazität berechnen
     total_kapazitaet = sum(
-        (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        get_speicher_kapazitaet_kwh(inv) or 0
         for inv in speicher
     )
 
     for inv in speicher:
-        inv_kap = (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+        inv_kap = get_speicher_kapazitaet_kwh(inv) or 0
 
         if total_kapazitaet > 0:
             # Proportionale Verteilung nach Kapazität

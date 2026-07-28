@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -145,7 +146,7 @@ async def _aktueller_speicher(db, anlage_id: int, heute: date) -> tuple[float, O
         i for i in res.scalars().all()
         if not i.stilllegungsdatum or i.stilllegungsdatum >= heute
     ]
-    kap = sum((i.parameter or {}).get("kapazitaet_kwh", 0) or 0 for i in speicher)
+    kap = sum(get_speicher_kapazitaet_kwh(i) or 0 for i in speicher)
     if kap <= 0:
         return 0.0, None
 

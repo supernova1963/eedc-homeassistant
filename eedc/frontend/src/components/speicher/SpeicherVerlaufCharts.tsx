@@ -49,7 +49,10 @@ export function prepSpeicherMonate(monatsdaten: InvestitionMonatsdaten[], z: Zus
       name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(2)}`,
       ladung, entladung, arbitrage,
       pvLadung: ladung - arbitrage,
-      zyklen: z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0,
+      // N127: ohne gepflegte Kapazität ist `kapazitaet_kwh` null — der
+      // Vergleich fällt dann wie bisher auf 0 (kein Balken), nur eben ohne die
+      // erfundene 10-kWh-Basis dahinter.
+      zyklen: z.kapazitaet_kwh != null && z.kapazitaet_kwh > 0 ? ladung / z.kapazitaet_kwh : 0,
     }
   })
 }

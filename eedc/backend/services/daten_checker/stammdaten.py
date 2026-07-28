@@ -11,6 +11,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.utils.investition_filter import sort_investitionen_nach_typ
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import PARAM_PV_MODULE, ist_dienstlich
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
 from backend.core.field_definitions import get_speicher_netzladung_kwh
@@ -323,8 +324,11 @@ class StammdatenChecks:
                 ))
 
             elif inv.typ == "speicher":
-                kap = param.get("kapazitaet_kwh")
-                if not kap:
+                # Diese Meldung ist die Bedingung, unter der `None` als
+                # Helper-Rückgabe freigegeben wurde (E16): der fehlende Wert
+                # wird ausgewiesen, statt dass irgendwo eine 10 entsteht.
+                kap = get_speicher_kapazitaet_kwh(inv)
+                if kap is None:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Kapazität (kWh) fehlt",

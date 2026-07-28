@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from backend.core.investition_kennwerte import get_erzeuger_kwp
-from backend.core.investition_parameter import PARAM_SPEICHER, ist_dienstlich
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_speicher_kapazitaet_kwh
+from backend.core.investition_parameter import ist_dienstlich
 from backend.models.investition import InvestitionTyp
 
 # Hinweis: Die GRAUE_LAST_*-Richtwerte leben in core/calculations.py (neben den
@@ -87,9 +87,10 @@ def graue_last_einzeln(inv) -> tuple[float, str]:
         return kwp * GRAUE_LAST_PV_KG_PRO_KWP, QUELLE_DEFAULT
 
     if typ == InvestitionTyp.SPEICHER.value:
-        params = getattr(inv, "parameter", None) or {}
-        kap = params.get(PARAM_SPEICHER["KAPAZITAET_KWH"], 0) or 0
-        if kap <= 0:
+        # BRUTTO-Kapazität über den SoT-Helper (ADR-002/P3-a) — dieselbe
+        # Bezugsgröße wie der Faktor `GRAUE_LAST_SPEICHER_KG_PRO_KWH` meint.
+        kap = get_speicher_kapazitaet_kwh(inv)
+        if kap is None or kap <= 0:
             return 0.0, QUELLE_FEHLT
         return kap * GRAUE_LAST_SPEICHER_KG_PRO_KWH, QUELLE_DEFAULT
 

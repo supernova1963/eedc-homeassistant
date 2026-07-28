@@ -33,6 +33,7 @@ from backend.core.berechnungen import (
     vollzyklen as berechne_vollzyklen,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
@@ -144,7 +145,7 @@ async def baue_tage_werte(
             speicher_vollzyklen=_r(berechne_vollzyklen(
                 bilanz.speicher_entladung_kwh,
                 sum(
-                    (i.parameter or {}).get("kapazitaet_kwh", 0) or 0
+                    get_speicher_kapazitaet_kwh(i) or 0
                     for i in speicher_invs if i.ist_aktiv_an(tag)
                 ),
             ), 2),

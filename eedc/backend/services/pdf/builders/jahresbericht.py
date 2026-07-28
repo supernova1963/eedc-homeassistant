@@ -33,6 +33,7 @@ from backend.utils.sonstige_positionen import (
     berechne_md_sonstige_summen,
 )
 from backend.core.field_definitions import get_wp_strom_kwh
+from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
 from backend.core.calculations import (
@@ -124,10 +125,12 @@ async def build_jahresbericht_context(
     )
     hat_bkw = any(i.typ == "balkonkraftwerk" for i in investitionen)
 
+    # BRUTTO-Kapazität über den SoT-Helper (ADR-002/P3-a). `or 0`, weil ein
+    # ungepflegter Speicher `None` liefert und die Summe der übrigen weiterläuft.
     speicher_kapazitaet = 0.0
     for inv in investitionen:
         if inv.typ == "speicher":
-            speicher_kapazitaet += (inv.parameter or {}).get("kapazitaet_kwh", 0) or 0
+            speicher_kapazitaet += get_speicher_kapazitaet_kwh(inv) or 0
 
     # ── 4. PVGIS-Prognose (die aktive) ──────────────────────────────────
     # Auswahlregel über den SoT `services/prognose_auswahl.py` — dieselbe

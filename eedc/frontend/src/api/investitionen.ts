@@ -211,9 +211,12 @@ export interface SpeicherDashboardResponse {
     gesamt_ladung_kwh: number
     gesamt_entladung_kwh: number
     effizienz_prozent: number
-    vollzyklen: number
-    zyklen_pro_monat: number
-    kapazitaet_kwh: number
+    // N127: alle drei sind `null`, wenn keine Kapazität gepflegt ist — ohne sie
+    // gibt es keine Zyklenzahl. Vorher rechnete das Backend still mit 10 kWh.
+    vollzyklen: number | null
+    zyklen_pro_monat: number | null
+    kapazitaet_kwh: number | null
+    kapazitaet_fehlt?: boolean
     ersparnis_euro: number
     anzahl_monate: number
     // Arbitrage-Daten
