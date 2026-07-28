@@ -30,7 +30,9 @@ from backend.services.solar_forecast_service import (
 )
 from backend.services.pv_orientation import resolve_system_losses
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
-from backend.services.wetter.cache import _cache_get, _cache_set
+from backend.services.wetter.cache import (
+    SNAPSHOT_HORIZONT_TAGE, _cache_get, _cache_set,
+)
 from backend.services.wetter.models import WETTER_MODELLE
 
 logger = logging.getLogger(__name__)
@@ -120,36 +122,36 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
 
     coros = []
 
+    # EIN Abruf je Standort/Orientierung/Modell (E15/A29). Bis A29 wärmte der
+    # Prefetch hier zwei GTI- und drei Wetter-Horizonte, weil jeder davon einen
+    # eigenen Cache-Eintrag hatte — den `days=4`-Satz des Prognose-Kanons traf
+    # er dabei NIE, der lief also immer als Live-Abruf. Seit der Cache-Key den
+    # Modell-Snapshot trägt (`cache.snapshot_days`), bedient ein Abruf alle
+    # Horizonte; mehrere parallele Aufrufe wären jetzt derselbe Key und damit
+    # schlicht doppelte API-Last.
     if has_multi:
-        for tage in (7, 14):
-            coros.append(get_multi_string_prognose(
-                anlage.latitude, anlage.longitude, strings,
-                days=tage, system_losses=system_losses,
-                wetter_modell=wetter_modell, skip_jitter=True,
-            ))
+        coros.append(get_multi_string_prognose(
+            anlage.latitude, anlage.longitude, strings,
+            days=SNAPSHOT_HORIZONT_TAGE, system_losses=system_losses,
+            wetter_modell=wetter_modell, skip_jitter=True,
+        ))
     else:
         total_kwp = sum(s.kwp for s in strings)
-        for tage in (7, 14):
-            coros.append(get_solar_prognose(
-                anlage.latitude, anlage.longitude, total_kwp,
-                strings[0].neigung, strings[0].ausrichtung,
-                days=tage, system_losses=system_losses,
-                wetter_modell=wetter_modell, skip_jitter=True,
-            ))
+        coros.append(get_solar_prognose(
+            anlage.latitude, anlage.longitude, total_kwp,
+            strings[0].neigung, strings[0].ausrichtung,
+            days=SNAPSHOT_HORIZONT_TAGE, system_losses=system_losses,
+            wetter_modell=wetter_modell, skip_jitter=True,
+        ))
 
-    # Wetter-Forecast (für Aussichten kurzfristig) — mit Wettermodell der Anlage
-    # days=7  → /aussichten/wetter/{id} (default)
-    # days=14 → /aussichten/kurzfristig/{id} (default, Kurzfrist-Prognose)
-    # days=16 → 14-Tage-Ansicht
+    # Wetter-Forecast (Aussichten kurzfristig, 14-Tage-Ansicht) — mit
+    # Wettermodell der Anlage. Der volle Horizont deckt alle drei Sichten
+    # (/aussichten/wetter default 7, /aussichten/kurzfristig default 14,
+    # 14-Tage-Ansicht 16) aus demselben Snapshot.
     model_name, _ = WETTER_MODELLE.get(wetter_modell, (None, 16))
     coros.append(fetch_open_meteo_forecast(
-        anlage.latitude, anlage.longitude, days=7, skip_jitter=True, model=model_name,
-    ))
-    coros.append(fetch_open_meteo_forecast(
-        anlage.latitude, anlage.longitude, days=14, skip_jitter=True, model=model_name,
-    ))
-    coros.append(fetch_open_meteo_forecast(
-        anlage.latitude, anlage.longitude, days=16, skip_jitter=True, model=model_name,
+        anlage.latitude, anlage.longitude,
+        days=SNAPSHOT_HORIZONT_TAGE, skip_jitter=True, model=model_name,
     ))
 
     # Live-Wetter (für WetterWidget auf Live-Seite) — Gruppen aus demselben SoT,
@@ -165,7 +167,8 @@ async def _prefetch_for_anlage(anlage: Anlage, db) -> dict:
     results = await asyncio.gather(*coros, return_exceptions=True)
 
     # ── Heutige PV-Prognose in DB persistieren (für Lernfaktor) ──
-    # Erster Result ist die 7-Tage-Prognose (single oder multi)
+    # Erster Result ist die PV-Prognose (single oder multi); der Snapshot deckt
+    # alle Horizonte, gelesen wird hier nur der heutige Tag.
     pv_heute_kwh = _extract_heute_kwh(results[0], has_multi)
     # #306: Bei Multi-String prüfen, ob alle Orientierungsgruppen geliefert
     # haben. Ein unvollständiger Fan-out lieferte einen kollabierten Solo-

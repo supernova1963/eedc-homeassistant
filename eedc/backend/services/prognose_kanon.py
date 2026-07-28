@@ -97,11 +97,16 @@ class KanonPrognose:
     skalar_fallback: Optional[float]   # Legacy-Lernfaktor (Diagnose/Fallback)
 
 
-# Untergrenze des Kanon-Horizonts. Der OpenMeteo-Cache-Key enthält `days`
-# (`gti:lat:lon:neigung:ausrichtung:days:model`) — heute/morgen/übermorgen
-# treffen damit nur dann DENSELBEN Snapshot wie Prognosen-Vergleich, HA-Export
-# und Live, wenn alle mit demselben `days` abrufen. 4 ist dieser gemeinsame
-# Nenner (MQTT/Vergleich/Live rufen fix `days=4`).
+# Untergrenze des Kanon-Horizonts: so viele Tage, wie der weitest blickende
+# Konsument braucht — MQTT/HA-Export und der Prognosen-Vergleich lesen fix
+# `tage[0..3]`.
+#
+# Bis A29 stand hier eine zweite, inzwischen überholte Begründung: der
+# OpenMeteo-Cache-Key enthielt `days`, weshalb ein abweichender Horizont einen
+# ANDEREN Snapshot desselben Tages zog und 4 der erzwungene gemeinsame Nenner
+# war. Seit E15 bestimmt nicht mehr der Aufrufer den Cache-Key, sondern das
+# Wettermodell (`services/wetter/cache.snapshot_days`) — `days` ist hier wieder
+# das, was es sein soll: wie viele Tage der Kanon RECHNET.
 KANON_MIN_DAYS = 4
 
 

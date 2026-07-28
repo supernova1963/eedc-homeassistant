@@ -37,6 +37,78 @@ ERROR_TTL_SERVER_ERROR = 120    # 502/503 Bad Gateway: 2 Minuten
 ERROR_TTL_NETWORK = 60          # Timeout/ConnectError: 1 Minute
 
 
+# ── Snapshot-Horizont: EIN OpenMeteo-Abruf je (Standort, Modell) ─────────────
+# Größter im Baum benötigter Horizont. `/solar-prognose?tage=` und
+# `/aussichten/kurzfristig?tage=` erlauben beide bis 16, der Prefetch wärmt 16 —
+# und 16 ist zugleich das OpenMeteo-Maximum (`forecast_days`).
+SNAPSHOT_HORIZONT_TAGE = 16
+
+
+def snapshot_days(model: Optional[str] = None) -> int:
+    """Kanonisches ``days`` für Cache-Key UND ``forecast_days`` (Entscheidung E15).
+
+    **Warum es diese Funktion gibt.** Die Cache-Keys beider OpenMeteo-Räume
+    (``gti:lat:lon:neigung:ausrichtung:days:model`` in
+    ``solar_forecast_service`` und ``forecast:lat:lon:days:model`` hier im
+    Wetter-Client) enthalten ``days``. Verschiedene Sichten fragen verschiedene
+    Horizonte — der Kanon 4, der Prefetch 7 und 14, ``/solar-prognose`` bis 16 —
+    also lag für DENSELBEN Tag je Sicht ein anderer Snapshot im Cache. Zwei
+    Seiten zeigten für „morgen" zwei Zahlen, ohne dass sich die Rechnung
+    unterschied (N20/N33). Seit dieser Funktion bestimmt **nicht mehr der
+    Aufrufer** den Cache-Key, sondern das Modell: ein ``days``-Wert je
+    ``(lat, lon, model)``, alle Aufrufer treffen denselben Eintrag.
+
+    **Warum EIN langer Abruf und nicht ein Cache ohne ``days`` (Variante b).**
+
+    * Die Antwort ist ein **echtes Präfix**: der API-Parameter heißt
+      ``forecast_days``; ``days=16`` liefert Tag 0..15 und enthält den
+      ``days=4``-Abruf vollständig. Variante (b) — Key ohne ``days``, längstes
+      Fenster bedient kürzere Anfragen — müsste genau diese Eigenschaft in einer
+      eigenen Cache-Schicht nachbauen, die die API bereits mitbringt.
+    * Kostentreiber ist der **Request, nicht der Tag**: die Payload sind wenige
+      KB; teuer sind Rate-Limit (``ERROR_TTL_RATE_LIMIT``) und der Jitter von
+      1–30 s vor jedem Nicht-Prefetch-Call.
+    * (b) verlagert Komplexität an die falsche Stelle: der Cache hier ist
+      ``key → (expires_at, data)`` plus L2-Persistenz in ``ApiCache`` plus
+      Negative-Cache über DENSELBEN Key. (b) verlangte zusätzlich eine
+      Fensterlänge je Eintrag, eine „reicht das Fenster?"-Logik, den Mitzug des
+      Negative-Caches und die L2-Rekonstruktion — eine neue Invariante ohne
+      Wächter. (a) dagegen ist wächterbar: genau ein ``days``-Wert je
+      ``(lat, lon, model)``, Baseline 0.
+
+    **Warum ``min`` und nicht pauschal 16 (Auflage E15-a).** ``WETTER_MODELLE``
+    gibt je Modell ein Maximum (icon_d2 2 Tage, icon_eu 5, ecmwf_ifs04 10 …).
+    Ein pauschales 16 verfehlte nicht nur den Cache — es änderte Zahlen. Am
+    2026-07-28 gemessen: ``models=icon_d2&forecast_days=16`` liefert 16
+    Tageseinträge, ab Tag 3 aber ``None``. Die Modell-Kaskade in
+    ``solar_forecast_service.get_solar_prognose`` bildet
+    ``primary_dates`` aus den Daten der Primär-Antwort und lässt den
+    best_match-Fallback nur die FEHLENDEN Tage auffüllen. Mit 16 leeren
+    Primär-Tagen hätte der Fallback keinen einzigen Tag mehr beigesteuert, und
+    Tag 3–16 wären auf den 0-Ertrag der leeren Antwort gefallen statt auf
+    best_match.
+
+    Solange ``wetter_modell`` nicht im Prognose-Kanon ankommt, ist ``model``
+    dort immer ``None``/``auto`` → 16 und die Grenze fällt nicht auf; sie steht
+    trotzdem hier, damit sie beim Nachziehen des Modells (A30/N16) schon greift.
+
+    Args:
+        model: OpenMeteo-**Modellname** wie im Cache-Key (``icon_d2``,
+            ``ecmwf_seamless``, …). ``None`` = best_match/``auto``.
+    """
+    # Import lokal: `models` ist reine Konfiguration, aber ein Modul-Import auf
+    # dieser Ebene machte den Cache von der Modell-Schicht abhängig.
+    from backend.services.wetter.models import WETTER_MODELLE
+
+    max_je_modell = {
+        (name or "auto"): tage for name, tage in WETTER_MODELLE.values()
+    }
+    return min(
+        SNAPSHOT_HORIZONT_TAGE,
+        max_je_modell.get(model or "auto", SNAPSHOT_HORIZONT_TAGE),
+    )
+
+
 def _error_cache_check(key: str) -> bool:
     """True wenn dieser Key kürzlich einen Fehler hatte → API-Call überspringen."""
     expires = _error_cache.get(key)

@@ -998,11 +998,12 @@ async def _pv_stunden_aus_kanon(db, anlage, datum: date) -> Optional[list[float]
     — dieselbe Anlage bekam so je nach Pfad verschiedene Tagessummen.
 
     ``days`` kommt aus ``kanon_days`` (Horizont-Formel-SoT, geteilt mit
-    ``/solar-prognose``): mindestens 4, damit für heute/morgen/übermorgen
-    **derselbe** OpenMeteo-Cache-Eintrag (Key enthält ``days``) und damit
-    derselbe Snapshot gezogen wird wie im Prognosen-Vergleich und im HA-/
-    MQTT-Export. Für spätere Zieltage aus dem Datum abgeleitet — der Picker
-    erlaubt +14 Tage, also ``days`` ≤ 15 (OpenMeteo-Maximum 16).
+    ``/solar-prognose``): mindestens 4, für spätere Zieltage aus dem Datum
+    abgeleitet — der Picker erlaubt +14 Tage, also ``days`` ≤ 15 (OpenMeteo-
+    Maximum 16). Dass dabei derselbe OpenMeteo-Snapshot gezogen wird wie im
+    Prognosen-Vergleich und im HA-/MQTT-Export, hängt seit E15/A29 nicht mehr
+    an diesem Horizont: der Cache-Key trägt den Modell-Snapshot, nicht die
+    Anfrage (``services/wetter/cache.snapshot_days``).
     """
     tage_bis_ziel = (datum - date.today()).days
     if tage_bis_ziel < 0:

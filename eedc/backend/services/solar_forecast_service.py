@@ -23,6 +23,7 @@ from typing import Optional, List
 
 from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.cache import (
+    snapshot_days,
     _cache_get, _cache_set, _error_cache_check, _error_cache_set,
     FORECAST_CACHE_TTL, JITTER_MAX_SECONDS,
     ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
@@ -30,7 +31,7 @@ from backend.services.wetter.cache import (
 from backend.services.wetter.models import WETTER_MODELLE, MODELL_ANZEIGE
 
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -217,17 +218,29 @@ async def fetch_gti_forecast(
 
     days = min(days, 16)  # API-Maximum
 
+    # E15: abgerufen und gecacht wird IMMER der volle Snapshot des Modells (das
+    # Ergebnis ist ein echtes Präfix), zugeschnitten wird lokal in
+    # `get_solar_prognose`. Sonst hat jeder Horizont seinen eigenen Cache-
+    # Eintrag und damit seinen eigenen Snapshot desselben Tages (N20/N33) —
+    # Begründung am SoT: `services/wetter/cache.snapshot_days`.
+    abruf_days = snapshot_days(model)
+
     # Cache prüfen (GTI-Forecast → 60 Min TTL)
     model_key = model or "auto"
-    cache_key = f"gti:{latitude:.2f}:{longitude:.2f}:{neigung}:{ausrichtung}:{days}:{model_key}"
+    cache_key = (
+        f"gti:{latitude:.2f}:{longitude:.2f}:{neigung}:{ausrichtung}"
+        f":{abruf_days}:{model_key}"
+    )
     cached = _cache_get(cache_key)
     if cached is not None:
-        logger.debug(f"Open-Meteo Solar: Cache-Hit ({days} Tage, {model_key})")
+        logger.debug(f"Open-Meteo Solar: Cache-Hit ({abruf_days} Tage, {model_key})")
         return cached
 
     # Negative Cache: kürzlich fehlgeschlagen → API-Call überspringen
     if _error_cache_check(cache_key):
-        logger.debug(f"Open-Meteo Solar: Negative-Cache-Hit ({days} Tage, {model_key})")
+        logger.debug(
+            f"Open-Meteo Solar: Negative-Cache-Hit ({abruf_days} Tage, {model_key})"
+        )
         return None
 
     params = {
@@ -257,7 +270,7 @@ async def fetch_gti_forecast(
         "tilt": neigung,
         "azimuth": azimuth_to_openmeteo(ausrichtung),
         "timezone": "Europe/Berlin",
-        "forecast_days": days,
+        "forecast_days": abruf_days,
     }
 
     if model is not None:
@@ -275,8 +288,9 @@ async def fetch_gti_forecast(
 
             model_info = f", Modell={model}" if model else ""
             logger.info(
-                f"Open-Meteo Solar: {days} Tage @ ({latitude}, {longitude}), "
+                f"Open-Meteo Solar: {abruf_days} Tage @ ({latitude}, {longitude}), "
                 f"Neigung={neigung}°, Azimut={ausrichtung}°{model_info}"
+                f" (Anfrage: {days} Tage)"
             )
 
             _cache_set(cache_key, data, FORECAST_CACHE_TTL)
@@ -355,7 +369,63 @@ def berechne_pv_ertrag(
     return max(0, ertrag)
 
 
+def _auf_horizont_kuerzen(
+    prognose: Optional[SolarPrognoseResponse], days: int
+) -> Optional[SolarPrognoseResponse]:
+    """Schneidet eine Prognose auf die ersten ``days`` Tage zu (Gegenstück zu E15).
+
+    Seit ``fetch_gti_forecast`` immer den vollen Modell-Snapshot abruft (EIN
+    Cache-Eintrag je Standort/Modell statt einem je Horizont), liefert
+    ``_build_prognose`` mehr Tage, als der Aufrufer angefragt hat. Hier fällt
+    der Überhang wieder weg — **rein als Präfix**: die Tageswerte selbst sind
+    unberührt, nur die Aggregate darüber werden über den verbliebenen Ausschnitt
+    neu gebildet. Für jeden Aufrufer sieht die Antwort damit exakt so aus wie
+    vor der Vereinheitlichung.
+    """
+    if prognose is None or len(prognose.tageswerte) <= days:
+        return prognose
+
+    tageswerte = prognose.tageswerte[:days]
+    summe = sum(t.pv_ertrag_kwh for t in tageswerte)
+    return replace(
+        prognose,
+        tageswerte=tageswerte,
+        prognose_zeitraum={
+            "von": tageswerte[0].datum,
+            "bis": tageswerte[-1].datum,
+        },
+        summe_kwh=round(summe, 1),
+        durchschnitt_kwh_tag=round(summe / len(tageswerte), 2),
+    )
+
+
 async def get_solar_prognose(
+    latitude: float,
+    longitude: float,
+    kwp: float,
+    neigung: int = 35,
+    ausrichtung: int = 0,
+    days: int = 7,
+    system_losses: float = DEFAULT_SYSTEM_LOSSES,
+    wetter_modell: str = "auto",
+    skip_jitter: bool = False,
+) -> Optional[SolarPrognoseResponse]:
+    """PV-Ertragsprognose (GTI) über genau ``days`` Tage.
+
+    Dünner Zuschnitt über ``_solar_prognose_snapshot``: der Abruf darunter holt
+    immer den vollen Modell-Snapshot (E15, siehe ``cache.snapshot_days``), diese
+    Funktion gibt daraus den angefragten Horizont zurück.
+    """
+    return _auf_horizont_kuerzen(
+        await _solar_prognose_snapshot(
+            latitude, longitude, kwp, neigung, ausrichtung, days,
+            system_losses, wetter_modell, skip_jitter,
+        ),
+        days,
+    )
+
+
+async def _solar_prognose_snapshot(
     latitude: float,
     longitude: float,
     kwp: float,
@@ -371,6 +441,9 @@ async def get_solar_prognose(
 
     Bei wetter_modell != "auto" wird eine Kaskade verwendet:
     bevorzugtes Modell (begrenzte Tage) + best_match Fallback für den Rest.
+
+    Liefert den vollen Snapshot (≥ ``days`` Tage) — den Zuschnitt macht
+    ``get_solar_prognose``.
 
     Args:
         latitude: Breitengrad

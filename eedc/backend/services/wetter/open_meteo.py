@@ -18,6 +18,7 @@ from backend.services.wetter.cache import (
     _cache_get, _cache_set, _error_cache_check, _error_cache_set,
     FORECAST_CACHE_TTL, ARCHIVE_CACHE_TTL, JITTER_MAX_SECONDS,
     ERROR_TTL_RATE_LIMIT, ERROR_TTL_SERVER_ERROR, ERROR_TTL_NETWORK,
+    snapshot_days,
 )
 from backend.services.wetter.utils import MJ_TO_KWH, SECONDS_TO_HOURS
 
@@ -25,6 +26,20 @@ logger = logging.getLogger(__name__)
 
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+
+def _auf_horizont_kuerzen(snapshot: dict, days: int) -> dict:
+    """Schneidet den gecachten Snapshot auf die ersten ``days`` Tage zu.
+
+    Gegenstück zu ``snapshot_days``: gecacht wird EIN langer Snapshot je
+    ``(lat, lon, model)``, jeder Aufrufer bekommt daraus genau den Horizont,
+    den er angefragt hat. Reines Präfix — die Tageseinträge selbst bleiben
+    unberührt, es fällt kein Wert anders aus als vorher.
+    """
+    tage = snapshot.get("tage") or []
+    if len(tage) <= days:
+        return snapshot
+    return {**snapshot, "tage": tage[:days]}
 
 
 async def fetch_open_meteo_archive(
@@ -173,17 +188,25 @@ async def fetch_open_meteo_forecast(
     """
     days = min(days, 16)  # Open-Meteo Maximum
 
+    # E15: abgerufen und gecacht wird IMMER der volle Snapshot des Modells,
+    # zugeschnitten wird lokal — sonst hat jeder Horizont seinen eigenen
+    # Cache-Eintrag und damit seinen eigenen Snapshot desselben Tages
+    # (Begründung: `cache.snapshot_days`).
+    abruf_days = snapshot_days(model)
+
     # Cache prüfen (Forecast → 60 Min TTL, Key enthält Modell)
     model_key = model or "auto"
-    cache_key = f"forecast:{latitude:.2f}:{longitude:.2f}:{days}:{model_key}"
+    cache_key = f"forecast:{latitude:.2f}:{longitude:.2f}:{abruf_days}:{model_key}"
     cached = _cache_get(cache_key)
     if cached is not None:
-        logger.debug(f"Open-Meteo Forecast: Cache-Hit ({days} Tage, {model_key})")
-        return cached
+        logger.debug(f"Open-Meteo Forecast: Cache-Hit ({abruf_days} Tage, {model_key})")
+        return _auf_horizont_kuerzen(cached, days)
 
     # Negative Cache: kürzlich fehlgeschlagen → API-Call überspringen
     if _error_cache_check(cache_key):
-        logger.debug(f"Open-Meteo Forecast: Negative-Cache-Hit ({days} Tage, {model_key})")
+        logger.debug(
+            f"Open-Meteo Forecast: Negative-Cache-Hit ({abruf_days} Tage, {model_key})"
+        )
         return None
 
     params = {
@@ -199,7 +222,7 @@ async def fetch_open_meteo_forecast(
             "weather_code"
         ]),
         "timezone": "Europe/Berlin",
-        "forecast_days": days,
+        "forecast_days": abruf_days,
     }
 
     # Wettermodell ergänzen (None = best_match = Parameter weglassen)
@@ -241,7 +264,7 @@ async def fetch_open_meteo_forecast(
 
             logger.info(
                 f"Open-Meteo Forecast: {len(tage)} Tage @ ({latitude}, {longitude})"
-                f" [Modell: {model_key}]"
+                f" [Modell: {model_key}, Anfrage: {days} Tage]"
             )
 
             result = {
@@ -253,8 +276,10 @@ async def fetch_open_meteo_forecast(
                 },
                 "wetter_modell": model_key,
             }
+            # Gecacht wird der volle Snapshot, zurückgegeben der Zuschnitt —
+            # damit ändert sich für keinen Aufrufer die Anzahl der Tage.
             _cache_set(cache_key, result, FORECAST_CACHE_TTL)
-            return result
+            return _auf_horizont_kuerzen(result, days)
 
     except httpx.TimeoutException:
         logger.error("Open-Meteo Forecast: Timeout")

@@ -496,7 +496,9 @@ async def get_prognosen_vergleich(
     # (Symmetrie-Test "OM == OM-Basis"), und eedc hier == Live/MQTT/Export.
     kanon_prog = None
     try:
-        # days=4 wie der HA-Export → identischer OpenMeteo-Solar-Cache-Eintrag.
+        # days=4: heute/morgen/übermorgen werden hier gelesen, der HA-Export
+        # rechnet denselben Horizont. Der OpenMeteo-Snapshot ist seit E15/A29
+        # ohnehin für alle Horizonte derselbe (`cache.snapshot_days`).
         kanon_prog = await kanon_tagesprognose(db, anlage, days=4, skip_jitter=True)
     except Exception as e:
         logger.warning(f"eedc-Kaskaden-Prognose fehlgeschlagen: {e}")
