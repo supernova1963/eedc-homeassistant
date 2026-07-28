@@ -1,7 +1,7 @@
 /**
  * AppStatusContext — Versorgungsschicht der app-weiten Status-Fusszeile (G11, P1).
  *
- * SPEC: `docs/drafts/SPEC-STATUS-FUSSZEILE.md`. Zwei Belange, ein Provider in der
+ * SPEC: `docs/drafts/archive/flip-v4/SPEC-STATUS-FUSSZEILE.md`. Zwei Belange, ein Provider in der
  * Shell (`LayoutV4`):
  *   - **Demo-Modus** global (war zuvor lokaler State der Live-Sicht; nur Live nutzt
  *     ihn funktional, aber der Schalter sitzt jetzt global in der Fusszeile).

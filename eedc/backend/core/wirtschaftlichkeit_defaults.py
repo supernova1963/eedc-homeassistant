@@ -1,7 +1,7 @@
 """Wirtschaftlichkeits-Defaults — zentrale Konstanten für Berechnungen.
 
 Single Source of Truth für hartcodierte Werte, die bisher an mehreren Stellen
-dupliziert waren (siehe `docs/drafts/INVENTUR-DRIFT-AUDIT.md`, Domäne B).
+dupliziert waren (siehe `docs/archive/INVENTUR-DRIFT-AUDIT.md`, Domäne B).
 
 Pendant im Frontend: `eedc/frontend/src/lib/wirtschaftlichkeitDefaults.ts`
 — bei Änderungen dort spiegeln.

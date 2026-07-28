@@ -1,7 +1,8 @@
 /**
  * DatenquellenHaPicker — HA-Sensor-Auswahl für die Datenquellen-Zuordnung (Schritt B).
  *
- * SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2b1 + KONZEPT-DATENQUELLEN-P2 (#343).
+ * SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2b1
+ * + docs/drafts/archive/flip-v4/KONZEPT-DATENQUELLEN-P2.md (#343, gebaut).
  * Listet die Entities der aktiven HA-Verbindung (Supervisor ODER Remote-HA per
  * LL-Token — verbindungs-transparent über `/datenquellen/{id}/ha/sensoren`) mit
  * Suche; Klick wählt die Entity. Welche Quell-Kennung (`ha_app`/`ha_connector`)

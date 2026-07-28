@@ -2,7 +2,7 @@
  * MonatAuswertungBloecke — die vor dem v4-Flip wiederhergestellten Monats-Analysen
  * aus dem alten „Energieprofil (Beta)"-Tab (Cockpit/Monat).
  *
- * Prüfung + Entscheid: `docs/drafts/PRUEFUNG-V3-ENERGIEPROFIL-ABDECKUNG.md` §5
+ * Prüfung + Entscheid: `docs/drafts/archive/flip-v4/PRUEFUNG-V3-ENERGIEPROFIL-ABDECKUNG.md` §5
  * (Gernot 2026-07-19). Vier Blöcke — reine WIEDERHERSTELLUNG verlorener Abdeckung,
  * kein neues Feature; alle Werte kommen fertig berechnet aus `getMonat`
  * (`MonatsAuswertung`), daher KEIN Berechnungs-Layer (Berechnung≠UI, ADR-001):

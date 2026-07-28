@@ -10,7 +10,7 @@ Nutzt nur `strompreis_cent` (Endpreis aus HA-Sensor, z.B. Tibber/aWATTar),
 NICHT `boersenpreis_cent` — Börsenpreis ist kein Endkundenpreis.
 
 Wird als Vorschlag im Monatsabschluss-Wizard verwendet (Phase 2 aus
-docs/KONZEPT-STROMPREIS-MITSCHRIFT.md).
+docs/archive/KONZEPT-STROMPREIS-MITSCHRIFT.md).
 """
 
 from __future__ import annotations

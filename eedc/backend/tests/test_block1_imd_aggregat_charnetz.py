@@ -5,7 +5,7 @@ die je eigenständig über `InvestitionMonatsdaten.verbrauch_daten` iterieren un
 per `if inv.typ == "..."` Monats-Aggregate bilden — BEVOR die Logik in einen
 gemeinsamen per-Zeilen-Resolver (`core/berechnungen/imd_monatsaggregat`) wandert.
 
-Sites (siehe docs/drafts/BLOCK1-FELD-MATRIX-20260614.md):
+Sites (siehe docs/drafts/archive/BLOCK1-FELD-MATRIX-20260614.md):
   1  get_aktueller_monat            (aktueller_monat.py, aktueller Monat)
   1b get_aktueller_monat .vorjahr   (aktueller_monat.py, Vorjahr-Variante)
   2  list_monatsdaten_aggregiert    (monatsdaten.py, /aggregiert)

@@ -1,7 +1,7 @@
 /**
  * useGlobalStatus — installations-/anlage-weite Status-Quellen der Fusszeile (G11, P2).
  *
- * SPEC: `docs/drafts/SPEC-STATUS-FUSSZEILE.md` §5/§7. Holt die Global-Zone-Daten
+ * SPEC: `docs/drafts/archive/flip-v4/SPEC-STATUS-FUSSZEILE.md` §5/§7. Holt die Global-Zone-Daten
  * **einmal auf Shell-Ebene** (nicht pro Sicht) aus bestehenden IST-Endpoints —
  * kein Backend-Neubau:
  *   - **Versions-Update**: `systemApi.checkUpdate()` (GitHub-Releases) — faltet das

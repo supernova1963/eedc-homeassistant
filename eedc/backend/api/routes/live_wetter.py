@@ -577,7 +577,7 @@ class LernfaktorResult:
     # O1 (Recency) + O2 (Trim-Mean) als Doppel-Variante neben Legacy.
     # Live-Pfad nutzt weiterhin `faktor`; faktor_o12 läuft parallel zu Diagnose-
     # Zwecken im Prognosen-Tab. Aktivierung als neuer Default erst nach mehrwöchiger
-    # Beobachtung — siehe docs/KONZEPT-KORREKTURPROFIL.md.
+    # Beobachtung — siehe docs/archive/KONZEPT-KORREKTURPROFIL.md.
     faktor_o12: Optional[float] = None
     delta_o12_pct: Optional[float] = None  # 100 * (o12 - legacy) / legacy
 
@@ -642,7 +642,7 @@ def _aggregiere_legacy(
     return sum_ist / sum_prog, len(daten)
 
 
-# O1+O2 Parameter — siehe docs/KONZEPT-KORREKTURPROFIL.md
+# O1+O2 Parameter — siehe docs/archive/KONZEPT-KORREKTURPROFIL.md
 _O1_RECENCY_DAYS = 30      # Tage jünger als N erhalten Recency-Boost
 _O1_RECENCY_BOOST = 1.30   # +30 % Gewicht für junge Tage
 _O2_TRIM_PCT = 0.10        # 10 % oberste/unterste Tage werden verworfen

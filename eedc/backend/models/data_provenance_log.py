@@ -9,7 +9,7 @@ geschrieben. Keine UPDATE/DELETE-Pfade — eine spätere Retention-Policy
 (z. B. „älter als 24 Monate → archivieren") ist möglich, selektive Löschung
 nicht.
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 3.3.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 3.3.
 """
 
 from datetime import datetime

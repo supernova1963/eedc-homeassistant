@@ -7,7 +7,7 @@ Single Source of Truth für „PV-Tagesprognose heute (+ Rest, + morgen/
 verschiedenen Stellen (GTI vs. Energie-Slot) und mit verschiedenen
 losses-Quellen → vier verschiedene „heute"-Werte (Rainer-PN 2026-06-26).
 
-Bau-Vertrag: ``docs/drafts/KONZEPT-PROGNOSE-KANON.md``.
+Bau-Vertrag: ``docs/drafts/archive/KONZEPT-PROGNOSE-KANON.md``.
 
 Kanon-Rechenweg (abgenommen):
 

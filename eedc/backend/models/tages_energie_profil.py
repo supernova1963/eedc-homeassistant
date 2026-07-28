@@ -180,7 +180,7 @@ class TagesZusammenfassung(Base):
     # Day-Ahead Stundenprofil (kWh, 24 Werte): vor Sonnenaufgang gefrorener
     # Forecast für den Tag, indexiert von Stunde 0 bis 23 (Backward-Slot-Konvention,
     # Index h = Energie im Intervall [h-1, h)). Dient als Datenbasis für künftige
-    # Stundenprofil-Diagnostik (siehe docs/KONZEPT-KORREKTURPROFIL.md).
+    # Stundenprofil-Diagnostik (siehe docs/archive/KONZEPT-KORREKTURPROFIL.md).
     pv_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     solcast_prognose_stundenprofil: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     # SFML/Tom-HA echtes Stundenprofil (24 kWh-Slots, Backward) — bei gewählter

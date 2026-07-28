@@ -5,7 +5,7 @@ Source-Hierarchie für Schreib-Entscheidungen auf Aggregat-Tabellen
 Niedrigere Zahl = höhere Priorität. Eingesetzt von
 `backend.services.provenance.write_with_provenance()` ab Päckchen 3.
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 3.1.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 3.1.
 
 Vokabular ist hier abgeschlossen pro Päckchen-Lieferung — neue Schreib-Pfade
 müssen ihr Source-Label hier eintragen, sonst weist der Helper sie ab.

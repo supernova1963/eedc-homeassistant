@@ -1,7 +1,27 @@
 
 # EEDC Architektur-Dokumentation
 
-**Version 3.24.1** | Stand: April 2026
+**Beschriebener Stand: v3.24.1 (April 2026)** — geprüft und als veraltet markiert am 2026-07-28.
+
+> ## ⚠️ Teilweise überholt — die Frontend-Kapitel beschreiben die abgeschaltete V3-Oberfläche
+>
+> Mit **v4.0.0** (2026-07-25) wurde die Informationsarchitektur neu geschnitten (drei Achsen:
+> Zeit / Was / Wie). Dieses Dokument wurde dabei **nicht** nachgezogen. Konkret betroffen:
+>
+> | Stelle | Was dort steht | Realität seit v4.0.0 |
+> | --- | --- | --- |
+> | Kap. 3 „Projektstruktur" (Z. 294–301) | Seiten-Liste `LiveDashboard.tsx` · `Auswertung.tsx` · `Aussichten.tsx` · `MonatsabschlussView.tsx` als aktive Seiten | sind Flip-Donoren bzw. entfallen; die Sichten liegen in `frontend/src/v4/` |
+> | Kap. 6 „Frontend-Architektur" (Z. 879–939) | Routen `/live` · `/auswertungen` (6 Tabs) · `/aussichten` (4 Tabs), `MainTabs (Live, Cockpit, Auswertungen, Community, Aussichten)` | ersetzt durch Cockpit (Live·Tag·Monat·Jahr·Aussicht) · Komponenten · Auswertungen (5 Sub) · Community · Einstellungen; Altpfade werden **redirected** |
+> | durchgehend | keine Erwähnung von v4 (0 Treffer), Block-Modell, Parken, Status-Fusszeile | zentrale Mechanik der heutigen Oberfläche |
+>
+> **Verbindlich für die Oberfläche ist bis zur Überarbeitung:**
+> [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) (Struktur/Achsen/Redirects) und
+> [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md) (Darstellung, Regel 0/0a).
+> **Backend-, Datenmodell-, API- und Service-Kapitel (4, 5, 7) sind davon nicht betroffen** —
+> der Flip war reines UI. Für Berechnungen gelten [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md) und
+> [`ADR-002`](ADR-002-WURZELMUSTER.md).
+>
+> Nachverfolgt als **DOK-1** in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D.
 
 ---
 

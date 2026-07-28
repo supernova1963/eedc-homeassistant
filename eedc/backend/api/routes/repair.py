@@ -13,7 +13,7 @@ Drei Endpoints für die zentrale Reparatur-Werkbank:
                                               neueste zuerst
   DELETE /api/repair/plans/{plan_id}        → verwirft offenen Plan
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 5.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 5.
 
 Hinweis: Plan-Lebenszyklus ist in-memory + 1h-Expiry (siehe
 `services/repair_orchestrator.py`). Plan-Lookup auf einem zweiten

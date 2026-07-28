@@ -1,6 +1,6 @@
 """E-Auto/Wallbox-Wirtschaftlichkeit — Single Source of Truth.
 
-Anlass: Drift-Audit Domäne A2 (`docs/drafts/INVENTUR-DRIFT-AUDIT.md`).
+Anlass: Drift-Audit Domäne A2 (`docs/archive/INVENTUR-DRIFT-AUDIT.md`).
 Cockpit/Monatsbericht hatten 7 L/100km und 1,80 €/L hartcodiert, ignorierten
 User-gepflegte Werte — User sahen 7-9% falsche Ersparnis vs. Aussichten/PDF.
 

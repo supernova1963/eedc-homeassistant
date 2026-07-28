@@ -270,7 +270,7 @@ router = APIRouter()
 # v3.25.0: Phantom-Endpoint /typen + InvestitionTypInfo + parameter_schema entfernt.
 # Niemand hat das Schema im Frontend gelesen (useInvestitionTypen war exportiert, aber
 # nirgends aufgerufen), und der Schema-Inhalt war historisch von Form/Wizard und
-# Backend-Reads auseinandergedriftet — siehe docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md.
+# Backend-Reads auseinandergedriftet — siehe docs/archive/INVENTUR-INVESTITIONS-PARAMETER.md.
 # Single Source of Truth ist jetzt:
 #   - Frontend: eedc/frontend/src/lib/investitionParameter.ts
 #   - Backend:  eedc/backend/core/investition_parameter.py

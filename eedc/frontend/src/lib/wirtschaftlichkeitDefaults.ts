@@ -2,7 +2,7 @@
  * Wirtschaftlichkeits-Defaults — zentrale Konstanten für Berechnungen.
  *
  * Single Source of Truth für hartcodierte Werte, die bisher an mehreren Stellen
- * dupliziert waren (siehe `docs/drafts/INVENTUR-DRIFT-AUDIT.md`, Domäne B).
+ * dupliziert waren (siehe `docs/archive/INVENTUR-DRIFT-AUDIT.md`, Domäne B).
  *
  * Pendant im Backend: `eedc/backend/core/wirtschaftlichkeit_defaults.py`
  * — bei Änderungen dort spiegeln.

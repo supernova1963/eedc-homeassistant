@@ -2,7 +2,7 @@
 Akzeptanztest für Genauigkeits-Tracking-Bug — IST darf keine
 Batterie-Netto-Ladung als PV-Erzeugung mitzählen (Rainer-PN 2026-05-16).
 
-Hintergrund (siehe `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` Abschnitt 5): die
+Hintergrund (siehe `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` Abschnitt 5): die
 alte Filter-Logik `v > 0 and k not in {strompreis, netzbezug, einspeisung}`
 ließ alle Sub-Keys mit positivem Wert durch — auch `batterie_*` mit netto
 positiver Tages-Ladung. Bei einer Anlage mit ~5 kWh Netto-Batterie-Ladung

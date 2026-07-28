@@ -10,7 +10,7 @@
  * Release-sicher: außerhalb eines ParkProvider (`!aktiv`) reicht der Wrapper die
  * Kinder unverändert durch — keine Geste, kein Extra-Verhalten (Produktion/v3).
  *
- * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
+ * SoT: docs/drafts/archive/flip-v4/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ParkingSquare } from 'lucide-react'

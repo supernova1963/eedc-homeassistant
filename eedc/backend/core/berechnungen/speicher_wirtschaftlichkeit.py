@@ -6,7 +6,7 @@ hier liegen die reinen Spread-/Aggregat-Funktionen, die DB-gebundenen
 Rekonstruktionen (effektiver Ladepreis, SoC-korrigierter IST-Wirkungsgrad)
 bleiben in `backend.services.speicher_wirtschaftlichkeit`.
 
-Hintergrund (Drift-Audit Domäne A3, `docs/drafts/INVENTUR-DRIFT-AUDIT.md`):
+Hintergrund (Drift-Audit Domäne A3, `docs/archive/INVENTUR-DRIFT-AUDIT.md`):
 Zwei Modelle waren parallel im Einsatz —
 - Investitionen-Detail rechnete `entladung × (bezug − einspeise)` (Spread)
 - Aussichten rechnete `entladung × bezug` (Voll-Strompreis)

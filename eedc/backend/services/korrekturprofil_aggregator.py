@@ -2,7 +2,7 @@
 Korrekturprofil-Aggregator.
 
 Berechnet pro Anlage vier Lernfaktor-Profile (siehe
-docs/KONZEPT-KORREKTURPROFIL.md):
+docs/archive/KONZEPT-KORREKTURPROFIL.md):
 
 1. `sonnenstand_wetter` — Faktor pro `(azimut_bin, elevation_bin, wetterklasse)`
 2. `stunde` — Faktor pro `(saisonbin, stunde)` (Variante A); trennt saisonale

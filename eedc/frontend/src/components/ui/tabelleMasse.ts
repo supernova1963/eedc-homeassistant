@@ -1,5 +1,5 @@
 /**
- * Tabellen-SoT — Maße und Zell-Typo (Regel T, `docs/drafts/KONZEPT-TABELLEN-SOT.md`).
+ * Tabellen-SoT — Maße und Zell-Typo (Regel T, `docs/drafts/archive/KONZEPT-TABELLEN-SOT.md`).
  *
  * Eigene Datei, weil `Table.tsx` nur Komponenten exportieren darf (react-refresh).
  * Werte sind auf der Dev-Box gemessen (Playwright, 2026-07-10); ändern sie sich,

@@ -2,7 +2,7 @@
 Korrekturprofil — anlagen-spezifische Lernfaktor-Tabelle.
 
 Speichert das mehrdimensionale Korrekturprofil aus
-docs/KONZEPT-KORREKTURPROFIL.md. Pro Anlage existiert genau ein Profil
+docs/archive/KONZEPT-KORREKTURPROFIL.md. Pro Anlage existiert genau ein Profil
 für `(anlage_id, investition_id, quelle, profil_typ)` — der Aggregator
 schreibt jeweils das aktuell beste verfügbare `profil_typ`-Niveau, der
 Live-Lookup nutzt die Fallback-Kaskade über mehrere `profil_typ`-Zeilen.

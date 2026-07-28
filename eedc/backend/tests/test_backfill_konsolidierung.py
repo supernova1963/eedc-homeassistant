@@ -1,6 +1,6 @@
 """Phase-B-Tests (v3.34.2): Backfill-Konsolidierung über `aggregate_day`.
 
-Verankert den Phase-B-Schnitt aus `docs/drafts/PLAN-energieprofil-werkbank-v3.34.md`
+Verankert den Phase-B-Schnitt aus `docs/drafts/archive/PLAN-energieprofil-werkbank-v3.34.md`
 §3 Phase B + `HANDOVER-energieprofil-werkbank-phase-b.md`:
 
 - ``aktiv_am_tag(datum)`` als dritte Aktiv-Filter-Variante (Baustein 3, Audit §6.4).

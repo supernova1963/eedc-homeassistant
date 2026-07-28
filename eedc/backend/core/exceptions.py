@@ -1,5 +1,5 @@
 """
-HTTP-Exception-Factory (Tier-4 Schuldenabbau, Plan: docs/drafts/PLAN-exception-factory.md).
+HTTP-Exception-Factory (Tier-4 Schuldenabbau, Plan: docs/drafts/archive/PLAN-exception-factory.md).
 
 Helper RETURNEN die `HTTPException` — der Aufrufer schreibt `raise not_found(...)`.
 Begründung: `raise` bleibt am Call-Site sichtbar (Coverage/Linter/Type-Narrowing),

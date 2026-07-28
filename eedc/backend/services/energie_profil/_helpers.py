@@ -316,7 +316,7 @@ async def _get_tagespeaks_aus_ha_lts(
     HA-Recorder schreibt für `has_mean=True`-Sensoren je Stunde die im
     State-Bucket beobachteten Extremwerte. Das ist die richtige Quelle für
     Tages-Peak-Leistungen — eedc muss sie nicht aus 10-Min-Mittelwerten
-    rekonstruieren (siehe `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`).
+    rekonstruieren (siehe `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`).
 
     Aggregation:
       - peak_pv: max über Stunden von Σ max(pv_sensor[h]) für alle PV-Entities.

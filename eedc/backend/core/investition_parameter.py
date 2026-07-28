@@ -4,10 +4,12 @@ jeder Investition.
 
 Hintergrund: das `parameter`-Feld auf einer Investition ist ein unstrukturiertes
 JSON. Über mehrere Iterationen sind Schlüsselnamen zwischen Form, Wizard und
-Backend-Lese-Code gedriftet. Die damalige Inventur lag unter `docs/drafts/`
-(gitignored, nicht mehr vorhanden); was von ihr trägt, steht als Ergebnis in
-diesem Modul, in der Migration `core/database.py::_migrate_investitionen_
-parameter_keys_v325` und im CHANGELOG zu v3.25.0.
+Backend-Lese-Code gedriftet. Die damalige Inventur liegt unter
+`docs/archive/INVENTUR-INVESTITIONS-PARAMETER.md` (versioniert; der Kommentar
+behauptete bis 2026-07-28 fälschlich, sie sei nicht mehr vorhanden). Was von ihr
+trägt, steht als Ergebnis in diesem Modul, in der Migration
+`core/database.py::_migrate_investitionen_parameter_keys_v325` und im CHANGELOG
+zu v3.25.0.
 
 Dieses Modul macht die Keys statisch typisiert + auffindbar:
   - `PARAM_<TYP>` exportiert die kanonischen Schlüsselnamen pro Investitions-Typ

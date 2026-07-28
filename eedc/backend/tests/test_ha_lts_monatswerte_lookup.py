@@ -1,8 +1,9 @@
 """
 Charakterisierungs-Tests für HAStatisticsService — Monatswerte + Punkt-Lookup.
 
-Spur 0 des Backend-Refactoring-Plans (docs/drafts/REFACTORING-BACKEND-PLAN-
-20260614.md): Bevor `services/ha_statistics_service.py` (1208 Z.) entschlackt
+Spur 0 des Backend-Refactoring-Plans
+(docs/drafts/archive/REFACTORING-BACKEND-PLAN-20260614.md): Bevor
+`services/ha_statistics_service.py` (1208 Z.) entschlackt
 wird, fixieren diese Tests das aktuelle Verhalten der bislang UNGETESTETEN
 öffentlichen Methoden.
 

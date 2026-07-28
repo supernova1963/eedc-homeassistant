@@ -1,10 +1,39 @@
 # eedc Informationsarchitektur v4.0.0
 
-> **Status:** Konzept-Fundament für den großen IA-Schnitt zur Version 4.0.0. Bewusste Abkehr von der wachsend-Linie für **diesen einen** Refactor — die Achsen-Struktur lässt sich nicht inkrementell migrieren, ohne zwischenzeitlich noch unstrukturierter zu wirken als heute.
+> **Status (Faktenstand 2026-07-28): AUSGELIEFERT mit v4.0.0 (2026-07-25).** Dieses Dokument ist seit
+> dem Flip **kein Vorhaben mehr, sondern die Beschreibung des Ist-Zustands** — es bleibt der IA-SoT
+> („wo liegt was"), Gegenstück zum [Style-Guide](KONZEPT-STYLE-GUIDE.md) („wie sieht es aus").
+> Wer hier liest, liest die gebaute App, nicht einen Plan. Lesehilfe:
 >
-> **Eingangsperspektive:** Heutige Top-Nav (Cockpit / Live / Auswertungen / Aussichten / Community) vermischt drei Achsen — Zeit, Komponente, analytischer Schnitt. Folge: jeder Anwender-Frage entsprechen mehrere plausible Klick-Pfade, „lange gesucht, nicht gefunden" wird zur wiederkehrenden Tester-Rückmeldung. v4.0.0 trennt die Achsen.
+> | Abschnitt | gilt |
+> | --- | --- |
+> | Leitprinzip · Top-Nav · Cockpit · Komponenten · Auswertungen · Einstellungen · Cross-Linking | **lebend** — beschreibt die ausgelieferte Struktur |
+> | **Invarianten I1–I12** (Flip-Gate, abgenommen 2026-07-21) | **lebend als Regel**; einzige Ausnahme: die „Bau-Invariante bis zum Flip" (Z. 300, `VITE_IA_V4`) ist mit R6 gestorben — das Flag existiert in `frontend/src/**` nicht mehr |
+> | **URL-Redirect-Tabelle** | **lebend als Vertrag** — die Redirects laufen (`App.tsx`), Foren-/Issue-Links hängen daran |
+> | **Migrations-Plan Phase 0/1** · Vorab-Sichtung | **Historie** — abgearbeitet, Ablauf im CHANGELOG + `docs/drafts/archive/flip-v4/` |
+> | **Phase 2 „Folge-Wellen"** | **offen** — s. Register unten |
+> | Risiken + Gegenmaßnahmen | Historie (Flip ist ohne die genannten Risiken durchgelaufen) |
 >
-> **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) (Mobile-Verhalten) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker).
+> **Offene Folge-Wellen (Phase 2, am Code geprüft 2026-07-28):**
+>
+> | # | Punkt | Stand |
+> | --- | --- | --- |
+> | **B10** | PageHeader-Konsolidierung | ⬜ offen — keine PageHeader-SoT; 17 `.tsx` mit hartem `<h1`. Zugleich SoT-Inventar-Zeile „Sicht-Rahmen" ⇒ Backlog **DOK-4** |
+> | **B14** | Globale Cmd+K-Suchpalette | ⬜ offen — 0 Treffer im Code. Kein Nutzer-Trigger bisher |
+> | **B5** | Mobile-Reduce (M1 Reduce-Logik · M2 Sticky-Header auto-hide · M3 Tabellen-Swipe) | ⬜ offen — 0 Treffer. Stakeholder-Lage dünn, s. [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) |
+> | **B12** | Single-Anlage-Selektor-Audit | 🟡 Kern erledigt (Selektor blendet bei < 2 Anlagen aus); der Audit **über alle Sichten** ist nie gelaufen |
+>
+> Diese vier stehen als **DOK-13** im Backlog (`docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D).
+>
+> **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) (Mobile-Verhalten) · [ADR-001](ADR-001-BERECHNUNGS-LAYER.md)/[ADR-002](ADR-002-WURZELMUSTER.md) (Berechnung — nie mit der IA vermischen, I11) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker, mit v4.0.0 abgeschlossen).
+
+---
+
+> **Zur Eingangsperspektive unten:** Sie beschreibt die Lage **vor** v4.0.0 und bleibt als Begründung
+> stehen — die dort genannte Top-Nav (Cockpit / Live / Auswertungen / Aussichten / Community) gibt es
+> seit dem Flip nicht mehr.
+
+> **Eingangsperspektive (Stand vor v4.0.0):** Die damalige Top-Nav (Cockpit / Live / Auswertungen / Aussichten / Community) vermischte drei Achsen — Zeit, Komponente, analytischer Schnitt. Folge: jeder Anwender-Frage entsprachen mehrere plausible Klick-Pfade, „lange gesucht, nicht gefunden" wurde zur wiederkehrenden Tester-Rückmeldung. v4.0.0 trennt die Achsen. Bewusste Abkehr von der wachsend-Linie für **diesen einen** Refactor — die Achsen-Struktur ließ sich nicht inkrementell migrieren, ohne zwischenzeitlich noch unstrukturierter zu wirken.
 
 ---
 
@@ -279,8 +308,8 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 |---|---|---|---|
 | I1 | **Block-Modell:** Inhaltssichten rendern ihre Blöcke über `BlockShell` (`Block[]`: einklappen · „alle auf/zu" · Fokus ⤢ · optional ↑↓). Klapp+Reihenfolge = EIN Persistenz-Eintrag je Sicht (`eedc-bloecke:<persistKey>`). Block-Identität (Icon+Farbe) aus `BLOCK_IDENTITAET`. Komponenten-Hub bleibt fix-linear (Variante-C-Entscheid). | `components/blocks/BlockShell.tsx` · `lib/blockStyle.ts` | BlockShell-Tests; Keys via `check:persistenz` |
 | I2 | **Fokus/Vollbild:** EIN geteilter Baustein — `FokusVollbild` (Portal an `body`); Konsumenten: BlockShell (⤢ je Block) + `FokusKachel` (IST-treue Layouts ohne Block-Stack). Keine zweite Fokus-Implementierung; eigene Kopfzeilen reichen ⤢ per `kopfAktion`-Slot ein. ⤢ unter 640 px aus (D14-16). | `components/blocks/FokusVollbild.tsx` / `FokusKachel.tsx` | Review (Regel 0a) |
-| I3 | **Element-Park:** einzelne Anzeigen parken/entparken (Geste + „Geparkt (n)"), feste kanonische Position — KEIN freies Umsortieren auf Element-Ebene. Persistenz `eedc-park:<key>`; ohne Provider inert. | `components/park/` · [`SPEC-ELEMENT-LAYOUT-PAPIERKORB`](drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md) (Abnahme 2026-06-25) | `park.test.tsx` |
-| I4 | **Status-Achse:** EINE Severity-Quelle (`SEVERITY_CONFIG`/`CheckSchwere`: error/warning/info/ok, neutral=grau) für Fusszeile, Badges, Alerts, Icons (`STATUS_COLORS`/`STATUS_ICONS`). System-Status NUR über die `StatusFusszeile` (global einmal via `useGlobalStatus`; Sichten melden Frische/Quelle via `useReportDatenStatus`) — keine verstreuten Eigen-Indikatoren. | `config/datenCheckerKategorien.ts` · `v4/status/` · [`SPEC-STATUS-FUSSZEILE`](drafts/SPEC-STATUS-FUSSZEILE.md) | StatusFusszeile-Tests |
+| I3 | **Element-Park:** einzelne Anzeigen parken/entparken (Geste + „Geparkt (n)"), feste kanonische Position — KEIN freies Umsortieren auf Element-Ebene. Persistenz `eedc-park:<key>`; ohne Provider inert. | `components/park/` · [`SPEC-ELEMENT-LAYOUT-PAPIERKORB`](drafts/archive/flip-v4/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md) (Abnahme 2026-06-25) | `park.test.tsx` |
+| I4 | **Status-Achse:** EINE Severity-Quelle (`SEVERITY_CONFIG`/`CheckSchwere`: error/warning/info/ok, neutral=grau) für Fusszeile, Badges, Alerts, Icons (`STATUS_COLORS`/`STATUS_ICONS`). System-Status NUR über die `StatusFusszeile` (global einmal via `useGlobalStatus`; Sichten melden Frische/Quelle via `useReportDatenStatus`) — keine verstreuten Eigen-Indikatoren. | `config/datenCheckerKategorien.ts` · `v4/status/` · [`SPEC-STATUS-FUSSZEILE`](drafts/archive/flip-v4/SPEC-STATUS-FUSSZEILE.md) | StatusFusszeile-Tests |
 | I5 | **Farb-Invariante:** eine Datenrolle = eine Farbe (`DATENROLLE`), eine Komponenten-Klasse = eine Identitätsfarbe (`KOMPONENTEN_FARBEN`, abgeleitete Klassen, kein zweiter Satz). Signal-Rot `#ef4444` exklusiv Kosten/negativ/Fehler. Keine Inline-Hex außerhalb `lib/colors.ts`. | `lib/colors.ts` · Style-Guide A2 | `check:design` + Farb-Guard-Tests |
 | I6 | **Zeit-Steuerung:** Cockpit-Zeitsichten navigieren über die EINE `ZeitStepper`-SoT (mobil) + Rails (Desktop). Zeit-Navigation INNERHALB einer Sicht ändert den `pathname` nicht und erhält die Scroll-Position (`useScrollErhalt`). Datums-Eingaben nur `DatumPicker`/`DatumFeld`. | `v4/ZeitStepper.tsx` (+Adapter) · `ui/DatumPicker`/`DatumFeld` | `check:datumpicker` |
 | I7 | **Scroll & Überlauf:** Fade statt Scroll-Balken (ScrollSchatten inkl. Rad-Umleitung); Scroll-to-top NUR auf gerouteten Ebenen (Haupt + 1. Sub), zentral in `LayoutV4` — tiefere Ebenen positionstreu. Seiten-Scroller-Ausnahmen dokumentiert. | Style-Guide **A9** · `ui/ScrollSchatten.tsx` | `check:scrollschatten` |
@@ -326,12 +355,15 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 6. URL-Redirects für alle Bestandspfade (siehe Tabelle unten).
 7. Release-Notes mit Migrations-Hinweisen, in-App-Hilfe-Eintrag „Wo ist X hin?".
 
-### Phase 2 — Folge-Wellen (post-v4.0.0)
+### Phase 2 — Folge-Wellen (post-v4.0.0) — **die einzigen offenen Punkte dieses Dokuments**
 
-- **B10** PageHeader-Konsolidierung (39 Seiten von hardcoded `<h1>` migrieren)
-- **B14** Globale Cmd+K-Suchpalette
-- **B5** Mobile-Reduce-Etappen (M1 Reduce-Logik, M2 Sticky-Header auto-hide, M3 Tabellen-Swipe)
-- **B12** Single-Anlage-Selektor-Audit
+> Stand 2026-07-28 am Code geprüft; Details + Belege im Status-Kopf oben, Nachverfolgung als
+> **DOK-13** in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D.
+
+- ⬜ **B10** PageHeader-Konsolidierung — noch 17 `.tsx` mit hartem `<h1`, keine SoT-Komponente
+- ⬜ **B14** Globale Cmd+K-Suchpalette — nicht gebaut, kein Nutzer-Trigger
+- ⬜ **B5** Mobile-Reduce-Etappen (M1 Reduce-Logik, M2 Sticky-Header auto-hide, M3 Tabellen-Swipe)
+- 🟡 **B12** Single-Anlage-Selektor-Audit — Kern erledigt (Ausblenden bei < 2 Anlagen), Audit über alle Sichten offen
 
 ### Vorab-Sichtung — klickbare Vorschau (statt Design-Tool)
 

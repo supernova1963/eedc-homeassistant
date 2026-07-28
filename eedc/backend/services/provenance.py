@@ -16,7 +16,7 @@ Verantwortlichkeiten:
    flag_modified persistiert SQLAlchemy JSON-Mutationen NICHT).
 4. Append-Only Audit-Log in DataProvenanceLog für Diagnose.
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 3.4 + 4.1.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 3.4 + 4.1.
 """
 
 from __future__ import annotations

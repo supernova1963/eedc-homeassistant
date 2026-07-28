@@ -1,6 +1,6 @@
 /**
  * CockpitAussichtV4 — die Projektions-/Zukunfts-Sicht der Cockpit-Zeit-Achse
- * (IA-V4 Muster A.4). SoT: `docs/drafts/SPEC-COCKPIT-AUSSICHTEN.md`.
+ * (IA-V4 Muster A.4). SoT: `docs/drafts/archive/flip-v4/SPEC-COCKPIT-AUSSICHTEN.md`.
  *
  * „Vorwärts-Teleskop" (Gernot 2026-06-22): EINE lineare Seite, deren Zoomring der
  * Horizont-Selektor ist (7 T · 14 T · 12 Monate; Mehrjahr/Degradation an 12 M

@@ -6,7 +6,7 @@ Seit Etappe 3d Päckchen 4 sind alle Repair-Endpoints Wrapper über den
 `orchestrator.plan(req)` + `orchestrator.execute(plan_id)` und mapt
 die alten Response-Felder, damit Bestand-Frontends nicht brechen.
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 5.2.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 5.2.
 
 Endpunkt-Inventar:
 

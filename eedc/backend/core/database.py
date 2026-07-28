@@ -827,7 +827,7 @@ async def run_migrations(conn):
                     connection.execute(text(f'ALTER TABLE investitionen ADD COLUMN {col_name} {col_type}'))
 
             # v3.25.0: Investitions-Parameter-Key-Vereinheitlichung (siehe
-            # docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md). 7 Drift-Bugs zwischen Form/Wizard
+            # docs/archive/INVENTUR-INVESTITIONS-PARAMETER.md). 7 Drift-Bugs zwischen Form/Wizard
             # und Backend-Reads sind in v3.25.0 gefixt — bestehende Anlagen können historisch
             # aber alte Keys gespeichert haben (typischerweise nicht, weil Form/Wizard-Schreibseite
             # immer kanonisch war, aber HA-Import o. ä. Schreib-Pfade können zu Drift geführt haben).

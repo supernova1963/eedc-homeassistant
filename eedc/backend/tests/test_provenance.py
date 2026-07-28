@@ -1,7 +1,7 @@
 """
 Unit-Tests für write_with_provenance() (Etappe 3d Päckchen 1).
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 8 Päckchen 1 — fünf
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 8 Päckchen 1 — fünf
 Akzeptanz-Test-Fälle:
 
   1. applied bei höherer Priorität

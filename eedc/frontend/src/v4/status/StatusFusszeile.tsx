@@ -1,7 +1,7 @@
 /**
  * StatusFusszeile — app-weite System-Statusleiste (G11 Shell-Slice, P1 + P2).
  *
- * SPEC: `docs/drafts/SPEC-STATUS-FUSSZEILE.md`. Dünne Zeile am unteren Shell-Rand
+ * SPEC: `docs/drafts/archive/flip-v4/SPEC-STATUS-FUSSZEILE.md`. Dünne Zeile am unteren Shell-Rand
  * (3. Flex-Kind in `LayoutV4`), drei Zonen:
  *   - **global (links)**: installations-weite Indikatoren aus {@link useGlobalStatus} —
  *     Version/Update (immer sichtbar) · offener Monatsabschluss · Community-Teilen · MQTT-Verbindung (P2).

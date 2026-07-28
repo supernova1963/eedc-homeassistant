@@ -1,6 +1,23 @@
 # Konzept: Berechnungs-Layer (`core/berechnungen/`)
 
-**Status:** Aktiv (2026-05-19) | **Auslöser:** BKW-Doppelzählung (Rainer-PN) als sichtbarster Vertreter einer ganzen Drift-Klasse | **Regel-Doku:** [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)
+**Status:** Aktiv — **Architektur-Detail zu [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)** (die Regel steht dort, hier der Submodul-Schnitt und die Erweiterungen). Ursprung 2026-05-19, Faktenstand gegen den Code geprüft **2026-07-28**. | **Auslöser:** BKW-Doppelzählung (Rainer-PN) als sichtbarster Vertreter einer ganzen Drift-Klasse
+
+## 0. Maßnahmen-Register (fortschreibbar)
+
+> Eine Zeile je paketierter Maßnahme. **Beleg = Datei:Zeile**, nicht „laut Konzept".
+> Erledigtes bleibt stehen (mit Beleg), damit niemand es ein zweites Mal aufmacht.
+
+| # | Maßnahme | Status | Beleg / Rest |
+| --- | --- | --- | --- |
+| **BL-1** | Akut-Fix: Aggregator-Mode-Switch + Pflicht-Invariante (§3.1) | ✅ v3.31.5 | `core/berechnungen/invarianten.py` |
+| **BL-2** | Konformitäts-Test als CI-Guardrail (§5) | ✅ v3.31.5 | `backend/tests/test_berechnungs_layer_konformitaet.py` |
+| **BL-3** | Layer-Grundbestand `energie.py` + `invarianten.py` (§4) | ✅ | beide vorhanden |
+| **BL-4** | **Konsumenten-Migration** (§2-Liste) | ✅ **für die sechs namentlich genannten Module** — die „(offen)"-Marker in §2 waren am 2026-07-28 **falsch**: `prognosen.py` · `energie_profil/{repair,views}.py` · `live_wetter.py` · `live_history_service.py` · `live_komponenten_builder.py` importieren alle aus `core.berechnungen` | Liste korrigiert. **Rest bleibt:** die vollständige Inventur (~30 Konsumenten) in `project_berechnungs_layer_offen` — opportunistisch beim Touch |
+| **BL-5** | **Geplante Submodule** (§4-Tabelle) | 🟡 **teilweise** — `counter.py` ✅ · `kennzahlen.py` ✅ · Einsparungen ✅ (anders geschnitten: `speicher*.py`, `emob.py`, `alternativkosten.py`) · **`peaks.py` ❌** (steht seit v3.31.5 als geplant in `__init__.py:30`) · **`roi.py` ❌** — `berechne_roi` lebt weiter in `core/calculations.py:620` | → Backlog **DOK-3**, opportunistisch |
+| **BL-6** | **Herleitungs-Transparenz §6** (Vertrag zu Style-Guide A6) | ⬜ **offen — Trigger ist gefeuert.** §6 sagt „Durchsetzung: separater Zukunfts-Punkt **nach Projektabschluss**"; der Projektabschluss (IA-V4-Flip, v4.0.0) ist seit 2026-07-25 durch. Im Backend existiert **keine** `Herleitung`-Struktur (0 Treffer `eingesetzte_werte` in `core/`), die 9 `FormelTooltip`-Konsumenten tragen ihre Formeln frontend-seitig hart — genau die Drift, die §6 verhindern soll | → Backlog **DOK-2** (Q) |
+| **BL-7** | Alt-JSONs mit BKW-Doppel-Bug migrieren (§8) | ⏸ bewusst nicht automatisch — Reparatur-Werkbank (`feedback_kein_grosser_heiler_knopf`) | unverändert gültig |
+
+**Was dieses Dokument NICHT ist:** die Regel (→ [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)) und nicht die Invarianten-Liste (→ [`ADR-002`](ADR-002-WURZELMUSTER.md)).
 
 ## 1. Problem-Kontext
 
@@ -31,15 +48,21 @@ READ-Pfad (eine Heimat für Berechnungen):
     roi.py            — Migration aus calculations.py
 
 KONSUMENTEN (alle importieren aus core/berechnungen):
-  services/daten_checker.py (✓ migriert 2026-05-19)
-  api/routes/prognosen.py (offen)
-  api/routes/energie_profil/repair.py (offen)
-  api/routes/energie_profil/views.py (offen, anderes Pattern)
-  api/routes/live_wetter.py (offen, anderes Pattern)
-  services/live_history_service.py (offen, anderes Pattern)
-  services/live_komponenten_builder.py (offen, anderes Pattern)
-  ... (vollständige Inventur in Memory project_berechnungs_layer_offen)
+  services/daten_checker.py            (✓ migriert 2026-05-19)
+  api/routes/prognosen.py              (✓ geprüft 2026-07-28)
+  api/routes/energie_profil/repair.py  (✓ geprüft 2026-07-28)
+  api/routes/energie_profil/views.py   (✓ geprüft 2026-07-28)
+  api/routes/live_wetter.py            (✓ geprüft 2026-07-28)
+  services/live_history_service.py     (✓ geprüft 2026-07-28)
+  services/live_komponenten_builder.py (✓ geprüft 2026-07-28)
+  ... Long-Tail (~30) weiter offen — vollständige Inventur in Memory
+      project_berechnungs_layer_offen; Migration beim Touch (§3.3)
 ```
+
+> **Korrektur 2026-07-28:** Die sechs Zeilen oben standen bis dahin auf „(offen)" — sie sind es nicht
+> mehr; alle sechs Module ziehen den Layer. Die Liste war ein Beispiel für „Regel ohne Code-Beleg"
+> ([[feedback_keine_regel_behaupten_ohne_code_beleg]]): sie wurde beim Migrieren nie nachgezogen und
+> hätte den nächsten Leser zu bereits erledigter Arbeit geschickt. Der **Long-Tail** ist echt offen.
 
 ## 3. Migrations-Pattern (Step-by-Step, opportunistisch)
 
@@ -64,13 +87,17 @@ Disziplin durch **Architektur**, nicht durch Sprint-Plan:
 
 ### Geplante Submodule (entstehen beim nächsten Touch des betroffenen Codes)
 
-| Submodul | Inhalt | Trigger für Anlage |
+| Submodul | Inhalt | Stand 2026-07-28 |
 |---|---|---|
-| `counter.py` | komponenten_starts-Σ, wp_starts_pro_stunde-Σ | WP-Counter-Drift-Fix (siehe [KONZEPT-COUNTER-DAILY-DRIFT.md](KONZEPT-COUNTER-DAILY-DRIFT.md)) oder #238 WP-Betriebszeiten |
-| `peaks.py` | peak_pv/bezug/einspeisung | Tagesverlauf-Refactor oder Peak-bezogener Bug |
-| `kennzahlen.py` | eigenverbrauch, autarkie, spez_ertrag | Migration aus `calculations.py` wenn dort eine Funktion angefasst wird |
-| `einsparungen.py` | speicher, e-auto, wärmepumpe ROI | Migration aus `calculations.py` |
-| `roi.py` | roi_prozent, amortisation_jahre, ust_eigenverbrauch | Migration aus `calculations.py` |
+| `counter.py` | komponenten_starts-Σ, wp_starts_pro_stunde-Σ | ✅ angelegt |
+| `kennzahlen.py` | eigenverbrauch, autarkie, spez_ertrag | ✅ angelegt (+ `spez_ertrag.py`, `verbrauch.py`) |
+| `einsparungen.py` | speicher, e-auto, wärmepumpe ROI | ✅ **anders geschnitten** — statt eines Sammel-Moduls je Domäne eins: `speicher.py`, `speicher_wirtschaftlichkeit.py`, `emob.py`, `alternativkosten.py` |
+| `peaks.py` | peak_pv/bezug/einspeisung | ❌ nie angelegt — steht seit v3.31.5 als geplant in `core/berechnungen/__init__.py:30` |
+| `roi.py` | roi_prozent, amortisation_jahre, ust_eigenverbrauch | ❌ nie angelegt — `berechne_roi` liegt weiter in `core/calculations.py:620` |
+
+> Die beiden ❌ sind kein eigener Auftrag, sondern Backlog **DOK-3**: mitnehmen, wer die Dateien
+> ohnehin anfasst (ADR-001-Regel „beim Touch"). Der Trigger für `peaks.py` wäre ein Tagesverlauf-
+> Refactor, für `roi.py` der nächste Griff in `calculations.py`.
 
 ## 5. Schutzmechanismen
 
@@ -100,12 +127,21 @@ Herleitung = { wert, einheit, formel, eingesetzte_werte[], quelle, zeitraum }
 
 **Durchsetzung — separater Zukunfts-Punkt (nach Projektabschluss):** analog zu den Schutzmechanismen (Abschnitt 5) ist ein Konformitäts-Check denkbar (neuer Kennzahl-Helfer ohne Herleitungs-Feld → Test schlägt an). Bewusst NICHT jetzt umgesetzt — erst nach Abschluss des laufenden Umbaus als eigener Punkt bewerten. Bis dahin gilt die Erwartung dokumentarisch (dieser Abschnitt + Style-Guide A6).
 
+> **⏰ Trigger gefeuert (2026-07-28).** „Nach Projektabschluss" war der IA-V4-Flip — der ist seit
+> v4.0.0 (2026-07-25) durch. Stand der Umsetzung: **nichts davon existiert.** `eingesetzte_werte`
+> hat 0 Treffer in `core/`; die neun `FormelTooltip`-Konsumenten (`KPICard`, `TKonto`,
+> `AmortisationsBar`, `RingGaugeCard`, `HeroLeiste`, `AussichtTeile`, `ChartTooltip`,
+> `PrognoseVergleichTeile`) tragen Formel und eingesetzte Werte **im Frontend hart** — Wert und
+> Erklärung haben also zwei Quellen, genau der Zustand, den §6 ausschließen wollte.
+> Als Punkt **DOK-2** im Backlog (Q, Wartungsfenster). Zuerst zu entscheiden: Rückgabe-Erweiterung
+> aller Kennzahl-Helfer (breit, invasiv) vs. eigener Herleitungs-Helfer je Kennzahl (additiv).
+
 ## 7. Anwender-Kommunikation
 
 Für v3.31.5-Release in WAS-IST-NEU/CHANGELOG: BKW-Doppelzählungs-Fix mit Dank an Rainer, Aggregator-Verhalten im HA-Add-on-Modus auf „HA-LTS exklusiv" konsolidiert (Etappe-4-Komplettierung). KEINE große Refactoring-Ankündigung — der Step-by-Step-Pfad läuft unter der Haube, Anwender sehen nur die Bugfixes.
 
 ## 8. Was NICHT in diesem Konzept ist
 
-- Daten-Checker-Refactor (Achse A/B/C, eigenes [KONZEPT-DATENCHECKER-KONSISTENZ.md](KONZEPT-DATENCHECKER-KONSISTENZ.md)) — orthogonal, kann unabhängig laufen.
+- Daten-Checker-Refactor (Achse A/B/C, eigenes [KONZEPT-DATENCHECKER-KONSISTENZ.md](archive/KONZEPT-DATENCHECKER-KONSISTENZ.md)) — orthogonal, kann unabhängig laufen.
 - Migration der bestehenden alten `TagesZusammenfassung.komponenten_kwh`-JSONs mit dem BKW-Doppel-Bug — wird über die Reparatur-Werkbank gelöst (Anwender wählen Bereich und „Mehrere Tage neu berechnen"). Auto-Migration ist denkbar, aber bisher nicht implementiert; siehe Memory `project_berechnungs_layer_offen` falls Tester-Befunde dazu zwingen.
 - Frontend-Berechnungs-Layer — separate Migration, kein Backend-ADR-Thema.

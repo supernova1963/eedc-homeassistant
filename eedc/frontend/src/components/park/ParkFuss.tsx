@@ -5,7 +5,7 @@
  *
  * Inert ohne ParkProvider (`!aktiv`) → rendert nichts (Produktion/v3).
  *
- * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
+ * SoT: docs/drafts/archive/flip-v4/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
  */
 import { MousePointerClick } from 'lucide-react'
 import { usePark } from './ParkContext'

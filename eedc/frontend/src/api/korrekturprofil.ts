@@ -5,7 +5,7 @@
  * - Wetter-Backfill aus Open-Meteo Archive
  * - Wetter-stratifizierte Stunden-Genauigkeit (interne eedc-Diagnose)
  *
- * Siehe docs/KONZEPT-KORREKTURPROFIL.md
+ * Siehe docs/archive/KONZEPT-KORREKTURPROFIL.md
  */
 
 import { api } from './client'

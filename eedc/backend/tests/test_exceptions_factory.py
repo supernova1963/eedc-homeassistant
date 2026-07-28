@@ -1,6 +1,6 @@
 """Test-Harness für die HTTP-Exception-Factory (`core/exceptions.py`).
 
-Tier-4 Schuldenabbau, Plan: `docs/drafts/PLAN-exception-factory.md`.
+Tier-4 Schuldenabbau, Plan: `docs/drafts/archive/PLAN-exception-factory.md`.
 
 Zwei Ebenen:
 1. **Helper-Tupel** — `(status_code, detail)` jeder Factory-Funktion exakt

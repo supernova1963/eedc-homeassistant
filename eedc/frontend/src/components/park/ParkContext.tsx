@@ -6,7 +6,7 @@
  * **parken/entparken** — KEIN Umsortieren, jedes Element hat seine feste kanonische
  * Position und kehrt beim Zurückholen exakt dorthin zurück.
  *
- * SoT-Doku: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md (Gernot-Abnahme 2026-06-25).
+ * SoT-Doku: docs/drafts/archive/flip-v4/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md (Gernot-Abnahme 2026-06-25).
  *
  * Persistenz wie BlockShell: pro Sicht ein localStorage-Eintrag `eedc-park:<key>`.
  * Schema-robust beim Laden (nur gültige Form). `titel` wird MITPERSISTIERT, damit der

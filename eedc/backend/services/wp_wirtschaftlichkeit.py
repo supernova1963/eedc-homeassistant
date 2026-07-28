@@ -1,7 +1,7 @@
 """WP-Wirtschaftlichkeit — Single Source of Truth für Ersparnis-Berechnung.
 
 Anlass: 6-Sprachen-Drift bei der WP-Ersparnis-Anzeige (siehe Issue #178 +
-`docs/drafts/INVENTUR-DRIFT-AUDIT.md`, Domäne A1).
+`docs/archive/INVENTUR-DRIFT-AUDIT.md`, Domäne A1).
 
 Vorher: vier Render-Stellen (Cockpit-Monatsbericht, Cockpit-Übersicht,
 Cockpit-WP-Detail, Auswertungen-Komponenten) rechneten unterschiedliche

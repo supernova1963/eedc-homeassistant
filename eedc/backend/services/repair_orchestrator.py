@@ -16,7 +16,7 @@ Plan-Lookup auf einem zweiten Worker zerbrechen (HTTP 404) und müsste
 auf einen externen Cache umgestellt werden. Für die Add-on-Realität
 heute ist die in-memory-Variante das Richtige.
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 5 + 8 Päckchen 4.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 5 + 8 Päckchen 4.
 
 Memory-Linien-Kreuzbezüge:
 - `feedback_reparatur_statt_loesch_features.md`: Plan-Vorschau ist die
@@ -911,7 +911,7 @@ async def _plan_solcast_rewrite(
 ) -> tuple[dict[str, int], list[str], dict[str, Any]]:
     raise NotImplementedError(
         "SOLCAST_REWRITE ist Päckchen 6 — noch nicht implementiert. "
-        "Siehe docs/KONZEPT-DATENPIPELINE.md Sektion 8 Päckchen 6."
+        "Siehe docs/archive/KONZEPT-DATENPIPELINE.md Sektion 8 Päckchen 6."
     )
 
 

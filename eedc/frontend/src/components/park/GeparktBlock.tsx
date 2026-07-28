@@ -9,7 +9,7 @@
  * KEIN BlockShell-Block (nicht verschiebbar/parkbar/in der Block-Order) — eine
  * schlichte, feste, einklappbare Section.
  *
- * SoT: docs/drafts/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
+ * SoT: docs/drafts/archive/flip-v4/SPEC-ELEMENT-LAYOUT-PAPIERKORB.md
  *
  * Wächter-Ausnahme: die rohen <button> (Park-Mechanik/Chips) SIND die Infra-Implementierung —
  * check:v4-migration-Infra-Allowlist (Regel 0a Fall 3, Gernot-Freigabe 2026-07-11).

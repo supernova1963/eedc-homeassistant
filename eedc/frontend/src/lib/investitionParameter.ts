@@ -5,7 +5,7 @@
  * Hintergrund: das `parameter`-Feld auf einer Investition ist ein unstrukturiertes
  * JSON. Über mehrere Iterationen sind Schlüsselnamen zwischen Form, Wizard und
  * Backend-Lese-Code gedriftet — siehe Inventur in
- * `docs/drafts/INVENTUR-INVESTITIONS-PARAMETER.md`.
+ * `docs/archive/INVENTUR-INVESTITIONS-PARAMETER.md`.
  *
  * Dieses Modul macht die Keys statisch typisiert + auffindbar:
  *   - `PARAM_<TYP>` exportiert die kanonischen Schlüsselnamen pro Investitions-Typ

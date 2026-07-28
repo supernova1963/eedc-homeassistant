@@ -8,7 +8,7 @@
  * (Overlay), listen-/tabellenlastige Bereiche verweisen per Aktion auf ihre
  * bestehende Detail-Route (Deep-Link/Fallback — Routen-Inventur = Akzeptanz).
  *
- * Inhalts-SoT: `docs/drafts/PLAN-IA-V4-…` §2 (alle 17 IST-Bereiche + neue
+ * Inhalts-SoT: `docs/drafts/archive/flip-v4/PLAN-IA-V4-RESTWEG.md` §2 (alle 17 IST-Bereiche + neue
  * Kacheln Infothek · Berichte · MQTT-Inbound · Import-Bündel). Status-Badges
  * (Schritt 3) und der Voll-Ausbau der neuen Kacheln (Schritt 4) folgen separat.
  */

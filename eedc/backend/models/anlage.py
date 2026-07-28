@@ -91,7 +91,7 @@ class Anlage(Base):
 
     # Sensor-Mapping für Home Assistant Integration
     # Struktur: {"basis": {...}, "investitionen": {...}}
-    # Siehe docs/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation
+    # Siehe docs/archive/PLAN_AUTOMATISCHE_DATENERFASSUNG.md für vollständige Dokumentation
     sensor_mapping: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # Connector-Konfiguration für direkte Geräteverbindung (ennexOS REST API etc.)

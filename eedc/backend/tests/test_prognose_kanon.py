@@ -1,6 +1,6 @@
 """Tests — Prognose-Kanon: EIN Wert über alle Pfade (Produktions-Fix V3).
 
-Bau-Vertrag ``docs/drafts/KONZEPT-PROGNOSE-KANON.md`` §6. Deckt ab:
+Bau-Vertrag ``docs/drafts/archive/KONZEPT-PROGNOSE-KANON.md`` §6. Deckt ab:
 
 * **Symmetrie** ([[feedback_aggregator_symmetrie]]): bei fixem OM-Snapshot
   liefern Kanon-Service, ``berechne_eedc_prognose`` (eedc-Spalte/Vergleich)

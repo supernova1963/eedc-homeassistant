@@ -17,7 +17,7 @@ beschreiben, gehen durch diesen Wrapper. Single Source of Truth für:
    `feedback_release_bundling.md`: kein Verhaltens-Diff für Bestands-
    Anwender außerhalb des Akzeptanz-Versprechens.
 
-Konzept: docs/KONZEPT-DATENPIPELINE.md Sektion 6.2.
+Konzept: docs/archive/KONZEPT-DATENPIPELINE.md Sektion 6.2.
 """
 
 from __future__ import annotations

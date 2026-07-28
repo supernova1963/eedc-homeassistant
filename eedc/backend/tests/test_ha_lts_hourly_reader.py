@@ -2,7 +2,7 @@
 Akzeptanztest für Etappe 4 Schritt 3:
 `HAStatisticsService.get_hourly_kwh_deltas_for_day()` liest stündliche
 kWh-Deltas direkt aus HA-LTS-Statistics — die neue Single-Source-of-Truth
-für Aggregat-Tabellen (siehe `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`).
+für Aggregat-Tabellen (siehe `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`).
 
 Self-contained Standalone-Script:
 

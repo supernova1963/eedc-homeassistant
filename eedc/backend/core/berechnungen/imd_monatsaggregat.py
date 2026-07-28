@@ -6,7 +6,7 @@ Resolver** sie gelesen werden. Vor dieser Konsolidierung dupliziert jede der
 Read-Sites (`aktueller_monat`, `monatsdaten`-`/aggregiert`, `cockpit/komponenten`,
 `cockpit/uebersicht`) dieselbe `if inv.typ == "..."`-Schleife — die größte
 Drift-Klasse der Read-Pfade (Pool-Bug, #289, #290; siehe
-`docs/drafts/BLOCK1-FELD-MATRIX-20260614.md`).
+`docs/drafts/archive/BLOCK1-FELD-MATRIX-20260614.md`).
 
 Diese Funktion ist **rein** (kein DB-/Service-I/O, ADR-001): sie nimmt eine
 Investition + ihr `verbrauch_daten`-Dict und gibt einen `ImdTypBeitrag` mit allen

@@ -1,5 +1,5 @@
 /**
- * Table — Tabellen-SoT (Regel T, `docs/drafts/KONZEPT-TABELLEN-SOT.md`, abgenommen 2026-07-10).
+ * Table — Tabellen-SoT (Regel T, `docs/drafts/archive/KONZEPT-TABELLEN-SOT.md`, abgenommen 2026-07-10).
  *
  * Vorgeschichte: die SoT existierte, hatte aber NULL Nutzer — 52 Dateien bauten
  * ihr eigenes `<table>`. Ergebnis waren drei Mechaniken nebeneinander und die

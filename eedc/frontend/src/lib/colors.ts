@@ -429,7 +429,7 @@ export const CHART_ACHSEN = {
  * **Kollisionsfrei + disjunkt von {@link DATENROLLE}** — Ausnahmen: PV=Amber und
  * Speicher=Blau teilen bewusst die gleichnamige Rolle (Komponente = ihre Rolle).
  * `TYP_COLORS`/`TYP_TEXT_CLASS` UND die Komponenten-Keys von `KATEGORIE_FARBEN`
- * leiten hieraus ab (kein zweiter Satz). SoT-Doc: `docs/drafts/SPEC-IDENTITAETS-FARBMAP.md`.
+ * leiten hieraus ab (kein zweiter Satz). SoT-Doc: `docs/drafts/archive/flip-v4/SPEC-IDENTITAETS-FARBMAP.md`.
  */
 export const KOMPONENTEN_FARBEN = {
   'pv-module':       { hex: '#f59e0b', bg: 'bg-amber-500',  text: 'text-amber-500',  tint: 'bg-amber-50 dark:bg-amber-900/20' },   // = PV-Rolle (bewusst)

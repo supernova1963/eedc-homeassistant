@@ -15,7 +15,7 @@ Unterschied zur Snapshot-Variante:
   - Standalone-Modus (MQTT) wird NICHT bedient — dafür bleibt die
     Snapshot-Variante (`get_hourly_kwh_by_category`) als Fallback
 
-Konzept-Doc: `docs/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`.
+Konzept-Doc: `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md`.
 """
 
 from __future__ import annotations

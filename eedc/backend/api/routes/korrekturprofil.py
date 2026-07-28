@@ -6,7 +6,7 @@ Bündelt Endpoints rund um das Korrekturprofil-Konzept:
 - Wetter-Stratifizierung als interne EEDC-Diagnose
 - (später) Korrekturprofil-Status und Heatmap-Daten
 
-Siehe `docs/KONZEPT-KORREKTURPROFIL.md` für Architektur und Reihenfolge.
+Siehe `docs/archive/KONZEPT-KORREKTURPROFIL.md` für Architektur und Reihenfolge.
 """
 
 from datetime import date, timedelta

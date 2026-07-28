@@ -1,7 +1,24 @@
 
 # EEDC Development Guide
 
-**Version 3.24.1** | Stand: April 2026
+**Beschriebener Stand: v3.24.1 (April 2026)** — geprüft am 2026-07-28.
+
+> ## ⚠️ Teilweise überholt
+>
+> **Korrigiert am 2026-07-28:** der Abschnitt „Tests" (stand auf „kein pytest installiert").
+>
+> **Noch nicht nachgezogen** — beim Lesen mitdenken:
+> - **Kap. „Projektstruktur" (Z. 196 ff.)** listet die V3-Seiten; seit **v4.0.0** (2026-07-25) liegen
+>   die Sichten in `eedc/frontend/src/v4/` + geteilte SoT-Komponenten in `components/`.
+>   Verbindlich für die Oberfläche: [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) +
+>   [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md).
+> - **Kap. „API-Routen Übersicht" (Z. 399 ff.)** ist gegen den heutigen Routen-Bestand ungeprüft.
+> - Die verbindlichen Regeln für **Berechnungen** stehen in [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md)
+>   (Schichtung) und [`ADR-002`](ADR-002-WURZELMUSTER.md) (Invarianten) — beide entstanden nach diesem
+>   Dokument und werden hier nirgends genannt.
+>
+> Setup, Docker-Build, Add-on-Test, Git-Workflow, Versionierung und die Code-Patterns sind gültig.
+> Nachverfolgt als **DOK-1** in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D.
 
 ---
 
@@ -374,15 +391,37 @@ Die `parameter` JSON-Spalte in `investitionen` wird automatisch erweitert (kein 
 
 ---
 
-## Tests
+## Tests & Gates
+
+> **Korrigiert 2026-07-28.** Hier stand bis dahin „kein pytest installiert" + ein `ast.parse`-Syntax-Check.
+> Das ist seit v3.27 falsch: es gibt eine volle pytest-Suite und seit dem V4-Umbau 24 statische Wächter.
+> **Vor jedem Commit-Paket vollständig laufen lassen** — die Soll-Zahlen (pytest/Vitest) stehen bewusst
+> nicht hier, sondern im laufenden Master-Register unter `~/.claude/plans/` (sie ändern sich je Paket).
 
 ```bash
-# Backend: Syntax-Check (kein pytest installiert)
-python -c "import ast; ast.parse(open('backend/main.py').read())"
+# Backend
+cd eedc && source backend/venv/bin/activate && python -m pytest backend/tests -q
 
-# Frontend: TypeScript Type-Check
-cd eedc/frontend && npx tsc --noEmit
+# Frontend: Unit-Tests + Typen + die Wächter
+cd eedc/frontend && npm run test && npx tsc --noEmit && npm run check:design && \
+  npm run check:de-de && npm run check:roh-controls && npm run check:parkbar && \
+  npm run check:form-controls && npm run check:typografie && npm run check:kennwert-roh
 ```
+
+**Die Wächter (`npm run check:*`, `eedc/frontend/scripts/check-*.mjs`)** setzen die Darstellungs-Regeln
+maschinell durch — Regel 0/0a aus [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md). `npm run` ohne
+Argument listet alle. Zwei Besonderheiten:
+
+- `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als **dokumentierte Baseline** (rc=0).
+- `check:park-leertest` ist ein **Playwright-Livetest** gegen eine laufende Box und verlangt ein
+  `VITE_DEMO_DEFAULT=true`-Build; **danach zwingend**
+  `git checkout -- eedc/frontend/dist/ && git clean -fdq eedc/frontend/dist/` — `dist/` ist versioniert,
+  sonst landet ein Demo-Build im Release.
+
+**Backend-Regeln haben pytest als Wächter, keine `check:*`-Skripte** (die sind alle Frontend-Node):
+`test_berechnungs_layer_konformitaet.py` ([ADR-001](ADR-001-BERECHNUNGS-LAYER.md)) ·
+`test_wurzelmuster_*.py` ([ADR-002](ADR-002-WURZELMUSTER.md)). Einzige Ausnahme mit eigener
+Begründung: `check:kennwert-roh` bewacht die Client-Hälfte von ADR-002/P3-a.
 
 ---
 
