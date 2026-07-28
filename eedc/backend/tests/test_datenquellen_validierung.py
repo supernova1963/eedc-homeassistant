@@ -141,3 +141,110 @@ def test_takt_duenne_datenlage_still():
     assert takt_problem([]) is None
     assert takt_problem([100.0, 101.0]) is None          # < 4 Werte
     assert takt_problem([100.0, 100.0, 100.0, 100.0]) is None  # kein Zuwachs
+
+
+# ─── Bedarfs-Einstufung (§2i-6): ist ein LEERES Feld eine Lücke? ─────────
+#
+# Anlass: der Rollup „n ohne Quelle" zählte jedes leere Feld und meldete auf
+# einer korrekt eingerichteten Anlage lauter Fehlalarm — gemessen 3 von 3
+# (PV-Zählerstand, PV gesamt (W), Netz kombiniert sind dort legitim leer).
+
+from backend.services.datenquellen_validierung import stufe_bedarf_ein
+
+
+def _feld(fid, feld, typ="basis", belegt=False, bedarf="optional",
+          gruppe=None, bedingung_anlage=None):
+    return {"id": fid, "feld": feld, "typ": typ, "belegt": belegt,
+            "bedarf": bedarf, "bedarf_gruppe": gruppe,
+            "bedingung_anlage": bedingung_anlage}
+
+
+def test_leeres_pflichtfeld_ohne_alternative_bleibt_pflicht():
+    """Der einzige Fall, der rot werden darf."""
+    r = stufe_bedarf_ein([_feld("f1", "einspeisung_kwh", bedarf="pflicht")], set())
+    assert r["f1"]["bedarf"] == "pflicht"
+    assert r["f1"]["grund"] is None
+
+
+def test_optionales_feld_bleibt_optional():
+    r = stufe_bedarf_ein([_feld("f1", "aussentemperatur_c")], set())
+    assert r["f1"]["bedarf"] == "optional"
+
+
+def test_alternativ_gruppe_deckt_leeres_pflichtfeld_ab():
+    """Anlagen-Zählerstand leer, aber ein PV-Modul misst → keine Lücke."""
+    felder = [
+        _feld("basis_pv", "pv_gesamt_kwh", bedarf="pflicht", gruppe="pv_energie"),
+        _feld("mod_pv", "pv_erzeugung_kwh", typ="pv-module", belegt=True,
+              bedarf="pflicht", gruppe="pv_energie"),
+    ]
+    r = stufe_bedarf_ein(felder, {"pv-module"})
+    assert r["basis_pv"]["bedarf"] == "inaktiv"
+    assert r["basis_pv"]["grund"] == "gruppe:pv_energie"
+    assert r["basis_pv"]["text"]
+    assert r["mod_pv"]["bedarf"] == "pflicht"  # das belegte Feld bleibt Pflicht
+
+
+def test_gruppe_komplett_leer_bleibt_offen():
+    """Deckt keiner der Wege den Wert ab, ist es sehr wohl eine Lücke."""
+    felder = [
+        _feld("basis_pv", "pv_gesamt_kwh", bedarf="pflicht", gruppe="pv_energie"),
+        _feld("mod_pv", "pv_erzeugung_kwh", typ="pv-module", bedarf="pflicht",
+              gruppe="pv_energie"),
+    ]
+    r = stufe_bedarf_ein(felder, {"pv-module"})
+    assert r["basis_pv"]["bedarf"] == "pflicht"
+    assert r["mod_pv"]["bedarf"] == "pflicht"
+
+
+def test_netz_live_gruppe_kombi_gegen_getrennt():
+    """`netz_kombi_w` leer ist richtig, wenn Einspeisung/Netzbezug belegt sind
+    — genau die Konstellation, die eedc auch rechnerisch so auflöst."""
+    felder = [
+        _feld("e_w", "einspeisung_w", belegt=True, gruppe="netz_live"),
+        _feld("n_w", "netzbezug_w", belegt=True, gruppe="netz_live"),
+        _feld("k_w", "netz_kombi_w", gruppe="netz_live"),
+    ]
+    r = stufe_bedarf_ein(felder, set())
+    assert r["k_w"]["bedarf"] == "inaktiv"
+
+
+def test_wallbox_verdraengt_eauto_heimladung():
+    """Phase 2a: mit Wallbox ist die Heimladung am E-Auto nicht zu erfassen."""
+    felder = [_feld("ea_pv", "ladung_pv_kwh", typ="e-auto",
+                    bedingung_anlage="keine_wallbox")]
+    r = stufe_bedarf_ein(felder, {"e-auto", "wallbox"})
+    assert r["ea_pv"]["bedarf"] == "inaktiv"
+    assert r["ea_pv"]["grund"] == "keine_wallbox"
+    assert "Wallbox" in r["ea_pv"]["text"]
+
+
+def test_ohne_wallbox_ist_eauto_heimladung_normal():
+    felder = [_feld("ea_pv", "ladung_pv_kwh", typ="e-auto",
+                    bedingung_anlage="keine_wallbox")]
+    r = stufe_bedarf_ein(felder, {"e-auto"})
+    assert r["ea_pv"]["bedarf"] == "optional"
+
+
+def test_verdraengtes_aber_belegtes_feld_bleibt_sichtbar_inaktiv():
+    """Die ungünstige Kombination: Feld ist verdrängt UND belegt (Altbestand).
+
+    Es darf nicht verschwinden — sonst ließe sich die wirkungslose Zuordnung
+    nicht mehr entfernen. `inaktiv` + die bestehende Redundanz-Warnung führen
+    den Nutzer zum Aufräumen.
+    """
+    felder = [_feld("ea_pv", "ladung_pv_kwh", typ="e-auto", belegt=True,
+                    bedingung_anlage="keine_wallbox")]
+    r = stufe_bedarf_ein(felder, {"e-auto", "wallbox"})
+    assert r["ea_pv"]["bedarf"] == "inaktiv"
+
+
+def test_belegtes_feld_zaehlt_fuer_seine_gruppe_auch_wenn_optional():
+    """Ein belegtes optionales Feld deckt die Gruppe ebenfalls ab (PV-Leistung
+    je Modul macht „PV gesamt (W)" überflüssig)."""
+    felder = [
+        _feld("mod_w", "leistung_w", typ="pv-module", belegt=True, gruppe="pv_live"),
+        _feld("basis_w", "pv_gesamt_w", gruppe="pv_live"),
+    ]
+    r = stufe_bedarf_ein(felder, {"pv-module"})
+    assert r["basis_w"]["bedarf"] == "inaktiv"

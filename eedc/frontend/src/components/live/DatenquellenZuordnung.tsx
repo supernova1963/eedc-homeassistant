@@ -32,6 +32,7 @@ import DatenquellenGatewayPicker from './DatenquellenGatewayPicker'
 import DatenquellenHaPicker from './DatenquellenHaPicker'
 import { useSelectedAnlage } from '../../hooks'
 import { TYP_LABELS } from '../../lib/constants'
+import { STATUS_TEXT_CLASS } from '../../lib/colors'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
 import {
   datenquellenApi,
@@ -224,7 +225,9 @@ export default function DatenquellenZuordnung() {
     // Die nackte ID allein war für Tester nicht wiedererkennbar (Rainer-PN
     // 2026-07-25); V3 zeigte hier den Friendly Name.
     let istText: string
-    if (f.quelle === Q_KEINE) istText = 'keine Quelle'
+    // §2i-6: bei `inaktiv` sagt die Zeile, WARUM hier nichts hingehört, statt
+    // ein „keine Quelle“, das wie eine Lücke aussieht.
+    if (f.quelle === Q_KEINE) istText = f.bedarf_text || (f.bedarf === 'optional' ? 'optional' : 'keine Quelle')
     else if (istGateway) istText = `Gateway: ${f.gateway_topic ?? '…'}`
     else if (istHA) istText = f.ha_name ? `HA: ${f.ha_name} · ${f.ha_entity}` : `HA: ${f.ha_entity ?? '…'}`
     else istText = f.standard_topic
@@ -241,12 +244,21 @@ export default function DatenquellenZuordnung() {
       wertTone = 'text-amber-600 dark:text-amber-400'
     }
 
-    const hinweisOffen = offeneHinweise.has(f.id)
+    // §2i-6: offene Pflicht = Feld ist Pflicht, hat keine Quelle und wird auch
+    // nicht über seine Alternativ-Gruppe abgedeckt (das Backend hätte sonst
+    // `inaktiv` gesetzt). Der Hinweis erklärt dann, was hier hingehört — also
+    // ohne Klick zeigen und rot einfärben (Style-Guide D1: Pflicht-Marker `*`,
+    // Fehler rot unter dem Feld; Signal-Rot ist seit F2 der Fehler-Kanon).
+    const offenePflicht = f.bedarf === 'pflicht' && istKeine
+    const hinweisOffen = offeneHinweise.has(f.id) || offenePflicht
     return (
       <div key={f.id} className="flex flex-col gap-1.5 py-2 sm:flex-row sm:items-center sm:gap-3">
-        <div className={`min-w-0 sm:flex-1 ${istKeine ? 'opacity-60' : ''}`}>
+        <div className={`min-w-0 sm:flex-1 ${istKeine && !offenePflicht ? 'opacity-60' : ''}`}>
           <div className="flex items-center gap-1">
             <span className="text-sm text-gray-800 dark:text-gray-200">{label}</span>
+            {f.bedarf === 'pflicht' && (
+              <span className={`${STATUS_TEXT_CLASS.kritisch}`} title="Pflichtfeld">*</span>
+            )}
             {f.hinweis && (
               <Button
                 type="button" variant="ghost" size="icon"
@@ -257,15 +269,21 @@ export default function DatenquellenZuordnung() {
                 onClick={() => toggleHinweis(f.id)}
                 aria-label="Hinweis anzeigen" aria-expanded={hinweisOffen} title="Hinweis anzeigen"
               >
-                <Info className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+                <Info className={`h-3.5 w-3.5 ${offenePflicht ? STATUS_TEXT_CLASS.kritisch : 'text-gray-400 dark:text-gray-500'}`} />
               </Button>
             )}
           </div>
-          <div className={`font-mono text-xs break-all ${amber ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>
+          <div className={`font-mono text-xs break-all ${
+            amber ? 'text-amber-600 dark:text-amber-400'
+              : offenePflicht ? STATUS_TEXT_CLASS.kritisch
+              : 'text-gray-500 dark:text-gray-400'
+          }`}>
             {istText}
           </div>
           {hinweisOffen && f.hinweis && (
-            <p className="mt-1 max-w-prose text-xs text-gray-500 dark:text-gray-400">{f.hinweis}</p>
+            <p className={`mt-1 max-w-prose text-xs ${offenePflicht ? STATUS_TEXT_CLASS.kritisch : 'text-gray-500 dark:text-gray-400'}`}>
+              {f.hinweis}
+            </p>
           )}
           {/* §2i: diagnostische Zuordnungs-Probleme (Einheit/state_class/Redundanz/
               Doppelmapping). Rot=error, amber=warning; Redundanz mit Inline-„auf keine". */}
@@ -372,13 +390,18 @@ export default function DatenquellenZuordnung() {
     ))
   }
 
-  // Rollup: Felder ohne Quelle je Gerät/Block.
-  const ohneQuelle = (felder: DatenquelleFeld[]) => felder.filter((f) => f.quelle === Q_KEINE).length
+  // Rollup: NUR offene Pflichtfelder je Gerät/Block (§2i-6).
+  // Vorher zählte jedes Feld ohne Quelle — auf einer korrekt eingerichteten
+  // Anlage waren das die Aggregat-, Alternativ- und Optional-Felder, also lauter
+  // Fehlalarm in Amber (gemessen: 3 von 3 Meldungen). „inaktiv“ und „optional“
+  // sind kein offener Punkt; rot bleibt dem vorbehalten, was wirklich fehlt.
+  const offenePflichten = (felder: DatenquelleFeld[]) =>
+    felder.filter((f) => f.bedarf === 'pflicht' && f.quelle === Q_KEINE).length
   const geraetBadge = (g: DatenquelleGruppe) => {
-    const ohne = ohneQuelle(g.felder)
+    const offen = offenePflichten(g.felder)
     return (
       <span className="text-xs text-gray-400 dark:text-gray-500">
-        {g.felder.length} Felder{ohne > 0 && <span className="text-amber-600 dark:text-amber-400"> · {ohne} ohne Quelle</span>}
+        {g.felder.length} Felder{offen > 0 && <span className={STATUS_TEXT_CLASS.kritisch}> · {offen} noch ohne Quelle</span>}
       </span>
     )
   }
@@ -386,11 +409,11 @@ export default function DatenquellenZuordnung() {
   const bloecke: Block[] = useMemo(() => cluster.map((tc): Block => {
     const style = typStyle(tc.typ)
     const alleFelder = tc.geraete.flatMap((g) => g.felder)
-    const ohne = ohneQuelle(alleFelder)
+    const offen = offenePflichten(alleFelder)
     const istBasis = tc.typ === 'basis'
     const summary = istBasis
-      ? `${alleFelder.length} Felder${ohne > 0 ? ` · ${ohne} ohne Quelle` : ''}`
-      : `${tc.geraete.length} ${tc.geraete.length === 1 ? 'Gerät' : 'Geräte'}${ohne > 0 ? ` · ${ohne} Felder ohne Quelle` : ''}`
+      ? `${alleFelder.length} Felder${offen > 0 ? ` · ${offen} noch ohne Quelle` : ''}`
+      : `${tc.geraete.length} ${tc.geraete.length === 1 ? 'Gerät' : 'Geräte'}${offen > 0 ? ` · ${offen} Felder noch ohne Quelle` : ''}`
     return {
       id: `dq-${tc.typ}`,
       title: tc.label,

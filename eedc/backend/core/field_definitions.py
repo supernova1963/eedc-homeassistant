@@ -164,14 +164,14 @@ INVESTITION_FELDER: dict = {
             "feld": "ladung_netz_kwh", "label": "Netzladung", "einheit": "kWh",
             "bedingung": "laedt_aus_netz",
             "csv_suffix": "Netzladung_kWh",
-            "hinweis": "Anteil der Ladung aus dem Netz (Arbitrage), in kWh. Optional, muss ≤ Ladung sein. Nur via HA-Sensor oder manuell — kein MQTT-Topic.",
+            "hinweis": "Anteil der Ladung, der aus dem Netz kam (kWh, kumulativ oder Tagessensor). Optional und muss ≤ Ladung sein. Nur nötig, wenn der Speicher aus dem Netz lädt — bei reiner PV-Ladung leer lassen.",
         },
         # Ladepreis nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis.
         {
             "feld": "speicher_ladepreis_cent", "label": "Ø Ladepreis", "einheit": "ct/kWh",
             "bedingung": "arbitrage_faehig",
             "csv_suffix": "Ladepreis_Cent",
-            "hinweis": "Ø Preis der Netzladung (ct/kWh). Nur bei echter Arbitrage relevant; Backup-/Notladung läuft zum Bezugspreis. Manuell.",
+            "hinweis": "Ø Preis der Netzladung in ct/kWh. Nur bei Arbitrage relevant (gezielt günstig laden) — Backup-/Notladung läuft zum normalen Bezugspreis. Meist manuell im Monatsabschluss; bei dynamischem Tarif rechnet eedc den Wert selbst aus den Stundenpreisen.",
         },
     ],
 
@@ -382,47 +382,199 @@ INVESTITION_FELDER: dict = {
 # =============================================================================
 
 LIVE_FELDER_INV: dict = {
+    # Live-Felder speisen ausschließlich das Live-Dashboard (Momentanwerte in W/%).
+    # Für Monatswerte, Statistik und Wirtschaftlichkeit zählen die kWh-Felder oben —
+    # ein fehlender Live-Sensor kostet also nur die Echtzeit-Anzeige.
     "pv-module": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W",
+         "hinweis": "Momentane Leistung dieses Strings in W. Ohne eigenen Sensor je Modul "
+                    "nutzt eedc „PV gesamt (W)“ der Anlage — sobald hier einer zugeordnet "
+                    "ist, hat er Vorrang."},
     ],
     "wechselrichter": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W",
+         "hinweis": "Momentane AC-Ausgangsleistung des Wechselrichters in W."},
     ],
     "speicher": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
-        {"key": "soc",        "label": "Ladestand", "einheit": "%"},
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W",
+         "hinweis": "Momentane Lade-/Entladeleistung in W. Ein vorzeichenbehafteter Sensor "
+                    "genügt (+ laden / − entladen); zeigt er in die falsche Richtung, dreht "
+                    "ihn das ⇅-Symbol am Wert."},
+        {"key": "soc",        "label": "Ladestand", "einheit": "%",
+         "hinweis": "Ladestand des Speichers in Prozent (0–100)."},
     ],
     "e-auto": [
-        {"key": "leistung_w", "label": "Ladeleistung", "einheit": "W"},
-        {"key": "soc",        "label": "Ladestand",    "einheit": "%"},
+        {"key": "leistung_w", "label": "Ladeleistung", "einheit": "W",
+         "hinweis": "Momentane Ladeleistung des Fahrzeugs in W. Bei vorhandener Wallbox "
+                    "misst diese meist dasselbe — denselben Sensor nicht beiden Geräten "
+                    "zuordnen, sonst zählt die Live-Bilanz ihn doppelt."},
+        {"key": "soc",        "label": "Ladestand",    "einheit": "%",
+         "hinweis": "Ladestand der Fahrzeugbatterie in Prozent (0–100)."},
     ],
     "wallbox": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W",
+         "hinweis": "Momentane Ladeleistung der Wallbox in W."},
     ],
     "waermepumpe": [
-        {"key": "leistung_w",              "label": "Leistung gesamt",      "einheit": "W"},
-        {"key": "leistung_heizen_w",       "label": "Leistung Heizen",      "einheit": "W"},
-        {"key": "leistung_warmwasser_w",   "label": "Leistung Warmwasser",  "einheit": "W"},
-        {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C"},
+        {"key": "leistung_w",              "label": "Leistung gesamt",      "einheit": "W",
+         "hinweis": "Momentane elektrische Leistungsaufnahme der Wärmepumpe in W "
+                    "(nicht die abgegebene Wärmeleistung)."},
+        {"key": "leistung_heizen_w",       "label": "Leistung Heizen",      "einheit": "W",
+         "hinweis": "Elektrische Leistungsaufnahme im Heizbetrieb in W. Nur sinnvoll, wenn "
+                    "Heizen und Warmwasser getrennt gemessen werden."},
+        {"key": "leistung_warmwasser_w",   "label": "Leistung Warmwasser",  "einheit": "W",
+         "hinweis": "Elektrische Leistungsaufnahme der Warmwasserbereitung in W. Nur "
+                    "sinnvoll bei getrennter Messung."},
+        {"key": "warmwasser_temperatur_c", "label": "Warmwasser-Temperatur","einheit": "°C",
+         "hinweis": "Temperatur im Warmwasserspeicher in °C — reine Anzeige, geht in keine "
+                    "Berechnung ein."},
     ],
     "balkonkraftwerk": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W",
+         "hinweis": "Momentane Leistung des Balkonkraftwerks in W."},
     ],
     "sonstiges": [
-        {"key": "leistung_w", "label": "Leistung", "einheit": "W"},
+        {"key": "leistung_w", "label": "Leistung", "einheit": "W",
+         "hinweis": "Momentane Leistung in W — bei einem Erzeuger positiv als Erzeugung, "
+                    "bei einem Verbraucher als Verbrauch gewertet."},
     ],
 }
 
-# Live-Felder auf Anlage-Ebene (kein Investment-Bezug)
+# Live-Felder auf Anlage-Ebene (kein Investment-Bezug).
+#
+# `bedarf`/`bedarf_gruppe` steuern die Zuordnungs-Fläche (Datenquellen-V4):
+# „pflicht" wird rot und aufgeklappt gezeigt, solange weder das Feld selbst noch
+# ein anderes Mitglied seiner `bedarf_gruppe` eine Quelle hat; „optional" bleibt
+# leise grau und zählt nicht als offener Punkt. Live-Felder sind durchweg
+# optional — ohne sie bleibt nur das Live-Dashboard leer, die Statistik läuft
+# über die kWh-Zählerstände weiter.
 BASIS_LIVE_FELDER: list[dict] = [
-    {"key": "einspeisung_w",       "label": "Einspeisung",              "einheit": "W"},
-    {"key": "netzbezug_w",         "label": "Netzbezug",                "einheit": "W"},
-    {"key": "netz_kombi_w",        "label": "Netz kombiniert (±)",      "einheit": "W"},
-    {"key": "pv_gesamt_w",         "label": "PV gesamt",                "einheit": "W"},
-    {"key": "aussentemperatur_c",  "label": "Außentemperatur",          "einheit": "°C"},
+    {"key": "einspeisung_w",       "label": "Einspeisung",              "einheit": "W",
+     "hinweis": "Momentane Einspeiseleistung in W — nur für das Live-Dashboard. "
+                "Alternative: ein einzelner Sensor mit Vorzeichen unter „Netz kombiniert (±)“."},
+    {"key": "netzbezug_w",         "label": "Netzbezug",                "einheit": "W",
+     "hinweis": "Momentane Bezugsleistung in W — nur für das Live-Dashboard. "
+                "Alternative: ein einzelner Sensor mit Vorzeichen unter „Netz kombiniert (±)“."},
+    {"key": "netz_kombi_w",        "label": "Netz kombiniert (±)",      "einheit": "W",
+     "hinweis": "EIN vorzeichenbehafteter Netz-Sensor (+ Bezug / − Einspeisung) statt zweier "
+                "getrennter. Wirkt nur, wenn „Einspeisung (W)“ und „Netzbezug (W)“ beide auf "
+                "„keine“ stehen — sonst haben die getrennten Felder Vorrang. Zeigt der Sensor "
+                "in die falsche Richtung, dreht ihn das ⇅-Symbol am Wert."},
+    {"key": "pv_gesamt_w",         "label": "PV gesamt",                "einheit": "W",
+     "hinweis": "Momentane PV-Leistung der ganzen Anlage in W. Nur nötig, wenn die PV-Module "
+                "keine eigenen Leistungs-Sensoren haben — sobald dort einer zugeordnet ist, "
+                "wird diese Angabe ignoriert."},
+    {"key": "aussentemperatur_c",  "label": "Außentemperatur",          "einheit": "°C",
+     "hinweis": "Außentemperatur in °C für Live-Anzeige und Wärmepumpen-Kontext. Optional — "
+                "fehlt sie, nutzt eedc die Wetterdaten des Standorts."},
     # SFML- und Solcast-Sensoren werden per Auto-Discovery erkannt (prognose_discovery.py),
     # kein manuelles Mapping mehr nötig.
 ]
+
+# =============================================================================
+# Bedarf je Feld — steuert die Zuordnungs-Fläche (Datenquellen-V4)
+#
+# EINE Tabelle statt eines Attributs an ~40 verstreuten Feld-Dicts: die
+# Einstufung ist eine fachliche Festlegung und muss an einer Stelle prüfbar
+# bleiben. Die Feld-TEXTE (`hinweis`) stehen weiter beim Feld — Text beschreibt,
+# diese Tabelle bewertet.
+#
+#   "pflicht"  — ohne diesen Wert fehlt eine Kernauswertung. Die Fläche zeigt
+#                das Feld rot und mit aufgeklapptem Hinweis, solange weder es
+#                selbst noch ein Mitglied seiner `gruppe` eine Quelle hat.
+#   "optional" — leise grau, zählt nie als offener Punkt.
+#
+# `gruppe` = Alternativ-Gruppe: EINE belegte Quelle in der Gruppe genügt, die
+# übrigen Mitglieder gelten dann als abgedeckt (nicht als Lücke). Das löst die
+# Konstellationen auf, in denen zwei Erfassungswege einander ausschließen:
+#   pv_energie — Anlagen-Zählerstand ODER Zähler je PV-Modul/Balkonkraftwerk
+#   pv_live    — Anlagen-Leistung ODER Leistung je Modul
+#   netz_live  — „Netz kombiniert (±)" ODER Einspeisung+Netzbezug getrennt
+#
+# WICHTIG — „keine Quelle" ist kein Fehler: alle kWh-Felder lassen sich im
+# Monatsabschluss auch manuell erfassen. Rot heißt deshalb „hier fehlt noch
+# etwas", nie „falsch"; die Hinweistexte nennen die manuelle Alternative.
+# =============================================================================
+
+FELD_BEDARF: dict[tuple[str, str], tuple[str, Optional[str]]] = {
+    # ── Anlage (Basis) ──────────────────────────────────────────────────────
+    # Kernwerte laut Daten-Checker (`daten_checker/monatsdaten.py`: „Kernfeld —
+    # ohne Einspeisung sind Eigenverbrauch und Autarkie nicht berechenbar").
+    ("basis", "einspeisung_kwh"): ("pflicht", None),
+    ("basis", "netzbezug_kwh"): ("pflicht", None),
+    ("basis", "pv_gesamt_kwh"): ("pflicht", "pv_energie"),
+    # Live-Felder sind durchweg optional: ohne sie bleibt das Live-Dashboard
+    # leer, die Statistik läuft über die kWh-Zählerstände weiter.
+    ("basis", "einspeisung_w"): ("optional", "netz_live"),
+    ("basis", "netzbezug_w"): ("optional", "netz_live"),
+    ("basis", "netz_kombi_w"): ("optional", "netz_live"),
+    ("basis", "pv_gesamt_w"): ("optional", "pv_live"),
+    ("basis", "aussentemperatur_c"): ("optional", None),
+
+    # ── PV ──────────────────────────────────────────────────────────────────
+    ("pv-module", "pv_erzeugung_kwh"): ("pflicht", "pv_energie"),
+    ("pv-module", "leistung_w"): ("optional", "pv_live"),
+    ("wechselrichter", "pv_erzeugung_kwh"): ("pflicht", "pv_energie"),
+    ("wechselrichter", "leistung_w"): ("optional", "pv_live"),
+    ("balkonkraftwerk", "pv_erzeugung_kwh"): ("pflicht", "pv_energie"),
+    ("balkonkraftwerk", "leistung_w"): ("optional", "pv_live"),
+    ("balkonkraftwerk", "eigenverbrauch_kwh"): ("optional", None),
+    ("balkonkraftwerk", "speicher_ladung_kwh"): ("optional", None),
+    ("balkonkraftwerk", "speicher_entladung_kwh"): ("optional", None),
+
+    # ── Speicher ────────────────────────────────────────────────────────────
+    # Ohne Lade-/Entlademenge bleibt die gesamte Speicher-Auswertung leer und
+    # der Hausverbrauch wird falsch gerechnet (Daten-Checker warnt darauf).
+    ("speicher", "ladung_kwh"): ("pflicht", None),
+    ("speicher", "entladung_kwh"): ("pflicht", None),
+    ("speicher", "ladung_netz_kwh"): ("optional", None),
+    ("speicher", "speicher_ladepreis_cent"): ("optional", None),
+    ("speicher", "leistung_w"): ("optional", None),
+    ("speicher", "soc"): ("optional", None),
+
+    # ── Wärmepumpe ──────────────────────────────────────────────────────────
+    # Strom UND abgegebene Wärme: erst beide zusammen ergeben JAZ, Ersparnis
+    # und CO₂. Der Strom kommt je nach Parameter aus einem oder zwei Feldern.
+    ("waermepumpe", "stromverbrauch_kwh"): ("pflicht", "wp_strom"),
+    ("waermepumpe", "strom_heizen_kwh"): ("pflicht", "wp_strom"),
+    ("waermepumpe", "strom_warmwasser_kwh"): ("pflicht", "wp_strom"),
+    ("waermepumpe", "heizenergie_kwh"): ("pflicht", None),
+    ("waermepumpe", "warmwasser_kwh"): ("optional", None),
+    ("waermepumpe", "leistung_w"): ("optional", None),
+    ("waermepumpe", "leistung_heizen_w"): ("optional", None),
+    ("waermepumpe", "leistung_warmwasser_w"): ("optional", None),
+    ("waermepumpe", "warmwasser_temperatur_c"): ("optional", None),
+
+    # ── E-Auto ──────────────────────────────────────────────────────────────
+    # Kilometer sind der Bezugswert für Effizienz und Benzin-Vergleich.
+    # Die Heimladungs-Felder sind bei vorhandener Wallbox verdrängt
+    # (`bedingung_anlage: keine_wallbox`) — das wertet die Fläche selbst aus.
+    ("e-auto", "km_gefahren"): ("pflicht", None),
+    ("e-auto", "verbrauch_kwh"): ("optional", None),
+    ("e-auto", "ladung_pv_kwh"): ("optional", None),
+    ("e-auto", "ladung_netz_kwh"): ("optional", None),
+    ("e-auto", "ladung_extern_kwh"): ("optional", None),
+    ("e-auto", "ladung_extern_euro"): ("optional", None),
+    ("e-auto", "v2h_entladung_kwh"): ("optional", None),
+    ("e-auto", "leistung_w"): ("optional", None),
+    ("e-auto", "soc"): ("optional", None),
+
+    # ── Wallbox ─────────────────────────────────────────────────────────────
+    ("wallbox", "ladung_kwh"): ("pflicht", None),
+    ("wallbox", "ladung_pv_kwh"): ("optional", None),
+    ("wallbox", "ladevorgaenge"): ("optional", None),
+    ("wallbox", "leistung_w"): ("optional", None),
+}
+
+# Default für alles, was nicht in der Tabelle steht (u. a. „sonstiges", dessen
+# Felder kategorie-abhängig erzeugt werden): nie rot, nie als Lücke gezählt.
+FELD_BEDARF_DEFAULT: tuple[str, Optional[str]] = ("optional", None)
+
+
+def get_feld_bedarf(typ: str, feld: str) -> tuple[str, Optional[str]]:
+    """Bedarf + Alternativ-Gruppe eines Felds — siehe {@link FELD_BEDARF}."""
+    return FELD_BEDARF.get((typ, feld), FELD_BEDARF_DEFAULT)
+
 
 # Typen mit SoC-Live-Sensor (aus LIVE_FELDER_INV abgeleitet)
 SOC_TYPEN: frozenset[str] = frozenset(
@@ -543,6 +695,11 @@ def get_felder_fuer_investition(
         bedingung_anlage = feld.get("bedingung_anlage")
 
         # ── Anlage-Kontext-Bedingung ─────────────────────────────────────────
+        # Hier wird gefiltert (Monatsabschluss/Import-Kontext). Die Datenquellen-
+        # Fläche nutzt bewusst `get_alle_felder_fuer_investition` und wertet
+        # `bedingung_anlage` selbst aus — sie muss ein bereits ZUGEORDNETES Feld
+        # weiter zeigen, sonst verschwindet die Zuordnung unsichtbar und lässt
+        # sich nicht mehr entfernen (`_bedarf_einstufung` in routes/datenquellen.py).
         if bedingung_anlage and anlage_investitionen is not None:
             if bedingung_anlage == "keine_pv_module" and "pv-module" in anlage_typen:
                 continue  # Feld ausblenden: PV-Module separat erfasst

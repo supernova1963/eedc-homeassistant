@@ -738,11 +738,17 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     # Aggregat-Redundanz (PV gesamt/Netz kombi neben Komponenten); HA-Doppelmapping.
     from backend.services.datenquellen_validierung import (
         einheit_problem, state_class_problem,
-        finde_redundante_aggregate, finde_doppelmappings,
+        finde_redundante_aggregate, finde_doppelmappings, stufe_bedarf_ein,
     )
     feld_einheit = {_feld_id(e["match_key"]): e.get("einheit", "") for e in eintraege}
     feld_feld = {_feld_id(e["match_key"]): e.get("feld", "") for e in eintraege}
     feld_typ = {_feld_id(e["match_key"]): e.get("typ", "basis") for e in eintraege}
+    feld_bedarf = {_feld_id(e["match_key"]): e.get("bedarf", "optional") for e in eintraege}
+    feld_bedarf_gruppe = {_feld_id(e["match_key"]): e.get("bedarf_gruppe") for e in eintraege}
+    feld_bedingung_anlage = {
+        _feld_id(e["match_key"]): e.get("bedingung_anlage") for e in eintraege
+    }
+    vorhandene_inv_typen = {i.typ for i in invs}
     probleme_je_feld: dict[str, list] = {}
 
     def _add_problem(fid: str, p: dict | None) -> None:
@@ -767,6 +773,21 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         _add_problem(fid, p)
     for fid, p in finde_doppelmappings(ha_zuordnungen).items():
         _add_problem(fid, p)
+
+    # §2i-6 — Bedarfs-Einstufung: ist ein LEERES Feld überhaupt eine Lücke?
+    # Ohne sie zählte der Rollup Aggregat-, Alternativ- und Optional-Felder als
+    # „ohne Quelle" und meldete auf einer korrekt eingerichteten Anlage Fehlalarm.
+    _bedarf_eingabe = [
+        {"id": fid,
+         "feld": feld_feld[fid],
+         "typ": feld_typ[fid],
+         "belegt": (effektiv.get(fid, {}).get("quelle", QUELLE_KEINE) != QUELLE_KEINE),
+         "bedarf": feld_bedarf.get(fid, "optional"),
+         "bedarf_gruppe": feld_bedarf_gruppe.get(fid),
+         "bedingung_anlage": feld_bedingung_anlage.get(fid)}
+        for fid in feld_feld
+    ]
+    bedarf_je_feld = stufe_bedarf_ein(_bedarf_eingabe, vorhandene_inv_typen)
 
     # Pass 2 — Reihenfolge-erhaltend nach gruppe_id gruppieren + Response bauen.
     gruppen: list[dict] = []
@@ -822,6 +843,11 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             # §2i: diagnostische Zuordnungs-Probleme (Einheit/state_class/Redundanz/
             # Doppelmapping) — leere Liste, wenn alles sauber.
             "probleme": probleme_je_feld.get(fid, []),
+            # §2i-6: „pflicht" | "optional" | "inaktiv" (+ Begründung). Steuert
+            # rot/aufgeklappt vs. leise und die Rollup-Zählung.
+            "bedarf": bedarf_je_feld.get(fid, {}).get("bedarf", "optional"),
+            "bedarf_grund": bedarf_je_feld.get(fid, {}).get("grund"),
+            "bedarf_text": bedarf_je_feld.get(fid, {}).get("text"),
         })
 
     # B8-2: aufgelöste positive Evidenz additiv festschreiben (guarded — nur bei

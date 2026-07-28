@@ -22,6 +22,7 @@ from backend.utils.investition_filter import aktiv_jetzt
 from backend.core.field_definitions import (
     BASIS_LIVE_FELDER,
     get_alle_felder_fuer_investition,
+    get_feld_bedarf,
     get_live_felder_fuer_investition,
 )
 
@@ -39,13 +40,23 @@ _HEUTE_HINWEIS = (
     "das Tagesdelta gegen den Mitternachtswert (täglich resettende oder "
     "fortlaufende Zähler funktionieren beide)."
 )
-# (key, feld_label, einheit, beschreibung). feld_label + einheit getrennt, damit
-# die Datenquellen-Fläche nach Einheit gruppieren kann (Energie-Sensoren kWh) —
-# das Anzeige-`label` setzt die Einheit wieder in Klammern (rückwärtskompatibel).
+# (key, feld_label, einheit, beschreibung). feld_label +
+# einheit getrennt, damit die Datenquellen-Fläche nach Einheit gruppieren kann
+# (Energie-Sensoren kWh) — das Anzeige-`label` setzt die Einheit wieder in
+# Klammern (rückwärtskompatibel).
 BASIS_ENERGY_TOPICS = [
-    ("pv_gesamt_kwh", "PV-Erzeugung Zählerstand", "kWh", _HEUTE_HINWEIS),
-    ("einspeisung_kwh", "Einspeisung Zählerstand", "kWh", _HEUTE_HINWEIS),
-    ("netzbezug_kwh", "Netzbezug Zählerstand", "kWh", _HEUTE_HINWEIS),
+    ("pv_gesamt_kwh", "PV-Erzeugung Zählerstand", "kWh",
+     "Zählerstand der gesamten PV-Erzeugung. Nur nötig, wenn die PV-Module keine "
+     "eigenen Zähler haben — ist dort einer zugeordnet, wird diese Angabe ignoriert. "
+     + _HEUTE_HINWEIS),
+    ("einspeisung_kwh", "Einspeisung Zählerstand", "kWh",
+     "Zählerstand der ins Netz eingespeisten Energie. Kernwert: ohne ihn lassen sich "
+     "Eigenverbrauch und Autarkie nicht berechnen. Ohne Sensor im Monatsabschluss "
+     "manuell erfassbar. " + _HEUTE_HINWEIS),
+    ("netzbezug_kwh", "Netzbezug Zählerstand", "kWh",
+     "Zählerstand der aus dem Netz bezogenen Energie. Kernwert: ohne ihn lassen sich "
+     "Hausverbrauch und Stromkosten nicht berechnen. Ohne Sensor im Monatsabschluss "
+     "manuell erfassbar. " + _HEUTE_HINWEIS),
 ]
 
 
@@ -110,6 +121,8 @@ async def build_expected_topics(
             "feld_label": feld["label"],
             "einheit": feld.get("einheit", ""),
             "hinweis": feld.get("hinweis", ""),
+            "bedarf": get_feld_bedarf("basis", feld["key"])[0],
+            "bedarf_gruppe": get_feld_bedarf("basis", feld["key"])[1],
             "gruppe_id": "basis",
             "gruppe_titel": "Anlage (Basis)",
         })
@@ -127,6 +140,8 @@ async def build_expected_topics(
             "feld_label": feld_label,
             "einheit": einheit,
             "hinweis": beschreibung,
+            "bedarf": get_feld_bedarf("basis", key)[0],
+            "bedarf_gruppe": get_feld_bedarf("basis", key)[1],
             "gruppe_id": "basis",
             "gruppe_titel": "Anlage (Basis)",
         })
@@ -163,6 +178,8 @@ async def build_expected_topics(
                 "feld_label": live_feld["label"],
                 "einheit": live_feld.get("einheit", ""),
                 "hinweis": live_feld.get("hinweis", ""),
+                "bedarf": get_feld_bedarf(inv.typ, live_feld["key"])[0],
+                "bedarf_gruppe": get_feld_bedarf(inv.typ, live_feld["key"])[1],
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })
@@ -179,6 +196,12 @@ async def build_expected_topics(
                 "feld_label": feld["label"],
                 "einheit": feld.get("einheit", ""),
                 "hinweis": feld.get("hinweis", ""),
+                "bedarf": get_feld_bedarf(inv.typ, feld["feld"])[0],
+                "bedarf_gruppe": get_feld_bedarf(inv.typ, feld["feld"])[1],
+                # Roh durchgereicht — die Zuordnungs-Fläche wertet selbst aus
+                # (markieren statt filtern, s. get_felder_fuer_investition).
+                "bedingung": feld.get("bedingung"),
+                "bedingung_anlage": feld.get("bedingung_anlage"),
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })

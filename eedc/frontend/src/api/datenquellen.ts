@@ -36,6 +36,19 @@ export interface DatenquelleFeld {
   wert_zeit: string | null
   /** §2i: diagnostische Zuordnungs-Probleme (leer = sauber). */
   probleme: FeldProblem[]
+  /**
+   * §2i-6: Ist eine fehlende Quelle hier überhaupt eine Lücke?
+   *  - `pflicht`  — ohne Wert fehlt eine Kernauswertung → Pflicht-Marker,
+   *                 bei leerer Quelle rot + Hinweis aufgeklappt.
+   *  - `optional` — leer ist in Ordnung, zählt nicht als offener Punkt.
+   *  - `inaktiv`  — hier nicht zu erfassen, ein anderer Weg gewinnt
+   *                 (Alternativ-Gruppe belegt oder vom Anlagen-Kontext verdrängt).
+   */
+  bedarf: 'pflicht' | 'optional' | 'inaktiv'
+  /** Maschinenlesbarer Grund bei `inaktiv` (z. B. 'gruppe:pv_energie'). */
+  bedarf_grund: string | null
+  /** Erklärsatz bei `inaktiv` — ersetzt „keine Quelle" in der Zeile. */
+  bedarf_text: string | null
 }
 
 /** Diagnostisches Zuordnungs-Problem (§2i) — rein informativ, keine Sperre. */

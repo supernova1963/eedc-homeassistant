@@ -17,6 +17,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 - **PV-Module: Querprüfung von Modulanzahl × Wp gegen die eingetragene Leistung.** Wer sich bei den optionalen Modul-Details vertippt, sieht die Abweichung jetzt **im Formular** („Berechnete Leistung: 7,20 kWp — weicht von der eingetragenen Leistung (4,00 kWp) ab"), und der **Daten-Checker nennt den betroffenen String beim Namen** statt nur die Anlagensumme zu bemängeln. Die Warnung blockiert nichts: die Modul-Details bleiben optional, maßgeblich bleibt das Feld **Leistung (kWp)**. *(Rainer, PN)*
 
+### Changed
+
+- **Datenquellen: „ohne Quelle" heißt nicht mehr automatisch „hier fehlt was".** Die Zuordnungs-Fläche zählte jedes leere Feld und färbte den Block-Kopf amber („8 Felder · 3 ohne Quelle"). Auf einer **richtig** eingerichteten Anlage sind das aber gerade die Felder, die leer sein *sollen* — und die Meldung lud dazu ein, sie trotzdem zu füllen. Genau das führt in die Irre: wer die PV-Erzeugung je Modul erfasst, soll den Anlagen-Sammelzähler leer lassen. Jetzt sagt die Fläche bei jedem Feld, woran du bist:
+  - **Pflichtfelder** tragen einen roten `*`. Fehlt dort die Quelle *und* ist kein Ersatzweg belegt, steht der Hinweis **rot und automatisch aufgeklappt** — er nennt den passenden Sensortyp, statt stumm zu bleiben.
+  - **Optionale Felder** bleiben leise grau. Der Zähler im Block-Kopf zählt **nur offene Pflichtfelder**: steht dort nichts, ist die Zuordnung fertig.
+  - **Felder, die an anderer Stelle erfasst werden**, nennen jetzt den Grund statt „keine Quelle" zu melden — PV-Erzeugung und -Leistung (anlagenweit *oder* je Modul), „Netz kombiniert (±)" gegenüber getrennten Einspeise-/Bezugs-Sensoren, und die Heimladung am E-Auto, sobald eine Wallbox existiert.
+  - **Alle Feld-Hinweise überarbeitet:** die 13 Leistungs- und Ladestand-Felder hatten bisher überhaupt keinen (also kein ⓘ), und einzelne Texte waren überholt — beim Speicher stand „kein MQTT-Topic", obwohl es längst eines gibt.
+
+  „Keine Quelle" bleibt ausdrücklich kein Fehler: alle kWh-Felder lassen sich im Monatsabschluss auch von Hand pflegen. Rot heißt „hier fehlt noch etwas", nicht „falsch".
+
 ### Fixed
 
 - **Komponenten-Liste: PV-Module zeigen wieder ihre Werte.** In **Einstellungen → Komponenten** blieb die graue Detailzeile ausgerechnet bei den PV-Modulen leer, während Speicher, Wärmepumpe, Wallbox, Wechselrichter und Balkonkraftwerk ihre Eckdaten nannten. Ursache: PV-Module wurden mit den Feldern des **Balkonkraftwerks** gelesen, die es bei ihnen nicht gibt. Sie zeigen jetzt Leistung (kWp), Modulanzahl und Wp pro Modul — die kWp auch dann, wenn sie bei Import-/Altbestand nur im Detail-Feld gepflegt ist (#229). *(Rainer, PN)*

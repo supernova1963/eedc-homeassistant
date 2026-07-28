@@ -162,3 +162,82 @@ def takt_problem(werte: list[float]) -> Optional[dict]:
                 "einer Lade-Session) — Live- und Tageskurven zeigen dann Nadeln. "
                 "Für Monatssummen ist er ok.",
     }
+
+
+# ─── Bedarfs-Einstufung je Feld (§2i-6, 2026-07-28) ──────────────────────────
+# Beantwortet die Frage, die der Rollup „n ohne Quelle" bisher nicht stellte:
+# IST ein leeres Feld überhaupt eine Lücke? Drei Ausgänge:
+#
+#   "pflicht"  — leer und durch nichts abgedeckt → rot, Hinweis aufgeklappt.
+#   "optional" — leer ist in Ordnung → leise, zählt nicht.
+#   "inaktiv"  — hier gar nicht zu erfassen, weil ein anderer Weg gewinnt
+#                (Alternativ-Gruppe belegt, oder Anlagen-Kontext verdrängt das
+#                Feld) → leise, zählt nicht, mit Begründung.
+#
+# Gegenstück zu `finde_redundante_aggregate`: dort geht es um ein BELEGTES Feld,
+# das ignoriert wird; hier um ein LEERES, das keins sein muss.
+
+_VERDRAENGT_TEXT = {
+    "keine_wallbox": "Die Wallbox ist die maßgebliche Quelle der Heimladung — "
+                     "dort zuordnen, nicht hier.",
+    "keine_pv_module": "Die PV-Module sind einzeln erfasst — dort zuordnen, "
+                       "nicht hier.",
+}
+_VERDRAENGT_TYP = {"keine_wallbox": "wallbox", "keine_pv_module": "pv-module"}
+
+_GRUPPEN_TEXT = {
+    "pv_energie": "Die PV-Erzeugung ist bereits an anderer Stelle zugeordnet.",
+    "pv_live": "Die PV-Leistung ist bereits an anderer Stelle zugeordnet.",
+    "netz_live": "Netz-Leistung ist bereits zugeordnet (kombiniert oder getrennt).",
+    "wp_strom": "Der WP-Stromverbrauch ist bereits zugeordnet.",
+}
+
+
+def stufe_bedarf_ein(
+    felder: list[dict], vorhandene_typen: set[str],
+) -> dict[str, dict]:
+    """Bedarfs-Einstufung je Feld.
+
+    `felder`: [{"id", "feld", "typ", "belegt", "bedarf", "bedarf_gruppe",
+                "bedingung_anlage"}].
+    `vorhandene_typen`: Investitionstypen der Anlage (für `bedingung_anlage`).
+
+    Returns {field_id: {"bedarf": …, "grund": …|None, "text": …|None}}.
+    """
+    belegte_gruppen = {
+        f.get("bedarf_gruppe") for f in felder
+        if f.get("belegt") and f.get("bedarf_gruppe")
+    }
+    out: dict[str, dict] = {}
+    for f in felder:
+        fid = f["id"]
+        belegt = bool(f.get("belegt"))
+        bedingung_anlage = f.get("bedingung_anlage")
+
+        # 1. Anlagen-Kontext verdrängt das Feld (Wallbox schlägt E-Auto-Heimladung,
+        #    PV-Module schlagen den Wechselrichter-Sammelzähler). Ein BELEGTES Feld
+        #    bleibt trotzdem sichtbar — sonst verschwände die Zuordnung unsichtbar
+        #    und ließe sich nicht mehr entfernen; die Redundanz-Warnung greift dort.
+        if bedingung_anlage and _VERDRAENGT_TYP.get(bedingung_anlage) in vorhandene_typen:
+            out[fid] = {
+                "bedarf": "inaktiv", "grund": bedingung_anlage,
+                "text": _VERDRAENGT_TEXT.get(bedingung_anlage),
+            }
+            continue
+
+        if belegt:
+            out[fid] = {"bedarf": f.get("bedarf") or "optional", "grund": None, "text": None}
+            continue
+
+        # 2. Leer, aber ein anderes Mitglied der Alternativ-Gruppe trägt den Wert.
+        gruppe = f.get("bedarf_gruppe")
+        if gruppe and gruppe in belegte_gruppen:
+            out[fid] = {
+                "bedarf": "inaktiv", "grund": f"gruppe:{gruppe}",
+                "text": _GRUPPEN_TEXT.get(gruppe),
+            }
+            continue
+
+        # 3. Echte Lücke — nur bei Pflicht.
+        out[fid] = {"bedarf": f.get("bedarf") or "optional", "grund": None, "text": None}
+    return out

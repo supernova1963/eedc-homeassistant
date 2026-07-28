@@ -14,8 +14,26 @@
 | **Counter** | Kumulativer Anzahl-Zähler (Total-Increasing, kein kWh). Wird strikt von kWh-Feldern getrennt — siehe „Counter vs. kWh" unten. |
 | **Bidirektional** | Positiv/negativ kodiert die Richtung (z.B. +Ladung/−Entladung) |
 | **`state_class`** | HA-Attribut. `total_increasing`/`total` markieren kumulative Sensoren — von HA in Long-Term Statistics persistiert. Sensoren ohne `state_class` haben **keine** LTS-Einträge → für kWh-Felder ungeeignet (siehe „LTS-Verfügbarkeit"). |
+| **`*`** | **Pflichtfeld** — ohne diesen Wert fehlt eine Kernauswertung. In der Zuordnungs-Fläche mit rotem `*`; bleibt es ohne Quelle, steht der Hinweis dort rot und aufgeklappt. |
+| **Alternativ-Gruppe** | Zwei Erfassungswege, von denen **einer genügt**. Ist ein Weg belegt, gilt der andere als abgedeckt und wird nicht mehr angemahnt. |
 
 > **Wo ordne ich Sensoren zu?** In v4 unter **Einstellungen → Datenquellen** — jedes Feld bekommt **genau eine** Quelle (HA-Sensor, MQTT-Gateway, MQTT-Inbound oder keine). Details zur Fläche: [Handbuch Einstellungen §7](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung). Voraussetzung ist eine stehende Verbindung ([Integration](HANDBUCH_EINSTELLUNGEN.md#6-integration)).
+
+> **Pflicht, optional, oder hier gar nicht?** Die Fläche stuft jedes Feld ein, damit „keine Quelle" nicht pauschal wie ein Mangel aussieht (SoT: `FELD_BEDARF` in `backend/core/field_definitions.py`):
+>
+> - **Pflicht** (`*`) — Anlage: Einspeisung + Netzbezug (Zählerstand) und die PV-Erzeugung. Je Gerät das jeweilige Kernfeld: Speicher Ladung/Entladung, Wärmepumpe Strom + Heizwärme, Wallbox Ladung gesamt, E-Auto gefahrene km, PV-Modul/Balkonkraftwerk Erzeugung.
+> - **Optional** — alles Übrige, insbesondere **alle Live-Felder (W, %, °C)**: ohne sie bleibt nur das Live-Dashboard leer, Statistik und Wirtschaftlichkeit laufen über die kWh-Zählerstände weiter.
+> - **Nicht hier zu erfassen** — das Feld ist durch einen anderen Weg abgedeckt und wird mit Begründung ausgegraut: die drei Alternativ-Gruppen (unten) sowie die Heimladung am E-Auto, sobald eine Wallbox existiert (die Wallbox ist die maßgebliche Quelle, siehe §5).
+>
+> **Alternativ-Gruppen:**
+>
+> | Gruppe | Weg A | Weg B |
+> |--------|-------|-------|
+> | PV-Energie | Anlage `pv_gesamt_kwh` | je PV-Modul/Balkonkraftwerk `pv_erzeugung_kwh` |
+> | PV-Leistung | Anlage `pv_gesamt_w` | je Modul `leistung_w` |
+> | Netz-Leistung | `netz_kombi_w` (ein Sensor mit Vorzeichen) | `einspeisung_w` + `netzbezug_w` getrennt |
+>
+> **„Keine Quelle" ist kein Fehler:** Alle kWh-Felder lassen sich im Monatsabschluss auch manuell erfassen. Rot heißt „hier fehlt noch etwas", nie „falsch".
 
 ---
 
@@ -25,8 +43,8 @@
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
 |------|-------|---------|-----------|-------------|
-| `einspeisung_kwh` | Einspeisung | kWh | Kumulativ oder Tagessensor | Ins Netz eingespeiste Energie. Muss immer ≥ 0 sein. Bei Zweirichtungszähler: nur der Einspeiseanteil. |
-| `netzbezug_kwh` | Netzbezug | kWh | Kumulativ oder Tagessensor | Aus dem Netz bezogene Energie. Muss immer ≥ 0 sein. Bei Zweirichtungszähler: nur der Bezugsanteil. |
+| `einspeisung_kwh` | Einspeisung `*` | kWh | Kumulativ oder Tagessensor | Ins Netz eingespeiste Energie. Muss immer ≥ 0 sein. Bei Zweirichtungszähler: nur der Einspeiseanteil. |
+| `netzbezug_kwh` | Netzbezug `*` | kWh | Kumulativ oder Tagessensor | Aus dem Netz bezogene Energie. Muss immer ≥ 0 sein. Bei Zweirichtungszähler: nur der Bezugsanteil. |
 | `globalstrahlung_kwh_m2` | Globalstrahlung | kWh/m² | Kumulativ | Globalstrahlung im Monat. Wird automatisch von Open-Meteo geholt wenn nicht manuell gepflegt. |
 | `sonnenstunden` | Sonnenstunden | h | Kumulativ | Sonnenstunden im Monat. Wird automatisch von Open-Meteo geholt. |
 | `durchschnittstemperatur` | Ø Temperatur | °C | — | Monatsdurchschnitt. Wird automatisch von Open-Meteo geholt. |
@@ -317,7 +335,7 @@ Bei der HA-Sensor-Auswahl zeigt eedc:
 
 ### „ohne Statistik"-Badge
 
-Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"** im Picker-Dropdown. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch." Im Backend trägt `HASensorInfo.has_statistics: bool` (= `state_class is not None`) diese Information. Zur Zuordnungszeit meldet die Datenquellen-Fläche das zusätzlich als Feld-Warnung ([Einstellungen §7.5](HANDBUCH_EINSTELLUNGEN.md#75-validierung--probleme-je-feld)).
+Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"** im Picker-Dropdown. Tooltip: „Für kWh-Felder ungeeignet, für Counter unproblematisch." Im Backend trägt `HASensorInfo.has_statistics: bool` (= `state_class is not None`) diese Information. Zur Zuordnungszeit meldet die Datenquellen-Fläche das zusätzlich als Feld-Warnung ([Einstellungen §7.6](HANDBUCH_EINSTELLUNGEN.md#76-validierung--probleme-je-feld)).
 
 #### Anleitung zum Nachrüsten
 
