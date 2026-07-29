@@ -275,7 +275,67 @@ class EnergieprofilChecks:
                 ),
             ))
 
+        ergebnisse.extend(
+            self._check_tages_zusatzfelder(anlage, inv_map, _has_zaehler, heute)
+        )
+
         return ergebnisse
+
+    # Tages-ableitbare Zusatzfelder: nicht kritisch für die Abdeckung, aber
+    # ohne Zuordnung bleiben genau diese Tageswerte auf „—". Der Tooltip in
+    # Cockpit/Tag nennt sie längst als fehlende Zuordnung — der Checker
+    # schwieg dazu (DOK-9). Bewusst INFO, nicht WARNING: es sind
+    # Zusatz-Messstellen (Wärmemengenzähler, getrennte PV-Ladung), kein
+    # Pflichtprogramm. Wer sie nicht hat, soll keine Dauerwarnung bekommen.
+    _TAGES_ZUSATZFELDER: dict[str, list[tuple[str, str]]] = {
+        "waermepumpe": [
+            ("heizenergie_kwh", "Heizwärme"),
+            ("warmwasser_kwh", "Warmwasser"),
+        ],
+        "wallbox": [("ladung_pv_kwh", "Ladung PV")],
+        "e-auto": [("ladung_pv_kwh", "Ladung PV")],
+    }
+
+    def _check_tages_zusatzfelder(
+        self, anlage: Anlage, inv_map: dict, has_zaehler, heute: date,
+    ) -> list[CheckErgebnis]:
+        """INFO über Zusatz-Zähler, deren Tageswerte sonst leer bleiben (DOK-9)."""
+        # Deckt eine Wallbox die Heimladung ab, ist die PV-Ladung am E-Auto
+        # redundant — dieselbe Regel wie `bedingung_anlage: "keine_wallbox"`
+        # in `core/field_definitions.py` und wie oben bei `ladung_kwh`.
+        hat_wallbox = any(
+            i.typ == "wallbox" and i.ist_aktiv_an(heute) for i in anlage.investitionen
+        )
+
+        offen: list[str] = []
+        for inv in sort_investitionen_nach_typ(anlage.investitionen):
+            zusatz = self._TAGES_ZUSATZFELDER.get(inv.typ)
+            if not zusatz or not inv.ist_aktiv_an(heute):
+                continue
+            if inv.typ == "e-auto" and (hat_wallbox or ist_dienstlich(inv)):
+                continue
+            felder = (inv_map.get(str(inv.id), {}) or {}).get("felder", {}) or {}
+            fehlend = [label for feld, label in zusatz if not has_zaehler(felder.get(feld))]
+            if fehlend:
+                offen.append(f"{inv.bezeichnung}: {', '.join(fehlend)}")
+
+        if not offen:
+            return []
+
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.ENERGIEPROFIL_ABDECKUNG,
+            schwere=CheckSeverity.INFO,
+            meldung=f"{len(offen)} Komponente(n) ohne Zusatz-Zähler für Tageswerte",
+            details=(
+                "Diese Werte lassen sich nur aus einem eigenen kumulativen Zähler "
+                "ableiten und bleiben in Cockpit → Tag sonst auf „—“ — die "
+                "Monatsauswertungen sind davon nicht betroffen, dort lassen sie "
+                "sich von Hand pflegen. Kein Fehler: Wärmemengenzähler und eine "
+                "getrennte PV-Ladungsmessung sind Zusatz-Messstellen, die längst "
+                "nicht jede Anlage hat. Offen: " + "; ".join(offen)
+            ),
+            link=LINK_DATENQUELLEN,
+        )]
 
     # ─── Energieprofil-Plausibilität (Counter-Spikes) ─────────────────────
 
