@@ -33,7 +33,10 @@ from typing import Any
 # braucht und `core/` laut ADR-001 nicht auf `services/` zeigen darf. Hier steht
 # nur noch der Re-Export, damit die bestehenden Importeure unberührt bleiben —
 # KEINE Kopie, es gibt genau eine Implementierung.
-from backend.core.investition_kennwerte import get_pv_kwp  # noqa: F401
+from backend.core.investition_kennwerte import (  # noqa: F401
+    get_erzeuger_kwp,
+    get_pv_kwp,
+)
 
 # Mapping für Ausrichtung-Strings → Azimut-Grad (EEDC/PVGIS-Konvention:
 # 0=Süd, -90=Ost, 90=West, 180/-180=Nord).
@@ -111,14 +114,26 @@ def orientierungs_gruppen(invs: Any) -> list[Orientierungsgruppe]:
     Ost/West-Anlage liefert sonst (über eine gemittelte Ausrichtung) einen
     systematisch falschen Tagesgang.
 
-    Liest kWp/Neigung/Azimut konsistent über die ``get_pv_*``-Helper (Top-Level-
+    Liest kWp/Neigung/Azimut konsistent über die ``get_*``-Helper (Top-Level-
     Spalte → ``parameter``-JSON → Default). Module mit kWp ≤ 0 entfallen.
     Reihenfolge: kWp-stärkste Gruppe zuerst (deterministisch, dominante Gruppe
     führt für Defaults wie Schätzpfad-Wetter).
+
+    kWp über ``get_erzeuger_kwp`` (Typ-Dispatcher), nicht über ``get_pv_kwp``:
+    Letzterer kennt den BKW-Zweig ``leistung_wp × anzahl`` nicht, und genau so
+    legt das BKW-Formular an (Spalte und ``parameter["kwp"]`` bleiben leer).
+    Ein Balkonkraftwerk lieferte hier deshalb 0 und fiel **ganz aus der
+    Gruppierung** — im gesamten Kanon-Pfad (Tagesprognose, Stundenprofil,
+    Live-Wetter, Prefetch, MQTT-/HA-Prognosesensoren). Bei gemischtem Bestand
+    fehlte sein Anteil still; eine reine BKW-Anlage fiel auf die
+    Anlagen-Gesamtleistung zurück. Dieselbe Umstellung ist in
+    ``aussichten.py`` mit A24-2 gefahren worden und blieb hier liegen —
+    dieselbe Klasse wie die zwei Abweichungen, die A20 in
+    ``live_wetter._get_pv_orientierungsgruppen`` eingesammelt hat.
     """
     gruppen: dict[tuple[int, int], float] = {}
     for inv in invs or []:
-        kwp = get_pv_kwp(inv)
+        kwp = get_erzeuger_kwp(inv)
         if kwp <= 0:
             continue
         key = (int(get_pv_neigung(inv)), int(get_pv_azimut(inv)))

@@ -271,6 +271,10 @@ export const PARAM_BALKONKRAFTWERK = {
   NEIGUNG_GRAD: 'neigung_grad',
   HAT_SPEICHER: 'hat_speicher',
   SPEICHER_KAPAZITAET_WH: 'speicher_kapazitaet_wh',
+  // AC-Grenze des Wechselrichters in Watt (#347). Optional — ohne Wert wird
+  // nicht gekappt. Backend-Spiegel: `core/investition_parameter.py`,
+  // gelesen über `get_wr_grenze_kw`; die Kappung wirkt STÜNDLICH.
+  WECHSELRICHTER_LEISTUNG_W: 'wechselrichter_leistung_w',
 } as const
 
 export const PARAM_BALKONKRAFTWERK_DEFAULTS = {
@@ -290,6 +294,7 @@ export interface BalkonkraftwerkParameter {
   neigung_grad?: number
   hat_speicher?: boolean
   speicher_kapazitaet_wh?: number
+  wechselrichter_leistung_w?: number
 }
 
 // ============================================================================

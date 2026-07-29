@@ -65,6 +65,12 @@ from backend.services.pv_orientation import (
     orientierungs_gruppen,
     resolve_system_losses,
 )
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_wr_grenze_kw
+from backend.core.berechnungen.wr_kappung import (
+    hat_kappung,
+    kappe_profil,
+    kappungs_faktor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +190,34 @@ def _tages_gewichte(
     return gewichte
 
 
+def _kappungs_mitglieder(
+    invs: list[Investition], gruppen: list[Orientierungsgruppe], tag: date,
+) -> list[list[tuple[float, Optional[float]]]]:
+    """(kWp, AC-Grenze) je Gruppe für die an `tag` aktiven Komponenten.
+
+    Nur nötig, wenn überhaupt eine AC-Grenze gepflegt ist (#347) — sonst nimmt
+    der Aufrufer den unveränderten Pfad mit den kWp-Tagesgewichten, und die
+    Rechnung bleibt für alle anderen Anlagen bitgleich.
+
+    Die Gruppenzuordnung läuft über dieselben Helper wie
+    ``orientierungs_gruppen``, damit ein Mitglied nicht in einer anderen Gruppe
+    landet als beim Fan-out.
+    """
+    index = {(g.neigung, g.ausrichtung): i for i, g in enumerate(gruppen)}
+    mitglieder: list[list[tuple[float, Optional[float]]]] = [[] for _ in gruppen]
+    for inv in invs:
+        if not inv.ist_aktiv_an(tag):
+            continue
+        kwp = get_erzeuger_kwp(inv)
+        if kwp <= 0:
+            continue
+        pos = index.get((int(get_pv_neigung(inv)), int(get_pv_azimut(inv))))
+        if pos is None:
+            continue
+        mitglieder[pos].append((kwp, get_wr_grenze_kw(inv)))
+    return mitglieder
+
+
 async def kanon_tagesprognose(
     db,
     anlage,
@@ -265,10 +299,17 @@ async def kanon_tagesprognose(
     from backend.api.routes.live_wetter import _get_lernfaktor
     skalar = await _get_lernfaktor(anlage.id, db)
 
+    # #347: AC-Grenze eines Wechselrichters. Nur wenn überhaupt eine gepflegt
+    # ist, wird je Komponente gerechnet — sonst bleibt der Pfad unverändert.
+    kappung_aktiv = any(get_wr_grenze_kw(i) for i in invs)
+
     tage: list[Optional[KanonTag]] = []
     for offset in range(days):
         datum = tagesdaten[offset]
         datum_iso = datum.isoformat()
+        mitglieder = (
+            _kappungs_mitglieder(invs, gruppen, datum) if kappung_aktiv else None
+        )
 
         om_slots = [0.0] * 24
         pv_ertrag_sum = 0.0
@@ -285,12 +326,29 @@ async def kanon_tagesprognose(
             # sich im Horizont nichts ändert). Ein Faktor 0 ist kein fehlender
             # Tag — die Gruppe hat an diesem Tag legitim keinen Ertrag.
             gew = gewichte[offset][grp_idx] if gewichte is not None else 1.0
-            pv_ertrag_sum += (getattr(tag, "pv_ertrag_kwh", 0.0) or 0.0) * gew
             stunden_kw = getattr(tag, "stunden_kw", None)
-            if stunden_kw and any(v for v in stunden_kw):
-                has_hourly = True
-                for h in range(min(24, len(stunden_kw))):
-                    om_slots[h] += (stunden_kw[h] or 0.0) * gew
+            tages_kwh = getattr(tag, "pv_ertrag_kwh", 0.0) or 0.0
+
+            # #347: gepflegte AC-Grenze ⇒ je Komponente rechnen und stündlich
+            # kappen. Das ersetzt das kWp-Tagesgewicht (`gew`) — die Mitglieder
+            # sind bereits die an DIESEM Tag aktiven, die Gewichtung steckt
+            # also in der Mitgliederliste statt in einem Skalar.
+            grp_mitglieder = mitglieder[grp_idx] if mitglieder is not None else None
+            if grp_mitglieder and hat_kappung(grp_mitglieder) and stunden_kw:
+                gekappt = kappe_profil(stunden_kw, gruppen[grp_idx].kwp, grp_mitglieder)
+                pv_ertrag_sum += tages_kwh * kappungs_faktor(
+                    stunden_kw, gruppen[grp_idx].kwp, grp_mitglieder
+                )
+                if any(gekappt):
+                    has_hourly = True
+                    for h in range(min(24, len(gekappt))):
+                        om_slots[h] += gekappt[h]
+            else:
+                pv_ertrag_sum += tages_kwh * gew
+                if stunden_kw and any(v for v in stunden_kw):
+                    has_hourly = True
+                    for h in range(min(24, len(stunden_kw))):
+                        om_slots[h] += (stunden_kw[h] or 0.0) * gew
             # Wetter ist standort- (nicht orientierungs-)abhängig → erste
             # liefernde Gruppe genügt für die Kaskaden-Klassifikation.
             if wetter_bew is None:

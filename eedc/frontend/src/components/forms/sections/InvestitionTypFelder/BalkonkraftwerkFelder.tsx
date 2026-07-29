@@ -8,6 +8,7 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: Ty
   const anzahl = parseInt(paramData.anzahl as string) || 0
   const wp = parseInt(paramData.leistung_wp as string) || 0
   const kwp = (anzahl * wp) / 1000
+  const wrGrenzeW = parseInt(paramData.wechselrichter_leistung_w as string) || 0
   return (
     <>
       <FormSection title="Balkonkraftwerk">
@@ -41,6 +42,21 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: Ty
             value={paramData.neigung_grad as string}
             onChange={onInputChange}
             hint="0° = flach, 90° = senkrecht"
+          />
+          {/* #347: Überbelegung ist beim BKW der Normalfall (3 × 420 Wp an
+              600 W). Ohne diese Grenze prognostiziert eedc die volle
+              Modulleistung. Optional — leer heißt „nicht kappen". */}
+          <Input
+            label="Wechselrichter-Leistung (W)"
+            name="param_wechselrichter_leistung_w"
+            type="number" step="1" min="0"
+            value={paramData.wechselrichter_leistung_w as string}
+            onChange={onInputChange}
+            hint={
+              wrGrenzeW > 0 && kwp * 1000 > wrGrenzeW
+                ? `Überbelegung: ${fmtZahl(kwp, 2)} kWp an ${fmtZahl(wrGrenzeW, 0)} W — die Prognose wird stündlich gekappt`
+                : 'z. B. 600 oder 800 — begrenzt die Einspeisung, leer = keine Begrenzung'
+            }
           />
         </div>
       </FormSection>

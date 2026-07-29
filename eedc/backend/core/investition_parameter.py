@@ -209,6 +209,14 @@ PARAM_BALKONKRAFTWERK: Final[dict[str, str]] = {
     "NEIGUNG_GRAD": "neigung_grad",
     "HAT_SPEICHER": "hat_speicher",
     "SPEICHER_KAPAZITAET_WH": "speicher_kapazitaet_wh",
+    # AC-Grenze des BKW-Wechselrichters in Watt (#347, Rainer). Ein BKW ist
+    # regelmäßig überbelegt — 3 × 420 Wp an einem 600-W-Wechselrichter —, und
+    # ohne diese Grenze prognostiziert eedc die volle Modulleistung. Gelesen
+    # NUR über `core/investition_kennwerte.get_wr_grenze_kw`; die Kappung ist
+    # eine STÜNDLICHE (die Mittagsspitze wird gekappt, die Randstunden nicht),
+    # deshalb steht sie im Kanon-Pfad und nicht als kWp-Deckel.
+    # Optional: fehlt der Wert, wird nicht gekappt.
+    "WECHSELRICHTER_LEISTUNG_W": "wechselrichter_leistung_w",
 }
 
 PARAM_BALKONKRAFTWERK_DEFAULTS: Final[dict[str, object]] = {

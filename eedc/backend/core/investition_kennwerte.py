@@ -133,6 +133,36 @@ def get_erzeuger_kwp(inv: Any) -> float:
     return get_pv_kwp(inv)
 
 
+def get_wr_grenze_kw(inv: Any) -> Optional[float]:
+    """AC-Grenze des Wechselrichters in kW — oder `None`, wenn keine gepflegt ist.
+
+    `None` heißt „nicht begrenzen", **nicht** „0". Ein Default wäre hier die
+    Klasse, gegen die ADR-002 geschrieben ist: er machte aus „nicht gepflegt"
+    eine Zahl, die wie eine Messung aussieht, und würde still Ertrag wegkappen.
+
+    Heute nur für `balkonkraftwerk` gepflegt (#347): dort ist Überbelegung der
+    Normalfall — 3 × 420 Wp an einem 600-W-Wechselrichter. Für PV-Module
+    existiert dieselbe Physik (#354), aber noch kein Feld; sobald es eines gibt,
+    kommt der Zweig hierher und nicht an die Aufrufstelle.
+
+    Die Grenze wirkt **stündlich** (siehe `services/prognose_kanon.py`), nicht
+    als kWp-Deckel: ein 600-W-Wechselrichter begrenzt die Mittagsspitze, nicht
+    den Morgen. Wer die kWp deckelte, kürzte die Randstunden mit — bei starker
+    Überbelegung deutlich daneben.
+    """
+    if getattr(inv, "typ", None) != InvestitionTyp.BALKONKRAFTWERK.value:
+        return None
+    params = getattr(inv, "parameter", None) or {}
+    roh = params.get(PARAM_BALKONKRAFTWERK["WECHSELRICHTER_LEISTUNG_W"])
+    if roh is None:
+        return None
+    try:
+        watt = float(roh)
+    except (TypeError, ValueError):
+        return None
+    return watt / 1000 if watt > 0 else None
+
+
 def get_speicher_kapazitaet_kwh(inv: Any) -> Optional[float]:
     """**BRUTTO**-Kapazität eines Speichers in kWh — oder `None`, wenn keine
     gepflegt ist.

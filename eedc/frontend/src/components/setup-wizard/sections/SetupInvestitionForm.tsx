@@ -302,6 +302,16 @@ export function SetupInvestitionForm({
                   placeholder="z.B. 30"
                   hint="0° = flach, 90° = senkrecht (Balkon)"
                 />
+                {/* #347: ohne die AC-Grenze rechnet die Prognose mit der vollen
+                    Modulleistung — Überbelegung ist beim BKW der Normalfall. */}
+                <Input
+                  label="Wechselrichter-Leistung (W)"
+                  type="number" min="0" step="1"
+                  value={getParam(PARAM_BALKONKRAFTWERK.WECHSELRICHTER_LEISTUNG_W) ?? ''}
+                  onChange={(e) => updateParam(PARAM_BALKONKRAFTWERK.WECHSELRICHTER_LEISTUNG_W, num(e.target.value))}
+                  placeholder="z.B. 800"
+                  hint="Begrenzt die Einspeisung; leer = keine Begrenzung"
+                />
               </div>
 
               <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-3">
