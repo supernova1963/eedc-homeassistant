@@ -92,17 +92,27 @@ async def test_nur_aggregat_summe_gleich_aggregiert(db):
     assert gesamt.anzahl_monate == 1
 
 
-async def test_gemischt_ein_modul_gemessen_summe_gleich_aggregiert(db):
-    """Ein Modul gemessen, eines nicht, Aggregat vorhanden → Aggregat verteilt
-    (Σ == Aggregat), nicht nur der eine Messwert."""
+async def test_gemischt_messwert_bleibt_aggregat_fuellt_die_luecke(db):
+    """Ein Modul gemessen, eines nicht, Aggregat vorhanden.
+
+    Der gemessene String behält seine 700; der ungemessene bekommt den **Rest**
+    (1000 − 700 = 300). Σ == Aggregat wie bisher — **die Anlagensumme ändert
+    sich nicht**, nur die Aufteilung wird ehrlich.
+
+    Bis 2026-07-29 stand hier 600/400: das Aggregat wurde über beide Strings
+    verteilt und die Messung von 700 dabei verworfen. Wer diese Zahlen wieder
+    auf 600/400 zieht, dreht die Regel zurück (Gernot 2026-07-29; Begründung im
+    Docstring von `core/berechnungen/pv_verteilung`).
+    """
     anlage_id = await _anlage_mit_zwei_strings(
         db, aggregat=1000.0, pro_modul={"Süd": 700.0})
 
     jahr = await get_pv_strings(anlage_id=anlage_id, jahr=2026, db=db)
-    assert _ist_je_string(jahr) == {"Süd": 600.0, "Ost": 400.0}
+    assert _ist_je_string(jahr) == {"Süd": 700.0, "Ost": 300.0}
     assert sum(_ist_je_string(jahr).values()) == pytest.approx(
         await _pv_summe_aggregiert(db, anlage_id))
-    assert all(s.ist_quelle == PV_QUELLE_VERTEILT for s in jahr.strings)
+    quellen = {s.bezeichnung: s.ist_quelle for s in jahr.strings}
+    assert quellen == {"Süd": PV_QUELLE_GEMESSEN, "Ost": PV_QUELLE_VERTEILT}
 
     gesamt = await get_pv_strings_gesamtlaufzeit(anlage_id=anlage_id, db=db)
     assert gesamt.ist_gesamt_kwh == pytest.approx(1000.0)

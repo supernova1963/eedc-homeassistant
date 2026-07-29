@@ -13,17 +13,40 @@ Pro-Modul-Sicht wird aus Aggregat + im Monat aktiven Modulen deterministisch
 neu gebildet — es gibt damit keine „historisch verteilten Werte" zum
 Rekonstruieren.
 
-Präzedenz (``resolve_pv_je_modul``):
-  1. alle aktiven Module haben Pro-Modul-Werte → ``gemessen`` (wir glauben dem
-     User; keine Provenance, kein Hinweis)
-  2. sonst Aggregat gesetzt → nach kWp verteilen → ``verteilt``
-  3. sonst → ``fehlt``
+**Präzedenz je Modul** (``resolve_pv_je_modul``) — Gernot 2026-07-29:
+
+  1. Modul hat einen eigenen Wert → ``gemessen``. **Immer und ausnahmslos.**
+  2. Modul ohne eigenen Wert, Aggregat gesetzt → Anteil am **Rest**
+     (``Aggregat − Σ gemessene``), kWp-gewichtet → ``verteilt``
+  3. Modul ohne eigenen Wert, kein Aggregat → ``fehlt``
+
+Die Regel ist **modulweise**, nicht anlagenweit. Bis 2026-07-29 galt sie
+anlagenweit: sobald **ein** Modul keinen Wert hatte, wurde das Aggregat über
+**alle** Module verteilt — die echten Messwerte der übrigen Strings wurden
+dabei verworfen und durch kWp-Anteile ersetzt. Das war nicht der Zweck des
+Aggregats: es existiert, um **Lücken zu füllen** (Anlass war ein Anwender mit
+Nur-Gesamt-Historie und neu unterstützten Einzelstrings), nicht um Messungen
+zu überschreiben. Teil-Messung ist außerdem kein Sonderfall — sie entsteht bei
+jedem Sensor-Aussetzer, jedem neu angelegten String und in jedem Monat vor der
+Umstellung auf Pro-String-Messung.
+
+**Das Aggregat ist reiner Eingang dieser Auflösung.** Es darf in keiner
+einzelnen Berechnung direkt gelesen werden; jede PV-Zahl kommt aus der
+Pro-Modul-Schicht bzw. deren Summe (siehe ``ist_vollstaendig``).
 
 Σ-Invariante (Symmetrie-Test Pflicht, [[feedback_aggregator_symmetrie]]):
-Σ der zurückgegebenen Pro-Modul-Werte == Gesamterzeugung — also == Summe der
-gemessenen Werte (Fall 1) bzw. == Aggregat (Fall 2). Die Verteilung rundet
-NICHT, damit die Summe exakt erhalten bleibt; Rundung ist Aufgabe der
-Anzeige-Schicht.
+Σ der zurückgegebenen Pro-Modul-Werte == Gesamterzeugung — == Σ der gemessenen
+Werte (keine Lücken) bzw. == Aggregat (Lücken + Aggregat). Die Verteilung
+rundet NICHT, damit die Summe exakt erhalten bleibt; Rundung ist Aufgabe der
+Anzeige-Schicht. **Eine Ausnahme:** übersteigt Σ der gemessenen Werte das
+Aggregat, wird der Rest auf 0 geklemmt statt negativ verteilt — dann ist
+Σ > Aggregat. Das ist ein Messfehler und gehört gemeldet, nicht weggerechnet.
+
+**Unvollständigkeit ist ein eigener Zustand, keine kleine Zahl.** Bleibt auch
+nur ein Modul auf ``fehlt``, ist die Σ **keine Anlagensumme** — sie sähe wie
+die Gesamterzeugung aus und wäre systematisch zu klein. Plausibilitäts-Prüfung
+dafür: ``ist_vollstaendig``. Die Pro-Modul-Sicht zeigt trotzdem, was gemessen
+wurde (das ist der Sinn der modulweisen Regel).
 
 Architektur-Anker: ADR-001 (core/berechnungen). 0-Werte gelten als Daten
 (``is not None``, CLAUDE.md „0-Werte prüfen") — ein Aggregat von 0 (dunkler
@@ -118,18 +141,15 @@ def resolve_pv_je_modul(
 
     **Teil-Lücke ohne Aggregat — die Σ-Abweichung dort ist GEWOLLT (N42):**
 
-    Messen nur MANCHE Module und es gibt kein Aggregat, liefert dieser Helper
-    für alle Module ``QUELLE_FEHLT``/``0.0`` — bewusst: als **Anlagen-Summe**
-    wäre eine Teilsumme irreführend, sie sähe wie die Gesamterzeugung aus und
-    wäre systematisch zu klein.
-
-    Eine **Pro-Modul-Sicht** kennt aber keine Anlagen-Summe und darf einen
-    vorhandenen Messwert deshalb nicht wegwerfen. Read-Sites dürfen in genau
-    diesem Fall (und nur in ihm) auf die Rohwerte zurückfallen — so gebaut in
-    ``api/routes/cockpit/pv_strings.py`` (``if quelle == PV_QUELLE_FEHLT``).
+    Messen nur MANCHE Module und es gibt kein Aggregat, behalten die messenden
+    Module ihren Wert (Regel 1), die übrigen bleiben ``QUELLE_FEHLT``/``0.0``.
+    Die **Anlagen-Summe** darf daraus nicht gebildet werden — sie wäre eine
+    Teilsumme, sähe wie die Gesamterzeugung aus und wäre systematisch zu klein.
+    Dafür gibt es ``ist_vollstaendig``; Anlagen-Read-Sites fragen sie, bevor sie
+    summieren (so gebaut in ``api/routes/monatsdaten.py``).
 
     Folge: **Σ pv_strings ≠ Σ /monatsdaten/aggregiert** — die Pro-Modul-Sicht
-    zeigt den Messwert, die Anlagen-Summe zeigt nichts. Das ist **kein
+    zeigt die Messwerte, die Anlagen-Summe zeigt nichts. Das ist **kein
     Aggregations-Drift** und darf nicht „geheilt" werden: die beiden Sichten
     antworten auf verschiedene Fragen. Festgehalten in
     ``test_teilluecke_ohne_aggregat_behaelt_messwert``.
@@ -142,37 +162,59 @@ def resolve_pv_je_modul(
     if not module:
         return {}
 
-    if all(m.eigen_kwh is not None for m in module):
-        return {
-            m.inv_id: PvModulWert(m.inv_id, m.eigen_kwh or 0.0, QUELLE_GEMESSEN)
-            for m in module
-        }
+    gemessen_summe = sum(m.eigen_kwh or 0.0 for m in module if m.eigen_kwh is not None)
+    luecken = [m for m in module if m.eigen_kwh is None]
 
-    if aggregat_kwh is not None:
+    verteilt: dict[int, float] = {}
+    if luecken and aggregat_kwh is not None:
+        # Der Rest, den die gemessenen Module NICHT erklären. Negativ = die
+        # Messungen übersteigen das Aggregat; dann ist eine der beiden Quellen
+        # falsch. Auf 0 klemmen statt negative kWh zu verteilen — die Meldung
+        # ist Sache des Daten-Checkers, nicht dieser Formel.
+        rest = max(0.0, aggregat_kwh - gemessen_summe)
         verteilt = verteile_basis_kwh_nach_kwp(
-            aggregat_kwh, [(m.inv_id, m.leistung_kwp) for m in module]
+            rest, [(m.inv_id, m.leistung_kwp) for m in luecken]
         )
-        return {
-            m.inv_id: PvModulWert(m.inv_id, verteilt.get(m.inv_id, 0.0), QUELLE_VERTEILT)
-            for m in module
-        }
 
-    return {m.inv_id: PvModulWert(m.inv_id, 0.0, QUELLE_FEHLT) for m in module}
+    out: dict[int, PvModulWert] = {}
+    for m in module:  # Eingabe-Reihenfolge erhalten (deterministisch)
+        if m.eigen_kwh is not None:
+            out[m.inv_id] = PvModulWert(m.inv_id, m.eigen_kwh, QUELLE_GEMESSEN)
+        elif aggregat_kwh is not None:
+            out[m.inv_id] = PvModulWert(
+                m.inv_id, verteilt.get(m.inv_id, 0.0), QUELLE_VERTEILT
+            )
+        else:
+            out[m.inv_id] = PvModulWert(m.inv_id, 0.0, QUELLE_FEHLT)
+    return out
+
+
+def ist_vollstaendig(werte: dict[int, PvModulWert]) -> bool:
+    """Ist die Σ der aufgelösten Werte eine **Anlagensumme**?
+
+    Nur wenn jedes Modul aufgelöst ist (gemessen oder verteilt). Bleibt eines
+    auf ``fehlt``, ist die Σ eine Teilsumme — die darf keine Read-Site als
+    Gesamterzeugung ausweisen (N42). Leere Modul-Liste → ``False``: „keine
+    Module" ist keine vollständige Erzeugung, sondern gar keine Aussage.
+    """
+    return bool(werte) and all(w.quelle != QUELLE_FEHLT for w in werte.values())
 
 
 def gesamt_pv_kwh(
     *,
     aggregat_kwh: Optional[float],
     module: list[PvModul],
-) -> float:
+) -> Optional[float]:
     """Gesamt-PV eines Monats nach derselben Präzedenz wie ``resolve_pv_je_modul``.
 
-    Convenience für Read-Sites, die nur die Summe brauchen (z. B. ``/aggregiert``):
-    Summe der gemessenen Werte, sonst das Aggregat, sonst 0. Deckungsgleich mit
-    ``Σ resolve_pv_je_modul`` (Σ-Invariante).
+    ``None`` = **unvollständig** (mindestens ein Modul unaufgelöst) — bewusst
+    keine Teilsumme, siehe ``ist_vollstaendig``. Sonst Σ der Pro-Modul-Werte,
+    deckungsgleich mit ``Σ resolve_pv_je_modul`` (Σ-Invariante).
     """
-    return sum(w.pv_erzeugung_kwh for w in resolve_pv_je_modul(
-        aggregat_kwh=aggregat_kwh, module=module).values())
+    werte = resolve_pv_je_modul(aggregat_kwh=aggregat_kwh, module=module)
+    if not ist_vollstaendig(werte):
+        return None
+    return sum(w.pv_erzeugung_kwh for w in werte.values())
 
 
 def klassifiziere_pv_monat(

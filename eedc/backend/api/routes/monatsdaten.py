@@ -22,6 +22,7 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     erzeugung_hinter_zaehler_kwh,
     imd_typ_beitrag,
+    ist_vollstaendig,
     resolve_pv_je_modul,
     PvModul,
     PV_QUELLE_FEHLT,
@@ -451,9 +452,16 @@ async def list_monatsdaten_aggregiert(
                     for inv in aktive_pv_module
                 ],
             )
-            if any(w.quelle != PV_QUELLE_FEHLT for w in pv_resolved.values()):
-                # PV vorhanden (gemessen oder über Aggregat verteilt) — auf das
-                # bereits gesammelte BKW-PV oben aufaddieren. Σ == Gesamterzeugung.
+            # `ist_vollstaendig` statt „irgendein Modul aufgelöst": seit der
+            # modulweisen Präzedenz behalten gemessene Module ihren Wert, auch
+            # wenn daneben eine Lücke offen ist. Ohne diese Prüfung würde hier
+            # jetzt eine TEILSUMME als Anlagenerzeugung ausgewiesen — genau das,
+            # was N42 verhindert. Die Anlagensumme bleibt dadurch in allen
+            # Konstellationen bitgleich zu vorher; nur die Pro-Modul-Aufteilung
+            # ist ehrlicher geworden.
+            if ist_vollstaendig(pv_resolved):
+                # PV vollständig (gemessen und/oder Lücken über das Aggregat
+                # gefüllt) — auf das bereits gesammelte BKW-PV oben aufaddieren.
                 hat_pv_imd = True
                 pv_erzeugung += sum(w.pv_erzeugung_kwh for w in pv_resolved.values())
 

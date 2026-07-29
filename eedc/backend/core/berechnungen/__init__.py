@@ -122,6 +122,7 @@ from backend.core.berechnungen.pv_verteilung import (
     PvModul,
     PvModulWert,
     gesamt_pv_kwh,
+    ist_vollstaendig,
     klassifiziere_pv_monat,
     resolve_pv_je_modul,
     verteile_basis_kwh_nach_kwp,
@@ -300,5 +301,6 @@ __all__ = [
     "verteile_basis_kwh_nach_kwp",
     "resolve_pv_je_modul",
     "gesamt_pv_kwh",
+    "ist_vollstaendig",
     "klassifiziere_pv_monat",
 ]
