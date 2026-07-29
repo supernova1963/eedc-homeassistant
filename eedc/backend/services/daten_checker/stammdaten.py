@@ -12,10 +12,18 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
-from backend.core.investition_parameter import PARAM_PV_MODULE, ist_dienstlich
+from backend.core.investition_parameter import (
+    BKW_EINSPEISEGRENZE_W_TYPISCH,
+    PARAM_PV_MODULE,
+    ist_dienstlich,
+)
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
 from backend.core.field_definitions import get_speicher_netzladung_kwh
-from backend.core.investition_kennwerte import get_bkw_kwp, get_pv_kwp
+from backend.core.investition_kennwerte import (
+    get_bkw_kwp,
+    get_pv_kwp,
+    get_wr_grenze_kw,
+)
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 
@@ -317,6 +325,29 @@ class StammdatenChecks:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Leistung (Wp) fehlt",
+                        link="/einstellungen/investitionen",
+                    ))
+                # #347: Überbelegung ist beim BKW der Normalfall. Ohne gepflegte
+                # Wechselrichter-Leistung kappt die Prognose nicht und rechnet
+                # mit der vollen Modulleistung — an sonnigen Tagen mehr, als das
+                # Gerät je einspeisen kann. Gemeldet wird erst oberhalb der
+                # typischen Einspeisegrenze: darunter ist Überbelegung
+                # unwahrscheinlich und der Hinweis wäre reines Nörgeln.
+                modul_w = get_bkw_kwp(inv) * 1000
+                if (
+                    modul_w > BKW_EINSPEISEGRENZE_W_TYPISCH
+                    and get_wr_grenze_kw(inv) is None
+                ):
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{name}: Wechselrichter-Leistung fehlt",
+                        details=(
+                            f"Die Module leisten {modul_w:.0f} W. Ohne die "
+                            "Wechselrichter-Leistung rechnet die Prognose mit dieser "
+                            "vollen Leistung — bei Überbelegung (z. B. 1.260 W Module "
+                            "an 600 W Wechselrichter) fällt sie dadurch zu hoch aus. "
+                            "Mit gepflegtem Wert wird stündlich gekappt."
+                        ),
                         link="/einstellungen/investitionen",
                     ))
                 ergebnisse.extend(self._check_investition_monatsdaten(

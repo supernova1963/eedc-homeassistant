@@ -219,6 +219,15 @@ PARAM_BALKONKRAFTWERK: Final[dict[str, str]] = {
     "WECHSELRICHTER_LEISTUNG_W": "wechselrichter_leistung_w",
 }
 
+# Typische AC-Einspeisegrenze eines Balkonkraftwerks in Watt (seit 2024 in DE
+# 800 W, davor 600 W). **Kein Lese-Default** — es wird nie damit gerechnet.
+# Der Daten-Checker nutzt sie als Schwelle: liegt die Modulleistung darüber und
+# ist keine Wechselrichter-Leistung gepflegt, ist Überbelegung so wahrscheinlich,
+# dass die ungekappte Prognose gemeldet gehört (#347). Darunter lohnt der
+# Hinweis nicht — die Abweichung wäre bestenfalls marginal.
+BKW_EINSPEISEGRENZE_W_TYPISCH: Final[int] = 800
+
+
 PARAM_BALKONKRAFTWERK_DEFAULTS: Final[dict[str, object]] = {
     # Formular-VORBELEGUNG (typisches BKW = 2 Module), KEIN Lese-Default.
     # Wer `anzahl` nie gepflegt hat, darf beim LESEN nicht stillschweigend die
