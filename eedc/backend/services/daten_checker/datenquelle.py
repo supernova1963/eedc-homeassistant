@@ -416,6 +416,286 @@ class DatenquelleChecks:
 
         return ergebnisse
 
+    async def _check_leere_tage_trotz_zaehler(
+        self, anlage: Anlage,
+    ) -> list[CheckErgebnis]:
+        """Nachlauf v4.0.3: „Zähler zugeordnet, Tageswerte fehlen".
+
+        Nach dem v4.0.3-Fix (Zuordnung der Datenquellen-Fläche landet wieder im
+        ``sensor_mapping``) ist die Zuordnung heil — die **Historie** bleibt
+        leer, denn für die Tage davor hat nie ein Aggregator-Lauf stattgefunden.
+        Der Daten-Checker meldete dafür „Zähler-Abdeckung: OK": technisch
+        richtig (der Zähler IST zugeordnet), für den Anwender irreführend. Drei
+        Melder sind genau hier hängengeblieben, und die Energieprofil-Daten
+        stehen in keiner Exportdatei — nach einem Restore können sie
+        ausschließlich aus HA-LTS kommen.
+
+        **Erkennung per Daten-Signal** (Muster von
+        ``_check_batterie_vorzeichen_historie``): ein frischer HA-LTS-Read gegen
+        die gespeicherte ``TagesZusammenfassung``. Gemeldet wird ein Tag, wenn
+        HA für einen zugeordneten Zähler einen nennenswerten Tageswert liefert
+        und die gespeicherte Zeile für denselben Key leer oder 0 ist.
+
+        Leitplanken:
+
+        - **#311:** fehlende LTS-Lesbarkeit ist „nicht gelesen", nie „= 0".
+          Verglichen wird ausschließlich über Keys, die der LTS-Read wirklich
+          geliefert hat — sonst meldete der Check Phantom-Lücken und böte einen
+          Knopf an, der korrekte Snapshot-Werte mit 0 überschreibt.
+        - **Kein Dauer-Nörgeln** (``feedback_daten_checker_kein_akzeptiert``):
+          gemeldet wird nur, solange HA-LTS den Wert überhaupt hergibt. Reicht
+          die Lücke weiter zurück als die HA-Historie, ist sie kein Befund,
+          sondern eine Tatsache — und die Meldung sagt genau das.
+        - **Kein zweiter Turm:** PV/BKW auf einer **vorhandenen** Tageszeile
+          gehört ``_check_datenquelle_drift`` (dort „PV 0,0 → HA 30,0 kWh" mit
+          demselben Reparatur-Knopf). Hier zählen solche Keys nur, wenn die
+          Tageszeile ganz fehlt — dann ist der Drift-Check blind.
+        - **Speicher-Keys bleiben außen vor:** ``batterie_*`` ist ein Netto und
+          darf legitim ~0 sein; das Vorzeichen-/Historien-Thema hat mit
+          ``_check_batterie_vorzeichen_historie`` seinen eigenen Punkt.
+        - **Reichweite benennen:** die Tagesreparatur heilt Tag und Stunden,
+          **nicht** die Monatswerte — dafür der Statistik-Import.
+
+        Aktion: ``reaggregate_range`` über das jüngste
+        ``REAGGREGATE_RANGE_MAX_DAYS``-Fenster plus Einzeltag-Knöpfe —
+        user-getriggert, nie als Start-Migration
+        (``feedback_migration_startup_kein_http``,
+        ``feedback_kein_grosser_heiler_knopf``).
+
+        Nur HA-LTS-Modus: im Standalone-Betrieb fehlt die unabhängige Referenz.
+        """
+        from datetime import date, timedelta as _td
+        from backend.services.ha_statistics_service import get_ha_statistics_service
+        from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
+        from backend.services.snapshot.komponenten_beitraege import (
+            basis_beitraege, investition_beitraege,
+        )
+        from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.models.investition import Investition as _Inv
+
+        kat = CheckKategorie.TAGESWERTE_FEHLEN.value
+
+        ha_svc = get_ha_statistics_service()
+        if not ha_svc.is_available:
+            return []  # Standalone: keine unabhängige Referenz
+
+        sensor_mapping = anlage.sensor_mapping or {}
+
+        inv_result = await self.db.execute(
+            select(_Inv).where(_Inv.anlage_id == anlage.id)
+        )
+        invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
+
+        # Welche Keys verspricht die Zuordnung? Dieselbe Normalisierung, die
+        # auch der Aggregator benutzt — keine zweite Feld-Liste daneben.
+        erwartete_keys: set[str] = {b.target_key for b in basis_beitraege(sensor_mapping)}
+        for inv_id_str, inv_data in (sensor_mapping.get("investitionen") or {}).items():
+            if not isinstance(inv_data, dict):
+                continue
+            inv = invs_by_id.get(str(inv_id_str))
+            if inv is None:
+                continue
+            erwartete_keys |= {b.target_key for b in investition_beitraege(inv, inv_data)}
+        # Speicher-Netto raus (darf legitim ~0 sein, eigener Check).
+        erwartete_keys = {k for k in erwartete_keys if not k.startswith("batterie_")}
+        if not erwartete_keys:
+            return []  # Kein kWh-Zähler zugeordnet → nichts zu versprechen
+
+        bis = date.today() - _td(days=1)  # heute ist unvollständig
+        von = bis - _td(days=89)
+        if anlage.installationsdatum:
+            # Vor der Inbetriebnahme hat eedc keinen Anspruch auf Tageswerte —
+            # die Basiszähler existierten in HA womöglich lange vorher
+            # (feedback_anschaffungsdatum_grenze).
+            von = max(von, anlage.installationsdatum)
+        if von > bis:
+            return []
+
+        tz_result = await self.db.execute(
+            select(TagesZusammenfassung).where(
+                TagesZusammenfassung.anlage_id == anlage.id,
+                TagesZusammenfassung.datum >= von,
+                TagesZusammenfassung.datum <= bis,
+            )
+        )
+        tz_by_datum = {tz.datum: tz for tz in tz_result.scalars().all()}
+
+        # Vorfilter aus der DB — teuer ist nur der LTS-Read. Eine gesunde
+        # Anlage kommt so ganz ohne HA-Abfrage aus.
+        kandidaten: list[tuple[date, set[str]]] = []
+        d = bis
+        while d >= von:
+            tz = tz_by_datum.get(d)
+            if tz is None:
+                # Zeile fehlt ganz → auch PV zählt, der Drift-Check sieht sie nicht.
+                pruef_keys = set(erwartete_keys)
+                gespeichert: dict = {}
+            else:
+                # Vorhandene Zeile: PV/BKW gehört dem Drift-Check.
+                pruef_keys = {
+                    k for k in erwartete_keys
+                    if not any(k.startswith(p) for p in PV_KOMPONENTEN_PREFIXE)
+                }
+                gespeichert = tz.komponenten_kwh or {}
+            leer = {
+                k for k in pruef_keys
+                if not isinstance(gespeichert.get(k), (int, float))
+                or gespeichert.get(k) <= 0
+            }
+            if leer:
+                kandidaten.append((d, leer))
+            d -= _td(days=1)
+
+        if not kandidaten:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="Alle Tage mit zugeordnetem Zähler tragen Werte (letzte 90 Tage)",
+                details=(
+                    "Für jeden zugeordneten kWh-Zähler steht in der gespeicherten "
+                    "Tages-Zusammenfassung ein Wert. Tage, an denen die Zuordnung "
+                    "zwar steht, aber nie aggregiert wurde, würden hier mit einem "
+                    "Reparatur-Knopf erscheinen."
+                ),
+            )]
+
+        # LTS-Reads deckeln — ohne stilles Abschneiden (die Meldung nennt den Rest).
+        MAX_LTS_READS = 45
+        gepruefte = kandidaten[:MAX_LTS_READS]
+        ungeprueft = len(kandidaten) - len(gepruefte)
+
+        # (datum, {key: ha_kwh})
+        befunde: list[tuple[date, dict[str, float]]] = []
+        SCHWELLE_KWH = 1.0
+        for datum_, leere_keys in gepruefte:
+            try:
+                ha_komp = await get_komponenten_tageskwh_lts(
+                    anlage, invs_by_id, datum_,
+                )
+            except Exception as e:
+                logger.debug(
+                    f"Leere-Tage-Check Anlage {anlage.id} {datum_}: "
+                    f"HA-LTS-Read fehlgeschlagen: {type(e).__name__}: {e}"
+                )
+                continue
+            # #311: nur Keys, die der LTS-Read WIRKLICH geliefert hat.
+            fehlend = {
+                k: v for k in leere_keys
+                if isinstance((v := ha_komp.get(k)), (int, float)) and v >= SCHWELLE_KWH
+            }
+            if fehlend:
+                befunde.append((datum_, fehlend))
+
+        if not befunde:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung="Keine reparierbaren Tages-Lücken gefunden (letzte 90 Tage)",
+                details=(
+                    f"{len(kandidaten)} Tag(e) tragen für einen zugeordneten Zähler "
+                    f"keinen Wert — die HA-Langzeitstatistik liefert für diese Tage "
+                    f"aber ebenfalls nichts. eedc reicht nur so weit zurück wie HA "
+                    f"selbst; solche Lücken sind keine Fehlfunktion, sondern lassen "
+                    f"sich nicht mehr füllen."
+                ),
+            )]
+
+        befunde.sort(key=lambda x: x[0])
+        aeltester, neuester = befunde[0][0], befunde[-1][0]
+
+        # Bereichs-Knopf auf das jüngste erlaubte Fenster begrenzen; ältere Tage
+        # bleiben für einen zweiten Lauf stehen (Cap mehrfach anbieten statt
+        # still abschneiden).
+        range_von = max(aeltester, neuester - _td(days=REAGGREGATE_RANGE_MAX_DAYS - 1))
+        rest_aelter = sum(1 for dt, _ in befunde if dt < range_von)
+
+        def _key_label(key: str) -> str:
+            if key in ("einspeisung", "netzbezug"):
+                return key.capitalize()
+            praefix, _, inv_id = key.rpartition("_")
+            inv = invs_by_id.get(inv_id)
+            if inv is not None and getattr(inv, "bezeichnung", None):
+                return inv.bezeichnung
+            return praefix or key
+
+        betroffene_keys = sorted({k for _dt, f in befunde for k in f})
+        keys_text = ", ".join(_key_label(k) for k in betroffene_keys)
+
+        ergebnisse: list[CheckErgebnis] = []
+
+        summen_details = (
+            f"{len(befunde)} Tag(e) zwischen {aeltester.isoformat()} und "
+            f"{neuester.isoformat()} tragen keinen Wert für: {keys_text}. Die "
+            f"HA-Langzeitstatistik hat für dieselben Tage Werte — die Zuordnung "
+            f"stand damals nur noch nicht, deshalb hat nie ein Lauf sie "
+            f"aufgeschrieben. „Zeitraum neu aggregieren“ holt "
+            f"{range_von.isoformat()} bis {neuester.isoformat()} aus HA-Statistics "
+            f"nach (max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
+        )
+        if rest_aelter > 0:
+            summen_details += (
+                f" {rest_aelter} ältere(r) Tag(e) liegen außerhalb des Fensters — "
+                f"nach dem Lauf erneut prüfen oder einzeln reparieren."
+            )
+        if ungeprueft > 0:
+            summen_details += (
+                f" Weitere {ungeprueft} Tag(e) wurden noch nicht gegen HA geprüft "
+                f"(max. {MAX_LTS_READS} Abfragen pro Durchlauf) — nach dem Lauf "
+                f"erneut prüfen."
+            )
+        summen_details += (
+            " Reichweite: die Tagesreparatur heilt Tages- und Stundenwerte, "
+            "NICHT die Monatswerte. Für zurückliegende Monate anschließend "
+            "Einstellungen → Integration → Statistik-Import (bereits belegte "
+            "Monate erscheinen dort unter „Konflikte“ und müssen zum "
+            "Überschreiben angehakt werden)."
+        )
+
+        ergebnisse.append(CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            meldung=(
+                f"{len(befunde)} Tag(e) ohne Werte trotz zugeordnetem Zähler "
+                f"({aeltester.isoformat()} … {neuester.isoformat()})"
+            ),
+            details=summen_details,
+            link="/einstellungen/energieprofil",
+            action_kind="reaggregate_range",
+            action_params={
+                "anlage_id": anlage.id,
+                "von": range_von.isoformat(),
+                "bis": neuester.isoformat(),
+            },
+            action_label="Zeitraum neu aggregieren",
+        ))
+
+        MAX_EINZEL = 15
+        for datum_, fehlend in sorted(befunde, key=lambda x: x[0], reverse=True)[:MAX_EINZEL]:
+            teile = ", ".join(
+                f"{_key_label(k)} {v:.1f} kWh" for k, v in sorted(fehlend.items())
+            )
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING.value,
+                meldung=f"{datum_.isoformat()}: keine Tageswerte, HA hat {teile}",
+                details=(
+                    "Einzelnen Tag aus HA-Statistics nachaggregieren — schreibt "
+                    "Tages- und Stundenwerte, nicht die Monatswerte."
+                ),
+                link=f"/einstellungen/energieprofil?datum={datum_.isoformat()}",
+                action_kind="reaggregate_day",
+                action_params={"anlage_id": anlage.id, "datum": datum_.isoformat()},
+                action_label="Tag reparieren",
+            ))
+        if len(befunde) > MAX_EINZEL:
+            rest = len(befunde) - MAX_EINZEL
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung=(
+                    f"… plus {rest} weitere(r) Tag(e) — am besten per "
+                    f"„Zeitraum neu aggregieren“."
+                ),
+            ))
+
+        return ergebnisse
+
     async def _check_batterie_vorzeichen_historie(
         self, anlage: Anlage,
     ) -> list[CheckErgebnis]:

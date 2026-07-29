@@ -33,6 +33,64 @@ PV_MAX_KWH_PRO_KWP = {
 class MonatsdatenChecks:
     """Prüfungen rund um Monatsdaten und Investition-Monatsdaten."""
 
+    async def _tages_pv_summe_monat(
+        self, anlage_id: int, jahr: int, monat: int,
+    ) -> Optional[float]:
+        """Σ der gespeicherten PV-Tageswerte eines Monats (TagesZusammenfassung).
+
+        Nachlauf v4.0.3: der **Diskriminator** für „der Monat wurde nie
+        nachgezogen". Nach einer Tages-Reparatur stehen die Tage voll da,
+        während der Monatswert auf seinem alten (oder leeren) Stand bleibt —
+        genau der Zustand, in dem Prüfung 3/3b sonst die falsche Ursache zuerst
+        nennt („Sensoren vertauscht" bzw. „ungepflegte Netzladung").
+
+        Bewusst **lazy je Monat** statt einer Vorab-Query über die ganze
+        Historie: aufgerufen wird nur, wenn eine der beiden Prüfungen ohnehin
+        anschlägt — in aller Regel also gar nicht.
+
+        Returns:
+            Σ kWh, oder ``None`` wenn für den Monat keine Tageszeilen
+            existieren (dann gibt es nichts zu vergleichen).
+        """
+        from sqlalchemy import select, extract
+        from backend.core.berechnungen import summe_pv_bkw_kwh
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+
+        result = await self.db.execute(
+            select(TagesZusammenfassung).where(
+                TagesZusammenfassung.anlage_id == anlage_id,
+                extract("year", TagesZusammenfassung.datum) == jahr,
+                extract("month", TagesZusammenfassung.datum) == monat,
+            )
+        )
+        zeilen = list(result.scalars().all())
+        if not zeilen:
+            return None
+        return sum(summe_pv_bkw_kwh(tz.komponenten_kwh or {}) for tz in zeilen)
+
+    @staticmethod
+    def _nachzug_hinweis(tages_pv: Optional[float], monats_pv: Optional[float]) -> Optional[str]:
+        """Detail-Vorspann, wenn die Tageswerte den Monatswert deutlich übersteigen.
+
+        Schwelle: ≥ 20 % **und** ≥ 20 kWh über dem Monatswert. Beides zusammen,
+        damit weder die normale Rundungs-/Boundary-Drift noch ein kleiner
+        Wintermonat den Hinweis auslöst.
+        """
+        if tages_pv is None or monats_pv is None:
+            return None
+        if tages_pv <= max(monats_pv * 1.2, monats_pv + 20.0):
+            return None
+        return (
+            f"Wahrscheinlichste Ursache zuerst: die Tageswerte dieses Monats "
+            f"summieren sich bereits auf {tages_pv:.0f} kWh PV, der gespeicherte "
+            f"Monatswert steht aber bei {monats_pv:.0f} kWh. Die Tage wurden also "
+            f"nachgetragen oder repariert, der Monatswert nie nachgezogen. "
+            f"Weg dorthin: Einstellungen → Integration → Statistik-Import — "
+            f"Zeitraum wählen, Vorschau ansehen; bereits belegte Monate stehen "
+            f"unter „Konflikte“ und müssen zum Überschreiben angehakt werden. "
+            f"Erst wenn das nichts ändert, kommen die folgenden Ursachen infrage. "
+        )
+
     # ─── Monatsdaten Vollständigkeit ─────────────────────────────────────
 
     def _check_monatsdaten_vollstaendigkeit(
@@ -281,6 +339,23 @@ class MonatsdatenChecks:
                         link=md_link,
                     ))
 
+            # Diskriminator für 3 + 3b: stehen in den Tageswerten deutlich mehr
+            # kWh als im Monatswert, wurde der Monat schlicht nie nachgezogen —
+            # dann ist die sonst zuerst genannte Ursache falsch (coolxmad #353).
+            # Lazy: nur berechnen, wenn eine der beiden Prüfungen anschlägt.
+            nachzug: Optional[str] = None
+            nachzug_geprueft = False
+
+            async def _hole_nachzug_hinweis() -> Optional[str]:
+                nonlocal nachzug, nachzug_geprueft
+                if not nachzug_geprueft:
+                    nachzug_geprueft = True
+                    nachzug = self._nachzug_hinweis(
+                        await self._tages_pv_summe_monat(anlage.id, md.jahr, md.monat),
+                        pv_erzeugung,
+                    )
+                return nachzug
+
             # 3. Einspeisung > PV-Erzeugung
             if (
                 pv_erzeugung is not None
@@ -288,15 +363,17 @@ class MonatsdatenChecks:
                 and md.einspeisung_kwh is not None
                 and md.einspeisung_kwh > pv_erzeugung
             ):
+                details_3 = (
+                    "Einspeisung kann nicht höher als die Erzeugung sein. "
+                    "Häufigste Ursache: Einspeisungs- und Netzbezugs-Sensor "
+                    "sind im Sensor-Mapping vertauscht (oder das Vorzeichen "
+                    "eines kombinierten Netz-Sensors ist invertiert)."
+                )
+                vorspann = await _hole_nachzug_hinweis()
                 ergebnisse.append(CheckErgebnis(
                     kategorie=kat, schwere=CheckSeverity.ERROR,
                     meldung=f"{prefix}: Einspeisung ({md.einspeisung_kwh:.0f} kWh) > PV-Erzeugung ({pv_erzeugung:.0f} kWh)",
-                    details=(
-                        "Einspeisung kann nicht höher als die Erzeugung sein. "
-                        "Häufigste Ursache: Einspeisungs- und Netzbezugs-Sensor "
-                        "sind im Sensor-Mapping vertauscht (oder das Vorzeichen "
-                        "eines kombinierten Netz-Sensors ist invertiert)."
-                    ),
+                    details=(vorspann or "") + details_3,
                     link=md_link,
                 ))
 
@@ -332,6 +409,7 @@ class MonatsdatenChecks:
                 # Zahlen kommen aus verschiedenen Sensoren mit eigenen Messfehlern.
                 toleranz = max(5.0, pv_erzeugung * 0.02)
                 if stapel > pv_erzeugung + toleranz:
+                    vorspann = await _hole_nachzug_hinweis()
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=(
@@ -340,7 +418,7 @@ class MonatsdatenChecks:
                             f"({pv_ladung_speicher:.0f}) = {stapel:.0f} kWh, "
                             f"erzeugt wurden {pv_erzeugung:.0f} kWh"
                         ),
-                        details=(
+                        details=(vorspann or "") + (
                             "Beides kommt aus derselben Erzeugung — zusammen kann es "
                             "nicht mehr sein als die PV geliefert hat. Drei häufige "
                             "Ursachen, in dieser Reihenfolge: (1) Der Speicher wird "

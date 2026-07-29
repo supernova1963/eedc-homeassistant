@@ -89,6 +89,18 @@ class CheckKategorie(str, Enum):
     # (feedback_migration_startup_kein_http: der v3.45.7-Versuch hat das Add-on
     # gebrickt). Nur HA-LTS-Modus; Standalone hat keine Referenz zum Vergleich.
     BATTERIE_VORZEICHEN_HISTORIE = "batterie_vorzeichen_historie"
+    # v4.0.4 (Nachlauf v4.0.3): Tage, an denen ein Zähler zugeordnet ist und
+    # HA-Statistics einen Wert liefert, die gespeicherte Tageszeile aber leer
+    # bzw. 0 ist. Genau die Lücke, in der drei Melder nach dem v4.0.3-Fix
+    # hängenblieben: die Zuordnung ist geheilt, die Historie bleibt leer, und
+    # „Zähler-Abdeckung: OK" ist technisch richtig, für den Anwender aber
+    # irreführend. Erkennung per Daten-Signal (frischer HA-LTS-Read gegen die
+    # gespeicherte TagesZusammenfassung), Aktion = Bereichs- + Einzeltag-
+    # Reparatur — user-getriggert, NIE als Start-Migration
+    # (feedback_migration_startup_kein_http, feedback_kein_grosser_heiler_knopf).
+    # Abgrenzung: PV auf bestehenden Tageszeilen gehört DATENQUELLE_DRIFT —
+    # kein zweiter Turm über denselben Sachverhalt.
+    TAGESWERTE_FEHLEN = "tageswerte_fehlen"
 
 
 @dataclass
