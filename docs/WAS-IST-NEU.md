@@ -9,7 +9,7 @@
 
 ---
 
-## Noch nicht veröffentlicht — Balkonkraftwerk, Import und PV je String (Juli 2026)
+## Noch nicht veröffentlicht — Lücken nachholen, Balkonkraftwerk, Import und PV je String (Juli 2026)
 
 > **Diese Sektion bekommt beim Release ihre Versionsnummer.** Bis dahin steht hier, was seit
 > v4.0.3 fertig ist.
@@ -35,6 +35,63 @@ Besonders häufig betrifft das Zähler, bei denen man `state_class` von Hand nac
 bitShake-/Tasmota-Lesekopf-Familie setzt von sich aus keines. Für Counter wie die
 WP-Kompressor-Starts gibt es eine eigene Meldung: die laufen weiter, nur die Reparatur-Werkzeuge
 greifen auf ihnen nicht.
+
+### Zähler zugeordnet, Tage trotzdem leer: jetzt mit Knopf zum Nachholen
+
+**Betrifft dich das?** Wenn du auf v4.0.3 aktualisiert hast und deine Zuordnung seither wieder
+greift — die **zurückliegenden Tage** aber leer geblieben sind.
+
+Das ist kein neuer Fehler, sondern die Nachwirkung: Solange die Zuordnung unsichtbar war, hat für
+diese Tage nie eine Auswertung stattgefunden. Der Daten-Checker sagte dazu „Zähler-Abdeckung: OK" —
+stimmt ja auch, der Zähler **ist** zugeordnet. Nur half das niemandem weiter.
+
+Jetzt vergleicht eedc die gespeicherten Tage der letzten 90 Tage mit dem, was die
+**Home-Assistant-Langzeitstatistik** für dieselben Tage hergibt. Wo HA etwas hat und eedc nichts,
+steht im Daten-Checker eine Meldung — **mit dem Knopf gleich daneben**: „Zeitraum neu aggregieren"
+für die ganze Lücke (bis 31 Tage pro Durchgang, größere Lücken einfach mehrfach) oder „Tag
+reparieren" für einzelne Tage.
+
+Zwei Dinge sagt die Meldung ausdrücklich dazu:
+
+- **Wie weit es zurückreicht.** eedc kann nur holen, was Home Assistant noch hat. Ist die Lücke
+  älter als deine HA-Historie, meldet eedc das als Tatsache — und bietet keinen Knopf an, der
+  nichts holen könnte.
+- **Was repariert wird.** Die Tagesreparatur füllt **Tages- und Stundenwerte**, nicht die
+  **Monatswerte**. Für zurückliegende Monate ist der Weg **Einstellungen → Integration →
+  Statistik-Import**: Zeitraum wählen, Vorschau ansehen — schon belegte Monate stehen dort unter
+  **„Konflikte"** und müssen zum **Überschreiben angehakt** werden, sonst bleibt der alte Wert
+  stehen.
+
+Nichts davon läuft beim Start von allein. eedc erkennt es, sagt es — auslösen tust du es.
+
+**Dazu passend:** Meldet der Daten-Checker „Einspeisung größer als PV-Erzeugung" für einen Monat,
+riet er bisher zuerst zu vertauschten Sensoren. Stehen die **Tage** dieses Monats aber schon voll da
+und nur der Monatswert nicht, nennt die Meldung jetzt **diese** Ursache zuerst und den Weg zum
+Statistik-Import dazu.
+
+### Cockpit → Tag: „Eigenverbrauch" hieß dort etwas anderes
+
+Wenn du Live „Heute" und Cockpit → Tag nebeneinandergelegt hast, standen dort für den
+Eigenverbrauch zwei verschiedene Zahlen. Beide waren richtig — sie meinten nur nicht dasselbe:
+
+- **Live, Monat, Jahr und die Wirtschaftlichkeit** meinen den **PV-gedeckten Hausverbrauch**
+  (Direktverbrauch + was der Speicher wieder abgibt).
+- **Cockpit → Tag** rechnet **PV-Erzeugung − Einspeisung** — da steckt auch die **Speicherladung**
+  drin, also Energie, die noch gar nicht verbraucht wurde.
+
+Die Differenz ist genau das, was an dem Tag netto in den Speicher gewandert ist. Beides ist eine
+sinnvolle Größe, nur hießen sie gleich. **Die Zahlen bleiben, der Name ändert sich:** Die
+Tages-Kachel heißt jetzt **„PV-Eigenverbrauch"** und sagt „inkl. Speicherladung" dazu. Der
+unqualifizierte Begriff „Eigenverbrauch" gehört ab jetzt überall der ersten Größe.
+
+Zwei Kleinigkeiten aus demselben Winkel:
+
+- **Am laufenden Tag** steht die Tages-Sicht auf den **abgeschlossenen** Stunden, Live „Heute"
+  zählt die laufende schon mit — deshalb steht dort jetzt **„Stand: n von 24 Std. · laufende
+  Stunde fehlt"**. Das erklärt die kleine Differenz, die es am heutigen Tag immer gab.
+- **Der Rechenweg hinter der Autarkie-Kachel** (Tag) zeigte eine Formel, die seit v4.0.2 nicht mehr
+  zur angezeigten Zahl passte — vorgerechnet kamen an manchen Tagen über 100 % heraus. Der
+  angezeigte Prozentwert war die ganze Zeit richtig; jetzt stimmt die Erklärung dazu.
 
 ### Balkonkraftwerk: die Prognose passt jetzt zum Gerät
 
