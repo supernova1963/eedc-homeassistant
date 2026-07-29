@@ -941,10 +941,15 @@ async def set_feld_quelle(
     — das ist die bewusste Nutzer-Umschaltung im Picker (kein Waisen-Ballast); das
     §2h-Prinzip „deaktivieren statt löschen" gilt der **automatischen** B8-Migration
     (parallele Mappings verlustfrei rückholbar), nicht dieser expliziten Wahl.
+
+    Die Wahl wird IMMER auch in die klassische `sensor_mapping`-Struktur
+    geschrieben (`datenquellen_mapping_sync`) — `quellen` allein ist für alle
+    Leser nur ein Read-Through, die Aufzählung läuft über `basis`/`investitionen`.
     """
     from sqlalchemy.orm.attributes import flag_modified
     from datetime import datetime
     from backend.models.mqtt_gateway_mapping import MqttGatewayMapping
+    from backend.services.datenquellen_mapping_sync import uebernehme_quelle_ins_mapping
 
     quelle = (body.quelle or "").strip()
     if quelle not in QUELLEN_ERLAUBT:
@@ -1016,6 +1021,12 @@ async def set_feld_quelle(
             quellen[field_id] = {"quelle": QUELLE_KEINE}
 
     mapping[QUELLEN_KEY] = quellen
+    # Klassische Struktur mitschreiben: HA → Sensor-Eintrag, sonst räumen. Ohne
+    # das Räumen spränge die B8-2-Auflösung beim nächsten `/felder` über Stufe 1
+    # („HA-Sensor zugeordnet") zurück auf HA und drehte die Wahl zurück.
+    uebernehme_quelle_ins_mapping(
+        mapping, field_id, quelle, (body.entity_id or "").strip() or None
+    )
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")
     await db.commit()
@@ -1053,9 +1064,11 @@ async def uebernehme_energy_vorschlaege(
     in die Datenquellen-Quellen — nie stumm, der Wizard zeigt die Auswahl vorher.
 
     Schreibt in denselben Store wie /felder/{fid}/quelle (HA-Transport = aktive
-    Verbindung); nur Feld-IDs, die die Registry der Anlage wirklich kennt.
+    Verbindung) und über dieselbe Schreib-Schicht zusätzlich in die klassische
+    `sensor_mapping`-Struktur; nur Feld-IDs, die die Registry der Anlage kennt.
     """
     from sqlalchemy.orm.attributes import flag_modified
+    from backend.services.datenquellen_mapping_sync import uebernehme_quelle_ins_mapping
 
     anlage = (
         await db.execute(select(Anlage).where(Anlage.id == anlage_id))
@@ -1086,6 +1099,7 @@ async def uebernehme_energy_vorschlaege(
     quellen = dict(mapping.get(QUELLEN_KEY) or {})
     for fid, entity in zuordnungen:
         quellen[fid] = {"quelle": kind, "entity_id": entity}
+        uebernehme_quelle_ins_mapping(mapping, fid, kind, entity)
     mapping[QUELLEN_KEY] = quellen
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")

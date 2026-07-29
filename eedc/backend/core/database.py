@@ -1140,6 +1140,19 @@ async def _run_data_migrations() -> None:
             migriere_mqtt_richtungen,
         )
 
+        # Datenquellen-V4: HA-Zuordnungen, die ab v4.0.0 NUR im `quellen`-Store
+        # gelandet sind, in `basis`/`investitionen` nachziehen. Ohne sie bleiben
+        # in der Fläche zugeordnete Sensoren für alle Aufzähl-Leser unsichtbar
+        # (Daten-Checker „Kein Basis-Zähler", Cockpit/Tag/Monat leer — Forum
+        # #89667/36–41). Additiv, kein HTTP.
+        from backend.services.migrations.migrate_quellen_ins_mapping import (
+            migriere_quellen_ins_mapping,
+        )
+        await _apply_once(
+            "datenquellen_v4_quellen_ins_mapping",
+            migriere_quellen_ins_mapping,
+        )
+
         # HINWEIS (v3.45.8): Die in v3.45.7 hier registrierte Migration
         # `batterie_kw_entladung_positiv` wurde ENTFERNT. Sie reaggregierte beim
         # Start ALLE historischen Tage über externe HTTP-Calls (HA-History +

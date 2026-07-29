@@ -1,11 +1,66 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.2)
+> **Stand:** Juli 2026 (v4.0.3)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.3 — Zugeordnete Sensoren wirken überall (Juli 2026)
+
+> Ein Fehler mit einem verwirrenden Gesicht: Die Datenquellen-Fläche zeigte deinen Sensor **samt
+> aktuellem Zählerstand**, das Live-Dashboard lief — und trotzdem blieb das Cockpit leer, während
+> der Daten-Checker genau die Zähler vermisste, die eine Zeile darüber mit ihrem Wert standen.
+
+### Betrifft dich das?
+
+**Ja, wenn du deine Sensoren ab v4.0.0 zugeordnet hast** — also über **Einstellungen →
+Datenquellen** oder im Setup-Assistenten über „Energiekonfiguration aus Home Assistant
+übernehmen". Das trifft vor allem **neue Installationen**, aber auch jeden, der seither eine
+Zuordnung **geändert oder ergänzt** hat, etwa für eine neu angelegte Komponente.
+
+**Nicht betroffen bist du**, wenn du von v3 aktualisiert und deine Zuordnung nicht angefasst hast
+— sie stammt dann noch aus dem alten Assistenten. Ebenso wenig betroffen sind Anlagen ohne Home
+Assistant (MQTT/Standalone).
+
+So sah es aus, wenn es dich getroffen hat:
+
+- **Cockpit → Tag/Monat/Jahr** und das **Energieprofil** blieben leer, obwohl Zähler zugeordnet waren.
+- Der **Daten-Checker** meldete „Kein Basis-Zähler für: Einspeisung, Netzbezug".
+- Der **Monatsabschluss** machte keine Vorschläge, der **Import aus der HA-Statistik** fand keine Sensoren.
+- Nur das **Live-Dashboard** lief — was den Eindruck verstärkte, die Zuordnung sei in Ordnung.
+
+**Der Grund in einem Satz:** Die neue Fläche merkte sich nur, *woher* ein Wert kommt („aus Home
+Assistant, Entität X"), aber nicht, *dass* dieses Feld überhaupt einen Zähler hat — und genau
+danach fragen die Auswertungen. Ab jetzt wird beides zusammen gespeichert.
+
+### Was du tun musst: nichts
+
+Beim Update zieht eedc die bestehenden Zuordnungen **selbsttätig** nach. Es muss nichts neu
+zugeordnet werden, es geht nichts verloren, und wer eine Quelle bewusst auf „keine" oder MQTT
+gestellt hat, behält diese Wahl.
+
+**Deine vergangenen Tage sind nicht verloren:** Die Zählerstände wurden die ganze Zeit
+mitgeschrieben — sie waren nur nicht verrechnet. Unter **Einstellungen → Energieprofil-Pflege**
+holst du sie mit „Tag neu berechnen" bzw. „Mehrere Tage neu aggregieren" nach. Neue Tage rechnen
+ab dem Update von selbst richtig.
+
+### Zwei kleinere Korrekturen
+
+- **Der Daten-Checker weist wieder den richtigen Weg.** Sechs Meldungen schickten noch zum
+  **Sensor-Mapping-Assistenten**, den v4.0.0 durch die **Datenquellen**-Fläche ersetzt hat. Sie
+  zeigen jetzt dorthin. Außerdem nennen die Hinweise Feld-Bezeichnungen statt interner Kürzel.
+- **„Alles in Ordnung" sagt jetzt, wie weit es reicht.** Wer seine Monatsdaten importiert oder von
+  Hand pflegt, bekam die grüne Meldung „Basis-Zähler über … befüllt". Sie gilt für die
+  **Monatsauswertungen** — Tages- und Stundenwerte brauchen weiterhin kumulative kWh-Zähler. Das
+  steht jetzt dabei; grün bleibt es trotzdem, eine gepflegte Anlage soll keine Dauerwarnung
+  bekommen.
+- **Cockpit → Aussicht:** Solange für heute noch kein gemessener PV-Wert vorliegt, entfällt die
+  Zeile „verbl." — vorher wurde „unbekannt" als 0 gelesen und die **volle** Tagesprognose als noch
+  ausstehend behauptet.
 
 ---
 
