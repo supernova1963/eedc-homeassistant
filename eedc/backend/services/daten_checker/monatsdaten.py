@@ -85,9 +85,10 @@ class MonatsdatenChecks:
             f"summieren sich bereits auf {tages_pv:.0f} kWh PV, der gespeicherte "
             f"Monatswert steht aber bei {monats_pv:.0f} kWh. Die Tage wurden also "
             f"nachgetragen oder repariert, der Monatswert nie nachgezogen. "
-            f"Weg dorthin: Einstellungen → Integration → Statistik-Import — "
-            f"Zeitraum wählen, Vorschau ansehen; bereits belegte Monate stehen "
-            f"unter „Konflikte“ und müssen zum Überschreiben angehakt werden. "
+            f"Weg dorthin: Einstellungen → Integration → Statistik-Import, "
+            f"„Vorschau laden“ — bereits belegte Monate stehen dort unter "
+            f"„Konflikte“ und sind zum Überschreiben vorausgewählt, also vor "
+            f"dem Import einmal durchsehen. "
             f"Erst wenn das nichts ändert, kommen die folgenden Ursachen infrage. "
         )
 

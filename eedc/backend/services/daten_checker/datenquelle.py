@@ -644,10 +644,10 @@ class DatenquelleChecks:
             )
         summen_details += (
             " Reichweite: die Tagesreparatur heilt Tages- und Stundenwerte, "
-            "NICHT die Monatswerte. Für zurückliegende Monate anschließend "
-            "Einstellungen → Integration → Statistik-Import (bereits belegte "
-            "Monate erscheinen dort unter „Konflikte“ und müssen zum "
-            "Überschreiben angehakt werden)."
+            "NICHT die Monatswerte. Für abgeschlossene Monate anschließend "
+            "Einstellungen → Integration → Statistik-Import: „Vorschau laden“ — "
+            "bereits belegte Monate stehen dort unter „Konflikte“ und sind zum "
+            "Überschreiben vorausgewählt, also vor dem Import einmal durchsehen."
         )
 
         ergebnisse.append(CheckErgebnis(

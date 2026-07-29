@@ -57,10 +57,10 @@ Zwei Dinge sagt die Meldung ausdrücklich dazu:
   älter als deine HA-Historie, meldet eedc das als Tatsache — und bietet keinen Knopf an, der
   nichts holen könnte.
 - **Was repariert wird.** Die Tagesreparatur füllt **Tages- und Stundenwerte**, nicht die
-  **Monatswerte**. Für zurückliegende Monate ist der Weg **Einstellungen → Integration →
-  Statistik-Import**: Zeitraum wählen, Vorschau ansehen — schon belegte Monate stehen dort unter
-  **„Konflikte"** und müssen zum **Überschreiben angehakt** werden, sonst bleibt der alte Wert
-  stehen.
+  **Monatswerte**. Für abgeschlossene Monate ist der Weg **Einstellungen → Integration →
+  Statistik-Import**: „Vorschau laden" — schon belegte Monate stehen dort unter **„Konflikte"**
+  und sind zum **Überschreiben vorausgewählt**. Vor dem Import einmal durchsehen: was hier
+  ausgewählt bleibt, wird überschrieben.
 
 Nichts davon läuft beim Start von allein. eedc erkennt es, sagt es — auslösen tust du es.
 
