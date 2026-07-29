@@ -9,7 +9,8 @@ im Daten-Checker. Reuse statt Neubau: der Einheiten-Dimensions-Klassifikator
 Fünf Prüfungen (Gernot 2026-07-16; Takt: D2/#343, 2026-07-18):
 1. **Einheit** — kWh-Sensor in W-Feld / W-Sensor in kWh-Feld (#200).
 2. **Aggregat-Redundanz** — Aggregat (PV gesamt / Netz kombi) neben Komponenten
-   belegt → Aggregat wirkungslos (Engine-Vorrang), Inline „auf keine".
+   belegt → Aggregat wirkungslos (Engine-Vorrang), Inline „auf keine". Je
+   Aggregat-Feld eigene Bedingung, s. Kommentar-Block unten (N131 §4).
 3. **state_class** — HA-Energie-Sensor ohne `state_class` → keine History/LTS.
 4. **Doppelmapping** — dieselbe HA-Entity in ≥2 Feldern → Doppelzählung (#314).
 5. **Takt** — kWh-Zähler mit nur sprunghaften Updates (Session-Ende-Statistik,
@@ -25,13 +26,36 @@ from typing import Optional
 from backend.core.field_definitions import einheit_klasse
 
 # ─── Aggregat ⊥ Komponenten (Engine-Vorrang, C) ─────────────────────────────
-# Aggregat-Sensor wird bei vorhandenen Komponenten still ignoriert:
-#   PV gesamt  — `live_komponenten_builder` `not has_individual_pv`; Energie-
-#                Bilanz zählt pro WR (pv_gesamt_kwh ohne Snapshot-Counterpart).
-#   Netz kombi — `_collect_values`: kombi nur wenn einspeisung_w UND netzbezug_w
-#                fehlen → ≥1 Split-Feld belegt = kombi wirkungslos.
-_PV_AGGREGAT_FELDER = {"pv_gesamt_kwh", "pv_gesamt_w"}
-_PV_KOMPONENTEN_FELDER = {"pv_erzeugung_kwh", "leistung_w"}
+# Aggregat-Sensor wird bei vorhandenen Komponenten still ignoriert — ABER die
+# beiden PV-Aggregat-Felder tragen ZWEI verschiedene Rollen und haben deshalb
+# je eigene Bedingung (2026-07-29, Befund N131 §4):
+#
+#   PV gesamt (W)   — Live. `live_komponenten_builder:267` hängt das Aggregat
+#                     an `not has_individual_pv`, und eine PV-Komponente
+#                     entsteht dort NUR mit `leistung_w` (`val_w is None` →
+#                     `continue`, :107). Ein einziges belegtes `leistung_w`
+#                     macht das Live-Aggregat wirkungslos.
+#   PV gesamt (kWh) — Monat. Das Feld landet über `basis["pv_gesamt"]` in
+#                     `Monatsdaten.pv_erzeugung_kwh` und ist damit der EINGANG
+#                     von `resolve_pv_je_modul`: es füllt die Lücken der Module
+#                     OHNE eigenen Wert. Wirkungslos ist es erst, wenn es keine
+#                     Lücke mehr gibt — sonst rät die Fläche, genau die Quelle
+#                     abzuschalten, aus der die Anlagensumme kommt (Stufe 3 →
+#                     QUELLE_FEHLT → 0 für die ganze Anlage).
+#   Netz kombi      — `_collect_values`: kombi nur wenn einspeisung_w UND
+#                     netzbezug_w fehlen → ≥1 Split-Feld belegt = wirkungslos.
+#
+# Die kWh-Bedingung ist NICHT neu erfunden: sie ist die zweite Bedingung von
+# `core/database.py::_migrate_pv_erzeugung_aggregat_clear` („JEDE im Monat
+# aktive PV-Quelle hat einen eigenen Wert") — dieselbe Frage („darf das
+# Aggregat weg?"), deshalb dieselbe Antwort. Wie dort zählen `pv-module` UND
+# `balkonkraftwerk`: das Aggregat verteilt zwar nur auf `pv-module`, aber
+# Schweigen ist die sichere Richtung — eine überflüssige Zuordnung kostet
+# nichts, ein befolgter falscher Rat kostet die Anlagensumme.
+_PV_AGGREGAT_FELD_MONAT = "pv_gesamt_kwh"
+_PV_AGGREGAT_FELD_LIVE = "pv_gesamt_w"
+_PV_KOMPONENTEN_FELD_MONAT = "pv_erzeugung_kwh"
+_PV_KOMPONENTEN_FELD_LIVE = "leistung_w"
 _PV_KOMPONENTEN_TYPEN = {"pv-module", "balkonkraftwerk"}
 _NETZ_AGGREGAT_FELDER = {"netz_kombi_w"}
 _NETZ_KOMPONENTEN_FELDER = {"einspeisung_w", "netzbezug_w"}
@@ -77,13 +101,30 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
     """Belegte Aggregat-Felder, die durch belegte Komponenten wirkungslos sind (C).
 
     `felder`: [{"id", "feld", "typ", "belegt": bool}]. `belegt` = Quelle ≠ keine.
+    Erwartet die Felder ALLER aktiven Investitionen — auch die unbelegten: die
+    kWh-Bedingung („keine Lücke mehr") ist sonst nicht entscheidbar.
     Returns {aggregat_field_id: {"art":"redundant","schwere":"warning","grund","wirksame_felder":[…],"text"}}.
     """
-    pv_komp = [
+    # Live: ein einziges belegtes `leistung_w` genügt (Engine-Vorrang).
+    pv_komp_live = [
         f for f in felder
         if f.get("belegt") and f.get("typ") in _PV_KOMPONENTEN_TYPEN
-        and f.get("feld") in _PV_KOMPONENTEN_FELDER
+        and f.get("feld") == _PV_KOMPONENTEN_FELD_LIVE
     ]
+    # Monat: erst wenn JEDE aktive PV-Quelle ihren eigenen kWh-Wert hat, ist
+    # das Aggregat wirkungslos (sonst füllt es Lücken). `felder` enthält nur
+    # im Moment aktive Investitionen (`datenquellen.py` filtert per
+    # `aktiv_am_tag`), der Lifecycle-Filter ist damit schon gezogen.
+    pv_komp_monat = [
+        f for f in felder
+        if f.get("typ") in _PV_KOMPONENTEN_TYPEN
+        and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
+    ]
+    pv_komp_monat_belegt = [f for f in pv_komp_monat if f.get("belegt")]
+    pv_monat_vollstaendig = (
+        bool(pv_komp_monat_belegt)
+        and len(pv_komp_monat_belegt) == len(pv_komp_monat)
+    )
     netz_split = [
         f for f in felder
         if f.get("belegt") and f.get("typ") == "basis"
@@ -94,12 +135,21 @@ def finde_redundante_aggregate(felder: list[dict]) -> dict[str, dict]:
         if not f.get("belegt"):
             continue
         feld = f.get("feld")
-        if feld in _PV_AGGREGAT_FELDER and f.get("typ") == "basis" and pv_komp:
+        if feld == _PV_AGGREGAT_FELD_LIVE and f.get("typ") == "basis" and pv_komp_live:
             out[f["id"]] = {
                 "art": "redundant", "schwere": "warning", "grund": "pv_aggregat",
-                "wirksame_felder": [k["id"] for k in pv_komp],
-                "text": "Wirkungslos: einzelne PV-Erzeugung ist zugeordnet — die "
+                "wirksame_felder": [k["id"] for k in pv_komp_live],
+                "text": "Wirkungslos: einzelne PV-Leistung ist zugeordnet — die "
                         "gesamt-Zuordnung wird ignoriert. Auf „keine“ setzen.",
+            }
+        elif (feld == _PV_AGGREGAT_FELD_MONAT and f.get("typ") == "basis"
+                and pv_monat_vollstaendig):
+            out[f["id"]] = {
+                "art": "redundant", "schwere": "warning", "grund": "pv_aggregat",
+                "wirksame_felder": [k["id"] for k in pv_komp_monat_belegt],
+                "text": "Wirkungslos: jede PV-Quelle hat eine eigene Erzeugungs-"
+                        "Zuordnung — die gesamt-Zuordnung wird ignoriert. "
+                        "Auf „keine“ setzen.",
             }
         elif feld in _NETZ_AGGREGAT_FELDER and netz_split:
             out[f["id"]] = {

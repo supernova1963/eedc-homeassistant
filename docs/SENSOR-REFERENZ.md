@@ -33,6 +33,14 @@
 > | PV-Leistung | Anlage `pv_gesamt_w` | je Modul `leistung_w` |
 > | Netz-Leistung | `netz_kombi_w` (ein Sensor mit Vorzeichen) | `einspeisung_w` + `netzbezug_w` getrennt |
 >
+> **PV-Energie ist kein reines Entweder-oder:** Einzelwerte haben immer Vorrang, der Gesamtwert füllt
+> nur die Lücken der Module **ohne** eigenen Wert (anteilig nach kWp, in der Anzeige gekennzeichnet).
+> Beides zusammen ist deshalb der normale Übergangszustand, solange noch nicht jeder String misst.
+> **Zielbild:** alle Strings erfassen und `pv_gesamt_kwh` auf „keine" setzen — zusammengefasst
+> höchstens je Ausrichtung/Neigung, sonst kippt die Prognose für Anlagen mit mehreren Ausrichtungen.
+> Bei den beiden Leistungs-Gruppen gilt das Entweder-oder dagegen strikt: ein einziger Einzelsensor
+> macht den Gesamtsensor im Live-Dashboard wirkungslos.
+>
 > **„Keine Quelle" ist kein Fehler:** Alle kWh-Felder lassen sich im Monatsabschluss auch manuell erfassen. Rot heißt „hier fehlt noch etwas", nie „falsch".
 
 ---

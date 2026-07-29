@@ -288,6 +288,12 @@ Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die re
 > mit einer **Herkunfts-Zeile „geschätzt (kWp-Anteil)"** gekennzeichnet. Die 0 war die unehrlichere
 > Anzeige — erzeugt wurde ja etwas.
 >
+> **Gemischt erfasst? Dann bleibt gemessen gemessen.** Misst ein Teil der Strings selbst und ein Teil
+> nicht, behalten die messenden Module ihren echten Wert; nur die übrigen bekommen den **Rest** des
+> Gesamtwerts nach Nennleistung. Bis v4.0.1 kippte in dieser Lage die ganze Anlage auf kWp-Anteile —
+> ein einziger Sensor-Aussetzer reichte, und die Messwerte der anderen Strings waren für den Monat
+> verschwunden.
+>
 > **Solange die Werte verteilt sind, nennt eedc bewusst keinen besten und keinen schwächsten String.**
 > Eine Platzierung wäre dort nur die Reihenfolge der Nennleistungen. Wer das Ranking zurückhaben will,
 > gibt jedem Modul einen eigenen Erzeugungs-Sensor

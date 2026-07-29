@@ -208,24 +208,19 @@ class SensorChecks:
         # (Joachim-PN 2026-05-04: grid_price_monitor wurde fälschlich als
         # fehlender kWh-Sensor gemeldet.)
         #
-        # `pv_gesamt` fehlt hier bewusst — die frühere Begründung („heute nur als
-        # `pv_gesamt_w` (Live-W) gemappt") ist zwar überholt (der Zählerstand ist
+        # `pv_gesamt` gehört seit 2026-07-29 dazu (N131/M1): der Zählerstand ist
         # über `BASIS_ENERGY_TOPICS` zuordenbar und wird von
         # `aktueller_monat._ha_stats_monatswerte` als `pv_erzeugung_kwh` aus LTS
-        # gelesen), aber die Aufnahme ist NICHT die Einzeiler-Ergänzung, als die
-        # sie aussieht: der Sammelzähler ist der Notstopfen für Wechselrichter
-        # ohne einzeln erfasste Strings und wird nach kWp verteilt. Ob er
-        # gelesen wird, entscheidet die dreistufige Präzedenz in
-        # `core/berechnungen/pv_verteilung.resolve_pv_je_modul` — das Aggregat
-        # gilt, sobald AUCH NUR EIN aktives Modul keinen eigenen Wert hat, nicht
-        # erst wenn keines misst. Ein Guard „irgendein Modul-Zähler vorhanden"
-        # würde genau die Teil-Abdeckung stumm schalten, in der das Aggregat
-        # zählt; und er wäre eine zweite Wahrheit neben
-        # `datenquellen_validierung.finde_redundante_aggregate` (die den
-        # Wechselrichter bewusst NICHT als Komponente zählt). Sauber gelöst
-        # gehört das zusammen mit N51/DOK-9 in dieselbe Checker-Datei
-        # (Backlog §F R4), nicht als Anhängsel hier.
-        for key in ("einspeisung", "netzbezug"):
+        # gelesen — ein Sammelzähler ohne state_class liefert dort still nichts.
+        # BEWUSST OHNE GUARD „liest die Rechnung ihn diesen Monat überhaupt?":
+        # das wäre die Laufzeitfrage, dieser Check beantwortet die
+        # Konfigurationsfrage („diesem Feld ist ein Sensor zugeordnet — hat er
+        # Langzeitstatistik?"). Die Antwort darauf ist in JEDER Präzedenz-Stufe
+        # von `pv_verteilung.resolve_pv_je_modul` dieselbe, und die Stufe kann
+        # jeden Monat wechseln (fällt ein String-Sensor aus, ist der
+        # Sammelzähler plötzlich die einzige Quelle). Ein Check, der die
+        # Präzedenz nachbaut, wäre die zweite Wahrheit neben ihr.
+        for key in ("einspeisung", "netzbezug", "pv_gesamt"):
             m = basis.get(key)
             if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
                 kwh_sensors.append((m["sensor_id"], f"Basis: {FELD_LABELS.get(key, key)}"))

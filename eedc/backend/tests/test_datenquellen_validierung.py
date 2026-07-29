@@ -47,11 +47,13 @@ def _f(id, feld, typ, belegt):
     return {"id": id, "feld": feld, "typ": typ, "belegt": belegt}
 
 
-def test_pv_gesamt_redundant_wenn_einzeln_belegt():
+def test_pv_gesamt_redundant_wenn_alle_einzeln_belegt():
+    """Vollständig gemessen → beide Aggregate wirkungslos (Stufe 1 der Präzedenz)."""
     felder = [
         _f("basis_energy_pv_gesamt_kwh", "pv_gesamt_kwh", "basis", True),
         _f("basis_live_pv_gesamt_w", "pv_gesamt_w", "basis", True),
         _f("inv_energy_2_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_live_2_leistung_w", "leistung_w", "pv-module", True),
     ]
     red = finde_redundante_aggregate(felder)
     assert "basis_energy_pv_gesamt_kwh" in red
@@ -60,6 +62,56 @@ def test_pv_gesamt_redundant_wenn_einzeln_belegt():
     assert "inv_energy_2_pv_erzeugung_kwh" in red["basis_energy_pv_gesamt_kwh"]["wirksame_felder"]
     # Die Komponente selbst ist nicht redundant
     assert "inv_energy_2_pv_erzeugung_kwh" not in red
+
+
+def test_pv_gesamt_kwh_bei_teil_abdeckung_nicht_redundant():
+    """N131 §4 — zwei von drei Strings gemessen: das Aggregat füllt die Lücke.
+
+    Vor 2026-07-29 riet die Fläche hier „auf keine setzen" — wer dem folgte,
+    landete in `QUELLE_FEHLT` und damit auf 0 für die GANZE Anlage. Bedingung
+    ist jetzt dieselbe wie in `_migrate_pv_erzeugung_aggregat_clear`: erst wenn
+    JEDE aktive PV-Quelle einen eigenen Wert hat, darf das Aggregat weg.
+    """
+    felder = [
+        _f("basis_energy_pv_gesamt_kwh", "pv_gesamt_kwh", "basis", True),
+        _f("inv_energy_2_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_energy_3_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_energy_4_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", False),
+    ]
+    assert "basis_energy_pv_gesamt_kwh" not in finde_redundante_aggregate(felder)
+
+
+def test_pv_gesamt_kwh_bkw_ohne_wert_schweigt():
+    """BKW zählt wie in der Migration mit — Schweigen ist die sichere Richtung.
+
+    Das Aggregat verteilt zwar nur auf `pv-module`, aber eine unbelegte
+    BKW-Zuordnung als „alles gemessen" zu werten hieße, eine Handlungs-
+    aufforderung auf eine unvollständige Erfassung zu stützen.
+    """
+    felder = [
+        _f("basis_energy_pv_gesamt_kwh", "pv_gesamt_kwh", "basis", True),
+        _f("inv_energy_2_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_energy_5_pv_erzeugung_kwh", "pv_erzeugung_kwh", "balkonkraftwerk", False),
+    ]
+    assert "basis_energy_pv_gesamt_kwh" not in finde_redundante_aggregate(felder)
+
+
+def test_pv_gesamt_live_haengt_allein_an_leistung_w():
+    """Live-Rolle ≠ Monats-Rolle (N131 §4).
+
+    `live_komponenten_builder` bildet eine PV-Komponente nur mit `leistung_w`
+    (`val_w is None` → `continue`). Ein kWh-Zähler je String macht das
+    Live-Aggregat also NICHT wirkungslos — das Monats-Aggregat sehr wohl.
+    """
+    felder = [
+        _f("basis_energy_pv_gesamt_kwh", "pv_gesamt_kwh", "basis", True),
+        _f("basis_live_pv_gesamt_w", "pv_gesamt_w", "basis", True),
+        _f("inv_energy_2_pv_erzeugung_kwh", "pv_erzeugung_kwh", "pv-module", True),
+        _f("inv_live_2_leistung_w", "leistung_w", "pv-module", False),
+    ]
+    red = finde_redundante_aggregate(felder)
+    assert "basis_energy_pv_gesamt_kwh" in red      # alle Module messen kWh
+    assert "basis_live_pv_gesamt_w" not in red      # kein String misst live
 
 
 def test_pv_gesamt_allein_nicht_redundant():

@@ -53,7 +53,7 @@ und zum Verständnis der Datenflüsse.
 
 **Legacy-Felder (NICHT neu befüllen):**
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
-- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`), aber weiterhin eine **gültige Lesequelle**: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats. Wer nur einen Gesamt-Sensor hat, pflegt ausschließlich hier — der Read-time-SoT `core/berechnungen/pv_verteilung.py` verteilt den Wert dann nach kWp auf die Module und kennzeichnet ihn als gerechnet.
+- `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
 > **Achtung, ein Name für zwei Größen:** `pv_erzeugung_kwh` bezeichnet **drei verschiedene Dinge**, je nachdem, wo es steht — die **DB-Spalte** `Monatsdaten.pv_erzeugung_kwh` (manuelles Gesamt-Aggregat, s. o.), den **Schlüssel in `InvestitionMonatsdaten.verbrauch_daten`** (Erzeugung *dieses einen* Moduls) und das **Response-Feld** von `/monatsdaten/aggregiert` (PV-Module **+** Balkonkraftwerk). Der Identifier bleibt bewusst unverändert — er ist zugleich MQTT-Topic-Segment, CSV-Spaltenname und Backup-Feld. Siehe [Glossar](GLOSSAR.md#energie--bilanzen).
 
@@ -729,11 +729,28 @@ Der IST-Wert je Modul kommt aus dem Read-time-SoT `core/berechnungen/pv_verteilu
 
 ```
 1. Messwert       InvestitionMonatsdaten.verbrauch_daten["pv_erzeugung_kwh"]
-                  → Quelle „gemessen"
-2. Verteilung     Monatsdaten.pv_erzeugung_kwh (Gesamtwert) × kWp_Anteil
+                  → Quelle „gemessen" — IMMER und AUSNAHMSLOS
+2. Lücke füllen   (Monatsdaten.pv_erzeugung_kwh − Σ gemessene) × kWp_Anteil,
+                  nur auf die Module OHNE eigenen Wert
                   → Quelle „geschätzt (kWp-Anteil)", in der Anzeige gekennzeichnet
 3. keine Quelle   kein Wert (kein 0)
 ```
+
+**Die Präzedenz ist modulweise, nicht anlagenweit (ab 2026-07-29).** Bis dahin genügte **ein**
+Modul ohne eigenen Wert, damit der Gesamtwert über **alle** Module verteilt wurde — die echten
+Messwerte der übrigen Strings wurden dabei verworfen und durch kWp-Anteile ersetzt. Dafür ist der
+Gesamtwert nicht da: er füllt **Lücken**, er überschreibt keine Messungen. Teil-Messung ist auch
+kein Sonderfall — sie entsteht bei jedem Sensor-Aussetzer, jedem neu angelegten String und in jedem
+Monat vor der Umstellung auf Pro-String-Messung.
+
+Übersteigt die Summe der Messwerte den Gesamtwert, wird der Rest auf 0 geklemmt statt negativ
+verteilt (`Σ > Gesamtwert`) — das ist ein Messfehler und gehört gemeldet, nicht weggerechnet.
+
+**Der Gesamtwert ist ausschließlich Eingang dieser Auflösung.** Er darf in keiner einzelnen
+Berechnung direkt gelesen werden; jede PV-Zahl kommt aus der Pro-Modul-Schicht bzw. deren Summe.
+Zielbild für die Erfassung: alle Strings erfassen und „PV gesamt" auf „keine" setzen —
+zusammengefasst wird höchstens je Ausrichtung/Neigung, sonst kippt die Multi-Orientierungs-Prognose.
+Die anteilige Verteilung ist ein Übergangswerkzeug, kein Dauerzustand.
 
 **Der kWp-Anteil ist ein Prognose-, kein Ertragsschlüssel** (ADR-002/P2): auf der IST-Seite verteilt
 er nur, wenn kein Messwert existiert — und dann sichtbar beschriftet. Solange die Werte verteilt sind,
@@ -1426,7 +1443,7 @@ API: GET /api/cockpit/pv-strings/{anlage_id}?jahr=2025
 
 1. **JSON-Felder in SQLAlchemy:** Änderungen an `verbrauch_daten` oder `parameter` werden nur persistiert mit `flag_modified(obj, "feldname")`
 2. **0-Werte:** `if val:` wertet 0 als False aus → immer `if val is not None:` verwenden
-3. **Legacy-Felder:** `Monatsdaten.batterie_*` ist deprecated. `Monatsdaten.pv_erzeugung_kwh` ist es **nicht** — kein Schreibziel für neuen Code, aber gültige Lesequelle (Anlagen-Aggregat, s. [Schicht 1](#schicht-1-rohdaten-eingabe)); Pro-Modul-Werte kommen aus `InvestitionMonatsdaten` (Typ: pv-module)
+3. **Legacy-Felder:** `Monatsdaten.batterie_*` ist deprecated. `Monatsdaten.pv_erzeugung_kwh` ist es **nicht** — kein Schreibziel für neuen Code und nur als **Eingang von `resolve_pv_je_modul`** zu lesen (Anlagen-Aggregat, s. [Schicht 1](#schicht-1-rohdaten-eingabe)); Pro-Modul-Werte kommen aus `InvestitionMonatsdaten` (Typ: pv-module)
 4. **PVGIS E_m vs e_m:** Ältere Prognosen verwenden `E_m` (Großbuchstabe), neuere `e_m`
 5. **Grundpreis:** Wird zu den Netzbezugskosten addiert, NICHT vom Netto-Ertrag abgezogen
 6. **Cockpit vs ROI-Dashboard:** Cockpit berechnet inline (vereinfacht), ROI-Dashboard nutzt `calculations.py` (detaillierter)
