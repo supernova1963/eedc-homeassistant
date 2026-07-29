@@ -1,8 +1,8 @@
-"""Konformitäts-Wächter gegen fünf der sechs Wurzelmuster (A14/A17/A24/A25/A27).
+"""Konformitäts-Wächter gegen sechs der sieben Wurzelmuster (A14/A17/A24/A25/A27/R8-4).
 
 Hintergrund: Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
 Commits der v4.0.1-Runde haben Fundstellen einzeln geheilt, jeder Fix erzeugte
-den nächsten Fund. Diese Datei macht fünf der Muster maschinell prüfbar, damit
+den nächsten Fund. Diese Datei macht sechs der Muster maschinell prüfbar, damit
 sie nicht neu entstehen. Sie prüft **Struktur, keine Werte** — deshalb kein
 `db`-Fixture, kein I/O, kein Netz.
 
@@ -59,6 +59,15 @@ Gewächterte Muster:
        Daten-Checkers) und ein HTTP 400 in der PVGIS-Prognose entstanden — jedes
        einzeln geheilt, jedes Mal ohne Wächter, jedes Mal entstand die nächste
        Kopie. SoT ist `core/investition_kennwerte.py`.
+
+  P7 — Das PV-Anlagen-Aggregat `Monatsdaten.pv_erzeugung_kwh` ist **Eingang**
+       der Auflösung, kein Wert (R8-4, 2026-07-29). Drei Sichten rechneten
+       daran vorbei: Cockpit und HA-Export bildeten eine rohe IMD-Summe und
+       schalteten über ein globales Flag um (`19ae5f73`), die Daten-Checker-
+       Karte tat dasselbe mit Aggregat-Fallback. Bei teilweise gemessenen
+       Strings ging so eine **Teilsumme** in Finanzen, spezifischen Ertrag,
+       Performance-Ratio und SOLL/IST-Abweichung. SoT ist
+       `core/berechnungen/pv_verteilung.py`, Ladepfad `services/pv_monatswerte.py`.
 """
 
 from __future__ import annotations
@@ -1189,4 +1198,158 @@ def test_p3b_kanon_eintraege_ohne_migration_sind_benannt():
         "Legacy-Key ist aus LEGACY_PARAM_KEYS verschwunden — die Ausnahme aus "
         "N115_KANON_OHNE_MIGRATION mit entfernen, sonst deckt sie später einen "
         "gleichnamigen neuen Eintrag."
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# P7 — Das PV-Anlagen-Aggregat ist Eingang der Auflösung, kein Wert
+# ══════════════════════════════════════════════════════════════════════════
+#
+# `Monatsdaten.pv_erzeugung_kwh` ist der manuell erfasste bzw. importierte
+# Gesamtwert eines Monats. Er darf NUR als `aggregat_kwh` in
+# `core/berechnungen/pv_verteilung.resolve_pv_je_modul` gehen (Ladepfad:
+# `services/pv_monatswerte.py`) — jede PV-Zahl kommt aus der Pro-Modul-Schicht
+# bzw. deren Summe (Gernot 2026-07-29).
+#
+# **Warum eine eigene Regel und nicht P2.** P2 sichert den kWp-Schlüssel als
+# Prognose-, nicht Ertragsschlüssel; P7 sichert die Herkunft des Werts. Der
+# Unterschied ist nicht akademisch: die drei Fundstellen, die diese Regel
+# provoziert haben, verletzten P2 gar nicht — sie verteilten nichts, sie
+# rechneten am Aggregat vorbei. `19ae5f73` (Cockpit, HA-Export) und die
+# Daten-Checker-Karte lasen eine ROHE IMD-Summe und fielen bei fehlender Summe
+# auf das Aggregat zurück; bei teilweise gemessenen Strings ging damit eine
+# Teilsumme in Finanzen, spezifischen Ertrag, Performance-Ratio und
+# SOLL/IST-Abweichung.
+#
+# Der Wächter prüft die **Attributform** `x.pv_erzeugung_kwh` (Lesen). Er kann
+# den Empfänger nicht typisieren — und der Feldname ist mehrfach belegt
+# (Connector-DTO, Import-DTO, Finanz-Dataclass, das Ergebnis-Objekt
+# `PvModulWert` der Auflösung selbst). Deshalb dieselbe Mechanik wie P3-a:
+# jede Fundstelle ist ein Verstoß, bis sie als `modul.py::empfänger` mit
+# Klartext-Begründung klassifiziert ist. Neue Stellen fallen laut auf, statt
+# still durchzulaufen.
+P7_SOT_MODULE: frozenset[str] = frozenset({
+    # Die Formel selbst (ADR-001) …
+    "backend/core/berechnungen/pv_verteilung.py",
+    # … und der EINE Ladepfad davor.
+    "backend/services/pv_monatswerte.py",
+})
+
+P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
+    # ─── Kein Monatsdaten-Empfänger: gleichnamiges Feld auf einem DTO ───
+    # `PvModulWert` — das ERGEBNIS der Auflösung. Genau der Weg, den die Regel
+    # vorschreibt; die Summe daraus ist die Anlagen-PV.
+    "backend/api/routes/cockpit/pv_strings.py::w",
+    "backend/api/routes/monatsdaten.py::w",
+    # Import-/Connector-/Parser-DTOs auf dem Weg IN die Datenbank. Sie tragen
+    # den Wert, bevor es eine Monatsdaten-Zeile gibt — eine Auflösung wäre dort
+    # gegenstandslos.
+    "backend/api/routes/custom_import/preview.py::month",
+    "backend/api/routes/data_import.py::monat_input",
+    "backend/services/connector_mqtt_bridge.py::meters",
+    "backend/services/import_parsers/base.py::self",
+    # Finanz-Schicht: `FinanzZeileEingabe` (Dataclass) bzw. `FinanzMonatsZeile`.
+    # Wer die Zeile FÜLLT, ist der Aufrufer — und der steht mit seinem eigenen
+    # Empfänger in dieser Erhebung (`cockpit/uebersicht.py`, `ha_export.py`
+    # lesen seit `19ae5f73` über `pv_monatswerte`).
+    "backend/services/finanz_zeilen.py::eingabe",
+    "backend/core/berechnungen/finanz_aggregat.py::z",
+    #
+    # ─── Echte Monatsdaten-Leser, bewusst freigestellt ───
+    # Der Klassifikator `klassifiziere_pv_monat` gehört zur Auflösungs-SoT und
+    # NIMMT das Aggregat als Argument (`aggregat_kwh`) — dieselbe Rolle wie
+    # `resolve_pv_je_modul`, nur auf der Diagnose-Seite.
+    "backend/services/daten_checker/energieprofil.py::md",
+    # Das Backup spiegelt die ROHSPALTE Feld für Feld; der Import schreibt sie
+    # zurück. Ein aufgelöster Wert würde beim Re-Import in eine bis dahin leere
+    # Spalte wandern — der Export VERÄNDERTE die Daten (dieselbe Begründung wie
+    # P3A_BASELINE_AUSNAHMEN für `json_operations.py::inv`).
+    "backend/api/routes/import_export/json_operations.py::md",
+    # Vier Rollen in einer Datei, alle vier gedeckt (Granularität ist
+    # `modul::empfänger`, feiner geht die Allowlist nicht):
+    #   :446 — Eingang von `resolve_pv_je_modul`. Die Regel selbst.
+    #   :500 — Legacy-Erkennung: die Meldung handelt VOM Feld („Aggregat
+    #          gepflegt, aber keine Pro-Modul-Werte") — ein aufgelöster Wert
+    #          beantwortete die Frage nicht mehr.
+    #   :718/:863 — das Legacy-Trio (`direktverbrauch_kwh`/`eigenverbrauch_kwh`)
+    #          wird aus dem MANUELL eingetragenen Aggregat fortgeschrieben.
+    #          Die Felder sind deprecated (CLAUDE.md Prinzip 3); sie hier auf
+    #          die Auflösung umzustellen hieße, ein totes Feld neu zu beleben.
+    "backend/api/routes/monatsdaten.py::md",
+    # N110: der Endpoint hat keinen Konsumenten (Produktentscheidung
+    # „anschließen oder löschen?" offen, Backlog §P4/R8-5, Gernot 2026-07-29).
+    # Wird der Text angeschlossen, MUSS die Stelle auf den SoT — dann ist diese
+    # Zeile zu streichen, nicht zu verlängern.
+    "backend/api/routes/cockpit/social.py::md",
+})
+
+
+def _p7_fundstellen() -> list[tuple[str, str, str]]:
+    """Alle Lesezugriffe `x.pv_erzeugung_kwh` als `(ort, modul, empfänger)`."""
+    treffer: list[tuple[str, str, str]] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        for knoten in ast.walk(baum):
+            if not isinstance(knoten, ast.Attribute):
+                continue
+            if knoten.attr != "pv_erzeugung_kwh" or not isinstance(knoten.ctx, ast.Load):
+                continue
+            treffer.append((_ort(pfad, knoten), modul, _p3a_empfaengername(knoten.value)))
+    return treffer
+
+
+def _p7_verstoesse() -> list[str]:
+    return [
+        f"  {ort} — Lesezugriff auf {empfaenger!r}  (Allowlist-Schlüssel: {modul}::{empfaenger})"
+        for ort, modul, empfaenger in _p7_fundstellen()
+        if modul not in P7_SOT_MODULE
+        and f"{modul}::{empfaenger}" not in P7_BASELINE_AUSNAHMEN
+    ]
+
+
+def test_p7_pv_aggregat_nur_als_eingang_der_aufloesung():
+    """Das PV-Anlagen-Aggregat wird nirgends direkt verrechnet.
+
+    Baseline 0 (26 Zugriffe im Baum, 2 in den SoT-Modulen, 12 klassifiziert).
+    **Grenzen, beide gemessen und keine Fußnote:** (a) kein Typwissen — ein
+    Empfänger, der wie ein DTO heißt, aber eine Monatsdaten-Zeile hält, ist
+    falsch-negativ per Konstruktion (dieselbe Grenze wie P3-a); (b) nur die
+    Attributform — ein `row["pv_erzeugung_kwh"]` auf einem Dict wäre
+    P6-Territorium und ist heute nirgends im Baum.
+    """
+    verstoesse = _p7_verstoesse()
+
+    assert not verstoesse, (
+        "Direkter Lesezugriff auf das PV-Anlagen-Aggregat (P7):\n"
+        + "\n".join(verstoesse)
+        + "\n\nStattdessen über `backend/services/pv_monatswerte.py` laden: "
+        "`lade_pv_je_monat` (Pro-Modul-Sicht) bzw. `pv_summe_je_monat` "
+        "(Anlagensumme, `None` bei Unvollständigkeit). Das Aggregat füllt nur "
+        "die Lücken der Module OHNE eigenen Wert — direkt gelesen ist es "
+        "entweder eine Teilsumme oder es überschreibt Messungen.\n"
+        "Wer bewusst die Rohspalte braucht (Export-Spiegelung, Diagnose ÜBER "
+        "das Feld) oder gar keine Monatsdaten-Zeile liest (Import-DTO, "
+        "Connector-DTO, `PvModulWert`), trägt sich mit Klartext-Begründung in "
+        "P7_BASELINE_AUSNAHMEN ein — Form `modul.py::empfaenger`."
+    )
+
+
+def test_p7_baseline_ausnahmen_sind_noch_belegt():
+    """Keine verwaiste Ausnahme — sonst deckt sie später einen echten Treffer.
+
+    Dieselbe Pflicht wie bei P3-a/P5/P6 (ADR-002 Pflicht Nr. 2): eine Allowlist,
+    die nicht mitschrumpft, wird zur Sammlung und der Wächter zur Fassade.
+    """
+    vorhanden = {f"{modul}::{empfaenger}" for _, modul, empfaenger in _p7_fundstellen()}
+    verwaist = P7_BASELINE_AUSNAHMEN - vorhanden
+    verwaiste_module = P7_SOT_MODULE - {modul for _, modul, _ in _p7_fundstellen()}
+
+    assert not verwaist, (
+        f"P7-Ausnahmen ohne Fundstelle: {sorted(verwaist)} — die Stelle ist weg "
+        "oder migriert; Eintrag streichen."
+    )
+    assert not verwaiste_module, (
+        f"P7-SoT-Module ohne Fundstelle: {sorted(verwaiste_module)} — liest der "
+        "Ladepfad das Aggregat nicht mehr, ist die Regel gegenstandslos "
+        "geworden oder der SoT ist umgezogen."
     )

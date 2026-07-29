@@ -112,7 +112,7 @@ class MonatsdatenChecks:
 
     # ─── Monatsdaten Plausibilität ───────────────────────────────────────
 
-    def _check_monatsdaten_plausibilitaet(
+    async def _check_monatsdaten_plausibilitaet(
         self,
         anlage: Anlage,
         monatsdaten: list[Monatsdaten],
@@ -130,7 +130,7 @@ class MonatsdatenChecks:
 
         # Fallback falls nicht von außen übergeben
         if pv_erzeugung_map is None:
-            pv_erzeugung_map = self._get_pv_erzeugung_map(anlage)
+            pv_erzeugung_map = await self._get_pv_erzeugung_map(anlage)
         if pvgis_monat_map is None:
             pvgis_monat_map = self._get_pvgis_monat_map(pvgis_prognose)
 
@@ -183,10 +183,11 @@ class MonatsdatenChecks:
             prefix = f"{md.monat:02d}/{md.jahr}"
             md_link = f"/monatsabschluss/{anlage.id}/{md.jahr}/{md.monat}"
 
-            # PV-Erzeugung bestimmen (InvestitionMonatsdaten oder Legacy)
+            # PV-Erzeugung des Monats aus dem Read-time-SoT (Messwerte +
+            # Aggregat-Lückenfüllung). `None` heißt „nicht auflösbar", nicht
+            # „0" — die PV-abhängigen Prüfungen unten überspringen den Monat
+            # dann, statt mit einer Teilsumme oder einer 0 zu rechnen.
             pv_erzeugung = pv_erzeugung_map.get((md.jahr, md.monat))
-            if pv_erzeugung is None and md.pv_erzeugung_kwh is not None:
-                pv_erzeugung = md.pv_erzeugung_kwh
 
             # 0. Pflichtfelder nicht befüllt
             if md.einspeisung_kwh is None:
@@ -324,12 +325,17 @@ class MonatsdatenChecks:
                         ))
 
             # 6. Energiebilanz: Hausverbrauch = PV - Einspeisung + Netzbezug ± Batterie
-            # Nur prüfbar wenn alle Kernfelder vorhanden
+            # Nur prüfbar wenn alle Kernfelder vorhanden — die PV gehört dazu.
+            # `pv_erzeugung or 0` stand hier bis 2026-07-29 und machte aus einer
+            # unauflösbaren PV eine 0; bei erfasster Einspeisung ergab das einen
+            # negativen Hausverbrauch und damit einen ERROR über eine Bilanz,
+            # die schlicht nicht prüfbar ist.
             if (
                 md.einspeisung_kwh is not None
                 and md.netzbezug_kwh is not None
+                and pv_erzeugung is not None
             ):
-                pv = pv_erzeugung or 0
+                pv = pv_erzeugung
                 # Batterie: InvestitionMonatsdaten bevorzugen (neuer Weg), Legacy als Fallback
                 imd_key = (md.jahr, md.monat)
                 if imd_key in speicher_imd_bat:

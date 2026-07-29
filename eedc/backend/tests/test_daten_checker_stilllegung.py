@@ -295,7 +295,7 @@ async def test_pv_erzeugung_map_filtert_post_stilllegung_imds(db):
     )).scalar_one()
 
     checker = DatenChecker(db)
-    pv_map = checker._get_pv_erzeugung_map(anlage)
+    pv_map = await checker._get_pv_erzeugung_map(anlage)
     assert pv_map.get((2024, 5)) == 500.0, f"Mai-IMD soll zählen, Karte: {pv_map}"
     assert (2024, 8) not in pv_map, f"August-IMD nach Stilllegung darf nicht zählen, Karte: {pv_map}"
 

@@ -1,11 +1,88 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.3)
+> **Stand:** Juli 2026 (v4.0.3 + eine unveröffentlichte Runde)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## Noch nicht veröffentlicht — Balkonkraftwerk, Import und PV je String (Juli 2026)
+
+> **Diese Sektion bekommt beim Release ihre Versionsnummer.** Bis dahin steht hier, was seit
+> v4.0.3 fertig ist.
+
+### Balkonkraftwerk: die Prognose passt jetzt zum Gerät
+
+Ein Balkonkraftwerk ist fast immer überbelegt — drei Module à 420 Wp ergeben 1,26 kWp, der
+Wechselrichter gibt aber nur 600 oder 800 W ab. Zwei Dinge ändern sich:
+
+- Unter **Einstellungen → Investitionen** gibt es beim Balkonkraftwerk das Feld
+  **Wechselrichter-Leistung (W)**. Ist es gepflegt, kappt eedc die Prognose **stundenweise** —
+  die Mittagsspitze wird begrenzt, Morgen und Abend bleiben voll. **Bleibt das Feld leer, wird
+  nichts gekappt**; einen Standardwert gibt es bewusst nicht. Wer es ausfüllt, sieht seine
+  Prognose an sonnigen Tagen sinken — das ist die Korrektur.
+- **Balkonkraftwerke zählten in der Tagesprognose bisher gar nicht mit.** In der 14-Tage-Aussicht
+  schon — dieselbe Anlage hatte damit zwei Zahlen für denselben Tag. Wenn du ein
+  Balkonkraftwerk erfasst hast, steigen Tagesprognose, Stundenprofil, Live-Wetter und die
+  Prognose-Sensoren in Home Assistant jetzt um dessen Anteil. **Anlagen ohne Balkonkraftwerk sind
+  unverändert.**
+
+### JSON-Import: die Sensor-Zuordnung überlebt den Umzug
+
+Beim Einspielen einer JSON-Datei ging bisher die Zuordnung **aller Komponenten** verloren —
+Speicher, Wallbox, PV-Strings, Wärmepumpe. Sichtbar wurde das erst daran, dass Stundenwerte,
+Prognose-IST und Monatsbericht für diese Komponenten leer blieben. Jetzt trägt die Datei die
+nötigen Nummern mit und der Import schreibt die Zuordnung um.
+
+**Ältere Dateien** (vor diesem Update erzeugt) lassen sich nicht heilen — ihnen fehlen die Nummern.
+Der Import sagt es jetzt ausdrücklich und nennt, was neu zuzuordnen ist. Die Basis-Zähler
+(Einspeisung, Netzbezug, PV gesamt) waren nie betroffen.
+
+> **Zur Erinnerung:** Der JSON-Export ist **kein Datenbank-Backup**, sondern der Weg für Umzug oder
+> Neuanfang. Für die vollständige Wiederherstellung: **HA-Backup** (Add-on) bzw. Sicherung des
+> `eedc`-Verzeichnisses (Standalone).
+
+### PV je String: gemessen bleibt gemessen
+
+**Betrifft dich das?** Ja, wenn du **mehrere Strings** hast und **nicht alle** davon einen eigenen
+Erzeugungs-Sensor haben — nach einem Sensor-Ausfall, nach dem Anlegen eines neuen Strings, oder in
+den Monaten vor deiner Umstellung auf Pro-String-Messung.
+
+Bisher galt: sobald **ein** Modul für einen Monat keinen eigenen Wert hatte, wurde der
+Monats-Gesamtwert nach Nennleistung über **alle** Module verteilt — die echten Messwerte der
+anderen Strings waren für diesen Monat weg. Jetzt gilt die Regel **je Modul:** ein Messwert zählt
+immer, verteilt wird nur der **Rest** auf die Module ohne eigenen Wert. Deine **Anlagensumme
+ändert sich dadurch nicht** — nur die Aufteilung auf die Dächer wird ehrlich.
+
+**Das Zielbild:** alle Strings erfassen und die Zuordnung **PV gesamt** auf „keine" setzen.
+Zusammenfassen höchstens je Ausrichtung/Neigung — sonst kann eedc für Anlagen mit mehreren
+Ausrichtungen nicht mehr getrennt prognostizieren. Die anteilige Verteilung ist ein Übergang, kein
+Dauerzustand.
+
+**Wenn du mitten in der Historie umgestellt hast**, kommt deine Vorgeschichte zurück: sobald
+irgendein Monat Pro-Modul-Werte hatte, standen alle früheren Monate in **Erzeugungs-Kachel,
+spezifischem Ertrag und Finanzen** auf 0. Jahres-Erzeugung und Netto-Ertrag steigen dort jetzt auf
+die tatsächlichen Werte.
+
+### Daten-Checker und Datenquellen: weniger Fehlalarm
+
+- Der Hinweis „die Gesamt-Zuordnung wird ignoriert, auf ‚keine' setzen" erschien für **PV gesamt
+  (kWh)** schon, sobald ein einziger String einen eigenen Zähler hatte. Wer dem folgte, stand für
+  die ganze Anlage auf 0. Der Hinweis kommt jetzt erst, wenn **jede** PV-Quelle einen eigenen
+  Zähler hat. Für **PV gesamt (W)** (Live-Dashboard) bleibt es beim bisherigen Verhalten.
+- **Ø Performance Ratio**, die **SOLL/IST-Abweichung** und die Plausibilitätsprüfungen rechneten in
+  Monaten mit teilweise gemessenen Strings mit einer Teilsumme — und meldeten einen
+  Ertragseinbruch, den es nicht gab. Ebenso weg: der Fehlalarm „Energiebilanz ergibt negativen
+  Hausverbrauch", wenn die PV eines Monats gar nicht auflösbar war.
+- Neu geprüft wird der **PV-Gesamtzähler** auf Langzeitstatistik: ohne `state_class` liefert er für
+  die Monatswerte still nichts.
+
+- Zusätzlich meldet der Daten-Checker ein **überbelegtes Balkonkraftwerk ohne gepflegte
+  Wechselrichter-Grenze** (ab 800 W Modulleistung) und nennt die **Wärmepumpen-Felder
+  Heizenergie/Warmwasser** sowie **PV-Ladung** beim Namen, statt sie stumm zu übergehen.
 
 ---
 

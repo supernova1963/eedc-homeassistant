@@ -131,7 +131,7 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 1. **Standalone-First:** Keine HA-Abhängigkeit für Kernfunktionen
 2. **Datenquellen getrennt:** `Monatsdaten` = Zählerwerte, `InvestitionMonatsdaten` = Komponenten-Details
 3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.batterie_*` und das computed-Trio (`eigenverbrauch_kwh`, `direktverbrauch_kwh`, `gesamtverbrauch_kwh`) → erst `InvestitionMonatsdaten`, Legacy nur als expliziter Fallback
-4. **`Monatsdaten.pv_erzeugung_kwh` ist KEIN Legacy-Feld** (seit `ba0d8d9d`/v4.0.0): manuelles bzw. importiertes Anlagen-Aggregat und Eingang von `resolve_pv_je_modul` — **lesen ist der vorgesehene Weg**, programmatisch füllen bleibt verboten. Detail: [BERECHNUNGEN §1](docs/BERECHNUNGEN.md), [ADR-002](docs/ADR-002-WURZELMUSTER.md)
+4. **`Monatsdaten.pv_erzeugung_kwh` ist KEIN Legacy-Feld, aber auch keine Lesequelle** (Gernot 2026-07-29, ADR-002/**P7**): manuelles bzw. importiertes Anlagen-Aggregat und **ausschließlich Eingang** von `resolve_pv_je_modul` — geladen über `services/pv_monatswerte.py`, nie direkt verrechnet. Einzelwerte und ihre Summe haben immer Vorrang; das Aggregat füllt nur die Lücken der Module **ohne** eigenen Wert. Programmatisch füllen bleibt verboten. Der baumweite Wächter ist `test_wurzelmuster_konformitaet.py::test_p7_*` (Baseline 0). Detail: [BERECHNUNGEN §1](docs/BERECHNUNGEN.md), [ADR-002](docs/ADR-002-WURZELMUSTER.md)
 
 ## Drei SoT-Regime — nicht mischen
 
@@ -139,7 +139,7 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 | --- | --- | --- |
 | [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel 0/0a) | **Darstellung** — Farben, Komponenten, Typografie, Chart-Konventionen | die `check:*`-Skripte im Frontend (`eedc/frontend/scripts/check-*.mjs`) |
 | [`docs/ADR-001-BERECHNUNGS-LAYER.md`](docs/ADR-001-BERECHNUNGS-LAYER.md) | **Schichtung** — *wo* eine Aggregat-Formel definiert wird (`core/berechnungen/`) | `backend/tests/test_berechnungs_layer_konformitaet.py` |
-| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P6) | `backend/tests/test_wurzelmuster_*.py` |
+| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P7) | `backend/tests/test_wurzelmuster_*.py` |
 
 > **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. Ausnahme mit eigener Begründung: `check:kennwert-roh` bewacht die Client-Hälfte von ADR-002/P3-a.
 >
@@ -196,7 +196,7 @@ Die Nennleistung liegt je nach Herkunft in der **Spalte** `Investition.leistung_
 | JSON-Änderungen werden nicht gespeichert | `flag_modified(obj, "field_name")` aufrufen |
 | 0-Werte verschwinden | `is not None` statt `if val` |
 | SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
-| `Monatsdaten.pv_erzeugung_kwh` programmatisch gefüllt | Nur manuell/Import; Pro-Modul-Werte nach `InvestitionMonatsdaten` (Lesen ist erlaubt, s. Prinzip 4) |
+| `Monatsdaten.pv_erzeugung_kwh` programmatisch gefüllt **oder direkt gelesen** | Nur manuell/Import; Pro-Modul-Werte nach `InvestitionMonatsdaten`. Lesen ausschließlich über `lade_pv_je_monat`/`pv_summe_je_monat` (P7, s. Prinzip 4) — direkt gelesen ist es entweder eine Teilsumme oder es überschreibt Messungen |
 | ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
 | Nennleistung ist plötzlich 0 | Bei Import-/Altbestand (#229) steht die kWp **nur im `parameter`-JSON** (`kwp` / `leistung_kwp`) — die Spalte allein zu lesen liefert dort still 0. `get_erzeuger_kwp` statt `inv.leistung_kwp` |
 

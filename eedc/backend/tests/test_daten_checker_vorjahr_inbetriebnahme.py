@@ -60,7 +60,7 @@ async def test_keine_3x_warnung_bei_inbetriebnahme_im_vorjahresmonat(db):
 
     anlage, monatsdaten = await _reload_anlage(db, anlage.id)
     checker = DatenChecker(db)
-    ergebnisse = checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
+    ergebnisse = await checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
 
     vj_warnungen = [
         e for e in ergebnisse
@@ -103,7 +103,7 @@ async def test_3x_warnung_bleibt_bei_normalem_vorjahresmonat(db):
 
     anlage, monatsdaten = await _reload_anlage(db, anlage.id)
     checker = DatenChecker(db)
-    ergebnisse = checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
+    ergebnisse = await checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
 
     vj_warnungen = [
         e for e in ergebnisse

@@ -38,6 +38,7 @@ from backend.services.provenance import (
     write_json_subkey_with_provenance,
     write_with_provenance,
 )
+from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 
 
 # Source-Tag-Konstanten (Etappe 3d Päckchen 3)
@@ -637,11 +638,24 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
     preis_result = await db.execute(preis_query)
     strompreis = preis_result.scalar_one_or_none()
 
+    # PV des Monats über den Read-time-SoT statt aus dem Aggregat-Feld: wer je
+    # String misst, hat dort NULL stehen — die Kennzahlen dieses Endpoints
+    # (Autarkie, Eigenverbrauchsquote, Erträge) rechneten dann mit PV = 0.
+    pv_module = list((await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == md.anlage_id,
+            Investition.typ == "pv-module",
+        )
+    )).scalars().all())
+    pv_kwh = pv_summe_je_monat(
+        await lade_pv_je_monat(db, md.anlage_id, pv_module, md.jahr)
+    ).get((md.jahr, md.monat))
+
     # Kennzahlen berechnen
     kennzahlen = berechne_monatskennzahlen(
         einspeisung_kwh=md.einspeisung_kwh,
         netzbezug_kwh=md.netzbezug_kwh,
-        pv_erzeugung_kwh=md.pv_erzeugung_kwh or 0,
+        pv_erzeugung_kwh=pv_kwh or 0,
         batterie_ladung_kwh=md.batterie_ladung_kwh or 0,
         batterie_entladung_kwh=md.batterie_entladung_kwh or 0,
         einspeiseverguetung_cent=strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2,

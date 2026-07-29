@@ -13,17 +13,14 @@ from backend.core.exceptions import not_found
 from backend.core.investition_kennwerte import get_pv_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
-    resolve_pv_je_modul,
-    PvModul,
     PV_QUELLE_GEMESSEN,
     PV_QUELLE_VERTEILT,
     PV_QUELLE_FEHLT,
 )
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.models.monatsdaten import Monatsdaten
+from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
-from backend.utils.investition_value import get_inv_value
+from backend.services.pv_monatswerte import lade_pv_je_monat
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
 router = APIRouter()
@@ -107,52 +104,17 @@ async def _lade_ist_je_modul(
         und aus dem Aggregat gefüllte Strings zugleich enthalten. Module ohne
         PV-Quelle tauchen in beiden Strukturen nicht auf.
     """
-    pv_ids = [m.id for m in pv_module]
-
-    imd_query = select(InvestitionMonatsdaten).where(
-        InvestitionMonatsdaten.investition_id.in_(pv_ids)
-    )
-    md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
-    if jahr is not None:
-        imd_query = imd_query.where(InvestitionMonatsdaten.jahr == jahr)
-        md_query = md_query.where(Monatsdaten.jahr == jahr)
-
-    roh: dict[tuple[int, int], dict[int, float]] = {}
-    for imd in (await db.execute(imd_query)).scalars().all():
-        data = imd.verbrauch_daten or {}
-        wert = data.get("pv_erzeugung_kwh")
-        if wert is None:
-            continue
-        roh.setdefault((imd.jahr, imd.monat), {})[imd.investition_id] = wert
-
-    # Anlagen-Aggregat je Monat (manuell/importiert, NIE programmatisch gefüllt).
-    aggregat: dict[tuple[int, int], Optional[float]] = {
-        (md.jahr, md.monat): md.pv_erzeugung_kwh
-        for md in (await db.execute(md_query)).scalars().all()
-    }
-
     werte: dict[int, dict[int, dict[int, float]]] = {m.id: {} for m in pv_module}
     quellen: dict[tuple[int, int, int], str] = {}
 
-    kandidaten = set(roh.keys()) | {k for k, v in aggregat.items() if v is not None}
-    for (j, monat) in sorted(kandidaten):
-        # #236: nur im Monat aktive Module (Anschaffungs-/Stilllegungsdatum) —
-        # sonst verteilt das Aggregat auf Module, die es noch nicht gab.
-        aktive = [m for m in pv_module if m.ist_aktiv_im_monat(j, monat)]
-        if not aktive:
-            continue
-        roh_monat = roh.get((j, monat), {})
-        aufgeloest = resolve_pv_je_modul(
-            aggregat_kwh=aggregat.get((j, monat)),
-            module=[
-                PvModul(
-                    inv_id=m.id,
-                    leistung_kwp=get_inv_value(m, "leistung_kwp"),
-                    eigen_kwh=roh_monat.get(m.id),
-                )
-                for m in aktive
-            ],
-        )
+    # EIN Ladepfad für alle Monats-PV-Sichten (`services/pv_monatswerte.py`):
+    # IMD-Werte + Anlagen-Aggregat laden, nach Anschaffungs-/Stilllegungsdatum
+    # filtern (#236) und durch `resolve_pv_je_modul` schicken. Diese Funktion
+    # trug den Ladeteil bis 2026-07-29 als dritte Kopie — dieselbe Klasse, die
+    # `19ae5f73` in Cockpit und HA-Export aufgelöst hat.
+    for (j, monat), aufgeloest in sorted((await lade_pv_je_monat(
+        db, anlage_id, pv_module, jahr
+    )).items()):
         # Herkunft JE MODUL, nicht je Monat: seit der modulweisen Präzedenz
         # (Gernot 2026-07-29) stehen in einem Monat gemessene und aus dem
         # Aggregat gefüllte Strings nebeneinander. Ein Monats-Rollup würde einen

@@ -38,10 +38,11 @@ class _CheckHelpers:
             if not pvgis_soll or pvgis_soll <= 0:
                 continue
 
-            # IST-Erzeugung bestimmen
+            # IST-Erzeugung bestimmen. Kein Rückfall auf
+            # `md.pv_erzeugung_kwh` mehr — das Aggregat steckt seit 2026-07-29
+            # bereits in der Karte (über `resolve_pv_je_modul`), und wo es fehlt,
+            # fehlt es wirklich.
             pv_ist = pv_erzeugung_map.get((md.jahr, md.monat))
-            if pv_ist is None and md.pv_erzeugung_kwh is not None:
-                pv_ist = md.pv_erzeugung_kwh
             if pv_ist is None or pv_ist <= 0:
                 continue
 
@@ -93,26 +94,30 @@ class _CheckHelpers:
 
         return monat_map
 
-    def _get_pv_erzeugung_map(self, anlage: Anlage) -> dict[tuple[int, int], float]:
-        """Aggregiert PV-Erzeugung aus InvestitionMonatsdaten pro Monat.
+    async def _get_pv_erzeugung_map(self, anlage: Anlage) -> dict[tuple[int, int], float]:
+        """Anlagen-PV je Monat über den EINEN Ladepfad ``pv_monatswerte``.
 
-        Per-IMD-Lifecycle-Filter (#608-Sweep): historische IMDs aus dem
-        aktiven Zeitfenster der Investition zählen, Werte vor anschaffungs-
-        bzw. nach stilllegungsdatum nicht — Drift-Audit analog zu den anderen
-        Read-Sites (v3.29.0 #236).
+        Bis 2026-07-29 summierte diese Methode die IMD-Werte **roh** und die
+        beiden Konsumenten fielen bei fehlender Summe auf
+        ``Monatsdaten.pv_erzeugung_kwh`` zurück — das globale Entweder-oder,
+        das `19ae5f73` in Cockpit und HA-Export bereits aufgelöst hat. In einem
+        Monat mit teilweise gemessenen Strings ging damit eine **Teilsumme** in
+        die Prüfung: der Performance-Ratio fiel zu niedrig aus, die SOLL/IST-
+        Abweichung meldete einen Einbruch, den es nicht gab.
+
+        Der Lifecycle-Filter (#608/#236) steckt jetzt im Service
+        (``ist_aktiv_im_monat`` je Monat) statt in einer eigenen Schleife.
+
+        Returns:
+            ``{(jahr, monat): kwh}`` — **nur vollständig auflösbare Monate**.
+            Bleibt ein aktives Modul ohne Wert und ohne Aggregat, fehlt der
+            Monat: eine Teilsumme wäre als Anlagenerzeugung irreführend (N42).
+            Die Konsumenten überspringen den Monat, statt mit 0 zu rechnen.
         """
-        pv_map: dict[tuple[int, int], float] = {}
+        from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 
-        for inv in anlage.investitionen:
-            if inv.typ != "pv-module" or not inv.aktiv:
-                continue
-            for imd in inv.monatsdaten:
-                if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                    continue
-                data = imd.verbrauch_daten or {}
-                erzeugung = data.get("pv_erzeugung_kwh")
-                if erzeugung is not None:
-                    key = (imd.jahr, imd.monat)
-                    pv_map[key] = pv_map.get(key, 0) + erzeugung
-
-        return pv_map
+        pv_module = [i for i in anlage.investitionen if i.typ == "pv-module"]
+        summen = pv_summe_je_monat(
+            await lade_pv_je_monat(self.db, anlage.id, pv_module)
+        )
+        return {key: wert for key, wert in summen.items() if wert is not None}
