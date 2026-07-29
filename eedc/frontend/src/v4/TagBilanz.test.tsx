@@ -59,3 +59,36 @@ describe('baueTagKpis — Kosten-Kacheln', () => {
     expect(mitBezug.value).toBe('30,0')
   })
 })
+
+describe('baueTagKpis — die beiden Eigenverbrauchs-Begriffe (F3)', () => {
+  it('nennt den Tages-Wert „PV-Eigenverbrauch" und sagt „inkl. Speicherladung"', () => {
+    // Der Tag rechnet PV − Einspeisung, der Kanon (Live/Monat/Jahr/ROI) den
+    // PV-gedeckten Hausverbrauch. Zwei Größen, ein Name — das war der Befund.
+    const kpis = baueTagKpis(tag(), null)
+    expect(kachel(kpis, 'Eigenverbrauch')).toBeUndefined()
+    const k = kachel(kpis, 'PV-Eigenverbrauch')!
+    expect(k.value).toBe('2')
+    expect(k.subtitle).toContain('inkl. Speicherladung')
+    expect(k.formel).toContain('inkl. Speicherladung')
+  })
+
+  it('rechnet den PV-Eigenverbrauch aus PV − Einspeisung vor', () => {
+    const k = kachel(baueTagKpis(tag({ erzeugung: 7, einspeisung: 5, eigenverbrauch: 2 }), null), 'PV-Eigenverbrauch')!
+    expect(k.berechnung).toBe('7 − 5 kWh')
+    expect(k.ergebnis).toBe('= 2 kWh')
+  })
+})
+
+describe('baueTagKpis — Autarkie-Rechenweg passt zum Prozentwert', () => {
+  it('rechnet mit (Gesamtverbrauch − Netzbezug), nicht mit dem Eigenverbrauch', () => {
+    // N129: das Backend rechnet seit v4.0.2 mit dem netzunabhängig gedeckten
+    // Verbrauch. Der alte Rechenweg „Eigenverbrauch ÷ Gesamtverbrauch" las sich
+    // an realen Tagen als 111 % — ein Wert, den es nicht geben kann.
+    const k = kachel(baueTagKpis(tag({ gesamtverbrauch: 11.3, netzbezug: 0.15, autarkie: 98.7, eigenverbrauch: 12.6 }), null), 'Autarkie')!
+    expect(k.formel).toBe('(Gesamtverbrauch − Netzbezug) ÷ Gesamtverbrauch × 100')
+    expect(k.berechnung).toBe('(11 − 0) ÷ 11 kWh')
+    expect(k.ergebnis).toBe('= 98,7 %')
+    // Der Rechenweg darf den angezeigten Wert nicht überschreiten können.
+    expect(k.berechnung).not.toContain('13')
+  })
+})

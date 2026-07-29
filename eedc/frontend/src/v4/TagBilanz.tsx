@@ -87,15 +87,31 @@ export function baueTagKpis(
       subtitle: [sollTxt, spezTxt, vtTxt].filter(Boolean).join(' · ') || undefined,
     },
     {
+      // Der Zähler ist der netzunabhängig gedeckte Verbrauch, NICHT `eigenverbrauch`
+      // (Backend-SoT `core/berechnungen/tagesbilanz.py`: `verbrauch − netzbezug`).
+      // Bis v4.0.3 stand hier der Tages-Eigenverbrauch im Rechenweg — seit dem
+      // N129-Fix passte er nicht mehr zum angezeigten Prozentwert und las sich an
+      // realen Tagen als „12,6 ÷ 11,3 = 111 %", eine Zahl, die es nicht geben kann.
       title: 'Autarkie', value: fmt(t.autarkie), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vt ? `VT: ${fmt(vt.autarkie)} %` : undefined,
-      formel: 'Eigenverbrauch ÷ Gesamtverbrauch × 100',
-      berechnung: t.gesamtverbrauch > 0 ? `${fmt(t.eigenverbrauch)} ÷ ${fmt(t.gesamtverbrauch)} kWh` : undefined,
+      formel: '(Gesamtverbrauch − Netzbezug) ÷ Gesamtverbrauch × 100',
+      berechnung: t.gesamtverbrauch > 0
+        ? `(${fmt(t.gesamtverbrauch)} − ${fmt(t.netzbezug)}) ÷ ${fmt(t.gesamtverbrauch)} kWh`
+        : undefined,
       ergebnis: t.autarkie != null ? `= ${fmtCalc(t.autarkie, 1)} %` : undefined,
     },
     {
-      title: 'Eigenverbrauch', value: fmt(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
-      subtitle: `EV-Quote ${fmt(t.evQuote)} %${vt ? ` · VT: ${fmt(vt.eigenverbrauch)} kWh` : ''}`,
+      // F3 (2026-07-29): Tag und Live/Monat/Jahr/ROI meinten zwei verschiedene
+      // Größen unter EINEM Namen. Der Tag rechnet `PV − Einspeisung` — die
+      // Speicherladung steckt also drin; der Kanon (`core/calculations.py`,
+      // `live_power_service.py`) meint den PV-gedeckten Hausverbrauch
+      // (Direktverbrauch + Entladung). Entschieden wurde benennen statt
+      // umrechnen: keine Zahl ändert sich, der Unterschied ist sichtbar.
+      title: 'PV-Eigenverbrauch', value: fmt(t.eigenverbrauch), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
+      subtitle: `inkl. Speicherladung · EV-Quote ${fmt(t.evQuote)} %${vt ? ` · VT: ${fmt(vt.eigenverbrauch)} kWh` : ''}`,
+      formel: 'PV-Erzeugung − Einspeisung (inkl. Speicherladung)',
+      berechnung: `${fmt(t.erzeugung)} − ${fmt(t.einspeisung)} kWh`,
+      ergebnis: `= ${fmt(t.eigenverbrauch)} kWh`,
     },
     {
       title: 'Einspeisung', value: fmt(t.einspeisung), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
@@ -143,7 +159,9 @@ export function TagBilanz({
     t.autarkie != null && vglAutarkie != null ? t.autarkie >= vglAutarkie : undefined
   const rows: BilanzRow[] = [
     { label: 'PV-Erzeugung',    ist: t.erzeugung,      vt: vt?.erzeugung,      wt: wtStats?.pv ?? null,       unit: 'kWh' },
-    { label: 'Eigenverbrauch',  ist: t.eigenverbrauch, vt: vt?.eigenverbrauch, wt: wtStats?.ev ?? null,       unit: 'kWh',
+    // Name wie in der Kachel: der Tages-Wert schließt die Speicherladung ein
+    // und ist damit eine andere Größe als der „Eigenverbrauch" in Live/Monat.
+    { label: 'PV-Eigenverbrauch', ist: t.eigenverbrauch, vt: vt?.eigenverbrauch, wt: wtStats?.ev ?? null,     unit: 'kWh',
       besserVt: evBesser(vt?.autarkie), besserWt: evBesser(wtStats?.autarkie) },
     { label: 'Direktverbrauch', ist: t.direktverbrauch, vt: vt?.direktverbrauch, wt: wtStats?.direkt ?? null, unit: 'kWh' },
     { label: 'Einspeisung',     ist: t.einspeisung,    vt: vt?.einspeisung,    wt: wtStats?.einsp ?? null,    unit: 'kWh' },
