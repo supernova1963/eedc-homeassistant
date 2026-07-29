@@ -30,6 +30,7 @@ from backend.services.provenance import seed_provenance
 
 from .schemas import JSONImportResult
 from .helpers import _parse_date, _parse_datetime
+from .sensor_mapping_remap import remap_investitionen_ids
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,12 @@ class InvestitionMonatsdatenExport(BaseModel):
 
 class InvestitionExport(BaseModel):
     """Export-Schema für Investitionen (hierarchisch mit Children)."""
+    # Quell-ID der exportierenden Installation (ab Export-Version 1.3). Sie wird
+    # NICHT als ID importiert — der Import vergibt neue IDs — sondern dient
+    # einzig dazu, `sensor_mapping.investitionen` und die `quellen`-Feld-IDs
+    # umzuschreiben, die auf die alten IDs zeigen. Ohne sie musste der Import
+    # die Komponenten-Zuordnung verwerfen (#353, coolxmad).
+    id: Optional[int] = None
     typ: str
     bezeichnung: str
     anschaffungskosten_gesamt: Optional[float] = None
@@ -163,7 +170,9 @@ class AnlageExport(BaseModel):
 
 class FullAnlageExport(BaseModel):
     """Vollständiger Export einer Anlage mit allen verknüpften Daten."""
-    export_version: str = "1.2"  # v1.2: standort_land, horizont_daten, PVGIS komplett, Legacy-Monatsdaten
+    # v1.3: Investitions-Quell-IDs (Komponenten-Sensorzuordnung überlebt den Import, #353)
+    # v1.2: standort_land, horizont_daten, PVGIS komplett, Legacy-Monatsdaten
+    export_version: str = "1.3"
     export_datum: datetime
     eedc_version: str
     anlage: AnlageExport
@@ -367,6 +376,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             children_exports.append(build_inv_export(child))
 
         return InvestitionExport(
+            id=inv.id,
             typ=inv.typ,
             bezeichnung=inv.bezeichnung,
             anschaffungskosten_gesamt=inv.anschaffungskosten_gesamt,
@@ -465,7 +475,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
 
     # Vollständiger Export
     full_export = FullAnlageExport(
-        export_version="1.2",
+        export_version="1.3",
         export_datum=datetime.now(),
         eedc_version=APP_VERSION,
         anlage=anlage_export,
@@ -526,10 +536,10 @@ async def import_json(
 
     # 2. Version prüfen (1.0 und 1.1 werden unterstützt)
     export_version = data.get("export_version")
-    if export_version not in ["1.0", "1.1", "1.2"]:
+    if export_version not in ["1.0", "1.1", "1.2", "1.3"]:
         return JSONImportResult(
             erfolg=False,
-            fehler=[f"Nicht unterstützte Export-Version: {export_version}. Unterstützt: 1.0, 1.1, 1.2"]
+            fehler=[f"Nicht unterstützte Export-Version: {export_version}. Unterstützt: 1.0, 1.1, 1.2, 1.3"]
         )
     if export_version == "1.0":
         warnungen.append("Import von Export-Version 1.0 - sensor_mapping nicht enthalten.")
@@ -575,8 +585,8 @@ async def import_json(
         imported_sensor_mapping = anlage_data.get("sensor_mapping")
         if imported_sensor_mapping:
             warnungen.append(
-                "Sensor-Mapping importiert. Sensor-IDs müssen ggf. nach Import angepasst werden "
-                "(Einstellungen → Home Assistant → Sensor-Zuordnung)."
+                "Sensor-Zuordnung importiert. Die Entitäts-Namen stammen aus der Quell-Installation "
+                "und müssen ggf. angepasst werden (Einstellungen → Datenquellen)."
             )
 
         new_anlage = Anlage(
@@ -623,8 +633,10 @@ async def import_json(
             importiert["strompreise"] += 1
 
         # 7. Investitionen hierarchisch importieren
-        # Mapping von Bezeichnung+Typ zu neuer ID (für sensor_mapping Korrektur)
-        inv_bezeichnung_to_new_id: dict[str, int] = {}
+        # Quell-ID → neu vergebene ID (ab Export-Version 1.3). Damit schreibt
+        # 7b die Komponenten-Sensorzuordnung um, statt sie zu verwerfen (#353).
+        # Ältere Dateien tragen keine `id` — die Map bleibt dann leer.
+        alt_id_zu_neu: dict[int, int] = {}
 
         async def import_investition(inv_data: dict, parent_id: Optional[int] = None) -> int:
             """Importiert eine Investition rekursiv mit Children."""
@@ -650,9 +662,10 @@ async def import_json(
             inv_id = inv.id
             importiert["investitionen"] += 1
 
-            # Mapping von Bezeichnung+Typ zu neuer ID speichern (für sensor_mapping)
-            key = f"{inv_data.get('typ', '')}:{inv_data.get('bezeichnung', '')}"
-            inv_bezeichnung_to_new_id[key] = inv_id
+            # Quell-ID merken (für den sensor_mapping-Remap in 7b)
+            alt_id = inv_data.get("id")
+            if isinstance(alt_id, int):
+                alt_id_zu_neu[alt_id] = inv_id
 
             # Monatsdaten der Investition importieren
             for md_data in inv_data.get("monatsdaten", []):
@@ -687,22 +700,39 @@ async def import_json(
         for inv_data in data.get("investitionen", []):
             await import_investition(inv_data)
 
-        # 7b. sensor_mapping komplett neu aufbauen basierend auf Bezeichnung+Typ
-        # Das sensor_mapping enthält alte IDs die nicht mehr gültig sind
+        # 7b. sensor_mapping auf die neu vergebenen Investitions-IDs umschreiben.
+        # Die Zuordnung hängt an den IDs der Quell-Installation — sowohl in
+        # `investitionen` als auch in den `quellen`-Feld-IDs. Bis Export-Version
+        # 1.2 trug die Datei die Quell-IDs nicht; dort bleibt es beim Verwerfen,
+        # weil es nichts gibt, worauf sich umschreiben ließe (#353).
         if imported_sensor_mapping:
-            # Wir löschen das alte Investitionen-Mapping komplett
-            # Der Benutzer muss das Sensor-Mapping nach Import neu konfigurieren
-            imported_sensor_mapping["investitionen"] = {}
+            bericht = remap_investitionen_ids(imported_sensor_mapping, alt_id_zu_neu)
             new_anlage.sensor_mapping = imported_sensor_mapping
             from sqlalchemy.orm.attributes import flag_modified
             flag_modified(new_anlage, "sensor_mapping")
 
-            warnungen.append(
-                "WICHTIG: Das Sensor-Mapping für Investitionen wurde zurückgesetzt, da die Investitions-IDs "
-                "nach dem Import nicht mehr übereinstimmen. Bitte konfigurieren Sie das Sensor-Mapping neu "
-                "(Einstellungen → Home Assistant → Sensor-Zuordnung)."
+            if bericht.uebernommen:
+                warnungen.append(
+                    f"Sensor-Zuordnung für {bericht.uebernommen} Komponente(n) übernommen "
+                    "(Basis-Zähler und Komponenten-Felder bleiben erhalten)."
+                )
+            if bericht.hat_verworfen:
+                verworfen = ", ".join(bericht.verworfen[:8])
+                mehr = f" (und {len(bericht.verworfen) - 8} weitere)" if len(bericht.verworfen) > 8 else ""
+                warnungen.append(
+                    "WICHTIG: Für folgende Einträge ließ sich die Sensor-Zuordnung nicht übernehmen "
+                    f"und wurde entfernt: {verworfen}{mehr}. "
+                    + (
+                        "Die Datei stammt aus einer Version vor 1.3 und enthält die dafür nötigen "
+                        "Komponenten-IDs nicht. "
+                        if not alt_id_zu_neu else ""
+                    )
+                    + "Bitte die betroffenen Felder unter Einstellungen → Datenquellen neu zuordnen."
+                )
+            logger.info(
+                "sensor_mapping-Remap: %d Komponenten übernommen, %d Einträge verworfen",
+                bericht.uebernommen, len(bericht.verworfen),
             )
-            logger.info("sensor_mapping Investitionen zurückgesetzt - IDs nicht übertragbar")
 
         # 8. Monatsdaten (Zählerwerte) importieren
         for md_data in data.get("monatsdaten", []):

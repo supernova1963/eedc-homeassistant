@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Backup einspielen löscht die Sensor-Zuordnung der Komponenten nicht mehr.** Wer eine Anlage aus einer JSON-Sicherung wiederherstellte, verlor dabei die Zuordnung **aller Komponenten** — Speicher, Wallbox, PV-Strings, Wärmepumpe. Der Import meldete das zwar als Warnung, die aber im Erfolgs-Rauschen unterging; sichtbar wurde es erst daran, dass Stundenwerte, Prognose-IST, Heatmap und Monatsbericht für die betroffenen Komponenten leer blieben. Besonders bitter beim **Reimport einer korrigierten Datei**: eine vorher funktionierende Zuordnung war danach weg. **Ursache:** Beim Import bekommen alle Komponenten neue interne Nummern, und die Zuordnung hängt genau an diesen Nummern — die Sicherungsdatei enthielt sie aber nicht, also konnte der Import sie nicht umschreiben und hat sie verworfen. **Jetzt** trägt die Sicherung die Nummern mit (Dateiformat **1.3**), und der Import schreibt die Zuordnung auf die neuen Komponenten um — sowohl für die Auswertungen als auch für die Anzeige unter **Einstellungen → Datenquellen**. Der Import meldet im Ergebnis, für wie viele Komponenten die Zuordnung übernommen wurde.
+  - **Ältere Sicherungen (Format 1.0–1.2) lassen sich nicht heilen** — ihnen fehlen die Nummern schlicht. Dort bleibt es beim bisherigen Verhalten, der Import sagt jetzt aber ausdrücklich, dass die Datei aus einer älteren Version stammt und welche Einträge deshalb neu zuzuordnen sind. Wer künftig sicher zurückspielen will, exportiert einmal neu.
+  - **Basis-Zähler (Einspeisung, Netzbezug, PV gesamt) waren nie betroffen** und bleiben es auch — sie hängen an keiner Komponenten-Nummer.
+  - Nicht auflösbare Einträge werden beim Import **entfernt statt stehengelassen**: eine Zuordnung zu einer Komponente, die es nicht mehr gibt, wäre für alle Auswertungen tote Last.
+
+  *(#353, coolxmad)*
+
+---
+
 ## [4.0.3] - 2026-07-29 — Zugeordnete Sensoren wirken überall · Daten-Checker weist den richtigen Weg
 
 ### Fixed

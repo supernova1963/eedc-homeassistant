@@ -56,8 +56,14 @@ BASIS_ENERGY_FELD: dict[str, str] = {
 QUELLEN_HA = ("ha_app", "ha_connector")
 
 
-def _split_inv(rest: str) -> tuple[Optional[str], Optional[str]]:
-    """`{inv_id}_{feld}` → (inv_id, feld); identisch zu `datenquellen_resolver`."""
+def split_inv(rest: str) -> tuple[Optional[str], Optional[str]]:
+    """`{inv_id}_{feld}` → (inv_id, feld); identisch zu `datenquellen_resolver`.
+
+    Öffentlich, weil der JSON-Import dieselbe Zerlegung braucht, um die
+    `quellen`-Feld-IDs auf die neu vergebenen Investitions-IDs umzuschreiben
+    (`import_export/sensor_mapping_remap.py`, #353). Eine vierte Kopie der
+    Prefix-Zerlegung wäre genau die Drift, gegen die dieses Modul gebaut ist.
+    """
     inv_id, sep, feld = rest.partition("_")
     if not sep or not inv_id.isdigit() or not feld:
         return None, None
@@ -104,7 +110,7 @@ def uebernehme_quelle_ins_mapping(
         return _setze_live(live, field_id[len("basis_live_"):], ist_ha, entity_id)
 
     if field_id.startswith("inv_energy_"):
-        inv_id, feld = _split_inv(field_id[len("inv_energy_"):])
+        inv_id, feld = split_inv(field_id[len("inv_energy_"):])
         if inv_id is None:
             return False
         inv = _inv_eintrag(mapping, inv_id, anlegen=ist_ha)
@@ -116,7 +122,7 @@ def uebernehme_quelle_ins_mapping(
         return _setze_energie(felder, feld, ist_ha, entity_id)
 
     if field_id.startswith("inv_live_"):
-        inv_id, key = _split_inv(field_id[len("inv_live_"):])
+        inv_id, key = split_inv(field_id[len("inv_live_"):])
         if inv_id is None:
             return False
         inv = _inv_eintrag(mapping, inv_id, anlegen=ist_ha)
