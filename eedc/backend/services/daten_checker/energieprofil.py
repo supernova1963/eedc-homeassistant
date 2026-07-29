@@ -23,7 +23,22 @@ from backend.core.berechnungen import (
     PV_STATUS_FEHLT,
 )
 
-from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from .kategorien import (
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
+)
+
+
+# Achse B deckt die MONATS-Ebene ab. Tages- und Stundenwerte lesen ausschließlich
+# kumulative kWh-Zähler (`snapshot/lts_aggregator` liest nur den `felder`-Zweig,
+# nie `live`) — eine manuell/importiert gepflegte Anlage hat dort weiterhin
+# nichts. Ohne diesen Zusatz las sich „Energieprofil-Abdeckung ist damit erfüllt"
+# als Gesamt-Freigabe: Forum #32 (Johannes, 2026-07-28) hatte einen vollständigen
+# Monat, Cockpit/Tag durchgehend 0 und einen stillen Checker.
+_REICHWEITE_MONAT = (
+    " Das gilt für die Monatsauswertungen: Tages- und Stundenwerte brauchen "
+    "weiterhin kumulative kWh-Zähler — ohne sie bleiben Cockpit/Tag und die "
+    "Stundenwerte leer."
+)
 
 
 # Datenquelle-Werte, die für eine manuell/importiert befüllte Monatsdaten-
@@ -110,9 +125,10 @@ class EnergieprofilChecks:
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung=f"Basis-Zähler über {manuelle_quelle} befüllt",
                 details=(
-                    f"Einspeisung/Netzbezug ohne Sensor-Mapping, aber die "
+                    f"Einspeisung/Netzbezug ohne Zuordnung, aber die "
                     f"Monatsdaten werden über {manuelle_quelle} gepflegt — "
                     f"Energieprofil-Abdeckung ist damit erfüllt."
+                    + _REICHWEITE_MONAT
                 ),
             ))
         elif fehlende_basis:
@@ -121,10 +137,10 @@ class EnergieprofilChecks:
                 meldung=f"Kein Basis-Zähler für: {', '.join(fehlende_basis)}",
                 details=(
                     "Ohne kumulative kWh-Zähler bleibt der bilanzielle Verbrauch im "
-                    "Energieprofil leer. Bitte im Sensor-Mapping-Wizard die kWh-Zähler "
-                    "(nicht die leistung_w-Sensoren) eintragen."
+                    "Energieprofil leer. Bitte unter Einstellungen → Datenquellen "
+                    "die kWh-Zeilen belegen (nicht nur die Watt-Zeilen)."
                 ),
-                link="/einstellungen/sensor-mapping",
+                link=LINK_DATENQUELLEN,
             ))
         else:
             ergebnisse.append(CheckErgebnis(
@@ -235,9 +251,11 @@ class EnergieprofilChecks:
                 details=(
                     "Ohne kumulative Zähler bleibt das Energieprofil für diese "
                     "Komponenten leer. Betroffen sind Prognosen-IST, Heatmap, "
-                    "Lernfaktor und Monatsberichte. Details: " + "; ".join(details_parts)
+                    "Lernfaktor und Monatsberichte. Zuzuordnen unter "
+                    "Einstellungen → Datenquellen (die kWh-Zeilen, nicht nur die "
+                    "Watt-Zeilen). Details: " + "; ".join(details_parts)
                 ),
-                link="/einstellungen/sensor-mapping",
+                link=LINK_DATENQUELLEN,
             ))
         if gemappt_count > 0:
             # "Alle" nur wenn keine andere Quelle / kein Fehlend daneben steht
@@ -251,8 +269,9 @@ class EnergieprofilChecks:
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung=f"{quelle_count} Komponente(n) über {manuelle_quelle} befüllt",
                 details=(
-                    f"Kein Sensor-Mapping nötig — die Monatsdaten dieser "
+                    f"Keine Zuordnung nötig — die Monatsdaten dieser "
                     f"Komponenten werden über {manuelle_quelle} gepflegt."
+                    + _REICHWEITE_MONAT
                 ),
             ))
 
@@ -553,8 +572,10 @@ class EnergieprofilChecks:
                 "Einspeisepunkt eines Balkonkraftwerks — die BKW-Erzeugung ist "
                 "im WR-Wert bereits enthalten, ein separates BKW-Mapping zählt "
                 "sie nochmal.\n\n"
-                "Prüfen: Sensor-Mapping unter Investitionen → BKW.\n"
-                "Test-Variante: BKW-Mapping temporär abklemmen und schauen, "
+                "Prüfen: Einstellungen → Datenquellen, Block des "
+                "Balkonkraftwerks.\n"
+                "Test-Variante: die BKW-Zuordnung temporär auf „keine“ setzen "
+                "und schauen, "
                 "ob PR und Tagesertrag in den physikalischen Bereich zurückkommen."
             ),
         ))

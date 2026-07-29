@@ -132,6 +132,13 @@ class DatenCheckResult:
 
 # ─── Konstanten / Labels ───────────────────────────────────────────────────
 
+# Ziel aller „hier zuordnen"-Verweise. Der frühere Sensor-Mapping-Wizard ist mit
+# v4.0.0 durch die Datenquellen-Fläche abgelöst; `/einstellungen/sensor-mapping`
+# leitet zwar um (`routeManifest.ts`), stand aber weiter als sichtbarer Link in
+# den Meldungen. Eine Konstante, damit die sechs Fundstellen nicht wieder
+# auseinanderlaufen.
+LINK_DATENQUELLEN = "/einstellungen/datenquellen"
+
 # Sprechende Kurz-Labels für Provenance-Quellen (Daten-Checker Detail-Zeile,
 # Safi105 #301). Die technischen Source-Strings aus core/source_priority.py
 # (z. B. "manual:form", "external:cloud_import:fronius_solarweb") sollen dem

@@ -4,7 +4,9 @@
  *
  * Aus `pages/LiveDashboard.tsx` extrahiert (IA-V4 A.3) — EINE Code-Wahrheit für
  * IST-Live + `v4/CockpitLiveV4`. Reine Darstellung; `heutePvKwh` (IST-PV heute)
- * fließt in den „verbleibend/übertroffen"-Vergleich der Heute-Zeile ein.
+ * fließt in den „verbleibend/übertroffen"-Vergleich der Heute-Zeile ein — ist er
+ * `null` (Erzeugung unbekannt), entfällt die Vergleichszeile ganz, statt 0
+ * anzunehmen.
  */
 import { Info } from 'lucide-react'
 import type { LiveWetterResponse } from '../../api/liveDashboard'
@@ -55,8 +57,18 @@ export default function SolarAussicht3Tage({ prognose3Tage, wetter, heutePvKwh }
           const verbrTooltip = wetter?.profil_typ?.startsWith('individuell')
             ? `Individuelles Profil (${wetter.profil_typ === 'individuell_wochenende' ? 'Wochenende' : 'Werktag'}, ${wetter.profil_tage ?? '?'} Tage) — Haus + Batterie + WP + Wallbox + Sonstige`
             : 'BDEW H0 Standardlastprofil — Haus + Batterie + WP + Wallbox + Sonstige'
-          const verbleibenKwh = i === 0 && wetter?.pv_prognose_kwh != null ? (() => {
-            const diff = wetter.pv_prognose_kwh - (heutePvKwh ?? 0)
+          // „verbleibend" ist eine Differenz-Aussage: Tagesprognose minus dem,
+          // was heute schon erzeugt wurde. Ohne den Subtrahenden gibt es keine
+          // Aussage — `heutePvKwh == null` heißt „eedc kennt die heutige
+          // Erzeugung nicht" (keine kWh-/W-Zuordnung, keine HA-History) und
+          // darf NICHT als 0 gelesen werden: die Zeile behauptete dann die volle
+          // Tagesprognose als ausstehend (Forum #22, Algie 2026-07-28).
+          // 0 ≠ nicht vorhanden ([[feedback_sensor_ableitbar_nicht_weglassen]]):
+          // `heutePvKwh === 0` bleibt eine gültige Aussage („PV noch nicht
+          // gestartet") und zeigt weiterhin die volle Restmenge — genau der
+          // Zweck von `a0cb32cd`, nur ohne die Null-Substitution.
+          const verbleibenKwh = i === 0 && wetter?.pv_prognose_kwh != null && heutePvKwh != null ? (() => {
+            const diff = wetter.pv_prognose_kwh - heutePvKwh
             const nachSU = wetter.sunset ? (() => {
               const now = new Date()
               const [h, m] = wetter.sunset!.split(':').map(Number)

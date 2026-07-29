@@ -12,7 +12,9 @@ from sqlalchemy import select
 
 from backend.models.anlage import Anlage
 
-from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
+from .kategorien import (
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN,
+)
 
 
 class SensorChecks:
@@ -181,6 +183,7 @@ class SensorChecks:
           jeder Aussetzer permanent verloren, einzelne Stunden können fehlen)
         - **kWh-Feld + LTS vorhanden** → OK
         """
+        from backend.core.field_definitions import FELD_LABELS
         from backend.services.ha_statistics_service import get_ha_statistics_service
         from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
 
@@ -201,14 +204,31 @@ class SensorChecks:
         basis = mapping.get("basis") or {}
         # Nur kumulative kWh-Counter prüfen. `strompreis` ist ct/kWh bzw. €/kWh
         # (Live-Preis-Sensor) und braucht kein state_class — wird nur live
-        # gelesen, nicht aus LTS aggregiert. `pv_gesamt` ist heute nur als
-        # `pv_gesamt_w` (Live-W) gemappt, ebenfalls kein LTS-Bedarf.
+        # gelesen, nicht aus LTS aggregiert.
         # (Joachim-PN 2026-05-04: grid_price_monitor wurde fälschlich als
         # fehlender kWh-Sensor gemeldet.)
+        #
+        # `pv_gesamt` fehlt hier bewusst — die frühere Begründung („heute nur als
+        # `pv_gesamt_w` (Live-W) gemappt") ist zwar überholt (der Zählerstand ist
+        # über `BASIS_ENERGY_TOPICS` zuordenbar und wird von
+        # `aktueller_monat._ha_stats_monatswerte` als `pv_erzeugung_kwh` aus LTS
+        # gelesen), aber die Aufnahme ist NICHT die Einzeiler-Ergänzung, als die
+        # sie aussieht: der Sammelzähler ist der Notstopfen für Wechselrichter
+        # ohne einzeln erfasste Strings und wird nach kWp verteilt. Ob er
+        # gelesen wird, entscheidet die dreistufige Präzedenz in
+        # `core/berechnungen/pv_verteilung.resolve_pv_je_modul` — das Aggregat
+        # gilt, sobald AUCH NUR EIN aktives Modul keinen eigenen Wert hat, nicht
+        # erst wenn keines misst. Ein Guard „irgendein Modul-Zähler vorhanden"
+        # würde genau die Teil-Abdeckung stumm schalten, in der das Aggregat
+        # zählt; und er wäre eine zweite Wahrheit neben
+        # `datenquellen_validierung.finde_redundante_aggregate` (die den
+        # Wechselrichter bewusst NICHT als Komponente zählt). Sauber gelöst
+        # gehört das zusammen mit N51/DOK-9 in dieselbe Checker-Datei
+        # (Backlog §F R4), nicht als Anhängsel hier.
         for key in ("einspeisung", "netzbezug"):
             m = basis.get(key)
             if isinstance(m, dict) and m.get("strategie") == "sensor" and m.get("sensor_id"):
-                kwh_sensors.append((m["sensor_id"], f"Basis: {key}"))
+                kwh_sensors.append((m["sensor_id"], f"Basis: {FELD_LABELS.get(key, key)}"))
 
         # Investitions-Bezeichnungen für aussagekräftige Labels + Lifecycle-Status
         inv_label = {str(i.id): i.bezeichnung for i in (anlage.investitionen or [])}
@@ -232,7 +252,10 @@ class SensorChecks:
                 sid = m.get("sensor_id")
                 if not sid:
                     continue
-                lbl = f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: {feld}"
+                lbl = (
+                    f"{inv_label.get(str(inv_id), f'Inv. {inv_id}')}: "
+                    f"{FELD_LABELS.get(feld, feld)}"
+                )
                 if feld in counter_fields:
                     counter_sensors.append((sid, lbl))
                 else:
@@ -277,7 +300,7 @@ class SensorChecks:
                     "Sensor mit state_class=total_increasing wählen. "
                     f"Betroffen: {beispiele}"
                 ),
-                link="/einstellungen/sensor-mapping",
+                link=LINK_DATENQUELLEN,
             ))
 
         if counter_missing:
@@ -302,7 +325,7 @@ class SensorChecks:
                     "customize ergänzen — dann laufen alle Reparatur-Werkzeuge auf "
                     f"diesem Sensor. Betroffen: {beispiele}"
                 ),
-                link="/einstellungen/sensor-mapping",
+                link=LINK_DATENQUELLEN,
             ))
 
         if kwh_sensors and not kwh_missing:
@@ -412,7 +435,7 @@ class SensorChecks:
                         f"(klemmt auf 0). Bitte für „{label}\" einen Leistungssensor "
                         f"(W/kW) wählen; aktuell: {eid}."
                     ),
-                    link="/einstellungen/sensor-mapping",
+                    link=LINK_DATENQUELLEN,
                 ))
             else:  # erwartet == "energie": Leistungssensor im kWh-Slot (#200)
                 ergebnisse.append(CheckErgebnis(
@@ -428,7 +451,7 @@ class SensorChecks:
                         "ableiten (ungenauer, anfällig für Lücken). Bitte für "
                         f"„{label}\" einen kWh-Zähler wählen; aktuell: {eid}."
                     ),
-                    link="/einstellungen/sensor-mapping",
+                    link=LINK_DATENQUELLEN,
                 ))
 
         return ergebnisse

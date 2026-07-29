@@ -138,3 +138,65 @@ async def test_weder_sensor_noch_quelle_warnt_wie_bisher(db):
         "Ohne Sensor und ohne manuelle Quelle muss wie bisher gewarnt werden, fand:\n"
         + "\n".join(f"  {r.schwere.value}: {r.meldung}" for r in ergebnisse)
     )
+
+
+async def test_ok_zweig_nennt_die_reichweite_monat(db):
+    """Achse-B-OK gilt nur für Monatswerte — der Detailtext muss das sagen.
+
+    Forum #32 (Johannes, 2026-07-28): Monatsdaten vollständig, Cockpit/Tag
+    durchgehend 0 kWh, Daten-Checker still. Ursache ist keine Fehlbewertung,
+    sondern eine zu weit gelesene Aussage: Tages-/Stundenwerte kommen
+    ausschließlich aus kumulativen kWh-Zählern (`snapshot/lts_aggregator` liest
+    nur den `felder`-Zweig, nie `live`) und bleiben ohne sie leer. Die Schwere
+    bleibt bewusst OK — sonst bekäme jede sauber importiert gepflegte Anlage
+    eine Dauerwarnung.
+    """
+    anlage = await _seed(db)
+    db.add(_md(anlage.id, 2025, 1, "custom_import"))
+    await db.commit()
+    anlage = await _reload(db, anlage.id)
+    monatsdaten = list((await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage.id)
+    )).scalars().all())
+
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_energieprofil_abdeckung(anlage, monatsdaten)
+
+    quelle_oks = [r for r in ergebnisse if "Custom-Import" in r.meldung]
+    assert quelle_oks, "OK-Meldungen mit Quellen-Hinweis erwartet"
+    for r in quelle_oks:
+        assert r.schwere == CheckSeverity.OK, (
+            f"Schwere muss OK bleiben (keine Dauerwarnung), war: {r.schwere}"
+        )
+        assert r.details and "Tages- und Stundenwerte" in r.details, (
+            "Der OK-Text muss seine Reichweite nennen (Monat ≠ Tag/Stunde), "
+            f"fand: {r.details!r}"
+        )
+
+
+async def test_warnung_verweist_auf_datenquellen_flaeche(db):
+    """Der WARNING-Zweig schickt in die Datenquellen-Fläche, nicht in den
+    seit v4.0.0 abgelösten Sensor-Mapping-Wizard."""
+    anlage = await _seed(db)
+    db.add(_md(anlage.id, 2025, 1, "ha_statistics"))
+    await db.commit()
+    anlage = await _reload(db, anlage.id)
+    monatsdaten = list((await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage.id)
+    )).scalars().all())
+
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_energieprofil_abdeckung(anlage, monatsdaten)
+
+    mit_link = [r for r in ergebnisse if r.link]
+    assert mit_link, "Abdeckungs-Warnungen sollen einen Sprungpunkt tragen"
+    for r in mit_link:
+        assert r.link == "/einstellungen/datenquellen", (
+            f"Link muss auf die Datenquellen-Fläche zeigen, war: {r.link}"
+        )
+        assert "Sensor-Mapping-Wizard" not in (r.details or ""), (
+            "Der Wizard existiert seit v4.0.0 nicht mehr"
+        )
+        assert "leistung_w" not in (r.details or ""), (
+            "Interne Feldkürzel gehören nicht in Anwendertexte"
+        )
