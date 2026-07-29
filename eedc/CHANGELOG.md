@@ -7,6 +7,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.3] - 2026-07-29 — Zugeordnete Sensoren wirken überall · Daten-Checker weist den richtigen Weg
+
+### Fixed
+
+- **In der Datenquellen-Fläche zugeordnete Sensoren wirken jetzt überall — Cockpit und Daten-Checker bleiben nicht mehr leer.** Wer seine Sensoren **ab v4.0.0** über **Einstellungen → Datenquellen** oder im Setup-Wizard über **„Energiekonfiguration aus Home Assistant übernehmen"** zugeordnet hat, sah ein widersprüchliches Bild: die Fläche zeigte den Sensor samt aktuellem Zählerstand, das **Live-Dashboard** lief — aber **Cockpit → Tag/Monat/Jahr**, das Energieprofil und die Monatsabschluss-Vorschläge blieben leer, und der **Daten-Checker** meldete „Kein Basis-Zähler für: Einspeisung, Netzbezug" für genau die Zähler, die eine Zeile darüber mit ihrem Wert standen.
+  - **Ursache:** Die neue Fläche schrieb die Zuordnung nur als **Herkunfts-Angabe** („dieses Feld kommt aus Home Assistant, Entität X"). Die Auswertungen zählen ihre Zähler aber über die **Sensor-Zuordnung** der Anlage auf — und die blieb leer. Beide Angaben werden ab jetzt gemeinsam geschrieben; das war die eine Stelle, an der die neue Oberfläche eine halbe Wahrheit hinterließ.
+  - **Wen es betrifft:** vor allem **Neuinstallationen ab v4.0.0** sowie alle, die seither eine Zuordnung in der Fläche **geändert oder ergänzt** haben (z. B. eine neu angelegte Komponente). Wer aus v3 aktualisiert und seine Zuordnung nicht angefasst hat, war nie betroffen — dort steht sie noch aus dem alten Wizard. Anlagen ohne Home Assistant (MQTT/Standalone) waren ebenfalls nicht betroffen.
+  - **Was beim Update passiert:** Eine einmalige Reparatur zieht bestehende Zuordnungen selbsttätig nach. **Es muss nichts neu zugeordnet werden**, es geht nichts verloren, und wer eine Quelle bewusst auf „keine" oder MQTT gestellt hat, behält diese Wahl.
+  - **Vergangene Tage:** Die Zählerstände wurden die ganze Zeit **mitgeschrieben** — die Historie ist also da, nur nicht verrechnet. Sie lässt sich unter **Einstellungen → Energieprofil-Pflege** mit „Tag neu berechnen" bzw. „Mehrere Tage neu aggregieren" nachziehen. Ab dem Update rechnen neue Tage von selbst richtig.
+
+  *(Forum simon42, Beiträge 36–41 im v4.0.0-Thread: Algie und CHI3fx117)*
+
+- **Daten-Checker: die Meldungen führen wieder dorthin, wo man es repariert.** Sechs Meldungen verwiesen weiterhin auf den **Sensor-Mapping-Wizard**, den v4.0.0 durch die **Datenquellen**-Fläche abgelöst hat — der Link leitete zwar um, der Text schickte aber sichtbar an eine Stelle, die es nicht mehr gibt. Alle Meldungen zeigen jetzt auf **Einstellungen → Datenquellen**. Nebenbei sind die internen Kürzel raus (`leistung_w` in einer Anwender-Meldung), und die LTS-Hinweise nennen die Feld-**Bezeichnung** statt des Roh-Schlüssels („Basis: Einspeisung" statt „Basis: einspeisung"). *(Forum: Algie, pipp086)*
+
+- **Daten-Checker sagt jetzt, wie weit sein „alles in Ordnung" reicht.** Wer seine Monatsdaten importiert oder von Hand pflegt, bekam die grüne Meldung „Basis-Zähler über … befüllt" — die sich wie eine Gesamt-Freigabe las. Sie gilt aber nur für die **Monatsauswertungen**: Tages- und Stundenwerte lesen ausschließlich kumulative kWh-Zähler, ohne sie bleiben Cockpit → Tag und die Stundenwerte leer. Genau diese Kombination (voller Monat, leerer Tag, stiller Checker) stand im Forum. Der Satz steht jetzt in der Meldung; **grün bleibt es trotzdem** — eine importiert gepflegte Anlage soll keine Dauerwarnung bekommen.
+
+- **Cockpit → Aussicht: keine „verbleibende" Menge, wenn das heutige IST unbekannt ist.** Solange für heute noch kein gemessener PV-Wert vorliegt, wurde er als **0** behandelt — die Zeile „verbl." behauptete daraufhin die **volle** Tagesprognose als noch ausstehend. Unbekannt ist aber keine Null: ohne gemessenen Wert entfällt die Zeile jetzt. Eine echte 0 („PV noch nicht gestartet") bleibt eine gültige Aussage und zeigt weiterhin die volle Restmenge.
+
+---
+
 ## [4.0.2] - 2026-07-28 — Speicher rechnet mit der nutzbaren Kapazität · Prognose folgt dem Wettermodell · Autarkie wieder plausibel
 
 ### Added
