@@ -79,6 +79,9 @@ die tatsächlichen Werte.
   Hausverbrauch", wenn die PV eines Monats gar nicht auflösbar war.
 - Neu geprüft wird der **PV-Gesamtzähler** auf Langzeitstatistik: ohne `state_class` liefert er für
   die Monatswerte still nichts.
+- Neu ist auch eine **Frage** statt einer Anschuldigung: Ist „Einspeisung + Speicherladung aus PV"
+  größer als die Erzeugung des Monats, fragt der Checker nach. Meist fehlt dann nur das Feld
+  **Ladung aus Netz** (wer nachts günstig lädt) — dann stimmt die Energie, nur die Zuordnung nicht.
 
 - Zusätzlich meldet der Daten-Checker ein **überbelegtes Balkonkraftwerk ohne gepflegte
   Wechselrichter-Grenze** (ab 800 W Modulleistung) und nennt die **Wärmepumpen-Felder

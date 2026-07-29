@@ -7,6 +7,7 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 from datetime import date
 from typing import Optional
 
+from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
@@ -150,6 +151,7 @@ class MonatsdatenChecks:
         # das ist korrekt und darf keine Warnung auslösen.
         # Werte werden auch für die Energiebilanz gebraucht (aggregiert über alle Speicher).
         speicher_imd_bat: dict[tuple[int, int], tuple[float, float]] = {}  # (jahr,monat) → (ladung, entladung)
+        speicher_imd_netzladung: dict[tuple[int, int], float] = {}  # (jahr,monat) → Netzladung
         # Monate, in denen mind. ein Speicher zeitlich aktiv war (Anschaffung erfolgt,
         # noch nicht stillgelegt). Verhindert Warnungen für Monate VOR der ersten
         # Batterie-Installation (Issue #226 JanKgh: PV seit 11/2021, Speicher erst
@@ -176,6 +178,13 @@ class MonatsdatenChecks:
                         speicher_imd_bat[key] = (
                             prev[0] + (ladung or 0),
                             prev[1] + (entladung or 0),
+                        )
+                        # Netzladung (Arbitrage) getrennt mitführen: sie kommt
+                        # NICHT aus der PV und darf im Verwendungs-Stapel (N51)
+                        # nicht gegen die Erzeugung gerechnet werden.
+                        speicher_imd_netzladung[key] = (
+                            speicher_imd_netzladung.get(key, 0.0)
+                            + get_speicher_netzladung_kwh(daten)
                         )
         speicher_imd_monate = set(speicher_imd_bat.keys())
 
@@ -290,6 +299,62 @@ class MonatsdatenChecks:
                     ),
                     link=md_link,
                 ))
+
+            # 3b. Verwendungs-Stapel > Erzeugung (N51, Gernot 2026-07-29)
+            #
+            # Prüfung 3 vergleicht nur die Einspeisung mit der Erzeugung. Was
+            # in den Speicher geladen wurde, kam aber ebenfalls aus der PV —
+            # AUSSER dem Arbitrage-Anteil, der aus dem Netz stammt. Übersteigt
+            # `Einspeisung + (Speicherladung − Netzladung)` die Erzeugung, ist
+            # eine der drei Zahlen falsch.
+            #
+            # **Bewusst als FRAGE und als WARNING**, nicht als Fehler: der
+            # häufigste Auslöser ist eine ungepflegte Netzladung — wer nachts
+            # billig lädt und das nicht erfasst, bekommt hier einen ehrlichen
+            # Hinweis statt einer Anschuldigung. Rein diagnostisch: die Meldung
+            # ändert keine Berechnung und keine Anzeige.
+            #
+            # Nur wenn PV-Ladung > 0, sonst wäre es eine zweite (und schwächere)
+            # Meldung über denselben Sachverhalt wie Prüfung 3.
+            bat_ladung_monat, _ = speicher_imd_bat.get((md.jahr, md.monat), (0.0, 0.0))
+            pv_ladung_speicher = max(
+                0.0,
+                bat_ladung_monat - speicher_imd_netzladung.get((md.jahr, md.monat), 0.0),
+            )
+            if (
+                pv_erzeugung is not None
+                and pv_erzeugung > 0
+                and md.einspeisung_kwh is not None
+                and pv_ladung_speicher > 0
+            ):
+                stapel = md.einspeisung_kwh + pv_ladung_speicher
+                # Toleranz: Zählerstände werden je Quelle gerundet, und die drei
+                # Zahlen kommen aus verschiedenen Sensoren mit eigenen Messfehlern.
+                toleranz = max(5.0, pv_erzeugung * 0.02)
+                if stapel > pv_erzeugung + toleranz:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=(
+                            f"{prefix}: mehr PV verwendet als erzeugt? "
+                            f"Einspeisung ({md.einspeisung_kwh:.0f}) + Speicherladung aus PV "
+                            f"({pv_ladung_speicher:.0f}) = {stapel:.0f} kWh, "
+                            f"erzeugt wurden {pv_erzeugung:.0f} kWh"
+                        ),
+                        details=(
+                            "Beides kommt aus derselben Erzeugung — zusammen kann es "
+                            "nicht mehr sein als die PV geliefert hat. Drei häufige "
+                            "Ursachen, in dieser Reihenfolge: (1) Der Speicher wird "
+                            "auch aus dem Netz geladen (Arbitrage/Notladung), aber das "
+                            "Feld „Ladung aus Netz“ ist nicht gepflegt — dann ist nur "
+                            "die Zuordnung unvollständig, nicht die Energie. "
+                            "(2) Die Erzeugung ist zu niedrig erfasst, etwa weil ein "
+                            "String-Sensor im Monat ausgesetzt hat. (3) Einspeisung "
+                            "und Netzbezug sind vertauscht (dann meldet die Prüfung "
+                            "darüber meist zusätzlich). Rein diagnostisch — es wird "
+                            "nichts automatisch korrigiert."
+                        ),
+                        link=md_link,
+                    ))
 
             # 4. Beide Kernfelder 0
             if md.einspeisung_kwh == 0 and md.netzbezug_kwh == 0:
