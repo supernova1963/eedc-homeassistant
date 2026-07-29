@@ -16,6 +16,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
@@ -235,6 +236,10 @@ async def get_cockpit_uebersicht(
     speicher_entladung_by_ym: dict[tuple[int, int], float] = {}
     v2h_by_ym: dict[tuple[int, int], float] = {}
     bkw_eigenverbrauch_by_ym: dict[tuple[int, int], float] = {}
+    # BKW je Monat getrennt führen: das Anlagen-Aggregat deckt nur
+    # `pv-module` ab, die Finanzzeile unten setzt sich deshalb aus dem
+    # aufgelösten Modul-Wert PLUS dem BKW zusammen.
+    bkw_erzeugung_by_ym: dict[tuple[int, int], float] = {}
     bkw_erzeugung = 0.0
     bkw_eigenverbrauch = 0.0
     sonstiges_erzeugung = 0.0
@@ -312,6 +317,7 @@ async def get_cockpit_uebersicht(
             bkw_eigenverbrauch += b.bkw_eigenverbrauch
             pv_erzeugung_inv += b.bkw_erzeugung
             pv_erzeugung_inv_by_ym[key] = pv_erzeugung_inv_by_ym.get(key, 0) + b.bkw_erzeugung
+            bkw_erzeugung_by_ym[key] = bkw_erzeugung_by_ym.get(key, 0) + b.bkw_erzeugung
             bkw_eigenverbrauch_by_ym[key] = bkw_eigenverbrauch_by_ym.get(key, 0) + b.bkw_eigenverbrauch
 
         elif inv.typ == "sonstiges":
@@ -406,8 +412,26 @@ async def get_cockpit_uebersicht(
     einspeisung = sum(m.einspeisung_kwh or 0 for m in md_pv)
     netzbezug = sum(m.netzbezug_kwh or 0 for m in md_pv)
 
-    pv_erzeugung_md = sum(m.pv_erzeugung_kwh or 0 for m in md_pv)
-    pv_erzeugung = pv_erzeugung_inv if pv_erzeugung_inv > 0 else pv_erzeugung_md
+    # PV je Monat über den Read-time-SoT: gemessene Modulwerte + Lücken aus dem
+    # Anlagen-Aggregat. Ersetzt das globale Entweder-oder
+    # (`pv_erzeugung_inv if pv_erzeugung_inv > 0 else pv_erzeugung_md`), das eine
+    # Anlage mit gemischter Historie um ihre Aggregat-Monate brachte: sobald ein
+    # einziger Monat Pro-Modul-Werte hatte, zählten die Aggregat-Monate GAR
+    # NICHT mehr — Erzeugungs-Kachel, spezifischer Ertrag und Finanzen fielen
+    # gemeinsam zu niedrig aus. Genau der Fall, für den das Aggregat existiert
+    # (Umstellung auf Pro-String-Messung mitten in der Historie).
+    pv_modul_je_monat = pv_summe_je_monat(
+        await lade_pv_je_monat(
+            db, anlage_id, [i for i in investitionen if i.typ == "pv-module"]
+        )
+    )
+    # BKW liegt außerhalb des Aggregats (das deckt nur `pv-module` ab) und wird
+    # additiv geführt — wie bisher.
+    pv_monate = set(pv_modul_je_monat) | set(bkw_erzeugung_by_ym)
+    pv_erzeugung = sum(
+        (pv_modul_je_monat.get(key) or 0.0) + bkw_erzeugung_by_ym.get(key, 0.0)
+        for key in pv_monate
+    )
 
     # Netzpunkt-Bilanz: sonstige Erzeuger (z. B. BHKW) speisen hinter denselben
     # Zähler → ihre Erzeugung gehört in die EV/Autarkie-Ableitung, sonst drückt
@@ -464,20 +488,13 @@ async def get_cockpit_uebersicht(
     # Sonst rutschen WP-/Speicher-/Zähler-Monate aus der Zeit vor PV-Inbetrieb-
     # nahme rein, periode_anteil wird zu groß und spez_ertrag zu klein
     # (Symptom: ~300 kWh/kWp bei "alle Jahre").
-    covered_months: set[tuple[int, int]] = set()
-    for imd in all_imd:
-        inv = inv_by_id.get(imd.investition_id)
-        if not inv or inv.typ not in ("pv-module", "balkonkraftwerk"):
-            continue
-        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-            continue
-        covered_months.add((imd.jahr, imd.monat))
-    # Fallback für Setups ohne PV-IMDs (nur Anlagen-Zähler):
-    # Monate mit pv_erzeugung > 0 aus Monatsdaten heranziehen.
-    if not covered_months:
-        for md in md_pv:
-            if (md.pv_erzeugung_kwh or 0) > 0:
-                covered_months.add((md.jahr, md.monat))
+    # Aus derselben Quelle wie `pv_erzeugung` oben: jeder Monat mit aufgelöster
+    # PV zählt — gemessen ODER über das Aggregat gefüllt. Der frühere Aufbau
+    # (rohe IMD-Zeilen, dann ein Fallback „nur wenn GAR keine IMD existieren")
+    # trug denselben Fehler wie die Erzeugungssumme: bei gemischter Historie
+    # fehlten die Aggregat-Monate, `periode_anteil` wurde zu klein und der
+    # spezifische Ertrag entsprechend zu hoch.
+    covered_months: set[tuple[int, int]] = set(pv_monate)
 
     # Annualisierung über den SoT-Helper (per-Monat-aktives kWp + saisonale
     # Gewichtung) — deckungsgleich mit dem HA-Export-Sensor
@@ -583,8 +600,13 @@ async def get_cockpit_uebersicht(
         return _tarif_cache[stichtag]
 
     netzbezug_kosten = 0.0
-    # PV-Quelle pro Monat wie beim Aggregat wählen (IMD bevorzugt, sonst Zähler).
-    use_inv_pv = pv_erzeugung_inv > 0
+    # PV je Monat über den Read-time-SoT statt über ein globales Flag.
+    # Vorher: `use_inv_pv = pv_erzeugung_inv > 0` und dann
+    # `pv_erzeugung_inv_by_ym.get(m_key, 0.0)` — sobald IRGENDEIN Monat
+    # IMD-Werte hatte, stand für alle anderen Monate 0 in der Finanzzeile,
+    # auch wo ein Anlagen-Aggregat vorlag; und in teilweise gemessenen
+    # Monaten ging die rohe Teilsumme ein. Identischer Befund wie in
+    # `ha_export.py` — dieselbe Zeile, zweimal gebaut.
     # #326: Finanz-Aggregation (Einspeise-Erlös §51 + EV-/BKW-Ersparnis) über den
     # SoT-Helper `berechne_finanz_aggregat` — per-Monat mit dem Monats-Flexpreis
     # (Σ EV_m × p_m), deckungsgleich mit Jahresbericht-PDF, HA-Export und
@@ -605,7 +627,9 @@ async def get_cockpit_uebersicht(
         netzbezug_kosten += berechne_netzbezug_kosten(kwh, eff_preis, m_grundpreis)
 
         m_key = (m.jahr, m.monat)
-        m_pv = pv_erzeugung_inv_by_ym.get(m_key, 0.0) if use_inv_pv else (m.pv_erzeugung_kwh or 0)
+        # Aufgelöste Modul-PV + BKW; `None` (unvollständige Auflösung) zählt
+        # als 0 statt als Teilsumme (N42).
+        m_pv = (pv_modul_je_monat.get(m_key) or 0.0) + bkw_erzeugung_by_ym.get(m_key, 0.0)
         m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, m.jahr, m.monat)
         # #326: FinanzMonatsZeile über den gemeinsamen Builder (einzige erlaubte
         # Konstruktions-Stelle, Wächter) — derselbe `_tarif_cache` → der Preis der

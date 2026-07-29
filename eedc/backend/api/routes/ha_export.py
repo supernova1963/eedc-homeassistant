@@ -36,6 +36,7 @@ from backend.core.berechnungen import (
     vollzyklen as berechne_vollzyklen,
 )
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 from datetime import date
 
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
@@ -295,27 +296,24 @@ async def calculate_anlage_sensors(
     investitionen = result.scalars().all()
 
     # PV-Module IDs für InvestitionMonatsdaten
-    pv_module_ids = [inv.id for inv in investitionen if inv.typ == "pv-module"]
+    pv_module_invs = [inv for inv in investitionen if inv.typ == "pv-module"]
+    pv_module_ids = [inv.id for inv in pv_module_invs]
     inv_by_id = {inv.id: inv for inv in investitionen}
 
     # PV-Erzeugung aus InvestitionMonatsdaten aggregieren
     # Drift-Audit F: nur Monate ab Anschaffungsdatum berücksichtigen.
     # #326: zusätzlich pro (jahr, monat) für die per-Monat-korrekte EV-Ersparnis.
-    pv_erzeugung = 0.0
-    pv_by_ym: dict[tuple[int, int], float] = {}
-    if pv_module_ids:
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id.in_(pv_module_ids))
-        )
-        for imd in imd_result.scalars().all():
-            inv = inv_by_id.get(imd.investition_id)
-            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                continue
-            data = imd.verbrauch_daten or {}
-            pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
-            pv_erzeugung += pv_kwh
-            pv_by_ym[(imd.jahr, imd.monat)] = pv_by_ym.get((imd.jahr, imd.monat), 0.0) + pv_kwh
+    # PV je Monat über den Read-time-SoT (Messwerte + Aggregat-Lückenfüllung)
+    # statt einer rohen IMD-Summe. Die rohe Summe kannte das Anlagen-Aggregat
+    # gar nicht: eine Anlage, deren frühe Monate nur als Gesamtwert vorliegen
+    # (Umstellung auf Pro-String-Messung mitten in der Historie), verlor diese
+    # Monate im PV-Sensor, im spezifischen Ertrag und in den Finanzzeilen —
+    # bzw. bekam über den Fallback unten eine SCHÄTZUNG, obwohl echte Werte
+    # gepflegt waren. Zwillingsstelle: `cockpit/uebersicht.py`.
+    pv_je_monat = pv_summe_je_monat(
+        await lade_pv_je_monat(db, anlage.id, pv_module_invs)
+    )
+    pv_erzeugung = sum(v or 0.0 for v in pv_je_monat.values())
 
     # DI-2-B: Erzeuger hinter dem EINEN Hauszähler in die EV-/Autarkie-/CO₂-
     # Bilanz aufnehmen — deckungsgleich mit dem Cockpit (uebersicht.py:309-322,
@@ -328,7 +326,7 @@ async def calculate_anlage_sensors(
     #   • Sonstige Erzeuger (Mini-BHKW/KWK) speisen ebenfalls hinter den Zähler →
     #     zählen in EV/Autarkie, bleiben aber aus den PV-eigenen Kennzahlen
     #     (spez. Ertrag/PR) und aus der PV-Erzeugungs-Anzeige draußen.
-    # Der Finanz-Pfad (`pv_by_ym`) bleibt REIN pv-module — die BKW-Ersparnis läuft
+    # Der Finanz-Pfad (`pv_je_monat`) bleibt REIN pv-module — die BKW-Ersparnis läuft
     # separat über `bisherige_bkw_ersparnis` (kein Doppel-Ansatz); CO₂/Wirtschaft-
     # lichkeit eines Brennstoff-Erzeugers bleibt bewusst neutral.
     bkw_erzeugung = 0.0
@@ -436,13 +434,12 @@ async def calculate_anlage_sensors(
     # mit der Cockpit-Kachel (Rainer-PN 2026-06-11: die alte Roh-Division
     # Lebenszeit-kWh ÷ heutiges kWp lieferte einen über die Laufzeit
     # aufkumulierten Wert, ~3× Jahreswert bei 3 Jahren Historie).
-    spez_covered_months = set(pv_by_ym.keys())
-    if not spez_covered_months:
-        # Fallback ohne PV-IMDs (reine Zähler-Setups): Monate mit Legacy-PV>0 —
-        # symmetrisch zum Cockpit-Fallback in cockpit/uebersicht.py.
-        spez_covered_months = {
-            (m.jahr, m.monat) for m in monatsdaten if (m.pv_erzeugung_kwh or 0) > 0
-        }
+    # Aus derselben Quelle wie `pv_erzeugung`: jeder Monat mit aufgelöster PV
+    # zählt, gemessen ODER über das Aggregat gefüllt. Der frühere
+    # Zwei-Wege-Aufbau (IMD-Monate, sonst Monate mit Legacy-PV>0) ließ bei
+    # gemischter Historie die Aggregat-Monate aus und machte den spezifischen
+    # Ertrag dadurch zu hoch.
+    spez_covered_months = set(pv_je_monat)
     spez_gewichte = None
     if spez_covered_months:
         pvgis = await lade_aktive_prognose(db, anlage.id)
@@ -493,9 +490,14 @@ async def calculate_anlage_sensors(
         # Strompreis für alle Jahre. Deckungsgleich mit Cockpit/Jahresbericht
         # (rilmor-mhrs: Jahres-Tarife 23,90→32,80 ct).
         _tarif_cache: dict[date, dict] = {}
-        # PV-Quelle pro Monat wie das Aggregat: IMD bevorzugt, sonst Zähler-
-        # Legacy-Feld (deckungsgleich mit cockpit/uebersicht.py `use_inv_pv`).
-        use_inv_pv = bool(pv_by_ym)
+        # PV je Monat über den Read-time-SoT statt über ein globales Flag.
+        # Vorher: `use_inv_pv = bool(pv_by_ym)` und dann `pv_by_ym.get(key, 0.0)`
+        # — zwei Fehler in einem. (a) In einem Monat mit nur TEILWEISE gemessenen
+        # Strings ging die rohe Teilsumme in die Finanzzeile. (b) Sobald
+        # IRGENDEIN Monat IMD-Werte hatte, lieferte `.get(key, 0.0)` für alle
+        # anderen Monate 0 — auch dort, wo ein Anlagen-Aggregat vorlag. Eine
+        # Anlage, die mitten in der Historie auf Pro-String-Messung umgestellt
+        # hat, verlor damit ihre Vorgeschichte in Finanzen und spez. Ertrag.
         finanz_zeilen: list[FinanzMonatsZeile] = []
         for m in monatsdaten:
             key = (m.jahr, m.monat)
@@ -503,7 +505,10 @@ async def calculate_anlage_sensors(
                 await get_neg_preis_einspeisung_monat(db, anlage.id, m.jahr, m.monat)
                 if m.einspeisung_kwh else None
             )
-            m_pv = pv_by_ym.get(key, 0.0) if use_inv_pv else (m.pv_erzeugung_kwh or 0)
+            # `None` = Auflösung unvollständig (Modul ohne Wert UND ohne
+            # Aggregat) — dann bleibt die Zeile bei 0, statt eine Teilsumme
+            # als Erzeugung auszuweisen (N42).
+            m_pv = pv_je_monat.get(key) or 0.0
             finanz_zeilen.append(await baue_finanz_zeile(db, anlage.id, FinanzZeileEingabe(
                 jahr=m.jahr, monat=m.monat,
                 einspeisung_kwh=m.einspeisung_kwh or 0,
