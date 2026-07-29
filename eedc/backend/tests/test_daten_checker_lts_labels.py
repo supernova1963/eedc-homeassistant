@@ -26,7 +26,12 @@ from backend.models import Anlage, Investition  # noqa: F401
 
 
 class _FakeHaStats:
-    """HA-LTS-Doppel: alles verfügbar außer den explizit fehlenden IDs."""
+    """HA-LTS-Doppel: alles verfügbar außer den explizit fehlenden IDs.
+
+    Seit 2026-07-29 fragt der Check `filter_summen_faehige_sensor_ids` statt
+    nur nach Existenz — hier haben alle vorhandenen Sensoren eine Summen-Spalte
+    (die Gegenprobe dazu steht in `test_daten_checker_lts_summen_spalte.py`).
+    """
 
     is_available = True
 
@@ -37,6 +42,10 @@ class _FakeHaStats:
         valid = [s for s in sids if s not in self._fehlend]
         missing = [s for s in sids if s in self._fehlend]
         return valid, missing
+
+    def filter_summen_faehige_sensor_ids(self, sids):
+        mit_sum, fehlend = self.filter_valid_sensor_ids(sids)
+        return mit_sum, [], fehlend
 
 
 async def _seed(db: AsyncSession) -> Anlage:

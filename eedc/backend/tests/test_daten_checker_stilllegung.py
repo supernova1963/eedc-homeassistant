@@ -346,6 +346,13 @@ async def test_sensor_mapping_lts_ignoriert_stillgelegten_sensor(db, monkeypatch
             missing = [s for s in sids if s == "sensor.wr_b_alt_kwh"]
             return valid, missing
 
+        def filter_summen_faehige_sensor_ids(self, sids):
+            # Seit 2026-07-29 fragt der Check zusätzlich die Summen-Spalte ab;
+            # hier haben alle vorhandenen Sensoren eine (Gegenprobe:
+            # test_daten_checker_lts_summen_spalte.py).
+            mit_sum, fehlend = self.filter_valid_sensor_ids(sids)
+            return mit_sum, [], fehlend
+
     monkeypatch.setattr(ha_mod, "get_ha_statistics_service", lambda: _FakeHaStats())
 
     checker = DatenChecker(db)

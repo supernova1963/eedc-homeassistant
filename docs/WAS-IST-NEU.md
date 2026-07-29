@@ -14,6 +14,28 @@
 > **Diese Sektion bekommt beim Release ihre Versionsnummer.** Bis dahin steht hier, was seit
 > v4.0.3 fertig ist.
 
+### Leere Tageswerte trotz „alles grün": eedc sagt jetzt, woran es liegt
+
+**Betrifft dich das?** Wenn dein **Live-Dashboard Werte zeigt**, aber **Cockpit → Tag und die
+Stundenwerte auf 0 stehen** — und der Daten-Checker trotzdem nichts bemängelt.
+
+Dahinter steckt fast immer eine Kleinigkeit am Sensor: Ein kWh-Zähler braucht in Home Assistant
+`state_class: total_increasing`. Steht dort **`measurement`**, merkt sich HA für ihn nur Mittel-,
+Min- und Max-Werte — **keine Zählerstände**. eedc kann daraus keine Tages- und Stundenwerte bilden.
+Die Live-Ansicht merkt davon nichts, weil sie aus den Watt-Sensoren rechnet; genau deshalb sieht so
+eine Anlage von außen gesund aus.
+
+Bisher hat der Daten-Checker nur gefragt, ob der Sensor **überhaupt** in der Langzeitstatistik
+auftaucht — und das tut er in diesem Zustand. Jetzt unterscheidet er beide Fälle, nennt die
+betroffenen Zähler beim Namen und sagt, was zu tun ist. **Nach der Umstellung** die Tage einmal über
+**Einstellungen → Energieprofil-Pflege → Reparatur-Werkbank** neu berechnen — Home Assistant sammelt
+die Zählerstände erst ab dem Moment, in dem `state_class` richtig steht.
+
+Besonders häufig betrifft das Zähler, bei denen man `state_class` von Hand nachträgt — die
+bitShake-/Tasmota-Lesekopf-Familie setzt von sich aus keines. Für Counter wie die
+WP-Kompressor-Starts gibt es eine eigene Meldung: die laufen weiter, nur die Reparatur-Werkzeuge
+greifen auf ihnen nicht.
+
 ### Balkonkraftwerk: die Prognose passt jetzt zum Gerät
 
 Ein Balkonkraftwerk ist fast immer überbelegt — drei Module à 420 Wp ergeben 1,26 kWp, der

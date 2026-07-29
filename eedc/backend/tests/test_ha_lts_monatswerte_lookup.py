@@ -136,6 +136,28 @@ def test_filter_valid_sensor_ids_erhaelt_reihenfolge():
     assert missing == ["sensor.b", "sensor.d"]
 
 
+def test_filter_summen_faehige_trennt_drei_zustaende():
+    """Für Energie-Zähler ist „steht in statistics_meta" zu wenig: ohne
+    `has_sum` liefert der Stunden-Reader nichts (Forum #89667/44). Die Methode
+    trennt deshalb dritt-genau — `filter_valid_sensor_ids` bleibt daneben
+    bestehen, weil der Live-Backfill W-Sensoren prüft, die nie `has_sum` haben.
+    """
+    svc = _make_service_with_mock_db()
+    _seed_sensor(svc, "sensor.zaehler", "kWh", has_sum=True)
+    _seed_sensor(svc, "sensor.measurement", "kWh", has_sum=False)
+    mit_sum, ohne_sum, fehlend = svc.filter_summen_faehige_sensor_ids(
+        ["sensor.zaehler", "sensor.measurement", "sensor.unbekannt"]
+    )
+    assert mit_sum == ["sensor.zaehler"]
+    assert ohne_sum == ["sensor.measurement"]
+    assert fehlend == ["sensor.unbekannt"]
+
+    # Gegenprobe: der alte Prüfer sieht denselben measurement-Sensor als gültig —
+    # genau das war das Loch, und genau deshalb bleibt er unverändert bestehen.
+    valid, missing = svc.filter_valid_sensor_ids(["sensor.measurement"])
+    assert valid == ["sensor.measurement"] and missing == []
+
+
 def test_count_statistics_sensors():
     svc = _make_service_with_mock_db()
     assert svc.count_statistics_sensors() == 0

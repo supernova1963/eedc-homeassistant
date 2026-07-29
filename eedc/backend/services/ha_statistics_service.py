@@ -264,6 +264,47 @@ class HAStatisticsService:
                     missing.append(sid)
         return valid, missing
 
+    def filter_summen_faehige_sensor_ids(
+        self, sensor_ids: list[str],
+    ) -> tuple[list[str], list[str], list[str]]:
+        """Teilt Sensor-IDs nach ihrer Eignung als **Energie-Zähler** auf.
+
+        Schärfer als `filter_valid_sensor_ids`: dort genügt ein Eintrag in
+        `statistics_meta`. Für kWh-/Counter-Felder reicht das nicht — ohne
+        `has_sum` überspringt `get_hourly_kwh_deltas_for_day` **jede Zeile**
+        des Sensors (`continue`), er fehlt danach im Ergebnis, und Tages- wie
+        Stundenwerte bleiben leer.
+
+        Von außen ist dieser Zustand nicht von „Sensor gar nicht zugeordnet"
+        zu unterscheiden: HA legt auch für `state_class: measurement` eine
+        `statistics_meta`-Zeile an (mean/min/max), nur eben ohne Summen-Spalte.
+        Ein Prüfer, der nur die Existenz abfragt, meldet deshalb „alles in
+        Ordnung", während Cockpit/Tag auf 0 steht — Forum simon42 #89667/44,
+        Gerätefamilie bitShake/Tasmota, wo `state_class` von Hand nachgetragen
+        wird und `measurement` statt `total_increasing` der bekannte Griff
+        daneben ist.
+
+        `filter_valid_sensor_ids` bleibt bewusst unverändert — der Live-Backfill
+        (`energie_profil/backfill.py`) prüft damit **W-Sensoren**, die
+        korrekterweise kein `has_sum` haben.
+
+        Returns:
+            (mit_sum, ohne_sum, fehlend) — Reihenfolge der Eingabe bleibt erhalten.
+        """
+        mit_sum: list[str] = []
+        ohne_sum: list[str] = []
+        fehlend: list[str] = []
+        with self._engine.connect() as conn:
+            for sid in sensor_ids:
+                meta = self.get_metadata(conn, sid)
+                if meta is None:
+                    fehlend.append(sid)
+                elif meta.has_sum:
+                    mit_sum.append(sid)
+                else:
+                    ohne_sum.append(sid)
+        return mit_sum, ohne_sum, fehlend
+
     def get_sensor_monatswert(
         self,
         conn,
