@@ -183,6 +183,26 @@ describe('baueNetzKostenKpis (via baueMonatKpis)', () => {
     expect(k.subtitle).toBe('112 kWh · 25,12 €')
   })
 
+  it('Batterieladung Netz benennt die tatsächliche Preis-Herkunft', () => {
+    // Forum simon42 #89667/56 (MartyBr): die Kachel sagte pauschal „aus der
+    // Strompreis-Mitschrift", auch wenn der Preis aus dem Tarif kam. Ein
+    // falsches Etikett schickt den Anwender auf die falsche Fehlersuche.
+    const herkunft = (quelle: string | null) => baueMonatKpis(d({
+      speicher_ladung_netz_kwh: 19,
+      speicher_ladung_netz_kosten_euro: 5.45,
+      speicher_ladung_netz_preis_cent: 28.7,
+      speicher_ladung_netz_preis_quelle: quelle,
+    }), vm).find((x) => x.title === 'Batterieladung Netz')!.formel
+
+    expect(herkunft('tep')).toContain('aus der Strompreis-Mitschrift')
+    expect(herkunft('imd')).toContain('aus deiner Eingabe im Monatsabschluss')
+    expect(herkunft('bezugspreis')).toContain('Arbeitspreis deines Tarifs')
+    // Festpreis-Anlage: gerade NICHT die Mitschrift behaupten.
+    expect(herkunft('bezugspreis')).not.toContain('Mitschrift')
+    // Unbekannte/fehlende Quelle behauptet lieber nichts.
+    expect(herkunft(null)).toContain('Herkunft unbekannt')
+  })
+
   it('Ø-Preis Netz bevorzugt den dynamischen Monats-Ø vor dem Tarif', () => {
     const k = baueMonatKpis(d({
       netzbezug_kwh: 1153,

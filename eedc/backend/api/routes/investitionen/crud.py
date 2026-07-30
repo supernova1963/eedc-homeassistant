@@ -91,8 +91,8 @@ def _aufloesen_ladepreis(
     """Liefert (ladepreis_cent, quelle) für die ROI-Berechnung.
 
     Etappe C1/C4: Helper liefert immer ein Ergebnis. Bei nicht-belastbarer
-    Quelle (`keine-tep-daten`, `keine-netzladung`, `datenbasis-zu-duenn` mit
-    `effektiver_ladepreis_cent=None`) Param-Fallback. Ohne Arbitrage und
+    Quelle (`keine-tep-daten`, `keine-netzladung`, `kein-dyn-tarif`,
+    `datenbasis-zu-duenn` mit `effektiver_ladepreis_cent=None`) Param-Fallback. Ohne Arbitrage und
     ohne Param: `None` → der Spread-Service behandelt das als kostenneutral.
     """
     if eff_ladepreis is None:

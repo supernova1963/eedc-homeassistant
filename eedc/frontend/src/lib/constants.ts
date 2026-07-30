@@ -186,11 +186,26 @@ export const SAISON_FENSTER = {
 export const LADEPREIS_QUELLE_LABELS: Record<string, string> = {
   'dyn-tarif': 'dyn. Tarif',
   'boersenpreis': 'Börsenpreis',
+  // Festpreis-Tarif: kein stündlicher Ladepreis ermittelbar, die Kosten laufen
+  // über den Arbeitspreis. NICHT „Datenbasis dünn" — es fehlt nichts.
+  'kein-dyn-tarif': 'Festpreis-Tarif',
   'datenbasis-zu-duenn': 'Datenbasis dünn',
   'keine-netzladung': 'keine Netzladung',
   'keine-tep-daten': 'keine Profildaten',
   'bezugspreis-fallback': 'Bezugspreis',
   'param': 'Parameter',
+}
+
+/**
+ * Herkunft des Netzladungs-Preises (Backend `speicher_ladung_netz_preis_quelle`,
+ * Preis-Kette in `core/berechnungen/speicher_wirtschaftlichkeit.py`). Als
+ * Halbsatz formuliert — die Kachel setzt ihn in Klammern hinter den Kennwert.
+ */
+export const NETZLADUNG_PREIS_HERKUNFT: Record<string, string> = {
+  tep: 'aus der Strompreis-Mitschrift',
+  imd: 'aus deiner Eingabe im Monatsabschluss',
+  bezugspreis: 'Arbeitspreis deines Tarifs',
+  keine: 'keine Netzladung',
 }
 
 export const WIRKUNGSGRAD_QUELLE_LABELS: Record<string, string> = {

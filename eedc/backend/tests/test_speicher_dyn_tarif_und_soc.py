@@ -84,6 +84,21 @@ async def _db_ctx():
         await engine.dispose()
 
 
+async def _seed_tarif(db: AsyncSession, anlage_id: int, *, vertragsart: str | None):
+    """Stromtarif (Verwendung `allgemein`) — entscheidet über den Börsenpreis."""
+    from backend.models.strompreis import Strompreis
+
+    db.add(Strompreis(
+        anlage_id=anlage_id,
+        netzbezug_arbeitspreis_cent_kwh=28.67,
+        einspeiseverguetung_cent_kwh=8.2,
+        gueltig_ab=date(2024, 1, 1),
+        vertragsart=vertragsart,
+        verwendung="allgemein",
+    ))
+    await db.commit()
+
+
 async def _seed_tep_stunden(db: AsyncSession, anlage_id: int, rows: list[dict]):
     """Seeded TEP-Zeilen, jeweils mit datum/stunde + Sensorwerten."""
     for r in rows:
@@ -166,9 +181,15 @@ async def test_effektiver_ladepreis_pv_ladung_zaehlt_nicht() -> None:
 
 
 async def test_effektiver_ladepreis_fallback_auf_boersenpreis() -> None:
-    """Ohne strompreis_cent (kein dyn. Tarif) → Boersenpreis-Quelle."""
+    """Dynamischer Tarif, aber kein Preis-Sensor → Boersenpreis-Quelle.
+
+    Der Ersatz ist hier sinnvoll: die Stundenform stimmt, nur die Aufschläge
+    fehlen. Voraussetzung ist der ausdrücklich dynamische Tarif — ohne ihn
+    greift `test_kein_boersenpreis_ohne_dynamischen_tarif`.
+    """
     async with _db_ctx() as (db, anlage_id):
         d = date(2025, 5, 1)
+        await _seed_tarif(db, anlage_id, vertragsart="dynamisch")
         rows = [
             {"datum": d, "stunde": 3, "batterie_kw": -2.0, "netzbezug_kw": 2.0,
              "boersenpreis_cent": 5.5},
@@ -181,6 +202,57 @@ async def test_effektiver_ladepreis_fallback_auf_boersenpreis() -> None:
         assert r is not None
         assert r.quelle == "boersenpreis"
         assert _approx(r.effektiver_ladepreis_cent, 6.0)
+
+
+async def test_kein_boersenpreis_ohne_dynamischen_tarif() -> None:
+    """Festpreis-Vertrag: der Börsenpreis ist NICHT sein Ladepreis.
+
+    Forum simon42 #89667/56 (MartyBr): Kachel „Batterieladung Netz" zeigte
+    6,4 ct/kWh, während der Anwender 28,67 ct zahlt — der EPEX-Preis war als
+    Ersatz eingesprungen. Erwartung: kein Wert, eigene Quelle; die Kosten
+    rechnet der Aufrufer über IMD-Ø bzw. Arbeitspreis.
+
+    Beide Formen zählen als „nicht dynamisch": ausdrücklich `fix` UND das
+    leere Dropdown (der Normalfall — `vertragsart` ist optional).
+    """
+    for vertragsart in ("fix", None):
+        async with _db_ctx() as (db, anlage_id):
+            d = date(2025, 5, 1)
+            await _seed_tarif(db, anlage_id, vertragsart=vertragsart)
+            rows = [
+                {"datum": d, "stunde": 3, "batterie_kw": -2.0, "netzbezug_kw": 2.0,
+                 "boersenpreis_cent": 5.5},
+                {"datum": d, "stunde": 4, "batterie_kw": -2.0, "netzbezug_kw": 2.0,
+                 "boersenpreis_cent": 6.5},
+            ]
+            await _seed_tep_stunden(db, anlage_id, rows)
+
+            r = await berechne_effektiver_ladepreis(db, anlage_id=anlage_id, von=d, bis=d)
+            assert r.quelle == "kein-dyn-tarif", vertragsart
+            assert r.effektiver_ladepreis_cent is None, vertragsart
+            # Die Netzlade-Stunden bleiben gezählt — es ist keine Datenlücke.
+            assert r.netzlade_stunden_gesamt == 2, vertragsart
+
+
+async def test_preis_sensor_schlaegt_tarifart() -> None:
+    """Festpreis-Tarif, aber Preis je Stunde vorhanden → Wert wird gerechnet.
+
+    Wer seinen (auch festen) Preis als Sensor mitschreiben lässt, bekommt
+    seinen eigenen Preis — die Tarifart sperrt nur den Börsenpreis-Ersatz.
+    """
+    async with _db_ctx() as (db, anlage_id):
+        d = date(2025, 5, 1)
+        await _seed_tarif(db, anlage_id, vertragsart="fix")
+        rows = [
+            {"datum": d, "stunde": 3, "batterie_kw": -2.0, "netzbezug_kw": 2.0,
+             "strompreis_cent": 28.67, "boersenpreis_cent": 5.5},
+            {"datum": d, "stunde": 4, "batterie_kw": -2.0, "netzbezug_kw": 2.0,
+             "strompreis_cent": 28.67, "boersenpreis_cent": 6.5},
+        ]
+        await _seed_tep_stunden(db, anlage_id, rows)
+
+        r = await berechne_effektiver_ladepreis(db, anlage_id=anlage_id, von=d, bis=d)
+        assert _approx(r.effektiver_ladepreis_cent, 28.67)
 
 
 async def test_effektiver_ladepreis_abdeckung_unter_schwelle_quelle_datenbasis() -> None:

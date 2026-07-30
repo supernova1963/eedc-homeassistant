@@ -72,8 +72,14 @@ class EffektiverLadepreisErgebnis:
 
     - `"dyn-tarif"`: Endkundenpreis aus dem HA-Sensor (z. B. Tibber) —
       mindestens eine Stunde hatte `strompreis_cent`. Belastbarster Wert.
-    - `"boersenpreis"`: EPEX Day-Ahead aus aWATTar-API (kein dyn. Endkunden-
-      tarif konfiguriert). Tarif-Aufschläge fehlen, aber stündliche Verteilung.
+    - `"boersenpreis"`: EPEX Day-Ahead aus aWATTar-API — nur bei ausdrücklich
+      dynamischem Tarif ohne zugeordneten Preis-Sensor. Tarif-Aufschläge
+      fehlen, aber stündliche Verteilung.
+    - `"kein-dyn-tarif"`: Netzladung vorhanden, aber kein Endkundenpreis je
+      Stunde und kein dynamischer Tarif — bei einem Festpreis ist der
+      stündliche Ladepreis keine sinnvolle Größe. `effektiver_ladepreis_cent`
+      ist `None`; die Kosten rechnet der Aufrufer mit dem IMD-Ø bzw. dem
+      Arbeitspreis (Forum simon42 #89667/56).
     - `"datenbasis-zu-duenn"`: TEP-Stunden vorhanden, aber Preis-Abdeckung
       unter `LADEPREIS_STUNDEN_ABDECKUNG_MIN`. Wert wird trotzdem geliefert,
       darf vom Caller aber nur informativ behandelt werden — das UI zeigt
@@ -118,14 +124,40 @@ async def berechne_effektiver_ladepreis(
         ladung_kwh_h = max(0, -batterie_kw_h)        # nur Ladung
         netz_kwh_h   = max(0, netzbezug_kw_h)        # Netzbezug der Stunde
         netz_lade_h  = min(ladung_kwh_h, netz_kwh_h) # NICHT aus PV-Überschuss
-        preis_h      = strompreis_cent_h or boersenpreis_cent_h
+        preis_h      = strompreis_cent_h or boersenpreis_cent_h*
         kosten_h     = netz_lade_h × preis_h / 100
+
+    \\* Der Börsenpreis-Ersatz gilt **nur bei ausdrücklich dynamischem Tarif**
+    (`Strompreis.vertragsart == "dynamisch"`, Verwendung `allgemein`). Dort ist
+    er ein Näherungswert mit richtiger Stundenform und fehlenden Aufschlägen.
+    Bei jedem anderen Tarif ist er schlicht der falsche Preis: EPEX ≈ 6 ct
+    gegen einen Festpreis von 28,67 ct — gemeldet als Forum simon42 #89667/56
+    (MartyBr), Kachel „Batterieladung Netz". Die Regel steht bereits in
+    `strompreis_aggregator.py`: „Börsenpreis ist kein Endkundenpreis"; der
+    verbrauchsgewichtete Ø-Bezugspreis hält sich daran, diese Kette tat es
+    nicht. Ohne dynamischen Tarif liefert der Helper deshalb `None` und die
+    Preis-Kette in `berechne_netzladung_kosten` fällt auf den IMD-Ø der
+    Handeingabe bzw. den Arbeitspreis durch — beides Preise, die der Anwender
+    wirklich zahlt.
+
+    Bewusst **positive Evidenz** statt `vertragsart == "fix"`: das Feld ist ein
+    optionales Dropdown („Bitte wählen"), leer ist der Normalfall. Eine Regel
+    auf `"fix"` würde die Mehrheit der Festpreis-Anlagen nicht erreichen.
 
     Liefert immer ein Ergebnis (Etappe C1) — die `quelle` sagt, was draus
     folgt: Werte mit Quelle `dyn-tarif`/`boersenpreis` sind belastbar,
-    `datenbasis-zu-duenn`/`keine-netzladung`/`keine-tep-daten` sind
-    informativ für das UI-Badge.
+    `datenbasis-zu-duenn`/`kein-dyn-tarif`/`keine-netzladung`/`keine-tep-daten`
+    sind informativ für das UI-Badge.
     """
+    # Tarifart EINMAL vorab (Stichtag = Fensterbeginn; eedc rechnet Monate mit
+    # einem Preis). SoT-Helper statt eigener Query — er kennt die Verwendungs-
+    # Trennung allgemein/waermepumpe/wallbox. Die Speicher-Netzladung läuft über
+    # den Haushaltszähler, also `allgemein`.
+    from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id, von)
+    allgemein_tarif = tarife.get("allgemein")
+    hat_dyn_tarif = bool(allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch")
     # Spalten-Projektion statt voller ORM-Zeilen: der Helper braucht nur diese
     # vier Float-Spalten. Volle TEP-Objekte würden pro Zeile zwei JSON-Spalten
     # (komponenten + source_provenance) deserialisieren — bei mehrjährigen
@@ -181,7 +213,9 @@ async def berechne_effektiver_ladepreis(
 
         netzlade_stunden_gesamt += 1
 
-        preis = row.strompreis_cent if row.strompreis_cent is not None else row.boersenpreis_cent
+        preis = row.strompreis_cent
+        if preis is None and hat_dyn_tarif:
+            preis = row.boersenpreis_cent
         if preis is None:
             continue
         if row.strompreis_cent is not None:
@@ -199,6 +233,21 @@ async def berechne_effektiver_ladepreis(
             netz_lade_kwh=0.0,
             netzlade_stunden_mit_preis=0,
             netzlade_stunden_gesamt=0,
+            stunden_gesamt_im_fenster=len(rows),
+        )
+
+    # Netzladung ja, aber kein Endkundenpreis je Stunde UND kein dynamischer
+    # Tarif: hier ist nichts „zu dünn" — die Frage nach einem stündlichen
+    # Ladepreis stellt sich bei einem Festpreis gar nicht. Eigene `quelle`,
+    # damit das UI nicht fälschlich eine Datenlücke behauptet, und Wert `None`,
+    # damit die Preis-Kette auf IMD-Ø bzw. Arbeitspreis durchfällt.
+    if stunden_mit_preis == 0 and not hat_dyn_tarif:
+        return EffektiverLadepreisErgebnis(
+            quelle="kein-dyn-tarif",
+            effektiver_ladepreis_cent=None,
+            netz_lade_kwh=0.0,
+            netzlade_stunden_mit_preis=0,
+            netzlade_stunden_gesamt=netzlade_stunden_gesamt,
             stunden_gesamt_im_fenster=len(rows),
         )
 

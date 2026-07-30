@@ -22,7 +22,7 @@ import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
 import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
 import { Parkbar } from '../components/park'
-import { DATENROLLE, VERGLEICH_BADGE } from '../lib'
+import { DATENROLLE, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
 import type { KpiStripItem } from '../components/blocks'
@@ -130,7 +130,12 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       value: fmtCalc(d.speicher_ladung_netz_preis_cent, 1, '—'), unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzladungKosten,
       subtitle: `${fmt(d.speicher_ladung_netz_kwh)} kWh · ${fmtCalc(d.speicher_ladung_netz_kosten_euro, 2, '—')} €`,
-      formel: 'Ø-Ladepreis der Netzladung (aus der Strompreis-Mitschrift) · Kosten = Netzladung × Ladepreis',
+      // Die Herkunft steht in der Herleitung, weil die Kachel drei verschiedene
+      // Preise zeigen kann. Bis v4.0.4 behauptete sie pauschal „aus der
+      // Strompreis-Mitschrift" — auch dort, wo gar keine Mitschrift beteiligt
+      // war (Forum simon42 #89667/56, MartyBr). Ein Etikett, das die Quelle
+      // falsch benennt, ist schlimmer als keines.
+      formel: `Ø-Ladepreis der Netzladung (${NETZLADUNG_PREIS_HERKUNFT[d.speicher_ladung_netz_preis_quelle ?? ''] ?? 'Herkunft unbekannt'}) · Kosten = Netzladung × Ladepreis`,
       // Ohne Ladepreis (u. a. bei 0 kWh Netzladung) bleibt die Herleitung leer —
       // „0 kWh × — ct/kWh" wäre keine Rechnung, sondern Rauschen.
       berechnung: d.speicher_ladung_netz_preis_cent != null
