@@ -23,7 +23,8 @@
 > | **B5** | Mobile-Reduce (M1 Reduce-Logik · M2 Sticky-Header auto-hide · M3 Tabellen-Swipe) | ⬜ offen — 0 Treffer. Stakeholder-Lage dünn, s. [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) |
 > | **B12** | Single-Anlage-Selektor-Audit | 🟡 Kern erledigt (Selektor blendet bei < 2 Anlagen aus); der Audit **über alle Sichten** ist nie gelaufen |
 >
-> Diese vier stehen als **DOK-13** im Backlog (`docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D).
+> Diese vier haben keinen Nutzer-Trigger und kein Issue — sie bleiben offene Punkte dieses
+> Dokuments. Vorher standen sie als DOK-13 im Post-Flip-Backlog, der am 2026-07-30 außer Dienst ist.
 >
 > **Verwandte Dokumente:** [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (visuelle Sprache) · [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) (Mobile-Verhalten) · [ADR-001](ADR-001-BERECHNUNGS-LAYER.md)/[ADR-002](ADR-002-WURZELMUSTER.md) (Berechnung — nie mit der IA vermischen, I11) · [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243) (operativer Bausteine-Tracker, mit v4.0.0 abgeschlossen).
 
@@ -373,7 +374,7 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 ### Phase 2 — Folge-Wellen (post-v4.0.0) — **die einzigen offenen Punkte dieses Dokuments**
 
 > Stand 2026-07-28 am Code geprüft; Details + Belege im Status-Kopf oben, Nachverfolgung als
-> **DOK-13** in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D.
+> Offen, bewusst ohne Issue (kein Nutzer-Trigger).
 
 - ⬜ **B10** PageHeader-Konsolidierung — noch 17 `.tsx` mit hartem `<h1`, keine SoT-Komponente
 - ⬜ **B14** Globale Cmd+K-Suchpalette — nicht gebaut, kein Nutzer-Trigger

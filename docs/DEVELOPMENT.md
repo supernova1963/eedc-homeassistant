@@ -18,7 +18,7 @@
 >   Dokument und werden hier nirgends genannt.
 >
 > Setup, Docker-Build, Add-on-Test, Git-Workflow, Versionierung und die Code-Patterns sind gültig.
-> Nachverfolgt als **DOK-1** in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D.
+> Nachverfolgt als [Issue #359](https://github.com/supernova1963/eedc-homeassistant/issues/359).
 
 ---
 

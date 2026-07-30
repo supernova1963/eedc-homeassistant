@@ -21,7 +21,7 @@
 > der Flip war reines UI. Für Berechnungen gelten [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md) und
 > [`ADR-002`](ADR-002-WURZELMUSTER.md).
 >
-> Nachverfolgt als **DOK-1** in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §D.
+> Nachverfolgt als [Issue #359](https://github.com/supernova1963/eedc-homeassistant/issues/359).
 
 ---
 
