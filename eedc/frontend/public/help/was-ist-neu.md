@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.3 + eine unveröffentlichte Runde)
+> **Stand:** Juli 2026 (v4.0.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,10 +9,107 @@
 
 ---
 
-## Noch nicht veröffentlicht — Balkonkraftwerk, Import und PV je String (Juli 2026)
+## v4.0.4 — Lücken nachholen, Balkonkraftwerk, Import und PV je String (Juli 2026)
 
-> **Diese Sektion bekommt beim Release ihre Versionsnummer.** Bis dahin steht hier, was seit
-> v4.0.3 fertig ist.
+> **Der Schwerpunkt dieser Version:** eedc sagt jetzt, **warum** eine Sicht leer ist — und stellt,
+> wo es geht, den Knopf zum Nachholen daneben. Bisher sah eine Anlage in solchen Fällen von außen
+> gesund aus, während Cockpit und Tagesansicht nichts zeigten.
+
+### Leere Tageswerte trotz „alles grün": eedc sagt jetzt, woran es liegt
+
+**Betrifft dich das?** Wenn dein **Live-Dashboard Werte zeigt**, aber **Cockpit → Tag und die
+Stundenwerte auf 0 stehen** — und der Daten-Checker trotzdem nichts bemängelt.
+
+Dahinter steckt fast immer eine Kleinigkeit am Sensor: Ein kWh-Zähler braucht in Home Assistant
+`state_class: total_increasing`. Steht dort **`measurement`**, merkt sich HA für ihn nur Mittel-,
+Min- und Max-Werte — **keine Zählerstände**. eedc kann daraus keine Tages- und Stundenwerte bilden.
+Die Live-Ansicht merkt davon nichts, weil sie aus den Watt-Sensoren rechnet; genau deshalb sieht so
+eine Anlage von außen gesund aus.
+
+Bisher hat der Daten-Checker nur gefragt, ob der Sensor **überhaupt** in der Langzeitstatistik
+auftaucht — und das tut er in diesem Zustand. Jetzt unterscheidet er beide Fälle, nennt die
+betroffenen Zähler beim Namen und sagt, was zu tun ist. **Nach der Umstellung** die Tage einmal über
+**Einstellungen → Energieprofil-Pflege → Reparatur-Werkbank** neu berechnen — Home Assistant sammelt
+die Zählerstände erst ab dem Moment, in dem `state_class` richtig steht.
+
+Besonders häufig betrifft das Zähler, bei denen man `state_class` von Hand nachträgt — die
+bitShake-/Tasmota-Lesekopf-Familie setzt von sich aus keines. Für Counter wie die
+WP-Kompressor-Starts gibt es eine eigene Meldung: die laufen weiter, nur die Reparatur-Werkzeuge
+greifen auf ihnen nicht.
+
+**Wer die `configuration.yaml` nicht anfassen will**, kommt auch ohne sie zu einem brauchbaren
+Zähler: In Home Assistant unter **Einstellungen → Geräte & Dienste → Helfer** einen
+**Verbrauchszähler** auf den vorhandenen Sensor anlegen — **ohne Zyklus**, also ohne
+Zurücksetzen. Der bringt die richtigen Attribute von sich aus mit, und sein Name bleibt auch
+dann derselbe, wenn du später das Gerät tauschst (du änderst nur die Quelle). Einen **Zyklus**
+(täglich/monatlich) solltest du für eedc **nicht** wählen — bei jedem Zurücksetzen muss eedc den
+Sprung erkennen, und das ist eine Fehlerquelle, die du geschenkt bekommst, wenn der Zähler
+einfach durchläuft. Ein Hinweis noch: Ein neuer Helfer fängt bei null an, seine Historie beginnt
+also mit ihm. *(Danke an Rainer für den Tipp.)*
+
+### Zähler zugeordnet, Tage trotzdem leer: jetzt mit Knopf zum Nachholen
+
+**Betrifft dich das?** Wenn du auf v4.0.3 aktualisiert hast und deine Zuordnung seither wieder
+greift — die **zurückliegenden Tage** aber leer geblieben sind.
+
+Das ist kein neuer Fehler, sondern die Nachwirkung: Solange die Zuordnung unsichtbar war, hat für
+diese Tage nie eine Auswertung stattgefunden. Der Daten-Checker sagte dazu „Zähler-Abdeckung: OK" —
+stimmt ja auch, der Zähler **ist** zugeordnet. Nur half das niemandem weiter.
+
+Jetzt vergleicht eedc die gespeicherten Tage der letzten 90 Tage mit dem, was die
+**Home-Assistant-Langzeitstatistik** für dieselben Tage hergibt. Wo HA etwas hat und eedc nichts,
+steht im Daten-Checker eine Meldung — **mit dem Knopf gleich daneben**: „Zeitraum neu aggregieren"
+für die ganze Lücke (bis 31 Tage pro Durchgang, größere Lücken einfach mehrfach) oder „Tag
+reparieren" für einzelne Tage.
+
+Zwei Dinge sagt die Meldung ausdrücklich dazu:
+
+- **Wie weit es zurückreicht.** eedc kann nur holen, was Home Assistant noch hat. Ist die Lücke
+  älter als deine HA-Historie, meldet eedc das als Tatsache — und bietet keinen Knopf an, der
+  nichts holen könnte.
+- **Was repariert wird.** Die Tagesreparatur füllt **Tages- und Stundenwerte**, nicht die
+  **Monatswerte**. Für abgeschlossene Monate ist der Weg **Einstellungen → Integration →
+  Statistik-Import**: „Vorschau laden" — schon belegte Monate stehen dort unter **„Konflikte"**
+  und sind zum **Überschreiben vorausgewählt**. Vor dem Import einmal durchsehen: was hier
+  ausgewählt bleibt, wird überschrieben.
+
+Nichts davon läuft beim Start von allein. eedc erkennt es, sagt es — auslösen tust du es.
+
+**Und der Knopf sagt jetzt die Wahrheit über sich selbst.** „Mehrere Tage neu aggregieren" meldete
+bisher immer Erfolg, auch wenn kein einziger Tag nachgerechnet werden konnte. Der Lauf braucht
+nämlich mehr als den Zählerstand: ohne zugeordneten **Leistungssensor (W)** und ohne
+Home-Assistant-Historie für den Zeitraum findet er keine Kurvendaten. Jetzt steht dort, was
+tatsächlich passiert ist — und wenn deiner Anlage der Leistungssensor fehlt, erscheint der Knopf
+gar nicht mehr, sondern der Hinweis, ihn erst unter **Einstellungen → Datenquellen** zuzuordnen.
+
+**Dazu passend:** Meldet der Daten-Checker „Einspeisung größer als PV-Erzeugung" für einen Monat,
+riet er bisher zuerst zu vertauschten Sensoren. Stehen die **Tage** dieses Monats aber schon voll da
+und nur der Monatswert nicht, nennt die Meldung jetzt **diese** Ursache zuerst und den Weg zum
+Statistik-Import dazu.
+
+### Cockpit → Tag: „Eigenverbrauch" hieß dort etwas anderes
+
+Wenn du Live „Heute" und Cockpit → Tag nebeneinandergelegt hast, standen dort für den
+Eigenverbrauch zwei verschiedene Zahlen. Beide waren richtig — sie meinten nur nicht dasselbe:
+
+- **Live, Monat, Jahr und die Wirtschaftlichkeit** meinen den **PV-gedeckten Hausverbrauch**
+  (Direktverbrauch + was der Speicher wieder abgibt).
+- **Cockpit → Tag** rechnet **PV-Erzeugung − Einspeisung** — da steckt auch die **Speicherladung**
+  drin, also Energie, die noch gar nicht verbraucht wurde.
+
+Die Differenz ist genau das, was an dem Tag netto in den Speicher gewandert ist. Beides ist eine
+sinnvolle Größe, nur hießen sie gleich. **Die Zahlen bleiben, der Name ändert sich:** Die
+Tages-Kachel heißt jetzt **„PV-Eigenverbrauch"** und sagt „inkl. Speicherladung" dazu. Der
+unqualifizierte Begriff „Eigenverbrauch" gehört ab jetzt überall der ersten Größe.
+
+Zwei Kleinigkeiten aus demselben Winkel:
+
+- **Am laufenden Tag** steht die Tages-Sicht auf den **abgeschlossenen** Stunden, Live „Heute"
+  zählt die laufende schon mit — deshalb steht dort jetzt **„Stand: n von 24 Std. · laufende
+  Stunde fehlt"**. Das erklärt die kleine Differenz, die es am heutigen Tag immer gab.
+- **Der Rechenweg hinter der Autarkie-Kachel** (Tag) zeigte eine Formel, die seit v4.0.2 nicht mehr
+  zur angezeigten Zahl passte — vorgerechnet kamen an manchen Tagen über 100 % heraus. Der
+  angezeigte Prozentwert war die ganze Zeit richtig; jetzt stimmt die Erklärung dazu.
 
 ### Balkonkraftwerk: die Prognose passt jetzt zum Gerät
 

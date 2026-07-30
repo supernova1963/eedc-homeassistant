@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.3 + eine unveröffentlichte Runde)
+> **Stand:** Juli 2026 (v4.0.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,10 +9,11 @@
 
 ---
 
-## Noch nicht veröffentlicht — Lücken nachholen, Balkonkraftwerk, Import und PV je String (Juli 2026)
+## v4.0.4 — Lücken nachholen, Balkonkraftwerk, Import und PV je String (Juli 2026)
 
-> **Diese Sektion bekommt beim Release ihre Versionsnummer.** Bis dahin steht hier, was seit
-> v4.0.3 fertig ist.
+> **Der Schwerpunkt dieser Version:** eedc sagt jetzt, **warum** eine Sicht leer ist — und stellt,
+> wo es geht, den Knopf zum Nachholen daneben. Bisher sah eine Anlage in solchen Fällen von außen
+> gesund aus, während Cockpit und Tagesansicht nichts zeigten.
 
 ### Leere Tageswerte trotz „alles grün": eedc sagt jetzt, woran es liegt
 
@@ -35,6 +36,16 @@ Besonders häufig betrifft das Zähler, bei denen man `state_class` von Hand nac
 bitShake-/Tasmota-Lesekopf-Familie setzt von sich aus keines. Für Counter wie die
 WP-Kompressor-Starts gibt es eine eigene Meldung: die laufen weiter, nur die Reparatur-Werkzeuge
 greifen auf ihnen nicht.
+
+**Wer die `configuration.yaml` nicht anfassen will**, kommt auch ohne sie zu einem brauchbaren
+Zähler: In Home Assistant unter **Einstellungen → Geräte & Dienste → Helfer** einen
+**Verbrauchszähler** auf den vorhandenen Sensor anlegen — **ohne Zyklus**, also ohne
+Zurücksetzen. Der bringt die richtigen Attribute von sich aus mit, und sein Name bleibt auch
+dann derselbe, wenn du später das Gerät tauschst (du änderst nur die Quelle). Einen **Zyklus**
+(täglich/monatlich) solltest du für eedc **nicht** wählen — bei jedem Zurücksetzen muss eedc den
+Sprung erkennen, und das ist eine Fehlerquelle, die du geschenkt bekommst, wenn der Zähler
+einfach durchläuft. Ein Hinweis noch: Ein neuer Helfer fängt bei null an, seine Historie beginnt
+also mit ihm. *(Danke an Rainer für den Tipp.)*
 
 ### Zähler zugeordnet, Tage trotzdem leer: jetzt mit Knopf zum Nachholen
 

@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.4] - 2026-07-30 — Leere Sichten erklären sich · Balkonkraftwerk in der Prognose · PV je String bleibt gemessen
 
 ### Added
 
