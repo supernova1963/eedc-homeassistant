@@ -23,6 +23,7 @@ from backend.core.exceptions import bad_request, ha_db_unavailable, not_found
 from backend.api.deps import get_db
 from backend.services.activity_service import log_activity
 from backend.core.field_definitions import FELD_LABELS as _FELD_LABELS_REGISTRY
+from backend.core.field_definitions import ist_zaehler_differenz_feld
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition, InvestitionMonatsdaten
@@ -673,6 +674,10 @@ async def get_import_vorschau(
         for sensor in ha_monat.sensoren:
             # Sensor-ID zu Feld-Name mappen
             for basis_feld, basis_config in (anlage.sensor_mapping.get("basis") or {}).items():
+                # `basis` trägt neben den Zählern auch den Strompreis-Sensor;
+                # dessen Monats-Differenz ist eine Preis-Spreizung, kein Wert.
+                if not ist_zaehler_differenz_feld(basis_feld):
+                    continue
                 if basis_config and basis_config.get("sensor_id") == sensor.sensor_id:
                     ha_basis_werte[basis_feld] = sensor.differenz
 
@@ -682,6 +687,11 @@ async def get_import_vorschau(
             felder = inv_config.get("felder", {})
             ha_inv_werte[inv_id] = {}
             for feld, feld_config in felder.items():
+                # Nur Zählerfelder — s. Import-Pfad weiter unten. Die Vorschau
+                # muss dieselbe Menge zeigen wie der Import schreibt, sonst
+                # steht dort ein Wert, der nie ankommt.
+                if not ist_zaehler_differenz_feld(feld):
+                    continue
                 if feld_config and feld_config.get("sensor_id"):
                     for sensor in ha_monat.sensoren:
                         if sensor.sensor_id == feld_config["sensor_id"]:
@@ -1006,6 +1016,12 @@ async def import_ha_statistics(
                         feld_label = FELD_LABELS.get(feld, feld)
                         if feld not in erlaubte_felder and feld_label not in erlaubte_felder:
                             continue
+
+                    # `sensor_values` sind Zählerdifferenzen (MAX−MIN). Bei
+                    # einem Preis-/Kosten-Feld wäre das die Monats-Spreizung —
+                    # und die landete hier persistent in `verbrauch_daten`.
+                    if not ist_zaehler_differenz_feld(feld):
+                        continue
 
                     if feld_config and feld_config.get("sensor_id"):
                         sensor_id = feld_config["sensor_id"]

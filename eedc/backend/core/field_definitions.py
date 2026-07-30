@@ -1008,6 +1008,49 @@ def einheit_klasse(unit: Optional[str]) -> Optional[str]:
     return None
 
 
+# ─── Zählerdifferenz-Felder (SoT für „darf aus HA-LTS gelesen werden?") ─────
+# Zähler ohne Energie-Einheit: monoton steigend, der Monatswert ist die
+# Differenz zweier Zählerstände. Energie-Felder erkennt `einheit_klasse`.
+_ZAEHLER_FELDER_OHNE_ENERGIE_EINHEIT: frozenset[str] = frozenset({
+    "km_gefahren",        # km-Zähler (Auto-Integration/OBD)
+    "ladevorgaenge",      # Anzahl-Zähler der Wallbox
+    "wp_starts_anzahl",   # #136
+    "wp_betriebsstunden",  # #238
+    # Basis-Mapping-Schlüssel des PV-Sammelzählers. kWh wie „einspeisung"/
+    # „netzbezug", steht aber in KEINER Feld-Registry: es ist ein reiner
+    # Mapping-Key, kein IMD-Feld — `FELD_EINHEITEN` kennt ihn deshalb nicht.
+    # Ohne diesen Eintrag fiele der Sammelzähler still aus dem Statistik-Import
+    # (gewächtert in test_zaehler_differenz_feld.py).
+    "pv_gesamt",
+})
+
+
+def ist_zaehler_differenz_feld(feld: str) -> bool:
+    """Darf der Monatswert dieses Feldes als Zählerdifferenz gelesen werden?
+
+    Die Monatswert-Pfade aus HA (`monatsabschluss`-Vorschläge,
+    HA-Statistik-Import) rechnen ausnahmslos `MAX(sum) − MIN(sum)` mit
+    Fallback `MAX(state) − MIN(state)`. Das ist für einen Zählerstand richtig
+    und für alles andere Unsinn: bei einem Preis-Sensor käme die **Preis-Spanne
+    des Monats** heraus, bei einer Temperatur die Spreizung.
+
+    Vorher iterierten beide Pfade ungefiltert über alles, was im Mapping stand.
+    Praktisch blieb das meist folgenlos, weil ein `measurement`-Sensor weder
+    `state` noch `sum` führt und still `None` liefert — aber eine Preis-Entität
+    mit gefüllter `state`-Spalte schrieb ihre Monats-Spreizung als Ø Ladepreis
+    in die Datenbank (Forum simon42 #89667/54, Anlass war die Sensor-Zuordnung
+    an einem ct/kWh-Feld).
+
+    Kein Gegenstück in `snapshot/keys.py`: dort geht es um den stündlichen
+    Snapshot-Job, hier um den Monatswert aus HA-Langzeitstatistik. Die Mengen
+    überschneiden sich, sind aber nicht dieselbe Frage — `ladung_extern_kwh`
+    etwa ist ein Monatswert ohne Snapshot-Erfassung.
+    """
+    if einheit_klasse(FELD_EINHEITEN.get(feld)) == "energie":
+        return True
+    return feld in _ZAEHLER_FELDER_OHNE_ENERGIE_EINHEIT
+
+
 # =============================================================================
 # Reader-Helper für `verbrauch_daten`-JSON
 #

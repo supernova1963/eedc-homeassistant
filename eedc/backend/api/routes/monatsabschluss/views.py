@@ -25,6 +25,7 @@ from backend.core.field_definitions import (
     OPTIONALE_FELDER,
     get_basis_felder,
     get_felder_fuer_investition,
+    ist_zaehler_differenz_feld,
 )
 from backend.models.anlage import Anlage
 from backend.models.investition import InvestitionMonatsdaten
@@ -474,8 +475,15 @@ async def get_monatsabschluss(
                 anlage_id, feld, jahr, monat, investition_id=inv.id
             )
 
-            # Bei konfiguriertem Sensor: HA Statistics Wert als Vorschlag hinzufügen
-            if strategie == "sensor" and sensor_id and sensor_id in ha_stats_werte:
+            # Bei konfiguriertem Sensor: HA Statistics Wert als Vorschlag hinzufügen.
+            # Nur für Zählerfelder — der Wert ist eine Zählerdifferenz
+            # (MAX−MIN), bei einem Preis-Feld also die Monats-Spreizung. Ohne
+            # den Filter stand die mit Konfidenz 92 ÜBER dem korrekt
+            # gerechneten Vorschlag (s. `ist_zaehler_differenz_feld`).
+            if (
+                strategie == "sensor" and sensor_id and sensor_id in ha_stats_werte
+                and ist_zaehler_differenz_feld(feld)
+            ):
                 stats_wert = ha_stats_werte[sensor_id]
                 if stats_wert > 0:
                     vorschlaege.insert(0, Vorschlag(
