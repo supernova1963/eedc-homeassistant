@@ -125,8 +125,6 @@ const T_MIGRATION_OFFEN = new Set([
   // Slice T-6: V3 / Wizards / Settings — ziehen mit Donor→V4 nach
   'src/components/energieprofil/EnergieprofilTageTabelle.tsx', 'src/components/energieprofil/ReaggregatePreviewModal.tsx',
   'src/components/repair/RepairWorkbench.tsx',
-  'src/pages/aussichten/KurzfristTab.tsx',
-  'src/pages/auswertung/InvestitionenTab.tsx',
   'src/pages/CloudImportWizard.tsx', 'src/pages/CustomImportWizard.tsx', 'src/pages/DataImportWizard.tsx',
   'src/pages/HAStatistikImport.tsx', 'src/pages/MonatsdatenTeile.tsx',
   'src/pages/ProtokolleTeile.tsx', 'src/pages/PVGISSettingsTeile.tsx',

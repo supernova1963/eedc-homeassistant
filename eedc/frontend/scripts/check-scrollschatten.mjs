@@ -32,7 +32,6 @@ const ALLOW = new Map([
   // G16-3 (2026-07-06): Datei ist im ScrollSchatten-Sweep, behält aber EINEN rohen
   // overflow für ein Nicht-Tabellen-Element (kein Tabellen-Scroll) — dokumentiert:
   ['src/components/tag/TagWerteTabelle.tsx', 1], // Spalten-Picker-Popover (Dropdown, max-h) — nicht die Tabelle
-  ['src/pages/aussichten/KurzfristTab.tsx', 1], // Prognose-Kachel-Flexleiste (keine <table>)
 ])
 
 /** Geteilte SoT-Komponenten außerhalb src/v4/, die V4 konsumiert (Regel gilt dort mit). */
@@ -59,11 +58,9 @@ const GETEILTE_SOT = [
   'src/components/balkonkraftwerk/BkwCharts.tsx',
   'src/components/roi/RoiAnalyse.tsx',
   'src/components/tag/TagWerteTabelle.tsx', // + ALLOW=1 (Picker-Popover)
-  'src/pages/auswertung/InvestitionenTab.tsx',
   'src/pages/community/CommunityStatistikenTeile.tsx',
   'src/pages/community/CommunityPVErtragTeile.tsx',
   'src/pages/community/CommunityRegionalTeile.tsx',
-  'src/pages/aussichten/KurzfristTab.tsx', // + ALLOW=1 (Kachel-Flexleiste)
   'src/pages/aussichten/KorrekturprofilHeatmapCard.tsx',
   // Bewusst NICHT im Scope (Sonderfall max-h + sticky-Header — vertikaler Fade
   // kollidiert mit stickem Kopf; behalten native Scrollbar mit G16-3-Pillen-Optik,

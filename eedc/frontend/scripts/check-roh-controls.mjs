@@ -96,14 +96,9 @@ const ROH_INFRA = new Map([
   ['src/components/park/Parkbar.tsx', 2], // Park-Overlay-Mechanik (Gattung GeparktBlock)
   ['src/components/common/DataLoadingState.tsx', 1], // Retry im Fehlerzustand (Impl des geteilten Ladezustand-Bausteins)
   // Gruppe 3 — freigegebene Gattungen in Fach-Composites:
-  ['src/components/dashboard/CommunityNudge.tsx', 2], // Karten-Kachel + Dismiss-X (Gattung DateiUpload-Badge)
-  ['src/components/dashboard/CommunityTeaser.tsx', 1], // Karten-Kachel
-  ['src/components/dashboard/QuickLink.tsx', 1], // Karten-Kachel
-  ['src/components/dashboard/Section.tsx', 1], // klickbarer Sektions-Header (Disclosure-Gattung)
   ['src/components/import/custom/MappingTabelle.tsx', 1], // Invert-Mikro-Trigger in Zelle (Gattung ⚠-Popover)
   ['src/components/roi/RoiAnalyse.tsx', 1], // Zeilen-Disclosure in Tabelle
   ['src/components/tag/TagWerteTabelle.tsx', 2], // Spalten-Picker (Gattung WerteTabelle)
-  ['src/pages/auswertung/InvestitionenTab.tsx', 2], // 2× Aufklapp-Header (Gattung BlockShell-Kopf)
   ['src/pages/auswertung/EnergieprofilPrognose.tsx', 1], // „Morgen"-Schnellwahl-Chip (Gattung WerkbankZeitraum)
   // — REST-Abbau-Reste 2026-07-25 (Misch-Dateien, freigebbare Gattungen):
   ['src/pages/InvestitionenTeile.tsx', 2], // Typ-Karten-Kachel + Dropdown-Menü-Eintrag (Gattung SetupInvestitionMenu)

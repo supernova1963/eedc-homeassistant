@@ -144,6 +144,21 @@ Bewusste Schärfung gegenüber „3–4 Zahlen": die testerseitig bewährten **5
 
 Vollständige Inventur von `Dashboard.tsx` (alte Cockpit-Übersicht, 630 Z.), damit beim Auflösen nichts verloren geht. Jedes Element hat eine Achsen-gerechte Heimat — **Komponenten ist Auffangbecken nur für die pro-Komponenten-Inhalte, nicht für anlage-weite oder analytische** (sonst würde die gerade getrennte Achsen-Vermischung nur verschoben).
 
+> **⚠ Stand 2026-07-30: die V3-Komponenten dieser Tabelle sind gelöscht.** `components/dashboard/`
+> (11 Dateien) sowie die IST-Tabs in `pages/auswertung/` und `pages/aussichten/` hatten nach dem Flip
+> **null Konsumenten** und sind entfernt. Die Spalte „Heimat" beschreibt weiterhin das **Ziel**, nicht
+> zwingend den gebauten Zustand — sie ist Migrations-Inventur, keine Ist-Liste. Wo V4 einen eigenen
+> Nachfolger gebaut hat, steht er unten dabei; wo keiner steht, ist die Heimat **noch leer**.
+> Historie per `git log -- eedc/frontend/src/components/dashboard`.
+>
+> | Gelöschte V3-Komponente | V4-Nachfolger |
+> | --- | --- |
+> | `EnergyFlowDiagram` | `components/live/EnergieFluss.tsx` (+ `EnergieFlussBackground`) — **#341 entwirft diesen neu**, nicht den gelöschten |
+> | `GettingStarted` | `components/ui/EmptyState.tsx` |
+> | `SparklineChart` | `components/charts/SparklineBar.tsx` |
+> | `HeroLeiste` · `RingGaugeCard` · `AmortisationsBar` | **kein direkter Nachfolger** — die Inhalte stecken im KPI-Strip bzw. in `components/roi/RoiAnalyse.tsx`; ein „Kopf des KPI-Strips" im Sinne der Zeile unten existiert nicht |
+> | `CommunityNudge` · `CommunityTeaser` · `QuickLink` · `Section` | entfallen (Cross-Link-/Teaser-Pattern ist offen: **DOK-4**) |
+
 | Element der alten Übersicht | Art | Heimat |
 |---|---|---|
 | Energie-Bilanz (PV, Verbrauch, Netzbezug, Einspeisung) | anlage-weit | Cockpit — universeller KPI-Strip jeder Zeit-Ansicht |

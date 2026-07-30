@@ -33,7 +33,6 @@ const SOT = new Set([
 const BESTAND = new Map([
   ['src/components/AppWithSetup.tsx', 6],
   ['src/components/blocks/types.ts', 1],
-  ['src/components/dashboard/CommunityNudge.tsx', 3],
   ['src/components/energieprofil/EnergieprofilTageTabelle.tsx', 6], // LEGACY V3
   ['src/components/layout/Layout.tsx', 2], // LEGACY V3
   ['src/components/live/EnergieFluss.tsx', 4],
