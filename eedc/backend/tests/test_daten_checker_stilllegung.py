@@ -261,6 +261,58 @@ async def test_spezialtarif_nag_verschwindet_bei_stillgelegter_wp(db):
     )
 
 
+async def test_ladetarif_hinweis_ist_abstellbar(db):
+    """Der Ladetarif-Hinweis muss sich durch eine Eingabe erledigen lassen.
+
+    Bis 2026-07-30 fragte der Check nach der Verwendung `e-auto` — die gibt es
+    nicht (`Strompreis.verwendung`: allgemein | waermepumpe | wallbox), das
+    Formular bietet sie nicht an, und gelesen wird ohnehin der Wallbox-Tarif
+    („E-Auto lädt über Wallbox", investitionen/dashboards.py). Der Hinweis
+    stand damit dauerhaft bei jedem E-Auto-Besitzer, ohne Weg ihn abzustellen —
+    und ein Daten-Checker-Hinweis ohne Handgriff ist Rauschen.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from backend.services.daten_checker import DatenChecker
+
+    anlage = await _seed(db, total_kwp=10.0)
+    db.add(Investition(
+        anlage_id=anlage.id, typ="e-auto", bezeichnung="Fahrzeug",
+        anschaffungsdatum=date(2023, 1, 1), aktiv=True,
+    ))
+    db.add(Strompreis(
+        anlage_id=anlage.id, verwendung="allgemein", gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    await db.commit()
+
+    async def _lade() -> Anlage:
+        return (await db.execute(
+            select(Anlage)
+            .options(selectinload(Anlage.investitionen), selectinload(Anlage.strompreise))
+            .where(Anlage.id == anlage.id)
+        )).scalar_one()
+
+    def _hinweise(a: Anlage) -> list[str]:
+        return [r.meldung for r in DatenChecker(db)._check_strompreise(a) if "Ladetarif" in r.meldung]
+
+    # Ohne Ladetarif: Hinweis steht.
+    assert _hinweise(await _lade()) == ["Kein Ladetarif hinterlegt"]
+
+    # Mit Wallbox-Tarif — der Verwendung, die das Formular anbietet und die die
+    # Dashboards lesen — ist er weg.
+    db.add(Strompreis(
+        anlage_id=anlage.id, verwendung="wallbox", gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=22.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    await db.commit()
+    # Frisch laden statt den Identity-Map-Eintrag aufzufrischen: der Checker ist
+    # synchron und darf keine Lazy-Loads auslösen (MissingGreenlet).
+    db.expunge_all()
+    assert _hinweise(await _lade()) == []
+
+
 async def test_pv_erzeugung_map_filtert_post_stilllegung_imds(db):
     """Historische IMDs vor Stilllegung zählen mit, post-Stilllegung-IMDs
     werden ignoriert — sonst werden Werte des stillgelegten Moduls als

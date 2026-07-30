@@ -234,11 +234,24 @@ class StammdatenChecks:
                 details="Wärmepumpe vorhanden – bei eigenem WP-Tarif (Wärmestrom) hier ergänzen",
                 link="/einstellungen/strompreise",
             ))
-        if hat_eauto and "e-auto" not in verwendungen:
+        # Ladetarif hängt an der Verwendung `wallbox` — „e-auto" gibt es als
+        # Verwendung nicht (`Strompreis.verwendung`: allgemein | waermepumpe |
+        # wallbox), das Formular bietet sie nicht an und
+        # `resolve_strompreis_for_komponente` kennt sie auch nicht. Der Hinweis
+        # war damit unerfüllbar: er stand bei jedem E-Auto dauerhaft, ohne dass
+        # ihn irgendeine Eingabe hätte abstellen können. Was ein Anwender
+        # wirklich hinterlegen kann und was gelesen wird, ist der Wallbox-Tarif
+        # — beide Dashboards ziehen ihn („E-Auto lädt über Wallbox",
+        # investitionen/dashboards.py). Wallbox ohne E-Auto zählt genauso: der
+        # Ladetarif hängt am Ladepunkt.
+        hat_wallbox = any(i.typ == "wallbox" and i.ist_aktiv_an(heute) for i in anlage.investitionen)
+        if (hat_eauto or hat_wallbox) and "wallbox" not in verwendungen:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO,
-                meldung="Kein E-Auto-Spezialtarif hinterlegt",
-                details="E-Auto vorhanden – bei eigenem Ladetarif hier ergänzen",
+                meldung="Kein Ladetarif hinterlegt",
+                details="E-Auto/Wallbox vorhanden – bei eigenem Ladetarif einen "
+                        "Strompreis mit Verwendung „Wallbox“ ergänzen. Ohne ihn "
+                        "rechnet eedc die Ladung mit dem allgemeinen Tarif.",
                 link="/einstellungen/strompreise",
             ))
 
