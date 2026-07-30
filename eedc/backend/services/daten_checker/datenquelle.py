@@ -19,7 +19,9 @@ from backend.core.berechnungen import (
     summe_pv_bkw_kwh as _summe_pv_bkw_kwh,
 )
 
-from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity, _quelle_label
+from .kategorien import (
+    CheckErgebnis, CheckKategorie, CheckSeverity, LINK_DATENQUELLEN, _quelle_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -602,6 +604,31 @@ class DatenquelleChecks:
         befunde.sort(key=lambda x: x[0])
         aeltester, neuester = befunde[0][0], befunde[-1][0]
 
+        # Kann die Reparatur überhaupt etwas holen? `aggregate_day` steigt ohne
+        # Leistungs-Zuordnung (`basis.live` / `inv.live`) und ohne MQTT-Energie
+        # sofort aus (`energie_profil/aggregator.py:143-168`) — dann liefert der
+        # Bereichs-Lauf `erfolgreich: 0, keine_daten: n` bei HTTP 200. Am
+        # 2026-07-30 E2E gemessen. Ein Knopf, der garantiert nichts holen kann,
+        # ist schlimmer als keiner (der Anwender sucht den Fehler bei sich),
+        # deshalb wird er hier gar nicht angeboten und die Meldung sagt, was
+        # fehlt. Dieselbe Bedingung wie im Aggregator, nicht eine zweite.
+        basis_live = (sensor_mapping.get("basis") or {}).get("live") or {}
+        inv_live = any(
+            isinstance(v, dict) and v.get("live")
+            for v in (sensor_mapping.get("investitionen") or {}).values()
+        )
+        reparatur_moeglich = bool(basis_live or inv_live)
+        if not reparatur_moeglich:
+            from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
+            cutoff = datetime.combine(aeltester, datetime.min.time()) - timedelta(days=1)
+            mqtt_check = await self.db.execute(
+                select(MqttEnergySnapshot.id).where(
+                    MqttEnergySnapshot.anlage_id == anlage.id,
+                    MqttEnergySnapshot.timestamp >= cutoff,
+                ).limit(1)
+            )
+            reparatur_moeglich = mqtt_check.scalar_one_or_none() is not None
+
         # Bereichs-Knopf auf das jüngste erlaubte Fenster begrenzen; ältere Tage
         # bleiben für einen zweiten Lauf stehen (Cap mehrfach anbieten statt
         # still abschneiden).
@@ -627,10 +654,24 @@ class DatenquelleChecks:
             f"{neuester.isoformat()} tragen keinen Wert für: {keys_text}. Die "
             f"HA-Langzeitstatistik hat für dieselben Tage Werte — die Zuordnung "
             f"stand damals nur noch nicht, deshalb hat nie ein Lauf sie "
-            f"aufgeschrieben. „Zeitraum neu aggregieren“ holt "
-            f"{range_von.isoformat()} bis {neuester.isoformat()} aus HA-Statistics "
-            f"nach (max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
+            f"aufgeschrieben."
         )
+        if reparatur_moeglich:
+            summen_details += (
+                f" „Zeitraum neu aggregieren“ holt {range_von.isoformat()} bis "
+                f"{neuester.isoformat()} aus HA-Statistics nach "
+                f"(max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
+            )
+        else:
+            summen_details += (
+                " Nachrechnen ist hier allerdings NICHT möglich: der Tages-Lauf "
+                "braucht zusätzlich eine Leistungs-Zuordnung (W), und dieser "
+                "Anlage ist keine zugeordnet. Der Zählerstand allein genügt ihm "
+                "nicht. Deshalb steht hier bewusst kein Knopf — er würde "
+                "durchlaufen und nichts schreiben. Zuerst unter Einstellungen → "
+                "Datenquellen einen Leistungssensor zuordnen (z. B. „Netz-"
+                "Leistung“), danach erscheint die Reparatur hier."
+            )
         if rest_aelter > 0:
             summen_details += (
                 f" {rest_aelter} ältere(r) Tag(e) liegen außerhalb des Fensters — "
@@ -657,15 +698,23 @@ class DatenquelleChecks:
                 f"({aeltester.isoformat()} … {neuester.isoformat()})"
             ),
             details=summen_details,
-            link="/einstellungen/energieprofil",
-            action_kind="reaggregate_range",
+            link=(
+                "/einstellungen/energieprofil" if reparatur_moeglich
+                else LINK_DATENQUELLEN
+            ),
+            action_kind="reaggregate_range" if reparatur_moeglich else None,
             action_params={
                 "anlage_id": anlage.id,
                 "von": range_von.isoformat(),
                 "bis": neuester.isoformat(),
-            },
-            action_label="Zeitraum neu aggregieren",
+            } if reparatur_moeglich else None,
+            action_label="Zeitraum neu aggregieren" if reparatur_moeglich else None,
         ))
+
+        if not reparatur_moeglich:
+            # Ohne Reparatur-Pfad keine Einzeltag-Zeilen: 15 Knöpfe, die alle
+            # nichts holen können, sind fünfzehnmal derselbe falsche Eindruck.
+            return ergebnisse
 
         MAX_EINZEL = 15
         for datum_, fehlend in sorted(befunde, key=lambda x: x[0], reverse=True)[:MAX_EINZEL]:

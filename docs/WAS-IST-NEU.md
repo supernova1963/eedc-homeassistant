@@ -64,6 +64,13 @@ Zwei Dinge sagt die Meldung ausdrücklich dazu:
 
 Nichts davon läuft beim Start von allein. eedc erkennt es, sagt es — auslösen tust du es.
 
+**Und der Knopf sagt jetzt die Wahrheit über sich selbst.** „Mehrere Tage neu aggregieren" meldete
+bisher immer Erfolg, auch wenn kein einziger Tag nachgerechnet werden konnte. Der Lauf braucht
+nämlich mehr als den Zählerstand: ohne zugeordneten **Leistungssensor (W)** und ohne
+Home-Assistant-Historie für den Zeitraum findet er keine Kurvendaten. Jetzt steht dort, was
+tatsächlich passiert ist — und wenn deiner Anlage der Leistungssensor fehlt, erscheint der Knopf
+gar nicht mehr, sondern der Hinweis, ihn erst unter **Einstellungen → Datenquellen** zuzuordnen.
+
 **Dazu passend:** Meldet der Daten-Checker „Einspeisung größer als PV-Erzeugung" für einen Monat,
 riet er bisher zuerst zu vertauschten Sensoren. Stehen die **Tage** dieses Monats aber schon voll da
 und nur der Monatswert nicht, nennt die Meldung jetzt **diese** Ursache zuerst und den Weg zum

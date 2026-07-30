@@ -233,6 +233,24 @@ export interface VollbackfillResult {
   bis: string
 }
 
+/** Antwort von `POST /energie-profil/{id}/reaggregate-bereich`.
+ *
+ * `status: "ok"` ist NUR die Aussage „der Lauf ist durchgelaufen". Ob dabei
+ * etwas geschrieben wurde, steht in `erfolgreich` — `aggregate_day` liefert
+ * `None`, wenn es für den Tag keine Kurvendaten findet (keine Leistungs-
+ * Zuordnung, HA-History reicht nicht so weit zurück), und der Tag landet dann
+ * in `keine_daten`. Beides bei HTTP 200. */
+export interface ReaggregateBereichResponse {
+  status: string
+  von: string
+  bis: string
+  verarbeitet: number
+  erfolgreich: number
+  keine_daten: number
+  fehlgeschlagen: number
+  fehler_details?: { datum: string; grund: string }[]
+}
+
 export interface KraftstoffpreisStatus {
   tages_offen: number
   monats_offen: number
@@ -373,7 +391,12 @@ export const energieProfilApi = {
 
   // v3.45.9: Bereichs-Reaggregation (max 31 Tage/Lauf) — Bulk-Reparatur z. B.
   // der Batterie-Vorzeichen-Historie aus dem Daten-Checker.
-  reaggregateBereich: (anlageId: number, von: string, bis: string, mitResnap: boolean = true, signal?: AbortSignal): Promise<{ status: string; [k: string]: unknown }> =>
+  // Die Zähler sind getypt, weil `status: "ok"` NICHT heißt, dass Werte
+  // geschrieben wurden: `aggregate_day` liefert `None`, wenn es für den Tag
+  // keine Kurvendaten findet — dann steht `erfolgreich: 0, keine_daten: n`
+  // bei HTTP 200. Am 2026-07-30 E2E gemessen; der Aufrufer MUSS das auswerten,
+  // sonst meldet die Oberfläche einen Erfolg, den es nicht gab.
+  reaggregateBereich: (anlageId: number, von: string, bis: string, mitResnap: boolean = true, signal?: AbortSignal): Promise<ReaggregateBereichResponse> =>
     api.post(`/energie-profil/${anlageId}/reaggregate-bereich?von=${von}&bis=${bis}&mit_resnap=${mitResnap}`, undefined, { signal }),
 
   getTagesprognose: (anlageId: number, datum?: string): Promise<TagesPrognose> =>

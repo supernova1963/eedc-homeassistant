@@ -19,8 +19,10 @@ Testet:
   6. Standalone (kein HA-LTS) → leer
   7. Kein Zähler zugeordnet → leer
   8. Span > 31 Tage → Bereichs-Fenster begrenzt, Rest genannt, 15 Einzeltage
-  9. Abfrage-Budget (45 LTS-Reads/Lauf) wird gedeckelt UND benannt
- 10. Vor Inbetriebnahme wird nicht gemeldet
+  9. Ohne Leistungs-Zuordnung: Befund ja, Knopf nein (E2E 2026-07-30)
+ 10. Standalone: MQTT-Energie ersetzt die W-Zuordnung → Knopf wieder da
+ 11. Abfrage-Budget (45 LTS-Reads/Lauf) wird gedeckelt UND benannt
+ 12. Vor Inbetriebnahme wird nicht gemeldet
 """
 
 from __future__ import annotations
@@ -43,10 +45,14 @@ _KAT = CheckKategorie.TAGESWERTE_FEHLEN.value
 _SENSOR = {"strategie": "sensor", "sensor_id": "sensor.x"}
 
 
-def _make_anlage(*, mit_pv=True, installationsdatum=None):
+def _make_anlage(*, mit_pv=True, installationsdatum=None, mit_live=True):
     mapping = {
         "basis": {"einspeisung": dict(_SENSOR), "netzbezug": dict(_SENSOR)},
     }
+    if mit_live:
+        # Ohne Leistungs-Zuordnung kann `aggregate_day` nichts holen — der Check
+        # bietet dann bewusst keinen Knopf an (E2E 2026-07-30).
+        mapping["basis"]["live"] = {"einspeisung_w": "sensor.netz_w"}
     if mit_pv:
         mapping["investitionen"] = {
             "7": {"felder": {"pv_erzeugung_kwh": dict(_SENSOR)}},
@@ -73,8 +79,14 @@ def _make_tz(datum: date, komponenten: dict):
     return SimpleNamespace(id=1, anlage_id=1, datum=datum, komponenten_kwh=komponenten)
 
 
-async def _run_check(anlage, tz_list, invs_list, ha_func, ha_available=True):
-    """Reihenfolge der db.execute-Aufrufe im SUT: 1) Investition, 2) TagesZusammenfassung."""
+async def _run_check(anlage, tz_list, invs_list, ha_func, ha_available=True,
+                     mqtt_energie=False):
+    """db.execute-Reihenfolge im SUT: 1) Investition, 2) TagesZusammenfassung,
+    3) MqttEnergySnapshot (nur wenn kein Live-Mapping vorliegt).
+
+    `mqtt_energie` steuert den dritten Aufruf: im Standalone-Betrieb ersetzt
+    MQTT-Energie die Leistungs-Zuordnung als Vorbedingung von `aggregate_day`.
+    """
     db = MagicMock()
     call_count = {"n": 0}
     lts_reads = {"n": 0}
@@ -87,6 +99,9 @@ async def _run_check(anlage, tz_list, invs_list, ha_func, ha_available=True):
             return_value=invs_list if call_count["n"] == 1 else tz_list
         )
         result.scalars = MagicMock(return_value=scalars)
+        result.scalar_one_or_none = MagicMock(
+            return_value=1 if mqtt_energie else None
+        )
         return result
 
     db.execute = _execute
@@ -267,6 +282,55 @@ async def test_span_groesser_31_fenster_begrenzt():
     assert len(rest_hinweise) == 1
 
 
+async def test_ohne_leistungssensor_kein_knopf():
+    """E2E-Befund 2026-07-30: `aggregate_day` steigt ohne Leistungs-Zuordnung
+    sofort aus und der Bereichs-Lauf meldet `erfolgreich: 0` bei HTTP 200.
+
+    Der Befund bleibt (die Werte fehlen ja), aber der Knopf muss weg — sonst
+    läuft er durch, schreibt nichts, und der Anwender sucht den Fehler bei sich.
+    """
+    tag = _gestern()
+    tz_list = [
+        _make_tz(tag, {"pv_7": 29.0, "einspeisung": 0.0, "netzbezug": 0.0}),
+        *_volle_zeilen(2),
+    ]
+    ha_func = lambda d: {"einspeisung": 22.0, "netzbezug": 3.4}
+    result, _ = await _run_check(
+        _make_anlage(mit_live=False), tz_list, [_make_inv()], ha_func,
+    )
+
+    assert result, "Der Befund selbst muss bleiben"
+    assert not any(r.action_kind for r in result), \
+        f"Kein Knopf erwartet, bekommen {[r.action_kind for r in result]}"
+    assert len(result) == 1, f"Keine Einzeltag-Zeilen ohne Reparatur-Pfad: {result}"
+    d = result[0].details
+    assert "NICHT möglich" in d, d
+    assert "Leistungs-Zuordnung" in d, d
+    # Der Weg raus muss dabeistehen, nicht nur die Absage.
+    assert "Datenquellen" in d, d
+    assert result[0].link == "/einstellungen/datenquellen", result[0].link
+
+
+async def test_standalone_mqtt_energie_erlaubt_die_reparatur():
+    """Gegenprobe: im Standalone-Betrieb ersetzt MQTT-Energie die W-Zuordnung.
+
+    Dieselbe Bedingung wie in `aggregate_day` — sonst sperrte der Guard eine
+    Reparatur aus, die tatsächlich läuft.
+    """
+    tag = _gestern()
+    tz_list = [
+        _make_tz(tag, {"pv_7": 29.0, "einspeisung": 0.0, "netzbezug": 0.0}),
+        *_volle_zeilen(2),
+    ]
+    ha_func = lambda d: {"einspeisung": 22.0, "netzbezug": 3.4}
+    result, _ = await _run_check(
+        _make_anlage(mit_live=False), tz_list, [_make_inv()], ha_func,
+        mqtt_energie=True,
+    )
+    assert any(r.action_kind == "reaggregate_range" for r in result), \
+        f"Mit MQTT-Energie muss der Knopf da sein: {result}"
+
+
 async def test_lts_read_cap_wird_benannt():
     """Mehr Verdachts-Tage als Abfrage-Budget → gedeckelt, aber nicht still."""
     today = date.today()
@@ -305,6 +369,8 @@ _TESTS = [
     test_standalone_leer,
     test_ohne_zaehler_leer,
     test_span_groesser_31_fenster_begrenzt,
+    test_ohne_leistungssensor_kein_knopf,
+    test_standalone_mqtt_energie_erlaubt_die_reparatur,
     test_lts_read_cap_wird_benannt,
     test_vor_inbetriebnahme_nicht_gemeldet,
 ]

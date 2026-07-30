@@ -19,6 +19,7 @@ import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 import { energieProfilApi } from '../api/energie_profil'
+import { baueBereichsMeldung, type ReparaturMeldung } from './datenCheckerMeldungen'
 import { fmtZahl } from '../lib'
 import {
   KATEGORIE_LABELS as kategorieLabels,
@@ -207,9 +208,11 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [reparaturBusy, setReparaturBusy] = useState<string | null>(null)
-  const [reparaturMessage, setReparaturMessage] = useState<{
-    art: 'ok' | 'fehler'; text: string
-  } | null>(null)
+  // `hinweis` (bernstein) ist der dritte Zustand, den es braucht: der Lauf ist
+  // durchgelaufen, hat aber nichts (oder nur teilweise etwas) geschrieben —
+  // weder Erfolg noch Fehler. Ohne ihn stand „aggregiert" auch dann da, wenn
+  // kein einziger Tag verwertbare Daten hatte.
+  const [reparaturMessage, setReparaturMessage] = useState<ReparaturMeldung | null>(null)
 
   // Etappe 6 v3.31.1: Per-Tag-Reparatur über bestehenden reaggregate-tag-Endpoint.
   const handleReaggregateDay = async (anlageId: number, datum: string) => {
@@ -255,11 +258,10 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
     setReparaturBusy(key)
     setReparaturMessage(null)
     try {
-      await energieProfilApi.reaggregateBereich(anlageId, von, bis, true)
-      setReparaturMessage({
-        art: 'ok',
-        text: `Zeitraum ${von} bis ${bis} neu aus HA-Statistics aggregiert.`,
-      })
+      const r = await energieProfilApi.reaggregateBereich(anlageId, von, bis, true)
+      // Rückmeldung aus den TATSÄCHLICHEN Zählern (SoT: baueBereichsMeldung) —
+      // `status: "ok"` heißt nur „durchgelaufen", nicht „etwas geschrieben".
+      setReparaturMessage(baueBereichsMeldung(r, von, bis))
       // Daten-Checker neu laden → Einträge verschwinden, wenn der Konflikt weg ist.
       setRefreshKey(k => k + 1)
     } catch (e) {
@@ -390,6 +392,8 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
             <div className={`px-3 py-2 rounded text-sm ${
               reparaturMessage.art === 'ok'
                 ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800'
+                : reparaturMessage.art === 'hinweis'
+                ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                 : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
             }`}>
               {reparaturMessage.text}
