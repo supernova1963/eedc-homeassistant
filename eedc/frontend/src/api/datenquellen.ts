@@ -15,10 +15,12 @@ export interface DatenquelleFeld {
   typ: string
   label: string
   einheit: string
-  kategorie: 'live' | 'energy'
+  kategorie: 'live' | 'energy' | 'preis'
   /** Feld-Hilfetext aus der Registry (field_definitions) — leer wenn keiner. */
   hinweis: string
   standard_topic: string
+  /** Nur als HA-Sensor lesbar (Preis-Felder): Gateway/Inbound entfallen. */
+  nur_ha?: boolean
   /** Aktive Quelle. */
   quelle: string
   /** Zugeordnetes Gateway-Quell-Topic (nur bei quelle==='mqtt_gateway'). */

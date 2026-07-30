@@ -53,6 +53,13 @@ BASIS_ENERGY_FELD: dict[str, str] = {
     "netzbezug_kwh": "netzbezug",
 }
 
+# Basis-Preis-Feld-IDs → `basis`-Schlüssel. Getrennt von BASIS_ENERGY_FELD,
+# weil diese Felder keine Zähler sind (kein Snapshot, kein MQTT-Topic, kein
+# LTS-Summen-Check) — s. `BASIS_PREIS_FELDER` in field_definitions.py.
+BASIS_PREIS_FELD: dict[str, str] = {
+    "strompreis": "strompreis",
+}
+
 QUELLEN_HA = ("ha_app", "ha_connector")
 
 
@@ -78,7 +85,7 @@ def uebernehme_quelle_ins_mapping(
     Args:
         mapping: `anlage.sensor_mapping` (wird in-place verändert).
         field_id: Feld-Kennung der Fläche (`basis_energy_*`, `basis_live_*`,
-            `inv_energy_{id}_{feld}`, `inv_live_{id}_{key}`).
+            `basis_preis_*`, `inv_energy_{id}_{feld}`, `inv_live_{id}_{key}`).
         quelle: Wire-Wert der gewählten Quelle.
         entity_id: HA-Entity — nur bei HA-Quellen gesetzt.
 
@@ -108,6 +115,20 @@ def uebernehme_quelle_ins_mapping(
         if live is None:
             return False
         return _setze_live(live, field_id[len("basis_live_"):], ist_ha, entity_id)
+
+    # Preis-Felder (`BASIS_PREIS_FELDER`) liegen wie die Energie-Felder direkt
+    # unter `basis`, teilen aber deren MQTT-Maschinerie NICHT: sie werden nur
+    # als HA-Sensor gelesen. Derselbe Eintrags-Shape (`strategie`/`sensor_id`),
+    # damit `energie_profil/_helpers.py` sie unverändert findet — der Slot ist
+    # die Rückkehr des v3-Wizard-Feldes, kein neues Format.
+    if field_id.startswith("basis_preis_"):
+        feld = BASIS_PREIS_FELD.get(field_id[len("basis_preis_"):])
+        if feld is None:
+            return False
+        basis = _teilbaum(mapping, "basis", anlegen=ist_ha)
+        if basis is None:
+            return False
+        return _setze_energie(basis, feld, ist_ha, entity_id)
 
     if field_id.startswith("inv_energy_"):
         inv_id, feld = split_inv(field_id[len("inv_energy_"):])

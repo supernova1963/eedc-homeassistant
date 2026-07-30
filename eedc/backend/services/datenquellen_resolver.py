@@ -62,6 +62,19 @@ def ha_entity_fuer_feld(
         if isinstance(cfg, dict) and cfg.get("strategie") == "sensor":
             return cfg.get("sensor_id") or None
         return None
+    if field_id.startswith("basis_preis_"):
+        # Preis-Felder liegen im selben Eintrags-Shape unter `basis` wie die
+        # Energie-Felder, nur ohne Snapshot-Key — deshalb direkt statt über
+        # `_energy_field_id_to_sensor_key`.
+        from backend.services.datenquellen_mapping_sync import BASIS_PREIS_FELD
+
+        feld = BASIS_PREIS_FELD.get(field_id[len("basis_preis_"):])
+        if not feld:
+            return None
+        cfg = (mapping.get("basis") or {}).get(feld)
+        if isinstance(cfg, dict) and cfg.get("strategie") == "sensor":
+            return cfg.get("sensor_id") or None
+        return None
     if field_id.startswith("inv_energy_"):
         inv_id, sep, feld = field_id[len("inv_energy_"):].partition("_")
         if not sep or not feld:

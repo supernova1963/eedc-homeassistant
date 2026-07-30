@@ -471,6 +471,51 @@ async def _standard_topic_suffix(db: AsyncSession, anlage: Anlage, field_id: str
     return None
 
 
+async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]:
+    """Preis-Slots der Anlage im Eintrags-Shape der Fläche — HA-only.
+
+    Bewusst NICHT in `build_expected_topics`: dort ist jeder Eintrag ein
+    ERWARTETES MQTT-Topic (Wizard-Anzeige + Abdeckungs-Check #134). Ein
+    Preis-Feld kommt aber nur über HA herein — als Topic gelistet wäre es eine
+    Lücke, die niemand schließen kann. `topic` bleibt deshalb leer; damit
+    findet auch `topic_suffix()` kein Gateway-Ziel und die 3-Stufen-Auflösung
+    endet bei HA oder „keine".
+
+    Sichtbar nur bei ausdrücklich dynamischem Tarif (`vertragsart`): bei einem
+    Festpreis gehört der Preis in die Stammdaten. Ein angebotener Preis-Slot
+    verleitet sonst dazu, sich einen Konstanten-Sensor zu bauen (Forum simon42
+    #89667/54).
+    """
+    from backend.api.routes.strompreise import lade_tarife_fuer_anlage
+    from backend.core.field_definitions import BASIS_PREIS_FELDER, get_feld_bedarf
+
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    allgemein = tarife.get("allgemein")
+    if not (allgemein and allgemein.vertragsart == "dynamisch"):
+        return []
+
+    eintraege: list[dict] = []
+    for feld in BASIS_PREIS_FELDER:
+        bedarf, bedarf_gruppe = get_feld_bedarf("basis", feld["key"])
+        eintraege.append({
+            "topic": "",
+            "label": f"{feld['label']} ({feld['einheit']})",
+            "kategorie": "preis",
+            "typ": "basis",
+            "match_key": ("basis_preis", feld["key"]),
+            "feld": feld["key"],
+            "feld_label": feld["label"],
+            "einheit": feld["einheit"],
+            "hinweis": feld.get("hinweis", ""),
+            "bedarf": bedarf,
+            "bedarf_gruppe": bedarf_gruppe,
+            "gruppe_id": "basis",
+            "gruppe_titel": "Anlage (Basis)",
+            "nur_ha": True,
+        })
+    return eintraege
+
+
 def _quellen_map(anlage: Anlage) -> dict:
     """Liest die Feld→Quelle-Map aus anlage.sensor_mapping (leer wenn keine)."""
     mapping = anlage.sensor_mapping or {}
@@ -660,7 +705,12 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         select(Investition).where(Investition.anlage_id == anlage_id, aktiv_am_tag(date.today()))
     )).scalars().all()
     invs = sort_investitionen_nach_typ(invs)
-    eintraege = await build_expected_topics(db, anlage, investitionen=invs)
+    eintraege = list(await build_expected_topics(db, anlage, investitionen=invs))
+    # Preis-Slots hängen an derselben Basis-Gruppe, kommen aber nicht aus der
+    # MQTT-Registry (s. Helper). Angehängt statt eingemischt: die Gruppierung
+    # ist reihenfolge-erhaltend, „Anlage (Basis)" existiert an dieser Stelle
+    # bereits — der Preis landet damit am Ende seines eigenen Abschnitts.
+    eintraege += await _basis_preis_eintraege(db, anlage_id)
 
     quellen = _quellen_map(anlage)
     # Vereinheitlichter Invert-Store (quellen-unabhängig, feld-/wert-level).
@@ -827,6 +877,9 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
             "kategorie": e.get("kategorie", "energy"),
             "hinweis": e.get("hinweis", ""),
             "standard_topic": e["topic"],
+            # HA-only-Feld (Preis): die Fläche blendet Gateway/Inbound aus,
+            # statt Quellen anzubieten, die kein Leser abfragt.
+            "nur_ha": bool(e.get("nur_ha")),
             "quelle": q,
             # Gateway-Quell-Topic (falls zugeordnet) für die UI-Anzeige.
             "gateway_topic": gateway_topics.get(eintrag.get("mapping_id")),
@@ -954,6 +1007,16 @@ async def set_feld_quelle(
     quelle = (body.quelle or "").strip()
     if quelle not in QUELLEN_ERLAUBT:
         raise HTTPException(status_code=400, detail=f"Unbekannte/nicht verfügbare Quelle: {quelle}")
+
+    # Preis-Felder werden ausschließlich als HA-Sensor gelesen (stündlicher
+    # LTS-Mittelwert). Ein Gateway-/Inbound-Eintrag würde eine Quelle
+    # versprechen, die kein Leser abfragt — die Fläche blendet die Knöpfe
+    # deshalb aus, und hier steht der Riegel für den direkten API-Weg.
+    if field_id.startswith("basis_preis_") and quelle not in (*QUELLEN_HA, QUELLE_KEINE):
+        raise HTTPException(
+            status_code=400,
+            detail="Preis-Felder werden nur als HA-Sensor gelesen — MQTT ist hier ohne Wirkung.",
+        )
 
     anlage = (
         await db.execute(select(Anlage).where(Anlage.id == anlage_id))

@@ -471,6 +471,37 @@ BASIS_LIVE_FELDER: list[dict] = [
     # kein manuelles Mapping mehr nötig.
 ]
 
+# Preis-Felder auf Anlage-Ebene — weder Zähler noch Live-Leistung.
+#
+# Eigene Familie, weil ein Preis an drei Stellen anders behandelt wird als die
+# übrigen Basis-Felder:
+#   1. **Kein MQTT.** Der Wert wird ausschließlich als HA-Sensor gelesen
+#      (stündlicher LTS-Mittelwert, `energie_profil/_helpers.py`). Deshalb steht
+#      er NICHT in `BASIS_ENERGY_TOPICS` — dort wäre er ein erwartetes
+#      MQTT-Topic, das niemand bedient, und der Abdeckungs-Check (#134) würde
+#      ihn als Lücke melden.
+#   2. **Kein Zähler.** `state_class: measurement` ist hier richtig; der
+#      LTS-Summen-Check ist nicht zuständig (`daten_checker/sensoren.py`).
+#   3. **Nur bei dynamischem Tarif sichtbar.** Bei einem Festpreis gehört der
+#      Preis in die Stammdaten, nicht an einen Sensor — und ein angebotener
+#      Preis-Slot verleitet genau dazu (Forum simon42 #89667/54, MartyBr hatte
+#      seinen Festpreis-Template-Sensor mangels Alternative an den
+#      Speicher-Ø-Ladepreis gehängt).
+#
+# Der Slot existierte bis v3 im Sensor-Mapping-Wizard („Basis-Sensoren") und ist
+# beim V4-Umbau ersatzlos entfallen — das Backend las `basis.strompreis` weiter,
+# nur setzen konnte man ihn nicht mehr. Bestehende v3-Zuordnungen waren davon
+# nie betroffen.
+BASIS_PREIS_FELDER: list[dict] = [
+    {"key": "strompreis", "label": "Strompreis (dynamischer Tarif)", "einheit": "ct/kWh",
+     "bedingung_basis": "dynamischer_tarif",
+     "hinweis": "HA-Sensor mit dem aktuellen Arbeitspreis (Tibber, aWATTar, EPEX-Endpreis). "
+                "eedc schreibt daraus die Stundenpreise mit und rechnet damit den "
+                "verbrauchsgewichteten Ø-Bezugspreis des Monats sowie den Ø-Ladepreis der "
+                "Speicher-Netzladung. Einheit ct/kWh oder €/kWh — eedc rechnet um. "
+                "Ohne Sensor bleibt der Arbeitspreis aus den Stammdaten maßgeblich."},
+]
+
 # =============================================================================
 # Bedarf je Feld — steuert die Zuordnungs-Fläche (Datenquellen-V4)
 #

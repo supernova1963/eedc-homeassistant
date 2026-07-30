@@ -334,7 +334,10 @@ export default function DatenquellenZuordnung() {
             rein verbindungsbasiert: ohne HA-Verbindung keine HA-Option, ohne
             MQTT-Broker keine Gateway-/Inbound-Option. Eine bestehende Zuordnung
             bleibt trotzdem sichtbar (IST-Spalte + amber Wert), nur nicht mehr
-            neu wählbar (ohne Verbindung sinnlos); umschaltbar bleibt „Keine". */}
+            neu wählbar (ohne Verbindung sinnlos); umschaltbar bleibt „Keine".
+            Zusätzlich feldbezogen: `nur_ha` (Preis-Felder) blendet MQTT aus —
+            eedc liest sie ausschließlich als HA-Sensor, ein Gateway-Eintrag
+            wäre ein Versprechen ohne Leser (Backend riegelt gleichlautend ab). */}
         <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:flex-shrink-0">
           {verfuegbarkeit.ha && (
             <QuelleButton
@@ -345,7 +348,7 @@ export default function DatenquellenZuordnung() {
               onClick={() => waehleHa(f)}
             />
           )}
-          {verfuegbarkeit.mqtt && (
+          {verfuegbarkeit.mqtt && !f.nur_ha && (
             <QuelleButton
               icon={Waypoints}
               label="Gateway"
@@ -354,7 +357,7 @@ export default function DatenquellenZuordnung() {
               onClick={() => waehleGateway(f)}
             />
           )}
-          {verfuegbarkeit.mqtt && (
+          {verfuegbarkeit.mqtt && !f.nur_ha && (
             <QuelleButton
               icon={Rss}
               label="Inbound"
