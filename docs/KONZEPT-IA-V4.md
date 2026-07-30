@@ -18,7 +18,7 @@
 >
 > | # | Punkt | Stand |
 > | --- | --- | --- |
-> | **B10** | PageHeader-Konsolidierung | ⬜ offen — keine PageHeader-SoT; 17 `.tsx` mit hartem `<h1`. Zugleich SoT-Inventar-Zeile „Sicht-Rahmen" ⇒ Backlog **DOK-4** |
+> | **B10** | PageHeader-Konsolidierung | ⬜ offen — keine PageHeader-SoT; 17 `.tsx` mit hartem `<h1`. Zugleich SoT-Inventar-Zeile „Sicht-Rahmen". Kein Issue (kein Nutzer-Trigger) — dieses Register ist die Heimat |
 > | **B14** | Globale Cmd+K-Suchpalette | ⬜ offen — 0 Treffer im Code. Kein Nutzer-Trigger bisher |
 > | **B5** | Mobile-Reduce (M1 Reduce-Logik · M2 Sticky-Header auto-hide · M3 Tabellen-Swipe) | ⬜ offen — 0 Treffer. Stakeholder-Lage dünn, s. [KONZEPT-MOBILE.md](KONZEPT-MOBILE.md) |
 > | **B12** | Single-Anlage-Selektor-Audit | 🟡 Kern erledigt (Selektor blendet bei < 2 Anlagen aus); der Audit **über alle Sichten** ist nie gelaufen |
@@ -158,7 +158,7 @@ Vollständige Inventur von `Dashboard.tsx` (alte Cockpit-Übersicht, 630 Z.), da
 > | `GettingStarted` | `components/ui/EmptyState.tsx` |
 > | `SparklineChart` | `components/charts/SparklineBar.tsx` |
 > | `HeroLeiste` · `RingGaugeCard` · `AmortisationsBar` | **kein direkter Nachfolger** — die Inhalte stecken im KPI-Strip bzw. in `components/roi/RoiAnalyse.tsx`; ein „Kopf des KPI-Strips" im Sinne der Zeile unten existiert nicht |
-> | `CommunityNudge` · `CommunityTeaser` · `QuickLink` · `Section` | entfallen (Cross-Link-/Teaser-Pattern ist offen: **DOK-4**) |
+> | `CommunityNudge` · `CommunityTeaser` · `QuickLink` · `Section` | entfallen — das **Cross-Link-/Teaser-Pattern** hat damit keine Implementierung mehr und bleibt offen (Bausteine-Tracker oben, zusammen mit B10) |
 
 | Element der alten Übersicht | Art | Heimat |
 |---|---|---|
