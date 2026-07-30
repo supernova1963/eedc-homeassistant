@@ -46,22 +46,39 @@ class _FakeHaStats:
         return mit_sum, ohne_sum, fehlend
 
 
-async def _seed(db: AsyncSession, *, mit_counter: bool = False) -> Anlage:
+async def _seed(
+    db: AsyncSession, *, mit_counter: bool = False, mit_preis: bool = False,
+) -> Anlage:
+    if mit_preis:
+        typ, bez = "speicher", "Pylontech"
+    elif mit_counter:
+        typ, bez = "waermepumpe", "WP"
+    else:
+        typ, bez = "pv-module", "WR Süd"
     anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
     db.add(anlage)
     await db.flush()
     db.add(Investition(
-        anlage_id=anlage.id, typ="waermepumpe" if mit_counter else "pv-module",
-        bezeichnung="WP" if mit_counter else "WR Süd",
+        anlage_id=anlage.id, typ=typ, bezeichnung=bez,
         leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1), aktiv=True,
+        parameter={"arbitrage_faehig": True} if mit_preis else None,
     ))
     await db.flush()
     inv_id = (await db.execute(select(Investition))).scalars().first().id
-    felder = (
-        {"wp_starts_anzahl": {"strategie": "sensor", "sensor_id": "sensor.wp_starts"}}
-        if mit_counter else
-        {"pv_erzeugung_kwh": {"strategie": "sensor", "sensor_id": "sensor.pv"}}
-    )
+    if mit_preis:
+        felder = {
+            # Der gemeldete Fall: Preis-Sensor am Ø-Ladepreis (ct/kWh).
+            "speicher_ladepreis_cent": {
+                "strategie": "sensor", "sensor_id": "sensor.strombezug_festpreis",
+            },
+            # Daneben ein echter kWh-Zähler derselben Investition — der muss
+            # weiter geprüft werden, sonst filtert der Fix zu breit.
+            "ladung_kwh": {"strategie": "sensor", "sensor_id": "sensor.speicher_ladung"},
+        }
+    elif mit_counter:
+        felder = {"wp_starts_anzahl": {"strategie": "sensor", "sensor_id": "sensor.wp_starts"}}
+    else:
+        felder = {"pv_erzeugung_kwh": {"strategie": "sensor", "sensor_id": "sensor.pv"}}
     anlage.sensor_mapping = {
         "basis": {
             "einspeisung": {"strategie": "sensor", "sensor_id": "sensor.e_out"},
@@ -131,6 +148,55 @@ async def test_fehlender_sensor_meldet_weiter_die_alte_ursache(db, monkeypatch):
     assert len(warnungen) == 1
     assert "nicht in HA-Long-Term-Statistics" in warnungen[0].meldung
     assert "Summen-Spalte" not in warnungen[0].meldung
+
+
+async def test_preis_feld_erzeugt_keinen_fehlalarm(db, monkeypatch):
+    """Ein Preis-Sensor (ct/kWh) am Ø-Ladepreis ist KEIN kWh-Zähler.
+
+    Forum simon42 #89667/54 (MartyBr): `sensor.strombezug_festpreis` ist ein
+    Template-Sensor mit festem €/kWh-Wert und `state_class: measurement` — genau
+    richtig für einen Preis, und ohne `has_sum`. Der Check meldete ihn als
+    „kWh-Sensor ohne Summen-Spalte". Der echte kWh-Zähler derselben Investition
+    muss weiterhin gemeldet werden, sonst ist der Filter zu breit.
+    """
+    from backend.services.daten_checker import DatenChecker
+
+    anlage = await _seed(db, mit_preis=True)
+    _patch(monkeypatch, _FakeHaStats(
+        ohne_sum={"sensor.strombezug_festpreis", "sensor.speicher_ladung"},
+    ))
+
+    ergebnisse = await DatenChecker(db)._check_sensor_mapping_lts(anlage)
+
+    warnungen = [r for r in ergebnisse if r.schwere == CheckSeverity.WARNING]
+    assert len(warnungen) == 1, [r.meldung for r in ergebnisse]
+    details = warnungen[0].details or ""
+    assert "sensor.strombezug_festpreis" not in details
+    assert "Ladepreis" not in details
+    # Gegenprobe: der kWh-Zähler daneben steht sehr wohl drin.
+    assert "sensor.speicher_ladung" in details
+
+
+async def test_alle_zaehlerfelder_bleiben_gedeckt():
+    """Wächter: jedes kumulative kWh-Feld passiert den Einheiten-Filter.
+
+    Der Filter liest `FELD_EINHEITEN`. Ein Zähler-Feld ohne Eintrag dort fiele
+    still aus der Prüfung — ohne diesen Test bliebe das unbemerkt, weil der
+    Check dann einfach schweigt.
+    """
+    from backend.core.field_definitions import FELD_EINHEITEN, einheit_klasse
+    from backend.services.snapshot.keys import KUMULATIVE_ZAEHLER_FELDER
+
+    ohne_deckung = sorted({
+        feld
+        for felder in KUMULATIVE_ZAEHLER_FELDER.values()
+        for feld in felder
+        if einheit_klasse(FELD_EINHEITEN.get(feld)) != "energie"
+    })
+    assert ohne_deckung == [], (
+        f"Zähler-Felder ohne Energie-Einheit in FELD_EINHEITEN: {ohne_deckung} — "
+        "der LTS-Check würde sie stillschweigend überspringen."
+    )
 
 
 async def test_counter_ohne_summen_spalte_eigene_meldung(db, monkeypatch):

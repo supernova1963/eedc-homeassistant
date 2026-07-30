@@ -186,6 +186,10 @@ class SensorChecks:
           kann daraus keine Deltas bilden — s. u.)
         - **kWh-Feld + LTS-Eintrag mit Summen-Spalte** → OK
 
+        Geprüft werden nur **Energie-Felder** (Einheit kWh/Wh/MWh) und die
+        reinen Counter. Preis-, km-, Anzahl- und Temperatur-Slots sind hier
+        nicht zuständig — s. Filter unten.
+
         Der dritte Fall ist der stille: HA legt auch für `measurement` eine
         `statistics_meta`-Zeile an, nur ohne `sum`. Wer bloß die Existenz prüft,
         meldet OK, während `get_hourly_kwh_deltas_for_day` jede Zeile dieses
@@ -195,7 +199,9 @@ class SensorChecks:
         `measurement` ist dort der bekannte Griff daneben.
         Forum simon42 #89667/44.
         """
-        from backend.core.field_definitions import FELD_LABELS
+        from backend.core.field_definitions import (
+            FELD_EINHEITEN, FELD_LABELS, einheit_klasse,
+        )
         from backend.services.ha_statistics_service import get_ha_statistics_service
         from backend.services.sensor_snapshot_service import KUMULATIVE_COUNTER_FELDER
 
@@ -265,8 +271,24 @@ class SensorChecks:
                 )
                 if feld in counter_fields:
                     counter_sensors.append((sid, lbl))
-                else:
+                elif einheit_klasse(FELD_EINHEITEN.get(feld)) == "energie":
                     kwh_sensors.append((sid, lbl))
+                # sonst: kein Energie-Feld — dieser Check ist nicht zuständig.
+                # Die Basis-Ebene zieht diese Grenze seit 2026-05-04 per Whitelist
+                # (s. o., Joachim-PN `grid_price_monitor`); auf Investitionsebene
+                # fehlte sie, und der Ø-Ladepreis eines Speichers (ct/kWh) wurde
+                # als „kWh-Sensor ohne Summen-Spalte" gemeldet — ein Preis-Sensor
+                # mit `state_class: measurement` ist aber korrekt konfiguriert und
+                # hat naturgemäß kein `has_sum` (Forum simon42 #89667/54, MartyBr).
+                # Betrifft ebenso `km_gefahren`, `ladevorgaenge`,
+                # `ladung_extern_euro`, `soc`, `warmwasser_temperatur_c`.
+                #
+                # Einheiten-Filter statt `KUMULATIVE_ZAEHLER_FELDER`: dort fehlen
+                # echte kWh-Felder (`ladung_extern_kwh`, `v2h_entladung_kwh`,
+                # `verbrauch_sonstig_kwh`), die Zähler-Whitelist würde Deckung
+                # VERLIEREN. Gleiche Mechanik wie `_check_sensor_mapping_einheit`.
+                # Wächter gegen fehlende `FELD_EINHEITEN`-Einträge:
+                # test_daten_checker_lts_summen_spalte.py::test_alle_zaehlerfelder_bleiben_gedeckt
 
         if not kwh_sensors and not counter_sensors:
             return []
