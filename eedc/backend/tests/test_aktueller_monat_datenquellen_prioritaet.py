@@ -24,7 +24,7 @@ Geschwister-Datei (Symbol get_aktueller_monat):
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,8 +51,13 @@ async def _seed(db: AsyncSession, *, jahr: int, monat: int,
     return anlage.id
 
 
-def _info(am, quelle, konfidenz):
-    return am.DatenquelleInfo(quelle=quelle, konfidenz=konfidenz)
+def _info(am, quelle, konfidenz, abdeckung_von=None):
+    return am.DatenquelleInfo(quelle=quelle, konfidenz=konfidenz, abdeckung_von=abdeckung_von)
+
+
+def _monatsanfang(jahr: int, monat: int) -> datetime:
+    """Connector-Abdeckung, die den ganzen Monat umfasst (Snapshot davor)."""
+    return datetime(jahr, monat, 1) - timedelta(minutes=5)
 
 
 # ---------------------------------------------------------------------------
@@ -155,13 +160,18 @@ async def test_laufender_monat_ha_stats_gewinnt_ueber_connector_und_mqtt(db, mon
 
 async def test_laufender_monat_connector_ueberschreibt_gespeichert(db, monkeypatch):
     """Laufender Monat ohne MQTT/HA-Stats: der Connector überschreibt den
-    gespeicherten Wert (Konfidenz 90 % > gespeichert)."""
+    gespeicherten Wert (Konfidenz 90 % > gespeichert) — sofern sein Delta den
+    Monat ab dem Ersten misst."""
     import backend.api.routes.aktueller_monat as am
     now = datetime.now()
     anlage_id = await _seed(db, jahr=now.year, monat=now.month, einspeisung=100.0)
 
     async def _fake_connector(anlage, j, m):
-        return {"einspeisung_kwh": (222.0, _info(am, "local_connector", 90))}
+        return {
+            "einspeisung_kwh": (
+                222.0, _info(am, "local_connector", 90, _monatsanfang(j, m))
+            )
+        }
 
     async def _fake_mqtt(anlage, investitionen):
         return {}
@@ -175,3 +185,42 @@ async def test_laufender_monat_connector_ueberschreibt_gespeichert(db, monkeypat
 
     res = await am.get_aktueller_monat(anlage_id=anlage_id, jahr=now.year, monat=now.month, db=db)
     assert res.einspeisung_kwh == 222.0
+
+
+async def test_laufender_monat_connector_teilzeitraum_ueberschreibt_gespeichert_nicht(
+    db, monkeypatch
+):
+    """Frisch eingerichteter Connector: sein Delta beginnt erst mitten im Monat
+    und ist damit kein Monatswert. Der gespeicherte Wert (aus dem
+    Monatsdaten-Import, der einzigen Quelle für die Zeit davor) bleibt stehen —
+    sonst zeigt der laufende Monat still zu wenig."""
+    import backend.api.routes.aktueller_monat as am
+    now = datetime.now()
+    anlage_id = await _seed(db, jahr=now.year, monat=now.month, einspeisung=100.0)
+
+    # Erster Snapshot am 28. des laufenden Monats (bzw. später als der Erste).
+    spaet = datetime(now.year, now.month, 1) + timedelta(days=27)
+
+    async def _fake_connector(anlage, j, m):
+        return {
+            "einspeisung_kwh": (12.0, _info(am, "local_connector", 90, spaet)),
+            "netzbezug_kwh": (7.0, _info(am, "local_connector", 90, spaet)),
+        }
+
+    async def _fake_mqtt(anlage, investitionen):
+        return {}
+
+    async def _fake_ha_stats(anlage, j, m):
+        return {}
+
+    monkeypatch.setattr(am, "_collect_connector_data", _fake_connector)
+    monkeypatch.setattr(am, "_collect_mqtt_inbound_data", _fake_mqtt)
+    monkeypatch.setattr(am, "_collect_ha_statistics_data", _fake_ha_stats)
+
+    res = await am.get_aktueller_monat(anlage_id=anlage_id, jahr=now.year, monat=now.month, db=db)
+    assert res.einspeisung_kwh == 100.0, (
+        f"Teil-Abdeckung des Connectors hat den Monatswert überschrieben "
+        f"(war {res.einspeisung_kwh}, erwartet 100)"
+    )
+    # Der gespeicherte Netzbezug (8.0 aus _seed) bleibt ebenfalls maßgeblich.
+    assert res.netzbezug_kwh == 8.0

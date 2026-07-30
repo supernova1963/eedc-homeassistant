@@ -201,7 +201,8 @@ async def get_monatsabschluss(
         # zugeordnet hat, bekommt dessen Wert und keine kWp-Zerlegung.
         field_inv_map = connector_config.get("field_inv_map") or {}
         if snapshots:
-            connector_delta = _calc_month_delta(snapshots, jahr, monat)
+            _delta = _calc_month_delta(snapshots, jahr, monat)
+            connector_delta = _delta.werte if _delta else None
             # PV auf Module verteilen
             if connector_delta:
                 pv_kwh = connector_delta.get("pv_erzeugung_kwh")

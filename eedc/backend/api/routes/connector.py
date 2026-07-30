@@ -10,7 +10,7 @@ import ipaddress
 import logging
 import socket
 from datetime import datetime, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -470,13 +470,14 @@ async def get_connector_monatswerte(
         raise HTTPException(status_code=404, detail="Keine Snapshots vorhanden")
 
     # Snapshots die den Monat umrahmen finden
-    diff = _calc_month_delta(snapshots, jahr, monat)
-    if not diff:
+    delta = _calc_month_delta(snapshots, jahr, monat)
+    if not delta:
         raise HTTPException(
             status_code=404,
             detail=f"Nicht genügend Snapshots für {monat:02d}/{jahr}. "
             "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn nötig."
         )
+    diff = delta.werte
 
     # Explizite Kategorie→Investition-Zuordnung (gleiche SoT wie die MQTT-Bridge).
     # Ist eine Kategorie zugeordnet, geht der ganze Wert auf diese eine
@@ -563,14 +564,35 @@ async def get_connector_monatswerte(
 # Pfad mit dem täglichen Scheduler-Job, #300) — Aliase siehe Import-Block oben.
 
 
-def _calc_month_delta(snapshots: dict, jahr: int, monat: int) -> Optional[dict]:
+class MonatsDelta(NamedTuple):
+    """Monatsdifferenz aus Zähler-Snapshots samt der Zeit, die sie wirklich misst.
+
+    `werte` ist die Felddifferenz zwischen zwei Snapshots — sie deckt genau den
+    Zeitraum `(abdeckung_von, abdeckung_bis]` ab, NICHT zwingend den ganzen
+    Monat. Liegt der erste verfügbare Snapshot im Monat (frisch eingerichteter
+    Connector), fehlt der Monatsanfang im Wert; wer das Delta als Monatswert
+    behandelt, liefert stumm zu wenig. Die Abdeckung wandert deshalb mit —
+    die Aufrufer entscheiden damit, ob das Delta einen gespeicherten Monatswert
+    überschreiben darf.
+
+    Zeitstempel sind naiv (wie die Snapshot-Normalisierung in
+    `_calc_month_delta`) und damit direkt mit `datetime(jahr, monat, 1)`
+    vergleichbar.
+    """
+    werte: dict
+    abdeckung_von: datetime
+    abdeckung_bis: datetime
+
+
+def _calc_month_delta(snapshots: dict, jahr: int, monat: int) -> Optional[MonatsDelta]:
     """Berechnet die Monatsdifferenz aus verfügbaren Snapshots.
 
     Sucht den letzten Snapshot VOR dem Monat als Start und den letzten
     Snapshot IM Monat (oder den ersten danach) als Ende.
 
     Returns:
-        Dict mit Felddifferenzen oder None wenn nicht genug Snapshots.
+        `MonatsDelta` (Felddifferenzen + tatsächlich gemessene Abdeckung) oder
+        None wenn nicht genug Snapshots bzw. keine gemeinsamen Felder.
     """
     from datetime import datetime as dt
 
@@ -594,27 +616,33 @@ def _calc_month_delta(snapshots: dict, jahr: int, monat: int) -> Optional[dict]:
         return None
 
     # Start-Snapshot: letzter VOR dem Monat, oder erster im Monat
-    start_snap = None
+    start_ts, start_snap = None, None
     for ts, snap in sorted_snaps:
         if ts < monat_start:
-            start_snap = snap
+            start_ts, start_snap = ts, snap
         elif ts <= monat_ende and start_snap is None:
-            start_snap = snap
+            start_ts, start_snap = ts, snap
             break
 
     # End-Snapshot: letzter IM Monat, oder erster danach
-    end_snap = None
+    end_ts, end_snap = None, None
     for ts, snap in sorted_snaps:
         if monat_start <= ts < monat_ende:
-            end_snap = snap  # Letzter im Monat
+            end_ts, end_snap = ts, snap  # Letzter im Monat
         elif ts >= monat_ende and end_snap is None:
-            end_snap = snap
+            end_ts, end_snap = ts, snap
             break
 
     if not start_snap or not end_snap or start_snap is end_snap:
         return None
 
-    return _calc_difference(start_snap, end_snap)
+    werte = _calc_difference(start_snap, end_snap)
+    if not werte:
+        # Keine gemeinsamen Felder — wie bisher „nichts zu melden" (die
+        # Aufrufer prüften bisher das leere Dict, ein NamedTuple wäre truthy).
+        return None
+
+    return MonatsDelta(werte=werte, abdeckung_von=start_ts, abdeckung_bis=end_ts)
 
 
 def _mapped_or_distribute(

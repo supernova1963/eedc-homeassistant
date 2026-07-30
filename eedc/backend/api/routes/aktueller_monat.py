@@ -87,6 +87,12 @@ class DatenquelleInfo(BaseModel):
     quelle: str          # "ha_sensor" | "local_connector" | "gespeichert"
     konfidenz: int       # 95, 90, 85
     zeitpunkt: Optional[str] = None
+    # Zeitraum, den der Wert tatsächlich misst — bisher nur beim Connector
+    # gesetzt, dessen Delta aus zwei Zähler-Snapshots stammt und den Monat
+    # nicht abdecken MUSS (frisch eingerichteter Connector). Leer = Abdeckung
+    # unbekannt bzw. nicht anwendbar.
+    abdeckung_von: Optional[datetime] = None
+    abdeckung_bis: Optional[datetime] = None
 
 
 class InvestitionFinancialDetail(BaseModel):
@@ -362,7 +368,16 @@ async def _collect_connector_data(anlage: Anlage, jahr: int, monat: int) -> dict
 
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
     last_fetch = config.get("last_fetch")
-    quelle = DatenquelleInfo(quelle="local_connector", konfidenz=90, zeitpunkt=last_fetch)
+    # Die Abdeckung wandert mit: das Delta misst `(abdeckung_von, abdeckung_bis]`,
+    # nicht zwangsläufig den ganzen Monat. `merge_datenquellen` entscheidet
+    # damit, ob der Connector gespeicherte Monatswerte überschreiben darf.
+    quelle = DatenquelleInfo(
+        quelle="local_connector",
+        konfidenz=90,
+        zeitpunkt=last_fetch,
+        abdeckung_von=delta.abdeckung_von,
+        abdeckung_bis=delta.abdeckung_bis,
+    )
 
     feld_map = {
         "pv_erzeugung_kwh": "pv_erzeugung_kwh",
@@ -372,7 +387,7 @@ async def _collect_connector_data(anlage: Anlage, jahr: int, monat: int) -> dict
         "batterie_entladung_kwh": "speicher_entladung_kwh",
     }
     for delta_key, feld_name in feld_map.items():
-        val = delta.get(delta_key)
+        val = delta.werte.get(delta_key)
         if val is not None:
             resolved[feld_name] = (val, quelle)
 
@@ -1087,12 +1102,23 @@ async def get_aktueller_monat(
     mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen) if ist_aktueller_monat else {}
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
 
+    # Abdeckung des Connector-Deltas — sie steht in jedem seiner
+    # DatenquelleInfo (eine Instanz für alle Felder), der erste Eintrag genügt.
+    # Naive Zeitstempel wie in `_calc_month_delta`, daher direkt mit dem
+    # naiven Monatsanfang vergleichbar.
+    connector_abdeckung_von = next(
+        (info.abdeckung_von for _, info in connector.values() if info.abdeckung_von),
+        None,
+    )
+
     resolved: dict[str, tuple[float, DatenquelleInfo]] = merge_datenquellen(
         saved=saved,
         connector=connector,
         mqtt_energy=mqtt_energy,
         ha_stats=ha_stats,
         ist_aktueller_monat=ist_aktueller_monat,
+        connector_abdeckung_von=connector_abdeckung_von,
+        monat_start=datetime(jahr, monat, 1),
     )
 
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──

@@ -10,6 +10,10 @@ export interface DatenquelleInfo {
   quelle: string   // "ha_sensor" | "local_connector" | "gespeichert"
   konfidenz: number
   zeitpunkt: string | null
+  // Zeitraum, den der Wert tatsächlich misst (ISO). Nur beim Connector gesetzt,
+  // dessen Delta aus zwei Zähler-Snapshots stammt; null = unbekannt.
+  abdeckung_von?: string | null
+  abdeckung_bis?: string | null
 }
 
 export interface InvestitionFinancialDetail {

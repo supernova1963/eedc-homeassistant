@@ -131,7 +131,9 @@ async def test_zweiter_lauf_am_selben_tag_erzeugt_keinen_drift(
     now = datetime.now(timezone.utc)
     delta = _calc_month_delta(snaps, now.year, now.month)
     assert delta is not None
-    assert all(v == 0 for v in delta.values())
+    assert all(v == 0 for v in delta.werte.values())
+    # Die gemessene Abdeckung wandert mit (beide Snapshots von heute).
+    assert delta.abdeckung_von <= delta.abdeckung_bis
 
 
 async def test_fetch_service_ohne_config_wirft_connector_not_configured(
