@@ -1,11 +1,188 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.3)
+> **Stand:** Juli 2026 (v4.0.4)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.4 — Lücken nachholen, Balkonkraftwerk, Import und PV je String (Juli 2026)
+
+> **Der Schwerpunkt dieser Version:** eedc sagt jetzt, **warum** eine Sicht leer ist — und stellt,
+> wo es geht, den Knopf zum Nachholen daneben. Bisher sah eine Anlage in solchen Fällen von außen
+> gesund aus, während Cockpit und Tagesansicht nichts zeigten.
+
+### Leere Tageswerte trotz „alles grün": eedc sagt jetzt, woran es liegt
+
+**Betrifft dich das?** Wenn dein **Live-Dashboard Werte zeigt**, aber **Cockpit → Tag und die
+Stundenwerte auf 0 stehen** — und der Daten-Checker trotzdem nichts bemängelt.
+
+Dahinter steckt fast immer eine Kleinigkeit am Sensor: Ein kWh-Zähler braucht in Home Assistant
+`state_class: total_increasing`. Steht dort **`measurement`**, merkt sich HA für ihn nur Mittel-,
+Min- und Max-Werte — **keine Zählerstände**. eedc kann daraus keine Tages- und Stundenwerte bilden.
+Die Live-Ansicht merkt davon nichts, weil sie aus den Watt-Sensoren rechnet; genau deshalb sieht so
+eine Anlage von außen gesund aus.
+
+Bisher hat der Daten-Checker nur gefragt, ob der Sensor **überhaupt** in der Langzeitstatistik
+auftaucht — und das tut er in diesem Zustand. Jetzt unterscheidet er beide Fälle, nennt die
+betroffenen Zähler beim Namen und sagt, was zu tun ist. **Nach der Umstellung** die Tage einmal über
+**Einstellungen → Energieprofil-Pflege → Reparatur-Werkbank** neu berechnen — Home Assistant sammelt
+die Zählerstände erst ab dem Moment, in dem `state_class` richtig steht.
+
+Besonders häufig betrifft das Zähler, bei denen man `state_class` von Hand nachträgt — die
+bitShake-/Tasmota-Lesekopf-Familie setzt von sich aus keines. Für Counter wie die
+WP-Kompressor-Starts gibt es eine eigene Meldung: die laufen weiter, nur die Reparatur-Werkzeuge
+greifen auf ihnen nicht.
+
+**Wer die `configuration.yaml` nicht anfassen will**, kommt auch ohne sie zu einem brauchbaren
+Zähler: In Home Assistant unter **Einstellungen → Geräte & Dienste → Helfer** einen
+**Verbrauchszähler** auf den vorhandenen Sensor anlegen — **ohne Zyklus**, also ohne
+Zurücksetzen. Der bringt die richtigen Attribute von sich aus mit, und sein Name bleibt auch
+dann derselbe, wenn du später das Gerät tauschst (du änderst nur die Quelle). Einen **Zyklus**
+(täglich/monatlich) solltest du für eedc **nicht** wählen — bei jedem Zurücksetzen muss eedc den
+Sprung erkennen, und das ist eine Fehlerquelle, die du geschenkt bekommst, wenn der Zähler
+einfach durchläuft. Ein Hinweis noch: Ein neuer Helfer fängt bei null an, seine Historie beginnt
+also mit ihm. *(Danke an Rainer für den Tipp.)*
+
+### Zähler zugeordnet, Tage trotzdem leer: jetzt mit Knopf zum Nachholen
+
+**Betrifft dich das?** Wenn du auf v4.0.3 aktualisiert hast und deine Zuordnung seither wieder
+greift — die **zurückliegenden Tage** aber leer geblieben sind.
+
+Das ist kein neuer Fehler, sondern die Nachwirkung: Solange die Zuordnung unsichtbar war, hat für
+diese Tage nie eine Auswertung stattgefunden. Der Daten-Checker sagte dazu „Zähler-Abdeckung: OK" —
+stimmt ja auch, der Zähler **ist** zugeordnet. Nur half das niemandem weiter.
+
+Jetzt vergleicht eedc die gespeicherten Tage der letzten 90 Tage mit dem, was die
+**Home-Assistant-Langzeitstatistik** für dieselben Tage hergibt. Wo HA etwas hat und eedc nichts,
+steht im Daten-Checker eine Meldung — **mit dem Knopf gleich daneben**: „Zeitraum neu aggregieren"
+für die ganze Lücke (bis 31 Tage pro Durchgang, größere Lücken einfach mehrfach) oder „Tag
+reparieren" für einzelne Tage.
+
+Zwei Dinge sagt die Meldung ausdrücklich dazu:
+
+- **Wie weit es zurückreicht.** eedc kann nur holen, was Home Assistant noch hat. Ist die Lücke
+  älter als deine HA-Historie, meldet eedc das als Tatsache — und bietet keinen Knopf an, der
+  nichts holen könnte.
+- **Was repariert wird.** Die Tagesreparatur füllt **Tages- und Stundenwerte**, nicht die
+  **Monatswerte**. Für abgeschlossene Monate ist der Weg **Einstellungen → Integration →
+  Statistik-Import**: „Vorschau laden" — schon belegte Monate stehen dort unter **„Konflikte"**
+  und sind zum **Überschreiben vorausgewählt**. Vor dem Import einmal durchsehen: was hier
+  ausgewählt bleibt, wird überschrieben.
+
+Nichts davon läuft beim Start von allein. eedc erkennt es, sagt es — auslösen tust du es.
+
+**Und der Knopf sagt jetzt die Wahrheit über sich selbst.** „Mehrere Tage neu aggregieren" meldete
+bisher immer Erfolg, auch wenn kein einziger Tag nachgerechnet werden konnte. Der Lauf braucht
+nämlich mehr als den Zählerstand: ohne zugeordneten **Leistungssensor (W)** und ohne
+Home-Assistant-Historie für den Zeitraum findet er keine Kurvendaten. Jetzt steht dort, was
+tatsächlich passiert ist — und wenn deiner Anlage der Leistungssensor fehlt, erscheint der Knopf
+gar nicht mehr, sondern der Hinweis, ihn erst unter **Einstellungen → Datenquellen** zuzuordnen.
+
+**Dazu passend:** Meldet der Daten-Checker „Einspeisung größer als PV-Erzeugung" für einen Monat,
+riet er bisher zuerst zu vertauschten Sensoren. Stehen die **Tage** dieses Monats aber schon voll da
+und nur der Monatswert nicht, nennt die Meldung jetzt **diese** Ursache zuerst und den Weg zum
+Statistik-Import dazu.
+
+### Cockpit → Tag: „Eigenverbrauch" hieß dort etwas anderes
+
+Wenn du Live „Heute" und Cockpit → Tag nebeneinandergelegt hast, standen dort für den
+Eigenverbrauch zwei verschiedene Zahlen. Beide waren richtig — sie meinten nur nicht dasselbe:
+
+- **Live, Monat, Jahr und die Wirtschaftlichkeit** meinen den **PV-gedeckten Hausverbrauch**
+  (Direktverbrauch + was der Speicher wieder abgibt).
+- **Cockpit → Tag** rechnet **PV-Erzeugung − Einspeisung** — da steckt auch die **Speicherladung**
+  drin, also Energie, die noch gar nicht verbraucht wurde.
+
+Die Differenz ist genau das, was an dem Tag netto in den Speicher gewandert ist. Beides ist eine
+sinnvolle Größe, nur hießen sie gleich. **Die Zahlen bleiben, der Name ändert sich:** Die
+Tages-Kachel heißt jetzt **„PV-Eigenverbrauch"** und sagt „inkl. Speicherladung" dazu. Der
+unqualifizierte Begriff „Eigenverbrauch" gehört ab jetzt überall der ersten Größe.
+
+Zwei Kleinigkeiten aus demselben Winkel:
+
+- **Am laufenden Tag** steht die Tages-Sicht auf den **abgeschlossenen** Stunden, Live „Heute"
+  zählt die laufende schon mit — deshalb steht dort jetzt **„Stand: n von 24 Std. · laufende
+  Stunde fehlt"**. Das erklärt die kleine Differenz, die es am heutigen Tag immer gab.
+- **Der Rechenweg hinter der Autarkie-Kachel** (Tag) zeigte eine Formel, die seit v4.0.2 nicht mehr
+  zur angezeigten Zahl passte — vorgerechnet kamen an manchen Tagen über 100 % heraus. Der
+  angezeigte Prozentwert war die ganze Zeit richtig; jetzt stimmt die Erklärung dazu.
+
+### Balkonkraftwerk: die Prognose passt jetzt zum Gerät
+
+Ein Balkonkraftwerk ist fast immer überbelegt — drei Module à 420 Wp ergeben 1,26 kWp, der
+Wechselrichter gibt aber nur 600 oder 800 W ab. Zwei Dinge ändern sich:
+
+- Unter **Einstellungen → Investitionen** gibt es beim Balkonkraftwerk das Feld
+  **Wechselrichter-Leistung (W)**. Ist es gepflegt, kappt eedc die Prognose **stundenweise** —
+  die Mittagsspitze wird begrenzt, Morgen und Abend bleiben voll. **Bleibt das Feld leer, wird
+  nichts gekappt**; einen Standardwert gibt es bewusst nicht. Wer es ausfüllt, sieht seine
+  Prognose an sonnigen Tagen sinken — das ist die Korrektur.
+- **Balkonkraftwerke zählten in der Tagesprognose bisher gar nicht mit.** In der 14-Tage-Aussicht
+  schon — dieselbe Anlage hatte damit zwei Zahlen für denselben Tag. Wenn du ein
+  Balkonkraftwerk erfasst hast, steigen Tagesprognose, Stundenprofil, Live-Wetter und die
+  Prognose-Sensoren in Home Assistant jetzt um dessen Anteil. **Anlagen ohne Balkonkraftwerk sind
+  unverändert.**
+
+### JSON-Import: die Sensor-Zuordnung überlebt den Umzug
+
+Beim Einspielen einer JSON-Datei ging bisher die Zuordnung **aller Komponenten** verloren —
+Speicher, Wallbox, PV-Strings, Wärmepumpe. Sichtbar wurde das erst daran, dass Stundenwerte,
+Prognose-IST und Monatsbericht für diese Komponenten leer blieben. Jetzt trägt die Datei die
+nötigen Nummern mit und der Import schreibt die Zuordnung um.
+
+**Ältere Dateien** (vor diesem Update erzeugt) lassen sich nicht heilen — ihnen fehlen die Nummern.
+Der Import sagt es jetzt ausdrücklich und nennt, was neu zuzuordnen ist. Die Basis-Zähler
+(Einspeisung, Netzbezug, PV gesamt) waren nie betroffen.
+
+> **Zur Erinnerung:** Der JSON-Export ist **kein Datenbank-Backup**, sondern der Weg für Umzug oder
+> Neuanfang. Für die vollständige Wiederherstellung: **HA-Backup** (Add-on) bzw. Sicherung des
+> `eedc`-Verzeichnisses (Standalone).
+
+### PV je String: gemessen bleibt gemessen
+
+**Betrifft dich das?** Ja, wenn du **mehrere Strings** hast und **nicht alle** davon einen eigenen
+Erzeugungs-Sensor haben — nach einem Sensor-Ausfall, nach dem Anlegen eines neuen Strings, oder in
+den Monaten vor deiner Umstellung auf Pro-String-Messung.
+
+Bisher galt: sobald **ein** Modul für einen Monat keinen eigenen Wert hatte, wurde der
+Monats-Gesamtwert nach Nennleistung über **alle** Module verteilt — die echten Messwerte der
+anderen Strings waren für diesen Monat weg. Jetzt gilt die Regel **je Modul:** ein Messwert zählt
+immer, verteilt wird nur der **Rest** auf die Module ohne eigenen Wert. Deine **Anlagensumme
+ändert sich dadurch nicht** — nur die Aufteilung auf die Dächer wird ehrlich.
+
+**Das Zielbild:** alle Strings erfassen und die Zuordnung **PV gesamt** auf „keine" setzen.
+Zusammenfassen höchstens je Ausrichtung/Neigung — sonst kann eedc für Anlagen mit mehreren
+Ausrichtungen nicht mehr getrennt prognostizieren. Die anteilige Verteilung ist ein Übergang, kein
+Dauerzustand.
+
+**Wenn du mitten in der Historie umgestellt hast**, kommt deine Vorgeschichte zurück: sobald
+irgendein Monat Pro-Modul-Werte hatte, standen alle früheren Monate in **Erzeugungs-Kachel,
+spezifischem Ertrag und Finanzen** auf 0. Jahres-Erzeugung und Netto-Ertrag steigen dort jetzt auf
+die tatsächlichen Werte.
+
+### Daten-Checker und Datenquellen: weniger Fehlalarm
+
+- Der Hinweis „die Gesamt-Zuordnung wird ignoriert, auf ‚keine' setzen" erschien für **PV gesamt
+  (kWh)** schon, sobald ein einziger String einen eigenen Zähler hatte. Wer dem folgte, stand für
+  die ganze Anlage auf 0. Der Hinweis kommt jetzt erst, wenn **jede** PV-Quelle einen eigenen
+  Zähler hat. Für **PV gesamt (W)** (Live-Dashboard) bleibt es beim bisherigen Verhalten.
+- **Ø Performance Ratio**, die **SOLL/IST-Abweichung** und die Plausibilitätsprüfungen rechneten in
+  Monaten mit teilweise gemessenen Strings mit einer Teilsumme — und meldeten einen
+  Ertragseinbruch, den es nicht gab. Ebenso weg: der Fehlalarm „Energiebilanz ergibt negativen
+  Hausverbrauch", wenn die PV eines Monats gar nicht auflösbar war.
+- Neu geprüft wird der **PV-Gesamtzähler** auf Langzeitstatistik: ohne `state_class` liefert er für
+  die Monatswerte still nichts.
+- Neu ist auch eine **Frage** statt einer Anschuldigung: Ist „Einspeisung + Speicherladung aus PV"
+  größer als die Erzeugung des Monats, fragt der Checker nach. Meist fehlt dann nur das Feld
+  **Ladung aus Netz** (wer nachts günstig lädt) — dann stimmt die Energie, nur die Zuordnung nicht.
+
+- Zusätzlich meldet der Daten-Checker ein **überbelegtes Balkonkraftwerk ohne gepflegte
+  Wechselrichter-Grenze** (ab 800 W Modulleistung) und nennt die **Wärmepumpen-Felder
+  Heizenergie/Warmwasser** sowie **PV-Ladung** beim Namen, statt sie stumm zu übergehen.
 
 ---
 

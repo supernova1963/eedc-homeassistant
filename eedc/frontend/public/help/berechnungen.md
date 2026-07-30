@@ -475,7 +475,10 @@ Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_f
 > (250 Vollzyklen × Brutto-Kapazität, `SPEICHER_ZYKLEN_PRO_JAHR`), die vor dem Vorliegen von
 > Messdaten greift, sowie in der Tages-**Vorschau** („Speicher voll um …",
 > `core/berechnungen/speicher_simulation.py`), die von 0 bis 100 % der Brutto-Kapazität simuliert —
-> wer bei 90 % abriegelt, ist real früher voll. Beides offen — als Zeile in `docs/drafts/PLAN-POST-FLIP-BACKLOG.md` §P2/B11 („nutzbare Kapazität konsequent").
+> wer bei 90 % abriegelt, ist real früher voll. **Beides ist mit v4.0.2 erledigt:** Kapazitäts-SoT
+> `get_speicher_kapazitaet_kwh` (`52d3714b`) und die Netto-Umstellung von Tagesvorschau und
+> Wirtschaftlichkeits-Prognose (`c5c4437c`), baumweit gewächtert (`5dc3f488`, ADR-002 P3-a).
+> **Die Vollzyklen bleiben bewusst brutto** (Kanon `f1644cc8`) — die Netto-Umstellung zieht sie nicht mit.
 
 ### 3.4 E-Auto-Einsparung
 

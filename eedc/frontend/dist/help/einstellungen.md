@@ -394,7 +394,9 @@ Zur Zuordnungszeit erkennbare Fehler zeigt eedc **direkt an der Feld-Zeile** —
 
 - **Einheiten-Mismatch** — der zugeordnete HA-Sensor hat eine andere Dimension als das Feld (kWh-Sensor in W-Feld). Nur bei HA-Feldern prüfbar (MQTT-Topics tragen keine Einheit-Metadaten).
 - **Kein `state_class` / keine Langzeitstatistik** — der HA-Sensor liefert für kWh-Felder still keine History (keine Zeitmaschine). Für reine Live-/Counter-Felder unproblematisch.
-- **Aggregat-Redundanz** — ist ein Gesamt-Sensor (z. B. „PV gesamt") **und** ≥ 1 Einzelkomponente zugeordnet, ist die Gesamt-Zuordnung wirkungslos (die Engine nutzt die Einzelwerte). Ein amber Hinweis bietet inline **„auf keine setzen"** an — kein automatischer Eingriff.
+- **Aggregat-Redundanz** — ist eine Gesamt-Zuordnung wirkungslos, weil die Einzelwerte sie ersetzen, bietet ein amber Hinweis inline **„auf keine setzen"** an (kein automatischer Eingriff). Wann das gilt, hängt am Feld:
+  - **PV gesamt (W)** und **Kombi-Netzsensor** — sobald **eine** Einzelkomponente zugeordnet ist. Das Live-Dashboard nutzt dann ausschließlich die Einzelwerte.
+  - **PV gesamt (kWh)** — erst wenn **jede** PV-Quelle (PV-Module und Balkonkraftwerke) einen eigenen kWh-Zähler hat. Vorher füllt der Gesamtzähler die Lücken der Module ohne eigenen Wert und ist damit die Quelle der Monatswerte; ihn dort abzuschalten würde die Anlagen-Erzeugung auf 0 setzen. Bei Teil-Abdeckung schweigt der Hinweis deshalb bewusst.
 - **Sensor-Doppelmapping** — dieselbe HA-Entity in zwei Feldern → Doppelzählungs-Gefahr; beide betroffenen Felder werden benannt.
 
 Die datenbasierten (rückblickenden) Prüfungen — Über-Erfassung, Datenquellen-Drift, Vorzeichen-Historie — bleiben im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md).
