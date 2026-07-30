@@ -16,10 +16,10 @@
  *        (B7-Standard `useLegendenToggle`, 2026-07-18) — erkennbar am role="button",
  *        das `ChartLegende` nur bei gesetztem `onItemClick` rendert.
  *
- * Voraussetzung: flag-on gebautes `dist` auf $EEDC_BASE (Default :8200) + Chromium unter
+ * Voraussetzung: mit `VITE_DEMO_DEFAULT=true` gebautes `dist` auf $EEDC_BASE (Default :8200) + Chromium unter
  * $PLAYWRIGHT_CHROMIUM. Kein CI-Pflichtlauf — Dev-Box-Kommando ([[reference_recharts_bars_jsdom]]):
  *
- *   VITE_IA_V4=true VITE_DEMO_DEFAULT=true npm run build
+ *   VITE_DEMO_DEFAULT=true npm run build
  *   npm run check:chart-audit
  */
 import { chromium } from 'playwright-core'

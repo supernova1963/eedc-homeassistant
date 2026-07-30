@@ -2,7 +2,7 @@
 
 // Build-Feature-Flags (siehe src/lib/flags.ts)
 interface ImportMetaEnv {
-  /** Startet Echtzeit-Sichten im Demo-Modus (Guest-Box-Tester). `deploy-guest.sh`. */
+  /** Startet Echtzeit-Sichten im Demo-Modus (datenlose Test-Builds). Siehe `src/lib/flags.ts`. */
   readonly VITE_DEMO_DEFAULT?: string
 }
 

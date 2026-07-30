@@ -15,11 +15,11 @@
  * Kachel leer-aber-sichtbar stehen? Neue Kacheln/Charts sind automatisch abgedeckt,
  * sobald sie in einer `<Parkbar>` stecken (was `check:parkbar-vollstaendig` erzwingt).
  *
- * Voraussetzungen: flag-on gebautes `dist` wird über $EEDC_BASE serviert (Default
+ * Voraussetzungen: mit `VITE_DEMO_DEFAULT=true` gebautes `dist` wird über $EEDC_BASE serviert (Default
  * http://localhost:8200) + ein Chromium unter $PLAYWRIGHT_CHROMIUM. `playwright-core`
  * muss auflösbar sein (devDep oder NODE_PATH). Kein CI-Pflichtlauf — Dev-Box-Kommando.
  *
- *   VITE_IA_V4=true VITE_DEMO_DEFAULT=true npm run build   # dist aktualisieren
+ *   VITE_DEMO_DEFAULT=true npm run build   # dist aktualisieren
  *   npm run check:park-leertest                            # gegen :8200
  */
 import { chromium } from 'playwright-core'
