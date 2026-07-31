@@ -32,7 +32,6 @@ Geplant (step-by-step, wenn Konsumenten angefasst werden):
 """
 
 from backend.core.berechnungen.alternativkosten import (
-    berechne_bkw_alternativkosten_ersparnis,
     berechne_wp_alternativkosten_ersparnis,
     alter_wirkungsgrad,
     gas_kosten_altanlage,
@@ -56,6 +55,10 @@ from backend.core.berechnungen.counter import (
 from backend.core.berechnungen.datenquellen import (
     connector_deckt_monatsanfang,
     merge_datenquellen,
+)
+from backend.core.berechnungen.bkw_finanz import (
+    BkwFinanzBeitrag,
+    bkw_finanz_beitrag,
 )
 from backend.core.berechnungen.einspeise_erloes import (
     EinspeiseErloes,
@@ -195,7 +198,6 @@ __all__ = [
     "berechne_grundlast",
     "TagesBilanz",
     "bilanz_aus_stundenrows",
-    "berechne_bkw_alternativkosten_ersparnis",
     "berechne_wp_alternativkosten_ersparnis",
     "alter_wirkungsgrad",
     "gas_kosten_altanlage",
@@ -213,6 +215,8 @@ __all__ = [
     "verteile_counter_auf_stunden",
     "connector_deckt_monatsanfang",
     "merge_datenquellen",
+    "BkwFinanzBeitrag",
+    "bkw_finanz_beitrag",
     "EinspeiseErloes",
     "einspeise_erloes_euro",
     "FinanzAggregat",

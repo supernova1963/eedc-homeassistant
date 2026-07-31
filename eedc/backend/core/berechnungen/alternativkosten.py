@@ -170,27 +170,3 @@ def berechne_wp_alternativkosten_ersparnis(
             monate_gezaehlt.add((jahr, monat))
     ersparnis += zusatzkosten_jahr_gesamt * len(monate_gezaehlt) / 12
     return ersparnis
-
-
-def berechne_bkw_alternativkosten_ersparnis(
-    balkonkraftwerke: Iterable,
-    historische_inv_daten: dict[tuple[int, int, int], dict],
-    netzbezug_preis_cent: float,
-) -> float:
-    """Bisherige BKW-Ersparnis: Eigenverbrauch zum Netzbezugspreis bewertet.
-
-    Args:
-        balkonkraftwerke: Investitionen vom Typ ``balkonkraftwerk`` (gelesen: ``.id``).
-        historische_inv_daten: gefilterte IMD ``{(inv_id, jahr, monat): daten}``.
-        netzbezug_preis_cent: Netzbezugs-Arbeitspreis (ct/kWh).
-
-    Returns:
-        Σ über alle BKW/Monate ``eigenverbrauch_kwh × netzbezug_preis_cent / 100``.
-    """
-    ersparnis = 0.0
-    for bkw in balkonkraftwerke:
-        for (inv_id, _jahr, _monat), daten in historische_inv_daten.items():
-            if inv_id == bkw.id:
-                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
-                ersparnis += bkw_ev * netzbezug_preis_cent / 100
-    return ersparnis

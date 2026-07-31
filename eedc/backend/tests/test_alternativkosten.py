@@ -12,7 +12,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from backend.core.berechnungen import (
-    berechne_bkw_alternativkosten_ersparnis,
     berechne_wp_alternativkosten_ersparnis,
     gas_kosten_altanlage,
 )
@@ -104,31 +103,6 @@ def test_wp_strompreis_je_monat_schlaegt_den_fallback():
     )
 
     assert abs(out - 280.0) < 1e-6
-
-
-def test_bkw_eigenverbrauch_zum_netzpreis():
-    """12 × 40 kWh × 30 ct/100 = 144 €."""
-    imd = {(2, 2025, m): {"eigenverbrauch_kwh": 40.0} for m in range(1, 13)}
-    out = berechne_bkw_alternativkosten_ersparnis(
-        [SimpleNamespace(id=2)], imd, 30.0,
-    )
-    assert abs(out - 144.0) < 1e-6
-
-
-def test_bkw_ignoriert_fremde_inv_ids():
-    """Nur IMD der BKW-Investition zählen — andere Komponenten bleiben außen vor."""
-    imd = {
-        (2, 2025, 1): {"eigenverbrauch_kwh": 40.0},
-        (99, 2025, 1): {"eigenverbrauch_kwh": 1000.0},  # fremde Investition
-    }
-    out = berechne_bkw_alternativkosten_ersparnis(
-        [SimpleNamespace(id=2)], imd, 30.0,
-    )
-    assert abs(out - (40.0 * 0.30)) < 1e-6
-
-
-def test_bkw_leer():
-    assert berechne_bkw_alternativkosten_ersparnis([], {}, 30.0) == 0.0
 
 
 # ============================================================================

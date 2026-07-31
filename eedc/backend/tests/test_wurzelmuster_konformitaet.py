@@ -1503,3 +1503,88 @@ def test_p8_baseline_ausnahmen_sind_noch_belegt():
         f"P8-Ausnahmen ohne Fundstelle: {sorted(verwaist)} — die Stelle lädt "
         "keine Tarife mehr; Eintrag streichen."
     )
+
+
+# ============================================================================
+# P9 — ein Energiefluss trägt genau einmal zum Finanz-Netto bei
+# ============================================================================
+#
+# Die Finanz-Zeile hat zwei BKW-Eingänge, die sich BEDINGT überlappen:
+# `pv_erzeugung_kwh` (Erzeugung hinter dem Hauszähler — Module UND BKW) und
+# `bkw_eigenverbrauch_kwh`. Wessen BKW die Erzeugung mitschreibt, dessen
+# Eigenverbrauch steckt bereits in der Ableitung aus dem ersten Eingang; der
+# zweite darf dann nur noch 0 tragen. Wer die Entscheidung selbst trifft,
+# trifft sie irgendwann anders als die Nachbar-Sicht — genau so standen vier
+# Read-Sites mit vier verschiedenen Kombinationen im Baum (#326-Inventur:
+# Aussichten zählten doppelt, Cockpit und PDF verloren die Datenlücken-Zeile,
+# der HA-Export trug sie nur im ROI-Pfad und dort mit statischem Preis).
+#
+# Der Wächter greift auf der SCHREIB-Seite: jeder Wert, der als
+# `bkw_eigenverbrauch_kwh=` in eine Finanz-Zeile geht, muss sichtbar aus
+# `bkw_finanz_beitrag` stammen. Er fängt damit auch eine fünfte Sicht, die es
+# heute noch nicht gibt.
+_P9_ZEILEN_KONSTRUKTOREN = ("FinanzZeileEingabe", "FinanzMonatsZeile")
+_P9_FELD = "bkw_eigenverbrauch_kwh"
+# Belege im Wert-Ausdruck, die den Helper nachweisen. `rest_ev` ist die
+# Namenskonvention der vier Faltungen (`bkw_rest_ev_by_ym` & Co.),
+# `bkw_finanz_beitrag` der direkte Aufruf.
+_P9_HELFER_BELEGE = ("bkw_finanz_beitrag", "rest_ev", "rest_eigenverbrauch")
+# Der Builder selbst reicht den bereits entschiedenen Wert nur durch.
+P9_DURCHREICHER: frozenset[str] = frozenset({
+    "backend/services/finanz_zeilen.py",
+})
+
+
+def _p9_roh_uebergebene_bkw_werte() -> list[str]:
+    """Alle `bkw_eigenverbrauch_kwh=`-Argumente ohne Helper-Beleg im Ausdruck."""
+    treffer: list[str] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if modul in P9_DURCHREICHER:
+            continue
+        quelltext = pfad.read_text(errors="ignore")
+        for knoten in ast.walk(baum):
+            if not isinstance(knoten, ast.Call):
+                continue
+            name = getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
+            if name not in _P9_ZEILEN_KONSTRUKTOREN:
+                continue
+            for kw in knoten.keywords:
+                if kw.arg != _P9_FELD:
+                    continue
+                ausdruck = ast.get_source_segment(quelltext, kw.value) or ""
+                if not any(beleg in ausdruck for beleg in _P9_HELFER_BELEGE):
+                    treffer.append(f"{_ort(pfad, kw.value)} → {ausdruck}")
+    return treffer
+
+
+def test_p9_bkw_eigenverbrauch_kommt_aus_dem_helper():
+    offen = _p9_roh_uebergebene_bkw_werte()
+
+    assert offen == [], (
+        f"{len(offen)} roh übergebene BKW-Eigenverbrauchswerte: {offen}\n"
+        "`bkw_eigenverbrauch_kwh` der Finanz-Zeile ist KEIN Zusatzposten, "
+        "sondern der Ersatzträger für BKW-Monate OHNE erfasste Erzeugung. "
+        "Wer den gemessenen Eigenverbrauch roh übergibt, zählt ihn bei jedem "
+        "BKW mit Erzeugung doppelt — er steckt dann schon in der Ableitung aus "
+        "`pv_erzeugung_kwh`. Die Aufteilung entscheidet `bkw_finanz_beitrag` "
+        "je (BKW, Monat)."
+    )
+
+
+def test_p9_durchreicher_sind_noch_belegt():
+    """Keine verwaiste Ausnahme — dieselbe Pflicht wie bei P3-a/P5/P6/P7/P8."""
+    module_mit_feld: set[str] = set()
+    for pfad, baum in _quelldateien():
+        for knoten in ast.walk(baum):
+            if isinstance(knoten, ast.Call) and any(
+                kw.arg == _P9_FELD for kw in knoten.keywords
+            ):
+                module_mit_feld.add(f"backend/{pfad.relative_to(_BACKEND).as_posix()}")
+
+    verwaist = P9_DURCHREICHER - module_mit_feld
+
+    assert not verwaist, (
+        f"P9-Durchreicher ohne Fundstelle: {sorted(verwaist)} — die Stelle "
+        "baut keine Finanz-Zeile mehr; Eintrag streichen."
+    )

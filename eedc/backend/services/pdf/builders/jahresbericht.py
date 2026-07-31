@@ -20,6 +20,7 @@ from backend.core.berechnungen import (
     autarkie_prozent,
     berechne_finanz_aggregat,
     berechne_verbrauchs_kennzahlen,
+    bkw_finanz_beitrag,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
     erzeugung_hinter_zaehler_kwh,
@@ -197,14 +198,34 @@ async def build_jahresbericht_context(
         (m.jahr, m.monat): m for m in monatsdaten_list
     }
 
-    # PV-Erzeugung pro Jahr/Monat aus IMD
+    # PV-Erzeugung pro Jahr/Monat aus IMD (Module + BKW, Cockpit-Konvention).
+    #
+    # ADR-002/P9: Beim Balkonkraftwerk entscheidet `bkw_finanz_beitrag` je
+    # (BKW, Monat), ob die Erzeugung hier einfließt oder — mangels Erfassung —
+    # der gemessene Eigenverbrauch als Rest-Term in die Finanz-Zeile geht.
+    # Dieser Builder übergab den Rest-Term bisher gar nicht: ein BKW, das nur
+    # `eigenverbrauch_kwh` führt, fehlte im Jahresbericht komplett, während
+    # Cockpit und Aussichten es (unterschiedlich) berücksichtigten.
     pv_by_year_month: dict[tuple[int, int], float] = {}
+    bkw_rest_ev_by_ym: dict[tuple[int, int], float] = {}
     for imd in all_imd:
         inv = inv_by_id.get(imd.investition_id)
-        if inv and inv.typ in ("pv-module", "balkonkraftwerk"):
+        if not inv:
+            continue
+        key = (imd.jahr, imd.monat)
+        if inv.typ == "pv-module":
             pv = (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0
-            key = (imd.jahr, imd.monat)
             pv_by_year_month[key] = pv_by_year_month.get(key, 0) + pv
+        elif inv.typ == "balkonkraftwerk":
+            beitrag = imd_typ_beitrag(inv, imd.verbrauch_daten or {})
+            bkw = bkw_finanz_beitrag(
+                erzeugung_kwh=beitrag.bkw_erzeugung,
+                eigenverbrauch_kwh=beitrag.bkw_eigenverbrauch,
+            )
+            pv_by_year_month[key] = pv_by_year_month.get(key, 0) + bkw.erzeugung_kwh
+            bkw_rest_ev_by_ym[key] = (
+                bkw_rest_ev_by_ym.get(key, 0) + bkw.rest_eigenverbrauch_kwh
+            )
 
     # N93: Sonstige Erzeuger (z. B. Mini-BHKW) speisen hinter DENSELBEN
     # Hauszähler — ihre Erzeugung gehört in die EV-/Autarkie-Ableitung, sonst
@@ -358,6 +379,7 @@ async def build_jahresbericht_context(
             speicher_ladung_kwh=speicher_ladung_by_ym.get(key, 0),
             speicher_entladung_kwh=speicher_entladung_by_ym.get(key, 0),
             v2h_entladung_kwh=v2h_by_ym.get(key, 0),
+            bkw_eigenverbrauch_kwh=bkw_rest_ev_by_ym.get(key, 0),
             neg_preis_kwh=m_neg,
             monatsdaten=md,
         ), tarif_cache=_tarif_cache)

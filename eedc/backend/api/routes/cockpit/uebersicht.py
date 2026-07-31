@@ -25,6 +25,7 @@ from backend.api.routes.strompreise import (
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
+    bkw_finanz_beitrag,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
     berechne_netzbezug_kosten,
@@ -254,7 +255,9 @@ async def get_cockpit_uebersicht(
     speicher_ladung_by_ym: dict[tuple[int, int], float] = {}
     speicher_entladung_by_ym: dict[tuple[int, int], float] = {}
     v2h_by_ym: dict[tuple[int, int], float] = {}
-    bkw_eigenverbrauch_by_ym: dict[tuple[int, int], float] = {}
+    # P9: NUR der Rest-Eigenverbrauch der BKW-Monate ohne erfasste
+    # Erzeugung — mit Erzeugung trägt die PV-Summe (`bkw_erzeugung_by_ym`).
+    bkw_rest_ev_by_ym: dict[tuple[int, int], float] = {}
     # BKW je Monat getrennt führen: das Anlagen-Aggregat deckt nur
     # `pv-module` ab, die Finanzzeile unten setzt sich deshalb aus dem
     # aufgelösten Modul-Wert PLUS dem BKW zusammen.
@@ -332,12 +335,23 @@ async def get_cockpit_uebersicht(
                 wb_imd_data.append(data)
 
         elif inv.typ == "balkonkraftwerk":
+            # P9: je (BKW, Monat) trägt genau EINER der beiden Werte die
+            # Finanz-Zeile — die Erzeugung (dann steckt der Eigenverbrauch
+            # schon in der EV-Ableitung) oder, wenn keine erfasst ist, der
+            # gemessene Eigenverbrauch. `bkw_eigenverbrauch` bleibt daneben der
+            # ROHE Wert für die Anzeige.
+            _bkw_finanz = bkw_finanz_beitrag(
+                erzeugung_kwh=b.bkw_erzeugung,
+                eigenverbrauch_kwh=b.bkw_eigenverbrauch,
+            )
             bkw_erzeugung += b.bkw_erzeugung
             bkw_eigenverbrauch += b.bkw_eigenverbrauch
             pv_erzeugung_inv += b.bkw_erzeugung
             pv_erzeugung_inv_by_ym[key] = pv_erzeugung_inv_by_ym.get(key, 0) + b.bkw_erzeugung
             bkw_erzeugung_by_ym[key] = bkw_erzeugung_by_ym.get(key, 0) + b.bkw_erzeugung
-            bkw_eigenverbrauch_by_ym[key] = bkw_eigenverbrauch_by_ym.get(key, 0) + b.bkw_eigenverbrauch
+            bkw_rest_ev_by_ym[key] = (
+                bkw_rest_ev_by_ym.get(key, 0) + _bkw_finanz.rest_eigenverbrauch_kwh
+            )
 
         elif inv.typ == "sonstiges":
             # D4 (Block 1): zentraler Resolver ist kategorie-bewusst (wie Site
@@ -664,7 +678,7 @@ async def get_cockpit_uebersicht(
             speicher_ladung_kwh=speicher_ladung_by_ym.get(m_key, 0.0),
             speicher_entladung_kwh=speicher_entladung_by_ym.get(m_key, 0.0),
             v2h_entladung_kwh=v2h_by_ym.get(m_key, 0.0),
-            bkw_eigenverbrauch_kwh=bkw_eigenverbrauch_by_ym.get(m_key, 0.0),
+            bkw_eigenverbrauch_kwh=bkw_rest_ev_by_ym.get(m_key, 0.0),
             neg_preis_kwh=m_neg,
             monatsdaten=m,
         ), tarif_cache=_tarif_cache))
@@ -680,13 +694,14 @@ async def get_cockpit_uebersicht(
     nicht_vergueteter_erloes_sum = _finanz.nicht_vergueteter_erloes_euro
     nicht_verguetete_kwh_sum = _finanz.nicht_verguetete_kwh
     hat_neg_preis_daten = _finanz.hat_neg_preis_daten
-    # Netto-Kanon (2026-07-31): die BKW-Eigenverbrauchs-Ersparnis ist hier
-    # bereits ENTHALTEN und darf NICHT addiert werden — `pv_erzeugung_kwh` der
-    # Finanz-Zeile ist „PV-Module + BKW", der daraus abgeleitete Eigenverbrauch
-    # deckt den BKW-Anteil also mit ab. `_finanz.bkw_ersparnis_euro` ist an
-    # dieser Stelle eine AUFSCHLÜSSELUNG derselben Energie, keine zusätzliche
-    # Position. Wer sie aufaddiert, zählt den BKW-Eigenverbrauch doppelt.
-    netto_ertrag = einspeise_erloes + ev_ersparnis
+    # Netto-Kanon (ADR-002/P9): `pv_erzeugung_kwh` der Finanz-Zeile ist
+    # „PV-Module + BKW" — der daraus abgeleitete Eigenverbrauch deckt den
+    # BKW-Anteil also mit ab. `_finanz.bkw_ersparnis_euro` trägt deshalb NUR
+    # noch die BKW-Monate OHNE erfasste Erzeugung (`bkw_finanz_beitrag`, oben);
+    # für alle anderen ist er 0 und die Addition hier folgenlos. Den Term ganz
+    # wegzulassen (Stand 2026-07-31) ließ genau diese Anlagen ihre Ersparnis
+    # verlieren.
+    netto_ertrag = einspeise_erloes + ev_ersparnis + _finanz.bkw_ersparnis_euro
 
     PV_RELEVANTE_TYPEN = ["pv-module", "wechselrichter", "speicher", "wallbox", "balkonkraftwerk"]
     investition_pv_system = 0.0
@@ -779,10 +794,10 @@ async def get_cockpit_uebersicht(
     betriebskosten_zeitraum = betriebskosten_ges * anzahl_monate / 12 if anzahl_monate > 0 else 0
     # sonstige_netto steckt bereits in netto_ertrag (#326) — hier NICHT erneut
     # addieren, sonst Doppelzählung im ROI. Dasselbe gilt für `bkw_ersparnis`:
-    # der BKW-Eigenverbrauch ist über die gemeinsame PV-Summe schon in
-    # `ev_ersparnis` und damit in `netto_ertrag` enthalten. Bis 2026-07-31 stand
-    # er hier zusätzlich — der ROI-Fortschritt war bei BKW-Besitzern um die
-    # BKW-Ersparnis zu hoch.
+    # er ist seit P9 Teil von `netto_ertrag` (und bei mitgeschriebener BKW-
+    # Erzeugung ohnehin 0, weil dann `ev_ersparnis` ihn trägt). Bis 2026-07-31
+    # stand er hier zusätzlich — der ROI-Fortschritt war bei BKW-Besitzern um
+    # die BKW-Ersparnis zu hoch.
     kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis - betriebskosten_zeitraum
     roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
 

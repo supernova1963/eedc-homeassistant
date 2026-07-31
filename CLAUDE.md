@@ -139,7 +139,7 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 | --- | --- | --- |
 | [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel 0/0a) | **Darstellung** — Farben, Komponenten, Typografie, Chart-Konventionen | die `check:*`-Skripte im Frontend (`eedc/frontend/scripts/check-*.mjs`) |
 | [`docs/ADR-001-BERECHNUNGS-LAYER.md`](docs/ADR-001-BERECHNUNGS-LAYER.md) | **Schichtung** — *wo* eine Aggregat-Formel definiert wird (`core/berechnungen/`) | `backend/tests/test_berechnungs_layer_konformitaet.py` |
-| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P7) | `backend/tests/test_wurzelmuster_*.py` |
+| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P9) | `backend/tests/test_wurzelmuster_*.py` |
 
 > **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. Ausnahme mit eigener Begründung: `check:kennwert-roh` bewacht die Client-Hälfte von ADR-002/P3-a.
 >

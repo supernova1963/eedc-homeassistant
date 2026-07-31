@@ -16,6 +16,9 @@ Dieser Helper rechnet **ausschließlich per-Monat** und summiert:
 
 - Eigenverbrauch pro Monat über den kanonischen `berechne_verbrauchs_kennzahlen`
   (inkl. Speicher- + V2H-Entladung).
+- `bkw_eigenverbrauch_kwh` ist **kein Zusatzposten**, sondern der Ersatzträger
+  für BKW-Monate ohne erfasste Erzeugung — sonst zählte derselbe Fluss zweimal
+  (ADR-002/**P9**, `bkw_finanz_beitrag` entscheidet das je Zeile, s. u.).
 - Einspeise-Erlös pro Monat über `einspeise_erloes_euro` (§51 EEG-Abzug).
 - `netzbezug_preis_cent` ist der bereits **aufgelöste** Monats-Flexpreis
   (`resolve_netzbezug_preis_cent`) — die Auflösung bleibt beim Caller, weil sie
@@ -48,6 +51,16 @@ class FinanzMonatsZeile:
     Energiemengen in kWh, Preise in ct/kWh. ``netzbezug_preis_cent`` ist der
     bereits aufgelöste Monats-Flexpreis (Caller ruft
     ``resolve_netzbezug_preis_cent``). Alle Felder None-tolerant über Defaults.
+
+    **Kontrakt der beiden BKW-Eingänge (ADR-002/P9).** ``pv_erzeugung_kwh`` ist
+    die Erzeugung **hinter dem Hauszähler** — PV-Module *und* Balkonkraftwerke;
+    aus ihr leitet der Helper den Eigenverbrauch ab.
+    ``bkw_eigenverbrauch_kwh`` trägt deshalb **ausschließlich** den gemessenen
+    Eigenverbrauch solcher BKW-Monate, deren Erzeugung NICHT in
+    ``pv_erzeugung_kwh`` steckt. Die Aufteilung entscheidet je (BKW, Monat)
+    ``bkw_finanz_beitrag`` — sie hier selbst zu treffen ist der Fehler, den
+    diese Aufteilung abstellt (jede der vier Read-Sites hatte ihn anders
+    getroffen, #326-Inventur).
     """
 
     einspeisung_kwh: float = 0.0
@@ -114,6 +127,8 @@ def berechne_finanz_aggregat(
         )
         ev_kwh += kz.eigenverbrauch_kwh
         ev += kz.eigenverbrauch_kwh * z.netzbezug_preis_cent / 100
+        # Nur der Rest-Eigenverbrauch aus BKW-Monaten OHNE erfasste Erzeugung
+        # (P9-Kontrakt der Zeile) — mit Erzeugung steckt er bereits in `ev`.
         bkw += (z.bkw_eigenverbrauch_kwh or 0.0) * z.netzbezug_preis_cent / 100
 
         erloes = einspeise_erloes_euro(

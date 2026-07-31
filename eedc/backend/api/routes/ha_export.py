@@ -23,8 +23,8 @@ from backend.core.investition_kennwerte import (
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
-    berechne_bkw_alternativkosten_ersparnis,
     berechne_finanz_aggregat,
+    bkw_finanz_beitrag,
     berechne_wp_alternativkosten_ersparnis,
     berechne_spez_ertrag_annualisiert,
     alter_wirkungsgrad,
@@ -326,11 +326,15 @@ async def calculate_anlage_sensors(
     #   • Sonstige Erzeuger (Mini-BHKW/KWK) speisen ebenfalls hinter den Zähler →
     #     zählen in EV/Autarkie, bleiben aber aus den PV-eigenen Kennzahlen
     #     (spez. Ertrag/PR) und aus der PV-Erzeugungs-Anzeige draußen.
-    # Der Finanz-Pfad (`pv_je_monat`) bleibt REIN pv-module — die BKW-Ersparnis läuft
-    # separat über `bisherige_bkw_ersparnis` (kein Doppel-Ansatz); CO₂/Wirtschaft-
-    # lichkeit eines Brennstoff-Erzeugers bleibt bewusst neutral.
+    # `pv_je_monat` bleibt REIN pv-module, weil es auch den spezifischen Ertrag
+    # trägt; die Finanz-Zeile unten addiert `bkw_je_monat` dazu (ADR-002/P9,
+    # dieselbe PV-Basis wie Cockpit/Jahresbericht). CO₂/Wirtschaftlichkeit eines
+    # Brennstoff-Erzeugers bleibt bewusst neutral.
     bkw_erzeugung = 0.0
     bkw_je_monat: dict[tuple[int, int], float] = {}
+    # P9: Rest-Eigenverbrauch der BKW-Monate OHNE erfasste Erzeugung — der
+    # einzige Fall, in dem die Finanz-Zeile ihn separat tragen darf.
+    bkw_rest_ev_je_monat: dict[tuple[int, int], float] = {}
     sonstiges_erzeugung = 0.0
     erzeuger_ids = [
         inv.id for inv in investitionen
@@ -351,10 +355,18 @@ async def calculate_anlage_sensors(
             # Je Monat mitführen: die Finanz-Zeile unten braucht dieselbe
             # PV-Basis wie Cockpit und Jahresbericht („PV-Module + BKW"),
             # sonst fehlt dem Sensor `netto_ertrag_euro` der BKW-Anteil.
-            if b.bkw_erzeugung:
-                bkw_je_monat[(imd.jahr, imd.monat)] = (
-                    bkw_je_monat.get((imd.jahr, imd.monat), 0.0) + b.bkw_erzeugung
+            if inv.typ == "balkonkraftwerk":
+                bkw = bkw_finanz_beitrag(
+                    erzeugung_kwh=b.bkw_erzeugung,
+                    eigenverbrauch_kwh=b.bkw_eigenverbrauch,
                 )
+                key_m = (imd.jahr, imd.monat)
+                if bkw.erzeugung_kwh:
+                    bkw_je_monat[key_m] = bkw_je_monat.get(key_m, 0.0) + bkw.erzeugung_kwh
+                if bkw.rest_eigenverbrauch_kwh:
+                    bkw_rest_ev_je_monat[key_m] = (
+                        bkw_rest_ev_je_monat.get(key_m, 0.0) + bkw.rest_eigenverbrauch_kwh
+                    )
     pv_erzeugung += bkw_erzeugung
 
     # Fallback: Falls keine InvestitionMonatsdaten vorhanden, berechne aus Einspeisung
@@ -516,7 +528,12 @@ async def calculate_anlage_sensors(
             # `None` = Auflösung unvollständig (Modul ohne Wert UND ohne
             # Aggregat) — dann bleibt die Zeile bei 0, statt eine Teilsumme
             # als Erzeugung auszuweisen (N42).
-            m_pv = pv_je_monat.get(key) or 0.0
+            # P9: Erzeugung hinter dem Hauszähler = Module + BKW (wie Cockpit).
+            # Bis 2026-07-31 blieb die Zeile rein pv-module — der Sensor
+            # `netto_ertrag_euro` trug die BKW-Ersparnis dadurch überhaupt
+            # nicht, während der ROI-Pfad sie mit einem STATISCHEN Preis
+            # separat rechnete (P8-Klasse, `berechne_bkw_alternativkosten_…`).
+            m_pv = (pv_je_monat.get(key) or 0.0) + bkw_je_monat.get(key, 0.0)
             finanz_zeilen.append(await baue_finanz_zeile(db, anlage.id, FinanzZeileEingabe(
                 jahr=m.jahr, monat=m.monat,
                 einspeisung_kwh=m.einspeisung_kwh or 0,
@@ -525,6 +542,7 @@ async def calculate_anlage_sensors(
                 speicher_ladung_kwh=sp_lad_by_ym.get(key, 0.0),
                 speicher_entladung_kwh=sp_entl_by_ym.get(key, 0.0),
                 v2h_entladung_kwh=v2h_by_ym.get(key, 0.0),
+                bkw_eigenverbrauch_kwh=bkw_rest_ev_je_monat.get(key, 0.0),
                 neg_preis_kwh=m_neg,
                 monatsdaten=m,
             ), tarif_cache=_tarif_cache))
@@ -572,7 +590,6 @@ async def calculate_anlage_sensors(
         i for i in investitionen
         if i.typ == "wallbox" and not ist_dienstlich(i)
     ]
-    balkonkraftwerke = [i for i in investitionen if i.typ == "balkonkraftwerk"]
 
     # IMD vor anschaffungsdatum / nach stilllegungsdatum überspringen (#236):
     # Sonst fließen Werte in HA-Sensor-Aggregate ein, obwohl die Komponente
@@ -720,16 +737,16 @@ async def calculate_anlage_sensors(
         benzin_verbrauch_liter=co2_benzin_liter,
     ).co2_gesamt_kg
 
-    # BKW-Alternativkosten: Eigenverbrauch zum Netzbezugspreis (Berechnungs-Layer).
-    bisherige_bkw_ersparnis = berechne_bkw_alternativkosten_ersparnis(
-        balkonkraftwerke, historische_inv_daten, netzbezug_preis_cent,
-    )
-
+    # BKW: KEIN eigener Posten mehr (ADR-002/P9). Die Ersparnis steckt seit
+    # 2026-07-31 in `netto_ertrag` — entweder über die gemeinsame PV-Basis der
+    # Finanz-Zeilen (Erzeugung erfasst) oder über deren Rest-Eigenverbrauchs-
+    # Term (nicht erfasst), beides mit dem Preis DES MONATS. Der frühere
+    # Zuschlag hier rechnete mit einem statischen Netzbezugspreis und tauchte
+    # im Sensor `netto_ertrag_euro` gar nicht auf, nur in ROI/Amortisation.
     historischer_netto_ertrag = (
         netto_ertrag
         + bisherige_wp_ersparnis
         + bisherige_eauto_ersparnis
-        + bisherige_bkw_ersparnis
     )
 
     # Jahresersparnis aus Monatsdaten berechnen (annualisiert)

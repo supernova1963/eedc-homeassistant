@@ -34,9 +34,11 @@ from backend.core.berechnungen import (
     berechne_verbrauchs_kennzahlen,
     alter_wirkungsgrad,
     berechne_wp_alternativkosten_ersparnis,
+    bkw_finanz_beitrag,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
     gas_kosten_altanlage,
+    imd_typ_beitrag,
     spezifischer_ertrag_kwh_kwp,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
@@ -985,17 +987,33 @@ async def get_finanz_prognose(
                 gesamt_pv += kwh
                 pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
 
-    # BKW-Erzeugung (+ Eigenverbrauch pro Monat für die Finanz-Aggregation)
-    bkw_ev_pro_monat: dict[tuple[int, int], float] = {}
+    # BKW-Erzeugung (+ Rest-Eigenverbrauch pro Monat für die Finanz-Aggregation)
+    #
+    # ADR-002/P9: die BKW-Erzeugung fließt in dieselbe PV-Summe wie die Module —
+    # der daraus abgeleitete Eigenverbrauch enthält den BKW-Anteil damit schon.
+    # `bkw_finanz_beitrag` entscheidet je (BKW, Monat), ob daneben noch ein
+    # Rest-Eigenverbrauch zu tragen ist (nur bei fehlender Erzeugung). Bis
+    # 2026-07-31 wurde hier der VOLLE gemessene Eigenverbrauch zusätzlich
+    # übergeben und in `_finanz.netto_ertrag_euro` aufaddiert — die bisherigen
+    # Erträge und der ROI-Fortschritt waren bei BKW-Anlagen um diesen Betrag
+    # zu hoch. Werte-Auflösung über den kanonischen `imd_typ_beitrag` (deckt
+    # den Legacy-Key `erzeugung_kwh` mit ab, den der Rohzugriff hier verlor).
+    bkw_rest_ev_pro_monat: dict[tuple[int, int], float] = {}
     for bkw in balkonkraftwerke:
         for (inv_id, jahr, monat), daten in historische_inv_daten.items():
             if inv_id == bkw.id:
-                kwh = daten.get("pv_erzeugung_kwh", 0)
-                gesamt_pv += kwh
-                pv_pro_monat[(jahr, monat)] = pv_pro_monat.get((jahr, monat), 0) + kwh
-                bkw_ev = daten.get("eigenverbrauch_kwh", 0) or 0
-                bkw_ev_pro_monat[(jahr, monat)] = (
-                    bkw_ev_pro_monat.get((jahr, monat), 0) + bkw_ev
+                _b = imd_typ_beitrag(bkw, daten)
+                _bkw_finanz = bkw_finanz_beitrag(
+                    erzeugung_kwh=_b.bkw_erzeugung,
+                    eigenverbrauch_kwh=_b.bkw_eigenverbrauch,
+                )
+                gesamt_pv += _b.bkw_erzeugung
+                pv_pro_monat[(jahr, monat)] = (
+                    pv_pro_monat.get((jahr, monat), 0) + _b.bkw_erzeugung
+                )
+                bkw_rest_ev_pro_monat[(jahr, monat)] = (
+                    bkw_rest_ev_pro_monat.get((jahr, monat), 0)
+                    + _bkw_finanz.rest_eigenverbrauch_kwh
                 )
 
     # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
@@ -1276,7 +1294,7 @@ async def get_finanz_prognose(
             speicher_ladung_kwh=speicher_ladung_pro_monat.get(m_key, 0),
             speicher_entladung_kwh=speicher_entladung_pro_monat.get(m_key, 0),
             v2h_entladung_kwh=v2h_pro_monat.get(m_key, 0),
-            bkw_eigenverbrauch_kwh=bkw_ev_pro_monat.get(m_key, 0),
+            bkw_eigenverbrauch_kwh=bkw_rest_ev_pro_monat.get(m_key, 0),
             neg_preis_kwh=m_neg,
             monatsdaten=md,
         ), tarif_cache=_tarif_cache))
@@ -1641,7 +1659,10 @@ async def get_finanz_prognose(
             stromkosten_ea = eauto_stromkosten_netz_jahr * (agg["km"] / gesamt_km)
             agg["jahres_ersparnis"] = benzin_kosten_jahr_ea - stromkosten_ea
 
-    # BKW Jahres-Ersparnis (aus historischem Durchschnitt hochgerechnet)
+    # BKW Jahres-Ersparnis (aus historischem Durchschnitt hochgerechnet).
+    # P9-konform 0, sobald das BKW seine Erzeugung mitschreibt: dann steckt es
+    # in `gesamt_pv` und damit in `jahres_ev_ersparnis` — der Posten trägt nur
+    # noch die Anlagen, deren BKW ausschließlich Eigenverbrauch führt.
     jahres_bkw_ersparnis = 0.0
     if balkonkraftwerke and anzahl_monate_hist > 0 and bisherige_bkw_ersparnis > 0:
         jahres_bkw_ersparnis = bisherige_bkw_ersparnis / anzahl_monate_hist * 12
