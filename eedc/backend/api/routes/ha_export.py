@@ -593,6 +593,23 @@ async def calculate_anlage_sensors(
     # DI-4: WP-Strom mit dem WP-Spezialtarif bewerten (Fallback allgemein), wie
     # in aktueller_monat.py — sonst rechnet der HA-Export die WP-Ersparnis mit
     # dem allgemeinen Netzbezugspreis, obwohl ein günstigerer WP-Tarif gepflegt ist.
+    # ADR-002/P8: JE MONAT auflösen — die WP-Ersparnis summiert über die ganze
+    # Historie, ein Einheitstarif hätte einen Tarifwechsel rückwirkend über alle
+    # Jahre gezogen (dieselbe Klasse wie der Jahresbericht-Drift, #326).
+    wp_preis_by_periode: dict[tuple[int, int], float] = {}
+    for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten:
+        _periode = (_p_jahr, _p_monat)
+        if _periode in wp_preis_by_periode:
+            continue
+        _p_tarife = await lade_tarife_fuer_anlage(
+            db, anlage.id, target_date=date(_p_jahr, _p_monat, 1)
+        )
+        wp_preis_by_periode[_periode] = resolve_strompreis_for_komponente(
+            _p_tarife, "waermepumpe", fallback=netzbezug_preis_cent
+        )
+
+    # Heutiger WP-Tarif: Fallback für Monate ohne Auflösung und Grundlage der
+    # nach vorn gerichteten Sensor-Werte weiter unten.
     _tarife = await lade_tarife_fuer_anlage(db, anlage.id)
     wp_netzbezug_preis_cent = resolve_strompreis_for_komponente(
         _tarife, "waermepumpe", fallback=netzbezug_preis_cent
@@ -605,6 +622,7 @@ async def calculate_anlage_sensors(
         waermepumpen,
         historische_inv_daten,
         {k: md.gaspreis_cent_kwh for k, md in md_by_periode.items()},
+        wp_preis_by_periode,
         wp_netzbezug_preis_cent,
     )
 

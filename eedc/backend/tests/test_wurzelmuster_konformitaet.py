@@ -1353,3 +1353,153 @@ def test_p7_baseline_ausnahmen_sind_noch_belegt():
         "Ladepfad das Aggregat nicht mehr, ist die Regel gegenstandslos "
         "geworden oder der SoT ist umgezogen."
     )
+
+
+# ============================================================================
+# P8 — Tarif-Werte tragen den Stichtag ihres Monats
+# ============================================================================
+#
+# `lade_tarife_fuer_anlage(db, anlage_id)` ohne `target_date` liefert den HEUTE
+# gültigen Tarif. Für die Sicht nach vorn (ROI, Prognose, „aktueller Tarif",
+# Feld-/Spaltenstruktur nach Vertragsart) ist das richtig — für jeden Wert, der
+# einen vergangenen Monat beschreibt, ist es falsch: eine Preiserhöhung schreibt
+# dann die gesamte Historie um.
+#
+# Die Klasse ist teuer geworden. Sie kostete den Jahresbericht-Drift (#326,
+# ~174 € bei vier Tibber-Jahrestarifen), danach dieselbe Form in `aussichten`,
+# `ha_export`, `cockpit/uebersicht`, `aktueller_monat`, `social`, allen vier
+# Komponenten-Dashboards und als Handquery in `monatsdaten.py`. Jeder Fund wurde
+# einzeln geheilt, jeder Fix erzeugte den nächsten (Forum simon42 #89667/60).
+#
+# Zweite Form derselben Sache: `FinanzZeileEingabe` ohne `monatsdaten`. Der
+# Builder setzt den abgerechneten Flex-Ø des Monats VOR den Stammdaten-Tarif
+# (`resolve_netzbezug_preis_cent`) — wer die Zeile nicht durchreicht, verliert
+# den Override STILL. So rechnete Cockpit/Tag mit dem Referenzpreis, während
+# Monat und Jahr den Ø nahmen: Σ Tage ≠ Monat.
+
+# Aufrufe, die bewusst den HEUTIGEN Tarif brauchen. Wer hier etwas hinzufügt,
+# begründet im Klartext, warum die Stelle NICHTS über einen vergangenen Monat
+# aussagt. Ein Wert, der in einer Monats- oder Historien-Summe landet, gehört
+# nicht hierher, sondern auf den Stichtag.
+#
+#   strompreise.py            — Endpoint `/aktuell/{anlage_id}`: „aktuell" IST
+#                               die Frage; ein Stichtag wäre sinnlos.
+#   datenquellen.py           — entscheidet, ob die Preis-Felder angeboten
+#                               werden (Vertragsart heute). Konfigurations-
+#                               Sicht, kein Messwert.
+#   import_export/csv_operations.py
+#                             — Spaltenstruktur von Vorlage und Export nach
+#                               heutiger Vertragsart. Der Zahlenwert je Zeile
+#                               kommt aus den Monatsdaten, nicht von hier.
+#   investitionen/crud.py     — ROI-/Wirtschaftlichkeits-Prognose NACH VORN.
+#   investitionen/dashboards.py
+#                             — Query-Param-Default + Fallback der
+#                               `_gewichteter_monatspreis`-Mittelung; die
+#                               historischen Beträge laufen über den Helper.
+#   ha_export.py              — heutiger WP-Tarif als Fallback des
+#                               Perioden-Mappings und für die nach vorn
+#                               gerichteten Sensor-Werte.
+#   cockpit/uebersicht.py     — Anzeige des aktuellen Tarifs + Komponenten-
+#                               Kennwerte; alle Monats-Summen laufen über
+#                               `_tarife_fuer(jahr, monat)`.
+#   aussichten.py             — Hochrechnung + ausgewiesener Tarif der
+#                               Response; die Historie läuft über
+#                               `_tarife_fuer_stichtag`.
+P8_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
+    "backend/api/routes/strompreise.py",
+    "backend/api/routes/datenquellen.py",
+    "backend/api/routes/import_export/csv_operations.py",
+    "backend/api/routes/investitionen/crud.py",
+    "backend/api/routes/investitionen/dashboards.py",
+    "backend/api/routes/ha_export.py",
+    "backend/api/routes/cockpit/uebersicht.py",
+    "backend/api/routes/aussichten.py",
+})
+
+_P8_TARIF_LADER = "lade_tarife_fuer_anlage"
+_P8_EINGABE = "FinanzZeileEingabe"
+
+
+def _p8_lader_ohne_stichtag() -> list[str]:
+    """Alle `lade_tarife_fuer_anlage`-Aufrufe ohne Stichtag außerhalb der Baseline.
+
+    Der Stichtag darf als Keyword (`target_date=`) oder als dritte Position
+    stehen — `speicher_wirtschaftlichkeit.py` nutzt die positionale Form.
+    """
+    treffer: list[str] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if modul in P8_BASELINE_AUSNAHMEN:
+            continue
+        for knoten in ast.walk(baum):
+            if not isinstance(knoten, ast.Call):
+                continue
+            name = getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
+            if name != _P8_TARIF_LADER:
+                continue
+            hat_keyword = any(kw.arg == "target_date" for kw in knoten.keywords)
+            hat_positional = len(knoten.args) >= 3
+            if not (hat_keyword or hat_positional):
+                treffer.append(_ort(pfad, knoten))
+    return treffer
+
+
+def _p8_eingaben_ohne_monatsdaten() -> list[str]:
+    """Alle `FinanzZeileEingabe(...)` ohne `monatsdaten=`."""
+    treffer: list[str] = []
+    for pfad, baum in _quelldateien():
+        for knoten in ast.walk(baum):
+            if not isinstance(knoten, ast.Call):
+                continue
+            name = getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
+            if name != _P8_EINGABE:
+                continue
+            if not any(kw.arg == "monatsdaten" for kw in knoten.keywords):
+                treffer.append(_ort(pfad, knoten))
+    return treffer
+
+
+def test_p8_tarif_wird_mit_dem_stichtag_des_monats_geladen():
+    offen = _p8_lader_ohne_stichtag()
+
+    assert offen == [], (
+        f"{len(offen)} Tarif-Ladevorgang/-vorgänge ohne Stichtag: {offen}\n"
+        "`lade_tarife_fuer_anlage(db, anlage_id)` liefert den HEUTE gültigen "
+        "Tarif. Jeder Wert, der einen vergangenen Monat beschreibt, braucht "
+        "`target_date=date(jahr, monat, 1)` — sonst rechnet eine Preiserhöhung "
+        "die Historie um (#326: ~174 € im Jahresbericht).\n"
+        "Wer bewusst den heutigen Tarif braucht (Prognose, „aktueller Tarif“, "
+        "Feld-/Spaltenstruktur), trägt sich mit Klartext-Begründung in "
+        "P8_BASELINE_AUSNAHMEN ein."
+    )
+
+
+def test_p8_finanz_zeile_bekommt_die_monatsdaten_zeile():
+    offen = _p8_eingaben_ohne_monatsdaten()
+
+    assert offen == [], (
+        f"{len(offen)} `FinanzZeileEingabe` ohne `monatsdaten=`: {offen}\n"
+        "Der Builder setzt den abgerechneten Monats-Ø eines dynamischen Tarifs "
+        "VOR den Stammdaten-Arbeitspreis. Ohne die Zeile fällt dieser Override "
+        "STILL weg — so nannten Cockpit/Tag und Cockpit/Monat verschiedene "
+        "Preise für denselben Zeitraum. `monatsdaten=None` ist erlaubt, aber "
+        "explizit hinzuschreiben."
+    )
+
+
+def test_p8_baseline_ausnahmen_sind_noch_belegt():
+    """Keine verwaiste Ausnahme — dieselbe Pflicht wie bei P3-a/P5/P6/P7."""
+    module_mit_lader: set[str] = set()
+    for pfad, baum in _quelldateien():
+        for knoten in ast.walk(baum):
+            if isinstance(knoten, ast.Call) and (
+                getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
+            ) == _P8_TARIF_LADER:
+                module_mit_lader.add(f"backend/{pfad.relative_to(_BACKEND).as_posix()}")
+
+    verwaist = P8_BASELINE_AUSNAHMEN - module_mit_lader
+
+    assert not verwaist, (
+        f"P8-Ausnahmen ohne Fundstelle: {sorted(verwaist)} — die Stelle lädt "
+        "keine Tarife mehr; Eintrag streichen."
+    )

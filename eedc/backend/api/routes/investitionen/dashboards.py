@@ -92,6 +92,48 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _gewichteter_monatspreis(
+    db: AsyncSession,
+    anlage_id: int,
+    verwendung: str,
+    gewichte: dict[tuple[int, int], float],
+    fallback: float,
+) -> float:
+    """Mengengewichteter Ø der Tarife, die in den Monaten der Periode galten.
+
+    ADR-002/P8 für die Komponenten-Dashboards. Sie summieren Energien über die
+    ganze Lebensdauer und bewerten sie EINMAL — mit dem heutigen Tarif hätte
+    jede Preiserhöhung die komplette Historie rückwirkend neu bewertet.
+
+    Warum ein gewichteter Ø statt einer strengen Monatsmultiplikation: Bei
+    aktivem Wallbox-Pool (#262) ersetzt `attribute_emob_pool_by_km` die
+    Monatswerte durch EINEN nach km verteilten Gesamtwert — eine
+    Monatsaufteilung der Netzladung existiert dort nicht. Der Ø wird deshalb
+    mit derselben Größe gewichtet, nach der auch attribuiert wird. Für Anlagen
+    ohne Tarifwechsel ist das Ergebnis identisch zum bisherigen Wert.
+
+    Args:
+        gewichte: ``{(jahr, monat): menge}`` — Netzladung bzw. km je Monat.
+        fallback: Preis für den Fall, dass keine Gewichte vorliegen (ct/kWh).
+    """
+    summe_gewicht = sum(g for g in gewichte.values() if g and g > 0)
+    if summe_gewicht <= 0:
+        return fallback
+
+    gewichteter_preis = 0.0
+    for (jahr, monat), gewicht in gewichte.items():
+        if not gewicht or gewicht <= 0:
+            continue
+        m_tarife = await lade_tarife_fuer_anlage(
+            db, anlage_id, target_date=date(jahr, monat, 1)
+        )
+        m_preis = resolve_strompreis_for_komponente(
+            m_tarife, verwendung, fallback=fallback
+        )
+        gewichteter_preis += m_preis * gewicht
+    return gewichteter_preis / summe_gewicht
+
+
 class InvestitionMonatsdatenResponse(BaseModel):
     """Monatsdaten für eine Investition."""
     id: int
@@ -269,17 +311,25 @@ async def get_eauto_dashboard(
         # mit dem jeweils gültigen Monats-Benzinpreis rechnen kann.
         km_pro_monat: list[tuple[int, int, float]] = []
 
+        # ADR-002/P8: Gewichte je Monat mitführen, um den Tarif über die
+        # tatsächlich gültigen Monatstarife zu mitteln statt über den heutigen.
+        netz_pro_monat: dict[tuple[int, int], float] = {}
+        km_gewichte: dict[tuple[int, int], float] = {}
+
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             km_this = d.get('km_gefahren', 0) or 0
             gesamt_km += km_this
             if km_this > 0:
                 km_pro_monat.append((md.jahr, md.monat, km_this))
+                km_gewichte[(md.jahr, md.monat)] = km_this
             gesamt_verbrauch += d.get('verbrauch_kwh', 0)
             # #262: PV/Netz via SoT-Helper (evcc-Import schreibt nur Total + PV).
             pv, netz = get_emob_pv_netz_kwh(d)
             gesamt_pv_ladung += pv
             gesamt_netz_ladung += netz
+            if netz:
+                netz_pro_monat[(md.jahr, md.monat)] = netz
             gesamt_extern_ladung += d.get('ladung_extern_kwh', 0)
             gesamt_extern_kosten += d.get('ladung_extern_euro', 0)
             gesamt_v2h += d.get('v2h_entladung_kwh', 0)
@@ -289,11 +339,21 @@ async def get_eauto_dashboard(
         # offenbar via evcc-Portal-Import in die Wallbox geflossen. Anteilig
         # nach gefahrenen km auf die E-Autos verteilen.
         share = attribute_emob_pool_by_km(pool_attr, gesamt_km)
-        if pool_attr.use_wb_pool and share.netz_kwh + share.pv_kwh > 0:
+        ist_pool = pool_attr.use_wb_pool and share.netz_kwh + share.pv_kwh > 0
+        if ist_pool:
             gesamt_pv_ladung = share.pv_kwh
             gesamt_netz_ladung = share.netz_kwh
             gesamt_extern_ladung = share.extern_kwh
             gesamt_extern_kosten = share.extern_euro
+
+        # ADR-002/P8: Tarif über die Monate der Periode mitteln. Beim Pool-Fall
+        # nach km gewichten — das ist der Schlüssel, nach dem auch attribuiert
+        # wird; sonst nach der Netzladung des Monats.
+        eauto_strompreis_cent = await _gewichteter_monatspreis(
+            db, anlage_id, "wallbox",
+            km_gewichte if ist_pool else netz_pro_monat,
+            fallback=strompreis_cent,
+        )
 
         # Heim-Ladung (Wallbox) = PV + Netz
         gesamt_heim_ladung = gesamt_pv_ladung + gesamt_netz_ladung
@@ -312,12 +372,12 @@ async def get_eauto_dashboard(
             km_pro_monat=km_pro_monat,
             ladung_netz_kwh_gesamt=gesamt_netz_ladung,
             ladung_extern_euro_gesamt=gesamt_extern_kosten,
-            wallbox_strompreis_cent=strompreis_cent,
+            wallbox_strompreis_cent=eauto_strompreis_cent,
             eauto_parameter=params,
             monats_benzinpreis_lookup=benzinpreis_lookup,
         )
         benzin_kosten = eauto_result.benzin_kosten_euro
-        heim_netz_kosten = gesamt_netz_ladung * strompreis_cent / 100
+        heim_netz_kosten = gesamt_netz_ladung * eauto_strompreis_cent / 100
         strom_kosten_gesamt = eauto_result.strom_kosten_euro
         ersparnis_vs_benzin = eauto_result.ersparnis_euro
         benzin_verbrauch_100km = eauto_result.verwendeter_verbrauch_l_100km
@@ -332,7 +392,7 @@ async def get_eauto_dashboard(
         else:
             v2h_ersparnis = berechne_v2h_ersparnis(
                 v2h_entladung_kwh=gesamt_v2h,
-                bezug_preis_cent=strompreis_cent,
+                bezug_preis_cent=eauto_strompreis_cent,
                 einspeise_verg_cent=einspeise_verg_cent,
             ).ersparnis_euro
 
@@ -531,6 +591,13 @@ async def get_waermepumpe_dashboard(
             if isinstance(hours, (int, float)) and hours > 0:
                 stunden_by_inv[inv_id].append(float(hours))
 
+    # Anlage-Monatsdaten für den Monats-Gaspreis (Vorrang vor dem
+    # WP-Parameter-Default, wie in `aussichten.py` und im HA-Export).
+    wp_anlage_md_result = await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+    )
+    wp_anlage_md = {(m.jahr, m.monat): m for m in wp_anlage_md_result.scalars().all()}
+
     dashboards = []
     for wp in waermepumpen:
         # Issue #153 / #236: SoT-Filter inkl. stilllegungsdatum
@@ -566,17 +633,41 @@ async def get_waermepumpe_dashboard(
         # Drift-Audit Domäne A1 / Issue #178: vorher las dieser Endpoint
         # `gas_kwh_preis_cent` (toter Key, Form schreibt `alter_preis_cent_kwh`)
         # und ignorierte den Wirkungsgrad-Faktor → Ergebnis +16€ Drift.
-        # TODO: monatlicher Gaspreis-Override (analog `aussichten.py`-Loop)
-        # könnte ergänzt werden, ist aber für Lebenszeit-Aggregat weniger relevant.
-        wp_result = berechne_wp_ersparnis(
-            wp_waerme_kwh=gesamt_waerme,
-            wp_strom_kwh=gesamt_strom,
-            wp_strompreis_cent=strompreis_cent,
-            wp_parameter=wp.parameter,
-        )
-        wp_kosten = wp_result.wp_kosten_euro
-        alte_heizung_kosten = wp_result.alte_heizung_kosten_euro
-        ersparnis = wp_result.ersparnis_euro
+        #
+        # ADR-002/P8: JE MONAT rechnen statt Energien über die Lebensdauer zu
+        # summieren und einmal mit dem HEUTIGEN Tarif zu multiplizieren. Ein
+        # Tarifwechsel hätte sonst die gesamte WP-Historie neu bewertet. Der
+        # Helper ist linear und kennt keine Jahres-Fixkosten, die Summe der
+        # Monate ist also identisch, solange der Preis konstant ist. Nebenbei
+        # erledigt das den TODO „monatlicher Gaspreis-Override": er wird jetzt
+        # wie in `aussichten.py` je Monat gezogen.
+        wp_kosten = 0.0
+        alte_heizung_kosten = 0.0
+        for md in monatsdaten:
+            d = md.verbrauch_daten or {}
+            m_waerme = (d.get('heizenergie_kwh', 0) or 0) + (d.get('warmwasser_kwh', 0) or 0)
+            m_strom = d.get('stromverbrauch_kwh', 0) or 0
+            if m_waerme <= 0 and m_strom <= 0:
+                continue
+            m_tarife = await lade_tarife_fuer_anlage(
+                db, anlage_id, target_date=date(md.jahr, md.monat, 1)
+            )
+            m_wp_preis = resolve_strompreis_for_komponente(
+                m_tarife, "waermepumpe", fallback=strompreis_cent
+            )
+            m_anlage_md = wp_anlage_md.get((md.jahr, md.monat))
+            m_ergebnis = berechne_wp_ersparnis(
+                wp_waerme_kwh=m_waerme,
+                wp_strom_kwh=m_strom,
+                wp_strompreis_cent=m_wp_preis,
+                wp_parameter=wp.parameter,
+                monats_gaspreis_cent=(
+                    m_anlage_md.gaspreis_cent_kwh if m_anlage_md else None
+                ),
+            )
+            wp_kosten += m_ergebnis.wp_kosten_euro
+            alte_heizung_kosten += m_ergebnis.alte_heizung_kosten_euro
+        ersparnis = alte_heizung_kosten - wp_kosten
 
         # CO2-Ersparnis: kanonischer Helfer (ADR-001, DI-1/DI-2-A). Vorher rechnete
         # dieser Endpoint `wärme × f_gas − strom × f_strom` OHNE den Gas-Kessel-
@@ -734,11 +825,20 @@ async def get_speicher_dashboard(
         (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
     }
 
-    # Gewichteter Ø-Netzbezugspreis für Spread-Berechnung
-    gew_preis_sum = sum(
-        resolve_netzbezug_preis_cent(m, strompreis_cent) * (m.netzbezug_kwh or 0)
-        for m in anlage_md_dict.values()
-    )
+    # Gewichteter Ø-Netzbezugspreis für Spread-Berechnung — Basistarif JE MONAT
+    # (ADR-002/P8). Mit dem heutigen Tarif als Basis hätte eine Preiserhöhung
+    # den Ø über die gesamte Speicher-Historie angehoben und damit den
+    # Arbitrage-Spread rückwirkend verändert. Der Flex-Ø des Monats behält
+    # weiterhin Vorrang (`resolve_netzbezug_preis_cent`).
+    gew_preis_sum = 0.0
+    for m in anlage_md_dict.values():
+        m_tarife = await lade_tarife_fuer_anlage(
+            db, anlage_id, target_date=date(m.jahr, m.monat, 1)
+        )
+        m_basis = resolve_strompreis_for_komponente(
+            m_tarife, "allgemein", fallback=strompreis_cent
+        )
+        gew_preis_sum += resolve_netzbezug_preis_cent(m, m_basis) * (m.netzbezug_kwh or 0)
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in anlage_md_dict.values())
     eff_strompreis_cent = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else strompreis_cent
 
@@ -1090,8 +1190,19 @@ async def get_wallbox_dashboard(
     # PV-Anteil der Heimladung
     pv_anteil = (gesamt_heim_pv / gesamt_heim_ladung * 100) if gesamt_heim_ladung > 0 else 0
 
-    # Kosten Heimladung (nur Netzstrom, PV ist "kostenlos")
-    heim_kosten = gesamt_heim_netz * strompreis_cent / 100
+    # Kosten Heimladung (nur Netzstrom, PV ist "kostenlos").
+    # ADR-002/P8: Tarif über die Monate der Periode mitteln statt den heutigen
+    # zu nehmen. Hier bewusst GLEICHGEWICHTET über `monate_set`: die
+    # Heimladung kommt aus `get_emob_heimladung_canonical`, das die IMD-Dicts
+    # zu einem Pool zusammenfasst — eine Netz-kWh-Aufteilung je Monat gibt es
+    # an dieser Stelle nicht. Genauer als der heutige Tarif, gröber als das
+    # mengengewichtete Mittel im E-Auto-Dashboard.
+    wb_strompreis_cent = await _gewichteter_monatspreis(
+        db, anlage_id, "wallbox",
+        {periode: 1.0 for periode in monate_set},
+        fallback=strompreis_cent,
+    )
+    heim_kosten = gesamt_heim_netz * wb_strompreis_cent / 100
 
     # Was hätte externe Ladung gekostet?
     # Durchschnittspreis extern (wenn vorhanden) oder Annahme 50 ct/kWh

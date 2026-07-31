@@ -17,7 +17,11 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.api.routes.strompreise import (
+    lade_tarife_fuer_anlage,
+    resolve_netzbezug_preis_cent,
+    resolve_strompreis_for_komponente,
+)
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
@@ -173,7 +177,11 @@ async def get_cockpit_uebersicht(
     investitionen = inv_result.scalars().all()
     inv_by_id = {i.id: i for i in investitionen}
 
-    # Tarife laden (allgemein + Spezialtarife für WP/Wallbox)
+    # Tarife laden (allgemein + Spezialtarife für WP/Wallbox).
+    # ACHTUNG: `tarife` ist der HEUTE gültige Satz und damit nur für die
+    # Anzeige des aktuellen Tarifs und die Komponenten-Kennwerte gedacht.
+    # Alles, was über MONATE summiert, holt sich seinen Tarif über
+    # `_tarife_fuer(jahr, monat)` (ADR-002/P8).
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
     wp_tarif = tarife.get("waermepumpe")
@@ -183,6 +191,17 @@ async def get_cockpit_uebersicht(
     einspeise_verguetung_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
     wp_preis_cent = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else netzbezug_preis_cent
     wallbox_preis_cent = wallbox_tarif.netzbezug_arbeitspreis_cent_kwh if wallbox_tarif else netzbezug_preis_cent
+
+    # Monats-Tarif-Auflösung (ein Cache für den ganzen Request).
+    _tarif_cache: dict[date, dict] = {}
+
+    async def _tarife_fuer(jahr: int, monat: int) -> dict:
+        stichtag = date(jahr, monat, 1)
+        if stichtag not in _tarif_cache:
+            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
+                db, anlage_id, target_date=stichtag
+            )
+        return _tarif_cache[stichtag]
 
     # Alle InvestitionMonatsdaten laden (eine Query für alle!)
     all_inv_ids = [i.id for i in investitionen]
@@ -369,15 +388,25 @@ async def get_cockpit_uebersicht(
         sonstige_ausgaben_gesamt += md_summen["ausgaben_euro"]
 
     # Dienstliche Ladekosten: Netzbezug-Anteil per-Monat über den Flexpreis
-    # (`resolve_netzbezug_preis_cent`), Fallback Wallbox-Tarif; entgangene
-    # Einspeisung bleibt statisch (Vertragswert). Gleichzeitig mit
-    # aussichten.get_finanz_prognose umgestellt ([[feedback_aggregations_drift]]).
+    # (`resolve_netzbezug_preis_cent`), Fallback Wallbox-Tarif des MONATS;
+    # die entgangene Einspeisung ist der damalige Vertragswert.
+    # Deckungsgleich mit aussichten.get_finanz_prognose — beide Seiten sind
+    # gemeinsam auf den Monats-Stichtag gezogen worden, weil eine einseitige
+    # Umstellung genau die Asymmetrie erzeugt, die #326 gekostet hat
+    # ([[feedback_aggregations_drift]], [[feedback_aggregator_symmetrie]]).
     dienstlich_ladekosten_euro = 0.0
     for d_key, (d_pv, d_netz) in dienstlich_pv_netz_by_ym.items():
         d_md = monatsdaten_by_ym.get(d_key)
-        d_preis = resolve_netzbezug_preis_cent(d_md, wallbox_preis_cent) if d_md else wallbox_preis_cent
+        d_tarife = await _tarife_fuer(*d_key)
+        d_allgemein = d_tarife.get("allgemein")
+        d_wallbox_cent = resolve_strompreis_for_komponente(d_tarife, "wallbox")
+        d_einspeise_cent = (
+            d_allgemein.einspeiseverguetung_cent_kwh if d_allgemein
+            else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        )
+        d_preis = resolve_netzbezug_preis_cent(d_md, d_wallbox_cent) if d_md else d_wallbox_cent
         dienstlich_ladekosten_euro += (
-            d_netz * d_preis + d_pv * einspeise_verguetung_cent
+            d_netz * d_preis + d_pv * d_einspeise_cent
         ) / 100
     sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
 
@@ -590,15 +619,8 @@ async def get_cockpit_uebersicht(
     sonstiges_invs = [i for i in investitionen if i.typ == "sonstiges" and i.ist_aktiv_an(today)]
     hat_sonstiges = len(sonstiges_invs) > 0
 
-    # Finanzen
-    _tarif_cache: dict[date, dict] = {}
-
-    async def _tarif_fuer_monat(m: Monatsdaten) -> dict:
-        stichtag = date(m.jahr, m.monat, 1)
-        if stichtag not in _tarif_cache:
-            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag)
-        return _tarif_cache[stichtag]
-
+    # Finanzen — Monats-Tarif über den weiter oben definierten `_tarife_fuer`
+    # (geteilter Cache mit der Dienstwagen-Schleife).
     netzbezug_kosten = 0.0
     # PV je Monat über den Read-time-SoT statt über ein globales Flag.
     # Vorher: `use_inv_pv = pv_erzeugung_inv > 0` und dann
@@ -617,7 +639,7 @@ async def get_cockpit_uebersicht(
     # per-Monat-EV-/BKW-Ersparnis zählen nur Monate mit aktiver PV — wie die
     # Energiebilanz oben und der Amortisations-Pfad in aussichten.
     for m in md_pv:
-        m_tarife = await _tarif_fuer_monat(m)
+        m_tarife = await _tarife_fuer(m.jahr, m.monat)
         m_allgemein = m_tarife.get("allgemein")
         m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
         m_grundpreis = (m_allgemein.grundpreis_euro_monat or 0) if m_allgemein else 0

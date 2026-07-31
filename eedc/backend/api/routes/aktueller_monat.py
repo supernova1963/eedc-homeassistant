@@ -1276,7 +1276,14 @@ async def get_aktueller_monat(
     grundgebuehr = None
     zaehlergebuehr_jahr = None
 
-    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    # Tarif DES angezeigten Monats (ADR-002/P8) — der Endpoint bedient jeden
+    # Monat über `jahr`/`monat`, nicht nur den laufenden. Mit dem heutigen Tarif
+    # wich er von Cockpit/Monat ab, sobald ein Tarifwechsel dazwischenlag; und
+    # ein Tarif ab Monatsmitte hätte hier sofort gegolten, dort erst im
+    # Folgemonat (Stichtag = Monatserster). Wie `stichtag_vj` weiter oben.
+    tarife = await lade_tarife_fuer_anlage(
+        db, anlage_id, target_date=date(jahr, monat, 1)
+    )
     allgemein_tarif = tarife.get("allgemein")
     if allgemein_tarif:
         # G19-1 K3: jährliche Zählergebühr (Ausweis in der Jahresaufstellung,

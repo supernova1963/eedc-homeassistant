@@ -2,6 +2,7 @@
 Cockpit Social — Kopierfertiger Social-Media-Text für einen Monat.
 """
 
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -208,7 +209,12 @@ async def get_share_text(
     co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - ((emob_ladung - emob_pv_ladung) * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
     co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
 
-    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    # Tarif DES Monats (ADR-002/P8): der Endpoint bereitet genau eine
+    # Monatszeile auf. Mit dem heutigen Tarif hätte ein Tarifwechsel jeden
+    # rückwirkend geteilten Monat neu bewertet.
+    tarife = await lade_tarife_fuer_anlage(
+        db, anlage_id, target_date=date(md.jahr, md.monat, 1)
+    )
     allgemein_tarif = tarife.get("allgemein")
     einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
     netzbezug_cent = resolve_netzbezug_preis_cent(md, allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT)

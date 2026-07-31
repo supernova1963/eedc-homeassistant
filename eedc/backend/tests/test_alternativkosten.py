@@ -37,7 +37,7 @@ def test_wp_gas_default():
     """Gas-WP (Default 0,90 / 12 ct / PV-Anteil 50 %), kein Monats-Gaspreis:
     pro Monat 250/0,90×12/100 − 80×0,5×0,30 = 33,3333 − 12 = 21,3333 → 256 €/J."""
     out = berechne_wp_alternativkosten_ersparnis(
-        [_wp(1)], _wp_imd(1), {}, 30.0,
+        [_wp(1)], _wp_imd(1), {}, {}, 30.0,
     )
     assert abs(out - 256.0) < 1e-6
 
@@ -47,7 +47,7 @@ def test_wp_oel_und_monats_gaspreis_schlaegt_default():
     250/0,85×15/100 − 12 = 44,1176 − 12 = 32,1176 → ×12 = 385,41 €/J."""
     gaspreis = {(2025, m): 15.0 for m in range(1, 13)}
     out = berechne_wp_alternativkosten_ersparnis(
-        [_wp(1, {"alter_energietraeger": "oel"})], _wp_imd(1), gaspreis, 30.0,
+        [_wp(1, {"alter_energietraeger": "oel"})], _wp_imd(1), gaspreis, {}, 30.0,
     )
     assert abs(out - 385.41) < 0.01
 
@@ -59,7 +59,7 @@ def test_wp_per_wp_parameter_kein_last_write_wins():
     Σ = 256 + 279,53 = 535,53 €. Bei last-write-wins (beide Öl) wäre es 559,06 €."""
     imd = {**_wp_imd(1), **_wp_imd(2)}
     out = berechne_wp_alternativkosten_ersparnis(
-        [_wp(1), _wp(2, {"alter_energietraeger": "oel"})], imd, {}, 30.0,
+        [_wp(1), _wp(2, {"alter_energietraeger": "oel"})], imd, {}, {}, 30.0,
     )
     assert abs(out - (256.0 + 279.53)) < 0.05
 
@@ -76,13 +76,34 @@ def test_wp_zusatzkosten_anteilig_pro_erfasstem_monat():
         for m in range(1, 7)
     }
     out = berechne_wp_alternativkosten_ersparnis(
-        [_wp(1, {"alternativ_zusatzkosten_jahr": 120.0})], imd, {}, 30.0,
+        [_wp(1, {"alternativ_zusatzkosten_jahr": 120.0})], imd, {}, {}, 30.0,
     )
     assert abs(out - (128.0 + 60.0)) < 0.01
 
 
 def test_wp_leer():
-    assert berechne_wp_alternativkosten_ersparnis([], {}, {}, 30.0) == 0.0
+    assert berechne_wp_alternativkosten_ersparnis([], {}, {}, {}, 30.0) == 0.0
+
+
+def test_wp_strompreis_je_monat_schlaegt_den_fallback():
+    """ADR-002/P8: der Strompreis kommt je Monat herein, wie der Gaspreis.
+
+    Vorher war er ein Skalar über die ganze Historie — ein Tarifwechsel hätte
+    alle Jahre rückwirkend neu bewertet (dieselbe Klasse wie der
+    Jahresbericht-Drift #326). Hier: das erste Halbjahr zu 20 ct, das zweite
+    zum Fallback 30 ct.
+
+    Monatlich: 250/0,90 × 12/100 = 33,3333 € Gas-Kosten.
+    WP-Netzstrom = 80 × 0,5 × Preis/100 → 8 € bei 20 ct, 12 € bei 30 ct.
+    → 6 × 25,3333 + 6 × 21,3333 = 280,00 €.
+    """
+    preise = {(2025, m): 20.0 for m in range(1, 7)}
+
+    out = berechne_wp_alternativkosten_ersparnis(
+        [_wp(1)], _wp_imd(1), {}, preise, 30.0,
+    )
+
+    assert abs(out - 280.0) < 1e-6
 
 
 def test_bkw_eigenverbrauch_zum_netzpreis():

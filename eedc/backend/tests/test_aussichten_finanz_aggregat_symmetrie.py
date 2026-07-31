@@ -124,3 +124,77 @@ async def test_dienstwagen_abzug_per_monat_flexpreis(db):
     assert cockpit.sonstige_netto_euro == pytest.approx(-4.0, abs=0.05)
     # Gegenprobe: mit statischem 30-ct-Abzug wäre sonstige_netto = 100 − 94 = +6.
     assert abs(cockpit.sonstige_netto_euro - 6.0) > 5.0
+
+
+async def _anlage_mit_tarifwechsel_und_dienstwagen(db) -> int:
+    """Zwei Monate in ZWEI Tarifperioden, bewusst OHNE Flex-Ø.
+
+    Die Fixture oben gibt jedem Monat einen `netzbezug_durchschnittspreis_cent`
+    — damit übersteuert der Flex-Ø den Stammdaten-Tarif, und die Achse
+    „historischer Basistarif" wird nie geprüft. Genau diese blinde Achse hat
+    2026-07-30 zugelassen, dass `aussichten` auf den Monats-Stichtag gezogen
+    wurde, während Cockpit weiter mit dem heutigen Tarif rechnete
+    (ADR-002/P8, [[feedback_aggregator_symmetrie]]).
+
+    Tarif bis 2025: 20 ct Bezug / 10 ct Einspeisung. Ab 2026: 40 / 6.
+
+    2025-06: einsp 100 → 10,00 € · EV (200−100) × 0,20 → 20,00 €
+    2026-06: einsp  50 →  3,00 € · EV (100− 50) × 0,40 → 20,00 €
+    Dienstwagen: 100 kWh Netz je Monat → 100×0,20 + 100×0,40 = 60,00 € Abzug
+    netto = 10 + 20 + 3 + 20 − 60 = −7,00 €
+    (mit dem HEUTIGEN Tarif für alles wären es 53 − 80 = −27,00 €)
+    """
+    anlage = Anlage(anlagenname="P8Symmetrie", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Strompreis(
+        anlage_id=anlage.id,
+        gueltig_ab=date(2024, 1, 1), gueltig_bis=date(2025, 12, 31),
+        netzbezug_arbeitspreis_cent_kwh=20.0, einspeiseverguetung_cent_kwh=10.0,
+    ))
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2026, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=40.0, einspeiseverguetung_cent_kwh=6.0,
+    ))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=6,
+                       einspeisung_kwh=100.0, netzbezug_kwh=0.0))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=6,
+                       einspeisung_kwh=50.0, netzbezug_kwh=0.0))
+
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
+                     anschaffungskosten_gesamt=10000.0)
+    dienstwagen = Investition(anlage_id=anlage.id, typ="e-auto",
+                              bezeichnung="Firmenwagen",
+                              anschaffungsdatum=date(2024, 1, 1),
+                              parameter={"ist_dienstlich": True})
+    db.add_all([pv, dienstwagen])
+    await db.flush()
+
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2025, monat=6,
+        verbrauch_daten={"pv_erzeugung_kwh": 200.0}))
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2026, monat=6,
+        verbrauch_daten={"pv_erzeugung_kwh": 100.0}))
+    for j in (2025, 2026):
+        db.add(InvestitionMonatsdaten(investition_id=dienstwagen.id, jahr=j, monat=6,
+            verbrauch_daten={"ladung_kwh": 100.0, "ladung_pv_kwh": 0.0,
+                             "ladung_netz_kwh": 100.0}))
+    await db.commit()
+    return anlage.id
+
+
+async def test_historischer_basistarif_beidseitig_gleich(db):
+    """ADR-002/P8: Cockpit und Aussichten nehmen denselben Monats-Basistarif."""
+    anlage_id = await _anlage_mit_tarifwechsel_und_dienstwagen(db)
+    erwartet = -7.0
+
+    cockpit = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
+    aussichten = await get_finanz_prognose(anlage_id=anlage_id, monate=12, db=db)
+
+    assert cockpit.netto_ertrag_euro == pytest.approx(erwartet, abs=0.05)
+    assert aussichten.bisherige_ertraege_euro == pytest.approx(erwartet, abs=0.05)
+    assert aussichten.bisherige_ertraege_euro == pytest.approx(
+        cockpit.netto_ertrag_euro, abs=0.01)
+    # Gegenprobe: mit dem heutigen Tarif für alles wären es −27 €.
+    assert abs(cockpit.netto_ertrag_euro - (-27.0)) > 15.0

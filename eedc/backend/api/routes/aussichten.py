@@ -23,7 +23,11 @@ from backend.utils.investition_filter import aktiv_jetzt, aktiv_im_zeitraum
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.models.strompreis import Strompreis
 from backend.models.monatsdaten import Monatsdaten
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.api.routes.strompreise import (
+    lade_tarife_fuer_anlage,
+    resolve_netzbezug_preis_cent,
+    resolve_strompreis_for_komponente,
+)
 from backend.core.berechnungen import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
@@ -1277,6 +1281,18 @@ async def get_finanz_prognose(
             monatsdaten=md,
         ), tarif_cache=_tarif_cache))
 
+    async def _tarife_fuer_stichtag(jahr: int, monat: int) -> dict:
+        """Kompletter Tarifsatz des Monats (allgemein + WP/Wallbox).
+
+        Teilt sich `_tarif_cache` mit `baue_finanz_zeile` → keine Extra-Queries.
+        """
+        stichtag = date(jahr, monat, 1)
+        if stichtag not in _tarif_cache:
+            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
+                db, anlage_id, target_date=stichtag
+            )
+        return _tarif_cache[stichtag]
+
     async def _monats_tarif(jahr: int, monat: int) -> tuple[float, float]:
         """(Arbeitspreis, Einspeisevergütung) des Monats in ct/kWh.
 
@@ -1288,12 +1304,7 @@ async def get_finanz_prognose(
         (dieselbe Klasse wie der Jahresbericht-Drift, Forum simon42 #89667/60).
         Teilt sich `_tarif_cache` mit `baue_finanz_zeile` → keine Extra-Queries.
         """
-        stichtag = date(jahr, monat, 1)
-        if stichtag not in _tarif_cache:
-            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
-                db, anlage_id, target_date=stichtag
-            )
-        m_allgemein = _tarif_cache[stichtag].get("allgemein")
+        m_allgemein = (await _tarife_fuer_stichtag(jahr, monat)).get("allgemein")
         return (
             m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT,
             m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -1309,10 +1320,20 @@ async def get_finanz_prognose(
     gaspreis_by_periode = {
         (md.jahr, md.monat): md.gaspreis_cent_kwh for md in monatsdaten
     }
+    # WP-Arbeitspreis je Monat (ADR-002/P8) — deckungsgleich mit dem HA-Export.
+    wp_preis_by_periode: dict[tuple[int, int], float] = {}
+    for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten:
+        _periode = (_p_jahr, _p_monat)
+        if _periode not in wp_preis_by_periode:
+            _p_tarife = await _tarife_fuer_stichtag(_p_jahr, _p_monat)
+            wp_preis_by_periode[_periode] = resolve_strompreis_for_komponente(
+                _p_tarife, "waermepumpe", fallback=netzbezug_preis
+            )
     bisherige_wp_ersparnis = berechne_wp_alternativkosten_ersparnis(
         waermepumpen,
         historische_inv_daten,
         gaspreis_by_periode,
+        wp_preis_by_periode,
         wp_netzbezug_preis,
     )
 
