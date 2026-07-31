@@ -61,16 +61,28 @@ export const AUSRICHTUNG_OPTIONEN: SelectItem[] = [
   { value: 'Ost-West', label: 'Ost-West (gemischt)' },
 ]
 
-// Parent-Kind-Beziehungen (analog zu useSetupWizard.ts)
+// ── Parent-Kind-Beziehungen — Single Source of Truth (Client) ───────────────
+// Pendant zu `models/investition.py::ERLAUBTE_PARENT_TYPEN`. Die Regel stand
+// bis 2026-07-31 in drei uneinigen Kopien (hier, `useSetupWizard.ts` und
+// `crud.py::get_parent_options`); nur diese kannte das Balkonkraftwerk.
+// Wer die Regel braucht, importiert `parentTypenFuer` — nicht die Konstante,
+// damit die Array-/Einzelwert-Fallunterscheidung nur EINMAL existiert.
 export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp | InvestitionTyp[]>> = {
-  'pv-module': 'wechselrichter',                          // Pflicht
-  'speicher': ['wechselrichter', 'balkonkraftwerk'],       // Optional — Hybrid-WR oder BKW mit integriertem Speicher
+  'pv-module': 'wechselrichter',                           // Pflicht
+  'speicher': ['wechselrichter', 'balkonkraftwerk'],       // Optional — Hybrid-WR (DC) oder BKW mit Akku (AC)
 }
 export const PARENT_REQUIRED: InvestitionTyp[] = ['pv-module']
 
 export const PARENT_TYPE_LABELS: Record<string, string> = {
   'wechselrichter': 'Wechselrichter',
   'balkonkraftwerk': 'Balkonkraftwerk',
+}
+
+/** Erlaubte Parent-Typen eines Investitions-Typs — immer als Liste. */
+export function parentTypenFuer(typ: InvestitionTyp): InvestitionTyp[] {
+  const raw = PARENT_MAPPING[typ]
+  if (!raw) return []
+  return Array.isArray(raw) ? raw : [raw]
 }
 
 // Typ-Label Mapping

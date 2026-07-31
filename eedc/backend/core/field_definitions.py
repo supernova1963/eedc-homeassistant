@@ -35,6 +35,14 @@ Feld-Attribute:
                   Sensor-Zuordnungs-Wizard, im MQTT-Inbound-Wizard und in der
                   manuellen Monatsdaten-Eingabe. Sensor-Felder konsistent zu
                   docs/SENSOR-REFERENZ.md halten.
+  nur_manuell   — True: das Feld bleibt in Monatsabschluss, CSV-Import und
+                  Export **erfassbar**, verschwindet aber als **zuordenbare
+                  Quelle** — `mqtt_topic_registry.build_expected_topics` lässt es
+                  aus, damit weder die Datenquellen-Fläche noch ein MQTT-Topic
+                  darauf zeigen kann. Der Rückbau-Modus dieses Projekts: kein
+                  Löschen, gepflegte Werte bleiben lesbar und pflegbar, nur der
+                  automatische Erfassungsweg entfällt
+                  ([[feedback_reparatur_statt_loesch_features]]).
 """
 
 from typing import Optional
@@ -298,20 +306,29 @@ INVESTITION_FELDER: dict = {
             "csv_suffix": "Eigenverbrauch_kWh",
             "hinweis": "Direkt im Haushalt verbrauchte BKW-Erzeugung (kWh, kumulativ oder Tagessensor). Optional — sonst aus Erzeugung − Einspeisung berechnet.",
         },
-        # Konditionell — nur wenn hat_speicher=true:
+        # Konditionell — nur wenn hat_speicher=true. ALTBESTAND, `nur_manuell`:
+        # Der Kanon für einen BKW-Akku ist seit 2026-07-31 die **eigene
+        # Speicher-Investition mit Parent Balkonkraftwerk** (Weg A) — die trägt
+        # Live-Leistung, SoC, Energiefluss-Knoten und Zählerpfad, während diese
+        # beiden Felder nur einen Monatswert kennen. Sie bleiben erfassbar,
+        # damit gepflegte Werte lesbar bleiben, sind aber nicht mehr
+        # **zuordenbar**: kein Sensor, kein MQTT-Topic. Wer sie gepflegt hat,
+        # wird vom Daten-Checker auf Weg A gewiesen (`daten_checker/stammdaten.py`).
         {
             "feld": "speicher_ladung_kwh", "label": "Speicher Ladung", "einheit": "kWh",
             "bedingung": "hat_speicher",
+            "nur_manuell": True,
             "csv_suffix": "Speicher_Ladung_kWh",
             "aggregiert_in": "batterie_ladung_sum",
-            "hinweis": "In den BKW-Akku geladene Energie (kWh, kumulativ oder Tagessensor). Nur bei BKW mit Speicher.",
+            "hinweis": "In den BKW-Akku geladene Energie (kWh). Nur manuell oder per Import — für Sensor-/MQTT-Zuordnung den Akku als eigene Speicher-Investition mit Parent Balkonkraftwerk erfassen.",
         },
         {
             "feld": "speicher_entladung_kwh", "label": "Speicher Entladung", "einheit": "kWh",
             "bedingung": "hat_speicher",
+            "nur_manuell": True,
             "csv_suffix": "Speicher_Entladung_kWh",
             "aggregiert_in": "batterie_entladung_sum",
-            "hinweis": "Aus dem BKW-Akku entladene Energie (kWh, kumulativ oder Tagessensor). Nur bei BKW mit Speicher.",
+            "hinweis": "Aus dem BKW-Akku entladene Energie (kWh). Nur manuell oder per Import — für Sensor-/MQTT-Zuordnung den Akku als eigene Speicher-Investition mit Parent Balkonkraftwerk erfassen.",
         },
     ],
 
@@ -710,7 +727,9 @@ def get_felder_fuer_investition(
     v2h_faehig = bool(params.get("v2h_faehig") or params.get("nutzt_v2h"))
     hat_speicher = bool(params.get("hat_speicher"))
 
-    SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn"}
+    # Steuer-Schlüssel — hier ausgewertet bzw. nur für die Zuordnungs-Fläche
+    # relevant, gehören nicht in die Eingabe-Antwort.
+    SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn", "nur_manuell"}
 
     # #281: konditionelles Label — nutzt dieselben Bedingungs-Keys wie `bedingung`.
     bedingungs_werte = {

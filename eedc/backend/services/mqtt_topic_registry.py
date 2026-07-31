@@ -200,8 +200,13 @@ async def build_expected_topics(
                 "bedarf_gruppe": get_feld_bedarf(inv.typ, feld["feld"])[1],
                 # Roh durchgereicht — die Zuordnungs-Fläche wertet selbst aus
                 # (markieren statt filtern, s. get_felder_fuer_investition).
+                # Auch `nur_manuell` wird hier NICHT gefiltert: die Registry ist
+                # die SoT „welche Felder gibt es", und ein bereits zugeordnetes
+                # Feld muss sichtbar bleiben, sonst lässt sich die Zuordnung
+                # nicht mehr entfernen. Die Fläche entscheidet (routes/datenquellen.py).
                 "bedingung": feld.get("bedingung"),
                 "bedingung_anlage": feld.get("bedingung_anlage"),
+                "nur_manuell": bool(feld.get("nur_manuell")),
                 "gruppe_id": gruppe_id,
                 "gruppe_titel": gruppe_titel,
             })

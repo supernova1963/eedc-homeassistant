@@ -3,7 +3,11 @@ import { Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button, Input, Select, Alert, DatumFeld } from '../../ui'
 import { SchalterZeile } from '../../forms/sections/SchalterZeile'
 import type { Investition } from '../../../types'
-import { PARENT_MAPPING, PARENT_REQUIRED } from '../../../hooks/useSetupWizard'
+import {
+  PARENT_REQUIRED,
+  PARENT_TYPE_LABELS,
+  parentTypenFuer,
+} from '../../forms/sections/investitionFormHelpers'
 import { TYP_LABELS as INVESTITION_TYP_LABELS } from '../../../lib/constants'
 import {
   PARAM_E_AUTO,
@@ -40,9 +44,13 @@ export function SetupInvestitionForm({
   useEffect(() => { if (isNew) setExpanded(true) }, [isNew])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const parentTyp = PARENT_MAPPING[investition.typ]
-  const possibleParents = parentTyp
-    ? allInvestitionen.filter(i => i.typ === parentTyp && i.id !== investition.id)
+  // Mehrere Parent-Typen sind möglich (Speicher: Wechselrichter ODER
+  // Balkonkraftwerk — der BKW-Akku ist genau dieser Fall). SoT ist
+  // `parentTypenFuer`; der Wizard hatte dafür eine eigene, kürzere Kopie.
+  const parentTypen = parentTypenFuer(investition.typ)
+  const parentLabel = parentTypen.map(t => PARENT_TYPE_LABELS[t] || t).join(' / ')
+  const possibleParents = parentTypen.length
+    ? allInvestitionen.filter(i => parentTypen.includes(i.typ) && i.id !== investition.id)
     : []
 
   const getParam = (key: string) => investition.parameter?.[key] as number | string | undefined
@@ -113,11 +121,11 @@ export function SetupInvestitionForm({
           </div>
 
           {/* Parent-Zuordnung */}
-          {parentTyp && (() => {
+          {parentTypen.length > 0 && (() => {
             const isRequired = PARENT_REQUIRED.includes(investition.typ)
             const hasParents = possibleParents.length > 0
             const missingParent = isRequired && !investition.parent_investition_id && hasParents
-            const label = `Gehört zu (${INVESTITION_TYP_LABELS[parentTyp]})${isRequired ? '' : ' (optional)'}`
+            const label = `Gehört zu (${parentLabel})${isRequired ? '' : ' (optional)'}`
             return hasParents ? (
               <Select
                 label={label}
@@ -125,7 +133,15 @@ export function SetupInvestitionForm({
                 value={investition.parent_investition_id ? String(investition.parent_investition_id) : ''}
                 onChange={(e) => onUpdate({ parent_investition_id: e.target.value ? parseInt(e.target.value) : null })}
                 placeholder={isRequired ? '-- Bitte wählen --' : '-- Keine Zuordnung --'}
-                options={possibleParents.map(p => ({ value: String(p.id), label: p.bezeichnung }))}
+                options={possibleParents.map(p => ({
+                  value: String(p.id),
+                  // Bei mehreren erlaubten Parent-Typen muss die Zeile sagen,
+                  // WAS sie ist — sonst stehen Wechselrichter und
+                  // Balkonkraftwerk namenlos untereinander.
+                  label: parentTypen.length > 1
+                    ? `${p.bezeichnung} (${INVESTITION_TYP_LABELS[p.typ]})`
+                    : p.bezeichnung,
+                }))}
                 error={missingParent ? 'PV-Module müssen einem Wechselrichter zugeordnet werden' : undefined}
               />
             ) : (
@@ -133,7 +149,7 @@ export function SetupInvestitionForm({
                 {isRequired ? (
                   <>Bitte legen Sie zuerst einen <strong>Wechselrichter</strong> an, bevor Sie PV-Module zuordnen können.</>
                 ) : (
-                  <>Kein {INVESTITION_TYP_LABELS[parentTyp]} vorhanden. Zuordnung ist optional.</>
+                  <>Kein {parentLabel} vorhanden. Zuordnung ist optional.</>
                 )}
               </Alert>
             )

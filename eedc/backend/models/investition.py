@@ -25,6 +25,53 @@ class InvestitionTyp(str, Enum):
     SONSTIGES = "sonstiges"
 
 
+# Lesbare Typ-Bezeichnung — Single Source of Truth. Stand bis 2026-07-31
+# byte-gleich in `pdf/builders/finanzbericht.py` und
+# `pdf/builders/anlagendokumentation.py`; beide importieren jetzt von hier.
+# Kein Roh-Enum in anwendersichtbarem Text ([[feedback_typ_labels_pattern]]).
+TYP_LABELS: dict[str, str] = {
+    InvestitionTyp.PV_MODULE.value: "PV-Modulfeld",
+    InvestitionTyp.WECHSELRICHTER.value: "Wechselrichter",
+    InvestitionTyp.SPEICHER.value: "Batteriespeicher",
+    InvestitionTyp.WAERMEPUMPE.value: "Wärmepumpe",
+    InvestitionTyp.WALLBOX.value: "Wallbox",
+    InvestitionTyp.E_AUTO.value: "E-Fahrzeug",
+    InvestitionTyp.BALKONKRAFTWERK.value: "Balkonkraftwerk",
+    InvestitionTyp.SONSTIGES.value: "Sonstiges",
+}
+
+
+# =============================================================================
+# Parent-Kind-Regel — Single Source of Truth
+# =============================================================================
+# Welcher Typ darf welchem Typ zugeordnet werden. Die Regel stand bis 2026-07-31
+# in DREI uneinigen Kopien: `_validate_parent_child` und `get_parent_options`
+# (beide in api/routes/investitionen/crud.py) sowie zwei Client-Konstanten
+# (`investitionFormHelpers.ts`, `useSetupWizard.ts`). Nur eine kannte das
+# Balkonkraftwerk vollständig — der Wizard bot es nie an, `get_parent_options`
+# behauptete das Gegenteil. Beides gemessen beim BKW-Kanon-Entscheid.
+#
+# Der BKW-Akku (Zendure, Anker SOLIX) ist genau der Fall, für den der
+# Balkonkraftwerk-Parent existiert: der Akku wird als eigene Speicher-Investition
+# erfasst und bekommt damit Live-Leistung, SoC, Energiefluss-Knoten und
+# Zählerpfad. Das ist der Kanon; die BKW-eigenen Speicher-Felder im
+# Monatsabschluss sind Altbestand (`nur_manuell`, s. core/field_definitions.py).
+#
+# Das Client-Pendant lebt in
+#   eedc/frontend/src/components/forms/sections/investitionFormHelpers.ts
+# und wird von `useSetupWizard.ts` importiert statt nachgebaut.
+ERLAUBTE_PARENT_TYPEN: dict[str, tuple[str, ...]] = {
+    InvestitionTyp.PV_MODULE.value: (InvestitionTyp.WECHSELRICHTER.value,),
+    InvestitionTyp.SPEICHER.value: (
+        InvestitionTyp.WECHSELRICHTER.value,      # Hybrid-Wechselrichter (DC)
+        InvestitionTyp.BALKONKRAFTWERK.value,     # BKW mit Akku (AC)
+    ),
+}
+
+# Typen, für die eine Parent-Zuordnung PFLICHT ist (sofern ein Parent existiert).
+PARENT_PFLICHT_TYPEN: frozenset[str] = frozenset({InvestitionTyp.PV_MODULE.value})
+
+
 class Investition(Base):
     """
     Eine Investition/Erweiterung der PV-Anlage.

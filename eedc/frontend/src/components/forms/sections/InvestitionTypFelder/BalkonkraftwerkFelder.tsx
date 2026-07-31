@@ -78,10 +78,12 @@ export function BalkonkraftwerkFelder({ paramData, onInputChange, setParam }: Ty
                 onChange={onInputChange}
                 hint="z.B. 1600 Wh für Anker SOLIX"
               />
-              <Alert type="warning">
-                Für vollständige Auswertungen (Live-Dashboard, Cockpit, Tagesverlauf) bitte den Speicher
-                zusätzlich als separate <strong>Speicher-Investition</strong> erfassen und dort die
-                Batterieleistung sowie den SoC-Sensor zuordnen.
+              <Alert type="info">
+                Die Lade- und Entlademengen des Akkus werden als eigene{' '}
+                <strong>Speicher-Investition</strong> erfasst: neu anlegen, Typ „Speicher", und
+                unter <em>Gehört zu</em> dieses Balkonkraftwerk wählen. Nur so zählt der Akku im
+                Live-Dashboard, im Tagesverlauf und im Energiefluss mit — hier im Balkonkraftwerk
+                beschreibst du ihn nur (Kapazität).
               </Alert>
             </>
           )}

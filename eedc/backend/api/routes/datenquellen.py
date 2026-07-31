@@ -516,6 +516,32 @@ async def _basis_preis_eintraege(db: AsyncSession, anlage_id: int) -> list[dict]
     return eintraege
 
 
+def ohne_nicht_zuordenbare(eintraege: list[dict], quellen: dict) -> list[dict]:
+    """Entfernt `nur_manuell`-Felder aus der Zuordnungs-Fläche.
+
+    Solche Felder sind **erfassbar** (Monatsabschluss, CSV-Import), aber nicht
+    mehr **zuordenbar** — der automatische Erfassungsweg ist zurückgebaut, das
+    Feld nicht gelöscht. Begründung je Feld in `core/field_definitions.py`
+    (Attribut `nur_manuell`); erster Fall sind die BKW-eigenen Akku-Felder,
+    seit der Akku als eigene Speicher-Investition erfasst wird.
+
+    AUSNAHME — hat das Feld heute eine Quelle, bleibt es stehen. Sonst
+    verschwände eine bestehende Zuordnung unsichtbar und ließe sich nicht mehr
+    entfernen; dieselbe Falle hat `bedingung_anlage` schon einmal gestellt
+    (s. `get_felder_fuer_investition`).
+    """
+    def _hat_quelle(fid: str) -> bool:
+        eintrag = quellen.get(fid)
+        if not isinstance(eintrag, dict):
+            return False
+        return eintrag.get("quelle", QUELLE_KEINE) != QUELLE_KEINE
+
+    return [
+        e for e in eintraege
+        if not e.get("nur_manuell") or _hat_quelle(_feld_id(e["match_key"]))
+    ]
+
+
 def _quellen_map(anlage: Anlage) -> dict:
     """Liest die Feld→Quelle-Map aus anlage.sensor_mapping (leer wenn keine)."""
     mapping = anlage.sensor_mapping or {}
@@ -713,6 +739,16 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     eintraege += await _basis_preis_eintraege(db, anlage_id)
 
     quellen = _quellen_map(anlage)
+
+    # `nur_manuell`-Felder gehören nicht auf diese Fläche: sie sind erfassbar
+    # (Monatsabschluss, CSV-Import), aber nicht mehr zuordenbar — der Erfassungsweg
+    # ist zurückgebaut, nicht das Feld (Begründung je Feld in
+    # `core/field_definitions.py`). AUSNAHME: hat das Feld heute eine Quelle,
+    # bleibt es stehen. Sonst verschwände eine bestehende Zuordnung unsichtbar und
+    # ließe sich nicht mehr entfernen — dieselbe Falle, die `bedingung_anlage`
+    # schon einmal gestellt hat (s. `get_felder_fuer_investition`).
+    eintraege = ohne_nicht_zuordenbare(eintraege, quellen)
+
     # Vereinheitlichter Invert-Store (quellen-unabhängig, feld-/wert-level).
     invert_store = (anlage.sensor_mapping or {}).get("invertieren") or {}
 
@@ -1143,9 +1179,14 @@ async def uebernehme_energy_vorschlaege(
     if kind not in ("ha_app", "ha_connector"):
         raise HTTPException(status_code=400, detail="Keine aktive HA-Verbindung")
 
-    # Gueltige Feld-IDs der Anlage aus der Registry (wie /felder).
+    # Gueltige Feld-IDs der Anlage aus der Registry (wie /felder) — ohne die
+    # `nur_manuell`-Felder: was auf der Fläche nicht zuordenbar ist, darf auch
+    # der HA-Energie-Übernahmepfad nicht zuordnen (sonst entstünde eine
+    # Zuordnung, die die Fläche gar nicht anbietet).
     erwartete = await build_expected_topics(db, anlage)
-    gueltig = {_feld_id(e["match_key"]) for e in erwartete}
+    gueltig = {
+        _feld_id(e["match_key"]) for e in erwartete if not e.get("nur_manuell")
+    }
 
     zuordnungen: list[tuple[str, str]] = []
     for feld, entity in (body.basis or {}).items():

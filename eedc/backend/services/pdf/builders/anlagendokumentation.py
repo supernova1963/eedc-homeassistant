@@ -37,16 +37,9 @@ from backend.models.investition import Investition
 from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
 
 
-TYP_LABELS = {
-    "pv-module": "PV-Modulfeld",
-    "wechselrichter": "Wechselrichter",
-    "speicher": "Batteriespeicher",
-    "waermepumpe": "Wärmepumpe",
-    "wallbox": "Wallbox",
-    "e-auto": "E-Fahrzeug",
-    "balkonkraftwerk": "Balkonkraftwerk",
-    "sonstiges": "Sonstiges",
-}
+# SoT: backend.models.investition (stand hier bis 2026-07-31 als byte-gleiche
+# Zweitkopie neben `pdf/builders/finanzbericht.py`).
+from backend.models.investition import TYP_LABELS  # noqa: E402,F401
 
 # Reihenfolge der Folgeseiten — zentrale SoT in `backend.utils.investition_filter`.
 from backend.utils.investition_filter import INVESTITION_TYP_ORDER as TYP_REIHENFOLGE  # noqa: E402

@@ -120,17 +120,12 @@ def investition_beitraege(
     inv_id_str = str(getattr(inv, "id", ""))
     target_key = f"{prefix}{inv_id_str}"
 
-    def _add(
-        feld: str,
-        vorzeichen: int = +1,
-        fallback_gruppe: Optional[str] = None,
-        ziel: Optional[str] = None,
-    ):
+    def _add(feld: str, vorzeichen: int = +1, fallback_gruppe: Optional[str] = None):
         if ist_verfuegbar(feld):
             beitraege.append(
                 KomponentenBeitrag(
                     feld=feld,
-                    target_key=ziel or target_key,
+                    target_key=target_key,
                     vorzeichen=vorzeichen,
                     fallback_gruppe=fallback_gruppe,
                 )
@@ -139,24 +134,18 @@ def investition_beitraege(
     beitraege: list[KomponentenBeitrag] = []
 
     if typ in ("pv-module", "balkonkraftwerk"):
+        # Ein Balkonkraftwerk trägt GENAU EINEN Ziel-Key: `bkw_{id}`, Erzeugung.
+        # Paket D gab ihm kurzzeitig einen zweiten (`batterie_{id}`) für die
+        # BKW-eigenen Speicher-Felder — zurückgenommen mit dem Kanon-Entscheid am
+        # selben Tag: ein BKW-Akku wird als eigene Speicher-Investition mit
+        # Parent Balkonkraftwerk erfasst und läuft damit durch den `speicher`-Zweig
+        # unten, mitsamt Live-Leistung, SoC und Energiefluss-Knoten.
+        # Warum die Speicher-Hälfte NIE auf `bkw_{id}` durfte, bleibt wissenswert:
+        # dieser Präfix steht in PV_KOMPONENTEN_PREFIXE und wird als *Erzeugung*
+        # summiert (`summe_pv_bkw_kwh`, nur-positiv) — eine Entladung landete dort
+        # als PV-Erzeugung, eine Ladung hätte die BKW-Erzeugung still gekürzt,
+        # exakt die Klasse des BKW-Bugs vom 2026-05-19 (Rainer-PN).
         _add("pv_erzeugung_kwh")
-        if typ == "balkonkraftwerk":
-            # BKW mit Akku (Zendure, Anker SOLIX) — die Speicher-Hälfte gehört
-            # NICHT auf `bkw_{id}`: dieser Präfix steht in
-            # PV_KOMPONENTEN_PREFIXE und wird als *Erzeugung* summiert
-            # (`summe_pv_bkw_kwh`, nur-positiv). Eine Entladung landete dort als
-            # PV-Erzeugung, eine Ladung würde die BKW-Erzeugung still kürzen —
-            # dieselbe Klasse wie der BKW-Bug 2026-05-19 (Rainer-PN). Deshalb
-            # ein zweiter Ziel-Key mit dem Batterie-Präfix; die Investitions-ID
-            # hält ihn frei von einem echten Speicher derselben Anlage
-            # (`batterie_{bkw_id}` vs. `batterie_{speicher_id}`).
-            # Damit ist das BKW die einzige Investition, die zu ZWEI Komponenten-
-            # Präfixen beiträgt — gewollt: es ist ein Erzeuger UND eine Batterie.
-            # Vorzeichen wie beim Typ `speicher`: Entladung + (Quelle), Ladung −
-            # (Senke), SoT `core.berechnungen.batterie_kw_spalte`.
-            batterie_ziel = f"{_TYP_KEY_PREFIX['speicher']}{inv_id_str}"
-            _add("speicher_ladung_kwh", vorzeichen=-1, ziel=batterie_ziel)
-            _add("speicher_entladung_kwh", vorzeichen=+1, ziel=batterie_ziel)
 
     elif typ == "speicher":
         # ladung_netz_kwh ist semantisch Teilmenge von ladung_kwh — NICHT

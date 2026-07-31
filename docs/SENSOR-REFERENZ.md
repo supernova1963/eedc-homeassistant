@@ -89,21 +89,28 @@
 |------|-------|---------|-----------|-------------|
 | `pv_erzeugung_kwh` | PV-Erzeugung | kWh | Kumulativ oder Tagessensor | Erzeugte Energie dieses PV-Strings/Moduls. Muss ≥ 0 sein. Alternativ: automatische kWp-Verteilung aus dem Gesamt-PV-Sensor. |
 | `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional, **nur Monatswert** (siehe Kasten). |
-| `speicher_ladung_kwh` | Speicher Ladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Optional. |
-| `speicher_entladung_kwh` | Speicher Entladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Optional. |
+| `speicher_ladung_kwh` | Speicher Ladung | kWh | **kein Sensor** — nur manuell/Import | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Altbestand, siehe Kasten. |
+| `speicher_entladung_kwh` | Speicher Entladung | kWh | **kein Sensor** — nur manuell/Import | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Altbestand, siehe Kasten. |
 
-> **Der BKW-Akku zählt seit v4.0.5 überall mit.** `speicher_ladung_kwh` und
-> `speicher_entladung_kwh` laufen jetzt durch dieselbe Zähler-Maschinerie wie beim Typ
-> *Speicher* — Tages- und Stundenwerte, Energiefluss und die Batterie-Kennzahlen des
-> Tagesverlaufs. Vorher kam nur der Monatswert an, Tag und Verlauf blieben leer. Die
-> Werte erscheinen unter der Batterie-Kategorie, getrennt vom Akku einer großen Anlage.
+> **Ein Balkonkraftwerk mit Akku: den Akku als eigene Speicher-Investition erfassen.**
+> Neu anlegen, Typ *Speicher*, und unter **Gehört zu** das Balkonkraftwerk wählen. Nur so
+> hat der Akku Live-Leistung, Ladestand, einen Knoten im Energiefluss und Tages-/
+> Stundenwerte — er nutzt dann die normalen Speicher-Felder `ladung_kwh` /
+> `entladung_kwh`, und deren Sensoren ordnest du bei dieser Speicher-Investition zu.
 >
-> **`eigenverbrauch_kwh` ist die Ausnahme:** dafür gibt es weiterhin **nur** den
-> Monatswert (aus der HA-Langzeitstatistik oder von Hand/per Import). Es ist kein
-> Bilanz-Zähler, sondern eine optionale Verfeinerung — normalerweise leitet eedc den
-> BKW-Eigenverbrauch aus Erzeugung − Einspeisung ab. Wer es per **MQTT** publiziert hat:
-> das Topic wurde bis v4.0.4 fälschlich auf den Erzeugungs-Kanal gelegt und konnte die
-> „Heute"-PV-Kachel überschreiben; das ist behoben.
+> Die beiden BKW-eigenen Felder `speicher_ladung_kwh`/`speicher_entladung_kwh` sind der
+> **frühere zweite Weg**. Sie bleiben erfassbar — bereits gepflegte Werte bleiben
+> sichtbar und im Monatsabschluss wie im CSV-Import änderbar —, kennen aber nur einen
+> **Monatswert** und lassen sich deshalb **nicht mehr als Sensor- oder MQTT-Quelle
+> zuordnen**. Wer sie gepflegt hat, bekommt im Daten-Checker einen Hinweis mit dem
+> Umstellungsweg; es geht dabei nichts verloren.
+>
+> **`eigenverbrauch_kwh`** bleibt zuordenbar, liefert aber ebenfalls **nur** den
+> Monatswert (HA-Langzeitstatistik oder von Hand/per Import). Es ist kein Bilanz-Zähler,
+> sondern eine optionale Verfeinerung — normalerweise leitet eedc den BKW-Eigenverbrauch
+> aus Erzeugung − Einspeisung ab. Wer es per **MQTT** publiziert hat: das Topic wurde bis
+> v4.0.4 fälschlich auf den Erzeugungs-Kanal gelegt und konnte die „Heute"-PV-Kachel
+> überschreiben; das ist behoben.
 
 > **`pv_erzeugung_kwh` steht für drei verschiedene Größen — je nachdem, wo es auftaucht.** Hier in der
 > Monatserfassung ist es die Erzeugung **dieses einen** Moduls. Daneben gibt es den monatlichen
@@ -125,8 +132,10 @@
 |------------|------|
 | `eedc/.../energy/inv/{inv_id}_{name}/pv_erzeugung_kwh` | `pv_erzeugung_kwh` |
 | `eedc/.../energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | `eigenverbrauch_kwh` (nur BKW) — wird für Tages-/Live-Werte **nicht** ausgewertet, s. Kasten oben |
-| `eedc/.../energy/inv/{inv_id}_{name}/speicher_ladung_kwh` | `speicher_ladung_kwh` (nur BKW) |
-| `eedc/.../energy/inv/{inv_id}_{name}/speicher_entladung_kwh` | `speicher_entladung_kwh` (nur BKW) |
+
+Für den **Akku eines Balkonkraftwerks** gibt es hier bewusst kein Topic: er wird als
+eigene Speicher-Investition erfasst und publiziert unter deren ID auf
+`…/energy/inv/{speicher_id}_{name}/ladung_kwh` bzw. `…/entladung_kwh` (siehe Speicher).
 
 ---
 

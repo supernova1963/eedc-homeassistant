@@ -397,8 +397,18 @@ async def list_monatsdaten_aggregiert(
                 hat_pv_imd = True
                 pv_erzeugung += b.bkw_erzeugung
                 bkw_erzeugung += b.bkw_erzeugung
-                # QUIRK (IST-Stand): BKW-Speicher fließt in DENSELBEN Speicher-Akku
-                # wie echte Speicher (siehe BLOCK1-FELD-MATRIX D2).
+                # ALTBESTAND (N-28), bewusst so belassen: die BKW-eigenen
+                # Akku-Felder zählen hier in dieselbe anlagenweite Speicher-Summe
+                # wie ein echter Speicher, während `monats_fakten.SpeicherFakten`
+                # sie getrennt hält. Diese Uneinheitlichkeit wird NICHT
+                # aufgelöst, sondern durch den Kanon erledigt: ein BKW-Akku
+                # gehört als eigene Speicher-Investition mit Parent
+                # Balkonkraftwerk erfasst und läuft dann durch den `speicher`-
+                # Zweig unten — dort gibt es genau eine Verbuchung.
+                # Hier zu ändern hieße, die Zahlen genau der Anwender zu
+                # bewegen, die noch auf dem alten Weg pflegen; sie bekommen
+                # stattdessen den Migrationshinweis des Daten-Checkers
+                # (`daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg`).
                 hat_speicher_imd = True
                 speicher_ladung += b.bkw_speicher_ladung
                 speicher_entladung += b.bkw_speicher_entladung

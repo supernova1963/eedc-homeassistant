@@ -67,7 +67,14 @@ class SensorChecks:
             ))
             return ergebnisse
 
-        erwartet = await build_expected_topics(self.db, anlage)
+        # `nur_manuell`-Felder sind kein erwartetes Topic — sie sind bewusst
+        # nicht zuordenbar; als „nie empfangen" gemeldet wären sie eine Lücke,
+        # die niemand schließen kann (dieselbe Begründung wie bei den
+        # Preis-Slots in `_basis_preis_eintraege`).
+        erwartet = [
+            e for e in await build_expected_topics(self.db, anlage)
+            if not e.get("nur_manuell")
+        ]
         if not erwartet:
             return ergebnisse
 

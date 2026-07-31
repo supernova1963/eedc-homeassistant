@@ -24,16 +24,9 @@ from backend.models.investition import Investition
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 
 
-TYP_LABELS = {
-    "pv-module": "PV-Modulfeld",
-    "wechselrichter": "Wechselrichter",
-    "speicher": "Batteriespeicher",
-    "waermepumpe": "Wärmepumpe",
-    "wallbox": "Wallbox",
-    "e-auto": "E-Fahrzeug",
-    "balkonkraftwerk": "Balkonkraftwerk",
-    "sonstiges": "Sonstiges",
-}
+# SoT: backend.models.investition — hier nur re-exportiert, damit bestehende
+# Importe (`from .finanzbericht import TYP_LABELS`) weiter tragen.
+from backend.models.investition import TYP_LABELS  # noqa: E402,F401
 
 
 def _format_euro(val: Optional[float]) -> str:

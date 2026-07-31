@@ -8,7 +8,7 @@ import {
   ausrichtungToGrad,
   gradToAusrichtung,
   AUSRICHTUNG_OPTIONEN,
-  PARENT_MAPPING,
+  parentTypenFuer,
   PARENT_REQUIRED,
   PARENT_TYPE_LABELS,
   typLabels,
@@ -66,11 +66,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
   // Parent-Typ(en) für diesen Investitions-Typ ermitteln. Memoisiert, weil das
   // Array sonst bei jedem Render neu entsteht — als Dep des Lade-Effekts unten
   // hieße das: ein Parent-Fetch pro Render. Hängt allein an `typ`.
-  const parentTypen: InvestitionTyp[] = useMemo(() => {
-    const raw = PARENT_MAPPING[typ]
-    if (!raw) return []
-    return Array.isArray(raw) ? raw : [raw]
-  }, [typ])
+  const parentTypen: InvestitionTyp[] = useMemo(() => parentTypenFuer(typ), [typ])
   const isParentRequired = PARENT_REQUIRED.includes(typ)
   const parentLabel = parentTypen.map(t => PARENT_TYPE_LABELS[t] || t).join(' / ')
 

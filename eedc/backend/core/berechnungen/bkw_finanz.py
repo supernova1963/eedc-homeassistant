@@ -28,14 +28,15 @@ Erzeugung ist damit eine **Datenlücke**, keine zweite gleichberechtigte
 Erfassungsform — ihre Ersparnis wäre aber sonst nirgends sichtbar, deshalb wird
 sie getragen statt verworfen ([[feedback_reparatur_statt_loesch_features]]).
 
-Genauer, seit 2026-07-31: ``KUMULATIVE_ZAEHLER_FELDER["balkonkraftwerk"]`` führt
-neben der Erzeugung auch ``speicher_ladung_kwh``/``speicher_entladung_kwh``
-(BKW mit Akku). Die beiden gehen in die Batterie-Kategorie, **nicht** in diese
-Finanz-Aufteilung — an der Überlappung Erzeugung ↔ Eigenverbrauch ändert sich
-dadurch nichts. ``eigenverbrauch_kwh`` bleibt der einzige der vier BKW-kWh-Felder
-ohne Zähler-Pfad; ein zugeordneter HA-Sensor liefert dort weiterhin den
-**Monatswert** (HA-Langzeitstatistik über den ``monatsabschluss``-Vorschlag), aber
-keinen Tages- oder Stundenwert.
+Genauer, Stand 2026-07-31: ``KUMULATIVE_ZAEHLER_FELDER["balkonkraftwerk"]`` führt
+weiterhin **nur** die Erzeugung. Weder ``eigenverbrauch_kwh`` noch die
+BKW-eigenen ``speicher_ladung_kwh``/``speicher_entladung_kwh`` haben einen
+Zähler-Pfad; für die beiden Speicher-Felder ist das seit dem Kanon-Entscheid
+gewollt, denn ein BKW-Akku wird als **eigene Speicher-Investition mit Parent
+Balkonkraftwerk** erfasst und läuft über den Typ ``speicher``. Ein zugeordneter
+HA-Sensor liefert für ``eigenverbrauch_kwh`` weiterhin den **Monatswert**
+(HA-Langzeitstatistik über den ``monatsabschluss``-Vorschlag), aber keinen
+Tages- oder Stundenwert.
 
 Vor dieser Konsolidierung wählte jede Read-Site die Kombination selbst und alle
 vier wählten anders (#326-Inventur, letzte Dimension): die Aussichten zählten

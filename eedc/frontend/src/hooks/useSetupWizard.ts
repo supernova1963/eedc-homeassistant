@@ -104,14 +104,12 @@ export const STEP_ORDER: WizardStep[] = [
 ]
 
 
-// Welche Typen können einem Parent zugeordnet werden?
-export const PARENT_MAPPING: Partial<Record<InvestitionTyp, InvestitionTyp>> = {
-  'pv-module': 'wechselrichter',  // Pflicht: PV-Module müssen einem Wechselrichter zugeordnet sein
-  'speicher': 'wechselrichter',    // Optional: Für Hybrid-Wechselrichter
-}
-
-// Welche Parent-Zuordnungen sind Pflicht?
-export const PARENT_REQUIRED: InvestitionTyp[] = ['pv-module']
+// Die Parent-Kind-Regel steht NICHT mehr hier. Sie lebte bis 2026-07-31 als
+// eigene, unvollständige Kopie in dieser Datei ('speicher' → nur
+// 'wechselrichter') — der Setup-Wizard bot damit den Balkonkraftwerk-Parent
+// nie an, obwohl Formular und Backend ihn kennen. Ein Kanon, den der
+// Einstiegspfad nicht anbietet, ist keiner.
+// SoT: components/forms/sections/investitionFormHelpers.ts (`parentTypenFuer`).
 
 interface UseSetupWizardReturn {
   // State

@@ -45,17 +45,17 @@ _KEY_TO_CATEGORY = {
 # (SoT-Begründung im Modul-Docstring von `core/berechnungen/bkw_finanz.py`).
 # Ohne Eintrag läuft der Key unverändert durch und wird von keinem Konsumenten
 # aufgesammelt — still, aber nicht mehr schädlich.
+#
+# Die BKW-eigenen `speicher_ladung_kwh`/`speicher_entladung_kwh` stehen hier
+# bewusst NICHT: der Kanon für einen BKW-Akku ist die eigene Speicher-Investition
+# mit Parent Balkonkraftwerk, die über `ladung_kwh`/`entladung_kwh` (Typ
+# `speicher`) läuft. Sie standen kurzzeitig hier (Paket D) und sind mit dem
+# Kanon-Entscheid am selben Tag zurückgenommen worden.
 _MQTT_FIELD_TO_LIVE_KEY: dict[str, dict[str, str]] = {
     # field → {typ → key_pattern}  (Pattern: {prefix}_{inv_id} wird im Code gebaut)
     "pv_erzeugung_kwh": {"pv-module": "pv", "balkonkraftwerk": "pv", "wechselrichter": "pv"},
     "ladung_kwh": {"speicher": "batterie:ladung", "wallbox": "wallbox", "e-auto": "eauto"},
     "entladung_kwh": {"speicher": "batterie:entladung"},
-    # BKW mit Akku: eigene Feldnamen, aber dieselbe Batterie-Semantik wie beim
-    # Typ `speicher`. Der Ziel-Key trägt die Investitions-ID
-    # (`batterie_{bkw_id}_ladung`) und kollidiert deshalb nicht mit einem echten
-    # Speicher derselben Anlage.
-    "speicher_ladung_kwh": {"balkonkraftwerk": "batterie:ladung"},
-    "speicher_entladung_kwh": {"balkonkraftwerk": "batterie:entladung"},
     "stromverbrauch_kwh": {"waermepumpe": "waermepumpe"},
     "erzeugung_kwh": {"sonstiges": "sonstige"},
     "verbrauch_sonstig_kwh": {"sonstiges": "sonstige"},

@@ -303,6 +303,10 @@ async def get_mqtt_topics(
     for anlage in anlagen:
         aname = anlage.anlagenname or f"Anlage {anlage.id}"
         for entry in await build_expected_topics(db, anlage):
+            if entry.get("nur_manuell"):
+                # Nicht zuordenbar ⇒ auch kein Topic, auf das jemand publizieren
+                # soll: der Wert würde von keinem Konsumenten aufgesammelt.
+                continue
             # Endpoint-Konvention: energy-Topics führen typ="energy",
             # live-Topics behalten "basis" oder den Investitions-Typ.
             api_typ = "energy" if entry["kategorie"] == "energy" else entry["typ"]

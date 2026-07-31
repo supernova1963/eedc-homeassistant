@@ -325,6 +325,69 @@ class StammdatenChecks:
 
     # ─── Investitionen ───────────────────────────────────────────────────
 
+    def _check_bkw_akku_erfassungsweg(self, inv, name: str, alle_invs) -> list[CheckErgebnis]:
+        """Weist Weg-B-Altbestand auf den Kanon hin — mit benannter Handlung.
+
+        Ein BKW-Akku wird als **eigene Speicher-Investition mit Parent
+        Balkonkraftwerk** erfasst (Kanon seit 2026-07-31): nur so hat er
+        Live-Leistung, Ladestand, Energiefluss-Knoten und Tages-/Stundenwerte.
+        Die BKW-eigenen Felder `speicher_ladung_kwh`/`speicher_entladung_kwh`
+        kennen nur einen Monatswert und sind seither `nur_manuell` — erfassbar,
+        aber nicht mehr zuordenbar (`core/field_definitions.py`).
+
+        Gemeldet wird NUR, wer die alten Felder tatsächlich gepflegt hat und
+        noch kein Speicher-Kind am BKW hängen hat. Kein stiller Umbau seiner
+        Daten ([[feedback_kein_grosser_heiler_knopf]]), sondern ein Hinweis mit
+        Handlung ([[feedback_reparatur_statt_loesch_features]]) — die gepflegten
+        Werte bleiben unangetastet und weiter sichtbar.
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.INVESTITIONEN
+
+        # Hängt schon ein Speicher am BKW? Dann ist der Anwender auf Weg A.
+        # Bewusst über die bereits geladene Investitions-Liste statt über die
+        # `children`-Backref: die ist NICHT eager-geladen (`__init__.py` lädt
+        # `Anlage.investitionen` + `Investition.monatsdaten`), ein Zugriff wäre
+        # im Async-Kontext ein Lazy-Load und damit ein MissingGreenlet-Fehler.
+        if any(
+            k.typ == "speicher" and k.parent_investition_id == inv.id
+            for k in (alle_invs or [])
+        ):
+            return ergebnisse
+
+        monate = sorted(
+            (imd.jahr, imd.monat)
+            for imd in (inv.monatsdaten or [])
+            if any(
+                (imd.verbrauch_daten or {}).get(f) is not None
+                for f in ("speicher_ladung_kwh", "speicher_entladung_kwh")
+            )
+        )
+        if not monate:
+            return ergebnisse
+
+        von = f"{monate[0][1]:02d}/{monate[0][0]}"
+        bis = f"{monate[-1][1]:02d}/{monate[-1][0]}"
+        zeitraum = von if len(monate) == 1 else f"{von} bis {bis}"
+        ergebnisse.append(CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.INFO,
+            meldung=f"{name}: Akku-Werte nur als Monatswert erfasst",
+            details=(
+                f"Für {len(monate)} Monate ({zeitraum}) sind Lade-/Entlademengen "
+                "direkt am Balkonkraftwerk gepflegt. In dieser Form gibt es sie "
+                "nur monatlich — im Live-Dashboard, im Tagesverlauf und im "
+                "Energiefluss fehlt der Akku. "
+                "Empfohlen: den Akku zusätzlich als eigene Investition vom Typ "
+                "„Speicher“ anlegen und unter „Gehört zu“ "
+                "dieses Balkonkraftwerk wählen; die Lade-/Entladesensoren "
+                "dann dort zuordnen. "
+                "Die bereits gepflegten Monatswerte bleiben erhalten und werden "
+                "weiter angezeigt — es geht nichts verloren."
+            ),
+            link="/einstellungen/investitionen",
+        ))
+        return ergebnisse
+
     def _check_investitionen(self, anlage: Anlage, monatsdaten: list[Monatsdaten]) -> list[CheckErgebnis]:
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.INVESTITIONEN
@@ -411,6 +474,9 @@ class StammdatenChecks:
                 ergebnisse.extend(self._check_investition_monatsdaten(
                     inv, name, "pv_erzeugung_kwh", "PV-Erzeugung", CheckSeverity.WARNING, monatsdaten,
                 ))
+                ergebnisse.extend(
+                    self._check_bkw_akku_erfassungsweg(inv, name, anlage.investitionen)
+                )
 
             elif inv.typ == "speicher":
                 # Diese Meldung ist die Bedingung, unter der `None` als
