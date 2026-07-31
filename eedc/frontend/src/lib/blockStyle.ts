@@ -14,7 +14,7 @@
  * NICHT roh notiert, sondern aus `COLOR_CLASSES` (`lib/komponentenStyle`, der
  * EINEN 8er-Farbklassen-Definition; Werte aus `lib/colors.ts`) bezogen.
  */
-import { Activity, Scale, LineChart, Table2, Euro, Users, CloudSun, CalendarRange, TrendingDown, Flame } from 'lucide-react'
+import { Activity, Scale, LineChart, Table2, Euro, Users, CloudSun, CalendarRange, TrendingDown, Flame, Leaf } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { COLOR_CLASSES } from './komponentenStyle'
 
@@ -25,6 +25,7 @@ export type BlockKind =
   | 'werte'
   | 'finanzen'
   | 'community'
+  | 'co2'
   // Cockpit/Aussicht (A.4) — Projektions-Blöcke
   | 'wetter'
   | 'saison'
@@ -44,6 +45,13 @@ export const BLOCK_IDENTITAET: Record<BlockKind, BlockIdentitaet> = {
   werte:         { icon: Table2 },    // neutral
   finanzen:      { icon: Euro,      farbe: COLOR_CLASSES.green.text }, // Geld-Logik
   community:     { icon: Users,     farbe: COLOR_CLASSES.blue.text },  // „eigene Serie"
+  // CO₂/Umwelt = grün. Begründung wie bei den Nachbarn: der Block trägt eine
+  // eigene Datenrolle, also ihre Rollenfarbe. Die CO₂-Rolle ist Emerald
+  // (`CHART_COLORS.co2Pv`, dazu der Text-Zwilling `CO2_TEXT_CLASS`); im
+  // 8er-Farbklassen-Kanon hat Emerald keinen eigenen Eintrag, `green` ist sein
+  // nächster Nachbar. Bewusst NICHT roh `text-emerald-600` notiert — Block-Icons
+  // bleiben auf der EINEN Palette (Kopf-Regel), sonst steht hier die nächste Drift.
+  co2:           { icon: Leaf,      farbe: COLOR_CLASSES.green.text },
   // Aussicht: Wetter = Solar/gelb (Umgebung treibt PV); übrige neutral (Projektion
   // ohne Einzel-Datenrolle), Degradation NICHT rot gefärbt (Status-Hinweis, kein Alarm).
   wetter:         { icon: CloudSun,     farbe: COLOR_CLASSES.yellow.text },

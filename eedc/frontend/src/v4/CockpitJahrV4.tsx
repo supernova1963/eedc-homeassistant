@@ -17,19 +17,24 @@
  *    {@link baueJahrAlsMonat}. So existieren ALLE Komponenten-KPIs (anders als Tag).
  *  - Verlauf-Chart + Vorjahr/Ø-Jahr-Vergleich = `monatsdatenApi.listAggregiert`
  *    (Σ der IMD je Monat), einmal je Anlage geladen.
+ *  - CO₂-Bilanz = `cockpitApi.getNachhaltigkeit` (Monats-Fakten/P10), ebenfalls
+ *    einmal je Anlage — der Endpoint kennt kein `?jahr=` und wird auch NICHT darum
+ *    erweitert; das Jahr filtert die Sicht (s. {@link baueJahrCo2ChartDaten}).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Leaf, Sprout } from 'lucide-react'
 import { fmtCalc, FehlerZustand, ChartDatenTabelle } from '../components/ui'
 import { AnlageLeer, DatenLeer } from './OnboardingLeer'
-import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useApiData, useScrollErhalt } from '../hooks'
-import { BLOCK_IDENTITAET } from '../lib'
+import { BLOCK_IDENTITAET, formatCo2 } from '../lib'
 import { baueJahrKpis, JahrBilanz } from './JahrBilanz'
 import { monatBilanzParkIds } from './bilanzParkIds'
 import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
 import { JahrVerlaufChart, baueJahrChartDaten } from './JahrVerlaufChart'
+import { JahrCo2Chart, baueJahrCo2ChartDaten, co2JahresSumme, CO2_TABELLEN_SPALTEN } from './JahrCo2Chart'
 import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
@@ -37,6 +42,7 @@ import { JahrHeader } from './JahrRahmen'
 import { baueJahrAlsMonat, jahrVergleichAus, mittelJahre, type JahrVergleich } from './JahrAggregat'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
+import { cockpitApi } from '../api/cockpit'
 
 // persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
 // (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
@@ -96,6 +102,29 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       keepPreviousData: true,
     },
   )
+  // CO₂-Zeitreihe (Monats-Fakten/P10) — EIN Abruf je Anlage im selben useApiData-
+  // Verbund wie `monateQ`/`jahrQ` (kein loser useEffect daneben, eigener swrKey).
+  // Der Endpoint liefert die GANZE Historie und wird bewusst nicht um `?jahr=`
+  // erweitert; ein Jahreswechsel löst deshalb auch keinen neuen Abruf aus.
+  const co2Q = useApiData(
+    () => cockpitApi.getNachhaltigkeit(anlageId!),
+    [anlageId],
+    { enabled: !!anlageId, swrKey: `v4-jahr-co2:${anlageId}` },
+  )
+  const co2Monate = useMemo(() => co2Q.data?.monatswerte ?? [], [co2Q.data])
+  // JAHRESGEBUNDEN: die Chart-Zeilen — der Filter greift auf die ganze Zeile, nicht
+  // auf einzelne Serien (die halb greifende Variante war der Befund N-10).
+  const co2Punkte = useMemo(
+    () => (jahr == null ? [] : baueJahrCo2ChartDaten(co2Monate, jahr)),
+    [co2Monate, jahr],
+  )
+  // NICHT JAHRESGEBUNDEN: `co2_kumuliert_kg` ist eine Lebensdauer-Zahl. Deshalb der
+  // letzte Wert der GESAMTEN Historie (Backend liefert nach (jahr, monat) aufsteigend),
+  // ausdrücklich nicht der letzte des gewählten Jahres.
+  const co2Kumuliert = co2Monate.length > 0 ? co2Monate[co2Monate.length - 1].co2_kumuliert_kg : 0
+  const co2Fehler = co2Q.data == null && co2Q.error != null
+  const co2Reload = co2Q.refetch
+
   const jahrData = jahrQ.data
   const loading = monateQ.loading || (jahr != null && jahrQ.loading)
   const reloading = jahrQ.reloading
@@ -171,6 +200,72 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
           render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahres-Kennzahlen verfügbar.</p>,
         }
     const finanzBlock = d ? finanzTeaserBlock(d, park, 'jahr') : null
+
+    // ── CO₂-Bilanz (Nebenfunde-Paket B') ────────────────────────────────────────
+    // Zwei Kennwerte + der gestapelte Monats-Chart. Jede Anzeige ist einzeln
+    // parkbar (KpiStrip parkt je Kachel, der Chart über EINE Parkbar = EINE
+    // atomare Anzeige); der Block entfällt erst, wenn ALLE drei geparkt sind —
+    // dasselbe Auto-Hide-Muster wie der Bilanz-Block darüber.
+    // Abgrenzung: das ist die ZEITBEZOGENE Sicht. Die CO₂-**Amortisation** je
+    // Komponente (Lebensdauer-Frage „wann ist die graue Last eingespielt")
+    // bleibt unter Auswertungen → CO₂; hier bewusst keine Dublette davon.
+    const co2ParkIds = ['kpi:co2-jahr', 'kpi:co2-kumuliert', 'el:co2']
+    const fcJahr = formatCo2(co2JahresSumme(co2Punkte))
+    const fcKum = formatCo2(co2Kumuliert)
+    const co2Kpis: KpiStripItem[] = [
+      {
+        title: 'CO₂ eingespart', value: fcJahr.wert, unit: fcJahr.einheit,
+        color: 'green', icon: Leaf, parkId: 'kpi:co2-jahr',
+        subtitle: `${jahr} · PV + Wärmepumpe + E-Mobilität`,
+        formel: 'Σ der Monatswerte des gewählten Jahres',
+        berechnung: `${co2Punkte.length} Monate mit Daten`, ergebnis: `= ${fcJahr.text}`,
+        sicht: `Jahr ${jahr}`,
+      },
+      {
+        title: 'CO₂ kumuliert', value: fcKum.wert, unit: fcKum.einheit,
+        color: 'green', icon: Sprout, parkId: 'kpi:co2-kumuliert',
+        subtitle: 'gesamte Historie — nicht jahresgebunden',
+        formel: 'Σ aller erfassten Monate',
+        berechnung: `${co2Monate.length} Monate mit Daten`, ergebnis: `= ${fcKum.text}`,
+        sicht: 'Gesamte Historie',
+      },
+    ]
+    const co2Block: Block | null = co2Fehler
+      // B8: der Fehler des Zweit-Abrufs wird sichtbar statt still ausgelassen —
+      // ein fehlender Block wäre von „diese Anlage hat keine CO₂-Daten" nicht zu
+      // unterscheiden.
+      ? {
+          id: 'co2', title: 'CO₂-Bilanz', ...BLOCK_IDENTITAET.co2,
+          summary: 'vermiedenes CO₂ je Monat', defaultOpen: false,
+          render: () => <FehlerZustand text="Fehler beim Laden der CO₂-Bilanz" onRetry={co2Reload} />,
+        }
+      : co2Punkte.length === 0 || co2ParkIds.every((id) => park.istGeparkt(id))
+        ? null
+        : {
+            id: 'co2', title: 'CO₂-Bilanz', ...BLOCK_IDENTITAET.co2,
+            summary: `${fcJahr.text} eingespart · kumuliert ${fcKum.text}`,
+            defaultOpen: false,
+            render: () => (
+              <div className="space-y-4">
+                <KpiStrip kpis={co2Kpis} />
+                <Parkbar id="el:co2" titel="CO₂-Verlauf">
+                  <JahrCo2Chart daten={co2Punkte} />
+                </Parkbar>
+              </div>
+            ),
+            // Paket CT: dieselbe Datenreihe wie der Chart, Spalten = Union der Serien
+            // (+ die Stapel-Höhe, die der Balken ohnehin zeigt).
+            renderTabelle: () => (
+              <ChartDatenTabelle
+                xLabel="Monat"
+                xKey="monat"
+                spalten={CO2_TABELLEN_SPALTEN}
+                daten={co2Punkte}
+                csvDateiname={`co2_${jahr}.csv`}
+              />
+            ),
+          }
+
     return [
       ...(kennzahlenBlock ? [kennzahlenBlock] : []),
       // Bilanz-Block: jede Teil-Anzeige einzeln parkbar (in JahrBilanz, gleiche IDs wie
@@ -200,10 +295,12 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
           />
         ),
       }]),
+      ...(co2Block ? [co2Block] : []),
       ...(d ? baueKomponentenBloecke(d, park, 'jahr') : []),
       ...(finanzBlock ? [finanzBlock] : []),
     ]
-  }, [jahr, jahrData, vorjahr, oeJahr, monatsZeilen, park])
+  }, [jahr, jahrData, vorjahr, oeJahr, monatsZeilen, park,
+      co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload])
 
   if (!anlageId) {
     return (

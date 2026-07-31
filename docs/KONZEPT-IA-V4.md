@@ -169,7 +169,7 @@ Vollständige Inventur von `Dashboard.tsx` (alte Cockpit-Übersicht, 630 Z.), da
 | Speicher / Wärme/Klima / Sonstiges / E-Mobilität (je 4 KPIs) | pro-Komponente | **Komponenten/`<typ>`** (Detail) + Teaser-Cross-Link im Zeit-View |
 | Finanzen (Erlös, §51-Verlust, EV-Ersparnis, Netzkosten, USt, Netto-Ertrag) | analytisch | Auswertungen/Finanzen |
 | Jahres-Rendite + AmortisationsBar | analytisch | Auswertungen/ROI |
-| CO₂-Bilanz (PV, WP, E-Mob, gesamt) | analytisch | Auswertungen/CO₂ |
+| CO₂-Bilanz (PV, WP, E-Mob, gesamt) | analytisch | **präzisiert 2026-07-31 — zwei Fragen, zwei Heimaten:** die **Zeitreihe** (wann wie viel vermieden, nach Quelle gestapelt) ist **zeitbezogen** → **Cockpit/Jahr**, Block „CO₂-Bilanz"; die **CO₂-Amortisation** (wann ist die graue Herstellungs-Last eingespielt) ist eine **Lebensdauer**-Frage → **Auswertungen/CO₂**. Keine Dublette — s. u. |
 | Jahres-/Zeitraum-Selektor + Zeitraum-Info | Steuerung | Zeitraum-Selektor der Zeit-Ansicht (Jahr ↔ Gesamt) |
 | **`GettingStarted`** (Empty-State, keine Anlage) | Onboarding | Cockpit-Leerzustand (Style-Guide B8) |
 | **Multi-Anlagen-Selektor** (bei >1 Anlage) | Steuerung | global/Layout — Audit unter B12 (Single-Anlage-Selektor) |
@@ -179,6 +179,8 @@ Vollständige Inventur von `Dashboard.tsx` (alte Cockpit-Übersicht, 630 Z.), da
 **Social-Media-Text-Export — ZURÜCKGEBAUT (Entscheid Gernot, 2026-07-31):** Die Funktion ist beim Flip faktisch entfallen — der Teilen-Button und `ShareTextModal` sind in v4 nie wieder aufgetaucht, der Endpoint `cockpit/social.py` lief seither ohne Konsumenten weiter. Sie wird **nicht wieder eingeführt**: Endpoint und api-Client sind am 2026-07-31 gelöscht (Nebenfunde-Runde, Paket B), die Beschreibung im Handbuch ist mitgezogen worden. **Nicht betroffen** ist das **Community-Teilen** (`CommunityShareBlock`) — eine andere Funktion, die bleibt.
 
 > *Der ursprüngliche Plan (2026-06-01) stand hier: den Button als zeitraum-gebundene Cockpit-Aktion zu platzieren (Tag/Monat/Jahr) und die zeitraum-adaptive Text-Generierung post-v4.0.0 nachzuziehen. Er ist mit dem Entscheid gegenstandslos und steht nur noch als Herkunft dieser Zeile.*
+
+**CO₂-Zeitreihe — Heimat präzisiert (Entscheid Gernot, 2026-07-31):** Die Zeile oben schickte die CO₂-Bilanz pauschal nach Auswertungen; ausgeliefert wurde dort die **Amortisation** (#284), die **Zeitreihe** blieb ohne Sicht — der Endpoint `cockpit/nachhaltigkeit.py` lief wie `social.py` ohne Konsumenten, nur ist er *nicht* zurückgebaut worden, weil die Sicht inhaltlich fehlte. Sie hängt seit dem 2026-07-31 als Block **„CO₂-Bilanz" in Cockpit/Jahr** (Nebenfunde-Runde, Paket B'). Die Zuordnung folgt der Achsen-Regel: **zeitbezogen → Cockpit, Lebensdauer → Hub/Auswertungen.** Beide Sichten bleiben nebeneinander bestehen; sie beantworten verschiedene Fragen und sind deshalb keine Dubletten. Die Abgrenzung steht auch im Handbuch, damit ein Anwender nicht auf der falschen Seite sucht.
 
 ---
 

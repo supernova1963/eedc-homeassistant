@@ -186,7 +186,14 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 
 **Trend-Historie** — Jahresvergleich und saisonale Muster (beste/schlechteste Monate) über alle bisherigen Jahre. Die reine **Degradations-Prognose** (geschätzter Leistungsrückgang pro Jahr) liegt dagegen in der [Aussicht](#25-aussicht).
 
-**CO₂-Bilanz** — vermiedene Emissionen (kg) im Vergleich zu reinem Netzbezug.
+**CO₂-Bilanz** — ein eigener Block mit dem Verlauf der vermiedenen Emissionen. Das gestapelte Monats-Diagramm trennt die drei Quellen, aus denen die Ersparnis entsteht: **PV/Eigenverbrauch** (vermiedener Netzstrom), **Wärmepumpe** (vermiedene fossile Wärme) und **E-Mobilität** (vermiedener Kraftstoff); die Autarkie desselben Monats läuft als Linie mit. Über dem Diagramm stehen zwei Kennwerte, die sich bewusst auf **verschiedene Zeiträume** beziehen:
+
+- **CO₂ eingespart** — die Summe des **gewählten Jahres**; sie ändert sich, wenn du das Jahr wechselst.
+- **CO₂ kumuliert** — die **gesamte Historie** seit Inbetriebnahme; sie bleibt beim Jahreswechsel stehen. Der Kennwert sagt das auch dazu.
+
+Wie bei jedem Block lässt sich der Verlauf über ⤢ auf **Vollbild** stellen und dort zwischen Diagramm und **Tabelle** umschalten (mit CSV-Export).
+
+> **Nicht zu verwechseln mit der CO₂-Amortisation** unter **Auswertungen → CO₂** (§4.4). Diese Sicht hier beantwortet „**wann** habe ich wie viel gespart" — Zeitverlauf, nach Quelle getrennt. Die Amortisation beantwortet „**wann ist die Herstellungs-CO₂ meiner Komponenten wieder eingespielt**" (Lebensdauer) und rechnet deshalb immer über die gesamte Historie, nie über ein einzelnes Jahr.
 
 > **Entfallen: die Social-Media-Textvorlage.** Bis Version 3 konntest du über ein Teilen-Symbol im Kopf des Cockpits einen kopierfertigen Text für Social-Media-Posts erzeugen. Mit der neuen Oberfläche (v4) ist diese Funktion weggefallen; dieser Abschnitt hat sie bis Juli 2026 weiter beschrieben. Nicht gemeint ist das **Teilen mit der Community** — das gibt es unverändert, siehe [5. Community](#5-community).
 
