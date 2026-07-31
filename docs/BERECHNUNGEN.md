@@ -55,12 +55,17 @@ und zum Verständnis der Datenflüsse.
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
 - `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
+> **Seit 2026-07-31 ist die Lesequelle nicht mehr `lade_pv_je_monat`, sondern eine Schicht darüber:** `services/monats_fakten.py::lade_monats_fakten` (ADR-002/**P10**, [Konzept](KONZEPT-MONATS-FAKTEN.md)). Sie liefert die **ganze** Monatszeile kanonisch aufgelöst — die PV ist darin ein Feld (`erzeugung.pv_module_kwh` bzw. `erzeugung.pv_kwh`), daneben stehen Zähler, Speicher, E-Mobilität, Wärmepumpe, Sonstiges, Tarif, §51 und die Verbrauchs-Kennzahlen. Sie **ruft** `lade_pv_je_monat` (die P7-Regel bleibt unverändert), wendet aber zusätzlich **einmal** alle Zeitfilter (`aktiv` · Anschaffung · Stilllegung) und den Dienstwagen-Filter an. Wer eine abgeleitete Monatsgröße auswertet, nimmt sie von dort; `lade_pv_je_monat` direkt zu rufen bleibt richtig, wo **nur** die Pro-Modul-PV gebraucht wird (String-Vergleich, PV-Diagnose). Ausgenommen sind Schreib-, Import- und Checker-Pfade — die Schicht ist reines Lesen.
+>
+> Die Migration läuft sichtweise (`KONZEPT-MONATS-FAKTEN.md` §10): umgehängt sind **Aussichten**, **Jahresbericht-PDF** und der **Investitions-ROI** (S2). Der baumweite Wächter wird mit S5 scharf gestellt.
+
 > **Achtung, ein Name für zwei Größen:** `pv_erzeugung_kwh` bezeichnet **drei verschiedene Dinge**, je nachdem, wo es steht — die **DB-Spalte** `Monatsdaten.pv_erzeugung_kwh` (manuelles Gesamt-Aggregat, s. o.), den **Schlüssel in `InvestitionMonatsdaten.verbrauch_daten`** (Erzeugung *dieses einen* Moduls) und das **Response-Feld** von `/monatsdaten/aggregiert` (PV-Module **+** Balkonkraftwerk). Der Identifier bleibt bewusst unverändert — er ist zugleich MQTT-Topic-Segment, CSV-Spaltenname und Backup-Feld. Siehe [Glossar](GLOSSAR.md#energie--bilanzen).
 
 ### Schicht 2: Berechnungslogik
 
 | Datei | Funktionen | Beschreibung |
 |-------|-----------|-------------|
+| `services/monats_fakten.py` | `lade_monats_fakten()`, `finanz_zeile_eingabe()`, `kennzahlen_aus_fakten()` | **Eingabe-Aufbereitung, keine Formel** (ADR-002/P10): löst die Monatszeile einmal auf und ruft die SoT-Helfer. Vorschaltet jeder aggregierenden Lese-Sicht |
 | `core/calculations.py` | `berechne_monatskennzahlen()`, `berechne_speicher_einsparung()`, `berechne_eauto_einsparung()`, `berechne_waermepumpe_einsparung()`, `berechne_roi()`, `berechne_ust_eigenverbrauch()` | Reine Berechnungsfunktionen ohne DB-Zugriff |
 | `api/routes/cockpit.py` | 6 Endpoints | Aggregation aller Daten für Dashboard |
 | `api/routes/aussichten.py` | 4 Endpoints | Prognosen und Finanzberechnungen |

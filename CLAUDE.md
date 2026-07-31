@@ -176,7 +176,7 @@ for imd in await db.execute(select(InvestitionMonatsdaten)...):
     summe += (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
 ```
 
-Ausgenommen sind **Schreib-, Import- und Checker-Pfade**. Der baumweite Wächter wird mit S5 scharf gestellt (`docs/KONZEPT-MONATS-FAKTEN.md` §10) — bis dahin deckt `test_monats_fakten_schicht.py` die Schicht, nicht ihre Benutzung.
+Ausgenommen sind **Schreib-, Import- und Checker-Pfade**. Der baumweite Wächter wird mit S5 scharf gestellt (`docs/KONZEPT-MONATS-FAKTEN.md` §10) — bis dahin decken `test_monats_fakten_schicht.py` die Schicht und `test_netto_ertrag_vier_wege_symmetrie.py` (Achse „nur Anlagen-Aggregat") die umgehängten Sichten. **Umgehängt sind seit S2:** Aussichten, Jahresbericht-PDF, Investitions-ROI.
 
 ### SQLAlchemy JSON-Felder
 

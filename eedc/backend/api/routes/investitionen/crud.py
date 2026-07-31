@@ -53,6 +53,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     resolve_eauto_benzinpreis,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
+from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.berechnungen import PV_ERZEUGER_TYPEN, einspeise_erloes_euro
 
 
@@ -788,8 +789,16 @@ async def get_roi_dashboard(
         """
         Berechnet PV-Einsparung für alle PV-Module gemeinsam.
 
-        WICHTIG: Die PV-Erzeugung kommt aus InvestitionMonatsdaten (pro PV-Modul),
-        NICHT aus Monatsdaten.pv_erzeugung_kwh (Legacy-Feld!).
+        Die PV-Erzeugung kommt aus den Monats-Fakten (ADR-002/**P10**), die sie
+        nach **P7** auflösen: gemessene Pro-Modul-Werte, und wo nur das
+        Anlagen-Aggregat (`Monatsdaten.pv_erzeugung_kwh`) gepflegt ist, dessen
+        kWp-Verteilung. Dieser Docstring nannte das Aggregat bis 2026-07-31 ein
+        „Legacy-Feld!" — genau die Annahme, die P7 widerlegt hat: es ist kein
+        Legacy, sondern der einzige Wert bei manueller Pflege und beim Import
+        mit einem Gesamt-PV-Sensor. Die rohe IMD-Summe daneben lieferte dort 0
+        und damit 32,00 € statt 212,00 € Jahres-Einsparung — der ROI-Fortschritt
+        und die Amortisation standen um 85 % zu niedrig (Befund F-5).
+
         Einspeisung/Netzbezug kommen weiterhin aus Monatsdaten (Zählerwerte).
         """
         # 1. PV-Module IDs ermitteln
@@ -812,26 +821,27 @@ async def get_roi_dashboard(
         if jahr is not None:
             md_query = md_query.where(Monatsdaten.jahr == jahr)
 
-        # 3. PV-Erzeugung aus InvestitionMonatsdaten aggregieren
-        async def get_pv_erzeugung(filter_jahr: int = None) -> dict[tuple[int, int], float]:
-            """Holt PV-Erzeugung aus InvestitionMonatsdaten."""
+        # 3. PV-Erzeugung je Monat über die Monats-Fakten (ADR-002/P10)
+        async def get_pv_erzeugung(filter_jahr: Optional[int] = None) -> dict[tuple[int, int], float]:
+            """Modul-PV je Monat, kanonisch aufgelöst (P7).
+
+            `erzeugung.pv_module_kwh` ist bewusst die **Modul**-Summe, nicht
+            `pv_kwh`: das Balkonkraftwerk hat in diesem Dashboard eine eigene
+            ROI-Zeile (`standalone`), seine Erzeugung zählte hier sonst zweimal.
+            `None` heißt N42-Lücke (mindestens ein aktives Modul ohne Wert und
+            ohne Aggregat) und wird — wie bisher — als 0 verrechnet.
+            """
             if not pv_module_ids:
                 return {}
 
-            imd_query = select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(pv_module_ids)
+            fakten = await lade_monats_fakten(
+                db, anlage_id,
+                von=(filter_jahr, 1) if filter_jahr is not None else None,
+                bis=(filter_jahr, 12) if filter_jahr is not None else None,
             )
-            if filter_jahr is not None:
-                imd_query = imd_query.where(InvestitionMonatsdaten.jahr == filter_jahr)
-
-            imd_result = await db.execute(imd_query)
-            erzeugung_by_monat: dict[tuple[int, int], float] = {}
-            for imd in imd_result.scalars().all():
-                data = imd.verbrauch_daten or {}
-                pv_kwh = data.get("pv_erzeugung_kwh", 0) or 0
-                key = (imd.jahr, imd.monat)
-                erzeugung_by_monat[key] = erzeugung_by_monat.get(key, 0) + pv_kwh
-            return erzeugung_by_monat
+            return {
+                f.schluessel: (f.erzeugung.pv_module_kwh or 0.0) for f in fakten
+            }
 
         if jahr is None:
             # Alle Jahre: Jahresdurchschnitt

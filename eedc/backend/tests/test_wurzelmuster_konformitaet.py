@@ -1241,6 +1241,10 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # vorschreibt; die Summe daraus ist die Anlagen-PV.
     "backend/api/routes/cockpit/pv_strings.py::w",
     "backend/api/routes/monatsdaten.py::w",
+    # Dito, aus den Monats-Fakten (`erzeugung.pv_je_modul`) statt aus
+    # `lade_pv_je_monat` direkt — dieselbe Auflösung, eine Schicht weiter oben
+    # (ADR-002/P10). Trägt den String-Vergleich SOLL/IST im Jahresbericht.
+    "backend/services/pdf/builders/jahresbericht.py::w",
     # Import-/Connector-/Parser-DTOs auf dem Weg IN die Datenbank. Sie tragen
     # den Wert, bevor es eine Monatsdaten-Zeile gibt — eine Auflösung wäre dort
     # gegenstandslos.

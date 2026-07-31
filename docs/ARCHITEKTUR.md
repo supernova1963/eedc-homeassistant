@@ -1070,6 +1070,8 @@ Monatsdaten · InvestitionMonatsdaten · Strompreise · TagesZusammenfassung
 Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie schreiben oder prüfen die Zeilen, sie leiten nichts ab. Details: `docs/KONZEPT-MONATS-FAKTEN.md`, `docs/ADR-002-WURZELMUSTER.md` (P7 · P8 · P9 · P10), `docs/ADR-001-BERECHNUNGS-LAYER.md`.
 
 > **Migrationsstand:** Die Schicht steht seit S1 mit ihren Einheitstests; die Sichten werden in den Schritten S2–S6 nacheinander umgehängt (Reihenfolge und Beweis-Fixture je Schritt in `KONZEPT-MONATS-FAKTEN.md` §5/§10). Bis S5 ist P10 durch Regressionstests gedeckt, nicht durch einen baumweiten Wächter.
+>
+> **Umgehängt (S2, 2026-07-31):** `api/routes/aussichten.py` (Finanz-Prognose), `services/pdf/builders/jahresbericht.py` und `api/routes/investitionen/crud.py` (ROI-Dashboard) — Befund **F-5**. Der PDF-Builder lädt `InvestitionMonatsdaten` seither gar nicht mehr selbst. **Noch selbst faltend:** `cockpit/nachhaltigkeit.py` + `cockpit/social.py` (S3), `cockpit/uebersicht.py` + `ha_export.py` (S4), `investitionen/dashboards.py` (S5), `services/community_service.py` (S6) sowie die beiden Performance-Ratio-Pfade in `aussichten.py` (Langfrist/Trend — gleiche Klasse, in der Inventur nicht erfasst).
 
 ### Wetter-Service (Multi-Provider)
 
