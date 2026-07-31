@@ -1690,8 +1690,6 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
 #: dokumentiert sie — genau dafür steht der Eintrag im Code und nicht in einer
 #: Allowlist-Datei daneben.
 P10_NOCH_NICHT_MIGRIERT: frozenset[str] = frozenset({
-    # S6 des Bauplans — nur zusammen mit dem Datenmodell von `eedc-community`.
-    "backend/services/community_service.py::prepare_community_data",
     # N-15 — Auswertungen → Tabelle (`list_monatsdaten_aggregiert`).
     "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",
     # N-16 — Monatsbericht + Vorjahresvergleich.
@@ -1813,11 +1811,12 @@ def test_p10_offene_schuld_waechst_nicht():
     hieße, sie unsichtbar wachsen zu lassen — dann wäre der Wächter genau das
     Aufräum-Paket mit einem grünen Test obendrauf, das ADR-002 §80 ablehnt.
     """
-    assert len(P10_NOCH_NICHT_MIGRIERT) <= 5, (
+    assert len(P10_NOCH_NICHT_MIGRIERT) <= 4, (
         f"{len(P10_NOCH_NICHT_MIGRIERT)} Sichten falten eine anlagenweite "
-        "Monatszeile selbst — nach S5 waren es 5 (community_service für S6, "
-        "dazu N-15/N-16/N-17). Diese Zahl darf nur sinken. Wer eine Sicht "
-        "hinzufügen will, migriert sie stattdessen."
+        "Monatszeile selbst — nach S5 waren es 5, nach S6 sind es 4 "
+        "(N-15/N-16/N-17; `community_service` ist mit S6 gefallen). Diese Zahl "
+        "darf nur sinken. Wer eine Sicht hinzufügen will, migriert sie "
+        "stattdessen."
     )
 
 

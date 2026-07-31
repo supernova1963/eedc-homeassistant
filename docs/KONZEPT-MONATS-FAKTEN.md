@@ -1,6 +1,33 @@
 # Konzept — Monats-Fakten: die fehlende Aufbereitungs-Schicht
 
-> **Status: ABGENOMMEN (Gernot, 2026-07-31).** Bau beginnt mit S1.
+> **Status: UMGESETZT (2026-07-31).** Alle sechs Bau-Schritte sind gebaut; der
+> Bauplan unten ist Historie, nicht Arbeitsvorrat. Das Dokument bleibt
+> versioniert, weil **ADR-002/P10 darauf verweist** — es ist die Begründung
+> hinter der Regel, nicht ihr Ersatz.
+>
+> **Wo der laufende Stand steht — dieses Dokument wird nicht mehr fortgeschrieben:**
+>
+> | Was | Dauerhafte Heimat |
+> | --- | --- |
+> | Die Regel selbst + „gesichert durch" je Schritt | [`docs/ADR-002-WURZELMUSTER.md`](ADR-002-WURZELMUSTER.md), Zeile **P10** |
+> | Migrationsstand + die drei Wächter-Kategorien mit ihren Zahlen | [`docs/ARCHITEKTUR.md`](ARCHITEKTUR.md) §7 |
+> | Der Kontrakt für Aufrufer (`lade_monats_fakten`, Feldgruppen, Fallen) | Modul- und Dataclass-Docstrings in `eedc/backend/services/monats_fakten.py` |
+> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**4** nach S6), mit Obergrenze im Test |
+> | Nebenfunde N-2 … N-17 (Abarbeitung nach S6) | `~/.claude/plans/uebergabe-monats-fakten.md` |
+>
+> **Was nach S6 offen bleibt** — beides bewusst *nicht* in diesem Dokument
+> geparkt, sondern an den genannten Stellen benannt und gezählt:
+>
+> 1. **Die Nebenfunde-Runde** (12 offene Einträge im Register) — erst
+>    analysieren, was sich durch die Migration erledigt hat, dann abarbeiten.
+> 2. **`MonatsFakt.je_investition`** — der Ausbau, der `P10_PER_INVESTITION`
+>    (11 Funktionen) leert. Entscheid **N-2**: vertagt, nicht verworfen.
+> 3. **F-6** (Tages-CO₂ auf dem Eigenverbrauch) — Nicht-Ziel dieser Schicht
+>    (§4), ein eigener Einzelfix im Tages-Pfad.
+>
+> ---
+>
+> **Status bis dahin: ABGENOMMEN (Gernot, 2026-07-31).** Bau beginnt mit S1.
 > Auslöser: Drift-Inventur 2026-07-31 (`~/.claude/plans/inventur-drift-oberflaeche.md`),
 > sechs bestätigte Befunde, alle aus derselben Ursache.
 >
@@ -198,7 +225,7 @@ welchen Schritt baut, zieht **im selben Paket** nach:
 | `docs/BERECHNUNGEN.md` | §1 nennt heute nur `lade_pv_je_monat` als Lesequelle (P7). Ergänzen: die Monats-Fakten sind ab jetzt **die** Lesequelle, PV darin ein Feld | Schritt 2 |
 | `CLAUDE.md` | SoT-Regime-Tabelle (P1–P10) · „Kritische Code-Patterns" um den Fakten-Zugriff ergänzen · Digest-Eintrag beim Release | Schritt 1 + Release |
 | `CHANGELOG.md` / WAS-IST-NEU | Anwender-Sicht: **welche Zahlen sich bewegen und warum** (ROI, Amortisation, Jahresbericht, CO₂) | beim Release |
-| `docs/KONZEPT-MONATS-FAKTEN.md` (dieses) | ✅ mit der Abnahme aus `drafts/` nach `docs/` gewandert — **weil ADR-002/P10 darauf verweisen wird und ein versionierter Verweis nicht ins Gitignore zeigen darf**. Nicht auf der Website: `website/scripts/sync-docs.sh` arbeitet mit einer Allowlist, in der Konzepte und ADRs bewusst fehlen. Nach S6: Stand fortschreiben, Restposten an eine dauerhafte Heimat | erledigt |
+| `docs/KONZEPT-MONATS-FAKTEN.md` (dieses) | ✅ mit der Abnahme aus `drafts/` nach `docs/` gewandert — **weil ADR-002/P10 darauf verweisen wird und ein versionierter Verweis nicht ins Gitignore zeigen darf**. Nicht auf der Website: `website/scripts/sync-docs.sh` arbeitet mit einer Allowlist, in der Konzepte und ADRs bewusst fehlen. Nach S6: Stand fortschreiben, Restposten an eine dauerhafte Heimat | ✅ **erledigt mit S6** — der Kopf trägt die Wanderungskarte (wo der laufende Stand jetzt steht) und die drei offenen Punkte; ab hier ist das Dokument Historie und wird nicht mehr fortgeschrieben |
 | GitHub **#110** | Sammelzeile „Monats-Fakten-Schicht" mit Schritt-Stand | nach Abnahme |
 
 Die Website zieht `docs/` automatisch (`scripts/sync-docs.sh`) — kein separater Schritt.
@@ -216,7 +243,39 @@ alle anderen.
 | **S3** | **F-1**: Cockpit/CO₂ + Cockpit/Social umhängen. Achse „V2H + Erzeuger hinter dem Zähler". Hartkodierte 7 l/100 km auf `vergleich_l_100km`. | mittel | CO₂/Autarkie deckungsgleich mit dem Cockpit |
 | **S4** | Cockpit/Übersicht + HA-Export nachziehen (heute korrekt → reiner Strukturschritt). **Ladezeit vorher/nachher messen.** | mittel | Vier-Wege-Symmetrie unverändert grün, Ladezeit nicht schlechter |
 | **S5** ✅ | **F-4 + F-7**: Komponenten-Dashboards umhängen (BKW-Tarif, Dienstwagen-Filter). P10-Wächter **scharf stellen**, Baseline 0 mit klassifizierten Ausnahmen. | mittel | Wächter grün, ohne Umbau rot verifiziert |
-| **S6** | Community-Payload — **nur** mit Datenmodell-Abgleich `eedc-community`. Optional, eigener Entscheid. | klein | beide Repos synchron |
+| **S6** ✅ | Community-Payload — **nur** mit Datenmodell-Abgleich `eedc-community`. Optional, eigener Entscheid. | klein | beide Repos synchron |
+
+> **Gebaut mit S6 (2026-07-31) — was der Schritt gegenüber dem Entwurf gelernt hat:**
+>
+> 1. **Der Payload verlor drei Achsen, nicht eine.** Die Inventur hatte diese
+>    Sicht nur auf **F-5** abgeklopft (§1). Gemessen fehlten außerdem **F-1**
+>    (V2H + Erzeuger hinter dem Zähler in der Autarkie: 85,7 % statt 90,9 %)
+>    und der **Dienstwagen-Filter** — km, Ladung und V2H eines dienstlichen
+>    Fahrzeugs gingen in den öffentlichen Benchmark ein. Dazu die #262-Klasse:
+>    der Netz-Anteil wurde roh gelesen statt abgeleitet (150 statt 200 kWh bei
+>    evcc-Import).
+> 2. **F-5 wiegt hier schwerer als in den Finanz-Sichten.** Dort waren es 32 €
+>    statt 212 €. Hier blieb `monatswerte` **leer**, und `/community/share`
+>    antwortet darauf mit HTTP 400: die betroffenen Anlagen konnten am
+>    Benchmark gar nicht teilnehmen.
+> 3. **§11 hieß nicht automatisch „Schema ändern".** `eedc-community/backend/
+>    schemas.py` blieb strukturell unverändert — der Payload validiert
+>    unverändert (end-to-end geprüft, nicht behauptet). Geändert hat sich die
+>    **Bedeutung** dreier Feldgruppen, und weil der Server nichts nachrechnet,
+>    ist genau diese Semantik im selben Paket als Vertrag in den Docstring von
+>    `MonatswertInput` gewandert. „Beide Repos oder gar nicht" ist damit erfüllt,
+>    ohne eine Migration zu erfinden, die niemand braucht.
+> 4. **Zwei Gernot-Entscheide (31.07.), beide mit Messung vorgelegt:**
+>    Dienstwagen **raus** aus den E-Mob-Mengen (die stehende Regel gilt auch für
+>    den Benchmark, Preis: die öffentliche Summe „X km elektrisch gefahren"
+>    sinkt) · Altbestand auf dem Server **stehen lassen** — der Submit ist ein
+>    Voll-Submit, jede Anlage heilt beim nächsten Teilen. Keine Start-Migration,
+>    kein erzwungener Re-Share, keine Markierung.
+> 5. **Die Schicht musste dafür eine Quellen-Trennung bekommen.** Der Server
+>    führt `eauto_*` und `wallbox_*` als getrennte Felder; der Heimladungs-Pool
+>    wählt aber genau EINE Quelle. Neu: `EmobFakten.eauto_summe` /
+>    `wallbox_summe` über denselben SoT-Leser (`summiere_emob_quelle`, dafür
+>    öffentlich gemacht) — getrennt, aber nicht roh gelesen.
 
 **Daneben, unabhängig und jederzeit einschiebbar:** **F-6** (Tages-CO₂ auf dem
 Eigenverbrauch statt auf der Erzeugung) — ein Einzelfix im Tages-Pfad, den diese
@@ -237,6 +296,14 @@ Alle sechs Schritte, Community mitgezogen, ein gemeinsames Release am Ende.
 - **S6 koppelt zwei Repos.** `eedc-community/backend/schemas.py` und
   `eedc/backend/services/community_service.py` werden im selben Paket angefasst
   oder gar nicht. Ein halb migrierter Payload ist schlimmer als der heutige.
+  > **Ausgang (2026-07-31):** beide Repos im selben Paket angefasst — die
+  > Struktur blieb, die **Semantik** ist gewandert. Kein Feld kam hinzu, keines
+  > fiel weg, keine Grenze verschob sich; geprüft wurde end-to-end, indem der
+  > erzeugte Payload gegen das Schema des anderen Repos instanziiert wurde.
+  > `MonatswertInput` trägt seither die Bedeutung der drei geänderten
+  > Feldgruppen im Docstring — der Server rechnet nichts nach, also muss sie
+  > dort stehen, wo sie gelesen wird. Ein „halb migrierter Payload" ist damit
+  > ausgeschlossen, ohne eine Schema-Migration zu erfinden.
 - **Kein Zwischen-Release.** Der Strang läuft bis S6 durch. Wer unterwegs eine
   Zahl bewegt, schreibt die Anwender-Sicht **sofort** in den
   WAS-IST-NEU-Entwurf — am Ende sind es sechs Sessions Abstand zur Erinnerung.

@@ -9,8 +9,7 @@ from datetime import datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models import Anlage, Monatsdaten, Investition, InvestitionMonatsdaten
-from backend.core.berechnungen import berechne_verbrauchs_kennzahlen
+from backend.models import Anlage, Investition
 from backend.core.config import settings
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import (
@@ -18,6 +17,7 @@ from backend.core.investition_parameter import (
     PARAM_BALKONKRAFTWERK,
     PARAM_WAERMEPUMPE,
 )
+from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.services.plz_to_state import PLZ_TO_STATE
 
 
@@ -232,227 +232,125 @@ async def prepare_community_data(
         "monate_vollstaendig": bool(include_monatswerte),
     }
 
-    # Monatswerte laden wenn gewünscht
+    # Monatswerte aus den Monats-Fakten (ADR-002/P10, S6 des Bauplans).
+    # Vorher faltete diese Sicht die `InvestitionMonatsdaten` selbst — und
+    # verlor dabei drei Achsen: die P7-Auflösung der PV (eine Anlage, die ihre
+    # Erzeugung als Anlagen-Aggregat statt je Modul pflegt, konnte GAR NICHTS
+    # teilen — `monatswerte` blieb leer und `/community/share` brach mit HTTP
+    # 400 ab), den Erzeuger hinter dem Zähler + V2H in der Autarkie (F-1) und
+    # den Dienstwagen-Filter.
     if include_monatswerte:
-        result = await db.execute(
-            select(Monatsdaten)
-            .where(Monatsdaten.anlage_id == anlage_id)
-            .order_by(Monatsdaten.jahr, Monatsdaten.monat)
-        )
-        monatsdaten = result.scalars().all()
-
-        # InvestitionMonatsdaten für alle Komponenten vorladen
-        # Drift-Audit F: vollständiges Investition-Objekt für Anschaffungsdatum-Filter.
-        inv_md_result = await db.execute(
-            select(InvestitionMonatsdaten, Investition)
-            .join(Investition)
-            .where(Investition.anlage_id == anlage_id)
-        )
-        inv_monatsdaten = inv_md_result.all()
-
-        # Nach Jahr/Monat gruppieren — Daten vor Anschaffung ignorieren
-        # (inv_md, typ, parameter) — parameter wird für getrennte_strommessung gebraucht (#183)
-        inv_by_month: dict[tuple[int, int], list[tuple]] = {}
-        for inv_md, inv in inv_monatsdaten:
-            if not inv.ist_aktiv_im_monat(inv_md.jahr, inv_md.monat):
-                continue
-            key = (inv_md.jahr, inv_md.monat)
-            if key not in inv_by_month:
-                inv_by_month[key] = []
-            inv_by_month[key].append((inv_md, inv.typ, inv.parameter or {}))
-
-        for md in monatsdaten:
-            key = (md.jahr, md.monat)
-            month_inv_data = inv_by_month.get(key, [])
-
-            # PV-Erzeugung aggregieren (PV-Module + BKW)
-            pv_erzeugung = sum(
-                (inv_md.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
-                or (inv_md.verbrauch_daten or {}).get("erzeugung_kwh", 0)
-                or 0
-                for inv_md, typ, _params in month_inv_data if typ in ("pv-module", "balkonkraftwerk")
-            )
-
-            # Speicher-KPIs aggregieren
-            speicher_ladung = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "speicher"
-            )
-            speicher_entladung = sum(
-                (inv_md.verbrauch_daten or {}).get("entladung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "speicher"
-            )
-            speicher_ladung_netz = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_netz_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "speicher"
-            )
-
-            # Wärmepumpe-KPIs aggregieren
-            # #183: bei getrennter Strommessung Gesamt aus Einzel-Sensoren bilden
-            wp_stromverbrauch = sum(
-                (
-                    ((inv_md.verbrauch_daten or {}).get("strom_heizen_kwh") or 0) +
-                    ((inv_md.verbrauch_daten or {}).get("strom_warmwasser_kwh") or 0)
-                )
-                if (_params or {}).get("getrennte_strommessung")
-                else (inv_md.verbrauch_daten or {}).get("stromverbrauch_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "waermepumpe"
-            )
-            wp_heizwaerme = sum(
-                (inv_md.verbrauch_daten or {}).get("heizenergie_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "waermepumpe"
-            )
-            wp_warmwasser = sum(
-                (inv_md.verbrauch_daten or {}).get("warmwasser_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "waermepumpe"
-            )
-
-            # E-Auto-KPIs aggregieren
-            eauto_ladung_pv = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_pv_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
-            )
-            eauto_ladung_netz = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_netz_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
-            )
-            eauto_ladung_extern = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_extern_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
-            )
-            eauto_km = sum(
-                (inv_md.verbrauch_daten or {}).get("km_gefahren", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
-            )
-            eauto_v2h = sum(
-                (inv_md.verbrauch_daten or {}).get("v2h_entladung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "e-auto"
-            )
-            eauto_ladung_gesamt = eauto_ladung_pv + eauto_ladung_netz + eauto_ladung_extern
-
-            # Wallbox-KPIs aggregieren
-            wallbox_ladung = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "wallbox"
-            )
-            wallbox_ladung_pv = sum(
-                (inv_md.verbrauch_daten or {}).get("ladung_pv_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "wallbox"
-            )
-            wallbox_ladevorgaenge = sum(
-                (inv_md.verbrauch_daten or {}).get("ladevorgaenge", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "wallbox"
-            )
-
-            # Balkonkraftwerk-KPIs aggregieren
-            bkw_erzeugung = sum(
-                (inv_md.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
-            )
-            bkw_eigenverbrauch = sum(
-                (inv_md.verbrauch_daten or {}).get("eigenverbrauch_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
-            )
-            bkw_speicher_ladung = sum(
-                (inv_md.verbrauch_daten or {}).get("speicher_ladung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
-            )
-            bkw_speicher_entladung = sum(
-                (inv_md.verbrauch_daten or {}).get("speicher_entladung_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "balkonkraftwerk"
-            )
-
-            # Sonstiges-KPIs aggregieren
-            sonstiges_verbrauch = sum(
-                (inv_md.verbrauch_daten or {}).get("stromverbrauch_kwh", 0) or 0
-                for inv_md, typ, _params in month_inv_data if typ == "sonstiges"
-            )
-
-            # Autarkie und Eigenverbrauch berechnen — #294: kanonische SoT-Formel
-            # (inkl. Speicher), deckungsgleich mit Cockpit/HA-Export
-            # (core/berechnungen/verbrauch.py, ADR-001). Vorher ignorierte der
-            # Submit-Pfad den Speicher (EV = PV − Einspeisung) und lieferte für
-            # Speicher-Anlagen — besonders mit Netzladung — systematisch zu
-            # niedrige Community-Autarkie (kingcap1 #294, 12 % statt real ~).
-            einspeisung = md.einspeisung_kwh or 0
-            netzbezug = md.netzbezug_kwh or 0
-            kennzahlen = berechne_verbrauchs_kennzahlen(
-                pv_erzeugung_kwh=pv_erzeugung,
-                einspeisung_kwh=einspeisung,
-                netzbezug_kwh=netzbezug,
-                speicher_ladung_kwh=speicher_ladung,
-                speicher_entladung_kwh=speicher_entladung,
-            )
-            autarkie = (
-                kennzahlen.autarkie_prozent
-                if kennzahlen.gesamtverbrauch_kwh > 0
-                else None
-            )
-            ev_quote = kennzahlen.eigenverbrauchsquote_prozent if pv_erzeugung > 0 else None
-
-            if pv_erzeugung > 0:
-                monatswert_data = {
-                    "jahr": md.jahr,
-                    "monat": md.monat,
-                    "ertrag_kwh": round(pv_erzeugung, 1),
-                    "einspeisung_kwh": round(einspeisung, 1) if einspeisung else None,
-                    "netzbezug_kwh": round(netzbezug, 1) if netzbezug else None,
-                    "autarkie_prozent": round(autarkie, 1) if autarkie is not None else None,
-                    "eigenverbrauch_prozent": round(ev_quote, 1) if ev_quote is not None else None,
-                }
-
-                # Speicher-KPIs (nur wenn vorhanden)
-                if speicher_ladung > 0 or speicher_entladung > 0:
-                    monatswert_data["speicher_ladung_kwh"] = round(speicher_ladung, 1)
-                    monatswert_data["speicher_entladung_kwh"] = round(speicher_entladung, 1)
-                    if speicher_ladung_netz > 0:
-                        monatswert_data["speicher_ladung_netz_kwh"] = round(speicher_ladung_netz, 1)
-
-                # Wärmepumpe-KPIs (nur wenn vorhanden)
-                if wp_stromverbrauch > 0:
-                    monatswert_data["wp_stromverbrauch_kwh"] = round(wp_stromverbrauch, 1)
-                    if wp_heizwaerme > 0:
-                        monatswert_data["wp_heizwaerme_kwh"] = round(wp_heizwaerme, 1)
-                    if wp_warmwasser > 0:
-                        monatswert_data["wp_warmwasser_kwh"] = round(wp_warmwasser, 1)
-
-                # E-Auto-KPIs (nur wenn vorhanden)
-                if eauto_ladung_gesamt > 0:
-                    monatswert_data["eauto_ladung_gesamt_kwh"] = round(eauto_ladung_gesamt, 1)
-                    if eauto_ladung_pv > 0:
-                        monatswert_data["eauto_ladung_pv_kwh"] = round(eauto_ladung_pv, 1)
-                    if eauto_ladung_extern > 0:
-                        monatswert_data["eauto_ladung_extern_kwh"] = round(eauto_ladung_extern, 1)
-                    if eauto_km > 0:
-                        monatswert_data["eauto_km"] = round(eauto_km, 1)
-                    if eauto_v2h > 0:
-                        monatswert_data["eauto_v2h_kwh"] = round(eauto_v2h, 1)
-
-                # Wallbox-KPIs (nur wenn vorhanden)
-                if wallbox_ladung > 0:
-                    monatswert_data["wallbox_ladung_kwh"] = round(wallbox_ladung, 1)
-                    if wallbox_ladung_pv > 0:
-                        monatswert_data["wallbox_ladung_pv_kwh"] = round(wallbox_ladung_pv, 1)
-                    if wallbox_ladevorgaenge > 0:
-                        monatswert_data["wallbox_ladevorgaenge"] = wallbox_ladevorgaenge
-
-                # Balkonkraftwerk-KPIs (nur wenn vorhanden)
-                if bkw_erzeugung > 0:
-                    monatswert_data["bkw_erzeugung_kwh"] = round(bkw_erzeugung, 1)
-                    if bkw_eigenverbrauch > 0:
-                        monatswert_data["bkw_eigenverbrauch_kwh"] = round(bkw_eigenverbrauch, 1)
-                    if bkw_speicher_ladung > 0:
-                        monatswert_data["bkw_speicher_ladung_kwh"] = round(bkw_speicher_ladung, 1)
-                    if bkw_speicher_entladung > 0:
-                        monatswert_data["bkw_speicher_entladung_kwh"] = round(bkw_speicher_entladung, 1)
-
-                # Sonstiges-KPIs (nur wenn vorhanden)
-                if sonstiges_verbrauch > 0:
-                    monatswert_data["sonstiges_verbrauch_kwh"] = round(sonstiges_verbrauch, 1)
-
+        for fakt in await lade_monats_fakten(db, anlage_id):
+            monatswert_data = _monatswert(fakt)
+            if monatswert_data is not None:
                 data["monatswerte"].append(monatswert_data)
 
     return data
+
+
+def _monatswert(fakt: MonatsFakt) -> dict | None:
+    """Ein Community-Monatswert aus einem ``MonatsFakt`` — oder ``None``.
+
+    Zwei Filter, beide aus dem Bestand übernommen und bewusst beibehalten:
+
+    - **ohne Zählerzeile nichts** — Einspeisung und Netzbezug wären 0 und die
+      Autarkie damit eine Behauptung ohne Messung (P4). Die alte Fassung lief
+      über die ``Monatsdaten``-Zeilen und hatte den Filter dadurch implizit.
+    - **ohne PV nichts** — der Benchmark vergleicht PV-Anlagen. Ein Monat vor
+      der Inbetriebnahme (oder eine reine BHKW-Anlage) gehört nicht hinein.
+    """
+    if not fakt.meta.hat_zaehlerzeile:
+        return None
+
+    # Die PV-Achse des Benchmarks: Module (P7-aufgelöst) + BKW — NICHT
+    # `hinter_zaehler_kwh`. Der Server rechnet daraus den spezifischen Ertrag
+    # je kWp; ein BHKW dort hineinzurechnen würde die Kennzahl verfälschen.
+    pv_erzeugung = fakt.erzeugung.pv_kwh
+    if pv_erzeugung <= 0:
+        return None
+
+    einspeisung = fakt.zaehler.einspeisung_kwh
+    netzbezug = fakt.zaehler.netzbezug_kwh
+
+    # #294: kanonische SoT-Formel (inkl. Speicher), deckungsgleich mit
+    # Cockpit/HA-Export. Seit S6 kommt sie aus der Schicht und trägt damit
+    # zusätzlich V2H und den Erzeuger hinter dem Zähler (F-1) — die
+    # Bezugsgröße ist `erzeugung_hinter_zaehler_kwh`, nicht `pv_kwh`: an EINEM
+    # Netzanschluss messen die Zähler die Summe aller Erzeuger dahinter.
+    kennzahlen = fakt.kennzahlen
+    autarkie = (
+        kennzahlen.autarkie_prozent if kennzahlen.gesamtverbrauch_kwh > 0 else None
+    )
+    ev_quote = kennzahlen.eigenverbrauchsquote_prozent
+
+    monatswert_data = {
+        "jahr": fakt.jahr,
+        "monat": fakt.monat,
+        "ertrag_kwh": round(pv_erzeugung, 1),
+        "einspeisung_kwh": round(einspeisung, 1) if einspeisung else None,
+        "netzbezug_kwh": round(netzbezug, 1) if netzbezug else None,
+        "autarkie_prozent": round(autarkie, 1) if autarkie is not None else None,
+        "eigenverbrauch_prozent": round(ev_quote, 1) if ev_quote is not None else None,
+    }
+
+    speicher = fakt.speicher
+    if speicher.ladung_kwh > 0 or speicher.entladung_kwh > 0:
+        monatswert_data["speicher_ladung_kwh"] = round(speicher.ladung_kwh, 1)
+        monatswert_data["speicher_entladung_kwh"] = round(speicher.entladung_kwh, 1)
+        if speicher.netzladung_kwh > 0:
+            monatswert_data["speicher_ladung_netz_kwh"] = round(speicher.netzladung_kwh, 1)
+
+    wp = fakt.wp
+    if wp.strom_kwh > 0:
+        monatswert_data["wp_stromverbrauch_kwh"] = round(wp.strom_kwh, 1)
+        if wp.heizung_kwh > 0:
+            monatswert_data["wp_heizwaerme_kwh"] = round(wp.heizung_kwh, 1)
+        if wp.warmwasser_kwh > 0:
+            monatswert_data["wp_warmwasser_kwh"] = round(wp.warmwasser_kwh, 1)
+
+    # E-Auto und Wallbox bleiben GETRENNT (der Server führt beide Felder) —
+    # deshalb die Quellen-Summen der Schicht statt des Heimladungs-Pools, der
+    # genau eine der beiden Quellen wählt. Beide sind dienstwagen- und
+    # laufzeitgefiltert; ein dienstlich gefahrenes Fahrzeug ist keine Aussage
+    # über diese Anlage. [[feedback_dienstwagen_alle_checks]]
+    emob = fakt.emob
+    eauto = emob.eauto_summe
+    eauto_ladung_gesamt = eauto.ladung_kwh + eauto.extern_kwh
+    if eauto_ladung_gesamt > 0:
+        monatswert_data["eauto_ladung_gesamt_kwh"] = round(eauto_ladung_gesamt, 1)
+        if eauto.pv_kwh > 0:
+            monatswert_data["eauto_ladung_pv_kwh"] = round(eauto.pv_kwh, 1)
+        if eauto.extern_kwh > 0:
+            monatswert_data["eauto_ladung_extern_kwh"] = round(eauto.extern_kwh, 1)
+        if emob.km > 0:
+            monatswert_data["eauto_km"] = round(emob.km, 1)
+        if emob.v2h_entladung_kwh > 0:
+            monatswert_data["eauto_v2h_kwh"] = round(emob.v2h_entladung_kwh, 1)
+
+    wallbox = emob.wallbox_summe
+    if wallbox.ladung_kwh > 0:
+        monatswert_data["wallbox_ladung_kwh"] = round(wallbox.ladung_kwh, 1)
+        if wallbox.pv_kwh > 0:
+            monatswert_data["wallbox_ladung_pv_kwh"] = round(wallbox.pv_kwh, 1)
+        if wallbox.ladevorgaenge > 0:
+            monatswert_data["wallbox_ladevorgaenge"] = int(wallbox.ladevorgaenge)
+
+    # BKW: der GEMESSENE Eigenverbrauch, nicht der aus der Hausbilanz
+    # abgeleitete Anteil (S5). Der Payload trägt Messwerte, keine Bewertung.
+    bkw = fakt.bkw
+    if bkw.erzeugung_kwh > 0:
+        monatswert_data["bkw_erzeugung_kwh"] = round(bkw.erzeugung_kwh, 1)
+        if bkw.eigenverbrauch_gemessen_kwh > 0:
+            monatswert_data["bkw_eigenverbrauch_kwh"] = round(bkw.eigenverbrauch_gemessen_kwh, 1)
+        if bkw.speicher_ladung_kwh > 0:
+            monatswert_data["bkw_speicher_ladung_kwh"] = round(bkw.speicher_ladung_kwh, 1)
+        if bkw.speicher_entladung_kwh > 0:
+            monatswert_data["bkw_speicher_entladung_kwh"] = round(bkw.speicher_entladung_kwh, 1)
+
+    if fakt.sonstiges.verbrauch_kwh > 0:
+        monatswert_data["sonstiges_verbrauch_kwh"] = round(fakt.sonstiges.verbrauch_kwh, 1)
+
+    return monatswert_data
 
 
 async def get_community_preview(db: AsyncSession, anlage_id: int) -> dict | None:

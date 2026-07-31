@@ -76,7 +76,11 @@ from backend.core.wirtschaftlichkeit_defaults import (
 from backend.core.field_definitions import get_emob_pv_netz_kwh
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
-from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
+from backend.services.eauto_wirtschaftlichkeit import (
+    EmobLadungPool,
+    get_emob_heimladung_canonical,
+    summiere_emob_quelle,
+)
 from backend.services.einspeise_erloes_service import (
     get_neg_preis_einspeisung_je_monat,
 )
@@ -199,6 +203,16 @@ class EmobFakten:
     ``wallbox_ladedaten``, bereits dienstwagen- und laufzeitgefiltert): der
     Aufrufer kann sie über denselben SoT global poolen.
 
+    ``eauto_summe`` / ``wallbox_summe`` sind dieselben Rohdicts, aber je Quelle
+    **getrennt** und über denselben SoT-Leser aufsummiert
+    (``summiere_emob_quelle``) — für Sichten, die die beiden Seiten einzeln
+    ausweisen müssen statt sie zu poolen (der Community-Payload trägt
+    ``eauto_*`` und ``wallbox_*`` als eigene Felder). Sie sind **kein** Ersatz
+    für die Trias oben: wer eine Gesamt-Heimladung braucht, nimmt den Pool,
+    sonst zählt derselbe Fluss zweimal (die Wallbox misst am Ladepunkt, was das
+    E-Auto als Ladung meldet). ``quelle`` ist in beiden leer — die Quellen-Wahl
+    trifft nur der Pool.
+
     ``dienstlich_*`` ist der herausgefilterte Anteil — nicht verworfen, sondern
     getrennt ausgewiesen, weil er als *Ausgabe* (dienstliche Ladekosten) in die
     Sonstige-Summen gehört. Die Bewertung in Euro bleibt beim Aufrufer, weil sie
@@ -222,6 +236,12 @@ class EmobFakten:
     dienstlich_ladung_netz_kwh: float = 0.0
     eauto_ladedaten: tuple[dict, ...] = ()
     wallbox_ladedaten: tuple[dict, ...] = ()
+    eauto_summe: EmobLadungPool = field(
+        default_factory=lambda: EmobLadungPool(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "")
+    )
+    wallbox_summe: EmobLadungPool = field(
+        default_factory=lambda: EmobLadungPool(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, "")
+    )
 
 
 @dataclass(frozen=True)
@@ -667,6 +687,8 @@ async def _baue_fakt(
         dienstlich_ladung_netz_kwh=roh.dienstlich_netz,
         eauto_ladedaten=tuple(roh.eauto_ladedaten),
         wallbox_ladedaten=tuple(roh.wallbox_ladedaten),
+        eauto_summe=summiere_emob_quelle(roh.eauto_ladedaten),
+        wallbox_summe=summiere_emob_quelle(roh.wallbox_ladedaten),
     )
 
     md_summen = berechne_md_sonstige_summen(monatsdaten) if monatsdaten else None

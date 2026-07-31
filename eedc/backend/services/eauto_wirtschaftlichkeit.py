@@ -499,10 +499,18 @@ class EmobLadungPool:
     quelle: str             # "wallbox" | "e-auto" | "leer"
 
 
-def _summiere_emob_quelle(imd_data: Iterable[dict]) -> EmobLadungPool:
+def summiere_emob_quelle(imd_data: Iterable[dict]) -> EmobLadungPool:
     """Summiert eine Quelle (alle Wallbox- ODER alle E-Auto-IMD) zu einer in
     sich konsistenten Trias. `netz` über den SoT-Helper `get_emob_pv_netz_kwh`
-    (liest `ladung_netz_kwh` direkt oder leitet `Total − PV` ab)."""
+    (liest `ladung_netz_kwh` direkt oder leitet `Total − PV` ab).
+
+    Öffentlich seit S6: es gibt Sichten, die die Quellen **getrennt** ausweisen
+    müssen (der Community-Payload trägt `eauto_*` und `wallbox_*` als eigene
+    Felder). Sie dürfen die Felder trotzdem nicht selbst aus dem
+    `verbrauch_daten`-Dict lesen — genau dort saß #262. `quelle` bleibt hier
+    leer; die Quellen-WAHL trifft ausschließlich
+    `get_emob_heimladung_canonical`.
+    """
     pv = netz = extern_kwh = extern_euro = ladevorgaenge = 0.0
     for d in imd_data:
         d = d or {}
@@ -548,8 +556,8 @@ def get_emob_heimladung_canonical(
     und `ist_dienstlich`). Die `pv + netz == ladung_kwh`-Garantie von
     `EmobLadungPool` bleibt erhalten (Trias kommt geschlossen aus einer Quelle).
     """
-    wb = _summiere_emob_quelle(wallbox_imd_data)
-    ea = _summiere_emob_quelle(eauto_imd_data)
+    wb = summiere_emob_quelle(wallbox_imd_data)
+    ea = summiere_emob_quelle(eauto_imd_data)
 
     if wb.ladung_kwh > 0:
         heim, name = wb, "wallbox"

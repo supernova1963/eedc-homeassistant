@@ -282,7 +282,7 @@ async def test_bkw_ohne_erzeugung_wird_von_allen_vier_getragen(db):
 # ============================================================================
 
 
-async def _anlage_nur_mit_aggregat(db) -> int:
+async def anlage_nur_mit_aggregat(db) -> int:
     """PV-Anlage, deren Erzeugung NUR als Anlagen-Aggregat gepflegt ist.
 
     Der Unterschied zu `_anlage_mit_regelbesteuerung` ist genau eine Zeile: das
@@ -322,7 +322,7 @@ async def test_nur_aggregat_alle_vier_sichten_nennen_212_euro(db):
     rohe IMD-Summe fand keine Pro-Modul-Zeile und setzte die PV auf 0, womit die
     komplette Eigenverbrauchs-Ersparnis fehlte.
     """
-    anlage_id = await _anlage_nur_mit_aggregat(db)
+    anlage_id = await anlage_nur_mit_aggregat(db)
 
     werte = await _vier_netto_ertraege(db, anlage_id)
 
@@ -342,7 +342,7 @@ async def test_nur_aggregat_pv_menge_ist_im_jahresbericht_sichtbar(db):
     Die KPI-Kachel „PV-Erzeugung" und die Monatstabelle des PDFs standen bei
     dieser Anlage auf 0 — ein Bericht, der die Anlage als tot auswies.
     """
-    anlage_id = await _anlage_nur_mit_aggregat(db)
+    anlage_id = await anlage_nur_mit_aggregat(db)
 
     pdf = await build_jahresbericht_context(db, anlage_id, jahr=2026)
 
@@ -371,7 +371,7 @@ async def test_nur_aggregat_investitions_roi_traegt_die_ev_ersparnis(db):
     Vorher: Erzeugung 0 → Eigenverbrauch 0 → 384,00 € (12 × 32 €). Das ist die
     Zahl, aus der Amortisation und Break-Even-Jahr abgeleitet werden.
     """
-    anlage_id = await _anlage_nur_mit_aggregat(db)
+    anlage_id = await anlage_nur_mit_aggregat(db)
 
     roi = await get_roi_dashboard(
         anlage_id=anlage_id, strompreis_cent=None, einspeiseverguetung_cent=None,
