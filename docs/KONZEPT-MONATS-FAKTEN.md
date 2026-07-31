@@ -15,6 +15,12 @@
 > | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**4** nach S6), mit Obergrenze im Test |
 > | Nebenfunde N-2 … N-17 (Abarbeitung nach S6) | `~/.claude/plans/uebergabe-monats-fakten.md` |
 >
+> **Eine der umgehängten Sichten gibt es nicht mehr:** `cockpit/social.py` (S3,
+> geteilter Monatstext) ist am 2026-07-31 **zurückgebaut** worden — die
+> Oberfläche dazu war beim IA-V4-Flip entfallen, der Endpoint lief ohne
+> Konsumenten (Nebenfunde-Runde, Paket B). Die Bau-Tabellen unten bleiben als
+> Historie unverändert; wer `social.py` sucht, findet es nur noch dort.
+>
 > **Was nach S6 offen bleibt** — beides bewusst *nicht* in diesem Dokument
 > geparkt, sondern an den genannten Stellen benannt und gezählt:
 >

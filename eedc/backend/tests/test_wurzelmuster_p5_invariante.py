@@ -10,6 +10,12 @@ Deaktivierung). Aus einer Ursache wurden drei verschiedene Symptome:
 * **HTTP 500** in der Social-Karte (dito) — N85
 * **verdoppelter SOLL-PV** im Monatsbericht (`JOIN` ohne `limit`, `sum()`) — N83
 
+**Rückbau 2026-07-31 (Paket B):** der N85-Einsprungpunkt ist entfallen —
+`cockpit/social.py` ist gelöscht (die Oberfläche dazu gibt es seit dem
+IA-V4-Flip nicht mehr). Die Datei prüft die Lesepfade seither über **vier**
+statt fünf Einsprungpunkte; N85 selbst bleibt hier als Herkunft der Regel
+stehen, denn er hat sie mit ausgelöst. ADR-002/P5 trägt die Zahl mit.
+
 Diese Datei prüft drei Ebenen:
 
 1. **Die Wurzel** — der partielle Unique-Index lässt den Zustand nicht mehr
@@ -333,19 +339,6 @@ async def test_daten_checker_wirft_keinen_500_bei_zwei_aktiven(db):
     ergebnis = await DatenChecker(db).check_anlage(anlage_id)
     assert ergebnis.anlage_id == anlage_id
     assert ergebnis.ergebnisse, "Der Checker liefert keine Befunde mehr."
-
-
-async def test_social_karte_wirft_keinen_500_bei_zwei_aktiven(db):
-    """N85: vorher `MultipleResultsFound` → HTTP 500 statt der Karte."""
-    from backend.api.routes.cockpit.social import get_share_text
-
-    await _index_loeschen(db)
-    anlage_id = await _seed(db, zwei_aktive=True)
-
-    resp = await get_share_text(
-        anlage_id=anlage_id, monat=MONAT, jahr=2026, variante="kompakt", db=db,
-    )
-    assert resp.text
 
 
 async def test_monatsbericht_soll_pv_wird_nicht_verdoppelt(db):

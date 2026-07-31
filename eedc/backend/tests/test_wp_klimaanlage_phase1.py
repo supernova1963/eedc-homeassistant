@@ -9,7 +9,7 @@ Phase 1 macht zwei Anpassungen:
    (das ist bei Klimas das normale Verhalten, kein Datenloch).
 2. JAZ/COP-Berechnung in den Cockpit-Routes liefert None statt 0, wenn
    wp_strom > 0 aber wp_waerme = 0 (siehe geänderte uebersicht.py / komponenten.py /
-   pdf_operations.py / social.py / jahresbericht.py).
+   pdf_operations.py / social.py [2026-07-31 zurückgebaut] / jahresbericht.py).
 """
 
 from __future__ import annotations

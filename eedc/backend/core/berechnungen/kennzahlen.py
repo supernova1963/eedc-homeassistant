@@ -3,7 +3,8 @@
 
 Single Source of Truth für die drei Quoten-/Ertrags-Primitive, vorher über die
 Codebase verstreut inline dupliziert (calculations, verbrauch, aussichten,
-investitionen/dashboards, cockpit/social, cockpit/nachhaltigkeit, pdf-builder).
+investitionen/dashboards, cockpit/social (2026-07-31 zurückgebaut),
+cockpit/nachhaltigkeit, pdf-builder).
 Reine Arithmetik, DB-/Service-frei (ADR-001).
 
 Maintainer-Entscheid (2026-06-14): die **Eigenverbrauchsquote wird überall auf

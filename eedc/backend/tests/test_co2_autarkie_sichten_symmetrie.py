@@ -1,4 +1,4 @@
-"""Ein Eigenverbrauch, drei Sichten — CO₂ und Autarkie (Befund **F-1**).
+"""Ein Eigenverbrauch, zwei Sichten — CO₂ und Autarkie (Befund **F-1**).
 
 `cockpit/nachhaltigkeit.py` (CO₂-Zeitreihe) und `cockpit/social.py`
 (kopierfertiger Monatstext) haben bis 2026-07-31 die komplette Monats-
@@ -19,9 +19,17 @@ Kein Test hat das gefunden, weil es für beide Endpoints **gar keinen** gab; die
 Vier-Wege-Symmetrie prüft den Netto-Ertrag, nicht CO₂ und Autarkie. Diese Datei
 schließt die Lücke auf derselben Fixture-Achse („V2H **und** Erzeuger hinter dem
 Zähler", `test_netto_ertrag_vier_wege_symmetrie.anlage_mit_v2h_und_bhkw`) und
-prüft gegen die **ausgerechnete** Zahl, nicht nur die drei Sichten gegeneinander
-— Symmetrie allein ließe auch drei gleich falsche Werte durch
+prüft gegen die **ausgerechnete** Zahl, nicht nur die Sichten gegeneinander
+— Symmetrie allein ließe auch gleich falsche Werte durch
 ([[feedback_aggregator_symmetrie]]).
+
+**Rückbau 2026-07-31 (Paket B):** `cockpit/social.py` ist gelöscht — die
+auslösende Oberfläche (Teilen-Symbol, `ShareTextModal`) ist mit dem IA-V4-Flip
+entfallen und wird nicht wieder eingeführt. Der Test
+``test_social_text_teilt_dieselbe_autarkie_und_co2_zahl`` ist damit
+gegenstandslos und ersatzlos entfernt; die Datei deckt seither **nur noch** die
+CO₂-Zeitreihe, und die bleibt. Die fünf verbliebenen Tests sind unverändert —
+das ist der Beweis des Rückbaus: er hat die Zeitreihe nicht berührt.
 """
 
 from __future__ import annotations
@@ -31,7 +39,6 @@ from datetime import date
 import pytest
 
 from backend.api.routes.cockpit.nachhaltigkeit import get_nachhaltigkeit
-from backend.api.routes.cockpit.social import get_share_text
 from backend.api.routes.cockpit.uebersicht import get_cockpit_uebersicht
 from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.investition import InvestitionMonatsdaten
@@ -101,26 +108,6 @@ async def test_co2_und_autarkie_sind_deckungsgleich_mit_dem_cockpit(db):
 
 
 @pytest.mark.asyncio
-async def test_social_text_teilt_dieselbe_autarkie_und_co2_zahl(db):
-    """Der Text geht nach außen — er darf nichts anderes behaupten als das Cockpit."""
-    anlage_id = await anlage_mit_v2h_und_bhkw(db, km=1000.0, name="Social-V2H-BHKW")
-
-    resp = await get_share_text(
-        anlage_id=anlage_id, monat=6, jahr=2026, variante="ausfuehrlich", db=db,
-    )
-
-    # 91 % statt 86 %, 539 kg statt 375 kg — beide Zahlen stehen im Text.
-    assert "Autarkiegrad: 91%" in resp.text, resp.text
-    assert "CO₂ gespart: 539 kg" in resp.text, resp.text
-    assert "86%" not in resp.text, resp.text
-    assert "375 kg" not in resp.text, resp.text
-
-    # Die PV-Achse bleibt rein: spezifischer Ertrag und der PVGIS-Vergleich
-    # rechnen mit 1.000 kWh PV, nicht mit den 1.300 kWh hinter dem Zähler.
-    assert "Erzeugung: 1.000 kWh (100,0 kWh/kWp)" in resp.text, resp.text
-
-
-@pytest.mark.asyncio
 async def test_benzin_vergleich_nutzt_den_gepflegten_verbrauch(db):
     """Der gepflegte `vergleich_verbrauch_l_100km` schlägt die alte 7-l-Konstante.
 
@@ -145,13 +132,12 @@ async def test_benzin_vergleich_nutzt_den_gepflegten_verbrauch(db):
 
 
 @pytest.mark.asyncio
-async def test_dienstwagen_zaehlt_in_keiner_der_beiden_sichten(db):
+async def test_dienstwagen_zaehlt_nicht_in_der_co2_zeitreihe(db):
     """Dienstlich gefahrene Kilometer sind keine private CO₂-Ersparnis.
 
     [[feedback_dienstwagen_alle_checks]] — der Filter fehlte in
-    `nachhaltigkeit.py` ganz; `social.py` hatte ihn zwar für die Roh-Faltung,
-    hat ihn aber mit der eigenen Aggregation getragen. Beide bekommen ihn jetzt
-    aus derselben Schicht.
+    `nachhaltigkeit.py` ganz; er kommt jetzt aus der Monats-Fakten-Schicht,
+    die ihn genau einmal anwendet (ADR-002/P10).
     """
     anlage_id = await anlage_mit_v2h_und_bhkw(
         db, km=1000.0, name="Dienstwagen",

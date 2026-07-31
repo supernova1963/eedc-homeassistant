@@ -402,15 +402,6 @@ export interface PrognoseVergleich {
 }
 
 // =============================================================================
-// Share-Text Types
-// =============================================================================
-
-export interface ShareTextResponse {
-  text: string
-  variante: string
-}
-
-// =============================================================================
 // API Functions
 // =============================================================================
 
@@ -461,13 +452,6 @@ export const cockpitApi = {
    */
   async getPVStringsGesamtlaufzeit(anlageId: number): Promise<PVStringsGesamtlaufzeitResponse> {
     return api.get<PVStringsGesamtlaufzeitResponse>(`/cockpit/pv-strings-gesamtlaufzeit/${anlageId}`)
-  },
-
-  /**
-   * Generiert kopierfertigen Social-Media-Text für einen Monat.
-   */
-  async getShareText(anlageId: number, monat: number, jahr: number, variante: 'kompakt' | 'ausfuehrlich'): Promise<ShareTextResponse> {
-    return api.get<ShareTextResponse>(`/cockpit/share-text/${anlageId}?monat=${monat}&jahr=${jahr}&variante=${variante}`)
   },
 
   /**

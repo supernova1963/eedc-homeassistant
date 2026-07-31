@@ -188,14 +188,7 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 
 **CO₂-Bilanz** — vermiedene Emissionen (kg) im Vergleich zu reinem Netzbezug.
 
-**Social-Media-Textvorlage** — über das Teilen-Symbol (↗) im Kopf erzeugst du einen kopierfertigen Text für Social-Media-Posts:
-
-1. **Monat/Jahr wählen** (Standard: letzter verfügbarer Monat)
-2. **Variante wählen** — *Kompakt* (Twitter/X, mit Hashtags) oder *Ausführlich* (Facebook-Gruppen/Foren, mit Emojis)
-3. **Vorschau** wird sofort angezeigt
-4. **Kopieren** in die Zwischenablage
-
-Der Text enthält automatisch Anlagenleistung (kWp), Ausrichtung, Bundesland, Erzeugung, Autarkie, Eigenverbrauchsquote, den Prognose-Vergleich (wenn vorhanden), vorhandene Komponenten (Speicher, Wärmepumpe, E-Auto), CO₂-Einsparung und Netto-Ertrag.
+> **Entfallen: die Social-Media-Textvorlage.** Bis Version 3 konntest du über ein Teilen-Symbol im Kopf des Cockpits einen kopierfertigen Text für Social-Media-Posts erzeugen. Mit der neuen Oberfläche (v4) ist diese Funktion weggefallen; dieser Abschnitt hat sie bis Juli 2026 weiter beschrieben. Nicht gemeint ist das **Teilen mit der Community** — das gibt es unverändert, siehe [5. Community](#5-community).
 
 **Kennzahl-Tooltips** — jede Kennzahl zeigt bei Hover/Tipp Formel, eingesetzte Zahlen und Ergebnis. Bei ROI- und Amortisations-Werten kommt eine **„Sicht"-Zeile** hinzu, die die Bezugsbasis klärt (pro Investition vs. gesamt, Jahres-ROI vs. kumuliert, IST vs. Prognose) — eedc zeigt bewusst mehrere ROI-Sichten parallel.
 
@@ -560,7 +553,8 @@ Die neue Oberfläche ordnet Vertrautes neu. Diese Tabelle zeigt, wo frühere Ber
 | **Infothek** (eigener Tab) | **Einstellungen → Infothek** |
 | **Sensor-Zuordnung / MQTT-Inbound** (Assistenten) | **Einstellungen → Datenquellen** (eine Fläche) |
 | **Einstellungen-Dropdown** | **Einstellungen** als Kachel-Raster |
+| **Social-Media-Textvorlage** (Teilen-Symbol ↗ im Cockpit-Kopf) | **entfällt ersatzlos.** Mit v4 war sie nicht mehr erreichbar, seit Juli 2026 ist sie auch im Programm zurückgebaut. Das **Teilen mit der Community** ist eine andere Funktion und bleibt (siehe [5. Community](#5-community)). |
 
 ---
 
-*Letzte Aktualisierung: 2026-07-25 (v4.0)*
+*Letzte Aktualisierung: 2026-07-31 (v4.0)*

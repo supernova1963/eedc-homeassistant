@@ -173,12 +173,12 @@ Vollständige Inventur von `Dashboard.tsx` (alte Cockpit-Übersicht, 630 Z.), da
 | Jahres-/Zeitraum-Selektor + Zeitraum-Info | Steuerung | Zeitraum-Selektor der Zeit-Ansicht (Jahr ↔ Gesamt) |
 | **`GettingStarted`** (Empty-State, keine Anlage) | Onboarding | Cockpit-Leerzustand (Style-Guide B8) |
 | **Multi-Anlagen-Selektor** (bei >1 Anlage) | Steuerung | global/Layout — Audit unter B12 (Single-Anlage-Selektor) |
-| **Social-Media-Text-Export** (Share-Button + `ShareTextModal`) | Aktion | **zeitraum-gebundene Cockpit-Aktion** (siehe unten) |
+| **Social-Media-Text-Export** (Share-Button + `ShareTextModal`) | Aktion | **entfällt ersatzlos** (Entscheid Gernot, 2026-07-31 — siehe unten) |
 | QuickLinks (Monatsdaten/Auswertungen/Investitionen) | Navigation | entfällt — durch neue Top-Nav + Einstellungs-Kachelgrid redundant |
 
-**Social-Media-Text-Export — zeitraum-gebunden (2026-06-01):** Der Teilen-Button wird eine **Cockpit-Aktion pro Zeit-Ansicht** (nicht Community): er teilt den jeweils gewählten Zeitraum — Tag (gewählter Tag) / Monat (gewählter Monat) / Jahr (gewähltes Jahr bzw. Gesamtlaufzeit). **Scope-Trennung (wichtig, [v4.0.0 = reine Struktur](#L233)):**
-> - **In v4.0.0 (reine IA):** nur die **Platzierung** als zeitraum-gebundene Aktion, mit der **heute vorhandenen** Fähigkeit (Monat — `social.py` ist bereits monatsbasiert). Kein neuer Generierungs-Code.
-> - **Eigenes Feature-Bündel (post-v4.0.0):** die **zeitraum-adaptive Text-Generierung**. Aufwand gestaffelt — Monat: vorhanden; **Jahr/Gesamt:** moderater Backend-Zusatz (Aggregations-Zweig + Vorlage); **Tag:** größer (eigener Tages-Datenpfad statt `Monatsdaten`, nur wo Tagesdaten existieren). Funktionale Erweiterung, gehört nicht in den Struktur-Schnitt.
+**Social-Media-Text-Export — ZURÜCKGEBAUT (Entscheid Gernot, 2026-07-31):** Die Funktion ist beim Flip faktisch entfallen — der Teilen-Button und `ShareTextModal` sind in v4 nie wieder aufgetaucht, der Endpoint `cockpit/social.py` lief seither ohne Konsumenten weiter. Sie wird **nicht wieder eingeführt**: Endpoint und api-Client sind am 2026-07-31 gelöscht (Nebenfunde-Runde, Paket B), die Beschreibung im Handbuch ist mitgezogen worden. **Nicht betroffen** ist das **Community-Teilen** (`CommunityShareBlock`) — eine andere Funktion, die bleibt.
+
+> *Der ursprüngliche Plan (2026-06-01) stand hier: den Button als zeitraum-gebundene Cockpit-Aktion zu platzieren (Tag/Monat/Jahr) und die zeitraum-adaptive Text-Generierung post-v4.0.0 nachzuziehen. Er ist mit dem Entscheid gegenstandslos und steht nur noch als Herkunft dieser Zeile.*
 
 ---
 

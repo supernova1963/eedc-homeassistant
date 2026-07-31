@@ -152,8 +152,7 @@ eedc-homeassistant/
     │   │       │   ├── komponenten.py
     │   │       │   ├── nachhaltigkeit.py
     │   │       │   ├── prognose.py
-    │   │       │   ├── pv_strings.py
-    │   │       │   └── social.py
+    │   │       │   └── pv_strings.py
     │   │       ├── aussichten.py          # Prognosen (4 Tabs)
     │   │       ├── community.py           # Community-Teilen & Benchmark
     │   │       ├── import_export/         # Modulares Package
@@ -1074,7 +1073,7 @@ Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie sch
 >
 > **Umgehängt (S2, 2026-07-31):** `api/routes/aussichten.py` (Finanz-Prognose), `services/pdf/builders/jahresbericht.py` und `api/routes/investitionen/crud.py` (ROI-Dashboard) — Befund **F-5**. Der PDF-Builder lädt `InvestitionMonatsdaten` seither gar nicht mehr selbst.
 >
-> **Umgehängt (S3, 2026-07-31):** `cockpit/nachhaltigkeit.py` (CO₂-Zeitreihe) und `cockpit/social.py` (geteilter Monatstext) — Befund **F-1**. Beide hatten **keinen einzigen** Zeilen-SoT benutzt und die Eigenverbrauchs-Formel selbst nachgebaut; CO₂ kommt jetzt zusätzlich aus `berechne_co2_bilanz` (ADR-001/DI-2) statt aus drei lokalen Formeln. Damit ist auch die P7-Ausnahme `cockpit/social.py::md` gestrichen.
+> **Umgehängt (S3, 2026-07-31):** `cockpit/nachhaltigkeit.py` (CO₂-Zeitreihe) und `cockpit/social.py` (geteilter Monatstext) — Befund **F-1**. Beide hatten **keinen einzigen** Zeilen-SoT benutzt und die Eigenverbrauchs-Formel selbst nachgebaut; CO₂ kommt jetzt zusätzlich aus `berechne_co2_bilanz` (ADR-001/DI-2) statt aus drei lokalen Formeln. Damit ist auch die P7-Ausnahme `cockpit/social.py::md` gestrichen. **Nachtrag (Paket B, 2026-07-31):** `cockpit/social.py` ist danach **ganz zurückgebaut** worden — die Oberfläche dazu ist beim IA-V4-Flip entfallen, der Endpoint hatte keinen Konsumenten mehr. Von den beiden S3-Sichten bleibt die CO₂-Zeitreihe. Nicht betroffen ist das **Community-Teilen** (`api/routes/community.py`) — eine andere Funktion.
 >
 > **Umgehängt (S4, 2026-07-31):** `cockpit/uebersicht.py` und `ha_export.py::calculate_anlage_sensors` — der Schritt **ohne** Inventur-Befund. Beide rechneten richtig und wurden trotzdem umgehängt, weil eine selbst faltende Sicht die nächste Drift-Quelle ist. Der Beweis ist entsprechend negativ (Vier-Wege- und CO₂-Symmetrie unverändert grün, Antworten gegen die Demo-DB wertgleich), plus eine **gemessene** Ladezeit: Cockpit/Übersicht 83 → 60 ms, HA-Export 133 → 115 ms (warm, Median über 10 Läufe) — ein Tarif-Cache statt zwei, §51 als Bulk-Query, vier IMD-Queries weniger. Drei Ränder haben sich dabei doch bewegt, alle drei waren vorher unsichtbar: der Jahres-Filter des Cockpits erfasste `lade_pv_je_monat` nicht, der HA-Export blendete stillgelegte Komponenten rückwirkend aus (`aktiv_jetzt()` als Vorfilter über der Historie) und filterte den Dienstwagen nicht aus der V2H-Bilanz.
 >
