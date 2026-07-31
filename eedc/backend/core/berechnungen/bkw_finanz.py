@@ -21,12 +21,21 @@ nur Eigenverbrauch (Datenlücke)      0                Eigenverbrauch
 ===================================  ===============  =========================
 
 Warum die dritte Zeile überhaupt existiert: ``pv_erzeugung_kwh`` ist für das
-Balkonkraftwerk **Pflichtfeld** und das einzige, das der Sensor-/MQTT-Pfad
-schreiben kann (``KUMULATIVE_ZAEHLER_FELDER``); ``eigenverbrauch_kwh`` ist eine
-optionale Verfeinerung aus manueller Pflege oder Import. Eine Zeile ohne
+Balkonkraftwerk **Pflichtfeld** und der einzige der beiden Finanz-Eingänge, den
+der Zähler-Pfad schreibt (``KUMULATIVE_ZAEHLER_FELDER``); ``eigenverbrauch_kwh``
+ist eine optionale Verfeinerung aus manueller Pflege oder Import. Eine Zeile ohne
 Erzeugung ist damit eine **Datenlücke**, keine zweite gleichberechtigte
 Erfassungsform — ihre Ersparnis wäre aber sonst nirgends sichtbar, deshalb wird
 sie getragen statt verworfen ([[feedback_reparatur_statt_loesch_features]]).
+
+Genauer, seit 2026-07-31: ``KUMULATIVE_ZAEHLER_FELDER["balkonkraftwerk"]`` führt
+neben der Erzeugung auch ``speicher_ladung_kwh``/``speicher_entladung_kwh``
+(BKW mit Akku). Die beiden gehen in die Batterie-Kategorie, **nicht** in diese
+Finanz-Aufteilung — an der Überlappung Erzeugung ↔ Eigenverbrauch ändert sich
+dadurch nichts. ``eigenverbrauch_kwh`` bleibt der einzige der vier BKW-kWh-Felder
+ohne Zähler-Pfad; ein zugeordneter HA-Sensor liefert dort weiterhin den
+**Monatswert** (HA-Langzeitstatistik über den ``monatsabschluss``-Vorschlag), aber
+keinen Tages- oder Stundenwert.
 
 Vor dieser Konsolidierung wählte jede Read-Site die Kombination selbst und alle
 vier wählten anders (#326-Inventur, letzte Dimension): die Aussichten zählten

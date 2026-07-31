@@ -88,9 +88,22 @@
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
 |------|-------|---------|-----------|-------------|
 | `pv_erzeugung_kwh` | PV-Erzeugung | kWh | Kumulativ oder Tagessensor | Erzeugte Energie dieses PV-Strings/Moduls. Muss ≥ 0 sein. Alternativ: automatische kWp-Verteilung aus dem Gesamt-PV-Sensor. |
-| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional. |
+| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional, **nur Monatswert** (siehe Kasten). |
 | `speicher_ladung_kwh` | Speicher Ladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Optional. |
 | `speicher_entladung_kwh` | Speicher Entladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Optional. |
+
+> **Der BKW-Akku zählt seit v4.0.5 überall mit.** `speicher_ladung_kwh` und
+> `speicher_entladung_kwh` laufen jetzt durch dieselbe Zähler-Maschinerie wie beim Typ
+> *Speicher* — Tages- und Stundenwerte, Energiefluss und die Batterie-Kennzahlen des
+> Tagesverlaufs. Vorher kam nur der Monatswert an, Tag und Verlauf blieben leer. Die
+> Werte erscheinen unter der Batterie-Kategorie, getrennt vom Akku einer großen Anlage.
+>
+> **`eigenverbrauch_kwh` ist die Ausnahme:** dafür gibt es weiterhin **nur** den
+> Monatswert (aus der HA-Langzeitstatistik oder von Hand/per Import). Es ist kein
+> Bilanz-Zähler, sondern eine optionale Verfeinerung — normalerweise leitet eedc den
+> BKW-Eigenverbrauch aus Erzeugung − Einspeisung ab. Wer es per **MQTT** publiziert hat:
+> das Topic wurde bis v4.0.4 fälschlich auf den Erzeugungs-Kanal gelegt und konnte die
+> „Heute"-PV-Kachel überschreiben; das ist behoben.
 
 > **`pv_erzeugung_kwh` steht für drei verschiedene Größen — je nachdem, wo es auftaucht.** Hier in der
 > Monatserfassung ist es die Erzeugung **dieses einen** Moduls. Daneben gibt es den monatlichen
@@ -111,7 +124,7 @@
 | MQTT-Topic | Feld |
 |------------|------|
 | `eedc/.../energy/inv/{inv_id}_{name}/pv_erzeugung_kwh` | `pv_erzeugung_kwh` |
-| `eedc/.../energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | `eigenverbrauch_kwh` (nur BKW) |
+| `eedc/.../energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | `eigenverbrauch_kwh` (nur BKW) — wird für Tages-/Live-Werte **nicht** ausgewertet, s. Kasten oben |
 | `eedc/.../energy/inv/{inv_id}_{name}/speicher_ladung_kwh` | `speicher_ladung_kwh` (nur BKW) |
 | `eedc/.../energy/inv/{inv_id}_{name}/speicher_entladung_kwh` | `speicher_entladung_kwh` (nur BKW) |
 

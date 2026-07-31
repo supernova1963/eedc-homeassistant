@@ -34,13 +34,29 @@ _KEY_TO_CATEGORY = {
 # HA-Pfad liefert z.B. "pv_14", "batterie_15_ladung", "wallbox_12"
 # MQTT-Pfad liefert "inv/14/pv_erzeugung_kwh", "inv/15/ladung_kwh", "inv/12/ladung_kwh"
 # Diese Tabelle übersetzt MQTT → HA-Format, damit das Frontend identische Keys bekommt.
+#
+# `eigenverbrauch_kwh` stand hier bis 2026-07-31 mit dem Ziel `pv` — also auf
+# DEMSELBEN Key wie die BKW-Erzeugung. Ein Balkonkraftwerk, das beide Topics
+# publiziert, überschrieb damit seine eigene Erzeugung: gemessen wurden aus
+# 10 kWh PV-Zuwachs und 4 kWh Eigenverbrauch die Werte `pv_7 = 4.0` und
+# `pv = 4.0` — die „Heute"-Kachel zeigte den Eigenverbrauch statt der Erzeugung.
+# Der Eintrag ist ersatzlos entfallen: Eigenverbrauch ist keine Erzeugung, und
+# das Feld ist beim BKW ohnehin die manuell/per Import gepflegte Verfeinerung
+# (SoT-Begründung im Modul-Docstring von `core/berechnungen/bkw_finanz.py`).
+# Ohne Eintrag läuft der Key unverändert durch und wird von keinem Konsumenten
+# aufgesammelt — still, aber nicht mehr schädlich.
 _MQTT_FIELD_TO_LIVE_KEY: dict[str, dict[str, str]] = {
     # field → {typ → key_pattern}  (Pattern: {prefix}_{inv_id} wird im Code gebaut)
     "pv_erzeugung_kwh": {"pv-module": "pv", "balkonkraftwerk": "pv", "wechselrichter": "pv"},
     "ladung_kwh": {"speicher": "batterie:ladung", "wallbox": "wallbox", "e-auto": "eauto"},
     "entladung_kwh": {"speicher": "batterie:entladung"},
+    # BKW mit Akku: eigene Feldnamen, aber dieselbe Batterie-Semantik wie beim
+    # Typ `speicher`. Der Ziel-Key trägt die Investitions-ID
+    # (`batterie_{bkw_id}_ladung`) und kollidiert deshalb nicht mit einem echten
+    # Speicher derselben Anlage.
+    "speicher_ladung_kwh": {"balkonkraftwerk": "batterie:ladung"},
+    "speicher_entladung_kwh": {"balkonkraftwerk": "batterie:entladung"},
     "stromverbrauch_kwh": {"waermepumpe": "waermepumpe"},
-    "eigenverbrauch_kwh": {"balkonkraftwerk": "pv"},
     "erzeugung_kwh": {"sonstiges": "sonstige"},
     "verbrauch_sonstig_kwh": {"sonstiges": "sonstige"},
 }

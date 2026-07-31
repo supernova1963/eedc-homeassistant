@@ -18,7 +18,19 @@ from typing import Optional
 # Wird von _build_counter_map konsumiert.
 KUMULATIVE_ZAEHLER_FELDER: dict[str, tuple[str, ...]] = {
     "pv-module": ("pv_erzeugung_kwh",),
-    "balkonkraftwerk": ("pv_erzeugung_kwh",),
+    # Balkonkraftwerk MIT Akku (Zendure, Anker SOLIX): die beiden Speicher-Felder
+    # sind echte Messgrößen eines realen Geräts und laufen seit 2026-07-31 durch
+    # dieselbe Zähler-Maschinerie wie beim Typ `speicher`. Vorher schrieb der
+    # Snapshot-/MQTT-Pfad sie nicht — eine Sensor-Zuordnung darauf lieferte den
+    # Monatswert (HA-LTS, `monatsabschluss`-Vorschlag), aber keinen Tages-/
+    # Stundenwert. `eigenverbrauch_kwh` steht bewusst NICHT hier: es ist die
+    # optionale Verfeinerung aus manueller Pflege/Import, kein Zähler
+    # (Begründung im Modul-Docstring von `core/berechnungen/bkw_finanz.py`).
+    "balkonkraftwerk": (
+        "pv_erzeugung_kwh",
+        "speicher_ladung_kwh",
+        "speicher_entladung_kwh",
+    ),
     "speicher": ("ladung_kwh", "entladung_kwh", "ladung_netz_kwh"),
     "waermepumpe": (
         "stromverbrauch_kwh",
@@ -240,6 +252,16 @@ def _categorize_counter(
 
     if inv_typ in ("pv-module", "balkonkraftwerk") and feld == "pv_erzeugung_kwh":
         return "pv"
+    if inv_typ == "balkonkraftwerk":
+        # BKW mit Akku: energetisch ist das eine Batterie hinter dem Hauszähler,
+        # also dieselbe Energiefluss-Kategorie wie beim Typ `speicher`. Die
+        # Komponenten-Seite trägt der BKW-Beitrag unter `batterie_{id}`
+        # (`komponenten_beitraege.investition_beitraege`) — beide Hälften der
+        # „Batterie (netto)"-Invariante bewegen sich damit gemeinsam.
+        if feld == "speicher_ladung_kwh":
+            return "ladung_batterie"
+        if feld == "speicher_entladung_kwh":
+            return "entladung_batterie"
     if inv_typ == "speicher":
         if feld == "ladung_kwh":
             return "ladung_batterie"
