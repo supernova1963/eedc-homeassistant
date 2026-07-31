@@ -92,8 +92,13 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   { key: 'netto_ertrag',       label: 'Netto-Ertrag (PV)', unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   { key: 'netto_bilanz',       label: 'Netto-Bilanz',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'netzbezug_preis_cent', label: 'Ø Netzpreis',     unit: 'ct/kWh',  gruppe: 'finanzen',    decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
-  // CO2
-  { key: 'co2_einsparung',     label: 'CO₂-Einsparung',    unit: 'kg',      gruppe: 'co2',         decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
+  // CO₂ — „(PV)" grenzt gegen die vollständige Bilanz ab, wie „Netto-Ertrag (PV)"
+  // gegen das T-Konto: hier steht der PV-Anteil (Eigenverbrauch × Strommix,
+  // Layer-SoT `berechne_co2_bilanz`), OHNE Wärmepumpe und E-Mobilität. Nur der
+  // ist über beide Granularitäten summierbar — am Tag sind WP-Wärme und
+  // E-Mob-Kilometer nicht gemessen. Die volle Bilanz (PV + WP + E-Mob) zeigen
+  // Cockpit → Jahr und Auswertungen → CO₂.
+  { key: 'co2_einsparung',     label: 'CO₂-Einsparung (PV)', unit: 'kg',    gruppe: 'co2',         decimals: 1, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
   // ── Tag-native Zusatzmetriken (kein Monats-Pendant, nur Tagessichten) ──
   { key: 'ueberschuss_kwh',        label: 'Überschuss',     unit: 'kWh',    gruppe: 'tagdetail',   decimals: 1, aggregation: 'sum', defaultVisible: true,  granular: NUR_TAG, higherIsBetter: undefined },
   { key: 'defizit_kwh',            label: 'Defizit',        unit: 'kWh',    gruppe: 'tagdetail',   decimals: 1, aggregation: 'sum', defaultVisible: false, granular: NUR_TAG, higherIsBetter: false },

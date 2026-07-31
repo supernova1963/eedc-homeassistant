@@ -82,7 +82,8 @@ cd eedc/frontend && npm run dev
 cd eedc && source backend/venv/bin/activate && python -m pytest backend/tests -q
 cd eedc/frontend && npm run test && npx tsc --noEmit && npm run check:design && \
   npm run check:de-de && npm run check:roh-controls && npm run check:parkbar && \
-  npm run check:form-controls && npm run check:typografie && npm run check:kennwert-roh
+  npm run check:form-controls && npm run check:typografie && npm run check:kennwert-roh && \
+  npm run check:co2-roh
 ```
 
 Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline. `check:park-leertest` ist ein Playwright-Livetest gegen eine laufende Box und verlangt ein `VITE_DEMO_DEFAULT=true`-Build; **danach zwingend** `git checkout -- eedc/frontend/dist/ && git clean -fdq eedc/frontend/dist/` — `dist/` ist versioniert, sonst landet ein Demo-Build im Release.
@@ -142,7 +143,7 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 | [`docs/ADR-001-BERECHNUNGS-LAYER.md`](docs/ADR-001-BERECHNUNGS-LAYER.md) | **Schichtung** — *wo* eine Aggregat-Formel definiert wird (`core/berechnungen/`) | `backend/tests/test_berechnungs_layer_konformitaet.py` |
 | [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P10) | `backend/tests/test_wurzelmuster_*.py` |
 
-> **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. Ausnahme mit eigener Begründung: `check:kennwert-roh` bewacht die Client-Hälfte von ADR-002/P3-a.
+> **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. **Zwei** Ausnahmen mit eigener Begründung, beide bewachen die Client-Hälfte einer Backend-Regel: `check:kennwert-roh` für ADR-002/P3-a und `check:co2-roh` für ADR-001/DI-2 (der Client konstruiert keine CO₂-Menge; `CO2_FAKTOR_KG_KWH` darf nur noch *angezeigt* werden).
 >
 > ADR-002 trägt die Pflicht-Spalte **„gesichert durch"** mit der Unterscheidung **Wächter** (baumweit, fängt auch eine Stelle, die es heute noch nicht gibt) und **Regression** (schützt nur die namentlich aufgerufenen Stellen). Wer die Spalte fortschreibt, trägt die Art der Deckung mit ein — eine Regel ohne Code-Beleg gilt als nicht gesichert.
 
@@ -219,6 +220,7 @@ Die Nennleistung liegt je nach Herkunft in der **Spalte** `Investition.leistung_
 | SOLL-IST zeigt falsches Jahr | `jahr` Parameter explizit übergeben |
 | `Monatsdaten.pv_erzeugung_kwh` programmatisch gefüllt **oder direkt gelesen** | Nur manuell/Import; Pro-Modul-Werte nach `InvestitionMonatsdaten`. Lesen ausschließlich über `lade_pv_je_monat`/`pv_summe_je_monat` (P7, s. Prinzip 4) — direkt gelesen ist es entweder eine Teilsumme oder es überschreibt Messungen |
 | ROI-Werte unterschiedlich | Cockpit = Jahres-%, Aussichten = Kumuliert-% |
+| Zwei Sichten nennen verschiedene CO₂-Zahlen | `berechne_co2_bilanz` ist die **einzige** Konstruktions-Stelle (ADR-001/DI-2: Eigenverbrauch × Strommix **+ WP + E-Mob**), ausgeliefert über `/cockpit/nachhaltigkeit`. Der Client rechnet nichts — Wächter `npm run check:co2-roh`. Der **Tages**-Wert trägt bewusst nur `co2_pv_kg` (WP-Wärme/E-Mob-km gibt es nur monatlich) ⇒ Σ Tage ≠ Monat |
 | Nennleistung ist plötzlich 0 | Bei Import-/Altbestand (#229) steht die kWp **nur im `parameter`-JSON** (`kwp` / `leistung_kwp`) — die Spalte allein zu lesen liefert dort still 0. `get_erzeuger_kwp` statt `inv.leistung_kwp` |
 
 ## Community-Datenfluss

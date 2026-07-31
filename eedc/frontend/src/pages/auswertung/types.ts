@@ -2,8 +2,9 @@
 import type { useAnlagen, useAggregierteStats } from '../../hooks'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
 import type { Strompreis } from '../../types'
+import type { NachhaltigkeitMonat } from '../../api/cockpit'
 import {
-  MONAT_KURZ, TYP_LABELS, CO2_FAKTOR_KG_KWH,
+  MONAT_KURZ, TYP_LABELS,
   COLORS, CHART_COLORS, TYP_COLORS,
   calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
   calcSpeicherEffizienz, calcCOP, calcEinspeiseErloes,
@@ -75,8 +76,23 @@ export interface MonatsZeitreihe {
   einspeise_nicht_verguetet_euro?: number
   /** Eingespeiste kWh ohne Vergütung (§51-Volumen); null = Anlage unterliegt nicht §51. */
   einspeise_neg_preis_kwh?: number | null
-  // CO2
-  co2_einsparung: number
+  /**
+   * CO₂-Einsparung des Monats in kg — der **PV-Anteil** der kanonischen Bilanz
+   * (`co2_pv_kg` aus `/cockpit/nachhaltigkeit`, Layer-SoT `berechne_co2_bilanz`).
+   *
+   * `null` = für diesen Monat liegt kein kanonischer Wert vor (Reihe noch nicht
+   * geladen, Abruf fehlgeschlagen, oder der Monat trägt nichts zur CO₂-Bilanz
+   * bei). Bewusst **nicht** ersatzweise gerechnet: ein stiller Näherungswert
+   * neben einer kanonischen Zahl ist genau die Drift, die N-21 beendet hat.
+   *
+   * Warum der PV-Anteil und nicht `co2_gesamt_kg`: diese Zeile speist die
+   * **Werte-Tabelle**, und die zeigt dieselbe Spalte auch je Tag — dort sind
+   * WP-Wärme und E-Mob-Kilometer nicht gemessen (s. `tage_werte.py`). Eine
+   * Spalte, die im Monat drei Quellen und am Tag eine addiert, wäre über die
+   * Granularitäten nicht summierbar. Die **vollständige** Bilanz (PV + WP +
+   * E-Mob) zeigen Cockpit → Jahr und Auswertungen → CO₂.
+   */
+  co2_einsparung: number | null
 }
 
 /**
@@ -95,12 +111,20 @@ function findGueltigerTarif(tarife: Strompreis[], jahr: number, monat: number): 
 
 // Helper-Funktion zum Erstellen der Monatszeitreihen
 // Verwendet jetzt AggregierteMonatsdaten mit korrekter PV-Erzeugung aus InvestitionMonatsdaten
+//
+// `co2Monate` ist die kanonische CO₂-Reihe aus `/cockpit/nachhaltigkeit`
+// (`useAuswertungBasis().co2.monate`). Fehlt sie, bleibt `co2_einsparung` null —
+// diese Funktion konstruiert **keine** CO₂-Größe mehr (N-21, ADR-001).
 export function createMonatsZeitreihe(
   data: AggregierteMonatsdaten[],
   anlage?: TabProps['anlage'],
   strompreis?: Strompreis | null,
   alleTarife?: Strompreis[],
+  co2Monate?: NachhaltigkeitMonat[],
 ): MonatsZeitreihe[] {
+  const co2ProMonat = new Map(
+    (co2Monate ?? []).map((m) => [`${m.jahr}-${m.monat}`, m.co2_pv_kg]),
+  )
   // Tarife nach gueltig_ab DESC sortieren für findGueltigerTarif
   const tarifeDesc = alleTarife?.length
     ? [...alleTarife].sort((a, b) => b.gueltig_ab.localeCompare(a.gueltig_ab))
@@ -184,8 +208,9 @@ export function createMonatsZeitreihe(
     const netto_ertrag = einspeise_erloes + ev_ersparnis
     const netto_bilanz = einspeise_erloes + ev_ersparnis - netzbezug_kosten
 
-    // CO2
-    const co2_einsparung = erzeugung * CO2_FAKTOR_KG_KWH
+    // CO₂: nachgeschlagen, nicht gerechnet (N-21). Der Kanon steht im Backend
+    // (`berechne_co2_bilanz`); hier wird nur der Monat zugeordnet.
+    const co2_einsparung = co2ProMonat.get(`${md.jahr}-${md.monat}`) ?? null
 
     return {
       name: `${MONAT_KURZ[md.monat]} ${md.jahr.toString().slice(-2)}`,

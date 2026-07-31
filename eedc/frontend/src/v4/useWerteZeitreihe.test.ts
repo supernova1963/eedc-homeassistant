@@ -15,9 +15,12 @@ import { createMonatsZeitreihe } from '../pages/auswertung/types'
 
 const ANLAGE = { id: 1 } as Parameters<typeof useWerteZeitreihe>[1]
 
+const CO2_LEER = { monate: [], gesamtKg: 0, loading: false, error: null, refresh: vi.fn() }
+
 function basis(over: Partial<WerteZeitreiheBasis>): WerteZeitreiheBasis {
   return {
     daten: [], strompreis: null, alleTarife: [], loading: false, error: null,
+    co2: CO2_LEER,
     ...over,
   } as WerteZeitreiheBasis
 }
@@ -28,7 +31,16 @@ describe('useWerteZeitreihe (reine Basis-Ableitung, Paket Q)', () => {
     const { result } = renderHook(() => useWerteZeitreihe(basis({ daten }), ANLAGE))
     expect(result.current.rows).toHaveLength(3)
     expect(result.current.jahre).toEqual([2026, 2024])
-    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenCalledWith(daten, ANLAGE, null, [])
+    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenCalledWith(daten, ANLAGE, null, [], [])
+  })
+
+  it('N-21: reicht die kanonische CO₂-Reihe der Basis durch, statt sie rechnen zu lassen', () => {
+    // Der Hook holt sie NICHT selbst (Paket Q) — sie kommt aus dem Sockel, geteilt
+    // mit der CO₂-Sicht. Und er baut sie nicht um: was ankommt, geht weiter.
+    const monate = [{ jahr: 2026, monat: 1, co2_pv_kg: 42 }] as WerteZeitreiheBasis['co2']['monate']
+    const daten = [{ jahr: 2026, monat: 1 }] as WerteZeitreiheBasis['daten']
+    renderHook(() => useWerteZeitreihe(basis({ daten, co2: { ...CO2_LEER, monate } }), ANLAGE))
+    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenLastCalledWith(daten, ANLAGE, null, [], monate)
   })
 
   it('reicht loading der Basis durch', () => {

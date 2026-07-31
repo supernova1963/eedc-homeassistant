@@ -10,7 +10,23 @@
  * Einheit zentral (`formatCo2`/`co2Achse`: kg→t ab ≥1.000, 2 NK; KEIN freies t/kg/g,
  * Auto-km ohne Tsd-Transform) · R6 KPIs + Charts parkbar. Daten = `basis`-Prop aus
  * dem Dispatcher (R18-3 Option B, Jahr-Filter in dessen Steuerleiste) +
- * `getCO2Amortisation`; CO₂-Faktor aus lib-SoT (kein lokales 0,38).
+ * `getCO2Amortisation`.
+ *
+ * ─── N-21 (2026-07-31): diese Sicht rechnet kein CO₂ mehr ────────────────────
+ * Bis dahin stand hier `gesamtErzeugung × CO2_FAKTOR_KG_KWH` — eine Aggregat-
+ * Formel im Client (ADR-001) und zugleich die **abgelöste** Definition: sie
+ * schrieb der eingespeisten kWh die volle Netzstrom-Vermeidung gut und kannte
+ * weder Wärmepumpe noch E-Mobilität. Der Kanon ist seit DI-2
+ * `berechne_co2_bilanz`; ausgeliefert wird er von `/cockpit/nachhaltigkeit`.
+ * Diese Sicht liest ihn jetzt aus `basis.co2` — **derselbe Abruf**, aus dem
+ * Cockpit → Jahr seinen Block „CO₂-Bilanz" speist. Zwei Sichten, eine Zahl.
+ *
+ * `CO2_FAKTOR_KG_KWH` steht weiterhin im Modul, aber ausschließlich als
+ * **angezeigte Größe** („380 g/kWh") in der Berechnungsgrundlage — nie mehr in
+ * einer Rechnung. Gewächtert von `npm run check:co2-roh`.
+ *
+ * Der Jahr-Filter greift an EINER Stelle ({@link baueCo2Monatsreihe}) und über
+ * die ganze Monatszeile (die N-10-Klasse: ein halb greifender Filter).
  *
  * R18-3c (Kennzahlen-Bug, Root-Cause upstream): Block ② (Amortisation) rechnet
  * IMMER auf der GESAMT-Historie — die graue Last ist eine Gesamt-Größe; ein
@@ -29,12 +45,12 @@ import { eedcTooltipProps } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block, type KpiStripItem } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import {
-  CO2_FAKTOR_KG_KWH, CHART_COLORS, MARKER_WARNUNG, TYP_LABELS,
+  CO2_FAKTOR_KG_KWH, CHART_COLORS, MARKER_WARNUNG, TYP_LABELS, MONAT_KURZ,
   formatCo2, fmtZahl, formatProzent, co2Achse, xAchse, yAchse,
   achsenEinheit, ACHSEN_MARGIN_TOP, CO2_TEXT_CLASS,
 } from '../lib'
 import { investitionenApi, type CO2AmortisationResponse } from '../api/investitionen'
-import { createMonatsZeitreihe } from '../pages/auswertung/types'
+import type { NachhaltigkeitMonat } from '../api/cockpit'
 import { useApiData, useSelectedAnlage, useSchmaleAchse } from '../hooks'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { AuswertungKopf } from './AuswertungKopf'
@@ -46,6 +62,55 @@ const SICHT_KEY = 'v4-auswertungen-co2'
 const KG_PRO_BAUM_JAHR = 12.5
 const KG_PRO_AUTO_KM = 0.12
 const KG_PRO_FLUG = 230
+
+/** Ein Monatspunkt der Charts — alle Zahlen aus dem Backend-Kanon übernommen. */
+export interface Co2MonatsPunkt {
+  name: string
+  jahr: number
+  monat: number
+  /** Vollständige Monatsbilanz (PV + WP + E-Mob), kg — `co2_gesamt_kg`. */
+  co2_einsparung: number
+  /** Kumuliert über die GESAMTE Historie, kg — `co2_kumuliert_kg`. */
+  kumuliert_co2: number
+  // Die drei Quellen einzeln — für die Herleitung im KPI-Tooltip. Bereits
+  // geklemmt vom Backend, `co2_einsparung` IST ihre Summe.
+  co2Pv: number
+  co2Wp: number
+  co2Emob: number
+}
+
+/**
+ * Die kanonische CO₂-Reihe in Chart-Form, optional auf ein Jahr gefiltert.
+ *
+ * **Die eine Filter-Stelle.** Der Endpoint kennt kein `?jahr=` und liefert die
+ * ganze Historie; gefiltert wird hier — und über die **ganze Zeile**, nicht je
+ * Serie (ein halb greifender Jahres-Filter war N-10).
+ *
+ * `kumuliert_co2` bleibt bewusst die Historien-Summe des Backends und wird
+ * **nicht** neu aufaddiert: der Amortisations-Block vergleicht sie mit der
+ * grauen Last der gesamten Historie (R18-3c) und ruft deshalb ungefiltert auf.
+ * Die Sortierung ist die des Backends (jahr, monat aufsteigend) — nur in ihr
+ * ist `co2_kumuliert_kg` monoton.
+ */
+export function baueCo2Monatsreihe(
+  monate: NachhaltigkeitMonat[],
+  jahr: number | 'alle' = 'alle',
+): Co2MonatsPunkt[] {
+  return monate
+    .filter((m) => jahr === 'alle' || m.jahr === jahr)
+    .slice()
+    .sort((a, b) => (a.jahr - b.jahr) || (a.monat - b.monat))
+    .map((m) => ({
+      name: `${MONAT_KURZ[m.monat]} ${String(m.jahr).slice(-2)}`,
+      jahr: m.jahr,
+      monat: m.monat,
+      co2_einsparung: m.co2_gesamt_kg,
+      kumuliert_co2: m.co2_kumuliert_kg,
+      co2Pv: m.co2_pv_kg,
+      co2Wp: m.co2_wp_kg,
+      co2Emob: m.co2_emob_kg,
+    }))
+}
 
 export default function AuswertungenCo2V4({ basis }: { basis: AuswertungBasis }) {
   return (
@@ -73,21 +138,31 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
   const amortGeladen = !selectedAnlageId || !amortQ.loading
 
   const schmal = useSchmaleAchse()
-  const zeitreihe = useMemo(() => createMonatsZeitreihe(basis.gefiltert), [basis.gefiltert])
-
-  const anzahlMonate = basis.stats.anzahlMonate
-  const gesamtCo2 = basis.stats.gesamtErzeugung * CO2_FAKTOR_KG_KWH
+  // Jahr-gefilterte Reihe (Block ①). Die Monatszahl kommt aus derselben Reihe wie
+  // die Summe — sonst dividiert der Ø durch eine andere Menge, als er summiert.
+  const zeitreihe = useMemo(
+    () => baueCo2Monatsreihe(basis.co2.monate, basis.jahr),
+    [basis.co2.monate, basis.jahr],
+  )
+  const anzahlMonate = zeitreihe.length
+  const gesamtCo2 = useMemo(
+    () => zeitreihe.reduce((s, z) => s + z.co2_einsparung, 0),
+    [zeitreihe],
+  )
+  const anteile = useMemo(() => ({
+    pv: zeitreihe.reduce((s, z) => s + z.co2Pv, 0),
+    wp: zeitreihe.reduce((s, z) => s + z.co2Wp, 0),
+    emob: zeitreihe.reduce((s, z) => s + z.co2Emob, 0),
+  }), [zeitreihe])
   const graueLast = co2Amort?.graue_last_gesamt_kg ?? 0
 
   // R18-3c: Amortisation IMMER auf der GESAMT-Historie — die graue Last ist eine
   // Gesamt-Größe. Eine jahrgefilterte Kumuliert-Kurve gegen die gesamte graue
   // Last machte „klimapositiv" bei Einzeljahr-Filter falsch (stille Fehlanzeige).
-  const kumuliertGesamt = useMemo(() => {
-    let summe = 0
-    return createMonatsZeitreihe(basis.daten).map((z) => { summe += z.co2_einsparung; return { ...z, kumuliert_co2: summe } })
-  }, [basis.daten])
-  const anzahlMonateGesamt = basis.statsGesamt.anzahlMonate
-  const gesamtCo2Gesamt = basis.statsGesamt.gesamtErzeugung * CO2_FAKTOR_KG_KWH
+  const kumuliertGesamt = useMemo(() => baueCo2Monatsreihe(basis.co2.monate), [basis.co2.monate])
+  const anzahlMonateGesamt = kumuliertGesamt.length
+  // Die Historien-Summe weist der Endpoint selbst aus — nicht nachaddiert.
+  const gesamtCo2Gesamt = basis.co2.gesamtKg
 
   const klimapositiv = useMemo(() => {
     if (graueLast <= 0) return { status: 'keine' as const }
@@ -110,8 +185,10 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       {
         title: 'CO₂ eingespart', value: fc.wert, unit: fc.einheit, color: 'green', icon: Leaf,
         subtitle: `${anzahlMonate} Monate`, parkId: 'kpi:co2-eingespart',
-        formel: 'PV-Erzeugung × CO₂-Faktor',
-        berechnung: `${fmtCalc(basis.stats.gesamtErzeugung, 0)} kWh × ${fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh`,
+        // Die Herleitung nennt die DREI Quellen, nicht mehr „Erzeugung × Faktor".
+        // Genau diese Formel war N-21: sie sagte laut, was die Zahl nicht war.
+        formel: 'Eigenverbrauch × Strommix + Wärmepumpe + E-Mobilität',
+        berechnung: `PV ${fmtCalc(anteile.pv, 0)} kg + WP ${fmtCalc(anteile.wp, 0)} kg + E-Mob ${fmtCalc(anteile.emob, 0)} kg`,
         ergebnis: `= ${formatCo2(gesamtCo2).text}`,
       },
       {
@@ -252,7 +329,8 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
           )}
           <Parkbar id="info:co2-amort-methodik" titel="Amortisations-Methodik">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Kumulierte Einsparung = vermiedene Netz-CO₂ der PV-Erzeugung ({fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh).
+              Kumulierte Einsparung = die monatliche CO₂-Bilanz aufaddiert (PV-Eigenverbrauch mit {fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g/kWh,
+              Wärmepumpe, E-Mobilität) — gerechnet über die gesamte Historie.
               Graue Last für PV/Speicher = voller Herstellungs-Aufwand, für Wärmepumpe/E-Auto = Differenz zur Alternative.
               Richtwerte, pro Investition per Datenblatt übersteuerbar.
             </p>
@@ -272,11 +350,23 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       render: () => (
         <Parkbar id="info:co2-berechnung" titel="Berechnungsgrundlage">
           <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Die CO₂-Einsparung rechnet mit dem deutschen Strommix von{' '}
-              <strong>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g CO₂/kWh</strong>. Jede selbst erzeugte kWh,
-              die fossilen Strom ersetzt, spart entsprechend CO₂.
-            </p>
+            <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+              <p>
+                Gespart ist, was Sie <strong>selbst verbraucht</strong> haben: jede
+                eigene Kilowattstunde, die Netzstrom ersetzt, vermeidet den
+                deutschen Strommix von{' '}
+                <strong>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g CO₂/kWh</strong>.
+                Eingespeister Strom zählt hier <strong>nicht</strong> mit — er
+                verdrängt Netzstrom beim Abnehmer, nicht bei Ihnen.
+              </p>
+              <p>
+                Dazu kommen die beiden anderen Quellen: die <strong>Wärmepumpe</strong>{' '}
+                (vermiedene fossile Wärme abzüglich ihres Stroms) und die{' '}
+                <strong>E-Mobilität</strong> (vermiedener Kraftstoff abzüglich der
+                Netzladung). Dieselbe Rechnung liegt hinter dem Block „CO₂-Bilanz"
+                in Cockpit → Jahr und hinter dem CO₂-Sensor in Home Assistant.
+              </p>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm border-t border-gray-200 dark:border-gray-700 pt-4">
               <div><p className="text-gray-500 dark:text-gray-400">Ø pro Monat</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{formatCo2(oProMonat).text}</p></div>
               <div><p className="text-gray-500 dark:text-gray-400">Ø pro kWh</p><p className={`font-medium ${CO2_TEXT_CLASS}`}>{fmtZahl(CO2_FAKTOR_KG_KWH * 1000, 0)} g</p></div>
@@ -300,7 +390,7 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       ...(blockAmort && sichtbar(amortIds) ? [blockAmort] : []),
       ...(sichtbar(basisIds) ? [blockBasis] : []),
     ]
-  }, [zeitreihe, kumuliertGesamt, gesamtCo2, gesamtCo2Gesamt, graueLast, anzahlMonate, klimapositiv, co2Amort, basis.stats.gesamtErzeugung, basis.jahr, schmal, park])
+  }, [zeitreihe, kumuliertGesamt, gesamtCo2, gesamtCo2Gesamt, graueLast, anzahlMonate, anteile, klimapositiv, co2Amort, basis.jahr, schmal, park])
 
   if (basis.error) {
     // B8 (S15): Basis-Fetch-Fehler sichtbar machen — vorher 0-Wert-KPIs (stille Leere).
@@ -312,7 +402,18 @@ function Co2Inner({ basis }: { basis: AuswertungBasis }) {
       </div>
     )
   }
-  if (anlagenLoading || basis.loading || !amortGeladen) {
+  if (basis.co2.error) {
+    // Seit N-21 hängt JEDE Zahl dieser Sicht an der CO₂-Reihe. Fällt sie aus, wäre
+    // die Alternative eine Seite voller Nullen — dieselbe stille Leere, gegen die
+    // B8 gebaut wurde. Eigener Zweig, weil `basis.error` bewusst nur die
+    // aggregierten Monatsdaten meint (Finanzen/Prognose sollen davon leben können).
+    return (
+      <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">
+        <FehlerZustand text={basis.co2.error} onRetry={basis.co2.refresh} />
+      </div>
+    )
+  }
+  if (anlagenLoading || basis.loading || basis.co2.loading || !amortGeladen) {
     // B8 (S15): Sicht-Skeleton in BlockShell-Form (3 Blöcke) statt Vollseiten-Spinner.
     return (
       <div className="p-3 sm:p-6 max-w-[1920px] mx-auto">

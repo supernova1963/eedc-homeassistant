@@ -14,6 +14,23 @@ Speicher/V2H/BKW werden bewusst mit 0 eingespeist, weil `einspeisung`/
 eingerechnet) — so ist die Finanz-Eigenverbrauchsmenge == der Energie-Spalte
 `eigenverbrauch` (= PV − Einspeisung), keine Doppelzählung. Der Grundpreis ist
 monatlich-fix und wird auf Tagesebene **nicht** anteilig verteilt.
+
+**CO₂ — eine Definition, ein bewusst benannter Teil-Umfang (F-6, 2026-07-31).**
+Bis dahin stand hier ``erzeugung × CO2_FAKTOR_STROM_KG_KWH``. Das war ein
+Überlebender der DI-2-Ablösung: es schrieb auch der **eingespeisten** kWh die
+volle Netzstrom-Vermeidung gut, lag also systematisch zu hoch. Gerechnet wird
+jetzt über den Kanon ``berechne_co2_bilanz`` (ADR-001) — dieselbe Bezugsgröße
+wie die Finanz-Spalte ``ev_ersparnis`` nebenan (Eigenverbrauch, nicht Erzeugung).
+
+Der Tageswert trägt aus dieser Bilanz **nur den PV-Anteil** (``co2_pv_kg``):
+WP-**Wärme** und E-Mobilitäts-**Kilometer** liegen ausschließlich monatlich vor
+(``InvestitionMonatsdaten``); stündlich existiert von der Wärmepumpe nur die
+Stromaufnahme (``TagesEnergieProfil.waermepumpe_kw``), und ohne Wärmemenge ist
+die WP-Ersparnis nicht bestimmbar. Daraus folgt eine Aussage, die **nicht**
+stillschweigend bleiben darf: **Σ Tage ≠ CO₂-Monatswert**, sobald die Anlage
+eine Wärmepumpe oder ein E-Auto hat. Die vollständige Bilanz (PV + WP + E-Mob)
+liefert ``/cockpit/nachhaltigkeit/{anlage}``; sie ist die Quelle von Cockpit/Jahr
+und Auswertungen → CO₂. Die Spalte heißt im Client deshalb „CO₂-Einsparung (PV)".
 """
 
 from __future__ import annotations
@@ -32,7 +49,7 @@ from backend.core.berechnungen import (
     summe_pv_anlage_kwh,
     vollzyklen as berechne_vollzyklen,
 )
-from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
+from backend.core.calculations import berechne_co2_bilanz
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
@@ -173,8 +190,16 @@ async def baue_tage_werte(
             netzbezug_kosten=round(netzbezug_kosten, 2),
             netto_ertrag=round(netto_ertrag, 2),
             netto_bilanz=round(netto_bilanz, 2),
-            # CO₂
-            co2_einsparung=round(bilanz.erzeugung_kwh * CO2_FAKTOR_STROM_KG_KWH, 1),
+            # CO₂ — Kanon statt eigener Formel; nur der PV-Anteil ist auf
+            # Tagesebene bestimmbar (s. Modul-Docstring). WP-Strom wird bewusst
+            # NICHT übergeben: ohne die zugehörige Wärmemenge wäre die
+            # WP-Komponente rein negativ und damit eine Falschaussage.
+            co2_einsparung=round(
+                berechne_co2_bilanz(
+                    eigenverbrauch_kwh=bilanz.eigenverbrauch_kwh
+                ).co2_pv_kg,
+                1,
+            ),
             # Tag-native
             ueberschuss_kwh=round(bilanz.ueberschuss_kwh, 3),
             defizit_kwh=round(bilanz.defizit_kwh, 3),

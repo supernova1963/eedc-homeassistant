@@ -60,6 +60,25 @@ Die eigentliche Lehre steckt aber in **N-18**: Beide rechnenden Sichten zogen de
 
 **Regel:** Kürze ist kein Kriterium. Sobald eine Formel an mehr als einer Read-Site gebraucht wird **oder** die Gegenbuchung zu einer bereits zentralen Formel bildet, gehört sie in `core/berechnungen/` — mit der Begründung im Modul-Docstring, nicht nur der Formel. SoT hier: `core/berechnungen/dienstliche_ladekosten.py`, Wächter `test_berechnungs_layer_konformitaet.py::test_dienstliche_ladung_nur_im_layer_bewertet` (AST: eine `dienstlich…`-benannte Größe darf außerhalb des Helpers nicht multipliziert werden).
 
+## Eine abgelöste Formel stirbt nicht mit dem Layer-Helper — sie stirbt mit ihrem letzten Aufrufer (Lehre F-6/N-21, 2026-07-31)
+
+`berechne_co2_bilanz` ist seit DI-2 die **einzige erlaubte Konstruktions-Stelle** der CO₂-Gesamt-Kennzahl; sein Docstring sagt ausdrücklich, was er ablöst („vorher nur `pv_erzeugung × f_strom`, WP + E-Mob fehlten ganz"). Der Helper stand, die Hauptpfade waren umgestellt — und **zwei Stellen rechneten weiter die alte Formel**, gemessen am 2026-07-31:
+
+| Ort | Zeile |
+| --- | --- |
+| `frontend/src/pages/auswertung/types.ts` | `co2_einsparung = erzeugung * CO2_FAKTOR_KG_KWH` |
+| `backend/services/energie_profil/tage_werte.py` | `co2_einsparung = bilanz.erzeugung_kwh * CO2_FAKTOR_STROM_KG_KWH` |
+
+Ein **Spiegelpaar** — gleicher Feldname, gleiche Formel, gleicher Faktor, gleiche Position hinter dem Finanzen-Block: Monatstabelle im Client, Tagestabelle im Backend. Beide rechneten auf der **Erzeugung** statt auf dem Eigenverbrauch, schrieben also auch der eingespeisten kWh die volle Netzstrom-Vermeidung gut, und beide kannten weder WP noch E-Mobilität. Ein Anwender sah dieselbe Größe für denselben Monat mit zwei verschiedenen Zahlen.
+
+Drei Lehren, und die dritte ist die unbequeme:
+
+1. **Die Ablösung ist erst fertig, wenn der letzte Aufrufer weg ist.** „Der Kanon existiert" und „der Kanon gilt" sind zwei Zustände. Wer eine Formel ablöst, zählt beim Abschluss die verbliebenen Rechenstellen — sonst bleibt es eine unvollendete Migration, die sich später wie eine offene Definitionsfrage anfühlt.
+2. **Eine Aggregat-Formel gehört nicht in den Client** — und der Client hat für diese Regel bis dahin **keinen** Wächter gehabt. `pages/auswertung/types.ts` war dieselbe Klasse, die `check:kennwert-roh` auf der Kennwert-Seite bewacht; die CO₂-Seite war offen. Geschlossen durch `npm run check:co2-roh` (baumweit, Baseline 0: `CO2_FAKTOR_KG_KWH` darf im Client nur noch **angezeigt** werden, `× 1000` → g/kWh). Der Wächter ist gegen den Vor-Zustand **rot verifiziert** — er meldet dort genau die vier Rechenstellen (die beiden oben, dazu die Dublette `gesamtErzeugung × Faktor` in `AuswertungenCo2V4.tsx` und den toten Export `lib/calculations.ts::calcCO2Einsparung`).
+3. **Ein Teil-Umfang muss im Code stehen, nicht im Kopf.** Der Tages-Pfad kann die volle Bilanz gar nicht bilden: WP-Wärme und E-Mob-Kilometer sind Monatsgrößen, stündlich existiert nur die WP-Stromaufnahme. Er trägt deshalb bewusst nur `co2_pv_kg` — **und schreibt hin, dass Σ Tage ≠ Monatswert ist**, sobald eine WP oder ein E-Auto im Spiel ist. Eine stille Teil-Kennzahl unter dem Namen der vollen ist die nächste Drift; die Spalte heißt im Client entsprechend „CO₂-Einsparung (PV)".
+
+**Deckung, ehrlich getrennt:** *Wächter* (baumweit) ist `check:co2-roh` für die **Client**-Hälfte. Die **Backend**-Hälfte deckt nur eine *Regression* (`tests/test_co2_tages_bezugsgroesse.py`) für den einen Pfad, der die Klasse trug. Ein baumweiter Backend-Wächter fehlt: `CO2_FAKTOR_STROM_KG_KWH` wird außerhalb von `core/` an sechs weiteren Stellen multipliziert (PDF-Jahresbericht, Komponenten-Dashboards, Investitions-ROI). Alle sechs rechnen — gemessen — auf der **richtigen** Bezugsgröße oder auf einer anderen Frage (Prognose je Investition); ein Wächter darüber verlangt ihre Klassifikation und ist deshalb ein eigener Schritt (N-23).
+
 ## Datei-Allowlists bewachen die Datei, nicht die Frage (Lehre WP-η, 2026-07-27)
 
 Wächter der Bauart „diese Formel darf nur in Datei X stehen" (`test_inline_gas_kosten_altanlage_nur_im_layer`, `test_gas_co2_faktor_nur_im_helper`) haben einen blinden Fleck: **innerhalb** von X. Genau dort saß die WP-Alternativkosten-Drift. `core/calculations.py` beherbergt den CO₂-SoT `co2_wp_ersparnis_kg` (rechnet `wärme / η_gas × f_gas`) — und zwanzig Zeilen weiter rechnete `berechne_waermepumpe_einsparung` für dieselbe Frage `wärme × f` **ohne η**. Der Wächter-Kommentar hielt das sogar fest („liegt in derselben Datei = erlaubt"), womit die zweite Formel als geprüft *aussah*, obwohl nur ihr Ort geprüft war. Die ROI-Seite nannte dadurch eine andere WP-Ersparnis als Aussichten, HA-Export und WP-Dashboard.

@@ -5,7 +5,6 @@
  * Tests und Frontend gleichermaßen verwendet werden.
  */
 
-import { CO2_FAKTOR_KG_KWH } from './constants'
 
 /** Autarkiequote: Anteil Eigenverbrauch am Gesamtverbrauch (0–100 %). */
 export function calcAutarkie(eigenverbrauch: number, gesamtverbrauch: number): number {
@@ -32,10 +31,12 @@ export function calcCOP(waerme: number, strom: number): number | null {
   return strom > 0 ? waerme / strom : null
 }
 
-/** CO2-Einsparung in kg durch PV-Eigenverbrauch. */
-export function calcCO2Einsparung(erzeugung: number): number {
-  return erzeugung * CO2_FAKTOR_KG_KWH
-}
+// `calcCO2Einsparung(erzeugung)` ist am 2026-07-31 mit N-21 entfallen: die
+// Funktion trug im Namen den Eigenverbrauch und rechnete auf der Erzeugung —
+// die vor `berechne_co2_bilanz` gültige Definition (ADR-001/DI-2). Aufrufer
+// hatte sie zuletzt keine. CO₂-Mengen konstruiert ausschließlich das Backend;
+// der Client liest sie aus `/cockpit/nachhaltigkeit`. Gewächtert von
+// `npm run check:co2-roh`.
 
 /** Ergebnis der §51-bereinigten Erlös-Berechnung (Spiegel von `EinspeiseErloes`). */
 export interface EinspeiseErloes {

@@ -352,7 +352,12 @@ class TagWerteResponse(BaseModel):
     netzbezug_kosten: float = 0.0
     netto_ertrag: float = 0.0
     netto_bilanz: float = 0.0
-    # CO₂
+    # CO₂ — der **PV-Anteil** der kanonischen Bilanz (`berechne_co2_bilanz`,
+    # ADR-001/DI-2): Eigenverbrauch × Strommix-Faktor. WP-Wärme und
+    # E-Mobilitäts-Kilometer sind Monatsgrößen (`InvestitionMonatsdaten`) und auf
+    # Tagesebene nicht gemessen — dieser Wert enthält sie deshalb **nicht**.
+    # Bis 2026-07-31 stand hier `erzeugung × Faktor` (F-6): das schrieb auch der
+    # eingespeisten kWh die volle Netzstrom-Vermeidung gut.
     co2_einsparung: float = 0.0
     # ── Tag-native Zusatzmetriken (kein Monats-Registry-Pendant) ──
     ueberschuss_kwh: Optional[float] = None

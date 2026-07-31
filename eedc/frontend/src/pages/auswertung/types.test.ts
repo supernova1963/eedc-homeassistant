@@ -75,3 +75,36 @@ describe('createMonatsZeitreihe — §51 EEG', () => {
     expect(z.einspeise_nicht_verguetet_euro).toBe(0)
   })
 })
+
+/**
+ * N-21 — CO₂ wird nachgeschlagen, nicht gerechnet.
+ *
+ * Beide Tests fallen gegen `HEAD~1`: dort stand `erzeugung × CO2_FAKTOR_KG_KWH`,
+ * also 1.500 kWh × 0,38 = **570 kg** — unabhängig davon, ob eine kanonische
+ * Reihe mitgegeben wurde oder nicht.
+ */
+describe('createMonatsZeitreihe — CO₂ kommt aus dem Kanon (N-21)', () => {
+  const co2 = (over = {}) => ({
+    jahr: 2026, monat: 5, monat_name: 'Mai',
+    co2_pv_kg: 190, co2_wp_kg: 60, co2_emob_kg: 40,
+    co2_gesamt_kg: 290, co2_kumuliert_kg: 290, autarkie_prozent: 71.4,
+    ...over,
+  })
+
+  it('übernimmt den PV-Anteil des passenden Monats — nicht Erzeugung × 0,38', () => {
+    const [z] = createMonatsZeitreihe([md()], undefined, null, [], [co2()])
+    // Eigenverbrauch 500 kWh × 0,38 = 190 kg, vom Backend geliefert.
+    expect(z.co2_einsparung).toBe(190)
+    // Gegenprobe auf den alten Wert: 1.500 kWh Erzeugung × 0,38 = 570 kg,
+    // also das Dreifache — die eingespeisten 1.000 kWh waren mitgezählt.
+    expect(z.co2_einsparung).not.toBe(570)
+  })
+
+  it('ohne kanonische Reihe bleibt die Spalte leer, statt genähert zu werden', () => {
+    // „Kein Wert" ist eine ehrliche Aussage; eine still danebengerechnete Zahl
+    // neben der kanonischen wäre genau die Drift, die N-21 beendet hat.
+    expect(createMonatsZeitreihe([md()])[0].co2_einsparung).toBeNull()
+    // Auch ein Monat, den die Reihe nicht kennt, bleibt leer (kein Fallback).
+    expect(createMonatsZeitreihe([md({ monat: 7 })], undefined, null, [], [co2()])[0].co2_einsparung).toBeNull()
+  })
+})

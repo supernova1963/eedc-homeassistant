@@ -449,10 +449,15 @@ Die Vergleichs- und Bewertungsfläche für mehrere PV-Prognosequellen — vier Q
 
 ### 4.4 CO₂
 
-- **Vermiedene Emissionen** (kg CO₂)
-- **Berechnung:** Eigenverbrauch × CO₂-Faktor des Strommix
-- **Zeitreihe** der Einsparung
-- **Äquivalente** (z. B. „entspricht X km Autofahren")
+- **Vermiedene Emissionen** (kg CO₂) — als Kennwert, als Monats-Diagramm und in anschaulichen **Äquivalenten** (Bäume, Auto-Kilometer, Kurzstreckenflüge)
+- **CO₂-Amortisation:** die kumulierte Einsparung gegen die **graue Herstellungs-Last** deiner Komponenten — inklusive des Punktes, ab dem sich beides ausgleicht
+- **Berechnungsgrundlage:** Methodik und Ø-Werte, standardmäßig eingeklappt
+
+**Was genau als „gespart" zählt.** Gespart ist, was du **selbst verbraucht** hast: jede eigene Kilowattstunde, die Netzstrom ersetzt, vermeidet den deutschen Strommix (380 g CO₂/kWh). **Eingespeister Strom zählt hier nicht mit** — er verdrängt Netzstrom beim Abnehmer, nicht bei dir. Dazu kommen die beiden anderen Quellen: die **Wärmepumpe** (vermiedene fossile Wärme abzüglich ihres Stroms) und die **E-Mobilität** (vermiedener Kraftstoff abzüglich der Netzladung).
+
+> **Eine Zahl, überall dieselbe.** Diese Seite, der Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt) und der CO₂-Sensor in Home Assistant nennen seit Juli 2026 denselben Wert. Vorher rechnete diese Seite auf der **Erzeugung** statt auf dem Eigenverbrauch und ließ Wärmepumpe und E-Mobilität weg — sie lag dadurch zu hoch. Wenn deine CO₂-Zahl hier einmalig kleiner geworden ist, ist das die Korrektur; deine Anlage hat sich nicht verschlechtert.
+
+> **Der Jahr-Filter wirkt nicht überall gleich.** Das Monats-Diagramm und der Kennwert „CO₂ eingespart" folgen dem gewählten Jahr. Die **Amortisation** rechnet immer über die **gesamte Historie** — die graue Herstellungs-Last ist einmalig angefallen, ein Vergleich mit nur einem Jahr wäre irreführend. Der Block sagt das sichtbar dazu, sobald ein Einzeljahr gewählt ist.
 
 ### 4.5 Tabelle (Werte-Werkbank)
 
@@ -467,6 +472,8 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 - **CSV-Export** des sichtbaren Inhalts (alle Zeilen, eingeblendete Spalten)
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
+
+> **Die Spalte „CO₂-Einsparung (PV)"** zeigt bewusst nur den **PV-Anteil** (Eigenverbrauch × Strommix) — für Monate **und** Tage, damit sich Tageszeilen zum Monat aufaddieren. Wärmepumpe und E-Mobilität fehlen darin: ihre Bezugsgrößen (erzeugte Wärme, gefahrene Kilometer) erfasst eedc nur monatlich. Die **vollständige** Bilanz steht unter **Auswertungen → CO₂** (§4.4) und im Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt).
 
 ---
 

@@ -82,7 +82,7 @@ Die API-Endpoints sind unverändert; die **Sicht** (Spalte „Wo in v4") folgt d
 |-------|-------------|----------------------|
 | [Cockpit → Monat/Jahr](HANDBUCH_BEDIENUNG.md#2-cockpit--die-zeit-achse) | `GET /api/cockpit/uebersicht/{id}?jahr=` | Autarkie, EV-Quote, Netto-Ertrag, Rendite, CO2 |
 | [Auswertungen → Prognose](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-ist) | `GET /api/cockpit/prognose-vs-ist/{id}?jahr=` | Performance Ratio pro Monat |
-| [Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt) | `GET /api/cockpit/nachhaltigkeit/{id}` | CO2-Zeitreihe (Block „CO₂-Bilanz"), Äquivalente |
+| [Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt) · [Auswertungen → CO₂](HANDBUCH_BEDIENUNG.md#4-auswertungen--die-wie-achse) (§4.4) | `GET /api/cockpit/nachhaltigkeit/{id}` | CO2-Zeitreihe (Block „CO₂-Bilanz"), Äquivalente, Amortisation — **die eine CO₂-Quelle beider Sichten** ([§3.8](#38-co2-bilanz)) |
 | [Komponenten](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse) (je Typ) | `GET /api/cockpit/komponenten-zeitreihe/{id}` | Speicher-Effizienz, WP-JAZ, E-Auto PV-Anteil |
 | [Komponenten → PV-Anlage](HANDBUCH_BEDIENUNG.md#32-pv-anlage) | `GET /api/cockpit/pv-strings/{id}?jahr=` | SOLL vs IST pro String |
 | [Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi) | `GET /api/investitionen/roi/{id}` | ROI%, Amortisation pro System |
@@ -163,8 +163,16 @@ Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisever
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
-CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (nur PV/BKW; s. u.)
+CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
 ```
+
+> **⚠ Die CO₂-Zeile dieser Funktion ist NICHT der Kanon.** `berechne_monatskennzahlen`
+> trägt noch die vor DI-2 gültige Formel (Erzeugung statt Eigenverbrauch, ohne WP und
+> E-Mobilität). Sie wird ausschließlich von `GET /api/monatsdaten/{id}` als
+> `kennzahlen.co2_einsparung_kg` ausgeliefert und dort **von keiner Sicht gelesen**
+> (gemessen 2026-07-31: das Feld existiert im Client-Typ `MonatsKennzahlen`, es gibt
+> keinen Leser). Sie bewegt also keine angezeigte Zahl — sie steht hier, damit niemand
+> sie für die gültige Definition hält. Der Kanon ist **§3.8**.
 
 **§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
@@ -666,14 +674,57 @@ USt_Eigenverbrauch   = Eigenverbrauch * Selbstkosten_pro_kWh * USt_Satz / 100
 ### 3.8 CO2-Bilanz
 
 **Endpoint:** `GET /api/cockpit/nachhaltigkeit/{anlage_id}`
-**Sicht:** Cockpit → Jahr/Gesamt, Block „CO₂-Bilanz" (seit 2026-07-31).
+**Sichten:** Cockpit → Jahr/Gesamt, Block „CO₂-Bilanz" (seit 2026-07-31) ·
+Auswertungen → CO₂, Blöcke „CO₂-Bilanz & Wirkung" und „CO₂-Amortisation" (seit 2026-07-31).
+
+#### Eine Definition — wer sie bildet und wer sie liest
+
+| Rolle | Ort |
+| --- | --- |
+| **Bildet** die Zahl (einzige erlaubte Stelle) | `core/calculations.py::berechne_co2_bilanz` (ADR-001, DI-2) |
+| **Liefert** sie je Monat aus | `GET /api/cockpit/nachhaltigkeit/{id}` (`co2_pv_kg` · `co2_wp_kg` · `co2_emob_kg` · `co2_gesamt_kg` · `co2_kumuliert_kg`) |
+| **Zeigt** sie | Cockpit → Jahr (`v4/JahrCo2Chart.tsx`) · Auswertungen → CO₂ (`v4/AuswertungenCo2V4.tsx`, über `useAuswertungBasis().co2`) · HA-Sensor „CO₂ Einsparung" · PDF-Jahresbericht · WP-Dashboard |
+| **Rechnet nicht** | der Client. `CO2_FAKTOR_KG_KWH` darf dort nur noch *angezeigt* werden (`× 1000` → g/kWh); gewächtert von `npm run check:co2-roh` (Baseline 0) |
+
+> **Warum das ausgeschrieben dasteht (N-21, 2026-07-31).** Bis dahin standen im Produkt
+> **drei** CO₂-Zahlen für denselben Monat: die kanonische im Cockpit — und zwei
+> Überlebende der DI-2-Ablösung, die `Erzeugung × 0,38` rechneten, also auch der
+> **eingespeisten** kWh die volle Netzstrom-Vermeidung gutschrieben und weder
+> Wärmepumpe noch E-Mobilität kannten (`pages/auswertung/types.ts` im Client,
+> `services/energie_profil/tage_werte.py` im Backend — ein Spiegelpaar, Monatstabelle
+> und Tagestabelle). Beide sind auf den Kanon umgestellt. Das war **keine
+> Definitionsfrage, sondern eine unvollendete Migration.**
 
 > **Jahres-Scope:** Der Endpoint kennt **kein** `?jahr=` und liefert die gesamte Historie —
-> der Jahresfilter sitzt in der Sicht (`v4/JahrCo2Chart.tsx::baueJahrCo2ChartDaten`) und greift
-> auf die ganze Monatszeile, nicht auf einzelne Serien. **Nicht jahresgebunden** ist
+> der Jahresfilter sitzt in der Sicht (`v4/JahrCo2Chart.tsx::baueJahrCo2ChartDaten` bzw.
+> `v4/AuswertungenCo2V4.tsx::baueCo2Monatsreihe`) und greift auf die ganze Monatszeile,
+> nicht auf einzelne Serien. **Nicht jahresgebunden** ist
 > `co2_kumuliert_kg`: eine Lebensdauer-Größe, die deshalb als eigener Kennwert („CO₂ kumuliert")
 > steht und **nicht** als Linie im Jahres-Chart — eine kumulierte Kurve, die im Januar auf halber
-> Höhe beginnt, erklärt sich nicht selbst.
+> Höhe beginnt, erklärt sich nicht selbst. Aus demselben Grund rechnet die
+> **CO₂-Amortisation** (Auswertungen → CO₂, Block ②) immer gegen `co2_kumuliert_kg` der
+> gesamten Historie, auch wenn ein Einzeljahr gefiltert ist — sichtbar gekennzeichnet.
+
+#### Der Tageswert trägt nur den PV-Anteil
+
+Die Spalte **„CO₂-Einsparung (PV)"** der Werte-Tabelle (Auswertungen → Tabelle,
+Monats- **und** Tages-Granularität) zeigt bewusst nur `co2_pv_kg`:
+
+```
+CO2-Einsparung (PV) = Eigenverbrauch * 0.38
+```
+
+**Warum nicht die volle Bilanz:** WP-**Wärme** und E-Mobilitäts-**Kilometer** sind
+Monatsgrößen (`InvestitionMonatsdaten`). Stündlich liegt von der Wärmepumpe nur die
+Stromaufnahme vor (`TagesEnergieProfil.waermepumpe_kw`) — ohne Wärmemenge ist die
+WP-Ersparnis nicht bestimmbar, und eine allein aus dem Stromverbrauch gebildete
+Komponente wäre rein negativ. Eine Spalte, die im Monat drei Quellen und am Tag eine
+addiert, wäre über die Granularitäten nicht summierbar.
+
+> **Folge, die nicht stillschweigend bleiben darf: Σ Tage ≠ CO₂-Monatswert**, sobald die
+> Anlage eine Wärmepumpe oder ein E-Auto hat. Die Differenz ist genau
+> `max(0, CO2_WP) + max(0, CO2_E-Mob)`. Die vollständige Bilanz zeigen Cockpit → Jahr
+> und Auswertungen → CO₂.
 
 #### Monatliche CO2-Berechnung
 
