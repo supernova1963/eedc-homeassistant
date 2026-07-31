@@ -41,7 +41,7 @@ from backend.core.berechnungen import (
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
-from backend.core.calculations import berechne_ust_eigenverbrauch
+from backend.core.calculations import ust_eigenverbrauch_fuer_anlage
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -1429,6 +1429,21 @@ async def get_finanz_prognose(
     betriebskosten_hist = betriebskosten_ges * anzahl_monate_hist / 12 if anzahl_monate_hist > 0 else 0
     bisherige_ertraege -= betriebskosten_hist
 
+    # USt auf Eigenverbrauch bei Regelbesteuerung — auch RÜCKBLICKEND. Sie stand
+    # bisher nur in der Jahres-Prognose (`jahres_netto_ertrag`, weiter unten);
+    # die bisherigen Erträge trugen sie nicht, obwohl der Cockpit-Netto-Ertrag
+    # sie abzieht. Bei Regelbesteuerung lagen ROI-Fortschritt und Amortisation
+    # damit um den USt-Betrag zu günstig (#326-Inventur, Dimension 2).
+    bisherige_ertraege -= ust_eigenverbrauch_fuer_anlage(
+        anlage,
+        eigenverbrauch_kwh=_finanz.eigenverbrauch_kwh,
+        investition_gesamt_euro=sum(
+            i.anschaffungskosten_gesamt or 0 for i in alle_investitionen
+        ),
+        betriebskosten_jahr_euro=betriebskosten_ges,
+        pv_erzeugung_jahr_kwh=sum(pv_pro_monat.values()),
+    )
+
     # =====================================================================
     # MONATSPROGNOSEN ERSTELLEN
     # =====================================================================
@@ -1640,18 +1655,14 @@ async def get_finanz_prognose(
     jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis + jahres_bkw_ersparnis + jahres_sonstige_netto - betriebskosten_ges
 
     # USt auf Eigenverbrauch bei Regelbesteuerung
-    ust_eigenverbrauch = 0.0
-    steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
-    if steuerliche_beh == "regelbesteuerung" and jahres_erzeugung > 0:
-        _ust = getattr(anlage, 'ust_satz_prozent', None)
-        ust_eigenverbrauch = berechne_ust_eigenverbrauch(
-            eigenverbrauch_kwh=jahres_eigenverbrauch,
-            investition_gesamt_euro=sum(i.anschaffungskosten_gesamt or 0 for i in alle_investitionen),
-            betriebskosten_jahr_euro=betriebskosten_ges,
-            pv_erzeugung_jahr_kwh=jahres_erzeugung,
-            ust_satz_prozent=_ust if _ust is not None else 19.0,
-        )
-        jahres_netto_ertrag -= ust_eigenverbrauch
+    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
+        anlage,
+        eigenverbrauch_kwh=jahres_eigenverbrauch,
+        investition_gesamt_euro=sum(i.anschaffungskosten_gesamt or 0 for i in alle_investitionen),
+        betriebskosten_jahr_euro=betriebskosten_ges,
+        pv_erzeugung_jahr_kwh=jahres_erzeugung,
+    )
+    jahres_netto_ertrag -= ust_eigenverbrauch
 
     # =====================================================================
     # KOMPONENTEN-BEITRÄGE ZUSAMMENSTELLEN

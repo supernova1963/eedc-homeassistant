@@ -687,3 +687,39 @@ def berechne_ust_eigenverbrauch(
     abschreibung_jahr = investition_gesamt_euro / 20  # 20 Jahre lineare AfA
     selbstkosten_pro_kwh = (abschreibung_jahr + betriebskosten_jahr_euro) / pv_erzeugung_jahr_kwh
     return eigenverbrauch_kwh * selbstkosten_pro_kwh * ust_satz_prozent / 100
+
+
+def ust_eigenverbrauch_fuer_anlage(
+    anlage,
+    *,
+    eigenverbrauch_kwh: float,
+    investition_gesamt_euro: float,
+    betriebskosten_jahr_euro: float,
+    pv_erzeugung_jahr_kwh: float,
+) -> float:
+    """USt auf Eigenverbrauch inkl. der Steuerregime-Vorprüfung.
+
+    Single Source der drei Zeilen, die vor `berechne_ust_eigenverbrauch` stehen
+    müssen: nur bei ``steuerliche_behandlung == "regelbesteuerung"``, sonst
+    ``0.0``; fehlender ``ust_satz_prozent`` → 19 %. Genau diese Vorprüfung stand
+    doppelt im Baum (Cockpit + Aussichten) und **fehlte** im Jahresbericht-PDF
+    und im HA-Export — dort lag der Netto-Ertrag bei Regelbesteuerung um den
+    USt-Betrag über dem Cockpit (#326-Inventur, Dimension 2).
+
+    `anlage` wird nur per ``getattr`` gelesen — kein ORM-Import, ADR-001 bleibt
+    gewahrt.
+
+    Returns:
+        USt-Betrag in Euro (positiv = Kosten), der vom Netto-Ertrag ABZUZIEHEN
+        ist. ``0.0`` außerhalb der Regelbesteuerung.
+    """
+    if (getattr(anlage, "steuerliche_behandlung", None) or "keine_ust") != "regelbesteuerung":
+        return 0.0
+    satz = getattr(anlage, "ust_satz_prozent", None)
+    return berechne_ust_eigenverbrauch(
+        eigenverbrauch_kwh=eigenverbrauch_kwh,
+        investition_gesamt_euro=investition_gesamt_euro,
+        betriebskosten_jahr_euro=betriebskosten_jahr_euro,
+        pv_erzeugung_jahr_kwh=pv_erzeugung_jahr_kwh,
+        ust_satz_prozent=satz if satz is not None else 19.0,
+    )

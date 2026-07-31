@@ -34,7 +34,7 @@ from backend.core.berechnungen import (
     monatsgewichte_aus_pvgis,
 )
 from backend.core.calculations import (
-    berechne_ust_eigenverbrauch,
+    ust_eigenverbrauch_fuer_anlage,
     berechne_co2_bilanz,
 )
 from backend.utils.sonstige_positionen import (
@@ -680,6 +680,12 @@ async def get_cockpit_uebersicht(
     nicht_vergueteter_erloes_sum = _finanz.nicht_vergueteter_erloes_euro
     nicht_verguetete_kwh_sum = _finanz.nicht_verguetete_kwh
     hat_neg_preis_daten = _finanz.hat_neg_preis_daten
+    # Netto-Kanon (2026-07-31): die BKW-Eigenverbrauchs-Ersparnis ist hier
+    # bereits ENTHALTEN und darf NICHT addiert werden — `pv_erzeugung_kwh` der
+    # Finanz-Zeile ist „PV-Module + BKW", der daraus abgeleitete Eigenverbrauch
+    # deckt den BKW-Anteil also mit ab. `_finanz.bkw_ersparnis_euro` ist an
+    # dieser Stelle eine AUFSCHLÜSSELUNG derselben Energie, keine zusätzliche
+    # Position. Wer sie aufaddiert, zählt den BKW-Eigenverbrauch doppelt.
     netto_ertrag = einspeise_erloes + ev_ersparnis
 
     PV_RELEVANTE_TYPEN = ["pv-module", "wechselrichter", "speicher", "wallbox", "balkonkraftwerk"]
@@ -718,18 +724,15 @@ async def get_cockpit_uebersicht(
 
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
-    ust_eigenverbrauch = 0.0
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
-    if steuerliche_beh == "regelbesteuerung":
-        _ust = getattr(anlage, 'ust_satz_prozent', None)
-        ust_eigenverbrauch = berechne_ust_eigenverbrauch(
-            eigenverbrauch_kwh=eigenverbrauch,
-            investition_gesamt_euro=investition_gesamt,
-            betriebskosten_jahr_euro=betriebskosten_ges,
-            pv_erzeugung_jahr_kwh=pv_erzeugung,
-            ust_satz_prozent=_ust if _ust is not None else 19.0,
-        )
-        netto_ertrag -= ust_eigenverbrauch
+    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
+        anlage,
+        eigenverbrauch_kwh=eigenverbrauch,
+        investition_gesamt_euro=investition_gesamt,
+        betriebskosten_jahr_euro=betriebskosten_ges,
+        pv_erzeugung_jahr_kwh=pv_erzeugung,
+    )
+    netto_ertrag -= ust_eigenverbrauch
 
     # #326: BKW-Ersparnis ebenfalls per-Monat (Σ BKW-EV_m × flexpreis_m).
     bkw_ersparnis = _finanz.bkw_ersparnis_euro
@@ -775,8 +778,12 @@ async def get_cockpit_uebersicht(
 
     betriebskosten_zeitraum = betriebskosten_ges * anzahl_monate / 12 if anzahl_monate > 0 else 0
     # sonstige_netto steckt bereits in netto_ertrag (#326) — hier NICHT erneut
-    # addieren, sonst Doppelzählung im ROI.
-    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis + bkw_ersparnis - betriebskosten_zeitraum
+    # addieren, sonst Doppelzählung im ROI. Dasselbe gilt für `bkw_ersparnis`:
+    # der BKW-Eigenverbrauch ist über die gemeinsame PV-Summe schon in
+    # `ev_ersparnis` und damit in `netto_ertrag` enthalten. Bis 2026-07-31 stand
+    # er hier zusätzlich — der ROI-Fortschritt war bei BKW-Besitzern um die
+    # BKW-Ersparnis zu hoch.
+    kumulative_ersparnis = netto_ertrag + wp_ersparnis + emob_ersparnis - betriebskosten_zeitraum
     roi_fortschritt = (kumulative_ersparnis / investition_gesamt * 100) if investition_gesamt > 0 else None
 
     return CockpitUebersichtResponse(

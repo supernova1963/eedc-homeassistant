@@ -39,6 +39,7 @@ from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canoni
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
     co2_wp_ersparnis_kg,
+    ust_eigenverbrauch_fuer_anlage,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -437,6 +438,20 @@ async def build_jahresbericht_context(
     )
     investition_mehrkosten = investition_gesamt - investition_alternativ
     betriebskosten_jahr = sum(i.betriebskosten_jahr or 0 for i in investitionen)
+
+    # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
+    # Cockpit und Aussichten ziehen sie seit jeher ab, der Bericht nicht — bei
+    # Regelbesteuerung wies er den Netto-Ertrag deshalb um den USt-Betrag zu
+    # hoch aus. Vorprüfung + Satz-Default liegen im SoT-Helper, damit die
+    # Regel nicht zum vierten Mal als Kopie im Baum steht.
+    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
+        anlage,
+        eigenverbrauch_kwh=_finanz.eigenverbrauch_kwh,
+        investition_gesamt_euro=investition_gesamt,
+        betriebskosten_jahr_euro=betriebskosten_jahr,
+        pv_erzeugung_jahr_kwh=sum(pv_by_year_month.values()),
+    )
+    netto_ertrag -= ust_eigenverbrauch
 
     anzahl_monate = len(monats_zeilen)
     betriebskosten_zeitraum = betriebskosten_jahr * anzahl_monate / 12 if anzahl_monate else 0

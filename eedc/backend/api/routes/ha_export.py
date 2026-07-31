@@ -86,7 +86,7 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE_DEFAULTS,
     ist_dienstlich,
 )
-from backend.core.calculations import berechne_co2_bilanz
+from backend.core.calculations import berechne_co2_bilanz, ust_eigenverbrauch_fuer_anlage
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -330,6 +330,7 @@ async def calculate_anlage_sensors(
     # separat über `bisherige_bkw_ersparnis` (kein Doppel-Ansatz); CO₂/Wirtschaft-
     # lichkeit eines Brennstoff-Erzeugers bleibt bewusst neutral.
     bkw_erzeugung = 0.0
+    bkw_je_monat: dict[tuple[int, int], float] = {}
     sonstiges_erzeugung = 0.0
     erzeuger_ids = [
         inv.id for inv in investitionen
@@ -347,6 +348,13 @@ async def calculate_anlage_sensors(
             b = imd_typ_beitrag(inv, imd.verbrauch_daten or {})
             bkw_erzeugung += b.bkw_erzeugung
             sonstiges_erzeugung += b.sonstiges_erzeugung
+            # Je Monat mitführen: die Finanz-Zeile unten braucht dieselbe
+            # PV-Basis wie Cockpit und Jahresbericht („PV-Module + BKW"),
+            # sonst fehlt dem Sensor `netto_ertrag_euro` der BKW-Anteil.
+            if b.bkw_erzeugung:
+                bkw_je_monat[(imd.jahr, imd.monat)] = (
+                    bkw_je_monat.get((imd.jahr, imd.monat), 0.0) + b.bkw_erzeugung
+                )
     pv_erzeugung += bkw_erzeugung
 
     # Fallback: Falls keine InvestitionMonatsdaten vorhanden, berechne aus Einspeisung
@@ -537,6 +545,19 @@ async def calculate_anlage_sensors(
     alternativ_gesamt = sum(i.anschaffungskosten_alternativ or 0 for i in investitionen)
     relevante_kosten = investition_gesamt - alternativ_gesamt
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
+
+    # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
+    # Cockpit und Aussichten ziehen sie ab, der HA-Export bisher nicht — der
+    # Sensor `netto_ertrag_euro` stand damit um den USt-Betrag über der Kachel,
+    # auf die er sich bezieht. Vorprüfung im SoT-Helper.
+    ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
+        anlage,
+        eigenverbrauch_kwh=eigenverbrauch,
+        investition_gesamt_euro=investition_gesamt,
+        betriebskosten_jahr_euro=betriebskosten_ges,
+        pv_erzeugung_jahr_kwh=pv_erzeugung,
+    )
+    netto_ertrag -= ust_eigenverbrauch
 
     # Alternativkosten-Ersparnisse aus historischen InvestitionMonatsdaten:
     # WP vs. Gas/Öl, E-Auto vs. Benzin, BKW-Eigenverbrauch.
