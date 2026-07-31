@@ -249,7 +249,18 @@ eedc Add-on                                   Community Server
 
 ## Letzte Änderungen
 
-> **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`. **Stand des Digests: v4.0.1** (fortgeschrieben 2026-07-27).
+> **Versions-SoT = [CHANGELOG.md](CHANGELOG.md)** (vollständig, pro Release gepflegt). Dieser Digest ist eine kuratierte Auswahl und kann der Spitze hinterherhinken — `release.sh` bumpt ihn NICHT. Bei Diskrepanz gilt CHANGELOG/`config.py`. **Stand des Digests: v4.0.5** (fortgeschrieben 2026-07-31).
+
+**v4.0.5** (2026-07-31) — Preise je Monat, CO₂ auf dem Eigenverbrauch, eine Zahl je Kennwert:
+
+- **Ein Tarif-Wert trägt den Stichtag seines Monats (ADR-002/P8, gewächtert, Baseline 0):** sechzehn Fundstellen rechneten die Vergangenheit mit dem *heutigen* Tarif — eine Preiserhöhung schrieb die Historie um. Betroffen waren u. a. WP-/Speicher-Dashboard, Monatsbericht, Aussichten-Historie, HA-Export und `GET /monatsdaten/{id}` (dessen handgebaute Query zusätzlich `gueltig_bis` und den `verwendung`-Filter verlor). Dazu: Flex-Ø erreicht die Tagespfade (Σ Tage ≠ Monat war die Folge), „Gültig ab" wird beim ersten Tarif mit dem Inbetriebnahme-Datum vorbelegt, Daten-Checker meldet Monate ohne Tarif-Abdeckung. Auslöser Forum #89667/60 (Algie).
+- **Vier Finanz-Sichten, eine Zahl:** USt auf Eigenverbrauch fehlte in PDF, HA-Sensor und den *bisherigen* Aussichten-Erträgen (→ ROI-Fortschritt); der **BKW-Eigenverbrauch** zählte je nach Sicht doppelt, gar nicht oder nur im ROI-Pfad → neuer SoT `core/berechnungen/bkw_finanz.py` (**ADR-002/P9**, Baseline 0). Symmetrie-Test `test_netto_ertrag_vier_wege_symmetrie.py` deckt beide Achsen.
+- **Dienstwagen kostet, statt zu verdienen:** PV-Ladung wurde als eingesparter Netzbezug gutgeschrieben und nur die entgangene Einspeisung abgezogen — netto +22 ct/kWh für Strom, den das Haus nie verbraucht hat (196 € > 168 € ohne Auto). Neue Layer-Formel `dienstliche_ladekosten.py` für Cockpit · Aussichten · HA-Export (152 €); Komponenten-Hub zieht nach. **Energiebilanz unberührt.**
+- **Eine CO₂-Definition (DI-2 vollendet):** Monatstabelle (Client) und Tagestabelle (Backend) rechneten weiter `Erzeugung × 0,38` — inkl. Einspeisung, ohne WP/E-Mob. Auswertungen → CO₂ liest jetzt `/cockpit/nachhaltigkeit`; Tages-Spalte heißt „CO₂-Einsparung (PV)" (Σ Tage ≠ Monat by design). Wächter `check:co2-roh`. Neu: Block **„CO₂-Bilanz"** in Cockpit → Jahr.
+- **BKW-Akku hat einen Erfassungsweg statt zwei:** Kanon = eigene `speicher`-Investition mit BKW-Parent (Live, SoC, Energiefluss, Zählerpfad). Die BKW-eigenen Monatsfelder bleiben erfassbar (`nur_manuell`), aber nicht mehr zuordenbar; Parent-Regel-SoT `models/investition.py::ERLAUBTE_PARENT_TYPEN`, Setup-Wizard bietet den Parent erstmals an. MQTT-Fix: `eigenverbrauch_kwh` lag auf dem Erzeugungs-Kanal.
+- **Monats-Fakten-Schicht (ADR-002/P10) ausgeliefert** — S1–S6, Wächter scharf, Restschuld 4. Sichtbare Folgen: Aussichten/PDF/ROI/Prognose-vs-IST/Langfrist/CO₂-Zeitreihe finden die PV bei Gesamtwert-Pflege wieder, HA-Sensoren tragen stillgelegte Komponenten, Community-Payload rechnet mit V2H/BHKW und ohne Dienstwagen. **Social-Media-Textvorlage zurückgebaut** (seit v4.0.0 unerreichbar; Community-Teilen unberührt).
+
+**v4.0.2–v4.0.4** (2026-07-28/30) — Speicher rechnet mit der nutzbaren Kapazität · zugeordnete Sensoren wirken überall (#353 coolxmad) · Daten-Checker erklärt leere Sichten und stellt den Reparatur-Knopf daneben · Balkonkraftwerk in der Prognose (#347, Wechselrichter-Grenze stundenweise) · PV je String bleibt gemessen (Rest-Verteilung statt Alles-Verteilung).
 
 **v4.0.1** (2026-07-26) — Prognose-Werte vereinheitlicht + gemessene PV-Modulwerte:
 
