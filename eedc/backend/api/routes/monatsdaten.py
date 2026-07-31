@@ -15,7 +15,6 @@ from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
 from backend.models.tages_energie_profil import TagesZusammenfassung
-from backend.models.strompreis import Strompreis
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
 from backend.core.berechnungen import (
@@ -31,7 +30,14 @@ from backend.utils.investition_value import get_inv_value
 from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.core.field_definitions import get_feld_hinweise
 from backend.core.investition_parameter import ist_dienstlich
-from backend.api.routes.strompreise import resolve_netzbezug_preis_cent
+from backend.api.routes.strompreise import (
+    lade_tarife_fuer_anlage,
+    resolve_netzbezug_preis_cent,
+)
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
+)
 from backend.services.provenance import (
     log_delete,
     seed_provenance,
@@ -628,15 +634,15 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
     anlage_result = await db.execute(select(Anlage).where(Anlage.id == md.anlage_id))
     anlage = anlage_result.scalar_one()
 
-    # Aktuellen Strompreis finden
+    # Tarif des Monats über den SoT-Helper. Die frühere Handquery hier ließ
+    # `gueltig_bis` und `verwendung` weg: ein beendeter Tarif galt weiter, und
+    # ein später angelegter WP-/Wallbox-Spezialtarif verdrängte über
+    # `ORDER BY gueltig_ab DESC` den allgemeinen (Forum simon42 #89667/60).
     from datetime import date
-    preis_query = select(Strompreis).where(
-        Strompreis.anlage_id == md.anlage_id,
-        Strompreis.gueltig_ab <= date(md.jahr, md.monat, 1)
-    ).order_by(Strompreis.gueltig_ab.desc()).limit(1)
-
-    preis_result = await db.execute(preis_query)
-    strompreis = preis_result.scalar_one_or_none()
+    tarife = await lade_tarife_fuer_anlage(
+        db, md.anlage_id, target_date=date(md.jahr, md.monat, 1)
+    )
+    strompreis = tarife.get("allgemein")
 
     # PV des Monats über den Read-time-SoT statt aus dem Aggregat-Feld: wer je
     # String misst, hat dort NULL stehen — die Kennzahlen dieses Endpoints
@@ -658,8 +664,13 @@ async def get_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db
         pv_erzeugung_kwh=pv_kwh or 0,
         batterie_ladung_kwh=md.batterie_ladung_kwh or 0,
         batterie_entladung_kwh=md.batterie_entladung_kwh or 0,
-        einspeiseverguetung_cent=strompreis.einspeiseverguetung_cent_kwh if strompreis else 8.2,
-        netzbezug_preis_cent=resolve_netzbezug_preis_cent(md, strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0),
+        einspeiseverguetung_cent=(
+            strompreis.einspeiseverguetung_cent_kwh if strompreis else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        ),
+        netzbezug_preis_cent=resolve_netzbezug_preis_cent(
+            md,
+            strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else NETZBEZUG_DEFAULT_CENT,
+        ),
         grundpreis_euro_monat=strompreis.grundpreis_euro_monat or 0 if strompreis else 0,
         leistung_kwp=anlage.leistung_kwp,
     )

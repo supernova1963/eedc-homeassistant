@@ -1277,6 +1277,28 @@ async def get_finanz_prognose(
             monatsdaten=md,
         ), tarif_cache=_tarif_cache))
 
+    async def _monats_tarif(jahr: int, monat: int) -> tuple[float, float]:
+        """(Arbeitspreis, Einspeisevergütung) des Monats in ct/kWh.
+
+        Für die RÜCKBLICKENDEN Schleifen unten. Die Modul-Variablen
+        `netzbezug_preis`/`einspeiseverguetung` tragen den HEUTE gültigen Tarif
+        — richtig für die Hochrechnung nach vorn, falsch für einen Altmonat:
+        eine Preiserhöhung hätte die gesamte E-Auto-Historie rückwirkend
+        umgerechnet, während die Finanz-Zeilen daneben korrekt je Monat rechnen
+        (dieselbe Klasse wie der Jahresbericht-Drift, Forum simon42 #89667/60).
+        Teilt sich `_tarif_cache` mit `baue_finanz_zeile` → keine Extra-Queries.
+        """
+        stichtag = date(jahr, monat, 1)
+        if stichtag not in _tarif_cache:
+            _tarif_cache[stichtag] = await lade_tarife_fuer_anlage(
+                db, anlage_id, target_date=stichtag
+            )
+        m_allgemein = _tarif_cache[stichtag].get("allgemein")
+        return (
+            m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT,
+            m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT,
+        )
+
     # Wärmepumpe Alternativkosten-Ersparnis (vs. Gas/Öl) — die „bisherige"-
     # Ersparnis-FORMEL liegt jetzt im SoT-Helper `berechne_wp_alternativkosten_
     # ersparnis` (core/berechnungen/alternativkosten.py), identisch zum HA-Export
@@ -1333,7 +1355,8 @@ async def get_finanz_prognose(
                 else agg["benzinpreis_default"]
             )
             benzin_liter = km / 100 * agg["vergleich_l_100km"]
-            md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis) if md else netzbezug_preis
+            m_arbeitspreis, _ = await _monats_tarif(jahr, monat)
+            md_preis = resolve_netzbezug_preis_cent(md, m_arbeitspreis)
             agg["bisherige_ersparnis"] += (
                 benzin_liter * monats_benzinpreis - netz * md_preis / 100
             )
@@ -1353,8 +1376,9 @@ async def get_finanz_prognose(
 
     # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene
     # Einspeisung). Netzbezug-Anteil per-Monat über den Flexpreis (gleichzeitig
-    # mit cockpit/uebersicht.py umgestellt — einseitig wäre neue Asymmetrie);
-    # Einspeisevergütung bleibt statisch (Vertragswert). PV/Netz-Split über den
+    # mit cockpit/uebersicht.py umgestellt — einseitig wäre neue Asymmetrie).
+    # BEIDE Preise stammen aus dem Tarif DES MONATS: die entgangene Einspeisung
+    # ist der damalige Vertragswert, nicht der heutige. PV/Netz-Split über den
     # SoT-Helper `get_emob_pv_netz_kwh` (#262: evcc-Import ohne ladung_netz_kwh).
     bisherige_dienstlich_ladekosten = 0.0
     for inv in alle_investitionen:
@@ -1363,9 +1387,10 @@ async def get_finanz_prognose(
                 if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
                     pv_kwh, netz_kwh = get_emob_pv_netz_kwh(daten)
                     md = monatsdaten_dict.get((jahr, monat))
-                    md_preis = resolve_netzbezug_preis_cent(md, netzbezug_preis) if md else netzbezug_preis
+                    m_arbeitspreis, m_verguetung = await _monats_tarif(jahr, monat)
+                    md_preis = resolve_netzbezug_preis_cent(md, m_arbeitspreis)
                     bisherige_dienstlich_ladekosten += (
-                        netz_kwh * md_preis + pv_kwh * einspeiseverguetung
+                        netz_kwh * md_preis + pv_kwh * m_verguetung
                     ) / 100
     bisherige_sonstige_netto -= bisherige_dienstlich_ladekosten
 

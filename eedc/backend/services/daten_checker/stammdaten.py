@@ -18,6 +18,7 @@ from backend.core.investition_parameter import (
     ist_dienstlich,
 )
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
+from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.investition_kennwerte import (
     get_bkw_kwp,
@@ -182,7 +183,9 @@ class StammdatenChecks:
 
     # ─── Strompreise ─────────────────────────────────────────────────────
 
-    def _check_strompreise(self, anlage: Anlage) -> list[CheckErgebnis]:
+    def _check_strompreise(
+        self, anlage: Anlage, monatsdaten: list | None = None
+    ) -> list[CheckErgebnis]:
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.STROMPREISE
 
@@ -206,11 +209,53 @@ class StammdatenChecks:
             meldung=f"{len(tarife)} Strompreis-Tarif(e) vorhanden",
         ))
 
-        # Lücken prüfen
-        if anlage.installationsdatum:
-            start = anlage.installationsdatum
-            for i, tarif in enumerate(tarife):
-                if tarif.gueltig_ab > start:
+        # ── Monate MIT DATEN vor dem ersten Tarif ────────────────────────────
+        # Diese rechnen still mit der Vorbelegung (NETZBEZUG_DEFAULT_CENT).
+        # Der Fall entsteht regelmäßig bei Neuinstallationen: erst Monate aus
+        # der HA-Statistik importieren, danach den Tarif anlegen — dessen
+        # Formular schlägt „heute" als Gültigkeitsbeginn vor (Forum simon42
+        # #89667/60). Bewusst an den DATEN gemessen, nicht am
+        # `installationsdatum`: das ist nullable, und genau bei frischen
+        # Installationen leer — die Prüfung wurde dann komplett übersprungen.
+        erster_tarif_ab = tarife[0].gueltig_ab
+        monate_ohne_tarif = [
+            m for m in (monatsdaten or [])
+            # Stichtag ist der Monatserste (`baue_finanz_zeile`): ein Tarif ab
+            # dem 15. gilt erst für den Folgemonat.
+            if erster_tarif_ab > date(m.jahr, m.monat, 1)
+        ]
+        if monate_ohne_tarif:
+            aeltester = min((m.jahr, m.monat) for m in monate_ohne_tarif)
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=(
+                    f"{len(monate_ohne_tarif)} Monat(e) mit Daten liegen vor dem "
+                    f"ersten Tarif ({erster_tarif_ab.strftime('%m/%Y')})"
+                ),
+                details=(
+                    f"Ab {aeltester[1]:02d}/{aeltester[0]} sind Werte erfasst, aber kein "
+                    f"Strompreis hinterlegt — diese Monate rechnen mit der Vorbelegung "
+                    f"{NETZBEZUG_DEFAULT_CENT:.0f} ct/kWh. Beim ältesten Tarif das "
+                    f"Gültig-ab-Datum auf den Beginn der Daten zurücksetzen; die "
+                    f"Auswertungen rechnen sofort neu."
+                ),
+                link="/einstellungen/strompreise",
+            ))
+
+        # ── Lücken ZWISCHEN Tarifen ──────────────────────────────────────────
+        # Anker ist der früheste bekannte Betriebsbeginn: Inbetriebnahme oder
+        # der erste Monat mit Daten, je nachdem was früher liegt.
+        anker = [d for d in (
+            anlage.installationsdatum,
+            date(*min((m.jahr, m.monat) for m in monatsdaten), 1) if monatsdaten else None,
+        ) if d]
+        if anker:
+            start = min(anker)
+            for tarif in tarife:
+                # Der führende Fall ist oben schon (präziser) gemeldet.
+                if tarif.gueltig_ab > start and not (
+                    monate_ohne_tarif and tarif.gueltig_ab == erster_tarif_ab
+                ):
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"Strompreis-Lücke: {start.strftime('%d.%m.%Y')} bis {tarif.gueltig_ab.strftime('%d.%m.%Y')}",

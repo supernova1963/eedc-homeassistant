@@ -16,7 +16,12 @@ from backend.core.berechnungen import (
     gas_kosten_altanlage,
     spezifischer_ertrag_kwh_kwp,
 )
-from backend.core.wirtschaftlichkeit_defaults import WP_WIRKUNGSGRAD_GAS_DEFAULT
+from backend.core.wirtschaftlichkeit_defaults import (
+    EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    GASPREIS_DEFAULT_CENT,
+    NETZBEZUG_DEFAULT_CENT,
+    WP_WIRKUNGSGRAD_GAS_DEFAULT,
+)
 
 
 # =============================================================================
@@ -114,9 +119,9 @@ def berechne_monatskennzahlen(
     batterie_ladung_kwh: float = 0,
     batterie_entladung_kwh: float = 0,
     v2h_entladung_kwh: float = 0,
-    # Preise (Cent/kWh)
-    einspeiseverguetung_cent: float = 8.2,
-    netzbezug_preis_cent: float = 30.0,
+    # Preise (Cent/kWh) — Defaults aus dem SoT, nie als Zahl kopieren
+    einspeiseverguetung_cent: float = EINSPEISEVERGUETUNG_DEFAULT_CENT,
+    netzbezug_preis_cent: float = NETZBEZUG_DEFAULT_CENT,
     # Grundpreis (Euro/Monat) - wird zu den Netzbezugskosten addiert
     grundpreis_euro_monat: float = 0,
     # Anlage
@@ -374,10 +379,10 @@ def berechne_waermepumpe_einsparung(
     # Modus-Auswahl
     effizienz_modus: str = "gesamt_jaz",
     # Gemeinsame Parameter
-    strompreis_cent: float = 30.0,
+    strompreis_cent: float = NETZBEZUG_DEFAULT_CENT,
     pv_anteil_prozent: float = 30.0,
     alter_energietraeger: str = "gas",  # "gas", "oel", "strom"
-    alter_preis_cent_kwh: float = 12.0,
+    alter_preis_cent_kwh: float = GASPREIS_DEFAULT_CENT,
     alternativ_zusatzkosten_jahr: float = 0.0,
 ) -> WaermepumpeEinsparung:
     """

@@ -11,7 +11,7 @@ import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react
 import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
-import { useStrompreise } from '../hooks'
+import { useAnlage, useStrompreise } from '../hooks'
 import { GELD_TEXT_CLASS, fmtZahl } from '../lib'
 import type { Strompreis, StrompreisVerwendung } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
@@ -328,6 +328,13 @@ export function StrompreiseVerwaltung({
     sorted, aktuellerStandard, aktiveSpezialtarife, error,
     createStrompreis, updateStrompreis, deleteStrompreis,
   } = useStrompreiseTeile(anlageId)
+  const { anlage } = useAnlage(anlageId)
+
+  // Nur beim ERSTEN Tarif vorbelegen: ab dem zweiten ist „heute" die richtige
+  // Annahme (Tarifwechsel), und ein bestehender Eintrag darf nicht überschrieben
+  // wirken. Siehe `gueltigAbVorbelegung` in StrompreisFormProps.
+  const gueltigAbVorbelegung =
+    sorted.length === 0 ? anlage?.installationsdatum || undefined : undefined
 
   const [showForm, setShowForm] = useState(false)
   const [editingStrompreis, setEditingStrompreis] = useState<Strompreis | null>(null)
@@ -403,6 +410,7 @@ export function StrompreiseVerwaltung({
           onCreate={handleCreate}
           onCancel={() => { setShowForm(false); setFormError(null) }}
           error={formError}
+          gueltigAbVorbelegung={gueltigAbVorbelegung}
         />
       </Modal>
 
@@ -458,6 +466,15 @@ interface StrompreisFormProps {
   onUpdate?: (data: StrompreisUpdate) => Promise<void>
   onCancel: () => void
   error?: string | null
+  /**
+   * Vorbelegung für „Gültig ab" beim ERSTEN Tarif einer Anlage (Inbetriebnahme-
+   * Datum). Ohne sie stand dort das heutige Datum — bei einer Neuinstallation
+   * mit Statistik-Import systematisch falsch: alle importierten Altmonate fielen
+   * hinter den Tarif und rechneten still mit der 30-ct-Vorbelegung (Forum
+   * simon42 #89667/60). Der Setup-Wizard belegt seit jeher so vor
+   * (`StrompreiseStep`), die Einzelseite folgt jetzt derselben Mechanik.
+   */
+  gueltigAbVorbelegung?: string
 }
 
 const VERWENDUNG_OPTIONEN: readonly { value: StrompreisVerwendung; label: string; description: string }[] = [
@@ -483,7 +500,9 @@ const EINSPEISUNG_MAX = 30
 
 type PflichtFeld = 'netzbezug_arbeitspreis_cent_kwh' | 'einspeiseverguetung_cent_kwh' | 'gueltig_ab'
 
-export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCancel, error }: StrompreisFormProps) {
+export function StrompreisForm({
+  strompreis, anlageId, onCreate, onUpdate, onCancel, error, gueltigAbVorbelegung,
+}: StrompreisFormProps) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     tarifname: strompreis?.tarifname || '',
@@ -492,7 +511,7 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
     einspeiseverguetung_cent_kwh: strompreis?.einspeiseverguetung_cent_kwh?.toString() || '8.2',
     grundpreis_euro_monat: strompreis?.grundpreis_euro_monat?.toString() || '',
     zaehlergebuehr_euro_jahr: strompreis?.zaehlergebuehr_euro_jahr?.toString() || '',
-    gueltig_ab: strompreis?.gueltig_ab || new Date().toISOString().split('T')[0],
+    gueltig_ab: strompreis?.gueltig_ab || gueltigAbVorbelegung || new Date().toISOString().split('T')[0],
     gueltig_bis: strompreis?.gueltig_bis || '',
     vertragsart: strompreis?.vertragsart || '',
     verwendung: (strompreis?.verwendung || 'allgemein') as StrompreisVerwendung,
@@ -682,6 +701,7 @@ export function StrompreisForm({ strompreis, anlageId, onCreate, onUpdate, onCan
             value={formData.gueltig_ab}
             onChange={(v) => { setFormData(prev => ({ ...prev, gueltig_ab: v })); markTouched('gueltig_ab') }}
             required
+            hint="Gilt ab dem 1. des Monats — Monate davor rechnen mit der Vorbelegung (30 ct). Reicht deine Historie weiter zurück, hier den Beginn deiner Daten eintragen."
           />
           {zeigeFehler('gueltig_ab') && (
             <p className="mt-1 text-xs text-red-500">{zeigeFehler('gueltig_ab')}</p>

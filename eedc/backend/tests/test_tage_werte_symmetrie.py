@@ -18,7 +18,7 @@ from datetime import date
 import pytest
 
 from backend.api.routes.energie_profil.views import get_monatsauswertung
-from backend.models import Anlage, Investition, Strompreis
+from backend.models import Anlage, Investition, Monatsdaten, Strompreis
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.energie_profil.tage_werte import baue_tage_werte
 
@@ -164,3 +164,47 @@ async def test_tages_vollzyklen_ohne_speicher_bleiben_leer(db):
     tage = await baue_tage_werte(db, anlage, date(2026, 5, 1), date(2026, 5, 31))
 
     assert all(t.speicher_vollzyklen is None for t in tage)
+
+
+@pytest.mark.asyncio
+async def test_tage_werte_nehmen_den_abgerechneten_monats_durchschnittspreis(db):
+    """Dynamischer Tarif: der Tag rechnet mit demselben Preis wie der Monat.
+
+    `Monatsdaten.netzbezug_durchschnittspreis_cent` trägt den ABGERECHNETEN
+    Monats-Ø und schlägt laut `resolve_netzbezug_preis_cent` den Stammdaten-
+    Arbeitspreis. Bis 2026-07-30 reichte `baue_tage_werte` die Monatsdaten-Zeile
+    nicht durch (`monatsdaten=None`) — Cockpit/Tag nannte 30 ct, Cockpit/Monat
+    18 ct, und Σ Tage ≠ Monat. Diese Achse war vom Symmetrie-Test bis dahin
+    nicht abgedeckt: er legte nur einen festen Tarif an
+    ([[feedback_aggregator_symmetrie]], Forum simon42 #89667/60).
+    """
+    aid = await _anlage_mit_tagesprofil(db)
+    db.add(Monatsdaten(
+        anlage_id=aid, jahr=2026, monat=5,
+        netzbezug_durchschnittspreis_cent=18.0,
+    ))
+    await db.flush()
+    anlage = await db.get(Anlage, aid)
+
+    tage = await baue_tage_werte(db, anlage, date(2026, 5, 1), date(2026, 5, 31))
+
+    for t in tage:
+        # Kosten UND Eigenverbrauchs-Ersparnis folgen dem Ø, nicht den 30 ct.
+        assert t.netzbezug_kosten == round(t.netzbezug * 18.0 / 100, 2)
+        assert t.ev_ersparnis == round(t.eigenverbrauch * 18.0 / 100, 2)
+
+
+@pytest.mark.asyncio
+async def test_tage_werte_ohne_monats_durchschnitt_bleiben_beim_tarif(db):
+    """Gegenprobe: ohne gepflegten Ø gilt weiter der Stammdaten-Arbeitspreis.
+
+    Sichert, dass der Flex-Override nicht versehentlich zum Pflichtweg wird —
+    eine fehlende Monatsdaten-Zeile darf den Preis nicht auf 0 ziehen.
+    """
+    aid = await _anlage_mit_tagesprofil(db)
+    anlage = await db.get(Anlage, aid)
+
+    tage = await baue_tage_werte(db, anlage, date(2026, 5, 1), date(2026, 5, 31))
+
+    for t in tage:
+        assert t.netzbezug_kosten == round(t.netzbezug * 30.0 / 100, 2)

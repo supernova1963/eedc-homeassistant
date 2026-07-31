@@ -9,6 +9,7 @@ GET  /historie/{anlage_id}                      — Historie der letzten N Monat
 Schreib-Pfad (POST {anlage_id}/{jahr}/{monat}) liegt in wizard.py.
 """
 
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -311,8 +312,11 @@ async def get_monatsabschluss(
     # Datenquelle des Monats ermitteln
     datenquelle = getattr(monatsdaten, "datenquelle", None) if monatsdaten else None
 
-    # Bedingungen für bedingte Basis-Felder ermitteln
-    tarife = await lade_tarife_fuer_anlage(db, anlage_id)
+    # Bedingungen für bedingte Basis-Felder ermitteln. Stichtag ist der Monat,
+    # der abgeschlossen wird — sonst entscheidet die HEUTIGE Vertragsart, ob das
+    # Feld „Ø Strompreis" erscheint: nach einem Wechsel dynamisch → fest käme man
+    # an den abgerechneten Ø eines Altmonats nicht mehr heran.
+    tarife = await lade_tarife_fuer_anlage(db, anlage_id, target_date=date(jahr, monat, 1))
     allgemein_tarif = tarife.get("allgemein")
     hat_dynamischen_tarif = bool(allgemein_tarif and allgemein_tarif.vertragsart == "dynamisch")
     aktive_inv_typen = {i.typ for i in anlage.investitionen if not i.stilllegungsdatum}
@@ -749,8 +753,6 @@ async def get_naechster_monat(
 
     Rückgabe: der früheste offene Monat, oder ``None`` bei lückenlosem Bereich.
     """
-    from datetime import date
-
     from backend.core.monats_luecken import naechster_offener_monat_fuer
 
     # Anlage inkl. Investitionen laden (Investitions-anschaffungsdatum = Start-Anker).

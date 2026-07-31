@@ -36,6 +36,7 @@ from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 
@@ -93,6 +94,22 @@ async def baue_tage_werte(
     )
     speicher_invs = list(speicher_result.scalars().all())
 
+    # Monatsdaten des Zeitraums für den Flex-Ø-Override. Bei dynamischem Tarif
+    # trägt `netzbezug_durchschnittspreis_cent` den ABGERECHNETEN Monats-Ø und
+    # schlägt den Stammdaten-Arbeitspreis (`resolve_netzbezug_preis_cent`).
+    # Ohne diese Zeilen rechnete der Tag mit dem Referenzpreis, während Monat
+    # und Jahr den Ø nahmen — Σ Tage ≠ Monat ([[feedback_aggregator_symmetrie]]).
+    md_result = await db.execute(
+        select(Monatsdaten).where(and_(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr >= von.year,
+            Monatsdaten.jahr <= bis.year,
+        ))
+    )
+    md_pro_monat: dict[tuple[int, int], Monatsdaten] = {
+        (m.jahr, m.monat): m for m in md_result.scalars().all()
+    }
+
     alle_tage = sorted(set(tep_pro_tag) | set(tz_pro_tag))
     tarif_cache: dict[date, dict] = {}
     zeilen: list[TagWerteResponse] = []
@@ -110,7 +127,7 @@ async def baue_tage_werte(
             pv_erzeugung_kwh=bilanz.erzeugung_kwh,
             neg_preis_kwh=(tz.einspeisung_neg_preis_kwh if tz else None),
             # Speicher/V2H/BKW = 0: Netto-Flüsse bilden Speicher schon ab.
-            monatsdaten=None,
+            monatsdaten=md_pro_monat.get((tag.year, tag.month)),
         )
         finanz_zeile = await baue_finanz_zeile(
             db, anlage_id, eingabe, tarif_cache=tarif_cache

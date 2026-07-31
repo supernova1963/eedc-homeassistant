@@ -810,7 +810,7 @@ async def get_speicher_dashboard(
                 # Fallback: Monatsdaten Ø-Preis für dynamische Tarife
                 if preis <= 0:
                     anlage_md = anlage_md_dict.get((md.jahr, md.monat))
-                    if anlage_md and anlage_md.netzbezug_durchschnittspreis_cent:
+                    if anlage_md and anlage_md.netzbezug_durchschnittspreis_cent is not None:
                         preis = anlage_md.netzbezug_durchschnittspreis_cent
                 if preis > 0:
                     arbitrage_preis_sum += preis * netzladung

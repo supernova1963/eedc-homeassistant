@@ -97,7 +97,7 @@ class DatenChecker(
         # Alle Prüfungen durchführen
         ergebnisse: list[CheckErgebnis] = []
         ergebnisse.extend(self._check_stammdaten(anlage, pvgis_prognose, pr, pr_count))
-        ergebnisse.extend(self._check_strompreise(anlage))
+        ergebnisse.extend(self._check_strompreise(anlage, monatsdaten))
         ergebnisse.extend(self._check_investitionen(anlage, monatsdaten))
         ergebnisse.extend(self._check_monatsdaten_vollstaendigkeit(anlage, monatsdaten))
         ergebnisse.extend(await self._check_monatsdaten_plausibilitaet(

@@ -34,6 +34,7 @@ from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
+from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 
 from ._shared import (
@@ -198,8 +199,21 @@ async def get_tag_detail(
     soll_pv = round(pv_prognose * lernfaktor, 1) if (pv_prognose and lernfaktor) else pv_prognose
 
     # Tagestarif (Monatstarif je Tag) — Preise hängen nicht von Mengen ab.
+    # Die Monatsdaten-Zeile muss mit: bei dynamischem Tarif trägt sie den
+    # abgerechneten Monats-Ø, der den Stammdaten-Arbeitspreis schlägt. Ohne sie
+    # nennt die Tarif-Zeile hier einen anderen Preis als Cockpit/Monat.
+    md_tag = (await db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr == datum.year,
+            Monatsdaten.monat == datum.month,
+        )
+    )).scalar_one_or_none()
     tarif = await baue_finanz_zeile(
-        db, anlage_id, FinanzZeileEingabe(jahr=datum.year, monat=datum.month), tarif_cache={}
+        db,
+        anlage_id,
+        FinanzZeileEingabe(jahr=datum.year, monat=datum.month, monatsdaten=md_tag),
+        tarif_cache={},
     )
 
     return TagDetailResponse(
