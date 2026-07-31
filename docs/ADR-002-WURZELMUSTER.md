@@ -1,7 +1,7 @@
 # ADR-002 — Zehn Wurzelmuster für Daten-, Zugriffs- und Aggregations-Invarianten
 
 **Status:** Akzeptiert (2026-07-26) · **P7 ergänzt 2026-07-29** (R8-4) · **P8 + P9 ergänzt 2026-07-31** (Abschluss der #326-Inventur: Tarif-Stichtag, BKW-Doppelzählung) · **P10 ergänzt 2026-07-31** (Drift-Inventur der Lese-Sichten: die Aufbereitung der Monatszeile)
-**Auslöser:** Die v4.0.1-Runde heilte 19 Fundstellen einzeln — und **jeder Fix legte den nächsten frei**, weil dieselbe Ursache an mehreren Stellen unabhängig kopiert war. Der Sweep dahinter (`docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`) zählte nicht Symptome, sondern Ursachen: **sechs Muster, 44 Fundstellen**. Diese ADR schreibt die Muster als Regeln fest, damit sie nicht neu entstehen.
+**Auslöser:** Die v4.0.1-Runde heilte 19 Fundstellen einzeln — und **jeder Fix legte den nächsten frei**, weil dieselbe Ursache an mehreren Stellen unabhängig kopiert war. Der Sweep dahinter (`docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` — **Entwurf, nicht im Repository**, s. Quellen am Ende) zählte nicht Symptome, sondern Ursachen: **sechs Muster, 44 Fundstellen**. Diese ADR schreibt die Muster als Regeln fest, damit sie nicht neu entstehen.
 
 **Abgrenzung zu den anderen SoT-Regimen (bewusst, nicht kosmetisch):**
 
@@ -108,7 +108,7 @@ Die Baseline in §offen stand bis A27 bei **70 Literal-Zugriffen in 23 Dateien, 
 
 ## Korrekturen gegenüber dem Sweep-Bericht
 
-`docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` beschreibt den Stand **vor** den A17-/A20-Paketen. Fünf Stellen sind überholt; hier gilt die korrigierte Fassung, damit diese ADR nicht einen falschen Status zementiert:
+`docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` (**nicht im Repository**, s. Quellen unten) beschreibt den Stand **vor** den A17-/A20-Paketen. Fünf Stellen sind überholt; die korrigierte Fassung steht hier — und damit im versionierten Baum, nicht nur im Bericht. Sie gilt, damit diese ADR keinen falschen Status zementiert:
 
 1. **§1 „gesichert durch: nichts"** — gilt für **P1, P2, P4 und P5 nicht mehr.** Alle vier haben inzwischen Tests (Tabelle oben).
 2. **§2, Wirkung von N52 und N53 war am Code falsch beschrieben.**
@@ -141,7 +141,7 @@ Die Baseline in §offen stand bis A27 bei **70 Literal-Zugriffen in 23 Dateien, 
 - `docs/ADR-001-BERECHNUNGS-LAYER.md` — Schichtentscheidung und ihr Konformitätswächter (Form-Präzedenz)
 - `docs/KONZEPT-MONATS-FAKTEN.md` — der Bauplan hinter **P10**: Kontrakt, Feldgruppen, sechs Migrations-Schritte, Abnahmekriterien
 - `docs/KONZEPT-BERECHNUNGS-LAYER.md` — Submodul-Schnitt des Berechnungs-Layers
-- `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` — der Sweep, aus dem diese Regeln stammen (Stand vor A17/A20, s. Korrekturen oben)
+- `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` — der Sweep, aus dem diese Regeln stammen (Stand vor A17/A20, s. Korrekturen oben). ⚠️ **Nicht im Repository** — `docs/drafts/` ist gitignored (`.gitignore:82`), die Datei liegt nur auf der Maschine, auf der sie entstanden ist. Diese ADR ist deshalb so geschrieben, dass sie **ohne** den Bericht trägt: jede Regel nennt ihre Invariante, ihre Begründung und ihre Deckung selbst. Der Verweis belegt die Herkunft, er ersetzt keinen Absatz. Den Umzug der tragenden Passagen an eine versionierte Heimat führt ein eigenes Paket (**N-27**, gemessen 726 Zeilen — zu viel für eine Nebenarbeit).
 - `docs/KONZEPT-STYLE-GUIDE.md` — das **andere** SoT-Regime (Darstellung); die zwei werden nicht vermischt
 
 ## Verbundene Memory-Einträge

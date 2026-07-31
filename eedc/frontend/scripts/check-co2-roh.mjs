@@ -32,6 +32,19 @@
  *      darüber, dass der Client keine eigene bildet. Die Backend-Hälfte deckt
  *      `test_co2_tages_bezugsgroesse.py` (F-6) für den einen Pfad, der dort
  *      dieselbe Klasse trug; ein baumweiter Backend-Wächter fehlt noch (N-23).
+ *  (d) Erkannt wird ein **Rechen-Operator unmittelbar vor oder nach** dem
+ *      Faktor. Eine Rechnung, die den Faktor erst über eine neutral benannte
+ *      Zwischenvariable einführt (`const f = CO2_FAKTOR_KG_KWH; e * f`), läuft
+ *      vorbei — dieselbe Grenze wie beim Dienstlast-Wächter in ADR-001.
+ *
+ * **Wie diese Liste geprüft ist.** Der Wächter wurde gegen eine Probe-Datei in
+ * beide Richtungen gemessen (2026-07-31): `e * FAKTOR` wird gefangen,
+ * `FAKTOR * 1000` läuft durch, und — seit der Reihenfolge-Korrektur unten —
+ * `e * FAKTOR * 1000` wird ebenfalls gefangen. Genau dieser Mischfall lief bis
+ * dahin still durch, und die Grenzen-Liste erwähnte ihn nicht: die Freigabe für
+ * die Einheiten-Umrechnung stieg aus, bevor der Operator DAVOR geprüft wurde.
+ * Wer die Liste fortschreibt, misst neu — eine Grenze ohne Probe ist eine
+ * Behauptung.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -91,8 +104,13 @@ for (const f of quellDateien(join(ROOT, 'src'))) {
     const zeile = davor.split('\n').length
     const zeilenText = zeilen[zeile - 1] ?? ''
 
-    if (EINHEITEN_UMRECHNUNG.test(danach)) continue
-    if (/^\s*[*/+\-%]/.test(danach) || OPERATOR_DAVOR.test(davor)) {
+    // Reihenfolge ist hier die ganze Logik: erst prüfen, ob VOR dem Faktor
+    // gerechnet wird, dann die Umrechnung freigeben. Andersherum (bis
+    // 2026-07-31) lief `e * FAKTOR * 1000` durch — die Freigabe sah nur nach
+    // rechts und stieg aus, bevor der Operator davor drankam.
+    const operatorDavor = OPERATOR_DAVOR.test(davor)
+    if (!operatorDavor && EINHEITEN_UMRECHNUNG.test(danach)) continue
+    if (operatorDavor || /^\s*[*/+\-%]/.test(danach)) {
       verstoesse.push({ datei, zeile, text: zeilenText.trim() })
     }
   }

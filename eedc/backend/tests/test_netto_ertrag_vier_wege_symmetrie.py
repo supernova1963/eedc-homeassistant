@@ -192,7 +192,20 @@ async def _anlage_mit_bkw(db, *, bkw_daten: dict, name: str) -> int:
 
 
 async def _vier_netto_ertraege(db, anlage_id: int) -> dict[str, float]:
-    """Netto-Ertrag aller vier Sichten für dieselbe Anlage."""
+    """Netto-Ertrag aller vier Sichten für dieselbe Anlage.
+
+    **Grenze — der Helfer taugt nur für Fixtures ohne Wärmepumpe und ohne
+    gefahrene E-Auto-Kilometer.** Die vier Sichten sind nur dort vergleichbar:
+    `aussichten.bisherige_ertraege_euro` nennt eine Größe, die WP- und
+    eMob-Alternativkosten-Ersparnisse anders trägt als die übrigen drei. Mit
+    einer WP oder gefahrenen km im Fixture meldet `_einig` deshalb eine Drift,
+    die keine ist.
+
+    Das steht hier und nicht nur in der Fixture-Doku, weil ein Symmetrie-Test
+    genau die Achsen abdeckt, die seine Fixture variiert — und sonst nichts
+    ([[feedback_aggregator_symmetrie]]). Wer den Helfer für eine neue Achse
+    wiederverwendet, muss diese Grenze kennen, bevor er die Fixture baut.
+    """
     cockpit = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
     aussichten = await get_finanz_prognose(anlage_id=anlage_id, monate=12, db=db)
     pdf = await build_jahresbericht_context(db, anlage_id, jahr=2026)

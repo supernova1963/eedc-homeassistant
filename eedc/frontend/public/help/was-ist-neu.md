@@ -2161,7 +2161,7 @@ Alle drei greifen jetzt auf den gleichen Anschaffungsdatum-Filter zu, der seit v
 
 ### Hintergrund: Drift-Audit-Initiative
 
-Der WP-Ersparnis-Bug aus #178 (v3.25.7) hat eine systematische Inventur aller Investitions-Berechnungen ausgelöst. 16 Drifts in 6 Domänen identifiziert. v3.25.8 schließt davon 5 Bündel; eine weitere Folge-Version macht den Rest (vereinheitlichte Reader für die JSON-Felder im `verbrauch_daten`-Speicher mit Datenbank-Migration). Die komplette Inventur liegt im Repo unter `docs/drafts/INVENTUR-DRIFT-AUDIT.md`.
+Der WP-Ersparnis-Bug aus #178 (v3.25.7) hat eine systematische Inventur aller Investitions-Berechnungen ausgelöst. 16 Drifts in 6 Domänen identifiziert. v3.25.8 schließt davon 5 Bündel; eine weitere Folge-Version macht den Rest (vereinheitlichte Reader für die JSON-Felder im `verbrauch_daten`-Speicher mit Datenbank-Migration). Was davon bei dir ankommt, steht in den Einträgen zu v3.25.8 und den Folgeversionen — eine gesonderte Inventur-Datei gibt es im Repository nicht (der frühere Verweis auf `docs/drafts/…` ging ins Leere: Entwurfs-Notizen sind nicht Teil der Auslieferung).
 
 ### Wärmepumpe: Ersparnis-Anzeige in allen vier Tabs konsistent *(v3.25.7)*
 
