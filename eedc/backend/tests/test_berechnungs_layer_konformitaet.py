@@ -442,3 +442,78 @@ def test_finanz_monatszeile_nur_im_builder():
         regel='`FinanzMonatsZeile(...)` außerhalb des Builders services/finanz_zeilen.py '
               '— nutze `baue_finanz_zeile` (sonst Einheitstarif-Drift, #326)',
     )
+
+
+# ── N-18/N-12/N-13: dienstliche Ladung nur im Layer-Helper bewerten ──────────
+# Die Euro-Bewertung der Dienstwagen-Ladung stand an drei Read-Sites in drei
+# Fassungen: Cockpit nahm den Wallbox-Preis, Aussichten den allgemeinen
+# Arbeitspreis, der HA-Export zog gar nichts ab — und beide rechnenden Sichten
+# bewerteten den PV-Anteil zur Einspeisevergütung statt zum Netzbezugspreis,
+# womit die EV-Gutschrift aus `berechne_finanz_aggregat` stehen blieb (+22 ct je
+# verschenkter kWh). Seit 2026-07-31 gibt es genau einen Ort:
+# `core/berechnungen/dienstliche_ladekosten.py`.
+#
+# Der Wächter greift die **Bewertung**, nicht die Menge: eine Multiplikation, an
+# der eine `dienstlich…`-benannte Größe hängt. Reines Summieren/Durchreichen der
+# Mengen (die Schicht tut das) bleibt erlaubt.
+#
+# **Grenze, ausgeschrieben:** wer die Mengen zuerst in neutral benannte
+# Variablen legt (`pv_kwh`, `netz_kwh`) und dann multipliziert, läuft an diesem
+# Wächter vorbei — genau so sah der alte Aussichten-Block aus. Diese Hälfte
+# deckt ADR-002/P10 ab (rohe `InvestitionMonatsdaten` außerhalb der Schicht
+# falten ist dort verboten); zusammen bleibt kaum ein Weg offen.
+ALLOWED_DIENSTLICH_BEWERTUNG_FILES = {
+    "core/berechnungen/dienstliche_ladekosten.py",  # der SoT-Helper
+}
+
+
+def _dienstlich_multiplikationen(text: str) -> list[tuple[int, str]]:
+    """Zeilen mit einer Multiplikation, in der ein `dienstlich…`-Name steckt."""
+    import ast
+
+    try:
+        baum = ast.parse(text)
+    except SyntaxError:
+        return []
+
+    def traegt_dienstlich(knoten) -> bool:
+        for kind in ast.walk(knoten):
+            if isinstance(kind, ast.Attribute) and "dienstlich" in kind.attr:
+                return True
+            if isinstance(kind, ast.Name) and "dienstlich" in kind.id:
+                return True
+        return False
+
+    treffer: list[tuple[int, str]] = []
+    zeilen = text.splitlines()
+    for knoten in ast.walk(baum):
+        if not isinstance(knoten, ast.BinOp) or not isinstance(knoten.op, ast.Mult):
+            continue
+        if traegt_dienstlich(knoten.left) or traegt_dienstlich(knoten.right):
+            quelle = zeilen[knoten.lineno - 1].strip() if knoten.lineno <= len(zeilen) else ""
+            treffer.append((knoten.lineno, quelle))
+    return treffer
+
+
+def test_dienstliche_ladung_nur_im_layer_bewertet():
+    """Dienstliche Lade-kWh dürfen nur in `core/berechnungen/dienstliche_ladekosten.py`
+    mit einem Preis multipliziert werden — sonst driften die drei Sichten wieder
+    auseinander (N-12/N-13/N-18)."""
+    verstoesse: list[tuple[str, int, str]] = []
+    for path, rel in _iter_py_files():
+        if rel in ALLOWED_DIENSTLICH_BEWERTUNG_FILES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, quelle in _dienstlich_multiplikationen(text):
+            verstoesse.append((rel, line_no, quelle))
+
+    assert not verstoesse, _format_verstoesse_meldung(
+        verstoesse,
+        regel="dienstliche Lade-kWh außerhalb von "
+              "`core/berechnungen/dienstliche_ladekosten.py` bewertet — nutze "
+              "`berechne_dienstliche_ladekosten(DienstlicheLadungZeile(...))` "
+              "(N-12/N-13/N-18)",
+    )

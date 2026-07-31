@@ -17,7 +17,9 @@ from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
 from backend.core.berechnungen import (
+    DienstlicheLadungZeile,
     FinanzMonatsZeile,
+    berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
     berechne_spez_ertrag_annualisiert,
     berechne_verbrauchs_kennzahlen,
@@ -262,18 +264,26 @@ async def get_cockpit_uebersicht(
             _pm = eauto_km_pro_monat_by_inv.setdefault(_inv_id, {})
             _pm[f.schluessel] = _pm.get(f.schluessel, 0.0) + _km
 
-    # Dienstliche Ladekosten: Netzbezug-Anteil über den effektiven Wallbox-Preis
-    # des MONATS (Flex-Ø vor Wallbox-Tarif), die entgangene Einspeisung über die
-    # damalige Vergütung — beide Preise aus `fakt.tarif` (P8). Die Bewertung
-    # bleibt bewusst hier: die Schicht liefert Mengen und Tarif, sie rechnet
-    # keine Euro-Beträge, für die es einen Formel-Helfer gibt.
-    dienstlich_ladekosten_euro = sum(
-        (
-            f.emob.dienstlich_ladung_netz_kwh * f.tarif.wallbox_preis_effektiv_cent
-            + f.emob.dienstlich_ladung_pv_kwh * f.tarif.einspeiseverguetung_cent
-        ) / 100
+    # Dienstliche Ladekosten über den Layer-SoT (ADR-001) — dieselbe Formel wie
+    # in `aussichten.get_finanz_prognose` und im HA-Export, die sie bis
+    # 2026-07-31 alle drei verschieden (bzw. gar nicht) rechneten.
+    # Beide Preise stammen aus dem Tarif DES MONATS (P8): der Netzanteil aus dem
+    # effektiven Wallbox-Preis (Flex-Ø vor Wallbox-Tarif vor Anlagentarif), der
+    # PV-Anteil aus dem Netzbezugspreis. Letzteres nimmt die EV-Gutschrift
+    # zurück, die `berechne_finanz_aggregat` unten für dieselben kWh
+    # gutschreibt — der frühere Abzug zur Einspeisevergütung tat das nicht und
+    # ließ dem Dienstwagen netto +22 ct je verschenkter kWh (N-18).
+    # Die ENERGIEBILANZ oben bleibt davon unberührt: energetisch ist die Ladung
+    # Eigenverbrauch hinter dem Zähler.
+    dienstlich_ladekosten_euro = berechne_dienstliche_ladekosten(
+        DienstlicheLadungZeile(
+            ladung_pv_kwh=f.emob.dienstlich_ladung_pv_kwh,
+            ladung_netz_kwh=f.emob.dienstlich_ladung_netz_kwh,
+            netzbezug_preis_cent=f.tarif.netzbezug_preis_cent,
+            wallbox_preis_cent=f.tarif.wallbox_preis_effektiv_cent,
+        )
         for f in fakten
-    )
+    ).gesamt_euro
     sonstige_ausgaben_gesamt += dienstlich_ladekosten_euro
 
     # Anschaffungsdatum-Grenze: Energiebilanz + Erträge nur über Monate, in denen

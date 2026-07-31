@@ -37,8 +37,10 @@ export function WallboxFelder({ paramData, onInputChange, setParam }: TypFelderP
           />
           {paramData.ist_dienstlich && (
             <Alert type="warning">
-              ROI-Berechnung: Netzkosten + entgangene Einspeisung als Ausgaben.
-              Erträge (z. B. AG-Erstattung) als „Sonstige Erträge" im Monatsabschluss erfassen.
+              ROI-Berechnung: der dienstlich geladene Strom wird als Ausgabe gegengerechnet —
+              Netzanteil zum Wallbox-Tarif, PV-Anteil zum Netzbezugspreis (Ihr Haushalt hat
+              diesen Strom nicht selbst verbraucht). Erträge (z. B. AG-Erstattung) als
+              „Sonstige Erträge" im Monatsabschluss erfassen.
               Für gemischte Nutzung (privat + dienstlich): zwei separate Wallbox-Einträge anlegen.
             </Alert>
           )}

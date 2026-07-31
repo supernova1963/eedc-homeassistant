@@ -9,9 +9,19 @@ Sonstige + Dienstwagen) denselben Wert liefern ([[feedback_aggregator_symmetrie]
 
 Mitgezogen (beidseitig, sonst neue Asymmetrie):
 - Dienstwagen-Ladekosten-Abzug per-Monat über `resolve_netzbezug_preis_cent`
-  statt statischem Tarifpreis (Einspeisevergütung bleibt Vertragswert).
-- Aussichten-Dienstwagen nutzt `get_emob_pv_netz_kwh` (#262 evcc-Fallback)
-  statt rohem `ladung_netz_kwh`-Read.
+  statt statischem Tarifpreis.
+- Mengen und Bewertung des Dienstwagens laufen seit 2026-07-31 über die
+  Monats-Fakten (P10) und den Layer-SoT `berechne_dienstliche_ladekosten`
+  (ADR-001) — inklusive `get_emob_pv_netz_kwh` (#262 evcc-Fallback) in der Schicht.
+
+**Erwartungswerte angepasst 2026-07-31 (N-18).** Der PV-Anteil der dienstlichen
+Ladung wird jetzt mit dem **Netzbezugspreis** bewertet statt mit der
+Einspeisevergütung — er nimmt damit die EV-Gutschrift zurück, die
+`berechne_finanz_aggregat` für dieselben kWh gutschreibt. Im Fixture unten sind
+das 50 kWh im Mai zu 20 statt 8 ct: der Abzug steigt von 104,00 € auf 110,00 €,
+der Netto-Ertrag fällt von 152,80 € auf 146,80 €. Die **Symmetrie**, die diese
+Datei bewacht, ist davon unberührt — sie wird nur auf der neuen Zahl geprüft.
+Herleitung und Messtabelle: `test_dienstliche_ladekosten_drei_sichten.py`.
 """
 
 from __future__ import annotations
@@ -36,8 +46,11 @@ async def _anlage_flex_speicher_sonstige_dienstwagen(db) -> int:
           EV = (100-20-10) + 8 = 78 → 31,20 €
     einspeise  = 620 · 0,08            =  49,60 €
     sonstige   = +100 (THG)
-    dienstlich = (100·0,20 + 50·0,08) + (200·0,40) = 24 + 80 = 104,00 €
-    netto      = 49,60 + 107,20 + 100 − 104 = 152,80 €
+    dienstlich = (100·0,20 Netz + 50·0,20 PV) + (200·0,40 Netz) = 30 + 80 = 110,00 €
+                 ↑ beide Anteile zum Monats-Flexpreis: Netz, weil es der
+                   Wallbox-Preis ist (kein WB-Vertrag → Anlagentarif → Flex-Ø),
+                   PV, weil der Abzug die EV-Gutschrift zurücknimmt (N-18).
+    netto      = 49,60 + 107,20 + 100 − 110 = 146,80 €
     """
     anlage = Anlage(anlagenname="FinanzSymAussichten", leistung_kwp=10.0)
     db.add(anlage)
@@ -90,14 +103,14 @@ async def _anlage_flex_speicher_sonstige_dienstwagen(db) -> int:
 
 
 async def test_aussichten_bisherige_ertraege_gleich_cockpit_netto(db):
-    """Cockpit-Netto-Ertrag == Aussichten-bisherige-Erträge == 152,80 €.
+    """Cockpit-Netto-Ertrag == Aussichten-bisherige-Erträge == 146,80 €.
 
     Keine WP/kein privates E-Auto/keine Betriebskosten im Fixture — damit ist
     `bisherige_ertraege_euro` exakt das Finanz-Aggregat und direkt mit dem
     Cockpit-`netto_ertrag_euro` vergleichbar.
     """
     anlage_id = await _anlage_flex_speicher_sonstige_dienstwagen(db)
-    erwartet = 152.8
+    erwartet = 146.8
 
     cockpit = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
     aussichten = await get_finanz_prognose(anlage_id=anlage_id, monate=12, db=db)
@@ -113,17 +126,17 @@ async def test_aussichten_bisherige_ertraege_gleich_cockpit_netto(db):
 async def test_dienstwagen_abzug_per_monat_flexpreis(db):
     """Der Dienstwagen-Abzug nutzt den Monats-Flexpreis, nicht den Tarifpreis.
 
-    Per-Monat: 100·0,20 + 200·0,40 = 100,00 € Netz-Anteil (+ 4 € PV).
-    Alt/statisch: 300·0,30 = 90,00 € Netz-Anteil (+ 4 € PV) → 10 € Differenz,
+    Per-Monat: 100·0,20 + 200·0,40 = 100,00 € Netz-Anteil (+ 10 € PV).
+    Alt/statisch: 300·0,30 = 90,00 € Netz-Anteil (+ 15 € PV) → 15 € Differenz,
     die in beiden Read-Sites identisch ankommen muss.
     """
     anlage_id = await _anlage_flex_speicher_sonstige_dienstwagen(db)
 
     cockpit = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
-    # sonstige_netto = 100 (THG) − 104 (Dienstwagen) = −4
-    assert cockpit.sonstige_netto_euro == pytest.approx(-4.0, abs=0.05)
-    # Gegenprobe: mit statischem 30-ct-Abzug wäre sonstige_netto = 100 − 94 = +6.
-    assert abs(cockpit.sonstige_netto_euro - 6.0) > 5.0
+    # sonstige_netto = 100 (THG) − 110 (Dienstwagen) = −10
+    assert cockpit.sonstige_netto_euro == pytest.approx(-10.0, abs=0.05)
+    # Gegenprobe: mit statischem 30-ct-Abzug wäre sonstige_netto = 100 − 105 = −5.
+    assert abs(cockpit.sonstige_netto_euro - (-5.0)) > 4.0
 
 
 async def _anlage_mit_tarifwechsel_und_dienstwagen(db) -> int:

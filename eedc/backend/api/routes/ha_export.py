@@ -22,7 +22,9 @@ from backend.core.investition_kennwerte import (
 )
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
+    DienstlicheLadungZeile,
     FinanzMonatsZeile,
+    berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
     berechne_wp_alternativkosten_ersparnis,
     berechne_spez_ertrag_annualisiert,
@@ -416,6 +418,22 @@ async def calculate_anlage_sensors(
     # (typ-unabhängig, #310) UND die Basis-Positionen der Monatsdaten-Zeile
     # (G19-1) an einer Stelle, gleiche Netto-Faltung wie Cockpit/Jahresbericht.
     sonstige_netto_gesamt = sum(f.sonstiges.netto_euro for f in fakten)
+
+    # Dienstliche Ladekosten — bis 2026-07-31 hat der HA-Export sie als einzige
+    # der drei Sichten **gar nicht** abgezogen (N-13): der Sensor
+    # `netto_ertrag_euro` stand bei Dienstwagen-Anlagen über der Cockpit-Kachel,
+    # auf die er sich bezieht. Gleiche Formel, gleicher Layer-SoT
+    # (ADR-001) wie Cockpit/Übersicht und Aussichten; die Mengen kommen aus den
+    # Monats-Fakten (Dienstwagen-Filter + PV/Netz-Split, P10).
+    sonstige_netto_gesamt -= berechne_dienstliche_ladekosten(
+        DienstlicheLadungZeile(
+            ladung_pv_kwh=f.emob.dienstlich_ladung_pv_kwh,
+            ladung_netz_kwh=f.emob.dienstlich_ladung_netz_kwh,
+            netzbezug_preis_cent=f.tarif.netzbezug_preis_cent,
+            wallbox_preis_cent=f.tarif.wallbox_preis_effektiv_cent,
+        )
+        for f in fakten
+    ).gesamt_euro
 
     einspeise_erloes = 0
     ev_ersparnis = 0

@@ -1053,7 +1053,8 @@ Monatsdaten · InvestitionMonatsdaten · Strompreise · TagesZusammenfassung
         │
         ▼   core/berechnungen/               ← Formeln       (ADR-001)
    berechne_verbrauchs_kennzahlen · berechne_finanz_aggregat · imd_typ_beitrag ·
-   bkw_finanz_beitrag · erzeugung_hinter_zaehler_kwh …  (DB-frei, rein)
+   bkw_finanz_beitrag · erzeugung_hinter_zaehler_kwh ·
+   berechne_dienstliche_ladekosten …                    (DB-frei, rein)
         │
         ▼   api/routes/…                     ← Darstellung
    Cockpit · Aussichten · HA-Export · PDF · Community
@@ -1089,7 +1090,9 @@ Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie sch
 > | `P10_PER_INVESTITION` | Aggregat **je Gerät**; die Schicht hat dafür keine Sicht (Register **N-2**) | 11 Funktionen |
 > | `P10_NOCH_NICHT_MIGRIERT` | faltet eine **anlagenweite** Monatszeile selbst — die Klasse, die P10 schließen soll | **4**, mit Obergrenze im Test |
 >
-> **Offene Schuld, benannt statt versteckt:** `monatsdaten.py::list_monatsdaten_aggregiert` (**N-15**), `aktueller_monat.py` (Monatsbericht + Vorjahr, **N-16**) und `cockpit/komponenten.py::get_komponenten_zeitreihe` (**N-17**). Alle drei standen nie im Bauplan und sind beim Scharfstellen aufgefallen. `test_p10_offene_schuld_waechst_nicht` hält die Zahl seit S6 bei **4** (vorher 5) — sie darf nur sinken; eine Obergrenze, die nach einem erledigten Schritt stehen bleibt, ist keine. **Teilmigriert** bleiben `aussichten.py` und `ha_export.py`: ihre Monatsgrößen kommen aus der Schicht, die per-Investition-Aggregate (WP-Alternativkosten, E-Auto je Fahrzeug, dienstliche Ladekosten, `calculate_investition_sensors`) falten sie weiter selbst.
+> **Offene Schuld, benannt statt versteckt:** `monatsdaten.py::list_monatsdaten_aggregiert` (**N-15**), `aktueller_monat.py` (Monatsbericht + Vorjahr, **N-16**) und `cockpit/komponenten.py::get_komponenten_zeitreihe` (**N-17**). Alle drei standen nie im Bauplan und sind beim Scharfstellen aufgefallen. `test_p10_offene_schuld_waechst_nicht` hält die Zahl seit S6 bei **4** (vorher 5) — sie darf nur sinken; eine Obergrenze, die nach einem erledigten Schritt stehen bleibt, ist keine. **Teilmigriert** bleiben `aussichten.py` und `ha_export.py`: ihre Monatsgrößen kommen aus der Schicht, die per-Investition-Aggregate (WP-Alternativkosten, E-Auto je Fahrzeug, `calculate_investition_sensors`) falten sie weiter selbst.
+
+> **Nachtrag 2026-07-31 (Nebenfunde-Runde, Paket A):** Die **dienstlichen Ladekosten** stehen nicht mehr auf dieser Liste. Sie waren der letzte Posten, den `aussichten.py` je Investition selbst faltete — und er driftete gleich zweifach: der Netzanteil lief dort über den allgemeinen Arbeitspreis statt über den Wallbox-Tarif (**N-12**), und der HA-Export zog ihn **gar nicht** ab (**N-13**). Beide Sichten beziehen die Mengen jetzt aus `MonatsFakt.emob.dienstlich_*` und bewerten sie über die neue Layer-Formel `berechne_dienstliche_ladekosten` (`core/berechnungen/dienstliche_ladekosten.py`, ADR-001). Dabei ist eine dritte, größere Sache mitgefallen — **N-18**: der PV-Anteil wurde zur Einspeisevergütung abgezogen, während die EV-Ersparnis dieselben kWh zum Netzbezugspreis gutschrieb, sodass ein Dienstwagen der Anlage netto **+22 ct je verschenkter kWh** einbrachte. Der Abzug bewertet den PV-Anteil seither mit dem Netzbezugspreis; die **Energiebilanz** (Eigenverbrauch, Quote, Autarkie) bleibt unverändert, korrigiert wurde ausschließlich die Bewertung. Herleitung: [BERECHNUNGEN §3.10](BERECHNUNGEN.md).
 
 ### Wetter-Service (Multi-Provider)
 

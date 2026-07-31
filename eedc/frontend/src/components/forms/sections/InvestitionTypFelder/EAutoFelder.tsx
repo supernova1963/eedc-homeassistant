@@ -80,8 +80,10 @@ export function EAutoFelder({ paramData, onInputChange, setParam }: TypFelderPro
           />
           {paramData.ist_dienstlich && (
             <Alert type="warning">
-              Die Kraftstoffersparnis geht an den Arbeitgeber. ROI-Berechnung: nur PV-Eigenverbrauchsvorteil
-              und AG-Erstattung (als „Sonstiger Ertrag" im Monatsabschluss erfassen).
+              Die Kraftstoffersparnis geht an den Arbeitgeber. ROI-Berechnung: die AG-Erstattung
+              (als „Sonstiger Ertrag" im Monatsabschluss erfassen) und ihr Gegenposten — der dienstlich
+              geladene Strom wird als Ausgabe gegengerechnet, Netzanteil zum Wallbox-Tarif, PV-Anteil
+              zum Netzbezugspreis. Ihre Energiebilanz (Eigenverbrauch, Autarkie) bleibt davon unberührt.
             </Alert>
           )}
         </div>

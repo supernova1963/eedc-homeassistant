@@ -29,7 +29,9 @@ from backend.api.routes.strompreise import (
     resolve_strompreis_for_komponente,
 )
 from backend.core.berechnungen import (
+    DienstlicheLadungZeile,
     FinanzMonatsZeile,
+    berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
     alter_wirkungsgrad,
     berechne_wp_alternativkosten_ersparnis,
@@ -41,7 +43,7 @@ from backend.core.berechnungen import (
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
 from backend.core.calculations import ust_eigenverbrauch_fuer_anlage
-from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
+from backend.core.field_definitions import get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -1341,24 +1343,23 @@ async def get_finanz_prognose(
             if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
                 bisherige_sonstige_netto += berechne_sonstige_netto(daten)
 
-    # Dienstliche E-Auto/Wallbox-Ladekosten abziehen (Netzbezug + entgangene
-    # Einspeisung). Netzbezug-Anteil per-Monat über den Flexpreis (gleichzeitig
-    # mit cockpit/uebersicht.py umgestellt — einseitig wäre neue Asymmetrie).
-    # BEIDE Preise stammen aus dem Tarif DES MONATS: die entgangene Einspeisung
-    # ist der damalige Vertragswert, nicht der heutige. PV/Netz-Split über den
-    # SoT-Helper `get_emob_pv_netz_kwh` (#262: evcc-Import ohne ladung_netz_kwh).
-    bisherige_dienstlich_ladekosten = 0.0
-    for inv in alle_investitionen:
-        if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
-            for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-                if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
-                    pv_kwh, netz_kwh = get_emob_pv_netz_kwh(daten)
-                    md = monatsdaten_dict.get((jahr, monat))
-                    m_arbeitspreis, m_verguetung = await _monats_tarif(jahr, monat)
-                    md_preis = resolve_netzbezug_preis_cent(md, m_arbeitspreis)
-                    bisherige_dienstlich_ladekosten += (
-                        netz_kwh * md_preis + pv_kwh * m_verguetung
-                    ) / 100
+    # Dienstliche E-Auto/Wallbox-Ladekosten abziehen — Mengen aus den
+    # Monats-Fakten (P10: Dienstwagen-Filter, Laufzeit-Fenster und PV/Netz-Split
+    # löst die Schicht auf), Bewertung über den Layer-SoT (ADR-001).
+    # Bis 2026-07-31 hat dieser Block beides selbst getan und dabei ZWEI Preise
+    # anders gewählt als das Cockpit: den Netzanteil zum **allgemeinen**
+    # Arbeitspreis statt zum Wallbox-Tarif (N-12) und den PV-Anteil zur
+    # Einspeisevergütung statt zum Netzbezugspreis (N-18). Das Cockpit ist der
+    # Kanon (Gernot 2026-07-31), hier läuft jetzt dieselbe Formel.
+    bisherige_dienstlich_ladekosten = berechne_dienstliche_ladekosten(
+        DienstlicheLadungZeile(
+            ladung_pv_kwh=f.emob.dienstlich_ladung_pv_kwh,
+            ladung_netz_kwh=f.emob.dienstlich_ladung_netz_kwh,
+            netzbezug_preis_cent=f.tarif.netzbezug_preis_cent,
+            wallbox_preis_cent=f.tarif.wallbox_preis_effektiv_cent,
+        )
+        for f in fakten
+    ).gesamt_euro
     bisherige_sonstige_netto -= bisherige_dienstlich_ladekosten
 
     # Finanz-Aggregat (Einspeise-Erlös §51 + EV- + BKW-Ersparnis + Sonstige)

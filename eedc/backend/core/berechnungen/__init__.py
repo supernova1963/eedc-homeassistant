@@ -17,6 +17,8 @@ Regel (siehe `docs/ADR-001-BERECHNUNGS-LAYER.md`):
 Submodule:
 - `energie` — kWh-Aggregate aus komponenten_kwh, TagesEnergieProfil
 - `einspeise_erloes` — §51-bereinigte Einspeise-Erlös-Berechnung
+- `dienstliche_ladekosten` — Euro-Bewertung der Dienstwagen-Ladung (Gegenposten
+  zur AG-Erstattung); PV-Anteil zum Netzbezugspreis, Netzanteil zum Wallbox-Preis
 - `counter` — Counter-Aggregate (WP-Starts/Betriebsstunden): Stunden-Σ aus
   Tages-Boundary-Diff ableiten + Pflicht-Invariante (Variante 2-light)
 - `invarianten` — Konsistenz-Asserts (Σ Hourly == Daily, Σ pv == komponenten_pv etc.)
@@ -61,6 +63,11 @@ from backend.core.berechnungen.bkw_finanz import (
     BkwFinanzBeitrag,
     bkw_eigenverbrauch_anteil,
     bkw_finanz_beitrag,
+)
+from backend.core.berechnungen.dienstliche_ladekosten import (
+    DienstlicheLadekosten,
+    DienstlicheLadungZeile,
+    berechne_dienstliche_ladekosten,
 )
 from backend.core.berechnungen.einspeise_erloes import (
     EinspeiseErloes,
@@ -221,6 +228,9 @@ __all__ = [
     "bkw_finanz_beitrag",
     "BkwEigenverbrauchsAnteil",
     "bkw_eigenverbrauch_anteil",
+    "DienstlicheLadekosten",
+    "DienstlicheLadungZeile",
+    "berechne_dienstliche_ladekosten",
     "EinspeiseErloes",
     "einspeise_erloes_euro",
     "FinanzAggregat",
