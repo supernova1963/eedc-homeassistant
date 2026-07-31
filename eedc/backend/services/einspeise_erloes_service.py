@@ -103,3 +103,43 @@ async def get_neg_preis_einspeisung_jahr(
     if not anzahl:
         return None
     return float(summe or 0.0)
+
+
+async def get_neg_preis_einspeisung_je_monat(
+    db: AsyncSession,
+    anlage_id: int,
+) -> Optional[dict[tuple[int, int], float]]:
+    """Alle Monats-Aggregate auf einmal — dieselbe Aussage, EIN Query.
+
+    Gegenstück zu `get_neg_preis_einspeisung_monat` für Aufrufer, die eine ganze
+    Historie aufbereiten (`services/monats_fakten.py`): pro Monat einzeln zu
+    fragen wären N Rundreisen für dieselbe Gruppierung.
+
+    Returns:
+        `None` wenn die Anlage **nicht** dem §51 unterliegt — identisches Gate,
+        damit beide Wege dieselbe Antwort geben. Sonst ein Dict
+        `{(jahr, monat): kWh}`; ein Monat **ohne** Tages-Aggregate mit
+        Strompreis-Mitschrift **fehlt** im Dict (der Aufrufer liest ihn als
+        `None`, nicht als 0 — eine 0 wäre dort eine Aussage, die niemand belegen
+        kann).
+    """
+    if not await _unterliegt_eeg_51(db, anlage_id):
+        return None
+    jahr_spalte = extract("year", TagesZusammenfassung.datum).label("jahr")
+    monat_spalte = extract("month", TagesZusammenfassung.datum).label("monat")
+    stmt = (
+        select(
+            jahr_spalte,
+            monat_spalte,
+            func.sum(TagesZusammenfassung.einspeisung_neg_preis_kwh),
+            func.count(TagesZusammenfassung.einspeisung_neg_preis_kwh),
+        )
+        .where(TagesZusammenfassung.anlage_id == anlage_id)
+        .group_by(jahr_spalte, monat_spalte)
+    )
+    result = await db.execute(stmt)
+    return {
+        (int(j), int(m)): float(summe or 0.0)
+        for j, m, summe, anzahl in result.all()
+        if anzahl
+    }

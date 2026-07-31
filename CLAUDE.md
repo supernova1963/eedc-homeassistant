@@ -132,6 +132,7 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 2. **Datenquellen getrennt:** `Monatsdaten` = Zählerwerte, `InvestitionMonatsdaten` = Komponenten-Details
 3. **Legacy-Felder NICHT verwenden:** `Monatsdaten.batterie_*` und das computed-Trio (`eigenverbrauch_kwh`, `direktverbrauch_kwh`, `gesamtverbrauch_kwh`) → erst `InvestitionMonatsdaten`, Legacy nur als expliziter Fallback
 4. **`Monatsdaten.pv_erzeugung_kwh` ist KEIN Legacy-Feld, aber auch keine Lesequelle** (Gernot 2026-07-29, ADR-002/**P7**): manuelles bzw. importiertes Anlagen-Aggregat und **ausschließlich Eingang** von `resolve_pv_je_modul` — geladen über `services/pv_monatswerte.py`, nie direkt verrechnet. Einzelwerte und ihre Summe haben immer Vorrang; das Aggregat füllt nur die Lücken der Module **ohne** eigenen Wert. Programmatisch füllen bleibt verboten. Der baumweite Wächter ist `test_wurzelmuster_konformitaet.py::test_p7_*` (Baseline 0). Detail: [BERECHNUNGEN §1](docs/BERECHNUNGEN.md), [ADR-002](docs/ADR-002-WURZELMUSTER.md)
+5. **Die Monatszeile wird genau einmal aufbereitet** (ADR-002/**P10**): `services/monats_fakten.py` löst auf, filtert (`aktiv` · Anschaffung · Stilllegung · Dienstwagen) und **ruft** die Layer-Formeln — keine Read-Site faltet `InvestitionMonatsdaten` mehr selbst. Verallgemeinerung von P7 von einer Größe auf die ganze Zeile; Auslöser war die Drift-Inventur 2026-07-31 (sechs Befunde, **kein** Rechenfehler im Layer). Migration läuft sichtweise, Wächter ab S5. Detail: [KONZEPT-MONATS-FAKTEN](docs/KONZEPT-MONATS-FAKTEN.md), [ARCHITEKTUR §7](docs/ARCHITEKTUR.md)
 
 ## Drei SoT-Regime — nicht mischen
 
@@ -139,7 +140,7 @@ cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts
 | --- | --- | --- |
 | [`docs/KONZEPT-STYLE-GUIDE.md`](docs/KONZEPT-STYLE-GUIDE.md) (Regel 0/0a) | **Darstellung** — Farben, Komponenten, Typografie, Chart-Konventionen | die `check:*`-Skripte im Frontend (`eedc/frontend/scripts/check-*.mjs`) |
 | [`docs/ADR-001-BERECHNUNGS-LAYER.md`](docs/ADR-001-BERECHNUNGS-LAYER.md) | **Schichtung** — *wo* eine Aggregat-Formel definiert wird (`core/berechnungen/`) | `backend/tests/test_berechnungs_layer_konformitaet.py` |
-| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P9) | `backend/tests/test_wurzelmuster_*.py` |
+| [`docs/ADR-002-WURZELMUSTER.md`](docs/ADR-002-WURZELMUSTER.md) | **Invarianten** — *was* ein Wert behaupten darf und woher er kommen muss (P1–P10) | `backend/tests/test_wurzelmuster_*.py` |
 
 > **Backend-Wächter sind pytest, keine `check:*`-Skripte** — alle `check:*` sind Frontend-Node-Skripte. Ausnahme mit eigener Begründung: `check:kennwert-roh` bewacht die Client-Hälfte von ADR-002/P3-a.
 >
@@ -156,6 +157,26 @@ Bei **allem mit Darstellung** (Seite, Komponente, Chart, Tabelle, Tooltip, Butto
 - **Typ-Reihenfolge** immer aus `INVESTITION_TYP_ORDER`/`compareTyp` bzw. Backend `sort_investitionen_nach_typ`. **Datums-Listen/Tabellen** Default absteigend (neueste zuerst). **% mit Leerzeichen**, **„eedc"** klein.
 
 ## Kritische Code-Patterns
+
+### Monatswerte nur aus den Monats-Fakten (ADR-002/P10)
+
+SoT ist `eedc/backend/services/monats_fakten.py`. Wer eine abgeleitete Monatsgröße auswertet, faltet `InvestitionMonatsdaten` **nicht selbst**:
+
+```python
+from backend.services.monats_fakten import lade_monats_fakten, finanz_zeile_eingabe
+
+fakten = await lade_monats_fakten(db, anlage_id, von=(2025, 1), bis=(2025, 12))
+for f in fakten:                          # RICHTIG — Zeitfilter + Dienstwagen-
+    pv    = f.erzeugung.pv_kwh            #   Filter + Auflösung sind schon drin
+    bilanz = f.erzeugung.hinter_zaehler_kwh   # EV/Autarkie: inkl. BHKW & Co.
+    zeile  = await baue_finanz_zeile(db, anlage_id, finanz_zeile_eingabe(f), ...)
+
+# FALSCH — die Klasse hinter allen sechs Befunden der Inventur 2026-07-31:
+for imd in await db.execute(select(InvestitionMonatsdaten)...):
+    summe += (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
+```
+
+Ausgenommen sind **Schreib-, Import- und Checker-Pfade**. Der baumweite Wächter wird mit S5 scharf gestellt (`docs/KONZEPT-MONATS-FAKTEN.md` §10) — bis dahin deckt `test_monats_fakten_schicht.py` die Schicht, nicht ihre Benutzung.
 
 ### SQLAlchemy JSON-Felder
 

@@ -33,8 +33,24 @@ Ein gemeinsamer Aggregat-Helper (z. B. `berechne_finanz_aggregat`) liefert nur d
 1. **Gemeinsamer Eingabe-Builder**, nicht nur ein Formel-Helper. Die Konstruktion des Eingabe-Objekts (inkl. drift-anfälliger Auflösungen wie Tarif-pro-Monat) gehört in **eine** Funktion (DB-I/O → Service-Schicht, nicht core). Beispiel: `services/finanz_zeilen.py` `baue_finanz_zeile`.
 2. **Statischer Wächter**, der die Konstruktion außerhalb des Builders verbietet (analog `test_finanz_monatszeile_nur_im_builder`) — so kann auch **künftiger** Code die zentrale Auflösung nicht umgehen.
 3. **Symmetrie-Test**, der „Site A == Site B == …" für eine realistische Fixture beweist (inkl. der Edge-Cases, die der Default-Pfad umgeht — z. B. mehrere Jahres-Tarife OHNE Monats-Flex-Ø).
+4. **Fakten-Quelle** — der Builder aus Punkt 1 bekommt seine Rohwerte selbst aus **einer** Aufbereitungs-Schicht, nicht aus einer site-eigenen Faltung. Sonst ist nur die letzte Meile zentral: in #326 nutzten alle vier Sichten denselben Aggregat-Helper, und die Drift saß eine Etage tiefer. Heute: `services/monats_fakten.py` für die Monatszeile (ADR-002/**P10**), `services/pv_monatswerte.py` für die PV darin (P7).
 
 Symmetrie-Test allein reicht nicht (er kennt nur die eingetragenen Sites); statischer Wächter allein reicht nicht (er fängt Formel-, nicht Wert-Drift). Erst der Builder macht Drift strukturell unmöglich; Wächter + Symmetrie-Test sichern es ab.
+
+## Eine Aufbereitungs-Schicht ist keine Formel — die Abgrenzung zu `core/berechnungen/`
+
+Die Drift-Inventur der Lese-Sichten (2026-07-31) fand über 23 Sichten × 18 kanonische Größen **keinen einzigen Rechenfehler** im Berechnungs-Layer. Sie fand sechsmal dieselbe Struktur: *jede Sicht faltet die Rohdaten selbst zu Monatswerten*, und dabei fällt jedes Mal etwas anderes weg — mal V2H, mal der Erzeuger hinter dem Zähler, mal der Aggregat-Fallback, mal der Monatstarif, mal der Dienstwagen-Filter. Der Layer war fehlerfrei und die Zahlen trotzdem um bis zu 85 % auseinander.
+
+Daraus folgt eine Schicht, die es vorher nicht gab, und eine klare Grenze:
+
+| | `core/berechnungen/` | `services/monats_fakten.py`, `services/pv_monatswerte.py`, `services/finanz_zeilen.py` |
+| --- | --- | --- |
+| **Rolle** | die **Formel** — *wie* aus Eingaben ein Wert wird | die **Eingabe-Aufbereitung** — *welche* Rohwerte, kanonisch aufgelöst und gefiltert, überhaupt hineingehen |
+| **DB-I/O** | nie (rein, testbar ohne Session) | ja — genau deshalb liegt sie in `services/` |
+| **Enthält** | Σ-Helfer, Whitelists, Invarianten, Kennzahlen | Laden, Zeit-/Dienstwagen-Filter, Quellenwahl, Lückenfüllung — und **Aufrufe** in den Layer |
+| **Verboten** | Session, Query, Modell-Import | eine eigene Formel. Wer hier rechnet, dupliziert den Layer |
+
+**Praktisch:** Eine Aufbereitungs-Schicht darf keine Aggregat-Formel enthalten — sie ruft `imd_typ_beitrag`, `bkw_finanz_beitrag`, `erzeugung_hinter_zaehler_kwh`, `berechne_verbrauchs_kennzahlen`. Umgekehrt darf der Layer keine Session sehen. Fällt bei einem Umbau auf, dass eine Schicht rechnen *möchte*, ist das der Hinweis auf einen fehlenden Helfer im Layer — nicht die Erlaubnis, ihn dort nachzubauen.
 
 ## Datei-Allowlists bewachen die Datei, nicht die Frage (Lehre WP-η, 2026-07-27)
 
@@ -60,6 +76,8 @@ Beim Migrieren:
 ## Verbundene Konzepte
 
 - `docs/KONZEPT-BERECHNUNGS-LAYER.md` — Architektur-Detail, Submodul-Schnitt, geplante Erweiterungen
+- `docs/KONZEPT-MONATS-FAKTEN.md` — die Aufbereitungs-Schicht über der Monatszeile (ADR-002/P10): Kontrakt, Feldgruppen, Migrations-Schritte
+- `docs/ADR-002-WURZELMUSTER.md` — die Invarianten-Seite: **P10** macht die Fakten-Quelle zur Pflicht, ADR-001 hält sie von der Formel getrennt
 - `docs/archive/KONZEPT-DATENPIPELINE.md` Abschnitt 3.4 — „Zentraler Helper Pflicht"
 - `docs/archive/KONZEPT-ETAPPE-4-HA-LTS-SOT.md` — Etappe-4-Auslöser, dessen unvollständiger Riemann-Pfad-Rückbau das Berechnungs-Layer-Konzept erst nötig gemacht hat
 - `docs/KONZEPT-COUNTER-DAILY-DRIFT.md` — analoge Drift-Klasse für Counter-Felder, wird Teil des Berechnungs-Layers (`counter`-Submodul) wenn die Stelle angefasst wird

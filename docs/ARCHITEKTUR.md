@@ -244,6 +244,11 @@ eedc-homeassistant/
     │       ├── mqtt_live_history_service.py   # MQTT Live-History (v3.9.0)
     │       ├── mqtt_presets.py             # MQTT-Preset-Definitionen
     │       ├── connector_mqtt_bridge.py   # Connector→MQTT Brücke
+    │       ├── monats_fakten.py           # Lese-SoT: die EINE Aufbereitung der
+    │       │                              #   Monatszeile (ADR-002/P10)
+    │       ├── pv_monatswerte.py          # Lese-SoT: PV je Modul + Monat (P7)
+    │       ├── finanz_zeilen.py           # Eingabe-Builder der Finanz-Zeile (#326)
+    │       ├── einspeise_erloes_service.py # §51-Aggregate je Monat/Jahr
     │       ├── energie_profil_service.py   # Energieprofil: Aggregation + Rollup (v3.1.0)
     │       ├── daten_checker.py           # Datenqualitätsprüfung
     │       ├── activity_service.py        # Aktivitäts-Logging
@@ -744,6 +749,8 @@ GET /api/cockpit/pv-strings-gesamtlaufzeit/{anlage_id}   # String-Vergleich (Ges
 - Monatsdaten: Einspeisung, Netzbezug
 - InvestitionMonatsdaten: Alle Komponenten-Details
 
+Beides kommt **aufbereitet** aus `services/monats_fakten.py` (s. §7 „Lese-Schichtung"), nicht als Roh-Faltung im Endpoint — dort greifen auch die Zeitfilter. Der Umbau läuft sichtweise (S2–S6); bis dahin faltet ein Teil der Endpoints noch selbst.
+
 #### Aussichten (Prognosen)
 
 ```
@@ -1030,6 +1037,39 @@ useEffect(() => {
 ---
 
 ## 7. Services
+
+### Lese-Schichtung: von der Tabelle zur Kennzahl
+
+Zwischen den Tabellen und den auswertenden Endpoints liegen **drei** Schichten, und die Reihenfolge ist keine Geschmacksfrage — sie ist das Ergebnis von zwei Drift-Inventuren (#326 und der Inventur der Lese-Sichten vom 2026-07-31):
+
+```
+Monatsdaten · InvestitionMonatsdaten · Strompreise · TagesZusammenfassung
+        │
+        ▼   services/monats_fakten.py        ← Aufbereitung  (ADR-002/P10)
+   MonatsFakt je (jahr, monat): zaehler · erzeugung · bkw · speicher · emob ·
+   wp · sonstiges · tarif · eeg · kennzahlen · meta
+   Hier — und nur hier — greifen die Zeitfilter (aktiv · Anschaffung ·
+   Stilllegung) und der Dienstwagen-Filter. Nutzt intern pv_monatswerte.py (P7).
+        │
+        ▼   core/berechnungen/               ← Formeln       (ADR-001)
+   berechne_verbrauchs_kennzahlen · berechne_finanz_aggregat · imd_typ_beitrag ·
+   bkw_finanz_beitrag · erzeugung_hinter_zaehler_kwh …  (DB-frei, rein)
+        │
+        ▼   api/routes/…                     ← Darstellung
+   Cockpit · Aussichten · HA-Export · PDF · Community
+```
+
+**Die frühere Aufteilung — „`Monatsdaten` und `InvestitionMonatsdaten` sind die Quellen, jede Read-Site aggregiert daraus selbst" — gilt nicht mehr.** Genau sie war die Fehlerursache: der Berechnungs-Layer war fehlerfrei, aber jede Sicht faltete die Rohdaten anders, und dabei fiel jedes Mal etwas anderes weg (V2H, der Erzeuger hinter dem Zähler, der Aggregat-Fallback, der Monatstarif, der Dienstwagen-Filter). Bei einer Anlage, die nur das Anlagen-Aggregat pflegt, standen für denselben Monat 1.000 kWh und 0 kWh auf zwei Seiten derselben Anwendung.
+
+| Schicht | Darf | Darf nicht |
+| --- | --- | --- |
+| `services/monats_fakten.py` | laden, filtern, kanonisch auflösen, Layer-Helfer **rufen** | selbst rechnen (das wäre eine Formel-Duplikation) |
+| `core/berechnungen/` | rechnen | eine Session sehen |
+| `api/routes/…` | darstellen, Zeiträume wählen | `InvestitionMonatsdaten` selbst laden und falten (P10) |
+
+Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie schreiben oder prüfen die Zeilen, sie leiten nichts ab. Details: `docs/KONZEPT-MONATS-FAKTEN.md`, `docs/ADR-002-WURZELMUSTER.md` (P7 · P8 · P9 · P10), `docs/ADR-001-BERECHNUNGS-LAYER.md`.
+
+> **Migrationsstand:** Die Schicht steht seit S1 mit ihren Einheitstests; die Sichten werden in den Schritten S2–S6 nacheinander umgehängt (Reihenfolge und Beweis-Fixture je Schritt in `KONZEPT-MONATS-FAKTEN.md` §5/§10). Bis S5 ist P10 durch Regressionstests gedeckt, nicht durch einen baumweiten Wächter.
 
 ### Wetter-Service (Multi-Provider)
 
@@ -1352,6 +1392,8 @@ Beim Monatsabschluss werden zwei Schritte ausgeführt:
 **Lösung:** Alle Komponenten-Details in `InvestitionMonatsdaten`:
 - `Monatsdaten` = Nur Zählerwerte (Einspeisung, Netzbezug)
 - `InvestitionMonatsdaten` = Alle Komponenten-Details
+
+**Was diese Trennung NICHT bedeutet** (Lehre aus der Drift-Inventur 2026-07-31): dass jede Read-Site sich ihre Monatszeile selbst aus beiden Tabellen zusammenfaltet. Genau das war jahrelang der Fall und genau daraus entstanden sechs Befunde mit derselben Ursache. Die Auflösung — welcher Wert gilt, welche Lücke wird gefüllt, welche Investition zählt im Monat überhaupt — liegt seit ADR-002/P10 in `services/monats_fakten.py` (§7 „Lese-Schichtung").
 
 ### Warum Parent-Child für PV-Module?
 
