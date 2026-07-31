@@ -1,0 +1,1 @@
+const e={zustand:"geschaetzt",quelleLabel:"kWp-Anteil",hinweis:"Werte je Modul sind nicht gemessen, sondern anteilig nach kWp aus der Gesamterzeugung verteilt — Pro-String-Genauigkeit eingeschränkt. Für gemessene Werte je String braucht jedes Modul einen eigenen Erzeugungs-Sensor."};function i(n,t){return{...e,bezug:n,hinweis:t||e.hinweis}}export{i as p};

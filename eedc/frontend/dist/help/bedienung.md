@@ -186,16 +186,16 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 
 **Trend-Historie** — Jahresvergleich und saisonale Muster (beste/schlechteste Monate) über alle bisherigen Jahre. Die reine **Degradations-Prognose** (geschätzter Leistungsrückgang pro Jahr) liegt dagegen in der [Aussicht](#25-aussicht).
 
-**CO₂-Bilanz** — vermiedene Emissionen (kg) im Vergleich zu reinem Netzbezug.
+**CO₂-Bilanz** — ein eigener Block mit dem Verlauf der vermiedenen Emissionen. Das gestapelte Monats-Diagramm trennt die drei Quellen, aus denen die Ersparnis entsteht: **PV/Eigenverbrauch** (vermiedener Netzstrom), **Wärmepumpe** (vermiedene fossile Wärme) und **E-Mobilität** (vermiedener Kraftstoff); die Autarkie desselben Monats läuft als Linie mit. Über dem Diagramm stehen zwei Kennwerte, die sich bewusst auf **verschiedene Zeiträume** beziehen:
 
-**Social-Media-Textvorlage** — über das Teilen-Symbol (↗) im Kopf erzeugst du einen kopierfertigen Text für Social-Media-Posts:
+- **CO₂ eingespart** — die Summe des **gewählten Jahres**; sie ändert sich, wenn du das Jahr wechselst.
+- **CO₂ kumuliert** — die **gesamte Historie** seit Inbetriebnahme; sie bleibt beim Jahreswechsel stehen. Der Kennwert sagt das auch dazu.
 
-1. **Monat/Jahr wählen** (Standard: letzter verfügbarer Monat)
-2. **Variante wählen** — *Kompakt* (Twitter/X, mit Hashtags) oder *Ausführlich* (Facebook-Gruppen/Foren, mit Emojis)
-3. **Vorschau** wird sofort angezeigt
-4. **Kopieren** in die Zwischenablage
+Wie bei jedem Block lässt sich der Verlauf über ⤢ auf **Vollbild** stellen und dort zwischen Diagramm und **Tabelle** umschalten (mit CSV-Export).
 
-Der Text enthält automatisch Anlagenleistung (kWp), Ausrichtung, Bundesland, Erzeugung, Autarkie, Eigenverbrauchsquote, den Prognose-Vergleich (wenn vorhanden), vorhandene Komponenten (Speicher, Wärmepumpe, E-Auto), CO₂-Einsparung und Netto-Ertrag.
+> **Nicht zu verwechseln mit der CO₂-Amortisation** unter **Auswertungen → CO₂** (§4.4). Diese Sicht hier beantwortet „**wann** habe ich wie viel gespart" — Zeitverlauf, nach Quelle getrennt. Die Amortisation beantwortet „**wann ist die Herstellungs-CO₂ meiner Komponenten wieder eingespielt**" (Lebensdauer) und rechnet deshalb immer über die gesamte Historie, nie über ein einzelnes Jahr.
+
+> **Entfallen: die Social-Media-Textvorlage.** Bis Version 3 konntest du über ein Teilen-Symbol im Kopf des Cockpits einen kopierfertigen Text für Social-Media-Posts erzeugen. Mit der neuen Oberfläche (v4) ist diese Funktion weggefallen; dieser Abschnitt hat sie bis Juli 2026 weiter beschrieben. Nicht gemeint ist das **Teilen mit der Community** — das gibt es unverändert, siehe [5. Community](#5-community).
 
 **Kennzahl-Tooltips** — jede Kennzahl zeigt bei Hover/Tipp Formel, eingesetzte Zahlen und Ergebnis. Bei ROI- und Amortisations-Werten kommt eine **„Sicht"-Zeile** hinzu, die die Bezugsbasis klärt (pro Investition vs. gesamt, Jahres-ROI vs. kumuliert, IST vs. Prognose) — eedc zeigt bewusst mehrere ROI-Sichten parallel.
 
@@ -449,10 +449,15 @@ Die Vergleichs- und Bewertungsfläche für mehrere PV-Prognosequellen — vier Q
 
 ### 4.4 CO₂
 
-- **Vermiedene Emissionen** (kg CO₂)
-- **Berechnung:** Eigenverbrauch × CO₂-Faktor des Strommix
-- **Zeitreihe** der Einsparung
-- **Äquivalente** (z. B. „entspricht X km Autofahren")
+- **Vermiedene Emissionen** (kg CO₂) — als Kennwert, als Monats-Diagramm und in anschaulichen **Äquivalenten** (Bäume, Auto-Kilometer, Kurzstreckenflüge)
+- **CO₂-Amortisation:** die kumulierte Einsparung gegen die **graue Herstellungs-Last** deiner Komponenten — inklusive des Punktes, ab dem sich beides ausgleicht
+- **Berechnungsgrundlage:** Methodik und Ø-Werte, standardmäßig eingeklappt
+
+**Was genau als „gespart" zählt.** Gespart ist, was du **selbst verbraucht** hast: jede eigene Kilowattstunde, die Netzstrom ersetzt, vermeidet den deutschen Strommix (380 g CO₂/kWh). **Eingespeister Strom zählt hier nicht mit** — er verdrängt Netzstrom beim Abnehmer, nicht bei dir. Dazu kommen die beiden anderen Quellen: die **Wärmepumpe** (vermiedene fossile Wärme abzüglich ihres Stroms) und die **E-Mobilität** (vermiedener Kraftstoff abzüglich der Netzladung).
+
+> **Eine Zahl, überall dieselbe.** Diese Seite, der Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt) und der CO₂-Sensor in Home Assistant nennen seit Juli 2026 denselben Wert. Vorher rechnete diese Seite auf der **Erzeugung** statt auf dem Eigenverbrauch und ließ Wärmepumpe und E-Mobilität weg — sie lag dadurch zu hoch. Wenn deine CO₂-Zahl hier einmalig kleiner geworden ist, ist das die Korrektur; deine Anlage hat sich nicht verschlechtert.
+
+> **Der Jahr-Filter wirkt nicht überall gleich.** Das Monats-Diagramm und der Kennwert „CO₂ eingespart" folgen dem gewählten Jahr. Die **Amortisation** rechnet immer über die **gesamte Historie** — die graue Herstellungs-Last ist einmalig angefallen, ein Vergleich mit nur einem Jahr wäre irreführend. Der Block sagt das sichtbar dazu, sobald ein Einzeljahr gewählt ist.
 
 ### 4.5 Tabelle (Werte-Werkbank)
 
@@ -467,6 +472,8 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 - **CSV-Export** des sichtbaren Inhalts (alle Zeilen, eingeblendete Spalten)
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
+
+> **Die Spalte „CO₂-Einsparung (PV)"** zeigt bewusst nur den **PV-Anteil** (Eigenverbrauch × Strommix) — für Monate **und** Tage, damit sich Tageszeilen zum Monat aufaddieren. Wärmepumpe und E-Mobilität fehlen darin: ihre Bezugsgrößen (erzeugte Wärme, gefahrene Kilometer) erfasst eedc nur monatlich. Die **vollständige** Bilanz steht unter **Auswertungen → CO₂** (§4.4) und im Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt).
 
 ---
 
@@ -560,7 +567,8 @@ Die neue Oberfläche ordnet Vertrautes neu. Diese Tabelle zeigt, wo frühere Ber
 | **Infothek** (eigener Tab) | **Einstellungen → Infothek** |
 | **Sensor-Zuordnung / MQTT-Inbound** (Assistenten) | **Einstellungen → Datenquellen** (eine Fläche) |
 | **Einstellungen-Dropdown** | **Einstellungen** als Kachel-Raster |
+| **Social-Media-Textvorlage** (Teilen-Symbol ↗ im Cockpit-Kopf) | **entfällt ersatzlos.** Mit v4 war sie nicht mehr erreichbar, seit Juli 2026 ist sie auch im Programm zurückgebaut. Das **Teilen mit der Community** ist eine andere Funktion und bleibt (siehe [5. Community](#5-community)). |
 
 ---
 
-*Letzte Aktualisierung: 2026-07-25 (v4.0)*
+*Letzte Aktualisierung: 2026-07-31 (v4.0)*

@@ -55,12 +55,17 @@ und zum Verständnis der Datenflüsse.
 - `Monatsdaten.batterie_*` - Nutze `InvestitionMonatsdaten` (Speicher)
 - `Monatsdaten.pv_erzeugung_kwh` - **kein Schreibziel** für neuen Code (Pro-Modul-Werte gehören in `InvestitionMonatsdaten`) und seit 2026-07-29 auch **keine allgemeine Lesequelle** mehr: das Feld trägt den manuell erfassten oder importierten **PV-Gesamtwert** eines Monats und ist **ausschließlich Eingang** des Read-time-SoT `core/berechnungen/pv_verteilung.py` (`resolve_pv_je_modul`). Der füllt damit die Lücken der Module ohne eigenen Wert und kennzeichnet sie als gerechnet. Wer nur einen Gesamt-Sensor hat, pflegt weiterhin ausschließlich hier. Jede einzelne Berechnung liest die Pro-Modul-Schicht bzw. deren Summe — nie das Feld selbst. Ladepfad: `services/pv_monatswerte.py`.
 
+> **Seit 2026-07-31 ist die Lesequelle nicht mehr `lade_pv_je_monat`, sondern eine Schicht darüber:** `services/monats_fakten.py::lade_monats_fakten` (ADR-002/**P10**, [Konzept](KONZEPT-MONATS-FAKTEN.md)). Sie liefert die **ganze** Monatszeile kanonisch aufgelöst — die PV ist darin ein Feld (`erzeugung.pv_module_kwh` bzw. `erzeugung.pv_kwh`), daneben stehen Zähler, Speicher, E-Mobilität, Wärmepumpe, Sonstiges, Tarif, §51 und die Verbrauchs-Kennzahlen. Sie **ruft** `lade_pv_je_monat` (die P7-Regel bleibt unverändert), wendet aber zusätzlich **einmal** alle Zeitfilter (`aktiv` · Anschaffung · Stilllegung) und den Dienstwagen-Filter an. Wer eine abgeleitete Monatsgröße auswertet, nimmt sie von dort; `lade_pv_je_monat` direkt zu rufen bleibt richtig, wo **nur** die Pro-Modul-PV gebraucht wird (String-Vergleich, PV-Diagnose). Ausgenommen sind Schreib-, Import- und Checker-Pfade — die Schicht ist reines Lesen.
+>
+> Die Migration läuft sichtweise (`KONZEPT-MONATS-FAKTEN.md` §10): umgehängt sind **Aussichten**, **Jahresbericht-PDF** und der **Investitions-ROI** (S2). Der baumweite Wächter wird mit S5 scharf gestellt.
+
 > **Achtung, ein Name für zwei Größen:** `pv_erzeugung_kwh` bezeichnet **drei verschiedene Dinge**, je nachdem, wo es steht — die **DB-Spalte** `Monatsdaten.pv_erzeugung_kwh` (manuelles Gesamt-Aggregat, s. o.), den **Schlüssel in `InvestitionMonatsdaten.verbrauch_daten`** (Erzeugung *dieses einen* Moduls) und das **Response-Feld** von `/monatsdaten/aggregiert` (PV-Module **+** Balkonkraftwerk). Der Identifier bleibt bewusst unverändert — er ist zugleich MQTT-Topic-Segment, CSV-Spaltenname und Backup-Feld. Siehe [Glossar](GLOSSAR.md#energie--bilanzen).
 
 ### Schicht 2: Berechnungslogik
 
 | Datei | Funktionen | Beschreibung |
 |-------|-----------|-------------|
+| `services/monats_fakten.py` | `lade_monats_fakten()`, `finanz_zeile_eingabe()`, `kennzahlen_aus_fakten()` | **Eingabe-Aufbereitung, keine Formel** (ADR-002/P10): löst die Monatszeile einmal auf und ruft die SoT-Helfer. Vorschaltet jeder aggregierenden Lese-Sicht |
 | `core/calculations.py` | `berechne_monatskennzahlen()`, `berechne_speicher_einsparung()`, `berechne_eauto_einsparung()`, `berechne_waermepumpe_einsparung()`, `berechne_roi()`, `berechne_ust_eigenverbrauch()` | Reine Berechnungsfunktionen ohne DB-Zugriff |
 | `api/routes/cockpit.py` | 6 Endpoints | Aggregation aller Daten für Dashboard |
 | `api/routes/aussichten.py` | 4 Endpoints | Prognosen und Finanzberechnungen |
@@ -77,7 +82,7 @@ Die API-Endpoints sind unverändert; die **Sicht** (Spalte „Wo in v4") folgt d
 |-------|-------------|----------------------|
 | [Cockpit → Monat/Jahr](HANDBUCH_BEDIENUNG.md#2-cockpit--die-zeit-achse) | `GET /api/cockpit/uebersicht/{id}?jahr=` | Autarkie, EV-Quote, Netto-Ertrag, Rendite, CO2 |
 | [Auswertungen → Prognose](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-ist) | `GET /api/cockpit/prognose-vs-ist/{id}?jahr=` | Performance Ratio pro Monat |
-| [Auswertungen → CO₂](HANDBUCH_BEDIENUNG.md#44-co) | `GET /api/cockpit/nachhaltigkeit/{id}` | CO2-Zeitreihe, Äquivalente |
+| [Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt) · [Auswertungen → CO₂](HANDBUCH_BEDIENUNG.md#4-auswertungen--die-wie-achse) (§4.4) | `GET /api/cockpit/nachhaltigkeit/{id}` | CO2-Zeitreihe (Block „CO₂-Bilanz"), Äquivalente, Amortisation — **die eine CO₂-Quelle beider Sichten** ([§3.8](#38-co2-bilanz)) |
 | [Komponenten](HANDBUCH_BEDIENUNG.md#3-komponenten--die-was-achse) (je Typ) | `GET /api/cockpit/komponenten-zeitreihe/{id}` | Speicher-Effizienz, WP-JAZ, E-Auto PV-Anteil |
 | [Komponenten → PV-Anlage](HANDBUCH_BEDIENUNG.md#32-pv-anlage) | `GET /api/cockpit/pv-strings/{id}?jahr=` | SOLL vs IST pro String |
 | [Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi) | `GET /api/investitionen/roi/{id}` | ROI%, Amortisation pro System |
@@ -158,8 +163,16 @@ Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisever
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
 EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
-CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (nur PV/BKW; s. u.)
+CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
 ```
+
+> **⚠ Die CO₂-Zeile dieser Funktion ist NICHT der Kanon.** `berechne_monatskennzahlen`
+> trägt noch die vor DI-2 gültige Formel (Erzeugung statt Eigenverbrauch, ohne WP und
+> E-Mobilität). Sie wird ausschließlich von `GET /api/monatsdaten/{id}` als
+> `kennzahlen.co2_einsparung_kg` ausgeliefert und dort **von keiner Sicht gelesen**
+> (gemessen 2026-07-31: das Feld existiert im Client-Typ `MonatsKennzahlen`, es gibt
+> keinen Leser). Sie bewegt also keine angezeigte Zahl — sie steht hier, damit niemand
+> sie für die gültige Definition hält. Der Kanon ist **§3.8**.
 
 **§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
@@ -340,7 +353,7 @@ Strom_Kosten        = (Ladung_gesamt - Ladung_PV) * Wallbox_Preis / 100
 E-Mob-Ersparnis     = Benzin_Kosten - Strom_Kosten
 ```
 
-**Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten fließen als kalkulatorische Ausgaben in `sonstige_ausgaben_gesamt`.
+**Hinweis:** Dienstliche E-Autos/Wallboxen (`ist_dienstlich = true`) werden NICHT in die E-Mob-Ersparnis eingerechnet. Deren Ladekosten fließen als kalkulatorische Ausgaben in `sonstige_ausgaben_gesamt` — Formel und Begründung stehen in §3.10 „Sonstige Positionen" unter **Dienstliche Ladekosten** — der PV-Anteil zählt dort zum **Netzbezugspreis**, nicht zur Einspeisevergütung.
 
 > **G20-2 — Aggregat bei mehreren E-Autos = Σ der Einzel-Fahrzeuge:** Die Gesamt-E-Mob-Ersparnis wird als **Summe der pro Fahrzeug** gerechneten Ersparnisse gebildet — jedes E-Auto mit seinem **eigenen** Vergleichsverbrauch (L/100 km) und Benzinpreis. Sie ist NICHT ein Einmal-Lauf über die Gesamt-Kilometer mit dem Parametersatz des ersten Fahrzeugs (das überschätzte die Ersparnis, sobald zwei E-Autos unterschiedliche Vergleichsverbräuche hatten). Bei genau **einem** E-Auto ist das Ergebnis unverändert. Die Per-Fahrzeug-Zeilen (T-Konto) rechneten schon immer je Fahrzeug korrekt; nur das aggregierte Cockpit-Feld ist jetzt symmetrisch dazu.
 
@@ -661,6 +674,57 @@ USt_Eigenverbrauch   = Eigenverbrauch * Selbstkosten_pro_kWh * USt_Satz / 100
 ### 3.8 CO2-Bilanz
 
 **Endpoint:** `GET /api/cockpit/nachhaltigkeit/{anlage_id}`
+**Sichten:** Cockpit → Jahr/Gesamt, Block „CO₂-Bilanz" (seit 2026-07-31) ·
+Auswertungen → CO₂, Blöcke „CO₂-Bilanz & Wirkung" und „CO₂-Amortisation" (seit 2026-07-31).
+
+#### Eine Definition — wer sie bildet und wer sie liest
+
+| Rolle | Ort |
+| --- | --- |
+| **Bildet** die Zahl (einzige erlaubte Stelle) | `core/calculations.py::berechne_co2_bilanz` (ADR-001, DI-2) |
+| **Liefert** sie je Monat aus | `GET /api/cockpit/nachhaltigkeit/{id}` (`co2_pv_kg` · `co2_wp_kg` · `co2_emob_kg` · `co2_gesamt_kg` · `co2_kumuliert_kg`) |
+| **Zeigt** sie | Cockpit → Jahr (`v4/JahrCo2Chart.tsx`) · Auswertungen → CO₂ (`v4/AuswertungenCo2V4.tsx`, über `useAuswertungBasis().co2`) · HA-Sensor „CO₂ Einsparung" · PDF-Jahresbericht · WP-Dashboard |
+| **Rechnet nicht** | der Client. `CO2_FAKTOR_KG_KWH` darf dort nur noch *angezeigt* werden (`× 1000` → g/kWh); gewächtert von `npm run check:co2-roh` (Baseline 0) |
+
+> **Warum das ausgeschrieben dasteht (N-21, 2026-07-31).** Bis dahin standen im Produkt
+> **drei** CO₂-Zahlen für denselben Monat: die kanonische im Cockpit — und zwei
+> Überlebende der DI-2-Ablösung, die `Erzeugung × 0,38` rechneten, also auch der
+> **eingespeisten** kWh die volle Netzstrom-Vermeidung gutschrieben und weder
+> Wärmepumpe noch E-Mobilität kannten (`pages/auswertung/types.ts` im Client,
+> `services/energie_profil/tage_werte.py` im Backend — ein Spiegelpaar, Monatstabelle
+> und Tagestabelle). Beide sind auf den Kanon umgestellt. Das war **keine
+> Definitionsfrage, sondern eine unvollendete Migration.**
+
+> **Jahres-Scope:** Der Endpoint kennt **kein** `?jahr=` und liefert die gesamte Historie —
+> der Jahresfilter sitzt in der Sicht (`v4/JahrCo2Chart.tsx::baueJahrCo2ChartDaten` bzw.
+> `v4/AuswertungenCo2V4.tsx::baueCo2Monatsreihe`) und greift auf die ganze Monatszeile,
+> nicht auf einzelne Serien. **Nicht jahresgebunden** ist
+> `co2_kumuliert_kg`: eine Lebensdauer-Größe, die deshalb als eigener Kennwert („CO₂ kumuliert")
+> steht und **nicht** als Linie im Jahres-Chart — eine kumulierte Kurve, die im Januar auf halber
+> Höhe beginnt, erklärt sich nicht selbst. Aus demselben Grund rechnet die
+> **CO₂-Amortisation** (Auswertungen → CO₂, Block ②) immer gegen `co2_kumuliert_kg` der
+> gesamten Historie, auch wenn ein Einzeljahr gefiltert ist — sichtbar gekennzeichnet.
+
+#### Der Tageswert trägt nur den PV-Anteil
+
+Die Spalte **„CO₂-Einsparung (PV)"** der Werte-Tabelle (Auswertungen → Tabelle,
+Monats- **und** Tages-Granularität) zeigt bewusst nur `co2_pv_kg`:
+
+```
+CO2-Einsparung (PV) = Eigenverbrauch * 0.38
+```
+
+**Warum nicht die volle Bilanz:** WP-**Wärme** und E-Mobilitäts-**Kilometer** sind
+Monatsgrößen (`InvestitionMonatsdaten`). Stündlich liegt von der Wärmepumpe nur die
+Stromaufnahme vor (`TagesEnergieProfil.waermepumpe_kw`) — ohne Wärmemenge ist die
+WP-Ersparnis nicht bestimmbar, und eine allein aus dem Stromverbrauch gebildete
+Komponente wäre rein negativ. Eine Spalte, die im Monat drei Quellen und am Tag eine
+addiert, wäre über die Granularitäten nicht summierbar.
+
+> **Folge, die nicht stillschweigend bleiben darf: Σ Tage ≠ CO₂-Monatswert**, sobald die
+> Anlage eine Wärmepumpe oder ein E-Auto hat. Die Differenz ist genau
+> `max(0, CO2_WP) + max(0, CO2_E-Mob)`. Die vollständige Bilanz zeigen Cockpit → Jahr
+> und Auswertungen → CO₂.
 
 #### Monatliche CO2-Berechnung
 
@@ -822,8 +886,25 @@ Sonstige_Netto    = Erträge - Ausgaben
 **Dienstliche Ladekosten:**
 Bei `ist_dienstlich == true` (E-Auto/Wallbox) werden Ladekosten als kalkulatorische Ausgaben verbucht:
 ```
-Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Einspeisevergütung
+Dienstlich_Ladekosten = Netz_kWh * Wallbox_Preis + PV_kWh * Netzbezugspreis
 ```
+
+> **Warum der PV-Anteil zum Netzbezugspreis zählt, nicht zur Einspeisevergütung (seit 2026-07-31).** Die Formel stand bis dahin andersherum, und die beiden für sich plausiblen Halbschritte gingen zusammen nicht auf: Der Eigenverbrauch ändert sich durch das Dienstwagen-Flag **nicht** — energetisch ist die Ladung Eigenverbrauch hinter dem Zähler —, also schreibt die EV-Ersparnis (`Eigenverbrauch × Netzbezugspreis`) die dienstlich geladenen kWh voll gut. Der Abzug zog dagegen nur die Einspeisevergütung ab. Netto blieben **+22 ct je verschenkter kWh** Gewinn stehen (bei 30/8 ct). Die *entgangene Einspeisevergütung* braucht gar keinen Buchungssatz: sie steckt bereits in der niedrigeren **gemessenen** Einspeisung. Was einen braucht, ist die zurückzunehmende EV-Gutschrift — und die steht zum Netzbezugspreis.
+>
+> Gemessen (PV 1.000 · Einspeisung 400 · Netzbezug 100 · 30/8 ct · 200 kWh PV in den Wagen):
+>
+> | Fall | Eigenverbrauch | Netto-Ertrag |
+> | --- | ---: | ---: |
+> | gar kein Auto (200 kWh eingespeist) | 400 kWh | 168,00 € |
+> | Privatwagen | 600 kWh | 212,00 € |
+> | Dienstwagen — bis 2026-07-31 | 600 kWh | 196,00 € |
+> | **Dienstwagen — seither** | **600 kWh (unverändert)** | **152,00 €** |
+>
+> **Die Energiebilanz bleibt unangetastet** — Eigenverbrauchs-kWh, Eigenverbrauchsquote und Autarkie ändern sich durch diesen Posten nicht. Korrigiert wurde ausschließlich die Bewertung in Euro.
+>
+> **Netzanteil:** Wallbox-Stromvertrag, wenn vorhanden, sonst Anlagentarif — jeweils der Monats-Flexpreis vor dem Stammdaten-Arbeitspreis (P8). Die Aussichten nahmen dafür bis 2026-07-31 den allgemeinen Arbeitspreis, das Cockpit den Wallbox-Preis; Kanon ist das Cockpit.
+>
+> **SoT:** `core/berechnungen/dienstliche_ladekosten.py` (ADR-001). Alle drei Sichten — Cockpit/Übersicht, Aussichten/Finanz-Prognose und der HA-Sensor `netto_ertrag_euro` — rufen ihn; der HA-Export zog die Kosten bis 2026-07-31 **gar nicht** ab und stand damit über der Kachel, auf die er sich bezieht.
 
 ---
 

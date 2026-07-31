@@ -1,11 +1,329 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.4)
+> **Stand:** Juli 2026 (v4.0.5)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)
+
+> **Der Schwerpunkt dieser Version:** An mehreren Stellen nannten zwei Sichten dieselbe Größe und
+> zeigten trotzdem zwei verschiedene Zahlen — beim Netto-Ertrag, bei der CO₂-Einsparung, beim
+> Strompreis eines vergangenen Monats. Diese Version zieht sie zusammen. **Einige Zahlen bewegen
+> sich dadurch sichtbar.** Bei jedem Punkt steht, wen es betrifft und in welche Richtung es geht.
+
+### Strompreise: jeder Monat rechnet mit dem Tarif, der damals galt
+
+**Betrifft dich das?** Wenn du deinen Tarif **nach** dem Import deiner Historie angelegt hast oder
+seither eine **Preiserhöhung** eingetragen hast.
+
+An mehreren Stellen nahm eedc bisher den **heute** gültigen Tarif und rechnete damit auch die
+Vergangenheit. Eine Preiserhöhung schrieb so rückwirkend die ganze Historie um. Jetzt gilt für jeden
+Monat der Tarif, der in diesem Monat gültig war.
+
+Was du davon merkst:
+
+- **Monatsbericht sowie die Wärmepumpen- und Speicher-Karte** rechnen je Monat. Die
+  Wärmepumpen-Karte hat bisher die Energien der gesamten Laufzeit summiert und einmal mit dem
+  heutigen Preis multipliziert.
+- **Cockpit → Tag** nutzt jetzt denselben abgerechneten Monatsdurchschnitt wie Monat und Jahr. Wer
+  einen dynamischen Tarif hat und diesen Durchschnitt pflegt, sah dort bisher den Referenzpreis —
+  die Summe der Tage passte nicht zum Monat, und „Ø-Preis Netz" nannte je Ebene eine andere Zahl.
+- **Auswertungen → Aussichten** bewerten die zurückliegenden Monate ebenfalls mit dem damaligen
+  Preis, die entgangene Einspeisevergütung eingeschlossen. Die Hochrechnung nach vorn bleibt beim
+  heutigen Tarif — dort ist er richtig.
+
+Und damit der Fall gar nicht erst entsteht:
+
+- **Beim ersten Tarif einer Anlage** schlägt „Gültig ab" jetzt das **Inbetriebnahme-Datum** vor statt
+  „heute" — so macht es der Einrichtungs-Assistent seit jeher. Ab dem zweiten Tarif bleibt „heute"
+  richtig, das ist ein Tarifwechsel. Am Feld steht der Hinweis, dass frühere Monate mit dieser
+  Vorbelegung rechnen.
+- **Der Daten-Checker meldet Monate ohne Tarif-Abdeckung** — mit ihrer Anzahl und dem Hinweis, dass
+  eedc dort mit der 30-ct-Vorbelegung rechnet. Die Prüfung gab es schon, sie hing aber am
+  Inbetriebnahme-Datum der Anlage und wurde bei frischen Installationen still übersprungen.
+- **Das Feld „Ø Strompreis" im Monatsabschluss** richtete sich nach deiner **heutigen** Vertragsart.
+  Wer von dynamisch auf fest gewechselt ist, kam an den abgerechneten Durchschnitt eines Altmonats
+  nicht mehr heran. Jetzt entscheidet der Monat, um den es geht.
+
+**Was du tun musst: nichts.** Deine gepflegte Tarif-Historie wirkt ab jetzt rückwärts mit.
+
+### Speicher: der Börsenpreis ist kein Ladepreis
+
+**Betrifft dich das?** Wenn du einen Speicher hast, ihn aus dem Netz lädst und **keinen Preis-Sensor**
+dafür zugeordnet hast.
+
+Die Kachel **„Batterieladung Netz"** zeigte in einem gemeldeten Fall 6,4 ct/kWh, während der Betreiber
+28,67 ct zahlt. Ohne zugeordneten Preis-Sensor sprang der **EPEX-Börsenpreis** als Stundenpreis ein —
+gedacht als Näherung für dynamische Tarife, bei einem Festpreis aber schlicht der falsche Preis. Er
+gewann zudem gegen den von Hand eingetragenen Wert.
+
+Der Börsenpreis kommt jetzt nur noch bei **ausdrücklich dynamischem Tarif** zum Einsatz; sonst rechnet
+eedc mit deinem gepflegten Ladepreis und ersatzweise mit dem Arbeitspreis. **Deine ausgewiesenen
+Ladekosten steigen dadurch auf den Wert, den du tatsächlich zahlst.**
+
+**Wenn du einen dynamischen Tarif hast**, trag ihn unter **Einstellungen → Strompreise** mit der
+Vertragsart **„Dynamischer Tarif"** ein — sonst rechnet eedc ab jetzt mit deinem
+Referenz-Arbeitspreis statt mit dem Börsenpreis. Das Feld ist ein optionales Auswahlfeld und bei
+vielen Anlagen leer.
+
+Dazu passend: Die Kachel behauptete pauschal „aus der Strompreis-Mitschrift", auch wo der Preis aus
+dem Tarif kam. Sie nennt jetzt die tatsächliche Herkunft — und sagt „Herkunft unbekannt", statt zu
+raten.
+
+### Der Strompreis-Sensor lässt sich wieder zuordnen
+
+**Betrifft dich das?** Wenn du einen **dynamischen Tarif** (Tibber, aWATTar, EPEX) hast und den
+stündlichen Preis aus Home Assistant mitschreiben willst.
+
+Bis v3 gab es dafür im Sensor-Mapping-Wizard einen Slot „Strompreis". Mit der neuen Oberfläche ist er
+ersatzlos entfallen — das Backend las ihn weiter, neu zuordnen ging aber nicht mehr. Unter
+**Einstellungen → Datenquellen** steht er jetzt wieder zur Verfügung. **Bestehende Zuordnungen aus v3
+waren nie betroffen** und tauchen mit dem Slot wieder auf.
+
+Drei Dinge dazu:
+
+- Er erscheint **nur bei dynamischem Tarif**. Bei einem Festpreis gehört der Preis in die Stammdaten;
+  ein angebotener Preis-Slot verleitet sonst dazu, sich einen Konstanten-Sensor zu bauen.
+- Er ist **nur über Home Assistant** belegbar. Über MQTT kommt kein Preis herein, und ein erwartetes
+  Topic, das niemand bedient, hätte in der Abdeckungs-Prüfung eine Lücke gemeldet, die sich nicht
+  schließen lässt.
+- Er speist die **Strompreis-Mitschrift**: den Ø-Bezugspreis und den Ø-Ladepreis der
+  Speicher-Netzladung.
+
+### Netto-Ertrag: vier Sichten, eine Zahl
+
+**Betrifft dich das?** Zwei Gruppen: Anlagen mit **Regelbesteuerung** und Anlagen mit einem
+**Balkonkraftwerk**.
+
+**Bei Regelbesteuerung** zogen bisher nur das Cockpit und die Jahres-Prognose der Aussichten die
+Umsatzsteuer auf den Eigenverbrauch ab. **Jahresbericht-PDF, der HA-Sensor `netto_ertrag_euro` und die
+bisherigen Erträge der Aussichten** taten es nicht — diese drei Zahlen lagen um den vollen USt-Betrag
+zu hoch (im Testfall 68,40 € auf 212 €). Sie **sinken** jetzt auf den Wert, den das Cockpit schon
+vorher nannte. Weil die bisherigen Erträge den ROI-Fortschritt tragen, bewegen sich Amortisation und
+Break-Even-Jahr mit.
+
+**Beim Balkonkraftwerk** hatte jede der vier Sichten die beiden Erfassungswege anders kombiniert: die
+Aussichten zählten den Eigenverbrauch doppelt, Cockpit und PDF ließen ein Balkonkraftwerk **ohne**
+erfasste Erzeugung ganz weg, und der HA-Sensor trug die BKW-Ersparnis gar nicht. Jetzt entscheidet
+eedc je Gerät und Monat, welcher der beiden Werte trägt. **Die Richtung hängt an deiner Erfassung:**
+wer Erzeugung **und** Eigenverbrauch pflegt, sieht in den Aussichten weniger — die Doppelzählung ist
+weg; wer nur den Eigenverbrauch pflegt, sieht in Cockpit, PDF und HA-Sensor mehr.
+
+**Anlagen ohne Regelbesteuerung und ohne Balkonkraftwerk sind unverändert.**
+
+### Dienstwagen: der Firmenwagen bringt der Anlage keinen Gewinn mehr
+
+**Betrifft dich das?** Nur wenn du ein **E-Auto als Firmenwagen** oder eine Wallbox mit
+**„ausschließlich dienstliches Laden"** erfasst hast. Alle anderen Anlagen sind unberührt.
+
+Wer PV-Strom in einen Firmenwagen lud, bekam ihn bisher als eingesparten Netzbezug gutgeschrieben
+(30 ct) und zahlte nur die entgangene Einspeisevergütung dagegen (8 ct) — netto 22 ct Gewinn je
+Kilowattstunde, die das Haus nie verbraucht hat. In der Beispielrechnung stand die Anlage **mit**
+Dienstwagen damit über derselben Anlage ohne Auto: verschenkter Strom war profitabler als verkaufter.
+
+Der dienstlich geladene Strom wird jetzt mit dem Netzbezugspreis gegengerechnet. Im gemessenen
+Beispiel fällt der Netto-Ertrag von 196 € auf 152 €; die Anlage ohne Auto liegt mit 168 € dazwischen,
+wo sie hingehört. Die Erstattung deines Arbeitgebers steht weiterhin als Ertrag daneben — erst der
+**Saldo** ist dein Vorteil.
+
+**Eigenverbrauch, Eigenverbrauchsquote und Autarkie bleiben exakt gleich.** Der Strom ist hinter dem
+Zähler verbraucht worden, daran rüttelt niemand — korrigiert ist ausschließlich die Bewertung in Euro.
+
+Dieselbe Korrektur greift an drei weiteren Stellen, die das Kennzeichen bisher übersahen:
+
+- **Komponenten → E-Auto und → Wallbox** wiesen den Dienstwagen voll als private Ersparnis aus — in
+  seiner eigenen Karte und, weil die Ladung anteilig verteilt wird, zusätzlich in der Ersparnis der
+  privaten Fahrzeuge und jeder Wallbox. Das Fahrzeug bleibt mit allen gemessenen Größen sichtbar
+  (Kilometer, Ladung, PV-Anteil); nur seine Euro- und CO₂-Ersparnis steht auf 0 und ist als dienstlich
+  gekennzeichnet.
+- **Der HA-Sensor `netto_ertrag_euro`** zog die dienstlichen Ladekosten gar nicht ab, während Cockpit
+  und Aussichten es taten. Er nennt jetzt dieselbe Zahl wie die Kachel daneben.
+- **Ein dienstliches Fahrzeug, das ins Haus entlädt** (V2H), zählte in den HA-Sensoren als privater
+  Eigenverbrauch.
+
+**Was du tun musst: nichts.** Die Korrektur wirkt beim nächsten Aufruf.
+
+### CO₂: eine neue Sicht — und die alte Zahl daneben war zu hoch
+
+**Neu in Cockpit → Jahr/Gesamt: der Block „CO₂-Bilanz".** Er zeigt Monat für Monat, wie viel CO₂ deine
+Anlage vermieden hat, getrennt nach den drei Quellen: **PV-Eigenverbrauch** (vermiedener Netzstrom),
+**Wärmepumpe** (vermiedene fossile Wärme) und **E-Mobilität** (vermiedener Kraftstoff). Die Autarkie
+desselben Monats läuft als Linie mit. Wie jeder Block lässt er sich auf Vollbild stellen, dort auf
+**Tabelle** umschalten und als CSV exportieren. Darüber stehen zwei Kennwerte: „CO₂ eingespart" ist
+die Summe des **gewählten Jahres**, „CO₂ kumuliert" die **gesamte Historie**.
+
+**Nicht zu verwechseln mit der CO₂-Amortisation** unter Auswertungen → CO₂: die beantwortet, wann die
+Herstellungs-CO₂ deiner Komponenten wieder eingespielt ist, und rechnet immer über die ganze Laufzeit.
+Der neue Block beantwortet, wann du wie viel gespart hast.
+
+**Und damit zur Korrektur — sie betrifft jede Anlage:** *Gespart ist, was du selbst verbraucht hast.*
+Eingespeister Strom spart bei dir kein CO₂; er verdrängt Netzstrom beim Abnehmer, nicht in deinem
+Haus. Die Seite **Auswertungen → CO₂** und die Spalte **CO₂-Einsparung** in **Auswertungen → Tabelle**
+rechneten bisher auf der **gesamten Erzeugung** und schrieben damit auch der eingespeisten
+Kilowattstunde die volle Vermeidung gut.
+
+**Die Zahl dort wird kleiner** — bei einer Anlage, die etwa die Hälfte einspeist, ungefähr um die
+Hälfte. **Das ist eine Korrektur, keine Verschlechterung: deine Anlage hat nicht weniger gespart, sie
+hat nie so viel gespart, wie dort stand.** Gleichzeitig kommt etwas dazu: **Wärmepumpe und
+E-Mobilität zählen auf dieser Seite jetzt mit** — sie fehlten dort bisher ganz. Wer beides hat, sieht
+die Differenz entsprechend kleiner ausfallen.
+
+**Was sich nicht ändert:** Eigenverbrauch, Autarkie, alle Euro-Werte — und der **CO₂-Sensor in Home
+Assistant**. Der rechnete schon vorher richtig; er war es, von dem die Seite abwich. Auswertungen →
+CO₂, der neue Block in Cockpit → Jahr und der HA-Sensor nennen ab jetzt dieselbe Zahl. Vorher waren es
+drei.
+
+**Eine Feinheit für die Tabelle:** Die Spalte heißt jetzt **„CO₂-Einsparung (PV)"** und zeigt bewusst
+nur den PV-Anteil — für Monate wie für Tage, damit sich Tageszeilen zum Monat aufaddieren. Erzeugte
+Wärme und gefahrene Kilometer erfasst eedc nur monatlich; sie lassen sich nicht auf einzelne Tage
+herunterbrechen. Die vollständige Bilanz steht auf der CO₂-Seite.
+
+### Balkonkraftwerk mit Akku: ein Weg, und der steht jetzt in der App
+
+**Betrifft dich das?** Nur wenn dein Balkonkraftwerk einen Akku hat (Zendure, Anker SOLIX und
+Verwandte).
+
+**Der Akku gehört als eigene Komponente erfasst:** neu anlegen, Typ **Speicher**, und unter **Gehört
+zu** das Balkonkraftwerk wählen. Dann hat er alles, was ein Hausspeicher auch hat — Live-Leistung,
+Ladestand, einen eigenen Knoten im Energiefluss sowie Tages- und Stundenwerte. **Das ging immer schon
+so**; neu ist, dass eedc es sagt und dass der **Einrichtungs-Assistent** diese Zuordnung jetzt
+ebenfalls anbietet. Bisher fand man sie nur, wenn man später eine Komponente bearbeitete.
+
+**Die beiden Felder „Speicher Ladung/Entladung" direkt am Balkonkraftwerk bleiben, lassen sich aber
+nicht mehr auf einen Sensor legen.** Sie kannten nur einen Monatswert; für Tagesverlauf und
+Energiefluss hat das nie gereicht. **Gepflegte Werte bleiben vollständig erhalten** und im
+Monatsabschluss wie im CSV-Import weiter änderbar — es verschwindet nichts. Wer sie benutzt hat,
+findet im **Daten-Checker** einen Hinweis mit dem Umstellungsweg.
+
+**Ein Fehler bei MQTT ist behoben** — die einzige Stelle, an der eine Zahl falsch war: Wer den
+BKW-**Eigenverbrauch** per MQTT veröffentlicht hat, bekam ihn auf denselben Kanal gelegt wie die
+**Erzeugung**. In der „Heute"-Kachel stand dann der Eigenverbrauch statt der Erzeugung — aus 10 kWh
+Erzeugung wurden 4 kWh. Ab dem Update steht die Kachel wieder richtig. **Über Home Assistant
+zugeordnete Sensoren waren nie betroffen.**
+
+**Zum Feld „Eigenverbrauch" beim Balkonkraftwerk, damit niemand sucht:** dafür gibt es weiterhin nur
+den Monatswert, keinen Tages- oder Live-Wert. Das ist Absicht — normalerweise leitet eedc den
+BKW-Eigenverbrauch aus Erzeugung minus Einspeisung ab; das Feld ist die optionale Verfeinerung für
+den Fall, dass jemand ihn direkt misst.
+
+### Balkonkraftwerk: die Komponenten-Karte zeigt endlich eine Ersparnis
+
+**Betrifft dich das?** Wenn du ein Balkonkraftwerk hast und — wie vorgesehen — nur seine **Erzeugung**
+erfasst.
+
+Unter **Komponenten → Balkonkraftwerk** standen dort bisher **0 € Ersparnis**: die Auswertung
+bewertete ausschließlich einen separat gepflegten Eigenverbrauch, und den schreibt weder der Sensor-
+noch der MQTT-Pfad. Das Cockpit hat dieselbe Energie auf der Nachbarseite immer bewertet. Jetzt leitet
+die Karte den Eigenverbrauch aus der Hausbilanz ab — bei 1.000 kWh Erzeugung und 400 kWh Einspeisung
+sind das **180 € statt 0 €**. Steht neben dem Balkonkraftwerk eine Dachanlage, bekommt es seinen
+**Anteil** an der Erzeugung: an einem Hauszähler ist nicht messbar, welches Modul die verbrauchte
+Kilowattstunde geliefert hat.
+
+**Und sie rechnet mit deinem Strompreis.** Dieselbe Karte hat bisher fest mit **30 ct/kWh** gerechnet,
+unabhängig vom gepflegten Tarif und über die ganze Historie mit einem einzigen Preis. Jetzt gilt für
+jeden Monat der Tarif, der damals galt. Wer über oder unter 30 ct liegt, sieht die Ersparnis
+entsprechend steigen oder fallen.
+
+**Ohne Einspeisezähler sagt die Karte das jetzt.** Ein Balkonkraftwerk ohne Hauszähler-Erfassung
+(typisch in der Mietwohnung) hat keine Bilanz, aus der sich ein Eigenverbrauch ableiten ließe. Statt
+still **0 €** zu zeigen, weist die Karte diese Monate als **nicht bewertbar** aus. Die Erzeugung steht
+unverändert da — nur ihre Bewertung fehlt, und das ist jetzt sichtbar statt geraten.
+
+### PV als ein Gesamtwert gepflegt: Aussichten, Jahresbericht, ROI und Prognose stimmen wieder
+
+**Betrifft dich das?** Wenn du deine PV-Erzeugung als **einen Gesamtwert** pflegst — von Hand
+eingetragen oder über einen einzigen PV-Sensor importiert — statt je Modul.
+
+Mehrere Sichten haben diesen Gesamtwert nicht gefunden und mit 0 kWh weitergerechnet:
+
+- **Auswertungen → Aussichten, das Jahresbericht-PDF und der ROI je Investition** zeigten viel zu
+  kleine Zahlen, weil die Eigenverbrauchs-Ersparnis dort ganz fehlte. Im Beispiel einer Anlage mit
+  1.000 kWh Erzeugung standen **32 € statt 212 €**; der Jahresbericht wies sogar **0 kWh Erzeugung**
+  aus und der String-Vergleich eine Abweichung von −100 % gegen die Prognose.
+- **Auswertungen → Prognose vs. IST** zeigte für jeden Monat ein IST von **0 kWh** und −100 %
+  Abweichung — das sah aus wie ein Totalausfall der Anlage.
+- **Die Langfrist-Prognose** fiel ohne gefundene Messwerte auf ihren Standardwert zurück und sagte
+  für eine Anlage, die real die Hälfte des PVGIS-Solls liefert, die **volle** Prognose voraus (im
+  Testfall 6.000 statt 3.000 kWh im Jahr).
+
+Alle diese Sichten rechnen jetzt mit den tatsächlichen Werten. **Sichtbar steigen** ROI-Fortschritt,
+Amortisation, Break-Even-Jahr und der gesamte Jahresbericht. **Cockpit und HA-Sensoren waren nie
+betroffen**; wer seine Module einzeln misst, sieht keine Änderung.
+
+**Ein Fall geht nach unten:** Wer **mehrere Module** hat, davon nur einen **Teil** misst und **keinen**
+Gesamtwert pflegt, sah in Aussichten und PDF bisher diese Teilsumme als Erzeugung der ganzen Anlage —
+im Testfall 92 € statt 32 €. Cockpit und HA-Sensoren haben diesen Fall nie mitgerechnet; die vier
+Sichten sagen jetzt dasselbe. **Abhilfe:** entweder alle Module messen oder den Gesamtwert pflegen —
+dann zählt wieder alles.
+
+### Community-Vergleich: teilnehmen können jetzt alle, und die geteilte Autarkie stimmt
+
+**Anlagen mit einem PV-Gesamtwert konnten bisher gar nicht teilen.** eedc fand für sie keine Erzeugung,
+schickte eine leere Monatsliste los und bekam vom Community-Server „Keine Monatsdaten vorhanden. Bitte
+zuerst Daten erfassen." zurück — auch dann, wenn jahrelang gepflegte Werte vorlagen. Beim automatischen
+Teilen nach dem Monatsabschluss passierte dasselbe stillschweigend. Dieselbe Ursache wie im Punkt
+darüber; jetzt sind diese Anlagen im Benchmark dabei.
+
+**Die geteilte Autarkie stimmt wieder mit dem Bildschirm überein.** Wer ein E-Auto mit **V2H**
+(Entladung ins Haus) oder einen **weiteren Erzeuger** hinter dem Hauszähler (BHKW, Mini-KWK) hat, hat
+eine **zu niedrige** Autarkie übertragen — im Beispiel 85,7 % statt 90,9 % —, während das Cockpit auf
+derselben Seite die richtige Zahl nannte. Und ein als **dienstlich** markiertes Fahrzeug zählte im
+Benchmark voll mit. Wer weder BHKW noch V2H noch Dienstwagen hat, sieht keine Änderung.
+
+**Bereits übertragene Monate behalten ihre alten Werte**, bis deine Anlage das nächste Mal teilt —
+manuell über „Teilen" oder automatisch nach dem nächsten Monatsabschluss. Dann wird der komplette
+Verlauf überschrieben.
+
+### HA-Sensoren: stillgelegte Komponenten behalten ihre Historie
+
+**Betrifft dich das?** Wenn du eine Komponente (Speicher, Wärmepumpe, E-Auto …) mit einem
+**Stilllegungsdatum** versehen hast.
+
+Die Sensoren in Home Assistant hatten deren Vergangenheit vergessen: Eigenverbrauch, Autarkie,
+Netto-Ertrag und die Speicher-Sensoren rechneten so, als hätte es die Komponente nie gegeben. Das
+Cockpit hat dieselbe Anlage immer richtig gerechnet — die Sensoren behaupteten also etwas anderes als
+der Bildschirm daneben. **Sichtbar ändern sich diese Sensorwerte.** Ein stillgelegtes Gerät zählt
+jetzt bis zu seinem Stilllegungsdatum in der Historie mit, danach nicht mehr; deaktivierte Komponenten
+(„aktiv: nein") bleiben wie bisher überall ausgeblendet.
+
+### Daten-Checker, Import und Datenquellen: weniger Fehlalarm, keine falschen Werte
+
+- **Preis- und Zählfelder sind keine kWh-Sensoren.** Der Daten-Checker meldete „kWh-Sensor(en) ohne
+  Summen-Spalte" für den Ø Ladepreis eines Speichers. Ein Preis-Sensor hat naturgemäß keine
+  Summen-Spalte — die Meldung schickte auf eine Fehlersuche, die es nicht gab. Ebenso betroffen waren
+  gefahrene Kilometer, Ladevorgänge, die Kosten für externes Laden, der Ladestand und die
+  Warmwasser-Temperatur.
+- **Der Ladetarif-Hinweis war nicht abstellbar.** Bei vorhandenem E-Auto fragte der Checker nach einem
+  Strompreis mit der Verwendung „E-Auto" — die es gar nicht gibt (es gibt allgemein, Wärmepumpe und
+  Wallbox). Der Hinweis stand damit dauerhaft bei jedem E-Auto-Besitzer, ohne dass irgendeine Eingabe
+  ihn hätte abstellen können. Gemeint war der **Wallbox-Tarif**: die Prüfung zielt jetzt dorthin,
+  löst auch bei einer Wallbox ohne E-Auto aus und sagt, womit eedc ohne ihn rechnet.
+- **Aus der Home-Assistant-Statistik werden nur noch Zählerfelder gelesen.** Die Monatswert-Pfade
+  nahmen jedes zugeordnete Feld als Zählerstand und bildeten „Höchststand minus Tiefststand". Für
+  einen Zähler ist das richtig, für ein Preis-Feld ist es die Monats-Spreizung — der Monatsabschluss
+  bot diesen Wert sogar mit höherer Konfidenz an als den korrekt gerechneten Vorschlag, und der
+  Statistik-Import schrieb ihn dauerhaft weg.
+- **Ein frisch eingerichteter Connector überschreibt keinen Monatswert mehr.** Beginnt seine Messung
+  mitten im Monat, deckt sie nur einen Teilzeitraum ab — sie überschrieb den gespeicherten Monatswert
+  trotzdem und zeigte damit still zu wenig. Im laufenden Monat überschreibt der Connector jetzt nur
+  noch, wenn seine Messung am Monatsanfang beginnt; sonst füllt er nur, was ohnehin fehlt. Betroffen
+  ist genau der Monat, in dem die Messung anfängt — ab dem Folgemonat rechnet sich alles von selbst.
+
+### Die Social-Media-Textvorlage entfällt
+
+Der kopierfertige Monatstext für Beiträge in Foren oder sozialen Netzwerken („PV-Bilanz Juni 2026 …")
+hing am Teilen-Symbol im Kopf des alten Cockpits. Mit der neuen Oberfläche in v4.0.0 ist dieses Symbol
+weggefallen und die Funktion war seither nicht mehr erreichbar; jetzt ist sie auch im Programm
+entfernt, und das Handbuch beschreibt sie nicht länger.
+
+**Das Teilen mit der Community bleibt vollständig erhalten** — anonymen Benchmark teilen, im Browser
+öffnen, wieder zurückziehen: unverändert. Das sind zwei verschiedene Dinge, die beide „teilen" heißen.
+**Was du tun musst: nichts.**
 
 ---
 
@@ -2161,7 +2479,7 @@ Alle drei greifen jetzt auf den gleichen Anschaffungsdatum-Filter zu, der seit v
 
 ### Hintergrund: Drift-Audit-Initiative
 
-Der WP-Ersparnis-Bug aus #178 (v3.25.7) hat eine systematische Inventur aller Investitions-Berechnungen ausgelöst. 16 Drifts in 6 Domänen identifiziert. v3.25.8 schließt davon 5 Bündel; eine weitere Folge-Version macht den Rest (vereinheitlichte Reader für die JSON-Felder im `verbrauch_daten`-Speicher mit Datenbank-Migration). Die komplette Inventur liegt im Repo unter `docs/drafts/INVENTUR-DRIFT-AUDIT.md`.
+Der WP-Ersparnis-Bug aus #178 (v3.25.7) hat eine systematische Inventur aller Investitions-Berechnungen ausgelöst. 16 Drifts in 6 Domänen identifiziert. v3.25.8 schließt davon 5 Bündel; eine weitere Folge-Version macht den Rest (vereinheitlichte Reader für die JSON-Felder im `verbrauch_daten`-Speicher mit Datenbank-Migration). Was davon bei dir ankommt, steht in den Einträgen zu v3.25.8 und den Folgeversionen — eine gesonderte Inventur-Datei gibt es im Repository nicht (der frühere Verweis auf `docs/drafts/…` ging ins Leere: Entwurfs-Notizen sind nicht Teil der Auslieferung).
 
 ### Wärmepumpe: Ersparnis-Anzeige in allen vier Tabs konsistent *(v3.25.7)*
 

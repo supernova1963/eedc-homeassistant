@@ -88,9 +88,29 @@
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
 |------|-------|---------|-----------|-------------|
 | `pv_erzeugung_kwh` | PV-Erzeugung | kWh | Kumulativ oder Tagessensor | Erzeugte Energie dieses PV-Strings/Moduls. Muss ≥ 0 sein. Alternativ: automatische kWp-Verteilung aus dem Gesamt-PV-Sensor. |
-| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional. |
-| `speicher_ladung_kwh` | Speicher Ladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Optional. |
-| `speicher_entladung_kwh` | Speicher Entladung | kWh | Kumulativ oder Tagessensor | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Optional. |
+| `eigenverbrauch_kwh` | Eigenverbrauch | kWh | Kumulativ oder Tagessensor | Nur BKW: Direkt im Haushalt verbrauchte BKW-Erzeugung. Optional, **nur Monatswert** (siehe Kasten). |
+| `speicher_ladung_kwh` | Speicher Ladung | kWh | **kein Sensor** — nur manuell/Import | Nur BKW mit Speicher: Ins BKW-Akku geladene Energie. Altbestand, siehe Kasten. |
+| `speicher_entladung_kwh` | Speicher Entladung | kWh | **kein Sensor** — nur manuell/Import | Nur BKW mit Speicher: Aus BKW-Akku entladene Energie. Altbestand, siehe Kasten. |
+
+> **Ein Balkonkraftwerk mit Akku: den Akku als eigene Speicher-Investition erfassen.**
+> Neu anlegen, Typ *Speicher*, und unter **Gehört zu** das Balkonkraftwerk wählen. Nur so
+> hat der Akku Live-Leistung, Ladestand, einen Knoten im Energiefluss und Tages-/
+> Stundenwerte — er nutzt dann die normalen Speicher-Felder `ladung_kwh` /
+> `entladung_kwh`, und deren Sensoren ordnest du bei dieser Speicher-Investition zu.
+>
+> Die beiden BKW-eigenen Felder `speicher_ladung_kwh`/`speicher_entladung_kwh` sind der
+> **frühere zweite Weg**. Sie bleiben erfassbar — bereits gepflegte Werte bleiben
+> sichtbar und im Monatsabschluss wie im CSV-Import änderbar —, kennen aber nur einen
+> **Monatswert** und lassen sich deshalb **nicht mehr als Sensor- oder MQTT-Quelle
+> zuordnen**. Wer sie gepflegt hat, bekommt im Daten-Checker einen Hinweis mit dem
+> Umstellungsweg; es geht dabei nichts verloren.
+>
+> **`eigenverbrauch_kwh`** bleibt zuordenbar, liefert aber ebenfalls **nur** den
+> Monatswert (HA-Langzeitstatistik oder von Hand/per Import). Es ist kein Bilanz-Zähler,
+> sondern eine optionale Verfeinerung — normalerweise leitet eedc den BKW-Eigenverbrauch
+> aus Erzeugung − Einspeisung ab. Wer es per **MQTT** publiziert hat: das Topic wurde bis
+> v4.0.4 fälschlich auf den Erzeugungs-Kanal gelegt und konnte die „Heute"-PV-Kachel
+> überschreiben; das ist behoben.
 
 > **`pv_erzeugung_kwh` steht für drei verschiedene Größen — je nachdem, wo es auftaucht.** Hier in der
 > Monatserfassung ist es die Erzeugung **dieses einen** Moduls. Daneben gibt es den monatlichen
@@ -111,9 +131,11 @@
 | MQTT-Topic | Feld |
 |------------|------|
 | `eedc/.../energy/inv/{inv_id}_{name}/pv_erzeugung_kwh` | `pv_erzeugung_kwh` |
-| `eedc/.../energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | `eigenverbrauch_kwh` (nur BKW) |
-| `eedc/.../energy/inv/{inv_id}_{name}/speicher_ladung_kwh` | `speicher_ladung_kwh` (nur BKW) |
-| `eedc/.../energy/inv/{inv_id}_{name}/speicher_entladung_kwh` | `speicher_entladung_kwh` (nur BKW) |
+| `eedc/.../energy/inv/{inv_id}_{name}/eigenverbrauch_kwh` | `eigenverbrauch_kwh` (nur BKW) — wird für Tages-/Live-Werte **nicht** ausgewertet, s. Kasten oben |
+
+Für den **Akku eines Balkonkraftwerks** gibt es hier bewusst kein Topic: er wird als
+eigene Speicher-Investition erfasst und publiziert unter deren ID auf
+`…/energy/inv/{speicher_id}_{name}/ladung_kwh` bzw. `…/entladung_kwh` (siehe Speicher).
 
 ---
 
@@ -400,7 +422,11 @@ Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Diese
 
 Zusätzlich erscheinen **pro Komponente** (E-Auto, Wärmepumpe, Speicher, Wallbox …) eigene Sensoren (z. B. `e_auto_pv_anteil_prozent`, `wp_cop_durchschnitt`, `wp_betriebsstunden`) — jeweils unter einem eigenen HA-Gerät.
 
-> **Wertsemantik `netto_ertrag_euro` (ab v4.0):** Der Sensor trägt den kanonischen Netto-Ertrag aus dem Finanz-Aggregat-SoT: **Einspeiseerlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto** (Erträge − Ausgaben aus den Sonstigen Positionen, inklusive der auf **Anlage-Ebene** erfassten Positionen ab v4.0). Der Sensor-Name und die Einheit sind unverändert; nur der **Wert** enthält jetzt die Sonstigen Positionen. Achtung: die frühere Kurzformel „Einspeiseerlös + EV-Ersparnis" (noch als statisches `formel`-Label in der Definition) beschreibt nur zwei der vier Bausteine — maßgeblich ist die Summe in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit). Der USt-Eigenverbrauchs-Abzug (nur bei Regelbesteuerung) bleibt eine Cockpit-Zusatzlogik und ist im Export-Sensor **nicht** enthalten.
+> **Wertsemantik `netto_ertrag_euro` (ab v4.0):** Der Sensor trägt den kanonischen Netto-Ertrag aus dem Finanz-Aggregat-SoT: **Einspeiseerlös + EV-Ersparnis + BKW-Ersparnis + Sonstige-Netto** (Erträge − Ausgaben aus den Sonstigen Positionen, inklusive der auf **Anlage-Ebene** erfassten Positionen ab v4.0). Der Sensor-Name und die Einheit sind unverändert; nur der **Wert** enthält jetzt die Sonstigen Positionen. Achtung: die frühere Kurzformel „Einspeiseerlös + EV-Ersparnis" (noch als statisches `formel`-Label in der Definition) beschreibt nur zwei der vier Bausteine — maßgeblich ist die Summe in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit). Der **USt-Eigenverbrauchs-Abzug** (nur bei Regelbesteuerung) ist seit der #326-Inventur ebenfalls enthalten — `ha_export.py` rechnet `netto_ertrag -= ust_eigenverbrauch` über denselben SoT-Helper wie Cockpit und Aussichten. (Bis dahin stand hier das Gegenteil: „bleibt eine Cockpit-Zusatzlogik und ist im Export-Sensor nicht enthalten." Das war der Stand vor v4.0; die Zeile ist beim Fix nicht mitgezogen worden.)
+>
+> **Ergänzung 2026-07-31 (N-13):** Bei Anlagen mit einem **Dienstwagen** (E-Auto oder Wallbox mit „ausschließlich dienstliches Laden") zieht der Sensor jetzt auch die **dienstlichen Ladekosten** ab — bis dahin tat er das als einzige der drei Sichten nicht und stand damit über der Cockpit-Kachel, auf die er sich bezieht. Für diese Anlagen fällt der Wert einmalig; alle anderen sind unberührt. Formel und Begründung: [Berechnungen §3.10](BERECHNUNGEN.md).
+>
+> **Damit nennt der Sensor alle vier Abzüge/Bausteine der Cockpit-Kachel** — Einspeiseerlös, EV-Ersparnis, BKW-Ersparnis, Sonstige-Netto, abzüglich Netzbezugskosten, USt-Eigenverbrauch und dienstlicher Ladekosten. Er ist mit ihr deckungsgleich.
 
 > **Wertsemantik `co2_ersparnis_kg` (ab v4.0, DI-2/DI-2-B):** Der Sensor trägt die **volle CO₂-Bilanz** aus dem kanonischen Helfer `berechne_co2_bilanz` — **PV-Eigenverbrauch** (inkl. der Erzeugung von BKW/sonstigen Erzeugern hinter dem Zähler) **+ Wärmepumpe** (vermiedenes Gas mit η_gas = 0,90 minus WP-Strom-CO₂) **+ E-Mobilität** (vermiedener Benziner minus Netzladung). Damit ist er **exakt deckungsgleich** mit der Cockpit-CO₂-Kachel (früher rechnete der Sensor nur `PV-Eigenverbrauch × Strom-Faktor`). Ein Brennstoff-Erzeuger (BHKW) zählt zwar in EV/Autarkie, erzeugt aber bewusst **keine** CO₂-Gutschrift. Herleitung: [Berechnungen §3.8](BERECHNUNGEN.md#38-co2-bilanz).
 
