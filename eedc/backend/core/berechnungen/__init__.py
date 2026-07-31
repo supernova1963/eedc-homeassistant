@@ -57,7 +57,9 @@ from backend.core.berechnungen.datenquellen import (
     merge_datenquellen,
 )
 from backend.core.berechnungen.bkw_finanz import (
+    BkwEigenverbrauchsAnteil,
     BkwFinanzBeitrag,
+    bkw_eigenverbrauch_anteil,
     bkw_finanz_beitrag,
 )
 from backend.core.berechnungen.einspeise_erloes import (
@@ -217,6 +219,8 @@ __all__ = [
     "merge_datenquellen",
     "BkwFinanzBeitrag",
     "bkw_finanz_beitrag",
+    "BkwEigenverbrauchsAnteil",
+    "bkw_eigenverbrauch_anteil",
     "EinspeiseErloes",
     "einspeise_erloes_euro",
     "FinanzAggregat",

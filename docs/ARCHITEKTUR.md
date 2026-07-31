@@ -1069,7 +1069,7 @@ Monatsdaten · InvestitionMonatsdaten · Strompreise · TagesZusammenfassung
 
 Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie schreiben oder prüfen die Zeilen, sie leiten nichts ab. Details: `docs/KONZEPT-MONATS-FAKTEN.md`, `docs/ADR-002-WURZELMUSTER.md` (P7 · P8 · P9 · P10), `docs/ADR-001-BERECHNUNGS-LAYER.md`.
 
-> **Migrationsstand:** Die Schicht steht seit S1 mit ihren Einheitstests; die Sichten werden in den Schritten S2–S6 nacheinander umgehängt (Reihenfolge und Beweis-Fixture je Schritt in `KONZEPT-MONATS-FAKTEN.md` §5/§10). **S2, S3 und S4 sind gebaut.** Bis S5 ist P10 durch Regressionstests gedeckt, nicht durch einen baumweiten Wächter.
+> **Migrationsstand:** Die Schicht steht seit S1 mit ihren Einheitstests; die Sichten werden in den Schritten S2–S6 nacheinander umgehängt (Reihenfolge und Beweis-Fixture je Schritt in `KONZEPT-MONATS-FAKTEN.md` §5/§10). **S2 bis S5 sind gebaut. Seit S5 ist P10 baumweit gewächtert** (`test_wurzelmuster_konformitaet.py::test_p10_*`), nicht mehr nur durch Regressionstests gedeckt.
 >
 > **Umgehängt (S2, 2026-07-31):** `api/routes/aussichten.py` (Finanz-Prognose), `services/pdf/builders/jahresbericht.py` und `api/routes/investitionen/crud.py` (ROI-Dashboard) — Befund **F-5**. Der PDF-Builder lädt `InvestitionMonatsdaten` seither gar nicht mehr selbst.
 >
@@ -1077,7 +1077,17 @@ Ausgenommen von P10 sind die **Schreib-, Import- und Checker-Pfade** — sie sch
 >
 > **Umgehängt (S4, 2026-07-31):** `cockpit/uebersicht.py` und `ha_export.py::calculate_anlage_sensors` — der Schritt **ohne** Inventur-Befund. Beide rechneten richtig und wurden trotzdem umgehängt, weil eine selbst faltende Sicht die nächste Drift-Quelle ist. Der Beweis ist entsprechend negativ (Vier-Wege- und CO₂-Symmetrie unverändert grün, Antworten gegen die Demo-DB wertgleich), plus eine **gemessene** Ladezeit: Cockpit/Übersicht 83 → 60 ms, HA-Export 133 → 115 ms (warm, Median über 10 Läufe) — ein Tarif-Cache statt zwei, §51 als Bulk-Query, vier IMD-Queries weniger. Drei Ränder haben sich dabei doch bewegt, alle drei waren vorher unsichtbar: der Jahres-Filter des Cockpits erfasste `lade_pv_je_monat` nicht, der HA-Export blendete stillgelegte Komponenten rückwirkend aus (`aktiv_jetzt()` als Vorfilter über der Historie) und filterte den Dienstwagen nicht aus der V2H-Bilanz.
 >
-> **Noch selbst faltend:** `investitionen/dashboards.py` (S5), `services/community_service.py` (S6) sowie die beiden Performance-Ratio-Pfade in `aussichten.py` (Langfrist/Trend — gleiche Klasse, in der Inventur nicht erfasst). **Teilmigriert — die Monatsgrößen kommen aus der Schicht, die *per-Investition*-Aggregate nicht** (die Schicht hat dafür keine Sicht): `aussichten.py` (WP-Alternativkosten, E-Auto je Fahrzeug, dienstliche Ladekosten) und `ha_export.py` (dieselben Alternativkosten-Pfade plus `calculate_investition_sensors`, die per-Investition-Sensorschleife). Vor dem Scharfstellen des Wächters in S5 ist zu entscheiden: Schicht erweitern oder klassifizierte Ausnahme.
+> **Umgehängt (S5, 2026-07-31):** `investitionen/dashboards.py` — Befunde **F-4** (BKW-Wirtschaftlichkeit: 30-ct-Query-Default und bewerteter *gemessener* Eigenverbrauch → im Normalfall 0 € im Hub) und **F-7** (die Datei enthielt keinen einzigen `ist_dienstlich`-Aufruf). Dazu zwei Funde derselben F-5-Klasse, die vor dem Scharfstellen fallen mussten, weil der Wächter sie sonst gemeldet hätte: die beiden Performance-Ratio-Pfade in `aussichten.py` (**N-1**) und der Prognose-vs-IST-Vergleich in `cockpit/prognose.py` (**N-14**, in der Inventur nicht erhoben). Neue Layer-Formel `bkw_eigenverbrauch_anteil` (`core/berechnungen/bkw_finanz.py`): der Eigenverbrauchs-Anteil **eines** Balkonkraftwerks, anteilig an der Erzeugung hinter dem Zähler — und ausdrücklich *nicht bewertbar*, wo mangels Zählerzeile keine Hausbilanz existiert (P4).
+>
+> **Der Wächter ist funktions-granular**, nicht modul-granular: eine ausgenommene Datei ist nicht als Ganzes freigestellt, eine *neue* Funktion darin ist ein Treffer. Seine Ausnahmen stehen in drei getrennten Kategorien, weil zwei davon Schuld sind und nicht Freispruch:
+>
+> | Kategorie | Bedeutung | Stand nach S5 |
+> | --- | --- | --- |
+> | `P10_SCHREIBEN_IMPORT_CHECKER` | schreibt, prüft oder reicht durch — leitet nichts ab; auf Dauer legitim | 17 Funktionen |
+> | `P10_PER_INVESTITION` | Aggregat **je Gerät**; die Schicht hat dafür keine Sicht (Register **N-2**) | 11 Funktionen |
+> | `P10_NOCH_NICHT_MIGRIERT` | faltet eine **anlagenweite** Monatszeile selbst — die Klasse, die P10 schließen soll | **5**, mit Obergrenze im Test |
+>
+> **Offene Schuld, benannt statt versteckt:** `services/community_service.py` (S6), `monatsdaten.py::list_monatsdaten_aggregiert` (**N-15**), `aktueller_monat.py` (Monatsbericht + Vorjahr, **N-16**) und `cockpit/komponenten.py::get_komponenten_zeitreihe` (**N-17**). Die letzten drei standen nie im Bauplan und sind beim Scharfstellen aufgefallen. `test_p10_offene_schuld_waechst_nicht` hält die Zahl bei 5 — sie darf nur sinken. **Teilmigriert** bleiben `aussichten.py` und `ha_export.py`: ihre Monatsgrößen kommen aus der Schicht, die per-Investition-Aggregate (WP-Alternativkosten, E-Auto je Fahrzeug, dienstliche Ladekosten, `calculate_investition_sensors`) falten sie weiter selbst.
 
 ### Wetter-Service (Multi-Provider)
 

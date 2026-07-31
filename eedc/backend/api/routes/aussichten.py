@@ -491,20 +491,23 @@ async def get_langfrist_prognose(
     gesamt_pr = 1.0
 
     if alle_pv_ids:
-        result = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(alle_pv_ids)
-            )
-        )
-        historische_daten = result.scalars().all()
+        # Historisches IST aus den Monats-Fakten (ADR-002/**P10**). Bis
+        # 2026-07-31 summierte diese Stelle roh
+        # `verbrauch_daten["pv_erzeugung_kwh"]` über die PV-/BKW-IMD-Zeilen —
+        # dieselbe Klasse wie F-5, hier nachträglich erhoben (Register N-1).
+        # Ohne Pro-Modul-IMD blieb `monatliche_erzeugung` leer, `gesamt_pr`
+        # fiel auf den Default **1,0** zurück, und die Langfrist-Prognose
+        # rechnete damit ungebremst mit dem PVGIS-SOLL statt mit der
+        # gemessenen Anlagen-Güte.
+        fakten = await lade_monats_fakten(db, anlage_id)
 
-        # Aggregiere pro Jahr/Monat über alle PV-Quellen
-        monatliche_erzeugung = {}  # {(jahr, monat): kwh}
-        for hd in historische_daten:
-            key = (hd.jahr, hd.monat)
-            ist_kwh = hd.verbrauch_daten.get("pv_erzeugung_kwh", 0) if hd.verbrauch_daten else 0
-            if ist_kwh > 0:
-                monatliche_erzeugung[key] = monatliche_erzeugung.get(key, 0) + ist_kwh
+        # {(jahr, monat): kwh} — `pv_kwh` ist Module **und** BKW, deckungsgleich
+        # mit dem früheren `alle_pv_ids`-Filter.
+        monatliche_erzeugung = {
+            f.schluessel: f.erzeugung.pv_kwh
+            for f in fakten
+            if f.erzeugung.pv_kwh > 0
+        }
 
         for (jahr, monat), ist_kwh in monatliche_erzeugung.items():
             soll_kwh = pvgis_monatswerte.get(monat, 0)
@@ -621,17 +624,17 @@ async def get_trend_analyse(
     monats_ertraege = {}
 
     if alle_pv_ids:
-        result = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(alle_pv_ids)
-            )
-        )
-        historische_daten = result.scalars().all()
+        # Historisches IST aus den Monats-Fakten (ADR-002/**P10**) — dieselbe
+        # Begründung wie in der Langfrist-Prognose oben (Register N-1): die
+        # rohe IMD-Summe verlor die PV komplett, sobald die Erzeugung nur als
+        # Anlagen-Aggregat gepflegt war, und der Degradations-/Jahresvergleich
+        # zeigte dann leere Jahre statt der gemessenen Erträge.
+        fakten = await lade_monats_fakten(db, anlage_id)
 
-        for hd in historische_daten:
-            jahr = hd.jahr
-            monat = hd.monat
-            kwh = hd.verbrauch_daten.get("pv_erzeugung_kwh", 0) if hd.verbrauch_daten else 0
+        for fakt in fakten:
+            jahr = fakt.jahr
+            monat = fakt.monat
+            kwh = fakt.erzeugung.pv_kwh
 
             if kwh > 0:
                 if jahr not in jahres_ertraege:

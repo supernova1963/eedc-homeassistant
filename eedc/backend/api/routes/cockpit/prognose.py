@@ -11,13 +11,36 @@ from pydantic import BaseModel
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.utils.investition_filter import aktiv_im_jahr
+from backend.services.monats_fakten import lade_monats_fakten
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.api.routes.cockpit._shared import MONATSNAMEN
-from backend.core.field_definitions import get_pv_erzeugung_kwh
 
 router = APIRouter()
+
+
+async def _ist_pv_je_monat(
+    db: AsyncSession, anlage_id: int, jahr: int
+) -> dict[int, float]:
+    """Gemessene PV je Monat des Jahres — aus den Monats-Fakten (ADR-002/**P10**).
+
+    Beide Prognose-Vergleiche brauchen dieselbe IST-Achse, und bis 2026-07-31
+    hatte jeder seine eigene Kopie: eine rohe Summe über
+    ``verbrauch_daten["pv_erzeugung_kwh"]`` der PV-/BKW-IMD-Zeilen. Die liefert
+    **0**, wenn die Erzeugung nur als Anlagen-Aggregat
+    (``Monatsdaten.pv_erzeugung_kwh``) gepflegt ist — der Normalfall bei
+    manueller Pflege und beim Import mit einem einzigen Gesamt-PV-Sensor. Der
+    Vergleich stellte dort also eine Prognose gegen ein IST von 0 und wies
+    −100 % Abweichung aus (Befund-Klasse **F-5** der Drift-Inventur
+    2026-07-31, hier nachträglich erhoben — im Register **N-14**).
+
+    ``erzeugung.pv_kwh`` ist Module **und** Balkonkraftwerk, deckungsgleich mit
+    dem früheren Typ-Filter, und die P7-Auflösung füllt die Lücken der Module
+    ohne eigenen Wert aus dem Aggregat. Der Anschaffungs-/Stilllegungs-Filter
+    steckt in der Schicht (``ist_aktiv_im_monat``, monatsgenau statt
+    jahresweise wie der frühere ``aktiv_im_jahr``-Vorfilter).
+    """
+    fakten = await lade_monats_fakten(db, anlage_id, von=(jahr, 1), bis=(jahr, 12))
+    return {f.monat: f.erzeugung.pv_kwh for f in fakten if f.erzeugung.pv_kwh}
 
 
 class MonatsvergleichItem(BaseModel):
@@ -76,33 +99,7 @@ async def get_prognose_vs_ist(
     """Vergleicht PVGIS-Prognose mit tatsächlichen Monatsdaten."""
     prognose = await lade_aktive_prognose(db, anlage_id)
 
-    pv_result = await db.execute(
-        select(Investition.id)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ.in_(["pv-module", "balkonkraftwerk"]))
-        .where(aktiv_im_jahr(jahr))
-    )
-    pv_ids = [row[0] for row in pv_result.all()]
-
-    ist_pro_monat: dict[int, float] = {}
-    if pv_ids:
-        # Drift-Audit F: zusätzlich Investition laden für Anschaffungsdatum-Filter
-        inv_result = await db.execute(
-            select(Investition).where(Investition.id.in_(pv_ids))
-        )
-        inv_by_id = {i.id: i for i in inv_result.scalars().all()}
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
-            .where(InvestitionMonatsdaten.jahr == jahr)
-        )
-        for imd in imd_result.scalars().all():
-            inv = inv_by_id.get(imd.investition_id)
-            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                continue
-            data = imd.verbrauch_daten or {}
-            pv_kwh = get_pv_erzeugung_kwh(data)
-            ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
+    ist_pro_monat = await _ist_pv_je_monat(db, anlage_id, jahr)
 
     prognose_pro_monat = {}
     if prognose and prognose.monatswerte:
@@ -183,33 +180,7 @@ async def get_prognose_vergleich(
             eedc_pro_monat[monat] = eedc_pro_monat.get(monat, 0) + tz.pv_prognose_kwh
             tage_eedc_pro_monat[monat] = tage_eedc_pro_monat.get(monat, 0) + 1
 
-    pv_result = await db.execute(
-        select(Investition.id)
-        .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ.in_(["pv-module", "balkonkraftwerk"]))
-        .where(aktiv_im_jahr(jahr))
-    )
-    pv_ids = [row[0] for row in pv_result.all()]
-
-    ist_pro_monat: dict[int, float] = {}
-    if pv_ids:
-        # Drift-Audit F: zusätzlich Investition laden für Anschaffungsdatum-Filter
-        inv_result = await db.execute(
-            select(Investition).where(Investition.id.in_(pv_ids))
-        )
-        inv_by_id = {i.id: i for i in inv_result.scalars().all()}
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id.in_(pv_ids))
-            .where(InvestitionMonatsdaten.jahr == jahr)
-        )
-        for imd in imd_result.scalars().all():
-            inv = inv_by_id.get(imd.investition_id)
-            if inv and not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                continue
-            data = imd.verbrauch_daten or {}
-            pv_kwh = get_pv_erzeugung_kwh(data)
-            ist_pro_monat[imd.monat] = ist_pro_monat.get(imd.monat, 0) + pv_kwh
+    ist_pro_monat = await _ist_pv_je_monat(db, anlage_id, jahr)
 
     monatswerte = []
     eedc_summe = 0.0

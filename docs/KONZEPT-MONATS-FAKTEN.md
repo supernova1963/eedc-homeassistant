@@ -132,6 +132,33 @@ Bauform wie ADR-002/P9, aber auf der Eingabe-Ebene statt feldweise:
 
 Als neue **ADR-002/P10** eintragen, mit „gesichert durch"-Spalte.
 
+> **Gebaut mit S5 (2026-07-31) — zwei Abweichungen vom Entwurf oben, beide
+> gemessen begründet und von Gernot entschieden:**
+>
+> 1. **Funktions-granular statt modul-granular.** Eine Ausnahme auf Dateiebene
+>    hätte `dashboards.py`, `ha_export.py` und `aussichten.py` komplett
+>    freigestellt — also genau die Dateien, die der Auftrag ohnehin anfasst.
+>    Der Schlüssel ist `modul.py::funktion`; eine **neue** Funktion in einer
+>    ausgenommenen Datei ist ein Treffer.
+> 2. **Drei Ausnahme-Kategorien statt einer.** „Baseline 0 mit nur Schreib-,
+>    Import- und Checker-Ausnahmen" war **nicht erreichbar** — gemessen falteten
+>    beim Scharfstellen noch sechs Lese-Sichten selbst, davon drei
+>    (`monatsdaten.py`, `aktueller_monat.py`, `cockpit/komponenten.py`), die in
+>    §5 nie vorkamen. Sie in eine Sammel-Ausnahme zu schieben hätte den Wächter
+>    zu dem Aufräum-Paket gemacht, das ADR-002 §„noch nicht gewächtert" ablehnt.
+>    Stattdessen: `P10_SCHREIBEN_IMPORT_CHECKER` (dauerhaft legitim) ·
+>    `P10_PER_INVESTITION` (Aggregat je Gerät — die Schicht hat dafür keine
+>    Sicht, Register N-2) · `P10_NOCH_NICHT_MIGRIERT` (**anlagenweite Faltung,
+>    also die Klasse, gegen die P10 gebaut ist**) — letztere mit einer
+>    **Obergrenze im Test**, damit die Restschuld eine Zahl ist und nur fallen
+>    kann.
+>
+> Der **Tages-Pfad** (`energie_profil/views.py`, `energie_profil/tage_werte.py`)
+> baut eine `FinanzZeileEingabe` und ist trotzdem klassifizierte Ausnahme: seine
+> Mengen kommen aus `bilanz_aus_stundenrows`, `jahr`/`monat` trägt er nur für den
+> Tarif-Stichtag (P8) und §51. Ihn auf die Schicht zu ziehen wäre kein Fix,
+> sondern eine andere Zahl (§4).
+
 ## 7. Risiken, benannt
 
 1. **Zahlen bewegen sich.** Das ist der Zweck (fünf Sichten rechnen heute falsch),
@@ -188,7 +215,7 @@ alle anderen.
 | **S2** | **F-5**: Aussichten · Jahresbericht-PDF · Investitions-ROI umhängen. Vier-Wege-Symmetrie um die Achse „ohne Pro-Modul-IMD" erweitern. BERECHNUNGEN §1 nachziehen. | groß | 212,00 € statt 32,00 € in allen fünf Sichten |
 | **S3** | **F-1**: Cockpit/CO₂ + Cockpit/Social umhängen. Achse „V2H + Erzeuger hinter dem Zähler". Hartkodierte 7 l/100 km auf `vergleich_l_100km`. | mittel | CO₂/Autarkie deckungsgleich mit dem Cockpit |
 | **S4** | Cockpit/Übersicht + HA-Export nachziehen (heute korrekt → reiner Strukturschritt). **Ladezeit vorher/nachher messen.** | mittel | Vier-Wege-Symmetrie unverändert grün, Ladezeit nicht schlechter |
-| **S5** | **F-4 + F-7**: Komponenten-Dashboards umhängen (BKW-Tarif, Dienstwagen-Filter). P10-Wächter **scharf stellen**, Baseline 0 mit klassifizierten Ausnahmen. | mittel | Wächter grün, ohne Umbau rot verifiziert |
+| **S5** ✅ | **F-4 + F-7**: Komponenten-Dashboards umhängen (BKW-Tarif, Dienstwagen-Filter). P10-Wächter **scharf stellen**, Baseline 0 mit klassifizierten Ausnahmen. | mittel | Wächter grün, ohne Umbau rot verifiziert |
 | **S6** | Community-Payload — **nur** mit Datenmodell-Abgleich `eedc-community`. Optional, eigener Entscheid. | klein | beide Repos synchron |
 
 **Daneben, unabhängig und jederzeit einschiebbar:** **F-6** (Tages-CO₂ auf dem

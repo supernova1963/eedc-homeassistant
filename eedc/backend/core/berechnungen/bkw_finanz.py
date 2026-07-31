@@ -83,3 +83,85 @@ def bkw_finanz_beitrag(
         erzeugung_kwh=0.0,
         rest_eigenverbrauch_kwh=eigenverbrauch_kwh or 0.0,
     )
+
+
+@dataclass(frozen=True)
+class BkwEigenverbrauchsAnteil:
+    """Der selbst verbrauchte Anteil EINES Balkonkraftwerks in einem Monat.
+
+    ``bewertbar`` trennt „0 kWh gemessen" von „nicht ableitbar" (ADR-002/**P4**):
+    ohne Zählerzeile gibt es keine Hausbilanz, aus der ein Anteil folgen könnte.
+    Eine 0 wäre dort eine Aussage, die niemand belegen kann.
+    """
+
+    kwh: float
+    bewertbar: bool
+    quelle: str
+
+
+def bkw_eigenverbrauch_anteil(
+    *,
+    bkw_erzeugung_kwh: float | None,
+    bkw_eigenverbrauch_gemessen_kwh: float | None,
+    erzeugung_hinter_zaehler_kwh: float | None,
+    eigenverbrauch_gesamt_kwh: float | None,
+    hat_zaehlerzeile: bool,
+) -> BkwEigenverbrauchsAnteil:
+    """Was EIN Balkonkraftwerk in EINEM Monat selbst verbraucht hat.
+
+    Die Komponenten-Sicht braucht diese Zahl, die Finanz-Zeile nicht: dort geht
+    die BKW-Erzeugung in die PV-Summe ein und der Eigenverbrauch fällt als
+    Ableitung der **ganzen** Anlage an (``bkw_finanz_beitrag`` oben). Ein
+    Komponenten-Hub muss den Beitrag aber **einem Gerät** zuordnen können —
+    sonst steht dort 0 € Ersparnis, während das Cockpit dieselbe Energie sehr
+    wohl bewertet (Befund **F-4** der Drift-Inventur 2026-07-31).
+
+    Die Zuordnung ist eine Entscheidung, keine Messung, und sie ist hier
+    festgelegt statt in der Route: **anteilig an der Erzeugung hinter dem
+    Zähler.** Ein Balkonkraftwerk, das 10 % der Erzeugung liefert, trägt 10 %
+    des Eigenverbrauchs. Das ist dieselbe Annahme, die der Netzpunkt selbst
+    macht — an EINEM Zähler ist nicht unterscheidbar, welches Modul die
+    verbrauchte Kilowattstunde geliefert hat.
+
+    Args:
+        bkw_erzeugung_kwh: Erzeugung **dieses** BKW im Monat
+            (``ImdTypBeitrag.bkw_erzeugung``).
+        bkw_eigenverbrauch_gemessen_kwh: gemessener EV **dieses** BKW; trägt
+            allein, wenn die Erzeugung fehlt (die Datenlücke aus
+            ``bkw_finanz_beitrag``).
+        erzeugung_hinter_zaehler_kwh: Erzeugung der ganzen Anlage hinter dem
+            Hauszähler im Monat (``ErzeugungFakten.hinter_zaehler_kwh``).
+        eigenverbrauch_gesamt_kwh: Eigenverbrauch der ganzen Anlage im Monat
+            (``VerbrauchsKennzahlen.eigenverbrauch_kwh``).
+        hat_zaehlerzeile: ob es für den Monat eine ``Monatsdaten``-Zeile gibt.
+
+    Returns:
+        ``BkwEigenverbrauchsAnteil`` mit ``quelle`` ∈ {``"gemessen"``,
+        ``"anteilig"``, ``"nicht_bewertbar"``}.
+    """
+    erzeugung = bkw_erzeugung_kwh or 0.0
+
+    # Datenlücke: nur der Eigenverbrauch ist gepflegt. Dann ist er die Messung
+    # selbst und braucht keine Zuordnung — derselbe Ersatzträger wie in
+    # `bkw_finanz_beitrag`, damit beide Sichten dieselbe Zeile gleich lesen.
+    if erzeugung <= 0:
+        gemessen = bkw_eigenverbrauch_gemessen_kwh or 0.0
+        return BkwEigenverbrauchsAnteil(
+            kwh=gemessen, bewertbar=gemessen > 0, quelle="gemessen"
+        )
+
+    # Ohne Zählerzeile gibt es keine Einspeisung und damit keine Bilanz, aus der
+    # ein Eigenverbrauch folgen könnte. Die ganze Erzeugung als Eigenverbrauch
+    # auszuweisen wäre die P4-Verletzung, die #304 im Cockpit korrigiert hat.
+    hinter_zaehler = erzeugung_hinter_zaehler_kwh or 0.0
+    if not hat_zaehlerzeile or hinter_zaehler <= 0:
+        return BkwEigenverbrauchsAnteil(
+            kwh=0.0, bewertbar=False, quelle="nicht_bewertbar"
+        )
+
+    anteil = min(1.0, erzeugung / hinter_zaehler)
+    return BkwEigenverbrauchsAnteil(
+        kwh=max(0.0, (eigenverbrauch_gesamt_kwh or 0.0) * anteil),
+        bewertbar=True,
+        quelle="anteilig",
+    )
