@@ -399,6 +399,10 @@ async def test_n42_teilluecke_ohne_aggregat_gehoert_nicht_zu_dieser_achse(db):
     allein (400 × 0,08 = 32,00 €). Die asymmetrische Erwartung zwischen
     Pro-Modul-Sicht und Anlagen-Summe gehört zu P2-A und wird dort geprüft
     (`test_pv_strings_kwp_verteilung.py`), nicht hier.
+
+    **Auch hier bewegt sich eine Zahl** — nach unten: Aussichten und PDF nahmen
+    bis 2026-07-31 die Teilsumme (600 kWh) als Anlagenerzeugung und kamen auf
+    92,00 €. Cockpit und HA-Export haben diesen Fall nie mitgerechnet.
     """
     anlage = Anlage(anlagenname="N42-Teilluecke", leistung_kwp=10.0)
     db.add(anlage)
