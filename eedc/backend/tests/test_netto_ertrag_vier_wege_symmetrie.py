@@ -426,3 +426,115 @@ async def test_n42_teilluecke_ohne_aggregat_gehoert_nicht_zu_dieser_achse(db):
     await db.commit()
 
     _einig(await _vier_netto_ertraege(db, anlage.id), 32.0)
+
+
+# ============================================================================
+# Achse 4 — V2H und Erzeuger hinter dem Zähler (F-1, ADR-002/P10)
+# ============================================================================
+
+
+async def anlage_mit_v2h_und_bhkw(
+    db,
+    *,
+    name: str = "V2H-BHKW",
+    km: float = 0.0,
+    eauto_parameter: dict | None = None,
+) -> int:
+    """PV + BHKW hinter demselben Zähler + ein E-Auto, das ins Haus entlädt.
+
+    Die Konstellation, die Befund **F-1** sichtbar macht. Beide Zusätze wirken
+    auf DERSELBEN Größe (Eigenverbrauch), aber an verschiedenen Stellen: das
+    BHKW erhöht die Erzeugung hinter dem Zähler, V2H kommt wie eine
+    Speicher-Entladung obendrauf.
+
+    Das PV-Modul bekommt bewusst eine **eigene** Monatszeile: die Aggregat-Achse
+    (F-5) und die N42-Teillücke sind eigene Konstellationen mit eigenen Tests —
+    hier dürfen sie das Ergebnis nicht mitfärben (ADR-002/P2-A, Pflicht Nr. 4).
+    Kleinunternehmer, damit die USt-Achse die Zahl nicht überlagert.
+
+    ``km`` ist **0 by default**, und das ist keine Bequemlichkeit: die
+    Aussichten nennen als „bisherige Erträge" ``netto_ertrag + WP-Ersparnis +
+    E-Auto-Ersparnis`` — eine bewusst weitere Größe als der Netto-Ertrag der
+    anderen drei Sichten (sie trägt den ROI-Fortschritt). Mit gefahrenen
+    Kilometern verglichen der Vier-Wege-Test also zwei verschiedene Kennzahlen.
+    Die km-Variante nutzt `test_co2_autarkie_sichten_symmetrie`, wo sie
+    hingehört.
+    """
+    anlage = Anlage(anlagenname=name, leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=6,
+                       einspeisung_kwh=400.0, netzbezug_kwh=100.0))
+
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
+                     anschaffungskosten_gesamt=12000.0)
+    db.add(pv)
+    bhkw = Investition(anlage_id=anlage.id, typ="sonstiges", bezeichnung="Mini-BHKW",
+                       anschaffungsdatum=date(2024, 1, 1),
+                       anschaffungskosten_gesamt=9000.0,
+                       parameter={"kategorie": "erzeuger"})
+    db.add(bhkw)
+    eauto = Investition(anlage_id=anlage.id, typ="e-auto", bezeichnung="Kombi",
+                        anschaffungsdatum=date(2024, 1, 1),
+                        anschaffungskosten_gesamt=30000.0,
+                        parameter={"nutzt_v2h": True, **(eauto_parameter or {})})
+    db.add(eauto)
+    await db.flush()
+
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2026, monat=6,
+                                  verbrauch_daten={"pv_erzeugung_kwh": 1000.0}))
+    db.add(InvestitionMonatsdaten(investition_id=bhkw.id, jahr=2026, monat=6,
+                                  verbrauch_daten={"erzeugung_kwh": 300.0}))
+    eauto_daten: dict = {"v2h_entladung_kwh": 100.0}
+    if km > 0:
+        # Heimladung nur zusammen mit gefahrenen Kilometern: geladen ohne
+        # gefahren zu sein wäre reine Ausgabe und würde die Aussichten (die
+        # zusätzlich die E-Auto-Alternativkosten tragen) um genau diese Kosten
+        # verschieben.
+        eauto_daten.update({
+            "km_gefahren": km,
+            "ladung_kwh": 200.0,
+            "ladung_pv_kwh": 150.0,
+            "ladung_netz_kwh": 50.0,
+        })
+    db.add(InvestitionMonatsdaten(investition_id=eauto.id, jahr=2026, monat=6,
+                                  verbrauch_daten=eauto_daten))
+    await db.commit()
+    return anlage.id
+
+
+@pytest.mark.asyncio
+async def test_v2h_zaehlt_das_bhkw_nicht_in_allen_vier_sichten(db):
+    """Beide Regeln in einer Zahl — und beide in die richtige Richtung.
+
+    Die **Finanz**-Zeile rechnet mit der PV-Achse (Module + BKW), nicht mit der
+    Erzeugung hinter dem Zähler: ein Brennstoff-Erzeuger wird bewusst *nicht*
+    bewertet (v3.45.4). V2H dagegen ist eingesparter Netzbezug wie eine
+    Speicher-Entladung und zählt.
+
+    PV (Finanz-Achse)                                      = 1.000 kWh
+    Direktverbrauch = 1.000 − 400                          =   600 kWh
+    Eigenverbrauch  = 600 + 100 (V2H)                      =   700 kWh
+    ev        = 700 × 0,30                                 = 210,00 €
+    einspeise = 400 × 0,08                                 =  32,00 €
+    netto                                                  = 242,00 €
+
+    Die beiden Gegenproben sind der eigentliche Beweis: **212 €** wäre die Zahl
+    ohne V2H, **332 €** die Zahl, wenn eine Sicht das BHKW in die Bewertung
+    zöge. Genau diese Verwechslung von ``pv_kwh`` und ``hinter_zaehler_kwh``
+    IST Befund F-1.
+    """
+    anlage_id = await anlage_mit_v2h_und_bhkw(db)
+
+    werte = await _vier_netto_ertraege(db, anlage_id)
+
+    _einig(werte, 242.0)
+    for sicht, wert in werte.items():
+        assert abs(wert - 212.0) > 5.0, f"{sicht} lässt die V2H-Entladung fallen"
+        assert abs(wert - 332.0) > 5.0, f"{sicht} bewertet das BHKW mit"

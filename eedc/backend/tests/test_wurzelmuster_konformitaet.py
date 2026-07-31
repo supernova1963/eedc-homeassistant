@@ -1280,11 +1280,12 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     #          Die Felder sind deprecated (CLAUDE.md Prinzip 3); sie hier auf
     #          die Auflösung umzustellen hieße, ein totes Feld neu zu beleben.
     "backend/api/routes/monatsdaten.py::md",
-    # N110: der Endpoint hat keinen Konsumenten (Produktentscheidung
-    # „anschließen oder löschen?" offen, Backlog §P4/R8-5, Gernot 2026-07-29).
-    # Wird der Text angeschlossen, MUSS die Stelle auf den SoT — dann ist diese
-    # Zeile zu streichen, nicht zu verlängern.
-    "backend/api/routes/cockpit/social.py::md",
+    #
+    # Gestrichen mit dem S3-Umbau (2026-07-31): `cockpit/social.py::md` war als
+    # N110 freigestellt, weil der Endpoint keinen Konsumenten hat — mit der
+    # Auflage „wird der Text angeschlossen, MUSS die Stelle auf den SoT". Die
+    # Sicht liest die Monatszeile jetzt über `lade_monats_fakten` (ADR-002/P10);
+    # der Rohzugriff existiert nicht mehr, die Zeile ist damit gegenstandslos.
 })
 
 
@@ -1314,7 +1315,9 @@ def _p7_verstoesse() -> list[str]:
 def test_p7_pv_aggregat_nur_als_eingang_der_aufloesung():
     """Das PV-Anlagen-Aggregat wird nirgends direkt verrechnet.
 
-    Baseline 0 (26 Zugriffe im Baum, 2 in den SoT-Modulen, 12 klassifiziert).
+    Baseline 0 (26 Zugriffe im Baum, 3 in den SoT-Modulen, 12 klassifizierte
+    Allowlist-Schlüssel — nachgezählt beim S3-Umbau 2026-07-31, die Zahlen
+    standen auf einem älteren Stand).
     **Grenzen, beide gemessen und keine Fußnote:** (a) kein Typwissen — ein
     Empfänger, der wie ein DTO heißt, aber eine Monatsdaten-Zeile hält, ist
     falsch-negativ per Konstruktion (dieselbe Grenze wie P3-a); (b) nur die

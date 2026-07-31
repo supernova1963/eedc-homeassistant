@@ -1,9 +1,17 @@
 """
 Cockpit Social — Kopierfertiger Social-Media-Text für einen Monat.
+
+Wie ``nachhaltigkeit.py`` faltete dieser Endpoint bis 2026-07-31 die ganze
+Monatszeile selbst (Befund **F-1**, ADR-002/**P10**) — mit derselben
+nachgebauten Eigenverbrauchs-Formel und denselben Lücken: kein V2H (#304),
+keine Erzeugung hinter dem Zähler (v3.45.4), kein attribuierter E-Mob-Pool
+(#262), das PV-Anlagen-Aggregat roh statt über die Auflösung (P7). Das wog hier
+besonders schwer, weil der Text nach **außen** geteilt wird.
+
+Seit dem Umbau kommt die Monatszeile aus ``lade_monats_fakten`` und die
+CO₂-Bilanz aus ``berechne_co2_bilanz`` (ADR-001, DI-2).
 """
 
-from datetime import date
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,31 +19,14 @@ from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
-from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.models.investition import Investition
 from backend.services.prognose_auswahl import lade_aktive_prognose
 from backend.core.investition_kennwerte import get_erzeuger_kwp
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
-from backend.core.berechnungen import (
-    autarkie_prozent,
-    eigenverbrauchsquote_prozent,
-    spezifischer_ertrag_kwh_kwp,
-)
-from backend.core.calculations import (
-    CO2_FAKTOR_STROM_KG_KWH, CO2_FAKTOR_BENZIN_KG_LITER, co2_wp_ersparnis_kg,
-)
-from backend.core.wirtschaftlichkeit_defaults import (
-    EINSPEISEVERGUETUNG_DEFAULT_CENT,
-    NETZBEZUG_DEFAULT_CENT,
-)
-from backend.core.field_definitions import (
-    get_eauto_ladung_kwh,
-    get_pv_erzeugung_kwh,
-    get_wp_heizenergie_kwh,
-    get_wp_strom_kwh,
-)
-from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.berechnungen import spezifischer_ertrag_kwh_kwp
+from backend.core.calculations import berechne_co2_bilanz
+from backend.services.eauto_wirtschaftlichkeit import km_gewichtete_eauto_params
+from backend.services.monats_fakten import lade_monats_fakten
 from backend.services.community_service import get_region_from_plz
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 from backend.core.investition_parameter import ist_dienstlich
@@ -119,106 +110,77 @@ async def get_share_text(
     region_code = get_region_from_plz(anlage.standort_plz, anlage.standort_land)
     bundesland = _REGION_NAMEN.get(region_code, region_code) if region_code else None
 
-    md_result = await db.execute(
-        select(Monatsdaten).where(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == jahr,
-            Monatsdaten.monat == monat,
-        )
+    # Die eine Monatszeile aus der Aufbereitungs-Schicht (ADR-002/P10): P7-
+    # Auflösung, Zeit- und Dienstwagen-Filter, E-Mob-Pool, V2H und der Erzeuger
+    # hinter dem Zähler sind darin bereits angewandt — und der Tarif ist der
+    # des Monats (P8), nicht der heutige.
+    fakten = await lade_monats_fakten(
+        db, anlage_id, von=(jahr, monat), bis=(jahr, monat)
     )
-    md = md_result.scalar_one_or_none()
-    if not md:
+    fakt = next((f for f in fakten if f.meta.hat_zaehlerzeile), None)
+    if fakt is None:
         raise HTTPException(status_code=404, detail=f"Keine Monatsdaten für {MONATSNAMEN[monat]} {jahr}")
 
-    inv_ids = [i.id for i in investitionen]
-    imd_list = []
-    if inv_ids:
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(inv_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
-        imd_list = imd_result.scalars().all()
+    # PV-Achse rein (Module + BKW): spezifischer Ertrag und der PVGIS-Vergleich
+    # dürfen kein BHKW enthalten. Die Energiebilanz darunter nimmt dagegen
+    # `hinter_zaehler_kwh` — beides steckt in `fakt.kennzahlen`.
+    pv_erzeugung = fakt.erzeugung.pv_kwh
+    einspeisung = fakt.zaehler.einspeisung_kwh
+    netzbezug = fakt.zaehler.netzbezug_kwh
 
-    inv_by_id = {i.id: i for i in investitionen}
-
-    pv_erzeugung = 0.0
-    speicher_ladung = 0.0
-    speicher_entladung = 0.0
-    wp_waerme = 0.0
-    wp_strom = 0.0
-    emob_km = 0.0
-    emob_ladung = 0.0
-    emob_pv_ladung = 0.0
-
-    for imd in imd_list:
-        inv = inv_by_id.get(imd.investition_id)
-        if not inv:
-            continue
-        # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
-        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-            continue
-        data = imd.verbrauch_daten or {}
-        if inv.typ in ("pv-module", "balkonkraftwerk"):
-            pv_erzeugung += get_pv_erzeugung_kwh(data)
-        if inv.typ == "speicher":
-            speicher_ladung += data.get("ladung_kwh", 0) or 0
-            speicher_entladung += data.get("entladung_kwh", 0) or 0
-        elif inv.typ == "waermepumpe":
-            wp_waerme += (
-                data.get("waerme_kwh", 0) or
-                get_wp_heizenergie_kwh(data) + (data.get("warmwasser_kwh", 0) or 0)
-            )
-            wp_strom += get_wp_strom_kwh(data, inv.parameter)
-        elif inv.typ in ("e-auto", "wallbox") and not ist_dienstlich(inv):
-            emob_km += data.get("km_gefahren", 0) or 0
-            emob_ladung += get_eauto_ladung_kwh(data)
-            emob_pv_ladung += data.get("ladung_pv_kwh", 0) or 0
-
-    if pv_erzeugung == 0:
-        pv_erzeugung = md.pv_erzeugung_kwh or 0
-
-    einspeisung = md.einspeisung_kwh or 0
-    netzbezug = md.netzbezug_kwh or 0
-
-    direktverbrauch = max(0, pv_erzeugung - einspeisung - speicher_ladung) if pv_erzeugung > 0 else 0
-    eigenverbrauch = direktverbrauch + speicher_entladung
-    gesamtverbrauch = eigenverbrauch + netzbezug
-    autarkie = autarkie_prozent(eigenverbrauch, gesamtverbrauch)
-    ev_quote = eigenverbrauchsquote_prozent(eigenverbrauch, pv_erzeugung)
+    eigenverbrauch = fakt.kennzahlen.eigenverbrauch_kwh
+    autarkie = fakt.kennzahlen.autarkie_prozent
+    ev_quote = fakt.kennzahlen.eigenverbrauchsquote_prozent
     spez_ertrag = spezifischer_ertrag_kwh_kwp(pv_erzeugung, kwp) or 0
 
+    speicher_ladung = fakt.speicher.ladung_kwh
+    speicher_entladung = fakt.speicher.entladung_kwh
     hat_speicher = any(i.typ == "speicher" for i in investitionen)
     speicher_eff = (speicher_entladung / speicher_ladung * 100) if speicher_ladung > 0 else 0
 
+    wp_waerme = fakt.wp.waerme_kwh
+    wp_strom = fakt.wp.strom_kwh
     hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
     # JAZ/COP nur wenn beide Seiten gemessen sind (siehe komponenten.py).
     wp_cop = (wp_waerme / wp_strom) if wp_strom > 0 and wp_waerme > 0 else 0
 
+    emob_km = fakt.emob.km
     hat_emobilitaet = any(
         i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
         for i in investitionen
     )
-    emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else 0
+    emob_pv_anteil = (
+        fakt.emob.ladung_pv_kwh / fakt.emob.ladung_kwh * 100
+    ) if fakt.emob.ladung_kwh > 0 else 0
 
-    co2_pv = eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
-    co2_wp = co2_wp_ersparnis_kg(wp_waerme, wp_strom)  # DI-1: kanonischer Helper
-    benzin_verbrauch = emob_km * 7 / 100
-    co2_emob = (benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER) - ((emob_ladung - emob_pv_ladung) * CO2_FAKTOR_STROM_KG_KWH) if emob_km > 0 else 0
-    co2_gesamt = co2_pv + max(0, co2_wp) + max(0, co2_emob)
-
-    # Tarif DES Monats (ADR-002/P8): der Endpoint bereitet genau eine
-    # Monatszeile auf. Mit dem heutigen Tarif hätte ein Tarifwechsel jeden
-    # rückwirkend geteilten Monat neu bewertet.
-    tarife = await lade_tarife_fuer_anlage(
-        db, anlage_id, target_date=date(md.jahr, md.monat, 1)
+    # Der Vergleichs-Verbrenner mit dem gepflegten `vergleich_verbrauch_l_100km`
+    # je Fahrzeug (km-gewichtet, G20-2) — bis 2026-07-31 standen hier
+    # hartkodierte 7 l/100 km.
+    eauto_parameter = {i.id: i.parameter for i in investitionen if i.typ == "e-auto"}
+    vergleich_l_100km, _ = km_gewichtete_eauto_params(
+        eauto_params_und_km=[
+            (eauto_parameter.get(inv_id), km)
+            for inv_id, km in fakt.emob.km_je_fahrzeug.items()
+        ]
     )
-    allgemein_tarif = tarife.get("allgemein")
-    einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT
-    netzbezug_cent = resolve_netzbezug_preis_cent(md, allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif else NETZBEZUG_DEFAULT_CENT)
-    netto_ertrag = (einspeisung * einspeise_cent + eigenverbrauch * netzbezug_cent) / 100
+    # DI-2: die EINE Konstruktions-Stelle der CO₂-Kennzahl.
+    co2 = berechne_co2_bilanz(
+        eigenverbrauch_kwh=eigenverbrauch,
+        wp_waerme_kwh=wp_waerme,
+        wp_strom_kwh=wp_strom,
+        emob_km=emob_km,
+        emob_netz_ladung_kwh=fakt.emob.ladung_netz_kwh,
+        benzin_verbrauch_liter=emob_km / 100 * vergleich_l_100km,
+    )
+    co2_gesamt = co2.co2_gesamt_kg
+
+    # Tarif DES Monats (ADR-002/P8) — inklusive des abgerechneten Flex-Ø, falls
+    # gepflegt. Mit dem heutigen Tarif hätte ein Tarifwechsel jeden rückwirkend
+    # geteilten Monat neu bewertet.
+    netto_ertrag = (
+        einspeisung * fakt.tarif.einspeiseverguetung_cent
+        + eigenverbrauch * fakt.tarif.netzbezug_preis_cent
+    ) / 100
 
     # Aktive Prognose über den Auswahl-SoT. Vorher `scalar_one_or_none()` ohne
     # `limit`: zwei aktive Prognosen → `MultipleResultsFound` → HTTP 500 statt
