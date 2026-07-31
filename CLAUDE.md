@@ -176,7 +176,7 @@ for imd in await db.execute(select(InvestitionMonatsdaten)...):
     summe += (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh", 0)
 ```
 
-Ausgenommen sind **Schreib-, Import- und Checker-Pfade**. Der baumweite Wächter wird mit S5 scharf gestellt (`docs/KONZEPT-MONATS-FAKTEN.md` §10) — bis dahin decken `test_monats_fakten_schicht.py` die Schicht und `test_netto_ertrag_vier_wege_symmetrie.py` (Achse „nur Anlagen-Aggregat") die umgehängten Sichten. **Umgehängt sind seit S2:** Aussichten, Jahresbericht-PDF, Investitions-ROI; **seit S3** zusätzlich Cockpit/CO₂ und Cockpit/Social (dort deckt `test_co2_autarkie_sichten_symmetrie.py` CO₂ und Autarkie ab).
+Ausgenommen sind **Schreib-, Import- und Checker-Pfade**. Der baumweite Wächter wird mit S5 scharf gestellt (`docs/KONZEPT-MONATS-FAKTEN.md` §10) — bis dahin decken `test_monats_fakten_schicht.py` die Schicht und `test_netto_ertrag_vier_wege_symmetrie.py` (Achse „nur Anlagen-Aggregat") die umgehängten Sichten. **Umgehängt sind seit S2:** Aussichten, Jahresbericht-PDF, Investitions-ROI; **seit S3** zusätzlich Cockpit/CO₂ und Cockpit/Social (dort deckt `test_co2_autarkie_sichten_symmetrie.py` CO₂ und Autarkie ab); **seit S4** Cockpit/Übersicht und HA-Export (`test_cockpit_ha_export_aggregations_fenster.py`). **Teil-migriert** — Monatsgrößen ja, per-Investition-Aggregate nein: `aussichten.py` und `ha_export.py`.
 
 ### SQLAlchemy JSON-Felder
 
