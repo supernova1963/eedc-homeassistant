@@ -58,6 +58,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_netzbezug_preis_cent,
+    resolve_strompreis_for_komponente,
 )
 from backend.core.berechnungen import (
     PvModulWert,
@@ -266,6 +267,13 @@ class TarifFakten:
 
     Kraftstoff- und Gaspreis stehen daneben, weil sie dieselbe Stichtags-Regel
     tragen: sie sind Monatswerte der ``Monatsdaten``-Zeile, kein Stammdatum.
+
+    ``wallbox_preis_effektiv_cent`` ist derselbe Flex-Vorrang wie oben, nur auf
+    dem Wallbox-Tarif: **der abgerechnete Flex-Ø gilt für den ganzen Zähler**,
+    also auch für einen dienstlich geladenen Wagen. Die dienstlichen Ladekosten
+    (Cockpit/Übersicht) sind heute der einzige Konsument; für die Wärmepumpe gibt
+    es die Entsprechung, sobald sie gebraucht wird — ein ungenutztes Feld wäre
+    nur eine weitere Stelle, die veraltet.
     """
 
     netzbezug_preis_cent: float = NETZBEZUG_DEFAULT_CENT
@@ -274,6 +282,7 @@ class TarifFakten:
     grundpreis_euro_monat: float = 0.0
     wp_preis_cent: float = NETZBEZUG_DEFAULT_CENT
     wallbox_preis_cent: float = NETZBEZUG_DEFAULT_CENT
+    wallbox_preis_effektiv_cent: float = NETZBEZUG_DEFAULT_CENT
     kraftstoffpreis_euro: Optional[float] = None
     gaspreis_cent_kwh: Optional[float] = None
 
@@ -356,6 +365,7 @@ async def lade_monats_fakten(
     *,
     von: Optional[MonatsSchluessel] = None,
     bis: Optional[MonatsSchluessel] = None,
+    tarif_cache: Optional[dict[date, dict]] = None,
 ) -> list[MonatsFakt]:
     """Baut die Monats-Fakten einer Anlage — ein Query-Satz, danach reine Faltung.
 
@@ -364,6 +374,10 @@ async def lade_monats_fakten(
         anlage_id: Anlage.
         von: frühester Monat ``(jahr, monat)``, **inklusive**. ``None`` = offen.
         bis: spätester Monat ``(jahr, monat)``, **inklusive**. ``None`` = offen.
+        tarif_cache: derselbe Cache, den der Aufrufer an ``baue_finanz_zeile``
+            weiterreicht. Ohne ihn löst der Tarif-Stichtag **zweimal** je Monat
+            auf — einmal hier, einmal im Finanz-Zeilen-Builder (Risiko 2 des
+            Konzepts, „Ladezeit"). Wer keine Finanz-Zeile baut, lässt ihn weg.
 
     Returns:
         Nach ``(jahr, monat)`` aufsteigend sortierte Liste. Enthalten ist jeder
@@ -413,7 +427,8 @@ async def lade_monats_fakten(
         | set(roh)
     )
 
-    tarif_cache: dict[date, dict] = {}
+    if tarif_cache is None:
+        tarif_cache = {}
     fakten: list[MonatsFakt] = []
     for schluessel in sorted(k for k in kandidaten if _im_fenster(k, von, bis)):
         fakten.append(
@@ -737,8 +752,10 @@ async def _lade_tarif(
     stammpreis = (
         allgemein.netzbezug_arbeitspreis_cent_kwh if allgemein else NETZBEZUG_DEFAULT_CENT
     )
-    wp = tarife.get("waermepumpe")
-    wallbox = tarife.get("wallbox")
+    # Komponenten-Tarif über die SoT-Kaskade (Komponente → allgemein → Default)
+    # statt handschriftlich: ein Spezialtarif-Datensatz OHNE Arbeitspreis fiel
+    # in der Handschrift auf `None` durch, statt auf den allgemeinen Tarif.
+    wallbox_cent = resolve_strompreis_for_komponente(tarife, "wallbox", fallback=stammpreis)
     return TarifFakten(
         # Flex-Ø des Monats vor dem Stammdaten-Arbeitspreis (P8, zweite Form).
         netzbezug_preis_cent=resolve_netzbezug_preis_cent(monatsdaten, stammpreis),
@@ -749,8 +766,12 @@ async def _lade_tarif(
             else EINSPEISEVERGUETUNG_DEFAULT_CENT
         ),
         grundpreis_euro_monat=(allgemein.grundpreis_euro_monat or 0.0) if allgemein else 0.0,
-        wp_preis_cent=wp.netzbezug_arbeitspreis_cent_kwh if wp else stammpreis,
-        wallbox_preis_cent=wallbox.netzbezug_arbeitspreis_cent_kwh if wallbox else stammpreis,
+        wp_preis_cent=resolve_strompreis_for_komponente(
+            tarife, "waermepumpe", fallback=stammpreis
+        ),
+        wallbox_preis_cent=wallbox_cent,
+        # Der Flex-Ø gilt für den ganzen Zähler — auch für die Wallbox.
+        wallbox_preis_effektiv_cent=resolve_netzbezug_preis_cent(monatsdaten, wallbox_cent),
         kraftstoffpreis_euro=monatsdaten.kraftstoffpreis_euro if monatsdaten else None,
         gaspreis_cent_kwh=monatsdaten.gaspreis_cent_kwh if monatsdaten else None,
     )

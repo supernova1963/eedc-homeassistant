@@ -482,6 +482,62 @@ async def test_spezialtarife_fallen_auf_den_allgemeinen_zurueck(db):
     assert tarif.wallbox_preis_cent == pytest.approx(30.0)
 
 
+@pytest.mark.asyncio
+async def test_p8_flex_durchschnitt_gilt_auch_fuer_den_wallbox_preis(db):
+    """Der abgerechnete Flex-Ø gilt für den **ganzen Zähler** — auch am Ladepunkt.
+
+    Gebraucht von den dienstlichen Ladekosten (Cockpit/Übersicht): sie bewerten
+    den Netzbezugs-Anteil mit dem Wallbox-Preis, und zwar mit dem effektiven.
+    Ohne dieses Feld hätte das Umhängen (S4) den Flex-Ø dort still verloren —
+    genau die Klasse, gegen die P8 geschrieben wurde.
+    """
+    anlage = await _anlage(db)
+    await _tarif(db, anlage, netz=30.0)
+    await _tarif(db, anlage, netz=22.0, verwendung="wallbox")
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=3,
+                       einspeisung_kwh=0.0, netzbezug_kwh=100.0,
+                       netzbezug_durchschnittspreis_cent=17.5))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=4,
+                       einspeisung_kwh=0.0, netzbezug_kwh=100.0))
+    await db.commit()
+
+    fakten = await lade_monats_fakten(db, anlage.id)
+
+    mit_flex = _fakt(fakten, 2025, 3).tarif
+    assert mit_flex.wallbox_preis_cent == pytest.approx(22.0), "Stammtarif bleibt sichtbar"
+    assert mit_flex.wallbox_preis_effektiv_cent == pytest.approx(17.5)
+
+    ohne_flex = _fakt(fakten, 2025, 4).tarif
+    assert ohne_flex.wallbox_preis_effektiv_cent == pytest.approx(22.0)
+
+
+@pytest.mark.asyncio
+async def test_geteilter_tarif_cache_laedt_jeden_stichtag_einmal(db):
+    """Der Aufrufer teilt seinen Tarif-Cache mit der Schicht (Risiko 2, Ladezeit).
+
+    Ohne ihn löst derselbe Monats-Stichtag zweimal auf — einmal hier, einmal in
+    ``baue_finanz_zeile``. Der Cache ist zugleich die Zusicherung, dass beide
+    Seiten **denselben** Tarif sehen: zwei Auflösungen desselben Stichtags aus
+    zwei Caches sind eine Drift-Gelegenheit, keine Optimierungsfrage.
+    """
+    anlage = await _anlage(db)
+    await _tarif(db, anlage, netz=30.0)
+    for monat in (1, 2, 3):
+        db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=monat,
+                           einspeisung_kwh=100.0, netzbezug_kwh=50.0))
+    await db.commit()
+
+    cache: dict = {}
+    fakten = await lade_monats_fakten(db, anlage.id, tarif_cache=cache)
+
+    assert sorted(cache) == [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)]
+    # Ein zweiter Lauf mit demselben Cache liefert dieselben Preise.
+    assert [f.tarif.netzbezug_preis_cent for f in fakten] == [
+        f.tarif.netzbezug_preis_cent
+        for f in await lade_monats_fakten(db, anlage.id, tarif_cache=cache)
+    ]
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Gruppe `eeg` — §51
 # ═══════════════════════════════════════════════════════════════════════

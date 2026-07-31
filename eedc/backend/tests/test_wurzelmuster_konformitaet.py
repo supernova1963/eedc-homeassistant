@@ -1254,8 +1254,10 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     "backend/services/import_parsers/base.py::self",
     # Finanz-Schicht: `FinanzZeileEingabe` (Dataclass) bzw. `FinanzMonatsZeile`.
     # Wer die Zeile FÜLLT, ist der Aufrufer — und der steht mit seinem eigenen
-    # Empfänger in dieser Erhebung (`cockpit/uebersicht.py`, `ha_export.py`
-    # lesen seit `19ae5f73` über `pv_monatswerte`).
+    # Empfänger in dieser Erhebung. `cockpit/uebersicht.py` und `ha_export.py`
+    # lasen seit `19ae5f73` über `pv_monatswerte`, seit S4 (2026-07-31) über
+    # `lade_monats_fakten`/`finanz_zeile_eingabe` (ADR-002/P10) — beide Wege
+    # führen durch dieselbe Auflösung, nur eine Schicht weiter oben.
     "backend/services/finanz_zeilen.py::eingabe",
     "backend/core/berechnungen/finanz_aggregat.py::z",
     #
@@ -1407,8 +1409,9 @@ def test_p7_baseline_ausnahmen_sind_noch_belegt():
 #                               Perioden-Mappings und für die nach vorn
 #                               gerichteten Sensor-Werte.
 #   cockpit/uebersicht.py     — Anzeige des aktuellen Tarifs + Komponenten-
-#                               Kennwerte; alle Monats-Summen laufen über
-#                               `_tarife_fuer(jahr, monat)`.
+#                               Kennwerte; alle Monats-Summen laufen seit S4
+#                               über `fakt.tarif` bzw. `baue_finanz_zeile`,
+#                               beide mit dem Monats-Stichtag (ADR-002/P10).
 #   aussichten.py             — Hochrechnung + ausgewiesener Tarif der
 #                               Response; die Historie läuft über
 #                               `_tarife_fuer_stichtag`.
