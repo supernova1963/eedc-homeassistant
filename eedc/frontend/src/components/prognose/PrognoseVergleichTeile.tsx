@@ -28,7 +28,7 @@ import {
 import { energieProfilApi } from '../../api/energie_profil'
 import { getStratifizierung, StratifizierungResponse, Wetterklasse, wetterBackfill } from '../../api/korrekturprofil'
 import { KorrekturprofilHeatmapCard } from '../../pages/aussichten/KorrekturprofilHeatmapCard'
-import { PROGNOSE_QUELLEN_COLORS, PROGNOSE_QUELLEN_TEXT, PROGNOSE_DASH, fmtZahl, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP } from '../../lib'
+import { PROGNOSE_QUELLEN_COLORS, PROGNOSE_QUELLEN_TEXT, PROGNOSE_DASH, fmtZahl, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, slotZeitspanne } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
@@ -238,8 +238,10 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
+  // `fehlendeStunden` sind Backward-Slots (Slot h = [h-1, h)) — die Zeitspanne
+  // kommt deshalb aus demselben SoT wie die Chart-Tooltips, nicht aus `h + 1`.
   const stundenLabel = fehlendeStunden.length === 0 ? '—'
-    : fehlendeStunden.length === 1 ? `Stunde ${fehlendeStunden[0]}:00–${fehlendeStunden[0] + 1}:00`
+    : fehlendeStunden.length === 1 ? `Stunde ${slotZeitspanne(fehlendeStunden[0]).replace(' Uhr', '')}`
     : `Stunden ${fehlendeStunden.map(h => `${h}:00`).join(', ')}`
   const handleReaggregate = async () => {
     setBusy(true); setFeedback(null)
@@ -360,9 +362,9 @@ function AbweichungCell({ prognose, ist }: { prognose: number; ist: number | nul
 interface StundenTooltipPayload { dataKey?: string; value?: number | null; stroke?: string; fill?: string }
 function StundenTooltip({ active, payload, label, hasEedc }: { active?: boolean; payload?: StundenTooltipPayload[]; label?: string | number; hasEedc?: boolean }) {
   if (!active || !payload?.length) return null
-  const h = parseInt(String(label ?? '').replace(':00', ''))
-  const prev = (h - 1 + 24) % 24
-  const intervalLabel = `${String(prev).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:00 Uhr`
+  // Beschriftung aus dem Backward-SoT (`lib/stundenSlot.ts`) — dieselbe Quelle,
+  // aus der auch Cockpit → Live seine Zeitspanne nimmt (#144/#297).
+  const intervalLabel = slotZeitspanne(parseInt(String(label ?? '').replace(':00', '')))
   return (
     <div className="bg-gray-900 dark:bg-gray-950 text-white p-3 rounded-lg shadow-lg text-xs">
       <div className="font-medium mb-1">{intervalLabel}</div>

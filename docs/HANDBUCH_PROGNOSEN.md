@@ -117,6 +117,19 @@ In der neuen Oberfläche sind die Prognose-Sichten nach dem Grundsatz **„Vorsc
 - **Cockpit → Aussicht** — die *vorwärtsgerichtete* Sicht (heute bis Jahresprognose).
 - **Auswertungen → Prognose** — die *Vergleichs- und Genauigkeits-Fläche* (mehrere Quellen gegen IST).
 
+> **Wie eine Stunde zu lesen ist.** In allen Stunden-Grafiken und -Tabellen steht eine Stunde für die
+> Zeit **davor**: der Punkt bei **11** trägt, was zwischen **10:00 und 11:00** passiert ist — so wie
+> ein Zählerstand um 11:00 die Stunde davor abschließt. Der Tooltip schreibt die Zeitspanne
+> deshalb immer aus („10:00–11:00 Uhr"), damit man nicht raten muss. Das gilt für die
+> Prognose-Quellen, die gemessenen IST-Werte und das Energieprofil gleichermaßen (technisch:
+> Backward-Konvention, siehe [BERECHNUNGEN §6b](BERECHNUNGEN.md)). Ausgenommen sind **Strompreise** —
+> ein Börsenpreis „ab 11 Uhr" gilt nach vorn, für 11:00–12:00.
+>
+> Bis v4.0.5 hielt sich eine Sicht nicht daran: der Block **Cockpit → Live „Wetter heute"**
+> beschriftete die Stunde vorwärts und legte seine gemessene PV-Kurve eine Spalte zu früh ab —
+> die Prognose daneben sah dadurch aus, als käme sie eine Stunde zu spät. Seit v4.0.6 rechnen und
+> beschriften beide Sichten gleich.
+
 ### Cockpit → Aussicht — die Vorschau
 
 Die [Aussicht](HANDBUCH_BEDIENUNG.md#25-aussicht) bündelt alle vorwärtsgerichteten Analysen auf einer Seite; über einen **Horizont-Selektor** wählst du, wie weit du blickst:
@@ -290,7 +303,7 @@ Kurz: **Stammdaten (kWp, Koordinaten, Ausrichtung) + zugeordnete PV-Zähler** si
 | **Prognose systematisch zu hoch/niedrig** | falsche Ausrichtung/Neigung, oder Lernfaktor noch im Aufbau | Ausrichtung/Neigung je String korrekt pflegen; Bias im Genauigkeits-Tracking beobachten — das Korrekturprofil zieht nach. |
 | **Vormittags daneben, Tagessumme stimmt** | OpenMeteo-Tagesgang-Bias; ein Skalar korrigiert nur die Summe | das Sonnenstand-×-Wetter-Korrekturprofil greift hier — sichtbar in der Heatmap und der Asymmetrie-Diagnose. |
 | **Performance Ratio > 1** | nur bei alten Versionen (GHI statt GTI) | auf aktuelle Version updaten; danach betroffene Tage neu aggregieren. |
-| **Prognose-/IST-Linien um eine Stunde versetzt** | Slot-Versatz zwischen Quellen (Backward-Konvention) | in aktuellen Versionen einheitlich; nach Update auf v3.20.0 ggf. einmal den Verlauf neu berechnen. |
+| **Prognose-/IST-Linien um eine Stunde versetzt** | Slot-Versatz zwischen Quellen (Backward-Konvention) | in aktuellen Versionen einheitlich; nach Update auf v3.20.0 ggf. einmal den Verlauf neu berechnen. Der letzte verbliebene Fall — die IST-Kurve in Cockpit → Live „Wetter heute" — ist seit v4.0.6 behoben. |
 | **Solcast-Spalte fehlt** | kein Key (Standalone) / HA-Integration nicht da / Tageslimit erreicht | Status-Hinweis im Tab beachten; Key + Resource-IDs unter [Einstellungen → Stammdaten → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose) prüfen. |
 | **IST-Lücken im Tagesverlauf** | PV-Stundenwert fehlt (kein Zähler / HA-Neustart) | betroffenen Tag über die [Reparatur-Werkbank](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege) neu aggregieren. |
 | **Keine Prognose, „keine Koordinaten"** | Standort fehlt in den Stammdaten | Koordinaten unter [Einstellungen → Stammdaten → Anlage](HANDBUCH_EINSTELLUNGEN.md#21-anlage) eintragen. |

@@ -3,6 +3,12 @@
  *
  * Breites Layout (volle Breite): Hero links, Stundenverlauf Mitte, KPI rechts.
  * Darunter: PV-Ertrag vs. gestapelter Verbrauch — IST (solid) + Prognose (dashed), volle 24h.
+ *
+ * **Zeitraster = Backward-Slots** (`lib/stundenSlot.ts`, #144/#297): Spalte `h`
+ * trägt, was zwischen `h-1` und `h` passiert ist. Die Prognose kommt so schon
+ * aus dem Backend (OpenMeteo-Stundenwert@`h` = Mittel der Stunde davor); die
+ * IST-Kurve wird hier aus den 10-Minuten-Punkten des Tagesverlaufs auf
+ * dasselbe Raster gelegt — die Punkte tragen ihren **Slot-Beginn**.
  */
 
 import { useMemo, useState, useEffect } from 'react'
@@ -11,7 +17,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import SegmentControl from '../ui/SegmentControl'
 import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudFog, CloudLightning, Droplets, Thermometer, CloudSun, Zap, BatteryCharging } from 'lucide-react'
 import type { LiveWetterResponse, TagesverlaufResponse } from '../../api/liveDashboard'
-import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { CHART_COLORS, COLORS, KATEGORIE_FARBEN, NICHT_ENERGIE_KATEGORIEN, xAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, slotZeitspanne, slotAusIntervallStart, slotAusZeitpunkt } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 
 // Wetter-Symbol zu Lucide-Icon Mapping
@@ -50,6 +56,169 @@ interface WetterWidgetProps {
 
 type ChartView = 'beides' | 'pv' | 'verbrauch'
 
+export interface IstStundenWerte {
+  pv: number
+  haushalt: number
+  batterie_ladung: number
+  wallbox: number
+  waermepumpe: number
+  sonstige: number
+  verbrauch_gesamt: number
+}
+
+/**
+ * 10-Minuten-Punkte des Tagesverlaufs → mittlere Leistung je **Backward-Slot**
+ * (`lib/stundenSlot.ts`): ein Punkt, der um `10:xx` beginnt, gehört in Slot 11
+ * — denselben Slot, in dem die Prognose die Stunde 10:00–11:00 führt.
+ *
+ * Exportiert, weil genau diese Zuordnung der Regressionstest ist: sie war die
+ * Stelle, an der die Live-Sicht eine Stunde neben der Prognose lag (PN 90106).
+ * Der Slot 24 (letzte Tagesstunde) gehört bereits dem Folgetag und fällt raus.
+ */
+export function istStundenSlots(tagesverlauf: TagesverlaufResponse | null | undefined): {
+  istDaten: Record<number, IstStundenWerte> | null
+  vorhandeneKategorien: Set<string>
+  serienKategorien: Set<string>
+} {
+  if (!tagesverlauf?.punkte?.length || !tagesverlauf?.serien?.length) {
+    return { istDaten: null, vorhandeneKategorien: new Set<string>(), serienKategorien: new Set<string>() }
+  }
+
+  const pvKeys = tagesverlauf.serien
+    .filter(s => s.kategorie === 'pv')
+    .map(s => s.key)
+
+  // Kategorien der Serien indexieren
+  const keyKategorie: Record<string, string> = {}
+  for (const s of tagesverlauf.serien) {
+    keyKategorie[s.key] = s.kategorie
+  }
+  // E-Auto überspringen wenn Wallbox existiert (Wallbox misst bereits die Ladeleistung)
+  const hasWallbox = tagesverlauf.serien.some(s => s.kategorie === 'wallbox')
+  const skipKeys = new Set(
+    tagesverlauf.serien
+      .filter(s => s.kategorie === 'eauto' && hasWallbox)
+      .map(s => s.key)
+  )
+
+  const kategorienGesehen = new Set<string>()
+  const result: Record<number, IstStundenWerte> = {}
+
+  // Stunden-Mittelwert über alle 10-Min-Slots (statt letzten Slot zu nehmen).
+  // Konsistent mit der Mean-Konvention der Open-Meteo-Prognose im selben Chart.
+  type StundenAcc = IstStundenWerte & { count: number }
+  const accumulators: Record<number, StundenAcc> = {}
+
+  for (const punkt of tagesverlauf.punkte) {
+    // `zeit` ist der BEGINN des 10-Minuten-Intervalls → Backward-Slot = Stunde+1.
+    const slot = slotAusIntervallStart(parseInt(punkt.zeit.split(':')[0]))
+    if (slot > 23) continue  // letzte Tagesstunde → Slot 0 des Folgetags
+
+    let pvSum = 0
+    let haushalt = 0
+    let batterie_ladung = 0
+    let wallbox = 0
+    let waermepumpe = 0
+    let sonstige = 0
+    const netzValue = punkt.werte['netz'] ?? 0
+
+    for (const [key, val] of Object.entries(punkt.werte)) {
+      if (skipKeys.has(key)) continue
+      const kat = keyKategorie[key]
+
+      if (pvKeys.includes(key)) {
+        pvSum += val
+      } else if (kat === 'batterie') {
+        // Batterie: negativ = Ladung (Verbrauch), positiv = Entladung (Quelle)
+        if (val < 0) {
+          batterie_ladung += Math.abs(val)
+          kategorienGesehen.add('batterie_ladung')
+        }
+      } else if (kat === 'netz') {
+        // Netz wird separat behandelt (in Energiebilanz)
+      } else if (kat === 'haushalt') {
+        haushalt += Math.abs(val)
+        if (val !== 0) kategorienGesehen.add('haushalt')
+      } else if (kat === 'wallbox' || kat === 'eauto') {
+        wallbox += Math.abs(val)
+        if (val !== 0) kategorienGesehen.add('wallbox')
+      } else if (kat === 'waermepumpe') {
+        waermepumpe += Math.abs(val)
+        if (val !== 0) kategorienGesehen.add('waermepumpe')
+      } else if (kat && kat !== 'pv' && !NICHT_ENERGIE_KATEGORIEN.has(kat)) {
+        sonstige += Math.abs(val)
+        if (val !== 0) kategorienGesehen.add('sonstige')
+      }
+    }
+
+    // Energiebilanz: Gesamtverbrauch = PV + Netz
+    const verbrauch_gesamt = Math.max(0, pvSum + netzValue)
+
+    // Wenn wir keine Kategorien-Aufschlüsselung haben,
+    // Haushalt als Residual berechnen
+    const kategorien_summe = haushalt + batterie_ladung + wallbox + waermepumpe + sonstige
+    if (kategorien_summe === 0 && verbrauch_gesamt > 0) {
+      haushalt = verbrauch_gesamt
+      kategorienGesehen.add('haushalt')
+    }
+
+    const acc = accumulators[slot] ??= {
+      pv: 0, haushalt: 0, batterie_ladung: 0, wallbox: 0,
+      waermepumpe: 0, sonstige: 0, verbrauch_gesamt: 0, count: 0,
+    }
+    acc.pv += pvSum
+    acc.haushalt += haushalt
+    acc.batterie_ladung += batterie_ladung
+    acc.wallbox += wallbox
+    acc.waermepumpe += waermepumpe
+    acc.sonstige += sonstige
+    acc.verbrauch_gesamt += verbrauch_gesamt
+    acc.count += 1
+  }
+
+  for (const [slotStr, acc] of Object.entries(accumulators)) {
+    const c = acc.count
+    result[parseInt(slotStr)] = {
+      pv: acc.pv / c,
+      haushalt: acc.haushalt / c,
+      batterie_ladung: acc.batterie_ladung / c,
+      wallbox: acc.wallbox / c,
+      waermepumpe: acc.waermepumpe / c,
+      sonstige: acc.sonstige / c,
+      verbrauch_gesamt: acc.verbrauch_gesamt / c,
+    }
+  }
+
+  // Nur Kategorien behalten, die tatsächlich als Investition/Serie existieren
+  const serienKategorien = new Set(tagesverlauf.serien.map(s => {
+    if (s.kategorie === 'batterie') return 'batterie_ladung'
+    if (s.kategorie === 'eauto') return 'wallbox'
+    return s.kategorie
+  }))
+  // Haushalt ist immer erlaubt (Residualwert)
+  serienKategorien.add('haushalt')
+  for (const kat of kategorienGesehen) {
+    if (!serienKategorien.has(kat)) kategorienGesehen.delete(kat)
+  }
+
+  return {
+    istDaten: Object.keys(result).length > 0 ? result : null,
+    vorhandeneKategorien: kategorienGesehen,
+    serienKategorien,
+  }
+}
+
+/**
+ * Slot für einen Sonnen-Marker (Aufgang, Höchststand, Untergang) — oder `null`,
+ * wenn es keinen gibt bzw. er außerhalb des Tagesrasters 0…23 läge. Ohne diese
+ * Grenze zöge Recharts eine Linie auf eine Kategorie, die es nicht gibt.
+ */
+function sonnenSlot(zeit: string | null | undefined): number | null {
+  if (!zeit) return null
+  const slot = slotAusZeitpunkt(zeit)
+  return slot !== null && slot >= 0 && slot <= 23 ? slot : null
+}
+
 export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }: WetterWidgetProps) {
   const achsen = useChartTheme()
   const now = new Date()
@@ -73,151 +242,10 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
   const showPv = chartView === 'pv' || chartView === 'beides'
   const showVerbrauch = chartView === 'verbrauch' || chartView === 'beides'
 
-  // IST-Daten aus Tagesverlauf aggregieren — gestapelt nach Kategorie
-  const { istDaten, vorhandeneKategorien, serienKategorien } = useMemo(() => {
-    if (!tagesverlauf?.punkte?.length || !tagesverlauf?.serien?.length) {
-      return { istDaten: null, vorhandeneKategorien: new Set<string>(), serienKategorien: new Set<string>() }
-    }
-
-    const pvKeys = tagesverlauf.serien
-      .filter(s => s.kategorie === 'pv')
-      .map(s => s.key)
-
-    // Kategorien der Serien indexieren
-    const keyKategorie: Record<string, string> = {}
-    for (const s of tagesverlauf.serien) {
-      keyKategorie[s.key] = s.kategorie
-    }
-    // E-Auto überspringen wenn Wallbox existiert (Wallbox misst bereits die Ladeleistung)
-    const hasWallbox = tagesverlauf.serien.some(s => s.kategorie === 'wallbox')
-    const skipKeys = new Set(
-      tagesverlauf.serien
-        .filter(s => s.kategorie === 'eauto' && hasWallbox)
-        .map(s => s.key)
-    )
-
-    const kategorienGesehen = new Set<string>()
-    const result: Record<number, {
-      pv: number
-      haushalt: number
-      batterie_ladung: number
-      wallbox: number
-      waermepumpe: number
-      sonstige: number
-      verbrauch_gesamt: number
-    }> = {}
-
-    // Stunden-Mittelwert über alle 10-Min-Slots (statt letzten Slot zu nehmen).
-    // Konsistent mit der Mean-Konvention der Open-Meteo-Prognose im selben Chart.
-    type StundenAcc = {
-      pv: number
-      haushalt: number
-      batterie_ladung: number
-      wallbox: number
-      waermepumpe: number
-      sonstige: number
-      verbrauch_gesamt: number
-      count: number
-    }
-    const accumulators: Record<number, StundenAcc> = {}
-
-    for (const punkt of tagesverlauf.punkte) {
-      const h = parseInt(punkt.zeit.split(':')[0])
-      if (h > currentHour) continue
-
-      let pvSum = 0
-      let haushalt = 0
-      let batterie_ladung = 0
-      let wallbox = 0
-      let waermepumpe = 0
-      let sonstige = 0
-      const netzValue = punkt.werte['netz'] ?? 0
-
-      for (const [key, val] of Object.entries(punkt.werte)) {
-        if (skipKeys.has(key)) continue
-        const kat = keyKategorie[key]
-
-        if (pvKeys.includes(key)) {
-          pvSum += val
-        } else if (kat === 'batterie') {
-          // Batterie: negativ = Ladung (Verbrauch), positiv = Entladung (Quelle)
-          if (val < 0) {
-            batterie_ladung += Math.abs(val)
-            kategorienGesehen.add('batterie_ladung')
-          }
-        } else if (kat === 'netz') {
-          // Netz wird separat behandelt (in Energiebilanz)
-        } else if (kat === 'haushalt') {
-          haushalt += Math.abs(val)
-          if (val !== 0) kategorienGesehen.add('haushalt')
-        } else if (kat === 'wallbox' || kat === 'eauto') {
-          wallbox += Math.abs(val)
-          if (val !== 0) kategorienGesehen.add('wallbox')
-        } else if (kat === 'waermepumpe') {
-          waermepumpe += Math.abs(val)
-          if (val !== 0) kategorienGesehen.add('waermepumpe')
-        } else if (kat && kat !== 'pv' && !NICHT_ENERGIE_KATEGORIEN.has(kat)) {
-          sonstige += Math.abs(val)
-          if (val !== 0) kategorienGesehen.add('sonstige')
-        }
-      }
-
-      // Energiebilanz: Gesamtverbrauch = PV + Netz
-      const verbrauch_gesamt = Math.max(0, pvSum + netzValue)
-
-      // Wenn wir keine Kategorien-Aufschlüsselung haben,
-      // Haushalt als Residual berechnen
-      const kategorien_summe = haushalt + batterie_ladung + wallbox + waermepumpe + sonstige
-      if (kategorien_summe === 0 && verbrauch_gesamt > 0) {
-        haushalt = verbrauch_gesamt
-        kategorienGesehen.add('haushalt')
-      }
-
-      const acc = accumulators[h] ??= {
-        pv: 0, haushalt: 0, batterie_ladung: 0, wallbox: 0,
-        waermepumpe: 0, sonstige: 0, verbrauch_gesamt: 0, count: 0,
-      }
-      acc.pv += pvSum
-      acc.haushalt += haushalt
-      acc.batterie_ladung += batterie_ladung
-      acc.wallbox += wallbox
-      acc.waermepumpe += waermepumpe
-      acc.sonstige += sonstige
-      acc.verbrauch_gesamt += verbrauch_gesamt
-      acc.count += 1
-    }
-
-    for (const [hStr, acc] of Object.entries(accumulators)) {
-      const c = acc.count
-      result[parseInt(hStr)] = {
-        pv: acc.pv / c,
-        haushalt: acc.haushalt / c,
-        batterie_ladung: acc.batterie_ladung / c,
-        wallbox: acc.wallbox / c,
-        waermepumpe: acc.waermepumpe / c,
-        sonstige: acc.sonstige / c,
-        verbrauch_gesamt: acc.verbrauch_gesamt / c,
-      }
-    }
-
-    // Nur Kategorien behalten, die tatsächlich als Investition/Serie existieren
-    const serienKategorien = new Set(tagesverlauf.serien.map(s => {
-      if (s.kategorie === 'batterie') return 'batterie_ladung'
-      if (s.kategorie === 'eauto') return 'wallbox'
-      return s.kategorie
-    }))
-    // Haushalt ist immer erlaubt (Residualwert)
-    serienKategorien.add('haushalt')
-    for (const kat of kategorienGesehen) {
-      if (!serienKategorien.has(kat)) kategorienGesehen.delete(kat)
-    }
-
-    return {
-      istDaten: Object.keys(result).length > 0 ? result : null,
-      vorhandeneKategorien: kategorienGesehen,
-      serienKategorien,
-    }
-  }, [tagesverlauf, currentHour])
+  // IST-Daten aus Tagesverlauf aggregieren — gestapelt nach Kategorie,
+  // im selben Backward-Raster wie die Prognose (siehe `istStundenSlots`).
+  const { istDaten, vorhandeneKategorien, serienKategorien } = useMemo(
+    () => istStundenSlots(tagesverlauf), [tagesverlauf])
 
   // Chart-Daten: 24h mit IST (gestapelt) + Prognose
   const chartData = useMemo(() => {
@@ -243,8 +271,11 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
         punkt.verbrauch_prognose = prognose.verbrauch
       }
 
+      // Backward: Slot `currentHour` = `[currentHour-1, currentHour)` und damit
+      // die letzte VOLLSTÄNDIGE Stunde. Die laufende Stunde liegt in Slot
+      // `currentHour+1` und bleibt draußen — ein Mittel über die ersten paar
+      // Minuten sähe sonst wie ein Einbruch der IST-Kurve aus.
       if (h <= currentHour) {
-        // Vergangene + aktuelle Stunde: IST (gestapelt)
         if (ist) {
           punkt.pv_ist = ist.pv
           // 0 als 0 belassen (nicht null) — Recharts braucht das für korrektes Stacking
@@ -423,15 +454,17 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
           <div className="flex" style={{ paddingLeft: 45, paddingRight: 5 }}>
             {Array.from({ length: 24 }, (_, h) => {
               const s = stundenMap[h]
-              const istJetzt = h === currentHour
-              const istVergangen = h < currentHour
+              // Backward: Slot `h` deckt `[h-1, h)` ab → die laufende Stunde ist
+              // Slot `currentHour+1`, alles davor ist vorbei.
+              const istJetzt = h === currentHour + 1
+              const istVergangen = h <= currentHour
               return (
                 <div
                   key={h}
                   className={`flex-1 flex flex-col items-center py-0.5 rounded transition-opacity ${
                     istVergangen ? 'opacity-40' : ''
                   } ${istJetzt ? 'ring-1 ring-primary-400 bg-primary-50 dark:bg-primary-900/20' : ''}`}
-                  title={s ? `${s.zeit}: ${fmtZahl(s.temperatur_c, 1)}°C, ${fmtZahl(s.globalstrahlung_wm2, 0)} W/m²` : `${h}:00`}
+                  title={s ? `${slotZeitspanne(h)}: ${fmtZahl(s.temperatur_c, 1)}°C, ${fmtZahl(s.globalstrahlung_wm2, 0)} W/m²` : slotZeitspanne(h)}
                 >
                   {s ? (
                     <>
@@ -503,12 +536,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
               />
               <Tooltip content={<ChartTooltip
                 lineStyle /* D12-2: IST (durchgezogen) vs. Prognose (gestrichelt) bei gleicher Farbe unterscheidbar */
-                labelFormatter={(label) => {
-                  // Forward-Slot-Konvention: zeit=h ist Intervall [h, h+1]
-                  const h = parseInt(String(label))
-                  const next = (h + 1) % 24
-                  return `${String(h).padStart(2, '0')}:00–${String(next).padStart(2, '0')}:00 Uhr`
-                }}
+                /* Beschriftung aus derselben Quelle wie die Einsortierung der
+                   Werte — Backward-SoT `lib/stundenSlot.ts` (#144/#297). */
+                labelFormatter={(label) => slotZeitspanne(parseInt(String(label)))}
                 nameFormatter={(name) => tooltipLabels[name] ?? name}
                 formatter={(value, name) => {
                   if (value === null || value === undefined) return null
@@ -521,7 +551,8 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 }}
                 itemSorter={() => 0}
               />} />
-              {/* Aktuelle Stunde — Trennlinie IST/Prognose */}
+              {/* Trennlinie IST/Prognose: Slot `currentHour` ist die letzte
+                  vollständig gemessene Stunde, danach beginnt die Prognose. */}
               <ReferenceLine
                 x={String(currentHour)}
                 stroke={achsen.referenz}
@@ -529,10 +560,12 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 strokeWidth={1}
                 label={{ value: 'Jetzt', position: 'top', fontSize: 9, fill: achsen.referenz }}
               />
-              {/* Sonnenaufgang */}
-              {wetter.sunrise && (
+              {/* Sonnenaufgang — in dem Slot, der den Zeitpunkt enthält
+                  (05:56 liegt in `[05:00, 06:00)` = Slot 6), nicht in dem, der
+                  zufällig dieselbe Stundenzahl trägt. */}
+              {sonnenSlot(wetter.sunrise) !== null && (
                 <ReferenceLine
-                  x={String(parseInt(wetter.sunrise.split(':')[0]))}
+                  x={String(sonnenSlot(wetter.sunrise))}
                   stroke={COLORS.solar}
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
@@ -540,9 +573,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 />
               )}
               {/* Solar Noon */}
-              {wetter.solar_noon && (
+              {sonnenSlot(wetter.solar_noon) !== null && (
                 <ReferenceLine
-                  x={String(parseInt(wetter.solar_noon.split(':')[0]))}
+                  x={String(sonnenSlot(wetter.solar_noon))}
                   stroke={CHART_COLORS.solarNoon}
                   strokeDasharray="4 3"
                   strokeWidth={0.8}
@@ -550,9 +583,9 @@ export default function WetterWidget({ wetter, tagesverlauf, loading, anlageId }
                 />
               )}
               {/* Sonnenuntergang */}
-              {wetter.sunset && (
+              {sonnenSlot(wetter.sunset) !== null && (
                 <ReferenceLine
-                  x={String(parseInt(wetter.sunset.split(':')[0]))}
+                  x={String(sonnenSlot(wetter.sunset))}
                   stroke={COLORS.solar}
                   strokeDasharray="4 3"
                   strokeWidth={0.8}

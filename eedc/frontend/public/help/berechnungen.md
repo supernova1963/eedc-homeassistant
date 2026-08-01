@@ -1362,6 +1362,24 @@ Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Ti
 - `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot. Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
 - **Nach Update auf v3.20.0 nötig:** einmal „Verlauf nachberechnen + überschreiben" auslösen, damit alle historischen Stundenwerte umverteilt werden. Tagessummen und alle abgeleiteten Kennzahlen (Autarkie, PR, Lernfaktor) sind konventionsunabhängig korrekt.
 
+**Die Konvention endet nicht am Backend (v4.0.6).** Wer eine Stunde *beschriftet* oder einen Messwert
+in eine Chart-Spalte *einsortiert*, folgt derselben Regel — Client-SoT ist
+`frontend/src/lib/stundenSlot.ts` (Spiegel von `core/berechnungen/slot_konvention.py`, Regressionstest
+`stundenSlot.test.ts`):
+
+| Funktion | Wofür |
+|---|---|
+| `slotZeitspanne(h)` | Beschriftung — Slot 11 → „10:00–11:00 Uhr". **Jeder** Tooltip einer Stundengrafik. |
+| `slotAusIntervallStart(h)` | Messreihen mit Slot-**Beginn**-Stempel (10-Min-Punkte des Tagesverlaufs) → Slot `h+1`. Rückgabe 24 = Slot 0 des Folgetags, **kein** Modulo. |
+| `slotAusZeitpunkt("HH:MM")` | Zeitpunkt-Marker (Sonnenaufgang, Solar Noon) in den Slot, der ihn enthält — 05:56 → Slot 6. |
+
+Auslöser war Rainer (PN 90106, 01.08.2026): der Live-Block „Wetter heute" baute seine Zeitspanne selbst
+und **vorwärts** (`[h, h+1)`), während die Prognose-Sicht rückwärts beschriftete; zusätzlich bündelte er
+die 10-Minuten-Punkte der Stunde `h` in Spalte `h` statt `h+1`. Gemessen gegen die Live-Box lag die
+IST-Kurve dadurch **genau eine Spalte** neben der Prognose im selben Chart. Klasse: nicht das
+Beschriftungs-Symptom patchen, sondern die Stelle, die die Zuordnung konstruiert
+(`feedback_aggregations_drift`).
+
 ### Stündliche Berechnung (aggregate_day)
 
 ```

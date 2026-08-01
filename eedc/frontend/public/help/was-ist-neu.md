@@ -109,6 +109,34 @@ Komponente fest.
 wenn du sie klickst.
 → [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
 
+### Live „Wetter heute": IST-Kurve und Prognose liegen wieder auf derselben Stunde
+
+**Betrifft dich das?** Wenn du im **Cockpit → Live** den Block **„Wetter heute"** benutzt — also den
+Verlauf von PV-Ertrag und Verbrauch mit der gestrichelten Prognose darüber.
+
+Eine Stunde steht in eedc für die Zeit **davor**: Der Punkt bei **11** trägt, was zwischen 10:00 und
+11:00 passiert ist — so wie ein Zählerstand um 11:00 die Stunde davor abschließt. Alle
+Prognose-Quellen, das Energieprofil und die Auswertungen halten das so. Dieser eine Block hielt sich
+nicht daran: Er schrieb im Tooltip „11:00–12:00 Uhr" und legte gleichzeitig seine **gemessene**
+PV-Kurve eine Spalte zu früh ab. Wer beide Sichten offen hatte, las für dieselbe Stunde zwei
+verschiedene Zeitspannen — und die Prognose sah aus, als käme sie eine Stunde zu spät.
+
+Was du jetzt siehst:
+
+- **Der Tooltip nennt überall dieselbe Zeitspanne** („10:00–11:00 Uhr" am 11-Uhr-Punkt), im Cockpit
+  wie unter Auswertungen → Prognose.
+- **Die gemessene Kurve liegt Spalte für Spalte neben der Prognose** derselben Stunde. Die
+  Abweichung, die du siehst, ist ab jetzt die echte Prognose-Abweichung und kein Zeitversatz.
+- **Die laufende Stunde erscheint nicht mehr als Einbruch.** Bisher wurde die gerade erst
+  angefangene Stunde als vollständiger Mittelwert gezeichnet; jetzt endet die IST-Kurve mit der
+  letzten vollständigen Stunde.
+- **Sonnenauf-/-untergang, Sonnenhöchststand und das hervorgehobene Wettersymbol** stehen in der
+  Stunde, die den Zeitpunkt wirklich enthält (05:56 Uhr gehört zu 05:00–06:00).
+
+**Es ändert sich keine Zahl.** Tagessumme, Kacheln und alle Auswertungen bleiben, wie sie waren —
+verschoben wird nur, in welcher Spalte ein bereits gemessener Wert steht.
+→ [Handbuch → Prognosen §3 Wo die Prognosen erscheinen](HANDBUCH_PROGNOSEN.md#3-wo-die-prognosen-in-der-app-erscheinen) *(gemeldet von Rainer)*
+
 ---
 
 ## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)
