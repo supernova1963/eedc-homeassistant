@@ -205,6 +205,11 @@ weiterhin da, aber als Nebensatz für alle, die ihn ohnehin gehen.
 **Ein Hinweis gehört dazu:** Ein neuer Helfer **beginnt bei null** — vergangene Monate sammelt Home
 Assistant nicht nach. Das ist keine Eigenart des Helfers, das gilt für jeden Weg.
 
+**Das gilt jetzt für alle vier Meldungen dieser Prüfung.** Eine davon nannte bisher überhaupt keinen
+Weg, sondern nur das Ziel („`state_class: total_increasing` setzen") — wer sie las, wusste hinterher,
+*was* fehlt, aber nicht, *wie* man es behebt. Und die beiden Meldungen zur fehlenden Summen-Spalte
+standen bis jetzt gar nicht im Handbuch; die Melde-Tabelle ist vollständig.
+
 **Was du tun musst: nichts.** Es ändert sich nur der Text im Daten-Checker, keine Zahl und keine
 Zuordnung.
 → [Handbuch → Daten-Checker §5.1 state_class-Probleme beheben](HANDBUCH_DATEN_CHECKER.md#51-state_class-probleme-bei-ha-sensoren-beheben) *(gemeldet von Rainer)*

@@ -6,7 +6,9 @@ kWh-Zähler für eedc braucht, legt in Home Assistant einen **Verbrauchszähler-
 Helfer über die Oberfläche** an — **ohne Zyklus**. Bis v4.0.5 riet der
 LTS-Check an drei Stellen zuerst zu `configuration.yaml`/`customize`; die YAML
 ist für viele Anwender eine Fremdsprache, und ein Monatsreset trifft genau den
-Snapshot-Pfad (rohe Zählerdifferenzen mit Tageszähler-Heuristik).
+Snapshot-Pfad (rohe Zählerdifferenzen mit Tageszähler-Heuristik). Die **vierte**
+Meldung derselben Prüfung (Counter ohne Summen-Spalte) nannte gar keinen Weg —
+nachgezogen im Doku-Durchgang vor v4.0.6 (N-53).
 
 Zwei Aussagen gehören laut Kanon in jeden solchen Text und werden hier
 gewächtert: **ohne Zyklus** und **die Historie beginnt bei null** (HA sammelt
@@ -112,6 +114,28 @@ async def test_counter_ohne_state_class_empfiehlt_den_helfer(db, monkeypatch):
     warnungen = [r for r in ergebnisse if r.schwere == CheckSeverity.WARNING]
     assert len(warnungen) == 1, [r.meldung for r in ergebnisse]
     _pruefe_kanon(warnungen[0].details or "")
+
+
+async def test_counter_ohne_summen_spalte_empfiehlt_den_helfer(db, monkeypatch):
+    """Die vierte Meldung derselben Prüfung nannte gar keinen Weg (N-53).
+
+    Sie sagte nur „Empfohlen: `state_class: total_increasing` setzen" — wer
+    sie las, wusste hinterher *was*, aber nicht *wie*. Jetzt derselbe Kanon
+    wie die drei anderen.
+    """
+    from backend.services.daten_checker import DatenChecker
+
+    anlage = await _seed(db, mit_counter=True)
+    _patch(monkeypatch, _FakeHaStats(ohne_sum={"sensor.wp_starts"}))
+
+    ergebnisse = await DatenChecker(db)._check_sensor_mapping_lts(anlage)
+
+    warnungen = [r for r in ergebnisse if r.schwere == CheckSeverity.WARNING]
+    assert len(warnungen) == 1, [r.meldung for r in ergebnisse]
+    details = warnungen[0].details or ""
+    _pruefe_kanon(details)
+    # Der bisherige Handgriff bleibt lesbar — nur nicht mehr als einziger.
+    assert "total_increasing" in details
 
 
 async def test_zaehler_ohne_summen_spalte_empfiehlt_den_helfer(db, monkeypatch):

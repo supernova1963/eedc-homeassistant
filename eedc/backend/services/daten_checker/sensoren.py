@@ -433,8 +433,16 @@ class SensorChecks:
                     "`measurement` statt `total_increasing`, deshalb führt HA für sie "
                     "keine Summen-Spalte — und alle Korrektur-Werkzeuge lesen genau "
                     "die (Vollbackfill, Verlauf nachrechnen, Per-Tag-Reaggregation). "
-                    "Ein Aussetzer lässt sich damit nicht nachholen. Empfohlen: "
-                    "`state_class: total_increasing` setzen. "
+                    "Ein Aussetzer lässt sich damit nicht nachholen. Empfohlen: in "
+                    "Home Assistant unter Einstellungen → Geräte & Dienste → Helfer "
+                    "einen Verbrauchszähler auf diesen Sensor anlegen, Zurücksetzen "
+                    "„nie“ (ohne Zyklus) — er führt die Summen-Spalte, die die "
+                    "Korrektur-Werkzeuge brauchen, und behält seinen Namen auch nach "
+                    "einem Gerätetausch; zugeordnet wird dann der Helfer. Seine "
+                    "Historie beginnt bei null: Vergangenes sammelt Home Assistant "
+                    "nicht nach. Wer die YAML ohnehin pflegt, kann stattdessen "
+                    "`state_class: total_increasing` per `customize` setzen "
+                    "(HA-Neustart nötig). "
                     f"Betroffen: {beispiele}"
                 ),
                 link=LINK_DATENQUELLEN,
