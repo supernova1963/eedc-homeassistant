@@ -8,6 +8,7 @@ from datetime import date
 from typing import Optional
 
 from backend.core.field_definitions import get_speicher_netzladung_kwh
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
@@ -91,6 +92,49 @@ class MonatsdatenChecks:
             f"dem Import einmal durchsehen. "
             f"Erst wenn das nichts ändert, kommen die folgenden Ursachen infrage. "
         )
+
+    # Ab diesem Zuwachs an installierter Erzeugerleistung gilt ein
+    # Einspeise-Sprung als ausgebaut-bedingt (#362). 10 % ist die Grenze, ab
+    # der ein Zubau mehr ist als eine korrigierte Nachkommastelle.
+    AUSBAU_SCHWELLE = 1.10
+
+    @staticmethod
+    def _erzeugung_ausgebaut(
+        anlage: Anlage, vorjahr: Monatsdaten, md: Monatsdaten
+    ) -> bool:
+        """Ist zwischen Vergleichsmonat und geprüftem Monat Erzeugerleistung
+        dazugekommen? (#362 kingcap1)
+
+        Dann erklärt der Ausbau einen Einspeise-Sprung, und die Prüfung setzt
+        für dieses Monatspaar aus, statt die Schwelle zu skalieren. Der Grund
+        ist strukturell: Die Einspeisung ist eine **Differenzgröße**
+        (Erzeugung − Eigenverbrauch). Bleibt der Verbrauch gleich, landet vom
+        Zubau fast alles im Netz — kingcap1s Anlage wuchs um das Vierfache,
+        seine Mai-Einspeisung um das Fünfzehnfache (61 → 888 kWh). Ein aus der
+        kWp abgeleiteter Erwartungsfaktor wäre damit geraten, nicht gerechnet.
+
+        Nur Erzeuger-Typen zählen, gelesen über den SoT-Helper
+        `get_erzeuger_kwp` (ADR-002/P3-a — die kWp steht je nach Herkunft in
+        der Spalte oder im `parameter`-JSON). Schrumpft die Leistung
+        (Stilllegung), ist es kein Ausbau: dann ist ein Sprung erst recht
+        auffällig und die Prüfung greift unverändert.
+        """
+        erzeuger = [
+            i for i in (anlage.investitionen or [])
+            if i.typ in ("pv-module", "balkonkraftwerk")
+        ]
+        if not erzeuger:
+            return False
+
+        def _kwp(jahr: int, monat: int) -> float:
+            return sum(
+                get_erzeuger_kwp(i) for i in erzeuger if i.ist_aktiv_im_monat(jahr, monat)
+            )
+
+        kwp_vorher = _kwp(vorjahr.jahr, vorjahr.monat)
+        if kwp_vorher <= 0:
+            return False
+        return _kwp(md.jahr, md.monat) >= kwp_vorher * MonatsdatenChecks.AUSBAU_SCHWELLE
 
     # ─── Monatsdaten Vollständigkeit ─────────────────────────────────────
 
@@ -456,10 +500,19 @@ class MonatsdatenChecks:
                 vorjahr
                 and not (inst and (vorjahr.jahr, vorjahr.monat) <= (inst.year, inst.month))
             ):
+                # #362 kingcap1: Eine in Stufen ausgebaute Anlage erzeugt den
+                # Sprung selbst — 2024 hingen mehr Module am Netz als 2023.
+                # Für die Einspeisung setzt die Prüfung dann aus (Begründung
+                # in `_erzeugung_ausgebaut`). NUR für sie: Der Netzbezug sinkt
+                # mit mehr PV, dort wäre der Zubau die falsche Erklärung — er
+                # wächst mit neuen Verbrauchern (WP, E-Auto, Wallbox).
+                ausgebaut = self._erzeugung_ausgebaut(anlage, vorjahr, md)
                 for feld, wert, vj_wert in [
                     ("Einspeisung", md.einspeisung_kwh, vorjahr.einspeisung_kwh),
                     ("Netzbezug", md.netzbezug_kwh, vorjahr.netzbezug_kwh),
                 ]:
+                    if feld == "Einspeisung" and ausgebaut:
+                        continue
                     if vj_wert and vj_wert > 50 and wert is not None and wert > 3 * vj_wert:
                         ergebnisse.append(CheckErgebnis(
                             kategorie=kat, schwere=CheckSeverity.WARNING,

@@ -115,9 +115,101 @@ async def test_3x_warnung_bleibt_bei_normalem_vorjahresmonat(db):
     )
 
 
+async def test_kein_3x_alarm_wenn_die_anlage_zwischenzeitlich_ausgebaut_wurde(db):
+    """#362 kingcap1: Anlage 2023 mit 3 kWp gestartet, 2024 auf 12 kWp
+    ausgebaut. Die Einspeisung steigt dadurch um das Vierfache — das ist der
+    Ausbau, keine Anomalie. Die Schwelle wächst mit der installierten Leistung
+    mit (3× → 12×), die Warnung bleibt aus."""
+    anlage = Anlage(
+        anlagenname="AusbauAnlage",
+        leistung_kwp=12.0,
+        installationsdatum=date(2023, 1, 10),
+    )
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Erste Stufe",
+        anschaffungsdatum=date(2023, 1, 10), leistung_kwp=3.0,
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Ausbau 2024",
+        anschaffungsdatum=date(2024, 3, 1), leistung_kwp=9.0,
+    ))
+
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2023, monat=5,
+        einspeisung_kwh=61.0, netzbezug_kwh=100.0,
+    ))
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2024, monat=5,
+        einspeisung_kwh=888.0, netzbezug_kwh=110.0,
+    ))
+    await db.commit()
+
+    anlage, monatsdaten = await _reload_anlage(db, anlage.id)
+    checker = DatenChecker(db)
+    ergebnisse = await checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
+
+    vj_warnungen = [
+        e for e in ergebnisse
+        if "Vorjahr" in (e.meldung or "") and "Einspeisung" in (e.meldung or "")
+    ]
+    assert len(vj_warnungen) == 0, (
+        f"Ausbau von 3 auf 12 kWp erklärt den Sprung — keine Warnung erwartet, "
+        f"bekam: {[e.meldung for e in vj_warnungen]}"
+    )
+
+
+async def test_netzbezug_warnung_bleibt_trotz_ausbau(db):
+    """Gegenprobe zu #362: Der Ausbau entschuldigt nur die Einspeisung. Der
+    Netzbezug sinkt mit mehr PV — springt er trotzdem, ist das unabhängig vom
+    Zubau auffällig und muss gemeldet werden."""
+    anlage = Anlage(
+        anlagenname="AusbauNetzbezug",
+        leistung_kwp=12.0,
+        installationsdatum=date(2023, 1, 10),
+    )
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Erste Stufe",
+        anschaffungsdatum=date(2023, 1, 10), leistung_kwp=3.0,
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="Ausbau 2024",
+        anschaffungsdatum=date(2024, 3, 1), leistung_kwp=9.0,
+    ))
+
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2023, monat=5,
+        einspeisung_kwh=61.0, netzbezug_kwh=100.0,
+    ))
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2024, monat=5,
+        einspeisung_kwh=888.0, netzbezug_kwh=900.0,
+    ))
+    await db.commit()
+
+    anlage, monatsdaten = await _reload_anlage(db, anlage.id)
+    checker = DatenChecker(db)
+    ergebnisse = await checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
+
+    meldungen = [e.meldung or "" for e in ergebnisse if "Vorjahr" in (e.meldung or "")]
+    assert any("Netzbezug" in m for m in meldungen), (
+        f"Netzbezug-Warnung fehlt trotz 9× Sprung: {meldungen}"
+    )
+    assert not any("Einspeisung" in m for m in meldungen), (
+        f"Einspeisung darf bei Ausbau nicht melden: {meldungen}"
+    )
+
+
 _ASYNC_TESTS = [
     test_keine_3x_warnung_bei_inbetriebnahme_im_vorjahresmonat,
     test_3x_warnung_bleibt_bei_normalem_vorjahresmonat,
+    test_kein_3x_alarm_wenn_die_anlage_zwischenzeitlich_ausgebaut_wurde,
+    test_netzbezug_warnung_bleibt_trotz_ausbau,
 ]
 
 
