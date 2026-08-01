@@ -1401,6 +1401,41 @@ Intervall `[Vortag 23:00, 00:00)` trägt. Gepinnt in
 Symmetrie-Test „gleiche Wirklichkeit, drei Messarten ⇒ **ein** Profil"
 (`feedback_aggregator_symmetrie`).
 
+#### Wann eine Stunde als unvollständig gilt (v4.0.6)
+
+Die Zuordnung allein genügt nicht — die drei Quellen müssen sich auch einig sein, **wann eine Stunde
+überhaupt gemessen wurde**. Eine unvollständige Stunde liefert in allen dreien **keine Stichprobe**;
+sie wird ausgelassen, nicht geschätzt und nicht als 0 kW gezählt:
+
+| Quelle | Stunde gilt als gemessen, wenn … | sonst |
+|---|---|---|
+| EEDC-DB | eine `TagesEnergieProfil`-Zeile mit `verbrauch_kw IS NOT NULL` existiert | keine Zeile ⇒ keine Stichprobe (galt schon immer) |
+| HA-History | mindestens **ein** Netz-Sensor (Bezug, Einspeisung oder Kombi) in dieser Stunde einen Messpunkt hat | Stunde wird übersprungen |
+| MQTT-Snapshots | für **jeden** gelieferten Zähler an **beiden** Intervallgrenzen ein Stand vorliegt (höchstens 6 Minuten alt) | Stunde wird übersprungen |
+
+Zu den beiden Fallbacks im Einzelnen:
+
+- **MQTT misst über die Intervallgrenzen**, nicht über die zufällig in der Stunde liegenden Snapshots.
+  Bis v4.0.5 war das Stundendelta „letzter minus erster Snapshot *innerhalb* der Stunde"; das letzte
+  Snapshot-Intervall fiel damit jede Stunde heraus — bei 5-Minuten-Takt rund **8 % zu wenig**, und ein
+  Verbrauch, der erst gegen Ende der Stunde anfiel, ging ganz verloren. Der Randwert ist der letzte
+  Zählerstand *bei oder vor* der Grenze; benachbarte Stunden lesen denselben Wert, deshalb geht an der
+  Grenze nichts verloren und nichts wird doppelt gezählt. Der Scheduler schreibt alle 5 Minuten, aber
+  nicht auf die volle Stunde gerastert — daher die 6 Minuten Toleranz (Reserve für Verzug, aber nicht
+  genug für einen ausgefallenen Snapshot).
+- **HA zählt eine Stunde ohne Historie nicht mehr als gemessene Null.** Bis v4.0.5 hängte jede Stunde
+  eine Stichprobe an, auch wenn der Recorder nichts geliefert hatte: aus *unbekannt* wurde *war
+  nichts*, und ein einziger Ausfalltag drückte jeden Werktags-Slot auf 4/5 des wahren Werts. Beleg ist
+  bewusst der **Netzanschluss** und dort `any` statt `all`: PV- und WP-Sensoren melden nachts bzw. im
+  Stillstand stundenlang keine Zustandsänderung, ohne dass Daten fehlen, und von Bezug und Einspeisung
+  bewegt sich immer genau einer. Liefert im ganzen Fenster **kein** Netz-Sensor, gibt es kein
+  HA-Profil — sonst stünde die reine PV-Kurve als vermeintlicher Verbrauch da.
+
+Ein Slot ohne jede Stichprobe fehlt im Ergebnis-Dict. Der Konsument
+(`api/routes/live_wetter.py::_berechne_verbrauchsprofil`) erkennt das und setzt seine
+Standard-Grundlast ein, statt still 0 kW anzunehmen — die lokale Ausprägung von
+[ADR-002/P4](ADR-002-WURZELMUSTER.md).
+
 ### Stündliche Berechnung (aggregate_day)
 
 ```

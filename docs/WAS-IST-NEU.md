@@ -140,8 +140,19 @@ im Standalone-Betrieb — aus den MQTT-Daten, und diese beiden Wege ordneten die
 Nach ein paar Tagen Aufzeichnung stimmte die Kurve von selbst; jetzt stimmt sie ab der ersten
 Stunde. **Bestehende Anlagen waren nie betroffen.**
 
-**Es ändert sich keine Zahl.** Tagessumme, Kacheln und alle Auswertungen bleiben, wie sie waren —
-verschoben wird nur, in welcher Spalte ein bereits gemessener Wert steht.
+**Dieselben beiden Wege rechneten die Stunde außerdem zu niedrig — hier bewegt sich die Kurve
+sichtbar.** Im Standalone-Betrieb wurde nur der Verbrauch zwischen dem ersten und dem letzten
+Messpunkt **innerhalb** der Stunde gezählt; das letzte Stück bis zum Stundenschlag fiel jedes Mal
+heraus, bei einem Messpunkt alle fünf Minuten rund **8 %**. Und beim Weg über Home Assistant zählte
+eine Stunde, für die gar keine Aufzeichnung vorlag, als **gemessene Null** und zog den Durchschnitt
+nach unten — ein einziger Tag ohne Daten drückte jede Werktags-Stunde auf vier Fünftel. Beides ist
+behoben: Gemessen wird jetzt von Stundengrenze zu Stundengrenze, und **eine Stunde ohne Messung
+wird ausgelassen statt als Null gezählt**. Bleibt für eine Stunde gar nichts übrig, setzt eedc dort
+seinen Standardwert ein und behauptet nicht, du hättest nichts verbraucht. **Deine gestrichelte
+Verbrauchs-Kurve liegt dadurch höher als vorher — sie lag zu tief.**
+
+**An deinen erfassten Daten ändert sich nichts.** Tagessummen, Kacheln und alle Auswertungen
+bleiben, wie sie waren; betroffen ist allein die gelernte Verbrauchs-Prognose im Live-Chart.
 → [Handbuch → Prognosen §3 Wo die Prognosen erscheinen](HANDBUCH_PROGNOSEN.md#3-wo-die-prognosen-in-der-app-erscheinen) *(gemeldet von Rainer)*
 
 ---

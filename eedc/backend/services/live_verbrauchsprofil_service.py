@@ -15,9 +15,28 @@ aus ``TagesEnergieProfil.stunde``, HA-History und MQTT bekommen es über
 ``[h, h+1)`` nach Index ``h``) — die gestrichelte Verbrauchsprognose im
 Live-Chart lag damit eine Stunde zu früh, sichtbar nur bei frischer Installation
 und im Standalone-Betrieb, weil sonst der DB-Pfad greift.
+
+**Und alle drei Quellen zählen eine unvollständige Stunde nicht mit** (N-45/N-46).
+Der DB-Pfad tut das von jeher: eine Stunde ohne Zeile liefert keine Stichprobe.
+Die beiden Fallbacks taten es bis v4.0.5 nicht —
+
+* MQTT maß den Zuwachs zwischen dem *ersten und letzten Snapshot innerhalb* der
+  Stunde; das letzte Snapshot-Intervall fiel systematisch heraus (bei 5-Minuten-
+  Takt rund 8 % zu wenig). Jetzt wird über die **Intervallgrenzen** gemessen,
+  und fehlt ein Randwert, gilt die Stunde als unvollständig (N-45).
+* HA hängte für jede Stunde eine Stichprobe an — auch für Stunden, in denen der
+  Recorder gar nichts geliefert hatte. Aus *unbekannt* wurde so *war nichts*,
+  und ein Tag ohne History drückte das Profil nach unten (N-46).
+
+Eine ausgelassene Stunde bleibt im Ergebnis leer (``_build_profil_result``
+nimmt nur Slots mit Stichproben auf); der Konsument in
+``api/routes/live_wetter.py::_berechne_verbrauchsprofil`` erkennt den fehlenden
+Slot und setzt seine Standard-Grundlast ein, statt still 0 kW anzunehmen
+(Anschluss ADR-002/P4).
 """
 
 import logging
+from bisect import bisect_right
 from datetime import datetime, timedelta, date
 from typing import Iterator, Optional
 
@@ -44,6 +63,19 @@ logger = logging.getLogger(__name__)
 # Identisch in allen drei Quellen: der DB-Pfad filtert `datum >= heute-7 < heute`,
 # HA und MQTT laufen über `_slot_fenster(heute - 7 Tage)`.
 TAGE_FENSTER = 7
+
+# Wie alt ein Zählerstand an einer Stundengrenze höchstens sein darf, um noch als
+# deren Randwert zu gelten. Der Scheduler schreibt MQTT-Snapshots alle 5 Minuten
+# (`IntervalTrigger(minutes=5)`) — aber **nicht** auf die volle Stunde gerastert:
+# die Phase hängt am Startzeitpunkt und verschiebt sich bei jedem Neustart. Im
+# Normalbetrieb liegt der letzte Stand deshalb knapp unter 5 Minuten vor der
+# Grenze; die 6. Minute ist Reserve für Scheduler-Verzug.
+#
+# Bewusst **nicht** großzügiger: ein ausgefallener Snapshot macht die Stunde
+# unvollständig, und dann wird sie ausgelassen statt geschätzt. Die tolerierte
+# Restunschärfe kostet keine Energie — benachbarte Stunden lesen denselben
+# Randwert, die Tagessumme bleibt erhalten.
+RAND_TOLERANZ = timedelta(minutes=6)
 
 
 def _fenster_start(start_tag: date) -> datetime:
@@ -247,6 +279,9 @@ async def _profil_from_ha(
 
     Das Stundenmittel über ``[h_start, h_end)`` landet im Backward-Slot, den
     ``_slot_fenster`` dafür nennt — dieselbe Zuordnung wie im DB-Pfad.
+
+    Eine Stunde ohne Messpunkte am Netzanschluss liefert **keine** Stichprobe
+    (N-46, s. Modul-Docstring).
     """
     if not HA_INTEGRATION_AVAILABLE:
         return None
@@ -299,6 +334,26 @@ async def _profil_from_ha(
     if not history:
         return None
 
+    # ── Beleg dafür, dass eine Stunde überhaupt beobachtet wurde (N-46) ──
+    #
+    # Genommen werden die Netz-Sensoren: ohne sie ist „Verbrauch" gar nicht
+    # bestimmbar, und sie belegen, dass der Recorder in dieser Stunde lief.
+    # PV- und WP-Sensoren taugen nicht als Beleg — sie melden nachts bzw. im
+    # Stillstand stundenlang keine Zustandsänderung, obwohl nichts fehlt.
+    # Umgekehrt ist ``any`` statt ``all`` richtig: nachts steht der
+    # Einspeise-Sensor konstant auf 0 (keine Zustandsänderung), mittags der
+    # Bezugs-Sensor — einer von beiden bewegt sich immer.
+    nutzt_kombi = bool(kombi_eid and not bezug_eid and not einsp_eid)
+    netz_eids = [kombi_eid] if nutzt_kombi else [e for e in (bezug_eid, einsp_eid) if e]
+    beleg_eids = [eid for eid in netz_eids if history.get(eid)]
+    if not beleg_eids:
+        logger.info(
+            "Verbrauchsprofil Anlage %s: kein Netz-Sensor mit History im Fenster — "
+            "ohne Netzmessung gäbe es nur die PV-Kurve als vermeintlichen Verbrauch.",
+            anlage.id,
+        )
+        return None
+
     werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     wp_werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
@@ -306,10 +361,19 @@ async def _profil_from_ha(
     werktage_set: set[str] = set()
     wochenende_set: set[str] = set()
     temp_werte: list[float] = []
+    unbeobachtet = 0
 
     for h_start, h_end, slot_datum, h in _slot_fenster(start_tag):
         if h_end > now:
             break
+
+        if not any(
+            any(h_start <= ts < h_end for ts, _ in history.get(eid, ()))
+            for eid in beleg_eids
+        ):
+            unbeobachtet += 1
+            continue  # nicht beobachtet ⇒ keine Stichprobe (N-46)
+
         tag_str = slot_datum.isoformat()
         ist_wochenende = slot_datum.weekday() >= 5
 
@@ -368,6 +432,13 @@ async def _profil_from_ha(
             wp_werktag_sums[h].append(wp_kw)
             werktage_set.add(tag_str)
 
+    if unbeobachtet:
+        logger.info(
+            "Verbrauchsprofil Anlage %s: %d von %d Stunden ohne Netz-History — "
+            "ausgelassen statt als 0 kW gezählt.",
+            anlage.id, unbeobachtet, TAGE_FENSTER * 24,
+        )
+
     referenz_temp_c = round(sum(temp_werte) / len(temp_werte), 1) if temp_werte else None
 
     return _build_profil_result(
@@ -376,6 +447,49 @@ async def _profil_from_ha(
         wp_wochenende_sums=wp_wochenende_sums if wp_eids else None,
         referenz_temp_c=referenz_temp_c,
     )
+
+
+def _rand_stand(
+    zeiten: list[datetime], staende: list[float], grenze: datetime
+) -> Optional[float]:
+    """Zählerstand an einer Stundengrenze — oder ``None``, wenn keiner vorliegt.
+
+    Genommen wird der letzte Stand **bei oder vor** ``grenze``. Zwei
+    aufeinanderfolgende Stunden greifen damit auf denselben Randwert zu: an der
+    Grenze geht weder Energie verloren noch wird welche doppelt gezählt, die
+    Tagessumme bleibt erhalten. Liegt der letzte Stand weiter als
+    ``RAND_TOLERANZ`` zurück, wurde an dieser Grenze nicht gemessen.
+    """
+    i = bisect_right(zeiten, grenze) - 1
+    if i < 0 or grenze - zeiten[i] > RAND_TOLERANZ:
+        return None
+    return staende[i]
+
+
+def _stunden_zuwaechse(
+    reihen: dict[str, tuple[list[datetime], list[float]]],
+    h_start: datetime,
+    h_end: datetime,
+) -> Optional[dict[str, float]]:
+    """Zuwachs jedes Zählers über ``[h_start, h_end)`` — oder ``None``.
+
+    ``None`` heißt: mindestens ein Zähler hat an einer der beiden
+    Intervallgrenzen keinen Stand. Die Stunde ist dann **unvollständig** und
+    liefert keine Stichprobe, statt zu niedrig zu zählen (N-45).
+
+    Bis v4.0.5 wurde stattdessen der Zuwachs zwischen dem ersten und dem letzten
+    Snapshot *innerhalb* der Stunde gebildet — das letzte Snapshot-Intervall fiel
+    dabei jede Stunde heraus, bei 5-Minuten-Takt rund 8 % zu wenig.
+    """
+    zuwaechse: dict[str, float] = {}
+    for key, (zeiten, staende) in reihen.items():
+        v_start = _rand_stand(zeiten, staende, h_start)
+        v_end = _rand_stand(zeiten, staende, h_end)
+        if v_start is None or v_end is None:
+            return None
+        # Negatives Delta = Counter-Reset → als 0 werten (unverändert seit v3)
+        zuwaechse[key] = max(0.0, v_end - v_start)
+    return zuwaechse
 
 
 async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
@@ -387,7 +501,10 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
     daraus den durchschnittlichen Verbrauch in kW (= kWh/h).
 
     Das Delta über ``[h_start, h_end)`` landet im Backward-Slot, den
-    ``_slot_fenster`` dafür nennt — dieselbe Zuordnung wie im DB-Pfad.
+    ``_slot_fenster`` dafür nennt — dieselbe Zuordnung wie im DB-Pfad. Gemessen
+    wird über die **Intervallgrenzen** (``_stunden_zuwaechse``), nicht über die
+    zufällig darin liegenden Snapshots; fehlt ein Randwert, liefert die Stunde
+    keine Stichprobe (N-45).
     """
     from backend.core.database import get_session
     from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
@@ -396,7 +513,9 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
     start_tag = now.date() - timedelta(days=TAGE_FENSTER)
     start = _fenster_start(start_tag)
 
-    # Alle Snapshots der letzten 7 Tage laden
+    # Alle Snapshots der letzten 7 Tage laden. Die Toleranz gehört mit ins
+    # Fenster: der Randwert der allerersten Stundengrenze liegt davor, sonst
+    # fiele diese Stunde ohne Grund als unvollständig heraus.
     async with get_session() as session:
         result = await session.execute(
             select(
@@ -405,7 +524,7 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
                 MqttEnergySnapshot.value_kwh,
             ).where(
                 MqttEnergySnapshot.anlage_id == anlage_id,
-                MqttEnergySnapshot.timestamp >= start,
+                MqttEnergySnapshot.timestamp >= start - RAND_TOLERANZ,
             ).order_by(MqttEnergySnapshot.timestamp)
         )
         rows = result.all()
@@ -413,59 +532,52 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
     if not rows:
         return None
 
-    # Snapshots nach Zeitpunkt gruppieren: {timestamp: {key: value}}
-    snapshots: dict[datetime, dict[str, float]] = {}
-    for ts, key, val in rows:
-        if ts not in snapshots:
-            snapshots[ts] = {}
-        snapshots[ts][key] = val
-
-    sorted_times = sorted(snapshots.keys())
-    if len(sorted_times) < 2:
-        return None
-
     # Relevante Keys
     pv_key = "pv_gesamt_kwh"
     einsp_key = "einspeisung_kwh"
     bezug_key = "netzbezug_kwh"
 
+    # Je Zähler eine eigene Zeitreihe. Die Keys treffen nicht zwingend im selben
+    # Snapshot-Zeitpunkt ein, und der Randwert wird je Zähler gesucht — eine
+    # gemeinsame Zeitachse würde einen Zähler an der Grenze des anderen ablesen.
+    # `rows` kommt bereits nach timestamp sortiert (ORDER BY), das braucht
+    # `_rand_stand` für die Binärsuche.
+    reihen: dict[str, tuple[list[datetime], list[float]]] = {}
+    for ts, key, val in rows:
+        if key not in (pv_key, einsp_key, bezug_key):
+            continue
+        zeiten, staende = reihen.setdefault(key, ([], []))
+        zeiten.append(ts)
+        staende.append(val)
+
+    if not reihen:
+        return None
+
     werktag_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     wochenende_sums: dict[int, list[float]] = {h: [] for h in range(24)}
     werktage_set: set[str] = set()
     wochenende_set: set[str] = set()
+    unvollstaendig = 0
 
     for h_start, h_end, slot_datum, h in _slot_fenster(start_tag):
         if h_end > now:
             break
+
+        zuwaechse = _stunden_zuwaechse(reihen, h_start, h_end)
+        if zuwaechse is None:
+            unvollstaendig += 1
+            continue  # Randwert fehlt ⇒ keine Stichprobe (N-45)
+
         tag_str = slot_datum.isoformat()
         ist_wochenende = slot_datum.weekday() >= 5
 
-        # Snapshots in dieser Stunde finden
-        hour_snaps = [
-            snapshots[t] for t in sorted_times
-            if h_start <= t < h_end
-        ]
-        if len(hour_snaps) < 2:
-            continue
-
-        # Delta: letzter - erster Snapshot der Stunde
-        first = hour_snaps[0]
-        last = hour_snaps[-1]
-
-        def delta(key: str, _first=first, _last=last) -> float:
-            v_end = _last.get(key)
-            v_start = _first.get(key)
-            if v_end is None or v_start is None:
-                return 0.0
-            d = v_end - v_start
-            return max(0, d)  # Negative Deltas = Counter-Reset → ignorieren
-
-        pv_kwh = delta(pv_key)
-        bezug_kwh = delta(bezug_key)
-        einsp_kwh = delta(einsp_key)
-
         # Verbrauch in kWh für diese Stunde, ≈ kW (da 1h Intervall)
-        verbrauch_kw = max(0, pv_kwh + bezug_kwh - einsp_kwh)
+        verbrauch_kw = max(
+            0.0,
+            zuwaechse.get(pv_key, 0.0)
+            + zuwaechse.get(bezug_key, 0.0)
+            - zuwaechse.get(einsp_key, 0.0),
+        )
 
         if ist_wochenende:
             wochenende_sums[h].append(verbrauch_kw)
@@ -473,6 +585,13 @@ async def _profil_from_mqtt(anlage_id: int) -> Optional[dict]:
         else:
             werktag_sums[h].append(verbrauch_kw)
             werktage_set.add(tag_str)
+
+    if unvollstaendig:
+        logger.info(
+            "Verbrauchsprofil Anlage %s: %d von %d Stunden ohne Zählerstand an der "
+            "Intervallgrenze — ausgelassen statt zu niedrig gezählt.",
+            anlage_id, unvollstaendig, TAGE_FENSTER * 24,
+        )
 
     return _build_profil_result(
         werktag_sums, wochenende_sums, werktage_set, wochenende_set, "mqtt"
