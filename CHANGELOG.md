@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.6] - 2026-08-01 — Vergleichbares vergleichen · Gemessenes behalten
 
 ### Changed
 
