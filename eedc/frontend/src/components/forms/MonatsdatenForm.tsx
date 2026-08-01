@@ -7,10 +7,10 @@ import { useState, useEffect, useMemo, useRef, useCallback, FormEvent } from 're
 import { Button, Input, Alert, Select, Textarea, FormSection } from '../ui'
 import { useInvestitionen, useAktuellerStrompreis } from '../../hooks'
 import { investitionenApi, wetterApi, monatsabschlussApi } from '../../api'
-import type { MonatsabschlussResponse, FeldStatus } from '../../api/monatsabschluss'
+import type { MonatsabschlussResponse, FeldStatus, BehalteneAbweichung } from '../../api/monatsabschluss'
 import type { Monatsdaten, Investition } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert } from '../../lib/fieldDefinitions'
-import { prefillWert, ermittleZustand, zaehleAmpel, type ErfassungZustand } from '../../lib/erfassungZustand'
+import { prefillWert, ermittleZustand, zaehleAmpel, behaltenEintrag, type ErfassungZustand } from '../../lib/erfassungZustand'
 import { istAktivImMonat } from '../../lib/investitionAktiv'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
@@ -64,6 +64,9 @@ export interface MonatsdatenSubmitData {
   // sonderkosten_euro/_beschreibung; [] = bewusst geleert)
   sonstige_positionen?: SonstigePosition[]
   notizen?: string
+  // PN 90128: bewusst behaltene Sensor-Abweichungen der Basis-Felder
+  // ({feld: {sensor, wert}}); `{}` nimmt frühere Bestätigungen zurück.
+  geprueft_gegen?: Record<string, BehalteneAbweichung>
   // Investitions-spezifische Daten
   investitionen_daten?: Record<string, InvestitionMonatsdaten>
 }
@@ -523,31 +526,43 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
   // Kopf-Ampel (§6.2) + Review (§6.6): Zustände über den Pflicht-Kern (Zähler +
   // Investitionsfelder; Wetter/Preise/Sonderkosten zählen nicht als „offen") und
   // die vom Status gelieferten Plausibilitäts-Warnungen.
-  const { ampel, reviewWarnungen } = useMemo(() => {
+  const { ampel, reviewWarnungen, behaltenBasis, behaltenInv } = useMemo(() => {
     const zustaende: ErfassungZustand[] = []
     const warnungen: ReviewWarnung[] = []
+    // PN 90128: derselbe Durchlauf sammelt die bewusst behaltenen Abweichungen
+    // für den Speichern-Payload. Weil er bei jeder Änderung neu läuft, fallen
+    // überholte Bestätigungen von selbst heraus (kein Aufräum-Pfad nötig).
+    const behaltenBasis: Record<string, BehalteneAbweichung> = {}
+    const behaltenInv: Record<number, Record<string, BehalteneAbweichung>> = {}
     if (status) {
       // Alle Basis-Felder zählen mit ihrem Zustand; leere quellenlose Felder werden
       // 'optional' und von zaehleAmpel ignoriert (§6.2) → Feld-Badge ≡ Kopf-Ampel.
       for (const f of status.basis_felder) {
         const wert = (formData as Record<string, string>)[f.feld] ?? ''
-        zustaende.push(ermittleZustand(wert, f, bestaetigteFelder.has(f.feld)).zustand)
+        const erg = ermittleZustand(wert, f, bestaetigteFelder.has(f.feld))
+        zustaende.push(erg.zustand)
+        const behalten = behaltenEintrag(erg)
+        if (behalten) behaltenBasis[f.feld] = behalten
         for (const w of f.warnungen) {
           warnungen.push({ feld: f.feld, feldLabel: f.label, meldung: w.meldung, schwere: w.schwere, basis: true })
         }
       }
       for (const inv of aktiveInvestitionen) {
         const daten = investitionsDaten[inv.id] ?? {}
+        behaltenInv[inv.id] = {}
         for (const f of felderFuer(inv)) {
           const fs = invStatus[inv.id]?.[f.feld]
-          zustaende.push(ermittleZustand(readFeldWert(daten, f.feld), fs, istInvBestaetigt(inv.id, f.feld)).zustand)
+          const erg = ermittleZustand(readFeldWert(daten, f.feld), fs, istInvBestaetigt(inv.id, f.feld))
+          zustaende.push(erg.zustand)
+          const behalten = behaltenEintrag(erg)
+          if (behalten) behaltenInv[inv.id][f.feld] = behalten
           if (fs) for (const w of fs.warnungen) {
             warnungen.push({ feld: f.feld, feldLabel: `${inv.bezeichnung} · ${f.label}`, meldung: w.meldung, schwere: w.schwere, basis: false })
           }
         }
       }
     }
-    return { ampel: zaehleAmpel(zustaende), reviewWarnungen: warnungen }
+    return { ampel: zaehleAmpel(zustaende), reviewWarnungen: warnungen, behaltenBasis, behaltenInv }
   }, [status, formData, investitionsDaten, aktiveInvestitionen, invStatus, bestaetigteFelder, felderFuer, istInvBestaetigt])
 
   const springeZuFeld = (feld: string) => {
@@ -699,7 +714,13 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           (parsed as Record<string, unknown>).sonstige_positionen = gueltigePositionen
         }
 
-        if (Object.keys(parsed).length > 0) {
+        // PN 90128: bewusst behaltene Sensor-Abweichungen dieser Investition —
+        // immer mitgeben, sobald überhaupt etwas für sie gespeichert wird. Ein
+        // leeres Objekt nimmt frühere Bestätigungen zurück (der Sensor meldet
+        // inzwischen etwas anderes oder der Wert wurde geändert).
+        const invBehalten = behaltenInv[inv.id] ?? {}
+        if (Object.keys(parsed).length > 0 || Object.keys(invBehalten).length > 0) {
+          (parsed as Record<string, unknown>).geprueft_gegen = invBehalten
           invDaten[inv.id] = parsed
         }
       })
@@ -741,6 +762,8 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
           return (gueltige.length > 0 || initialHatteBasisPositionen) ? gueltige : undefined
         })(),
         notizen: formData.notizen || undefined,
+        // PN 90128: siehe oben — immer gesendet, `{}` nimmt alles zurück.
+        geprueft_gegen: behaltenBasis,
         investitionen_daten: Object.keys(invDaten).length > 0 ? invDaten : undefined,
       })
     } catch (e) {

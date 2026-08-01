@@ -40,6 +40,16 @@ export interface FeldStatus {
   sensor_id: string | null
   typ: 'number' | 'text'  // Feldtyp
   gruppe: string | null  // zaehler, wetter, preise
+  /** PN 90128: die vom Nutzer bewusst behaltene Situation dieses Feldes —
+   *  `sensor` = Vorschlagswert zum Zeitpunkt der Bestätigung, `wert` = der
+   *  behaltene gespeicherte Wert. Gilt nur, solange beide noch stimmen. */
+  geprueft_gegen?: BehalteneAbweichung | null
+}
+
+/** Bewusst behaltene Sensor-Abweichung (PN 90128) — Situation, nicht Häkchen. */
+export interface BehalteneAbweichung {
+  sensor: number
+  wert: number
 }
 
 // SoT-Kanon in types/index.ts (G19-1) — hier nur Re-Export für Bestand

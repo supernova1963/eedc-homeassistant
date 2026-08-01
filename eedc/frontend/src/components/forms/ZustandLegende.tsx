@@ -12,9 +12,9 @@ import type { ErfassungZustand } from '../../lib/erfassungZustand'
 
 const EINTRAEGE: { zustand: ErfassungZustand; text: string }[] = [
   { zustand: 'gemessen',   text: 'automatisch vom Sensor / Import' },
-  { zustand: 'geprueft',   text: 'von dir eingegeben oder bestätigt' },
+  { zustand: 'geprueft',   text: 'von dir eingegeben oder bestätigt — auch eine bewusst behaltene Sensor-Abweichung' },
   { zustand: 'geschaetzt', text: 'Schätzung (Vormonat/Vorjahr) — bitte prüfen, „✓ passt" bestätigt' },
-  { zustand: 'weicht_ab',  text: 'Sensor weicht vom gespeicherten Wert ab' },
+  { zustand: 'weicht_ab',  text: 'Sensor weicht vom gespeicherten Wert ab — noch nicht entschieden' },
   { zustand: 'fehlt',      text: 'erwartet, aber leer (Zähler / gemappter Sensor)' },
   { zustand: 'optional',   text: 'leer, aber nicht nötig — zählt nicht' },
 ]

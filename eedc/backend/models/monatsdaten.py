@@ -118,6 +118,21 @@ class Monatsdaten(Base):
     # idempotenter Import-Pfad geschrieben hat.
     source_hash: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
+    # „Gespeicherten Wert bewusst behalten" je Feld (PN 90128 / Auftrag 3b).
+    # Dict: feldname → {"sensor": <Vorschlagswert>, "wert": <behaltener Wert>}.
+    #
+    # Bewusst wird die SITUATION festgehalten, nicht ein „ist bestätigt"-Häkchen:
+    # der Monatsabschluss zeigt den Hinweis „Sensor meldet X · gespeichert Y" nur
+    # dann nicht mehr, wenn BEIDE Werte noch dieselben sind. Meldet der Zähler
+    # später etwas anderes — oder wird der gespeicherte Wert geändert —, ist die
+    # Bestätigung gegenstandslos und das Feld meldet sich wieder. Ein Flag ohne
+    # diesen Bezug wäre eine Stummschaltung ([[feedback_daten_checker_kein_akzeptiert]]).
+    #
+    # KEIN Eintrag in `field_definitions.py` (bewusst): das ist kein Messwert,
+    # sondern eine Notiz über eine Entscheidung — sie gehört nicht in MQTT-,
+    # HA-Sensor- oder CSV-Export.
+    geprueft_gegen: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

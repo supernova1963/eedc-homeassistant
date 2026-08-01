@@ -8,6 +8,7 @@ from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel, Field
 
 from backend.core.exceptions import not_found
@@ -90,6 +91,9 @@ class MonatsdatenCreate(MonatsdatenBase):
     anlage_id: int
     # Investitions-spezifische Monatsdaten (E-Auto km, Speicher Ladung, WP Verbrauch, etc.)
     investitionen_daten: Optional[dict[str, dict[str, Any]]] = None
+    # PN 90128: bewusst behaltene Abweichungen je Basis-Feld
+    # ({feld: {"sensor": …, "wert": …}}). Siehe Monatsdaten.geprueft_gegen.
+    geprueft_gegen: Optional[dict[str, dict[str, float]]] = None
 
 
 class MonatsdatenUpdate(BaseModel):
@@ -111,6 +115,8 @@ class MonatsdatenUpdate(BaseModel):
     notizen: Optional[str] = Field(None, max_length=1000)
     # G19-1: siehe MonatsdatenBase
     sonstige_positionen: Optional[list[dict]] = None
+    # PN 90128: siehe MonatsdatenCreate. `{}` = alle Bestätigungen zurückgenommen.
+    geprueft_gegen: Optional[dict[str, dict[str, float]]] = None
 
 
 class KennzahlenResponse(BaseModel):
@@ -724,9 +730,11 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
             detail=f"Monatsdaten für {data.monat}/{data.jahr} existieren bereits"
         )
 
-    # investitionen_daten separat extrahieren (nicht Teil des Monatsdaten-Models)
+    # investitionen_daten separat extrahieren (nicht Teil des Monatsdaten-Models);
+    # geprueft_gegen ebenfalls, es ist ein Messwert-Begleiter und darf weder in
+    # die Provenance-Saat noch in die berechneten Felder geraten (PN 90128).
     investitionen_daten = data.investitionen_daten
-    md_data = data.model_dump(exclude={'investitionen_daten'})
+    md_data = data.model_dump(exclude={'investitionen_daten', 'geprueft_gegen'})
     # G19-1: nur gültige Positionen persistieren (Bezeichnung nicht leer;
     # 0-€-Beträge sind legitim — gleiche Regel wie IMD, #286).
     if md_data.get('sonstige_positionen') is not None:
@@ -734,6 +742,7 @@ async def create_monatsdaten(data: MonatsdatenCreate, db: AsyncSession = Depends
             p for p in md_data['sonstige_positionen'] if ist_gueltige_position(p)
         ]
     md = Monatsdaten(**md_data)
+    md.geprueft_gegen = data.geprueft_gegen or {}
 
     # Berechnete Felder (werden berechnet wenn pv_erzeugung vorhanden)
     if md.pv_erzeugung_kwh is not None:
@@ -788,6 +797,11 @@ async def _save_investitionen_monatsdaten(
     Päckchen 3). Per-Sub-Key durch den Resolver, kein Komplett-Override des
     JSON-Dicts mehr — sonst würden manuell gepflegte Sub-Keys von einem
     parallelen Cloud-Sync überschrieben.
+
+    Sonderfall `geprueft_gegen` (PN 90128): der Schlüssel kommt im selben
+    Investitions-Payload an, ist aber **kein** Messwert und landet deshalb in
+    der gleichnamigen Spalte statt in `verbrauch_daten` — dort lesen
+    Aggregatoren, CSV-Export und MQTT mit.
     """
     for inv_id_str, verbrauch_daten in investitionen_daten.items():
         try:
@@ -808,7 +822,8 @@ async def _save_investitionen_monatsdaten(
             .where(InvestitionMonatsdaten.monat == monat)
         )
         existing = existing_result.scalar_one_or_none()
-        sub_payload = verbrauch_daten or {}
+        sub_payload = dict(verbrauch_daten or {})
+        geprueft_gegen = sub_payload.pop("geprueft_gegen", None)
 
         if existing:
             for sub_key, value in sub_payload.items():
@@ -816,12 +831,16 @@ async def _save_investitionen_monatsdaten(
                     db, existing, "verbrauch_daten", sub_key, value,
                     source="manual:form", writer=_MANUAL_WRITER,
                 )
+            if geprueft_gegen is not None:
+                existing.geprueft_gegen = geprueft_gegen
+                flag_modified(existing, "geprueft_gegen")
         else:
             imd = InvestitionMonatsdaten(
                 investition_id=inv_id,
                 jahr=jahr,
                 monat=monat,
                 verbrauch_daten=sub_payload,
+                geprueft_gegen=geprueft_gegen or {},
             )
             db.add(imd)
             if sub_payload:
@@ -861,7 +880,18 @@ async def update_monatsdaten(
 
     # investitionen_daten separat behandeln
     investitionen_daten = data.investitionen_daten
-    update_data = data.model_dump(exclude_unset=True, exclude={'investitionen_daten'})
+    update_data = data.model_dump(
+        exclude_unset=True, exclude={'investitionen_daten', 'geprueft_gegen'}
+    )
+
+    # PN 90128: bewusst behaltene Abweichungen. Läuft NICHT durch den
+    # Provenance-Resolver — das ist kein Messwert, der gegen eine andere Quelle
+    # gewinnen oder verlieren könnte, sondern die Notiz des Nutzers zu genau
+    # diesem Formular. `{}` nimmt alle Bestätigungen zurück, `None` (Feld nicht
+    # gesendet) lässt sie unangetastet.
+    if data.geprueft_gegen is not None:
+        md.geprueft_gegen = data.geprueft_gegen
+        flag_modified(md, "geprueft_gegen")
     # G19-1: nur gültige Positionen persistieren (leere Liste = bewusst geleert,
     # gleiche Semantik wie der IMD-Pfad in _save_investitionen_monatsdaten).
     if update_data.get('sonstige_positionen') is not None:

@@ -989,6 +989,24 @@ async def run_migrations(conn):
                         f"ALTER TABLE {tbl} ADD COLUMN source_hash VARCHAR(80)"
                     ))
 
+        # v4.0.6 (PN 90128): geprueft_gegen JSON-Spalte — je Feld die bewusst
+        # behaltene Situation {"sensor": …, "wert": …}. Leeres Dict für
+        # Bestandsdaten heißt schlicht „nichts bestätigt", es geht nichts verloren.
+        for tbl in ('monatsdaten', 'investition_monatsdaten'):
+            if tbl in inspector.get_table_names():
+                existing = {col['name'] for col in inspector.get_columns(tbl)}
+                if 'geprueft_gegen' not in existing:
+                    connection.execute(text(
+                        f"ALTER TABLE {tbl} ADD COLUMN geprueft_gegen JSON "
+                        "NOT NULL DEFAULT '{}'"
+                    ))
+                    # Sicherheitsnetz für ältere SQLite-Versionen, bei denen
+                    # DEFAULT '{}' beim ALTER nicht rückwirkend wirkt.
+                    connection.execute(text(
+                        f"UPDATE {tbl} SET geprueft_gegen = '{{}}' "
+                        "WHERE geprueft_gegen IS NULL"
+                    ))
+
         # v3.5.0: Infothek — Ansprechpartner-Verknüpfung
         if 'infothek_eintraege' in inspector.get_table_names():
             existing_columns = {col['name'] for col in inspector.get_columns('infothek_eintraege')}

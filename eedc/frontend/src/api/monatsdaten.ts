@@ -4,6 +4,7 @@
 
 import { api } from './client'
 import type { Monatsdaten, MonatsKennzahlen, SonstigePosition } from '../types'
+import type { BehalteneAbweichung } from './monatsabschluss'
 
 export interface MonatsdatenCreate {
   anlage_id: number
@@ -25,6 +26,9 @@ export interface MonatsdatenCreate {
   notizen?: string
   // G19-1: Anlage-Ebene Sonstige Erträge & Ausgaben ([] = bewusst geleert)
   sonstige_positionen?: SonstigePosition[]
+  // PN 90128: bewusst behaltene Sensor-Abweichungen je Basis-Feld
+  // ({feld: {sensor, wert}}); `{}` nimmt frühere Bestätigungen zurück.
+  geprueft_gegen?: Record<string, BehalteneAbweichung>
 }
 
 export interface MonatsdatenUpdate {
@@ -43,6 +47,8 @@ export interface MonatsdatenUpdate {
   notizen?: string
   // G19-1: Anlage-Ebene Sonstige Erträge & Ausgaben ([] = bewusst geleert)
   sonstige_positionen?: SonstigePosition[]
+  // PN 90128: siehe MonatsdatenCreate
+  geprueft_gegen?: Record<string, BehalteneAbweichung>
 }
 
 export interface MonatsdatenMitKennzahlen extends Monatsdaten {

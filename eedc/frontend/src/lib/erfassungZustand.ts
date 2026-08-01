@@ -13,7 +13,7 @@
  *   Erscheint NUR als Prefill — gespeicherte Werte sind nie „geschätzt".
  */
 
-import type { FeldStatus, Vorschlag } from '../api/monatsabschluss'
+import type { BehalteneAbweichung, FeldStatus, Vorschlag } from '../api/monatsabschluss'
 import type { ErfassungZustand } from '../components/ui/ErfassungZustandBadge'
 export type { ErfassungZustand } from '../components/ui/ErfassungZustandBadge'
 
@@ -96,8 +96,43 @@ export interface ZustandErgebnis {
   zustand: ErfassungZustand
   /** Roh-Quelle des aktuellen Werts/Prefills (für Badge-Label via getQuelleLabel). */
   quelle?: string | null
-  /** Nur bei 'weicht_ab': gemessener Sensor-Vorschlag ≠ gespeicherter Wert. */
+  /**
+   * Der gemessene Sensor-Vorschlag weicht vom gespeicherten Wert ab.
+   *
+   * Gesetzt bei `weicht_ab` **und** bei `geprueft`, wenn der Nutzer die
+   * Abweichung bewusst behalten hat (PN 90128) — die Wahrheit „Sensor sagt X,
+   * gespeichert ist Y" bleibt in beiden Fällen lesbar. Der Unterschied liegt
+   * nur in der Lautstärke: bestätigt zählt als fertig und mahnt nicht mehr.
+   */
   weichtAb?: { sensorWert: number; gespeichert: number }
+}
+
+/**
+ * Gilt eine gespeicherte Bestätigung noch? Nur wenn **beide** Seiten der
+ * damaligen Situation unverändert sind: derselbe Sensor-Vorschlag (in dessen
+ * Genauigkeit) und derselbe behaltene Wert. Meldet der Zähler etwas Neues oder
+ * wurde der Wert geändert, ist die Bestätigung gegenstandslos — sonst wäre sie
+ * eine Stummschaltung statt einer Entscheidung.
+ */
+export function bestaetigungGilt(
+  geprueftGegen: BehalteneAbweichung | null | undefined,
+  sensorWert: number,
+  gespeichert: number,
+): boolean {
+  if (!geprueftGegen) return false
+  return gleichWieVorschlag(geprueftGegen.sensor, sensorWert)
+    && gleich(geprueftGegen.wert, gespeichert)
+}
+
+/**
+ * Was für dieses Feld als „bewusst behalten" zu speichern ist — `null`, wenn
+ * es nichts zu merken gibt. Die Form baut daraus den `geprueft_gegen`-Payload;
+ * weil sie ihn bei jedem Speichern neu aus den aktuellen Zuständen bildet,
+ * fallen überholte Bestätigungen von selbst heraus.
+ */
+export function behaltenEintrag(erg: ZustandErgebnis): BehalteneAbweichung | null {
+  if (erg.zustand !== 'geprueft' || !erg.weichtAb) return null
+  return { sensor: erg.weichtAb.sensorWert, wert: erg.weichtAb.gespeichert }
 }
 
 /**
@@ -121,15 +156,21 @@ export function ermittleZustand(
   // der — gemessen an SEINER Genauigkeit (gleichWieVorschlag, PN 90128) —
   // abweicht, und der Eingabewert entspricht noch dem gespeicherten (der
   // Nutzer hat also noch nicht bewusst entschieden). Nur beim Bearbeiten (R2).
-  // Hat der Nutzer „gespeicherten behalten" bestätigt (bestaetigt), entfällt der
-  // Hinweis → der gespeicherte Wert gilt als bewusst geprüft.
+  //
+  // Hat der Nutzer „gespeicherten behalten" gewählt — in dieser Sitzung
+  // (`bestaetigt`) oder früher und gespeichert (`feld.geprueft_gegen`) —, ist
+  // der Zustand `geprueft`: zählt als fertig, mahnt nicht mehr. Die Abweichung
+  // selbst bleibt in `weichtAb` stehen und damit auf dem Feld sichtbar.
   if (
-    !bestaetigt &&
     gespeichert != null && best && istGemesseneQuelle(best.quelle) &&
     !gleichWieVorschlag(gespeichert, best.wert) &&
     hatForm && !Number.isNaN(formNum) && gleich(formNum, gespeichert)
   ) {
-    return { zustand: 'weicht_ab', quelle: best.quelle, weichtAb: { sensorWert: best.wert, gespeichert } }
+    const weichtAb = { sensorWert: best.wert, gespeichert }
+    if (bestaetigt || bestaetigungGilt(feld?.geprueft_gegen, best.wert, gespeichert)) {
+      return { zustand: 'geprueft', quelle: feld?.quelle ?? 'manuell', weichtAb }
+    }
+    return { zustand: 'weicht_ab', quelle: best.quelle, weichtAb }
   }
 
   // Leeres Feld → „offen" nur wenn erwartet (Zähler ODER gemappter Sensor); sonst

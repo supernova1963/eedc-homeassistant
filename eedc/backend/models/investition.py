@@ -239,6 +239,14 @@ class InvestitionMonatsdaten(Base):
     # Idempotenz-Hash für Cloud-/CSV-Re-Imports (P2-Lieferung).
     source_hash: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
 
+    # „Gespeicherten Wert bewusst behalten" je Feld (PN 90128 / Auftrag 3b) —
+    # gleiche Struktur und Semantik wie `Monatsdaten.geprueft_gegen`, dort steht
+    # die ausführliche Begründung. Bewusst eine EIGENE Spalte und kein Sub-Key in
+    # `verbrauch_daten`: dort stehen Messwerte, die von Aggregatoren, CSV-Export
+    # und MQTT gelesen werden — eine Entscheidungs-Notiz dazwischen wäre ein
+    # Fremdkörper im Datenpfad.
+    geprueft_gegen: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)

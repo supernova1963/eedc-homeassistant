@@ -79,6 +79,36 @@ Was du jetzt siehst:
 **Was du tun musst: nichts.** Es ändert sich nur, wann der Hinweis erscheint — keine erfassten Werte.
 → [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
 
+### Monatsabschluss: „gespeicherten behalten" hält jetzt auch nach dem Speichern
+
+**Betrifft dich das?** Wenn ein Zähler und dein gespeicherter Wert **wirklich** auseinanderlaufen —
+also nicht bloß gerundet. Bisher konntest du „gespeicherten behalten" klicken, aber nach dem
+Speichern und erneutem Öffnen stand derselbe orange Hinweis wieder da.
+
+Das war mehr als lästig: „weicht ab" zählt in der Kopf-Ampel als **„prüfen"**. Ein Monat mit einer
+echten Zähler-Differenz konnte damit nie „alles fertig" erreichen — ein Zustand, aus dem es keinen
+Ausweg gab, obwohl der Knopf genau diesen Ausweg versprach.
+
+Was du jetzt siehst:
+
+- **Deine Entscheidung wird gespeichert.** Das Feld gilt als *geprüft* und zählt in der Kopf-Ampel
+  als fertig — der Monat lässt sich abschließen.
+- **Die Abweichung bleibt trotzdem sichtbar.** Das Etikett sagt „geprüft (weicht vom Sensor ab)",
+  darunter steht weiter „Sensor meldet X · gespeichert Y · von dir behalten". Nichts wird
+  weggeklickt: wer später wissen will, warum die Zahlen auseinandergehen, sieht es immer noch.
+  „Sensorwert übernehmen" bleibt als Rückweg stehen.
+- **Gemerkt wird, wogegen du bestätigt hast** — nicht bloß „bestätigt". Meldet der Zähler später
+  einen anderen Wert, oder änderst du den gespeicherten Wert, ist die Bestätigung hinfällig und das
+  Feld meldet sich wieder. Eine alte Entscheidung kann also keine neue Abweichung verdecken.
+
+Das gilt für die Zählerfelder der Anlage **und** für die Felder deiner Komponenten (PV-Strings,
+Speicher, Wärmepumpe, E-Auto, Wallbox …) — sonst hinge der Monat weiter an einer einzelnen
+Komponente fest.
+
+**Was du tun musst: nichts.** Bestehende Monate bleiben unverändert; die Bestätigung entsteht erst,
+wenn du sie klickst.
+→ [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
+
 ---
 
 ## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)

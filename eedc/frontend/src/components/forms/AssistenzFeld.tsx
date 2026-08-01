@@ -64,18 +64,28 @@ export default function AssistenzFeld({
   const erg = ermittleZustand(value ?? '', feldStatus, bestaetigt)
   const best = besterVorschlag(feldStatus?.vorschlaege)
   const hatWert = (value ?? '').trim() !== ''
-  // Ruhige Zustände (fertig/optional) → im „nur bei Aufmerksamkeit"-Modus kein Badge.
-  const istRuhig = erg.zustand === 'gemessen' || erg.zustand === 'geprueft' || erg.zustand === 'optional'
+
+  // Bewusst behaltene Sensor-Abweichung (PN 90128): geprüft, aber die Differenz
+  // bleibt sichtbar — grün statt orange, ohne den Hinweis wegzunehmen.
+  const behalten = erg.zustand === 'geprueft' && !!erg.weichtAb
+
+  // Ruhige Zustände (fertig/optional) → im „nur bei Aufmerksamkeit"-Modus kein
+  // Badge. Eine behaltene Abweichung ist NICHT ruhig: sie mahnt zwar nicht mehr,
+  // muss aber lesbar bleiben — sonst wäre die Bestätigung ein Wegklicken.
+  const istRuhig = !behalten
+    && (erg.zustand === 'gemessen' || erg.zustand === 'geprueft' || erg.zustand === 'optional')
   const zeigeZustand = !!feldStatus && !error && (!nurBeiAufmerksamkeit || !istRuhig)
 
-  // Quell-Zusatz am Badge: geschätzt → Quelle nennen; geprüft nur „(manuell)"
-  // wenn von Hand (reines „gemessen" ohne Quell-Suffix).
+  // Quell-Zusatz am Badge: geschätzt → Quelle nennen; behaltene Abweichung sagt
+  // das am Badge; geprüft sonst nur „(manuell)" wenn von Hand.
   const quelleLabel =
     erg.zustand === 'geschaetzt'
       ? getQuelleLabel(erg.quelle ?? '')
-      : (erg.zustand === 'geprueft' && (erg.quelle === 'manuell' || erg.quelle === 'manual'))
-        ? 'manuell'
-        : undefined
+      : behalten
+        ? 'weicht vom Sensor ab'
+        : (erg.zustand === 'geprueft' && (erg.quelle === 'manuell' || erg.quelle === 'manual'))
+          ? 'manuell'
+          : undefined
 
   // Alternativen = alle Vorschläge außer dem aktuell übernommenen Wert. „Bereits
   // übernommen" gilt mit der Genauigkeit des Vorschlags (PN 90128) — sonst böte
@@ -133,14 +143,30 @@ export default function AssistenzFeld({
       )}
 
       {/* „Weicht ab": Sensor meldet X, gespeichert Y — bewusst entscheiden (§4.1):
-          Sensorwert übernehmen (→ gemessen) ODER gespeicherten behalten (→ geprüft). */}
+          Sensorwert übernehmen (→ gemessen) ODER gespeicherten behalten (→ geprüft).
+          Nach dem Behalten (PN 90128) bleibt die Zeile stehen, wird aber leise:
+          keine Warnfarbe, kein „behalten"-Knopf mehr — der Rückweg über
+          „Sensorwert übernehmen" bleibt offen. */}
       {erg.weichtAb && (
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-orange-600 dark:text-orange-400">
-          <span>Sensor meldet {erg.weichtAb.sensorWert} · gespeichert {erg.weichtAb.gespeichert}</span>
-          <InlineAktion ton="warnung" unterstrichen onClick={() => onChange(String(erg.weichtAb!.sensorWert))}>
+        <div
+          className={`mt-1 flex flex-wrap items-center gap-2 text-[11px] ${
+            behalten
+              ? 'text-gray-500 dark:text-gray-400'
+              : 'text-orange-600 dark:text-orange-400'
+          }`}
+        >
+          <span>
+            Sensor meldet {erg.weichtAb.sensorWert} · gespeichert {erg.weichtAb.gespeichert}
+            {behalten && ' · von dir behalten'}
+          </span>
+          <InlineAktion
+            ton={behalten ? 'neutral' : 'warnung'}
+            unterstrichen
+            onClick={() => onChange(String(erg.weichtAb!.sensorWert))}
+          >
             Sensorwert übernehmen
           </InlineAktion>
-          {onBestaetigen && (
+          {!behalten && onBestaetigen && (
             <InlineAktion ton="bestaetigen" onClick={onBestaetigen}>
               <Check className="w-3 h-3" /> gespeicherten behalten
             </InlineAktion>

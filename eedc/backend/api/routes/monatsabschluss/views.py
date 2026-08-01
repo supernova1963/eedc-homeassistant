@@ -88,6 +88,11 @@ class FeldStatus(BaseModel):
     sensor_id: Optional[str] = None  # Wenn strategie=sensor
     typ: str = "number"  # number oder text
     gruppe: Optional[str] = None  # zaehler, wetter, preise (für Frontend-Gruppierung)
+    # PN 90128: die vom Nutzer bewusst behaltene Situation dieses Feldes —
+    # {"sensor": <Vorschlagswert damals>, "wert": <behaltener Wert>} oder None.
+    # Der Client zeigt „weicht ab" nicht mehr als offenen Punkt, solange beide
+    # Werte noch stimmen; die Abweichung bleibt sichtbar (kein Wegklicken).
+    geprueft_gegen: Optional[dict] = None
 
 
 class InvestitionStatus(BaseModel):
@@ -311,6 +316,9 @@ async def get_monatsabschluss(
 
     # Datenquelle des Monats ermitteln
     datenquelle = getattr(monatsdaten, "datenquelle", None) if monatsdaten else None
+    # PN 90128: bewusst behaltene Abweichungen (Basis-Felder) — je Feld
+    # {"sensor": …, "wert": …}; leer, solange nichts bestätigt wurde.
+    basis_geprueft = (getattr(monatsdaten, "geprueft_gegen", None) or {}) if monatsdaten else {}
 
     # Bedingungen für bedingte Basis-Felder ermitteln. Stichtag ist der Monat,
     # der abgeschlossen wird — sonst entscheidet die HEUTIGE Vertragsart, ob das
@@ -438,6 +446,7 @@ async def get_monatsabschluss(
             strategie=strategie,
             sensor_id=sensor_id,
             gruppe=feld_config.get("gruppe"),
+            geprueft_gegen=basis_geprueft.get(feld),
         ))
 
     # Investitionen aufbereiten
@@ -459,6 +468,8 @@ async def get_monatsabschluss(
         )
         imd = imd_result.scalar_one_or_none()
         verbrauch_daten = imd.verbrauch_daten if imd else {}
+        # PN 90128: bewusst behaltene Abweichungen dieser Investition.
+        inv_geprueft = (getattr(imd, "geprueft_gegen", None) or {}) if imd else {}
 
         # Mapping für diese Investition - beachte die verschachtelte Struktur {"felder": {...}}
         inv_mapping_raw = inv_mappings.get(str(inv.id), {})
@@ -546,6 +557,7 @@ async def get_monatsabschluss(
                 warnungen=[_warnung_to_response(w) for w in warnungen],
                 strategie=strategie,
                 sensor_id=sensor_id,
+                geprueft_gegen=inv_geprueft.get(feld),
             ))
 
         # sonstige_positionen aus verbrauch_daten lesen (für alle Typen)
