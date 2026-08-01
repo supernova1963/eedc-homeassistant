@@ -404,6 +404,8 @@ Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Diese
 
 > **Zeithorizont:** Sofern nicht anders angegeben, beziehen sich die Werte auf die **Gesamtlaufzeit** (alle erfassten Monate, jeweils ab Anschaffungsdatum der Komponenten). Der laufende Monat fließt erst nach dem Monatsabschluss ein. Einzige Ausnahme: der **Spezifische Ertrag** ist aufs Jahr normiert (siehe unten).
 
+> **Nachkommastellen (ab v4.0.6):** Der MQTT-Export rundet **je Größenart**, nicht mehr pauschal auf zwei Stellen: Energie und Mengen (kWh, kWh/kWp, km, kg) **ganzzahlig**, Geld auf **2** Stellen, Prozent auf **1**, Leistung (kW) auf **2**, übrige Kennwerte (COP, Zyklen, Rang) auf 2. Ein kleiner, aber echter Wert wird dabei **nie auf 0 gerundet** — er bekommt so viele Stellen wie nötig (höchstens 3), damit aus 0,35 kW keine 0 wird. Sensor-Namen, Einheiten und die Anzahl der Entitäten sind unverändert; die HA-Historie zeigt für zurückliegende Zeitpunkte weiter die alten Werte.
+
 ### Anlage-weite Sensoren
 
 | Sensor | Einheit | Bedeutung |

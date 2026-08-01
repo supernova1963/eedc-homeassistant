@@ -209,6 +209,29 @@ Assistant nicht nach. Das ist keine Eigenart des Helfers, das gilt für jeden We
 Zuordnung.
 → [Handbuch → Daten-Checker §5.1 state_class-Probleme beheben](HANDBUCH_DATEN_CHECKER.md#51-state_class-probleme-bei-ha-sensoren-beheben) *(gemeldet von Rainer)*
 
+### HA-Export: kurze Zahlen statt Nachkommastellen für jede Größe
+
+**Betrifft dich das?** Wenn du die eedc-Sensoren per **MQTT** an Home Assistant übergibst
+(**Einstellungen → Integration → MQTT-Export**).
+
+Bisher bekam jeder Sensor dieselben zwei Nachkommastellen — auch dort, wo sie nichts aussagen: bei
+einer Jahres-Erzeugung von 12.345,67 kWh sind die beiden letzten Stellen reine Anzeige-Länge.
+
+Was du jetzt siehst — gerundet wird **nach Größenart**:
+
+- **Energie und Mengen** (kWh, kWh/kWp, km, kg CO₂) — **ganze Zahlen**.
+- **Geld** (€) — zwei Stellen, also auf den Cent.
+- **Prozent** — eine Stelle.
+- **Leistung** (kW) und die übrigen Kennwerte (COP, Zyklen, Rang) — zwei Stellen.
+
+**Kleine Werte verschwinden dabei nicht.** Ein Wert, der beim Runden auf 0 fiele, obwohl er nicht 0
+ist, bekommt so viele Stellen wie nötig — aus 0,35 kW wird keine 0, und die Rest-Prognose am Abend
+bleibt sichtbar.
+
+**Was du tun musst: nichts.** Sensor-Namen, Einheiten und die Anzahl der Entitäten sind unverändert;
+es ändert sich nur die Länge der Zahl. Deine bisherige HA-Historie bleibt, wie sie ist.
+→ [Sensor-Referenz §11 Export-Sensoren](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha) *(gemeldet von Rainer)*
+
 ---
 
 ## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)

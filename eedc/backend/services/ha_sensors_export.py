@@ -7,6 +7,7 @@ Unterstützt zwei Export-Methoden:
 2. MQTT Discovery - Native HA-Entitäten via MQTT Auto-Discovery
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Optional, Any
 from enum import Enum
@@ -51,6 +52,64 @@ class SensorValue:
     value: Any                          # Der aktuelle Wert
     berechnung: Optional[str] = None    # Konkrete Berechnung (z.B. "3200 ÷ 4670 × 100")
     zusatz_attribute: dict = field(default_factory=dict)  # Zusätzliche Attribute
+
+
+# =============================================================================
+# RUNDUNG JE GRÖSSENART — die EINE Regel für den Export-Payload
+# =============================================================================
+# Rainer-PN 89905/2: der Export lieferte für jede Größe dieselben zwei
+# Nachkommastellen (`round(value, 2)` im Publisher) — bei 12.345,67 kWh sind das
+# zwei Stellen Scheingenauigkeit, die in HA nur die Anzeige verlängern.
+# Entscheid (B7): pro Größenart runden statt global, und die Regel steht HIER
+# neben den Sensor-Definitionen — nicht an jeder Sensorzeile im Route-Modul.
+#
+# Leitplanke: Leistungswerte werden NICHT gekappt — aus 0,35 kW darf keine 0
+# werden. Dasselbe gilt generell (s. `runde_exportwert`): kein echter Wert kippt
+# durch die Rundung auf 0, notfalls mit mehr Stellen (max. 3).
+NACHKOMMASTELLEN_JE_EINHEIT: dict[str, int] = {
+    # Energie und Mengen — ganze Zahlen reichen
+    "kWh": 0,
+    "kWh/kWp": 0,
+    "km": 0,
+    "kg": 0,
+    # Geld — Cent-genau
+    "€": 2,
+    "€/Jahr": 2,
+    # Quoten
+    "%": 1,
+    # Leistung — bewusst mit Stellen (kleine Leistungen dürfen nicht kippen)
+    "kW": 2,
+    # Übrige Kennzahlen
+    "h": 1,
+    "Jahre": 1,
+    "kWh/100km": 1,
+}
+NACHKOMMASTELLEN_DEFAULT = 2   # dimensionslose Kennwerte (COP, Zyklen, Rang …)
+NACHKOMMASTELLEN_MAX = 3       # Obergrenze für die Nullkipp-Ausweichung
+
+
+def runde_exportwert(value: Any, unit: str) -> Any:
+    """Rundet einen Sensorwert nach seiner Größenart (Einheit der Definition).
+
+    Nicht-numerische Werte (Monatsname, „Speicher voll um") und ganze Zahlen
+    gehen unverändert durch. Ein Wert, der bei der vorgesehenen Stellenzahl auf
+    0 fiele, obwohl er nicht 0 ist, bekommt so viele Stellen wie nötig
+    (höchstens ``NACHKOMMASTELLEN_MAX``) — sonst würde aus 0,35 kW eine 0.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    if isinstance(value, int):
+        return value
+    if not math.isfinite(value):
+        return value
+
+    stellen = NACHKOMMASTELLEN_JE_EINHEIT.get(unit, NACHKOMMASTELLEN_DEFAULT)
+    gerundet = round(value, stellen)
+    while gerundet == 0 and value != 0 and stellen < NACHKOMMASTELLEN_MAX:
+        stellen += 1
+        gerundet = round(value, stellen)
+    # Ganzzahlige Größen als echte ganze Zahl ausliefern: „1234" statt „1234.0".
+    return int(gerundet) if stellen == 0 else gerundet
 
 
 # =============================================================================

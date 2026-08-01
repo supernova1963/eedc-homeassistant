@@ -23,7 +23,11 @@ except ImportError:
     MQTT_AVAILABLE = False
 
 from backend.core.config import APP_VERSION
-from backend.services.ha_sensors_export import SensorDefinition, SensorValue
+from backend.services.ha_sensors_export import (
+    SensorDefinition,
+    SensorValue,
+    runde_exportwert,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -283,12 +287,15 @@ class MQTTClient:
             username=self.config.username,
             password=self.config.password,
         ) as client:
-            # Wert publizieren
+            # Wert publizieren — Rundung je Größenart aus dem SoT neben den
+            # Sensor-Definitionen (PN 89905/2): kWh ganzzahlig, Geld auf Cent,
+            # Prozent auf eine Stelle. Vorher trug JEDE Größe dieselben zwei
+            # Nachkommastellen.
             value = sensor_value.value
             if value is None:
                 value = "unknown"
-            elif isinstance(value, float):
-                value = round(value, 2)
+            else:
+                value = runde_exportwert(value, sensor.unit)
 
             await client.publish(
                 state_topic,
