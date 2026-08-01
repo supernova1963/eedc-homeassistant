@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { FeldStatus, Vorschlag } from '../api/monatsabschluss'
-import { ermittleZustand, prefillWert, besterVorschlag, istGemesseneQuelle, rollupZustand, zaehleAmpel } from './erfassungZustand'
+import { ermittleZustand, prefillWert, besterVorschlag, istGemesseneQuelle, rollupZustand, zaehleAmpel, vergleichsStellen, gleichWieVorschlag } from './erfassungZustand'
 
 function feld(partial: Partial<FeldStatus>): FeldStatus {
   return {
@@ -39,6 +39,23 @@ describe('besterVorschlag = höchste Konfidenz', () => {
   it('leere Liste → null', () => {
     expect(besterVorschlag([])).toBeNull()
     expect(prefillWert(feld({}))).toBeNull()
+  })
+})
+
+describe('Toleranz nach Vorschlags-Genauigkeit (PN 90128)', () => {
+  it('vergleichsStellen: geklammert auf 1..3', () => {
+    expect(vergleichsStellen(2.3)).toBe(1)
+    expect(vergleichsStellen(2.33)).toBe(2)
+    expect(vergleichsStellen(1.2345)).toBe(3)   // 4-stelliger Sensor wird gedeckelt
+    expect(vergleichsStellen(2)).toBe(1)        // glatter Wert ≠ ganzzahlig genau
+  })
+
+  it('gleichWieVorschlag: Rundung tolerant, echte Abweichung nicht', () => {
+    expect(gleichWieVorschlag(2.33, 2.3)).toBe(true)      // 1-stelliger Sensor
+    expect(gleichWieVorschlag(454.74, 453.7)).toBe(false) // 1,04 kWh = echte Abweichung
+    expect(gleichWieVorschlag(2.33, 2.34)).toBe(false)    // 2-stelliger Sensor: streng
+    expect(gleichWieVorschlag(1.23456, 1.23454)).toBe(true) // beide auf 3 Stellen gleich
+    expect(gleichWieVorschlag(2.33, 2)).toBe(false)       // glatter Sensor: 1 Stelle, nicht 0
   })
 })
 
@@ -96,6 +113,33 @@ describe('ermittleZustand', () => {
     }))
     expect(r.zustand).toBe('weicht_ab')
     expect(r.weichtAb).toEqual({ sensorWert: 9.80, gespeichert: 9.43 })
+  })
+
+  it('kein „weicht ab" bei reiner Rundung: 1-stelliger Sensor ↔ 2-stellig gespeichert (PN 90128)', () => {
+    // Rainers Screenshot Nov 2025: Einspeisung Sensor 2,3 ↔ gespeichert 2,33.
+    const r = ermittleZustand('2.33', feld({
+      aktueller_wert: 2.33, quelle: 'ha_import',
+      vorschlaege: [vorschlag(2.3, 'ha_statistics', 92)],
+    }))
+    expect(r.zustand).toBe('gemessen')
+    expect(r.weichtAb).toBeUndefined()
+  })
+
+  it('„weicht ab" bleibt bei echter Abweichung (Netzbezug 453,7 ↔ 454,74)', () => {
+    const r = ermittleZustand('454.74', feld({
+      aktueller_wert: 454.74, quelle: 'ha_import',
+      vorschlaege: [vorschlag(453.7, 'ha_statistics', 92)],
+    }))
+    expect(r.zustand).toBe('weicht_ab')
+    expect(r.weichtAb).toEqual({ sensorWert: 453.7, gespeichert: 454.74 })
+  })
+
+  it('4-stelliger Sensor wird auf 3 Nachkommastellen gedeckelt', () => {
+    const r = ermittleZustand('0.3457', feld({
+      aktueller_wert: 0.3457, quelle: 'ha_import',
+      vorschlaege: [vorschlag(0.34566, 'ha_statistics', 92)],
+    }))
+    expect(r.zustand).toBe('gemessen')  // beide auf 3 Stellen = 0,346
   })
 
   it('kein „weicht ab", wenn der abweichende Vorschlag nur geschätzt ist', () => {

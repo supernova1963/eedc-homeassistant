@@ -42,9 +42,55 @@ export function besterVorschlag(vorschlaege: Vorschlag[] | undefined): Vorschlag
   return vorschlaege.reduce((best, v) => (v.konfidenz > best.konfidenz ? v : best), vorschlaege[0])
 }
 
-const EPS = 0.005
+// ─── Toleranz (PN 90128) ────────────────────────────────────────────────────
+//
+// Ein Vorschlag wird nur so genau genommen, wie er geliefert wird: das Backend
+// rundet den HA-Statistics-/Connector-Vorschlag auf EINE Nachkommastelle
+// (`round(wert, 1)`), der gespeicherte Wert trägt dagegen zwei. Gegen eine feste
+// Schwelle verglichen weicht der Vorschlag damit systematisch ab (2,3 ↔ 2,33 =
+// 0,03) — genau die Meldung „fast überall wird die 2. Nachkommastelle
+// angemeckert". Deshalb bestimmt die Genauigkeit des VORSCHLAGS die Toleranz.
+
+/** Gröbste berücksichtigte Genauigkeit. Vorschläge werden im Backend auf ≥1
+ *  Nachkommastelle gerundet — ein glatter Wert wie 2,0 heißt also NICHT
+ *  „ganzzahlig genau", sonst würde eine Toleranz von 0,5 entstehen. */
+export const MIN_NACHKOMMASTELLEN = 1
+/** Feinste berücksichtigte Genauigkeit (Entscheid Gernot: höchstens drei). */
+export const MAX_NACHKOMMASTELLEN = 3
+
+/** Nachkommastellen, auf die für den Vergleich gerundet wird — geklammert auf
+ *  [{@link MIN_NACHKOMMASTELLEN}, {@link MAX_NACHKOMMASTELLEN}]. */
+export function vergleichsStellen(wert: number): number {
+  if (!Number.isFinite(wert)) return MIN_NACHKOMMASTELLEN
+  const s = String(wert)
+  // Exponentialschreibweise (1e-7) → feinste Stufe, nie die gröbste.
+  if (s.includes('e') || s.includes('E')) return MAX_NACHKOMMASTELLEN
+  const punkt = s.indexOf('.')
+  const stellen = punkt < 0 ? 0 : s.length - punkt - 1
+  return Math.min(Math.max(stellen, MIN_NACHKOMMASTELLEN), MAX_NACHKOMMASTELLEN)
+}
+
+/** Halbe Einheit der letzten berücksichtigten Stelle = „auf `stellen` gerundet gleich". */
+const toleranz = (stellen: number): number => 0.5 * Math.pow(10, -stellen)
+
+/** Standard-Genauigkeit für Vergleiche ohne Vorschlags-Bezug (Form ↔ gespeichert):
+ *  zwei Nachkommastellen, entspricht der bisherigen festen Schwelle 0,005. */
+const STANDARD_STELLEN = 2
+
 /** Zwei gerundete Messwerte gelten als gleich (Werte sind auf ≤2 Nachkommastellen gerundet). */
-export const gleich = (a: number, b: number): boolean => Math.abs(a - b) < EPS
+export const gleich = (a: number, b: number): boolean =>
+  Math.abs(a - b) < toleranz(STANDARD_STELLEN)
+
+/**
+ * Vergleich gegen einen Vorschlags-/Sensorwert **mit dessen Genauigkeit**: beide
+ * Seiten zählen als gleich, wenn sie auf die Nachkommastellen von
+ * `vorschlagWert` gerundet übereinstimmen (1 ≤ Stellen ≤ 3).
+ *
+ * Beispiele: Sensor 2,3 ↔ gespeichert 2,33 → gleich (reine Rundung).
+ * Sensor 453,7 ↔ gespeichert 454,74 → NICHT gleich (echte Abweichung, 1,04 kWh).
+ */
+export const gleichWieVorschlag = (wert: number, vorschlagWert: number): boolean =>
+  Math.abs(wert - vorschlagWert) < toleranz(vergleichsStellen(vorschlagWert))
 
 export interface ZustandErgebnis {
   zustand: ErfassungZustand
@@ -72,14 +118,15 @@ export function ermittleZustand(
   const formNum = hatForm ? parseFloat(formWert) : NaN
 
   // „Weicht ab": es gibt einen gespeicherten Wert UND einen gemessenen Vorschlag,
-  // der abweicht, und der Eingabewert entspricht noch dem gespeicherten (der
+  // der — gemessen an SEINER Genauigkeit (gleichWieVorschlag, PN 90128) —
+  // abweicht, und der Eingabewert entspricht noch dem gespeicherten (der
   // Nutzer hat also noch nicht bewusst entschieden). Nur beim Bearbeiten (R2).
   // Hat der Nutzer „gespeicherten behalten" bestätigt (bestaetigt), entfällt der
   // Hinweis → der gespeicherte Wert gilt als bewusst geprüft.
   if (
     !bestaetigt &&
     gespeichert != null && best && istGemesseneQuelle(best.quelle) &&
-    !gleich(best.wert, gespeichert) &&
+    !gleichWieVorschlag(gespeichert, best.wert) &&
     hatForm && !Number.isNaN(formNum) && gleich(formNum, gespeichert)
   ) {
     return { zustand: 'weicht_ab', quelle: best.quelle, weichtAb: { sensorWert: best.wert, gespeichert } }
@@ -102,7 +149,7 @@ export function ermittleZustand(
 
   // Entspricht dem besten Vorschlag → Prefill. Gemessene Quelle = gemessen; eine
   // Schätzung ist „prüfen", nach Bestätigen (✓ passt) „geprüft".
-  if (best && gleich(formNum, best.wert)) {
+  if (best && gleichWieVorschlag(formNum, best.wert)) {
     if (istGemesseneQuelle(best.quelle)) return { zustand: 'gemessen', quelle: best.quelle }
     return { zustand: bestaetigt ? 'geprueft' : 'geschaetzt', quelle: best.quelle }
   }

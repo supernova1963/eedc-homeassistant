@@ -55,6 +55,30 @@ Jetzt gilt: **die Summenzeile vergleicht nur, wenn jede angezeigte Zeile ein Geg
 **Was du tun musst: nichts.** Es ändern sich nur angezeigte Vergleichswerte, keine erfassten Daten.
 → [Handbuch → Bedienung §4.5 Tabelle](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) *(gemeldet von Rainer)*
 
+### Monatsabschluss: „weicht ab" meckert nicht mehr die zweite Nachkommastelle an
+
+**Betrifft dich das?** Wenn du im Monatsabschluss (**Einstellungen → Daten → Monatsdaten**) Felder
+mit zugeordneter Datenquelle pflegst und dort fast überall der orange Hinweis „Sensor meldet X ·
+gespeichert Y" stand — auch nach dem Speichern immer wieder an denselben Stellen.
+
+Die Ursache war eine feste Vergleichsschwelle. Der Sensorwert kommt auf **eine** Nachkommastelle
+gerundet an, der gespeicherte Wert trägt zwei — und schon galten **2,3** und **2,33** als
+unterschiedlich, obwohl es dieselbe Messung ist. Weil sich daran durch Speichern nichts ändert,
+kam der Hinweis nach jedem Öffnen wieder.
+
+Was du jetzt siehst:
+
+- **Verglichen wird mit der Genauigkeit des Sensorwerts.** Eine Nachkommastelle vom Sensor heißt:
+  es wird auf eine Nachkommastelle verglichen. Liefert er mehr, wird auf höchstens drei Stellen
+  verglichen. Reine Rundungsunterschiede melden sich damit nicht mehr.
+- **Echte Unterschiede bleiben markiert.** Stehen z. B. 453,7 gegen 454,74, ist das keine Rundung,
+  sondern gut eine Kilowattstunde Differenz — der Hinweis bleibt und ist berechtigt.
+- Auch die Liste „andere Quelle" bietet einen Vorschlag nicht mehr an, der dem eingetragenen Wert
+  im Rahmen dieser Genauigkeit ohnehin entspricht.
+
+**Was du tun musst: nichts.** Es ändert sich nur, wann der Hinweis erscheint — keine erfassten Werte.
+→ [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
+
 ---
 
 ## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)

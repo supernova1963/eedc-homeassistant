@@ -21,7 +21,7 @@ import { useState } from 'react'
 import { ChevronDown, Check } from 'lucide-react'
 import type { FeldStatus } from '../../api/monatsabschluss'
 import { getQuelleLabel } from '../monatsabschluss/helpers'
-import { ermittleZustand, besterVorschlag, gleich } from '../../lib/erfassungZustand'
+import { ermittleZustand, besterVorschlag, gleichWieVorschlag } from '../../lib/erfassungZustand'
 import { STATUS_TEXT_CLASS } from '../../lib/colors'
 import { Input, ErfassungZustandBadge, InlineAktion } from '../ui'
 
@@ -77,9 +77,11 @@ export default function AssistenzFeld({
         ? 'manuell'
         : undefined
 
-  // Alternativen = alle Vorschläge außer dem aktuell übernommenen Wert.
+  // Alternativen = alle Vorschläge außer dem aktuell übernommenen Wert. „Bereits
+  // übernommen" gilt mit der Genauigkeit des Vorschlags (PN 90128) — sonst böte
+  // ein 1-stelliger Sensorvorschlag 2,3 sich neben dem Wert 2,33 als Alternative an.
   const alternativen = (feldStatus?.vorschlaege ?? []).filter(
-    (v) => !(hatWert && gleich(parseFloat(value), v.wert)),
+    (v) => !(hatWert && gleichWieVorschlag(parseFloat(value), v.wert)),
   )
 
   // Placeholder: liegt ein bester Vorschlag vor, ihn zeigen (falls Feld leer).
