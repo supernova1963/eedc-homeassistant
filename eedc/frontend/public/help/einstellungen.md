@@ -89,6 +89,7 @@ Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis
 - Mehrere Tarife mit **Gültigkeitszeitraum** möglich.
 - **Spezialtarife:** Jeder Tarif kann einer Verwendung zugeordnet werden — Standard, Wärmepumpe oder Wallbox. Ohne Spezialtarif nutzt eedc automatisch den Standard-Tarif für die Komponente. Aktive Spezialtarife stehen in der Info-Box oben.
 - **Zählergebühr-Tarif:** Neben Grundgebühr lässt sich eine separate Zählergebühr erfassen; Grund- und Zählergebühren werden im Cockpit (Monat/Jahr) getrennt ausgewiesen.
+- **Das Badge „Aktuell"** markiert den Tarif, mit dem eedc **heute** rechnet: gültig am heutigen Tag und — je Verwendung — der jüngste „Gültig ab". Standard- und Spezialtarif können damit gleichzeitig aktuell sein, zwei aufeinander folgende Standardtarife nicht. (Bis v4.0.5 trug es jeder Tarif ohne Enddatum, also auch abgelöste.)
 
 > **Dynamischer Strompreis (Tibber/aWATTar/EPEX):** Den zugehörigen Sensor ordnest du nicht mehr hier, sondern unter **Einstellungen → Datenquellen** dem Feld „Strompreis" zu (siehe [§7](#7-datenquellen--feld-zentrische-zuordnung)). Ohne eigenen Sensor blendet eedc automatisch den EPEX-Börsenpreis (DE/AT via aWATTar) als Overlay im Live-Tagesverlauf ein.
 
@@ -354,6 +355,10 @@ Der Zähler im Block-Kopf („2 Felder noch ohne Quelle") zählt **nur die offen
 - **PV-Erzeugung und PV-Leistung:** entweder anlagenweit (ein Sensor für alles) **oder** je PV-Modul. Sobald ein Modul einen eigenen Sensor hat, gilt dieser — die anlagenweite Angabe wird dann ignoriert. Wer mehrere Strings getrennt auswerten will, ordnet je Modul zu; wer nur einen Gesamtzähler hat, nutzt das Modul-Feld ebenfalls (bei einem Modul ist beides gleichwertig).
 - **Netz-Leistung:** entweder **ein** vorzeichenbehafteter Sensor unter „Netz kombiniert (±)" **oder** „Einspeisung (W)" und „Netzbezug (W)" getrennt. Der Kombi-Sensor wirkt nur, wenn die beiden getrennten Felder leer sind.
 - **Heimladung des E-Autos:** hat deine Anlage eine **Wallbox**, ist sie die maßgebliche Quelle — die Felder „Heim: PV" und „Heim: Netz" am Fahrzeug bleiben dann ungenutzt. (Sind sie bei dir noch belegt, weist die Fläche darauf hin und bietet an, sie auf „keine" zu setzen.)
+
+**Manche Felder gibt es hier gar nicht — sie werden ausschließlich von Hand erfasst.** Für sie existiert kein Sensor- und kein Topic-Weg; eine Zuordnung hätte keine Wirkung, würde aber eine Daten-Checker-Meldung auslösen. Sie stehen im Monatsabschluss, im CSV-Import und (wo sinnvoll) als errechneter Vorschlag zur Verfügung. Betroffen sind der **Ø Ladepreis** des Speichers (ct/kWh) und die BKW-eigenen Speicher-Felder *Ladung*/*Entladung*. Liegt heute noch eine Quelle auf so einem Feld, bleibt es sichtbar, damit du sie über **Keine** entfernen kannst.
+
+> **„Ladung" beim Speicher ist die Gesamtmenge.** Das Feld heißt bei Speichern mit Netzladung ausdrücklich **„Ladung (gesamt, inkl. Netz)"** — **„Netzladung"** sagt nur, wie viel *davon* aus dem Netz kam, und ist kein zweiter Summand. Wer nur den PV-Ladezähler auf „Ladung" legt, verliert die Netzladung in der Gesamtmenge und zählt sie zugleich doppelt. Liefert dein Gerät PV- und Netzladung getrennt (z. B. Kostal Plenticore), addierst du beide in Home Assistant zu einem Helfer und ordnest diesen zu.
 
 > **„Keine Quelle" ist kein Fehler.** Alle kWh-Felder lassen sich im Monatsabschluss auch von Hand erfassen — rot heißt „hier fehlt noch etwas", nicht „falsch".
 

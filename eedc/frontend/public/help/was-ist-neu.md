@@ -9,7 +9,19 @@
 
 ---
 
-## v4.0.6 — Der Vorjahresvergleich vergleicht wieder mit dem echten Vorjahr (August 2026)
+## v4.0.6 — Vergleichbares vergleichen, Gemessenes behalten (August 2026)
+
+> **Der Schwerpunkt dieser Version:** An etlichen Stellen stellte eedc zwei Zahlen nebeneinander, die
+> gar nicht zueinander gehörten — ein Monat neben dem falschen Vorjahrgang, ein halber Tag neben einem
+> ganzen, ein Durchschnitt neben Summen, eine gemessene Stunde neben der Prognose der Stunde davor.
+> Diese Version zieht das gerade. **Drei Zahlen bewegen sich dabei sichtbar:** die gestrichelte
+> Verbrauchs-Kurve im Live-Chart rückt **nach oben** (sie lag zu tief — das trifft jede frische
+> Installation und jeden Betrieb ohne Home Assistant), die Vergleichs-Zelle der Summenzeile wird
+> **kleiner**, und der Jahres-Ø-Preis passt sich den kWh und Euro darunter an.
+>
+> Dazu zwei Reparaturen, bei denen es nicht um Darstellung ging: ein frisch verbundener Connector
+> **löschte** den Monatswert, und die Tagesreparatur bot einen Knopf an, der für ältere Tage nicht
+> funktionieren konnte. Bei jedem Punkt steht, wen es betrifft und was zu tun ist.
 
 ### Werte-Tabelle: über mehrere Jahre stand die falsche Vergleichszahl daneben
 
@@ -109,6 +121,28 @@ Komponente fest.
 wenn du sie klickst.
 → [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
 
+### Ein frisch verbundener Connector setzt den Monatswert nicht mehr auf 0
+
+**Betrifft dich das?** Wenn du einen **Geräte-Connector** einrichtest (Hersteller-Cloud oder Gateway)
+und deine PV-Erzeugung gleichzeitig **je Komponente** aus Home Assistant kommt — also der empfohlene
+Fall, sobald du PV-Module als Komponenten führst. **Hier ging ein Wert verloren.**
+
+Jedes Feld hat in eedc genau eine maßgebliche Quelle. Meldet eine Quelle die **Anlage als Ganzes**,
+sperrt dieser Wert die Summe der Komponenten-Werte — sonst zählte dieselbe Erzeugung zweimal. Genau
+das tat ein frisch verbundener Connector: Er meldet einen Anlagen-Gesamtwert, und der ist am Anfang
+nur die Differenz zwischen zwei seiner Abrufe. Abends eingerichtet sind das **0,0 kWh** — und dieses
+Bruchstück verdrängte die vollständige Summe aus Home Assistant. Der laufende Monat sprang auf 0.
+
+Jetzt unterscheidet eedc, ob ein Wert den **ganzen Monat** abdeckt oder nur ein Stück davon. Ein
+Wert, der erst seit heute Abend zählt, sperrt die Komponenten-Summe nicht mehr und wird vom ersten
+vollständigen Beitrag ersetzt statt zu ihm addiert — die Doppelzählung, gegen die die Sperre steht,
+bleibt damit verhindert. Deckt dein Connector den Monat ab, ändert sich nichts.
+
+**Was du tun musst:** Der **laufende** Monat rechnet sich beim nächsten Aufruf von selbst richtig.
+Hast du den 0-Wert damals über den **Monatsabschluss gespeichert**, steht er weiter in deinen
+Monatsdaten — den einen Monat einmal öffnen und den Vorschlag übernehmen.
+→ [Handbuch → Einstellungen §7 Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) *(#361, aufgefallen bei der Bearbeitung von coolxmads Befund #353)*
+
 ### Live „Wetter heute": IST-Kurve und Prognose liegen wieder auf derselben Stunde
 
 **Betrifft dich das?** Wenn du im **Cockpit → Live** den Block **„Wetter heute"** benutzt — also den
@@ -187,6 +221,113 @@ diese Stunde gibt es noch keine Messung.
 und an allen anderen Kennzahlen ändert sich nichts.
 → [Handbuch → Prognosen §3 Stundenvergleich heute](HANDBUCH_PROGNOSEN.md#stundenvergleich-heute--was-die-abweichungen-sagen) *(gemeldet von Rainer)*
 
+### Cockpit → Jahr: der Ø-Preis passt wieder zu den kWh und Euro darunter
+
+**Betrifft dich das?** Wenn deine Strompreise über das Jahr geschwankt haben — durch einen
+Tarifwechsel oder einen dynamischen Tarif — und du im **Cockpit → Jahr** auf die Kachel
+**„Ø-Preis Netz"** (bzw. die Einspeisevergütung daneben) schaust. **Hier ändert sich eine
+angezeigte Zahl.**
+
+In einem gemeldeten Fall stand in derselben Kachel oben **28,0 ct** und darunter
+**„559 kWh · 210,45 €"** — das sind rechnerisch 37,6 ct. Zwei Zahlen, eine Kachel. Die Ursache: Der
+Jahresdurchschnitt war das **ungewichtete Mittel der zwölf Monatspreise**, während kWh und Euro
+darunter Summen sind. Ein teurer Januar mit 400 kWh wog damit genauso viel wie ein billiger Juli mit
+20 kWh.
+
+Jetzt zählt jeder Monat **mit der Menge, die in ihm geflossen ist**. Der Durchschnitt oben und die
+Summen darunter beschreiben damit dieselbe Rechnung. Monate ohne Menge fallen aus beiden Summen
+heraus. Dasselbe gilt für den Ø-Wert der Einspeisevergütung.
+
+**Und das grüne „Aktuell"-Badge markiert wieder genau einen Tarif.** Unter **Einstellungen →
+Strompreise** trug es bisher **jeder** Tarif ohne Enddatum — bei drei aufeinander folgenden Tarifen
+also dreimal. Es zeigt jetzt den Tarif, mit dem eedc heute tatsächlich rechnet: gültig am heutigen
+Tag und je Verwendung der jüngste. **Standard- und Spezialtarif** (Wärmepumpe, Wallbox) können
+weiterhin gleichzeitig aktuell sein — das sind verschiedene Verwendungen.
+
+**Was du tun musst: nichts.** Beides ist reine Anzeige — deine Kosten, Erträge und der Netto-Ertrag
+wurden nie aus dieser Kachel gerechnet und ändern sich nicht.
+→ [Handbuch → Einstellungen §2.2 Strompreise](HANDBUCH_EINSTELLUNGEN.md#22-strompreise) *(gemeldet im Forum von Algie)*
+
+### Datenquellen: das Speicher-Feld „Ladung" heißt auch dort, wie es gemeint ist
+
+**Betrifft dich das?** Wenn du einen **Speicher** hast, dessen Wechselrichter die Ladung getrennt
+nach PV-Anteil und Netzanteil meldet (z. B. Kostal Plenticore mit `charge_from_pv` und
+`charge_from_grid`). **Hier kann eine Zahl falsch erfasst worden sein.**
+
+Auf der Zuordnungs-Fläche standen **„Ladung"** und **„Netzladung"** untereinander — das liest sich
+wie zwei Hälften, die man zusammensetzt. Gemeint ist es anders: **„Ladung" ist die Gesamtmenge,
+Netzladung eingeschlossen**, und „Netzladung" sagt nur, wie viel *davon* aus dem Netz kam. Wer den
+PV-Anteil auf „Ladung" legte, verlor die Netzladung in der Gesamtmenge und zählte sie zugleich
+doppelt (im gemeldeten Fall 421 statt der gemessenen 494 kWh).
+
+Das eindeutige Label **„Ladung (gesamt, inkl. Netz)"** gibt es im Monatsabschluss schon länger — die
+Datenquellen-Fläche zeigte es nur nicht an. Jetzt sagen beide Flächen dasselbe.
+
+**Zweitens: „Ø Ladepreis" wird nicht mehr als zuordenbares Feld angeboten.** Es ist ein Monatswert in
+ct/kWh, für den es gar keinen Sensor- oder Topic-Weg gibt — ein zugeordneter Sensor bewirkte nichts,
+löste aber eine Daten-Checker-Meldung aus. Erfassen kannst du ihn weiterhin im **Monatsabschluss**,
+per **CSV-Import** und über den **errechneten Vorschlag** bei dynamischem Tarif. Hast du heute eine
+Quelle darauf gesetzt, siehst du das Feld weiter und kannst sie über **Keine** entfernen.
+
+**Was du tun musst:** Wenn auf „Ladung" nur dein **PV-Ladezähler** liegt, stell das Feld auf einen
+Zähler um, der **PV und Netz zusammen** führt. Liefert dein Gerät die beiden nur getrennt, addierst
+du sie in Home Assistant zu einem Helfer und ordnest diesen zu. **Bestehende Zuordnungen ändert eedc
+nicht von selbst** — sonst verschwände eine Einstellung, die du bewusst gesetzt hast.
+→ [Handbuch → Einstellungen §7.3 Was muss zugeordnet werden](HANDBUCH_EINSTELLUNGEN.md#73-was-muss-zugeordnet-werden--und-was-nicht) *(gemeldet im Forum von MartyBr)*
+
+### „Tag neu aggregieren" reicht jetzt so weit zurück wie Home Assistant
+
+**Betrifft dich das?** Wenn der Daten-Checker Tage ohne Werte meldet, die **länger als rund zehn Tage**
+zurückliegen, und der angebotene Reparatur-Knopf mit *„keine Live-/MQTT-Daten gefunden"* abbrach.
+
+Der Daten-Checker prüft 90 Tage weit zurück und findet die Lücken in der HA-**Langzeitstatistik**.
+Die Reparatur holte ihre Stundenkurve aber aus der HA-**Historie** — und die hebt Home Assistant
+standardmäßig nur zehn Tage lang auf. Für ältere Tage stieg der Lauf aus, **bevor** er die Zähler
+überhaupt anfasste. Im gemeldeten Fall: 39 Tage zwischen dem 16.06. und dem 30.07., jeder mit einem
+Knopf, der nicht funktionieren konnte. **Falsch war das Angebot, nicht deine Bedienung.**
+
+Findet die Reparatur auf dem regulären Weg nichts, holt sie dieselbe Stundenkurve jetzt aus der
+**Langzeitstatistik** — demselben Weg, den „Lücken aus HA-LTS nachfüllen" seit jeher nutzt. Das gilt
+für **„Tag neu aggregieren"** und für **„Mehrere Tage neu aggregieren"**.
+
+**Und wenn es trotzdem nicht geht, sagt die Meldung, woran es liegt** — statt pauschal „keine Daten":
+
+- **keine Leistungs-Zuordnung** — dann führt der Weg zu Datenquellen, dort fehlt eine Quelle;
+- **Home Assistant nicht erreichbar** — ein Verbindungsproblem, später erneut versuchen;
+- **Home Assistant hat für diesen Tag selbst nichts** — dann lässt sich der Tag nicht füllen. Das ist
+  keine Fehlfunktion: was HA nie aufgezeichnet hat, kann eedc nicht nachholen.
+
+**Was du tun musst:** Wenn du gemeldete Lücken bisher vergeblich zu reparieren versucht hast — probier
+es noch einmal. **„Lücken aus HA-LTS nachfüllen" verhält sich unverändert** und bleibt strikt
+additiv: bestehende Tage werden nicht überschrieben.
+→ [Handbuch → Energieprofil §4 Reparatur & Pflege](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege) *(gemeldet im Forum von dietmar1968)*
+
+### Daten-Checker: ein Anlagen-Ausbau ist keine Einspeise-Anomalie
+
+**Betrifft dich das?** Wenn du deine Anlage **in Stufen erweitert** hast und der Daten-Checker seither
+meldet: *„Einspeisung > 3× Vorjahr"*.
+
+Diese Prüfung vergleicht jeden Monat mit demselben Monat des Vorjahrs — dahinter steht der Verdacht
+auf einen Eingabefehler (Faktor 10) oder einen Zählertausch ohne Reset. Wer 2024 aber mehr Module am
+Netz hatte als 2023, erzeugt den Sprung selbst. Und weil der Vergleich an den Monatsdaten hängt und
+nicht an einem Zeitfenster, wären diese Meldungen **nie von allein verschwunden**: im gemeldeten Fall
+drei Stück, die niemand beheben konnte.
+
+Die Prüfung setzt für ein Monatspaar jetzt aus, wenn die **installierte Erzeugerleistung** zwischen
+den beiden Monaten um mindestens **10 %** gewachsen ist.
+
+**Warum aussetzen statt die Schwelle mitwachsen zu lassen:** Die Einspeisung ist eine Differenz —
+Erzeugung minus Eigenverbrauch. Bleibt dein Verbrauch gleich, landet vom Zubau fast alles im Netz. Im
+gemeldeten Fall wuchs die Anlage auf das Vierfache, die Mai-Einspeisung auf das Fünfzehnfache
+(61 → 888 kWh). Eine aus der kWp abgeleitete Schwelle wäre geraten und hätte genau diesen Fall auch
+nicht gefangen.
+
+**Nur für die Einspeisung.** Beim **Netzbezug** wäre ein PV-Zubau die falsche Erklärung: der sinkt mit
+mehr PV und steigt mit neuen Verbrauchern (Wärmepumpe, E-Auto, Wallbox). Dort bleibt die Meldung.
+
+**Was du tun musst: nichts** — die Meldungen verschwinden beim nächsten Prüflauf.
+→ [Handbuch → Daten-Checker §4.5 Monatsdaten – Plausibilität](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet) *(gemeldet von kingcap1, #354)*
+
 ### Daten-Checker: fehlt einem Zähler die Statistik, führt der Weg jetzt über die HA-Oberfläche
 
 **Betrifft dich das?** Wenn der Daten-Checker meldet, dass ein zugeordneter Zähler **nicht in der
@@ -204,6 +345,11 @@ weiterhin da, aber als Nebensatz für alle, die ihn ohnehin gehen.
 
 **Ein Hinweis gehört dazu:** Ein neuer Helfer **beginnt bei null** — vergangene Monate sammelt Home
 Assistant nicht nach. Das ist keine Eigenart des Helfers, das gilt für jeden Weg.
+
+**Das gilt jetzt für alle vier Meldungen dieser Prüfung.** Eine davon nannte bisher überhaupt keinen
+Weg, sondern nur das Ziel („`state_class: total_increasing` setzen") — wer sie las, wusste hinterher,
+*was* fehlt, aber nicht, *wie* man es behebt. Und die beiden Meldungen zur fehlenden Summen-Spalte
+standen bis jetzt gar nicht im Handbuch; die Melde-Tabelle ist vollständig.
 
 **Was du tun musst: nichts.** Es ändert sich nur der Text im Daten-Checker, keine Zahl und keine
 Zuordnung.
