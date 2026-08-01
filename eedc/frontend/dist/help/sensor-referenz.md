@@ -145,10 +145,10 @@ eigene Speicher-Investition erfasst und publiziert unter deren ID auf
 
 | Feld | Label | Einheit | Sensortyp | Beschreibung |
 |------|-------|---------|-----------|-------------|
-| `ladung_kwh` | Ladung | kWh | Kumulativ oder Tagessensor | Gesamte im Monat in den Speicher geladene Energie. Muss ≥ 0 sein. |
+| `ladung_kwh` | Ladung — bei Speichern mit Netzladung: **„Ladung (gesamt, inkl. Netz)"** | kWh | Kumulativ oder Tagessensor | Gesamte im Monat in den Speicher geladene Energie, **Netzladung eingeschlossen**. Muss ≥ 0 sein. `ladung_netz_kwh` ist ein *davon*-Anteil, kein zweiter Summand — ein Gerät, das PV- und Netzladung getrennt zählt, braucht hier die Summe beider (HA-Helfer). |
 | `entladung_kwh` | Entladung | kWh | Kumulativ oder Tagessensor | Gesamte im Monat aus dem Speicher entladene Energie. Muss ≥ 0 sein. |
 | `ladung_netz_kwh` | Netzladung | kWh | Kumulativ oder Tagessensor | Anteil der Ladung aus dem Netz (Arbitrage). Optional. Muss ≤ `ladung_kwh` sein. **Kanonischer Schlüssel** `ladung_netz_kwh` (Legacy-Fallback `speicher_ladung_netz_kwh` wird noch gelesen). |
-| `speicher_ladepreis_cent` | Ø Ladepreis | ct/kWh | Manuell | Ø Preis der Netzladung. Nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis. Manuell im Monatsdaten-Formular. |
+| `speicher_ladepreis_cent` | Ø Ladepreis | ct/kWh | **kein Sensor, kein Topic** — nur manuell/Import | Ø Preis der Netzladung. Nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis. Erfassung im Monatsdaten-Formular, per CSV-Import oder über den errechneten Vorschlag bei dynamischem Tarif; auf der Datenquellen-Fläche wird das Feld **nicht** zur Zuordnung angeboten (seit v4.0.6). |
 
 ### Live-Dashboard
 
@@ -369,7 +369,9 @@ Sensoren ohne `state_class` tragen ein amber-farbiges Badge **„ohne Statistik"
 
 #### Anleitung zum Nachrüsten
 
-Trägt ein Sensor das Badge — z. B. der Nibe-Counter `sensor.compressor_number_of_starts_…` —, lässt er sich in HA's `customize.yaml` nachträglich klassifizieren:
+Trägt ein Sensor das Badge — z. B. der Nibe-Counter `sensor.compressor_number_of_starts_…` —, ist der **empfohlene Weg ein Verbrauchszähler-Helfer über die HA-Oberfläche**: **Einstellungen → Geräte & Dienste → Helfer → Verbrauchszähler**, als Eingang den betroffenen Sensor, Zurücksetzen-Zyklus **„nie"** (also **ohne Zyklus**). Der Helfer bringt die Statistik-Attribute mit, sein Name überlebt einen Gerätetausch — in eedc wird anschließend der Helfer zugeordnet. Details und Begründung: [Handbuch Daten-Checker §5.1](HANDBUCH_DATEN_CHECKER.md#51-state_class-probleme-bei-ha-sensoren-beheben).
+
+Wer die YAML ohnehin pflegt, kann den Sensor stattdessen per `customize` klassifizieren:
 
 ```yaml
 homeassistant:
@@ -378,7 +380,7 @@ homeassistant:
       state_class: total_increasing
 ```
 
-Nach **HA-Neustart** landet der Sensor in HA-Long-Term-Statistics und steht damit für Backfill, Per-Tag-Reaggregation und Snapshot-Self-Healing zur Verfügung.
+Nach **HA-Neustart** landet der Sensor in HA-Long-Term-Statistics und steht damit für Backfill, Per-Tag-Reaggregation und Snapshot-Self-Healing zur Verfügung. Beide Wege gelten ab jetzt — ein neu angelegter Helfer beginnt seine Historie bei null.
 
 > **Wichtig:** Die Korrektur wirkt **ab dem Zeitpunkt** der `state_class`-Aktivierung. HA legt LTS-Werte erst ab diesem Moment an — vorher existieren keine Werte zum Holen, auch keine rückwirkende Reparatur. Bestehende leere Tage bleiben leer; ab Aktivierung wird lückenfrei erfasst.
 
@@ -401,6 +403,8 @@ Live-Zuordnungen (`leistung_w`, `soc`) werden nicht geprüft — sie lesen `stat
 Die bisherigen Abschnitte beschreiben Sensoren, die eedc **aus HA liest**. Dieser Abschnitt beschreibt die umgekehrte Richtung: berechnete eedc-Werte, die als **HA-Entitäten** bereitgestellt werden — per MQTT Discovery (empfohlen) oder REST. Einrichtung: [Einstellungen → Integration → MQTT-Export](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export).
 
 > **Zeithorizont:** Sofern nicht anders angegeben, beziehen sich die Werte auf die **Gesamtlaufzeit** (alle erfassten Monate, jeweils ab Anschaffungsdatum der Komponenten). Der laufende Monat fließt erst nach dem Monatsabschluss ein. Einzige Ausnahme: der **Spezifische Ertrag** ist aufs Jahr normiert (siehe unten).
+
+> **Nachkommastellen (ab v4.0.6):** Der MQTT-Export rundet **je Größenart**, nicht mehr pauschal auf zwei Stellen: Energie und Mengen (kWh, kWh/kWp, km, kg) **ganzzahlig**, Geld auf **2** Stellen, Prozent auf **1**, Leistung (kW) auf **2**, übrige Kennwerte (COP, Zyklen, Rang) auf 2. Ein kleiner, aber echter Wert wird dabei **nie auf 0 gerundet** — er bekommt so viele Stellen wie nötig (höchstens 3), damit aus 0,35 kW keine 0 wird. Sensor-Namen, Einheiten und die Anzahl der Entitäten sind unverändert; die HA-Historie zeigt für zurückliegende Zeitpunkte weiter die alten Werte.
 
 ### Anlage-weite Sensoren
 

@@ -1,11 +1,382 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.5)
+> **Stand:** August 2026 (v4.0.6)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.6 — Vergleichbares vergleichen, Gemessenes behalten (August 2026)
+
+> **Der Schwerpunkt dieser Version:** An etlichen Stellen stellte eedc zwei Zahlen nebeneinander, die
+> gar nicht zueinander gehörten — ein Monat neben dem falschen Vorjahrgang, ein halber Tag neben einem
+> ganzen, ein Durchschnitt neben Summen, eine gemessene Stunde neben der Prognose der Stunde davor.
+> Diese Version zieht das gerade. **Drei Zahlen bewegen sich dabei sichtbar:** die gestrichelte
+> Verbrauchs-Kurve im Live-Chart rückt **nach oben** (sie lag zu tief — das trifft jede frische
+> Installation und jeden Betrieb ohne Home Assistant), die Vergleichs-Zelle der Summenzeile wird
+> **kleiner**, und der Jahres-Ø-Preis passt sich den kWh und Euro darunter an.
+>
+> Dazu zwei Reparaturen, bei denen es nicht um Darstellung ging: ein frisch verbundener Connector
+> **löschte** den Monatswert, und die Tagesreparatur bot einen Knopf an, der für ältere Tage nicht
+> funktionieren konnte. Bei jedem Punkt steht, wen es betrifft und was zu tun ist.
+
+### Werte-Tabelle: über mehrere Jahre stand die falsche Vergleichszahl daneben
+
+**Betrifft dich das?** Wenn du unter **Auswertungen → Tabelle** den Vergleich einschaltest und
+dabei einen Zeitraum wählst, der **mehr als ein Jahr** umfasst — insbesondere den Chip
+**„Alle Jahre"**. Im Einzeljahr-Modus war nichts davon sichtbar.
+
+Über einen mehrjährigen Zeitraum lagen mehrere Jahrgänge desselben Monats nebeneinander, und eedc
+hat sie verwechselt: **jede Zeile bekam den jüngsten davon als „Vorjahr"**. Der Dezember 2025 stand
+damit sich selbst gegenüber — zweimal dieselbe Zahl, Δ 0,0 % —, ältere Dezember bekamen einen
+Jahrgang aus der Zukunft vorgesetzt. Dasselbe galt für Tageszeilen.
+
+Was du jetzt siehst:
+
+- **Jede Zeile steht ihrem eigenen Vorjahresmonat gegenüber** (Dezember 2025 dem Dezember 2024),
+  unabhängig davon, wie lang der gewählte Zeitraum ist.
+- **Gibt es diesen Vorjahresmonat nicht**, weil deine Aufzeichnung später beginnt, bleibt die
+  Vergleichsspalte **leer („—")**. Es wird kein Ersatzwert eingesetzt und kein Δ von 0,0 % erfunden.
+- **Der CSV-Export trägt dieselben Werte wie die Tabelle** — beide beantworten die Frage „womit
+  vergleicht sich diese Zeile" jetzt an derselben Stelle im Code.
+
+### Die Summenzeile stellt keine ungleich langen Zeiträume mehr gegenüber
+
+**Betrifft dich das?** Denselben Bereich — und zusätzlich das **laufende Jahr**, dort war es
+ebenfalls falsch.
+
+Die unterste Zeile der Tabelle summiert die Spalte über ihr. Ihre **Vergleichs**-Zelle summierte
+bisher schlicht alles, was im Vergleichsfenster lag — auch wenn das eine ganz andere Zeitspanne
+war: über „Alle Jahre" 37 Monate neben 31, im laufenden Jahr die bisher gelaufenen Monate neben die
+vollen zwölf des Vorjahrs. Das las sich als „+23,1 % gegenüber dem Vorjahr" und war keine Aussage
+über deine Anlage, sondern über die unterschiedliche Anzahl der Monate.
+
+Jetzt gilt: **die Summenzeile vergleicht nur, wenn jede angezeigte Zeile ein Gegenstück hat.**
+
+- Im **laufenden Jahr** vergleicht sie damit sechs Monate mit denselben sechs Monaten des
+  Vorjahrs — die Zahl in der Vergleichs-Zelle wird dadurch **sichtbar kleiner**, und sie stimmt.
+- Über **„Alle Jahre"** bleibt die Vergleichs-Zelle leer, weil die ersten Monate deiner
+  Aufzeichnung kein Vorjahr haben. **Damit das nicht wie ein Fehler aussieht, steht der Grund
+  jetzt unter der Tabelle** — mit der Angabe, wie viele Monate bzw. Tage ohne Gegenstück sind.
+  Die Δ-Werte der einzelnen Zeilen stehen unverändert vollständig darüber.
+- Die **„aktuell"-Zelle** ist und bleibt die Summe der Spalte über ihr — daran ändert sich nichts.
+
+**Was du tun musst: nichts.** Es ändern sich nur angezeigte Vergleichswerte, keine erfassten Daten.
+→ [Handbuch → Bedienung §4.5 Tabelle](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) *(gemeldet von Rainer)*
+
+### Monatsabschluss: „weicht ab" meckert nicht mehr die zweite Nachkommastelle an
+
+**Betrifft dich das?** Wenn du im Monatsabschluss (**Einstellungen → Daten → Monatsdaten**) Felder
+mit zugeordneter Datenquelle pflegst und dort fast überall der orange Hinweis „Sensor meldet X ·
+gespeichert Y" stand — auch nach dem Speichern immer wieder an denselben Stellen.
+
+Die Ursache war eine feste Vergleichsschwelle. Der Sensorwert kommt auf **eine** Nachkommastelle
+gerundet an, der gespeicherte Wert trägt zwei — und schon galten **2,3** und **2,33** als
+unterschiedlich, obwohl es dieselbe Messung ist. Weil sich daran durch Speichern nichts ändert,
+kam der Hinweis nach jedem Öffnen wieder.
+
+Was du jetzt siehst:
+
+- **Verglichen wird mit der Genauigkeit des Sensorwerts.** Eine Nachkommastelle vom Sensor heißt:
+  es wird auf eine Nachkommastelle verglichen. Liefert er mehr, wird auf höchstens drei Stellen
+  verglichen. Reine Rundungsunterschiede melden sich damit nicht mehr.
+- **Echte Unterschiede bleiben markiert.** Stehen z. B. 453,7 gegen 454,74, ist das keine Rundung,
+  sondern gut eine Kilowattstunde Differenz — der Hinweis bleibt und ist berechtigt.
+- Auch die Liste „andere Quelle" bietet einen Vorschlag nicht mehr an, der dem eingetragenen Wert
+  im Rahmen dieser Genauigkeit ohnehin entspricht.
+
+**Was du tun musst: nichts.** Es ändert sich nur, wann der Hinweis erscheint — keine erfassten Werte.
+→ [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
+
+### Monatsabschluss: „gespeicherten behalten" hält jetzt auch nach dem Speichern
+
+**Betrifft dich das?** Wenn ein Zähler und dein gespeicherter Wert **wirklich** auseinanderlaufen —
+also nicht bloß gerundet. Bisher konntest du „gespeicherten behalten" klicken, aber nach dem
+Speichern und erneutem Öffnen stand derselbe orange Hinweis wieder da.
+
+Das war mehr als lästig: „weicht ab" zählt in der Kopf-Ampel als **„prüfen"**. Ein Monat mit einer
+echten Zähler-Differenz konnte damit nie „alles fertig" erreichen — ein Zustand, aus dem es keinen
+Ausweg gab, obwohl der Knopf genau diesen Ausweg versprach.
+
+Was du jetzt siehst:
+
+- **Deine Entscheidung wird gespeichert.** Das Feld gilt als *geprüft* und zählt in der Kopf-Ampel
+  als fertig — der Monat lässt sich abschließen.
+- **Die Abweichung bleibt trotzdem sichtbar.** Das Etikett sagt „geprüft (weicht vom Sensor ab)",
+  darunter steht weiter „Sensor meldet X · gespeichert Y · von dir behalten". Nichts wird
+  weggeklickt: wer später wissen will, warum die Zahlen auseinandergehen, sieht es immer noch.
+  „Sensorwert übernehmen" bleibt als Rückweg stehen.
+- **Gemerkt wird, wogegen du bestätigt hast** — nicht bloß „bestätigt". Meldet der Zähler später
+  einen anderen Wert, oder änderst du den gespeicherten Wert, ist die Bestätigung hinfällig und das
+  Feld meldet sich wieder. Eine alte Entscheidung kann also keine neue Abweichung verdecken.
+
+Das gilt für die Zählerfelder der Anlage **und** für die Felder deiner Komponenten (PV-Strings,
+Speicher, Wärmepumpe, E-Auto, Wallbox …) — sonst hinge der Monat weiter an einer einzelnen
+Komponente fest.
+
+**Was du tun musst: nichts.** Bestehende Monate bleiben unverändert; die Bestätigung entsteht erst,
+wenn du sie klickst.
+→ [Handbuch → Einstellungen §5.1 Monatsdaten & Monatsabschluss](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) *(gemeldet von Rainer)*
+
+### Ein frisch verbundener Connector setzt den Monatswert nicht mehr auf 0
+
+**Betrifft dich das?** Wenn du einen **Geräte-Connector** einrichtest (Hersteller-Cloud oder Gateway)
+und deine PV-Erzeugung gleichzeitig **je Komponente** aus Home Assistant kommt — also der empfohlene
+Fall, sobald du PV-Module als Komponenten führst. **Hier ging ein Wert verloren.**
+
+Jedes Feld hat in eedc genau eine maßgebliche Quelle. Meldet eine Quelle die **Anlage als Ganzes**,
+sperrt dieser Wert die Summe der Komponenten-Werte — sonst zählte dieselbe Erzeugung zweimal. Genau
+das tat ein frisch verbundener Connector: Er meldet einen Anlagen-Gesamtwert, und der ist am Anfang
+nur die Differenz zwischen zwei seiner Abrufe. Abends eingerichtet sind das **0,0 kWh** — und dieses
+Bruchstück verdrängte die vollständige Summe aus Home Assistant. Der laufende Monat sprang auf 0.
+
+Jetzt unterscheidet eedc, ob ein Wert den **ganzen Monat** abdeckt oder nur ein Stück davon. Ein
+Wert, der erst seit heute Abend zählt, sperrt die Komponenten-Summe nicht mehr und wird vom ersten
+vollständigen Beitrag ersetzt statt zu ihm addiert — die Doppelzählung, gegen die die Sperre steht,
+bleibt damit verhindert. Deckt dein Connector den Monat ab, ändert sich nichts.
+
+**Was du tun musst:** Der **laufende** Monat rechnet sich beim nächsten Aufruf von selbst richtig.
+Hast du den 0-Wert damals über den **Monatsabschluss gespeichert**, steht er weiter in deinen
+Monatsdaten — den einen Monat einmal öffnen und den Vorschlag übernehmen.
+→ [Handbuch → Einstellungen §7 Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) *(#361, aufgefallen bei der Bearbeitung von coolxmads Befund #353)*
+
+### Live „Wetter heute": IST-Kurve und Prognose liegen wieder auf derselben Stunde
+
+**Betrifft dich das?** Wenn du im **Cockpit → Live** den Block **„Wetter heute"** benutzt — also den
+Verlauf von PV-Ertrag und Verbrauch mit der gestrichelten Prognose darüber.
+
+Eine Stunde steht in eedc für die Zeit **davor**: Der Punkt bei **11** trägt, was zwischen 10:00 und
+11:00 passiert ist — so wie ein Zählerstand um 11:00 die Stunde davor abschließt. Alle
+Prognose-Quellen, das Energieprofil und die Auswertungen halten das so. Dieser eine Block hielt sich
+nicht daran: Er schrieb im Tooltip „11:00–12:00 Uhr" und legte gleichzeitig seine **gemessene**
+PV-Kurve eine Spalte zu früh ab. Wer beide Sichten offen hatte, las für dieselbe Stunde zwei
+verschiedene Zeitspannen — und die Prognose sah aus, als käme sie eine Stunde zu spät.
+
+Was du jetzt siehst:
+
+- **Der Tooltip nennt überall dieselbe Zeitspanne** („10:00–11:00 Uhr" am 11-Uhr-Punkt), im Cockpit
+  wie unter Auswertungen → Prognose.
+- **Die gemessene Kurve liegt Spalte für Spalte neben der Prognose** derselben Stunde. Die
+  Abweichung, die du siehst, ist ab jetzt die echte Prognose-Abweichung und kein Zeitversatz.
+- **Die laufende Stunde erscheint nicht mehr als Einbruch.** Bisher wurde die gerade erst
+  angefangene Stunde als vollständiger Mittelwert gezeichnet; jetzt endet die IST-Kurve mit der
+  letzten vollständigen Stunde.
+- **Sonnenauf-/-untergang, Sonnenhöchststand und das hervorgehobene Wettersymbol** stehen in der
+  Stunde, die den Zeitpunkt wirklich enthält (05:56 Uhr gehört zu 05:00–06:00).
+
+**Frisch eingerichtet oder ohne Home Assistant: auch die gestrichelte Verbrauchs-Kurve lag eine
+Stunde zu früh.** eedc lernt dein typisches Verbrauchsprofil aus den letzten sieben Tagen. Solange
+es dafür noch keine eigenen Aufzeichnungen hat, nimmt es die Werte direkt aus Home Assistant oder —
+im Standalone-Betrieb — aus den MQTT-Daten, und diese beiden Wege ordneten die Stunden vorwärts zu.
+Nach ein paar Tagen Aufzeichnung stimmte die Kurve von selbst; jetzt stimmt sie ab der ersten
+Stunde. **Bestehende Anlagen waren nie betroffen.**
+
+**Dieselben beiden Wege rechneten die Stunde außerdem zu niedrig — hier bewegt sich die Kurve
+sichtbar.** Im Standalone-Betrieb wurde nur der Verbrauch zwischen dem ersten und dem letzten
+Messpunkt **innerhalb** der Stunde gezählt; das letzte Stück bis zum Stundenschlag fiel jedes Mal
+heraus, bei einem Messpunkt alle fünf Minuten rund **8 %**. Und beim Weg über Home Assistant zählte
+eine Stunde, für die gar keine Aufzeichnung vorlag, als **gemessene Null** und zog den Durchschnitt
+nach unten — ein einziger Tag ohne Daten drückte jede Werktags-Stunde auf vier Fünftel. Beides ist
+behoben: Gemessen wird jetzt von Stundengrenze zu Stundengrenze, und **eine Stunde ohne Messung
+wird ausgelassen statt als Null gezählt**. Bleibt für eine Stunde gar nichts übrig, setzt eedc dort
+seinen Standardwert ein und behauptet nicht, du hättest nichts verbraucht. **Deine gestrichelte
+Verbrauchs-Kurve liegt dadurch höher als vorher — sie lag zu tief.**
+
+**An deinen erfassten Daten ändert sich nichts.** Tagessummen, Kacheln und alle Auswertungen
+bleiben, wie sie waren; betroffen ist allein die gelernte Verbrauchs-Prognose im Live-Chart.
+→ [Handbuch → Prognosen §3 Wo die Prognosen erscheinen](HANDBUCH_PROGNOSEN.md#3-wo-die-prognosen-in-der-app-erscheinen) *(gemeldet von Rainer)*
+
+### Stundenvergleich: die Σ-Zeile vergleicht nur noch den bisher gelaufenen Tag
+
+**Betrifft dich das?** Wenn du unter **Auswertungen → Prognose** in die Tabelle
+**„Stundenvergleich heute"** schaust. **Hier ändert sich eine angezeigte Zahl.**
+
+Ganz unten in der Tabelle steht die Σ-Zeile. Sie summierte bisher die Prognose des **ganzen** Tages
+und stellte sie dem IST **bis jetzt** gegenüber. Mittags las sich das an einer Beispielanlage als
+`Σ 78,1 ▲ 52,0` gegen `IST 26,1` — eine Abweichung von 52 kWh, die vor allem aussagte, dass der Tag
+noch nicht vorbei war. Am Abend schrumpfte dieselbe „Abweichung" von allein wieder zusammen.
+
+Jetzt vergleicht die Zeile **dieselben Stunden auf beiden Seiten** — bis zur letzten Stunde, für die
+eine Messung vorliegt. Aus denselben Daten wird damit `Σ 30,2 ▲ 4,1 (16 %)` gegen `IST 26,1`, und
+darunter steht, worauf sich das bezieht: **`bis 13:00`**. Die **prozentuale** Abweichung ist neu.
+
+- **Die Σ-Zeile ist damit nicht mehr die Tagesprognose** — die steht unverändert in den Kacheln
+  oben („Heute"), zusammen mit „Verbleibend".
+- **Ist der Tag durch**, entfällt die Kennzeichnung und die Zeile zeigt wieder die vollen
+  Tagessummen — wie bisher.
+- **Für einen Tag ohne jede Messung** steht dort die Prognosesumme und **keine** Abweichung. Ein
+  „0 %" gegen ein IST, das es noch gar nicht gibt, wäre eine Behauptung.
+
+**Und die Abweichungen in den Stundenzeilen darüber sind jetzt vollständig.** Bisher blendete eedc
+sie aus, wenn sie sehr klein waren — das traf je Spalte unterschiedlich zu, und in derselben Zeile
+trugen OpenMeteo und Solcast eine Abweichung, die eedc-Spalte daneben nicht. Das sah aus, als fehlte
+ein Wert. **Sobald für eine Stunde ein IST vorliegt, steht die Abweichung in jeder Prognosespalte** —
+ein Volltreffer heißt jetzt sichtbar `± 0,0`. Bleibt eine Spalte leer, heißt das eindeutig: für
+diese Stunde gibt es noch keine Messung.
+
+**Was du tun musst: nichts.** Es ändert sich nur, was verglichen wird — an deinen erfassten Daten
+und an allen anderen Kennzahlen ändert sich nichts.
+→ [Handbuch → Prognosen §3 Stundenvergleich heute](HANDBUCH_PROGNOSEN.md#stundenvergleich-heute--was-die-abweichungen-sagen) *(gemeldet von Rainer)*
+
+### Cockpit → Jahr: der Ø-Preis passt wieder zu den kWh und Euro darunter
+
+**Betrifft dich das?** Wenn deine Strompreise über das Jahr geschwankt haben — durch einen
+Tarifwechsel oder einen dynamischen Tarif — und du im **Cockpit → Jahr** auf die Kachel
+**„Ø-Preis Netz"** (bzw. die Einspeisevergütung daneben) schaust. **Hier ändert sich eine
+angezeigte Zahl.**
+
+In einem gemeldeten Fall stand in derselben Kachel oben **28,0 ct** und darunter
+**„559 kWh · 210,45 €"** — das sind rechnerisch 37,6 ct. Zwei Zahlen, eine Kachel. Die Ursache: Der
+Jahresdurchschnitt war das **ungewichtete Mittel der zwölf Monatspreise**, während kWh und Euro
+darunter Summen sind. Ein teurer Januar mit 400 kWh wog damit genauso viel wie ein billiger Juli mit
+20 kWh.
+
+Jetzt zählt jeder Monat **mit der Menge, die in ihm geflossen ist**. Der Durchschnitt oben und die
+Summen darunter beschreiben damit dieselbe Rechnung. Monate ohne Menge fallen aus beiden Summen
+heraus. Dasselbe gilt für den Ø-Wert der Einspeisevergütung.
+
+**Und das grüne „Aktuell"-Badge markiert wieder genau einen Tarif.** Unter **Einstellungen →
+Strompreise** trug es bisher **jeder** Tarif ohne Enddatum — bei drei aufeinander folgenden Tarifen
+also dreimal. Es zeigt jetzt den Tarif, mit dem eedc heute tatsächlich rechnet: gültig am heutigen
+Tag und je Verwendung der jüngste. **Standard- und Spezialtarif** (Wärmepumpe, Wallbox) können
+weiterhin gleichzeitig aktuell sein — das sind verschiedene Verwendungen.
+
+**Was du tun musst: nichts.** Beides ist reine Anzeige — deine Kosten, Erträge und der Netto-Ertrag
+wurden nie aus dieser Kachel gerechnet und ändern sich nicht.
+→ [Handbuch → Einstellungen §2.2 Strompreise](HANDBUCH_EINSTELLUNGEN.md#22-strompreise) *(gemeldet im Forum von Algie)*
+
+### Datenquellen: das Speicher-Feld „Ladung" heißt auch dort, wie es gemeint ist
+
+**Betrifft dich das?** Wenn du einen **Speicher** hast, dessen Wechselrichter die Ladung getrennt
+nach PV-Anteil und Netzanteil meldet (z. B. Kostal Plenticore mit `charge_from_pv` und
+`charge_from_grid`). **Hier kann eine Zahl falsch erfasst worden sein.**
+
+Auf der Zuordnungs-Fläche standen **„Ladung"** und **„Netzladung"** untereinander — das liest sich
+wie zwei Hälften, die man zusammensetzt. Gemeint ist es anders: **„Ladung" ist die Gesamtmenge,
+Netzladung eingeschlossen**, und „Netzladung" sagt nur, wie viel *davon* aus dem Netz kam. Wer den
+PV-Anteil auf „Ladung" legte, verlor die Netzladung in der Gesamtmenge und zählte sie zugleich
+doppelt (im gemeldeten Fall 421 statt der gemessenen 494 kWh).
+
+Das eindeutige Label **„Ladung (gesamt, inkl. Netz)"** gibt es im Monatsabschluss schon länger — die
+Datenquellen-Fläche zeigte es nur nicht an. Jetzt sagen beide Flächen dasselbe.
+
+**Zweitens: „Ø Ladepreis" wird nicht mehr als zuordenbares Feld angeboten.** Es ist ein Monatswert in
+ct/kWh, für den es gar keinen Sensor- oder Topic-Weg gibt — ein zugeordneter Sensor bewirkte nichts,
+löste aber eine Daten-Checker-Meldung aus. Erfassen kannst du ihn weiterhin im **Monatsabschluss**,
+per **CSV-Import** und über den **errechneten Vorschlag** bei dynamischem Tarif. Hast du heute eine
+Quelle darauf gesetzt, siehst du das Feld weiter und kannst sie über **Keine** entfernen.
+
+**Was du tun musst:** Wenn auf „Ladung" nur dein **PV-Ladezähler** liegt, stell das Feld auf einen
+Zähler um, der **PV und Netz zusammen** führt. Liefert dein Gerät die beiden nur getrennt, addierst
+du sie in Home Assistant zu einem Helfer und ordnest diesen zu. **Bestehende Zuordnungen ändert eedc
+nicht von selbst** — sonst verschwände eine Einstellung, die du bewusst gesetzt hast.
+→ [Handbuch → Einstellungen §7.3 Was muss zugeordnet werden](HANDBUCH_EINSTELLUNGEN.md#73-was-muss-zugeordnet-werden--und-was-nicht) *(gemeldet im Forum von MartyBr)*
+
+### „Tag neu aggregieren" reicht jetzt so weit zurück wie Home Assistant
+
+**Betrifft dich das?** Wenn der Daten-Checker Tage ohne Werte meldet, die **länger als rund zehn Tage**
+zurückliegen, und der angebotene Reparatur-Knopf mit *„keine Live-/MQTT-Daten gefunden"* abbrach.
+
+Der Daten-Checker prüft 90 Tage weit zurück und findet die Lücken in der HA-**Langzeitstatistik**.
+Die Reparatur holte ihre Stundenkurve aber aus der HA-**Historie** — und die hebt Home Assistant
+standardmäßig nur zehn Tage lang auf. Für ältere Tage stieg der Lauf aus, **bevor** er die Zähler
+überhaupt anfasste. Im gemeldeten Fall: 39 Tage zwischen dem 16.06. und dem 30.07., jeder mit einem
+Knopf, der nicht funktionieren konnte. **Falsch war das Angebot, nicht deine Bedienung.**
+
+Findet die Reparatur auf dem regulären Weg nichts, holt sie dieselbe Stundenkurve jetzt aus der
+**Langzeitstatistik** — demselben Weg, den „Lücken aus HA-LTS nachfüllen" seit jeher nutzt. Das gilt
+für **„Tag neu aggregieren"** und für **„Mehrere Tage neu aggregieren"**.
+
+**Und wenn es trotzdem nicht geht, sagt die Meldung, woran es liegt** — statt pauschal „keine Daten":
+
+- **keine Leistungs-Zuordnung** — dann führt der Weg zu Datenquellen, dort fehlt eine Quelle;
+- **Home Assistant nicht erreichbar** — ein Verbindungsproblem, später erneut versuchen;
+- **Home Assistant hat für diesen Tag selbst nichts** — dann lässt sich der Tag nicht füllen. Das ist
+  keine Fehlfunktion: was HA nie aufgezeichnet hat, kann eedc nicht nachholen.
+
+**Was du tun musst:** Wenn du gemeldete Lücken bisher vergeblich zu reparieren versucht hast — probier
+es noch einmal. **„Lücken aus HA-LTS nachfüllen" verhält sich unverändert** und bleibt strikt
+additiv: bestehende Tage werden nicht überschrieben.
+→ [Handbuch → Energieprofil §4 Reparatur & Pflege](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege) *(gemeldet im Forum von dietmar1968)*
+
+### Daten-Checker: ein Anlagen-Ausbau ist keine Einspeise-Anomalie
+
+**Betrifft dich das?** Wenn du deine Anlage **in Stufen erweitert** hast und der Daten-Checker seither
+meldet: *„Einspeisung > 3× Vorjahr"*.
+
+Diese Prüfung vergleicht jeden Monat mit demselben Monat des Vorjahrs — dahinter steht der Verdacht
+auf einen Eingabefehler (Faktor 10) oder einen Zählertausch ohne Reset. Wer 2024 aber mehr Module am
+Netz hatte als 2023, erzeugt den Sprung selbst. Und weil der Vergleich an den Monatsdaten hängt und
+nicht an einem Zeitfenster, wären diese Meldungen **nie von allein verschwunden**: im gemeldeten Fall
+drei Stück, die niemand beheben konnte.
+
+Die Prüfung setzt für ein Monatspaar jetzt aus, wenn die **installierte Erzeugerleistung** zwischen
+den beiden Monaten um mindestens **10 %** gewachsen ist.
+
+**Warum aussetzen statt die Schwelle mitwachsen zu lassen:** Die Einspeisung ist eine Differenz —
+Erzeugung minus Eigenverbrauch. Bleibt dein Verbrauch gleich, landet vom Zubau fast alles im Netz. Im
+gemeldeten Fall wuchs die Anlage auf das Vierfache, die Mai-Einspeisung auf das Fünfzehnfache
+(61 → 888 kWh). Eine aus der kWp abgeleitete Schwelle wäre geraten und hätte genau diesen Fall auch
+nicht gefangen.
+
+**Nur für die Einspeisung.** Beim **Netzbezug** wäre ein PV-Zubau die falsche Erklärung: der sinkt mit
+mehr PV und steigt mit neuen Verbrauchern (Wärmepumpe, E-Auto, Wallbox). Dort bleibt die Meldung.
+
+**Was du tun musst: nichts** — die Meldungen verschwinden beim nächsten Prüflauf.
+→ [Handbuch → Daten-Checker §4.5 Monatsdaten – Plausibilität](HANDBUCH_DATEN_CHECKER.md#45-monatsdaten--plausibilitaet) *(gemeldet von kingcap1, #354)*
+
+### Daten-Checker: fehlt einem Zähler die Statistik, führt der Weg jetzt über die HA-Oberfläche
+
+**Betrifft dich das?** Wenn der Daten-Checker meldet, dass ein zugeordneter Zähler **nicht in der
+Home-Assistant-Langzeitstatistik** steht oder **keine Summen-Spalte** führt.
+
+Bisher riet der Hinweistext zuerst dazu, die `configuration.yaml` zu öffnen und dort `state_class`
+nachzutragen. Das setzt voraus, dass du Textdateien in Home Assistant pflegst — und viele tun das
+bewusst nicht.
+
+Was du jetzt liest: Der empfohlene Weg ist ein **Verbrauchszähler-Helfer über die Oberfläche**
+(**Einstellungen → Geräte & Dienste → Helfer**) auf den vorhandenen Sensor — **ohne Zyklus**, also
+mit Zurücksetzen „nie". Der Helfer bringt die nötigen Angaben von sich aus mit, und sein Name bleibt
+derselbe, wenn du später das Gerät tauschst; du wechselst dann nur die Quelle. Der YAML-Weg steht
+weiterhin da, aber als Nebensatz für alle, die ihn ohnehin gehen.
+
+**Ein Hinweis gehört dazu:** Ein neuer Helfer **beginnt bei null** — vergangene Monate sammelt Home
+Assistant nicht nach. Das ist keine Eigenart des Helfers, das gilt für jeden Weg.
+
+**Das gilt jetzt für alle vier Meldungen dieser Prüfung.** Eine davon nannte bisher überhaupt keinen
+Weg, sondern nur das Ziel („`state_class: total_increasing` setzen") — wer sie las, wusste hinterher,
+*was* fehlt, aber nicht, *wie* man es behebt. Und die beiden Meldungen zur fehlenden Summen-Spalte
+standen bis jetzt gar nicht im Handbuch; die Melde-Tabelle ist vollständig.
+
+**Was du tun musst: nichts.** Es ändert sich nur der Text im Daten-Checker, keine Zahl und keine
+Zuordnung.
+→ [Handbuch → Daten-Checker §5.1 state_class-Probleme beheben](HANDBUCH_DATEN_CHECKER.md#51-state_class-probleme-bei-ha-sensoren-beheben) *(gemeldet von Rainer)*
+
+### HA-Export: kurze Zahlen statt Nachkommastellen für jede Größe
+
+**Betrifft dich das?** Wenn du die eedc-Sensoren per **MQTT** an Home Assistant übergibst
+(**Einstellungen → Integration → MQTT-Export**).
+
+Bisher bekam jeder Sensor dieselben zwei Nachkommastellen — auch dort, wo sie nichts aussagen: bei
+einer Jahres-Erzeugung von 12.345,67 kWh sind die beiden letzten Stellen reine Anzeige-Länge.
+
+Was du jetzt siehst — gerundet wird **nach Größenart**:
+
+- **Energie und Mengen** (kWh, kWh/kWp, km, kg CO₂) — **ganze Zahlen**.
+- **Geld** (€) — zwei Stellen, also auf den Cent.
+- **Prozent** — eine Stelle.
+- **Leistung** (kW) und die übrigen Kennwerte (COP, Zyklen, Rang) — zwei Stellen.
+
+**Kleine Werte verschwinden dabei nicht.** Ein Wert, der beim Runden auf 0 fiele, obwohl er nicht 0
+ist, bekommt so viele Stellen wie nötig — aus 0,35 kW wird keine 0, und die Rest-Prognose am Abend
+bleibt sichtbar.
+
+**Was du tun musst: nichts.** Sensor-Namen, Einheiten und die Anzahl der Entitäten sind unverändert;
+es ändert sich nur die Länge der Zahl. Deine bisherige HA-Historie bleibt, wie sie ist.
+→ [Sensor-Referenz §11 Export-Sensoren](SENSOR-REFERENZ.md#11-export-sensoren-eedc--ha) *(gemeldet von Rainer)*
 
 ---
 

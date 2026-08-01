@@ -471,6 +471,12 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 - **Spaltenauswahl** über „Spalten" (Auswahl bleibt im Browser gespeichert)
 - **CSV-Export** des sichtbaren Inhalts (alle Zeilen, eingeblendete Spalten)
 
+> **Womit sich eine Zeile vergleicht.** Jede Monatszeile steht ihrem **eigenen** Vorjahresmonat gegenüber — Dezember 2025 dem Dezember 2024, auch wenn der Zeitraum „Alle Jahre" umfasst. Gibt es diesen Vorjahresmonat nicht (weil deine Aufzeichnung später beginnt), bleibt die Vergleichsspalte **leer („—")**; es wird kein Ersatzwert eingesetzt und kein Δ von 0,0 % angezeigt. Dasselbe gilt für Tageszeilen.
+>
+> Die **Summenzeile** hält sich an dieselbe Regel: Sie vergleicht nur, wenn **jede** angezeigte Zeile ein Gegenstück hat. Bei „Alle Jahre" ist das nicht der Fall — die ersten Monate deiner Aufzeichnung haben kein Vorjahr —, dort bleibt die Vergleichs-Spalte des Fußes leer, während die Δ-Werte der einzelnen Zeilen vollständig darüber stehen. Andernfalls stünde dort z. B. die Summe aus 37 Monaten neben der aus 25: eine Prozentzahl, die sich wie eine Aussage über deine Anlage liest und keine ist. Die „aktuell"-Zelle bleibt immer die Summe der Spalte darüber. **Warum sie schweigt, steht unter der Tabelle** — mit der Anzahl der Monate bzw. Tage, die kein Gegenstück haben; derselbe Satz erscheint als Hinweis, wenn du auf die leere Zelle zeigst.
+>
+> *Bis Version 4.0.5 wurden über mehrjährige Zeiträume alle Jahrgänge desselben Monats verwechselt: jede Zeile verglich sich mit dem jüngsten davon, im Extremfall mit sich selbst (identische Zahlen, Δ 0,0 %). Wenn deine Vorjahresspalte vorher gespiegelte Werte zeigte, ist das die Korrektur.*
+
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 
 > **Die Spalte „CO₂-Einsparung (PV)"** zeigt bewusst nur den **PV-Anteil** (Eigenverbrauch × Strommix) — für Monate **und** Tage, damit sich Tageszeilen zum Monat aufaddieren. Wärmepumpe und E-Mobilität fehlen darin: ihre Bezugsgrößen (erzeugte Wärme, gefahrene Kilometer) erfasst eedc nur monatlich. Die **vollständige** Bilanz steht unter **Auswertungen → CO₂** (§4.4) und im Block „CO₂-Bilanz" in [Cockpit → Jahr/Gesamt](#24-jahrgesamt).

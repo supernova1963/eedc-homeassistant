@@ -1033,6 +1033,21 @@ Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
 | **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet. |
 | **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
 
+#### Abweichung und Σ-Zeile im Stundenvergleich (ab v4.0.6)
+
+Die Tabelle „Stundenvergleich heute" annotiert jeden Prognosewert mit seiner Abweichung zum IST **derselben** Stunde. Zwei Regeln, beide client-seitig in `components/prognose/PrognoseVergleichTeile.tsx` (`DevBadge` bzw. `stundenSummeVon`), gepinnt in `PrognoseVergleichTeile.stundenvergleich.test.tsx`:
+
+```
+Δ_Stunde   = Prognose_kWh − IST_kWh            (angezeigt: |Δ|, Richtung als ▲/▼, „±" wenn |Δ| < 0,05)
+Δ_relativ  = |Δ| / IST × 100                   (nur für die Farbskala bzw. die Σ-Zeile; IST > 0,05 vorausgesetzt)
+```
+
+- **Liegt ein IST vor, wird immer annotiert** — auch bei Δ = 0. Eine fehlende Annotation bedeutet damit eindeutig „keine Messung", nicht „kleine Abweichung". *(Bis v4.0.5 unterdrückte die Anzeige jedes |Δ| < 0,03 kWh; das traf je Spalte unterschiedlich zu und sah in der Zeile aus wie eine Datenlücke — PN Rainer 90004.)*
+- **Die Σ-Zeile summiert über ein gemeinsames Fenster.** Obergrenze ist die letzte Stunde mit IST, höchstens `aktuelle_stunde` (Slot `aktuelle_stunde + 1` läuft noch, s. Backward-Konvention). Stunden **ohne** IST bleiben in allen vier Spalten außen vor — die vier Summen meinen damit paarweise dieselben Stunden. *(Bis v4.0.5 stand dort die 24-Stunden-Prognosesumme neben `ist_heute_kwh`: mittags z. B. 78,1 gegen 26,1 — die Abweichung maß die Tageszeit.)*
+- **Ohne jedes IST** (Zukunftstag) zeigt die Σ-Zeile die volle Prognosesumme und **kein** Δ — ADR-002/P4: kein 0-%-Ergebnis auf einer nicht vorhandenen Referenz. Der Vollständigkeits-Grenzfall „alle 24 Stunden gemessen" verhält sich wie vorher (keine `bis HH:00`-Kennzeichnung).
+
+Nicht zu verwechseln mit der **Tagesprognose** derselben Spalte (`openmeteo_heute_kwh` etc.) in der Kennzahl-Matrix — die bleibt der ganze Tag, ebenso `verbleibend_*` (= IST bisher + Σ Prognose-Slots der Reststunden).
+
 #### Lernfaktor (saisonale MOS-Kaskade, ab v3.16.15)
 
 Die eedc-Prognose ist die korrigierte OpenMeteo-Prognose; der Skalar-Lernfaktor unten ist die
@@ -1275,6 +1290,8 @@ Für Nutzer mit dynamischem Stromtarif (z.B. Tibber, aWATTar) kann der tatsächl
 - In der [Datenquellen-Zuordnung](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung) kann ein HA-Sensor (oder MQTT-Topic) für das Feld `strompreis` zugeordnet werden
 - Im [Monatsdaten-Formular](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss) wird der Ø-Preis als Vorschlag angezeigt und ist dort manuell editierbar
 
+> **Der Jahres-Ø ist mengengewichtet.** Die Jahres-/Gesamt-Kachel „Ø-Preis Netz" (und ebenso die Ø-Einspeisevergütung) rechnet `Σ(Preis_Monat × Menge_Monat) / Σ Menge_Monat` — nicht das arithmetische Mittel der Monatspreise. Gewichtet wird der **effektive** Monatspreis (also der Ø-Bezugspreis vor dem Tarif-Arbeitspreis, dieselbe Kette wie oben); sonst fiele ein Jahr mit dynamischem Tarif auf den Referenzpreis zurück, obwohl die Kosten darunter mit dem Stundenpreis gerechnet sind. Monate ohne Menge fallen aus Zähler und Nenner; gibt es im Zeitraum überhaupt keine Menge, bleibt das arithmetische Mittel als Rückfall stehen, statt die Kachel zu leeren. **Ohne die Gewichtung passte der Kopfwert nicht zu den kWh und Euro darunter** — ein teurer Winter- und ein billiger Sommermonat wogen gleich viel (Forum simon42 #89667/67).
+
 ---
 
 ## 6. Investitionstyp-spezifische Berechnungen (ROI-Dashboard)
@@ -1361,6 +1378,80 @@ Industriestandard für Energie: HA Energy Dashboard, SolarEdge, SMA, Fronius, Ti
 - `sensor_snapshot_service.get_hourly_kwh_by_category`: Delta `snap[h] − snap[h-1]` → Slot h (vorher: `snap[h+1] − snap[h]` → Slot h)
 - `solcast_service` (API + HA-Sensor): 30-Min-Buckets per `ceil(bucket_ende)` → richtigen Backward-Slot. Ein Bucket am Tagesübergang `[23:00, 23:30)` heute landet damit korrekt in Slot 0 des **Folgetags**, nicht in Slot 0 von heute.
 - **Nach Update auf v3.20.0 nötig:** einmal „Verlauf nachberechnen + überschreiben" auslösen, damit alle historischen Stundenwerte umverteilt werden. Tagessummen und alle abgeleiteten Kennzahlen (Autarkie, PR, Lernfaktor) sind konventionsunabhängig korrekt.
+
+**Die Konvention endet nicht am Backend (v4.0.6).** Wer eine Stunde *beschriftet* oder einen Messwert
+in eine Chart-Spalte *einsortiert*, folgt derselben Regel — Client-SoT ist
+`frontend/src/lib/stundenSlot.ts` (Spiegel von `core/berechnungen/slot_konvention.py`, Regressionstest
+`stundenSlot.test.ts`):
+
+| Funktion | Wofür |
+|---|---|
+| `slotZeitspanne(h)` | Beschriftung — Slot 11 → „10:00–11:00 Uhr". **Jeder** Tooltip einer Stundengrafik. |
+| `slotAusIntervallStart(h)` | Messreihen mit Slot-**Beginn**-Stempel (10-Min-Punkte des Tagesverlaufs) → Slot `h+1`. Rückgabe 24 = Slot 0 des Folgetags, **kein** Modulo. |
+| `slotAusZeitpunkt("HH:MM")` | Zeitpunkt-Marker (Sonnenaufgang, Solar Noon) in den Slot, der ihn enthält — 05:56 → Slot 6. |
+
+Auslöser war Rainer (PN 90106, 01.08.2026): der Live-Block „Wetter heute" baute seine Zeitspanne selbst
+und **vorwärts** (`[h, h+1)`), während die Prognose-Sicht rückwärts beschriftete; zusätzlich bündelte er
+die 10-Minuten-Punkte der Stunde `h` in Spalte `h` statt `h+1`. Gemessen gegen die Live-Box lag die
+IST-Kurve dadurch **genau eine Spalte** neben der Prognose im selben Chart. Klasse: nicht das
+Beschriftungs-Symptom patchen, sondern die Stelle, die die Zuordnung konstruiert
+(`feedback_aggregations_drift`).
+
+**Auch die Verbrauchs-Seite folgt ihr (v4.0.6).** Die gestrichelte Verbrauchs-Prognose im Live-Chart
+kommt aus dem individuellen Verbrauchsprofil der letzten 7 vollen Tage
+(`services/live_verbrauchsprofil_service.py`), und das hat **drei** Quellen mit Vorrang in dieser
+Reihenfolge:
+
+| Quelle | Wann sie greift | Slot-Herkunft |
+|---|---|---|
+| EEDC-DB (`TagesEnergieProfil.stunde`) | sobald der Scheduler mindestens zwei Tage aggregiert hat | schon backward (Aggregator schreibt über `lts_boundary_index`) |
+| HA-History (Leistungsmittel je Stunde) | frische Installation, noch keine DB-Historie | `_slot_fenster` → `backward_slot_aus_period_start` |
+| MQTT-Snapshots (Zähler-Delta je Stunde) | Standalone-Betrieb ohne HA | dieselbe Stelle |
+
+Bis v4.0.5 bündelten die beiden **Fallback**-Quellen forward: die Energie aus `[h, h+1)` landete unter
+Index `h`, das Profil lag also eine Stunde zu früh — unsichtbar für jeden, der schon DB-Historie hat,
+sichtbar bei **Neuinstallation** und im **Standalone-Betrieb**. Seit v4.0.6 ordnet **eine** Stelle im
+Modul zu (`_slot_fenster`), und zwar über den Backend-SoT `core/berechnungen/slot_konvention.py`;
+das Abfrage-Fenster beginnt dafür eine Stunde vor Mitternacht, weil Slot 0 des ersten Tages das
+Intervall `[Vortag 23:00, 00:00)` trägt. Gepinnt in
+`tests/test_verbrauchsprofil_slot_konvention.py` — je eine Regression pro Fallback-Pfad plus ein
+Symmetrie-Test „gleiche Wirklichkeit, drei Messarten ⇒ **ein** Profil"
+(`feedback_aggregator_symmetrie`).
+
+#### Wann eine Stunde als unvollständig gilt (v4.0.6)
+
+Die Zuordnung allein genügt nicht — die drei Quellen müssen sich auch einig sein, **wann eine Stunde
+überhaupt gemessen wurde**. Eine unvollständige Stunde liefert in allen dreien **keine Stichprobe**;
+sie wird ausgelassen, nicht geschätzt und nicht als 0 kW gezählt:
+
+| Quelle | Stunde gilt als gemessen, wenn … | sonst |
+|---|---|---|
+| EEDC-DB | eine `TagesEnergieProfil`-Zeile mit `verbrauch_kw IS NOT NULL` existiert | keine Zeile ⇒ keine Stichprobe (galt schon immer) |
+| HA-History | mindestens **ein** Netz-Sensor (Bezug, Einspeisung oder Kombi) in dieser Stunde einen Messpunkt hat | Stunde wird übersprungen |
+| MQTT-Snapshots | für **jeden** gelieferten Zähler an **beiden** Intervallgrenzen ein Stand vorliegt (höchstens 6 Minuten alt) | Stunde wird übersprungen |
+
+Zu den beiden Fallbacks im Einzelnen:
+
+- **MQTT misst über die Intervallgrenzen**, nicht über die zufällig in der Stunde liegenden Snapshots.
+  Bis v4.0.5 war das Stundendelta „letzter minus erster Snapshot *innerhalb* der Stunde"; das letzte
+  Snapshot-Intervall fiel damit jede Stunde heraus — bei 5-Minuten-Takt rund **8 % zu wenig**, und ein
+  Verbrauch, der erst gegen Ende der Stunde anfiel, ging ganz verloren. Der Randwert ist der letzte
+  Zählerstand *bei oder vor* der Grenze; benachbarte Stunden lesen denselben Wert, deshalb geht an der
+  Grenze nichts verloren und nichts wird doppelt gezählt. Der Scheduler schreibt alle 5 Minuten, aber
+  nicht auf die volle Stunde gerastert — daher die 6 Minuten Toleranz (Reserve für Verzug, aber nicht
+  genug für einen ausgefallenen Snapshot).
+- **HA zählt eine Stunde ohne Historie nicht mehr als gemessene Null.** Bis v4.0.5 hängte jede Stunde
+  eine Stichprobe an, auch wenn der Recorder nichts geliefert hatte: aus *unbekannt* wurde *war
+  nichts*, und ein einziger Ausfalltag drückte jeden Werktags-Slot auf 4/5 des wahren Werts. Beleg ist
+  bewusst der **Netzanschluss** und dort `any` statt `all`: PV- und WP-Sensoren melden nachts bzw. im
+  Stillstand stundenlang keine Zustandsänderung, ohne dass Daten fehlen, und von Bezug und Einspeisung
+  bewegt sich immer genau einer. Liefert im ganzen Fenster **kein** Netz-Sensor, gibt es kein
+  HA-Profil — sonst stünde die reine PV-Kurve als vermeintlicher Verbrauch da.
+
+Ein Slot ohne jede Stichprobe fehlt im Ergebnis-Dict. Der Konsument
+(`api/routes/live_wetter.py::_berechne_verbrauchsprofil`) erkennt das und setzt seine
+Standard-Grundlast ein, statt still 0 kW anzunehmen — die lokale Ausprägung von
+[ADR-002/P4](ADR-002-WURZELMUSTER.md).
 
 ### Stündliche Berechnung (aggregate_day)
 
