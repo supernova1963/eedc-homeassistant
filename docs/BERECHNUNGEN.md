@@ -1380,6 +1380,27 @@ IST-Kurve dadurch **genau eine Spalte** neben der Prognose im selben Chart. Klas
 Beschriftungs-Symptom patchen, sondern die Stelle, die die Zuordnung konstruiert
 (`feedback_aggregations_drift`).
 
+**Auch die Verbrauchs-Seite folgt ihr (v4.0.6).** Die gestrichelte Verbrauchs-Prognose im Live-Chart
+kommt aus dem individuellen Verbrauchsprofil der letzten 7 vollen Tage
+(`services/live_verbrauchsprofil_service.py`), und das hat **drei** Quellen mit Vorrang in dieser
+Reihenfolge:
+
+| Quelle | Wann sie greift | Slot-Herkunft |
+|---|---|---|
+| EEDC-DB (`TagesEnergieProfil.stunde`) | sobald der Scheduler mindestens zwei Tage aggregiert hat | schon backward (Aggregator schreibt über `lts_boundary_index`) |
+| HA-History (Leistungsmittel je Stunde) | frische Installation, noch keine DB-Historie | `_slot_fenster` → `backward_slot_aus_period_start` |
+| MQTT-Snapshots (Zähler-Delta je Stunde) | Standalone-Betrieb ohne HA | dieselbe Stelle |
+
+Bis v4.0.5 bündelten die beiden **Fallback**-Quellen forward: die Energie aus `[h, h+1)` landete unter
+Index `h`, das Profil lag also eine Stunde zu früh — unsichtbar für jeden, der schon DB-Historie hat,
+sichtbar bei **Neuinstallation** und im **Standalone-Betrieb**. Seit v4.0.6 ordnet **eine** Stelle im
+Modul zu (`_slot_fenster`), und zwar über den Backend-SoT `core/berechnungen/slot_konvention.py`;
+das Abfrage-Fenster beginnt dafür eine Stunde vor Mitternacht, weil Slot 0 des ersten Tages das
+Intervall `[Vortag 23:00, 00:00)` trägt. Gepinnt in
+`tests/test_verbrauchsprofil_slot_konvention.py` — je eine Regression pro Fallback-Pfad plus ein
+Symmetrie-Test „gleiche Wirklichkeit, drei Messarten ⇒ **ein** Profil"
+(`feedback_aggregator_symmetrie`).
+
 ### Stündliche Berechnung (aggregate_day)
 
 ```

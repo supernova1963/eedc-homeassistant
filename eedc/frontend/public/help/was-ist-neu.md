@@ -133,6 +133,13 @@ Was du jetzt siehst:
 - **Sonnenauf-/-untergang, Sonnenhöchststand und das hervorgehobene Wettersymbol** stehen in der
   Stunde, die den Zeitpunkt wirklich enthält (05:56 Uhr gehört zu 05:00–06:00).
 
+**Frisch eingerichtet oder ohne Home Assistant: auch die gestrichelte Verbrauchs-Kurve lag eine
+Stunde zu früh.** eedc lernt dein typisches Verbrauchsprofil aus den letzten sieben Tagen. Solange
+es dafür noch keine eigenen Aufzeichnungen hat, nimmt es die Werte direkt aus Home Assistant oder —
+im Standalone-Betrieb — aus den MQTT-Daten, und diese beiden Wege ordneten die Stunden vorwärts zu.
+Nach ein paar Tagen Aufzeichnung stimmte die Kurve von selbst; jetzt stimmt sie ab der ersten
+Stunde. **Bestehende Anlagen waren nie betroffen.**
+
 **Es ändert sich keine Zahl.** Tagessumme, Kacheln und alle Auswertungen bleiben, wie sie waren —
 verschoben wird nur, in welcher Spalte ein bereits gemessener Wert steht.
 → [Handbuch → Prognosen §3 Wo die Prognosen erscheinen](HANDBUCH_PROGNOSEN.md#3-wo-die-prognosen-in-der-app-erscheinen) *(gemeldet von Rainer)*
