@@ -37,6 +37,7 @@ from backend.core.berechnungen import (
     imd_typ_beitrag,
     merge_datenquellen,
     spezifischer_ertrag_kwh_kwp,
+    teilzeitraum_felder,
     vollzyklen as berechne_vollzyklen,
 )
 from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
@@ -1111,7 +1112,7 @@ async def get_aktueller_monat(
         None,
     )
 
-    resolved: dict[str, tuple[float, DatenquelleInfo]] = merge_datenquellen(
+    quellen_args = dict(
         saved=saved,
         connector=connector,
         mqtt_energy=mqtt_energy,
@@ -1120,6 +1121,12 @@ async def get_aktueller_monat(
         connector_abdeckung_von=connector_abdeckung_von,
         monat_start=datetime(jahr, monat, 1),
     )
+    resolved: dict[str, tuple[float, DatenquelleInfo]] = merge_datenquellen(**quellen_args)
+
+    # Felder, die nur einen Teilzeitraum messen (Connector-Delta ohne Abdeckung
+    # des Monatsanfangs) — sie dürfen die Aggregation der Komponenten-Werte
+    # nicht unterdrücken, siehe `direct_fields` unten (#361).
+    teilzeitraum = teilzeitraum_felder(**quellen_args)
 
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
     # Nur aggregieren wenn kein direkter Top-Level-Wert existiert (sonst Doppelzählung!)
@@ -1144,8 +1151,15 @@ async def get_aktueller_monat(
     }
 
     # Top-Level-Felder die bereits direkt von Collectoren gesetzt wurden
-    # → nicht nochmal aus Einzel-Investitionen aufaddieren
-    direct_fields = set(resolved.keys())
+    # → nicht nochmal aus Einzel-Investitionen aufaddieren.
+    #
+    # #361 (coolxmad #353): Ein Connector-Delta ohne Abdeckung des
+    # Monatsanfangs misst nur Stunden bis Tage und ist als Anlagen-Gesamtwert
+    # kein Ersatz für die Komponenten-Summe — es sperrt die Aggregation daher
+    # NICHT. Der Bruchstück-Wert wird beim ersten aggregierten Beitrag ersetzt
+    # (nicht addiert, das wäre die Doppelzählung, die die Sperre verhindert).
+    direct_fields = set(resolved.keys()) - teilzeitraum
+    ersetzbar = set(teilzeitraum)
 
     def _aggregate(top_level_feld: str, inv_key: str) -> None:
         if inv_key not in resolved:
@@ -1154,7 +1168,8 @@ async def get_aktueller_monat(
             return  # Bereits direkt gesetzt → nicht doppelt zählen
         val = resolved[inv_key][0]
         quelle_info = resolved[inv_key][1]
-        if top_level_feld not in resolved:
+        if top_level_feld not in resolved or top_level_feld in ersetzbar:
+            ersetzbar.discard(top_level_feld)
             resolved[top_level_feld] = (val, quelle_info)
         else:
             resolved[top_level_feld] = (resolved[top_level_feld][0] + val, quelle_info)

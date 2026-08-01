@@ -29,6 +29,11 @@ kommt aus dem Monatsdaten-Import (CSV/Statistik), der einzigen Quelle, die die
 Zeit vor dem ersten Snapshot kennt. Bewusst NICHT: Import und Delta addieren
 (die Abdeckung des Imports ist unbekannt — aneinandergestückelt wäre es Raten).
 
+Ein Connector-Wert ohne Monatsabdeckung bleibt auch dort ein Bruchstück, wo er
+eine Lücke füllen darf. `teilzeitraum_felder` weist genau diese Felder aus —
+der Aufrufer unterdrückt damit **nicht** die Aggregation der Komponenten-Werte,
+die den Monat vollständig kennen (#361).
+
 Werte sind `(float, DatenquelleInfo)`-Tupel; diese Funktion bewegt sie nur und
 ist daher bewusst typ-agnostisch über das zweite Tupel-Element (kein Import aus
 api/routes → keine Layer-Inversion). Die Abdeckung kommt deshalb als eigenes
@@ -56,6 +61,42 @@ def connector_deckt_monatsanfang(
     if abdeckung_von is None or monat_start is None:
         return False
     return abdeckung_von <= monat_start
+
+
+def teilzeitraum_felder(
+    *,
+    saved: dict[str, _V],
+    connector: dict[str, _V],
+    mqtt_energy: dict[str, _V],
+    ha_stats: dict[str, _V],
+    ist_aktueller_monat: bool,
+    connector_abdeckung_von: datetime | None = None,
+    monat_start: datetime | None = None,
+) -> set[str]:
+    """Felder, deren Endwert aus einem Connector-Delta ohne Monatsabdeckung stammt.
+
+    Gegenstück zu `merge_datenquellen` mit denselben Argumenten: Während der
+    Merge entscheidet, *welcher* Wert gewinnt, sagt diese Funktion, welche
+    Gewinner nur einen **Teilzeitraum** messen. Der Aufrufer braucht das, weil
+    ein Anlagen-Gesamtwert die Aggregation der Komponenten-Werte unterdrückt
+    (sonst Doppelzählung) — und ein Bruchstück das nicht darf (#361, coolxmad
+    #353: frisch eingerichteter Connector, Delta 0 kWh, verdrängte die
+    vollständige HA-Summe der PV-Komponente).
+
+    Deckt der Connector den Monat ab, ist sein Wert vollwertig → leere Menge.
+    Sonst zählen genau die Felder, die er selbst gesetzt hat: `saved` gewinnt
+    im `setdefault`-Zweig, MQTT und (im laufenden Monat) HA-Statistik
+    überschreiben ihn danach.
+    """
+    if not connector:
+        return set()
+    if connector_deckt_monatsanfang(connector_abdeckung_von, monat_start):
+        return set()
+
+    ueberschrieben = set(mqtt_energy)
+    if ist_aktueller_monat:
+        ueberschrieben |= set(ha_stats)
+    return {k for k in connector if k not in saved and k not in ueberschrieben}
 
 
 def merge_datenquellen(

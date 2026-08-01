@@ -18,7 +18,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from backend.core.berechnungen import connector_deckt_monatsanfang, merge_datenquellen
+from backend.core.berechnungen import (
+    connector_deckt_monatsanfang,
+    merge_datenquellen,
+    teilzeitraum_felder,
+)
 
 MONAT_START = datetime(2026, 7, 1)
 AB_MONATSANFANG = datetime(2026, 6, 30, 23, 55)   # letzter Snapshot vor dem Monat
@@ -174,3 +178,57 @@ def test_deckt_monatsanfang_grenzfaelle():
     assert connector_deckt_monatsanfang(AB_DEM_28STEN, MONAT_START) is False
     assert connector_deckt_monatsanfang(None, MONAT_START) is False
     assert connector_deckt_monatsanfang(AB_MONATSANFANG, None) is False
+
+
+# ---------------------------------------------------------------------------
+# Teilzeitraum-Felder: welcher Gewinner misst nur ein Bruchstück? (#361)
+# ---------------------------------------------------------------------------
+
+def test_teilzeitraum_leer_wenn_connector_den_monat_deckt():
+    assert teilzeitraum_felder(
+        saved={}, connector={"pv_erzeugung_kwh": "c"}, mqtt_energy={}, ha_stats={},
+        ist_aktueller_monat=True,
+        connector_abdeckung_von=AB_MONATSANFANG, monat_start=MONAT_START,
+    ) == set()
+
+
+def test_teilzeitraum_nennt_nur_die_felder_die_der_connector_gewinnt():
+    """`saved` gewinnt im setdefault-Zweig, HA-Statistik überschreibt im
+    laufenden Monat — beides sind keine Bruchstücke mehr."""
+    assert teilzeitraum_felder(
+        saved={"einspeisung_kwh": "s"},
+        connector={
+            "einspeisung_kwh": "c", "netzbezug_kwh": "c", "pv_erzeugung_kwh": "c",
+        },
+        mqtt_energy={},
+        ha_stats={"netzbezug_kwh": "h"},
+        ist_aktueller_monat=True,
+        connector_abdeckung_von=AB_DEM_28STEN, monat_start=MONAT_START,
+    ) == {"pv_erzeugung_kwh"}
+
+
+def test_teilzeitraum_ohne_abdeckungs_angabe():
+    """Unbekannte Abdeckung zählt als „deckt nicht" — wie beim Merge."""
+    assert teilzeitraum_felder(
+        saved={}, connector={"pv_erzeugung_kwh": "c"}, mqtt_energy={}, ha_stats={},
+        ist_aktueller_monat=True,
+    ) == {"pv_erzeugung_kwh"}
+
+
+def test_teilzeitraum_leer_ohne_connector():
+    assert teilzeitraum_felder(
+        saved={"x": "s"}, connector={}, mqtt_energy={}, ha_stats={"x": "h"},
+        ist_aktueller_monat=True,
+    ) == set()
+
+
+def test_teilzeitraum_abgeschlossener_monat_ha_stats_fuellt_nur():
+    """Im abgeschlossenen Monat greift HA-Statistik per setdefault — sie
+    verdrängt einen bereits gesetzten Connector-Wert also nicht, der bleibt
+    ein Bruchstück."""
+    assert teilzeitraum_felder(
+        saved={}, connector={"pv_erzeugung_kwh": "c"}, mqtt_energy={},
+        ha_stats={"pv_erzeugung_kwh": "h"},
+        ist_aktueller_monat=False,
+        connector_abdeckung_von=AB_DEM_28STEN, monat_start=MONAT_START,
+    ) == {"pv_erzeugung_kwh"}

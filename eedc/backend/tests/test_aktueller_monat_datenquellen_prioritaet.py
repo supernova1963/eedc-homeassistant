@@ -224,3 +224,92 @@ async def test_laufender_monat_connector_teilzeitraum_ueberschreibt_gespeichert_
     )
     # Der gespeicherte Netzbezug (8.0 aus _seed) bleibt ebenfalls maßgeblich.
     assert res.netzbezug_kwh == 8.0
+
+
+# ---------------------------------------------------------------------------
+# #361 (coolxmad #353): Teilzeitraum-Gesamtwert sperrt die Komponenten-
+# Aggregation nicht
+# ---------------------------------------------------------------------------
+
+async def _pv_investition_id(db: AsyncSession, anlage_id: int) -> int:
+    from sqlalchemy import select
+    res = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id, Investition.typ == "pv-module"
+        )
+    )
+    return res.scalars().first().id
+
+
+async def test_laufender_monat_connector_teilzeitraum_sperrt_pv_aggregation_nicht(
+    db, monkeypatch
+):
+    """#361: Der PV-Zähler hängt an der Komponente (Anlagen-Zeile „keine"), die
+    HA-Statistik liefert deshalb nur `inv_<id>_pv_erzeugung_kwh`. Ein frisch
+    eingerichteter Connector meldet dagegen einen Anlagen-Gesamtwert von 0 kWh
+    für die wenigen Stunden seit seiner Einrichtung. Dieses Bruchstück darf die
+    Aggregation der Komponenten-Werte nicht unterdrücken — sonst steht der
+    Monat auf 0, sobald der Connector verbunden wird (coolxmad #353)."""
+    import backend.api.routes.aktueller_monat as am
+    now = datetime.now()
+    anlage_id = await _seed(db, jahr=now.year, monat=now.month, einspeisung=100.0)
+    inv_id = await _pv_investition_id(db, anlage_id)
+    spaet = datetime(now.year, now.month, 1) + timedelta(days=27)
+
+    async def _fake_connector(anlage, j, m):
+        return {"pv_erzeugung_kwh": (0.0, _info(am, "local_connector", 90, spaet))}
+
+    async def _fake_mqtt(anlage, investitionen):
+        return {}
+
+    async def _fake_ha_stats(anlage, j, m):
+        return {
+            f"inv_{inv_id}_pv_erzeugung_kwh": (996.0, _info(am, "ha_statistics", 92))
+        }
+
+    monkeypatch.setattr(am, "_collect_connector_data", _fake_connector)
+    monkeypatch.setattr(am, "_collect_mqtt_inbound_data", _fake_mqtt)
+    monkeypatch.setattr(am, "_collect_ha_statistics_data", _fake_ha_stats)
+
+    res = await am.get_aktueller_monat(anlage_id=anlage_id, jahr=now.year, monat=now.month, db=db)
+    assert res.pv_erzeugung_kwh == 996.0, (
+        f"Connector-Bruchstück (0 kWh seit dem 28.) hat die Komponenten-Summe "
+        f"verdrängt (war {res.pv_erzeugung_kwh}, erwartet 996) — Regression #361"
+    )
+
+
+async def test_laufender_monat_connector_mit_abdeckung_sperrt_pv_aggregation_weiter(
+    db, monkeypatch
+):
+    """Gegenprobe zu #361: Deckt der Connector den Monat ab, ist sein
+    Anlagen-Gesamtwert vollwertig und die Komponenten-Summe darf NICHT
+    zusätzlich aufaddiert werden (das wäre Doppelzählung derselben Erzeugung)."""
+    import backend.api.routes.aktueller_monat as am
+    now = datetime.now()
+    anlage_id = await _seed(db, jahr=now.year, monat=now.month, einspeisung=100.0)
+    inv_id = await _pv_investition_id(db, anlage_id)
+
+    async def _fake_connector(anlage, j, m):
+        return {
+            "pv_erzeugung_kwh": (
+                900.0, _info(am, "local_connector", 90, _monatsanfang(j, m))
+            )
+        }
+
+    async def _fake_mqtt(anlage, investitionen):
+        return {}
+
+    async def _fake_ha_stats(anlage, j, m):
+        return {
+            f"inv_{inv_id}_pv_erzeugung_kwh": (890.0, _info(am, "ha_statistics", 92))
+        }
+
+    monkeypatch.setattr(am, "_collect_connector_data", _fake_connector)
+    monkeypatch.setattr(am, "_collect_mqtt_inbound_data", _fake_mqtt)
+    monkeypatch.setattr(am, "_collect_ha_statistics_data", _fake_ha_stats)
+
+    res = await am.get_aktueller_monat(anlage_id=anlage_id, jahr=now.year, monat=now.month, db=db)
+    assert res.pv_erzeugung_kwh == 900.0, (
+        f"Anlagen-Gesamtwert und Komponenten-Summe wurden addiert "
+        f"(war {res.pv_erzeugung_kwh}, erwartet 900)"
+    )

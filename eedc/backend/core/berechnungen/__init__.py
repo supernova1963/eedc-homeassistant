@@ -57,6 +57,7 @@ from backend.core.berechnungen.counter import (
 from backend.core.berechnungen.datenquellen import (
     connector_deckt_monatsanfang,
     merge_datenquellen,
+    teilzeitraum_felder,
 )
 from backend.core.berechnungen.bkw_finanz import (
     BkwEigenverbrauchsAnteil,
@@ -224,6 +225,7 @@ __all__ = [
     "verteile_counter_auf_stunden",
     "connector_deckt_monatsanfang",
     "merge_datenquellen",
+    "teilzeitraum_felder",
     "BkwFinanzBeitrag",
     "bkw_finanz_beitrag",
     "BkwEigenverbrauchsAnteil",
