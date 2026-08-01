@@ -1,9 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { WerteTabelle } from './WerteTabelle'
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 import { monatsZeile, tagesZeile, richteMonateAus } from '../../lib/werte'
+
+// Der CSV-Knopf löst im echten Code einen Download aus — für den Abgleich
+// Tabelle ↔ Export mocken (dieselbe Technik wie in `lib/werte/werte.test.ts`).
+vi.mock('../../utils/export', () => ({ exportToCSV: vi.fn() }))
+import { exportToCSV } from '../../utils/export'
 
 function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): MonatsZeitreihe {
   return {
@@ -207,5 +212,116 @@ describe('WerteTabelle', () => {
     const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
     expect(fuss[1]).toHaveTextContent('300')
     expect(fuss[2]).toHaveTextContent('100')
+  })
+
+  // Gegenlese-Auflage zu PN 90204: der schweigende Fuß braucht einen sichtbaren
+  // Grund. Genau in „Alle Jahre" war die fehlende Vergleichszahl der gemeldete
+  // Fehler — ohne Begründung liest sich die Korrektur wie der Bug.
+  describe('schweigender Fuß nennt seinen Grund', () => {
+    const prim = [mz(12, 2024, { erzeugung: 227.9 }), mz(12, 2025, { erzeugung: 432.7 })].map(monatsZeile)
+    const fenster = richteMonateAus(
+      [mz(12, 2024, { erzeugung: 227.9 }), mz(12, 2025, { erzeugung: 432.7 })].map(monatsZeile),
+    )
+
+    it('Hinweistext mit Anzahl — sichtbar, nicht nur als Tooltip', () => {
+      render(
+        <WerteTabelle
+          rows={prim} vorjahrRows={fenster} granularitaet="monat"
+          jahrLabel="Aktuell" vergleichLabel="Vorjahr" vergleichDefaultAn
+        />,
+      )
+      expect(screen.getByText(/Summenzeile zeigt keinen Vergleich/)).toHaveTextContent(
+        '1 von 2 Monaten hat kein Gegenstück',
+      )
+      // Derselbe Satz hängt am leeren Fuß (Hover).
+      const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
+      expect(fuss[2]).toHaveAttribute('title', expect.stringContaining('kein Gegenstück'))
+    })
+
+    it('Tages-Granularität beugt in „Tagen"', () => {
+      const aktuell = [tw('2026-05-10'), tw('2026-05-11')].map(tagesZeile)
+      // Nur der zweite Tag hat ein Gegenstück (Schlüssel auf die Primärzeile gehoben).
+      const vergleich = [tw('2026-04-11')].map(tagesZeile).map((z) => ({ ...z, vergleichKey: aktuell[1].vergleichKey }))
+      render(
+        <WerteTabelle
+          rows={aktuell} vorjahrRows={vergleich} granularitaet="tag"
+          jahrLabel="Mai" vergleichLabel="Apr" vergleichDefaultAn
+        />,
+      )
+      expect(screen.getByText(/Summenzeile zeigt keinen Vergleich/)).toHaveTextContent('1 von 2 Tagen hat')
+    })
+
+    it('vollständig gepaart ⇒ kein Hinweis, kein Tooltip', () => {
+      render(
+        <WerteTabelle
+          rows={[mz(1, 2025), mz(2, 2025)].map(monatsZeile)}
+          vorjahrRows={richteMonateAus([mz(1, 2024), mz(2, 2024)].map(monatsZeile))}
+          granularitaet="monat" jahrLabel={2025} vergleichLabel={2024} vergleichDefaultAn
+        />,
+      )
+      expect(screen.queryByText(/Summenzeile zeigt keinen Vergleich/)).not.toBeInTheDocument()
+      const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
+      expect(fuss[2]).not.toHaveAttribute('title')
+    })
+
+    it('ohne eingeschalteten Vergleich bleibt der Hinweis weg', () => {
+      render(
+        <WerteTabelle
+          rows={prim} vorjahrRows={fenster} granularitaet="monat"
+          jahrLabel="Aktuell" vergleichLabel="Vorjahr"
+        />,
+      )
+      expect(screen.queryByText(/Summenzeile zeigt keinen Vergleich/)).not.toBeInTheDocument()
+    })
+  })
+
+  // Gegenlese-Auflage zu PN 90204: Tabelle und CSV teilen sich EINE
+  // Vergleichs-Auflösung (`lib/werte/vergleich`) — hier gegengeprüft, dass der
+  // Export bei derselben Eingabe dieselbe Fuß-Aussage trägt. Tabelle ↔ Export ist
+  // historisch die Stelle, an der es auseinanderlief.
+  describe('Fuß: Tabelle und CSV-Export sagen dasselbe', () => {
+    beforeEach(() => vi.mocked(exportToCSV).mockClear())
+
+    function exportiereUndLiesFuss() {
+      fireEvent.click(screen.getByRole('button', { name: /CSV/ }))
+      const [, out] = vi.mocked(exportToCSV).mock.calls[0]
+      return out[out.length - 1] // Aggregat-Zeile: [Label, aktuell, Vergleich, Δ, …]
+    }
+
+    it('unvollständig gepaart: Tabelle „—", Export leere Zellen', () => {
+      render(
+        <WerteTabelle
+          rows={[mz(12, 2024, { erzeugung: 227.9 }), mz(12, 2025, { erzeugung: 432.7 })].map(monatsZeile)}
+          vorjahrRows={richteMonateAus(
+            [mz(12, 2024, { erzeugung: 227.9 }), mz(12, 2025, { erzeugung: 432.7 })].map(monatsZeile),
+          )}
+          granularitaet="monat" jahrLabel="Aktuell" vergleichLabel="Vorjahr" vergleichDefaultAn
+        />,
+      )
+      const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
+      expect(fuss[2]).toHaveTextContent('—')
+      const csvFuss = exportiereUndLiesFuss()
+      expect(csvFuss[0]).toBe('2 Monate')
+      expect(csvFuss[1]).toBe(660.6) // „aktuell" bleibt die Spaltensumme — in beiden
+      expect(csvFuss[2]).toBe('')    // Vergleich schweigt — in beiden
+      expect(csvFuss[3]).toBe('')
+    })
+
+    it('vollständig gepaart: beide zeigen dieselbe Vergleichssumme', () => {
+      render(
+        <WerteTabelle
+          rows={[mz(1, 2025, { erzeugung: 100 }), mz(2, 2025, { erzeugung: 200 })].map(monatsZeile)}
+          vorjahrRows={richteMonateAus([mz(1, 2024, { erzeugung: 50 }), mz(2, 2024, { erzeugung: 50 })].map(monatsZeile))}
+          granularitaet="monat" jahrLabel={2025} vergleichLabel={2024} vergleichDefaultAn
+        />,
+      )
+      const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
+      expect(fuss[1]).toHaveTextContent('300')
+      expect(fuss[2]).toHaveTextContent('100')
+      const csvFuss = exportiereUndLiesFuss()
+      expect(csvFuss[1]).toBe(300)
+      expect(csvFuss[2]).toBe(100)
+      expect(csvFuss[3]).toBe(200)
+    })
   })
 })

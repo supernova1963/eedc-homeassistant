@@ -1,11 +1,59 @@
 # Was ist neu
 
-> **Stand:** Juli 2026 (v4.0.5)
+> **Stand:** August 2026 (v4.0.6)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.6 — Der Vorjahresvergleich vergleicht wieder mit dem echten Vorjahr (August 2026)
+
+### Werte-Tabelle: über mehrere Jahre stand die falsche Vergleichszahl daneben
+
+**Betrifft dich das?** Wenn du unter **Auswertungen → Tabelle** den Vergleich einschaltest und
+dabei einen Zeitraum wählst, der **mehr als ein Jahr** umfasst — insbesondere den Chip
+**„Alle Jahre"**. Im Einzeljahr-Modus war nichts davon sichtbar.
+
+Über einen mehrjährigen Zeitraum lagen mehrere Jahrgänge desselben Monats nebeneinander, und eedc
+hat sie verwechselt: **jede Zeile bekam den jüngsten davon als „Vorjahr"**. Der Dezember 2025 stand
+damit sich selbst gegenüber — zweimal dieselbe Zahl, Δ 0,0 % —, ältere Dezember bekamen einen
+Jahrgang aus der Zukunft vorgesetzt. Dasselbe galt für Tageszeilen.
+
+Was du jetzt siehst:
+
+- **Jede Zeile steht ihrem eigenen Vorjahresmonat gegenüber** (Dezember 2025 dem Dezember 2024),
+  unabhängig davon, wie lang der gewählte Zeitraum ist.
+- **Gibt es diesen Vorjahresmonat nicht**, weil deine Aufzeichnung später beginnt, bleibt die
+  Vergleichsspalte **leer („—")**. Es wird kein Ersatzwert eingesetzt und kein Δ von 0,0 % erfunden.
+- **Der CSV-Export trägt dieselben Werte wie die Tabelle** — beide beantworten die Frage „womit
+  vergleicht sich diese Zeile" jetzt an derselben Stelle im Code.
+
+### Die Summenzeile stellt keine ungleich langen Zeiträume mehr gegenüber
+
+**Betrifft dich das?** Denselben Bereich — und zusätzlich das **laufende Jahr**, dort war es
+ebenfalls falsch.
+
+Die unterste Zeile der Tabelle summiert die Spalte über ihr. Ihre **Vergleichs**-Zelle summierte
+bisher schlicht alles, was im Vergleichsfenster lag — auch wenn das eine ganz andere Zeitspanne
+war: über „Alle Jahre" 37 Monate neben 31, im laufenden Jahr die bisher gelaufenen Monate neben die
+vollen zwölf des Vorjahrs. Das las sich als „+23,1 % gegenüber dem Vorjahr" und war keine Aussage
+über deine Anlage, sondern über die unterschiedliche Anzahl der Monate.
+
+Jetzt gilt: **die Summenzeile vergleicht nur, wenn jede angezeigte Zeile ein Gegenstück hat.**
+
+- Im **laufenden Jahr** vergleicht sie damit sechs Monate mit denselben sechs Monaten des
+  Vorjahrs — die Zahl in der Vergleichs-Zelle wird dadurch **sichtbar kleiner**, und sie stimmt.
+- Über **„Alle Jahre"** bleibt die Vergleichs-Zelle leer, weil die ersten Monate deiner
+  Aufzeichnung kein Vorjahr haben. **Damit das nicht wie ein Fehler aussieht, steht der Grund
+  jetzt unter der Tabelle** — mit der Angabe, wie viele Monate bzw. Tage ohne Gegenstück sind.
+  Die Δ-Werte der einzelnen Zeilen stehen unverändert vollständig darüber.
+- Die **„aktuell"-Zelle** ist und bleibt die Summe der Spalte über ihr — daran ändert sich nichts.
+
+**Was du tun musst: nichts.** Es ändern sich nur angezeigte Vergleichswerte, keine erfassten Daten.
+→ [Handbuch → Bedienung §4.5 Tabelle](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank) *(gemeldet von Rainer)*
 
 ---
 

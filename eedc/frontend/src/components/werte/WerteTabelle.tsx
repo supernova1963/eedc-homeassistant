@@ -26,7 +26,7 @@ import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
   fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
-  vergleichLookup, vergleichsAggregatBasis,
+  vergleichLookup, vergleichsAggregatBasis, gepaarteVergleichsZeilen,
   type WerteMetrik, type WerteZeile, type Granularitaet,
 } from '../../lib/werte'
 
@@ -200,6 +200,20 @@ export function WerteTabelle({
     const basis = vergleichsAggregatBasis(rows, vorjahrRows)
     return basis ? aggregiere(basis, aktiveMetriken) : null
   }, [rows, vorjahrRows, aktiveMetriken])
+  // Warum der Fuß schweigt — SICHTBAR, nicht nur als „—". Genau in der Ansicht
+  // „Alle Jahre" war die fehlende Vergleichszahl der ursprünglich gemeldete Fehler
+  // (PN 90204); ohne Begründung liest sich die Korrektur wie der Bug. Zahl statt
+  // Pauschale, damit erkennbar ist, dass nur der Anfang der Aufzeichnung fehlt.
+  const ohneGegenstueck = useMemo(
+    () => rows.length - gepaarteVergleichsZeilen(rows, vorjahrRows).length,
+    [rows, vorjahrRows],
+  )
+  const fussSchweigt = zeigeVergleich && vorjahrAggregat == null && ohneGegenstueck > 0
+  const einheitDativ = granularitaet === 'tag' ? 'Tagen' : 'Monaten'
+  const fussGrund = `Die Summenzeile zeigt keinen Vergleich: ${ohneGegenstueck} von ${rows.length} ${einheitDativ} `
+    + `${ohneGegenstueck === 1 ? 'hat' : 'haben'} kein Gegenstück im Vergleichszeitraum. `
+    + 'Eine Summe stünde dort einer anderen Zeitspanne gegenüber. '
+    + 'Die Δ-Werte der einzelnen Zeilen stehen vollständig darüber.'
 
   function verschiebe(key: string, dir: 'up' | 'down') {
     const gruppe = METRIK_BY_KEY[key].gruppe
@@ -420,8 +434,10 @@ export function WerteTabelle({
                     return (
                       <Fragment key={m.key}>
                         <td className={`${ZELLE} text-right tabular-nums text-gray-800 dark:text-gray-100`}>{v != null ? `${prefix}${fmtWert(v, m.decimals)}` : '—'}</td>
-                        <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`}>{pv != null ? `${prefix}${fmtWert(pv, m.decimals)}` : '—'}</td>
-                        <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-300 dark:border-gray-600`}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
+                        {/* Der leere Fuß trägt seinen Grund am Hover; der sichtbare
+                            Satz steht zusätzlich unter der Tabelle (nicht jeder hovert). */}
+                        <td className={`${ZELLE} text-right tabular-nums text-gray-500 dark:text-gray-400`} title={fussSchweigt ? fussGrund : undefined}>{pv != null ? `${prefix}${fmtWert(pv, m.decimals)}` : '—'}</td>
+                        <td className={`${ZELLE} text-right tabular-nums text-xs border-r border-gray-300 dark:border-gray-600`} title={fussSchweigt ? fussGrund : undefined}><DeltaZelle current={v} prev={pv} metrik={m} /></td>
                       </Fragment>
                     )
                   }
@@ -431,6 +447,10 @@ export function WerteTabelle({
             </TableFoot>
           )}
       </Table>
+
+      {sorted.length > 1 && fussSchweigt && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">{fussGrund}</p>
+      )}
     </div>
   )
 }
