@@ -3,7 +3,8 @@ import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
 import {
   WERTE_METRIKEN, WERTE_GRUPPEN, METRIK_BY_KEY, getMonatWert, getTagWert,
-  metrikenFuer, monatsZeile, tagesZeile,
+  metrikenFuer, monatsZeile, tagesZeile, richteMonateAus,
+  vergleichLookup, gepaarteVergleichsZeilen, vergleichsAggregatBasis,
   aggregiere, bewerteDelta, exportWerteCsv,
 } from './index'
 
@@ -100,19 +101,68 @@ describe('metrikenFuer (Granularität)', () => {
 })
 
 describe('zeile-Normalisierung', () => {
-  it('monatsZeile: Label/sortKey/vergleichKey', () => {
+  it('monatsZeile: Label/sortKey/vergleichKey (Jahr UND Monat)', () => {
     const z = monatsZeile(mz(5, 2025, { erzeugung: 123 }))
-    expect(z.vergleichKey).toBe(5)
+    expect(z.vergleichKey).toBe(202505)
     expect(z.sortKey).toBe(2025 * 100 + 5)
     expect(z.wert('erzeugung')).toBe(123)
   })
-  it('tagesZeile: vergleichKey = Tag-im-Monat, sortKey aufsteigend', () => {
+  it('monatsZeile: derselbe Monat verschiedener Jahre kollidiert NICHT (PN 90204)', () => {
+    expect(monatsZeile(mz(12, 2025)).vergleichKey)
+      .not.toBe(monatsZeile(mz(12, 2024)).vergleichKey)
+  })
+  it('tagesZeile: vergleichKey = volles Datum, sortKey aufsteigend', () => {
     const z = tagesZeile(tw('2026-05-10', { erzeugung: 41 }))
-    expect(z.vergleichKey).toBe(10)
+    expect(z.vergleichKey).toBe(20260510)
     expect(z.id).toBe('2026-05-10')
     expect(z.wert('erzeugung')).toBe(41)
     expect(z.wert('peak_pv_kw')).toBe(6.2)
     expect(tagesZeile(tw('2026-05-11')).sortKey).toBeGreaterThan(z.sortKey)
+    // gleicher Tag-im-Monat, anderer Monat → eigener Schlüssel
+    expect(tagesZeile(tw('2026-04-10')).vergleichKey).not.toBe(z.vergleichKey)
+  })
+})
+
+describe('Vergleichs-Auflösung (PN 90204 — mehrjähriger Zeitraum)', () => {
+  // „Alle Jahre": Primär 2024–2026, Vergleichsfenster 2023–2025. Vor dem Fix
+  // behielt der Lookup je Monatsnummer die LETZTE Zeile ⇒ Dez 2025 verglich sich
+  // mit Dez 2025 (Δ 0,0 %), Dez 2024 ebenfalls mit Dez 2025.
+  const prim = [
+    monatsZeile(mz(12, 2024, { erzeugung: 227.9 })),
+    monatsZeile(mz(12, 2025, { erzeugung: 432.7 })),
+    monatsZeile(mz(12, 2026, { erzeugung: 500 })),
+  ]
+  const vergleichsFenster = richteMonateAus([
+    monatsZeile(mz(12, 2024, { erzeugung: 227.9 })),
+    monatsZeile(mz(12, 2025, { erzeugung: 432.7 })),
+  ])!
+
+  it('jede Zeile findet ihr ECHTES Vorjahr, nicht den jüngsten Jahrgang', () => {
+    const lookup = vergleichLookup(vergleichsFenster)
+    expect(lookup.get(prim[1].vergleichKey)!.wert('erzeugung')).toBe(227.9) // Dez 2025 ← Dez 2024
+    expect(lookup.get(prim[2].vergleichKey)!.wert('erzeugung')).toBe(432.7) // Dez 2026 ← Dez 2025
+  })
+
+  it('kein Vorjahr vorhanden ⇒ kein Treffer (Anzeige „—", kein 0-%-Vergleich)', () => {
+    const lookup = vergleichLookup(vergleichsFenster)
+    expect(lookup.get(prim[0].vergleichKey)).toBeUndefined() // Dez 2023 gibt es nicht
+  })
+
+  it('gepaarteVergleichsZeilen: nur die Zeilen mit echtem Gegenstück', () => {
+    const paare = gepaarteVergleichsZeilen(prim, vergleichsFenster)
+    // 3 Primärzeilen, aber nur 2 haben ein Vorjahr.
+    expect(paare.map((z) => z.wert('erzeugung'))).toEqual([227.9, 432.7])
+  })
+
+  it('Summenzeile: kein Vergleich, solange nicht jede Zeile ein Gegenstück hat', () => {
+    // 3 angezeigte Zeilen, 2 gepaart → der Fuß dürfte sonst 3 Monate gegen 2 stellen.
+    expect(vergleichsAggregatBasis(prim, vergleichsFenster)).toBeNull()
+    // Vollständig gepaart → Basis vorhanden.
+    expect(vergleichsAggregatBasis(prim.slice(1), vergleichsFenster)).toHaveLength(2)
+  })
+
+  it('richteMonateAus(null) bleibt null (kein Vergleich)', () => {
+    expect(richteMonateAus(null)).toBeNull()
   })
 })
 
@@ -173,11 +223,38 @@ describe('exportWerteCsv (Schema)', () => {
   })
 
   it('mit Vergleich: drei Spalten je Metrik inkl. Δ-Header', () => {
-    exportWerteCsv({ rows, vorjahrRows: [monatsZeile(mz(1, 2024)), monatsZeile(mz(2, 2024))], jahrLabel: 2025, vergleichLabel: 2024, metriken, einheitLabel: 'Monate', dateiname: 'x.csv' })
+    exportWerteCsv({ rows, vorjahrRows: richteMonateAus([monatsZeile(mz(1, 2024)), monatsZeile(mz(2, 2024))]), jahrLabel: 2025, vergleichLabel: 2024, metriken, einheitLabel: 'Monate', dateiname: 'x.csv' })
     const [headers] = vi.mocked(exportToCSV).mock.calls[0]
     expect(headers).toContain('PV-Erzeugung (kWh) 2025')
     expect(headers).toContain('PV-Erzeugung (kWh) 2024')
     expect(headers).toContain('Δ vs. 2024')
+  })
+
+  // PN 90204: Export und Tabelle teilen sich EINE Vergleichs-Auflösung. Der Export
+  // muss deshalb über mehrere Jahrgänge dieselben Vorjahreswerte tragen wie die
+  // Tabelle — und dort, wo es kein Vorjahr gibt, eine leere Zelle statt eines
+  // gespiegelten Werts.
+  it('mehrjährig: jede Zeile exportiert ihr echtes Vorjahr, fehlendes Vorjahr bleibt leer', () => {
+    const mehrjaehrig = [
+      monatsZeile(mz(12, 2024, { erzeugung: 227.9 })),
+      monatsZeile(mz(12, 2025, { erzeugung: 432.7 })),
+    ]
+    exportWerteCsv({
+      rows: mehrjaehrig,
+      vorjahrRows: richteMonateAus([
+        monatsZeile(mz(12, 2024, { erzeugung: 227.9 })),
+        monatsZeile(mz(12, 2025, { erzeugung: 432.7 })),
+      ]),
+      jahrLabel: 'Aktuell', vergleichLabel: 'Vorjahr',
+      metriken: [METRIK_BY_KEY['erzeugung']], einheitLabel: 'Monate', dateiname: 'x.csv',
+    })
+    const [, out] = vi.mocked(exportToCSV).mock.calls[0]
+    // [Label, aktuell, Vergleich, Δ]
+    expect(out[0].slice(1)).toEqual([227.9, '', ''])       // Dez 2024 hat kein Vorjahr
+    expect(out[1].slice(1)).toEqual([432.7, 227.9, 204.8]) // Dez 2025 ← Dez 2024
+    // Summenzeile: „aktuell" bleibt die Spaltensumme, der Vergleich bleibt leer —
+    // nur eine der beiden Zeilen ist gepaart.
+    expect(out[2]).toEqual(['2 Monate', 660.6, '', ''])
   })
 
   // C3/S20 (R3b): Rundung vor Export — Float-Artefakte (0.4−0.1 =
@@ -185,7 +262,7 @@ describe('exportWerteCsv (Schema)', () => {
   it('S20: Δ-Werte ohne Float-Artefakte (max. 4 NK)', () => {
     exportWerteCsv({
       rows: [monatsZeile(mz(1, 2025, { erzeugung: 0.4 }))],
-      vorjahrRows: [monatsZeile(mz(1, 2024, { erzeugung: 0.1 }))],
+      vorjahrRows: richteMonateAus([monatsZeile(mz(1, 2024, { erzeugung: 0.1 }))]),
       jahrLabel: 2025, vergleichLabel: 2024,
       metriken: [METRIK_BY_KEY['erzeugung']], einheitLabel: 'Monate', dateiname: 'x.csv',
     })

@@ -7,7 +7,8 @@ export {
   getMonatWert, getTagWert, metrikenFuer,
 } from './registry'
 export type { WerteZeile } from './zeile'
-export { monatsZeile, tagesZeile } from './zeile'
+export { monatsZeile, tagesZeile, richteMonateAus } from './zeile'
+export { vergleichLookup, gepaarteVergleichsZeilen, vergleichsAggregatBasis } from './vergleich'
 export { fmtWert } from './format'
 export { aggregiere } from './aggregate'
 export { bewerteDelta } from './bewertung'

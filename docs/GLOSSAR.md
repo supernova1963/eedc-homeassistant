@@ -137,6 +137,7 @@
 | **Parken (Parkbar)** | Einzelne Anzeigen (Kacheln, Charts) lassen sich **parken** (ausblenden) und später wiederherstellen. Eine Parkbar = eine atomare Anzeige. |
 | **Herkunfts-Zeile** | Die Kopfzeile „woher kommen diese Zahlen?" über einem Diagramm, Balken oder einer Tabelle: ein Zustands-Zeichen (**gemessen** / **geschätzt** — gerechnet statt gemessen / **weicht ab** — unvollständig), worauf sich die Kennzeichnung bezieht, und ein Erklärsatz. Immer sichtbar, nicht nur als Hover-Tooltip, damit sie auch auf Touch lesbar ist. |
 | **Monatsdaten-Formular** | Der EINE Erfassungsweg für die monatlichen Zählerwerte in v4 (`MonatsdatenForm`) — datengetrieben, mit Assistenz je Feld. Löst den mehrstufigen [Monatsabschluss-Wizard](#sonstiges) ab. Unter [Einstellungen → Daten → Monatsdaten](HANDBUCH_EINSTELLUNGEN.md#51-monatsdaten--monatsabschluss). |
+| **Vorjahresvergleich** | Der Vergleichs-Modus der Werte-Tabelle und der Zeit-Sichten: jede Zeile steht **ihrem eigenen** Zeitraum ein Jahr früher gegenüber (Dez 2025 ↔ Dez 2024), auch über mehrjährige Zeiträume. Fehlt dieser Vorjahres-Zeitraum, bleibt die Spalte **leer („—")** — es wird kein Ersatzwert eingesetzt. Siehe [Bedienung §4.5](HANDBUCH_BEDIENUNG.md#45-tabelle-werte-werkbank). |
 | **Status-Fußzeile** | Die dauerhaft sichtbare Zeile mit Anlagen-Auswahl, Datenquellen-/Teilen-Status und Verbindungshinweisen. |
 | **CollapsibleSection** | Wiederverwendbare UI-Komponente mit localStorage-Persistenz pro `storageKey`. Status der Sektionen (offen/zu) bleibt pro Browser erhalten. |
 

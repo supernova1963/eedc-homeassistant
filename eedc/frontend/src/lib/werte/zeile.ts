@@ -22,7 +22,13 @@ export interface WerteZeile {
   zeitLinks: string
   /** Zeitraum-Teil rechts (Datum / Jahr) — R20-1: rechtsbündig. */
   zeitRechts: string
-  /** Schlüssel zum Matchen der Vergleichszeile (Monat 1–12 / Tag-im-Monat 1–31). */
+  /** Schlüssel zum Matchen der Vergleichszeile. Das ist ein **gemeinsamer
+   *  Schlüsselraum beider Seiten**, kein Zeitstempel: Primär- und Vergleichszeile
+   *  tragen denselben Wert genau dann, wenn sie einander gegenüberstehen. Die
+   *  Fabriken vergeben ihn **eindeutig** (Monat: `jahr·100+monat` · Tag:
+   *  `jahr·10000+monat·100+tag`); in den Raum der Primärseite hebt ihn die
+   *  jeweilige Ausrichtung — {@link richteMonateAus} hier, `richteAus`
+   *  (AuswertungenTabelleV4) für Tage. */
   vergleichKey: number
   /** Metrik-Wert-Accessor (Registry-key → Wert). */
   wert: (key: string) => number | null
@@ -36,12 +42,29 @@ export function monatsZeile(r: MonatsZeitreihe): WerteZeile {
     label: `${MONAT_KURZ[r.monat]} ${r.jahr}`,
     zeitLinks: MONAT_KURZ[r.monat],
     zeitRechts: String(r.jahr),
-    vergleichKey: r.monat,
+    vergleichKey: r.jahr * 100 + r.monat,
     wert: (key) => getMonatWert(r, key),
   }
 }
 
-/** Tages-Werte → normalisierte Zeile. Vergleich = gleicher Tag-im-Monat. */
+/**
+ * Monats-Ausrichtung „selber Monat, ein Jahr früher": die **Vergleichs**-Zeilen
+ * werden um ein Jahr vorwärts auf ihre Primärzeile abgebildet (Schlüssel
+ * `jahr·100+monat` ⇒ ein Jahr = +100), die Primärseite behält ihren eigenen
+ * Schlüssel. Findet eine Zeile kein Vorjahr, bleibt ihre Vergleichsspalte leer.
+ *
+ * Bis v4.0.5 war der Schlüssel die blanke Monatsnummer 1–12. Über einen
+ * mehrjährigen Zeitraum („Alle Jahre") lagen dadurch mehrere Jahrgänge desselben
+ * Monats im Vergleichsfenster, der Lookup behielt den letzten — jede Zeile verglich
+ * sich mit dem jüngsten Jahrgang, Dez 2025 im Extremfall mit sich selbst (Δ 0,0 %;
+ * PN 90204, Rainer).
+ */
+export function richteMonateAus(vergleichsZeilen: WerteZeile[] | null): WerteZeile[] | null {
+  if (!vergleichsZeilen) return null
+  return vergleichsZeilen.map((z) => ({ ...z, vergleichKey: z.vergleichKey + 100 }))
+}
+
+/** Tages-Werte → normalisierte Zeile. */
 export function tagesZeile(r: TagWerte): WerteZeile {
   // r.datum = ISO 'YYYY-MM-DD' → ohne TZ-Drift zerlegen.
   const [y, m, d] = r.datum.split('-').map(Number)
@@ -54,7 +77,7 @@ export function tagesZeile(r: TagWerte): WerteZeile {
     label: `${WT_KURZ[wt]} ${dd}.${mm}.`,
     zeitLinks: WT_KURZ[wt],
     zeitRechts: `${dd}.${mm}.`,
-    vergleichKey: d,
+    vergleichKey: y * 10000 + m * 100 + d,
     wert: (key) => getTagWert(r, key),
   }
 }

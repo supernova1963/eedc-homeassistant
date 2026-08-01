@@ -8,6 +8,7 @@ import { exportToCSV } from '../../utils/export'
 import type { WerteMetrik } from './registry'
 import type { WerteZeile } from './zeile'
 import { aggregiere } from './aggregate'
+import { vergleichLookup, vergleichsAggregatBasis } from './vergleich'
 
 export interface WerteCsvOptions {
   rows: WerteZeile[]
@@ -28,8 +29,7 @@ export function exportWerteCsv({
   rows, vorjahrRows, jahrLabel, vergleichLabel, metriken, einheitLabel, dateiname,
 }: WerteCsvOptions) {
   const vergleich = vorjahrRows != null && vergleichLabel != null
-  const vorjahrLookup: Record<number, WerteZeile> = {}
-  if (vorjahrRows) for (const r of vorjahrRows) vorjahrLookup[r.vergleichKey] = r
+  const vorjahrLookup = vergleichLookup(vorjahrRows)
 
   const headers: string[] = ['Zeitraum']
   metriken.forEach((m) => {
@@ -50,7 +50,7 @@ export function exportWerteCsv({
   const rund = (v: number) => Math.round(v * 1e4) / 1e4
 
   const out: (string | number)[][] = rows.map((r) => {
-    const prev = vergleich ? vorjahrLookup[r.vergleichKey] : undefined
+    const prev = vergleich ? vorjahrLookup.get(r.vergleichKey) : undefined
     const zeile: (string | number)[] = [r.label]
     metriken.forEach((m) => {
       const v = r.wert(m.key)
@@ -64,9 +64,12 @@ export function exportWerteCsv({
     return zeile
   })
 
-  // Aggregat-Zeile (Anzahl + Spalten-Aggregate)
+  // Aggregat-Zeile (Anzahl + Spalten-Aggregate). Vergleichs-Aggregat nur, wenn jede
+  // exportierte Zeile ein Gegenstück hat — sonst bleiben die Zellen leer, wie die
+  // Tabelle dort „—" zeigt (s. `vergleich.ts`).
   const agg = aggregiere(rows, metriken)
-  const vorjahrAgg = vergleich && vorjahrRows ? aggregiere(vorjahrRows, metriken) : null
+  const vorjahrAggBasis = vergleich ? vergleichsAggregatBasis(rows, vorjahrRows) : null
+  const vorjahrAgg = vorjahrAggBasis ? aggregiere(vorjahrAggBasis, metriken) : null
   const aggZeile: (string | number)[] = [`${rows.length} ${einheitLabel}`]
   metriken.forEach((m) => {
     const v = agg[m.key]

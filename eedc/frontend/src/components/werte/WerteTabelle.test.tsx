@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { WerteTabelle } from './WerteTabelle'
 import type { MonatsZeitreihe } from '../../pages/auswertung/types'
 import type { TagWerte } from '../../api/energie_profil'
-import { monatsZeile, tagesZeile } from '../../lib/werte'
+import { monatsZeile, tagesZeile, richteMonateAus } from '../../lib/werte'
 
 function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): MonatsZeitreihe {
   return {
@@ -81,7 +81,7 @@ describe('WerteTabelle', () => {
     render(
       <WerteTabelle
         rows={monatsRows}
-        vorjahrRows={[mz(1, 2024), mz(2, 2024)].map(monatsZeile)}
+        vorjahrRows={richteMonateAus([mz(1, 2024), mz(2, 2024)].map(monatsZeile))}
         granularitaet="monat"
         jahrLabel={2025}
         vergleichLabel={2024}
@@ -117,7 +117,7 @@ describe('WerteTabelle', () => {
     render(
       <WerteTabelle
         rows={monatsRows}
-        vorjahrRows={[mz(1, 2024), mz(2, 2024)].map(monatsZeile)}
+        vorjahrRows={richteMonateAus([mz(1, 2024), mz(2, 2024)].map(monatsZeile))}
         granularitaet="monat"
         jahrLabel={2025}
         vergleichLabel={2024}
@@ -143,9 +143,13 @@ describe('WerteTabelle', () => {
     expect(screen.queryByText('WP Wärme')).not.toBeInTheDocument()
   })
 
-  it('Tages-Vergleich matcht über Tag-im-Monat (Vergleichsmonat)', () => {
+  it('Tages-Vergleich matcht über den ausgerichteten Schlüssel (nicht über den Tag-im-Monat)', () => {
+    // Die Ausrichtung macht der Aufrufer (`richteAus` in AuswertungenTabelleV4) —
+    // hier nachgestellt: die Vergleichszeile trägt den Schlüssel ihrer Primärzeile.
     const aktuell = [tw('2026-05-10', { erzeugung: 30 })].map(tagesZeile)
-    const vergleich = [tw('2026-04-10', { erzeugung: 20 })].map(tagesZeile)
+    const vergleich = [tw('2026-04-10', { erzeugung: 20 })]
+      .map(tagesZeile)
+      .map((z) => ({ ...z, vergleichKey: aktuell[0].vergleichKey }))
     render(
       <WerteTabelle
         rows={aktuell}
@@ -157,5 +161,51 @@ describe('WerteTabelle', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /Vergleich Apr/ }))
     expect(screen.getAllByText(/[▲▼=]/).length).toBeGreaterThan(0)
+  })
+
+  // PN 90204 (Rainer): über „Alle Jahre" lagen mehrere Jahrgänge desselben Monats
+  // im Vergleichsfenster — jede Zeile verglich sich mit dem jüngsten, Dez 2025 im
+  // Extremfall mit sich selbst (Δ 0,0 %).
+  it('mehrjährig: jede Zeile zeigt ihr echtes Vorjahr, fehlendes Vorjahr „—"', () => {
+    const prim = [mz(12, 2024, { erzeugung: 227.9 }), mz(12, 2025, { erzeugung: 432.7 })].map(monatsZeile)
+    const fenster = richteMonateAus(
+      [mz(12, 2024, { erzeugung: 227.9 }), mz(12, 2025, { erzeugung: 432.7 })].map(monatsZeile),
+    )
+    render(
+      <WerteTabelle
+        rows={prim} vorjahrRows={fenster} granularitaet="monat"
+        jahrLabel="Aktuell" vergleichLabel="Vorjahr" vergleichDefaultAn
+      />,
+    )
+    const zeilen = screen.getAllByRole('row')
+    // Kopf (2 Zeilen im Vergleichs-Modus) → Datenzeilen ab Index 2, danach der Fuß.
+    const dez2024 = within(zeilen[2]).getAllByRole('cell')
+    const dez2025 = within(zeilen[3]).getAllByRole('cell')
+    // Spalte 0 = Zeitraum, dann je Metrik: aktuell · Vergleich · Δ (1. Metrik = PV-Erzeugung).
+    expect(dez2024[1]).toHaveTextContent('228')
+    expect(dez2024[2]).toHaveTextContent('—')   // kein Dez 2023 → kein gespiegelter Wert
+    expect(dez2024[3]).toHaveTextContent('—')
+    expect(dez2025[1]).toHaveTextContent('433')
+    expect(dez2025[2]).toHaveTextContent('228') // Dez 2025 ← Dez 2024, NICHT 433/433
+    expect(dez2025[3]).toHaveTextContent('▲')
+    // Fuß: „aktuell" bleibt die Spaltensumme, der Vergleich schweigt — nur eine der
+    // beiden Zeilen ist gepaart, eine Summe wäre eine andere Zeitspanne.
+    const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
+    expect(fuss[1]).toHaveTextContent('661')
+    expect(fuss[2]).toHaveTextContent('—')
+    expect(fuss[3]).toHaveTextContent('—')
+  })
+
+  it('Summenzeile vergleicht, wenn jede Zeile ein Gegenstück hat', () => {
+    render(
+      <WerteTabelle
+        rows={[mz(1, 2025, { erzeugung: 100 }), mz(2, 2025, { erzeugung: 200 })].map(monatsZeile)}
+        vorjahrRows={richteMonateAus([mz(1, 2024, { erzeugung: 50 }), mz(2, 2024, { erzeugung: 50 })].map(monatsZeile))}
+        granularitaet="monat" jahrLabel={2025} vergleichLabel={2024} vergleichDefaultAn
+      />,
+    )
+    const fuss = within(screen.getAllByRole('row').at(-1)!).getAllByRole('cell')
+    expect(fuss[1]).toHaveTextContent('300')
+    expect(fuss[2]).toHaveTextContent('100')
   })
 })

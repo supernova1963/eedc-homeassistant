@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Vorjahresvergleich in der Werte-Tabelle vergleicht wieder mit dem echten Vorjahr.** Über einen mehrjährigen Zeitraum („Alle Jahre") wurden alle Jahrgänge desselben Monats verwechselt: jede Zeile bekam den jüngsten davon als „Vorjahr" — Dezember 2025 stand damit sich selbst gegenüber (identische Zahlen, Δ 0,0 %), ältere Zeilen einem Jahrgang aus der Zukunft. Jetzt steht jede Zeile ihrem eigenen Vorjahresmonat bzw. -tag gegenüber; wo es keinen gibt (weil die Aufzeichnung später beginnt), bleibt die Spalte leer statt einen Ersatzwert zu spiegeln. Auch die **Summenzeile** hört auf, Zeitspannen ungleicher Länge gegenüberzustellen: Sie zeigt einen Vergleich nur noch, wenn jede angezeigte Zeile ein Gegenstück hat, sonst „—". Vorher stellte sie über „Alle Jahre" 37 Monate neben 31 (mit den Monaten der Primärperiode selbst darin) und im laufenden Jahr sechs Monate neben die vollen zwölf des Vorjahrs — auf Winterborn las sich das als „+23,1 % gegenüber dem Vorjahr". Die „aktuell"-Zelle bleibt unverändert die Summe der Spalte darüber. Der **CSV-Export** trägt dieselben Werte wie die Tabelle. Im Einzeljahr-Modus war der Zeilen-Fehler nie sichtbar. *(PN Rainer 90204)*
+
+---
+
 ## [4.0.5] - 2026-07-31 — Preise je Monat · CO₂ auf dem Eigenverbrauch · eine Zahl je Kennwert
 
 ### Added

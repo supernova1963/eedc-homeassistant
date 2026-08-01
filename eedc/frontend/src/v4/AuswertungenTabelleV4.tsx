@@ -16,7 +16,7 @@ import { FehlerZustand, TabellenSkeleton } from '../components/ui'
 import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
-import { monatsZeile, tagesZeile, type WerteZeile } from '../lib/werte'
+import { monatsZeile, tagesZeile, richteMonateAus, type WerteZeile } from '../lib/werte'
 import { useSelectedAnlage } from '../hooks'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
@@ -47,6 +47,24 @@ function vergleichLabelVon(von: string, bis: string): string {
 function jahrLabelVon(von: string, bis: string): string {
   const vy = Number(von.slice(0, 4)); const by = Number(bis.slice(0, 4))
   return vy === by ? `${vy}` : 'Aktuell'
+}
+
+/**
+ * Fenster des Monats-Blocks: Primärzeitraum [von..bis] (YYYY-MM) und das um genau
+ * ein Jahr zurückversetzte Vergleichsfenster. Über einen mehrjährigen Zeitraum
+ * („Alle Jahre") enthält das Vergleichsfenster mehrere Jahrgänge — welcher davon zu
+ * welcher Zeile gehört, entscheidet erst `richteMonateAus` (lib/werte).
+ */
+export function monatsFenster<T extends { jahr: number; monat: number }>(
+  rows: T[], von: string, bis: string,
+): { prim: T[]; vergleich: T[] } {
+  const vonNum = von ? Number(von.slice(0, 4)) * 100 + Number(von.slice(5, 7)) : 0
+  const bisNum = bis ? Number(bis.slice(0, 4)) * 100 + Number(bis.slice(5, 7)) : 999999
+  const im = (r: T, a: number, b: number) => { const n = r.jahr * 100 + r.monat; return n >= a && n <= b }
+  return {
+    prim: rows.filter((r) => im(r, vonNum, bisNum)),
+    vergleich: rows.filter((r) => im(r, vonNum - 100, bisNum - 100)),
+  }
 }
 
 export default function AuswertungenTabelleV4({ basis }: { basis: AuswertungBasis }) {
@@ -123,12 +141,8 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
   // ── Monats-Block-Daten ──
   const minJahr = jahre.length ? Math.min(...jahre) : (anker?.jahr ?? 0)
   const maxJahr = jahre.length ? Math.max(...jahre) : (anker?.jahr ?? 0)
-  const monVonNum = monVon ? Number(monVon.slice(0, 4)) * 100 + Number(monVon.slice(5, 7)) : 0
-  const monBisNum = monBis ? Number(monBis.slice(0, 4)) * 100 + Number(monBis.slice(5, 7)) : 999999
-  const monRows = rows.filter((r) => { const n = r.jahr * 100 + r.monat; return n >= monVonNum && n <= monBisNum })
-  const monVorjahr = monVergleich
-    ? rows.filter((r) => { const n = r.jahr * 100 + r.monat; return n >= monVonNum - 100 && n <= monBisNum - 100 })
-    : null
+  const { prim: monRows, vergleich: monVorjahrRows } = monatsFenster(rows, monVon, monBis)
+  const monVorjahr = monVergleich ? monVorjahrRows : null
 
   const monChips: ZeitChip[] = anker ? [
     { label: 'Aktuelles Jahr', range: () => [`${anker.jahr}-01`, `${anker.jahr}-12`], aktiv: monVon === `${anker.jahr}-01` && monBis === `${anker.jahr}-12` },
@@ -156,7 +170,9 @@ function TabelleInner({ basis }: { basis: AuswertungBasis }) {
           <Parkbar id="tabelle:monatswerte" titel="Monatswerte">
             <WerteTabelle
               rows={monRows.map(monatsZeile)}
-              vorjahrRows={monVorjahr ? monVorjahr.map(monatsZeile) : null}
+              // richteMonateAus: jede Zeile findet ihr ECHTES Vorjahr, auch wenn der
+              // Zeitraum mehrere Jahrgänge umfasst („Alle Jahre"). Ohne Vorjahr → „—".
+              vorjahrRows={richteMonateAus(monVorjahr ? monVorjahr.map(monatsZeile) : null)}
               granularitaet="monat"
               jahrLabel={jahrLabelVon(monVon, monBis)}
               vergleichLabel={monVergleich ? vergleichLabelVon(monVon, monBis) : null}

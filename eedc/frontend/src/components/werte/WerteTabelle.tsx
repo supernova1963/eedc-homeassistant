@@ -26,6 +26,7 @@ import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import {
   WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
   fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
+  vergleichLookup, vergleichsAggregatBasis,
   type WerteMetrik, type WerteZeile, type Granularitaet,
 } from '../../lib/werte'
 
@@ -189,17 +190,16 @@ export function WerteTabelle({
   // (z. B. „2026"), sonst neutral „Aktuell". Die Vergleichs-Spalte trägt `vergleichLabel`.
   const aktuellLabel = jahrLabel !== '' && jahrLabel != null ? String(jahrLabel) : 'Aktuell'
 
-  const vorjahrLookup = useMemo<Record<number, WerteZeile>>(() => {
-    const m: Record<number, WerteZeile> = {}
-    if (vorjahrRows) for (const r of vorjahrRows) m[r.vergleichKey] = r
-    return m
-  }, [vorjahrRows])
+  // Vergleichs-Auflösung: EINE Regel, geteilt mit dem CSV-Export (`lib/werte/vergleich`).
+  const vorjahrLookup = useMemo(() => vergleichLookup(vorjahrRows), [vorjahrRows])
 
   const aggregat = useMemo(() => aggregiere(rows, aktiveMetriken), [rows, aktiveMetriken])
-  const vorjahrAggregat = useMemo(
-    () => (vorjahrRows ? aggregiere(vorjahrRows, aktiveMetriken) : null),
-    [vorjahrRows, aktiveMetriken],
-  )
+  // Fuß-Vergleich nur, wenn JEDE angezeigte Zeile ein Gegenstück hat — sonst „—"
+  // statt einer Summe über eine andere Zeitspanne (s. `lib/werte/vergleich`).
+  const vorjahrAggregat = useMemo(() => {
+    const basis = vergleichsAggregatBasis(rows, vorjahrRows)
+    return basis ? aggregiere(basis, aktiveMetriken) : null
+  }, [rows, vorjahrRows, aktiveMetriken])
 
   function verschiebe(key: string, dir: 'up' | 'down') {
     const gruppe = METRIK_BY_KEY[key].gruppe
@@ -375,7 +375,7 @@ export function WerteTabelle({
           </TableHead>
           <TableBody>
             {sorted.map((r) => {
-              const prev = zeigeVergleich ? vorjahrLookup[r.vergleichKey] : undefined
+              const prev = zeigeVergleich ? vorjahrLookup.get(r.vergleichKey) : undefined
               return (
                 <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800">
                   {/* R20-1b: Wochentag/Monat linksbündig, Datum/Jahr rechtsbündig,
