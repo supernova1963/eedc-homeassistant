@@ -37,10 +37,15 @@ Feld-Attribute:
                   docs/SENSOR-REFERENZ.md halten.
   nur_manuell   — True: das Feld bleibt in Monatsabschluss, CSV-Import und
                   Export **erfassbar**, verschwindet aber als **zuordenbare
-                  Quelle** — `mqtt_topic_registry.build_expected_topics` lässt es
-                  aus, damit weder die Datenquellen-Fläche noch ein MQTT-Topic
-                  darauf zeigen kann. Der Rückbau-Modus dieses Projekts: kein
-                  Löschen, gepflegte Werte bleiben lesbar und pflegbar, nur der
+                  Quelle**. Markiert statt gefiltert: `build_expected_topics`
+                  reicht die Kennung durch (die Registry ist die SoT „welche
+                  Felder gibt es"), ausgewertet wird sie an den Rändern —
+                  `routes/datenquellen.py::ohne_nicht_zuordenbare` nimmt das Feld
+                  von der Fläche (außer es trägt heute eine Quelle, sonst ließe
+                  sich die Zuordnung nicht mehr entfernen), der MQTT-Inbound
+                  weist es ab und die Abdeckungs-Prüfung erwartet kein Topic
+                  dafür. Der Rückbau-Modus dieses Projekts: kein Löschen,
+                  gepflegte Werte bleiben lesbar und pflegbar, nur der
                   automatische Erfassungsweg entfällt
                   ([[feedback_reparatur_statt_loesch_features]]).
 """
@@ -175,9 +180,18 @@ INVESTITION_FELDER: dict = {
             "hinweis": "Anteil der Ladung, der aus dem Netz kam (kWh, kumulativ oder Tagessensor). Optional und muss ≤ Ladung sein. Nur nötig, wenn der Speicher aus dem Netz lädt — bei reiner PV-Ladung leer lassen.",
         },
         # Ladepreis nur bei echter Arbitrage relevant — Backup-/Notladung läuft zum Bezugspreis.
+        # `nur_manuell`: ein MONATSWERT, kein Messwert. Es gibt keinen Erfassungsweg,
+        # der ihn aus einem Sensor oder Topic zöge (`snapshot/keys.py` schließt ihn
+        # ausdrücklich aus) — angeboten wurde er auf der Zuordnungs-Fläche trotzdem,
+        # und ein Tester hat dort einen Preis-Sensor hinterlegt, der nichts bewirkte,
+        # aber eine Daten-Checker-Meldung auslöste (Forum simon42 #89667/54 + /64,
+        # MartyBr; dort stand zudem ein €/kWh-Sensor in einem ct/kWh-Feld). Erfassbar
+        # bleibt er im Monatsabschluss, im CSV-Import und über den errechneten
+        # Vorschlag bei dynamischem Tarif.
         {
             "feld": "speicher_ladepreis_cent", "label": "Ø Ladepreis", "einheit": "ct/kWh",
             "bedingung": "arbitrage_faehig",
+            "nur_manuell": True,
             "csv_suffix": "Ladepreis_Cent",
             "hinweis": "Ø Preis der Netzladung in ct/kWh. Nur bei Arbitrage relevant (gezielt günstig laden) — Backup-/Notladung läuft zum normalen Bezugspreis. Meist manuell im Monatsabschluss; bei dynamischem Tarif rechnet eedc den Wert selbst aus den Stundenpreisen.",
         },
@@ -682,6 +696,34 @@ def get_feld_hinweise() -> dict[str, dict[str, str]]:
     return result
 
 
+def _bedingungs_werte(parameter: Optional[dict]) -> dict[str, bool]:
+    """Die Bedingungs-Keys einer Investition — eine Auswertung für alle Feld-Wege.
+
+    Dieselben Keys steuern `bedingung` (Feld zeigen?) und `label_wenn` (wie heißt
+    es dann?). Beide Wege lesen sie hier, damit die Zuordnungs-Fläche kein zweites,
+    abweichendes Bild bekommt.
+    """
+    params = parameter or {}
+    arbitrage_faehig = bool(params.get("arbitrage_faehig"))
+    return {
+        "getrennte_strommessung": bool(params.get("getrennte_strommessung")),
+        "arbitrage_faehig": arbitrage_faehig,
+        # Arbitrage impliziert Netzladung — das Flag ist nur ein Erfassungs-Schalter,
+        # die UI für `ladung_netz_kwh` muss auch ohne Arbitrage sichtbar sein können.
+        "laedt_aus_netz": bool(params.get("laedt_aus_netz")) or arbitrage_faehig,
+        "v2h_faehig": bool(params.get("v2h_faehig") or params.get("nutzt_v2h")),
+        "hat_speicher": bool(params.get("hat_speicher")),
+    }
+
+
+def _label_aufgeloest(feld: dict, bedingungs_werte: dict[str, bool]) -> str:
+    """#281: konditionelles Label — nutzt dieselben Bedingungs-Keys wie `bedingung`."""
+    for cond_key, alt_label in (feld.get("label_wenn") or {}).items():
+        if bedingungs_werte.get(cond_key):
+            return alt_label
+    return feld["label"]
+
+
 def get_felder_fuer_investition(
     typ: str,
     parameter: Optional[dict],
@@ -719,26 +761,16 @@ def get_felder_fuer_investition(
         anlage_typen = {getattr(i, "typ", None) for i in anlage_investitionen}
 
     result = []
-    getrennte_strommessung = bool(params.get("getrennte_strommessung"))
-    arbitrage_faehig = bool(params.get("arbitrage_faehig"))
-    # Arbitrage impliziert Netzladung — das Flag ist nur ein Erfassungs-Schalter,
-    # die UI für `ladung_netz_kwh` muss auch ohne Arbitrage sichtbar sein können.
-    laedt_aus_netz = bool(params.get("laedt_aus_netz")) or arbitrage_faehig
-    v2h_faehig = bool(params.get("v2h_faehig") or params.get("nutzt_v2h"))
-    hat_speicher = bool(params.get("hat_speicher"))
+    bedingungs_werte = _bedingungs_werte(params)
+    getrennte_strommessung = bedingungs_werte["getrennte_strommessung"]
+    arbitrage_faehig = bedingungs_werte["arbitrage_faehig"]
+    laedt_aus_netz = bedingungs_werte["laedt_aus_netz"]
+    v2h_faehig = bedingungs_werte["v2h_faehig"]
+    hat_speicher = bedingungs_werte["hat_speicher"]
 
     # Steuer-Schlüssel — hier ausgewertet bzw. nur für die Zuordnungs-Fläche
     # relevant, gehören nicht in die Eingabe-Antwort.
     SKIP_KEYS = {"bedingung", "bedingung_anlage", "label_wenn", "nur_manuell"}
-
-    # #281: konditionelles Label — nutzt dieselben Bedingungs-Keys wie `bedingung`.
-    bedingungs_werte = {
-        "getrennte_strommessung": getrennte_strommessung,
-        "arbitrage_faehig": arbitrage_faehig,
-        "laedt_aus_netz": laedt_aus_netz,
-        "v2h_faehig": v2h_faehig,
-        "hat_speicher": hat_speicher,
-    }
 
     for feld in alle_felder:
         bedingung = feld.get("bedingung")
@@ -773,12 +805,7 @@ def get_felder_fuer_investition(
             continue
 
         aufgeloest = {k: v for k, v in feld.items() if k not in SKIP_KEYS}
-        label_wenn = feld.get("label_wenn")
-        if label_wenn:
-            for cond_key, alt_label in label_wenn.items():
-                if bedingungs_werte.get(cond_key):
-                    aufgeloest["label"] = alt_label
-                    break
+        aufgeloest["label"] = _label_aufgeloest(feld, bedingungs_werte)
         result.append(aufgeloest)
 
     return result
@@ -789,16 +816,24 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
     Gibt ALLE Felder für einen Investitionstyp zurück — ohne Bedingungsfilter.
 
     Für Import-Kontext: alle Felder anbieten, unabhängig von aktuellen Parametern.
-    Der Import soll nie Daten stillschweigend ignorieren.
+    Der Import soll nie Daten stillschweigend ignorieren. Dasselbe gilt für die
+    Datenquellen-Fläche: ein bereits zugeordnetes Feld darf nicht unsichtbar
+    verschwinden, sobald ein Parameter kippt.
 
-    Für Sonstiges wird die Kategorie aus `parameter` gelesen (Default: "erzeuger").
+    Das **Label** wird trotzdem an der konkreten Investition aufgelöst
+    (`label_wenn`) — die Steuer-Keys (`bedingung`, `nur_manuell`, …) bleiben im
+    Dict, weil die Aufrufer sie selbst auswerten. Ohne diese Auflösung hieß das
+    Speicher-Feld auf der Fläche nur „Ladung", während im Monatsabschluss daneben
+    „Ladung (gesamt, inkl. Netz)" stand — genau die Zweideutigkeit, an der ein
+    Tester PV-Ladung und Netzladung addiert im Gesamt-Feld ablegte UND als
+    Netzladung nochmal (Forum simon42 #89667/62 + /71, MartyBr).
 
     Args:
         typ: Investitionstyp
-        parameter: Investitions-Parameter-Dict (nur für Sonstiges-Kategorie benötigt)
+        parameter: Investitions-Parameter-Dict (Sonstiges-Kategorie + `label_wenn`)
 
     Returns:
-        Liste aller Feld-Dicts (inkl. konditioneller Felder)
+        Liste aller Feld-Dicts (inkl. konditioneller Felder), Labels aufgelöst
     """
     alle_felder = INVESTITION_FELDER.get(typ, [])
 
@@ -808,7 +843,13 @@ def get_alle_felder_fuer_investition(typ: str, parameter: Optional[dict] = None)
         kategorie = params.get("kategorie", "erzeuger")
         return list(get_felder_fuer_sonstiges(kategorie))
 
-    return list(alle_felder)
+    # Kopie je Feld: die Dicts sind Modul-Konstanten, ein direktes Setzen des
+    # Labels würde die Definition für alle folgenden Aufrufe umschreiben.
+    bedingungs_werte = _bedingungs_werte(parameter)
+    return [
+        {**feld, "label": _label_aufgeloest(feld, bedingungs_werte)}
+        for feld in alle_felder
+    ]
 
 
 def get_basis_felder(
