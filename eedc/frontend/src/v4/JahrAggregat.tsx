@@ -43,6 +43,37 @@ function quote(zaehler: number | null, nenner: number | null, faktor = 100): num
 }
 
 /**
+ * Mengengewichteter Jahres-Ø eines Monatspreises — Σ(Preis × Menge) / Σ Menge.
+ *
+ * Ein Jahres-Preis ist keine Eigenschaft der Monate, sondern der bezogenen Menge:
+ * ein teurer Januar mit 400 kWh wiegt schwerer als ein Juli mit 20 kWh. Das
+ * ungewichtete Monatsmittel, das hier bis v4.0.5 stand, widersprach der eigenen
+ * Kachel — Kopfzahl und „Σ € ÷ Σ kWh" liefen bei Tarifwechsel im Jahr auseinander
+ * (Forum simon42 #89667/67, Algie: 28,0 ct über 559 kWh · 210,45 €). Dasselbe
+ * Muster wie beim Speicher-Netzpreis (R15-1), das dort schon so gerechnet wurde.
+ *
+ * Monate ohne Preis ODER ohne Menge fallen aus BEIDEN Summen — sonst verdünnte ein
+ * datenloser Monat den Ø. Ohne jede Menge (Σ = 0) bleibt das ungewichtete Mittel
+ * als Rückfall: besser der Tarif-Wert als eine leere Kachel.
+ */
+function gewichtet(
+  preise: (number | null | undefined)[],
+  mengen: (number | null | undefined)[],
+): number | null {
+  let produktSumme = 0
+  let mengenSumme = 0
+  for (let i = 0; i < preise.length; i++) {
+    const p = preise[i]
+    const m = mengen[i]
+    if (p == null || m == null) continue
+    produktSumme += p * m
+    mengenSumme += m
+  }
+  if (mengenSumme === 0) return mittel(preise)
+  return produktSumme / mengenSumme
+}
+
+/**
  * Summiert die 12 Monats-Antworten eines Jahres zu einem
  * `AktuellerMonatResponse`-Shape (Felder, die die Monat-Bauer lesen).
  * `jahr` setzt das Jahr im Ergebnis; `monat`=0 markiert „Jahres-Aggregat".
@@ -62,6 +93,13 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
   const wpStrom = summe(f('wp_strom_kwh'))
   const emobLadung = summe(f('emob_ladung_kwh'))
   const emobKm = summe(f('emob_km'))
+
+  // Effektiver Netzbezugspreis je Monat — dieselbe Vorrang-Regel wie in der
+  // Kachel und im Backend (`resolve_netzbezug_preis_cent`): der mitgeschriebene
+  // Ø-Bezugspreis schlägt den Tarif-Arbeitspreis.
+  const netzbezugPreisEffektiv = monate.map(
+    (m) => m.netzbezug_durchschnittspreis_cent ?? m.netzbezug_preis_cent,
+  )
 
   // Per-Investition-Finanzdetails über das Jahr aufsummieren (Jahres-T-Konto in
   // Auswertungen/Finanzen): numerische Felder Σ (null-bewusst), Identität/Label
@@ -228,10 +266,19 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     gesamtnettoertrag_euro: summe(f('gesamtnettoertrag_euro')),
     betriebskosten_anteilig_euro: summe(f('betriebskosten_anteilig_euro')),
 
-    // Tarif-Info (Jahres-Mittel der Monate)
-    netzbezug_preis_cent: mittel(f('netzbezug_preis_cent')),
-    einspeise_preis_cent: mittel(f('einspeise_preis_cent')),
-    netzbezug_durchschnittspreis_cent: mittel(f('netzbezug_durchschnittspreis_cent')),
+    // Tarif-Info: verbrauchsgewichtet, nicht als Monats-Mittel (s. `gewichtet`).
+    // Gewichtet wird der EFFEKTIVE Monatspreis — dieselbe Wahl, die die Kachel
+    // trifft (`baueMonatKpis`: Ø-Bezugspreis vor Tarif-Arbeitspreis). Sonst
+    // fiele in einem Jahr mit dynamischem Tarif der Ø auf den Referenzpreis
+    // zurück, obwohl die Kosten darunter mit dem Stundenpreis gerechnet sind.
+    netzbezug_preis_cent: gewichtet(netzbezugPreisEffektiv, f('netzbezug_kwh')),
+    einspeise_preis_cent: gewichtet(f('einspeise_preis_cent'), f('einspeisung_kwh')),
+    // Nur setzen, wenn überhaupt ein Monat einen Ø-Bezugspreis trug — die Kachel
+    // liest daran ab, ob sie „dynamischer Tarif" oder „Arbeitspreis aus dem
+    // Tarif" unter die Zahl schreibt.
+    netzbezug_durchschnittspreis_cent: monate.some((m) => m.netzbezug_durchschnittspreis_cent != null)
+      ? gewichtet(netzbezugPreisEffektiv, f('netzbezug_kwh'))
+      : null,
     // G19-1 K3: Grundgebühr = Σ der Monats-Grundgebühren; Zählergebühr ist ein
     // JAHRES-Wert vom Tarif → letzter vorhandener Wert, NICHT summieren.
     grundgebuehr_euro: summe(f('grundgebuehr_euro')),

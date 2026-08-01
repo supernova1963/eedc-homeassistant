@@ -19,11 +19,33 @@ import type { StrompreisCreate, StrompreisUpdate } from '../api'
 // ─── Helfer ──────────────────────────────────────────────────────────────────
 
 /** Ist ein Tarif zum heutigen Tag gültig (gültig-ab ≤ heute ≤ gültig-bis)? */
-export function istAktuell(sp: Strompreis): boolean {
+export function istGueltigHeute(sp: Strompreis): boolean {
   const heute = new Date().toISOString().split('T')[0]
   const abOk = sp.gueltig_ab <= heute
   const bisOk = !sp.gueltig_bis || sp.gueltig_bis >= heute
   return abOk && bisOk
+}
+
+/**
+ * IDs der Tarife, mit denen eedc heute tatsächlich rechnet — je Verwendung genau EINER.
+ *
+ * Spiegelt `backend/api/routes/strompreise.py::lade_tarife_fuer_anlage`: gültig am
+ * Stichtag UND je Verwendung der jüngste `gueltig_ab` (der jüngere Eintrag löst den
+ * älteren ab, „Gültig bis" darf leer bleiben). Genau das war vorher nicht abgebildet —
+ * `istAktuell` prüfte nur die Gültigkeit des einzelnen Eintrags, also trug JEDER
+ * historische Tarif ohne „Gültig bis" das grüne „Aktuell" (Forum simon42 #89667/67,
+ * Algie: drei Tarife, drei Badges). Gerechnet wurde immer richtig — die Liste behauptete
+ * etwas anderes als die Rechnung, und das ist bei einem Preis die teuerste Sorte Drift.
+ */
+export function aktuelleTarifIds(strompreise: Strompreis[]): Set<number> {
+  const jungster = new Map<string, Strompreis>()
+  for (const sp of strompreise) {
+    if (!istGueltigHeute(sp)) continue
+    const verwendung = sp.verwendung || 'allgemein'
+    const bisher = jungster.get(verwendung)
+    if (!bisher || sp.gueltig_ab > bisher.gueltig_ab) jungster.set(verwendung, sp)
+  }
+  return new Set([...jungster.values()].map((sp) => sp.id))
 }
 
 export function verwendungLabel(v: StrompreisVerwendung): string {
@@ -42,6 +64,8 @@ export interface StrompreiseTeileDaten {
   error: string | null
   /** Aktuell + allgemein zuerst, dann Spezialtarife, dann historisch (absteigend). */
   sorted: Strompreis[]
+  /** IDs der Tarife, mit denen heute gerechnet wird — je Verwendung genau einer. */
+  aktuelleIds: Set<number>
   aktuellerStandard: Strompreis | undefined
   aktiveSpezialtarife: Strompreis[]
   createStrompreis: (data: StrompreisCreate) => Promise<Strompreis>
@@ -53,29 +77,31 @@ export function useStrompreiseTeile(anlageId?: number): StrompreiseTeileDaten {
   const { strompreise, loading, error, createStrompreis, updateStrompreis, deleteStrompreis } =
     useStrompreise(anlageId)
 
+  const aktuelleIds = useMemo(() => aktuelleTarifIds(strompreise), [strompreise])
+
   const sorted = useMemo(() => {
     return [...strompreise].sort((a, b) => {
-      const aAktuell = istAktuell(a)
-      const bAktuell = istAktuell(b)
+      const aAktuell = aktuelleIds.has(a.id)
+      const bAktuell = aktuelleIds.has(b.id)
       if (aAktuell !== bAktuell) return aAktuell ? -1 : 1
       const aAllgemein = (a.verwendung || 'allgemein') === 'allgemein'
       const bAllgemein = (b.verwendung || 'allgemein') === 'allgemein'
       if (aAllgemein !== bAllgemein) return aAllgemein ? -1 : 1
       return b.gueltig_ab.localeCompare(a.gueltig_ab)
     })
-  }, [strompreise])
+  }, [strompreise, aktuelleIds])
 
   const aktiveSpezialtarife = useMemo(
-    () => sorted.filter((sp) => istAktuell(sp) && sp.verwendung && sp.verwendung !== 'allgemein'),
-    [sorted],
+    () => sorted.filter((sp) => aktuelleIds.has(sp.id) && sp.verwendung && sp.verwendung !== 'allgemein'),
+    [sorted, aktuelleIds],
   )
   const aktuellerStandard = useMemo(
-    () => sorted.find((sp) => istAktuell(sp) && (!sp.verwendung || sp.verwendung === 'allgemein')),
-    [sorted],
+    () => sorted.find((sp) => aktuelleIds.has(sp.id) && (!sp.verwendung || sp.verwendung === 'allgemein')),
+    [sorted, aktuelleIds],
   )
 
   return {
-    strompreise, loading, error, sorted, aktuellerStandard, aktiveSpezialtarife,
+    strompreise, loading, error, sorted, aktuelleIds, aktuellerStandard, aktiveSpezialtarife,
     createStrompreis, updateStrompreis, deleteStrompreis,
   }
 }
@@ -133,10 +159,13 @@ export function StrompreisAktuellInfo({
 
 export function StrompreisTabelle({
   sorted,
+  aktuelleIds,
   onEdit,
   onDelete,
 }: {
   sorted: Strompreis[]
+  /** Aus `useStrompreiseTeile` — je Verwendung genau ein Tarif (s. `aktuelleTarifIds`). */
+  aktuelleIds: Set<number>
   onEdit: (sp: Strompreis) => void
   onDelete: (sp: Strompreis) => void
 }) {
@@ -156,7 +185,7 @@ export function StrompreisTabelle({
         gequetschter Tabelle. */}
     <div className="lg:hidden space-y-3">
       {sorted.map((sp) => {
-        const aktuell = istAktuell(sp)
+        const aktuell = aktuelleIds.has(sp.id)
         return (
           <Card key={sp.id} padding="sm" className={aktuell ? 'bg-green-50/50 dark:bg-green-900/10' : ''}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -201,7 +230,7 @@ export function StrompreisTabelle({
         </TableHead>
         <TableBody>
           {sorted.map((sp) => {
-            const aktuell = istAktuell(sp)
+            const aktuell = aktuelleIds.has(sp.id)
             return (
               <TableRow key={sp.id} className={aktuell ? 'bg-green-50/50 dark:bg-green-900/10' : ''}>
                 <TableCell>
@@ -325,7 +354,7 @@ export function StrompreiseVerwaltung({
   kopfZusatz?: ReactNode
 }) {
   const {
-    sorted, aktuellerStandard, aktiveSpezialtarife, error,
+    sorted, aktuelleIds, aktuellerStandard, aktiveSpezialtarife, error,
     createStrompreis, updateStrompreis, deleteStrompreis,
   } = useStrompreiseTeile(anlageId)
   const { anlage } = useAnlage(anlageId)
@@ -393,7 +422,7 @@ export function StrompreiseVerwaltung({
       {sorted.length === 0 ? (
         <StrompreisEmpty onCreate={() => setShowForm(true)} />
       ) : (
-        <StrompreisTabelle sorted={sorted} onEdit={setEditingStrompreis} onDelete={setDeleteConfirm} />
+        <StrompreisTabelle sorted={sorted} aktuelleIds={aktuelleIds} onEdit={setEditingStrompreis} onDelete={setDeleteConfirm} />
       )}
 
       <StrompreisHinweise />
