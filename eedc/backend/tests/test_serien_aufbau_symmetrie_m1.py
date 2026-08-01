@@ -116,21 +116,33 @@ def test_keine_dedup_bei_getrennten_entities():
 
 # ─── Struktureller Wächter: beide Pfade nutzen die geteilte Quelle ──────────
 
-_BACKFILL = Path(__file__).resolve().parents[1] / "services/energie_profil/backfill.py"
+# Der LTS-Serien-Aufbau saß bis 2026-08-01 in `backfill.py`; er liegt jetzt in
+# `lts_tagesverlauf.py`, weil auch die Reparatur-Werkbank ihn braucht
+# (Forum #89667/72). Der Wächter zeigt auf die Stelle, die die Selektion
+# tatsächlich baut — sonst prüfte er eine Datei, die nur noch aufruft.
+_LTS_TV = Path(__file__).resolve().parents[1] / "services/energie_profil/lts_tagesverlauf.py"
 _LIVE_TV = Path(__file__).resolve().parents[1] / "services/live_tagesverlauf_service.py"
+_BACKFILL = Path(__file__).resolve().parents[1] / "services/energie_profil/backfill.py"
 
 
 def test_beide_pfade_nutzen_geteilte_quelle():
     """Wächter gegen Re-Divergenz: beide Pfade rufen baue_investitions_serien
     und reimplementieren die Selektion nicht inline."""
-    for pfad in (_BACKFILL, _LIVE_TV):
+    for pfad in (_LTS_TV, _LIVE_TV):
         src = pfad.read_text(encoding="utf-8")
         assert "baue_investitions_serien(" in src, f"{pfad.name} nutzt die Quelle nicht"
+
+
+def test_backfill_baut_keine_eigene_selektion():
+    """Der Backfill ruft den LTS-Weg — er darf die Selektion nicht zurückholen."""
+    src = _BACKFILL.read_text(encoding="utf-8")
+    assert "lade_tagesverlauf_aus_lts" in src
+    assert "baue_investitions_serien" not in src
 
 
 def test_kein_paralleler_pool_dedup_mehr():
     """Der alte Live-spezifische Pool-Dedup (`_serie_priority`) darf nicht
     wieder auftauchen — die Dedup lebt jetzt nur in der geteilten Quelle."""
-    for pfad in (_BACKFILL, _LIVE_TV):
+    for pfad in (_LTS_TV, _LIVE_TV, _BACKFILL):
         src = pfad.read_text(encoding="utf-8")
         assert "_serie_priority" not in src, f"{pfad.name} hat wieder eigenen Pool-Dedup"

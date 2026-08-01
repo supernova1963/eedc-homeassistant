@@ -261,11 +261,54 @@ async def _plan_reaggregate_day(
     return estimated, warnings, {"preview": preview}
 
 
+async def _reparatur_aggregat(
+    anlage, datum: date, db: AsyncSession
+) -> tuple[Any, str]:
+    """Ein Tag neu aggregieren — mit LTS-Rückfall für Tage außerhalb der Historie.
+
+    `aggregate_day` holt die Stunden-Leistungskurve normalerweise aus der
+    HA-**Historie**, und die reicht nur so weit zurück wie der Recorder aufhebt
+    (Default 10 Tage). Für ältere Tage kam nichts zurück, und der Lauf stieg aus,
+    BEVOR er die Zähler anfasste — während der Daten-Checker 90 Tage weit prüft
+    und für all das einen Reparatur-Knopf anbot. Wer ihn drückte, bekam
+    „keine Live-/MQTT-Daten gefunden" für Tage, deren Werte in der
+    Langzeitstatistik lagen (Forum simon42 #89667/72, dietmar1968).
+
+    Deshalb: schlägt der reguläre Weg fehl, holt die Reparatur dieselbe Kurve aus
+    HA-LTS, die auch der Vollbackfill benutzt, und reicht sie durch. Kein zweiter
+    Aggregations-Pfad — `aggregate_day` bleibt der einzige Schreiber.
+
+    Returns:
+        (TagesZusammenfassung | None, quelle) — `quelle` ist „historie", „lts"
+        oder der LTS-Grund, warum auch der Rückfall nichts holen konnte.
+    """
+    from backend.services.energie_profil_service import aggregate_day
+    from backend.services.energie_profil.source import Source
+    from backend.services.energie_profil.lts_tagesverlauf import (
+        lade_tagesverlauf_aus_lts,
+    )
+
+    zusammenfassung = await aggregate_day(anlage, datum, db, source=Source.MANUAL_REPAIR)
+    if zusammenfassung is not None:
+        return zusammenfassung, "historie"
+
+    verlauf = await lade_tagesverlauf_aus_lts(db, anlage, datum, datum)
+    prefetched = verlauf.tage.get(datum)
+    if prefetched is None:
+        return None, verlauf.grund if verlauf.grund != "ok" else "keine_daten"
+
+    zusammenfassung = await aggregate_day(
+        anlage, datum, db,
+        source=Source.MANUAL_REPAIR,
+        prefetched_tagesverlauf=prefetched,
+    )
+    return zusammenfassung, "lts" if zusammenfassung is not None else "keine_daten"
+
+
 async def _execute_reaggregate_day(
     req: RepairOperationRequest, db: AsyncSession
 ) -> dict[str, Any]:
-    from backend.services.energie_profil_service import aggregate_day
-    from backend.services.energie_profil.source import Source
+    from backend.services.energie_profil.lts_tagesverlauf import grund_text
     from backend.services.sensor_snapshot_service import resnap_anlage_range
 
     datum = date.fromisoformat(req.params["datum"])
@@ -287,15 +330,20 @@ async def _execute_reaggregate_day(
                 f"{type(e).__name__}: {e}"
             )
 
-    zusammenfassung = await aggregate_day(anlage, datum, db, source=Source.MANUAL_REPAIR)
+    zusammenfassung, quelle = await _reparatur_aggregat(anlage, datum, db)
     if zusammenfassung is None:
-        raise RuntimeError(
-            f"Aggregation für {datum} nicht möglich — keine Live-/MQTT-Daten gefunden."
+        # Den Grund nennen, nicht raten: „keine Daten gefunden" schickte den
+        # Anwender auf eine Fehlersuche bei sich selbst.
+        erklaerung = grund_text(quelle) or (
+            "Weder die Home-Assistant-Historie noch die Langzeitstatistik haben "
+            "für diesen Tag Werte."
         )
+        raise RuntimeError(f"Aggregation für {datum} nicht möglich — {erklaerung}")
 
     return {
         "datum": datum.isoformat(),
         "stunden_verfuegbar": zusammenfassung.stunden_verfuegbar,
+        "quelle": quelle,
     }
 
 
@@ -371,14 +419,17 @@ async def _plan_reaggregate_range(
 async def _execute_reaggregate_range(
     req: RepairOperationRequest, db: AsyncSession
 ) -> dict[str, Any]:
-    """Seriell pro Tag: optional Resnap, dann aggregate_day(manuell), db.commit.
+    """Seriell pro Tag: optional Resnap, dann `_reparatur_aggregat`, db.commit.
 
     Per-Tag-Commit bewusst gewählt (statt atomar): bei 31 Tagen und HTTP-
     Timeout-/Worker-Restart-Risiko ist "bereits aggregierte Tage drin"
     deutlich nutzerfreundlicher als ein finales Rollback.
+
+    Der LTS-Rückfall (s. `_reparatur_aggregat`) holt hier pro Tag einen eigenen
+    LTS-Read — anders als der Vollbackfill, der einen Bulk-Read über die ganze
+    Range macht. Bewusst: der Rückfall greift nur, wenn der reguläre Weg leer
+    bleibt, und die Bereichs-Reparatur ist auf 31 Tage gedeckelt.
     """
-    from backend.services.energie_profil_service import aggregate_day
-    from backend.services.energie_profil.source import Source
     from backend.services.sensor_snapshot_service import resnap_anlage_range
 
     von = date.fromisoformat(req.params["von"])
@@ -409,14 +460,16 @@ async def _execute_reaggregate_range(
                         f"{type(e).__name__}: {e}"
                     )
 
-            zusammenfassung = await aggregate_day(
-                anlage, current, db, source=Source.MANUAL_REPAIR,
-            )
+            zusammenfassung, quelle = await _reparatur_aggregat(anlage, current, db)
             if zusammenfassung is None:
                 keine_daten += 1
                 fehler_details.append({
                     "datum": current.isoformat(),
-                    "grund": "keine_daten",
+                    # Trägt jetzt den echten Grund (`keine_live_zuordnung` /
+                    # `ha_nicht_verfuegbar` / `keine_daten`) statt pauschal
+                    # „keine_daten" — der Bereichs-Lauf lief über Alttage sonst
+                    # komplett ins Leere, ohne zu sagen warum.
+                    "grund": quelle,
                 })
             else:
                 erfolgreich += 1

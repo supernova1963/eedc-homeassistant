@@ -47,6 +47,11 @@ _LEERER_BACKFILL_STATUS = {
 }
 
 
+def _tage(von: date, bis: date) -> list[date]:
+    """Alle Tage im Bereich (inklusiv)."""
+    return [von + timedelta(days=i) for i in range((bis - von).days + 1)]
+
+
 async def backfill_range(
     anlage: Anlage,
     von: date,
@@ -138,114 +143,9 @@ async def backfill_from_statistics(
             verloren", tatsächlich hatte HA für diese Tage keine Daten)
           - uebersprungen_existiert (int): Tage mit bereits vorhandenem Profil
     """
-    from backend.models.investition import Investition
-    from backend.utils.investition_filter import aktiv_im_zeitraum
-    from backend.services.live_sensor_config import (
-        baue_investitions_serien,
-        extract_live_config,
+    from backend.services.energie_profil.lts_tagesverlauf import (
+        lade_tagesverlauf_aus_lts,
     )
-    from backend.services.ha_statistics_service import get_ha_statistics_service
-
-    # Investitionen laden — alle die im Backfill-Zeitraum aktiv waren
-    # (`aktiv_im_zeitraum`), für den Serien-Aufbau über die Range. Die Per-Tag-
-    # Verfeinerung (genau die am jeweiligen Tag aktiven Investitionen) macht
-    # die `ist_aktiv_an(current)`-Filterung in der Schleife unten plus der
-    # `aktiv_am_tag`-Inv-Load in `aggregate_day` (Audit §6.4).
-    inv_result = await db.execute(
-        sa_select(Investition).where(
-            Investition.anlage_id == anlage.id,
-            aktiv_im_zeitraum(von, bis),
-        )
-    )
-    investitionen: dict[str, Investition] = {
-        str(inv.id): inv for inv in inv_result.scalars().all()
-    }
-
-    basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)
-
-    if not basis_live and not inv_live_map:
-        logger.info(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert, Backfill übersprungen")
-        return dict(_LEERER_BACKFILL_STATUS)
-
-    # ── Serien + Entity-Mapping über die geteilte Quelle (Issue #318, M1) ──────
-    # Identische Selektion (inkl. Pool-Dedup #227) wie der Live-Pfad
-    # (`live_tagesverlauf_service`), damit Scheduler- und Backfill-Aggregation
-    # desselben Tages deckungsgleiche TEP.komponenten/Peaks liefern. Backfill
-    # nutzt nur die Kern-Felder; Chart-Metadaten sind Live-spezifisch.
-    serien_core, serie_entities = baue_investitions_serien(inv_live_map, investitionen)
-    serien: list[dict] = [
-        {"key": s.key, "inv_id": s.inv_id, "kategorie": s.kategorie,
-         "seite": s.seite, "bidirektional": s.bidirektional}
-        for s in serien_core
-    ]
-
-    # PV Gesamt als Fallback
-    has_individual_pv = any(s["kategorie"] == "pv" for s in serien)
-    if not has_individual_pv and basis_live.get("pv_gesamt_w"):
-        serien.append({"key": "pv_gesamt", "kategorie": "pv", "seite": "quelle", "bidirektional": False})
-        serie_entities["pv_gesamt"] = [basis_live["pv_gesamt_w"]]
-
-    # Netz-Konfiguration
-    netz_kombi_eid = basis_live.get("netz_kombi_w")
-    netz_einspeisung_eid = basis_live.get("einspeisung_w")
-    netz_bezug_eid = basis_live.get("netzbezug_w")
-    if netz_kombi_eid and not netz_einspeisung_eid and not netz_bezug_eid:
-        serien.append({"key": "netz", "kategorie": "netz", "seite": "quelle", "bidirektional": True})
-    elif netz_einspeisung_eid or netz_bezug_eid:
-        netz_kombi_eid = None
-        serien.append({"key": "netz", "kategorie": "netz", "seite": "quelle", "bidirektional": True})
-
-    # ── Alle Entity-IDs sammeln ──────────────────────────────────────────────
-    all_entity_ids: set[str] = set(eid for eids in serie_entities.values() for eid in eids)
-    if netz_kombi_eid:
-        all_entity_ids.add(netz_kombi_eid)
-    if netz_bezug_eid:
-        all_entity_ids.add(netz_bezug_eid)
-    if netz_einspeisung_eid:
-        all_entity_ids.add(netz_einspeisung_eid)
-
-    # SoC wird NICHT mehr hier vorgeholt — `aggregate_day` holt die Speicher-
-    # SoC-History selbst über `_get_soc_history` (Pfad 1: HA-LTS-Hourly-Mean,
-    # dieselbe Quelle, die der Bulk-Read nutzt → für historische Tage verfügbar,
-    # Vollzyklen bleiben erhalten). v3.34.2 Phase B.
-
-    if not all_entity_ids:
-        return dict(_LEERER_BACKFILL_STATUS)
-
-    # ── HA Statistics abfragen (Executor wegen Sync-SQLAlchemy) ─────────────
-    ha_service = get_ha_statistics_service()
-    if not ha_service.is_available:
-        logger.warning(f"Anlage {anlage.id}: HA Statistics nicht verfügbar, Backfill übersprungen")
-        return dict(_LEERER_BACKFILL_STATUS)
-
-    hourly_data = await asyncio.to_thread(
-        ha_service.get_hourly_sensor_data, list(all_entity_ids), von, bis
-    )
-
-    if not hourly_data:
-        logger.info(f"Anlage {anlage.id}: Keine Statistics-Daten für {von}–{bis}")
-        return dict(_LEERER_BACKFILL_STATUS)
-
-    # ── Vorzeichen-Invertierung anwenden (wie apply_invert_to_history) ───────
-    invert_eids: set[str] = set()
-    for key, should_invert in basis_invert.items():
-        if should_invert and key in basis_live:
-            invert_eids.add(basis_live[key])
-    for inv_id, invert_flags in inv_invert_map.items():
-        live = inv_live_map.get(inv_id, {})
-        for key, should_invert in invert_flags.items():
-            if should_invert and key in live:
-                invert_eids.add(live[key])
-    for eid in invert_eids:
-        if eid in hourly_data:
-            for datum_iso in hourly_data[eid]:
-                hourly_data[eid][datum_iso] = {
-                    h: -v for h, v in hourly_data[eid][datum_iso].items()
-                }
-
-    # (Die Kategorie-Schlüssel-Sets + die W-basierte Peak-/pv_kw-Berechnung
-    # leben nicht mehr hier — `aggregate_day` leitet sie aus den durchgereichten
-    # `serien` ab. v3.34.2 Phase B.)
 
     # ── Bestehende Tage ermitteln (immer additiv, #190) ──────────────────────
     ex_result = await db.execute(
@@ -259,10 +159,28 @@ async def backfill_from_statistics(
     )
     existing_dates: set[date] = {row[0] for row in ex_result}
 
+    # Die Stunden-Leistungskurve holt der geteilte LTS-Weg
+    # (`lts_tagesverlauf.lade_tagesverlauf_aus_lts`) — EIN gebündelter Read über
+    # die Range, Punkte nur für die fehlenden Tage. Denselben Weg nutzt die
+    # Reparatur-Werkbank für einzelne Alttage.
+    fehlende = {
+        d for d in _tage(von, bis) if d not in existing_dates
+    }
+    skipped_existing = len(_tage(von, bis)) - len(fehlende)
+    verlauf = await lade_tagesverlauf_aus_lts(
+        db, anlage, von, bis, nur_tage=fehlende,
+    )
+    if verlauf.grund != "ok":
+        # Keine Zuordnung / HA nicht erreichbar / gar keine Statistics-Werte:
+        # das ist kein „Tag ohne Daten", sondern ein anderer Zustand — die
+        # frühen Abbruch-Pfade melden weiterhin das leere Status-Dict, damit die
+        # Skip-Zahlen (#190) nur echte Datenlücken zählen.
+        return dict(_LEERER_BACKFILL_STATUS)
+    tagesverlaeufe = verlauf.tage
+
     # ── Pro-Tag-Schleife: pro fehlendem Tag ein aggregate_day-Aufruf ─────────
-    # Diese Funktion baut nur noch die vorgeholten Tagesverlauf-Daten (raw-kW
-    # pro Serie aus dem HA-LTS-Bulk-Read, Butterfly-Konvention) und reicht sie
-    # als `prefetched_tagesverlauf` durch. Alles Weitere — kategorisierte
+    # Diese Funktion reicht die vorgeholten Tagesverlauf-Daten als
+    # `prefetched_tagesverlauf` durch. Alles Weitere — kategorisierte
     # Stunden-kWh, Boundary-kWh, Peaks (HA-LTS-Min/Max), Strompreise,
     # Börsenpreis-Felder, Counter, SoC/Vollzyklen, Prognose-Rettung, Provenance,
     # Konsistenz-Invariante — erledigt `aggregate_day` mit
@@ -270,90 +188,20 @@ async def backfill_from_statistics(
     # (Audit §6.1, Plan v3.34 E1).
     count = 0
     skipped_no_data = 0
-    skipped_existing = 0
     current = von
     while current <= bis:
-        if current in existing_dates:
-            skipped_existing += 1
+        if current not in fehlende:
             current += timedelta(days=1)
             continue
 
-        datum_iso = current.isoformat()
-
-        # Serien filtern: nur Investitionen, die an diesem Tag aktiv waren.
-        # In-Memory-Pendant zum `aktiv_am_tag`-Inv-Load in `aggregate_day`
-        # (Audit §6.4) — punkte + Serien-Metadaten bleiben so tag-konsistent.
-        tages_serien = [
-            s for s in serien
-            if s.get("inv_id") is None  # Basis-Serien (PV Gesamt, Netz)
-            or investitionen.get(s["inv_id"], None) is None  # Safety
-            or investitionen[s["inv_id"]].ist_aktiv_an(current)
-        ]
-
-        # punkte (get_tagesverlauf-Form) aus dem HA-LTS-Bulk-Read aufbauen:
-        # je Stunde MIT Daten ein werte-Dict {serie_key: kW}. Stunden ohne
-        # jegliche Werte werden ausgelassen (wie der frühere `if not werte:
-        # continue`-Skip) — damit bleibt `stunden_verfuegbar` identisch zur
-        # Stunden-mit-Daten-Zählung.
-        punkte: list[dict] = []
-        for h in range(24):
-            werte: dict[str, float] = {}
-
-            for serie in tages_serien:
-                skey = serie["key"]
-                if serie["kategorie"] == "netz":
-                    continue  # Netz separat
-                entity_ids = serie_entities.get(skey, [])
-                serie_sum_kw = 0.0
-                has_data = False
-                for entity_id in entity_ids:
-                    val = hourly_data.get(entity_id, {}).get(datum_iso, {}).get(h)
-                    if val is not None:
-                        serie_sum_kw += val
-                        has_data = True
-                if has_data:
-                    if serie["bidirektional"]:
-                        raw_val = -serie_sum_kw
-                    elif serie["seite"] == "senke":
-                        raw_val = -abs(serie_sum_kw)
-                    else:
-                        raw_val = abs(serie_sum_kw)
-                    werte[skey] = round(raw_val, 3)
-
-            # Netz (Kombi-Sensor oder getrennt Bezug/Einspeisung)
-            bezug_kw = 0.0
-            einsp_kw = 0.0
-            if netz_kombi_eid:
-                val = hourly_data.get(netz_kombi_eid, {}).get(datum_iso, {}).get(h)
-                if val is not None:
-                    if val >= 0:
-                        bezug_kw = val
-                    else:
-                        einsp_kw = abs(val)
-            else:
-                if netz_bezug_eid:
-                    val = hourly_data.get(netz_bezug_eid, {}).get(datum_iso, {}).get(h)
-                    if val is not None:
-                        bezug_kw = max(0.0, val)
-                if netz_einspeisung_eid:
-                    val = hourly_data.get(netz_einspeisung_eid, {}).get(datum_iso, {}).get(h)
-                    if val is not None:
-                        einsp_kw = max(0.0, val)
-            netto_kw = bezug_kw - einsp_kw
-            if bezug_kw > 0 or einsp_kw > 0 or abs(netto_kw) > 0.001:
-                werte["netz"] = round(netto_kw, 3)
-
-            if werte:
-                punkte.append({"zeit": f"{h:02d}:00", "werte": werte})
-
-        if not punkte:
+        prefetched = tagesverlaeufe.get(current)
+        if prefetched is None:
             # #190 Bug B: kein stiller Skip — der Tag hatte schlicht keine
             # HA-Statistics-Werte (Skip-Transparenz im Status-Dict).
             skipped_no_data += 1
             current += timedelta(days=1)
             continue
 
-        prefetched = {"serien": tages_serien, "punkte": punkte}
         try:
             zusammenfassung = await aggregate_day(
                 anlage, current, db,

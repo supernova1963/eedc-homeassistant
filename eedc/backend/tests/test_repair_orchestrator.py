@@ -405,9 +405,12 @@ async def test_execute_reaggregate_range_iterates_and_commits_per_day(db):
     assert summary["keine_daten"] == 1
     assert summary["fehlgeschlagen"] == 1
     assert len(aufruf_daten) == 7  # auch nach Fehler weiter
-    # Fehler-Details enthalten die zwei betroffenen Tage
+    # Fehler-Details enthalten die zwei betroffenen Tage. Der Grund nennt jetzt
+    # den ZUSTAND, nicht pauschal „keine_daten": liefert der reguläre Weg nichts,
+    # versucht die Reparatur es über HA-LTS — und diese Test-Anlage hat gar keine
+    # Live-Zuordnung, also kann auch der Rückfall nichts holen (#89667/72).
     gruende = {d["datum"]: d["grund"] for d in summary["fehler_details"]}
-    assert gruende["2026-04-03"] == "keine_daten"
+    assert gruende["2026-04-03"] == "keine_live_zuordnung"
     assert "RuntimeError" in gruende["2026-04-05"]
 
 
