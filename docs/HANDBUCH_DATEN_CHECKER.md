@@ -391,11 +391,11 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **HA Long-Term-Statistics nicht erreichbar — Prüfung übersprungen** | ℹ️ INFO | eedc kann HA-LTS gerade nicht abfragen (z. B. Standalone-Betrieb, oder HA-API zwischenzeitlich nicht erreichbar). Die Kategorie wird übersprungen. | Standalone: keine Aktion nötig — die Kategorie ist hier irrelevant. HA Add-on: HA-Verbindung prüfen ([Einstellungen → Integration → HA-Verbindung](HANDBUCH_EINSTELLUNGEN.md#62-ha-verbindung)). |
-| **N kWh-Sensor(en) nicht in HA-Long-Term-Statistics** | ⚠️ WARNING | Mindestens ein zugeordneter kWh-Sensor (z. B. für *Einspeisung*, *PV Erzeugung Gesamt* oder *WP-Stromverbrauch*) zeigt auf einen Sensor ohne `state_class`. Reparatur-Werkzeuge greifen für diese Felder nicht; vergangene Monate bleiben leer, wenn der Snapshot-Pfad eine Lücke hatte. | Bevorzugt: `state_class: total_increasing` über HA-`customize.yaml` ergänzen. Alternativ: einen anderen Sensor wählen, der bereits LTS liefert. Siehe [HANDBUCH_EINSTELLUNGEN.md §7 Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung). |
-| **N Counter-Sensor(en) ohne state_class — Reparatur-Werkzeuge wirken nicht** | ⚠️ WARNING | Counter-Felder (z. B. WP-Kompressor-Starts) werden über den stündlichen Snapshot-Service erfasst und funktionieren live. Ohne `state_class` greifen aber dieselben Reparatur-Werkzeuge nicht: Aussetzer (Neustart, Polling-Hänger) sind permanent verloren, häufig fehlt zusätzlich die letzte Tagesstunde (23–24 Uhr). | `state_class: total_increasing` per `customize.yaml` ergänzen, dann laufen alle Reparatur-Werkzeuge auf diesem Sensor. |
+| **N kWh-Sensor(en) nicht in HA-Long-Term-Statistics** | ⚠️ WARNING | Mindestens ein zugeordneter kWh-Sensor (z. B. für *Einspeisung*, *PV Erzeugung Gesamt* oder *WP-Stromverbrauch*) zeigt auf einen Sensor ohne `state_class`. Reparatur-Werkzeuge greifen für diese Felder nicht; vergangene Monate bleiben leer, wenn der Snapshot-Pfad eine Lücke hatte. | Bevorzugt: einen **Verbrauchszähler-Helfer** auf diesen Sensor legen (§5.1) — **ohne Zyklus**. Alternativ: einen anderen Sensor wählen, der bereits LTS liefert. Siehe [HANDBUCH_EINSTELLUNGEN.md §7 Datenquellen](HANDBUCH_EINSTELLUNGEN.md#7-datenquellen--feld-zentrische-zuordnung). |
+| **N Counter-Sensor(en) ohne state_class — Reparatur-Werkzeuge wirken nicht** | ⚠️ WARNING | Counter-Felder (z. B. WP-Kompressor-Starts) werden über den stündlichen Snapshot-Service erfasst und funktionieren live. Ohne `state_class` greifen aber dieselben Reparatur-Werkzeuge nicht: Aussetzer (Neustart, Polling-Hänger) sind permanent verloren, häufig fehlt zusätzlich die letzte Tagesstunde (23–24 Uhr). | Einen **Verbrauchszähler-Helfer** auf diesen Sensor legen (§5.1), **ohne Zyklus** — dann laufen alle Reparatur-Werkzeuge auf diesem Zähler. |
 | **Alle N kWh-Sensor(en) in HA-Long-Term-Statistics verfügbar** | ✅ OK | Jeder zugeordnete kWh-Sensor liefert LTS — Reparatur-Werkzeuge wirken auf alle Felder. | – |
 
-> **Wichtige Lektion:** Frühere Hinweistexte sagten „vergangene Tage bleiben leer". Das ist irreführend, weil HA-Long-Term-Statistics ohnehin erst ab Aktivierung von `state_class` angelegt werden — vor der Aktivierung existieren keine Werte zum Holen, egal wann du `customize.yaml` setzt. Der eigentliche Schmerzpunkt ist daher: ohne `state_class` **wirken die Reparatur-Werkzeuge in der Energieprofil-Pflege nicht**. Ab Aktivierung läuft's lückenfrei, davor bleibt's leer.
+> **Wichtige Lektion:** Frühere Hinweistexte sagten „vergangene Tage bleiben leer". Das ist irreführend, weil HA-Long-Term-Statistics ohnehin erst ab Aktivierung von `state_class` angelegt werden — vor der Aktivierung existieren keine Werte zum Holen, egal auf welchem Weg du den Zähler in Ordnung bringst. Der eigentliche Schmerzpunkt ist daher: ohne `state_class` **wirken die Reparatur-Werkzeuge in der Energieprofil-Pflege nicht**. Ab Aktivierung läuft's lückenfrei, davor bleibt's leer.
 
 ---
 
@@ -409,22 +409,27 @@ Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeit
 
 **Ursache:** HA legt für einen Sensor erst dann Long-Term-Statistics an, wenn dessen Attribut `state_class` gesetzt ist. Typisch sind kumulative Zähler ohne diese Metadaten bei Modbus-Roh-Werten oder Hersteller-Integrationen.
 
-**Lösung:**
+**Lösung (empfohlen): Verbrauchszähler-Helfer über die HA-Oberfläche**
 
-1. In Home Assistant `configuration.yaml` (oder `customize.yaml`) öffnen.
-2. Für jeden betroffenen Sensor einen `customize`-Block ergänzen:
+1. In Home Assistant **Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → Verbrauchszähler** wählen.
+2. Als **Eingangssensor** den betroffenen Sensor auswählen, beim **Zurücksetzen-Zyklus** **„nie"** stehen lassen — also **ohne Zyklus**.
+3. In eedc unter **Einstellungen → Datenquellen** das betroffene Feld auf den **neuen Helfer** umstellen.
+4. Daten-Checker erneut prüfen — der Befund muss verschwinden.
 
-   ```yaml
-   homeassistant:
-     customize:
-       sensor.dein_zaehler:
-         state_class: total_increasing
-         device_class: energy
-         unit_of_measurement: kWh
-   ```
+Warum dieser Weg: Der Helfer bringt `state_class` und die Summen-Spalte von sich aus mit, und sein Name überlebt einen Gerätetausch — du wechselst später nur die Quelle, alle Zuordnungen bleiben stehen. **Ohne Zyklus** deshalb, weil ein zurückgesetzter Zähler bei jedem Reset einen Sprung erzeugt, den eedc erkennen muss; ein durchlaufender Zähler hat das Problem nicht.
 
-3. Home Assistant neu starten.
-4. In eedc: Daten-Checker erneut prüfen — der Befund muss verschwinden.
+> **Der Helfer fängt bei null an.** Seine Historie beginnt mit dem Anlegen — vergangene Monate holt Home Assistant nicht nach. Das gilt für jeden Weg (siehe Kasten unten), nicht nur für den Helfer.
+
+**Alternative für alle, die die YAML ohnehin pflegen:** Für jeden betroffenen Sensor einen `customize`-Block in der `configuration.yaml` ergänzen und Home Assistant neu starten:
+
+```yaml
+homeassistant:
+  customize:
+    sensor.dein_zaehler:
+      state_class: total_increasing
+      device_class: energy
+      unit_of_measurement: kWh
+```
 
 > **Wichtig:** HA legt LTS **erst ab Aktivierung** an. Vergangene Tage vor der `state_class`-Aktivierung bleiben permanent leer — das ist eine HA-Eigenschaft, kein eedc-Bug. Reparatur-Werkzeuge (Lücken aus HA-LTS nachfüllen, Tag/Bereich neu aggregieren) wirken erst auf den Zeitraum **nach** Aktivierung.
 
@@ -522,7 +527,7 @@ Der Daten-Checker ist Diagnose, nicht Behebung. Er **zeigt** Probleme und verlin
 | §4.6 Energieprofil-Zähler | Einstellungen → Datenquellen |
 | §4.7 Energieprofil-Plausibilität | Reparatur-Werkbank: *„Tag neu aggregieren"* bzw. *„Mehrere Tage neu aggregieren"* (zieht Snapshots frisch + baut Aggregate neu) |
 | §4.8 MQTT-Topic-Abdeckung | Externe Publisher-Quelle (HA-Automation YAML, ioBroker, Node-RED), MQTT-Broker-Verbindung |
-| §4.9 Sensor-Mapping HA-Statistics | HA-`customize.yaml` (state_class), Datenquellen-Zuordnung (alternativen Sensor wählen) |
+| §4.9 Sensor-Mapping HA-Statistics | HA-Helfer „Verbrauchszähler" (ohne Zyklus), ersatzweise `customize` (state_class), Datenquellen-Zuordnung (alternativen Sensor wählen) |
 
 ### Reparatur-Werkzeuge in der Energieprofil-Pflege
 

@@ -187,6 +187,28 @@ diese Stunde gibt es noch keine Messung.
 und an allen anderen Kennzahlen ändert sich nichts.
 → [Handbuch → Prognosen §3 Stundenvergleich heute](HANDBUCH_PROGNOSEN.md#stundenvergleich-heute--was-die-abweichungen-sagen) *(gemeldet von Rainer)*
 
+### Daten-Checker: fehlt einem Zähler die Statistik, führt der Weg jetzt über die HA-Oberfläche
+
+**Betrifft dich das?** Wenn der Daten-Checker meldet, dass ein zugeordneter Zähler **nicht in der
+Home-Assistant-Langzeitstatistik** steht oder **keine Summen-Spalte** führt.
+
+Bisher riet der Hinweistext zuerst dazu, die `configuration.yaml` zu öffnen und dort `state_class`
+nachzutragen. Das setzt voraus, dass du Textdateien in Home Assistant pflegst — und viele tun das
+bewusst nicht.
+
+Was du jetzt liest: Der empfohlene Weg ist ein **Verbrauchszähler-Helfer über die Oberfläche**
+(**Einstellungen → Geräte & Dienste → Helfer**) auf den vorhandenen Sensor — **ohne Zyklus**, also
+mit Zurücksetzen „nie". Der Helfer bringt die nötigen Angaben von sich aus mit, und sein Name bleibt
+derselbe, wenn du später das Gerät tauschst; du wechselst dann nur die Quelle. Der YAML-Weg steht
+weiterhin da, aber als Nebensatz für alle, die ihn ohnehin gehen.
+
+**Ein Hinweis gehört dazu:** Ein neuer Helfer **beginnt bei null** — vergangene Monate sammelt Home
+Assistant nicht nach. Das ist keine Eigenart des Helfers, das gilt für jeden Weg.
+
+**Was du tun musst: nichts.** Es ändert sich nur der Text im Daten-Checker, keine Zahl und keine
+Zuordnung.
+→ [Handbuch → Daten-Checker §5.1 state_class-Probleme beheben](HANDBUCH_DATEN_CHECKER.md#51-state_class-probleme-bei-ha-sensoren-beheben) *(gemeldet von Rainer)*
+
 ---
 
 ## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)
