@@ -169,9 +169,27 @@ Die [Prognose-Auswertung](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-is
 - **Lernfaktor-/Restzeit-Banner:** Solange noch keine valide Lerngrundlage da ist, steht hier „benötigt mindestens 7 Tage mit IST-Ertragsdaten (X von 7 Tagen)".
 - **Korrekturprofil-Stratifizierung:** stündliche Day-Ahead-Genauigkeit nach Wetterklasse.
 - **Tagesverlauf-Chart:** Stundenlinien IST / eedc / Solcast / OpenMeteo (Solcast mit p10/p90-Band).
-- **24-Stunden- und 7-Tage-Vergleichstabellen** mit Abweichungs-Badges.
+- **24-Stunden- und 7-Tage-Vergleichstabellen** mit Abweichungs-Badges (siehe unten).
 - **Genauigkeits-Tracking** (siehe [§6](#6-genauigkeits-tracking-mae--bias)).
 - **Korrekturprofil-Heatmap:** Sonnenstand (Azimut × Höhe) × Wetterklasse als Farbkacheln — rein diagnostisch.
+
+#### „Stundenvergleich heute" — was die Abweichungen sagen
+
+Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention)). Neben jedem Prognosewert steht die Abweichung zum gemessenen IST **derselben** Stunde, in kWh:
+
+- **Sobald für eine Stunde ein IST vorliegt, trägt jede Prognosespalte eine Abweichung** — auch wenn sie „± 0,0" lautet. Eine fehlende Annotation heißt also nicht „kleine Abweichung", sondern **„für diese Stunde gibt es noch keine Messung"**.
+- **± 0,0** = Treffer im Rahmen der angezeigten Nachkommastelle, **▲** = Prognose lag über dem IST, **▼** = darunter. Die Farbe folgt der relativen Abweichung (grün < 10 %, gelb < 30 %, sonst rot).
+
+**Die Σ-Zeile vergleicht nur den bisher gelaufenen Tag.** Sie summiert Prognose und IST über **dieselben** Stunden — bis zur letzten Stunde, für die eine Messung vorliegt — und schreibt diese Grenze darunter (`bis 13:00`). Zusätzlich zur Differenz in kWh steht dort die **prozentuale** Abweichung.
+
+> Bis v4.0.5 stand in dieser Zeile die Prognose des **ganzen** Tages neben dem IST **bis jetzt** — mittags also z. B. „78,1 ▲ 52,0" gegen „26,1". Diese Zahl maß vor allem, wie früh am Tag man hinsah. Dieselben Daten ergeben jetzt „30,2 ▲ 4,1 (16 %)" gegen „26,1 bis 13:00" — die Aussage über die Prognosegüte, die der Vergleich immer sein sollte.
+
+Daraus folgen zwei Dinge, die kein Fehler sind:
+
+- **Die Σ-Zeile wächst im Lauf des Tages.** Sie ist **nicht** die Tagesprognose — die steht in der Kennzahl-Matrix oben („Heute"), zusammen mit „Verbleibend".
+- **Ist der Tag abgeschlossen** (alle Stunden gemessen), entfällt die Kennzeichnung und die Zeile zeigt wieder die vollen Tagessummen. Für einen Tag **ohne** jede Messung — die Prognose für morgen — steht dort die volle Prognosesumme und **keine** Abweichung; eine Abweichung von 0 % gegen ein nicht vorhandenes IST wäre eine Behauptung.
+
+Fehlt mitten am Tag eine Stunde (kein Zähler gemappt, Datenlücke), bleibt sie in **allen** vier Spalten außen vor — sonst stünde die Prognose dieser Stunde als Fehlprognose in der Summe.
 
 ### Auswertungen → Finanzen — die Ertragsprognose
 

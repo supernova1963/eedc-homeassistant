@@ -155,6 +155,38 @@ Verbrauchs-Kurve liegt dadurch höher als vorher — sie lag zu tief.**
 bleiben, wie sie waren; betroffen ist allein die gelernte Verbrauchs-Prognose im Live-Chart.
 → [Handbuch → Prognosen §3 Wo die Prognosen erscheinen](HANDBUCH_PROGNOSEN.md#3-wo-die-prognosen-in-der-app-erscheinen) *(gemeldet von Rainer)*
 
+### Stundenvergleich: die Σ-Zeile vergleicht nur noch den bisher gelaufenen Tag
+
+**Betrifft dich das?** Wenn du unter **Auswertungen → Prognose** in die Tabelle
+**„Stundenvergleich heute"** schaust. **Hier ändert sich eine angezeigte Zahl.**
+
+Ganz unten in der Tabelle steht die Σ-Zeile. Sie summierte bisher die Prognose des **ganzen** Tages
+und stellte sie dem IST **bis jetzt** gegenüber. Mittags las sich das an einer Beispielanlage als
+`Σ 78,1 ▲ 52,0` gegen `IST 26,1` — eine Abweichung von 52 kWh, die vor allem aussagte, dass der Tag
+noch nicht vorbei war. Am Abend schrumpfte dieselbe „Abweichung" von allein wieder zusammen.
+
+Jetzt vergleicht die Zeile **dieselben Stunden auf beiden Seiten** — bis zur letzten Stunde, für die
+eine Messung vorliegt. Aus denselben Daten wird damit `Σ 30,2 ▲ 4,1 (16 %)` gegen `IST 26,1`, und
+darunter steht, worauf sich das bezieht: **`bis 13:00`**. Die **prozentuale** Abweichung ist neu.
+
+- **Die Σ-Zeile ist damit nicht mehr die Tagesprognose** — die steht unverändert in den Kacheln
+  oben („Heute"), zusammen mit „Verbleibend".
+- **Ist der Tag durch**, entfällt die Kennzeichnung und die Zeile zeigt wieder die vollen
+  Tagessummen — wie bisher.
+- **Für einen Tag ohne jede Messung** steht dort die Prognosesumme und **keine** Abweichung. Ein
+  „0 %" gegen ein IST, das es noch gar nicht gibt, wäre eine Behauptung.
+
+**Und die Abweichungen in den Stundenzeilen darüber sind jetzt vollständig.** Bisher blendete eedc
+sie aus, wenn sie sehr klein waren — das traf je Spalte unterschiedlich zu, und in derselben Zeile
+trugen OpenMeteo und Solcast eine Abweichung, die eedc-Spalte daneben nicht. Das sah aus, als fehlte
+ein Wert. **Sobald für eine Stunde ein IST vorliegt, steht die Abweichung in jeder Prognosespalte** —
+ein Volltreffer heißt jetzt sichtbar `± 0,0`. Bleibt eine Spalte leer, heißt das eindeutig: für
+diese Stunde gibt es noch keine Messung.
+
+**Was du tun musst: nichts.** Es ändert sich nur, was verglichen wird — an deinen erfassten Daten
+und an allen anderen Kennzahlen ändert sich nichts.
+→ [Handbuch → Prognosen §3 Stundenvergleich heute](HANDBUCH_PROGNOSEN.md#stundenvergleich-heute--was-die-abweichungen-sagen) *(gemeldet von Rainer)*
+
 ---
 
 ## v4.0.5 — Eine Zahl je Kennwert: Preise je Monat, CO₂ auf dem Eigenverbrauch (Juli 2026)

@@ -1033,6 +1033,21 @@ Der Prognosen-Tab vergleicht vier Quellen pro Tag/Stunde:
 | **Solcast** | Optionale dritte Quelle, entweder Solcast-API (Free/Paid Key) oder HA-Sensor (BJReplay-Integration). 30-Min-Buckets werden per `ceil(bucket_ende)` dem Backward-Slot zugeordnet. |
 | **IST** | Tatsächlich gemessener Tageswert aus den Stunden-Snapshots (siehe §6b) |
 
+#### Abweichung und Σ-Zeile im Stundenvergleich (ab v4.0.6)
+
+Die Tabelle „Stundenvergleich heute" annotiert jeden Prognosewert mit seiner Abweichung zum IST **derselben** Stunde. Zwei Regeln, beide client-seitig in `components/prognose/PrognoseVergleichTeile.tsx` (`DevBadge` bzw. `stundenSummeVon`), gepinnt in `PrognoseVergleichTeile.stundenvergleich.test.tsx`:
+
+```
+Δ_Stunde   = Prognose_kWh − IST_kWh            (angezeigt: |Δ|, Richtung als ▲/▼, „±" wenn |Δ| < 0,05)
+Δ_relativ  = |Δ| / IST × 100                   (nur für die Farbskala bzw. die Σ-Zeile; IST > 0,05 vorausgesetzt)
+```
+
+- **Liegt ein IST vor, wird immer annotiert** — auch bei Δ = 0. Eine fehlende Annotation bedeutet damit eindeutig „keine Messung", nicht „kleine Abweichung". *(Bis v4.0.5 unterdrückte die Anzeige jedes |Δ| < 0,03 kWh; das traf je Spalte unterschiedlich zu und sah in der Zeile aus wie eine Datenlücke — PN Rainer 90004.)*
+- **Die Σ-Zeile summiert über ein gemeinsames Fenster.** Obergrenze ist die letzte Stunde mit IST, höchstens `aktuelle_stunde` (Slot `aktuelle_stunde + 1` läuft noch, s. Backward-Konvention). Stunden **ohne** IST bleiben in allen vier Spalten außen vor — die vier Summen meinen damit paarweise dieselben Stunden. *(Bis v4.0.5 stand dort die 24-Stunden-Prognosesumme neben `ist_heute_kwh`: mittags z. B. 78,1 gegen 26,1 — die Abweichung maß die Tageszeit.)*
+- **Ohne jedes IST** (Zukunftstag) zeigt die Σ-Zeile die volle Prognosesumme und **kein** Δ — ADR-002/P4: kein 0-%-Ergebnis auf einer nicht vorhandenen Referenz. Der Vollständigkeits-Grenzfall „alle 24 Stunden gemessen" verhält sich wie vorher (keine `bis HH:00`-Kennzeichnung).
+
+Nicht zu verwechseln mit der **Tagesprognose** derselben Spalte (`openmeteo_heute_kwh` etc.) in der Kennzahl-Matrix — die bleibt der ganze Tag, ebenso `verbleibend_*` (= IST bisher + Σ Prognose-Slots der Reststunden).
+
 #### Lernfaktor (saisonale MOS-Kaskade, ab v3.16.15)
 
 Die eedc-Prognose ist die korrigierte OpenMeteo-Prognose; der Skalar-Lernfaktor unten ist die

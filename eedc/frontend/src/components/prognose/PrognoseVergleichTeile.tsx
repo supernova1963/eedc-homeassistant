@@ -171,6 +171,51 @@ function sichtbareStunden(chartData: ReturnType<typeof chartDatenVon>) {
   const hMax = helle.length > 0 ? Math.min(23, helle[helle.length - 1] + 1) : 23
   return chartData.slice(hMin, hMax + 1)
 }
+export interface StundenSumme {
+  /** Letzte volle Stunde mit IST — `null`, wenn der Tag noch kein IST hat. */
+  bisStunde: number | null
+  /** Ganzer Tag abgedeckt ⇒ die Zeile trägt keine „bis HH:00"-Kennzeichnung. */
+  vollerTag: boolean
+  openmeteo: number
+  eedc: number
+  solcast: number
+  /** Σ IST derselben Stunden — `null`, solange nichts gemessen ist. */
+  ist: number | null
+}
+
+/**
+ * Σ-Zeile des Stundenvergleichs: sie vergleicht **nur den bisher gelaufenen
+ * Tag** (Entscheid B4, Rainer PN 90004/89980).
+ *
+ * Vorher stand die Prognose des **ganzen** Tages gegen das IST **bis jetzt** —
+ * „Σ eedc 64,1 ▲ 59,7" gegen „IST 4,4". Die Abweichung maß damit vor allem,
+ * wie spät am Tag man hinsieht.
+ *
+ * Grenze ist die letzte Stunde, für die ein IST vorliegt, höchstens jedoch
+ * `aktuelleStunde`: nach der Backward-Konvention trägt Slot N die Energie von
+ * [N-1, N), Slot `aktuelleStunde + 1` läuft also noch. Stunden ohne IST bleiben
+ * in **allen** Spalten außen vor, damit die vier Summen paarweise dasselbe
+ * Fenster meinen — auch bei einer Messlücke mittendrin.
+ *
+ * Kein IST im Tag (Prognose für morgen) ⇒ `bisStunde === null`: die Zeile zeigt
+ * die volle Prognosesumme und **kein** Delta — keine 0-%-Behauptung.
+ */
+export function stundenSummeVon(chartData: ReturnType<typeof chartDatenVon>, aktuelleStunde: number | null): StundenSumme {
+  const grenze = aktuelleStunde ?? 23
+  const mitIst = chartData.filter((r, h) => h <= grenze && r.ist !== null)
+  const bisStunde = mitIst.length > 0 ? parseInt(mitIst[mitIst.length - 1].stunde) : null
+  const zeilen = bisStunde === null ? chartData : mitIst
+  const summe = (f: (r: ReturnType<typeof chartDatenVon>[number]) => number) => zeilen.reduce((s, r) => s + f(r), 0)
+  return {
+    bisStunde,
+    vollerTag: bisStunde !== null && mitIst.length === chartData.length,
+    openmeteo: summe(r => r.openmeteo),
+    eedc: summe(r => r.eedc ?? 0),
+    solcast: summe(r => r.solcast),
+    ist: bisStunde === null ? null : summe(r => r.ist ?? 0),
+  }
+}
+
 function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsResponse | null, hasEedc: boolean) {
   const heute = new Date().toISOString().slice(0, 10)
   const historisch = (genauigkeit?.tage ?? []).filter(t => t.datum < heute).slice(-4).map(t => ({
@@ -344,14 +389,37 @@ function AsymmetrieCard({ label, asym, color, hint }: { label: string; asym: Asy
     </div>
   )
 }
-function DevBadge({ prognose, ist }: { prognose: number; ist: number }) {
-  if (ist < 0.05 && prognose < 0.05) return null
+/**
+ * Abweichungs-Annotation — die EINE Stelle, an der ein Δ gerendert wird.
+ *
+ * `gemessen` = die Referenz ist ein **gemessenes IST**. Dann steht die
+ * Annotation immer, auch wenn sie „± 0,0" lautet (Rainer PN 90004): vorher
+ * unterdrückte sie sich bei |Δ| < 0,03 kWh bzw. wenn beide Werte unter
+ * 0,05 lagen — das traf je Spalte unterschiedlich zu und sah in der Tabelle
+ * aus wie eine Lücke (6:00 und 9:00 ohne Delta, während OM und SC eines
+ * trugen). Ohne gemessenes IST — die 7-Tage-Zukunftszeilen vergleichen gegen
+ * das Mittel der Prognosen — bleibt die Unterdrückung: dort ist ein „0,0"
+ * keine Aussage über die Wirklichkeit.
+ *
+ * `prozent` blendet die relative Abweichung ein (Σ-Zeile, B4) — aber nur bei
+ * einer tragfähigen Referenz; gegen ein IST von 0 wäre jede Prozentzahl erfunden.
+ */
+function DevBadge({ prognose, ist, gemessen = false, prozent = false }: { prognose: number; ist: number; gemessen?: boolean; prozent?: boolean }) {
   const diff = prognose - ist
-  if (Math.abs(diff) < 0.03) return null
+  if (!gemessen) {
+    if (ist < 0.05 && prognose < 0.05) return null
+    if (Math.abs(diff) < 0.03) return null
+  }
   const pct = ist > 0.05 ? Math.abs(diff / ist) * 100 : (prognose > 0.05 ? 100 : 0)
   const color = pct < 10 ? 'text-green-500' : pct < 30 ? 'text-yellow-500' : 'text-red-400'
-  const arrow = diff > 0 ? '▲' : '▼'
-  return <span className={`text-[10px] ml-1 ${color}`}>{arrow} {fmtZahl(Math.abs(diff), 1)}</span>
+  // Was auf 0,0 rundet, bekommt kein Richtungs-Symbol — ein „▼ 0,0" behauptet
+  // eine Unterschreitung, die die angezeigte Zahl gar nicht hergibt.
+  const arrow = Math.abs(diff) < 0.05 ? '±' : diff > 0 ? '▲' : '▼'
+  return (
+    <span className={`text-[10px] ml-1 ${color}`}>
+      {arrow} {fmtZahl(Math.abs(diff), 1)}{prozent && ist > 0.05 && ` (${fmtZahl(pct, 0)} %)`}
+    </span>
+  )
 }
 function AbweichungCell({ prognose, ist }: { prognose: number; ist: number | null }) {
   if (ist === null || ist < 0.5) return <span>{fmtZahl(prognose, 1)}</span>
@@ -753,12 +821,29 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
   )
 }
 
+/**
+ * Eine Prognose-Zelle des Stundenvergleichs: Wert **und** Abweichung aus einer
+ * Hand — vorher stand die Delta-Bedingung dreimal nebeneinander in der Zeile,
+ * je Spalte leicht anders (PN 90004).
+ */
+function PvgPrognoseZelle({ wert, ist, klasse = '', stellen = 2, prozent = false }: {
+  wert: number | null; ist: number | null; klasse?: string; stellen?: number; prozent?: boolean
+}) {
+  return (
+    <td className={`${ZELLE} text-right font-mono ${klasse}`}>
+      {wert === null ? '—' : fmtZahl(wert, stellen)}
+      {wert !== null && ist !== null && <DevBadge prognose={wert} ist={ist} gemessen prozent={prozent} />}
+    </td>
+  )
+}
+
 export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   const { data } = vm
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
   const chartData = chartDatenVon(data)
+  const summe = stundenSummeVon(chartData, data.aktuelle_stunde)
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Stundenvergleich heute</h3>
@@ -781,30 +866,29 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
             return (
               <tr key={row.stunde} className={`border-b border-gray-50 dark:border-gray-800 ${isPast ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}`}>
                 <td className={`${ZELLE} font-mono text-gray-900 dark:text-white`}>{row.stunde}</td>
-                <td className={`${ZELLE} text-right font-mono`}>{fmtZahl(row.openmeteo, 2)}{istVal !== null && <DevBadge prognose={row.openmeteo} ist={istVal} />}</td>
-                <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{row.eedc != null ? fmtZahl(row.eedc, 2) : '—'}{istVal !== null && row.eedc !== null && <DevBadge prognose={row.eedc} ist={istVal} />}</>) : '—'}</td>
-                {hasSolcast && (<td className={`${ZELLE} text-right font-mono`}>{fmtZahl(row.solcast, 2)}{istVal !== null && <DevBadge prognose={row.solcast} ist={istVal} />}</td>)}
+                <PvgPrognoseZelle wert={row.openmeteo} ist={istVal} />
+                <PvgPrognoseZelle wert={hasEedc ? row.eedc : null} ist={istVal} klasse={eedcKlasse(hasEedc)} />
+                {hasSolcast && <PvgPrognoseZelle wert={row.solcast} ist={istVal} />}
                 <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{istVal !== null ? fmtZahl(istVal, 2) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
               </tr>
             )
           })}
         </TableBody>
         <TableFoot>
-          {(() => {
-            const omSum = chartData.reduce((s, r) => s + r.openmeteo, 0)
-            const eedcSum = chartData.reduce((s, r) => s + (r.eedc ?? 0), 0)
-            const scSum = chartData.reduce((s, r) => s + r.solcast, 0)
-            const istSum = data.ist_heute_kwh
-            return (
-              <tr>
-                <td className={`${ZELLE} text-gray-900 dark:text-white`}>Σ</td>
-                <td className={`${ZELLE} text-right font-mono ${Q.openmeteo}`}>{fmtZahl(omSum, 1)}{istSum !== null && <DevBadge prognose={omSum} ist={istSum} />}</td>
-                <td className={`${ZELLE} text-right font-mono ${eedcKlasse(hasEedc)}`}>{hasEedc ? (<>{fmtZahl(eedcSum, 1)}{istSum !== null && <DevBadge prognose={eedcSum} ist={istSum} />}</>) : '—'}</td>
-                {hasSolcast && (<td className={`${ZELLE} text-right font-mono ${Q.solcast}`}>{fmtZahl(scSum, 1)}{istSum !== null && <DevBadge prognose={scSum} ist={istSum} />}</td>)}
-                <td className={`${ZELLE} text-right font-mono ${Q.ist}`}>{istSum !== null ? fmtZahl(istSum, 1) : '—'}</td>
-              </tr>
-            )
-          })()}
+          <tr>
+            <td className={`${ZELLE} text-gray-900 dark:text-white`}>
+              Σ
+              {summe.bisStunde !== null && !summe.vollerTag && (
+                <SimpleTooltip text={`Verglichen wird nur der bereits gelaufene Tag: Prognose und IST derselben Stunden, bis ${summe.bisStunde}:00. Die Tagesprognose steht in den Kacheln darüber.`}>
+                  <span className="block text-[10px] font-normal text-gray-500 dark:text-gray-400">bis {summe.bisStunde}:00</span>
+                </SimpleTooltip>
+              )}
+            </td>
+            <PvgPrognoseZelle wert={summe.openmeteo} ist={summe.ist} klasse={Q.openmeteo} stellen={1} prozent />
+            <PvgPrognoseZelle wert={hasEedc ? summe.eedc : null} ist={summe.ist} klasse={eedcKlasse(hasEedc)} stellen={1} prozent />
+            {hasSolcast && <PvgPrognoseZelle wert={summe.solcast} ist={summe.ist} klasse={Q.solcast} stellen={1} prozent />}
+            <td className={`${ZELLE} text-right font-mono ${Q.ist}`}>{summe.ist !== null ? fmtZahl(summe.ist, 1) : '—'}</td>
+          </tr>
         </TableFoot>
       </Table>
     </Card>
