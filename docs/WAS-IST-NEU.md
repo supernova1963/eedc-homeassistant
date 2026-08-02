@@ -20,17 +20,20 @@
 für ein Jahr, in dem einzelne Monate fehlen.
 
 Die Spalten **Vorjahr** und **Ø Jahre** summierten bisher immer das **ganze** Jahr. Im laufenden Jahr
-standen damit die bisher gelaufenen Monate gegen zwölf volle: auf einer echten Anlage im Juli
-7.696 kWh gegen 14.221 kWh, also **„▼ 46 %"**. Diese Zahl maß im Wesentlichen den Kalender und
+standen damit die bisher gelaufenen Monate gegen zwölf volle: auf einer echten Anlage im August
+7.703 kWh gegen 14.221 kWh, also **„▼ 46 %"**. Diese Zahl maß im Wesentlichen den Kalender und
 hätte sich bis Dezember von selbst zurückgebildet.
 
 Was du jetzt siehst:
 
-- **Vorjahr und Ø Jahre werden auf dieselben Monate beschnitten**, für die das angezeigte Jahr Daten
-  hat. Dieselben Daten wie oben ergeben jetzt 8.269 kWh und **„▼ 7 %"**.
-- **Das Fenster steht dran**, sobald dort weniger als ein volles Jahr summiert ist — am Spaltenkopf,
-  an den Kennzahl-Kacheln (`VJ (Jan–Jun): 5.146 kWh`) und als Satz unter der Tabelle:
-  „Vergleich beschnitten auf die gemeinsamen Monate: Jan–Jun".
+- **Alle Spalten rechnen über dieselben Monate** — die **abgeschlossenen** des angezeigten Jahres,
+  auf der IST-Seite genauso wie beim Vorjahr. Der laufende Monat bleibt außen vor; zwei Augusttage
+  gegen einen vollen August wären derselbe Fehler noch einmal, nur kleiner. Dieselbe Anlage wie oben
+  zeigt jetzt 9.450 kWh gegen 9.912 kWh und **„▼ 5 %"**.
+- **Das Fenster steht dran**, sobald dort weniger als ein volles Jahr summiert ist — über der
+  IST-Spalte, am Spaltenkopf des Vergleichs, an den Kennzahl-Kacheln (`VJ (Jan–Jul): 6.198 kWh`)
+  und als Satz unter der Tabelle:
+  „Vergleich beschnitten auf die gemeinsamen Monate: Jan–Jul".
 - **In den Ø geht nur ein Jahr ein, das dieses Fenster ganz abdeckt.** Ist deine Anlage z. B. im Juni
   2023 gestartet, trüge 2023 zu einem Vergleich über Jan–Jun nur einen einzigen Monat bei — das Jahr
   bleibt draußen, und die Zeile darunter zählt ehrlich („Ø aus 2 Jahren" statt 3).
@@ -43,6 +46,33 @@ Beschneidung wirkungslos und es wird auch nichts beschriftet.
 
 **Was du tun musst: nichts.** Wenn deine Vorjahres- und Ø-Spalten kleiner geworden sind und die
 Δ-Prozente viel moderater ausfallen, ist das die Korrektur — deine Anlage hat sich nicht verändert.
+→ [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
+
+### Ein Monat ohne Monatsabschluss fehlt der Jahreszahl nicht mehr
+
+**Betrifft dich das?** Wenn du **Cockpit → Jahr/Gesamt** ansiehst und den Monatsabschluss nicht
+sofort nach Monatsende machst — also fast alle.
+
+Bisher zählte ein Monat erst zum Jahr, wenn du ihn **abgeschlossen** hattest. Die Messwerte deiner
+Komponenten liegen aber längst vor; nur die Zählerstände trägst du oft Wochen später nach. In der
+Zwischenzeit fehlte dieser Monat der Jahreszahl **vollständig** — auf einer echten Anlage am
+2. August 2026 war das der volle Juli mit 1.843 kWh, also **knapp ein Viertel** der angezeigten
+Jahresernte, und ausgerechnet der stärkste Monat.
+
+Was du jetzt siehst:
+
+- **Ein Monat zählt, sobald er Daten trägt** — nicht erst nach dem Monatsabschluss. Dieselbe Anlage
+  zeigt statt 7.703 kWh jetzt **9.547 kWh**. Autarkie, spezifischer Ertrag, SOLL-Erfüllung, die
+  Komponenten-Kennzahlen und die Finanz-Zahlen des Jahres ziehen mit.
+- **Auch mehrere offene Monate** werden gefunden, ebenso eine Lücke mitten im Jahr.
+- **Der Block-Kopf nennt das Fenster**, sobald es kein volles Jahr ist: `Jan–Aug · 5 Energie-…`.
+- **Kachel und Vergleichstabelle sind bewusst nicht dieselbe Zahl.** Die Kachel zählt das Jahr **bis
+  heute**, die Tabelle bis zum letzten abgeschlossenen Monat — beide sagen, worauf sie sich
+  beziehen, und der Satz unter der Tabelle nennt den Unterschied („… · Kennzahlen oben: Jan–Aug").
+
+**Was du tun musst: nichts.** Wenn deine Jahres-Erzeugung sichtbar **gestiegen** ist, ist das die
+Korrektur — die alte Zahl war zu klein, deine Anlage ist unverändert. Den offenen Monatsabschluss
+meldet eedc weiterhin: als Symbol in der Statusleiste unten und als Befund im Daten-Checker.
 → [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
 
 ### Der Reparatur-Knopf erscheint nicht mehr für Zeiträume, die eedc gar nicht rechnen darf

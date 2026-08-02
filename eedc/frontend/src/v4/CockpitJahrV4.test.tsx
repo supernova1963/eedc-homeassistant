@@ -55,8 +55,22 @@ vi.mock('../api/monatsdaten', () => ({
   monatsdatenApi: { listAggregiert: vi.fn(() => Promise.resolve(aggregiert)) },
 }))
 
+// Monate ohne Zeile antworten wie die Box: nur Stammdaten-Ableitungen (SOLL/Tarif),
+// keine gemessenen Mengen. Seit P-12 fragt die Sicht das ganze Jahr ab und filtert
+// über `monatHatDaten` — eine Fixture, die für JEDEN Monat Werte liefert, würde die
+// Jahres-Summen still vervierfachen.
+const MIT_DATEN = new Set(aggregiert.map((m) => `${m.jahr}-${m.monat}`))
+const ohneDaten = (jahr: number, monat: number): AktuellerMonatResponse => ({
+  anlage_id: 1, anlage_name: 'Demo', jahr, monat, monat_name: String(monat),
+  aktualisiert_um: '', quellen: {}, soll_pv_kwh: 320,
+  investitionen_financials: [], komponenten_geraete: {}, feld_quellen: {}, vorjahr: null,
+} as unknown as AktuellerMonatResponse)
+
 vi.mock('../api/aktuellerMonat', () => ({
-  aktuellerMonatApi: { getData: vi.fn((_id: number, j: number, m: number) => Promise.resolve(monatsAntwort(j, m))) },
+  aktuellerMonatApi: {
+    getData: vi.fn((_id: number, j: number, m: number) =>
+      Promise.resolve(MIT_DATEN.has(`${j}-${m}`) ? monatsAntwort(j, m) : ohneDaten(j, m))),
+  },
 }))
 
 // CO₂-Zeitreihe: der Endpoint liefert die GANZE Historie ohne `?jahr=` — die

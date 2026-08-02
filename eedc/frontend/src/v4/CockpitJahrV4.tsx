@@ -12,9 +12,12 @@
  *    `finanzTeaserBlock`).
  *
  * Datenpfade — kein neuer Endpoint (D3):
- *  - Voll-Aggregat (KPIs/Komponenten/Finanzen/SOLL) = Σ der 12 kanonischen
+ *  - Voll-Aggregat (KPIs/Komponenten/Finanzen/SOLL) = Σ der kanonischen
  *    Monats-Antworten `aktuellerMonatApi.getData` (nur Monate mit Daten) via
  *    {@link baueJahrAlsMonat}. So existieren ALLE Komponenten-KPIs (anders als Tag).
+ *    Welche Monate das sind, entscheidet seit P-12 (N-65) `zuLadendeMonate` +
+ *    `monatHatDaten` — NICHT die Existenz einer aggregierten Zeile: die entsteht
+ *    erst beim Monatsabschluss.
  *  - Verlauf-Chart + Vorjahr/Ø-Jahr-Vergleich = `monatsdatenApi.listAggregiert`
  *    (Σ der IMD je Monat), einmal je Anlage geladen.
  *  - CO₂-Bilanz = `cockpitApi.getNachhaltigkeit` (Monats-Fakten/P10), ebenfalls
@@ -39,7 +42,10 @@ import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
 import { JahrHeader } from './JahrRahmen'
-import { baueJahrAlsMonat, jahrVergleichAus, mittelJahre, monatsFenster, type JahrVergleich } from './JahrAggregat'
+import {
+  abgeschlosseneMonate, baueJahrAlsMonat, jahrVergleichAus, kennzahlenFensterAus, mittelJahre,
+  monatHatDaten, monatsFenster, monatsFensterAus, zuLadendeMonate, type JahrVergleich,
+} from './JahrAggregat'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { cockpitApi } from '../api/cockpit'
@@ -47,6 +53,20 @@ import { cockpitApi } from '../api/cockpit'
 // persistKey-SoT der Sicht — geteilt von BlockShell (Block-Ebene) und ParkProvider
 // (Element-Ebene); eigene LS-Prefixe (`eedc-bloecke:` vs. `eedc-park:`).
 const SICHT_KEY = 'v4-cockpit-jahr'
+
+/**
+ * Ein geladenes Jahr — zwei Aggregate über zwei Monatsmengen (P-12/N-65).
+ *
+ * `d` ist die Kopfzahl („das Jahr bis heute", alle Monate mit Daten), `dVgl` die
+ * Vergleichs-Grundgesamtheit (nur abgeschlossene Monate). Bei einem abgeschlossenen
+ * Jahr sind beide dasselbe Objekt.
+ */
+interface JahrLadung {
+  d: AktuellerMonatResponse
+  dVgl: AktuellerMonatResponse
+  monate: number[]
+  vergleichsMonate: number[]
+}
 
 export default function CockpitJahrV4(props: { anlageId: number | undefined }) {
   // ParkProvider umschließt den Body (wie Cockpit/Monat, SLICE-1-Referenz).
@@ -78,17 +98,26 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   }, [monateQ.data])
 
   // Voll-Aggregat des gewählten Jahres = Σ der Monats-Antworten (nur Monate mit Daten).
-  const ladeJahr = useCallback(async (anlage: number, j: number): Promise<AktuellerMonatResponse> => {
+  //
+  // N-65: welche Monate das sind, entscheidet NICHT mehr die Existenz einer
+  // aggregierten Zeile — die entsteht erst beim Monatsabschluss, und ein längst
+  // gelaufener Monat ohne Abschluss fiel damit komplett aus der Jahreszahl (an der
+  // Box: Juli 2026, 1.843 kWh = ein Viertel der angezeigten Ernte). Gefragt wird
+  // jetzt das Intervall (`zuLadendeMonate`), geantwortet hat, wer Mengen trägt
+  // (`monatHatDaten` — der Endpoint beantwortet auch Monate vor der Inbetriebnahme,
+  // dann aber nur mit Stammdaten-Ableitungen wie SOLL und Tarif).
+  const ladeJahr = useCallback(async (anlage: number, j: number): Promise<JahrLadung> => {
     const heute = new Date()
-    const istLaufend = j === heute.getFullYear()
-    const monateMitDaten = [...new Set(alleMonate.filter((m) => m.jahr === j).map((m) => m.monat))]
-    // Laufendes Jahr: auch den aktuellen Monat einschließen (evtl. noch ohne
-    // abgeschlossene Aggregat-Zeile, aber mit Live-Daten).
-    if (istLaufend && !monateMitDaten.includes(heute.getMonth() + 1)) monateMitDaten.push(heute.getMonth() + 1)
-    const monate = (await Promise.all(
-      monateMitDaten.sort((a, b) => a - b).map((m) => aktuellerMonatApi.getData(anlage, j, m).catch(() => null)),
-    )).filter((m): m is AktuellerMonatResponse => m != null)
-    return baueJahrAlsMonat(monate, j)
+    const antworten = (await Promise.all(
+      zuLadendeMonate(alleMonate, j, heute).map((m) => aktuellerMonatApi.getData(anlage, j, m).catch(() => null)),
+    )).filter((m): m is AktuellerMonatResponse => m != null && monatHatDaten(m))
+    const monate = antworten.map((m) => m.monat)
+    const vergleichsMonate = abgeschlosseneMonate(monate, j, heute)
+    const d = baueJahrAlsMonat(antworten, j)
+    const dVgl = vergleichsMonate.length === monate.length
+      ? d
+      : baueJahrAlsMonat(antworten.filter((m) => vergleichsMonate.includes(m.monat)), j)
+    return { d, dVgl, monate, vergleichsMonate }
   }, [alleMonate])
 
   // keepPreviousData: Jahreswechsel aktualisiert den Block-Stack in-place statt
@@ -125,7 +154,8 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   const co2Fehler = co2Q.data == null && co2Q.error != null
   const co2Reload = co2Q.refetch
 
-  const jahrData = jahrQ.data
+  const jahrData = jahrQ.data?.d ?? null
+  const jahrVglData = jahrQ.data?.dVgl ?? null
   const loading = monateQ.loading || (jahr != null && jahrQ.loading)
   const reloading = jahrQ.reloading
   const error = monateQ.data == null && monateQ.error
@@ -156,11 +186,22 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     [alleMonate, jahr],
   )
   // Grundgesamtheit des Jahresvergleichs (Fund N-37): die Monate, für die das
-  // ANGEZEIGTE Jahr eine Zeile hat — abgeleitet aus `monatsZeilen`, nicht aus dem
-  // Kalender und nicht aus `new Date()`. Ohne sie standen im laufenden Jahr die
-  // gelaufenen Monate gegen ein volles Vorjahr. Eine Lücke mitten im Jahr
+  // ANGEZEIGTE Jahr Daten hat — ohne den laufenden. Ohne sie standen im laufenden
+  // Jahr die gelaufenen Monate gegen ein volles Vorjahr. Eine Lücke mitten im Jahr
   // beschneidet damit genauso: die Regel ist „gleiche Monate", nicht „erste N".
-  const vergleichsMonate = useMemo(() => monatsZeilen.map((m) => m.monat), [monatsZeilen])
+  //
+  // N-65: die Quelle ist jetzt die WIRKLICH geladene Monatsmenge, nicht mehr
+  // `monatsZeilen` (= die aggregierten Zeilen). Sonst wüchse der Widerspruch, den
+  // P-12 auflöst: die Kopfzahl zählte einen Monat, den der Vergleich nicht kennt.
+  const kopfMonate = useMemo(() => jahrQ.data?.monate ?? [], [jahrQ.data])
+  const vergleichsMonate = useMemo(() => jahrQ.data?.vergleichsMonate ?? [], [jahrQ.data])
+  // Fenster der Kacheln — nur gesetzt, wenn sie mehr Monate zählen als der Vergleich.
+  const kennzahlenFenster = useMemo(
+    () => kennzahlenFensterAus(kopfMonate, vergleichsMonate),
+    [kopfMonate, vergleichsMonate],
+  )
+  // Fenster der IST-Spalte der Vergleichstabelle = die Grundgesamtheit selbst.
+  const istFenster = useMemo(() => monatsFensterAus(vergleichsMonate), [vergleichsMonate])
   const vorjahr = useMemo<JahrVergleich | null>(() => {
     if (jahr == null) return null
     const vj = jahrVergleichAus(alleMonate, jahr - 1, vergleichsMonate)
@@ -184,12 +225,31 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   const bloecke = useMemo<Block[]>(() => {
     if (jahr == null) return []
     const d = jahrData
-    const bilanzSummary = d
-      ? `${fmtCalc(d.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(d.autarkie_prozent, 0, '—')} % Autarkie${
-          d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
-            ? ` · SOLL ${fmtCalc((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100, 0, '—')} %`
-            : ''}`
+    // P-12/N-65: die Kopfzeile eines Blocks trägt sein Zeitfenster, sobald das
+    // Jahr nicht deckungsgleich ist. Sie ist der einzige Ort über den Kacheln, der
+    // ungekürzt rendert — die Kachel-Zweitzeile ist `truncate` und schnitt ein
+    // Präfix genau dort ab, wo die Vorjahres-Angabe steht (an der Box gemessen).
+    const mitFenster = (fenster: string | null, text: string) => (fenster ? `${fenster} · ${text}` : text)
+    // Der Bilanz-Block fasst die TABELLE zusammen — also die abgeschlossenen Monate,
+    // nicht die Kopfzahl. Sonst nennte die eingeklappte Zeile eine andere PV-Zahl als
+    // die Tabelle darin.
+    const b = jahrVglData ?? d
+    // Die SOLL-Erfüllung steht NUR an der PV-Kachel. Über die abgeschlossenen Monate
+    // gerechnet ergäbe sie hier eine zweite, andere Prozentzahl für dieselbe Größe
+    // (an der Box 119 % gegen 103 % an der Kachel) — der Unterschied ist echt, aber
+    // er gehört an EINE Stelle. Ursache ist, dass der laufende Monat sein VOLLES
+    // PVGIS-SOLL mitbringt und nur ein paar Tage Ertrag; das ist ein eigener Fund und
+    // bestand schon vor P-12 (damals 98,7 % aus Jan–Jun + vollem August).
+    // Bei abgeschlossenem Jahr fallen beide Fenster zusammen ⇒ Anzeige wie bisher.
+    const bilanzSummary = b
+      ? mitFenster(istFenster, `${fmtCalc(b.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(b.autarkie_prozent, 0, '—')} % Autarkie${
+          istFenster == null && b.soll_pv_kwh != null && b.pv_erzeugung_kwh != null && b.soll_pv_kwh > 0
+            ? ` · SOLL ${fmtCalc((b.pv_erzeugung_kwh / b.soll_pv_kwh) * 100, 0, '—')} %`
+            : ''}`)
       : 'IST / Vorjahr / Ø-Jahr'
+    const kennzahlenSummary = mitFenster(
+      kennzahlenFenster, '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
+    )
     // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte im Strip
     // ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen (Monat-Referenz).
     const kpiItems = d
@@ -203,14 +263,14 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       ? (sichtbareKpi.length > 0
           ? {
               id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-              summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
+              summary: kennzahlenSummary,
               defaultOpen: true,
               render: () => <KpiStrip kpis={sichtbareKpi} />,
             }
           : null)
       : {
           id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
-          summary: '5 Energie-Kennzahlen + Netto-Ertrag + Jahresergebnis + Netz-Kosten',
+          summary: kennzahlenSummary,
           defaultOpen: true,
           render: () => <p className="text-sm text-gray-500 dark:text-gray-400">Keine Jahres-Kennzahlen verfügbar.</p>,
         }
@@ -290,7 +350,12 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         summary: bilanzSummary,
         defaultOpen: false,
         render: () => (d
-          ? <JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} vjFenster={vjFenster} ojFenster={ojFenster} />
+          ? <JahrBilanz
+              d={d} dVgl={jahrVglData ?? d}
+              vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0}
+              vjFenster={vjFenster} ojFenster={ojFenster}
+              istFenster={istFenster} kennzahlenFenster={kennzahlenFenster}
+            />
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
       }]),
       ...(park.istGeparkt('el:verlauf') ? [] : [{
@@ -314,7 +379,8 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       ...(d ? baueKomponentenBloecke(d, park, 'jahr') : []),
       ...(finanzBlock ? [finanzBlock] : []),
     ]
-  }, [jahr, jahrData, vorjahr, oeJahr, vjFenster, ojFenster, monatsZeilen, park,
+  }, [jahr, jahrData, jahrVglData, vorjahr, oeJahr, vjFenster, ojFenster, istFenster,
+      kennzahlenFenster, monatsZeilen, park,
       co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload])
 
   if (!anlageId) {
