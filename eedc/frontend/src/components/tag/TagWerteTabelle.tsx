@@ -17,6 +17,32 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100
 }
 
+/**
+ * Hausverbrauch einer Stunde = Gesamtverbrauch − Wärmepumpe − Wallbox − sonstige Senken.
+ *
+ * Eine **Differenz**: fehlt ihr Ausgangswert, ist sie nicht bestimmbar und die Zelle
+ * bleibt leer („—"), statt eine Zahl zu behaupten
+ * (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md` §3 — Differenz ⇒ unterdrücken).
+ *
+ * Das Backend liefert `verbrauch_kw` bewusst als `null`, solange die Bilanz
+ * PV/Einspeisung/Netzbezug nicht vollständig hat (`snapshot/aggregator.py`,
+ * `lts_aggregator.py`: „nur wenn pv und einsp und bez"). Der Client machte daraus per
+ * `?? 0` eine **0,00** — direkt neben der Spalte „Gesamtverbrauch", die denselben
+ * fehlenden Wert als „—" zeigt. Genau dieser Riss war der Befund (PN Rainer 89905).
+ *
+ * **Nicht** geprüft werden die Subtrahenden: ein `null` bei Wärmepumpe oder Wallbox
+ * heißt im heutigen Vertrag „Komponente nicht vorhanden" **oder** „Sensor hat nicht
+ * gemessen" — beides ist am Wert nicht zu unterscheiden. Wer das trennen will, braucht
+ * die Herkunfts-Angabe aus der Antwort (Paket B1/B2 des Konzepts).
+ */
+export function berechneHausverbrauch(s: StundenWert, extraVerbraucher: SerieInfo[]): number | null {
+  if (s.verbrauch_kw == null) return null
+  const vbrS = extraVerbraucher.reduce(
+    (a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0,
+  )
+  return round2(Math.max(0, s.verbrauch_kw - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrS))
+}
+
 type TdGroup = 'erzeugung' | 'netz' | 'verbrauch' | 'bilanz' | 'qualitaet'
 
 interface TdColDef {
@@ -74,10 +100,10 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
     const erzS = extraErzeuger.reduce((a, es) => a + Math.max(0, s.komponenten?.[es.key] ?? 0), 0)
     return round2((s.pv_kw ?? 0) + Math.max(0, s.batterie_kw ?? 0) + erzS)
   }, [extraErzeuger])
-  const calcHausverbrauch = useCallback((s: StundenWert): number => {
-    const vbrS = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s.komponenten?.[es.key] ?? 0)), 0)
-    return round2(Math.max(0, (s.verbrauch_kw ?? 0) - (s.waermepumpe_kw ?? 0) - (s.wallbox_kw ?? 0) - vbrS))
-  }, [extraVerbraucher])
+  const calcHausverbrauch = useCallback(
+    (s: StundenWert) => berechneHausverbrauch(s, extraVerbraucher),
+    [extraVerbraucher],
+  )
 
   // Sichtbare Spalten aus localStorage
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {

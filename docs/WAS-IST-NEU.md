@@ -39,6 +39,31 @@ ab, welcher fehlt — und eine Zahl, deren Fehlerrichtung niemand kennt, ist sch
 [Handbuch → Einstellungen §5.3 Daten-Checker](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker), welcher
 Zähler nicht zugeordnet ist.
 
+### Tag: die Stundentabelle schreibt keine 0,00 mehr, wo sie nichts weiß
+
+**Betrifft dich das?** Wenn in *Cockpit → Tag* einzelne Stunden Lücken haben — typischerweise
+nachts, wenn ein Zähler ausfällt, oder wenn du gar keinen vollständigen Zählersatz hast.
+
+In der Stundenwerte-Tabelle standen zwei benachbarte Spalten im Widerspruch: **Gesamtverbrauch**
+zeigte für eine unbekannte Stunde „—", **Hausverbrauch** dagegen **0,00 kW**. Aufgefallen ist es an
+einem Tag, an dem in den Stunden 0–7 die PV-Zeile leer war, Batterie und Netz aber weiter maßen —
+rund 0,28 kW flossen, angezeigt war 0,00.
+
+Der Hausverbrauch ist eine Differenz: *Gesamtverbrauch minus Wärmepumpe, Wallbox und weitere
+Verbraucher*. Kennt eedc den Gesamtverbrauch einer Stunde nicht, kennt es auch den Hausverbrauch
+nicht — dort steht jetzt **„—"**.
+
+- **Die Σ-Zeile (kWh/Tag) ändert sich nicht.** Die betroffenen Stunden trugen ohnehin 0,00 bei.
+- **Der CSV-Export trägt dieselben Zahlen** wie die Tabelle, an den betroffenen Stellen eine leere
+  Zelle.
+- **Eine gemessene 0 bleibt 0,00.** Eine Stunde, in der dein Haus nichts verbraucht hat, ist eine
+  Aussage — keine Lücke.
+
+**Wenn du keinen Gesamtverbrauch messen kannst**, ist die Spalte jetzt durchgehend leer statt
+durchgehend 0,00. Woran es liegt, sagt dir der
+[Daten-Checker](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker): für die Stunden-Bilanz braucht eedc
+PV, Einspeisung und Netzbezug.
+
 ### Klimaanlagen: keine Ersparnis mehr gegen eine Heizung, die es nie gab
 
 **Betrifft dich das?** Wenn du eine **Split-Klimaanlage** als Wärmepumpe mit der Art

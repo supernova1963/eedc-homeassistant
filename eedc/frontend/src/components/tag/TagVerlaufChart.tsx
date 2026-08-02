@@ -58,6 +58,15 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
       const ntz = (s?.netzbezug_kw ?? 0) - (s?.einspeisung_kw ?? 0)
       const vbrSons = extraVerbraucher.reduce((a, es) => a + Math.abs(Math.min(0, s?.komponenten?.[es.key] ?? 0)), 0)
       const erzSons = extraErzeuger.reduce((a, es) => a + Math.max(0, s?.komponenten?.[es.key] ?? 0), 0)
+      // `hausverbrauch` ist dieselbe Differenz wie in der Stundenwerte-Tabelle,
+      // hier aber bewusst **ohne** die Unterdrückungs-Regel aus §3 des Konzepts
+      // (`berechneHausverbrauch`): `Math.max(0, …)` klemmt den Ausdruck bei
+      // fehlendem `verbrauch_kw` algebraisch auf 0 (alle Subtrahenden ≥ 0), der
+      // Tooltip blendet Werte < 0,001 ohnehin aus — es entsteht also **keine**
+      // falsche Zahl, nur ein Strich auf der Nulllinie. Ein `null` an dieser
+      // Stelle ginge in eine **gestapelte** Fläche; dafür gibt es im Baum keine
+      // Präzedenz und jsdom kann es nicht nachweisen. Wer die Serie anfasst,
+      // zieht die Regel mit — s. `TagWerteTabelle.berechneHausverbrauch`.
       const punkt: Record<string, number | string> = {
         stunde:       `${h}:00`,
         pv:           s?.pv_kw ?? 0,
