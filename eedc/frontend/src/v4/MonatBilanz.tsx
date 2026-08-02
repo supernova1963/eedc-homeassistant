@@ -152,10 +152,20 @@ export function baueNetzKostenKpis(d: AktuellerMonatResponse): KpiStripItem[] {
       title: 'Ø-Preis Netz',
       value: fmtCalc(netzPreis, 1, '—'), unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
-      subtitle: `${fmt(d.netzbezug_kwh)} kWh · ${fmtCalc(d.netzbezug_kosten_euro, 2, '—')} €`,
+      // Die Unterzeile zeigt die ARBEITSPREIS-Kosten, nicht die Gesamtkosten:
+      // wer kWh und € nebeneinander sieht, dividiert — und muss dann oben
+      // herauskommen. Mit den Gesamtkosten (inkl. Grundpreis) ging das nie auf
+      // (559 kWh · 210,45 € ⇒ 37,6 ct statt 33 ct; Forum simon42 #89667,
+      // Algie). Der Tooltip allein reichte nicht: er wird erst nach dem
+      // Stolpern gelesen.
+      subtitle: `${fmt(d.netzbezug_kwh)} kWh · ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2, '—')} €`,
       formel: d.netzbezug_durchschnittspreis_cent != null
-        ? 'Ø-Bezugspreis (dynamischer Tarif, verbrauchsgewichtet) · Kosten inkl. Grundpreis'
-        : 'Arbeitspreis aus dem Strompreis-Tarif · Kosten inkl. Grundpreis',
+        ? 'Ø-Bezugspreis (dynamischer Tarif, verbrauchsgewichtet) · Kosten = Netzbezug × Ø-Preis, ohne Grundpreis'
+        : 'Arbeitspreis aus dem Strompreis-Tarif · Kosten = Netzbezug × Arbeitspreis, ohne Grundpreis',
+      berechnung: `${fmt(d.netzbezug_kwh)} kWh × ${fmtCalc(netzPreis, 1)} ct/kWh`,
+      ergebnis: (d.grundgebuehr_euro ?? 0) > 0
+        ? `= ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2)} € · + ${fmtCalc(d.grundgebuehr_euro, 2)} € Grundpreis = ${fmtCalc(d.netzbezug_kosten_euro, 2)} € gesamt`
+        : `= ${fmtCalc(d.netzbezug_arbeitspreis_kosten_euro, 2)} € Kosten`,
     })
   }
   return kpis

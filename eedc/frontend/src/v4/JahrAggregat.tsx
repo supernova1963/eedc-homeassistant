@@ -255,6 +255,11 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     einspeisung_neg_preis_kwh: summe(f('einspeisung_neg_preis_kwh')),
     nicht_vergueteter_erloes_euro: summe(f('nicht_vergueteter_erloes_euro')),
     netzbezug_kosten_euro: summe(f('netzbezug_kosten_euro')),
+    // Arbeitspreis-Anteil additiv summieren — NICHT als
+    // `netzbezug_kosten_euro − grundgebuehr_euro` nachbilden. Beides ergäbe
+    // hier dasselbe, aber die Ø-Preis-Kachel darf, wenn sie jemand in die
+    // Jahres-Sicht holt, keine zwölf Grundpreise im Divisor haben.
+    netzbezug_arbeitspreis_kosten_euro: summe(f('netzbezug_arbeitspreis_kosten_euro')),
     ev_ersparnis_euro: summe(f('ev_ersparnis_euro')),
     netto_ertrag_euro: summe(f('netto_ertrag_euro')),
     wp_ersparnis_euro: summe(f('wp_ersparnis_euro')),

@@ -161,6 +161,7 @@ Spez. Ertrag        = PV_Erzeugung / Leistung_kWp              (kWh/kWp, NUR PV;
 
 Einspeise-Erlös (EUR)    = (Einspeisung - Einspeisung_neg_Preis) * Einspeisevergütung / 100
 Netzbezug-Kosten (EUR)   = Netzbezug * Netzbezug_Preis / 100 + Grundpreis
+Arbeitspreis-Kosten (EUR)= Netzbezug * Netzbezug_Preis / 100            (ohne Grundpreis, reiner Ausweis)
 EV-Ersparnis (EUR)       = Eigenverbrauch * Netzbezug_Preis / 100
 Netto-Ertrag (EUR)       = Einspeise-Erlös + EV-Ersparnis
 CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Kasten)
@@ -173,6 +174,23 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 > (gemessen 2026-07-31: das Feld existiert im Client-Typ `MonatsKennzahlen`, es gibt
 > keinen Leser). Sie bewegt also keine angezeigte Zahl — sie steht hier, damit niemand
 > sie für die gültige Definition hält. Der Kanon ist **§3.8**.
+
+> **Zwei Kostenzahlen, eine Rechnung — `netzbezug_kosten_euro` vs.
+> `netzbezug_arbeitspreis_kosten_euro`:** verrechnet wird immer die **Gesamtsumme
+> inkl. Grundpreis**; sie ist das, was auf der Rechnung steht, und hängt an T-Konto,
+> Netto-Ertrag und den Finanz-Sichten. Daneben steht der reine **Arbeitspreis-Anteil** als
+> *Ausweis* — kein zweiter Kostenposten. Er gehört überall dorthin, wo eine Sicht kWh und €
+> so nebeneinander stellt, dass ein Leser sie dividiert: dann muss der Ø-Preis herauskommen.
+> Die Ø-Preis-Kachel in Cockpit → Monat tat das mit den Gesamtkosten nicht (559 kWh ·
+> 210,45 € ⇒ 37,6 ct statt 33 ct; Forum simon42 #89667). **Faustregel:** neben einem
+> **Preis** steht der Arbeitspreis-Anteil, in einer **Kostenaufstellung** die Gesamtsumme.
+>
+> **Welcher Preis gilt:** bei einem flexiblen Tarif der **verbrauchsgewichtete
+> Monatsdurchschnitt** (`Monatsdaten.netzbezug_durchschnittspreis_cent`), sonst der
+> Tarif-Arbeitspreis. Das gilt für Netzbezug-Kosten, EV-Ersparnis und — ohne eigenen
+> WP-Tarif — auch für die WP-Ersparnis. Bis v4.0.6 nahm der **laufende** Monat hier
+> den Tarifpreis, während Vorjahres-Vergleich und die per-Investition-Details schon den
+> Durchschnitt nahmen; derselbe Monat trug damit je nach Sicht zwei Beträge.
 
 **§51 EEG im Einspeise-Erlös:** `Einspeisung_neg_Preis` sind die kWh, die in Stunden
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
@@ -1620,7 +1638,7 @@ API: GET /api/cockpit/pv-strings/{anlage_id}?jahr=2025
 2. **0-Werte:** `if val:` wertet 0 als False aus → immer `if val is not None:` verwenden
 3. **Legacy-Felder:** `Monatsdaten.batterie_*` ist deprecated. `Monatsdaten.pv_erzeugung_kwh` ist es **nicht** — kein Schreibziel für neuen Code und nur als **Eingang von `resolve_pv_je_modul`** zu lesen (Anlagen-Aggregat, s. [Schicht 1](#schicht-1-rohdaten-eingabe)); Pro-Modul-Werte kommen aus `InvestitionMonatsdaten` (Typ: pv-module)
 4. **PVGIS E_m vs e_m:** Ältere Prognosen verwenden `E_m` (Großbuchstabe), neuere `e_m`
-5. **Grundpreis:** Wird zu den Netzbezugskosten addiert, NICHT vom Netto-Ertrag abgezogen
+5. **Grundpreis:** Wird zu den Netzbezugskosten addiert, NICHT vom Netto-Ertrag abgezogen. Er ist auch der Grund, warum „Kosten ÷ kWh" **nicht** den Ø-Preis ergibt — dafür gibt es `netzbezug_arbeitspreis_kosten_euro` (s. [§3.1](#31-energie-bilanz-monatskennzahlen))
 6. **Cockpit vs ROI-Dashboard:** Cockpit berechnet inline (vereinfacht), ROI-Dashboard nutzt `calculations.py` (detaillierter)
 
 ---

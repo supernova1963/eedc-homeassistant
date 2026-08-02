@@ -206,19 +206,74 @@ describe('baueNetzKostenKpis (via baueMonatKpis)', () => {
   it('Ø-Preis Netz bevorzugt den dynamischen Monats-Ø vor dem Tarif', () => {
     const k = baueMonatKpis(d({
       netzbezug_kwh: 1153,
-      netzbezug_kosten_euro: 266.12,
+      // 1153 × 26,1 ct = 300,93 € Arbeitspreis, + 25,98 € Grundpreis = 326,91 €
+      netzbezug_kosten_euro: 326.91,
+      netzbezug_arbeitspreis_kosten_euro: 300.93,
+      grundgebuehr_euro: 25.98,
       netzbezug_durchschnittspreis_cent: 26.1,
       netzbezug_preis_cent: 30,
     }), vm).find((x) => x.title === 'Ø-Preis Netz')!
     expect(k.unit).toBe('ct/kWh')
     expect(k.value).toBe('26,1')
-    expect(k.subtitle).toBe('1.153 kWh · 266,12 €')
+    // Unterzeile = Arbeitspreis-Anteil, nicht die Gesamtkosten.
+    expect(k.subtitle).toBe('1.153 kWh · 300,93 €')
   })
 
   it('Ø-Preis Netz fällt ohne dynamischen Ø auf den Tarif-Arbeitspreis zurück', () => {
     const k = baueMonatKpis(d({
-      netzbezug_kwh: 143, netzbezug_kosten_euro: 42.9, netzbezug_preis_cent: 30,
+      netzbezug_kwh: 143, netzbezug_kosten_euro: 42.9,
+      netzbezug_arbeitspreis_kosten_euro: 42.9, netzbezug_preis_cent: 30,
     }), vm).find((x) => x.title === 'Ø-Preis Netz')!
     expect(k.value).toBe('30,0')
+  })
+
+  // ── Der gemeldete Fall (Forum simon42 #89667, Algie) ──────────────────────
+
+  it('Ø-Preis Netz: kWh und € der Unterzeile ergeben den Kopfwert', () => {
+    // Algies Zahlen: 559 kWh, Kachel zeigt 33 ct, Gesamtkosten 210,45 €.
+    // Er hat 210,45 / 559 gerechnet und kam auf 37,6 ct — die Kachel stellte
+    // zwei Zahlen nebeneinander, die sich scheinbar ineinander umrechnen
+    // lassen. Der Tooltip „inkl. Grundpreis" wird erst nach dem Stolpern
+    // gelesen und ist deshalb keine Lösung.
+    const k = baueMonatKpis(d({
+      netzbezug_kwh: 559,
+      netzbezug_kosten_euro: 210.45,
+      netzbezug_arbeitspreis_kosten_euro: 184.47,
+      grundgebuehr_euro: 25.98,
+      netzbezug_preis_cent: 33,
+    }), vm).find((x) => x.title === 'Ø-Preis Netz')!
+
+    expect(k.value).toBe('33,0')
+    expect(k.subtitle).toBe('559 kWh · 184,47 €')
+
+    // Die Division, die der Melder gemacht hat — jetzt geht sie auf.
+    const [kwhTeil, euroTeil] = k.subtitle!.split(' · ')
+    const kwh = parseFloat(kwhTeil.replace(/\./g, '').replace(' kWh', ''))
+    const euro = parseFloat(euroTeil.replace(' €', '').replace(',', '.'))
+    expect((euro / kwh) * 100).toBeCloseTo(33.0, 1)
+    // Mit den alten Gesamtkosten wäre es weiterhin 37,6 ct gewesen.
+    expect((210.45 / 559) * 100).toBeCloseTo(37.6, 1)
+  })
+
+  it('Ø-Preis Netz weist den Grundpreis in der Herleitung aus, statt ihn zu verstecken', () => {
+    const k = baueMonatKpis(d({
+      netzbezug_kwh: 559, netzbezug_kosten_euro: 210.45,
+      netzbezug_arbeitspreis_kosten_euro: 184.47, grundgebuehr_euro: 25.98,
+      netzbezug_preis_cent: 33,
+    }), vm).find((x) => x.title === 'Ø-Preis Netz')!
+    expect(k.berechnung).toBe('559 kWh × 33,0 ct/kWh')
+    expect(k.ergebnis).toContain('25,98 € Grundpreis')
+    expect(k.ergebnis).toContain('210,45 € gesamt')
+    expect(k.formel).toContain('ohne Grundpreis')
+  })
+
+  it('ohne Grundpreis bleibt die Herleitung schlicht', () => {
+    const k = baueMonatKpis(d({
+      netzbezug_kwh: 143, netzbezug_kosten_euro: 42.9,
+      netzbezug_arbeitspreis_kosten_euro: 42.9, grundgebuehr_euro: 0,
+      netzbezug_preis_cent: 30,
+    }), vm).find((x) => x.title === 'Ø-Preis Netz')!
+    expect(k.ergebnis).toBe('= 42,90 € Kosten')
+    expect(k.ergebnis).not.toContain('Grundpreis')
   })
 })

@@ -235,6 +235,12 @@ class AktuellerMonatResponse(BaseModel):
     einspeisung_neg_preis_kwh: Optional[float] = None
     nicht_vergueteter_erloes_euro: Optional[float] = None
     netzbezug_kosten_euro: Optional[float] = None
+    # Arbeitspreis-Anteil der Netzbezugskosten OHNE Grundpreis
+    # (`netzbezug_kwh × Preis`). Reiner Ausweis für Sichten, die kWh und € so
+    # nebeneinander stellen, dass ein Leser sie dividiert — dort muss der
+    # Ø-Preis herauskommen. Kein zweiter Kostenposten; verrechnet wird
+    # weiterhin ausschließlich `netzbezug_kosten_euro`.
+    netzbezug_arbeitspreis_kosten_euro: Optional[float] = None
     ev_ersparnis_euro: Optional[float] = None
     netto_ertrag_euro: Optional[float] = None
     wp_ersparnis_euro: Optional[float] = None
@@ -740,8 +746,11 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             netz_preis = tarif_vj.netzbezug_arbeitspreis_cent_kwh or NETZBEZUG_DEFAULT_CENT
             einsp_preis = tarif_vj.einspeiseverguetung_cent_kwh or EINSPEISEVERGUETUNG_DEFAULT_CENT
             grundpreis = tarif_vj.grundpreis_euro_monat or 0
-            # Flexibler Tarif überschreibt wenn vorhanden
-            if result.get("netzbezug_durchschnittspreis_cent"):
+            # Flexibler Tarif überschreibt wenn vorhanden. `is not None` statt
+            # truthy: ein Monats-Ø von 0,0 ct ist bei dynamischem Tarif real
+            # (viele Negativpreis-Stunden) und wäre sonst still auf den
+            # Tarifpreis zurückgefallen.
+            if result.get("netzbezug_durchschnittspreis_cent") is not None:
                 netz_preis = result["netzbezug_durchschnittspreis_cent"]
             if einsp > 0:
                 # §51 EEG: Einspeisung in Negativpreis-Stunden ist seit
@@ -758,6 +767,11 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             if netz > 0:
                 result["netzbezug_kosten_euro"] = round(
                     berechne_netzbezug_kosten(netz, netz_preis, grundpreis), 2
+                )
+                # Arbeitspreis-Anteil ohne Grundpreis — symmetrisch zum
+                # laufenden Monat, damit die Jahres-Summe beide Felder findet.
+                result["netzbezug_arbeitspreis_kosten_euro"] = round(
+                    netz * netz_preis / 100, 2
                 )
             if ev > 0:
                 result["ev_ersparnis_euro"] = round(ev * netz_preis / 100, 2)
@@ -1284,12 +1298,33 @@ async def get_aktueller_monat(
     einspeisung_neg_preis = None
     nicht_vergueteter_erloes = None
     netzbezug_kosten = None
+    netzbezug_arbeitspreis_kosten = None
     ev_ersparnis = None
     netto_ertrag = None
     netzbezug_preis_cent = None
+    netzbezug_preis_effektiv_cent = None
     einspeise_cent = None
     grundgebuehr = None
     zaehlergebuehr_jahr = None
+
+    # Die Monatszeile trägt sowohl den flexiblen Durchschnittspreis als auch die
+    # Gas-/Kraftstoffpreise. Sie wird VOR dem Finanzblock geladen, weil der
+    # Durchschnittspreis in die Kosten eingeht (siehe unten) — vorher lag der
+    # Load hinter der Berechnung und stand erst zu spät zur Verfügung.
+    md_result = await db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr == jahr,
+            Monatsdaten.monat == monat,
+        )
+    )
+    md_for_gas = md_result.scalar_one_or_none()
+    monats_gaspreis = md_for_gas.gaspreis_cent_kwh if md_for_gas else None
+    monats_benzinpreis = md_for_gas.kraftstoffpreis_euro if md_for_gas else None
+    # Flexibler Tarif: Durchschnittspreis aus Monatsdaten lesen
+    netzbezug_durchschnittspreis = (
+        md_for_gas.netzbezug_durchschnittspreis_cent if md_for_gas else None
+    )
 
     # Tarif DES angezeigten Monats (ADR-002/P8) — der Endpoint bedient jeden
     # Monat über `jahr`/`monat`, nicht nur den laufenden. Mit dem heutigen Tarif
@@ -1307,8 +1342,26 @@ async def get_aktueller_monat(
     if allgemein_tarif:
         netzbezug_preis_cent = allgemein_tarif.netzbezug_arbeitspreis_cent_kwh if allgemein_tarif.netzbezug_arbeitspreis_cent_kwh is not None else NETZBEZUG_DEFAULT_CENT
         einspeise_cent = allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif.einspeiseverguetung_cent_kwh is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        # Flexibler Durchschnittspreis überschreibt Netzbezugspreis für Finanzberechnung
-        # (wird nach dem Monatsdaten-Laden gesetzt, hier Platzhalter für spätere Überschreibung)
+        # Der Preis, mit dem GELD gerechnet wird: bei flexiblem Tarif der
+        # verbrauchsgewichtete Monatsdurchschnitt, sonst der Tarif-Arbeitspreis.
+        # `netzbezug_preis_cent` bleibt daneben der ausgelieferte Tarif-Wert
+        # (Response-Feld „Verwendeter Tarif") und wird NICHT überschrieben.
+        #
+        # Bis v4.0.6 versprach hier nur ein Kommentar die Überschreibung — gebaut
+        # war sie nie: Netzbezugskosten, EV-Ersparnis und der WP-Fallback des
+        # laufenden Monats rechneten mit dem Tarifpreis, während der Vorjahres-
+        # Pfad (`_load_vorjahr`) und die per-Investition-Details längst den
+        # Durchschnitt nahmen. Derselbe Monat trug damit je nach Sicht zwei
+        # Beträge, und in Cockpit → Monat passte die Ø-Preis-Kachel nicht zu
+        # ihrer eigenen Kostenzeile (Forum simon42 #89667, Algie).
+        #
+        # Aufgelöst über den SoT-Helper, NICHT über `durchschnitt or tarif`:
+        # ein Monats-Ø von **0,0 ct** ist bei dynamischem Tarif real (viele
+        # Negativpreis-Stunden) und wäre als falsy stillschweigend auf den
+        # Tarifpreis zurückgefallen — die 0-Werte-Falle.
+        netzbezug_preis_effektiv_cent = resolve_netzbezug_preis_cent(
+            md_for_gas, netzbezug_preis_cent
+        )
 
         if einspeisung is not None:
             # §51 EEG: siehe `_load_vorjahr` für Begründung.
@@ -1327,13 +1380,23 @@ async def get_aktueller_monat(
         if netzbezug is not None:
             grundpreis = allgemein_tarif.grundpreis_euro_monat or 0
             netzbezug_kosten = round(
-                berechne_netzbezug_kosten(netzbezug, netzbezug_preis_cent, grundpreis), 2
+                berechne_netzbezug_kosten(
+                    netzbezug, netzbezug_preis_effektiv_cent, grundpreis
+                ), 2
+            )
+            # Der reine Arbeitspreis-Anteil OHNE Grundpreis. Reiner Ausweis für
+            # die Ø-Preis-Kachel: dort stehen kWh und € nebeneinander, und wer
+            # sie dividiert, muss auf die Kopfzahl kommen. Mit den Gesamtkosten
+            # ging das nie auf (559 kWh · 210,45 € ⇒ 37,6 ct statt 33 ct —
+            # Forum simon42 #89667, Algie). Kein zweiter Kostenposten.
+            netzbezug_arbeitspreis_kosten = round(
+                netzbezug * netzbezug_preis_effektiv_cent / 100, 2
             )
             # G19-1 K3 (R19-3): Grundgebühr separat ausweisen — steckt bereits
             # in netzbezug_kosten (kein zweiter Posten, nur Annotation).
             grundgebuehr = round(grundpreis, 2)
         if eigenverbrauch is not None:
-            ev_ersparnis = round(eigenverbrauch * netzbezug_preis_cent / 100, 2)
+            ev_ersparnis = round(eigenverbrauch * netzbezug_preis_effektiv_cent / 100, 2)
 
         if einspeise_erloes is not None and ev_ersparnis is not None:
             netto_ertrag = round(einspeise_erloes + ev_ersparnis, 2)
@@ -1342,19 +1405,9 @@ async def get_aktueller_monat(
     wp_ersparnis = None
     emob_ersparnis = None
 
-    # Monats-Gaspreis (für WP-Ersparnis hier + Per-Investition-Block unten).
-    # Drift-Audit Domäne A1 / Issue #178: ohne diesen Override fiel der Code
-    # auf hartcodierte 10ct zurück.
-    md_result = await db.execute(
-        select(Monatsdaten).where(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == jahr,
-            Monatsdaten.monat == monat,
-        )
-    )
-    md_for_gas = md_result.scalar_one_or_none()
-    monats_gaspreis = md_for_gas.gaspreis_cent_kwh if md_for_gas else None
-    monats_benzinpreis = md_for_gas.kraftstoffpreis_euro if md_for_gas else None
+    # Monats-Gaspreis (für WP-Ersparnis hier + Per-Investition-Block unten) wird
+    # oben mit der Monatszeile geladen. Drift-Audit Domäne A1 / Issue #178: ohne
+    # diesen Override fiel der Code auf hartcodierte 10ct zurück.
 
     wp_waerme = get_val("wp_waerme_kwh")
     wp_strom = get_val("wp_strom_kwh")
@@ -1363,7 +1416,10 @@ async def get_aktueller_monat(
         wp_preis_cent = (
             wp_tarif.netzbezug_arbeitspreis_cent_kwh
             if wp_tarif and wp_tarif.netzbezug_arbeitspreis_cent_kwh is not None
-            else netzbezug_preis_cent
+            # Ohne eigenen WP-Tarif gilt der allgemeine Bezugspreis — bei
+            # flexiblem Tarif also der Monatsdurchschnitt, wie im
+            # per-Investition-Block (`wp_p`) schon immer.
+            else netzbezug_preis_effektiv_cent
         )
         wp_invs = [i for i in investitionen if i.typ == "waermepumpe"]
         wp_ref_parameter = wp_invs[0].parameter if wp_invs else None
@@ -1713,18 +1769,8 @@ async def get_aktueller_monat(
                         erzeugung_kwh=_v(g["erz"]), eigenverbrauch_kwh=_v(g["eig"]), einspeisung_kwh=_v(g["ein"]),
                     ))
 
-    # Flexibler Tarif: Durchschnittspreis aus Monatsdaten lesen
-    netzbezug_durchschnittspreis = None
-    md_flex_result = await db.execute(
-        select(Monatsdaten).where(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == jahr,
-            Monatsdaten.monat == monat,
-        )
-    )
-    md_flex = md_flex_result.scalar_one_or_none()
-    if md_flex and md_flex.netzbezug_durchschnittspreis_cent is not None:
-        netzbezug_durchschnittspreis = md_flex.netzbezug_durchschnittspreis_cent
+    # (`netzbezug_durchschnittspreis` wird oben mit der Monatszeile geladen —
+    #  er geht in die Netzbezugskosten ein und muss dort schon vorliegen.)
 
     # R15-1 (Rainer-Kostenkacheln): Kosten der Speicher-Netzladung.
     # Preis-Kette TEP-effektiv → IMD-Ø (Handeingabe) → Bezugspreis
@@ -1733,7 +1779,7 @@ async def get_aktueller_monat(
         speicher_ladung_netz,
         eff_ladepreis_cent=speicher_eff_ladepreis,
         imd_preis_cent=speicher_imd_ladepreis,
-        netzbezug_preis_cent=netzbezug_durchschnittspreis or netzbezug_preis_cent,
+        netzbezug_preis_cent=netzbezug_preis_effektiv_cent,
     )
 
     # ── Komponenten-Flags ──
@@ -1857,9 +1903,7 @@ async def get_aktueller_monat(
     # ── Per-Investition Finanzdetails (T-Konto) ──
     investitionen_financials: list[InvestitionFinancialDetail] = []
     if investitionen and allgemein_tarif:
-        netz_p = netzbezug_preis_cent or NETZBEZUG_DEFAULT_CENT
-        if netzbezug_durchschnittspreis:
-            netz_p = netzbezug_durchschnittspreis
+        netz_p = netzbezug_preis_effektiv_cent or NETZBEZUG_DEFAULT_CENT
         einsp_p = einspeise_cent or EINSPEISEVERGUETUNG_DEFAULT_CENT
         wp_tarif_obj = tarife.get("waermepumpe")
         wp_p = (wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh
@@ -2032,6 +2076,7 @@ async def get_aktueller_monat(
         einspeisung_neg_preis_kwh=einspeisung_neg_preis,
         nicht_vergueteter_erloes_euro=nicht_vergueteter_erloes,
         netzbezug_kosten_euro=netzbezug_kosten,
+        netzbezug_arbeitspreis_kosten_euro=netzbezug_arbeitspreis_kosten,
         ev_ersparnis_euro=ev_ersparnis,
         netto_ertrag_euro=netto_ertrag,
         wp_ersparnis_euro=wp_ersparnis,

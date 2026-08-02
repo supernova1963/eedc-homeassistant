@@ -134,6 +134,11 @@ export interface AktuellerMonatResponse {
   einspeisung_neg_preis_kwh: number | null
   nicht_vergueteter_erloes_euro: number | null
   netzbezug_kosten_euro: number | null
+  // Arbeitspreis-Anteil OHNE Grundpreis (kWh × Ø-Preis). Wo kWh und € so
+  // nebeneinander stehen, dass ein Leser sie dividiert, gehört DIESES Feld
+  // hin — mit den Gesamtkosten kommt nie der Ø-Preis heraus. Kein zweiter
+  // Posten: verrechnet wird weiter netzbezug_kosten_euro.
+  netzbezug_arbeitspreis_kosten_euro: number | null
   ev_ersparnis_euro: number | null
   netto_ertrag_euro: number | null
   wp_ersparnis_euro: number | null
@@ -178,6 +183,7 @@ export interface AktuellerMonatResponse {
     speicher_entladung_kwh?: number
     einspeise_erloes_euro?: number
     netzbezug_kosten_euro?: number
+    netzbezug_arbeitspreis_kosten_euro?: number
     ev_ersparnis_euro?: number
     gesamtnettoertrag_euro?: number
     netzbezug_durchschnittspreis_cent?: number

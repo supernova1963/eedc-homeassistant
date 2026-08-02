@@ -92,6 +92,38 @@ Sprache.
 **Was du tun musst: nichts.** → [Handbuch → Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
 *(gemeldet von dietmar1968)*
 
+### Die Kachel „Ø-Preis Netz" geht jetzt auf
+
+**Betrifft dich das?** Wenn du in **Cockpit → Monat** auf die Kachel **Ø-Preis Netz** schaust — vor
+allem, wenn dein Tarif einen **Grundpreis** hat.
+
+Unter dem Ø-Preis standen bisher die **Gesamtkosten inklusive Grundpreis**. Wer die beiden Zahlen
+der Unterzeile durcheinander teilte — und das ist die naheliegendste Probe der Welt —, landete
+zwangsläufig daneben: **559 kWh · 210,45 € ergaben 37,6 ct**, während oben 33 ct stand. Der Hinweis
+„Kosten inkl. Grundpreis" stand zwar im Tipp-Text, wird aber erst gelesen, wenn man schon
+gestolpert ist.
+
+Was du jetzt siehst:
+
+- **Die Unterzeile zeigt die Arbeitspreis-Kosten** (`Netzbezug × Ø-Preis`), im Beispiel also
+  184,47 € statt 210,45 €. Teilst du sie durch die kWh, kommen die 33 ct heraus.
+- **Der Grundpreis ist nicht verschwunden**, sondern steht in der Herleitung der Kachel
+  (Hover/Tipp): „= 184,47 € · + 25,98 € Grundpreis = 210,45 € gesamt".
+- **Die Stromrechnung bleibt vollständig** — im Finanzen-Block darunter stehen weiterhin die
+  gesamten Netzbezug-Kosten. Es kommt kein Posten weg, er steht nur nicht mehr dort, wo er zur
+  falschen Division einlädt.
+
+**Dazu ein Rechenfehler, der beim Nachprüfen auffiel:** Wer einen **flexiblen Tarif** fährt
+(Tibber, aWATTar, EPEX), bekam im **laufenden** Monat Kosten und Eigenverbrauchs-Ersparnis mit dem
+**festen Arbeitspreis** des Tarifs berechnet statt mit dem tatsächlichen Monatsdurchschnitt — der
+Vorjahres-Vergleich und die Detailzeilen je Komponente rechneten längst richtig. Derselbe Monat
+trug damit je nach Sicht zwei verschiedene Beträge. **Ab jetzt gilt überall der
+verbrauchsgewichtete Monatsdurchschnitt.** Betroffene Monate ändern ihre Euro-Beträge sichtbar —
+sie waren vorher falsch.
+
+**Was du tun musst: nichts.** → [Handbuch → Cockpit/Monat](HANDBUCH_BEDIENUNG.md#23-monat)
+*(gemeldet von Algie im simon42-Forum)*
+
 ---
 
 ## v4.0.6 — Vergleichbares vergleichen, Gemessenes behalten (August 2026)
