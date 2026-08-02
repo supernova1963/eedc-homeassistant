@@ -470,7 +470,7 @@ class DatenquelleChecks:
         from backend.services.ha_statistics_service import get_ha_statistics_service
         from backend.services.snapshot.lts_aggregator import get_komponenten_tageskwh_lts
         from backend.services.snapshot.komponenten_beitraege import (
-            basis_beitraege, investition_beitraege,
+            erwartete_komponenten_keys, komponenten_key_label,
         )
         from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
         from backend.models.tages_energie_profil import TagesZusammenfassung
@@ -488,21 +488,6 @@ class DatenquelleChecks:
             select(_Inv).where(_Inv.anlage_id == anlage.id)
         )
         invs_by_id = {str(inv.id): inv for inv in inv_result.scalars().all()}
-
-        # Welche Keys verspricht die Zuordnung? Dieselbe Normalisierung, die
-        # auch der Aggregator benutzt — keine zweite Feld-Liste daneben.
-        erwartete_keys: set[str] = {b.target_key for b in basis_beitraege(sensor_mapping)}
-        for inv_id_str, inv_data in (sensor_mapping.get("investitionen") or {}).items():
-            if not isinstance(inv_data, dict):
-                continue
-            inv = invs_by_id.get(str(inv_id_str))
-            if inv is None:
-                continue
-            erwartete_keys |= {b.target_key for b in investition_beitraege(inv, inv_data)}
-        # Speicher-Netto raus (darf legitim ~0 sein, eigener Check).
-        erwartete_keys = {k for k in erwartete_keys if not k.startswith("batterie_")}
-        if not erwartete_keys:
-            return []  # Kein kWh-Zähler zugeordnet → nichts zu versprechen
 
         bis = date.today() - _td(days=1)  # heute ist unvollständig
         von = bis - _td(days=89)
@@ -523,11 +508,39 @@ class DatenquelleChecks:
         )
         tz_by_datum = {tz.datum: tz for tz in tz_result.scalars().all()}
 
+        def _erwartet_am_tag(tag: date) -> set[str]:
+            """Welche Keys verspricht die Zuordnung für GENAU diesen Tag?
+
+            Dieselbe Normalisierung, die auch der Aggregator benutzt — keine
+            zweite Feld-Liste daneben. **Pro Tag**, weil `aggregate_day` seine
+            Investitionen per `aktiv_am_tag(datum)` lädt: für eine an diesem
+            Tag noch nicht angeschaffte, bereits stillgelegte oder auf
+            `aktiv=False` gesetzte Komponente schreibt der Lauf nichts. Bis
+            v4.0.6 stand die Menge einmal für alle 90 Tage — der Check meldete
+            solche Tage als Lücke und bot „Tag reparieren" an, der Lauf
+            antwortete HTTP 200 und schrieb nichts, die Meldung blieb stehen
+            (N-57, dietmar1968, Forum simon42 #89667/83).
+
+            Speicher-Netto (`batterie_*`) bleibt draußen: darf legitim ~0 sein
+            und hat mit `_check_batterie_vorzeichen_historie` seinen eigenen
+            Punkt.
+            """
+            return {
+                k for k in erwartete_komponenten_keys(sensor_mapping, invs_by_id, tag)
+                if not k.startswith("batterie_")
+            }
+
         # Vorfilter aus der DB — teuer ist nur der LTS-Read. Eine gesunde
         # Anlage kommt so ganz ohne HA-Abfrage aus.
         kandidaten: list[tuple[date, set[str]]] = []
-        d = bis
-        while d >= von:
+        etwas_versprochen = False
+        for d in (bis - _td(days=i) for i in range((bis - von).days + 1)):
+            erwartete_keys = _erwartet_am_tag(d)
+            if not erwartete_keys:
+                # An diesem Tag war keine zugeordnete Komponente aktiv → nichts
+                # versprochen, also auch keine Lücke.
+                continue
+            etwas_versprochen = True
             tz = tz_by_datum.get(d)
             if tz is None:
                 # Zeile fehlt ganz → auch PV zählt, der Drift-Check sieht sie nicht.
@@ -547,7 +560,12 @@ class DatenquelleChecks:
             }
             if leer:
                 kandidaten.append((d, leer))
-            d -= _td(days=1)
+
+        if not etwas_versprochen:
+            # Kein kWh-Zähler zugeordnet — oder keine zugeordnete Komponente war
+            # im Fenster überhaupt aktiv. Beides verspricht nichts, also gibt es
+            # auch nichts zu bestätigen.
+            return []
 
         if not kandidaten:
             return [CheckErgebnis(
@@ -636,13 +654,10 @@ class DatenquelleChecks:
         rest_aelter = sum(1 for dt, _ in befunde if dt < range_von)
 
         def _key_label(key: str) -> str:
-            if key in ("einspeisung", "netzbezug"):
-                return key.capitalize()
-            praefix, _, inv_id = key.rpartition("_")
-            inv = invs_by_id.get(inv_id)
-            if inv is not None and getattr(inv, "bezeichnung", None):
-                return inv.bezeichnung
-            return praefix or key
+            # Geteilt mit der Reparatur-Rückmeldung (N-58) — dieselbe Komponente
+            # darf nicht in zwei Sichten verschieden heißen.
+            _praefix, _, inv_id = key.rpartition("_")
+            return komponenten_key_label(key, invs_by_id.get(inv_id))
 
         betroffene_keys = sorted({k for _dt, f in befunde for k in f})
         keys_text = ", ".join(_key_label(k) for k in betroffene_keys)

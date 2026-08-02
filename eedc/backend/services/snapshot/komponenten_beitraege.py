@@ -19,7 +19,8 @@ Wahrheit.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Iterable, Optional
+from datetime import date
+from typing import Any, Callable, Iterable, Optional
 
 from backend.services.snapshot.keys import _categorize_counter
 
@@ -210,6 +211,69 @@ def investition_beitraege(
         _add(secondary, fallback_gruppe=gruppe)
 
     return beitraege
+
+
+# ── Was die Zuordnung für EINEN Tag verspricht (N-57) ───────────────────────
+
+
+def erwartete_komponenten_keys(
+    sensor_mapping: dict,
+    investitionen_by_id: dict,
+    tag: date,
+) -> dict[str, Any]:
+    """`{target_key: Investition | None}` — was die Zuordnung für **diesen Tag**
+    verspricht. Basis-Zähler (Einspeisung/Netzbezug) tragen `None`.
+
+    **Tagesabhängig, und das ist der Punkt:** `energie_profil.aggregator.
+    aggregate_day` lädt seine Investitionen mit `aktiv_am_tag(datum)`. Eine
+    Komponente, die an diesem Tag noch nicht angeschafft, bereits stillgelegt
+    oder auf `aktiv=False` gesetzt war, bekommt vom Lauf nichts geschrieben —
+    also darf ihr Key für diesen Tag auch nichts versprechen. Wer die Menge
+    einmal für ein ganzes Fenster baut, meldet für solche Tage eine Lücke und
+    bietet eine Reparatur an, die der Lauf nicht einlösen kann (N-57,
+    dietmar1968, Forum simon42 #89667/83).
+
+    Der Filter ist `Investition.ist_aktiv_an(tag)` — die In-Memory-Zwillings-
+    Definition von `utils.investition_filter.aktiv_am_tag` (dort im Docstring
+    als identisch festgehalten), weil die Investitionen hier bereits geladen
+    sind und keine zweite Query brauchen.
+
+    Zwei Konsumenten, damit Versprechen und Rückmeldung dieselbe Menge
+    benutzen: der Daten-Checker (`daten_checker.datenquelle.
+    _check_leere_tage_trotz_zaehler`) und die Tages-Reparatur
+    (`repair_orchestrator._execute_reaggregate_day`, N-58).
+    """
+    erwartet: dict[str, Any] = {
+        b.target_key: None for b in basis_beitraege(sensor_mapping)
+    }
+    investitionen = (sensor_mapping or {}).get("investitionen") or {}
+    for inv_id_str, inv_data in investitionen.items():
+        if not isinstance(inv_data, dict):
+            continue
+        inv = investitionen_by_id.get(str(inv_id_str))
+        if inv is None:
+            continue
+        if not inv.ist_aktiv_an(tag):
+            continue
+        for b in investition_beitraege(inv, inv_data):
+            erwartet[b.target_key] = inv
+    return erwartet
+
+
+def komponenten_key_label(key: str, inv: Any = None) -> str:
+    """Anwender-Name eines Komponenten-Keys (`pv_7` → „Dach Süd").
+
+    Geteilt von Daten-Checker-Meldung und Reparatur-Rückmeldung — ein Anwender
+    darf dieselbe Komponente nicht in zwei Sichten verschieden heißen sehen.
+    Ohne Bezeichnung bleibt der Präfix (`waermepumpe_7` → „waermepumpe").
+    """
+    if key in ("einspeisung", "netzbezug"):
+        return key.capitalize()
+    bezeichnung = getattr(inv, "bezeichnung", None) if inv is not None else None
+    if bezeichnung:
+        return bezeichnung
+    praefix, _, _rest = key.rpartition("_")
+    return praefix or key
 
 
 # ── Hourly-Normalisierung (Phase C v3.35.0, Issue #298) ─────────────────────

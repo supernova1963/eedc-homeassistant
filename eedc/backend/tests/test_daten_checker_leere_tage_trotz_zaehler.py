@@ -23,6 +23,15 @@ Testet:
  10. Standalone: MQTT-Energie ersetzt die W-Zuordnung → Knopf wieder da
  11. Abfrage-Budget (45 LTS-Reads/Lauf) wird gedeckelt UND benannt
  12. Vor Inbetriebnahme wird nicht gemeldet
+
+N-57 (Forum simon42 #89667/83, dietmar1968) — der Check darf nur anbieten, was
+`aggregate_day` einlösen kann. Der Lauf lädt seine Investitionen mit
+`aktiv_am_tag(datum)`; die erwartete Schlüsselmenge ist deshalb **tagesabhängig**:
+
+ 13. `aktiv=False` → nicht gemeldet, aktive Nachbar-Komponente aber schon
+ 14. Anschaffungsdatum mitten im Fenster → davor still, danach gemeldet
+ 15. Stilllegung mitten im Fenster → spiegelbildlich, Stilllegungstag inklusiv
+ 16. dietmars Konstellation (inaktiv UND Anschaffung in der Zukunft) → kein Knopf
 """
 
 from __future__ import annotations
@@ -38,6 +47,7 @@ from unittest.mock import patch, MagicMock
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_BACKEND_ROOT))
 
+from backend.models.investition import Investition  # noqa: E402
 from backend.services.daten_checker import DatenChecker, CheckKategorie  # noqa: E402
 
 _KAT = CheckKategorie.TAGESWERTE_FEHLEN.value
@@ -45,7 +55,8 @@ _KAT = CheckKategorie.TAGESWERTE_FEHLEN.value
 _SENSOR = {"strategie": "sensor", "sensor_id": "sensor.x"}
 
 
-def _make_anlage(*, mit_pv=True, installationsdatum=None, mit_live=True):
+def _make_anlage(*, mit_pv=True, installationsdatum=None, mit_live=True,
+                 wp_ids=()):
     mapping = {
         "basis": {"einspeisung": dict(_SENSOR), "netzbezug": dict(_SENSOR)},
     }
@@ -53,10 +64,16 @@ def _make_anlage(*, mit_pv=True, installationsdatum=None, mit_live=True):
         # Ohne Leistungs-Zuordnung kann `aggregate_day` nichts holen — der Check
         # bietet dann bewusst keinen Knopf an (E2E 2026-07-30).
         mapping["basis"]["live"] = {"einspeisung_w": "sensor.netz_w"}
+    investitionen = {}
     if mit_pv:
-        mapping["investitionen"] = {
-            "7": {"felder": {"pv_erzeugung_kwh": dict(_SENSOR)}},
-        }
+        investitionen["7"] = {"felder": {"pv_erzeugung_kwh": dict(_SENSOR)}}
+    for wp_id in wp_ids:
+        # Wärmepumpe statt PV, wo der Lebensdauer-Filter geprüft wird: PV-Keys
+        # gehören auf einer VORHANDENEN Tageszeile dem Drift-Check (kein zweiter
+        # Turm) und würden den Befund aus einem anderen Grund verschlucken.
+        investitionen[str(wp_id)] = {"felder": {"stromverbrauch_kwh": dict(_SENSOR)}}
+    if investitionen:
+        mapping["investitionen"] = investitionen
     return SimpleNamespace(
         id=1,
         sensor_mapping=mapping,
@@ -68,10 +85,18 @@ def _make_anlage_ohne_zaehler():
     return SimpleNamespace(id=1, sensor_mapping={}, installationsdatum=None)
 
 
-def _make_inv(inv_id=7, typ="pv-module"):
-    return SimpleNamespace(
+def _make_inv(inv_id=7, typ="pv-module", bezeichnung="Dach Süd",
+              aktiv=True, anschaffungsdatum=None, stilllegungsdatum=None):
+    """Echtes Model-Objekt (nicht persistiert) — der Check ruft `ist_aktiv_an`.
+
+    Ein Double mit eigener Aktiv-Logik wäre genau die zweite Definition, gegen
+    die N-57 antritt.
+    """
+    return Investition(
         id=inv_id, anlage_id=1, typ=typ, parameter={},
-        bezeichnung="Dach Süd", parent_investition_id=None,
+        bezeichnung=bezeichnung, parent_investition_id=None,
+        aktiv=aktiv, anschaffungsdatum=anschaffungsdatum,
+        stilllegungsdatum=stilllegungsdatum,
     )
 
 
@@ -360,6 +385,117 @@ async def test_vor_inbetriebnahme_nicht_gemeldet():
     assert len(day_eintraege) == 2, f"Erwartet 2 Einzeltage, bekommen {len(day_eintraege)}"
 
 
+# ── N-57: die erwartete Schlüsselmenge ist tagesabhängig ────────────────────
+#
+# `aggregate_day` lädt seine Investitionen per `aktiv_am_tag(datum)`. Wo der
+# Check das nicht spiegelt, meldet er eine Lücke und bietet „Tag reparieren"
+# an — der Lauf schreibt für die Komponente nichts, antwortet HTTP 200, die
+# Meldung bleibt stehen. Ein `select`-Filter reicht dafür nicht: die Menge wird
+# einmal fürs ganze Fenster gebaut, die Aktivität ist aber pro Tag verschieden.
+
+_BASIS_VOLL = {"einspeisung": 20.0, "netzbezug": 2.0}
+
+
+def _zeilen_mit_wp(wp_keys: dict, tage: int = 90) -> list:
+    """90 Tageszeilen: Basis gefüllt, die WP-Keys auf 0 (= Verdachtsfall)."""
+    return [
+        _make_tz(date.today() - timedelta(days=i), {**_BASIS_VOLL, **wp_keys})
+        for i in range(1, tage + 1)
+    ]
+
+
+async def test_inaktive_komponente_wird_nicht_gemeldet():
+    """`aktiv=False` verspricht nichts — die aktive Nachbarin aber schon.
+
+    Die zweite Hälfte ist die wichtigere: ein Fix, der einfach alles verstummen
+    lässt, ist ein Blindmacher, kein Fix.
+    """
+    anlage = _make_anlage(mit_pv=False, wp_ids=(8, 9))
+    invs = [
+        _make_inv(8, typ="waermepumpe", bezeichnung="WP alt", aktiv=False),
+        _make_inv(9, typ="waermepumpe", bezeichnung="WP neu"),
+    ]
+    tz_list = _zeilen_mit_wp({"waermepumpe_8": 0.0, "waermepumpe_9": 0.0})
+    ha_func = lambda d: {"waermepumpe_8": 6.0, "waermepumpe_9": 4.0}
+    result, reads = await _run_check(anlage, tz_list, invs, ha_func)
+
+    summe = [r for r in result if r.action_kind == "reaggregate_range"]
+    assert len(summe) == 1, f"Die aktive WP muss weiter gemeldet werden: {result}"
+    assert "WP neu" in summe[0].details, summe[0].details
+    assert "WP alt" not in summe[0].details, \
+        f"Die inaktive WP darf nicht auftauchen: {summe[0].details}"
+    day_eintraege = [r for r in result if r.action_kind == "reaggregate_day"]
+    assert all("WP alt" not in d.meldung for d in day_eintraege), \
+        [d.meldung for d in day_eintraege]
+    assert reads == 45, f"Verdachtstage bleiben (aktive WP), waren {reads}"
+
+
+async def test_anschaffung_mitten_im_fenster():
+    """Tage vor der Anschaffung sind still, Tage danach werden gemeldet.
+
+    Genau der Test, den ein Filter am `select` NICHT bestehen würde: dort wäre
+    die Komponente entweder für alle 90 Tage erwartet oder für keinen.
+    """
+    today = date.today()
+    anschaffung = today - timedelta(days=5)
+    anlage = _make_anlage(mit_pv=False, wp_ids=(8,))
+    invs = [_make_inv(8, typ="waermepumpe", bezeichnung="WP",
+                      anschaffungsdatum=anschaffung)]
+    tz_list = _zeilen_mit_wp({"waermepumpe_8": 0.0})
+    ha_func = lambda d: {"waermepumpe_8": 6.0}
+    result, reads = await _run_check(anlage, tz_list, invs, ha_func)
+
+    assert reads == 5, f"Nur die 5 Tage ab Anschaffung dürfen HA kosten, waren {reads}"
+    tage = {r.action_params["datum"] for r in result
+            if r.action_kind == "reaggregate_day"}
+    erwartet = {(today - timedelta(days=i)).isoformat() for i in range(1, 6)}
+    assert tage == erwartet, f"Gemeldete Tage: {sorted(tage)}"
+
+
+async def test_stilllegung_mitten_im_fenster_inklusiv():
+    """Spiegelbild — und der Stilllegungstag selbst zählt noch (ist_aktiv_an)."""
+    today = date.today()
+    anlage = _make_anlage(mit_pv=False, wp_ids=(8,))
+    invs = [_make_inv(
+        8, typ="waermepumpe", bezeichnung="WP",
+        anschaffungsdatum=today - timedelta(days=8),
+        stilllegungsdatum=today - timedelta(days=5),
+    )]
+    tz_list = _zeilen_mit_wp({"waermepumpe_8": 0.0})
+    ha_func = lambda d: {"waermepumpe_8": 6.0}
+    result, reads = await _run_check(anlage, tz_list, invs, ha_func)
+
+    assert reads == 4, f"Erwartet 4 aktive Tage (8…5 zurück), waren {reads}"
+    tage = {r.action_params["datum"] for r in result
+            if r.action_kind == "reaggregate_day"}
+    assert (today - timedelta(days=5)).isoformat() in tage, \
+        f"Stilllegungstag ist inklusiv: {sorted(tage)}"
+    assert (today - timedelta(days=4)).isoformat() not in tage, \
+        f"Tag nach der Stilllegung darf nicht gemeldet werden: {sorted(tage)}"
+
+
+async def test_dietmars_konstellation_kein_knopf():
+    """Inaktiv UND Anschaffungsdatum in der Zukunft — zwei Gründe gleichzeitig.
+
+    Gemeldet war 16.06.–30.07. für eine Klimaanlage, die eedc für diese Tage
+    gar nicht rechnen darf. Erwartung: keine Meldung, kein Knopf — und trotzdem
+    die ehrliche OK-Zeile, weil die Basiszähler ja Werte tragen.
+    """
+    today = date.today()
+    anlage = _make_anlage(mit_pv=False, wp_ids=(8,))
+    invs = [_make_inv(
+        8, typ="waermepumpe", bezeichnung="Klimaanlage",
+        aktiv=False, anschaffungsdatum=today + timedelta(days=1),
+    )]
+    tz_list = _zeilen_mit_wp({"waermepumpe_8": 0.0})
+    ha_func = lambda d: {"waermepumpe_8": 6.0}
+    result, reads = await _run_check(anlage, tz_list, invs, ha_func)
+
+    assert reads == 0, f"Nichts versprochen → nichts abzufragen, waren {reads}"
+    assert not any(r.action_kind for r in result), f"Kein Knopf erwartet: {result}"
+    assert len(result) == 1 and result[0].schwere == "ok", result
+
+
 _TESTS = [
     test_basis_zaehler_leer_wird_gemeldet,
     test_fehlende_tageszeile_wird_gemeldet,
@@ -373,6 +509,10 @@ _TESTS = [
     test_standalone_mqtt_energie_erlaubt_die_reparatur,
     test_lts_read_cap_wird_benannt,
     test_vor_inbetriebnahme_nicht_gemeldet,
+    test_inaktive_komponente_wird_nicht_gemeldet,
+    test_anschaffung_mitten_im_fenster,
+    test_stilllegung_mitten_im_fenster_inklusiv,
+    test_dietmars_konstellation_kein_knopf,
 ]
 
 
