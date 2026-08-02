@@ -12,6 +12,12 @@
  * identisch zum Monat (gleiche Bauer-Bildsprache). Vergleichs-Chips (Delta/
  * VglChip) aus `MonatBilanz` wiederverwendet (eine SoT-Komponente). Vorjahr/
  * Ø-Jahr = Σ der aggregierten Monatszeilen je Jahr (`jahrVergleichAus`).
+ *
+ * Vergleichs-Fenster (Fund N-37): Vorjahr und Ø-Jahr sind auf die Monate
+ * beschnitten, für die das angezeigte Jahr Daten hat — sonst stünden im laufenden
+ * Jahr sieben gelaufene Monate gegen zwölf volle. Beschnitten wird in
+ * `jahrVergleichAus`; hier wird das Fenster nur AUSGEWIESEN (`vjFenster`/
+ * `ojFenster` = `Jan–Jul` o. Ä., `null` bei voller Deckung).
  */
 import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
@@ -29,11 +35,21 @@ import type { JahrVergleich } from './JahrAggregat'
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
 
 /** D1-Strip: 5 Energie + Netto-Ertrag € + Jahresergebnis €. Vorjahr in der
- *  Zweitzeile, SOLL am PV. */
-export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null): KpiStripItem[] {
+ *  Zweitzeile, SOLL am PV.
+ *
+ *  `vjFenster` (z. B. `Jan–Jul`) benennt die Monate, über die der Vorjahres-Wert
+ *  summiert ist — gesetzt genau dann, wenn das nicht die volle Grundgesamtheit des
+ *  angezeigten Jahres ist (s. {@link monatsFenster}). Ohne diese Angabe wäre „VJ:
+ *  3.890 kWh" im laufenden Jahr eine Behauptung über eine andere Zeitspanne. */
+export function baueJahrKpis(
+  d: AktuellerMonatResponse,
+  vj: JahrVergleich | null,
+  vjFenster?: string | null,
+): KpiStripItem[] {
+  const VJ = vjFenster ? `VJ (${vjFenster})` : 'VJ'
   const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
     ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
-    : vj?.pv != null ? `VJ: ${fmt(vj.pv)} kWh` : undefined
+    : vj?.pv != null ? `${VJ}: ${fmt(vj.pv)} kWh` : undefined
 
   // Jahresergebnis = nach Betriebskosten (verhaltensgleich Monat: Gesamt-
   // Nettoertrag − Betriebskosten + Sonstiges). `!= null`, damit 0 € nicht verschwindet.
@@ -45,7 +61,7 @@ export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null
     { title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv, subtitle: pvSoll },
     {
       title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
-      subtitle: vj?.autarkie != null ? `VJ: ${fmt(vj.autarkie)} %` : undefined,
+      subtitle: vj?.autarkie != null ? `${VJ}: ${fmt(vj.autarkie)} %` : undefined,
       formel: 'Eigenverbrauch ÷ Gesamtverbrauch × 100',
       berechnung: d.eigenverbrauch_kwh != null && d.gesamtverbrauch_kwh != null
         ? `${fmt(d.eigenverbrauch_kwh)} ÷ ${fmt(d.gesamtverbrauch_kwh)} kWh` : undefined,
@@ -53,15 +69,15 @@ export function baueJahrKpis(d: AktuellerMonatResponse, vj: JahrVergleich | null
     },
     {
       title: 'Eigenverbrauch', value: fmt(d.eigenverbrauch_kwh), unit: 'kWh', color: 'purple', icon: DATENROLLEN_ICONS.eigenverbrauch,
-      subtitle: `EV-Quote ${fmt(d.eigenverbrauch_quote_prozent)} %${vj?.ev != null ? ` · VJ: ${fmt(vj.ev)} kWh` : ''}`,
+      subtitle: `EV-Quote ${fmt(d.eigenverbrauch_quote_prozent)} %${vj?.ev != null ? ` · ${VJ}: ${fmt(vj.ev)} kWh` : ''}`,
     },
     {
       title: 'Einspeisung', value: fmt(d.einspeisung_kwh), unit: 'kWh', color: 'green', icon: DATENROLLEN_ICONS.einspeisung,
-      subtitle: vj?.einsp != null ? `VJ: ${fmt(vj.einsp)} kWh` : undefined,
+      subtitle: vj?.einsp != null ? `${VJ}: ${fmt(vj.einsp)} kWh` : undefined,
     },
     {
       title: 'Netzbezug', value: fmt(d.netzbezug_kwh), unit: 'kWh', color: 'red', icon: DATENROLLEN_ICONS.netzbezug,
-      subtitle: vj?.netz != null ? `VJ: ${fmt(vj.netz)} kWh` : undefined,
+      subtitle: vj?.netz != null ? `${VJ}: ${fmt(vj.netz)} kWh` : undefined,
     },
     {
       title: 'Netto-Ertrag', value: fmtCalc(d.netto_ertrag_euro, 2, '—'), unit: '€', color: 'blue', icon: DATENROLLEN_ICONS.nettoErtrag,
@@ -89,12 +105,15 @@ interface BilanzRow {
 }
 
 export function JahrBilanz({
-  d, vj, oj, ojCount,
+  d, vj, oj, ojCount, vjFenster, ojFenster,
 }: {
   d: AktuellerMonatResponse
   vj: JahrVergleich | null
   oj: JahrVergleich | null
   ojCount: number
+  /** Monatsfenster der Vergleichsspalte, `null` bei voller Deckung (s. `monatsFenster`). */
+  vjFenster?: string | null
+  ojFenster?: string | null
 }) {
   // Eigenverbrauch-Färbung folgt der Autarkie-Richtung (analog Monat #337).
   const evBesser = (vglAutarkie: number | null | undefined): boolean | undefined =>
@@ -112,6 +131,24 @@ export function JahrBilanz({
 
   const dash = <span className="text-gray-300 dark:text-gray-600">—</span>
   const dec = (row: BilanzRow) => (row.unit === '%' ? 1 : 0)
+
+  // Fund N-37: Vorjahr/Ø-Jahr sind auf die Monate beschnitten, für die das
+  // angezeigte Jahr Daten hat. Steht ein Fenster an, MUSS es dranstehen — sonst
+  // liest sich die Spalte wieder als ganzes Jahr. Formuliert als „gemeinsame
+  // Monate", weil auch eine Lücke im VERGLEICHSjahr das Fenster verkleinert.
+  // Ohne Ø-Spalte trägt deren Fenster auch nichts bei; je Spalte benannt wird nur,
+  // wenn beide da sind UND sich unterscheiden (Vergleichsjahr mit eigener Lücke).
+  const ojF = oj ? ojFenster : null
+  const fensterText = vjFenster && ojF && vjFenster !== ojF
+    ? `Vorjahr ${vjFenster} · Ø Jahre ${ojF}`
+    : (vjFenster ?? ojF)
+  const fensterNote = fensterText
+    ? `Vergleich beschnitten auf die gemeinsamen Monate: ${fensterText}`
+    : null
+  // Kopf-Zusatz: dieselbe Angabe direkt über der Spalte (Desktop-Tabelle).
+  const kopfFenster = (f: string | null | undefined) => (f
+    ? <span className="block font-normal text-[10px] text-gray-400 dark:text-gray-500">{f}</span>
+    : null)
 
   const vglZellen = (val: number | null | undefined, row: BilanzRow, besser?: boolean) => (
     <>
@@ -144,8 +181,10 @@ export function JahrBilanz({
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5 mt-1">
-                <VglChip prefix="VJ" lang="Vorjahr" ist={row.ist} val={row.vj} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserVj} />
-                {oj && <VglChip prefix="Ø Jahre" lang="Ø übrige Jahre" ist={row.ist} val={row.oj} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserOj} />}
+                {/* Mobil bleibt das Kürzel kurz; das Fenster steht im Tooltip und —
+                    immer sichtbar — in der Fußnote unter der Anzeige. */}
+                <VglChip prefix="VJ" lang={vjFenster ? `Vorjahr (${vjFenster})` : 'Vorjahr'} ist={row.ist} val={row.vj} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserVj} />
+                {oj && <VglChip prefix="Ø Jahre" lang={ojFenster ? `Ø übrige Jahre (${ojFenster})` : 'Ø übrige Jahre'} ist={row.ist} val={row.oj} unit={row.unit} dec={dec(row)} inv={row.inv} besser={row.besserOj} />}
               </div>
             </div>
           ))}
@@ -158,8 +197,8 @@ export function JahrBilanz({
               <tr className="text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
                 <th className={`${KOPF_ZELLE} text-left`}><span className="sr-only">Kennzahl</span></th>
                 <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>IST</th>
-                <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Vorjahr</th>
-                {oj && <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Ø Jahre</th>}
+                <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Vorjahr{kopfFenster(vjFenster)}</th>
+                {oj && <th colSpan={2} className={`${KOPF_ZELLE} text-center`}>Ø Jahre{kopfFenster(ojFenster)}</th>}
               </tr>
             </TableHead>
             <TableBody>
@@ -179,9 +218,11 @@ export function JahrBilanz({
               ))}
             </TableBody>
           </Table>
-        {oj && (
+        {(oj || fensterNote) && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-            Ø aus {ojCount} {ojCount !== 1 ? 'Jahren' : 'Jahr'}
+            {oj && `Ø aus ${ojCount} ${ojCount !== 1 ? 'Jahren' : 'Jahr'}`}
+            {oj && fensterNote && ' · '}
+            {fensterNote}
           </p>
         )}
       </Parkbar>

@@ -39,7 +39,7 @@ import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
 import { JahrHeader } from './JahrRahmen'
-import { baueJahrAlsMonat, jahrVergleichAus, mittelJahre, type JahrVergleich } from './JahrAggregat'
+import { baueJahrAlsMonat, jahrVergleichAus, mittelJahre, monatsFenster, type JahrVergleich } from './JahrAggregat'
 import { aktuellerMonatApi, type AktuellerMonatResponse } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { cockpitApi } from '../api/cockpit'
@@ -155,16 +155,31 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     () => (jahr == null ? [] : alleMonate.filter((m) => m.jahr === jahr)),
     [alleMonate, jahr],
   )
+  // Grundgesamtheit des Jahresvergleichs (Fund N-37): die Monate, für die das
+  // ANGEZEIGTE Jahr eine Zeile hat — abgeleitet aus `monatsZeilen`, nicht aus dem
+  // Kalender und nicht aus `new Date()`. Ohne sie standen im laufenden Jahr die
+  // gelaufenen Monate gegen ein volles Vorjahr. Eine Lücke mitten im Jahr
+  // beschneidet damit genauso: die Regel ist „gleiche Monate", nicht „erste N".
+  const vergleichsMonate = useMemo(() => monatsZeilen.map((m) => m.monat), [monatsZeilen])
   const vorjahr = useMemo<JahrVergleich | null>(() => {
     if (jahr == null) return null
-    const hatVj = alleMonate.some((m) => m.jahr === jahr - 1)
-    return hatVj ? jahrVergleichAus(alleMonate, jahr - 1) : null
-  }, [alleMonate, jahr])
+    const vj = jahrVergleichAus(alleMonate, jahr - 1, vergleichsMonate)
+    // Keine Überschneidung (Anlage erst im angezeigten Jahr in Betrieb) ⇒ KEIN
+    // Vergleich, nicht eine Spalte aus lauter 0.
+    return vj.monate.length > 0 ? vj : null
+  }, [alleMonate, jahr, vergleichsMonate])
   const oeJahr = useMemo(() => {
     if (jahr == null) return null
     const andere = [...new Set(alleMonate.map((m) => m.jahr))].filter((j) => j !== jahr)
-    return mittelJahre(andere.map((j) => jahrVergleichAus(alleMonate, j)))
-  }, [alleMonate, jahr])
+    // In den Ø geht nur ein Jahr ein, das die Grundgesamtheit GANZ abdeckt —
+    // sonst mischte sich eine Ein-Monats-Summe (Anlage lief 2023 erst ab Juni) in
+    // einen Sechs-Monats-Ø. `count` fällt entsprechend.
+    return mittelJahre(andere.map((j) => jahrVergleichAus(alleMonate, j, vergleichsMonate)), vergleichsMonate)
+  }, [alleMonate, jahr, vergleichsMonate])
+  // Das Fenster, auf das sich die Vergleichszahl bezieht — `null` bei einem vollen
+  // Jahr (dann ist nichts zu beschriften).
+  const vjFenster = useMemo(() => monatsFenster(vorjahr), [vorjahr])
+  const ojFenster = useMemo(() => monatsFenster(oeJahr), [oeJahr])
 
   const bloecke = useMemo<Block[]>(() => {
     if (jahr == null) return []
@@ -178,7 +193,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     // Kennzahlen-Kacheln parkbar (SLICE 1): stabile parkId je Titel; geparkte im Strip
     // ausgeblendet, sind ALLE geparkt → Block-Hülle weglassen (Monat-Referenz).
     const kpiItems = d
-      ? baueJahrKpis(d, vorjahr).map((k) => ({
+      ? baueJahrKpis(d, vorjahr, vjFenster).map((k) => ({
           ...k,
           parkId: `kpi:${k.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-')}`,
         }))
@@ -275,7 +290,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
         summary: bilanzSummary,
         defaultOpen: false,
         render: () => (d
-          ? <JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} />
+          ? <JahrBilanz d={d} vj={vorjahr} oj={oeJahr} ojCount={oeJahr?.count ?? 0} vjFenster={vjFenster} ojFenster={ojFenster} />
           : <p className="text-sm text-gray-500 dark:text-gray-400">Keine Vergleichsdaten verfügbar.</p>),
       }]),
       ...(park.istGeparkt('el:verlauf') ? [] : [{
@@ -299,7 +314,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       ...(d ? baueKomponentenBloecke(d, park, 'jahr') : []),
       ...(finanzBlock ? [finanzBlock] : []),
     ]
-  }, [jahr, jahrData, vorjahr, oeJahr, monatsZeilen, park,
+  }, [jahr, jahrData, vorjahr, oeJahr, vjFenster, ojFenster, monatsZeilen, park,
       co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload])
 
   if (!anlageId) {

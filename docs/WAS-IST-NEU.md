@@ -14,6 +14,37 @@
 > **Beim Release:** Überschrift auf `## vX.Y.Z — Titel (Monat Jahr)` ziehen und die Version im
 > Kopf dieser Seite mitnehmen (Doku-Durchgang) — sonst steht die Zusage als nicht eingelöst da.
 
+### Das laufende Jahr wird nicht mehr mit einem vollen Vorjahr verglichen
+
+**Betrifft dich das?** Wenn du **Cockpit → Jahr/Gesamt** für das **laufende** Jahr ansiehst — oder
+für ein Jahr, in dem einzelne Monate fehlen.
+
+Die Spalten **Vorjahr** und **Ø Jahre** summierten bisher immer das **ganze** Jahr. Im laufenden Jahr
+standen damit die bisher gelaufenen Monate gegen zwölf volle: auf einer echten Anlage im Juli
+7.696 kWh gegen 14.221 kWh, also **„▼ 46 %"**. Diese Zahl maß im Wesentlichen den Kalender und
+hätte sich bis Dezember von selbst zurückgebildet.
+
+Was du jetzt siehst:
+
+- **Vorjahr und Ø Jahre werden auf dieselben Monate beschnitten**, für die das angezeigte Jahr Daten
+  hat. Dieselben Daten wie oben ergeben jetzt 8.269 kWh und **„▼ 7 %"**.
+- **Das Fenster steht dran**, sobald dort weniger als ein volles Jahr summiert ist — am Spaltenkopf,
+  an den Kennzahl-Kacheln (`VJ (Jan–Jun): 5.146 kWh`) und als Satz unter der Tabelle:
+  „Vergleich beschnitten auf die gemeinsamen Monate: Jan–Jun".
+- **In den Ø geht nur ein Jahr ein, das dieses Fenster ganz abdeckt.** Ist deine Anlage z. B. im Juni
+  2023 gestartet, trüge 2023 zu einem Vergleich über Jan–Jun nur einen einzigen Monat bei — das Jahr
+  bleibt draußen, und die Zeile darunter zählt ehrlich („Ø aus 2 Jahren" statt 3).
+- **Gibt es gar keinen gemeinsamen Monat**, entfällt die Vergleichsspalte („—") statt 0 anzuzeigen.
+- **Eine Lücke mitten im Jahr wirkt genauso** — verglichen werden immer *dieselben* Monate, nicht
+  „die ersten N".
+
+**Abgeschlossene Jahre ändern sich nicht:** Steht auf beiden Seiten ein volles Jahr, ist die
+Beschneidung wirkungslos und es wird auch nichts beschriftet.
+
+**Was du tun musst: nichts.** Wenn deine Vorjahres- und Ø-Spalten kleiner geworden sind und die
+Δ-Prozente viel moderater ausfallen, ist das die Korrektur — deine Anlage hat sich nicht verändert.
+→ [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
+
 ### Der Reparatur-Knopf erscheint nicht mehr für Zeiträume, die eedc gar nicht rechnen darf
 
 **Betrifft dich das?** Wenn du eine Komponente auf **inaktiv** gesetzt hast, ein

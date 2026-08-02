@@ -127,6 +127,18 @@ describe('CockpitJahrV4 — Jahr', () => {
     expect(screen.getByText('Wärme/Klima')).toBeInTheDocument()
     expect(screen.getByText('Finanzen')).toBeInTheDocument()
   })
+
+  it('beschneidet Vorjahr/Ø-Jahr auf die Monate des angezeigten Jahres und sagt es (N-37)', async () => {
+    // Fixture: 2025 hat Jan–Mär, 2024 nur Jan–Feb ⇒ Überschneidung = Jan–Feb.
+    // Vorher summierte die Vergleichsspalte das ganze Jahr 2024.
+    renderView()
+    const titel = await screen.findByText('Energie-Bilanz')
+    fireEvent.click(titel.closest('button')!)
+    expect(screen.getByText(/Vergleich beschnitten auf die gemeinsamen Monate: Jan–Feb/))
+      .toBeInTheDocument()
+    // Dieselbe Angabe an der Kachel (Einspeisung: 2 × 120 kWh aus 2024).
+    expect(screen.getByText('VJ (Jan–Feb): 240 kWh')).toBeInTheDocument()
+  })
 })
 
 // ─── CO₂-Bilanz (Nebenfunde-Paket B') ────────────────────────────────────────
