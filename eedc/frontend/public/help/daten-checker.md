@@ -23,6 +23,7 @@
    7. [Energieprofil – Plausibilität](#47-energieprofil--plausibilitaet)
    8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
+   10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -401,6 +402,31 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 
 ---
 
+### 4.10 Energieprofil – fehlende Tageswerte <a name="410-energieprofil--fehlende-tageswerte"></a>
+
+> **Variantenhinweis:** Nur im **HA Add-on** (bzw. Docker mit HA-Recorder-Zugriff). Im Standalone-Betrieb fehlt die unabhängige Referenz, gegen die eedc prüfen könnte — die Kategorie wird dann still übersprungen.
+
+**Was wird geprüft:** Gibt es in den letzten 90 Tagen Tage, an denen ein Zähler zugeordnet ist und die **HA-Langzeitstatistik einen Wert liefert**, die gespeicherte Tageszeile aber leer oder 0 ist? Das ist der typische Fall nach einer nachträglich korrigierten Zuordnung: die Zuordnung steht heute, aber für die Tage davor hat nie ein Aggregator-Lauf stattgefunden. Die Zähler-Abdeckung (§4.6) meldet dort völlig zu Recht „OK" — der Zähler *ist* ja zugeordnet.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **N Tag(e) ohne Werte trotz zugeordnetem Zähler (von … bis …)** | ⚠️ WARNING | Für die genannten Tage hat HA Werte, eedc nicht. Die Details nennen die betroffenen Komponenten beim Namen. | Knopf **„Zeitraum neu aggregieren"** (max. 31 Tage pro Lauf; ältere Tage bleiben für einen zweiten Lauf stehen) oder **„Tag reparieren"** je Zeile. |
+| **YYYY-MM-DD: keine Tageswerte, HA hat …** | ⚠️ WARNING | Einzeltag-Zeile zum selben Sachverhalt, mit den Werten, die HA für diesen Tag führt. | **„Tag reparieren"** |
+| **Keine reparierbaren Tages-Lücken gefunden (letzte 90 Tage)** | ✅ OK | Es gibt leere Tage, aber HA hat für sie ebenfalls nichts. Solche Lücken sind keine Fehlfunktion — eedc reicht nur so weit zurück wie HA selbst. | – |
+| **Alle Tage mit zugeordnetem Zähler tragen Werte (letzte 90 Tage)** | ✅ OK | Nichts offen. | – |
+
+**Nur Zeiträume, in denen die Komponente auch gelaufen ist.** Die Prüfung fordert für jeden Tag genau das ein, was der Reparatur-Lauf an diesem Tag auch schreiben darf: Komponenten, die an dem Tag noch nicht angeschafft, bereits stillgelegt oder auf *inaktiv* gesetzt waren, tauchen für diesen Zeitraum nicht auf. Vorher konnte eine Meldung samt Reparatur-Knopf für Tage erscheinen, die eedc gar nicht rechnen darf — der Knopf lief durch, schrieb nichts, und die Meldung blieb stehen. Die Anlagen-Grenze wirkt genauso: vor dem Inbetriebnahme-Datum wird nichts eingefordert.
+
+**Kein Knopf ohne Deckung.** Braucht der Tages-Lauf für diese Anlage etwas, das nicht da ist — eine Leistungs-Zuordnung (W) bzw. MQTT-Energie —, dann erscheint der Befund weiterhin, aber **ohne** Reparatur-Knopf; die Meldung sagt stattdessen, was zuerst zuzuordnen ist.
+
+**Reichweite:** Die Tagesreparatur heilt Tages- und Stundenwerte, **nicht** die Monatswerte. Für abgeschlossene Monate danach Einstellungen → Integration → **Statistik-Import**.
+
+> **Abgrenzung:** PV-Werte auf einer *bestehenden* Tageszeile gehören der Drift-Prüfung (§4.7-Umfeld, Meldung „PV x → HA y kWh") — kein zweiter Turm über denselben Sachverhalt. Der Speicher-Netto-Wert (`batterie_*`) bleibt hier außen vor, er darf legitim ~0 sein.
+
+---
+
 ## 5. Behebungs-Workflows
 
 Diese Querschnitts-Anleitungen bündeln Schritte, die mehrere Befunde gleichzeitig betreffen — typischerweise weil ein einzelner Konfigurationsfehler in mehreren Kategorien aufschlägt.
@@ -510,6 +536,8 @@ Nach jedem Schritt: Daten-Checker erneut prüfen.
 
 > Die Reparatur-Werkbank fasst die Operationen in einem einzigen Auswahlfeld zusammen (Tag / Mehrere Tage / Lücken nachfüllen / Kraftstoffpreise / Energieprofil-Daten löschen), gruppiert mit Trennlinien. Die frühere Bedienung über ein grünes Reload-Symbol pro Zeile in der Tages-Tabelle entfällt — die Tages-Tabelle selbst ist als **Anzeige** ins [Cockpit → Tag](HANDBUCH_BEDIENUNG.md#22-tag) umgezogen; repariert wird ausschließlich über die Werkbank.
 
+**Was die Rückmeldung sagt:** Nach einem Einzeltag-Lauf steht dort nicht nur, ob sich der PV-Wert bewegt hat, sondern auch, **für welche Komponenten der Lauf einen Wert schreiben konnte** — und, falls nicht für alle, welche leer geblieben sind. Ein „durchgelaufen" ohne geschriebenen Wert (typisch: kein Leistungssensor zugeordnet, oder die HA-Historie reicht nicht so weit zurück) erscheint als **Hinweis**, nicht als Erfolg. Beim Bereichs-Lauf ist es dieselbe Aussage je Tag: *„N Tag(e) neu aggregiert, M ohne verwertbare Daten übersprungen."*
+
 > **Hinweis:** Tage **löschen** ist *keine* sinnvolle Reparaturstrategie. Eine gelöschte Lerngrundlage kostet die Solarprognose den saisonalen Lernfaktor (Monatsfaktor ≥ 15 Tage), und der eigentliche Defekt sitzt im Snapshot-Cache, nicht in den HA-LTS-Werten. Resnap holt die Daten zurück — Löschen tut das nicht.
 
 ---
@@ -530,6 +558,7 @@ Der Daten-Checker ist Diagnose, nicht Behebung. Er **zeigt** Probleme und verlin
 | §4.7 Energieprofil-Plausibilität | Reparatur-Werkbank: *„Tag neu aggregieren"* bzw. *„Mehrere Tage neu aggregieren"* (zieht Snapshots frisch + baut Aggregate neu) |
 | §4.8 MQTT-Topic-Abdeckung | Externe Publisher-Quelle (HA-Automation YAML, ioBroker, Node-RED), MQTT-Broker-Verbindung |
 | §4.9 Sensor-Mapping HA-Statistics | HA-Helfer „Verbrauchszähler" (ohne Zyklus), ersatzweise `customize` (state_class), Datenquellen-Zuordnung (alternativen Sensor wählen) |
+| §4.10 Fehlende Tageswerte | Knopf am Befund: *„Zeitraum neu aggregieren"* / *„Tag reparieren"*; ohne Leistungs-Zuordnung zuerst Einstellungen → Datenquellen |
 
 ### Reparatur-Werkzeuge in der Energieprofil-Pflege
 

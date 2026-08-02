@@ -9,6 +9,60 @@
 
 ---
 
+## Noch nicht veröffentlicht — die Reparatur bietet nur an, was sie kann
+
+> **Beim Release:** Überschrift auf `## vX.Y.Z — Titel (Monat Jahr)` ziehen und die Version im
+> Kopf dieser Seite mitnehmen (Doku-Durchgang) — sonst steht die Zusage als nicht eingelöst da.
+
+### Der Reparatur-Knopf erscheint nicht mehr für Zeiträume, die eedc gar nicht rechnen darf
+
+**Betrifft dich das?** Wenn du eine Komponente auf **inaktiv** gesetzt hast, ein
+**Anschaffungsdatum** in der Zukunft trägst oder eine Komponente **stillgelegt** hast — und der
+Daten-Checker dir für die Zeit davor bzw. danach „Zähler zugeordnet, Tageswerte fehlen" gemeldet
+hat.
+
+Der Befund verglich die gespeicherten Tage mit **allen** Komponenten der Anlage. Die Reparatur
+nimmt für jeden Tag aber nur die Komponenten, die an **diesem** Tag gelaufen sind. Wo beides
+auseinanderlief, stand eine Lücke samt Knopf **„Tag reparieren"** da — und nach dem Klick stand sie
+unverändert weiter da, weil der Lauf für diese Komponente nichts schreiben durfte.
+
+Was du jetzt siehst:
+
+- **Für Zeiträume, in denen eine Komponente noch nicht oder nicht mehr aktiv war, wird nichts mehr
+  gemeldet.** Dasselbe gilt für Zeit vor dem Inbetriebnahme-Datum der Anlage.
+- **Echte Lücken aktiver Komponenten meldet der Checker unverändert** — der Fix macht ihn nicht
+  blind, er nimmt ihm nur die Meldungen ohne Deckung.
+
+**Was du tun musst: nichts.** Beim nächsten Prüf-Lauf verschwinden die betroffenen Meldungen.
+→ [Handbuch → Daten-Checker §4.10](HANDBUCH_DATEN_CHECKER.md#410-energieprofil--fehlende-tageswerte)
+*(gemeldet von dietmar1968)*
+
+### Die Reparatur sagt jetzt, für welche Komponente sie nichts schreiben konnte
+
+**Betrifft dich das?** Wenn du in der Reparatur-Werkbank oder am Daten-Checker-Befund einen
+**einzelnen Tag** neu aggregierst.
+
+Bisher meldete dieser Lauf immer Erfolg und zeigte nur den PV-Wert vor und nach dem Lauf. Ob er für
+deine Wärmepumpe oder die Wallbox überhaupt etwas geholt hat, stand nirgends — solange sich die PV
+bewegte, sah ein halber Lauf aus wie ein ganzer.
+
+Was du jetzt siehst:
+
+- **Alles geschrieben:** die gewohnte Erfolgsmeldung, ergänzt um „Alle N zugeordneten Komponenten
+  tragen einen Wert."
+- **Teilweise:** „2 von 3 Komponenten neu geschrieben — ohne Wert blieb: Wärmepumpe."
+- **Gar nichts:** ein **Hinweis** statt eines Erfolgs, mit der häufigsten Ursache daneben — kein
+  Leistungssensor zugeordnet, oder die Home-Assistant-Historie reicht nicht so weit zurück.
+
+Die PV-Angabe („PV 0,0 → 30,0 kWh" bzw. „blieb unverändert") bleibt erhalten; die Komponenten-Aussage
+kommt dazu. Der Bereichs-Lauf sagt dasselbe schon länger je Tag — jetzt sprechen beide dieselbe
+Sprache.
+
+**Was du tun musst: nichts.** → [Handbuch → Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
+*(gemeldet von dietmar1968)*
+
+---
+
 ## v4.0.6 — Vergleichbares vergleichen, Gemessenes behalten (August 2026)
 
 > **Der Schwerpunkt dieser Version:** An etlichen Stellen stellte eedc zwei Zahlen nebeneinander, die

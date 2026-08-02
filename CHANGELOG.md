@@ -7,6 +7,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+> **Beim Release:** diese Überschrift auf `## [X.Y.Z] - JJJJ-MM-TT — Titel` ziehen (Doku-Durchgang) —
+> `release.sh` bricht sonst ab, und die WAS-IST-NEU-Sektion trägt dieselbe Nummer.
+
+### Fixed
+
+- **Der Reparatur-Knopf erscheint nur noch für Zeiträume, die eedc überhaupt rechnen darf.** Der Daten-Checker-Befund „Zähler zugeordnet, Tageswerte fehlen" verglich die gespeicherten Tage gegen **alle** Komponenten der Anlage — der Reparatur-Lauf dagegen nimmt für jeden Tag nur die Komponenten, die an **diesem** Tag aktiv waren (angeschafft, nicht stillgelegt, nicht auf *inaktiv* gesetzt). Wo beide auseinanderliefen, meldete der Checker eine Lücke und bot „Tag reparieren" an; der Lauf schrieb für diese Komponente nichts, antwortete mit HTTP 200, und die Meldung stand nach dem Klick unverändert da. Gemeldet wurde das für eine Klimaanlage, die **inaktiv** und zugleich erst zum 01.08. angeschafft war — die Lücke lief über den halben Juni und ganzen Juli. Die erwartete Schlüsselmenge ist jetzt **tagesabhängig** und benutzt dieselbe Aktiv-Definition wie der Lauf (`ist_aktiv_an`, In-Memory-Zwilling von `aktiv_am_tag`); eine gemeinsame Stelle (`erwartete_komponenten_keys`) beantwortet für Checker **und** Reparatur die Frage „was verspricht die Zuordnung an diesem Tag". Der Fix ist ausdrücklich **kein** Filter an der Abfrage: die Menge wird einmal fürs 90-Tage-Fenster gebaut, die Aktivität ist aber pro Tag verschieden — gepinnt mit Tests für Anschaffung und Stilllegung *mitten* im Fenster (Stilllegungstag inklusiv), die ein Abfrage-Filter nicht bestehen würde. **Echte Lücken aktiver Komponenten werden unverändert gemeldet** — das ist die zweite Hälfte der Tests, damit aus dem Fix kein Blindmacher wird. *(Forum simon42 #89667/83, dietmar1968 — #368)*
+
+- **Die Tagesreparatur sagt jetzt, für welche Komponente sie nichts schreiben konnte.** `status: "ok"` heißt „durchgelaufen", nicht „etwas geschrieben" — der Bereichs-Lauf wertet das seit v4.0.5 aus, der **Einzeltag**-Lauf war der eine Pfad ohne diese Aussage. Er meldete immer Erfolg und zeigte nur die PV-Tagessumme vor/nach dem Lauf (#290); eine Wärmepumpe, für die nichts geschrieben wurde, war davon nicht zu unterscheiden, solange sich die PV bewegt hatte. Die Antwort trägt jetzt je Komponente, ob der Lauf einen Wert hinterlassen hat, und die Meldung formuliert daraus dieselben drei Fälle wie der Bereichs-Pfad — aus **einer** Datei, damit nicht zwei Formulierungen nebeneinander wachsen: alles geschrieben (Erfolg), teilweise („2 von 3 Komponenten neu geschrieben — ohne Wert blieb: Wärmepumpe") oder gar nichts (**Hinweis**, kein Erfolg). Bei den beiden letzten steht die häufigste Ursache dabei: kein Leistungssensor zugeordnet, oder die Home-Assistant-Historie reicht nicht so weit zurück. **Die PV-Aussage bleibt** — sie beantwortet die #290-Frage „hat sich etwas bewegt?" — und wird ergänzt, nicht ersetzt. Die Ergebnisseite kommt aus dem tatsächlichen Lauf, nicht aus einer zweiten Rechnung daneben; ein Lauf, der mangels frischer Werte nur den Bestand stehen lässt, zählt ausdrücklich als „nichts geschrieben". *(Forum simon42 #89667/83, dietmar1968 — #369)*
+
+---
+
 ## [4.0.6] - 2026-08-01 — Vergleichbares vergleichen · Gemessenes behalten
 
 ### Changed
