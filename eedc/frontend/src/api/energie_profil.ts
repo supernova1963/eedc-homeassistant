@@ -358,6 +358,37 @@ export interface ReaggregatePreviewResponse {
   counter_tagesdelta: ReaggregatePreviewCounterTagesdelta[]
 }
 
+/** Eine Komponente im Ergebnis eines Tages-Laufs (N-58). */
+export interface ReaggregateTagKomponente {
+  key: string
+  /** Anwender-Name („Dach Süd", „Einspeisung") — Backend-SoT `komponenten_key_label`. */
+  name: string
+  /** Hat DIESER Lauf für die Komponente einen Wert geschrieben? */
+  geschrieben: boolean
+  kwh: number | null
+}
+
+/**
+ * Antwort des Einzeltag-Laufs.
+ *
+ * `status: "ok"` ist der Transport-Status und heißt nur „durchgelaufen" — die
+ * Aussage, ob etwas geschrieben wurde, steht in den Komponenten-Zählern
+ * daneben (gleiche Linie wie `ReaggregateBereichResponse`, N-58).
+ */
+export interface ReaggregateTagResponse {
+  status: string
+  datum: string
+  stunden_verfuegbar: number
+  stunden_mit_messdaten: number
+  pv_kwh_alt: number | null
+  pv_kwh_neu: number | null
+  komponenten: ReaggregateTagKomponente[]
+  komponenten_erwartet: number
+  komponenten_geschrieben: number
+  /** Namen der Komponenten, für die der Lauf nichts schreiben konnte. */
+  komponenten_ohne_wert: string[]
+}
+
 export const energieProfilApi = {
   getStunden: (anlageId: number, datum: string): Promise<StundenAntwort> =>
     api.get(`/energie-profil/${anlageId}/stunden?datum=${datum}`),
@@ -383,7 +414,7 @@ export const energieProfilApi = {
   vollbackfill: (anlageId: number): Promise<VollbackfillResult> =>
     api.post(`/energie-profil/${anlageId}/vollbackfill`),
 
-  reaggregateTag: (anlageId: number, datum: string, mitResnap: boolean = true, signal?: AbortSignal): Promise<{ status: string; datum: string; stunden_verfuegbar: number; stunden_mit_messdaten: number; pv_kwh_alt: number | null; pv_kwh_neu: number | null }> =>
+  reaggregateTag: (anlageId: number, datum: string, mitResnap: boolean = true, signal?: AbortSignal): Promise<ReaggregateTagResponse> =>
     api.post(`/energie-profil/${anlageId}/reaggregate-tag?datum=${datum}&mit_resnap=${mitResnap}`, undefined, { signal }),
 
   reaggregateTagPreview: (anlageId: number, datum: string, signal?: AbortSignal): Promise<ReaggregatePreviewResponse> =>

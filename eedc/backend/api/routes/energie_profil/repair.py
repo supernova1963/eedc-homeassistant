@@ -156,6 +156,12 @@ async def reaggregate_tag(
     Response enthält die PV-Tagessumme vor und nach dem Lauf, damit das
     Frontend dem Anwender konkret zeigen kann, was sich geändert hat
     (oder eben nicht — siehe Drift-Knopf-Diagnose im Daten-Checker).
+
+    Dazu (N-58) die Aussage **je Komponente**: `komponenten_erwartet` /
+    `komponenten_geschrieben` / `komponenten_ohne_wert` samt Detail-Liste.
+    `status: "ok"` bleibt der reine Transport-Status — dass der Lauf für eine
+    Wärmepumpe nichts holen konnte, stand vorher nirgends und war von
+    „PV-Wert unverändert" nicht unterscheidbar (Forum simon42 #89667/83).
     """
     pv_kwh_alt = await _pv_tagessumme(db, anlage_id, datum)
     summary = await _run_via_orchestrator(
@@ -173,6 +179,10 @@ async def reaggregate_tag(
         "stunden_mit_messdaten": stunden_mit_messdaten,
         "pv_kwh_alt": pv_kwh_alt,
         "pv_kwh_neu": pv_kwh_neu,
+        "komponenten": summary.get("komponenten", []),
+        "komponenten_erwartet": summary.get("komponenten_erwartet", 0),
+        "komponenten_geschrieben": summary.get("komponenten_geschrieben", 0),
+        "komponenten_ohne_wert": summary.get("komponenten_ohne_wert", []),
     }
 
 

@@ -773,6 +773,14 @@ async def aggregate_day(
         ),
     )
 
+    # Transienter Marker (nicht gemappt, nicht persistiert): hatte DIESER Lauf
+    # frische Komponenten-Werte, oder stehen im Feld die alten aus der
+    # Preserve-Logik oben? Der Unterschied ist von außen sonst nicht sichtbar —
+    # in beiden Fällen trägt `komponenten_kwh` dieselben Keys. Die Tages-
+    # Reparatur braucht ihn, um „geschrieben" nicht für einen Lauf zu behaupten,
+    # der nur den Bestand stehen ließ (N-58, Forum simon42 #89667/83).
+    zusammenfassung.komponenten_frisch = bool(komponenten_summen)
+
     # Etappe 4: TagesZusammenfassung-Source spiegelt die Hauptquelle der
     # Daily-Werte. Wenn die Stunden aus HA-LTS kamen, ist auch die
     # Tagessumme aus HA-LTS-Daten konsistent (Σ Hourly = Daily).

@@ -305,6 +305,62 @@ async def _reparatur_aggregat(
     return zusammenfassung, "lts" if zusammenfassung is not None else "keine_daten"
 
 
+async def _komponenten_rueckmeldung(
+    db: AsyncSession, anlage, datum: date, zusammenfassung,
+) -> dict[str, Any]:
+    """Was hat der Lauf je Komponente TATSÄCHLICH geschrieben? (N-58)
+
+    `status: "ok"` ist der Transport-Status und heißt nur „durchgelaufen".
+    Ein Lauf kann für eine Komponente nichts holen (kein Zähler in HA-LTS, kein
+    Snapshot, Sensor ohne Statistik) und trotzdem mit HTTP 200 antworten — die
+    Rückmeldung sagte das bisher nur für den Bereichs-Lauf
+    (`baueBereichsMeldung`), der Einzeltag blieb stumm. Dadurch war eine
+    Wärmepumpe, für die nichts geschrieben wurde, von „PV-Wert unverändert"
+    nicht unterscheidbar (Forum simon42 #89667/83, dietmar1968).
+
+    Erwartungsseite ist `erwartete_komponenten_keys` für **diesen Tag** —
+    dieselbe Menge, die auch der Daten-Checker verspricht und die
+    `aggregate_day` per `aktiv_am_tag` lädt. Ergebnisseite ist die
+    `komponenten_kwh` des Laufs selbst, nicht eine zweite Ableitung; ein Lauf
+    ohne frische Werte (Preserve-Logik) zählt als „nichts geschrieben".
+    """
+    from backend.services.snapshot.komponenten_beitraege import (
+        erwartete_komponenten_keys, komponenten_key_label,
+    )
+
+    inv_res = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id)
+    )
+    invs_by_id = {str(inv.id): inv for inv in inv_res.scalars().all()}
+    erwartet = erwartete_komponenten_keys(
+        anlage.sensor_mapping or {}, invs_by_id, datum,
+    )
+
+    # Preserve-Lauf (`komponenten_summen` leer, alte Werte bleiben stehen) hat
+    # für KEINE Komponente etwas geschrieben — der Marker kommt aus dem Lauf.
+    frisch = getattr(zusammenfassung, "komponenten_frisch", True)
+    geschrieben_map = (getattr(zusammenfassung, "komponenten_kwh", None) or {}) if frisch else {}
+
+    komponenten: list[dict[str, Any]] = []
+    for key in sorted(erwartet):
+        wert = geschrieben_map.get(key)
+        hat_wert = isinstance(wert, (int, float)) and not isinstance(wert, bool)
+        komponenten.append({
+            "key": key,
+            "name": komponenten_key_label(key, erwartet[key]),
+            "geschrieben": hat_wert,
+            "kwh": round(float(wert), 2) if hat_wert else None,
+        })
+
+    ohne_wert = [k["name"] for k in komponenten if not k["geschrieben"]]
+    return {
+        "komponenten": komponenten,
+        "komponenten_erwartet": len(komponenten),
+        "komponenten_geschrieben": len(komponenten) - len(ohne_wert),
+        "komponenten_ohne_wert": ohne_wert,
+    }
+
+
 async def _execute_reaggregate_day(
     req: RepairOperationRequest, db: AsyncSession
 ) -> dict[str, Any]:
@@ -344,6 +400,7 @@ async def _execute_reaggregate_day(
         "datum": datum.isoformat(),
         "stunden_verfuegbar": zusammenfassung.stunden_verfuegbar,
         "quelle": quelle,
+        **await _komponenten_rueckmeldung(db, anlage, datum, zusammenfassung),
     }
 
 
