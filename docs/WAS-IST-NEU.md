@@ -14,6 +14,31 @@
 > **Beim Release:** Überschrift auf `## vX.Y.Z — Titel (Monat Jahr)` ziehen und die Version im
 > Kopf dieser Seite mitnehmen (Doku-Durchgang) — sonst steht die Zusage als nicht eingelöst da.
 
+### Live: ein Hausverbrauch, der nicht mehr so tut, als wäre er vollständig
+
+**Betrifft dich das?** Wenn in *Cockpit → Live* für einen Tag **kein Netzbezug** ankommt — kein
+Zähler zugeordnet, Home Assistant zeitweise nicht erreichbar, MQTT still.
+
+Die „Heute"-Kachel **Hausverbrauch** ist Eigenverbrauch **plus** Netzbezug. Fehlte der Netzbezug,
+hat eedc die Lücke bisher als **0** eingesetzt und die Kachel trotzdem gefüllt — mit einer Zahl, die
+um genau den fehlenden Netzbezug zu niedrig war und von einem gemessenen Wert nicht zu unterscheiden.
+
+Was du jetzt siehst:
+
+- **Die Kachel bleibt leer**, solange ein Teil des Hausverbrauchs unbekannt ist — so wie die
+  Nachbar-Kacheln es bei fehlender Quelle schon immer gemacht haben.
+- **Der Eigenverbrauch bleibt stehen**, wenn nur der Netzbezug fehlt: er braucht ihn nicht.
+- **Eine gemessene 0 bleibt eine 0.** Ein Tag ohne Netzbezug oder eine Batterie, die nichts getan
+  hat, sind Aussagen — keine Lücken. Da steht weiterhin `0,0`, nicht „—".
+
+**Unverändert:** Fehlt die **PV** oder die **Einspeisung**, schweigen Eigenverbrauch und
+Hausverbrauch wie bisher. Ob der Wert ohne diesen Sensor zu hoch oder zu niedrig wäre, hängt davon
+ab, welcher fehlt — und eine Zahl, deren Fehlerrichtung niemand kennt, ist schlechter als eine Lücke.
+
+**Was du tun musst: nichts.** Wenn dir eine Kachel dauerhaft fehlt, sagt dir der
+[Handbuch → Einstellungen §5.3 Daten-Checker](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker), welcher
+Zähler nicht zugeordnet ist.
+
 ### Klimaanlagen: keine Ersparnis mehr gegen eine Heizung, die es nie gab
 
 **Betrifft dich das?** Wenn du eine **Split-Klimaanlage** als Wärmepumpe mit der Art

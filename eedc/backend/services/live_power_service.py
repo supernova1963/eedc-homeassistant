@@ -382,22 +382,44 @@ class LivePowerService:
     ) -> tuple[Optional[float], Optional[float]]:
         """Berechnet Eigenverbrauch und Hausverbrauch aus Tages-kWh inkl. Batterie.
 
+        **Eine Regel für beide Werte** (KONZEPT-UNVOLLSTAENDIGE-WERTE §3): jeder
+        Wert wird genau dann geliefert, wenn **seine eigenen** Summanden vorliegen.
+        Beide sind Differenzen bzw. bauen auf einer auf — ihre Fehlerrichtung hängt
+        davon ab, *welcher* Summand fehlt, also wird eine Lücke unterdrückt und
+        nicht als 0 eingesetzt. Die Leitfrage ist nie „ist irgendein Sensor
+        ausgefallen", sondern „braucht *dieser* Wert den fehlenden Sensor".
+
+        Vorher galten hier drei verschiedene Regeln nebeneinander: PV/Einspeisung
+        → beide Werte weg, Batterie-Lücke → still 0, Netzbezug-Lücke → `bezug or 0`
+        und damit ein Hausverbrauch, der ohne Kennzeichnung zu niedrig war.
+
         Returns:
             (eigenverbrauch, hausverbrauch) — jeweils Optional[float]
         """
         pv = kwh.get("pv")
         einsp = kwh.get("einspeisung")
         bezug = kwh.get("netzbezug")
-        if pv is None or einsp is None:
-            return None, None
 
-        # Batterie-Ladung/-Entladung summieren (Keys: batterie_X_ladung, batterie_X_entladung)
-        bat_ladung = sum(v for k, v in kwh.items() if k.endswith("_ladung") and v)
-        bat_entladung = sum(v for k, v in kwh.items() if k.endswith("_entladung") and v)
+        # Batterie-Ladung/-Entladung summieren (Keys: batterie_X_ladung, batterie_X_entladung).
+        # `is not None` statt `and v`: eine gemessene 0 ist eine Aussage, keine Lücke.
+        bat_ladung = sum(
+            v for k, v in kwh.items() if k.endswith("_ladung") and v is not None
+        )
+        bat_entladung = sum(
+            v for k, v in kwh.items() if k.endswith("_entladung") and v is not None
+        )
 
-        direktverbrauch = max(0, pv - einsp - bat_ladung)
-        eigenverbrauch = round(direktverbrauch + bat_entladung, 1)
-        hausverbrauch = round(eigenverbrauch + (bezug or 0), 1) if bezug is not None or eigenverbrauch > 0 else None
+        # Eigenverbrauch = (PV − Einspeisung − Ladung) + Entladung.
+        eigenverbrauch: Optional[float] = None
+        if pv is not None and einsp is not None:
+            direktverbrauch = max(0, pv - einsp - bat_ladung)
+            eigenverbrauch = round(direktverbrauch + bat_entladung, 1)
+
+        # Hausverbrauch = Eigenverbrauch + Netzbezug — beide Summanden nötig.
+        hausverbrauch: Optional[float] = None
+        if eigenverbrauch is not None and bezug is not None:
+            hausverbrauch = round(eigenverbrauch + bezug, 1)
+
         return eigenverbrauch, hausverbrauch
 
     async def get_tagesverlauf(
