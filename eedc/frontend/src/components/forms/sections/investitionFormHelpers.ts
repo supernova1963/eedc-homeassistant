@@ -163,9 +163,18 @@ export function getInitialParamData(
         // Getrennte Strommessung (Heizen/Warmwasser) — Bug #8 historisch als String 'true'/'false';
         // wird bei Phase 6 auf echten Boolean migriert. Bis dahin tolerieren wir beides beim Lesen.
         getrennte_strommessung: (params.getrennte_strommessung === true || params.getrennte_strommessung === 'true') ? 'true' : 'false',
-        // Wärmebedarf (getrennt)
-        heizwaermebedarf_kwh: paramStr(params.heizwaermebedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.heizwaermebedarf_kwh),
-        warmwasserbedarf_kwh: paramStr(params.warmwasserbedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.warmwasserbedarf_kwh),
+        // Wärmebedarf (getrennt). N-87: Bei einer Split-Klimaanlage NICHT
+        // vorbelegen — die Vorbelegung wurde beim Speichern mit übernommen und
+        // sah danach aus wie eine Anwender-Eingabe; die ROI-Auswertung machte
+        // daraus eine Ersparnis gegen eine nie ersetzte Gasheizung. Ein bereits
+        // gespeicherter Wert bleibt erhalten (`params.…` gewinnt), es wird nur
+        // nichts mehr erfunden.
+        heizwaermebedarf_kwh: params.wp_art === 'luft_luft'
+          ? paramStr(params.heizwaermebedarf_kwh)
+          : paramStr(params.heizwaermebedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.heizwaermebedarf_kwh),
+        warmwasserbedarf_kwh: params.wp_art === 'luft_luft'
+          ? paramStr(params.warmwasserbedarf_kwh)
+          : paramStr(params.warmwasserbedarf_kwh, PARAM_WAERMEPUMPE_DEFAULTS.warmwasserbedarf_kwh),
         // Vergleich mit alter Heizung
         pv_anteil_prozent: paramStr(params.pv_anteil_prozent, PARAM_WAERMEPUMPE_DEFAULTS.pv_anteil_prozent),
         alter_energietraeger: paramStr(params.alter_energietraeger, PARAM_WAERMEPUMPE_DEFAULTS.alter_energietraeger),

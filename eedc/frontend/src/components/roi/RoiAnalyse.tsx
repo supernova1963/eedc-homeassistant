@@ -408,6 +408,18 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
               const Icon = typIcons[b.investition_typ] || Settings2
               const cDetail = getSpeicherCDetail(b)
               const isExpanded = expandedRows.has(b.investition_id)
+              // N-87: Komponenten, für die eedc bewusst KEINE Wirtschaftlichkeit
+              // konstruiert (heute: Split-Klimaanlage), zeigen den Leerwert `—`
+              // statt einer 0 — eine 0 wäre die Behauptung „spart nichts", hier
+              // fehlt der Wert aber. Gleiche Haltung wie `unbewertet()` im
+              // Komponenten-Hub. Der Grund steht im `hinweis` als Tooltip.
+              const unbewertet = (b.detail_berechnung as { nicht_bewertet?: boolean } | undefined)?.nicht_bewertet === true
+              const unbewertetGrund = unbewertet
+                ? String((b.detail_berechnung as { hinweis?: unknown } | undefined)?.hinweis ?? '')
+                : undefined
+              const leerwert = (
+                <span className="text-gray-400 dark:text-gray-500" title={unbewertetGrund}>—</span>
+              )
               return (
                 <Fragment key={b.investition_id}>
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -441,6 +453,11 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                               const sp = b.komponenten?.filter((k) => k.typ === 'speicher') ?? []
                               return sp.length > 0 ? ` · inkl. Speicher ${sp.map((k) => k.bezeichnung).join(', ')}` : ''
                             })()}
+                            {/* N-87: der Leerwert in den Wert-Spalten braucht einen sichtbaren
+                                Grund — sonst liest er sich als fehlende Datenpflege. */}
+                            {unbewertet && (
+                              <span title={unbewertetGrund} className="cursor-help"> · nicht bewertet</span>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -451,11 +468,11 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                         <p className="text-xs text-gray-500 dark:text-gray-400">({formatGeld(b.anschaffungskosten).text} gesamt)</p>
                       )}
                     </td>
-                    <td className={`${ZELLE} text-right font-medium ${GELD_TEXT_CLASS.ersparnis}`}>
-                      {formatGeld(b.jahres_einsparung).text}
+                    <td className={`${ZELLE} text-right font-medium ${unbewertet ? '' : GELD_TEXT_CLASS.ersparnis}`}>
+                      {unbewertet ? leerwert : formatGeld(b.jahres_einsparung).text}
                     </td>
                     <td className={`${ZELLE} text-right`}>
-                      {b.roi_prozent ? (
+                      {unbewertet ? leerwert : b.roi_prozent ? (
                         <FormelTooltip
                           sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
                           formel="Jahresersparnis ÷ Relevante Kosten × 100"
@@ -471,7 +488,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                       )}
                     </td>
                     <td className={`${ZELLE} text-right`}>
-                      {b.amortisation_jahre ? (
+                      {unbewertet ? leerwert : b.amortisation_jahre ? (
                         <FormelTooltip
                           sicht="Pro Investition · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
                           formel="Relevante Kosten ÷ Jahresersparnis"
@@ -488,7 +505,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                     </td>
                     {zeigeCo2 && (
                       <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>
-                        {b.co2_einsparung_kg ? `${fmtZahl(b.co2_einsparung_kg, 0)} kg` : '-'}
+                        {unbewertet ? leerwert : b.co2_einsparung_kg ? `${fmtZahl(b.co2_einsparung_kg, 0)} kg` : '-'}
                       </td>
                     )}
                   </tr>

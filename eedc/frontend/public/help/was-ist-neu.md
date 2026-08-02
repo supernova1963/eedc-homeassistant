@@ -14,6 +14,37 @@
 > **Beim Release:** Überschrift auf `## vX.Y.Z — Titel (Monat Jahr)` ziehen und die Version im
 > Kopf dieser Seite mitnehmen (Doku-Durchgang) — sonst steht die Zusage als nicht eingelöst da.
 
+### Klimaanlagen: keine Ersparnis mehr gegen eine Heizung, die es nie gab
+
+**Betrifft dich das?** Wenn du eine **Split-Klimaanlage** als Wärmepumpe mit der Art
+*Luft-Luft (Klimaanlage)* erfasst hast.
+
+*Auswertungen → ROI* hat deiner Klimaanlage bisher einen Heizwärme- und Warmwasserbedarf
+angerechnet — **12.000 und 3.000 kWh pro Jahr**, Standardwerte, die du nie eingetragen hast. Daraus
+wurde eine Ersparnis von rund **1.100 € und 2.210 kg CO₂ im Jahr** gegenüber einer Gasheizung, die
+bei dir gar nicht ersetzt wurde. Ein Split-Gerät hat nicht einmal einen Warmwasserkreis. Die Beträge
+blieben außerdem nicht in ihrer Zeile: sie steckten auch in Gesamt-Ersparnis, ROI, Amortisation und
+Gesamt-CO₂ deiner Anlage.
+
+Was du jetzt siehst:
+
+- **Deine Klimaanlage steht weiter in der ROI-Tabelle** — mit ihren Anschaffungskosten. In den
+  Wert-Spalten steht **„—"** und daneben *nicht bewertet* statt einer erfundenen Zahl.
+- **Die Gesamtzahlen deiner Anlage werden dadurch kleiner** und stimmen jetzt mit dem überein, was
+  *Cockpit → Nachhaltigkeit* schon immer gezeigt hat (dort stand für dasselbe Gerät 0).
+- **Heizwärme- und Warmwasserbedarf werden nicht mehr abgefragt**, wenn die Wärmepumpenart auf
+  *Luft-Luft (Klimaanlage)* steht — und der Daten-Checker verlangt sie auch nicht mehr.
+
+**Was weiterhin voll funktioniert:** Stromverbrauch je Stunde/Tag/Monat/Jahr, der Anteil an
+Hausverbrauch, Eigenverbrauch und Autarkie, die Stromkosten (auch mit eigenem Wärmestrom-Tarif),
+Live-Anzeige und Tagesverlauf.
+
+**Was du tun musst: nichts.** Deine gespeicherten Werte bleiben erhalten — es wird nichts gelöscht.
+**Klassische Wärmepumpen rechnen unverändert.** Die Auswertung von Klimaanlagen wird
+weiterentwickelt; das Thema läuft als offenes Issue
+[#263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
+→ [Handbuch → Komponenten](HANDBUCH_BEDIENUNG.md)
+
 ### Das laufende Jahr wird nicht mehr mit einem vollen Vorjahr verglichen
 
 **Betrifft dich das?** Wenn du **Cockpit → Jahr/Gesamt** für das **laufende** Jahr ansiehst — oder

@@ -43,6 +43,7 @@ from backend.core.investition_parameter import (
     PARAM_SPEICHER_DEFAULTS,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
+    ist_luft_luft_waermepumpe,
 )
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
@@ -1468,6 +1469,39 @@ async def get_roi_dashboard(
                 'hinweis': f'E-Auto: {km_jahr} km/Jahr',
             }
 
+        elif inv.typ == InvestitionTyp.WAERMEPUMPE.value and ist_luft_luft_waermepumpe(inv):
+            # N-87 / #263 K-0b: Eine Split-Klimaanlage ersetzt keine Heizung.
+            # Der WP-Zweig darunter unterstellt genau das — und füllte den dafür
+            # nötigen Wärmebedarf aus `PARAM_WAERMEPUMPE_DEFAULTS` (12.000 kWh
+            # Heizwärme + 3.000 kWh Warmwasser) auf, wenn keiner gepflegt war.
+            # Ergebnis waren rund 1.100 €/Jahr und 2.210 kg CO₂ Ersparnis gegen
+            # eine Gasheizung, die es nie gab — Zahlen, die der Anwender nie
+            # eingegeben hat und die zusätzlich in die Anlagen-Summen liefen.
+            #
+            # Die vier GEMESSENEN Pfade liefern für dasselbe Gerät 0
+            # (`services/wp_wirtschaftlichkeit.py`, `co2_wp_ersparnis_kg`,
+            # `aussichten.py`, JAZ/COP in `cockpit/uebersicht.py`) — diese
+            # Route war die einzige, die konstruiert hat.
+            #
+            # Kein Fake-0 statt Fake-1100: `nicht_bewertet` sagt der Anzeige,
+            # dass hier ein FEHLENDER Wert steht und keine Null-Ersparnis —
+            # dieselbe Unterscheidung, die der AC-Speicher ohne Kapazität oben
+            # trifft. Die Anschaffungskosten zählen weiter (wie beim
+            # Wechselrichter ohne PV-Module): unbewertet heißt nicht unsichtbar.
+            # Der Text sagt den HEUTIGEN Stand und verspricht nichts: die
+            # Luft-Luft-Unterstützung ist nicht abgeschlossen (Gernot 02.08.) —
+            # SEER und die Heizen-/Kühlen-Trennung sind offen (#263).
+            detail = {
+                'hinweis': (
+                    'Klimaanlage (Luft-Luft): eine Wirtschaftlichkeit gegenüber Gas oder Öl '
+                    'wird hier nicht berechnet — dafür müsste das Gerät eine Heizung ersetzt '
+                    'haben, und die abgegebene Wärme müsste gemessen sein. Stromverbrauch, '
+                    'PV-Anteil und Kosten werden unverändert ausgewertet. Die Auswertung von '
+                    'Klimaanlagen wird weiterentwickelt (offenes Thema #263).'
+                ),
+                'nicht_bewertet': True,
+            }
+
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value:
             # Modus-Auswahl: gesamt_jaz (Standard), scop (EU-Label) oder getrennte_cops
             effizienz_modus = params.get(PARAM_WAERMEPUMPE["EFFIZIENZ_MODUS"], PARAM_WAERMEPUMPE_DEFAULTS["effizienz_modus"])
@@ -1588,6 +1622,10 @@ async def get_roi_dashboard(
         jahres_einsparung += inv_sonstige
         if isinstance(detail, dict):
             detail['sonstige_netto_euro'] = round(inv_sonstige, 2)
+            # Hat der Anwender selbst einen Betrag gepflegt, ist die Zeile sehr
+            # wohl bewertet — dann seine Zahl zeigen statt „—" (N-87).
+            if inv_sonstige and detail.get('nicht_bewertet'):
+                detail['nicht_bewertet'] = False
         betriebskosten = inv.betriebskosten_jahr or 0
         netto_einsparung = jahres_einsparung - betriebskosten
         roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)

@@ -207,3 +207,76 @@ async def test_wp_ohne_param_meldet_heizwaerme_warnung(db):
         e for e in ergebnisse if "Heizwärme fehlt" in e.meldung
     ]
     assert heiz_warnungen, "Legacy-WP ohne wp_art darf nicht als Klima durchgehen"
+
+
+# ============================================================================
+# N-87 / #263 K-0b: Hinweise, die nur den Gas-Vergleich füttern, entfallen
+# ============================================================================
+#
+# Seit N-87 rechnet das ROI-Dashboard einer Klimaanlage keine Ersparnis gegen
+# eine Gasheizung mehr. Die drei Stammdaten-Hinweise, die ausschließlich diesen
+# Vergleich versorgen, wären damit Forderungen ohne Zweck — und
+# „Heizwärmebedarf" wäre sogar UNAUFLÖSBAR, weil das Formular das Feld für
+# Klimaanlagen nicht mehr anbietet. Genau die Klasse, die P-6 abgeräumt hat.
+
+
+async def _anlage_mit_wp(db, *, parameter: dict) -> tuple:
+    anlage = Anlage(
+        anlagenname="TestStammdaten", leistung_kwp=10.0,
+        installationsdatum=date(2025, 1, 1),
+    )
+    db.add(anlage)
+    await db.flush()
+    db.add(Investition(
+        anlage_id=anlage.id, typ="waermepumpe",
+        bezeichnung="Testgerät", anschaffungsdatum=date(2025, 1, 1),
+        anschaffungskosten_gesamt=8000.0,
+        parameter=parameter,
+    ))
+    await db.commit()
+    return await _reload_anlage(db, anlage.id)
+
+
+# Die drei Meldungen, die am Gas-Vergleich hängen.
+GAS_VERGLEICHS_MELDUNGEN = (
+    "Alternativkosten (Gas-/Ölheizung) fehlen",
+    "Alter Energiepreis nicht gesetzt",
+    "Heizwärmebedarf nicht gesetzt",
+)
+
+
+def _gas_meldungen(ergebnisse) -> list[str]:
+    return [
+        e.meldung for e in ergebnisse
+        if any(m in e.meldung for m in GAS_VERGLEICHS_MELDUNGEN)
+    ]
+
+
+async def test_klima_bekommt_keine_gas_vergleichs_hinweise(db):
+    """Klimaanlage: keiner der drei Hinweise zum Gas-/Öl-Vergleich erscheint."""
+    anlage, monatsdaten = await _anlage_mit_wp(db, parameter={"wp_art": "luft_luft"})
+
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_investitionen(anlage, monatsdaten)
+
+    offen = _gas_meldungen(ergebnisse)
+    assert not offen, (
+        "Eine Klimaanlage kann diese Hinweise nicht auflösen — "
+        f"erhielt aber: {offen}"
+    )
+
+
+async def test_klassische_wp_bekommt_die_gas_vergleichs_hinweise_weiterhin(db):
+    """Negativprobe: bei einer Luft-Wasser-WP müssen alle drei weiter feuern.
+
+    Ohne diesen Test wäre die Bedingung oben nicht von einem „feuert nie mehr"
+    zu unterscheiden.
+    """
+    anlage, monatsdaten = await _anlage_mit_wp(db, parameter={"wp_art": "luft_wasser"})
+
+    checker = DatenChecker(db)
+    ergebnisse = checker._check_investitionen(anlage, monatsdaten)
+
+    offen = _gas_meldungen(ergebnisse)
+    for erwartet in GAS_VERGLEICHS_MELDUNGEN:
+        assert any(erwartet in m for m in offen), f"fehlt: {erwartet}"

@@ -617,6 +617,8 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 >
 > **Strom-Direktheizung:** η = 1,0. Eine Widerstandsheizung (Nachtspeicher, Infrarot) setzt Strom verlustfrei in Wärme um; ihr einen Kesselverlust anzurechnen, würde die WP-Ersparnis überhöhen. Die η-Wahl lag vorher an vier Stellen dupliziert vor und kannte diesen Fall nirgends.
 
+> **Split-Klimaanlagen (`wp_art = luft_luft`) durchlaufen diese Rechnung gar nicht.** Ein Luft-Luft-Gerät ersetzt in aller Regel keine Heizung und hat keinen Warmwasserkreis — die gesamte Formel oben hätte damit keinen Gegenstand. Bis v4.0.6 lief sie trotzdem, und weil `Heizwärmebedarf`/`Warmwasserbedarf` Defaults haben (12.000/3.000 kWh, Tabelle unten), kam sie nie ohne Ergebnis heraus: bei den übrigen Standardwerten rund **1.100 €/Jahr** und **2.210 kg CO₂/Jahr** Ersparnis gegen eine Gasheizung, die es nie gab — inklusive Beitrag zu den Anlagen-Summen des ROI-Dashboards. Die ROI-Sicht war damit die einzige, die einen fehlenden Wert konstruierte; alle **gemessenen** Pfade (`services/wp_wirtschaftlichkeit.py`, `co2_wp_ersparnis_kg`, Aussichten, JAZ/COP) haben denselben `wp_waerme_kwh <= 0`-Wächter und liefern 0 bzw. „—". Heute gilt: für `luft_luft` wird **weder Ersparnis noch CO₂-Ersparnis** konstruiert, die ROI-Zeile trägt den Leerwert „—" und `nicht_bewertet`; die Bedarfsfelder werden im Formular nicht mehr angeboten. Die Unterscheidung kommt aus dem SoT-Helper `ist_luft_luft_waermepumpe` — eine Wärmepumpe **ohne** `wp_art` zählt weiter als klassische.
+
 > **Alternativ-Zusatzkosten (v3.21.0, #141):** `alternativ_zusatzkosten_jahr` (€/Jahr) deckt laufende Fixkosten der Alt-Heizung (Schornsteinfeger, Wartung, Gaszähler-Grundpreis) ab. Wird in **fünf** Berechnungs-Pfaden berücksichtigt: Aussichten historisch + Prognose, HA-Sensor-Export inkl. WP-Sensor, PDF-Jahresbericht, Investitions-Vorschau. In historischen Aggregaten anteilig pro erfasstem Monat (`alternativ_zusatzkosten_jahr / 12`).
 
 #### Eingabefelder
@@ -629,8 +631,8 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 | SCOP Warmwasser | `scop_warmwasser` | 3.2 |
 | COP Heizung | `cop_heizung` | 3.9 |
 | COP Warmwasser | `cop_warmwasser` | 3.0 |
-| Heizwärmebedarf | `heizwaermebedarf_kwh` | 12000 |
-| Warmwasserbedarf | `warmwasserbedarf_kwh` | 3000 |
+| Heizwärmebedarf | `heizwaermebedarf_kwh` | 12000 (bei `luft_luft` **nicht** abgefragt und nicht vorbelegt) |
+| Warmwasserbedarf | `warmwasserbedarf_kwh` | 3000 (bei `luft_luft` **nicht** abgefragt und nicht vorbelegt) |
 | PV-Anteil | `pv_anteil_prozent` | 30 |
 | Alter Energieträger | `alter_energietraeger` | `gas` |
 | Alter Preis | `alter_preis_cent_kwh` | 12 (Fallback wenn `Monatsdaten.gaspreis_cent_kwh` leer) |

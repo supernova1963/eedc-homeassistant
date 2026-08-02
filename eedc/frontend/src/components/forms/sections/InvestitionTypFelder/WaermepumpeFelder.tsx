@@ -56,6 +56,9 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
             <Alert type="info" title="Split-Klimaanlage">
               Es genügt der Stromverbrauchs-Sensor. Heizenergie/Warmwasser sind bei Klimas meist nicht gemessen —
               die JAZ-Kachel bleibt dann leer („—"), die Stromauswertung funktioniert trotzdem.
+              Heizwärme- und Warmwasserbedarf werden deshalb nicht abgefragt, und eine Ersparnis
+              gegenüber Gas oder Öl weist eedc für Klimaanlagen nicht aus — dafür müsste das Gerät
+              eine Heizung ersetzt haben und die Wärme gemessen sein.
             </Alert>
           )}
 
@@ -163,22 +166,34 @@ export function WaermepumpeFelder({ paramData, onInputChange, setParam, zeige, m
               </>
             )}
 
-            <Input
-              label="Heizwärmebedarf (kWh/Jahr)"
-              name="param_heizwaermebedarf_kwh"
-              type="number" step="any" min="0"
-              value={paramData.heizwaermebedarf_kwh as string}
-              onChange={onInputChange}
-              hint="Aus Energieausweis oder Schätzung"
-            />
-            <Input
-              label="Warmwasserbedarf (kWh/Jahr)"
-              name="param_warmwasserbedarf_kwh"
-              type="number" step="any" min="0"
-              value={paramData.warmwasserbedarf_kwh as string}
-              onChange={onInputChange}
-              hint="~500 kWh/Person/Jahr typisch"
-            />
+            {/* #263 (3dmaster90) / N-87: Bei einer Split-Klimaanlage gibt es
+                weder einen Warmwasserkreis noch einen Heizwärmebedarf aus dem
+                Energieausweis. Beide Felder waren mit 12.000/3.000 kWh
+                vorbelegt, und die ROI-Auswertung rechnete daraus eine Ersparnis
+                gegen eine nie ersetzte Gasheizung. Bei `luft_luft` daher gar
+                nicht erst fragen. Bereits gespeicherte Werte bleiben stehen —
+                die Klima-Unterstützung ist nicht abgeschlossen (#263), da wird
+                nichts weggeworfen, was später noch gebraucht werden könnte. */}
+            {paramData.wp_art !== 'luft_luft' && (
+              <>
+                <Input
+                  label="Heizwärmebedarf (kWh/Jahr)"
+                  name="param_heizwaermebedarf_kwh"
+                  type="number" step="any" min="0"
+                  value={paramData.heizwaermebedarf_kwh as string}
+                  onChange={onInputChange}
+                  hint="Aus Energieausweis oder Schätzung"
+                />
+                <Input
+                  label="Warmwasserbedarf (kWh/Jahr)"
+                  name="param_warmwasserbedarf_kwh"
+                  type="number" step="any" min="0"
+                  value={paramData.warmwasserbedarf_kwh as string}
+                  onChange={onInputChange}
+                  hint="~500 kWh/Person/Jahr typisch"
+                />
+              </>
+            )}
           </div>
 
           <SchalterZeile

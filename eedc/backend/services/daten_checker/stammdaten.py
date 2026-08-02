@@ -16,6 +16,7 @@ from backend.core.investition_parameter import (
     BKW_EINSPEISEGRENZE_W_TYPISCH,
     PARAM_PV_MODULE,
     ist_dienstlich,
+    ist_luft_luft_waermepumpe,
 )
 from backend.core.berechnungen import pruefe_speicher_netzladung_kumulativ
 from backend.core.wirtschaftlichkeit_defaults import NETZBEZUG_DEFAULT_CENT
@@ -612,7 +613,18 @@ class StammdatenChecks:
                     ))
 
             elif inv.typ == "waermepumpe":
-                if inv.anschaffungskosten_alternativ is None:
+                # N-87 / #263: Eine Split-Klimaanlage ersetzt keine Heizung — der
+                # Vergleich gegen Gas/Öl wird für sie nicht mehr gerechnet
+                # (`investitionen/crud.py`, ROI-Dashboard). Die drei Hinweise, die
+                # ausschließlich diesen Vergleich füttern, wären damit Forderungen
+                # ohne Zweck; „Heizwärmebedarf" wäre sogar unauflösbar, weil das
+                # Feld für Klimaanlagen gar nicht mehr angeboten wird. Derselbe
+                # Grundsatz wie in P-6: ein Befund, den der Anwender nicht
+                # auflösen kann, ist ein Fehler bei uns
+                # ([[feedback_daten_checker_kein_akzeptiert]]).
+                ist_klima = ist_luft_luft_waermepumpe(param)
+
+                if inv.anschaffungskosten_alternativ is None and not ist_klima:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Alternativkosten (Gas-/Ölheizung) fehlen",
@@ -661,7 +673,7 @@ class StammdatenChecks:
 
                 # Alter Energieträger / Preis für Vergleichsrechnung
                 alter_preis = param.get("alter_preis_cent_kwh")
-                if alter_preis is None:
+                if alter_preis is None and not ist_klima:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: Alter Energiepreis nicht gesetzt",
@@ -670,7 +682,7 @@ class StammdatenChecks:
                     ))
 
                 # Wärmebedarf für Jahres-Einsparungsschätzung
-                if not param.get("heizwaermebedarf_kwh"):
+                if not param.get("heizwaermebedarf_kwh") and not ist_klima:
                     ergebnisse.append(CheckErgebnis(
                         kategorie=kat, schwere=CheckSeverity.INFO,
                         meldung=f"{name}: Heizwärmebedarf nicht gesetzt",

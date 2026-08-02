@@ -242,6 +242,8 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Heizenergie fehlt in N Monat(en)** | ℹ️ INFO | `heizenergie_kwh` fehlt — JAZ und COP-Vergleich für die Monate nicht möglich, Stromverbrauch bleibt aber erfasst. | Wenn Wärmemengenzähler vorhanden: Werte nachtragen; sonst akzeptieren. |
 
 > **Split-Klimaanlagen sind ausgenommen.** Ist die Wärmepumpenart **Luft-Luft (Klimaanlage)** eingetragen, verlangt der Checker weder die monatliche Heizwärme noch die Tages-Zusatzzähler aus §4.6: beides setzt einen Wärmemengenzähler voraus, den solche Geräte praktisch nie haben, und einen Warmwasserkreis gibt es dort gar nicht. Der **Stromverbrauch** bleibt Pflicht, die Stromauswertung funktioniert vollständig; JAZ/COP zeigen „—" statt einer Scheinzahl. Eine Wärmepumpe **ohne** eingetragene Art gilt als klassische Wärmepumpe — eine fehlende Angabe schaltet die Erwartung nicht ab.
+>
+> **Ebenfalls ausgenommen: die drei Hinweise zum Gas-/Öl-Vergleich** — *Alternativkosten (Gas-/Ölheizung) fehlen*, *Alter Energiepreis nicht gesetzt* und *Heizwärmebedarf nicht gesetzt*. Sie versorgen ausschließlich die Ersparnis-Rechnung gegenüber einer ersetzten Heizung, und die wird für Klimaanlagen nicht mehr durchgeführt (siehe *Auswertungen → ROI*: die Zeile steht dort mit „—" und dem Vermerk *nicht bewertet*). Der Hinweis zum Heizwärmebedarf wäre für Klimaanlagen sogar **unauflösbar**, weil das Feld im Komponenten-Formular für diese Art gar nicht mehr angeboten wird — genau der Fall, den §2 als Fehler auf unserer Seite beschreibt.
 
 #### 4.3.8 Allgemein (alle Komponententypen)
 
