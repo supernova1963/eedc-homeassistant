@@ -91,6 +91,16 @@ NACHKOMMASTELLEN_MAX = 3       # Obergrenze für die Nullkipp-Ausweichung
 def runde_exportwert(value: Any, unit: str) -> Any:
     """Rundet einen Sensorwert nach seiner Größenart (Einheit der Definition).
 
+    **Jeder** Export-Weg benutzt diesen Helfer, und zwar erst an der
+    Serialisierungsgrenze: MQTT-Sensoren (``mqtt_client.publish_sensor``),
+    MQTT-Monatsdaten (``runde_export_payload``) und REST
+    (``SensorExportItem``, das Pydantic-Modell rundet sich selbst). Die
+    Rundung hängt **nicht am Produzenten** — ``calculate_anlage_sensors`` und
+    ``calculate_investition_sensors`` liefern ungerundet. Vorher rundeten
+    ~25 Sensorzeilen im Route-Modul vor, sodass REST eine Nachkommastelle
+    zeigte, wo MQTT ganzzahlig publizierte, und der MQTT-Wert zweimal
+    hintereinander gerundet wurde.
+
     Nicht-numerische Werte (Monatsname, „Speicher voll um") und ganze Zahlen
     gehen unverändert durch. Ein Wert, der bei der vorgesehenen Stellenzahl auf
     0 fiele, obwohl er nicht 0 ist, bekommt so viele Stellen wie nötig
@@ -110,6 +120,26 @@ def runde_exportwert(value: Any, unit: str) -> Any:
         gerundet = round(value, stellen)
     # Ganzzahlige Größen als echte ganze Zahl ausliefern: „1234" statt „1234.0".
     return int(gerundet) if stellen == 0 else gerundet
+
+
+def runde_export_payload(daten: dict, einheiten: dict[str, str] | None = None) -> dict:
+    """Rundet die Werte eines Export-Payloads, der keine Sensor-Definition hat.
+
+    Für Payloads wie die MQTT-Monatsdaten, deren Felder ihre Größenart nicht
+    mitbringen: der Aufrufer gibt sie in ``einheiten`` mit — dort, wo er auch
+    die Felder auswählt, damit ein neu aufgenommenes Feld die Einheit direkt
+    daneben stehen hat. Ein Feld ohne Eintrag fällt bewusst auf
+    ``NACHKOMMASTELLEN_DEFAULT`` (2) zurück: das ist die Stellenzahl, die der
+    Export bis v4.0.6 für **alles** benutzt hat, also nie gröber als vorher.
+
+    Struktur, Feldnamen und Reihenfolge bleiben unangetastet — an dem Payload
+    hängen fremde HA-Automationen.
+    """
+    einheiten = einheiten or {}
+    return {
+        schluessel: runde_exportwert(wert, einheiten.get(schluessel, ""))
+        for schluessel, wert in daten.items()
+    }
 
 
 # =============================================================================

@@ -133,6 +133,16 @@ class MonatsabschlussResult(BaseModel):
 # Background-Task
 # =============================================================================
 
+# Größenart je Feld des MQTT-Monatsdaten-Payloads (N-54). Steht hier, direkt
+# neben der Stelle, die die Felder auswählt (s. `monatsdaten_dict` unten) —
+# wer ein Feld aufnimmt, sieht die Einheit daneben. `jahr`/`monat` sind ganze
+# Zahlen und gehen ohnehin unverändert durch.
+MONATSDATEN_MQTT_EINHEITEN = {
+    "einspeisung_kwh": "kWh",
+    "netzbezug_kwh": "kWh",
+}
+
+
 async def _post_save_hintergrund(
     anlage_id: int,
     jahr: int,
@@ -149,7 +159,10 @@ async def _post_save_hintergrund(
     # 1. MQTT Publish
     mqtt_sync = get_ha_mqtt_sync_service()
     try:
-        await mqtt_sync.publish_final_month_data(anlage_id, jahr, monat, monatsdaten_dict)
+        await mqtt_sync.publish_final_month_data(
+            anlage_id, jahr, monat, monatsdaten_dict,
+            einheiten=MONATSDATEN_MQTT_EINHEITEN,
+        )
     except Exception as e:
         logger.warning(f"MQTT-Publish fehlgeschlagen: {type(e).__name__}: {e}")
 
@@ -402,6 +415,8 @@ async def save_monatsabschluss(
         anlage_id=anlage_id,
         jahr=jahr,
         monat=monat,
+        # Feldauswahl des MQTT-Payloads — Einheiten dazu in
+        # MONATSDATEN_MQTT_EINHEITEN (N-54).
         monatsdaten_dict={
             "jahr": jahr,
             "monat": monat,

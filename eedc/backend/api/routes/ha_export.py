@@ -10,7 +10,7 @@ Unterstützt zwei Methoden:
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, Any
 from dataclasses import dataclass
 import os
@@ -62,7 +62,7 @@ from backend.services.ha_sensors_export import (
     ANLAGE_SENSOREN, INVESTITION_SENSOREN, E_AUTO_SENSOREN,
     WAERMEPUMPE_SENSOREN, SPEICHER_SENSOREN, LETZTER_IMPORT_SENSOREN,
     PROGNOSE_SENSOREN, PREIS_SENSOREN,
-    get_all_sensor_definitions
+    get_all_sensor_definitions, runde_exportwert
 )
 from backend.services.ha_export_prognose import berechne_prognose_export
 from backend.services.ha_export_preis import berechne_preis_export
@@ -110,7 +110,15 @@ class MQTTConfigRequest(BaseModel):
 
 
 class SensorExportItem(BaseModel):
-    """Einzelner Sensor im Export."""
+    """Einzelner Sensor im Export.
+
+    Die Rundung sitzt HIER und nicht in den drei Routen, die das Item bauen
+    (`/sensors` zweimal, `/sensors/{anlage_id}`): dieses Modell IST die
+    REST-Serialisierungsgrenze — an ihm vorbei kommt kein Sensorwert nach
+    außen, auch eine vierte Route nicht. Damit sagen REST und MQTT dieselbe
+    Zahl; vorher lieferte REST roh weiter, was der Produzent gerundet hatte
+    (kWh mit einer Nachkommastelle, wo MQTT ganzzahlig publizierte).
+    """
     key: str
     name: str
     value: Any
@@ -121,6 +129,15 @@ class SensorExportItem(BaseModel):
     berechnung: Optional[str] = None
     device_class: Optional[str] = None
     state_class: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _runde_wert(self):
+        gerundet = runde_exportwert(self.value, self.unit)
+        if gerundet is not self.value:
+            # `model_construct`-freier Weg: Zuweisung im After-Validator läuft
+            # nicht erneut durch die Validierung (Pydantic v2).
+            object.__setattr__(self, "value", gerundet)
+        return self
 
 
 class AnlageExport(BaseModel):
@@ -716,48 +733,48 @@ async def calculate_anlage_sensors(
         berechnung = None
 
         if sensor.key == "pv_erzeugung_gesamt_kwh":
-            value = round(pv_erzeugung, 1)
+            value = pv_erzeugung
             berechnung = f"Summe aus {len(monatsdaten)} Monaten"
         elif sensor.key == "direktverbrauch_gesamt_kwh":
-            value = round(direktverbrauch, 1)
+            value = direktverbrauch
             berechnung = f"PV direkt verbraucht (ohne Speicher)"
         elif sensor.key == "eigenverbrauch_gesamt_kwh":
-            value = round(eigenverbrauch, 1)
+            value = eigenverbrauch
         elif sensor.key == "einspeisung_gesamt_kwh":
-            value = round(einspeisung, 1)
+            value = einspeisung
         elif sensor.key == "netzbezug_gesamt_kwh":
-            value = round(netzbezug, 1)
+            value = netzbezug
         elif sensor.key == "gesamtverbrauch_kwh":
-            value = round(gesamtverbrauch, 1)
+            value = gesamtverbrauch
             berechnung = f"{eigenverbrauch:.0f} + {netzbezug:.0f}"
         elif sensor.key == "autarkie_prozent":
-            value = round(autarkie, 1)
+            value = autarkie
             berechnung = f"{eigenverbrauch:.0f} ÷ {gesamtverbrauch:.0f} × 100"
         elif sensor.key == "eigenverbrauch_quote_prozent":
-            value = round(ev_quote, 1)
+            value = ev_quote
             # DI-2-B: Nenner = Netzpunkt-Erzeugung (PV inkl. BKW + sonstige
             # Erzeuger), deckungsgleich mit der Cockpit-EV-Quote.
             berechnung = f"{eigenverbrauch:.0f} ÷ {erzeugung_bilanz:.0f} × 100"
         elif sensor.key == "spezifischer_ertrag_kwh_kwp":
-            value = round(spez_ertrag, 0) if spez_ertrag else None
+            value = spez_ertrag if spez_ertrag else None
             if value is not None:
                 berechnung = (
                     f"{pv_erzeugung:.0f} kWh annualisiert "
                     f"(saisonal gewichtet, wie Cockpit)"
                 )
         elif sensor.key == "netto_ertrag_euro":
-            value = round(netto_ertrag, 2)
+            value = netto_ertrag
             berechnung = f"{einspeise_erloes:.2f} + {ev_ersparnis:.2f} + {sonstige_netto_gesamt:.2f} (sonstige)"
         elif sensor.key == "einspeise_erloes_euro":
-            value = round(einspeise_erloes, 2)
+            value = einspeise_erloes
             if strompreis:
                 berechnung = f"{einspeisung:.0f} × {strompreis.einspeiseverguetung_cent_kwh:.2f} ct/kWh"
         elif sensor.key == "eigenverbrauch_ersparnis_euro":
-            value = round(ev_ersparnis, 2)
+            value = ev_ersparnis
             if strompreis:
                 berechnung = f"{eigenverbrauch:.0f} × {strompreis.netzbezug_arbeitspreis_cent_kwh:.2f} ct/kWh"
         elif sensor.key == "co2_ersparnis_kg":
-            value = round(co2_ersparnis, 1)
+            value = co2_ersparnis
             berechnung = "PV-Eigenverbrauch + Wärmepumpe + E-Mobilität (vermiedenes CO₂)"
 
         if value is not None:
@@ -774,19 +791,19 @@ async def calculate_anlage_sensors(
 
         if sensor.key == "investition_gesamt_euro":
             if investition_gesamt > 0:
-                value = round(investition_gesamt, 2)
+                value = investition_gesamt
                 berechnung = f"Summe aus {len(investitionen)} Investitionen"
         elif sensor.key == "jahres_ersparnis_euro":
             if jahres_ersparnis > 0:
-                value = round(jahres_ersparnis, 2)
+                value = jahres_ersparnis
                 berechnung = f"({historischer_netto_ertrag:.2f} ÷ {anzahl_monate}) × 12"
         elif sensor.key == "roi_prozent":
             if roi_prozent is not None:
-                value = round(roi_prozent, 1)
+                value = roi_prozent
                 berechnung = f"{jahres_ersparnis:.2f} ÷ {relevante_kosten:.2f} × 100"
         elif sensor.key == "amortisation_jahre":
             if amortisation_jahre is not None:
-                value = round(amortisation_jahre, 1)
+                value = amortisation_jahre
                 berechnung = f"{relevante_kosten:.2f} ÷ {jahres_ersparnis:.2f}"
 
         if value is not None:
@@ -804,11 +821,11 @@ async def calculate_anlage_sensors(
 
             if sensor.key == "speicher_zyklen":
                 if speicher_zyklen is not None:
-                    value = round(speicher_zyklen, 0)
+                    value = speicher_zyklen
                     berechnung = f"{batterie_entladung:.0f} ÷ {speicher_kapazitaet:.1f}"
             elif sensor.key == "speicher_effizienz_prozent":
                 if speicher_effizienz is not None:
-                    value = round(speicher_effizienz, 1)
+                    value = speicher_effizienz
                     berechnung = f"{batterie_entladung:.0f} ÷ {batterie_ladung:.0f} × 100"
 
             if value is not None:
@@ -953,7 +970,7 @@ async def calculate_investition_sensors(
             if sensor.key == "investition_gesamt_euro":
                 sensor_values.append(SensorValue(
                     definition=sensor,
-                    value=round(investition.anschaffungskosten_gesamt, 2),
+                    value=investition.anschaffungskosten_gesamt,
                     berechnung=None
                 ))
 
@@ -989,15 +1006,15 @@ async def calculate_investition_sensors(
 
             if sensor.key == "e_auto_km_gesamt":
                 if gesamt_km > 0:
-                    value = round(gesamt_km, 0)
+                    value = gesamt_km
                     berechnung = f"Summe aus {len(monatsdaten)} Monaten"
             elif sensor.key == "e_auto_verbrauch_kwh_100km":
                 if gesamt_km > 0 and gesamt_verbrauch > 0:
-                    value = round(gesamt_verbrauch / gesamt_km * 100, 1)
+                    value = gesamt_verbrauch / gesamt_km * 100
                     berechnung = f"{gesamt_verbrauch:.0f} / {gesamt_km:.0f} × 100"
             elif sensor.key == "e_auto_pv_anteil_prozent":
                 if gesamt_ladung > 0:
-                    value = round(gesamt_pv_ladung / gesamt_ladung * 100, 1)
+                    value = gesamt_pv_ladung / gesamt_ladung * 100
                     berechnung = f"{gesamt_pv_ladung:.0f} / {gesamt_ladung:.0f} × 100"
             elif sensor.key == "e_auto_ersparnis_vs_benzin_euro":
                 if gesamt_km > 0:
@@ -1030,7 +1047,7 @@ async def calculate_investition_sensors(
                               else fallback_benzinpreis)
                         benzin_kosten += (km / 100) * vergleich_l * bp
                         strom_kosten += netz * netzbezug_preis / 100
-                    value = round(benzin_kosten - strom_kosten, 2)
+                    value = benzin_kosten - strom_kosten
                     berechnung = f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom)"
 
             if value is not None:
@@ -1091,7 +1108,7 @@ async def calculate_investition_sensors(
 
             if sensor.key == "wp_cop_durchschnitt":
                 if gesamt_strom > 0 and gesamt_waerme > 0:
-                    value = round(gesamt_waerme / gesamt_strom, 2)
+                    value = gesamt_waerme / gesamt_strom
                     berechnung = f"{gesamt_waerme:.0f} / {gesamt_strom:.0f}"
             elif sensor.key == "wp_ersparnis_euro":
                 if gesamt_waerme > 0:
@@ -1117,7 +1134,7 @@ async def calculate_investition_sensors(
                     # Fixe Zusatzkosten anteilig
                     alte_kosten += zusatzkosten_jahr * len(monatsdaten) / 12
                     wp_kosten = gesamt_strom * wp_netzbezug_preis / 100
-                    value = round(alte_kosten - wp_kosten, 2)
+                    value = alte_kosten - wp_kosten
                     berechnung = f"{alte_kosten:.2f} (alt) - {wp_kosten:.2f} (WP)"
             elif sensor.key == "wp_kompressor_starts":
                 if hat_starts:
@@ -1125,7 +1142,7 @@ async def calculate_investition_sensors(
                     berechnung = "Σ erfasste Kompressor-Starts"
             elif sensor.key == "wp_betriebsstunden":
                 if hat_stunden:
-                    value = round(wp_stunden_total, 1)
+                    value = wp_stunden_total
                     berechnung = "Σ erfasste Betriebsstunden"
 
             if value is not None:

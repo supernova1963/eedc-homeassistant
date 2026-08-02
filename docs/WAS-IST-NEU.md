@@ -154,6 +154,33 @@ sie waren vorher falsch.
 **Was du tun musst: nichts.** → [Handbuch → Cockpit/Monat](HANDBUCH_BEDIENUNG.md#23-monat)
 *(gemeldet von Algie im simon42-Forum)*
 
+### Die exportierten Sensoren zeigen über REST dieselben Zahlen wie über MQTT
+
+**Betrifft dich das?** Nur wenn du eedc-Sensoren per **REST-Plattform** in Home Assistant eingebunden
+hast (das YAML-Snippet aus **Einstellungen → Integration → MQTT-Export**). Wer MQTT nutzt, sieht
+keine Änderung — dort gilt die Regel seit v4.0.6.
+
+Mit v4.0.6 wurden die Export-Werte auf handliche Längen gebracht: kWh ganzzahlig, Geld auf Cent,
+Prozent auf eine Stelle. Diese Regel griff bisher aber nur beim MQTT-Export. Derselbe Sensor kam
+über REST weiter mit einer Nachkommastelle an — dieselbe Jahressumme also einmal als `39692` und
+einmal als `39692,4`.
+
+Was du jetzt siehst:
+
+- **Beide Wege liefern dieselbe Zahl.** Auf der Demo-Anlage betrifft das 16 von 54 Sensoren; alle
+  übrigen waren ohnehin schon gleich. Die Werte werden dabei **kürzer**, nicht anders: aus
+  39.692,4 kWh wird 39.692 kWh.
+- **Eine Ausnahme wird länger:** die **Vollzyklen** des Speichers standen als glatte `380` im
+  Export und tragen jetzt `380,19` — dieselben zwei Nachkommastellen, die dir die Speicher-Kachel
+  in eedc längst zeigt.
+- **Deine HA-Konfiguration bleibt gültig.** Sensor-Namen, Einheiten und die Anzahl der Entitäten
+  ändern sich nicht, das YAML-Snippet auch nicht. Die aufgezeichnete Historie zurückliegender
+  Zeitpunkte bleibt stehen, wie sie ist — nur ab jetzt kommen die kürzeren Werte an.
+
+**Was du tun musst: nichts.** Wenn eine deiner Automationen auf eine Nachkommastelle angewiesen war,
+lohnt ein Blick — die Größenordnung ändert sich nie, nur die Stellen dahinter.
+→ [Sensor-Referenz → Export-Sensoren](SENSOR-REFERENZ.md)
+
 ---
 
 ## v4.0.6 — Vergleichbares vergleichen, Gemessenes behalten (August 2026)

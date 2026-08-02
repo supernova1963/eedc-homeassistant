@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from backend.api.routes.ha_export import calculate_investition_sensors
 from backend.models import Anlage, Investition, Monatsdaten
 from backend.models.investition import InvestitionMonatsdaten
@@ -26,7 +28,12 @@ async def test_wp_ersparnis_euro_sensor_wert_gepinnt(db):
 
       alte_kosten = (1000 / 0,90) * 10 / 100 + 120 * 1/12 = 111,111 + 10 = 121,111 €
       wp_kosten   = 300 * 30 / 100                          =  90,000 €
-      ersparnis   = round(31,111, 2)                        =  31,11 €
+      ersparnis                                             =  31,111… €
+
+    Der Produzent liefert seit P-4 **ungerundet** — gerundet wird erst an der
+    Export-Grenze (`SensorExportItem` bzw. `publish_sensor`), wo aus dieser
+    Zahl die ausgelieferten 31,11 € werden. Gepinnt ist hier die Formel, nicht
+    die Darstellung; die Rundung deckt `test_export_rundung_rest_mqtt_gleich`.
     """
     anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
     db.add(anlage)
@@ -58,4 +65,4 @@ async def test_wp_ersparnis_euro_sensor_wert_gepinnt(db):
     sensors = await calculate_investition_sensors(db, wp, None)
     s = _sensor(sensors, "wp_ersparnis_euro")
     assert s is not None
-    assert s.value == 31.11
+    assert s.value == pytest.approx(31.1111, abs=0.0001)

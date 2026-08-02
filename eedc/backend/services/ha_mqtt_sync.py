@@ -112,6 +112,7 @@ class HAMqttSyncService:
         jahr: int,
         monat: int,
         daten: dict[str, Any],
+        einheiten: Optional[dict[str, str]] = None,
     ) -> bool:
         """
         Publiziert finale Monatsdaten auf MQTT (retained).
@@ -121,6 +122,7 @@ class HAMqttSyncService:
             jahr: Jahr
             monat: Monat
             daten: Monatsdaten
+            einheiten: Größenart je Feld für die Export-Rundung (N-54)
 
         Returns:
             True wenn erfolgreich
@@ -131,6 +133,7 @@ class HAMqttSyncService:
             jahr=jahr,
             monat=monat,
             daten=daten,
+            einheiten=einheiten,
         )
 
 

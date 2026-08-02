@@ -26,6 +26,7 @@ from backend.core.config import APP_VERSION
 from backend.services.ha_sensors_export import (
     SensorDefinition,
     SensorValue,
+    runde_export_payload,
     runde_exportwert,
 )
 
@@ -407,17 +408,25 @@ class MQTTClient:
         jahr: int,
         monat: int,
         daten: dict,
+        einheiten: Optional[dict[str, str]] = None,
     ) -> bool:
         """
         Publiziert finale Monatsdaten auf MQTT (retained).
 
         Ermöglicht HA-Automationen basierend auf Monatsdaten.
 
+        Der zweite Payload desselben Clients — und damit derselben Regel
+        unterworfen wie `publish_sensor` (N-54): gerundet wird hier, an der
+        Serialisierungsgrenze, nicht beim Erzeuger. Struktur, Feldnamen und
+        Topic bleiben unverändert; daran hängen fremde HA-Automationen.
+
         Args:
             anlage_id: ID der Anlage
             jahr: Jahr
             monat: Monat
             daten: Monatsdaten als Dict
+            einheiten: Größenart je Feld (der Payload trägt keine mit) —
+                ohne Eintrag greift die dimensionslose Vorgabe
 
         Returns:
             True wenn erfolgreich
@@ -436,7 +445,7 @@ class MQTTClient:
             ) as client:
                 await client.publish(
                     topic,
-                    json.dumps(daten),
+                    json.dumps(runde_export_payload(daten, einheiten)),
                     retain=True
                 )
                 return True
