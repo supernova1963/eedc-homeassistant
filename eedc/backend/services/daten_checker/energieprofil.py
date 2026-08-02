@@ -13,7 +13,10 @@ from sqlalchemy import select
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.utils.investition_filter import sort_investitionen_nach_typ
-from backend.core.investition_parameter import ist_dienstlich
+from backend.core.investition_parameter import (
+    ist_dienstlich,
+    ist_luft_luft_waermepumpe,
+)
 from backend.core.berechnungen import (
     summe_pv_bkw_kwh as _summe_pv_bkw_kwh,
     klassifiziere_pv_monat,
@@ -313,6 +316,15 @@ class EnergieprofilChecks:
             if not zusatz or not inv.ist_aktiv_an(heute):
                 continue
             if inv.typ == "e-auto" and (hat_wallbox or ist_dienstlich(inv)):
+                continue
+            # Split-Klimaanlage: beide WP-Zusatzfelder setzen einen
+            # Wärmemengenzähler voraus, und einen Warmwasserkreis hat so ein
+            # Gerät ohnehin nicht. Der Hinweis war für den Anwender damit
+            # unauflösbar (dietmar1968, Forum #89667/87) — und widersprach der
+            # Zusage im Investitionsformular („Es genügt der
+            # Stromverbrauchs-Sensor"). Dieselbe Bedingung nimmt die
+            # Monatsdaten-Prüfung die Klima längst aus.
+            if inv.typ == "waermepumpe" and ist_luft_luft_waermepumpe(inv):
                 continue
             felder = (inv_map.get(str(inv.id), {}) or {}).get("felder", {}) or {}
             fehlend = [label for feld, label in zusatz if not has_zaehler(felder.get(feld))]

@@ -181,6 +181,49 @@ Was du jetzt siehst:
 lohnt ein Blick — die Größenordnung ändert sich nie, nur die Stellen dahinter.
 → [Sensor-Referenz → Export-Sensoren](SENSOR-REFERENZ.md)
 
+### Der Daten-Checker verlangt von einer Klimaanlage keinen Wärmemengenzähler mehr
+
+**Betrifft dich das?** Wenn du eine **Split-Klimaanlage** als Wärmepumpe der Art *Luft-Luft*
+angelegt hast.
+
+Der Daten-Checker meldete dauerhaft „1 Komponente(n) ohne Zusatz-Zähler für Tageswerte — Offen:
+Klimaanlage: Heizwärme, Warmwasser". Beide Werte kommen aus einem **Wärmemengenzähler**, und einen
+Warmwasserkreis hat ein Split-Gerät gar nicht — der Hinweis war also **nicht auflösbar**. Er
+widersprach obendrein dem, was eedc dir beim Anlegen der Komponente selbst zusagt: „Es genügt der
+Stromverbrauchs-Sensor."
+
+Der Hinweis erscheint für Luft-Luft-Geräte nicht mehr. **Für klassische Wärmepumpen bleibt er** — er
+ist dort ein echter Zuordnungs-Hinweis. Eine Wärmepumpe **ohne** eingetragene Art gilt weiter als
+klassische Wärmepumpe; wenn du also eine Klimaanlage hast und den Hinweis noch siehst, trage unter
+*Einstellungen → Komponenten* die Wärmepumpenart **Luft-Luft (Klimaanlage)** ein.
+
+**Was du tun musst: nichts** (außer im gerade genannten Fall).
+→ [Handbuch → Daten-Checker](HANDBUCH_DATEN_CHECKER.md)
+
+### Zwei Hinweise erklären jetzt, was passiert, wenn du nichts tust
+
+**Betrifft dich das?** Wenn du eine **Wärmepumpe ohne eigenen Wärmestrom-Tarif** hast, oder wenn dir
+der Daten-Checker **„PVGIS-Systemverluste ggf. zu hoch"** anzeigt.
+
+Beide Hinweise standen dauerhaft und ließen sich durch keine Eingabe abstellen. Ein Häkchen zum
+Wegklicken wird es dafür bewusst nicht geben — ein Hinweis, den man wegklicken kann, ist einer, den
+man bald gar nicht mehr liest. Stattdessen sagen die beiden jetzt, was sie eigentlich meinen:
+
+- **„Wärmepumpe rechnet mit dem allgemeinen Tarif"** (bisher „Kein WP-Spezialtarif hinterlegt"):
+  Ohne eigenen Wärmestrom-Tarif bewertet eedc den WP-Strom mit deinem allgemeinen Arbeitspreis.
+  Hast du einen Einheitstarif, ist das **richtig so und du musst nichts tun** — der Hinweis bleibt
+  dann als Information stehen. Hast du einen §14a-Wärmestrom-Tarif, trägst du ihn hier nach.
+- **„PVGIS-Systemverluste ggf. zu hoch"**: Der Text sagt jetzt dazu, dass die 14 % eine **Annahme**
+  der Prognose sind und keine Messung — und vor allem, **was passiert, wenn du sie senkst**: Deine
+  Prognose (das SOLL) steigt, deshalb sinken Performance Ratio und SOLL-Erfüllung in
+  *Auswertungen → Prognose vs. IST* und im Jahresbericht. **Deine gemessenen Werte ändern sich
+  nicht.** Wirksam wird die Änderung erst, wenn du unter *Solarprognose* eine **neue Prognose
+  abrufst** und speicherst; die bisherige bleibt als Historie erhalten und lässt sich jederzeit
+  wieder aktivieren. Du darfst die Prognose auch bewusst als konservative Untergrenze stehen lassen.
+
+**Es erscheint und verschwindet dadurch kein Befund** — es ändert sich der Text.
+→ [Handbuch → Daten-Checker](HANDBUCH_DATEN_CHECKER.md)
+
 ---
 
 ## v4.0.6 — Vergleichbares vergleichen, Gemessenes behalten (August 2026)

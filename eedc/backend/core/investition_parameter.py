@@ -320,3 +320,32 @@ def ist_dienstlich(inv_or_parameter) -> bool:
     if isinstance(val, str):
         return val.strip().lower() in ("true", "1", "yes", "ja")
     return bool(val)
+
+
+def ist_luft_luft_waermepumpe(inv_or_parameter) -> bool:
+    """Ist diese Wärmepumpe eine Split-Klimaanlage (`wp_art="luft_luft"`)?
+
+    Akzeptiert — wie `ist_dienstlich` — ein Investition-Objekt, direkt das
+    parameter-Dict oder None.
+
+    Warum als Helper und nicht als Vergleich an der Fundstelle: die Unterscheidung
+    entscheidet an mehreren Stellen, ob eine **Wärmemenge** erwartet werden darf.
+    Eine Split-Klimaanlage hat weder Wärmemengenzähler noch Warmwasserkreis — das
+    Investitionsformular sagt das dem Anwender auch so zu (`WaermepumpeFelder.tsx`:
+    „Es genügt der Stromverbrauchs-Sensor"). Wo die Bedingung fehlte, forderte der
+    Daten-Checker eine Zuordnung, die es beim Anwender nicht geben kann
+    (dietmar1968, Forum #89667/87).
+
+    Legacy-WP **ohne** `wp_art` zählt bewusst als klassische WP: die Vorbelegung
+    ist `luft_wasser`, und eine fehlende Angabe darf die Wärmemengen-Erwartung
+    nicht stillschweigend abschalten.
+    """
+    if inv_or_parameter is None:
+        return False
+    params = (
+        getattr(inv_or_parameter, "parameter", None)
+        if hasattr(inv_or_parameter, "parameter")
+        else inv_or_parameter
+    ) or {}
+    val = params.get(PARAM_WAERMEPUMPE["WP_ART"])
+    return isinstance(val, str) and val.strip().lower() == "luft_luft"

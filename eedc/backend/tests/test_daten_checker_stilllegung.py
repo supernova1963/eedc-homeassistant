@@ -254,9 +254,16 @@ async def test_spezialtarif_nag_verschwindet_bei_stillgelegter_wp(db):
 
     checker = DatenChecker(db)
     ergebnisse = checker._check_strompreise(anlage)
-    wp_nag = [r for r in ergebnisse if "Wärmepumpe" in r.meldung or "wärmepumpe" in r.meldung.lower()]
+    # Auf die Kategorie filtern, nicht auf den Wortlaut: bis 02.08. hieß die
+    # Meldung „Kein WP-Spezialtarif hinterlegt" und der Filter suchte nach
+    # „Wärmepumpe". Eine Umformulierung hätte diesen Test stumm gemacht — er
+    # hätte auf eine Liste geprüft, die dann immer leer ist.
+    wp_nag = [
+        r for r in ergebnisse
+        if "Wärmepumpe" in r.meldung or "Wärmepumpe" in (r.details or "")
+    ]
     assert wp_nag == [], (
-        f"Kein WP-Spezialtarif-Hinweis für stillgelegte WP erwartet, "
+        f"Kein WP-Tarif-Hinweis für stillgelegte WP erwartet, "
         f"fand: {[r.meldung for r in wp_nag]}"
     )
 

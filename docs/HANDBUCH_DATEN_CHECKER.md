@@ -1,7 +1,7 @@
 
 # eedc Handbuch — Daten-Checker
 
-**Version 4.0** | Stand: 2026-07-25
+**Version 4.0** | Stand: 2026-08-02
 
 > Dieses Handbuch ist Teil der eedc-Dokumentation.
 > Siehe auch: [Teil I: Installation & Einrichtung](HANDBUCH_INSTALLATION.md) | [Teil II: Bedienung](HANDBUCH_BEDIENUNG.md) | [Teil III: Einstellungen](HANDBUCH_EINSTELLUNGEN.md) | [Infothek](HANDBUCH_INFOTHEK.md) | [Glossar](GLOSSAR.md)
@@ -68,7 +68,7 @@ Jeder Befund hat genau eine von vier Schweregraden. Sie sind nicht zu addieren �
 |--------|-------------|-----------|-------------------|
 | ❌ | **ERROR** (rot) | Kerndaten fehlen oder Werte sind logisch unmöglich (z. B. Einspeisung > PV-Erzeugung). Ohne Behebung sind die zugehörigen Auswertungen entweder leer oder produzieren falsche Ergebnisse. | Beheben, **bevor** du den Auswertungen vertraust. |
 | ⚠️ | **WARNING** (amber) | Plausibilitäts-Abweichung oder fehlende Pflicht-Parameter, die einzelne Auswertungen einschränken (ROI, Heizenergie-Vergleich, kWh-basierte Reparatur-Werkzeuge). Die App rechnet trotzdem, blendet aber Bereiche aus oder rechnet mit Defaults. | Anschauen, in der Regel beheben. Manche Warnungen sind anlagenbedingt (z. B. ungewöhnlich gute Erzeugung) — dann zur Kenntnis nehmen. |
-| ℹ️ | **INFO** (blau) | Hinweis auf optionale Felder oder einen Konfigurations-Aspekt, der für deinen aktuellen Anwendungsfall vielleicht nicht relevant ist. Beispiel: „Kein WP-Spezialtarif hinterlegt" — nur relevant, wenn du tatsächlich einen separaten Wärmestrom-Tarif hast. | Lesen, dann entscheiden. Keine Pflicht. |
+| ℹ️ | **INFO** (blau) | Hinweis auf optionale Felder oder einen Konfigurations-Aspekt, der für deinen aktuellen Anwendungsfall vielleicht nicht relevant ist. Beispiel: „Wärmepumpe rechnet mit dem allgemeinen Tarif" — zu tun ist da nur etwas, wenn du tatsächlich einen separaten Wärmestrom-Tarif hast. | Lesen, dann entscheiden. Keine Pflicht. |
 | ✅ | **OK** (grün) | Prüfung bestanden. | Nichts zu tun. |
 
 ### Wann wechseln Severity-Stufen?
@@ -80,6 +80,8 @@ Einzelne Befunde haben über Releases hinweg ihre Stufe gewechselt. Beispiele:
 - **Kategorien werden still übersprungen**, wenn ihre technische Voraussetzung fehlt (HA-LTS nicht erreichbar, MQTT-Import nicht aktiviert) — du siehst dann gar keine Befunde dieser Kategorie, nicht „OK".
 
 > **Daten-Checker kennt kein „Akzeptiert".** Ein Befund lässt sich nicht wegklicken oder als „gesehen" markieren — er verschwindet erst, wenn die Ursache behoben ist (oder, bei anlagenbedingten Warnungen, bewusst bestehen bleibt). Das ist Absicht: der Checker ist Diagnose, kein Aufgaben-Abhaken.
+>
+> **Umgekehrt gilt die Pflicht auf unserer Seite:** ein Befund, den du **nicht** auflösen kannst, ist ein Fehler im Checker und keine Aufgabe für dich. Entweder die Bedingung ist zu weit gefasst (Beispiel: bis v4.0.6 verlangte der Checker von einer **Split-Klimaanlage** einen Wärmemengenzähler, den es dort gar nicht gibt — §4.6), oder der Text muss sagen, **was ohne Handlung gilt**. Ein paar INFO-Hinweise bleiben deshalb dauerhaft stehen und sind trotzdem in Ordnung — sie sind mit dieser Auskunft formuliert (§4.1 Systemverluste, §4.2 WP-Tarif und Ladetarif). Wenn dir ein Hinweis begegnet, den keine Eingabe abstellt und der auch nicht erklärt, warum das so bleiben darf: **melden**, das ist ein Bug.
 
 ---
 
@@ -133,7 +135,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **Keine PV-Module als Komponente angelegt** | ❌ ERROR | Ohne PV-Modul-Komponenten fehlen Erzeugungsdaten in der Aufschlüsselung. (Sonderfall: nur Balkonkraftwerk → INFO statt ERROR.) | Einstellungen → Komponenten → PV-Module hinzufügen. |
 | **Nur Balkonkraftwerk, keine PV-Module angelegt** | ℹ️ INFO | BKW-only Setup. PVGIS-Prognose und String-Vergleich sind nicht verfügbar, alles andere funktioniert. | Keine Aktion nötig — Hinweis dokumentiert die Einschränkung. |
 | **PV-Module kWp stimmt nicht mit Anlagenleistung überein** | ⚠️ WARNING | Summe `leistung_kwp` aller aktiven PV-Modul- und BKW-Komponenten weicht > 0,1 kWp von `Anlagenleistung` ab. Verfälscht alle Soll-Werte. | Entweder die Anlagen-Stammdaten an die Modulsumme anpassen, oder die Modul-Komponenten vervollständigen. |
-| **PVGIS-Systemverluste ggf. zu hoch (X %)** | ℹ️ INFO | Ø Performance Ratio (IST/PVGIS) > 1,1 über mindestens 6 Monate — die Anlage produziert systematisch über der Prognose. Standardwert für Systemverluste ist 14 %. | Einstellungen → Stammdaten → Solarprognose → Systemverluste reduzieren (z. B. 10 % statt 14 %). Erst nach mindestens einem Sommer mit verlässlicher IST-Erfassung sinnvoll. |
+| **PVGIS-Systemverluste ggf. zu hoch (X %)** | ℹ️ INFO | Ø Performance Ratio (IST/PVGIS) > 1,1 über mindestens 6 Monate — die Anlage produziert systematisch über der Prognose. Der Verlust-Wert (Standard 14 %) ist eine **Annahme der Prognose**, keine Messung. | Einstellungen → Solarprognose → *Neue Prognose abrufen* → Systemverluste senken (z. B. 10 % statt 14 %) → **„Speichern & Aktivieren"**. Ohne neuen Abruf ändert sich nichts — die Monatswerte der Prognose sind gespeichert. **Folge:** das SOLL steigt, deshalb sinken Performance Ratio und SOLL-Erfüllung in *Prognose vs. IST* und im Jahresbericht; **die IST-Werte ändern sich nicht**. Umkehrbar: die bisherige Prognose bleibt in der Historie und lässt sich wieder aktivieren. Erst nach mindestens einem Sommer mit verlässlicher IST-Erfassung sinnvoll — die Prognose bewusst als konservative Untergrenze zu behalten ist ebenfalls in Ordnung. |
 | **Installationsdatum vorhanden / Anlagenleistung: X kWp / PV-Module: X kWp (N Modul-Gruppen)** | ✅ OK | Pflichtfelder gesetzt und konsistent. | – |
 
 > **Hinweis:** Die früheren Felder „Ausrichtung" und „Neigung" am Anlage-Modell werden seit der Umstellung auf PV-Modul-Komponenten nicht mehr geprüft — diese Werte gehören jetzt pro Modul-String an die jeweilige Komponente (siehe [HANDBUCH_EINSTELLUNGEN.md §3](HANDBUCH_EINSTELLUNGEN.md#3-komponenten)).
@@ -142,14 +144,16 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 ### 4.2 Strompreise
 
-**Was wird geprüft:** Vorhandensein mindestens eines allgemeinen Tarifs, Lücken zwischen Tarif-Zeiträumen ab Installationsdatum, Existenz von Spezialtarifen für vorhandene WP- und E-Auto-Komponenten sowie Plausibilität der Preisangaben.
+**Was wird geprüft:** Vorhandensein mindestens eines allgemeinen Tarifs, Lücken zwischen Tarif-Zeiträumen ab Installationsdatum, Existenz von Spezialtarifen für vorhandene WP- bzw. Lade-Komponenten sowie Plausibilität der Preisangaben.
+
+> **Die beiden Spezialtarif-Hinweise sind INFO und bleiben bei Einheitstarif dauerhaft stehen.** Ob jemand einen Spezialtarif *hat*, lässt sich in den Daten nicht von „noch nicht eingetragen" unterscheiden — deshalb sagen beide Hinweise stattdessen, **womit eedc ohne sie rechnet** (allgemeiner Tarif). Sie sind Auskunft, keine Aufgabe.
 
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **Kein Strompreis vorhanden** | ❌ ERROR | Es gibt keinen einzigen Tarif mit Verwendung *allgemein*. Finanz-Auswertungen, ROI-Berechnungen und Monatsabschluss greifen ins Leere. | Einstellungen → Stammdaten → Strompreise → Tarif anlegen mit Arbeitspreis und Einspeisevergütung. |
 | **Strompreis-Lücke: TT.MM.JJJJ bis TT.MM.JJJJ** | ⚠️ WARNING | Zwischen Installationsdatum und erstem Tarif (oder zwischen aufeinanderfolgenden Tarifen) klafft ein nicht abgedeckter Zeitraum. Für diese Monate fehlen Strompreise und damit Kostenrechnung. | Einstellungen → Stammdaten → Strompreise → Tarif für den Lückenzeitraum anlegen, oder den vorhandenen Tarif rückwirkend gültig machen. |
-| **Kein WP-Spezialtarif hinterlegt** | ℹ️ INFO | Eine aktive Wärmepumpe ist vorhanden, aber kein Tarif mit Verwendung *waermepumpe*. Nur relevant, wenn du tatsächlich einen separaten Wärmestrom-Tarif hast (HT/NT, eigener Zähler). | Wenn ein Wärmestrom-Tarif existiert: Einstellungen → Stammdaten → Strompreise → Tarif anlegen, Verwendung *Wärmepumpe* wählen. Sonst Hinweis ignorieren. |
-| **Kein E-Auto-Spezialtarif hinterlegt** | ℹ️ INFO | Aktives E-Auto vorhanden, aber kein Tarif mit Verwendung *e-auto*. Nur relevant bei separatem Ladetarif (z. B. Wallbox-Stromzähler mit eigenem Tarif). | Analog zum WP-Hinweis: Tarif mit Verwendung *E-Auto* anlegen oder ignorieren. |
+| **Wärmepumpe rechnet mit dem allgemeinen Tarif** | ℹ️ INFO | Eine aktive Wärmepumpe ist vorhanden, aber kein Tarif mit Verwendung *waermepumpe* — der WP-Strom wird deshalb mit dem allgemeinen Arbeitspreis bewertet. *(Hieß bis v4.0.6 „Kein WP-Spezialtarif hinterlegt".)* | Nur wenn du einen eigenen Wärmestrom-Tarif hast (§14a, HT/NT, eigener Zähler): Einstellungen → Stammdaten → Strompreise → Tarif anlegen, Verwendung *Wärmepumpe*. **Bei Einheitstarif ist nichts zu tun** — die Rechnung stimmt bereits, der Hinweis bleibt als Information stehen und lässt sich nicht abstellen (siehe Kasten in §2). |
+| **Kein Ladetarif hinterlegt** | ℹ️ INFO | Aktives E-Auto oder aktive Wallbox vorhanden, aber kein Tarif mit Verwendung *wallbox*. Ohne ihn rechnet eedc die Ladung mit dem allgemeinen Tarif. *(Der Hinweis fragte bis v4.0.4 nach einer Verwendung „e-auto", die es nie gab — er war damit unerfüllbar.)* | Nur bei separatem Ladetarif: Strompreis mit Verwendung *Wallbox* anlegen — das ist die Verwendung, die beide Dashboards lesen. Sonst nichts zu tun. |
 | **Arbeitspreis ungewöhnlich: X,X ct/kWh (Tarifname)** | ⚠️ WARNING | Wert liegt außerhalb des erwarteten Bereichs 5–80 ct/kWh — typischerweise Eingabefehler (Komma vs. Punkt, ct vs. €/kWh). | Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Arbeitspreis prüfen. |
 | **Einspeisevergütung ungewöhnlich: X,X ct/kWh (Tarifname)** | ⚠️ WARNING | Wert außerhalb 0–30 ct/kWh. Negative Werte oder zweistellige Vergütungen sind seit den 2010er Jahren untypisch. | Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Vergütung prüfen. Bei dynamischen Vergütungsmodellen (Direktvermarktung) eine sinnvolle Schätzung eintragen. |
 | **N Strompreis-Tarif(e) vorhanden** | ✅ OK | Mindestens ein allgemeiner Tarif vorhanden — Anzahl ist informativ. | – |
@@ -236,6 +240,8 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **\[Name\]: Strom Heizen/Warmwasser fehlt in N Monat(en)** | ⚠️ WARNING | Bei aktivierter `getrennte_strommessung`: `strom_heizen_kwh` und `strom_warmwasser_kwh` fehlen für die genannten Monate. | Monatsdaten nachtragen mit getrennten Werten. |
 | **\[Name\]: Stromverbrauch fehlt in N Monat(en)** | ⚠️ WARNING | Ohne getrennte Strommessung: `stromverbrauch_kwh` fehlt. | Monatsdaten nachtragen. |
 | **\[Name\]: Heizenergie fehlt in N Monat(en)** | ℹ️ INFO | `heizenergie_kwh` fehlt — JAZ und COP-Vergleich für die Monate nicht möglich, Stromverbrauch bleibt aber erfasst. | Wenn Wärmemengenzähler vorhanden: Werte nachtragen; sonst akzeptieren. |
+
+> **Split-Klimaanlagen sind ausgenommen.** Ist die Wärmepumpenart **Luft-Luft (Klimaanlage)** eingetragen, verlangt der Checker weder die monatliche Heizwärme noch die Tages-Zusatzzähler aus §4.6: beides setzt einen Wärmemengenzähler voraus, den solche Geräte praktisch nie haben, und einen Warmwasserkreis gibt es dort gar nicht. Der **Stromverbrauch** bleibt Pflicht, die Stromauswertung funktioniert vollständig; JAZ/COP zeigen „—" statt einer Scheinzahl. Eine Wärmepumpe **ohne** eingetragene Art gilt als klassische Wärmepumpe — eine fehlende Angabe schaltet die Erwartung nicht ab.
 
 #### 4.3.8 Allgemein (alle Komponententypen)
 
@@ -329,6 +335,9 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **Kein Basis-Zähler für: \[Einspeisung, Netzbezug\]** | ⚠️ WARNING | In der Datenquellen-Zuordnung fehlt der Basis-Zähler für Einspeisung und/oder Netzbezug. Ohne diesen bleibt der bilanzielle Hausverbrauch im Energieprofil leer. | Einstellungen → Datenquellen öffnen, im Block *Anlage / Zähler* den kumulativen kWh-Zähler zuordnen. **Wichtig:** den kWh-Zähler wählen, nicht den `*_leistung_w`-Sensor. |
 | **N von M Komponenten ohne vollständige kWh-Zähler-Abdeckung** | ⚠️ WARNING | Mindestens eine aktive Komponente hat nicht alle erwarteten kWh-Zähler zugeordnet. Details listen die betroffenen Komponenten und fehlenden Felder. Folgen für diese Komponenten: Prognose-IST, Lernfaktor und Monatsauswertungen bleiben leer. | Einstellungen → Datenquellen öffnen, pro Komponente die fehlenden Zähler zuordnen. Bei Speichern: beide Felder (`ladung_kwh` + `entladung_kwh`) sind nötig. |
+| **N Komponente(n) ohne Zusatz-Zähler für Tageswerte** | ℹ️ INFO | Betrifft **zusätzliche** Messstellen, nicht die Abdeckung oben: Wärmepumpe `heizenergie_kwh` / `warmwasser_kwh` (Wärmemengenzähler) sowie `ladung_pv_kwh` an Wallbox bzw. E-Auto. Ohne sie bleiben genau diese Werte in *Cockpit → Tag* auf „—"; die **Monats**auswertungen sind nicht betroffen, dort lassen sich die Werte von Hand pflegen. Bewusst INFO — solche Zähler hat längst nicht jede Anlage. | Wenn vorhanden: Einstellungen → Datenquellen → das jeweilige kWh-Feld zuordnen. Sonst nichts zu tun. |
+
+> **Wer hier ausgenommen ist** — damit der Befund nicht etwas verlangt, das es bei dir nicht geben kann: **Split-Klimaanlagen** (Wärmepumpenart *Luft-Luft*) werden gar nicht gefragt, sie haben weder Wärmemengenzähler noch Warmwasserkreis. Das **E-Auto** wird übersprungen, wenn eine **Wallbox** existiert (dort wird die Heimladung geführt) oder wenn es als **Dienstwagen** markiert ist. Stillgelegte und inaktive Komponenten zählen ohnehin nicht mit.
 | **Basis-Zähler (Einspeisung + Netzbezug) gemappt** | ✅ OK | Beide Basis-Zähler zugeordnet. | – |
 | **Alle N aktiven Komponenten haben kWh-Zähler gemappt** | ✅ OK | Alle aktiven Komponenten mit erwarteten Zählern sind vollständig zugeordnet. | – |
 

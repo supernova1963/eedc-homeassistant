@@ -75,6 +75,41 @@ async def test_waermepumpe_ohne_waermemengenzaehler_wird_als_info_genannt(db):
     assert "Cockpit → Tag" in treffer[0].details
 
 
+async def test_split_klimaanlage_wird_nicht_nach_waermemengenzaehler_gefragt(db):
+    """Luft-Luft-WP: beide Zusatzfelder setzen einen Wärmemengenzähler voraus.
+
+    Eine Split-Klimaanlage hat weder den noch einen Warmwasserkreis — der
+    Hinweis war für den Anwender unauflösbar (dietmar1968, Forum #89667/87)
+    und widersprach der Zusage im Investitionsformular („Es genügt der
+    Stromverbrauchs-Sensor"). Die Monatsdaten-Prüfung kennt die Ausnahme
+    längst; hier fehlte sie.
+    """
+    anlage = await _anlage(db, [("waermepumpe", "Daikin Split", {"wp_art": "luft_luft"})])
+
+    assert not _treffer(anlage, db)
+
+
+async def test_klassische_waermepumpe_wird_weiterhin_gefragt(db):
+    """Gegenprobe: die Ausnahme darf nur Luft-Luft treffen."""
+    anlage = await _anlage(db, [("waermepumpe", "Vitocal", {"wp_art": "luft_wasser"})])
+
+    treffer = _treffer(anlage, db)
+
+    assert len(treffer) == 1
+    assert "Vitocal: Heizwärme, Warmwasser" in treffer[0].details
+
+
+async def test_waermepumpe_ohne_wp_art_wird_weiterhin_gefragt(db):
+    """Legacy-Bestand ohne `wp_art` zählt als klassische WP — eine fehlende
+    Angabe darf die Erwartung nicht stillschweigend abschalten."""
+    anlage = await _anlage(db, [("waermepumpe", "Legacy WP", {})])
+
+    treffer = _treffer(anlage, db)
+
+    assert len(treffer) == 1
+    assert "Legacy WP: Heizwärme, Warmwasser" in treffer[0].details
+
+
 async def test_gepflegte_zusatzzaehler_schweigen(db):
     anlage = await _anlage(
         db,

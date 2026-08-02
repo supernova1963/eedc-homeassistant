@@ -9,6 +9,7 @@ from typing import Optional
 
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.investition_parameter import ist_luft_luft_waermepumpe
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.investition import Investition
@@ -635,7 +636,10 @@ class MonatsdatenChecks:
         # Split-Klimaanlagen (wp_art="luft_luft") haben üblicherweise keinen
         # Wärmemengenzähler — die "Heizwärme fehlt"-Warnung wäre ein
         # Dauer-Falschpositiv. Stromverbrauch ist trotzdem Pflicht.
-        ist_klima = param.get("wp_art") == "luft_luft"
+        # Über den SoT-Helper statt als Literal: dieselbe Unterscheidung
+        # entscheidet in `energieprofil.py` über die Zusatz-Zähler, und genau
+        # dort hat sie bis 02.08. gefehlt.
+        ist_klima = ist_luft_luft_waermepumpe(param)
 
         # #183: bei getrennter Strommessung wird der alte stromverbrauch_kwh-
         # Sensor in der Aggregation ignoriert. Wenn er trotzdem im Sensor-

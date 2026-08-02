@@ -49,6 +49,30 @@ def _imd(inv_id, jahr, monat, *, stromverbrauch_kwh=None, heizenergie_kwh=None):
     )
 
 
+def test_helper_erkennt_die_klima_in_allen_uebergabeformen():
+    """`ist_luft_luft_waermepumpe` — SoT der Unterscheidung (02.08.).
+
+    Bis dahin stand der Vergleich `wp_art == "luft_luft"` als Literal an genau
+    einer Stelle; die zweite Stelle (`daten_checker/energieprofil.py`) hat ihn
+    schlicht vergessen. Der Helper nimmt — wie `ist_dienstlich` — Objekt,
+    Dict oder None.
+    """
+    from backend.core.investition_parameter import ist_luft_luft_waermepumpe
+
+    class _Inv:
+        def __init__(self, parameter):
+            self.parameter = parameter
+
+    assert ist_luft_luft_waermepumpe(_Inv({"wp_art": "luft_luft"})) is True
+    assert ist_luft_luft_waermepumpe({"wp_art": "luft_luft"}) is True
+    assert ist_luft_luft_waermepumpe({"wp_art": " Luft_Luft "}) is True
+
+    assert ist_luft_luft_waermepumpe({"wp_art": "luft_wasser"}) is False
+    assert ist_luft_luft_waermepumpe({}) is False, "fehlende Angabe = klassische WP"
+    assert ist_luft_luft_waermepumpe(_Inv(None)) is False
+    assert ist_luft_luft_waermepumpe(None) is False
+
+
 async def test_klima_meldet_keine_heizwaerme_warnung(db):
     """Bei wp_art='luft_luft' fehlt die Heizenergie-Warnung im Daten-Checker."""
     anlage = Anlage(
