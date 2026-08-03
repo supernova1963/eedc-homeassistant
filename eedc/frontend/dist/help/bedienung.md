@@ -152,6 +152,14 @@ Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
 **Finanzen-Block** — der Monat (und analog [Jahr/Gesamt](#24-jahrgesamt)) trägt einen eigenen Finanzen-Block als **Komponenten-Finanz-Tabelle**: eine Zeile je Komponente (PV-Anlage, Speicher, Wärmepumpe, E-Auto …) mit den Spalten **Erträge** (tatsächliche Zahlungsflüsse), **Einsparungen** (kalkulatorisch — vermiedene Kosten), **Aufwand** und **Saldo**. Die **Summenzeile ist die Block-Kopf-Kennzahl** (Kopf == sichtbare Summe). Spaltenköpfe und Zeilen zeigen ihre Herleitung im **Tooltip** (Hover/Tipp). Netzbezug-Kosten und Grundgebühr stehen **nachrichtlich** darunter, nicht im Saldo verrechnet. Eine zusätzliche Zeile **„Ergebnis nach Stromrechnung"** (= Saldo − Netzbezug-Kosten) zeigt als **zweite Perspektive** das Haushaltsergebnis; der Komponenten-Saldo bleibt davon unberührt und ist weiterhin die Kopf-Kennzahl. Die **volle Finanzrechnung** (T-Konto je Investition, zeitraum-fähig) und die Finanz-Prognose liegen in [Auswertungen → Finanzen](#41-finanzen); der Block verlinkt direkt dorthin.
 
+> **Die Kachel „Ø-Preis Netz" zeigt unter dem Preis die Arbeitspreis-Kosten** (`Netzbezug ×
+> Ø-Preis`) — nicht die Gesamtsumme der Stromrechnung. So geht die Division auf: kWh und €
+> der Unterzeile ergeben den Preis darüber. Der **Grundpreis** steht in der Herleitung
+> (Tipp/Hover) mit der Gesamtsumme daneben, und im Finanzen-Block darunter sind weiterhin
+> die vollen Netzbezug-Kosten ausgewiesen. Bei einem **flexiblen Tarif** ist der Ø-Preis der
+> verbrauchsgewichtete Monatsdurchschnitt; mit ihm rechnen dann auch Kosten und
+> Eigenverbrauchs-Ersparnis dieses Monats.
+
 > **Zwei Netto-Größen nicht verwechseln:** Die Hero-Kennzahl **„Netto-Ertrag"** (z. B. in Jahr/Gesamt) beziffert die **PV-Anlage** allein (Einspeise-Erlös + Eigenverbrauchs-Ersparnis) und ist bewusst **nicht** identisch mit dem **Finanz-Block-Saldo**, der **alle Komponenten** (Wärmepumpe-, E-Auto-, Speicher-Beiträge und Sonstige Positionen) attribuiert zusammenfasst. Beide Zahlen sind korrekt — sie beantworten verschiedene Fragen (reine PV-Wirtschaftlichkeit vs. Gesamt-Saldo aller Komponenten). Die volle Herleitung steht in [Berechnungen §3.2](BERECHNUNGEN.md#32-finanzen-cockpit).
 
 Die **Erfassung** eines Monats (Zählerstände, Monatsabschluss) läuft über das Formular unter [Einstellungen → Daten → Monatsdaten](HANDBUCH_EINSTELLUNGEN.md); ein offener Monatsabschluss wird zusätzlich in der Status-Fußzeile angezeigt.
@@ -176,6 +184,18 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 **Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug, plus eine **Sparkline** der Monatserträge über den Gesamtzeitraum.
 
 > **Warum weicht der Gesamtverbrauch von meinem Herstellerportal ab?** eedc bilanziert den Verbrauch aus deinen Werten: `Erzeugung − Einspeisung − Speicher-Ladung + Speicher-Entladung + Netzbezug`. Viele Hybrid-Wechselrichter (z. B. E3DC) messen PV und Speicher **DC-seitig**, Einspeisung und Netzbezug aber **AC-seitig** — dann enthält der Gesamtverbrauch die Wandlungsverluste und liegt rund **3–5 % der Erzeugung** über dem „Hausverbrauch" im Portal, das seine Verluste herausrechnet. Beide Werte stimmen: eedc zeigt, was deine Anlage liefern musste (die richtige Basis für Autarkie und Wirtschaftlichkeit — bezahlt werden muss auch der Verlust), das Portal, was die Verbraucher gezogen haben. Details und ein Rechenrezept zum Nachprüfen stehen in der [Berechnungsreferenz 3.1](BERECHNUNGEN.md#31-energie-bilanz-monatskennzahlen).
+
+> **Welche Monate die Jahreszahl umfasst.** Ein Monat zählt zum Jahr, sobald er **Daten trägt** — nicht erst, wenn du ihn im Monatsabschluss abgeschlossen hast. Das ist ein Unterschied: die Zählerstände eines Monats trägst du oft erst Wochen später nach, die Messwerte deiner Komponenten liegen längst vor. Bis dahin fehlte dieser Monat der Jahreszahl vollständig. Der Kopf des Kennzahlen-Blocks nennt das Fenster, sobald es kein volles Jahr ist (`Jan–Aug · 5 Energie-Kennzahlen …`); **auch mehrere offene Monate** werden so gefunden, ebenso eine Lücke mitten im Jahr.
+>
+> **Womit sich das Jahr vergleicht — und über welche Monate.** Die Energiebilanz stellt dem **IST** zwei Vergleichsspalten gegenüber: das **Vorjahr** und den **Ø der übrigen Jahre**. Verglichen wird über die **abgeschlossenen** Monate, und zwar auf **allen** Spalten gleich — der laufende Monat bleibt außen vor. Sonst stünden zwei Augusttage gegen einen vollen August des Vorjahrs. Auch das Vergleichsjahr wird beschnitten: im laufenden Jahr stünden sonst die bisher gelaufenen Monate gegen ein volles Vorjahr — im Juli sechs gegen zwölf, und die PV-Erzeugung sähe um fast die Hälfte eingebrochen aus, obwohl nichts passiert ist. Eine **Lücke mitten im Jahr** wirkt genauso: verglichen werden immer *dieselben* Monate, nicht „die ersten N".
+>
+> **Deshalb sind Kachel und Tabelle nicht dieselbe Zahl** — die Kachel zählt das Jahr **bis heute**, die Tabelle bis zum letzten abgeschlossenen Monat. Beide sagen, worauf sie sich beziehen: der Block-Kopf über den Kacheln (`Jan–Aug`), der Kopf der IST-Spalte und der Bilanz-Block-Kopf (`Jan–Jul`), dazu ein Satz unter der Tabelle („… · Kennzahlen oben: Jan–Aug").
+>
+> **Steht dort weniger als ein volles Jahr, sagt die Anzeige es** — am Spaltenkopf, an den Kennzahl-Kacheln (`VJ (Jan–Jul): 5.146 kWh`) und als Satz unter der Tabelle („Vergleich beschnitten auf die gemeinsamen Monate: Jan–Jul"). In den **Ø der übrigen Jahre** geht nur ein Jahr ein, das dieses Fenster **ganz** abdeckt: Ist deine Anlage im Juni 2023 in Betrieb gegangen, trüge 2023 zu einem Vergleich über Jan–Jun nur einen einzigen Monat bei — dann bleibt das Jahr draußen, und die Zeile darunter zählt entsprechend („Ø aus 2 Jahren" statt 3). Hat das Vorjahr **gar keinen** gemeinsamen Monat, entfällt die Vergleichsspalte („—"), statt 0 zu zeigen. Bei einem abgeschlossenen Jahr mit vollständigen Daten ändert sich nichts.
+>
+> *Bis Version 4.0.6 verglich diese Sicht das laufende Jahr mit vollen Vorjahren. Wenn deine Vorjahres- und Ø-Spalten kleiner geworden sind und die Δ-Prozente moderater ausfallen, ist das die Korrektur — deine Anlage hat sich nicht verändert.*
+>
+> *Ebenfalls bis 4.0.6 fehlte der Jahreszahl jeder Monat ohne Monatsabschluss. Wenn deine Jahres-Erzeugung sichtbar **gestiegen** ist, ist das die Korrektur — die alte Zahl war zu klein. Am Beispiel einer Testanlage im August 2026: 7.703 kWh vorher, 9.547 kWh nachher, weil der volle Juli fehlte.*
 
 **Effizienz-Quoten (Ring-Anzeigen):**
 

@@ -1,11 +1,527 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.6)
+> **Stand:** August 2026 (v4.0.7)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.7 — Nichts kleinrechnen, nichts behaupten (August 2026)
+
+### eedc geht sparsamer mit Home Assistant um
+
+**Betrifft dich das?** Wenn du eedc als **Add-on** in Home Assistant betreibst — vor allem auf einem
+Raspberry Pi oder einer anderen kleinen Box, und erst recht mit vielen Geräten in HA.
+
+Aus der Community kamen Berichte, die HA-Oberfläche werde träge oder hänge, seit eedc als Add-on
+läuft; als separate Docker-Installation sei alles normal. Wir haben nachgemessen, und es stimmte.
+
+Die *Live*-Ansicht von eedc hat alle fünf Sekunden **den kompletten Zustand aller HA-Geräte**
+angefordert, um daraus die paar zugeordneten Sensoren herauszusuchen. Auf einer Anlage mit rund
+3500 Geräten sind das etwa **2,4 Megabyte pro Abruf** — Daten, die Home Assistant selbst
+zusammenbauen muss, und zwar in genau dem Programmteil, der auch die Oberfläche bedient. Jetzt holt
+eedc **nur noch die Sensoren, die es wirklich benutzt**.
+
+Dazu kommen zwei Dinge, die du nicht siehst, aber merkst:
+
+- **Ein Tab im Hintergrund fragt nichts mehr ab.** Ein vergessenes Browser-Fenster oder ein
+  Wandtablet im Standby hat bisher rund um die Uhr weitergepollt. Kehrst du zurück, ist die Anzeige
+  sofort wieder aktuell.
+- **Die Abfragen an die HA-Datenbank sind deutlich schlanker geworden.** Bei großen Historien —
+  besonders mit MariaDB — musste die Datenbank bisher die gesamte Aufzeichnung eines Sensors
+  durchlesen, um einen einzigen Zählerstand zu holen. Das war der Teil, den die Community
+  vermutet hatte; er war real, aber nicht der größte.
+
+**Eine Zahl kann sich dabei ändern**, und zwar nur in einem Sonderfall: Wenn deine MariaDB in einer
+anderen Zeitzone läuft als eedc (typisch: Datenbank auf UTC, eedc auf Europe/Berlin), war der
+Monatsschnitt bisher um den Zeitunterschied verschoben. Jetzt gilt durchgehend die Zeitzone von
+eedc. Bei der Standard-Installation mit SQLite und bei gleicher Zeitzone ändert sich nichts.
+
+**Was du tun musst: nichts.** Wenn dir HA seit eedc träge vorkam, sollte das mit diesem Update
+besser sein — und wenn nicht, melde dich bitte, dann fehlt noch etwas.
+
+### Auswertungen und Jahr: die E-Auto-Ladung ist wieder vollständig
+
+**Betrifft dich das?** Wenn du bei deinem E-Auto oder deiner Wallbox die **Gesamt-Ladung** und den
+**PV-Anteil** pflegst, aber keinen eigenen Wert für die Netzladung — bei evcc-Importen ist das der
+Normalfall.
+
+In *Auswertungen → Tabelle* und in den Jahres-Kacheln hat eedc die Ladung bisher aus PV-Anteil
+**plus** Netzanteil zusammengezählt. Fehlte der Netzanteil als eigener Wert, blieb er weg: von
+200 geladenen Kilowattstunden standen dann nur die 150 PV-Kilowattstunden in der Tabelle. Der
+Netzanteil wird jetzt aus *Gesamt minus PV* abgeleitet — so, wie es die übrigen Ansichten längst
+tun.
+
+**Die Zahl wird also größer, und die alte war zu klein.** Wenn du beide Werte gepflegt hast, ändert
+sich nichts.
+
+Zusätzlich: die Spalte **„Einspeisung bei neg. Preis"** zeigt „—" statt `0,0`, wenn für den Monat
+keine Börsenpreis-Daten vorliegen. Das betrifft nur Anlagen mit gesetztem §51-Schalter — eine 0
+hätte dort behauptet, es habe keine Negativpreis-Stunden gegeben, obwohl schlicht nichts
+aufgezeichnet wurde.
+
+**Unverändert:** die Zeilen der Tabelle (nur Monate mit erfassten Zählerständen, neueste zuerst),
+alle übrigen Spalten, und „—" bleibt „—", wo ein Gerät für den Monat nichts gemeldet hat. Eine
+**gemessene** Null bleibt eine Null: eine Wärmepumpe, die im Sommer 0 kWh geheizt hat, zeigt
+weiterhin `0,0`.
+
+**Was du tun musst: nichts.**
+
+---
+
+### Cockpit → Monat: die PV ist da, wo bisher nichts stand — und der Vorjahresvergleich stimmt
+
+**Betrifft dich das?** Fünf Punkte, jeder mit eigener Voraussetzung — die ersten beiden im
+laufenden Monat, die letzten drei im Vergleich mit dem Vorjahr.
+
+**1. Deine PV erscheint, auch ohne Sensor je String.** Wenn du die **Gesamterzeugung deiner
+Anlage** pflegst, aber keinen eigenen Wert je Modulfeld, zeigte *Cockpit → Monat* bisher
+**gar keine PV** — während dieselbe Zahl unter *Cockpit → Übersicht* korrekt stand. Der
+Monatsbericht liest jetzt genauso auf wie alle anderen Ansichten: gemessene Werte je Modulfeld
+haben Vorrang, die Gesamterzeugung füllt die Lücken.
+
+**2. Beim Balkonkraftwerk wird kein Eigenverbrauch mehr erfunden.** Hast du für dein
+Balkonkraftwerk die Erzeugung gepflegt, den Eigenverbrauch aber nicht, setzte eedc hier die
+**volle Erzeugung** als Eigenverbrauch ein — als hätte das Gerät alles selbst verbraucht. Der
+Komponenten-Hub zeigte daneben nichts. Jetzt bleibt das Feld leer, bis du es füllst oder ein
+Sensor es misst.
+
+**3. Der Vorjahresvergleich löst die PV genauso auf** wie der laufende Monat. Wenn du nur die
+Gesamterzeugung pflegst, stand im Vorjahr eine 0 — **die Vorjahres-PV steigt also**.
+
+**4. Rückspeisung aus dem E-Auto zählt jetzt auch im Vorjahr.** Wer sein Auto ins Haus entladen
+kann (V2H), sah diese Kilowattstunden im laufenden Monat im Eigenverbrauch, im Vorjahr nicht —
+das Jahres-Delta zeigte dadurch einen Sprung, den es nie gab. **Vorjahres-Eigenverbrauch und
+-Autarkie steigen.**
+
+**5. Öffentliches Laden zählt im Vorjahr nicht mehr als Heimladung.** Wenn du **E-Auto und
+Wallbox** gepflegt hast, nahm der Vorjahresvergleich pro Feld den jeweils größeren Wert — und
+damit bei der Gesamt-Ladung des Autos auch den Strom, den du **an einer öffentlichen Ladesäule**
+gezogen hast. Beispiel aus dem Demo-Bestand: 223,8 kWh im Vorjahr, davon 50 kWh extern, während
+derselbe Monat als laufender Monat längst die richtigen 174 kWh zeigte. **Die Vorjahres-Ladung
+kann dadurch sinken** — sie war vorher zu hoch. Die extern geladenen Kilowattstunden und ihre
+Kosten gehen nicht verloren, sie stehen weiter in ihrer eigenen Zeile.
+
+**Unverändert:** dienstlich genutzte Fahrzeuge bleiben in beiden Ansichten außen vor, Komponenten
+zählen weiterhin erst ab ihrem Anschaffungsdatum, und ein Vorjahresmonat ohne erfasste
+Zählerstände blendet den Vergleich wie bisher aus. Alle übrigen Werte des Monatsberichts sind
+gegen den Demo-Bestand geprüft und identisch geblieben.
+
+**Was du tun musst: nichts.** Die Werte werden bei jedem Aufruf neu gerechnet.
+
+---
+
+### Komponenten: keine Monatszeile mehr aus lauter Nullen für den Firmenwagen
+
+**Betrifft dich das?** Nur wenn du ein Fahrzeug als **dienstlich** markiert hast und es in
+einzelnen Monaten die einzige Komponente ist, für die du Werte gepflegt hast.
+
+*Auswertungen → Komponenten* wertet dienstlich genutzte Fahrzeuge bewusst nicht mit aus — ihr Strom
+gehört in die dienstlichen Ladekosten, nicht in die E-Mobilitäts-Bilanz deines Hauses. In einem
+Monat, in dem **ausschließlich** ein solches Fahrzeug gepflegt war, erschien trotzdem eine Zeile:
+mit lauter Nullen. Das las sich wie „in diesem Monat wurde nichts geladen", obwohl in Wahrheit
+etwas geladen wurde, das diese Ansicht nur nicht auswertet. **Die Zeile entfällt jetzt.**
+
+**Unverändert:** Sobald in dem Monat noch irgendetwas anderes erfasst ist — eine zweite Komponente
+oder eine gebuchte Einnahme bzw. Ausgabe —, steht die Zeile wie bisher, der Dienstwagen bleibt
+darin wie bisher außen vor. **Und seine Kosten zählen weiter:** eine Reparatur, die du an dem
+Fahrzeug gebucht hast, erscheint unverändert unter *Sonstiges* und trägt den Monat auch allein.
+
+**Was du tun musst: nichts.**
+
+---
+
+### Komponenten: Speicher, V2H und „Sonstiges" rechnen mit deiner Einspeisevergütung
+
+**Betrifft dich das?** Wenn du unter *Einstellungen → Strompreise* **mehr als einen Eintrag** hast
+und sich darin die Einspeisevergütung unterscheidet — oder wenn du überhaupt eine Komponente unter
+**Sonstiges** erfasst hast (Mini-BHKW, Pelletofen und Ähnliches).
+
+Mit v4.0.5 haben wir dafür gesorgt, dass eine Preiserhöhung nicht rückwirkend deine ganze Historie
+umschreibt: Jeder Monat wird seither mit dem **Strompreis bewertet, der damals galt**. Die
+**Einspeisevergütung** daneben ist dabei stehen geblieben — sie war weiterhin die von heute.
+
+Das fällt überall dort auf, wo eedc **beide** Preise in dieselbe Rechnung nimmt. Wenn dein Speicher
+abends Strom ins Haus abgibt, ist dein Gewinn die *Differenz*: Du sparst den Netzbezug und
+verzichtest im Gegenzug auf die Einspeisevergütung. Genauso rechnet die **V2H-Ersparnis** deines
+E-Autos und die Speicher-Kategorie unter *Sonstiges*. Standen die beiden Preise aus verschiedenen
+Jahren nebeneinander, wurde die Differenz zu groß oder zu klein. In einem nachgestellten Fall — 12
+Cent Vergütung damals, 5 Cent heute, 1.200 kWh Rückspeisung — zeigte eedc **300 € statt 216 €**.
+
+Bei **Komponenten → Sonstiges** war es deutlicher: Diese Sicht rechnete mit zwei festen Zahlen,
+**30 Cent** Strompreis und **8 Cent** Einspeisevergütung, ganz gleich was in deinen Strompreisen
+stand. Ein BHKW bekam also 8 Cent je eingespeister Kilowattstunde gutgeschrieben, auch wenn dein
+Vertrag 12 Cent hergibt.
+
+**Beide Preise kommen jetzt aus dem Tarif, der im jeweiligen Monat galt.**
+
+**Unverändert:** Hast du nur **einen** Strompreis-Eintrag — der Normalfall —, ändert sich für dich
+nichts, denn „der Tarif des Monats" ist dann derselbe wie „der Tarif von heute". Ebenfalls
+unverändert bleiben das **Wallbox-** und das **Wärmepumpen-Dashboard** (dort gibt es keine solche
+Differenz), das **Balkonkraftwerk** (dessen Einspeisung ist unvergütet) und die **ROI-Auswertung**:
+Sie bildet bewusst einen Durchschnitts-Jahreswert, um die Amortisation nach vorn zu rechnen — dafür
+ist der heutige Tarif der richtige.
+
+**Was du tun musst: nichts.** Wenn du deine Einspeisevergütung bisher gar nicht gepflegt hast,
+lohnt jetzt aber ein Blick unter *Einstellungen → Strompreise* — die Zahlen der drei genannten
+Sichten hängen daran.
+
+---
+
+### Tag: der Einspeiseerlös wird nicht mehr gekürzt, wenn dich §51 gar nicht betrifft
+
+**Betrifft dich das?** Wenn deine Anlage **keine** §51-Anlage ist (das ist der Normalfall bei
+Bestandsanlagen — der Schalter unter *Einstellungen → Anlage* steht standardmäßig auf **aus**) und
+eedc gleichzeitig deine **Börsenpreise mitschreibt**, etwa über einen dynamischen Tarif.
+
+Seit dem Solarpaket I bekommen **Neuanlagen** in Stunden mit negativem Börsenpreis keine
+Einspeisevergütung. Für alle anderen gilt das nicht — deshalb ist es ein Schalter, den du selbst
+setzt. In *Cockpit → Tag* wurde dieser Abzug bisher trotzdem gerechnet, sobald überhaupt negative
+Preise mitgeschrieben waren: an einem sonnigen Sonntag mit **45 kWh Einspeisung** standen dort
+**1,86 €** statt der rund 3,70 €, die dir zustehen.
+
+Was du jetzt siehst:
+
+- **Der Tages-Einspeiseerlös ist wieder vollständig** — und mit ihm die Kachel **Netto-Ertrag** und
+  der Finanzen-Block darunter. Die Zahlen werden also **größer**; die alten waren zu klein.
+- Die Spalte **„Einspeisung bei neg. Preis"** bleibt bei dir leer, so wie in der Monatstabelle
+  auch — dort war sie schon immer leer.
+- **Die Anzahl der negativen Preisstunden bleibt sichtbar.** Das ist eine Marktinformation und
+  kein Abzug — interessant fürs Laden, unabhängig von §51.
+
+**Unverändert:** Hast du den §51-Schalter **gesetzt**, weil deine Anlage betroffen ist, rechnet
+eedc exakt wie bisher weiter. Monats-, Jahres- und Cockpit-Ansichten waren nie betroffen — dort hat
+der Schalter immer korrekt gewirkt. Rückwirkend musst du nichts anstoßen: die Beträge werden bei
+jedem Aufruf neu gerechnet, alte Tage stimmen ab sofort mit.
+
+**Was du tun musst: nichts.** Wenn du unsicher bist, ob der Schalter bei dir richtig steht: er
+heißt **„Unterliegt §51 EEG"** und gehört nur dann an, wenn deine Anlage nach dem Solarpaket I in
+Betrieb ging und dein Netzbetreiber dir die Negativpreis-Stunden tatsächlich nicht vergütet.
+
+---
+
+### Live: ein Hausverbrauch, der nicht mehr so tut, als wäre er vollständig
+
+**Betrifft dich das?** Wenn in *Cockpit → Live* für einen Tag **kein Netzbezug** ankommt — kein
+Zähler zugeordnet, Home Assistant zeitweise nicht erreichbar, MQTT still.
+
+Die „Heute"-Kachel **Hausverbrauch** ist Eigenverbrauch **plus** Netzbezug. Fehlte der Netzbezug,
+hat eedc die Lücke bisher als **0** eingesetzt und die Kachel trotzdem gefüllt — mit einer Zahl, die
+um genau den fehlenden Netzbezug zu niedrig war und von einem gemessenen Wert nicht zu unterscheiden.
+
+Was du jetzt siehst:
+
+- **Die Kachel bleibt leer**, solange ein Teil des Hausverbrauchs unbekannt ist — so wie die
+  Nachbar-Kacheln es bei fehlender Quelle schon immer gemacht haben.
+- **Der Eigenverbrauch bleibt stehen**, wenn nur der Netzbezug fehlt: er braucht ihn nicht.
+- **Eine gemessene 0 bleibt eine 0.** Ein Tag ohne Netzbezug oder eine Batterie, die nichts getan
+  hat, sind Aussagen — keine Lücken. Da steht weiterhin `0,0`, nicht „—".
+
+**Unverändert:** Fehlt die **PV** oder die **Einspeisung**, schweigen Eigenverbrauch und
+Hausverbrauch wie bisher. Ob der Wert ohne diesen Sensor zu hoch oder zu niedrig wäre, hängt davon
+ab, welcher fehlt — und eine Zahl, deren Fehlerrichtung niemand kennt, ist schlechter als eine Lücke.
+
+**Was du tun musst: nichts.** Wenn dir eine Kachel dauerhaft fehlt, sagt dir der
+[Handbuch → Einstellungen §5.3 Daten-Checker](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker), welcher
+Zähler nicht zugeordnet ist.
+
+### Tag: die Stundentabelle schreibt keine 0,00 mehr, wo sie nichts weiß
+
+**Betrifft dich das?** Wenn in *Cockpit → Tag* einzelne Stunden Lücken haben — typischerweise
+nachts, wenn ein Zähler ausfällt, oder wenn du gar keinen vollständigen Zählersatz hast.
+
+In der Stundenwerte-Tabelle standen zwei benachbarte Spalten im Widerspruch: **Gesamtverbrauch**
+zeigte für eine unbekannte Stunde „—", **Hausverbrauch** dagegen **0,00 kW**. Aufgefallen ist es an
+einem Tag, an dem in den Stunden 0–7 die PV-Zeile leer war, Batterie und Netz aber weiter maßen —
+rund 0,28 kW flossen, angezeigt war 0,00.
+
+Der Hausverbrauch ist eine Differenz: *Gesamtverbrauch minus Wärmepumpe, Wallbox und weitere
+Verbraucher*. Kennt eedc den Gesamtverbrauch einer Stunde nicht, kennt es auch den Hausverbrauch
+nicht — dort steht jetzt **„—"**.
+
+- **Die Σ-Zeile (kWh/Tag) ändert sich nicht.** Die betroffenen Stunden trugen ohnehin 0,00 bei.
+- **Der CSV-Export trägt dieselben Zahlen** wie die Tabelle, an den betroffenen Stellen eine leere
+  Zelle.
+- **Eine gemessene 0 bleibt 0,00.** Eine Stunde, in der dein Haus nichts verbraucht hat, ist eine
+  Aussage — keine Lücke.
+
+**Wenn du keinen Gesamtverbrauch messen kannst**, ist die Spalte jetzt durchgehend leer statt
+durchgehend 0,00. Woran es liegt, sagt dir der
+[Daten-Checker](HANDBUCH_EINSTELLUNGEN.md#53-daten-checker): für die Stunden-Bilanz braucht eedc
+PV, Einspeisung und Netzbezug.
+
+### Klimaanlagen: keine Ersparnis mehr gegen eine Heizung, die es nie gab
+
+**Betrifft dich das?** Wenn du eine **Split-Klimaanlage** als Wärmepumpe mit der Art
+*Luft-Luft (Klimaanlage)* erfasst hast.
+
+*Auswertungen → ROI* hat deiner Klimaanlage bisher einen Heizwärme- und Warmwasserbedarf
+angerechnet — **12.000 und 3.000 kWh pro Jahr**, Standardwerte, die du nie eingetragen hast. Daraus
+wurde eine Ersparnis von rund **1.100 € und 2.210 kg CO₂ im Jahr** gegenüber einer Gasheizung, die
+bei dir gar nicht ersetzt wurde. Ein Split-Gerät hat nicht einmal einen Warmwasserkreis. Die Beträge
+blieben außerdem nicht in ihrer Zeile: sie steckten auch in Gesamt-Ersparnis, ROI, Amortisation und
+Gesamt-CO₂ deiner Anlage.
+
+Was du jetzt siehst:
+
+- **Deine Klimaanlage steht weiter in der ROI-Tabelle** — mit ihren Anschaffungskosten. In den
+  Wert-Spalten steht **„—"** und daneben *nicht bewertet* statt einer erfundenen Zahl.
+- **Die Gesamtzahlen deiner Anlage werden dadurch kleiner** und stimmen jetzt mit dem überein, was
+  *Cockpit → Nachhaltigkeit* schon immer gezeigt hat (dort stand für dasselbe Gerät 0).
+- **Heizwärme- und Warmwasserbedarf werden nicht mehr abgefragt**, wenn die Wärmepumpenart auf
+  *Luft-Luft (Klimaanlage)* steht — und der Daten-Checker verlangt sie auch nicht mehr.
+
+**Was weiterhin voll funktioniert:** Stromverbrauch je Stunde/Tag/Monat/Jahr, der Anteil an
+Hausverbrauch, Eigenverbrauch und Autarkie, die Stromkosten (auch mit eigenem Wärmestrom-Tarif),
+Live-Anzeige und Tagesverlauf.
+
+**Was du tun musst: nichts.** Deine gespeicherten Werte bleiben erhalten — es wird nichts gelöscht.
+**Klassische Wärmepumpen rechnen unverändert.** Die Auswertung von Klimaanlagen wird
+weiterentwickelt; das Thema läuft als offenes Issue
+[#263](https://github.com/supernova1963/eedc-homeassistant/issues/263).
+→ [Handbuch → Komponenten](HANDBUCH_BEDIENUNG.md)
+
+### Das laufende Jahr wird nicht mehr mit einem vollen Vorjahr verglichen
+
+**Betrifft dich das?** Wenn du **Cockpit → Jahr/Gesamt** für das **laufende** Jahr ansiehst — oder
+für ein Jahr, in dem einzelne Monate fehlen.
+
+Die Spalten **Vorjahr** und **Ø Jahre** summierten bisher immer das **ganze** Jahr. Im laufenden Jahr
+standen damit die bisher gelaufenen Monate gegen zwölf volle: auf einer echten Anlage im August
+7.703 kWh gegen 14.221 kWh, also **„▼ 46 %"**. Diese Zahl maß im Wesentlichen den Kalender und
+hätte sich bis Dezember von selbst zurückgebildet.
+
+Was du jetzt siehst:
+
+- **Alle Spalten rechnen über dieselben Monate** — die **abgeschlossenen** des angezeigten Jahres,
+  auf der IST-Seite genauso wie beim Vorjahr. Der laufende Monat bleibt außen vor; zwei Augusttage
+  gegen einen vollen August wären derselbe Fehler noch einmal, nur kleiner. Dieselbe Anlage wie oben
+  zeigt jetzt 9.450 kWh gegen 9.912 kWh und **„▼ 5 %"**.
+- **Das Fenster steht dran**, sobald dort weniger als ein volles Jahr summiert ist — über der
+  IST-Spalte, am Spaltenkopf des Vergleichs, an den Kennzahl-Kacheln (`VJ (Jan–Jul): 6.198 kWh`)
+  und als Satz unter der Tabelle:
+  „Vergleich beschnitten auf die gemeinsamen Monate: Jan–Jul".
+- **In den Ø geht nur ein Jahr ein, das dieses Fenster ganz abdeckt.** Ist deine Anlage z. B. im Juni
+  2023 gestartet, trüge 2023 zu einem Vergleich über Jan–Jun nur einen einzigen Monat bei — das Jahr
+  bleibt draußen, und die Zeile darunter zählt ehrlich („Ø aus 2 Jahren" statt 3).
+- **Gibt es gar keinen gemeinsamen Monat**, entfällt die Vergleichsspalte („—") statt 0 anzuzeigen.
+- **Eine Lücke mitten im Jahr wirkt genauso** — verglichen werden immer *dieselben* Monate, nicht
+  „die ersten N".
+
+**Abgeschlossene Jahre ändern sich nicht:** Steht auf beiden Seiten ein volles Jahr, ist die
+Beschneidung wirkungslos und es wird auch nichts beschriftet.
+
+**Was du tun musst: nichts.** Wenn deine Vorjahres- und Ø-Spalten kleiner geworden sind und die
+Δ-Prozente viel moderater ausfallen, ist das die Korrektur — deine Anlage hat sich nicht verändert.
+→ [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
+
+### Ein Monat ohne Monatsabschluss fehlt der Jahreszahl nicht mehr
+
+**Betrifft dich das?** Wenn du **Cockpit → Jahr/Gesamt** ansiehst und den Monatsabschluss nicht
+sofort nach Monatsende machst — also fast alle.
+
+Bisher zählte ein Monat erst zum Jahr, wenn du ihn **abgeschlossen** hattest. Die Messwerte deiner
+Komponenten liegen aber längst vor; nur die Zählerstände trägst du oft Wochen später nach. In der
+Zwischenzeit fehlte dieser Monat der Jahreszahl **vollständig** — auf einer echten Anlage am
+2. August 2026 war das der volle Juli mit 1.843 kWh, also **knapp ein Viertel** der angezeigten
+Jahresernte, und ausgerechnet der stärkste Monat.
+
+Was du jetzt siehst:
+
+- **Ein Monat zählt, sobald er Daten trägt** — nicht erst nach dem Monatsabschluss. Dieselbe Anlage
+  zeigt statt 7.703 kWh jetzt **9.547 kWh**. Autarkie, spezifischer Ertrag, SOLL-Erfüllung, die
+  Komponenten-Kennzahlen und die Finanz-Zahlen des Jahres ziehen mit.
+- **Auch mehrere offene Monate** werden gefunden, ebenso eine Lücke mitten im Jahr.
+- **Der Block-Kopf nennt das Fenster**, sobald es kein volles Jahr ist: `Jan–Aug · 5 Energie-…`.
+- **Kachel und Vergleichstabelle sind bewusst nicht dieselbe Zahl.** Die Kachel zählt das Jahr **bis
+  heute**, die Tabelle bis zum letzten abgeschlossenen Monat — beide sagen, worauf sie sich
+  beziehen, und der Satz unter der Tabelle nennt den Unterschied („… · Kennzahlen oben: Jan–Aug").
+
+**Was du tun musst: nichts.** Wenn deine Jahres-Erzeugung sichtbar **gestiegen** ist, ist das die
+Korrektur — die alte Zahl war zu klein, deine Anlage ist unverändert. Den offenen Monatsabschluss
+meldet eedc weiterhin: als Symbol in der Statusleiste unten und als Befund im Daten-Checker.
+→ [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
+
+### … und der Verlauf darunter zeigt diesen Monat jetzt auch
+
+**Betrifft dich das?** Dieselbe Lage wie eben — offener Monatsabschluss, **Cockpit → Jahr/Gesamt**.
+
+Die Kachel oben zählte den offenen Monat also mit, der **Verlauf-Chart** darunter aber nicht: acht
+Monate in der Kennzahl, **sechs Balken** im Diagramm. Auch der Mini-Balken des Jahres im
+Zeitstrahl links fiel dadurch zu kurz aus. Beides holt sich seine Monate jetzt aus derselben
+Quelle wie die Kachel.
+
+Was du jetzt siehst:
+
+- **Der Verlauf hat einen Balken je Monat mit Daten** — auch für den, den du noch nicht
+  abgeschlossen hast. Erzeugung, Verbrauch und Autarkie stehen darin vollständig.
+- **Die Balken im Zeitstrahl** (links, bzw. der Schieber auf dem Handy) vergleichen die Jahre
+  wieder in ihrer wirklichen Größe. Bei einem **abgeschlossenen** Jahr mit offenem Monat war dort
+  auch die kWh-Zahl zu klein — sie stimmt jetzt.
+- **Die Spalten „Vorjahr" und „Ø Jahre"** in der Energie-Bilanz lasen dieselbe Quelle und ziehen mit.
+
+**Ein Monat ohne Zählerstände bleibt einer.** Im Balken fehlen Einspeisung und Netzbezug — die
+misst der Zähler, und den trägst du beim Monatsabschluss nach. Was deine Komponenten gemessen
+haben (PV, Speicher, Wärmepumpe, E-Auto), ist vollständig da. Monate, in denen gar nichts erfasst
+wurde, tauchen weiterhin **nicht** auf — ein Balken aus lauter Nullen wäre keine Auskunft.
+
+**Unverändert:** *Auswertungen → Tabelle* zeigt weiterhin nur Monate mit Monatsabschluss. Das ist
+eine Liste zum **Bearbeiten**, und einen Monat ohne Zählerstände gibt es dort nicht zu bearbeiten.
+
+**Was du tun musst: nichts.**
+→ [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
+
+### Der Reparatur-Knopf erscheint nicht mehr für Zeiträume, die eedc gar nicht rechnen darf
+
+**Betrifft dich das?** Wenn du eine Komponente auf **inaktiv** gesetzt hast, ein
+**Anschaffungsdatum** in der Zukunft trägst oder eine Komponente **stillgelegt** hast — und der
+Daten-Checker dir für die Zeit davor bzw. danach „Zähler zugeordnet, Tageswerte fehlen" gemeldet
+hat.
+
+Der Befund verglich die gespeicherten Tage mit **allen** Komponenten der Anlage. Die Reparatur
+nimmt für jeden Tag aber nur die Komponenten, die an **diesem** Tag gelaufen sind. Wo beides
+auseinanderlief, stand eine Lücke samt Knopf **„Tag reparieren"** da — und nach dem Klick stand sie
+unverändert weiter da, weil der Lauf für diese Komponente nichts schreiben durfte.
+
+Was du jetzt siehst:
+
+- **Für Zeiträume, in denen eine Komponente noch nicht oder nicht mehr aktiv war, wird nichts mehr
+  gemeldet.** Dasselbe gilt für Zeit vor dem Inbetriebnahme-Datum der Anlage.
+- **Echte Lücken aktiver Komponenten meldet der Checker unverändert** — der Fix macht ihn nicht
+  blind, er nimmt ihm nur die Meldungen ohne Deckung.
+
+**Was du tun musst: nichts.** Beim nächsten Prüf-Lauf verschwinden die betroffenen Meldungen.
+→ [Handbuch → Daten-Checker §4.10](HANDBUCH_DATEN_CHECKER.md#410-energieprofil--fehlende-tageswerte)
+*(gemeldet von dietmar1968)*
+
+### Die Reparatur sagt jetzt, für welche Komponente sie nichts schreiben konnte
+
+**Betrifft dich das?** Wenn du in der Reparatur-Werkbank oder am Daten-Checker-Befund einen
+**einzelnen Tag** neu aggregierst.
+
+Bisher meldete dieser Lauf immer Erfolg und zeigte nur den PV-Wert vor und nach dem Lauf. Ob er für
+deine Wärmepumpe oder die Wallbox überhaupt etwas geholt hat, stand nirgends — solange sich die PV
+bewegte, sah ein halber Lauf aus wie ein ganzer.
+
+Was du jetzt siehst:
+
+- **Alles geschrieben:** die gewohnte Erfolgsmeldung, ergänzt um „Alle N zugeordneten Komponenten
+  tragen einen Wert."
+- **Teilweise:** „2 von 3 Komponenten neu geschrieben — ohne Wert blieb: Wärmepumpe."
+- **Gar nichts:** ein **Hinweis** statt eines Erfolgs, mit der häufigsten Ursache daneben — kein
+  Leistungssensor zugeordnet, oder die Home-Assistant-Historie reicht nicht so weit zurück.
+
+Die PV-Angabe („PV 0,0 → 30,0 kWh" bzw. „blieb unverändert") bleibt erhalten; die Komponenten-Aussage
+kommt dazu. Der Bereichs-Lauf sagt dasselbe schon länger je Tag — jetzt sprechen beide dieselbe
+Sprache.
+
+**Was du tun musst: nichts.** → [Handbuch → Energieprofil §4](HANDBUCH_ENERGIEPROFIL.md#4-reparatur--pflege)
+*(gemeldet von dietmar1968)*
+
+### Die Kachel „Ø-Preis Netz" geht jetzt auf
+
+**Betrifft dich das?** Wenn du in **Cockpit → Monat** auf die Kachel **Ø-Preis Netz** schaust — vor
+allem, wenn dein Tarif einen **Grundpreis** hat.
+
+Unter dem Ø-Preis standen bisher die **Gesamtkosten inklusive Grundpreis**. Wer die beiden Zahlen
+der Unterzeile durcheinander teilte — und das ist die naheliegendste Probe der Welt —, landete
+zwangsläufig daneben: **559 kWh · 210,45 € ergaben 37,6 ct**, während oben 33 ct stand. Der Hinweis
+„Kosten inkl. Grundpreis" stand zwar im Tipp-Text, wird aber erst gelesen, wenn man schon
+gestolpert ist.
+
+Was du jetzt siehst:
+
+- **Die Unterzeile zeigt die Arbeitspreis-Kosten** (`Netzbezug × Ø-Preis`), im Beispiel also
+  184,47 € statt 210,45 €. Teilst du sie durch die kWh, kommen die 33 ct heraus.
+- **Der Grundpreis ist nicht verschwunden**, sondern steht in der Herleitung der Kachel
+  (Hover/Tipp): „= 184,47 € · + 25,98 € Grundpreis = 210,45 € gesamt".
+- **Die Stromrechnung bleibt vollständig** — im Finanzen-Block darunter stehen weiterhin die
+  gesamten Netzbezug-Kosten. Es kommt kein Posten weg, er steht nur nicht mehr dort, wo er zur
+  falschen Division einlädt.
+
+**Dazu ein Rechenfehler, der beim Nachprüfen auffiel:** Wer einen **flexiblen Tarif** fährt
+(Tibber, aWATTar, EPEX), bekam im **laufenden** Monat Kosten und Eigenverbrauchs-Ersparnis mit dem
+**festen Arbeitspreis** des Tarifs berechnet statt mit dem tatsächlichen Monatsdurchschnitt — der
+Vorjahres-Vergleich und die Detailzeilen je Komponente rechneten längst richtig. Derselbe Monat
+trug damit je nach Sicht zwei verschiedene Beträge. **Ab jetzt gilt überall der
+verbrauchsgewichtete Monatsdurchschnitt.** Betroffene Monate ändern ihre Euro-Beträge sichtbar —
+sie waren vorher falsch.
+
+**Was du tun musst: nichts.** → [Handbuch → Cockpit/Monat](HANDBUCH_BEDIENUNG.md#23-monat)
+*(gemeldet von Algie im simon42-Forum)*
+
+### Die exportierten Sensoren zeigen über REST dieselben Zahlen wie über MQTT
+
+**Betrifft dich das?** Nur wenn du eedc-Sensoren per **REST-Plattform** in Home Assistant eingebunden
+hast (das YAML-Snippet aus **Einstellungen → Integration → MQTT-Export**). Wer MQTT nutzt, sieht
+keine Änderung — dort gilt die Regel seit v4.0.6.
+
+Mit v4.0.6 wurden die Export-Werte auf handliche Längen gebracht: kWh ganzzahlig, Geld auf Cent,
+Prozent auf eine Stelle. Diese Regel griff bisher aber nur beim MQTT-Export. Derselbe Sensor kam
+über REST weiter mit einer Nachkommastelle an — dieselbe Jahressumme also einmal als `39692` und
+einmal als `39692,4`.
+
+Was du jetzt siehst:
+
+- **Beide Wege liefern dieselbe Zahl.** Auf der Demo-Anlage betrifft das 16 von 54 Sensoren; alle
+  übrigen waren ohnehin schon gleich. Die Werte werden dabei **kürzer**, nicht anders: aus
+  39.692,4 kWh wird 39.692 kWh.
+- **Eine Ausnahme wird länger:** die **Vollzyklen** des Speichers standen als glatte `380` im
+  Export und tragen jetzt `380,19` — dieselben zwei Nachkommastellen, die dir die Speicher-Kachel
+  in eedc längst zeigt.
+- **Deine HA-Konfiguration bleibt gültig.** Sensor-Namen, Einheiten und die Anzahl der Entitäten
+  ändern sich nicht, das YAML-Snippet auch nicht. Die aufgezeichnete Historie zurückliegender
+  Zeitpunkte bleibt stehen, wie sie ist — nur ab jetzt kommen die kürzeren Werte an.
+
+**Was du tun musst: nichts.** Wenn eine deiner Automationen auf eine Nachkommastelle angewiesen war,
+lohnt ein Blick — die Größenordnung ändert sich nie, nur die Stellen dahinter.
+→ [Sensor-Referenz → Export-Sensoren](SENSOR-REFERENZ.md)
+
+### Der Daten-Checker verlangt von einer Klimaanlage keinen Wärmemengenzähler mehr
+
+**Betrifft dich das?** Wenn du eine **Split-Klimaanlage** als Wärmepumpe der Art *Luft-Luft*
+angelegt hast.
+
+Der Daten-Checker meldete dauerhaft „1 Komponente(n) ohne Zusatz-Zähler für Tageswerte — Offen:
+Klimaanlage: Heizwärme, Warmwasser". Beide Werte kommen aus einem **Wärmemengenzähler**, und einen
+Warmwasserkreis hat ein Split-Gerät gar nicht — der Hinweis war also **nicht auflösbar**. Er
+widersprach obendrein dem, was eedc dir beim Anlegen der Komponente selbst zusagt: „Es genügt der
+Stromverbrauchs-Sensor."
+
+Der Hinweis erscheint für Luft-Luft-Geräte nicht mehr. **Für klassische Wärmepumpen bleibt er** — er
+ist dort ein echter Zuordnungs-Hinweis. Eine Wärmepumpe **ohne** eingetragene Art gilt weiter als
+klassische Wärmepumpe; wenn du also eine Klimaanlage hast und den Hinweis noch siehst, trage unter
+*Einstellungen → Komponenten* die Wärmepumpenart **Luft-Luft (Klimaanlage)** ein.
+
+**Was du tun musst: nichts** (außer im gerade genannten Fall).
+→ [Handbuch → Daten-Checker](HANDBUCH_DATEN_CHECKER.md)
+
+### Zwei Hinweise erklären jetzt, was passiert, wenn du nichts tust
+
+**Betrifft dich das?** Wenn du eine **Wärmepumpe ohne eigenen Wärmestrom-Tarif** hast, oder wenn dir
+der Daten-Checker **„PVGIS-Systemverluste ggf. zu hoch"** anzeigt.
+
+Beide Hinweise standen dauerhaft und ließen sich durch keine Eingabe abstellen. Ein Häkchen zum
+Wegklicken wird es dafür bewusst nicht geben — ein Hinweis, den man wegklicken kann, ist einer, den
+man bald gar nicht mehr liest. Stattdessen sagen die beiden jetzt, was sie eigentlich meinen:
+
+- **„Wärmepumpe rechnet mit dem allgemeinen Tarif"** (bisher „Kein WP-Spezialtarif hinterlegt"):
+  Ohne eigenen Wärmestrom-Tarif bewertet eedc den WP-Strom mit deinem allgemeinen Arbeitspreis.
+  Hast du einen Einheitstarif, ist das **richtig so und du musst nichts tun** — der Hinweis bleibt
+  dann als Information stehen. Hast du einen §14a-Wärmestrom-Tarif, trägst du ihn hier nach.
+- **„PVGIS-Systemverluste ggf. zu hoch"**: Der Text sagt jetzt dazu, dass die 14 % eine **Annahme**
+  der Prognose sind und keine Messung — und vor allem, **was passiert, wenn du sie senkst**: Deine
+  Prognose (das SOLL) steigt, deshalb sinken Performance Ratio und SOLL-Erfüllung in
+  *Auswertungen → Prognose vs. IST* und im Jahresbericht. **Deine gemessenen Werte ändern sich
+  nicht.** Wirksam wird die Änderung erst, wenn du unter *Solarprognose* eine **neue Prognose
+  abrufst** und speicherst; die bisherige bleibt als Historie erhalten und lässt sich jederzeit
+  wieder aktivieren. Du darfst die Prognose auch bewusst als konservative Untergrenze stehen lassen.
+
+**Es erscheint und verschwindet dadurch kein Befund** — es ändert sich der Text.
+→ [Handbuch → Daten-Checker](HANDBUCH_DATEN_CHECKER.md)
 
 ---
 
