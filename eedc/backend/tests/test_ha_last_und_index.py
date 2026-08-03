@@ -192,6 +192,29 @@ async def test_einheiten_cache_haelt_auch_sensoren_ohne_einheit(fake_http, monke
     )
 
 
+async def test_einheiten_kommen_auch_auf_frisch_gestarteter_box(fake_http, monkeypatch):
+    """`time.monotonic()` zählt ab Systemstart — nicht ab 1970.
+
+    Der leere Cache wurde über einen Default-Zeitstempel `0.0` geprüft:
+    `now - 0.0 >= 3600` ist auf einer Box, die seit weniger als einer Stunde
+    läuft, **falsch**. Damit galt „noch nie geholt" als „gerade erst geholt",
+    es wurde nichts abgerufen, und `get_sensor_units` lieferte die erste
+    Betriebsstunde lang `{}` — für Live-Historie, Energieprofil und
+    Daten-Checker heißt das: keine Einheit, also keine kW/kWh-Unterscheidung.
+
+    Der Test hält die Uhr klein und ist damit **unabhängig von der Laufzeit der
+    Maschine, auf der er läuft**. Genau daran hing der Vorgänger: auf einem
+    Rechner mit Tagen an Uptime grün, auf einem frischen CI-Runner rot.
+    """
+    monkeypatch.setattr(ha_state_service.time, "monotonic", lambda: 42.0)
+    svc = HAStateService()
+    monkeypatch.setattr(svc, "api_url", "http://ha")
+    monkeypatch.setattr(svc, "token", "token")
+    fake_http.bestand = {"sensor.zaehler": _sensor("1", einheit="kWh")}
+
+    assert await svc.get_sensor_units(["sensor.zaehler"]) == {"sensor.zaehler": "kWh"}
+
+
 # ── 2. Recorder-Queries bleiben index-fähig ───────────────────────────
 
 def _sql_literale(pfad: Path) -> list[str]:

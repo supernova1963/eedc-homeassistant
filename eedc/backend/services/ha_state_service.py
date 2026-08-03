@@ -218,6 +218,14 @@ class HAStateService:
         `unit_of_measurement` im Mapping stand damit dauerhaft auf der
         Fehlliste, und weil die Fehlliste den Neuabruf auslöste, lief der
         Voll-Dump bei **jedem** Aufruf. Der 1h-TTL war in dem Fall wirkungslos.
+
+        **„Noch nie geholt" wird an der Abwesenheit geprüft, nicht an einem
+        Zeitstempel 0.0.** `time.monotonic()` zählt ab dem Systemstart, nicht ab
+        1970: auf einer Box, die seit weniger als einer Stunde läuft, ist
+        `now - 0.0 < TTL` — ein leerer Cache galt damit als frisch, es wurde
+        nichts geholt, und die Funktion lieferte in der ersten Betriebsstunde
+        durchgehend `{}`. Genau daran ist der Beleg unten in CI gefallen und
+        auf einer Maschine mit Tagen an Laufzeit nicht.
         """
         if not self.is_available or not entity_ids:
             return {}
@@ -225,7 +233,8 @@ class HAStateService:
         now = time.monotonic()
         fehlend = [
             eid for eid in dict.fromkeys(entity_ids)
-            if now - self._unit_cache.get(eid, (0.0, ""))[0] >= self._UNIT_CACHE_TTL
+            if eid not in self._unit_cache
+            or now - self._unit_cache[eid][0] >= self._UNIT_CACHE_TTL
         ]
 
         if fehlend:
