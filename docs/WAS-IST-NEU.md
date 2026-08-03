@@ -276,6 +276,35 @@ Korrektur — die alte Zahl war zu klein, deine Anlage ist unverändert. Den off
 meldet eedc weiterhin: als Symbol in der Statusleiste unten und als Befund im Daten-Checker.
 → [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
 
+### … und der Verlauf darunter zeigt diesen Monat jetzt auch
+
+**Betrifft dich das?** Dieselbe Lage wie eben — offener Monatsabschluss, **Cockpit → Jahr/Gesamt**.
+
+Die Kachel oben zählte den offenen Monat also mit, der **Verlauf-Chart** darunter aber nicht: acht
+Monate in der Kennzahl, **sechs Balken** im Diagramm. Auch der Mini-Balken des Jahres im
+Zeitstrahl links fiel dadurch zu kurz aus. Beides holt sich seine Monate jetzt aus derselben
+Quelle wie die Kachel.
+
+Was du jetzt siehst:
+
+- **Der Verlauf hat einen Balken je Monat mit Daten** — auch für den, den du noch nicht
+  abgeschlossen hast. Erzeugung, Verbrauch und Autarkie stehen darin vollständig.
+- **Die Balken im Zeitstrahl** (links, bzw. der Schieber auf dem Handy) vergleichen die Jahre
+  wieder in ihrer wirklichen Größe. Bei einem **abgeschlossenen** Jahr mit offenem Monat war dort
+  auch die kWh-Zahl zu klein — sie stimmt jetzt.
+- **Die Spalten „Vorjahr" und „Ø Jahre"** in der Energie-Bilanz lasen dieselbe Quelle und ziehen mit.
+
+**Ein Monat ohne Zählerstände bleibt einer.** Im Balken fehlen Einspeisung und Netzbezug — die
+misst der Zähler, und den trägst du beim Monatsabschluss nach. Was deine Komponenten gemessen
+haben (PV, Speicher, Wärmepumpe, E-Auto), ist vollständig da. Monate, in denen gar nichts erfasst
+wurde, tauchen weiterhin **nicht** auf — ein Balken aus lauter Nullen wäre keine Auskunft.
+
+**Unverändert:** *Auswertungen → Tabelle* zeigt weiterhin nur Monate mit Monatsabschluss. Das ist
+eine Liste zum **Bearbeiten**, und einen Monat ohne Zählerstände gibt es dort nicht zu bearbeiten.
+
+**Was du tun musst: nichts.**
+→ [Handbuch → Cockpit → Jahr/Gesamt](HANDBUCH_BEDIENUNG.md#24-jahrgesamt)
+
 ### Der Reparatur-Knopf erscheint nicht mehr für Zeiträume, die eedc gar nicht rechnen darf
 
 **Betrifft dich das?** Wenn du eine Komponente auf **inaktiv** gesetzt hast, ein

@@ -43,11 +43,15 @@ async def _inv(db, anlage_id: int, typ: str, bez: str, **kw) -> Investition:
 # --- Zeilenmenge: nur Monate mit Zählerzeile -------------------------------
 
 async def test_monat_ohne_zaehlerzeile_erscheint_nicht(db):
-    """REGRESSION. Die Schicht liefert auch Monate ohne `Monatsdaten`-Zeile.
+    """REGRESSION — **der Default**. Die Schicht liefert auch Monate ohne
+    `Monatsdaten`-Zeile; ungefragt aufgenommen stünden in *Auswertungen →
+    Tabelle* Zeilen, die es dort nie gab und die man nicht bearbeiten kann.
 
-    Sie hier aufzunehmen hieße, in *Auswertungen → Tabelle* und *Cockpit → Jahr*
-    Zeilen erscheinen zu lassen, die es dort nie gab — und die Frage, ob ein
-    Monat ohne Abschluss zählt, ist im Frontend entschieden (P-12/N-65).
+    Seit N-68 sind sie über `inkl_ohne_zaehlerzeile=True` **abrufbar** — dieser
+    Test hält fest, dass der Default davon unberührt bleibt. Er ist damit auch
+    der Wächter über die `Annotated`-Form des Parameters: als
+    `= Query(False, …)` geschrieben wäre der Default beim direkten
+    Funktionsaufruf das truthy `Query`-Objekt, und genau hier fiel es auf.
     """
     anlage = await _anlage(db)
     db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
@@ -61,6 +65,98 @@ async def test_monat_ohne_zaehlerzeile_erscheint_nicht(db):
     rows = await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db)
 
     assert [r.monat for r in rows] == [5]
+
+
+# --- N-68: dieselbe Route, auf Wunsch mit den Monaten ohne Abschluss -------
+
+
+async def _mai_mit_zeile_juni_ohne(db) -> Anlage:
+    """Mai mit Zählerzeile + WP-Zeile, Juni **nur** mit WP-Zeile."""
+    anlage = await _anlage(db)
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=300.0, netzbezug_kwh=200.0,
+                       globalstrahlung_kwh_m2=140.0, sonnenstunden=210.0))
+    wp = await _inv(db, anlage.id, "waermepumpe", "WP")
+    for monat, strom in ((5, 80.0), (6, 100.0)):
+        db.add(InvestitionMonatsdaten(investition_id=wp.id, jahr=2026, monat=monat,
+                                      verbrauch_daten={"stromverbrauch_kwh": strom}))
+    await db.commit()
+    return anlage
+
+
+async def test_flag_nimmt_den_monat_ohne_zaehlerzeile_auf(db):
+    """**N-68.** Cockpit → Jahr zeichnete für 2026 sechs Monatsbalken, während
+    die Kopfzahl darüber acht Monate zählte — die fehlenden waren gelaufen, aber
+    nicht abgeschlossen. Mit dem Flag sind sie da, samt ihrer IMD-Mengen.
+    """
+    anlage = await _mai_mit_zeile_juni_ohne(db)
+
+    rows = await list_monatsdaten_aggregiert(
+        anlage_id=anlage.id, jahr=2026, inkl_ohne_zaehlerzeile=True, db=db,
+    )
+
+    assert [r.monat for r in rows] == [6, 5]      # absteigend wie immer
+    juni = rows[0]
+    assert juni.id is None                        # es gibt keinen Datensatz
+    assert juni.anlage_id == anlage.id            # trotzdem zugeordnet
+    assert juni.wp_strom_kwh == 100.0             # die Menge ist der ganze Punkt
+
+
+async def test_zeile_ohne_zaehlerzeile_behauptet_keine_zaehlerwerte(db):
+    """Was es ohne `Monatsdaten`-Datensatz nicht gibt, bleibt `None` — es wird
+    nicht still zu 0 (CLAUDE.md „0-Werte prüfen", ADR-002/P4).
+
+    Einspeisung/Netzbezug sind die Ausnahme: sie kommen aus `f.zaehler` und
+    stehen dort auf 0,0. Das ist keine neue Behauptung dieser Route, sondern die
+    der Schicht — hier festgehalten, damit ein späterer Umbau es nicht übersieht.
+    """
+    anlage = await _mai_mit_zeile_juni_ohne(db)
+
+    juni = (await list_monatsdaten_aggregiert(
+        anlage_id=anlage.id, jahr=2026, inkl_ohne_zaehlerzeile=True, db=db,
+    ))[0]
+
+    assert juni.globalstrahlung_kwh_m2 is None
+    assert juni.sonnenstunden is None
+    assert juni.netzbezug_durchschnittspreis_cent is None
+    assert juni.hat_legacy_daten is False
+    assert juni.einspeisung_kwh == 0.0
+    assert juni.netzbezug_kwh == 0.0
+
+
+async def test_flag_laesst_die_bestehenden_zeilen_unveraendert(db):
+    """**Die Deckungs-Aussage**: das Flag *ergänzt*, es rechnet nichts um.
+
+    Ohne diesen Test wäre „nur zusätzliche Balken" eine Behauptung. Verglichen
+    wird die ganze Zeile, nicht eine Auswahl von Feldern — sonst deckt der Test
+    genau das Feld nicht ab, das sich später verschiebt.
+    """
+    anlage = await _mai_mit_zeile_juni_ohne(db)
+
+    ohne = await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db)
+    mit = await list_monatsdaten_aggregiert(
+        anlage_id=anlage.id, jahr=2026, inkl_ohne_zaehlerzeile=True, db=db,
+    )
+
+    assert [r.monat for r in ohne] == [5]
+    assert [r.model_dump() for r in ohne] == [r.model_dump() for r in mit if r.monat == 5]
+
+
+async def test_monat_ganz_ohne_spur_erscheint_auch_mit_flag_nicht(db):
+    """Das Flag holt keine leeren Monate ins Bild.
+
+    Die Schicht führt nur Monate, für die es eine Zählerzeile, eine sichtbare
+    IMD-Zeile oder eine aufgelöste PV gibt (`lade_monats_fakten`). Ein Balken
+    aus lauter Nullen für einen Monat, in dem nichts erfasst wurde, wäre
+    schlimmer als der fehlende Balken, den N-68 behebt.
+    """
+    anlage = await _mai_mit_zeile_juni_ohne(db)
+
+    rows = await list_monatsdaten_aggregiert(
+        anlage_id=anlage.id, jahr=2026, inkl_ohne_zaehlerzeile=True, db=db,
+    )
+
+    assert [r.monat for r in rows] == [6, 5]   # kein Jan–Apr, kein Jul–Dez
 
 
 async def test_reihenfolge_bleibt_absteigend(db):

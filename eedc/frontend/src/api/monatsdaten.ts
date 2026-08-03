@@ -59,7 +59,10 @@ export interface MonatsdatenMitKennzahlen extends Monatsdaten {
  * Aggregierte Monatsdaten mit Werten aus InvestitionMonatsdaten
  */
 export interface AggregierteMonatsdaten {
-  id: number
+  // null = Monat OHNE Zählerzeile (kein Monatsabschluss) — kommt nur mit
+  // `inklOhneZaehlerzeile`. Die Zeile trägt IMD-Mengen, aber keinen Datensatz:
+  // wer sie bearbeiten/löschen/verlinken will, muss auf null prüfen.
+  id: number | null
   anlage_id: number
   jahr: number
   monat: number
@@ -164,9 +167,21 @@ export const monatsdatenApi = {
   /**
    * Aggregierte Monatsdaten abrufen
    * PV-Erzeugung und Speicher-Daten werden aus InvestitionMonatsdaten summiert
+   *
+   * `inklOhneZaehlerzeile` nimmt Monate mit auf, die zwar Mengen tragen, aber
+   * noch keinen Monatsabschluss haben (`id: null`). Für **Zeitreihen** gedacht
+   * (Cockpit → Jahr, Fund N-68) — nicht für Datensatz-Listen wie
+   * *Auswertungen → Tabelle*, wo eine nicht bearbeitbare Zeile stünde.
    */
-  async listAggregiert(anlageId: number, jahr?: number): Promise<AggregierteMonatsdaten[]> {
-    const params = jahr ? `?jahr=${jahr}` : ''
-    return api.get<AggregierteMonatsdaten[]>(`/monatsdaten/aggregiert/${anlageId}${params}`)
+  async listAggregiert(
+    anlageId: number,
+    jahr?: number,
+    opts?: { inklOhneZaehlerzeile?: boolean },
+  ): Promise<AggregierteMonatsdaten[]> {
+    const params = new URLSearchParams()
+    if (jahr) params.append('jahr', jahr.toString())
+    if (opts?.inklOhneZaehlerzeile) params.append('inkl_ohne_zaehlerzeile', 'true')
+    const query = params.toString()
+    return api.get<AggregierteMonatsdaten[]>(`/monatsdaten/aggregiert/${anlageId}${query ? '?' + query : ''}`)
   },
 }

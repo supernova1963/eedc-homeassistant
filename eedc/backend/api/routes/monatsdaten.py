@@ -4,7 +4,7 @@ Monatsdaten API Routes
 CRUD Endpoints für monatliche Energiedaten.
 """
 
-from typing import Optional, Any
+from typing import Annotated, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -161,7 +161,11 @@ class AggregierteMonatsdatenResponse(BaseModel):
     Die Unterscheidung darf nicht durch Default-0 verwischt werden
     (CLAUDE.md "0-Werte prüfen" + #236).
     """
-    id: int
+    # `None` = dieser Monat hat **keine Zählerzeile** (`Monatsdaten`-Datensatz) und
+    # kommt nur mit `inkl_ohne_zaehlerzeile=true` in die Antwort. Er trägt dann
+    # IMD-Mengen, aber keinen Datensatz, den man bearbeiten oder löschen könnte —
+    # wer die Zeile verlinkt oder eine Edit-Aktion daran hängt, muss das prüfen.
+    id: Optional[int]
     anlage_id: int
     jahr: int
     monat: int
@@ -252,6 +256,17 @@ class AggregierteMonatsdatenResponse(BaseModel):
 async def list_monatsdaten_aggregiert(
     anlage_id: int,
     jahr: Optional[int] = Query(None, description="Filter nach Jahr"),
+    # `Annotated`-Form, NICHT `= Query(False, …)`: als Default stünde dort sonst
+    # das `Query`-Objekt selbst, und das ist truthy. Über HTTP fällt das nicht
+    # auf (FastAPI ersetzt es), beim **direkten Funktionsaufruf** aber sehr wohl
+    # — und genau so rufen die Tests dieser Route sie auf. Der erste Lauf hat
+    # prompt `test_monat_ohne_zaehlerzeile_erscheint_nicht` gekippt.
+    inkl_ohne_zaehlerzeile: Annotated[bool, Query(
+        description=(
+            "Auch Monate ohne Zählerzeile (kein Monatsabschluss) liefern. "
+            "Diese Zeilen tragen `id: null` und keine Zählerwerte."
+        ),
+    )] = False,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -262,18 +277,29 @@ async def list_monatsdaten_aggregiert(
     die P7-Auflösung der PV und der Monatstarif genau einmal. Bis 2026-08-03
     faltete diese Route die `InvestitionMonatsdaten` selbst (Register N-15).
 
-    **Nur Monate mit Zählerzeile**, absteigend — wie bisher. Die Schicht liefert
-    auch Monate ohne (`meta.hat_zaehlerzeile is False`); sie hier aufzunehmen
-    hieße, in *Auswertungen → Tabelle* und *Cockpit → Jahr* Zeilen erscheinen zu
-    lassen, die es dort nie gab. Ob ein Monat ohne Zählerzeile zählt, ist im
-    Frontend entschieden (P-12/N-65) und wird hier nicht neu aufgemacht.
+    **Default: nur Monate mit Zählerzeile**, absteigend — wie bisher. Eine
+    `Monatsdaten`-Zeile entsteht erst beim **Monatsabschluss**; ein gelaufener
+    Monat ohne Abschluss trägt seine IMD-Mengen, aber keinen Datensatz. In
+    *Auswertungen → Tabelle* wäre er eine Zeile, die es dort nie gab (und die
+    man weder bearbeiten noch löschen kann), deshalb bleibt er ausgeschlossen.
+
+    Mit ``inkl_ohne_zaehlerzeile=true`` kommt er mit — für Sichten, die eine
+    **Zeitreihe** zeigen statt einer Datensatz-Liste (Fund N-68: Cockpit → Jahr
+    zeichnete sechs Monatsbalken, während die Kopfzahl acht Monate zählte, und
+    der Rail-Balken des laufenden Jahres fiel entsprechend zu kurz aus). Solche
+    Zeilen tragen ``id=None``, keine Zählerwerte (Einspeisung/Netzbezug = 0,0)
+    und kein ``globalstrahlung``/``sonnenstunden``. Die aus den IMD gerechneten
+    Größen — PV, Speicher, WP, E-Mob, Autarkie — sind vollständig.
     """
     von = (jahr, 1) if jahr else None
     bis = (jahr, 12) if jahr else None
     fakten = await lade_monats_fakten(db, anlage_id, von=von, bis=bis)
     # Absteigend (neueste zuerst) — Datums-Listen-Konvention, wie die frühere
     # `order_by(...desc())`.
-    fakten = [f for f in reversed(fakten) if f.meta.hat_zaehlerzeile]
+    fakten = [
+        f for f in reversed(fakten)
+        if f.meta.hat_zaehlerzeile or inkl_ohne_zaehlerzeile
+    ]
 
     if not fakten:
         return []
@@ -318,25 +344,33 @@ async def list_monatsdaten_aggregiert(
         # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)
         # 2. UND keine entsprechenden InvestitionMonatsdaten existieren
         # (d.h. die Daten wären "verloren" wenn wir nur die neuen Quellen nutzen)
-        hat_legacy_pv = bool(md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0)
-        hat_legacy_speicher = bool(
+        # Ohne Zählerzeile gibt es auch keine Legacy-Spalten, die zu retten wären.
+        hat_legacy_pv = bool(md is not None and md.pv_erzeugung_kwh and md.pv_erzeugung_kwh > 0)
+        hat_legacy_speicher = bool(md is not None and (
             (md.batterie_ladung_kwh and md.batterie_ladung_kwh > 0) or
             (md.batterie_entladung_kwh and md.batterie_entladung_kwh > 0)
-        )
+        ))
         hat_inv_pv = f.erzeugung.pv_kwh > 0
         hat_inv_speicher = speicher_ladung > 0 or speicher_entladung > 0
         hat_legacy = (hat_legacy_pv and not hat_inv_pv) or (hat_legacy_speicher and not hat_inv_speicher)
 
         result.append(AggregierteMonatsdatenResponse(
-            id=md.id,
-            anlage_id=md.anlage_id,
+            # `md is None` ⇒ Monat ohne Zählerzeile (nur mit
+            # `inkl_ohne_zaehlerzeile=true` in der Antwort). Die Zählerwerte
+            # kommen ohnehin schon aus der Schicht (`f.zaehler`, dort 0,0), die
+            # Spalten daneben existieren nicht — sie bleiben `None` statt still 0
+            # zu werden.
+            id=md.id if md is not None else None,
+            anlage_id=md.anlage_id if md is not None else anlage_id,
             jahr=f.jahr,
             monat=f.monat,
             einspeisung_kwh=round(einspeisung, 1),
             netzbezug_kwh=round(netzbezug, 1),
-            globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
-            sonnenstunden=md.sonnenstunden,
-            netzbezug_durchschnittspreis_cent=md.netzbezug_durchschnittspreis_cent,
+            globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2 if md is not None else None,
+            sonnenstunden=md.sonnenstunden if md is not None else None,
+            netzbezug_durchschnittspreis_cent=(
+                md.netzbezug_durchschnittspreis_cent if md is not None else None
+            ),
             # Komponenten-Aggregate: None wenn keine aktive IMD beigetragen
             # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
             # Sommer 0 kWh Heizung).

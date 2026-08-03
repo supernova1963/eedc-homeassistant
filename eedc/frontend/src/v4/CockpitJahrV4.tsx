@@ -18,8 +18,10 @@
  *    Welche Monate das sind, entscheidet seit P-12 (N-65) `zuLadendeMonate` +
  *    `monatHatDaten` — NICHT die Existenz einer aggregierten Zeile: die entsteht
  *    erst beim Monatsabschluss.
- *  - Verlauf-Chart + Vorjahr/Ø-Jahr-Vergleich = `monatsdatenApi.listAggregiert`
- *    (Σ der IMD je Monat), einmal je Anlage geladen.
+ *  - Verlauf-Chart + Jahres-Rail + Vorjahr/Ø-Jahr-Vergleich =
+ *    `monatsdatenApi.listAggregiert` (Σ der IMD je Monat), einmal je Anlage
+ *    geladen — seit N-68 **inklusive der Monate ohne Zählerzeile**, damit sie
+ *    dieselbe Monatsmenge sehen wie die Kopfzahl darüber.
  *  - CO₂-Bilanz = `cockpitApi.getNachhaltigkeit` (Monats-Fakten/P10), ebenfalls
  *    einmal je Anlage — der Endpoint kennt kein `?jahr=` und wird auch NICHT darum
  *    erweitert; das Jahr filtert die Sicht (s. {@link baueJahrCo2ChartDaten}).
@@ -85,10 +87,20 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   // Verlauf-Monatsbalken und die Vorjahr/Ø-Jahr-Vergleiche. Default = neuestes
   // Jahr mit Daten. R18-2 (SWR): über den Sicht-Cache von useApiData — beim
   // Tab-Wechsel stehen die alten Daten sofort (kein Skeleton), still revalidiert.
+  //
+  // N-68: MIT den Monaten ohne Zählerzeile. Eine `Monatsdaten`-Zeile entsteht
+  // erst beim Monatsabschluss — ohne das Flag zeichnete der Verlauf für 2026
+  // sechs Balken, während die Kopfzahl darüber acht Monate zählte, und der
+  // Rail-Balken des laufenden Jahres fiel entsprechend zu kurz aus. Dieselbe
+  // Lücke, die P-12 (N-65) für die Kopfzahl geschlossen hat, eine Ebene tiefer.
+  // Der Default der Route bleibt aus: *Auswertungen → Tabelle* ist eine
+  // Datensatz-Liste und darf keine Zeile zeigen, die man nicht bearbeiten kann.
   const monateQ = useApiData(
-    () => monatsdatenApi.listAggregiert(anlageId!),
+    () => monatsdatenApi.listAggregiert(anlageId!, undefined, { inklOhneZaehlerzeile: true }),
     [anlageId],
-    { enabled: !!anlageId, swrKey: `v4-jahr-liste:${anlageId}` },
+    // Eigener swrKey-Namensraum: der Inhalt ist eine Obermenge dessen, was die
+    // übrigen Sichten unter `listAggregiert` cachen.
+    { enabled: !!anlageId, swrKey: `v4-jahr-liste-voll:${anlageId}` },
   )
   const alleMonate = useMemo<AggregierteMonatsdaten[]>(() => monateQ.data ?? [], [monateQ.data])
   useEffect(() => {

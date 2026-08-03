@@ -813,7 +813,7 @@ POST /api/scheduler/monthly-snapshot              # Manueller Monatswechsel-Trig
 #### Aggregierte Monatsdaten
 
 ```
-GET /api/monatsdaten/aggregiert/{anlage_id}?jahr=2025
+GET /api/monatsdaten/aggregiert/{anlage_id}?jahr=2025[&inkl_ohne_zaehlerzeile=true]
 ```
 
 Liefert Monatsdaten mit allen Komponenten-Summen:
@@ -822,6 +822,26 @@ Liefert Monatsdaten mit allen Komponenten-Summen:
 - Speicher-Daten (Ladung, Entladung)
 - WP/E-Auto/Wallbox-Daten
 - Berechnete Kennzahlen (Direktverbrauch, Eigenverbrauch, Autarkie)
+
+Die Monatsgrößen kommen seit **C1a** aus der Monats-Fakten-Schicht (§7, ADR-002/P10).
+
+**`inkl_ohne_zaehlerzeile`** (Default `false`, seit **N-68**) entscheidet über die
+**Zeilenmenge**, nicht über die Werte. Eine `Monatsdaten`-Zeile entsteht erst beim
+**Monatsabschluss**; die Schicht kennt einen gelaufenen Monat auch ohne sie
+(`meta.hat_zaehlerzeile is False`). Die Trennlinie verläuft zwischen zwei
+Konsumenten-Arten:
+
+| Konsument | Flag | Warum |
+| --- | --- | --- |
+| **Datensatz-Liste** (*Auswertungen → Tabelle*) | aus | eine Zeile ohne Datensatz kann man weder bearbeiten noch löschen |
+| **Zeitreihe** (*Cockpit → Jahr*: Verlauf, Rail, Vorjahr/Ø-Spalten) | an | sonst zeichnet sie weniger Monate, als die Kennzahl darüber zählt |
+
+Zeilen ohne Zählerzeile tragen `id: null`, keine Zählerwerte (Einspeisung/Netzbezug
+`0.0` aus der Schicht) und weder `globalstrahlung_kwh_m2` noch `sonnenstunden` noch
+`netzbezug_durchschnittspreis_cent` — **`None`, nicht 0**. Die aus den
+`InvestitionMonatsdaten` gerechneten Größen sind vollständig. Monate **ohne jede
+Spur** liefert die Schicht ohnehin nicht, das Flag holt also keine Null-Zeilen ins
+Bild.
 
 #### CSV Import
 
