@@ -102,6 +102,43 @@ Fahrzeug gebucht hast, erscheint unverändert unter *Sonstiges* und trägt den M
 
 ---
 
+### Komponenten: Speicher, V2H und „Sonstiges" rechnen mit deiner Einspeisevergütung
+
+**Betrifft dich das?** Wenn du unter *Einstellungen → Strompreise* **mehr als einen Eintrag** hast
+und sich darin die Einspeisevergütung unterscheidet — oder wenn du überhaupt eine Komponente unter
+**Sonstiges** erfasst hast (Mini-BHKW, Pelletofen und Ähnliches).
+
+Mit v4.0.5 haben wir dafür gesorgt, dass eine Preiserhöhung nicht rückwirkend deine ganze Historie
+umschreibt: Jeder Monat wird seither mit dem **Strompreis bewertet, der damals galt**. Die
+**Einspeisevergütung** daneben ist dabei stehen geblieben — sie war weiterhin die von heute.
+
+Das fällt überall dort auf, wo eedc **beide** Preise in dieselbe Rechnung nimmt. Wenn dein Speicher
+abends Strom ins Haus abgibt, ist dein Gewinn die *Differenz*: Du sparst den Netzbezug und
+verzichtest im Gegenzug auf die Einspeisevergütung. Genauso rechnet die **V2H-Ersparnis** deines
+E-Autos und die Speicher-Kategorie unter *Sonstiges*. Standen die beiden Preise aus verschiedenen
+Jahren nebeneinander, wurde die Differenz zu groß oder zu klein. In einem nachgestellten Fall — 12
+Cent Vergütung damals, 5 Cent heute, 1.200 kWh Rückspeisung — zeigte eedc **300 € statt 216 €**.
+
+Bei **Komponenten → Sonstiges** war es deutlicher: Diese Sicht rechnete mit zwei festen Zahlen,
+**30 Cent** Strompreis und **8 Cent** Einspeisevergütung, ganz gleich was in deinen Strompreisen
+stand. Ein BHKW bekam also 8 Cent je eingespeister Kilowattstunde gutgeschrieben, auch wenn dein
+Vertrag 12 Cent hergibt.
+
+**Beide Preise kommen jetzt aus dem Tarif, der im jeweiligen Monat galt.**
+
+**Unverändert:** Hast du nur **einen** Strompreis-Eintrag — der Normalfall —, ändert sich für dich
+nichts, denn „der Tarif des Monats" ist dann derselbe wie „der Tarif von heute". Ebenfalls
+unverändert bleiben das **Wallbox-** und das **Wärmepumpen-Dashboard** (dort gibt es keine solche
+Differenz), das **Balkonkraftwerk** (dessen Einspeisung ist unvergütet) und die **ROI-Auswertung**:
+Sie bildet bewusst einen Durchschnitts-Jahreswert, um die Amortisation nach vorn zu rechnen — dafür
+ist der heutige Tarif der richtige.
+
+**Was du tun musst: nichts.** Wenn du deine Einspeisevergütung bisher gar nicht gepflegt hast,
+lohnt jetzt aber ein Blick unter *Einstellungen → Strompreise* — die Zahlen der drei genannten
+Sichten hängen daran.
+
+---
+
 ### Tag: der Einspeiseerlös wird nicht mehr gekürzt, wenn dich §51 gar nicht betrifft
 
 **Betrifft dich das?** Wenn deine Anlage **keine** §51-Anlage ist (das ist der Normalfall bei

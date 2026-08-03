@@ -1404,11 +1404,29 @@ def test_p7_baseline_ausnahmen_sind_noch_belegt():
 #                             — Spaltenstruktur von Vorlage und Export nach
 #                               heutiger Vertragsart. Der Zahlenwert je Zeile
 #                               kommt aus den Monatsdaten, nicht von hier.
-#   investitionen/crud.py     — ROI-/Wirtschaftlichkeits-Prognose NACH VORN.
+#   investitionen/crud.py     — ROI-/Wirtschaftlichkeits-Prognose NACH VORN:
+#                               die Route liefert einen Ø-JAHRESWERT für die
+#                               Amortisationsrechnung, und `AuswertungenRoiV4`
+#                               übergibt kein `jahr` (nachgemessen 03.08.).
+#                               ⚠ Wer den `jahr`-Filter erstmals aus einer
+#                               Sicht heraus setzt, bewertet damit ein
+#                               EINZELNES Altjahr mit dem heutigen Tarif —
+#                               dann gehört die Stelle auf den Stichtag und
+#                               nicht mehr hierher.
 #   investitionen/dashboards.py
 #                             — Query-Param-Default + Fallback der
-#                               `_gewichteter_monatspreis`-Mittelung; die
+#                               `_gewichtete_monatspreise`-Mittelung; die
 #                               historischen Beträge laufen über den Helper.
+#                               Seit v4.0.7 gilt das für BEIDE Preisseiten:
+#                               bis dahin zog der Helper nur den Bezugspreis
+#                               auf den Monats-Stichtag, während die
+#                               Einspeisevergütung daneben der HEUTIGE Wert
+#                               blieb — in jedem Spread (`bezug − einspeise`
+#                               bei V2H, Speicher, Sonstiges/Speicher) standen
+#                               damit zwei Summanden aus verschiedenen
+#                               Zeitpunkten. Diese Datei-Ausnahme hat das
+#                               gedeckt, weil sie den LADER zählt und nicht,
+#                               was mit dem geladenen Tarif geschieht.
 #   ha_export.py              — heutiger WP-Tarif als Fallback des
 #                               Perioden-Mappings und für die nach vorn
 #                               gerichteten Sensor-Werte.

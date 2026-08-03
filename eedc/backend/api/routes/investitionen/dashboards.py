@@ -7,7 +7,7 @@ Balkonkraftwerk, Sonstiges) plus die Investition-Monatsdaten-Abfrage.
 in investitionen/__init__.py aggregiert.
 """
 
-from typing import Optional, Any
+from typing import Optional, Any, NamedTuple
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    resolve_einspeiseverguetung_cent,
     resolve_netzbezug_preis_cent,
     resolve_strompreis_for_komponente,
 )
@@ -97,14 +98,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _gewichteter_monatspreis(
+class GewichtetePreise(NamedTuple):
+    """Mengengewichtete Ø-Tarife einer Periode, beide Preisseiten (ct/kWh)."""
+    bezug_cent: float
+    einspeise_cent: float
+
+
+async def _gewichtete_monatspreise(
     db: AsyncSession,
     anlage_id: int,
     verwendung: str,
     gewichte: dict[tuple[int, int], float],
-    fallback: float,
-) -> float:
-    """Mengengewichteter Ø der Tarife, die in den Monaten der Periode galten.
+    fallback_bezug: float,
+    fallback_einspeise: float,
+) -> GewichtetePreise:
+    """Mengengewichtete Ø der Tarife, die in den Monaten der Periode galten.
 
     ADR-002/P8 für die Komponenten-Dashboards. Sie summieren Energien über die
     ganze Lebensdauer und bewerten sie EINMAL — mit dem heutigen Tarif hätte
@@ -117,26 +125,46 @@ async def _gewichteter_monatspreis(
     mit derselben Größe gewichtet, nach der auch attribuiert wird. Für Anlagen
     ohne Tarifwechsel ist das Ergebnis identisch zum bisherigen Wert.
 
+    **Warum BEIDE Preisseiten aus einer Schleife kommen:** die Funktion hieß
+    bis v4.0.7 `_gewichteter_monatspreis` und lieferte nur den Bezugspreis —
+    die Einspeisevergütung daneben blieb der HEUTE gültige Wert. In jedem
+    Spread (`bezug − einspeise` bei V2H und Speicher) standen damit zwei
+    Summanden aus verschiedenen Zeitpunkten. Zwei getrennte Aufrufe wären
+    zudem eine zweite Query-Schleife über dieselben Monate.
+
+    Die Vergütung trägt bewusst dieselben Gewichte wie der Bezugspreis, auch
+    wo die bewertete Menge eine andere ist (V2H-Entladung statt Netzladung):
+    eine eigene Gewichtung wäre nur mit einer Monatsaufteilung der
+    V2H-Energie ehrlich, und die existiert im Pool-Fall gerade nicht. Die
+    Näherung ist damit dieselbe, die der Bezugspreis hier seit v4.0.5 macht.
+
     Args:
         gewichte: ``{(jahr, monat): menge}`` — Netzladung bzw. km je Monat.
-        fallback: Preis für den Fall, dass keine Gewichte vorliegen (ct/kWh).
+        fallback_bezug: Bezugspreis ohne Gewichte (ct/kWh).
+        fallback_einspeise: Einspeisevergütung ohne Gewichte (ct/kWh).
     """
     summe_gewicht = sum(g for g in gewichte.values() if g and g > 0)
     if summe_gewicht <= 0:
-        return fallback
+        return GewichtetePreise(fallback_bezug, fallback_einspeise)
 
-    gewichteter_preis = 0.0
+    gewichteter_bezug = 0.0
+    gewichtete_einspeisung = 0.0
     for (jahr, monat), gewicht in gewichte.items():
         if not gewicht or gewicht <= 0:
             continue
         m_tarife = await lade_tarife_fuer_anlage(
             db, anlage_id, target_date=date(jahr, monat, 1)
         )
-        m_preis = resolve_strompreis_for_komponente(
-            m_tarife, verwendung, fallback=fallback
-        )
-        gewichteter_preis += m_preis * gewicht
-    return gewichteter_preis / summe_gewicht
+        gewichteter_bezug += resolve_strompreis_for_komponente(
+            m_tarife, verwendung, fallback=fallback_bezug
+        ) * gewicht
+        gewichtete_einspeisung += resolve_einspeiseverguetung_cent(
+            m_tarife, fallback=fallback_einspeise
+        ) * gewicht
+    return GewichtetePreise(
+        gewichteter_bezug / summe_gewicht,
+        gewichtete_einspeisung / summe_gewicht,
+    )
 
 
 class InvestitionMonatsdatenResponse(BaseModel):
@@ -236,10 +264,11 @@ async def get_eauto_dashboard(
     wallbox_tarif = tarife.get("wallbox")
     allgemein_tarif = tarife.get("allgemein")
     strompreis_cent = strompreis_cent or resolve_strompreis_for_komponente(tarife, "wallbox")
-    # Einspeisevergütung für V2H-Spread-Berechnung (Drift-Audit D)
-    einspeise_verg_cent = (allgemein_tarif.einspeiseverguetung_cent_kwh
-                           if allgemein_tarif and allgemein_tarif.einspeiseverguetung_cent_kwh is not None
-                           else EINSPEISEVERGUETUNG_DEFAULT_CENT)
+    # Einspeisevergütung für V2H-Spread-Berechnung (Drift-Audit D). Nur der
+    # FALLBACK — der bewertete Wert kommt je E-Auto aus `_gewichtete_monats-
+    # preise` unten, weil der Spread sonst einen Monatspreis gegen die heutige
+    # Vergütung rechnet (ADR-002/P8, beide Seiten).
+    einspeise_verg_fallback_cent = resolve_einspeiseverguetung_cent(tarife)
 
     # E-Autos laden — Issue #123: Dashboard ist historische Übersicht,
     # stillgelegte E-Autos bleiben mit ihrer Historie sichtbar.
@@ -392,10 +421,11 @@ async def get_eauto_dashboard(
         # ADR-002/P8: Tarif über die Monate der Periode mitteln. Beim Pool-Fall
         # nach km gewichten — das ist der Schlüssel, nach dem auch attribuiert
         # wird; sonst nach der Netzladung des Monats.
-        eauto_strompreis_cent = await _gewichteter_monatspreis(
+        eauto_strompreis_cent, eauto_einspeise_cent = await _gewichtete_monatspreise(
             db, anlage_id, "wallbox",
             km_gewichte if ist_pool else netz_pro_monat,
-            fallback=strompreis_cent,
+            fallback_bezug=strompreis_cent,
+            fallback_einspeise=einspeise_verg_fallback_cent,
         )
 
         # Heim-Ladung (Wallbox) = PV + Netz
@@ -436,7 +466,7 @@ async def get_eauto_dashboard(
             v2h_ersparnis = berechne_v2h_ersparnis(
                 v2h_entladung_kwh=gesamt_v2h,
                 bezug_preis_cent=eauto_strompreis_cent,
-                einspeise_verg_cent=einspeise_verg_cent,
+                einspeise_verg_cent=eauto_einspeise_cent,
             ).ersparnis_euro
 
         # Wallbox-Ersparnis: Was hätte externe Ladung gekostet?
@@ -867,11 +897,7 @@ async def get_speicher_dashboard(
     if strompreis_cent is None:
         strompreis_cent = resolve_strompreis_for_komponente(tarife, "allgemein")
     if einspeiseverguetung_cent is None:
-        einspeiseverguetung_cent = (
-            allgemein_tarif.einspeiseverguetung_cent_kwh
-            if allgemein_tarif and allgemein_tarif.einspeiseverguetung_cent_kwh is not None
-            else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        )
+        einspeiseverguetung_cent = resolve_einspeiseverguetung_cent(tarife)
 
     # Monatsdaten für Durchschnittspreis-Fallback laden
     anlage_md_result = await db.execute(
@@ -886,7 +912,15 @@ async def get_speicher_dashboard(
     # den Ø über die gesamte Speicher-Historie angehoben und damit den
     # Arbitrage-Spread rückwirkend verändert. Der Flex-Ø des Monats behält
     # weiterhin Vorrang (`resolve_netzbezug_preis_cent`).
+    #
+    # Die Einspeisevergütung läuft seit v4.0.7 durch DIESELBE Schleife: der
+    # Spread ist `bezug − einspeise`, und solange nur der Minuend je Monat
+    # aufgelöst wurde, stammten die beiden Summanden aus verschiedenen
+    # Zeitpunkten. Gewichtet wird sie mit derselben Menge wie der Bezugspreis
+    # — der Spread wird auf die Entladung angewendet, für die es hier keine
+    # eigene Monatsaufteilung gibt.
     gew_preis_sum = 0.0
+    gew_einspeise_sum = 0.0
     for m in anlage_md_dict.values():
         m_tarife = await lade_tarife_fuer_anlage(
             db, anlage_id, target_date=date(m.jahr, m.monat, 1)
@@ -895,8 +929,14 @@ async def get_speicher_dashboard(
             m_tarife, "allgemein", fallback=strompreis_cent
         )
         gew_preis_sum += resolve_netzbezug_preis_cent(m, m_basis) * (m.netzbezug_kwh or 0)
+        gew_einspeise_sum += resolve_einspeiseverguetung_cent(
+            m_tarife, fallback=einspeiseverguetung_cent
+        ) * (m.netzbezug_kwh or 0)
     gew_kwh_sum = sum(m.netzbezug_kwh or 0 for m in anlage_md_dict.values())
     eff_strompreis_cent = gew_preis_sum / gew_kwh_sum if gew_kwh_sum > 0 else strompreis_cent
+    eff_einspeise_cent = (
+        gew_einspeise_sum / gew_kwh_sum if gew_kwh_sum > 0 else einspeiseverguetung_cent
+    )
 
     # Batch-Query: Alle Monatsdaten für alle Speicher auf einmal laden
     speicher_ids = [s.id for s in speicher_list]
@@ -1026,8 +1066,11 @@ async def get_speicher_dashboard(
                     f"η-IST fehlgeschlagen: {type(e).__name__}: {e}"
                 )
 
-        # Ersparnis: Entladung ersetzt Netzbezug (Spread zwischen Netzbezug und Einspeisung)
-        spread = eff_strompreis_cent - einspeiseverguetung_cent
+        # Ersparnis: Entladung ersetzt Netzbezug (Spread zwischen Netzbezug und
+        # Einspeisung). BEIDE Seiten aus derselben Monatsschleife oben — ein
+        # Ø-Bezugspreis gegen die heutige Vergütung wäre ein Spread aus zwei
+        # Zeitpunkten (ADR-002/P8).
+        spread = eff_strompreis_cent - eff_einspeise_cent
         ersparnis = gesamt_entladung * spread / 100
 
         # Arbitrage-Gewinn: (Strompreis - Ladepreis) * Netzladung
@@ -1268,11 +1311,15 @@ async def get_wallbox_dashboard(
     # zu einem Pool zusammenfasst — eine Netz-kWh-Aufteilung je Monat gibt es
     # an dieser Stelle nicht. Genauer als der heutige Tarif, gröber als das
     # mengengewichtete Mittel im E-Auto-Dashboard.
-    wb_strompreis_cent = await _gewichteter_monatspreis(
+    # Nur die Bezugsseite: die Wallbox rechnet keinen Spread, ihre Kosten sind
+    # bezogener Strom. `.bezug_cent` statt Tupel-Auspacken, damit sichtbar
+    # bleibt, dass die zweite Preisseite hier absichtlich ungenutzt ist.
+    wb_strompreis_cent = (await _gewichtete_monatspreise(
         db, anlage_id, "wallbox",
         {periode: 1.0 for periode in monate_set},
-        fallback=strompreis_cent,
-    )
+        fallback_bezug=strompreis_cent,
+        fallback_einspeise=resolve_einspeiseverguetung_cent(tarife),
+    )).bezug_cent
     heim_kosten = gesamt_heim_netz * wb_strompreis_cent / 100
 
     # Was hätte externe Ladung gekostet?
@@ -1540,15 +1587,44 @@ async def get_balkonkraftwerk_dashboard(
 @router.get("/dashboard/sonstiges/{anlage_id}", response_model=list[SonstigesDashboardResponse])
 async def get_sonstiges_dashboard(
     anlage_id: int,
-    strompreis_cent: float = Query(30.0),
-    einspeiseverguetung_cent: float = Query(8.0),
+    strompreis_cent: Optional[float] = Query(
+        None, description="Override: Strompreis (auto aus dem Monatstarif wenn leer)"
+    ),
+    einspeiseverguetung_cent: Optional[float] = Query(
+        None, description="Override: Einspeisevergütung (auto aus dem Monatstarif wenn leer)"
+    ),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Sonstiges Dashboard für eine Anlage.
 
     Zeigt sonstige Investitionen (Mini-BHKW, Pelletofen, etc.) mit kategorie-abhängigen Daten.
+
+    **Dieselbe Klasse wie Befund F-4 beim Balkonkraftwerk**, hier für BEIDE
+    Preisseiten: die Query-Parameter waren Pflichtwerte mit den Defaults 30,0
+    und 8,0 ct/kWh, und ``v4/komponentenAdapter.tsx`` ruft die Route ohne
+    Preise auf — die Konstanten galten also immer, unabhängig vom gepflegten
+    Tarif. Ein BHKW rechnete seine Ersparnis mit 30 ct, auch wenn der Vertrag
+    auf 24 ct lautete.
+
+    Jetzt kommen beide Preise je Monat aus dem dann gültigen Tarif
+    (ADR-002/**P8**), gewichtet mit der Menge, die die jeweilige Kategorie
+    tatsächlich bewertet: Eigenverbrauch beim Erzeuger, Netzbezug beim
+    Verbraucher, Entladung beim Speicher. Die Query-Parameter bleiben als
+    Override erhalten.
     """
+    tarife_heute = await lade_tarife_fuer_anlage(db, anlage_id)
+    fallback_bezug = (
+        strompreis_cent
+        if strompreis_cent is not None
+        else resolve_strompreis_for_komponente(tarife_heute, "allgemein")
+    )
+    fallback_einspeise = (
+        einspeiseverguetung_cent
+        if einspeiseverguetung_cent is not None
+        else resolve_einspeiseverguetung_cent(tarife_heute)
+    )
+
     inv_result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
@@ -1590,6 +1666,12 @@ async def get_sonstiges_dashboard(
         gesamt_sonstige_ertraege = 0
         gesamt_sonstige_ausgaben = 0
 
+        # Gewichte für die Tarif-Mittelung (ADR-002/P8): je Kategorie die
+        # Menge, die unten auch bewertet wird. Ein Monat ohne bewertete Menge
+        # trägt keinen Preis bei — sonst zöge ein datenloser Altmonat mit
+        # altem Tarif den Ø nach unten.
+        preis_gewichte: dict[tuple[int, int], float] = {}
+
         for md in monatsdaten:
             d = md.verbrauch_daten or {}
             summen = berechne_sonstige_summen(d)
@@ -1600,24 +1682,41 @@ async def get_sonstiges_dashboard(
                 gesamt_erzeugung += d.get('erzeugung_kwh', 0)
                 gesamt_eigenverbrauch += d.get('eigenverbrauch_kwh', 0)
                 gesamt_einspeisung += d.get('einspeisung_kwh', 0)
+                preis_gewichte[(md.jahr, md.monat)] = d.get('eigenverbrauch_kwh', 0) or 0
             elif kategorie == 'verbraucher':
                 gesamt_verbrauch += get_sonstiges_verbrauch_kwh(d)
                 gesamt_bezug_pv += d.get('bezug_pv_kwh', 0)
                 gesamt_bezug_netz += d.get('bezug_netz_kwh', 0)
+                preis_gewichte[(md.jahr, md.monat)] = (
+                    (d.get('bezug_netz_kwh', 0) or 0) + (d.get('bezug_pv_kwh', 0) or 0)
+                )
             elif kategorie == 'speicher':
                 gesamt_ladung += d.get('ladung_kwh', 0)
                 gesamt_entladung += d.get('entladung_kwh', 0)
+                preis_gewichte[(md.jahr, md.monat)] = d.get('entladung_kwh', 0) or 0
 
         gesamt_sonstige_netto = gesamt_sonstige_ertraege - gesamt_sonstige_ausgaben
+
+        # Beide Preisseiten je Monat, EIN Aufruf: bei den Kategorien
+        # `erzeuger` und `speicher` gehen sie gemeinsam in eine Formel
+        # (Eigenverbrauch gegen Einspeisung bzw. der Spread), und zwei
+        # Zeitpunkte in einer Differenz sind genau der Fehler, den P8 meint.
+        preise = await _gewichtete_monatspreise(
+            db, anlage_id, "allgemein", preis_gewichte,
+            fallback_bezug=fallback_bezug,
+            fallback_einspeise=fallback_einspeise,
+        )
+        inv_strompreis_cent = preise.bezug_cent
+        inv_einspeise_cent = preise.einspeise_cent
 
         # Berechnungen je nach Kategorie
         if kategorie == 'erzeuger':
             eigenverbrauch_quote = eigenverbrauchsquote_prozent(gesamt_eigenverbrauch, gesamt_erzeugung)
-            ersparnis_eigenverbrauch = gesamt_eigenverbrauch * strompreis_cent / 100
+            ersparnis_eigenverbrauch = gesamt_eigenverbrauch * inv_strompreis_cent / 100
             # §51-Erlös über SoT (ADR-001, M3); neg_preis_kwh = None auf
             # Monatsdaten-Aggregat-Ebene → volle Einspeisung (verhaltensneutral).
             erloes_einspeisung = einspeise_erloes_euro(
-                gesamt_einspeisung, None, einspeiseverguetung_cent
+                gesamt_einspeisung, None, inv_einspeise_cent
             ).erloes_euro
             gesamt_ersparnis = ersparnis_eigenverbrauch + erloes_einspeisung + gesamt_sonstige_netto
             co2_ersparnis = gesamt_eigenverbrauch * CO2_FAKTOR_STROM_KG_KWH
@@ -1642,9 +1741,9 @@ async def get_sonstiges_dashboard(
 
         elif kategorie == 'verbraucher':
             pv_anteil = (gesamt_bezug_pv / gesamt_verbrauch * 100) if gesamt_verbrauch > 0 else 0
-            kosten_netz = gesamt_bezug_netz * strompreis_cent / 100
+            kosten_netz = gesamt_bezug_netz * inv_strompreis_cent / 100
             # Ersparnis: PV-Strom statt Netzstrom + sonstige Erträge/Ausgaben
-            ersparnis_pv = gesamt_bezug_pv * strompreis_cent / 100 + gesamt_sonstige_netto
+            ersparnis_pv = gesamt_bezug_pv * inv_strompreis_cent / 100 + gesamt_sonstige_netto
 
             zusammenfassung = {
                 'kategorie': kategorie,
@@ -1664,8 +1763,9 @@ async def get_sonstiges_dashboard(
 
         else:  # speicher
             effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
-            # Ersparnis: Spread zwischen Netzbezug und Einspeisung
-            spread = strompreis_cent - einspeiseverguetung_cent
+            # Ersparnis: Spread zwischen Netzbezug und Einspeisung — beide
+            # Seiten aus derselben Monats-Mittelung (ADR-002/P8).
+            spread = inv_strompreis_cent - inv_einspeise_cent
             ersparnis = gesamt_entladung * spread / 100 + gesamt_sonstige_netto
 
             zusammenfassung = {

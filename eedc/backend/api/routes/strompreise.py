@@ -161,6 +161,40 @@ def resolve_strompreis_for_komponente(
     return fallback if fallback is not None else NETZBEZUG_DEFAULT_CENT
 
 
+def resolve_einspeiseverguetung_cent(
+    tarife: dict,
+    fallback: Optional[float] = None,
+) -> float:
+    """Liest die Einspeisevergütung aus dem allgemeinen Tarif.
+
+    Das Gegenstück zu `resolve_strompreis_for_komponente` für die ANDERE
+    Preisseite. Es gibt es, weil der P8-Sweep (v4.0.5) den Arbeitspreis auf
+    den Monats-Stichtag gezogen hat und die Vergütung nicht: wo beide in
+    dieselbe Formel gehen — jeder Spread `bezug − einspeise` bei Speicher,
+    V2H und BKW —, stammten die zwei Summanden danach aus verschiedenen
+    Zeitpunkten. Ein Resolver je Seite macht die Asymmetrie beim Lesen
+    sichtbar, statt sie in ein `if tarif else DEFAULT` je Aufrufer zu streuen.
+
+    Anders als beim Arbeitspreis gibt es keine Komponenten-Staffelung: eine
+    Wärmepumpe hat einen eigenen Bezugstarif, aber keine eigene Vergütung.
+
+    Args:
+        tarife: Dict aus `lade_tarife_fuer_anlage()` — für einen historischen
+                Monat mit dessen Stichtag geladen (ADR-002/P8).
+        fallback: Override des kanonischen Defaults.
+
+    Returns:
+        Einspeisevergütung in ct/kWh.
+    """
+    from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
+
+    allgemein = tarife.get("allgemein")
+    if allgemein and allgemein.einspeiseverguetung_cent_kwh is not None:
+        return allgemein.einspeiseverguetung_cent_kwh
+
+    return fallback if fallback is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
+
+
 # =============================================================================
 # Router
 # =============================================================================
