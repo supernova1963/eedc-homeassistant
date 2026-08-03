@@ -32,7 +32,10 @@ cd /home/gernot/claude/eedc-homeassistant
 
 Das Script:
 
-1. Prüft ob beide Repos clean sind und auf `main`
+1. Prüft ob beide Repos clean sind und auf `main` — **clean heißt inklusive untracked
+   Dateien**. Eine neue, noch nie hinzugefügte Datei (Scratch-Skript, Notiz, Datei einer
+   Parallel-Session) bricht das Release ab und wird namentlich genannt; gitignorierte
+   Arbeitsstände (`venv/`, `node_modules/`, `docs/drafts/`, `data/*.db`) nicht.
 2. Bumpt Version in allen 5 Dateien (`config.py`, `version.ts`, `config.yaml`, `run.sh`, `Dockerfile`)
 3. Kopiert CHANGELOG nach `eedc/`
 4. Committed + taggt + pusht `eedc-homeassistant`
@@ -40,6 +43,13 @@ Das Script:
 6. Committed + taggt + pusht `eedc`
 
 Ergebnis: Beide Repos auf gleicher Version, getaggt, gepusht.
+
+> **Die Commits kehren benannte Pfade ein, kein `git add -A`.** Die Listen stehen als
+> `RELEASE_PFADE` (Schritt 4) und `MIRROR_PFADE` (Schritt 6) in `scripts/release.sh`, jeweils mit
+> der Erhebung, welcher Schritt sie schreibt. Damit eine unvollständige Liste nicht still eine
+> Datei aus dem Release fallen lässt, prüft das Script nach dem Stagen, dass **nichts** offen
+> geblieben ist, und bricht sonst ab. Wer eine neue Schreibstelle ins Script baut, trägt sie in
+> die Liste ein — der Abbruch sagt genau, welche Datei fehlt.
 
 ## Externe PRs
 

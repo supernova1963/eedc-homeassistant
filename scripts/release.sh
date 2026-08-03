@@ -60,19 +60,54 @@ if [ ! -f "eedc/config.yaml" ]; then
     exit 1
 fi
 
-# Working Directory clean?
-if ! git diff --quiet || ! git diff --cached --quiet; then
-    echo -e "${RED}Fehler: eedc-homeassistant Working Directory ist nicht clean!${NC}"
-    git status --short
-    exit 1
-fi
+# Working Directory clean? — inklusive UNTRACKED.
+#
+# `git diff` sieht getrackte Änderungen, `git diff --cached` den Index —
+# eine neue, noch nie hinzugefügte Datei sieht keiner von beiden. In diesem
+# Projekt laufen regelmäßig Parallel-Sessions; eine Scratch-Datei daneben
+# würde sonst die ganze Laufzeit über unbemerkt bleiben und beim Commit
+# unten mitfahren (Nebenfund N-56). `git status --porcelain` respektiert
+# .gitignore, gitignorierte Arbeitsstände (venv/, node_modules/,
+# docs/drafts/, data/*.db) lösen also weiterhin nichts aus.
+pruefe_baum_sauber() {
+    local repo="$1"
+    local name="$2"
+    local dreckig
+    dreckig=$(git -C "$repo" status --porcelain)
+    if [ -n "$dreckig" ]; then
+        echo -e "${RED}Fehler: $name Working Directory ist nicht clean!${NC}"
+        echo "$dreckig"
+        echo -e "${YELLOW}  Auch untracked Dateien (Spalte '??') zählen — sie würden im${NC}"
+        echo -e "${YELLOW}  Release-Commit landen. Committen, löschen oder ignorieren.${NC}"
+        exit 1
+    fi
+}
 
-# Standalone-Repo clean?
-if ! git -C "$EEDC_STANDALONE" diff --quiet || ! git -C "$EEDC_STANDALONE" diff --cached --quiet; then
-    echo -e "${RED}Fehler: eedc Working Directory ist nicht clean!${NC}"
-    git -C "$EEDC_STANDALONE" status --short
-    exit 1
-fi
+pruefe_baum_sauber "$REPO_DIR" "eedc-homeassistant"
+pruefe_baum_sauber "$EEDC_STANDALONE" "eedc"
+
+# Sicherung gegen eine UNVOLLSTÄNDIGE Pfadliste (Schritt 4 + 6 stagen explizit
+# statt `git add -A`). Eine still fehlende Datei im Release wäre schlimmer als
+# eine zuviel eingekehrte — sie fällt erst beim Nutzer auf. Deshalb: nach dem
+# Stagen darf nichts mehr offen sein. Bleibt etwas übrig, hat entweder das
+# Script etwas Neues erzeugt (→ gehört in die Pfadliste) oder eine
+# Parallel-Session hat danebengeschrieben. Beides bricht laut ab.
+pruefe_nichts_uebrig() {
+    local repo="$1"
+    local name="$2"
+    local rest
+    rest=$( { git -C "$repo" diff --name-only; \
+              git -C "$repo" ls-files --others --exclude-standard; } | sort -u )
+    if [ -n "$rest" ]; then
+        echo -e "${RED}ABBRUCH: in $name sind nach dem Stagen Dateien offen geblieben:${NC}"
+        echo "$rest" | sed 's/^/    /'
+        echo -e "${YELLOW}  Entweder erzeugt das Release eine Datei, die die Pfadliste noch${NC}"
+        echo -e "${YELLOW}  nicht kennt (dann Liste in release.sh ergänzen), oder eine andere${NC}"
+        echo -e "${YELLOW}  Session hat in den Baum geschrieben. Der Version-Bump liegt bereits${NC}"
+        echo -e "${YELLOW}  gestaged vor — nach dem Aufräumen erneut starten.${NC}"
+        exit 1
+    fi
+}
 
 # Auf main?
 BRANCH=$(git branch --show-current)
@@ -224,7 +259,29 @@ fi
 echo ""
 echo -e "${CYAN}[4/6] Commit + Tag + Push eedc-homeassistant...${NC}"
 
-git add -A
+# Nur einkehren, was dieses Script oben selbst geschrieben hat — kein `git add -A`.
+# Erhebung der Schreibstellen (Stand 2026-08-03, Nebenfund N-56):
+#   Schritt 1 → die 5 Versionsdateien
+#   Schritt 2 → sync-help.sh nach eedc/frontend/public/help/, vite build nach
+#               eedc/frontend/dist/ (tsc läuft mit noEmit, schreibt nichts)
+#   Schritt 3 → eedc/CHANGELOG.md, eedc/README.md
+# smoke.sh (Schritt 0) legt nur außerhalb des Baums bzw. gitignoriert ab.
+# Wer hier eine Schreibstelle ergänzt, ergänzt auch diese Liste — sonst
+# schlägt pruefe_nichts_uebrig unten an.
+RELEASE_PFADE=(
+    eedc/backend/core/config.py
+    eedc/frontend/src/config/version.ts
+    eedc/config.yaml
+    eedc/run.sh
+    eedc/Dockerfile
+    eedc/CHANGELOG.md
+    eedc/README.md
+    eedc/frontend/public/help
+    eedc/frontend/dist
+)
+git add -A -- "${RELEASE_PFADE[@]}"
+pruefe_nichts_uebrig "$REPO_DIR" "eedc-homeassistant"
+
 if git diff --cached --quiet; then
     echo -e "${YELLOW}  Keine Änderungen (Version war bereits $VERSION).${NC}"
 else
@@ -290,7 +347,25 @@ echo ""
 echo -e "${CYAN}[6/6] Commit + Tag + Push eedc-Standalone...${NC}"
 
 cd "$EEDC_STANDALONE"
-git add -A
+
+# Auch hier explizit: genau die Ziele von Schritt 5 (rsync + cp), nichts sonst.
+# Der Mirror trägt daneben Dateien, die release.sh NIE anfasst (config.yaml,
+# Dockerfile, CLAUDE.md, docs/, .github/, package-lock.json, icon/logo) —
+# die haben im Release-Commit nichts verloren. `git add -A -- <pfad>` kehrt
+# auch Löschungen ein, die rsync --delete erzeugt hat.
+MIRROR_PFADE=(
+    backend
+    frontend
+    CHANGELOG.md
+    README.md
+    INSTALL.md
+    .gitignore
+    docker-compose.yml
+    run.sh
+)
+git add -A -- "${MIRROR_PFADE[@]}"
+pruefe_nichts_uebrig "$EEDC_STANDALONE" "eedc"
+
 if git diff --cached --quiet; then
     echo -e "${YELLOW}  Keine Änderungen im Standalone-Repo.${NC}"
 else
