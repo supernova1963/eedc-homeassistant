@@ -1647,7 +1647,10 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Die P7-Auflösung selbst — die Schicht ruft sie, sie ist ihr Unterbau.
     "backend/services/pv_monatswerte.py::lade_pv_je_monat",
     # Monatsabschluss: Formular füllen und speichern.
-    "backend/api/routes/aktueller_monat.py::_collect_saved_data",
+    # (`aktueller_monat.py::_collect_saved_data` stand hier bis C1c — als
+    # „Formular füllen" eingeordnet, obwohl es ein reiner Lesepfad mit
+    # anlagenweiter Faltung war (N-98). Es bezieht seine Mengen jetzt aus der
+    # Schicht und lädt nichts mehr selbst.)
     "backend/api/routes/monatsabschluss/views.py::get_monatsabschluss",
     "backend/api/routes/monatsabschluss/wizard.py::save_monatsabschluss",
     "backend/api/routes/monatsdaten.py::_save_investitionen_monatsdaten",
@@ -1674,6 +1677,11 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
 #: (bzw. brauchen keine); selbst gefaltet wird nur, was an einem einzelnen Gerät
 #: hängt. Der Eintrag fällt, sobald `MonatsFakt` eine per-Investition-Gruppe hat.
 P10_PER_INVESTITION: frozenset[str] = frozenset({
+    # C1c: alle anlagenweiten Mengen (PV · Speicher · WP · E-Mob · sonstiger
+    # Erzeuger · Eigenverbrauch/Autarkie) kommen aus `lade_monats_fakten`.
+    # Selbst geladen wird nur die Zuordnung `inv → verbrauch_daten` für die
+    # eMob-Zeilen des Vorjahres-T-Kontos.
+    "backend/api/routes/aktueller_monat.py::_load_vorjahr",
     "backend/api/routes/aussichten.py::get_finanz_prognose",
     "backend/api/routes/ha_export.py::_load_emob_pool_ctx",
     "backend/api/routes/ha_export.py::calculate_anlage_sensors",
@@ -1697,9 +1705,21 @@ P10_NOCH_NICHT_MIGRIERT: frozenset[str] = frozenset({
     # N-15 ist mit C1a (2026-08-03) getilgt: `list_monatsdaten_aggregiert`
     # bezieht seine Monatsgrößen aus `lade_monats_fakten` und lädt keine
     # `InvestitionMonatsdaten` mehr selbst.
-    # N-16 — Monatsbericht + Vorjahresvergleich.
+    # N-16 — Monatsbericht. Der **Energiekern** ist mit C1c (2026-08-03) auf der
+    # Schicht: der `saved`-Zweig der Quellen-Kaskade (`_collect_saved_data`) und
+    # die Sonstige-Positionen kommen aus `lade_monats_fakten`. Der
+    # Vorjahresvergleich (`_load_vorjahr`) ist ganz umgezogen.
+    #
+    # **Was hier noch offen ist, und warum der Eintrag deshalb bleibt** (N-107):
+    # der Komponenten-Detailblock faltet weiter anlagenweit über eine eigene
+    # IMD-Batch (Speicher-Netzladung + Ø-Ladepreis, WP-Heiz-/WW-Split, eMob
+    # Netz/Extern/V2H, BKW-Eigenverbrauch, die sechs Sonstiges-Summen). Vier
+    # davon hat die Schicht heute nicht (Sonstiges: Eigenverbrauch, Einspeisung,
+    # Bezug PV/Netz), und zwei änderten beim Umhängen ihre Bedeutung (eMob
+    # Netz/Extern: Roh-Summe → kanonischer Pool). Der Auftrag C1c hatte diesen
+    # Select als rein per-Investition eingeordnet; am Code gemessen ist er es
+    # nicht. Umbuchen wäre hier Umetikettieren, nicht Tilgen.
     "backend/api/routes/aktueller_monat.py::get_aktueller_monat",
-    "backend/api/routes/aktueller_monat.py::_load_vorjahr",
     # N-17 ist mit C1b (2026-08-03) getilgt: `get_komponenten_zeitreihe`
     # bezieht seine Monatszeile aus `lade_monats_fakten` und lädt keine
     # `InvestitionMonatsdaten` mehr selbst.
@@ -1817,13 +1837,15 @@ def test_p10_offene_schuld_waechst_nicht():
     hieße, sie unsichtbar wachsen zu lassen — dann wäre der Wächter genau das
     Aufräum-Paket mit einem grünen Test obendrauf, das ADR-002 §80 ablehnt.
     """
-    assert len(P10_NOCH_NICHT_MIGRIERT) <= 2, (
+    assert len(P10_NOCH_NICHT_MIGRIERT) <= 1, (
         f"{len(P10_NOCH_NICHT_MIGRIERT)} Sichten falten eine anlagenweite "
         "Monatszeile selbst — nach S5 waren es 5, nach S6 vier, nach **C1a** "
-        "drei, nach **C1b** sind es 2 (N-16 zweimal; `community_service` fiel "
-        "mit S6, `list_monatsdaten_aggregiert` mit C1a, "
-        "`get_komponenten_zeitreihe` mit C1b). Diese Zahl darf nur sinken. "
-        "Wer eine Sicht hinzufügen will, migriert sie stattdessen."
+        "drei, nach **C1b** zwei, nach **C1c** ist es 1 (`community_service` "
+        "fiel mit S6, `list_monatsdaten_aggregiert` mit C1a, "
+        "`get_komponenten_zeitreihe` mit C1b, `_load_vorjahr` mit C1c — es "
+        "bleibt `get_aktueller_monat`, dessen Komponenten-Detailblock die "
+        "Schicht noch nicht abbildet, siehe Kommentar dort). Diese Zahl darf "
+        "nur sinken. Wer eine Sicht hinzufügen will, migriert sie stattdessen."
     )
 
 

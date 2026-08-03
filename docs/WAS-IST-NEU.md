@@ -43,6 +43,48 @@ weiterhin `0,0`.
 
 ---
 
+### Cockpit → Monat: die PV ist da, wo bisher nichts stand — und der Vorjahresvergleich stimmt
+
+**Betrifft dich das?** Fünf Punkte, jeder mit eigener Voraussetzung — die ersten beiden im
+laufenden Monat, die letzten drei im Vergleich mit dem Vorjahr.
+
+**1. Deine PV erscheint, auch ohne Sensor je String.** Wenn du die **Gesamterzeugung deiner
+Anlage** pflegst, aber keinen eigenen Wert je Modulfeld, zeigte *Cockpit → Monat* bisher
+**gar keine PV** — während dieselbe Zahl unter *Cockpit → Übersicht* korrekt stand. Der
+Monatsbericht liest jetzt genauso auf wie alle anderen Ansichten: gemessene Werte je Modulfeld
+haben Vorrang, die Gesamterzeugung füllt die Lücken.
+
+**2. Beim Balkonkraftwerk wird kein Eigenverbrauch mehr erfunden.** Hast du für dein
+Balkonkraftwerk die Erzeugung gepflegt, den Eigenverbrauch aber nicht, setzte eedc hier die
+**volle Erzeugung** als Eigenverbrauch ein — als hätte das Gerät alles selbst verbraucht. Der
+Komponenten-Hub zeigte daneben nichts. Jetzt bleibt das Feld leer, bis du es füllst oder ein
+Sensor es misst.
+
+**3. Der Vorjahresvergleich löst die PV genauso auf** wie der laufende Monat. Wenn du nur die
+Gesamterzeugung pflegst, stand im Vorjahr eine 0 — **die Vorjahres-PV steigt also**.
+
+**4. Rückspeisung aus dem E-Auto zählt jetzt auch im Vorjahr.** Wer sein Auto ins Haus entladen
+kann (V2H), sah diese Kilowattstunden im laufenden Monat im Eigenverbrauch, im Vorjahr nicht —
+das Jahres-Delta zeigte dadurch einen Sprung, den es nie gab. **Vorjahres-Eigenverbrauch und
+-Autarkie steigen.**
+
+**5. Öffentliches Laden zählt im Vorjahr nicht mehr als Heimladung.** Wenn du **E-Auto und
+Wallbox** gepflegt hast, nahm der Vorjahresvergleich pro Feld den jeweils größeren Wert — und
+damit bei der Gesamt-Ladung des Autos auch den Strom, den du **an einer öffentlichen Ladesäule**
+gezogen hast. Beispiel aus dem Demo-Bestand: 223,8 kWh im Vorjahr, davon 50 kWh extern, während
+derselbe Monat als laufender Monat längst die richtigen 174 kWh zeigte. **Die Vorjahres-Ladung
+kann dadurch sinken** — sie war vorher zu hoch. Die extern geladenen Kilowattstunden und ihre
+Kosten gehen nicht verloren, sie stehen weiter in ihrer eigenen Zeile.
+
+**Unverändert:** dienstlich genutzte Fahrzeuge bleiben in beiden Ansichten außen vor, Komponenten
+zählen weiterhin erst ab ihrem Anschaffungsdatum, und ein Vorjahresmonat ohne erfasste
+Zählerstände blendet den Vergleich wie bisher aus. Alle übrigen Werte des Monatsberichts sind
+gegen den Demo-Bestand geprüft und identisch geblieben.
+
+**Was du tun musst: nichts.** Die Werte werden bei jedem Aufruf neu gerechnet.
+
+---
+
 ### Komponenten: keine Monatszeile mehr aus lauter Nullen für den Firmenwagen
 
 **Betrifft dich das?** Nur wenn du ein Fahrzeug als **dienstlich** markiert hast und es in

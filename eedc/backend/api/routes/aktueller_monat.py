@@ -34,7 +34,6 @@ from backend.core.berechnungen import (
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
     erzeugung_hinter_zaehler_kwh,
-    imd_typ_beitrag,
     merge_datenquellen,
     spezifischer_ertrag_kwh_kwp,
     teilzeitraum_felder,
@@ -46,7 +45,11 @@ from backend.services.eauto_wirtschaftlichkeit import (
     attribute_emob_pool_by_km,
     berechne_eauto_ersparnis,
     compute_emob_pool_attribution,
-    get_emob_heimladung_canonical,
+)
+from backend.services.monats_fakten import (
+    MonatsFakt,
+    SonstigesFakten,
+    lade_monats_fakten,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -55,17 +58,12 @@ from backend.core.wirtschaftlichkeit_defaults import (
 from backend.core.field_definitions import (
     get_eauto_ladung_kwh,
     get_emob_pv_netz_kwh,
-    get_pv_erzeugung_kwh,
     get_sonstiges_verbrauch_kwh,
     get_speicher_netzladung_kwh,
     get_wp_heizenergie_kwh,
     get_wp_strom_kwh,
 )
-from backend.utils.sonstige_positionen import (
-    berechne_sonstige_summen,
-    berechne_md_sonstige_summen,
-    aggregiere_sonstige_je_monat,
-)
+from backend.utils.sonstige_positionen import berechne_sonstige_summen
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import ist_dienstlich
 
@@ -401,30 +399,46 @@ async def _collect_connector_data(anlage: Anlage, jahr: int, monat: int) -> dict
     return resolved
 
 
-async def _collect_saved_data(
-    anlage_id: int, jahr: int, monat: int,
-    investitionen: list[Investition],
-    db: AsyncSession,
+def _collect_saved_data(
+    fakt: Optional[MonatsFakt],
 ) -> dict[str, tuple[float, DatenquelleInfo]]:
-    """Sammelt bereits gespeicherte Monatsdaten (Konfidenz 85%)."""
+    """Der **gespeicherte** Zweig der Quellen-Kaskade (Konfidenz 85 %).
+
+    Faltet nichts mehr selbst: die Mengen kommen aus den Monats-Fakten
+    (ADR-002/**P10**), wo Zeitfilter (``aktiv`` · Anschaffung · Stilllegung),
+    Dienstwagen-Filter, P7-Auflösung der PV und der Monatstarif genau einmal
+    gelten. Übrig bleibt hier die **Merge-Semantik** — und die ist bewusst
+    unverändert:
+
+    - Die ``> 0``-Gates sind keine Rechenregel, sondern die Präzedenz-Regel der
+      Kaskade: ein Feld, das ``saved`` nicht setzt, darf von einer stärkeren
+      Quelle (Connector · MQTT · HA-Statistics) kommen. ``is not None`` daraus
+      zu machen wäre eine andere Route, nicht dieselbe mit anderer Herkunft.
+    - Einspeisung/Netzbezug kommen weiter direkt von der ``Monatsdaten``-Zeile
+      und **nur, wenn sie dort gesetzt sind**: ``ZaehlerFakten`` macht aus einer
+      fehlenden Zahl eine 0,0, und eine 0,0 aus der schwächsten Quelle würde
+      eine echte Lücke füllen, die eine stärkere Quelle noch schließen könnte.
+
+    Zwei Zahlen ändern sich dadurch sichtbar (beide gewollt, ``C1c``):
+    die PV ist **P7-aufgelöst** (das Anlagen-Aggregat füllt Modul-Lücken, statt
+    dass der Monatsbericht bei reiner Aggregat-Pflege gar keine PV zeigt), und
+    der BKW-Eigenverbrauch fällt ohne Messwert **nicht** mehr auf die volle
+    Erzeugung zurück (der alte D5-Quirk, divergent zu Komponenten/Übersicht).
+    """
     resolved: dict[str, tuple[float, DatenquelleInfo]] = {}
-    quelle = DatenquelleInfo(quelle="gespeichert", konfidenz=85)
+    if fakt is None:
+        return resolved
 
-    # Monatsdaten (Basis)
-    md_result = await db.execute(
-        select(Monatsdaten).where(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == jahr,
-            Monatsdaten.monat == monat,
-        )
+    md = fakt.meta.monatsdaten
+    quelle = DatenquelleInfo(
+        quelle="gespeichert", konfidenz=85,
+        zeitpunkt=(
+            md.updated_at.isoformat()
+            if md is not None and getattr(md, "updated_at", None) else None
+        ),
     )
-    md = md_result.scalar_one_or_none()
 
-    if md:
-        quelle = DatenquelleInfo(
-            quelle="gespeichert", konfidenz=85,
-            zeitpunkt=md.updated_at.isoformat() if hasattr(md, 'updated_at') and md.updated_at else None,
-        )
+    if md is not None:
         for attr, feld in [
             ("einspeisung_kwh", "einspeisung_kwh"),
             ("netzbezug_kwh", "netzbezug_kwh"),
@@ -433,121 +447,29 @@ async def _collect_saved_data(
             if val is not None:
                 resolved[feld] = (val, quelle)
 
-    # InvestitionMonatsdaten
-    inv_ids = [i.id for i in investitionen]
-    if inv_ids:
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(inv_ids),
-                InvestitionMonatsdaten.jahr == jahr,
-                InvestitionMonatsdaten.monat == monat,
-            )
-        )
-        inv_by_id = {i.id: i for i in investitionen}
-        pv_erzeugung_total = 0.0
-        speicher_ladung_total = 0.0
-        speicher_entladung_total = 0.0
-        wp_strom_total = 0.0
-        wp_waerme_total = 0.0
-        # E-Mobilität: rohe IMD je Quelle (E-Auto / Wallbox) sammeln, danach
-        # zentral via `get_emob_heimladung_canonical` zu EINER konsistenten Heim-
-        # ladungs-Trias poolen. Beide Investitionstypen messen denselben
-        # Stromfluss aus zwei Perspektiven (siehe docs/KONZEPT-WALLBOX-EAUTO.md)
-        # — der Helper wählt die Quelle mit der größeren Heimladung komplett,
-        # statt feldweisem max() (das pv aus der einen, netz aus der anderen
-        # Quelle nehmen konnte → PV-Anteil > 100 %, #262). km kommt nur vom
-        # E-Auto. Gleiche Logik wie Übersicht / Komponenten / EAutoDashboard.
-        eauto_imd_data: list[dict] = []
-        wb_imd_data: list[dict] = []
-        eauto_km_total = 0.0
-        eauto_verbrauch_total = 0.0  # gemessener Fahrverbrauch (Vorrang vor Ladung)
-        bkw_erzeugung_total = 0.0
-        bkw_eigenverbrauch_total = 0.0
-        sonstiges_erzeugung_total = 0.0  # sonstige Erzeuger (BHKW) hinter dem Zähler
-
-        for imd in imd_result.scalars().all():
-            inv = inv_by_id.get(imd.investition_id)
-            if not inv:
-                continue
-            # Issue #153 / #155 / #236: SoT-Filter inkl. stilllegungsdatum
-            if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                continue
-            data = imd.verbrauch_daten or {}
-            # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
-            b = imd_typ_beitrag(inv, data)
-
-            if inv.typ == "pv-module":
-                pv_erzeugung_total += b.pv_erzeugung
-            elif inv.typ == "speicher":
-                speicher_ladung_total += b.speicher_ladung
-                speicher_entladung_total += b.speicher_entladung
-            elif inv.typ == "waermepumpe":
-                # #183: bei getrennter Strommessung Gesamt-Strom aus Einzel-
-                # Sensoren (im Resolver). wp_waerme = waerme_kwh oder Heiz+WW.
-                wp_strom_total += b.wp_strom
-                wp_waerme_total += b.wp_waerme
-            elif inv.typ == "e-auto":
-                if not ist_dienstlich(inv):
-                    eauto_imd_data.append(data)
-                    eauto_km_total += b.eauto_km
-                    eauto_verbrauch_total += b.eauto_verbrauch
-            elif inv.typ == "wallbox":
-                if not ist_dienstlich(inv):
-                    wb_imd_data.append(data)
-            elif inv.typ == "balkonkraftwerk":
-                bkw_kwh = b.bkw_erzeugung
-                bkw_erzeugung_total += bkw_kwh
-                # BKW ist PV-Erzeugung → fließt in Gesamt-PV ein
-                pv_erzeugung_total += bkw_kwh
-                # D5 (Block 1, IST-Stand erhalten): eigenverbrauch fällt bei
-                # fehlendem Messwert auf die volle Erzeugung zurück — Site-1-Quirk,
-                # divergent zu Komponenten/Übersicht (siehe FELD-MATRIX D5).
-                bkw_eigenverbrauch_total += b.bkw_eigenverbrauch or bkw_kwh
-            elif inv.typ == "sonstiges":
-                # Sonstiger Erzeuger (BHKW) speist hinter den Zähler → in die
-                # Netzpunkt-Bilanz (Resolver kategorie-bewusst: nur erzeuger).
-                sonstiges_erzeugung_total += b.sonstiges_erzeugung
-
-        # E-Mobilitäts-Pool: EINE Quelle liefert die konsistente Heimladungs-
-        # Trias (pv + netz == ladung). Früher feldweises max() — das nahm pv
-        # aus der einen, netz aus der anderen Quelle und konnte PV-Anteil
-        # > 100 % erzeugen (#262 junky84). Externe Lade-Kosten (#260) kommen
-        # paarweise aus der Quelle mit den höheren Extern-Kosten.
-        emob_pool = get_emob_heimladung_canonical(
-            eauto_imd_data=eauto_imd_data,
-            wallbox_imd_data=wb_imd_data,
-        )
-        emob_ladung_total = emob_pool.ladung_kwh
-        emob_pv_ladung_total = emob_pool.pv_kwh
-        emob_km_total = eauto_km_total
-        emob_extern_euro_total = emob_pool.extern_euro
-
-        if pv_erzeugung_total > 0:
-            resolved["pv_erzeugung_kwh"] = (pv_erzeugung_total, quelle)
-        if speicher_ladung_total > 0:
-            resolved["speicher_ladung_kwh"] = (speicher_ladung_total, quelle)
-        if speicher_entladung_total > 0:
-            resolved["speicher_entladung_kwh"] = (speicher_entladung_total, quelle)
-        if wp_strom_total > 0:
-            resolved["wp_strom_kwh"] = (wp_strom_total, quelle)
-        if wp_waerme_total > 0:
-            resolved["wp_waerme_kwh"] = (wp_waerme_total, quelle)
-        if emob_ladung_total > 0:
-            resolved["emob_ladung_kwh"] = (emob_ladung_total, quelle)
-        if emob_km_total > 0:
-            resolved["emob_km"] = (emob_km_total, quelle)
-        if eauto_verbrauch_total > 0:
-            resolved["emob_verbrauch_kwh"] = (eauto_verbrauch_total, quelle)
-        if emob_pv_ladung_total > 0:
-            resolved["emob_pv_ladung_kwh"] = (emob_pv_ladung_total, quelle)
-        if emob_extern_euro_total > 0:
-            resolved["emob_ladung_extern_euro"] = (emob_extern_euro_total, quelle)
-        if bkw_erzeugung_total > 0:
-            resolved["bkw_erzeugung_kwh"] = (bkw_erzeugung_total, quelle)
-        if bkw_eigenverbrauch_total > 0:
-            resolved["bkw_eigenverbrauch_kwh"] = (bkw_eigenverbrauch_total, quelle)
-        if sonstiges_erzeugung_total > 0:
-            resolved["sonstiges_erzeugung_kwh"] = (sonstiges_erzeugung_total, quelle)
+    for feld, wert in (
+        # Module (P7-aufgelöst) + BKW — die PV-Achse der Anlage.
+        ("pv_erzeugung_kwh", fakt.erzeugung.pv_kwh),
+        ("speicher_ladung_kwh", fakt.speicher.ladung_kwh),
+        ("speicher_entladung_kwh", fakt.speicher.entladung_kwh),
+        # #183: bei getrennter Strommessung ist der Gesamt-Strom bereits im
+        # Resolver summiert; `waerme` = waerme_kwh oder Heiz+WW.
+        ("wp_strom_kwh", fakt.wp.strom_kwh),
+        ("wp_waerme_kwh", fakt.wp.waerme_kwh),
+        # Heimladungs-Trias aus EINER Quelle (#262) — Dienstwagen sind in der
+        # Schicht bereits heraus ([[feedback_dienstwagen_alle_checks]]).
+        ("emob_ladung_kwh", fakt.emob.ladung_kwh),
+        ("emob_km", fakt.emob.km),
+        ("emob_verbrauch_kwh", fakt.emob.fahrverbrauch_kwh),
+        ("emob_pv_ladung_kwh", fakt.emob.ladung_pv_kwh),
+        ("emob_ladung_extern_euro", fakt.emob.extern_euro),
+        ("bkw_erzeugung_kwh", fakt.bkw.erzeugung_kwh),
+        ("bkw_eigenverbrauch_kwh", fakt.bkw.eigenverbrauch_gemessen_kwh),
+        # Sonstiger Erzeuger (BHKW) speist hinter den Hauszähler.
+        ("sonstiges_erzeugung_kwh", fakt.sonstiges.erzeugung_kwh),
+    ):
+        if wert > 0:
+            resolved[feld] = (wert, quelle)
 
     return resolved
 
@@ -601,20 +523,41 @@ async def _collect_mqtt_inbound_data(anlage: Anlage, investitionen: list[Investi
 # =============================================================================
 
 async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: int, monat: int, db: AsyncSession) -> Optional[dict]:
-    """Lädt Vorjahres-Monatsdaten für Vergleich (Energie + Finanzen)."""
+    """Lädt Vorjahres-Monatsdaten für Vergleich (Energie + Finanzen).
+
+    Die **anlagenweiten** Mengen kommen aus den Monats-Fakten (ADR-002/**P10**).
+    Damit fallen drei Divergenzen, die hier als „D6 / IST-Stand erhalten"
+    konserviert waren und den Vorjahresvergleich systematisch zu niedrig
+    zeigten — jede davon ist eine sichtbare Zahl:
+
+    - **PV:** je Modul roh gelesen, **ohne** P7-Auflösung. Wer nur das
+      Anlagen-Aggregat pflegt, hatte im Vorjahr 0 kWh stehen.
+    - **Eigenverbrauch/Autarkie:** handgerechnet **ohne V2H**. Was das E-Auto
+      ins Haus zurückspeist, zählt im laufenden Monat, im Vorjahr nicht.
+    - **E-Mob-Ladung:** ``max(E-Auto, Wallbox)`` je Feld statt der kanonischen
+      Trias aus EINER Quelle (#262) — dieselbe Falle, die der aktuelle Monat
+      längst über ``get_emob_heimladung_canonical`` vermeidet.
+
+    Selbst geladen wird nur noch, was **je Investition** hängt: die eMob-Zeilen
+    des T-Kontos brauchen die Zuordnung ``inv → verbrauch_daten``, die
+    ``MonatsFakt`` mangels per-Investition-Sicht (Register N-2) nicht hergibt.
+    """
     from datetime import date as date_type
     vj = jahr - 1
 
-    md_result = await db.execute(
-        select(Monatsdaten).where(
-            Monatsdaten.anlage_id == anlage_id,
-            Monatsdaten.jahr == vj,
-            Monatsdaten.monat == monat,
-        )
+    # Ein Tarif-Cache für beides: die Schicht löst den Stichtag (P8) ohnehin
+    # auf, der Finanzblock unten liest denselben Eintrag statt ein zweites Mal
+    # zu laden.
+    tarif_cache: dict[date, dict] = {}
+    fakten_vj = await lade_monats_fakten(
+        db, anlage_id, von=(vj, monat), bis=(vj, monat), tarif_cache=tarif_cache
     )
-    md = md_result.scalar_one_or_none()
-    if not md:
+    fakt = fakten_vj[0] if fakten_vj else None
+    # Ohne Zählerzeile gibt es keinen Vergleich — unverändert die Bedingung,
+    # unter der die Route bisher `None` lieferte.
+    if fakt is None or fakt.meta.monatsdaten is None:
         return None
+    md = fakt.meta.monatsdaten
 
     result: dict = {
         "einspeisung_kwh": md.einspeisung_kwh,
@@ -622,125 +565,64 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         "netzbezug_durchschnittspreis_cent": md.netzbezug_durchschnittspreis_cent,
     }
 
-    # PV-Erzeugung + Batterie + WP + eMob aus InvestitionMonatsdaten
-    pv_inv_ids = [i.id for i in investitionen if i.typ in ("pv-module", "balkonkraftwerk")]
-    bat_inv_ids = [i.id for i in investitionen if i.typ == "speicher"]
-    wp_inv_ids = [i.id for i in investitionen if i.typ == "waermepumpe"]
-    # E-Auto und Wallbox separat halten — selbe Pool-Doppelzählungs-Falle wie
-    # in `_collect_saved_data` (siehe dort). Max-pro-Feld statt Summe.
-    eauto_inv_ids = [i.id for i in investitionen if i.typ == "e-auto" and not ist_dienstlich(i)]
-    wb_inv_ids = [i.id for i in investitionen if i.typ == "wallbox" and not ist_dienstlich(i)]
-    # Sonstige Erzeuger (BHKW) speisen hinter den Zähler → in die Netzpunkt-Bilanz
-    # (Konzept Sonstiger Erzeuger); auch der VJ-Vergleich muss sie mitziehen,
-    # sonst zeigt das YoY-Delta einen methodischen Scheinsprung.
-    sonstiges_inv_ids = [i.id for i in investitionen if i.typ == "sonstiges"]
-    all_inv_ids = pv_inv_ids + bat_inv_ids + wp_inv_ids + eauto_inv_ids + wb_inv_ids + sonstiges_inv_ids
-    sonstiges_vj = 0.0
-    # DI-5: für die symmetrische gesamtnettoertrag-Formel (WP-/eMob-Ersparnis
-    # auch im Vorjahr) außerhalb des `if all_inv_ids`-Blocks vorbelegt.
-    wp_strom_vj = 0.0
-    wp_waerme_vj = 0.0
-    imd_data_by_inv_vj: dict[int, dict] = {}
+    if fakt.erzeugung.pv_kwh > 0:
+        result["pv_erzeugung_kwh"] = round(fakt.erzeugung.pv_kwh, 1)
+    if fakt.speicher.ladung_kwh > 0:
+        result["speicher_ladung_kwh"] = round(fakt.speicher.ladung_kwh, 1)
+    if fakt.speicher.entladung_kwh > 0:
+        result["speicher_entladung_kwh"] = round(fakt.speicher.entladung_kwh, 1)
+    if fakt.wp.strom_kwh > 0:
+        result["wp_strom_kwh"] = round(fakt.wp.strom_kwh, 1)
+    if fakt.wp.waerme_kwh > 0:
+        result["wp_waerme_kwh"] = round(fakt.wp.waerme_kwh, 1)
+    if fakt.emob.ladung_kwh > 0:
+        result["emob_ladung_kwh"] = round(fakt.emob.ladung_kwh, 1)
+    if fakt.emob.km > 0:
+        result["emob_km"] = round(fakt.emob.km, 1)
 
-    if all_inv_ids:
+    # Per-Investition: die eMob-Zeilen des T-Kontos brauchen die Zuordnung
+    # `inv → verbrauch_daten`. DI-2-C: Vor-Anschaffungs-/Nach-Stilllegungs-
+    # Monate überspringen — die Anschaffungsdatum-Grenze gilt für ALLE
+    # Auswertungen ([[feedback_anschaffungsdatum_grenze]], #236).
+    imd_data_by_inv_vj: dict[int, dict] = {}
+    emob_inv_ids = [
+        i.id for i in investitionen
+        if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
+    ]
+    if emob_inv_ids:
         imd_result = await db.execute(
             select(InvestitionMonatsdaten).where(
-                InvestitionMonatsdaten.investition_id.in_(all_inv_ids),
+                InvestitionMonatsdaten.investition_id.in_(emob_inv_ids),
                 InvestitionMonatsdaten.jahr == vj,
                 InvestitionMonatsdaten.monat == monat,
             )
         )
-        pv_vj = 0.0
-        bat_ladung_vj = 0.0
-        bat_entladung_vj = 0.0
-        eauto_ladung_vj = 0.0
-        wb_ladung_vj = 0.0
-        emob_km_vj = 0.0
-
         inv_by_id_vj = {i.id: i for i in investitionen}
         for imd in imd_result.scalars().all():
             inv = inv_by_id_vj.get(imd.investition_id)
-            if not inv:
+            if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
-            # DI-2-C: Vor-Anschaffungs-/Nach-Stilllegungs-Monate überspringen —
-            # die Anschaffungsdatum-Grenze gilt für ALLE Auswertungen, nicht nur
-            # die Finanz (DI-5 filterte nur den Finanz-Loop unten). Sonst zeigt die
-            # VJ-Energieanzeige (wp_strom/wp_waerme, PV, eMob …) Werte einer im
-            # Vorjahres-Monat noch nicht aktiven Komponente (#236-Rest, Demo:
-            # WP-IMD 2024-01..03 vor Inbetriebnahme 04/2024 → wp_strom 320 kWh,
-            # wp_waerme 1400 kWh im VJ-Vergleich 2025→2024).
-            # [[feedback_anschaffungsdatum_grenze]]
-            if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-                continue
-            data = imd.verbrauch_daten or {}
-            imd_data_by_inv_vj[imd.investition_id] = data  # DI-5: für WP-/eMob-Ersparnis
-            # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
-            b = imd_typ_beitrag(inv, data)
-            if imd.investition_id in pv_inv_ids:
-                # pv_inv_ids enthält PV-Module UND BKW. D6 (IST-Stand erhalten):
-                # pv-module behält den erzeugung_kwh-Legacy-Fallback (divergent zum
-                # aktuellen Monat); BKW kanonisch via Resolver.
-                pv_vj += (
-                    get_pv_erzeugung_kwh(data) if inv.typ == "pv-module"
-                    else b.bkw_erzeugung
-                )
-            elif imd.investition_id in bat_inv_ids:
-                bat_ladung_vj += b.speicher_ladung
-                bat_entladung_vj += b.speicher_entladung
-            elif imd.investition_id in wp_inv_ids:
-                # D1 (Block 1): wp_waerme kanonisch (waerme_kwh-Vorrang +
-                # heizung_kwh-Legacy) statt rohem Heiz+WW — angeglichen an den
-                # aktuellen Monat derselben Route.
-                wp_strom_vj += b.wp_strom
-                wp_waerme_vj += b.wp_waerme
-            elif imd.investition_id in eauto_inv_ids:
-                eauto_ladung_vj += b.eauto_ladung_kanonisch
-                emob_km_vj += b.eauto_km
-            elif imd.investition_id in wb_inv_ids:
-                wb_ladung_vj += b.wallbox_ladung
-            elif inv.typ == "sonstiges":
-                sonstiges_vj += b.sonstiges_erzeugung
+            imd_data_by_inv_vj[imd.investition_id] = imd.verbrauch_daten or {}
 
-        # Pool-Auswahl konsistent zu _collect_saved_data: pro Feld die größere
-        # Quelle. WB liefert üblicherweise Loadpoint-Wahrheit, EAuto ist Vehicle-
-        # Sicht; wenn nur eine gepflegt ist, gewinnt sie automatisch.
-        emob_ladung_vj = max(eauto_ladung_vj, wb_ladung_vj)
-
-        if pv_vj > 0:
-            result["pv_erzeugung_kwh"] = round(pv_vj, 1)
-        if bat_ladung_vj > 0:
-            result["speicher_ladung_kwh"] = round(bat_ladung_vj, 1)
-        if bat_entladung_vj > 0:
-            result["speicher_entladung_kwh"] = round(bat_entladung_vj, 1)
-        if wp_strom_vj > 0:
-            result["wp_strom_kwh"] = round(wp_strom_vj, 1)
-        if wp_waerme_vj > 0:
-            result["wp_waerme_kwh"] = round(wp_waerme_vj, 1)
-        if emob_ladung_vj > 0:
-            result["emob_ladung_kwh"] = round(emob_ladung_vj, 1)
-        if emob_km_vj > 0:
-            result["emob_km"] = round(emob_km_vj, 1)
-
-    # Berechnete Energie-Werte (mit Batterie-Korrektur)
-    pv = result.get("pv_erzeugung_kwh", 0) or 0
+    # Berechnete Energie-Werte — aus der Schicht, also inkl. V2H (Entladung ins
+    # Haus zählt wie Speicher-Entladung) und inkl. sonstiger Erzeuger hinter dem
+    # Zähler. `pv_erzeugung_kwh` im Result bleibt daneben rein.
+    kz = fakt.kennzahlen
     einsp = result.get("einspeisung_kwh", 0) or 0
     netz = result.get("netzbezug_kwh", 0) or 0
-    bat_ladung = result.get("speicher_ladung_kwh", 0) or 0
-    bat_entladung = result.get("speicher_entladung_kwh", 0) or 0
-    # Netzpunkt-Bilanz inkl. sonstiger Erzeuger (BHKW); `pv` (result) bleibt rein.
-    erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv, sonstiges_vj)
-    direktverbrauch = max(0, erzeugung_bilanz - einsp - bat_ladung) if erzeugung_bilanz > 0 else 0
-    ev = direktverbrauch + bat_entladung
-    gv = ev + netz
+    ev = kz.eigenverbrauch_kwh
+    gv = kz.gesamtverbrauch_kwh
     result["eigenverbrauch_kwh"] = round(ev, 1)
-    result["direktverbrauch_kwh"] = round(direktverbrauch, 1)
+    result["direktverbrauch_kwh"] = round(kz.direktverbrauch_kwh, 1)
     result["gesamtverbrauch_kwh"] = round(gv, 1) if gv > 0 else None
-    result["autarkie_prozent"] = round(ev / gv * 100, 1) if gv > 0 else None
+    result["autarkie_prozent"] = round(kz.autarkie_prozent, 1) if gv > 0 else None
 
     # Finanzen mit historisch korrektem Tarif berechnen
     try:
         stichtag_vj = date_type(vj, monat, 1)
-        tarife_vj = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag_vj)
+        tarife_vj = tarif_cache.get(stichtag_vj) or await lade_tarife_fuer_anlage(
+            db, anlage_id, target_date=stichtag_vj
+        )
         tarif_vj = tarife_vj.get("allgemein")
         if tarif_vj:
             netz_preis = tarif_vj.netzbezug_arbeitspreis_cent_kwh or NETZBEZUG_DEFAULT_CENT
@@ -787,19 +669,13 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             monats_gaspreis_vj = md.gaspreis_cent_kwh
             monats_benzinpreis_vj = md.kraftstoffpreis_euro
 
-            # WP-Ersparnis nur über die im Vorjahres-Monat AKTIVEN WPs summieren
-            # (ist_aktiv_im_monat, #236/[[feedback_anschaffungsdatum_grenze]]) —
-            # der aktuelle Monat filtert ebenso; sonst zählte Vor-Anschaffungs-
-            # Verbrauch mit (Demo: WP-IMD 2024-01..03 vor Inbetriebnahme 04/2024).
-            wp_waerme_fin = 0.0
-            wp_strom_fin = 0.0
-            for i in investitionen:
-                if (i.typ == "waermepumpe"
-                        and i.ist_aktiv_im_monat(vj, monat)
-                        and i.id in imd_data_by_inv_vj):
-                    _bwp = imd_typ_beitrag(i, imd_data_by_inv_vj[i.id])
-                    wp_waerme_fin += _bwp.wp_waerme
-                    wp_strom_fin += _bwp.wp_strom
+            # WP-Ersparnis über die WP-Mengen des Monats — dieselben, die oben
+            # angezeigt werden. Der Filter „nur im Vorjahres-Monat AKTIVE WPs"
+            # (#236/[[feedback_anschaffungsdatum_grenze]]) steckt in der Schicht;
+            # bis C1c stand er hier als zweiter, handgeführter Loop über
+            # dieselben Zeilen und lieferte per Konstruktion dieselbe Summe.
+            wp_waerme_fin = fakt.wp.waerme_kwh
+            wp_strom_fin = fakt.wp.strom_kwh
 
             wp_ersparnis_vj = 0.0
             if wp_waerme_fin > 0 and wp_strom_fin > 0:
@@ -1112,7 +988,17 @@ async def get_aktueller_monat(
     # core/berechnungen/datenquellen.merge_datenquellen (ADR-001) — eine Stelle,
     # symmetrie-getestet, ohne Drift zwischen den Quellen-Zweigen.
     # MQTT wird für abgeschlossene Monate gar nicht erst gesammelt.
-    saved = await _collect_saved_data(anlage_id, jahr, monat, investitionen, db)
+    #
+    # ADR-002/**P10**: die Monatszeile wird genau einmal aufbereitet. Diese
+    # Route mischt vier Quellen, von denen die Schicht ausdrücklich nur EINE
+    # kennt (die DB — Live/Connector sind Nicht-Ziel, KONZEPT-MONATS-FAKTEN §4).
+    # Also kommt der DB-Zweig aus den Fakten, die Präzedenz bleibt hier.
+    monats_fakten = await lade_monats_fakten(
+        db, anlage_id, von=(jahr, monat), bis=(jahr, monat)
+    )
+    monats_fakt = monats_fakten[0] if monats_fakten else None
+
+    saved = _collect_saved_data(monats_fakt)
     connector = await _collect_connector_data(anlage, jahr, monat)
     mqtt_energy = await _collect_mqtt_inbound_data(anlage, investitionen) if ist_aktueller_monat else {}
     ha_stats = await _collect_ha_statistics_data(anlage, jahr, monat)
@@ -1460,40 +1346,24 @@ async def get_aktueller_monat(
     # exponiert, damit das Frontend Monatsergebnis-Korrekturen sauber rechnen
     # kann ohne `gesamtnettoertrag` zu verschieben (verhindert Drift mit
     # bestehender `sonderkosten`-Logik in MonatsabschlussView).
-    sonstige_inv_imd_result = await db.execute(
-        select(InvestitionMonatsdaten).where(
-            InvestitionMonatsdaten.investition_id.in_([i.id for i in investitionen]),
-            InvestitionMonatsdaten.jahr == jahr,
-            InvestitionMonatsdaten.monat == monat,
-        )
-    ) if investitionen else None
-    # Sonstige Erträge/Ausgaben des Monats — zentraler SoT-Helper, identisch zur
-    # Komponenten-Zeitreihe (Symmetrie: test_sonstige_readsite_symmetrie). Gleiche
-    # Sichtbarkeitsregel wie überall: `investitionen` ist bereits aktiv-gefiltert
-    # (aktiv=False = wie gelöscht), zusätzlich nur innerhalb der Laufzeit
-    # Anschaffung→Stilllegung (detLAN [[feedback_anschaffungsdatum_grenze]],
-    # #236/#308) — Finanzpositionen sind keine Ausnahme.
-    _inv_by_id_s = {i.id: i for i in investitionen}
-    _sonstige_rows = [
-        imd for imd in (sonstige_inv_imd_result.scalars().all()
-                        if sonstige_inv_imd_result is not None else [])
-        if _inv_by_id_s[imd.investition_id].ist_aktiv_im_monat(imd.jahr, imd.monat)
-    ]
-    _sonstige_agg = aggregiere_sonstige_je_monat(_sonstige_rows).get((jahr, monat), {})
-    sonstige_ertraege_total = round(_sonstige_agg.get("ertraege_euro", 0.0), 2)
-    sonstige_ausgaben_total = round(_sonstige_agg.get("ausgaben_euro", 0.0), 2)
-
+    #
+    # Aus den Monats-Fakten (P10): dort gilt die Sichtbarkeitsregel einmal
+    # (`aktiv` = wie gelöscht **plus** Laufzeit Anschaffung→Stilllegung, detLAN
+    # [[feedback_anschaffungsdatum_grenze]], #236/#308 — Finanzpositionen sind
+    # keine Ausnahme), und die Positionen hängen dort wie hier NICHT am Typ
+    # (#310). Symmetrie zur Komponenten-Zeitreihe: dieselbe Quelle.
+    #
     # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen, Anlage-Ebene)
     # wirken GENAU wie IMD-Positionen: eigene T-Konto-Zeile „Anlage — Sonstige …"
     # (anlage_*-Felder, reiner Ausweis) + einmalig in die Totals gefaltet
-    # (R15-5-Muster: kein zweiter Kostenposten). md_for_gas ist der bereits
-    # geladene Monatsdaten-Row dieses Monats.
-    _anlage_sonstige = berechne_md_sonstige_summen(md_for_gas)
-    anlage_sonstige_ertraege = round(_anlage_sonstige["ertraege_euro"], 2)
-    anlage_sonstige_ausgaben = round(_anlage_sonstige["ausgaben_euro"], 2)
-    sonstige_ertraege_total = round(sonstige_ertraege_total + anlage_sonstige_ertraege, 2)
-    sonstige_ausgaben_total = round(sonstige_ausgaben_total + anlage_sonstige_ausgaben, 2)
-    sonstige_netto_total = round(sonstige_ertraege_total - sonstige_ausgaben_total, 2)
+    # (R15-5-Muster: kein zweiter Kostenposten). `SonstigesFakten` hält beides
+    # getrennt: die Totals tragen den Anlage-Anteil bereits.
+    _sonstiges_fakten = monats_fakt.sonstiges if monats_fakt else SonstigesFakten()
+    sonstige_ertraege_total = _sonstiges_fakten.ertraege_euro
+    sonstige_ausgaben_total = _sonstiges_fakten.ausgaben_euro
+    sonstige_netto_total = _sonstiges_fakten.netto_euro
+    anlage_sonstige_ertraege = _sonstiges_fakten.anlage_ertraege_euro
+    anlage_sonstige_ausgaben = _sonstiges_fakten.anlage_ausgaben_euro
 
     # ── Gesamtnettoertrag = Erlöse + Einsparungen − Kosten ──
     # G20-2: erst NACH den Per-Investition-Financials berechnet, damit
