@@ -43,6 +43,26 @@ weiterhin `0,0`.
 
 ---
 
+### Komponenten: keine Monatszeile mehr aus lauter Nullen für den Firmenwagen
+
+**Betrifft dich das?** Nur wenn du ein Fahrzeug als **dienstlich** markiert hast und es in
+einzelnen Monaten die einzige Komponente ist, für die du Werte gepflegt hast.
+
+*Auswertungen → Komponenten* wertet dienstlich genutzte Fahrzeuge bewusst nicht mit aus — ihr Strom
+gehört in die dienstlichen Ladekosten, nicht in die E-Mobilitäts-Bilanz deines Hauses. In einem
+Monat, in dem **ausschließlich** ein solches Fahrzeug gepflegt war, erschien trotzdem eine Zeile:
+mit lauter Nullen. Das las sich wie „in diesem Monat wurde nichts geladen", obwohl in Wahrheit
+etwas geladen wurde, das diese Ansicht nur nicht auswertet. **Die Zeile entfällt jetzt.**
+
+**Unverändert:** Sobald in dem Monat noch irgendetwas anderes erfasst ist — eine zweite Komponente
+oder eine gebuchte Einnahme bzw. Ausgabe —, steht die Zeile wie bisher, der Dienstwagen bleibt
+darin wie bisher außen vor. **Und seine Kosten zählen weiter:** eine Reparatur, die du an dem
+Fahrzeug gebucht hast, erscheint unverändert unter *Sonstiges* und trägt den Monat auch allein.
+
+**Was du tun musst: nichts.**
+
+---
+
 ### Tag: der Einspeiseerlös wird nicht mehr gekürzt, wenn dich §51 gar nicht betrifft
 
 **Betrifft dich das?** Wenn deine Anlage **keine** §51-Anlage ist (das ist der Normalfall bei

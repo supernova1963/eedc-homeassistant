@@ -1700,8 +1700,9 @@ P10_NOCH_NICHT_MIGRIERT: frozenset[str] = frozenset({
     # N-16 — Monatsbericht + Vorjahresvergleich.
     "backend/api/routes/aktueller_monat.py::get_aktueller_monat",
     "backend/api/routes/aktueller_monat.py::_load_vorjahr",
-    # N-17 — Cockpit → Komponenten-Zeitreihe.
-    "backend/api/routes/cockpit/komponenten.py::get_komponenten_zeitreihe",
+    # N-17 ist mit C1b (2026-08-03) getilgt: `get_komponenten_zeitreihe`
+    # bezieht seine Monatszeile aus `lade_monats_fakten` und lädt keine
+    # `InvestitionMonatsdaten` mehr selbst.
 })
 
 P10_BASELINE_AUSNAHMEN: frozenset[str] = (
@@ -1816,11 +1817,12 @@ def test_p10_offene_schuld_waechst_nicht():
     hieße, sie unsichtbar wachsen zu lassen — dann wäre der Wächter genau das
     Aufräum-Paket mit einem grünen Test obendrauf, das ADR-002 §80 ablehnt.
     """
-    assert len(P10_NOCH_NICHT_MIGRIERT) <= 3, (
+    assert len(P10_NOCH_NICHT_MIGRIERT) <= 2, (
         f"{len(P10_NOCH_NICHT_MIGRIERT)} Sichten falten eine anlagenweite "
         "Monatszeile selbst — nach S5 waren es 5, nach S6 vier, nach **C1a** "
-        "sind es 3 (N-16 zweimal, N-17; `community_service` fiel mit S6, "
-        "`list_monatsdaten_aggregiert` mit C1a). Diese Zahl darf nur sinken. "
+        "drei, nach **C1b** sind es 2 (N-16 zweimal; `community_service` fiel "
+        "mit S6, `list_monatsdaten_aggregiert` mit C1a, "
+        "`get_komponenten_zeitreihe` mit C1b). Diese Zahl darf nur sinken. "
         "Wer eine Sicht hinzufügen will, migriert sie stattdessen."
     )
 

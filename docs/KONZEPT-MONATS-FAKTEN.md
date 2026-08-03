@@ -12,7 +12,7 @@
 > | Die Regel selbst + „gesichert durch" je Schritt | [`docs/ADR-002-WURZELMUSTER.md`](ADR-002-WURZELMUSTER.md), Zeile **P10** |
 > | Migrationsstand + die drei Wächter-Kategorien mit ihren Zahlen | [`docs/ARCHITEKTUR.md`](ARCHITEKTUR.md) §7 |
 > | Der Kontrakt für Aufrufer (`lade_monats_fakten`, Feldgruppen, Fallen) | Modul- und Dataclass-Docstrings in `eedc/backend/services/monats_fakten.py` |
-> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**3** nach C1a), mit Obergrenze im Test |
+> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**2** nach C1b), mit Obergrenze im Test |
 > | Nebenfunde N-2 … N-17 (Abarbeitung nach S6) | `~/.claude/plans/uebergabe-monats-fakten.md` |
 >
 > **Eine der umgehängten Sichten gibt es nicht mehr:** `cockpit/social.py` (S3,
@@ -177,7 +177,9 @@ Als neue **ADR-002/P10** eintragen, mit „gesichert durch"-Spalte.
 >    Import- und Checker-Ausnahmen" war **nicht erreichbar** — gemessen falteten
 >    beim Scharfstellen noch sechs Lese-Sichten selbst, davon drei
 >    (`monatsdaten.py`, `aktueller_monat.py`, `cockpit/komponenten.py`), die in
->    §5 nie vorkamen. Sie in eine Sammel-Ausnahme zu schieben hätte den Wächter
+>    §5 nie vorkamen — zwei davon sind mit **C1a** und **C1b** (2026-08-03)
+>    umgehängt, offen ist nur noch `aktueller_monat.py`. Sie in eine
+>    Sammel-Ausnahme zu schieben hätte den Wächter
 >    zu dem Aufräum-Paket gemacht, das ADR-002 §„noch nicht gewächtert" ablehnt.
 >    Stattdessen: `P10_SCHREIBEN_IMPORT_CHECKER` (dauerhaft legitim) ·
 >    `P10_PER_INVESTITION` (Aggregat je Gerät — die Schicht hat dafür keine

@@ -10,30 +10,39 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.api.deps import get_db
-from backend.models.monatsdaten import Monatsdaten
-from backend.models.investition import Investition, InvestitionMonatsdaten
-from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
+from backend.models.investition import Investition
 from backend.core.berechnungen import (
     berechne_netzbezug_kosten,
     eauto_effizienz_100km,
     einspeise_erloes_euro,
-    imd_typ_beitrag,
-)
-from backend.services.einspeise_erloes_service import get_neg_preis_einspeisung_monat
-from backend.utils.sonstige_positionen import (
-    aggregiere_sonstige_je_monat,
-    berechne_md_sonstige_summen,
 )
 from backend.api.routes.cockpit._shared import MONATSNAMEN
+from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
-from backend.services.eauto_wirtschaftlichkeit import get_emob_heimladung_canonical
-from backend.core.investition_parameter import ist_dienstlich
-from backend.core.wirtschaftlichkeit_defaults import (
-    EINSPEISEVERGUETUNG_DEFAULT_CENT,
-    NETZBEZUG_DEFAULT_CENT,
-)
 
 router = APIRouter()
+
+#: Die Gerätetypen, die diese Sicht als Komponente führt. Sie entscheidet
+#: mit `MetaFakten.typen_mit_zeile`, ob ein Monat überhaupt eine Zeile bekommt
+#: — die Sicht zeigt seit jeher nur Monate, für die eine Komponente (oder eine
+#: Finanz-Position) etwas beigetragen hat, nicht jeden Monat mit Zählerzeile.
+_KOMPONENTEN_TYPEN = frozenset(
+    {"speicher", "waermepumpe", "e-auto", "wallbox", "balkonkraftwerk", "sonstiges"}
+)
+
+
+def _hat_komponenten_zeile(fakt: MonatsFakt) -> bool:
+    """Erzeugt dieser Monat eine Zeile in der Komponenten-Zeitreihe?
+
+    Zwei Wege, beide seit jeher im Verhalten dieser Route: eine sichtbare
+    IMD-Zeile eines Komponenten-Typs **oder** eine manuell gepflegte
+    Finanz-Position (die hängt nicht am Typ — #310 — und kann auch auf der
+    Anlage-Ebene liegen, G19-1). Ein Monat mit bloßer Zählerzeile erzeugt
+    hier **keine** Zeile; das ist Cockpit → Jahr, nicht diese Sicht.
+    """
+    if fakt.meta.typen_mit_zeile & _KOMPONENTEN_TYPEN:
+        return True
+    return bool(fakt.sonstiges.ertraege_euro or fakt.sonstiges.ausgaben_euro)
 
 
 class KomponentenMonat(BaseModel):
@@ -114,8 +123,13 @@ async def get_komponenten_zeitreihe(
     db: AsyncSession = Depends(get_db)
 ):
     """Zeitreihe aller Komponenten für Auswertungen."""
+    # Die Investitionen werden hier NUR noch für die `hat_*`-Blockschalter und
+    # den WP-Referenz-Parameter geladen — die Monatswerte kommen aus der Schicht.
     # Issue #123: historische Zeitreihe — kein aktiv-Filter, damit spätere
-    # Stilllegungen Vergangenheitsdaten nicht rückwirkend entfernen.
+    # Stilllegungen Vergangenheitsdaten nicht rückwirkend entfernen. Der
+    # `aktiv_im_jahr`-Vorfilter entscheidet, ob ein Block überhaupt erscheint
+    # (eine erst 2026 angeschaffte Wärmepumpe blendet den WP-Block in 2025 aus);
+    # die Monatswerte filtert die Schicht feiner, nämlich je Monat.
     inv_stmt = select(Investition).where(Investition.anlage_id == anlage_id)
     if jahr is not None:
         from backend.utils.investition_filter import aktiv_im_jahr
@@ -123,134 +137,38 @@ async def get_komponenten_zeitreihe(
     inv_result = await db.execute(inv_stmt)
     investitionen = inv_result.scalars().all()
 
-    speicher_ids = [i.id for i in investitionen if i.typ == "speicher"]
-    wp_ids = [i.id for i in investitionen if i.typ == "waermepumpe"]
-    emob_ids = [i.id for i in investitionen if i.typ in ("e-auto", "wallbox")]
-    bkw_ids = [i.id for i in investitionen if i.typ == "balkonkraftwerk"]
-    sonstiges_ids = [i.id for i in investitionen if i.typ == "sonstiges"]
+    hat_speicher = any(i.typ == "speicher" for i in investitionen)
+    hat_waermepumpe = any(i.typ == "waermepumpe" for i in investitionen)
+    hat_emobilitaet = any(i.typ in ("e-auto", "wallbox") for i in investitionen)
+    hat_balkonkraftwerk = any(i.typ == "balkonkraftwerk" for i in investitionen)
+    hat_sonstiges = any(i.typ == "sonstiges" for i in investitionen)
 
-    all_inv_ids = speicher_ids + wp_ids + emob_ids + bkw_ids + sonstiges_ids
-
-    hat_speicher = len(speicher_ids) > 0
-    hat_waermepumpe = len(wp_ids) > 0
-    hat_emobilitaet = len(emob_ids) > 0
-    hat_balkonkraftwerk = len(bkw_ids) > 0
-    hat_sonstiges = len(sonstiges_ids) > 0
-
-    # KEIN Early-Return mehr — auch nicht bei GAR keiner Investition. Bei reinen
-    # PV-/WR-Anlagen (all_inv_ids leer) liefe sonst die Sonstige-Aggregation
-    # nicht (#310), und seit G19-1 existieren Basis-Positionen (Anlage-Ebene)
-    # auch komplett ohne Investitionen. Alle Loops sind leer-sicher.
-    imd_query = select(InvestitionMonatsdaten).where(
-        InvestitionMonatsdaten.investition_id.in_(all_inv_ids)
+    # KEIN Early-Return — auch nicht bei GAR keiner Investition. Bei reinen
+    # PV-/WR-Anlagen liefe sonst die Sonstige-Aggregation nicht (#310), und seit
+    # G19-1 existieren Basis-Positionen (Anlage-Ebene) auch komplett ohne
+    # Investitionen. `lade_monats_fakten` deckt beides ab.
+    #
+    # ADR-002/P10: die Monatszeile wird GENAU EINMAL aufbereitet — in
+    # `services/monats_fakten.py`. Diese Route faltet `InvestitionMonatsdaten`
+    # nicht mehr selbst; Zeitfilter (`aktiv` · Anschaffung · Stilllegung),
+    # Dienstwagen-Ausschluss, E-Mob-Pool (#262), mengengewichteter Arbitrage-Ø,
+    # der getrennt gehaltene BKW-Akku, die typunabhängigen Finanz-Positionen
+    # (#310 + G19-1) und der Monatstarif (P8) stecken alle in der Schicht.
+    # Der Tarif-Cache wird mitgereicht, damit der Stichtag nur einmal auflöst.
+    tarif_cache: dict[date, dict] = {}
+    fakten = await lade_monats_fakten(
+        db,
+        anlage_id,
+        von=(jahr, 1) if jahr is not None else None,
+        bis=(jahr, 12) if jahr is not None else None,
+        tarif_cache=tarif_cache,
     )
-    if jahr is not None:
-        imd_query = imd_query.where(InvestitionMonatsdaten.jahr == jahr)
-    imd_query = imd_query.order_by(InvestitionMonatsdaten.jahr, InvestitionMonatsdaten.monat)
+    sichtbar = [f for f in fakten if _hat_komponenten_zeile(f)]
 
-    imd_result = await db.execute(imd_query)
-    all_imd = imd_result.scalars().all()
-
-    md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
-    if jahr is not None:
-        md_query = md_query.where(Monatsdaten.jahr == jahr)
-    md_result = await db.execute(md_query)
-    monatsdaten_by_key: dict[tuple[int, int], Monatsdaten] = {
-        (m.jahr, m.monat): m for m in md_result.scalars().all()
-    }
-
-    inv_by_id = {i.id: i for i in investitionen}
-
-    def empty_month_data():
-        return {
-            "speicher_ladung": 0, "speicher_entladung": 0,
-            "speicher_arbitrage": 0, "speicher_arbitrage_preis_sum": 0, "speicher_arbitrage_count": 0,
-            "wp_waerme": 0, "wp_strom": 0, "wp_heizung": 0, "wp_warmwasser": 0,
-            "wp_strom_heizen": 0, "wp_strom_warmwasser": 0,
-            # E-Mobilität: rohe IMD-`verbrauch_daten` je Quelle sammeln, erst
-            # beim Konsolidieren unten via `get_emob_heimladung_canonical` zu EINER
-            # konsistenten Trias poolen. Wallbox-IMD und E-Auto-IMD messen oft
-            # denselben Stromfluss aus zwei Perspektiven → feldweises max()
-            # über pv/netz konnte sie mischen (#262 junky84: PV-Anteil > 100 %).
-            # km + v2h kommen nur vom E-Auto.
-            "eauto_imds": [], "wb_imds": [],
-            "eauto_km": 0, "eauto_v2h": 0, "eauto_verbrauch": 0,
-            "bkw_erzeugung": 0, "bkw_eigenverbrauch": 0, "bkw_speicher_ladung": 0, "bkw_speicher_entladung": 0,
-            "sonstiges_erzeugung": 0, "sonstiges_verbrauch": 0,
-            "sonderkosten": 0, "sonstige_ertraege": 0, "sonstige_ausgaben": 0,
-            "anlage_sonstige_ertraege": 0, "anlage_sonstige_ausgaben": 0,
-        }
-
-    inv_data_by_month: dict[tuple[int, int], dict] = {}
-    hat_arbitrage = False
-    hat_v2h = False
-
-    for imd in all_imd:
-        inv = inv_by_id.get(imd.investition_id)
-        if not inv:
-            continue
-
-        # Issue #153 / #236: SoT-Filter inkl. stilllegungsdatum — vor-Inbetriebnahme-
-        # bzw. nach-Stilllegungs-Werte sollen nicht in JAZ/Aggregate fließen.
-        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-            continue
-
-        key = (imd.jahr, imd.monat)
-        if key not in inv_data_by_month:
-            inv_data_by_month[key] = empty_month_data()
-
-        data = imd.verbrauch_daten or {}
-        d = inv_data_by_month[key]
-
-        # Sonstige Erträge/Ausgaben NICHT hier — dieser Loop ist typ-gefiltert
-        # (all_inv_ids ohne PV/WR) und laufzeit-gefiltert (ist_aktiv_im_monat).
-        # Finanzpositionen werden unten entkoppelt über ALLE Investitionen
-        # aggregiert (#310). Siehe `aggregiere_sonstige_je_monat`.
-        # Dienstwagen rausfiltern (Joachim-Pattern, feedback_dienstwagen_alle_checks.md):
-        # ist_dienstlich-Komponenten gehören in dienstliche Ladekosten, nicht in
-        # den E-Mobilitäts-Pool der eigenen Anlage.
-        if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
-            continue
-
-        # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1). Nicht-
-        # zutreffende Felder sind 0 → unbedingtes Falten ist verhaltensneutral.
-        b = imd_typ_beitrag(inv, data)
-
-        d["speicher_ladung"] += b.speicher_ladung
-        d["speicher_entladung"] += b.speicher_entladung
-        if b.speicher_arbitrage > 0:
-            hat_arbitrage = True
-            d["speicher_arbitrage"] += b.speicher_arbitrage
-            if b.speicher_ladepreis_cent > 0:
-                d["speicher_arbitrage_preis_sum"] += b.speicher_ladepreis_cent * b.speicher_arbitrage
-                d["speicher_arbitrage_count"] += b.speicher_arbitrage
-
-        d["wp_heizung"] += b.wp_heizung
-        d["wp_warmwasser"] += b.wp_warmwasser
-        d["wp_waerme"] += b.wp_waerme
-        d["wp_strom"] += b.wp_strom
-        d["wp_strom_heizen"] += b.wp_strom_heizen
-        d["wp_strom_warmwasser"] += b.wp_strom_warmwasser
-
-        d["bkw_erzeugung"] += b.bkw_erzeugung
-        d["bkw_eigenverbrauch"] += b.bkw_eigenverbrauch
-        d["bkw_speicher_ladung"] += b.bkw_speicher_ladung
-        d["bkw_speicher_entladung"] += b.bkw_speicher_entladung
-
-        d["sonstiges_erzeugung"] += b.sonstiges_erzeugung
-        d["sonstiges_verbrauch"] += b.sonstiges_verbrauch
-
-        # E-Mob: km/Fahrverbrauch/V2H skalar; rohe IMD je Quelle sammeln — Pooling
-        # zentral via `get_emob_heimladung_canonical` weiter unten (km+v2h nur E-Auto).
-        d["eauto_km"] += b.eauto_km
-        d["eauto_verbrauch"] += b.eauto_verbrauch
-        if b.eauto_v2h > 0:
-            hat_v2h = True
-            d["eauto_v2h"] += b.eauto_v2h
-        if inv.typ == "e-auto":
-            d["eauto_imds"].append(data)
-        elif inv.typ == "wallbox":
-            d["wb_imds"].append(data)
+    # Flags über ALLE Monate des Zeitraums (nicht je Monat) — dieselbe Aussage
+    # wie die frühere Schleifen-Variable, nur aus den Fakten abgeleitet.
+    hat_arbitrage = any(f.speicher.netzladung_kwh > 0 for f in sichtbar)
+    hat_v2h = any(f.emob.v2h_entladung_kwh > 0 for f in sichtbar)
 
     monatswerte = []
     # E-Mobilität: Σ über alle Monate für das Komponenten-Aggregat (Ø Verbrauch
@@ -258,116 +176,49 @@ async def get_komponenten_zeitreihe(
     agg_emob_verbrauch = 0.0
     agg_emob_ladung = 0.0
     agg_emob_km = 0.0
-    _tarif_cache_kz: dict[date, dict] = {}
 
-    # Sonstige Erträge/Ausgaben (#310 rilmor-mhrs) — entkoppelt vom TYP-gefilterten
-    # Energie-Loop (der `all_inv_ids` ohne PV-Modul/Wechselrichter kennt): über
-    # ALLE Investitionstypen, sonst zählt diese Sicht einen am Wechselrichter
-    # gepflegten Ertrag NICHT mit, obwohl der Monatsbericht ihn zeigt.
-    # ABER: dieselbe Sichtbarkeitsregel wie überall (detLAN [[feedback_anschaffungsdatum_grenze]],
-    # #236/#308) — nur `aktiv` (aktiv=False = wie gelöscht) und nur innerhalb der
-    # Laufzeit Anschaffung→Stilllegung. Finanzpositionen sind KEINE Ausnahme.
-    # Symmetrie zum Monatsbericht: test_sonstige_readsite_symmetrie.
-    aktive_inv_ids = [i.id for i in investitionen if i.aktiv]
-    if aktive_inv_ids:
-        sonstige_query = select(InvestitionMonatsdaten).where(
-            InvestitionMonatsdaten.investition_id.in_(aktive_inv_ids)
+    for f in sichtbar:
+        jahr, monat = f.jahr, f.monat
+        speicher, emob, wp, sonstiges, tarif = (
+            f.speicher, f.emob, f.wp, f.sonstiges, f.tarif
         )
-        if jahr is not None:
-            sonstige_query = sonstige_query.where(InvestitionMonatsdaten.jahr == jahr)
-        sonstige_rows = [
-            imd for imd in (await db.execute(sonstige_query)).scalars().all()
-            if inv_by_id[imd.investition_id].ist_aktiv_im_monat(imd.jahr, imd.monat)
-        ]
-        for (s_jahr, s_monat), summen in aggregiere_sonstige_je_monat(sonstige_rows).items():
-            # Monat muss in der Response existieren, auch wenn er KEINE
-            # Komponenten-Energiedaten hat (reiner Sonstige-Monat).
-            d = inv_data_by_month.setdefault((s_jahr, s_monat), empty_month_data())
-            d["sonstige_ertraege"] = summen["ertraege_euro"]
-            d["sonstige_ausgaben"] = summen["ausgaben_euro"]
-            d["sonderkosten"] = summen["ausgaben_euro"]
-
-    # G19-1: Basis-Positionen (Monatsdaten.sonstige_positionen, Anlage-Ebene)
-    # wirken GENAU wie IMD-Positionen — gleiche Summen-Helper-Familie, gleiche
-    # Sicht. Separat als anlage_* ausgewiesen (Zeile „Anlage (Sonstiges)" im
-    # Frontend), zusätzlich in die Gesamt-Sonstige-Summen gefaltet (EIN Betrag,
-    # kein zweiter Kostenposten — R15-5-Muster: Ausweis + Summe).
-    for (m_jahr, m_monat), md in monatsdaten_by_key.items():
-        md_summen = berechne_md_sonstige_summen(md)
-        if not (md_summen["ertraege_euro"] or md_summen["ausgaben_euro"]):
-            continue
-        d = inv_data_by_month.setdefault((m_jahr, m_monat), empty_month_data())
-        d["anlage_sonstige_ertraege"] = md_summen["ertraege_euro"]
-        d["anlage_sonstige_ausgaben"] = md_summen["ausgaben_euro"]
-        d["sonstige_ertraege"] += md_summen["ertraege_euro"]
-        d["sonstige_ausgaben"] += md_summen["ausgaben_euro"]
-        d["sonderkosten"] += md_summen["ausgaben_euro"]
-
-    for key in sorted(inv_data_by_month.keys()):
-        jahr, monat = key
-        d = inv_data_by_month[key]
 
         speicher_effizienz = (
-            d["speicher_entladung"] / d["speicher_ladung"] * 100
-        ) if d["speicher_ladung"] > 0 else None
+            speicher.entladung_kwh / speicher.ladung_kwh * 100
+        ) if speicher.ladung_kwh > 0 else None
 
-        speicher_arbitrage_preis = (
-            d["speicher_arbitrage_preis_sum"] / d["speicher_arbitrage_count"]
-        ) if d["speicher_arbitrage_count"] > 0 else None
+        # Mengengewichteter Ø Ladepreis (nur Zeilen mit gepflegtem Preis).
+        speicher_arbitrage_preis = speicher.netzladung_preis_cent
 
         # JAZ/COP nur wenn beide Seiten gemessen sind (siehe uebersicht.py
         # für Erklärung — bei Split-Klimaanlagen kein Wärmemengenzähler).
-        wp_cop = (d["wp_waerme"] / d["wp_strom"]) if d["wp_strom"] > 0 and d["wp_waerme"] > 0 else None
+        wp_cop = (
+            wp.waerme_kwh / wp.strom_kwh
+        ) if wp.strom_kwh > 0 and wp.waerme_kwh > 0 else None
 
-        # E-Mobilitäts-Pool: EINE Quelle gewinnt die konsistente Trias
-        # (#262 — feldweises max() über pv/netz ergab PV-Anteil > 100 %).
-        # km + v2h kommen nur vom E-Auto (Vehicle-to-Home-Sicht).
-        emob_pool = get_emob_heimladung_canonical(
-            eauto_imd_data=d["eauto_imds"],
-            wallbox_imd_data=d["wb_imds"],
-        )
-        emob_ladung = emob_pool.ladung_kwh
-        emob_pv_ladung = emob_pool.pv_kwh
-        emob_netz_ladung = emob_pool.netz_kwh
-        emob_extern_ladung = emob_pool.extern_kwh
-        emob_extern_euro = emob_pool.extern_euro
-        emob_km = d["eauto_km"]
-        emob_v2h = d["eauto_v2h"]
-        emob_verbrauch = d["eauto_verbrauch"]
-        emob_pv_anteil = (emob_pv_ladung / emob_ladung * 100) if emob_ladung > 0 else None
+        emob_pv_anteil = (
+            emob.ladung_pv_kwh / emob.ladung_kwh * 100
+        ) if emob.ladung_kwh > 0 else None
         # Ø Verbrauch pro Monat via zentralem Helper (gemessen > Ladungs-Näherung).
-        eff_m = eauto_effizienz_100km(emob_verbrauch, emob_ladung, emob_km)
-        agg_emob_verbrauch += emob_verbrauch
-        agg_emob_ladung += emob_ladung
-        agg_emob_km += emob_km
-
-        stichtag = date(jahr, monat, 1)
-        if stichtag not in _tarif_cache_kz:
-            _tarif_cache_kz[stichtag] = await lade_tarife_fuer_anlage(db, anlage_id, target_date=stichtag)
-        m_tarife = _tarif_cache_kz[stichtag]
-        m_allgemein = m_tarife.get("allgemein")
-        m_preis_cent = m_allgemein.netzbezug_arbeitspreis_cent_kwh if m_allgemein else NETZBEZUG_DEFAULT_CENT
-        m_grundpreis = (m_allgemein.grundpreis_euro_monat or 0) if m_allgemein else 0
-        m_einspeis_cent = m_allgemein.einspeiseverguetung_cent_kwh if m_allgemein else EINSPEISEVERGUETUNG_DEFAULT_CENT
-        m_wp_tarif = m_tarife.get("waermepumpe")
-        m_wp_preis_cent = (
-            m_wp_tarif.netzbezug_arbeitspreis_cent_kwh
-            if m_wp_tarif and m_wp_tarif.netzbezug_arbeitspreis_cent_kwh is not None
-            else m_preis_cent
+        eff_m = eauto_effizienz_100km(
+            emob.fahrverbrauch_kwh, emob.ladung_kwh, emob.km
         )
-        md = monatsdaten_by_key.get((jahr, monat))
-        if md:
-            eff_preis = resolve_netzbezug_preis_cent(md, m_preis_cent)
+        agg_emob_verbrauch += emob.fahrverbrauch_kwh
+        agg_emob_ladung += emob.ladung_kwh
+        agg_emob_km += emob.km
+
+        if f.meta.hat_zaehlerzeile:
             m_netzbezug_kosten = berechne_netzbezug_kosten(
-                md.netzbezug_kwh or 0, eff_preis, m_grundpreis
+                f.zaehler.netzbezug_kwh,
+                tarif.netzbezug_preis_cent,
+                tarif.grundpreis_euro_monat,
             )
             # §51 EEG: Einspeisung in Negativpreis-Stunden ist unvergütet.
-            # Ohne Tages-Aggregat (m_neg=None) greift alte Berechnung.
-            m_neg = await get_neg_preis_einspeisung_monat(db, anlage_id, jahr, monat)
+            # Ohne Tages-Aggregat (neg_preis_kwh=None) greift die alte Berechnung.
             m_erloes_calc = einspeise_erloes_euro(
-                einspeisung_kwh=md.einspeisung_kwh or 0,
-                neg_preis_kwh=m_neg,
-                verguetung_ct_kwh=m_einspeis_cent,
+                einspeisung_kwh=f.zaehler.einspeisung_kwh,
+                neg_preis_kwh=f.eeg.neg_preis_kwh,
+                verguetung_ct_kwh=tarif.einspeiseverguetung_cent,
             )
             m_einspeise_erloes = m_erloes_calc.erloes_euro
         else:
@@ -377,59 +228,59 @@ async def get_komponenten_zeitreihe(
         # WP-Ersparnis pro Monat (Drift-Audit A1, Issue #178).
         # Aggregat über alle WPs, Parameter aus erster aktiver WP als Referenz.
         m_wp_ersparnis = 0.0
-        if d["wp_waerme"] > 0:
+        if wp.waerme_kwh > 0:
             wp_invs_in_monat = [
                 i for i in investitionen
                 if i.typ == "waermepumpe" and i.ist_aktiv_im_monat(jahr, monat)
             ]
             wp_ref_param = wp_invs_in_monat[0].parameter if wp_invs_in_monat else None
             wp_result = berechne_wp_ersparnis(
-                wp_waerme_kwh=d["wp_waerme"],
-                wp_strom_kwh=d["wp_strom"],
-                wp_strompreis_cent=m_wp_preis_cent,
+                wp_waerme_kwh=wp.waerme_kwh,
+                wp_strom_kwh=wp.strom_kwh,
+                wp_strompreis_cent=tarif.wp_preis_cent,
                 wp_parameter=wp_ref_param,
-                monats_gaspreis_cent=md.gaspreis_cent_kwh if md else None,
+                monats_gaspreis_cent=tarif.gaspreis_cent_kwh,
             )
             m_wp_ersparnis = wp_result.ersparnis_euro
 
         monatswerte.append(KomponentenMonat(
             jahr=jahr, monat=monat, monat_name=MONATSNAMEN[monat],
-            speicher_ladung_kwh=round(d["speicher_ladung"], 1),
-            speicher_entladung_kwh=round(d["speicher_entladung"], 1),
+            speicher_ladung_kwh=round(speicher.ladung_kwh, 1),
+            speicher_entladung_kwh=round(speicher.entladung_kwh, 1),
             speicher_effizienz_prozent=round(speicher_effizienz, 1) if speicher_effizienz else None,
-            speicher_arbitrage_kwh=round(d["speicher_arbitrage"], 1),
+            speicher_arbitrage_kwh=round(speicher.netzladung_kwh, 1),
             speicher_arbitrage_preis_cent=round(speicher_arbitrage_preis, 2) if speicher_arbitrage_preis else None,
-            wp_waerme_kwh=round(d["wp_waerme"], 1),
-            wp_strom_kwh=round(d["wp_strom"], 1),
+            wp_waerme_kwh=round(wp.waerme_kwh, 1),
+            wp_strom_kwh=round(wp.strom_kwh, 1),
             wp_cop=round(wp_cop, 2) if wp_cop else None,
-            wp_heizung_kwh=round(d["wp_heizung"], 1),
-            wp_warmwasser_kwh=round(d["wp_warmwasser"], 1),
-            wp_strom_heizen_kwh=round(d["wp_strom_heizen"], 1),
-            wp_strom_warmwasser_kwh=round(d["wp_strom_warmwasser"], 1),
+            wp_heizung_kwh=round(wp.heizung_kwh, 1),
+            wp_warmwasser_kwh=round(wp.warmwasser_kwh, 1),
+            wp_strom_heizen_kwh=round(wp.strom_heizen_kwh, 1),
+            wp_strom_warmwasser_kwh=round(wp.strom_warmwasser_kwh, 1),
             wp_ersparnis_euro=round(m_wp_ersparnis, 2),
-            emob_km=round(emob_km, 0),
-            emob_ladung_kwh=round(emob_ladung, 1),
+            emob_km=round(emob.km, 0),
+            emob_ladung_kwh=round(emob.ladung_kwh, 1),
             emob_pv_anteil_prozent=round(emob_pv_anteil, 1) if emob_pv_anteil else None,
-            emob_ladung_pv_kwh=round(emob_pv_ladung, 1),
-            emob_ladung_netz_kwh=round(emob_netz_ladung, 1),
-            emob_ladung_extern_kwh=round(emob_extern_ladung, 1),
-            emob_ladung_extern_euro=round(emob_extern_euro, 2),
-            emob_v2h_kwh=round(emob_v2h, 1),
-            emob_verbrauch_kwh=round(emob_verbrauch, 1),
+            emob_ladung_pv_kwh=round(emob.ladung_pv_kwh, 1),
+            emob_ladung_netz_kwh=round(emob.ladung_netz_kwh, 1),
+            emob_ladung_extern_kwh=round(emob.extern_kwh, 1),
+            emob_ladung_extern_euro=round(emob.extern_euro, 2),
+            emob_v2h_kwh=round(emob.v2h_entladung_kwh, 1),
+            emob_verbrauch_kwh=round(emob.fahrverbrauch_kwh, 1),
             emob_verbrauch_100km=round(eff_m.wert, 1) if eff_m.wert is not None else None,
             emob_verbrauch_quelle=eff_m.quelle,
-            bkw_erzeugung_kwh=round(d["bkw_erzeugung"], 1),
-            bkw_eigenverbrauch_kwh=round(d["bkw_eigenverbrauch"], 1),
-            bkw_speicher_ladung_kwh=round(d["bkw_speicher_ladung"], 1),
-            bkw_speicher_entladung_kwh=round(d["bkw_speicher_entladung"], 1),
-            sonstiges_erzeugung_kwh=round(d["sonstiges_erzeugung"], 1),
-            sonstiges_verbrauch_kwh=round(d["sonstiges_verbrauch"], 1),
-            sonderkosten_euro=round(d["sonderkosten"], 2),
-            sonstige_ertraege_euro=round(d["sonstige_ertraege"], 2),
-            sonstige_ausgaben_euro=round(d["sonstige_ausgaben"], 2),
-            sonstige_netto_euro=round(d["sonstige_ertraege"] - d["sonstige_ausgaben"], 2),
-            anlage_sonstige_ertraege_euro=round(d["anlage_sonstige_ertraege"], 2),
-            anlage_sonstige_ausgaben_euro=round(d["anlage_sonstige_ausgaben"], 2),
+            bkw_erzeugung_kwh=round(f.bkw.erzeugung_kwh, 1),
+            bkw_eigenverbrauch_kwh=round(f.bkw.eigenverbrauch_gemessen_kwh, 1),
+            bkw_speicher_ladung_kwh=round(f.bkw.speicher_ladung_kwh, 1),
+            bkw_speicher_entladung_kwh=round(f.bkw.speicher_entladung_kwh, 1),
+            sonstiges_erzeugung_kwh=round(sonstiges.erzeugung_kwh, 1),
+            sonstiges_verbrauch_kwh=round(sonstiges.verbrauch_kwh, 1),
+            sonderkosten_euro=sonstiges.ausgaben_euro,
+            sonstige_ertraege_euro=sonstiges.ertraege_euro,
+            sonstige_ausgaben_euro=sonstiges.ausgaben_euro,
+            sonstige_netto_euro=sonstiges.netto_euro,
+            anlage_sonstige_ertraege_euro=sonstiges.anlage_ertraege_euro,
+            anlage_sonstige_ausgaben_euro=sonstiges.anlage_ausgaben_euro,
             netzbezug_kosten_euro=round(m_netzbezug_kosten, 2),
             einspeise_erloes_euro=round(m_einspeise_erloes, 2),
         ))
