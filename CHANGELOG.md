@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.8] - 2026-08-03 — Nach einem Neustart stimmen die Einheiten sofort
 
 ### Fixed
 

@@ -1,11 +1,40 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.7)
+> **Stand:** August 2026 (v4.0.8)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.8 — Nach einem Neustart stimmen die Einheiten sofort (August 2026)
+
+### Die erste Stunde nach einem Neustart der Box rechnete mit fehlenden Einheiten
+
+**Betrifft dich das?** Wenn du in der ersten Stunde nach einem **Neustart deiner Home-Assistant-Box**
+(Update, Stromausfall, Reboot) in eedc hineingeschaut hast — und dort Sensoren nutzt, die ihre
+Leistung in **kW** melden statt in Watt.
+
+eedc merkt sich zu jedem zugeordneten Sensor, in welcher Einheit er misst — daraus folgt, ob ein
+Wert noch umgerechnet werden muss. Dieser Merkzettel wurde stündlich aufgefrischt, und um zu
+entscheiden, ob eine Auffrischung fällig ist, hat eedc auf die **Laufzeit des Systems** geschaut.
+Direkt nach einem Neustart ist die kleiner als eine Stunde — und damit galt der noch **völlig
+leere** Merkzettel als „gerade eben aufgefrischt". eedc hat die Einheiten also gar nicht erst
+abgefragt und eine Stunde lang so getan, als kenne es keine.
+
+Sichtbar wurde das dort, wo aus der Einheit eine Umrechnung folgt: Ein Sensor, der **kW** liefert,
+wurde im **Live-Tagesverlauf** in dieser ersten Stunde nicht in Watt umgerechnet und stand damit um
+den Faktor 1000 daneben. Ebenso betroffen waren die Einheiten-Prüfung des **Daten-Checkers**
+(die kW nicht mehr von kWh unterscheiden konnte) und die Auswertung im **Energieprofil**.
+
+Nach einer Stunde Laufzeit verschwand der Effekt von selbst und kam erst beim nächsten Neustart
+wieder — wer seine Box durchlaufen lässt, hat davon nie etwas gemerkt. Jetzt prüft eedc, ob ein
+Sensor **überhaupt schon einmal** abgefragt wurde, statt zu rechnen, wie lange die Box läuft.
+
+**Was du tun musst: nichts.** Gespeicherte Monats- und Tageswerte sind nicht betroffen — es ging um
+die Anzeige und um die Prüfung, nicht um deine erfassten Daten. Der Fehler kam mit v4.0.7 herein.
 
 ---
 
