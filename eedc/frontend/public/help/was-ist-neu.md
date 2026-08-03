@@ -14,6 +14,38 @@
 > **Beim Release:** Überschrift auf `## vX.Y.Z — Titel (Monat Jahr)` ziehen und die Version im
 > Kopf dieser Seite mitnehmen (Doku-Durchgang) — sonst steht die Zusage als nicht eingelöst da.
 
+### Tag: der Einspeiseerlös wird nicht mehr gekürzt, wenn dich §51 gar nicht betrifft
+
+**Betrifft dich das?** Wenn deine Anlage **keine** §51-Anlage ist (das ist der Normalfall bei
+Bestandsanlagen — der Schalter unter *Einstellungen → Anlage* steht standardmäßig auf **aus**) und
+eedc gleichzeitig deine **Börsenpreise mitschreibt**, etwa über einen dynamischen Tarif.
+
+Seit dem Solarpaket I bekommen **Neuanlagen** in Stunden mit negativem Börsenpreis keine
+Einspeisevergütung. Für alle anderen gilt das nicht — deshalb ist es ein Schalter, den du selbst
+setzt. In *Cockpit → Tag* wurde dieser Abzug bisher trotzdem gerechnet, sobald überhaupt negative
+Preise mitgeschrieben waren: an einem sonnigen Sonntag mit **45 kWh Einspeisung** standen dort
+**1,86 €** statt der rund 3,70 €, die dir zustehen.
+
+Was du jetzt siehst:
+
+- **Der Tages-Einspeiseerlös ist wieder vollständig** — und mit ihm die Kachel **Netto-Ertrag** und
+  der Finanzen-Block darunter. Die Zahlen werden also **größer**; die alten waren zu klein.
+- Die Spalte **„Einspeisung bei neg. Preis"** bleibt bei dir leer, so wie in der Monatstabelle
+  auch — dort war sie schon immer leer.
+- **Die Anzahl der negativen Preisstunden bleibt sichtbar.** Das ist eine Marktinformation und
+  kein Abzug — interessant fürs Laden, unabhängig von §51.
+
+**Unverändert:** Hast du den §51-Schalter **gesetzt**, weil deine Anlage betroffen ist, rechnet
+eedc exakt wie bisher weiter. Monats-, Jahres- und Cockpit-Ansichten waren nie betroffen — dort hat
+der Schalter immer korrekt gewirkt. Rückwirkend musst du nichts anstoßen: die Beträge werden bei
+jedem Aufruf neu gerechnet, alte Tage stimmen ab sofort mit.
+
+**Was du tun musst: nichts.** Wenn du unsicher bist, ob der Schalter bei dir richtig steht: er
+heißt **„Unterliegt §51 EEG"** und gehört nur dann an, wenn deine Anlage nach dem Solarpaket I in
+Betrieb ging und dein Netzbetreiber dir die Negativpreis-Stunden tatsächlich nicht vergütet.
+
+---
+
 ### Live: ein Hausverbrauch, der nicht mehr so tut, als wäre er vollständig
 
 **Betrifft dich das?** Wenn in *Cockpit → Live* für einen Tag **kein Netzbezug** ankommt — kein

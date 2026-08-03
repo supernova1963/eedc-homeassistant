@@ -55,6 +55,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.services.einspeise_erloes_service import neg_preis_einspeisung_tageswert
 from backend.services.finanz_zeilen import FinanzZeileEingabe, baue_finanz_zeile
 
 
@@ -134,6 +135,12 @@ async def baue_tage_werte(
     for tag in alle_tage:
         bilanz = bilanz_aus_stundenrows(tep_pro_tag.get(tag, []))
         tz = tz_pro_tag.get(tag)
+        # §51 gilt nur für Anlagen mit gesetztem Schalter — das Gate liegt im
+        # Erlös-Service, nicht hier (bis 2026-08-03 las diese Zeile die Spalte
+        # roh und kürzte den Erlös auch ohne §51-Pflicht).
+        neg_preis_kwh = neg_preis_einspeisung_tageswert(
+            anlage, tz.einspeisung_neg_preis_kwh if tz else None
+        )
 
         # ── Finanzen über den SoT-Helper (je-Monat-Tarif, §51-bereinigt) ──
         eingabe = FinanzZeileEingabe(
@@ -142,7 +149,7 @@ async def baue_tage_werte(
             einspeisung_kwh=bilanz.einspeisung_kwh,
             netzbezug_kwh=bilanz.netzbezug_kwh,
             pv_erzeugung_kwh=bilanz.erzeugung_kwh,
-            neg_preis_kwh=(tz.einspeisung_neg_preis_kwh if tz else None),
+            neg_preis_kwh=neg_preis_kwh,
             # Speicher/V2H/BKW = 0: Netto-Flüsse bilden Speicher schon ab.
             monatsdaten=md_pro_monat.get((tag.year, tag.month)),
         )
@@ -214,7 +221,10 @@ async def baue_tage_werte(
             boersenpreis_avg_cent=(tz.boersenpreis_avg_cent if tz else None),
             boersenpreis_min_cent=(tz.boersenpreis_min_cent if tz else None),
             negative_preis_stunden=(tz.negative_preis_stunden if tz else None),
-            einspeisung_neg_preis_kwh=(tz.einspeisung_neg_preis_kwh if tz else None),
+            # Ausweis-Spalte: dasselbe Gate wie die Rechnung darüber — sonst
+            # nennt die Tagestabelle eine §51-Menge, die die Monatstabelle bei
+            # derselben Anlage verschweigt (`monatsdaten.py`).
+            einspeisung_neg_preis_kwh=neg_preis_kwh,
         ))
 
     return zeilen

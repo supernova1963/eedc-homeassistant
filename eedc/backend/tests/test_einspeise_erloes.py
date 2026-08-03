@@ -9,6 +9,9 @@ Tests decken ab:
 - Pure Berechnung `einspeise_erloes_euro` (Standard-Fälle + Edge-Cases)
 - DB-Aggregat `get_neg_preis_einspeisung_monat` / `_jahr` (None-Pfad, Σ,
   Anlagen-Isolation, Monatsgrenzen)
+- **Tagespfad** `neg_preis_einspeisung_tageswert` + seine drei Read-Sites
+  (`baue_tage_werte`, Tagesliste, Monatsauswertung) — dasselbe Gate, seit
+  2026-08-03 (rapahl-Meldung, Abschnitt am Dateiende)
 """
 
 from __future__ import annotations
@@ -18,12 +21,18 @@ from datetime import date
 import pytest
 
 from backend.core.berechnungen import einspeise_erloes_euro
-from backend.models import Anlage
-from backend.models.tages_energie_profil import TagesZusammenfassung
+from backend.api.routes.energie_profil.views import (
+    get_monatsauswertung,
+    get_tages_zusammenfassungen,
+)
+from backend.models import Anlage, Strompreis
+from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
 from backend.services.einspeise_erloes_service import (
     get_neg_preis_einspeisung_jahr,
     get_neg_preis_einspeisung_monat,
+    neg_preis_einspeisung_tageswert,
 )
+from backend.services.energie_profil.tage_werte import baue_tage_werte
 
 
 # --- Pure-Berechnung: einspeise_erloes_euro ---------------------------------
@@ -196,3 +205,105 @@ async def test_jahr_ohne_tages_aggregate_liefert_none(db):
     anlage_id = await _seed_anlage(db)
     result = await get_neg_preis_einspeisung_jahr(db, anlage_id, 2026)
     assert result is None
+
+
+# --- Tagespfad: dasselbe Gate wie Monat/Jahr (2026-08-03) -------------------
+#
+# Der Tagespfad las `TagesZusammenfassung.einspeisung_neg_preis_kwh` roh und
+# kürzte den Erlös damit auch bei Anlagen OHNE §51-Pflicht. Gemeldet von rapahl
+# (2026-08-02): 45 kWh Einspeisung, 1,86 € statt ~3,7 €. Es ist derselbe Fehler,
+# der für den Cockpit-Pfad bereits behoben und getestet ist
+# (`test_cockpit_einspeise_neg_preis.py::test_ohne_eeg51_flag_kein_abzug_*`) —
+# der Tages-Zwilling wurde damals nicht mitgezogen
+# ([[feedback_aggregations_drift]]).
+
+
+async def _seed_tag_mit_einspeisung(db, *, unterliegt_eeg_51: bool):
+    """Ein Tag, 20 kWh Einspeisung, davon 15 kWh bei negativem Börsenpreis."""
+    anlage = Anlage(
+        anlagenname="§51-Tagespfad", leistung_kwp=10.0, standort_land="DE",
+        unterliegt_eeg_51=unterliegt_eeg_51,
+    )
+    db.add(anlage)
+    await db.flush()
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    tag = date(2026, 8, 2)
+    db.add_all([
+        TagesEnergieProfil(
+            anlage_id=anlage.id, datum=tag, stunde=h,
+            pv_kw=10.0, verbrauch_kw=0.0, einspeisung_kw=10.0, netzbezug_kw=0.0,
+        )
+        for h in (11, 12)
+    ])
+    db.add(TagesZusammenfassung(
+        anlage_id=anlage.id, datum=tag, stunden_verfuegbar=2,
+        negative_preis_stunden=5, einspeisung_neg_preis_kwh=15.0,
+    ))
+    await db.flush()
+    return anlage, tag
+
+
+def test_tageswert_gate_pur():
+    """Der Helfer entscheidet allein am Schalter — ohne Query."""
+    ohne = Anlage(anlagenname="A", leistung_kwp=1.0, unterliegt_eeg_51=False)
+    mit = Anlage(anlagenname="B", leistung_kwp=1.0, unterliegt_eeg_51=True)
+
+    assert neg_preis_einspeisung_tageswert(ohne, 15.0) is None
+    assert neg_preis_einspeisung_tageswert(mit, 15.0) == 15.0
+    # Kein Messwert bleibt kein Messwert — auch mit Flag.
+    assert neg_preis_einspeisung_tageswert(mit, None) is None
+
+
+async def test_tagespfad_ohne_eeg51_flag_kuerzt_den_erloes_nicht(db):
+    """Die gemeldete Klasse: Mitschrift vorhanden, §51-Pflicht nicht."""
+    anlage, tag = await _seed_tag_mit_einspeisung(db, unterliegt_eeg_51=False)
+
+    zeilen = await baue_tage_werte(db, anlage, tag, tag)
+
+    assert len(zeilen) == 1
+    z = zeilen[0]
+    # 20 kWh × 8 ct = 1,60 € — ungekürzt.
+    assert z.einspeise_erloes == pytest.approx(1.60, abs=0.01)
+    # Ausweis-Spalte schweigt wie die Monatstabelle bei derselben Anlage.
+    assert z.einspeisung_neg_preis_kwh is None
+    # Die Stundenzahl bleibt Marktinfo und damit sichtbar.
+    assert z.negative_preis_stunden == 5
+
+
+async def test_tagespfad_mit_eeg51_flag_kuerzt_weiterhin(db):
+    """Gegenprobe: mit Schalter greift der Abzug unverändert.
+
+    Ausdrücklich **Regressionsschutz, kein Beweis**: in der Rot-Probe (Gate
+    deaktiviert) bleibt dieser Test grün — er sichert nur, dass der Fix den
+    berechtigten Abzug nicht mit weggeräumt hat. Die drei Geschwister oben
+    fallen ohne Gate.
+    """
+    anlage, tag = await _seed_tag_mit_einspeisung(db, unterliegt_eeg_51=True)
+
+    zeilen = await baue_tage_werte(db, anlage, tag, tag)
+
+    z = zeilen[0]
+    # Nur (20 − 15) kWh × 8 ct = 0,40 €.
+    assert z.einspeise_erloes == pytest.approx(0.40, abs=0.01)
+    assert z.einspeisung_neg_preis_kwh == pytest.approx(15.0)
+
+
+async def test_tagesliste_und_monatsauswertung_gaten_die_ausweis_spalte(db):
+    """Die beiden Ausweis-Stellen in `energie_profil/views.py` ziehen mit."""
+    anlage_ohne, tag = await _seed_tag_mit_einspeisung(db, unterliegt_eeg_51=False)
+    await db.commit()
+
+    tage = await get_tages_zusammenfassungen(
+        anlage_id=anlage_ohne.id, von=tag, bis=tag, db=db
+    )
+    assert tage[0].einspeisung_neg_preis_kwh is None
+    assert tage[0].negative_preis_stunden == 5
+
+    monat = await get_monatsauswertung(
+        anlage_id=anlage_ohne.id, jahr=2026, monat=8, top_n=10, db=db
+    )
+    assert monat.einspeisung_neg_preis_kwh is None
+    assert monat.negative_preis_stunden == 5

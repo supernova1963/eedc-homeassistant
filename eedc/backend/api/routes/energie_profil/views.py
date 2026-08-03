@@ -36,6 +36,7 @@ from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.services.einspeise_erloes_service import neg_preis_einspeisung_tageswert
 
 from ._shared import (
     HeatmapZelle,
@@ -122,7 +123,11 @@ async def get_tages_zusammenfassungen(
             boersenpreis_avg_cent=t.boersenpreis_avg_cent,
             boersenpreis_min_cent=t.boersenpreis_min_cent,
             negative_preis_stunden=t.negative_preis_stunden,
-            einspeisung_neg_preis_kwh=t.einspeisung_neg_preis_kwh,
+            # §51-Menge nur bei Anlagen mit gesetztem Schalter; die Stundenzahl
+            # daneben bleibt ungegatet — sie ist reine Marktinfo, kein Abzug.
+            einspeisung_neg_preis_kwh=neg_preis_einspeisung_tageswert(
+                anlage, t.einspeisung_neg_preis_kwh
+            ),
         )
         for t in tage
     ]
@@ -443,7 +448,8 @@ async def get_monatsauswertung(
     Batterie-Vollzyklen-Summe und Ø Performance Ratio für einen Kalendermonat.
     """
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
-    if not result.scalar_one_or_none():
+    anlage = result.scalar_one_or_none()
+    if not anlage:
         raise not_found("Anlage", anlage_id)
 
     tage_im_monat = calendar.monthrange(jahr, monat)[1]
@@ -635,7 +641,14 @@ async def get_monatsauswertung(
     boersenpreis_avg = round(sum(boersen_werte) / len(boersen_werte), 2) if boersen_werte else None
     neg_stunden_werte = [t.negative_preis_stunden for t in tag_rows if t.negative_preis_stunden is not None]
     neg_stunden_summe = sum(neg_stunden_werte) if neg_stunden_werte else None
-    neg_einsp_werte = [t.einspeisung_neg_preis_kwh for t in tag_rows if t.einspeisung_neg_preis_kwh is not None]
+    # §51-Menge nur bei Anlagen mit gesetztem Schalter (Gate im Erlös-Service);
+    # `negative_preis_stunden` oben bleibt ungegatet — Marktinfo, kein Abzug.
+    neg_einsp_werte = [
+        w for w in (
+            neg_preis_einspeisung_tageswert(anlage, t.einspeisung_neg_preis_kwh)
+            for t in tag_rows
+        ) if w is not None
+    ]
     neg_einsp_summe = round(sum(neg_einsp_werte), 2) if neg_einsp_werte else None
 
     # ── Per-Komponente Aggregation aus komponenten_kwh ──

@@ -15,6 +15,9 @@ Konvention:
   für Neuanlagen ab Solarpaket I und ist ein bewusst manueller Schalter. Dies
   ist der **einzige Gate** für den §51-Abzug; alle Read-Sites gehen über diesen
   Service, daher genügt die Prüfung an dieser Stelle (kein Per-Site-Patch).
+  Wer seine Tages-Zeilen schon geladen hat, nimmt `neg_preis_einspeisung_tageswert`
+  — dieselbe Prüfung ohne zweiten Query. Genau dieser Weg fehlte bis 2026-08-03,
+  und der Satz oben stimmte deshalb nicht: der Tagespfad las die Spalte roh.
 - Rückgabe `None` wenn keine `TagesZusammenfassung`-Zeilen mit
   `einspeisung_neg_preis_kwh IS NOT NULL` existieren — das signalisiert
   Read-Sites: „Anwender hat keine Strompreis-Mitschrift / keinen
@@ -43,6 +46,38 @@ async def _unterliegt_eeg_51(db: AsyncSession, anlage_id: int) -> bool:
     """
     stmt = select(Anlage.unterliegt_eeg_51).where(Anlage.id == anlage_id)
     return bool(await db.scalar(stmt))
+
+
+def neg_preis_einspeisung_tageswert(
+    anlage: Anlage,
+    roh_kwh: Optional[float],
+) -> Optional[float]:
+    """Dasselbe Gate für einen **bereits geladenen** Tages-Rohwert.
+
+    Die Tages-Sichten haben ihre ``TagesZusammenfassung``-Zeilen schon in der
+    Hand (und die ``Anlage`` dazu) — für sie wäre ein eigener Query nur eine
+    zweite Rundreise für eine Auskunft, die schon vorliegt. Sie sollen deshalb
+    **nicht** an diesem Service vorbeigehen: bis 2026-08-03 lasen
+    ``services/energie_profil/tage_werte.py`` und
+    ``api/routes/energie_profil/views.py`` die Spalte roh, und der Tages-Erlös
+    wurde dadurch auch bei Anlagen gekürzt, die dem §51 **nicht** unterliegen
+    (Rainer-Meldung 2026-08-02: 45 kWh Einspeisung, 1,86 € statt ~3,7 €).
+    Der Rohwert selbst wird bewusst **immer** geschrieben
+    (``energie_profil/aggregator.py``) — er ist eine Messung; erst seine
+    *Verwendung* als Vergütungsabzug hängt am Schalter.
+
+    Args:
+        anlage: die bereits geladene Anlage (kein Query).
+        roh_kwh: ``TagesZusammenfassung.einspeisung_neg_preis_kwh`` des Tages.
+
+    Returns:
+        ``roh_kwh`` wenn die Anlage dem §51 unterliegt, sonst ``None`` — die
+        Erlös-Formel lässt den Abzug dann weg, und die Ausweis-Spalte zeigt
+        nichts an, genau wie die Monatstabelle (``monatsdaten.py``).
+    """
+    if not anlage.unterliegt_eeg_51:
+        return None
+    return roh_kwh
 
 
 async def get_neg_preis_einspeisung_monat(
