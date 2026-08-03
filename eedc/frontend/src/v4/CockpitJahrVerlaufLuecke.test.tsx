@@ -121,7 +121,13 @@ describe('Cockpit/Jahr — Verlauf und Rail kennen den Monat ohne Abschluss (N-6
   it('die Sicht fragt die Monate ohne Zählerzeile ausdrücklich mit an', async () => {
     renderView()
     await screen.findByText('Kennzahlen')
-    expect(listAggregiert).toHaveBeenCalledWith(1, undefined, { inklOhneZaehlerzeile: true })
+    // N-121: dazu die Monate, deren einzige Spur die lokale Tagesebene ist.
+    // N-68 allein reichte an einer echten Anlage nicht — es hob nur die
+    // Zählerzeilen-Bedingung auf, nicht die Grundgesamtheit der Schicht.
+    expect(listAggregiert).toHaveBeenCalledWith(1, undefined, {
+      inklOhneZaehlerzeile: true,
+      inklNurTageswerte: true,
+    })
   })
 
   it('der Verlauf zeichnet auch die Monate ohne Abschluss', async () => {

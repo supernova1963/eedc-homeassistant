@@ -122,6 +122,10 @@ export interface AggregierteMonatsdaten {
   einspeisung_neg_preis_kwh: number | null
   // Legacy-Marker
   hat_legacy_daten: boolean
+  // Feldgruppen, die nicht aus der Datenbank stammen, sondern aus der lokalen
+  // Tagesebene (`inklNurTageswerte`, N-121) — z. B. `['pv', 'zaehler']`.
+  // null/undefined = alles steht so in der Datenbank.
+  aus_tageswerten?: string[] | null
 }
 
 export const monatsdatenApi = {
@@ -172,15 +176,22 @@ export const monatsdatenApi = {
    * noch keinen Monatsabschluss haben (`id: null`). Für **Zeitreihen** gedacht
    * (Cockpit → Jahr, Fund N-68) — nicht für Datensatz-Listen wie
    * *Auswertungen → Tabelle*, wo eine nicht bearbeitbare Zeile stünde.
+   *
+   * `inklNurTageswerte` geht einen Schritt weiter und nimmt Monate mit, die
+   * **auch** keine Komponenten-Zeile haben und nur in der lokalen Tagesebene
+   * existieren (Fund N-121). Das betrifft immer den **laufenden** Monat — einen
+   * automatischen Monatsabschluss gibt es nicht. Die betroffenen Größen sind in
+   * `aus_tageswerten` benannt.
    */
   async listAggregiert(
     anlageId: number,
     jahr?: number,
-    opts?: { inklOhneZaehlerzeile?: boolean },
+    opts?: { inklOhneZaehlerzeile?: boolean; inklNurTageswerte?: boolean },
   ): Promise<AggregierteMonatsdaten[]> {
     const params = new URLSearchParams()
     if (jahr) params.append('jahr', jahr.toString())
     if (opts?.inklOhneZaehlerzeile) params.append('inkl_ohne_zaehlerzeile', 'true')
+    if (opts?.inklNurTageswerte) params.append('inkl_nur_tageswerte', 'true')
     const query = params.toString()
     return api.get<AggregierteMonatsdaten[]>(`/monatsdaten/aggregiert/${anlageId}${query ? '?' + query : ''}`)
   },

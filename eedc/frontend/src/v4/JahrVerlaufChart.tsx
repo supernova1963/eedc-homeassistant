@@ -45,6 +45,8 @@ interface ChartPunkt {
   netzladung: number
   eautoLadung: number
   eautoKm: number
+  /** N-121: Monat ohne Monatsabschluss — Größen aus der lokalen Tagesebene. */
+  ausTageswerten: boolean
 }
 
 const round1 = (v: number | null | undefined): number => (v == null ? 0 : Math.round(v * 10) / 10)
@@ -70,6 +72,7 @@ export function baueJahrChartDaten(monate: AggregierteMonatsdaten[]): ChartPunkt
       netzladung: round1(m.speicher_netzladung_kwh),
       eautoLadung: round1(m.eauto_ladung_kwh),
       eautoKm: round1(m.eauto_km),
+      ausTageswerten: (m.aus_tageswerten?.length ?? 0) > 0,
     }))
 }
 
@@ -83,6 +86,12 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
   // SoT-Hook). Reset bei Modus-/Preset-Wechsel — der Serien-Satz ändert sich.
   const legende = useLegendenToggle(`${view}:${presetKey}`)
   const daten = useMemo(() => baueJahrChartDaten(monate), [monate])
+  // N-121: welche Monatsbalken aus der Tagesebene stammen (kein Abschluss).
+  // Der Chart zeigt genau ein Jahr, deshalb ist der Monatskürzel eindeutig.
+  const tageswertMonate = useMemo(
+    () => new Set(daten.filter((d) => d.ausTageswerten).map((d) => d.monat)),
+    [daten],
+  )
   const presets = verfuegbarePresets(true)
   const aktPreset = presets.find((p) => p.key === presetKey) ?? presets[0]
 
@@ -140,10 +149,19 @@ export function JahrVerlaufChart({ monate }: { monate: AggregierteMonatsdaten[] 
             {showAutarkie && view !== 'vergleich' && (
               <YAxis yAxisId="pct" orientation="right" domain={[0, 100]} {...yAchse(schmal, 40)} tickFormatter={achsenTick} label={achsenEinheit('%', 'rechts')} />
             )}
-            <Tooltip {...eedcTooltipProps({ formatter: (value: number, name: string) =>
-              name === 'Autarkie' ? `${fmtZahl(value, 1)} %`
-                : name === 'Fahrleistung' ? `${fmtZahl(value, 0)} km`
-                : `${fmtZahl(value, 1)} kWh` })} />
+            <Tooltip {...eedcTooltipProps({
+              formatter: (value: number, name: string) =>
+                name === 'Autarkie' ? `${fmtZahl(value, 1)} %`
+                  : name === 'Fahrleistung' ? `${fmtZahl(value, 0)} km`
+                    : `${fmtZahl(value, 1)} kWh`,
+              // N-121: sagen, woher die Zahl kommt. Ein Monat ohne Abschluss
+              // wird aus der lokalen Tagesebene gerechnet — additiv, also
+              // beschriften statt unterdrücken (KONZEPT-UNVOLLSTAENDIGE-WERTE).
+              labelFormatter: (label: unknown) =>
+                tageswertMonate.has(String(label))
+                  ? `${String(label)} · aus Tageswerten`
+                  : String(label),
+            })} />
             <Legend wrapperStyle={{ fontSize: 12 }} content={
               // B7: Legenden-Klick blendet Serien aus/ein (Skalen-Lesbarkeit) — alle Modi.
               <ChartLegende onItemClick={legende.onItemClick} />

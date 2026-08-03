@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Verlauf in *Cockpit → Jahr* zeigt jetzt auch den laufenden Monat — und jeden anderen ohne Monatsabschluss.** Oben stand „Jan–Aug · 9.653 kWh", darunter zeichnete der Verlauf sechs Balken: Juli und August fehlten. Das ist dasselbe Bild, das v4.0.7 bereits beseitigen sollte; der damalige Schritt hat nur die Bedingung „hat Zählerwerte" aufgehoben, während die dahinterliegende Schicht einen Monat weiterhin nur kannte, wenn er **irgendeine** Zeile in der Datenbank hatte. Ein Monat ohne Monatsabschluss und ohne Komponenten-Zeile existierte für sie schlicht nicht. Das ist kein Randfall: **einen automatischen Monatsabschluss gibt es nicht**, deshalb fehlte im Verlauf immer mindestens der laufende Monat — und wer den Vormonat noch nicht abgeschlossen hatte, verlor auch den. An der Anlage, an der es auffiel, war das der **Juli, der ertragsstärkste Monat des Jahres**. Solche Monate werden jetzt aus der **Tagesebene** gerechnet, die eedc ohnehin führt, und im Tooltip als „aus Tageswerten" gekennzeichnet. **Das kostet keine einzige zusätzliche Abfrage an Home Assistant** — die Tageswerte liegen lokal und werden von den Snapshot-Jobs geschrieben, die ohnehin laufen; die mit v4.0.7 gewonnene Entlastung von HA bleibt damit unangetastet. Gemessen wurde vorher, ob die beiden Wege überhaupt dasselbe sagen: über sechs Monate, für die es *beide* Quellen gibt, weicht die Tagessumme um **maximal 0,8 kWh (0,05 %)** von der gepflegten Zeile ab, und für Juli und August trifft sie die Zahl der Kachel darüber auf allen vier Größen (PV 1843,2 gegen 1843,25 · Einspeisung 1343,9 gegen 1343,91 · Netzbezug 10,3 gegen 10,31). **Gepflegte Werte gewinnen immer**: die Tageswerte füllen nur Lücken, sie überschreiben nichts — auch nicht feldweise. **Unverändert bleibt alles andere:** *Auswertungen → Tabelle* zeigt weiterhin ausschließlich echte Datensätze (dort wäre so ein Monat eine Zeile, die man weder bearbeiten noch löschen kann), ebenso Monatsbericht, HA-Export und Community-Übertragung. Wer keine Datenquellen zugeordnet hat, hat auch keine Tageswerte — dort füllt sich allerdings die Kachel ebenso wenig, es gibt also keine Abweichung zu heilen. Dass der Monatsabschluss fehlt, meldet unverändert der **Daten-Checker**, mit Link direkt auf den Abschluss.
+
+---
+
 ## [4.0.8] - 2026-08-03 — Nach einem Neustart stimmen die Einheiten sofort
 
 ### Fixed

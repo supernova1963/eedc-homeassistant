@@ -40,10 +40,22 @@ Dienstwagen-Filter werden GENAU HIER angewandt, einmal** (#153/#155/#236/#308,
 [[feedback_anschaffungsdatum_grenze]], [[feedback_dienstwagen_alle_checks]]).
 
 **Was die Schicht bewusst NICHT tut** (``KONZEPT-MONATS-FAKTEN.md`` §4):
-Tages-/Stundenebene (der Tag hat mit ``bilanz_aus_stundenrows`` eine eigene,
-korrekte Quelle), Live, Prognose und **jeden Schreibpfad** — sie ist reines Lesen.
-Sie rechnet auch keine Euro-Beträge aus, für die es einen Formel-Helfer gibt: der
-Aufrufer bekommt die Mengen *und* den Monatstarif und ruft den Helfer selbst.
+Live, Prognose und **jeden Schreibpfad** — sie ist reines Lesen. Sie rechnet auch
+keine Euro-Beträge aus, für die es einen Formel-Helfer gibt: der Aufrufer bekommt
+die Mengen *und* den Monatstarif und ruft den Helfer selbst.
+
+**Eine Grenze ist seit N-121 (2026-08-03) verschoben, und zwar bewusst.** Bis
+dahin stand hier „keine Tages-/Stundenebene — der Tag hat mit
+``bilanz_aus_stundenrows`` eine eigene, korrekte Quelle". Das stimmt weiterhin
+für die *Formel*: gefaltet wird nach wie vor mit genau diesem Layer-Helfer, hier
+entsteht keine zweite Faltung. Was sich geändert hat, ist die **Grundgesamtheit**:
+mit ``inkl_nur_tageswerte=True`` kennt die Schicht auch Monate, deren einzige Spur
+die Tagesebene ist, und füllt damit die Lücken der übrigen. Auslöser war, dass es
+**keinen automatischen Monatsabschluss** gibt — der laufende Monat hat nie eine
+``Monatsdaten``-Zeile und fehlte im Jahres-Verlauf deshalb immer. Der Default
+bleibt **aus**; Datensatz-Listen sehen unverändert nur, was wirklich in der DB
+steht. Details, Messwerte und die Grenzen der Quelle:
+``energie_profil/monats_aus_tagen.py``.
 """
 
 from __future__ import annotations
@@ -84,6 +96,10 @@ from backend.services.eauto_wirtschaftlichkeit import (
 from backend.services.einspeise_erloes_service import (
     get_neg_preis_einspeisung_je_monat,
 )
+from backend.services.energie_profil.monats_aus_tagen import (
+    TagesMonatsSumme,
+    lade_monats_summen_aus_tagen,
+)
 from backend.services.finanz_zeilen import FinanzZeileEingabe
 from backend.services.pv_monatswerte import lade_pv_je_monat, pv_summe_je_monat
 from backend.utils.sonstige_positionen import (
@@ -97,6 +113,16 @@ MonatsSchluessel = tuple[int, int]
 #: Typen, die hinter denselben Hauszähler speisen und deshalb ein
 #: „PV-Fenster" öffnen (Anschaffungsdatum-Grenze, s. `MetaFakten.erzeuger_aktiv`).
 _ERZEUGER_TYPEN = ("pv-module", "balkonkraftwerk")
+
+#: Feldgruppen, die aus der lokalen Tagesebene **gefüllt** werden können, wenn
+#: die DB-Quelle für sie nichts hergibt (``inkl_nur_tageswerte``, Fund N-121).
+#: Sie landen in ``MetaFakten.tageswert_gruppen`` — eine Sicht, die zwischen
+#: „kein Gerät" und „aus Tageswerten belegt" unterscheiden muss, liest sie dort,
+#: statt aus einer 0 zu raten (P4).
+TAGESWERT_ZAEHLER = "zaehler"
+TAGESWERT_PV = "pv"
+TAGESWERT_BKW = "bkw"
+TAGESWERT_SPEICHER = "speicher"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -354,6 +380,14 @@ class MetaFakten:
     eine aktive Wärmepumpe ohne gepflegte Zeile ist aktiv und hat trotzdem nichts
     geliefert — wer die beiden verwechselt, macht aus „—" eine 0. Dienstwagen
     sind ausgenommen, weil sie auch aus dem E-Mob-Pool herausfallen.
+
+    ``tageswert_gruppen`` nennt die Feldgruppen, die **nicht** aus der DB kommen,
+    sondern aus der lokalen Tagesebene (nur mit ``inkl_nur_tageswerte``, N-121).
+    Leer heißt: alles steht so in der DB. Eine Sicht, die solche Monate zeigt,
+    sagt es — sie tragen weder ``id`` noch Zählerzeile, und der fehlende
+    Monatsabschluss wird als Fehlerquelle ohnehin schon vom Daten-Checker
+    ausgewiesen (``daten_checker/monatsdaten.py``, Kategorie
+    ``MONATSDATEN_VOLLSTAENDIGKEIT``, mit Link auf den Abschluss).
     """
 
     monatsdaten: Optional[Monatsdaten] = None
@@ -362,6 +396,7 @@ class MetaFakten:
     pv_vollstaendig: bool = True
     aktive_investitionen: tuple[int, ...] = ()
     typen_mit_zeile: frozenset[str] = frozenset()
+    tageswert_gruppen: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -408,6 +443,7 @@ async def lade_monats_fakten(
     von: Optional[MonatsSchluessel] = None,
     bis: Optional[MonatsSchluessel] = None,
     tarif_cache: Optional[dict[date, dict]] = None,
+    inkl_nur_tageswerte: bool = False,
 ) -> list[MonatsFakt]:
     """Baut die Monats-Fakten einer Anlage — ein Query-Satz, danach reine Faltung.
 
@@ -420,6 +456,14 @@ async def lade_monats_fakten(
             weiterreicht. Ohne ihn löst der Tarif-Stichtag **zweimal** je Monat
             auf — einmal hier, einmal im Finanz-Zeilen-Builder (Risiko 2 des
             Konzepts, „Ladezeit"). Wer keine Finanz-Zeile baut, lässt ihn weg.
+        inkl_nur_tageswerte: nimmt Monate mit auf, deren einzige Spur die lokale
+            **Tagesebene** ist, und füllt damit die Lücken der übrigen Monate
+            (Fund **N-121**, Default **aus**). Gedacht für **Zeitreihen** — der
+            laufende Monat hat nie einen Monatsabschluss und fehlte deshalb im
+            Jahres-Verlauf immer. Für Datensatz-Listen (*Auswertungen → Tabelle*)
+            bleibt es aus: dort wäre so ein Monat eine Zeile, die man weder
+            bearbeiten noch löschen kann. Kostet **keine** HA-Abfrage (die
+            Tagesebene liegt lokal, s. ``energie_profil/monats_aus_tagen.py``).
 
     Returns:
         Nach ``(jahr, monat)`` aufsteigend sortierte Liste. Enthalten ist jeder
@@ -462,11 +506,21 @@ async def lade_monats_fakten(
             continue
         roh.setdefault((imd.jahr, imd.monat), _RohMonat()).falte(inv, imd.verbrauch_daten or {})
 
+    # Die lokale Tagesebene als **zusätzliche** Grundgesamtheit (N-121). Ohne
+    # das Flag wird sie nicht einmal geladen — die Kosten trägt nur, wer sie
+    # bestellt.
+    tages_summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
+    if inkl_nur_tageswerte:
+        tages_summen = await lade_monats_summen_aus_tagen(
+            db, anlage_id, von=von, bis=bis
+        )
+
     kandidaten = (
         set(monatsdaten_by_ym)
         | set(pv_summen)
         | set(pv_je_modul)
         | set(roh)
+        | set(tages_summen)
     )
 
     if tarif_cache is None:
@@ -485,6 +539,7 @@ async def lade_monats_fakten(
                 investitionen=investitionen,
                 neg_preis_kwh=(neg_preis_je_monat or {}).get(schluessel),
                 tarif_cache=tarif_cache,
+                tages_summe=tages_summen.get(schluessel),
             )
         )
     return fakten
@@ -689,24 +744,58 @@ async def _baue_fakt(
     investitionen: list[Investition],
     neg_preis_kwh: Optional[float],
     tarif_cache: dict[date, dict],
+    tages_summe: Optional[TagesMonatsSumme] = None,
 ) -> MonatsFakt:
     jahr, monat = schluessel
+
+    # ── Lücken aus der Tagesebene füllen (N-121, nur mit `inkl_nur_tageswerte`) ──
+    # Präzedenz wie bei P7: was in der DB steht, gewinnt. Die Tageswerte füllen
+    # **Lücken**, sie überschreiben nichts — und zwar feldgruppen-weise, nicht
+    # monatsweise: ein Monat, dessen einzige DB-Spur eine Sonstiges-Zeile ist,
+    # bekommt dadurch seine PV, statt sie still als 0 zu zeichnen.
+    tageswert_gruppen: set[str] = set()
 
     zaehler = ZaehlerFakten(
         einspeisung_kwh=(monatsdaten.einspeisung_kwh or 0.0) if monatsdaten else 0.0,
         netzbezug_kwh=(monatsdaten.netzbezug_kwh or 0.0) if monatsdaten else 0.0,
     )
+    if monatsdaten is None and tages_summe is not None:
+        zaehler = ZaehlerFakten(
+            einspeisung_kwh=tages_summe.einspeisung_kwh,
+            netzbezug_kwh=tages_summe.netzbezug_kwh,
+        )
+        tageswert_gruppen.add(TAGESWERT_ZAEHLER)
 
-    pv_kwh = (pv_modul_summe or 0.0) + roh.bkw_erzeugung
+    # PV nur, wenn die P7-Auflösung nichts ergab (`None` = kein Modulwert und
+    # kein Anlagen-Aggregat). Ein aufgelöster Wert — auch ein teilweise
+    # geschätzter — bleibt unangetastet.
+    if pv_modul_summe is None and tages_summe is not None and tages_summe.pv_module_kwh > 0:
+        pv_modul_summe = tages_summe.pv_module_kwh
+        pv_vollstaendig = True
+        tageswert_gruppen.add(TAGESWERT_PV)
+    else:
+        pv_vollstaendig = pv_modul_summe is not None or not pv_je_modul
+
+    # BKW nur ohne eigene IMD-Zeile im Monat.
+    bkw_erzeugung = roh.bkw_erzeugung
+    if (
+        "balkonkraftwerk" not in roh.typen_mit_zeile
+        and tages_summe is not None
+        and tages_summe.bkw_kwh > 0
+    ):
+        bkw_erzeugung = tages_summe.bkw_kwh
+        tageswert_gruppen.add(TAGESWERT_BKW)
+
+    pv_kwh = (pv_modul_summe or 0.0) + bkw_erzeugung
     erzeugung = ErzeugungFakten(
         pv_module_kwh=pv_modul_summe,
-        bkw_kwh=roh.bkw_erzeugung,
+        bkw_kwh=bkw_erzeugung,
         sonstige_erzeuger_kwh=roh.sonstiges_erzeugung,
         pv_kwh=pv_kwh,
         # Netzpunkt-Bilanz: der sonstige Erzeuger speist hinter denselben Zähler.
         hinter_zaehler_kwh=erzeugung_hinter_zaehler_kwh(pv_kwh, roh.sonstiges_erzeugung),
         pv_je_modul=pv_je_modul,
-        pv_vollstaendig=pv_modul_summe is not None or not pv_je_modul,
+        pv_vollstaendig=pv_vollstaendig,
     )
 
     pool = get_emob_heimladung_canonical(
@@ -746,6 +835,20 @@ async def _baue_fakt(
         netzladung_preis_summe_cent_kwh=roh.speicher_preis_summe,
         netzladung_gewicht_kwh=roh.speicher_preis_gewicht,
     )
+    # Speicher nur ohne eigene IMD-Zeile im Monat. Die Netzladung (Arbitrage)
+    # bleibt dabei ungefüllt: sie ist eine **Preis**-Aussage, und die trägt die
+    # Tagesebene nicht — eine 0 daneben wäre keine Messung, sondern eine
+    # Behauptung über einen nie gepflegten Wert.
+    if (
+        "speicher" not in roh.typen_mit_zeile
+        and tages_summe is not None
+        and (tages_summe.speicher_ladung_kwh > 0 or tages_summe.speicher_entladung_kwh > 0)
+    ):
+        speicher = SpeicherFakten(
+            ladung_kwh=tages_summe.speicher_ladung_kwh,
+            entladung_kwh=tages_summe.speicher_entladung_kwh,
+        )
+        tageswert_gruppen.add(TAGESWERT_SPEICHER)
 
     return MonatsFakt(
         jahr=jahr,
@@ -753,7 +856,7 @@ async def _baue_fakt(
         zaehler=zaehler,
         erzeugung=erzeugung,
         bkw=BkwFakten(
-            erzeugung_kwh=roh.bkw_erzeugung,
+            erzeugung_kwh=bkw_erzeugung,
             eigenverbrauch_gemessen_kwh=roh.bkw_eigenverbrauch,
             rest_eigenverbrauch_kwh=roh.bkw_rest_eigenverbrauch,
             speicher_ladung_kwh=roh.bkw_speicher_ladung,
@@ -799,6 +902,7 @@ async def _baue_fakt(
                 i.id for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)
             ),
             typen_mit_zeile=frozenset(roh.typen_mit_zeile),
+            tageswert_gruppen=frozenset(tageswert_gruppen),
         ),
     )
 

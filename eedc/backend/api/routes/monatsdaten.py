@@ -27,7 +27,12 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
-from backend.services.monats_fakten import lade_monats_fakten
+from backend.services.monats_fakten import (
+    TAGESWERT_BKW,
+    TAGESWERT_PV,
+    TAGESWERT_SPEICHER,
+    lade_monats_fakten,
+)
 from backend.services.provenance import (
     log_delete,
     seed_provenance,
@@ -247,6 +252,11 @@ class AggregierteMonatsdatenResponse(BaseModel):
     einspeisung_neg_preis_kwh: Optional[float]
     # Legacy-Felder (für Migration-Warnung)
     hat_legacy_daten: bool
+    # Feldgruppen, die NICHT aus der DB stammen, sondern aus der lokalen
+    # Tagesebene (`inkl_nur_tageswerte`, N-121) — z. B. `["pv", "zaehler"]`.
+    # `None` = alles steht so in der Datenbank. Eine Sicht, die solche Monate
+    # zeigt, sagt es; ohne das Flag ist es immer `None`.
+    aus_tageswerten: Optional[list[str]] = None
 
     class Config:
         from_attributes = True
@@ -265,6 +275,14 @@ async def list_monatsdaten_aggregiert(
         description=(
             "Auch Monate ohne Zählerzeile (kein Monatsabschluss) liefern. "
             "Diese Zeilen tragen `id: null` und keine Zählerwerte."
+        ),
+    )] = False,
+    inkl_nur_tageswerte: Annotated[bool, Query(
+        description=(
+            "Auch Monate liefern, deren einzige Spur die lokale Tagesebene ist "
+            "(weder Monatsabschluss noch Komponenten-Zeile). Setzt "
+            "`inkl_ohne_zaehlerzeile` voraus und markiert die betroffenen "
+            "Größen über `aus_tageswerten`."
         ),
     )] = False,
     db: AsyncSession = Depends(get_db)
@@ -290,10 +308,22 @@ async def list_monatsdaten_aggregiert(
     Zeilen tragen ``id=None``, keine Zählerwerte (Einspeisung/Netzbezug = 0,0)
     und kein ``globalstrahlung``/``sonnenstunden``. Die aus den IMD gerechneten
     Größen — PV, Speicher, WP, E-Mob, Autarkie — sind vollständig.
+
+    Mit zusätzlich ``inkl_nur_tageswerte=true`` kommen Monate mit, die **auch**
+    keine Komponenten-Zeile haben und nur in der lokalen Tagesebene existieren
+    (Fund **N-121**). Das ist der Normalfall für den **laufenden** Monat: einen
+    automatischen Monatsabschluss gibt es nicht, deshalb fehlte er im Verlauf
+    immer. Solche Zeilen tragen ``aus_tageswerten`` mit den Feldgruppen, die von
+    dort stammen; Zählerwerte sind dann echte Messwerte statt 0,0. Der fehlende
+    Abschluss selbst wird als Fehlerquelle vom **Daten-Checker** ausgewiesen
+    (Kategorie ``monatsdaten_vollstaendigkeit``, mit Link auf den Abschluss) —
+    hier wird er nicht zusätzlich beklagt, sondern schlicht mitgerechnet.
     """
     von = (jahr, 1) if jahr else None
     bis = (jahr, 12) if jahr else None
-    fakten = await lade_monats_fakten(db, anlage_id, von=von, bis=bis)
+    fakten = await lade_monats_fakten(
+        db, anlage_id, von=von, bis=bis, inkl_nur_tageswerte=inkl_nur_tageswerte
+    )
     # Absteigend (neueste zuerst) — Datums-Listen-Konvention, wie die frühere
     # `order_by(...desc())`.
     fakten = [
@@ -315,7 +345,17 @@ async def list_monatsdaten_aggregiert(
         # geliefert. Die PV zählt zusätzlich als vorhanden, sobald die
         # P7-Auflösung einen Wert ergibt (auch ohne eigene Modul-Zeile, z. B.
         # aus dem Anlagen-Aggregat).
-        hat_pv_imd = "balkonkraftwerk" in typen or f.erzeugung.pv_module_kwh is not None
+        # Feldgruppen, die aus der lokalen Tagesebene stammen (N-121). Sie
+        # zählen für die „hat etwas beigetragen?"-Weichen genauso wie eine
+        # IMD-Zeile — sonst käme ein belegter Wert als `None` heraus, und die
+        # Sicht zeichnete wieder nichts.
+        aus_tagen = f.meta.tageswert_gruppen
+        hat_pv_imd = (
+            "balkonkraftwerk" in typen
+            or f.erzeugung.pv_module_kwh is not None
+            or TAGESWERT_PV in aus_tagen
+            or TAGESWERT_BKW in aus_tagen
+        )
         # ALTBESTAND (N-28), bewusst so belassen: die BKW-eigenen Akku-Felder
         # zählen hier in dieselbe anlagenweite Speicher-Summe wie ein echter
         # Speicher, während `monats_fakten.SpeicherFakten` sie getrennt hält.
@@ -325,7 +365,11 @@ async def list_monatsdaten_aggregiert(
         # der Anwender zu bewegen, die noch auf dem alten Weg pflegen; sie
         # bekommen stattdessen den Migrationshinweis des Daten-Checkers
         # (`daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg`).
-        hat_speicher_imd = "speicher" in typen or "balkonkraftwerk" in typen
+        hat_speicher_imd = (
+            "speicher" in typen
+            or "balkonkraftwerk" in typen
+            or TAGESWERT_SPEICHER in aus_tagen
+        )
         speicher_ladung = f.speicher.ladung_kwh + f.bkw.speicher_ladung_kwh
         speicher_entladung = f.speicher.entladung_kwh + f.bkw.speicher_entladung_kwh
 
@@ -419,6 +463,7 @@ async def list_monatsdaten_aggregiert(
                 round(f.eeg.neg_preis_kwh, 1) if f.eeg.neg_preis_kwh is not None else None
             ),
             hat_legacy_daten=hat_legacy,
+            aus_tageswerten=sorted(aus_tagen) or None,
         ))
 
     return result

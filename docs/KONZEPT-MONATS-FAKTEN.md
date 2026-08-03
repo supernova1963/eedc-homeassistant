@@ -128,10 +128,22 @@ werden genau hier angewandt, einmal.**
 
 ## 4. Nicht-Ziele (bewusst außerhalb)
 
-- **Tages- und Stundenebene.** Der Tag hat eine eigene, korrekte Quelle
-  (`bilanz_aus_stundenrows` über Snapshots). Befund **F-6** (Tages-CO₂ auf der
-  Erzeugung statt auf dem Eigenverbrauch) bleibt deshalb ein Einzelfix und wird
-  von dieser Schicht **nicht** miterledigt.
+- **Tages- und Stundenebene als eigene Zeitachse.** Der Tag hat eine eigene,
+  korrekte Quelle (`bilanz_aus_stundenrows` über Snapshots). Befund **F-6**
+  (Tages-CO₂ auf der Erzeugung statt auf dem Eigenverbrauch) bleibt deshalb ein
+  Einzelfix und wird von dieser Schicht **nicht** miterledigt.
+
+  > **Seit N-121 (2026-08-03) mit einer benannten Ausnahme, die die Formel-Grenze
+  > nicht verschiebt.** Gefaltet wird weiterhin ausschließlich mit
+  > `bilanz_aus_stundenrows` — eine zweite Tag→Monat-Faltung entsteht **nicht**.
+  > Was sich geändert hat, ist die **Grundgesamtheit**: mit
+  > `lade_monats_fakten(..., inkl_nur_tageswerte=True)` kennt die Schicht auch
+  > Monate, deren einzige Spur die Tagesebene ist, und füllt damit die Lücken der
+  > übrigen (Präzedenz P7: was in der DB steht, gewinnt). Auslöser war, dass es
+  > **keinen automatischen Monatsabschluss** gibt — der laufende Monat hat nie
+  > eine `Monatsdaten`-Zeile und fehlte im Jahres-Verlauf deshalb immer. Der
+  > Default bleibt **aus**, Datensatz-Listen sehen unverändert nur DB-Daten.
+  > Quelle, Messwerte und Grenzen: `services/energie_profil/monats_aus_tagen.py`.
 - **Live** und **Prognose** — andere Quellen, andere Zeitachse.
 - **Schreibpfade** (Monatsabschluss, Import, Connector) — die Schicht ist reines Lesen.
 

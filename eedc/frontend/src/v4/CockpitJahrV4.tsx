@@ -95,8 +95,18 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
   // Lücke, die P-12 (N-65) für die Kopfzahl geschlossen hat, eine Ebene tiefer.
   // Der Default der Route bleibt aus: *Auswertungen → Tabelle* ist eine
   // Datensatz-Liste und darf keine Zeile zeigen, die man nicht bearbeiten kann.
+  //
+  // N-121: dazu die Monate, deren einzige Spur die lokale Tagesebene ist. N-68
+  // allein reichte an einer echten Anlage nicht — es hob nur die Zählerzeilen-
+  // Bedingung auf, während die Grundgesamtheit der Schicht weiterhin eine
+  // DB-Spur verlangte. Da es **keinen automatischen Monatsabschluss** gibt,
+  // fehlte damit immer mindestens der laufende Monat (gemessen 03.08.: Juli
+  // *und* August fehlten, Kopfzahl 9.653 kWh über sechs Balken).
   const monateQ = useApiData(
-    () => monatsdatenApi.listAggregiert(anlageId!, undefined, { inklOhneZaehlerzeile: true }),
+    () => monatsdatenApi.listAggregiert(anlageId!, undefined, {
+      inklOhneZaehlerzeile: true,
+      inklNurTageswerte: true,
+    }),
     [anlageId],
     // Eigener swrKey-Namensraum: der Inhalt ist eine Obermenge dessen, was die
     // übrigen Sichten unter `listAggregiert` cachen.

@@ -34,4 +34,26 @@ describe('baueJahrChartDaten', () => {
     expect(d[0].netzladung).toBe(8)
     expect(d[0].eautoKm).toBe(400)
   })
+
+  // N-121: ein Monat ohne Monatsabschluss wird aus der lokalen Tagesebene
+  // gerechnet. Additiv ⇒ beschriften, nicht unterdrücken
+  // (docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md) — der Tooltip hängt an dieser Marke.
+  it('markiert Monate, deren Größen aus Tageswerten stammen', () => {
+    const d = baueJahrChartDaten([
+      md(2026, 6),
+      md(2026, 7, { aus_tageswerten: ['pv', 'zaehler'] }),
+    ])
+    expect(d.map((p) => p.ausTageswerten)).toEqual([false, true])
+  })
+
+  it('ein gepflegter Monat bleibt unmarkiert — auch bei leerer Liste', () => {
+    // Die Route liefert `null`, wenn nichts aus Tageswerten kommt. Ein leeres
+    // Array darf genauso wenig markieren, sonst trüge jede Zeile den Hinweis.
+    const d = baueJahrChartDaten([
+      md(2026, 1),
+      md(2026, 2, { aus_tageswerten: null }),
+      md(2026, 3, { aus_tageswerten: [] }),
+    ])
+    expect(d.every((p) => !p.ausTageswerten)).toBe(true)
+  })
 })

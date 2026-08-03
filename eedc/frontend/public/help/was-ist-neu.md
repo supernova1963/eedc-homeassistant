@@ -9,6 +9,34 @@
 
 ---
 
+## In Arbeit (noch nicht veröffentlicht)
+
+### Der Jahres-Verlauf zeigt auch den laufenden Monat
+
+**Betrifft dich das?** Wenn du in *Cockpit → Jahr* schaust und dort oben mehr Monate gezählt
+werden, als der Verlauf darunter Balken zeichnet.
+
+Ganz oben stand zum Beispiel „Jan–Aug · 9.653 kWh", der Verlauf darunter zeigte sechs Balken.
+Der Grund: eedc kannte einen Monat für den Verlauf nur dann, wenn er **irgendetwas** in der
+Datenbank stehen hatte — einen Monatsabschluss oder mindestens eine Komponenten-Zeile. Einen
+**automatischen Monatsabschluss gibt es nicht**, deshalb fehlte immer mindestens der gerade
+laufende Monat. Und wer den Vormonat noch nicht abgeschlossen hatte, verlor auch den — im
+Zweifel den ertragsstärksten des Jahres.
+
+Ab jetzt rechnet eedc solche Monate aus den **Tageswerten**, die es ohnehin täglich mitschreibt.
+Im Tooltip steht dann „aus Tageswerten", damit du siehst, woher die Zahl kommt.
+
+**Muss ich etwas tun?** Nein. Und es kostet deine Home-Assistant-Box **keine einzige zusätzliche
+Abfrage** — die Tageswerte liegen bereits bei eedc.
+
+**Was sich nicht ändert:** Gepflegte Zahlen bleiben unangetastet — die Tageswerte füllen nur
+Lücken, sie überschreiben nichts. *Auswertungen → Tabelle* zeigt weiterhin nur echte Datensätze,
+also nichts, was du dort nicht bearbeiten könntest. Monatsbericht, HA-Sensoren und die
+Community-Übertragung bleiben ebenfalls, wie sie waren. Dass ein Monatsabschluss fehlt, meldet
+dir weiterhin der [Daten-Checker](HANDBUCH_EINSTELLUNGEN.md) — mit Link direkt auf den Abschluss.
+
+---
+
 ## v4.0.8 — Nach einem Neustart stimmen die Einheiten sofort (August 2026)
 
 ### Die erste Stunde nach einem Neustart der Box rechnete mit fehlenden Einheiten
