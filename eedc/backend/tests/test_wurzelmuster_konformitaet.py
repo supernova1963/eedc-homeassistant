@@ -1240,7 +1240,6 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `PvModulWert` — das ERGEBNIS der Auflösung. Genau der Weg, den die Regel
     # vorschreibt; die Summe daraus ist die Anlagen-PV.
     "backend/api/routes/cockpit/pv_strings.py::w",
-    "backend/api/routes/monatsdaten.py::w",
     # Dito, aus den Monats-Fakten (`erzeugung.pv_je_modul`) statt aus
     # `lade_pv_je_monat` direkt — dieselbe Auflösung, eine Schicht weiter oben
     # (ADR-002/P10). Trägt den String-Vergleich SOLL/IST im Jahresbericht.
@@ -1271,16 +1270,21 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # Spalte wandern — der Export VERÄNDERTE die Daten (dieselbe Begründung wie
     # P3A_BASELINE_AUSNAHMEN für `json_operations.py::inv`).
     "backend/api/routes/import_export/json_operations.py::md",
-    # Vier Rollen in einer Datei, alle vier gedeckt (Granularität ist
-    # `modul::empfänger`, feiner geht die Allowlist nicht):
-    #   :446 — Eingang von `resolve_pv_je_modul`. Die Regel selbst.
-    #   :500 — Legacy-Erkennung: die Meldung handelt VOM Feld („Aggregat
-    #          gepflegt, aber keine Pro-Modul-Werte") — ein aufgelöster Wert
-    #          beantwortete die Frage nicht mehr.
-    #   :718/:863 — das Legacy-Trio (`direktverbrauch_kwh`/`eigenverbrauch_kwh`)
-    #          wird aus dem MANUELL eingetragenen Aggregat fortgeschrieben.
-    #          Die Felder sind deprecated (CLAUDE.md Prinzip 3); sie hier auf
-    #          die Auflösung umzustellen hieße, ein totes Feld neu zu beleben.
+    # Drei Rollen in einer Datei, alle drei gedeckt (Granularität ist
+    # `modul::empfänger`, feiner geht die Allowlist nicht). **Zeilennummern
+    # bewusst weggelassen** — sie standen hier und waren schon vor dem
+    # C1a-Umbau um rund zwanzig Zeilen daneben:
+    #   • Legacy-Erkennung in `list_monatsdaten_aggregiert`: die Meldung handelt
+    #     VOM Feld („Aggregat gepflegt, aber keine Pro-Modul-Werte") — ein
+    #     aufgelöster Wert beantwortete die Frage nicht mehr.
+    #   • zweimal das Legacy-Trio (`direktverbrauch_kwh`/`eigenverbrauch_kwh`),
+    #     fortgeschrieben aus dem MANUELL eingetragenen Aggregat. Die Felder
+    #     sind deprecated (CLAUDE.md Prinzip 3); sie hier auf die Auflösung
+    #     umzustellen hieße, ein totes Feld neu zu beleben.
+    # Die vierte Rolle (Eingang von `resolve_pv_je_modul`) ist mit **C1a**
+    # entfallen: die Route liest ihre PV jetzt über `lade_monats_fakten`, die
+    # Auflösung passiert eine Schicht tiefer. Der Empfänger `::w` derselben
+    # Datei ist damit gestrichen.
     "backend/api/routes/monatsdaten.py::md",
     #
     # Gestrichen mit dem S3-Umbau (2026-07-31): `cockpit/social.py::md` war als
@@ -1690,8 +1694,9 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
 #: dokumentiert sie — genau dafür steht der Eintrag im Code und nicht in einer
 #: Allowlist-Datei daneben.
 P10_NOCH_NICHT_MIGRIERT: frozenset[str] = frozenset({
-    # N-15 — Auswertungen → Tabelle (`list_monatsdaten_aggregiert`).
-    "backend/api/routes/monatsdaten.py::list_monatsdaten_aggregiert",
+    # N-15 ist mit C1a (2026-08-03) getilgt: `list_monatsdaten_aggregiert`
+    # bezieht seine Monatsgrößen aus `lade_monats_fakten` und lädt keine
+    # `InvestitionMonatsdaten` mehr selbst.
     # N-16 — Monatsbericht + Vorjahresvergleich.
     "backend/api/routes/aktueller_monat.py::get_aktueller_monat",
     "backend/api/routes/aktueller_monat.py::_load_vorjahr",
@@ -1811,12 +1816,12 @@ def test_p10_offene_schuld_waechst_nicht():
     hieße, sie unsichtbar wachsen zu lassen — dann wäre der Wächter genau das
     Aufräum-Paket mit einem grünen Test obendrauf, das ADR-002 §80 ablehnt.
     """
-    assert len(P10_NOCH_NICHT_MIGRIERT) <= 4, (
+    assert len(P10_NOCH_NICHT_MIGRIERT) <= 3, (
         f"{len(P10_NOCH_NICHT_MIGRIERT)} Sichten falten eine anlagenweite "
-        "Monatszeile selbst — nach S5 waren es 5, nach S6 sind es 4 "
-        "(N-15/N-16/N-17; `community_service` ist mit S6 gefallen). Diese Zahl "
-        "darf nur sinken. Wer eine Sicht hinzufügen will, migriert sie "
-        "stattdessen."
+        "Monatszeile selbst — nach S5 waren es 5, nach S6 vier, nach **C1a** "
+        "sind es 3 (N-16 zweimal, N-17; `community_service` fiel mit S6, "
+        "`list_monatsdaten_aggregiert` mit C1a). Diese Zahl darf nur sinken. "
+        "Wer eine Sicht hinzufügen will, migriert sie stattdessen."
     )
 
 

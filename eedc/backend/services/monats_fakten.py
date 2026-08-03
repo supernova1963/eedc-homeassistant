@@ -267,6 +267,17 @@ class SonstigesFakten:
     kommen aus **allen** sichtbaren IMD-Zeilen — unabhängig vom Typ (#310 war ein
     Typ-Ausschluss: PV/WR fehlten im Aggregat) — **plus** den Basis-Positionen auf
     der ``Monatsdaten``-Zeile (G19-1), die genau wie IMD-Positionen wirken.
+
+    ``anlage_*_euro`` ist der **Anteil der Basis-Positionen allein** — er steckt
+    in ``ertraege_euro``/``ausgaben_euro`` bereits mit drin und steht hier
+    zusätzlich, weil zwei Sichten ihn getrennt ausweisen (Zeile „Anlage —
+    Sonstige …" im Monatsbericht und in der Komponenten-Zeitreihe). Ohne dieses
+    Feld müsste der Aufrufer ihn zurückrechnen oder ``Monatsdaten`` selbst
+    anfassen — beides ist genau das, was P10 abstellt.
+
+    ``hat_erzeuger_zeile`` trennt „Erzeuger hat 0 kWh geliefert" von „es gibt
+    keinen" (P4). Feiner als der bloße Typ, weil ``sonstiges`` auch Verbraucher
+    umfasst.
     """
 
     erzeugung_kwh: float = 0.0
@@ -274,6 +285,9 @@ class SonstigesFakten:
     ertraege_euro: float = 0.0
     ausgaben_euro: float = 0.0
     netto_euro: float = 0.0
+    anlage_ertraege_euro: float = 0.0
+    anlage_ausgaben_euro: float = 0.0
+    hat_erzeuger_zeile: bool = False
 
 
 @dataclass(frozen=True)
@@ -333,6 +347,13 @@ class MetaFakten:
     „PV-Fenster" beschränken, lesen dieses Flag, statt die Regel je Sicht neu zu
     bauen. Ohne registrierten Erzeuger ist es ``True`` — der Filter greift dann
     nicht und das Verhalten bleibt unverändert.
+
+    ``typen_mit_zeile`` beantwortet „hat dieser Gerätetyp im Monat überhaupt
+    etwas beigetragen?" und ist die Grundlage dafür, **``None`` statt ``0``**
+    auszuliefern (P4). Es ist ausdrücklich **nicht** ``aktive_investitionen``:
+    eine aktive Wärmepumpe ohne gepflegte Zeile ist aktiv und hat trotzdem nichts
+    geliefert — wer die beiden verwechselt, macht aus „—" eine 0. Dienstwagen
+    sind ausgenommen, weil sie auch aus dem E-Mob-Pool herausfallen.
     """
 
     monatsdaten: Optional[Monatsdaten] = None
@@ -340,6 +361,7 @@ class MetaFakten:
     erzeuger_aktiv: bool = True
     pv_vollstaendig: bool = True
     aktive_investitionen: tuple[int, ...] = ()
+    typen_mit_zeile: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -535,6 +557,15 @@ class _RohMonat:
     """
 
     def __init__(self) -> None:
+        #: Typen, die in diesem Monat eine SICHTBARE Zeile beigetragen haben.
+        #: Trennt „0 gemessen" von „gar nicht vorhanden" (P4) — nicht dasselbe
+        #: wie `aktive_investitionen`: eine aktive Wärmepumpe ohne gepflegte
+        #: Zeile ist aktiv, hat aber nichts beigetragen.
+        self.typen_mit_zeile: set[str] = set()
+        #: Hat ein sonstiger **Erzeuger** beigetragen? Feiner als der Typ:
+        #: `sonstiges` deckt Erzeuger und Verbraucher ab, und nur der Erzeuger
+        #: gehört in die Erzeugungs-Anzeige.
+        self.hat_sonstigen_erzeuger = False
         self.pv_je_modul_roh: dict[int, float] = {}
         self.bkw_erzeugung = 0.0
         self.bkw_eigenverbrauch = 0.0
@@ -568,6 +599,12 @@ class _RohMonat:
 
     def falte(self, inv: Investition, data: dict) -> None:
         b = imd_typ_beitrag(inv, data)
+        # Dienstwagen zählen NICHT als Beitrag: sie sind aus dem E-Mob-Pool der
+        # Anlage herausgefiltert, und eine Sicht, die daraufhin „0 kWh geladen"
+        # schriebe statt „keine Daten", behauptete etwas über ein Fahrzeug, das
+        # sie gar nicht auswertet ([[feedback_dienstwagen_alle_checks]]).
+        if not (inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv)):
+            self.typen_mit_zeile.add(inv.typ)
 
         if inv.typ == "balkonkraftwerk":
             # P9: je (BKW, Monat) trägt genau EINER der beiden Werte die
@@ -627,6 +664,11 @@ class _RohMonat:
         elif inv.typ == "sonstiges":
             self.sonstiges_erzeugung += b.sonstiges_erzeugung
             self.sonstiges_verbrauch += b.sonstiges_verbrauch
+            # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
+            # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
+            # ein Beitrag > 0.
+            if b.sonstiges_erzeugung or (inv.parameter or {}).get("kategorie") == "erzeuger":
+                self.hat_sonstigen_erzeuger = True
 
         # #310: die Finanz-Positionen hängen NICHT am Typ — eine Reparatur am
         # Wechselrichter ist so real wie eine am Speicher.
@@ -734,6 +776,9 @@ async def _baue_fakt(
             ertraege_euro=round(ertraege, 2),
             ausgaben_euro=round(ausgaben, 2),
             netto_euro=round(ertraege - ausgaben, 2),
+            anlage_ertraege_euro=round(md_summen["ertraege_euro"], 2) if md_summen else 0.0,
+            anlage_ausgaben_euro=round(md_summen["ausgaben_euro"], 2) if md_summen else 0.0,
+            hat_erzeuger_zeile=roh.hat_sonstigen_erzeuger,
         ),
         tarif=tarif,
         eeg=EegFakten(neg_preis_kwh=neg_preis_kwh),
@@ -753,6 +798,7 @@ async def _baue_fakt(
             aktive_investitionen=tuple(
                 i.id for i in investitionen if i.ist_aktiv_im_monat(jahr, monat)
             ),
+            typen_mit_zeile=frozenset(roh.typen_mit_zeile),
         ),
     )
 

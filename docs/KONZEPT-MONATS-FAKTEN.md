@@ -12,7 +12,7 @@
 > | Die Regel selbst + „gesichert durch" je Schritt | [`docs/ADR-002-WURZELMUSTER.md`](ADR-002-WURZELMUSTER.md), Zeile **P10** |
 > | Migrationsstand + die drei Wächter-Kategorien mit ihren Zahlen | [`docs/ARCHITEKTUR.md`](ARCHITEKTUR.md) §7 |
 > | Der Kontrakt für Aufrufer (`lade_monats_fakten`, Feldgruppen, Fallen) | Modul- und Dataclass-Docstrings in `eedc/backend/services/monats_fakten.py` |
-> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**4** nach S6), mit Obergrenze im Test |
+> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**3** nach C1a), mit Obergrenze im Test |
 > | Nebenfunde N-2 … N-17 (Abarbeitung nach S6) | `~/.claude/plans/uebergabe-monats-fakten.md` |
 >
 > **Eine der umgehängten Sichten gibt es nicht mehr:** `cockpit/social.py` (S3,

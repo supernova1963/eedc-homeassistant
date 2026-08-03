@@ -6,7 +6,7 @@ CRUD Endpoints für monatliche Energiedaten.
 
 from typing import Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from pydantic import BaseModel, Field
@@ -15,22 +15,10 @@ from backend.core.exceptions import not_found
 from backend.api.deps import get_db
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.anlage import Anlage
-from backend.models.tages_energie_profil import TagesZusammenfassung
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import berechne_monatskennzahlen, MonatsKennzahlen
-from backend.core.berechnungen import (
-    berechne_verbrauchs_kennzahlen,
-    erzeugung_hinter_zaehler_kwh,
-    imd_typ_beitrag,
-    ist_vollstaendig,
-    resolve_pv_je_modul,
-    PvModul,
-    PV_QUELLE_FEHLT,
-)
-from backend.utils.investition_value import get_inv_value
 from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.core.field_definitions import get_feld_hinweise
-from backend.core.investition_parameter import ist_dienstlich
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
     resolve_netzbezug_preis_cent,
@@ -39,6 +27,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
 )
+from backend.services.monats_fakten import lade_monats_fakten
 from backend.services.provenance import (
     log_delete,
     seed_provenance,
@@ -268,252 +257,62 @@ async def list_monatsdaten_aggregiert(
     """
     Gibt Monatsdaten mit aggregierten Werten aus InvestitionMonatsdaten zurück.
 
-    Die PV-Erzeugung und Speicher-Daten werden aus den InvestitionMonatsdaten
-    der jeweiligen Komponenten summiert, nicht aus den Legacy-Feldern.
+    Die Monatsgrößen kommen aus der Monats-Fakten-Schicht (ADR-002/**P10**,
+    `services/monats_fakten.py`) — dort gelten Zeitfilter, Dienstwagen-Filter,
+    die P7-Auflösung der PV und der Monatstarif genau einmal. Bis 2026-08-03
+    faltete diese Route die `InvestitionMonatsdaten` selbst (Register N-15).
+
+    **Nur Monate mit Zählerzeile**, absteigend — wie bisher. Die Schicht liefert
+    auch Monate ohne (`meta.hat_zaehlerzeile is False`); sie hier aufzunehmen
+    hieße, in *Auswertungen → Tabelle* und *Cockpit → Jahr* Zeilen erscheinen zu
+    lassen, die es dort nie gab. Ob ein Monat ohne Zählerzeile zählt, ist im
+    Frontend entschieden (P-12/N-65) und wird hier nicht neu aufgemacht.
     """
-    # Monatsdaten laden
-    md_query = select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
-    if jahr:
-        md_query = md_query.where(Monatsdaten.jahr == jahr)
-    md_query = md_query.order_by(Monatsdaten.jahr.desc(), Monatsdaten.monat.desc())
+    von = (jahr, 1) if jahr else None
+    bis = (jahr, 12) if jahr else None
+    fakten = await lade_monats_fakten(db, anlage_id, von=von, bis=bis)
+    # Absteigend (neueste zuerst) — Datums-Listen-Konvention, wie die frühere
+    # `order_by(...desc())`.
+    fakten = [f for f in reversed(fakten) if f.meta.hat_zaehlerzeile]
 
-    md_result = await db.execute(md_query)
-    monatsdaten_list = md_result.scalars().all()
-
-    if not monatsdaten_list:
+    if not fakten:
         return []
 
-    # Investitionen laden — KEIN aktiv-Filter (Issue #123): historische Aggregate
-    # dürfen Investitionen nicht rückwirkend ausblenden, wenn sie später pausiert
-    # werden. Der Per-IMD-Filter unten respektiert aber anschaffungsdatum +
-    # stilllegungsdatum, sodass IMD vor Anschaffung / nach Stilllegung nicht
-    # mit-aggregiert werden (#236 detLAN).
-    inv_result = await db.execute(
-        select(Investition)
-        .where(Investition.anlage_id == anlage_id)
-    )
-    investitionen = inv_result.scalars().all()
-    inv_ids = [i.id for i in investitionen]
-    inv_by_id = {i.id: i for i in investitionen}
-
-    # InvestitionMonatsdaten laden
-    if inv_ids:
-        imd_result = await db.execute(
-            select(InvestitionMonatsdaten)
-            .where(InvestitionMonatsdaten.investition_id.in_(inv_ids))
-        )
-        inv_monatsdaten = imd_result.scalars().all()
-    else:
-        inv_monatsdaten = []
-
-    # Gruppieren nach (jahr, monat) — IMD vor anschaffungsdatum / nach
-    # stilllegungsdatum überspringen (#236 detLAN).
-    inv_data_by_month: dict[tuple[int, int], list[tuple[Investition, dict]]] = {}
-    for imd in inv_monatsdaten:
-        inv = inv_by_id.get(imd.investition_id)
-        if not inv:
-            continue
-        if not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
-            continue
-        key = (imd.jahr, imd.monat)
-        if key not in inv_data_by_month:
-            inv_data_by_month[key] = []
-        inv_data_by_month[key].append((inv, imd.verbrauch_daten or {}))
-
-    # §51 EEG (R17/Verlauf, Weg 1): fiktives Abzug-Volumen = Σ der stündlichen
-    # Tages-`einspeisung_neg_preis_kwh`, je Monat gruppiert. Nur wenn die Anlage
-    # §51 unterliegt (sonst None-Ausweis) — einziger Gate wie im Erlös-Service.
-    unterliegt_51 = bool(
-        (await db.execute(
-            select(Anlage.unterliegt_eeg_51).where(Anlage.id == anlage_id)
-        )).scalar_one_or_none()
-    )
-    neg_preis_by_month: dict[tuple[int, int], float] = {}
-    if unterliegt_51:
-        # Quelle: TagesZusammenfassung (1 Zeile/Tag) — dort liegt das §51-Volumen.
-        _y = func.extract("year", TagesZusammenfassung.datum)
-        _m = func.extract("month", TagesZusammenfassung.datum)
-        neg_q = (
-            select(_y, _m, func.sum(TagesZusammenfassung.einspeisung_neg_preis_kwh))
-            .where(TagesZusammenfassung.anlage_id == anlage_id)
-            .group_by(_y, _m)
-        )
-        if jahr:
-            neg_q = neg_q.where(_y == jahr)
-        for y, m, s in (await db.execute(neg_q)).all():
-            if s is not None:
-                neg_preis_by_month[(int(y), int(m))] = float(s)
-
-    # Aggregierte Daten erstellen
     result = []
-    for md in monatsdaten_list:
-        key = (md.jahr, md.monat)
-        inv_data = inv_data_by_month.get(key, [])
+    for f in fakten:
+        md = f.meta.monatsdaten
+        typen = f.meta.typen_mit_zeile
 
-        # Aggregieren - alle Komponenten. Zähler tracken, ob mindestens eine
-        # IMD pro Komponenten-Familie beigetragen hat — sonst None statt 0
-        # ausspielen (#236, CLAUDE.md "0-Werte prüfen": 0 ≠ nicht vorhanden).
-        pv_erzeugung = 0.0
-        bkw_erzeugung = 0.0  # nur BKW (R17/Verlauf-Split); pv_anlage = pv_erzeugung - bkw
-        speicher_ladung = 0.0
-        speicher_entladung = 0.0
-        speicher_netzladung = 0.0  # Netz-Anteil an der Ladung (R17/Verlauf)
-        wp_strom = 0.0
-        wp_strom_heizen = 0.0
-        wp_strom_warmwasser = 0.0
-        wp_heizung = 0.0
-        wp_warmwasser = 0.0
-        eauto_ladung = 0.0
-        eauto_km = 0.0
-        v2h_entladung = 0.0  # E-Auto → Haus, zählt wie Speicher-Entladung als Eigenverbrauch
-        wallbox_ladung = 0.0
-        wallbox_ladung_pv = 0.0
-        sonstiges_erzeugung = 0.0  # sonstige Erzeuger (BHKW) hinter dem Zähler
+        # „Hat dieser Gerätetyp im Monat etwas beigetragen?" — Grundlage für
+        # `None` statt `0` (P4). NICHT `aktive_investitionen`: eine aktive
+        # Wärmepumpe ohne gepflegte Zeile ist aktiv und hat trotzdem nichts
+        # geliefert. Die PV zählt zusätzlich als vorhanden, sobald die
+        # P7-Auflösung einen Wert ergibt (auch ohne eigene Modul-Zeile, z. B.
+        # aus dem Anlagen-Aggregat).
+        hat_pv_imd = "balkonkraftwerk" in typen or f.erzeugung.pv_module_kwh is not None
+        # ALTBESTAND (N-28), bewusst so belassen: die BKW-eigenen Akku-Felder
+        # zählen hier in dieselbe anlagenweite Speicher-Summe wie ein echter
+        # Speicher, während `monats_fakten.SpeicherFakten` sie getrennt hält.
+        # Diese Uneinheitlichkeit wird NICHT aufgelöst, sondern durch den Kanon
+        # erledigt: ein BKW-Akku gehört als eigene `speicher`-Investition mit
+        # Parent Balkonkraftwerk erfasst. Hier zu ändern hieße, die Zahlen genau
+        # der Anwender zu bewegen, die noch auf dem alten Weg pflegen; sie
+        # bekommen stattdessen den Migrationshinweis des Daten-Checkers
+        # (`daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg`).
+        hat_speicher_imd = "speicher" in typen or "balkonkraftwerk" in typen
+        speicher_ladung = f.speicher.ladung_kwh + f.bkw.speicher_ladung_kwh
+        speicher_entladung = f.speicher.entladung_kwh + f.bkw.speicher_entladung_kwh
 
-        # PV-Module werden NICHT direkt in der Schleife summiert — der
-        # kWp-Verteilungs-Read-time-Helper (resolve_pv_je_modul) entscheidet
-        # nach der Schleife zwischen gemessenen Pro-Modul-Werten und der
-        # Verteilung des manuellen Aggregats `md.pv_erzeugung_kwh`. Hier nur
-        # die gemessenen Pro-Modul-Werte sammeln (None = Feld fehlt).
-        pv_modul_measured: dict[int, Optional[float]] = {}
+        # E-Mob je Quelle getrennt ausweisen (die Response trägt eauto_* und
+        # wallbox_* als eigene Felder) — über denselben SoT-Leser, nicht roh aus
+        # dem Dict. `emob.ladung_kwh` (der Pool) wäre hier falsch: er wählt EINE
+        # Quelle für die Gesamt-Heimladung, diese Sicht zeigt aber beide Seiten.
+        eauto = f.emob.eauto_summe
+        wallbox = f.emob.wallbox_summe
 
-        hat_pv_imd = False
-        hat_speicher_imd = False
-        hat_wp_imd = False
-        hat_wp_split_imd = False  # für strom_heizen / strom_warmwasser
-        hat_eauto_imd = False
-        hat_wallbox_imd = False
-        hat_sonstiges_erz_imd = False
-
-        for inv, data in inv_data:
-            # D3 (Block 1): Dienstwagen-E-Autos/Wallboxen gehören wie überall
-            # sonst NICHT in den E-Mob-Pool der eigenen Anlage — vorher fehlte
-            # der Filter hier als einziger Read-Site (feedback_dienstwagen_alle_checks).
-            if inv.typ in ("e-auto", "wallbox") and ist_dienstlich(inv):
-                continue
-
-            # Per-Typ-Feld-Auflösung zentral ([[imd_typ_beitrag]], Block 1).
-            b = imd_typ_beitrag(inv, data)
-
-            if inv.typ == "pv-module":
-                # gemessenen Pro-Modul-Wert ROH sammeln (None = Feld fehlt, für
-                # die kWp-Verteilung unten) — keine Aggregation hier.
-                pv_modul_measured[inv.id] = data.get("pv_erzeugung_kwh")
-            elif inv.typ == "balkonkraftwerk":
-                hat_pv_imd = True
-                pv_erzeugung += b.bkw_erzeugung
-                bkw_erzeugung += b.bkw_erzeugung
-                # ALTBESTAND (N-28), bewusst so belassen: die BKW-eigenen
-                # Akku-Felder zählen hier in dieselbe anlagenweite Speicher-Summe
-                # wie ein echter Speicher, während `monats_fakten.SpeicherFakten`
-                # sie getrennt hält. Diese Uneinheitlichkeit wird NICHT
-                # aufgelöst, sondern durch den Kanon erledigt: ein BKW-Akku
-                # gehört als eigene Speicher-Investition mit Parent
-                # Balkonkraftwerk erfasst und läuft dann durch den `speicher`-
-                # Zweig unten — dort gibt es genau eine Verbuchung.
-                # Hier zu ändern hieße, die Zahlen genau der Anwender zu
-                # bewegen, die noch auf dem alten Weg pflegen; sie bekommen
-                # stattdessen den Migrationshinweis des Daten-Checkers
-                # (`daten_checker/stammdaten.py::_check_bkw_akku_erfassungsweg`).
-                hat_speicher_imd = True
-                speicher_ladung += b.bkw_speicher_ladung
-                speicher_entladung += b.bkw_speicher_entladung
-            elif inv.typ == "speicher":
-                hat_speicher_imd = True
-                speicher_ladung += b.speicher_ladung
-                speicher_entladung += b.speicher_entladung
-                speicher_netzladung += b.speicher_arbitrage
-            elif inv.typ == "waermepumpe":
-                hat_wp_imd = True
-                wp_strom += b.wp_strom
-                if b.wp_hat_split:
-                    hat_wp_split_imd = True
-                    wp_strom_heizen += b.wp_strom_heizen
-                    wp_strom_warmwasser += b.wp_strom_warmwasser
-                # D1 (Block 1): Heizung kanonisch (heizenergie_kwh inkl.
-                # heizung_kwh-Legacy-Fallback) — vorher roh ohne Legacy.
-                wp_heizung += b.wp_heizung
-                wp_warmwasser += b.wp_warmwasser
-            elif inv.typ == "e-auto":
-                hat_eauto_imd = True
-                eauto_ladung += b.eauto_ladung_pv_netz
-                eauto_km += b.eauto_km
-                v2h_entladung += b.eauto_v2h
-            elif inv.typ == "wallbox":
-                hat_wallbox_imd = True
-                wallbox_ladung += b.wallbox_ladung
-                wallbox_ladung_pv += b.wallbox_ladung_pv
-            elif inv.typ == "sonstiges":
-                # Sonstiger Erzeuger (z. B. BHKW) speist hinter den Hauszähler —
-                # Erzeugung gehört in die Netzpunkt-Bilanz (Resolver ist
-                # kategorie-bewusst: nur erzeuger liefert sonstiges_erzeugung).
-                sonstiges_erzeugung += b.sonstiges_erzeugung
-                # None vs. 0 wie bei den anderen Aggregaten: ein Erzeuger mit 0 kWh
-                # im Monat ist ein echter 0-Wert, kein „nicht vorhanden".
-                if b.sonstiges_erzeugung or (inv.parameter or {}).get("kategorie") == "erzeuger":
-                    hat_sonstiges_erz_imd = True
-
-        # PV-Module: kWp-Verteilung (Read-time, [[project_kwp_verteilung_aggregator]]).
-        # Aktive Module des Monats aus der vollständigen Investitions-Liste —
-        # auch Module ohne IMD-Zeile zählen (eigen_kwh=None), damit der Helper
-        # erkennt, ob NICHT alle Module messen und das Aggregat verteilt werden
-        # muss. Filter anschaffungs-/stilllegungs- + aktiv-bewusst via
-        # ist_aktiv_im_monat ([[feedback_anschaffungsdatum_grenze]]).
-        aktive_pv_module = [
-            inv for inv in investitionen
-            if inv.typ == "pv-module" and inv.ist_aktiv_im_monat(md.jahr, md.monat)
-        ]
-        if aktive_pv_module:
-            pv_resolved = resolve_pv_je_modul(
-                aggregat_kwh=md.pv_erzeugung_kwh,
-                module=[
-                    PvModul(
-                        inv_id=inv.id,
-                        leistung_kwp=get_inv_value(inv, "leistung_kwp"),
-                        eigen_kwh=pv_modul_measured.get(inv.id),
-                    )
-                    for inv in aktive_pv_module
-                ],
-            )
-            # `ist_vollstaendig` statt „irgendein Modul aufgelöst": seit der
-            # modulweisen Präzedenz behalten gemessene Module ihren Wert, auch
-            # wenn daneben eine Lücke offen ist. Ohne diese Prüfung würde hier
-            # jetzt eine TEILSUMME als Anlagenerzeugung ausgewiesen — genau das,
-            # was N42 verhindert. Die Anlagensumme bleibt dadurch in allen
-            # Konstellationen bitgleich zu vorher; nur die Pro-Modul-Aufteilung
-            # ist ehrlicher geworden.
-            if ist_vollstaendig(pv_resolved):
-                # PV vollständig (gemessen und/oder Lücken über das Aggregat
-                # gefüllt) — auf das bereits gesammelte BKW-PV oben aufaddieren.
-                hat_pv_imd = True
-                pv_erzeugung += sum(w.pv_erzeugung_kwh for w in pv_resolved.values())
-
-        # Berechnungen
-        einspeisung = md.einspeisung_kwh or 0
-        netzbezug = md.netzbezug_kwh or 0
-
-        # Netzpunkt-Bilanz: sonstige Erzeuger (BHKW) hinter dem Zähler zählen mit,
-        # sonst verfälscht der gemessene Einspeise-Zähler die PV-Bilanz (Konzept
-        # Sonstiger Erzeuger). `pv_erzeugung` bleibt rein (Legacy-Check/PV-Anzeige).
-        erzeugung_bilanz = erzeugung_hinter_zaehler_kwh(pv_erzeugung, sonstiges_erzeugung)
-
-        # #304-Bruder: kanonische Verbrauchs-Kennzahlen über den SoT-Helper —
-        # zuvor rechnete dieser Stats-Pfad eigenverbrauch von Hand und ließ V2H
-        # weg (E-Auto→Haus), während Cockpit/Aussichten/HA-Export/PDF V2H bereits
-        # als Eigenverbrauch zählen. Deckungsgleich mit `berechne_verbrauchs_kennzahlen`.
-        _kz = berechne_verbrauchs_kennzahlen(
-            pv_erzeugung_kwh=erzeugung_bilanz,
-            einspeisung_kwh=einspeisung,
-            netzbezug_kwh=netzbezug,
-            speicher_ladung_kwh=speicher_ladung,
-            speicher_entladung_kwh=speicher_entladung,
-            v2h_entladung_kwh=v2h_entladung,
-        )
-        direktverbrauch = _kz.direktverbrauch_kwh
-        eigenverbrauch = _kz.eigenverbrauch_kwh
-        gesamtverbrauch = _kz.gesamtverbrauch_kwh
-        autarkie = _kz.autarkie_prozent
-        ev_quote = _kz.eigenverbrauchsquote_prozent
+        einspeisung = f.zaehler.einspeisung_kwh
+        netzbezug = f.zaehler.netzbezug_kwh
+        _kz = f.kennzahlen
 
         # Legacy-Daten prüfen - nur warnen wenn:
         # 1. Legacy-Daten vorhanden sind (in Monatsdaten.pv_erzeugung_kwh oder batterie_*)
@@ -524,19 +323,15 @@ async def list_monatsdaten_aggregiert(
             (md.batterie_ladung_kwh and md.batterie_ladung_kwh > 0) or
             (md.batterie_entladung_kwh and md.batterie_entladung_kwh > 0)
         )
-
-        # Prüfen ob InvestitionMonatsdaten existieren
-        hat_inv_pv = pv_erzeugung > 0
+        hat_inv_pv = f.erzeugung.pv_kwh > 0
         hat_inv_speicher = speicher_ladung > 0 or speicher_entladung > 0
-
-        # Nur warnen wenn Legacy-Daten da sind ABER keine InvestitionMonatsdaten
         hat_legacy = (hat_legacy_pv and not hat_inv_pv) or (hat_legacy_speicher and not hat_inv_speicher)
 
         result.append(AggregierteMonatsdatenResponse(
             id=md.id,
             anlage_id=md.anlage_id,
-            jahr=md.jahr,
-            monat=md.monat,
+            jahr=f.jahr,
+            monat=f.monat,
             einspeisung_kwh=round(einspeisung, 1),
             netzbezug_kwh=round(netzbezug, 1),
             globalstrahlung_kwh_m2=md.globalstrahlung_kwh_m2,
@@ -545,38 +340,49 @@ async def list_monatsdaten_aggregiert(
             # Komponenten-Aggregate: None wenn keine aktive IMD beigetragen
             # hat, sonst tatsächlicher Wert (auch 0 ist legitim, z.B. WP im
             # Sommer 0 kWh Heizung).
-            pv_erzeugung_kwh=round(pv_erzeugung, 1) if hat_pv_imd else None,
-            pv_module_kwh=round(pv_erzeugung - bkw_erzeugung, 1) if hat_pv_imd else None,
-            bkw_kwh=round(bkw_erzeugung, 1) if hat_pv_imd else None,
-            sonstige_erzeugung_kwh=round(sonstiges_erzeugung, 1) if hat_sonstiges_erz_imd else None,
-            # Dieselbe Zahl, mit der direktverbrauch/eigenverbrauch oben gerechnet
-            # wurden (`erzeugung_bilanz`) — nicht neu summiert, sonst driftet die
-            # ausgelieferte Größe von der intern verwendeten ab. `None`, wenn
-            # WEDER PV noch ein sonstiger Erzeuger beigetragen hat.
+            pv_erzeugung_kwh=round(f.erzeugung.pv_kwh, 1) if hat_pv_imd else None,
+            pv_module_kwh=(
+                round(f.erzeugung.pv_kwh - f.erzeugung.bkw_kwh, 1) if hat_pv_imd else None
+            ),
+            bkw_kwh=round(f.erzeugung.bkw_kwh, 1) if hat_pv_imd else None,
+            sonstige_erzeugung_kwh=(
+                round(f.erzeugung.sonstige_erzeuger_kwh, 1)
+                if f.sonstiges.hat_erzeuger_zeile else None
+            ),
+            # Dieselbe Zahl, mit der direktverbrauch/eigenverbrauch gerechnet
+            # wurden — nicht neu summiert, sonst driftet die ausgelieferte Größe
+            # von der intern verwendeten ab. `None`, wenn WEDER PV noch ein
+            # sonstiger Erzeuger beigetragen hat.
             erzeugung_hinter_zaehler_kwh=(
-                round(erzeugung_bilanz, 1)
-                if (hat_pv_imd or hat_sonstiges_erz_imd) else None
+                round(f.erzeugung.hinter_zaehler_kwh, 1)
+                if (hat_pv_imd or f.sonstiges.hat_erzeuger_zeile) else None
             ),
             speicher_ladung_kwh=round(speicher_ladung, 1) if hat_speicher_imd else None,
             speicher_entladung_kwh=round(speicher_entladung, 1) if hat_speicher_imd else None,
-            speicher_netzladung_kwh=round(speicher_netzladung, 1) if hat_speicher_imd else None,
-            wp_strom_kwh=round(wp_strom, 1) if hat_wp_imd else None,
-            wp_strom_heizen_kwh=round(wp_strom_heizen, 1) if hat_wp_split_imd else None,
-            wp_strom_warmwasser_kwh=round(wp_strom_warmwasser, 1) if hat_wp_split_imd else None,
-            wp_heizung_kwh=round(wp_heizung, 1) if hat_wp_imd else None,
-            wp_warmwasser_kwh=round(wp_warmwasser, 1) if hat_wp_imd else None,
-            eauto_ladung_kwh=round(eauto_ladung, 1) if hat_eauto_imd else None,
-            eauto_km=round(eauto_km, 1) if hat_eauto_imd else None,
-            wallbox_ladung_kwh=round(wallbox_ladung, 1) if hat_wallbox_imd else None,
-            wallbox_ladung_pv_kwh=round(wallbox_ladung_pv, 1) if hat_wallbox_imd else None,
-            direktverbrauch_kwh=round(direktverbrauch, 1),
-            eigenverbrauch_kwh=round(eigenverbrauch, 1),
-            gesamtverbrauch_kwh=round(gesamtverbrauch, 1),
-            autarkie_prozent=round(autarkie, 1),
-            eigenverbrauchsquote_prozent=round(ev_quote, 1),
+            speicher_netzladung_kwh=(
+                round(f.speicher.netzladung_kwh, 1) if hat_speicher_imd else None
+            ),
+            wp_strom_kwh=round(f.wp.strom_kwh, 1) if "waermepumpe" in typen else None,
+            wp_strom_heizen_kwh=round(f.wp.strom_heizen_kwh, 1) if f.wp.hat_split else None,
+            wp_strom_warmwasser_kwh=(
+                round(f.wp.strom_warmwasser_kwh, 1) if f.wp.hat_split else None
+            ),
+            wp_heizung_kwh=round(f.wp.heizung_kwh, 1) if "waermepumpe" in typen else None,
+            wp_warmwasser_kwh=round(f.wp.warmwasser_kwh, 1) if "waermepumpe" in typen else None,
+            eauto_ladung_kwh=round(eauto.ladung_kwh, 1) if "e-auto" in typen else None,
+            eauto_km=round(f.emob.km, 1) if "e-auto" in typen else None,
+            wallbox_ladung_kwh=round(wallbox.ladung_kwh, 1) if "wallbox" in typen else None,
+            wallbox_ladung_pv_kwh=round(wallbox.pv_kwh, 1) if "wallbox" in typen else None,
+            direktverbrauch_kwh=round(_kz.direktverbrauch_kwh, 1),
+            eigenverbrauch_kwh=round(_kz.eigenverbrauch_kwh, 1),
+            gesamtverbrauch_kwh=round(_kz.gesamtverbrauch_kwh, 1),
+            autarkie_prozent=round(_kz.autarkie_prozent, 1),
+            eigenverbrauchsquote_prozent=round(_kz.eigenverbrauchsquote_prozent, 1),
+            # `None` heißt „nicht §51-pflichtig ODER kein Tages-Aggregat mit
+            # Strompreis-Mitschrift" — eine 0 wäre dort eine Aussage, die
+            # niemand belegen kann (Gate im Erlös-Service).
             einspeisung_neg_preis_kwh=(
-                round(neg_preis_by_month.get((md.jahr, md.monat), 0.0), 1)
-                if unterliegt_51 else None
+                round(f.eeg.neg_preis_kwh, 1) if f.eeg.neg_preis_kwh is not None else None
             ),
             hat_legacy_daten=hat_legacy,
         ))

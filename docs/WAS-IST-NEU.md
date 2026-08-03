@@ -14,6 +14,35 @@
 > **Beim Release:** Überschrift auf `## vX.Y.Z — Titel (Monat Jahr)` ziehen und die Version im
 > Kopf dieser Seite mitnehmen (Doku-Durchgang) — sonst steht die Zusage als nicht eingelöst da.
 
+### Auswertungen und Jahr: die E-Auto-Ladung ist wieder vollständig
+
+**Betrifft dich das?** Wenn du bei deinem E-Auto oder deiner Wallbox die **Gesamt-Ladung** und den
+**PV-Anteil** pflegst, aber keinen eigenen Wert für die Netzladung — bei evcc-Importen ist das der
+Normalfall.
+
+In *Auswertungen → Tabelle* und in den Jahres-Kacheln hat eedc die Ladung bisher aus PV-Anteil
+**plus** Netzanteil zusammengezählt. Fehlte der Netzanteil als eigener Wert, blieb er weg: von
+200 geladenen Kilowattstunden standen dann nur die 150 PV-Kilowattstunden in der Tabelle. Der
+Netzanteil wird jetzt aus *Gesamt minus PV* abgeleitet — so, wie es die übrigen Ansichten längst
+tun.
+
+**Die Zahl wird also größer, und die alte war zu klein.** Wenn du beide Werte gepflegt hast, ändert
+sich nichts.
+
+Zusätzlich: die Spalte **„Einspeisung bei neg. Preis"** zeigt „—" statt `0,0`, wenn für den Monat
+keine Börsenpreis-Daten vorliegen. Das betrifft nur Anlagen mit gesetztem §51-Schalter — eine 0
+hätte dort behauptet, es habe keine Negativpreis-Stunden gegeben, obwohl schlicht nichts
+aufgezeichnet wurde.
+
+**Unverändert:** die Zeilen der Tabelle (nur Monate mit erfassten Zählerständen, neueste zuerst),
+alle übrigen Spalten, und „—" bleibt „—", wo ein Gerät für den Monat nichts gemeldet hat. Eine
+**gemessene** Null bleibt eine Null: eine Wärmepumpe, die im Sommer 0 kWh geheizt hat, zeigt
+weiterhin `0,0`.
+
+**Was du tun musst: nichts.**
+
+---
+
 ### Tag: der Einspeiseerlös wird nicht mehr gekürzt, wenn dich §51 gar nicht betrifft
 
 **Betrifft dich das?** Wenn deine Anlage **keine** §51-Anlage ist (das ist der Normalfall bei
