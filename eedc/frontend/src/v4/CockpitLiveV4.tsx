@@ -139,16 +139,47 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   }, [liveKey, data, wetter, tagesverlauf, prognose3Tage, lastUpdate])
 
   useEffect(() => {
-    fetchData(false)
-    fetchWetter()
-    fetchTagesverlauf()
-    intervalRef.current = setInterval(() => fetchData(true), REFRESH_INTERVAL)
-    wetterIntervalRef.current = setInterval(() => fetchWetter(), WETTER_REFRESH_INTERVAL)
-    tagesverlaufIntervalRef.current = setInterval(() => fetchTagesverlauf(), TAGESVERLAUF_REFRESH_INTERVAL)
-    return () => {
+    const stoppePolling = () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
       if (wetterIntervalRef.current) clearInterval(wetterIntervalRef.current)
       if (tagesverlaufIntervalRef.current) clearInterval(tagesverlaufIntervalRef.current)
+      intervalRef.current = null
+      wetterIntervalRef.current = null
+      tagesverlaufIntervalRef.current = null
+    }
+
+    const startePolling = () => {
+      stoppePolling()
+      intervalRef.current = setInterval(() => fetchData(true), REFRESH_INTERVAL)
+      wetterIntervalRef.current = setInterval(() => fetchWetter(), WETTER_REFRESH_INTERVAL)
+      tagesverlaufIntervalRef.current = setInterval(() => fetchTagesverlauf(), TAGESVERLAUF_REFRESH_INTERVAL)
+    }
+
+    // Eine unsichtbare Seite pollt nicht. Der 5-s-Takt ist für den
+    // Energiefluss richtig, solange jemand hinsieht — ein vergessener Tab
+    // oder ein Wandtablet im Standby fragte HA sonst rund um die Uhr ab, und
+    // im Add-on läuft jeder dieser Abrufe durch den Ingress-Proxy von HA Core.
+    const beiSichtwechsel = () => {
+      if (document.visibilityState === 'hidden') {
+        stoppePolling()
+        return
+      }
+      // Rückkehr: sofort auffrischen, statt bis zum nächsten Tick alte Werte
+      // zu zeigen.
+      fetchData(true)
+      fetchWetter()
+      fetchTagesverlauf()
+      startePolling()
+    }
+
+    fetchData(false)
+    fetchWetter()
+    fetchTagesverlauf()
+    startePolling()
+    document.addEventListener('visibilitychange', beiSichtwechsel)
+    return () => {
+      document.removeEventListener('visibilitychange', beiSichtwechsel)
+      stoppePolling()
     }
   }, [fetchData, fetchWetter, fetchTagesverlauf])
 

@@ -185,34 +185,34 @@ class LivePowerService:
     async def _fetch_ha_states(self, db: AsyncSession, entity_ids: set) -> dict:
         """W-normalisierte States einer Entity-Menge über die aktive HA-Verbindung.
 
-        Nutzt den zentralen `resolve_ha_connection` (Supervisor ODER Remote-HA),
-        EIN `/states`-Batch. Nur für explizit zugeordnete quellen-HA-Entities (C2a);
-        der alte sensor_mapping-Pfad bleibt Supervisor-gebunden.
+        Nutzt den zentralen `resolve_ha_connection` (Supervisor ODER Remote-HA)
+        und holt **genau** die gebrauchten Entities über `fetch_selected_states`
+        — nicht mehr den Voll-Dump `/api/states`. Dieselbe Begründung wie im
+        Supervisor-Pfad (`ha_state_service`): der Dump kostet auf einer
+        gewachsenen Instanz Megabytes, und beide Pfade hängen am 5-s-Poll des
+        Live-Cockpits. Einen von beiden zu heilen wäre kein Fix gewesen.
+
+        Nur für explizit zugeordnete quellen-HA-Entities (C2a); der alte
+        sensor_mapping-Pfad bleibt Supervisor-gebunden.
         """
         if not entity_ids:
             return {}
         from backend.services.ha_connection import resolve_ha_connection
+        from backend.services.ha_state_service import fetch_selected_states
         api_url, token, _ = await resolve_ha_connection(db)
         if not api_url or not token:
             return {}
-        import httpx
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(f"{api_url}/states", headers={"Authorization": f"Bearer {token}"})
-        except Exception:  # noqa: BLE001 — Netzwerk-/TLS-Fehler → keine Werte
-            return {}
-        if resp.status_code != 200:
-            return {}
+        roh = await fetch_selected_states(api_url, token, list(entity_ids))
         out: dict = {}
-        for st in resp.json():
-            eid = st.get("entity_id")
-            if eid in entity_ids:
-                attrs = st.get("attributes", {}) or {}
-                unit = attrs.get("unit_of_measurement", "")
-                try:
-                    out[eid] = normalize_to_w(float(st.get("state")), unit)
-                except (ValueError, TypeError):
-                    out[eid] = None
+        for eid, st in roh.items():
+            if not st:
+                continue
+            attrs = st.get("attributes", {}) or {}
+            unit = attrs.get("unit_of_measurement", "")
+            try:
+                out[eid] = normalize_to_w(float(st.get("state")), unit)
+            except (ValueError, TypeError):
+                out[eid] = None
         return out
 
     async def get_live_data(self, anlage: Anlage, db: AsyncSession) -> dict:

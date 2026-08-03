@@ -6,6 +6,7 @@ Wird verwendet für:
 - Live-Werte für Dashboards
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
@@ -18,6 +19,129 @@ from backend.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+# ── Gezielter States-Abruf (statt Voll-Dump) ──────────────────────────
+#
+# `GET /api/states` liefert **alle** Entities der Instanz inklusive Attribute.
+# Auf einer gewachsenen Installation sind das Megabytes, die HA Core in seinem
+# eigenen Event-Loop serialisieren muss — gemessen 2026-08-03 auf einer Instanz
+# mit 3457 Entities: ~2,4 MB je Abruf. Das Live-Cockpit pollt alle 5 s, im
+# Add-on läuft jedes dieser Pakete zusätzlich durch den Ingress-Proxy, also ein
+# zweites Mal durch denselben Event-Loop. Wer daraus zwanzig Sensoren
+# herausfiltert, hat den Rest umsonst transportiert.
+#
+# Deshalb: `GET /api/states/<entity_id>` je gebrauchter Entity, gebündelt über
+# EINEN httpx-Client (Keep-Alive, eine TCP-Verbindung) und mit begrenzter
+# Parallelität. Der alte Kommentar „1 HTTP-Call statt N" optimierte die falsche
+# Achse — N winzige Antworten sind für HA billiger als eine riesige.
+#
+# **Nicht** hierher gehören die Aufrufer, die tatsächlich alle Entities
+# aufzählen (Sensor-Auswahllisten, Solcast-/Prognose-Discovery). Die brauchen
+# den Voll-Dump und laufen auf Anforderung, nicht getaktet.
+_PARALLEL_LIMIT = 8
+
+# TTL des Live-Caches. Kürzer als der 5-s-Poll des Cockpits, damit ein einzelner
+# Tab weiterhin frische Werte sieht — aber lang genug, dass sich zwei versetzt
+# pollende Tabs (oder Browser) die Abrufe teilen, statt HA zu verdoppeln.
+_STATE_CACHE_TTL = 3.0
+
+# (api_url, entity_id) → (zeitpunkt, roher State-Dict oder None).
+# Der api_url-Anteil trennt Supervisor- und Remote-Verbindung; sonst würde ein
+# Wechsel der aktiven HA-Verbindung alte Werte weiterreichen.
+_state_cache: dict[tuple[str, str], tuple[float, Optional[dict]]] = {}
+
+
+async def fetch_selected_states(
+    api_url: str,
+    token: str,
+    entity_ids: list[str],
+    *,
+    timeout: float = 10.0,
+    use_cache: bool = True,
+) -> dict[str, Optional[dict]]:
+    """Rohe State-Dicts genau der angefragten Entities — ohne Voll-Dump.
+
+    Args:
+        api_url: Basis-URL der HA-API (Supervisor ODER Remote).
+        token: Bearer-Token derselben Verbindung.
+        entity_ids: die tatsächlich gebrauchten Entity-IDs.
+        timeout: je Einzelabruf.
+        use_cache: TTL-Cache benutzen. Aus für Pfade, die zwingend den
+            Momentanwert brauchen (Diagnose, Reparatur).
+
+    Returns:
+        entity_id → State-Dict wie von HA geliefert, oder None wenn die Entity
+        nicht existiert bzw. der Abruf scheiterte. Ein Fehler bei einer Entity
+        nimmt die anderen nicht mit.
+    """
+    if not api_url or not token or not entity_ids:
+        return {}
+
+    now = time.monotonic()
+    ergebnis: dict[str, Optional[dict]] = {}
+    offen: list[str] = []
+
+    for eid in dict.fromkeys(entity_ids):  # Reihenfolge halten, Duplikate raus
+        if use_cache:
+            treffer = _state_cache.get((api_url, eid))
+            if treffer is not None and (now - treffer[0]) < _STATE_CACHE_TTL:
+                ergebnis[eid] = treffer[1]
+                continue
+        offen.append(eid)
+
+    if not offen:
+        return ergebnis
+
+    kopf = {"Authorization": f"Bearer {token}"}
+    sperre = asyncio.Semaphore(_PARALLEL_LIMIT)
+
+    async def hole(client: httpx.AsyncClient, eid: str) -> tuple[str, Optional[dict]]:
+        async with sperre:
+            try:
+                resp = await client.get(f"{api_url}/states/{eid}", headers=kopf)
+            except Exception:  # noqa: BLE001 — Netz/TLS: diese eine Entity fehlt
+                return eid, None
+            if resp.status_code != 200:
+                return eid, None
+            try:
+                return eid, resp.json()
+            except Exception:  # noqa: BLE001 — unerwarteter Body
+                return eid, None
+
+    grenzen = httpx.Limits(
+        max_connections=_PARALLEL_LIMIT,
+        max_keepalive_connections=_PARALLEL_LIMIT,
+    )
+    async with httpx.AsyncClient(timeout=timeout, limits=grenzen) as client:
+        for eid, daten in await asyncio.gather(*(hole(client, e) for e in offen)):
+            ergebnis[eid] = daten
+            # Auch ein None wird gecacht: ein nicht existierender oder gerade
+            # nicht erreichbarer Sensor darf den 5-s-Poll nicht in einen
+            # Dauer-Retry verwandeln.
+            _state_cache[(api_url, eid)] = (now, daten)
+
+    return ergebnis
+
+
+def _state_wert_und_einheit(daten: Optional[dict]) -> Optional[tuple[float, str]]:
+    """(Zahlwert, Einheit) aus einem rohen State-Dict — oder None.
+
+    None steht für „kein verwertbarer Messwert": Entity fehlt, State ist
+    `unknown`/`unavailable` oder nicht numerisch. Die Unterscheidung zwischen
+    diesen Fällen trifft der Aufrufer nicht, sie ist für ihn dieselbe.
+    """
+    if not daten:
+        return None
+    state = daten.get("state")
+    if state in [None, "unknown", "unavailable", ""]:
+        return None
+    try:
+        wert = float(state)
+    except (ValueError, TypeError):
+        return None
+    einheit = (daten.get("attributes") or {}).get("unit_of_measurement", "")
+    return (wert, einheit or "")
+
+
 class HAStateService:
     """Holt Sensor-States aus Home Assistant via Supervisor API."""
 
@@ -26,8 +150,9 @@ class HAStateService:
     def __init__(self):
         self.api_url = settings.ha_api_url
         self.token = settings.supervisor_token
-        self._unit_cache: dict[str, str] = {}
-        self._unit_cache_ts: float = 0.0
+        # entity_id → (zeitpunkt, einheit). Die Einheit ist bewusst auch dann
+        # gemerkt, wenn sie leer ist — siehe get_sensor_units().
+        self._unit_cache: dict[str, tuple[float, str]] = {}
 
     @property
     def is_available(self) -> bool:
@@ -61,42 +186,19 @@ class HAStateService:
         if not self.is_available:
             return None
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.api_url}/states/{entity_id}",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    timeout=5.0
-                )
-
-                if response.status_code != 200:
-                    return None
-
-                data = response.json()
-                state = data.get("state")
-
-                # Ungültige States ignorieren
-                if state in [None, "unknown", "unavailable", ""]:
-                    return None
-
-                try:
-                    value = float(state)
-                except (ValueError, TypeError):
-                    return None
-
-                unit = (data.get("attributes") or {}).get("unit_of_measurement", "")
-                return (value, unit or "")
-
-        except Exception:
-            return None
+        treffer = await self.get_sensor_states_batch([entity_id])
+        return treffer.get(entity_id)
 
     async def get_sensor_states_batch(
         self, entity_ids: list[str]
     ) -> dict[str, Optional[tuple[float, str]]]:
         """
-        Holt State + Einheit für mehrere Entities in einem Request.
+        Holt State + Einheit für mehrere Entities — nur für die angefragten.
 
-        Nutzt /api/states und filtert lokal — 1 HTTP-Call statt N.
+        Läuft über `fetch_selected_states` (ein Abruf je Entity, gebündelt über
+        einen Client, TTL-Cache) statt über den Voll-Dump `/api/states`. Warum,
+        steht dort ausführlich; kurz: der Voll-Dump kostete auf einer Instanz
+        mit 3457 Entities ~2,4 MB — je Poll, alle 5 s, im Event-Loop von HA.
 
         Returns:
             Dict entity_id → (wert, einheit) oder entity_id → None
@@ -104,83 +206,43 @@ class HAStateService:
         if not self.is_available or not entity_ids:
             return {}
 
-        wanted = set(entity_ids)
-        result: dict[str, Optional[tuple[float, str]]] = {}
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.api_url}/states",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    timeout=10.0,
-                )
-
-                if response.status_code != 200:
-                    return {}
-
-                for item in response.json():
-                    eid = item.get("entity_id", "")
-                    if eid not in wanted:
-                        continue
-
-                    state = item.get("state")
-                    if state in [None, "unknown", "unavailable", ""]:
-                        result[eid] = None
-                        continue
-
-                    try:
-                        value = float(state)
-                    except (ValueError, TypeError):
-                        result[eid] = None
-                        continue
-
-                    unit = (item.get("attributes") or {}).get("unit_of_measurement", "")
-                    result[eid] = (value, unit or "")
-
-        except Exception:
-            return {}
-
-        return result
+        roh = await fetch_selected_states(self.api_url, self.token, entity_ids)
+        return {eid: _state_wert_und_einheit(daten) for eid, daten in roh.items()}
 
     async def get_sensor_units(self, entity_ids: list[str]) -> dict[str, str]:
         """
-        Holt unit_of_measurement für mehrere Entities.
+        Holt unit_of_measurement für mehrere Entities (In-Memory-Cache, 1h TTL).
 
-        Nutzt 1-Call-Batch (/api/states) + In-Memory-Cache (1h TTL).
-        Vorher: N sequentielle HTTP-Calls → bis 50s bei 10 Sensoren.
-        Jetzt: 1 Call (gecacht) → <10ms bei Cache-Hit.
+        Gemerkt wird die Einheit **auch dann, wenn sie leer ist**. Vorher landete
+        nur im Cache, wer eine hatte (`if unit:`) — ein einziger Sensor ohne
+        `unit_of_measurement` im Mapping stand damit dauerhaft auf der
+        Fehlliste, und weil die Fehlliste den Neuabruf auslöste, lief der
+        Voll-Dump bei **jedem** Aufruf. Der 1h-TTL war in dem Fall wirkungslos.
         """
         if not self.is_available or not entity_ids:
             return {}
 
         now = time.monotonic()
+        fehlend = [
+            eid for eid in dict.fromkeys(entity_ids)
+            if now - self._unit_cache.get(eid, (0.0, ""))[0] >= self._UNIT_CACHE_TTL
+        ]
 
-        # Cache gültig? Alle angefragten IDs vorhanden?
-        if (now - self._unit_cache_ts) < self._UNIT_CACHE_TTL:
-            missing = [eid for eid in entity_ids if eid not in self._unit_cache]
-            if not missing:
-                return {eid: self._unit_cache[eid] for eid in entity_ids if eid in self._unit_cache}
+        if fehlend:
+            roh = await fetch_selected_states(self.api_url, self.token, fehlend)
+            for eid, daten in roh.items():
+                if daten is None:
+                    continue  # nicht erreichbar → beim nächsten Mal erneut
+                einheit = (daten.get("attributes") or {}).get("unit_of_measurement", "")
+                self._unit_cache[eid] = (now, einheit or "")
 
-        # Cache neu befüllen via Batch-Endpoint (1 HTTP-Call)
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.api_url}/states",
-                    headers={"Authorization": f"Bearer {self.token}"},
-                    timeout=10.0,
-                )
-                if response.status_code == 200:
-                    new_cache: dict[str, str] = {}
-                    for item in response.json():
-                        unit = (item.get("attributes") or {}).get("unit_of_measurement", "")
-                        if unit:
-                            new_cache[item.get("entity_id", "")] = unit
-                    self._unit_cache = new_cache
-                    self._unit_cache_ts = now
-        except Exception:
-            pass
-
-        return {eid: self._unit_cache[eid] for eid in entity_ids if eid in self._unit_cache}
+        # Nur belegte Einheiten ausliefern — unveränderter Vertrag: der Aufrufer
+        # unterscheidet „keine Einheit" nicht von „nicht gefunden".
+        return {
+            eid: self._unit_cache[eid][1]
+            for eid in entity_ids
+            if self._unit_cache.get(eid, (0.0, ""))[1]
+        }
 
     async def get_sensor_history(
         self,

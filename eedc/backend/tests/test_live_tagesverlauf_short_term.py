@@ -45,7 +45,9 @@ from backend.core.berechnungen.live_tagesverlauf_5min import (  # noqa: E402
 # ── Test-DB-Setup ─────────────────────────────────────────────────────
 
 def _make_service_with_mock_db() -> HAStatisticsService:
-    svc = HAStatisticsService.__new__(HAStatisticsService)
+    svc = HAStatisticsService()  # regulärer Konstruktor: setzt alle Felder (u. a.
+    # den Metadaten-Cache) und macht kein I/O — `_init_engine` wird erst
+    # beim ersten Zugriff gerufen und hier durch `_initialized` übersprungen.
     svc._engine = create_engine("sqlite:///:memory:")
     svc._is_mysql = False
     svc._initialized = True

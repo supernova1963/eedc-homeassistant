@@ -11,6 +11,38 @@
 
 ## v4.0.7 — Nichts kleinrechnen, nichts behaupten (August 2026)
 
+### eedc geht sparsamer mit Home Assistant um
+
+**Betrifft dich das?** Wenn du eedc als **Add-on** in Home Assistant betreibst — vor allem auf einem
+Raspberry Pi oder einer anderen kleinen Box, und erst recht mit vielen Geräten in HA.
+
+Aus der Community kamen Berichte, die HA-Oberfläche werde träge oder hänge, seit eedc als Add-on
+läuft; als separate Docker-Installation sei alles normal. Wir haben nachgemessen, und es stimmte.
+
+Die *Live*-Ansicht von eedc hat alle fünf Sekunden **den kompletten Zustand aller HA-Geräte**
+angefordert, um daraus die paar zugeordneten Sensoren herauszusuchen. Auf einer Anlage mit rund
+3500 Geräten sind das etwa **2,4 Megabyte pro Abruf** — Daten, die Home Assistant selbst
+zusammenbauen muss, und zwar in genau dem Programmteil, der auch die Oberfläche bedient. Jetzt holt
+eedc **nur noch die Sensoren, die es wirklich benutzt**.
+
+Dazu kommen zwei Dinge, die du nicht siehst, aber merkst:
+
+- **Ein Tab im Hintergrund fragt nichts mehr ab.** Ein vergessenes Browser-Fenster oder ein
+  Wandtablet im Standby hat bisher rund um die Uhr weitergepollt. Kehrst du zurück, ist die Anzeige
+  sofort wieder aktuell.
+- **Die Abfragen an die HA-Datenbank sind deutlich schlanker geworden.** Bei großen Historien —
+  besonders mit MariaDB — musste die Datenbank bisher die gesamte Aufzeichnung eines Sensors
+  durchlesen, um einen einzigen Zählerstand zu holen. Das war der Teil, den die Community
+  vermutet hatte; er war real, aber nicht der größte.
+
+**Eine Zahl kann sich dabei ändern**, und zwar nur in einem Sonderfall: Wenn deine MariaDB in einer
+anderen Zeitzone läuft als eedc (typisch: Datenbank auf UTC, eedc auf Europe/Berlin), war der
+Monatsschnitt bisher um den Zeitunterschied verschoben. Jetzt gilt durchgehend die Zeitzone von
+eedc. Bei der Standard-Installation mit SQLite und bei gleicher Zeitzone ändert sich nichts.
+
+**Was du tun musst: nichts.** Wenn dir HA seit eedc träge vorkam, sollte das mit diesem Update
+besser sein — und wenn nicht, melde dich bitte, dann fehlt noch etwas.
+
 ### Auswertungen und Jahr: die E-Auto-Ladung ist wieder vollständig
 
 **Betrifft dich das?** Wenn du bei deinem E-Auto oder deiner Wallbox die **Gesamt-Ladung** und den

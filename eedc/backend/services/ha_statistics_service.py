@@ -13,6 +13,7 @@ Unterstützt SQLite (Standard) und MariaDB/MySQL (über ha_recorder_db_url).
 """
 
 import logging
+import time
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Optional, NamedTuple
@@ -86,6 +87,34 @@ _ENERGY_UNIT_TO_KWH: dict[str, float] = {
 SHORT_TERM_SLOT = 5
 
 
+def _unix(dt: datetime) -> float:
+    """Lokale naive `datetime` → Unix-Timestamp, wie ihn HA in `start_ts` führt.
+
+    **Warum das an jeder Filter-Stelle stehen muss:** der Recorder-Index heißt
+    `(metadata_id, start_ts)`. Sobald die Spalte in einer Funktion steckt —
+    `FROM_UNIXTIME(start_ts) >= :von` bzw. `datetime(start_ts,'unixepoch',
+    'localtime')` — kann weder MariaDB noch SQLite den Zeitbereich über den
+    Index eingrenzen: gelesen werden **alle** Zeilen des Sensors, die Funktion
+    läuft je Zeile, danach wird sortiert. Vergleicht man stattdessen den rohen
+    Timestamp, greift der Index.
+
+    Nebenwirkung, bewusst in Kauf genommen: `FROM_UNIXTIME` rechnet in der
+    **Session-Zeitzone der Datenbank**, `mktime` in der des eedc-Prozesses.
+    Standen die beiden auseinander (MariaDB auf UTC, Container auf
+    Europe/Berlin), lieferten die Monats-Queries bisher einen um den
+    Zonen-Versatz verschobenen Ausschnitt. Ab jetzt gilt durchgehend die
+    Zeitzone von eedc — dieselbe, in der die Aufrufer ihre Grenzen bilden.
+    """
+    return dt.timestamp()
+
+
+def _monatsgrenzen_ts(jahr: int, monat: int) -> tuple[float, float]:
+    """(Beginn, Ende) eines Monats als Unix-Timestamps; Ende exklusiv."""
+    start = datetime(jahr, monat, 1)
+    ende = datetime(jahr + 1, 1, 1) if monat == 12 else datetime(jahr, monat + 1, 1)
+    return _unix(start), _unix(ende)
+
+
 def _snap_to_slot(dt: datetime, slot_minuten: int) -> datetime:
     """Rundet einen Zeitstempel auf das nächste Slot-Raster (Sekunden=0).
 
@@ -110,10 +139,15 @@ class HAStatisticsService:
         "Juli", "August", "September", "Oktober", "November", "Dezember"
     ]
 
+    # Kurz genug, dass ein nachgetragenes `state_class` zeitnah wirkt.
+    _META_CACHE_TTL = 300
+
     def __init__(self):
         self._engine: Optional[Engine] = None
         self._is_mysql: bool = False
         self._initialized: bool = False
+        # statistic_id → (zeitpunkt, SensorMeta). Nur Treffer, siehe get_metadata.
+        self._meta_cache: dict[str, tuple[float, SensorMeta]] = {}
 
     def _init_engine(self) -> None:
         """Initialisiert die SQLAlchemy Engine (einmalig)."""
@@ -210,19 +244,12 @@ class HAStatisticsService:
         except Exception:
             return 0
 
-    def _ts_to_datetime(self, col: str) -> str:
-        """Gibt den DB-spezifischen Ausdruck für Unix-Timestamp → Datetime."""
-        if self._is_mysql:
-            # FROM_UNIXTIME liefert bereits Session-Timezone, kein CONVERT_TZ nötig
-            # (CONVERT_TZ kann NULL liefern wenn Timezone-Tabellen nicht geladen sind)
-            return f"FROM_UNIXTIME({col})"
-        return f"datetime({col}, 'unixepoch', 'localtime')"
-
-    def _ts_to_date(self, col: str) -> str:
-        """Gibt den DB-spezifischen Ausdruck für Unix-Timestamp → Date."""
-        if self._is_mysql:
-            return f"DATE(FROM_UNIXTIME({col}))"
-        return f"date({col}, 'unixepoch', 'localtime')"
+    # `_ts_to_datetime` / `_ts_to_date` sind hier bewusst **nicht** mehr
+    # vorhanden. Sie erzeugten `FROM_UNIXTIME(start_ts)` bzw.
+    # `datetime(start_ts,'unixepoch','localtime')` — und jede WHERE-Bedingung,
+    # die damit gebaut wurde, verlor den Index auf `start_ts` (siehe `_unix`).
+    # Zeitgrenzen werden in Python zu Unix-Timestamps gerechnet und roh
+    # verglichen; für die Rückrichtung genügt `datetime.fromtimestamp`.
 
     def get_metadata(self, conn, sensor_id: str) -> Optional[SensorMeta]:
         """
@@ -234,7 +261,25 @@ class HAStatisticsService:
 
         Returns:
             SensorMeta oder None wenn Sensor nicht in statistics
+
+        Gefundene Sensoren werden `_META_CACHE_TTL` lang gemerkt. Der
+        Snapshot-Job ruft diese Auflösung je Zähler und Lauf auf, unmittelbar
+        vor der eigentlichen Wertabfrage — das war je Wert eine zweite
+        Rundreise zur Datenbank. Sie war nie teuer (Unique-Index auf einer
+        kleinen Tabelle), aber sie war überflüssig.
+
+        **Nicht gemerkt wird ein Fehlschlag.** Ein Sensor taucht in
+        `statistics_meta` genau dann auf, wenn der Anwender `state_class`
+        nachträgt — und dann soll der Daten-Checker das beim nächsten Lauf
+        sehen und nicht erst nach Ablauf eines Caches. Aus demselben Grund ist
+        der TTL kurz: `unit_of_measurement` und `has_sum` derselben Entity
+        können sich durch genau solche Korrekturen ändern.
         """
+        jetzt = time.monotonic()
+        gemerkt = self._meta_cache.get(sensor_id)
+        if gemerkt is not None and (jetzt - gemerkt[0]) < self._META_CACHE_TTL:
+            return gemerkt[1]
+
         result = conn.execute(
             text(
                 "SELECT id, unit_of_measurement, has_sum "
@@ -246,7 +291,9 @@ class HAStatisticsService:
         if not row:
             logger.debug(f"Sensor '{sensor_id}' nicht in statistics_meta gefunden")
             return None
-        return SensorMeta(id=row[0], unit=row[1], has_sum=bool(row[2]))
+        meta = SensorMeta(id=row[0], unit=row[1], has_sum=bool(row[2]))
+        self._meta_cache[sensor_id] = (jetzt, meta)
+        return meta
 
     def filter_valid_sensor_ids(self, sensor_ids: list[str]) -> tuple[list[str], list[str]]:
         """
@@ -329,16 +376,10 @@ class HAStatisticsService:
 
         Werte werden automatisch nach kWh konvertiert (Wh, MWh, etc.).
         """
-        start_datum = f"{jahr:04d}-{monat:02d}-01"
-        if monat == 12:
-            end_datum = f"{jahr + 1:04d}-01-01"
-        else:
-            end_datum = f"{jahr:04d}-{monat + 1:02d}-01"
-
-        ts_expr = self._ts_to_datetime("start_ts")
+        ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
 
         result = conn.execute(
-            text(f"""
+            text("""
                 SELECT
                     MIN(state) as state_min,
                     MAX(state) as state_max,
@@ -346,10 +387,10 @@ class HAStatisticsService:
                     MAX(sum)   as sum_max
                 FROM statistics
                 WHERE metadata_id = :mid
-                AND {ts_expr} >= :start
-                AND {ts_expr} < :end
+                AND start_ts >= :start
+                AND start_ts < :end
             """),
-            {"mid": meta.id, "start": start_datum, "end": end_datum}
+            {"mid": meta.id, "start": ts_start, "end": ts_ende}
         )
 
         row = result.fetchone()
@@ -445,44 +486,31 @@ class HAStatisticsService:
             # Zeitraum ermitteln — IN-Klausel mit benannten Parametern
             params = {f"id_{i}": mid for i, mid in enumerate(metadata_ids)}
             placeholders = ", ".join(f":id_{i}" for i in range(len(metadata_ids)))
-            ts_date = self._ts_to_date("MIN(start_ts)")
-            ts_date_max = self._ts_to_date("MAX(start_ts)")
 
-            # MIN/MAX erst ermitteln, dann Datumsfunktion anwenden
+            # Ein Aggregat statt zweier sortierter Abfragen. `ORDER BY start_ts
+            # LIMIT 1` über eine IN-Liste kann den Index `(metadata_id,
+            # start_ts)` nicht zum Sortieren nutzen — er ist je metadata_id
+            # sortiert, nicht darüber hinweg —, also sortierte die Datenbank
+            # zweimal alle Zeilen aller beteiligten Sensoren. MIN/MAX auf der
+            # rohen Spalte liest der Optimizer aus dem Index.
             result = conn.execute(
                 text(f"""
-                    SELECT
-                        {self._ts_to_date('start_ts')} as datum
+                    SELECT MIN(start_ts) as erstes, MAX(start_ts) as letztes
                     FROM statistics
                     WHERE metadata_id IN ({placeholders})
-                    ORDER BY start_ts ASC
-                    LIMIT 1
                 """),
                 params
             )
-            row_first = result.fetchone()
+            row_grenzen = result.fetchone()
 
-            result = conn.execute(
-                text(f"""
-                    SELECT
-                        {self._ts_to_date('start_ts')} as datum
-                    FROM statistics
-                    WHERE metadata_id IN ({placeholders})
-                    ORDER BY start_ts DESC
-                    LIMIT 1
-                """),
-                params
-            )
-            row_last = result.fetchone()
-
-            if not row_first or not row_last or row_first[0] is None or row_last[0] is None:
+            if not row_grenzen or row_grenzen[0] is None or row_grenzen[1] is None:
                 raise ValueError(
                     f"Sensoren in statistics_meta gefunden, aber keine Messwerte in der "
                     f"statistics-Tabelle vorhanden"
                 )
 
-            erstes = datetime.strptime(str(row_first[0]), "%Y-%m-%d").date()
-            letztes = datetime.strptime(str(row_last[0]), "%Y-%m-%d").date()
+            erstes = datetime.fromtimestamp(row_grenzen[0]).date()
+            letztes = datetime.fromtimestamp(row_grenzen[1]).date()
 
             # Aktuellen (unvollständigen) Monat ausschließen
             today = date.today()
@@ -808,13 +836,7 @@ class HAStatisticsService:
         if not self.is_available:
             return None
 
-        start_datum = f"{jahr:04d}-{monat:02d}-01"
-        if monat == 12:
-            end_datum = f"{jahr + 1:04d}-01-01"
-        else:
-            end_datum = f"{jahr:04d}-{monat + 1:02d}-01"
-
-        ts_expr = self._ts_to_datetime("start_ts")
+        ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
 
         with self._engine.connect() as conn:
             meta = self.get_metadata(conn, sensor_id)
@@ -822,14 +844,14 @@ class HAStatisticsService:
                 return None
 
             result = conn.execute(
-                text(f"""
+                text("""
                     SELECT MIN(state) as start_wert
                     FROM statistics
                     WHERE metadata_id = :mid
-                    AND {ts_expr} >= :start
-                    AND {ts_expr} < :end
+                    AND start_ts >= :start
+                    AND start_ts < :end
                 """),
-                {"mid": meta.id, "start": start_datum, "end": end_datum}
+                {"mid": meta.id, "start": ts_start, "end": ts_ende}
             )
 
             row = result.fetchone()
@@ -896,36 +918,38 @@ class HAStatisticsService:
 
         period = timedelta(minutes=5) if short_term else timedelta(hours=1)
         target = zeitpunkt - period
-        von = target - timedelta(minutes=toleranz_minuten)
-        bis = target + timedelta(minutes=toleranz_minuten)
-        ts_expr = self._ts_to_datetime("start_ts")
+        ts_target = _unix(target)
+        ts_von = ts_target - toleranz_minuten * 60
+        ts_bis = ts_target + toleranz_minuten * 60
         table = "statistics_short_term" if short_term else "statistics"
-
-        if self._is_mysql:
-            order_expr = f"ABS(TIMESTAMPDIFF(SECOND, {ts_expr}, :target))"
-        else:
-            order_expr = f"ABS(julianday({ts_expr}) - julianday(:target))"
 
         with self._engine.connect() as conn:
             meta = self.get_metadata(conn, sensor_id)
             if not meta:
                 return None
 
+            # Filter UND Sortierung auf dem rohen `start_ts`: beides lief vorher
+            # über `FROM_UNIXTIME`/`datetime(...)` und schloss damit den Index
+            # `(metadata_id, start_ts)` für den Zeitbereich aus — die Datenbank
+            # las die gesamte Historie des Sensors und sortierte sie per
+            # Filesort, um genau eine Zeile zu behalten. Das ist der Pfad, den
+            # der Snapshot-Job je Zähler stündlich (bei aktivem 5-Min-Snapshot
+            # alle fünf Minuten) betritt.
             result = conn.execute(
                 text(f"""
                     SELECT sum, state
                     FROM {table}
                     WHERE metadata_id = :mid
-                      AND {ts_expr} >= :von
-                      AND {ts_expr} <= :bis
-                    ORDER BY {order_expr}
+                      AND start_ts >= :von
+                      AND start_ts <= :bis
+                    ORDER BY ABS(start_ts - :target)
                     LIMIT 1
                 """),
                 {
                     "mid": meta.id,
-                    "target": target,
-                    "von": von,
-                    "bis": bis,
+                    "target": ts_target,
+                    "von": ts_von,
+                    "bis": ts_bis,
                 }
             )
             row = result.fetchone()

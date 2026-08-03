@@ -40,7 +40,9 @@ from backend.services.ha_statistics_service import HAStatisticsService  # noqa: 
 def _make_service_with_mock_db() -> HAStatisticsService:
     """Baut einen HAStatisticsService mit In-Memory-SQLite, gefüllt mit
     HA-Statistics-konformem Schema. Umgeht den File-Path-Init-Pfad."""
-    svc = HAStatisticsService.__new__(HAStatisticsService)
+    svc = HAStatisticsService()  # regulärer Konstruktor: setzt alle Felder (u. a.
+    # den Metadaten-Cache) und macht kein I/O — `_init_engine` wird erst
+    # beim ersten Zugriff gerufen und hier durch `_initialized` übersprungen.
     svc._engine = create_engine("sqlite:///:memory:")
     svc._is_mysql = False
     svc._initialized = True  # is_available muss True liefern ohne erneutes _init_engine

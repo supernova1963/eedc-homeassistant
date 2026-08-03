@@ -12,6 +12,7 @@ ergänzen MQTT-Energy-Snapshots als Standalone-Fallback. Das Self-Healing-Read
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
@@ -230,7 +231,14 @@ async def snapshot_anlage(
     ha_svc = get_ha_statistics_service()
     if counter_map and ha_svc.is_available:
         for sensor_key, entity_id in counter_map.items():
-            wert = ha_svc.get_value_at(entity_id, zeitpunkt, toleranz_minuten=10)
+            # `get_value_at` ist synchrones SQLAlchemy gegen die Recorder-DB.
+            # Direkt im `async def` aufgerufen hielt es den Event-Loop von eedc
+            # an — je Zähler, je Lauf. Bei einer Anlage mit zwanzig Zählern
+            # stand die Oberfläche für die Dauer aller zwanzig Abfragen. Der
+            # Job darf langsam sein, er darf nur nichts blockieren.
+            wert = await asyncio.to_thread(
+                ha_svc.get_value_at, entity_id, zeitpunkt, toleranz_minuten=10
+            )
             if wert is None:
                 # Recovery-Pfad: existierenden Eintrag löschen, damit ein
                 # prä-#184-Spike (sum=NULL→state-Fallback) nicht persistent
@@ -354,8 +362,11 @@ async def snapshot_anlage_5min(
         # Toleranz 3 Min: HA short_term schreibt exakt auf :00, :05, :10, ...
         # 3 Min ist eng genug um keinen Nachbar-Slot zu treffen, weit genug
         # für Latenz-Jitter.
-        wert = ha_svc.get_value_at(
-            entity_id, zeitpunkt, toleranz_minuten=3, short_term=True
+        # Wie im hourly-Pfad: synchrone DB-Abfrage gehört nicht in den
+        # Event-Loop. Dieser Job läuft alle fünf Minuten.
+        wert = await asyncio.to_thread(
+            ha_svc.get_value_at,
+            entity_id, zeitpunkt, toleranz_minuten=3, short_term=True,
         )
         if wert is None:
             if force_resnap:
