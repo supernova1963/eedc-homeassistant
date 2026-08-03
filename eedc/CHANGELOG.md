@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [4.0.8] - 2026-08-03 — Nach einem Neustart stimmen die Einheiten sofort
+
+### Fixed
+
+- **In der ersten Stunde nach einem Neustart der Box kannte eedc die Einheiten seiner Sensoren nicht — Regression aus v4.0.7.** Die Einheiten-Abfrage merkt sich je Sensor, wann sie ihn zuletzt geholt hat, und fragt nach einer Stunde erneut. Für einen Sensor, der **noch nie** geholt wurde, stand dort ein Platzhalter-Zeitpunkt, der mit der **Laufzeit des Systems** verglichen wurde — und die ist direkt nach einem Neustart kleiner als eine Stunde. Folge: der leere Vorrat galt als eben erst gefüllt, es wurde nichts abgefragt, und die Einheiten-Liste blieb leer, bis die Box eine Stunde gelaufen war. Sichtbar wurde das dort, wo aus der Einheit ein Umrechnungsfaktor folgt: Ein Sensor, der seine Leistung in **kW** meldet, wurde im Live-Tagesverlauf in dieser ersten Stunde nicht auf Watt umgerechnet und stand damit um den Faktor 1000 daneben; ebenso betroffen waren die Einheiten-Prüfung des Daten-Checkers (kW ≠ kWh) und der Energieprofil-Pfad. Wer seine Box durchlaufen lässt, hat davon nichts gemerkt — die Fehlstellung endete nach einer Stunde von selbst und kam erst mit dem nächsten Neustart wieder. Geprüft wird jetzt, ob ein Sensor **überhaupt** schon geholt wurde, statt einen Platzhalter-Zeitpunkt zu verrechnen. *(Beleg gegen eine simulierte Laufzeit von 42 Sekunden; er fällt gegen die alte Fassung unabhängig davon, wie lange die prüfende Maschine schon läuft — genau daran war der Vorgänger auf einem Entwicklungsrechner grün und im CI rot.)*
+
+---
+
 ## [4.0.7] - 2026-08-03 — Nichts kleinrechnen · nichts behaupten
 
 ### Changed
