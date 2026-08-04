@@ -1,7 +1,7 @@
 /**
- * Stundenvergleich heute — Abweichungen und Σ-Zeile (Rainer PN 90004/89980).
+ * Prognosen-Vergleich — Abweichungs-Sprache, Σ-Zeile und Zeilenfilter.
  *
- * Zwei Zusagen hält dieser Test fest:
+ * Vier Zusagen hält dieser Test fest:
  *
  * (a) **In jeder Zeile mit gemessenem IST trägt jede Prognosespalte eine
  *     Abweichung** — auch „± 0,0". Vorher unterdrückte sich die Annotation bei
@@ -11,12 +11,25 @@
  * (b) **Die Σ-Zeile vergleicht nur den gelaufenen Tag** (Entscheid B4). Vorher
  *     stand die Prognose des ganzen Tages gegen das IST bis jetzt — die
  *     Abweichung maß vor allem die Tageszeit.
+ *
+ * (c) **Dieselbe (Prognose, IST)-Paarung erzeugt in allen drei Tabellen
+ *     dieselbe Annotation** (P-5 / N-50). Das ist der eigentliche Beweis der
+ *     einen Sprache: vorher sagte das Genauigkeits-Tracking „+19 %", während
+ *     Stundenvergleich und 7-Tage-Vergleich „▲ 0,8" sagten — über dieselben
+ *     Tage, die beide Tabellen aus `genauigkeit.tage` ziehen.
+ *
+ * (d) **Der Zeilenfilter der 24h-Tabelle kennt die eedc-Spalte** (P-5 / N-51).
+ *
+ * **Spalten-Layout:** seit dem 04.08. trägt jede Quelle *zwei* Zellen — Wert und
+ * Einwertung getrennt (Entscheid Gernot), damit die Prozentangabe die
+ * rechtsbündige Zahl nicht mehr verschiebt. Die Tests adressieren deshalb
+ * benannte Spalten, nicht Positionen im Fließtext.
  */
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
 
-import { Pvg24hTabelle, PrognoseVergleichVM } from './PrognoseVergleichTeile'
-import type { PrognosenVergleich, StundenProfilEintrag } from '../../api/aussichten'
+import { Pvg24hTabelle, Pvg7TageTabelle, PvgGenauigkeitsTracking, PrognoseVergleichVM } from './PrognoseVergleichTeile'
+import type { PrognosenVergleich, StundenProfilEintrag, GenauigkeitsResponse } from '../../api/aussichten'
 
 const profil = (werte: Record<number, number | null>): StundenProfilEintrag[] =>
   Object.entries(werte).map(([h, kw]) => ({ stunde: Number(h), kw, p10_kw: null, p90_kw: null }))
@@ -45,10 +58,18 @@ const daten = (over: Partial<PrognosenVergleich> = {}): PrognosenVergleich => ({
   ...over,
 })
 
+/** Spalten der 24h-Tabelle. Jede Quelle: Wert, dann Einwertung. */
+const SP24 = { std: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 } as const
+/** Spalten des Genauigkeits-Trackings (Datum, drei Quellen, IST). */
+const SPTR = { datum: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 } as const
+/** Spalten der 7-Tage-Tabelle (Wetter-Icon und Datum vorweg). */
+const SP7 = { wetter: 0, datum: 1, om: 2, omD: 3, eedc: 4, eedcD: 5, sc: 6, scD: 7, ist: 8 } as const
+
+const zellen = (tr: Element) => Array.from(tr.querySelectorAll('td')).map(td => td.textContent ?? '')
+
 const zeige = (over: Partial<PrognosenVergleich> = {}) => {
   const vm = { data: daten(over) } as PrognoseVergleichVM
   const { container } = render(<Pvg24hTabelle vm={vm} />)
-  const zellen = (tr: Element) => Array.from(tr.querySelectorAll('td')).map(td => td.textContent ?? '')
   return {
     stunde: (label: string) => {
       const tr = Array.from(container.querySelectorAll('tbody tr'))
@@ -56,6 +77,8 @@ const zeige = (over: Partial<PrognosenVergleich> = {}) => {
       if (!tr) throw new Error(`Stundenzeile ${label} nicht gerendert`)
       return zellen(tr)
     },
+    stundenLabels: () => Array.from(container.querySelectorAll('tbody tr'))
+      .map(r => r.querySelector('td')?.textContent ?? ''),
     summe: () => zellen(container.querySelector('tfoot tr') as Element),
   }
 }
@@ -63,82 +86,191 @@ const zeige = (over: Partial<PrognosenVergleich> = {}) => {
 describe('Stundenvergleich — Abweichung je Prognosespalte', () => {
   it('annotiert jede Prognosespalte, auch wenn die Abweichung 0,0 ist', () => {
     // 9:00: OM und eedc treffen das IST exakt (2,69), Solcast liegt 0,3 darunter.
-    const [, om, eedc, sc, ist] = zeige().stunde('9:00')
+    const z = zeige().stunde('9:00')
 
-    expect(ist).toBe('2,69')
-    expect(om).toBe('2,69± 0,0')
-    expect(eedc).toBe('2,69± 0,0')
-    expect(sc).toBe('2,39▼ 0,3')
+    expect(z[SP24.ist]).toBe('2,69')
+    expect(z[SP24.om]).toBe('2,69')
+    expect(z[SP24.omD]).toBe('± 0,0 (0 %)')
+    expect(z[SP24.eedc]).toBe('2,69')
+    expect(z[SP24.eedcD]).toBe('± 0,0 (0 %)')
+    expect(z[SP24.sc]).toBe('2,39')
+    expect(z[SP24.scD]).toBe('▼ 0,3 (11 %)')
   })
 
   it('lässt die Annotation weg, wo kein IST vorliegt', () => {
     // 10:00 liegt hinter der IST-Grenze — dort wäre jede Abweichung erfunden.
-    const [, om, eedc, sc, ist] = zeige().stunde('10:00')
+    const z = zeige().stunde('10:00')
 
-    expect(ist).toBe('—')
-    expect(om).toBe('3,50')
-    expect(eedc).toBe('3,50')
-    expect(sc).toBe('3,50')
+    expect(z[SP24.ist]).toBe('—')
+    expect(z[SP24.om]).toBe('3,50')
+    expect(z[SP24.omD]).toBe('')
+    expect(z[SP24.eedcD]).toBe('')
+    expect(z[SP24.scD]).toBe('')
+  })
+
+  it('trägt die Prozentangabe auch bei kleinem, aber tragfähigem IST', () => {
+    // 7:00: IST 0,3 — über der Referenz-Grenze 0,05, aber unter der 0,5, an der
+    // das Genauigkeits-Tracking früher jede Annotation abschaltete.
+    const z = zeige({ solcast_stundenprofil: profil({ ...TAGESGANG, 7: 0.14 }) }).stunde('7:00')
+
+    expect(z[SP24.ist]).toBe('0,30')
+    expect(z[SP24.scD]).toBe('▼ 0,2 (53 %)')
+  })
+
+  it('lässt die Prozentangabe weg, wo die Referenz sie nicht trägt', () => {
+    // IST 0,04 liegt unter 0,05 — ein Prozentwert dagegen wäre erfunden.
+    const z = zeige({ ist_stundenprofil: profil({ 6: 0.04 }), aktuelle_stunde: 6 }).stunde('6:00')
+
+    expect(z[SP24.ist]).toBe('0,04')
+    expect(z[SP24.omD]).toBe('± 0,0')
   })
 })
 
 describe('Stundenvergleich — Σ vergleicht nur den gelaufenen Tag', () => {
   it('Rumpftag: Σ endet bei der letzten Stunde mit IST und nennt sie', () => {
-    const [label, om, eedc, sc, ist] = zeige().summe()
+    const z = zeige().summe()
 
     // 0,04 + 0,3 + 0,9 + 2,69 = 3,93 — die Stunden 10 und 11 zählen nicht mit,
     // obwohl für sie eine Prognose vorliegt.
-    expect(label).toBe('Σbis 9:00')
-    expect(ist).toBe('3,9')
-    expect(om).toBe('3,9± 0,0 (0 %)')
-    expect(eedc).toBe('3,9± 0,0 (0 %)')
+    expect(z[SP24.std]).toBe('Σbis 9:00')
+    expect(z[SP24.ist]).toBe('3,9')
+    expect(z[SP24.om]).toBe('3,9')
+    expect(z[SP24.omD]).toBe('± 0,0 (0 %)')
+    expect(z[SP24.eedcD]).toBe('± 0,0 (0 %)')
     // Solcast: 3,63 gegen 3,93 = 0,3 kWh = 8 %.
-    expect(sc).toBe('3,6▼ 0,3 (8 %)')
+    expect(z[SP24.sc]).toBe('3,6')
+    expect(z[SP24.scD]).toBe('▼ 0,3 (8 %)')
   })
 
   it('Rumpftag: die Prognose des Resttags fließt nicht in die Σ-Abweichung', () => {
-    const [, om] = zeige().summe()
+    const z = zeige().summe()
 
     // Vor B4 stand hier die Tagessumme 12,4 gegen IST 3,9 — eine Abweichung von
     // 8,5 kWh, die nur besagte, dass der Tag noch läuft.
-    expect(om).not.toContain('12,4')
-    expect(om).not.toContain('8,5')
+    expect(z[SP24.om]).not.toContain('12,4')
+    expect(z[SP24.omD]).not.toContain('8,5')
   })
 
   it('Volltag: alle Stunden gemessen ⇒ keine Kennzeichnung, Summe wie bisher', () => {
     const alle = Object.fromEntries(Array.from({ length: 24 }, (_, h) => [h, TAGESGANG[h] ?? 0]))
-    const { summe } = zeige({
+    const z = zeige({
       openmeteo_stundenprofil: profil(alle), eedc_stundenprofil: profil(alle),
       solcast_stundenprofil: profil(alle), ist_stundenprofil: profil(alle),
       aktuelle_stunde: 23,
-    })
-    const [label, om, , , ist] = summe()
+    }).summe()
 
-    expect(label).toBe('Σ')
-    expect(ist).toBe('12,4')
-    expect(om).toBe('12,4± 0,0 (0 %)')
+    expect(z[SP24.std]).toBe('Σ')
+    expect(z[SP24.ist]).toBe('12,4')
+    expect(z[SP24.om]).toBe('12,4')
+    expect(z[SP24.omD]).toBe('± 0,0 (0 %)')
   })
 
   it('Tag ohne jedes IST: volle Prognosesumme, aber kein Delta', () => {
-    const { summe } = zeige({ ist_stundenprofil: [], ist_heute_kwh: null, aktuelle_stunde: null })
-    const [label, om, eedc, sc, ist] = summe()
+    const z = zeige({ ist_stundenprofil: [], ist_heute_kwh: null, aktuelle_stunde: null }).summe()
 
-    expect(label).toBe('Σ')
-    expect(ist).toBe('—')
-    expect(om).toBe('12,4')
-    expect(eedc).toBe('12,4')
-    expect(sc).toBe('12,1')
-    expect([om, eedc, sc].join()).not.toMatch(/[▲▼±%]/)
+    expect(z[SP24.std]).toBe('Σ')
+    expect(z[SP24.ist]).toBe('—')
+    expect(z[SP24.om]).toBe('12,4')
+    expect(z[SP24.eedc]).toBe('12,4')
+    expect(z[SP24.sc]).toBe('12,1')
+    expect([z[SP24.omD], z[SP24.eedcD], z[SP24.scD]].join()).not.toMatch(/[▲▼±%]/)
   })
 
   it('Messlücke mitten im Tag: die Stunde fehlt in allen vier Spalten', () => {
     // 8:00 ohne Messwert (kein Zähler / Datenlücke) — die 0,9 kWh Prognose
     // dieser Stunde dürfen die Σ-Abweichung nicht als Fehlprognose belasten.
-    const { summe } = zeige({ ist_stundenprofil: profil({ ...bis(9), 8: null }) })
-    const [label, om, , , ist] = summe()
+    const z = zeige({ ist_stundenprofil: profil({ ...bis(9), 8: null }) }).summe()
 
-    expect(label).toBe('Σbis 9:00')
-    expect(ist).toBe('3,0')
-    expect(om).toBe('3,0± 0,0 (0 %)')
+    expect(z[SP24.std]).toBe('Σbis 9:00')
+    expect(z[SP24.ist]).toBe('3,0')
+    expect(z[SP24.om]).toBe('3,0')
+    expect(z[SP24.omD]).toBe('± 0,0 (0 %)')
+  })
+})
+
+describe('Zeilenfilter kennt jede Quelle (N-51)', () => {
+  it('zeigt eine Stunde, für die nur die eedc-Spalte einen Wert hat', () => {
+    // OM und Solcast liegen auf der Filter-Schwelle, IST fehlt — nur eedc trägt.
+    // Vorher fiel diese Zeile heraus, obwohl der Chart daneben sie zeichnete.
+    const labels = zeige({
+      openmeteo_stundenprofil: profil({ 5: 0.01, ...TAGESGANG }),
+      solcast_stundenprofil: profil({ 5: 0.0, ...TAGESGANG }),
+      eedc_stundenprofil: profil({ 5: 0.4, ...TAGESGANG }),
+    }).stundenLabels()
+
+    expect(labels).toContain('5:00')
+  })
+
+  it('lässt die Zeilenmenge eines normalen Tages unverändert', () => {
+    // Der Tagesgang hat Werte für 6–11; alle liegen über der Schwelle, keine
+    // Stunde kommt durch die eedc-Ergänzung hinzu oder fällt weg.
+    expect(zeige().stundenLabels()).toEqual(['6:00', '7:00', '8:00', '9:00', '10:00', '11:00'])
+  })
+})
+
+describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
+  // Bewusst weit in der Vergangenheit: `vergleichsTageVon` filtert gegen das
+  // heutige Datum, und ein Test darf nicht an der Uhr der Maschine hängen.
+  const TAG = '2020-06-11'
+  const genauigkeit = (): GenauigkeitsResponse => ({
+    anzahl_tage: 1, anzahl_ausreisser: 0, ausreisser_schwelle_prozent: 50,
+    openmeteo_mae_prozent: null, openmeteo_mbe_prozent: null, openmeteo_asymmetrie: [],
+    eedc_mae_prozent: null, eedc_mbe_prozent: null, eedc_asymmetrie: [],
+    solcast_mae_prozent: null, solcast_mbe_prozent: null, solcast_asymmetrie: [],
+    tage: [{
+      datum: TAG, openmeteo_kwh: 5.0, eedc_kwh: 5.0, solcast_kwh: 5.0, ist_kwh: 4.2,
+      wetter_symbol: 'cloudy', temperatur_max_c: 18, ist_ausreisser: false,
+    }],
+  } as unknown as GenauigkeitsResponse)
+
+  /** Dieselbe Paarung: Prognose 5,0 gegen IST 4,2 ⇒ Δ 0,8 kWh = 19 %. */
+  const ERWARTET = '▲ 0,8 (19 %)'
+
+  it('Genauigkeits-Tracking annotiert absolut mit Prozent in Klammern', () => {
+    const vm = { data: daten(), genauigkeit: genauigkeit(), ausreisserAusblenden: false } as PrognoseVergleichVM
+    const { container } = render(<PvgGenauigkeitsTracking vm={vm} />)
+    const z = zellen(container.querySelector('tbody tr') as Element)
+
+    expect(z[SPTR.om]).toBe('5,0')
+    expect(z[SPTR.omD]).toBe(ERWARTET)
+    expect(z[SPTR.ist]).toBe('4,2')
+  })
+
+  it('7-Tage-Vergleich sagt zu demselben Tag dasselbe', () => {
+    const vm = { data: daten(), genauigkeit: genauigkeit() } as PrognoseVergleichVM
+    const { container } = render(<Pvg7TageTabelle vm={vm} />)
+    const tr = Array.from(container.querySelectorAll('tbody tr'))
+      .find(r => zellen(r)[SP7.ist] === '4,2')
+    if (!tr) throw new Error('Vergangenheits-Zeile nicht gerendert')
+    const z = zellen(tr)
+
+    expect(z[SP7.om]).toBe('5,0')
+    expect(z[SP7.omD]).toBe(ERWARTET)
+  })
+
+  it('Stundenvergleich sagt zu derselben Paarung dasselbe', () => {
+    const z = zeige({
+      openmeteo_stundenprofil: profil({ 9: 5.0 }), eedc_stundenprofil: profil({ 9: 5.0 }),
+      solcast_stundenprofil: profil({ 9: 5.0 }), ist_stundenprofil: profil({ 9: 4.2 }),
+      aktuelle_stunde: 9,
+    }).stunde('9:00')
+
+    expect(z[SP24.omD]).toBe(ERWARTET)
+    expect(z[SP24.eedcD]).toBe(ERWARTET)
+    expect(z[SP24.scD]).toBe(ERWARTET)
+  })
+
+  it('7-Tage-Vergleich: ohne gemessenes IST bleibt die Unterdrückung', () => {
+    // Die Zukunfts-/Heute-Zeilen vergleichen gegen das Mittel der Prognosen —
+    // dort ist ein „± 0,0" keine Aussage über die Wirklichkeit.
+    const vm = { data: daten(), genauigkeit: genauigkeit() } as PrognoseVergleichVM
+    const { container } = render(<Pvg7TageTabelle vm={vm} />)
+    const heute = Array.from(container.querySelectorAll('tbody tr'))
+      .find(r => zellen(r)[SP7.ist].includes('bisher'))
+    if (!heute) throw new Error('Heute-Zeile nicht gerendert')
+
+    // OM 12,4 · eedc 12,0 · SC 11,0 ⇒ Mittel 11,8; die Abweichungen stehen,
+    // aber sie messen die Streuung der Prognosen, nicht die Wirklichkeit.
+    expect(zellen(heute)[SP7.omD]).toMatch(/▲/)
   })
 })

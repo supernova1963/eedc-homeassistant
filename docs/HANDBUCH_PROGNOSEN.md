@@ -175,12 +175,13 @@ Die [Prognose-Auswertung](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-is
 
 #### „Stundenvergleich heute" — was die Abweichungen sagen
 
-Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention)). Neben jedem Prognosewert steht die Abweichung zum gemessenen IST **derselben** Stunde, in kWh:
+Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention)). Jede Quelle hat **zwei** Spalten: ihren Wert, und daneben unter **Δ** die Abweichung zum gemessenen IST **derselben** Stunde:
 
 - **Sobald für eine Stunde ein IST vorliegt, trägt jede Prognosespalte eine Abweichung** — auch wenn sie „± 0,0" lautet. Eine fehlende Annotation heißt also nicht „kleine Abweichung", sondern **„für diese Stunde gibt es noch keine Messung"**.
 - **± 0,0** = Treffer im Rahmen der angezeigten Nachkommastelle, **▲** = Prognose lag über dem IST, **▼** = darunter. Die Farbe folgt der relativen Abweichung (grün < 10 %, gelb < 30 %, sonst rot).
+- Hinter der kWh-Differenz steht dieselbe Abweichung **relativ**, z. B. „▲ 9,7 (16 %)". Beide Zahlen sagen etwas Eigenes: 0,3 kWh sind mittags ein Treffer und morgens um sieben eine Fehlprognose. Die relative Angabe entfällt nur, wenn das IST so klein ist, dass ein Prozentwert erfunden wäre.
 
-**Die Σ-Zeile vergleicht nur den bisher gelaufenen Tag.** Sie summiert Prognose und IST über **dieselben** Stunden — bis zur letzten Stunde, für die eine Messung vorliegt — und schreibt diese Grenze darunter (`bis 13:00`). Zusätzlich zur Differenz in kWh steht dort die **prozentuale** Abweichung.
+**Die Σ-Zeile vergleicht nur den bisher gelaufenen Tag.** Sie summiert Prognose und IST über **dieselben** Stunden — bis zur letzten Stunde, für die eine Messung vorliegt — und schreibt diese Grenze darunter (`bis 13:00`).
 
 > Bis v4.0.5 stand in dieser Zeile die Prognose des **ganzen** Tages neben dem IST **bis jetzt** — mittags also z. B. „78,1 ▲ 52,0" gegen „26,1". Diese Zahl maß vor allem, wie früh am Tag man hinsah. Dieselben Daten ergeben jetzt „30,2 ▲ 4,1 (16 %)" gegen „26,1 bis 13:00" — die Aussage über die Prognosegüte, die der Vergleich immer sein sollte.
 
@@ -288,6 +289,8 @@ Faustregel für die Deutung:
 - **|Bias| ≈ MAE** → systematischer Versatz → genau hier wirkt der Lernfaktor / das Korrekturprofil.
 
 Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAE und Bias für OpenMeteo, eedc und Solcast nebeneinander; sie bleibt auch dann stabil und lesbar, wenn für eedc noch kein Lernfaktor vorliegt (dann bleibt nur die eedc-Spalte leer).
+
+**Die Tagestabelle darunter spricht dieselbe Sprache wie der Stundenvergleich:** je Quelle eine Wert- und eine **Δ**-Spalte, die Abweichung absolut in kWh mit der relativen Angabe in Klammern. Bis v4.0.8 stand hier nur der relative Wert („+16 %") — dieselben vier Tage, die auch im 7-Tage-Vergleich stehen, wurden damit auf einer Seite in zwei verschiedenen Sprachen beschrieben.
 
 Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie stark und an wie vielen Tagen die Prognose *über* bzw. *unter* dem IST lag. So wird z. B. ein reiner Vormittags-Bias sichtbar.
 

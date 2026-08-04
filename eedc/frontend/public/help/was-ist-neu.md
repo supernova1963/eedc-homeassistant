@@ -11,6 +11,30 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Prognosen-Vergleich: eine Abweichung, eine Sprache — und eine eigene Spalte
+
+**Betrifft dich das?** Wenn du unter *Auswertungen → Prognose* die drei Tabellen vergleichst.
+
+Bisher beantworteten sie dieselbe Frage in zwei Sprachen: das **Genauigkeits-Tracking** nannte
+nur den Prozentwert („+16 %"), **Stundenvergleich** und **7-Tage-Vergleich** nur die kWh
+(„▲ 9,7"). Weil die 7-Tage-Tabelle ihre Vergangenheits-Tage aus derselben Liste zieht wie das
+Tracking, standen die letzten vier Tage doppelt auf der Seite — mit zwei verschiedenen Zahlen
+für dieselbe Abweichung.
+
+Ab jetzt steht überall **beides**: „▲ 9,7 (16 %)". Beide Angaben sagen etwas Eigenes — 0,3 kWh
+Abweichung sind mittags ein Treffer und morgens um sieben eine Fehlprognose.
+
+Damit die Prozentangabe die Zahlen nicht mehr verschiebt, hat jede Quelle jetzt **zwei
+Spalten**: links ihr Wert, rechts daneben unter **Δ** die Einwertung. So fluchten die Werte
+wieder untereinander, und du kannst die Δ-Spalte für sich lesen.
+
+Nebenbei verschwinden drei Ungereimtheiten: Eine kleine Morgenstunde bekam in der einen Tabelle
+gar keine Bewertung und in der anderen eine **rote**; der Rotton war in beiden leicht
+verschieden; und der 7-Tage-Vergleich verschwieg als einziger die Abweichung abgeschlossener
+Tage, wenn sie sehr klein war.
+
+**Muss ich etwas tun?** Nein.
+
 ### Der Jahres-Verlauf zeigt auch den laufenden Monat
 
 **Betrifft dich das?** Wenn du in *Cockpit → Jahr* schaust und dort oben mehr Monate gezählt
