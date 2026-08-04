@@ -33,7 +33,7 @@ Der Kern-Gedanke: Eine Prognose ist nur so gut, wie sie zur Realität passt. Des
 
 ## 2. Die vier Quellen — und woher sie kommen
 
-Im Prognosen-Vergleich stehen vier Spalten nebeneinander:
+Im Prognosen-Vergleich stehen vier Quellen nebeneinander — jede mit ihrem Wert und, direkt daneben unter **Δ**, ihrer Abweichung zum IST:
 
 | Quelle | Herkunft | API-Key nötig? | Besonderheit |
 |--------|----------|----------------|--------------|
@@ -41,6 +41,8 @@ Im Prognosen-Vergleich stehen vier Spalten nebeneinander:
 | **eedc** | OpenMeteo **× Lernfaktor** deiner Anlage | nein | die kalibrierte Default-Quelle (siehe [§5](#5-lernfaktor--korrekturprofil--wie-eedc-dazulernt)) |
 | **Solcast** | Solcast-Forecast (optional) | ja, im Standalone | liefert Konfidenzband p10–p90 |
 | **IST** | dein gemessener Ertrag aus dem Energieprofil | — | die Referenz, an der sich alles misst |
+
+Dazu kommt **SFML**, wenn du es als Quelle gewählt hast — als Wert **ohne** Δ-Spalte, siehe [§2.5](#25-sfml-solar-forecast-ml--sichtbar-aber-bewusst-nicht-bewertet).
 
 ### 2.1 OpenMeteo (roh) — die Basis
 
@@ -73,9 +75,9 @@ Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Diens
 
 Der tatsächliche Ertrag kommt aus dem [Energieprofil](HANDBUCH_ENERGIEPROFIL.md): stündlich aus den PV-Stundenwerten, als Tagessumme über alle Komponenten mit Präfix `pv_`/`bkw_`. Fehlt der PV-Zähler, ist IST unvollständig (eedc markiert betroffene Stunden als Lücke) — und damit fällt die Lerngrundlage weg.
 
-### 2.5 SFML (Solar Forecast ML) — wählbar, aber bewusst nicht im Vergleich
+### 2.5 SFML (Solar Forecast ML) — sichtbar, aber bewusst nicht bewertet
 
-> **Zwei verschiedene Dinge nicht verwechseln:** Die **vier Spalten oben** sind der *Vergleich* (was steht nebeneinander zur Beurteilung). Davon getrennt gibt es die **operative Prognosequelle** — die *eine* Quelle, die deine Tagesprognose, Batteriesimulation und den HA-Export tatsächlich speist. Diese wählst du unter **Einstellungen → Stammdaten → Anlage** im Feld **„PV-Prognose-Quelle für diese Anlage"**.
+> **Zwei verschiedene Dinge nicht verwechseln:** Die **Δ-Spalten** sind die *Beurteilung* (welche Quelle wie weit danebenlag). Davon getrennt gibt es die **operative Prognosequelle** — die *eine* Quelle, die deine Tagesprognose, Batteriesimulation und den HA-Export tatsächlich speist. Diese wählst du unter **Einstellungen → Stammdaten → Anlage** im Feld **„PV-Prognose-Quelle für diese Anlage"**.
 
 Als operative Prognosequelle stehen zur Wahl:
 
@@ -83,11 +85,15 @@ Als operative Prognosequelle stehen zur Wahl:
 - **Solcast** (pur, ohne eedc-Korrektur).
 - **Solar Forecast ML (SFML)** — die HA-Integration von Tom-HA, pur und ohne eedc-Korrektur (das ML-Modell kalibriert sich selbst). **Nur im HA-Add-on auswählbar**; im Standalone ist die Option deaktiviert. Ist SFML gewählt, aber kein HA verfügbar, fällt eedc neutral auf die eedc-Quelle zurück.
 
-**SFML erscheint absichtlich *nicht* in der Vier-Spalten-Vergleichsmatrix.** eedc positioniert sich bewusst nicht vergleichend gegen eine spezialisierte Profi-Prognosequelle. SFML wirkt also als *aktive* Quelle (treibt deine operative Prognose), wird aber nicht Spalte an Spalte gegen OpenMeteo/eedc/Solcast gestellt. Das ist so gewollt — kein Fehler.
+**Ist SFML deine gewählte Quelle, siehst du sie im Vergleich — als Wert, nicht als Note.** Der Stundenvergleich, der 7-Tage-Vergleich und der Tagesverlauf zeigen dann eine zusätzliche **SFML**-Spalte bzw. -Kurve: sonst fehlte dir in dieser Sicht ausgerechnet die Zahl, mit der eedc bei dir tatsächlich rechnet.
+
+**Was SFML *nicht* bekommt, ist eine Abweichungs-Spalte** — und im **Genauigkeits-Tracking** (MAE/Bias und die Tagestabelle darunter) erscheint SFML gar nicht. eedc positioniert sich bewusst nicht bewertend gegen eine spezialisierte Prognosequelle; für zurückliegende Tage führt eedc über SFML deshalb auch keine Mitschrift, weshalb die SFML-Spalte im 7-Tage-Vergleich für die Vergangenheit „—" zeigt. Das ist so gewollt — kein Fehler.
+
+> Bis v4.0.8 blieb SFML in diesen Sichten **ganz** außen vor. Das war eine gröbere Regel als nötig: Wert und Bewertung standen damals in derselben Tabellenzelle, „anzeigen ohne zu bewerten" gab es also nicht. Seit Wert und **Δ** getrennte Spalten haben, geht beides.
 
 > **Echte Stundenauflösung:** Ist SFML als Quelle gewählt, nutzt eedc SFMLs **eigenes Stundenprofil** (bis zu 3 Tage, stündlich — aus dem evcc-Prognose-Sensor `…_evcc_solar_prognose`). Die SFML-Kurve im Tagesverlauf zeigt also SFMLs eigene Form, nicht die über die OpenMeteo-Strahlungskurve „verschmierte" Tagessumme. Fehlt dieser Sensor, fällt eedc auf das Tagesprofil `prognose_heute` (24 h) und notfalls auf die alte GTI-Verteilung zurück. (Das ist reine Treue zur selbstgewählten Quelle, **kein** Genauigkeits-Vergleich.)
 
-- **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil der Vier-Spalten-Matrix.
+- **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil des Stunden-/Tagesvergleichs.
 
 ### 2.6 Die aktive PVGIS-Prognose — eine, und du bestimmst welche
 

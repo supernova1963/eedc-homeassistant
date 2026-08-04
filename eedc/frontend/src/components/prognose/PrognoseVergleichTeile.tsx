@@ -152,10 +152,12 @@ function chartDatenVon(data: PrognosenVergleich) {
     const om = data.openmeteo_stundenprofil.find(s => s.stunde === h)
     const eedc = data.eedc_stundenprofil.find(s => s.stunde === h)
     const sc = data.solcast_stundenprofil.find(s => s.stunde === h)
+    const sfml = (data.sfml_stundenprofil ?? []).find(s => s.stunde === h)
     const ist = data.ist_stundenprofil.find(s => s.stunde === h)
     return {
       stunde: `${h}:00`, openmeteo: om?.kw ?? 0, eedc: eedc?.kw ?? null,
-      solcast: sc?.kw ?? 0, solcast_p10: sc?.p10_kw ?? 0, solcast_p90: sc?.p90_kw ?? 0, ist: ist?.kw ?? null,
+      solcast: sc?.kw ?? 0, solcast_p10: sc?.p10_kw ?? 0, solcast_p90: sc?.p90_kw ?? 0,
+      sfml: sfml?.kw ?? null, ist: ist?.kw ?? null,
     }
   })
 }
@@ -179,7 +181,7 @@ const ZEILE_MIN_KW = 0.01
  * Die Ergänzung um `eedc` selbst ändert dort 0 Zeilen (15 vorher wie nachher).
  */
 function hatWert(r: ChartZeile, schwelleKw: number): boolean {
-  return Math.max(r.openmeteo || 0, r.solcast || 0, r.eedc ?? 0, r.ist ?? 0) > schwelleKw
+  return Math.max(r.openmeteo || 0, r.solcast || 0, r.eedc ?? 0, r.sfml ?? 0, r.ist ?? 0) > schwelleKw
 }
 
 function sichtbareStunden(chartData: ReturnType<typeof chartDatenVon>) {
@@ -199,6 +201,7 @@ export interface StundenSumme {
   openmeteo: number
   eedc: number
   solcast: number
+  sfml: number
   /** Σ IST derselben Stunden — `null`, solange nichts gemessen ist. */
   ist: number | null
 }
@@ -232,6 +235,7 @@ export function stundenSummeVon(chartData: ReturnType<typeof chartDatenVon>, akt
     openmeteo: summe(r => r.openmeteo),
     eedc: summe(r => r.eedc ?? 0),
     solcast: summe(r => r.solcast),
+    sfml: summe(r => r.sfml ?? 0),
     ist: bisStunde === null ? null : summe(r => r.ist ?? 0),
   }
 }
@@ -241,16 +245,22 @@ function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsRe
   const historisch = (genauigkeit?.tage ?? []).filter(t => t.datum < heute).slice(-4).map(t => ({
     datum: t.datum, om_kwh: t.openmeteo_kwh, eedc_kwh: t.eedc_kwh, sc_kwh: t.solcast_kwh,
     sc_p10: null as number | null, sc_p90: null as number | null,
+    // SFML hat für die Vergangenheit keinen Wert: eedc führt darüber bewusst keine
+    // Mitschrift — genau die wäre das „rolling", gegen das die Tom-HA-Zusage geht.
+    sfml_kwh: null as number | null,
     wetter_symbol: t.wetter_symbol ?? null, temp_max: t.temperatur_max_c ?? null, ist_kwh: t.ist_kwh, ist_partiell: false,
   }))
   const omHeute = data.openmeteo_tage.find(om => om.datum === heute)
   const heuteZeile = {
     datum: heute, om_kwh: data.openmeteo_heute_kwh, eedc_kwh: hasEedc ? data.eedc_heute_kwh : null,
     sc_kwh: data.solcast_heute_kwh, sc_p10: data.solcast_p10_kwh ?? null, sc_p90: data.solcast_p90_kwh ?? null,
+    sfml_kwh: data.sfml_heute_kwh ?? null,
     wetter_symbol: (omHeute?.wetter_symbol ?? null) as string | null, temp_max: (omHeute?.temperatur_max_c ?? null) as number | null,
     ist_kwh: data.ist_heute_kwh, ist_partiell: true,
   }
-  const zukunft = data.openmeteo_tage.filter(om => om.datum > heute).slice(0, 3).map(om => {
+  // SFML liefert zwei Zukunftstage (morgen, übermorgen); der dritte bleibt leer.
+  const sfmlZukunft = [data.sfml_morgen_kwh ?? null, data.sfml_uebermorgen_kwh ?? null]
+  const zukunft = data.openmeteo_tage.filter(om => om.datum > heute).slice(0, 3).map((om, i) => {
     const sc = data.solcast_tage.find(s => s.datum === om.datum)
     return {
       datum: om.datum, om_kwh: om.pv_prognose_kwh as number | null,
@@ -258,6 +268,7 @@ function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsRe
       // seitiges `om × Lernfaktor`-Nachrechnen mehr — war eine Drift-Quelle).
       eedc_kwh: hasEedc ? (om.eedc_kwh ?? null) : null,
       sc_kwh: sc?.kwh ?? null, sc_p10: sc?.p10 ?? null, sc_p90: sc?.p90 ?? null,
+      sfml_kwh: sfmlZukunft[i] ?? null,
       wetter_symbol: om.wetter_symbol as string | null, temp_max: om.temperatur_max_c as number | null,
       ist_kwh: null as number | null, ist_partiell: false,
     }
@@ -490,7 +501,8 @@ function StundenTooltip({ active, payload, label, hasEedc }: { active?: boolean;
         if (['solcast_p10', 'solcast_p90'].includes(key)) return null
         if (key === 'ist' && p.value === null) return null
         if (key === 'eedc' && !hasEedc) return null
-        const labels: Record<string, string> = { openmeteo: 'OpenMeteo (roh)', eedc: 'eedc (kalibriert)', solcast: 'Solcast', ist: 'IST' }
+        if (key === 'sfml' && p.value === null) return null
+        const labels: Record<string, string> = { openmeteo: 'OpenMeteo (roh)', eedc: 'eedc (kalibriert)', solcast: 'Solcast', sfml: 'SFML (gewählte Quelle)', ist: 'IST' }
         return (
           <div key={key} className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: p.stroke || p.fill }} />
@@ -848,6 +860,7 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
+  const hasSfml = data.sfml_verfuegbar === true
   const visibleChartData = sichtbareStunden(chartDatenVon(data))
   return (
     <Card>
@@ -863,9 +876,10 @@ export function PvgStundenprofil({ vm }: { vm: PrognoseVergleichVM }) {
                 sein (Backlog-Beifang R21-1). „×Faktor" stand hier noch aus der
                 Zeit des reinen Skalars; korrigiert wird längst pro Stunden-Slot
                 (Korrekturprofil-Kaskade) — der Skalar ist nur noch Fallback. */}
-            <Legend content={<ChartLegende onItemClick={legende.onItemClick} formatter={(v) => ({ ist: 'IST', eedc: 'eedc (kalibriert)', solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)' }[v] || v)} />} />
+            <Legend content={<ChartLegende onItemClick={legende.onItemClick} formatter={(v) => ({ ist: 'IST', eedc: 'eedc (kalibriert)', solcast: 'Solcast', openmeteo: 'OpenMeteo (roh)', sfml: 'SFML (gewählte Quelle)' }[v] || v)} />} />
             {data.aktuelle_stunde !== null && (<ReferenceLine x={`${data.aktuelle_stunde}:00`} stroke={achsen.referenz} strokeDasharray="3 3" label={{ value: 'Jetzt', position: 'top', fontSize: 10, fill: achsen.achse }} />)}
             <Area dataKey="ist" stroke={PROGNOSE_QUELLEN_COLORS.ist} fill={PROGNOSE_QUELLEN_COLORS.ist} fillOpacity={0.3} strokeWidth={2} dot={false} name="ist" connectNulls={false} hide={legende.istVersteckt('ist')} />
+            {hasSfml && <Line dataKey="sfml" stroke={PROGNOSE_QUELLEN_COLORS.sfml} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="sfml" connectNulls={false} hide={legende.istVersteckt('sfml')} />}
             {hasSolcast && <Line dataKey="solcast" stroke={PROGNOSE_QUELLEN_COLORS.solcast} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="solcast" hide={legende.istVersteckt('solcast')} />}
             {hasEedc && <Line dataKey="eedc" stroke={PROGNOSE_QUELLEN_COLORS.eedc} strokeWidth={2} strokeDasharray={PROGNOSE_DASH} dot={false} name="eedc" hide={legende.istVersteckt('eedc')} />}
             <Line dataKey="openmeteo" stroke={PROGNOSE_QUELLEN_COLORS.openmeteo} strokeWidth={1.5} strokeDasharray={PROGNOSE_DASH} dot={false} name="openmeteo" hide={legende.istVersteckt('openmeteo')} />
@@ -909,11 +923,35 @@ function PvgPrognoseZelle({ wert, ist, klasse = '', stellen = 2, leerGedimmt = f
   )
 }
 
+/**
+ * Eine Prognose-Zelle **ohne** Einwertung — der Weg, auf dem SFML in den
+ * Vergleich kommt.
+ *
+ * Warum ohne Δ: eedc hat Tom-HA zugesagt, SFML in **keine** Genauigkeits-
+ * Gegenüberstellung gegen eedc/Solcast zu stellen. Die Zusage steht seit jeher
+ * im Backend, an genau der Stelle, die die SFML-Werte liefert
+ * (`api/routes/prognosen.py`: „Einzelquellen-Treue (#110 A) … KEIN
+ * Cross-Quellen-Genauigkeits-Ranking").
+ *
+ * Den **Wert treu anzuzeigen** ist davon ausdrücklich nicht betroffen — und er
+ * fehlte bisher ausgerechnet denen, die SFML als Quelle gewählt haben: das
+ * Backend liefert `sfml_*` seit jeher mit, der Vergleich las es nie. Sie sahen
+ * drei Zahlen, aber nicht die, mit der eedc bei ihnen rechnet.
+ */
+function PvgWertZelle({ wert, klasse = '', stellen = 2 }: { wert: number | null; klasse?: string; stellen?: number }) {
+  return (
+    <td className={`${ZELLE} text-right font-mono ${klasse}`}>
+      {wert === null ? <span className="text-gray-400 dark:text-gray-500">—</span> : fmtZahl(wert, stellen)}
+    </td>
+  )
+}
+
 export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   const { data } = vm
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
+  const hasSfml = data.sfml_verfuegbar === true
   const chartData = chartDatenVon(data)
   const summe = stundenSummeVon(chartData, data.aktuelle_stunde)
   return (
@@ -922,7 +960,7 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
       <Table zeilen={24} mitFuss className="table-fixed">
         <colgroup>
           <col className="w-16" /><col /><col className="w-24" /><col /><col className="w-24" />
-          {hasSolcast && <><col /><col className="w-24" /></>}<col />
+          {hasSolcast && <><col /><col className="w-24" /></>}{hasSfml && <col />}<col />
         </colgroup>
         <TableHead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -933,6 +971,13 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
             <AbweichungKopf quelle="eedc" klasse={eedcKlasse(hasEedc)} />
             {hasSolcast && <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>SC</th>}
             {hasSolcast && <AbweichungKopf quelle="Solcast" klasse={Q.solcast} />}
+            {hasSfml && (
+              <th className={`${KOPF_ZELLE} text-right ${Q.sfml}`}>
+                <SimpleTooltip text="Solar Forecast ML — deine gewählte Prognosequelle. Wird als Wert gezeigt, aber nicht gegen die anderen Quellen bewertet.">
+                  <span>SFML</span>
+                </SimpleTooltip>
+              </th>
+            )}
             <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>IST</th>
           </tr>
         </TableHead>
@@ -947,6 +992,7 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
                 <PvgPrognoseZelle wert={row.openmeteo} ist={istVal} />
                 <PvgPrognoseZelle wert={hasEedc ? row.eedc : null} ist={istVal} klasse={eedcKlasse(hasEedc)} />
                 {hasSolcast && <PvgPrognoseZelle wert={row.solcast} ist={istVal} />}
+                {hasSfml && <PvgWertZelle wert={row.sfml} klasse={Q.sfml} />}
                 <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{istVal !== null ? fmtZahl(istVal, 2) : <span className="text-gray-400 dark:text-gray-500">—</span>}</td>
               </tr>
             )
@@ -965,6 +1011,7 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
             <PvgPrognoseZelle wert={summe.openmeteo} ist={summe.ist} klasse={Q.openmeteo} stellen={1} />
             <PvgPrognoseZelle wert={hasEedc ? summe.eedc : null} ist={summe.ist} klasse={eedcKlasse(hasEedc)} stellen={1} />
             {hasSolcast && <PvgPrognoseZelle wert={summe.solcast} ist={summe.ist} klasse={Q.solcast} stellen={1} />}
+            {hasSfml && <PvgWertZelle wert={summe.sfml} klasse={Q.sfml} stellen={1} />}
             <td className={`${ZELLE} text-right font-mono ${Q.ist}`}>{summe.ist !== null ? fmtZahl(summe.ist, 1) : '—'}</td>
           </tr>
         </TableFoot>
@@ -978,6 +1025,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   if (!data) return null
   const hasSolcast = data.solcast_verfuegbar
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
+  const hasSfml = data.sfml_verfuegbar === true
   const vergleichsTage = vergleichsTageVon(data, genauigkeit, hasEedc)
   return (
     <Card>
@@ -986,7 +1034,8 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
         <Table className="table-fixed">
           <colgroup>
             <col className="w-20" /><col className="w-24" /><col /><col className="w-24" />
-            <col /><col className="w-24" />{hasSolcast && <><col /><col className="w-24" /></>}<col />
+            <col /><col className="w-24" />{hasSolcast && <><col /><col className="w-24" /></>}
+            {hasSfml && <col />}<col />
           </colgroup>
           <TableHead>
             <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -998,6 +1047,13 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
               <AbweichungKopf quelle="eedc" klasse={eedcKlasse(hasEedc)} />
               {hasSolcast && <th className={`${KOPF_ZELLE} text-right ${Q.solcast}`}>Solcast</th>}
               {hasSolcast && <AbweichungKopf quelle="Solcast" klasse={Q.solcast} />}
+              {hasSfml && (
+                <th className={`${KOPF_ZELLE} text-right ${Q.sfml}`}>
+                  <SimpleTooltip text="Solar Forecast ML — deine gewählte Prognosequelle. Wird als Wert gezeigt, aber nicht gegen die anderen Quellen bewertet; für zurückliegende Tage führt eedc dazu keine Mitschrift.">
+                    <span>SFML</span>
+                  </SimpleTooltip>
+                </th>
+              )}
               <th className={`${KOPF_ZELLE} text-right ${Q.ist}`}>IST</th>
             </tr>
           </TableHead>
@@ -1028,6 +1084,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
                         : null}
                     />
                   )}
+                  {hasSfml && <PvgWertZelle wert={tag.sfml_kwh} klasse={Q.sfml} stellen={1} />}
                   <td className={`${ZELLE} text-right font-mono font-semibold text-green-600 dark:text-green-400`}>{tag.ist_kwh !== null ? (<>{fmtZahl(tag.ist_kwh, 1)}{tag.ist_partiell && <span className="text-gray-400 dark:text-gray-500 text-[10px] font-normal ml-1">bisher</span>}</>) : <span className="text-gray-400 dark:text-gray-500 text-xs">⌀{mean != null ? fmtZahl(mean, 0) : '—'}</span>}</td>
                 </tr>
               )

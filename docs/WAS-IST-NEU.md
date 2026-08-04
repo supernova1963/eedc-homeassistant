@@ -11,6 +11,23 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### SFML steht jetzt im Prognosen-Vergleich
+
+**Betrifft dich das?** Wenn du unter *Einstellungen → Stammdaten* **Solar Forecast ML (SFML)**
+als Prognosequelle gewählt hast.
+
+Unter *Auswertungen → Prognose* standen bisher OpenMeteo, eedc, Solcast und dein IST — die
+Quelle, mit der eedc bei dir tatsächlich rechnet, fehlte ausgerechnet dort. Sie erscheint jetzt
+als eigene **SFML**-Spalte im Stundenvergleich und im 7-Tage-Vergleich, und als eigene Kurve im
+Tagesverlauf.
+
+**Bewertet wird SFML weiterhin nicht:** Es bekommt keine Δ-Spalte, und im Genauigkeits-Tracking
+(MAE/Bias) taucht es nicht auf. eedc stellt eine spezialisierte fremde Prognosequelle nicht
+benotend gegen die eigene. Für vergangene Tage steht in der SFML-Spalte deshalb „—" — eedc führt
+darüber keine Mitschrift; gefüllt sind heute und morgen.
+
+**Muss ich etwas tun?** Nein. Ohne gewählte SFML-Quelle ändert sich für dich nichts.
+
 ### Prognosen-Vergleich: eine Abweichung, eine Sprache — und eine eigene Spalte
 
 **Betrifft dich das?** Wenn du unter *Auswertungen → Prognose* die drei Tabellen vergleichst.

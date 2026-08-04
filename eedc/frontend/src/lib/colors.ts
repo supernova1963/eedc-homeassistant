@@ -272,12 +272,16 @@ export const SOLL_IST_COLORS = {
   abweichung: '#10b981',  // Grün (Differenz-Linie)
 }
 
-/** Prognose-Quellen — eine Quelle = überall dieselbe Farbe (Vergleichs-Tab, Charts). */
+/** Prognose-Quellen — eine Quelle = überall dieselbe Farbe (Vergleichs-Tab, Charts).
+ *  `sfml` ist die vom Anwender gewählte externe Quelle (Solar Forecast ML, nur im
+ *  HA-Add-on) — sie erscheint im Vergleich als **Wert**, nie im Genauigkeits-Ranking
+ *  ([[project_sfml_tom_ha]], `api/routes/prognosen.py` „KEIN Cross-Quellen-Ranking"). */
 export const PROGNOSE_QUELLEN_COLORS = {
   ist: '#22c55e',
   openmeteo: '#eab308',
   eedc: '#f97316',
   solcast: '#3b82f6',
+  sfml: '#8b5cf6',
 }
 
 /** Tailwind-Text-Klassen-Zwillinge zu {@link PROGNOSE_QUELLEN_COLORS} (R3): die
@@ -288,6 +292,7 @@ export const PROGNOSE_QUELLEN_TEXT = {
   openmeteo: 'text-yellow-500',
   eedc: 'text-orange-500',
   solcast: 'text-blue-500',
+  sfml: 'text-violet-500',
 }
 
 // ─── Mehrserien-Paletten ─────────────────────────────────────────────────────

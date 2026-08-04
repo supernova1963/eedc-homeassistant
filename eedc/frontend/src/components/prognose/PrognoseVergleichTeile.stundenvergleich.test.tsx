@@ -64,6 +64,8 @@ const SP24 = { std: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 }
 const SPTR = { datum: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 } as const
 /** Spalten der 7-Tage-Tabelle (Wetter-Icon und Datum vorweg). */
 const SP7 = { wetter: 0, datum: 1, om: 2, omD: 3, eedc: 4, eedcD: 5, sc: 6, scD: 7, ist: 8 } as const
+/** Dieselbe Tabelle, wenn SFML die gewählte Quelle ist — eine Wertspalte mehr. */
+const SP7_SFML = { ...SP7, sfml: 8, ist: 9 } as const
 
 const zellen = (tr: Element) => Array.from(tr.querySelectorAll('td')).map(td => td.textContent ?? '')
 
@@ -205,6 +207,78 @@ describe('Zeilenfilter kennt jede Quelle (N-51)', () => {
     // Der Tagesgang hat Werte für 6–11; alle liegen über der Schwelle, keine
     // Stunde kommt durch die eedc-Ergänzung hinzu oder fällt weg.
     expect(zeige().stundenLabels()).toEqual(['6:00', '7:00', '8:00', '9:00', '10:00', '11:00'])
+  })
+})
+
+describe('SFML — gewählte Quelle wird gezeigt, aber nicht bewertet', () => {
+  const mitSfml = (over: Partial<PrognosenVergleich> = {}) => daten({
+    sfml_verfuegbar: true,
+    sfml_heute_kwh: 11.7, sfml_morgen_kwh: 9.2, sfml_uebermorgen_kwh: null,
+    sfml_stundenprofil: profil({ ...TAGESGANG, 9: 2.9 }),
+    ...over,
+  })
+
+  it('bleibt ganz weg, solange SFML nicht die gewählte Quelle ist', () => {
+    // Ohne `sfml_verfuegbar` darf keine Spalte erscheinen — sonst stünde bei
+    // jedem Anwender eine leere Spalte für eine Quelle, die er nicht nutzt.
+    const { container } = render(<Pvg24hTabelle vm={{ data: daten() } as PrognoseVergleichVM} />)
+    const kopf = Array.from(container.querySelectorAll('thead th')).map(th => th.textContent ?? '')
+
+    expect(kopf).not.toContain('SFML')
+    expect(kopf).toHaveLength(8)
+  })
+
+  it('zeigt im Stundenvergleich den SFML-Wert — und KEINE Abweichung dazu', () => {
+    // Die Tom-HA-Zusage: SFML treu anzeigen ja, Genauigkeits-Ranking nein.
+    // Der Beweis ist die Spaltenzahl: neun statt zehn — eine Wertspalte mehr,
+    // aber kein zusätzliches Δ.
+    const { container } = render(<Pvg24hTabelle vm={{ data: mitSfml() } as PrognoseVergleichVM} />)
+    const kopf = Array.from(container.querySelectorAll('thead th')).map(th => th.textContent ?? '')
+    const tr = Array.from(container.querySelectorAll('tbody tr'))
+      .find(r => (r.querySelector('td')?.textContent ?? '') === '9:00')
+    if (!tr) throw new Error('Stundenzeile 9:00 nicht gerendert')
+    const z = zellen(tr)
+
+    expect(kopf).toEqual(['Std.', 'OM', 'Δ', 'eedc', 'Δ', 'SC', 'Δ', 'SFML', 'IST'])
+    expect(kopf.filter(k => k === 'Δ')).toHaveLength(3)
+    expect(z[7]).toBe('2,90')                    // SFML-Wert steht
+    expect(z[7]).not.toMatch(/[▲▼±%]/)           // ohne jede Einwertung
+    expect(z[8]).toBe('2,69')                    // IST daneben unverändert
+  })
+
+  it('zeigt im 7-Tage-Vergleich heute und morgen, aber nichts Vergangenes', () => {
+    // Für zurückliegende Tage führt eedc keine SFML-Mitschrift — genau die wäre
+    // das „rolling", gegen das die Zusage geht. Die Spalte bleibt dort leer.
+    const vm = { data: mitSfml(), genauigkeit: null } as PrognoseVergleichVM
+    const { container } = render(<Pvg7TageTabelle vm={vm} />)
+    const kopf = Array.from(container.querySelectorAll('thead th')).map(th => th.textContent ?? '')
+    const heute = Array.from(container.querySelectorAll('tbody tr'))
+      .find(r => zellen(r)[SP7_SFML.ist].includes('bisher'))
+    if (!heute) throw new Error('Heute-Zeile nicht gerendert')
+
+    expect(kopf).toContain('SFML')
+    expect(kopf.filter(k => k === 'Δ')).toHaveLength(3)
+    expect(zellen(heute)[SP7_SFML.sfml]).toBe('11,7')
+    expect(zellen(heute)[SP7_SFML.sfml]).not.toMatch(/[▲▼±%]/)
+  })
+
+  it('nimmt SFML in den Zeilenfilter auf', () => {
+    // Dieselbe Regel wie für eedc (N-51): eine Stunde, die nur SFML kennt,
+    // gehört in die Tabelle — sonst fehlt sie ausgerechnet der Quelle, mit der
+    // dieser Anwender rechnet.
+    const vm = {
+      data: mitSfml({
+        openmeteo_stundenprofil: profil({ 5: 0.0, ...TAGESGANG }),
+        solcast_stundenprofil: profil({ 5: 0.0, ...TAGESGANG }),
+        eedc_stundenprofil: profil({ 5: 0.0, ...TAGESGANG }),
+        sfml_stundenprofil: profil({ 5: 0.6, ...TAGESGANG }),
+      }),
+    } as PrognoseVergleichVM
+    const { container } = render(<Pvg24hTabelle vm={vm} />)
+    const labels = Array.from(container.querySelectorAll('tbody tr'))
+      .map(r => r.querySelector('td')?.textContent ?? '')
+
+    expect(labels).toContain('5:00')
   })
 })
 
