@@ -44,7 +44,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -65,11 +65,13 @@ from backend.services.pv_orientation import (
     orientierungs_gruppen,
     resolve_system_losses,
 )
-from backend.core.investition_kennwerte import get_erzeuger_kwp, get_wr_grenze_kw
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.berechnungen.wr_kappung import (
+    Mitglied,
     hat_kappung,
-    kappe_profil,
-    kappungs_faktor,
+    kappe_profile,
+    kappungs_faktoren,
+    zuordne_grenzen,
 )
 
 logger = logging.getLogger(__name__)
@@ -190,21 +192,43 @@ def _tages_gewichte(
     return gewichte
 
 
-def _kappungs_mitglieder(
-    invs: list[Investition], gruppen: list[Orientierungsgruppe], tag: date,
-) -> list[list[tuple[float, Optional[float]]]]:
-    """(kWp, AC-Grenze) je Gruppe für die an `tag` aktiven Komponenten.
+async def _wechselrichter(db, anlage) -> list[Investition]:
+    """Wechselrichter der Anlage — Träger der AC-Grenze der PV-Strings (#354).
 
-    Nur nötig, wenn überhaupt eine AC-Grenze gepflegt ist (#347) — sonst nimmt
-    der Aufrufer den unveränderten Pfad mit den kWp-Tagesgewichten, und die
-    Rechnung bleibt für alle anderen Anlagen bitgleich.
+    Ohne Aktiv-Filter auf das Datum: ein String ist nur so lange aktiv wie sein
+    Wechselrichter, und ein stillgelegter Wechselrichter, dessen String noch
+    läuft, ist ein Pflegefehler — dann lieber weiter kappen als still die
+    Grenze verlieren.
+    """
+    res = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage.id,
+            Investition.typ == "wechselrichter",
+        )
+    )
+    return list(res.scalars().all())
+
+
+def _kappungs_mitglieder(
+    invs: list[Investition],
+    gruppen: list[Orientierungsgruppe],
+    tag: date,
+    grenzen: dict[Any, tuple[Optional[float], Optional[str]]],
+) -> list[list[Mitglied]]:
+    """Mitglieder je Orientierungsgruppe für die an `tag` aktiven Komponenten.
+
+    Nur nötig, wenn überhaupt eine AC-Grenze gepflegt ist (#347/#354) — sonst
+    nimmt der Aufrufer den unveränderten Pfad mit den kWp-Tagesgewichten, und
+    die Rechnung bleibt für alle anderen Anlagen bitgleich.
 
     Die Gruppenzuordnung läuft über dieselben Helper wie
     ``orientierungs_gruppen``, damit ein Mitglied nicht in einer anderen Gruppe
-    landet als beim Fan-out.
+    landet als beim Fan-out. Die **Grenze** kommt aus ``zuordne_grenzen`` und
+    nicht aus dem Mitglied selbst: sie kann einem Wechselrichter gehören, den
+    sich mehrere Gruppen teilen.
     """
     index = {(g.neigung, g.ausrichtung): i for i, g in enumerate(gruppen)}
-    mitglieder: list[list[tuple[float, Optional[float]]]] = [[] for _ in gruppen]
+    mitglieder: list[list[Mitglied]] = [[] for _ in gruppen]
     for inv in invs:
         if not inv.ist_aktiv_an(tag):
             continue
@@ -214,7 +238,10 @@ def _kappungs_mitglieder(
         pos = index.get((int(get_pv_neigung(inv)), int(get_pv_azimut(inv))))
         if pos is None:
             continue
-        mitglieder[pos].append((kwp, get_wr_grenze_kw(inv)))
+        grenze_kw, grenz_id = grenzen.get(inv.id, (None, None))
+        mitglieder[pos].append(
+            Mitglied(kwp=kwp, grenze_kw=grenze_kw, grenz_id=grenz_id)
+        )
     return mitglieder
 
 
@@ -299,16 +326,21 @@ async def kanon_tagesprognose(
     from backend.api.routes.live_wetter import _get_lernfaktor
     skalar = await _get_lernfaktor(anlage.id, db)
 
-    # #347: AC-Grenze eines Wechselrichters. Nur wenn überhaupt eine gepflegt
-    # ist, wird je Komponente gerechnet — sonst bleibt der Pfad unverändert.
-    kappung_aktiv = any(get_wr_grenze_kw(i) for i in invs)
+    # #347/#354: AC-Grenze. Sie kann dem Erzeuger selbst gehören (BKW) oder
+    # dem Wechselrichter, dem er zugeordnet ist (PV-String) — beides löst
+    # `zuordne_grenzen` auf. Nur wenn überhaupt eine gepflegt ist, wird je
+    # Komponente gerechnet; sonst bleibt der Pfad unverändert.
+    grenzen = zuordne_grenzen(invs, await _wechselrichter(db, anlage))
+    kappung_aktiv = any(grenze for grenze, _ in grenzen.values())
 
     tage: list[Optional[KanonTag]] = []
     for offset in range(days):
         datum = tagesdaten[offset]
         datum_iso = datum.isoformat()
         mitglieder = (
-            _kappungs_mitglieder(invs, gruppen, datum) if kappung_aktiv else None
+            _kappungs_mitglieder(invs, gruppen, datum, grenzen)
+            if kappung_aktiv
+            else None
         )
 
         om_slots = [0.0] * 24
@@ -317,44 +349,78 @@ async def kanon_tagesprognose(
         has_hourly = False
         wetter_bew = wetter_nieder = wetter_code = None
 
+        # Erst einsammeln, dann kappen: die AC-Grenze eines Wechselrichters gilt
+        # für **alle** seine Strings gemeinsam, und die können in verschiedenen
+        # Orientierungsgruppen liegen (#354). Eine Kappung mitten in dieser
+        # Schleife sähe immer nur eine Gruppe und ließe denselben
+        # Wechselrichter mehrfach bis an seine Grenze liefern.
+        roh_stunden: list[list[float]] = [[] for _ in gruppen]
+        roh_tageswert: list[float] = [0.0] * len(gruppen)
+        roh_gewicht: list[float] = [1.0] * len(gruppen)
+        vorhanden: list[bool] = [False] * len(gruppen)
+
         for grp_idx in range(len(gruppen)):
             tag = by_datum[grp_idx].get(datum_iso)
             if tag is None:
                 continue
             groups_present += 1
+            vorhanden[grp_idx] = True
             # N31: Anteil der an DIESEM Tag aktiven kWp der Gruppe (1.0, wenn
             # sich im Horizont nichts ändert). Ein Faktor 0 ist kein fehlender
             # Tag — die Gruppe hat an diesem Tag legitim keinen Ertrag.
-            gew = gewichte[offset][grp_idx] if gewichte is not None else 1.0
-            stunden_kw = getattr(tag, "stunden_kw", None)
-            tages_kwh = getattr(tag, "pv_ertrag_kwh", 0.0) or 0.0
-
-            # #347: gepflegte AC-Grenze ⇒ je Komponente rechnen und stündlich
-            # kappen. Das ersetzt das kWp-Tagesgewicht (`gew`) — die Mitglieder
-            # sind bereits die an DIESEM Tag aktiven, die Gewichtung steckt
-            # also in der Mitgliederliste statt in einem Skalar.
-            grp_mitglieder = mitglieder[grp_idx] if mitglieder is not None else None
-            if grp_mitglieder and hat_kappung(grp_mitglieder) and stunden_kw:
-                gekappt = kappe_profil(stunden_kw, gruppen[grp_idx].kwp, grp_mitglieder)
-                pv_ertrag_sum += tages_kwh * kappungs_faktor(
-                    stunden_kw, gruppen[grp_idx].kwp, grp_mitglieder
-                )
-                if any(gekappt):
-                    has_hourly = True
-                    for h in range(min(24, len(gekappt))):
-                        om_slots[h] += gekappt[h]
-            else:
-                pv_ertrag_sum += tages_kwh * gew
-                if stunden_kw and any(v for v in stunden_kw):
-                    has_hourly = True
-                    for h in range(min(24, len(stunden_kw))):
-                        om_slots[h] += (stunden_kw[h] or 0.0) * gew
+            roh_gewicht[grp_idx] = (
+                gewichte[offset][grp_idx] if gewichte is not None else 1.0
+            )
+            roh_stunden[grp_idx] = list(getattr(tag, "stunden_kw", None) or [])
+            roh_tageswert[grp_idx] = getattr(tag, "pv_ertrag_kwh", 0.0) or 0.0
             # Wetter ist standort- (nicht orientierungs-)abhängig → erste
             # liefernde Gruppe genügt für die Kaskaden-Klassifikation.
             if wetter_bew is None:
                 wetter_bew = getattr(tag, "stunden_bewoelkung", None)
                 wetter_nieder = getattr(tag, "stunden_niederschlag", None)
                 wetter_code = getattr(tag, "stunden_wetter_code", None)
+
+        # #347/#354: gepflegte AC-Grenze ⇒ je Komponente rechnen und stündlich
+        # kappen. Das ersetzt das kWp-Tagesgewicht (`gew`) — die Mitglieder
+        # sind bereits die an DIESEM Tag aktiven, die Gewichtung steckt also in
+        # der Mitgliederliste statt in einem Skalar.
+        #
+        # Gruppen ohne Stundenprofil (OpenMeteo-Schätzpfad) liegen mit einer
+        # leeren Liste dabei und tragen zur Pool-Summe nichts bei. Für sie
+        # bleibt es beim `gew`-Pfad — eine Grenze auf einen Tageswert
+        # anzuwenden, für den es kein Profil gibt, wäre der kWp-Deckel, gegen
+        # den dieses Modul geschrieben ist.
+        kappen = mitglieder is not None and hat_kappung(mitglieder)
+        gekappte: Optional[list[list[float]]] = None
+        faktoren: Optional[list[float]] = None
+        if kappen:
+            gruppen_kwp = [g.kwp for g in gruppen]
+            gekappte = kappe_profile(roh_stunden, gruppen_kwp, mitglieder)
+            faktoren = kappungs_faktoren(roh_stunden, gruppen_kwp, mitglieder)
+
+        for grp_idx in range(len(gruppen)):
+            if not vorhanden[grp_idx]:
+                continue
+            stunden_kw = roh_stunden[grp_idx]
+            tages_kwh = roh_tageswert[grp_idx]
+            gew = roh_gewicht[grp_idx]
+            grp_mitglieder = mitglieder[grp_idx] if mitglieder is not None else None
+
+            if kappen and grp_mitglieder and stunden_kw:
+                werte = gekappte[grp_idx] if gekappte is not None else []
+                pv_ertrag_sum += tages_kwh * (
+                    faktoren[grp_idx] if faktoren is not None else 1.0
+                )
+                if any(werte):
+                    has_hourly = True
+                    for h in range(min(24, len(werte))):
+                        om_slots[h] += werte[h]
+            else:
+                pv_ertrag_sum += tages_kwh * gew
+                if stunden_kw and any(v for v in stunden_kw):
+                    has_hourly = True
+                    for h in range(min(24, len(stunden_kw))):
+                        om_slots[h] += (stunden_kw[h] or 0.0) * gew
 
         # #306: untergewichtet, wenn nicht alle Gruppen den Tag lieferten.
         om_vollstaendig = groups_present == len(gruppen)

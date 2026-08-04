@@ -25,13 +25,19 @@ from pydantic import BaseModel, Field
 import httpx
 
 from backend.core.exceptions import not_found
-from backend.core.investition_kennwerte import get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
+from backend.core.berechnungen.wr_kappung import zuordne_grenzen
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.services.pv_orientation import get_pv_neigung
+from backend.services.wetter.pvgis_kappung import (
+    KappungsModul,
+    monats_kappungsfaktoren,
+)
 
 # =============================================================================
 # PVGIS API Constants
@@ -43,6 +49,15 @@ PVGIS_BASE_URL = "https://re.jrc.ec.europa.eu/api/v5_2"
 DEFAULT_LOSSES = 14  # Systemverluste in % (Kabel, Wechselrichter, etc.)
 DEFAULT_AZIMUTH = 0  # 0 = Süd, -90 = Ost, 90 = West
 DEFAULT_TILT = 35    # Typische Dachneigung in Deutschland
+
+# Erzeuger, für die PVGIS ein SOLL rechnen kann (#367). Ein Balkonkraftwerk
+# trägt kWp, Neigung und Ausrichtung genau wie ein PV-String — der frühere
+# Filter auf `pv-module` war eine Typ-Grenze ohne fachlichen Grund und ließ
+# reine BKW-Anlagen mit einem 400er stehen.
+PVGIS_ERZEUGER_TYPEN = (
+    InvestitionTyp.PV_MODULE.value,
+    InvestitionTyp.BALKONKRAFTWERK.value,
+)
 
 
 # =============================================================================
@@ -259,6 +274,23 @@ def _ist_ost_west(ausrichtung: Optional[str]) -> bool:
     return al in ("ost-west", "east-west", "ow", "o-w") or "ost-west" in al or "east-west" in al
 
 
+def _kappungs_abrufe(
+    leistung_kwp: float, tilt: float, ausrichtung: Optional[str], azimuth: float,
+) -> list[tuple[float, float, float]]:
+    """PVGIS-Abrufe eines Moduls für das Stundenprofil der AC-Kappung.
+
+    Bewusst dieselbe Fallunterscheidung wie `_berechne_pvgis_modul`: eine
+    Ost-West-Anlage rechnet PVGIS als zwei halbe Anlagen (Ost -90°, West +90°).
+    Wer das Stundenprofil stattdessen aus einer Süd-Abfrage bildete, kappte ein
+    Profil, das die Anlage nie hatte — die Mittagsspitze einer Ost-West-Anlage
+    ist deutlich flacher.
+    """
+    if _ist_ost_west(ausrichtung):
+        haelfte = leistung_kwp / 2
+        return [(haelfte, tilt, -90.0), (haelfte, tilt, 90.0)]
+    return [(leistung_kwp, tilt, azimuth)]
+
+
 async def _berechne_pvgis_modul(
     latitude: float,
     longitude: float,
@@ -352,11 +384,15 @@ async def get_pvgis_prognose(
             detail="Anlage hat keine Geokoordinaten. Bitte latitude/longitude in den Stammdaten ergänzen."
         )
 
-    # PV-Module (Investitionen) laden
+    # Erzeuger laden — PV-Module UND Balkonkraftwerke (#367). Ein BKW trägt
+    # alles, was PVGIS braucht (kWp über `get_erzeuger_kwp`, Neigung und
+    # Ausrichtung als eigene Formularfelder); es hier auszuschließen war eine
+    # Typ-Grenze, keine fachliche. Zwei andere Prognose-Routen behandeln es seit
+    # v4.0.4 gleichberechtigt als String (`prognosen.py`, `solar_prognose.py`).
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == InvestitionTyp.PV_MODULE.value)
+        .where(Investition.typ.in_(PVGIS_ERZEUGER_TYPEN))
         .where(aktiv_jetzt())
     )
     pv_module = result.scalars().all()
@@ -364,25 +400,38 @@ async def get_pvgis_prognose(
     if not pv_module:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Keine PV-Module für diese Anlage gefunden. Bitte zuerst PV-Module als Investitionen anlegen."
+            detail=(
+                "Keine PV-Module oder Balkonkraftwerke für diese Anlage gefunden. "
+                "Bitte zuerst einen Erzeuger als Investition anlegen."
+            )
         )
+
+    wechselrichter = (await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.WECHSELRICHTER.value)
+    )).scalars().all()
+    grenzen = zuordne_grenzen(pv_module, wechselrichter)
 
     # Prognose für jedes Modul abrufen
     module_prognosen: list[PVModulPrognose] = []
     gesamt_monatsdaten: dict[int, dict] = {m: {"e_m": 0.0, "h_m": 0.0, "sd_m": 0.0} for m in range(1, 13)}
     gesamt_jahresertrag = 0.0
     gesamt_leistung = 0.0
+    kappungs_module: list[KappungsModul] = []
+    roh_prognosen: list[tuple] = []
 
     for modul in pv_module:
         # kWp über den SoT-Helper (ADR-002/P3-a): wer die Nennleistung nur im
         # Detail-Feld (`parameter`) gepflegt hat — Import-/Altbestand, #229 —
         # hat in der Spalte NULL stehen. Der frühere Spalten-Direktzugriff ließ
         # das Modul hier komplett aus der Anlagen-Prognose fallen.
-        modul_kwp = get_pv_kwp(modul)
+        # `get_erzeuger_kwp` dispatcht zusätzlich auf das BKW (Leistung × Anzahl).
+        modul_kwp = get_erzeuger_kwp(modul)
         if modul_kwp <= 0:
             continue  # Modul ohne Leistung überspringen
 
-        tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
+        tilt = get_pv_neigung(modul, default=int(DEFAULT_TILT))
 
         # Exakten Azimut aus Parameter-JSON bevorzugen (falls vorhanden)
         modul_params = modul.parameter or {}
@@ -400,6 +449,43 @@ async def get_pvgis_prognose(
             ausrichtung_grad=exact_azimuth,
         )
 
+        azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
+        grenze_kw, grenz_id = grenzen.get(modul.id, (None, None))
+        roh_prognosen.append((modul, modul_kwp, tilt, azimuth, modul_monatsdaten, jahresertrag))
+        kappungs_module.append(KappungsModul(
+            id=modul.id,
+            kwp=modul_kwp,
+            grenze_kw=grenze_kw,
+            grenz_id=grenz_id,
+            abrufe=_kappungs_abrufe(modul_kwp, tilt, modul.ausrichtung, azimuth),
+        ))
+
+    # #354/#367: Die AC-Grenze des Wechselrichters wirkt stündlich, die
+    # PVGIS-Monatssumme kennt keine Stunden. Der Faktor kommt deshalb aus einem
+    # eigenen `seriescalc`-Profil derselben Anlage — nur wenn überhaupt eine
+    # Grenze gepflegt ist, sonst wird PVGIS gar nicht zusätzlich gefragt.
+    faktoren = await monats_kappungsfaktoren(
+        latitude=anlage.latitude,
+        longitude=anlage.longitude,
+        module=kappungs_module,
+        losses=system_losses,
+        user_horizon=anlage.horizont_daten,
+    )
+
+    for modul, modul_kwp, tilt, azimuth, modul_monatsdaten, jahresertrag in roh_prognosen:
+        modul_faktoren = faktoren.get(modul.id)
+        if modul_faktoren:
+            modul_monatsdaten = [
+                PVGISMonthlyData(
+                    monat=md.monat,
+                    e_m=round(md.e_m * modul_faktoren[md.monat - 1], 2),
+                    h_m=md.h_m,   # Einstrahlung ist ungekappt — der Wechselrichter
+                    sd_m=md.sd_m,  # begrenzt die Abgabe, nicht die Sonne
+                )
+                for md in modul_monatsdaten
+            ]
+            jahresertrag = sum(md.e_m for md in modul_monatsdaten)
+
         # Zu Gesamt addieren
         for md in modul_monatsdaten:
             gesamt_monatsdaten[md.monat]["e_m"] += md.e_m
@@ -407,7 +493,6 @@ async def get_pvgis_prognose(
             gesamt_monatsdaten[md.monat]["sd_m"] += md.sd_m
 
         spezifischer_ertrag = jahresertrag / modul_kwp if modul_kwp > 0 else 0
-        azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
 
         module_prognosen.append(PVModulPrognose(
             investition_id=modul.id,
@@ -477,20 +562,21 @@ async def get_pvgis_modul_prognose(
     if not modul:
         raise not_found("Investition", investition_id)
 
-    if modul.typ != InvestitionTyp.PV_MODULE.value:
+    if modul.typ not in PVGIS_ERZEUGER_TYPEN:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Investition ist kein PV-Modul (Typ: {modul.typ})"
+            detail=f"Investition ist kein PV-Erzeuger (Typ: {modul.typ})"
         )
 
     # kWp über den SoT-Helper (ADR-002/P3-a): mit dem Spalten-Direktzugriff
     # bekam ein nur im `parameter` gepflegtes Modul (#229) hier einen harten
-    # 400er — für eine Nennleistung, die gepflegt ist.
-    modul_kwp = get_pv_kwp(modul)
+    # 400er — für eine Nennleistung, die gepflegt ist. `get_erzeuger_kwp`
+    # dispatcht zusätzlich auf das BKW (Leistung × Anzahl, #367).
+    modul_kwp = get_erzeuger_kwp(modul)
     if modul_kwp <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="PV-Modul hat keine Leistung (kWp) definiert"
+            detail="Erzeuger hat keine Leistung (kWp) definiert"
         )
 
     # Anlage für Koordinaten laden
@@ -505,7 +591,7 @@ async def get_pvgis_modul_prognose(
             detail="Anlage hat keine Geokoordinaten"
         )
 
-    tilt = modul.neigung_grad if modul.neigung_grad is not None else DEFAULT_TILT
+    tilt = get_pv_neigung(modul, default=int(DEFAULT_TILT))
 
     # Exakten Azimut aus Parameter-JSON bevorzugen (falls vorhanden)
     modul_params = modul.parameter or {}
@@ -524,6 +610,56 @@ async def get_pvgis_modul_prognose(
     )
 
     azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
+
+    # #354/#367: dieselbe AC-Kappung wie in der Anlagen-Prognose. Der Einzel-
+    # Endpunkt sieht nur EIN Modul — teilen sich mehrere Strings einen
+    # Wechselrichter, kann er ihre gemeinsame Grenze nicht auflösen. Er kappt
+    # deshalb nur, wenn dieses Modul der einzige Erzeuger an seiner Grenze ist;
+    # sonst bliebe die Zahl hier eine andere als in der Anlagen-Sicht.
+    wechselrichter = (await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == modul.anlage_id)
+        .where(Investition.typ == InvestitionTyp.WECHSELRICHTER.value)
+    )).scalars().all()
+    geschwister = (await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == modul.anlage_id)
+        .where(Investition.typ.in_(PVGIS_ERZEUGER_TYPEN))
+        .where(aktiv_jetzt())
+    )).scalars().all()
+    grenzen = zuordne_grenzen(geschwister, wechselrichter)
+    grenze_kw, grenz_id = grenzen.get(modul.id, (None, None))
+    teilt_sich_die_grenze = sum(
+        1 for g in geschwister if grenzen.get(g.id, (None, None))[1] == grenz_id
+    ) > 1 if grenz_id else False
+
+    if grenze_kw and not teilt_sich_die_grenze:
+        faktoren = await monats_kappungsfaktoren(
+            latitude=anlage.latitude,
+            longitude=anlage.longitude,
+            module=[KappungsModul(
+                id=modul.id,
+                kwp=modul_kwp,
+                grenze_kw=grenze_kw,
+                grenz_id=grenz_id,
+                abrufe=_kappungs_abrufe(modul_kwp, tilt, modul.ausrichtung, azimuth),
+            )],
+            losses=system_losses,
+            user_horizon=anlage.horizont_daten,
+        )
+        modul_faktoren = faktoren.get(modul.id)
+        if modul_faktoren:
+            monatsdaten_list = [
+                PVGISMonthlyData(
+                    monat=md.monat,
+                    e_m=round(md.e_m * modul_faktoren[md.monat - 1], 2),
+                    h_m=md.h_m,
+                    sd_m=md.sd_m,
+                )
+                for md in monatsdaten_list
+            ]
+            jahresertrag = sum(md.e_m for md in monatsdaten_list)
+
     spezifischer_ertrag = jahresertrag / modul_kwp if modul_kwp > 0 else 0
 
     return {

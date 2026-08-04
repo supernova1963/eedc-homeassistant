@@ -29,6 +29,12 @@ from backend.core.investition_kennwerte import (
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
 
+# Ab diesem DC/AC-Verhältnis meldet der Stammdaten-Check. Bewusst weit oberhalb
+# der üblichen Auslegung (1,1–1,3; Ost/West bis ~1,5, #354-Melder 1,38): bis
+# dahin ist Überbelegung eine Entwurfsentscheidung, darüber wahrscheinlicher
+# ein Pflegefehler. Entscheid Gernot 2026-08-04.
+DC_AC_MELDESCHWELLE = 2.0
+
 
 class StammdatenChecks:
     """Prüfungen für Stammdaten, Strompreise und Investitions-Stammwerte."""
@@ -115,30 +121,31 @@ class StammdatenChecks:
                     link="/einstellungen/investitionen",
                 ))
         else:
-            # kWp-Vergleich (PV-Module + BKW)
-            bkw_inv = [i for i in anlage.investitionen if i.typ == "balkonkraftwerk" and i.ist_aktiv_an(heute)]
+            # Σ der installierten Modulleistung (DC) — **ohne** Balkonkraftwerk.
+            #
+            # Ein BKW ist fachlich eine EIGENE Anlage mit eigener
+            # MaStR-Registrierung; seine Wp gehören nicht in die kWp der
+            # Hauptanlage. Solange es mitgezählt wurde, bekam **jeder** Anwender
+            # mit BKW hier eine Abweichungs-Meldung, ohne dass etwas falsch
+            # gepflegt gewesen wäre — am eigenen Demo-Bestand 20,8 gegen 20,0
+            # ([[feedback_daten_checker_kein_akzeptiert]], N-76).
+            #
             # kWp über den SoT-Helper (#229-Klasse, N66): wer die Nennleistung
             # nur im Detail-Feld (`parameter`) gepflegt hat, hat in der Spalte
             # NULL stehen. Der frühere Spalten-Direktzugriff las dort 0 und
             # meldete eine Abweichung, die es nicht gibt.
             summe_kwp = sum(get_pv_kwp(m) for m in pv_module)
-            # BKW über `get_bkw_kwp` statt der hier ausgeschriebenen Formel: die
-            # Duplikat-Formel kannte den `parameter`-kWp-Zweig nicht, ein BKW mit
-            # kWp unter `parameter["kwp"]` fiel deshalb auf den
-            # `leistung_wp`-Zweig oder auf 0 durch (ADR-002/P3-a).
-            summe_kwp += sum(get_bkw_kwp(b) for b in bkw_inv)
-            if anlage.leistung_kwp and abs(summe_kwp - anlage.leistung_kwp) > 0.1:
-                ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.WARNING,
-                    meldung="PV-Module kWp stimmt nicht mit Anlagenleistung überein",
-                    details=f"Summe PV-Module + BKW: {summe_kwp:.1f} kWp, Anlage: {anlage.leistung_kwp:.1f} kWp",
-                    link="/einstellungen/investitionen",
-                ))
-            else:
-                ergebnisse.append(CheckErgebnis(
-                    kategorie=kat, schwere=CheckSeverity.OK,
-                    meldung=f"PV-Module: {summe_kwp:.1f} kWp ({len(pv_module)} Modul-Gruppen{', inkl. BKW' if bkw_inv else ''})",
-                ))
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=f"PV-Module: {summe_kwp:.1f} kWp ({len(pv_module)} Modul-Gruppen)",
+                details=(
+                    "Das Feld „Anlagenleistung“ meint die installierte "
+                    "Modulleistung (DC). Ein Balkonkraftwerk zählt nicht mit — "
+                    "es ist eine eigene Anlage."
+                ),
+            ))
+
+            ergebnisse.extend(self._check_dc_ac_verhaeltnis(anlage, pv_module, heute))
 
             # Ursache benennen statt nur die Summe (R22-2b, PN 89782 Rainer):
             # die Regel oben sagt „Summe passt nicht zur Anlage" und lässt den
@@ -193,6 +200,66 @@ class StammdatenChecks:
                     f"stehen."
                 ),
                 link="/einstellungen/solarprognose",
+            ))
+
+        return ergebnisse
+
+    def _check_dc_ac_verhaeltnis(
+        self, anlage: Anlage, pv_module: list, heute: date,
+    ) -> list[CheckErgebnis]:
+        """DC/AC-Verhältnis je Wechselrichter — meldet erst bei Unplausiblem.
+
+        **Überbelegung ist der Normalfall, kein Mangel** (Entscheid Gernot
+        2026-08-04, #354). Mehr Modulleistung als Wechselrichter-Leistung ist
+        gewollte Auslegung: man tauscht Ertrag in der Mittagsspitze gegen
+        Ertrag im Schwachlicht. Üblich sind 1,1–1,3, bei Ost/West bis etwa 1,5;
+        der Melder von #354 liegt bei 1,38. Ein Check, der das anmeckert,
+        erzieht den Anwender dazu, falsche Zahlen einzutragen, damit Ruhe ist.
+
+        Gemeldet wird deshalb erst oberhalb von `DC_AC_MELDESCHWELLE` — dort ist
+        die wahrscheinlichste Erklärung nicht mehr die Auslegung, sondern ein
+        Pflegefehler: die Wechselrichter-Leistung steht im kWp-Feld des Strings
+        (genau der Fall aus #354) oder umgekehrt.
+
+        Die Prüfung ersetzt den früheren Abgleich „Σ Module ≠ Anlagenleistung",
+        der Überbelegung gar nicht kannte und beim Balkonkraftwerk zusätzlich
+        falsch-positiv meldete (N-76).
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.STAMMDATEN
+
+        wechselrichter = [
+            i for i in anlage.investitionen
+            if i.typ == "wechselrichter" and i.ist_aktiv_an(heute)
+        ]
+        if not wechselrichter:
+            return ergebnisse
+
+        for wr in wechselrichter:
+            grenze_kw = get_wr_grenze_kw(wr)
+            if not grenze_kw:
+                continue
+            dc_kwp = sum(
+                get_pv_kwp(m) for m in pv_module
+                if getattr(m, "parent_investition_id", None) == wr.id
+            )
+            if dc_kwp <= 0:
+                continue
+            verhaeltnis = dc_kwp / grenze_kw
+            if verhaeltnis <= DC_AC_MELDESCHWELLE:
+                continue
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=f"{wr.bezeichnung}: Modulleistung ist mehr als das "
+                        f"{DC_AC_MELDESCHWELLE:.0f}-fache der Wechselrichter-Leistung",
+                details=(
+                    f"{dc_kwp:.2f} kWp Module an {grenze_kw:.2f} kW "
+                    f"(Verhältnis {verhaeltnis:.2f}). Überbelegung ist normal, "
+                    f"dieses Verhältnis aber ungewöhnlich hoch — steht in einem "
+                    f"„Leistung (kWp)“-Feld versehentlich die Wechselrichter-"
+                    f"Leistung statt der Modulleistung?"
+                ),
+                link="/einstellungen/investitionen",
             ))
 
         return ergebnisse

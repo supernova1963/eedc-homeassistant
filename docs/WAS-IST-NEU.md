@@ -11,6 +11,60 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Überbelegung ist normal — und dein SOLL weiß das jetzt
+
+**Betrifft dich das?** Alle, die **mehr Modulleistung als Wechselrichter-Leistung** installiert
+haben — beim Balkonkraftwerk fast immer, auf dem Dach sehr häufig.
+
+Mehr kWp Module an einen kleineren Wechselrichter zu hängen ist kein Fehler, sondern gängige
+Auslegung: Du tauschst Ertrag in der Mittagsspitze gegen Ertrag am Morgen und am Abend. Die
+PVGIS-Prognose rechnete bisher aber nur aus der **Modulleistung** und wusste von der Grenze deines
+Geräts nichts. Was der Wechselrichter mittags abriegelt, stand trotzdem in deinem SOLL — und
+tauchte im Vergleich mit dem IST als Minus auf, für das du nichts konntest.
+
+Ab jetzt kappt eedc das SOLL **stündlich** an der Grenze deines Wechselrichters, so wie es die
+Tagesprognose beim Balkonkraftwerk schon seit v4.0.4 tut. Die Grenze steht längst in deinen Daten:
+beim Wechselrichter im Feld **„Max. Leistung (kW)"**.
+
+**Wichtig, wenn mehrere Strings an einem Gerät hängen:** die Grenze gilt für ihre **Summe**, nicht
+für jeden einzeln. Genau daran hing der ganze Effekt — an der Demo-Anlage (Süd 12 · Ost 5 ·
+West 3 kWp an einem 10-kW-Gerät) erreicht **kein einzelner String** allein 10 kW, gemeinsam sind es
+aber 1.227 kWh im Jahr, die das Gerät nie abgeben kann.
+
+**Was du siehst:** Dein SOLL sinkt (an der Demo-Anlage −5,9 % im Jahr, im April −10 %, im Winter
+gar nicht), SOLL-Erfüllung und Performance Ratio steigen entsprechend. **Deine IST-Werte ändern
+sich nicht.** Hast du keine Wechselrichter-Leistung gepflegt, bleibt alles wie bisher — ohne
+gepflegte Grenze kappt eedc nichts.
+
+> ⚠️ **Du musst die Prognose einmal neu abrufen.** Deine gespeicherte PVGIS-Prognose ist ein
+> Datensatz aus der Vergangenheit — eedc rechnet sie nicht nachträglich um, sonst würde sich eine
+> gespeicherte Zahl still ändern. Unter *Einstellungen → Solarprognose* einmal **„Neue Prognose
+> abrufen" → „Speichern & Aktivieren"**, dann trägt dein SOLL die Kappung. Deine bisherige
+> Prognose bleibt in der Historie und lässt sich jederzeit wieder aktivieren.
+
+> **Nebenbei:** Wenn du **nur ein Balkonkraftwerk** hast, bekommst du überhaupt zum ersten Mal ein
+> PVGIS-SOLL. Bisher antwortete die Prognose mit „Keine PV-Module gefunden", obwohl dein BKW alles
+> mitbringt, was PVGIS braucht. *(#354, #367)*
+
+### Daten-Checker: zwei Meldungen weniger, eine bessere
+
+**Betrifft dich das?** Alle mit **Balkonkraftwerk** — und alle, die schon einmal über die Meldung
+„PV-Module kWp stimmt nicht mit Anlagenleistung überein" gestolpert sind.
+
+Diese Prüfung zählte das **Balkonkraftwerk in die Anlagenleistung** hinein. Ein BKW ist aber eine
+eigene Anlage mit eigener MaStR-Registrierung und gehört dort nicht hinein — die Folge war eine
+Warnung bei jedem BKW-Besitzer, ohne dass irgendetwas falsch gepflegt gewesen wäre. Und sie kannte
+Überbelegung nicht, konnte dich also nur dazu bringen, falsche Zahlen einzutragen, damit Ruhe ist.
+
+Sie ist ersetzt: eedc sieht sich jetzt das **Verhältnis von Modulleistung zu
+Wechselrichter-Leistung** an und meldet erst, wenn es **mehr als das Doppelte** ist. Bis dahin ist
+Überbelegung eine Entwurfsentscheidung (üblich 1,1–1,3, bei Ost/West bis etwa 1,5). Darüber ist
+meist ein Tippfehler die Ursache — und die Meldung sagt dir, welcher: Steht in einem
+„Leistung (kWp)"-Feld versehentlich die Leistung deines Wechselrichters?
+
+**Merkregel:** Ins Feld **Anlagenleistung** und in die kWp-Felder deiner Strings gehört die
+**Modulleistung** (Anzahl × Wp). Die Geräteleistung gehört zum Wechselrichter. *(#354)*
+
 ### Cockpit → Jahr: der Speicher bekommt eine eigene Auswertung
 
 **Betrifft dich das?** Alle mit **Batteriespeicher**.

@@ -10,6 +10,13 @@ stand dort NULL → Summe 0 → „PV-Module kWp stimmt nicht mit Anlagenleistun
 Der wichtigere der beiden Fälle ist der zweite: ein Fix, der die Prüfung
 stilllegt, wäre schlimmer als die Falschmeldung. Deshalb steht jedem
 „kein Befund"-Test ein „Befund bleibt"-Test gegenüber.
+
+⚠ **Die Meldung selbst gibt es seit N-76/#354 nicht mehr** (Entscheid Gernot
+2026-08-04): der Abgleich „Σ Module ≠ Anlagenleistung" kannte Überbelegung
+nicht und ist durch die DC/AC-Prüfung ersetzt. Was diese Datei belegt, ist
+davon unberührt — **dass der SoT-Helper gelesen wird und nicht die Spalte**.
+Der Beleg hängt jetzt an der ausgewiesenen Summe statt an einer WARNING: steht
+die kWp nur im `parameter`-JSON, muss sie in der Summe auftauchen.
 """
 
 from __future__ import annotations
@@ -60,18 +67,22 @@ async def test_kwp_nur_im_detailfeld_ist_keine_abweichung(db):
     assert "9.8 kWp" in ok[0].meldung
 
 
-async def test_echte_abweichung_wird_weiter_gemeldet(db):
-    """Der Fix darf die Prüfung nicht stilllegen: 6,0 vs. 9,8 bleibt ein Befund."""
+async def test_der_detailfeld_wert_landet_in_der_ausgewiesenen_summe(db):
+    """Der Fix darf die Lesestelle nicht stilllegen.
+
+    Früher belegte das die WARNING „6,0 vs. 9,8" — die Meldung ist mit #354
+    entfallen. Der Beleg wandert damit auf die Summe selbst: läse der Check
+    weiter die Spalte, stünde hier 0,0 kWp statt 6,0.
+    """
     anlage = await _anlage_mit_modul(
         db, anlagen_kwp=9.8, spalte=None, parameter={"kwp": 6.0},
     )
 
     ergebnisse = DatenChecker(db)._check_stammdaten(anlage)
 
-    treffer = [r for r in ergebnisse if _ABWEICHUNG in r.meldung]
-    assert len(treffer) == 1, f"Befund erwartet, war: {[r.meldung for r in ergebnisse]}"
-    assert treffer[0].schwere == CheckSeverity.WARNING
-    assert "6.0 kWp" in treffer[0].details
+    ok = [r for r in ergebnisse if r.meldung.startswith("PV-Module:")]
+    assert len(ok) == 1, f"Summenzeile erwartet, war: {[r.meldung for r in ergebnisse]}"
+    assert "6.0 kWp" in ok[0].meldung, "Spalten-Direktzugriff hätte 0,0 gemeldet"
 
 
 async def test_kwp_in_der_spalte_bleibt_unveraendert(db):

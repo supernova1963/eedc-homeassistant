@@ -38,6 +38,7 @@ from backend.core.berechnungen.spez_ertrag import kwp_aktiv_im_monat
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.services.daten_checker import DatenChecker
+from backend.services.daten_checker.kategorien import CheckSeverity
 from backend.services.live_komponenten_builder import build_komponenten
 
 # Dieselbe Nennleistung, einmal in der Spalte und einmal nur im Detail-Feld.
@@ -535,36 +536,45 @@ async def _anlage_pv_und_bkw(db, *, bkw_spalte, bkw_param) -> Anlage:
     )).scalar_one()
 
 
-async def test_daten_checker_bkw_kwp_nur_im_detailfeld(db):
-    """N66 auf der BKW-Seite: die Duplikat-Formel im Checker kannte den
-    `parameter`-kWp-Zweig nicht ⇒ Σ 6,0 statt 6,8 ⇒ Falschmeldung."""
+# ⚠ Bis 2026-08-04 standen hier drei Tests, die N66 auf der BKW-Seite über die
+# Meldung „Σ Module ≠ Anlagenleistung" belegten. Diese Meldung gibt es nicht
+# mehr (N-76/#354, Entscheid Gernot): Ein Balkonkraftwerk ist fachlich eine
+# EIGENE Anlage mit eigener MaStR-Registrierung und zählt nicht in die kWp der
+# Hauptanlage — solange es mitgezählt wurde, meldete der Check am eigenen
+# Demo-Bestand eine Abweichung von 0,80 kWp, ohne dass etwas falsch gepflegt
+# war. Die Auflösung der BKW-kWp selbst ist unverändert gewächtert, aber an
+# ihrem eigenen Ort (`test_investition_kennwerte.py::get_bkw_kwp`) statt über
+# eine Checker-Meldung, die sie nur mittelbar sichtbar machte.
+
+async def test_daten_checker_zaehlt_das_bkw_nicht_in_die_anlagen_kwp(db):
+    """Der neue Vertrag: die ausgewiesene Σ ist die der PV-Module.
+
+    Gegenprobe zum alten Verhalten — vorher stand hier 6,8 (6,0 PV + 0,8 BKW)
+    und darauf eine WARNING gegen die gepflegten 6,8 kWp der Anlage.
+    """
     anlage = await _anlage_pv_und_bkw(db, bkw_spalte=None, bkw_param={"kwp": 0.8})
 
     ergebnisse = DatenChecker(db)._check_stammdaten(anlage)
 
-    assert not [r for r in ergebnisse
-                if "stimmt nicht mit Anlagenleistung überein" in r.meldung], (
-        f"Falschmeldung trotz gepflegter kWp: {[r.meldung for r in ergebnisse]}"
-    )
+    summe = [r for r in ergebnisse if r.meldung.startswith("PV-Module:")]
+    assert len(summe) == 1, f"Summenzeile erwartet: {[r.meldung for r in ergebnisse]}"
+    assert "6.0 kWp" in summe[0].meldung, "das BKW gehört nicht in die Anlagen-kWp"
+    assert "inkl. BKW" not in summe[0].meldung
 
 
-async def test_daten_checker_echte_bkw_abweichung_bleibt(db):
-    """Gegenprobe: der Fix darf die Prüfung nicht stilllegen."""
+async def test_daten_checker_meldet_keine_kwp_abweichung_mehr(db):
+    """Auch eine „echte" Abweichung ist keine mehr — Überbelegung ist normal.
+
+    6,0 kWp Module gegen 6,8 kWp gepflegte Anlagenleistung: früher WARNING,
+    heute stumm. Wer die Anlagenleistung prüfen will, hat dafür die
+    DC/AC-Prüfung und die Rechenprobe je String.
+    """
     anlage = await _anlage_pv_und_bkw(db, bkw_spalte=None, bkw_param={"kwp": 0.2})
 
     ergebnisse = DatenChecker(db)._check_stammdaten(anlage)
 
-    treffer = [r for r in ergebnisse
-               if "stimmt nicht mit Anlagenleistung überein" in r.meldung]
-    assert len(treffer) == 1, f"Befund erwartet: {[r.meldung for r in ergebnisse]}"
-
-
-async def test_daten_checker_bkw_leistung_wp_weiterhin_erkannt(db):
-    """Der bisher einzige BKW-Zweig (`leistung_wp × anzahl`) bleibt erhalten."""
-    anlage = await _anlage_pv_und_bkw(
-        db, bkw_spalte=None, bkw_param={"leistung_wp": 400, "anzahl": 2})
-
-    ergebnisse = DatenChecker(db)._check_stammdaten(anlage)
-
-    assert not [r for r in ergebnisse
-                if "stimmt nicht mit Anlagenleistung überein" in r.meldung]
+    assert not [r for r in ergebnisse if "Anlagenleistung überein" in r.meldung]
+    assert not [
+        r for r in ergebnisse
+        if r.schwere == CheckSeverity.WARNING and "kWp" in r.meldung
+    ], f"keine kWp-Warnung erwartet: {[r.meldung for r in ergebnisse]}"

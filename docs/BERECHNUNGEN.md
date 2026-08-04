@@ -929,6 +929,50 @@ aktiven** Prognose. Vor v4.0.1 stand dort eine Summe über *alle* aktiven Progno
 Bestand mit zwei aktiven war der SOLL-PV-Wert verdoppelt, und mit ihm die SOLL/IST-Abweichung und die
 Grundlast-SOLL-Kachel.
 
+#### AC-Kappung im SOLL (ab v4.0.9, #354/#367)
+
+Das PVGIS-SOLL rechnet aus der **Modulleistung (DC)** und kennt die Grenze des Wechselrichters
+nicht. Bei einer überbelegten Anlage ist es damit systematisch unerreichbar: was das Gerät mittags
+abriegelt, taucht im SOLL/IST-Vergleich als Minus auf, das der Betreiber nicht zu verantworten hat.
+
+Die Kappung wirkt **stündlich**, nie als kWp-Deckel — ein 7-kW-Gerät begrenzt die Mittagsspitze,
+nicht den Morgen (Begründung im Modul-Docstring `core/berechnungen/wr_kappung.py`). Weil `PVcalc`
+nur Monatssummen liefert, entsteht der Faktor aus einem eigenen **`seriescalc`**-Stundenprofil
+derselben Anlage:
+
+```
+Faktor_Monat = Σ min(Stunde, AC-Grenze) ÷ Σ Stunde      (über 2018–2020, ertragsgewichtet)
+SOLL_Monat   = PVcalc.e_m × Faktor_Monat
+```
+
+Damit bleibt PVGIS die **einzige** Ertragsquelle; hier entsteht kein zweiter Ertragswert, nur ein
+Faktor ≤ 1. Drei Jahre statt einem, weil der Faktor sonst das Wetter eines Einzeljahres trägt (am
+Demo-Standort schwankt der April zwischen 0,804 und 0,875).
+
+> **Die Grenze gehört dem Wechselrichter, nicht der Himmelsrichtung.** Mehrere Strings an einem
+> Gerät teilen sich seine AC-Grenze und werden **gemeinsam** gekappt, anteilig nach ihrem
+> Stundenbeitrag — auch über Orientierungsgruppen hinweg. Am Demo-Bestand (Süd 12 · Ost 5 ·
+> West 3 kWp an einem 10-kW-Fronius) ist das der ganze Effekt: **je String einzeln gekappt bliebe
+> das SOLL unverändert**, weil kein einzelner String allein 10 kW erreicht — gemeinsam liefern sie
+> 1.227 kWh im Jahr, die das Gerät nie abgeben kann (20.812 → 19.585 kWh, −5,9 %; April −10 %,
+> November/Dezember 0).
+
+Woher die Grenze kommt (SoT `core/investition_kennwerte.get_wr_grenze_kw`, Zuordnung
+`wr_kappung.zuordne_grenzen`):
+
+| Erzeuger | Grenze | Geteilt? |
+| --- | --- | --- |
+| `balkonkraftwerk` | eigener Parameter `wechselrichter_leistung_w` | nein — Erzeuger und Wechselrichter sind ein Gerät |
+| `pv-module` | `max_leistung_kw` des zugeordneten **Wechselrichters** (Fallback: Legacy `leistung_ac_kw`, dann die Spalte `leistung_kwp`, die dort kW AC trägt) | **ja** — alle Strings desselben Geräts |
+
+**Ohne gepflegte Grenze wird nicht gekappt** (`None`, kein Default) und PVGIS gar nicht zusätzlich
+gefragt — die Prognose bleibt dann bitgleich zu vorher. Fällt der `seriescalc`-Abruf aus, gibt es
+**keine** Faktoren statt geratener: ein ungekapptes SOLL ist eine bekannte Größe, ein halb
+gekapptes wäre keine.
+
+Derselbe Layer kappt seit v4.0.4 die **Tages**-Prognose (`services/prognose_kanon.py`); seit
+v4.0.9 sehen beide Pfade dieselben Grenzen und dieselbe Gruppierung.
+
 #### IST-Berechnung
 
 Der IST-Wert je Modul kommt aus dem Read-time-SoT `core/berechnungen/pv_verteilung.py`
