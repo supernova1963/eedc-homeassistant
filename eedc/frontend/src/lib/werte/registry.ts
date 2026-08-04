@@ -89,7 +89,13 @@ export const WERTE_METRIKEN: WerteMetrik[] = [
   // „(PV)" grenzt gegen die T-Konto-Ergebniszeile ab (Gewinn/Verlust Haushalt):
   // hier ohne Netzbezug-Kosten und ohne WP/E-Mobilität. Wortgleich zur
   // Finanz-Seite (AuswertungenFinanzenV4), sonst zwei Namen für eine Zahl.
+  // ⚠ Der Monatswert trägt seit N-22 die **USt auf Eigenverbrauch** abgezogen
+  // (Regelbesteuerung; sonst 0), der Tageswert nicht — die USt ist eine
+  // Jahresgröße (Selbstkosten je kWh aus Investition und Jahres-Erzeugung), sie
+  // lässt sich einem Tag nicht zuordnen. Bei Regelbesteuerung gilt deshalb
+  // Σ Tage ≠ Monat, wie bei der CO₂-Spalte. Die Spalte daneben macht es sichtbar.
   { key: 'netto_ertrag',       label: 'Netto-Ertrag (PV)', unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: MONAT_TAG, higherIsBetter: true },
+  { key: 'ust_eigenverbrauch', label: 'USt Eigenverbrauch', unit: '€',      gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
   { key: 'netto_bilanz',       label: 'Netto-Bilanz',      unit: '€',       gruppe: 'finanzen',    decimals: 2, aggregation: 'sum', defaultVisible: true,  granular: MONAT_TAG, higherIsBetter: true },
   { key: 'netzbezug_preis_cent', label: 'Ø Netzpreis',     unit: 'ct/kWh',  gruppe: 'finanzen',    decimals: 2, aggregation: 'avg', defaultVisible: false, granular: NUR_MONAT, higherIsBetter: false },
   // CO₂ — „(PV)" grenzt gegen die vollständige Bilanz ab, wie „Netto-Ertrag (PV)"

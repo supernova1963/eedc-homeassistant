@@ -7,7 +7,7 @@ import {
   MONAT_KURZ, TYP_LABELS,
   COLORS, CHART_COLORS, TYP_COLORS,
   calcAutarkie, calcEigenverbrauchsquote, calcSpezifischerErtrag,
-  calcSpeicherEffizienz, calcCOP, calcEinspeiseErloes,
+  calcSpeicherEffizienz, calcCOP,
 } from '../../lib'
 
 // Re-Export für Rückwärtskompatibilität (bestehende Imports brechen nicht)
@@ -64,12 +64,24 @@ export interface MonatsZeitreihe {
   wallbox_ladung: number | null
   wallbox_pv_ladung: number | null
   wallbox_pv_anteil: number | null
-  // Finanzen
+  // ── Finanzen ───────────────────────────────────────────────────────────
+  // Alle Werte kommen **fertig aus dem Backend** (`/monatsdaten/aggregiert`,
+  // SoT `baue_finanz_zeile` + `berechne_finanz_aggregat`). Bis 2026-08-04
+  // rechnete diese Datei sie selbst — mit eigener Tarif-Stichtags-Auflösung,
+  // eigenem §51-Abzug und ohne USt/BKW-Regel (Fund N-22). Wer hier wieder eine
+  // Formel einsetzt, baut die zweite Engine neu auf.
   einspeise_erloes: number
   ev_ersparnis: number
   netzbezug_kosten: number
   netto_ertrag: number
   netto_bilanz: number
+  /**
+   * USt auf Eigenverbrauch (§ 3 Abs. 1b UStG), bereits **in `netto_ertrag`
+   * abgezogen**. 0 außerhalb der Regelbesteuerung. Steht als eigene Größe da,
+   * damit die kleinere Netto-Zahl erklärbar bleibt — dieselbe Begründung wie
+   * beim ausgewiesenen §51-Abzug.
+   */
+  ust_eigenverbrauch: number
   /** Real verrechneter Monats-Ø-Netzbezugspreis (Flex-Ø oder statischer Tarif, #326). */
   netzbezug_preis_cent: number | null
   /** Durch §51 EEG entgangener Erlös in € (0, wenn die Anlage nicht betroffen ist). */
@@ -95,40 +107,28 @@ export interface MonatsZeitreihe {
   co2_einsparung: number | null
 }
 
-/**
- * Findet den zum Stichtag (1. des Monats) gültigen Tarif.
- * Tarife sind nach gueltig_ab DESC sortiert → erster Treffer gewinnt.
- */
-function findGueltigerTarif(tarife: Strompreis[], jahr: number, monat: number): Strompreis | null {
-  const stichtag = `${jahr}-${String(monat).padStart(2, '0')}-01`
-  for (const t of tarife) {
-    if (t.gueltig_ab <= stichtag && (!t.gueltig_bis || t.gueltig_bis >= stichtag)) {
-      return t
-    }
-  }
-  return null
-}
-
 // Helper-Funktion zum Erstellen der Monatszeitreihen
 // Verwendet jetzt AggregierteMonatsdaten mit korrekter PV-Erzeugung aus InvestitionMonatsdaten
 //
 // `co2Monate` ist die kanonische CO₂-Reihe aus `/cockpit/nachhaltigkeit`
 // (`useAuswertungBasis().co2.monate`). Fehlt sie, bleibt `co2_einsparung` null —
 // diese Funktion konstruiert **keine** CO₂-Größe mehr (N-21, ADR-001).
+//
+// **Die Finanzen rechnet diese Funktion seit N-22 nicht mehr** (2026-08-04). Sie
+// hatte dafür einen eigenen Tarif-Stichtags-Löser (`findGueltigerTarif`, ein
+// P8-Duplikat), einen eigenen §51-Abzug und eine eigene EV-Ersparnis — und war
+// damit eine zweite Finanz-Engine neben `services/finanz_zeilen.py`. Sie kannte
+// weder den BKW-Ersatzträger (P9) noch die USt auf Eigenverbrauch, die alle vier
+// Backend-Sichten abziehen, und rechnete die Erzeugung eines Brennstoff-Erzeugers
+// (BHKW) als Strompreis-Ersparnis mit. Die Werte kommen jetzt aus der Antwort.
 export function createMonatsZeitreihe(
   data: AggregierteMonatsdaten[],
   anlage?: TabProps['anlage'],
-  strompreis?: Strompreis | null,
-  alleTarife?: Strompreis[],
   co2Monate?: NachhaltigkeitMonat[],
 ): MonatsZeitreihe[] {
   const co2ProMonat = new Map(
     (co2Monate ?? []).map((m) => [`${m.jahr}-${m.monat}`, m.co2_pv_kg]),
   )
-  // Tarife nach gueltig_ab DESC sortieren für findGueltigerTarif
-  const tarifeDesc = alleTarife?.length
-    ? [...alleTarife].sort((a, b) => b.gueltig_ab.localeCompare(a.gueltig_ab))
-    : []
 
   const sorted = [...data].sort((a, b) => {
     if (a.jahr !== b.jahr) return a.jahr - b.jahr
@@ -136,11 +136,13 @@ export function createMonatsZeitreihe(
   })
 
   return sorted.map(md => {
-    // PV-Erzeugung kommt jetzt korrekt aus InvestitionMonatsdaten (aggregiert)
-    const erzeugung = md.pv_erzeugung_kwh || 0
-    const eigenverbrauch = md.eigenverbrauch_kwh || 0
-    const gesamtverbrauch = md.gesamtverbrauch_kwh || (eigenverbrauch + md.netzbezug_kwh)
-    const direktverbrauch = md.direktverbrauch_kwh || 0
+    // PV-Erzeugung kommt jetzt korrekt aus InvestitionMonatsdaten (aggregiert).
+    // `??` statt `||`: ein gemessener Monat mit 0 kWh ist eine Aussage, kein
+    // fehlender Wert — mit `||` fiel er auf den Ersatzausdruck durch (N-22).
+    const erzeugung = md.pv_erzeugung_kwh ?? 0
+    const eigenverbrauch = md.eigenverbrauch_kwh ?? 0
+    const gesamtverbrauch = md.gesamtverbrauch_kwh ?? (eigenverbrauch + md.netzbezug_kwh)
+    const direktverbrauch = md.direktverbrauch_kwh ?? 0
 
     // Quoten berechnen - direkt aus aggregierten Daten oder berechnet
     const autarkie = md.autarkie_prozent ?? calcAutarkie(eigenverbrauch, gesamtverbrauch)
@@ -184,30 +186,6 @@ export function createMonatsZeitreihe(
       : null
     const eauto_pv_anteil = wallbox_pv_anteil // gleicher PV-Anteil (Wallbox = Lade-Pfad des E-Autos)
 
-    // Finanzen: historisch korrekter Tarif pro Monat, Fallback auf aktuellen
-    const tarif = (tarifeDesc.length > 0 ? findGueltigerTarif(tarifeDesc, md.jahr, md.monat) : null) || strompreis
-    // Netzbezugspreis: bei Flex-Tarif den aufgezeichneten Monats-Ø nutzen,
-    // sonst den statischen Tarif — gleiche SoT-Quelle wie das Cockpit
-    // (resolve_netzbezug_preis_cent), sonst driften die €-Werte auseinander (#326).
-    const netzPreisCent = md.netzbezug_durchschnittspreis_cent ?? (tarif ? tarif.netzbezug_arbeitspreis_cent_kwh : null)
-    // §51 EEG: Stunden mit negativem Börsenpreis werden nicht vergütet. Der
-    // Abzug muss hier genauso passieren wie im Backend-SoT (finanz_aggregat →
-    // einspeise_erloes_euro) — sonst zeigt die Finanz-Übersicht einen höheren
-    // Einspeiseerlös als das T-Konto direkt darunter. `null` (keine §51-Anlage,
-    // keine Strompreis-Mitschrift) bedeutet: kein Abzug.
-    const erloes = tarif
-      ? calcEinspeiseErloes(md.einspeisung_kwh, md.einspeisung_neg_preis_kwh, tarif.einspeiseverguetung_cent_kwh)
-      : null
-    const einspeise_erloes = erloes ? erloes.erloes_euro : 0
-    const ev_ersparnis = netzPreisCent != null
-      ? eigenverbrauch * netzPreisCent / 100
-      : 0
-    const netzbezug_kosten = netzPreisCent != null
-      ? md.netzbezug_kwh * netzPreisCent / 100 + (tarif?.grundpreis_euro_monat || 0)
-      : 0
-    const netto_ertrag = einspeise_erloes + ev_ersparnis
-    const netto_bilanz = einspeise_erloes + ev_ersparnis - netzbezug_kosten
-
     // CO₂: nachgeschlagen, nicht gerechnet (N-21). Der Kanon steht im Backend
     // (`berechne_co2_bilanz`); hier wird nur der Monat zugeordnet.
     const co2_einsparung = co2ProMonat.get(`${md.jahr}-${md.monat}`) ?? null
@@ -243,13 +221,14 @@ export function createMonatsZeitreihe(
       wallbox_ladung,
       wallbox_pv_ladung,
       wallbox_pv_anteil,
-      einspeise_erloes,
-      ev_ersparnis,
-      netzbezug_kosten,
-      netto_ertrag,
-      netto_bilanz,
-      netzbezug_preis_cent: netzPreisCent,
-      einspeise_nicht_verguetet_euro: erloes ? erloes.nicht_verguetet_euro : 0,
+      einspeise_erloes: md.einspeise_erloes_euro,
+      ev_ersparnis: md.ev_ersparnis_euro + md.bkw_ersparnis_euro,
+      netzbezug_kosten: md.netzbezug_kosten_euro,
+      netto_ertrag: md.netto_ertrag_euro,
+      netto_bilanz: md.netto_bilanz_euro,
+      ust_eigenverbrauch: md.ust_eigenverbrauch_euro,
+      netzbezug_preis_cent: md.netzbezug_preis_cent,
+      einspeise_nicht_verguetet_euro: md.einspeise_nicht_verguetet_euro,
       einspeise_neg_preis_kwh: md.einspeisung_neg_preis_kwh,
       co2_einsparung,
     }

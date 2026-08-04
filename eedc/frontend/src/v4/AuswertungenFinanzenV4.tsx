@@ -76,8 +76,11 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
   const bilanzLegende = useLegendenToggle()
   const nettoLegende = useLegendenToggle()
   const zeitreihe = useMemo(
-    () => (basis.strompreis ? createMonatsZeitreihe(basis.gefiltert, undefined, basis.strompreis, basis.alleTarife) : []),
-    [basis.gefiltert, basis.strompreis, basis.alleTarife],
+    // Das `strompreis`-Gate bleibt: ohne gepflegten Tarif zeigt die Sicht ihren
+    // Leer-Zustand („kein Tarif"), statt Zahlen aus den Backend-Defaults. Die
+    // Werte selbst rechnet der Client seit N-22 nicht mehr.
+    () => (basis.strompreis ? createMonatsZeitreihe(basis.gefiltert) : []),
+    [basis.gefiltert, basis.strompreis],
   )
 
   const sonstigeByMonth = useMemo(() => {
@@ -112,9 +115,13 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
     // ausgewiesen, sonst wirkt die kleinere Zahl wie ein Fehler.
     const nichtVerguetet = chartData.reduce((s, z) => s + (z.einspeise_nicht_verguetet_euro || 0), 0)
     const neg51Kwh = chartData.reduce((s, z) => s + (z.einspeise_neg_preis_kwh || 0), 0)
-    const nettoErtrag = einspeiseErloes + eigenverbrauchErsparnis
+    // USt auf Eigenverbrauch (Regelbesteuerung) steckt seit N-22 im
+    // Netto-Ertrag der Zeile — deshalb Σ der Zeilen statt der Neuaufbau aus
+    // Erlös + Ersparnis, sonst stünde hier wieder eine dritte Zahl.
+    const ust = chartData.reduce((s, z) => s + (z.ust_eigenverbrauch || 0), 0)
+    const nettoErtrag = chartData.reduce((s, z) => s + z.netto_ertrag, 0)
     const nettoNachSonderkosten = nettoErtrag + sonstigeErtraege - sonderkosten
-    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, nettoErtrag, nettoNachSonderkosten, nichtVerguetet, neg51Kwh }
+    return { einspeiseErloes, netzbezugKosten, eigenverbrauchErsparnis, sonderkosten, sonstigeErtraege, ust, nettoErtrag, nettoNachSonderkosten, nichtVerguetet, neg51Kwh }
   }, [chartData, sonstigeByMonth])
 
   const monate = basis.stats.anzahlMonate || 1
@@ -185,8 +192,13 @@ function FinanzenInner({ basis }: { basis: AuswertungBasis }) {
         formel: (gesamt.sonstigeErtraege > 0 || gesamt.sonderkosten > 0
           ? 'Einspeiseerlös + EV-Ersparnis + Sonstige Erträge − Sonderkosten'
           : 'Einspeiseerlös + EV-Ersparnis')
+          // Der USt-Abzug wird nur genannt, wenn er greift (Regelbesteuerung) —
+          // sonst stünde in jeder Herleitung ein Posten, den es nicht gibt. Ohne
+          // die Nennung wäre die kleinere Zahl unerklärt (N-22).
+          + (gesamt.ust > 0 ? ' − USt auf Eigenverbrauch' : '')
           + ' · ohne Netzbezug-Kosten, ohne Wärmepumpe/E-Mobilität',
-        berechnung: `${fmtZahl(gesamt.einspeiseErloes, 2)} € + ${fmtZahl(gesamt.eigenverbrauchErsparnis, 2)} €`,
+        berechnung: `${fmtZahl(gesamt.einspeiseErloes, 2)} € + ${fmtZahl(gesamt.eigenverbrauchErsparnis, 2)} €`
+          + (gesamt.ust > 0 ? ` − ${fmtZahl(gesamt.ust, 2)} € USt` : ''),
         ergebnis: `= ${fmtZahl(gesamt.nettoNachSonderkosten, 2)} €`,
       },
     ]

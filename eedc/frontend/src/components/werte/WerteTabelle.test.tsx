@@ -24,7 +24,7 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
     eauto_km: null, eauto_ladung: null, eauto_pv_anteil: null,
     wallbox_ladung: null, wallbox_pv_ladung: null, wallbox_pv_anteil: null,
     einspeise_erloes: 5, ev_ersparnis: 12, netzbezug_kosten: 9,
-    netto_ertrag: 8, netto_bilanz: 8, netzbezug_preis_cent: null, co2_einsparung: 25,
+    netto_ertrag: 8, netto_bilanz: 8, ust_eigenverbrauch: 0, netzbezug_preis_cent: null, co2_einsparung: 25,
     ...over,
   }
 }

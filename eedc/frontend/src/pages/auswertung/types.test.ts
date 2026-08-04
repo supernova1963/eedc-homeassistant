@@ -1,16 +1,17 @@
 /**
- * `createMonatsZeitreihe` — die Finanz-Formeln der Auswertungen.
+ * `createMonatsZeitreihe` — die Zeitreihe hinter „Auswertungen → Finanzen" und
+ * der Werte-Tabelle.
  *
- * Diese Zeitreihe speist sowohl die v4-Seite „Auswertungen → Finanzen" als auch
- * die Werte-Tabelle. Sie rechnet im Frontend, muss aber dieselben Ergebnisse
- * liefern wie der Backend-SoT (`core/berechnungen/finanz_aggregat.py`) — sonst
- * stehen auf einer Seite zwei verschiedene Einspeiseerlöse (Block „Finanz-
- * Übersicht" gegen „SOLL/HABEN-T-Konto").
+ * **Seit N-22 (2026-08-04) rechnet sie keine Finanzen mehr.** Die §51-Tests, die
+ * hier standen, prüften eine zweite Finanz-Engine im Client — mit eigenem
+ * Tarif-Stichtag, eigenem §51-Abzug und ohne USt/BKW-Regel. Der SoT liegt im
+ * Backend (`services/finanz_zeilen.py` + `core/berechnungen/finanz_aggregat.py`,
+ * belegt in `test_monatsdaten_aggregiert_finanzen.py`); hier wird nur noch
+ * geprüft, dass die Zeile die gelieferten Werte **durchreicht statt zu rechnen**.
  */
 import { describe, it, expect } from 'vitest'
 import { createMonatsZeitreihe } from './types'
 import type { AggregierteMonatsdaten } from '../../api/monatsdaten'
-import type { Strompreis } from '../../types'
 
 const md = (over: Partial<AggregierteMonatsdaten> = {}): AggregierteMonatsdaten => ({
   id: 1, anlage_id: 1, jahr: 2026, monat: 5,
@@ -26,62 +27,79 @@ const md = (over: Partial<AggregierteMonatsdaten> = {}): AggregierteMonatsdaten 
   direktverbrauch_kwh: 500, eigenverbrauch_kwh: 500, gesamtverbrauch_kwh: 700,
   autarkie_prozent: 71.4, eigenverbrauchsquote_prozent: 33.3,
   einspeisung_neg_preis_kwh: null,
+  einspeise_erloes_euro: 82, einspeise_nicht_verguetet_euro: 0,
+  ev_ersparnis_euro: 150, bkw_ersparnis_euro: 0, ust_eigenverbrauch_euro: 0,
+  netzbezug_kosten_euro: 60, netto_ertrag_euro: 232, netto_bilanz_euro: 172,
+  netzbezug_preis_cent: 30,
   hat_legacy_daten: false,
   ...over,
 })
 
-const tarif = (over: Partial<Strompreis> = {}): Strompreis => ({
-  id: 1, anlage_id: 1,
-  netzbezug_arbeitspreis_cent_kwh: 30,
-  einspeiseverguetung_cent_kwh: 8.2,
-  gueltig_ab: '2020-01-01',
-  verwendung: 'standard',
-  ...over,
-} as Strompreis)
-
-describe('createMonatsZeitreihe — §51 EEG', () => {
-  it('ohne §51-Daten (null) bleibt der Erlös ungekürzt', () => {
-    const [z] = createMonatsZeitreihe([md()], undefined, tarif())
-    expect(z.einspeise_erloes).toBeCloseTo(82.0, 6)
-    expect(z.einspeise_nicht_verguetet_euro).toBe(0)
+describe('createMonatsZeitreihe — Finanzen kommen aus dem Backend (N-22)', () => {
+  it('reicht Erlös, Ersparnis, Kosten und Netto durch, ohne sie neu zu rechnen', () => {
+    // Die gelieferten Zahlen sind absichtlich NICHT die, die die alte
+    // Client-Formel aus denselben Mengen gerechnet hätte (1000 kWh × 8,2 ct =
+    // 82 € Erlös, 500 kWh × 30 ct = 150 € EV). Hier stehen bewusst andere
+    // Werte: wer wieder rechnet statt zu lesen, fällt auf.
+    const [z] = createMonatsZeitreihe([md({
+      einspeise_erloes_euro: 71.5, ev_ersparnis_euro: 133.25,
+      netzbezug_kosten_euro: 74, netto_ertrag_euro: 204.75, netto_bilanz_euro: 130.75,
+    })])
+    expect(z.einspeise_erloes).toBe(71.5)
+    expect(z.ev_ersparnis).toBe(133.25)
+    expect(z.netzbezug_kosten).toBe(74)
+    expect(z.netto_ertrag).toBe(204.75)
+    expect(z.netto_bilanz).toBe(130.75)
   })
 
-  it('zieht §51-kWh ab; Netto-Ertrag und Netto-Bilanz ziehen mit', () => {
-    const [z] = createMonatsZeitreihe([md({ einspeisung_neg_preis_kwh: 120 })], undefined, tarif())
-    expect(z.einspeise_erloes).toBeCloseTo((1000 - 120) * 8.2 / 100, 6)
-    expect(z.einspeise_nicht_verguetet_euro).toBeCloseTo(120 * 8.2 / 100, 6)
-    // netto_ertrag = Einspeiseerlös + EV-Ersparnis (500 kWh × 30 ct = 150 €)
-    expect(z.netto_ertrag).toBeCloseTo((1000 - 120) * 8.2 / 100 + 150, 6)
-    // netto_bilanz zusätzlich abzüglich Netzbezug-Kosten (200 kWh × 30 ct = 60 €)
-    expect(z.netto_bilanz).toBeCloseTo(z.netto_ertrag - 60, 6)
+  it('zählt die BKW-Ersparnis zur EV-Ersparnis (P9-Ersatzträger)', () => {
+    // Ein BKW-Monat ohne erfasste Erzeugung trägt seinen gemessenen
+    // Eigenverbrauch separat — in der Spalte „EV-Ersparnis" gehört er dazu,
+    // sonst summiert die Spalte auf weniger als der Netto-Ertrag daneben.
+    const [z] = createMonatsZeitreihe([md({ ev_ersparnis_euro: 100, bkw_ersparnis_euro: 12.5 })])
+    expect(z.ev_ersparnis).toBe(112.5)
   })
 
-  it('nutzt je Monat den historisch gültigen Tarif — auch beim §51-Abzug', () => {
-    const tarife = [
-      tarif({ id: 1, einspeiseverguetung_cent_kwh: 8.2, gueltig_ab: '2020-01-01', gueltig_bis: '2026-03-31' }),
-      tarif({ id: 2, einspeiseverguetung_cent_kwh: 7.0, gueltig_ab: '2026-04-01' }),
-    ]
-    const reihe = createMonatsZeitreihe([
-      md({ monat: 2, einspeisung_neg_preis_kwh: 100 }),
-      md({ monat: 6, einspeisung_neg_preis_kwh: 100 }),
-    ], undefined, tarife[0], tarife)
-    expect(reihe[0].einspeise_erloes).toBeCloseTo(900 * 8.2 / 100, 6)
-    expect(reihe[1].einspeise_erloes).toBeCloseTo(900 * 7.0 / 100, 6)
+  it('führt die USt auf Eigenverbrauch als eigene Größe (sie steckt im Netto)', () => {
+    const [z] = createMonatsZeitreihe([md({ ust_eigenverbrauch_euro: 41.3, netto_ertrag_euro: 190.7 })])
+    expect(z.ust_eigenverbrauch).toBe(41.3)
+    expect(z.netto_ertrag).toBe(190.7)
   })
 
-  it('ohne Tarif bleibt der Erlös 0 (kein Preis, keine Rechnung)', () => {
-    const [z] = createMonatsZeitreihe([md({ einspeisung_neg_preis_kwh: 120 })])
-    expect(z.einspeise_erloes).toBe(0)
-    expect(z.einspeise_nicht_verguetet_euro).toBe(0)
+  it('übernimmt den effektiven Monatspreis, statt ihn aus einem Tarif zu suchen', () => {
+    // Flex-Ø 24,8 ct schlägt den Stammpreis — die Auflösung (P8) liegt im
+    // Backend, der Client kennt weder Tarif-Historie noch Stichtag mehr.
+    const [z] = createMonatsZeitreihe([md({ netzbezug_preis_cent: 24.8 })])
+    expect(z.netzbezug_preis_cent).toBe(24.8)
+  })
+
+  it('reicht den §51-Abzug als Diagnose durch', () => {
+    const [z] = createMonatsZeitreihe([md({
+      einspeisung_neg_preis_kwh: 120, einspeise_nicht_verguetet_euro: 9.84,
+      einspeise_erloes_euro: 72.16,
+    })])
+    expect(z.einspeise_erloes).toBe(72.16)
+    expect(z.einspeise_nicht_verguetet_euro).toBe(9.84)
+    expect(z.einspeise_neg_preis_kwh).toBe(120)
+  })
+
+  it('behandelt eine gemessene 0 als Wert, nicht als Lücke', () => {
+    // `||` statt `??` ließ einen Monat mit 0 kWh Erzeugung auf den
+    // Ersatzausdruck durchfallen (Teil von N-22).
+    const [z] = createMonatsZeitreihe([md({
+      pv_erzeugung_kwh: 0, eigenverbrauch_kwh: 0, gesamtverbrauch_kwh: 0, netzbezug_kwh: 200,
+    })])
+    expect(z.erzeugung).toBe(0)
+    expect(z.gesamtverbrauch).toBe(0)
   })
 })
 
 /**
  * N-21 — CO₂ wird nachgeschlagen, nicht gerechnet.
  *
- * Beide Tests fallen gegen `HEAD~1`: dort stand `erzeugung × CO2_FAKTOR_KG_KWH`,
- * also 1.500 kWh × 0,38 = **570 kg** — unabhängig davon, ob eine kanonische
- * Reihe mitgegeben wurde oder nicht.
+ * Beide Tests fallen gegen den Stand vor N-21: dort stand
+ * `erzeugung × CO2_FAKTOR_KG_KWH`, also 1.500 kWh × 0,38 = **570 kg** —
+ * unabhängig davon, ob eine kanonische Reihe mitgegeben wurde oder nicht.
  */
 describe('createMonatsZeitreihe — CO₂ kommt aus dem Kanon (N-21)', () => {
   const co2 = (over = {}) => ({
@@ -92,7 +110,7 @@ describe('createMonatsZeitreihe — CO₂ kommt aus dem Kanon (N-21)', () => {
   })
 
   it('übernimmt den PV-Anteil des passenden Monats — nicht Erzeugung × 0,38', () => {
-    const [z] = createMonatsZeitreihe([md()], undefined, null, [], [co2()])
+    const [z] = createMonatsZeitreihe([md()], undefined, [co2()])
     // Eigenverbrauch 500 kWh × 0,38 = 190 kg, vom Backend geliefert.
     expect(z.co2_einsparung).toBe(190)
     // Gegenprobe auf den alten Wert: 1.500 kWh Erzeugung × 0,38 = 570 kg,
@@ -105,6 +123,6 @@ describe('createMonatsZeitreihe — CO₂ kommt aus dem Kanon (N-21)', () => {
     // neben der kanonischen wäre genau die Drift, die N-21 beendet hat.
     expect(createMonatsZeitreihe([md()])[0].co2_einsparung).toBeNull()
     // Auch ein Monat, den die Reihe nicht kennt, bleibt leer (kein Fallback).
-    expect(createMonatsZeitreihe([md({ monat: 7 })], undefined, null, [], [co2()])[0].co2_einsparung).toBeNull()
+    expect(createMonatsZeitreihe([md({ monat: 7 })], undefined, [co2()])[0].co2_einsparung).toBeNull()
   })
 })

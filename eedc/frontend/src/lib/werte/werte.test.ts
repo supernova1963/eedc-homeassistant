@@ -26,7 +26,7 @@ function mz(monat: number, jahr: number, over: Partial<MonatsZeitreihe> = {}): M
     eauto_km: null, eauto_ladung: null, eauto_pv_anteil: null,
     wallbox_ladung: null, wallbox_pv_ladung: null, wallbox_pv_anteil: null,
     einspeise_erloes: 5, ev_ersparnis: 12, netzbezug_kosten: 9,
-    netto_ertrag: 8, netto_bilanz: 8, netzbezug_preis_cent: null, co2_einsparung: 25,
+    netto_ertrag: 8, netto_bilanz: 8, ust_eigenverbrauch: 0, netzbezug_preis_cent: null, co2_einsparung: 25,
     ...over,
   }
 }
@@ -55,8 +55,8 @@ function tw(datum: string, over: Partial<TagWerte> = {}): TagWerte {
 }
 
 describe('W1-Registry', () => {
-  it('hat 44 Metriken (33 Monat + 11 Tag-native), jede mit gültiger Gruppe + granular', () => {
-    expect(WERTE_METRIKEN).toHaveLength(44)
+  it('hat 45 Metriken (34 Monat + 11 Tag-native), jede mit gültiger Gruppe + granular', () => {
+    expect(WERTE_METRIKEN).toHaveLength(45)
     for (const m of WERTE_METRIKEN) {
       expect(WERTE_GRUPPEN).toContain(m.gruppe)
       expect(m.granular.length).toBeGreaterThan(0)
@@ -80,9 +80,9 @@ describe('W1-Registry', () => {
 })
 
 describe('metrikenFuer (Granularität)', () => {
-  it('Monat = 33 Registry-Metriken, kein Tag-natives Feld', () => {
+  it('Monat = 34 Registry-Metriken, kein Tag-natives Feld', () => {
     const m = metrikenFuer('monat')
-    expect(m).toHaveLength(33)
+    expect(m).toHaveLength(34)
     expect(m.find((x) => x.key === 'peak_pv_kw')).toBeUndefined()
     expect(m.find((x) => x.key === 'wp_waerme')).toBeDefined()
     // Vollständigkeits-Spalten (Gernot 2026-06-26): verfügbare Felder als wählbare Spalten.

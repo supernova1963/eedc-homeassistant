@@ -38,41 +38,10 @@ export function calcCOP(waerme: number, strom: number): number | null {
 // der Client liest sie aus `/cockpit/nachhaltigkeit`. Gewächtert von
 // `npm run check:co2-roh`.
 
-/** Ergebnis der §51-bereinigten Erlös-Berechnung (Spiegel von `EinspeiseErloes`). */
-export interface EinspeiseErloes {
-  /** Tatsächlicher Erlös in € (nach §51-Abzug). */
-  erloes_euro: number
-  /** Erlös, der durch §51 entfallen ist (= entgangener Erlös). */
-  nicht_verguetet_euro: number
-  /** Eingespeiste kWh, die nicht vergütet wurden (= §51-Volumen). */
-  nicht_verguetete_kwh: number
-}
-
-/**
- * Einspeise-Erlös unter §51 EEG — Spiegel des Backend-SoT
- * `core/berechnungen/einspeise_erloes.py::einspeise_erloes_euro`.
- *
- * Seit Solarpaket I entfällt für betroffene Anlagen die Vergütung in Stunden mit
- * negativem Börsenpreis. Das Volumen steht als `einspeisung_neg_preis_kwh` in den
- * aggregierten Monatsdaten (`null` = Anlage unterliegt nicht §51 bzw. keine
- * Strompreis-Mitschrift → kein Abzug, wie vor dem Feature).
- *
- * `max(0, min(...))` fängt Drift zwischen Monatsdaten und Tages-Aggregat ab —
- * ein negativer Erlös darf daraus nie entstehen. Beide Implementierungen müssen
- * identisch bleiben; die Testfälle spiegeln `backend/tests/test_einspeise_erloes.py`.
- */
-export function calcEinspeiseErloes(
-  einspeisung_kwh: number,
-  neg_preis_kwh: number | null | undefined,
-  verguetung_ct_kwh: number,
-): EinspeiseErloes {
-  if (einspeisung_kwh <= 0) {
-    return { erloes_euro: 0, nicht_verguetet_euro: 0, nicht_verguetete_kwh: 0 }
-  }
-  const abzugKwh = Math.max(0, Math.min(neg_preis_kwh ?? 0, einspeisung_kwh))
-  return {
-    erloes_euro: ((einspeisung_kwh - abzugKwh) * verguetung_ct_kwh) / 100,
-    nicht_verguetet_euro: (abzugKwh * verguetung_ct_kwh) / 100,
-    nicht_verguetete_kwh: abzugKwh,
-  }
-}
+// ENTFERNT 2026-08-04 (Fund N-22): `calcEinspeiseErloes` war der Frontend-Spiegel
+// von `core/berechnungen/einspeise_erloes.py`. Sein einziger Aufrufer war die
+// Finanz-Rechnung in `pages/auswertung/types.ts` — eine zweite Finanz-Engine
+// neben `services/finanz_zeilen.py`, die es seit N-22 nicht mehr gibt. Ein
+// Spiegel ohne Aufrufer ist kein Vorrat, sondern der Anfang der nächsten Drift:
+// er altert still mit, bis ihn jemand wieder einsetzt. Der §51-Abzug kommt
+// fertig aus der Antwort (`einspeise_erloes_euro` / `einspeise_nicht_verguetet_euro`).

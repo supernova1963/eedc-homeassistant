@@ -401,7 +401,8 @@ Beim Öffnen landest du auf **Finanzen**.
 Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amortisation** — hierher ist auch der monatliche **Finanz-Abschluss** (T-Konto) aus dem alten Monatsbericht gezogen, jetzt zeitraum-fähig, sowie die frühere Finanz-Prognose.
 
 - **Einspeiseerlös** = **vergütete** Einspeisung × Einspeisevergütung. Bei Anlagen mit aktivem §51-Schalter sind die in Negativpreis-Stunden eingespeisten kWh **abgezogen** — auch im Kennwert und in der Werte-Tabelle, nicht nur im T-Konto darunter (bis v4.0.0 stand derselbe Erlös mit zwei Zahlen auf einer Seite).
-- **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis
+- **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis. **Aus PV und Balkonkraftwerk** — ein Erzeuger unter „Sonstiges" mit Brennstoff (Mini-BHKW) zählt hier bewusst **nicht** mit: er erscheint voll in der Energiebilanz (Eigenverbrauch, Autarkie, EV-Quote), seine Wirtschaftlichkeit gilt aber als „nicht bewertet", weil der Brennstoff Geld kostet. Die Mengen-Spalte „Eigenverbrauch" ist deshalb bei einem solchen Erzeuger größer als die Menge hinter dieser Ersparnis.
+- **USt auf Eigenverbrauch** — nur bei **Regelbesteuerung** (Stammdaten). Sie ist im „Netto-Ertrag (PV)" bereits **abgezogen** und in der Werte-Tabelle über den Spalten-Wähler als eigene Spalte einblendbar. Als Jahresgröße (Selbstkosten je kWh aus Investitionssumme und Jahresertrag) hat sie **kein Tages-Pendant** — die Summe der Tageszeilen ergibt beim Netto-Ertrag dann nicht exakt den Monatswert.
 - **Sonstige Positionen** — frei erfassbare Kosten und Erlöse je Monat (Reparaturen, Wartung, sonstige Erträge); sie fließen als eigene T-Konto-Zeilen in die Summen ein
 - **Grund- und Zählergebühren** — separat ausgewiesen
 - **Netto-Einsparung** = Erlöse + Einsparungen − Kosten

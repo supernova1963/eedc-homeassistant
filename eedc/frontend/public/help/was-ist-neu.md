@@ -11,6 +11,32 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Auswertungen und Cockpit nennen dieselben Euro-Beträge
+
+**Betrifft dich das?** Wenn du *Auswertungen → Finanzen* oder die Finanzspalten in
+*Auswertungen → Tabelle* nutzt — besonders, wenn du **regelbesteuert** bist oder einen
+**Erzeuger unter „Sonstiges"** mit Brennstoff betreibst (z. B. ein Mini-BHKW).
+
+Die Finanzwerte dieser Seite wurden bisher **in deinem Browser** gerechnet, mit einer eigenen
+Formel neben der, die eedc für Cockpit, Monatsbericht-PDF, HA-Export und Aussichten benutzt.
+Jetzt kommen sie aus derselben Quelle wie überall sonst. Drei Beträge ändern sich dadurch:
+
+- **Ein Brennstoff-Erzeuger bringt keine Strompreis-Ersparnis mehr.** Sein Strom wurde bisher
+  bewertet, als wäre er gratis. In deiner **Energiebilanz** zählt er weiter voll mit
+  (Eigenverbrauch, Autarkie, EV-Quote) — nur wirtschaftlich bewertet eedc ihn bewusst nicht,
+  weil der Brennstoff auf der anderen Seite Geld kostet.
+- **Bei Regelbesteuerung wird die USt auf den Eigenverbrauch abgezogen**, wie im Cockpit. Damit
+  die kleinere Zahl erklärbar bleibt, gibt es in der Werte-Tabelle die neue Spalte
+  **„USt Eigenverbrauch"** (über den Spalten-Wähler einblendbar). Bist du nicht regelbesteuert,
+  ändert sich hier nichts.
+- **Ein Balkonkraftwerk, bei dem nur der Eigenverbrauch gepflegt ist**, zählt jetzt mit statt
+  gar nicht.
+
+**Muss ich etwas tun?** Nein. Wenn dir eine Zahl kleiner vorkommt als früher: sie stimmt jetzt
+mit dem Cockpit überein. **Ein Hinweis für Regelbesteuerte:** Die Summe der Tageszeilen ergibt
+beim Netto-Ertrag nicht mehr genau den Monatswert — die USt ist eine Jahresgröße und lässt sich
+keinem einzelnen Tag zuordnen.
+
 ### SFML steht jetzt im Prognosen-Vergleich
 
 **Betrifft dich das?** Wenn du unter *Einstellungen → Stammdaten* **Solar Forecast ML (SFML)**

@@ -196,9 +196,11 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
 die Vergütung (Herleitung des Volumens: Abschnitt „§51 EEG (Negativpreis-Analyse)"). Ist
 die Anlage nicht §51-pflichtig oder liegt keine Strompreis-Mitschrift vor, ist der
-Wert `null` und es wird nichts abgezogen. Der Abzug gilt **überall** gleich:
-Backend-SoT `core/berechnungen/einspeise_erloes.py` und der Frontend-Spiegel
-`lib/calculations.ts::calcEinspeiseErloes` (Auswertungen → Finanzen + Tabelle).
+Wert `null` und es wird nichts abgezogen. Der Abzug gilt **überall** gleich, und es
+gibt dafür **eine** Implementierung: `core/berechnungen/einspeise_erloes.py`. Bis
+2026-08-04 stand daneben ein Frontend-Spiegel (`lib/calculations.ts::calcEinspeiseErloes`)
+für *Auswertungen → Finanzen + Tabelle*; er ist mit Fund **N-22** entfallen, weil die
+Monats-Finanzzeile jetzt fertig aus `/monatsdaten/aggregiert` kommt.
 
 **Netzpunkt-Bilanz (Erzeugung_gesamt):** Am EINEN Netzanschluss messen die Zähler
 (`Einspeisung`/`Netzbezug`) die Summe **aller** dahinter liegenden Erzeuger. Deshalb
@@ -689,7 +691,23 @@ USt_Eigenverbrauch   = Eigenverbrauch * Selbstkosten_pro_kWh * USt_Satz / 100
 | `PV_Erzeugung_Jahr` | Aggregierte PV-Erzeugung aus InvestitionMonatsdaten |
 | `USt_Satz` | `Anlage.ust_satz_prozent` (DE: 19, AT: 20, CH: 8.1) |
 
-**Auswirkung:** USt wird vom `Netto_Ertrag` abgezogen (im Cockpit und in Auswertungen → Finanzen).
+**Auswirkung:** USt wird vom `Netto_Ertrag` abgezogen — Cockpit, Jahresbericht-PDF,
+HA-Export, Aussichten und (seit 2026-08-04, Fund **N-22**) auch *Auswertungen →
+Finanzen* + *Tabelle*. Bis dahin behauptete dieser Satz den Abzug für die
+Auswertungen bereits, während der Client dort ohne ihn rechnete.
+
+> **Je Monat verteilt (Auswertungen):** die Formel ist linear im Eigenverbrauch,
+> deshalb trägt jeder Monat `EV_m × Selbstkosten_je_kWh × USt_Satz`. Der Nenner der
+> Selbstkosten ist die **Jahres**-PV, damit Σ der Monatsbeträge exakt der
+> Jahresbetrag bleibt. **Auf Tagesebene gibt es die Größe nicht** — Investitionssumme
+> und Jahresertrag lassen sich keinem Tag zuordnen; bei Regelbesteuerung gilt daher
+> Σ Tage ≠ Monat beim Netto-Ertrag (dieselbe bewusste Asymmetrie wie bei CO₂).
+>
+> ⚠ **Cockpit setzt an dieser Stelle eine andere Investitionssumme ein** als die
+> übrigen vier Sichten (zusammengesetzt aus Mehrkosten statt Vollkosten) — über ein
+> einzelnes Jahr sind das wenige Euro, über einen mehrjährigen Zeitraum mehr, weil
+> die Jahres-Abschreibung dort durch eine mehrjährige Erzeugung geteilt wird.
+> Register N-129/N-130.
 
 ### 3.8 CO2-Bilanz
 

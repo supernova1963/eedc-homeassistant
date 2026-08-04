@@ -19,7 +19,7 @@ const CO2_LEER = { monate: [], gesamtKg: 0, loading: false, error: null, refresh
 
 function basis(over: Partial<WerteZeitreiheBasis>): WerteZeitreiheBasis {
   return {
-    daten: [], strompreis: null, alleTarife: [], loading: false, error: null,
+    daten: [], loading: false, error: null,
     co2: CO2_LEER,
     ...over,
   } as WerteZeitreiheBasis
@@ -31,7 +31,7 @@ describe('useWerteZeitreihe (reine Basis-Ableitung, Paket Q)', () => {
     const { result } = renderHook(() => useWerteZeitreihe(basis({ daten }), ANLAGE))
     expect(result.current.rows).toHaveLength(3)
     expect(result.current.jahre).toEqual([2026, 2024])
-    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenCalledWith(daten, ANLAGE, null, [], [])
+    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenCalledWith(daten, ANLAGE, [])
   })
 
   it('N-21: reicht die kanonische CO₂-Reihe der Basis durch, statt sie rechnen zu lassen', () => {
@@ -40,7 +40,7 @@ describe('useWerteZeitreihe (reine Basis-Ableitung, Paket Q)', () => {
     const monate = [{ jahr: 2026, monat: 1, co2_pv_kg: 42 }] as WerteZeitreiheBasis['co2']['monate']
     const daten = [{ jahr: 2026, monat: 1 }] as WerteZeitreiheBasis['daten']
     renderHook(() => useWerteZeitreihe(basis({ daten, co2: { ...CO2_LEER, monate } }), ANLAGE))
-    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenLastCalledWith(daten, ANLAGE, null, [], monate)
+    expect(vi.mocked(createMonatsZeitreihe)).toHaveBeenLastCalledWith(daten, ANLAGE, monate)
   })
 
   it('reicht loading der Basis durch', () => {

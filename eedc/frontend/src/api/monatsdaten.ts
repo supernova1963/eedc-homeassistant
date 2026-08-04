@@ -120,6 +120,26 @@ export interface AggregierteMonatsdaten {
   // §51-Abzug-Volumen (kWh bei neg. Börsenpreis eingespeist); null = Anlage
   // unterliegt nicht §51 (R17/Verlauf).
   einspeisung_neg_preis_kwh: number | null
+  // ── Finanzen je Monat (N-22) ────────────────────────────────────────────
+  // Fertig gerechnet aus dem Backend-SoT (`baue_finanz_zeile` +
+  // `berechne_finanz_aggregat`) — derselbe Weg, den die Tages-Granularität
+  // derselben Tabelle längst geht. Der Client rechnet hier nichts nach;
+  // `createMonatsZeitreihe` tat es bis 2026-08-04 und wich dabei ab.
+  einspeise_erloes_euro: number
+  // §51-Diagnose: entgangener Erlös. Der Erlös oben ist bereits gekürzt.
+  einspeise_nicht_verguetet_euro: number
+  ev_ersparnis_euro: number
+  // Nur für BKW-Monate ohne erfasste Erzeugung besetzt (Datenlücke, ADR-002/P9).
+  bkw_ersparnis_euro: number
+  // Bereits in `netto_ertrag_euro` abgezogen; 0 außerhalb der Regelbesteuerung.
+  ust_eigenverbrauch_euro: number
+  // Arbeitspreis × kWh + Grundpreis des Monats.
+  netzbezug_kosten_euro: number
+  // Erlös + EV- + BKW-Ersparnis − USt. OHNE „Sonstige Erträge & Ausgaben".
+  netto_ertrag_euro: number
+  netto_bilanz_euro: number
+  // Effektiver Arbeitspreis des Monats (Flex-Ø vor Stammdaten-Tarif, P8).
+  netzbezug_preis_cent: number
   // Legacy-Marker
   hat_legacy_daten: boolean
   // Feldgruppen, die nicht aus der Datenbank stammen, sondern aus der lokalen
