@@ -11,6 +11,32 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Im laufenden Monat vergleicht das SOLL nur die Tage, die schon vorbei sind
+
+**Betrifft dich das?** Alle, die *Cockpit → Monat* oder *Cockpit → Jahr* im **laufenden** Monat
+ansehen.
+
+Die SOLL-Erfüllung setzt deinen Ertrag ins Verhältnis zu dem, was PVGIS für den Zeitraum erwartet.
+PVGIS rechnet in **Monatssummen** — und die stand bisher auch dann voll im Nenner, wenn der Monat
+gerade erst angefangen hatte. Am 4. August sah das an Gernots Anlage so aus:
+
+| | zeigte | tatsächlich |
+| --- | --- | --- |
+| Cockpit → Monat (August) | **19 %** | 148 % — 264,8 kWh gegen die 179,1 kWh, die bis zum 4. zu erwarten waren |
+| Cockpit → Jahr | **104 %** | 120 % — dieselbe Anlage kommt über Jan–Jul auf 119 % |
+
+Am Monatsersten stand dort also praktisch eine Null für eine völlig gesunde Anlage — und in der
+Jahres-Kachel zog der volle August-Nenner das ganze Jahr nach unten.
+
+Ab jetzt zählt das SOLL im laufenden Monat nur die **abgelaufenen Tage**. Damit du die kleinere
+kWh-Zahl richtig liest, schreibt eedc das Fenster dazu: **„anteilig · 4 von 31 Tagen"** — im
+Tooltip der PV-Kachel und in der Kopfzeile des Bilanz-Blocks. Mit dem Monatsabschluss steht dort
+wieder der volle Monat.
+
+**Was sich nicht ändert:** abgeschlossene Monate, deine Historie und jedes Jahr, das nicht mehr
+läuft. Dort waren Zähler und Nenner ohnehin deckungsgleich. Neu ist außerdem, dass ein Monat in
+der **Zukunft** gar keine Erfüllungsquote mehr zeigt statt 0 % — er hat noch nicht stattgefunden.
+
 ### Überbelegung ist normal — und dein SOLL weiß das jetzt
 
 **Betrifft dich das?** Alle, die **mehr Modulleistung als Wechselrichter-Leistung** installiert

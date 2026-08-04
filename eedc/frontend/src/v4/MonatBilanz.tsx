@@ -25,6 +25,7 @@ import { Parkbar } from '../components/park'
 import { DATENROLLE, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
+import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -52,9 +53,15 @@ export function baueMonatKpis(
   vm: AggregierteMonatsdaten | null,
   prAvg?: number | null,
 ): KpiStripItem[] {
-  const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null
-    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
+  // N-69: im laufenden Monat trägt `soll_pv_kwh` nur die abgelaufenen Tage. Die
+  // Zweitzeile ist `truncate` und fasst keine Fensterangabe mehr — die steht
+  // deshalb im Tooltip und in der Block-Kopfzeile (dieselbe Arbeitsteilung wie
+  // bei den Vergleichsfenstern, P-12/N-65).
+  const sollPct = sollErfuellungProzent(d)
+  const pvSoll = sollPct != null
+    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt(sollPct)} %`
     : vm ? `VM: ${fmt(vm.pv_erzeugung_kwh)} kWh` : undefined
+  const sollFenster = sollFensterText(d)
 
   // Monatsergebnis = nach Betriebskosten (verhaltensgleich zu MonatsabschlussView
   // `nettoNachAllem`, Donor): Gesamt-Nettoertrag − Betriebskosten + Sonstiges.
@@ -67,6 +74,11 @@ export function baueMonatKpis(
     {
       title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv,
       subtitle: pvSoll,
+      formel: sollPct != null ? 'PV-Ertrag ÷ PVGIS-SOLL × 100' : undefined,
+      berechnung: sollPct != null
+        ? `${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(d.soll_pv_kwh)} kWh${sollFenster ? ` (${sollFenster})` : ''}`
+        : undefined,
+      ergebnis: sollPct != null ? `= ${fmtCalc(sollPct, 1)} %` : undefined,
     },
     {
       title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,

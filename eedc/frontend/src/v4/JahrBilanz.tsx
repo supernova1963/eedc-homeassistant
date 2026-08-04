@@ -35,6 +35,7 @@ import { DATENROLLE } from '../lib'
 import { Delta, VglChip, baueNetzKostenKpis } from './MonatBilanz'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
 import { DATENROLLEN_ICONS } from '../lib/komponentenStyle'
+import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
 import type { KpiStripItem } from '../components/blocks'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { JahrVergleich } from './JahrAggregat'
@@ -63,8 +64,13 @@ export function baueJahrKpis(
   // „IST Jan–Aug · " genau die Angabe ab, die es einordnen sollte („… VJ (Jan–…").
   // Es steht deshalb in der Block-Kopfzeile darüber (`kennzahlenSummary`), die
   // ungekürzt rendert, und über der IST-Spalte der Vergleichstabelle.
-  const pvSoll = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
-    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)} %`
+  // N-69: der laufende Monat steuert nur seine abgelaufenen Tage zum SOLL bei
+  // (Backend, `core/berechnungen/monatsfenster.py`) — vorher stand hier sein
+  // volles Monats-SOLL über ein paar Tagen Ertrag, an der Box 104 % statt 119 %.
+  const sollPct = sollErfuellungProzent(d)
+  const sollFenster = sollFensterText(d)
+  const pvSoll = sollPct != null
+    ? `SOLL ${fmt(d.soll_pv_kwh)} kWh · ${fmt(sollPct)} %`
     : vj?.pv != null ? `${VJ}: ${fmt(vj.pv)} kWh` : undefined
 
   // Jahresergebnis = nach Betriebskosten (verhaltensgleich Monat: Gesamt-
@@ -74,7 +80,15 @@ export function baueJahrKpis(
     : null
 
   return [
-    { title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow', icon: DATENROLLEN_ICONS.pv, subtitle: pvSoll },
+    {
+      title: 'PV-Erzeugung', value: fmt(d.pv_erzeugung_kwh), unit: 'kWh', color: 'yellow',
+      icon: DATENROLLEN_ICONS.pv, subtitle: pvSoll,
+      formel: sollPct != null ? 'PV-Ertrag ÷ PVGIS-SOLL × 100' : undefined,
+      berechnung: sollPct != null
+        ? `${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(d.soll_pv_kwh)} kWh${sollFenster ? ` (${sollFenster})` : ''}`
+        : undefined,
+      ergebnis: sollPct != null ? `= ${fmtCalc(sollPct, 1)} %` : undefined,
+    },
     {
       title: 'Autarkie', value: fmt(d.autarkie_prozent), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vj?.autarkie != null ? `${VJ}: ${fmt(vj.autarkie)} %` : undefined,

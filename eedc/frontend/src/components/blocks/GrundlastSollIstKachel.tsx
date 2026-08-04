@@ -22,6 +22,7 @@ import type { ReactNode } from 'react'
 import FormelTooltip from '../ui/FormelTooltip'
 import { fmtCalc } from '../ui'
 import { AMPEL_TEXT_CLASS, AMPEL_BG_CLASS, sollIstStufe } from '../../lib'
+import { sollErfuellungProzent, sollFensterText } from '../../lib/sollErfuellung'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
@@ -97,10 +98,12 @@ export function GrundlastSollIstKachel({ d }: { d: AktuellerMonatResponse }) {
     )
   }
 
-  // Fallback: PVGIS-SOLL/IST (unverändert), wenn keine Stundenprofile vorliegen.
-  const sollPct = d.soll_pv_kwh != null && d.pv_erzeugung_kwh != null && d.soll_pv_kwh > 0
-    ? Math.round((d.pv_erzeugung_kwh / d.soll_pv_kwh) * 100)
-    : null
+  // Fallback: PVGIS-SOLL/IST, wenn keine Stundenprofile vorliegen. Der SOLL-Wert
+  // trägt im laufenden Monat nur die abgelaufenen Tage (N-69) — deshalb benennt
+  // die Kachel ihr Fenster, sonst läse man die gekürzte kWh-Zahl als Monats-SOLL.
+  const sollRoh = sollErfuellungProzent(d)
+  const sollPct = sollRoh != null ? Math.round(sollRoh) : null
+  const sollFenster = sollFensterText(d)
   if (sollPct == null) {
     return <p className="text-xs text-gray-400 dark:text-gray-500">Keine Grundlast- oder PVGIS-Daten für diesen Zeitraum.</p>
   }
@@ -109,12 +112,14 @@ export function GrundlastSollIstKachel({ d }: { d: AktuellerMonatResponse }) {
     <BilanzKachel
       label="IST/SOLL (PVGIS)"
       formel="IST ÷ SOLL × 100"
-      berechnung={d.pv_erzeugung_kwh != null && d.soll_pv_kwh != null ? `${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(d.soll_pv_kwh)} kWh` : undefined}
+      berechnung={d.pv_erzeugung_kwh != null && d.soll_pv_kwh != null
+        ? `${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(d.soll_pv_kwh)} kWh${sollFenster ? ` (${sollFenster})` : ''}`
+        : undefined}
       ergebnis={`= ${fmt(sollPct)} %`}
       wert={`${fmt(sollPct)} %`}
       wertClass={AMPEL_TEXT_CLASS[stufe]}
       balken={{ pct: sollPct, bgClass: AMPEL_BG_CLASS[stufe] }}
-      subtitle={<>{fmt(d.pv_erzeugung_kwh)} von {fmt(d.soll_pv_kwh)} kWh</>}
+      subtitle={<>{fmt(d.pv_erzeugung_kwh)} von {fmt(d.soll_pv_kwh)} kWh{sollFenster ? ` (${sollFenster})` : ''}</>}
     />
   )
 }

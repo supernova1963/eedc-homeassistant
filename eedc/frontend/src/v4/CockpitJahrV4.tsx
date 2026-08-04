@@ -265,12 +265,16 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     // nicht die Kopfzahl. Sonst nennte die eingeklappte Zeile eine andere PV-Zahl als
     // die Tabelle darin.
     const b = jahrVglData ?? d
-    // Die SOLL-Erfüllung steht NUR an der PV-Kachel. Über die abgeschlossenen Monate
-    // gerechnet ergäbe sie hier eine zweite, andere Prozentzahl für dieselbe Größe
-    // (an der Box 119 % gegen 103 % an der Kachel) — der Unterschied ist echt, aber
-    // er gehört an EINE Stelle. Ursache ist, dass der laufende Monat sein VOLLES
-    // PVGIS-SOLL mitbringt und nur ein paar Tage Ertrag; das ist ein eigener Fund und
-    // bestand schon vor P-12 (damals 98,7 % aus Jan–Jun + vollem August).
+    // Die SOLL-Erfüllung steht im laufenden Jahr NUR an der PV-Kachel: die
+    // Kopfzeile fasst die TABELLE zusammen (abgeschlossene Monate), die Kachel das
+    // Jahr bis heute — zwei Fenster, also zwei Prozentzahlen für dieselbe Größe.
+    //
+    // Der Abstand war der eigentliche Grund und ist mit N-69 (2026-08-04) getilgt:
+    // der laufende Monat brachte sein VOLLES PVGIS-SOLL über ein paar Tage Ertrag
+    // mit, an der Box 119 % (Tabelle) gegen 103 % (Kachel). Seit das Backend den
+    // SOLL-Nenner auf die abgelaufenen Tage kürzt, liegen beide bei ~119 %. Die
+    // Unterdrückung bleibt trotzdem stehen — ob die Kopfzeile die Zahl wieder
+    // tragen soll, ist eine Anzeige-Entscheidung und kein Rechenfehler mehr.
     // Bei abgeschlossenem Jahr fallen beide Fenster zusammen ⇒ Anzeige wie bisher.
     const bilanzSummary = b
       ? mitFenster(istFenster, `${fmtCalc(b.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(b.autarkie_prozent, 0, '—')} % Autarkie${

@@ -354,6 +354,13 @@ Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die re
 
 Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung? Verschmutzung?), > 20 % Handlungsbedarf (Defekt? Fehlkonfiguration?).
 
+> **Im laufenden Monat zählt das SOLL nur die vergangenen Tage** — steht am 4. August ein SOLL von
+> 179 kWh statt der 1.388 kWh des ganzen Monats, ist das kein Fehler: verglichen wird der bisherige
+> Ertrag mit dem, was bis heute zu erwarten war. Die Kachel schreibt das Fenster dazu
+> („anteilig · 4 von 31 Tagen"); mit dem Monatsabschluss steht dort wieder der volle Monat.
+
+
+
 ### 3.3 Speicher
 
 - **Vollzyklen** = entladene Energie ÷ Kapazität — dieselbe Zahl in Tag, Monat, Jahr, PDF und HA-Sensor. Gezählt wird die *entnommene* Energie (darauf zielen Hersteller-Garantien), geteilt durch die **Brutto**-Kapazität. Wer eine „nutzbare Kapazität" gepflegt hat, findet sie beim Wirkungsgrad wieder, nicht hier ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).

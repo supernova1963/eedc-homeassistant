@@ -33,6 +33,7 @@ import { energieProfilApi, type VerfuegbarerMonat } from '../api/energie_profil'
 import { aktuellerMonatApi } from '../api/aktuellerMonat'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { monatRefAusQuery, verlaufTabellenSpalten } from './verlaufVergleich'
+import { sollErfuellungProzent, sollFensterText } from '../lib/sollErfuellung'
 
 interface MonatRef { jahr: number; monat: number }
 
@@ -228,10 +229,16 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     if (!gewaehlt) return []
     // Energie-Bilanz Block-Summary = Kernwerte auf einen Blick (wie IST), nicht
     // die Struktur-Beschreibung — im eingeklappten Zustand direkt ablesbar (A1).
+    // Die Kopfzeile rendert ungekürzt — sie ist deshalb der Ort für die
+    // Fensterangabe des SOLL (N-69; die Kachel-Zweitzeile darunter ist
+    // `truncate`). Im laufenden Monat steht dort „SOLL 148 % (anteilig · 4 von
+    // 31 Tagen)", im abgeschlossenen wie bisher nur die Prozentzahl.
+    const monatSollPct = monatData ? sollErfuellungProzent(monatData) : null
+    const monatSollFenster = monatData ? sollFensterText(monatData) : null
     const bilanzSummary = monatData
       ? `${fmtCalc(monatData.pv_erzeugung_kwh, 0, '—')} kWh PV · ${fmtCalc(monatData.autarkie_prozent, 0, '—')} % Autarkie${
-          monatData.soll_pv_kwh != null && monatData.pv_erzeugung_kwh != null && monatData.soll_pv_kwh > 0
-            ? ` · SOLL ${fmtCalc((monatData.pv_erzeugung_kwh / monatData.soll_pv_kwh) * 100, 0, '—')} %`
+          monatSollPct != null
+            ? ` · SOLL ${fmtCalc(monatSollPct, 0, '—')} %${monatSollFenster ? ` (${monatSollFenster})` : ''}`
             : ''}`
       : 'IST / Vormonat / Vorjahr / Ø-Monat'
     // Kennzahlen-Kacheln parkbar machen (SLICE 1): stabile parkId je Titel; geparkte

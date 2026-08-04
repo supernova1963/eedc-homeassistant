@@ -26,10 +26,13 @@ from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
+    Monatsfenster,
+    anteilig,
     auslastung_prozent,
     auslastungs_basis_kwh,
     autarkie_prozent,
     berechne_grundlast,
+    monatsfenster,
     berechne_netzbezug_kosten,
     berechne_netzladung_kosten,
     berechne_speicher_ersparnis,
@@ -283,7 +286,14 @@ class AktuellerMonatResponse(BaseModel):
 
     # Vergleiche
     vorjahr: Optional[dict] = None
+    # PVGIS-SOLL des Monats. Im LAUFENDEN Monat nur der Anteil der abgelaufenen
+    # Tage (N-69) — sonst stünde ein voller Monats-Nenner über einem
+    # angefangenen Ertrag. `soll_pv_tage`/`_gesamt` benennen das Fenster, damit
+    # die Anzeige „anteilig" sagen kann statt eine gekürzte Zahl als Monats-SOLL
+    # auszugeben; `tage == tage_gesamt` heißt „voller Monat".
     soll_pv_kwh: Optional[float] = None
+    soll_pv_tage: Optional[int] = None
+    soll_pv_tage_gesamt: Optional[int] = None
 
     # Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). `grundlast_kwh` ist
     # additiv → Cockpit/Jahr summiert die Monate (analog soll_pv_kwh).
@@ -765,7 +775,9 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
     return result
 
 
-async def _load_soll_pv(anlage_id: int, monat: int, db: AsyncSession) -> Optional[float]:
+async def _load_soll_pv(
+    anlage_id: int, jahr: int, monat: int, db: AsyncSession, fenster: Monatsfenster,
+) -> Optional[float]:
     """Lädt PVGIS SOLL-Wert für den Monat — aus der AKTIVEN Prognose (P5).
 
     Vorher stand hier ein `JOIN` auf `ist_aktiv` **ohne `limit`** und ein `sum()`
@@ -773,11 +785,21 @@ async def _load_soll_pv(anlage_id: int, monat: int, db: AsyncSession) -> Optiona
     Der Fehler war nicht sichtbar, weil die Summe plausibel aussah — sie war nur
     doppelt so groß, und die SOLL/IST-Abweichung sowie die Grundlast-SOLL-Kachel
     rechneten mit. Der Auswahl-SoT trägt das `LIMIT 1` in der Subquery.
+
+    **Im laufenden Monat trägt der Rückgabewert nur die abgelaufenen Tage**
+    (N-69, Entscheid Gernot 2026-08-04): PVGIS liefert eine Monatssumme, der IST
+    daneben ist angefangen. Ungekürzt maß die Erfüllungsquote das Datum statt
+    die Anlage — am 4. August 19 % für eine Anlage, die über die abgeschlossenen
+    Monate auf 119 % kam. Begründung der Kürzung im Layer-Docstring
+    (`core/berechnungen/monatsfenster.py`); die Jahres-Sicht summiert diese
+    Monatswerte und erbt die Korrektur damit ohne eigene Rechnung.
     """
     prognosen = await lade_aktive_monatsprognosen(db, anlage_id, monat=monat)
     if not prognosen:
         return None
-    return round(sum(p.ertrag_kwh for p in prognosen), 1)
+    voll = sum(p.ertrag_kwh for p in prognosen)
+    gekuerzt = anteilig(voll, fenster)
+    return round(gekuerzt, 1) if gekuerzt is not None else None
 
 
 async def _load_grundlast_nacht_kw(
@@ -1053,6 +1075,11 @@ async def get_aktueller_monat(
     if monat is None:
         monat = now.month
     ist_aktueller_monat = (jahr == now.year and monat == now.month)
+    # Das gemessene Fenster des Monats — EIN Anker für alle Größen, die im
+    # laufenden Monat mit den abgelaufenen Tagen wachsen (SOLL · Grundlast ·
+    # Speicher-Auslastung). Vorher zählte jede dieser drei Stellen ihre Tage
+    # selbst, mit drei Kopien derselben `min(heute.day, tage_im_monat)`-Zeile.
+    fenster = monatsfenster(jahr, monat, heute=now.date())
     investitionen = [i for i in anlage.investitionen if i.aktiv]
 
     # ── Daten sammeln (I/O) — Zusammenführung nach Präzedenz im SoT-Helper ──
@@ -1561,15 +1588,7 @@ async def get_aktueller_monat(
         # einem angefangenen Zähler ist genau der Fall, den die P4-Doktrin
         # unterdrücken oder ehrlich machen will (KONZEPT-UNVOLLSTAENDIGE-WERTE
         # §3). Hier ist er ehrlich zu machen: die Basis wächst mit.
-        from calendar import monthrange as _mr
-        _heute = date.today()
-        _tage_gesamt = _mr(jahr, monat)[1]
-        _tage = (
-            min(_heute.day, _tage_gesamt)
-            if (jahr, monat) == (_heute.year, _heute.month)
-            else _tage_gesamt
-        )
-        _basis = auslastungs_basis_kwh(speicher_kapazitaet, _tage)
+        _basis = auslastungs_basis_kwh(speicher_kapazitaet, fenster.tage)
         if _basis is not None:
             speicher_auslastungs_basis = round(_basis, 1)
             _au = auslastung_prozent(se, _basis)
@@ -1792,13 +1811,12 @@ async def get_aktueller_monat(
 
     # ── Vergleichsdaten ──
     vorjahr = await _load_vorjahr(anlage_id, investitionen, jahr, monat, db)
-    soll_pv = await _load_soll_pv(anlage_id, monat, db)
+    soll_pv = await _load_soll_pv(anlage_id, jahr, monat, db, fenster)
 
     # ── Grundlast (Nacht-Sockel, R12-1: ersetzt PVGIS-SOLL/IST in Cockpit/Monat
     # + Jahr; Formel im Berechnungs-Layer, Median wie der Live-Wert). Im aktuellen
     # Monat nur die bisherigen Tage hochrechnen, sonst alle Kalendertage. ──
-    from calendar import monthrange as _monthrange_gl
-    grundlast_tage = now.day if ist_aktueller_monat else _monthrange_gl(jahr, monat)[1]
+    grundlast_tage = fenster.tage
     grundlast = berechne_grundlast(
         nacht_verbrauch_kw=await _load_grundlast_nacht_kw(anlage_id, jahr, monat, db),
         gesamtverbrauch_kwh=gesamtverbrauch,
@@ -2036,6 +2054,8 @@ async def get_aktueller_monat(
         # Vergleiche
         vorjahr=vorjahr,
         soll_pv_kwh=soll_pv,
+        soll_pv_tage=fenster.tage if soll_pv is not None else None,
+        soll_pv_tage_gesamt=fenster.tage_gesamt if soll_pv is not None else None,
         grundlast_kw=grundlast.grundlast_kw,
         grundlast_kwh=grundlast.grundlast_kwh,
         grundlast_anteil_prozent=grundlast.grundlast_anteil_prozent,

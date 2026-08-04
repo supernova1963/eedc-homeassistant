@@ -924,6 +924,32 @@ Abweichung gegenüber dem Cockpit).
 **Faire Vergleichsbasis (ab v2.3.2):**
 SOLL wird NUR für Monate gezählt, die auch IST-Daten haben. Verhindert aufgeblähten SOLL bei Teil-Jahren.
 
+**Der laufende Monat zählt anteilig (ab v4.0.9, N-69):**
+PVGIS liefert Monatssummen — im laufenden Monat stünde diese volle Summe als Nenner über einem
+angefangenen Ertrag. Die Quote maß dann das Datum statt die Anlage: am 4. August meldete eine
+gesunde Anlage **19 %** SOLL-Erfüllung (264,8 IST gegen 1.387,9 SOLL), während dieselbe Anlage über
+Jan–Jul auf **119 %** kam; in der Jahres-Kachel wurden daraus 104 % statt 119 %.
+
+```
+Tage      = min(heutiger Tag, Tage im Monat)   im laufenden Monat, sonst alle Tage
+SOLL_kWh  = PVGIS-Monatswert × Tage ÷ Tage im Monat
+```
+
+Gekürzt wird der **Nenner**, nicht das Zeitfenster des IST (Entscheid 2026-08-04) — sonst verlöre
+die Monatssicht ihre einzige Einordnung des PV-Werts bis zum Monatsabschluss. Der laufende Tag zählt
+voll mit: ihn wegzulassen machte den Nenner kleiner und die Quote höher, also genau die Richtung,
+aus der der Fehler kam. Innerhalb des Monats gilt Gleichverteilung; am Beispiel oben liegt die
+Jahresquote damit bei 119,8 % gegen 119,2 % aus den abgeschlossenen Monaten allein.
+
+Ein Monat in der **Zukunft** hat null Tage und damit kein SOLL — die Sichten lassen die Quote weg,
+statt 0 % für einen Monat zu melden, der noch nicht stattgefunden hat. Abgeschlossene Monate und
+damit die gesamte Historie bleiben unberührt.
+
+SoT der Formel: `core/berechnungen/monatsfenster.py` (auch die Grundlast-Hochrechnung und die
+Speicher-Auslastung zählen ihre Tage dort, statt jede für sich). Die Jahres-Sicht summiert die
+Monatswerte und erbt die Kürzung ohne eigene Rechnung; die Oberfläche weist das Fenster aus
+(„anteilig · 4 von 31 Tagen").
+
 **SOLL im Monatsbericht:** derselbe Grundsatz — der Monatswert kommt aus den Monatszeilen **genau der
 aktiven** Prognose. Vor v4.0.1 stand dort eine Summe über *alle* aktiven Prognosen; bei einem
 Bestand mit zwei aktiven war der SOLL-PV-Wert verdoppelt, und mit ihm die SOLL/IST-Abweichung und die

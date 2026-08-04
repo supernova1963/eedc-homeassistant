@@ -198,7 +198,12 @@ export interface AktuellerMonatResponse {
     gesamtnettoertrag_euro?: number
     netzbezug_durchschnittspreis_cent?: number
   } | null
+  // PVGIS-SOLL. Im LAUFENDEN Monat nur der Anteil der abgelaufenen Tage (N-69) —
+  // `soll_pv_tage < soll_pv_tage_gesamt` heißt „anteilig". Wer die Zahl anzeigt,
+  // nimmt `lib/sollErfuellung.ts`, nicht die Felder direkt.
   soll_pv_kwh: number | null
+  soll_pv_tage?: number | null
+  soll_pv_tage_gesamt?: number | null
 
   // Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). grundlast_kwh additiv
   // → Cockpit/Jahr (JahrAggregat) summiert die Monate.

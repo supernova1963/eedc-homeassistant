@@ -37,6 +37,7 @@ from datetime import date, datetime
 import pytest
 from sqlalchemy import select, text
 
+from backend.core.berechnungen import monatsfenster
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.models.pvgis_prognose import (
     INDEX_EINE_AKTIVE_PROGNOSE,
@@ -46,6 +47,12 @@ from backend.models.pvgis_prognose import (
 
 # Die ÄLTERE Prognose ist die vom Nutzer aktivierte — genau der Fall, den
 # „die neueste" still übersteuern würde.
+# Das SOLL-Fenster ist seit N-69 ein Parameter von `_load_soll_pv` (im laufenden
+# Monat trägt es nur die abgelaufenen Tage). Diese Datei prüft **P5** — welche
+# Prognose gelesen wird —, nicht die Kürzung: sie übergibt deshalb bewusst ein
+# volles Fenster, fest verdrahtet statt aus `date.today()` abgeleitet.
+VOLLER_MONAT = monatsfenster(2026, 5, heute=date(2026, 6, 1))
+
 AKTIV_ALT_JAHR = 9_600.0
 NEU_JAHR = 19_200.0
 MONAT = 5
@@ -355,7 +362,7 @@ async def test_monatsbericht_soll_pv_wird_nicht_verdoppelt(db):
     await _index_loeschen(db)
     anlage_id = await _seed(db, zwei_aktive=True)
 
-    soll = await _load_soll_pv(anlage_id, MONAT, db)
+    soll = await _load_soll_pv(anlage_id, 2026, MONAT, db, VOLLER_MONAT)
     erwartet = round(NEU_JAHR / 12, 1)
     verdoppelt = round((AKTIV_ALT_JAHR + NEU_JAHR) / 12, 1)
     assert soll == pytest.approx(erwartet, abs=0.2), (
@@ -393,7 +400,7 @@ async def test_aeltere_aktive_gewinnt_ueber_die_neuere_inaktive(db):
 
     anlage_id = await _seed(db, zwei_aktive=False)
 
-    soll = await _load_soll_pv(anlage_id, MONAT, db)
+    soll = await _load_soll_pv(anlage_id, 2026, MONAT, db, VOLLER_MONAT)
     assert soll == pytest.approx(round(AKTIV_ALT_JAHR / 12, 1), abs=0.2)
 
     strings = await get_pv_strings(anlage_id=anlage_id, jahr=2026, db=db)

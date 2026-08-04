@@ -218,10 +218,18 @@ from backend.core.berechnungen.grundlast import (
     GrundlastKennzahlen,
     berechne_grundlast,
 )
+from backend.core.berechnungen.monatsfenster import (
+    Monatsfenster,
+    anteilig,
+    monatsfenster,
+)
 
 __all__ = [
     "GrundlastKennzahlen",
     "berechne_grundlast",
+    "Monatsfenster",
+    "anteilig",
+    "monatsfenster",
     "TagesBilanz",
     "bilanz_aus_stundenrows",
     "berechne_wp_alternativkosten_ersparnis",

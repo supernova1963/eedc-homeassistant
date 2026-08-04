@@ -387,7 +387,12 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     zaehlergebuehr_euro_jahr: f('zaehlergebuehr_euro_jahr').filter((v): v is number => v != null).at(-1) ?? null,
 
     // SOLL (Σ Monats-PVGIS); Vorjahr-Vergleich liefert die Jahr-Sicht separat.
+    // Das Fenster wird MITSUMMIERT, weil die SOLL-Summe genauso entsteht: der
+    // laufende Monat steuert nur seine abgelaufenen Tage bei (N-69). Ohne die
+    // beiden Summen wäre die Jahreszahl anteilig, ohne es sagen zu können.
     soll_pv_kwh: summe(f('soll_pv_kwh')),
+    soll_pv_tage: summe(f('soll_pv_tage')),
+    soll_pv_tage_gesamt: summe(f('soll_pv_tage_gesamt')),
     // Grundlast (R12-1): Σ Energie, Ø Leistung, Anteil aus Summen.
     grundlast_kw: mittel(f('grundlast_kw')),
     grundlast_kwh: glKwh,
