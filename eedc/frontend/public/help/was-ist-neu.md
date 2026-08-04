@@ -11,6 +11,42 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Die Umsatzsteuer auf den Eigenverbrauch stimmt jetzt — und ist überall dieselbe
+
+**Betrifft dich das?** Nur wenn du unter *Einstellungen → Stammdaten* die
+**Regelbesteuerung** eingestellt hast. Bei „Keine USt-Auswirkung" (der Normalfall)
+ändert sich für dich nichts.
+
+eedc leitet diese Steuer aus den **Selbstkosten je Kilowattstunde** ab: die
+Jahresabschreibung deiner Anlage plus laufende Kosten, geteilt durch den **Jahres**-Ertrag.
+Zwei Dinge stimmten daran nicht:
+
+- **Über mehrere Jahre war sie viel zu niedrig.** Sobald eine Sicht einen längeren Zeitraum
+  zeigte — Cockpit ohne Jahresfilter, der Anlagenbericht über den Gesamtzeitraum, die
+  bisherigen Erträge in *Aussichten*, die HA-Sensoren —, wurde die Erzeugung **des ganzen
+  Zeitraums** gegen eine **einzelne** Jahresabschreibung gerechnet. Bei drei Jahren kam so
+  rund ein Drittel des richtigen Betrags heraus. Dein Netto-Ertrag stand entsprechend zu
+  hoch, und weil der ROI-Fortschritt darauf aufsetzt, sah auch die Amortisation zu gut aus.
+- **Jede Sicht rechnete mit einer anderen Grundlage.** Die meisten setzten die vollen
+  Anschaffungskosten an — beim E-Auto also den ganzen Kaufpreis —, das Cockpit eine eigene
+  Summe mit festen Annahmen (35.000 € fürs Auto, 8.000 € für die Heizung), die deine
+  gepflegten **Alternativkosten** gar nicht las. Cockpit-Kachel und HA-Sensor lagen dadurch
+  auseinander, obwohl der Sensor genau diese Kachel abbilden soll.
+
+Beides läuft jetzt über **eine** Berechnung. Grundlage sind die **Mehrkosten** — was eine
+Anschaffung gegenüber ihrer Alternative gekostet hat, aus dem Feld, das du in der
+Investition ohnehin pflegst —, und gerechnet wird Jahr für Jahr. **Ein angefangenes Jahr
+zählt anteilig**: gehst du im Juni in Betrieb, trägt dieses Jahr sieben Zwölftel
+Abschreibung statt zwölf gegen sieben Monate Ertrag.
+
+**Was du siehst:** Die Beträge bewegen sich **in beide Richtungen**. Über einen mehrjährigen
+Zeitraum steigt die USt spürbar und der Netto-Ertrag sinkt; für ein einzelnes Jahr sinkt sie
+meist leicht. Cockpit und HA-Sensor stimmen danach auf den Cent überein.
+
+**Muss ich etwas tun?** Nein. Es lohnt sich aber, bei E-Auto und Wärmepumpe die
+**Alternativkosten** zu pflegen (*Investitionen → Bearbeiten*) — sie bestimmen jetzt
+mit, wie hoch die Steuer ausfällt.
+
 ### Auswertungen und Cockpit nennen dieselben Euro-Beträge
 
 **Betrifft dich das?** Wenn du *Auswertungen → Finanzen* oder die Finanzspalten in

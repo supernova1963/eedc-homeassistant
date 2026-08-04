@@ -8,6 +8,7 @@ Prognosen und Vorhersagen für PV-Erträge:
 """
 
 import logging
+from collections import defaultdict
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -42,7 +43,11 @@ from backend.core.berechnungen import (
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
-from backend.core.calculations import ust_eigenverbrauch_fuer_anlage
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    UstJahresanteil,
+    bemessungsgrundlage_aus_investitionen,
+    ust_eigenverbrauch_fuer_anlage,
+)
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
@@ -1222,12 +1227,18 @@ async def get_finanz_prognose(
     # Erzeuger bleibt das Verhalten unverändert.
     _tarif_cache: dict[date, dict] = {}
     finanz_zeilen: list[FinanzMonatsZeile] = []
+    # Dieselben Zeilen je Kalenderjahr — die USt rechnet je Jahr (N-130), und
+    # `eigenverbrauch_kwh` des Aggregats ist die Summe der Monatswerte, das
+    # Zerlegen ist also exakt.
+    finanz_zeilen_je_jahr: dict[int, list[FinanzMonatsZeile]] = defaultdict(list)
     for f in fakten:
         if not f.meta.hat_zaehlerzeile or not f.meta.erzeuger_aktiv:
             continue
-        finanz_zeilen.append(await baue_finanz_zeile(
+        _zeile = await baue_finanz_zeile(
             db, anlage_id, finanz_zeile_eingabe(f), tarif_cache=_tarif_cache
-        ))
+        )
+        finanz_zeilen.append(_zeile)
+        finanz_zeilen_je_jahr[f.jahr].append(_zeile)
 
     async def _tarife_fuer_stichtag(jahr: int, monat: int) -> dict:
         """Kompletter Tarifsatz des Monats (allgemein + WP/Wallbox).
@@ -1381,14 +1392,30 @@ async def get_finanz_prognose(
     # die bisherigen Erträge trugen sie nicht, obwohl der Cockpit-Netto-Ertrag
     # sie abzieht. Bei Regelbesteuerung lagen ROI-Fortschritt und Amortisation
     # damit um den USt-Betrag zu günstig (#326-Inventur, Dimension 2).
+    #
+    # N-130: Der Rückblick geht IMMER über den gesamten bisherigen Zeitraum —
+    # er war damit von der Zeitraum-Kollaps-Klasse durchgehend betroffen, nicht
+    # nur bei gesetztem Filter. `sum(pv_pro_monat.values())` stand als
+    # „Jahres-Erzeugung" gegen eine Ein-Jahres-AfA. N-129: Bemessungsgrundlage
+    # über den Layer-SoT (Mehrkosten) statt der Vollkosten.
+    _pv_je_jahr: dict[int, float] = defaultdict(float)
+    for (_j, _m), _pv in pv_pro_monat.items():
+        _pv_je_jahr[_j] += _pv
     bisherige_ertraege -= ust_eigenverbrauch_fuer_anlage(
         anlage,
-        eigenverbrauch_kwh=_finanz.eigenverbrauch_kwh,
-        investition_gesamt_euro=sum(
-            i.anschaffungskosten_gesamt or 0 for i in alle_investitionen
-        ),
+        jahresanteile=[
+            UstJahresanteil(
+                jahr=_j,
+                eigenverbrauch_kwh=berechne_finanz_aggregat(
+                    finanz_zeilen_je_jahr[_j]
+                ).eigenverbrauch_kwh,
+                pv_kwh=_pv_je_jahr.get(_j, 0.0),
+                monate=len(finanz_zeilen_je_jahr[_j]),
+            )
+            for _j in sorted(finanz_zeilen_je_jahr)
+        ],
+        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(alle_investitionen),
         betriebskosten_jahr_euro=betriebskosten_ges,
-        pv_erzeugung_jahr_kwh=sum(pv_pro_monat.values()),
     )
 
     # =====================================================================
@@ -1604,13 +1631,20 @@ async def get_finanz_prognose(
     # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten, BKW, Sonstige und Betriebskosten
     jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis + jahres_bkw_ersparnis + jahres_sonstige_netto - betriebskosten_ges
 
-    # USt auf Eigenverbrauch bei Regelbesteuerung
+    # USt auf Eigenverbrauch bei Regelbesteuerung.
+    # N-130 greift hier NICHT: `jahres_*` sind auf zwölf Monate hochgerechnete
+    # Jahresmengen, kein Zeitraum-Aggregat ⇒ genau EIN Anteil mit `monate=12`.
+    # Geändert hat sich nur die Bemessungsgrundlage (N-129).
     ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
         anlage,
-        eigenverbrauch_kwh=jahres_eigenverbrauch,
-        investition_gesamt_euro=sum(i.anschaffungskosten_gesamt or 0 for i in alle_investitionen),
+        jahresanteile=[UstJahresanteil(
+            jahr=heute.year,
+            eigenverbrauch_kwh=jahres_eigenverbrauch,
+            pv_kwh=jahres_erzeugung,
+            monate=12,
+        )],
+        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(alle_investitionen),
         betriebskosten_jahr_euro=betriebskosten_ges,
-        pv_erzeugung_jahr_kwh=jahres_erzeugung,
     )
     jahres_netto_ertrag -= ust_eigenverbrauch
 

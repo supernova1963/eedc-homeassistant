@@ -27,7 +27,10 @@ from datetime import date
 import pytest
 
 from backend.api.routes.monatsdaten import list_monatsdaten_aggregiert
-from backend.core.calculations import berechne_ust_eigenverbrauch
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    UstJahresanteil,
+    berechne_ust_eigenverbrauch,
+)
 from backend.models import Anlage, Investition, InvestitionMonatsdaten, Monatsdaten
 from backend.models.strompreis import Strompreis
 
@@ -133,11 +136,19 @@ async def test_regelbesteuerung_zieht_ust_ab_und_verteilt_sie_verlustfrei(db):
 
     # Mai: EV = max(0, 1000 − 300) = 700; Juni: max(0, 800 − 200) = 600.
     summe_ust = sum(r.ust_eigenverbrauch_euro for r in rows)
+    # Bemessungsgrundlage ist seit 04.08. die MEHRKOSTEN-Form (N-129); die
+    # Fixture pflegt keine Alternativkosten, damit ist sie hier == Vollkosten.
+    # `monate=2`, weil nur zwei Monate des Jahres ausgeliefert werden (N-130) —
+    # AfA und Betriebskosten zählen anteilig.
     einmal = berechne_ust_eigenverbrauch(
-        eigenverbrauch_kwh=700.0 + 600.0,
-        investition_gesamt_euro=20000.0,
+        [UstJahresanteil(
+            jahr=2026,
+            eigenverbrauch_kwh=700.0 + 600.0,
+            pv_kwh=1000.0 + 800.0,
+            monate=2,
+        )],
+        bemessungsgrundlage_euro=20000.0,
         betriebskosten_jahr_euro=200.0,
-        pv_erzeugung_jahr_kwh=1000.0 + 800.0,
         ust_satz_prozent=19.0,
     )
     assert summe_ust == pytest.approx(einmal, abs=0.02)

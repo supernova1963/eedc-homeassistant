@@ -79,6 +79,13 @@ from backend.core.berechnungen.finanz_aggregat import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
 )
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    AFA_JAHRE,
+    UstJahresanteil,
+    bemessungsgrundlage_aus_investitionen,
+    berechne_ust_eigenverbrauch,
+    ust_eigenverbrauch_fuer_anlage,
+)
 from backend.core.berechnungen.emob import (
     QUELLE_GEMESSEN,
     QUELLE_KEINE,
@@ -238,6 +245,11 @@ __all__ = [
     "FinanzAggregat",
     "FinanzMonatsZeile",
     "berechne_finanz_aggregat",
+    "AFA_JAHRE",
+    "UstJahresanteil",
+    "bemessungsgrundlage_aus_investitionen",
+    "berechne_ust_eigenverbrauch",
+    "ust_eigenverbrauch_fuer_anlage",
     "ImdTypBeitrag",
     "imd_typ_beitrag",
     "berechne_netzbezug_kosten",

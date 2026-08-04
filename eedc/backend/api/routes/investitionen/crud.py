@@ -675,6 +675,10 @@ async def get_roi_dashboard(
         berechne_eauto_einsparung,
         berechne_waermepumpe_einsparung,
         berechne_roi,
+    )
+    from backend.core.berechnungen.ust_eigenverbrauch import (
+        UstJahresanteil,
+        bemessungsgrundlage_aus_investitionen,
         berechne_ust_eigenverbrauch,
     )
     from sqlalchemy import func
@@ -1657,13 +1661,24 @@ async def get_roi_dashboard(
         )
         alle_inv = alle_inv_result.scalars().all()
         betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in alle_inv)
-        alle_kosten = sum(i.anschaffungskosten_gesamt or 0 for i in alle_inv)
         _ust = getattr(anlage, 'ust_satz_prozent', None)
+        # N-130 greift hier NICHT: `*_kwh_jahr` ist bereits eine auf zwölf
+        # Monate hochgerechnete Jahresmenge (`faktor` weiter oben), kein
+        # Zeitraum-Aggregat — deshalb genau EIN Jahresanteil mit `monate=12`.
+        # Geändert hat sich nur die Bemessungsgrundlage (N-129: Mehrkosten
+        # statt Vollkosten).
         ust_abzug = berechne_ust_eigenverbrauch(
-            eigenverbrauch_kwh=pv_detail.get('eigenverbrauch_kwh_jahr', 0),
-            investition_gesamt_euro=alle_kosten,
+            # `jahr` ist hier nur ein Etikett für die Diagnose. `isinstance`
+            # statt `jahr or …`, weil `= Query(None, …)` beim direkten
+            # Funktionsaufruf das truthy `Query`-Objekt ablegt (N-111).
+            [UstJahresanteil(
+                jahr=jahr if isinstance(jahr, int) else date.today().year,
+                eigenverbrauch_kwh=pv_detail.get('eigenverbrauch_kwh_jahr', 0),
+                pv_kwh=pv_detail.get('erzeugung_kwh_jahr', 0),
+                monate=12,
+            )],
+            bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(alle_inv),
             betriebskosten_jahr_euro=betriebskosten_ges,
-            pv_erzeugung_jahr_kwh=pv_detail.get('erzeugung_kwh_jahr', 0),
             ust_satz_prozent=_ust if _ust is not None else 19.0,
         )
         gesamt_einsparung -= ust_abzug

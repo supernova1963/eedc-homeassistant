@@ -2,6 +2,7 @@
 Cockpit Übersicht — Aggregierte KPI-Übersicht für eine Anlage.
 """
 
+from collections import Counter
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,10 +29,12 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     monatsgewichte_aus_pvgis,
 )
-from backend.core.calculations import (
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    UstJahresanteil,
+    bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
-    berechne_co2_bilanz,
 )
+from backend.core.calculations import berechne_co2_bilanz
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
 from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
@@ -550,20 +553,53 @@ async def get_cockpit_uebersicht(
         investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
 
     investition_vollkosten = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
-    investition_mehrkosten = sum(
-        max(0, (i.anschaffungskosten_gesamt or 0) - (i.anschaffungskosten_alternativ or 0))
-        for i in investitionen
-    )
+    # Zugleich die kanonische USt-Bemessungsgrundlage (N-129) — die Formel stand
+    # hier als Inline-Kopie, jetzt liegt sie im Layer.
+    investition_mehrkosten = bemessungsgrundlage_aus_investitionen(investitionen)
 
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
+    # N-129 + N-130: Bis 04.08. bekam die USt hier `investition_gesamt` — die
+    # ad-hoc zusammengesetzte Summe darüber, die als einzige Sicht im Baum
+    # NICHT `anschaffungskosten_alternativ` las, sondern die Parameter-Defaults
+    # 35.000/8.000 €. Und sie bekam die PV des ganzen gewählten Zeitraums als
+    # „Jahres-Erzeugung": bei „alle Jahre" stand eine mehrjährige Menge im
+    # Nenner gegen eine Ein-Jahres-AfA ⇒ die USt fiel um den Faktor der
+    # Jahresanzahl zu niedrig aus (Demo-Bestand: 646 € statt 2.447 €).
+    # `investition_gesamt` bleibt, wo es hingehört: ROI-Fortschritt und die
+    # ausgelieferte Kachel `investition_gesamt_euro` — das ist eine andere
+    # Frage und ausdrücklich nicht mitentschieden.
+    #
+    # Je Kalenderjahr dieselben Eingänge wie die Perioden-Kennzahlen oben:
+    # Zählerwerte aus `md_pv`, Mengen aus `fakten`.
+    monate_je_jahr = Counter(f.jahr for f in fakten)
+    ust_jahresanteile: list[UstJahresanteil] = []
+    for _jahr in sorted(monate_je_jahr):
+        _f_jahr = [f for f in fakten if f.jahr == _jahr]
+        _md_jahr = [f for f in md_pv if f.jahr == _jahr]
+        _pv_jahr = sum(f.erzeugung.pv_kwh for f in _f_jahr)
+        _kz_jahr = berechne_verbrauchs_kennzahlen(
+            pv_erzeugung_kwh=erzeugung_hinter_zaehler_kwh(
+                _pv_jahr, sum(f.sonstiges.erzeugung_kwh for f in _f_jahr)
+            ),
+            einspeisung_kwh=sum(f.zaehler.einspeisung_kwh for f in _md_jahr),
+            netzbezug_kwh=sum(f.zaehler.netzbezug_kwh for f in _md_jahr),
+            speicher_ladung_kwh=sum(f.speicher.ladung_kwh for f in _f_jahr),
+            speicher_entladung_kwh=sum(f.speicher.entladung_kwh for f in _f_jahr),
+            v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in _f_jahr),
+        )
+        ust_jahresanteile.append(UstJahresanteil(
+            jahr=_jahr,
+            eigenverbrauch_kwh=_kz_jahr.eigenverbrauch_kwh,
+            pv_kwh=_pv_jahr,
+            monate=monate_je_jahr[_jahr],
+        ))
     ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
         anlage,
-        eigenverbrauch_kwh=eigenverbrauch,
-        investition_gesamt_euro=investition_gesamt,
+        jahresanteile=ust_jahresanteile,
+        bemessungsgrundlage_euro=investition_mehrkosten,
         betriebskosten_jahr_euro=betriebskosten_ges,
-        pv_erzeugung_jahr_kwh=pv_erzeugung,
     )
     netto_ertrag -= ust_eigenverbrauch
 

@@ -109,21 +109,32 @@ async def _anlage_mit_regelbesteuerung(db) -> int:
 async def test_cockpit_zieht_die_ust_ab(db):
     """Die Referenzzahl, gegen die die anderen drei geprüft werden.
 
-    einspeise = 400 × 0,08                  =  32,00 €
-    ev        = (1.000 − 400) × 0,30        = 180,00 €
-    USt       = 600 kWh × (12.000/20 / 1.000) × 19 %
-              = 600 × 0,60 × 0,19           =  68,40 €
-    netto     = 32 + 180 − 68,40            = 143,60 €
+    einspeise = 400 × 0,08                       =  32,00 €
+    ev        = (1.000 − 400) × 0,30             = 180,00 €
+    USt       = 600 kWh × (12.000/20 × 1/12 / 1.000) × 19 %
+              = 600 × 0,05 × 0,19                =   5,70 €
+    netto     = 32 + 180 − 5,70                  = 206,30 €
+
+    **Der `× 1/12` ist neu seit dem 2026-08-04** (N-130, Entscheid Gernot): die
+    Fixture deckt EINEN Monat ab, also trägt sie auch nur einen Monat AfA. Bis
+    dahin stand hier `68,40 €` — zwölf Monate Abschreibung gegen einen Monat
+    Ertrag. Die Bemessungsgrundlage ist jetzt die Mehrkosten-Form (N-129); die
+    Fixture pflegt keine Alternativkosten, deshalb bleibt sie hier bei 12.000 €.
     """
     anlage_id = await _anlage_mit_regelbesteuerung(db)
 
     cockpit = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
 
-    assert cockpit.ust_eigenverbrauch_euro == pytest.approx(68.4, abs=0.05)
-    assert cockpit.netto_ertrag_euro == pytest.approx(143.6, abs=0.1)
+    assert cockpit.ust_eigenverbrauch_euro == pytest.approx(5.7, abs=0.05)
+    assert cockpit.netto_ertrag_euro == pytest.approx(206.3, abs=0.1)
     # Gegenprobe: ohne USt-Abzug wären es 212 € — das war der Stand in PDF,
-    # HA-Export und den bisherigen Erträgen der Aussichten.
-    assert abs(cockpit.netto_ertrag_euro - 212.0) > 50.0
+    # HA-Export und den bisherigen Erträgen der Aussichten. Der Abstand ist
+    # klein, weil ein Ein-Monats-Zeitraum nur ein Zwölftel der Jahres-AfA
+    # trägt; deshalb wird er hier EXAKT geprüft und nicht über eine Schwelle.
+    assert cockpit.netto_ertrag_euro == pytest.approx(
+        212.0 - cockpit.ust_eigenverbrauch_euro, abs=0.1
+    )
+    assert cockpit.ust_eigenverbrauch_euro > 0, "sonst prüft der Test nichts"
 
 
 @pytest.mark.asyncio
@@ -143,6 +154,98 @@ async def test_alle_vier_sichten_nennen_denselben_netto_ertrag(db):
 
     referenz = cockpit.netto_ertrag_euro
 
+    assert aussichten.bisherige_ertraege_euro == pytest.approx(referenz, abs=0.1), (
+        f"Aussichten {aussichten.bisherige_ertraege_euro} ≠ Cockpit {referenz}")
+    assert pdf["kpis"]["netto_ertrag_euro"] == pytest.approx(referenz, abs=0.1), (
+        f"PDF {pdf['kpis']['netto_ertrag_euro']} ≠ Cockpit {referenz}")
+    assert ha_netto == pytest.approx(referenz, abs=0.1), (
+        f"HA-Export {ha_netto} ≠ Cockpit {referenz}")
+
+
+# ============================================================================
+# Achse 1b — Zeitraumlänge (N-130)
+# ============================================================================
+
+
+async def _anlage_ueber_zwei_jahre(db) -> int:
+    """Dieselbe Anlage, aber ZWEI volle Kalenderjahre statt eines Monats.
+
+    Die Fixture-Familie oben deckt einen Monat ab — und in einem Ein-Monats-
+    Zeitraum ist „Zeitraum" == „Jahr". Genau deshalb hat der Symmetrie-Test
+    **N-130 nicht gefangen**, obwohl er vier Sichten vergleicht: die Achse
+    Zeitraumlänge fehlte ([[feedback_aggregator_symmetrie]]).
+
+    Je Jahr sechs Monate mit identischen Mengen ⇒ beide Jahre tragen dieselbe
+    USt, und der Gesamtbetrag muss das Doppelte eines Jahres sein.
+    """
+    anlage = Anlage(
+        anlagenname="VierWegeUStZweiJahre", leistung_kwp=10.0,
+        steuerliche_behandlung="regelbesteuerung", ust_satz_prozent=19.0,
+    )
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2023, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     leistung_kwp=10.0, anschaffungsdatum=date(2023, 1, 1),
+                     anschaffungskosten_gesamt=12000.0)
+    db.add(pv)
+    await db.flush()
+    for jahr in (2024, 2025):
+        for monat in range(1, 7):
+            db.add(Monatsdaten(anlage_id=anlage.id, jahr=jahr, monat=monat,
+                               einspeisung_kwh=400.0, netzbezug_kwh=100.0))
+            db.add(InvestitionMonatsdaten(
+                investition_id=pv.id, jahr=jahr, monat=monat,
+                verbrauch_daten={"pv_erzeugung_kwh": 1000.0},
+            ))
+    await db.commit()
+    return anlage.id
+
+
+@pytest.mark.asyncio
+async def test_zwei_jahre_tragen_die_doppelte_ust_eines_jahres(db):
+    """N-130: der Gesamtzeitraum darf nicht gegen EINE Jahres-AfA laufen.
+
+    Beide Jahre sind mengengleich, also muss die USt über beide exakt doppelt
+    so hoch sein wie über eines. Die Vorfassung teilte die Jahres-Abschreibung
+    durch die Erzeugung **beider** Jahre und kam auf die Hälfte.
+    """
+    anlage_id = await _anlage_ueber_zwei_jahre(db)
+
+    beide = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
+    eines = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=2024, db=db)
+
+    assert eines.ust_eigenverbrauch_euro > 0, "sonst prüft der Test nichts"
+    assert beide.ust_eigenverbrauch_euro == pytest.approx(
+        2 * eines.ust_eigenverbrauch_euro, abs=0.05
+    )
+    # Und der absolute Wert, damit ein Vorzeichenfehler in der Anteiligkeit
+    # nicht durch beide Seiten der Verhältnis-Prüfung rutscht:
+    # AfA 12.000/20 = 600 €/Jahr × 6/12 = 300 € auf 6.000 kWh = 0,05 €/kWh
+    # ⇒ 3.600 kWh EV × 0,05 × 19 % = 34,20 € je Jahr.
+    assert eines.ust_eigenverbrauch_euro == pytest.approx(34.2, abs=0.05)
+
+
+@pytest.mark.asyncio
+async def test_ueber_zwei_jahre_nennen_alle_vier_sichten_dasselbe(db):
+    """Dieselbe Symmetrie wie oben, aber auf der Zeitachse."""
+    anlage_id = await _anlage_ueber_zwei_jahre(db)
+
+    cockpit = await get_cockpit_uebersicht(anlage_id=anlage_id, jahr=None, db=db)
+    aussichten = await get_finanz_prognose(anlage_id=anlage_id, monate=12, db=db)
+    pdf = await build_jahresbericht_context(db, anlage_id, jahr=None)
+
+    anlage = await db.get(Anlage, anlage_id)
+    sensoren = await calculate_anlage_sensors(db, anlage)
+    ha_netto = next(
+        s.value for s in sensoren if s.definition.key == "netto_ertrag_euro"
+    )
+
+    referenz = cockpit.netto_ertrag_euro
     assert aussichten.bisherige_ertraege_euro == pytest.approx(referenz, abs=0.1), (
         f"Aussichten {aussichten.bisherige_ertraege_euro} ≠ Cockpit {referenz}")
     assert pdf["kpis"]["netto_ertrag_euro"] == pytest.approx(referenz, abs=0.1), (

@@ -9,6 +9,7 @@ Reine Datenschicht — keine HTTP-, keine Render-Aufrufe.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date, datetime
 from typing import Optional
 
@@ -31,6 +32,10 @@ from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fak
 from backend.core.calculations import (
     CO2_FAKTOR_STROM_KG_KWH,
     co2_wp_ersparnis_kg,
+)
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    UstJahresanteil,
+    bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -261,6 +266,10 @@ async def build_jahresbericht_context(
     _tarif_cache: dict[date, dict] = {}
     monats_zeilen: list[dict] = []
     finanz_zeilen: list[FinanzMonatsZeile] = []
+    # Dieselben Zeilen, nur nach Kalenderjahr sortiert — für die USt, die je
+    # Jahr rechnet (N-130). `eigenverbrauch_kwh` des Aggregats ist die Summe der
+    # Monatswerte, das Zerlegen ist also exakt und keine Näherung.
+    finanz_zeilen_je_jahr: dict[int, list[FinanzMonatsZeile]] = defaultdict(list)
 
     def _leere_zeile(j: int, m: int) -> dict:
         """Anzeige-Zeile für einen Monat ganz ohne Spur (kein Zähler, kein IMD).
@@ -299,6 +308,7 @@ async def build_jahresbericht_context(
             db, anlage_id, finanz_zeile_eingabe(fakt), tarif_cache=_tarif_cache
         )
         finanz_zeilen.append(zeile)
+        finanz_zeilen_je_jahr[j].append(zeile)
         # Display aus der Zeile (gleicher Tarif wie der Aggregat-Helper):
         einsp_eur = einspeise_erloes_euro(
             einspeisung_kwh=einsp,
@@ -381,12 +391,35 @@ async def build_jahresbericht_context(
     # Regelbesteuerung wies er den Netto-Ertrag deshalb um den USt-Betrag zu
     # hoch aus. Vorprüfung + Satz-Default liegen im SoT-Helper, damit die
     # Regel nicht zum vierten Mal als Kopie im Baum steht.
+    #
+    # N-130: `jahr=None` erzeugt hier den **Anlagenbericht** über den gesamten
+    # Zeitraum — der Client bietet das als „Gesamtzeitraum" an. Dieser Builder
+    # war damit von der Zeitraum-Kollaps-Klasse betroffen, entgegen der
+    # Registerzeile („nicht den Jahresbericht, der ist per Jahr"). Jetzt je
+    # Kalenderjahr; bei `jahr=<J>` bleibt genau ein Anteil übrig und die Zahl
+    # ändert sich nur um die neue Bemessungsgrundlage und die Monats-Anteiligkeit.
+    # N-129: Bemessungsgrundlage über den Layer-SoT statt `investition_gesamt`.
+    # `investition_mehrkosten` daneben bleibt unberührt — es trägt die
+    # Rendite/Amortisation und ist die ungeklemmte Form (Σ gesamt − Σ alternativ).
+    pv_je_jahr: dict[int, float] = defaultdict(float)
+    for (_j, _m), _pv in pv_by_year_month.items():
+        pv_je_jahr[_j] += _pv
+    ust_jahresanteile = [
+        UstJahresanteil(
+            jahr=_j,
+            eigenverbrauch_kwh=berechne_finanz_aggregat(
+                finanz_zeilen_je_jahr[_j]
+            ).eigenverbrauch_kwh,
+            pv_kwh=pv_je_jahr.get(_j, 0.0),
+            monate=len(finanz_zeilen_je_jahr[_j]),
+        )
+        for _j in sorted(finanz_zeilen_je_jahr)
+    ]
     ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
         anlage,
-        eigenverbrauch_kwh=_finanz.eigenverbrauch_kwh,
-        investition_gesamt_euro=investition_gesamt,
+        jahresanteile=ust_jahresanteile,
+        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(investitionen),
         betriebskosten_jahr_euro=betriebskosten_jahr,
-        pv_erzeugung_jahr_kwh=sum(pv_by_year_month.values()),
     )
     netto_ertrag -= ust_eigenverbrauch
 

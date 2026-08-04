@@ -658,68 +658,10 @@ def berechne_roi(
     }
 
 
-def berechne_ust_eigenverbrauch(
-    eigenverbrauch_kwh: float,
-    investition_gesamt_euro: float,
-    betriebskosten_jahr_euro: float,
-    pv_erzeugung_jahr_kwh: float,
-    ust_satz_prozent: float = 19.0,
-) -> float:
-    """
-    Berechnet USt auf Eigenverbrauch (unentgeltliche Wertabgabe § 3 Abs. 1b UStG).
-
-    Bei Regelbesteuerung muss auf selbst verbrauchten PV-Strom USt abgeführt werden.
-    Bemessungsgrundlage = Selbstkosten pro kWh (Abschreibung + lfd. Kosten / Jahresertrag).
-
-    Args:
-        eigenverbrauch_kwh: Selbst verbrauchte Energie in kWh
-        investition_gesamt_euro: Gesamte Anschaffungskosten
-        betriebskosten_jahr_euro: Jährliche Betriebskosten (Wartung, Versicherung)
-        pv_erzeugung_jahr_kwh: Jährliche PV-Erzeugung in kWh
-        ust_satz_prozent: USt-Satz (DE: 19, AT: 20, CH: 8.1)
-
-    Returns:
-        USt-Betrag in Euro (positiv = Kosten für den Betreiber)
-    """
-    if pv_erzeugung_jahr_kwh <= 0 or ust_satz_prozent <= 0 or eigenverbrauch_kwh <= 0:
-        return 0.0
-
-    abschreibung_jahr = investition_gesamt_euro / 20  # 20 Jahre lineare AfA
-    selbstkosten_pro_kwh = (abschreibung_jahr + betriebskosten_jahr_euro) / pv_erzeugung_jahr_kwh
-    return eigenverbrauch_kwh * selbstkosten_pro_kwh * ust_satz_prozent / 100
-
-
-def ust_eigenverbrauch_fuer_anlage(
-    anlage,
-    *,
-    eigenverbrauch_kwh: float,
-    investition_gesamt_euro: float,
-    betriebskosten_jahr_euro: float,
-    pv_erzeugung_jahr_kwh: float,
-) -> float:
-    """USt auf Eigenverbrauch inkl. der Steuerregime-Vorprüfung.
-
-    Single Source der drei Zeilen, die vor `berechne_ust_eigenverbrauch` stehen
-    müssen: nur bei ``steuerliche_behandlung == "regelbesteuerung"``, sonst
-    ``0.0``; fehlender ``ust_satz_prozent`` → 19 %. Genau diese Vorprüfung stand
-    doppelt im Baum (Cockpit + Aussichten) und **fehlte** im Jahresbericht-PDF
-    und im HA-Export — dort lag der Netto-Ertrag bei Regelbesteuerung um den
-    USt-Betrag über dem Cockpit (#326-Inventur, Dimension 2).
-
-    `anlage` wird nur per ``getattr`` gelesen — kein ORM-Import, ADR-001 bleibt
-    gewahrt.
-
-    Returns:
-        USt-Betrag in Euro (positiv = Kosten), der vom Netto-Ertrag ABZUZIEHEN
-        ist. ``0.0`` außerhalb der Regelbesteuerung.
-    """
-    if (getattr(anlage, "steuerliche_behandlung", None) or "keine_ust") != "regelbesteuerung":
-        return 0.0
-    satz = getattr(anlage, "ust_satz_prozent", None)
-    return berechne_ust_eigenverbrauch(
-        eigenverbrauch_kwh=eigenverbrauch_kwh,
-        investition_gesamt_euro=investition_gesamt_euro,
-        betriebskosten_jahr_euro=betriebskosten_jahr_euro,
-        pv_erzeugung_jahr_kwh=pv_erzeugung_jahr_kwh,
-        ust_satz_prozent=satz if satz is not None else 19.0,
-    )
+# Die USt auf den Eigenverbrauch lag bis 2026-08-04 hier — mit einer
+# Bemessungsgrundlage je Aufrufer (N-129) und einem Nenner, der bei
+# mehrjährigem Zeitraum gegen eine Ein-Jahres-AfA stand (N-130). Sie ist
+# jetzt eine Aggregat-Formel im Berechnungs-Layer (ADR-001):
+# `core/berechnungen/ust_eigenverbrauch.py`. Hier bleibt bewusst KEIN
+# Spiegel stehen — ein Spiegel ohne Aufrufer ist der Anfang der nächsten
+# Drift (Lehre aus N-22 / `calcEinspeiseErloes`).

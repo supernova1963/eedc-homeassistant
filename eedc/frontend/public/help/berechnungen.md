@@ -675,20 +675,30 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 ### 3.7 USt auf Eigenverbrauch
 
-**Funktion:** `berechne_ust_eigenverbrauch()` in `core/calculations.py`
+**SoT:** `core/berechnungen/ust_eigenverbrauch.py` (Berechnungs-Layer, ADR-001)
 **Bedingung:** Nur wenn `Anlage.steuerliche_behandlung == "regelbesteuerung"`
 
+Die Selbstkosten je kWh sind eine **Jahresgröße**. Gerechnet wird deshalb **je
+Kalenderjahr** und summiert — auch wenn die Sicht einen mehrjährigen Zeitraum zeigt:
+
 ```
-Abschreibung_Jahr    = Investition_gesamt / 20        (20 Jahre lineare AfA)
-Selbstkosten_pro_kWh = (Abschreibung_Jahr + Betriebskosten_Jahr) / PV_Erzeugung_Jahr
-USt_Eigenverbrauch   = Eigenverbrauch * Selbstkosten_pro_kWh * USt_Satz / 100
+Bemessungsgrundlage  = Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)
+Abschreibung_Jahr    = Bemessungsgrundlage / 20        (20 Jahre lineare AfA)
+
+je Kalenderjahr j:
+  Jahreskosten_j     = (Abschreibung_Jahr + Betriebskosten_Jahr) × Monate_j / 12
+  Selbstkosten_kWh_j = Jahreskosten_j / PV_Erzeugung_j
+  USt_j              = Eigenverbrauch_j × Selbstkosten_kWh_j × USt_Satz / 100
+
+USt_Eigenverbrauch   = Σ USt_j
 ```
 
 | Feld | Quelle |
 |------|--------|
-| `Investition_gesamt` | Σ(Investition.anschaffungskosten_gesamt) |
+| `Bemessungsgrundlage` | **Mehrkosten** je Investition, geklemmt bei 0 — nicht die Vollkosten. Der volle Kaufpreis eines E-Autos gehört nicht in die Selbstkosten des PV-Stroms; maßgeblich ist, was er gegenüber der Alternative gekostet hat |
 | `Betriebskosten_Jahr` | Σ(Investition.betriebskosten_jahr) |
-| `PV_Erzeugung_Jahr` | Aggregierte PV-Erzeugung aus InvestitionMonatsdaten |
+| `Monate_j` | Monate des Jahres `j`, die im ausgewerteten Zeitraum liegen (1–12). Ein angeschnittenes Jahr trägt anteilig AfA — sonst stünden zwölf Monate Abschreibung gegen sieben Monate Ertrag |
+| `PV_Erzeugung_j` | PV-Erzeugung des Jahres `j` aus den Monats-Fakten |
 | `USt_Satz` | `Anlage.ust_satz_prozent` (DE: 19, AT: 20, CH: 8.1) |
 
 **Auswirkung:** USt wird vom `Netto_Ertrag` abgezogen — Cockpit, Jahresbericht-PDF,
@@ -703,11 +713,19 @@ Auswertungen bereits, während der Client dort ohne ihn rechnete.
 > und Jahresertrag lassen sich keinem Tag zuordnen; bei Regelbesteuerung gilt daher
 > Σ Tage ≠ Monat beim Netto-Ertrag (dieselbe bewusste Asymmetrie wie bei CO₂).
 >
-> ⚠ **Cockpit setzt an dieser Stelle eine andere Investitionssumme ein** als die
-> übrigen vier Sichten (zusammengesetzt aus Mehrkosten statt Vollkosten) — über ein
-> einzelnes Jahr sind das wenige Euro, über einen mehrjährigen Zeitraum mehr, weil
-> die Jahres-Abschreibung dort durch eine mehrjährige Erzeugung geteilt wird.
-> Register N-129/N-130.
+> **Historie (2026-08-04, Funde N-129/N-130):** Bis dahin standen im Baum *vier*
+> Bemessungsgrundlagen nebeneinander — vier Sichten die Vollkosten, das Cockpit eine
+> zusammengesetzte Summe, die als einzige `anschaffungskosten_alternativ` nicht las.
+> Und die Sichten übergaben die Erzeugung ihres **gesamten Zeitraums** als
+> „Jahres-Erzeugung": bei Filter „alle Jahre" stand eine mehrjährige Menge im Nenner
+> gegen eine Ein-Jahres-Abschreibung, die USt fiel um den Faktor der Jahresanzahl zu
+> niedrig aus. Beides ist mit dem Layer-SoT aufgelöst.
+>
+> ⚠ **Was weiterhin auseinandergeht:** *welche Menge* als Eigenverbrauch eingeht.
+> Cockpit und HA-Export setzen den **Netzpunkt**-Eigenverbrauch ein (inklusive eines
+> Brennstoff-Erzeugers), Jahresbericht, Aussichten und die Monatszeile den
+> **Finanz**-Eigenverbrauch (PV allein). Bei einer Anlage mit Mini-BHKW nennen die
+> beiden Gruppen deshalb verschiedene USt-Beträge. Register **N-131**.
 
 ### 3.8 CO2-Bilanz
 

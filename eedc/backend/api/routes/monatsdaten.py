@@ -20,11 +20,15 @@ from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.core.calculations import (
     berechne_monatskennzahlen,
     MonatsKennzahlen,
-    ust_eigenverbrauch_fuer_anlage,
 )
 from backend.core.berechnungen import (
     berechne_finanz_aggregat,
     berechne_netzbezug_kosten,
+)
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    UstJahresanteil,
+    bemessungsgrundlage_aus_investitionen,
+    ust_eigenverbrauch_fuer_anlage,
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.utils.sonstige_positionen import ist_gueltige_position
@@ -395,29 +399,31 @@ async def list_monatsdaten_aggregiert(
         return []
 
     # ── USt-Basis der Anlage (nur bei Regelbesteuerung wirksam) ──────────────
-    # Investitionssumme + Betriebskosten in der Form, die drei der vier
-    # Backend-Sichten verwenden (Jahresbericht-PDF, HA-Export, Aussichten):
-    # die Vollkosten. Cockpit setzt an derselben Stelle eine zusammengesetzte
-    # Summe aus Mehrkosten ein — dieselbe Anlage bekommt dort einen anderen
-    # USt-Betrag (Register N-129). Hier wird die Mehrheitsform gewählt und die
-    # Abweichung notiert, nicht stillschweigend eine fünfte gebaut.
+    # Bemessungsgrundlage über den Layer-SoT: Σ max(0, gesamt − alternativ).
+    # Bis 04.08. standen dafür vier Formen im Baum (N-129) und diese Sicht wählte
+    # die damalige Mehrheitsform (Vollkosten). Entschieden ist seither die
+    # Mehrkosten-Form — sie liest das Feld, das der Anwender pflegt, statt den
+    # vollen Kaufpreis eines E-Autos in die Selbstkosten des PV-Stroms zu legen.
     anlage_obj = (
         await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     ).scalar_one_or_none()
     inv_rows = (
         await db.execute(select(Investition).where(Investition.anlage_id == anlage_id))
     ).scalars().all()
-    investition_gesamt_euro = sum(i.anschaffungskosten_gesamt or 0 for i in inv_rows)
+    ust_bemessungsgrundlage_euro = bemessungsgrundlage_aus_investitionen(inv_rows)
     betriebskosten_jahr_euro = sum(i.betriebskosten_jahr or 0 for i in inv_rows)
     # Nenner der Selbstkosten je kWh ist eine **Jahres**-Erzeugung. Je
     # Kalenderjahr über die ausgelieferten Monate summiert, damit die Summe der
     # Monats-USt genau die Jahres-USt ergibt (die Formel ist linear im
-    # Eigenverbrauch). Ein angefangenes Jahr trägt entsprechend seinen
-    # angefangenen Nenner — genauso rechnen Cockpit und PDF für einen
-    # angefangenen Zeitraum.
+    # Eigenverbrauch). Ein angefangenes Jahr trägt seinen angefangenen Nenner —
+    # und seit 04.08. auch nur den entsprechenden Anteil an AfA und
+    # Betriebskosten (`monate`), sonst stünden zwölf Monate Abschreibung gegen
+    # sieben Monate Ertrag.
     pv_je_jahr: dict[int, float] = {}
+    monate_je_jahr: dict[int, int] = {}
     for f in fakten:
         pv_je_jahr[f.jahr] = pv_je_jahr.get(f.jahr, 0.0) + f.erzeugung.pv_kwh
+        monate_je_jahr[f.jahr] = monate_je_jahr.get(f.jahr, 0) + 1
 
     result = []
     for f in fakten:
@@ -496,10 +502,14 @@ async def list_monatsdaten_aggregiert(
         ust_eigenverbrauch = (
             ust_eigenverbrauch_fuer_anlage(
                 anlage_obj,
-                eigenverbrauch_kwh=finanz.eigenverbrauch_kwh,
-                investition_gesamt_euro=investition_gesamt_euro,
+                jahresanteile=[UstJahresanteil(
+                    jahr=f.jahr,
+                    eigenverbrauch_kwh=finanz.eigenverbrauch_kwh,
+                    pv_kwh=pv_je_jahr.get(f.jahr, 0.0),
+                    monate=monate_je_jahr.get(f.jahr, 12),
+                )],
+                bemessungsgrundlage_euro=ust_bemessungsgrundlage_euro,
                 betriebskosten_jahr_euro=betriebskosten_jahr_euro,
-                pv_erzeugung_jahr_kwh=pv_je_jahr.get(f.jahr, 0.0),
             )
             if anlage_obj is not None else 0.0
         )

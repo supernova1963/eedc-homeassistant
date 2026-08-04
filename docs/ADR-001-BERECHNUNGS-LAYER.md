@@ -37,6 +37,19 @@ Ein gemeinsamer Aggregat-Helper (z. B. `berechne_finanz_aggregat`) liefert nur d
 
 Symmetrie-Test allein reicht nicht (er kennt nur die eingetragenen Sites); statischer Wächter allein reicht nicht (er fängt Formel-, nicht Wert-Drift). Erst der Builder macht Drift strukturell unmöglich; Wächter + Symmetrie-Test sichern es ab.
 
+### Nachtrag 2026-08-04 (N-129/N-130): ein Parametername ist kein Vertrag
+
+Zweiter Fall derselben Klasse, diesmal ohne jede Formel-Drift. `berechne_ust_eigenverbrauch` war seit jeher **eine** Funktion, und alle sechs Read-Sites riefen sie. Ihr Parameter hieß `pv_erzeugung_jahr_kwh` — und **vier** Sites füllten ihn mit der Erzeugung ihres *gewählten Zeitraums*, weil ihnen genau die vorlag. Bei „alle Jahre" stand damit eine mehrjährige Menge im Nenner gegen eine Ein-Jahres-Abschreibung; die Zahl fiel um den Faktor der Jahresanzahl zu niedrig aus (Demo-Bestand: 390 € statt 1.183 €). Parallel dazu bekam derselbe Helper vier verschiedene *Bemessungsgrundlagen*, weil auch die jeder Aufrufer selbst summierte.
+
+**Zwei Lehren, beide über den Einzelfall hinaus:**
+
+1. **Wenn ein Argument nur für einen bestimmten Zeitbezug gilt, darf der Helper ihn nicht als Skalar entgegennehmen.** Ein `_jahr_`-Suffix im Parameternamen ist eine Bitte, kein Vertrag — und sie wurde viermal überhört. Der Helper nimmt jetzt eine **Liste von Jahresanteilen** (`UstJahresanteil`) und rechnet den Zeitbezug selbst; einen Zeitraum falsch hineinzureichen ist damit nicht mehr möglich, sondern muss aktiv falsch gruppiert werden.
+2. **Auch eine Nebengröße wie die Bemessungsgrundlage ist eine Formel.** `Σ max(0, gesamt − alternativ)` ist eine Zeile — genau der Fall, den die N-12-Lehre unten meint. Sie steht jetzt als `bemessungsgrundlage_aus_investitionen` im Layer.
+
+**Und eine dritte, die härter ist als die bekannte Symmetrie-Lehre.** Der Vier-Wege-Symmetrie-Test hatte N-130 nicht gefangen — naheliegende Erklärung: seine Fixture deckt **einen** Monat ab, und dort ist „Zeitraum" == „Jahr", die Achse Zeitraumlänge fehlte ([[feedback_aggregator_symmetrie]]). Die Achse ist beim Fix nachgezogen worden (`_anlage_ueber_zwei_jahre`) — **und der Symmetrie-Teil des neuen Tests ist auch gegen die alte Fassung grün.** Gemessen, nicht vermutet: alle vier Sichten kollabierten den Zeitraum **gleich** falsch, also waren sie sich einig.
+
+> Ein Symmetrie-Test kann einen Fehler grundsätzlich nicht sehen, den alle verglichenen Sichten teilen. Er sichert **Übereinstimmung**, nicht **Richtigkeit**. Wo eine Formel eine nachrechenbare Größe liefert, gehört neben „A == B == C == D" deshalb **eine absolute Erwartung** — hier „zwei mengengleiche Jahre tragen exakt die doppelte USt eines Jahres" plus der ausgerechnete Betrag. Erst diese Assertion fällt gegen die Vorfassung.
+
 ## Eine Aufbereitungs-Schicht ist keine Formel — die Abgrenzung zu `core/berechnungen/`
 
 Die Drift-Inventur der Lese-Sichten (2026-07-31) fand über 23 Sichten × 18 kanonische Größen **keinen einzigen Rechenfehler** im Berechnungs-Layer. Sie fand sechsmal dieselbe Struktur: *jede Sicht faltet die Rohdaten selbst zu Monatswerten*, und dabei fällt jedes Mal etwas anderes weg — mal V2H, mal der Erzeuger hinter dem Zähler, mal der Aggregat-Fallback, mal der Monatstarif, mal der Dienstwagen-Filter. Der Layer war fehlerfrei und die Zahlen trotzdem um bis zu 85 % auseinander.

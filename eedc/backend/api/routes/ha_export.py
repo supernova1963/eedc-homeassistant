@@ -13,6 +13,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, model_validator
 from typing import Optional, Any
 from dataclasses import dataclass
+from collections import defaultdict
 import os
 
 from backend.core.exceptions import not_found
@@ -82,7 +83,12 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE_DEFAULTS,
     ist_dienstlich,
 )
-from backend.core.calculations import berechne_co2_bilanz, ust_eigenverbrauch_fuer_anlage
+from backend.core.calculations import berechne_co2_bilanz
+from backend.core.berechnungen.ust_eigenverbrauch import (
+    UstJahresanteil,
+    bemessungsgrundlage_aus_investitionen,
+    ust_eigenverbrauch_fuer_anlage,
+)
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -493,12 +499,54 @@ async def calculate_anlage_sensors(
     # Cockpit und Aussichten ziehen sie ab, der HA-Export bisher nicht — der
     # Sensor `netto_ertrag_euro` stand damit um den USt-Betrag über der Kachel,
     # auf die er sich bezieht. Vorprüfung im SoT-Helper.
+    #
+    # N-129 + N-130: Bemessungsgrundlage jetzt Mehrkosten statt Vollkosten, und
+    # gerechnet wird je Kalenderjahr. Der Export kennt keinen Jahres-Filter — er
+    # liefert IMMER den Gesamtzeitraum und war deshalb von der Zeitraum-Kollaps-
+    # Klasse durchgehend betroffen, nicht nur bei gesetztem Filter.
+    # Eingänge je Jahr wie die Perioden-Kennzahlen oben, inkl. derselben
+    # Legacy-Fallbacks (dort periodenweit, hier je Jahr geprüft).
+    monatsdaten_je_jahr: dict[int, list] = defaultdict(list)
+    for _md in monatsdaten:
+        monatsdaten_je_jahr[_md.jahr].append(_md)
+    fakten_je_jahr: dict[int, list] = defaultdict(list)
+    for _f in fakten:
+        fakten_je_jahr[_f.jahr].append(_f)
+
+    ust_jahresanteile: list[UstJahresanteil] = []
+    for _jahr in sorted(set(monatsdaten_je_jahr) | set(fakten_je_jahr)):
+        _f_jahr = fakten_je_jahr.get(_jahr, [])
+        _md_jahr = monatsdaten_je_jahr.get(_jahr, [])
+        _eins_jahr = sum(m.einspeisung_kwh or 0 for m in _md_jahr)
+        _pv_jahr = sum(f.erzeugung.pv_kwh for f in _f_jahr)
+        if _pv_jahr == 0:
+            _pv_jahr = _eins_jahr + sum(m.eigenverbrauch_kwh or 0 for m in _md_jahr)
+        _lad_jahr = sum(f.speicher.ladung_kwh for f in _f_jahr)
+        _entl_jahr = sum(f.speicher.entladung_kwh for f in _f_jahr)
+        if _lad_jahr == 0 and _entl_jahr == 0:
+            _lad_jahr = sum(m.batterie_ladung_kwh or 0 for m in _md_jahr)
+            _entl_jahr = sum(m.batterie_entladung_kwh or 0 for m in _md_jahr)
+        _kz_jahr = berechne_verbrauchs_kennzahlen(
+            pv_erzeugung_kwh=erzeugung_hinter_zaehler_kwh(
+                _pv_jahr, sum(f.sonstiges.erzeugung_kwh for f in _f_jahr)
+            ),
+            einspeisung_kwh=_eins_jahr,
+            netzbezug_kwh=sum(m.netzbezug_kwh or 0 for m in _md_jahr),
+            speicher_ladung_kwh=_lad_jahr,
+            speicher_entladung_kwh=_entl_jahr,
+            v2h_entladung_kwh=sum(f.emob.v2h_entladung_kwh for f in _f_jahr),
+        )
+        ust_jahresanteile.append(UstJahresanteil(
+            jahr=_jahr,
+            eigenverbrauch_kwh=_kz_jahr.eigenverbrauch_kwh,
+            pv_kwh=_pv_jahr,
+            monate=max(len(_f_jahr), len(_md_jahr)),
+        ))
     ust_eigenverbrauch = ust_eigenverbrauch_fuer_anlage(
         anlage,
-        eigenverbrauch_kwh=eigenverbrauch,
-        investition_gesamt_euro=investition_gesamt,
+        jahresanteile=ust_jahresanteile,
+        bemessungsgrundlage_euro=bemessungsgrundlage_aus_investitionen(investitionen),
         betriebskosten_jahr_euro=betriebskosten_ges,
-        pv_erzeugung_jahr_kwh=pv_erzeugung,
     )
     netto_ertrag -= ust_eigenverbrauch
 
