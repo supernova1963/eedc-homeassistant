@@ -16,7 +16,7 @@
 
 import {
   Activity, AlertTriangle, ArrowUpFromLine, Battery, BatteryCharging, Car,
-  CheckCircle, Coins, Euro, Flame, Hash, Home, Info, Leaf, Plug, RotateCw,
+  CheckCircle, Coins, Euro, Flame, Gauge, Hash, Home, Info, Leaf, Plug, RotateCw,
   Sun, Thermometer, TrendingUp, Wallet, Wrench, XCircle, Zap,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -95,12 +95,15 @@ export const PV_ANLAGE_KPI = {
   eigenverbrauch: { title: 'Eigenverbrauch',  icon: Activity,   color: 'purple' as const },
 } as const satisfies Record<string, KpiStyle>
 
-/** Speicher: Vollzyklen · Wirkungsgrad η · Durchsatz · Ersparnis */
+/** Speicher: Vollzyklen · Wirkungsgrad η · Durchsatz · Ersparnis · Auslastung */
 export const SPEICHER_KPI = {
   vollzyklen:   { title: 'Vollzyklen',     icon: RotateCw,   color: 'blue'   as const },
   wirkungsgrad: { title: 'Wirkungsgrad η', icon: Activity,   color: 'cyan'   as const },
   durchsatz:    { title: 'Durchsatz',      icon: Zap,        color: 'yellow' as const },
   ersparnis:    { title: 'Ersparnis',      icon: TrendingUp, color: 'green'  as const },
+  // #358 Phase 1: zeitraum-normierte Nutzung — Entladung ÷ (Kapazität × Tage).
+  // Anders als die Vollzyklen ist sie zwischen Monat und Jahr vergleichbar.
+  auslastung:   { title: 'Auslastung',     icon: Gauge,      color: 'purple' as const },
 } as const satisfies Record<string, KpiStyle>
 
 /** Wärme/Klima: JAZ · Wärme erzeugt · Strom verbraucht · Ersparnis vs. Gas */

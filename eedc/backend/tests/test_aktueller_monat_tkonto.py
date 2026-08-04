@@ -91,7 +91,8 @@ async def test_speicher_entladung_ersparnis_und_betriebskosten(db):
     res = await get_aktueller_monat(anlage_id=anlage.id, jahr=JAHR, monat=MONAT, db=db)
     d = _detail_by_id(res, sp_id)
     assert d is not None
-    assert d.ersparnis_euro == 24.0    # 80 × 30 ct
+    # #358: Spread statt Voll-Netzbezugspreis — 80 × (30 − 8) ct.
+    assert d.ersparnis_euro == 17.6
     assert d.ersparnis_label == "Entladung-Ersparnis"
     assert d.betriebskosten_monat_euro == 10.0  # 120 / 12
 

@@ -168,6 +168,25 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
       { ...SPEICHER_KPI.vollzyklen, value: fmtCalc(d.speicher_vollzyklen, 2, '—'),
         subtitle: hat(d.speicher_kapazitaet_kwh) ? `Kapazität ${fmt(d.speicher_kapazitaet_kwh)} kWh` : undefined },
     ]
+    // #358 Phase 1: Auslastung und Netto-Nutzen. Beide gibt es nur auf Monats-
+    // und Jahresebene — die Tagessicht kennt weder Kapazität × Tage noch eine
+    // Finanz-Zeile, dort erschienen sie als dauerhaftes „—".
+    if (!istTag) {
+      if (hat(d.speicher_auslastung_prozent)) {
+        kpis.push({
+          ...SPEICHER_KPI.auslastung,
+          value: fmtCalc(d.speicher_auslastung_prozent, 1, '—'), unit: '%',
+          subtitle: 'Entladung ÷ (Kapazität × Tage)',
+        })
+      }
+      if (hat(d.speicher_ersparnis_euro)) {
+        kpis.push({
+          ...SPEICHER_KPI.ersparnis,
+          value: fmtCalc(d.speicher_ersparnis_euro, 2, '—'), unit: '€',
+          subtitle: 'Netzbezug − entgangene Einspeisung',
+        })
+      }
+    }
     // Periodensinnvolle Detailzeilen (E-Gegencheck): Netzladung/Ladepreis/Bilanz/
     // Wirkungsverluste — alles als Tag/Monat/Jahr aggregierbar.
     const detail: DetailZeile[] = []

@@ -57,8 +57,45 @@ def test_speicher_betriebskosten_durchgereicht():
     inv = _inv("speicher", betriebskosten_jahr=120.0)
     d = _baue_investition_financial(inv, {"entladung_kwh": 80.0}, **_PREISE)
     assert d is not None
-    assert d.ersparnis_euro == 24.0
+    # SPREAD, nicht Voll-Netzbezugspreis (#358): 80 × (30 − 8) ct = 17,60 €.
+    # Bis 2026-08-04 stand hier 24,00 € = 80 × 30 ct — der Test schrieb den
+    # Voll-Strompreis fest, den der Layer-SoT nie vorsah.
+    assert d.ersparnis_euro == 17.6
     assert d.betriebskosten_monat_euro == 10.0  # 120 / 12
+
+
+def test_speicher_ersparnis_haengt_an_der_einspeiseverguetung():
+    """Die Gegenprobe zur Zahl oben: der Spread muss die Vergütung WIRKLICH lesen.
+
+    Ohne sie wäre `17.6` nur eine andere Konstante — dieselbe Blindheit, an der
+    die alte Fassung 24,00 € für richtig hielt.
+    """
+    inv = _inv("speicher")
+    preise_ohne_verguetung = {**_PREISE, "einsp_p": 0.0}
+    d = _baue_investition_financial(inv, {"entladung_kwh": 80.0}, **preise_ohne_verguetung)
+    assert d is not None
+    # Ohne Einspeisevergütung IST der Spread der volle Bezugspreis: 80 × 30 ct.
+    assert d.ersparnis_euro == 24.0
+    assert "Einspeisevergütung" in (d.formel or "")
+
+
+def test_speicher_netzladung_bekommt_keinen_pv_spread():
+    """Netzgeladene Energie hätte nie eingespeist werden können (#358).
+
+    Die ganze Entladung stammt hier aus dem Netz (40 kWh × η 100 % ≥ 40 kWh
+    Entladung), gekauft zu 10 ct. Vorteil = 40 × (30 − 10) = 8,00 € — NICHT
+    40 × (30 − 8) = 8,80 €, was der PV-Spread ergäbe.
+    """
+    inv = _inv("speicher")
+    d = _baue_investition_financial(
+        inv,
+        {"entladung_kwh": 40.0, "ladung_kwh": 40.0, "ladung_netz_kwh": 40.0,
+         "speicher_ladepreis_cent": 10.0},
+        **_PREISE,
+    )
+    assert d is not None
+    assert d.ersparnis_euro == 8.0
+    assert "Netz-Anteil" in (d.formel or "")
 
 
 def test_dienstwagen_zweig_uebersprungen_sonstige_bleiben():

@@ -40,6 +40,7 @@ import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
 import { JahrVerlaufChart, baueJahrChartDaten } from './JahrVerlaufChart'
 import { JahrCo2Chart, baueJahrCo2ChartDaten, co2JahresSumme, CO2_TABELLEN_SPALTEN } from './JahrCo2Chart'
+import { JahrSpeicherTabelle, baueSpeicherZeilen } from './JahrSpeicherTabelle'
 import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
@@ -68,6 +69,11 @@ interface JahrLadung {
   dVgl: AktuellerMonatResponse
   monate: number[]
   vergleichsMonate: number[]
+  /** Die EINZELNEN Monats-Antworten, aus denen `d` gefaltet wurde (#358). Der
+   *  Speicher-Block zeigt sie als Monatstabelle — dieselbe Quelle wie die
+   *  Kacheln darüber, deshalb kein zusätzlicher Abruf und keine zweite
+   *  Wahrheit. */
+  antworten: AktuellerMonatResponse[]
 }
 
 export default function CockpitJahrV4(props: { anlageId: number | undefined }) {
@@ -139,7 +145,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
     const dVgl = vergleichsMonate.length === monate.length
       ? d
       : baueJahrAlsMonat(antworten.filter((m) => vergleichsMonate.includes(m.monat)), j)
-    return { d, dVgl, monate, vergleichsMonate }
+    return { d, dVgl, monate, vergleichsMonate, antworten }
   }, [alleMonate])
 
   // keepPreviousData: Jahreswechsel aktualisiert den Block-Stack in-place statt
@@ -178,6 +184,9 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
 
   const jahrData = jahrQ.data?.d ?? null
   const jahrVglData = jahrQ.data?.dVgl ?? null
+  // #358: die Monats-Antworten des Jahres für den Speicher-Block.
+  const jahrAntworten = useMemo(() => jahrQ.data?.antworten ?? [], [jahrQ.data])
+  const speicherZeilen = useMemo(() => baueSpeicherZeilen(jahrAntworten), [jahrAntworten])
   const loading = monateQ.loading || (jahr != null && jahrQ.loading)
   const reloading = jahrQ.reloading
   const error = monateQ.data == null && monateQ.error
@@ -399,10 +408,20 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       }]),
       ...(co2Block ? [co2Block] : []),
       ...(d ? baueKomponentenBloecke(d, park, 'jahr') : []),
+      // #358 Phase 1 — die Tiefe unter dem Speicher-Abschnitt: Monatstabelle
+      // (Vollzyklen · Solar-Anteil · Auslastung · Netto-Nutzen) + Saison-
+      // Vergleich. Nur wenn überhaupt ein Speicher Bewegung hatte; die Zeilen
+      // kommen aus denselben Monats-Antworten wie die Kacheln darüber.
+      ...(speicherZeilen.length > 0 ? [{
+        id: 'speicher-verlauf', title: 'Speicher im Jahr', ...BLOCK_IDENTITAET.werte,
+        summary: `${speicherZeilen.length} Monate mit Speicher-Bewegung`,
+        defaultOpen: false,
+        render: () => <JahrSpeicherTabelle monate={jahrAntworten} />,
+      }] : []),
       ...(finanzBlock ? [finanzBlock] : []),
     ]
   }, [jahr, jahrData, jahrVglData, vorjahr, oeJahr, vjFenster, ojFenster, istFenster,
-      kennzahlenFenster, monatsZeilen, park,
+      kennzahlenFenster, monatsZeilen, park, jahrAntworten, speicherZeilen,
       co2Punkte, co2Monate.length, co2Kumuliert, co2Fehler, co2Reload])
 
   if (!anlageId) {

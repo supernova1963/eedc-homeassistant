@@ -181,6 +181,8 @@ from backend.core.berechnungen.spez_ertrag import (
 from backend.core.berechnungen.speicher import (
     EFFIZIENZ_FENSTER_MONATE,
     MonatsEffizienz,
+    auslastung_prozent,
+    auslastungs_basis_kwh,
     gleitende_effizienz,
     speicher_effizienz_prozent,
     vollzyklen,
@@ -316,6 +318,8 @@ __all__ = [
     "simuliere_speicher_tag",
     "EFFIZIENZ_FENSTER_MONATE",
     "MonatsEffizienz",
+    "auslastung_prozent",
+    "auslastungs_basis_kwh",
     "gleitende_effizienz",
     "speicher_effizienz_prozent",
     "vollzyklen",

@@ -28,6 +28,7 @@ from backend.core.berechnungen import (
     eauto_effizienz_100km,
     erzeugung_hinter_zaehler_kwh,
     monatsgewichte_aus_pvgis,
+    vollzyklen as berechne_vollzyklen,
 )
 from backend.core.berechnungen import relevante_kosten_aus_investitionen
 from backend.core.berechnungen.ust_eigenverbrauch import (
@@ -406,7 +407,14 @@ async def get_cockpit_uebersicht(
         get_speicher_kapazitaet_kwh(i) or 0 for i in speicher_invs
     )
     speicher_effizienz = (speicher_entladung / speicher_ladung * 100) if speicher_ladung > 0 else None
-    speicher_vollzyklen = (speicher_ladung / speicher_kapazitaet) if speicher_kapazitaet > 0 else None
+    # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT. Hier stand bis zum
+    # 04.08. die LADUNG — die eine Route, die der Kanon-Sweep vom 2026-07-28
+    # (Entscheid Gernot, Rainer-PN 89768) übersehen hat. Die beiden Zahlen
+    # liegen genau um den Speicher-Wirkungsgrad auseinander; die Begründung
+    # („ein Vollzyklus ist die einmal entnommene Kapazität") steht im Docstring
+    # von `vollzyklen`. Der Wert hatte hier keinen Client-Leser — mit dem
+    # Speicher-Block in Cockpit → Jahr (#358 Phase 1) bekommt er einen.
+    speicher_vollzyklen = berechne_vollzyklen(speicher_entladung, speicher_kapazitaet)
 
     wp_invs = [i for i in investitionen if i.typ == "waermepumpe" and i.ist_aktiv_an(today)]
     hat_waermepumpe = len(wp_invs) > 0

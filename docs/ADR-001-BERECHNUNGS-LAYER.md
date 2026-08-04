@@ -62,6 +62,24 @@ Dritter Fall, und der lehrreichste: Die Frage „was hat die Anlage relevant gek
 
 Und eine zweite, die den Umgang mit dem Auslöser betrifft: Der Amortisations-**Fortschritt** wurde beim V4-Flip bewusst nicht übernommen, mit der Begründung „Gefahr unterschiedlicher Sichtweisen mit aufwendig zu dokumentierenden Unterschieden" (Gernot). Diese Sorge war **am Code belegt** — nur lag die Ursache nicht in den zwei Sichtweisen, sondern im gemeinsamen Nenner. Zwei Kennzahlen dürfen dieselbe Frage verschieden beantworten (hier: Modell vs. Messung), solange sie sich **ineinander überführen lassen**. Das ist die Bedingung, unter der die Anzeige zurückkam: `test_amortisation_nenner_symmetrie.py` beweist, dass Aussichten, Cockpit und ROI-Sicht denselben Nenner nennen — und die Tooltips beider Kacheln sagen ausdrücklich, welche von beiden gemessen und welche hochgerechnet ist.
 
+### Nachtrag 2026-08-04 (#358): eine Formel im Layer ist noch keine durchgesetzte Formel
+
+Vierter Fall, und er kehrt den dritten um: Hier war die Definition **von Anfang an** im Layer, samt Begründung im Modul-Docstring (`speicher_wirtschaftlichkeit.py`: „Entscheidung: **Spread-Modell** ist ökonomisch korrekt", Drift-Audit A3). Trotzdem standen im Baum drei verschiedene Zahlen für den Speicher-Nutzen:
+
+| Stelle | rechnete | Abweichung |
+| --- | --- | --- |
+| ROI-Sicht, Aussichten | `berechne_speicher_ersparnis` (Layer) | — (Referenz) |
+| `aktueller_monat.py` T-Konto | `Entladung × Netzbezugspreis` | **+36 %** bei 30/8 ct |
+| `dashboards.py` (2×) | Spread **inline**, auf der *gesamten* Entladung | Netzladung doppelt (s. u.) |
+
+Die dritte Zeile ist die interessante: die Inline-Kopie rechnete die *richtige* Formel — aber ohne die Verfeinerung, die der Layer seit Etappe B (#264) trägt (PV-/Netz-Split). Netzgeladene Energie bekam dort den PV-Spread, und der Komponenten-Hub addierte den Arbitrage-Gewinn **zusätzlich**: dieselbe Kilowattstunde zweimal gutgeschrieben. Eine Kopie altert eben nicht mit ihrem Original.
+
+**Die Lehre:**
+
+> **Eine Formel gilt erst als im Layer, wenn baumweit keine Inline-Kopie mehr danebensteht.** „Der SoT existiert" ist eine Aussage über eine Datei, nicht über den Baum — belegen lässt sie sich nur mit einem Grep über die Rechenform (`× preis`, `* spread`, `/ 100`), nicht über den Funktionsnamen. Wer eine Layer-Funktion erweitert, erbt außerdem die Pflicht, ihre Kopien zu suchen: sie bekommen die Erweiterung nicht.
+
+Dazu ein Befund an der Doku selbst: `docs/BERECHNUNGEN.md` führte für die Vollzyklen eine Liste „alle Sichten rufen ihn auf" — und **genau die eine fehlende Zeile war die fehlerhafte** (`cockpit/uebersicht.py`, rechnete `Ladung ÷ Kapazität`). Eine Aufrufer-Liste in der Doku ist eine Behauptung über den Code und gehört mit einem baumweiten Grep belegt, sonst beschreibt sie den Soll- statt den Ist-Zustand.
+
 ## Eine Aufbereitungs-Schicht ist keine Formel — die Abgrenzung zu `core/berechnungen/`
 
 Die Drift-Inventur der Lese-Sichten (2026-07-31) fand über 23 Sichten × 18 kanonische Größen **keinen einzigen Rechenfehler** im Berechnungs-Layer. Sie fand sechsmal dieselbe Struktur: *jede Sicht faltet die Rohdaten selbst zu Monatswerten*, und dabei fällt jedes Mal etwas anderes weg — mal V2H, mal der Erzeuger hinter dem Zähler, mal der Aggregat-Fallback, mal der Monatstarif, mal der Dienstwagen-Filter. Der Layer war fehlerfrei und die Zahlen trotzdem um bis zu 85 % auseinander.

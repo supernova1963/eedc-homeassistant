@@ -255,7 +255,7 @@ export function roiKpiItems(
       ergebnis: roiData.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent} % ROI` : undefined,
     },
     {
-      title: 'Amortisation', value: roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre}` : '-',
+      title: 'Amortisation', value: roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre}` : '—',
       unit: roiData.gesamt_amortisation_jahre ? 'Jahre' : undefined,
       color: 'orange', icon: Clock, parkId: 'kpi:amortisation',
       // Radiocarbonat (Forum v4.0.0): „Ich fand es schöner mit der voraussichtlichen
@@ -550,7 +550,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                           </span>
                         </FormelTooltip>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">-</span>
+                        <span className="text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     <td className={`${ZELLE} text-right`}>
@@ -566,12 +566,12 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                           </span>
                         </FormelTooltip>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">-</span>
+                        <span className="text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     {zeigeCo2 && (
                       <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>
-                        {unbewertet ? leerwert : b.co2_einsparung_kg ? `${fmtZahl(b.co2_einsparung_kg, 0)} kg` : '-'}
+                        {unbewertet ? leerwert : b.co2_einsparung_kg ? `${fmtZahl(b.co2_einsparung_kg, 0)} kg` : '—'}
                       </td>
                     )}
                   </tr>
@@ -589,8 +589,8 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
               <td className={`${ZELLE} text-gray-900 dark:text-white`}>Gesamt</td>
               <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{formatGeld(roiData.gesamt_relevante_kosten).text}</td>
               <td className={`${ZELLE} text-right ${GELD_TEXT_CLASS.ersparnis}`}>{formatGeld(roiData.gesamt_jahres_einsparung).text}</td>
-              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent} %` : '-'}</td>
-              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J.` : '-'}</td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent} %` : '—'}</td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J.` : '—'}</td>
               {zeigeCo2 && (
                 <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>{fmtZahl(roiData.gesamt_co2_einsparung_kg, 0)} kg</td>
               )}

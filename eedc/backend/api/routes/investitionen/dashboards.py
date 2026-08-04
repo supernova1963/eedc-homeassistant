@@ -61,6 +61,7 @@ from backend.core.investition_parameter import ist_dienstlich
 from backend.services.monats_fakten import lade_monats_fakten
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     aggregiere_speicher_ist,
+    berechne_speicher_ersparnis,
     berechne_v2h_ersparnis,
     ist_eta_degradation_alarm,
 )
@@ -1066,16 +1067,30 @@ async def get_speicher_dashboard(
                     f"η-IST fehlgeschlagen: {type(e).__name__}: {e}"
                 )
 
-        # Ersparnis: Entladung ersetzt Netzbezug (Spread zwischen Netzbezug und
-        # Einspeisung). BEIDE Seiten aus derselben Monatsschleife oben — ein
-        # Ø-Bezugspreis gegen die heutige Vergütung wäre ein Spread aus zwei
-        # Zeitpunkten (ADR-002/P8).
-        spread = eff_strompreis_cent - eff_einspeise_cent
-        ersparnis = gesamt_entladung * spread / 100
-
-        # Arbitrage-Gewinn: (Strompreis - Ladepreis) * Netzladung
+        # Ersparnis über den Layer-SoT (#358): Spread zwischen Netzbezug und
+        # Einspeisung, aber NUR auf dem PV-Anteil der Entladung. BEIDE Preis-
+        # Seiten aus derselben Monatsschleife oben — ein Ø-Bezugspreis gegen die
+        # heutige Vergütung wäre ein Spread aus zwei Zeitpunkten (ADR-002/P8).
+        #
+        # Hier stand der Spread als Inline-Formel auf der GESAMTEN Entladung,
+        # daneben ein zweiter Posten „Arbitrage-Gewinn" auf der Netzladung — der
+        # Hub addiert beide in der Wirtschaftlichkeits-Aufstellung
+        # (`komponentenAdapter.tsx`), also wurde netzgeladene Energie zweimal
+        # gutgeschrieben: einmal mit dem PV-Spread (den sie nicht verdient, sie
+        # hätte nie eingespeist werden können) und einmal mit ihrem echten
+        # Arbitrage-Vorteil. Der Layer trennt beides sauber; die zwei Posten
+        # unten sind seither disjunkt und summieren sich auf `ersparnis`.
         arbitrage_avg_preis = (arbitrage_preis_sum / arbitrage_count) if arbitrage_count > 0 else 0
-        arbitrage_gewinn = gesamt_arbitrage_kwh * (eff_strompreis_cent - arbitrage_avg_preis) / 100 if gesamt_arbitrage_kwh > 0 else 0
+        _sp = berechne_speicher_ersparnis(
+            entladung_kwh=gesamt_entladung,
+            bezug_preis_cent=eff_strompreis_cent,
+            einspeise_verg_cent=eff_einspeise_cent,
+            ladung_netz_kwh=gesamt_arbitrage_kwh,
+            **({"wirkungsgrad_prozent": effizienz} if effizienz > 0 else {}),
+            lade_preis_cent=arbitrage_avg_preis if arbitrage_avg_preis > 0 else None,
+        )
+        ersparnis = _sp.ersparnis_euro
+        arbitrage_gewinn = _sp.netz_anteil_euro
 
         zusammenfassung = {
             'gesamt_ladung_kwh': round(gesamt_ladung, 1),
@@ -1092,6 +1107,10 @@ async def get_speicher_dashboard(
             # Hinweis in das bestehende `hinweise`-Array des Speicher-Geräts.
             'kapazitaet_fehlt': kapazitaet is None,
             'ersparnis_euro': round(ersparnis, 2),
+            # PV-Anteil und Arbitrage-Gewinn sind die beiden DISJUNKTEN Hälften
+            # von `ersparnis_euro` (#358) — die Aufstellung im Hub addiert sie,
+            # deshalb darf sich hier nichts überlappen.
+            'pv_anteil_euro': round(_sp.pv_anteil_euro, 2),
             'anzahl_monate': len(monatsdaten),
             # Arbitrage-Daten
             'arbitrage_faehig': arbitrage_faehig,
@@ -1763,10 +1782,17 @@ async def get_sonstiges_dashboard(
 
         else:  # speicher
             effizienz = (gesamt_entladung / gesamt_ladung * 100) if gesamt_ladung > 0 else 0
-            # Ersparnis: Spread zwischen Netzbezug und Einspeisung — beide
-            # Seiten aus derselben Monats-Mittelung (ADR-002/P8).
-            spread = inv_strompreis_cent - inv_einspeise_cent
-            ersparnis = gesamt_entladung * spread / 100 + gesamt_sonstige_netto
+            # Ersparnis über den Layer-SoT (#358): Spread zwischen Netzbezug und
+            # Einspeisung, beide Seiten aus derselben Monats-Mittelung
+            # (ADR-002/P8). Der Spread stand hier als Inline-Formel; ein
+            # Speicher unter „Sonstiges" erfasst keine Netzladung, der Aufruf
+            # ist deshalb verhaltensgleich — er bindet die Definition nur an
+            # ihre eine Heimat (ADR-001).
+            ersparnis = berechne_speicher_ersparnis(
+                entladung_kwh=gesamt_entladung,
+                bezug_preis_cent=inv_strompreis_cent,
+                einspeise_verg_cent=inv_einspeise_cent,
+            ).ersparnis_euro + gesamt_sonstige_netto
 
             zusammenfassung = {
                 'kategorie': kategorie,

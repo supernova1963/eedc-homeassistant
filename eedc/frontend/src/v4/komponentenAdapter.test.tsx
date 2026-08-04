@@ -98,6 +98,27 @@ describe('KOMPONENTEN_ADAPTER', () => {
     expect(g.hinweise!.every((h) => h.ton === 'warning')).toBe(true)
   })
 
+  it('#358: die Wirtschaftlichkeits-Posten sind disjunkt (kein doppelter Netz-Anteil)', async () => {
+    // Vorher stand im PV-Posten die GESAMT-Ersparnis, daneben zusätzlich der
+    // Arbitrage-Gewinn — die netzgeladene kWh war damit zweimal gutgeschrieben
+    // und die Aufstellung summierte über die ausgewiesene Ersparnis hinaus.
+    getSpeicherDashboard.mockResolvedValue([{
+      investition: inv({ typ: 'speicher' }),
+      zusammenfassung: { vollzyklen: 8, effizienz_prozent: 80, arbitrage_faehig: true,
+        gesamt_entladung_kwh: 400, gesamt_ladung_kwh: 500, arbitrage_kwh: 100,
+        ersparnis_euro: 86.4, pv_anteil_euro: 70.4, arbitrage_gewinn_euro: 16 },
+      monatsdaten: [{ jahr: 2025, monat: 11, verbrauch_daten: { ladung_kwh: 100, entladung_kwh: 90 } }],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER.speicher.fetch(1)
+    const posten = g.wirtschaftlichkeit!.posten
+    expect(posten.map((p) => [p.label, p.euro])).toEqual([
+      ['Eigenverbrauchs-Ersparnis', 70.4],
+      ['Arbitrage-Gewinn', 16],
+    ])
+    // Die Invariante: Σ Posten = ausgewiesene Ersparnis.
+    expect(posten.reduce((s, p) => s + (p.euro ?? 0), 0)).toBeCloseTo(86.4, 2)
+  })
+
   it('Vergleich: Jahressummen über mehrere Jahre, chronologisch', async () => {
     getSpeicherDashboard.mockResolvedValue([{
       investition: inv({ typ: 'speicher' }),

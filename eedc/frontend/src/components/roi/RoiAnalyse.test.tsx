@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
 
 vi.mock('../../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api')>()),
@@ -54,6 +55,17 @@ describe('RoiAnalyse', () => {
     // Rückkanal liefert den Benzinpreis-Hinweis.
     await waitFor(() => expect(onLoaded).toHaveBeenCalled())
     expect(onLoaded.mock.calls[0][0].benzinpreis_hinweis_euro).toBe(1.7)
+  })
+
+  it('N-90: die Leerwerte der ROI-Tabelle sind Halbgeviertstriche, keine Bindestriche', () => {
+    // Style-Guide A3: Display-Token `—` (etabliert v3.29.1). In dieser Datei
+    // standen sechs nicht migrierte ASCII-Bindestriche neben bereits
+    // umgestellten Nachbarn — eine Anzeige, zwei Zeichen.
+    const quelle = readFileSync('src/components/roi/RoiAnalyse.tsx', 'utf-8')
+    // Leerwert-Formen, die es nicht mehr geben darf.
+    expect(quelle).not.toMatch(/: '-'/)
+    expect(quelle).not.toMatch(/>-</)
+    expect(quelle).not.toMatch(/\? `[^`]*` : '-'/)
   })
 
   it('N-137: Amortisations-Fortschritt steht als eigene Kachel neben der Dauer', async () => {

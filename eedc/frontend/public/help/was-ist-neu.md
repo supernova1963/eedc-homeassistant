@@ -11,6 +11,56 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Cockpit → Jahr: der Speicher bekommt eine eigene Auswertung
+
+**Betrifft dich das?** Alle mit **Batteriespeicher**.
+
+Bisher standen zum Speicher vier Kacheln da — Ladung, Entladung, Wirkungsgrad, Vollzyklen — und
+für alles Weitere musstest du die Monate einzeln durchklicken. Unter dem Speicher-Abschnitt in
+*Cockpit → Jahr* findest du jetzt den Block **„Speicher im Jahr"**: eine Zeile je Monat mit
+
+| Monat | Ladung | Entladung | Vollzyklen | Solar-Anteil | Auslastung | Netto-Nutzen |
+|---|---|---|---|---|---|---|
+
+dazu eine Gesamtzeile und einen Vergleich **Sommer (Jun–Aug) gegen Winter (Nov–Feb)**.
+
+**Zwei Spalten sind neu.** Die **Auslastung** setzt deine Entladung ins Verhältnis zu dem, was der
+Speicher im Zeitraum überhaupt hergäbe (Kapazität × Tage). Anders als die Vollzyklen kannst du
+sie zwischen Februar und Juli direkt vergleichen. Im laufenden Monat zählen dabei nur die schon
+abgelaufenen Tage — sonst stünde am 3. eine Zahl, die mehr über das Datum sagt als über deinen
+Speicher. Der **Netto-Nutzen** ist genau der Betrag, der auch im T-Konto desselben Monats steht.
+
+**Wenn Felder leer bleiben.** Ohne gepflegte **Kapazität** stehen Vollzyklen und Auslastung auf
+„—" statt auf 0: ein Speicher ohne Kapazitätsangabe ist ein *unbekannter*, kein ungenutzter. Der
+Daten-Checker weist dich darauf hin. Trägst du deine **Netzladung** nicht ein, bleibt auch der
+Solar-Anteil leer — eedc behauptet dann nicht einfach 100 % Sonne.
+
+Das ist Phase 1 von [#358](https://github.com/supernova1963/eedc-homeassistant/issues/358). Die
+Tiefe — SoC-Heatmap „hätte mehr Kapazität geholfen?" und der Sizing-Rechner — kommt später und
+gehört dann in den Komponenten-Hub.
+
+### Speicher: der Nutzen in Euro stimmt jetzt überall überein
+
+**Betrifft dich das?** Alle mit Speicher — besonders, wenn du **aus dem Netz lädst** (Arbitrage).
+
+Was dir dein Speicher einbringt, stand je nach Seite unterschiedlich da. Richtig ist der
+**Spread**: die entladene Kilowattstunde ersetzt Netzbezug, hätte aber sonst Einspeisevergütung
+gebracht — es zählt die Differenz. Das **T-Konto** in *Cockpit → Monat* und *→ Jahr* rechnete
+dagegen mit dem vollen Strompreis und lag damit bei einem typischen Tarif (30/8 ct) **rund ein
+Drittel zu hoch**; die ROI-Seite nannte für dieselbe Anlage die kleinere Zahl.
+
+Im **Komponenten-Hub → Speicher** kam ein zweiter Punkt dazu: „Eigenverbrauchs-Ersparnis" und
+„Arbitrage-Gewinn" werden dort addiert — der erste Posten enthielt aber auch die aus dem Netz
+geladene Energie, die im zweiten noch einmal auftauchte. Dieselbe Kilowattstunde zählte doppelt.
+
+Beides läuft jetzt über eine Rechnung, die deine Entladung nach Herkunft trennt. **Du siehst im
+T-Konto einen niedrigeren, dafür stimmigen Beitrag** — er passt jetzt zur ROI-Seite. Lädst du
+nicht aus dem Netz, ändert sich im Hub nichts.
+
+Und: die **Vollzyklen** in der Cockpit-Übersicht zählten intern die Ladung statt der Entladung
+(bei 80 % Wirkungsgrad 10,0 statt 8,0). Gesehen hat das bisher niemand — der Wert wurde nirgends
+angezeigt. Mit der neuen Speicher-Tabelle wäre er sichtbar geworden, deshalb ist er mit korrigiert.
+
 ### Auswertungen → ROI: „wie weit bin ich?" steht wieder da
 
 **Betrifft dich das?** Alle — besonders, wenn du eine **Wärmepumpe oder ein E-Auto** hast.

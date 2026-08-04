@@ -26,10 +26,13 @@ from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
+    auslastung_prozent,
+    auslastungs_basis_kwh,
     autarkie_prozent,
     berechne_grundlast,
     berechne_netzbezug_kosten,
     berechne_netzladung_kosten,
+    berechne_speicher_ersparnis,
     eauto_effizienz_100km,
     eigenverbrauchsquote_prozent,
     einspeise_erloes_euro,
@@ -172,6 +175,17 @@ class AktuellerMonatResponse(BaseModel):
     speicher_ladung_netz_kosten_euro: Optional[float] = None
     speicher_ladung_netz_preis_cent: Optional[float] = None
     speicher_ladung_netz_preis_quelle: Optional[str] = None  # tep | imd | bezugspreis
+    # #358 Phase 1 — Auslastung und Netto-Nutzen des Zeitraums.
+    # `basis` = Kapazität × Tage (theoretisch verfügbare Menge). Sie steht als
+    # eigenes Feld daneben, damit die Jahres-Sicht Entladung und Basis SUMMIEREN
+    # und einmal teilen kann: Auslastungen mehrerer Monate lassen sich nicht
+    # mitteln (Februar wiegt weniger als Juli). Ohne gepflegte Kapazität bleiben
+    # beide `None` — „unbekannt", nicht 0.
+    speicher_auslastungs_basis_kwh: Optional[float] = None
+    speicher_auslastung_prozent: Optional[float] = None
+    # Σ der Speicher-Ersparnisse des Monats — dieselbe Zahl wie im T-Konto
+    # (Spread-SoT), aufgesammelt statt zweitgerechnet.
+    speicher_ersparnis_euro: Optional[float] = None
     hat_speicher: bool = False
 
     # Komponenten — Wärmepumpe
@@ -848,10 +862,42 @@ def _baue_investition_financial(
     elif inv.typ == "speicher":
         entl_kwh = data.get("entladung_kwh")
         if entl_kwh and entl_kwh > 0:
-            inv_ersparnis = round(entl_kwh * netz_p / 100, 2)
+            # SPREAD, nicht Voll-Netzbezugspreis (Entscheid Gernot 2026-08-04,
+            # #358 — er bestätigt den Drift-Audit-Entscheid A3, der seit
+            # `core/berechnungen/speicher_wirtschaftlichkeit.py` im Docstring
+            # steht und den ROI und Aussichten längst befolgen). Bis hierher
+            # rechnete das T-Konto `Entladung × Netzbezug` und damit bei 30/8 ct
+            # 36 % über der Zahl, die dieselbe Anlage in der ROI-Sicht trug.
+            #
+            # Begründung: die entladene kWh hätte sonst eingespeist werden
+            # können — die entgangene Vergütung ist eine reale Gegenposition.
+            # Netzgeladene Energie ist davon ausgenommen (sie hätte nie
+            # eingespeist werden können); diese Trennung macht der Layer, nicht
+            # dieser Aufrufer.
+            netzladung = get_speicher_netzladung_kwh(data)
+            lad_kwh = data.get("ladung_kwh") or 0
+            # Gemessener Monats-η, sonst der Layer-Default. Er wirkt nur auf die
+            # Aufteilung der Entladung nach Herkunft, nicht auf den PV-Spread.
+            eta = (entl_kwh / lad_kwh * 100) if lad_kwh > 0 else None
+            erg = berechne_speicher_ersparnis(
+                entladung_kwh=entl_kwh,
+                bezug_preis_cent=netz_p,
+                einspeise_verg_cent=einsp_p,
+                ladung_netz_kwh=netzladung,
+                **({"wirkungsgrad_prozent": eta} if eta is not None else {}),
+                lade_preis_cent=data.get("speicher_ladepreis_cent"),
+            )
+            inv_ersparnis = round(erg.ersparnis_euro, 2)
             inv_label = "Entladung-Ersparnis"
-            inv_formel = "Speicher-Entladung × Netzbezugspreis"
-            inv_berechnung = f"{entl_kwh:.1f} kWh × {netz_p:.2f} ct/kWh"
+            if netzladung > 0:
+                inv_formel = "PV-Anteil × (Netzbezug − Einspeisung) + Netz-Anteil × (Netzbezug − Ladepreis)"
+                inv_berechnung = (
+                    f"{erg.pv_anteil_entladung_kwh:.1f} kWh × {erg.spread_cent_kwh:.2f} ct/kWh"
+                    f" + {erg.netz_anteil_entladung_kwh:.1f} kWh Netz-Anteil"
+                )
+            else:
+                inv_formel = "Speicher-Entladung × (Netzbezugspreis − Einspeisevergütung)"
+                inv_berechnung = f"{entl_kwh:.1f} kWh × {erg.spread_cent_kwh:.2f} ct/kWh"
 
     elif inv.typ == "waermepumpe":
         waerme = get_wp_heizenergie_kwh(data)
@@ -1421,11 +1467,14 @@ async def get_aktueller_monat(
             result.extend(imd_by_inv.get(inv.id, []))
         return result
 
-    # Speicher: Kapazität, Arbitrage-Ladung, Wirkungsgrad, Vollzyklen
+    # Speicher: Kapazität, Arbitrage-Ladung, Wirkungsgrad, Vollzyklen, Auslastung
     speicher_ladung_netz = None
     speicher_wirkungsgrad = None
     speicher_vollzyklen = None
     speicher_kapazitaet = None
+    speicher_auslastungs_basis = None
+    speicher_auslastung = None
+    speicher_ersparnis = None
 
     speicher_invs = [i for i in investitionen if i.typ == "speicher"]
     speicher_soc_drift_flag = False
@@ -1513,6 +1562,29 @@ async def get_aktueller_monat(
         _vz = berechne_vollzyklen(se, speicher_kapazitaet)
         if _vz is not None:
             speicher_vollzyklen = round(_vz, 2)
+
+        # #358 Phase 1: Auslastung = Entladung ÷ (Kapazität × Tage).
+        #
+        # Im LAUFENDEN Monat zählen nur die abgelaufenen Tage. Sonst stünde am
+        # 3. eines Monats eine Auslastung von 10 %, die nichts über den Speicher
+        # sagt, sondern über das Datum — ein Quotient aus einem vollen Nenner und
+        # einem angefangenen Zähler ist genau der Fall, den die P4-Doktrin
+        # unterdrücken oder ehrlich machen will (KONZEPT-UNVOLLSTAENDIGE-WERTE
+        # §3). Hier ist er ehrlich zu machen: die Basis wächst mit.
+        from calendar import monthrange as _mr
+        _heute = date.today()
+        _tage_gesamt = _mr(jahr, monat)[1]
+        _tage = (
+            min(_heute.day, _tage_gesamt)
+            if (jahr, monat) == (_heute.year, _heute.month)
+            else _tage_gesamt
+        )
+        _basis = auslastungs_basis_kwh(speicher_kapazitaet, _tage)
+        if _basis is not None:
+            speicher_auslastungs_basis = round(_basis, 1)
+            _au = auslastung_prozent(se, _basis)
+            if _au is not None:
+                speicher_auslastung = round(_au, 1)
 
         # Etappe C1+C4: stundengewichteter effektiver Netz-Ladepreis für den Monat.
         # Helper liefert immer ein Ergebnis (auch bei dünner Datenlage) — UI
@@ -1863,6 +1935,16 @@ async def get_aktueller_monat(
             if detail is not None:
                 investitionen_financials.append(detail)
 
+    # #358 Phase 1: Σ Speicher-Ersparnis des Monats — AUFGESAMMELT aus den
+    # T-Konto-Zeilen, nicht zweitgerechnet. Damit kann die Kachel nie eine
+    # andere Zahl zeigen als die Zeile darunter (die Klasse hinter N-129/N-130).
+    # `None`, solange keine Speicher-Zeile finanziell relevant ist.
+    _sp_zeilen = [d for d in investitionen_financials if d.typ == "speicher"]
+    if _sp_zeilen:
+        speicher_ersparnis = round(
+            sum(d.ersparnis_euro or 0 for d in _sp_zeilen), 2
+        )
+
     # ── G20-2: eMob-Ersparnis-Aggregat = Σ der Per-Fahrzeug-Ersparnisse ──
     # Deckungsgleich mit den investitionen_financials-Zeilen (jede mit dem
     # parameter-Satz IHRES Fahrzeugs), statt Einmal-Lauf über die Gesamt-km mit
@@ -1927,6 +2009,9 @@ async def get_aktueller_monat(
         speicher_vollzyklen=speicher_vollzyklen,
         speicher_kapazitaet_kwh=speicher_kapazitaet,
         speicher_soc_drift_signifikant=speicher_soc_drift_flag,
+        speicher_auslastungs_basis_kwh=speicher_auslastungs_basis,
+        speicher_auslastung_prozent=speicher_auslastung,
+        speicher_ersparnis_euro=speicher_ersparnis,
         speicher_effektiver_ladepreis_cent=speicher_eff_ladepreis,
         speicher_effektiver_ladepreis_quelle=speicher_eff_ladepreis_quelle,
         speicher_ladung_netz_kosten_euro=netzladung_kosten.kosten_euro if netzladung_kosten else None,

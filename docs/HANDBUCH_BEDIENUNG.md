@@ -216,6 +216,15 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 
 **Trend-Historie** — Jahresvergleich und saisonale Muster (beste/schlechteste Monate) über alle bisherigen Jahre. Die reine **Degradations-Prognose** (geschätzter Leistungsrückgang pro Jahr) liegt dagegen in der [Aussicht](#25-aussicht).
 
+**Speicher im Jahr** — der Block erscheint, wenn im gewählten Jahr ein Speicher Bewegung hatte. Er zeigt eine Zeile je Monat (neueste zuerst) mit **Ladung**, **Entladung**, **Vollzyklen**, **Solar-Anteil** der Ladung, **Auslastung** und **Netto-Nutzen** in Euro, dazu eine Gesamtzeile und darunter einen Vergleich der beiden Saison-Fenster **Sommer (Jun–Aug)** und **Winter (Nov–Feb)**.
+
+- **Auslastung** = Entladung ÷ (Kapazität × Tage des Zeitraums). Sie beantwortet „wie viel von dem, was der Speicher hergäbe, nutze ich tatsächlich" — und ist anders als die Vollzyklen zwischen einem kurzen Februar und einem langen Juli direkt vergleichbar. Im **laufenden** Monat zählen nur die bereits abgelaufenen Tage; sonst stünde am 3. eine Zahl, die mehr über das Datum aussagt als über den Speicher. Werte über 100 % sind möglich und richtig — dann wurde mehr als eine Kapazität pro Tag durchgesetzt.
+- **Netto-Nutzen** ist derselbe Betrag, der im Finanzen-Block desselben Monats in der Speicher-Zeile steht: die entladene Energie ersetzt Netzbezug, abzüglich der Einspeisevergütung, die sie sonst erbracht hätte. Aus dem **Netz** geladene Energie zählt getrennt, sie hätte nie eingespeist werden können (Details: [Berechnungsreferenz 3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
+- **Leere Felder sind Absicht.** Ohne gepflegte **Kapazität** stehen Vollzyklen und Auslastung auf „—" statt auf 0 — ein Speicher ohne Kapazitätsangabe ist ein *unbekannter*, kein ungenutzter; der Daten-Checker weist darauf hin. Ohne gepflegte **Netzladung** bleibt der Solar-Anteil leer, statt 100 % zu behaupten.
+- Die beiden Saison-Fenster sind **Fokus-Zeiträume, keine Aufteilung des Jahres**: Frühjahr und Herbst zählen in keinem von beiden. Das steht auch unter der Tabelle.
+
+> Die **Tiefe** zum Speicher — „hätte mehr Kapazität etwas gebracht?" und der Sizing-Rechner — gehört nicht hierher, sondern in den [Komponenten-Hub](#3-komponenten--die-was-achse): dort steht, was über die **Lebensdauer** des Geräts geht, hier, was sich auf einen **Zeitraum** bezieht.
+
 **CO₂-Bilanz** — ein eigener Block mit dem Verlauf der vermiedenen Emissionen. Das gestapelte Monats-Diagramm trennt die drei Quellen, aus denen die Ersparnis entsteht: **PV/Eigenverbrauch** (vermiedener Netzstrom), **Wärmepumpe** (vermiedene fossile Wärme) und **E-Mobilität** (vermiedener Kraftstoff); die Autarkie desselben Monats läuft als Linie mit. Über dem Diagramm stehen zwei Kennwerte, die sich bewusst auf **verschiedene Zeiträume** beziehen:
 
 - **CO₂ eingespart** — die Summe des **gewählten Jahres**; sie ändert sich, wenn du das Jahr wechselst.

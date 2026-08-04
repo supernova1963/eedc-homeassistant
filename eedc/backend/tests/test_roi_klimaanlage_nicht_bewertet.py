@@ -172,3 +172,41 @@ async def test_klimaanlage_ohne_gepflegte_parameter_erfindet_auch_nichts(db):
     assert zeile.jahres_einsparung == 0
     assert zeile.co2_einsparung_kg is None
     assert zeile.detail_berechnung["nicht_bewertet"] is True
+
+
+# ============================================================================
+# Dieselbe Anzeige-Regel, zweiter Anlass: Speicher ohne Kapazität (N-89)
+# ============================================================================
+
+
+async def _seed_speicher_ohne_kapazitaet(db) -> int:
+    """Anlage mit einem AC-Speicher, dessen Kapazität niemand gepflegt hat."""
+    anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Investition(
+        anlage_id=anlage.id, typ="speicher", bezeichnung="Akku ohne kWh",
+        anschaffungsdatum=date(2024, 1, 1), anschaffungskosten_gesamt=6000.0,
+        parameter={},
+    ))
+    await db.flush()
+    return anlage.id
+
+
+async def test_speicher_ohne_kapazitaet_ist_nicht_bewertet_statt_null(db):
+    """N-89: „0 €" behauptet „spart nichts" — gemeint war „unbekannt".
+
+    Die Route wusste es längst (`detail['kapazitaet_fehlt']`), aber die
+    ROI-Tabelle liest ausschließlich `nicht_bewertet` — das Flag aus N-87 —
+    und zeigte deshalb eine harte 0. Beide Schlüssel stehen jetzt
+    nebeneinander: `kapazitaet_fehlt` ist die Ursache (der Komponenten-Hub
+    liest sie), `nicht_bewertet` die Anzeige-Folge.
+    """
+    anlage_id = await _seed_speicher_ohne_kapazitaet(db)
+    result = await _roi(db, anlage_id)
+
+    zeile = next(b for b in result.berechnungen if b.investition_typ == "speicher")
+    assert zeile.jahres_einsparung == 0          # zählt nicht in die Summe
+    assert zeile.detail_berechnung["kapazitaet_fehlt"] is True
+    assert zeile.detail_berechnung["nicht_bewertet"] is True
+    assert "Kapazität" in zeile.detail_berechnung["hinweis"]

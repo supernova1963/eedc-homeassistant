@@ -82,6 +82,16 @@ export interface AktuellerMonatResponse {
   speicher_ladung_netz_kosten_euro: number | null
   speicher_ladung_netz_preis_cent: number | null
   speicher_ladung_netz_preis_quelle: string | null
+  /** #358 Phase 1 — Auslastung des Zeitraums und ihre additive Basis
+   *  (Kapazität × Tage; im laufenden Monat nur die abgelaufenen Tage).
+   *  Über mehrere Monate wird NICHT der Prozentwert gemittelt, sondern
+   *  Entladung und Basis summiert und einmal geteilt — ein Februar wiegt
+   *  weniger als ein Juli. */
+  speicher_auslastungs_basis_kwh: number | null
+  speicher_auslastung_prozent: number | null
+  /** Σ Speicher-Ersparnis des Zeitraums (Spread-SoT) — dieselbe Zahl wie in
+   *  den T-Konto-Zeilen, dort aufgesammelt statt zweitgerechnet. */
+  speicher_ersparnis_euro: number | null
 
   // Komponenten — Wärmepumpe
   wp_strom_kwh: number | null

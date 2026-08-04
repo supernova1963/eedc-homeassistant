@@ -218,6 +218,11 @@ export interface SpeicherDashboardResponse {
     kapazitaet_kwh: number | null
     kapazitaet_fehlt?: boolean
     ersparnis_euro: number
+    /** PV-Hälfte von `ersparnis_euro` (#358) — die andere ist
+     *  `arbitrage_gewinn_euro`. Beide sind disjunkt und summieren sich auf
+     *  `ersparnis_euro`; die Aufstellung addiert sie, deshalb darf hier NICHT
+     *  wieder `ersparnis_euro` als PV-Posten stehen. */
+    pv_anteil_euro: number
     anzahl_monate: number
     // Arbitrage-Daten
     arbitrage_faehig: boolean

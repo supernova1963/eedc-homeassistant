@@ -445,10 +445,18 @@ Vollzyklen = Entladung_kWh ÷ Kapazität_brutto_kWh
 ```
 
 **SoT:** `core/berechnungen/speicher.py::vollzyklen`. Alle Sichten rufen ihn auf —
-Komponenten-Hub (`investitionen/dashboards.py`), Cockpit Tag (`energie_profil/tage_werte.py`) und
-Monat/Jahr (`aktueller_monat.py`), PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
-Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie)
-und `test_tage_werte_symmetrie.py`.
+Komponenten-Hub (`investitionen/dashboards.py`), Cockpit Tag (`energie_profil/tage_werte.py`),
+Monat/Jahr (`aktueller_monat.py`) und **Cockpit-Übersicht (`cockpit/uebersicht.py`)**,
+PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
+Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie),
+`test_tage_werte_symmetrie.py` und `test_speicher_kanon_symmetrie.py`.
+
+> ⚠ **Diese Aufzählung war bis zum 2026-08-04 unvollständig — und genau die fehlende Zeile war die
+> fehlerhafte.** `cockpit/uebersicht.py` rechnete weiterhin `Ladung ÷ Kapazität`; der Sweep vom
+> 2026-07-28 hatte die Route übersehen, und weil ihr Wert damals keinen Client-Leser hatte, fiel es
+> niemandem auf (#358 gab ihm einen). **Lehre:** eine Liste von Aufrufern in der Doku ist eine
+> Behauptung über den Code — sie gehört mit einem baumweiten Grep belegt, sonst dokumentiert sie
+> den Soll- statt den Ist-Zustand.
 
 **Warum die Entladung:** Ein Vollzyklus meint die einmal *entnommene* Kapazität — die Größe, auf die
 sich Hersteller-Garantien beziehen, und unabhängig von den Wandlungsverlusten des Ladepfads. Sie ist
@@ -458,6 +466,63 @@ außerdem ein Energiedurchsatz und damit über Tag → Monat → Jahr additiv.
 Nenner, der je nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend leicht konservativer
 Wert. Im HA-Export ist das Netto-Feld reiner **Fallback**, falls die Brutto-Kapazität fehlt — die
 Lese-Reihenfolge dort ist bewusst brutto → netto und bleibt es auch nach A31-2.
+
+#### Auslastung — zeitraum-normierte Nutzung (#358 Phase 1)
+
+```
+Auslastungs-Basis  = Kapazität_brutto_kWh × Tage_im_Zeitraum
+Auslastung [%]     = Entladung_kWh ÷ Auslastungs-Basis × 100
+```
+
+**SoT:** `core/berechnungen/speicher.py::auslastungs_basis_kwh` + `auslastung_prozent`.
+Geliefert von `aktueller_monat.py` (Felder `speicher_auslastungs_basis_kwh` /
+`speicher_auslastung_prozent`), angezeigt in *Cockpit → Monat* und *→ Jahr*.
+
+**Warum die Basis ein eigenes Feld ist:** Auslastungen mehrerer Monate lassen sich **nicht
+mitteln** — ein Februar wiegt weniger als ein Juli, ein angefangener Monat noch weniger. Wer ein
+Jahr bildet, summiert **Entladung und Basis** und teilt einmal. Ein Prozent-Mittelwert wäre die
+Drift-Klasse, die diese Trennung von vornherein ausschließt (Beleg:
+`test_speicher_kanon_symmetrie.py::test_auslastungs_basis_ist_additiv_ueber_monate` — 40 % und
+61 % ergeben zusammen 50 %, nicht 50,5 %).
+
+**Im laufenden Monat zählen nur die abgelaufenen Tage.** Sonst stünde am 3. eines Monats eine
+Auslastung von 10 %, die nichts über den Speicher aussagt, sondern über das Datum — ein voller
+Nenner gegen einen angefangenen Zähler, genau der Fall aus
+[KONZEPT-UNVOLLSTAENDIGE-WERTE](KONZEPT-UNVOLLSTAENDIGE-WERTE.md) §3.
+
+**Kein Deckel bei 100 %:** zwei Zyklen an einem Tag sind real, und die Zahl soll das sagen dürfen.
+Ohne gepflegte Kapazität liefern beide Funktionen `None` — „unbekannt", nicht 0.
+
+#### Der Nutzen in Euro — Spread, nicht Voll-Strompreis
+
+```
+PV-Anteil der Entladung   = Entladung − min(Entladung, Netzladung × η)
+Netz-Anteil der Entladung = min(Entladung, Netzladung × η)
+
+Ersparnis = PV-Anteil   × (Netzbezug − Einspeisevergütung) / 100
+          + Netz-Anteil × (Netzbezug − Ladepreis)          / 100
+```
+
+**SoT:** `core/berechnungen/speicher_wirtschaftlichkeit.py::berechne_speicher_ersparnis`.
+Aufrufer: T-Konto (`aktueller_monat.py::_baue_investition_financial`), Speicher-Dashboard und
+Sonstiges-Speicher (`investitionen/dashboards.py`), Aussichten. Gewächtert von
+`test_speicher_kanon_symmetrie.py` (drei Achsen, mit **absoluten** Erwartungen — Symmetrie allein
+ließe auch drei gleich falsche Zahlen durch, Lehre aus N-130).
+
+**Warum der Spread:** die entladene kWh ersetzt Netzbezug, hätte aber sonst Einspeisevergütung
+erbracht. Die entgangene Vergütung ist eine reale Gegenposition (Drift-Audit A3, von Gernot am
+2026-08-04 für #358 bestätigt).
+
+**Warum die Netzladung ausgenommen ist:** sie hätte nie eingespeist werden können, der PV-Spread
+gilt für sie nicht. Ihr Vorteil ist `Netzbezug − Ladepreis`; ohne gepflegten Ladepreis ist sie
+kostenneutrale Durchleitung (z. B. Backup-Vorhaltung).
+
+> ⚠ **Zwei Fundstellen wichen bis zum 2026-08-04 ab** — beide sichtbar: `aktueller_monat.py`
+> rechnete `Entladung × Netzbezug` (bei 30/8 ct **36 % zu hoch**), `dashboards.py` den Spread
+> **inline** auf der gesamten Entladung *und* wies den Arbitrage-Gewinn zusätzlich aus — der
+> Komponenten-Hub addiert beide Posten, netzgeladene Energie zählte damit doppelt. Die Formel im
+> Layer zu haben genügt nicht; sie ist erst durchgesetzt, wenn keine Inline-Kopie mehr danebensteht
+> (ADR-001).
 
 #### Brutto oder netto — wann welche Kapazität gilt
 

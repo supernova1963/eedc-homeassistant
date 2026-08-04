@@ -95,6 +95,56 @@ def vollzyklen(
     return entladung_kwh / kapazitaet_kwh
 
 
+def auslastungs_basis_kwh(
+    kapazitaet_kwh: Optional[float], tage: int
+) -> Optional[float]:
+    """Theoretisch verfügbare Speichermenge eines Zeitraums: Kapazität × Tage.
+
+    Der Nenner der Auslastung (#358 Phase 1) — bewusst als **eigene, additive
+    Größe** und nicht als fertiger Prozentsatz: Auslastungen mehrerer Monate
+    lassen sich nicht mitteln (ein Februar wiegt weniger als ein Juli), Summen
+    dagegen schon. Wer ein Jahr bildet, summiert Entladung und Basis und teilt
+    einmal — genau so, wie die Jahres-Sicht alle anderen Quoten bildet. Ein
+    nachgebauter Prozent-Mittelwert wäre die Drift-Klasse, die diese Trennung
+    verhindert.
+
+    Kapazität = **brutto**, gleiche Wahl und gleiche Begründung wie bei
+    `vollzyklen` (der Netto-Wert ist selten gepflegt; ein Nenner, der je nach
+    Pflegezustand wechselt, wäre schlimmer als ein konservativer).
+
+    Gibt `None` ohne gepflegte Kapazität — „unbekannt", nicht 0.
+    """
+    if not kapazitaet_kwh or kapazitaet_kwh <= 0:
+        return None
+    if tage <= 0:
+        return None
+    return kapazitaet_kwh * tage
+
+
+def auslastung_prozent(
+    entladung_kwh: Optional[float], basis_kwh: Optional[float]
+) -> Optional[float]:
+    """Auslastung in % der theoretisch verfügbaren Speichermenge.
+
+    ``Entladung ÷ (Kapazität × Tage) × 100`` — die Antwort auf „wie viel von
+    dem, was der Speicher an Durchsatz hergäbe, wird tatsächlich genutzt".
+    Anders als die Vollzyklen ist sie zeitraum-normiert und deshalb zwischen
+    Monaten und Jahren vergleichbar.
+
+    **Kein Deckel bei 100 %:** ein Speicher, der an einem Tag mehr als eine
+    Kapazität durchsetzt (zwei Zyklen), ist real — die Zahl darf über 100
+    gehen und sagt dann genau das.
+
+    Gibt `None`, wenn die Basis fehlt (keine Kapazität gepflegt) oder nichts
+    entladen wurde.
+    """
+    if not basis_kwh or basis_kwh <= 0:
+        return None
+    if entladung_kwh is None or entladung_kwh <= 0:
+        return None
+    return entladung_kwh / basis_kwh * 100
+
+
 def gleitende_effizienz(
     monats_reihe: list[tuple[int, int, float, float]],
     fenster: int = EFFIZIENZ_FENSTER_MONATE,

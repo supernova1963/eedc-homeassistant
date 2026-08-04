@@ -5,7 +5,29 @@
 > - **R15-Scheiben (Rainer-PN #88625, 2026-07-05):** Kosten-Kacheln „Batterieladung Netz" + „Durchschnittspreis Netz" in Cockpit Monat/Tag/Jahr (`berechne_netzladung_kosten`, Preis-Kette TEP→IMD→Bezugspreis) · Ø-Ladepreis-**Vorschlag** im Monatsabschluss-Wizard · Netzladung-Kosten-**Ausweis** im Hub-Arbitrage-Block + T-Konto („davon"-Zeile) · Kanon-Key-Fix `get_speicher_netzladung_kwh` (Hub-Arbitrage war unsichtbar) → deckt die Sichtbarkeits-Seite von Frage 4 + 5 im Kleinen.
 > - **Phase-3-Grundstein:** `core/berechnungen/speicher_simulation.py` (`simuliere_speicher_tag`) existiert.
 >
-> **Offen (= B11-Kern):** Phase 1 (Monats-Tabelle + KPI-Kacheln + Sommer/Winter-Split), Phase 2 (SoC-Heatmap „ungenutztes Potential"), Phase 3 (Sizing-Simulator-UI), Phase 4 (#101-Kopplung) — **plus der geparkte Spread-Entscheid** (Drift-Audit Domäne A3: T-Konto-Speicher-Posten rechnet Voll-Strompreis statt Spread; Umstellung mit ADR-001-Besteck im B11-Rahmen).
+> **✅ Phase 1 ausgeliefert (2026-08-04, #358).** Block **„Speicher im Jahr"** in *Cockpit → Jahr*:
+> Monatstabelle (Ladung · Entladung · Vollzyklen · Solar-Anteil · Auslastung · Netto-Nutzen) +
+> Gesamtzeile + Saison-Vergleich über `SAISON_FENSTER`; zwei zusätzliche KPI-Kacheln (Auslastung,
+> Netto-Nutzen) im Speicher-Abschnitt von Monat und Jahr. **Kein neuer Endpoint** (D3): die Sicht
+> faltet dieselben Monats-Antworten wie die Kacheln darüber. Neue Layer-Formeln
+> `auslastungs_basis_kwh` + `auslastung_prozent` (`core/berechnungen/speicher.py`) — die **Basis**
+> ist bewusst ein eigenes, additives Feld, weil sich Auslastungs-Prozente nicht mitteln lassen.
+> Damit sind die Issue-Punkte **1, 4, 5 und 6** beantwortet.
+>
+> **✅ Der Spread-Entscheid ist im selben Paket gefallen** (Gernot 2026-08-04): der Speicher-Nutzen
+> ist der **Spread** (Bezug − Einspeisung), Netzladung ausgenommen. Er bestätigt die Entscheidung
+> aus Drift-Audit A3 — neu ist ihre **Durchsetzung**: `aktueller_monat.py` rechnete den
+> T-Konto-Posten mit dem Voll-Strompreis (36 % zu hoch bei 30/8 ct), `dashboards.py` den Spread
+> inline auf der **gesamten** Entladung und wies den Arbitrage-Gewinn zusätzlich aus (Doppelzählung
+> im Hub). Alle drei Stellen rufen jetzt `berechne_speicher_ersparnis`; gewächtert von
+> `backend/tests/test_speicher_kanon_symmetrie.py` (3 Achsen, mit absoluten Erwartungen — Symmetrie
+> allein ließe auch drei gleich falsche Zahlen durch). Im selben Zug fiel die letzte Route auf, die
+> Vollzyklen aus der **Ladung** rechnete (`cockpit/uebersicht.py`; der Kanon-Sweep vom 2026-07-28
+> hatte sie übersehen, sie hatte damals keinen Client-Leser).
+>
+> **Offen (= B11-Kern):** Phase 2 (SoC-Heatmap „ungenutztes Potential"), Phase 3
+> (Sizing-Simulator-UI), Phase 4 (#101-Kopplung) — alle drei im **Komponenten-Hub**, sie gehen
+> über die Lebensdauer des Geräts.
 >
 > Zugehörig: [#101](https://github.com/supernova1963/eedc-homeassistant/issues/101) (Live-Restzeit), [Energieprofil Etappe 4](https://github.com/supernova1963/eedc-homeassistant/issues/110) (Saison)
 

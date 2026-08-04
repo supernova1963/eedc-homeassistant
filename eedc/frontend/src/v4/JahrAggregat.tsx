@@ -178,6 +178,11 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
   const speicherEntladung = summe(f('speicher_entladung_kwh'))
   const speicherLadungNetz = summe(f('speicher_ladung_netz_kwh'))
   const speicherLadungNetzKosten = summe(f('speicher_ladung_netz_kosten_euro'))
+  // #358: Die Auslastungs-BASIS wird summiert, der Prozentsatz daraus einmal
+  // gebildet — Monats-Prozente zu mitteln wäre falsch (ein Februar wiegt
+  // weniger als ein Juli, und ein angefangener Monat trägt nur seine
+  // abgelaufenen Tage bei). Deshalb liefert das Backend beide Größen.
+  const speicherAuslastungsBasis = summe(f('speicher_auslastungs_basis_kwh'))
   const wpWaerme = summe(f('wp_waerme_kwh'))
   const wpStrom = summe(f('wp_strom_kwh'))
   const emobLadung = summe(f('emob_ladung_kwh'))
@@ -285,6 +290,9 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     speicher_wirkungsgrad_prozent: quote(speicherEntladung, speicherLadung),
     speicher_vollzyklen: summe(f('speicher_vollzyklen')),
     speicher_kapazitaet_kwh: max(f('speicher_kapazitaet_kwh')),
+    speicher_auslastungs_basis_kwh: speicherAuslastungsBasis,
+    speicher_auslastung_prozent: quote(speicherEntladung, speicherAuslastungsBasis),
+    speicher_ersparnis_euro: summe(f('speicher_ersparnis_euro')),
     hat_speicher: monate.some((m) => m.hat_speicher),
     speicher_soc_drift_signifikant: monate.some((m) => m.speicher_soc_drift_signifikant),
     speicher_effektiver_ladepreis_cent: mittel(f('speicher_effektiver_ladepreis_cent')),

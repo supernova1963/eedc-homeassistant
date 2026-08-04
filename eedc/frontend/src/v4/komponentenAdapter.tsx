@@ -501,9 +501,13 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         } : undefined,
         // Wirtschaftlichkeit = Ertrags-Zusammensetzung: Eigenverbrauchs-Ersparnis
         // (höhere PV-Nutzung) + Arbitrage-Gewinn (Netzladung billig → teuer), wenn vorhanden.
+        // #358: Der erste Posten ist die PV-HÄLFTE (`pv_anteil_euro`), nicht die
+        // Gesamt-Ersparnis — sonst steckte die netzgeladene Energie in beiden
+        // Posten und die Aufstellung summierte über die tatsächliche Ersparnis
+        // hinaus. Σ Posten = `ersparnis_euro`.
         wirtschaftlichkeit: (z.ersparnis_euro ?? 0) > 0 || (z.arbitrage_gewinn_euro ?? 0) > 0 ? {
           posten: [
-            { label: 'Eigenverbrauchs-Ersparnis', euro: z.ersparnis_euro, farbe: SEG.ev, hinweis: 'erhöhter PV-Eigenverbrauch' },
+            { label: 'Eigenverbrauchs-Ersparnis', euro: z.pv_anteil_euro ?? z.ersparnis_euro, farbe: SEG.ev, hinweis: 'erhöhter PV-Eigenverbrauch' },
             ...(z.arbitrage_faehig && (z.arbitrage_gewinn_euro ?? 0) > 0
               ? [{ label: 'Arbitrage-Gewinn', euro: z.arbitrage_gewinn_euro, farbe: SEG.netz, hinweis: 'günstig laden, teuer nutzen' }]
               : []),

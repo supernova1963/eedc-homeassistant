@@ -1408,6 +1408,14 @@ async def get_roi_dashboard(
                 # Gesamtsumme darf keinen Beitrag bekommen. Dass es ein
                 # fehlender Wert und keine Null-Ersparnis ist, sagt `detail`
                 # (P4); `ROIBerechnung.jahres_einsparung` ist nicht optional.
+                # N-89: `kapazitaet_fehlt` allein hat das der ROI-Tabelle NICHT
+                # gesagt — sie liest ausschließlich `nicht_bewertet` (der
+                # Mechanismus aus N-87). Die Zeile stand deshalb mit „0 €" da,
+                # also mit der Behauptung „spart nichts", statt mit „unbekannt".
+                # `kapazitaet_fehlt` bleibt: es ist die speicherspezifische
+                # URSACHE und wird vom Komponenten-Hub gelesen
+                # (`v4/komponentenAdapter.tsx`), `nicht_bewertet` die
+                # anzeigeseitige Folge.
                 detail = {
                     'hinweis': (
                         'AC-gekoppelter Speicher — keine Kapazität gepflegt, '
@@ -1415,6 +1423,7 @@ async def get_roi_dashboard(
                         'Kapazität in der Investitionspflege nachtragen.'
                     ),
                     'kapazitaet_fehlt': True,
+                    'nicht_bewertet': True,
                     'modus': 'prognose',
                 }
             else:
