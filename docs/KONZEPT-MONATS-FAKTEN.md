@@ -13,7 +13,7 @@
 > | Migrationsstand + die drei Wächter-Kategorien mit ihren Zahlen | [`docs/ARCHITEKTUR.md`](ARCHITEKTUR.md) §7 |
 > | Der Kontrakt für Aufrufer (`lade_monats_fakten`, Feldgruppen, Fallen) | Modul- und Dataclass-Docstrings in `eedc/backend/services/monats_fakten.py` |
 > | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**1** nach C1c), mit Obergrenze im Test |
-> | Nebenfunde N-2 … N-17 (Abarbeitung nach S6) | `~/.claude/plans/uebergabe-monats-fakten.md` |
+> | Nebenfunde N-2 … N-17 (Runde nach S6) | **abgearbeitet** — am 2026-08-04 einzeln am Code nachgeprüft und geschlossen; keiner ist offen geblieben. Was danach auffällt, gehört ins laufende Fund-Register, nicht hierher |
 >
 > **Eine der umgehängten Sichten gibt es nicht mehr:** `cockpit/social.py` (S3,
 > geteilter Monatstext) ist am 2026-07-31 **zurückgebaut** worden — die
@@ -50,6 +50,11 @@
 >    Nutzer erst danach. Meldet ein Tester zwischenzeitlich genau einen dieser
 >    Fehler, ist ein Zwischen-Release jederzeit möglich — das entscheidet der
 >    Maintainer dann, nicht dieses Konzept.
+>
+> ⚠ **Das „derzeit" in Punkt 3 ist das vom 2026-07-31** — die vier genannten
+> Commits sind **mit v4.0.5 ausgeliefert**. Der Satz bleibt unverändert stehen,
+> weil er ein *Protokoll* ist und als solches korrekt; datiert ist er, damit ihn
+> niemand als offenen Punkt liest.
 
 ## 1. Ausgangslage — was die Inventur gemessen hat
 

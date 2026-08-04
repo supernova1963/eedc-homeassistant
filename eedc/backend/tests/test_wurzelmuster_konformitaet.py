@@ -1715,10 +1715,15 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
 
 #: **Offene Schuld.** Diese Funktionen falten eine ANLAGEN-weite Monatszeile
 #: selbst — die Klasse, gegen die P10 gebaut ist. Jeder Eintrag trägt seine
-#: Register-ID in `~/.claude/plans/uebergabe-monats-fakten.md`; die Liste darf
-#: nur schrumpfen. Wer hier etwas hinzufügt, trifft eine Entscheidung und
-#: dokumentiert sie — genau dafür steht der Eintrag im Code und nicht in einer
-#: Allowlist-Datei daneben.
+#: Fund-ID **im Kommentar direkt darüber**; die Liste darf nur schrumpfen. Wer
+#: hier etwas hinzufügt, trifft eine Entscheidung und dokumentiert sie — genau
+#: dafür steht der Eintrag im Code und nicht in einer Allowlist-Datei daneben.
+#:
+#: **Diese Liste IST die Buchung** (Entscheid R-1, 2026-08-02): sie ist die
+#: einzige Fassung der Restschuld, die ein Test deckelt. Eine zweite Buchung in
+#: einer Register-Datei wäre unbewacht und liefe auseinander — bis 2026-08-04
+#: verwies dieser Kommentar auf genau so eine (`uebergabe-monats-fakten.md`,
+#: mit dem Abschluss des Strangs S1–S6 geschlossen).
 P10_NOCH_NICHT_MIGRIERT: frozenset[str] = frozenset({
     # N-15 ist mit C1a (2026-08-03) getilgt: `list_monatsdaten_aggregiert`
     # bezieht seine Monatsgrößen aus `lade_monats_fakten` und lädt keine
@@ -1826,7 +1831,8 @@ def test_p10_monatszeile_nur_aus_der_schicht():
         "Schreib-, Import- und Checker-Pfade gehören mit Begründung in "
         "P10_SCHREIBEN_IMPORT_CHECKER. Ein per-Investition-Aggregat gehört in "
         "P10_PER_INVESTITION. Alles andere ist offene Schuld und braucht einen "
-        "Register-Eintrag, bevor es in P10_NOCH_NICHT_MIGRIERT darf."
+        "Kommentar mit Fund-ID über dem Eintrag, bevor es in "
+        "P10_NOCH_NICHT_MIGRIERT darf."
     )
 
 
@@ -1842,8 +1848,9 @@ def test_p10_baseline_ausnahmen_sind_noch_belegt():
     assert not verwaist, (
         f"P10-Ausnahmen ohne Fundstelle: {sorted(verwaist)} — die Funktion lädt "
         "keine `InvestitionMonatsdaten` mehr (oder heißt anders). Eintrag "
-        "streichen; bei P10_NOCH_NICHT_MIGRIERT zusätzlich den Register-Eintrag "
-        "in `uebergabe-monats-fakten.md` als erledigt markieren."
+        "streichen; bei P10_NOCH_NICHT_MIGRIERT den Kommentar darüber stehen "
+        "lassen und als getilgt vermerken — mit Paket und Datum, so wie es "
+        "C1a–C1c für N-15, N-16 und N-17 getan haben."
     )
 
 
