@@ -1,12 +1,15 @@
 """
-Akzeptanztest #240 NongJoWo: Plausibilitäts-Check „>3× Vorjahr" darf den
-Inbetriebnahme-Monat nicht als Vergleichsbasis nutzen — sonst meldet er
-nach jeder ersten vollen Jahresrunde fälschlich „3× Vorjahr".
+Der Plausibilitäts-Check „>3× Vorjahr" und seine drei Ausnahmen.
+
+1. #240 NongJoWo: der Inbetriebnahme-Monat taugt nicht als Vergleichsbasis —
+   sonst meldet die Prüfung nach jeder ersten vollen Jahresrunde fälschlich.
+2. #362 kingcap1: ein Erzeuger-Zubau erklärt den Einspeise-Sprung.
+3. N-75: ein Verbraucher-Zubau erklärt den Netzbezugs-Sprung (das Gegenstück
+   zu 2., seitenrein — jede Seite bekommt nur die Ausnahme ihrer Ursache).
 """
 
 from __future__ import annotations
 
-import traceback
 from datetime import date
 
 from sqlalchemy import select
@@ -205,32 +208,199 @@ async def test_netzbezug_warnung_bleibt_trotz_ausbau(db):
     )
 
 
-_ASYNC_TESTS = [
-    test_keine_3x_warnung_bei_inbetriebnahme_im_vorjahresmonat,
-    test_3x_warnung_bleibt_bei_normalem_vorjahresmonat,
-    test_kein_3x_alarm_wenn_die_anlage_zwischenzeitlich_ausgebaut_wurde,
-    test_netzbezug_warnung_bleibt_trotz_ausbau,
-]
+async def _anlage_mit_wp(db, *, wp_ab: date, netzbezug_2024: float = 900.0):
+    """Grundaufbau für die Verbraucher-Zubau-Fälle: PV seit 2020, ein
+    Vorjahresmonat (05/2023) und ein Prüfmonat (05/2024) mit Netzbezugs-Sprung.
+    """
+    anlage = Anlage(
+        anlagenname="WpZubau",
+        leistung_kwp=10.0,
+        installationsdatum=date(2020, 1, 15),
+    )
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="PV",
+        anschaffungsdatum=date(2020, 1, 15), leistung_kwp=10.0,
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP",
+        anschaffungsdatum=wp_ab,
+    ))
+
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2023, monat=5,
+        einspeisung_kwh=400.0, netzbezug_kwh=250.0,
+    ))
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2024, monat=5,
+        einspeisung_kwh=410.0, netzbezug_kwh=netzbezug_2024,
+    ))
+    await db.commit()
+    return await _reload_anlage(db, anlage.id)
 
 
-async def _main() -> int:
-    failures = 0
-    for fn in _ASYNC_TESTS:
-        try:
-            await fn()
-            print(f"OK   {fn.__name__}")
-        except AssertionError as e:
-            failures += 1
-            print(f"FAIL {fn.__name__}: {e}")
-            traceback.print_exc()
-        except Exception as e:
-            failures += 1
-            print(f"ERR  {fn.__name__}: {type(e).__name__}: {e}")
-            traceback.print_exc()
-    total = len(_ASYNC_TESTS)
-    if failures:
-        print(f"\n{failures}/{total} Tests fehlgeschlagen.")
-        return 1
-    print(f"\nAlle {total} Tests grün.")
-    return 0
+async def _vorjahr_meldungen(db, anlage, monatsdaten) -> list[str]:
+    checker = DatenChecker(db)
+    ergebnisse = await checker._check_monatsdaten_plausibilitaet(anlage, monatsdaten)
+    return [e.meldung or "" for e in ergebnisse if "Vorjahr" in (e.meldung or "")]
+
+
+async def test_kein_netzbezug_alarm_nach_waermepumpen_einbau(db):
+    """N-75: Die WP kam im September 2023 dazu — im Mai 2023 gab es sie noch
+    nicht, im Mai 2024 heizt sie. Der verdreifachte Netzbezug ist damit
+    strukturell erklärt; eine WARNING wäre ein Befund, den der Anwender nicht
+    auflösen kann.
+    """
+    anlage, monatsdaten = await _anlage_mit_wp(db, wp_ab=date(2023, 9, 1))
+
+    meldungen = await _vorjahr_meldungen(db, anlage, monatsdaten)
+    assert not any("Netzbezug" in m for m in meldungen), (
+        f"WP-Zubau erklärt den Netzbezugs-Sprung — keine Warnung erwartet, "
+        f"bekam: {meldungen}"
+    )
+
+
+async def test_netzbezug_alarm_bleibt_ohne_zubau(db):
+    """Gegenprobe: dieselbe Anlage, aber die WP stand schon 2022. Dann erklärt
+    nichts den Sprung und die Warnung muss kommen.
+    """
+    anlage, monatsdaten = await _anlage_mit_wp(db, wp_ab=date(2022, 3, 1))
+
+    meldungen = await _vorjahr_meldungen(db, anlage, monatsdaten)
+    assert any("Netzbezug" in m for m in meldungen), (
+        f"Ohne Zubau muss der Netzbezugs-Sprung gemeldet werden: {meldungen}"
+    )
+
+
+async def test_verbraucher_zubau_entschuldigt_die_einspeisung_nicht(db):
+    """Die Ausnahme ist seitenrein: ein neuer Verbraucher erklärt den
+    Netzbezug, nicht die Einspeisung. Springt die trotzdem, bleibt die Meldung.
+    """
+    anlage = Anlage(
+        anlagenname="WpUndEinspeisung",
+        leistung_kwp=10.0,
+        installationsdatum=date(2020, 1, 15),
+    )
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="PV",
+        anschaffungsdatum=date(2020, 1, 15), leistung_kwp=10.0,
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="wallbox", bezeichnung="Wallbox",
+        anschaffungsdatum=date(2023, 9, 1),
+    ))
+
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2023, monat=5,
+        einspeisung_kwh=100.0, netzbezug_kwh=250.0,
+    ))
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2024, monat=5,
+        einspeisung_kwh=900.0, netzbezug_kwh=900.0,
+    ))
+    await db.commit()
+
+    anlage, monatsdaten = await _reload_anlage(db, anlage.id)
+    meldungen = await _vorjahr_meldungen(db, anlage, monatsdaten)
+    assert any("Einspeisung" in m for m in meldungen), (
+        f"Der Wallbox-Zubau erklärt die Einspeisung nicht: {meldungen}"
+    )
+    assert not any("Netzbezug" in m for m in meldungen), (
+        f"Den Netzbezug erklärt er sehr wohl: {meldungen}"
+    )
+
+
+async def test_austausch_ist_kein_zubau(db):
+    """Alte WP stillgelegt, neue angeschafft: die Anzahl bleibt gleich, also
+    ist der Sprung nicht erklärt und die Warnung bleibt.
+    """
+    anlage = Anlage(
+        anlagenname="WpAustausch",
+        leistung_kwp=10.0,
+        installationsdatum=date(2020, 1, 15),
+    )
+    db.add(anlage)
+    await db.flush()
+
+    db.add(Investition(
+        anlage_id=anlage.id, typ="pv-module", bezeichnung="PV",
+        anschaffungsdatum=date(2020, 1, 15), leistung_kwp=10.0,
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP alt",
+        anschaffungsdatum=date(2021, 1, 1), stilllegungsdatum=date(2023, 8, 31),
+    ))
+    db.add(Investition(
+        anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP neu",
+        anschaffungsdatum=date(2023, 9, 1),
+    ))
+
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2023, monat=5,
+        einspeisung_kwh=400.0, netzbezug_kwh=250.0,
+    ))
+    db.add(Monatsdaten(
+        anlage_id=anlage.id, jahr=2024, monat=5,
+        einspeisung_kwh=410.0, netzbezug_kwh=900.0,
+    ))
+    await db.commit()
+
+    anlage, monatsdaten = await _reload_anlage(db, anlage.id)
+    meldungen = await _vorjahr_meldungen(db, anlage, monatsdaten)
+    assert any("Netzbezug" in m for m in meldungen), (
+        f"Ein Austausch ist kein Zubau — die Warnung muss bleiben: {meldungen}"
+    )
+
+
+async def test_sonstiges_zaehlt_nur_als_verbraucher(db):
+    """`sonstiges` kann beides sein. Ein neues BHKW (Kategorie „erzeuger")
+    erklärt keinen Netzbezugs-Sprung, ein neuer Pool (Kategorie
+    „verbraucher") schon.
+    """
+    async def _lauf(kategorie: str) -> list[str]:
+        anlage = Anlage(
+            anlagenname=f"Sonstiges-{kategorie}",
+            leistung_kwp=10.0,
+            installationsdatum=date(2020, 1, 15),
+        )
+        db.add(anlage)
+        await db.flush()
+
+        db.add(Investition(
+            anlage_id=anlage.id, typ="pv-module", bezeichnung="PV",
+            anschaffungsdatum=date(2020, 1, 15), leistung_kwp=10.0,
+        ))
+        db.add(Investition(
+            anlage_id=anlage.id, typ="sonstiges", bezeichnung="Neuzugang",
+            anschaffungsdatum=date(2023, 9, 1), parameter={"kategorie": kategorie},
+        ))
+
+        db.add(Monatsdaten(
+            anlage_id=anlage.id, jahr=2023, monat=5,
+            einspeisung_kwh=400.0, netzbezug_kwh=250.0,
+        ))
+        db.add(Monatsdaten(
+            anlage_id=anlage.id, jahr=2024, monat=5,
+            einspeisung_kwh=410.0, netzbezug_kwh=900.0,
+        ))
+        await db.commit()
+
+        anlage, monatsdaten = await _reload_anlage(db, anlage.id)
+        return await _vorjahr_meldungen(db, anlage, monatsdaten)
+
+    erzeuger_meldungen = await _lauf("erzeuger")
+    assert any("Netzbezug" in m for m in erzeuger_meldungen), (
+        f"Ein Erzeuger unter Sonstiges erklärt keinen Netzbezugs-Sprung: "
+        f"{erzeuger_meldungen}"
+    )
+
+    verbraucher_meldungen = await _lauf("verbraucher")
+    assert not any("Netzbezug" in m for m in verbraucher_meldungen), (
+        f"Ein Verbraucher unter Sonstiges erklärt ihn: {verbraucher_meldungen}"
+    )
 

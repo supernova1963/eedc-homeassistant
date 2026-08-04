@@ -137,6 +137,62 @@ class MonatsdatenChecks:
             return False
         return _kwp(md.jahr, md.monat) >= kwp_vorher * MonatsdatenChecks.AUSBAU_SCHWELLE
 
+    # Verbraucher, deren Zubau den Netzbezug strukturell hebt. `sonstiges`
+    # steht nicht in der Liste, weil der Typ beides sein kann — er kommt über
+    # die Kategorie dazu (`kategorie == "verbraucher"`, dieselbe Unterscheidung
+    # wie in `core/berechnungen/imd_monatsaggregat.py`).
+    VERBRAUCHER_TYPEN = ("waermepumpe", "e-auto", "wallbox")
+
+    @staticmethod
+    def _verbrauch_ausgebaut(
+        anlage: Anlage, vorjahr: Monatsdaten, md: Monatsdaten
+    ) -> bool:
+        """Ist zwischen Vergleichsmonat und geprüftem Monat ein netzbezugs-
+        hebender Verbraucher dazugekommen? (Gegenstück zu `_erzeugung_ausgebaut`)
+
+        Der Ausbau-Gedanke aus #362 galt bis dahin nur für die Einspeisung: ein
+        Erzeuger-Zubau erklärt ihren Sprung, ein Verbraucher-Zubau erklärte den
+        Netzbezugs-Sprung nicht — obwohl der Kommentar an der Prüfstelle ihn
+        selbst benannte („er wächst mit neuen Verbrauchern"). Wer im Mai eine
+        Wärmepumpe einbaut, bekommt im Folgejahr eine WARNING über eine
+        Verdreifachung, die er selbst herbeigeführt hat und nicht auflösen kann;
+        das Handbuch riet ihm bis dahin, sie zu „akzeptieren" — genau das, was
+        ein Daten-Checker-Hinweis nicht verlangen darf
+        ([[feedback_daten_checker_kein_akzeptiert]], Präzedenz #240).
+
+        **Gezählt wird die Anzahl, nicht eine Leistung.** Verbraucher haben
+        keine gemeinsame Kennzahl (WP: Heizleistung, Wallbox: kW, E-Auto:
+        Akku-kWh), und aus keiner davon ließe sich ein Erwartungsfaktor
+        rechnen — er wäre geraten. Die Prüfung setzt deshalb für das Monatspaar
+        aus, statt die Schwelle zu skalieren; das ist dieselbe Entscheidung, die
+        `_erzeugung_ausgebaut` für die kWp-Seite begründet.
+
+        **Ein Dienstwagen zählt mit.** Der Filter, der ihn aus den Finanzen
+        heraushält ([[feedback_dienstwagen_alle_checks]]), gilt hier nicht: er
+        lädt physisch aus demselben Netzanschluss, und die Frage ist eine
+        Mengen-, keine Kostenfrage.
+
+        Ein Austausch ist kein Zubau (alte WP stillgelegt, neue angeschafft →
+        Anzahl gleich), und eine schrumpfende Ausstattung erst recht nicht —
+        dann ist ein Netzbezugs-Sprung besonders auffällig und die Prüfung
+        greift unverändert.
+        """
+        def _ist_verbraucher(inv) -> bool:
+            if inv.typ in MonatsdatenChecks.VERBRAUCHER_TYPEN:
+                return True
+            if inv.typ == "sonstiges":
+                return (getattr(inv, "parameter", None) or {}).get("kategorie") == "verbraucher"
+            return False
+
+        verbraucher = [i for i in (anlage.investitionen or []) if _ist_verbraucher(i)]
+        if not verbraucher:
+            return False
+
+        def _anzahl(jahr: int, monat: int) -> int:
+            return sum(1 for i in verbraucher if i.ist_aktiv_im_monat(jahr, monat))
+
+        return _anzahl(md.jahr, md.monat) > _anzahl(vorjahr.jahr, vorjahr.monat)
+
     # ─── Monatsdaten Vollständigkeit ─────────────────────────────────────
 
     def _check_monatsdaten_vollstaendigkeit(
@@ -504,15 +560,20 @@ class MonatsdatenChecks:
                 # #362 kingcap1: Eine in Stufen ausgebaute Anlage erzeugt den
                 # Sprung selbst — 2024 hingen mehr Module am Netz als 2023.
                 # Für die Einspeisung setzt die Prüfung dann aus (Begründung
-                # in `_erzeugung_ausgebaut`). NUR für sie: Der Netzbezug sinkt
-                # mit mehr PV, dort wäre der Zubau die falsche Erklärung — er
-                # wächst mit neuen Verbrauchern (WP, E-Auto, Wallbox).
+                # in `_erzeugung_ausgebaut`). Der Netzbezug hat sein eigenes
+                # Gegenstück: er sinkt mit mehr PV — der Erzeuger-Zubau wäre
+                # dort die falsche Erklärung —, aber er wächst mit neuen
+                # Verbrauchern (WP, E-Auto, Wallbox). Jede Seite bekommt also
+                # die Ausnahme, die zu ihrer Ursache gehört.
                 ausgebaut = self._erzeugung_ausgebaut(anlage, vorjahr, md)
+                verbraucher_zugebaut = self._verbrauch_ausgebaut(anlage, vorjahr, md)
                 for feld, wert, vj_wert in [
                     ("Einspeisung", md.einspeisung_kwh, vorjahr.einspeisung_kwh),
                     ("Netzbezug", md.netzbezug_kwh, vorjahr.netzbezug_kwh),
                 ]:
                     if feld == "Einspeisung" and ausgebaut:
+                        continue
+                    if feld == "Netzbezug" and verbraucher_zugebaut:
                         continue
                     if vj_wert and vj_wert > 50 and wert is not None and wert > 3 * vj_wert:
                         ergebnisse.append(CheckErgebnis(

@@ -11,6 +11,42 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Keine Warnung mehr für den Stromverbrauch, den du selbst dazugebaut hast
+
+**Betrifft dich das?** Wenn du eine **Wärmepumpe, ein E-Fahrzeug oder eine Wallbox**
+angeschafft hast und der Daten-Checker dir seither erzählt, dein Netzbezug sei
+verdächtig hoch.
+
+Der Daten-Checker vergleicht jeden Monat mit demselben Monat im Vorjahr und meldet ab
+dem Dreifachen. Für die **Einspeisung** kennt er dabei längst eine Ausnahme: hast du
+zwischendurch PV zugebaut, erklärt der Ausbau den Sprung und die Prüfung setzt aus.
+Für den **Netzbezug** fehlte dieses Gegenstück — dabei ist der Fall genauso eindeutig:
+Wer im September eine Wärmepumpe einbaut, heizt im Januar mit Strom und sieht seinen
+Netzbezug planmäßig auf ein Mehrfaches steigen. Der Daten-Checker meldete das Monat für
+Monat, und es gab nichts zu korrigieren.
+
+Jetzt gilt: **Ist zwischen den beiden verglichenen Monaten ein Verbraucher dazugekommen,
+schweigt die Netzbezugs-Prüfung für dieses Monatspaar.** Als Verbraucher zählen
+Wärmepumpe, E-Fahrzeug, Wallbox und alles unter *Sonstiges*, dem du die Kategorie
+*Verbraucher* gegeben hast.
+
+Drei Dinge, die dabei bewusst so bleiben:
+
+- **Die Einspeisung wird davon nicht mit entschuldigt.** Ein Verbraucher-Zubau erklärt
+  den Netzbezug, ein PV-Ausbau die Einspeisung — springt die jeweils andere Größe, wird
+  sie unverändert gemeldet.
+- **Ein Austausch ist kein Zubau.** Alte Wärmepumpe stillgelegt, neue angeschafft: die
+  Anzahl bleibt gleich, also erklärt nichts den Sprung und die Warnung kommt weiterhin.
+- **Ohne Anschaffungsdatum passiert nichts.** eedc kann den Zubau nur erkennen, wenn du
+  bei der Komponente ein Anschaffungsdatum gepflegt hast. Steht dort nichts, gilt sie als
+  von Anfang an vorhanden — dann ist die Meldung der richtige Hinweis, das Datum unter
+  *Einstellungen → Investitionen* nachzutragen.
+
+*Warum das kein Wegklick-Knopf geworden ist:* Ein Hinweis, den du nur noch abnicken
+kannst, verstellt später den Blick auf einen echten Fehler. Wenn eedc eine Auffälligkeit
+selbst erklären kann, gehört sie gar nicht erst gemeldet — genauso wurde 2026 schon der
+Inbetriebnahme-Monat als Vergleichsbasis ausgeschlossen.
+
 ### Die Umsatzsteuer auf den Eigenverbrauch stimmt jetzt — und ist überall dieselbe
 
 **Betrifft dich das?** Nur wenn du unter *Einstellungen → Stammdaten* die
