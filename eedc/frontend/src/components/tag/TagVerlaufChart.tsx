@@ -7,13 +7,14 @@
  * Darstellung aus `StundenWert[]` + `SerieInfo[]` (extra Serien) — kein Daten-Laden.
  * Farben ausschließlich aus `lib` (kein Inline-Hex, Regel 0a).
  */
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { ChartLegende, eedcTooltipProps } from '../ui'
-import { EXTRA_SERIEN_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { EXTRA_SERIEN_FARBEN, PV_MODUL_FARBEN, KATEGORIE_FARBEN, CHART_LABELS, HILFSLINIE_DASH, AREA_FILL_OPACITY, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl } from '../../lib'
+import { pvRestKw } from '../../lib/erzeugerSpalten'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
 import type { StundenWert, SerieInfo } from '../../api/energie_profil'
@@ -24,7 +25,20 @@ function round2(v: number): number {
 
 interface ChartSerie { dataKey: string; label: string; farbe: string; stackId: 'quellen' | 'senken'; hideLabel?: boolean }
 
-export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; extraSerien: SerieInfo[] }) {
+/** Rest-Serie „PV (übrige)" erst ab dieser Stundenleistung — darunter ist der
+ *  Rest Rundung, und eine Legenden-Zeile für 0,01 kW verwirrt mehr als sie sagt. */
+const PV_REST_SCHWELLE_KW = 0.05
+
+export function TagVerlaufChart({ daten, extraSerien, erzeugerSerien = [] }: {
+  daten: StundenWert[]
+  extraSerien: SerieInfo[]
+  /** PV-Strings/BKW mit eigenem Sensor (#350, Rainer). Sie **ersetzen** den
+   *  PV-Stapel durch seine Bestandteile, statt zusätzlich obendrauf zu liegen —
+   *  als Extra-Serie wäre dieselbe Erzeugung zweimal im Stapel (`extraErzeuger`
+   *  addiert sich zu `pv`). Was die Strings nicht abdecken, bleibt als
+   *  „PV (übrige)" stehen; die Stapelhöhe ist damit unverändert die Erzeugung. */
+  erzeugerSerien?: SerieInfo[]
+}) {
   const achsen = useChartTheme()
   // B7-Legenden-Toggle; Paar-Mapping: bidirektionale _pos/_neg-Serien (Batterie/Netz)
   // schalten gemeinsam über ihren Basis-Key (Legende zeigt nur den _pos-Eintrag).
@@ -33,10 +47,32 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
   const extraErzeuger    = useMemo(() => extraSerien.filter(s => s.seite === 'quelle'), [extraSerien])
   const extraVerbraucher = useMemo(() => extraSerien.filter(s => s.seite === 'senke'), [extraSerien])
 
+  // PV je String: nur aufschlüsseln, wenn es etwas zu trennen gibt (≥ 2 Serien);
+  // bei einem Gerät wäre die Gerätereihe die PV-Reihe unter anderem Namen.
+  const pvAufgeschluesselt = erzeugerSerien.length >= 2
+  // Rest-Regel liegt in `lib/erzeugerSpalten` — dieselbe Fläche, ein Ort.
+  const pvRest = useCallback(
+    (s: StundenWert | undefined) => pvRestKw(s?.pv_kw, s?.komponenten, erzeugerSerien.map((es) => es.key)),
+    [erzeugerSerien],
+  )
+  const zeigePvRest = useMemo(
+    () => pvAufgeschluesselt && daten.some((s) => pvRest(s) > PV_REST_SCHWELLE_KW),
+    [pvAufgeschluesselt, daten, pvRest],
+  )
+
   // Chart-Serien analog Live-TagesverlaufChart: bidirektionale in _pos/_neg aufgespalten.
   const chartSerien = useMemo<ChartSerie[]>(() => {
     const r: ChartSerie[] = []
-    r.push({ dataKey: 'pv', label: 'PV', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
+    if (pvAufgeschluesselt) {
+      // Modul-Schattierungen statt kategorischer Fremdfarben: hier liegen Module
+      // UND Rollen (Batterie/Netz/Haushalt) im selben Stapel — genau der Scope
+      // der Regel an `PV_MODUL_FARBEN`.
+      erzeugerSerien.forEach((es, i) =>
+        r.push({ dataKey: es.key, label: es.label, farbe: PV_MODUL_FARBEN[i % PV_MODUL_FARBEN.length], stackId: 'quellen' }))
+      if (zeigePvRest) r.push({ dataKey: 'pv_rest', label: 'PV (übrige)', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
+    } else {
+      r.push({ dataKey: 'pv', label: 'PV', farbe: KATEGORIE_FARBEN.pv, stackId: 'quellen' })
+    }
     extraErzeuger.forEach((es, i) =>
       r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[i % EXTRA_SERIEN_FARBEN.length], stackId: 'quellen' }))
     r.push({ dataKey: 'bat_pos', label: 'Batterie', farbe: KATEGORIE_FARBEN.batterie, stackId: 'quellen' })
@@ -49,7 +85,7 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
     extraVerbraucher.forEach((es, i) =>
       r.push({ dataKey: es.key, label: es.label, farbe: EXTRA_SERIEN_FARBEN[(extraErzeuger.length + i) % EXTRA_SERIEN_FARBEN.length], stackId: 'senken' }))
     return r
-  }, [extraErzeuger, extraVerbraucher])
+  }, [extraErzeuger, extraVerbraucher, erzeugerSerien, pvAufgeschluesselt, zeigePvRest])
 
   const chartDaten = useMemo(() =>
     Array.from({ length: 24 }, (_, h) => {
@@ -81,8 +117,14 @@ export function TagVerlaufChart({ daten, extraSerien }: { daten: StundenWert[]; 
       }
       for (const es of extraErzeuger)    punkt[es.key] = Math.max(0, s?.komponenten?.[es.key] ?? 0)
       for (const es of extraVerbraucher) punkt[es.key] = Math.min(0, s?.komponenten?.[es.key] ?? 0)
+      if (pvAufgeschluesselt) {
+        // `gesamterzeugung` oben bleibt auf `pv_kw` — die Aufschlüsselung ändert
+        // die Darstellung, nicht die Bilanz.
+        for (const es of erzeugerSerien) punkt[es.key] = Math.max(0, s?.komponenten?.[es.key] ?? 0)
+        if (zeigePvRest) punkt.pv_rest = round2(pvRest(s))
+      }
       return punkt
-    }), [daten, extraErzeuger, extraVerbraucher])
+    }), [daten, extraErzeuger, extraVerbraucher, erzeugerSerien, pvAufgeschluesselt, zeigePvRest, pvRest])
 
   return (
     // D18-3 (detlan #210): KEINE eigene <Card> mehr um den Chart — die

@@ -197,6 +197,13 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
 
   const bloecke = useMemo<Block[]>(() => {
     const list: Block[] = []
+    // Erzeuger-Serien (#350, Rainer): PV-Strings und Balkonkraftwerke mit eigenem
+    // Sensor. Sie sind kategorie `pv` und fallen deshalb aus `extraSerien` heraus
+    // — das ist richtig so: dort würden sie **zusätzlich** zur PV-Summe gestapelt
+    // bzw. in die Gesamterzeugung addiert. Als eigene Prop schlüsseln sie die
+    // vorhandene PV-Reihe auf, ohne die Bilanz zu berühren. `pv_gesamt` ist die
+    // virtuelle Summenserie und bleibt draußen.
+    const erzeugerSerien = serien.filter((s) => s.kategorie === 'pv' && s.typ !== 'virtual')
     // Extra-Serien (nicht-dedizierte) für Chart/Tabelle — wie IST-„Tagesdetail".
     const extraSerien = serien.filter((s) => !DEDIZIERTE_KATEGORIEN.has(s.kategorie))
     const wochentag = WT_LANG[wochentagOf(datum)]
@@ -247,13 +254,13 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
         id: 'verlauf', title: 'Stundenverlauf', ...BLOCK_IDENTITAET.verlauf,
         summary: 'Stundenmittel: Quellen ▲ / Senken ▼',
         defaultOpen: false,
-        render: () => <Parkbar id="el:stundenverlauf" titel="Stundenverlauf"><TagVerlaufChart daten={stunden} extraSerien={extraSerien} /></Parkbar>,
+        render: () => <Parkbar id="el:stundenverlauf" titel="Stundenverlauf"><TagVerlaufChart daten={stunden} extraSerien={extraSerien} erzeugerSerien={erzeugerSerien} /></Parkbar>,
       })
       if (!park.istGeparkt('el:stundenwerte')) list.push({
         id: 'stundenwerte', title: 'Stundenwerte', ...BLOCK_IDENTITAET.werte,
         summary: 'Stundenwerte in kW · Σ-Zeile = kWh/Tag',
         defaultOpen: false,
-        render: () => <Parkbar id="el:stundenwerte" titel="Stundenwerte"><TagWerteTabelle daten={stunden} extraSerien={extraSerien} datum={datum} /></Parkbar>,
+        render: () => <Parkbar id="el:stundenwerte" titel="Stundenwerte"><TagWerteTabelle daten={stunden} extraSerien={extraSerien} erzeugerSerien={erzeugerSerien} datum={datum} /></Parkbar>,
       })
     }
     // Komponenten-Detailblöcke (aktiv-gegated) + Finanz-Teaser — dieselben Bauer

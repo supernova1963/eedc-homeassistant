@@ -43,8 +43,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.routes.energie_profil._shared import TagWerteResponse
 from backend.core.berechnungen import (
+    aggregiere_tep_komponenten,
     berechne_finanz_aggregat,
     bilanz_aus_stundenrows,
+    erzeuger_kwh_je_investition,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
     vollzyklen as berechne_vollzyklen,
@@ -133,8 +135,23 @@ async def baue_tage_werte(
     zeilen: list[TagWerteResponse] = []
 
     for tag in alle_tage:
-        bilanz = bilanz_aus_stundenrows(tep_pro_tag.get(tag, []))
+        stunden_rows = tep_pro_tag.get(tag, [])
+        bilanz = bilanz_aus_stundenrows(stunden_rows)
         tz = tz_pro_tag.get(tag)
+
+        # Erträge je Erzeuger (#350, Rainer): erst der Boundary-Rollup, sonst die
+        # Σ der Stunden-Komponenten. Der Rollup fehlt im Standalone-Betrieb und an
+        # einzelnen Tagen auch im Add-on-Modus — genau deshalb liest die
+        # Tages-Komponenten-Kachel im Client schon länger von den Stunden
+        # (`v4/TagKomponenten.tsx`). Die ID-Normalisierung liegt im Layer, weil
+        # dasselbe Balkonkraftwerk in den beiden Keyspaces `bkw_<id>` bzw.
+        # `pv_<id>` heißt — je Roh-Key gruppiert ergäbe das zwei Spalten für ein
+        # Gerät (s. `erzeuger_kwh_je_investition`).
+        erzeuger_kwh = erzeuger_kwh_je_investition(tz.komponenten_kwh if tz else None)
+        if not erzeuger_kwh:
+            erzeuger_kwh = erzeuger_kwh_je_investition(
+                aggregiere_tep_komponenten(stunden_rows)
+            )
         # §51 gilt nur für Anlagen mit gesetztem Schalter — das Gate liegt im
         # Erlös-Service, nicht hier (bis 2026-08-03 las diese Zeile die Spalte
         # roh und kürzte den Erlös auch ohne §51-Pflicht).
@@ -225,6 +242,12 @@ async def baue_tage_werte(
             # nennt die Tagestabelle eine §51-Menge, die die Monatstabelle bei
             # derselben Anlage verschweigt (`monatsdaten.py`).
             einspeisung_neg_preis_kwh=neg_preis_kwh,
+            # Leer bleibt leer: ohne eigenen Sensor je Erzeuger gibt es hier
+            # keinen Wert. Auf Tagesebene wird **nicht** nach kWp verteilt
+            # (anders als im Monat) — eine verteilte Tageszahl wäre in der
+            # Spalte „Dach Süd" eine Behauptung über eine Messung, die es nicht
+            # gibt (#352-Klasse).
+            erzeuger_kwh={k: round(v, 3) for k, v in erzeuger_kwh.items()} or None,
         ))
 
     return zeilen

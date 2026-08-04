@@ -1047,6 +1047,38 @@ Der Zuordnungs-Schritt des Import-Wizards schlägt die Anteile ebenfalls **nach 
 (bzw. nach Kapazität bei Speichern); ist die Bezugsgröße nirgends gepflegt, verteilt er gleichmäßig
 **und sagt dazu, dass das keine proportionale Aufteilung ist**.
 
+#### IST je Erzeuger auf **Tagesebene** (ab v4.0.9, #350)
+
+Die Präzedenz oben gilt für **Monatswerte**. Auf der Tagesebene gibt es sie nicht — dort wird
+**nicht verteilt**:
+
+```
+erzeuger_kwh[inv_id] = Σ komponenten_kwh[pv_<id> | bkw_<id>]      (Boundary-Rollup)
+                     ∨ Σ TagesEnergieProfil.komponenten je Stunde  (Fallback, kein Rollup)
+kein eigener Sensor  ⇒ kein Eintrag (kein 0, kein kWp-Anteil)
+```
+
+SoT der Formel: `core/berechnungen/energie.py::erzeuger_kwh_je_investition`, ausgeliefert als
+`TagWerteResponse.erzeuger_kwh` (`GET /api/energie-profil/{id}/tage-werte`). Zwei Eigenschaften
+sind dabei nicht optional:
+
+- **Der Schlüssel ist die Investitions-ID, nicht der Komponenten-Key.** Dasselbe Balkonkraftwerk
+  heißt im Live-Keyspace `pv_<id>` und im Boundary-Keyspace `bkw_<id>`
+  (`snapshot/komponenten_beitraege._TYP_PREFIX` gegen `live_komponenten_builder`). Je Roh-Key
+  gruppiert bekäme ein Gerät zwei Spalten, deren Belegung vom Schreibpfad des jeweiligen Tages
+  abhängt — dieselbe Mismatch-Klasse wie der BKW-Doppelzählungs-Bug vom 2026-05-19.
+- **Keine kWp-Verteilung.** Der Monatspfad füllt Lücken nach Nennleistung und **kennzeichnet** das;
+  eine so gefüllte Tageszahl unter der Überschrift „Dach Süd" wäre von einer Messung nicht mehr zu
+  unterscheiden (die Klasse aus #352). Fehlt der Sensor, nennt die Oberfläche das Gerät und den
+  Weg zur Zuordnung, statt eine Spalte zu zeigen.
+
+Der Client schlüsselt **ab zwei Erzeugern** auf (`lib/erzeugerSpalten.ts`, geteilt von
+*Cockpit → Tag* und *Auswertungen → Tabelle*) und berücksichtigt Anschaffungs-/Stilllegungsdatum.
+Im Stundenverlauf **ersetzen** die Geräte-Flächen die PV-Fläche, statt auf ihr zu liegen; der
+ungedeckte Rest (`pvRestKw`) steht als „PV (übrige)" daneben, damit die Stapelhöhe die Erzeugung
+bleibt. Die Energie-Bilanz (`erzeugung`, `pv_anlage`, `bkw`) rechnet unverändert aus ihren eigenen
+Quellen — die Aufschlüsselung ist eine Auskunft, keine Summe.
+
 #### Kennzahlen pro String
 
 ```
@@ -1055,6 +1087,10 @@ Abweichung_%          = (IST - SOLL) / SOLL * 100
 Performance_Ratio      = IST / SOLL
 Spez. Ertrag (kWh/kWp) = IST_Jahr / Modul_kWp
 ```
+
+**Ohne aktive PVGIS-Prognose** entfallen Abweichung und Performance Ratio (`None`); IST,
+Ertragsanteil und spezifischer Ertrag bleiben. Die Sicht zeigt sie seit v4.0.9 auch an — bis dahin
+brach sie ohne Prognose vollständig ab und verbarg damit auch die gemessenen Werte (#350).
 
 ### 3.10 Sonstige Positionen
 

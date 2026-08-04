@@ -13,11 +13,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Table, CalendarDays } from 'lucide-react'
 import { FehlerZustand, TabellenSkeleton } from '../components/ui'
-import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
+import { BlockShell, BlockStackSkeleton, GeraeteHinweis, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { WerteTabelle } from '../components/werte'
 import { monatsZeile, tagesZeile, richteMonateAus, type WerteZeile } from '../lib/werte'
-import { useSelectedAnlage } from '../hooks'
+import {
+  baueErzeugerSpalten, ERZEUGER_OHNE_SENSOR_LABEL, ERZEUGER_OHNE_SENSOR_HINWEIS,
+} from '../lib/erzeugerSpalten'
+import { useInvestitionen, useSelectedAnlage } from '../hooks'
 import type { AuswertungBasis } from './useAuswertungBasis'
 import { useWerteZeitreihe } from './useWerteZeitreihe'
 import { useTagesWerte } from './useTagesWerte'
@@ -298,6 +301,15 @@ function EnergieprofilBlock({
     [rows, vorjahrRows, vgl],
   )
 
+  // Spalten je PV-String / Balkonkraftwerk (#350, Rainer). Die Regel — ab zwei
+  // Erzeugern, nur was im Zeitraum existierte, fehlende Messung benennen — liegt
+  // in `lib/erzeugerSpalten` und gilt genauso für die Serien in Cockpit → Tag.
+  const { investitionen } = useInvestitionen(anlageId)
+  const erzeuger = useMemo(
+    () => baueErzeugerSpalten(rows, investitionen, von, bis),
+    [rows, investitionen, von, bis],
+  )
+
   // Primär-Schnellwahl: füllt nur von–bis (Gernot 2026-06-27). Vormonat = Monat vor dem Anker.
   const vm = anker ? (anker.monat === 1 ? { jahr: anker.jahr - 1, monat: 12 } : { jahr: anker.jahr, monat: anker.monat - 1 }) : null
   const monatRange = (j: number, m: number): [string, string] => [`${j}-${pad(m)}-01`, `${j}-${pad(m)}-${pad(letzterTag(j, m))}`]
@@ -332,10 +344,24 @@ function EnergieprofilBlock({
         <FehlerZustand text={error} />
       ) : (
         <Parkbar id="tabelle:energieprofile" titel="Tageswerte">
+          {/* Was es gibt, aber nicht gemessen wird — sonst sucht man die Spalte
+              seines Dachs vergeblich (#350). Steht über der Tabelle, weil die
+              Spaltenwahl darüber getroffen wird. */}
+          {erzeuger.ohneMessung.length > 0 && (
+            <div className="mb-2 space-y-0.5">
+              <GeraeteHinweis
+                namen={erzeuger.ohneMessung.map((i) => i.bezeichnung)}
+                label={ERZEUGER_OHNE_SENSOR_LABEL}
+                minAnzahl={1}
+              />
+              <p className="text-xs text-gray-400 dark:text-gray-500 pl-5">{ERZEUGER_OHNE_SENSOR_HINWEIS}</p>
+            </div>
+          )}
           <WerteTabelle
             rows={primZeilen}
             vorjahrRows={vglZeilen}
             granularitaet="tag"
+            zusatzMetriken={erzeuger.metriken}
             // R20-1a: bei „Periode im Jahr" das Primär-Jahr als Spalten-Label; bei
             // „Vorperiode" neutral „Aktuell" (WerteTabelle-Default) — beide Spalten klar.
             jahrLabel={vglModus === 'periodeImJahr' ? von.slice(0, 4) : undefined}

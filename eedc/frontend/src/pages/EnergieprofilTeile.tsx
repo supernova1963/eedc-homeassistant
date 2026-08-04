@@ -1,14 +1,19 @@
 /**
  * Energieprofil — geteilte Teile (nur die PFLEGE-Funktionen).
  *
- * EINE Code-Wahrheit für IST (`pages/Energieprofil.tsx`, dünner Komposer) und
- * IA-V4 (Einstellungen-Katalog-Block „Energieprofil-Pflege", inline wie
- * Monatsdaten/Daten-Checker). **Anzeige ≠ Pflege** (Plan §6): die Tages-Tabelle
- * (`EnergieprofilTageTabelle`) ist ANZEIGE und wandert zu den Zeit-Sichten — sie
- * ist hier NICHT enthalten, sondern wird von der V3-Seite als `tabelleSlot`
- * gereicht (bleibt in V3 an ihrer Stelle, fehlt im V4-Pflege-Block). Der Block
- * trägt: Datenbestand-Status · Lücken-Backfill · Kraftstoffpreis-Backfill ·
- * Löschen · Reparatur-Werkbank. Zahlen de-DE über `fmtZahl`.
+ * Block im Einstellungen-Katalog („Energieprofil-Pflege", inline wie
+ * Monatsdaten/Daten-Checker). **Anzeige ≠ Pflege** (Plan §6): die Tages-Anzeige
+ * ist der Block „Energieprofile" in `AuswertungenTabelleV4` (Werte-SoT
+ * `WerteTabelle`, seit #350 mit Spalten je Erzeuger). Der Pflege-Block trägt:
+ * Datenbestand-Status · Lücken-Backfill · Kraftstoffpreis-Backfill · Löschen ·
+ * Reparatur-Werkbank. Zahlen de-DE über `fmtZahl`.
+ *
+ * **`tabelleSlot` ist am 2026-08-04 entfallen** (#350): er reichte die V3-eigene
+ * `EnergieprofilTageTabelle` durch, deren Seite (`pages/Energieprofil.tsx`) mit
+ * dem V4-Flip verschwand — der Slot hatte seither keinen Setzer, die Tabelle
+ * keinen Aufrufer. Der Entscheid dahinter ist älter als der Fund: „V3-Tabelle
+ * wird beim Flip mit V3 stillgelegt, kein Umzug, keine zweite Tabellen-Wahrheit"
+ * (Gernot, 2026-07-02) — ausgeführt wurde er beim Flip nur nicht.
  *
  * D14-8 (detLAN #113/#123, Gernot #128 + Gating-Entscheid 2026-07-03): unter
  * `/v4` ist die „Datenverwaltung"-Karte (Lücken/Kraftstoff/Löschen) ausgeblendet
@@ -25,21 +30,17 @@ import RepairWorkbench from '../components/repair/RepairWorkbench'
 import { fmtZahl } from '../lib'
 
 /**
- * Voller Energieprofil-PFLEGE-Block. Wird von der IST-Seite (V3-Hülle) und dem
- * V4-Daten-Block geteilt. `anlageId` ist bereits aufgelöst; `kopfZusatz` (z. B.
- * Anlage-Auswahl) wandert links in die Kopfleiste; `tabelleSlot` (V3-Anzeige)
- * wird – falls gereicht – zwischen Datenbestand und Datenverwaltung gerendert.
+ * Voller Energieprofil-PFLEGE-Block. `anlageId` ist bereits aufgelöst;
+ * `kopfZusatz` (z. B. Anlage-Auswahl) wandert links in die Kopfleiste.
  */
 export function EnergieprofilPflege({
   anlageId,
   anlagenname,
   kopfZusatz,
-  tabelleSlot,
 }: {
   anlageId: number
   anlagenname?: string
   kopfZusatz?: ReactNode
-  tabelleSlot?: ReactNode
 }) {
   const { investitionen } = useInvestitionen(anlageId)
   const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
@@ -234,9 +235,6 @@ export function EnergieprofilPflege({
         </Card>
         </Parkbar>
       )}
-
-      {/* Tages-Energieprofile (Anzeige) — nur wenn die V3-Seite sie reicht. */}
-      {tabelleSlot}
 
       {/* Datenverwaltung — D14-8: nur V3; unter /v4 konsolidiert im
           Werkbank-Auswahlfeld (Lücken · Kraftstoffpreise · Löschen). */}

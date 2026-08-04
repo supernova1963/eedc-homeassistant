@@ -374,6 +374,12 @@ class TagWerteResponse(BaseModel):
     boersenpreis_min_cent: Optional[float] = None
     negative_preis_stunden: Optional[int] = None
     einspeisung_neg_preis_kwh: Optional[float] = None
+    # Erzeugung je Erzeuger-Investition (#350, Rainer): Schlüssel ist die
+    # **Investitions-ID als String**, Wert die Tages-kWh. Nur belegt, wenn der
+    # Erzeuger einen eigenen Sensor hat — auf Tagesebene wird **nichts** nach
+    # kWp verteilt (anders als die Monatswerte, `resolve_pv_je_modul`). Ein
+    # leeres Dict heißt deshalb „keine Messung je Gerät", nicht „kein Ertrag".
+    erzeuger_kwh: Optional[dict[str, float]] = None
 
 
 class TagDetailResponse(BaseModel):

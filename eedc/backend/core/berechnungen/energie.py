@@ -85,6 +85,39 @@ def summe_bkw_kwh(komponenten_kwh: Optional[dict]) -> float:
     return _summe_prefix(komponenten_kwh, ("bkw_",), nur_positiv=True)
 
 
+def erzeuger_kwh_je_investition(komponenten_kwh: Optional[dict]) -> dict[str, float]:
+    """Erzeugung **je Erzeuger-Investition** aus einem Komponenten-JSON (#350).
+
+    Schlüssel ist die **Investitions-ID als String**, nicht der Roh-Key — und das
+    ist der ganze Zweck der Funktion. Dieselbe Investition trägt je nach
+    Schreibpfad zwei verschiedene Präfixe: der Live-Keyspace führt *alle*
+    Erzeuger unter `pv_<id>` (auch ein Balkonkraftwerk,
+    `live_komponenten_builder`/`live_history_service`), der Boundary-Keyspace
+    unterscheidet `pv_<id>` und `bkw_<id>`
+    (`snapshot/komponenten_beitraege._TYP_PREFIX`). Wer je Roh-Key gruppiert,
+    bekommt für **ein** Balkonkraftwerk zwei Spalten, deren Belegung vom
+    Schreibpfad des jeweiligen Tages abhängt — dieselbe Mismatch-Klasse, aus der
+    der BKW-Doppelzählungs-Bug vom 2026-05-19 entstand (s. Kommentar an
+    {@link PV_KOMPONENTEN_PREFIXE}).
+
+    Werte werden je ID summiert und wie in {@link summe_pv_bkw_kwh} auf positive
+    Beiträge beschränkt. Keys ohne numerische ID (`pv_gesamt`) fallen heraus:
+    sie benennen keine Investition und wären in einer Spalte je Gerät eine
+    Summe neben ihren eigenen Summanden.
+    """
+    if not komponenten_kwh:
+        return {}
+    je_inv: dict[str, float] = {}
+    for key, wert in komponenten_kwh.items():
+        if not isinstance(wert, (int, float)) or wert <= 0:
+            continue
+        praefix, _, rest = str(key).rpartition("_")
+        if f"{praefix}_" not in PV_KOMPONENTEN_PREFIXE or not rest.isdigit():
+            continue
+        je_inv[rest] = je_inv.get(rest, 0.0) + float(wert)
+    return je_inv
+
+
 # ─── Netzpunkt-Bilanz: Gesamterzeugung hinter dem Hauszähler ────────────────
 
 

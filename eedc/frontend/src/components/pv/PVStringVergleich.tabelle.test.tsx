@@ -102,3 +102,51 @@ describe('PVStringVergleich — String-Tabelle', () => {
     expect(container.textContent).not.toMatch(/Anteil0,0 %/)
   })
 })
+
+describe('PVStringVergleich — ohne PVGIS-Prognose (#350)', () => {
+  /** Bis 2026-08-04 brach die Sicht bei `hat_prognose: false` komplett ab —
+   *  mitsamt den gemessenen Modul-Erträgen, die keine Prognose brauchen. */
+  const ohnePrognose = () => antwort({
+    hat_prognose: false,
+    prognose_gesamt_kwh: 0,
+    abweichung_gesamt_prozent: null,
+    bester_string: null, schlechtester_string: null,
+    strings: [
+      { ...string(11, 'Dach Nord-West', 7.2, 6000, 'Nord-West'), prognose_gesamt_kwh: 0, abweichung_gesamt_prozent: null, performance_ratio_gesamt: null },
+      { ...string(12, 'Dach Süd-Ost', 3.6, 4000, 'Süd-Ost'), prognose_gesamt_kwh: 0, abweichung_gesamt_prozent: null, performance_ratio_gesamt: null },
+    ],
+  })
+
+  it('zeigt die gemessenen Erträge statt einer leeren Sicht', async () => {
+    const container = await zeige(ohnePrognose())
+
+    expect(screen.getAllByText('Dach Nord-West').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Dach Süd-Ost').length).toBeGreaterThan(0)
+    expect(container.textContent).toMatch(/6,0 MWh/)
+    // Der Ertragsanteil braucht kein SOLL und bleibt damit ablesbar.
+    expect(screen.getAllByText('60,0 %').length).toBeGreaterThan(0)
+  })
+
+  it('lässt SOLL, Abweichung und Performance weg statt Nullen zu zeigen', async () => {
+    const container = await zeige(ohnePrognose())
+
+    expect(screen.queryByText('SOLL')).not.toBeInTheDocument()
+    expect(screen.queryByText('Abw.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Performance')).not.toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/SOLL \(Prognose\)/)
+  })
+
+  it('sagt, was fehlt und wo es herkommt', async () => {
+    const container = await zeige(ohnePrognose())
+
+    expect(container.textContent).toMatch(/Keine PVGIS-Prognose vorhanden/)
+    expect(container.textContent).toMatch(/Einstellungen → PVGIS/)
+  })
+
+  it('mit Prognose bleibt alles wie bisher', async () => {
+    const container = await zeige(antwort())
+
+    expect(screen.getAllByText('SOLL').length).toBeGreaterThan(0)
+    expect(container.textContent).not.toMatch(/Keine PVGIS-Prognose vorhanden/)
+  })
+})

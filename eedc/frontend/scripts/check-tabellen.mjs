@@ -123,7 +123,10 @@ const T_MIGRATION_OFFEN = new Set([
   //   Statistiken) + Chart-Familien-Monatstabellen (Bkw/EAuto/WP/PVStringVergleich/
   //   Speicher-Jahresbilanz+VerlaufCharts) auf ui/Table.
   // Slice T-6: V3 / Wizards / Settings — ziehen mit Donor→V4 nach
-  'src/components/energieprofil/EnergieprofilTageTabelle.tsx', 'src/components/energieprofil/ReaggregatePreviewModal.tsx',
+  // ✅ 2026-08-04 (#350): `EnergieprofilTageTabelle` + `ReaggregatePreviewModal`
+  //   sind **gelöscht**, nicht migriert — ihre V3-Seite fiel mit dem Flip weg,
+  //   die Tages-Anzeige liegt im Werte-SoT (`AuswertungenTabelleV4`), die
+  //   Tages-Reparatur in der Werkbank.
   'src/components/repair/RepairWorkbench.tsx',
   'src/pages/CloudImportWizard.tsx', 'src/pages/CustomImportWizard.tsx', 'src/pages/DataImportWizard.tsx',
   'src/pages/HAStatistikImport.tsx', 'src/pages/MonatsdatenTeile.tsx',

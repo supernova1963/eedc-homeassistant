@@ -4,6 +4,7 @@
 export type { WerteMetrik, WerteGruppe, WerteAggregation, Granularitaet } from './registry'
 export {
   WERTE_METRIKEN, WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
+  ERZEUGER_METRIK_PREFIX, erzeugerMetriken,
   getMonatWert, getTagWert, metrikenFuer,
 } from './registry'
 export type { WerteZeile } from './zeile'

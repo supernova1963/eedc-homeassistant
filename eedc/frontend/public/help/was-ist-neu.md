@@ -11,6 +11,47 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Erträge je Dachfläche und je Balkonkraftwerk — jetzt auch tagesgenau
+
+**Betrifft dich das?** Alle mit **mehreren** PV-Strings oder mehreren Balkonkraftwerken, bei denen
+jedes Gerät einen **eigenen Ertragssensor** hat.
+
+Monats- und Jahreswerte je String gab es schon (*Auswertungen → Prognose*, Komponenten-Hub,
+Jahresbericht). Für einen **einzelnen Tag** ließ sich die Erzeugung dagegen nicht auftrennen —
+obwohl eedc die Werte je Gerät stündlich mitschreibt. Rainer hat gefragt: „welchen Ertrag hat mein
+BKW im Vorgarten, mein Süd-Ost-Dach, mein Nord-West-Dach **täglich** gebracht?" Zwei Stellen
+beantworten das jetzt:
+
+- ***Cockpit → Tag*** — der **Stundenverlauf** teilt die PV-Fläche in ihre Geräte auf (statt eines
+  Blocks), und die **Stundenwerte**-Tabelle bekommt je Gerät eine Spalte hinter „PV".
+- ***Auswertungen → Tabelle → Energieprofile*** — je Gerät eine Spalte **je Tag**, im
+  Spalten-Picker unter **„Je Erzeuger"**. Mit Summenzeile, Vorjahresvergleich und CSV-Export wie
+  jede andere Spalte; über einen Monat oder ein Jahr gelesen ergibt das die Tages-Historie je Dach.
+
+Aufgeteilt wird **ab zwei Geräten** — bei einem einzigen wäre die Gerätespalte die Anlagenspalte.
+
+**Und wenn ein Gerät keinen eigenen Sensor hat?** Dann bekommt es **keine** Spalte, sondern du
+bekommst einen Hinweis, welches Gerät fehlt und wo du den Sensor zuordnest
+(*Einstellungen → Datenquellen*). Auf Monatsebene füllt eedc solche Lücken notfalls nach
+kWp-Anteil auf und schreibt „geschätzt" dazu — auf Tagesebene bewusst nicht: eine gerechnete Zahl
+unter der Überschrift „Dach Süd" sähe aus wie eine Messung. Im Stundenverlauf steht der
+ungedeckte Rest als eigene Fläche **„PV (übrige)"**, damit die Kurve weiter deine ganze Erzeugung
+zeigt.
+
+### Die String-Sicht zeigt deine Erträge auch ohne PVGIS-Prognose
+
+**Betrifft dich das?** Alle, die *Auswertungen → Prognose* öffnen, **ohne** eine PVGIS-Prognose
+abgerufen zu haben.
+
+Bisher stand dort nur der Satz „Keine PVGIS-Prognose vorhanden" — und mit ihm verschwanden auch
+alle Zahlen, die gar keine Prognose brauchen: deine **gemessenen** Erträge je String, ihr Anteil am
+Gesamtertrag und der spezifische Ertrag in **kWh/kWp**, also genau die Kennzahl, mit der man zwei
+Dächer vergleicht.
+
+Jetzt steht die Sicht. Weg bleibt nur, was ohne Prognose keine Aussage hat: **SOLL, Abweichung und
+Performance**. Der Hinweis bleibt oben stehen und sagt dir, wo du die Prognose abrufst
+(*Einstellungen → PVGIS*). Wer eine Prognose hinterlegt hat, sieht keinen Unterschied.
+
 ### Im laufenden Monat vergleicht das SOLL nur die Tage, die schon vorbei sind
 
 **Betrifft dich das?** Alle, die *Cockpit → Monat* oder *Cockpit → Jahr* im **laufenden** Monat

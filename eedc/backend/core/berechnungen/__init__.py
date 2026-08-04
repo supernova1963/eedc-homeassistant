@@ -116,6 +116,7 @@ from backend.core.berechnungen.energie import (
     WAERMEPUMPE_KOMPONENTEN_PREFIXE,
     WALLBOX_KOMPONENTEN_PREFIXE,
     batterie_kw_spalte,
+    erzeuger_kwh_je_investition,
     erzeugung_hinter_zaehler_kwh,
     summe_batterie_netto_kwh,
     summe_bkw_kwh,
@@ -126,6 +127,7 @@ from backend.core.berechnungen.energie import (
     wert_basis_kwh,
 )
 from backend.core.berechnungen.invarianten import (
+    aggregiere_tep_komponenten,
     assert_speicher_durchsatz_konsistent,
     assert_speicher_ladung_konsistent,
     assert_speicher_netzladung_kumulativ,
@@ -288,6 +290,7 @@ __all__ = [
     "summe_pv_bkw_kwh",
     "summe_pv_anlage_kwh",
     "summe_bkw_kwh",
+    "erzeuger_kwh_je_investition",
     "erzeugung_hinter_zaehler_kwh",
     "summe_waermepumpe_kwh",
     "summe_wallbox_eauto_kwh",
@@ -298,6 +301,7 @@ __all__ = [
     "pruefe_tep_tz_konsistenz",
     "assert_tep_tz_komponenten_konsistent",
     "pruefe_tep_tz_komponenten_konsistenz",
+    "aggregiere_tep_komponenten",
     "assert_tep_komponenten_intern_konsistent",
     "pruefe_tep_komponenten_intern_konsistenz",
     "assert_speicher_ladung_konsistent",

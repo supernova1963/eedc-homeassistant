@@ -125,6 +125,10 @@ export interface TagWerte {
   boersenpreis_min_cent: number | null
   negative_preis_stunden: number | null
   einspeisung_neg_preis_kwh: number | null
+  /** Ertrag je Erzeuger-Investition (#350): Investitions-ID → Tages-kWh. Nur
+   *  belegt, wo das Gerät einen eigenen Sensor hat — auf Tagesebene wird nichts
+   *  nach kWp verteilt. Leer/fehlend heißt „nicht gemessen", nicht „0 kWh". */
+  erzeuger_kwh?: Record<string, number> | null
 }
 
 /**

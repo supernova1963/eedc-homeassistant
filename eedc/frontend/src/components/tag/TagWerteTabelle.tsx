@@ -90,10 +90,24 @@ const TD_GROUP_LABELS: Record<TdGroup, string> = {
 const TD_GROUPS: TdGroup[] = ['erzeugung', 'netz', 'verbrauch', 'bilanz', 'qualitaet']
 const TD_STORAGE_KEY = 'eedc_tagesprofil_visible_cols'
 
-export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenWert[], extraSerien: SerieInfo[], datum: string }) {
+export function TagWerteTabelle({ daten, extraSerien, erzeugerSerien = [], datum }: {
+  daten: StundenWert[]
+  extraSerien: SerieInfo[]
+  /** PV-Strings/BKW mit eigenem Sensor (#350, Rainer) — je Gerät eine Spalte,
+   *  eingehängt hinter „PV". Sie sind bewusst **keine** `extraSerien`: die gehen
+   *  in `calcGesamterzeugung` ein, und da die Strings Bestandteile der bereits
+   *  gezählten `pv_kw` sind, stünde die Erzeugung dann doppelt in der Bilanz. */
+  erzeugerSerien?: SerieInfo[]
+  datum: string
+}) {
   // Memoisiert → stabile Referenzen (sonst re-rennt jede abhängige useMemo/useCallback je Render).
   const extraErzeuger    = useMemo(() => extraSerien.filter(s => s.seite === 'quelle'), [extraSerien])
   const extraVerbraucher = useMemo(() => extraSerien.filter(s => s.seite === 'senke'), [extraSerien])
+  // Ab zwei Geräten — bei einem wäre die Gerätespalte die PV-Spalte (`lib/erzeugerSpalten`).
+  const erzeugerSpalten  = useMemo(
+    () => (erzeugerSerien.length >= 2 ? erzeugerSerien : []),
+    [erzeugerSerien],
+  )
 
   // Berechnete Werte pro Stunde
   const calcGesamterzeugung = useCallback((s: StundenWert): number => {
@@ -116,6 +130,7 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
     } catch { /* ignore */ }
     const defaults = new Set(TD_COLUMNS.filter(c => c.defaultVisible).map(c => c.key))
     extraSerien.forEach(es => defaults.add(es.key))
+    erzeugerSerien.forEach(es => defaults.add(es.key))
     return defaults
   })
   useEffect(() => {
@@ -123,9 +138,10 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
     setVisibleCols(prev => {
       const next = new Set(prev)
       extraSerien.forEach(es => { if (!next.has(es.key)) next.add(es.key) })
+      erzeugerSpalten.forEach(es => { if (!next.has(es.key)) next.add(es.key) })
       return next
     })
-  }, [extraSerien])
+  }, [extraSerien, erzeugerSpalten])
   useEffect(() => {
     try { localStorage.setItem(TD_STORAGE_KEY, JSON.stringify([...visibleCols])) } catch { /* ignore */ }
   }, [visibleCols])
@@ -166,6 +182,7 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
           gesamterzeugung: s ? calcGesamterzeugung(s) : null,
           hausverbrauch:   s ? calcHausverbrauch(s)   : null,
           ...Object.fromEntries(extraSerien.map(es => [es.key, s?.komponenten?.[es.key] ?? null])),
+          ...Object.fromEntries(erzeugerSpalten.map(es => [es.key, s?.komponenten?.[es.key] ?? null])),
         } as Record<string, number | null>,
       }
     })
@@ -175,18 +192,20 @@ export function TagWerteTabelle({ daten, extraSerien, datum }: { daten: StundenW
       const bv = b.vals[sortKey] ?? (sortDir === 'desc' ? -Infinity : Infinity)
       return sortDir === 'asc' ? av - bv : bv - av
     })
-  }, [daten, sortKey, sortDir, extraSerien, calcGesamterzeugung, calcHausverbrauch])
+  }, [daten, sortKey, sortDir, extraSerien, erzeugerSpalten, calcGesamterzeugung, calcHausverbrauch])
 
   // Aktive Spalten in Reihenfolge: TD_COLUMNS + extra Serien (eingebettet in Gruppe)
   const allCols = useMemo(() => {
     const cols: (TdColDef | (SerieInfo & { unit: string; decimals: number; isSum: boolean; group: TdGroup }))[] = []
     for (const c of TD_COLUMNS) {
       cols.push(c)
+      // Die Strings stehen direkt hinter ihrer Summe „PV" — sie schlüsseln sie auf.
+      if (c.key === 'pv_kw') erzeugerSpalten.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'erzeugung' }))
       if (c.key === 'batterie_kw') extraErzeuger.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'erzeugung' }))
       if (c.key === 'wallbox_kw') extraVerbraucher.forEach(es => cols.push({ ...es, unit: 'kW', decimals: 2, isSum: true, group: 'verbrauch' }))
     }
     return cols.filter(c => visibleCols.has(c.key))
-  }, [visibleCols, extraErzeuger, extraVerbraucher])
+  }, [visibleCols, extraErzeuger, extraVerbraucher, erzeugerSpalten])
 
   // Summenzeile
   const summen = useMemo(() => {

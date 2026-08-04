@@ -251,19 +251,12 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
     )
   }
 
-  // No Prognosis State
-  if (!data.hat_prognose) {
-    return (
-      <Alert type="warning">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4" />
-          <span>
-            Keine PVGIS-Prognose vorhanden. Bitte unter Einstellungen → PVGIS eine Prognose abrufen.
-          </span>
-        </div>
-      </Alert>
-    )
-  }
+  // Ohne PVGIS-Prognose bleibt der **IST** stehen (#350). Bis 2026-08-04 brach
+  // die Sicht hier komplett ab — mit ihr auch die gemessenen Modul-Ertraege, die
+  // gar keine Prognose brauchen. Wer nie eine abgerufen hat, sah fuer seine
+  // Anlage nichts als diesen Satz. Jetzt entfaellt nur, was ohne SOLL keine
+  // Aussage hat: SOLL, Abweichung, Performance.
+  const hatPrognose = data.hat_prognose
 
   // Performance Badge
   const PerformanceBadge = ({ ratio }: { ratio: number | null | undefined }) => {
@@ -281,6 +274,21 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Ohne Prognose: sagen, was fehlt — und was trotzdem dasteht (#350). */}
+      {!hatPrognose && (
+        <Parkbar id="info:pv-keine-prognose" titel="Keine PVGIS-Prognose">
+          <Alert type="info">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>
+                Keine PVGIS-Prognose vorhanden — gezeigt werden die gemessenen Erträge.
+                SOLL, Abweichung und Performance brauchen eine Prognose: Einstellungen → PVGIS.
+              </span>
+            </div>
+          </Alert>
+        </Parkbar>
+      )}
+
       {/* Diagnose-Hinweis: stale/oversize PVGIS-Prognose (passt nicht zur kWp) */}
       {data.prognose_warnung && (
         <Parkbar id="info:pv-warnung" titel="Prognose-Warnung">
@@ -306,14 +314,14 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
 
       {/* KPI Übersicht — je Kachel einzeln parkbar (Element-Park-Doktrin). */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <Parkbar id="kpi:pv-soll" titel="SOLL (Prognose)"><KPICard
+        {hatPrognose && <Parkbar id="kpi:pv-soll" titel="SOLL (Prognose)"><KPICard
           title="SOLL (Prognose)"
           value={fmtZahl(data.prognose_gesamt_kwh / 1000, 1)}
           unit="MWh"
           color="blue"
           icon={TrendingUp}
           subtitle={`${data.anzahl_jahre} Jahre × PVGIS`}
-        /></Parkbar>
+        /></Parkbar>}
         <Parkbar id="kpi:pv-ist" titel="IST (Erzeugt)"><KPICard
           title="IST (Erzeugt)"
           value={fmtZahl(data.ist_gesamt_kwh / 1000, 1)}
@@ -322,13 +330,13 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
           icon={Sun}
           subtitle={`${data.anzahl_monate} Monate erfasst`}
         /></Parkbar>
-        <Parkbar id="kpi:pv-abweichung" titel="Abweichung"><KPICard
+        {hatPrognose && <Parkbar id="kpi:pv-abweichung" titel="Abweichung"><KPICard
           title="Abweichung"
           value={`${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}${data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'}`}
           unit="%"
           color={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'green' : 'red'}
           icon={(data.abweichung_gesamt_prozent ?? 0) >= 0 ? TrendingUp : TrendingDown}
-        /></Parkbar>
+        /></Parkbar>}
         <Parkbar id="kpi:pv-zeitraum" titel="Zeitraum"><KPICard
           title="Zeitraum"
           value={`${data.erstes_jahr} - ${data.letztes_jahr}`}
@@ -366,8 +374,12 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
       {(embed ? moduleVergleichData.length > 0 : jahresChartData.length > 0) && (
         <Parkbar id="chart:pv-soll-ist" titel="SOLL vs IST">
         <Sektion embed={embed} icon={Calendar} farbe="text-blue-500"
-          titel={embed ? 'SOLL vs IST je Modul (Gesamtlaufzeit)' : 'SOLL vs IST pro Jahr'}
-          hinweis={embed ? 'PVGIS-Prognose vs. erzeugt je Modul; Label = Abweichung.' : undefined}>
+          titel={hatPrognose
+            ? (embed ? 'SOLL vs IST je Modul (Gesamtlaufzeit)' : 'SOLL vs IST pro Jahr')
+            : (embed ? 'Ertrag je Modul (Gesamtlaufzeit)' : 'Ertrag pro Jahr')}
+          hinweis={embed
+            ? (hatPrognose ? 'PVGIS-Prognose vs. erzeugt je Modul; Label = Abweichung.' : 'Gemessener Ertrag je Modul.')
+            : undefined}>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               {embed ? (
@@ -379,7 +391,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   <Legend content={<ChartLegende onItemClick={vergleichLegende.onItemClick} />} />
                   {/* SOLL deckend (S4: Balken nicht transparent); als Prognose nur
                       über den gestrichelten Rand markiert. */}
-                  <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} hide={vergleichLegende.istVersteckt('SOLL')} />
+                  {hatPrognose && <Bar dataKey="SOLL" name="SOLL (PVGIS)" fill={SOLL_IST_COLORS.soll} stroke={SOLL_IST_COLORS.soll} strokeWidth={1} strokeDasharray={PROGNOSE_DASH} hide={vergleichLegende.istVersteckt('SOLL')} />}
                   <Bar dataKey="IST" name="IST (erzeugt)" fill={SOLL_IST_COLORS.ist} hide={vergleichLegende.istVersteckt('IST')}>
                     <LabelList dataKey="deltaLabel" position="top" fontSize={11} />
                   </Bar>
@@ -391,7 +403,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   <YAxis tickFormatter={jahresAchse.tick} label={achsenEinheit(jahresAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                   <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                   <Legend content={<ChartLegende onItemClick={vergleichLegende.onItemClick} />} />
-                  {data.strings.map((s, idx) => {
+                  {hatPrognose && data.strings.map((s, idx) => {
                     const single = data.strings.length === 1
                     const baseColor = single ? SOLL_IST_COLORS.soll : STRING_COLORS[idx % STRING_COLORS.length]
                     return (
@@ -420,7 +432,9 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
       {saisonalChartData.length > 0 && (
         <Parkbar id="chart:pv-saison" titel="Saisonaler Vergleich">
         <Sektion embed={embed} icon={BarChart3} farbe="text-green-500" titel="Saisonaler Vergleich (Jan – Dez)"
-          hinweis="Monatliche PVGIS-Prognose vs. Durchschnitt der tatsächlichen Erzeugung über alle Jahre.">
+          hinweis={hatPrognose
+            ? 'Monatliche PVGIS-Prognose vs. Durchschnitt der tatsächlichen Erzeugung über alle Jahre.'
+            : 'Durchschnitt der tatsächlichen Erzeugung über alle Jahre.'}>
           {embed && data.strings.length > 1 && (
             <div className="flex items-center gap-2">
               <label className="text-xs text-gray-500 dark:text-gray-400">Modul:</label>
@@ -444,7 +458,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                 <YAxis tickFormatter={saisonalAchse.tick} label={achsenEinheit(saisonalAchse.einheit)} width={80} tick={{ fontSize: 10 }} />
                 <Tooltip cursor={CHART_HOVER_CURSOR} content={<ChartTooltip unit="kWh" />} />
                 <Legend content={<ChartLegende onItemClick={saisonLegende.onItemClick} />} />
-                <Area
+                {hatPrognose && <Area
                   type="monotone"
                   dataKey="SOLL"
                   fill={SOLL_IST_COLORS.soll}
@@ -453,7 +467,7 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   fillOpacity={0.2}
                   name="PVGIS Prognose"
                   hide={saisonLegende.istVersteckt('SOLL')}
-                />
+                />}
                 <Line
                   type="monotone"
                   dataKey="IST Ø"
@@ -472,7 +486,8 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
 
       {/* String-Detail-Tabelle */}
       <Parkbar id="tabelle:pv-strings" titel="Einzelne Strings / Module">
-      <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)" hinweis={PERFORMANCE_ERKLAERUNG}>
+      <Sektion embed={embed} icon={BarChart3} farbe="text-gray-500" titel="Einzelne Strings / Module (Gesamtlaufzeit)"
+        hinweis={hatPrognose ? PERFORMANCE_ERKLAERUNG : 'Für den Vergleich der Dächer untereinander zählt kWh/kWp, für das Gewicht am Gesamtertrag die Spalte „Anteil".'}>
         {/* Mobil (< sm): Karten je String/Modul statt Tabelle — Muster wie
             Cockpit-Energiebilanz (eine Datenliste, zwei Render-Pfade). */}
         <div className="sm:hidden space-y-2">
@@ -481,16 +496,16 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: STRING_COLORS[idx % STRING_COLORS.length] }} />
                 <span className="font-medium text-gray-900 dark:text-white truncate">{s.bezeichnung}</span>
-                <span className="ml-auto shrink-0"><PerformanceBadge ratio={s.performance_ratio_gesamt} /></span>
+                {hatPrognose && <span className="ml-auto shrink-0"><PerformanceBadge ratio={s.performance_ratio_gesamt} /></span>}
               </div>
               {s.wechselrichter_name && <p className="text-xs text-gray-500 ml-5">→ {s.wechselrichter_name}</p>}
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{fmtZahl(s.leistung_kwp, 1)}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Ausrichtung</dt><dd className="text-gray-700 dark:text-gray-300">{s.ausrichtung || '-'}{s.neigung_grad != null && ` / ${s.neigung_grad}°`}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>}
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium tabular-nums" style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>{fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Anteil</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{anteilText(s.ist_gesamt_kwh, data.ist_gesamt_kwh)}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>
+                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>}
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}</dd></div>
               </dl>
             </div>
@@ -501,9 +516,9 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
               <span className="font-medium text-gray-900 dark:text-white">Gesamt</span>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-sm">
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{fmtZahl(data.anlagen_leistung_kwp, 1)}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>
+                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">SOLL</dt><dd className="text-blue-600 dark:text-blue-400 tabular-nums">{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</dd></div>}
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">IST</dt><dd className="font-medium text-gray-900 dark:text-white tabular-nums">{fmtZahl(data.ist_gesamt_kwh / 1000, 1)} MWh</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>
+                {hatPrognose && <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">Abw.</dt><dd className={`tabular-nums ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}{data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %</dd></div>}
                 <div className="flex justify-between gap-2"><dt className="text-gray-500 dark:text-gray-400">kWh/kWp</dt><dd className="text-gray-700 dark:text-gray-300 tabular-nums">{data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—'}</dd></div>
               </dl>
             </div>
@@ -517,11 +532,11 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
               <th className={`${KOPF_ZELLE} text-left text-gray-500`}>String / Modul</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWp</th>
               <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Ausrichtung</th>
-              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>SOLL</th>
+              {hatPrognose && <th className={`${KOPF_ZELLE} text-right text-gray-500`}>SOLL</th>}
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>IST</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Anteil</th>
-              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Abw.</th>
-              <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Performance</th>
+              {hatPrognose && <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Abw.</th>}
+              {hatPrognose && <th className={`${KOPF_ZELLE} text-right text-gray-500`}>Performance</th>}
               <th className={`${KOPF_ZELLE} text-right text-gray-500`}>kWh/kWp</th>
             </tr>
           </TableHead>
@@ -549,24 +564,24 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                   {s.ausrichtung || '-'}
                   {s.neigung_grad != null && ` / ${s.neigung_grad}°`}
                 </td>
-                <td className={`${ZELLE} text-right text-blue-600 dark:text-blue-400`}>
+                {hatPrognose && <td className={`${ZELLE} text-right text-blue-600 dark:text-blue-400`}>
                   {fmtZahl(s.prognose_gesamt_kwh / 1000, 1)} MWh
-                </td>
+                </td>}
                 <td className={`${ZELLE} text-right font-medium`} style={{ color: STRING_COLORS[idx % STRING_COLORS.length] }}>
                   {fmtZahl(s.ist_gesamt_kwh / 1000, 1)} MWh
                 </td>
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
                   {anteilText(s.ist_gesamt_kwh, data.ist_gesamt_kwh)}
                 </td>
-                <td className={`${ZELLE} text-right ${
+                {hatPrognose && <td className={`${ZELLE} text-right ${
                   (s.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
                   {(s.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
                   {s.abweichung_gesamt_prozent != null ? fmtZahl(s.abweichung_gesamt_prozent, 1) : '0'} %
-                </td>
-                <td className={`${ZELLE} text-right`}>
+                </td>}
+                {hatPrognose && <td className={`${ZELLE} text-right`}>
                   <PerformanceBadge ratio={s.performance_ratio_gesamt} />
-                </td>
+                </td>}
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
                   {s.spezifischer_ertrag_kwh_kwp != null ? fmtZahl(s.spezifischer_ertrag_kwh_kwp, 0) : '-'}
                 </td>
@@ -582,16 +597,16 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
                 <td className={`${ZELLE} font-medium text-gray-900 dark:text-white`}>Gesamt</td>
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>{fmtZahl(data.anlagen_leistung_kwp, 1)}</td>
                 <td className={`${ZELLE} text-gray-600 dark:text-gray-400`}>-</td>
-                <td className={`${ZELLE} text-right text-blue-600 dark:text-blue-400`}>{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</td>
+                {hatPrognose && <td className={`${ZELLE} text-right text-blue-600 dark:text-blue-400`}>{fmtZahl(data.prognose_gesamt_kwh / 1000, 1)} MWh</td>}
                 <td className={`${ZELLE} text-right font-medium text-gray-900 dark:text-white`}>{fmtZahl(data.ist_gesamt_kwh / 1000, 1)} MWh</td>
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>{data.ist_gesamt_kwh > 0 ? formatProzent(100).text : '—'}</td>
-                <td className={`${ZELLE} text-right ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {hatPrognose && <td className={`${ZELLE} text-right ${(data.abweichung_gesamt_prozent ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {(data.abweichung_gesamt_prozent ?? 0) >= 0 ? '+' : ''}
                   {data.abweichung_gesamt_prozent != null ? fmtZahl(data.abweichung_gesamt_prozent, 1) : '0'} %
-                </td>
+                </td>}
                 {/* Kein Gesamt-Performance-Badge: die SOLL-Basen der Strings sind
                     verschieden gewichtet — ein Mittelwert daraus wäre erfunden. */}
-                <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>
+                {hatPrognose && <td className={`${ZELLE} text-right text-gray-400 dark:text-gray-500`}>—</td>}
                 <td className={`${ZELLE} text-right text-gray-600 dark:text-gray-400`}>
                   {data.anlagen_leistung_kwp > 0 ? fmtZahl(data.ist_gesamt_kwh / data.anlagen_leistung_kwp, 0) : '—'}
                 </td>

@@ -258,10 +258,17 @@ _ACHSE2_KATEGORIEN: tuple[tuple[str, str, tuple[str, ...], callable], ...] = (
 )
 
 
-def _aggregiere_tep_komponenten(tep_rows: Iterable) -> dict[str, float]:
+def aggregiere_tep_komponenten(tep_rows: Iterable) -> dict[str, float]:
     """Σ aller stündlichen ``TagesEnergieProfil.komponenten``-Dicts (Leistungs-
     pfad) zu einem Tages-Dict — Gegenstück zu ``komponenten_kwh`` aus dem
-    Zähler-/Boundary-Pfad, aber aus der W-Integration gespeist."""
+    Zähler-/Boundary-Pfad, aber aus der W-Integration gespeist.
+
+    Seit #350 auch **Lesequelle**: die Tageswerte je Erzeuger fallen auf diese
+    Σ zurück, wenn ein Tag keinen Boundary-Rollup hat (Standalone-Betrieb, und
+    einzelne Tage im Add-on-Modus). Die Betrags-Drift zwischen beiden Achsen ist
+    als **#356** offen und dort an Wallbox/E-Auto festgemacht; wer diese Funktion
+    für eine weitere Größe heranzieht, prüft sie für **seine** Kategorie nach —
+    ``pruefe_tep_tz_komponenten_konsistenz`` unten tut genau das."""
     agg: dict[str, float] = {}
     for row in tep_rows:
         komp = getattr(row, "komponenten", None)
@@ -302,7 +309,7 @@ def pruefe_tep_komponenten_intern_konsistenz(
     fängt Riemann-/Rundungsdrift, größere Abweichung soll sichtbar werden.
     """
     tep_rows = list(tep_rows)
-    agg = _aggregiere_tep_komponenten(tep_rows)
+    agg = aggregiere_tep_komponenten(tep_rows)
     berichte: list[KonsistenzBericht] = []
 
     for label, tep_feld, prefixe, summe_fn in _ACHSE2_KATEGORIEN:

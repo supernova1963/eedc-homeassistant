@@ -126,6 +126,15 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 - **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
 - Detail-Sektionen je nach vorhandenen Komponenten
 
+> **Mehrere Dachflächen oder Balkonkraftwerke?** Hat **jedes** Gerät einen eigenen Ertragssensor,
+> zeigt der Stunden-Verlauf die PV-Fläche **aufgeteilt** je Gerät statt als einen Block, und die
+> Stundenwerte-Tabelle bekommt je Gerät eine Spalte hinter „PV". Aufgeteilt wird ab **zwei**
+> Geräten. Was die Geräte nicht abdecken — etwa ein String ohne eigenen Sensor —, steht als
+> **„PV (übrige)"** daneben; die Höhe der Kurve bleibt damit deine ganze Erzeugung. Auf Tagesebene
+> rechnet eedc **nichts** nach Nennleistung auf die Geräte um: ohne Sensor keine Spalte. Die
+> Tages-Historie je Gerät über einen längeren Zeitraum liegt in
+> [Auswertungen → Tabelle](#45-tabelle-werte-werkbank).
+
 Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md).
 
 ### 2.3 Monat
@@ -354,6 +363,12 @@ Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die re
 
 Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung? Verschmutzung?), > 20 % Handlungsbedarf (Defekt? Fehlkonfiguration?).
 
+> **Ohne PVGIS-Prognose** entfallen SOLL, Abweichung und Performance — deine **gemessenen** Erträge
+> je String, ihr Anteil am Gesamtertrag und der spezifische Ertrag (kWh/kWp) bleiben sichtbar. Eine
+> Zeile oben sagt, dass die Prognose fehlt und wo du sie abrufst
+> ([Einstellungen → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)). Bis Version 4.0.8
+> blendete diese Sicht ohne Prognose **alles** aus, auch die Messwerte.
+
 > **Im laufenden Monat zählt das SOLL nur die vergangenen Tage** — steht am 4. August ein SOLL von
 > 179 kWh statt der 1.388 kWh des ganzen Monats, ist das kein Fehler: verglichen wird der bisherige
 > Ertrag mit dem, was bis heute zu erwarten war. Die Kachel schreibt das Fenster dazu
@@ -543,6 +558,14 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > Die **Summenzeile** hält sich an dieselbe Regel: Sie vergleicht nur, wenn **jede** angezeigte Zeile ein Gegenstück hat. Bei „Alle Jahre" ist das nicht der Fall — die ersten Monate deiner Aufzeichnung haben kein Vorjahr —, dort bleibt die Vergleichs-Spalte des Fußes leer, während die Δ-Werte der einzelnen Zeilen vollständig darüber stehen. Andernfalls stünde dort z. B. die Summe aus 37 Monaten neben der aus 25: eine Prozentzahl, die sich wie eine Aussage über deine Anlage liest und keine ist. Die „aktuell"-Zelle bleibt immer die Summe der Spalte darüber. **Warum sie schweigt, steht unter der Tabelle** — mit der Anzahl der Monate bzw. Tage, die kein Gegenstück haben; derselbe Satz erscheint als Hinweis, wenn du auf die leere Zelle zeigst.
 >
 > *Bis Version 4.0.5 wurden über mehrjährige Zeiträume alle Jahrgänge desselben Monats verwechselt: jede Zeile verglich sich mit dem jüngsten davon, im Extremfall mit sich selbst (identische Zahlen, Δ 0,0 %). Wenn deine Vorjahresspalte vorher gespiegelte Werte zeigte, ist das die Korrektur.*
+
+> **Erträge je PV-String und je Balkonkraftwerk (Tagesansicht).** Im Block **Energieprofile** führt
+> der Spalten-Picker die Gruppe **„Je Erzeuger"**: je Gerät eine Spalte mit seinem Tagesertrag —
+> mit Summenzeile, Vergleich und CSV wie jede andere Spalte. Sie erscheint ab **zwei** Erzeugern und
+> nur für Geräte mit **eigenem Ertragssensor**; fehlt der Sensor, steht über der Tabelle, welches
+> Gerät betroffen ist und wo du ihn zuordnest ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md)).
+> Eine nach Nennleistung gerechnete Tageszahl gibt es bewusst nicht — sie wäre von einer Messung
+> nicht zu unterscheiden. Der Stunden-Blick auf denselben Tag liegt in [Cockpit → Tag](#22-tag).
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 

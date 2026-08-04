@@ -24,7 +24,7 @@ import { Button, Checkbox, CsvExportButton } from '../ui'
 import { Table, TableBody, TableFoot, TableHead, TableSortKopf } from '../ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../ui/tabelleMasse'
 import {
-  WERTE_GRUPPEN, GRUPPE_LABELS, METRIK_BY_KEY,
+  WERTE_GRUPPEN, GRUPPE_LABELS,
   fmtWert, aggregiere, bewerteDelta, exportWerteCsv, metrikenFuer,
   vergleichLookup, vergleichsAggregatBasis, gepaarteVergleichsZeilen,
   type WerteMetrik, type WerteZeile, type Granularitaet,
@@ -76,7 +76,15 @@ export interface WerteTabelleProps {
   defaultSpalten?: string[]
   /** Vergleich (cur/cmp/Δ) initial eingeschaltet, falls Vergleichszeilen vorliegen. */
   vergleichDefaultAn?: boolean
+  /** Anlagen-abhängige Zusatz-Spalten, die nicht in der Produkt-Registry stehen
+   *  können — heute die Erträge je Erzeuger (#350, `erzeugerMetriken`). Sie
+   *  verhalten sich wie jede andere Metrik (Picker, Sortierung, Δ, CSV, Fuß). */
+  zusatzMetriken?: WerteMetrik[]
 }
+
+/** Stabile leere Zusatz-Liste — als Literal in der Signatur wäre sie bei jedem
+ *  Render neu und würde die `useMemo`/`useEffect`-Ketten unten dauerhaft feuern. */
+const KEINE_ZUSATZ_METRIKEN: WerteMetrik[] = []
 
 export function WerteTabelle({
   rows,
@@ -89,10 +97,21 @@ export function WerteTabelle({
   scope = 'werte-werkbank',
   defaultSpalten,
   vergleichDefaultAn = false,
+  zusatzMetriken = KEINE_ZUSATZ_METRIKEN,
 }: WerteTabelleProps) {
-  // Verfügbare Metriken + Picker-Gruppen je Granularität.
-  const verfuegbar = useMemo(() => metrikenFuer(granularitaet), [granularitaet])
+  // Verfügbare Metriken + Picker-Gruppen je Granularität, plus die anlagen-
+  // abhängigen Zusatz-Spalten (#350).
+  const verfuegbar = useMemo(
+    () => [...metrikenFuer(granularitaet), ...zusatzMetriken.filter((m) => m.granular.includes(granularitaet))],
+    [granularitaet, zusatzMetriken],
+  )
   const verfuegbarKeys = useMemo(() => new Set(verfuegbar.map((m) => m.key)), [verfuegbar])
+  // Lookup über die *verfügbaren* Metriken statt der Produkt-Registry — sonst
+  // fänden Picker, Sortierung und Umsortieren die Zusatz-Spalten nicht.
+  const metrikByKey = useMemo(
+    () => Object.fromEntries(verfuegbar.map((m) => [m.key, m])) as Record<string, WerteMetrik>,
+    [verfuegbar],
+  )
   const gruppen = useMemo(
     () => WERTE_GRUPPEN.filter((g) => verfuegbar.some((m) => m.gruppe === g)),
     [verfuegbar],
@@ -172,6 +191,17 @@ export function WerteTabelle({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [granularitaet])
 
+  // Spät eintreffende Zusatz-Spalten (#350: die Erzeuger stehen erst, wenn
+  // Investitionen UND Tageszeilen geladen sind) hinten anhängen. Ohne das
+  // blieben sie dauerhaft aus `order` und damit aus dem Picker — die Spalten
+  // wären gebaut, aber unerreichbar.
+  useEffect(() => {
+    setOrder((prev) => {
+      const fehlend = verfuegbar.map((m) => m.key).filter((k) => !prev.includes(k))
+      return fehlend.length ? [...prev, ...fehlend] : prev
+    })
+  }, [verfuegbar])
+
   useEffect(() => {
     try { localStorage.setItem(lsCols, JSON.stringify([...visible])) } catch { /* ignore */ }
   }, [visible, lsCols])
@@ -180,8 +210,8 @@ export function WerteTabelle({
   }, [order, lsOrder])
 
   const aktiveMetriken = useMemo<WerteMetrik[]>(
-    () => order.map((k) => METRIK_BY_KEY[k]).filter((m) => m && visible.has(m.key)),
-    [order, visible],
+    () => order.map((k) => metrikByKey[k]).filter((m) => m && visible.has(m.key)),
+    [order, visible, metrikByKey],
   )
 
   const vergleichVerfuegbar = vorjahrRows != null && vorjahrRows.length > 0 && vergleichLabel != null
@@ -216,7 +246,7 @@ export function WerteTabelle({
     + 'Die Δ-Werte der einzelnen Zeilen stehen vollständig darüber.'
 
   function verschiebe(key: string, dir: 'up' | 'down') {
-    const gruppe = METRIK_BY_KEY[key].gruppe
+    const gruppe = metrikByKey[key].gruppe
     const gruppenKeys = verfuegbar.filter((m) => m.gruppe === gruppe).map((m) => m.key)
     const inGruppe = order.filter((k) => gruppenKeys.includes(k))
     const idx = inGruppe.indexOf(key)
@@ -301,8 +331,8 @@ export function WerteTabelle({
             <div key={g}>
               <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1">{GRUPPE_LABELS[g]}</p>
               <ul className="space-y-0.5">
-                {order.filter((k) => METRIK_BY_KEY[k]?.gruppe === g).map((k) => {
-                  const m = METRIK_BY_KEY[k]
+                {order.filter((k) => metrikByKey[k]?.gruppe === g).map((k) => {
+                  const m = metrikByKey[k]
                   const an = visible.has(k)
                   return (
                     <li key={k} className="flex items-center gap-1 text-sm">
