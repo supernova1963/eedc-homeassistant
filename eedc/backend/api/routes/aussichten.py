@@ -32,8 +32,10 @@ from backend.api.routes.strompreise import (
 from backend.core.berechnungen import (
     DienstlicheLadungZeile,
     FinanzMonatsZeile,
+    berechne_amortisations_fortschritt,
     berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
+    relevante_kosten_aus_investitionen,
     alter_wirkungsgrad,
     berechne_wp_alternativkosten_ersparnis,
     eigenverbrauchsquote_prozent,
@@ -1091,49 +1093,48 @@ async def get_finanz_prognose(
     # =====================================================================
     # INVESTITIONEN SUMMIEREN (mit Alternativkosten-Berechnung)
     # =====================================================================
-    # Für ROI werden MEHRKOSTEN gegenüber Alternativen berechnet:
-    # - PV-System: volle Kosten (keine Alternative)
-    # - Wärmepumpe: Mehrkosten vs. Gasheizung
-    # - E-Auto: Mehrkosten vs. Verbrenner
-    # - Sonstiges: volle Kosten
+    # Relevante Kosten = MEHRKOSTEN gegenüber der Alternative, je Position
+    # geklemmt — über den Layer-SoT (ADR-001), dieselbe Zahl wie USt-Bemessung
+    # (N-129/N-130) und ROI-Sicht.
+    #
+    # N-137/N-134: Hier stand bis 04.08. eine **Hybrid-Summe** — PV-System voll
+    # + WP-/eAuto-Mehrkosten + Sonstiges voll —, und ihre Mehrkosten kamen aus
+    # `inv.parameter["alternativ_kosten_euro"]`. Dieser Schlüssel hat baumweit
+    # KEINEN Schreiber (gemessen): kein Formular, kein Wizard, kein Import setzt
+    # ihn. Gepflegt wird die Spalte `anschaffungskosten_alternativ`, die der
+    # Daten-Checker mit WARNING einfordert („werden für ROI-Berechnung
+    # benötigt") — die Summe fiel also immer auf die Festannahmen 8.000/35.000 €
+    # zurück und ignorierte genau das Feld, nach dem eedc fragt. Dieselbe
+    # Hybrid-Summe stand ein zweites Mal in `cockpit/uebersicht.py`.
+    #
+    # Sichtbare Folge: keine. Die Summe erreichte über diesen Endpoint keine
+    # Oberfläche (kein `.tsx` las `investition_gesamt_euro`) — sie war der
+    # Nenner des Amortisations-Fortschritts, den es am Bildschirm nicht gab.
+    # Mit der neuen Fortschritts-Kachel in Auswertungen → ROI wird sie sichtbar,
+    # deshalb wird sie jetzt richtig.
+    investition_gesamt = relevante_kosten_aus_investitionen(alle_investitionen)
 
+    # Aufschlüsselung für die Response — dieselbe Klemmung je Position, nur nach
+    # Typ gruppiert. `investition_pv_system` und `investition_sonstige` sind
+    # dort, wo keine Alternative gepflegt ist, weiterhin die Vollkosten; das ist
+    # keine Sonderregel, sondern `max(0, gesamt − 0)`.
     PV_RELEVANTE_TYPEN = [
         "pv-module", "wechselrichter", "speicher", "wallbox", "balkonkraftwerk"
     ]
-
     investition_pv_system = 0.0
     investition_wp_mehrkosten = 0.0
     investition_eauto_mehrkosten = 0.0
     investition_sonstige = 0.0
-
     for inv in alle_investitionen:
-        kosten = inv.anschaffungskosten_gesamt or 0
+        relevant = relevante_kosten_aus_investitionen([inv])
         if inv.typ in PV_RELEVANTE_TYPEN:
-            investition_pv_system += kosten
+            investition_pv_system += relevant
         elif inv.typ == "waermepumpe":
-            # Mehrkosten WP vs. Gasheizung (ca. 8.000-10.000€)
-            # Kann über Parameter konfiguriert werden
-            alternativ_kosten = 8000.0
-            if inv.parameter:
-                alternativ_kosten = inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_KOSTEN_EURO"], 8000.0)
-            investition_wp_mehrkosten += max(0, kosten - alternativ_kosten)
+            investition_wp_mehrkosten += relevant
         elif inv.typ == "e-auto":
-            # Mehrkosten E-Auto vs. Verbrenner
-            # Kann über Parameter konfiguriert werden
-            alternativ_kosten = 35000.0  # Default: vergleichbarer Verbrenner
-            if inv.parameter:
-                alternativ_kosten = inv.parameter.get(PARAM_E_AUTO["ALTERNATIV_KOSTEN_EURO"], 35000.0)
-            investition_eauto_mehrkosten += max(0, kosten - alternativ_kosten)
+            investition_eauto_mehrkosten += relevant
         else:
-            investition_sonstige += kosten
-
-    # Gesamtinvestition = PV-System + Mehrkosten für WP/E-Auto + Sonstiges
-    investition_gesamt = (
-        investition_pv_system +
-        investition_wp_mehrkosten +
-        investition_eauto_mehrkosten +
-        investition_sonstige
-    )
+            investition_sonstige += relevant
 
     # =====================================================================
     # ALTERNATIVKOSTEN-PARAMETER LADEN
@@ -1828,17 +1829,20 @@ async def get_finanz_prognose(
     # =====================================================================
     # ROI UND AMORTISATION
     # =====================================================================
-    roi_fortschritt = (bisherige_ertraege / investition_gesamt * 100) if investition_gesamt > 0 else 0
-    amortisation_erreicht = bisherige_ertraege >= investition_gesamt
-
-    amortisation_prognose_jahr = None
-    restlaufzeit_monate = None
-
-    if not amortisation_erreicht and jahres_netto_ertrag > 0 and investition_gesamt > 0:
-        rest_betrag = investition_gesamt - bisherige_ertraege
-        monate_bis_amort = rest_betrag / (jahres_netto_ertrag / 12)
-        restlaufzeit_monate = int(monate_bis_amort)
-        amortisation_prognose_jahr = heute.year + int(monate_bis_amort / 12)
+    # Layer-SoT (ADR-001) statt vier Zeilen Arithmetik an dieser Stelle — dieselbe
+    # Formel speist seit N-137 die Kachel „Amortisations-Fortschritt" in
+    # Auswertungen → ROI. Der Fortschritt ist reine MESSUNG (kumulierte Erträge
+    # ÷ relevante Kosten); `jahres_netto_ertrag` geht nur in die Restlaufzeit ein.
+    _amort = berechne_amortisations_fortschritt(
+        relevante_kosten_euro=investition_gesamt,
+        bisherige_ertraege_euro=bisherige_ertraege,
+        jahres_netto_ertrag_euro=jahres_netto_ertrag,
+        aktuelles_jahr=heute.year,
+    )
+    roi_fortschritt = _amort.fortschritt_prozent
+    amortisation_erreicht = _amort.erreicht
+    amortisation_prognose_jahr = _amort.prognose_jahr
+    restlaufzeit_monate = _amort.rest_monate
 
     # =====================================================================
     # RESPONSE

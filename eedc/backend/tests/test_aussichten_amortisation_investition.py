@@ -57,12 +57,20 @@ async def _anlage_gemischte_investitionen(db) -> int:
                            anschaffungsdatum=date(2024, 1, 1),
                            anschaffungskosten_gesamt=5000.0,
                            parameter={"kapazitaet_kwh": 10.0})
+    # N-137: Die Alternativkosten stehen in der SPALTE `anschaffungskosten_alternativ`
+    # — dem Feld, das der Daten-Checker mit WARNING einfordert. Bis 04.08. las
+    # diese Route sie NICHT, sondern `parameter["alternativ_kosten_euro"]`, einen
+    # Schlüssel ohne Schreiber, und fiel damit immer auf 8.000/35.000 zurück.
+    # Diese Fixture pflegte nichts und traf die erwarteten 4.000/5.000 trotzdem
+    # — sie hat die Festannahme festgeschrieben, nicht das Lesen des Feldes.
     wp = Investition(anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP",
                      anschaffungsdatum=date(2024, 1, 1),
-                     anschaffungskosten_gesamt=12000.0)
+                     anschaffungskosten_gesamt=12000.0,
+                     anschaffungskosten_alternativ=8000.0)
     eauto = Investition(anlage_id=anlage.id, typ="e-auto", bezeichnung="EV",
                         anschaffungsdatum=date(2024, 1, 1),
-                        anschaffungskosten_gesamt=40000.0)
+                        anschaffungskosten_gesamt=40000.0,
+                        anschaffungskosten_alternativ=35000.0)
     sonstiges = Investition(anlage_id=anlage.id, typ="sonstiges", bezeichnung="Div",
                             anschaffungsdatum=date(2024, 1, 1),
                             anschaffungskosten_gesamt=1000.0)
@@ -117,6 +125,43 @@ async def test_investition_komposition_mehrkosten_ansatz(db):
     assert res.investition_eauto_mehrkosten_euro == pytest.approx(5000.0)  # 40000 − 35000
     assert res.investition_sonstige_euro == pytest.approx(1000.0)
     assert res.investition_gesamt_euro == pytest.approx(25000.0)
+
+
+async def test_ohne_gepflegte_alternativkosten_zaehlen_die_vollkosten(db):
+    """Ohne gepflegte Alternativkosten erfindet eedc keine (N-137).
+
+    Bis 04.08. setzte diese Route für eine WP ohne Angabe 8.000 € und für ein
+    E-Auto 35.000 € an — Festannahmen aus einem Parameter-Schlüssel, den nichts
+    schreibt. Der Amortisations-Fortschritt sah dadurch systematisch günstiger
+    aus, als die gepflegten Daten hergaben. Fehlt die Angabe, sind die
+    relevanten Kosten jetzt die Vollkosten; wer es genauer will, pflegt das
+    Feld, nach dem der Daten-Checker ohnehin fragt.
+    """
+    anlage = Anlage(anlagenname="AmortOhneAlternativ", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=5,
+                       einspeisung_kwh=600.0, netzbezug_kwh=0.0))
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
+                     anschaffungskosten_gesamt=10000.0)
+    wp = Investition(anlage_id=anlage.id, typ="waermepumpe", bezeichnung="WP",
+                     anschaffungsdatum=date(2024, 1, 1),
+                     anschaffungskosten_gesamt=12000.0)
+    db.add_all([pv, wp])
+    await db.flush()
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2026, monat=5,
+        verbrauch_daten={"pv_erzeugung_kwh": 600.0}))
+    await db.commit()
+
+    res = await get_finanz_prognose(anlage_id=anlage.id, monate=12, db=db)
+
+    assert res.investition_wp_mehrkosten_euro == pytest.approx(12000.0)
+    assert res.investition_gesamt_euro == pytest.approx(22000.0)
 
 
 async def test_eauto_ohne_km_kein_crash(db):

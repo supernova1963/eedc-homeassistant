@@ -91,13 +91,13 @@ function RoiInner() {
   // gerenderten Park-Elemente geparkt sind (Block ① parkt je KPI via roiKpiItems-parkId).
   const sichtbar = (ids: string[]) => !ids.every((id) => park.istGeparkt(id))
   const bloecke: Block[] = [
-    ...(sichtbar(['kpi:investition', 'kpi:einsparung', 'kpi:amortisation']) ? [{
+    ...(sichtbar(['kpi:investition', 'kpi:einsparung', 'kpi:amortisation', 'kpi:amortisation-fortschritt']) ? [{
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit auf einen Blick', icon: TrendingUp,
       farbe: 'text-green-500', defaultOpen: true,
       summary: `${formatGeld(roiData.gesamt_investition).text} investiert · ${roiData.gesamt_amortisation_jahre
         ? `${roiData.gesamt_amortisation_jahre} J. Amortisation${roiData.gesamt_amortisation_jahr ? ` (≈ ${roiData.gesamt_amortisation_jahr})` : ''}`
         : 'Amortisation offen'}`,
-      render: () => <KpiStrip kpis={roiKpiItems(roiData, false)} />,
+      render: () => <KpiStrip kpis={roiKpiItems(roiData, false, vm.fortschritt)} />,
     }] : []),
     ...(sichtbar(['chart:amortisation']) ? [{
       id: 'amortisation', title: 'Amortisation', icon: Clock, farbe: 'text-orange-500', defaultOpen: false,

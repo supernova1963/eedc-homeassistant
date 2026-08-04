@@ -29,15 +29,15 @@ from backend.core.berechnungen import (
     erzeugung_hinter_zaehler_kwh,
     monatsgewichte_aus_pvgis,
 )
+from backend.core.berechnungen import relevante_kosten_aus_investitionen
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
-    bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
 )
 from backend.core.calculations import berechne_co2_bilanz
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
-from backend.core.investition_parameter import PARAM_E_AUTO, PARAM_WAERMEPUMPE, ist_dienstlich
+from backend.core.investition_parameter import ist_dienstlich
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -524,38 +524,28 @@ async def get_cockpit_uebersicht(
     # verlieren.
     netto_ertrag = einspeise_erloes + ev_ersparnis + _finanz.bkw_ersparnis_euro
 
-    PV_RELEVANTE_TYPEN = ["pv-module", "wechselrichter", "speicher", "wallbox", "balkonkraftwerk"]
-    investition_pv_system = 0.0
-    investition_wp_mehrkosten = 0.0
-    investition_eauto_mehrkosten = 0.0
-    investition_sonstige = 0.0
-    for inv in investitionen:
-        kosten = inv.anschaffungskosten_gesamt or 0
-        if inv.typ in PV_RELEVANTE_TYPEN:
-            investition_pv_system += kosten
-        elif inv.typ == "waermepumpe":
-            alternativ_kosten = 8000.0
-            if inv.parameter:
-                alternativ_kosten = inv.parameter.get(PARAM_WAERMEPUMPE["ALTERNATIV_KOSTEN_EURO"], 8000.0)
-            investition_wp_mehrkosten += max(0, kosten - alternativ_kosten)
-        elif inv.typ == "e-auto":
-            alternativ_kosten = 35000.0
-            if inv.parameter:
-                alternativ_kosten = inv.parameter.get(PARAM_E_AUTO["ALTERNATIV_KOSTEN_EURO"], 35000.0)
-            investition_eauto_mehrkosten += max(0, kosten - alternativ_kosten)
-        else:
-            investition_sonstige += kosten
-    investition_gesamt = (
-        investition_pv_system + investition_wp_mehrkosten +
-        investition_eauto_mehrkosten + investition_sonstige
-    )
-    if investition_gesamt <= 0:
-        investition_gesamt = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
-
     investition_vollkosten = sum(i.anschaffungskosten_gesamt or 0 for i in investitionen)
     # Zugleich die kanonische USt-Bemessungsgrundlage (N-129) — die Formel stand
     # hier als Inline-Kopie, jetzt liegt sie im Layer.
-    investition_mehrkosten = bemessungsgrundlage_aus_investitionen(investitionen)
+    investition_mehrkosten = relevante_kosten_aus_investitionen(investitionen)
+
+    # N-137/N-134: Hier stand bis 04.08. eine dritte Summe — PV-System voll +
+    # WP-/eAuto-Mehrkosten aus `parameter["alternativ_kosten_euro"]` + Sonstiges
+    # voll. Dieser Parameter-Schlüssel hat baumweit KEINEN Schreiber; gepflegt
+    # wird die Spalte `anschaffungskosten_alternativ`, die der Daten-Checker mit
+    # WARNING einfordert. Die Summe rechnete also mit Festannahmen (8.000 /
+    # 35.000 €) an genau dem Feld vorbei, nach dem eedc fragt — und ein Fallback
+    # darunter setzte bei 0 auf die VOLLkosten, also auf eine vierte Lesart.
+    # Wortgleich stand sie ein zweites Mal in `aussichten.py`.
+    #
+    # Seit dem Entscheid zu N-137 gibt es EINE Definition relevanter Kosten
+    # (Mehrkosten, Layer-SoT). `investition_gesamt_euro` bleibt als Feld
+    # erhalten — es ist ausgeliefert und typisiert (`api/cockpit.ts`) —, trägt
+    # aber denselben Wert wie `investition_mehrkosten_euro`. Der Fallback
+    # entfällt: sind die relevanten Kosten 0, gibt es nichts zu amortisieren,
+    # und der ROI-Fortschritt sagt das (None), statt gegen die Vollkosten zu
+    # rechnen.
+    investition_gesamt = investition_mehrkosten
 
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
 
@@ -567,9 +557,6 @@ async def get_cockpit_uebersicht(
     # „Jahres-Erzeugung": bei „alle Jahre" stand eine mehrjährige Menge im
     # Nenner gegen eine Ein-Jahres-AfA ⇒ die USt fiel um den Faktor der
     # Jahresanzahl zu niedrig aus (Demo-Bestand: 646 € statt 2.447 €).
-    # `investition_gesamt` bleibt, wo es hingehört: ROI-Fortschritt und die
-    # ausgelieferte Kachel `investition_gesamt_euro` — das ist eine andere
-    # Frage und ausdrücklich nicht mitentschieden.
     #
     # Je Kalenderjahr dieselben Eingänge wie die Perioden-Kennzahlen oben:
     # Zählerwerte aus `md_pv`, Mengen aus `fakten`.

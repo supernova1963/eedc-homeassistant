@@ -29,6 +29,7 @@ import ChartTooltip from '../ui/ChartTooltip'
 import { useLegendenToggle } from '../../hooks'
 import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
+import { aussichtenApi } from '../../api/aussichten'
 import { swrCachePeek, swrCacheStore } from '../../hooks/useApiData'
 import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
 import { TYP_LABELS } from '../../lib/constants'
@@ -67,6 +68,15 @@ export interface RoiAnalyseProps {
   swrKeyBasis?: string
 }
 
+/** Der gemessene Amortisations-Fortschritt (N-137) — geholt, nicht gerechnet. */
+export interface AmortisationsFortschrittVM {
+  prozent: number
+  erreicht: boolean
+  bisherigeErtraege: number
+  relevanteKosten: number
+  prognoseJahr: number | null
+}
+
 export interface RoiAnalyseVM {
   loading: boolean
   error: string | null
@@ -78,6 +88,8 @@ export interface RoiAnalyseVM {
     name: string; fullName: string; kosten: number; einsparung: number
     amortisation: number; typ: string; color: string
   }>
+  /** null, solange die Aussichten-Prognose nicht da ist oder scheiterte. */
+  fortschritt: AmortisationsFortschrittVM | null
 }
 
 /**
@@ -111,6 +123,34 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // N-137: Der Amortisations-FORTSCHRITT ist die einzige Amortisations-Aussage,
+  // die aus GEMESSENEN Erträgen kommt — und die kumulierten Erträge entstehen
+  // nur an einer Stelle im Baum (Aussichten-Finanzprognose: Monats-Fakten →
+  // Finanz-Zeilen → Aggregat − Betriebskosten − USt, rund 220 Zeilen). Diese
+  // Sicht HOLT die fertige Zahl deshalb, statt sie ein zweites Mal zu rechnen;
+  // dieselbe Zahl noch einmal aufzubauen wäre die Drift-Klasse, die dieses
+  // Paket gerade beseitigt. Eigener State: die Kachel erscheint, wenn sie da
+  // ist — der Rest der Sicht wartet nicht auf den schwereren Endpoint.
+  const [fortschritt, setFortschritt] = useState<AmortisationsFortschrittVM | null>(null)
+
+  useEffect(() => {
+    if (!anlageId) return
+    let ab = false
+    aussichtenApi.getFinanzPrognose(anlageId)
+      .then((p) => {
+        if (ab) return
+        setFortschritt({
+          prozent: p.amortisations_fortschritt_prozent,
+          erreicht: p.amortisation_erreicht,
+          bisherigeErtraege: p.bisherige_ertraege_euro,
+          relevanteKosten: p.investition_gesamt_euro,
+          prognoseJahr: p.amortisation_prognose_jahr,
+        })
+      })
+      // Still: die Fortschritts-Kachel entfällt dann, der Rest der Sicht steht.
+      .catch(() => { if (!ab) setFortschritt(null) })
+    return () => { ab = true }
+  }, [anlageId])
 
   useEffect(() => {
     if (!anlageId) return
@@ -185,12 +225,16 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
     }))
   }, [roiData])
 
-  return { loading, error, setError, roiData, amortisationData, einsparungenByTyp, investitionenChart }
+  return { loading, error, setError, roiData, amortisationData, einsparungenByTyp, investitionenChart, fortschritt }
 }
 
 /** Block ① — KPIs Investition · Einsparung · Amortisation. CO₂-KPI nur bei
  *  `zeigeCo2` (R4: v4 = aus → 3 KPIs, IST = an → 4 KPIs). */
-export function roiKpiItems(roiData: ROIDashboardResponse, zeigeCo2 = false): KpiStripItem[] {
+export function roiKpiItems(
+  roiData: ROIDashboardResponse,
+  zeigeCo2 = false,
+  fortschritt: AmortisationsFortschrittVM | null = null,
+): KpiStripItem[] {
   const items: KpiStripItem[] = [
     {
       title: 'Gesamtinvestition', value: formatGeld(roiData.gesamt_investition).wert, unit: '€',
@@ -219,12 +263,34 @@ export function roiKpiItems(roiData: ROIDashboardResponse, zeigeCo2 = false): Kp
       subtitle: roiData.gesamt_amortisation_jahr
         ? `Kostendeckung voraussichtlich ${roiData.gesamt_amortisation_jahr}`
         : 'Bis zur Kostendeckung',
-      sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)',
+      sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · MODELL (hochgerechnet, ohne bisherige Erträge) — die gemessene Sicht steht daneben als „Amortisations-Fortschritt“',
       formel: 'Relevante Kosten ÷ Jährliche Einsparung',
       berechnung: roiData.gesamt_jahres_einsparung > 0 ? `${formatGeld(roiData.gesamt_relevante_kosten).text} ÷ ${formatGeld(roiData.gesamt_jahres_einsparung).text}/Jahr` : undefined,
       ergebnis: roiData.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre} Jahre` : undefined,
     },
   ]
+  // N-137: Die Gegen-Kachel zur Amortisation. Sie beantwortet dieselbe Frage,
+  // aber aus der GEMESSENEN Historie statt aus einer hochgerechneten
+  // Jahres-Einsparung — „4.800 € von 12.000 € sind drin" neben „laut Rechnung
+  // in 9,2 Jahren". Beide teilen denselben Nenner (relevante Kosten =
+  // Mehrkosten), sonst stünden sie sich in einer Sicht widersprechend
+  // gegenüber. Fehlt die Zahl (Endpoint nicht da), entfällt die Kachel — kein
+  // Platzhalter, der eine Aussage vortäuscht.
+  if (fortschritt) {
+    const rest = Math.max(0, fortschritt.relevanteKosten - fortschritt.bisherigeErtraege)
+    items.push({
+      title: 'Amortisations-Fortschritt',
+      value: fmtZahl(fortschritt.prozent, 1), unit: '%',
+      color: 'purple', icon: PiggyBank, parkId: 'kpi:amortisation-fortschritt',
+      subtitle: fortschritt.erreicht
+        ? 'Kosten gedeckt'
+        : `noch ${formatGeld(rest).text}${fortschritt.prognoseJahr ? ` · voraussichtlich ${fortschritt.prognoseJahr}` : ''}`,
+      sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · GEMESSEN (bisherige Erträge, kein Modell)',
+      formel: 'Bisherige Netto-Erträge ÷ Relevante Kosten × 100',
+      berechnung: `${formatGeld(fortschritt.bisherigeErtraege).text} ÷ ${formatGeld(fortschritt.relevanteKosten).text}`,
+      ergebnis: `= ${fmtZahl(fortschritt.prozent, 1)} % gedeckt`,
+    })
+  }
   if (zeigeCo2) {
     items.push({
       title: 'CO2-Einsparung', value: formatCo2(roiData.gesamt_co2_einsparung_kg).wert, unit: formatCo2(roiData.gesamt_co2_einsparung_kg).einheit,
@@ -573,7 +639,7 @@ export function RoiAnalyse(props: RoiAnalyseProps) {
   const zeigeCo2 = props.zeigeCo2 ?? true
   return (
     <div className="space-y-6">
-      <KpiStrip kpis={roiKpiItems(vm.roiData, zeigeCo2)} />
+      <KpiStrip kpis={roiKpiItems(vm.roiData, zeigeCo2, vm.fortschritt)} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <RoiAmortisationChart vm={vm} />
         <RoiTypBalken vm={vm} />

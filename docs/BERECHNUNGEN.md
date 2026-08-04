@@ -658,16 +658,35 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |
 |--------|-------------|--------|-----------|
-| **Jahres-Rendite** | Cockpit, Auswertungen → ROI | Kumul. Ersparnis / Investition * 100 | Wie viel % bereits amortisiert (kumuliert) |
+| **Jahres-Rendite** | Cockpit | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
-| **Amortisations-Fortschritt** | Auswertungen → Finanzen | Bisherige Erträge / Investition * 100 | Kumulierter Fortschritt |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF | Bisherige Erträge / Relevante Kosten * 100 | Kumulierter Fortschritt |
 
-**Und zwei verschiedene Amortisations-Angaben:**
+> **Ein Nenner für alle drei (N-137, seit 2026-08-04).** „Relevante Kosten" sind die **Mehrkosten**
+> `Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)` — SoT
+> `core/berechnungen/investitionskosten.py::relevante_kosten_aus_investitionen`, identisch mit der
+> USt-Bemessungsgrundlage (§3.7). Vorher gab es **drei** Antworten: die ROI-Sicht rechnete ohne
+> Klemmung je Position, Aussichten und Cockpit trugen eine Hybrid-Summe, deren WP-/E-Auto-Mehrkosten
+> aus `parameter["alternativ_kosten_euro"]` kamen — einem Schlüssel **ohne Schreiber**, der immer auf
+> die Festannahmen 8.000 € / 35.000 € zurückfiel. Gepflegt wird die Spalte
+> `anschaffungskosten_alternativ`, die der Daten-Checker mit WARNING einfordert.
+>
+> **Ohne gepflegte Alternativkosten zählen die Vollkosten.** eedc setzt keine Annahme mehr ein; die
+> Amortisation fällt dadurch für WP und E-Auto ungünstiger aus als vorher, dafür entspricht sie den
+> Daten, die tatsächlich da sind. Gesichert durch `test_amortisation_nenner_symmetrie.py`
+> (**Regression**, drei Sichten auf einer Fixture mit Alternativkosten ≠ Festannahme).
+
+**Und zwei verschiedene Amortisations-Angaben — Modell neben Messung:**
 
 | Angabe | Wo | Grundlage |
 |---|---|---|
-| **Amortisation (Ist)** — Dauer **und Break-Even-Jahr** | Auswertungen → ROI | die tatsächlich erfassten Erträge, fortgeschrieben. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
+| **Amortisationsdauer** — Jahre **und Break-Even-Jahr** | Auswertungen → ROI | **MODELL:** `Relevante Kosten ÷ prognostizierte Jahres-Einsparung`, konstant hochgerechnet. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`. |
 | **Amortisation (Prognose)** | PDF-Finanzbericht | `Gesamt-Kosten ÷ prognostizierte Jahres-Einsparung` — eine Projektion, kein gemessener Verlauf. |
+
+> Die beiden ersten beantworten dieselbe Frage verschieden — „laut Rechnung in 9,2 Jahren" gegen
+> „4.800 € von 12.000 € sind drin". Das ist gewollt und in beiden Tooltips ausgeschrieben; Bedingung
+> ist der **gemeinsame Nenner**, sonst ließen sich die Zahlen nicht ineinander überführen.
 
 > Verteilen sich die Anschaffungen über mehrere Jahre, ist das ausgewiesene Amortisationsjahr
 > **optimistisch** (der Anker ist die *erste* Anschaffung, die Kosten sind die Summe). Der
@@ -1275,8 +1294,12 @@ WP_Strom_Monat = WP_Strom_Durchschnitt * Saison_Faktor
 
 #### Amortisation
 
+**SoT:** `core/berechnungen/amortisation.py::berechne_amortisations_fortschritt`
+(Berechnungs-Layer, ADR-001) — dieselbe Formel speist die Kachel
+„Amortisations-Fortschritt" in *Auswertungen → ROI*.
+
 ```
-Investition          = PV_System + WP_Mehrkosten + E-Auto_Mehrkosten + Sonstige
+Investition          = Σ max(0, Anschaffung − Alternative)   # relevante Kosten, §3.6
 
 Jahres_Netto_Ertrag  = PV_Einspeise_Erlös + EV_Ersparnis
                      + WP_Ersparnis + E-Auto_Ersparnis
@@ -1292,6 +1315,12 @@ Wenn nicht amortisiert:
     Monate_bis_Amort      = Rest_Betrag / (Jahres_Netto_Ertrag / 12)
     Prognose_Jahr         = Heute + Monate_bis_Amort
 ```
+
+> **Der Fortschritt ist reine Messung** — `Jahres_Netto_Ertrag` geht ausschließlich in die
+> Restlaufzeit ein. Ist er ≤ 0 (Anlaufjahr), gibt es keine Prognose statt einer geratenen;
+> sind die relevanten Kosten 0, gibt es nichts zu amortisieren (0 %, nicht „fertig"). Der
+> Fortschritt ist **nicht bei 100 % gedeckelt**: eine Anlage, die sich doppelt bezahlt gemacht
+> hat, darf das sagen.
 
 ---
 

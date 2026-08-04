@@ -44,6 +44,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
+from backend.core.berechnungen.investitionskosten import (
+    relevante_kosten_aus_investitionen,
+)
+
 
 @dataclass(frozen=True)
 class UstJahresanteil:
@@ -67,18 +71,14 @@ AFA_JAHRE = 20
 def bemessungsgrundlage_aus_investitionen(investitionen: Iterable) -> float:
     """Kanonische USt-Bemessungsgrundlage: Σ max(0, gesamt − alternativ).
 
-    ``investitionen`` wird nur per ``getattr`` gelesen — kein ORM-Import,
-    ADR-001 bleibt gewahrt. Die Klemmung je Investition (statt
-    ``Σ gesamt − Σ alternativ``) ist die Form, die das Cockpit als
-    ``investition_mehrkosten_euro`` bereits ausliefert: eine Position, deren
-    Alternative teurer war als sie selbst, senkt die Grundlage nicht.
+    **Identisch mit den relevanten Kosten der Wirtschaftlichkeitsrechnung** —
+    seit N-137 steht die Definition deshalb nur noch einmal, in
+    `investitionskosten.relevante_kosten_aus_investitionen`. Zwei Namen für
+    denselben Wert, weil das Steuerrecht ihn anders nennt als die
+    Amortisationsrechnung; **eine** Formel, damit USt, Amortisations-Fortschritt
+    und Amortisationsdauer nicht wieder auseinanderlaufen.
     """
-    summe = 0.0
-    for inv in investitionen:
-        gesamt = getattr(inv, "anschaffungskosten_gesamt", None) or 0.0
-        alternativ = getattr(inv, "anschaffungskosten_alternativ", None) or 0.0
-        summe += max(0.0, gesamt - alternativ)
-    return summe
+    return relevante_kosten_aus_investitionen(investitionen)
 
 
 def berechne_ust_eigenverbrauch(

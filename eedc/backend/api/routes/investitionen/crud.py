@@ -62,7 +62,11 @@ from backend.services.eauto_wirtschaftlichkeit import (
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
 from backend.services.monats_fakten import lade_monats_fakten
-from backend.core.berechnungen import PV_ERZEUGER_TYPEN, einspeise_erloes_euro
+from backend.core.berechnungen import (
+    PV_ERZEUGER_TYPEN,
+    einspeise_erloes_euro,
+    relevante_kosten_aus_investitionen,
+)
 
 
 # ============================================================================
@@ -959,6 +963,18 @@ async def get_roi_dashboard(
     # Phase 3: Berechne ROI für PV-Systeme (aggregiert)
     # ==========================================================================
 
+    def _relevante_kosten(*invs) -> float:
+        """Relevante Kosten über den Layer-SoT (ADR-001) — je Position geklemmt.
+
+        N-137: Hier stand `kosten − alternativ` an sechs Stellen, ohne Klemmung.
+        Eine Position, deren gepflegte Alternative teurer war als sie selbst,
+        senkte damit die relevanten Kosten der ganzen Anlage — und der
+        Amortisations-Fortschritt, der in derselben Sicht daneben steht, rechnet
+        über `relevante_kosten_aus_investitionen` mit `max(0, …)`. Zwei Nenner in
+        einer Sicht sind genau das, was dieses Paket beseitigt.
+        """
+        return relevante_kosten_aus_investitionen(invs)
+
     berechnungen: list[ROIBerechnung] = []
     gesamt_investition = 0.0
     gesamt_relevante = 0.0
@@ -1058,6 +1074,10 @@ async def get_roi_dashboard(
         system_kosten = (wr.anschaffungskosten_gesamt or 0)
         system_alternativ = (wr.anschaffungskosten_alternativ or 0)
         system_betriebskosten = (wr.betriebskosten_jahr or 0)
+        # Die beteiligten Positionen wandern mit, damit die relevanten Kosten
+        # des Bündels je Position geklemmt werden (siehe `_relevante_kosten`)
+        # statt als `Σ gesamt − Σ alternativ`.
+        system_invs = [wr]
 
         komponenten: list[ROIKomponente] = []
 
@@ -1070,7 +1090,7 @@ async def get_roi_dashboard(
             typ=wr.typ,
             kosten=wr_kosten,
             kosten_alternativ=wr_alternativ,
-            relevante_kosten=wr_kosten - wr_alternativ,
+            relevante_kosten=_relevante_kosten(wr),
             einsparung=None,  # WR hat keine eigene Einsparung
             co2_einsparung_kg=None,
             detail={'hinweis': 'Wechselrichter - Einsparung über PV-Module'}
@@ -1087,6 +1107,7 @@ async def get_roi_dashboard(
             system_kosten += inv_kosten
             system_alternativ += inv_alternativ
             system_betriebskosten += (inv.betriebskosten_jahr or 0)
+            system_invs.append(inv)
 
             # Einsparung proportional nach kWp.
             # `anteil` vor dem Zweig setzen: Zeile 1066 liest es, sobald
@@ -1111,7 +1132,7 @@ async def get_roi_dashboard(
                 typ=inv.typ,
                 kosten=inv_kosten,
                 kosten_alternativ=inv_alternativ,
-                relevante_kosten=inv_kosten - inv_alternativ,
+                relevante_kosten=_relevante_kosten(inv),
                 einsparung=round(inv_einsparung, 2),
                 co2_einsparung_kg=round(inv_co2, 1),
                 detail={
@@ -1127,6 +1148,7 @@ async def get_roi_dashboard(
             system_kosten += inv_kosten
             system_alternativ += inv_alternativ
             system_betriebskosten += (inv.betriebskosten_jahr or 0)
+            system_invs.append(inv)
 
             params = inv.parameter or {}
             # N127: BRUTTO-Kapazität über den SoT-Helper, ohne Default. Hier
@@ -1230,7 +1252,7 @@ async def get_roi_dashboard(
                 typ=inv.typ,
                 kosten=inv_kosten,
                 kosten_alternativ=inv_alternativ,
-                relevante_kosten=inv_kosten - inv_alternativ,
+                relevante_kosten=_relevante_kosten(inv),
                 einsparung=round(inv_einsparung, 2) if inv_einsparung is not None else None,
                 co2_einsparung_kg=round(inv_co2, 1) if inv_co2 is not None else None,
                 detail=komp_detail,
@@ -1243,7 +1265,7 @@ async def get_roi_dashboard(
             [wr.id, *(m.id for m in pv_module), *(s.id for s in dc_speicher)]
         )
         system_einsparung += system_sonstige
-        system_relevante = system_kosten - system_alternativ
+        system_relevante = _relevante_kosten(*system_invs)
         system_netto_einsparung = system_einsparung - system_betriebskosten
         roi_result = berechne_roi(system_kosten, system_einsparung, system_alternativ, system_betriebskosten)
 
@@ -1279,7 +1301,7 @@ async def get_roi_dashboard(
     for inv in orphan_pv_module:
         kosten = inv.anschaffungskosten_gesamt or 0
         alternativ = inv.anschaffungskosten_alternativ or 0
-        relevante = kosten - alternativ
+        relevante = _relevante_kosten(inv)
 
         # Einsparung proportional nach kWp.
         # `anteil` wird VOR dem Zweig gesetzt: Zeile 1231 liest es, sobald
@@ -1336,7 +1358,7 @@ async def get_roi_dashboard(
         params = inv.parameter or {}
         kosten = inv.anschaffungskosten_gesamt or 0
         alternativ = inv.anschaffungskosten_alternativ or 0
-        relevante = kosten - alternativ
+        relevante = _relevante_kosten(inv)
         jahres_einsparung = 0.0
         co2_einsparung = 0.0
         detail: dict[str, Any] = {}

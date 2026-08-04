@@ -79,6 +79,13 @@ from backend.core.berechnungen.finanz_aggregat import (
     FinanzMonatsZeile,
     berechne_finanz_aggregat,
 )
+from backend.core.berechnungen.amortisation import (
+    AmortisationsFortschritt,
+    berechne_amortisations_fortschritt,
+)
+from backend.core.berechnungen.investitionskosten import (
+    relevante_kosten_aus_investitionen,
+)
 from backend.core.berechnungen.ust_eigenverbrauch import (
     AFA_JAHRE,
     UstJahresanteil,
@@ -247,6 +254,9 @@ __all__ = [
     "berechne_finanz_aggregat",
     "AFA_JAHRE",
     "UstJahresanteil",
+    "AmortisationsFortschritt",
+    "berechne_amortisations_fortschritt",
+    "relevante_kosten_aus_investitionen",
     "bemessungsgrundlage_aus_investitionen",
     "berechne_ust_eigenverbrauch",
     "ust_eigenverbrauch_fuer_anlage",

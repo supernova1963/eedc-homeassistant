@@ -445,6 +445,26 @@ Zwei klar getrennte Sichten statt vieler paralleler ROI-Zahlen ohne Bezug:
 > ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index. Verteilen sich die Anschaffungen über
 > mehrere Jahre, ist das genannte Jahr **optimistisch** — der Text sagt das dazu.
 
+**Zwei Amortisations-Kacheln, die sich ergänzen** (neu, nach dem V4-Flip zurückgeholt):
+
+| Kachel | Was sie sagt | Woher die Zahl kommt |
+|---|---|---|
+| **Amortisation** | „in 9,2 Jahren" | **Modell** — deine relevanten Kosten geteilt durch eine hochgerechnete Jahres-Einsparung |
+| **Amortisations-Fortschritt** | „40,0 % · noch 7.200 € · voraussichtlich 2030" | **Messung** — die Erträge, die deine Anlage seit Inbetriebnahme tatsächlich erwirtschaftet hat |
+
+Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahlen ineinander
+überführen. Welche der beiden du gerade liest, steht im ⓘ-Tooltip der Kachel.
+
+> **Was als „relevante Kosten" zählt.** Nicht der volle Kaufpreis, sondern die **Mehrkosten**
+> gegenüber der Alternative: Was hätte eine Gasheizung statt der Wärmepumpe gekostet, was ein
+> Verbrenner statt des E-Autos? Diesen Betrag pflegst du je Komponente im Feld
+> **„Anschaffungskosten Alternative"** — dasselbe Feld, das der Daten-Checker anmahnt.
+> **Pflegst du es nicht, zählen die vollen Anschaffungskosten**; eedc setzt keine Annahme mehr an
+> deiner Stelle ein. Früher rechnete diese Sicht mit pauschalen 8.000 € für die Heizung und
+> 35.000 € fürs Auto — auch dann, wenn du etwas anderes eingetragen hattest. Wer die Alternative
+> pflegt, sieht seine Amortisation seitdem realistischer, und für PV, Speicher und Wechselrichter
+> ändert sich nichts (dort gibt es keine Alternative).
+
 **ROI pro Komponente — zwei Sichten:**
 
 | Sicht | Bezugsbasis | Wann nutzen? |

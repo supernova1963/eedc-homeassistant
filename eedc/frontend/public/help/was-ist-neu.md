@@ -11,6 +11,43 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Auswertungen → ROI: „wie weit bin ich?" steht wieder da
+
+**Betrifft dich das?** Alle — besonders, wenn du eine **Wärmepumpe oder ein E-Auto** hast.
+
+Die ROI-Seite sagte dir bisher nur, wie lange es *rechnerisch* noch dauert: „Amortisation in
+9,2 Jahren", hochgerechnet aus einer prognostizierten Jahres-Einsparung. Die andere Hälfte der
+Frage — **wie viel hat deine Anlage tatsächlich schon eingespielt?** — stand am Bildschirm
+nirgends. Sie ist jetzt als zweite Kachel daneben:
+
+> **Amortisations-Fortschritt · 40,0 %**
+> noch 7.200 € · voraussichtlich 2030
+
+Der Unterschied ist wichtig: Die linke Kachel ist ein **Modell**, die rechte eine **Messung** aus
+deinen tatsächlich erfassten Erträgen. Welche du gerade liest, sagt dir das ⓘ-Symbol an der
+Kachel.
+
+**Was sich an deinen Zahlen ändern kann.** Beide Kacheln rechnen gegen deine **Mehrkosten** —
+also gegen das, was eine Anschaffung *gegenüber ihrer Alternative* gekostet hat. Für die
+Wärmepumpe und das E-Auto setzte eedc dafür bisher pauschale Annahmen ein: 8.000 € für eine
+Gasheizung, 35.000 € für einen vergleichbaren Verbrenner — **auch dann, wenn du unter
+„Anschaffungskosten Alternative" längst etwas anderes eingetragen hattest**. Genau dieses Feld
+mahnt der Daten-Checker an. Ab jetzt wird es gelesen:
+
+- **Du hast das Feld gepflegt** → deine Zahl zählt, nicht die Pauschale.
+- **Du hast es nicht gepflegt** → es zählen die vollen Anschaffungskosten. eedc rät nicht mehr an
+  deiner Stelle. Deine Amortisation sieht dadurch länger aus als vorher — sie entspricht jetzt
+  den Daten, die tatsächlich da sind. Wenn dir das zu streng ist: das Feld nachtragen, dann
+  stimmt es wieder.
+- **PV, Speicher, Wechselrichter, Wallbox** → unverändert. Dort gibt es keine Alternative.
+
+**Warum es diesen Block eine Weile nicht gab:** Er war beim Umbau auf die neue Oberfläche bewusst
+weggelassen worden, weil zwei Amortisations-Zahlen nebeneinander leicht widersprüchlich wirken.
+Beim Nachmessen zeigte sich, dass die eigentliche Ursache tiefer lag — es gab **drei**
+verschiedene Investitionssummen im Programm, je nachdem welche Seite man aufschlug. Die sind
+jetzt eine, und erst dadurch dürfen die beiden Kacheln nebeneinander stehen.
+
+
 ### Keine Warnung mehr für den Stromverbrauch, den du selbst dazugebaut hast
 
 **Betrifft dich das?** Wenn du eine **Wärmepumpe, ein E-Fahrzeug oder eine Wallbox**
