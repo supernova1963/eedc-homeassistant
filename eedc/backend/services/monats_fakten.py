@@ -285,6 +285,23 @@ class WpFakten:
 
 
 @dataclass(frozen=True)
+class SonstigesGeraetFakten:
+    """Die Mengen EINES sonstigen Geräts im Monat.
+
+    Kategorie-bewusst aufgelöst wie die Anlagen-Summen: beim Erzeuger bleiben
+    ``bezug_*`` leer, beim Verbraucher ``eigenverbrauch``/``einspeisung`` — die
+    Entscheidung fällt ``imd_typ_beitrag``, nicht der Aufrufer (ADR-001).
+    """
+
+    erzeugung_kwh: float = 0.0
+    verbrauch_kwh: float = 0.0
+    eigenverbrauch_kwh: float = 0.0
+    einspeisung_kwh: float = 0.0
+    bezug_pv_kwh: float = 0.0
+    bezug_netz_kwh: float = 0.0
+
+
+@dataclass(frozen=True)
 class SonstigesFakten:
     """Sonstige Verbraucher + die manuell gepflegten Finanz-Positionen.
 
@@ -304,16 +321,30 @@ class SonstigesFakten:
     ``hat_erzeuger_zeile`` trennt „Erzeuger hat 0 kWh geliefert" von „es gibt
     keinen" (P4). Feiner als der bloße Typ, weil ``sonstiges`` auch Verbraucher
     umfasst.
+
+    ``eigenverbrauch_kwh``/``einspeisung_kwh``/``bezug_*`` sind mit **C1d**
+    dazugekommen — bis dahin waren sie die einzigen Größen des Komponenten-
+    Detailblocks der Monatsroute, die die Schicht nicht kannte, und genau das
+    hielt die letzte anlagenweite Faltung des Baums am Leben (N-107).
     """
 
     erzeugung_kwh: float = 0.0
     verbrauch_kwh: float = 0.0
+    eigenverbrauch_kwh: float = 0.0
+    einspeisung_kwh: float = 0.0
+    bezug_pv_kwh: float = 0.0
+    bezug_netz_kwh: float = 0.0
     ertraege_euro: float = 0.0
     ausgaben_euro: float = 0.0
     netto_euro: float = 0.0
     anlage_ertraege_euro: float = 0.0
     anlage_ausgaben_euro: float = 0.0
     hat_erzeuger_zeile: bool = False
+    #: Dieselben sechs Mengen je ``Investition.id`` — die Aufschlüsselung der
+    #: Summen oben, nicht eine zweite Quelle. Enthalten sind nur Geräte, die im
+    #: Monat **sichtbar** waren (Laufzeit-Filter der Schicht); wer die Liste
+    #: durchgeht, hat den ``ist_aktiv_im_monat``-Filter damit schon hinter sich.
+    je_geraet: dict[int, SonstigesGeraetFakten] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -649,6 +680,15 @@ class _RohMonat:
         self.dienstlich_netz = 0.0
         self.sonstiges_erzeugung = 0.0
         self.sonstiges_verbrauch = 0.0
+        self.sonstiges_eigenverbrauch = 0.0
+        self.sonstiges_einspeisung = 0.0
+        self.sonstiges_bezug_pv = 0.0
+        self.sonstiges_bezug_netz = 0.0
+        #: Je `Investition.id` dieselben sechs Größen — für Sichten, die die
+        #: Geräte einzeln ausweisen (Monatsroute: „Sonstige Geräte"). Die
+        #: Summen oben bleiben die Wahrheit der Anlage; diese Gruppe ist ihre
+        #: Aufschlüsselung, nicht eine zweite Quelle.
+        self.sonstiges_je_geraet: dict[int, dict[str, float]] = {}
         self.ertraege_euro = 0.0
         self.ausgaben_euro = 0.0
 
@@ -719,6 +759,21 @@ class _RohMonat:
         elif inv.typ == "sonstiges":
             self.sonstiges_erzeugung += b.sonstiges_erzeugung
             self.sonstiges_verbrauch += b.sonstiges_verbrauch
+            self.sonstiges_eigenverbrauch += b.sonstiges_eigenverbrauch
+            self.sonstiges_einspeisung += b.sonstiges_einspeisung
+            self.sonstiges_bezug_pv += b.sonstiges_bezug_pv
+            self.sonstiges_bezug_netz += b.sonstiges_bezug_netz
+            g = self.sonstiges_je_geraet.setdefault(
+                inv.id,
+                {"erzeugung": 0.0, "verbrauch": 0.0, "eigenverbrauch": 0.0,
+                 "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0},
+            )
+            g["erzeugung"] += b.sonstiges_erzeugung
+            g["verbrauch"] += b.sonstiges_verbrauch
+            g["eigenverbrauch"] += b.sonstiges_eigenverbrauch
+            g["einspeisung"] += b.sonstiges_einspeisung
+            g["bezug_pv"] += b.sonstiges_bezug_pv
+            g["bezug_netz"] += b.sonstiges_bezug_netz
             # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
             # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
             # ein Beitrag > 0.
@@ -876,6 +931,21 @@ async def _baue_fakt(
         sonstiges=SonstigesFakten(
             erzeugung_kwh=roh.sonstiges_erzeugung,
             verbrauch_kwh=roh.sonstiges_verbrauch,
+            eigenverbrauch_kwh=roh.sonstiges_eigenverbrauch,
+            einspeisung_kwh=roh.sonstiges_einspeisung,
+            bezug_pv_kwh=roh.sonstiges_bezug_pv,
+            bezug_netz_kwh=roh.sonstiges_bezug_netz,
+            je_geraet={
+                inv_id: SonstigesGeraetFakten(
+                    erzeugung_kwh=g["erzeugung"],
+                    verbrauch_kwh=g["verbrauch"],
+                    eigenverbrauch_kwh=g["eigenverbrauch"],
+                    einspeisung_kwh=g["einspeisung"],
+                    bezug_pv_kwh=g["bezug_pv"],
+                    bezug_netz_kwh=g["bezug_netz"],
+                )
+                for inv_id, g in roh.sonstiges_je_geraet.items()
+            },
             ertraege_euro=round(ertraege, 2),
             ausgaben_euro=round(ausgaben, 2),
             netto_euro=round(ertraege - ausgaben, 2),

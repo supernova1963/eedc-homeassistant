@@ -12,7 +12,7 @@
 > | Die Regel selbst + „gesichert durch" je Schritt | [`docs/ADR-002-WURZELMUSTER.md`](ADR-002-WURZELMUSTER.md), Zeile **P10** |
 > | Migrationsstand + die drei Wächter-Kategorien mit ihren Zahlen | [`docs/ARCHITEKTUR.md`](ARCHITEKTUR.md) §7 |
 > | Der Kontrakt für Aufrufer (`lade_monats_fakten`, Feldgruppen, Fallen) | Modul- und Dataclass-Docstrings in `eedc/backend/services/monats_fakten.py` |
-> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst (**1** nach C1c), mit Obergrenze im Test |
+> | Die gezählte Restschuld | `P10_NOCH_NICHT_MIGRIERT` im Wächter selbst — **0 seit C1d** (2026-08-04); der Test hält die Liste leer, statt sie zu deckeln |
 > | Nebenfunde N-2 … N-17 (Runde nach S6) | **abgearbeitet** — am 2026-08-04 einzeln am Code nachgeprüft und geschlossen; keiner ist offen geblieben. Was danach auffällt, gehört ins laufende Fund-Register, nicht hierher |
 >
 > **Eine der umgehängten Sichten gibt es nicht mehr:** `cockpit/social.py` (S3,
@@ -208,7 +208,9 @@ Als neue **ADR-002/P10** eintragen, mit „gesichert durch"-Spalte.
 >    Sicht, Register N-2) · `P10_NOCH_NICHT_MIGRIERT` (**anlagenweite Faltung,
 >    also die Klasse, gegen die P10 gebaut ist**) — letztere mit einer
 >    **Obergrenze im Test**, damit die Restschuld eine Zahl ist und nur fallen
->    kann.
+>    kann. Sie ist mit **C1d** (2026-08-04) auf **0** gefallen; aus der
+>    Obergrenze ist damit eine Gleichheit geworden — die Liste bleibt leer,
+>    ein neuer Eintrag eröffnet die Schuld neu.
 >
 > Der **Tages-Pfad** (`energie_profil/views.py`, `energie_profil/tage_werte.py`)
 > baut eine `FinanzZeileEingabe` und ist trotzdem klassifizierte Ausnahme: seine

@@ -1700,6 +1700,11 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
     # Selbst geladen wird nur die Zuordnung `inv → verbrauch_daten` für die
     # eMob-Zeilen des Vorjahres-T-Kontos.
     "backend/api/routes/aktueller_monat.py::_load_vorjahr",
+    # C1d (2026-08-04): der Komponenten-Detailblock ist umgehängt — Speicher,
+    # WP, E-Mob, BKW und die sechs Sonstiges-Mengen kommen aus
+    # `lade_monats_fakten`. Selbst geladen wird nur noch die Zuordnung
+    # `inv → verbrauch_daten` für die Financial-Zeile JE Investition.
+    "backend/api/routes/aktueller_monat.py::get_aktueller_monat",
     "backend/api/routes/aussichten.py::get_finanz_prognose",
     "backend/api/routes/ha_export.py::_load_emob_pool_ctx",
     "backend/api/routes/ha_export.py::calculate_anlage_sensors",
@@ -1733,16 +1738,15 @@ P10_NOCH_NICHT_MIGRIERT: frozenset[str] = frozenset({
     # die Sonstige-Positionen kommen aus `lade_monats_fakten`. Der
     # Vorjahresvergleich (`_load_vorjahr`) ist ganz umgezogen.
     #
-    # **Was hier noch offen ist, und warum der Eintrag deshalb bleibt** (N-107):
-    # der Komponenten-Detailblock faltet weiter anlagenweit über eine eigene
-    # IMD-Batch (Speicher-Netzladung + Ø-Ladepreis, WP-Heiz-/WW-Split, eMob
-    # Netz/Extern/V2H, BKW-Eigenverbrauch, die sechs Sonstiges-Summen). Vier
-    # davon hat die Schicht heute nicht (Sonstiges: Eigenverbrauch, Einspeisung,
-    # Bezug PV/Netz), und zwei änderten beim Umhängen ihre Bedeutung (eMob
-    # Netz/Extern: Roh-Summe → kanonischer Pool). Der Auftrag C1c hatte diesen
-    # Select als rein per-Investition eingeordnet; am Code gemessen ist er es
-    # nicht. Umbuchen wäre hier Umetikettieren, nicht Tilgen.
-    "backend/api/routes/aktueller_monat.py::get_aktueller_monat",
+    # N-107 ist mit **C1d** (2026-08-04) getilgt — und damit ist diese Liste
+    # LEER. Der Komponenten-Detailblock von `get_aktueller_monat` war die
+    # letzte anlagenweite Faltung des Baums; die vier Sonstiges-Mengen, die der
+    # Schicht dafür fehlten, sind additiv nachgezogen (`SonstigesFakten`), und
+    # die beiden Größen, die dabei ihre Bedeutung ändern mussten, haben sie
+    # geändert: der eMob-Netzanteil kommt aus dem kanonischen Pool statt aus
+    # einer Roh-Summe über E-Auto UND Wallbox (die denselben Fluss doppelt
+    # zählte), und der Laufzeit-Filter der Schicht greift jetzt auch hier.
+    #
     # N-17 ist mit C1b (2026-08-03) getilgt: `get_komponenten_zeitreihe`
     # bezieht seine Monatszeile aus `lade_monats_fakten` und lädt keine
     # `InvestitionMonatsdaten` mehr selbst.
@@ -1862,15 +1866,16 @@ def test_p10_offene_schuld_waechst_nicht():
     hieße, sie unsichtbar wachsen zu lassen — dann wäre der Wächter genau das
     Aufräum-Paket mit einem grünen Test obendrauf, das ADR-002 §80 ablehnt.
     """
-    assert len(P10_NOCH_NICHT_MIGRIERT) <= 1, (
+    assert len(P10_NOCH_NICHT_MIGRIERT) == 0, (
         f"{len(P10_NOCH_NICHT_MIGRIERT)} Sichten falten eine anlagenweite "
         "Monatszeile selbst — nach S5 waren es 5, nach S6 vier, nach **C1a** "
-        "drei, nach **C1b** zwei, nach **C1c** ist es 1 (`community_service` "
-        "fiel mit S6, `list_monatsdaten_aggregiert` mit C1a, "
-        "`get_komponenten_zeitreihe` mit C1b, `_load_vorjahr` mit C1c — es "
-        "bleibt `get_aktueller_monat`, dessen Komponenten-Detailblock die "
-        "Schicht noch nicht abbildet, siehe Kommentar dort). Diese Zahl darf "
-        "nur sinken. Wer eine Sicht hinzufügen will, migriert sie stattdessen."
+        "drei, nach **C1b** zwei, nach **C1c** eine, nach **C1d** ist es "
+        "**keine** (`community_service` fiel mit S6, "
+        "`list_monatsdaten_aggregiert` mit C1a, `get_komponenten_zeitreihe` "
+        "mit C1b, `_load_vorjahr` mit C1c, der Komponenten-Detailblock von "
+        "`get_aktueller_monat` mit C1d). **Die Restschuld ist getilgt** — "
+        "diese Liste bleibt leer. Wer eine Sicht hinzufügen will, migriert "
+        "sie stattdessen; ein neuer Eintrag hier eröffnet die Schuld neu."
     )
 
 

@@ -89,6 +89,15 @@ class ImdTypBeitrag:
     # Sonstiges
     sonstiges_erzeugung: float = 0.0
     sonstiges_verbrauch: float = 0.0
+    # C1d: die Detail-Größen der Sonstiges-Zeile. Sie folgen derselben
+    # Kategorie-Regel wie `erzeugung`/`verbrauch` — ein Erzeuger hat keinen
+    # Bezug, ein Verbraucher speist nicht ein. Bis C1d las die Monatsroute sie
+    # roh und ohne Kategorie aus `verbrauch_daten`; genau diese Doppel-Lesart
+    # ist die Klasse, gegen die P10 gebaut ist.
+    sonstiges_eigenverbrauch: float = 0.0
+    sonstiges_einspeisung: float = 0.0
+    sonstiges_bezug_pv: float = 0.0
+    sonstiges_bezug_netz: float = 0.0
 
 
 def _f(data: dict, key: str) -> float:
@@ -166,12 +175,29 @@ def imd_typ_beitrag(inv, data: dict | None) -> ImdTypBeitrag:
         kategorie = params.get("kategorie", "")
         erzeugung = _f(data, "erzeugung_kwh")
         verbrauch = get_sonstiges_verbrauch_kwh(data)
+        # C1d: Detail-Größen. Eigenverbrauch/Einspeisung gehören zur
+        # Erzeugerseite, Bezug PV/Netz zur Verbraucherseite — sie werden
+        # zusammen mit ihrer Hauptgröße stummgeschaltet, sonst trüge ein
+        # Erzeuger einen Netzbezug, den seine eigene Zeile gar nicht ausweist.
+        eigenverbrauch = _f(data, "eigenverbrauch_kwh")
+        einspeisung = _f(data, "einspeisung_kwh")
+        bezug_pv = _f(data, "bezug_pv_kwh")
+        bezug_netz = _f(data, "bezug_netz_kwh")
         if kategorie == "erzeuger":
             verbrauch = 0.0
+            bezug_pv = bezug_netz = 0.0
         elif kategorie == "verbraucher":
             erzeugung = 0.0
+            eigenverbrauch = einspeisung = 0.0
         # sonst (leere Kategorie): beide Werte mitnehmen (Site-3-Verhalten)
-        return ImdTypBeitrag(typ=typ, sonstiges_erzeugung=erzeugung,
-                             sonstiges_verbrauch=verbrauch)
+        return ImdTypBeitrag(
+            typ=typ,
+            sonstiges_erzeugung=erzeugung,
+            sonstiges_verbrauch=verbrauch,
+            sonstiges_eigenverbrauch=eigenverbrauch,
+            sonstiges_einspeisung=einspeisung,
+            sonstiges_bezug_pv=bezug_pv,
+            sonstiges_bezug_netz=bezug_netz,
+        )
 
     return ImdTypBeitrag(typ=typ)

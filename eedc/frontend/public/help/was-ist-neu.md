@@ -98,6 +98,50 @@ verschiedene Investitionssummen im Programm, je nachdem welche Seite man aufschl
 jetzt eine, und erst dadurch dürfen die beiden Kacheln nebeneinander stehen.
 
 
+### Cockpit → Monat: der Netz-Ladeanteil zählte doppelt, wenn du Auto und Wallbox pflegst
+
+**Betrifft dich das?** Wenn du **sowohl ein E-Fahrzeug als auch eine Wallbox** in eedc erfasst
+hast. Wer nur eines von beidem pflegt, sieht keinen Unterschied.
+
+Deine Wallbox misst den Strom **am Ladepunkt**, dein Auto meldet dieselbe Ladung **aus
+Fahrzeugsicht**. Pflegst du beides, hast du **eine** Ladung mit zwei Messgeräten dokumentiert —
+nicht zwei Ladungen. eedc weiß das und wählt überall genau eine der beiden Quellen aus (die
+Wallbox, wenn sie Heimladung meldet, sonst das Fahrzeug).
+
+An einer Stelle fehlte diese Regel: die Zeile **„Ladung · Netz-Anteil"** im Komponenten-Block
+von *Cockpit → Monat* addierte beide Seiten einfach zusammen. Die Zahl lief von dort weiter in
+die Jahres-Summe und — das ist der teure Teil — ins **T-Konto**, wo sie mit deinem Arbeitspreis
+multipliziert als Kostenposition steht.
+
+Am Demo-Datenbestand nachgestellt: über 25 Monate **5.976 statt 3.831 kWh**, also **56 % zu
+viel**, in *jedem* Monat mit Ladung.
+
+**Was du siehst:** einen niedrigeren, richtigen Netz-Anteil und entsprechend niedrigere
+Ladekosten im T-Konto — dieselbe Zahl, die ROI-Sicht, Aussichten und die HA-Sensoren schon
+vorher genannt haben.
+
+
+### Werte aus der Zeit vor der Anschaffung zählen nicht mehr mit
+
+**Betrifft dich das?** Wenn du Monatswerte **rückwirkend importiert oder nachgepflegt** hast —
+etwa über den HA-Statistik-Import, der so weit zurückreicht, wie deine Langzeitstatistik geht.
+
+Alle Auswertungen in eedc achten auf **Anschaffungs- und Stilllegungsdatum**: eine Wärmepumpe,
+die du im April gekauft hast, taucht in den Monaten davor nicht auf. Der Komponenten-Block in
+*Cockpit → Monat* war die letzte Stelle, an der dieser Filter fehlte — er nahm jede erfasste
+Zeile seines Gerätetyps, ganz gleich ob das Gerät damals schon existierte.
+
+Am Demo-Datenbestand standen dadurch vier Monate lang Heizwärme und Warmwasser einer
+Wärmepumpe, die es zu der Zeit noch gar nicht gab; **3.400 kWh davon zählte die Jahres-Sicht ins
+Jahr 2024**.
+
+**Was du siehst:** In Monaten vor der Anschaffung (und nach einer Stilllegung) steht bei der
+betroffenen Komponente jetzt „—" statt einer Zahl, und die Jahressumme fällt entsprechend
+niedriger — und richtiger — aus. Hast du **kein** Anschaffungsdatum gepflegt, gilt das Gerät
+unverändert als von Anfang an vorhanden; das ist dann der richtige Anlass, das Datum
+nachzutragen.
+
+
 ### Keine Warnung mehr für den Stromverbrauch, den du selbst dazugebaut hast
 
 **Betrifft dich das?** Wenn du eine **Wärmepumpe, ein E-Fahrzeug oder eine Wallbox**
