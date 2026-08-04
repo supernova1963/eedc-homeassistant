@@ -262,6 +262,38 @@ describe('SFML — gewählte Quelle wird gezeigt, aber nicht bewertet', () => {
     expect(zellen(heute)[SP7_SFML.sfml]).not.toMatch(/[▲▼±%]/)
   })
 
+  it('setzt den Übermorgen-Wert aufs Datum, nicht auf die Position', () => {
+    // Fehlt in der OpenMeteo-Liste ein Tag, rutscht eine positionsweise
+    // Zuordnung um einen Tag weiter — der Übermorgen-Wert stünde dann beim
+    // übernächsten. Die Erwartung leitet sich aus derselben Uhr ab wie der Code,
+    // hängt also nicht an einem festen Datum.
+    const tagPlus = (n: number) => {
+      const d = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`)
+      d.setUTCDate(d.getUTCDate() + n)
+      return d.toISOString().slice(0, 10)
+    }
+    const omTag = (datum: string) => ({
+      datum, pv_prognose_kwh: 10.0, eedc_kwh: 10.0, wetter_symbol: 'sunny', temperatur_max_c: 20,
+    })
+    const vm = {
+      // Übermorgen fehlt; der Tag danach ist da.
+      data: mitSfml({
+        sfml_uebermorgen_kwh: 7.4,
+        openmeteo_tage: [omTag(tagPlus(1)), omTag(tagPlus(3))],
+      } as Partial<PrognosenVergleich>),
+      genauigkeit: null,
+    } as PrognoseVergleichVM
+    const { container } = render(<Pvg7TageTabelle vm={vm} />)
+    const zeilen = Array.from(container.querySelectorAll('tbody tr')).map(r => zellen(r))
+
+    // morgen trägt 9,2; der Übermorgen-Wert 7,4 gehört zu einem Datum, das die
+    // Liste nicht enthält — er darf nirgends auftauchen. Positionsweise stünde
+    // er in der letzten Zeile.
+    expect(zeilen.map(z => z[SP7_SFML.sfml])).toContain('9,2')
+    expect(zeilen[zeilen.length - 1][SP7_SFML.sfml]).toBe('—')
+    expect(zeilen.map(z => z[SP7_SFML.sfml])).not.toContain('7,4')
+  })
+
   it('nimmt SFML in den Zeilenfilter auf', () => {
     // Dieselbe Regel wie für eedc (N-51): eine Stunde, die nur SFML kennt,
     // gehört in die Tabelle — sonst fehlt sie ausgerechnet der Quelle, mit der

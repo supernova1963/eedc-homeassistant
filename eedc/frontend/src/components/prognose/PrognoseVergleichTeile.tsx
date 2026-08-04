@@ -259,8 +259,18 @@ function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsRe
     ist_kwh: data.ist_heute_kwh, ist_partiell: true,
   }
   // SFML liefert zwei Zukunftstage (morgen, übermorgen); der dritte bleibt leer.
-  const sfmlZukunft = [data.sfml_morgen_kwh ?? null, data.sfml_uebermorgen_kwh ?? null]
-  const zukunft = data.openmeteo_tage.filter(om => om.datum > heute).slice(0, 3).map((om, i) => {
+  // Zuordnung über das **Datum**, nicht über die Position in der OpenMeteo-Liste:
+  // fehlt dort ein Tag, säße der Übermorgen-Wert sonst auf dem falschen Datum.
+  const tagPlus = (n: number) => {
+    const d = new Date(`${heute}T12:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+  const sfmlJeDatum: Record<string, number | null> = {
+    [tagPlus(1)]: data.sfml_morgen_kwh ?? null,
+    [tagPlus(2)]: data.sfml_uebermorgen_kwh ?? null,
+  }
+  const zukunft = data.openmeteo_tage.filter(om => om.datum > heute).slice(0, 3).map((om) => {
     const sc = data.solcast_tage.find(s => s.datum === om.datum)
     return {
       datum: om.datum, om_kwh: om.pv_prognose_kwh as number | null,
@@ -268,7 +278,7 @@ function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsRe
       // seitiges `om × Lernfaktor`-Nachrechnen mehr — war eine Drift-Quelle).
       eedc_kwh: hasEedc ? (om.eedc_kwh ?? null) : null,
       sc_kwh: sc?.kwh ?? null, sc_p10: sc?.p10 ?? null, sc_p90: sc?.p90 ?? null,
-      sfml_kwh: sfmlZukunft[i] ?? null,
+      sfml_kwh: sfmlJeDatum[om.datum] ?? null,
       wetter_symbol: om.wetter_symbol as string | null, temp_max: om.temperatur_max_c as number | null,
       ist_kwh: null as number | null, ist_partiell: false,
     }
