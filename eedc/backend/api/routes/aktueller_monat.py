@@ -959,11 +959,38 @@ async def get_aktueller_monat(
     """
     Übersicht eines Monats mit Daten aus allen verfügbaren Quellen.
 
-    Datenquellen-Priorität (höchste überschreibt niedrigere):
+    Reihenfolge der vier Quellen (spätere überschreiben frühere):
     1. Gespeicherte Monatsdaten (85%) — DB
     2. Connector (90%) — Geräte-Snapshot-Delta
     3. MQTT-Inbound (91%) — Energy-Topics aus Smarthome (nur aktueller Monat)
     4. HA Statistics (92%) — Recorder-DB
+
+    **Die Konfidenz allein entscheidet nicht** — überschreiben darf eine
+    frischere Quelle nur im **laufenden** Monat (Live-Vorschau). Im
+    abgeschlossenen Monat sind die gespeicherten Werte authoritativ: Connector
+    (#325 detlefh68) und HA-Statistics (#118 Safi105) füllen dort nur
+    **fehlende** Felder (`setdefault`), MQTT wird gar nicht erst gesammelt.
+    Ein importierter Monatswert (Cloud-/Portal-/CSV-Import) wird von einem
+    zugeordneten HA-Sensor hier also **nicht** verdrängt — die Zuordnung
+    stehen zu lassen kostet ihn nichts.
+
+    Was „fehlend" heißt, entscheiden die `> 0`-Gates in `_collect_saved_data`:
+    eine gespeicherte 0,0 gilt der Kaskade nicht als Wert und darf gefüllt
+    werden. Begründung im Docstring dort.
+
+    **Nur diese Route.** Auf der **Schreib**-Seite gilt die Aussage nicht:
+    `external:portal_import` (Cloud-/Portal-Import) und `external:ha_statistics`
+    stehen auf derselben Hierarchie-Stufe (`core/source_priority.py`), gleiche
+    Stufe ist Last-Writer-Wins. Ein HA-Statistik-Import mit gesetztem
+    `ueberschreiben` überschreibt einen Cloud-Wert dauerhaft in der DB. Wer
+    den Wert wirklich festnageln will, pflegt ihn im Formular (`manual:form`,
+    Stufe 1 — die einzige, die beide schlägt).
+
+    Der Connector überschreibt zusätzlich nur mit belegter Monatsabdeckung
+    (#361), sonst ist sein Delta ein Teilzeitraum.
+
+    Die Regeln selbst stehen in `core/berechnungen/datenquellen.py`
+    (ADR-001) — hier steht nur, was diese Route hineinreicht.
     """
     # Anlage mit Investitionen laden
     result = await db.execute(
