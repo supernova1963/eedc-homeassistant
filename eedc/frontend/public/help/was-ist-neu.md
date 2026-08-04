@@ -138,6 +138,32 @@ also nichts, was du dort nicht bearbeiten könntest. Monatsbericht, HA-Sensoren 
 Community-Übertragung bleiben ebenfalls, wie sie waren. Dass ein Monatsabschluss fehlt, meldet
 dir weiterhin der [Daten-Checker](HANDBUCH_EINSTELLUNGEN.md) — mit Link direkt auf den Abschluss.
 
+### Ein Geräte-Connector sagt jetzt, welchen Zeitraum er gemessen hat
+
+**Betrifft dich das?** Nur wenn du unter *Einstellungen → Datenquellen* einen
+**Geräte-Connector** eingerichtet hast (Wechselrichter, Speicher o. ä. mit direktem Abruf).
+
+Ein Connector-Wert ist immer die **Differenz zweier Zählerstände**. Richtest du ihn mitten im
+Monat ein, kennt er die Tage davor nicht — der Wert für diesen Monat ist dann ein Bruchstück.
+Bei einem Anwender waren das fünf Zählerstände vom 28.–30. Juli, angezeigt als **Juli-Wert von
+51 kWh**, während seine Anlage in dem Monat rund **996 kWh** erzeugt hatte. Dass so ein Wert
+keinen von dir gepflegten Monatswert mehr verdrängt, ist seit v4.0.5 erledigt — **beschriftet
+war er trotzdem nicht**, und wenn keine andere Quelle da war, stand er einfach da.
+
+In *Cockpit → Monat* trägt das Quellen-Etikett jetzt den gemessenen Zeitraum:
+**„Connector (28.–30.07.2025)"**. Fährst du mit der Maus darüber, steht dort ausgeschrieben,
+wie viele Tage des Monats das sind. Deckt dein Connector den Monat ab dem Ersten ab — der
+Normalfall, sobald er ein paar Wochen läuft —, **ändert sich für dich nichts**.
+
+Und wenn dein Connector für den laufenden Monat **gar keinen** Wert bilden kann, weil ein
+Zählerstand fehlt, sagt dir das jetzt der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#411-geraete-connector-ohne-monatswert)
+— vorher merkte man davon nichts, in der Monats-Sicht stand einfach eine Quelle weniger.
+Am 1. eines Monats meldet er nichts, solange der tägliche Abruf läuft: dort fehlt der
+Zählerstand *im* neuen Monat naturgemäß, bis der Abruf einmal durch ist.
+
+**Muss ich etwas tun?** Nein — außer der Daten-Checker meldet den Connector; dann lohnt der
+Blick, ob der **tägliche Abruf** eingeschaltet und das Gerät erreichbar ist.
+
 ---
 
 ## v4.0.8 — Nach einem Neustart stimmen die Einheiten sofort (August 2026)

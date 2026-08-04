@@ -140,6 +140,16 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 - **SOLL/IST** — gegen die Solarprognose
 - **Community-Vergleich** — eingebettet, wo Daten geteilt sind
 
+> **Wenn ein Geräte-Connector nur einen Teil des Monats gemessen hat**, steht sein
+> Zeitraum direkt am Quellen-Etikett: „Connector (28.–30.07.2025)". Ein Connector-Wert
+> ist die **Differenz zweier Zählerstände** — richtest du ihn mitten im Monat ein, kennt
+> er die Tage davor nicht, und der Wert ist entsprechend kleiner als der ganze Monat.
+> Er verdrängt deshalb keinen gepflegten Monatswert mehr, sondern füllt nur, was sonst
+> fehlt. Deckt der Connector den Monat ab dem Ersten ab, steht dort wie bisher schlicht
+> „Connector". Die **Jahres**-Sicht nennt keinen Zeitraum — sie fasst zwölf Monate
+> zusammen, dort gäbe es keinen einzelnen. Kann der Connector für den laufenden Monat
+> **gar keinen** Wert bilden, meldet das der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md).
+
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
 - **Performance Ratio (Ø Monat)** als Kennzahl

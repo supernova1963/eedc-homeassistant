@@ -24,6 +24,7 @@
    8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
+   11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -48,7 +49,7 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
 - **Klappbare Kategorie-Sektionen**: Jede Kategorie zeigt im Kopf eine Sammel-Bewertung (z. B. *„2 Warnungen, 1 Hinweis"* oder *OK*) und enthält die Einzelbefunde.
 - **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details und „Beheben"-Link zur betroffenen Stelle (Datenquellen, Monatsdaten, Komponenten-Formular usw.).
 
-> Der Daten-Checker umfasst inzwischen mehr Kategorien als die neun hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Status/-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
+> Der Daten-Checker umfasst inzwischen mehr Kategorien als die hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
 
 ### Wann sollte ich den Daten-Checker nutzen?
 
@@ -435,6 +436,24 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 **Reichweite:** Die Tagesreparatur heilt Tages- und Stundenwerte, **nicht** die Monatswerte. Für abgeschlossene Monate danach Einstellungen → Integration → **Statistik-Import**.
 
 > **Abgrenzung:** PV-Werte auf einer *bestehenden* Tageszeile gehören der Drift-Prüfung (§4.7-Umfeld, Meldung „PV x → HA y kWh") — kein zweiter Turm über denselben Sachverhalt. Der Speicher-Netto-Wert (`batterie_*`) bleibt hier außen vor, er darf legitim ~0 sein.
+
+---
+
+### 4.11 Geräte-Connector ohne Monatswert <a name="411-geraete-connector-ohne-monatswert"></a>
+
+> **Variantenhinweis:** Nur relevant, wenn unter *Einstellungen → Datenquellen* ein **Geräte-Connector** eingerichtet ist. Ohne Connector wird die Kategorie still übersprungen — sie meldet nie etwas, das du nicht auflösen könntest.
+
+**Was wird geprüft:** Kann eedc aus den gespeicherten Zählerständen des Connectors für den **laufenden Monat** überhaupt einen Wert bilden? Ein Connector-Wert ist immer die **Differenz zweier Snapshots** — einer muss vor dem Monatsbeginn liegen, einer danach. Fehlt einer davon, liefert der Connector für diesen Monat gar nichts, und das war bisher nirgends zu sehen: In *Cockpit → Monat* stand einfach eine Quelle weniger, ohne Hinweis darauf, dass eine eingerichtete Quelle gerade schweigt.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **Connector „…" liefert für MM/JJJJ keinen Wert** | ⚠️ WARNING | Es liegen nicht genügend Zählerstände vor, um den laufenden Monat zu berechnen — entweder erst einer insgesamt, oder der jüngste ist mehrere Tage alt (der Abruf steht still). Die Details nennen den Bestand und ob der tägliche Abruf eingeschaltet ist. | Einstellungen → Datenquellen → Connector: **täglichen Abruf einschalten** bzw. die Verbindung prüfen (Gerät erreichbar? Zugangsdaten noch gültig?). Sobald ein zweiter Zählerstand vorliegt, verschwindet der Befund von selbst. |
+
+**Kein Lärm am Monatsersten.** Solange der Connector aktiv liefert, fehlt ihm am 1. eines Monats bis zum ersten Abruf naturgemäß der Snapshot *im* Monat. Dieser Zustand erledigt sich innerhalb eines Tages und wird deshalb nicht gemeldet — der Befund erscheint erst, wenn der jüngste Zählerstand älter als zwei Tage ist (oder es überhaupt erst einen gibt).
+
+> **Abgrenzung:** Liefert der Connector einen Wert, misst er aber nur einen **Teil** des Monats (frisch eingerichtet), ist das kein Befund — dort steht eine Zahl, und sie wird in *Cockpit → Monat* mit ihrem Zeitraum beschriftet: „Connector (28.–30.07.2025)". Siehe [HANDBUCH_BEDIENUNG.md §2.3](HANDBUCH_BEDIENUNG.md#23-monat).
 
 ---
 

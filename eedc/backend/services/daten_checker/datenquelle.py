@@ -7,7 +7,7 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -933,3 +933,99 @@ class DatenquelleChecks:
             ))
 
         return ergebnisse
+
+    # Ein Connector, der lange nichts mehr geliefert hat, kann für den laufenden
+    # Monat kein Delta bilden — nach diesen Tagen gilt das nicht mehr als
+    # „gleich behoben". Kürzer wäre Rauschen: am Monatsersten fehlt der Snapshot
+    # IM Monat noch bei jedem aktiven Connector, bis der Tagesabruf gelaufen ist.
+    CONNECTOR_STILL_TAGE = 2
+
+    async def _check_connector_monatswert(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """#360/N-73: Connector eingerichtet, aber für den laufenden Monat ist
+        kein Wert ableitbar — und niemand sagt es.
+
+        Das Connector-Delta ist die Differenz zweier Zähler-Snapshots. Fehlt
+        einer davon, liefert `_calc_month_delta` `None`, `_collect_connector_data`
+        gibt ein leeres Dict zurück, und die Monats-Sicht zeigt einfach eine
+        Quelle weniger — ohne Log, ohne Hinweis, ohne Response-Feld. Die Route
+        `GET /connector/monatswerte/…` sagt es zwar mit 404, hat aber keinen
+        Aufrufer im Client; der Anwender erfährt es also nirgends.
+
+        Zuständigkeitsgrenze (P4-Konzept §4): die Sicht beantwortet „worauf
+        beruht diese Zahl" — hier steht gar keine Zahl, es gibt nichts zu
+        beschriften. Der Checker beantwortet „was musst du nachtragen", und dazu
+        gibt es einen Weg (Abruf anstoßen bzw. einschalten). Der Wortlaut ist
+        der geprüfte 404-Text der Route, nicht neu erfunden (E5).
+
+        Kein Connector konfiguriert ⇒ kein Befund — sonst meldete der Checker
+        jedem HA-Nutzer etwas Unauflösbares.
+        """
+        from datetime import date
+        from backend.api.routes.connector import _calc_month_delta
+
+        config = anlage.connector_config
+        if not config:
+            return []
+
+        snapshots = config.get("meter_snapshots") or {}
+        heute = date.today()
+        if _calc_month_delta(snapshots, heute.year, heute.month):
+            return []
+
+        # Frisch genug, um sich selbst zu heilen? Dann schweigen. Snapshot-
+        # Zeitstempel sind UTC-naiv (Schreibpfad `connector.py`, Lesepfad
+        # `_calc_month_delta`) — die Gegenwart muss es hier genauso sein.
+        juengster = _juengster_snapshot(snapshots)
+        jetzt = datetime.now(timezone.utc).replace(tzinfo=None)
+        if (
+            len(snapshots) >= 2
+            and juengster is not None
+            and (jetzt - juengster) < timedelta(days=self.CONNECTOR_STILL_TAGE)
+        ):
+            return []
+
+        geraet = config.get("geraet_name") or config.get("connector_id") or "Connector"
+        if len(snapshots) < 2:
+            bestand = (
+                f"Gespeichert ist bisher {len(snapshots)} Snapshot"
+                f"{'s' if len(snapshots) != 1 else ''}."
+            )
+        else:
+            bestand = (
+                "Der jüngste Snapshot ist vom "
+                f"{juengster.strftime('%d.%m.%Y') if juengster else 'unbekannten Datum'}."
+            )
+        weg = (
+            "Der tägliche Abruf ist aktiv — mit dem nächsten Snapshot trägt der "
+            "Connector den Monat wieder mit."
+            if config.get("auto_fetch_enabled")
+            else "Der tägliche Abruf ist ausgeschaltet; ohne ihn kommt kein "
+            "weiterer Snapshot dazu."
+        )
+        return [CheckErgebnis(
+            kategorie=CheckKategorie.DATENQUELLE_STATUS.value,
+            schwere=CheckSeverity.WARNING.value,
+            meldung=(
+                f"Connector „{geraet}“ liefert für "
+                f"{heute.month:02d}/{heute.year} keinen Wert"
+            ),
+            details=(
+                f"Nicht genügend Snapshots für {heute.month:02d}/{heute.year}. "
+                "Mindestens ein Snapshot vor und einer nach dem Monatsbeginn "
+                f"nötig. {bestand} {weg}"
+            ),
+            link=LINK_DATENQUELLEN,
+        )]
+
+
+def _juengster_snapshot(snapshots: dict) -> Optional[datetime]:
+    """Zeitstempel des jüngsten Snapshots (naiv, wie `_calc_month_delta`)."""
+    neuster: Optional[datetime] = None
+    for ts_str in snapshots:
+        try:
+            ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00")).replace(tzinfo=None)
+        except (ValueError, TypeError):
+            continue
+        if neuster is None or ts > neuster:
+            neuster = ts
+    return neuster

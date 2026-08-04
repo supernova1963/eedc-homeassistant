@@ -121,6 +121,42 @@ describe('MonatHeader — C1/C2 Sicht-Aktionen', () => {
   })
 })
 
+describe('MonatHeader — Connector nennt seinen Zeitraum (#360)', () => {
+  const mitConnector = (abdeckung: { abdeckung_von?: string | null; abdeckung_bis?: string | null }) => ({
+    ...d,
+    jahr: 2025,
+    monat: 7,
+    feld_quellen: {
+      pv_erzeugung_kwh: { quelle: 'local_connector', konfidenz: 90, zeitpunkt: null, ...abdeckung },
+    },
+  }) as unknown as AktuellerMonatResponse
+
+  it('Teilabdeckung: Zeitraum am Badge + Tage-Satz im Tooltip', () => {
+    // coolxmad #353: fünf Snapshots vom 28.–30.07., geliefert als Juli-Wert.
+    render(<MonatHeader titel="Juli 2025" laufend d={mitConnector({
+      abdeckung_von: '2025-07-28T14:03:00', abdeckung_bis: '2025-07-30T09:12:00',
+    })} />)
+    const badge = screen.getByText('Connector (28.–30.07.2025)')
+    // Gemessen wird die Zeit ZWISCHEN den Zählerständen — 2 Tage, nicht 3.
+    expect(badge).toHaveAttribute('title', expect.stringContaining('2 von 31 Tagen des Monats'))
+    expect(badge).toHaveAttribute('title', expect.stringContaining('28.07.2025 bis 30.07.2025'))
+  })
+
+  it('volle Abdeckung ab dem Monatsersten: Badge unverändert', () => {
+    render(<MonatHeader titel="Juli 2025" laufend d={mitConnector({
+      abdeckung_von: '2025-07-01T00:00:00', abdeckung_bis: '2025-07-31T23:00:00',
+    })} />)
+    expect(screen.getByText('Connector')).toBeInTheDocument()
+    expect(screen.queryByText(/Connector \(/)).not.toBeInTheDocument()
+  })
+
+  it('ohne Abdeckungs-Angabe: Badge unverändert', () => {
+    render(<MonatHeader titel="Juli 2025" laufend d={mitConnector({})} />)
+    expect(screen.getByText('Connector')).toBeInTheDocument()
+    expect(screen.queryByText(/Connector \(/)).not.toBeInTheDocument()
+  })
+})
+
 describe('communityBlock — data-gated (O4)', () => {
   it('null wenn keine Anlagen im Monat', () => {
     const v = { anzahl_anlagen: 0 } as MonatsVergleich

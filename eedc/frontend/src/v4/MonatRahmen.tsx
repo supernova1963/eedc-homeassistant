@@ -20,20 +20,9 @@ import type { Block } from '../components/blocks'
 import { Parkbar, NOOP_PARK, type ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { MonatsVergleich } from '../api/community'
-import { DATENQUELLE_LABELS } from '../lib/constants'
+import { provenanzQuellen, ProvenanzQuellenZeile } from './ProvenanzQuellen'
 
 const euro = (v: number | null | undefined) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${fmtCalc(v, 2)} €`)
-
-function provenanceQuellen(feldQuellen: AktuellerMonatResponse['feld_quellen']): string[] {
-  if (!feldQuellen) return []
-  const set = new Set<string>()
-  for (const info of Object.values(feldQuellen)) {
-    // R3b S7: SoT-Map (die alte lokale 6-Key-Map kannte die echten
-    // feld_quellen-Enums nicht → Roh-Werte wie „ha_statistics" in der UI).
-    if (info?.quelle) set.add(DATENQUELLE_LABELS[info.quelle] ?? info.quelle)
-  }
-  return [...set]
-}
 
 export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbschlussLink }: {
   titel: string
@@ -45,7 +34,13 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
   /** C2: „Abschluss starten"-Cross-Link zeigen (laufend + offene Vergangenheits-Monate). */
   zeigeAbschlussLink?: boolean
 }) {
-  const quellen = d ? provenanceQuellen(d.feld_quellen) : []
+  // #360: der Connector nennt seinen Zeitraum. Deckt sein Delta den Monat nicht
+  // ab dem Ersten ab, misst der Wert nur ein Bruchstück (coolxmad #353: 51,3 statt
+  // 996 kWh) — er steht seit `2cc1dfa2` keinem gespeicherten Wert mehr im Weg,
+  // stand aber weiter unbeschriftet da. Der Monatskontext kommt aus der Antwort,
+  // die Tage rechnet der Client (kein zweites Backend-Feld dafür).
+  const monat = d ? { start: new Date(d.jahr, d.monat - 1, 1), tage: new Date(d.jahr, d.monat, 0).getDate() } : undefined
+  const quellen = d ? provenanzQuellen(d.feld_quellen, monat) : []
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div className="flex items-center gap-2.5">
@@ -71,16 +66,7 @@ export function MonatHeader({ titel, laufend, d, onReload, reloading, zeigeAbsch
             Abschluss starten
           </a>
         )}
-        {quellen.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-gray-400 dark:text-gray-500">Quellen:</span>
-            {quellen.map((q) => (
-              <span key={q} className="text-[10px] leading-tight px-1.5 py-0.5 rounded-full font-medium bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
-                {q}
-              </span>
-            ))}
-          </div>
-        )}
+        <ProvenanzQuellenZeile quellen={quellen} />
       </div>
     </div>
   )

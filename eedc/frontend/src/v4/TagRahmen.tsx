@@ -7,6 +7,8 @@ import type { TagWerte } from '../api/energie_profil'
 import { ReloadButton } from './ReloadButton'
 // R3b S7: Provenance-Labels + Wochentage aus der SoT (vorher 3 gedriftete lokale Kopien).
 import { DATENQUELLE_LABELS, WT_LANG } from '../lib/constants'
+// #360: die Quellen-Zeile selbst liegt seither auch nur noch einmal.
+import { PROVENANZ_BADGE, ProvenanzQuellenZeile } from './ProvenanzQuellen'
 import { LAUFEND_ZUSTAND } from '../lib'
 
 function langesDatum(iso: string): string {
@@ -48,20 +50,13 @@ export function TagHeader({ datum, laufend, tag, onReload, reloading }: {
         {onReload && <ReloadButton onClick={onReload} loading={!!reloading} />}
         {stand != null && (
           <span
-            className="text-[10px] leading-tight px-1.5 py-0.5 rounded-full font-medium bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+            className={PROVENANZ_BADGE}
             title="Die Tages-Sicht steht auf den abgeschlossenen Stunden. Die laufende Stunde wird erst nach ihrem Ende verbucht — Live „Heute“ zählt sie bereits mit."
           >
             Stand: {stand} von 24 Std. · laufende Stunde fehlt
           </span>
         )}
-        {quelle && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-gray-400 dark:text-gray-500">Quellen:</span>
-            <span className="text-[10px] leading-tight px-1.5 py-0.5 rounded-full font-medium bg-gray-50 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
-              {quelle}
-            </span>
-          </div>
-        )}
+        <ProvenanzQuellenZeile quellen={quelle ? [{ label: quelle }] : []} />
       </div>
     </div>
   )
