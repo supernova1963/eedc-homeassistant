@@ -9,6 +9,17 @@
 
 ---
 
+## Unreleased
+
+### „Die TagesZusammenfassung vom ? aus unbekannt" — diese Meldung gibt es nicht mehr
+
+Wer eedc frisch eingerichtet hatte, bekam im Daten-Checker einen Hinweis mit **Fragezeichen und „unbekannt"** darin. Er war für einen anderen Zustand gedacht — nämlich dafür, dass schon aggregierte Tage noch aus einer älteren Quelle stammen. Wenn es überhaupt noch **keine** Tageswerte gab, passte er nicht und schickte dich auf die Suche nach einer falschen Datenquelle.
+
+Jetzt steht dort **„Noch keine Tageswerte aggregiert"** — mit dem, was tatsächlich hilft: kurz abwarten (die Aggregation läuft stündlich), die **kWh-Zeilen** unter *Einstellungen → Datenquellen* belegen (nicht nur die Watt-Zeilen), oder zurückliegende Tage über *„Lücken aus HA-LTS nachfüllen"* in der Reparatur-Werkbank holen.
+
+
+---
+
 ## v4.0.9 — Der laufende Monat zählt nur seine Tage · jede PV-Zahl nennt ihre Herkunft (August 2026)
 
 ### Wo kann ich die Kopplung meines Speichers einstellen? Ab jetzt: in der Investitionspflege

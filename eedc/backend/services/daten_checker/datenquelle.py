@@ -218,15 +218,41 @@ class DatenquelleChecks:
                     "(Σ Stundenwerte = Tagessumme per Konstruktion)."
                 ),
             )]
+        if ha_lts_verfuegbar and tz is None:
+            # Es gibt ÜBERHAUPT keine aggregierte Tageszeile. Bis 2026-08-05
+            # fiel dieser Fall in den Zweig darunter und erzeugte den Satz
+            # „die TagesZusammenfassung vom **?** wurde aber noch aus
+            # **unbekannt** geschrieben" — eine Behauptung über eine Zeile, die
+            # es nicht gibt, und ein Fehlerbild, das jeder frisch eingerichtete
+            # Anwender in der ersten Stunde zu sehen bekam. Der Zustand ist
+            # nicht „falsche Quelle", sondern „noch nichts da"; ein Anwender,
+            # der nach der Quelle sucht, sucht am falschen Ort.
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.INFO.value,
+                meldung="Noch keine Tageswerte aggregiert",
+                details=(
+                    "HA-Statistics ist erreichbar, aber es liegt noch keine "
+                    "Tageszusammenfassung mit Stundenwerten vor. Direkt nach "
+                    "der Einrichtung ist das normal — die Aggregation läuft "
+                    "stündlich, die ersten Werte stehen also innerhalb einer "
+                    "Stunde bereit. Bleibt es dabei, fehlt meist die Zuordnung "
+                    "der kWh-Zähler (Einstellungen → Datenquellen — es müssen "
+                    "die kWh-Zeilen belegt sein, nicht nur die Watt-Zeilen). "
+                    "Zurückliegende Tage holt „Lücken aus HA-LTS nachfüllen“ "
+                    "in der Reparatur-Werkbank."
+                ),
+                link=LINK_DATENQUELLEN,
+            )]
         if ha_lts_verfuegbar:
             # HA verfügbar, aber Aggregate aus älterem Pfad — typisch nach
-            # Upgrade auf v3.31.0 vor erstem Reaggregations-Lauf
+            # Upgrade auf v3.31.0 vor erstem Reaggregations-Lauf. Ab hier ist
+            # `tz` garantiert vorhanden (der Zweig darüber fängt None ab).
             return [CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.INFO.value,
                 meldung="HA-Statistics-Pfad bereit, Aggregate aus älterer Quelle",
                 details=(
-                    "HA-Statistics ist verfügbar, die TagesZusammenfassung "
-                    f"vom {tz.datum.isoformat() if tz else '?'} wurde aber noch "
+                    "HA-Statistics ist verfügbar, die Tageszusammenfassung "
+                    f"vom {tz.datum.isoformat()} wurde aber noch "
                     f"aus '{letzte_source or 'unbekannt'}' geschrieben. "
                     "Sobald diese Tage neu aus HA-Statistics aggregiert "
                     "werden (nächster Monatsabschluss oder Tag-Reparatur), "

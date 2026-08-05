@@ -7,6 +7,15 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Der Daten-Checker behauptet keine Tageszusammenfassung mehr, die es nicht gibt.** Wer eedc frisch einrichtet, bekam in der ersten Stunde — und dauerhaft, wenn die kWh-Zähler nicht zugeordnet sind — einen Hinweis zu lesen, der wörtlich lautete: „die TagesZusammenfassung vom **?** wurde aber noch aus '**unbekannt**' geschrieben". Gemeint war ein ganz anderer Zustand: der Hinweis ist dafür gedacht, dass bereits aggregierte Tage noch aus einer **älteren Quelle** stammen und beim nächsten Lauf auf HA-Statistics umgestellt werden. Existiert dagegen **überhaupt keine** aggregierte Tageszeile, passte der Satz nicht — er schickte den Anwender auf die Suche nach einer falschen Quelle, während in Wahrheit schlicht noch nichts da war. Für diesen Fall gibt es jetzt eine eigene Meldung, **„Noch keine Tageswerte aggregiert"**, und sie sagt, was zu tun ist: abwarten (die Aggregation läuft stündlich), die **kWh-Zeilen** unter *Einstellungen → Datenquellen* belegen — nicht nur die Watt-Zeilen —, oder zurückliegende Tage über *„Lücken aus HA-LTS nachfüllen"* in der Reparatur-Werkbank holen. Die beiden Nachbarzweige sind unberührt: wer schon Tage aggregiert hat, liest weiterhin die Quelle samt echtem Datum, und im Standalone-Betrieb ohne Zugriff auf die HA-Recorder-Datenbank bleibt es beim bisherigen Hinweis — dessen Verdrängung wäre der schlimmere Fehler gewesen, denn er ist dort die einzige Meldung, die die Lage beschreibt. *(gefunden beim Messen einer Fehlermeldung aus dem Forum; der Befund selbst betrifft den HA-Add-on-Betrieb)*
+
+
+---
+
 ## [4.0.9] - 2026-08-05 — Der laufende Monat zählt nur seine Tage · jede PV-Zahl nennt ihre Herkunft
 
 ### Added
