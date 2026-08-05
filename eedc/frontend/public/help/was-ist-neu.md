@@ -17,6 +17,15 @@ Wer eedc frisch eingerichtet hatte, bekam im Daten-Checker einen Hinweis mit **F
 
 Jetzt steht dort **„Noch keine Tageswerte aggregiert"** — mit dem, was tatsächlich hilft: kurz abwarten (die Aggregation läuft stündlich), die **kWh-Zeilen** unter *Einstellungen → Datenquellen* belegen (nicht nur die Watt-Zeilen), oder zurückliegende Tage über *„Lücken aus HA-LTS nachfüllen"* in der Reparatur-Werkbank holen.
 
+### Meine Monatsleiste zeigte nur den laufenden Monat — jetzt stehen alle drin
+
+Wer eedc mit **Monatsabschlüssen oder importierter Historie** pflegt und keine Tagesdaten aus Home Assistant hat, bekam in *Cockpit → Monat* links nur einen einzigen Eintrag angeboten: den laufenden Monat. Die Sicht daneben zeigte trotzdem einen abgeschlossenen Monat mit allen Werten — der Monat, den man gerade ansah, war in seiner eigenen Auswahlliste nicht zu finden.
+
+Grund war, dass die Leiste ihre Liste aus einer **anderen Quelle** las als die Sicht: sie kannte nur Monate mit **Tagesdaten**, nicht deine gepflegten **Monatsdaten**. Jetzt liest sie beides und zeigt alles, was es gibt — egal ob ein Monat aus dem Monatsabschluss, aus einem Import oder ausschließlich aus Tageswerten stammt.
+
+**An deinen Zahlen ändert sich nichts**, nur die Auswahl ist vollständig. Und der Umweg über *Auswertungen → Tabelle*, um ältere Monate überhaupt zu erreichen, entfällt.
+
+*Gemeldet von kaba-kakao im Forum.*
 
 ---
 

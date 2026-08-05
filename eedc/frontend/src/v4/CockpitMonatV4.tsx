@@ -88,16 +88,41 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
   // Beide Quellen parallel, damit die Default-Wahl die Monatsdaten kennt.
   // R18-2 (SWR): über den Sicht-Cache von useApiData — beim Tab-Wechsel stehen die
   // alten Daten sofort (kein Skeleton), still revalidiert.
+  //
+  // DREI Quellen, und die dritte ist der Grund für dieses Paket (Melder
+  // kaba-kakao, Forum T89667/98): die **Rail** hing allein an
+  // `getVerfuegbareMonate` — das ist ein `GROUP BY` über `TagesZusammenfassung`,
+  // also die reine **Tagesebene**. Wer eedc über Monatsabschlüsse oder Import
+  // pflegt (der Standalone-Kernfall), hat dort nichts stehen; die Rail zeigte
+  // dann als einzigen Eintrag den laufenden Monat, den der Client unten
+  // bedingungslos nachschiebt — während die Sicht daneben einen Monat mit
+  // vollen Werten darstellte, der in seiner eigenen Auswahlliste fehlte.
+  // Cockpit → Jahr wurde von genau dieser Klasse mit N-68 + N-121 geheilt und
+  // zieht seither `listAggregiert` mit beiden Flags; die Monats-Rail ist bei
+  // der alten Quelle geblieben.
+  //
+  // Die **volle** Liste steht bewusst NEBEN der strengen, statt sie zu
+  // ersetzen: die beiden beantworten verschiedene Fragen (Datensatz-Liste vs.
+  // Zeitreihe, siehe Route-Docstring), und `inkl_nur_tageswerte` füllt in der
+  // Schicht auch **Lücken bestehender** Monate (PV/BKW aus der Tagesebene).
+  // Die strenge Liste hier zu ersetzen würde daher Vormonats- und Ø-Vergleiche
+  // bewegen — eine Zahlenänderung, die dieses Paket nicht beauftragt hat.
   const monateQ = useApiData(
     () => Promise.all([
       monatsdatenApi.listAggregiert(anlageId!),
       energieProfilApi.getVerfuegbareMonate(anlageId!),
+      monatsdatenApi.listAggregiert(anlageId!, undefined, {
+        inklOhneZaehlerzeile: true,
+        inklNurTageswerte: true,
+      }),
     ]),
     [anlageId],
     { enabled: !!anlageId, swrKey: `v4-monat-liste:${anlageId}` },
   )
   const alleMonate = useMemo<AggregierteMonatsdaten[]>(() => monateQ.data?.[0] ?? [], [monateQ.data])
   const monate = useMemo<VerfuegbarerMonat[]>(() => monateQ.data?.[1] ?? [], [monateQ.data])
+  /** Obermenge für die Rail: inkl. Monate ohne Abschluss und ohne DB-Spur. */
+  const alleMonateVoll = useMemo<AggregierteMonatsdaten[]>(() => monateQ.data?.[2] ?? [], [monateQ.data])
 
   // Default vorwählen, sobald die Listen da sind.
   useEffect(() => {
@@ -203,21 +228,37 @@ function CockpitMonatInner({ anlageId }: { anlageId: number | undefined }) {
     }
   }, [alleMonate, gewaehlt])
 
-  // Rail-Einträge: verfügbare Monate + PV (Mini-Balken) + laufender Monat.
+  // Rail-Einträge = **Vereinigung** beider Grundgesamtheiten + laufender Monat:
+  // die Monats-Fakten (Abschlüsse, Import, Komponenten-Zeilen) UND die lokale
+  // Tagesebene. Keine der beiden allein reicht — die Tagesebene kennt keinen
+  // importierten Monat, die Monats-Fakten keinen Monat, der ausschließlich aus
+  // Tageswerten besteht (dafür brauchte Cockpit → Jahr seinerzeit N-121).
   const railEntries = useMemo<RailEintrag[]>(() => {
     const heute = new Date()
     const hj = heute.getFullYear()
     const hm = heute.getMonth() + 1
-    const entries: RailEintrag[] = monate.map((m) => ({
-      jahr: m.jahr, monat: m.monat,
-      pv_kwh: alleMonate.find((a) => a.jahr === m.jahr && a.monat === m.monat)?.pv_erzeugung_kwh ?? 0,
-      laufend: m.jahr === hj && m.monat === hm,
+    const key = (jahr: number, monat: number) => `${jahr}-${monat}`
+    const pvJeMonat = new Map<string, number>()
+    const schluessel = new Map<string, { jahr: number; monat: number }>()
+    const merke = (jahr: number, monat: number) => {
+      const k = key(jahr, monat)
+      if (!schluessel.has(k)) schluessel.set(k, { jahr, monat })
+    }
+    alleMonateVoll.forEach((m) => {
+      pvJeMonat.set(key(m.jahr, m.monat), m.pv_erzeugung_kwh ?? 0)
+      merke(m.jahr, m.monat)
+    })
+    monate.forEach((m) => merke(m.jahr, m.monat))
+    const entries: RailEintrag[] = [...schluessel.values()].map(({ jahr: j, monat: m }) => ({
+      jahr: j, monat: m,
+      pv_kwh: pvJeMonat.get(key(j, m)) ?? 0,
+      laufend: j === hj && m === hm,
     }))
     if (!entries.some((e) => e.jahr === hj && e.monat === hm)) {
       entries.push({ jahr: hj, monat: hm, pv_kwh: 0, laufend: true })
     }
     return entries
-  }, [monate, alleMonate])
+  }, [monate, alleMonateVoll])
 
   const istLaufend = useMemo(() => {
     if (!gewaehlt) return false
