@@ -33,7 +33,7 @@ Der Kern-Gedanke: Eine Prognose ist nur so gut, wie sie zur Realität passt. Des
 
 ## 2. Die vier Quellen — und woher sie kommen
 
-Im Prognosen-Vergleich stehen vier Spalten nebeneinander:
+Im Prognosen-Vergleich stehen vier Quellen nebeneinander — jede mit ihrem Wert und, direkt daneben unter **Δ**, ihrer Abweichung zum IST:
 
 | Quelle | Herkunft | API-Key nötig? | Besonderheit |
 |--------|----------|----------------|--------------|
@@ -41,6 +41,8 @@ Im Prognosen-Vergleich stehen vier Spalten nebeneinander:
 | **eedc** | OpenMeteo **× Lernfaktor** deiner Anlage | nein | die kalibrierte Default-Quelle (siehe [§5](#5-lernfaktor--korrekturprofil--wie-eedc-dazulernt)) |
 | **Solcast** | Solcast-Forecast (optional) | ja, im Standalone | liefert Konfidenzband p10–p90 |
 | **IST** | dein gemessener Ertrag aus dem Energieprofil | — | die Referenz, an der sich alles misst |
+
+Dazu kommt **SFML**, wenn du es als Quelle gewählt hast — als Wert **ohne** Δ-Spalte, siehe [§2.5](#25-sfml-solar-forecast-ml--sichtbar-aber-bewusst-nicht-bewertet).
 
 ### 2.1 OpenMeteo (roh) — die Basis
 
@@ -63,19 +65,21 @@ Solcast ist ein spezialisierter PV-Forecast-Dienst und liefert ein Konfidenzband
 
 Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Dienst). Fehlt der Key oder ist HA nicht erreichbar, fällt eedc still auf die eedc-Quelle zurück und zeigt einen Hinweistext.
 
-> **Der Stundenverlauf für morgen ist bei Solcast eine Näherung.** Solcast liefert eedc ein
-> Stundenprofil nur für **heute**. Fragst du den Tagesverlauf für einen anderen Tag ab, zeigt eedc das
-> heutige Profil als Näherung — der Wert bleibt (er ist die beste verfügbare Information), aber die
-> Anzeige sagt es jetzt dazu, und die Tagessumme kann davon abweichen. Bis v4.0.0 stand das nur als
-> Kommentar im Quelltext, während die Anzeige aussah wie ein echtes Profil dieses Tages.
+> **Jeder Tag bekommt den Stundenverlauf, den Solcast für ihn liefert.** Die HA-Integration führt je
+> Tages-Sensor ein eigenes Detailprofil, der API-Zugang liefert sieben Tage am Stück — eedc wertet
+> beides aus. Wo die Quelle für einen Tag **nur die Tagesmenge** kennt, zeigt eedc weiterhin das
+> heutige Profil als **Näherung** und sagt es in der Antwort dazu; die Tagessumme kann davon
+> abweichen. Bis v4.0.8 galt das für **jeden** Tag außer heute — auch für morgen, obwohl die Quelle
+> dafür längst ein eigenes Profil lieferte (#357). Wirksam wird der Unterschied ohne Zutun beim
+> nächsten Abruf.
 
 ### 2.4 IST — die Referenz
 
 Der tatsächliche Ertrag kommt aus dem [Energieprofil](HANDBUCH_ENERGIEPROFIL.md): stündlich aus den PV-Stundenwerten, als Tagessumme über alle Komponenten mit Präfix `pv_`/`bkw_`. Fehlt der PV-Zähler, ist IST unvollständig (eedc markiert betroffene Stunden als Lücke) — und damit fällt die Lerngrundlage weg.
 
-### 2.5 SFML (Solar Forecast ML) — wählbar, aber bewusst nicht im Vergleich
+### 2.5 SFML (Solar Forecast ML) — sichtbar, aber bewusst nicht bewertet
 
-> **Zwei verschiedene Dinge nicht verwechseln:** Die **vier Spalten oben** sind der *Vergleich* (was steht nebeneinander zur Beurteilung). Davon getrennt gibt es die **operative Prognosequelle** — die *eine* Quelle, die deine Tagesprognose, Batteriesimulation und den HA-Export tatsächlich speist. Diese wählst du unter **Einstellungen → Stammdaten → Anlage** im Feld **„PV-Prognose-Quelle für diese Anlage"**.
+> **Zwei verschiedene Dinge nicht verwechseln:** Die **Δ-Spalten** sind die *Beurteilung* (welche Quelle wie weit danebenlag). Davon getrennt gibt es die **operative Prognosequelle** — die *eine* Quelle, die deine Tagesprognose, Batteriesimulation und den HA-Export tatsächlich speist. Diese wählst du unter **Einstellungen → Stammdaten → Anlage** im Feld **„PV-Prognose-Quelle für diese Anlage"**.
 
 Als operative Prognosequelle stehen zur Wahl:
 
@@ -83,11 +87,15 @@ Als operative Prognosequelle stehen zur Wahl:
 - **Solcast** (pur, ohne eedc-Korrektur).
 - **Solar Forecast ML (SFML)** — die HA-Integration von Tom-HA, pur und ohne eedc-Korrektur (das ML-Modell kalibriert sich selbst). **Nur im HA-Add-on auswählbar**; im Standalone ist die Option deaktiviert. Ist SFML gewählt, aber kein HA verfügbar, fällt eedc neutral auf die eedc-Quelle zurück.
 
-**SFML erscheint absichtlich *nicht* in der Vier-Spalten-Vergleichsmatrix.** eedc positioniert sich bewusst nicht vergleichend gegen eine spezialisierte Profi-Prognosequelle. SFML wirkt also als *aktive* Quelle (treibt deine operative Prognose), wird aber nicht Spalte an Spalte gegen OpenMeteo/eedc/Solcast gestellt. Das ist so gewollt — kein Fehler.
+**Ist SFML deine gewählte Quelle, siehst du sie im Vergleich — als Wert, nicht als Note.** Der Stundenvergleich, der 7-Tage-Vergleich und der Tagesverlauf zeigen dann eine zusätzliche **SFML**-Spalte bzw. -Kurve: sonst fehlte dir in dieser Sicht ausgerechnet die Zahl, mit der eedc bei dir tatsächlich rechnet.
+
+**Was SFML *nicht* bekommt, ist eine Abweichungs-Spalte** — und im **Genauigkeits-Tracking** (MAE/Bias und die Tagestabelle darunter) erscheint SFML gar nicht. eedc positioniert sich bewusst nicht bewertend gegen eine spezialisierte Prognosequelle; für zurückliegende Tage führt eedc über SFML deshalb auch keine Mitschrift, weshalb die SFML-Spalte im 7-Tage-Vergleich für die Vergangenheit „—" zeigt. Das ist so gewollt — kein Fehler.
+
+> Bis v4.0.8 blieb SFML in diesen Sichten **ganz** außen vor. Das war eine gröbere Regel als nötig: Wert und Bewertung standen damals in derselben Tabellenzelle, „anzeigen ohne zu bewerten" gab es also nicht. Seit Wert und **Δ** getrennte Spalten haben, geht beides.
 
 > **Echte Stundenauflösung:** Ist SFML als Quelle gewählt, nutzt eedc SFMLs **eigenes Stundenprofil** (bis zu 3 Tage, stündlich — aus dem evcc-Prognose-Sensor `…_evcc_solar_prognose`). Die SFML-Kurve im Tagesverlauf zeigt also SFMLs eigene Form, nicht die über die OpenMeteo-Strahlungskurve „verschmierte" Tagessumme. Fehlt dieser Sensor, fällt eedc auf das Tagesprofil `prognose_heute` (24 h) und notfalls auf die alte GTI-Verteilung zurück. (Das ist reine Treue zur selbstgewählten Quelle, **kein** Genauigkeits-Vergleich.)
 
-- **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil der Vier-Spalten-Matrix.
+- **PVGIS** liefert zusätzlich die **Langfrist-**Sicht (12 Monate, Finanzprognose) aus typischen Meteojahren — eine eigene Quelle, ebenfalls kein Teil des Stunden-/Tagesvergleichs.
 
 ### 2.6 Die aktive PVGIS-Prognose — eine, und du bestimmst welche
 
@@ -175,12 +183,13 @@ Die [Prognose-Auswertung](HANDBUCH_BEDIENUNG.md#43-prognose-genauigkeit-gegen-is
 
 #### „Stundenvergleich heute" — was die Abweichungen sagen
 
-Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention)). Neben jedem Prognosewert steht die Abweichung zum gemessenen IST **derselben** Stunde, in kWh:
+Jede Zeile ist eine Stunde; eine Stunde steht dabei für die Zeit **davor** (Zeile 11:00 = 10:00–11:00 Uhr, [Backward-Konvention](BERECHNUNGEN.md#backward-slot-konvention)). Jede Quelle hat **zwei** Spalten: ihren Wert, und daneben unter **Δ** die Abweichung zum gemessenen IST **derselben** Stunde:
 
 - **Sobald für eine Stunde ein IST vorliegt, trägt jede Prognosespalte eine Abweichung** — auch wenn sie „± 0,0" lautet. Eine fehlende Annotation heißt also nicht „kleine Abweichung", sondern **„für diese Stunde gibt es noch keine Messung"**.
 - **± 0,0** = Treffer im Rahmen der angezeigten Nachkommastelle, **▲** = Prognose lag über dem IST, **▼** = darunter. Die Farbe folgt der relativen Abweichung (grün < 10 %, gelb < 30 %, sonst rot).
+- Hinter der kWh-Differenz steht dieselbe Abweichung **relativ**, z. B. „▲ 9,7 (16 %)". Beide Zahlen sagen etwas Eigenes: 0,3 kWh sind mittags ein Treffer und morgens um sieben eine Fehlprognose. Die relative Angabe entfällt nur, wenn das IST so klein ist, dass ein Prozentwert erfunden wäre.
 
-**Die Σ-Zeile vergleicht nur den bisher gelaufenen Tag.** Sie summiert Prognose und IST über **dieselben** Stunden — bis zur letzten Stunde, für die eine Messung vorliegt — und schreibt diese Grenze darunter (`bis 13:00`). Zusätzlich zur Differenz in kWh steht dort die **prozentuale** Abweichung.
+**Die Σ-Zeile vergleicht nur den bisher gelaufenen Tag.** Sie summiert Prognose und IST über **dieselben** Stunden — bis zur letzten Stunde, für die eine Messung vorliegt — und schreibt diese Grenze darunter (`bis 13:00`).
 
 > Bis v4.0.5 stand in dieser Zeile die Prognose des **ganzen** Tages neben dem IST **bis jetzt** — mittags also z. B. „78,1 ▲ 52,0" gegen „26,1". Diese Zahl maß vor allem, wie früh am Tag man hinsah. Dieselben Daten ergeben jetzt „30,2 ▲ 4,1 (16 %)" gegen „26,1 bis 13:00" — die Aussage über die Prognosegüte, die der Vergleich immer sein sollte.
 
@@ -288,6 +297,8 @@ Faustregel für die Deutung:
 - **|Bias| ≈ MAE** → systematischer Versatz → genau hier wirkt der Lernfaktor / das Korrekturprofil.
 
 Der Bias ist in der UI **neutral grau** gefärbt: ein Vorzeichen ist eine Information, keine „schlechte Note". Die Tabelle zeigt MAE und Bias für OpenMeteo, eedc und Solcast nebeneinander; sie bleibt auch dann stabil und lesbar, wenn für eedc noch kein Lernfaktor vorliegt (dann bleibt nur die eedc-Spalte leer).
+
+**Die Tagestabelle darunter spricht dieselbe Sprache wie der Stundenvergleich:** je Quelle eine Wert- und eine **Δ**-Spalte, die Abweichung absolut in kWh mit der relativen Angabe in Klammern. Bis v4.0.8 stand hier nur der relative Wert („+16 %") — dieselben vier Tage, die auch im 7-Tage-Vergleich stehen, wurden damit auf einer Seite in zwei verschiedenen Sprachen beschrieben.
 
 Im Diagnose-Modus zeigt eedc zusätzlich die **Asymmetrie** — getrennt, wie stark und an wie vielen Tagen die Prognose *über* bzw. *unter* dem IST lag. So wird z. B. ein reiner Vormittags-Bias sichtbar.
 

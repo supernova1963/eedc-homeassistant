@@ -24,6 +24,7 @@
    8. [MQTT-Topic-Abdeckung](#48-mqtt-topic-abdeckung)
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
+   11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -48,7 +49,7 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
 - **Klappbare Kategorie-Sektionen**: Jede Kategorie zeigt im Kopf eine Sammel-Bewertung (z. B. *„2 Warnungen, 1 Hinweis"* oder *OK*) und enthält die Einzelbefunde.
 - **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details und „Beheben"-Link zur betroffenen Stelle (Datenquellen, Monatsdaten, Komponenten-Formular usw.).
 
-> Der Daten-Checker umfasst inzwischen mehr Kategorien als die neun hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Status/-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
+> Der Daten-Checker umfasst inzwischen mehr Kategorien als die hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
 
 ### Wann sollte ich den Daten-Checker nutzen?
 
@@ -129,12 +130,12 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **Installationsdatum nicht gesetzt** | ⚠️ WARNING | Wird zur Bestimmung des erwarteten Monatsdaten-Zeitraums benötigt. Ohne Datum kann der Checker nicht sagen, welche Monate erfasst sein sollten. | Einstellungen → Stammdaten → Anlage → Installationsdatum eintragen. |
-| **Anlagenleistung fehlt oder ist 0** | ❌ ERROR | Leistung in kWp ist Bezugsgröße für sämtliche Soll-/Ist-Vergleiche und PVGIS-Plausibilität. | Einstellungen → Stammdaten → Anlage → Leistung in kWp eintragen. Der Wert sollte mit der Summe der PV-Modul-Komponenten übereinstimmen (siehe nächste Zeile). |
+| **Anlagenleistung fehlt oder ist 0** | ❌ ERROR | Leistung in kWp ist Bezugsgröße für sämtliche Soll-/Ist-Vergleiche und PVGIS-Plausibilität. | Einstellungen → Stammdaten → Anlage → Leistung in kWp eintragen. Gemeint ist die installierte **Modulleistung (DC)**, also die Summe der PV-Modul-Komponenten — **nicht** die Summe der Wechselrichter-Leistungen. Ein Balkonkraftwerk gehört nicht dazu (eigene Anlage mit eigener MaStR-Registrierung). |
 | **Keine Koordinaten hinterlegt** | ℹ️ INFO | Koordinaten werden nur für die PVGIS-Solarprognose benötigt. Ohne sie funktionieren PV-Auswertungen mit dynamischer Performance-Ratio nicht; statische Plausibilität bleibt aktiv. | Einstellungen → Stammdaten → Anlage → Koordinaten setzen (oder „Aus Adresse ermitteln"). |
 | **Kein Standort hinterlegt (Ort/PLZ)** | ℹ️ INFO | Wird für den Community-Benchmark-Vergleich nach Region benötigt. Ohne Ort/PLZ teilst du keine regionalen Vergleichswerte. | Einstellungen → Stammdaten → Anlage → Ort oder PLZ setzen. |
 | **Keine PV-Module als Komponente angelegt** | ❌ ERROR | Ohne PV-Modul-Komponenten fehlen Erzeugungsdaten in der Aufschlüsselung. (Sonderfall: nur Balkonkraftwerk → INFO statt ERROR.) | Einstellungen → Komponenten → PV-Module hinzufügen. |
 | **Nur Balkonkraftwerk, keine PV-Module angelegt** | ℹ️ INFO | BKW-only Setup. PVGIS-Prognose und String-Vergleich sind nicht verfügbar, alles andere funktioniert. | Keine Aktion nötig — Hinweis dokumentiert die Einschränkung. |
-| **PV-Module kWp stimmt nicht mit Anlagenleistung überein** | ⚠️ WARNING | Summe `leistung_kwp` aller aktiven PV-Modul- und BKW-Komponenten weicht > 0,1 kWp von `Anlagenleistung` ab. Verfälscht alle Soll-Werte. | Entweder die Anlagen-Stammdaten an die Modulsumme anpassen, oder die Modul-Komponenten vervollständigen. |
+| **&lt;Wechselrichter&gt;: Modulleistung ist mehr als das 2-fache der Wechselrichter-Leistung** | ⚠️ WARNING | DC/AC-Verhältnis der Strings an diesem Gerät > 2,0. **Überbelegung selbst ist der Normalfall** und wird nicht gemeldet (üblich 1,1–1,3, bei Ost/West bis ~1,5) — oberhalb 2,0 ist ein Pflegefehler wahrscheinlicher als eine Auslegung. | Prüfen, ob in einem „Leistung (kWp)"-Feld eines Strings versehentlich die **Wechselrichter**-Leistung steht. Ins kWp-Feld gehört die Modulleistung (Anzahl × Wp), die Geräteleistung ins Feld „Max. Leistung (kW)" des Wechselrichters. Ist die Auslegung wirklich so, kann die Meldung stehen bleiben — sie ändert keine Berechnung. |
 | **PVGIS-Systemverluste ggf. zu hoch (X %)** | ℹ️ INFO | Ø Performance Ratio (IST/PVGIS) > 1,1 über mindestens 6 Monate — die Anlage produziert systematisch über der Prognose. Der Verlust-Wert (Standard 14 %) ist eine **Annahme der Prognose**, keine Messung. | Einstellungen → Solarprognose → *Neue Prognose abrufen* → Systemverluste senken (z. B. 10 % statt 14 %) → **„Speichern & Aktivieren"**. Ohne neuen Abruf ändert sich nichts — die Monatswerte der Prognose sind gespeichert. **Folge:** das SOLL steigt, deshalb sinken Performance Ratio und SOLL-Erfüllung in *Prognose vs. IST* und im Jahresbericht; **die IST-Werte ändern sich nicht**. Umkehrbar: die bisherige Prognose bleibt in der Historie und lässt sich wieder aktivieren. Erst nach mindestens einem Sommer mit verlässlicher IST-Erfassung sinnvoll — die Prognose bewusst als konservative Untergrenze zu behalten ist ebenfalls in Ordnung. |
 | **Installationsdatum vorhanden / Anlagenleistung: X kWp / PV-Module: X kWp (N Modul-Gruppen)** | ✅ OK | Pflichtfelder gesetzt und konsistent. | – |
 
@@ -302,7 +303,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **MM/JJJJ: Einspeisung (X kWh) > PV-Erzeugung (Y kWh)** | ❌ ERROR | Logisch unmöglich — du kannst nicht mehr einspeisen als erzeugen. | Beide Werte prüfen. Häufige Ursache: PV-Erzeugung wurde nur teilweise erfasst (z. B. ein String fehlt in den Komponenten), oder Einspeisung enthält fälschlich Bezug. |
 | **MM/JJJJ: mehr PV verwendet als erzeugt?** | ⚠️ WARNING | Einspeisung **plus** die aus PV geladene Speichermenge ist größer als die Erzeugung des Monats. Beides kommt aus derselben Quelle — zusammen kann es nicht mehr sein, als die Anlage geliefert hat. Bewusst als **Frage**: die häufigste Ursache ist kein Messfehler. | In dieser Reihenfolge prüfen: **(1)** Wird der Speicher auch aus dem Netz geladen (Arbitrage, Notladung), ohne dass das Feld **Ladung aus Netz** gepflegt ist? Dann stimmt die Energie, nur die Zuordnung fehlt. **(2)** Ist die Erzeugung zu niedrig erfasst (ausgesetzter String-Sensor)? **(3)** Sind Einspeisung und Netzbezug vertauscht — dann meldet die Zeile darüber meist zusätzlich. Kleine Abweichungen (bis 2 % der Erzeugung, mindestens 5 kWh) bleiben still. |
 | **MM/JJJJ: Einspeisung und Netzbezug sind beide 0** | ⚠️ WARNING | Beide Kernfelder sind 0 — wahrscheinlich fehlende Daten, kein echter Null-Verbrauch. | Monatsdaten öffnen, Werte eintragen. Falls die Anlage tatsächlich den ganzen Monat aus war (Umzug, Defekt): WARNING akzeptieren. |
-| **MM/JJJJ: \[Feld\] > 3× Vorjahr (X vs. Y kWh)** | ⚠️ WARNING | Einspeisung oder Netzbezug ist mehr als dreimal so groß wie der gleiche Monat im Vorjahr (Vorjahr > 50 kWh). Häufig Eingabefehler (Faktor 10) oder Zählerwechsel ohne Reset. **Zwei Ausnahmen bei der Einspeisung:** der Vergleichsmonat liegt vor oder in der Inbetriebnahme, **oder** die installierte Erzeugerleistung ist zwischen beiden Monaten um mindestens 10 % gewachsen (Anlagen-Ausbau) — dann wird die Prüfung für dieses Monatspaar ausgesetzt. Beim **Netzbezug** greift die Ausbau-Ausnahme bewusst nicht: der sinkt mit mehr PV und steigt mit neuen Verbrauchern. | Werte beider Monate prüfen. Bei echter Veränderung (neue Wallbox, neue WP): WARNING akzeptieren. |
+| **MM/JJJJ: \[Feld\] > 3× Vorjahr (X vs. Y kWh)** | ⚠️ WARNING | Einspeisung oder Netzbezug ist mehr als dreimal so groß wie der gleiche Monat im Vorjahr (Vorjahr > 50 kWh). Häufig Eingabefehler (Faktor 10) oder Zählerwechsel ohne Reset. **Drei Ausnahmen — die Prüfung setzt für das Monatspaar aus:** (1) der Vergleichsmonat liegt vor oder in der Inbetriebnahme (beide Felder); (2) die installierte Erzeugerleistung ist zwischen beiden Monaten um mindestens 10 % gewachsen — dann ist der Sprung der **Einspeisung** erklärt; (3) zwischen beiden Monaten ist ein **Verbraucher dazugekommen** (Wärmepumpe, E-Fahrzeug, Wallbox oder ein „Sonstiges“ der Kategorie Verbraucher) — dann ist der Sprung des **Netzbezugs** erklärt. Ausnahme 2 und 3 sind seitenrein: ein Erzeuger-Zubau entschuldigt den Netzbezug nicht und umgekehrt. Ein **Austausch** ist kein Zubau (alte Komponente stillgelegt, neue angeschafft ⇒ Anzahl unverändert). | Werte beider Monate prüfen. Zeigt eedc die Meldung trotz neuer Wallbox/WP, ist deren Anschaffungsdatum vermutlich nicht gepflegt — dann dort nachtragen, statt die Meldung stehen zu lassen. |
 
 #### Energiebilanz
 
@@ -435,6 +436,24 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 **Reichweite:** Die Tagesreparatur heilt Tages- und Stundenwerte, **nicht** die Monatswerte. Für abgeschlossene Monate danach Einstellungen → Integration → **Statistik-Import**.
 
 > **Abgrenzung:** PV-Werte auf einer *bestehenden* Tageszeile gehören der Drift-Prüfung (§4.7-Umfeld, Meldung „PV x → HA y kWh") — kein zweiter Turm über denselben Sachverhalt. Der Speicher-Netto-Wert (`batterie_*`) bleibt hier außen vor, er darf legitim ~0 sein.
+
+---
+
+### 4.11 Geräte-Connector ohne Monatswert <a name="411-geraete-connector-ohne-monatswert"></a>
+
+> **Variantenhinweis:** Nur relevant, wenn unter *Einstellungen → Datenquellen* ein **Geräte-Connector** eingerichtet ist. Ohne Connector wird die Kategorie still übersprungen — sie meldet nie etwas, das du nicht auflösen könntest.
+
+**Was wird geprüft:** Kann eedc aus den gespeicherten Zählerständen des Connectors für den **laufenden Monat** überhaupt einen Wert bilden? Ein Connector-Wert ist immer die **Differenz zweier Snapshots** — einer muss vor dem Monatsbeginn liegen, einer danach. Fehlt einer davon, liefert der Connector für diesen Monat gar nichts, und das war bisher nirgends zu sehen: In *Cockpit → Monat* stand einfach eine Quelle weniger, ohne Hinweis darauf, dass eine eingerichtete Quelle gerade schweigt.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **Connector „…" liefert für MM/JJJJ keinen Wert** | ⚠️ WARNING | Es liegen nicht genügend Zählerstände vor, um den laufenden Monat zu berechnen — entweder erst einer insgesamt, oder der jüngste ist mehrere Tage alt (der Abruf steht still). Die Details nennen den Bestand und ob der tägliche Abruf eingeschaltet ist. | Einstellungen → Datenquellen → Connector: **täglichen Abruf einschalten** bzw. die Verbindung prüfen (Gerät erreichbar? Zugangsdaten noch gültig?). Sobald ein zweiter Zählerstand vorliegt, verschwindet der Befund von selbst. |
+
+**Kein Lärm am Monatsersten.** Solange der Connector aktiv liefert, fehlt ihm am 1. eines Monats bis zum ersten Abruf naturgemäß der Snapshot *im* Monat. Dieser Zustand erledigt sich innerhalb eines Tages und wird deshalb nicht gemeldet — der Befund erscheint erst, wenn der jüngste Zählerstand älter als zwei Tage ist (oder es überhaupt erst einen gibt).
+
+> **Abgrenzung:** Liefert der Connector einen Wert, misst er aber nur einen **Teil** des Monats (frisch eingerichtet), ist das kein Befund — dort steht eine Zahl, und sie wird in *Cockpit → Monat* mit ihrem Zeitraum beschriftet: „Connector (28.–30.07.2025)". Siehe [HANDBUCH_BEDIENUNG.md §2.3](HANDBUCH_BEDIENUNG.md#23-monat).
 
 ---
 

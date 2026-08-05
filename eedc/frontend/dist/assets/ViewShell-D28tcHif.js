@@ -1,0 +1,1 @@
+import{j as l}from"./index-BG4CpxFi.js";function o({bar:e,children:s}){return l.jsxs("div",{className:"lg:flex lg:flex-col lg:h-full lg:min-h-0",children:[e,l.jsx("div",{"data-sicht-scroll":!0,className:"lg:flex-1 lg:overflow-auto lg:min-h-0",children:s})]})}export{o as V};

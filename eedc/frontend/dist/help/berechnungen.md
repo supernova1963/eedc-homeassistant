@@ -196,9 +196,11 @@ CO2-Einsparung (kg)      = PV_Erzeugung * 0.38               (VERALTET — s. Ka
 mit negativem Börsenpreis eingespeist wurden — für betroffene Anlagen entfällt dafür
 die Vergütung (Herleitung des Volumens: Abschnitt „§51 EEG (Negativpreis-Analyse)"). Ist
 die Anlage nicht §51-pflichtig oder liegt keine Strompreis-Mitschrift vor, ist der
-Wert `null` und es wird nichts abgezogen. Der Abzug gilt **überall** gleich:
-Backend-SoT `core/berechnungen/einspeise_erloes.py` und der Frontend-Spiegel
-`lib/calculations.ts::calcEinspeiseErloes` (Auswertungen → Finanzen + Tabelle).
+Wert `null` und es wird nichts abgezogen. Der Abzug gilt **überall** gleich, und es
+gibt dafür **eine** Implementierung: `core/berechnungen/einspeise_erloes.py`. Bis
+2026-08-04 stand daneben ein Frontend-Spiegel (`lib/calculations.ts::calcEinspeiseErloes`)
+für *Auswertungen → Finanzen + Tabelle*; er ist mit Fund **N-22** entfallen, weil die
+Monats-Finanzzeile jetzt fertig aus `/monatsdaten/aggregiert` kommt.
 
 **Netzpunkt-Bilanz (Erzeugung_gesamt):** Am EINEN Netzanschluss messen die Zähler
 (`Einspeisung`/`Netzbezug`) die Summe **aller** dahinter liegenden Erzeuger. Deshalb
@@ -443,10 +445,18 @@ Vollzyklen = Entladung_kWh ÷ Kapazität_brutto_kWh
 ```
 
 **SoT:** `core/berechnungen/speicher.py::vollzyklen`. Alle Sichten rufen ihn auf —
-Komponenten-Hub (`investitionen/dashboards.py`), Cockpit Tag (`energie_profil/tage_werte.py`) und
-Monat/Jahr (`aktueller_monat.py`), PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
-Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie)
-und `test_tage_werte_symmetrie.py`.
+Komponenten-Hub (`investitionen/dashboards.py`), Cockpit Tag (`energie_profil/tage_werte.py`),
+Monat/Jahr (`aktueller_monat.py`) und **Cockpit-Übersicht (`cockpit/uebersicht.py`)**,
+PDF-Jahresbericht, HA-Sensor `speicher_zyklen`.
+Gewächtert von `backend/tests/test_speicher_zyklen_kapazitaets_basis.py` (inkl. Drei-Pfad-Symmetrie),
+`test_tage_werte_symmetrie.py` und `test_speicher_kanon_symmetrie.py`.
+
+> ⚠ **Diese Aufzählung war bis zum 2026-08-04 unvollständig — und genau die fehlende Zeile war die
+> fehlerhafte.** `cockpit/uebersicht.py` rechnete weiterhin `Ladung ÷ Kapazität`; der Sweep vom
+> 2026-07-28 hatte die Route übersehen, und weil ihr Wert damals keinen Client-Leser hatte, fiel es
+> niemandem auf (#358 gab ihm einen). **Lehre:** eine Liste von Aufrufern in der Doku ist eine
+> Behauptung über den Code — sie gehört mit einem baumweiten Grep belegt, sonst dokumentiert sie
+> den Soll- statt den Ist-Zustand.
 
 **Warum die Entladung:** Ein Vollzyklus meint die einmal *entnommene* Kapazität — die Größe, auf die
 sich Hersteller-Garantien beziehen, und unabhängig von den Wandlungsverlusten des Ladepfads. Sie ist
@@ -456,6 +466,63 @@ außerdem ein Energiedurchsatz und damit über Tag → Monat → Jahr additiv.
 Nenner, der je nach Pflegezustand wechselt, wäre schlimmer als ein durchgehend leicht konservativer
 Wert. Im HA-Export ist das Netto-Feld reiner **Fallback**, falls die Brutto-Kapazität fehlt — die
 Lese-Reihenfolge dort ist bewusst brutto → netto und bleibt es auch nach A31-2.
+
+#### Auslastung — zeitraum-normierte Nutzung (#358 Phase 1)
+
+```
+Auslastungs-Basis  = Kapazität_brutto_kWh × Tage_im_Zeitraum
+Auslastung [%]     = Entladung_kWh ÷ Auslastungs-Basis × 100
+```
+
+**SoT:** `core/berechnungen/speicher.py::auslastungs_basis_kwh` + `auslastung_prozent`.
+Geliefert von `aktueller_monat.py` (Felder `speicher_auslastungs_basis_kwh` /
+`speicher_auslastung_prozent`), angezeigt in *Cockpit → Monat* und *→ Jahr*.
+
+**Warum die Basis ein eigenes Feld ist:** Auslastungen mehrerer Monate lassen sich **nicht
+mitteln** — ein Februar wiegt weniger als ein Juli, ein angefangener Monat noch weniger. Wer ein
+Jahr bildet, summiert **Entladung und Basis** und teilt einmal. Ein Prozent-Mittelwert wäre die
+Drift-Klasse, die diese Trennung von vornherein ausschließt (Beleg:
+`test_speicher_kanon_symmetrie.py::test_auslastungs_basis_ist_additiv_ueber_monate` — 40 % und
+61 % ergeben zusammen 50 %, nicht 50,5 %).
+
+**Im laufenden Monat zählen nur die abgelaufenen Tage.** Sonst stünde am 3. eines Monats eine
+Auslastung von 10 %, die nichts über den Speicher aussagt, sondern über das Datum — ein voller
+Nenner gegen einen angefangenen Zähler, genau der Fall aus
+[KONZEPT-UNVOLLSTAENDIGE-WERTE](KONZEPT-UNVOLLSTAENDIGE-WERTE.md) §3.
+
+**Kein Deckel bei 100 %:** zwei Zyklen an einem Tag sind real, und die Zahl soll das sagen dürfen.
+Ohne gepflegte Kapazität liefern beide Funktionen `None` — „unbekannt", nicht 0.
+
+#### Der Nutzen in Euro — Spread, nicht Voll-Strompreis
+
+```
+PV-Anteil der Entladung   = Entladung − min(Entladung, Netzladung × η)
+Netz-Anteil der Entladung = min(Entladung, Netzladung × η)
+
+Ersparnis = PV-Anteil   × (Netzbezug − Einspeisevergütung) / 100
+          + Netz-Anteil × (Netzbezug − Ladepreis)          / 100
+```
+
+**SoT:** `core/berechnungen/speicher_wirtschaftlichkeit.py::berechne_speicher_ersparnis`.
+Aufrufer: T-Konto (`aktueller_monat.py::_baue_investition_financial`), Speicher-Dashboard und
+Sonstiges-Speicher (`investitionen/dashboards.py`), Aussichten. Gewächtert von
+`test_speicher_kanon_symmetrie.py` (drei Achsen, mit **absoluten** Erwartungen — Symmetrie allein
+ließe auch drei gleich falsche Zahlen durch, Lehre aus N-130).
+
+**Warum der Spread:** die entladene kWh ersetzt Netzbezug, hätte aber sonst Einspeisevergütung
+erbracht. Die entgangene Vergütung ist eine reale Gegenposition (Drift-Audit A3, von Gernot am
+2026-08-04 für #358 bestätigt).
+
+**Warum die Netzladung ausgenommen ist:** sie hätte nie eingespeist werden können, der PV-Spread
+gilt für sie nicht. Ihr Vorteil ist `Netzbezug − Ladepreis`; ohne gepflegten Ladepreis ist sie
+kostenneutrale Durchleitung (z. B. Backup-Vorhaltung).
+
+> ⚠ **Zwei Fundstellen wichen bis zum 2026-08-04 ab** — beide sichtbar: `aktueller_monat.py`
+> rechnete `Entladung × Netzbezug` (bei 30/8 ct **36 % zu hoch**), `dashboards.py` den Spread
+> **inline** auf der gesamten Entladung *und* wies den Arbitrage-Gewinn zusätzlich aus — der
+> Komponenten-Hub addiert beide Posten, netzgeladene Energie zählte damit doppelt. Die Formel im
+> Layer zu haben genügt nicht; sie ist erst durchgesetzt, wenn keine Inline-Kopie mehr danebensteht
+> (ADR-001).
 
 #### Brutto oder netto — wann welche Kapazität gilt
 
@@ -656,16 +723,35 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 | Metrik | Wo angezeigt | Formel | Bedeutung |
 |--------|-------------|--------|-----------|
-| **Jahres-Rendite** | Cockpit, Auswertungen → ROI | Kumul. Ersparnis / Investition * 100 | Wie viel % bereits amortisiert (kumuliert) |
+| **Jahres-Rendite** | Cockpit | Kumul. Ersparnis / Relevante Kosten * 100 | Wie viel % bereits amortisiert (kumuliert) |
 | **ROI p.a.** | Auswertungen → ROI (pro Komponente) | Jahres-Einsparung / Relevante Kosten * 100 | Rendite pro Jahr |
-| **Amortisations-Fortschritt** | Auswertungen → Finanzen | Bisherige Erträge / Investition * 100 | Kumulierter Fortschritt |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel), Jahresbericht-PDF | Bisherige Erträge / Relevante Kosten * 100 | Kumulierter Fortschritt |
 
-**Und zwei verschiedene Amortisations-Angaben:**
+> **Ein Nenner für alle drei (N-137, seit 2026-08-04).** „Relevante Kosten" sind die **Mehrkosten**
+> `Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)` — SoT
+> `core/berechnungen/investitionskosten.py::relevante_kosten_aus_investitionen`, identisch mit der
+> USt-Bemessungsgrundlage (§3.7). Vorher gab es **drei** Antworten: die ROI-Sicht rechnete ohne
+> Klemmung je Position, Aussichten und Cockpit trugen eine Hybrid-Summe, deren WP-/E-Auto-Mehrkosten
+> aus `parameter["alternativ_kosten_euro"]` kamen — einem Schlüssel **ohne Schreiber**, der immer auf
+> die Festannahmen 8.000 € / 35.000 € zurückfiel. Gepflegt wird die Spalte
+> `anschaffungskosten_alternativ`, die der Daten-Checker mit WARNING einfordert.
+>
+> **Ohne gepflegte Alternativkosten zählen die Vollkosten.** eedc setzt keine Annahme mehr ein; die
+> Amortisation fällt dadurch für WP und E-Auto ungünstiger aus als vorher, dafür entspricht sie den
+> Daten, die tatsächlich da sind. Gesichert durch `test_amortisation_nenner_symmetrie.py`
+> (**Regression**, drei Sichten auf einer Fixture mit Alternativkosten ≠ Festannahme).
+
+**Und zwei verschiedene Amortisations-Angaben — Modell neben Messung:**
 
 | Angabe | Wo | Grundlage |
 |---|---|---|
-| **Amortisation (Ist)** — Dauer **und Break-Even-Jahr** | Auswertungen → ROI | die tatsächlich erfassten Erträge, fortgeschrieben. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
+| **Amortisationsdauer** — Jahre **und Break-Even-Jahr** | Auswertungen → ROI | **MODELL:** `Relevante Kosten ÷ prognostizierte Jahres-Einsparung`, konstant hochgerechnet. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
+| **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`. |
 | **Amortisation (Prognose)** | PDF-Finanzbericht | `Gesamt-Kosten ÷ prognostizierte Jahres-Einsparung` — eine Projektion, kein gemessener Verlauf. |
+
+> Die beiden ersten beantworten dieselbe Frage verschieden — „laut Rechnung in 9,2 Jahren" gegen
+> „4.800 € von 12.000 € sind drin". Das ist gewollt und in beiden Tooltips ausgeschrieben; Bedingung
+> ist der **gemeinsame Nenner**, sonst ließen sich die Zahlen nicht ineinander überführen.
 
 > Verteilen sich die Anschaffungen über mehrere Jahre, ist das ausgewiesene Amortisationsjahr
 > **optimistisch** (der Anker ist die *erste* Anschaffung, die Kosten sind die Summe). Der
@@ -673,23 +759,57 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 
 ### 3.7 USt auf Eigenverbrauch
 
-**Funktion:** `berechne_ust_eigenverbrauch()` in `core/calculations.py`
+**SoT:** `core/berechnungen/ust_eigenverbrauch.py` (Berechnungs-Layer, ADR-001)
 **Bedingung:** Nur wenn `Anlage.steuerliche_behandlung == "regelbesteuerung"`
 
+Die Selbstkosten je kWh sind eine **Jahresgröße**. Gerechnet wird deshalb **je
+Kalenderjahr** und summiert — auch wenn die Sicht einen mehrjährigen Zeitraum zeigt:
+
 ```
-Abschreibung_Jahr    = Investition_gesamt / 20        (20 Jahre lineare AfA)
-Selbstkosten_pro_kWh = (Abschreibung_Jahr + Betriebskosten_Jahr) / PV_Erzeugung_Jahr
-USt_Eigenverbrauch   = Eigenverbrauch * Selbstkosten_pro_kWh * USt_Satz / 100
+Bemessungsgrundlage  = Σ max(0, anschaffungskosten_gesamt − anschaffungskosten_alternativ)
+Abschreibung_Jahr    = Bemessungsgrundlage / 20        (20 Jahre lineare AfA)
+
+je Kalenderjahr j:
+  Jahreskosten_j     = (Abschreibung_Jahr + Betriebskosten_Jahr) × Monate_j / 12
+  Selbstkosten_kWh_j = Jahreskosten_j / PV_Erzeugung_j
+  USt_j              = Eigenverbrauch_j × Selbstkosten_kWh_j × USt_Satz / 100
+
+USt_Eigenverbrauch   = Σ USt_j
 ```
 
 | Feld | Quelle |
 |------|--------|
-| `Investition_gesamt` | Σ(Investition.anschaffungskosten_gesamt) |
+| `Bemessungsgrundlage` | **Mehrkosten** je Investition, geklemmt bei 0 — nicht die Vollkosten. Der volle Kaufpreis eines E-Autos gehört nicht in die Selbstkosten des PV-Stroms; maßgeblich ist, was er gegenüber der Alternative gekostet hat |
 | `Betriebskosten_Jahr` | Σ(Investition.betriebskosten_jahr) |
-| `PV_Erzeugung_Jahr` | Aggregierte PV-Erzeugung aus InvestitionMonatsdaten |
+| `Monate_j` | Monate des Jahres `j`, die im ausgewerteten Zeitraum liegen (1–12). Ein angeschnittenes Jahr trägt anteilig AfA — sonst stünden zwölf Monate Abschreibung gegen sieben Monate Ertrag |
+| `PV_Erzeugung_j` | PV-Erzeugung des Jahres `j` aus den Monats-Fakten |
 | `USt_Satz` | `Anlage.ust_satz_prozent` (DE: 19, AT: 20, CH: 8.1) |
 
-**Auswirkung:** USt wird vom `Netto_Ertrag` abgezogen (im Cockpit und in Auswertungen → Finanzen).
+**Auswirkung:** USt wird vom `Netto_Ertrag` abgezogen — Cockpit, Jahresbericht-PDF,
+HA-Export, Aussichten und (seit 2026-08-04, Fund **N-22**) auch *Auswertungen →
+Finanzen* + *Tabelle*. Bis dahin behauptete dieser Satz den Abzug für die
+Auswertungen bereits, während der Client dort ohne ihn rechnete.
+
+> **Je Monat verteilt (Auswertungen):** die Formel ist linear im Eigenverbrauch,
+> deshalb trägt jeder Monat `EV_m × Selbstkosten_je_kWh × USt_Satz`. Der Nenner der
+> Selbstkosten ist die **Jahres**-PV, damit Σ der Monatsbeträge exakt der
+> Jahresbetrag bleibt. **Auf Tagesebene gibt es die Größe nicht** — Investitionssumme
+> und Jahresertrag lassen sich keinem Tag zuordnen; bei Regelbesteuerung gilt daher
+> Σ Tage ≠ Monat beim Netto-Ertrag (dieselbe bewusste Asymmetrie wie bei CO₂).
+>
+> **Historie (2026-08-04, Funde N-129/N-130):** Bis dahin standen im Baum *vier*
+> Bemessungsgrundlagen nebeneinander — vier Sichten die Vollkosten, das Cockpit eine
+> zusammengesetzte Summe, die als einzige `anschaffungskosten_alternativ` nicht las.
+> Und die Sichten übergaben die Erzeugung ihres **gesamten Zeitraums** als
+> „Jahres-Erzeugung": bei Filter „alle Jahre" stand eine mehrjährige Menge im Nenner
+> gegen eine Ein-Jahres-Abschreibung, die USt fiel um den Faktor der Jahresanzahl zu
+> niedrig aus. Beides ist mit dem Layer-SoT aufgelöst.
+>
+> ⚠ **Was weiterhin auseinandergeht:** *welche Menge* als Eigenverbrauch eingeht.
+> Cockpit und HA-Export setzen den **Netzpunkt**-Eigenverbrauch ein (inklusive eines
+> Brennstoff-Erzeugers), Jahresbericht, Aussichten und die Monatszeile den
+> **Finanz**-Eigenverbrauch (PV allein). Bei einer Anlage mit Mini-BHKW nennen die
+> beiden Gruppen deshalb verschiedene USt-Beträge. Register **N-131**.
 
 ### 3.8 CO2-Bilanz
 
@@ -804,10 +924,80 @@ Abweichung gegenüber dem Cockpit).
 **Faire Vergleichsbasis (ab v2.3.2):**
 SOLL wird NUR für Monate gezählt, die auch IST-Daten haben. Verhindert aufgeblähten SOLL bei Teil-Jahren.
 
+**Der laufende Monat zählt anteilig (ab v4.0.9, N-69):**
+PVGIS liefert Monatssummen — im laufenden Monat stünde diese volle Summe als Nenner über einem
+angefangenen Ertrag. Die Quote maß dann das Datum statt die Anlage: am 4. August meldete eine
+gesunde Anlage **19 %** SOLL-Erfüllung (264,8 IST gegen 1.387,9 SOLL), während dieselbe Anlage über
+Jan–Jul auf **119 %** kam; in der Jahres-Kachel wurden daraus 104 % statt 119 %.
+
+```
+Tage      = min(heutiger Tag, Tage im Monat)   im laufenden Monat, sonst alle Tage
+SOLL_kWh  = PVGIS-Monatswert × Tage ÷ Tage im Monat
+```
+
+Gekürzt wird der **Nenner**, nicht das Zeitfenster des IST (Entscheid 2026-08-04) — sonst verlöre
+die Monatssicht ihre einzige Einordnung des PV-Werts bis zum Monatsabschluss. Der laufende Tag zählt
+voll mit: ihn wegzulassen machte den Nenner kleiner und die Quote höher, also genau die Richtung,
+aus der der Fehler kam. Innerhalb des Monats gilt Gleichverteilung; am Beispiel oben liegt die
+Jahresquote damit bei 119,8 % gegen 119,2 % aus den abgeschlossenen Monaten allein.
+
+Ein Monat in der **Zukunft** hat null Tage und damit kein SOLL — die Sichten lassen die Quote weg,
+statt 0 % für einen Monat zu melden, der noch nicht stattgefunden hat. Abgeschlossene Monate und
+damit die gesamte Historie bleiben unberührt.
+
+SoT der Formel: `core/berechnungen/monatsfenster.py` (auch die Grundlast-Hochrechnung und die
+Speicher-Auslastung zählen ihre Tage dort, statt jede für sich). Die Jahres-Sicht summiert die
+Monatswerte und erbt die Kürzung ohne eigene Rechnung; die Oberfläche weist das Fenster aus
+(„anteilig · 4 von 31 Tagen").
+
 **SOLL im Monatsbericht:** derselbe Grundsatz — der Monatswert kommt aus den Monatszeilen **genau der
 aktiven** Prognose. Vor v4.0.1 stand dort eine Summe über *alle* aktiven Prognosen; bei einem
 Bestand mit zwei aktiven war der SOLL-PV-Wert verdoppelt, und mit ihm die SOLL/IST-Abweichung und die
 Grundlast-SOLL-Kachel.
+
+#### AC-Kappung im SOLL (ab v4.0.9, #354/#367)
+
+Das PVGIS-SOLL rechnet aus der **Modulleistung (DC)** und kennt die Grenze des Wechselrichters
+nicht. Bei einer überbelegten Anlage ist es damit systematisch unerreichbar: was das Gerät mittags
+abriegelt, taucht im SOLL/IST-Vergleich als Minus auf, das der Betreiber nicht zu verantworten hat.
+
+Die Kappung wirkt **stündlich**, nie als kWp-Deckel — ein 7-kW-Gerät begrenzt die Mittagsspitze,
+nicht den Morgen (Begründung im Modul-Docstring `core/berechnungen/wr_kappung.py`). Weil `PVcalc`
+nur Monatssummen liefert, entsteht der Faktor aus einem eigenen **`seriescalc`**-Stundenprofil
+derselben Anlage:
+
+```
+Faktor_Monat = Σ min(Stunde, AC-Grenze) ÷ Σ Stunde      (über 2018–2020, ertragsgewichtet)
+SOLL_Monat   = PVcalc.e_m × Faktor_Monat
+```
+
+Damit bleibt PVGIS die **einzige** Ertragsquelle; hier entsteht kein zweiter Ertragswert, nur ein
+Faktor ≤ 1. Drei Jahre statt einem, weil der Faktor sonst das Wetter eines Einzeljahres trägt (am
+Demo-Standort schwankt der April zwischen 0,804 und 0,875).
+
+> **Die Grenze gehört dem Wechselrichter, nicht der Himmelsrichtung.** Mehrere Strings an einem
+> Gerät teilen sich seine AC-Grenze und werden **gemeinsam** gekappt, anteilig nach ihrem
+> Stundenbeitrag — auch über Orientierungsgruppen hinweg. Am Demo-Bestand (Süd 12 · Ost 5 ·
+> West 3 kWp an einem 10-kW-Fronius) ist das der ganze Effekt: **je String einzeln gekappt bliebe
+> das SOLL unverändert**, weil kein einzelner String allein 10 kW erreicht — gemeinsam liefern sie
+> 1.227 kWh im Jahr, die das Gerät nie abgeben kann (20.812 → 19.585 kWh, −5,9 %; April −10 %,
+> November/Dezember 0).
+
+Woher die Grenze kommt (SoT `core/investition_kennwerte.get_wr_grenze_kw`, Zuordnung
+`wr_kappung.zuordne_grenzen`):
+
+| Erzeuger | Grenze | Geteilt? |
+| --- | --- | --- |
+| `balkonkraftwerk` | eigener Parameter `wechselrichter_leistung_w` | nein — Erzeuger und Wechselrichter sind ein Gerät |
+| `pv-module` | `max_leistung_kw` des zugeordneten **Wechselrichters** (Fallback: Legacy `leistung_ac_kw`, dann die Spalte `leistung_kwp`, die dort kW AC trägt) | **ja** — alle Strings desselben Geräts |
+
+**Ohne gepflegte Grenze wird nicht gekappt** (`None`, kein Default) und PVGIS gar nicht zusätzlich
+gefragt — die Prognose bleibt dann bitgleich zu vorher. Fällt der `seriescalc`-Abruf aus, gibt es
+**keine** Faktoren statt geratener: ein ungekapptes SOLL ist eine bekannte Größe, ein halb
+gekapptes wäre keine.
+
+Derselbe Layer kappt seit v4.0.4 die **Tages**-Prognose (`services/prognose_kanon.py`); seit
+v4.0.9 sehen beide Pfade dieselben Grenzen und dieselbe Gruppierung.
 
 #### IST-Berechnung
 
@@ -844,6 +1034,43 @@ er nur, wenn kein Messwert existiert — und dann sichtbar beschriftet. Solange 
 nennen die String-Sichten bewusst **keinen besten oder schwächsten String**: eine Platzierung wäre
 dort nur die Reihenfolge der Nennleistungen.
 
+##### Regel 1 gilt nur für echte Messungen (#352, seit v4.0.9)
+
+Die Präzedenz oben liest „ein eigener Wert in der Zeile = gemessen". Das stimmt nur, solange in der
+Zeile keine **gerechnete** Zahl steht — und zwei Schreibwege legen genau das dorthin: der Import
+einer Legacy-Gesamtspalte (`_distribute_legacy_pv_to_modules`, aus CSV-Backup, Portal- und
+Custom-Import) und der Monatsabschluss, wenn der zerlegte Vorschlag von Connector oder Cloud-Import
+übernommen wird (`_mapped_or_distribute`). Beide schrieben ihre Aufteilung bis dahin mit derselben
+Herkunft wie eine Gerätemessung; danach klassifizierte Regel 1 sie als `gemessen` — mit Ranking und
+grünem Daten-Checker als Folge.
+
+Seither vermerken diese Wege am Wert, dass er gerechnet ist:
+`InvestitionMonatsdaten.source_provenance["verbrauch_daten.<feld>"]["abgeleitet"]` trägt
+`kwp_anteil` (PV) bzw. `kapazitaet_anteil` (Speicher). SoT der Marken und ihrer Positivliste:
+`services/provenance.py` (`ABGELEITET_*`, `gepruefte_ableitung`). Der Ladepfad
+`services/pv_monatswerte.py` liest sie **aus derselben Zeile** — kein Join, keine zweite Abfrage —
+und übergibt sie als `PvModul.eigen_ist_abgeleitet`; `resolve_pv_je_modul` liefert dafür
+`QUELLE_VERTEILT` statt `QUELLE_GEMESSEN`, **ohne den Wert anzufassen**.
+
+Drei Grenzen, alle bewusst:
+
+- **Ein Empfänger = keine Zerlegung.** Geht der Gesamtwert an genau ein Modul bzw. einen Speicher,
+  ist er unverzerrt dort und bleibt `gemessen` — dieselbe Grenze, die der Monatsabschluss für
+  Beschriftung und Konfidenz schon vorher zog (`ist_verteilt`).
+- **Der Client meldet die Herkunft, das Backend rät sie nicht.** Nur die Oberfläche weiß, ob der
+  Anwender den zerlegten Vorschlag übernommen oder eine eigene Zahl getippt hat; sie schickt die
+  Marke im Investitions-Payload als `abgeleitet_felder` mit (gleiches Muster wie `geprueft_gegen`).
+  Client-SoT: `lib/erfassungZustand.ts::abgeleiteteMarke` — sie schweigt, wenn ein gleich hoher
+  Vorschlag **ohne** Marke danebensteht, weil dann nicht entscheidbar ist, welcher übernommen wurde.
+- **Kein Altbestand-Heilen.** Bereits gespeicherte Zeilen bleiben mehrdeutig: derselbe `writer`
+  steht dort für „echte Pro-Modul-Spalte aus der CSV" *und* für „verteilt". Rückwirkend trennen geht
+  nicht ([[feedback_kein_grosser_heiler_knopf]]); die Marke wirkt ab dem nächsten Schreibvorgang.
+
+Der Daten-Checker zählt markierte Werte nicht als Messung. Damit ein vollständig importierter Monat
+dadurch nicht von OK auf ERROR fällt, kennt `klassifiziere_pv_monat` den Parameter `n_abgeleitet`:
+decken die gerechneten Werte den Monat ab, ist er `verteilt` (INFO) — die Zahlen sind da, sie sind
+nur nicht gemessen.
+
 > **Benannte Ausnahme (ADR-002/P2-A):** Ist nur ein Teil der Module gemessen und **kein** Gesamtwert
 > hinterlegt, behält die Pro-Modul-Sicht ihre Messwerte, während die Anlagen-Summe bewusst nichts
 > zeigt. `Σ Strings ≠ Σ Anlage` ist dort **gewollt** — eine Teilsumme als „Gesamt-PV" auszuweisen wäre
@@ -857,6 +1084,38 @@ Der Zuordnungs-Schritt des Import-Wizards schlägt die Anteile ebenfalls **nach 
 (bzw. nach Kapazität bei Speichern); ist die Bezugsgröße nirgends gepflegt, verteilt er gleichmäßig
 **und sagt dazu, dass das keine proportionale Aufteilung ist**.
 
+#### IST je Erzeuger auf **Tagesebene** (ab v4.0.9, #350)
+
+Die Präzedenz oben gilt für **Monatswerte**. Auf der Tagesebene gibt es sie nicht — dort wird
+**nicht verteilt**:
+
+```
+erzeuger_kwh[inv_id] = Σ komponenten_kwh[pv_<id> | bkw_<id>]      (Boundary-Rollup)
+                     ∨ Σ TagesEnergieProfil.komponenten je Stunde  (Fallback, kein Rollup)
+kein eigener Sensor  ⇒ kein Eintrag (kein 0, kein kWp-Anteil)
+```
+
+SoT der Formel: `core/berechnungen/energie.py::erzeuger_kwh_je_investition`, ausgeliefert als
+`TagWerteResponse.erzeuger_kwh` (`GET /api/energie-profil/{id}/tage-werte`). Zwei Eigenschaften
+sind dabei nicht optional:
+
+- **Der Schlüssel ist die Investitions-ID, nicht der Komponenten-Key.** Dasselbe Balkonkraftwerk
+  heißt im Live-Keyspace `pv_<id>` und im Boundary-Keyspace `bkw_<id>`
+  (`snapshot/komponenten_beitraege._TYP_PREFIX` gegen `live_komponenten_builder`). Je Roh-Key
+  gruppiert bekäme ein Gerät zwei Spalten, deren Belegung vom Schreibpfad des jeweiligen Tages
+  abhängt — dieselbe Mismatch-Klasse wie der BKW-Doppelzählungs-Bug vom 2026-05-19.
+- **Keine kWp-Verteilung.** Der Monatspfad füllt Lücken nach Nennleistung und **kennzeichnet** das;
+  eine so gefüllte Tageszahl unter der Überschrift „Dach Süd" wäre von einer Messung nicht mehr zu
+  unterscheiden (die Klasse aus #352). Fehlt der Sensor, nennt die Oberfläche das Gerät und den
+  Weg zur Zuordnung, statt eine Spalte zu zeigen.
+
+Der Client schlüsselt **ab zwei Erzeugern** auf (`lib/erzeugerSpalten.ts`, geteilt von
+*Cockpit → Tag* und *Auswertungen → Tabelle*) und berücksichtigt Anschaffungs-/Stilllegungsdatum.
+Im Stundenverlauf **ersetzen** die Geräte-Flächen die PV-Fläche, statt auf ihr zu liegen; der
+ungedeckte Rest (`pvRestKw`) steht als „PV (übrige)" daneben, damit die Stapelhöhe die Erzeugung
+bleibt. Die Energie-Bilanz (`erzeugung`, `pv_anlage`, `bkw`) rechnet unverändert aus ihren eigenen
+Quellen — die Aufschlüsselung ist eine Auskunft, keine Summe.
+
 #### Kennzahlen pro String
 
 ```
@@ -865,6 +1124,10 @@ Abweichung_%          = (IST - SOLL) / SOLL * 100
 Performance_Ratio      = IST / SOLL
 Spez. Ertrag (kWh/kWp) = IST_Jahr / Modul_kWp
 ```
+
+**Ohne aktive PVGIS-Prognose** entfallen Abweichung und Performance Ratio (`None`); IST,
+Ertragsanteil und spezifischer Ertrag bleiben. Die Sicht zeigt sie seit v4.0.9 auch an — bis dahin
+brach sie ohne Prognose vollständig ab und verbarg damit auch die gemessenen Werte (#350).
 
 ### 3.10 Sonstige Positionen
 
@@ -1239,8 +1502,12 @@ WP_Strom_Monat = WP_Strom_Durchschnitt * Saison_Faktor
 
 #### Amortisation
 
+**SoT:** `core/berechnungen/amortisation.py::berechne_amortisations_fortschritt`
+(Berechnungs-Layer, ADR-001) — dieselbe Formel speist die Kachel
+„Amortisations-Fortschritt" in *Auswertungen → ROI*.
+
 ```
-Investition          = PV_System + WP_Mehrkosten + E-Auto_Mehrkosten + Sonstige
+Investition          = Σ max(0, Anschaffung − Alternative)   # relevante Kosten, §3.6
 
 Jahres_Netto_Ertrag  = PV_Einspeise_Erlös + EV_Ersparnis
                      + WP_Ersparnis + E-Auto_Ersparnis
@@ -1256,6 +1523,12 @@ Wenn nicht amortisiert:
     Monate_bis_Amort      = Rest_Betrag / (Jahres_Netto_Ertrag / 12)
     Prognose_Jahr         = Heute + Monate_bis_Amort
 ```
+
+> **Der Fortschritt ist reine Messung** — `Jahres_Netto_Ertrag` geht ausschließlich in die
+> Restlaufzeit ein. Ist er ≤ 0 (Anlaufjahr), gibt es keine Prognose statt einer geratenen;
+> sind die relevanten Kosten 0, gibt es nichts zu amortisieren (0 %, nicht „fertig"). Der
+> Fortschritt ist **nicht bei 100 % gedeckelt**: eine Anlage, die sich doppelt bezahlt gemacht
+> hat, darf das sagen.
 
 ---
 

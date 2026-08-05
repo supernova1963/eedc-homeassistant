@@ -58,7 +58,7 @@ Fast alle Sichten sind aus **Blöcken** aufgebaut — abgegrenzte Karten wie „
 
 Deine Klapp-Zustände, die Reihenfolge und die geparkten Elemente werden **pro Sicht im Browser gespeichert** und bleiben nach einem Neustart erhalten. Ein **Zurücksetzen**-Knopf stellt die Standard-Anordnung einer Sicht wieder her.
 
-> **Hinweis zum Layout:** eedc ist als datendichte Analyse-App primär für den Desktop gedacht. Live, Cockpit-Monat und die Komponenten-Sichten funktionieren auch am Smartphone gut; für die datendichten Tabellen (Auswertungen → Tabelle, Cockpit → Aussicht) empfehlen wir Querformat oder Desktop. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
+> **Hinweis zum Layout:** eedc ist als datendichte Analyse-App primär für den Desktop gedacht. Live, Cockpit-Monat und die Komponenten-Sichten funktionieren auch am Smartphone gut; für die datendichten Tabellen (Auswertungen → Tabelle, Cockpit → Aussicht) empfehlen wir Querformat oder Desktop. **Weggesperrt ist dabei nichts:** wo eine Tabelle auf einem schmalen Bildschirm nicht lesbar wäre, zeigt eedc dieselben Daten als **Karten** — eine je Zeile —, etwa in *Auswertungen → Prognose*, in den Komponenten-Finanzen und im T-Konto. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
 
 ### 1.4 Anlagen-Auswahl und Status-Fußzeile
 
@@ -126,6 +126,15 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 - **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
 - Detail-Sektionen je nach vorhandenen Komponenten
 
+> **Mehrere Dachflächen oder Balkonkraftwerke?** Hat **jedes** Gerät einen eigenen Ertragssensor,
+> zeigt der Stunden-Verlauf die PV-Fläche **aufgeteilt** je Gerät statt als einen Block, und die
+> Stundenwerte-Tabelle bekommt je Gerät eine Spalte hinter „PV". Aufgeteilt wird ab **zwei**
+> Geräten. Was die Geräte nicht abdecken — etwa ein String ohne eigenen Sensor —, steht als
+> **„PV (übrige)"** daneben; die Höhe der Kurve bleibt damit deine ganze Erzeugung. Auf Tagesebene
+> rechnet eedc **nichts** nach Nennleistung auf die Geräte um: ohne Sensor keine Spalte. Die
+> Tages-Historie je Gerät über einen längeren Zeitraum liegt in
+> [Auswertungen → Tabelle](#45-tabelle-werte-werkbank).
+
 Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte folgen der Backward-Slot-Konvention (Slot N = Energie aus dem Intervall [N−1, N), Industriestandard). Fehlen Snapshots (z. B. durch eine HA-Statistik-Latenz oder einen Add-on-Neustart), weist eedc darauf hin und bietet eine Nachberechnung an — die Pflege dazu liegt unter [Einstellungen → Daten → Energieprofil-Pflege](HANDBUCH_EINSTELLUNGEN.md).
 
 ### 2.3 Monat
@@ -139,6 +148,16 @@ Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Mo
 - **Datenquellen-Kennzeichnung** — pro Feld ist die Herkunft der Werte sichtbar (HA-Statistik, MQTT, Connector, gespeichert)
 - **SOLL/IST** — gegen die Solarprognose
 - **Community-Vergleich** — eingebettet, wo Daten geteilt sind
+
+> **Wenn ein Geräte-Connector nur einen Teil des Monats gemessen hat**, steht sein
+> Zeitraum direkt am Quellen-Etikett: „Connector (28.–30.07.2025)". Ein Connector-Wert
+> ist die **Differenz zweier Zählerstände** — richtest du ihn mitten im Monat ein, kennt
+> er die Tage davor nicht, und der Wert ist entsprechend kleiner als der ganze Monat.
+> Er verdrängt deshalb keinen gepflegten Monatswert mehr, sondern füllt nur, was sonst
+> fehlt. Deckt der Connector den Monat ab dem Ersten ab, steht dort wie bisher schlicht
+> „Connector". Die **Jahres**-Sicht nennt keinen Zeitraum — sie fasst zwölf Monate
+> zusammen, dort gäbe es keinen einzelnen. Kann der Connector für den laufenden Monat
+> **gar keinen** Wert bilden, meldet das der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md).
 
 Aus dem feingranularen Stunden-Bestand des Monats zeigt die Sicht zusätzlich:
 
@@ -205,6 +224,15 @@ Die **Jahr/Gesamt**-Sicht fasst die Anlage über ein ganzes Jahr bzw. über die 
 **Komponenten-Status** — Schnellstatus aller Komponenten mit Sprung in die jeweilige Komponenten-Sicht. Wärmepumpe-, Speicher-, E-Auto- und Wallbox-Kennzahlen verwenden durchgängig dieselben Icons, Farben und Reihenfolgen wie überall in eedc.
 
 **Trend-Historie** — Jahresvergleich und saisonale Muster (beste/schlechteste Monate) über alle bisherigen Jahre. Die reine **Degradations-Prognose** (geschätzter Leistungsrückgang pro Jahr) liegt dagegen in der [Aussicht](#25-aussicht).
+
+**Speicher im Jahr** — der Block erscheint, wenn im gewählten Jahr ein Speicher Bewegung hatte. Er zeigt eine Zeile je Monat (neueste zuerst) mit **Ladung**, **Entladung**, **Vollzyklen**, **Solar-Anteil** der Ladung, **Auslastung** und **Netto-Nutzen** in Euro, dazu eine Gesamtzeile und darunter einen Vergleich der beiden Saison-Fenster **Sommer (Jun–Aug)** und **Winter (Nov–Feb)**.
+
+- **Auslastung** = Entladung ÷ (Kapazität × Tage des Zeitraums). Sie beantwortet „wie viel von dem, was der Speicher hergäbe, nutze ich tatsächlich" — und ist anders als die Vollzyklen zwischen einem kurzen Februar und einem langen Juli direkt vergleichbar. Im **laufenden** Monat zählen nur die bereits abgelaufenen Tage; sonst stünde am 3. eine Zahl, die mehr über das Datum aussagt als über den Speicher. Werte über 100 % sind möglich und richtig — dann wurde mehr als eine Kapazität pro Tag durchgesetzt.
+- **Netto-Nutzen** ist derselbe Betrag, der im Finanzen-Block desselben Monats in der Speicher-Zeile steht: die entladene Energie ersetzt Netzbezug, abzüglich der Einspeisevergütung, die sie sonst erbracht hätte. Aus dem **Netz** geladene Energie zählt getrennt, sie hätte nie eingespeist werden können (Details: [Berechnungsreferenz 3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
+- **Leere Felder sind Absicht.** Ohne gepflegte **Kapazität** stehen Vollzyklen und Auslastung auf „—" statt auf 0 — ein Speicher ohne Kapazitätsangabe ist ein *unbekannter*, kein ungenutzter; der Daten-Checker weist darauf hin. Ohne gepflegte **Netzladung** bleibt der Solar-Anteil leer, statt 100 % zu behaupten.
+- Die beiden Saison-Fenster sind **Fokus-Zeiträume, keine Aufteilung des Jahres**: Frühjahr und Herbst zählen in keinem von beiden. Das steht auch unter der Tabelle.
+
+> Die **Tiefe** zum Speicher — „hätte mehr Kapazität etwas gebracht?" und der Sizing-Rechner — gehört nicht hierher, sondern in den [Komponenten-Hub](#3-komponenten--die-was-achse): dort steht, was über die **Lebensdauer** des Geräts geht, hier, was sich auf einen **Zeitraum** bezieht.
 
 **CO₂-Bilanz** — ein eigener Block mit dem Verlauf der vermiedenen Emissionen. Das gestapelte Monats-Diagramm trennt die drei Quellen, aus denen die Ersparnis entsteht: **PV/Eigenverbrauch** (vermiedener Netzstrom), **Wärmepumpe** (vermiedene fossile Wärme) und **E-Mobilität** (vermiedener Kraftstoff); die Autarkie desselben Monats läuft als Linie mit. Über dem Diagramm stehen zwei Kennwerte, die sich bewusst auf **verschiedene Zeiträume** beziehen:
 
@@ -335,6 +363,19 @@ Bei **Einzel-String-Anlagen** (genau eine PV-Modul-Investition) entfällt die re
 
 Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung? Verschmutzung?), > 20 % Handlungsbedarf (Defekt? Fehlkonfiguration?).
 
+> **Ohne PVGIS-Prognose** entfallen SOLL, Abweichung und Performance — deine **gemessenen** Erträge
+> je String, ihr Anteil am Gesamtertrag und der spezifische Ertrag (kWh/kWp) bleiben sichtbar. Eine
+> Zeile oben sagt, dass die Prognose fehlt und wo du sie abrufst
+> ([Einstellungen → Solarprognose](HANDBUCH_EINSTELLUNGEN.md#23-solarprognose)). Bis Version 4.0.8
+> blendete diese Sicht ohne Prognose **alles** aus, auch die Messwerte.
+
+> **Im laufenden Monat zählt das SOLL nur die vergangenen Tage** — steht am 4. August ein SOLL von
+> 179 kWh statt der 1.388 kWh des ganzen Monats, ist das kein Fehler: verglichen wird der bisherige
+> Ertrag mit dem, was bis heute zu erwarten war. Die Kachel schreibt das Fenster dazu
+> („anteilig · 4 von 31 Tagen"); mit dem Monatsabschluss steht dort wieder der volle Monat.
+
+
+
 ### 3.3 Speicher
 
 - **Vollzyklen** = entladene Energie ÷ Kapazität — dieselbe Zahl in Tag, Monat, Jahr, PDF und HA-Sensor. Gezählt wird die *entnommene* Energie (darauf zielen Hersteller-Garantien), geteilt durch die **Brutto**-Kapazität. Wer eine „nutzbare Kapazität" gepflegt hat, findet sie beim Wirkungsgrad wieder, nicht hier ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
@@ -401,7 +442,8 @@ Beim Öffnen landest du auf **Finanzen**.
 Die Finanz-Sicht ist der Ort für **Erlöse, Einsparungen, Kosten und die Amortisation** — hierher ist auch der monatliche **Finanz-Abschluss** (T-Konto) aus dem alten Monatsbericht gezogen, jetzt zeitraum-fähig, sowie die frühere Finanz-Prognose.
 
 - **Einspeiseerlös** = **vergütete** Einspeisung × Einspeisevergütung. Bei Anlagen mit aktivem §51-Schalter sind die in Negativpreis-Stunden eingespeisten kWh **abgezogen** — auch im Kennwert und in der Werte-Tabelle, nicht nur im T-Konto darunter (bis v4.0.0 stand derselbe Erlös mit zwei Zahlen auf einer Seite).
-- **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis
+- **Eingesparte Stromkosten** = Eigenverbrauch × Bezugspreis. **Aus PV und Balkonkraftwerk** — ein Erzeuger unter „Sonstiges" mit Brennstoff (Mini-BHKW) zählt hier bewusst **nicht** mit: er erscheint voll in der Energiebilanz (Eigenverbrauch, Autarkie, EV-Quote), seine Wirtschaftlichkeit gilt aber als „nicht bewertet", weil der Brennstoff Geld kostet. Die Mengen-Spalte „Eigenverbrauch" ist deshalb bei einem solchen Erzeuger größer als die Menge hinter dieser Ersparnis.
+- **USt auf Eigenverbrauch** — nur bei **Regelbesteuerung** (Stammdaten). Sie ist im „Netto-Ertrag (PV)" bereits **abgezogen** und in der Werte-Tabelle über den Spalten-Wähler als eigene Spalte einblendbar. Als Jahresgröße (Selbstkosten je kWh aus Investitionssumme und Jahresertrag) hat sie **kein Tages-Pendant** — die Summe der Tageszeilen ergibt beim Netto-Ertrag dann nicht exakt den Monatswert.
 - **Sonstige Positionen** — frei erfassbare Kosten und Erlöse je Monat (Reparaturen, Wartung, sonstige Erträge); sie fließen als eigene T-Konto-Zeilen in die Summen ein
 - **Grund- und Zählergebühren** — separat ausgewiesen
 - **Netto-Einsparung** = Erlöse + Einsparungen − Kosten
@@ -433,6 +475,26 @@ Zwei klar getrennte Sichten statt vieler paralleler ROI-Zahlen ohne Bezug:
 > (Kalenderjahre statt Jahres-Index). Anker ist das **früheste Anschaffungsjahr** deiner Komponenten;
 > ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index. Verteilen sich die Anschaffungen über
 > mehrere Jahre, ist das genannte Jahr **optimistisch** — der Text sagt das dazu.
+
+**Zwei Amortisations-Kacheln, die sich ergänzen** (neu, nach dem V4-Flip zurückgeholt):
+
+| Kachel | Was sie sagt | Woher die Zahl kommt |
+|---|---|---|
+| **Amortisation** | „in 9,2 Jahren" | **Modell** — deine relevanten Kosten geteilt durch eine hochgerechnete Jahres-Einsparung |
+| **Amortisations-Fortschritt** | „40,0 % · noch 7.200 € · voraussichtlich 2030" | **Messung** — die Erträge, die deine Anlage seit Inbetriebnahme tatsächlich erwirtschaftet hat |
+
+Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahlen ineinander
+überführen. Welche der beiden du gerade liest, steht im ⓘ-Tooltip der Kachel.
+
+> **Was als „relevante Kosten" zählt.** Nicht der volle Kaufpreis, sondern die **Mehrkosten**
+> gegenüber der Alternative: Was hätte eine Gasheizung statt der Wärmepumpe gekostet, was ein
+> Verbrenner statt des E-Autos? Diesen Betrag pflegst du je Komponente im Feld
+> **„Anschaffungskosten Alternative"** — dasselbe Feld, das der Daten-Checker anmahnt.
+> **Pflegst du es nicht, zählen die vollen Anschaffungskosten**; eedc setzt keine Annahme mehr an
+> deiner Stelle ein. Früher rechnete diese Sicht mit pauschalen 8.000 € für die Heizung und
+> 35.000 € fürs Auto — auch dann, wenn du etwas anderes eingetragen hattest. Wer die Alternative
+> pflegt, sieht seine Amortisation seitdem realistischer, und für PV, Speicher und Wechselrichter
+> ändert sich nichts (dort gibt es keine Alternative).
 
 **ROI pro Komponente — zwei Sichten:**
 
@@ -496,6 +558,14 @@ Der interaktive Überblick über alle Monatswerte in einer sortierbaren Tabelle 
 > Die **Summenzeile** hält sich an dieselbe Regel: Sie vergleicht nur, wenn **jede** angezeigte Zeile ein Gegenstück hat. Bei „Alle Jahre" ist das nicht der Fall — die ersten Monate deiner Aufzeichnung haben kein Vorjahr —, dort bleibt die Vergleichs-Spalte des Fußes leer, während die Δ-Werte der einzelnen Zeilen vollständig darüber stehen. Andernfalls stünde dort z. B. die Summe aus 37 Monaten neben der aus 25: eine Prozentzahl, die sich wie eine Aussage über deine Anlage liest und keine ist. Die „aktuell"-Zelle bleibt immer die Summe der Spalte darüber. **Warum sie schweigt, steht unter der Tabelle** — mit der Anzahl der Monate bzw. Tage, die kein Gegenstück haben; derselbe Satz erscheint als Hinweis, wenn du auf die leere Zelle zeigst.
 >
 > *Bis Version 4.0.5 wurden über mehrjährige Zeiträume alle Jahrgänge desselben Monats verwechselt: jede Zeile verglich sich mit dem jüngsten davon, im Extremfall mit sich selbst (identische Zahlen, Δ 0,0 %). Wenn deine Vorjahresspalte vorher gespiegelte Werte zeigte, ist das die Korrektur.*
+
+> **Erträge je PV-String und je Balkonkraftwerk (Tagesansicht).** Im Block **Energieprofile** führt
+> der Spalten-Picker die Gruppe **„Je Erzeuger"**: je Gerät eine Spalte mit seinem Tagesertrag —
+> mit Summenzeile, Vergleich und CSV wie jede andere Spalte. Sie erscheint ab **zwei** Erzeugern und
+> nur für Geräte mit **eigenem Ertragssensor**; fehlt der Sensor, steht über der Tabelle, welches
+> Gerät betroffen ist und wo du ihn zuordnest ([Einstellungen → Datenquellen](HANDBUCH_EINSTELLUNGEN.md)).
+> Eine nach Nennleistung gerechnete Tageszahl gibt es bewusst nicht — sie wäre von einer Messung
+> nicht zu unterscheiden. Der Stunden-Blick auf denselben Tag liegt in [Cockpit → Tag](#22-tag).
 
 > Kompakte Werte-Blöcke sind zusätzlich direkt in Cockpit- und Komponenten-Sichten eingebettet; die volle Werkbank mit Picker und Export liegt hier.
 

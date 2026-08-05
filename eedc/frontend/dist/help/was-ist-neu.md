@@ -1,11 +1,609 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.8)
+> **Stand:** August 2026 (v4.0.9)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.9 — Der laufende Monat zählt nur seine Tage · jede PV-Zahl nennt ihre Herkunft (August 2026)
+
+### Wo kann ich die Kopplung meines Speichers einstellen? Ab jetzt: in der Investitionspflege
+
+**Betrifft dich das?** Alle mit einem **Batteriespeicher**, besonders wenn er **AC-gekoppelt an
+einem Hybrid-Wechselrichter** hängt oder **DC-gekoppelt ohne** dass du den Wechselrichter als
+eigene Komponente erfasst hast.
+
+Bis hierher hat eedc die Kopplung nicht *gewusst*, sondern *geraten* — und zwar an genau einer
+Angabe: Ist dem Speicher ein Wechselrichter zugeordnet? Dann DC. Sonst AC. Für die meisten Anlagen
+trifft das zu; für zwei ganz normale Bauformen nicht:
+
+- **AC-Speicher am Hybrid-Wechselrichter** — sobald du ihn zuordnest, galt er als DC-gekoppelt.
+- **DC-Speicher ohne erfassten Wechselrichter** — er galt als AC-gekoppelt.
+
+**Was neu ist:** In *Einstellungen → Investitionen → Speicher bearbeiten* steht das Feld
+**„Kopplung"** mit drei Möglichkeiten:
+
+| Auswahl | Bedeutung |
+| --- | --- |
+| **Automatisch (aus der Zuordnung)** | Vorbelegung — eedc leitet ab wie bisher und schreibt dir dazu, **was** dabei herauskommt |
+| **AC-gekoppelt** | Der Speicher hat einen eigenen Batterie-Wechselrichter |
+| **DC-gekoppelt** | Der Speicher hängt gleichstromseitig am (Hybrid-)Wechselrichter |
+
+Im **Komponenten-Hub** steht die Kopplung als eigene Zeile neben der Zuordnung — und wenn du nichts
+gepflegt hast, sagt sie das auch, statt eine Angabe zu behaupten.
+
+**Ändert das meine Zahlen?** Nein, und das ist Absicht. Ob dein Speicher in der Wirtschaftlichkeit
+**als Teil des PV-Systems** oder **eigenständig** gerechnet wird, entscheidet weiterhin allein die
+**Zuordnung** zum Wechselrichter — die Ersparnis selbst rechnet eedc für beide Bauformen gleich.
+Du kannst einen AC-Speicher also korrekt eintragen, **ohne** dass er aus deinem PV-System fällt.
+
+**Wofür die Angabe gut ist:** Sie sagt, **wo** Ladung und Entladung gemessen werden. Das stand
+bisher nirgends — und deshalb waren ein Zähler direkt an der Batterie (DC) und einer hinter dem
+Batterie-Wechselrichter (AC) **beide** richtig, obwohl sie verschiedene Zahlen liefern:
+dazwischen liegt der Wandlungsverlust. Wer Ladung von der einen und Entladung von der anderen
+Seite erfasst — bei Cloud-Werten mancher Hersteller ist das der Normalfall —, bekommt einen
+Wirkungsgrad, der die Messstelle beschreibt und nicht den Speicher. Die Feldbeschreibungen von
+**Ladung** und **Entladung** nennen die Messstelle jetzt und verlangen für beide **dieselbe Seite**.
+
+*(#351 — gemeldet von JayJay im Forum-Thread zu v4.0.0)*
+
+### Ein gerechneter PV-Wert gibt sich nicht mehr als Messung aus
+
+**Betrifft dich das?** Alle mit **mehreren PV-Strings oder mehreren Speichern**, die ihre
+Monatswerte über einen **Import** (CSV-Backup, Portal, eigener Import) oder über den
+**Monatsabschluss mit Geräte-Connector bzw. Cloud-Import** pflegen.
+
+Hat eedc für einen Monat nur den **Gesamtwert** der Anlage, teilt es ihn nach Nennleistung auf die
+Strings auf — beim Anzeigen, gekennzeichnet als „geschätzt (kWp-Anteil)". Das ist so gewollt.
+Zwei Wege haben eine solche Aufteilung aber **gespeichert**, und danach war sie von einer echten
+Messung nicht mehr zu unterscheiden.
+
+**Was das anrichtete:**
+
+- Die String-Sichten kürten einen **„besten" und einen „schwächsten String"** — aus Zahlen, die
+  rechnerisch immer im Verhältnis der Nennleistung stehen. Die Rangfolge sagte also nichts über
+  die Dächer aus. Die Sperre, die genau das verhindern soll, sah keinen Grund einzugreifen.
+- Der **Daten-Checker meldete den Monat grün** („PV-Erzeugung vollständig gemessen"), obwohl kein
+  einziger String gemessen hatte.
+
+Bei ungleich ausgerichteten oder verschatteten Dächern liegt so eine Aufteilung schnell zweistellig
+neben der Wirklichkeit — und wanderte unmarkiert in Auswertungen, Berichte und den
+Community-Vergleich.
+
+**Jetzt** merkt sich eedc am Wert, dass er gerechnet ist. Die Anzeige stuft ihn als **verteilt**
+ein: kein Ranking, Kennzeichnung „geschätzt (kWp-Anteil)", und der Daten-Checker sagt „über
+kWp-Anteil geschätzt" statt „vollständig gemessen".
+
+**Was sich nicht ändert:**
+
+- **Die Zahl bleibt, wie sie ist** — es geht um ihre Herkunft, nicht um ihren Wert.
+- Wer **einen** String bzw. **einen** Speicher hat, merkt nichts: dort geht der Gesamtwert
+  unverzerrt an ein Gerät, und das ist eine Messung.
+- **Rückwirkend** lässt sich das nicht heilen: bei bereits gespeicherten Werten steht dieselbe
+  Herkunft für „echt gemessen" und „verteilt", die beiden sind nachträglich nicht trennbar. Die
+  Kennzeichnung greift ab dem nächsten Import bzw. Monatsabschluss.
+
+Dasselbe gilt für **Speicher**, deren Lade- und Entladewerte nach Kapazität aufgeteilt werden.
+
+---
+
+### Solarman-Cloud-Import: die Server-Region ist wählbar — und Fehler sagen, was los ist
+
+**Betrifft dich das?** Alle mit einem **Deye**-Wechselrichter, die historische Monatsdaten über
+den **Solarman**-Cloud-Import holen wollen.
+
+Solarman betreibt **zwei getrennte Wolken**: eine chinesische und eine internationale. Wer sich
+unter `globalhome.solarmanpv.com` anmeldet, hat sein Konto auf der internationalen — und genau die
+hat eedc bisher nie gefragt. Die Adresse stand fest im Code, und zwar auf der chinesischen Seite;
+ein europäisches Konto existiert dort schlicht nicht, der Verbindungstest brach ab. **Olli
+(OliS2811) hat das gemeldet und die Ursache gleich mitgeliefert.**
+
+Jetzt gibt es im Cloud-Import ein Feld **„Server-Region"** mit „Global / Europa" (Vorauswahl) und
+„China" — dasselbe Feld, das Anker, EcoFlow, Sungrow und Huawei längst haben.
+
+**Zwei Dinge kamen beim Nachmessen dazu:**
+
+- Der **Anmelde-Nachweis** ging in einer Form raus, die Solarman nicht akzeptiert (ein fehlendes
+  Schlüsselwort im Kopf der Anfrage). Der Zugang wurde also korrekt geholt und jeder Abruf danach
+  trotzdem abgelehnt — **auf beiden Regionen**. Wer den Solarman-Import bisher erfolglos versucht
+  hat, war nicht falsch eingerichtet.
+- **Fehlermeldungen nennen jetzt den Grund.** Bisher stand bei jedem Problem derselbe Satz
+  („Bitte appId, appSecret, E-Mail und Passwort prüfen"), egal ob der Server nicht erreichbar war,
+  die Anlagen-ID nicht passte oder das Konto auf der anderen Region lag. Jetzt steht die Antwort
+  von Solarman im Klartext dabei, samt angesprochener Adresse — und bricht ein Import ab, bevor
+  ein einziger Monat geholt ist, sagt er das, statt „keine Daten gefunden" zu melden.
+
+**Noch nicht mit einem echten Konto bestätigt** — der Provider bleibt als „ungetestet"
+gekennzeichnet, bis eine erfolgreiche Einrichtung zurückgemeldet ist.
+
+→ [Einstellungen-Handbuch](HANDBUCH_EINSTELLUNGEN.md) · *(#349)*
+
+### Solcast: der Verlauf für morgen ist der von morgen
+
+**Betrifft dich das?** Alle, die **Solcast** als Prognosequelle nutzen — über die HA-Integration
+oder mit eigenem API-Key.
+
+Die **Tagesmengen** von Solcast stimmten immer. Was fehlte, war die **Form** des Tages: Der
+Stundenverlauf für morgen (*Cockpit → Aussicht*) war in Wahrheit der von **heute**, hochgerechnet
+auf die morgige Tagesmenge. Ein Tag mit Nebel am Morgen und Sonne am Nachmittag sah damit aus wie
+der Vortag — nur höher oder flacher. eedc hat das nie behauptet zu wissen (ein Hinweis stand
+darunter), nötig war es aber auch nicht: **Rainer hat belegt**, dass die HA-Integration für morgen
+ein **eigenes** Detailprofil mitliefert, und der API-Zugang liefert ohnehin sieben Tage am Stück.
+
+Jetzt bekommt **jeder Tag, für den Solcast Stundenwerte liefert, seinen eigenen Verlauf**. Wo die
+Quelle nur die Tagesmenge kennt (je nach Integration die weiter entfernten Tage), bleibt es bei der
+Näherung — und der Hinweis steht dann auch nur noch **dort**. Ein zusätzlicher Abruf entsteht
+nicht; die Daten waren schon in der Antwort.
+
+Zweite sichtbare Stelle: In *Auswertungen → Prognose* stammen die **Vormittag/Nachmittag**-Werte
+der Solcast-Spalte für morgen jetzt aus Solcast selbst. Vorher wurden sie aus der
+**OpenMeteo**-Verteilung geschätzt — die Solcast-Spalte trug an dieser Stelle also die Form einer
+anderen Quelle.
+
+→ [Prognosen-Handbuch](HANDBUCH_PROGNOSEN.md) · *(#357)*
+
+### Prognosen-Vergleich auf dem Handy: Karten statt „bitte Desktop verwenden"
+
+**Betrifft dich das?** Alle, die *Auswertungen → Prognose* auf dem Smartphone öffnen.
+
+Drei der vier Tabellen dort — die Kopf-Matrix mit Heute/Morgen/Übermorgen, das
+**Genauigkeits-Tracking** und der **7-Tage-Vergleich** — zeigten auf schmalen Bildschirmen **keine
+Daten**, sondern die Aufforderung, das Gerät zu drehen oder einen Desktop zu benutzen. Beim Drehen
+kam der nächste Hinweis: „Auflösung zu gering". Die Zahlen waren am Telefon also gar nicht
+erreichbar.
+
+Jetzt steht dort **je Tag eine Karte** mit den Quellen untereinander — dieselbe Darstellung, die
+die String-Übersicht, das T-Konto und die Komponenten-Finanzen auf schmalen Bildschirmen schon
+lange nutzen. **Auf dem Desktop ändert sich nichts.**
+
+Kleinigkeit am Rande: Die relative Abweichung ist nach oben begrenzt. An einem Ausfalltag
+(0,2 kWh gemessen gegen 5,0 kWh Prognose) stand dort „2400 %"; jetzt steht „> 999 %" — die
+kWh-Zahl daneben sagt ohnehin, wie groß der Fehler war.
+
+### Erträge je Dachfläche und je Balkonkraftwerk — jetzt auch tagesgenau
+
+**Betrifft dich das?** Alle mit **mehreren** PV-Strings oder mehreren Balkonkraftwerken, bei denen
+jedes Gerät einen **eigenen Ertragssensor** hat.
+
+Monats- und Jahreswerte je String gab es schon (*Auswertungen → Prognose*, Komponenten-Hub,
+Jahresbericht). Für einen **einzelnen Tag** ließ sich die Erzeugung dagegen nicht auftrennen —
+obwohl eedc die Werte je Gerät stündlich mitschreibt. Rainer hat gefragt: „welchen Ertrag hat mein
+BKW im Vorgarten, mein Süd-Ost-Dach, mein Nord-West-Dach **täglich** gebracht?" Zwei Stellen
+beantworten das jetzt:
+
+- ***Cockpit → Tag*** — der **Stundenverlauf** teilt die PV-Fläche in ihre Geräte auf (statt eines
+  Blocks), und die **Stundenwerte**-Tabelle bekommt je Gerät eine Spalte hinter „PV".
+- ***Auswertungen → Tabelle → Energieprofile*** — je Gerät eine Spalte **je Tag**, im
+  Spalten-Picker unter **„Je Erzeuger"**. Mit Summenzeile, Vorjahresvergleich und CSV-Export wie
+  jede andere Spalte; über einen Monat oder ein Jahr gelesen ergibt das die Tages-Historie je Dach.
+
+Aufgeteilt wird **ab zwei Geräten** — bei einem einzigen wäre die Gerätespalte die Anlagenspalte.
+
+**Und wenn ein Gerät keinen eigenen Sensor hat?** Dann bekommt es **keine** Spalte, sondern du
+bekommst einen Hinweis, welches Gerät fehlt und wo du den Sensor zuordnest
+(*Einstellungen → Datenquellen*). Auf Monatsebene füllt eedc solche Lücken notfalls nach
+kWp-Anteil auf und schreibt „geschätzt" dazu — auf Tagesebene bewusst nicht: eine gerechnete Zahl
+unter der Überschrift „Dach Süd" sähe aus wie eine Messung. Im Stundenverlauf steht der
+ungedeckte Rest als eigene Fläche **„PV (übrige)"**, damit die Kurve weiter deine ganze Erzeugung
+zeigt.
+
+### Die String-Sicht zeigt deine Erträge auch ohne PVGIS-Prognose
+
+**Betrifft dich das?** Alle, die *Auswertungen → Prognose* öffnen, **ohne** eine PVGIS-Prognose
+abgerufen zu haben.
+
+Bisher stand dort nur der Satz „Keine PVGIS-Prognose vorhanden" — und mit ihm verschwanden auch
+alle Zahlen, die gar keine Prognose brauchen: deine **gemessenen** Erträge je String, ihr Anteil am
+Gesamtertrag und der spezifische Ertrag in **kWh/kWp**, also genau die Kennzahl, mit der man zwei
+Dächer vergleicht.
+
+Jetzt steht die Sicht. Weg bleibt nur, was ohne Prognose keine Aussage hat: **SOLL, Abweichung und
+Performance**. Der Hinweis bleibt oben stehen und sagt dir, wo du die Prognose abrufst
+(*Einstellungen → PVGIS*). Wer eine Prognose hinterlegt hat, sieht keinen Unterschied.
+
+### Im laufenden Monat vergleicht das SOLL nur die Tage, die schon vorbei sind
+
+**Betrifft dich das?** Alle, die *Cockpit → Monat* oder *Cockpit → Jahr* im **laufenden** Monat
+ansehen.
+
+Die SOLL-Erfüllung setzt deinen Ertrag ins Verhältnis zu dem, was PVGIS für den Zeitraum erwartet.
+PVGIS rechnet in **Monatssummen** — und die stand bisher auch dann voll im Nenner, wenn der Monat
+gerade erst angefangen hatte. Am 4. August sah das an Gernots Anlage so aus:
+
+| | zeigte | tatsächlich |
+| --- | --- | --- |
+| Cockpit → Monat (August) | **19 %** | 148 % — 264,8 kWh gegen die 179,1 kWh, die bis zum 4. zu erwarten waren |
+| Cockpit → Jahr | **104 %** | 120 % — dieselbe Anlage kommt über Jan–Jul auf 119 % |
+
+Am Monatsersten stand dort also praktisch eine Null für eine völlig gesunde Anlage — und in der
+Jahres-Kachel zog der volle August-Nenner das ganze Jahr nach unten.
+
+Ab jetzt zählt das SOLL im laufenden Monat nur die **abgelaufenen Tage**. Damit du die kleinere
+kWh-Zahl richtig liest, schreibt eedc das Fenster dazu: **„anteilig · 4 von 31 Tagen"** — im
+Tooltip der PV-Kachel und in der Kopfzeile des Bilanz-Blocks. Mit dem Monatsabschluss steht dort
+wieder der volle Monat.
+
+**Was sich nicht ändert:** abgeschlossene Monate, deine Historie und jedes Jahr, das nicht mehr
+läuft. Dort waren Zähler und Nenner ohnehin deckungsgleich. Neu ist außerdem, dass ein Monat in
+der **Zukunft** gar keine Erfüllungsquote mehr zeigt statt 0 % — er hat noch nicht stattgefunden.
+
+### Überbelegung ist normal — und dein SOLL weiß das jetzt
+
+**Betrifft dich das?** Alle, die **mehr Modulleistung als Wechselrichter-Leistung** installiert
+haben — beim Balkonkraftwerk fast immer, auf dem Dach sehr häufig.
+
+Mehr kWp Module an einen kleineren Wechselrichter zu hängen ist kein Fehler, sondern gängige
+Auslegung: Du tauschst Ertrag in der Mittagsspitze gegen Ertrag am Morgen und am Abend. Die
+PVGIS-Prognose rechnete bisher aber nur aus der **Modulleistung** und wusste von der Grenze deines
+Geräts nichts. Was der Wechselrichter mittags abriegelt, stand trotzdem in deinem SOLL — und
+tauchte im Vergleich mit dem IST als Minus auf, für das du nichts konntest.
+
+Ab jetzt kappt eedc das SOLL **stündlich** an der Grenze deines Wechselrichters, so wie es die
+Tagesprognose beim Balkonkraftwerk schon seit v4.0.4 tut. Die Grenze steht längst in deinen Daten:
+beim Wechselrichter im Feld **„Max. Leistung (kW)"**.
+
+**Wichtig, wenn mehrere Strings an einem Gerät hängen:** die Grenze gilt für ihre **Summe**, nicht
+für jeden einzeln. Genau daran hing der ganze Effekt — an der Demo-Anlage (Süd 12 · Ost 5 ·
+West 3 kWp an einem 10-kW-Gerät) erreicht **kein einzelner String** allein 10 kW, gemeinsam sind es
+aber 1.227 kWh im Jahr, die das Gerät nie abgeben kann.
+
+**Was du siehst:** Dein SOLL sinkt (an der Demo-Anlage −5,9 % im Jahr, im April −10 %, im Winter
+gar nicht), SOLL-Erfüllung und Performance Ratio steigen entsprechend. **Deine IST-Werte ändern
+sich nicht.** Hast du keine Wechselrichter-Leistung gepflegt, bleibt alles wie bisher — ohne
+gepflegte Grenze kappt eedc nichts.
+
+> ⚠️ **Du musst die Prognose einmal neu abrufen.** Deine gespeicherte PVGIS-Prognose ist ein
+> Datensatz aus der Vergangenheit — eedc rechnet sie nicht nachträglich um, sonst würde sich eine
+> gespeicherte Zahl still ändern. Unter *Einstellungen → Solarprognose* einmal **„Neue Prognose
+> abrufen" → „Speichern & Aktivieren"**, dann trägt dein SOLL die Kappung. Deine bisherige
+> Prognose bleibt in der Historie und lässt sich jederzeit wieder aktivieren.
+
+> **Nebenbei:** Wenn du **nur ein Balkonkraftwerk** hast, bekommst du überhaupt zum ersten Mal ein
+> PVGIS-SOLL. Bisher antwortete die Prognose mit „Keine PV-Module gefunden", obwohl dein BKW alles
+> mitbringt, was PVGIS braucht. *(#354, #367)*
+
+### Daten-Checker: zwei Meldungen weniger, eine bessere
+
+**Betrifft dich das?** Alle mit **Balkonkraftwerk** — und alle, die schon einmal über die Meldung
+„PV-Module kWp stimmt nicht mit Anlagenleistung überein" gestolpert sind.
+
+Diese Prüfung zählte das **Balkonkraftwerk in die Anlagenleistung** hinein. Ein BKW ist aber eine
+eigene Anlage mit eigener MaStR-Registrierung und gehört dort nicht hinein — die Folge war eine
+Warnung bei jedem BKW-Besitzer, ohne dass irgendetwas falsch gepflegt gewesen wäre. Und sie kannte
+Überbelegung nicht, konnte dich also nur dazu bringen, falsche Zahlen einzutragen, damit Ruhe ist.
+
+Sie ist ersetzt: eedc sieht sich jetzt das **Verhältnis von Modulleistung zu
+Wechselrichter-Leistung** an und meldet erst, wenn es **mehr als das Doppelte** ist. Bis dahin ist
+Überbelegung eine Entwurfsentscheidung (üblich 1,1–1,3, bei Ost/West bis etwa 1,5). Darüber ist
+meist ein Tippfehler die Ursache — und die Meldung sagt dir, welcher: Steht in einem
+„Leistung (kWp)"-Feld versehentlich die Leistung deines Wechselrichters?
+
+**Merkregel:** Ins Feld **Anlagenleistung** und in die kWp-Felder deiner Strings gehört die
+**Modulleistung** (Anzahl × Wp). Die Geräteleistung gehört zum Wechselrichter. *(#354)*
+
+### Cockpit → Jahr: der Speicher bekommt eine eigene Auswertung
+
+**Betrifft dich das?** Alle mit **Batteriespeicher**.
+
+Bisher standen zum Speicher vier Kacheln da — Ladung, Entladung, Wirkungsgrad, Vollzyklen — und
+für alles Weitere musstest du die Monate einzeln durchklicken. Unter dem Speicher-Abschnitt in
+*Cockpit → Jahr* findest du jetzt den Block **„Speicher im Jahr"**: eine Zeile je Monat mit
+
+| Monat | Ladung | Entladung | Vollzyklen | Solar-Anteil | Auslastung | Netto-Nutzen |
+|---|---|---|---|---|---|---|
+
+dazu eine Gesamtzeile und einen Vergleich **Sommer (Jun–Aug) gegen Winter (Nov–Feb)**.
+
+**Zwei Spalten sind neu.** Die **Auslastung** setzt deine Entladung ins Verhältnis zu dem, was der
+Speicher im Zeitraum überhaupt hergäbe (Kapazität × Tage). Anders als die Vollzyklen kannst du
+sie zwischen Februar und Juli direkt vergleichen. Im laufenden Monat zählen dabei nur die schon
+abgelaufenen Tage — sonst stünde am 3. eine Zahl, die mehr über das Datum sagt als über deinen
+Speicher. Der **Netto-Nutzen** ist genau der Betrag, der auch im T-Konto desselben Monats steht.
+
+**Wenn Felder leer bleiben.** Ohne gepflegte **Kapazität** stehen Vollzyklen und Auslastung auf
+„—" statt auf 0: ein Speicher ohne Kapazitätsangabe ist ein *unbekannter*, kein ungenutzter. Der
+Daten-Checker weist dich darauf hin. Trägst du deine **Netzladung** nicht ein, bleibt auch der
+Solar-Anteil leer — eedc behauptet dann nicht einfach 100 % Sonne.
+
+Das ist Phase 1 von [#358](https://github.com/supernova1963/eedc-homeassistant/issues/358). Die
+Tiefe — SoC-Heatmap „hätte mehr Kapazität geholfen?" und der Sizing-Rechner — kommt später und
+gehört dann in den Komponenten-Hub.
+
+### Speicher: der Nutzen in Euro stimmt jetzt überall überein
+
+**Betrifft dich das?** Alle mit Speicher — besonders, wenn du **aus dem Netz lädst** (Arbitrage).
+
+Was dir dein Speicher einbringt, stand je nach Seite unterschiedlich da. Richtig ist der
+**Spread**: die entladene Kilowattstunde ersetzt Netzbezug, hätte aber sonst Einspeisevergütung
+gebracht — es zählt die Differenz. Das **T-Konto** in *Cockpit → Monat* und *→ Jahr* rechnete
+dagegen mit dem vollen Strompreis und lag damit bei einem typischen Tarif (30/8 ct) **rund ein
+Drittel zu hoch**; die ROI-Seite nannte für dieselbe Anlage die kleinere Zahl.
+
+Im **Komponenten-Hub → Speicher** kam ein zweiter Punkt dazu: „Eigenverbrauchs-Ersparnis" und
+„Arbitrage-Gewinn" werden dort addiert — der erste Posten enthielt aber auch die aus dem Netz
+geladene Energie, die im zweiten noch einmal auftauchte. Dieselbe Kilowattstunde zählte doppelt.
+
+Beides läuft jetzt über eine Rechnung, die deine Entladung nach Herkunft trennt. **Du siehst im
+T-Konto einen niedrigeren, dafür stimmigen Beitrag** — er passt jetzt zur ROI-Seite. Lädst du
+nicht aus dem Netz, ändert sich im Hub nichts.
+
+Und: die **Vollzyklen** in der Cockpit-Übersicht zählten intern die Ladung statt der Entladung
+(bei 80 % Wirkungsgrad 10,0 statt 8,0). Gesehen hat das bisher niemand — der Wert wurde nirgends
+angezeigt. Mit der neuen Speicher-Tabelle wäre er sichtbar geworden, deshalb ist er mit korrigiert.
+
+### Auswertungen → ROI: „wie weit bin ich?" steht wieder da
+
+**Betrifft dich das?** Alle — besonders, wenn du eine **Wärmepumpe oder ein E-Auto** hast.
+
+Die ROI-Seite sagte dir bisher nur, wie lange es *rechnerisch* noch dauert: „Amortisation in
+9,2 Jahren", hochgerechnet aus einer prognostizierten Jahres-Einsparung. Die andere Hälfte der
+Frage — **wie viel hat deine Anlage tatsächlich schon eingespielt?** — stand am Bildschirm
+nirgends. Sie ist jetzt als zweite Kachel daneben:
+
+> **Amortisations-Fortschritt · 40,0 %**
+> noch 7.200 € · voraussichtlich 2030
+
+Der Unterschied ist wichtig: Die linke Kachel ist ein **Modell**, die rechte eine **Messung** aus
+deinen tatsächlich erfassten Erträgen. Welche du gerade liest, sagt dir das ⓘ-Symbol an der
+Kachel.
+
+**Was sich an deinen Zahlen ändern kann.** Beide Kacheln rechnen gegen deine **Mehrkosten** —
+also gegen das, was eine Anschaffung *gegenüber ihrer Alternative* gekostet hat. Für die
+Wärmepumpe und das E-Auto setzte eedc dafür bisher pauschale Annahmen ein: 8.000 € für eine
+Gasheizung, 35.000 € für einen vergleichbaren Verbrenner — **auch dann, wenn du unter
+„Anschaffungskosten Alternative" längst etwas anderes eingetragen hattest**. Genau dieses Feld
+mahnt der Daten-Checker an. Ab jetzt wird es gelesen:
+
+- **Du hast das Feld gepflegt** → deine Zahl zählt, nicht die Pauschale.
+- **Du hast es nicht gepflegt** → es zählen die vollen Anschaffungskosten. eedc rät nicht mehr an
+  deiner Stelle. Deine Amortisation sieht dadurch länger aus als vorher — sie entspricht jetzt
+  den Daten, die tatsächlich da sind. Wenn dir das zu streng ist: das Feld nachtragen, dann
+  stimmt es wieder.
+- **PV, Speicher, Wechselrichter, Wallbox** → unverändert. Dort gibt es keine Alternative.
+
+**Warum es diesen Block eine Weile nicht gab:** Er war beim Umbau auf die neue Oberfläche bewusst
+weggelassen worden, weil zwei Amortisations-Zahlen nebeneinander leicht widersprüchlich wirken.
+Beim Nachmessen zeigte sich, dass die eigentliche Ursache tiefer lag — es gab **drei**
+verschiedene Investitionssummen im Programm, je nachdem welche Seite man aufschlug. Die sind
+jetzt eine, und erst dadurch dürfen die beiden Kacheln nebeneinander stehen.
+
+
+### Cockpit → Monat: der Netz-Ladeanteil zählte doppelt, wenn du Auto und Wallbox pflegst
+
+**Betrifft dich das?** Wenn du **sowohl ein E-Fahrzeug als auch eine Wallbox** in eedc erfasst
+hast. Wer nur eines von beidem pflegt, sieht keinen Unterschied.
+
+Deine Wallbox misst den Strom **am Ladepunkt**, dein Auto meldet dieselbe Ladung **aus
+Fahrzeugsicht**. Pflegst du beides, hast du **eine** Ladung mit zwei Messgeräten dokumentiert —
+nicht zwei Ladungen. eedc weiß das und wählt überall genau eine der beiden Quellen aus (die
+Wallbox, wenn sie Heimladung meldet, sonst das Fahrzeug).
+
+An einer Stelle fehlte diese Regel: die Zeile **„Ladung · Netz-Anteil"** im Komponenten-Block
+von *Cockpit → Monat* addierte beide Seiten einfach zusammen. Die Zahl lief von dort weiter in
+die Jahres-Summe und — das ist der teure Teil — ins **T-Konto**, wo sie mit deinem Arbeitspreis
+multipliziert als Kostenposition steht.
+
+Am Demo-Datenbestand nachgestellt: über 25 Monate **5.976 statt 3.831 kWh**, also **56 % zu
+viel**, in *jedem* Monat mit Ladung.
+
+**Was du siehst:** einen niedrigeren, richtigen Netz-Anteil und entsprechend niedrigere
+Ladekosten im T-Konto — dieselbe Zahl, die ROI-Sicht, Aussichten und die HA-Sensoren schon
+vorher genannt haben.
+
+
+### Werte aus der Zeit vor der Anschaffung zählen nicht mehr mit
+
+**Betrifft dich das?** Wenn du Monatswerte **rückwirkend importiert oder nachgepflegt** hast —
+etwa über den HA-Statistik-Import, der so weit zurückreicht, wie deine Langzeitstatistik geht.
+
+Alle Auswertungen in eedc achten auf **Anschaffungs- und Stilllegungsdatum**: eine Wärmepumpe,
+die du im April gekauft hast, taucht in den Monaten davor nicht auf. Der Komponenten-Block in
+*Cockpit → Monat* war die letzte Stelle, an der dieser Filter fehlte — er nahm jede erfasste
+Zeile seines Gerätetyps, ganz gleich ob das Gerät damals schon existierte.
+
+Am Demo-Datenbestand standen dadurch vier Monate lang Heizwärme und Warmwasser einer
+Wärmepumpe, die es zu der Zeit noch gar nicht gab; **3.400 kWh davon zählte die Jahres-Sicht ins
+Jahr 2024**.
+
+**Was du siehst:** In Monaten vor der Anschaffung (und nach einer Stilllegung) steht bei der
+betroffenen Komponente jetzt „—" statt einer Zahl, und die Jahressumme fällt entsprechend
+niedriger — und richtiger — aus. Hast du **kein** Anschaffungsdatum gepflegt, gilt das Gerät
+unverändert als von Anfang an vorhanden; das ist dann der richtige Anlass, das Datum
+nachzutragen.
+
+
+### Keine Warnung mehr für den Stromverbrauch, den du selbst dazugebaut hast
+
+**Betrifft dich das?** Wenn du eine **Wärmepumpe, ein E-Fahrzeug oder eine Wallbox**
+angeschafft hast und der Daten-Checker dir seither erzählt, dein Netzbezug sei
+verdächtig hoch.
+
+Der Daten-Checker vergleicht jeden Monat mit demselben Monat im Vorjahr und meldet ab
+dem Dreifachen. Für die **Einspeisung** kennt er dabei längst eine Ausnahme: hast du
+zwischendurch PV zugebaut, erklärt der Ausbau den Sprung und die Prüfung setzt aus.
+Für den **Netzbezug** fehlte dieses Gegenstück — dabei ist der Fall genauso eindeutig:
+Wer im September eine Wärmepumpe einbaut, heizt im Januar mit Strom und sieht seinen
+Netzbezug planmäßig auf ein Mehrfaches steigen. Der Daten-Checker meldete das Monat für
+Monat, und es gab nichts zu korrigieren.
+
+Jetzt gilt: **Ist zwischen den beiden verglichenen Monaten ein Verbraucher dazugekommen,
+schweigt die Netzbezugs-Prüfung für dieses Monatspaar.** Als Verbraucher zählen
+Wärmepumpe, E-Fahrzeug, Wallbox und alles unter *Sonstiges*, dem du die Kategorie
+*Verbraucher* gegeben hast.
+
+Drei Dinge, die dabei bewusst so bleiben:
+
+- **Die Einspeisung wird davon nicht mit entschuldigt.** Ein Verbraucher-Zubau erklärt
+  den Netzbezug, ein PV-Ausbau die Einspeisung — springt die jeweils andere Größe, wird
+  sie unverändert gemeldet.
+- **Ein Austausch ist kein Zubau.** Alte Wärmepumpe stillgelegt, neue angeschafft: die
+  Anzahl bleibt gleich, also erklärt nichts den Sprung und die Warnung kommt weiterhin.
+- **Ohne Anschaffungsdatum passiert nichts.** eedc kann den Zubau nur erkennen, wenn du
+  bei der Komponente ein Anschaffungsdatum gepflegt hast. Steht dort nichts, gilt sie als
+  von Anfang an vorhanden — dann ist die Meldung der richtige Hinweis, das Datum unter
+  *Einstellungen → Investitionen* nachzutragen.
+
+*Warum das kein Wegklick-Knopf geworden ist:* Ein Hinweis, den du nur noch abnicken
+kannst, verstellt später den Blick auf einen echten Fehler. Wenn eedc eine Auffälligkeit
+selbst erklären kann, gehört sie gar nicht erst gemeldet — genauso wurde 2026 schon der
+Inbetriebnahme-Monat als Vergleichsbasis ausgeschlossen.
+
+### Die Umsatzsteuer auf den Eigenverbrauch stimmt jetzt — und ist überall dieselbe
+
+**Betrifft dich das?** Nur wenn du unter *Einstellungen → Stammdaten* die
+**Regelbesteuerung** eingestellt hast. Bei „Keine USt-Auswirkung" (der Normalfall)
+ändert sich für dich nichts.
+
+eedc leitet diese Steuer aus den **Selbstkosten je Kilowattstunde** ab: die
+Jahresabschreibung deiner Anlage plus laufende Kosten, geteilt durch den **Jahres**-Ertrag.
+Zwei Dinge stimmten daran nicht:
+
+- **Über mehrere Jahre war sie viel zu niedrig.** Sobald eine Sicht einen längeren Zeitraum
+  zeigte — Cockpit ohne Jahresfilter, der Anlagenbericht über den Gesamtzeitraum, die
+  bisherigen Erträge in *Aussichten*, die HA-Sensoren —, wurde die Erzeugung **des ganzen
+  Zeitraums** gegen eine **einzelne** Jahresabschreibung gerechnet. Bei drei Jahren kam so
+  rund ein Drittel des richtigen Betrags heraus. Dein Netto-Ertrag stand entsprechend zu
+  hoch, und weil der ROI-Fortschritt darauf aufsetzt, sah auch die Amortisation zu gut aus.
+- **Jede Sicht rechnete mit einer anderen Grundlage.** Die meisten setzten die vollen
+  Anschaffungskosten an — beim E-Auto also den ganzen Kaufpreis —, das Cockpit eine eigene
+  Summe mit festen Annahmen (35.000 € fürs Auto, 8.000 € für die Heizung), die deine
+  gepflegten **Alternativkosten** gar nicht las. Cockpit-Kachel und HA-Sensor lagen dadurch
+  auseinander, obwohl der Sensor genau diese Kachel abbilden soll.
+
+Beides läuft jetzt über **eine** Berechnung. Grundlage sind die **Mehrkosten** — was eine
+Anschaffung gegenüber ihrer Alternative gekostet hat, aus dem Feld, das du in der
+Investition ohnehin pflegst —, und gerechnet wird Jahr für Jahr. **Ein angefangenes Jahr
+zählt anteilig**: gehst du im Juni in Betrieb, trägt dieses Jahr sieben Zwölftel
+Abschreibung statt zwölf gegen sieben Monate Ertrag.
+
+**Was du siehst:** Die Beträge bewegen sich **in beide Richtungen**. Über einen mehrjährigen
+Zeitraum steigt die USt spürbar und der Netto-Ertrag sinkt; für ein einzelnes Jahr sinkt sie
+meist leicht. Cockpit und HA-Sensor stimmen danach auf den Cent überein.
+
+**Muss ich etwas tun?** Nein. Es lohnt sich aber, bei E-Auto und Wärmepumpe die
+**Alternativkosten** zu pflegen (*Investitionen → Bearbeiten*) — sie bestimmen jetzt
+mit, wie hoch die Steuer ausfällt.
+
+### Auswertungen und Cockpit nennen dieselben Euro-Beträge
+
+**Betrifft dich das?** Wenn du *Auswertungen → Finanzen* oder die Finanzspalten in
+*Auswertungen → Tabelle* nutzt — besonders, wenn du **regelbesteuert** bist oder einen
+**Erzeuger unter „Sonstiges"** mit Brennstoff betreibst (z. B. ein Mini-BHKW).
+
+Die Finanzwerte dieser Seite wurden bisher **in deinem Browser** gerechnet, mit einer eigenen
+Formel neben der, die eedc für Cockpit, Monatsbericht-PDF, HA-Export und Aussichten benutzt.
+Jetzt kommen sie aus derselben Quelle wie überall sonst. Drei Beträge ändern sich dadurch:
+
+- **Ein Brennstoff-Erzeuger bringt keine Strompreis-Ersparnis mehr.** Sein Strom wurde bisher
+  bewertet, als wäre er gratis. In deiner **Energiebilanz** zählt er weiter voll mit
+  (Eigenverbrauch, Autarkie, EV-Quote) — nur wirtschaftlich bewertet eedc ihn bewusst nicht,
+  weil der Brennstoff auf der anderen Seite Geld kostet.
+- **Bei Regelbesteuerung wird die USt auf den Eigenverbrauch abgezogen**, wie im Cockpit. Damit
+  die kleinere Zahl erklärbar bleibt, gibt es in der Werte-Tabelle die neue Spalte
+  **„USt Eigenverbrauch"** (über den Spalten-Wähler einblendbar). Bist du nicht regelbesteuert,
+  ändert sich hier nichts.
+- **Ein Balkonkraftwerk, bei dem nur der Eigenverbrauch gepflegt ist**, zählt jetzt mit statt
+  gar nicht.
+
+**Muss ich etwas tun?** Nein. Wenn dir eine Zahl kleiner vorkommt als früher: sie stimmt jetzt
+mit dem Cockpit überein. **Ein Hinweis für Regelbesteuerte:** Die Summe der Tageszeilen ergibt
+beim Netto-Ertrag nicht mehr genau den Monatswert — die USt ist eine Jahresgröße und lässt sich
+keinem einzelnen Tag zuordnen.
+
+### SFML steht jetzt im Prognosen-Vergleich
+
+**Betrifft dich das?** Wenn du unter *Einstellungen → Stammdaten* **Solar Forecast ML (SFML)**
+als Prognosequelle gewählt hast.
+
+Unter *Auswertungen → Prognose* standen bisher OpenMeteo, eedc, Solcast und dein IST — die
+Quelle, mit der eedc bei dir tatsächlich rechnet, fehlte ausgerechnet dort. Sie erscheint jetzt
+als eigene **SFML**-Spalte im Stundenvergleich und im 7-Tage-Vergleich, und als eigene Kurve im
+Tagesverlauf.
+
+**Bewertet wird SFML weiterhin nicht:** Es bekommt keine Δ-Spalte, und im Genauigkeits-Tracking
+(MAE/Bias) taucht es nicht auf. eedc stellt eine spezialisierte fremde Prognosequelle nicht
+benotend gegen die eigene. Für vergangene Tage steht in der SFML-Spalte deshalb „—" — eedc führt
+darüber keine Mitschrift; gefüllt sind heute und morgen.
+
+**Muss ich etwas tun?** Nein. Ohne gewählte SFML-Quelle ändert sich für dich nichts.
+
+### Prognosen-Vergleich: eine Abweichung, eine Sprache — und eine eigene Spalte
+
+**Betrifft dich das?** Wenn du unter *Auswertungen → Prognose* die drei Tabellen vergleichst.
+
+Bisher beantworteten sie dieselbe Frage in zwei Sprachen: das **Genauigkeits-Tracking** nannte
+nur den Prozentwert („+16 %"), **Stundenvergleich** und **7-Tage-Vergleich** nur die kWh
+(„▲ 9,7"). Weil die 7-Tage-Tabelle ihre Vergangenheits-Tage aus derselben Liste zieht wie das
+Tracking, standen die letzten vier Tage doppelt auf der Seite — mit zwei verschiedenen Zahlen
+für dieselbe Abweichung.
+
+Ab jetzt steht überall **beides**: „▲ 9,7 (16 %)". Beide Angaben sagen etwas Eigenes — 0,3 kWh
+Abweichung sind mittags ein Treffer und morgens um sieben eine Fehlprognose.
+
+Damit die Prozentangabe die Zahlen nicht mehr verschiebt, hat jede Quelle jetzt **zwei
+Spalten**: links ihr Wert, rechts daneben unter **Δ** die Einwertung. So fluchten die Werte
+wieder untereinander, und du kannst die Δ-Spalte für sich lesen.
+
+Nebenbei verschwinden drei Ungereimtheiten: Eine kleine Morgenstunde bekam in der einen Tabelle
+gar keine Bewertung und in der anderen eine **rote**; der Rotton war in beiden leicht
+verschieden; und der 7-Tage-Vergleich verschwieg als einziger die Abweichung abgeschlossener
+Tage, wenn sie sehr klein war.
+
+**Muss ich etwas tun?** Nein.
+
+### Der Jahres-Verlauf zeigt auch den laufenden Monat
+
+**Betrifft dich das?** Wenn du in *Cockpit → Jahr* schaust und dort oben mehr Monate gezählt
+werden, als der Verlauf darunter Balken zeichnet.
+
+Ganz oben stand zum Beispiel „Jan–Aug · 9.653 kWh", der Verlauf darunter zeigte sechs Balken.
+Der Grund: eedc kannte einen Monat für den Verlauf nur dann, wenn er **irgendetwas** in der
+Datenbank stehen hatte — einen Monatsabschluss oder mindestens eine Komponenten-Zeile. Einen
+**automatischen Monatsabschluss gibt es nicht**, deshalb fehlte immer mindestens der gerade
+laufende Monat. Und wer den Vormonat noch nicht abgeschlossen hatte, verlor auch den — im
+Zweifel den ertragsstärksten des Jahres.
+
+Ab jetzt rechnet eedc solche Monate aus den **Tageswerten**, die es ohnehin täglich mitschreibt.
+Im Tooltip steht dann „aus Tageswerten", damit du siehst, woher die Zahl kommt.
+
+**Muss ich etwas tun?** Nein. Und es kostet deine Home-Assistant-Box **keine einzige zusätzliche
+Abfrage** — die Tageswerte liegen bereits bei eedc.
+
+**Was sich nicht ändert:** Gepflegte Zahlen bleiben unangetastet — die Tageswerte füllen nur
+Lücken, sie überschreiben nichts. *Auswertungen → Tabelle* zeigt weiterhin nur echte Datensätze,
+also nichts, was du dort nicht bearbeiten könntest. Monatsbericht, HA-Sensoren und die
+Community-Übertragung bleiben ebenfalls, wie sie waren. Dass ein Monatsabschluss fehlt, meldet
+dir weiterhin der [Daten-Checker](HANDBUCH_EINSTELLUNGEN.md) — mit Link direkt auf den Abschluss.
+
+### Ein Geräte-Connector sagt jetzt, welchen Zeitraum er gemessen hat
+
+**Betrifft dich das?** Nur wenn du unter *Einstellungen → Datenquellen* einen
+**Geräte-Connector** eingerichtet hast (Wechselrichter, Speicher o. ä. mit direktem Abruf).
+
+Ein Connector-Wert ist immer die **Differenz zweier Zählerstände**. Richtest du ihn mitten im
+Monat ein, kennt er die Tage davor nicht — der Wert für diesen Monat ist dann ein Bruchstück.
+Bei einem Anwender waren das fünf Zählerstände vom 28.–30. Juli, angezeigt als **Juli-Wert von
+51 kWh**, während seine Anlage in dem Monat rund **996 kWh** erzeugt hatte. Dass so ein Wert
+keinen von dir gepflegten Monatswert mehr verdrängt, ist seit v4.0.5 erledigt — **beschriftet
+war er trotzdem nicht**, und wenn keine andere Quelle da war, stand er einfach da.
+
+In *Cockpit → Monat* trägt das Quellen-Etikett jetzt den gemessenen Zeitraum:
+**„Connector (28.–30.07.2025)"**. Fährst du mit der Maus darüber, steht dort ausgeschrieben,
+wie viele Tage des Monats das sind. Deckt dein Connector den Monat ab dem Ersten ab — der
+Normalfall, sobald er ein paar Wochen läuft —, **ändert sich für dich nichts**.
+
+Und wenn dein Connector für den laufenden Monat **gar keinen** Wert bilden kann, weil ein
+Zählerstand fehlt, sagt dir das jetzt der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#411-geraete-connector-ohne-monatswert)
+— vorher merkte man davon nichts, in der Monats-Sicht stand einfach eine Quelle weniger.
+Am 1. eines Monats meldet er nichts, solange der tägliche Abruf läuft: dort fehlt der
+Zählerstand *im* neuen Monat naturgemäß, bis der Abruf einmal durch ist.
+
+**Muss ich etwas tun?** Nein — außer der Daten-Checker meldet den Connector; dann lohnt der
+Blick, ob der **tägliche Abruf** eingeschaltet und das Gerät erreichbar ist.
 
 ---
 
