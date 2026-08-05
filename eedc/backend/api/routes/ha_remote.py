@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db
 from backend.core.config import HA_INTEGRATION_AVAILABLE
+from backend.services.ha_connection import aktualisiere_ha_verbindung
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,12 @@ async def save_ha_remote_settings(config: dict, db: AsyncSession = Depends(get_d
 
     mqtt_import = await _mqtt_import_auf_default(db) if wird_aktiviert else None
     await db.commit()
+
+    # Die Langzeitstatistik liest ohne Datenbank-Zugang über diese Verbindung
+    # (`services/ha_statistics_ws.py`). Sie ist ein synchroner Singleton und
+    # kann die Zeile nicht selbst nachschlagen — also wird sie hier informiert,
+    # sonst greift eine geänderte Verbindung erst nach einem Neustart.
+    await aktualisiere_ha_verbindung(db)
 
     return {
         "gespeichert": True,

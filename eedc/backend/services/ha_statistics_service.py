@@ -1,5 +1,5 @@
 """
-HA Statistics Service - Liest historische Daten aus der Home Assistant Datenbank.
+HA Statistics Service - Liest historische Daten aus der Home Assistant Langzeitstatistik.
 
 Ermöglicht:
 - Monatswerte aus HA-Langzeitstatistiken abrufen
@@ -9,14 +9,32 @@ Ermöglicht:
 Die HA-Datenbank enthält in der `statistics` Tabelle stündliche Aggregationen
 für Sensoren mit `has_sum=True` (typisch für kWh-Zähler).
 
-Unterstützt SQLite (Standard) und MariaDB/MySQL (über ha_recorder_db_url).
+**Drei gleichwertige Transporte, eine Quelle** (Reihenfolge = Vorrang):
+
+1. `HA_RECORDER_DB_URL` — externer Recorder (MariaDB/MySQL), per SQL.
+2. Recorder-**Datei** `/config/home-assistant_v2.db` — im Add-on eingehängt, per SQL.
+3. **WebSocket** `recorder/statistics_during_period` — braucht weder Datei noch
+   DB-Zugang, nur die HA-Verbindung samt Token (`services/ha_statistics_ws.py`).
+
+Die beiden SQL-Wege behalten den Vorrang, wo sie verfügbar sind: sie sind
+synchron, gehen nicht übers Netz und lesen gebündelt. Fehlt beides, trägt der
+WebSocket-Weg **dieselbe** Quelle — er liest `sum` · `state` · `mean` · `min` ·
+`max` aus derselben Recorder-Statistik, nur über HAs API statt über die Tabelle.
+Für den Standalone-Container neben einer HA-Instanz ist er der einzige Weg zur
+Historie; vorher entstanden Tageswerte dort ausschließlich aus eedcs eigenen
+5-Minuten-Snapshots, also ab Installation vorwärts.
+
+⚠ **Was auch der WebSocket-Weg nicht kann:** weiter zurückreichen als HA selbst.
+Die LTS beginnt mit der Existenz des Sensors. Für die Zeit davor bleibt der
+Datei-Import die Antwort.
 """
 
 import logging
 import time
+from contextlib import contextmanager
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from typing import Optional, NamedTuple
+from typing import TYPE_CHECKING, Optional, NamedTuple
 
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -24,6 +42,9 @@ from sqlalchemy.engine import Engine
 
 from backend.core.config import settings
 from backend.core.berechnungen.slot_konvention import lts_boundary_index
+
+if TYPE_CHECKING:  # pragma: no cover — nur für die Typprüfung
+    from backend.services.ha_statistics_ws import HAStatisticsWebsocket
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +169,50 @@ class HAStatisticsService:
         self._initialized: bool = False
         # statistic_id → (zeitpunkt, SensorMeta). Nur Treffer, siehe get_metadata.
         self._meta_cache: dict[str, tuple[float, SensorMeta]] = {}
+        # WebSocket-Transport (dritter Weg, nur ohne DB-Zugang) — siehe
+        # `setze_ha_verbindung`. Die Ersatz-IDs füllen `SensorMeta.id`, das dort
+        # keine Entsprechung hat: die WS-Antwort ist bereits nach statistic_id
+        # geschlüsselt, aber der übrige Code erwartet das Feld.
+        self._ws_client: Optional["HAStatisticsWebsocket"] = None
+        self._ws_ersatz_ids: dict[str, int] = {}
+        self._ws_status: Optional[tuple[float, bool]] = None
+
+    def setze_ha_verbindung(self, api_url: Optional[str], token: Optional[str]) -> None:
+        """Meldet die aktive HA-Verbindung für den WebSocket-Transport.
+
+        Gerufen beim Start und bei jeder Änderung der HA-Verbindung (siehe
+        `api/routes/ha_remote.py`). Ohne DB-Zugang wird daraus der dritte
+        Transport; mit DB-Zugang bleibt es folgenlos, weil SQL den Vorrang hat.
+
+        ⚠ Der Service kann die Verbindung **nicht selbst** nachschlagen:
+        `resolve_ha_connection` ist async und braucht eine DB-Session, während
+        hier jede Methode synchron ist. Ihn aus dem WS-Brücken-Thread heraus zu
+        rufen wäre die falsche Antwort — aiosqlite-Verbindungen sind an ihren
+        Event-Loop gebunden. Deshalb wird die Verbindung hereingereicht.
+        """
+        alt = self._ws_client
+        if alt is not None:
+            alt.schliessen()
+        self._ws_client = None
+        self._ws_status = None
+        self._meta_cache.clear()
+        if api_url and token:
+            from backend.services.ha_statistics_ws import HAStatisticsWebsocket
+
+            self._ws_client = HAStatisticsWebsocket(api_url, token)
+        # Erneut auflösen: ohne DB kann sich die Verfügbarkeit gerade geändert haben.
+        self._initialized = False
+
+    @property
+    def _ws(self) -> Optional["HAStatisticsWebsocket"]:
+        """Der WS-Transport — nur wenn keine Datenbank erreichbar ist.
+
+        Die Reihenfolge steht hier und nirgends sonst: erst SQL, dann WebSocket.
+        """
+        self._init_engine()
+        if self._engine is not None:
+            return None
+        return self._ws_client
 
     def _init_engine(self) -> None:
         """Initialisiert die SQLAlchemy Engine (einmalig)."""
@@ -203,17 +268,42 @@ class HAStatisticsService:
             )
             self._is_mysql = False
 
+    def _ws_verfuegbar(self) -> bool:
+        """Antwortet der WebSocket-Transport? Ergebnis wird kurz gemerkt.
+
+        Ohne dieses Merken zahlte **jeder** `is_available`-Aufruf einen
+        Verbindungsversuch — bei nicht erreichbarer HA also je Aufruf den
+        vollen Verbindungs-Timeout. `is_available` steht am Anfang fast jeder
+        Lesemethode.
+        """
+        client = self._ws_client
+        if client is None:
+            return False
+        jetzt = time.monotonic()
+        gemerkt = self._ws_status
+        if gemerkt is not None and (jetzt - gemerkt[0]) < self._META_CACHE_TTL:
+            return gemerkt[1]
+        erreichbar = client.erreichbar()
+        self._ws_status = (jetzt, erreichbar)
+        return erreichbar
+
     @property
     def is_available(self) -> bool:
-        """Prüft ob die HA-Datenbank verfügbar ist."""
+        """Prüft ob die HA-Langzeitstatistik erreichbar ist — per DB **oder** WebSocket."""
         self._init_engine()
-        return self._engine is not None
+        if self._engine is not None:
+            return True
+        return self._ws_verfuegbar()
 
     @property
     def db_path(self) -> Optional[str]:
-        """Gibt den DB-Pfad/URL für Status-Anzeige zurück."""
+        """Gibt den DB-Pfad/URL bzw. die WS-Adresse für Status-Anzeige zurück."""
         self._init_engine()
         if self._engine is None:
+            # Ohne Datenbank ist die Herkunft die HA-API — und sie zu benennen
+            # ist der Unterschied zwischen „nicht verfügbar" und „anderer Weg".
+            if self._ws_verfuegbar() and self._ws_client is not None:
+                return self._ws_client.ws_url
             return None
         url = str(self._engine.url)
         # Passwort maskieren
@@ -227,15 +317,23 @@ class HAStatisticsService:
 
     @property
     def backend_type(self) -> str:
-        """Gibt den Datenbank-Typ zurück."""
+        """Gibt den genutzten Transport zurück."""
         if not self.is_available:
             return "nicht verfügbar"
+        if self._engine is None:
+            return "HA-WebSocket"
         return "MariaDB/MySQL" if self._is_mysql else "SQLite"
 
     def count_statistics_sensors(self) -> int:
         """Zählt die Anzahl der Sensoren in statistics_meta."""
         if not self.is_available:
             return 0
+        ws = self._ws
+        if ws is not None:
+            try:
+                return len(ws.metadaten())
+            except Exception:
+                return 0
         try:
             with self._engine.connect() as conn:
                 result = conn.execute(text("SELECT COUNT(*) FROM statistics_meta"))
@@ -243,6 +341,115 @@ class HAStatisticsService:
                 return row[0] if row else 0
         except Exception:
             return 0
+
+    # ------------------------------------------------------------------
+    # Zeilen-Beschaffung — die einzige Stelle, an der sich die Transporte
+    # unterscheiden. Alles darüber (Einheitenumrechnung, Boundary-Index,
+    # Slot-Konvention, Delta-Bildung) rechnet auf demselben Ergebnis.
+    # ------------------------------------------------------------------
+
+    def _ws_zeilen(
+        self,
+        sensor_ids: list[str],
+        ts_von: float,
+        ts_bis: float,
+        *,
+        short_term: bool = False,
+        types: Optional[list[str]] = None,
+    ) -> dict[str, list[dict]]:
+        """Statistik-Zeilen über den WebSocket-Transport.
+
+        `ts_von`/`ts_bis` sind dieselben Unix-Sekunden, mit denen die SQL-Pfade
+        gegen `start_ts` filtern — die WS-Antwort wird auf genau diese Größe
+        zurückgerechnet. Deshalb bleibt jede Nachverarbeitung identisch.
+
+        Das Fenster ist beidseitig **inklusiv** wie die SQL-Varianten mit
+        `<= :ts_bis`: HA schließt `end_time` aus, also wird eine Slotlänge
+        aufgeschlagen und danach exakt beschnitten.
+        """
+        ws = self._ws
+        if ws is None or not sensor_ids:
+            return {}
+        period = "5minute" if short_term else "hour"
+        schritt = SHORT_TERM_SLOT * 60 if short_term else 3600
+        # ⚠ Ein Netzfehler wird **nicht** hier zu einem leeren Ergebnis gemacht.
+        # „Keine Zeilen“ und „nicht gefragt werden können“ sind zwei Lagen: wer
+        # sie gleichsetzt, liefert dem Aufrufer eine Null, wo eine Lücke ist —
+        # genau die Klasse, die den Hausverbrauch schon einmal still auf 0
+        # gezogen hat. Die Lesemethoden fangen die Ausnahme dort, wo sie auch
+        # einen SQL-Fehler fangen, und liefern dann ihren eigenen Leerwert.
+        roh = ws.statistiken(
+            sensor_ids,
+            datetime.fromtimestamp(ts_von),
+            datetime.fromtimestamp(ts_bis + schritt),
+            period=period,
+            types=types or ["sum", "state", "mean", "min", "max"],
+        )
+        return {
+            sid: [z for z in zeilen if ts_von <= z["start_ts"] <= ts_bis]
+            for sid, zeilen in roh.items()
+        }
+
+    @contextmanager
+    def _verbindung(self):
+        """Datenbank-Verbindung — oder `None`, wenn über WebSocket gelesen wird.
+
+        Damit bleibt die Form `with self._verbindung() as conn:` in allen
+        Lesemethoden erhalten; `conn is None` heißt „nimm den WS-Zweig".
+        """
+        if self._engine is not None:
+            with self._engine.connect() as conn:
+                yield conn
+        else:
+            yield None
+
+    def _ws_flachzeilen(
+        self,
+        sensor_ids: list[str],
+        ts_von: float,
+        ts_bis: float,
+        *,
+        felder: tuple[str, ...],
+        short_term: bool = False,
+    ) -> list[tuple]:
+        """WS-Zeilen in der Tupel-Form der SQL-Abfragen mit `JOIN statistics_meta`.
+
+        Liefert `(statistic_id, start_ts, *felder, unit_of_measurement)`, sortiert
+        nach Sensor und Zeit — dasselbe, was `SELECT sm.statistic_id, s.start_ts,
+        …, sm.unit_of_measurement … ORDER BY sm.statistic_id, s.start_ts` ergibt.
+        So bleibt die auswertende Schleife für beide Transporte dieselbe.
+        """
+        zeilen = self._ws_zeilen(
+            sensor_ids, ts_von, ts_bis, short_term=short_term, types=list(felder),
+        )
+        ergebnis: list[tuple] = []
+        for sensor_id in sorted(zeilen):
+            meta = self._ws_meta(sensor_id)
+            unit = meta.unit if meta else None
+            for zeile in zeilen[sensor_id]:
+                ergebnis.append(
+                    (sensor_id, zeile["start_ts"], *(zeile.get(f) for f in felder), unit)
+                )
+        return ergebnis
+
+    def _ws_meta(self, sensor_id: str) -> Optional[SensorMeta]:
+        """`SensorMeta` aus den WS-Metadaten — Gegenstück zu `statistics_meta`."""
+        ws = self._ws
+        if ws is None:
+            return None
+        try:
+            alle = ws.metadaten()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("HA-Statistik-Metadaten nicht abrufbar: %s", e)
+            return None
+        eintrag = alle.get(sensor_id)
+        if eintrag is None:
+            return None
+        # `metadata_id` gibt es über die API nicht — die Antwort ist bereits nach
+        # statistic_id geschlüsselt. Eine stabile Ersatz-Nummer hält die
+        # bestehenden Rückwärts-Zuordnungen (`meta_id_to_sensor`) am Leben.
+        ersatz = self._ws_ersatz_ids.setdefault(sensor_id, len(self._ws_ersatz_ids) + 1)
+        return SensorMeta(id=ersatz, unit=eintrag.unit, has_sum=eintrag.has_sum)
 
     # `_ts_to_datetime` / `_ts_to_date` sind hier bewusst **nicht** mehr
     # vorhanden. Sie erzeugten `FROM_UNIXTIME(start_ts)` bzw.
@@ -280,6 +487,16 @@ class HAStatisticsService:
         if gemerkt is not None and (jetzt - gemerkt[0]) < self._META_CACHE_TTL:
             return gemerkt[1]
 
+        # Ohne Datenbank steht `conn` auf None — dann kommt die Auskunft aus
+        # `recorder/list_statistic_ids` statt aus `statistics_meta`.
+        if conn is None:
+            meta_ws = self._ws_meta(sensor_id)
+            if meta_ws is None:
+                logger.debug(f"Sensor '{sensor_id}' nicht in der HA-Statistik gefunden")
+                return None
+            self._meta_cache[sensor_id] = (jetzt, meta_ws)
+            return meta_ws
+
         result = conn.execute(
             text(
                 "SELECT id, unit_of_measurement, has_sum "
@@ -303,7 +520,7 @@ class HAStatisticsService:
             (valid_ids, missing_ids)
         """
         valid, missing = [], []
-        with self._engine.connect() as conn:
+        with self._verbindung() as conn:
             for sid in sensor_ids:
                 if self.get_metadata(conn, sid):
                     valid.append(sid)
@@ -341,7 +558,7 @@ class HAStatisticsService:
         mit_sum: list[str] = []
         ohne_sum: list[str] = []
         fehlend: list[str] = []
-        with self._engine.connect() as conn:
+        with self._verbindung() as conn:
             for sid in sensor_ids:
                 meta = self.get_metadata(conn, sid)
                 if meta is None:
@@ -378,26 +595,44 @@ class HAStatisticsService:
         """
         ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
 
-        result = conn.execute(
-            text("""
-                SELECT
-                    MIN(state) as state_min,
-                    MAX(state) as state_max,
-                    MIN(sum)   as sum_min,
-                    MAX(sum)   as sum_max
-                FROM statistics
-                WHERE metadata_id = :mid
-                AND start_ts >= :start
-                AND start_ts < :end
-            """),
-            {"mid": meta.id, "start": ts_start, "end": ts_ende}
-        )
+        if conn is None:
+            # Ohne Datenbank rechnet Python die vier Aggregate — `period=month`
+            # taugt hier NICHT: HA liefert dort den Wert am Perioden-**Ende**,
+            # gebraucht wird aber MAX−MIN **innerhalb** des Monats. Ein anderer
+            # Bezugspunkt wäre eine andere Zahl, nicht dieselbe über ein anderes
+            # Kabel.
+            zeilen = self._ws_zeilen(
+                [sensor_id], ts_start, ts_ende - 1, types=["sum", "state"],
+            ).get(sensor_id, [])
+            states = [z["state"] for z in zeilen if z["state"] is not None]
+            sums = [z["sum"] for z in zeilen if z["sum"] is not None]
+            if not states and not sums:
+                return None
+            state_min = min(states) if states else None
+            state_max = max(states) if states else None
+            sum_min = min(sums) if sums else None
+            sum_max = max(sums) if sums else None
+        else:
+            result = conn.execute(
+                text("""
+                    SELECT
+                        MIN(state) as state_min,
+                        MAX(state) as state_max,
+                        MIN(sum)   as sum_min,
+                        MAX(sum)   as sum_max
+                    FROM statistics
+                    WHERE metadata_id = :mid
+                    AND start_ts >= :start
+                    AND start_ts < :end
+                """),
+                {"mid": meta.id, "start": ts_start, "end": ts_ende}
+            )
 
-        row = result.fetchone()
-        if not row or (row[0] is None and row[2] is None):
-            return None
+            row = result.fetchone()
+            if not row or (row[0] is None and row[2] is None):
+                return None
 
-        state_min, state_max, sum_min, sum_max = row[0], row[1], row[2], row[3]
+            state_min, state_max, sum_min, sum_max = row[0], row[1], row[2], row[3]
 
         # Bevorzugt sum-basiert (reset-bereinigt), Fallback state-basiert
         if sum_min is not None and sum_max is not None:
@@ -435,7 +670,7 @@ class HAStatisticsService:
 
         sensoren: list[SensorMonatswert] = []
 
-        with self._engine.connect() as conn:
+        with self._verbindung() as conn:
             for sensor_id in sensor_ids:
                 meta = self.get_metadata(conn, sensor_id)
                 if meta is None:
@@ -459,7 +694,7 @@ class HAStatisticsService:
         if not self.is_available:
             raise RuntimeError("HA-Datenbank nicht verfügbar")
 
-        with self._engine.connect() as conn:
+        with self._verbindung() as conn:
             # Metadata-IDs ermitteln
             metadata_ids = []
             nicht_gefunden = []
@@ -482,6 +717,17 @@ class HAStatisticsService:
                     f"HA-Datenbank gefunden. Bitte prüfen: Ist der HA Recorder auf diese "
                     f"Datenbank konfiguriert (configuration.yaml → recorder → db_url)?"
                 )
+
+            if conn is None:
+                grenzen = self._ws_zeitraum(
+                    [sid for sid in sensor_ids if sid not in nicht_gefunden]
+                )
+                if grenzen is None:
+                    raise ValueError(
+                        "Sensoren in der HA-Statistik gefunden, aber keine Messwerte vorhanden"
+                    )
+                row_grenzen = grenzen
+                return self._monatsliste(row_grenzen[0], row_grenzen[1])
 
             # Zeitraum ermitteln — IN-Klausel mit benannten Parametern
             params = {f"id_{i}": mid for i, mid in enumerate(metadata_ids)}
@@ -509,41 +755,94 @@ class HAStatisticsService:
                     f"statistics-Tabelle vorhanden"
                 )
 
-            erstes = datetime.fromtimestamp(row_grenzen[0]).date()
-            letztes = datetime.fromtimestamp(row_grenzen[1]).date()
+            return self._monatsliste(row_grenzen[0], row_grenzen[1])
 
-            # Aktuellen (unvollständigen) Monat ausschließen
-            today = date.today()
-            first_of_current_month = date(today.year, today.month, 1)
-            if letztes >= first_of_current_month:
-                # Auf Vormonat begrenzen
-                if first_of_current_month.month == 1:
-                    letztes = date(first_of_current_month.year - 1, 12, 1)
-                else:
-                    letztes = date(first_of_current_month.year, first_of_current_month.month - 1, 1)
+    def _monatsliste(self, erstes_ts: float, letztes_ts: float) -> AlleMonateResponse:
+        """Baut die Monatsliste aus erstem und letztem Messzeitpunkt.
 
-            # Alle Monate im Zeitraum generieren
-            monate: list[VerfuegbarerMonat] = []
-            current = date(erstes.year, erstes.month, 1)
-            end = date(letztes.year, letztes.month, 1)
+        Bewusst gemeinsam für beide Transporte: welche Monate als „verfügbar"
+        gelten und dass der laufende Monat draußen bleibt, ist eine fachliche
+        Festlegung — sie darf nicht davon abhängen, über welches Kabel die
+        Grenzen kamen.
+        """
+        erstes = datetime.fromtimestamp(erstes_ts).date()
+        letztes = datetime.fromtimestamp(letztes_ts).date()
 
-            while current <= end:
-                monate.append(VerfuegbarerMonat(
-                    jahr=current.year,
-                    monat=current.month,
-                    monat_name=self.MONAT_NAMEN[current.month]
-                ))
-                if current.month == 12:
-                    current = date(current.year + 1, 1, 1)
-                else:
-                    current = date(current.year, current.month + 1, 1)
+        # Aktuellen (unvollständigen) Monat ausschließen
+        today = date.today()
+        first_of_current_month = date(today.year, today.month, 1)
+        if letztes >= first_of_current_month:
+            # Auf Vormonat begrenzen
+            if first_of_current_month.month == 1:
+                letztes = date(first_of_current_month.year - 1, 12, 1)
+            else:
+                letztes = date(first_of_current_month.year, first_of_current_month.month - 1, 1)
 
-            return AlleMonateResponse(
-                erstes_datum=erstes,
-                letztes_datum=letztes,
-                anzahl_monate=len(monate),
-                monate=monate
+        # Alle Monate im Zeitraum generieren
+        monate: list[VerfuegbarerMonat] = []
+        current = date(erstes.year, erstes.month, 1)
+        end = date(letztes.year, letztes.month, 1)
+
+        while current <= end:
+            monate.append(VerfuegbarerMonat(
+                jahr=current.year,
+                monat=current.month,
+                monat_name=self.MONAT_NAMEN[current.month]
+            ))
+            if current.month == 12:
+                current = date(current.year + 1, 1, 1)
+            else:
+                current = date(current.year, current.month + 1, 1)
+
+        return AlleMonateResponse(
+            erstes_datum=erstes,
+            letztes_datum=letztes,
+            anzahl_monate=len(monate),
+            monate=monate
+        )
+
+    def _ws_zeitraum(self, sensor_ids: list[str]) -> Optional[tuple[float, float]]:
+        """Erster und letzter Messzeitpunkt über den WebSocket-Transport.
+
+        `MIN/MAX(start_ts)` hat über die API kein Gegenstück. Statt die ganze
+        Historie stündlich zu laden (Jahre × 8760 Zeilen je Sensor) wird sie
+        **monatsweise** abgefragt — leere Monate liefern nichts, belegte je eine
+        Zeile. Für den ersten und den letzten belegten Monat folgt eine
+        tagesgenaue Abfrage, damit `erstes_datum`/`letztes_datum` denselben
+        Tag nennen wie der SQL-Weg und nicht nur den Monatsersten.
+        """
+        ws = self._ws
+        if ws is None or not sensor_ids:
+            return None
+        # 2015 ist großzügig unterhalb jeder HA-Installation; leere Monate
+        # kosten nichts, weil HA sie gar nicht erst zurückgibt.
+        anfang = datetime(2015, 1, 1)
+        ende = datetime.now() + timedelta(days=1)
+        try:
+            monate = ws.statistiken(sensor_ids, anfang, ende, "month", ["sum", "state"])
+        except Exception as e:  # noqa: BLE001
+            logger.warning("HA-Statistik-Zeitraum nicht ermittelbar: %s", e)
+            return None
+        starts = [z["start_ts"] for zeilen in monate.values() for z in zeilen]
+        if not starts:
+            return None
+
+        def _tagesgenau(monats_ts: float, letzter: bool) -> float:
+            """Ersten bzw. letzten belegten Tag innerhalb eines Monats finden."""
+            monats_start = datetime.fromtimestamp(monats_ts).replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0,
             )
+            naechster = (monats_start + timedelta(days=32)).replace(day=1)
+            try:
+                tage = ws.statistiken(sensor_ids, monats_start, naechster, "day", ["sum", "state"])
+            except Exception:  # noqa: BLE001 — Monatsanfang ist ein brauchbarer Rückfall
+                return monats_ts
+            treffer = [z["start_ts"] for zeilen in tage.values() for z in zeilen]
+            if not treffer:
+                return monats_ts
+            return max(treffer) if letzter else min(treffer)
+
+        return _tagesgenau(min(starts), letzter=False), _tagesgenau(max(starts), letzter=True)
 
     def get_alle_monatswerte(
         self,
@@ -612,25 +911,32 @@ class HAStatisticsService:
         result: dict[str, dict[str, dict[int, float]]] = {}
 
         try:
-            with self._engine.connect() as conn:
-                rows = conn.execute(
-                    text(f"""
-                        SELECT sm.statistic_id, s.start_ts, s.mean, sm.unit_of_measurement
-                        FROM statistics s
-                        JOIN statistics_meta sm ON s.metadata_id = sm.id
-                        WHERE sm.statistic_id IN ({placeholders})
-                          AND s.start_ts >= :ts_von
-                          AND s.start_ts < :ts_bis
-                          AND s.mean IS NOT NULL
-                        ORDER BY sm.statistic_id, s.start_ts
-                    """),
-                    params
-                )
+            with self._verbindung() as conn:
+                if conn is None:
+                    rows = self._ws_flachzeilen(
+                        sensor_ids, ts_von, ts_bis - 1, felder=("mean",),
+                    )
+                else:
+                    rows = conn.execute(
+                        text(f"""
+                            SELECT sm.statistic_id, s.start_ts, s.mean, sm.unit_of_measurement
+                            FROM statistics s
+                            JOIN statistics_meta sm ON s.metadata_id = sm.id
+                            WHERE sm.statistic_id IN ({placeholders})
+                              AND s.start_ts >= :ts_von
+                              AND s.start_ts < :ts_bis
+                              AND s.mean IS NOT NULL
+                            ORDER BY sm.statistic_id, s.start_ts
+                        """),
+                        params
+                    )
                 for row in rows:
                     entity_id: str = row[0]
                     start_ts: float = row[1]
                     mean: float = row[2]
                     unit: Optional[str] = row[3]
+                    if mean is None:
+                        continue
 
                     # Energie-Zähler sind für Leistungsprofile ungeeignet
                     if unit in ("kWh", "Wh", "MWh"):
@@ -707,20 +1013,25 @@ class HAStatisticsService:
         result: dict[str, dict[str, dict[int, dict[str, float]]]] = {}
 
         try:
-            with self._engine.connect() as conn:
-                rows = conn.execute(
-                    text(f"""
-                        SELECT sm.statistic_id, s.start_ts, s.min, s.max, sm.unit_of_measurement
-                        FROM statistics s
-                        JOIN statistics_meta sm ON s.metadata_id = sm.id
-                        WHERE sm.statistic_id IN ({placeholders})
-                          AND s.start_ts >= :ts_von
-                          AND s.start_ts < :ts_bis
-                          AND (s.min IS NOT NULL OR s.max IS NOT NULL)
-                        ORDER BY sm.statistic_id, s.start_ts
-                    """),
-                    params,
-                )
+            with self._verbindung() as conn:
+                if conn is None:
+                    rows = self._ws_flachzeilen(
+                        sensor_ids, ts_von, ts_bis - 1, felder=("min", "max"),
+                    )
+                else:
+                    rows = conn.execute(
+                        text(f"""
+                            SELECT sm.statistic_id, s.start_ts, s.min, s.max, sm.unit_of_measurement
+                            FROM statistics s
+                            JOIN statistics_meta sm ON s.metadata_id = sm.id
+                            WHERE sm.statistic_id IN ({placeholders})
+                              AND s.start_ts >= :ts_von
+                              AND s.start_ts < :ts_bis
+                              AND (s.min IS NOT NULL OR s.max IS NOT NULL)
+                            ORDER BY sm.statistic_id, s.start_ts
+                        """),
+                        params,
+                    )
                 for row in rows:
                     entity_id: str = row[0]
                     start_ts: float = row[1]
@@ -728,6 +1039,8 @@ class HAStatisticsService:
                     max_v = row[3]
                     unit: Optional[str] = row[4]
 
+                    if min_v is None and max_v is None:
+                        continue
                     if unit in ("kWh", "Wh", "MWh"):
                         continue
 
@@ -792,23 +1105,32 @@ class HAStatisticsService:
         unit: Optional[str] = None
 
         try:
-            with self._engine.connect() as conn:
+            with self._verbindung() as conn:
                 meta = self.get_metadata(conn, sensor_id)
                 if not meta:
                     return {}, None
                 unit = meta.unit
 
-                rows = conn.execute(
-                    text(
-                        "SELECT start_ts, mean FROM statistics "
-                        "WHERE metadata_id = :mid "
-                        "AND start_ts >= :ts_von "
-                        "AND start_ts < :ts_bis "
-                        "AND mean IS NOT NULL "
-                        "ORDER BY start_ts"
-                    ),
-                    {"mid": meta.id, "ts_von": ts_von, "ts_bis": ts_bis},
-                )
+                if conn is None:
+                    rows = [
+                        (z["start_ts"], z["mean"])
+                        for z in self._ws_zeilen(
+                            [sensor_id], ts_von, ts_bis - 1, types=["mean"],
+                        ).get(sensor_id, [])
+                        if z["mean"] is not None
+                    ]
+                else:
+                    rows = conn.execute(
+                        text(
+                            "SELECT start_ts, mean FROM statistics "
+                            "WHERE metadata_id = :mid "
+                            "AND start_ts >= :ts_von "
+                            "AND start_ts < :ts_bis "
+                            "AND mean IS NOT NULL "
+                            "ORDER BY start_ts"
+                        ),
+                        {"mid": meta.id, "ts_von": ts_von, "ts_bis": ts_bis},
+                    )
                 for row in rows:
                     start_ts = row[0]
                     mean = row[1]
@@ -838,27 +1160,39 @@ class HAStatisticsService:
 
         ts_start, ts_ende = _monatsgrenzen_ts(jahr, monat)
 
-        with self._engine.connect() as conn:
+        with self._verbindung() as conn:
             meta = self.get_metadata(conn, sensor_id)
             if not meta:
                 return None
 
-            result = conn.execute(
-                text("""
-                    SELECT MIN(state) as start_wert
-                    FROM statistics
-                    WHERE metadata_id = :mid
-                    AND start_ts >= :start
-                    AND start_ts < :end
-                """),
-                {"mid": meta.id, "start": ts_start, "end": ts_ende}
-            )
+            if conn is None:
+                states = [
+                    z["state"]
+                    for z in self._ws_zeilen(
+                        [sensor_id], ts_start, ts_ende - 1, types=["state"],
+                    ).get(sensor_id, [])
+                    if z["state"] is not None
+                ]
+                if not states:
+                    return None
+                wert = min(states)
+            else:
+                result = conn.execute(
+                    text("""
+                        SELECT MIN(state) as start_wert
+                        FROM statistics
+                        WHERE metadata_id = :mid
+                        AND start_ts >= :start
+                        AND start_ts < :end
+                    """),
+                    {"mid": meta.id, "start": ts_start, "end": ts_ende}
+                )
 
-            row = result.fetchone()
-            if not row or row[0] is None:
-                return None
+                row = result.fetchone()
+                if not row or row[0] is None:
+                    return None
 
-            wert = row[0]
+                wert = row[0]
             faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
             if faktor != 1.0:
                 wert *= faktor
@@ -923,10 +1257,24 @@ class HAStatisticsService:
         ts_bis = ts_target + toleranz_minuten * 60
         table = "statistics_short_term" if short_term else "statistics"
 
-        with self._engine.connect() as conn:
+        with self._verbindung() as conn:
             meta = self.get_metadata(conn, sensor_id)
             if not meta:
                 return None
+
+            if conn is None:
+                # Dieselbe Wahl wie `ORDER BY ABS(start_ts - :target) LIMIT 1`,
+                # nur in Python: die Zeile mit dem geringsten Abstand zum
+                # gesuchten Perioden-Ende.
+                kandidaten = self._ws_zeilen(
+                    [sensor_id], ts_von, ts_bis,
+                    short_term=short_term, types=["sum", "state"],
+                ).get(sensor_id, [])
+                if not kandidaten:
+                    return None
+                naechste = min(kandidaten, key=lambda z: abs(z["start_ts"] - ts_target))
+                row = (naechste["sum"], naechste["state"])
+                return self._value_at_wert(row, meta)
 
             # Filter UND Sortierung auf dem rohen `start_ts`: beides lief vorher
             # über `FROM_UNIXTIME`/`datetime(...)` und schloss damit den Index
@@ -955,33 +1303,41 @@ class HAStatisticsService:
             row = result.fetchone()
             if not row:
                 return None
+            return self._value_at_wert(row, meta)
 
-            # Bei kumulativen Energiezählern (has_sum=True) ausschließlich
-            # `sum` verwenden — niemals auf `state` zurückfallen.
-            # `sum` ist HAs reset-bereinigte Lifetime-Summe; `state` kann
-            # daneben eine andere Größe sein (z. B. Tageswert eines
-            # utility_meter-Sensors). Mischt man beide, entstehen
-            # Counter-Spikes von der Größenordnung des Lifetime-Werts,
-            # sobald ein Slot `sum=NULL` hat (z. B. nach HA-Restart bevor
-            # `recompile_statistics` lief). Bei `sum=NULL` lieber `None`
-            # zurückgeben — der Aufrufer interpoliert (sensor_snapshot
-            # _service._fill_gaps_linear).
-            if meta.has_sum:
-                wert = row[0]
-            else:
-                # Power-Sensor (kW/W) ohne `sum` darf nicht als kumulative
-                # Energie ausgegeben werden — `state` ist die momentane
-                # Leistung, keine kWh (#200 rcmcronny).
-                if not meta.unit or meta.unit not in _ENERGY_UNIT_TO_KWH:
-                    return None
-                wert = row[0] if row[0] is not None else row[1]
-            if wert is None:
+    def _value_at_wert(self, row, meta: SensorMeta) -> Optional[float]:
+        """Wählt aus `(sum, state)` den gültigen Zählerstand in kWh.
+
+        Gemeinsam für beide Transporte: welche Spalte ein Zählerstand ist und
+        wann gar keiner geliefert werden darf, ist eine fachliche Regel — die
+        Antwort darf nicht davon abhängen, woher die Zeile kam.
+        """
+        # Bei kumulativen Energiezählern (has_sum=True) ausschließlich
+        # `sum` verwenden — niemals auf `state` zurückfallen.
+        # `sum` ist HAs reset-bereinigte Lifetime-Summe; `state` kann
+        # daneben eine andere Größe sein (z. B. Tageswert eines
+        # utility_meter-Sensors). Mischt man beide, entstehen
+        # Counter-Spikes von der Größenordnung des Lifetime-Werts,
+        # sobald ein Slot `sum=NULL` hat (z. B. nach HA-Restart bevor
+        # `recompile_statistics` lief). Bei `sum=NULL` lieber `None`
+        # zurückgeben — der Aufrufer interpoliert (sensor_snapshot
+        # _service._fill_gaps_linear).
+        if meta.has_sum:
+            wert = row[0]
+        else:
+            # Power-Sensor (kW/W) ohne `sum` darf nicht als kumulative
+            # Energie ausgegeben werden — `state` ist die momentane
+            # Leistung, keine kWh (#200 rcmcronny).
+            if not meta.unit or meta.unit not in _ENERGY_UNIT_TO_KWH:
                 return None
+            wert = row[0] if row[0] is not None else row[1]
+        if wert is None:
+            return None
 
-            faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
-            if faktor != 1.0:
-                wert *= faktor
-            return round(wert, 3)
+        faktor = _ENERGY_UNIT_TO_KWH.get(meta.unit, 1.0) if meta.unit else 1.0
+        if faktor != 1.0:
+            wert *= faktor
+        return round(wert, 3)
 
     def get_hourly_kwh_deltas_for_day(
         self,
@@ -1063,7 +1419,7 @@ class HAStatisticsService:
         per_sensor_boundaries: dict[str, dict[int, float]] = {sid: {} for sid in sensor_ids}
 
         try:
-            with self._engine.connect() as conn:
+            with self._verbindung() as conn:
                 # Metadaten laden (faktor, has_sum)
                 meta_by_id: dict[str, SensorMeta] = {}
                 for sid in sensor_ids:
@@ -1074,21 +1430,33 @@ class HAStatisticsService:
                 if not meta_by_id:
                     return {}
 
-                placeholders_meta = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
-                meta_params: dict = {f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())}
                 meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
 
-                rows = conn.execute(
-                    text(f"""
-                        SELECT metadata_id, start_ts, sum, state
-                        FROM statistics
-                        WHERE metadata_id IN ({placeholders_meta})
-                          AND start_ts >= :ts_von
-                          AND start_ts <= :ts_bis
-                        ORDER BY metadata_id, start_ts
-                    """),
-                    {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
-                )
+                if conn is None:
+                    rows = [
+                        (meta_by_id[sid].id, z["start_ts"], z["sum"], z["state"])
+                        for sid, zeilen in self._ws_zeilen(
+                            list(meta_by_id), ts_von, ts_bis, types=["sum", "state"],
+                        ).items()
+                        if sid in meta_by_id
+                        for z in zeilen
+                    ]
+                else:
+                    placeholders_meta = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
+                    meta_params: dict = {
+                        f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())
+                    }
+                    rows = conn.execute(
+                        text(f"""
+                            SELECT metadata_id, start_ts, sum, state
+                            FROM statistics
+                            WHERE metadata_id IN ({placeholders_meta})
+                              AND start_ts >= :ts_von
+                              AND start_ts <= :ts_bis
+                            ORDER BY metadata_id, start_ts
+                        """),
+                        {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
+                    )
                 for row in rows:
                     metadata_id = row[0]
                     start_ts = row[1]
@@ -1199,7 +1567,7 @@ class HAStatisticsService:
         result: dict[str, dict] = {}
 
         try:
-            with self._engine.connect() as conn:
+            with self._verbindung() as conn:
                 meta_by_id: dict[str, SensorMeta] = {}
                 for sid in sensor_ids:
                     m = self.get_metadata(conn, sid)
@@ -1208,21 +1576,38 @@ class HAStatisticsService:
                 if not meta_by_id:
                     return {}
 
-                placeholders = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
-                meta_params: dict = {f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())}
                 meta_id_to_sensor: dict[int, str] = {m.id: sid for sid, m in meta_by_id.items()}
 
-                rows = conn.execute(
-                    text(f"""
-                        SELECT metadata_id, start_ts, sum, mean
-                        FROM statistics_short_term
-                        WHERE metadata_id IN ({placeholders})
-                          AND start_ts >= :ts_von
-                          AND start_ts <= :ts_bis
-                        ORDER BY metadata_id, start_ts
-                    """),
-                    {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
-                )
+                if conn is None:
+                    # `period=5minute` ist das Gegenstück zu
+                    # `statistics_short_term` — inklusive derselben Reichweite:
+                    # HA hält beide nur für die Recorder-Aufbewahrung vor
+                    # (gemessen ~12 Tage), danach bleibt nur die Stundenebene.
+                    rows = [
+                        (meta_by_id[sid].id, z["start_ts"], z["sum"], z["mean"])
+                        for sid, zeilen in self._ws_zeilen(
+                            list(meta_by_id), ts_von, ts_bis,
+                            short_term=True, types=["sum", "mean"],
+                        ).items()
+                        if sid in meta_by_id
+                        for z in zeilen
+                    ]
+                else:
+                    placeholders = ", ".join(f":mid_{i}" for i in range(len(meta_by_id)))
+                    meta_params: dict = {
+                        f"mid_{i}": m.id for i, m in enumerate(meta_by_id.values())
+                    }
+                    rows = conn.execute(
+                        text(f"""
+                            SELECT metadata_id, start_ts, sum, mean
+                            FROM statistics_short_term
+                            WHERE metadata_id IN ({placeholders})
+                              AND start_ts >= :ts_von
+                              AND start_ts <= :ts_bis
+                            ORDER BY metadata_id, start_ts
+                        """),
+                        {**meta_params, "ts_von": ts_von, "ts_bis": ts_bis},
+                    )
 
                 # Pro Sensor: {slot_beginn_dt: sum_kwh} und {slot_beginn_dt: mean}.
                 sum_by_slot: dict[str, dict[datetime, float]] = {sid: {} for sid in meta_by_id}

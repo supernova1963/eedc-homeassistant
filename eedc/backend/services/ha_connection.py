@@ -39,3 +39,30 @@ async def resolve_ha_connection(db: AsyncSession) -> tuple:
         return (f"{base}/api", val["token"], HA_CONNECTOR)
 
     return (None, None, None)
+
+
+async def aktualisiere_ha_verbindung(db: AsyncSession) -> bool:
+    """Reicht die aktive HA-Verbindung an die beiden HA-Singletons weiter.
+
+    Betroffen sind `HAStatisticsService` (Langzeitstatistik über die
+    WebSocket-API, wenn kein Recorder-Zugang besteht) und `HAStateService`
+    (aktuelle States, Einheiten, Sensorhistorie). Beide sind Singletons ohne
+    DB-Session — `HAStatisticsService` ist zusätzlich durchgehend synchron —,
+    können `resolve_ha_connection` also nicht selbst rufen. Die Verbindung wird
+    ihnen hereingereicht.
+
+    Zwei Aufrufer, und beide sind nötig: der Start (sonst wirkt eine bestehende
+    Verbindung erst nach dem nächsten Speichern) und das Speichern der
+    Remote-Verbindung (sonst erst nach dem nächsten Start).
+
+    Returns:
+        True, wenn eine Verbindung gesetzt wurde.
+    """
+    api_url, token, _ = await resolve_ha_connection(db)
+
+    from backend.services.ha_state_service import get_ha_state_service
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+
+    get_ha_statistics_service().setze_ha_verbindung(api_url, token)
+    get_ha_state_service().setze_ha_verbindung(api_url, token)
+    return bool(api_url and token)

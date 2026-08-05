@@ -1216,11 +1216,39 @@ eedc/{anlage_id}/{key}/attributes                   → Attributes
 
 **Datei:** `backend/services/ha_statistics_service.py`
 
-**Funktion:** Direkter SQLite-Zugriff auf Home Assistant Langzeitstatistiken.
+**Funktion:** Zugriff auf die Home-Assistant-Langzeitstatistik.
 
-**Voraussetzungen:**
-- Volume-Mapping `config:ro` für Lesezugriff auf `/config/home-assistant_v2.db`
-- Sensor-Mapping konfiguriert
+**Drei Transporte, eine Quelle** (Reihenfolge = Vorrang):
+
+| # | Transport | Voraussetzung |
+| --- | --- | --- |
+| 1 | `HA_RECORDER_DB_URL` (SQL) | externer Recorder, MariaDB/MySQL |
+| 2 | Recorder-Datei (SQL) | Volume-Mapping `config:ro` auf `/config/home-assistant_v2.db` |
+| 3 | **WebSocket** `recorder/statistics_during_period` | nur die HA-Verbindung (Supervisor oder Long-Lived-Token) |
+
+Die SQL-Wege behalten den Vorrang, wo sie verfügbar sind — synchron, kein Netz,
+gebündeltes Lesen. Fehlt beides, liefert der WebSocket-Weg **dieselbe** Quelle:
+`sum` · `state` · `mean` · `min` · `max` aus derselben Recorder-Statistik.
+Aggregator, Rücksetzer-Behandlung und Slot-Konvention bleiben unberührt; der
+Unterschied liegt allein in der Zeilen-Beschaffung
+(`backend/services/ha_statistics_ws.py`).
+
+Gemessen 2026-08-05 gegen eine produktive Anlage, beide Wege parallel: 27
+Monatswerte und 26 Monatsanfangswerte **bitgleich**, verfügbare Monate
+identisch bis auf den Tag.
+
+⚠ **Warum der dritte Weg gebraucht wird:** Wer eedc als eigenen Container neben
+HA betreibt, hat weder `/config` noch `HA_RECORDER_DB_URL` — Tageswerte
+entstanden dort ausschließlich aus eedcs eigenen 5-Minuten-Snapshots, also ab
+Installation **vorwärts**. `config:ro` hilft dort auch nicht generell: es setzt
+denselben Host **und** eine laufende HA voraus (eine WAL-Datenbank braucht auch
+als Leser eine schreibbare `-shm`) und trägt bei MariaDB-Recorder gar nicht.
+
+⚠ **Die Grenze, die auch der dritte Weg nicht verschiebt:** die LTS reicht nur
+so weit zurück, wie der Sensor in HA existiert. Für alles davor ist der
+Datei-Import die Antwort.
+
+**Weitere Voraussetzung:** Sensor-Mapping konfiguriert.
 
 **Hauptfunktionen:**
 - `get_monatswerte()` - Einzelner Monat aus HA-Statistik

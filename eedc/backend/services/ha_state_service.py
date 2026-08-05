@@ -143,7 +143,19 @@ def _state_wert_und_einheit(daten: Optional[dict]) -> Optional[tuple[float, str]
 
 
 class HAStateService:
-    """Holt Sensor-States aus Home Assistant via Supervisor API."""
+    """Holt Sensor-States aus Home Assistant — per Supervisor **oder** Remote-Token.
+
+    ⚠ Bis 2026-08-05 las diese Klasse ausschließlich `settings.supervisor_token`.
+    Für eine Remote-/Standalone-Verbindung war `is_available` damit still
+    `False`, obwohl `resolve_ha_connection` diesen Fall längst auflöst — und die
+    Aufrufer lieferten wortlos leer statt den vorhandenen Weg zu nehmen:
+    Live-Tagesverlauf (`live_history_service`), Solcast, Prognose-Discovery,
+    die Speicher-SoC-Historie und der **kW≠kWh-Check** des Daten-Checkers
+    (`daten_checker/sensoren.py`). Letzterer schaltete sich mit dem Kommentar
+    „HA nicht erreichbar (Standalone)" ab — dabei war HA erreichbar, nur eben
+    nicht über den supervisor-gebundenen Zugriff. Ausgerechnet bei den
+    Anwendern, die die kW/kWh-Verwechslung am ehesten machen.
+    """
 
     _UNIT_CACHE_TTL = 3600  # 1 Stunde
 
@@ -153,6 +165,21 @@ class HAStateService:
         # entity_id → (zeitpunkt, einheit). Die Einheit ist bewusst auch dann
         # gemerkt, wenn sie leer ist — siehe get_sensor_units().
         self._unit_cache: dict[str, tuple[float, str]] = {}
+
+    def setze_ha_verbindung(self, api_url: Optional[str], token: Optional[str]) -> None:
+        """Übernimmt die aktive HA-Verbindung (Supervisor oder Remote).
+
+        Gerufen aus `ha_connection.aktualisiere_ha_verbindung` — beim Start und
+        bei jeder Änderung. Ohne Verbindung bleibt der Supervisor-Stand aus
+        `__init__` stehen, damit der Add-on-Betrieb unberührt ist.
+        """
+        if not (api_url and token):
+            return
+        if token != self.token or api_url != self.api_url:
+            # Zwischen zwei Verbindungen sagt dieselbe Entity nicht dasselbe.
+            self._unit_cache.clear()
+        self.api_url = api_url
+        self.token = token
 
     @property
     def is_available(self) -> bool:

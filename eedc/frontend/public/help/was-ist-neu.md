@@ -11,6 +11,24 @@
 
 ## Unreleased
 
+### Meine Tageswerte fangen erst bei der Installation an — jetzt holt eedc die Historie selbst
+
+Wenn du eedc als eigenen Container betreibst und über einen Long-Lived-Token mit Home Assistant verbunden bist, gab es bisher eine unsichtbare Grenze: eedc kam **nicht** an die Langzeitstatistik von HA. Tageswerte baute es sich deshalb nur aus eigenen Messungen im 5-Minuten-Takt — also ab dem Tag der Installation vorwärts. *Cockpit → Tag* blieb für alles davor leer, der Voll-Backfill war gesperrt, und „Lücken aus HA-LTS nachfüllen" in der Reparatur-Werkbank ging nicht.
+
+Der bisherige Rat war, das HA-Konfigurationsverzeichnis in den eedc-Container einzuhängen. Das setzt aber voraus, dass beide auf **demselben Rechner** laufen und HA gerade läuft — und wer MariaDB als Recorder nutzt, kam damit gar nicht weiter.
+
+**Jetzt holt eedc die Statistik über dieselbe Verbindung, über die es ohnehin schon die aktuellen Sensorwerte liest.** Du musst dafür nichts einrichten: Ist deine HA-Verbindung eingetragen, ist die Historie da. Läuft eedc als Add-on oder hast du die Datenbank eingehängt, bleibt alles wie bisher — dieser Weg ist etwas schneller und wird weiter bevorzugt.
+
+**An deinen Zahlen ändert sich nichts.** Es sind dieselben Werte aus derselben Statistik, nur anders abgeholt; wir haben beide Wege an einer echten Anlage nebeneinander gemessen und keinen einzigen Unterschied gefunden.
+
+**Ein Punkt bleibt:** Weiter zurück als Home Assistant selbst kann auch dieser Weg nicht. Die Langzeitstatistik beginnt, wenn du den Sensor einrichtest. Für die Jahre davor ist der Datei-Import (CSV/Excel) der richtige Weg.
+
+### Live-Verlauf, Solcast und der kW/kWh-Test waren im Container stumm
+
+Fünf Funktionen waren fest an den Add-on-Betrieb gebunden und meldeten sich bei einer Token-Verbindung einfach als „nicht verfügbar", obwohl die Verbindung stand: der **Live-Tagesverlauf**, die **Solcast-Anbindung**, die Prognose-Erkennung, die **Ladestands-Historie deines Speichers** und die Prüfung des Daten-Checkers auf **vertauschte Leistungs- und Energie-Sensoren**.
+
+Der letzte Punkt war der ärgerlichste: Genau die Verwechslung, kW statt kWh zuzuordnen, wurde ausgerechnet dort nicht geprüft, wo sie am häufigsten passiert. Alle fünf arbeiten jetzt auch mit einer Remote-Verbindung.
+
 ### „Die TagesZusammenfassung vom ? aus unbekannt" — diese Meldung gibt es nicht mehr
 
 Wer eedc frisch eingerichtet hatte, bekam im Daten-Checker einen Hinweis mit **Fragezeichen und „unbekannt"** darin. Er war für einen anderen Zustand gedacht — nämlich dafür, dass schon aggregierte Tage noch aus einer älteren Quelle stammen. Wenn es überhaupt noch **keine** Tageswerte gab, passte er nicht und schickte dich auf die Suche nach einer falschen Datenquelle.

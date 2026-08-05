@@ -165,6 +165,20 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("Datenbank initialisiert.")
 
+    # Die HA-Langzeitstatistik liest ohne Recorder-Zugang über die WebSocket-API.
+    # Der Service ist synchron und kann die Verbindung nicht selbst nachschlagen
+    # — ohne diesen Aufruf bliebe der Weg bis zum ersten Speichern der
+    # HA-Verbindung ungenutzt.
+    try:
+        from backend.core.database import async_session_maker
+        from backend.services.ha_connection import aktualisiere_ha_verbindung
+
+        async with async_session_maker() as _session:
+            if await aktualisiere_ha_verbindung(_session):
+                print("HA-Verbindung für die Langzeitstatistik übernommen.")
+    except Exception as e:
+        logger.debug(f"HA-Verbindung für Statistik nicht ermittelbar: {e}")
+
     # L2-Cache → L1-Cache Warmup (sofort, bevor irgendein Request kommt)
     _cache_cold = True
     try:

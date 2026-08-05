@@ -290,7 +290,9 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 Jeder Monat ist einzeln per Checkbox wählbar — so bleiben manuell erfasste Daten geschützt.
 
-> **Voraussetzungen:** zugeordnete HA-Sensoren (siehe [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung)), Sensoren in der HA-Langzeitstatistik, Volume-Mapping `config:ro`. Unterstützt SQLite **und** MariaDB/MySQL als Recorder-Backend (automatische Erkennung). Bei Tagesreset-Zählern nutzt eedc `MAX(sum) − MIN(sum)` aus HA-Statistics (reset-bereinigt).
+> **Voraussetzungen:** zugeordnete HA-Sensoren (siehe [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung)) und Sensoren, die in der HA-Langzeitstatistik geführt werden. Den **Zugang zur Statistik** hat eedc auf drei Wegen, und einer genügt: über die verbundene Home-Assistant-Instanz (Add-on oder Long-Lived-Token — **ohne** jede weitere Einrichtung), über das Volume-Mapping `config:ro` auf die Recorder-Datei, oder über `HA_RECORDER_DB_URL` bei MariaDB/MySQL. Wo eine Datenbank erreichbar ist, wird sie bevorzugt; sonst holt eedc dieselben Werte über die HA-API. Bei Tagesreset-Zählern nutzt eedc `MAX(sum) − MIN(sum)` aus HA-Statistics (reset-bereinigt).
+>
+> **Wie weit zurück?** So weit, wie Home Assistant den Sensor selbst führt — die Langzeitstatistik beginnt mit seiner Einrichtung. Für die Zeit davor gibt es den Datei-Import (CSV/Excel); daran ändert auch der API-Weg nichts.
 
 ### 6.5 Import-Assistenten
 
