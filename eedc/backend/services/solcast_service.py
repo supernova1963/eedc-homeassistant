@@ -43,6 +43,18 @@ CACHE_TTL_HA_SENSOR = 300  # 5 Minuten
 # ── Datenstruktur ──────────────────────────────────────────────────────────────
 
 @dataclass
+class TagesStundenprofil:
+    """24 Backward-Slots (kWh) eines einzelnen Prognosetags, inkl. p10/p90-Band."""
+    datum: date
+    p50: list[float] = field(default_factory=lambda: [0.0] * 24)
+    p10: list[float] = field(default_factory=lambda: [0.0] * 24)
+    p90: list[float] = field(default_factory=lambda: [0.0] * 24)
+
+    def hat_werte(self) -> bool:
+        return any(v for v in self.p50)
+
+
+@dataclass
 class SolcastForecast:
     """Gemeinsame Datenstruktur für alle 3 Solcast-Fälle."""
     daily_kwh: float              # p50 heute
@@ -55,7 +67,36 @@ class SolcastForecast:
     hourly_p10_kw: list[float] = field(default_factory=list)
     hourly_p90_kw: list[float] = field(default_factory=list)
     tage_voraus: list[dict] = field(default_factory=list)       # [{datum, kwh, p10, p90}]
+    # Stundenprofile je Prognosetag, Schlüssel ist das ISO-Datum (#357).
+    # ``hourly_kw`` ist die Heute-Sicht daraus und bleibt der Bestandsweg.
+    #
+    # Bis v4.0.8 kannte diese Struktur **nur** heute: der HA-Pfad las das
+    # ``detailedForecast``-Attribut ausschließlich vom Heute-Sensor, der
+    # API-Pfad verwarf alle Buckets mit ``slot_date != heute``. Wer einen
+    # anderen Tag brauchte, bekam das Profil von heute als Näherung
+    # (Kennzeichnung über ``hinweise``, ADR-002/P4). Belegt hat rapahl in
+    # #357, dass die HA-Integration je Tages-Sensor ein eigenes Attribut
+    # führt; die API liefert ohnehin 168 h. Gefüllt wird deshalb **datenge-
+    # trieben**: jeder Tag, für den die Quelle Slots liefert, bekommt hier
+    # einen Eintrag — kein Sonderfall „morgen", keine Annahme über Tag 3–7.
+    stundenprofile: dict[str, TagesStundenprofil] = field(default_factory=dict)
     quelle: str = "solcast_api"   # "solcast_api" | "solcast_ha"
+
+    def profil_fuer(self, datum: date) -> Optional[TagesStundenprofil]:
+        """Eigenes Stundenprofil dieses Tages — ``None``, wenn die Quelle für
+        den Tag nur eine Tagesmenge kennt (dann bleibt die Näherung samt
+        Kennzeichnung, sie wird nicht stillschweigend ersetzt)."""
+        profil = self.stundenprofile.get(datum.isoformat())
+        return profil if profil is not None and profil.hat_werte() else None
+
+
+def _runde_profile(profile: dict[str, TagesStundenprofil]) -> None:
+    """Rundet alle Slots auf 2 NK — dieselbe Stelle wie bisher ``hourly_kw``,
+    damit Heute-Sicht und Tagesprofil bitgleich bleiben."""
+    for profil in profile.values():
+        profil.p50 = [round(v, 2) for v in profil.p50]
+        profil.p10 = [round(v, 2) for v in profil.p10]
+        profil.p90 = [round(v, 2) for v in profil.p90]
 
 
 # ── Dispatcher ─────────────────────────────────────────────────────────────────
@@ -199,10 +240,10 @@ async def _fetch_solcast_api(
     tz = ZoneInfo("Europe/Berlin")
     heute = date.today()
 
-    # Stundenwerte aggregieren (über alle Resources)
-    hourly_p50 = [0.0] * 24
-    hourly_p10 = [0.0] * 24
-    hourly_p90 = [0.0] * 24
+    # Stundenwerte je Prognosetag aggregieren (über alle Resources, #357).
+    # Der Abruf holt ohnehin 168 h; bis v4.0.8 landeten davon nur die
+    # Heute-Slots in der Antwort, der Rest wurde verworfen.
+    profile: dict[str, TagesStundenprofil] = {}
     # Tageswerte: {datum_str: {kwh, p10, p90}}
     tage_dict: dict[str, dict[str, float]] = {}
 
@@ -254,11 +295,14 @@ async def _fetch_solcast_api(
                     slot_date, slot_hour = backward_slot_aus_period_end(period_end)
                     datum_str = slot_date.isoformat()
 
-                    # Stundenwerte für heute aggregieren (kW × 0.5h = kWh)
-                    if slot_date == heute:
-                        hourly_p50[slot_hour] += pv_p50 * period_hours
-                        hourly_p10[slot_hour] += pv_p10 * period_hours
-                        hourly_p90[slot_hour] += pv_p90 * period_hours
+                    # Stundenwerte je Tag aggregieren (kW × 0.5h = kWh)
+                    profil = profile.get(datum_str)
+                    if profil is None:
+                        profil = TagesStundenprofil(datum=slot_date)
+                        profile[datum_str] = profil
+                    profil.p50[slot_hour] += pv_p50 * period_hours
+                    profil.p10[slot_hour] += pv_p10 * period_hours
+                    profil.p90[slot_hour] += pv_p90 * period_hours
 
                     # Tageswerte aggregieren (kW × h = kWh)
                     if datum_str not in tage_dict:
@@ -294,6 +338,9 @@ async def _fetch_solcast_api(
             "p90": round(d["p90"], 1),
         })
 
+    _runde_profile(profile)
+    heute_profil = profile.get(heute_str)
+
     result = SolcastForecast(
         daily_kwh=round(heute_daten["kwh"], 1),
         daily_p10_kwh=round(heute_daten["p10"], 1),
@@ -301,10 +348,11 @@ async def _fetch_solcast_api(
         tomorrow_kwh=round(morgen_daten["kwh"], 1),
         tomorrow_p10_kwh=round(morgen_daten["p10"], 1),
         tomorrow_p90_kwh=round(morgen_daten["p90"], 1),
-        hourly_kw=[round(v, 2) for v in hourly_p50],
-        hourly_p10_kw=[round(v, 2) for v in hourly_p10],
-        hourly_p90_kw=[round(v, 2) for v in hourly_p90],
+        hourly_kw=list(heute_profil.p50) if heute_profil else [0.0] * 24,
+        hourly_p10_kw=list(heute_profil.p10) if heute_profil else [0.0] * 24,
+        hourly_p90_kw=list(heute_profil.p90) if heute_profil else [0.0] * 24,
         tage_voraus=tage_voraus,
+        stundenprofile=profile,
         quelle="solcast_api",
     )
 
@@ -505,47 +553,70 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
                     "p90": round(float(attrs.get("estimate90", 0) or 0), 1),
                 })
 
-        # detailedForecast-Attribut des Heute-Sensors für Stundenprofil
-        hourly_p50 = [0.0] * 24
-        hourly_p10 = [0.0] * 24
-        hourly_p90 = [0.0] * 24
-        today_attrs = ha_states[heute_entity]["attrs"]
-
-        detailed = (
-            today_attrs.get("detailedForecast")
-            or today_attrs.get("DetailedForecast")
-            or today_attrs.get("detailedHourly")
-            or today_attrs.get("detailed_hourly")
-            or []
-        )
+        # detailedForecast je Tages-Sensor → ein Stundenprofil pro Tag (#357).
+        # Bis v4.0.8 wurde nur das Attribut des HEUTE-Sensors gelesen; die
+        # übrigen Sensoren liegen aus demselben Batch-Call längst in
+        # `ha_states` (inkl. Attribute), es fehlte nur die Auswertung.
+        # Jeder Sensor wird gegen SEIN Datum gefiltert (`slot_date == datum`) —
+        # so wie vorher gegen `heute`. Das hält Rand-Slots (23:30 → Slot 0 des
+        # Folgetags) beim Tag, dessen Sensor sie liefert, und verhindert, dass
+        # zwei Sensoren denselben Slot doppelt füllen.
+        profile: dict[str, TagesStundenprofil] = {}
         tz = ZoneInfo("Europe/Berlin")
 
-        for entry in detailed:
-            period_start = entry.get("period_start", "")
-            try:
-                dt = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=tz)
-                else:
-                    dt = dt.astimezone(tz)
-            except (ValueError, TypeError):
+        for day_offset, key in enumerate(["heute", "morgen", "tag_3", "tag_4", "tag_5", "tag_6", "tag_7"]):
+            entity = entity_map.get(key)
+            sensor = ha_states.get(entity) if entity else None
+            if not sensor:
+                continue
+            attrs = sensor["attrs"]
+            detailed = (
+                attrs.get("detailedForecast")
+                or attrs.get("DetailedForecast")
+                or attrs.get("detailedHourly")
+                or attrs.get("detailed_hourly")
+                or []
+            )
+            if not detailed:
                 continue
 
-            pv_p50 = entry.get("pv_estimate", 0) or 0
-            pv_p10 = entry.get("pv_estimate10", 0) or 0
-            pv_p90 = entry.get("pv_estimate90", 0) or 0
+            datum = heute + timedelta(days=day_offset)
+            profil = TagesStundenprofil(datum=datum)
 
-            # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
-            # HA-Sensor liefert periodenbeginnende 30-Min-Buckets (period_start,
-            # nicht period_end wie die API). Die Abbildung auf den Backward-Slot
-            # ist zentral in core/berechnungen/slot_konvention.py gekapselt.
-            slot_date, slot_hour = backward_slot_aus_period_start(dt)
+            for entry in detailed:
+                period_start = entry.get("period_start", "")
+                try:
+                    dt = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=tz)
+                    else:
+                        dt = dt.astimezone(tz)
+                except (ValueError, TypeError):
+                    continue
 
-            # Stundenwerte für heute
-            if slot_date == heute:
-                hourly_p50[slot_hour] += pv_p50 * 0.5
-                hourly_p10[slot_hour] += pv_p10 * 0.5
-                hourly_p90[slot_hour] += pv_p90 * 0.5
+                pv_p50 = entry.get("pv_estimate", 0) or 0
+                pv_p10 = entry.get("pv_estimate10", 0) or 0
+                pv_p90 = entry.get("pv_estimate90", 0) or 0
+
+                # Backward-Konvention (Issue #144): Slot N = Energie [N-1, N).
+                # HA-Sensor liefert periodenbeginnende 30-Min-Buckets (period_start,
+                # nicht period_end wie die API). Die Abbildung auf den Backward-Slot
+                # ist zentral in core/berechnungen/slot_konvention.py gekapselt.
+                slot_date, slot_hour = backward_slot_aus_period_start(dt)
+
+                if slot_date == datum:
+                    profil.p50[slot_hour] += pv_p50 * 0.5
+                    profil.p10[slot_hour] += pv_p10 * 0.5
+                    profil.p90[slot_hour] += pv_p90 * 0.5
+
+            if profil.hat_werte():
+                profile[datum.isoformat()] = profil
+
+        _runde_profile(profile)
+        heute_profil = profile.get(heute.isoformat())
+        hourly_p50 = list(heute_profil.p50) if heute_profil else [0.0] * 24
+        hourly_p10 = list(heute_profil.p10) if heute_profil else [0.0] * 24
+        hourly_p90 = list(heute_profil.p90) if heute_profil else [0.0] * 24
 
         # Morgen/Heute aus tage_voraus
         morgen_kwh = tage_voraus[1]["kwh"] if len(tage_voraus) > 1 else 0
@@ -565,6 +636,7 @@ async def _fetch_solcast_ha_auto() -> Optional[SolcastForecast]:
             hourly_p10_kw=[round(v, 2) for v in hourly_p10],
             hourly_p90_kw=[round(v, 2) for v in hourly_p90],
             tage_voraus=tage_voraus,
+            stundenprofile=profile,
             quelle="solcast_ha",
         )
 

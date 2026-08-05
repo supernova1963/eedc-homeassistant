@@ -65,11 +65,13 @@ Solcast ist ein spezialisierter PV-Forecast-Dienst und liefert ein Konfidenzband
 
 Solcast läuft **ohne** Lernfaktor (es ist bereits ein fertig kalibrierter Dienst). Fehlt der Key oder ist HA nicht erreichbar, fällt eedc still auf die eedc-Quelle zurück und zeigt einen Hinweistext.
 
-> **Der Stundenverlauf für morgen ist bei Solcast eine Näherung.** Solcast liefert eedc ein
-> Stundenprofil nur für **heute**. Fragst du den Tagesverlauf für einen anderen Tag ab, zeigt eedc das
-> heutige Profil als Näherung — der Wert bleibt (er ist die beste verfügbare Information), aber die
-> Anzeige sagt es jetzt dazu, und die Tagessumme kann davon abweichen. Bis v4.0.0 stand das nur als
-> Kommentar im Quelltext, während die Anzeige aussah wie ein echtes Profil dieses Tages.
+> **Jeder Tag bekommt den Stundenverlauf, den Solcast für ihn liefert.** Die HA-Integration führt je
+> Tages-Sensor ein eigenes Detailprofil, der API-Zugang liefert sieben Tage am Stück — eedc wertet
+> beides aus. Wo die Quelle für einen Tag **nur die Tagesmenge** kennt, zeigt eedc weiterhin das
+> heutige Profil als **Näherung** und sagt es in der Antwort dazu; die Tagessumme kann davon
+> abweichen. Bis v4.0.8 galt das für **jeden** Tag außer heute — auch für morgen, obwohl die Quelle
+> dafür längst ein eigenes Profil lieferte (#357). Wirksam wird der Unterschied ohne Zutun beim
+> nächsten Abruf.
 
 ### 2.4 IST — die Referenz
 

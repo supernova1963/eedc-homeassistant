@@ -23,7 +23,7 @@ import { SimpleTooltip } from '../ui/FormelTooltip'
 import { useLegendenToggle } from '../../hooks'
 import { Parkbar } from '../park'
 import {
-  aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag,
+  aussichtenApi, PrognosenVergleich, GenauigkeitsResponse, AsymmetrieEintrag, Tageshaelfte,
 } from '../../api/aussichten'
 import { energieProfilApi } from '../../api/energie_profil'
 import { getStratifizierung, StratifizierungResponse, Wetterklasse, wetterBackfill } from '../../api/korrekturprofil'
@@ -302,15 +302,61 @@ function WetterIcon({ symbol, className = 'h-5 w-5' }: { symbol: string; classNa
 function formatDatum(datum: string): string {
   return new Date(datum).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
 }
-function DatendichtFallback({ children }: { children: React.ReactNode }) {
+/**
+ * Tabelle ab `sm` — darunter übernimmt die Kartenliste daneben (N-127).
+ *
+ * Vorher stand hier `DatendichtFallback`: unter `sm` ersetzte er die Tabelle
+ * durch einen Hinweiskasten („bitte Gerät ins Querformat drehen oder Desktop
+ * verwenden"), und im Querformat durch „Auflösung zu gering". Der Inhalt war
+ * auf dem Handy also **gar nicht** erreichbar — genau das schließt
+ * `KONZEPT-MOBILE.md` M1 aus (Gernot, 2026-05-31: „der `<HideOnMobile>`-Wrapper
+ * entfällt … nichts wird auf Mobile unerreichbar, nur de-priorisiert").
+ * Das Muster dafür gab es im Baum längst — eine Datenliste, zwei Render-Pfade
+ * (`PVStringVergleich`, `KomponentenFinanzTabelle`, `TKonto`).
+ */
+function TabelleAbSm({ children }: { children: React.ReactNode }) {
+  return <div className="hidden sm:block">{children}</div>
+}
+
+/** Kartenliste unter `sm` — die mobile Hälfte derselben Datenliste. */
+function MobilKarten({ children }: { children: React.ReactNode }) {
+  return <div className="sm:hidden space-y-2">{children}</div>
+}
+
+interface KartenZeile {
+  label: React.ReactNode
+  wert: React.ReactNode
+  /** Farbklasse der Quelle — dieselbe wie ihre Tabellenspalte. */
+  klasse?: string
+  /** Zusatz unter dem Wert (Δ, VM/NM, Band) — klein und grau. */
+  zusatz?: React.ReactNode
+}
+
+/** Eine Karte = eine Tabellenzeile der Breitansicht, hochkant gelesen. */
+function MobilKarte({ titel, kopfWert, zeilen, rahmenKlasse = '' }: {
+  titel: React.ReactNode
+  kopfWert?: React.ReactNode
+  zeilen: KartenZeile[]
+  rahmenKlasse?: string
+}) {
   return (
-    <>
-      <div className="hidden sm:block">{children}</div>
-      <div className="sm:hidden p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-sm text-amber-900 dark:text-amber-200">
-        <span className="portrait:inline landscape:hidden">Datendichte Tabelle — bitte Gerät ins Querformat drehen oder Desktop verwenden.</span>
-        <span className="portrait:hidden landscape:inline">Auflösung zu gering für datendichte Anzeige — bitte Desktop verwenden.</span>
+    <div className={`rounded-lg border border-gray-200 dark:border-gray-700 p-3 ${rahmenKlasse}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-gray-900 dark:text-white">{titel}</span>
+        {kopfWert}
       </div>
-    </>
+      <dl className="mt-2 space-y-1 text-sm">
+        {zeilen.map((z, i) => (
+          <div key={i} className="flex items-baseline justify-between gap-3">
+            <dt className={`shrink-0 ${z.klasse || 'text-gray-500 dark:text-gray-400'}`}>{z.label}</dt>
+            <dd className="text-right tabular-nums text-gray-700 dark:text-gray-300">
+              {z.wert}
+              {z.zusatz && <span className="ml-1.5">{z.zusatz}</span>}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   )
 }
 function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { fehlendeStunden: number[]; anlageId: number; onReloaded: () => void }) {
@@ -482,9 +528,28 @@ function Abweichung({ prognose, ist, gemessen = false }: { prognose: number; ist
   const arrow = Math.abs(diff) < ABW_NULL_KWH ? '±' : diff > 0 ? '▲' : '▼'
   return (
     <span className={`text-[10px] ${STATUS_TEXT_CLASS[abweichungsStufe(pct)]}`}>
-      {arrow} {fmtZahl(Math.abs(diff), 1)}{refTraegt && ` (${fmtZahl(pct, 0)} %)`}
+      {arrow} {fmtZahl(Math.abs(diff), 1)}{refTraegt && ` (${prozentText(pct)})`}
     </span>
   )
+}
+
+/** Ab hier sagt die Prozentzahl nichts mehr — die absolute kWh-Zahl daneben schon. */
+const ABW_PROZENT_DECKEL = 999
+
+/**
+ * Relative Abweichung als Text — gekappt (N-128).
+ *
+ * Der Quotient ist nach oben unbegrenzt: bei IST 0,2 kWh und Prognose 5,0 stand
+ * dort „(2400 %)". Vorbestehend, aber seit P-5 an mehr Stellen erreichbar (das
+ * Tracking hatte mit `ist < 0.5` ein Gate, das mit der gemeinsamen
+ * Abweichungs-Sprache entfiel). Es trifft Ausfall- und Tiefwinter-Tage sowie
+ * Randstunden. Gekappt wird nur die **Anzeige**; die Ampel-Stufe rechnet
+ * weiter mit dem echten Wert, und der absolute kWh-Wert steht unverändert
+ * daneben — dort ist die Größenordnung ablesbar, ohne dass eine vierstellige
+ * Prozentzahl die Zeile sprengt.
+ */
+function prozentText(pct: number): string {
+  return pct > ABW_PROZENT_DECKEL ? `> ${ABW_PROZENT_DECKEL} %` : `${fmtZahl(pct, 0)} %`
 }
 
 /** Kopfzelle der Δ-Spalte — je Quelle eine, farblich an ihre Wert-Spalte gebunden. */
@@ -542,9 +607,67 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
   const hasEedc = data.eedc_lernfaktor !== null || data.eedc_heute_kwh !== null
   const lf = data.eedc_lernfaktor
   const progBasisLabel = 'OpenMeteo'
+  // Mobil (< sm): je Tag eine Karte, Quellen als Zeilen — dieselbe Datenlage
+  // transponiert. Die Tabelle ist quellen-spaltig, die Karte tag-weise; das ist
+  // die Leserichtung, die auf einem schmalen Gerät trägt.
+  const tagesKarten = [
+    {
+      titel: 'Heute',
+      werte: [data.openmeteo_heute_kwh, data.eedc_heute_kwh, data.solcast_heute_kwh, data.ist_heute_kwh] as (number | null)[],
+      haelften: 0,
+      verbleibend: [data.verbleibend_om_kwh, data.verbleibend_eedc_kwh, data.verbleibend_solcast_kwh, data.verbleibend_kwh] as (number | null)[],
+    },
+    {
+      titel: 'Morgen',
+      werte: [data.openmeteo_morgen_kwh, data.eedc_morgen_kwh, data.solcast_morgen_kwh, null] as (number | null)[],
+      haelften: 1,
+      verbleibend: null,
+    },
+    {
+      titel: 'Übermorgen',
+      werte: [data.openmeteo_uebermorgen_kwh, data.eedc_uebermorgen_kwh, data.solcast_uebermorgen_kwh, null] as (number | null)[],
+      haelften: 2,
+      verbleibend: null,
+    },
+  ]
+  const quellenSpalten: { label: string; klasse: string; haelften: (Tageshaelfte | null)[] | null | undefined }[] = [
+    { label: 'OpenMeteo', klasse: Q.openmeteo, haelften: data.openmeteo_tageshaelften },
+    { label: 'eedc', klasse: eedcKlasse(hasEedc), haelften: data.eedc_tageshaelften },
+    { label: 'Solcast', klasse: Q.solcast, haelften: data.solcast_tageshaelften },
+    { label: 'IST', klasse: Q.ist, haelften: null },
+  ]
   return (
     <Card>
-      <DatendichtFallback>
+      <MobilKarten>
+        {tagesKarten.map((tk) => (
+          <MobilKarte
+            key={tk.titel}
+            titel={tk.titel}
+            zeilen={quellenSpalten.flatMap((sp, idx) => {
+              if (sp.label === 'Solcast' && !hasSolcast) return []
+              if (sp.label === 'eedc' && !hasEedc) {
+                return [{ label: 'eedc', klasse: sp.klasse, wert: '—' }]
+              }
+              const wert = tk.werte[idx]
+              const th = sp.haelften?.[tk.haelften] ?? null
+              const zusatzTeile: string[] = []
+              if (th) zusatzTeile.push(`VM/NM ${fmtVmNm(th)}`)
+              if (tk.verbleibend && tk.verbleibend[idx] != null) {
+                zusatzTeile.push(`verbleibend ${fmtKwh(tk.verbleibend[idx])}`)
+              }
+              return [{
+                label: sp.label,
+                klasse: sp.klasse,
+                wert: sp.label === 'IST' && tk.titel !== 'Heute' ? '—' : fmtKwh(wert),
+                zusatz: zusatzTeile.length > 0
+                  ? <span className="text-[10px] text-gray-400 dark:text-gray-500">{zusatzTeile.join(' · ')}</span>
+                  : null,
+              }]
+            })}
+          />
+        ))}
+      </MobilKarten>
+      <TabelleAbSm>
         <Table className="table-fixed">
           <colgroup><col className="w-32" /><col /><col />{hasSolcast && <col />}<col /></colgroup>
           <TableHead>
@@ -627,7 +750,7 @@ export function PvgKpiMatrix({ vm }: { vm: PrognoseVergleichVM }) {
             </tr>
           </TableBody>
         </Table>
-      </DatendichtFallback>
+      </TabelleAbSm>
     </Card>
   )
 }
@@ -819,7 +942,42 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
         MAPE/Bias oben über {genauigkeit.anzahl_tage} {genauigkeit.anzahl_tage === 1 ? 'Tag' : 'Tage'} mit Daten{vm.ausreisserAusblenden && (genauigkeit.anzahl_ausreisser ?? 0) > 0 ? ` (ohne ${genauigkeit.anzahl_ausreisser} Ausreißer)` : ''} · Tabelle unten: {Math.min(7, genauigkeit.tage.length) === 1 ? 'letzter Tag' : `letzte ${Math.min(7, genauigkeit.tage.length)} Tage`}
       </div>
-      <DatendichtFallback>
+      <MobilKarten>
+        {genauigkeit.tage.slice(-7).reverse().map((tag) => {
+          const ausgeschlossen = vm.ausreisserAusblenden && tag.ist_ausreisser
+          const quellen: { label: string; klasse: string; wert: number | null }[] = [
+            { label: 'OpenMeteo', klasse: Q.openmeteo, wert: tag.openmeteo_kwh },
+            { label: 'eedc', klasse: lf != null ? Q.eedc : 'text-gray-400 dark:text-gray-500', wert: tag.eedc_kwh },
+            { label: 'Solcast', klasse: Q.solcast, wert: tag.solcast_kwh },
+          ]
+          return (
+            <MobilKarte
+              key={tag.datum}
+              rahmenKlasse={`${tag.ist_ausreisser ? 'border-l-2 border-l-amber-400 dark:border-l-amber-500' : ''} ${ausgeschlossen ? 'opacity-40' : ''}`}
+              titel={
+                <>
+                  {formatDatum(tag.datum)}
+                  {tag.ist_ausreisser && <span className="ml-1 text-amber-500 text-[10px]">⚠</span>}
+                </>
+              }
+              kopfWert={
+                <span className={`font-mono font-semibold tabular-nums ${Q.ist}`}>
+                  IST {tag.ist_kwh !== null ? fmtZahl(tag.ist_kwh, 1) : '—'}
+                </span>
+              }
+              zeilen={quellen.map((q) => ({
+                label: q.label,
+                klasse: q.klasse,
+                wert: q.wert !== null ? fmtZahl(q.wert, 1) : '—',
+                zusatz: q.wert !== null && tag.ist_kwh !== null
+                  ? <Abweichung prognose={q.wert} ist={tag.ist_kwh} gemessen />
+                  : null,
+              }))}
+            />
+          )
+        })}
+      </MobilKarten>
+      <TabelleAbSm>
         <Table className="table-fixed">
           <colgroup>
             <col className="w-28" /><col /><col className="w-24" /><col /><col className="w-24" />
@@ -857,7 +1015,7 @@ export function PvgGenauigkeitsTracking({ vm }: { vm: PrognoseVergleichVM }) {
             })}
           </TableBody>
         </Table>
-      </DatendichtFallback>
+      </TabelleAbSm>
     </Card>
   )
 }
@@ -1040,7 +1198,56 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">7-Tage-Vergleich</h3>
-      <DatendichtFallback>
+      <MobilKarten>
+        {vergleichsTage.map((tag) => {
+          const ref = tag.ist_kwh
+          const prognosen = [tag.om_kwh, tag.eedc_kwh, tag.sc_kwh].filter((v): v is number => v !== null)
+          const mean = prognosen.length > 1 ? prognosen.reduce((a, b) => a + b, 0) / prognosen.length : null
+          const devRef = tag.ist_partiell ? mean : (ref ?? mean)
+          const devGemessen = !tag.ist_partiell && ref !== null
+          const quellen: { label: string; klasse: string; wert: number | null; bewertet: boolean; extra?: React.ReactNode }[] = [
+            { label: 'OM', klasse: Q.openmeteo, wert: tag.om_kwh, bewertet: true },
+            { label: 'eedc', klasse: eedcKlasse(hasEedc), wert: hasEedc ? tag.eedc_kwh : null, bewertet: true },
+          ]
+          if (hasSolcast) quellen.push({
+            label: 'Solcast', klasse: Q.solcast, wert: tag.sc_kwh, bewertet: true,
+            extra: tag.sc_p10 !== null && tag.sc_p90 !== null
+              ? <span className="text-gray-400 dark:text-gray-500 text-[10px] ml-1">({fmtZahl(tag.sc_p10, 0)}–{fmtZahl(tag.sc_p90, 0)})</span>
+              : null,
+          })
+          // SFML steht als Wert, ohne Δ und ohne Bewertung — dieselbe Linie wie
+          // in der Tabelle (kein Cross-Quellen-Ranking).
+          if (hasSfml) quellen.push({ label: 'SFML', klasse: Q.sfml, wert: tag.sfml_kwh, bewertet: false })
+          return (
+            <MobilKarte
+              key={tag.datum}
+              titel={
+                <span className="flex items-center gap-1.5">
+                  {tag.wetter_symbol !== null && <WetterIcon symbol={tag.wetter_symbol} className="h-4 w-4" />}
+                  {formatDatum(tag.datum)}
+                  {tag.temp_max !== null && <span className="text-xs font-normal text-gray-500">{tag.temp_max}°</span>}
+                </span>
+              }
+              kopfWert={
+                <span className={`font-mono font-semibold tabular-nums ${tag.ist_kwh !== null ? Q.ist : 'text-gray-400 dark:text-gray-500'}`}>
+                  {tag.ist_kwh !== null
+                    ? <>IST {fmtZahl(tag.ist_kwh, 1)}{tag.ist_partiell && <span className="text-gray-400 dark:text-gray-500 text-[10px] font-normal ml-1">bisher</span>}</>
+                    : <span className="text-xs">⌀ {mean != null ? fmtZahl(mean, 0) : '—'}</span>}
+                </span>
+              }
+              zeilen={quellen.map((q) => ({
+                label: q.label,
+                klasse: q.klasse,
+                wert: <>{q.wert !== null ? fmtZahl(q.wert, 1) : '—'}{q.extra}</>,
+                zusatz: q.bewertet && q.wert !== null && devRef !== null
+                  ? <Abweichung prognose={q.wert} ist={devRef} gemessen={devGemessen} />
+                  : null,
+              }))}
+            />
+          )
+        })}
+      </MobilKarten>
+      <TabelleAbSm>
         <Table className="table-fixed">
           <colgroup>
             <col className="w-20" /><col className="w-24" /><col /><col className="w-24" />
@@ -1101,7 +1308,7 @@ export function Pvg7TageTabelle({ vm }: { vm: PrognoseVergleichVM }) {
             })}
           </TableBody>
         </Table>
-      </DatendichtFallback>
+      </TabelleAbSm>
     </Card>
   )
 }

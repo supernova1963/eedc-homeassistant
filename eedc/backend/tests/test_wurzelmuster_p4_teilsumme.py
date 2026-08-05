@@ -333,9 +333,12 @@ async def test_solcast_profil_von_heute_wird_als_naeherung_ausgewiesen(db, monke
 
     Der Code-Kommentar dokumentierte es, die Antwort nicht — `pv_quelle` meldete
     `solcast` wie bei einem echten Morgen-Profil.
-    """
-    from types import SimpleNamespace
 
+    Seit #357 gilt das nur noch für Tage, für die Solcast **kein** eigenes
+    Stundenprofil liefert (hier: die Fixture führt nur das Heute-Profil).
+    Der Gegenfall steht in
+    ``test_solcast_eigenes_tagesprofil_ersetzt_die_naeherung``.
+    """
     from backend.api.routes.energie_profil import views
     from backend.services import solcast_service
 
@@ -357,7 +360,7 @@ async def test_solcast_profil_von_heute_wird_als_naeherung_ausgewiesen(db, monke
     await db.commit()
 
     async def fake_solcast(_anlage):
-        return SimpleNamespace(hourly_kw=[0.0] * 8 + [2.0] * 8 + [0.0] * 8)
+        return _solcast_forecast(heute_profil=[0.0] * 8 + [2.0] * 8 + [0.0] * 8)
 
     monkeypatch.setattr(solcast_service, "get_solcast_forecast", fake_solcast)
 
@@ -367,12 +370,97 @@ async def test_solcast_profil_von_heute_wird_als_naeherung_ausgewiesen(db, monke
         "Der Wert bleibt der von Solcast — nur die Beschriftung kommt hinzu."
     )
     assert morgen.hinweise, "Profil von heute als Näherung für morgen, ungekennzeichnet."
-    assert "heute" in " ".join(morgen.hinweise).lower()
+    # „heutig" deckt beide Formulierungen ab (heute/heutige) — der Hinweis muss
+    # sagen, WESSEN Profil man sieht, nicht nur DASS es eine Näherung ist.
+    assert "heutig" in " ".join(morgen.hinweise).lower()
 
     # Für HEUTE ist dasselbe Profil das richtige — dort kein Hinweis.
     heute = await views.get_tagesprognose(anlage_id=anlage_id, datum=HEUTE, db=db)
     assert heute.pv_quelle == "solcast"
     assert heute.hinweise == []
+
+
+def _solcast_forecast(heute_profil: list[float], morgen_profil: list[float] | None = None):
+    """``SolcastForecast`` mit echten Tagesprofilen statt eines Stellvertreters.
+
+    Bewusst kein ``SimpleNamespace``: die Näherungs-Frage entscheidet sich an
+    ``profil_fuer``, und eine Fixture, die diese Konstellation nicht herstellt,
+    kann den Unterschied nicht prüfen (N-130-Klasse).
+    """
+    from datetime import date, timedelta
+
+    from backend.services.solcast_service import SolcastForecast, TagesStundenprofil
+
+    heute_d = date.today()
+    morgen_d = heute_d + timedelta(days=1)
+    profile = {heute_d.isoformat(): TagesStundenprofil(datum=heute_d, p50=list(heute_profil))}
+    tage = [{"datum": heute_d.isoformat(), "kwh": round(sum(heute_profil), 1), "p10": 0.0, "p90": 0.0}]
+    if morgen_profil is not None:
+        profile[morgen_d.isoformat()] = TagesStundenprofil(datum=morgen_d, p50=list(morgen_profil))
+        tage.append({"datum": morgen_d.isoformat(), "kwh": round(sum(morgen_profil), 1), "p10": 0.0, "p90": 0.0})
+    return SolcastForecast(
+        daily_kwh=round(sum(heute_profil), 1),
+        daily_p10_kwh=0.0,
+        daily_p90_kwh=0.0,
+        tomorrow_kwh=round(sum(morgen_profil), 1) if morgen_profil else 0.0,
+        tomorrow_p10_kwh=0.0,
+        tomorrow_p90_kwh=0.0,
+        hourly_kw=list(heute_profil),
+        hourly_p10_kw=[0.0] * 24,
+        hourly_p90_kw=[0.0] * 24,
+        tage_voraus=tage,
+        stundenprofile=profile,
+        quelle="solcast_api",
+    )
+
+
+async def test_solcast_eigenes_tagesprofil_ersetzt_die_naeherung(db, monkeypatch):
+    """#357: Liefert Solcast für morgen ein eigenes Stundenprofil, ist der Tag
+    echt beantwortet — eigene Kurve, eigene Summe, **kein** Näherungs-Hinweis.
+
+    Belegt hat das rapahl (#357, 30.07.2026): die HA-Integration führt je
+    Tages-Sensor ein eigenes ``detailedForecast``; der API-Pfad liefert ohnehin
+    168 h. Bis v4.0.8 wurde beides verworfen.
+    """
+    from backend.api.routes.energie_profil import views
+    from backend.services import solcast_service
+
+    anlage_id = await _anlage_mit_verbrauchshistorie(db)
+
+    from sqlalchemy import select
+
+    from backend.models import Anlage
+
+    anlage = (await db.execute(
+        select(Anlage).where(Anlage.id == anlage_id)
+    )).scalar_one()
+    anlage.prognose_quelle = "solcast"
+    anlage.sensor_mapping = {"solcast_config": {"api_key": "test-token"}}
+    await db.commit()
+
+    # Morgen ist der schwächere Tag — genau der Unterschied, den die Näherung
+    # verschluckte: sie hätte die Form UND die Summe von heute gezeigt.
+    async def fake_solcast(_anlage):
+        return _solcast_forecast(
+            heute_profil=[0.0] * 8 + [2.0] * 8 + [0.0] * 8,
+            morgen_profil=[0.0] * 10 + [1.0] * 4 + [0.0] * 10,
+        )
+
+    monkeypatch.setattr(solcast_service, "get_solcast_forecast", fake_solcast)
+
+    morgen = await views.get_tagesprognose(anlage_id=anlage_id, datum=MORGEN, db=db)
+    assert morgen.pv_quelle == "solcast"
+    assert morgen.pv_summe_kwh == pytest.approx(4.0, abs=0.1), (
+        "Die Summe kommt aus dem Morgen-Profil, nicht aus dem von heute (16 kWh)."
+    )
+    assert morgen.hinweise == [], (
+        "Ohne Näherung gibt es nichts zu kennzeichnen — der Hinweis darf nicht "
+        "stehen bleiben, sonst beschriftet er einen echten Wert als geschätzt."
+    )
+    # Die Kurvenform ist die des Morgen-Profils: um 9 Uhr (Slot 9) liefert heute
+    # 2,0 kWh, morgen 0,0.
+    stunde_9 = next(s for s in morgen.stunden if s.stunde == 9)
+    assert (stunde_9.pv_kw or 0.0) == pytest.approx(0.0, abs=0.01)
 
 
 # ============================================================================

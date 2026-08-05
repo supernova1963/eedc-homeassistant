@@ -129,19 +129,33 @@ def solcast_profil(solcast, datum: date | None = None) -> StundenProfil:
     gefüllt (nicht ``None``); Solcast liefert ein durchgehendes 24er-Raster.
     Slot-Mapping passiert bereits im ``solcast_service`` (period_start/-end →
     Backward-Slot via ``slot_konvention``).
+
+    ``datum`` wählt seit #357 das Profil dieses Tages, sofern Solcast eines
+    liefert; sonst bleibt es bei ``hourly_kw`` (heute). Der Tageswert bleibt
+    dabei der des jeweiligen Tages aus ``tage_voraus`` — er kommt aus dem
+    Sensor-State und ist die genauere Zahl als die Summe der 30-Min-Buckets.
     """
-    hk = solcast.hourly_kw
-    h10 = solcast.hourly_p10_kw
-    h90 = solcast.hourly_p90_kw
+    tages_profil = solcast.profil_fuer(datum) if datum is not None else None
+    hk = tages_profil.p50 if tages_profil else solcast.hourly_kw
+    h10 = tages_profil.p10 if tages_profil else solcast.hourly_p10_kw
+    h90 = tages_profil.p90 if tages_profil else solcast.hourly_p90_kw
     slots = tuple(hk[h] if h < len(hk) else 0 for h in range(24))
     p10 = tuple(h10[h] if h < len(h10) else 0 for h in range(24))
     p90 = tuple(h90[h] if h < len(h90) else 0 for h in range(24))
+    tageswert = solcast.daily_kwh
+    if tages_profil is not None:
+        tag = next(
+            (t for t in solcast.tage_voraus if t.get("datum") == datum.isoformat()),
+            None,
+        )
+        if tag is not None:
+            tageswert = tag["kwh"]
     return StundenProfil(
         datum=datum,
         quelle="solcast",
         slots_kw=slots,
         present_stunden=tuple(range(24)),
-        tageswert_kwh=solcast.daily_kwh,
+        tageswert_kwh=tageswert,
         p10_kw=p10,
         p90_kw=p90,
     )

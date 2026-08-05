@@ -1142,7 +1142,16 @@ async def get_tagesprognose(
         try:
             from backend.services.solcast_service import get_solcast_forecast
             solcast = await get_solcast_forecast(anlage)
-            if solcast and solcast.hourly_kw and len(solcast.hourly_kw) == 24:
+            # Seit #357 trägt Solcast ein eigenes Stundenprofil je Prognosetag
+            # (HA-Integration: `detailedForecast` am Tages-Sensor; API: 168 h).
+            # Wo es eins gibt, ist der Zieltag echt beantwortet — die Näherung
+            # samt Kennzeichnung bleibt nur für Tage ohne eigenes Profil.
+            tages_profil = solcast.profil_fuer(datum) if solcast else None
+            if tages_profil is not None:
+                pv_stunden = list(tages_profil.p50)
+                pv_quelle = "solcast"
+                pv_profil_vorhanden = True
+            elif solcast and solcast.hourly_kw and len(solcast.hourly_kw) == 24:
                 # `solcast.hourly_kw` ist das Stundenprofil von HEUTE. Für einen
                 # anderen Zieltag ist es eine Näherung — bisher stand das nur als
                 # Code-Kommentar, während die Antwort `pv_quelle = "solcast"`
@@ -1154,10 +1163,11 @@ async def get_tagesprognose(
                 pv_profil_vorhanden = True
                 if datum != date.today():
                     hinweise.append(
-                        "Solcast liefert das Stundenprofil nur für heute. Der "
-                        "Tagesverlauf ist deshalb das heutige Profil als Näherung "
-                        f"für den {datum.strftime('%d.%m.%Y')} — die Tagessumme "
-                        "kann abweichen."
+                        "Solcast liefert für diesen Tag nur die Tagesmenge, kein "
+                        "eigenes Stundenprofil. Der Tagesverlauf ist deshalb das "
+                        "heutige Profil als Näherung für den "
+                        f"{datum.strftime('%d.%m.%Y')} — die Tagessumme kann "
+                        "abweichen."
                     )
         except Exception as e:
             logger.warning("Solcast für Tagesprognose fehlgeschlagen: %s", e)

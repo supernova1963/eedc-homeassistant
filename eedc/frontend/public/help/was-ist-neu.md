@@ -11,6 +11,48 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Solcast: der Verlauf für morgen ist der von morgen
+
+**Betrifft dich das?** Alle, die **Solcast** als Prognosequelle nutzen — über die HA-Integration
+oder mit eigenem API-Key.
+
+Die **Tagesmengen** von Solcast stimmten immer. Was fehlte, war die **Form** des Tages: Der
+Stundenverlauf für morgen (*Cockpit → Aussicht*) war in Wahrheit der von **heute**, hochgerechnet
+auf die morgige Tagesmenge. Ein Tag mit Nebel am Morgen und Sonne am Nachmittag sah damit aus wie
+der Vortag — nur höher oder flacher. eedc hat das nie behauptet zu wissen (ein Hinweis stand
+darunter), nötig war es aber auch nicht: **Rainer hat belegt**, dass die HA-Integration für morgen
+ein **eigenes** Detailprofil mitliefert, und der API-Zugang liefert ohnehin sieben Tage am Stück.
+
+Jetzt bekommt **jeder Tag, für den Solcast Stundenwerte liefert, seinen eigenen Verlauf**. Wo die
+Quelle nur die Tagesmenge kennt (je nach Integration die weiter entfernten Tage), bleibt es bei der
+Näherung — und der Hinweis steht dann auch nur noch **dort**. Ein zusätzlicher Abruf entsteht
+nicht; die Daten waren schon in der Antwort.
+
+Zweite sichtbare Stelle: In *Auswertungen → Prognose* stammen die **Vormittag/Nachmittag**-Werte
+der Solcast-Spalte für morgen jetzt aus Solcast selbst. Vorher wurden sie aus der
+**OpenMeteo**-Verteilung geschätzt — die Solcast-Spalte trug an dieser Stelle also die Form einer
+anderen Quelle.
+
+→ [Prognosen-Handbuch](HANDBUCH_PROGNOSEN.md) · *(#357)*
+
+### Prognosen-Vergleich auf dem Handy: Karten statt „bitte Desktop verwenden"
+
+**Betrifft dich das?** Alle, die *Auswertungen → Prognose* auf dem Smartphone öffnen.
+
+Drei der vier Tabellen dort — die Kopf-Matrix mit Heute/Morgen/Übermorgen, das
+**Genauigkeits-Tracking** und der **7-Tage-Vergleich** — zeigten auf schmalen Bildschirmen **keine
+Daten**, sondern die Aufforderung, das Gerät zu drehen oder einen Desktop zu benutzen. Beim Drehen
+kam der nächste Hinweis: „Auflösung zu gering". Die Zahlen waren am Telefon also gar nicht
+erreichbar.
+
+Jetzt steht dort **je Tag eine Karte** mit den Quellen untereinander — dieselbe Darstellung, die
+die String-Übersicht, das T-Konto und die Komponenten-Finanzen auf schmalen Bildschirmen schon
+lange nutzen. **Auf dem Desktop ändert sich nichts.**
+
+Kleinigkeit am Rande: Die relative Abweichung ist nach oben begrenzt. An einem Ausfalltag
+(0,2 kWh gemessen gegen 5,0 kWh Prognose) stand dort „2400 %"; jetzt steht „> 999 %" — die
+kWh-Zahl daneben sagt ohnehin, wie groß der Fehler war.
+
 ### Erträge je Dachfläche und je Balkonkraftwerk — jetzt auch tagesgenau
 
 **Betrifft dich das?** Alle mit **mehreren** PV-Strings oder mehreren Balkonkraftwerken, bei denen

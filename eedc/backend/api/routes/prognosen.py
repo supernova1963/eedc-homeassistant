@@ -697,14 +697,27 @@ async def get_prognosen_vergleich(
     while len(sfml_ths) < 3:
         sfml_ths.append(None)
 
-    # Solcast VM/NM pro Tag aus tage_voraus berechnen (Stundenwerte nur für heute vorhanden,
-    # für Morgen/Übermorgen approximieren wir aus den 30-Min-Daten im SolcastForecast)
+    # Solcast VM/NM pro Tag. Seit #357 hat jeder Tag, für den Solcast ein
+    # eigenes Stundenprofil liefert, seine EIGENE Tageshälfte — vorher wurde
+    # für Morgen/Übermorgen die OpenMeteo-Verteilung übernommen, die
+    # Solcast-Spalte trug dort also fremde Form (Einzelquellen-Treue).
+    # Wo Solcast weiterhin nur die Tagesmenge kennt, bleibt die
+    # OM-Schätzung — sie ist die beste verfügbare Aufteilung (Entscheid
+    # Gernot 2026-08-05: lieber geschätzt als gar keine Zahl).
     sc_ths: list[Optional[TageshaelfteSchema]] = [None, None, None]
     if solcast_stundenprofil:
         sc_ths[0] = _berechne_tageshaelfte(solcast_stundenprofil, solar_noons[0])
-    # Für Morgen/Übermorgen: Solcast liefert nur Tageswerte, kein Stundenprofil
-    # → VM/NM aus OpenMeteo-Verteilung schätzen (proportional)
     for day_idx in [1, 2]:
+        eigenes = solcast.profil_fuer(heute + timedelta(days=day_idx)) if solcast else None
+        if eigenes is None:
+            continue
+        eintraege = _profil_zu_eintraegen(
+            solcast_profil(solcast, datum=heute + timedelta(days=day_idx))
+        )
+        sc_ths[day_idx] = _berechne_tageshaelfte(eintraege, solar_noons[day_idx])
+    for day_idx in [1, 2]:
+        if sc_ths[day_idx] is not None:
+            continue
         sc_tag = next((t for t in solcast.tage_voraus if t["datum"] == (heute + timedelta(days=day_idx)).isoformat()), None) if solcast else None
         om_day_th = om_ths[day_idx] if day_idx < len(om_ths) else None
         if sc_tag and om_day_th and (om_day_th.vormittag_kwh + om_day_th.nachmittag_kwh) > 0:

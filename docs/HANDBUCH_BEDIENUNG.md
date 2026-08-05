@@ -58,7 +58,7 @@ Fast alle Sichten sind aus **Blöcken** aufgebaut — abgegrenzte Karten wie „
 
 Deine Klapp-Zustände, die Reihenfolge und die geparkten Elemente werden **pro Sicht im Browser gespeichert** und bleiben nach einem Neustart erhalten. Ein **Zurücksetzen**-Knopf stellt die Standard-Anordnung einer Sicht wieder her.
 
-> **Hinweis zum Layout:** eedc ist als datendichte Analyse-App primär für den Desktop gedacht. Live, Cockpit-Monat und die Komponenten-Sichten funktionieren auch am Smartphone gut; für die datendichten Tabellen (Auswertungen → Tabelle, Cockpit → Aussicht) empfehlen wir Querformat oder Desktop. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
+> **Hinweis zum Layout:** eedc ist als datendichte Analyse-App primär für den Desktop gedacht. Live, Cockpit-Monat und die Komponenten-Sichten funktionieren auch am Smartphone gut; für die datendichten Tabellen (Auswertungen → Tabelle, Cockpit → Aussicht) empfehlen wir Querformat oder Desktop. **Weggesperrt ist dabei nichts:** wo eine Tabelle auf einem schmalen Bildschirm nicht lesbar wäre, zeigt eedc dieselben Daten als **Karten** — eine je Zeile —, etwa in *Auswertungen → Prognose*, in den Komponenten-Finanzen und im T-Konto. Bei stark erhöhtem Anzeigezoom (iOS „Größerer Text", HA-Companion-Seitenzoom) können einzelne Layouts eng werden — eine bewusste Designentscheidung statt Layout-Patches, die den datendichten Charakter aufweichen würden.
 
 ### 1.4 Anlagen-Auswahl und Status-Fußzeile
 

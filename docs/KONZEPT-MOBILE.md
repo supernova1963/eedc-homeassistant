@@ -66,6 +66,19 @@
 > **Designentscheidung:** Tabellen mit `overflow-x: auto` bekommen einen Swipe-Hinweis (kleines „←→"-Indikator), Scrollbar selber ausgeblendet. Touch-Swipe ist primäre Interaktion.
 > **Audit aller `<Table>`-Verwendungen** als Umsetzungs-Phase.
 >
+> **Kanon für zu breite Tabellen: eine Datenliste, zwei Render-Pfade** (2026-08-05, aus N-127).
+> Passt eine Tabelle unter `sm` nicht, kommt **nicht** ein Ersatztext an ihre Stelle, sondern eine
+> **Kartenliste** derselben Daten — Tabelle in `hidden sm:block`, Karten in `sm:hidden`, eine Karte
+> je Tabellenzeile (Kopfzeile = Zeilenschlüssel + Leitwert, darunter `dl` mit den Spalten).
+> Belegt im Baum: `PVStringVergleich`, `KomponentenFinanzTabelle`, `TKonto`,
+> `PrognoseVergleichTeile` (`MobilKarte`/`MobilKarten`/`TabelleAbSm`).
+> **Warum die Regel nötig wurde:** der Prognosen-Vergleich hatte bis v4.0.8 einen
+> `DatendichtFallback`, der drei Tabellen unter `sm` durch „bitte Gerät ins Querformat drehen oder
+> Desktop verwenden" ersetzte — und im Querformat durch „Auflösung zu gering". Das ist ein hartes
+> Ausblenden und damit genau das, was **M1** seit dem 31.05.2026 ausschließt („nichts wird auf
+> Mobile unerreichbar, nur de-priorisiert"); die Regel stand nur bei M1 und griff deshalb nicht auf
+> die Tabellen-Seite durch.
+>
 > Bezug: [Style-Guide B2 Tabellen + Listen](KONZEPT-STYLE-GUIDE.md#b2--tabellen--listen).
 
 **Datenpunkte:** #243 B5d, #203.
