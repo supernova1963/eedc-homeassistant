@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.9] - 2026-08-05 — Der laufende Monat zählt nur seine Tage · jede PV-Zahl nennt ihre Herkunft
 
 ### Added
 
