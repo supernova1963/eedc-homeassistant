@@ -29,6 +29,7 @@ from backend.services.activity_service import log_activity
 from backend.utils.sonstige_positionen import ist_gueltige_position
 from backend.services.ha_mqtt_sync import get_ha_mqtt_sync_service
 from backend.services.provenance import (
+    gepruefte_ableitung,
     write_json_subkey_with_provenance,
     write_with_provenance,
 )
@@ -83,9 +84,23 @@ def _wizard_save_fehler(exc: Exception, kontext: str) -> HTTPException:
 # =============================================================================
 
 class FeldWert(BaseModel):
-    """Wert für ein Feld."""
+    """Wert für ein Feld.
+
+    ``abgeleitet`` meldet der Client, wenn der gespeicherte Wert ein
+    **zerlegter Anlagen-Gesamtwert** ist — also der übernommene Vorschlag aus
+    Connector oder Cloud-Import, den das Backend nach kWp bzw. Kapazität auf
+    mehrere Geräte aufgeteilt hat (#352). Nur der Client weiß das: er zeigt
+    Label und Konfidenz des Vorschlags an und sieht, ob der Anwender ihn
+    übernommen oder eine eigene Zahl getippt hat. Ohne die Angabe sähe die
+    Lesezeit einen gerechneten Wert als Gerätemessung — inklusive
+    String-Ranking und grünem Daten-Checker.
+
+    Optional: ältere Clients senden das Feld nicht, ihre Werte gelten wie
+    bisher als gemessen.
+    """
     feld: str
     wert: float
+    abgeleitet: Optional[str] = None
 
 
 class InvestitionWerte(BaseModel):
@@ -342,6 +357,7 @@ async def save_monatsabschluss(
             res = await write_json_subkey_with_provenance(
                 db, imd, "verbrauch_daten", feld_wert.feld, feld_wert.wert,
                 source="manual:form", writer=_WIZARD_WRITER,
+                abgeleitet=gepruefte_ableitung(feld_wert.abgeleitet),
             )
             if not res.applied and res.decision == "rejected_lower_priority":
                 alle_warnungen.append(WarnungResponse(

@@ -34,6 +34,10 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.services.activity_service import log_activity
 from backend.services.ha_state_service import get_ha_state_service
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
+from backend.services.provenance import (
+    ABGELEITET_KAPAZITAET_ANTEIL,
+    ABGELEITET_KWP_ANTEIL,
+)
 from backend.services.vorschlag_service import Vorschlag, VorschlagQuelle, VorschlagService
 
 from ._shared import (
@@ -68,6 +72,20 @@ router = APIRouter()
 # Verteilungsschlüssel ist gerechnet.
 KONFIDENZ_CONNECTOR_GEMESSEN = 90
 KONFIDENZ_CONNECTOR_VERTEILT = 85
+
+# Welche Ableitungs-Marke ein zerlegter Vorschlag trägt — die Zerlegung folgt
+# dem Kennwert des Geräts (#352): PV nach kWp, Speicher nach Kapazität, wie
+# `_mapped_or_distribute` es rechnet.
+_ABGELEITET_JE_FELD = {
+    "pv_erzeugung_kwh": ABGELEITET_KWP_ANTEIL,
+    "ladung_kwh": ABGELEITET_KAPAZITAET_ANTEIL,
+    "entladung_kwh": ABGELEITET_KAPAZITAET_ANTEIL,
+}
+
+
+def _abgeleitet_marke(feld: str) -> Optional[str]:
+    """Marke für ein zerlegtes Feld; ``None`` für Felder ohne Zerlegung."""
+    return _ABGELEITET_JE_FELD.get(feld)
 
 
 # =============================================================================
@@ -134,6 +152,8 @@ class CloudMonatswertFeld(BaseModel):
     label: str
     wert: float
     einheit: str
+    # #352: gesetzt, wenn der Wert die Zerlegung des Anlagen-Gesamtwerts ist.
+    abgeleitet: Optional[str] = None
 
 
 class CloudMonatswerteResponse(BaseModel):
@@ -528,6 +548,12 @@ async def get_monatsabschluss(
                             if verteilt_hinweis
                             else "Vom Wechselrichter (Zählerstand-Differenz)"
                         ),
+                        # #352: der Client meldet die Marke beim Speichern
+                        # zurück, damit der zerlegte Wert in der Provenance
+                        # nicht als Gerätemessung landet.
+                        abgeleitet=(
+                            _abgeleitet_marke(feld) if verteilt_hinweis else None
+                        ),
                     ))
 
             # MQTT Inbound-Vorschlag einfügen (Konfidenz 91)
@@ -703,12 +729,19 @@ async def fetch_cloud_monatswerte(
                 "PV Erzeugung (Gesamtwert, anteilig nach kWp verteilt)"
                 if len(pv_verteilung) > 1 else "PV Erzeugung"
             )
+            pv_abgeleitet = (
+                ABGELEITET_KWP_ANTEIL if len(pv_verteilung) > 1 else None
+            )
             for inv, anteil in pv_verteilung:
                 inv_result.append({
                     "investition_id": inv.id,
                     "bezeichnung": inv.bezeichnung,
                     "typ": inv.typ,
-                    "felder": [{"feld": "pv_erzeugung_kwh", "label": pv_label, "wert": round(anteil, 1), "einheit": "kWh"}],
+                    "felder": [{
+                        "feld": "pv_erzeugung_kwh", "label": pv_label,
+                        "wert": round(anteil, 1), "einheit": "kWh",
+                        "abgeleitet": pv_abgeleitet,
+                    }],
                 })
 
     for cloud_feld, inv_feld, label in [
@@ -726,16 +759,24 @@ async def fetch_cloud_monatswerte(
                     f"{label} (Gesamtwert, anteilig nach Kapazität verteilt)"
                     if len(bat_verteilung) > 1 else label
                 )
+                bat_abgeleitet = (
+                    ABGELEITET_KAPAZITAET_ANTEIL if len(bat_verteilung) > 1 else None
+                )
                 for inv, anteil in bat_verteilung:
+                    feld_eintrag = {
+                        "feld": inv_feld, "label": bat_label,
+                        "wert": round(anteil, 1), "einheit": "kWh",
+                        "abgeleitet": bat_abgeleitet,
+                    }
                     existing = next((r for r in inv_result if r["investition_id"] == inv.id), None)
                     if existing:
-                        existing["felder"].append({"feld": inv_feld, "label": bat_label, "wert": round(anteil, 1), "einheit": "kWh"})
+                        existing["felder"].append(feld_eintrag)
                     else:
                         inv_result.append({
                             "investition_id": inv.id,
                             "bezeichnung": inv.bezeichnung,
                             "typ": inv.typ,
-                            "felder": [{"feld": inv_feld, "label": bat_label, "wert": round(anteil, 1), "einheit": "kWh"}],
+                            "felder": [feld_eintrag],
                         })
 
     await log_activity(

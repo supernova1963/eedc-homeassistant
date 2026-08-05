@@ -49,6 +49,7 @@ from backend.services.monats_fakten import (
     lade_monats_fakten,
 )
 from backend.services.provenance import (
+    gepruefte_ableitungen,
     log_delete,
     seed_provenance,
     write_json_subkey_with_provenance,
@@ -815,6 +816,13 @@ async def _save_investitionen_monatsdaten(
     Investitions-Payload an, ist aber **kein** Messwert und landet deshalb in
     der gleichnamigen Spalte statt in `verbrauch_daten` — dort lesen
     Aggregatoren, CSV-Export und MQTT mit.
+
+    Sonderfall `abgeleitet_felder` (#352): gleiches Muster, ein Dict
+    ``{feld: ABGELEITET_*}``. Es meldet, welche der mitgeschickten Werte der
+    **zerlegte Anlagen-Gesamtwert** aus Connector oder Cloud-Import sind statt
+    einer Gerätemessung. Die Marke landet in der Provenance des jeweiligen
+    Sub-Keys, nicht in `verbrauch_daten` — der gespeicherte Wert selbst bleibt
+    unverändert, nur seine Herkunft ist eine andere.
     """
     for inv_id_str, verbrauch_daten in investitionen_daten.items():
         try:
@@ -837,12 +845,16 @@ async def _save_investitionen_monatsdaten(
         existing = existing_result.scalar_one_or_none()
         sub_payload = dict(verbrauch_daten or {})
         geprueft_gegen = sub_payload.pop("geprueft_gegen", None)
+        abgeleitet_felder = gepruefte_ableitungen(
+            sub_payload.pop("abgeleitet_felder", None)
+        )
 
         if existing:
             for sub_key, value in sub_payload.items():
                 await write_json_subkey_with_provenance(
                     db, existing, "verbrauch_daten", sub_key, value,
                     source="manual:form", writer=_MANUAL_WRITER,
+                    abgeleitet=abgeleitet_felder.get(sub_key),
                 )
             if geprueft_gegen is not None:
                 existing.geprueft_gegen = geprueft_gegen
@@ -861,6 +873,7 @@ async def _save_investitionen_monatsdaten(
                 seed_provenance(
                     imd, source="manual:form", writer=_MANUAL_WRITER,
                     json_subkeys={"verbrauch_daten": list(sub_payload.keys())},
+                    abgeleitet_je_subkey=abgeleitet_felder,
                 )
 
     await db.flush()

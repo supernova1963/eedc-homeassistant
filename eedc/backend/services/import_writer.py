@@ -110,6 +110,7 @@ async def upsert_investition_monatsdaten_with_provenance(
     source: str,
     writer: str,
     ueberschreiben: bool = False,
+    abgeleitet: Optional[str] = None,
 ) -> UpsertResult:
     """Provenance-Variante des heutigen `_upsert_investition_monatsdaten`.
 
@@ -136,6 +137,10 @@ async def upsert_investition_monatsdaten_with_provenance(
         ueberschreiben: Wizard-Flag, wirkt wie Status quo aber zusätzlich
             durch Hierarchie gefiltert (Memory-Linie
             `feedback_aggregations_drift.md`).
+        abgeleitet: ``ABGELEITET_*``, wenn ALLE Sub-Keys dieses Payloads aus
+            der Zerlegung eines Anlagen-Gesamtwerts stammen (#352). Die
+            Verteil-Schreiber rufen mit genau einem Feld je Investition auf;
+            gemischte Payloads setzen die Markierung pro Sub-Key selbst.
     """
     if not verbrauch_daten:
         return UpsertResult(inserted=False)
@@ -169,6 +174,7 @@ async def upsert_investition_monatsdaten_with_provenance(
             result.field_results[sub_key] = await write_json_subkey_with_provenance(
                 db, imd, "verbrauch_daten", sub_key, value,
                 source=source, writer=writer, input_hash=new_hash,
+                abgeleitet=abgeleitet,
             )
         return result
 
@@ -201,6 +207,7 @@ async def upsert_investition_monatsdaten_with_provenance(
         result.field_results[sub_key] = await write_json_subkey_with_provenance(
             db, existing, "verbrauch_daten", sub_key, value,
             source=source, writer=writer, input_hash=new_hash,
+            abgeleitet=abgeleitet,
         )
 
     # source_hash nur aktualisieren, wenn mindestens ein Sub-Key applied wurde

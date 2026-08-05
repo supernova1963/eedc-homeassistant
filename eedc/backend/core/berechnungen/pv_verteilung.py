@@ -79,11 +79,19 @@ class PvModul:
     - ``leistung_kwp``: kWp für die Gewichtung (SoT-Wert via ``get_inv_value``)
     - ``eigen_kwh``: gemessener Pro-Modul-Wert aus den IMD; ``None`` = nicht
       erfasst (löst Aggregat-Verteilung aus, sobald nicht alle Module messen).
+    - ``eigen_ist_abgeleitet``: der gespeicherte Wert IST bereits eine
+      kWp-Zerlegung (#352) — ein Import oder ein übernommener Connector-/
+      Cloud-Vorschlag hat ihn geschrieben, gemessen wurde er nie. Der Wert
+      bleibt unangetastet (er steht so in der DB), nur seine **Herkunft** ist
+      ``verteilt`` statt ``gemessen``. Die Markierung kommt aus
+      ``InvestitionMonatsdaten.source_provenance`` (Ladepfad
+      ``services/pv_monatswerte.py``).
     """
 
     inv_id: int
     leistung_kwp: float
     eigen_kwh: Optional[float]
+    eigen_ist_abgeleitet: bool = False
 
 
 @dataclass(frozen=True)
@@ -179,7 +187,16 @@ def resolve_pv_je_modul(
     out: dict[int, PvModulWert] = {}
     for m in module:  # Eingabe-Reihenfolge erhalten (deterministisch)
         if m.eigen_kwh is not None:
-            out[m.inv_id] = PvModulWert(m.inv_id, m.eigen_kwh, QUELLE_GEMESSEN)
+            # #352: Ein gespeicherter Wert, der selbst schon eine Zerlegung ist,
+            # bleibt als Zahl unverändert — aber er behauptet keine Messung.
+            # Sonst kürt das String-Ranking einen „besten String" aus Zahlen,
+            # die per Konstruktion proportional zur kWp sind, und der
+            # Daten-Checker meldet OK statt INFO.
+            out[m.inv_id] = PvModulWert(
+                m.inv_id,
+                m.eigen_kwh,
+                QUELLE_VERTEILT if m.eigen_ist_abgeleitet else QUELLE_GEMESSEN,
+            )
         elif aggregat_kwh is not None:
             out[m.inv_id] = PvModulWert(
                 m.inv_id, verteilt.get(m.inv_id, 0.0), QUELLE_VERTEILT
@@ -222,6 +239,7 @@ def klassifiziere_pv_monat(
     n_aktive_module: int,
     n_gemessen: int,
     aggregat_kwh: Optional[float],
+    n_abgeleitet: int = 0,
 ) -> str:
     """Klassifiziert die PV-Quellenlage eines Monats (Daten-Checker-SoT).
 
@@ -230,12 +248,23 @@ def klassifiziere_pv_monat(
     Module gemessen, kein Aggregat → WARNING) oder ``STATUS_FEHLT`` (gar keine
     PV-Quelle → ERROR). Diese 3-stufige Konvention (Gernot 2026-06-06) wird vom
     Daten-Checker auf Severity gemappt.
+
+    Args:
+        n_gemessen: Module mit einem **gemessenen** Pro-Modul-Wert.
+        n_abgeleitet: Module, deren gespeicherter Wert selbst eine
+            kWp-Zerlegung ist (#352). Sie decken den Monat ab wie ein
+            Aggregat — deshalb ``STATUS_VERTEILT`` und **nicht**
+            ``STATUS_FEHLT``: die Zahlen sind da, sie sind nur gerechnet.
+            Ohne diesen Zweig würde ein vollständig importierter Monat nach
+            der Markierung plötzlich als ERROR gemeldet.
     """
     if n_aktive_module <= 0:
         return STATUS_FEHLT
     if n_gemessen >= n_aktive_module:
         return STATUS_OK
     if aggregat_kwh is not None:
+        return STATUS_VERTEILT
+    if n_gemessen + n_abgeleitet >= n_aktive_module and n_abgeleitet > 0:
         return STATUS_VERTEILT
     if n_gemessen > 0:
         return STATUS_TEIL_LUECKE

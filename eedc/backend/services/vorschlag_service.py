@@ -38,12 +38,21 @@ class VorschlagQuelle(str, Enum):
 
 @dataclass
 class Vorschlag:
-    """Ein Vorschlag für einen Feldwert."""
+    """Ein Vorschlag für einen Feldwert.
+
+    ``abgeleitet`` steht, wenn der Wert die **Zerlegung** eines Anlagen-
+    Gesamtwerts ist und keine Gerätemessung (#352, ``ABGELEITET_*`` aus
+    ``services/provenance.py``). Der Client gibt die Marke beim Speichern
+    zurück, damit die Provenance den Unterschied behält — die Beschreibung
+    allein zu parsen wäre ein Wortlaut-Vertrag und würde beim ersten
+    Text-Feinschliff still brechen.
+    """
     wert: float
     quelle: VorschlagQuelle
     konfidenz: int  # 0-100
     beschreibung: str
     details: Optional[dict] = None
+    abgeleitet: Optional[str] = None
 
 
 @dataclass

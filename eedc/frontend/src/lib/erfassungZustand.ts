@@ -92,6 +92,34 @@ export const gleich = (a: number, b: number): boolean =>
 export const gleichWieVorschlag = (wert: number, vorschlagWert: number): boolean =>
   Math.abs(wert - vorschlagWert) < toleranz(vergleichsStellen(vorschlagWert))
 
+/**
+ * Marke des übernommenen **zerlegten** Vorschlags — oder `undefined` (#352).
+ *
+ * Der Connector- und der Cloud-Vorschlag können der nach kWp bzw. Kapazität
+ * aufgeteilte Anlagen-Gesamtwert sein; das Backend sagt das am Vorschlag
+ * (`abgeleitet`). Steht genau dieser Wert im Feld, meldet das Formular die
+ * Marke beim Speichern zurück — sonst landet eine Rechnung als Gerätemessung
+ * in der Provenance, und die String-Sichten ranken sie gegen echte Messungen.
+ *
+ * Verglichen wird mit derselben Genauigkeits-Regel wie „bereits übernommen"
+ * am AssistenzFeld (`gleichWieVorschlag`, PN 90128) — ein auf eine Stelle
+ * gerundeter Vorschlag 2,3 gilt also auch neben dem Feldwert 2,33.
+ */
+export function abgeleiteteMarke(
+  wert: number,
+  vorschlaege: Vorschlag[] | undefined,
+): string | undefined {
+  if (!Number.isFinite(wert)) return undefined
+  const passend = (vorschlaege ?? []).filter((v) => gleichWieVorschlag(wert, v.wert))
+  // Im Zweifel gemessen: trägt ein passender Vorschlag KEINE Marke, ist nicht
+  // entscheidbar, welchen der Anwender übernommen hat (HA-Statistik und der
+  // zerlegte Connector-Wert können auf dieselbe Zahl fallen). Eine falsche
+  // „verteilt"-Marke entwertete eine echte Messung — die fehlende Marke lässt
+  // nur den Zustand von vorher stehen.
+  if (passend.length === 0 || passend.some((v) => !v.abgeleitet)) return undefined
+  return passend[0].abgeleitet ?? undefined
+}
+
 export interface ZustandErgebnis {
   zustand: ErfassungZustand
   /** Roh-Quelle des aktuellen Werts/Prefills (für Badge-Label via getQuelleLabel). */

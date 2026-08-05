@@ -11,6 +11,46 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Ein gerechneter PV-Wert gibt sich nicht mehr als Messung aus
+
+**Betrifft dich das?** Alle mit **mehreren PV-Strings oder mehreren Speichern**, die ihre
+Monatswerte über einen **Import** (CSV-Backup, Portal, eigener Import) oder über den
+**Monatsabschluss mit Geräte-Connector bzw. Cloud-Import** pflegen.
+
+Hat eedc für einen Monat nur den **Gesamtwert** der Anlage, teilt es ihn nach Nennleistung auf die
+Strings auf — beim Anzeigen, gekennzeichnet als „geschätzt (kWp-Anteil)". Das ist so gewollt.
+Zwei Wege haben eine solche Aufteilung aber **gespeichert**, und danach war sie von einer echten
+Messung nicht mehr zu unterscheiden.
+
+**Was das anrichtete:**
+
+- Die String-Sichten kürten einen **„besten" und einen „schwächsten String"** — aus Zahlen, die
+  rechnerisch immer im Verhältnis der Nennleistung stehen. Die Rangfolge sagte also nichts über
+  die Dächer aus. Die Sperre, die genau das verhindern soll, sah keinen Grund einzugreifen.
+- Der **Daten-Checker meldete den Monat grün** („PV-Erzeugung vollständig gemessen"), obwohl kein
+  einziger String gemessen hatte.
+
+Bei ungleich ausgerichteten oder verschatteten Dächern liegt so eine Aufteilung schnell zweistellig
+neben der Wirklichkeit — und wanderte unmarkiert in Auswertungen, Berichte und den
+Community-Vergleich.
+
+**Jetzt** merkt sich eedc am Wert, dass er gerechnet ist. Die Anzeige stuft ihn als **verteilt**
+ein: kein Ranking, Kennzeichnung „geschätzt (kWp-Anteil)", und der Daten-Checker sagt „über
+kWp-Anteil geschätzt" statt „vollständig gemessen".
+
+**Was sich nicht ändert:**
+
+- **Die Zahl bleibt, wie sie ist** — es geht um ihre Herkunft, nicht um ihren Wert.
+- Wer **einen** String bzw. **einen** Speicher hat, merkt nichts: dort geht der Gesamtwert
+  unverzerrt an ein Gerät, und das ist eine Messung.
+- **Rückwirkend** lässt sich das nicht heilen: bei bereits gespeicherten Werten steht dieselbe
+  Herkunft für „echt gemessen" und „verteilt", die beiden sind nachträglich nicht trennbar. Die
+  Kennzeichnung greift ab dem nächsten Import bzw. Monatsabschluss.
+
+Dasselbe gilt für **Speicher**, deren Lade- und Entladewerte nach Kapazität aufgeteilt werden.
+
+---
+
 ### Solarman-Cloud-Import: die Server-Region ist wählbar — und Fehler sagen, was los ist
 
 **Betrifft dich das?** Alle mit einem **Deye**-Wechselrichter, die historische Monatsdaten über

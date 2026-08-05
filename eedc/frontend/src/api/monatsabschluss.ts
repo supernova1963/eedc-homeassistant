@@ -18,6 +18,12 @@ export interface Vorschlag {
   konfidenz: number
   beschreibung: string
   details?: Record<string, unknown>
+  /** #352: gesetzt, wenn der Wert die **Zerlegung** eines Anlagen-Gesamtwerts
+   *  ist (`kwp_anteil` / `kapazitaet_anteil`) und keine Gerätemessung. Wer den
+   *  Vorschlag übernimmt, schickt die Marke beim Speichern zurück — sonst
+   *  gilt der gerechnete Wert in der Provenance als gemessen und die
+   *  String-Sichten ranken ihn gegen echte Messungen. */
+  abgeleitet?: string | null
 }
 
 export interface Warnung {
@@ -85,6 +91,8 @@ export interface MonatsabschlussResponse {
 export interface FeldWert {
   feld: string
   wert: number
+  /** #352: Marke des übernommenen, zerlegten Vorschlags (siehe `Vorschlag`). */
+  abgeleitet?: string | null
 }
 
 export interface InvestitionWerte {
@@ -146,6 +154,8 @@ export interface CloudMonatswertFeld {
   label: string
   wert: number
   einheit: string
+  /** #352: siehe `Vorschlag.abgeleitet`. */
+  abgeleitet?: string | null
 }
 
 export interface CloudMonatswerteResponse {

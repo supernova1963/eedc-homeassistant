@@ -1034,6 +1034,43 @@ er nur, wenn kein Messwert existiert — und dann sichtbar beschriftet. Solange 
 nennen die String-Sichten bewusst **keinen besten oder schwächsten String**: eine Platzierung wäre
 dort nur die Reihenfolge der Nennleistungen.
 
+##### Regel 1 gilt nur für echte Messungen (#352, seit v4.0.9)
+
+Die Präzedenz oben liest „ein eigener Wert in der Zeile = gemessen". Das stimmt nur, solange in der
+Zeile keine **gerechnete** Zahl steht — und zwei Schreibwege legen genau das dorthin: der Import
+einer Legacy-Gesamtspalte (`_distribute_legacy_pv_to_modules`, aus CSV-Backup, Portal- und
+Custom-Import) und der Monatsabschluss, wenn der zerlegte Vorschlag von Connector oder Cloud-Import
+übernommen wird (`_mapped_or_distribute`). Beide schrieben ihre Aufteilung bis dahin mit derselben
+Herkunft wie eine Gerätemessung; danach klassifizierte Regel 1 sie als `gemessen` — mit Ranking und
+grünem Daten-Checker als Folge.
+
+Seither vermerken diese Wege am Wert, dass er gerechnet ist:
+`InvestitionMonatsdaten.source_provenance["verbrauch_daten.<feld>"]["abgeleitet"]` trägt
+`kwp_anteil` (PV) bzw. `kapazitaet_anteil` (Speicher). SoT der Marken und ihrer Positivliste:
+`services/provenance.py` (`ABGELEITET_*`, `gepruefte_ableitung`). Der Ladepfad
+`services/pv_monatswerte.py` liest sie **aus derselben Zeile** — kein Join, keine zweite Abfrage —
+und übergibt sie als `PvModul.eigen_ist_abgeleitet`; `resolve_pv_je_modul` liefert dafür
+`QUELLE_VERTEILT` statt `QUELLE_GEMESSEN`, **ohne den Wert anzufassen**.
+
+Drei Grenzen, alle bewusst:
+
+- **Ein Empfänger = keine Zerlegung.** Geht der Gesamtwert an genau ein Modul bzw. einen Speicher,
+  ist er unverzerrt dort und bleibt `gemessen` — dieselbe Grenze, die der Monatsabschluss für
+  Beschriftung und Konfidenz schon vorher zog (`ist_verteilt`).
+- **Der Client meldet die Herkunft, das Backend rät sie nicht.** Nur die Oberfläche weiß, ob der
+  Anwender den zerlegten Vorschlag übernommen oder eine eigene Zahl getippt hat; sie schickt die
+  Marke im Investitions-Payload als `abgeleitet_felder` mit (gleiches Muster wie `geprueft_gegen`).
+  Client-SoT: `lib/erfassungZustand.ts::abgeleiteteMarke` — sie schweigt, wenn ein gleich hoher
+  Vorschlag **ohne** Marke danebensteht, weil dann nicht entscheidbar ist, welcher übernommen wurde.
+- **Kein Altbestand-Heilen.** Bereits gespeicherte Zeilen bleiben mehrdeutig: derselbe `writer`
+  steht dort für „echte Pro-Modul-Spalte aus der CSV" *und* für „verteilt". Rückwirkend trennen geht
+  nicht ([[feedback_kein_grosser_heiler_knopf]]); die Marke wirkt ab dem nächsten Schreibvorgang.
+
+Der Daten-Checker zählt markierte Werte nicht als Messung. Damit ein vollständig importierter Monat
+dadurch nicht von OK auf ERROR fällt, kennt `klassifiziere_pv_monat` den Parameter `n_abgeleitet`:
+decken die gerechneten Werte den Monat ab, ist er `verteilt` (INFO) — die Zahlen sind da, sie sind
+nur nicht gemessen.
+
 > **Benannte Ausnahme (ADR-002/P2-A):** Ist nur ein Teil der Module gemessen und **kein** Gesamtwert
 > hinterlegt, behält die Pro-Modul-Sicht ihre Messwerte, während die Anlagen-Summe bewusst nichts
 > zeigt. `Σ Strings ≠ Σ Anlage` ist dort **gewollt** — eine Teilsumme als „Gesamt-PV" auszuweisen wäre

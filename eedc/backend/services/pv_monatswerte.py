@@ -75,11 +75,19 @@ async def lade_pv_je_monat(
         md_query = md_query.where(Monatsdaten.jahr == jahr)
 
     roh: dict[tuple[int, int], dict[int, float]] = {}
+    # #352: Werte, die selbst schon eine kWp-Zerlegung sind (Import oder
+    # übernommener Connector-/Cloud-Vorschlag). Die Markierung steht je Feld in
+    # DERSELBEN Zeile (`source_provenance`) — kein zusätzlicher Query, die Row
+    # liegt hier ohnehin vor.
+    abgeleitet: dict[tuple[int, int], set[int]] = {}
     for imd in (await db.execute(imd_query)).scalars().all():
         wert = (imd.verbrauch_daten or {}).get("pv_erzeugung_kwh")
         if wert is None:
             continue
         roh.setdefault((imd.jahr, imd.monat), {})[imd.investition_id] = wert
+        eintrag = (imd.source_provenance or {}).get("verbrauch_daten.pv_erzeugung_kwh")
+        if isinstance(eintrag, dict) and eintrag.get("abgeleitet"):
+            abgeleitet.setdefault((imd.jahr, imd.monat), set()).add(imd.investition_id)
 
     # Anlagen-Aggregat (manuell/importiert, NIE programmatisch gefüllt).
     aggregat: dict[tuple[int, int], Optional[float]] = {
@@ -96,6 +104,7 @@ async def lade_pv_je_monat(
         if not aktive:
             continue
         roh_monat = roh.get((j, monat), {})
+        abgeleitet_monat = abgeleitet.get((j, monat), set())
         out[(j, monat)] = resolve_pv_je_modul(
             aggregat_kwh=aggregat.get((j, monat)),
             module=[
@@ -103,6 +112,7 @@ async def lade_pv_je_monat(
                     inv_id=m.id,
                     leistung_kwp=get_inv_value(m, "leistung_kwp"),
                     eigen_kwh=roh_monat.get(m.id),
+                    eigen_ist_abgeleitet=m.id in abgeleitet_monat,
                 )
                 for m in aktive
             ],

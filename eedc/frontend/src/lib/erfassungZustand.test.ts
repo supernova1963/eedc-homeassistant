@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { FeldStatus, Vorschlag } from '../api/monatsabschluss'
-import { ermittleZustand, prefillWert, besterVorschlag, istGemesseneQuelle, rollupZustand, zaehleAmpel, vergleichsStellen, gleichWieVorschlag, behaltenEintrag, bestaetigungGilt } from './erfassungZustand'
+import { ermittleZustand, prefillWert, besterVorschlag, istGemesseneQuelle, rollupZustand, zaehleAmpel, vergleichsStellen, gleichWieVorschlag, behaltenEintrag, bestaetigungGilt, abgeleiteteMarke } from './erfassungZustand'
 
 function feld(partial: Partial<FeldStatus>): FeldStatus {
   return {
@@ -250,5 +250,46 @@ describe('zaehleAmpel (§6.2)', () => {
   it('fertig = gemessen+geprüft, prüfen = geschätzt+weicht_ab, offen = fehlt, optional zählt nicht', () => {
     const z = zaehleAmpel(['gemessen', 'geprueft', 'geschaetzt', 'weicht_ab', 'fehlt', 'optional'])
     expect(z).toEqual({ fertig: 2, pruefen: 2, offen: 1 })
+  })
+})
+
+describe('abgeleiteteMarke (#352) — ein gerechneter Wert behauptet keine Messung', () => {
+  const zerlegt = (wert: number): Vorschlag => ({
+    wert, quelle: 'local_connector', konfidenz: 85,
+    beschreibung: 'Vom Wechselrichter — Gesamtwert, anteilig nach kWp verteilt',
+    abgeleitet: 'kwp_anteil',
+  })
+  const gemessen = (wert: number): Vorschlag => ({
+    wert, quelle: 'local_connector', konfidenz: 90,
+    beschreibung: 'Vom Wechselrichter (Zählerstand-Differenz)',
+  })
+
+  it('meldet die Marke, wenn genau der zerlegte Vorschlag im Feld steht', () => {
+    expect(abgeleiteteMarke(600, [zerlegt(600)])).toBe('kwp_anteil')
+  })
+
+  it('schweigt bei einem eigenen Wert daneben', () => {
+    expect(abgeleiteteMarke(742, [zerlegt(600)])).toBeUndefined()
+  })
+
+  it('schweigt, wenn der übernommene Vorschlag eine Messung ist', () => {
+    expect(abgeleiteteMarke(600, [gemessen(600), zerlegt(410)])).toBeUndefined()
+  })
+
+  it('gilt mit der Genauigkeit des Vorschlags (PN 90128)', () => {
+    // Der Vorschlag ist auf eine Stelle gerundet — 2,33 im Feld ist derselbe Wert.
+    expect(abgeleiteteMarke(2.33, [zerlegt(2.3)])).toBe('kwp_anteil')
+  })
+
+  it('schweigt, wenn ein gleich hoher Vorschlag OHNE Marke danebensteht', () => {
+    // Mehrdeutig: HA-Statistik und der zerlegte Connector-Wert fallen auf
+    // dieselbe Zahl. Dann lieber keine Marke als eine falsche.
+    expect(abgeleiteteMarke(600, [gemessen(600), zerlegt(600)])).toBeUndefined()
+    expect(abgeleiteteMarke(600, [zerlegt(600), gemessen(600)])).toBeUndefined()
+  })
+
+  it('ohne Vorschläge und bei NaN passiert nichts', () => {
+    expect(abgeleiteteMarke(600, undefined)).toBeUndefined()
+    expect(abgeleiteteMarke(NaN, [zerlegt(600)])).toBeUndefined()
   })
 })

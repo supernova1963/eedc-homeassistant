@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.investition import Investition
 from backend.core.field_definitions import get_alle_felder_fuer_investition, IMPORT_SUMMEN_KEYS
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
+from backend.services.provenance import (
+    ABGELEITET_KAPAZITAET_ANTEIL,
+    ABGELEITET_KWP_ANTEIL,
+)
 from backend.services.import_writer import (
     UpsertResult,
     upsert_investition_monatsdaten_with_provenance,
@@ -96,6 +100,7 @@ async def _upsert_investition_monatsdaten(
     *,
     source: str,
     writer: str,
+    abgeleitet: Optional[str] = None,
 ) -> UpsertResult:
     """Erstellt oder aktualisiert InvestitionMonatsdaten via Provenance-Wrapper
     (Etappe 3d Päckchen 2).
@@ -111,6 +116,8 @@ async def _upsert_investition_monatsdaten(
             überschrieben?" sonst nicht beantwortbar ist.
         writer: Identität des Schreibers (z. B. "csv_wizard",
             "portal_apply:cloud_import").
+        abgeleitet: ``ABGELEITET_*``, wenn der Payload die Zerlegung eines
+            Anlagen-Gesamtwerts ist statt einer Gerätemessung (#352).
 
     Returns:
         UpsertResult mit applied_count / rejected_count / rejected_fields —
@@ -126,6 +133,7 @@ async def _upsert_investition_monatsdaten(
         source=source,
         writer=writer,
         ueberschreiben=ueberschreiben,
+        abgeleitet=abgeleitet,
     )
 
 
@@ -348,6 +356,10 @@ async def _distribute_legacy_pv_to_modules(
         res = await _upsert_investition_monatsdaten(
             db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben,
             source=source, writer=writer,
+            # #352: Bei genau EINEM Modul geht der Gesamtwert unverzerrt
+            # dorthin — das ist eine Messung und bleibt als solche etikettiert
+            # (gleiche Grenze wie im Monatsabschluss, `ist_verteilt`).
+            abgeleitet=ABGELEITET_KWP_ANTEIL if len(pv_module) > 1 else None,
         )
         if on_upsert is not None:
             on_upsert(res)
@@ -422,6 +434,9 @@ async def _distribute_legacy_battery_to_storages(
             res = await _upsert_investition_monatsdaten(
                 db, inv.id, jahr, monat, verbrauch_daten, ueberschreiben,
                 source=source, writer=writer,
+                abgeleitet=(
+                    ABGELEITET_KAPAZITAET_ANTEIL if len(speicher) > 1 else None
+                ),
             )
             if on_upsert is not None:
                 on_upsert(res)

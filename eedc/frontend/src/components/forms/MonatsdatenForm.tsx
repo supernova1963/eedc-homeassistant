@@ -10,7 +10,7 @@ import { investitionenApi, wetterApi, monatsabschlussApi } from '../../api'
 import type { MonatsabschlussResponse, FeldStatus, BehalteneAbweichung } from '../../api/monatsabschluss'
 import type { Monatsdaten, Investition } from '../../types'
 import { getFelderFuerInvestition, LEGACY_FELDNAMEN, readFeldWert } from '../../lib/fieldDefinitions'
-import { prefillWert, ermittleZustand, zaehleAmpel, behaltenEintrag, type ErfassungZustand } from '../../lib/erfassungZustand'
+import { prefillWert, ermittleZustand, zaehleAmpel, behaltenEintrag, abgeleiteteMarke, type ErfassungZustand } from '../../lib/erfassungZustand'
 import { istAktivImMonat } from '../../lib/investitionAktiv'
 import { fmtZahl, SONSTIGES_KATEGORIE_LABELS } from '../../lib'
 import { Plug, Sun, Flame, Cloud, Loader2, Battery, Car, Zap, MoreHorizontal } from 'lucide-react'
@@ -687,9 +687,20 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
 
         // Generisches Parsen aus field_definitions (E4)
         const felder = getFelderFuerInvestition(inv.typ, inv.parameter)
+        // #352: Steht im Feld genau der Vorschlag, den das Backend als
+        // ZERLEGUNG eines Anlagen-Gesamtwerts geliefert hat (Connector/Cloud
+        // bei mehreren Modulen bzw. Speichern), geben wir seine Marke mit.
+        // Ohne sie landet der gerechnete Wert als Gerätemessung in der
+        // Provenance — und die String-Sichten ranken ihn gegen echte
+        // Messungen. Verglichen wird mit derselben Genauigkeits-Regel wie
+        // „bereits übernommen" im AssistenzFeld (PN 90128).
+        const abgeleiteteFelder: Record<string, string> = {}
         felder.forEach(f => {
           if (hasValue(daten[f.feld])) {
-            (parsed as Record<string, number>)[f.feld] = f.datentyp === 'int' ? pi(daten[f.feld]) : pf(daten[f.feld])
+            const wert = f.datentyp === 'int' ? pi(daten[f.feld]) : pf(daten[f.feld]);
+            (parsed as Record<string, number>)[f.feld] = wert
+            const marke = abgeleiteteMarke(wert, invStatus[inv.id]?.[f.feld]?.vorschlaege)
+            if (marke) abgeleiteteFelder[f.feld] = marke
           }
         })
         // WP Auto-Sum: stromverbrauch aus getrennten Werten berechnen
@@ -721,6 +732,12 @@ export default function MonatsdatenForm({ monatsdaten, anlageId, onSubmit, onCan
         const invBehalten = behaltenInv[inv.id] ?? {}
         if (Object.keys(parsed).length > 0 || Object.keys(invBehalten).length > 0) {
           (parsed as Record<string, unknown>).geprueft_gegen = invBehalten
+          // Gleiches Muster wie `geprueft_gegen`: kein Messwert, sondern
+          // Metadaten zum Wert — das Backend zieht den Schlüssel heraus,
+          // bevor `verbrauch_daten` geschrieben wird (#352).
+          if (Object.keys(abgeleiteteFelder).length > 0) {
+            (parsed as Record<string, unknown>).abgeleitet_felder = abgeleiteteFelder
+          }
           invDaten[inv.id] = parsed
         }
       })

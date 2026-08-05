@@ -470,6 +470,20 @@ class EnergieprofilChecks:
             (inv.id, imd.jahr, imd.monat): (imd.verbrauch_daten or {})
             for inv in pv_module for imd in inv.monatsdaten
         }
+        # #352: Ein gespeicherter Wert kann selbst eine kWp-Zerlegung sein
+        # (Import oder übernommener Connector-/Cloud-Vorschlag). Er steht in
+        # der Zeile, ist aber keine Messung — sonst meldet der Checker OK für
+        # einen Monat, in dem kein einziger String gemessen wurde.
+        abgeleitet_map = {
+            (inv.id, imd.jahr, imd.monat)
+            for inv in pv_module for imd in inv.monatsdaten
+            if isinstance(
+                (imd.source_provenance or {}).get("verbrauch_daten.pv_erzeugung_kwh"), dict
+            )
+            and (imd.source_provenance or {})
+            .get("verbrauch_daten.pv_erzeugung_kwh", {})
+            .get("abgeleitet")
+        }
 
         fehlt: list[str] = []
         teil_luecke: list[str] = []
@@ -483,11 +497,18 @@ class EnergieprofilChecks:
             n_gemessen = sum(
                 1 for inv in aktive
                 if imd_map.get((inv.id, jahr, monat), {}).get("pv_erzeugung_kwh") is not None
+                and (inv.id, jahr, monat) not in abgeleitet_map
+            )
+            n_abgeleitet = sum(
+                1 for inv in aktive
+                if imd_map.get((inv.id, jahr, monat), {}).get("pv_erzeugung_kwh") is not None
+                and (inv.id, jahr, monat) in abgeleitet_map
             )
             status = klassifiziere_pv_monat(
                 n_aktive_module=len(aktive),
                 n_gemessen=n_gemessen,
                 aggregat_kwh=agg_map.get((jahr, monat)),
+                n_abgeleitet=n_abgeleitet,
             )
             label = f"{monat:02d}/{jahr}"
             if status == PV_STATUS_OK:

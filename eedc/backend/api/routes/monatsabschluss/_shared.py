@@ -33,6 +33,8 @@ class VorschlagResponse(BaseModel):
     konfidenz: int
     beschreibung: str
     details: Optional[dict] = None
+    # #352: gesetzt, wenn der Wert ein zerlegter Anlagen-Gesamtwert ist.
+    abgeleitet: Optional[str] = None
 
 
 class WarnungResponse(BaseModel):
@@ -51,6 +53,7 @@ def _vorschlag_to_response(v: Vorschlag) -> VorschlagResponse:
         konfidenz=v.konfidenz,
         beschreibung=v.beschreibung,
         details=v.details,
+        abgeleitet=v.abgeleitet,
     )
 
 

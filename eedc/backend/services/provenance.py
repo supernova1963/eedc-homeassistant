@@ -199,12 +199,70 @@ def _make_audit_entry(
     )
 
 
+# Werte für `abgeleitet` — was für eine Rechnung hinter dem Wert steht (#352).
+# Der Wert ist KEINE Quelle und keine Priorität: er sagt nur, dass diese Zahl
+# nicht am Gerät gemessen, sondern aus einem Anlagen-Gesamtwert zerlegt wurde.
+# Deshalb steht er im Eintrag neben `source`, nicht als eigenes SOURCE_LABEL —
+# die Verdrängungs-Hierarchie bleibt unberührt (Entscheid Gernot 2026-08-05).
+ABGELEITET_KWP_ANTEIL = "kwp_anteil"
+ABGELEITET_KAPAZITAET_ANTEIL = "kapazitaet_anteil"
+
+# Positivliste: was ein Client als Ableitungs-Marke melden darf. Sie ist der
+# Vertrag zwischen Oberfläche und Provenance — und sie steht hier, nicht in
+# den Routen: bis v4.0.8 gab es zwei Schreibpfade für dieselbe Sache (der
+# Wizard-Endpoint und `/monatsdaten`), und eine zweite Kopie der Liste hätte
+# genau die Drift erzeugt, gegen die dieses Paket gebaut ist.
+ERLAUBTE_ABLEITUNGEN = frozenset({
+    ABGELEITET_KWP_ANTEIL,
+    ABGELEITET_KAPAZITAET_ANTEIL,
+})
+
+
+def gepruefte_ableitung(wert: Any) -> Optional[str]:
+    """Nimmt nur bekannte Ableitungs-Marken an (#352).
+
+    Ein unbekannter String käme sonst ungeprüft in die Provenance und gälte
+    dort still als Ableitung, die keine Lesezeit auswerten kann. Verworfene
+    Marken landen im Log, damit ein Client-/Backend-Versionsversatz sichtbar
+    wird statt still geschluckt zu werden.
+    """
+    if wert is None:
+        return None
+    if isinstance(wert, str) and wert in ERLAUBTE_ABLEITUNGEN:
+        return wert
+    logger.warning(
+        "Unbekannte Ableitungs-Marke %r verworfen (erlaubt: %s)",
+        wert, ", ".join(sorted(ERLAUBTE_ABLEITUNGEN)),
+    )
+    return None
+
+
+def gepruefte_ableitungen(werte: Any) -> dict[str, str]:
+    """Feldweise Variante von `gepruefte_ableitung` für Payload-Dicts."""
+    if not isinstance(werte, dict):
+        return {}
+    out: dict[str, str] = {}
+    for feld, marke in werte.items():
+        geprueft = gepruefte_ableitung(marke)
+        if geprueft is not None:
+            out[str(feld)] = geprueft
+    return out
+
+
 def _provenance_entry(
     effective_source: str,
     writer: str,
     input_hash: Optional[str],
+    abgeleitet: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Baut den source_provenance-Eintrag pro Feld."""
+    """Baut den source_provenance-Eintrag pro Feld.
+
+    Args:
+        abgeleitet: gesetzt, wenn der Wert nicht gemessen, sondern aus einem
+            Anlagen-Gesamtwert gerechnet wurde (``ABGELEITET_*``). Die
+            Lesezeit stuft solche Werte als „verteilt" statt „gemessen" ein
+            (#352) — ohne diesen Schlüssel sieht sie keinen Unterschied.
+    """
     entry: dict[str, Any] = {
         "source": effective_source,
         "writer": writer,
@@ -212,6 +270,8 @@ def _provenance_entry(
     }
     if input_hash is not None:
         entry["input_hash"] = input_hash
+    if abgeleitet is not None:
+        entry["abgeleitet"] = abgeleitet
     return entry
 
 
@@ -291,6 +351,7 @@ def seed_provenance(
     writer: str,
     fields: Optional[list[str]] = None,
     json_subkeys: Optional[dict[str, list[str]]] = None,
+    abgeleitet_je_subkey: Optional[dict[str, str]] = None,
 ) -> None:
     """Setzt source_provenance für eine FRISCHE Row mit bekanntem Initial-Inhalt.
 
@@ -303,6 +364,10 @@ def seed_provenance(
     Args:
         fields: Top-Level-ORM-Attribute, deren Provenance gesetzt werden soll.
         json_subkeys: dict[json_attr, list[sub_key]] für JSON-Sub-Keys.
+        abgeleitet_je_subkey: ``{sub_key: ABGELEITET_*}`` für Werte, die eine
+            Zerlegung sind statt einer Messung (#352). Gilt nur für
+            ``json_subkeys`` — die Top-Level-Felder der Anlage tragen keine
+            Gerätezerlegung.
 
     Verhalten:
         - source_provenance wird direkt gesetzt (KEIN Audit-Log).
@@ -318,9 +383,13 @@ def seed_provenance(
         for field in fields:
             provenance[field] = dict(entry)
     if json_subkeys:
+        marken = abgeleitet_je_subkey or {}
         for json_attr, sub_keys in json_subkeys.items():
             for sub_key in sub_keys:
-                provenance[f"{json_attr}.{sub_key}"] = dict(entry)
+                sub_entry = dict(entry)
+                if marken.get(sub_key):
+                    sub_entry["abgeleitet"] = marken[sub_key]
+                provenance[f"{json_attr}.{sub_key}"] = sub_entry
     obj.source_provenance = provenance
     flag_modified(obj, "source_provenance")
 
@@ -402,6 +471,7 @@ async def write_json_subkey_with_provenance(
     input_hash: Optional[str] = None,
     *,
     force_override: bool = False,
+    abgeleitet: Optional[str] = None,
 ) -> WriteResult:
     """Per-JSON-Sub-Key-Variante von write_with_provenance.
 
@@ -418,6 +488,8 @@ async def write_json_subkey_with_provenance(
     Args:
         json_attr: Name der JSON-Spalte auf obj (z. B. "verbrauch_daten").
         sub_key: Schlüssel im Dict (z. B. "ladung_kwh").
+        abgeleitet: ``ABGELEITET_*``, wenn der Wert die Zerlegung eines
+            Anlagen-Gesamtwerts ist und keine Gerätemessung (#352).
         Restliche Args wie write_with_provenance.
     """
     effective_source = "repair" if force_override else source
@@ -446,7 +518,9 @@ async def write_json_subkey_with_provenance(
         setattr(obj, json_attr, json_dict)
         flag_modified(obj, json_attr)
 
-        provenance[provenance_key] = _provenance_entry(effective_source, writer, input_hash)
+        provenance[provenance_key] = _provenance_entry(
+            effective_source, writer, input_hash, abgeleitet
+        )
         obj.source_provenance = provenance
         flag_modified(obj, "source_provenance")
 
