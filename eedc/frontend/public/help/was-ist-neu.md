@@ -11,6 +11,37 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Solarman-Cloud-Import: die Server-Region ist wählbar — und Fehler sagen, was los ist
+
+**Betrifft dich das?** Alle mit einem **Deye**-Wechselrichter, die historische Monatsdaten über
+den **Solarman**-Cloud-Import holen wollen.
+
+Solarman betreibt **zwei getrennte Wolken**: eine chinesische und eine internationale. Wer sich
+unter `globalhome.solarmanpv.com` anmeldet, hat sein Konto auf der internationalen — und genau die
+hat eedc bisher nie gefragt. Die Adresse stand fest im Code, und zwar auf der chinesischen Seite;
+ein europäisches Konto existiert dort schlicht nicht, der Verbindungstest brach ab. **Olli
+(OliS2811) hat das gemeldet und die Ursache gleich mitgeliefert.**
+
+Jetzt gibt es im Cloud-Import ein Feld **„Server-Region"** mit „Global / Europa" (Vorauswahl) und
+„China" — dasselbe Feld, das Anker, EcoFlow, Sungrow und Huawei längst haben.
+
+**Zwei Dinge kamen beim Nachmessen dazu:**
+
+- Der **Anmelde-Nachweis** ging in einer Form raus, die Solarman nicht akzeptiert (ein fehlendes
+  Schlüsselwort im Kopf der Anfrage). Der Zugang wurde also korrekt geholt und jeder Abruf danach
+  trotzdem abgelehnt — **auf beiden Regionen**. Wer den Solarman-Import bisher erfolglos versucht
+  hat, war nicht falsch eingerichtet.
+- **Fehlermeldungen nennen jetzt den Grund.** Bisher stand bei jedem Problem derselbe Satz
+  („Bitte appId, appSecret, E-Mail und Passwort prüfen"), egal ob der Server nicht erreichbar war,
+  die Anlagen-ID nicht passte oder das Konto auf der anderen Region lag. Jetzt steht die Antwort
+  von Solarman im Klartext dabei, samt angesprochener Adresse — und bricht ein Import ab, bevor
+  ein einziger Monat geholt ist, sagt er das, statt „keine Daten gefunden" zu melden.
+
+**Noch nicht mit einem echten Konto bestätigt** — der Provider bleibt als „ungetestet"
+gekennzeichnet, bis eine erfolgreiche Einrichtung zurückgemeldet ist.
+
+→ [Einstellungen-Handbuch](HANDBUCH_EINSTELLUNGEN.md) · *(#349)*
+
 ### Solcast: der Verlauf für morgen ist der von morgen
 
 **Betrifft dich das?** Alle, die **Solcast** als Prognosequelle nutzen — über die HA-Integration

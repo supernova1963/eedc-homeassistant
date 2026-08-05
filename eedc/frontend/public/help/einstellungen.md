@@ -295,7 +295,7 @@ Jeder Monat ist einzeln per Checkbox wählbar — so bleiben manuell erfasste Da
 
 Ein Sammel-Einstieg für die einmaligen und wiederkehrenden Importe. Jeder Assistent öffnet als **Overlay** (keine eigene Seite mehr):
 
-- **Portal-Import** und **Cloud-Import** (Hersteller-Cloud-APIs: SolarEdge, Fronius SolarWeb, Huawei FusionSolar, Growatt, Deye/Solarman, EcoFlow, Anker …). Ablauf: Verbinden → Zeitraum → Vorschau → Import; Credentials pro Anlage speicherbar.
+- **Portal-Import** und **Cloud-Import** (Hersteller-Cloud-APIs: SolarEdge, Fronius SolarWeb, Huawei FusionSolar, Growatt, Deye/Solarman, EcoFlow, Anker …). Ablauf: Verbinden → Zeitraum → Vorschau → Import; Credentials pro Anlage speicherbar. **Server-Region beachten:** Mehrere Hersteller betreiben getrennte Wolken je Weltregion (Anker, EcoFlow, Sungrow, Huawei, Deye/Solarman) — maßgeblich ist die Adresse, unter der du dich im Hersteller-Portal anmeldest. Ein europäisches Konto existiert auf dem chinesischen Server nicht; passt die Region nicht, scheitert schon der Verbindungstest. Die Fehlermeldung nennt den angesprochenen Server und die Antwort des Herstellers im Klartext.
 - **Geräte-Connector** — direkter Abruf lokaler/Cloud-Geräte; kann seine Werte optional als MQTT-Bridge auf eedc-Topics publishen.
 - **Eigene Datei / Vorlage (Custom-Import)** — beliebige CSV/JSON mit Spalten-Mapping (Auto-Detect, Einheiten Wh/kWh/MWh, Dezimalzeichen, Datumsspalte, speicherbare Mapping-Vorlagen).
 - **CSV-Import** — eedc-Template mit dynamischen Komponenten-Spalten; Plausibilitätsprüfung (negative Werte, Legacy-Spalten-Mismatch = Abbruch; redundante Legacy-Spalten / unplausible Wetterwerte = Warnung). Duplikate werden überschrieben.

@@ -1532,7 +1532,7 @@ EEDC Add-on                              Community Server
 | Fronius SolarWeb | SolarWeb API | AccessKeyId + AccessKeyValue |
 | Huawei FusionSolar | thirdData API | XSRF-Token |
 | Growatt | OpenAPI | MD5-Auth |
-| Deye/Solarman | SolarMAN OpenAPI v1.1.0 | OAuth2 + SHA256 |
+| Deye/Solarman | SolarMAN OpenAPI v1.1.0 | OAuth2 (`bearer`-Präfix) + SHA256; Server-Region wählbar (`global`/`cn`) |
 
 **Output:** Alle Provider liefern `ParsedMonthData` als einheitliches Format.
 
