@@ -18,6 +18,8 @@ from backend.core.investition_kennwerte import (
     get_erzeuger_kwp,
     get_pv_kwp,
     get_speicher_kapazitaet_kwh,
+    get_speicher_kopplung,
+    get_speicher_kopplung_gepflegt,
     get_speicher_nutzbare_kapazitaet_kwh,
 )
 from backend.api.deps import get_db
@@ -43,6 +45,7 @@ from backend.core.investition_parameter import (
     PARAM_SPEICHER_DEFAULTS,
     PARAM_WAERMEPUMPE,
     PARAM_WAERMEPUMPE_DEFAULTS,
+    SPEICHER_KOPPLUNG_DC,
     ist_luft_luft_waermepumpe,
 )
 from backend.core.wirtschaftlichkeit_defaults import EINSPEISEVERGUETUNG_DEFAULT_CENT
@@ -1210,7 +1213,16 @@ async def get_roi_dashboard(
             system_einsparung += inv_einsparung or 0
             system_co2 += inv_co2 or 0
 
-            komp_detail: dict[str, Any] = {'kapazitaet_kwh': kapazitaet, 'dc_gekoppelt': True}
+            # #351: `dc_gekoppelt` stand hier hart auf `True` — eine Behauptung
+            # über eine Eigenschaft, die eedc nie erhoben hatte. Sie kommt jetzt
+            # aus dem Feld (Vorbelegung: zugeordnet ⇒ DC), die Gruppierung
+            # darüber bleibt unverändert an der Zuordnung.
+            komp_detail: dict[str, Any] = {
+                'kapazitaet_kwh': kapazitaet,
+                'dc_gekoppelt': get_speicher_kopplung(inv) == SPEICHER_KOPPLUNG_DC,
+                'kopplung': get_speicher_kopplung(inv),
+                'kopplung_gepflegt': get_speicher_kopplung_gepflegt(inv) is not None,
+            }
             if kapazitaet_fehlt:
                 komp_detail['hinweis'] = (
                     'Keine Kapazität gepflegt — ohne sie lässt sich die Ersparnis '
@@ -1364,10 +1376,19 @@ async def get_roi_dashboard(
         detail: dict[str, Any] = {}
 
         if inv.typ == InvestitionTyp.SPEICHER.value:
-            # AC-gekoppelter Speicher — Bug #5 v3.25.0 fix wie oben (DC-Speicher)
+            # Eigenständig geführter Speicher (keine WR-Zuordnung) — Bug #5
+            # v3.25.0 fix wie oben. #351: dieser Zweig hieß „AC-gekoppelter
+            # Speicher" und nannte das auch im ausgelieferten `hinweis`; das war
+            # eine Folgerung aus der Zuordnung, kein erhobener Wert. Die Kopplung
+            # steht jetzt im Feld, der Zweig bleibt der der **Rechnung**.
             # N127 + A31-2: Kapazität über die SoT-Helper, ohne Default — s. den
             # DC-Pfad oben. Der Prognose-Modus rechnet NETTO; hier gibt es kein
             # Detail-Feld mit der Brutto-Zahl, also wird sie auch nicht gelesen.
+            kopplung = get_speicher_kopplung(inv)
+            kopplung_felder: dict[str, Any] = {
+                'kopplung': kopplung,
+                'kopplung_gepflegt': get_speicher_kopplung_gepflegt(inv) is not None,
+            }
             kapazitaet_netto = get_speicher_nutzbare_kapazitaet_kwh(inv)
             wirkungsgrad = params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"], PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
             nutzt_arbitrage = params.get(PARAM_SPEICHER["ARBITRAGE_FAEHIG"], PARAM_SPEICHER_DEFAULTS["arbitrage_faehig"])
@@ -1418,13 +1439,14 @@ async def get_roi_dashboard(
                 # anzeigeseitige Folge.
                 detail = {
                     'hinweis': (
-                        'AC-gekoppelter Speicher — keine Kapazität gepflegt, '
-                        'ohne sie lässt sich die Ersparnis nicht abschätzen. '
-                        'Kapazität in der Investitionspflege nachtragen.'
+                        'Keine Kapazität gepflegt — ohne sie lässt sich die '
+                        'Ersparnis nicht abschätzen. Kapazität in der '
+                        'Investitionspflege nachtragen.'
                     ),
                     'kapazitaet_fehlt': True,
                     'nicht_bewertet': True,
                     'modus': 'prognose',
+                    **kopplung_felder,
                 }
             else:
                 jahres_einsparung = result.jahres_einsparung_euro
@@ -1433,8 +1455,9 @@ async def get_roi_dashboard(
                     'nutzbare_speicherung_kwh': result.nutzbare_speicherung_kwh,
                     'pv_anteil_euro': result.pv_anteil_euro,
                     'arbitrage_anteil_euro': result.arbitrage_anteil_euro,
-                    'hinweis': 'AC-gekoppelter Speicher',
+                    'hinweis': 'Eigenständig gerechneter Speicher',
                     'modus': 'ist' if ist_aggregat is not None else 'prognose',
+                    **kopplung_felder,
                 }
             if ist_aggregat is not None:
                 detail.update({

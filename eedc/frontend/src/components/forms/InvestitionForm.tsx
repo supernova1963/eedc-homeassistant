@@ -450,6 +450,7 @@ export default function InvestitionForm({ investition, anlageId, typ, onSubmit, 
         markTouched={markTouched}
         setFeldRef={setFeldRef}
         leistungKwp={formData.leistung_kwp}
+        hatZuordnung={!!formData.parent_investition_id}
       />
 
       {/* ── Verknüpfte Infothek-Einträge (nur beim Bearbeiten) ── */}

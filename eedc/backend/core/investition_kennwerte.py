@@ -33,6 +33,9 @@ from backend.core.investition_parameter import (
     PARAM_PV_MODULE,
     PARAM_SPEICHER,
     PARAM_WECHSELRICHTER,
+    SPEICHER_KOPPLUNG_AC,
+    SPEICHER_KOPPLUNG_DC,
+    SPEICHER_KOPPLUNG_WERTE,
 )
 from backend.models.investition import InvestitionTyp
 
@@ -341,3 +344,51 @@ def _speicher_param_kwh(inv: Any, schluessel: str) -> Optional[float]:
     except (TypeError, ValueError):
         return None
     return wert or None
+
+
+def get_speicher_kopplung_gepflegt(inv: Any) -> Optional[str]:
+    """Die **gepflegte** Kopplung (`"ac"`/`"dc"`) oder `None`, wenn sie fehlt.
+
+    Getrennt vom auflösenden Helper, weil der Unterschied „der Anwender hat es
+    gesagt" gegen „wir leiten es ab" eine eigene Aussage ist: die Anzeige
+    schreibt die Ableitung dazu, das Formular stellt sie auf „Automatisch".
+    Unbekannte Werte gelten als ungepflegt (nicht als Fehler) — ein Altbestand
+    mit Tippfehler soll die Auflösung nicht kippen, sondern in die Ableitung
+    fallen.
+    """
+    params = getattr(inv, "parameter", None) or {}
+    roh = params.get(PARAM_SPEICHER["KOPPLUNG"])
+    if not isinstance(roh, str):
+        return None
+    wert = roh.strip().lower()
+    return wert if wert in SPEICHER_KOPPLUNG_WERTE else None
+
+
+def get_speicher_kopplung(inv: Any) -> str:
+    """Die Kopplung eines Speichers — gepflegt schlägt abgeleitet (#351).
+
+    Bis v4.0.8 war die Kopplung **keine** Eigenschaft, sondern eine Folgerung
+    aus `parent_investition_id`: Speicher am Wechselrichter ⇒ DC, sonst AC. Das
+    ist als *Vorbelegung* richtig und als *Wahrheit* falsch — zwei reale
+    Konstellationen fielen durch (JayJay, Forum v4.0.0):
+
+    * **AC-Speicher am Hybrid-Wechselrichter** — fachlich üblich, wurde
+      zwangsweise als DC geführt, sobald man ihn zuordnete;
+    * **DC-Speicher ohne erfassten Wechselrichter** — wurde als AC geführt.
+
+    Die Zuordnung bleibt die **Struktur**-Information (sie entscheidet, ob die
+    Wirtschaftlichkeit als Teil des PV-Systems gerechnet wird); die Kopplung ist
+    daneben eine eigene Eigenschaft. Deshalb ändert dieser Helper **keine Zahl**:
+    ADR-001-Formeln lesen ihn nicht, `berechne_speicher_einsparung` rechnet für
+    beide Fälle identisch. Was er ändert, ist die *Aussage* — vorher behauptete
+    `dc_gekoppelt=True` bzw. „AC-gekoppelter Speicher" etwas, das nie erhoben
+    worden war.
+    """
+    gepflegt = get_speicher_kopplung_gepflegt(inv)
+    if gepflegt is not None:
+        return gepflegt
+    return (
+        SPEICHER_KOPPLUNG_DC
+        if getattr(inv, "parent_investition_id", None) is not None
+        else SPEICHER_KOPPLUNG_AC
+    )

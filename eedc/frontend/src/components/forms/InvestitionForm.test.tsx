@@ -75,6 +75,38 @@ describe('InvestitionForm — Submit-Nutzlast', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
+  it('#351 zeigt bei ungepflegter Kopplung, WAS abgeleitet wird — und speichert die Wahl', async () => {
+    // Genau JayJays Konstellation: AC-Speicher an einem Hybrid-Wechselrichter.
+    // Solange nichts gepflegt ist, leitet eedc „DC" ab (weil zugeordnet) — der
+    // Hinweis muss das sagen, sonst ist die Angabe unauffindbar.
+    const onSubmit = vi.fn(() => Promise.resolve())
+    render(<InvestitionForm anlageId={1} typ="speicher" investition={speicher} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    const select = await screen.findByLabelText(/Kopplung/i)
+    expect((select as HTMLSelectElement).value).toBe('')
+    expect(screen.getByText(/Ohne Angabe: DC-gekoppelt/i)).toBeInTheDocument()
+
+    fireEvent.change(select, { target: { value: 'ac' } })
+    const nutzlast = await submit(onSubmit)
+    expect((nutzlast.parameter as Record<string, unknown>).kopplung).toBe('ac')
+    // Die Zuordnung bleibt bestehen — Struktur und Bauform sind getrennt.
+    expect(nutzlast.parent_investition_id).toBe(3)
+  })
+
+  it('#351 zeigt eine gepflegte Kopplung beim Bearbeiten wieder an', async () => {
+    // Ohne diesen Weg stünde das Feld beim zweiten Öffnen auf „Automatisch" —
+    // die Anzeige behauptete dann eine Ableitung, obwohl ein Wert gepflegt ist,
+    // und ein Speichern würde ihn stillschweigend löschen.
+    const onSubmit = vi.fn(() => Promise.resolve())
+    const acSpeicher = { ...speicher, parameter: { kapazitaet_kwh: 10, kopplung: 'ac' } }
+    render(<InvestitionForm anlageId={1} typ="speicher" investition={acSpeicher} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    const select = await screen.findByLabelText(/Kopplung/i)
+    expect((select as HTMLSelectElement).value).toBe('ac')
+    const nutzlast = await submit(onSubmit)
+    expect((nutzlast.parameter as Record<string, unknown>).kopplung).toBe('ac')
+  })
+
   it('sendet beim Anlegen undefined statt null (Backend-Defaults greifen)', async () => {
     const onSubmit = vi.fn(() => Promise.resolve())
     render(<InvestitionForm anlageId={1} typ="speicher" onSubmit={onSubmit} onCancel={() => {}} />)

@@ -142,6 +142,11 @@ export function getInitialParamData(
         wirkungsgrad_prozent: paramStr(params.wirkungsgrad_prozent, PARAM_SPEICHER_DEFAULTS.wirkungsgrad_prozent),
         laedt_aus_netz: arbitrage ? true : laedtAusNetzGespeichert,
         arbitrage_faehig: arbitrage,
+        // #351: leer = „Automatisch (aus der Zuordnung)". Bewusst OHNE Default —
+        // eine Vorbelegung hier würde beim ersten Speichern die Ableitung als
+        // gepflegten Wert festschreiben, und wer den Wechselrichter später
+        // zuordnet, behielte still die alte Annahme.
+        kopplung: paramStr(params.kopplung),
       }
     }
     case 'waermepumpe':

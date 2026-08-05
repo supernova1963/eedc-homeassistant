@@ -164,13 +164,21 @@ INVESTITION_FELDER: dict = {
             "label_wenn": {"laedt_aus_netz": "Ladung (gesamt, inkl. Netz)"},
             "csv_suffix": "Ladung_kWh",
             "aggregiert_in": "batterie_ladung_sum",
-            "hinweis": "Gesamte in den Speicher geladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0.",
+            # N-60/#351: Die Messstelle war nicht genannt — und ohne sie sind ein
+            # DC-Zähler an der Batterie und ein AC-Zähler am Batterie-Wechsel-
+            # richter **beide** vertragskonform und liefern trotzdem verschiedene
+            # Zahlen (dazwischen liegt der Wandlungsverlust). Der Kanon ist
+            # deshalb an die Kopplung gebunden: sie ist die einzige Angabe, die
+            # für beide Bauformen erhebbar ist — bei einem DC-gekoppelten
+            # Speicher gibt es zwischen Batterie und Hybrid-Wechselrichter gar
+            # keinen AC-Punkt, ein „immer AC"-Vertrag wäre dort nicht messbar.
+            "hinweis": "Gesamte in den Speicher geladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0. Gemessen an der Stelle, die zur Kopplung des Speichers passt: bei AC-Kopplung hausseitig hinter dem Batterie-Wechselrichter, bei DC-Kopplung am Batterie-Anschluss. Ladung und Entladung müssen von derselben Seite kommen — sonst enthält der Wirkungsgrad die Wandlung nur in eine Richtung.",
         },
         {
             "feld": "entladung_kwh", "label": "Entladung", "einheit": "kWh",
             "csv_suffix": "Entladung_kWh",
             "aggregiert_in": "batterie_entladung_sum",
-            "hinweis": "Gesamte aus dem Speicher entladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0.",
+            "hinweis": "Gesamte aus dem Speicher entladene Energie (kWh, kumulativer Zähler oder Tagessensor). Immer ≥ 0. Dieselbe Messstelle wie die Ladung (s. dort) — bei gemischten Seiten misst der Wirkungsgrad die Messstelle statt den Speicher.",
         },
         # Konditionell — nur wenn laedt_aus_netz=true (arbitrage_faehig impliziert das):
         {

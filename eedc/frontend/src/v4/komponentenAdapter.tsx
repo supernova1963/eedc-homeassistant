@@ -26,6 +26,7 @@ import { formatEnergie, formatEffizienz } from '../lib/einheiten'
 import { MONAT_KURZ, PV_MODUL_FARBEN, PV_MODUL_BG, SONSTIGES_KATEGORIE_LABELS } from '../lib'
 import { CHART_COLORS, ENERGIE_KATEGORIE, KOMPONENTEN_FARBEN, LADEQUELLEN_FARBEN, ROLLEN_BG, SONSTIGES_ERZEUGER_FARBE } from '../lib/colors'
 import { pvVerteiltHerkunft } from '../lib/pvHerkunft'
+import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung, speicherParameter } from '../lib/investitionParameter'
 import { cockpitApi, type PVStringsGesamtlaufzeitResponse } from '../api/cockpit'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
@@ -460,24 +461,37 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
             k('Arbitrage-Gewinn', n0(z.arbitrage_gewinn_euro), '€', 'green', TrendingUp),
           ],
         } : undefined,
-        // ② Verknüpfung (dünn): Zuordnung zu einem Wechselrichter (parent_investition_id).
-        // BEWUSST nicht „DC-/AC-gekoppelt": eedc kennt kein Kopplungs-Feld, die
-        // Zuordnung sagt nur, ob der Speicher in der Wirtschaftlichkeit als Teil
-        // des PV-Systems oder eigenständig geführt wird. Ein AC-Speicher an einem
-        // Hybrid-Wechselrichter wäre sonst falsch beschriftet (JayJay, Forum v4.0.0).
+        // ② Verknüpfung (dünn): ZWEI Zeilen, seit #351 bewusst getrennt.
+        // „Zuordnung" ist die Struktur (rechnet als Teil des PV-Systems oder
+        // eigenständig), „Kopplung" die Bauform. Bis v4.0.8 gab es nur die
+        // Zuordnung und sie musste beides tragen — ein AC-Speicher am Hybrid-
+        // Wechselrichter war dadurch nicht abbildbar (JayJay, Forum v4.0.0).
         struktur: {
           art: 'referenz',
-          zeilen: [inv.parent_investition_id != null
-            ? {
-              label: 'Zuordnung',
-              wert: invs.find((i) => i.id === inv.parent_investition_id)?.bezeichnung ?? '—',
-              hinweis: 'Einem Wechselrichter zugeordnet — die Wirtschaftlichkeit wird als Teil des PV-Systems gerechnet.',
-            }
-            : {
-              label: 'Zuordnung',
-              wert: 'Eigenständig',
-              hinweis: 'Keinem Wechselrichter zugeordnet — eigene Wirtschaftlichkeits-Rechnung. Für AC-gekoppelte Speicher der Normalfall.',
-            }],
+          zeilen: [
+            inv.parent_investition_id != null
+              ? {
+                label: 'Zuordnung',
+                wert: invs.find((i) => i.id === inv.parent_investition_id)?.bezeichnung ?? '—',
+                hinweis: 'Einem Wechselrichter zugeordnet — die Wirtschaftlichkeit wird als Teil des PV-Systems gerechnet.',
+              }
+              : {
+                label: 'Zuordnung',
+                wert: 'Eigenständig',
+                hinweis: 'Keinem Wechselrichter zugeordnet — eigene Wirtschaftlichkeits-Rechnung.',
+              },
+            (() => {
+              const gepflegt = speicherParameter(inv.parameter).kopplung
+              const kopplung = aufgeloesteSpeicherKopplung(inv.parameter, inv.parent_investition_id != null)
+              return {
+                label: 'Kopplung',
+                wert: SPEICHER_KOPPLUNG_LABELS[kopplung],
+                hinweis: gepflegt
+                  ? 'Bestimmt, an welcher Stelle Ladung und Entladung gemessen werden — bei AC-Kopplung hausseitig hinter dem Batterie-Wechselrichter, bei DC-Kopplung am Batterie-Anschluss.'
+                  : 'Nicht gepflegt — aus der Zuordnung abgeleitet. Bei einem AC-Speicher am Hybrid-Wechselrichter in der Investitionspflege nachtragen.',
+              }
+            })(),
+          ],
         } as KompStruktur,
         aufteilung: z.gesamt_ladung_kwh > 0 ? {
           titel: 'Ladung nach Quelle', segmente: [

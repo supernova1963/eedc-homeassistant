@@ -79,7 +79,18 @@ export const PARAM_SPEICHER = {
   ARBITRAGE_FAEHIG: 'arbitrage_faehig',
   LADE_DURCHSCHNITTSPREIS_CENT: 'lade_durchschnittspreis_cent',
   ENTLADE_VERMIEDENER_PREIS_CENT: 'entlade_vermiedener_preis_cent',
+  // #351: leerer Wert = „aus der Wechselrichter-Zuordnung ableiten". Kein
+  // Default in PARAM_SPEICHER_DEFAULTS — der würde die Ableitung zur
+  // gespeicherten Wahrheit machen. Backend-Spiegel: core/investition_parameter.py
+  KOPPLUNG: 'kopplung',
 } as const
+
+/** Kopplung eines Speichers (#351). `''` = automatisch aus der Zuordnung. */
+export type SpeicherKopplung = 'ac' | 'dc'
+export const SPEICHER_KOPPLUNG_LABELS: Record<SpeicherKopplung, string> = {
+  ac: 'AC-gekoppelt',
+  dc: 'DC-gekoppelt',
+}
 
 export const PARAM_SPEICHER_DEFAULTS = {
   wirkungsgrad_prozent: 95,
@@ -99,6 +110,7 @@ export interface SpeicherParameter {
   arbitrage_faehig?: boolean
   lade_durchschnittspreis_cent?: number
   entlade_vermiedener_preis_cent?: number
+  kopplung?: SpeicherKopplung
 }
 
 // ============================================================================
@@ -331,6 +343,21 @@ export function eAutoParameter(parameter: unknown): EAutoParameter {
 
 export function speicherParameter(parameter: unknown): SpeicherParameter {
   return (parameter || {}) as SpeicherParameter
+}
+
+/**
+ * Die Kopplung eines Speichers — gepflegt schlägt abgeleitet (#351).
+ *
+ * Client-Spiegel von `core/investition_kennwerte.py::get_speicher_kopplung`.
+ * Er existiert, weil Formular und Komponenten-Hub die Auflösung **zeigen**,
+ * bevor eine Antwort vorliegt (Formular) bzw. ohne sie erneut zu holen (Hub) —
+ * die Regel liegt deshalb hier einmal statt zweimal inline. Rechnende Pfade
+ * lesen sie nicht: die Kopplung ändert keine Zahl, sie benennt die Messstelle.
+ */
+export function aufgeloesteSpeicherKopplung(parameter: unknown, hatZuordnung: boolean): SpeicherKopplung {
+  const gepflegt = speicherParameter(parameter).kopplung
+  if (gepflegt === 'ac' || gepflegt === 'dc') return gepflegt
+  return hatZuordnung ? 'dc' : 'ac'
 }
 
 export function waermepumpeParameter(parameter: unknown): WaermepumpeParameter {

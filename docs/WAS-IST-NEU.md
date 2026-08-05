@@ -11,6 +11,46 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### Wo kann ich die Kopplung meines Speichers einstellen? Ab jetzt: in der Investitionspflege
+
+**Betrifft dich das?** Alle mit einem **Batteriespeicher**, besonders wenn er **AC-gekoppelt an
+einem Hybrid-Wechselrichter** hängt oder **DC-gekoppelt ohne** dass du den Wechselrichter als
+eigene Komponente erfasst hast.
+
+Bis hierher hat eedc die Kopplung nicht *gewusst*, sondern *geraten* — und zwar an genau einer
+Angabe: Ist dem Speicher ein Wechselrichter zugeordnet? Dann DC. Sonst AC. Für die meisten Anlagen
+trifft das zu; für zwei ganz normale Bauformen nicht:
+
+- **AC-Speicher am Hybrid-Wechselrichter** — sobald du ihn zuordnest, galt er als DC-gekoppelt.
+- **DC-Speicher ohne erfassten Wechselrichter** — er galt als AC-gekoppelt.
+
+**Was neu ist:** In *Einstellungen → Investitionen → Speicher bearbeiten* steht das Feld
+**„Kopplung"** mit drei Möglichkeiten:
+
+| Auswahl | Bedeutung |
+| --- | --- |
+| **Automatisch (aus der Zuordnung)** | Vorbelegung — eedc leitet ab wie bisher und schreibt dir dazu, **was** dabei herauskommt |
+| **AC-gekoppelt** | Der Speicher hat einen eigenen Batterie-Wechselrichter |
+| **DC-gekoppelt** | Der Speicher hängt gleichstromseitig am (Hybrid-)Wechselrichter |
+
+Im **Komponenten-Hub** steht die Kopplung als eigene Zeile neben der Zuordnung — und wenn du nichts
+gepflegt hast, sagt sie das auch, statt eine Angabe zu behaupten.
+
+**Ändert das meine Zahlen?** Nein, und das ist Absicht. Ob dein Speicher in der Wirtschaftlichkeit
+**als Teil des PV-Systems** oder **eigenständig** gerechnet wird, entscheidet weiterhin allein die
+**Zuordnung** zum Wechselrichter — die Ersparnis selbst rechnet eedc für beide Bauformen gleich.
+Du kannst einen AC-Speicher also korrekt eintragen, **ohne** dass er aus deinem PV-System fällt.
+
+**Wofür die Angabe gut ist:** Sie sagt, **wo** Ladung und Entladung gemessen werden. Das stand
+bisher nirgends — und deshalb waren ein Zähler direkt an der Batterie (DC) und einer hinter dem
+Batterie-Wechselrichter (AC) **beide** richtig, obwohl sie verschiedene Zahlen liefern:
+dazwischen liegt der Wandlungsverlust. Wer Ladung von der einen und Entladung von der anderen
+Seite erfasst — bei Cloud-Werten mancher Hersteller ist das der Normalfall —, bekommt einen
+Wirkungsgrad, der die Messstelle beschreibt und nicht den Speicher. Die Feldbeschreibungen von
+**Ladung** und **Entladung** nennen die Messstelle jetzt und verlangen für beide **dieselbe Seite**.
+
+*(#351 — gemeldet von JayJay im Forum-Thread zu v4.0.0)*
+
 ### Ein gerechneter PV-Wert gibt sich nicht mehr als Messung aus
 
 **Betrifft dich das?** Alle mit **mehreren PV-Strings oder mehreren Speichern**, die ihre

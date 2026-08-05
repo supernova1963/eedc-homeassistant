@@ -22,4 +22,11 @@ export interface TypFelderProps {
    * Warnung soll das vergleichen, was gerade im Formular steht.
    */
   leistungKwp?: string
+  /**
+   * Ob im Formular gerade ein Wechselrichter zugeordnet ist — nur der Speicher
+   * nutzt es (#351), um bei „Automatisch" zu zeigen, **was** daraus folgt.
+   * Bewusst der Formular-Zustand und nicht der gespeicherte: die Anzeige soll
+   * der Auswahl folgen, die der Anwender gerade trifft.
+   */
+  hatZuordnung?: boolean
 }

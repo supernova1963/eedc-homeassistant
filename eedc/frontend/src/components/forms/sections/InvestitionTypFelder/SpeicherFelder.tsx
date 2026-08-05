@@ -1,9 +1,21 @@
-import { FormSection, Input } from '../../../ui'
+import { FormSection, Input, Select } from '../../../ui'
 import { SchalterZeile } from '../SchalterZeile'
+import { SPEICHER_KOPPLUNG_LABELS, aufgeloesteSpeicherKopplung } from '../../../../lib/investitionParameter'
 import type { TypFelderProps } from './types'
 
-export function SpeicherFelder({ paramData, onInputChange, setParam }: TypFelderProps) {
+// #351: Die Kopplung ist eine eigene Eigenschaft, keine Folgerung aus der
+// Wechselrichter-Zuordnung. Der leere Wert bleibt wählbar und ist die
+// Vorbelegung — er sagt „eedc leitet ab", und was daraus folgt, steht im Hint.
+const KOPPLUNG_OPTIONEN = [
+  { value: '', label: 'Automatisch (aus der Zuordnung)' },
+  { value: 'ac', label: SPEICHER_KOPPLUNG_LABELS.ac },
+  { value: 'dc', label: SPEICHER_KOPPLUNG_LABELS.dc },
+]
+
+export function SpeicherFelder({ paramData, onInputChange, setParam, hatZuordnung }: TypFelderProps) {
   const arbitrage = paramData.arbitrage_faehig as boolean
+  const kopplung = (paramData.kopplung as string) || ''
+  const abgeleitet = SPEICHER_KOPPLUNG_LABELS[aufgeloesteSpeicherKopplung({}, !!hatZuordnung)]
   return (
     <>
       <FormSection title="Speicher">
@@ -43,6 +55,16 @@ export function SpeicherFelder({ paramData, onInputChange, setParam }: TypFelder
             type="number" step="any" min="0" max="100"
             value={paramData.wirkungsgrad_prozent as string}
             onChange={onInputChange}
+          />
+          <Select
+            label="Kopplung"
+            name="param_kopplung"
+            value={kopplung}
+            onChange={(e) => setParam('kopplung', e.target.value)}
+            options={KOPPLUNG_OPTIONEN}
+            hint={kopplung === ''
+              ? `Ohne Angabe: ${abgeleitet} — abgeleitet aus der Wechselrichter-Zuordnung. Ein AC-Speicher am Hybrid-Wechselrichter braucht die Angabe.`
+              : 'Bestimmt, an welcher Stelle Ladung und Entladung gemessen werden — die Zuordnung zum Wechselrichter bleibt davon unberührt.'}
           />
         </div>
       </FormSection>

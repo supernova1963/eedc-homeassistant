@@ -77,7 +77,25 @@ PARAM_SPEICHER: Final[dict[str, str]] = {
     "ARBITRAGE_FAEHIG": "arbitrage_faehig",
     "LADE_DURCHSCHNITTSPREIS_CENT": "lade_durchschnittspreis_cent",
     "ENTLADE_VERMIEDENER_PREIS_CENT": "entlade_vermiedener_preis_cent",
+    # #351: die Kopplung als eigene Eigenschaft. **Fehlt der Schlüssel, ist das
+    # kein Defekt**, sondern der Normalfall „nicht gepflegt" — aufgelöst wird er
+    # dann aus der Wechselrichter-Zuordnung (s. `get_speicher_kopplung`). Ein
+    # Default in `PARAM_SPEICHER_DEFAULTS` wäre hier falsch: er würde die
+    # Ableitung zur gespeicherten Wahrheit machen und beide Konstellationen des
+    # Issues wieder unerreichbar (AC-Speicher am Hybrid-WR · DC-Speicher ohne
+    # erfassten WR).
+    "KOPPLUNG": "kopplung",
 }
+
+# Erlaubte Werte von `kopplung` (#351). `None`/fehlend = „aus der Zuordnung
+# ableiten"; ein drittes gespeichertes „unbekannt" gibt es bewusst nicht — die
+# Anzeige soll nie „unbekannt" sagen müssen, sie hat immer eine Auflösung.
+SPEICHER_KOPPLUNG_AC: Final[str] = "ac"
+SPEICHER_KOPPLUNG_DC: Final[str] = "dc"
+SPEICHER_KOPPLUNG_WERTE: Final[tuple[str, ...]] = (
+    SPEICHER_KOPPLUNG_AC,
+    SPEICHER_KOPPLUNG_DC,
+)
 
 PARAM_SPEICHER_DEFAULTS: Final[dict[str, object]] = {
     "wirkungsgrad_prozent": 95,
