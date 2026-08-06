@@ -75,7 +75,7 @@ def test_rang_tag_und_nacht_getrennt_schwelle_global():
     assert all(erg.rang_profil[h] == RANG_TEUER for h in tag)
     assert erg.guenstige_stunden_tag == 0
     # Im Nacht-Fenster liegen ALLE 6 5-ct-Stunden unter der Schwelle und
-    # zählen ab v4.1 auch alle sechs (#335/N-103). Der RANG bleibt auf die
+    # zählen ab v4.0.10 auch alle sechs (#335/N-103). Der RANG bleibt auf die
     # fünf billigsten gedeckelt — die sechste ist günstig, aber nicht Top-5.
     assert erg.guenstige_stunden_nacht == 6
     assert erg.guenstige_stunden_anzahl == 6
@@ -101,7 +101,7 @@ def test_rang_aktuelle_stunde_ohne_preis_ist_none():
 def test_optimierter_durchschnitt_ist_die_schwelle_ohne_faktor():
     """Der Ø ohne 3 Peaks ist die Bezugsgröße — die Schwelle ist er × Faktor.
 
-    Bis v4.0 verließ nur das Produkt die Datei; genau die Zahl, nach der
+    Bis v4.0.9 verließ nur das Produkt die Datei; genau die Zahl, nach der
     gefragt wurde, war damit im Export unerreichbar.
     """
     preise = {h: float(h + 1) for h in range(24)}
@@ -297,7 +297,7 @@ async def test_preis_und_durchschnitt_werden_exportiert(db, _patch_preis, monkey
 
     rapahls Wunsch (PN 05.08., zweite Äußerung): „ein Sensor, der sagt, ob der
     aktuelle Börsenpreis über oder unter dem optimierten Ø liegt" — Grundlage
-    einer Nicht-Entlade-Regel. Bis v4.0 lieferte der Export nur Ø × Faktor.
+    einer Nicht-Entlade-Regel. Bis v4.0.9 lieferte der Export nur Ø × Faktor.
 
     ⚠ **Die Uhr wird gestellt, seit 2026-08-06 nachmittags.** Vorher nahm die
     Probe die echte Stunde — und fiel damit **in 4 von 24 Stunden** (5, 11, 17,

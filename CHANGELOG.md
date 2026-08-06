@@ -7,7 +7,7 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
-## [Unreleased]
+## [4.0.10] - 2026-08-06 — Jede Stunde trägt ihren eigenen Preis · jeder Tag sein eigenes Datum
 
 ### Added
 

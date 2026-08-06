@@ -239,7 +239,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       // D11-2: Tag ohne Daten (z. B. Lücken-Tag) — denselben `kpi`-Block mit Hinweis
       // rendern statt die Block-Liste leeren. So bleibt im Vollbild der Block (gleiche
       // ID) stehen, statt dass BlockShell unmountet und das Vollbild abrupt wegbricht.
-      // F-2: der Hinweis nennt seit v4.1 den GRUND (aus dem Backend) und stellt den
+      // F-2: der Hinweis nennt seit v4.0.10 den GRUND (aus dem Backend) und stellt den
       // Reparatur-Knopf daneben — aber nur, wo er wirkt. Das ist die Stelle, die ein
       // Anwender bei einem leeren Tag sieht; die Card weiter unten greift erst, wenn
       // die Block-Liste ganz leer ist (alles geparkt).

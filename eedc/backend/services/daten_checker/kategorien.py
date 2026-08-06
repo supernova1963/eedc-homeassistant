@@ -101,7 +101,7 @@ class CheckKategorie(str, Enum):
     # Abgrenzung: PV auf bestehenden Tageszeilen gehört DATENQUELLE_DRIFT —
     # kein zweiter Turm über denselben Sachverhalt.
     TAGESWERTE_FEHLEN = "tageswerte_fehlen"
-    # v4.1 (N-161): eedc und Home Assistant laufen in verschiedenen Zeitzonen.
+    # v4.0.10 (N-161): eedc und Home Assistant laufen in verschiedenen Zeitzonen.
     # eedc mischt zwei Zeitwelten — 28 Stellen rechnen hart in
     # `ZoneInfo("Europe/Berlin")`, 85 Stellen nehmen die Systemzeit
     # (`date.today()`). Solange der Container auf der HA-Zeitzone steht, sind

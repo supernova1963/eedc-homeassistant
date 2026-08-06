@@ -1,6 +1,6 @@
 """Bewerteter Börsenpreis-Tag — die gemeinsame Quelle von HA-Export und Live-Chart (#335).
 
-**Warum diese Datei existiert.** Bis v4.1 gab es genau *einen* Konsumenten der
+**Warum diese Datei existiert.** Bis v4.0.9 gab es genau *einen* Konsumenten der
 Rang-Logik: ``ha_export_preis.berechne_preis_export`` für die HA-Sensoren. Mit dem
 Preis-Chart auf *Cockpit → Live* kommt ein zweiter dazu — und beide müssen dieselbe
 Antwort auf „ist diese Stunde günstig?" geben. Ein Chart, der andere Stunden grün

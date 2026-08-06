@@ -585,7 +585,7 @@ PREIS_SENSOREN = [
         state_class="measurement",
     ),
     # Die drei Werte, aus denen jede eigene Preis-Regel gebaut werden kann
-    # (#335, rapahl-PN 2026-08-05). Bis v4.0 lieferte der Export nur die
+    # (#335, rapahl-PN 2026-08-05). Bis v4.0.9 lieferte der Export nur die
     # fertige Zerlegung — weder der Preis der laufenden Stunde noch die
     # Bezugsgröße der Schwelle verließen eedc, und „liegt der Preis über oder
     # unter dem optimierten Ø?" war damit nicht beantwortbar.

@@ -144,7 +144,7 @@ async def aggregate_day(
         # `live`-Einträge oft leer (MQTT liefert direkt Topics). Der Lauf darf
         # trotzdem laufen, wenn MQTT-Energy-Snapshots vorliegen; der Zähler-Pfad
         # braucht kein leistung_w (Issue #135 Blocker 2). Die Bedingung steht
-        # seit v4.1 an EINER Stelle — Daten-Checker und Tages-Begründung lesen
+        # seit v4.0.10 an EINER Stelle — Daten-Checker und Tages-Begründung lesen
         # dieselbe, statt sie zu kopieren.
         from backend.services.energie_profil.aggregations_quelle import (
             ermittle_aggregations_quelle,

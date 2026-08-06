@@ -3,7 +3,7 @@
  *
  * Der Block beantwortet die Frage, die hinter dem Community-Wunsch steht: „Wann
  * ist der Strom heute und morgen billig?" Die drei Kennzahlen darüber sind
- * dieselben, die seit v4.1 auch die HA-Sensoren melden (`eedc_preis_aktuell_cent`,
+ * dieselben, die seit v4.0.10 auch die HA-Sensoren melden (`eedc_preis_aktuell_cent`,
  * `…_optimierter_durchschnitt_cent`, die Schwelle als Attribut) — wer den Block
  * gegen seine Automation hält, sieht dieselben Zahlen.
  *

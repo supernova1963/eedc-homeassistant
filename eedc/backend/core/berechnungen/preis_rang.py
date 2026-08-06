@@ -14,7 +14,7 @@ rein relativ — die „günstige Stunden"-Anzahl stand praktisch konstant auf 1
 und ein erzwungener Verbrauch / eine Netzladung in einer „günstigen", aber
 kaum billigeren Stunde ergibt keinen Sinn.
 
-**Rang und „günstig" sind getrennt (ab v4.1, #335/N-103):** Der Rang bleibt die
+**Rang und „günstig" sind getrennt (ab v4.0.10, #335/N-103):** Der Rang bleibt die
 Anzeige-Größe „eine der fünf billigsten Stunden dieses Fensters"; gezählt wird
 als günstig dagegen **jede** Stunde unter der Schwelle. Vorher zählte auch die
 Anzahl nur die Ränge und war damit bei 5 gedeckelt — als Divisor in einer
@@ -53,7 +53,7 @@ class PreisRangErgebnis:
     guenstige_stunden_tag: int = 0              # günstige Stunden im Tag-Fenster
     guenstige_stunden_nacht: int = 0            # günstige Stunden im Nacht-Fenster
     schwelle_cent: Optional[float] = None       # Günstig-Schwelle (ct/kWh); None wenn zu wenige Preise
-    # ── ab v4.1 (#335, rapahl-PN 2026-08-05) ───────────────────────────────
+    # ── ab v4.0.10 (#335, rapahl-PN 2026-08-05) ───────────────────────────────
     unter_schwelle_profil: dict[int, bool] = field(default_factory=dict)  # {stunde: günstig?} — UNGEKAPPT
     preis_aktuell_cent: Optional[float] = None          # Preis der aktuellen Stunde
     optimierter_durchschnitt_cent: Optional[float] = None  # Ø ohne die 3 Peaks (Bezugsgröße der Schwelle)
@@ -124,7 +124,7 @@ def _bewerte_fenster(
       Fensters": höchstens ``GUENSTIG_TOP_N`` bekommen 1–N, und nur solange
       ihr Preis die Schwelle unterschreitet.
     * **Günstig** — jede Stunde unter der Schwelle, **ohne** Top-5-Deckel.
-      Bis v4.0 zählte auch diese Größe nur die Ränge: lagen sieben
+      Bis v4.0.9 zählte auch diese Größe nur die Ränge: lagen sieben
       Nachtstunden unter der Schwelle, meldete der Sensor fünf. Als Anzeige
       stimmig, als **Divisor** in einer Automation zu klein — eine daraus
       gerechnete Ladeleistung fiel zu hoch aus.

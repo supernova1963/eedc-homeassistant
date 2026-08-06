@@ -659,7 +659,7 @@ class DatenquelleChecks:
         # ist schlimmer als keiner (der Anwender sucht den Fehler bei sich),
         # deshalb wird er hier gar nicht angeboten und die Meldung sagt, was
         # fehlt. Dieselbe Bedingung wie im Aggregator, nicht eine zweite —
-        # seit v4.1 auch buchstäblich: `ermittle_aggregations_quelle` ist der
+        # seit v4.0.10 auch buchstäblich: `ermittle_aggregations_quelle` ist der
         # geteilte Ort, vorher stand hier eine wortgleiche Kopie.
         from backend.services.energie_profil.aggregations_quelle import (
             ermittle_aggregations_quelle,

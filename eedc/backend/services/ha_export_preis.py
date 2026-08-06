@@ -55,7 +55,7 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             return None
         tag, ergebnis = bewertet
 
-        # Das Profil trägt seit v4.1 (#335/N-105) das Rohmaterial mit: den
+        # Das Profil trägt seit v4.0.10 (#335/N-105) das Rohmaterial mit: den
         # Stundenpreis und die ungekappte Günstig-Markierung. Vorher stand je
         # Stunde nur `1–5` oder `99` — damit ließ sich in HA weder eine eigene
         # Schwelle noch ein eigenes Zeitfenster auswerten, obwohl die
