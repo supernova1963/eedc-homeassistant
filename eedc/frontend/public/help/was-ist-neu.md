@@ -55,6 +55,16 @@ Grund war, dass die Leiste ihre Liste aus einer **anderen Quelle** las als die S
 
 *Gemeldet von kaba-kakao im Forum.*
 
+### „Keine Daten für diesen Tag" — jetzt steht dabei, warum
+
+In *Cockpit → Tag* stand für einen Tag ohne Werte ein einziger Satz: „Für diesen Tag liegen keine Daten vor. Wähle einen Tag mit Messwerten." Das half nicht weiter — und klang so, als hättest du dich beim Tag vertan. Meistens hattest du das nicht: Die Datumsauswahl gibt schon ab dem ersten Tag deines ältesten Monats frei, deine Tageswerte fangen aber oft später an. An einer echten Anlage sind das 30 Tage, die sich anwählen lassen und immer leer bleiben.
+
+**Jetzt sagt die Sicht, was los ist** — je nach Fall: Der Tag liegt **vor der Inbetriebnahme** deiner Anlage · an ihm war **kein kWh-Zähler zugeordnet** · der Tag **wurde nie ausgewertet, Home Assistant hat die Werte aber noch** · **auch Home Assistant hat für diesen Tag nichts** · der Tag **läuft noch**.
+
+**Der Knopf „Tag nachrechnen" erscheint nur da, wo er auch etwas holt** — also im dritten Fall. Liegt der Tag vor deiner Inbetriebnahme oder hat Home Assistant selbst nichts aufgezeichnet, gibt es nichts nachzurechnen; dann steht das offen da, statt dir einen Knopf hinzustellen, der nichts bewirkt. Fehlt eine Zuordnung, führt der Weg direkt zu *Einstellungen → Datenquellen*.
+
+Kleiner Nebeneffekt: Hast du in der Tagessicht **alle** Anzeigen geparkt, stand dort ebenfalls „Keine Daten für diesen Tag" — obwohl die Daten da sind und nur im Papierkorb liegen. Auch das sagt eedc jetzt richtig.
+
 ---
 
 ## v4.0.9 — Der laufende Monat zählt nur seine Tage · jede PV-Zahl nennt ihre Herkunft (August 2026)

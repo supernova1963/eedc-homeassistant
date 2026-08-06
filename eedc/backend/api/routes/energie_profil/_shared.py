@@ -382,6 +382,27 @@ class TagWerteResponse(BaseModel):
     erzeuger_kwh: Optional[dict[str, float]] = None
 
 
+class TagStatusResponse(BaseModel):
+    """Warum ist die Tagessicht leer — und was hilft? (F-2, 2026-08-06)
+
+    Wird **nur** abgefragt, wenn Cockpit/Tag für den gewählten Tag keine Werte
+    bekommen hat. Der Grund kommt aus dem Backend statt aus einer Client-eigenen
+    Ableitung; die Lagen und ihre Texte stehen in
+    `services/energie_profil/tag_status.py`.
+
+    `aktion_kind` ist gesetzt, **wo die Handlung wirkt** — bei einem Tag vor der
+    Inbetriebnahme, ohne Zuordnung oder ohne HA-Werte bleibt es leer, und der
+    Text sagt die Absage offen.
+    """
+    datum: date
+    lage: str
+    meldung: str
+    details: Optional[str] = None
+    link: Optional[str] = None
+    aktion_kind: Optional[str] = None
+    aktion_label: Optional[str] = None
+
+
 class TagDetailResponse(BaseModel):
     """Tages-Detail-Werte für Cockpit/Tag, die NICHT in der Tages-Bilanz/
     `TagWerteResponse` stehen, aber aus Snapshots/TEP tagesgenau erhebbar sind

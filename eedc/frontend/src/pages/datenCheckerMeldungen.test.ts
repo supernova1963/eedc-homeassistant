@@ -11,6 +11,9 @@ import { baueBereichsMeldung, baueTagesMeldung } from './datenCheckerMeldungen'
 
 const VON = '2026-07-19'
 const BIS = '2026-07-29'
+// Anzeige-Schreibweise (de-DE) — die Meldungen formatieren seit F-2 über `formatDatum`.
+const VON_DE = '19.07.2026'
+const BIS_DE = '29.07.2026'
 
 describe('baueBereichsMeldung', () => {
   it('meldet KEINEN Erfolg, wenn kein einziger Tag geschrieben wurde', () => {
@@ -41,7 +44,7 @@ describe('baueBereichsMeldung', () => {
       { erfolgreich: 11, keine_daten: 0, fehlgeschlagen: 0 }, VON, BIS,
     )
     expect(m.art).toBe('ok')
-    expect(m.text).toBe(`Zeitraum ${VON} bis ${BIS}: 11 Tag(e) neu aus HA-Statistics aggregiert.`)
+    expect(m.text).toBe(`Zeitraum ${VON_DE} bis ${BIS_DE}: 11 Tag(e) neu aus HA-Statistics aggregiert.`)
   })
 
   it('führt fehlgeschlagene Tage getrennt auf', () => {
@@ -69,6 +72,7 @@ describe('baueBereichsMeldung', () => {
  */
 describe('baueTagesMeldung', () => {
   const DATUM = '2026-07-28'
+  const DATUM_DE = '28.07.2026'
 
   it('meldet Erfolg nur, wenn alle Komponenten einen Wert tragen', () => {
     const m = baueTagesMeldung(
@@ -121,7 +125,7 @@ describe('baueTagesMeldung', () => {
       { status: 'ok', pv_kwh_alt: 30, pv_kwh_neu: 30 }, DATUM,
     )
     expect(m.art).toBe('ok')
-    expect(m.text).toBe(`Tag ${DATUM}: PV-Wert blieb 30,0 kWh (keine Änderung).`)
+    expect(m.text).toBe(`Tag ${DATUM_DE}: PV-Wert blieb 30,0 kWh (keine Änderung).`)
   })
 
   it('kommt ohne PV-Zahlen aus (Tag ohne bestehende Zusammenfassung)', () => {
@@ -134,7 +138,7 @@ describe('baueTagesMeldung', () => {
       DATUM,
     )
     expect(m.art).toBe('hinweis')
-    expect(m.text).toContain(`Tag ${DATUM} aus HA-Statistics neu aggregiert.`)
+    expect(m.text).toContain(`Tag ${DATUM_DE} aus HA-Statistics neu aggregiert.`)
     expect(m.text).toContain('Wärmepumpe')
   })
 })

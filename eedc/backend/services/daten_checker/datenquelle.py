@@ -655,23 +655,15 @@ class DatenquelleChecks:
         # 2026-07-30 E2E gemessen. Ein Knopf, der garantiert nichts holen kann,
         # ist schlimmer als keiner (der Anwender sucht den Fehler bei sich),
         # deshalb wird er hier gar nicht angeboten und die Meldung sagt, was
-        # fehlt. Dieselbe Bedingung wie im Aggregator, nicht eine zweite.
-        basis_live = (sensor_mapping.get("basis") or {}).get("live") or {}
-        inv_live = any(
-            isinstance(v, dict) and v.get("live")
-            for v in (sensor_mapping.get("investitionen") or {}).values()
+        # fehlt. Dieselbe Bedingung wie im Aggregator, nicht eine zweite —
+        # seit v4.1 auch buchstäblich: `ermittle_aggregations_quelle` ist der
+        # geteilte Ort, vorher stand hier eine wortgleiche Kopie.
+        from backend.services.energie_profil.aggregations_quelle import (
+            ermittle_aggregations_quelle,
         )
-        reparatur_moeglich = bool(basis_live or inv_live)
-        if not reparatur_moeglich:
-            from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
-            cutoff = datetime.combine(aeltester, datetime.min.time()) - timedelta(days=1)
-            mqtt_check = await self.db.execute(
-                select(MqttEnergySnapshot.id).where(
-                    MqttEnergySnapshot.anlage_id == anlage.id,
-                    MqttEnergySnapshot.timestamp >= cutoff,
-                ).limit(1)
-            )
-            reparatur_moeglich = mqtt_check.scalar_one_or_none() is not None
+        reparatur_moeglich = (
+            await ermittle_aggregations_quelle(self.db, anlage, aeltester)
+        ).vorhanden
 
         # Bereichs-Knopf auf das jüngste erlaubte Fenster begrenzen; ältere Tage
         # bleiben für einen zweiten Lauf stehen (Cap mehrfach anbieten statt

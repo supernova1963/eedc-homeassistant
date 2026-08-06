@@ -54,6 +54,7 @@ from ._shared import (
     StundenWertResponse,
     TagesPrognoseResponse,
     TagDetailResponse,
+    TagStatusResponse,
     TagesZusammenfassungResponse,
     TagWerteResponse,
     TagesprofilStunde,
@@ -238,6 +239,41 @@ async def get_tag_detail(
         soll_pv_kwh=soll_pv,
         einspeise_preis_cent=tarif.einspeiseverguetung_cent,
         netzbezug_preis_cent=tarif.netzbezug_preis_cent,
+    )
+
+
+@router.get("/{anlage_id}/tag-status", response_model=TagStatusResponse)
+async def get_tag_status(
+    anlage_id: int,
+    datum: date = Query(..., description="Tag (YYYY-MM-DD)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Warum liegen für diesen Tag keine Werte vor — und was hilft? (F-2)
+
+    Aufruf **nur** aus der leeren Tagessicht heraus, nicht bei jedem
+    Tageswechsel: die letzte Prüfung ist ein HA-LTS-Read für den Tag, und nur
+    er unterscheidet „Lücke, nachholbar" von „HA hat für den Tag selbst nichts".
+
+    Bewusst getrennt vom Daten-Checker: der beschreibt die **Anlage** (letzte
+    Tageszeile, 90-Tage-Lücken, ~2,5 s je Lauf) und beantwortet die Frage nach
+    **diesem** Tag nicht.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise not_found("Anlage", anlage_id)
+
+    from backend.services.energie_profil.tag_status import baue_tag_status
+
+    status = await baue_tag_status(db, anlage, datum)
+    return TagStatusResponse(
+        datum=datum,
+        lage=status.lage,
+        meldung=status.meldung,
+        details=status.details,
+        link=status.link,
+        aktion_kind=status.aktion_kind,
+        aktion_label=status.aktion_label,
     )
 
 

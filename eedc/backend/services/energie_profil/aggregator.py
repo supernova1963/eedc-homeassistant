@@ -140,32 +140,21 @@ async def aggregate_day(
 
         service = get_live_power_service()
 
-        # Sensor-Mapping prüfen
-        basis_live = sensor_mapping.get("basis", {}).get("live", {})
-        has_inv_live = any(
-            isinstance(v, dict) and v.get("live")
-            for v in sensor_mapping.get("investitionen", {}).values()
+        # Sensor-Mapping prüfen — im Standalone-/Docker-Modus sind die
+        # `live`-Einträge oft leer (MQTT liefert direkt Topics). Der Lauf darf
+        # trotzdem laufen, wenn MQTT-Energy-Snapshots vorliegen; der Zähler-Pfad
+        # braucht kein leistung_w (Issue #135 Blocker 2). Die Bedingung steht
+        # seit v4.1 an EINER Stelle — Daten-Checker und Tages-Begründung lesen
+        # dieselbe, statt sie zu kopieren.
+        from backend.services.energie_profil.aggregations_quelle import (
+            ermittle_aggregations_quelle,
         )
 
-        # Im Standalone-/Docker-Modus sind sensor_mapping.live-Einträge oft leer
-        # (MQTT liefert direkt Topics). Wir erlauben aggregate_day trotzdem zu
-        # laufen, wenn MQTT-Energy-Snapshots vorliegen — der Zähler-Pfad braucht
-        # kein leistung_w. Issue #135 Blocker 2.
-        has_mqtt_energy = False
-        if not basis_live and not has_inv_live:
-            from backend.models.mqtt_energy_snapshot import MqttEnergySnapshot
-            cutoff = datetime.combine(datum, datetime.min.time()) - timedelta(days=1)
-            mqtt_check = await db.execute(
-                select(MqttEnergySnapshot.id).where(
-                    MqttEnergySnapshot.anlage_id == anlage.id,
-                    MqttEnergySnapshot.timestamp >= cutoff,
-                ).limit(1)
-            )
-            has_mqtt_energy = mqtt_check.scalar_one_or_none() is not None
-
-            if not has_mqtt_energy:
-                logger.debug(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert")
-                return None
+        quelle = await ermittle_aggregations_quelle(db, anlage, datum)
+        has_mqtt_energy = quelle.mqtt_energie
+        if not quelle.vorhanden:
+            logger.debug(f"Anlage {anlage.id}: Keine Live-Sensoren konfiguriert")
+            return None
 
         # ── Tagesverlauf-Daten holen ──────────────────────────────────────
         try:

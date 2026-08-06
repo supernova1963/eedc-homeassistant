@@ -6,7 +6,7 @@
  * `baueTagKpis`) und die Seite kein react-refresh-Treffer wird.
  */
 import type { ReaggregateBereichResponse, ReaggregateTagResponse } from '../api/energie_profil'
-import { fmtZahl } from '../lib'
+import { fmtZahl, formatDatum } from '../lib'
 
 export type MeldungsArt = 'ok' | 'hinweis' | 'fehler'
 
@@ -27,9 +27,12 @@ export interface ReparaturMeldung {
  */
 export function baueBereichsMeldung(
   r: Partial<ReaggregateBereichResponse>,
-  von: string,
-  bis: string,
+  vonIso: string,
+  bisIso: string,
 ): ReparaturMeldung {
+  // Anzeige-Datum de-DE — dieselbe Schreibweise wie die Tages-Meldung daneben.
+  const von = formatDatum(vonIso)
+  const bis = formatDatum(bisIso)
   const ok = r.erfolgreich ?? 0
   const leer = r.keine_daten ?? 0
   const kaputt = r.fehlgeschlagen ?? 0
@@ -80,17 +83,20 @@ const URSACHE =
  */
 export function baueTagesMeldung(
   r: Partial<ReaggregateTagResponse>,
-  datum: string,
+  datumIso: string,
 ): ReparaturMeldung {
+  // Anzeige-Datum de-DE (`check:de-de`): die Meldung wird seit F-2 auch in
+  // Cockpit/Tag gezeigt und ist damit im Scharf-Scope des Wächters.
+  const datumDe = formatDatum(datumIso)
   const alt = r.pv_kwh_alt ?? null
   const neu = r.pv_kwh_neu ?? null
   let pvTeil: string
   if (alt !== null && neu !== null && Math.abs(alt - neu) < 0.1) {
-    pvTeil = `Tag ${datum}: PV-Wert blieb ${fmtZahl(alt, 1)} kWh (keine Änderung).`
+    pvTeil = `Tag ${datumDe}: PV-Wert blieb ${fmtZahl(alt, 1)} kWh (keine Änderung).`
   } else if (alt !== null && neu !== null) {
-    pvTeil = `Tag ${datum} repariert: PV ${fmtZahl(alt, 1)} → ${fmtZahl(neu, 1)} kWh.`
+    pvTeil = `Tag ${datumDe} repariert: PV ${fmtZahl(alt, 1)} → ${fmtZahl(neu, 1)} kWh.`
   } else {
-    pvTeil = `Tag ${datum} aus HA-Statistics neu aggregiert.`
+    pvTeil = `Tag ${datumDe} aus HA-Statistics neu aggregiert.`
   }
 
   const erwartet = r.komponenten_erwartet ?? 0

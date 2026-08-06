@@ -33,6 +33,7 @@ import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
 import { tagBilanzParkIds } from './bilanzParkIds'
 import { baueTagKomponentenUndFinanz } from './TagKomponenten'
 import { TagesRail, type TagRailEintrag } from './TagesRail'
+import TagLeerGrund from './TagLeerGrund'
 import { TagStepper } from './TagStepper'
 import { TagHeader } from './TagRahmen'
 import { datumAusQuery } from './verlaufVergleich'
@@ -239,13 +240,15 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
       // D11-2: Tag ohne Daten (z. B. Lücken-Tag) — denselben `kpi`-Block mit Hinweis
       // rendern statt die Block-Liste leeren. So bleibt im Vollbild der Block (gleiche
       // ID) stehen, statt dass BlockShell unmountet und das Vollbild abrupt wegbricht.
+      // F-2: der Hinweis nennt seit v4.1 den GRUND (aus dem Backend) und stellt den
+      // Reparatur-Knopf daneben — aber nur, wo er wirkt. Das ist die Stelle, die ein
+      // Anwender bei einem leeren Tag sieht; die Card weiter unten greift erst, wenn
+      // die Block-Liste ganz leer ist (alles geparkt).
       list.push({
         id: 'kpi', title: 'Kennzahlen', ...BLOCK_IDENTITAET.kennzahlen,
         summary: 'keine Daten für diesen Tag', defaultOpen: true,
         render: () => (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Für diesen Tag liegen keine Daten vor. Wähle einen Tag mit Messwerten.
-          </p>
+          <TagLeerGrund anlageId={anlageId!} datum={datum} onRepariert={laden} />
         ),
       })
     }
@@ -268,7 +271,7 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
     // Zusatzwerte (WP-Strom-Split, Speicher-Netzladung/Ladepreis).
     if (tag) list.push(...baueTagKomponentenUndFinanz(tag, stunden, serien, park, tagDetail))
     return list
-  }, [tag, vortag, wtStats, stunden, serien, datum, tagDetail, park])
+  }, [tag, vortag, wtStats, stunden, serien, datum, tagDetail, park, anlageId, laden])
 
   if (!anlageId) {
     return (
@@ -306,7 +309,11 @@ function CockpitTagInner({ anlageId }: { anlageId: number | undefined }) {
             // Lücke→Lücke bleibt spinner-frei (Wrapper-Objekt ≠ null). Kein `key={datum}`.
             <BlockStackSkeleton label="Lade Tag…" />
           ) : bloecke.length === 0 ? (
-            <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine Daten für diesen Tag vorhanden.</p></Card>
+            // Hierher kommt man NUR mit Werten in der Hand: der Zweig „Tag ohne
+            // Daten" pusht immer den Kennzahlen-Block (mit Grund, s. `bloecke`).
+            // Leer ist die Liste erst, wenn alles geparkt ist — „keine Daten"
+            // wäre dort das Gegenteil der Lage (F-2, gemessen 2026-08-06).
+            <Card><p className="text-sm text-gray-500 dark:text-gray-400">Keine sichtbaren Anzeigen — alle Elemente dieses Tages sind geparkt. Über „Geparkt" unten kommen sie zurück.</p></Card>
           ) : (
             <BlockShell
               persistKey={SICHT_KEY}

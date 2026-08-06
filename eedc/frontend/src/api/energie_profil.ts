@@ -132,6 +132,32 @@ export interface TagWerte {
 }
 
 /**
+ * Warum liegen für einen Tag keine Werte vor — und was hilft? (F-2)
+ *
+ * Der Grund kommt aus dem Backend (`services/energie_profil/tag_status.py`),
+ * NICHT aus einer Client-eigenen Ableitung: der Client kennt weder das
+ * Inbetriebnahme-Datum, noch die Zuordnung des Tages, noch ob Home Assistant
+ * für ihn Werte hat. Eine zweite Wahrheit daneben wäre genau die Klasse, die
+ * ADR-002 verhindert.
+ *
+ * `aktion_kind` ist gesetzt, **wo die Handlung wirkt**. Vor der Inbetriebnahme,
+ * ohne Zuordnung oder ohne HA-Werte bleibt es leer — ein Knopf verspräche dort
+ * eine Wirkung, die es nicht gibt.
+ */
+export interface TagStatus {
+  datum: string
+  /** `daten_vorhanden` · `zukunft` · `laeuft_noch` · `vor_inbetriebnahme` ·
+   *  `keine_zuordnung` · `keine_ha_statistik` · `ha_ohne_werte` ·
+   *  `luecke_ohne_reparaturweg` · `luecke_reparierbar` */
+  lage: string
+  meldung: string
+  details?: string | null
+  link?: string | null
+  aktion_kind?: string | null
+  aktion_label?: string | null
+}
+
+/**
  * Tages-Detailwerte (Cockpit/Tag), die NICHT in der Tages-Bilanz stehen, aber
  * snapshot-/TEP-genau pro Tag erhebbar sind (SPEC-COCKPIT-TAG-JAHR Abschnitt F,
  * D1 „maximal erheben"). Ein Aufruf je gewähltem Tag (`getTagDetail`). Felder
@@ -408,6 +434,11 @@ export const energieProfilApi = {
 
   getTagDetail: (anlageId: number, datum: string): Promise<TagDetail> =>
     api.get(`/energie-profil/${anlageId}/tag-detail?datum=${datum}`),
+
+  /** Warum ist die Tagessicht leer? Nur aus dem leeren Zustand heraus abrufen —
+   *  die Antwort kostet im letzten Zweig einen HA-LTS-Read für den Tag. */
+  getTagStatus: (anlageId: number, datum: string): Promise<TagStatus> =>
+    api.get(`/energie-profil/${anlageId}/tag-status?datum=${datum}`),
 
   getKomponentenSerien: (anlageId: number, von: string, bis: string): Promise<SerieInfo[]> =>
     api.get(`/energie-profil/${anlageId}/komponenten-serien?von=${von}&bis=${bis}`),
