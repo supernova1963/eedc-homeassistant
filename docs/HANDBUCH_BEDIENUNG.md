@@ -180,6 +180,8 @@ Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte f
 
 Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Monat mit Tages-Granularität. Über den Monats-Zeitstrahl navigierst du zu beliebigen Vormonaten.
 
+> **Womit die Sicht aufgeht:** mit dem **laufenden** Monat, solange kein Monatsabschluss offen ist. Fehlt noch ein Abschluss, öffnet sie stattdessen den jüngsten Monat, für den Werte gepflegt sind — dort beginnt der Weg zum offenen Abschluss, und der Knopf „Abschluss starten" steht daneben.
+
 - **Kennzahl-Strip** oben — die wichtigsten Monatswerte mit Δ zum Vormonat
 - **Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug
 - **Finanzen** — Komponenten-Finanz-Tabelle (Saldo je Komponente) mit Sprung in die volle Finanzrechnung (siehe unten)

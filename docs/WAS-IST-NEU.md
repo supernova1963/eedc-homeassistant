@@ -39,6 +39,19 @@ Den Ladezustand gibt es bewusst **nur in der Tagessicht**: Er ist ein Bestand, k
 
 > **Der Block ist eingeklappt** und steht unter den Kennzahlen. Seine Kopfzeile nennt schon ohne Aufklappen geladene kWh, Vollzyklen und Wirkungsgrad. *(Anregung aus dem Forum-Thread zu v4.0.0)*
 
+### Cockpit → Monat geht auf dem laufenden Monat auf
+
+Bisher stand beim Aufschlagen der Monats-Sicht immer der neueste Monat da, für den es einen gepflegten Abschluss gibt — bei laufender Pflege also der **Vormonat**. Wer wissen wollte, wie der aktuelle Monat steht, musste ihn jedes Mal selbst in der Monatsleiste anklicken. *Cockpit → Tag* und *Cockpit → Jahr* öffnen längst auf dem Aktuellen; die Monats-Sicht war die Ausnahme.
+
+Jetzt öffnet auch sie den **laufenden** Monat — mit einer Einschränkung, und die ist Absicht:
+
+- **Ist noch ein Monatsabschluss offen**, bleibt alles beim Alten: die Sicht geht auf dem jüngsten Monat auf, für den Werte gepflegt sind. Dort beginnt der Weg zum offenen Abschluss, und der Knopf „Abschluss starten" steht direkt daneben. Es wäre wenig hilfreich, in den laufenden Monat zu springen und den offenen Abschluss aus dem Blick zu verlieren.
+- **In einen Monat nach dem laufenden** springt die Sicht nie.
+
+Bei der Gelegenheit wurde die Frage „ist überhaupt noch etwas offen?" richtiggestellt: Sie hieß in dieser Sicht bisher „ist der jüngste gepflegte Monat älter als der Vormonat?" — ein **fehlender Monat mitten in der Historie** fiel damit durch, obwohl der Hinweis unten in der Statusleiste ihn längst nennt. Beide antworten jetzt gleich. Merken wirst du das nur, wenn du eine solche Lücke hast: dann steht der Knopf „Abschluss starten" da, wo er vorher fehlte.
+
+> Über die Monatsleiste erreichst du weiterhin jeden Monat; ein Direktsprung aus *Cockpit → Jahr* landet unverändert auf dem angeklickten Monat. *(coolxmad, [#353](https://github.com/supernova1963/eedc-homeassistant/issues/353))*
+
 ### Die Börsenpreise der Nachtstunden gehörten dem falschen Tag — behoben
 
 Wenn du dir auf der Live-Seite den Tagesverlauf mit der Strompreis-Linie angesehen hast, ist dir vielleicht aufgefallen, dass die Preislinie erst **um 2 Uhr** beginnt. Und wer nachts genauer hingeschaut hat, sah dort ab dem frühen Nachmittag Zahlen stehen, die gar nicht zu diesem Tag gehörten — es waren die des **nächsten** Tages.
@@ -2398,6 +2411,13 @@ die Prognose-Sensoren in Home Assistant folgten dem eedc-Wert. Das ist jetzt ein
 - **Günstig-Schwelle:** Der Wert **0 %** war schon immer erlaubt, schaltet die Schwelle aber ab —
   dann zählen wieder allein die 5 günstigsten Stunden je Fenster. Das steht jetzt am Feld. Der
   Standard war und ist 10 %.
+
+  > ⚠ **Nachträglich richtiggestellt (August 2026):** Der Satz oben stimmt nicht. **0 % schaltet
+  > die Schwelle nicht ab** — sie liegt dann genau **auf** dem Durchschnitt, und günstig ist alles
+  > darunter. Der damalige Deckel auf 5 Stunden je Fenster hat den Unterschied verdeckt; seit er
+  > weg ist, ist er sichtbar. Am Rechenweg hat sich dadurch nichts geändert, nur an dem, was hier
+  > und in der Oberfläche darüber stand.
+
 - **Neu installiert?** Die Tagesprognose zeigt dir jetzt vom ersten Tag an die **PV-Vorschau**,
   statt die ganze Ansicht mit „zu wenig historische Daten" zu verweigern. Verbrauch, Netzbezug und
   die Speicher-Vorschau bleiben dabei leer („—"), bis drei Tage aufgezeichnet sind — sie kommen
