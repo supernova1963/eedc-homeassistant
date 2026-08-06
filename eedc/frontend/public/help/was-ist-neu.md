@@ -23,6 +23,16 @@ Der bisherige Rat war, das HA-Konfigurationsverzeichnis in den eedc-Container ei
 
 **Ein Punkt bleibt:** Weiter zurück als Home Assistant selbst kann auch dieser Weg nicht. Die Langzeitstatistik beginnt, wenn du den Sensor einrichtest. Für die Jahre davor ist der Datei-Import (CSV/Excel) der richtige Weg.
 
+### Deye/Solarman-Import: jetzt geht er wirklich
+
+Mit v4.0.9 hatten wir zwei Ursachen behoben, an denen der Deye/Solarman-Cloud-Import scheiterte — die fehlende Auswahl der Server-Region und einen falsch aufgebauten Autorisierungs-Kopf. Beides war richtig, und der Import ging trotzdem nicht.
+
+Der Melder hat daraufhin den Anmelde-Aufruf selbst gegen Solarman gefahren und uns die Antwort danebengelegt. Damit war die Sache klar: **Die Anmeldung klappt, eedc hat den Zugriffsschlüssel in der Antwort nur an der falschen Stelle gesucht** — eine Ebene zu tief. Herausgekommen ist die Meldung „Antwort enthielt keinen access_token", obwohl er sehr wohl da war.
+
+Und weil dieser Schlüssel für jeden weiteren Aufruf gebraucht wird, konnten auch die beiden Korrekturen aus v4.0.9 nie greifen. Sie waren nicht falsch — sie kamen nie an die Reihe.
+
+**Wenn du Deye/Solarman nutzt:** Trag deine Zugangsdaten wie gewohnt ein und starte den Verbindungstest neu. Änderungen an deiner Konfiguration sind nicht nötig.
+
 ### Live-Verlauf, Solcast und der kW/kWh-Test waren im Container stumm
 
 Fünf Funktionen waren fest an den Add-on-Betrieb gebunden und meldeten sich bei einer Token-Verbindung einfach als „nicht verfügbar", obwohl die Verbindung stand: der **Live-Tagesverlauf**, die **Solcast-Anbindung**, die Prognose-Erkennung, die **Ladestands-Historie deines Speichers** und die Prüfung des Daten-Checkers auf **vertauschte Leistungs- und Energie-Sensoren**.

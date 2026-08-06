@@ -7,7 +7,9 @@ Wechselrichtern abzurufen. Deye-Geräte kommunizieren über die Solarman-Cloud.
 Auth: OAuth2 mit appId/appSecret + SHA256-verschlüsseltem Passwort.
 Endpoint: POST /station/v1.0/history (timeType=3 für Monatsdaten, max 12 Monate)
 
-Zwei Dinge, an denen der Provider bis #349 (OliS2811, 20.07.2026) scheiterte:
+Drei Dinge, an denen der Provider scheiterte — alle aus #349 (OliS2811). Die
+ersten beiden wurden in v4.0.9 behoben, der dritte hat sie wirkungslos gemacht
+und kam erst durch seine Folgemeldung vom 05.08.2026 ans Licht:
 
 1. **Region.** Solarman betreibt zwei getrennte Wolken — die chinesische
    (`api.solarmanpv.com`, Portal `home.solarmanpv.com`) und die
@@ -23,6 +25,17 @@ Zwei Dinge, an denen der Provider bis #349 (OliS2811, 20.07.2026) scheiterte:
    Damit konnte dieser Provider seit seiner Einführung auf KEINER Region
    einen Import abschließen — deshalb ist der Default-Wechsel auf „Global"
    auch kein Bruch für Bestands-Zugangsdaten.
+
+3. **Antwortform.** Der Token wurde aus `data["body"]["access_token"]` gelesen;
+   Solarman liefert ihn **flach**, direkt neben `success`. Ergebnis: `None`,
+   und die Oberfläche meldete „Antwort enthielt keinen access_token" —
+   obwohl die Authentifizierung gelungen war. **Damit trugen die beiden Fixes
+   oben ins Leere: es gab nie einen Token, den man hätte mit `bearer` senden
+   können.** Aufgedeckt erst durch OliS2811s zweite Meldung (#349, 05.08.2026),
+   in der er einen funktionierenden Referenz-Request gegenüberstellte.
+   ⚠ Der Testlauf war grün, weil die Fixture die `body`-Hülle **selbst
+   erfunden** hatte — eine Fixture für eine fremde API ist eine Behauptung
+   über sie und braucht eine Quelle.
 
 Das Passwort geht als kleingeschriebener SHA256-Hex-Digest raus — das war
 bereits richtig und ist in #349 ausdrücklich mit geprüft worden.
@@ -74,6 +87,41 @@ def _resolve_host(credentials: dict) -> str:
 def _auth_header(token: str) -> dict:
     """Authorization-Header der Open API — MIT `bearer`-Präfix (s. Modul-Docstring)."""
     return {"Authorization": f"bearer {token}"}
+
+
+def _TOKEN_PARAMS(app_id: str) -> dict:
+    """Query-Parameter der Token-Anfrage.
+
+    `language=en` stand nicht dabei, OliS2811s nachweislich funktionierender
+    Referenz-Request führt es (`?appId=…&language=en`). Ob es die Antwortform
+    beeinflusst oder nur die Sprache von `msg` steuert, ist **nicht gemessen** —
+    mitgesendet wird es, damit unsere Anfrage deckungsgleich mit der ist, von
+    der belegt ist, dass sie durchgeht.
+    """
+    return {"appId": app_id, "language": "en"}
+
+
+def _nutzlast(data: dict) -> dict:
+    """Die fachliche Nutzlast einer Solarman-Antwort.
+
+    Solarman liefert sie **flach**: `access_token`, `stationDataItems` und die
+    Stammdaten stehen direkt neben `success`/`requestId`. Bis v4.0.9 las dieser
+    Provider sie aus einer `body`-Hülle, die es nicht gibt — der Token war damit
+    immer `None`, und der Import konnte auf KEINER Region abschließen (s.
+    Modul-Docstring, Punkt 3).
+
+    Gelesen werden trotzdem beide Formen, und zwar begründet: belegt ist die
+    flache Form für `/account/v1.0/token` (OliS2811s Referenz-Request, dazu
+    `mpepping/solarman-mqtt` und `hareeshmu/solarman`, die beide
+    `data["access_token"]` flach lesen). Für `/station/v1.0/base` und
+    `/station/v1.0/history` gibt es nur Indizien von Geschwister-Endpunkten.
+    Eine ungemessene Annahme gegen die andere zu tauschen wäre kein Fix —
+    deshalb gewinnt die flache Form, und `body` füllt nur ihre Lücken.
+    """
+    body = data.get("body")
+    if not isinstance(body, dict):
+        return data
+    return {**body, **{k: v for k, v in data.items() if k != "body"}}
 
 
 def _api_fehlertext(data: dict) -> str:
@@ -228,7 +276,7 @@ class DeyeSolarmanProvider(CloudImportProvider):
                         "Station ID prüfen.",
                     )
 
-                station = data.get("body", {})
+                station = _nutzlast(data)
                 name = station.get("name", "Deye Anlage")
                 capacity = station.get("installedCapacity")
 
@@ -348,7 +396,7 @@ class DeyeSolarmanProvider(CloudImportProvider):
                         raise Exception(f"Solarman-Abruf fehlgeschlagen — {grund}")
                     break
 
-                for item in data.get("body", {}).get("stationDataItems", []):
+                for item in _nutzlast(data).get("stationDataItems", []):
                     jahr = item.get("year")
                     monat = item.get("month")
                     if not jahr or not monat:
@@ -413,7 +461,7 @@ class DeyeSolarmanProvider(CloudImportProvider):
 
             resp = await client.post(
                 f"{host}/account/v1.0/token",
-                params={"appId": app_id},
+                params=_TOKEN_PARAMS(app_id),
                 json={
                     "appSecret": app_secret,
                     "email": email,
@@ -437,7 +485,7 @@ class DeyeSolarmanProvider(CloudImportProvider):
                 # Fallback: username statt email
                 resp = await client.post(
                     f"{host}/account/v1.0/token",
-                    params={"appId": app_id},
+                    params=_TOKEN_PARAMS(app_id),
                     json={
                         "appSecret": app_secret,
                         "username": email,
@@ -456,7 +504,7 @@ class DeyeSolarmanProvider(CloudImportProvider):
                         f"{_api_fehlertext(data)}"
                     )
 
-            token = data.get("body", {}).get("access_token")
+            token = _nutzlast(data).get("access_token")
             if not token:
                 return None, "Antwort enthielt keinen access_token"
             return token, None
