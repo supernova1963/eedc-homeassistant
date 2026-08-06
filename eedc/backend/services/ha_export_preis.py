@@ -22,15 +22,12 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
 logger = logging.getLogger(__name__)
-
-_BERLIN_TZ = ZoneInfo("Europe/Berlin")
 
 
 async def berechne_preis_export(db, anlage) -> Optional[dict]:
@@ -48,14 +45,22 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
         return None
 
     try:
-        from backend.services.strompreis_markt_service import fetch_marktpreise
+        from backend.services.strompreis_markt_service import fetch_marktpreise, _markt_tz
         from backend.services.solar_forecast_service import sonnenauf_unter_stunde
         from backend.core.berechnungen.preis_rang import berechne_preis_rang
 
-        heute = date.today()
         markt = (anlage.standort_land or "DE").upper()
         if markt not in ("DE", "AT"):
             markt = "DE"
+
+        # Datum UND Stunde aus derselben Zone — der Zone, in der auch die
+        # Börsenpreise ihren Tag zählen (F-6). Vorher kam der Tag aus der
+        # Prozesszone (`date.today()`) und die Stunde hart aus Europe/Berlin:
+        # auf einem UTC-Container fragte eedc zwischen 00:00 und 02:00
+        # Ortszeit die Preise von **gestern** ab und suchte darin die Stunde 0
+        # von heute.
+        now = datetime.now(_markt_tz(markt))
+        heute = now.date()
 
         # Day-Ahead-Kurve (ganztägig bekannt) bevorzugt; sonst das, was bereits
         # im Tagesprofil persistiert ist.
@@ -78,7 +83,6 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             prozent = 10.0
         schwelle_faktor = 1.0 - prozent / 100.0
 
-        now = datetime.now(_BERLIN_TZ)
         ergebnis = berechne_preis_rang(
             preise, tag_stunden, nacht_stunden, now.hour,
             schwelle_faktor=schwelle_faktor,

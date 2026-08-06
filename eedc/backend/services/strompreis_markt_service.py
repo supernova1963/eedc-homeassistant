@@ -11,12 +11,27 @@ Datenquelle: aWATTar API (frei, kein Auth nötig)
 
 Einheit intern: ct/kWh (aWATTar liefert EUR/MWh → ÷ 10)
 Cache: 2h TTL (Day-Ahead Preise ändern sich nur 1× täglich um 13:00 CET)
+
+⚠ **Ein Tag ist ein Tag der Marktzone, nicht der UTC-Tag** (F-6, 2026-08-06):
+Bis dahin wurde das Abfragefenster in UTC gebildet, die zurückgelieferten
+Stunden aber über die **lokale** Uhr zugeordnet. Beide Enden passten nicht
+zueinander — in Mitteleuropa fehlten die Stunden 0 und 1 des angefragten Tages
+(im Winter die Stunde 0), und an ihrer Stelle standen die Preise des
+**Folgetages**. Das Ergebnis hatte 24 Einträge und sah damit vollständig aus.
+In einem Container ohne ``TZ`` (Docker-Default UTC) war das Fenster stimmig,
+die Schlüssel aber UTC-Stunden — gegen ``Europe/Berlin`` gehalten, wie es der
+HA-Export tut, lagen sie zwei Stunden daneben.
+
+Beide Enden laufen jetzt über ``_markt_tz()``: Fenster von lokaler Mitternacht
+bis lokaler Mitternacht, Stundenschlüssel in derselben Zone. Die Prozesszone
+spielt keine Rolle mehr.
 """
 
 import logging
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -28,6 +43,18 @@ AWATTAR_URLS = {
     "DE": "https://api.awattar.de/v1/marketdata",
     "AT": "https://api.awattar.at/v1/marketdata",
 }
+
+# Zeitzone der Gebotszone. DE und AT teilen sich CET/CEST — die Unterscheidung
+# ist trotzdem benannt, damit ein dritter Markt nicht stillschweigend Berlin erbt.
+MARKT_TZ = {
+    "DE": ZoneInfo("Europe/Berlin"),
+    "AT": ZoneInfo("Europe/Vienna"),
+}
+
+
+def _markt_tz(markt: str) -> ZoneInfo:
+    """Zeitzone der Gebotszone; unbekannte Märkte fallen auf Berlin zurück."""
+    return MARKT_TZ.get(markt, MARKT_TZ["DE"])
 
 # ── Cache (einfacher In-Memory-Cache, reicht für Day-Ahead) ─────────────
 
@@ -80,8 +107,13 @@ async def fetch_marktpreise(
         logger.warning("Strompreis-Markt: Unbekannter Markt '%s'", markt)
         return None
 
-    # aWATTar erwartet Unix-Millisekunden
-    start_dt = datetime(datum.year, datum.month, datum.day, tzinfo=timezone.utc)
+    # aWATTar erwartet Unix-Millisekunden. Das Fenster läuft von Mitternacht bis
+    # Mitternacht **der Marktzone** (F-6) — ein UTC-Fenster schnitt in
+    # Mitteleuropa die ersten ein bis zwei Stunden des Tages ab und hängte
+    # dafür die ersten Stunden des Folgetages an.
+    tz = _markt_tz(markt)
+    start_dt = datetime(datum.year, datum.month, datum.day, tzinfo=tz)
+    # Wanduhr-Arithmetik: +1 Tag ist am Umstellungswochenende 23 bzw. 25 Stunden.
     end_dt = start_dt + timedelta(days=1)
     params = {
         "start": str(int(start_dt.timestamp() * 1000)),
@@ -121,9 +153,21 @@ async def fetch_marktpreise(
         mp = entry.get("marketprice")  # EUR/MWh
         if ts_ms is None or mp is None:
             continue
-        # Lokale Stunde (Europe/Berlin bzw. Vienna — beide CET/CEST)
-        local_dt = datetime.fromtimestamp(ts_ms / 1000)
-        stunde = local_dt.hour
+        # Stunde in der MARKTZONE, nicht in der Prozesszone (F-6): ohne die
+        # explizite Zone trug der Schlüssel auf einem UTC-Container die
+        # UTC-Stunde, während der HA-Export ihn gegen die Berliner Stunde hielt.
+        lokal = datetime.fromtimestamp(ts_ms / 1000, tz=tz)
+        if lokal.date() != datum:
+            # Kann nur der Rand des Fensters sein — gehört nicht zu diesem Tag.
+            continue
+        stunde = lokal.hour
+        # Am Ende der Sommerzeit gibt es die Stunde 2 zweimal. Ein
+        # `dict[int, float]` kann das nicht abbilden; die **erste** (also die
+        # vor der Rückstellung) gewinnt, statt still von der zweiten
+        # überschrieben zu werden. Im Frühjahr fehlt die Stunde 2 entsprechend
+        # ganz — der Tag hat dann 23 Einträge, und das ist richtig so.
+        if stunde in preise:
+            continue
         # EUR/MWh → ct/kWh (÷ 10)
         preise[stunde] = round(mp / 10, 2)
 

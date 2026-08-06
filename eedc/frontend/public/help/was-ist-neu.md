@@ -11,6 +11,20 @@
 
 ## Unreleased
 
+### Die Börsenpreise der Nachtstunden gehörten dem falschen Tag — behoben
+
+Wenn du dir auf der Live-Seite den Tagesverlauf mit der Strompreis-Linie angesehen hast, ist dir vielleicht aufgefallen, dass die Preislinie erst **um 2 Uhr** beginnt. Und wer nachts genauer hingeschaut hat, sah dort ab dem frühen Nachmittag Zahlen stehen, die gar nicht zu diesem Tag gehörten — es waren die des **nächsten** Tages.
+
+**Woran es lag:** eedc holt die Börsenpreise stundenweise ab und hat dabei einen Tag angefragt, der von Mitternacht bis Mitternacht **UTC** läuft — also von 2 Uhr bis 2 Uhr deiner Zeit. Die Antwort hat es aber nach deiner Uhr einsortiert. Die ersten ein bis zwei Stunden des Tages fielen damit heraus, und ihre Plätze belegten die ersten Stunden von morgen. Weil am Ende trotzdem 24 Werte dastanden, sah alles vollständig aus.
+
+**Das betraf mehr als die Anzeige.** Auf derselben Preisreihe stehen die HA-Sensoren für Preis-Rang, günstige Stunden, aktuellen Preis und Abstand zum Durchschnitt — und die stündliche Mitschrift, aus der später der Tagesdurchschnitt und der effektive Ladepreis deines Speichers entstehen.
+
+**Jetzt gilt: ein Tag ist der Tag der Strommarkt-Zeitzone.** Abfrage und Zuordnung kommen aus derselben Uhr — unabhängig davon, in welcher Zeitzone dein Container läuft. Auch die beiden Umstellungstage stimmen: Ende März hat der Tag 23 Stundenpreise, Ende Oktober behält er die erste seiner beiden Zwei-Uhr-Stunden.
+
+⚠ **Was sich an deinen Sensorwerten ändert:** Rang, Anzahl günstiger Stunden, aktueller Preis und Abstand zum Durchschnitt rechnen ab jetzt mit den richtigen Nachtpreisen. Da Durchschnitt und Günstig-Schwelle über alle Stunden eines Tages gebildet werden, kann sich dadurch auch die Bewertung einzelner Tagesstunden verschieben. Wer nachts zwischen 0 und 2 Uhr auf den aktuellen Preis reagiert, bekommt jetzt den Preis der Stunde, in der er tatsächlich ist.
+
+**Schon gespeicherte Tage bleiben, wie sie sind.** eedc fasst deine Historie nicht von selbst an. Wenn du sie berichtigen möchtest, rechne die betroffenen Tage unter *Einstellungen → Daten* mit **„Mehrere Tage neu aggregieren"** neu (in Schüben zu je höchstens 31 Tagen).
+
 ### Meine Tageswerte fangen erst bei der Installation an — jetzt holt eedc die Historie selbst
 
 Wenn du eedc als eigenen Container betreibst und über einen Long-Lived-Token mit Home Assistant verbunden bist, gab es bisher eine unsichtbare Grenze: eedc kam **nicht** an die Langzeitstatistik von HA. Tageswerte baute es sich deshalb nur aus eigenen Messungen im 5-Minuten-Takt — also ab dem Tag der Installation vorwärts. *Cockpit → Tag* blieb für alles davor leer, der Voll-Backfill war gesperrt, und „Lücken aus HA-LTS nachfüllen" in der Reparatur-Werkbank ging nicht.
