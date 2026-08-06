@@ -107,6 +107,28 @@ export function baueTagAlsMonat(
   } as unknown as AktuellerMonatResponse
 }
 
+/**
+ * Ladezustand des Tages aus den Stundenwerten — Spanne und Stand am Tagesende.
+ *
+ * Der SoC ist die einzige Speicher-Größe, die **nicht** als Tagessumme existiert:
+ * Er ist ein Bestand, kein Fluss, und steht deshalb weder in `TagWerte` noch im
+ * Tagesdetail. Die Stunden tragen ihn (`soc_prozent`), sichtbar war er bisher nur
+ * als abgewählte Spalte der Stundentabelle.
+ *
+ * „Tagesende" ist der **letzte gemessene** Stundenwert, nicht zwingend 23 Uhr —
+ * am laufenden Tag ist das die zuletzt aggregierte Stunde. Das ist gewollt: eine
+ * Lücke am Tagesrand darf keinen SoC von 0 % vortäuschen.
+ *
+ * Gemeldet von dietmar1968 (Forum T89667 #97, 05.08.2026): „In dieser Aufstellung
+ * fehlt mir eigentlich der Batteriespeicher mit Lade- bzw. Entladeenergie kWh und
+ * SOC." Ladung/Entladung standen bereits im Speicher-Block, der SoC nicht.
+ */
+export function socTagWerte(stunden: StundenWert[]): { min: number; max: number; ende: number } | null {
+  const werte = stunden.map((s) => s.soc_prozent).filter((v): v is number => v != null)
+  if (werte.length === 0) return null
+  return { min: Math.min(...werte), max: Math.max(...werte), ende: werte[werte.length - 1] }
+}
+
 /** Komponenten-Detailblöcke (aktiv-gegated) + Finanz-Teaser für einen Tag — gleiche
  *  Bauer wie Cockpit/Monat. Reihenfolge: Komponenten …, dann Finanzen (ganz unten). */
 export function baueTagKomponentenUndFinanz(
@@ -114,5 +136,5 @@ export function baueTagKomponentenUndFinanz(
 ): Block[] {
   const d = baueTagAlsMonat(tag, stunden, serien, tagDetail)
   const finanz = finanzTeaserBlock(d, park)
-  return [...baueKomponentenBloecke(d, park, 'tag'), ...(finanz ? [finanz] : [])]
+  return [...baueKomponentenBloecke(d, park, 'tag', socTagWerte(stunden)), ...(finanz ? [finanz] : [])]
 }

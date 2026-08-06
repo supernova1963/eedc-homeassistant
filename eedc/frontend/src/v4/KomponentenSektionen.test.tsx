@@ -6,6 +6,14 @@ import { KOMPONENTEN_IDENTITAET } from '../lib'
 import type { Block } from '../components/blocks'
 import type { ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
+import type { StundenWert } from '../api/energie_profil'
+import { socTagWerte } from './TagKomponenten'
+
+/** Park-Stub: nichts geparkt — für die Bauer-Aufrufe mit expliziter Periode. */
+const NOOP_PARK_STUB: ParkApi = {
+  aktiv: false, istGeparkt: () => false, park: () => {}, entparke: () => {}, zuruecksetzen: () => {}, geparkt: [],
+  registriere: () => () => {}, parkbareAnzahl: 0,
+}
 
 /** Park-Stub: alles geparkt (Element-Park-Doktrin — leerer Block verschwindet). */
 const ALLES_GEPARKT: ParkApi = {
@@ -183,5 +191,66 @@ describe('Geräte-Hinweis (Aggregation kenntlich machen)', () => {
     }))
     renderBlock(bloecke, 'k-speicher')
     expect(screen.queryByText(/Aggregiert aus/)).not.toBeInTheDocument()
+  })
+})
+
+// ── Ladezustand am Tag (dietmar1968, Forum T89667 #97) ──────────────────────
+// Sein Satz nannte zwei Dinge: „Lade- bzw. Entladeenergie kWh und SOC". Das
+// Erste stand längst im Speicher-Block, das Zweite nirgends in der Tagessicht
+// (nur als abgewählte Spalte der Stundentabelle). Der SoC ist ein BESTAND: er
+// summiert sich nicht und lässt sich über einen Monat nicht mitteln — deshalb
+// gibt es ihn ausschließlich auf Tagesebene.
+describe('Speicher: Ladezustand (nur Tagesebene)', () => {
+  const soc = { min: 12, max: 98, ende: 64 }
+
+  it('Tag mit SoC → Kachel „Ladezustand" mit Stand am Tagesende und Spanne', () => {
+    const bloecke = baueKomponentenBloecke(
+      d({ speicher_ladung_kwh: 6.1, speicher_entladung_kwh: 5.4 }), NOOP_PARK_STUB, 'tag', soc,
+    )
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.getByText('Ladezustand')).toBeInTheDocument()
+    expect(screen.getByText('64')).toBeInTheDocument()
+    expect(screen.getByText(/Spanne 12–98 % · Stand am Tagesende/)).toBeInTheDocument()
+  })
+
+  it('Tag ohne Lade-/Entladebewegung, aber mit SoC → der Block erscheint trotzdem', () => {
+    const bloecke = baueKomponentenBloecke(d(), NOOP_PARK_STUB, 'tag', soc)
+    expect(bloecke.map((b) => b.id)).toContain('k-speicher')
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.getByText('Ladezustand')).toBeInTheDocument()
+  })
+
+  it('Monat: derselbe Wert wird NICHT gezeigt — ein SoC-Mittel über 30 Tage sagt nichts', () => {
+    const bloecke = baueKomponentenBloecke(
+      d({ speicher_ladung_kwh: 207, speicher_entladung_kwh: 153 }), NOOP_PARK_STUB, 'monat', soc,
+    )
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.queryByText('Ladezustand')).not.toBeInTheDocument()
+  })
+
+  it('Tag ohne SoC-Messung → keine Kachel (kein „—"-Platzhalter)', () => {
+    const bloecke = baueKomponentenBloecke(
+      d({ speicher_ladung_kwh: 6.1, speicher_entladung_kwh: 5.4 }), NOOP_PARK_STUB, 'tag', null,
+    )
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.queryByText('Ladezustand')).not.toBeInTheDocument()
+  })
+})
+
+describe('socTagWerte — Spanne und Tagesende aus den Stundenwerten', () => {
+  const std = (soc: number | null) => ({ soc_prozent: soc }) as StundenWert
+
+  it('Spanne = min/max, Ende = letzter GEMESSENER Wert', () => {
+    expect(socTagWerte([std(30), std(85), std(64)])).toEqual({ min: 30, max: 85, ende: 64 })
+  })
+
+  it('Lücke am Tagesende täuscht keine 0 % vor', () => {
+    // Die letzten Stunden des laufenden Tages sind noch nicht aggregiert.
+    expect(socTagWerte([std(30), std(64), std(null), std(null)])).toEqual({ min: 30, max: 64, ende: 64 })
+  })
+
+  it('kein einziger Messwert → null (statt 0/0/0)', () => {
+    expect(socTagWerte([std(null), std(null)])).toBeNull()
+    expect(socTagWerte([])).toBeNull()
   })
 })

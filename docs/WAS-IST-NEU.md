@@ -11,6 +11,16 @@
 
 ## Unreleased
 
+### Cockpit → Tag zeigt den Ladezustand des Speichers
+
+Im Speicher-Block der Tagessicht standen bisher Ladung, Entladung, Wirkungsgrad und Vollzyklen — aber nicht der **Ladezustand**. Den gab es nur, wenn man ihn sich in der Stundenwerte-Tabelle als Spalte „SoC" einblendete.
+
+Jetzt steht er als eigene Kachel im Block: der Stand am **Ende** des Tages, darunter die **Spanne**, zwischen der der Speicher an diesem Tag geschwungen ist — also etwa „64 %, Spanne 12–98 %". Am laufenden Tag ist „Ende" die zuletzt aufgezeichnete Stunde; fehlen die letzten Stunden noch, wird daraus **kein** Ladestand von 0 % gemacht.
+
+Den Ladezustand gibt es bewusst **nur in der Tagessicht**: Er ist ein Bestand, kein Fluss. Über einen Monat gemittelt ergäbe er keine sinnvolle Aussage, deshalb taucht er in *Monat* und *Jahr* nicht auf.
+
+> **Der Block ist eingeklappt** und steht unter den Kennzahlen. Seine Kopfzeile nennt schon ohne Aufklappen geladene kWh, Vollzyklen und Wirkungsgrad. *(Anregung aus dem Forum-Thread zu v4.0.0)*
+
 ### Die Börsenpreise der Nachtstunden gehörten dem falschen Tag — behoben
 
 Wenn du dir auf der Live-Seite den Tagesverlauf mit der Strompreis-Linie angesehen hast, ist dir vielleicht aufgefallen, dass die Preislinie erst **um 2 Uhr** beginnt. Und wer nachts genauer hingeschaut hat, sah dort ab dem frühen Nachmittag Zahlen stehen, die gar nicht zu diesem Tag gehörten — es waren die des **nächsten** Tages.

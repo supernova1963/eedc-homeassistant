@@ -126,6 +126,17 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 - **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
 - Detail-Sektionen je nach vorhandenen Komponenten
 
+> **Wo steht der Speicher?** Nicht im obersten Kennzahlen-Block, sondern weiter unten im
+> eingeklappten Block **Speicher** — seine Kopfzeile nennt schon ohne Aufklappen geladene kWh,
+> Vollzyklen und Wirkungsgrad. Aufgeklappt stehen dort **Ladung**, **Entladung**,
+> **Wirkungsgrad η**, **Vollzyklen** und der **Ladezustand**, dazu Netzladung, effektiver
+> Ladepreis und die Tagesbilanz. Der **Ladezustand** zeigt den Stand am **Ende** des Tages und
+> darunter die **Spanne**, zwischen der der Speicher an diesem Tag geschwungen ist — am laufenden
+> Tag ist „Ende" die zuletzt aufgezeichnete Stunde. Ihn gibt es nur in der Tagessicht: Ein
+> Ladestand ist ein Bestand, kein Fluss — über einen Monat gemittelt sagt er nichts. Den
+> stündlichen Verlauf blendest du in der Stundenwerte-Tabelle über den Spalten-Auswähler als
+> **SoC** ein.
+
 > **Mehrere Dachflächen oder Balkonkraftwerke?** Hat **jedes** Gerät einen eigenen Ertragssensor,
 > zeigt der Stunden-Verlauf die PV-Fläche **aufgeteilt** je Gerät statt als einen Block, und die
 > Stundenwerte-Tabelle bekommt je Gerät eine Spalte hinter „PV". Aufgeteilt wird ab **zwei**

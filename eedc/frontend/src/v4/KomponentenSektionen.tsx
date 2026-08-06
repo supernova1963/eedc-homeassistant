@@ -146,7 +146,15 @@ function speicherWirkungsverluste(d: AktuellerMonatResponse) {
  *  Monat/Jahr); Default 'monat' lässt Cockpit/Monat unverändert. Cockpit/Tag ruft mit
  *  'tag' → gleiche Blöcke, tages-korrekte Beschriftung. Cockpit/Jahr ruft mit 'jahr'
  *  → wie 'monat' (Σ-Slot trägt die Jahressumme, Max/Tag = höchster Einzeltag des Jahres). */
-export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi = NOOP_PARK, periode: 'monat' | 'tag' | 'jahr' = 'monat'): Block[] {
+export function baueKomponentenBloecke(
+  d: AktuellerMonatResponse,
+  park: ParkApi = NOOP_PARK,
+  periode: 'monat' | 'tag' | 'jahr' = 'monat',
+  /** Ladezustand des Tages (Spanne + Stand am Ende) — nur die Tagessicht kennt ihn,
+   *  weil er aus den Stundenwerten stammt und keine Summe ist. Monat/Jahr geben
+   *  `null`; ein Monats-Mittel über SoC-Stände wäre eine Zahl ohne Aussage. */
+  socTag?: { min: number; max: number; ende: number } | null,
+): Block[] {
   const istTag = periode === 'tag'
   const bloecke: Block[] = []
 
@@ -157,7 +165,9 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
     istTag && !vorhanden ? text : undefined
 
   // ── Speicher ────────────────────────────────────────────────────────────
-  if (hat(d.speicher_ladung_kwh) || hat(d.speicher_entladung_kwh) || hat(d.speicher_kapazitaet_kwh)) {
+  // `socTag` öffnet den Block mit: an einem Tag ohne Lade-/Entladebewegung gibt es
+  // trotzdem einen Ladezustand, und ohne diese Bedingung bliebe er unsichtbar.
+  if (hat(d.speicher_ladung_kwh) || hat(d.speicher_entladung_kwh) || hat(d.speicher_kapazitaet_kwh) || (istTag && socTag)) {
     // Ladung/Entladung haben kein D2-Status-Pendant → bleiben (Teaser-Metrik);
     // Wirkungsgrad/Vollzyklen ziehen Icon/Farbe/Titel aus dem D2-Kanon.
     const kpis: KpiStripItem[] = [
@@ -168,6 +178,17 @@ export function baueKomponentenBloecke(d: AktuellerMonatResponse, park: ParkApi 
       { ...SPEICHER_KPI.vollzyklen, value: fmtCalc(d.speicher_vollzyklen, 2, '—'),
         subtitle: hat(d.speicher_kapazitaet_kwh) ? `Kapazität ${fmt(d.speicher_kapazitaet_kwh)} kWh` : undefined },
     ]
+    // Ladezustand: nur auf Tagesebene, und nur wenn er gemessen ist. Der Wert ist
+    // der Stand am ENDE des Tages (letzte gemessene Stunde), die Spanne sagt, wie
+    // weit der Speicher an diesem Tag ausgeschwungen hat — beides Bestandsgrößen,
+    // die sich weder summieren noch über einen Monat mitteln lassen.
+    if (istTag && socTag) {
+      kpis.push({
+        ...SPEICHER_KPI.ladezustand,
+        value: fmtCalc(socTag.ende, 0), unit: '%',
+        subtitle: `Spanne ${fmtCalc(socTag.min, 0)}–${fmtCalc(socTag.max, 0)} % · Stand am Tagesende`,
+      })
+    }
     // #358 Phase 1: Auslastung und Netto-Nutzen. Beide gibt es nur auf Monats-
     // und Jahresebene — die Tagessicht kennt weder Kapazität × Tage noch eine
     // Finanz-Zeile, dort erschienen sie als dauerhaftes „—".
