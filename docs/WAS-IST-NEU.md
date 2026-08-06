@@ -35,6 +35,24 @@ Was zu tun ist, steht im Befund: **Als Add-on** übernimmt eedc die Zeitzone von
 
 Bereits gespeicherte Tage repariert das nicht von selbst — die kannst du danach über *Einstellungen → Datenverwaltung* neu berechnen lassen.
 
+### Nachts zeigte eedc den falschen Tag — behoben
+
+Wer zwischen Mitternacht und 2 Uhr in den **Prognosen-Vergleich** geschaut hat, sah dort zwei Kalendertage mit **exakt denselben Zahlen** — in allen drei Spalten, OpenMeteo, eedc und Solcast. Die Zeile für „heute" trug das Datum von gestern, aber die Werte von heute, und der heutige Tag stand daneben gleich noch einmal.
+
+**Woran es lag:** Der Browser hat das Datum in der Weltzeit UTC gebildet statt in deiner Zeitzone. In Mitteleuropa ist das zwischen 00:00 und 02:00 Uhr (im Winter 00:00–01:00) noch der Vortag — während eedc im Hintergrund längst mit dem neuen Tag rechnet. Ab 2 Uhr stimmten beide wieder überein, und tagsüber war nichts zu sehen. Genau deshalb hat es so lange gedauert, das zu finden.
+
+**Es betraf mehr als diese eine Ansicht.** In demselben Zeitfenster:
+
+- Der Knopf **„Tag neu berechnen"** hat *gestern* neu berechnet — und die Rückmeldung „0 von 24 Stunden mit Daten" bezog sich dann auf den falschen Tag.
+- Die **Tagesleiste** markierte den Vortag als „heute".
+- **Cockpit → Tag** öffnete auf gestern.
+- Eine Komponente, die du **zum heutigen Tag stillgelegt** hast, galt noch als aktiv.
+- Ein **Stromtarif, der heute beginnt**, galt noch nicht — der abgelöste noch.
+
+Alle zehn Stellen rechnen jetzt mit deiner lokalen Uhr, über eine gemeinsame Funktion. Ein neuer Prüflauf in unserem Entwicklungs-Werkzeug sorgt dafür, dass die nächste Stelle diesen Fehler nicht wiederholen kann.
+
+> **Danke fürs Dranbleiben.** Der Fehler ist zweimal gemeldet worden — beim ersten Mal haben wir ihn für einen harmlosen Zufall gehalten. Erst die Screenshots aus der Nacht haben gezeigt, dass es keiner war.
+
 ### Börsenpreis: „ist der Strom gerade teurer als der Tagesschnitt?" ist jetzt ein Sensor
 
 Wer eine Batterie an einem dynamischen Tarif fährt, will oft genau eine Auskunft: **liegt der Preis dieser Stunde über oder unter dem Tagesdurchschnitt?** Nur entladen, wenn Strom teuer ist, und billige Stunden zum Nachladen nehmen — das spart die Verluste des Umwegs über die Batterie.

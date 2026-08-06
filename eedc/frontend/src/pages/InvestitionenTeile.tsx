@@ -32,6 +32,7 @@ import {
   balkonkraftwerkParameter,
   fmtZahl,
   formatDatum,
+  heuteIso,
   KOMPONENTEN_FARBEN,
 } from '../lib'
 
@@ -520,7 +521,9 @@ function InvestitionCard({ investition, onEdit, onDelete }: InvestitionCardProps
 
   const details = getDetails()
   const kosten = investition.anschaffungskosten_gesamt
-  const heute = new Date().toISOString().slice(0, 10)
+  // Lokales Datum (F-5): mit dem UTC-Datum galt eine zum heutigen Tag
+  // stillgelegte Komponente nachts noch als aktiv.
+  const heute = heuteIso()
   const istStillgelegt = !!investition.stilllegungsdatum && investition.stilllegungsdatum <= heute
   const istAktiv = investition.aktiv && !istStillgelegt
 

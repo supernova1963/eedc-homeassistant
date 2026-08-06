@@ -12,7 +12,7 @@ import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { useAnlage, useStrompreise } from '../hooks'
-import { GELD_TEXT_CLASS, fmtZahl } from '../lib'
+import { GELD_TEXT_CLASS, fmtZahl, heuteIso } from '../lib'
 import type { Strompreis, StrompreisVerwendung } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
@@ -20,7 +20,9 @@ import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
 /** Ist ein Tarif zum heutigen Tag gültig (gültig-ab ≤ heute ≤ gültig-bis)? */
 export function istGueltigHeute(sp: Strompreis): boolean {
-  const heute = new Date().toISOString().split('T')[0]
+  // Lokales Datum (F-5): mit dem UTC-Datum galt ein heute beginnender Tarif
+  // nachts noch nicht — und der abgelöste noch.
+  const heute = heuteIso()
   const abOk = sp.gueltig_ab <= heute
   const bisOk = !sp.gueltig_bis || sp.gueltig_bis >= heute
   return abOk && bisOk

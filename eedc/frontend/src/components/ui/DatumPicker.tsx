@@ -25,6 +25,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { WT_KURZ } from '../../lib/constants'
+import { toIsoDatum } from '../../lib/datum'
 
 const MONAT_LANG = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 const MONAT_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
@@ -140,7 +141,10 @@ export function DatumPicker({ modus, value, onChange, min, max, ariaLabel, class
   // Montag-first-Index (JS getDay(): 0=So…6=Sa → (d+6)%7).
   const ersterWt = (new Date(navJahr, navMonat - 1, 1).getDay() + 6) % 7
   const tageImMonat = new Date(navJahr, navMonat, 0).getDate()
-  const heuteISO = `${heute.getFullYear()}-${pad(heute.getMonth() + 1)}-${pad(heute.getDate())}`
+  // Über den SoT statt lokal nachgebaut (F-5): das Muster war hier richtig,
+  // stand aber nur hier — zehn andere Stellen bauten es mit `toISOString()`
+  // falsch nach.
+  const heuteISO = toIsoDatum(heute)
   const letzterTagVorMonat = tagVal(
     navMonat === 1 ? navJahr - 1 : navJahr,
     navMonat === 1 ? 12 : navMonat - 1,

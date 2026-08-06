@@ -28,7 +28,7 @@ import {
 import { energieProfilApi } from '../../api/energie_profil'
 import { getStratifizierung, StratifizierungResponse, Wetterklasse, wetterBackfill } from '../../api/korrekturprofil'
 import { KorrekturprofilHeatmapCard } from '../../pages/aussichten/KorrekturprofilHeatmapCard'
-import { PROGNOSE_QUELLEN_COLORS, PROGNOSE_QUELLEN_TEXT, PROGNOSE_DASH, STATUS_TEXT_CLASS, fmtZahl, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, slotZeitspanne } from '../../lib'
+import { PROGNOSE_QUELLEN_COLORS, PROGNOSE_QUELLEN_TEXT, PROGNOSE_DASH, STATUS_TEXT_CLASS, fmtZahl, xAchse, yAchse, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, slotZeitspanne, heuteIso, verschiebeIsoTage } from '../../lib'
 import { useChartTheme } from '../../context/ThemeContext'
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
@@ -241,7 +241,12 @@ export function stundenSummeVon(chartData: ReturnType<typeof chartDatenVon>, akt
 }
 
 function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsResponse | null, hasEedc: boolean) {
-  const heute = new Date().toISOString().slice(0, 10)
+  // LOKALES Datum (F-5): mit `toISOString()` stand hier zwischen 00:00 und 02:00
+  // Ortszeit noch gestern, während `data.*_heute_kwh` vom Backend den heutigen
+  // Tag beschreibt. Die „heute"-Zeile trug dann das Datum D−1 mit den Werten
+  // von D, und `zukunft` (Filter `> heute`) lieferte D gleich noch einmal —
+  // zwei Zeilen mit identischen Zahlen in allen drei Quellenspalten.
+  const heute = heuteIso()
   const historisch = (genauigkeit?.tage ?? []).filter(t => t.datum < heute).slice(-4).map(t => ({
     datum: t.datum, om_kwh: t.openmeteo_kwh, eedc_kwh: t.eedc_kwh, sc_kwh: t.solcast_kwh,
     sc_p10: null as number | null, sc_p90: null as number | null,
@@ -261,11 +266,7 @@ function vergleichsTageVon(data: PrognosenVergleich, genauigkeit: GenauigkeitsRe
   // SFML liefert zwei Zukunftstage (morgen, übermorgen); der dritte bleibt leer.
   // Zuordnung über das **Datum**, nicht über die Position in der OpenMeteo-Liste:
   // fehlt dort ein Tag, säße der Übermorgen-Wert sonst auf dem falschen Datum.
-  const tagPlus = (n: number) => {
-    const d = new Date(`${heute}T12:00:00Z`)
-    d.setUTCDate(d.getUTCDate() + n)
-    return d.toISOString().slice(0, 10)
-  }
+  const tagPlus = (n: number) => verschiebeIsoTage(heute, n)
   const sfmlJeDatum: Record<string, number | null> = {
     [tagPlus(1)]: data.sfml_morgen_kwh ?? null,
     [tagPlus(2)]: data.sfml_uebermorgen_kwh ?? null,
@@ -378,7 +379,10 @@ function IstUnvollstaendigPopover({ fehlendeStunden, anlageId, onReloaded }: { f
   const handleReaggregate = async () => {
     setBusy(true); setFeedback(null)
     try {
-      const heute = new Date().toISOString().slice(0, 10)
+      // Lokales Datum (F-5): mit dem UTC-Datum hat dieser Knopf nachts
+      // **gestern** neu berechnet — und die Meldung „0/24 Stunden mit Daten"
+      // bezog sich dann auf den falschen Tag.
+      const heute = heuteIso()
       const res = await energieProfilApi.reaggregateTag(anlageId, heute)
       if (res.stunden_mit_messdaten > 0) setFeedback({ tone: 'success', msg: `Neu berechnet: ${res.stunden_mit_messdaten}/24 Stunden mit Daten.` })
       else setFeedback({ tone: 'warning', msg: 'Reaggregiert, aber HA Statistics liefert noch keine Werte. In ~10 Min erneut versuchen.' })

@@ -55,3 +55,53 @@ export function formatZeitraumKurz(
 export function jaNein(v: boolean | null | undefined): string {
   return v == null ? FALLBACK : v ? 'Ja' : 'Nein'
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ISO-Datums-Keys aus der LOKALEN Uhr (F-5)
+// ─────────────────────────────────────────────────────────────────────────────
+// `new Date().toISOString().slice(0, 10)` liefert das Datum in **UTC**. In
+// Mitteleuropa ist das zwischen 00:00 und 02:00 Ortszeit (Sommerzeit; im Winter
+// 00:00–01:00) noch **gestern** — das Backend rechnet aber mit `date.today()`
+// in der Container-Zeitzone. Wer nachts einen Datums-Key so bildet, vergleicht
+// zwei verschiedene Tage miteinander.
+//
+// Gemeldet von rapahl (06.08.2026, mit Screenshots um 00:40 und 01:15): der
+// Prognosen-Vergleich zeigte zwei Kalendertage mit identischen Werten in allen
+// drei Quellenspalten — die „heute"-Zeile trug das UTC-Datum von gestern, aber
+// die Backend-Werte von heute, und die Zukunftsliste lieferte denselben Tag
+// gleich noch einmal. Tagsüber verschwand es von selbst.
+//
+// **Die Funktionen hier sind die einzige erlaubte Art, einen Datums-Key aus
+// einer Uhr zu bilden** — `check:datum-utc` hält das baumweit. Für die reine
+// Anzeige gilt weiterhin `formatDatum`; das ist eine andere Frage.
+
+const zwei = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * `Date` → ISO-Datums-Key `'2026-08-06'` aus der **lokalen** Zeitzone.
+ *
+ * Bewusst nicht über `toISOString()`: das serialisiert in UTC und kippt den Tag
+ * (s. o.). Diese Funktion liest Jahr/Monat/Tag so, wie sie auf der Uhr des
+ * Anwenders stehen.
+ */
+export function toIsoDatum(d: Date): string {
+  return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}`
+}
+
+/** Heutiger Tag als ISO-Datums-Key, aus der lokalen Uhr. */
+export function heuteIso(): string {
+  return toIsoDatum(new Date())
+}
+
+/**
+ * ISO-Datums-Key ± `tage`, ohne die Zeitzone zu kippen.
+ *
+ * Der Zwischenwert wird auf die lokale Mittagszeit gelegt — dieselbe Regel wie
+ * in `parseIso` oben —, damit weder Sommerzeit-Umstellung noch UTC-Versatz den
+ * Tag verschieben.
+ */
+export function verschiebeIsoTage(iso: string, tage: number): string {
+  const d = new Date(`${iso}T12:00:00`)
+  d.setDate(d.getDate() + tage)
+  return toIsoDatum(d)
+}

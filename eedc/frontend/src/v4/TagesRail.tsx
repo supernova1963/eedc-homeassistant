@@ -7,7 +7,7 @@
  * (gruppiert nach Monat statt Jahr).
  */
 import { useMemo } from 'react'
-import { MONAT_KURZ, WT_KURZ, DATENROLLE, fmtZahl, LAUFEND_ZUSTAND } from '../lib'
+import { MONAT_KURZ, WT_KURZ, DATENROLLE, fmtZahl, LAUFEND_ZUSTAND, heuteIso } from '../lib'
 import ScrollSchatten from '../components/ui/ScrollSchatten'
 import { DatumPicker } from '../components/ui/DatumPicker'
 
@@ -50,7 +50,9 @@ export function TagesRail({ entries, datum, onSelect, aeltesterTag }: TagesRailP
   }, [byMonat])
 
   const monate = useMemo(() => [...byMonat.keys()].sort((a, b) => (a < b ? 1 : -1)), [byMonat])
-  const heuteISO = new Date().toISOString().slice(0, 10)
+  // Lokales Datum (F-5): mit dem UTC-Datum markierte die Rail nachts den
+  // Vortag als „heute" und sperrte den echten heutigen Tag als Zukunft.
+  const heuteISO = heuteIso()
   const aeltesterListe = useMemo(() => entries.reduce((m, e) => (m && m < e.datum ? m : e.datum), entries[0]?.datum ?? ''), [entries])
   // Untergrenze der Datumsauswahl = ältester verfügbarer Tag (kann vor der 90-Tage-
   // Liste liegen → alle Tage erreichbar), Fallback = ältester Listen-Tag.

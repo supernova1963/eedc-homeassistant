@@ -27,7 +27,7 @@ import { AnlageLeer } from './OnboardingLeer'
 import { BlockShell, BlockStackSkeleton, KpiStrip, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss, Parkbar, usePark } from '../components/park'
 import { useApiData, useScrollErhalt } from '../hooks'
-import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG } from '../lib'
+import { BLOCK_IDENTITAET, DEDIZIERTE_KATEGORIEN, fmtZahl, WT_LANG, heuteIso, verschiebeIsoTage } from '../lib'
 import { TagVerlaufChart, TagWerteTabelle } from '../components/tag'
 import { baueTagKpis, TagBilanz, type GleicheWochentagStats } from './TagBilanz'
 import { tagBilanzParkIds } from './bilanzParkIds'
@@ -41,16 +41,15 @@ import {
   energieProfilApi, type StundenWert, type SerieInfo, type TagWerte, type TagDetail,
 } from '../api/energie_profil'
 
-// ─── Datums-Helfer (TZ-stabil über Mittag) ───────────────────────────────────
-function toISODate(d: Date): string { return d.toISOString().slice(0, 10) }
-function heuteISO(): string { return toISODate(new Date()) }
-function gesternISO(): string { const d = new Date(); d.setDate(d.getDate() - 1); return toISODate(d) }
-function tagVerschieben(iso: string, tage: number): string {
-  const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + tage); return toISODate(d)
-}
-function vorTagen(iso: string, tage: number): string {
-  const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - tage); return toISODate(d)
-}
+// ─── Datums-Helfer ───────────────────────────────────────────────────────────
+// Alle über den SoT `lib/datum.ts` (F-5). Vorher baute diese Datei ihr eigenes
+// `toISODate` auf `toISOString()` — das lieferte zwischen 00:00 und 02:00
+// Ortszeit den Vortag, die Tagessicht öffnete also nachts auf gestern und
+// „heute" war nur über den Stepper vorwärts erreichbar.
+function heuteISO(): string { return heuteIso() }
+function gesternISO(): string { return verschiebeIsoTage(heuteIso(), -1) }
+function tagVerschieben(iso: string, tage: number): string { return verschiebeIsoTage(iso, tage) }
+function vorTagen(iso: string, tage: number): string { return verschiebeIsoTage(iso, -tage) }
 function wochentagOf(iso: string): number { return new Date(iso + 'T12:00:00').getDay() }
 
 // (a) Gernot 2026-06-26: Picker/Liste (Rail) = letzte 90 Tage; ALLE verfügbaren

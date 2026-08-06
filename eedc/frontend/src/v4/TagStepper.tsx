@@ -10,7 +10,7 @@ import { ChevronFirst, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, C
 import type { TagRailEintrag } from './TagesRail'
 import { ZeitStepper, type ZeitStepperEintrag } from './ZeitStepper'
 import { DatumPicker } from '../components/ui/DatumPicker'
-import { fmtZahl, WT_KURZ } from '../lib'
+import { fmtZahl, WT_KURZ, verschiebeIsoTage } from '../lib'
 
 interface TagStepperProps {
   entries: TagRailEintrag[]
@@ -23,9 +23,10 @@ interface TagStepperProps {
   immerSichtbar?: boolean
 }
 
-const verschieben = (iso: string, n: number) => {
-  const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10)
-}
+// Über den SoT (F-5). Die frühere Fassung war zufällig richtig — sie legte den
+// Zwischenwert auf die lokale Mittagszeit, dort fällt das UTC-Datum mit dem
+// lokalen zusammen. Zufällig richtig ist kein Grund, es stehen zu lassen.
+const verschieben = (iso: string, n: number) => verschiebeIsoTage(iso, n)
 const label = (iso: string) => {
   const d = new Date(iso + 'T12:00:00')
   return `${WT_KURZ[d.getDay()]} ${d.getDate()}. ${d.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' })}`

@@ -19,6 +19,7 @@
     "check:roh-controls": "node scripts/check-roh-controls.mjs",
     "check:kennwert-roh": "node scripts/check-kennwert-roh.mjs",
     "check:co2-roh": "node scripts/check-co2-roh.mjs",
+    "check:datum-utc": "node scripts/check-datum-utc.mjs",
     "check:scrollschatten": "node scripts/check-scrollschatten.mjs",
     "check:persistenz": "node scripts/check-persistenz.mjs",
     "check:badges": "node scripts/check-badges.mjs",

@@ -13,7 +13,7 @@ import { Calendar, Battery, Zap, Sun, ArrowDown, ArrowUp, Info } from 'lucide-re
 import { Card, Alert, KPICard, ChartLegende, Table, TableHead, TableBody, TableFoot } from '../../components/ui'
 import { ZELLE, KOPF_ZELLE } from '../../components/ui/tabelleMasse'
 import { DatumPicker } from '../../components/ui/DatumPicker'
-import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, unvollstaendigHerkunft } from '../../lib'
+import { COLORS, CHART_COLORS, achsenEinheit, achsenTick, ACHSEN_MARGIN_TOP, fmtZahl, unvollstaendigHerkunft, heuteIso, verschiebeIsoTage } from '../../lib'
 import { HerkunftZeile } from '../../components/blocks'
 import { useChartTheme } from '../../context/ThemeContext'
 import { useLegendenToggle } from '../../hooks'
@@ -23,21 +23,20 @@ interface Props {
   anlageId: number
 }
 
+// Alle drei aus der LOKALEN Uhr (F-5): mit `toISOString()` lagen sie zwischen
+// 00:00 und 02:00 Ortszeit einen Tag zurück — die Vorschau begann dann bei
+// gestern und die Picker-Obergrenze schnitt den letzten Prognosetag ab.
 export function morgenISO(): string {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
+  return verschiebeIsoTage(heuteIso(), 1)
 }
 
 export function heuteISO(): string {
-  return new Date().toISOString().slice(0, 10)
+  return heuteIso()
 }
 
 /** Max-Prognose-Datum = heute + 14 Tage (Picker-Obergrenze). */
 export function maxPrognoseDatum(): string {
-  const d = new Date()
-  d.setDate(d.getDate() + 14)
-  return d.toISOString().slice(0, 10)
+  return verschiebeIsoTage(heuteIso(), 14)
 }
 
 function fmt1(v: number | null | undefined): string {
