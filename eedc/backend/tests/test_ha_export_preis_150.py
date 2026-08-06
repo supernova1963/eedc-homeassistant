@@ -9,8 +9,9 @@ Preis-/Wetter-Quellen.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -291,14 +292,30 @@ async def test_preis_sensoren_erscheinen(db, _patch_preis):
 
 # ── #335: die drei Werte für eigene Preis-Regeln ────────────────────────────
 
-async def test_preis_und_durchschnitt_werden_exportiert(db, _patch_preis):
+async def test_preis_und_durchschnitt_werden_exportiert(db, _patch_preis, monkeypatch):
     """Aktueller Preis, optimierter Ø und ihr Abstand verlassen eedc.
 
     rapahls Wunsch (PN 05.08., zweite Äußerung): „ein Sensor, der sagt, ob der
     aktuelle Börsenpreis über oder unter dem optimierten Ø liegt" — Grundlage
     einer Nicht-Entlade-Regel. Bis v4.0 lieferte der Export nur Ø × Faktor.
+
+    ⚠ **Die Uhr wird gestellt, seit 2026-08-06 nachmittags.** Vorher nahm die
+    Probe die echte Stunde — und fiel damit **in 4 von 24 Stunden** (5, 11, 17,
+    23), nämlich immer dann, wenn die Fake-Kurve gerade auf ihrem Höchstwert
+    stand. Sie war nicht falsch, sondern von der Tageszeit abhängig; gemessen
+    wurde das, als ein Gate-Lauf um 16:5x grün und der nächste um 17:12 rot war
+    ([[feedback_tests_ci_hermetisch]] — „auch die Uhr"). Ein CI-Lauf zur
+    falschen Stunde wäre ohne jede Code-Änderung rot geworden.
     """
     from backend.api.routes.ha_export import calculate_anlage_sensors
+    from backend.services import preis_tag as pt
+
+    class _Uhr(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            fest = datetime(2026, 8, 6, 17, 0, tzinfo=ZoneInfo("Europe/Berlin"))
+            return fest.astimezone(tz) if tz else fest.replace(tzinfo=None)
+    monkeypatch.setattr(pt, "datetime", _Uhr)
 
     anlage = await _seed_anlage(db)
     sensors = await calculate_anlage_sensors(db, anlage)
@@ -307,13 +324,20 @@ async def test_preis_und_durchschnitt_werden_exportiert(db, _patch_preis):
     # Fake-Kurve 2/5/8/11/14/17 ct je 4× → Ø ohne 3 Peaks = 177/21 ≈ 8,43 ct.
     o = by_key["eedc_preis_optimierter_durchschnitt_cent"].value
     assert o == pytest.approx(177.0 / 21.0, abs=0.01)
+    # 17 Uhr → Stunde 17, und 17 % 6 = 5 ⇒ der teuerste Wert der Kurve.
     aktuell = by_key["eedc_preis_aktuell_cent"].value
-    assert aktuell in {2.0, 5.0, 8.0, 11.0, 14.0, 17.0}
+    assert aktuell == 17.0
 
     # Der Abstand ist die Aussage „über/unter" — und stimmt mit den beiden
     # Absolutwerten überein, statt eine dritte Rechnung zu sein.
+    #
+    # Die Toleranz deckt EINEN Rundungsschritt ab und nicht mehr: Der Ø verlässt
+    # den Layer auf drei Nachkommastellen gerundet (8,429 statt 8,428571…),
+    # während der Abstand aus dem ungerundeten Wert stammt. Bei einem Preis am
+    # oberen Rand der Kurve macht das 0,0103 Prozentpunkte aus — mit der alten
+    # Toleranz von 0,01 lag das um drei Tausendstel daneben.
     abstand = by_key["eedc_preis_abstand_prozent"].value
-    assert abstand == pytest.approx((aktuell - o) / abs(o) * 100.0, abs=0.01)
+    assert abstand == pytest.approx((aktuell - o) / abs(o) * 100.0, abs=0.02)
     assert (abstand < 0) is (aktuell < o)
 
     # Die Bezugsgröße reist auch als Attribut mit dem Rang-Sensor.

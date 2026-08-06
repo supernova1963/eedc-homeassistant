@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { CHART_ACHSEN } from '../lib/colors'
+import { CHART_ACHSEN, PREISSTUFEN_FARBEN } from '../lib/colors'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -80,4 +80,18 @@ export function useTheme() {
 export function useChartTheme() {
   const { isDark } = useTheme()
   return isDark ? CHART_ACHSEN.dark : CHART_ACHSEN.light
+}
+
+/**
+ * Börsenpreis-Stufenfarben des aktuellen Modus (#335) — derselbe Mechanismus
+ * wie {@link useChartTheme}, andere Rolle.
+ *
+ * Warum überhaupt theme-abhängig: Die beiden Randstufen liegen an den Enden des
+ * Helligkeitsspektrums und fallen mit einer festen Farbe in je einem Modus unter
+ * die 3:1-Schwelle für grafische Objekte. Begründung und Messwerte stehen an
+ * `PREISSTUFEN_FARBEN`.
+ */
+export function usePreisstufenFarben() {
+  const { isDark } = useTheme()
+  return isDark ? PREISSTUFEN_FARBEN.dark : PREISSTUFEN_FARBEN.light
 }

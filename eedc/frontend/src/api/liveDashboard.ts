@@ -281,6 +281,34 @@ export interface TransformTestResult {
   fehler?: string
 }
 
+/** Eine bewertete Stunde der Day-Ahead-Kurve (#335). */
+export interface BoersenpreisStunde {
+  stunde: number          // 0–23, lokale Stunde der Gebotszone
+  preis_cent: number      // netto, ohne Steuern/Netzentgelte — kann negativ sein
+  rang: number            // 1–5 = eine der günstigsten des Fensters, 99 = Rest
+  /** Ungekappt — anders als `rang` nicht auf fünf je Fenster begrenzt (N-103).
+   *  Das ist die Größe, nach der der Chart färbt. */
+  unter_schwelle: boolean
+}
+
+export interface BoersenpreisTag {
+  datum: string                                    // "2026-08-06"
+  stunden: BoersenpreisStunde[]
+  /** Günstig-Schwelle **dieses** Tages (Day-Ahead ist ein Tagesprodukt). */
+  schwelle_cent: number | null
+  optimierter_durchschnitt_cent: number | null     // Ø ohne die 3 Peaks
+}
+
+export interface BoersenpreisResponse {
+  anlage_id: number
+  markt: string                     // "DE" | "AT"
+  /** Nur Tage MIT Preisen. Fehlt einer, sagt `hinweis` warum (ADR-002/P4). */
+  tage: BoersenpreisTag[]
+  aktuelle_stunde: number | null
+  heute: string | null
+  hinweis: string | null
+}
+
 export const liveDashboardApi = {
   getData: (anlageId: number, demo = false) =>
     api.get<LiveDashboardResponse>(`/live/${anlageId}${demo ? '?demo=true' : ''}`),
@@ -290,6 +318,11 @@ export const liveDashboardApi = {
 
   getTagesverlauf: (anlageId: number, demo = false) =>
     api.get<TagesverlaufResponse>(`/live/${anlageId}/tagesverlauf${demo ? '?demo=true' : ''}`),
+
+  /** Börsenpreise heute + morgen. Kein `demo`-Schalter: die Kurve ist ein
+   *  öffentlicher Marktpreis, keine Anlagendaten — im Demo-Modus dieselbe. */
+  getBoersenpreise: (anlageId: number) =>
+    api.get<BoersenpreisResponse>(`/live/${anlageId}/boersenpreise`),
 
   getMqttStatus: () =>
     api.get<MqttInboundStatus>('/live/mqtt/status'),

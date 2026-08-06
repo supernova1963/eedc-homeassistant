@@ -200,9 +200,16 @@ async def test_export_fragt_den_tag_der_marktzone_ab(monkeypatch):
 
     Uhr **und** Prozesszone werden gestellt — sonst prüft die Probe nur, ob sie
     zufällig zwischen 00:00 und 02:00 läuft, und wäre 22 von 24 Stunden grün.
+
+    ⚠ **Gestellt wird die Uhr seit #335 in `preis_tag`**, nicht mehr in
+    `ha_export_preis`: Beschaffung und Bewertung eines Preistages liegen dort,
+    seit der Live-Preis-Chart dieselbe Quelle nutzt. Geprüft wird weiterhin der
+    **Export**-Pfad von außen — die Zuständigkeit ist gewandert, die Zusicherung
+    nicht.
     """
     from backend.models.anlage import Anlage
     from backend.services import ha_export_preis as hep
+    from backend.services import preis_tag as pt
 
     jetzt_utc = datetime(2026, 8, 6, 22, 30, tzinfo=timezone.utc)  # = 07.08. 00:30 Berlin
 
@@ -223,14 +230,14 @@ async def test_export_fragt_den_tag_der_marktzone_ab(monkeypatch):
         gefragt.append(datum)
         return {h: 10.0 + h for h in range(24)}
 
-    monkeypatch.setattr(hep, "datetime", _Uhr)
-    monkeypatch.setattr(hep, "date", _Kalender)
+    monkeypatch.setattr(pt, "datetime", _Uhr)
+    monkeypatch.setattr(pt, "date", _Kalender)
     monkeypatch.setattr(smp, "fetch_marktpreise", _fake_fetch)
 
     anlage = Anlage(anlagenname="TZ-Test", leistung_kwp=10.0,
                     latitude=48.8, longitude=9.2, standort_land="DE")
     # `db` wird auf diesem Weg nicht berührt — es gibt Preise, der
-    # DB-Fallback `_persistierte_preise` ist unerreichbar. Wäre er es doch,
+    # DB-Fallback `persistierte_preise` ist unerreichbar. Wäre er es doch,
     # scheiterte die Probe laut statt still grün zu bleiben.
     ergebnis = await hep.berechne_preis_export(None, anlage)
 

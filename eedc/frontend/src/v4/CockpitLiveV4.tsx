@@ -15,15 +15,18 @@
  * (`components/live/*`) → eine Code-Wahrheit.
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { Activity, CloudSun, LineChart, Maximize2, Workflow } from 'lucide-react'
+import { Activity, CloudSun, Coins, LineChart, Maximize2, Workflow } from 'lucide-react'
 import { useSelectedAnlage } from '../hooks'
 import { swrCachePeek, swrCacheStore } from '../hooks/useApiData'
 import { liveDashboardApi } from '../api/liveDashboard'
-import type { LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse } from '../api/liveDashboard'
+import type {
+  BoersenpreisResponse, LiveDashboardResponse, LiveWetterResponse, TagesverlaufResponse,
+} from '../api/liveDashboard'
 import { wetterApi } from '../api/wetter'
 import type { SolarPrognoseTag } from '../api/wetter'
 import EnergieFluss from '../components/live/EnergieFluss'
 import TagesverlaufChart, { tagesverlaufTabelle } from '../components/live/TagesverlaufChart'
+import BoersenpreisBlock from '../components/live/BoersenpreisBlock'
 import WetterWidget from '../components/live/WetterWidget'
 import LiveAufEinenBlick from '../components/live/LiveAufEinenBlick'
 import { FokusKachel, FokusVollbild } from '../components/blocks'
@@ -35,6 +38,10 @@ import { useDemoMode, useReportDatenStatus } from './status/AppStatusContext'
 const REFRESH_INTERVAL = 5_000
 const WETTER_REFRESH_INTERVAL = 300_000
 const TAGESVERLAUF_REFRESH_INTERVAL = 60_000
+// Börsenpreise ändern sich einmal am Tag (Day-Ahead-Auktion, ~13 Uhr). Der
+// 15-Minuten-Takt ist kein Datenbedarf, sondern der Zeitpunkt, zu dem der Block
+// die Preise von morgen aufnimmt, ohne dass jemand die Seite neu lädt.
+const BOERSENPREIS_REFRESH_INTERVAL = 900_000
 
 // R18-2 (SWR, Erst-Paint): Live pollt ohnehin — aber beim Tab-Wechsel (unmount →
 // remount) verlor die Sicht ihren State und zeigte den Spinner. Die letzten Werte
@@ -45,6 +52,7 @@ interface LiveSeed {
   wetter: LiveWetterResponse | null
   tagesverlauf: TagesverlaufResponse | null
   prognose3Tage: SolarPrognoseTag[] | null
+  boersenpreise: BoersenpreisResponse | null
   lastUpdate: string | null
 }
 
@@ -71,6 +79,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const [wetter, setWetter] = useState<LiveWetterResponse | null>(seed?.wetter ?? null)
   const [tagesverlauf, setTagesverlauf] = useState<TagesverlaufResponse | null>(seed?.tagesverlauf ?? null)
   const [prognose3Tage, setPrognose3Tage] = useState<SolarPrognoseTag[] | null>(seed?.prognose3Tage ?? null)
+  const [boersenpreise, setBoersenpreise] = useState<BoersenpreisResponse | null>(seed?.boersenpreise ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<string | null>(seed?.lastUpdate ?? null)
@@ -79,6 +88,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wetterIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tagesverlaufIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const boersenpreisIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const activeAnlageRef = useRef(anlageId)
   activeAnlageRef.current = anlageId
 
@@ -130,22 +140,41 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
     }
   }, [anlageId, demoMode])
 
+  // Börsenpreise sind KEINE Anlagendaten, sondern öffentliche Marktpreise —
+  // deshalb ohne `demo`-Schalter: im Demo-Modus wäre eine erfundene Preiskurve
+  // nicht anschaulicher, nur falsch.
+  const fetchBoersenpreise = useCallback(async () => {
+    if (!anlageId) return
+    const reqId = anlageId
+    try {
+      const result = await liveDashboardApi.getBoersenpreise(reqId)
+      if (activeAnlageRef.current !== reqId) return
+      setBoersenpreise(result)
+    } catch {
+      // still ignorieren — der Block entfällt, die übrige Sicht bleibt
+    }
+  }, [anlageId])
+
   // R18-2: letzten Stand in den Sicht-Cache spiegeln (billiger Map-Write je
   // Poll-Tick) — Quelle für den Erst-Paint-Seed beim nächsten Remount.
   useEffect(() => {
     if (data || wetter || tagesverlauf) {
-      swrCacheStore(liveKey, { data, wetter, tagesverlauf, prognose3Tage, lastUpdate } satisfies LiveSeed)
+      swrCacheStore(liveKey, {
+        data, wetter, tagesverlauf, prognose3Tage, boersenpreise, lastUpdate,
+      } satisfies LiveSeed)
     }
-  }, [liveKey, data, wetter, tagesverlauf, prognose3Tage, lastUpdate])
+  }, [liveKey, data, wetter, tagesverlauf, prognose3Tage, boersenpreise, lastUpdate])
 
   useEffect(() => {
     const stoppePolling = () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
       if (wetterIntervalRef.current) clearInterval(wetterIntervalRef.current)
       if (tagesverlaufIntervalRef.current) clearInterval(tagesverlaufIntervalRef.current)
+      if (boersenpreisIntervalRef.current) clearInterval(boersenpreisIntervalRef.current)
       intervalRef.current = null
       wetterIntervalRef.current = null
       tagesverlaufIntervalRef.current = null
+      boersenpreisIntervalRef.current = null
     }
 
     const startePolling = () => {
@@ -153,6 +182,7 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       intervalRef.current = setInterval(() => fetchData(true), REFRESH_INTERVAL)
       wetterIntervalRef.current = setInterval(() => fetchWetter(), WETTER_REFRESH_INTERVAL)
       tagesverlaufIntervalRef.current = setInterval(() => fetchTagesverlauf(), TAGESVERLAUF_REFRESH_INTERVAL)
+      boersenpreisIntervalRef.current = setInterval(() => fetchBoersenpreise(), BOERSENPREIS_REFRESH_INTERVAL)
     }
 
     // Eine unsichtbare Seite pollt nicht. Der 5-s-Takt ist für den
@@ -169,19 +199,21 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
       fetchData(true)
       fetchWetter()
       fetchTagesverlauf()
+      fetchBoersenpreise()
       startePolling()
     }
 
     fetchData(false)
     fetchWetter()
     fetchTagesverlauf()
+    fetchBoersenpreise()
     startePolling()
     document.addEventListener('visibilitychange', beiSichtwechsel)
     return () => {
       document.removeEventListener('visibilitychange', beiSichtwechsel)
       stoppePolling()
     }
-  }, [fetchData, fetchWetter, fetchTagesverlauf])
+  }, [fetchData, fetchWetter, fetchTagesverlauf, fetchBoersenpreise])
 
   // PV-SOLL der aktuellen Stunde (SFML → eedc-Fallback) für den Energiefluss.
   const pvSollKw = useMemo<number | null>(() => {
@@ -333,6 +365,22 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
         </div>
         )
       })()}
+
+      {/* Börsenpreis heute + morgen (#335) — BEWUSST außerhalb des
+          `data.verfuegbar`-Zweigs. Day-Ahead-Preise sind öffentliche Marktdaten
+          und hängen an keinem Sensor: Wer noch keine Leistungssensoren zugeordnet
+          hat, sieht auf dieser Seite sonst nur „Keine Live-Daten verfügbar" —
+          und einen Block, der ohne jede Einrichtung funktioniert hätte, nie.
+          Eigener Block statt Overlay im Tagesverlauf: der zeigt 10-Minuten-
+          Leistung von heute, dieser Stundenpreise über zwei Tage.
+          Erscheint mit Preisen ODER mit dem Grund, warum es keine gibt. */}
+      {boersenpreise && (boersenpreise.tage.length > 0 || boersenpreise.hinweis) && (
+        <Parkbar id="live:boersenpreis" titel="Börsenpreis">
+          <FokusKachel titel="Börsenpreis heute & morgen" icon={Coins} zeigeTitel>
+            <BoersenpreisBlock daten={boersenpreise} />
+          </FokusKachel>
+        </Parkbar>
+      )}
 
       {/* Element-Park-Fuß (SLICE 1): Hinweiszeile + „Geparkt (n)". Inert leer. */}
       <ParkFuss />

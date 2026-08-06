@@ -11,6 +11,24 @@
 
 ## Unreleased
 
+### Börsenpreis heute *und morgen* — als eigener Block auf der Live-Seite
+
+Bisher lief der Börsenpreis auf der Live-Seite als dünne Linie über dem Tagesverlauf mit: für **heute**, einfarbig, ohne jeden Hinweis darauf, welche Stunde eigentlich die günstige ist. Wer wissen wollte, wann morgen der billige Block liegt, musste dafür zu seinem Stromanbieter wechseln.
+
+Jetzt gibt es dafür einen **eigenen Block: „Börsenpreis heute & morgen"**. Er zeigt beide Tage auf **einer durchgehenden Zeitachse**, und die Linie ist **nach Preisniveau eingefärbt** — grün, wo der Strom unter deiner Günstig-Schwelle liegt, und zusätzlich mit einer hinterlegten Fläche, damit die günstigen Blöcke schon aus dem Augenwinkel zu erkennen sind.
+
+Darüber stehen drei Zahlen für heute: der **aktuelle Preis**, der **Durchschnitt ohne die drei teuersten Stunden** und deine **Günstig-Schwelle** samt der Anzahl von Stunden, die heute darunter liegen. Es sind dieselben Zahlen, die auch als Sensoren in Home Assistant ankommen — der Block und deine Automation sprechen also über dasselbe.
+
+**Was du wissen solltest:**
+
+- Die Preise für morgen gibt die Auktion erst **gegen 13 Uhr** frei. Vorher siehst du nur heute — und darunter steht, warum.
+- **Jeder Tag hat seine eigene Schwelle.** Ein gemeinsamer Durchschnitt über beide Tage hätte an einem teuren Tag gar keine günstige Stunde ausgewiesen.
+- Es sind **Börsenpreise, netto** — ohne Steuern, Abgaben und Netzentgelte. Dein Lieferant rechnet andere Beträge ab; für die Frage, *welche* Stunde die günstige ist, zählt der Verlauf.
+- Der Block braucht **keine eingerichteten Sensoren**. Er erscheint auch, wenn die Live-Seite sonst noch „Keine Live-Daten verfügbar" meldet — nur die Koordinaten deiner Anlage müssen gepflegt sein.
+- Die **Günstig-Schwelle** stellst du selbst ein (Standard: 10 % unter dem Durchschnitt). ⚠ **0 % schaltet sie nicht ab**, sondern legt sie genau auf den Durchschnitt.
+
+> eedc zeigt dir die Preise — **was du damit machst, bleibt deine Entscheidung**. Ladefenster, Entlade-Sperren und Batterie-Strategien baust du weiterhin selbst in Home Assistant.
+
 ### Cockpit → Tag zeigt den Ladezustand des Speichers
 
 Im Speicher-Block der Tagessicht standen bisher Ladung, Entladung, Wirkungsgrad und Vollzyklen — aber nicht der **Ladezustand**. Den gab es nur, wenn man ihn sich in der Stundenwerte-Tabelle als Spalte „SoC" einblendete.

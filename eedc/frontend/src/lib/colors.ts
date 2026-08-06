@@ -214,6 +214,42 @@ export const CHART_COLORS = {
   emobV2h: '#06b6d4',            // Vehicle-to-Home-Rückspeisung
 }
 
+/** Börsenpreis-Stufen (#335) — EINE Datenrolle (Strompreis), nach Preisniveau abgestuft.
+ *
+ *  Das ist kein zweiter Farbsatz für eine zweite Rolle, sondern eine Skala **innerhalb**
+ *  der Rolle `CHART_COLORS.strompreis`: dieselbe Größe, eingefärbt nach ihrem Abstand zum
+ *  optimierten Tages-Ø. Deshalb bleibt die Mitte exakt die Rollenfarbe, und nur die beiden
+ *  Enden weichen ab — `teuer` als abgesetzte Stufe derselben Familie, `guenstig` als die
+ *  einzige echte Auszeichnung. Sie trägt Grün, weil genau das die Aussage des Blocks ist
+ *  („diese Stunden sind billig"); ein Rot am oberen Ende wurde bewusst nicht genommen —
+ *  es ist im SoT die Wärmepumpen-Identität und hieße hier fälschlich „Gefahr".
+ *
+ *  ⚠ **Die beiden Randstufen sind theme-abhängig, und zwar aus Messung, nicht aus
+ *  Geschmack.** Eine feste Farbe je Stufe war die erste Fassung, und sie fiel in je einem
+ *  Modus unter die 3:1-Schwelle für grafische Objekte (WCAG 1.4.11): Grün-500 erreicht auf
+ *  Weiß nur 2,28:1, Purple-700 auf dunklem Grund nur 2,10:1. Beide Enden weichen deshalb
+ *  **vom Hintergrund weg** statt in eine feste Richtung — im hellen Modus nach dunkel, im
+ *  dunklen nach hell. Der Helligkeitsabstand zur Mitte bleibt dabei in beiden Modi
+ *  vergleichbar (1,76:1 hell · 1,61:1 dunkel), was auf der Achse normal↔teuer zählt: Beide
+ *  sind Lila, dort trägt allein die Helligkeit. Muster wie `CHART_ACHSEN.light/.dark`;
+ *  gelesen über {@link usePreisstufenFarben}.
+ *
+ *  Die Grenzen sind Daten, keine Farben: `guenstig` gilt unterhalb der anlagen-eigenen
+ *  Günstig-Schwelle (Backend, ungekappt — nicht der auf fünf gedeckelte Rang), `teuer`
+ *  oberhalb des optimierten Ø. Wer die Schwellen ändert, ändert sie im Backend. */
+export const PREISSTUFEN_FARBEN = {
+  light: {
+    guenstig: '#16a34a',   // green-600 · 3,30:1 auf Weiß (green-500 wären 2,28:1)
+    normal: '#a855f7',     // = CHART_COLORS.strompreis, in beiden Modi über 3:1
+    teuer: '#7e22ce',      // purple-700 · 6,98:1 — dunkler als die Mitte
+  },
+  dark: {
+    guenstig: '#22c55e',   // green-500 · 6,44:1 auf dunklem Grund
+    normal: '#a855f7',     // dieselbe Rollenfarbe — die Mitte wandert nicht
+    teuer: '#e879f9',      // fuchsia-400 · 5,97:1 — heller als die Mitte
+  },
+} as const
+
 /** E-Auto-/Wallbox-Ladequellen — ein Trio, überall gleich (PV günstig → Extern teuer). */
 export const LADEQUELLEN_FARBEN = {
   pv: '#22c55e',
@@ -424,6 +460,19 @@ export const HILFSLINIE_DASH = '4 2'
 export const CHART_ACHSEN = {
   light: { achse: '#6b7280', grid: '#e5e7eb', referenz: '#9ca3af' }, // gray-500/200/400
   dark:  { achse: '#9ca3af', grid: '#374151', referenz: '#6b7280' }, // gray-400/700/500
+}
+
+/** Fläche, auf der Charts stehen — der Hex-Zwilling von `bg-white dark:bg-gray-800`.
+ *
+ *  Nicht zum Färben gedacht (das macht Tailwind), sondern als **Bezugsgröße**: Ob
+ *  eine Serienfarbe sichtbar ist, ist eine Aussage über ihren Kontrast zu dieser
+ *  Fläche, und die lässt sich nur gegen einen benannten Wert prüfen. Angelegt mit
+ *  der Kontrast-Probe der Preisstufen (#335), die sonst zwei Hex-Werte im Test
+ *  hätte hartkodieren müssen — und damit die Frage „gegen welchen Hintergrund
+ *  eigentlich?" jedem künftigen Leser überlassen. */
+export const CHART_FLAECHE = {
+  light: '#ffffff',
+  dark: '#1f2937',   // gray-800
 }
 
 // ─── Komponenten-Identität (Investitionstyp) — kanonische SoT (Regel A) ──────

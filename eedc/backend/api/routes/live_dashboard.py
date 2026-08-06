@@ -102,6 +102,36 @@ class TagesverlaufResponse(BaseModel):
     punkte: list[TagesverlaufPunkt] = []
 
 
+class BoersenpreisStunde(BaseModel):
+    """Eine bewertete Stunde der Day-Ahead-Kurve."""
+    stunde: int              # 0–23, lokale Stunde der Gebotszone
+    preis_cent: float        # ct/kWh, netto (ohne Steuern/Netzentgelte) — kann negativ sein
+    rang: int                # 1–5 = eine der günstigsten des Fensters, 99 = Rest
+    unter_schwelle: bool     # UNGEKAPPT — anders als der Rang nicht auf 5 begrenzt
+
+
+class BoersenpreisTag(BaseModel):
+    datum: str                                        # "2026-08-06"
+    stunden: list[BoersenpreisStunde] = []
+    schwelle_cent: Optional[float] = None             # Günstig-Schwelle DIESES Tages
+    optimierter_durchschnitt_cent: Optional[float] = None  # Ø ohne die 3 Peaks
+
+
+class BoersenpreisResponse(BaseModel):
+    """Day-Ahead-Börsenpreise für heute und (ab ~13 Uhr) morgen.
+
+    ``tage`` enthält **nur** Tage mit Preisen. Fehlt morgen, sagt ``hinweis``
+    warum — ein stilles Weglassen wäre eine unvollständige Antwort, die sich als
+    vollständige ausgibt (ADR-002/P4).
+    """
+    anlage_id: int
+    markt: str                                   # "DE" | "AT"
+    tage: list[BoersenpreisTag] = []
+    aktuelle_stunde: Optional[int] = None        # lokale Stunde in der Gebotszone
+    heute: Optional[str] = None                  # Datum von „heute" in derselben Zone
+    hinweis: Optional[str] = None                # gesetzt, wenn ein Tag fehlt
+
+
 # ── Demo-Daten ───────────────────────────────────────────────────────────────
 
 def _generate_demo_data(anlage_id: int, anlage_name: str) -> dict:
@@ -362,6 +392,109 @@ async def get_tagesverlauf(
         "datum": datetime.now().strftime("%Y-%m-%d"),
         "serien": tv_data.get("serien", []),
         "punkte": tv_data.get("punkte", []),
+    }
+
+
+# ── Börsenpreis-Endpoint (#335) ──────────────────────────────────────────────
+
+# Die Day-Ahead-Auktion veröffentlicht die Preise des Folgetages gegen 13 Uhr
+# (EPEX Spot, Marktzeit). Vor diesem Zeitpunkt gibt es sie nicht — das ist keine
+# Störung, sondern der Marktrhythmus, und der Block sagt es entsprechend.
+DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE = 13
+
+
+@router.get("/{anlage_id}/boersenpreise", response_model=BoersenpreisResponse)
+async def get_boersenpreise(
+    anlage_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Bewertete Day-Ahead-Börsenpreise für heute und — sobald veröffentlicht — morgen.
+
+    Bewertet wird über ``services/preis_tag.py``, also über **dieselbe** Schicht,
+    aus der auch die HA-Preis-Sensoren ihre Zahlen ziehen. Der Chart zeigt damit
+    genau die Stunden als günstig, die ``eedc_preis_rang`` meldet.
+
+    **Je Tag eine eigene Schwelle:** Day-Ahead ist ein Tagesprodukt, und der
+    optimierte Ø (ohne die 3 Peaks) wird je Kalendertag gebildet. Ein gemeinsamer
+    Ø über 48 Stunden würde an einem teuren Tag keine einzige günstige Stunde
+    ausweisen und am billigen fast alle — und stünde damit im Widerspruch zu den
+    Sensoren derselben Anlage.
+
+    **Kein Demo-Zweig:** Börsenpreise sind öffentliche Marktdaten, keine
+    Anlagendaten. Der Endpunkt liefert im Demo-Modus dieselbe echte Kurve —
+    simuliert würde hier nichts glaubwürdiger, nur falsch.
+    """
+    result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    anlage = result.scalar_one_or_none()
+    if not anlage:
+        raise not_found("Anlage")
+
+    from datetime import timedelta
+
+    from backend.services.preis_tag import (
+        jetzt_im_markt, lade_preistag, markt_der_anlage,
+    )
+
+    markt = markt_der_anlage(anlage)
+    now = jetzt_im_markt(markt)
+    heute = now.date()
+    morgen = heute + timedelta(days=1)
+
+    tage: list[dict] = []
+    for datum in (heute, morgen):
+        try:
+            tag = await lade_preistag(db, anlage, datum, now.hour)
+        except Exception as e:
+            # Ein Tag, der nicht geladen werden kann, darf den anderen nicht
+            # mitreißen — und er wird unten als fehlend ausgewiesen, nicht
+            # stillschweigend als „gibt es nicht" behandelt.
+            logger.warning(
+                "Börsenpreise %s (Anlage %s): %s: %s",
+                datum, anlage_id, type(e).__name__, e,
+            )
+            continue
+        if tag is None or not tag.stunden:
+            continue
+        tage.append({
+            "datum": tag.datum.isoformat(),
+            "stunden": [
+                {
+                    "stunde": s.stunde,
+                    "preis_cent": s.preis_cent,
+                    "rang": s.rang,
+                    "unter_schwelle": s.unter_schwelle,
+                }
+                for s in tag.stunden
+            ],
+            "schwelle_cent": tag.schwelle_cent,
+            "optimierter_durchschnitt_cent": tag.optimierter_durchschnitt_cent,
+        })
+
+    geladene = {t["datum"] for t in tage}
+    hinweis: Optional[str] = None
+    if heute.isoformat() not in geladene and morgen.isoformat() not in geladene:
+        hinweis = (
+            "Börsenpreise sind derzeit nicht abrufbar. Ohne Koordinaten der Anlage "
+            "lassen sich Tag- und Nachtfenster nicht bestimmen; ansonsten antwortet "
+            "die Marktdaten-Quelle gerade nicht."
+        )
+    elif morgen.isoformat() not in geladene:
+        hinweis = (
+            f"Für morgen liegen noch keine Börsenpreise vor — die Day-Ahead-Auktion "
+            f"veröffentlicht sie gegen {DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE}:00 Uhr."
+            if now.hour < DAY_AHEAD_VEROEFFENTLICHUNG_STUNDE
+            else "Für morgen liegen noch keine Börsenpreise vor."
+        )
+    elif heute.isoformat() not in geladene:
+        hinweis = "Für heute liegen keine Börsenpreise vor, nur für morgen."
+
+    return {
+        "anlage_id": anlage.id,
+        "markt": markt,
+        "tage": tage,
+        "aktuelle_stunde": now.hour,
+        "heute": heute.isoformat(),
+        "hinweis": hinweis,
     }
 
 

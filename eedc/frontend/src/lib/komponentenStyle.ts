@@ -170,6 +170,20 @@ export const SONSTIGES_SPEICHER_KPI = {
   ersparnis: { title: 'Ersparnis', icon: TrendingUp, color: 'green'  as const },
 } as const satisfies Record<string, KpiStyle>
 
+/** Börsenpreis-Kennzahlen des Live-Blocks (#335).
+ *
+ *  Alle drei sind dieselbe Größe in ct/kWh und tragen deshalb dieselbe Farbe —
+ *  `purple`, die Rollenfarbe des Strompreises (`CHART_COLORS.strompreis`). Was
+ *  sie unterscheidet, ist ihre Rolle zueinander (Ist · Bezugsgröße · Grenze),
+ *  und das sagt der Titel, nicht die Farbe. Die Stufenfarben der Chart-Linie
+ *  stehen getrennt in `colors.ts::PREISSTUFEN_FARBEN` — sie färben nach Wert,
+ *  diese hier benennen Kennzahlen. */
+export const BOERSENPREIS_KPI = {
+  aktuell:      { title: 'Aktueller Preis',  icon: Coins, color: 'purple' as const },
+  durchschnitt: { title: 'Ø ohne 3 Peaks',   icon: Gauge, color: 'purple' as const },
+  schwelle:     { title: 'Günstig-Schwelle', icon: Hash,  color: 'purple' as const },
+} as const satisfies Record<string, KpiStyle>
+
 // ─── Komponenten-Identität (#3b') — Icon + Farbe + Label je Investitionstyp ───
 //
 // Sektions-Kopf-Identität (Cockpit-Teaser, Komponenten-Achse, Vorschau). Icon +
