@@ -101,6 +101,19 @@ class CheckKategorie(str, Enum):
     # Abgrenzung: PV auf bestehenden Tageszeilen gehört DATENQUELLE_DRIFT —
     # kein zweiter Turm über denselben Sachverhalt.
     TAGESWERTE_FEHLEN = "tageswerte_fehlen"
+    # v4.1 (N-161): eedc und Home Assistant laufen in verschiedenen Zeitzonen.
+    # eedc mischt zwei Zeitwelten — 28 Stellen rechnen hart in
+    # `ZoneInfo("Europe/Berlin")`, 85 Stellen nehmen die Systemzeit
+    # (`date.today()`). Solange der Container auf der HA-Zeitzone steht, sind
+    # beide deckungsgleich; auf UTC — dem Docker-Default ohne `TZ` — driften sie
+    # **an der Tageskante**, also genau dort, wo Tageszeilen entstehen.
+    # Verglichen wird der aktuelle **UTC-Offset**, nicht der Zonenname: Wien,
+    # Zürich und Amsterdam teilen sich Berlins Offset, ein Namensvergleich
+    # meldete dort einen Fehler, den es nicht gibt. Ohne erreichbares HA
+    # schweigt der Check (kein Hinweis, den niemand auflösen kann — P-6).
+    # Bereits schief gespeicherte Tage heilt er NICHT und behauptet das auch
+    # nicht: er misst den Zustand von jetzt.
+    ZEITZONE_ABWEICHUNG = "zeitzone_abweichung"
 
 
 @dataclass

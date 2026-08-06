@@ -110,6 +110,7 @@ class DatenChecker(
         ergebnisse.extend(await self._check_sensor_mapping_einheit(anlage))
         ergebnisse.extend(await self._check_provenance_conflicts(anlage))
         ergebnisse.extend(await self._check_datenquelle_status(anlage))
+        ergebnisse.extend(await self._check_zeitzone_ha(anlage))
         ergebnisse.extend(await self._check_datenquelle_drift(anlage))
         ergebnisse.extend(await self._check_connector_monatswert(anlage))
         ergebnisse.extend(await self._check_batterie_vorzeichen_historie(anlage))

@@ -23,6 +23,18 @@ Der bisherige Rat war, das HA-Konfigurationsverzeichnis in den eedc-Container ei
 
 **Ein Punkt bleibt:** Weiter zurück als Home Assistant selbst kann auch dieser Weg nicht. Die Langzeitstatistik beginnt, wenn du den Sensor einrichtest. Für die Jahre davor ist der Datei-Import (CSV/Excel) der richtige Weg.
 
+### Läuft eedc in einer anderen Zeitzone als Home Assistant? Der Daten-Checker sagt es dir
+
+Ein Docker-Container läuft auf **UTC**, wenn man ihm nichts anderes sagt — egal, wie der Rechner eingestellt ist. Für eedc heißt das: Der Tag endet um 22:00 statt um Mitternacht, und die letzten beiden Stunden landen im nächsten Tag. Das betrifft alle Tageswerte, von *Cockpit → Tag* bis zum Tagesabschluss.
+
+Das Tückische daran: Man sieht es nicht. Die Zahlen wirken plausibel, sie stehen nur am falschen Tag.
+
+**Der Daten-Checker prüft das jetzt** und meldet eine Abweichung unter *Zeitzone – Abweichung zu Home Assistant*. Er vergleicht dabei den Zeitabstand, nicht den Namen der Zeitzone — wer in Wien oder Zürich wohnt, bekommt keine Meldung, obwohl seine Zeitzone anders heißt als Berlin.
+
+Was zu tun ist, steht im Befund: **Als Add-on** übernimmt eedc die Zeitzone von Home Assistant, ein Neustart des Add-ons genügt. **Im eigenen Container** setzt du `TZ=Europe/Berlin` (bzw. deine Zeitzone) und startest ihn neu — in der mitgelieferten `docker-compose.yml` ist das bereits eingetragen. Ohne Home-Assistant-Verbindung meldet sich die Prüfung nicht: Dann gibt es nichts zu vergleichen.
+
+Bereits gespeicherte Tage repariert das nicht von selbst — die kannst du danach über *Einstellungen → Datenverwaltung* neu berechnen lassen.
+
 ### Deye/Solarman-Import: jetzt geht er wirklich
 
 Mit v4.0.9 hatten wir zwei Ursachen behoben, an denen der Deye/Solarman-Cloud-Import scheiterte — die fehlende Auswahl der Server-Region und einen falsch aufgebauten Autorisierungs-Kopf. Beides war richtig, und der Import ging trotzdem nicht.
