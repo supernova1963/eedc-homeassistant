@@ -112,9 +112,37 @@ Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Anim
 - Ohne eigenen Sensor greift automatisch der **EPEX-Börsenpreis** (DE/AT via aWATTar-API) → Linie „Börsenpreis (EPEX)"; auch die frühen Morgenstunden vor dem ersten Sensor-Wert werden so aufgefüllt.
 - Ein Klick auf einen Legenden-Eintrag schaltet die jeweilige Serie ein oder aus.
 
+**Börsenpreis heute & morgen** — ein eigener Block mit der **Day-Ahead-Kurve** über zwei Tage
+auf einer durchgehenden Zeitachse:
+
+- Die Linie ist **nach Preisniveau abgestuft**: grün unterhalb deiner Günstig-Schwelle, in der
+  Rollenfarbe zwischen Schwelle und Tagesdurchschnitt, abgesetzt darüber. Zusammenhängende
+  günstige Stunden sind zusätzlich als Fläche hinterlegt.
+- Darüber drei Kennzahlen für **heute**: aktueller Preis, der **Ø ohne die 3 teuersten Stunden**
+  (die Bezugsgröße) und die **Günstig-Schwelle** samt Anzahl der Stunden darunter. Es sind
+  dieselben Zahlen, die auch die HA-Sensoren `eedc_preis_aktuell_cent`,
+  `eedc_preis_optimierter_durchschnitt_cent` und `eedc_preis_guenstige_stunden_anzahl` melden.
+- **Jeder Tag hat seine eigene Schwelle** — Day-Ahead ist ein Tagesprodukt, und ein Durchschnitt
+  über beide Tage würde an einem teuren Tag keine einzige Stunde als günstig ausweisen.
+- Die Preise für **morgen** veröffentlicht die Auktion gegen **13 Uhr**. Vorher zeigt der Block
+  nur heute und sagt, warum die zweite Hälfte fehlt.
+- Es sind **Börsenpreise, netto** — ohne Steuern, Abgaben und Netzentgelte. Dein Lieferant
+  rechnet andere Beträge ab; für die Frage, *welche* Stunde die günstige ist, zählt der Verlauf.
+- Die **Günstig-Schwelle stellst du selbst ein** (Standard: 10 % unter dem Ø ohne Peaks) —
+  siehe [Teil III](HANDBUCH_EINSTELLUNGEN.md). ⚠ **0 % schaltet die Schwelle nicht ab**, sondern
+  legt sie genau auf den Durchschnitt.
+
+> Der Block braucht **keine zugeordneten Sensoren** — Börsenpreise sind öffentliche Marktdaten.
+> Er erscheint deshalb auch dann, wenn Live sonst noch „Keine Live-Daten verfügbar" meldet.
+> Nur die Anlagen-Koordinaten müssen gepflegt sein: Aus ihnen ergibt sich, welche Stunden Tag
+> und welche Nacht sind — die günstigsten fünf werden je Fenster getrennt bestimmt.
+>
+> eedc zeigt Preise und **empfiehlt keine Handlung**: Wann geladen, entladen oder pausiert wird,
+> entscheidest du in deiner eigenen Automation.
+
 **Wetter-Widget** — aktuelle Außentemperatur, Wolkenbedeckung und Stunden-Prognose als kleine Kachel.
 
-**Demo-Modus** — ohne zugeordnete Datenquellen zeigt Live simulierte Werte, damit du die Darstellung vorab testen kannst.
+**Demo-Modus** — ohne zugeordnete Datenquellen zeigt Live simulierte Werte, damit du die Darstellung vorab testen kannst. Der Börsenpreis-Block bleibt davon unberührt: Er zeigt auch dort die echte Marktkurve.
 
 > **Woher kommen die Live-Daten?** Aus deinen zugeordneten **Datenquellen** — Home-Assistant-Sensoren, MQTT-Topics oder Geräte-Connectoren. Die Zuordnung pflegst du unter **Einstellungen → Datenquellen** (siehe [Teil III](HANDBUCH_EINSTELLUNGEN.md)).
 
@@ -125,6 +153,17 @@ Die **Tag**-Sicht bringt den feingranularen Stunden-Tag ins Cockpit: ein ausgew�
 - **Stunden-Verlauf** von Erzeugung, Verbrauch und Speicher
 - **Tagesbilanz** als Kennzahl-Strip (Summen des Tages)
 - Detail-Sektionen je nach vorhandenen Komponenten
+
+> **Wo steht der Speicher?** Nicht im obersten Kennzahlen-Block, sondern weiter unten im
+> eingeklappten Block **Speicher** — seine Kopfzeile nennt schon ohne Aufklappen geladene kWh,
+> Vollzyklen und Wirkungsgrad. Aufgeklappt stehen dort **Ladung**, **Entladung**,
+> **Wirkungsgrad η**, **Vollzyklen** und der **Ladezustand**, dazu Netzladung, effektiver
+> Ladepreis und die Tagesbilanz. Der **Ladezustand** zeigt den Stand am **Ende** des Tages und
+> darunter die **Spanne**, zwischen der der Speicher an diesem Tag geschwungen ist — am laufenden
+> Tag ist „Ende" die zuletzt aufgezeichnete Stunde. Ihn gibt es nur in der Tagessicht: Ein
+> Ladestand ist ein Bestand, kein Fluss — über einen Monat gemittelt sagt er nichts. Den
+> stündlichen Verlauf blendest du in der Stundenwerte-Tabelle über den Spalten-Auswähler als
+> **SoC** ein.
 
 > **Mehrere Dachflächen oder Balkonkraftwerke?** Hat **jedes** Gerät einen eigenen Ertragssensor,
 > zeigt der Stunden-Verlauf die PV-Fläche **aufgeteilt** je Gerät statt als einen Block, und die
@@ -140,6 +179,8 @@ Die Datenbasis sind kumulative Zähler-Snapshots (stündlich); die Tages-Werte f
 ### 2.3 Monat
 
 Die **Monat**-Sicht ist das Referenz-Muster der Zeit-Achse: ein ausgewählter Monat mit Tages-Granularität. Über den Monats-Zeitstrahl navigierst du zu beliebigen Vormonaten.
+
+> **Womit die Sicht aufgeht:** mit dem **laufenden** Monat, solange kein Monatsabschluss offen ist. Fehlt noch ein Abschluss, öffnet sie stattdessen den jüngsten Monat, für den Werte gepflegt sind — dort beginnt der Weg zum offenen Abschluss, und der Knopf „Abschluss starten" steht daneben.
 
 - **Kennzahl-Strip** oben — die wichtigsten Monatswerte mit Δ zum Vormonat
 - **Energiebilanz** — PV-Erzeugung, Direktverbrauch, Einspeisung, Netzbezug

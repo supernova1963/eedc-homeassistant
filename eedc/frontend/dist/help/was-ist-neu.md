@@ -1,11 +1,186 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.9)
+> **Stand:** August 2026 (v4.0.10)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.10 — Jede Stunde trägt ihren eigenen Preis · jeder Tag sein eigenes Datum (August 2026)
+
+### Börsenpreis heute *und morgen* — als eigener Block auf der Live-Seite
+
+Bisher lief der Börsenpreis auf der Live-Seite als dünne Linie über dem Tagesverlauf mit: für **heute**, einfarbig, ohne jeden Hinweis darauf, welche Stunde eigentlich die günstige ist. Wer wissen wollte, wann morgen der billige Block liegt, musste dafür zu seinem Stromanbieter wechseln.
+
+Jetzt gibt es dafür einen **eigenen Block: „Börsenpreis heute & morgen"**. Er zeigt beide Tage auf **einer durchgehenden Zeitachse**, und die Linie ist **nach Preisniveau eingefärbt** — grün, wo der Strom unter deiner Günstig-Schwelle liegt, und zusätzlich mit einer hinterlegten Fläche, damit die günstigen Blöcke schon aus dem Augenwinkel zu erkennen sind.
+
+Darüber stehen drei Zahlen für heute: der **aktuelle Preis**, der **Durchschnitt ohne die drei teuersten Stunden** und deine **Günstig-Schwelle** samt der Anzahl von Stunden, die heute darunter liegen. Es sind dieselben Zahlen, die auch als Sensoren in Home Assistant ankommen — der Block und deine Automation sprechen also über dasselbe.
+
+**Was du wissen solltest:**
+
+- Die Preise für morgen gibt die Auktion erst **gegen 13 Uhr** frei. Vorher siehst du nur heute — und darunter steht, warum.
+- **Jeder Tag hat seine eigene Schwelle.** Ein gemeinsamer Durchschnitt über beide Tage hätte an einem teuren Tag gar keine günstige Stunde ausgewiesen.
+- Es sind **Börsenpreise, netto** — ohne Steuern, Abgaben und Netzentgelte. Dein Lieferant rechnet andere Beträge ab; für die Frage, *welche* Stunde die günstige ist, zählt der Verlauf.
+- Der Block braucht **keine eingerichteten Sensoren**. Er erscheint auch, wenn die Live-Seite sonst noch „Keine Live-Daten verfügbar" meldet — nur die Koordinaten deiner Anlage müssen gepflegt sein.
+- Die **Günstig-Schwelle** stellst du selbst ein (Standard: 10 % unter dem Durchschnitt). ⚠ **0 % schaltet sie nicht ab**, sondern legt sie genau auf den Durchschnitt.
+
+> eedc zeigt dir die Preise — **was du damit machst, bleibt deine Entscheidung**. Ladefenster, Entlade-Sperren und Batterie-Strategien baust du weiterhin selbst in Home Assistant.
+
+### Cockpit → Tag zeigt den Ladezustand des Speichers
+
+Im Speicher-Block der Tagessicht standen bisher Ladung, Entladung, Wirkungsgrad und Vollzyklen — aber nicht der **Ladezustand**. Den gab es nur, wenn man ihn sich in der Stundenwerte-Tabelle als Spalte „SoC" einblendete.
+
+Jetzt steht er als eigene Kachel im Block: der Stand am **Ende** des Tages, darunter die **Spanne**, zwischen der der Speicher an diesem Tag geschwungen ist — also etwa „64 %, Spanne 12–98 %". Am laufenden Tag ist „Ende" die zuletzt aufgezeichnete Stunde; fehlen die letzten Stunden noch, wird daraus **kein** Ladestand von 0 % gemacht.
+
+Den Ladezustand gibt es bewusst **nur in der Tagessicht**: Er ist ein Bestand, kein Fluss. Über einen Monat gemittelt ergäbe er keine sinnvolle Aussage, deshalb taucht er in *Monat* und *Jahr* nicht auf.
+
+> **Der Block ist eingeklappt** und steht unter den Kennzahlen. Seine Kopfzeile nennt schon ohne Aufklappen geladene kWh, Vollzyklen und Wirkungsgrad. *(Anregung aus dem Forum-Thread zu v4.0.0)*
+
+### Cockpit → Monat geht auf dem laufenden Monat auf
+
+Bisher stand beim Aufschlagen der Monats-Sicht immer der neueste Monat da, für den es einen gepflegten Abschluss gibt — bei laufender Pflege also der **Vormonat**. Wer wissen wollte, wie der aktuelle Monat steht, musste ihn jedes Mal selbst in der Monatsleiste anklicken. *Cockpit → Tag* und *Cockpit → Jahr* öffnen längst auf dem Aktuellen; die Monats-Sicht war die Ausnahme.
+
+Jetzt öffnet auch sie den **laufenden** Monat — mit einer Einschränkung, und die ist Absicht:
+
+- **Ist noch ein Monatsabschluss offen**, bleibt alles beim Alten: die Sicht geht auf dem jüngsten Monat auf, für den Werte gepflegt sind. Dort beginnt der Weg zum offenen Abschluss, und der Knopf „Abschluss starten" steht direkt daneben. Es wäre wenig hilfreich, in den laufenden Monat zu springen und den offenen Abschluss aus dem Blick zu verlieren.
+- **In einen Monat nach dem laufenden** springt die Sicht nie.
+
+Bei der Gelegenheit wurde die Frage „ist überhaupt noch etwas offen?" richtiggestellt: Sie hieß in dieser Sicht bisher „ist der jüngste gepflegte Monat älter als der Vormonat?" — ein **fehlender Monat mitten in der Historie** fiel damit durch, obwohl der Hinweis unten in der Statusleiste ihn längst nennt. Beide antworten jetzt gleich. Merken wirst du das nur, wenn du eine solche Lücke hast: dann steht der Knopf „Abschluss starten" da, wo er vorher fehlte.
+
+> Über die Monatsleiste erreichst du weiterhin jeden Monat; ein Direktsprung aus *Cockpit → Jahr* landet unverändert auf dem angeklickten Monat. *(coolxmad, [#353](https://github.com/supernova1963/eedc-homeassistant/issues/353))*
+
+### Die Börsenpreise der Nachtstunden gehörten dem falschen Tag — behoben
+
+Wenn du dir auf der Live-Seite den Tagesverlauf mit der Strompreis-Linie angesehen hast, ist dir vielleicht aufgefallen, dass die Preislinie erst **um 2 Uhr** beginnt. Und wer nachts genauer hingeschaut hat, sah dort ab dem frühen Nachmittag Zahlen stehen, die gar nicht zu diesem Tag gehörten — es waren die des **nächsten** Tages.
+
+**Woran es lag:** eedc holt die Börsenpreise stundenweise ab und hat dabei einen Tag angefragt, der von Mitternacht bis Mitternacht **UTC** läuft — also von 2 Uhr bis 2 Uhr deiner Zeit. Die Antwort hat es aber nach deiner Uhr einsortiert. Die ersten ein bis zwei Stunden des Tages fielen damit heraus, und ihre Plätze belegten die ersten Stunden von morgen. Weil am Ende trotzdem 24 Werte dastanden, sah alles vollständig aus.
+
+**Das betraf mehr als die Anzeige.** Auf derselben Preisreihe stehen die HA-Sensoren für Preis-Rang, günstige Stunden, aktuellen Preis und Abstand zum Durchschnitt — und die stündliche Mitschrift, aus der später der Tagesdurchschnitt und der effektive Ladepreis deines Speichers entstehen.
+
+**Jetzt gilt: ein Tag ist der Tag der Strommarkt-Zeitzone.** Abfrage und Zuordnung kommen aus derselben Uhr — unabhängig davon, in welcher Zeitzone dein Container läuft. Auch die beiden Umstellungstage stimmen: Ende März hat der Tag 23 Stundenpreise, Ende Oktober behält er die erste seiner beiden Zwei-Uhr-Stunden.
+
+⚠ **Was sich an deinen Sensorwerten ändert:** Rang, Anzahl günstiger Stunden, aktueller Preis und Abstand zum Durchschnitt rechnen ab jetzt mit den richtigen Nachtpreisen. Da Durchschnitt und Günstig-Schwelle über alle Stunden eines Tages gebildet werden, kann sich dadurch auch die Bewertung einzelner Tagesstunden verschieben. Wer nachts zwischen 0 und 2 Uhr auf den aktuellen Preis reagiert, bekommt jetzt den Preis der Stunde, in der er tatsächlich ist.
+
+**Schon gespeicherte Tage bleiben, wie sie sind.** eedc fasst deine Historie nicht von selbst an. Wenn du sie berichtigen möchtest, rechne die betroffenen Tage unter *Einstellungen → Daten* mit **„Mehrere Tage neu aggregieren"** neu (in Schüben zu je höchstens 31 Tagen).
+
+### Meine Tageswerte fangen erst bei der Installation an — jetzt holt eedc die Historie selbst
+
+Wenn du eedc als eigenen Container betreibst und über einen Long-Lived-Token mit Home Assistant verbunden bist, gab es bisher eine unsichtbare Grenze: eedc kam **nicht** an die Langzeitstatistik von HA. Tageswerte baute es sich deshalb nur aus eigenen Messungen im 5-Minuten-Takt — also ab dem Tag der Installation vorwärts. *Cockpit → Tag* blieb für alles davor leer, der Voll-Backfill war gesperrt, und „Lücken aus HA-LTS nachfüllen" in der Reparatur-Werkbank ging nicht.
+
+Der bisherige Rat war, das HA-Konfigurationsverzeichnis in den eedc-Container einzuhängen. Das setzt aber voraus, dass beide auf **demselben Rechner** laufen und HA gerade läuft — und wer MariaDB als Recorder nutzt, kam damit gar nicht weiter.
+
+**Jetzt holt eedc die Statistik über dieselbe Verbindung, über die es ohnehin schon die aktuellen Sensorwerte liest.** Du musst dafür nichts einrichten: Ist deine HA-Verbindung eingetragen, ist die Historie da. Läuft eedc als Add-on oder hast du die Datenbank eingehängt, bleibt alles wie bisher — dieser Weg ist etwas schneller und wird weiter bevorzugt.
+
+**An deinen Zahlen ändert sich nichts.** Es sind dieselben Werte aus derselben Statistik, nur anders abgeholt; wir haben beide Wege an einer echten Anlage nebeneinander gemessen und keinen einzigen Unterschied gefunden.
+
+**Ein Punkt bleibt:** Weiter zurück als Home Assistant selbst kann auch dieser Weg nicht. Die Langzeitstatistik beginnt, wenn du den Sensor einrichtest. Für die Jahre davor ist der Datei-Import (CSV/Excel) der richtige Weg.
+
+### Läuft eedc in einer anderen Zeitzone als Home Assistant? Der Daten-Checker sagt es dir
+
+Ein Docker-Container läuft auf **UTC**, wenn man ihm nichts anderes sagt — egal, wie der Rechner eingestellt ist. Für eedc heißt das: Der Tag endet um 22:00 statt um Mitternacht, und die letzten beiden Stunden landen im nächsten Tag. Das betrifft alle Tageswerte, von *Cockpit → Tag* bis zum Tagesabschluss.
+
+Das Tückische daran: Man sieht es nicht. Die Zahlen wirken plausibel, sie stehen nur am falschen Tag.
+
+**Der Daten-Checker prüft das jetzt** und meldet eine Abweichung unter *Zeitzone – Abweichung zu Home Assistant*. Er vergleicht dabei den Zeitabstand, nicht den Namen der Zeitzone — wer in Wien oder Zürich wohnt, bekommt keine Meldung, obwohl seine Zeitzone anders heißt als Berlin.
+
+Was zu tun ist, steht im Befund: **Als Add-on** übernimmt eedc die Zeitzone von Home Assistant, ein Neustart des Add-ons genügt. **Im eigenen Container** setzt du `TZ=Europe/Berlin` (bzw. deine Zeitzone) und startest ihn neu — in der mitgelieferten `docker-compose.yml` ist das bereits eingetragen. Ohne Home-Assistant-Verbindung meldet sich die Prüfung nicht: Dann gibt es nichts zu vergleichen.
+
+Bereits gespeicherte Tage repariert das nicht von selbst — die kannst du danach über *Einstellungen → Datenverwaltung* neu berechnen lassen.
+
+### Nachts zeigte eedc den falschen Tag — behoben
+
+Wer zwischen Mitternacht und 2 Uhr in den **Prognosen-Vergleich** geschaut hat, sah dort zwei Kalendertage mit **exakt denselben Zahlen** — in allen drei Spalten, OpenMeteo, eedc und Solcast. Die Zeile für „heute" trug das Datum von gestern, aber die Werte von heute, und der heutige Tag stand daneben gleich noch einmal.
+
+**Woran es lag:** Der Browser hat das Datum in der Weltzeit UTC gebildet statt in deiner Zeitzone. In Mitteleuropa ist das zwischen 00:00 und 02:00 Uhr (im Winter 00:00–01:00) noch der Vortag — während eedc im Hintergrund längst mit dem neuen Tag rechnet. Ab 2 Uhr stimmten beide wieder überein, und tagsüber war nichts zu sehen. Genau deshalb hat es so lange gedauert, das zu finden.
+
+**Es betraf mehr als diese eine Ansicht.** In demselben Zeitfenster:
+
+- Der Knopf **„Tag neu berechnen"** hat *gestern* neu berechnet — und die Rückmeldung „0 von 24 Stunden mit Daten" bezog sich dann auf den falschen Tag.
+- Die **Tagesleiste** markierte den Vortag als „heute".
+- **Cockpit → Tag** öffnete auf gestern.
+- Eine Komponente, die du **zum heutigen Tag stillgelegt** hast, galt noch als aktiv.
+- Ein **Stromtarif, der heute beginnt**, galt noch nicht — der abgelöste noch.
+
+Alle zehn Stellen rechnen jetzt mit deiner lokalen Uhr, über eine gemeinsame Funktion. Ein neuer Prüflauf in unserem Entwicklungs-Werkzeug sorgt dafür, dass die nächste Stelle diesen Fehler nicht wiederholen kann.
+
+> **Danke fürs Dranbleiben.** Der Fehler ist zweimal gemeldet worden — beim ersten Mal haben wir ihn für einen harmlosen Zufall gehalten. Erst die Screenshots aus der Nacht haben gezeigt, dass es keiner war.
+
+### Börsenpreis: „ist der Strom gerade teurer als der Tagesschnitt?" ist jetzt ein Sensor
+
+Wer eine Batterie an einem dynamischen Tarif fährt, will oft genau eine Auskunft: **liegt der Preis dieser Stunde über oder unter dem Tagesdurchschnitt?** Nur entladen, wenn Strom teuer ist, und billige Stunden zum Nachladen nehmen — das spart die Verluste des Umwegs über die Batterie.
+
+Diese Auskunft gab eedc bisher nicht heraus. Der Export lieferte nur die fertige Bewertung: den Rang der laufenden Stunde und die Anzahl günstiger Stunden. Der **Preis selbst** und der **optimierte Durchschnitt**, auf den sich die Günstig-Schwelle bezieht, blieben drinnen — obwohl eedc beide längst ausrechnet.
+
+**Drei neue Sensoren liefern sie jetzt:**
+
+| Sensor | Was er sagt |
+|---|---|
+| *Börsenpreis aktuell* | Der Day-Ahead-Preis dieser Stunde in ct/kWh |
+| *Börsenpreis Ø ohne Peaks* | Der Tagesdurchschnitt ohne die 3 teuersten Stunden — die Bezugsgröße der Günstig-Schwelle |
+| *Börsenpreis-Abstand zum Ø* | Wie weit der aktuelle Preis davon entfernt ist: **negativ = billiger**, positiv = teurer |
+
+Damit ist „nur entladen, wenn der Strom teurer ist als der Schnitt" eine Bedingung auf einen Zahlenwert (`> 0`) — kein Template nötig. Und wer feiner steuern will, staffelt nach der Stärke: erst ab +20 % entladen, unter −20 % nachladen.
+
+Dazu trägt das Rang-Profil am Sensor *Börsenpreis-Rang* jetzt auch die **Stundenpreise** selbst. Bisher stand dort je Stunde nur ein Rang — eine eigene Schwelle oder ein eigenes Zeitfenster ließ sich daraus nicht rechnen, obwohl die Sensor-Referenz das anbot.
+
+> **eedc gibt weiterhin keine Lade-Strategie vor.** Es liefert die Werte, auf die deine Automation hört — was damit geschieht, entscheidest du.
+
+### ⚠ „Günstige Stunden" zählt jetzt richtig — bitte einmal deine Automationen prüfen
+
+Die Sensoren *Günstige Stunden*, *… Tag* und *… Nacht* waren bei **5 je Fenster gedeckelt**. Lagen sieben Nachtstunden unter der Günstig-Schwelle, meldeten sie trotzdem fünf.
+
+Als Anzeige ging das durch. Als **Divisor** nicht: Wer seine Ladeleistung aus „Energiemenge ÷ günstige Stunden" rechnet, bekam einen zu kleinen Nenner und damit eine zu hohe Leistung.
+
+**Ab jetzt zählen die drei Sensoren, was ihr Name sagt** — jede Stunde unter der Schwelle. Der Sensor *Börsenpreis-Rang* bleibt unverändert bei 1–5 bzw. 99, denn er beantwortet eine andere Frage („gehört diese Stunde zu den fünf billigsten ihres Fensters?").
+
+**Was du tun solltest:** Wenn du einen der drei Zähler in einer Automation verwendest, sieh dir deine Schwellenwerte einmal an. Im Verlauf in Home Assistant wirst du an der Umstellung einen einmaligen Sprung nach oben sehen — das ist die Korrektur, kein Messfehler.
+
+Nebenbei richtiggestellt: Bei einer Günstig-Schwelle von **0 %** stand in der Oberfläche „schaltet die Schwelle ab, dann zählen wieder die 5 günstigsten". Das hat eedc nie getan — bei 0 % liegt die Schwelle **genau auf** dem Tagesdurchschnitt, günstig ist alles darunter. Der alte Deckel hat den Unterschied verdeckt.
+
+### Deye/Solarman-Import: jetzt geht er wirklich
+
+Mit v4.0.9 hatten wir zwei Ursachen behoben, an denen der Deye/Solarman-Cloud-Import scheiterte — die fehlende Auswahl der Server-Region und einen falsch aufgebauten Autorisierungs-Kopf. Beides war richtig, und der Import ging trotzdem nicht.
+
+Der Melder hat daraufhin den Anmelde-Aufruf selbst gegen Solarman gefahren und uns die Antwort danebengelegt. Damit war die Sache klar: **Die Anmeldung klappt, eedc hat den Zugriffsschlüssel in der Antwort nur an der falschen Stelle gesucht** — eine Ebene zu tief. Herausgekommen ist die Meldung „Antwort enthielt keinen access_token", obwohl er sehr wohl da war.
+
+Und weil dieser Schlüssel für jeden weiteren Aufruf gebraucht wird, konnten auch die beiden Korrekturen aus v4.0.9 nie greifen. Sie waren nicht falsch — sie kamen nie an die Reihe.
+
+**Wenn du Deye/Solarman nutzt:** Trag deine Zugangsdaten wie gewohnt ein und starte den Verbindungstest neu. Änderungen an deiner Konfiguration sind nicht nötig.
+
+### Live-Verlauf, Solcast und der kW/kWh-Test waren im Container stumm
+
+Fünf Funktionen waren fest an den Add-on-Betrieb gebunden und meldeten sich bei einer Token-Verbindung einfach als „nicht verfügbar", obwohl die Verbindung stand: der **Live-Tagesverlauf**, die **Solcast-Anbindung**, die Prognose-Erkennung, die **Ladestands-Historie deines Speichers** und die Prüfung des Daten-Checkers auf **vertauschte Leistungs- und Energie-Sensoren**.
+
+Der letzte Punkt war der ärgerlichste: Genau die Verwechslung, kW statt kWh zuzuordnen, wurde ausgerechnet dort nicht geprüft, wo sie am häufigsten passiert. Alle fünf arbeiten jetzt auch mit einer Remote-Verbindung.
+
+### „Die TagesZusammenfassung vom ? aus unbekannt" — diese Meldung gibt es nicht mehr
+
+Wer eedc frisch eingerichtet hatte, bekam im Daten-Checker einen Hinweis mit **Fragezeichen und „unbekannt"** darin. Er war für einen anderen Zustand gedacht — nämlich dafür, dass schon aggregierte Tage noch aus einer älteren Quelle stammen. Wenn es überhaupt noch **keine** Tageswerte gab, passte er nicht und schickte dich auf die Suche nach einer falschen Datenquelle.
+
+Jetzt steht dort **„Noch keine Tageswerte aggregiert"** — mit dem, was tatsächlich hilft: kurz abwarten (die Aggregation läuft stündlich), die **kWh-Zeilen** unter *Einstellungen → Datenquellen* belegen (nicht nur die Watt-Zeilen), oder zurückliegende Tage über *„Lücken aus HA-LTS nachfüllen"* in der Reparatur-Werkbank holen.
+
+### Meine Monatsleiste zeigte nur den laufenden Monat — jetzt stehen alle drin
+
+Wer eedc mit **Monatsabschlüssen oder importierter Historie** pflegt und keine Tagesdaten aus Home Assistant hat, bekam in *Cockpit → Monat* links nur einen einzigen Eintrag angeboten: den laufenden Monat. Die Sicht daneben zeigte trotzdem einen abgeschlossenen Monat mit allen Werten — der Monat, den man gerade ansah, war in seiner eigenen Auswahlliste nicht zu finden.
+
+Grund war, dass die Leiste ihre Liste aus einer **anderen Quelle** las als die Sicht: sie kannte nur Monate mit **Tagesdaten**, nicht deine gepflegten **Monatsdaten**. Jetzt liest sie beides und zeigt alles, was es gibt — egal ob ein Monat aus dem Monatsabschluss, aus einem Import oder ausschließlich aus Tageswerten stammt.
+
+**An deinen Zahlen ändert sich nichts**, nur die Auswahl ist vollständig. Und der Umweg über *Auswertungen → Tabelle*, um ältere Monate überhaupt zu erreichen, entfällt.
+
+*Gemeldet von kaba-kakao im Forum.*
+
+### „Keine Daten für diesen Tag" — jetzt steht dabei, warum
+
+In *Cockpit → Tag* stand für einen Tag ohne Werte ein einziger Satz: „Für diesen Tag liegen keine Daten vor. Wähle einen Tag mit Messwerten." Das half nicht weiter — und klang so, als hättest du dich beim Tag vertan. Meistens hattest du das nicht: Die Datumsauswahl gibt schon ab dem ersten Tag deines ältesten Monats frei, deine Tageswerte fangen aber oft später an. An einer echten Anlage sind das 30 Tage, die sich anwählen lassen und immer leer bleiben.
+
+**Jetzt sagt die Sicht, was los ist** — je nach Fall: Der Tag liegt **vor der Inbetriebnahme** deiner Anlage · an ihm war **kein kWh-Zähler zugeordnet** · der Tag **wurde nie ausgewertet, Home Assistant hat die Werte aber noch** · **auch Home Assistant hat für diesen Tag nichts** · der Tag **läuft noch**.
+
+**Der Knopf „Tag nachrechnen" erscheint nur da, wo er auch etwas holt** — also im dritten Fall. Liegt der Tag vor deiner Inbetriebnahme oder hat Home Assistant selbst nichts aufgezeichnet, gibt es nichts nachzurechnen; dann steht das offen da, statt dir einen Knopf hinzustellen, der nichts bewirkt. Fehlt eine Zuordnung, führt der Weg direkt zu *Einstellungen → Datenquellen*.
+
+Kleiner Nebeneffekt: Hast du in der Tagessicht **alle** Anzeigen geparkt, stand dort ebenfalls „Keine Daten für diesen Tag" — obwohl die Daten da sind und nur im Papierkorb liegen. Auch das sagt eedc jetzt richtig.
 
 ---
 
@@ -2236,6 +2411,13 @@ die Prognose-Sensoren in Home Assistant folgten dem eedc-Wert. Das ist jetzt ein
 - **Günstig-Schwelle:** Der Wert **0 %** war schon immer erlaubt, schaltet die Schwelle aber ab —
   dann zählen wieder allein die 5 günstigsten Stunden je Fenster. Das steht jetzt am Feld. Der
   Standard war und ist 10 %.
+
+  > ⚠ **Nachträglich richtiggestellt (August 2026):** Der Satz oben stimmt nicht. **0 % schaltet
+  > die Schwelle nicht ab** — sie liegt dann genau **auf** dem Durchschnitt, und günstig ist alles
+  > darunter. Der damalige Deckel auf 5 Stunden je Fenster hat den Unterschied verdeckt; seit er
+  > weg ist, ist er sichtbar. Am Rechenweg hat sich dadurch nichts geändert, nur an dem, was hier
+  > und in der Oberfläche darüber stand.
+
 - **Neu installiert?** Die Tagesprognose zeigt dir jetzt vom ersten Tag an die **PV-Vorschau**,
   statt die ganze Ansicht mit „zu wenig historische Daten" zu verweigern. Verbrauch, Netzbezug und
   die Speicher-Vorschau bleiben dabei leer („—"), bis drei Tage aufgezeichnet sind — sie kommen

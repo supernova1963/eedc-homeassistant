@@ -271,7 +271,7 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 - **Auto-Discovery:** Für jedes über eine Datenquelle mit HA-Sensor bequellte Feld erzeugt eedc zwei Entities: eine `number.eedc_…_start` (Zählerstand vom Monatsanfang) und einen `sensor.eedc_…_monat` (berechneter Monatswert = aktueller Stand − Startwert). Die Friendly Names tragen den Komponentennamen zur besseren Lesbarkeit.
 - **KPI-Export:** zusätzlich exportiert eedc Kennzahlen-Gruppen (Energie & Quoten, Finanzen & Investition, spezifischer Ertrag [aufs Jahr normiert], PV-Prognose, Börsenpreis-Trigger). Die vollständige Liste mit Bedeutung und Einheiten steht in der **[Sensor-Referenz](SENSOR-REFERENZ.md)**.
-- **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn sie zu den 5 billigsten ihres Tag-/Nacht-Fensters gehört **und** ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt (ohne die 3 teuersten Stunden) liegt. Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %). **0 % schaltet die Schwelle ab** — dann zählen wieder allein die 5 günstigsten Stunden je Fenster, unabhängig vom Preisabstand. eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
+- **Günstig-Schwelle:** Eine Stunde gilt als „günstig", wenn ihr Börsenpreis mindestens den eingestellten Prozentsatz unter dem Tagesschnitt ohne die 3 teuersten Stunden liegt („optimierter Ø"). Der Prozentsatz ist je Anlage einstellbar (0–50 %, Standard 10 %); bei **0 %** liegt die Schwelle genau **auf** dem Ø — günstig ist dann alles darunter. Der **Rang** (`eedc_preis_rang`) ist davon getrennt: er nennt die fünf billigsten Stunden je Tag-/Nacht-Fenster und ist deshalb bei 5 gedeckelt, die **Anzahl** günstiger Stunden ist es seit v4.0.10 nicht mehr. eedc liefert nur diese Trigger-Werte — die Lade-/Entlade-Strategie baust du in deinen HA-Automationen.
 - **Alternative REST-API:** Statt MQTT kannst du die Sensoren auch per REST-Sensor aus `…/api/ha/export/sensors/{id}` in HA ziehen (YAML-Beispiel im Block). **Beide Wege liefern dieselbe Zahl** — wie viele Nachkommastellen sie trägt, hängt an der Größenart (kWh ganzzahlig, Geld auf Cent, Prozent auf eine Stelle); Einzelheiten in der [Sensor-Referenz §11](SENSOR-REFERENZ.md).
 
 > **Zu viele Entitäten?** Nicht benötigte Sensoren in HA deaktivieren — oder per `recorder:`-`exclude` nur von der Aufzeichnung ausnehmen (aktuelle Werte bleiben sichtbar, keine DB-Historie).
@@ -290,7 +290,9 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 Jeder Monat ist einzeln per Checkbox wählbar — so bleiben manuell erfasste Daten geschützt.
 
-> **Voraussetzungen:** zugeordnete HA-Sensoren (siehe [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung)), Sensoren in der HA-Langzeitstatistik, Volume-Mapping `config:ro`. Unterstützt SQLite **und** MariaDB/MySQL als Recorder-Backend (automatische Erkennung). Bei Tagesreset-Zählern nutzt eedc `MAX(sum) − MIN(sum)` aus HA-Statistics (reset-bereinigt).
+> **Voraussetzungen:** zugeordnete HA-Sensoren (siehe [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung)) und Sensoren, die in der HA-Langzeitstatistik geführt werden. Den **Zugang zur Statistik** hat eedc auf drei Wegen, und einer genügt: über die verbundene Home-Assistant-Instanz (Add-on oder Long-Lived-Token — **ohne** jede weitere Einrichtung), über das Volume-Mapping `config:ro` auf die Recorder-Datei, oder über `HA_RECORDER_DB_URL` bei MariaDB/MySQL. Wo eine Datenbank erreichbar ist, wird sie bevorzugt; sonst holt eedc dieselben Werte über die HA-API. Bei Tagesreset-Zählern nutzt eedc `MAX(sum) − MIN(sum)` aus HA-Statistics (reset-bereinigt).
+>
+> **Wie weit zurück?** So weit, wie Home Assistant den Sensor selbst führt — die Langzeitstatistik beginnt mit seiner Einrichtung. Für die Zeit davor gibt es den Datei-Import (CSV/Excel); daran ändert auch der API-Weg nichts.
 
 ### 6.5 Import-Assistenten
 

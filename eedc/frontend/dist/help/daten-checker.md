@@ -25,6 +25,7 @@
    9. [Sensor-Mapping – HA-Statistics](#49-sensor-mapping--ha-statistics)
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
+   12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -454,6 +455,24 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 **Kein Lärm am Monatsersten.** Solange der Connector aktiv liefert, fehlt ihm am 1. eines Monats bis zum ersten Abruf naturgemäß der Snapshot *im* Monat. Dieser Zustand erledigt sich innerhalb eines Tages und wird deshalb nicht gemeldet — der Befund erscheint erst, wenn der jüngste Zählerstand älter als zwei Tage ist (oder es überhaupt erst einen gibt).
 
 > **Abgrenzung:** Liefert der Connector einen Wert, misst er aber nur einen **Teil** des Monats (frisch eingerichtet), ist das kein Befund — dort steht eine Zahl, und sie wird in *Cockpit → Monat* mit ihrem Zeitraum beschriftet: „Connector (28.–30.07.2025)". Siehe [HANDBUCH_BEDIENUNG.md §2.3](HANDBUCH_BEDIENUNG.md#23-monat).
+
+---
+
+### 4.12 Zeitzone – Abweichung zu Home Assistant <a name="412-zeitzone--abweichung-zu-home-assistant"></a>
+
+> **Variantenhinweis:** Nur relevant, wenn eine Verbindung zu Home Assistant besteht — als Add-on oder per Zugriffstoken. Ohne HA-Verbindung wird die Kategorie still übersprungen: Es gäbe nichts zu vergleichen und nichts zu tun.
+
+**Was wird geprüft:** Rechnen eedc und Home Assistant mit derselben Uhrzeit? Verglichen wird der **aktuelle UTC-Abstand** beider Systeme, nicht der Name der Zeitzone — Wien, Zürich und Amsterdam gehen genauso wie Berlin, und dort wäre eine Meldung falsch.
+
+**Warum das zählt:** Läuft eedc in einem Container ohne gesetzte Zeitzone, arbeitet er auf UTC. Der Tag endet dann für eedc um 22:00 Ortszeit, und die letzten Stunden werden dem Folgetag zugerechnet. Betroffen sind alle Tageswerte — Cockpit → Tag, Energieprofil, Tagesabschlüsse.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **eedc und Home Assistant rechnen mit verschiedenen Zeitzonen (… Unterschied)** | ⚠️ WARNING | Die beiden Systeme liegen um mindestens eine Stunde auseinander. Die Details nennen die Zeitzone von Home Assistant und den Abstand. | **Als Add-on:** eedc übernimmt die Zeitzone beim Start von Home Assistant — Add-on einmal neu starten. **Standalone:** `TZ=Europe/Berlin` (bzw. deine Zeitzone) als Umgebungsvariable setzen und den Container neu starten, siehe [HANDBUCH_INSTALLATION.md §2](HANDBUCH_INSTALLATION.md#2-installation). |
+
+**Was der Befund nicht leistet:** Er beschreibt den Zustand von **jetzt**. Bereits gespeicherte Tage werden dadurch nicht korrigiert — die lassen sich nach dem Neustart über *Einstellungen → Datenverwaltung* neu berechnen.
 
 ---
 

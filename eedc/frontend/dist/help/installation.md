@@ -107,9 +107,14 @@ docker run -d \
   --name eedc \
   -p 8099:8099 \
   -v $(pwd)/data:/data \
+  -e TZ=Europe/Berlin \
   --restart unless-stopped \
   eedc
 ```
+
+**Zeitzone setzen — nicht optional.** Ein Docker-Container läuft ohne die Angabe `TZ` auf **UTC**, unabhängig von der Zeitzone des Rechners. eedc ordnet Stundenwerte dann rund um Mitternacht dem falschen Tag zu: Der Tagesabschluss fällt auf 22:00 statt 24:00, und die letzten beiden Stunden landen im Folgetag. In der mitgelieferten `docker-compose.yml` ist `TZ=Europe/Berlin` bereits gesetzt — beim manuellen `docker run` und in eigenen Compose-Dateien musst du sie selbst angeben und auf deine Zeitzone anpassen.
+
+Betreibst du eedc zusammen mit Home Assistant, prüft der **Daten-Checker** das automatisch und meldet eine Abweichung zwischen beiden (Kategorie *Zeitzone – Abweichung zu Home Assistant*). Als HA-Add-on übernimmt eedc die Zeitzone von Home Assistant; dort ist nichts einzustellen.
 
 Im Standalone-Betrieb ohne lokales Home Assistant kannst du eedc trotzdem an eine externe HA-Instanz anbinden (per langlebigem Zugriffstoken) oder Daten ausschließlich über MQTT beziehen – beides richtest du im Setup-Wizard oder später unter *Einstellungen → Integration* bzw. *Einstellungen → Datenquellen* ein.
 
