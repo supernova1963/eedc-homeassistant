@@ -966,12 +966,22 @@ async def calculate_anlage_sensors(
                     zusatz = {"rang_profil": preis["rang_profil"]}
                 if preis.get("guenstig_schwelle_cent") is not None:
                     zusatz["guenstig_schwelle_cent"] = preis["guenstig_schwelle_cent"]
+                # Die Bezugsgröße der Schwelle reist mit: ohne sie ist im
+                # Rang-Profil keine eigene Schwelle rechenbar (#335/N-105).
+                if preis.get("optimierter_durchschnitt_cent") is not None:
+                    zusatz["optimierter_durchschnitt_cent"] = preis["optimierter_durchschnitt_cent"]
             elif sensor.key == "eedc_preis_guenstige_stunden_anzahl":
                 value = preis["guenstige_stunden_anzahl"]
             elif sensor.key == "eedc_preis_guenstige_stunden_tag":
                 value = preis["guenstige_stunden_tag"]
             elif sensor.key == "eedc_preis_guenstige_stunden_nacht":
                 value = preis["guenstige_stunden_nacht"]
+            elif sensor.key == "eedc_preis_aktuell_cent":
+                value = preis["preis_aktuell_cent"]
+            elif sensor.key == "eedc_preis_optimierter_durchschnitt_cent":
+                value = preis["optimierter_durchschnitt_cent"]
+            elif sensor.key == "eedc_preis_abstand_prozent":
+                value = preis["abstand_prozent"]
 
             if value is not None:
                 sensor_values.append(SensorValue(

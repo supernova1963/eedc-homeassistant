@@ -75,6 +75,8 @@ NACHKOMMASTELLEN_JE_EINHEIT: dict[str, int] = {
     # Geld — Cent-genau
     "€": 2,
     "€/Jahr": 2,
+    # Arbeitspreise — zwei Stellen, so genau wie die Börsen-Quelle selbst
+    "ct/kWh": 2,
     # Quoten
     "%": 1,
     # Leistung — bewusst mit Stellen (kleine Leistungen dürfen nicht kippen)
@@ -561,7 +563,7 @@ PREIS_SENSOREN = [
         unit="",
         icon="mdi:counter",
         category=SensorCategory.PREIS,
-        formel="Anzahl günstiger Stunden heute (Rang 1–5 UND unter der Günstig-Schwelle, je Anlage einstellbar)",
+        formel="Anzahl Stunden heute unter der Günstig-Schwelle (je Anlage einstellbar) — ungekappt",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -570,7 +572,7 @@ PREIS_SENSOREN = [
         unit="",
         icon="mdi:weather-sunny",
         category=SensorCategory.PREIS,
-        formel="Günstige Stunden im Tag-Fenster (Sonnenauf→-untergang), max. 5",
+        formel="Stunden unter der Günstig-Schwelle im Tag-Fenster (Sonnenauf→-untergang)",
         state_class="measurement",
     ),
     SensorDefinition(
@@ -579,7 +581,39 @@ PREIS_SENSOREN = [
         unit="",
         icon="mdi:weather-night",
         category=SensorCategory.PREIS,
-        formel="Günstige Stunden im Nacht-Fenster, max. 5",
+        formel="Stunden unter der Günstig-Schwelle im Nacht-Fenster",
+        state_class="measurement",
+    ),
+    # Die drei Werte, aus denen jede eigene Preis-Regel gebaut werden kann
+    # (#335, rapahl-PN 2026-08-05). Bis v4.0 lieferte der Export nur die
+    # fertige Zerlegung — weder der Preis der laufenden Stunde noch die
+    # Bezugsgröße der Schwelle verließen eedc, und „liegt der Preis über oder
+    # unter dem optimierten Ø?" war damit nicht beantwortbar.
+    SensorDefinition(
+        key="eedc_preis_aktuell_cent",
+        name="Börsenpreis aktuell",
+        unit="ct/kWh",
+        icon="mdi:cash-clock",
+        category=SensorCategory.PREIS,
+        formel="Day-Ahead-Börsenpreis der laufenden Stunde",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_preis_optimierter_durchschnitt_cent",
+        name="Börsenpreis Ø ohne Peaks",
+        unit="ct/kWh",
+        icon="mdi:chart-line-variant",
+        category=SensorCategory.PREIS,
+        formel="Ø der heutigen Börsenpreise ohne die 3 teuersten Stunden — die Bezugsgröße der Günstig-Schwelle",
+        state_class="measurement",
+    ),
+    SensorDefinition(
+        key="eedc_preis_abstand_prozent",
+        name="Börsenpreis-Abstand zum Ø",
+        unit="%",
+        icon="mdi:swap-vertical",
+        category=SensorCategory.PREIS,
+        formel="(Preis der laufenden Stunde − Ø ohne Peaks) ÷ |Ø| × 100 — negativ = billiger als der Ø",
         state_class="measurement",
     ),
 ]

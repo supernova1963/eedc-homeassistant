@@ -461,15 +461,26 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 
 Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — der variiert je Vertrag/Region, die Kurvenform ist dieselbe). Tag- und Nacht-Fenster werden **solar-basiert getrennt** bewertet (Sonnenauf-/-untergang, wandert saisonal).
 
-**Günstig-Definition (zweistufig):** Eine Stunde gilt als günstig, wenn sie (1) zu den 5 billigsten ihres Fensters gehört **und** (2) ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden. Der Prozentsatz ist je Anlage einstellbar ([MQTT-Export-Seite](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export)); **0 % deaktiviert Stufe (2)**, dann greift wieder allein die Rang-Regel. Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
+**Günstig-Definition:** Eine Stunde gilt als günstig, wenn ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden („optimierter Ø"). Der Prozentsatz ist je Anlage einstellbar ([MQTT-Export-Seite](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export)). Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
+
+**Rang und „günstig" sind zwei verschiedene Aussagen** (ab v4.1). Der **Rang** beantwortet „gehört diese Stunde zu den fünf billigsten ihres Fensters?" und ist deshalb bei 5 gedeckelt. **Günstig** beantwortet „liegt sie unter der Schwelle?" und ist es nicht: liegen sieben Nachtstunden unter der Schwelle, meldet der Zähler auch sieben. Bis v4.0 zählte er nur die Ränge und war damit ebenfalls bei 5 gedeckelt — als Anzeige stimmig, als **Divisor** in einer Automation zu klein.
+
+**Was 0 % bedeutet:** Der Prozentsatz gibt an, wie weit *unter* dem optimierten Ø eine Stunde liegen muss. Bei **0 %** liegt die Schwelle damit **genau auf dem Ø** — günstig ist dann alles, was unter dem Tagesdurchschnitt (ohne die 3 Peaks) liegt. Die Schwelle ist also nicht abgeschaltet, sie ist nur nicht zusätzlich abgesenkt. (Bis v4.0 stand hier „0 % deaktiviert die Schwelle, dann zählen wieder die 5 günstigsten". Das hat der Code nie getan; der Top-5-Deckel hat den Unterschied verdeckt.)
 
 | Sensor | Bedeutung |
 |---|---|
-| `eedc_preis_rang` | Rang der **aktuellen** Stunde: 1–5 = günstig (1 = billigste ihres Fensters), 99 = teuer/Rest. Attribute: `rang_profil` (alle 24 Stunden) und `guenstig_schwelle_cent` (die heutige Schwelle in ct/kWh). |
-| `eedc_preis_guenstige_stunden_anzahl` | Anzahl günstiger Stunden heute (Tag + Nacht) |
-| `eedc_preis_guenstige_stunden_tag` / `_nacht` | Anzahl je Fenster (max. 5) |
+| `eedc_preis_rang` | Rang der **aktuellen** Stunde: 1–5 = eine der fünf billigsten ihres Fensters **und** unter der Schwelle, 99 = teuer/Rest. Attribute: `rang_profil` (alle 24 Stunden, s. u.), `guenstig_schwelle_cent` und `optimierter_durchschnitt_cent` (beide ct/kWh). |
+| `eedc_preis_guenstige_stunden_anzahl` | Anzahl Stunden heute unter der Schwelle (Tag + Nacht) — **ungedeckelt** |
+| `eedc_preis_guenstige_stunden_tag` / `_nacht` | dieselbe Zahl je Fenster |
+| `eedc_preis_aktuell_cent` | Day-Ahead-Börsenpreis der laufenden Stunde |
+| `eedc_preis_optimierter_durchschnitt_cent` | Ø der heutigen Preise **ohne** die 3 teuersten Stunden — die Bezugsgröße der Schwelle |
+| `eedc_preis_abstand_prozent` | Abstand des aktuellen Preises zu diesem Ø. **Negativ = billiger als der Ø**, positiv = teurer. Bezugsgröße ist der Betrag des Ø, damit das Vorzeichen auch bei negativen Börsenpreisen stimmt. |
 
-> **Eigene Kriterien:** Wer eine andere Schwelle bevorzugt, stellt den Prozentsatz auf der Export-Seite um — oder rechnet in HA per Template direkt auf den Attributen (`rang_profil`, `guenstig_schwelle_cent`). eedc liefert bewusst nur die **Trigger-Werte**; die Lade-/Entlade-Strategie baut jeder selbst in seinen Automationen.
+> **Die drei letzten sind für eigene Preis-Regeln da** (v4.1, Wunsch aus der Tester-Runde): „nur entladen, wenn der Strom gerade teurer ist als der Tagesschnitt" ist damit eine Bedingung auf `eedc_preis_abstand_prozent > 0` — ohne Template und ohne dass eedc eine Lade-/Entlade-Strategie vorgibt.
+
+**Das Rang-Profil als Attribut** trägt je Stunde vier Angaben: `stunde`, `rang`, `preis_cent` und `unter_schwelle`. Die letzten beiden gibt es ab v4.1 — vorher stand dort nur der Rang, und damit ließ sich in HA weder eine eigene Schwelle noch ein eigenes Zeitfenster auswerten.
+
+> **Eigene Kriterien:** Wer eine andere Schwelle bevorzugt, stellt den Prozentsatz auf der Export-Seite um — oder rechnet in HA per Template direkt auf den Attributen (`rang_profil` mit den Stundenpreisen, `optimierter_durchschnitt_cent`). eedc liefert bewusst nur die **Trigger-Werte**; die Lade-/Entlade-Strategie baut jeder selbst in seinen Automationen.
 
 ---
 

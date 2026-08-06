@@ -35,6 +35,38 @@ Was zu tun ist, steht im Befund: **Als Add-on** übernimmt eedc die Zeitzone von
 
 Bereits gespeicherte Tage repariert das nicht von selbst — die kannst du danach über *Einstellungen → Datenverwaltung* neu berechnen lassen.
 
+### Börsenpreis: „ist der Strom gerade teurer als der Tagesschnitt?" ist jetzt ein Sensor
+
+Wer eine Batterie an einem dynamischen Tarif fährt, will oft genau eine Auskunft: **liegt der Preis dieser Stunde über oder unter dem Tagesdurchschnitt?** Nur entladen, wenn Strom teuer ist, und billige Stunden zum Nachladen nehmen — das spart die Verluste des Umwegs über die Batterie.
+
+Diese Auskunft gab eedc bisher nicht heraus. Der Export lieferte nur die fertige Bewertung: den Rang der laufenden Stunde und die Anzahl günstiger Stunden. Der **Preis selbst** und der **optimierte Durchschnitt**, auf den sich die Günstig-Schwelle bezieht, blieben drinnen — obwohl eedc beide längst ausrechnet.
+
+**Drei neue Sensoren liefern sie jetzt:**
+
+| Sensor | Was er sagt |
+|---|---|
+| *Börsenpreis aktuell* | Der Day-Ahead-Preis dieser Stunde in ct/kWh |
+| *Börsenpreis Ø ohne Peaks* | Der Tagesdurchschnitt ohne die 3 teuersten Stunden — die Bezugsgröße der Günstig-Schwelle |
+| *Börsenpreis-Abstand zum Ø* | Wie weit der aktuelle Preis davon entfernt ist: **negativ = billiger**, positiv = teurer |
+
+Damit ist „nur entladen, wenn der Strom teurer ist als der Schnitt" eine Bedingung auf einen Zahlenwert (`> 0`) — kein Template nötig. Und wer feiner steuern will, staffelt nach der Stärke: erst ab +20 % entladen, unter −20 % nachladen.
+
+Dazu trägt das Rang-Profil am Sensor *Börsenpreis-Rang* jetzt auch die **Stundenpreise** selbst. Bisher stand dort je Stunde nur ein Rang — eine eigene Schwelle oder ein eigenes Zeitfenster ließ sich daraus nicht rechnen, obwohl die Sensor-Referenz das anbot.
+
+> **eedc gibt weiterhin keine Lade-Strategie vor.** Es liefert die Werte, auf die deine Automation hört — was damit geschieht, entscheidest du.
+
+### ⚠ „Günstige Stunden" zählt jetzt richtig — bitte einmal deine Automationen prüfen
+
+Die Sensoren *Günstige Stunden*, *… Tag* und *… Nacht* waren bei **5 je Fenster gedeckelt**. Lagen sieben Nachtstunden unter der Günstig-Schwelle, meldeten sie trotzdem fünf.
+
+Als Anzeige ging das durch. Als **Divisor** nicht: Wer seine Ladeleistung aus „Energiemenge ÷ günstige Stunden" rechnet, bekam einen zu kleinen Nenner und damit eine zu hohe Leistung.
+
+**Ab jetzt zählen die drei Sensoren, was ihr Name sagt** — jede Stunde unter der Schwelle. Der Sensor *Börsenpreis-Rang* bleibt unverändert bei 1–5 bzw. 99, denn er beantwortet eine andere Frage („gehört diese Stunde zu den fünf billigsten ihres Fensters?").
+
+**Was du tun solltest:** Wenn du einen der drei Zähler in einer Automation verwendest, sieh dir deine Schwellenwerte einmal an. Im Verlauf in Home Assistant wirst du an der Umstellung einen einmaligen Sprung nach oben sehen — das ist die Korrektur, kein Messfehler.
+
+Nebenbei richtiggestellt: Bei einer Günstig-Schwelle von **0 %** stand in der Oberfläche „schaltet die Schwelle ab, dann zählen wieder die 5 günstigsten". Das hat eedc nie getan — bei 0 % liegt die Schwelle **genau auf** dem Tagesdurchschnitt, günstig ist alles darunter. Der alte Deckel hat den Unterschied verdeckt.
+
 ### Deye/Solarman-Import: jetzt geht er wirklich
 
 Mit v4.0.9 hatten wir zwei Ursachen behoben, an denen der Deye/Solarman-Cloud-Import scheiterte — die fehlende Auswahl der Server-Region und einen falsch aufgebauten Autorisierungs-Kopf. Beides war richtig, und der Import ging trotzdem nicht.

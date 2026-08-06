@@ -39,8 +39,10 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
     Returns:
         dict mit ``preis_rang`` (int | None), ``guenstige_stunden_anzahl``,
         ``guenstige_stunden_tag``, ``guenstige_stunden_nacht`` (int),
-        ``guenstig_schwelle_cent`` (float | None) und ``rang_profil``
-        (Liste ``{stunde, rang}``) — oder ``None``.
+        ``guenstig_schwelle_cent``, ``preis_aktuell_cent``,
+        ``optimierter_durchschnitt_cent``, ``abstand_prozent``
+        (float | None) und ``rang_profil``
+        (Liste ``{stunde, rang, preis_cent, unter_schwelle}``) — oder ``None``.
     """
     if not anlage.latitude or not anlage.longitude:
         return None
@@ -82,8 +84,19 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             schwelle_faktor=schwelle_faktor,
         )
 
+        # Das Profil trägt seit v4.1 (#335/N-105) das Rohmaterial mit: den
+        # Stundenpreis und die ungekappte Günstig-Markierung. Vorher stand je
+        # Stunde nur `1–5` oder `99` — damit ließ sich in HA weder eine eigene
+        # Schwelle noch ein eigenes Zeitfenster auswerten, obwohl die
+        # Sensor-Referenz genau das anbot. Muster: `stundenprofil_kwh` der
+        # Prognose-Sensoren.
         rang_profil = [
-            {"stunde": h, "rang": ergebnis.rang_profil[h]}
+            {
+                "stunde": h,
+                "rang": ergebnis.rang_profil[h],
+                "preis_cent": preise.get(h),
+                "unter_schwelle": ergebnis.unter_schwelle_profil.get(h, False),
+            }
             for h in sorted(ergebnis.rang_profil)
         ]
         return {
@@ -92,6 +105,9 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             "guenstige_stunden_tag": ergebnis.guenstige_stunden_tag,
             "guenstige_stunden_nacht": ergebnis.guenstige_stunden_nacht,
             "guenstig_schwelle_cent": ergebnis.schwelle_cent,
+            "preis_aktuell_cent": ergebnis.preis_aktuell_cent,
+            "optimierter_durchschnitt_cent": ergebnis.optimierter_durchschnitt_cent,
+            "abstand_prozent": ergebnis.abstand_prozent,
             "rang_profil": rang_profil,
         }
     except Exception as e:  # Export bleibt für die übrigen Sensoren grün
