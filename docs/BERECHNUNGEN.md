@@ -897,6 +897,39 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 
 **Endpoint:** `GET /api/cockpit/pv-strings/{anlage_id}?jahr=`
 
+#### Was eine „String"-Zeile ist — die Erzeuger-Abgrenzung (F-10)
+
+> **Die Zeilen dieser Sicht sind PV-*Erzeuger*, nicht PV-*Module*.** Maßgeblich ist
+> `PV_ERZEUGER_TYPEN` (SoT `core/berechnungen/spez_ertrag.py`) = `pv-module` **+**
+> `balkonkraftwerk`. Ein Balkonkraftwerk trägt alles, was die Sicht braucht: kWp über
+> `get_erzeuger_kwp` (beim BKW `leistung_wp × anzahl`), Ausrichtung und Neigung als eigene
+> Formularfelder, und seit #367 ein eigenes PVGIS-SOLL.
+>
+> **Betroffen sind vier Ausgaben derselben Sicht** — `GET /pv-strings`,
+> `GET /pv-strings-gesamtlaufzeit`, Abschnitt 10 des Jahresbericht-PDF und die beiden Leertexte
+> im Client. #367 hatte nur die *zwei PVGIS*-Endpunkte erweitert und im Issue-Text „zwei
+> Endpunkte" behauptet; es waren fünf. Klasse #236 — *ein Filter auf einer Schicht reicht nicht,
+> wenn parallele Pfade existieren.*
+>
+> ⚠ **Die IST-Quelle ist je Typ eine andere, und das ist Absicht.** Ein `pv-module` holt seinen
+> Wert aus `ErzeugungFakten.pv_je_modul` (P7-Auflösung); ein `balkonkraftwerk` steht dort
+> **nicht**, sondern in `BkwFakten.erzeugung_je_investition`. Grund: die Σ von `pv_je_modul` ist
+> `pv_module_kwh`, und die geht in die **ROI-Rechnung**, wo das Balkonkraftwerk eine **eigene**
+> Zeile hat (`investitionen/crud.py::get_pv_erzeugung`) — läge es in beiden, zählte seine
+> Erzeugung dort doppelt. Wer die Sicht erweitert, erweitert deshalb **nicht** `pv_je_modul`.
+> Gewächtert in `tests/test_bkw_erzeuger_sichten_f10.py`.
+>
+> **Kein zweiter Erfassungsweg.** `pv-module` unter `balkonkraftwerk` bleibt verboten
+> (`models/investition.py::ERLAUBTE_PARENT_TYPEN`): das wäre dieselbe Erzeugung zweimal erfasst,
+> mit doppelter kWp als Folge — der Workaround, den der Melder selbst zurückgenommen hat. Wer
+> mehrere Ausrichtungen hat, erfasst **Wechselrichter + PV-Module**; die Abgrenzung steht in
+> [HANDBUCH_EINSTELLUNGEN §3.5](HANDBUCH_EINSTELLUNGEN.md#35-balkonkraftwerk-oder-wechselrichter--pv-module).
+>
+> **Dieselbe Erzeuger-Abgrenzung gilt für die Community-Stammdaten** (`services/community_service.py`):
+> Neigung und Ausrichtung werden über beide Typen gemittelt. Vorher fiel eine reine
+> Balkonkraftwerk-Anlage auf die Annahme *30° / Süd* zurück — der Community-Server rechnet nichts
+> nach, die Anlage wurde also gegen die falsche Vergleichsgruppe gemessen.
+
 #### SOLL-Berechnung (PVGIS)
 
 > **Genau eine Prognose ist die aktive.** eedc bewahrt beliebig viele PVGIS-Abrufe einer Anlage auf;

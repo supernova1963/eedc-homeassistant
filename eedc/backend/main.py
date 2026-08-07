@@ -93,6 +93,7 @@ from backend.api.routes import (
 from backend.core.log_buffer import setup_log_buffer
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
+from backend.core.berechnungen import PV_ERZEUGER_TYPEN
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.strompreis import Strompreis
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
@@ -767,13 +768,24 @@ async def get_database_stats():
         )
         strompreise_count = strompreise_result.scalar() or 0
 
-        # Zusätzliche Infos
-        # Gesamte PV-Erzeugung aus InvestitionMonatsdaten (pro PV-Modul)
-        # WICHTIG: Monatsdaten.pv_erzeugung_kwh ist LEGACY und wird nicht mehr gepflegt!
-
-        # PV-Module IDs ermitteln
+        # Zusätzliche Infos: gesamte PV-Erzeugung aus den InvestitionMonatsdaten,
+        # je PV-Erzeuger. `balkonkraftwerk` fehlte hier bis 2026-08-07 (F-10,
+        # Klasse C) — eine reine BKW-Anlage meldete in dieser Diagnose 0 kWh.
+        #
+        # Bewusst eine ROHE IMD-Summe und KEIN Weg über die Monats-Fakten: das
+        # ist eine Zähl-Statistik über den Datenbestand („was steht in den
+        # Zeilen"), keine Energie-Aussage über die Anlage. Wer sie als solche
+        # liest, bekommt bei Aggregat-Pflege zu wenig — dafür ist
+        # `services/monats_fakten.py` da (ADR-002/P10).
+        #
+        # ⚠ Der Kommentar an dieser Stelle nannte `Monatsdaten.pv_erzeugung_kwh`
+        # bis heute ein „LEGACY"-Feld, „das nicht mehr gepflegt wird". Das ist
+        # seit P7 widerlegt (CLAUDE.md Prinzip 4): es ist der einzige Wert bei
+        # manueller Pflege und beim Import mit einem Gesamt-PV-Sensor. Derselbe
+        # Satz stand bis 2026-07-31 in `investitionen/crud.py` und wurde dort
+        # korrigiert — hier war er stehen geblieben.
         pv_ids_result = await session.execute(
-            select(Investition.id).where(Investition.typ == "pv-module")
+            select(Investition.id).where(Investition.typ.in_(PV_ERZEUGER_TYPEN))
         )
         pv_ids = [row[0] for row in pv_ids_result.all()]
 

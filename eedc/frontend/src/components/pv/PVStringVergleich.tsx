@@ -241,11 +241,15 @@ export function PVStringVergleich({ anlageId, embed = false, melde }: Props) {
     return (
       <div className="text-center py-8">
         <Sun className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
+        {/* F-10: Auch ein Balkonkraftwerk ist hier eine Zeile. Der alte Rat
+            („PV-Module anlegen") führte BKW-Besitzer in den Workaround, den
+            #367 verworfen hat — ein zweiter Erfassungsweg für dieselbe
+            Erzeugung, mit doppelter kWp als Folge. */}
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-          Keine PV-Module gefunden
+          Keine PV-Module oder Balkonkraftwerke gefunden
         </h3>
         <p className="text-gray-500 dark:text-gray-400">
-          Bitte PV-Module unter Einstellungen → Investitionen anlegen.
+          Bitte einen PV-Erzeuger unter Einstellungen → Investitionen anlegen.
         </p>
       </div>
     )

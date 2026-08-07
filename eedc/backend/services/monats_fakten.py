@@ -178,6 +178,13 @@ class BkwFakten:
     Monats fehlt (Datenlücke) — sonst steckt der Eigenverbrauch bereits in der
     Ableitung aus ``pv_kwh`` und ein zweiter Term wäre Doppelzählung.
     ``eigenverbrauch_gemessen_kwh`` bleibt daneben der ROHE Wert für die Anzeige.
+
+    ``erzeugung_je_investition`` ist dieselbe Erzeugung, nur nicht summiert (F-10):
+    String-Vergleiche stellen **jeden** Erzeuger einzeln seinem SOLL gegenüber,
+    und ein Balkonkraftwerk steht nicht in ``ErzeugungFakten.pv_je_modul`` — dort
+    stehen ausschließlich ``pv-module``. Bewusst ein eigenes Feld statt einer
+    Erweiterung von ``pv_je_modul``: dessen Summe ``pv_module_kwh`` geht in die
+    ROI-Rechnung, wo das BKW eine eigene Zeile hat und sonst doppelt zählte.
     """
 
     erzeugung_kwh: float = 0.0
@@ -185,6 +192,13 @@ class BkwFakten:
     rest_eigenverbrauch_kwh: float = 0.0
     speicher_ladung_kwh: float = 0.0
     speicher_entladung_kwh: float = 0.0
+    #: ``{investition_id: erzeugung_kwh}`` aus den IMD-Zeilen des Monats.
+    #: Σ der Werte == ``erzeugung_kwh`` — **außer** wenn der Monat seine BKW-Zahl
+    #: aus der Tagesebene bezieht (``TAGESWERT_BKW``): die Tagessumme ist
+    #: anlagenweit und lässt sich nicht je Investition aufteilen. Dann bleibt
+    #: dieses Feld **leer**, während ``erzeugung_kwh`` einen Wert trägt. Wer je
+    #: Investition auswertet, behandelt das wie eine Lücke, nicht wie 0.
+    erzeugung_je_investition: dict[int, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -653,6 +667,7 @@ class _RohMonat:
         #: gehört in die Erzeugungs-Anzeige.
         self.hat_sonstigen_erzeuger = False
         self.pv_je_modul_roh: dict[int, float] = {}
+        self.bkw_je_investition: dict[int, float] = {}
         self.bkw_erzeugung = 0.0
         self.bkw_eigenverbrauch = 0.0
         self.bkw_rest_eigenverbrauch = 0.0
@@ -709,6 +724,17 @@ class _RohMonat:
                 eigenverbrauch_kwh=b.bkw_eigenverbrauch,
             )
             self.bkw_erzeugung += b.bkw_erzeugung
+            # Je Investition zusätzlich zur Summe (F-10): der String-Vergleich
+            # des Jahresbericht-PDF stellt jeden Erzeuger einzeln seinem SOLL
+            # gegenüber und findet ein BKW in `pv_je_modul` nicht — dort stehen
+            # nur `pv-module`. Die Summe `bkw_erzeugung` hilft ihm nicht, sobald
+            # zwei Balkonkraftwerke da sind. Rein additiv; `pv_je_modul` und
+            # `pv_module_kwh` bleiben unberührt, weil `pv_module_kwh` in die
+            # ROI-Rechnung geht, wo das BKW bewusst eine eigene Zeile hat
+            # (`investitionen/crud.py::get_pv_erzeugung`) und sonst doppelt zählte.
+            self.bkw_je_investition[inv.id] = (
+                self.bkw_je_investition.get(inv.id, 0.0) + b.bkw_erzeugung
+            )
             self.bkw_eigenverbrauch += b.bkw_eigenverbrauch
             self.bkw_rest_eigenverbrauch += beitrag.rest_eigenverbrauch_kwh
             self.bkw_speicher_ladung += b.bkw_speicher_ladung
@@ -916,6 +942,12 @@ async def _baue_fakt(
             rest_eigenverbrauch_kwh=roh.bkw_rest_eigenverbrauch,
             speicher_ladung_kwh=roh.bkw_speicher_ladung,
             speicher_entladung_kwh=roh.bkw_speicher_entladung,
+            # Leer lassen, sobald die Zahl von der Tagesebene kommt: dort ist sie
+            # anlagenweit, eine Aufteilung wäre erfunden (s. Feld-Docstring).
+            erzeugung_je_investition=(
+                {} if TAGESWERT_BKW in tageswert_gruppen
+                else dict(roh.bkw_je_investition)
+            ),
         ),
         speicher=speicher,
         emob=emob,

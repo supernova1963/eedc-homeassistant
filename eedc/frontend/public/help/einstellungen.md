@@ -145,7 +145,7 @@ Unter **Einstellungen → Komponenten** legst du deine Geräte an und pflegst ih
 
 **Nur PV-Module ohne Wechselrichter tragen ein Warnsymbol.** Bis v4.0.0 wurde auch bei Speichern „Speicher ohne Wechselrichter-Zuordnung" gemeldet — und verleitete dazu, eine falsche Zuordnung anzulegen. Speicher ohne Zuordnung heißen jetzt neutral **„Eigenständige Speicher"**.
 
-> **Die Zeile heißt „Zuordnung", nicht „Kopplung".** eedc kennt **kein** Feld für AC-/DC-Kopplung; die frühere Anzeige „DC-gekoppelt" leitete sich allein daraus ab, *ob* ein Wechselrichter zugeordnet ist — ein AC-Speicher am Hybrid-Wechselrichter war damit falsch beschriftet. Die Zeile nennt jetzt den Wechselrichter beim Namen und erklärt, was die Zuordnung bewirkt.
+> **Die Zeile heißt „Zuordnung", nicht „Kopplung".** Die frühere Anzeige „DC-gekoppelt" leitete sich allein daraus ab, *ob* ein Wechselrichter zugeordnet ist — ein AC-Speicher am Hybrid-Wechselrichter war damit falsch beschriftet. Die Zeile nennt jetzt den Wechselrichter beim Namen und erklärt, was die Zuordnung bewirkt. Die Kopplung ist davon **unabhängig** und wird seit #351 als eigenes Feld gepflegt (s. [§3.4](#34-typ-spezifische-parameter)); sie ändert keine Zahl, sondern sagt, **wo** gemessen wird.
 
 ### 3.2 Anschaffungs- und Stilllegungsdatum
 
@@ -170,6 +170,31 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 - **Wallbox:** max. Ladeleistung (kW), bidirektional.
 - **Wechselrichter:** max. Leistung (kW), MaStR-ID.
 - **Sonstiges:** Kategorie (Erzeuger / Verbraucher / Speicher) + Beschreibung; die Monatsdaten-Felder passen sich der Kategorie an.
+
+### 3.5 Balkonkraftwerk **oder** Wechselrichter + PV-Module?
+
+Beide Wege bilden erzeugende Module ab, und die Frage kommt regelmäßig. Die Antwort hängt an **einer** Eigenschaft:
+
+> **Ein Balkonkraftwerk trägt genau *eine* Ausrichtung und *eine* Neigung.** Es ist als Kompaktgerät gedacht — Module, Mikro-Wechselrichter und (optional) Akku in einer Investition. Die Modulzahl steckt in *Leistung je Modul × Anzahl*; alle Module teilen sich zwangsläufig dieselbe Ausrichtung. Der einzige Mehrfach-Fall ist die Option **„Ost-West (gemischt)"**, und die rechnet einen festen **50/50**-Split auf Ost und West — keine dritte Richtung, keine eigene Gewichtung.
+
+**Wann welcher Typ:**
+
+| Deine Anlage | Erfassen als | Warum |
+|---|---|---|
+| Stecker-Solargerät, alle Module gleich ausgerichtet | **Balkonkraftwerk** | Ein Gerät, ein Datensatz. Der Mikro-Wechselrichter braucht keine eigene Investition. |
+| Stecker-Solargerät, Module je zur Hälfte Ost und West | **Balkonkraftwerk**, Ausrichtung „Ost-West (gemischt)" | Der 50/50-Split trifft genau diesen Fall. |
+| Module in **drei oder mehr** Ausrichtungen, oder ungleich verteilt | **Wechselrichter + PV-Module** | Jede Ausrichtung bekommt ein eigenes PV-Modulfeld mit eigener Prognose. |
+| Dachanlage, mehrere Strings | **Wechselrichter + PV-Module** | Der Regelfall. |
+
+**Wenn du auf Wechselrichter + PV-Module ausweichst:** Trage beim Wechselrichter die **max. Leistung (kW)** ein — das ist seine **AC-Einspeisegrenze**, bei einem Stecker-Gerät also 0,8 kW (bzw. 0,6 kW bei älteren). eedc kappt dein SOLL damit **stündlich** an dieser Grenze, gemeinsam über alle Strings desselben Wechselrichters. Ohne diesen Eintrag prognostiziert PVGIS die volle Modulleistung, und dein SOLL wäre ein Ziel, das die Anlage konstruktionsbedingt nie erreicht.
+
+> **Achte auf die Nennleistung der Anlage.** Ein Balkonkraftwerk zählt in eedc **nicht** in die Anlagenleistung — es ist eine eigene Anlage mit eigener MaStR-Registrierung. Wechselrichter + PV-Module dagegen schon. Wer von einem Weg auf den anderen wechselt, prüft danach *Einstellungen → Anlage → Leistung (kWp)*.
+
+**Was ein Balkonkraftwerk trotzdem alles kann:** eigenes PVGIS-SOLL, eigene Zeile im String-Vergleich und in der Mehrjahres-Performance, eigene Zeile im Jahresbericht, eigene Wirtschaftlichkeit, eigener Eintrag in Energiebilanz und CO₂ — und einen **eigenen Akku** (s. unten). Der Ausweichweg ist also nur bei mehreren Ausrichtungen nötig, nicht um Funktionen freizuschalten.
+
+**Der Akku am Balkonkraftwerk** (Anker Solarbank, Zendure u. ä.) wird als **eigene Speicher-Investition** angelegt, mit dem Balkonkraftwerk als übergeordneter Komponente. Nur so bekommt er Live-Leistung, Ladestand, einen Knoten im Energiefluss und einen eigenen Zählerpfad. Die Speicher-Felder im Monatsabschluss des Balkonkraftwerks selbst sind Altbestand aus der Zeit davor — sie lassen sich weiter pflegen, aber der Akku ist darüber keiner Auswertung zuzuordnen.
+
+---
 
 > **Ein Schlüsselsatz für alle Wege:** Setup-Wizard, Komponenten-Formular und das Backend halten dieselben Parameter-Schlüssel. Felder, die du im [Setup-Wizard](HANDBUCH_INSTALLATION.md) erfasst, landen direkt unter den hier dokumentierten Werten.
 

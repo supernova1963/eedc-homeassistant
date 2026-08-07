@@ -20,7 +20,9 @@ import httpx
 from backend.core.exceptions import ha_supervisor_unavailable, not_found
 from backend.core.database import get_session
 from backend.core.config import settings
+from backend.core.berechnungen import PV_ERZEUGER_TYPEN
 from backend.core.field_definitions import get_felder_fuer_investition
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.core.investition_parameter import PARAM_WAERMEPUMPE
 from backend.models.anlage import Anlage
 from backend.utils.investition_filter import sort_investitionen_nach_typ
@@ -208,12 +210,25 @@ async def get_sensor_mapping(anlage_id: int):
             # Erwartete Felder aus Registry (Bedingungen werden anhand der Parameter aufgelöst)
             felder = [f["feld"] for f in get_felder_fuer_investition(inv.typ, inv.parameter)]
 
-            # kWp für PV-Module (nur aktive in Gesamtsumme)
-            # Note: 'leistung_kwp' liegt bei PV-Modulen als Top-Level-Feld vor (nicht in `parameter`),
-            # die parameter-Variante hier ist ein Legacy-Read für ältere DB-Einträge.
+            # kWp je PV-Erzeuger (nur aktive in der Gesamtsumme).
+            #
+            # Zwei Korrekturen 2026-08-07 (F-10, Klasse C):
+            # 1. `balkonkraftwerk` fehlte — eine reine BKW-Anlage meldete hier 0 kWp.
+            # 2. Gelesen wurde **nur** das `parameter`-JSON, obwohl der
+            #    nebenstehende Kommentar selbst festhielt, dass `leistung_kwp`
+            #    bei PV-Modulen als Top-Level-Spalte vorliegt. Ein normal
+            #    gepflegtes Modul (Spalte gesetzt, JSON leer) zählte damit 0 —
+            #    die #229-Klasse mit vertauschten Rollen. Jetzt über den
+            #    SoT-Dispatcher (ADR-002/P3-a), der Spalte, `parameter.kwp`,
+            #    `parameter.leistung_kwp` und `leistung_wp × anzahl` abdeckt.
+            #
+            # ⚠ `gesamt_kwp` hat baumweit KEINEN Leser (gemessen: nur die
+            # Typdeklaration in `api/sensorMapping.ts:62`), die Korrektur bewegt
+            # also keine angezeigte Zahl. Sie steht hier, damit der nächste, der
+            # das Feld in Gebrauch nimmt, keine stille 0 erbt.
             kwp = None
-            if inv.typ == "pv-module":
-                kwp = inv.parameter.get("leistung_kwp") if inv.parameter else None
+            if inv.typ in PV_ERZEUGER_TYPEN:
+                kwp = get_erzeuger_kwp(inv) or None
                 if kwp and inv.ist_aktiv_an(date.today()):
                     gesamt_kwp += kwp
 

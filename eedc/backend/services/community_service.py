@@ -10,8 +10,10 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import Anlage, Investition
+from backend.core.berechnungen import PV_ERZEUGER_TYPEN
 from backend.core.config import settings
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
+from backend.services.pv_orientation import get_pv_neigung
 from backend.core.investition_parameter import (
     PARAM_WALLBOX,
     PARAM_BALKONKRAFTWERK,
@@ -62,6 +64,29 @@ _AUSRICHTUNG_ZU_KOMPASS = {
     "südwest": 225, "southwest": 225, "sw": 225,
     "ost-west": 180,  # Sonderfall: wird als "gemischt" behandelt
 }
+
+
+def _ausrichtung_roh(inv) -> str:
+    """Ausrichtungs-String einer Investition: Spalte → ``parameter`` → ``""``.
+
+    Kleingeschrieben zurückgegeben, damit die Aufrufer nicht jeder für sich
+    `.lower()` rufen (und einer es vergisst). Der `parameter`-Zweig ist für das
+    Balkonkraftwerk nötig: ``PARAM_BALKONKRAFTWERK["AUSRICHTUNG"]`` schreibt
+    dorthin, das Formular zusätzlich in die Spalte — bei Import und Altbestand
+    kann also nur das JSON gefüllt sein (dieselbe #229-Lage wie bei der kWp).
+
+    Bewusst **kein** ``get_pv_azimut``: der arbeitet in der PVGIS-Konvention
+    (0 = Süd), die Community-Payload in der Kompass-Konvention (180 = Süd).
+    Die beiden zu mischen wäre genau die Vokabular-Drift, gegen die
+    ``project_backend_client_vokabular`` geschrieben ist.
+    """
+    direkt = getattr(inv, "ausrichtung", None)
+    if isinstance(direkt, str) and direkt.strip():
+        return direkt.strip().lower()
+    param = (getattr(inv, "parameter", None) or {}).get("ausrichtung")
+    if isinstance(param, str) and param.strip():
+        return param.strip().lower()
+    return ""
 
 
 def _ausrichtung_zu_kompass(ausrichtung: str | None) -> int:
@@ -174,17 +199,29 @@ async def prepare_community_data(
         bezeichnungen = [inv.bezeichnung for inv in sonstige if inv.bezeichnung]
         sonstiges_bezeichnung = ", ".join(bezeichnungen[:3]) if bezeichnungen else None
 
-    # Durchschnittliche Neigung und Ausrichtung aus PV-Modulen
-    pv_module = [inv for inv in investitionen if inv.typ == "pv-module"]
+    # Durchschnittliche Neigung und Ausrichtung aus den PV-ERZEUGERN (F-10).
+    #
+    # Bis 2026-08-07 filterte diese Zeile hart auf `pv-module`. Eine reine
+    # Balkonkraftwerk-Anlage fiel damit in den `else`-Zweig unten und meldete dem
+    # Community-Server **erfundene** Stammdaten: 30° Neigung und Ausrichtung
+    # „süd" — obwohl das BKW beides als eigenes Formularfeld trägt. Der Server
+    # rechnet nichts nach (er hat die Rohdaten nie gesehen), also wurde die
+    # Anlage still gegen die falsche Vergleichsgruppe gemessen. Von allen
+    # F-10-Stellen die einzige, deren falscher Wert das Haus verlässt.
+    pv_module = [inv for inv in investitionen if inv.typ in PV_ERZEUGER_TYPEN]
     if pv_module:
-        neigungen = [inv.neigung_grad if inv.neigung_grad is not None else 30 for inv in pv_module]
+        # Über den SoT-Helper (Spalte → `parameter`): beim BKW kann die Neigung
+        # aus Import/Altbestand nur im `parameter`-JSON stehen, dann lieferte der
+        # Spalten-Direktzugriff still die 30°-Annahme statt des gepflegten Werts.
+        neigungen = [get_pv_neigung(inv, default=30) for inv in pv_module]
         neigung_grad = int(sum(neigungen) / len(neigungen))
 
-        # Sonderfall: Einzelnes Modul mit "Ost-West" → direkt übernehmen
-        if len(pv_module) == 1 and (pv_module[0].ausrichtung or "").lower() == "ost-west":
+        # Sonderfall: Einzelner Erzeuger mit "Ost-West" → direkt übernehmen.
+        # Gilt für das BKW genauso: es kennt „Ost-West (gemischt)" als Option.
+        if len(pv_module) == 1 and _ausrichtung_roh(pv_module[0]) == "ost-west":
             ausrichtung = "ost-west"
         else:
-            azimute = [_ausrichtung_zu_kompass(inv.ausrichtung) for inv in pv_module]
+            azimute = [_ausrichtung_zu_kompass(_ausrichtung_roh(inv)) for inv in pv_module]
             # Prüfen ob gemischt (z.B. Ost-West)
             if max(azimute) - min(azimute) > 45:
                 ausrichtung = "ost-west" if any(60 <= a <= 120 for a in azimute) and any(240 <= a <= 300 for a in azimute) else "gemischt"

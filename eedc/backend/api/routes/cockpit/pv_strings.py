@@ -1,5 +1,22 @@
 """
-Cockpit PV-Strings — SOLL vs. IST Vergleich pro PV-Modul (Jahressicht + Gesamtlaufzeit).
+Cockpit PV-Strings — SOLL vs. IST Vergleich je PV-Erzeuger (Jahressicht + Gesamtlaufzeit).
+
+**Warum „Erzeuger" und nicht „PV-Modul" (F-10).** Beide Endpunkte hier filterten
+bis 2026-08-07 hart auf ``Investition.typ == "pv-module"``. Eine reine
+Balkonkraftwerk-Anlage bekam damit eine **leere** Antwort — der Client schreibt
+daraufhin „Keine PV-Module gefunden", obwohl das BKW alles trägt, was diese
+Sicht braucht (kWp über ``get_erzeuger_kwp``, Ausrichtung und Neigung als eigene
+Spalten, ein PVGIS-SOLL seit #367). Gemeldet von azywietz-web in Discussion #366,
+**nachdem** #367 als erledigt geschlossen war: dessen Text sprach von „zwei
+Endpunkten", es waren aber fünf — die beiden PVGIS-Routen sind seit v4.0.9
+erweitert, die String-Sichten hingen an einer anderen Query. Dieselbe Klasse wie
+#236: *ein Filter auf einer Schicht reicht nicht, wenn parallele Pfade
+existieren.*
+
+Die fachliche Frage dieser Sicht lautet „welche Erzeuger-Einheiten gibt es, und
+wie stehen sie zu ihrem SOLL" — nicht „welche Investitionen haben den Typ
+`pv-module`". Maßgeblich ist deshalb ``PV_ERZEUGER_TYPEN`` (SoT in
+``core/berechnungen/spez_ertrag.py``), nicht eine lokale Typ-Liste.
 """
 
 from datetime import date
@@ -10,9 +27,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from backend.core.exceptions import not_found
-from backend.core.investition_kennwerte import get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.api.deps import get_db
 from backend.core.berechnungen import (
+    PV_ERZEUGER_TYPEN,
     PV_QUELLE_GEMESSEN,
     PV_QUELLE_VERTEILT,
     PV_QUELLE_FEHLT,
@@ -284,7 +302,7 @@ async def get_pv_strings(
     jahr: int = Query(default=None, description="Jahr (Default: aktuelles Jahr)"),
     db: AsyncSession = Depends(get_db)
 ):
-    """PV-String-Vergleich: SOLL vs IST pro PV-Modul."""
+    """SOLL vs. IST je PV-Erzeuger (PV-Modulfeld **oder** Balkonkraftwerk)."""
     if jahr is None:
         jahr = date.today().year
 
@@ -295,10 +313,12 @@ async def get_pv_strings(
 
     # KEIN aktiv-Filter (Issue #123): historische PV-String-Auswertung darf
     # später stillgelegte Strings nicht aus Vergangenheits-Vergleichen ausblenden.
+    # Typ-Filter über den SoT `PV_ERZEUGER_TYPEN` (F-10) — ein Balkonkraftwerk
+    # ist hier eine Erzeuger-Zeile wie ein String, kein Sonderfall.
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == "pv-module")
+        .where(Investition.typ.in_(PV_ERZEUGER_TYPEN))
     )
     pv_module = result.scalars().all()
 
@@ -338,10 +358,12 @@ async def get_pv_strings(
             except (ValueError, TypeError):
                 pass
 
-    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
-    # Modul (#229) zählte hier 0 — damit war der Nenner zu klein und ALLE
-    # übrigen Strings bekamen zu viel SOLL zugerechnet.
-    gesamt_kwp = sum(get_pv_kwp(m) for m in pv_module)
+    # kWp über den SoT-Dispatcher (ADR-002/P3-a): ein nur im `parameter`
+    # gepflegtes Modul (#229) zählte hier 0 — damit war der Nenner zu klein und
+    # ALLE übrigen Strings bekamen zu viel SOLL zugerechnet. `get_erzeuger_kwp`
+    # statt `get_pv_kwp`, weil das Balkonkraftwerk seine kWp aus
+    # `leistung_wp × anzahl` bezieht (F-10) und sonst mit 0 im Nenner stünde.
+    gesamt_kwp = sum(get_erzeuger_kwp(m) for m in pv_module)
     if gesamt_kwp == 0:
         gesamt_kwp = anlage.leistung_kwp or 1
 
@@ -356,7 +378,7 @@ async def get_pv_strings(
     ist_gesamt = 0
 
     for modul in pv_module:
-        modul_kwp = get_pv_kwp(modul)
+        modul_kwp = get_erzeuger_kwp(modul)
         kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
         params = modul.parameter or {}
         ausrichtung = modul.ausrichtung or params.get("ausrichtung")
@@ -440,7 +462,7 @@ async def get_pv_strings_gesamtlaufzeit(
     anlage_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """PV-String-Vergleich über die gesamte Laufzeit."""
+    """SOLL vs. IST je PV-Erzeuger über die gesamte Laufzeit (s. Modul-Kopf, F-10)."""
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
@@ -448,10 +470,12 @@ async def get_pv_strings_gesamtlaufzeit(
 
     # KEIN aktiv-Filter (Issue #123): historische PV-String-Auswertung darf
     # später stillgelegte Strings nicht aus Vergangenheits-Vergleichen ausblenden.
+    # Typ-Filter über den SoT `PV_ERZEUGER_TYPEN` (F-10) — ein Balkonkraftwerk
+    # ist hier eine Erzeuger-Zeile wie ein String, kein Sonderfall.
     result = await db.execute(
         select(Investition)
         .where(Investition.anlage_id == anlage_id)
-        .where(Investition.typ == "pv-module")
+        .where(Investition.typ.in_(PV_ERZEUGER_TYPEN))
     )
     pv_module = result.scalars().all()
 
@@ -495,10 +519,12 @@ async def get_pv_strings_gesamtlaufzeit(
             except (ValueError, TypeError):
                 pass
 
-    # kWp über den SoT-Helper (ADR-002/P3-a): ein nur im `parameter` gepflegtes
-    # Modul (#229) zählte hier 0 — damit war der Nenner zu klein und ALLE
-    # übrigen Strings bekamen zu viel SOLL zugerechnet.
-    gesamt_kwp = sum(get_pv_kwp(m) for m in pv_module)
+    # kWp über den SoT-Dispatcher (ADR-002/P3-a): ein nur im `parameter`
+    # gepflegtes Modul (#229) zählte hier 0 — damit war der Nenner zu klein und
+    # ALLE übrigen Strings bekamen zu viel SOLL zugerechnet. `get_erzeuger_kwp`
+    # statt `get_pv_kwp`, weil das Balkonkraftwerk seine kWp aus
+    # `leistung_wp × anzahl` bezieht (F-10) und sonst mit 0 im Nenner stünde.
+    gesamt_kwp = sum(get_erzeuger_kwp(m) for m in pv_module)
     if gesamt_kwp == 0:
         gesamt_kwp = anlage.leistung_kwp or 1
 
@@ -524,7 +550,7 @@ async def get_pv_strings_gesamtlaufzeit(
     saisonal_agg: dict[int, dict] = {m: {"prognose": 0, "ist_summe": 0, "anzahl": 0} for m in range(1, 13)}
 
     for modul in pv_module:
-        modul_kwp = get_pv_kwp(modul)
+        modul_kwp = get_erzeuger_kwp(modul)
         kwp_anteil = modul_kwp / gesamt_kwp if gesamt_kwp > 0 else 0
         params = modul.parameter or {}
         ausrichtung = modul.ausrichtung or params.get("ausrichtung")

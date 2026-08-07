@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen import (
+    PV_ERZEUGER_TYPEN,
     FinanzMonatsZeile,
     autarkie_prozent,
     berechne_finanz_aggregat,
@@ -43,10 +44,10 @@ from backend.core.wirtschaftlichkeit_defaults import (
     NETZBEZUG_DEFAULT_CENT,
 )
 from backend.models.anlage import Anlage
-from backend.models.investition import Investition
+from backend.models.investition import Investition, InvestitionTyp
 from backend.models.monatsdaten import Monatsdaten
 from backend.services.prognose_auswahl import lade_aktive_prognose
-from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
+from backend.core.investition_kennwerte import get_erzeuger_kwp
 from backend.models.strompreis import Strompreis
 
 from ..charts import autarkie_chart, energie_fluss_chart, pv_erzeugung_chart
@@ -493,12 +494,17 @@ async def build_jahresbericht_context(
     )
 
     # ── 10. String-Vergleich SOLL/IST ───────────────────────────────────
-    pv_module = [i for i in investitionen if i.typ == "pv-module"]
-    # kWp über den SoT-Helper (Spalte → parameter-JSON) — sonst ist der
-    # SOLL-Verteilungs-Nenner bei `parameter`-gepflegten Modulen eine
-    # Teilsumme, und der `or anlage.leistung_kwp`-Fallback greift nur bei
-    # Summe 0, nicht bei gemischter Pflege (N73/P3).
-    gesamt_kwp = sum(get_pv_kwp(i) for i in pv_module) or (anlage.leistung_kwp or 1)
+    # Erzeuger, nicht nur `pv-module` (F-10): eine reine Balkonkraftwerk-Anlage
+    # bekam hier eine leere Tabelle, obwohl sie seit #367 ein PVGIS-SOLL hat.
+    # Derselbe Schnitt wie im API-Pfad `api/routes/cockpit/pv_strings.py`, damit
+    # PDF und Cockpit dieselben Zeilen zeigen.
+    pv_module = [i for i in investitionen if i.typ in PV_ERZEUGER_TYPEN]
+    # kWp über den SoT-Dispatcher (Spalte → parameter-JSON, beim BKW
+    # `leistung_wp × anzahl`) — sonst ist der SOLL-Verteilungs-Nenner bei
+    # `parameter`-gepflegten Modulen eine Teilsumme, und der
+    # `or anlage.leistung_kwp`-Fallback greift nur bei Summe 0, nicht bei
+    # gemischter Pflege (N73/P3).
+    gesamt_kwp = sum(get_erzeuger_kwp(i) for i in pv_module) or (anlage.leistung_kwp or 1)
     # Dieselbe Prognose wie in Abschnitt 4 — sonst widerspräche der
     # String-Vergleich der Monatstabelle desselben PDFs.
     prognose_monate: dict[int, float] = {}
@@ -525,18 +531,30 @@ async def build_jahresbericht_context(
 
     string_vergleiche = []
     for inv in pv_module:
-        kwp = get_pv_kwp(inv)
+        kwp = get_erzeuger_kwp(inv)
         anteil = kwp / gesamt_kwp if gesamt_kwp else 0
         # IST je Modul aus der P7-Auflösung (`erzeugung.pv_je_modul`): gemessene
         # Werte, und wo nur das Anlagen-Aggregat gepflegt ist, dessen
         # kWp-Verteilung. Die rohe IMD-Summe stand hier bei Aggregat-Pflege auf
         # 0 — der String-Vergleich zeigte dann 100 % Abweichung nach unten.
-        ist_kwh = sum(
-            w.pv_erzeugung_kwh
-            for f in fakten
-            for modul_id, w in f.erzeugung.pv_je_modul.items()
-            if modul_id == inv.id
-        )
+        #
+        # Das Balkonkraftwerk steht NICHT in `pv_je_modul` (dort nur `pv-module`,
+        # weil dessen Σ `pv_module_kwh` in die ROI-Rechnung geht und das BKW
+        # dort eine eigene Zeile hat). Sein IST kommt deshalb aus
+        # `bkw.erzeugung_je_investition` — F-10. Ohne diesen Zweig hätte die
+        # bloße Typ-Erweiterung oben eine Zeile mit **0 kWh IST** erzeugt, also
+        # 100 % Abweichung nach unten: schlimmer als die leere Tabelle vorher.
+        if inv.typ == InvestitionTyp.BALKONKRAFTWERK.value:
+            ist_kwh = sum(
+                f.bkw.erzeugung_je_investition.get(inv.id, 0.0) for f in fakten
+            )
+        else:
+            ist_kwh = sum(
+                w.pv_erzeugung_kwh
+                for f in fakten
+                for modul_id, w in f.erzeugung.pv_je_modul.items()
+                if modul_id == inv.id
+            )
         modul_prognose = prognose_per_modul.get(inv.id)
         if modul_prognose is not None:
             prognose_kwh = sum(modul_prognose.values()) * anzahl_jahre

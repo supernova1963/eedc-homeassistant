@@ -11,6 +11,24 @@
 
 ## Unveröffentlicht
 
+### Balkonkraftwerk: der String-Vergleich zeigt dich jetzt auch
+
+**Betrifft dich das?** Alle, die **nur ein Balkonkraftwerk** haben — und alle mit Balkonkraftwerk **neben** einer Dachanlage.
+
+Seit v4.0.9 bekommt ein Balkonkraftwerk ein PVGIS-SOLL. Zwei Blöcke daneben blieben aber leer und schrieben weiterhin *„Keine PV-Module gefunden"*: **SOLL/IST pro PV-String** und **Mehrjahres-Performance** in *Auswertungen → Prognose*. Genauso fehlte der String-Abschnitt im **Jahresbericht-PDF**. Der Grund: diese Sichten fragen über eine andere Abfrage nach den Komponenten, und die kannte nur den Typ *PV-Modulfeld*.
+
+Sie fragen jetzt nach dem **PV-Erzeuger**. Dein Balkonkraftwerk ist dort eine Zeile wie ein Dach-String — mit seiner Nennleistung (aus *Leistung je Modul × Anzahl*), seinem SOLL und seinem gemessenen Ertrag.
+
+> **Was sich dadurch nicht ändert:** Deine Energiebilanz, dein Eigenverbrauch, deine Wirtschaftlichkeit und die ROI-Sicht bleiben Zahl für Zahl gleich. Das Balkonkraftwerk bekommt **keinen zweiten Erfassungsweg** — es bleibt eine Investition, und seine Erzeugung zählt weiterhin genau einmal.
+
+### Community-Vergleich: deine echte Ausrichtung statt „Süd, 30°"
+
+**Betrifft dich das?** Nur wer **ausschließlich ein Balkonkraftwerk** hat **und** am Community-Vergleich teilnimmt.
+
+Beim Teilen hat eedc Neigung und Ausrichtung bisher nur aus Komponenten vom Typ *PV-Modulfeld* gebildet. Gab es keine, wurden ersatzweise **30° und „Süd"** übermittelt — auch wenn dein Balkonkraftwerk an einer **Westfassade** hängt. Der Community-Server rechnet nichts nach, deine Anlage wurde also mit einer Gruppe verglichen, zu der sie nicht gehört.
+
+Jetzt zählt dein Balkonkraftwerk mit seinen tatsächlich gepflegten Werten. **Bestehende Einträge korrigieren sich beim nächsten vollständigen Teilen** — du musst nichts löschen.
+
 ### Deine Solarprognose merkt selbst, wenn sie nicht mehr zu deiner Anlage passt
 
 Eine PVGIS-Prognose wird beim Abruf eingefroren. Baust du danach um — ein String kommt dazu, ein Balkonkraftwerk ersetzt die alte Anlage, das Dach wird anders belegt —, dann vergleicht eedc deine Erträge weiter mit der **alten** Anlage. In einem gemeldeten Fall stand für ein 2,4-kWp-Balkonkraftwerk ein Jahres-SOLL von **357 MWh**, weil die gespeicherte Prognose zu einem viel größeren System gehörte.
@@ -484,6 +502,12 @@ gepflegte Grenze kappt eedc nichts.
 > **Nebenbei:** Wenn du **nur ein Balkonkraftwerk** hast, bekommst du überhaupt zum ersten Mal ein
 > PVGIS-SOLL. Bisher antwortete die Prognose mit „Keine PV-Module gefunden", obwohl dein BKW alles
 > mitbringt, was PVGIS braucht. *(#354, #367)*
+>
+> **Nachtrag (August 2026):** Das galt nur für den **Jahresvergleich** gegen PVGIS. Die Blöcke
+> *SOLL/IST pro PV-String* und *Mehrjahres-Performance* sowie der String-Abschnitt im
+> Jahresbericht-PDF blieben leer und zeigten weiterhin „Keine PV-Module gefunden" — sie hängen an
+> anderen Abfragen, die damals übersehen wurden. Ein Anwender hat das gemeldet; **behoben** im
+> Abschnitt weiter oben auf dieser Seite.
 
 ### Daten-Checker: zwei Meldungen weniger, eine bessere
 

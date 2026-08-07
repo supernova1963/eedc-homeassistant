@@ -53,8 +53,16 @@ async def lade_pv_je_monat(
     Args:
         db: Session.
         anlage_id: Anlage.
-        pv_module: PV-Module der Anlage (Typ-Filter ist Sache des Aufrufers;
-            das Anlagen-Aggregat gilt für ``pv-module``).
+        pv_module: PV-Erzeuger der Anlage. **Der Typ-Filter ist Sache des
+            Aufrufers**, und das ist eine Entscheidung, keine Nachlässigkeit:
+            die meisten Aufrufer übergeben nur ``pv-module``, weil das
+            Balkonkraftwerk dort eine eigene Zeile hat und sonst doppelt zählte
+            (so etwa ``investitionen/crud.py::berechne_pv_einsparung…``). Die
+            String-Sichten (``cockpit/pv_strings.py``) übergeben seit F-10
+            **beide** Erzeuger-Typen — dort ist das BKW eine Erzeuger-Zeile wie
+            ein String, und ohne es bliebe eine reine BKW-Anlage leer.
+            Die Auflösung selbst ist typ-blind und bleibt es: sie kennt nur
+            „hat einen eigenen Wert" gegen „bekommt einen Anteil am Rest".
         jahr: optional auf ein Jahr einschränken.
 
     Returns:

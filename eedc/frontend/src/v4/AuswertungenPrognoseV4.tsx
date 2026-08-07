@@ -72,7 +72,11 @@ function BlockPvgis({ anlageId, jahr, monatsdaten, melde }: { anlageId: number; 
   // B8 (S15): Block-Skeleton in Zielform (KPI-Strip + Chart) statt Sektions-Spinner.
   if (vm.loading) return <div className="space-y-4"><KpiStripSkeleton label="Lade Prognose…" /><ChartSkeleton /></div>
   if (vm.error) return <Alert type="error">{vm.error}</Alert>
-  if (!vm.prognose) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PVGIS-Prognose verfügbar — bitte PV-Module unter Einstellungen → Investitionen anlegen.</p>
+  // „PV-Module anlegen" war der Rat, der einen Balkonkraftwerk-Besitzer in den
+  // Workaround geführt hat, den #367 ausdrücklich verworfen hat (fiktiver
+  // Wechselrichter als Parent ⇒ doppelte kWp). Ein BKW ist hier ein Erzeuger
+  // wie jeder andere — F-10.
+  if (!vm.prognose) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PVGIS-Prognose verfügbar — bitte einen PV-Erzeuger (PV-Modulfeld oder Balkonkraftwerk) unter Einstellungen → Investitionen anlegen.</p>
   if (vm.monatsdaten.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine Monatsdaten für diese Anlage vorhanden.</p>
   return (
     <div className="space-y-4">
@@ -102,7 +106,9 @@ function BlockStrings({ anlageId, selectedYear, jahre, zeitraumLabel, melde }: {
   useEffect(() => melde('pvstrings', ids), [melde, ids])
   if (loading) return <div className="space-y-4"><KpiStripSkeleton label="Lade PV-String-Daten…" /><ChartSkeleton /></div>
   if (error) return <Alert type="error">{error}</Alert>
-  if (!data || data.strings.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PV-Module gefunden.</p>
+  // Seit F-10 zählt auch ein Balkonkraftwerk als Zeile — der Text darf nicht
+  // mehr behaupten, es gehe hier nur um PV-Module.
+  if (!data || data.strings.length === 0) return <p className="text-sm text-gray-500 dark:text-gray-400">Keine PV-Module oder Balkonkraftwerke gefunden.</p>
   if (!data.hat_prognose) return <Alert type="warning">Keine PVGIS-Prognose vorhanden — bitte unter Einstellungen → PVGIS abrufen.</Alert>
   return (
     <div className="space-y-4">
