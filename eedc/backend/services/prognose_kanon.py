@@ -209,6 +209,24 @@ async def _wechselrichter(db, anlage) -> list[Investition]:
     return list(res.scalars().all())
 
 
+async def _speicher(db, anlage) -> list[Investition]:
+    """Speicher der Anlage — entscheiden, ob die AC-Grenze überhaupt kappt (F-11).
+
+    Ein DC-gekoppelter Speicher am Träger der Grenze nimmt den Überschuss auf,
+    der sonst weggekappt würde. Dieselbe Begründung wie oben gegen den
+    Aktiv-Filter: ein stillgelegter Speicher an einem laufenden Erzeuger ist ein
+    Pflegefehler, und im Zweifel lieber nicht kappen als eine Ernte wegrechnen,
+    die es gegeben hat.
+    """
+    res = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage.id,
+            Investition.typ == "speicher",
+        )
+    )
+    return list(res.scalars().all())
+
+
 def _kappungs_mitglieder(
     invs: list[Investition],
     gruppen: list[Orientierungsgruppe],
@@ -330,7 +348,9 @@ async def kanon_tagesprognose(
     # dem Wechselrichter, dem er zugeordnet ist (PV-String) — beides löst
     # `zuordne_grenzen` auf. Nur wenn überhaupt eine gepflegt ist, wird je
     # Komponente gerechnet; sonst bleibt der Pfad unverändert.
-    grenzen = zuordne_grenzen(invs, await _wechselrichter(db, anlage))
+    grenzen = zuordne_grenzen(
+        invs, await _wechselrichter(db, anlage), await _speicher(db, anlage)
+    )
     kappung_aktiv = any(grenze for grenze, _ in grenzen.values())
 
     tage: list[Optional[KanonTag]] = []

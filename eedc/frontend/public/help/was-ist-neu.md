@@ -11,6 +11,18 @@
 
 ## Unveröffentlicht
 
+### Speicher hinter der Wechselrichter-Grenze: dein SOLL war zu niedrig
+
+**Betrifft dich das?** Alle mit **Balkonkraftwerk + Akku** und alle mit **Hybrid-Wechselrichter** (Speicher gleichstromseitig am Wechselrichter).
+
+Seit v4.0.9 begrenzt eedc dein SOLL an der eingetragenen Wechselrichter-Leistung. Das ist richtig, solange der Überschuss über dieser Grenze wirklich verloren geht. Hängt aber ein **DC-gekoppelter Speicher** dahinter, ist er das nicht: er lädt den Akku, ohne durch den Wechselrichter zu müssen. eedc hat ihn trotzdem abgeschnitten.
+
+Sichtbar war das als **zu niedriges SOLL** — dein SOLL/IST-Vergleich sah besser aus, als deine Anlage ist, und die Performance Ratio lag zu hoch. Beim Balkonkraftwerk mit Speicher traf es die Mittagsspitze praktisch täglich.
+
+> **Deine SOLL-Zahlen steigen dadurch.** Deine gemessenen Erträge ändern sich **nicht** — nur die Erwartung, gegen die sie gehalten werden, wird wieder realistisch. Bei **AC**-gekoppeltem Speicher bleibt alles wie bisher: dort läuft die Energie tatsächlich durch den Wechselrichter, die Begrenzung ist dann richtig.
+
+> **Prüf einmal die Kopplung deines Speichers** (*Einstellungen → Komponenten → Speicher → Kopplung*). Sie war bisher eine reine Beschreibung und hat keine Zahl bewegt — ab jetzt entscheidet sie mit, ob dein SOLL begrenzt wird. Die Vorbelegung *Automatisch* trifft den Normalfall (Speicher am Wechselrichter ⇒ DC).
+
 ### Balkonkraftwerk: der String-Vergleich zeigt dich jetzt auch
 
 **Betrifft dich das?** Alle, die **nur ein Balkonkraftwerk** haben — und alle mit Balkonkraftwerk **neben** einer Dachanlage.

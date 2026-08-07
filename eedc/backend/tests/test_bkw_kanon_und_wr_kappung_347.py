@@ -175,7 +175,7 @@ def test_strings_erben_die_grenze_ihres_wechselrichters():
     west = _Inv(typ="pv-module", leistung_kwp=5.0, parent_investition_id=wr.id)
     frei = _Inv(typ="pv-module", leistung_kwp=3.0)
 
-    z = zuordne_grenzen([ost, west, frei], [wr])
+    z = zuordne_grenzen([ost, west, frei], [wr], [])
 
     assert z[ost.id] == z[west.id], "dieselbe Grenze, dieselbe Kennung"
     assert z[ost.id][0] == pytest.approx(7.0)
@@ -188,7 +188,7 @@ def test_bkw_behaelt_die_eigene_grenze_auch_mit_parent():
     bkw = _bkw(wechselrichter_leistung_w=600)
     bkw.parent_investition_id = wr.id
 
-    grenze, grenz_id = zuordne_grenzen([bkw], [wr])[bkw.id]
+    grenze, grenz_id = zuordne_grenzen([bkw], [wr], [])[bkw.id]
 
     assert grenze == pytest.approx(0.6)
     assert grenz_id == f"inv:{bkw.id}"

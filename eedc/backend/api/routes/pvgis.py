@@ -457,7 +457,14 @@ async def get_pvgis_prognose(
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.WECHSELRICHTER.value)
     )).scalars().all()
-    grenzen = zuordne_grenzen(pv_module, wechselrichter)
+    # F-11: ein DC-gekoppelter Speicher am Träger der Grenze nimmt den Überschuss
+    # auf, der sonst weggekappt würde — dann darf gar nicht gekappt werden.
+    speicher = (await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == anlage_id)
+        .where(Investition.typ == InvestitionTyp.SPEICHER.value)
+    )).scalars().all()
+    grenzen = zuordne_grenzen(pv_module, wechselrichter, speicher)
 
     # Prognose für jedes Modul abrufen
     module_prognosen: list[PVModulPrognose] = []
@@ -678,7 +685,12 @@ async def get_pvgis_modul_prognose(
         .where(Investition.typ.in_(PVGIS_ERZEUGER_TYPEN))
         .where(aktiv_jetzt())
     )).scalars().all()
-    grenzen = zuordne_grenzen(geschwister, wechselrichter)
+    speicher = (await db.execute(
+        select(Investition)
+        .where(Investition.anlage_id == modul.anlage_id)
+        .where(Investition.typ == InvestitionTyp.SPEICHER.value)
+    )).scalars().all()
+    grenzen = zuordne_grenzen(geschwister, wechselrichter, speicher)
     grenze_kw, grenz_id = grenzen.get(modul.id, (None, None))
     teilt_sich_die_grenze = sum(
         1 for g in geschwister if grenzen.get(g.id, (None, None))[1] == grenz_id

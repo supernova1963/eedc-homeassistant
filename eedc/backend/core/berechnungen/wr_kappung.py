@@ -42,7 +42,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence
 
-from backend.core.investition_kennwerte import get_wr_grenze_kw
+from backend.core.investition_kennwerte import (
+    SPEICHER_KOPPLUNG_DC,
+    get_speicher_kopplung,
+    get_wr_grenze_kw,
+)
 
 
 @dataclass(frozen=True)
@@ -63,8 +67,46 @@ class Mitglied:
     grenz_id: Optional[str] = None
 
 
+def _dc_speicher_traeger(speicher: Sequence[Any]) -> set[Any]:
+    """IDs der Investitionen, an denen ein **DC-gekoppelter** Speicher hängt (F-11).
+
+    Warum das die Kappung interessiert: Die AC-Grenze begrenzt, was ein
+    Wechselrichter **ins Haus abgeben** kann — nicht, was die Module ernten. Bei
+    einem **DC**-gekoppelten Speicher läuft der Überschuss über der Grenze
+    gleichstromseitig in den Akku, ohne je durch den Wechselrichter zu müssen.
+    Er ist also **nicht verloren**, und eine Kappung des Erzeugungsprofils würde
+    ihn wegrechnen. Bei **AC**-Kopplung muss alles durch den Wechselrichter —
+    dort ist die Kappung richtig und bleibt.
+
+    Dass die Zahl, die eedc als ``pv_erzeugung_kwh`` einsammelt, tatsächlich die
+    Ernte **vor** dem Speicher ist, folgt aus der eigenen Bilanz: in
+    ``berechnungen/verbrauch.py`` steht
+    ``direktverbrauch = max(0, pv − einspeisung − speicher_ladung)``. Die
+    Speicherladung wird von der PV-Summe **abgezogen**, sie muss darin also
+    enthalten sein. Die Sensor-Referenz sagt dasselbe in Worten („erzeugte
+    Energie dieses PV-Strings/Moduls").
+
+    ⚠ **Damit liest erstmals eine ADR-001-Formel `get_speicher_kopplung`.** Dessen
+    Docstring hielt bis 2026-08-07 fest, der Helper „ändert keine Zahl" — das
+    gilt ab hier nicht mehr, und der Vermerk dort ist entsprechend angepasst. Die
+    Kopplung ist gepflegt oder wird aus der Zuordnung abgeleitet (Parent gesetzt
+    ⇒ DC); für den BKW-Akku-Kanon (Speicher mit dem Balkonkraftwerk als Parent)
+    trifft die Ableitung genau zu.
+    """
+    traeger: set[Any] = set()
+    for sp in speicher:
+        parent_id = getattr(sp, "parent_investition_id", None)
+        if parent_id is None:
+            continue  # eigenständiger Speicher — hängt an keiner AC-Grenze
+        if get_speicher_kopplung(sp) == SPEICHER_KOPPLUNG_DC:
+            traeger.add(parent_id)
+    return traeger
+
+
 def zuordne_grenzen(
-    erzeuger: Sequence[Any], wechselrichter: Sequence[Any],
+    erzeuger: Sequence[Any],
+    wechselrichter: Sequence[Any],
+    speicher: Sequence[Any],
 ) -> dict[Any, tuple[Optional[float], Optional[str]]]:
     """`{erzeuger.id: (grenze_kw, grenz_id)}` für eine Bestandsliste.
 
@@ -82,6 +124,15 @@ def zuordne_grenzen(
        alle Strings desselben Wechselrichters bekommen dieselbe `grenz_id` und
        werden gemeinsam gekappt.
 
+    Darüber liegt seit F-11 eine dritte Regel: **hängt am Träger der Grenze ein
+    DC-gekoppelter Speicher, wird nicht gekappt** (`(None, None)`) — der
+    Überschuss geht dann in den Akku statt verloren, s. `_dc_speicher_traeger`.
+
+    ``speicher`` ist ein **Pflicht**-Argument, obwohl die meisten Anlagen keinen
+    haben. Ein Default wäre die stille Falle: ein Aufrufer, der ihn vergisst,
+    kappt weiter zu viel und meldet dabei nichts. So bricht stattdessen der
+    Aufruf, und die Stelle wird sichtbar.
+
     Ein Erzeuger ohne Grenze bekommt `(None, None)` — der Aufrufer nimmt dann
     den unveränderten Pfad, und die Rechnung bleibt bitgleich zu vorher.
     """
@@ -90,6 +141,7 @@ def zuordne_grenzen(
         for wr in wechselrichter
         if getattr(wr, "id", None) is not None
     }
+    dc_traeger = _dc_speicher_traeger(speicher)
 
     zuordnung: dict[Any, tuple[Optional[float], Optional[str]]] = {}
     for erz in erzeuger:
@@ -98,12 +150,18 @@ def zuordne_grenzen(
             continue
         eigene = get_wr_grenze_kw(erz)
         if eigene is not None:
-            zuordnung[erz_id] = (eigene, f"inv:{erz_id}")
+            # Der Träger der eigenen Grenze ist der Erzeuger selbst (BKW).
+            zuordnung[erz_id] = (
+                (None, None) if erz_id in dc_traeger else (eigene, f"inv:{erz_id}")
+            )
             continue
         parent_id = getattr(erz, "parent_investition_id", None)
         parent_grenze = wr_grenzen.get(parent_id) if parent_id is not None else None
         if parent_grenze is not None:
-            zuordnung[erz_id] = (parent_grenze, f"wr:{parent_id}")
+            # Träger ist hier der Wechselrichter, nicht der String.
+            zuordnung[erz_id] = (
+                (None, None) if parent_id in dc_traeger else (parent_grenze, f"wr:{parent_id}")
+            )
         else:
             zuordnung[erz_id] = (None, None)
     return zuordnung

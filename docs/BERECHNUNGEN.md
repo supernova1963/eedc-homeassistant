@@ -965,6 +965,31 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 > 10.495,79 → 10.727,57 kWh). Bestandsprognosen tragen kein `raddatabase` und werden deshalb genau
 > einmal automatisch nachgezogen; danach rechnen alle Installationen auf derselben Grundlage.
 
+> **Wann die AC-Kappung NICHT greift (F-11).** Die Grenze begrenzt, was ein Wechselrichter **ins
+> Haus abgibt** — nicht, was die Module ernten. Hängt am **Träger der Grenze** ein
+> **DC-gekoppelter** Speicher, läuft der Überschuss gleichstromseitig in den Akku, ohne je durch
+> den Wechselrichter zu müssen; er ist dann **nicht verloren**, und eine Kappung des
+> Erzeugungsprofils würde ihn wegrechnen. SoT `core/berechnungen/wr_kappung.py::_dc_speicher_traeger`.
+>
+> | Lage | Kappung |
+> | --- | --- |
+> | kein Speicher am Träger | **ja** (#347/#354 unverändert) |
+> | **DC**-gekoppelter Speicher am Träger | **nein** — der Überschuss lädt den Akku |
+> | **AC**-gekoppelter Speicher am Träger | **ja** — alles läuft durch den Wechselrichter |
+> | Speicher ohne Zuordnung, oder an einem *anderen* Wechselrichter | **ja** — er kann den Überschuss dieses Erzeugers nicht aufnehmen |
+>
+> **Warum die IST-Größe die Ernte *vor* dem Speicher ist** — das entscheidet nicht der Hersteller,
+> sondern die eigene Bilanz: `direktverbrauch = max(0, pv − einspeisung − speicher_ladung)`
+> (§3.1). Die Speicherladung wird von der PV-Summe **abgezogen**, sie muss darin enthalten sein.
+> Die [Sensor-Referenz](SENSOR-REFERENZ.md) sagt dasselbe in Worten, und der BKW-Akku-Kanon führt
+> Ladung/Entladung als eigene Speicher-Investition daneben.
+>
+> ⚠ **Damit ändert die Kopplung eines Speichers erstmals eine Zahl.** Bis v4.0.10 war
+> `parameter.kopplung` (#351) rein beschreibend — sie sagte, **wo** gemessen wird, und keine
+> ADR-001-Formel las sie. Ab F-11 liest `wr_kappung` sie, und die Wirkung bleibt auf **SOLL**-Werte
+> beschränkt: Prognose-Kanon und PVGIS-Monatsprognose. Kein IST-Pfad, keine Energiebilanz, keine
+> Finanzrechnung. Wer die Kopplung eines Speichers ändert, verschiebt seither sein SOLL.
+
 **Ab v2.3.2 (Per-Modul PVGIS-Daten vorhanden):**
 ```
 SOLL_Monat = PVGISPrognose.module_monatswerte[modul_id][monat].e_m

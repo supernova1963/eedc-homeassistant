@@ -378,11 +378,21 @@ def get_speicher_kopplung(inv: Any) -> str:
 
     Die Zuordnung bleibt die **Struktur**-Information (sie entscheidet, ob die
     Wirtschaftlichkeit als Teil des PV-Systems gerechnet wird); die Kopplung ist
-    daneben eine eigene Eigenschaft. Deshalb ändert dieser Helper **keine Zahl**:
-    ADR-001-Formeln lesen ihn nicht, `berechne_speicher_einsparung` rechnet für
-    beide Fälle identisch. Was er ändert, ist die *Aussage* — vorher behauptete
+    daneben eine eigene Eigenschaft. Bis v4.0.10 änderte dieser Helper deshalb
+    **keine Zahl** — er änderte die *Aussage*, denn vorher behauptete
     `dc_gekoppelt=True` bzw. „AC-gekoppelter Speicher" etwas, das nie erhoben
-    worden war.
+    worden war. `berechne_speicher_einsparung` rechnet weiterhin für beide Fälle
+    identisch.
+
+    ⚠ **Seit F-11 (2026-08-07) gilt das „keine Zahl" nicht mehr uneingeschränkt.**
+    `core/berechnungen/wr_kappung.py::_dc_speicher_traeger` liest die Kopplung und
+    setzt die AC-Kappung der **Prognose** aus, wo ein DC-gekoppelter Speicher am
+    Träger der Grenze hängt: dort läuft der Überschuss über der Grenze in den
+    Akku statt verloren zu gehen, und eine Kappung des Erzeugungsprofils rechnete
+    ihn weg. Wirkung ausschließlich auf SOLL-Werte (Prognose-Kanon und
+    PVGIS-Monatsprognose) — **kein** IST-Pfad, keine Bilanz, keine
+    Finanzrechnung. Wer die Kopplung eines Speichers ändert, bewegt seither also
+    seine SOLL-Zahlen; das ist gewollt und in BERECHNUNGEN §3.9 beschrieben.
     """
     gepflegt = get_speicher_kopplung_gepflegt(inv)
     if gepflegt is not None:
