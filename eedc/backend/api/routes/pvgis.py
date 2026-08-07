@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 import httpx
 
+from backend.core.config import settings
 from backend.core.exceptions import not_found
 from backend.core.investition_kennwerte import get_erzeuger_kwp, get_pv_kwp
 from backend.core.berechnungen.wr_kappung import zuordne_grenzen
@@ -33,6 +34,7 @@ from backend.models.investition import Investition, InvestitionTyp
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.pvgis_prognose import PVGISPrognose as PVGISPrognoseModel, PVGISMonatsprognose
 from backend.services.prognose_auswahl import lade_aktive_prognose
+from backend.services.pvgis_aktualitaet import pruefe_prognose
 from backend.services.pv_orientation import get_pv_neigung
 from backend.services.wetter.pvgis_kappung import (
     KappungsModul,
@@ -43,7 +45,9 @@ from backend.services.wetter.pvgis_kappung import (
 # PVGIS API Constants
 # =============================================================================
 
-PVGIS_BASE_URL = "https://re.jrc.ec.europa.eu/api/v5_2"
+# Eine Quelle für die API-Version (`core/config.py::pvgis_api_url`) — sie
+# entscheidet über den Strahlungsdatensatz und damit über jede SOLL-Zahl.
+PVGIS_BASE_URL = settings.pvgis_api_url
 
 # Standard-Werte für Deutschland
 DEFAULT_LOSSES = 14  # Systemverluste in % (Kabel, Wechselrichter, etc.)
@@ -110,7 +114,16 @@ class PVGISPrognose(BaseModel):
 
     # Metadata
     abgerufen_am: datetime
-    pvgis_version: str = "5.2"
+    # Aus der konfigurierten URL abgeleitet statt hart geschrieben: bis v4.0.11
+    # stand hier "5.2" als Literal — es war die vierte Stelle, an der die
+    # Version dupliziert war, und wäre beim Wechsel auf v5_3 still falsch
+    # geworden (gelesen wird das Feld von niemandem, deklariert schon).
+    pvgis_version: str = Field(
+        default_factory=lambda: settings.pvgis_api_url.rstrip("/").rsplit("/", 1)[-1]
+    )
+    # Strahlungsdatensatz laut PVGIS-Antwort (z. B. "PVGIS-SARAH3"), None wenn
+    # kein Modul abgefragt wurde. Entscheidet über den Neuabruf (#363).
+    raddatabase: Optional[str] = None
 
 
 class GespeichertePrognoseResponse(BaseModel):
@@ -146,36 +159,54 @@ class HorizontStatusResponse(BaseModel):
 router = APIRouter()
 
 
+AUSRICHTUNG_AZIMUT: dict[str, float] = {
+    "süd": 0, "sued": 0, "s": 0, "south": 0,
+    "südost": -45, "suedost": -45, "so": -45, "southeast": -45,
+    "ost": -90, "o": -90, "east": -90,
+    "nordost": -135, "no": -135, "northeast": -135,
+    "nord": 180, "n": 180, "north": 180,
+    "nordwest": 135, "nw": 135, "northwest": 135,
+    "west": 90, "w": 90,
+    "südwest": 45, "suedwest": 45, "sw": 45, "southwest": 45,
+    # Ost-West wird in den PVGIS-Berechnungen separat behandelt (zwei Abfragen,
+    # Ost + West). Dieser Wert dient nur als Anzeige-Fallback.
+    "ost-west": 0, "ow": 0, "o-w": 0, "east-west": 0,
+}
+
+
 def ausrichtung_zu_azimut(ausrichtung: Optional[str]) -> float:
     """
     Konvertiert Ausrichtungstext zu PVGIS Azimut.
 
     PVGIS Azimut: 0 = Süd, -90 = Ost, 90 = West, 180/-180 = Nord
+
+    ⚠ Bis v4.0.11 lief hier ein **Substring**-Match über ein Dict in
+    Einfüge-Reihenfolge (`if key in ausrichtung_lower`). Der Ein-Buchstaben-
+    Schlüssel „s" (Süd) traf damit in „o**s**t" und „we**s**t", „o" (Ost) in
+    „n**o**rd" — **11 von 16 Himmelsrichtungen** kamen falsch heraus: Ost, West
+    und alle vier Zwischenrichtungen wurden zu **Süd (0°)**, Nord zu Ost.
+    Wirksam wurde das überall dort, wo kein exakter `parameter.ausrichtung_grad`
+    gepflegt ist (Altbestand, JSON-Import) — die betroffene Anlage bekam eine
+    deutlich zu hohe SOLL-Prognose. Kein Test griff die Funktion je (#363).
+
+    Deshalb jetzt ein **exakter** Vergleich auf dem normalisierten Text. Ein
+    unbekannter Wert fällt bewusst auf Süd zurück wie bisher: eine Prognose ist
+    besser als keine, und der Daten-Checker sieht die Abweichung im PR.
     """
     if not ausrichtung:
         return DEFAULT_AZIMUTH
 
-    ausrichtung_lower = ausrichtung.lower()
+    # Normalisieren, nicht raten: Groß/Klein, Rand-Leerzeichen und die im
+    # Bestand vorkommenden Trenner („Süd-Ost", „Süd Ost") auf eine Form.
+    schluessel = ausrichtung.strip().lower().replace(" ", "").replace("_", "-")
+    if schluessel in AUSRICHTUNG_AZIMUT:
+        return AUSRICHTUNG_AZIMUT[schluessel]
 
-    mapping = {
-        "süd": 0, "s": 0, "south": 0,
-        "südost": -45, "so": -45, "southeast": -45,
-        "ost": -90, "o": -90, "east": -90,
-        "nordost": -135, "no": -135, "northeast": -135,
-        "nord": 180, "n": 180, "north": 180,
-        "nordwest": 135, "nw": 135, "northwest": 135,
-        "west": 90, "w": 90,
-        "südwest": 45, "sw": 45, "southwest": 45,
-        # Ost-West: Wird in PVGIS-Berechnungen separat behandelt (2 Abfragen: Ost + West).
-        # Dieser Wert (0 = Süd) dient nur noch als Anzeige-Fallback.
-        "ost-west": 0, "ow": 0, "o-w": 0, "east-west": 0,
-    }
-
-    for key, value in mapping.items():
-        if key in ausrichtung_lower:
-            return value
-
-    return DEFAULT_AZIMUTH
+    # „süd-ost" → „südost"; die zusammengesetzten Richtungen stehen ohne
+    # Bindestrich in der Tabelle, „ost-west" dagegen MIT — deshalb erst der
+    # ungekürzte Versuch oben, dann dieser.
+    ohne_trenner = schluessel.replace("-", "")
+    return AUSRICHTUNG_AZIMUT.get(ohne_trenner, DEFAULT_AZIMUTH)
 
 
 def _azimut_zu_richtung(azimut: float) -> str:
@@ -291,6 +322,19 @@ def _kappungs_abrufe(
     return [(leistung_kwp, tilt, azimuth)]
 
 
+def _radiation_db(pvgis_data: dict) -> Optional[str]:
+    """Liest den Strahlungsdatensatz aus einer PVGIS-Antwort (`PVGIS-SARAH3`, …).
+
+    Bewusst aus der ANTWORT und nicht aus der konfigurierten API-Version
+    abgeleitet: die Version bestimmt den Datensatz zwar, aber eine Konstante
+    daneben würde ihn behaupten statt belegen — und PVGIS kann eine Version
+    intern weiterdrehen, ohne dass sich die URL ändert. Der Wert entscheidet in
+    `services/pvgis_aktualitaet.py`, ob eine gespeicherte Prognose noch auf
+    derselben Grundlage steht wie ein frischer Abruf (#363).
+    """
+    return (pvgis_data.get("inputs", {}).get("meteo_data", {}) or {}).get("radiation_db")
+
+
 async def _berechne_pvgis_modul(
     latitude: float,
     longitude: float,
@@ -300,7 +344,7 @@ async def _berechne_pvgis_modul(
     system_losses: float,
     user_horizon: Optional[list[float]] = None,
     ausrichtung_grad: Optional[float] = None,
-) -> tuple[list[PVGISMonthlyData], float]:
+) -> tuple[list[PVGISMonthlyData], float, Optional[str]]:
     """
     Berechnet PVGIS-Prognose für ein PV-Modul.
 
@@ -309,7 +353,7 @@ async def _berechne_pvgis_modul(
     Süd-Ausrichtung als Fallback.
 
     Returns:
-        (monatsdaten, jahresertrag_kwh)
+        (monatsdaten, jahresertrag_kwh, raddatabase)
     """
     if _ist_ost_west(ausrichtung):
         half_kwp = leistung_kwp / 2
@@ -330,7 +374,9 @@ async def _berechne_pvgis_modul(
 
         jahresertrag_ost = pvgis_ost.get("outputs", {}).get("totals", {}).get("fixed", {}).get("E_y", 0)
         jahresertrag_west = pvgis_west.get("outputs", {}).get("totals", {}).get("fixed", {}).get("E_y", 0)
-        return monatsdaten, jahresertrag_ost + jahresertrag_west
+        # Beide Hälften stammen aus derselben API-Version; die Ost-Antwort steht
+        # stellvertretend für beide.
+        return monatsdaten, jahresertrag_ost + jahresertrag_west, _radiation_db(pvgis_ost)
     else:
         azimuth = ausrichtung_grad if ausrichtung_grad is not None else ausrichtung_zu_azimut(ausrichtung)
         pvgis_data = await fetch_pvgis_data(latitude, longitude, leistung_kwp, neigung_grad, azimuth, system_losses, user_horizon)
@@ -348,7 +394,7 @@ async def _berechne_pvgis_modul(
             )
             for m in monthly
         ]
-        return monatsdaten, totals.get("E_y", 0)
+        return monatsdaten, totals.get("E_y", 0), _radiation_db(pvgis_data)
 
 
 @router.get("/prognose/{anlage_id}", response_model=PVGISPrognose)
@@ -420,6 +466,7 @@ async def get_pvgis_prognose(
     gesamt_leistung = 0.0
     kappungs_module: list[KappungsModul] = []
     roh_prognosen: list[tuple] = []
+    raddatabase: Optional[str] = None
 
     for modul in pv_module:
         # kWp über den SoT-Helper (ADR-002/P3-a): wer die Nennleistung nur im
@@ -438,7 +485,7 @@ async def get_pvgis_prognose(
         exact_azimuth = modul_params.get("ausrichtung_grad")  # float oder None
 
         # PVGIS abrufen – Ost-West-Anlagen: 2 separate Abfragen (Ost 50% + West 50%)
-        modul_monatsdaten, jahresertrag = await _berechne_pvgis_modul(
+        modul_monatsdaten, jahresertrag, modul_raddatabase = await _berechne_pvgis_modul(
             latitude=anlage.latitude,
             longitude=anlage.longitude,
             leistung_kwp=modul_kwp,
@@ -448,6 +495,9 @@ async def get_pvgis_prognose(
             user_horizon=anlage.horizont_daten,
             ausrichtung_grad=exact_azimuth,
         )
+        # Alle Module derselben Anlage fragen dieselbe API-Version; der erste
+        # gelieferte Wert steht für die ganze Prognose.
+        raddatabase = raddatabase or modul_raddatabase
 
         azimuth = exact_azimuth if exact_azimuth is not None else ausrichtung_zu_azimut(modul.ausrichtung)
         grenze_kw, grenz_id = grenzen.get(modul.id, (None, None))
@@ -533,7 +583,8 @@ async def get_pvgis_prognose(
         monatsdaten=gesamt_monatsdaten_list,
         module=module_prognosen,
         system_losses=system_losses,
-        abgerufen_am=datetime.now()
+        abgerufen_am=datetime.now(),
+        raddatabase=raddatabase,
     )
 
 
@@ -598,7 +649,7 @@ async def get_pvgis_modul_prognose(
     exact_azimuth = modul_params.get("ausrichtung_grad")  # float oder None
 
     # PVGIS abrufen – Ost-West-Anlagen: 2 separate Abfragen (Ost 50% + West 50%)
-    monatsdaten_list, jahresertrag = await _berechne_pvgis_modul(
+    monatsdaten_list, jahresertrag, _raddb = await _berechne_pvgis_modul(
         latitude=anlage.latitude,
         longitude=anlage.longitude,
         leistung_kwp=modul_kwp,
@@ -858,6 +909,7 @@ async def speichere_pvgis_prognose(
         monatswerte=monatswerte,
         module_monatswerte=module_monatswerte_data,
         horizont_verwendet=hat_horizont,
+        raddatabase=prognose.raddatabase,
         ist_aktiv=True
     )
 
@@ -941,10 +993,19 @@ async def get_aktive_prognose(
         # Stabile Reihenfolge: größte Module zuerst
         module_info.sort(key=lambda m: m["leistung_kwp"], reverse=True)
 
+    # Passt die Prognose noch zur Anlage? Aus demselben SoT wie der nächtliche
+    # Neuabruf (#363) — die Einstellungs-Kachel meldete früher stattdessen das
+    # ALTER („Letzter Abruf vor N Tagen"). Das war eine Warnung ohne Gegenstand:
+    # PVGIS rechnet auf einem festen Klimamittel, eine sieben Tage alte Prognose
+    # ist so gut wie eine von heute. Falsch wird sie erst durch eine Änderung.
+    abweichung = await pruefe_prognose(db, anlage_id)
+
     return {
         "id": prognose.id,
         "anlage_id": prognose.anlage_id,
         "abgerufen_am": prognose.abgerufen_am,
+        "passt_zur_anlage": abweichung is None,
+        "abweichung_text": abweichung.text if abweichung else None,
         "latitude": prognose.latitude,
         "longitude": prognose.longitude,
         "neigung_grad": prognose.neigung_grad,

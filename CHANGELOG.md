@@ -9,7 +9,19 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Die Solarprognose zieht selbst nach, wenn sie nicht mehr zur Anlage passt.** Eine PVGIS-Prognose wird beim Abruf eingefroren — baust du danach um, rechnet eedc jede SOLL-Zahl weiter gegen die **alte** Anlage. Im gemeldeten Extremfall stand für ein 2,4-kWp-Balkonkraftwerk ein Jahres-SOLL von **357 MWh**, weil die gespeicherte Prognose zu einem weit größeren System gehörte. Jetzt prüft eedc jede Nacht, ob die aktive Prognose noch zur Anlage passt, und holt bei Bedarf eine neue — **mit deinen eingestellten Systemverlusten**, nicht mit dem Standardwert. Ausgelöst wird das von einer geänderten **Nennleistung, Ausrichtung, Neigung**, einem geänderten **Standort** oder einem hinzugekommenen bzw. entfernten **Horizontprofil**. Die bisherige Prognose bleibt in der Historie und ist jederzeit wieder aktivierbar — es geht nichts verloren. Jeder automatische Abruf steht mit seinem Grund im Aktivitätsprotokoll.
+
+  ⚠ **Das Alter einer Prognose ist ausdrücklich kein Grund für einen Neuabruf** — und die Einstellungs-Kachel warnt auch nicht mehr davor. PVGIS rechnet mit einem Langzeit-Mittel über viele Jahre; eine ein Jahr alte Prognose liefert für dieselbe Anlage dieselbe Zahl wie eine von heute. Die bisherige Meldung „Letzter Abruf vor N Tagen" (ab sieben Tagen) hat damit ein Problem angezeigt, das es nicht gab. An ihrer Stelle steht jetzt, **was** nicht mehr passt — zum Beispiel „Nennleistung 9,80 → 2,40 kWp".
+
+### Changed
+
+- **eedc rechnet die Solarprognose auf dem neueren PVGIS-Strahlungsdatensatz.** Die PVGIS-Schnittstelle wechselt von v5.2 auf v5.3 und damit von **PVGIS-SARAH2** (Messjahre 2005–2020) auf **PVGIS-SARAH3** (2005–2023). ⚠ **Deine SOLL-Zahlen ändern sich dadurch einmalig um rund 2 % nach oben** (an einer Beispielanlage gemessen: 9,8 kWp Süd 35° — 10.496 → 10.728 kWh im Jahr). Sichtbar wird das in *Auswertungen → Prognose vs. IST*, im Monatsbericht und beim Performance-Ratio-Hinweis des Daten-Checkers. Bestehende Prognosen werden dafür **einmalig automatisch** neu abgerufen, damit nicht Bestands- und Neuinstallationen dauerhaft auf verschiedenen Grundlagen rechnen; die bisherige Prognose bleibt in der Historie erhalten.
+
 ### Fixed
+
+- **Ost- und West-Anlagen bekommen die richtige Prognose statt einer Süd-Prognose.** Wurde die Ausrichtung eines Strings nur als **Text** geführt („Ost", „West", „Südwest" …) und nicht zusätzlich als Gradwert, hat eedc sie beim PVGIS-Abruf falsch übersetzt: **11 von 16 Himmelsrichtungen** kamen falsch heraus — Ost, West und alle vier Zwischenrichtungen landeten auf **Süd**, Nord auf Ost. Betroffen waren vor allem **ältere Bestände und JSON-Importe**; wer seine Komponenten im aktuellen Formular gespeichert hat, hatte den Gradwert hinterlegt und war nicht betroffen. Die Folge war eine **deutlich zu hohe SOLL-Prognose** — eine Ost-Anlage wurde an einer Süd-Erwartung gemessen und sah dauerhaft schlecht aus. Betroffene Prognosen werden durch die neue Aktualitätsprüfung automatisch nachgezogen.
 
 - **Ein PV-Zähler für die ganze Anlage reicht jetzt auch für Tages- und Stundenwerte.** Wer seine PV über den **Anlagen-Zählerstand** pflegt (*Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)*) — typisch bei einem Wechselrichter, der nur eine Summe über mehrere Ausrichtungen liefert —, hatte bisher korrekte **Monatswerte** und in *Cockpit → Tag* **gar keine PV**: die Tagesebene entstand ausschließlich aus Zählern je Erzeuger. Der Anlagen-Zählerstand versorgt jetzt **Monat, Tag und Stunde** als Summe der ganzen Anlage. Damit füllen sich Tagesbilanz, Eigenverbrauch, spezifischer Ertrag, Performance Ratio, CO₂ und der Stundenverlauf. **Alles rückwirkend, ohne Zutun** — die Werte werden aus der bereits vorhandenen Zähler-Historie gebildet, sobald ein Tag neu aggregiert wird. *(Forum-Meldung.)*
 

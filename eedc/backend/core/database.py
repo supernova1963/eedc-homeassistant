@@ -795,6 +795,11 @@ async def run_migrations(conn):
                 ('gesamt_leistung_kwp', 'FLOAT'),
                 ('module_monatswerte', 'JSON'),
                 ('horizont_verwendet', 'BOOLEAN DEFAULT 0'),
+                # v4.0.11 (#363): Strahlungsdatensatz der Zahl. Bewusst ohne
+                # DEFAULT — NULL bedeutet „vor der Umstellung geschrieben, also
+                # aus PVGIS v5_2/SARAH2" und ist der Auslöser, der eine Anlage
+                # ohne Stammdaten-Änderung einmalig nachziehen lässt.
+                ('raddatabase', 'VARCHAR(50)'),
             ]
             for col_name, col_type in new_columns:
                 if col_name not in existing_columns:

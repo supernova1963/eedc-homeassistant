@@ -103,6 +103,22 @@ class PVGISPrognose(Base):
     # Horizont-Profil wurde bei der Berechnung berücksichtigt
     horizont_verwendet: Mapped[Optional[bool]] = mapped_column(default=False)
 
+    # Strahlungsdatensatz, aus dem diese Zahl stammt (PVGIS `inputs.meteo_data.
+    # radiation_db`, z. B. "PVGIS-SARAH3"). Aus der Antwort gelesen, NICHT aus
+    # der konfigurierten API-Version abgeleitet: die Version bestimmt den
+    # Datensatz zwar heute, aber eine Konstante würde ihn behaupten statt
+    # belegen — und PVGIS kann eine Version intern weiterdrehen.
+    #
+    # Der Wert ist der einzige Auslöser, der eine Anlage OHNE Änderung an ihren
+    # Stammdaten betrifft: #363 vergleicht sonst kWp, Winkel, Koordinaten und
+    # Verluste, und keiner davon bewegt sich, wenn PVGIS den Datensatz wechselt
+    # (gemessen 2026-08-07: v5_2/SARAH2 2005-2020 gegen v5_3/SARAH3 2005-2023
+    # ergeben für dieselbe Anlage 10.495,79 gegen 10.727,57 kWh, +2,2 %).
+    #
+    # NULL bei jeder Zeile, die vor v4.0.11 geschrieben wurde. Das gilt als
+    # „nicht der aktuelle Datensatz" und löst genau einmal einen Neuabruf aus.
+    raddatabase: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
     # Aktiv-Flag: Nur eine Prognose pro Anlage kann aktiv sein (für Vergleiche)
     ist_aktiv: Mapped[bool] = mapped_column(default=True)
 

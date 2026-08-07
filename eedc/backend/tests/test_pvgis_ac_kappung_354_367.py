@@ -141,7 +141,8 @@ def pvgis_stub(monkeypatch):
     async def _stub(*, leistung_kwp, **_):
         monate = [PVGISMonthlyData(monat=m, e_m=leistung_kwp * 1000 / 12,
                                    h_m=100.0, sd_m=10.0) for m in range(1, 13)]
-        return monate, leistung_kwp * 1000
+        # Dritter Rückgabewert seit #363: der Strahlungsdatensatz.
+        return monate, leistung_kwp * 1000, "PVGIS-SARAH3"
 
     monkeypatch.setattr(pvgis_mod, "_berechne_pvgis_modul", _stub)
 

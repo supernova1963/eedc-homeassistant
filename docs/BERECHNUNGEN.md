@@ -906,6 +906,32 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 > `services/prognose_auswahl.py`, datenbankseitig gesichert durch einen partiellen Unique-Index
 > (ADR-002/P5). Ist **keine** Prognose aktiv, bleibt die SOLL-Seite leer, statt eine beliebige zu zeigen.
 
+> **Wann eine Prognose von selbst nachgezogen wird (#363, ab v4.0.11).** Eine Prognose wird beim
+> Abruf eingefroren; ändert sich die Anlage danach, rechnet jede SOLL-Sicht gegen eine Anlage, die
+> es nicht mehr gibt (gemeldeter Extremfall: 357 MWh Jahres-SOLL für ein 2,4-kWp-Balkonkraftwerk).
+> Der nächtliche Job `pvgis_aktualitaet` prüft deshalb je Anlage, **ob die aktive Prognose noch
+> passt** — SoT `services/pvgis_aktualitaet.py`, dieselbe Funktion versorgt die Statusanzeige der
+> Einstellungs-Kachel. Auslöser sind ausschließlich:
+>
+> | Auslöser | Vergleich |
+> | --- | --- |
+> | Nennleistung | Σ `get_erzeuger_kwp` der aktiven Erzeuger gegen `gesamt_leistung_kwp` |
+> | Ausrichtung / Neigung | nach kWp gewichtet, wie im Speicherpfad |
+> | Standort | `latitude`/`longitude` der Anlage |
+> | Horizontprofil | hinzugekommen oder entfernt |
+> | Strahlungsdatensatz | `raddatabase` der Zeile gegen den der konfigurierten API-Version |
+>
+> **Das Alter ist ausdrücklich KEIN Auslöser.** PVGIS rechnet auf einem abgeschlossenen Klimamittel
+> (API v5_2 → PVGIS-SARAH2 2005–2020, v5_3 → PVGIS-SARAH3 2005–2023); bei unveränderten Eingaben
+> liefert ein zweiter Abruf dieselbe Zahl, ein turnusmäßiger Abruf wäre Last ohne Wirkung. Die
+> Systemverluste sind ebenfalls kein Auslöser, sondern werden in den Neuabruf **übernommen** — sie
+> sind nirgends sonst gespeichert. Die abgelöste Prognose bleibt als inaktive Zeile erhalten.
+>
+> ⚠ **v4.0.11 hebt die API-Version von v5_2 auf v5_3.** Damit wechselt der Strahlungsdatensatz von
+> SARAH2 auf SARAH3 — für dieselbe Anlage rund **+2 %** (am 2026-08-07 gemessen: 9,8 kWp Süd 35°,
+> 10.495,79 → 10.727,57 kWh). Bestandsprognosen tragen kein `raddatabase` und werden deshalb genau
+> einmal automatisch nachgezogen; danach rechnen alle Installationen auf derselben Grundlage.
+
 **Ab v2.3.2 (Per-Modul PVGIS-Daten vorhanden):**
 ```
 SOLL_Monat = PVGISPrognose.module_monatswerte[modul_id][monat].e_m

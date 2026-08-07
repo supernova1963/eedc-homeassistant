@@ -231,6 +231,19 @@ class EEDCScheduler:
                 replace_existing=True,
             )
 
+            # Solarprognose-Aktualität: Täglich um 04:30, nach dem Cache-Cleanup
+            # (#363). Prüft je Anlage, ob die gespeicherte PVGIS-Prognose noch
+            # zur Anlage passt, und ruft nur bei Abweichung neu ab — PVGIS
+            # rechnet auf einem festen Klimamittel, ein Turnus-Abruf wäre Last
+            # ohne Wirkung. Ohne Abweichung geht kein einziger Request raus.
+            self._scheduler.add_job(
+                pvgis_aktualitaet_job,
+                CronTrigger(hour=4, minute=30),
+                id="pvgis_aktualitaet",
+                name="Solarprognose-Aktualität (Neuabruf bei Anlagenänderung)",
+                replace_existing=True,
+            )
+
             # Kraftstoffpreis: Wöchentlich Dienstag 06:00 (Oil Bulletin erscheint Montag)
             self._scheduler.add_job(
                 kraftstoffpreis_job,
@@ -1002,6 +1015,71 @@ def get_scheduler() -> EEDCScheduler:
     if _scheduler is None:
         _scheduler = EEDCScheduler()
     return _scheduler
+
+
+async def pvgis_aktualitaet_job() -> None:
+    """Zieht die Solarprognose nach, wenn sie nicht mehr zur Anlage passt (#363).
+
+    Ausgelöst wird ausschließlich durch eine ABWEICHUNG (Nennleistung,
+    Ausrichtung, Neigung, Standort, Horizontprofil, Strahlungsdatensatz) —
+    bewusst nicht durch das Alter der Prognose: PVGIS rechnet auf einem festen
+    Klimamittel, ein turnusmäßiger Abruf liefert dieselbe Zahl. Die Regel steht
+    als SoT in `services/pvgis_aktualitaet.py`, dort auch die Messung.
+
+    Die eingestellten Systemverluste werden übernommen, nicht auf den Default
+    zurückgesetzt. Die alte Prognose bleibt als inaktive Zeile in der Historie
+    und ist über die Einstellungs-Seite wieder aktivierbar — ein Neuabruf
+    verwirft nichts.
+
+    Läuft täglich statt beim Start: ein blockierender HTTP-Aufruf im Startpfad
+    hat das Add-on schon einmal in eine Neustart-Schleife gebracht (v3.45.7).
+    """
+    try:
+        from backend.api.routes.pvgis import speichere_pvgis_prognose
+        from backend.core.database import get_session
+        from backend.models.anlage import Anlage
+        from backend.services.pvgis_aktualitaet import pruefe_prognose
+        from sqlalchemy import select
+
+        async with get_session() as db:
+            anlagen = (await db.execute(select(Anlage))).scalars().all()
+
+            for anlage in anlagen:
+                try:
+                    abweichung = await pruefe_prognose(db, anlage.id)
+                    if abweichung is None:
+                        continue
+
+                    await speichere_pvgis_prognose(
+                        anlage_id=anlage.id,
+                        system_losses=abweichung.system_losses,
+                        db=db,
+                    )
+                    await db.commit()
+
+                    # Eine automatisch geänderte SOLL-Zahl muss nachvollziehbar
+                    # bleiben — der Grund steht im Aktivitätsprotokoll, nicht nur
+                    # im Log (#363).
+                    await log_activity(
+                        kategorie="scheduler",
+                        aktion="Solarprognose aktualisiert",
+                        erfolg=True,
+                        details=f"Anlage {anlage.id}: {abweichung.text}",
+                    )
+                    logger.info(
+                        "PVGIS-Aktualität: Anlage %d neu abgerufen (%s)",
+                        anlage.id, abweichung.text,
+                    )
+                except Exception as e:
+                    # Ein nicht erreichbares PVGIS darf den Lauf nicht abbrechen:
+                    # die bestehende Prognose bleibt gültig, der nächste Tag
+                    # versucht es erneut.
+                    logger.warning(
+                        "PVGIS-Aktualität Anlage %d: %s: %s",
+                        anlage.id, type(e).__name__, e,
+                    )
+    except Exception as e:
+        logger.warning("PVGIS-Aktualitäts-Job fehlgeschlagen: %s: %s", type(e).__name__, e)
 
 
 async def kraftstoffpreis_job() -> None:

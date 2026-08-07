@@ -72,7 +72,17 @@ class Settings(BaseSettings):
 
     # API URLs
     ha_api_url: str = "http://supervisor/core/api"
-    pvgis_api_url: str = "https://re.jrc.ec.europa.eu/api/v5_2"
+    # PVGIS-API. Die Version bestimmt den Strahlungsdatensatz und damit JEDE
+    # SOLL-Zahl: v5_2 liefert PVGIS-SARAH2 (2005-2020), v5_3 liefert
+    # PVGIS-SARAH3 (2005-2023). Gemessen am 2026-08-07 an derselben Anlage
+    # (9,8 kWp, Süd 35°): 10.495,79 gegen 10.727,57 kWh, +2,2 %.
+    # Wer sie ändert, verschiebt die Prognose jeder bestehenden Anlage — der
+    # Neuabruf läuft dann über `services/pvgis_aktualitaet.py` (#363).
+    # Der EINE Ort: `api/routes/pvgis.py` und `services/wetter/pvgis_kappung.py`
+    # führten die URL bis v4.0.11 jeweils selbst; ein Versionswechsel hätte
+    # zwei von drei Stellen getroffen und die AC-Kappung auf dem alten
+    # Datensatz gelassen.
+    pvgis_api_url: str = "https://re.jrc.ec.europa.eu/api/v5_3"
     open_meteo_api_url: str = "https://api.open-meteo.com/v1"
 
     # MQTT Export Settings

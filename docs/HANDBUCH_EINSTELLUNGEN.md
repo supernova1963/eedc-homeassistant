@@ -106,6 +106,19 @@ Diese Kachel kombiniert die PVGIS-Langfristprognose mit den Wetter-Provider-Eins
 - **Wetter-Provider** (für Autofill/historische Werte): Auto (Bright Sky DE, sonst Open-Meteo), Bright Sky (DWD), Open-Meteo, Open-Meteo Solar (GTI-basiert für geneigte Module).
 - **Prognose-Historie:** Jeder Abruf wird gespeichert und bleibt erhalten. **Genau einer ist „Aktiv"** und liefert die SOLL-Werte in *allen* Sichten und Berichten; über „Aktivieren" schaltest du bewusst auf einen anderen — auch auf einen **älteren**, etwa weil er mit einem genaueren Horizontprofil geholt wurde. Mehr dazu: [Prognosen §2.6](HANDBUCH_PROGNOSEN.md#26-die-aktive-pvgis-prognose--eine-und-du-bestimmst-welche).
 
+> **Die Prognose zieht selbst nach, wenn sie nicht mehr zur Anlage passt.**
+> Ändert sich die Nennleistung, die Ausrichtung, die Neigung, der Standort oder
+> das Horizontprofil, holt eedc nachts eine neue Prognose — mit **deinen**
+> eingestellten Systemverlusten, nicht mit dem Standardwert. Die bisherige
+> Prognose bleibt in der Historie und ist jederzeit wieder aktivierbar.
+>
+> Das **Alter** einer Prognose ist dagegen kein Grund für einen Neuabruf, und
+> die Kachel warnt auch nicht mehr davor: PVGIS rechnet mit einem
+> Langzeit-Mittel über viele Jahre. Eine ein Jahr alte Prognose liefert für
+> dieselbe Anlage dieselbe Zahl wie eine von heute — falsch wird sie erst durch
+> eine Änderung. Statt „Letzter Abruf vor N Tagen" meldet die Kachel deshalb,
+> **was** nicht mehr passt, zum Beispiel „Nennleistung 9,80 → 2,40 kWp".
+
 ### 2.4 Community-Share
 
 Der Schalter zum anonymen Teilen deiner Anlagendaten für den [Community-Vergleich](HANDBUCH_BEDIENUNG.md#5-community). Der „Teilen"-Umschalter sitzt im Block-Kopf, der Inhalt zeigt eine **Vorschau** der geteilten Daten (abgeblendet, wenn aus):

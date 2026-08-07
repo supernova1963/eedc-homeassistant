@@ -11,6 +11,22 @@
 
 ## Unveröffentlicht
 
+### Deine Solarprognose merkt selbst, wenn sie nicht mehr zu deiner Anlage passt
+
+Eine PVGIS-Prognose wird beim Abruf eingefroren. Baust du danach um — ein String kommt dazu, ein Balkonkraftwerk ersetzt die alte Anlage, das Dach wird anders belegt —, dann vergleicht eedc deine Erträge weiter mit der **alten** Anlage. In einem gemeldeten Fall stand für ein 2,4-kWp-Balkonkraftwerk ein Jahres-SOLL von **357 MWh**, weil die gespeicherte Prognose zu einem viel größeren System gehörte.
+
+Ab jetzt prüft eedc jede Nacht, ob die aktive Prognose noch passt, und holt bei Bedarf eine neue — **mit deinen eingestellten Systemverlusten**, nicht mit dem Standardwert. Nachgezogen wird bei geänderter **Nennleistung, Ausrichtung, Neigung**, geändertem **Standort** oder einem hinzugekommenen bzw. gelöschten **Horizontprofil**. Deine bisherige Prognose bleibt in der Historie und lässt sich jederzeit wieder aktivieren — es geht nichts verloren.
+
+**Die Warnung „Letzter Abruf vor N Tagen" ist weg**, und das ist Absicht: PVGIS rechnet mit einem Mittel über viele Jahre. Eine ein Jahr alte Prognose liefert für dieselbe Anlage dieselbe Zahl wie eine von heute — sie war nie „zu alt". Die Kachel *Einstellungen → Solarprognose* sagt dir stattdessen, **was** nicht mehr passt, zum Beispiel „Nennleistung 9,80 → 2,40 kWp".
+
+> ⚠ **Deine SOLL-Zahlen steigen mit diesem Update einmalig um rund 2 %.** eedc nutzt jetzt den neueren PVGIS-Strahlungsdatensatz (SARAH3 mit den Messjahren 2005–2023 statt SARAH2 mit 2005–2020). Deine bestehende Prognose wird dafür einmal automatisch neu abgerufen. Sichtbar wird das in *Auswertungen → Prognose vs. IST*, im Monatsbericht und beim Performance-Ratio-Hinweis des Daten-Checkers. Deine gemessenen Erträge ändern sich dadurch **nicht** — nur die Erwartung, gegen die sie gehalten werden.
+
+### Zeigte deine Ost- oder West-Anlage dauerhaft zu wenig Ertrag?
+
+Dann lag das womöglich an uns. Wenn die Ausrichtung deiner Module nur als **Wort** gespeichert war („Ost", „West", „Südwest" …) und nicht zusätzlich als Gradzahl, hat eedc sie beim Prognose-Abruf falsch übersetzt: **Ost, West und alle Zwischenrichtungen wurden wie Süd gerechnet**, Nord wie Ost. Deine Anlage wurde damit an einer Süd-Erwartung gemessen, die sie gar nicht erfüllen kann.
+
+Betroffen waren vor allem **ältere Bestände und wiederhergestellte Sicherungen**. Wer seine Komponenten im heutigen Formular gespeichert hat, hatte die Gradzahl hinterlegt — bei ihm stimmte die Prognose. Der Fehler ist behoben, und betroffene Prognosen werden durch die neue nächtliche Prüfung automatisch nachgezogen.
+
 ### Ein PV-Zähler für die ganze Anlage reicht jetzt auch für die Tagessicht
 
 Wenn deine PV **nur** über den Anlagen-Zählerstand gepflegt ist (*Einstellungen → Datenquellen → Anlage (Basis) → PV-Erzeugung Zählerstand*) — typisch, wenn dein Wechselrichter nur eine Summe über mehrere Dachseiten liefert —, stimmten bisher nur deine **Monatswerte**. In *Cockpit → Tag* stand `0 kWh` PV neben deiner gemessenen Einspeisung, und daraus wurde ein **negativer Eigenverbrauch**, eine Performance Ratio von 0 % und eine negative CO₂-Einsparung.

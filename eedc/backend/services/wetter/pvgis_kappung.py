@@ -45,17 +45,23 @@ from typing import Any, Optional
 import httpx
 
 from backend.core.berechnungen.wr_kappung import Mitglied, kappe_stunde
+from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-PVGIS_BASE_URL = "https://re.jrc.ec.europa.eu/api/v5_2"
+# Eine Quelle für die API-Version (`core/config.py::pvgis_api_url`). Bis
+# v4.0.11 stand die URL hier ein zweites Mal — ein Versionswechsel hätte die
+# Prognose gehoben und die AC-Kappung auf dem alten Datensatz gelassen.
+PVGIS_BASE_URL = settings.pvgis_api_url
 
-# Letzte drei Jahre, die PVGIS v5.2 im `seriescalc` führt (der Datensatz endet
-# 2020; ein späteres Startjahr quittiert die API mit HTTP 400 und dem Hinweis
-# „enter an integer between 2005 and 2020"). Wer die API-Version hebt, prüft
-# diese Grenze mit.
-SERIESCALC_VON_JAHR = 2018
-SERIESCALC_BIS_JAHR = 2020
+# Letzte drei Jahre, die PVGIS im `seriescalc` führt. Ein Jahr außerhalb des
+# Datensatzes quittiert die API mit HTTP 400 („enter an integer between …“).
+# Wer die API-Version hebt, prüft diese Grenze mit — v5_2/SARAH2 endete 2020,
+# v5_3/SARAH3 reicht bis 2023 (beide Fenster am 2026-08-07 gegen v5_3 gemessen,
+# je HTTP 200). Der Zweck ist die STUNDENFORM für die AC-Kappung, nicht der
+# Ertrag: `PVcalc` rechnet unabhängig davon auf dem vollen Klimamittel.
+SERIESCALC_VON_JAHR = 2021
+SERIESCALC_BIS_JAHR = 2023
 
 # Ein Abruf über drei Jahre ist rund 2,5 MB — großzügiger als die 30 s der
 # Monatsprognose, weil hier deutlich mehr Nutzlast über die Leitung geht.

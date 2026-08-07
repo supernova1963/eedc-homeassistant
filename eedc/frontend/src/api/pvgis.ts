@@ -85,6 +85,12 @@ export interface AktivePrognoseResponse {
   jahresertrag_kwh: number
   spezifischer_ertrag_kwh_kwp: number
   horizont_verwendet?: boolean
+  /** Passt die gespeicherte Prognose noch zur Anlage? SoT ist das Backend
+   *  (`services/pvgis_aktualitaet.py`) — der Client rechnet die Regel nicht
+   *  nach, sonst driften Kachel und nächtlicher Neuabruf auseinander (#363). */
+  passt_zur_anlage?: boolean
+  /** Grund im Klartext, wenn sie nicht mehr passt („Nennleistung 9,80 → 2,40 kWp"). */
+  abweichung_text?: string | null
   monatswerte: Array<{
     monat: number
     e_m: number

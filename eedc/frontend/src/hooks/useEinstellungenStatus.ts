@@ -59,8 +59,6 @@ function ausSchwere(e: CheckErgebnis): EinstellungStatus {
   return warn ? { status: 'warn', hinweis: e.meldung } : { status: 'ok' }
 }
 
-const PVGIS_FRISCH_TAGE = 7
-
 export function useEinstellungenStatus(): EinstellungStatusMap {
   const { mqtt, datencheckErgebnisse, anlageId } = useGlobalStatus()
   const { selectedAnlage } = useSelectedAnlage()
@@ -99,15 +97,27 @@ export function useEinstellungenStatus(): EinstellungStatusMap {
   // (Investitionen/Geräte-Status wandert mit der Geräte-Bearbeitung in den
   // Komponenten-Hub, Entsch. 5 — kein Einstellungs-Badge mehr.)
 
-  // Solarprognose: Alter der aktiven PVGIS-Prognose.
+  // Solarprognose: passt die aktive PVGIS-Prognose noch zur Anlage?
+  //
+  // Bis v4.0.11 stand hier das ALTER („Letzter Abruf vor N Tagen", ab 7 Tagen
+  // eine Warnung). Das maß nichts: PVGIS rechnet auf einem abgeschlossenen
+  // Klimamittel — eine Woche alte Prognose ist so gut wie eine von heute, und
+  // ein Neuabruf hätte dieselbe Zahl geliefert. Falsch wird eine Prognose erst
+  // durch eine Änderung an der Anlage, und genau das steht jetzt hier (#363).
+  // Die Regel selbst gehört dem Backend (`services/pvgis_aktualitaet.py`), das
+  // sie mit dem nächtlichen Neuabruf teilt — der Client zeigt nur an.
   if (anlageId && prognoseGeladen) {
     if (!prognose) {
       map.solarprognose = { status: 'neu', hinweis: 'Noch nie abgerufen.' }
+    } else if (prognose.passt_zur_anlage === false) {
+      map.solarprognose = {
+        status: 'warn',
+        hinweis: prognose.abweichung_text
+          ? `Passt nicht mehr zur Anlage: ${prognose.abweichung_text}.`
+          : 'Passt nicht mehr zur Anlage.',
+      }
     } else {
-      const alterTage = Math.floor((Date.now() - new Date(prognose.abgerufen_am).getTime()) / 86_400_000)
-      map.solarprognose = alterTage > PVGIS_FRISCH_TAGE
-        ? { status: 'warn', hinweis: `Letzter Abruf vor ${alterTage} Tagen.` }
-        : { status: 'ok' }
+      map.solarprognose = { status: 'ok' }
     }
   }
 

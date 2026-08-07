@@ -81,12 +81,32 @@ describe('useEinstellungenStatus — Signal → Status', () => {
     expect(result.current['ha-export']).toEqual({ status: 'neu', hinweis: 'Kein Broker' })
   })
 
-  it('leitet Solarprognose aus dem Alter der aktiven Prognose ab', async () => {
-    const alt = new Date(Date.now() - 10 * 86_400_000).toISOString()
-    getAktivePrognose.mockResolvedValue({ abgerufen_am: alt })
+  it('warnt bei der Solarprognose, wenn sie nicht mehr zur Anlage passt', async () => {
+    getAktivePrognose.mockResolvedValue({
+      abgerufen_am: new Date().toISOString(),
+      passt_zur_anlage: false,
+      abweichung_text: 'Nennleistung 9,80 → 2,40 kWp',
+    })
     const { result } = renderHook(() => useEinstellungenStatus())
     await waitFor(() => expect(result.current.solarprognose?.status).toBe('warn'))
-    expect(result.current.solarprognose?.hinweis).toMatch(/vor 10 Tagen/)
+    expect(result.current.solarprognose?.hinweis).toBe(
+      'Passt nicht mehr zur Anlage: Nennleistung 9,80 → 2,40 kWp.',
+    )
+  })
+
+  // Die ABGRENZUNG zur abgelösten Regel (#363): bis v4.0.11 warnte die Kachel ab
+  // sieben Tagen Alter. Eine alte, aber passende Prognose ist kein Befund —
+  // PVGIS rechnet auf einem festen Klimamittel, ein Neuabruf brächte dieselbe
+  // Zahl. Diese Probe fällt, sobald jemand die Alters-Regel zurückholt.
+  it('schweigt bei einer alten Prognose, solange sie zur Anlage passt', async () => {
+    const vorEinemJahr = new Date(Date.now() - 365 * 86_400_000).toISOString()
+    getAktivePrognose.mockResolvedValue({
+      abgerufen_am: vorEinemJahr,
+      passt_zur_anlage: true,
+      abweichung_text: null,
+    })
+    const { result } = renderHook(() => useEinstellungenStatus())
+    await waitFor(() => expect(result.current.solarprognose).toEqual({ status: 'ok' }))
   })
 
   it('meldet „neu" für Solarprognose, wenn nie abgerufen', async () => {
