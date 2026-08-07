@@ -322,6 +322,16 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 > Jede v4-Sicht (auch künftige) MUSS jede Zeile erfüllen; Ausnahme nur per Regel 0a Stufe 3
 > (Maintainer-Freigabe + Code-Kommentar + Allowlist).
 
+> ⚠ **Verweise auf `drafts/` sind Herkunftsbelege, keine Voraussetzung.** `docs/drafts/` ist
+> **gitignored** (`.gitignore:82`) — die Dateien liegen nur auf der Maschine, auf der sie entstanden
+> sind, und sind für jeden anderen Leser nicht erreichbar. Betroffen sind fünf Zellen dieser
+> Tabelle (I3 · I4 · I12 · I13 · I16). **Jede Invariante trägt deshalb ihre Regel, ihre Begründung
+> und ihren Wächter in der Zeile selbst**; wo ein Draft in der SoT-Spalte steht, ist der
+> **verlinkte Code** die verbindliche Quelle, nicht der Entwurf. Den Umzug der tragenden Passagen
+> an eine versionierte Heimat führt ein eigenes Paket (Fund **N-27**) — gemessen 2026-08-07:
+> **neun** Verweise auf **sieben** Draft-Dateien in drei Dokumenten (ADR-002 3× · dieses 5× ·
+> Style-Guide 1×), alle Ziele lokal vorhanden.
+
 | # | Invariante | SoT | Wächter/Gate |
 |---|---|---|---|
 | I1 | **Block-Modell:** Inhaltssichten rendern ihre Blöcke über `BlockShell` (`Block[]`: einklappen · „alle auf/zu" · Fokus ⤢ · optional ↑↓). Klapp+Reihenfolge = EIN Persistenz-Eintrag je Sicht (`eedc-bloecke:<persistKey>`). Block-Identität (Icon+Farbe) aus `BLOCK_IDENTITAET`. Komponenten-Hub bleibt fix-linear (Variante-C-Entscheid). | `components/blocks/BlockShell.tsx` · `lib/blockStyle.ts` | BlockShell-Tests; Keys via `check:persistenz` |
@@ -341,7 +351,17 @@ Cross-Links visuell dezent (Pfeil-Icon rechts neben KPI-Wert oder Sektion-Header
 | I15 | **Zustands-SoT (B8):** Leer-/Lade-/Fehler-Zustände über EINE Zustands-SoT — `ui/Skeleton`/`BlockStackSkeleton` (Laden), `ui/FehlerZustand` (Fehler + echtes Retry), `v4/OnboardingLeer`/`ui/EmptyState` (Leer mit CTA). Kein nackter Vollseiten-Spinner, keine rohe Exception, keine nackte Leer-Card. | Style-Guide **B8** | `check:b8` |
 | I16 | **Datenquellen — eine Quelle je Feld (HA-first):** jedes Datenfeld hat GENAU eine Quelle (HA-Sensor · MQTT-Topic · keine), **HA vor MQTT, kein stiller Laufzeit-Fallback** (Ausfall → Feld-Lücke, untertägige Recovery schließt sie). | [`KONZEPT-DATENQUELLEN-V4`](drafts/KONZEPT-DATENQUELLEN-V4.md) + Read-Through-Resolver (C1/C2) | C+D-Laufzeitvalidierung (`probleme[]` am Feld) + Resolver-Tests (prinzip-starkes/weiches Gate, Präzedenz I11) |
 
-> **Wächter-Register (Stand 2026-07-20 — SoT = `eedc/frontend/package.json`):** die Invarianten oben sind durch **25 `check:*`-Gates** (statisch + Laufzeit/Chromium) gedeckt: `achsen · b8 · badges · buttons · chart-audit · charts · chart-tooltip · darkmode-paare · datumpicker · de-de · design · details · form-controls · label-maps · parkbar · parkbar-vollstaendig · park-leertest · persistenz · scrollschatten · status-icons · tabellen · typografie · v4links · v4-migration` (+ der flip-temporäre `datenquellen-aufloesung`, s. u.). Zahl + Liste sind Momentaufnahme — **maßgeblich ist package.json**, nicht diese Aufzählung.
+> **Wächter-Register (nachgemessen 2026-08-07 — SoT = `eedc/frontend/package.json`):** die
+> Invarianten oben sind durch die `check:*`-Gates gedeckt (statisch + Laufzeit/Chromium):
+> `achsen · b8 · badges · buttons · chart-audit · chart-tooltip · charts · co2-roh ·
+> darkmode-paare · datum-utc · datumpicker · de-de · design · details · form-controls ·
+> kennwert-roh · label-maps · park-leertest · parkbar · parkbar-vollstaendig · persistenz ·
+> roh-controls · scrollschatten · status-icons · tabellen · typografie`.
+> **Maßgeblich ist `package.json`** (`npm run 2>&1 | grep 'check:'`), nicht diese Aufzählung —
+> die vorige Fassung nannte drei Gates, die es nicht mehr gibt (`v4links`, `v4-migration` und den
+> flip-temporären `datenquellen-aufloesung`: alle drei bewachten den Weg **zum** Flip und sind mit
+> ihm gestorben), und ihr fehlten vier, die seither dazugekommen sind (`co2-roh`, `datum-utc`,
+> `kennwert-roh`, `roh-controls`). **Deshalb steht hier keine Zahl mehr.**
 > **Flip-temporär, KEINE Produkt-Invariante:** `check:datenquellen-aufloesung` (25. im Register) friert die Auflösung der Alt-Wizards `SensorMappingWizard`/`MqttInboundSetup` ein und **stirbt am Flip** (R6 löscht die Donor-Wizards) — ein am Flip sterbender Wächter kann keine dauerhafte Invariante bewachen. Gehört mit der Bau-Invariante unten zusammen (beide flip-temporär).
 
 **Bau-Invariante bis zum Flip (stirbt mit R6):** alles v4-Neue dormant hinter `VITE_IA_V4`; Prod-Build flag-rein; flag-on-`dist` NIE committen; Demo-DB hängt hinter ECHTEN Endpoints (kein Rewiring — „echte Daten" = Anlage wechseln). **Ebenfalls flip-temporär:** der Migrations-Riegel `check:datenquellen-aufloesung` (s. Register-Notiz) — er bewacht die Alt-Wizard-Auflösung nur bis R6.

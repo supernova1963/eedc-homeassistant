@@ -118,12 +118,12 @@ Das Script macht automatisch:
 
 ```bash
 cd website && npm run dev    # http://localhost:4321/eedc-homeassistant/
-cd website && npm run build  # Synct automatisch docs/ → website/ (via scripts/sync-docs.sh)
+cd website && npm run build  # Synct automatisch docs/ → website/ (prebuild: website/scripts/sync-docs.sh)
 ```
 
 **Technik:** Astro Starlight (v0.37), GitHub Pages, German-only
 **Deployment:** Automatisch via `.github/workflows/deploy-website.yml` bei Push auf `main`
-**Single Source of Truth:** Dokumentationen in `docs/` pflegen, `scripts/sync-docs.sh` generiert Website-Versionen mit Frontmatter.
+**Single Source of Truth:** Dokumentationen in `docs/` pflegen, `website/scripts/sync-docs.sh` (npm-`prebuild`, läuft **im `website/`-Verzeichnis**) generiert Website-Versionen mit Frontmatter.
 
 **Starlight-Hinweis:** Invertierte Farbskala im Light Mode! `--sl-color-white` = Text, `--sl-color-black` = Hintergrund. Grau-Skala in `custom.css` definieren.
 

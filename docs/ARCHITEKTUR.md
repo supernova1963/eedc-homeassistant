@@ -1,27 +1,28 @@
 
 # EEDC Architektur-Dokumentation
 
-**Beschriebener Stand: v3.24.1 (April 2026)** — geprüft und als veraltet markiert am 2026-07-28.
+**Stand: 2026-08-07** — Frontend-Kapitel (3 · 6 · 9) gegen den Baum neu erhoben.
 
-> ## ⚠️ Teilweise überholt — die Frontend-Kapitel beschreiben die abgeschaltete V3-Oberfläche
+> **Dieses Dokument trägt bewusst keine Versionsnummer.** Versions-SoT ist
+> [CHANGELOG.md](../CHANGELOG.md) bzw. `eedc/backend/core/config.py::APP_VERSION`;
+> `scripts/release.sh` bumpt `docs/` nicht. Der vorige Kopf stand auf „v3.24.1, April 2026" und
+> beschrieb eine Oberfläche, die es seit v4.0.0 nicht mehr gibt.
 >
-> Mit **v4.0.0** (2026-07-25) wurde die Informationsarchitektur neu geschnitten (drei Achsen:
-> Zeit / Was / Wie). Dieses Dokument wurde dabei **nicht** nachgezogen. Konkret betroffen:
+> **Wo dieses Dokument nicht die letzte Instanz ist:**
 >
-> | Stelle | Was dort steht | Realität seit v4.0.0 |
-> | --- | --- | --- |
-> | Kap. 3 „Projektstruktur" (Z. 294–301) | Seiten-Liste `LiveDashboard.tsx` · `Auswertung.tsx` · `Aussichten.tsx` · `MonatsabschlussView.tsx` als aktive Seiten | sind Flip-Donoren bzw. entfallen; die Sichten liegen in `frontend/src/v4/` |
-> | Kap. 6 „Frontend-Architektur" (Z. 879–939) | Routen `/live` · `/auswertungen` (6 Tabs) · `/aussichten` (4 Tabs), `MainTabs (Live, Cockpit, Auswertungen, Community, Aussichten)` | ersetzt durch Cockpit (Live·Tag·Monat·Jahr·Aussicht) · Komponenten · Auswertungen (5 Sub) · Community · Einstellungen; Altpfade werden **redirected** |
-> | durchgehend | keine Erwähnung von v4 (0 Treffer), Block-Modell, Parken, Status-Fusszeile | zentrale Mechanik der heutigen Oberfläche |
+> | Frage | SoT |
+> | --- | --- |
+> | Informationsarchitektur, Oberflächen-Invarianten I1–I16, Redirects | [KONZEPT-IA-V4.md](KONZEPT-IA-V4.md) |
+> | Darstellung (Farben, Komponenten, Typografie, Charts), Regel 0/0a | [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) |
+> | *Wo* eine Aggregat-Formel definiert wird | [ADR-001](ADR-001-BERECHNUNGS-LAYER.md) |
+> | *Was* ein Wert behaupten darf, woher er kommt (P1–P10) | [ADR-002](ADR-002-WURZELMUSTER.md) |
+> | die Monatszeile als **eine** Schicht (P10) | [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md) |
+> | Formeln je Kennzahl | [BERECHNUNGEN.md](BERECHNUNGEN.md) |
+> | Einrichtung, Befehle, Gates, Dateibestand | [DEVELOPMENT.md](DEVELOPMENT.md) |
 >
-> **Verbindlich für die Oberfläche ist bis zur Überarbeitung:**
-> [`KONZEPT-IA-V4.md`](KONZEPT-IA-V4.md) (Struktur/Achsen/Redirects) und
-> [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md) (Darstellung, Regel 0/0a).
-> **Backend-, Datenmodell-, API- und Service-Kapitel (4, 5, 7) sind davon nicht betroffen** —
-> der Flip war reines UI. Für Berechnungen gelten [`ADR-001`](ADR-001-BERECHNUNGS-LAYER.md) und
-> [`ADR-002`](ADR-002-WURZELMUSTER.md).
->
-> Nachverfolgt als [Issue #359](https://github.com/supernova1963/eedc-homeassistant/issues/359).
+> Dieses Dokument beschreibt die **Gesamtsicht**: Schichten, Datenmodell, Services,
+> Design-Entscheidungen. Wo eine Regel woanders steht, wird sie **verwiesen, nicht kopiert** — eine
+> zweite Fassung daneben ist der Anfang der nächsten Drift.
 
 ---
 
@@ -43,37 +44,71 @@
 
 ### Architektur-Prinzipien
 
-1. **Standalone-First**: EEDC funktioniert ohne externe Abhängigkeiten
-2. **Lokale Datenspeicherung**: SQLite-Datenbank, alle Daten bleiben lokal
-3. **Optionale Integration**: Home Assistant ist optional, nicht erforderlich
-4. **Monatliche Granularität**: Datenerfassung und Auswertung auf Monatsbasis
+1. **Standalone-First:** eedc funktioniert ohne externe Abhängigkeiten — Home Assistant ist eine
+   Option, keine Voraussetzung. Kernfunktionen dürfen nicht an HA hängen; HA-only-Funktionen sind
+   sichtbar als solche gekennzeichnet und werden ausgeblendet, wenn kein HA da ist.
+2. **Lokale Datenspeicherung:** SQLite unter `/data/eedc.db`, alle Daten bleiben beim Nutzer. Der
+   Community-Server bekommt nur anonymisierte, ausdrücklich geteilte Aggregate.
+3. **Vier Zeitebenen, eine Wahrheit je Größe:** Live (5-Minuten-Snapshots) · Tag (Stundenprofile) ·
+   **Monat** (Zählerwerte, die abrechnungsrelevante Ebene) · Jahr. Die Monatsebene ist der Kern,
+   aber längst nicht mehr die einzige — Tages- und Stundenebene entstehen aus eigenen Snapshots
+   bzw. der HA-Langzeitstatistik.
+4. **Datenquellen getrennt:** `Monatsdaten` trägt **Zählerwerte**, `InvestitionMonatsdaten` die
+   **Komponenten-Details**. Legacy-Felder (`Monatsdaten.batterie_*`, das computed-Trio) werden nicht
+   gelesen; `Monatsdaten.pv_erzeugung_kwh` ist ausschließlich **Eingang** der PV-Auflösung
+   (ADR-002/P7).
+5. **Ein Wert, eine Konstruktionsstelle:** jede Aggregat-Größe wird an genau einem Ort gebildet
+   (ADR-001) und sagt, woher sie kommt (ADR-002). Zwei Sichten dürfen nicht zwei Zahlen für
+   dieselbe Frage nennen — die häufigste Fehlerklasse dieses Projekts.
+6. **Unvollständig heißt unvollständig:** eine Teilsumme wird als solche ausgewiesen, nicht als
+   niedriger Wert ausgeliefert (ADR-002/P4). Eine Lücke ist keine 0.
 
 ### System-Architektur
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        Browser                              │
-│                    (React Frontend)                         │
+│         React (HashRouter — HA-Ingress-Pfad ist dynamisch)   │
+│   v4/ Sichten · components/ SoT-Bausteine · lib/ Ableitungen │
 └────────────────────────┬────────────────────────────────────┘
-                         │ HTTP/REST
+                         │ HTTP/REST  (/api/…)
 ┌────────────────────────┴────────────────────────────────────┐
 │                     FastAPI Backend                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
-│  │  Routes  │  │ Services │  │  Models  │  │   Core   │     │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘     │
+│  ┌────────┐  ┌──────────┐  ┌───────────────┐  ┌──────────┐  │
+│  │ Routes │→ │ Services │→ │ berechnungen/ │  │  Models  │  │
+│  │  HTTP  │  │ Beschaff.│  │  ADR-001-SoT  │  │  Tabellen│  │
+│  └────────┘  └──────────┘  └───────────────┘  └──────────┘  │
+│         APScheduler: Snapshot- · Prognose- · Korrektur-Jobs │
 └────────────────────────┬────────────────────────────────────┘
-                         │ SQLAlchemy
+                         │ SQLAlchemy (async)
 ┌────────────────────────┴────────────────────────────────────┐
-│                      SQLite Database                        │
-│                      (/data/eedc.db)                        │
+│                      SQLite  /data/eedc.db                  │
+│  Monatsdaten · InvestitionMonatsdaten · TagesEnergieProfil   │
+│  TagesZusammenfassung · sensor_snapshots · MQTT-Snapshots     │
 └─────────────────────────────────────────────────────────────┘
 
-Externe APIs (optional):
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Open-Meteo │  │ Bright Sky  │  │    PVGIS    │  │ Home Asst.  │
-│  (Wetter)   │  │   (DWD)     │  │  (Prognose) │  │   (MQTT)    │
-└─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
+Externe Quellen (alle optional):
+┌────────────┐ ┌────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
+│ Open-Meteo │ │ Bright Sky │ │  PVGIS   │ │ Solcast  │ │ EU Oil Bull. │
+│  Wetter/   │ │   (DWD)    │ │ Jahres-  │ │ PV-Prog- │ │ Kraftstoff-  │
+│  Solar-GTI │ │            │ │ prognose │ │  nose    │ │   preise     │
+└────────────┘ └────────────┘ └──────────┘ └──────────┘ └──────────────┘
+┌──────────────────────────────────────────┐ ┌────────────────────────┐
+│ Home Assistant                           │ │ Geräte / Cloud-APIs    │
+│  REST (States) · WebSocket (LTS) ·        │ │  9 Connectors (LAN)    │
+│  Recorder-DB/-Datei · MQTT in UND out     │ │  12 Cloud-Provider     │
+└──────────────────────────────────────────┘ └────────────────────────┘
+                                             ┌────────────────────────┐
+                                             │ eedc-community (opt-in)│
+                                             │  anonyme Aggregate     │
+                                             └────────────────────────┘
 ```
+
+**Drei Wege zur HA-Langzeitstatistik**, in dieser Vorrangfolge: externe Recorder-DB
+(`HA_RECORDER_DB_URL`, SQL) · eingehängte Recorder-Datei (`/config`, SQL) · **WebSocket**
+`recorder/statistics_during_period` (braucht nur Token — der einzige Weg für einen
+Standalone-Container neben HA). Alle drei liefern **dieselbe** Quelle; verzweigt wird ausschließlich
+die Zeilen-Beschaffung, nicht die Aggregation.
 
 ---
 
@@ -81,16 +116,24 @@ Externe APIs (optional):
 
 ### Backend
 
+> SoT ist `eedc/backend/requirements.txt` — dort stehen auch die **Obergrenzen**, die es aus
+> Erfahrung gibt (FastAPI ist gedeckelt, damit ein Major-Sprung nicht still in ein HA-Add-on-Image
+> gerät).
+
 | Technologie | Version | Zweck |
 |-------------|---------|-------|
 | **Python** | 3.11+ | Programmiersprache |
-| **FastAPI** | 0.109+ | REST API Framework |
-| **SQLAlchemy** | 2.0+ | ORM (Object-Relational Mapping) |
+| **FastAPI** | ≥ 0.109, **< 0.137** | REST-API-Framework (bewusst gedeckelt) |
+| **Uvicorn** | ≥ 0.27 | ASGI-Server |
+| **SQLAlchemy** | ≥ 2.0.25 | ORM, async |
+| **aiosqlite** | ≥ 0.19 | async-SQLite-Treiber (**loop-gebunden** — sync-Aufrufer brauchen eine Brücke) |
 | **SQLite** | 3.x | Datenbank |
-| **Pydantic** | 2.x | Datenvalidierung |
-| **httpx** | 0.26+ | HTTP Client für externe APIs |
-| **aiomqtt** | optional | MQTT Client für HA Export |
-| **APScheduler** | 3.x | Scheduler für Cron-Jobs |
+| **Pydantic** | ≥ 2.5 (+ pydantic-settings) | Datenvalidierung, Settings |
+| **httpx** | ≥ 0.26 | HTTP-Client für externe APIs |
+| **websockets** | ≥ 12.0 | HA-WebSocket (Langzeitstatistik ohne DB-Zugang) |
+| **aiomqtt** | ≥ 2.0 | MQTT — Export **und** Inbound |
+| **APScheduler** | ≥ 3.10 | Snapshot-, Prognose- und Korrektur-Jobs |
+| **WeasyPrint + Jinja2** | ≥ 62.0 / ≥ 3.1 | PDF-Berichte (HTML→PDF, SVG-Charts) |
 
 ### Frontend
 
@@ -117,241 +160,59 @@ Externe APIs (optional):
 
 ## 3. Projektstruktur
 
-```
-eedc-homeassistant/
-├── README.md                    # Projekt-Übersicht
-├── CHANGELOG.md                 # Versionshistorie
-├── CLAUDE.md                    # KI-Entwicklungskontext
-├── LICENSE                      # MIT Lizenz
-│
-├── docs/                        # Dokumentation
-│   ├── BENUTZERHANDBUCH.md      # Endbenutzer-Anleitung
-│   ├── ARCHITEKTUR.md           # Diese Datei
-│   ├── DEVELOPMENT.md           # Entwickler-Setup
-│   └── archive/                 # Archivierte Dokumente
-│
-└── eedc/                        # Das Add-on/Die Anwendung
-    ├── config.yaml              # HA Add-on Konfiguration
-    ├── Dockerfile               # Multi-Stage Build
-    ├── run.sh                   # Container Startscript
-    │
-    ├── backend/                 # Python FastAPI Backend
-    │   ├── main.py              # FastAPI App Entry Point
-    │   ├── requirements.txt     # Python Dependencies
-    │   │
-    │   ├── api/                 # API Layer
-    │   │   ├── deps.py          # Dependency Injection
-    │   │   └── routes/          # API Endpoints
-    │   │       ├── anlagen.py
-    │   │       ├── monatsdaten.py
-    │   │       ├── investitionen.py
-    │   │       ├── strompreise.py
-    │   │       ├── cockpit.py             # Cockpit-Übersicht
-    │   │       ├── cockpit/               # Cockpit Sub-Module (v3.11.x)
-    │   │       │   ├── uebersicht.py
-    │   │       │   ├── komponenten.py
-    │   │       │   ├── nachhaltigkeit.py
-    │   │       │   ├── prognose.py
-    │   │       │   └── pv_strings.py
-    │   │       ├── aussichten.py          # Prognosen (4 Tabs)
-    │   │       ├── community.py           # Community-Teilen & Benchmark
-    │   │       ├── import_export/         # Modulares Package
-    │   │       │   ├── __init__.py       # Router-Kombination
-    │   │       │   ├── schemas.py        # Pydantic-Modelle
-    │   │       │   ├── helpers.py        # Hilfsfunktionen
-    │   │       │   ├── csv_operations.py
-    │   │       │   ├── json_operations.py
-    │   │       │   ├── pdf_operations.py  # PDF-Export
-    │   │       │   └── demo_data.py
-    │   │       ├── wetter.py
-    │   │       ├── pvgis.py
-    │   │       ├── ha_export.py
-    │   │       ├── ha_import.py
-    │   │       ├── ha_integration.py
-    │   │       ├── ha_statistics.py       # HA-Statistik Bulk-Import
-    │   │       ├── sensor_mapping.py      # Sensor-Mapping CRUD
-    │   │       ├── monatsabschluss.py     # Monatsabschluss-Wizard API
-    │   │       ├── data_import.py           # Universeller Daten-Import (v3.10.x)
-    │   │       ├── custom_import.py          # Custom CSV/JSON Import
-    │   │       ├── cloud_import.py           # Cloud-API Import
-    │   │       ├── live_dashboard.py        # Live Dashboard Kern-API (v3.0.0, refactored v3.9.0)
-    │   │       ├── live_mqtt_inbound.py    # Live MQTT Endpoints (extrahiert v3.9.0)
-    │   │       ├── live_wetter.py          # Live Wetter + Verbrauchsprofil (extrahiert v3.9.0)
-    │   │       ├── aktueller_monat.py       # Aktueller Monat API (deprecated v3.12.0)
-    │   │       ├── daten_checker.py         # Daten-Checker API
-    │   │       ├── system_logs.py           # Protokolle API
-    │   │       ├── connector.py             # Geräte-Connector API
-    │   │       ├── infothek.py              # Infothek CRUD (v3.5.0)
-    │   │       ├── energie_profil.py        # Energieprofil-Auswertung (v3.13.0)
-    │   │       ├── dokumentation.py         # PDF-Dokumente (v3.15.0)
-    │   │       ├── mqtt_gateway.py          # MQTT-Gateway Mapping
-    │   │       ├── mqtt_presets.py           # MQTT-Presets
-    │   │       └── solar_prognose.py        # Solar-Prognose API
-    │   │
-    │   ├── core/                # Kernfunktionalität
-    │   │   ├── config.py        # Settings + Version
-    │   │   ├── database.py      # SQLAlchemy Setup
-    │   │   └── calculations.py  # Berechnungslogik
-    │   │
-    │   ├── models/              # SQLAlchemy Models
-    │   │   ├── anlage.py
-    │   │   ├── monatsdaten.py
-    │   │   ├── investition.py
-    │   │   ├── strompreis.py
-    │   │   ├── pvgis_prognose.py
-    │   │   ├── settings.py             # App-Einstellungen
-    │   │   ├── activity_log.py         # Aktivitäts-Protokolle
-    │   │   ├── api_cache.py            # L1/L2 API-Cache (v3.7.6)
-    │   │   ├── mqtt_energy_snapshot.py  # MQTT Energy Snapshots (v3.0.0)
-    │   │   ├── mqtt_gateway_mapping.py  # MQTT-Gateway Topic-Mapping (v3.4.5)
-    │   │   ├── mqtt_live_snapshot.py     # MQTT Live-Snapshots
-    │   │   ├── tages_energie_profil.py  # Energieprofil: Stundenwerte + Tagessummary (v3.1.0)
-    │   │   └── infothek.py             # Infothek-Einträge + Dateien + N:M (v3.5.0, N:M v3.15.2)
-    │   │
-    │   ├── utils/                # Hilfsfunktionen
-    │   │   ├── sonstige_positionen.py  # Sonstige Erträge/Ausgaben
-    │   │   └── investition_filter.py   # aktiv_jetzt/aktiv_im_zeitraum Filter (v3.14.0)
-    │   │
-    │   └── services/            # Business Logic
-    │       ├── wetter_service.py
-    │       ├── brightsky_service.py       # DWD-Daten via Bright Sky API
-    │       ├── solar_forecast_service.py  # Open-Meteo Solar GTI + Solar Forecast ML (SFML)
-    │       ├── mqtt_gateway_service.py    # MQTT-Gateway Topic-Mapping + Presets (v3.4.5)
-    │       ├── infothek_datei_service.py  # Bild-Resize, HEIC→JPEG, PDF-Validierung
-    │       ├── infothek_migration.py      # stamm_*→Infothek Migration + 1:1→N:M (v3.15.2)
-    │       ├── prognose_service.py        # Prognose-Berechnungen
-    │       ├── ha_sensors_export.py
-    │       ├── ha_state_service.py        # HA State-Abfragen
-    │       ├── mqtt_client.py
-    │       ├── ha_mqtt_sync.py            # MQTT Sync Service
-    │       ├── vorschlag_service.py       # Intelligente Vorschläge
-    │       ├── scheduler.py               # APScheduler für Cron-Jobs
-    │       ├── ha_statistics_service.py   # HA-DB Statistik-Abfragen
-    │       ├── community_service.py       # Community-Datenaufbereitung
-    │       ├── plz_to_state.py            # PLZ→Bundesland Mapping (8.308 Einträge)
-    │       ├── prefetch_service.py        # Startup-Prefetch für Caches (v3.7.6)
-    │       ├── strompreis_markt_service.py # EPEX-Börsenpreise via aWATTar API (v3.16.0)
-    │       ├── live_power_service.py      # Live Dashboard Orchestrierung (v3.0.0, refactored v3.9.0)
-    │       ├── live_sensor_config.py      # Konstanten, Config-Extraktion, Normalisierung (v3.9.0)
-    │       ├── live_kwh_cache.py          # TTL-Caches für heute/gestern/profil kWh (v3.9.0)
-    │       ├── live_history_service.py    # HA-History, Trapez-kWh, Tages-kWh (v3.9.0)
-    │       ├── live_verbrauchsprofil_service.py # Verbrauchsprofil aus HA + MQTT (v3.9.0)
-    │       ├── live_tagesverlauf_service.py     # Butterfly-Chart Daten (v3.9.0)
-    │       ├── live_komponenten_builder.py      # Komponenten, Gauges, Summen (v3.9.0)
-    │       ├── mqtt_inbound_service.py    # MQTT-Inbound Subscribe + Cache (v3.0.0)
-    │       ├── mqtt_energy_history_service.py # MQTT Snapshots (v3.0.0)
-    │       ├── mqtt_live_history_service.py   # MQTT Live-History (v3.9.0)
-    │       ├── mqtt_presets.py             # MQTT-Preset-Definitionen
-    │       ├── connector_mqtt_bridge.py   # Connector→MQTT Brücke
-    │       ├── monats_fakten.py           # Lese-SoT: die EINE Aufbereitung der
-    │       │                              #   Monatszeile (ADR-002/P10)
-    │       ├── pv_monatswerte.py          # Lese-SoT: PV je Modul + Monat (P7)
-    │       ├── finanz_zeilen.py           # Eingabe-Builder der Finanz-Zeile (#326)
-    │       ├── einspeise_erloes_service.py # §51-Aggregate je Monat/Jahr
-    │       ├── energie_profil_service.py   # Energieprofil: Aggregation + Rollup (v3.1.0)
-    │       ├── daten_checker.py           # Datenqualitätsprüfung
-    │       ├── activity_service.py        # Aktivitäts-Logging
-    │       ├── wetter/                    # Wetter-Subsystem (refactored v3.4.18)
-    │       │   ├── orchestrator.py        # Kaskadierender Multi-Provider
-    │       │   ├── open_meteo.py          # Open-Meteo API
-    │       │   ├── pvgis.py               # PVGIS TMY
-    │       │   ├── cache.py               # Wetter-Cache
-    │       │   ├── models.py              # Wetter-Datenmodelle
-    │       │   └── utils.py
-    │       ├── pdf/                       # PDF-Subsystem (WeasyPrint-only seit Phase 5 #303)
-    │       │   ├── engine.py              # WeasyPrint + Jinja2 Wrapper
-    │       │   ├── charts.py              # SVG-Chart-Rendering für PDFs (matplotlib-frei)
-    │       │   ├── builders/              # Dokument-Builder (Jahresbericht, Infothek, …)
-    │       │   └── templates/             # Jinja2/HTML-Templates
-    │       ├── cloud_import/              # Cloud-Import-Provider (14 Dateien)
-    │       │   ├── base.py + registry.py  # ABC + Provider-Registry
-    │       │   ├── ecoflow_powerocean.py, ecoflow_powerstream.py
-    │       │   ├── solaredge.py, fronius_solarweb.py
-    │       │   ├── huawei_fusionsolar.py, growatt.py, deye_solarman.py
-    │       │   ├── anker_solix.py, hoymiles_smiles.py
-    │       │   └── sungrow_isolarcloud.py, viessmann_gridbox.py
-    │       ├── connectors/                # Geräte-Connectors (v3.10.x)
-    │       │   ├── base.py + registry.py
-    │       │   ├── fronius_solar_api.py, sma_webconnect.py, sma_ennexos.py
-    │       │   ├── kostal_plenticore.py, opendtu.py, shelly_em.py
-    │       │   ├── sonnen_batterie.py, tasmota_sml.py
-    │       │   └── go_echarger.py
-    │       └── import_parsers/            # Portal-Import Parser (v3.10.x)
-    │           ├── base.py + registry.py
-    │           ├── fronius_solarweb.py, sma_sunny_portal.py, sma_echarger.py
-    │           └── evcc.py
-    │
-    └── frontend/                # React Frontend
-        ├── package.json
-        ├── vite.config.ts
-        ├── tailwind.config.js
-        │
-        ├── src/
-        │   ├── main.tsx         # React Entry Point
-        │   ├── App.tsx          # Router Setup
-        │   │
-        │   ├── api/             # API Client Layer
-        │   │   ├── anlagen.ts
-        │   │   ├── monatsdaten.ts
-        │   │   ├── investitionen.ts
-        │   │   ├── cockpit.ts
-        │   │   ├── wetter.ts
-        │   │   ├── portalImport.ts
-        │   │   ├── cloudImport.ts
-        │   │   ├── customImport.ts
-        │   │   └── ...
-        │   │
-        │   ├── components/      # React Komponenten
-        │   │   ├── layout/      # Layout (TopNav, SubTabs)
-        │   │   ├── forms/       # Formulare
-        │   │   ├── ui/          # Wiederverwendbare UI
-        │   │   ├── common/      # Shared Components (PageHeader, DataLoadingState, KPICard)
-        │   │   ├── charts/      # Chart-Komponenten (Recharts-Wrapper)
-        │   │   ├── dashboard/   # Dashboard-spezifische Komponenten
-        │   │   ├── live/        # Live-Dashboard Komponenten
-        │   │   ├── infothek/    # Infothek-Komponenten
-        │   │   ├── monatsabschluss/ # Monatsabschluss-Wizard Schritte
-        │   │   ├── sensor-mapping/  # Sensor-Mapping Wizard
-        │   │   ├── setup-wizard/    # Setup-Wizard
-        │   │   └── pv/             # PV-spezifische Komponenten
-        │   │
-        │   ├── pages/           # Seiten-Komponenten (40 Seiten, React.lazy Code-Split)
-        │   │   ├── Dashboard.tsx           # Cockpit-Übersicht
-        │   │   ├── LiveDashboard.tsx       # Echtzeit-Leistung (Startseite, eager)
-        │   │   ├── Auswertung.tsx          # Auswertungs-Hub
-        │   │   ├── auswertung/            # Tabs: Energie, PV, Komponenten, Finanzen, CO2, Investitionen, Tabelle
-        │   │   ├── Aussichten.tsx          # Prognosen
-        │   │   ├── aussichten/            # Prognose-Tabs
-        │   │   ├── MonatsabschlussView.tsx # Monatsberichte (ersetzt AktuellerMonat, v3.12.0)
-        │   │   ├── MonatsabschlussWizard.tsx
-        │   │   ├── Infothek.tsx           # Infothek (v3.5.0)
-        │   │   ├── Investitionen.tsx      # Investitions-Übersicht
-        │   │   ├── Monatsdaten.tsx         # Monatsdaten-Editor
-        │   │   ├── ROIDashboard.tsx        # ROI-Analyse
-        │   │   ├── PrognoseVsIst.tsx      # SOLL-IST Vergleich
-        │   │   ├── PVAnlageDashboard.tsx  # PV-Anlagen Dashboard
-        │   │   ├── SpeicherDashboard.tsx  # Speicher Dashboard
-        │   │   ├── WaermepumpeDashboard.tsx
-        │   │   ├── WallboxDashboard.tsx
-        │   │   ├── EAutoDashboard.tsx
-        │   │   ├── BalkonkraftwerkDashboard.tsx
-        │   │   ├── SonstigesDashboard.tsx
-        │   │   ├── Strompreise.tsx         # Strompreis-Verwaltung
-        │   │   ├── Community.tsx + CommunityShare.tsx + CommunityVergleich.tsx
-        │   │   ├── Import.tsx + DataImportWizard.tsx + CloudImportWizard.tsx + CustomImportWizard.tsx
-        │   │   ├── Einrichtung.tsx         # Datenquellen-Hub
-        │   │   ├── SensorMappingWizard.tsx + MqttInboundSetup.tsx + ConnectorSetupWizard.tsx
-        │   │   ├── HAStatistikImport.tsx + HAExportSettings.tsx + PVGISSettings.tsx
-        │   │   ├── DatenChecker.tsx + DatenerfassungGuide.tsx
-        │   │   ├── Anlagen.tsx + Settings.tsx + Backup.tsx + Protokolle.tsx
-        │   │   └── AktuellerMonat.tsx     # deprecated (v3.12.0, redirect)
-        │   │
-        │   ├── hooks/           # Custom React Hooks
-        │   ├── utils/           # Hilfsfunktionen
-        │   └── config/          # Konfiguration
-        │
-        └── dist/                # Production Build
-```
+> **Den vollständigen Dateibestand führt [DEVELOPMENT.md §Projektstruktur](DEVELOPMENT.md#projektstruktur)**
+> — bewusst an **einem** Ort. Zwei vollständige Listen in zwei Dokumenten driften garantiert
+> auseinander; genau so ist die V3-Liste entstanden, die hier bis 2026-08-07 stand. Dieses Kapitel
+> beschreibt die **Schichten und ihre Zuständigkeiten**.
+
+### Die drei Repositories
+
+| Repository | Rolle | Wird wie gepflegt |
+| --- | --- | --- |
+| **eedc-homeassistant** | **Source of Truth** — Backend, Frontend, Docs, HA-Add-on-Konfiguration, Website | hier wird gearbeitet |
+| **eedc** | Standalone-Distribution für Nutzer ohne HA | **Spiegel**, ausschließlich per `scripts/release.sh` |
+| **eedc-community** | anonymer Community-Benchmark-Server (FastAPI + PostgreSQL) | unabhängig; bei Datenmodell-Änderungen **synchron** anpassen |
+
+Die Anwendung liegt vollständig unter `eedc/` — dasselbe Verzeichnis, das ins Standalone-Repo
+gespiegelt wird. HA-spezifisch sind nur `config.yaml`, `Dockerfile`, `run.sh` und die Icons.
+
+### Backend-Schichten (`eedc/backend/`)
+
+Die Reihenfolge ist die Abhängigkeitsrichtung — **nach oben wird nie gerufen**:
+
+| Schicht | Verzeichnis | Zuständig für | Darf nicht |
+| --- | --- | --- | --- |
+| **Routen** | `api/routes/` | HTTP, Validierung, Response-Form | rechnen — Aggregat-Formeln gehören in den Layer (ADR-001) |
+| **Services** | `services/` | Beschaffung, Aufbereitung, externe APIs, Persistenz-Abläufe | eigene Fassungen einer Formel halten |
+| **Berechnungs-Layer** | `core/berechnungen/` | **alle** Aggregat-Formeln, je Größe genau eine | I/O oder DB-Zugriff |
+| **Modelle** | `models/` | SQLAlchemy-Tabellen | Fachlogik |
+| **Kern** | `core/` | Config, Engine, Schema-Nachzug, SoT-Helper | — |
+
+Drei Stellen sind dabei die tragenden **Single Sources of Truth**:
+
+- **`services/monats_fakten.py`** — die Monatszeile wird **einmal** aufgelöst und gefiltert
+  (`aktiv` · Anschaffung · Stilllegung · Dienstwagen), dann ruft sie die Layer-Formeln. Keine
+  Read-Site faltet `InvestitionMonatsdaten` mehr selbst (ADR-002/P10,
+  [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md)).
+- **`core/investition_kennwerte.py`** — Nennleistung je Typ, gleich ob sie in der Spalte oder im
+  `parameter`-JSON liegt (ADR-002/P3-a).
+- **`core/berechnungen/slot_konvention.py`** — Slot N ist die Energie in `[N-1, N)`, baumweit
+  (Backward-Konvention, Industriestandard).
+
+### Frontend-Schichten (`eedc/frontend/src/`)
+
+| Schicht | Verzeichnis | Zuständig für |
+| --- | --- | --- |
+| **Sichten** | `v4/` | die ausgelieferte Oberfläche: eine Datei je Sicht bzw. Block |
+| **Geteilte Bausteine** | `components/` | SoT-Komponenten (eine Klasse = eine Komponente), Block-Modell, Park-Mechanik |
+| **Einstellungs-Flächen** | `pages/` | Stammdaten, Import-Assistenten, Datenverwaltung — von V4 eingebunden |
+| **Ableitungen** | `lib/` | reine Funktionen + Farb-/Datums-/Einheiten-SoT |
+| **Transport** | `api/` | ein Modul je Backend-Router, `client.ts` als Basis |
+| **Zustand** | `hooks/`, `context/` | `useApiData` (inkl. SWR-Sicht-Cache), Auswahl, Theme, Status |
+| **Wege** | `routes/`, `config/` | Route-Manifest + Redirects, Einstellungs-Katalog, Version |
+
+⚠ **`eedc/frontend/dist/` ist versioniert** — das Add-on liefert diesen Build aus. Wer lokal mit
+Demo-Flags baut, stellt `dist/` danach wieder her, sonst landet ein Demo-Build im Release.
 
 ---
 
@@ -691,39 +552,26 @@ Sonstiges [Eigenständig]
 
 ### Route-Übersicht
 
-| Prefix | Datei | Beschreibung |
-|--------|-------|--------------|
-| `/api/anlagen` | anlagen.py | PV-Anlagen CRUD, Geocoding |
-| `/api/monatsdaten` | monatsdaten.py | Monatsdaten CRUD, Berechnungen |
-| `/api/investitionen` | investitionen.py | Komponenten CRUD, ROI (Jahres-Rendite) |
-| `/api/strompreise` | strompreise.py | Stromtarife CRUD |
-| `/api/cockpit` | cockpit.py | Aggregierte Dashboard-Daten (Jahres-Rendite) |
-| `/api/aussichten` | aussichten.py | **Prognosen: Kurzfristig, Langfristig, Trend, Finanzen** |
-| `/api/import` | import_export/ | CSV Import/Export, JSON-Export, **PDF-Export**, Demo-Daten |
-| `/api/wetter` | wetter.py | Wetter-API (Multi-Provider: Open-Meteo, Bright Sky, PVGIS) |
-| `/api/solar-prognose` | solar_prognose.py | GTI-basierte PV-Ertragsprognose |
-| `/api/pvgis` | pvgis.py | PVGIS Ertragsprognosen |
-| `/api/ha/export` | ha_export.py | HA Sensor Export (REST, MQTT) |
-| `/api/ha-import` | ha_import.py | Investitions-Felder (CSV-Template) |
-| `/api/ha` | ha_integration.py | HA Discovery, String-Import |
-| `/api/sensor-mapping` | sensor_mapping.py | **Sensor-Mapping CRUD** |
-| `/api/monatsabschluss` | monatsabschluss.py | **Monatsabschluss-Wizard** |
-| `/api/scheduler` | main.py (inline) | **Scheduler Status/Trigger** |
-| `/api/community` | community.py | **Community-Teilen & Benchmark** |
-| `/api/live` | live_dashboard.py, live_mqtt_inbound.py, live_wetter.py | **Live Dashboard + MQTT + Wetter** (v3.0.0, refactored v3.9.0; Korrekturprofil-Lookup pro Stunde ab v3.26.2) |
-| `/api/korrekturprofil` | korrekturprofil.py | **Lernfaktor-Korrekturprofil** (Wetter-Backfill, Stratifizierungs-Diagnose, Aggregator, Profile) — siehe [`archive/KONZEPT-KORREKTURPROFIL.md`](archive/KONZEPT-KORREKTURPROFIL.md) |
-| `/api/aktueller-monat` | aktueller_monat.py | **Monatsdaten-API** (genutzt von Monatsberichte-View für alle Monate inkl. laufender) |
-| `/api/daten-checker` | daten_checker.py | **Datenqualitäts-Prüfung** |
-| `/api/system-logs` | system_logs.py | **Aktivitäts-Protokolle** |
-| `/api/data-import` | data_import.py | Universeller Daten-Import (ersetzt Portal-Import, v3.10.x) |
-| `/api/cloud-import` | cloud_import.py | Cloud-API Import (12 Provider) |
-| `/api/custom-import` | custom_import.py | Custom CSV/JSON Import mit Feld-Mapping |
-| `/api/infothek` | infothek.py | Infothek CRUD + Datei-Upload + N:M (v3.5.0, N:M v3.15.2) |
-| `/api/mqtt-gateway` | mqtt_gateway.py | MQTT-Gateway Topic-Mapping (v3.4.5) |
-| `/api/mqtt-presets` | mqtt_presets.py | MQTT-Geräte-Presets |
-| `/api/energie-profil` | energie_profil.py | Energieprofil-Auswertung (v3.13.0) |
-| `/api/dokumentation` | dokumentation.py | PDF-Dokumente: Anlagendokumentation, Finanzbericht (v3.15.0) |
-| `/api/solar-prognose` | solar_prognose.py | Solar-Prognose API |
+> **Die Prefix-Tabelle steht in [DEVELOPMENT.md §API-Routen Übersicht](DEVELOPMENT.md#api-routen-übersicht)**
+> — an **einem** Ort, erhoben aus `backend/main.py`. Die Kopie, die hier bis 2026-08-07 stand, war
+> an sechs Stellen falsch (`/api/daten-checker` und `/api/system-logs` liegen beide unter
+> `/api/system`, `/api/data-import` heißt `/api/portal-import`, `mqtt_gateway` und `mqtt_presets`
+> liegen unter `/api/live`, `ha_export` hat gar kein eigenes Prefix).
+
+**Was architektonisch daran wichtig ist:**
+
+- **Ein Modulname sagt nichts über sein Prefix.** Mehrere Module teilen sich eines (`/api/live`
+  trägt fünf, `/api/system` zwei, `/api/aussichten` zwei), und drei Module hängen direkt unter
+  `/api` (Monatsabschluss, Community, HA-Export). SoT sind die `include_router`-Aufrufe.
+- **HA-only-Router werden bedingt eingehängt** (`HA_MODE`): `ha_integration`, `ha_import`,
+  `sensor_mapping`, `ha_statistics`. `ha_remote` **nicht** — die Verbindung per Token gehört zum
+  Standalone-Betrieb.
+- **Einige System-Endpunkte liegen inline in `main.py`**, nicht in einem Router:
+  `/api/health` · `/api/settings` · `/api/scheduler` (+ `/api/scheduler/monthly-snapshot`) ·
+  `/api/updates/check` · `/api/stats` — dazu die SPA-Auslieferung als Catch-all.
+- ⚠ **Die SPA beantwortet JEDEN Pfad mit HTTP 200 und HTML.** Ein Statuscode belegt daher **keinen**
+  Endpunkt; wer eine API prüft, prüft den **Inhalt** und macht die Gegenprobe mit einem frei
+  erfundenen Pfad.
 
 ### Wichtige Endpoints
 
@@ -913,145 +761,174 @@ class MonatsdatenResponse(MonatsdatenCreate):
 
 ## 6. Frontend-Architektur
 
+> **Verbindlich für die Informationsarchitektur ist [KONZEPT-IA-V4.md](KONZEPT-IA-V4.md)**
+> (Achsen, Invarianten I1–I16, Redirect-Mechanik), für die Darstellung
+> [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) (Regel 0/0a). Dieses Kapitel beschreibt, **wie**
+> das im Code liegt — es definiert keine Regeln daneben.
+
+### Drei Achsen, eine Frage je Achse
+
+Seit dem IA-V4-Flip (v4.0.0) ist die Oberfläche nach **Fragen** geschnitten, nicht nach Geräten:
+
+| Achse | Frage | Sektion | Unterteilung |
+| --- | --- | --- | --- |
+| Zeit | **Wann?** | **Cockpit** | Live · Tag · Monat · Jahr · Aussicht |
+| Gerät | **Was?** | **Komponenten** | je Typ: Status → Verlauf → Vergleich → Wirtschaftlichkeit |
+| Methode | **Wie?** | **Auswertungen** | Finanzen · ROI · Prognose-vs-IST · CO₂ · Tabelle |
+| — | Vergleich | **Community** | Übersicht · PV-Ertrag · Komponenten · Regional · Trends · Statistiken |
+| — | Einrichtung | **Einstellungen** | Kachel-Übersicht je Kategorie |
+
+Eine zeitbezogene Auswertung gehört damit ins **Cockpit**, eine über die Lebensdauer einer
+Komponente in den **Hub** — diese Zuordnung ist die häufigste Entscheidung beim Bau einer neuen
+Sicht.
+
 ### Routing-Struktur
 
-**Hinweis:** EEDC verwendet `HashRouter` (nicht BrowserRouter) für HA Ingress-Kompatibilität.
-URLs im Browser erscheinen als `/#/cockpit` statt `/cockpit`.
+**`HashRouter`** (nicht `BrowserRouter`), weil der HA-Ingress-Pfad dynamisch ist: URLs erscheinen
+als `/#/cockpit/live`. Die V4-Routen sind **prefix-frei** — der frühere `/v4`-Präfix ist mit dem
+Flip gefallen.
 
+```text
+/                          → Navigate → /cockpit/live
+├── cockpit                → Navigate → /cockpit/live
+├── cockpit/:zeit          → CockpitV4      (live · tag · monat · jahr · aussicht)
+├── komponenten            → KomponentenV4  (Auswahl)
+├── komponenten/:typ       → KomponentenV4  (pv-anlage · speicher · bkw · waermepumpe ·
+│                                            wallbox · e-auto · sonstiges)
+├── auswertungen           → Navigate → /auswertungen/finanzen
+├── auswertungen/:sub      → AuswertungenV4 (finanzen · roi · prognose · co2 · tabelle)
+├── community              → Navigate → /community/uebersicht
+├── community/:sub         → CommunityV4    (uebersicht · pv-ertrag · komponenten ·
+│                                            regional · trends · statistiken)
+├── hilfe                  → HilfeV4
+├── einstellungen          → Navigate → /einstellungen/stammdaten
+├── einstellungen/:kategorie → EinstellungenV4 (stammdaten · komponenten · infothek · daten ·
+│                                               integration · datenquellen · system)
+└── dev/design-preview     → DesignPreview   (nur Entwicklung)
 ```
-/                       → Redirect zu /cockpit
-│
-│
-├── /live               → LiveDashboard (Echtzeit-Leistungsdaten)
-│                         EnergieFluss (SVG), GaugeChart (SoC), Tagesverlauf
-├── /cockpit            → Dashboard (Übersicht)
-│   ├── /aktueller-monat → Redirect → /monatsberichte (seit v3.12.0)
-│   ├── /monatsberichte → MonatsabschlussView (Zeitstrahl + laufender Monat + Historik)
-│   ├── /pv-anlage      → PVAnlageDashboard
-│   ├── /e-auto         → EAutoDashboard
-│   ├── /waermepumpe    → WaermepumpeDashboard
-│   ├── /speicher       → SpeicherDashboard
-│   ├── /wallbox        → WallboxDashboard
-│   ├── /balkonkraftwerk → BalkonkraftwerkDashboard
-│   └── /sonstiges      → SonstigesDashboard
-│
-├── /auswertungen       → Auswertung.tsx (6 Client-Side Tabs)
-│   │                     Tabs: Energie, PV-Anlage, Komponenten, Finanzen, CO2, Investitionen
-│   ├── /roi            → ROIDashboard (Jahres-Rendite p.a.)
-│   ├── /prognose       → PrognoseVsIst
-│   └── /export         → PDF-Export
-│
-├── /community          → Community.tsx (6 Client-Side Tabs)
-│                         Tabs: Übersicht, PV-Ertrag, Komponenten, Regional, Trends, Statistiken
-│                         (Tabs via useState, KEINE URL-Sub-Routes)
-│
-├── /aussichten         → Aussichten.tsx (4 Client-Side Tabs)
-│                         Tabs: Kurzfristig, Langfristig, Trend, Finanzen
-│                         (Tabs via useState, KEINE URL-Sub-Routes)
-│
-├── /monatsabschluss/:anlageId              → MonatsabschlussWizard
-├── /monatsabschluss/:anlageId/:jahr/:monat → MonatsabschlussWizard (Monat)
-│
-└── /einstellungen
-    ├── /anlage         → Anlagen.tsx
-    ├── /strompreise    → Strompreise.tsx
-    ├── /investitionen  → Investitionen.tsx
-    ├── /monatsdaten    → Monatsdaten.tsx
-    ├── /import         → Import.tsx
-    ├── /demo           → Import.tsx (Demo-Sektion)
-    ├── /pvgis          → PVGISSettings.tsx
-    ├── /ha-import      → HAImportSettings.tsx
-    ├── /ha-export      → HAExportSettings.tsx
-    ├── /allgemein      → Settings.tsx
-    ├── /einrichtung       → Einrichtung.tsx (Datenquellen-Hub)
-    ├── /cloud-import      → CloudImportWizard.tsx
-    ├── /custom-import     → CustomImportWizard.tsx
-    ├── /data-import       → DataImportWizard.tsx
-    ├── /daten-checker    → DatenChecker.tsx
-    └── /protokolle       → Protokolle.tsx
-```
+
+**Alle Alt-Pfade werden umgeleitet, keiner läuft in ein 404.** SoT dafür ist
+`src/routes/routeManifest.ts`:
+
+- `LEGACY_REDIRECTS` — die Alt→Neu-Tabelle, von `App.tsx` als `<Navigate replace>` gerendert.
+  Sie trägt drei Klassen: V3-Top-Level (`live` → `/cockpit/live`), **Achsenwechsel** der
+  Gerätepfade (`cockpit/speicher` → `/komponenten/speicher` — Geräte sind keine Zeit-Frage mehr)
+  und die **Re-Kategorisierung** der Einstellungs-Routen (`einstellungen/sensor-mapping` →
+  `/einstellungen/datenquellen`).
+- `REAL_ROUTE_PATHS` — das Inventar der echten Routen; es muss mit den `<Route>`-Pfaden in
+  `App.tsx` synchron bleiben.
+- `src/routes/redirects.test.tsx` prüft beides maschinell: jeder Alt-Pfad landet auf einer echten
+  Route, **ohne Redirect-Kette**.
+
+Dazu drei Sonderfälle in `App.tsx`: Splat-Fänger für gelöschte dynamische Alt-Sektionen
+(`aussichten/*`, `monatsabschluss/*`) und eine Versicherung für `/v4/*`-Bookmarks.
 
 ### Komponenten-Hierarchie
 
-```
+```text
 main.tsx
-├── ThemeProvider
-└── AppWithSetup
+├── ThemeProvider                    # Light/Dark (context/ThemeContext)
+└── AppWithSetup                     # Ersteinrichtung vor der App
     └── App.tsx
         └── HashRouter
-            └── Layout.tsx
-                ├── TopNavigation.tsx
-                │   ├── Logo
-                │   ├── MainTabs (Live, Cockpit, Auswertungen, Community, Aussichten)
-                │   ├── SettingsDropdown (5 Kategorien)
-                │   └── ThemeToggle
-                │
-                ├── SubTabs.tsx (kontextabhängig)
-                │
-                └── <Outlet /> (React Router)
-                    └── [Page Component]
+            └── AppErrorBoundary     # um den GANZEN Routenbaum (#207)
+                └── Suspense         # LayoutV4 → Cockpit → Live lazy, für langsame Zugänge
+                    └── LayoutV4 (v4/)
+                        ├── AnlagenSelektor · ReloadButton
+                        ├── GlobalStatusProvider + StatusFusszeile (v4/status/)
+                        └── <Outlet />
+                            └── CockpitV4 · KomponentenV4 · AuswertungenV4 ·
+                                CommunityV4 · EinstellungenV4 · HilfeV4
 ```
+
+### Das Block-Modell
+
+Eine V4-Sicht ist eine **Liste von Blöcken**, nicht ein Seitenlayout. Jeder Block ist verschiebbar,
+fokussierbar (⤢) und parkbar:
+
+| Baustein | Ort | Aufgabe |
+| --- | --- | --- |
+| `BlockShell` | `components/blocks/` | Rahmen, Titel, Fokus-Knopf, Parken-Geste |
+| `FokusVollbild` · `FokusKachel` | `components/blocks/` | **ein** geteiltes Overlay für alle Sichten |
+| `BlockStackSkeleton` | `components/blocks/` | Ladezustand als Block-Stapel statt Spinner |
+| `KpiStrip` · `VerteilungsBalken` · `HerkunftZeile` | `components/blocks/` | wiederkehrende Block-Inhalte |
+| `Parkbar` · `GeparktBlock` · `ParkContext` · `ParkFuss` | `components/park/` | Park-Zustand je Sicht (persistiert) |
+| `useSectionOrder` | `hooks/` | Reihenfolge der Blöcke je Sicht (persistiert) |
+
+**Park-Doktrin (I3):** eine Parkbar trägt **eine atomare Anzeige**. Wer einen Block parkt, parkt
+genau das, was er sieht — nicht eine Gruppe, aus der später etwas Unerwartetes wieder auftaucht.
 
 ### State Management
 
-**Kein globaler State-Store** – stattdessen:
+**Kein globaler Store.** Vier Mechanismen, jeder mit klarer Zuständigkeit:
 
-1. **React Query / SWR Pattern** für Server-State
-2. **Context** für Theme
-3. **localStorage** für Präferenzen (Spalten-Toggle, Wizard-Status)
-4. **URL-Parameter** für Filter (Jahr, Anlage)
+1. **`useApiData(fetcher, deps, opts)`** für Server-State — inklusive **SWR-Sicht-Cache** (opt-in
+   über `swrKey`). Ohne ihn fetchte jede Sicht beim Tab-Wechsel neu und zeigte ein Skeleton,
+   obwohl die Daten Sekunden alt waren (#218). Mit `swrKey` stehen beim Remount die alten Daten
+   sofort, still revalidiert wird trotzdem (`reloading`). Der Cache ist ein **Modul-Singleton**
+   mit LRU-Grenze und stirbt mit dem Browser-Tab; Tests leeren ihn über
+   `_clearSwrCacheForTests()`.
+2. **Context** für Theme (`ThemeContext`) und den globalen Status (`GlobalStatusProvider`).
+3. **`localStorage`** für Präferenzen: Anlagen-Auswahl, Block-Reihenfolge, Park-Zustand,
+   Spalten-Toggles, Wizard-Fortschritt.
+4. **URL** für alles, was ein Link tragen muss: Sektion, Zeitraum-Achse, Gerätetyp, Unter-Sicht.
 
-### API-Client Pattern
-
-```typescript
-// api/cockpit.ts
-export const cockpitApi = {
-  getUebersicht: async (anlageId: number, jahr?: number) => {
-    const params = jahr ? `?jahr=${jahr}` : '';
-    const response = await fetch(`/api/cockpit/uebersicht/${anlageId}${params}`);
-    return response.json();
-  },
-  // ...
-};
-
-// Verwendung in Komponente
-const [data, setData] = useState<CockpitData | null>(null);
-
-useEffect(() => {
-  cockpitApi.getUebersicht(anlageId, jahr).then(setData);
-}, [anlageId, jahr]);
-```
-
-### Custom Hooks
+### Custom Hooks (`src/hooks/`)
 
 | Hook | Zweck |
-|------|-------|
-| `useSelectedAnlage()` | Anlage-Selektion mit Auto-Select und localStorage-Persistierung |
-| `useApiData(fetcher, deps, opts)` | Generischer async Datenfetch mit Loading/Error-State |
-| `useYearSelection()` | Verfügbare Jahre + Selektion |
-| `useAnlagen()` | PV-Anlagen laden (nur für Anlagen-CRUD, sonst `useSelectedAnlage`) |
-| `useMonatsdaten(anlageId)` | Monatsdaten mit Filter |
-| `useInvestitionen(anlageId)` | Komponenten |
-| `useAktuellerStrompreis(anlageId)` | Aktueller Tarif |
-| `useSetupWizard()` | Wizard-State & Navigation |
+| --- | --- |
+| `useApiData` | async Fetch mit Loading/Error + SWR-Sicht-Cache |
+| `useSelectedAnlage` | Anlagen-Auswahl mit Auto-Select und Persistierung |
+| `useAnlagen` · `useInvestitionen` · `useMonatsdaten` · `useStrompreise` | Bestandsdaten |
+| `useYearSelection` | verfügbare Jahre + Auswahl |
+| `useSectionOrder` | Block-Reihenfolge je Sicht |
+| `useEinstellungenStatus` | Status-Ampeln der Einstellungs-Kacheln |
+| `useHelpKatalog` · `useFeldHinweise` | In-App-Hilfe und Feld-Hinweise |
+| `useHAAvailable` | HA-only-Funktionen ausblenden, wenn kein HA da ist |
+| `useLegendenToggle` · `useSchmaleAchse` · `useScrollErhalt` · `useTouchTitleTooltip` | Anzeige-Verhalten (auch mobil) |
+| `useSetupWizard` | Ersteinrichtung |
 
-### Shared Components (seit v3.3)
+### Geteilte SoT-Komponenten (`src/components/`)
 
-| Komponente | Zweck |
-|------------|-------|
-| `PageHeader` | Konsistenter Seitentitel mit Selektoren und Action-Buttons |
-| `DataLoadingState` | Loading/Error/Empty-Wrapper für Datenseiten |
-| `ChartTooltip` | Einheitliche Recharts-Tooltips mit Dark-Mode |
-| `RingGauge` | SVG Ring-Gauge für Autarkie/Eigenverbrauch |
+**Eine Komponenten-Klasse = EINE Komponente** (I12). Eine zweite Fassung neben einer bestehenden
+ist ein Regelbruch, nicht eine Variante:
 
-### Utility-Library (`lib/`)
+| Verzeichnis | Inhalt |
+| --- | --- |
+| `ui/` | Card · Button · Modal · Table/WerteTabelle · ChartTooltip · Badge · CsvExport … |
+| `blocks/` · `park/` | Block-Modell und Park-Mechanik (siehe oben) |
+| `charts/` | Chart-Bausteine (Achsen, Legende) — Konventionen im Style-Guide |
+| `forms/` | Formular-Controls; **Roh-Controls sind gewächtert** (`check:roh-controls`, `check:form-controls`) |
+| `live/` | `EnergieFluss` (animiertes SVG), `EnergieBilanz`, `WetterWidget` … |
+| `monatsabschluss/` | das Monatsabschluss-**Formular** (seit v4.0.0 ein Formular statt 7 Schritten) |
+| `sensor-mapping/` · `connector/` · `import/` · `setup-wizard/` | Einrichtung und Import |
+| gerätespezifisch | `pv/` · `speicher/` · `waermepumpe/` · `wallbox/` · `eauto/` · `balkonkraftwerk/` |
+| fachlich | `finanzen/` · `roi/` · `aussicht/` · `prognose/` · `tag/` · `werte/` · `infothek/` · `repair/` |
+
+### Utility-Library (`src/lib/`)
 
 | Modul | Inhalt |
-|-------|--------|
-| `formatting.ts` | `formatKWh`, `formatEuro`, `formatPercent`, `formatCO2` |
-| `constants.ts` | `MONAT_NAMEN`, `MONAT_KURZ`, `TYP_ICONS`, `TYP_LABELS` |
-| `colors.ts` | Chart-Farbpalette, CSS-Variable-Referenzen |
-| `calculations.ts` | Pure Functions für Autarkie, Eigenverbrauch, spez. Ertrag |
+| --- | --- |
+| `colors.ts` | **Farb-SoT.** Eine Datenrolle = eine Farbe; Inline-Hex außerhalb ist gewächtert (`check:design`) |
+| `einheiten.ts` | Zahl-/Einheiten-Formatierung (kWh, €, %, CO₂) — deutsche Konvention, `%` mit Leerzeichen |
+| `datum.ts` | `heuteIso` · `toIsoDatum` · `verschiebeIsoTage` — **lokale** Uhr, nie UTC (`check:datum-utc`) |
+| `monatsLuecken.ts` | „welcher Monat ist offen" inkl. **Binnen**-Lücken |
+| `chartAchse.ts` · `blockStyle.ts` · `komponentenStyle.ts` | Achsen- und Stil-Ableitungen |
+| `investitionAktiv.ts` | die drei Achsen von „aktiv" (Flag · Anschaffung · Stilllegung) |
+| `investitionParameter.ts` | Parameter-Keys **gemeinsam mit dem Backend** (`core/investition_parameter.py`) |
+| `erzeugerSpalten.ts` · `pvHerkunft.ts` · `erfassungZustand.ts` · `sollErfuellung.ts` | Tabellen- und Zustands-Ableitungen |
+| `stundenSlot.ts` | Slot-Konvention im Client (Backward, wie `core/berechnungen/slot_konvention.py`) |
+| `prognoseAnzeige.ts` · `prognoseHinweise.ts` | Prognose-Darstellung und ihre Hinweistexte |
+| `calculations.ts` · `constants.ts` · `fieldDefinitions.ts` · `flags.ts` · `download.ts` | Rest |
+
+### Was der Client NICHT tut
+
+- **Keine CO₂-Menge konstruieren** — sie kommt aus `/cockpit/nachhaltigkeit` (ADR-001/DI-2,
+  Wächter `check:co2-roh`).
+- **Keine Nennleistung aus der Rohspalte rechnen** — Anzeige und Rechnung lesen
+  `leistung_kwp_effektiv` aus der Response; die Rohspalte gehört Formularen (P3-a, Wächter
+  `check:kennwert-roh`).
+- **Keine Monatsgröße selbst falten** — das ist Aufgabe der Monats-Fakten im Backend (P10).
 
 ---
 
@@ -1285,19 +1162,32 @@ POST /api/ha-statistics/import/{anlage_id}                         # Import mit 
 
 **Funktion:** APScheduler-basierte Cron-Jobs für automatische Aufgaben.
 
-**Jobs:**
-- `monthly_snapshot_job` - Läuft am 1. jedes Monats um 00:01
-  - Liest Sensor-Werte via HA MQTT
-  - Erstellt Vorschläge für den Monatsabschluss
-  - Sendet Notifications (optional)
-- `mqtt_energy_snapshot_job` - Alle 5 Minuten (NEU v3.0.0)
-  - Speichert MQTT Energy-Zählerstände in SQLite
-- `mqtt_energy_cleanup_job` - Täglich 03:00 (NEU v3.0.0)
-  - Löscht Snapshots älter als 31 Tage
-- `energie_profil_aggregation_job` - Täglich 00:15 (NEU v3.1.0)
-  - Aggregiert Vortag für alle Anlagen → `TagesEnergieProfil` + `TagesZusammenfassung`
-- `kraftstoffpreis_job` - Wöchentlich Dienstag 06:00 (NEU v3.16.16)
-  - Lädt EU Weekly Oil Bulletin (XLSX) und befüllt `TagesZusammenfassung.kraftstoffpreis_euro` + `Monatsdaten.kraftstoffpreis_euro`
+**Jobs** (vollständig aus `scheduler.py` erhoben, 2026-08-07 — die Job-`id` ist der Name, unter dem
+`GET /api/scheduler` sie ausweist):
+
+| Job-ID | Takt | Aufgabe |
+| --- | --- | --- |
+| `sensor_snapshot` | stündlich :05 | Zählerstände je Sensor in `sensor_snapshots` — **die kWh-Quelle** der Stunden-/Tageswerte |
+| `sensor_snapshot_preview` | stündlich :55 | Vorschau-Snapshot kurz vor dem Stundenwechsel |
+| `sensor_snapshot_5min` | alle 5 min (:30 s) | 5-Minuten-Snapshots für den Live-Tagesverlauf |
+| `sensor_snapshot_5min_cleanup` | täglich 00:30 | 5-Minuten-Daten aufräumen |
+| `energie_profil_heute` | alle 15 min | den **laufenden** Tag fortschreiben |
+| `energie_profil_aggregation` | täglich 00:15 | Vortag aggregieren → `TagesEnergieProfil` + `TagesZusammenfassung` |
+| `energie_profil_aggregation_recovery` | täglich 02:15 | zweiter Anlauf für Tage, die 00:15 verpasst hat (Neustart, Ausfall) |
+| `korrekturprofil_aggregation` | täglich 02:30 | gelernte eedc-Prognose-Korrektur neu bilden |
+| `prognose_prefetch` | alle 45 min | Wetter-/Prognosedaten vorhalten |
+| `connector_daily_poll` | täglich 03:30 | Geräte-Connectors im lokalen Netz abfragen |
+| `api_cache_cleanup` | täglich 04:00 | `api_cache` aufräumen |
+| `kraftstoffpreis` | Di 06:00 | EU Weekly Oil Bulletin → `TagesZusammenfassung.kraftstoffpreis_euro` + `Monatsdaten.kraftstoffpreis_euro` |
+| `monthly_snapshot` | 1. des Monats 00:01 | ⚠ setzt **nur einen Log-Zeitstempel** — es gibt **keinen automatischen Monatsabschluss** |
+| `mqtt_auto_publish` | Intervall (konfigurierbar) | HA-Export per MQTT, mit Start-Publish beim Hochlauf |
+| `mqtt_energy_snapshot` · `mqtt_live_snapshot` | je alle 5 min | MQTT-Inbound: Energie-Zählerstände bzw. Live-Werte sichern |
+| `mqtt_energy_cleanup` · `mqtt_live_cleanup` | täglich 03:00 / 03:05 | MQTT-Snapshots älter als die Aufbewahrung löschen |
+
+⚠ **Dass `monthly_snapshot` nichts abschließt, hat Folgen für jede Monats-Auswertung:** eine
+`Monatsdaten`-Zeile entsteht erst, wenn der Nutzer den Abschluss macht. Dem laufenden Monat fehlt sie
+immer, dem Vormonat bis zum Abschluss — Sichten müssen einen gelaufenen Monat also auch **ohne**
+Zählerzeile kennen (`meta.hat_zaehlerzeile`, Flag `inkl_ohne_zaehlerzeile`).
 
 ### Kraftstoffpreis Service (v3.16.16)
 
@@ -1530,20 +1420,30 @@ Bei der ROI-Berechnung werden **Mehrkosten** gegenüber Alternativen berücksich
 ```
 EEDC Add-on                              Community Server
 ┌──────────────────────┐                 ┌──────────────────┐
-│ CommunityShare.tsx   │ ── POST ──────→ │ /api/submit      │
-│ CommunityVergleich   │ ── Proxy ─────→ │ /api/benchmark/  │
-│   .tsx (embedded)    │                 │   anlage/{hash}  │
+│ v4/CommunityShare-   │ ── POST ──────→ │ /api/submit      │
+│   Block.tsx          │ ── DELETE ────→ │ /api/submit/{h}  │
+│ v4/CommunityV4.tsx   │ ── Proxy ─────→ │ /api/benchmark/  │
+│   (+ 6 Unter-Sichten)│                 │   anlage/{hash}  │
 │ "Im Browser öffnen"  │ ── Link ──────→ │ /?anlage=HASH    │
 └──────────────────────┘                 └──────────────────┘
 ```
 
 **Relevante Dateien:**
-- `backend/services/community_service.py` – Datenaufbereitung + Anonymisierung
-- `backend/services/plz_to_state.py` – Vollständiges PLZ→Bundesland Dictionary (8.308 Einträge, O(1) Lookup)
-- `backend/api/routes/community.py` – API Routes + Benchmark-Proxy
-- `frontend/src/pages/CommunityShare.tsx` – Upload UI
-- `frontend/src/pages/CommunityVergleich.tsx` – Benchmark-Analyse (6 Tabs)
-- `frontend/src/api/community.ts` – API Client
+
+- `backend/services/community_service.py` – Datenaufbereitung + Anonymisierung; die Monatswerte
+  kommen aus den **Monats-Fakten** (ADR-002/P10), nicht aus eigener Faltung
+- `backend/services/plz_to_state.py` – PLZ→Bundesland (8.308 Einträge, O(1))
+- `backend/api/routes/community.py` – Routen + Benchmark-**Proxy**; der Client spricht den
+  Community-Server nie direkt an
+- `frontend/src/v4/CommunityShareBlock.tsx` – teilen und rückwirkend entfernen
+- `frontend/src/v4/CommunityV4.tsx` – Benchmark-Sicht mit sechs Unter-Sichten
+  (`CommunityUebersichtV4` · `PVErtragV4` · `KomponentenV4` · `RegionalV4` · `TrendsV4` ·
+  `StatistikenV4`)
+- `frontend/src/api/community.ts` – API-Client
+
+⚠ **Der Community-Server rechnet nichts nach** — er hat die Rohdaten nie gesehen. Was ein Feld
+bedeutet, steht als Vertrag im Docstring von `MonatswertInput` **im Community-Repo**; wer die
+Bedeutung ändert, ändert sie dort mit. Altbestand heilt beim nächsten Voll-Submit.
 
 ### Cloud-Import-Provider (v2.7.0+)
 
@@ -1551,22 +1451,25 @@ EEDC Add-on                              Community Server
 
 **Architektur:** ABC-Pattern mit `@register_provider` Decorator und Provider-Registry.
 
-**Verfügbare Provider (alle ungetestet):**
+**Verfügbare Provider (12, SoT ist `services/cloud_import/registry.py`):**
 
-| Provider | API | Auth |
-|----------|-----|------|
-| EcoFlow PowerOcean | Developer API | HMAC-SHA256 |
-| SolarEdge | Monitoring API v1 | API-Key |
-| Fronius SolarWeb | SolarWeb API | AccessKeyId + AccessKeyValue |
-| Huawei FusionSolar | thirdData API | XSRF-Token |
-| Growatt | OpenAPI | MD5-Auth |
-| Deye/Solarman | SolarMAN OpenAPI v1.1.0 | OAuth2 (`bearer`-Präfix) + SHA256; Server-Region wählbar (`global`/`cn`) |
+| Provider | Status |
+|----------|--------|
+| Anker SOLIX | ✅ an einem echten Konto bestätigt |
+| Victron VRM | ✅ an einem echten Konto bestätigt |
+| Deye / Solarman · EcoFlow PowerOcean · EcoFlow PowerStream · Fronius Solar.web · Growatt · Hoymiles S-Miles · Huawei FusionSolar · SolarEdge · Sungrow iSolarCloud · Viessmann GridBox | ⚠ `getestet=False` |
+
+**`getestet` ist eine Aussage über die Wirklichkeit, kein Ausdruck von Zuversicht.** Das Flag geht
+erst auf `True`, wenn ein Nutzer mit einem echten Konto Einrichtung **und** Zeitraum-Import
+gemeldet hat — rot verifizierte Tests genügen nicht: eine Fixture ist eine **Behauptung** über eine
+fremde API. Genau daran ist der Solarman-Import zweimal gescheitert (die Fixture erfand eine
+`body`-Hülle, die es nicht gibt).
 
 **Output:** Alle Provider liefern `ParsedMonthData` als einheitliches Format.
 
 ### Custom-Import (v2.8.0)
 
-**Datei:** `backend/api/routes/custom_import.py`
+**Verzeichnis:** `backend/api/routes/custom_import/`
 
 **Funktion:** Beliebige CSV/JSON-Dateien mit benutzerdefinierbarem Feld-Mapping importieren.
 
@@ -1591,115 +1494,72 @@ GET    /api/custom-import/fields           # Verfügbare EEDC-Zielfelder
 
 ## 9. Entwickler-Workflow
 
-### Repository-Struktur
+> **SoT für Einrichtung, Befehle und Gates ist [DEVELOPMENT.md](DEVELOPMENT.md)**, für den Release
+> [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md). Hier stand bis 2026-08-07 eine Kopie beider — mit
+> vier statt fünf Versionsdateien und dem Satz „Frontend Tests (noch nicht implementiert)", während
+> längst eine Vitest-Suite und die `check:*`-Wächter liefen. **Kopierte Befehle veralten
+> unbemerkt**; deshalb bleibt hier nur, was architektonisch ist.
 
-**`eedc-homeassistant` ist die Source of Truth** für alle Änderungen (Backend, Frontend, Docs, HA-Config).
+### Der Fluss zwischen den Repositories
 
-Das `eedc`-Standalone-Repo ist ein **Spiegel** und wird ausschließlich per Release-Script synchronisiert.
-
-```
+```text
 eedc-homeassistant (Source of Truth)
-├── eedc/backend/          ─── release.sh ───→  eedc (Standalone-Spiegel)
-├── eedc/frontend/         ─── release.sh ───→  eedc (Standalone-Spiegel)
-├── website/
-├── docs/
-└── CHANGELOG.md
+├── eedc/backend/          ─── scripts/release.sh ───→  eedc (Standalone-Spiegel)
+├── eedc/frontend/         ─── scripts/release.sh ───→  eedc (Standalone-Spiegel)
+├── docs/                  ── website/scripts/sync-docs.sh ─→ website/ (GitHub Pages)
+│                          └── scripts/sync-help.sh ──→  In-App-Hilfe (versioniert!)
+└── CHANGELOG.md           ─── release.sh ────────────→  eedc/CHANGELOG.md
+                                                         (die Datei, die HA-Nutzer im Store lesen)
 
-eedc-community (unabhängig)
+eedc-community (unabhängig — bei Datenmodell-Änderungen synchron anpassen)
 ```
 
-**Regeln:**
+**Regeln, die daraus folgen:**
 
-- Alle Änderungen in `eedc-homeassistant` machen, nie direkt in `eedc`
-- Immer auf `main` arbeiten (keine Feature-Branches, Einzelentwickler-Projekt)
-- Kein `git subtree` (abgeschafft)
+- Alle Änderungen in `eedc-homeassistant`, **nie** direkt im `eedc`-Spiegel.
+- Immer auf `main` (Einzelentwickler-Projekt, keine Feature-Branches), kein `git subtree`.
+- Nur explizite Pfade committen — es laufen parallele Sessions im selben Arbeitsbaum.
+- **Zwei Kopien hängen an `docs/`**: die Website-Kopie ist gitignored, die **In-App-Hilfe-Kopie
+  ist versioniert** und gehört in denselben Commit (`scripts/sync-help.sh`).
 
-### Lokale Entwicklung
+### Was ein Release technisch bedeutet
 
-**Terminal 1 – Backend:**
-```bash
-cd eedc
-source backend/venv/bin/activate
-uvicorn backend.main:app --reload --port 8099
+`release.sh` bumpt **fünf** Versionsdateien (Backend, Frontend, `config.yaml`, `run.sh`,
+`Dockerfile`), kopiert den CHANGELOG, committet, taggt und pusht **beide** Repos. Danach laufen
+drei Workflows: `tests.yml`, `release.yml` (baut die Add-on-Images) und `deploy-website.yml`.
+
+⚠ **Das Add-on zieht ein vorgebautes Image** (`eedc/config.yaml` →
+`ghcr.io/supernova1963/eedc-homeassistant-{arch}`). Zwischen Tag und fertigem Image ist die Version
+im Store sichtbar, aber nicht installierbar (`[404] manifest unknown`). Der Prüf-Einzeiler samt
+seiner beiden Pflicht-Header steht in [DEVELOPMENT.md §Versionierung](DEVELOPMENT.md#versionierung).
+
+### Community-Datenfluss
+
+```text
+eedc Add-on                                   Community Server
+┌───────────────────────────────┐             ┌────────────────────────┐
+│ v4/CommunityShareBlock.tsx    │ ─ POST ───→ │ /api/submit            │
+│   (teilen / rückwirkend weg)  │ ─ DELETE ─→ │ /api/submit/{hash}     │
+│ v4/CommunityV4.tsx            │ ─ Proxy ──→ │ /api/benchmark/        │
+│                               │             │   anlage/{hash}        │
+└───────────────────────────────┘             └────────────────────────┘
 ```
 
-**Terminal 2 – Frontend:**
-```bash
-cd eedc/frontend
-npm run dev
-```
-
-**URLs:**
-- Frontend: http://localhost:3000 (Vite Dev Server, Proxy zu Backend)
-- API Docs: http://localhost:8099/api/docs
-
-### Production Build
-
-```bash
-cd eedc/frontend
-npm run build
-# Output: dist/
-```
-
-### Docker Build
-
-```bash
-cd eedc
-docker build -t eedc .
-docker run -p 8099:8099 -v $(pwd)/data:/data eedc
-```
-
-### Release-Workflow
-
-Ein Script erledigt alles — Version bumpen, committen, taggen, pushen und Standalone-Repo synchronisieren:
-
-```bash
-cd /home/gernot/claude/eedc-homeassistant
-./scripts/release.sh 2.8.6
-```
-
-Das Script aktualisiert automatisch alle 4 Versionsdateien:
-
-| Datei | Feld |
-| ----- | ---- |
-| `eedc/backend/core/config.py` | `APP_VERSION` |
-| `eedc/frontend/src/config/version.ts` | `APP_VERSION` |
-| `eedc/config.yaml` | `version` (HA Add-on) |
-| `eedc/run.sh` | Version im Echo |
-
-**Wichtig:** HA Add-ons erkennen Updates über das `version`-Feld in `config.yaml`. Jede Änderung, die beim User ankommen soll, benötigt ein Release.
-
-### Git Commit Conventions
-
-```
-feat(wizard): Add Setup-Wizard for first-time users
-fix(import): Fix 0-value handling in CSV import
-refactor(cockpit): Use InvestitionMonatsdaten for all components
-docs: Update BENUTZERHANDBUCH
-chore: Bump version to 1.0.0-beta.1
-```
-
-### Tests
-
-```bash
-# Backend Tests
-cd eedc/backend
-pytest
-
-# Frontend Tests (noch nicht implementiert)
-cd eedc/frontend
-npm test
-```
+Der Client spricht den Community-Server **nie direkt** an — alles läuft über
+`api/routes/community.py` (Proxy + Aufbereitung). **Der Server rechnet nichts nach**: er hat die
+Rohdaten nie gesehen, und was ein Feld bedeutet, steht als Vertrag im Docstring von
+`MonatswertInput` (Community-Repo). Wer die Bedeutung ändert, ändert sie dort mit.
 
 ---
 
 ## Anhang: API-Referenz
 
-Vollständige API-Dokumentation unter:
-- Swagger UI: http://localhost:8099/api/docs
-- ReDoc: http://localhost:8099/api/redoc
-- OpenAPI JSON: http://localhost:8099/api/openapi.json
+Vollständige API-Dokumentation nach dem Start des Backends:
 
----
+- Swagger UI: `http://localhost:8099/api/docs`
+- ReDoc: `http://localhost:8099/api/redoc`
+- OpenAPI JSON: `http://localhost:8099/api/openapi.json`
 
-*Letzte Aktualisierung: April 2026*
+Die Prefix-Übersicht je Modul steht in
+[DEVELOPMENT.md §API-Routen Übersicht](DEVELOPMENT.md#api-routen-übersicht) — erhoben aus
+`backend/main.py`, das der SoT der Prefixe ist.
