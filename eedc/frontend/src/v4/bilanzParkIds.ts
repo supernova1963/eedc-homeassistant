@@ -24,6 +24,7 @@ export function tagBilanzParkIds(t: TagWerte): string[] {
   const ids = ['el:bilanz-vergleich', 'el:bilanz-pr']
   const hatSpitzen = t.peak_pv_kw != null || (t.temperatur_min_c != null && t.temperatur_max_c != null)
   if (hatSpitzen) ids.push('el:bilanz-spitzen')
-  if (t.eigenverbrauch != null && t.einspeisung != null && t.erzeugung > 0) ids.push('el:bilanz-verteilung')
+  // Gate wortgleich in `TagBilanz.tsx` (PV-Verteilung) — siehe dort.
+  if (t.eigenverbrauch != null && t.einspeisung != null && (t.erzeugung ?? 0) > 0) ids.push('el:bilanz-verteilung')
   return ids
 }

@@ -1109,6 +1109,24 @@ sind dabei nicht optional:
   unterscheiden (die Klasse aus #352). Fehlt der Sensor, nennt die Oberfläche das Gerät und den
   Weg zur Zuordnung, statt eine Spalte zu zeigen.
 
+**Der Anlagen-Zählerstand erreicht die Tagesebene gar nicht** — auch nicht als Summe. Das Feld
+*Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* landet über `basis["pv_gesamt"]` in
+`Monatsdaten.pv_erzeugung_kwh` und ist damit **Eingang der Monats-Auflösung** (P7). Ein
+Snapshot-Gegenstück hat es nicht: `snapshot/keys.py::BASIS_ZAEHLER_FELDER` führt nur Einspeisung
+und Netzbezug, `_energy_field_id_to_sensor_key` liefert für `basis_energy_pv_gesamt_kwh`
+ausdrücklich `None`. Wer seine PV nur so pflegt, hat also **korrekte Monatswerte und keine
+Tages-PV**.
+
+Seit 2026-08-07 sagt die Tagessicht das auch, statt zu rechnen: `TagesBilanz.pv_erfasst` trennt
+„0 kWh gemessen" (Nacht, Schnee — gültig) von „nicht erfasst". Im zweiten Fall bleiben
+**Erzeugung, Eigenverbrauch, spezifischer Ertrag, Performance Ratio und CO₂ leer**. Vorher stand
+dort `0 − Einspeisung`, also ein **negativer Eigenverbrauch** neben einem Peak-PV-Wert aus dem
+Leistungssensor (Forum kaba-kakao, T89667 #109). Regel-SoT:
+[KONZEPT-UNVOLLSTAENDIGE-WERTE](KONZEPT-UNVOLLSTAENDIGE-WERTE.md) — eine Summe darf 0 bleiben,
+eine Differenz mit fehlendem Summanden nicht. Die Zuordnungs-Seite und der Daten-Checker nennen
+in dieser Lage den Weg über einen HA-Integral-Sensor je Erzeuger
+([HANDBUCH_DATEN_CHECKER §5.2](HANDBUCH_DATEN_CHECKER.md#52-fehlende-kwh-zähler-in-der-datenquellen-zuordnung-ergänzen)).
+
 Der Client schlüsselt **ab zwei Erzeugern** auf (`lib/erzeugerSpalten.ts`, geteilt von
 *Cockpit → Tag* und *Auswertungen → Tabelle*) und berücksichtigt Anschaffungs-/Stilllegungsdatum.
 Im Stundenverlauf **ersetzen** die Geräte-Flächen die PV-Fläche, statt auf ihr zu liegen; der

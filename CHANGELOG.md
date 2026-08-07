@@ -7,6 +7,18 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Ein Tag ohne erfasste PV zeigt keine Zahlen mehr, die es nicht gibt.** Wer seine PV nur über den **Anlagen-Zählerstand** pflegt (*Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)*), hat korrekte **Monatswerte** — die Tages- und Stundenebene entsteht aber ausschließlich aus einem kumulativen Zähler **je Erzeuger**. In *Cockpit → Tag* stand deshalb **0 kWh PV** neben einer gemessenen Einspeisung, und daraus errechnete sich ein **Eigenverbrauch von −25 kWh**, eine Performance Ratio von **0 %** („auffällig niedrig") und eine negative CO₂-Einsparung — während im selben Block die **Peak-Leistung** aus dem Watt-Sensor korrekt stand. Erzeugung, Eigenverbrauch, spezifischer Ertrag, Performance Ratio, CO₂ und die SOLL-Erfüllung zeigen in dieser Lage jetzt „—". **Eine gemessene Null bleibt eine Null:** Nacht, Schnee oder eine abgeschaltete Anlage sind ein gültiger Messwert und werden weiterhin als 0 angezeigt — unterschieden wird „nicht erfasst" von „nichts erzeugt". *(Forum-Meldung.)*
+
+### Changed
+
+- **Die Datenquellen-Seite sagt über den Anlagen-Zählerstand die Wahrheit.** An den Erzeuger-Zeilen stand bisher „Die PV-Erzeugung ist bereits an anderer Stelle zugeordnet" — für die Monatswerte richtig, für Tages- und Stundenwerte falsch, und der Daten-Checker meldete dieselbe Stelle gleichzeitig als Lücke. Die Zeile nennt jetzt die Grenze; und wenn ein Erzeuger einen **Leistungssensor** hat, aus dem sich ein Zähler bauen lässt, weist eine Warnung am Anlagen-Zählerstand den Weg über den **HA-Integral-Sensor** (Riemannsche Summe). Wer nur einen Summenzähler besitzt, bekommt **kein** Warndreieck — dort gibt es nichts besser zu machen. Der Daten-Checker und [die Hilfe](docs/HANDBUCH_DATEN_CHECKER.md) beschreiben denselben Weg.
+
+---
+
 ## [4.0.10] - 2026-08-06 — Jede Stunde trägt ihren eigenen Preis · jeder Tag sein eigenes Datum
 
 ### Added

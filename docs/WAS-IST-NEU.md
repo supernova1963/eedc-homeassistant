@@ -9,6 +9,18 @@
 
 ---
 
+## Unveröffentlicht
+
+### Cockpit → Tag behauptet keine PV-Zahlen mehr, die nicht gemessen sind
+
+Wenn deine PV **nur** über den Anlagen-Zählerstand gepflegt ist (*Einstellungen → Datenquellen → Anlage (Basis) → PV-Erzeugung Zählerstand*), stimmen deine **Monatswerte** — eedc verteilt die Anlagensumme auf die Strings. **Tages- und Stundenwerte** entstehen dagegen nur aus einem Zähler **je Erzeuger**. Bislang stand in der Tagessicht deshalb `0 kWh` PV neben deiner gemessenen Einspeisung, und daraus wurde ein **negativer Eigenverbrauch**, eine Performance Ratio von 0 % und eine negative CO₂-Einsparung.
+
+Jetzt steht dort „—": nicht gemessen ist nicht dasselbe wie null. **Eine echte Null bleibt sichtbar** — eine verschneite Anlage hat 0 kWh erzeugt, und das ist eine Aussage.
+
+**Was du tun kannst, wenn dein Wechselrichter je String nur Leistung liefert:** In Home Assistant unter *Helfer → Helfer erstellen → „Integral-Sensor"* (Riemannsche Summe) je String einen kWh-Zähler bauen — Methode **Trapez**, Präfix **k**, Zeiteinheit **Stunden**, kein Zyklus — und diesen beim jeweiligen Erzeuger zuordnen. Die Datenquellen-Seite und der Daten-Checker weisen jetzt auf diesen Weg hin, statt „bereits an anderer Stelle zugeordnet" zu melden. Beachte: Ein neuer Helfer **beginnt bei null**, Tageswerte entstehen ab dem Anlegen.
+
+---
+
 ## v4.0.10 — Jede Stunde trägt ihren eigenen Preis · jeder Tag sein eigenes Datum (August 2026)
 
 ### Börsenpreis heute *und morgen* — als eigener Block auf der Live-Seite

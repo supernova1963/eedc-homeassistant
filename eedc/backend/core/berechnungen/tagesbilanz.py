@@ -6,6 +6,13 @@ Monats-Endpoints ``get_monatsauswertung`` (energie_profil/views.py): NULL-
 Stunden zählen **nicht** als 0, Überschuss/Defizit/Direktverbrauch nur wenn
 PV **und** Verbrauch vorhanden, Batterie richtungsgetrennt.
 
+Eine **Summe** darf dabei 0 bleiben (additiv, richtungssicher), eine
+**Differenz** nicht: ``eigenverbrauch_kwh`` ist ``None``, solange keine
+einzige Stunde einen PV-Wert trug — sonst entsteht aus gemessener
+Einspeisung ohne PV-Zähler ein negativer Eigenverbrauch. Regel und
+Begründung: ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md``; Träger ist
+``pv_erfasst``.
+
 Damit gilt für jedes additive Feld die Invariante
 
     Σ ( bilanz_aus_stundenrows(tag_n) )  ==  bilanz_aus_stundenrows(ganzer_monat)
@@ -46,14 +53,19 @@ class TagesBilanz:
     """Σ-über-Stunden-Bilanz eines Zeitfensters. Alle kWh additiv über Tage."""
 
     # Additive kWh-Summen (Σ stündlicher kW × 1 h)
-    erzeugung_kwh: float            # = Σ pv_kw (registry: erzeugung)
+    erzeugung_kwh: float            # = Σ pv_kw (registry: erzeugung); 0.0 auch wenn
+                                    #   KEINE Stunde einen PV-Wert trug — dafür
+                                    #   steht `pv_erfasst`, s. u.
     gesamtverbrauch_kwh: float      # = Σ verbrauch_kw
     einspeisung_kwh: float
     netzbezug_kwh: float
     ueberschuss_kwh: float          # = Σ max(0, pv − verbrauch)
     defizit_kwh: float              # = Σ max(0, verbrauch − pv)
     direktverbrauch_kwh: float      # = Σ min(pv, verbrauch)
-    eigenverbrauch_kwh: float       # = erzeugung − einspeisung (PV-Eigenverbrauch)
+    # = erzeugung − einspeisung (PV-Eigenverbrauch). `None`, wenn keine einzige
+    # Stunde einen PV-Wert trug: eine Differenz ohne Minuenden ist keine Zahl,
+    # sondern eine Lücke (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`).
+    eigenverbrauch_kwh: Optional[float]
     speicher_ladung_kwh: float      # = Σ max(0, −batterie_kw)
     speicher_entladung_kwh: float   # = Σ max(0,  batterie_kw)
     wp_strom_kwh: float             # = Σ waermepumpe_kw
@@ -63,11 +75,17 @@ class TagesBilanz:
     speicher_effizienz_prozent: Optional[float]
     # Datenqualität
     stunden: int
+    # True, sobald EINE Stunde `pv_kw is not None` trug. Trennt „0 kWh
+    # gemessen" (Nacht/Schnee/Anlage aus — gültig) von „PV nirgends erfasst"
+    # (kein kWh-Zähler je Erzeuger — Lücke). Wer eine PV-abhängige Größe
+    # anzeigt, prüft dieses Feld, nicht `erzeugung_kwh > 0`.
+    pv_erfasst: bool = False
 
 
 def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring)."""
     pv_sum = 0.0
+    pv_erfasst = False
     verbrauch_sum = 0.0
     einspeisung_sum = 0.0
     netzbezug_sum = 0.0
@@ -91,6 +109,7 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
         # NULL überspringt still (statt als 0 zu zählen) — wie get_monatsauswertung.
         if pv is not None:
             pv_sum += pv
+            pv_erfasst = True
         if verbrauch is not None:
             verbrauch_sum += verbrauch
         if einspeisung is not None:
@@ -114,7 +133,17 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
             elif batt > 0:
                 batt_entlade_sum += batt
 
-    eigenverbrauch = pv_sum - einspeisung_sum
+    # Eigenverbrauch ist eine DIFFERENZ — fehlt die Erzeugung ganz, ist die
+    # Richtung des Fehlers unbekannt und der Wert wird unterdrückt statt
+    # geraten (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Ohne diese Regel
+    # lieferte ein Tag mit gemessener Einspeisung, aber ohne PV-Zähler
+    # `0 − 25 = −25 kWh` (Forum kaba-kakao, 2026-08-07): ein physikalisch
+    # unmöglicher Wert, den keine Sicht als Lücke erkennen konnte.
+    #
+    # Träger ist `pv_erfasst`, NICHT `pv_sum > 0`: eine gemessene Null
+    # (Nacht, Schnee, Anlage aus) ist ein gültiger Wert und muss 0 bleiben
+    # ([[feedback_legacy_felder]] — `is not None` statt `if val`).
+    eigenverbrauch = (pv_sum - einspeisung_sum) if pv_erfasst else None
     # Quoten über den SoT (kennzahlen-Layer); None statt 0 wenn Nenner fehlt,
     # damit die UI '—' statt '0 %' zeigt.
     autarkie = (
@@ -123,7 +152,7 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     )
     ev_quote = (
         eigenverbrauchsquote_prozent(eigenverbrauch, pv_sum)
-        if pv_sum > 0 else None
+        if pv_erfasst and eigenverbrauch is not None and pv_sum > 0 else None
     )
     speicher_eff = (
         batt_entlade_sum / batt_lade_sum * 100 if batt_lade_sum > 0.1 else None
@@ -145,4 +174,5 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
         ev_quote_prozent=ev_quote,
         speicher_effizienz_prozent=speicher_eff,
         stunden=n,
+        pv_erfasst=pv_erfasst,
     )

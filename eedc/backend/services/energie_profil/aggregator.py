@@ -423,6 +423,7 @@ async def aggregate_day(
     temp_values = []
     strahlung_summe = 0.0
     pv_ertrag_summe = 0.0
+    pv_ertrag_erfasst = False  # mind. eine Stunde mit gemessener PV — s. PR unten
     gti_summe = 0.0  # kWp-gewichtete GTI (Wh/m²) über den Tag — für PR (#139)
     gti_stunden_count = 0
     soc_values = []
@@ -484,6 +485,7 @@ async def aggregate_day(
             # Performance-Ratio = reine PV-Qualität (Ertrag vs. GTI) → den in `pv`
             # enthaltenen Sonstiges-Erzeuger-Anteil (BHKW, kein GTI-Bezug) abziehen.
             pv_ertrag_summe += pv_kw - (sonstige_erz_kw or 0.0)
+            pv_ertrag_erfasst = True
 
         peak_pv = max(peak_pv, pv_kw_w)
         peak_bezug = max(peak_bezug, netzbezug_kw_w)
@@ -586,9 +588,13 @@ async def aggregate_day(
     # als GHI — mit GHI liefen PR-Werte im Winter künstlich auf 1.5–2.8
     # (Issue #139). Ohne GTI (keine PV-Module, API-Fehler) bleibt PR = None
     # statt einen physikalisch unsinnigen Wert zu liefern.
+    # Zweiter Fall derselben Regel: ohne EINE gemessene PV-Stunde ist der
+    # Zähler dieses Bruchs kein Ertrag, sondern eine Lücke — die PR liefe sonst
+    # auf 0,0 und der Daten-Checker meldete „auffällig niedrig" für eine Anlage,
+    # die schlicht keinen PV-Zähler je Erzeuger hat (Forum kaba-kakao 2026-08-07).
     performance_ratio = None
     kwp = anlage.leistung_kwp
-    if kwp and kwp > 0 and gti_summe > 0:
+    if kwp and kwp > 0 and gti_summe > 0 and pv_ertrag_erfasst:
         theoretisch_kwh = gti_summe * kwp / 1000  # Wh/m² × kWp / 1000
         if theoretisch_kwh > 0:
             performance_ratio = round(pv_ertrag_summe / theoretisch_kwh, 3)

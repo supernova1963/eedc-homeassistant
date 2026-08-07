@@ -32,7 +32,8 @@ interface ChartPunkt {
   tag: number
   /** ISO-Datum des Tages — Drill-in-Ziel (B3, Balken-Klick → Cockpit/Tag). */
   datum: string
-  eigenverbrauch: number
+  /** `null` = an dem Tag keine PV erfasst (Lücke im Balken statt einer 0). */
+  eigenverbrauch: number | null
   einspeisung: number
   netzbezug: number
   direktverbrauch: number
@@ -52,7 +53,9 @@ export function baueChartDaten(tage: TagWerte[]): ChartPunkt[] {
     .map((t) => ({
       tag: Number(t.datum.slice(8, 10)),
       datum: t.datum,
-      eigenverbrauch: round1(t.eigenverbrauch),
+      // null bleibt null: der Chart zeigt eine Lücke statt einer 0-Fläche,
+      // wenn an dem Tag keine PV erfasst war.
+      eigenverbrauch: t.eigenverbrauch != null ? round1(t.eigenverbrauch) : null,
       einspeisung: round1(t.einspeisung),
       netzbezug: round1(t.netzbezug),
       direktverbrauch: round1(t.direktverbrauch),

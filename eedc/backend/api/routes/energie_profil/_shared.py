@@ -319,13 +319,19 @@ class TagWerteResponse(BaseModel):
     datum: date
     stunden_verfuegbar: int = 0
     datenquelle: Optional[str] = None
-    # Energie (additive kWh) — Registry-Keys
-    erzeugung: float = 0.0
+    # Energie (additive kWh) — Registry-Keys.
+    # `erzeugung`/`eigenverbrauch` sind `None`, wenn für den Tag keine einzige
+    # Stunde einen PV-Wert trug (kein kWh-Zähler je Erzeuger — z. B. wenn die PV
+    # nur als Anlagen-Aggregat gepflegt ist, das den Monat versorgt und nicht die
+    # Tagesebene). Eine 0 wäre dort eine Behauptung; beim Eigenverbrauch entstand
+    # daraus sogar ein negativer Wert. SoT der Regel:
+    # `docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`, Träger `TagesBilanz.pv_erfasst`.
+    erzeugung: Optional[float] = None
     # R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == PV+BKW-Anteil der
     # Erzeugung; ein evtl. sonstiger Erzeuger/BHKW steckt zusätzlich in `erzeugung`).
     pv_anlage: float = 0.0
     bkw: float = 0.0
-    eigenverbrauch: float = 0.0
+    eigenverbrauch: Optional[float] = None
     einspeisung: float = 0.0
     netzbezug: float = 0.0
     gesamtverbrauch: float = 0.0
@@ -358,7 +364,9 @@ class TagWerteResponse(BaseModel):
     # Tagesebene nicht gemessen — dieser Wert enthält sie deshalb **nicht**.
     # Bis 2026-07-31 stand hier `erzeugung × Faktor` (F-6): das schrieb auch der
     # eingespeisten kWh die volle Netzstrom-Vermeidung gut.
-    co2_einsparung: float = 0.0
+    # None, wenn der Eigenverbrauch nicht erfasst ist (s. `eigenverbrauch`) —
+    # ohne ihn gibt es keine CO₂-Aussage, keine 0.
+    co2_einsparung: Optional[float] = None
     # ── Tag-native Zusatzmetriken (kein Monats-Registry-Pendant) ──
     ueberschuss_kwh: Optional[float] = None
     defizit_kwh: Optional[float] = None

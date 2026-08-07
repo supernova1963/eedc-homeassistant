@@ -256,7 +256,12 @@ class EnergieprofilChecks:
                     "Komponenten leer. Betroffen sind Prognosen-IST, Heatmap, "
                     "Lernfaktor und Monatsberichte. Zuzuordnen unter "
                     "Einstellungen → Datenquellen (die kWh-Zeilen, nicht nur die "
-                    "Watt-Zeilen). Details: " + "; ".join(details_parts)
+                    "Watt-Zeilen). Ein Anlagen-Gesamtzähler ersetzt das nicht — "
+                    "er versorgt die Monatswerte, nicht die Tages- und "
+                    "Stundenebene. Liefert ein Gerät nur Leistung (W), baut Home "
+                    "Assistant unter Helfer → „Integral-Sensor“ (Riemannsche "
+                    "Summe) einen kWh-Zähler daraus. Details: "
+                    + "; ".join(details_parts)
                 ),
                 link=LINK_DATENQUELLEN,
             ))

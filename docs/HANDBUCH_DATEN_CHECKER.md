@@ -523,6 +523,17 @@ homeassistant:
 5. Zuordnung speichern.
 6. Daten-Checker erneut prüfen.
 
+> **Ein Anlagen-Gesamtzähler ersetzt die Zähler je Komponente nicht.** Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* versorgt die **Monatswerte**: eedc verteilt die Anlagensumme auf die Strings, die keinen eigenen Wert haben. **Tages- und Stundenwerte** entstehen dagegen ausschließlich aus einem kumulativen Zähler **je Erzeuger**. Fehlt der, bleibt Cockpit → Tag ohne PV — die Einspeisung ist dann trotzdem gemessen, und Eigenverbrauch, Performance Ratio und CO₂ zeigen „—" statt einer Zahl.
+
+**Wenn dein Wechselrichter je String nur Leistung (W) liefert:** Daraus baut Home Assistant selbst einen Zähler.
+
+1. **Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → „Integral-Sensor"** (Riemannsche Summe) wählen.
+2. Als **Eingangssensor** den Leistungssensor des Strings angeben, **Integrationsmethode Trapez**, **metrisches Präfix „k"** und **Zeiteinheit „Stunden"** — so entsteht ein kWh-Wert. Keinen Zyklus einstellen.
+3. Den neuen Helfer in eedc beim jeweiligen Erzeuger in der Zeile *PV-Erzeugung (kWh)* zuordnen.
+4. Danach die Zuordnung *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* entfernen, damit jede Zahl aus einer Quelle kommt.
+
+> Auch dieser Helfer **fängt bei null an** — Tageswerte entstehen ab dem Anlegen, rückwirkend geht es nicht. Bereits erfasste Monatswerte bleiben unverändert.
+
 > **Hinweis:** Ordnest du einen kWh-Sensor ohne Standard-Metadaten zu (kein `state_class`), erscheint er in §4.9 — siehe Workflow 5.1. Der Sensor-Picker in den Datenquellen warnt beim Zuordnen bereits vor fehlender Langzeitstatistik.
 
 ### 5.3 Monatsdaten-Lücken aufholen

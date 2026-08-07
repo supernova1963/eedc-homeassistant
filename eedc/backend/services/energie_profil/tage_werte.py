@@ -182,12 +182,16 @@ async def baue_tage_werte(
             datum=tag,
             stunden_verfuegbar=(tz.stunden_verfuegbar if tz else bilanz.stunden),
             datenquelle=(tz.datenquelle if tz else None),
-            # Energie
-            erzeugung=round(bilanz.erzeugung_kwh, 3),
+            # Energie. `erzeugung` ist None, solange keine Stunde einen PV-Wert
+            # trug — eine 0 wäre hier nicht „nichts erzeugt", sondern „nicht
+            # gemessen" (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`). Betrifft
+            # Anlagen, deren PV nur als Anlagen-Aggregat gepflegt ist: das
+            # versorgt den Monat, nicht die Tagesebene.
+            erzeugung=(round(bilanz.erzeugung_kwh, 3) if bilanz.pv_erfasst else None),
             # PV/BKW-Split (R17/Verlauf) aus dem Tages-komponenten_kwh-JSON.
             pv_anlage=round(summe_pv_anlage_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
             bkw=round(summe_bkw_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
-            eigenverbrauch=round(bilanz.eigenverbrauch_kwh, 3),
+            eigenverbrauch=_r(bilanz.eigenverbrauch_kwh, 3),
             einspeisung=round(bilanz.einspeisung_kwh, 3),
             netzbezug=round(bilanz.netzbezug_kwh, 3),
             gesamtverbrauch=round(bilanz.gesamtverbrauch_kwh, 3),
@@ -195,7 +199,10 @@ async def baue_tage_werte(
             # Quoten
             autarkie=_r(bilanz.autarkie_prozent, 1),
             evQuote=_r(bilanz.ev_quote_prozent, 1),
-            spezErtrag=(round(bilanz.erzeugung_kwh / kwp, 2) if kwp > 0 else None),
+            spezErtrag=(
+                round(bilanz.erzeugung_kwh / kwp, 2)
+                if kwp > 0 and bilanz.pv_erfasst else None
+            ),
             # Speicher (None wenn kein Lade-/Entlade-Geschehen)
             speicher_ladung=_nz(bilanz.speicher_ladung_kwh),
             speicher_entladung=_nz(bilanz.speicher_entladung_kwh),
@@ -218,11 +225,16 @@ async def baue_tage_werte(
             # Tagesebene bestimmbar (s. Modul-Docstring). WP-Strom wird bewusst
             # NICHT übergeben: ohne die zugehörige Wärmemenge wäre die
             # WP-Komponente rein negativ und damit eine Falschaussage.
-            co2_einsparung=round(
-                berechne_co2_bilanz(
-                    eigenverbrauch_kwh=bilanz.eigenverbrauch_kwh
-                ).co2_pv_kg,
-                1,
+            # Ohne erfassten Eigenverbrauch gibt es keine CO₂-Aussage — vorher
+            # wurde aus dem negativen Eigenverbrauch eine negative „Einsparung".
+            co2_einsparung=(
+                round(
+                    berechne_co2_bilanz(
+                        eigenverbrauch_kwh=bilanz.eigenverbrauch_kwh
+                    ).co2_pv_kg,
+                    1,
+                )
+                if bilanz.eigenverbrauch_kwh is not None else None
             ),
             # Tag-native
             ueberschuss_kwh=round(bilanz.ueberschuss_kwh, 3),
@@ -230,7 +242,13 @@ async def baue_tage_werte(
             peak_pv_kw=(tz.peak_pv_kw if tz else None),
             peak_netzbezug_kw=(tz.peak_netzbezug_kw if tz else None),
             peak_einspeisung_kw=(tz.peak_einspeisung_kw if tz else None),
-            performance_ratio=(tz.performance_ratio if tz else None),
+            # PR ohne erfasste PV ist keine 0, sondern keine Aussage. Der
+            # Aggregator schreibt sie seit demselben Paket gar nicht mehr;
+            # diese Zeile deckt die Tage, die vorher schon eine 0 gespeichert
+            # haben — es gibt bewusst keinen Migrationslauf.
+            performance_ratio=(
+                tz.performance_ratio if (tz and bilanz.pv_erfasst) else None
+            ),
             batterie_vollzyklen=(tz.batterie_vollzyklen if tz else None),
             temperatur_min_c=(tz.temperatur_min_c if tz else None),
             temperatur_max_c=(tz.temperatur_max_c if tz else None),

@@ -92,3 +92,32 @@ describe('baueTagKpis — Autarkie-Rechenweg passt zum Prozentwert', () => {
     expect(k.berechnung).not.toContain('13')
   })
 })
+
+describe('baueTagKpis — ohne erfasste PV wird nichts behauptet', () => {
+  // Forum kaba-kakao (T89667 #109, 2026-08-07): PV nur als Anlagen-Aggregat
+  // zugeordnet ⇒ die Tagesebene hat keinen PV-Wert. Vorher stand dort
+  // „0 kWh · SOLL 40 kWh · 0 %" neben einem Eigenverbrauch von −25 kWh.
+  const ohnePv = () => tag({
+    erzeugung: null, eigenverbrauch: null, evQuote: null, spezErtrag: null,
+    einspeisung: 25, netzbezug: 0, gesamtverbrauch: 0, direktverbrauch: 0,
+  })
+
+  it('zeigt „—" statt 0 kWh bei Erzeugung und Eigenverbrauch', () => {
+    const kpis = baueTagKpis(ohnePv(), null)
+    expect(kachel(kpis, 'PV-Erzeugung')!.value).toBe('—')
+    expect(kachel(kpis, 'PV-Eigenverbrauch')!.value).toBe('—')
+    // Die gemessene Einspeisung bleibt sichtbar — sie ist kein Teil der Lücke.
+    expect(kachel(kpis, 'Einspeisung')!.value).toBe('25')
+  })
+
+  it('nennt das SOLL, aber keine Erfüllung in Prozent', () => {
+    const k = kachel(baueTagKpis(ohnePv(), null, 40), 'PV-Erzeugung')!
+    expect(k.subtitle).toContain('SOLL 40 kWh')
+    expect(k.subtitle).not.toContain('%')
+  })
+
+  it('lässt den Vortag weg, wenn dessen Erzeugung nicht erfasst ist', () => {
+    const k = kachel(baueTagKpis(tag(), ohnePv()), 'PV-Erzeugung')!
+    expect(k.subtitle ?? '').not.toContain('VT:')
+  })
+})

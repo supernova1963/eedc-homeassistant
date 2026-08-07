@@ -80,12 +80,17 @@ export interface TagWerte {
   datum: string
   stunden_verfuegbar: number
   datenquelle: string | null
-  // Energie (kWh)
-  erzeugung: number
+  // Energie (kWh).
+  // `erzeugung`/`eigenverbrauch` sind `null`, wenn für den Tag keine Stunde
+  // einen PV-Wert trug — etwa wenn die PV nur als Anlagen-Aggregat gepflegt
+  // ist: das versorgt die Monatswerte, nicht die Tagesebene. Eine 0 wäre dort
+  // „nichts erzeugt" statt „nicht gemessen", und beim Eigenverbrauch entstand
+  // aus der Differenz zur gemessenen Einspeisung sogar ein negativer Wert.
+  erzeugung: number | null
   // R17/Verlauf-Vergleich: PV-Anlage vs. BKW getrennt (Σ == PV+BKW-Anteil).
   pv_anlage: number
   bkw: number
-  eigenverbrauch: number
+  eigenverbrauch: number | null
   einspeisung: number
   netzbezug: number
   gesamtverbrauch: number
@@ -109,7 +114,8 @@ export interface TagWerte {
   netto_ertrag: number
   netto_bilanz: number
   // CO₂
-  co2_einsparung: number
+  /** `null`, wenn der Eigenverbrauch nicht erfasst ist — ohne ihn keine CO₂-Aussage. */
+  co2_einsparung: number | null
   // Tag-native Zusatzmetriken (kein Monats-Pendant)
   ueberschuss_kwh: number | null
   defizit_kwh: number | null

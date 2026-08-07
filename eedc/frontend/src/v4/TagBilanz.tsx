@@ -42,10 +42,16 @@ export function baueTagKpis(
   sollPvKwh?: number | null,
   netzladung?: { kwh?: number | null; preis_cent?: number | null },
 ): KpiStripItem[] {
+  // Ohne erfasste Tages-Erzeugung bleibt das SOLL stehen, die Erfüllung aber
+  // leer — sonst stünde dort „0 %" für einen Tag, an dem nur nichts gemessen
+  // wurde (Forum kaba-kakao 2026-08-07).
   const sollTxt = sollPvKwh != null && sollPvKwh > 0
-    ? `SOLL ${fmt(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %` : null
+    ? (t.erzeugung != null
+        ? `SOLL ${fmt(sollPvKwh)} kWh · ${fmt((t.erzeugung / sollPvKwh) * 100)} %`
+        : `SOLL ${fmt(sollPvKwh)} kWh`)
+    : null
   const spezTxt = t.spezErtrag != null ? `${fmt(t.spezErtrag, 2)} kWh/kWp` : null
-  const vtTxt = vt ? `VT: ${fmt(vt.erzeugung)} kWh` : null
+  const vtTxt = vt && vt.erzeugung != null ? `VT: ${fmt(vt.erzeugung)} kWh` : null
 
   // R15-1: Kosten-Kacheln — nur wenn die Tagesdaten es hergeben. Netzladung-
   // Kosten brauchen den TEP-Tages-Ladepreis (#264); der Tages-Ø-Bezugspreis
@@ -302,7 +308,9 @@ export function TagBilanz({
           </Parkbar>
         )}
 
-        {t.eigenverbrauch != null && t.einspeisung != null && t.erzeugung > 0 && (
+        {/* Gate wortgleich in `bilanzParkIds.ts::tagBilanzParkIds` — eine
+            Parkbar, eine Bedingung ([[feedback_park_doktrin_atomar]]). */}
+        {t.eigenverbrauch != null && t.einspeisung != null && (t.erzeugung ?? 0) > 0 && (
           <Parkbar id="el:bilanz-verteilung" titel="PV-Verteilung">
             <VerteilungsBalken
               titel="PV-Verteilung"
