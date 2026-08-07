@@ -14,8 +14,12 @@
 #   5. Pusht eedc-homeassistant
 #   6. Synchronisiert shared Code nach eedc-Standalone-Repo
 #   7. Committed + taggt + pusht eedc
+#   8. Wartet, bis das Add-on-Image in ghcr.io liegt (scripts/warte-auf-image.sh)
 #
-# Ergebnis: Beide Repos auf gleicher Version, getaggt, gepusht.
+# Ergebnis: Beide Repos auf gleicher Version, getaggt, gepusht — UND das Image
+#           ist nachweislich ausgeliefert. Ein grüner Push allein ist kein
+#           ausgeliefertes Add-on (Nebenfund N-169): `eedc/config.yaml` zieht ein
+#           vorgebautes ghcr-Image, das ein Workflow erst NACH dem Tag baut.
 #
 # =============================================================================
 
@@ -57,6 +61,15 @@ echo ""
 # Richtiges Repo?
 if [ ! -f "eedc/config.yaml" ]; then
     echo -e "${RED}Fehler: Muss im eedc-homeassistant-Repo ausgeführt werden!${NC}"
+    exit 1
+fi
+
+# Schritt 7 braucht das Warte-Script. Die Prüfung steht bewusst HIER und nicht
+# erst unten: fehlt es, will man das vor dem Tag-Push wissen — danach wäre das
+# Release draußen und die Auslieferung ungeprüft, also genau die Lage aus N-169.
+if [ ! -x "$SCRIPT_DIR/warte-auf-image.sh" ]; then
+    echo -e "${RED}Fehler: scripts/warte-auf-image.sh fehlt oder ist nicht ausführbar.${NC}"
+    echo -e "${YELLOW}  Schritt 7 (Auslieferung abwarten) hängt daran. chmod +x nicht vergessen.${NC}"
     exit 1
 fi
 
@@ -188,7 +201,7 @@ echo ""
 # =============================================================================
 # SCHRITT 1: Version bumpen in eedc-homeassistant (alle 5 Dateien)
 # =============================================================================
-echo -e "${CYAN}[1/6] Version bumpen in eedc-homeassistant...${NC}"
+echo -e "${CYAN}[1/7] Version bumpen in eedc-homeassistant...${NC}"
 
 sed -i "s/^APP_VERSION = \".*\"/APP_VERSION = \"$VERSION\"/" eedc/backend/core/config.py
 echo "  eedc/backend/core/config.py         → $VERSION"
@@ -209,7 +222,7 @@ echo "  eedc/Dockerfile (Label)             → $VERSION"
 # SCHRITT 2: Frontend Build (damit dist/ die neue Version enthält)
 # =============================================================================
 echo ""
-echo -e "${CYAN}[2/6] Frontend Build...${NC}"
+echo -e "${CYAN}[2/7] Frontend Build...${NC}"
 
 # In-App-Hilfe-Inhalte aus docs/ refreshen, damit dist/ aktuell ist
 "$REPO_DIR/scripts/sync-help.sh"
@@ -228,7 +241,7 @@ cd "$REPO_DIR"
 # SCHRITT 3: CHANGELOG + README synchronisieren (Root → eedc/)
 # =============================================================================
 echo ""
-echo -e "${CYAN}[3/6] CHANGELOG + README synchronisieren...${NC}"
+echo -e "${CYAN}[3/7] CHANGELOG + README synchronisieren...${NC}"
 
 if [ -f "CHANGELOG.md" ]; then
     cp CHANGELOG.md eedc/CHANGELOG.md
@@ -257,7 +270,7 @@ fi
 # SCHRITT 4: Commit + Tag + Push eedc-homeassistant
 # =============================================================================
 echo ""
-echo -e "${CYAN}[4/6] Commit + Tag + Push eedc-homeassistant...${NC}"
+echo -e "${CYAN}[4/7] Commit + Tag + Push eedc-homeassistant...${NC}"
 
 # Nur einkehren, was dieses Script oben selbst geschrieben hat — kein `git add -A`.
 # Erhebung der Schreibstellen (Stand 2026-08-03, Nebenfund N-56):
@@ -295,7 +308,7 @@ echo -e "${GREEN}  eedc-homeassistant v$VERSION gepusht.${NC}"
 # SCHRITT 5: Sync shared Code → eedc-Standalone
 # =============================================================================
 echo ""
-echo -e "${CYAN}[5/6] Sync nach eedc-Standalone...${NC}"
+echo -e "${CYAN}[5/7] Sync nach eedc-Standalone...${NC}"
 
 # eedc-Mirror VOR dem Sync auf origin-Stand bringen. Der Mirror ist ein
 # reiner Spiegel (nur release.sh schreibt). Ein lokal veralteter Stand
@@ -344,7 +357,7 @@ echo "  Shared Files kopiert"
 # SCHRITT 6: Commit + Tag + Push eedc-Standalone
 # =============================================================================
 echo ""
-echo -e "${CYAN}[6/6] Commit + Tag + Push eedc-Standalone...${NC}"
+echo -e "${CYAN}[6/7] Commit + Tag + Push eedc-Standalone...${NC}"
 
 cd "$EEDC_STANDALONE"
 
@@ -385,12 +398,9 @@ echo -e "${GREEN}  eedc v$VERSION gepusht.${NC}"
 cd "$REPO_DIR"
 
 echo ""
-echo -e "${BOLD}============================================${NC}"
-echo -e "${GREEN}  Release v$VERSION abgeschlossen!${NC}"
-echo -e "${BOLD}============================================${NC}"
-echo ""
-echo -e "  eedc-homeassistant: v$VERSION gepusht + getaggt"
-echo -e "  eedc (Standalone):  v$VERSION gepusht + getaggt"
+echo -e "${CYAN}Beide Repos sind gepusht + getaggt:${NC}"
+echo -e "  eedc-homeassistant: v$VERSION"
+echo -e "  eedc (Standalone):  v$VERSION"
 echo ""
 
 # Versionsprüfung
@@ -415,5 +425,41 @@ check_version "$EEDC_STANDALONE/backend/core/config.py"         '(?<=APP_VERSION
 check_version "$EEDC_STANDALONE/frontend/src/config/version.ts"  "(?<=APP_VERSION = ')[^']*"
 
 echo ""
-echo "GitHub Releases werden automatisch per Workflow erstellt (Tag-Push Trigger)."
+
+# =============================================================================
+# SCHRITT 7: Auf die Auslieferung warten
+# =============================================================================
+# Bis hierher ist NICHTS beim Anwender angekommen. `eedc/config.yaml` zieht ein
+# vorgebautes ghcr-Image, das der Release-Workflow erst nach dem Tag-Push baut —
+# und der Add-on-Store zeigt die neue Version schon währenddessen an. Wer hier
+# aufhört, meldet einen Erfolg, den er nicht geprüft hat: am 2026-08-06 blieb
+# das Fenster wegen einer GitHub-Actions-Störung sechs Stunden offen, und drei
+# Anwender liefen mit `[404] manifest unknown` hinein (Nebenfund N-169).
+#
+# Das Warten steht bewusst in einem eigenen Script: nach einer Störung will man
+# nur noch warten und prüfen, ohne ein Release anzufassen.
+echo -e "${CYAN}[7/7] Auslieferung abwarten...${NC}"
+echo -e "  Der Release-Workflow baut jetzt die Add-on-Images. Das dauert einige"
+echo -e "  Minuten; abbrechen mit Ctrl-C ist gefahrlos (das Release bleibt draußen)."
 echo ""
+
+WARTE_RC=0
+"$SCRIPT_DIR/warte-auf-image.sh" "$VERSION" || WARTE_RC=$?
+
+echo ""
+if [ "$WARTE_RC" = "0" ]; then
+    echo -e "${BOLD}============================================${NC}"
+    echo -e "${GREEN}  Release v$VERSION ist ausgeliefert!${NC}"
+    echo -e "${BOLD}============================================${NC}"
+    echo ""
+    echo -e "  Beide Repos getaggt + gepusht, Image für amd64 und aarch64 bereit."
+    echo -e "  Das GitHub-Release erstellt der Workflow im selben Lauf."
+    echo ""
+    echo -e "${YELLOW}  Nächster Schritt: ~/.claude/plans/auftrag-nachlauf-nach-release.md${NC}"
+    echo ""
+else
+    echo -e "${YELLOW}  Der Versions-Bump, die Commits und die Tags sind vollständig durch —${NC}"
+    echo -e "${YELLOW}  hier ist nichts zu wiederholen. Offen ist allein die Auslieferung.${NC}"
+    echo ""
+    exit "$WARTE_RC"
+fi

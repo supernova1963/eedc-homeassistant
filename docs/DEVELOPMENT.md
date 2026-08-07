@@ -118,7 +118,8 @@ Siehe [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) für Details.
 
 ## Versionierung
 
-Ein Release-Script bumpt alle Versionsdateien, committed, taggt, pusht und synchronisiert das Standalone-Repo:
+Ein Release-Script bumpt alle Versionsdateien, committed, taggt, pusht, synchronisiert das
+Standalone-Repo — und wartet zum Schluss, bis das Add-on-Image wirklich in der Registry liegt:
 
 ```bash
 ./scripts/release.sh <version>       # z. B. die nächste Patch-Nummer laut CHANGELOG
@@ -157,6 +158,21 @@ neue Version — ein Commit auf `main` genügt nicht.
 > längst ausgeliefertes Image als fehlend. Gemessen am 2026-08-07: `4.0.10` → **200**, `4.0.9` →
 > **200**, erfundene `4.0.99` → **404**. **Immer gegen die Vorversion und eine erfundene Version
 > gegenprüfen**, bevor ein Alarm daraus wird.
+>
+> **Von Hand braucht man das nur noch zur Diagnose.** `release.sh` ruft als Schritt 7
+> `scripts/warte-auf-image.sh <version>` auf, das genau diesen Abruf für **beide** Architekturen
+> wiederholt (alle 20 s, längstens 40 Minuten) und erst danach „ausgeliefert" meldet. Das Script
+> **weist sich vorher an der Vorversion aus** und bricht mit einer eigenen Meldung ab, wenn schon
+> die als fehlend gemeldet wird — dann ist der Prüfer kaputt, nicht das Release. Exit-Codes:
+> `0` ausgeliefert · `1` Wartezeit abgelaufen, Image fehlt wirklich · `2` Prüfer nicht
+> vertrauenswürdig · `130` per Ctrl-C abgebrochen. Nach einer Störung (Actions-Ausfall,
+> abgebrochener Build) startet man es **allein**, ohne das Release anzufassen:
+>
+> ```bash
+> gh run list --repo supernova1963/eedc-homeassistant --workflow Release --limit 5
+> gh run rerun <run-id> --repo supernova1963/eedc-homeassistant
+> ./scripts/warte-auf-image.sh <version>
+> ```
 
 ---
 
