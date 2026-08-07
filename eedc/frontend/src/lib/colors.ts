@@ -219,20 +219,42 @@ export const CHART_COLORS = {
  *  Das ist kein zweiter Farbsatz für eine zweite Rolle, sondern eine Skala **innerhalb**
  *  der Rolle `CHART_COLORS.strompreis`: dieselbe Größe, eingefärbt nach ihrem Abstand zum
  *  optimierten Tages-Ø. Deshalb bleibt die Mitte exakt die Rollenfarbe, und nur die beiden
- *  Enden weichen ab — `teuer` als abgesetzte Stufe derselben Familie, `guenstig` als die
- *  einzige echte Auszeichnung. Sie trägt Grün, weil genau das die Aussage des Blocks ist
- *  („diese Stunden sind billig"); ein Rot am oberen Ende wurde bewusst nicht genommen —
- *  es ist im SoT die Wärmepumpen-Identität und hieße hier fälschlich „Gefahr".
+ *  Enden weichen ab — `guenstig` in Grün, weil genau das die Aussage des Blocks ist
+ *  („diese Stunden sind billig"), `teuer` als Gegenpol dazu.
  *
  *  ⚠ **Die beiden Randstufen sind theme-abhängig, und zwar aus Messung, nicht aus
  *  Geschmack.** Eine feste Farbe je Stufe war die erste Fassung, und sie fiel in je einem
  *  Modus unter die 3:1-Schwelle für grafische Objekte (WCAG 1.4.11): Grün-500 erreicht auf
  *  Weiß nur 2,28:1, Purple-700 auf dunklem Grund nur 2,10:1. Beide Enden weichen deshalb
  *  **vom Hintergrund weg** statt in eine feste Richtung — im hellen Modus nach dunkel, im
- *  dunklen nach hell. Der Helligkeitsabstand zur Mitte bleibt dabei in beiden Modi
- *  vergleichbar (1,76:1 hell · 1,61:1 dunkel), was auf der Achse normal↔teuer zählt: Beide
- *  sind Lila, dort trägt allein die Helligkeit. Muster wie `CHART_ACHSEN.light/.dark`;
- *  gelesen über {@link usePreisstufenFarben}.
+ *  dunklen nach hell. Muster wie `CHART_ACHSEN.light/.dark`; gelesen über
+ *  {@link usePreisstufenFarben}.
+ *
+ *  ⚠ **`teuer` war bis v4.0.10 die dunklere bzw. hellere Stufe derselben Lila-Familie —
+ *  und das trug nicht.** Radiocarbonat hat es an der Legende gemeldet (T89667 #110,
+ *  2026-08-07, mit Bild): zwei Lila-Punkte von 8×12 px nebeneinander, für ihn nicht
+ *  unterscheidbar. Der Prüf-Blindfleck beim Bau war, jede Stufe nur **gegen den
+ *  Hintergrund** zu messen — Sichtbarkeit und Unterscheidbarkeit voneinander sind zwei
+ *  verschiedene Prüfungen, und nur die erste war gedeckt.
+ *
+ *  **Warum ein Farbton-Wechsel und nicht ein größerer Helligkeitsabstand:** Solange die
+ *  Mitte die Rollenfarbe Purple-500 bleibt, ist 3:1 zur Mitte **rechnerisch unerreichbar**
+ *  — eine Farbe, die 3:1 heller als die Mitte ist, steht praktisch auf dem Hintergrund
+ *  (15 Kandidaten durchgerechnet, bester Wert 2,35:1). Die Helligkeits-Achse ist
+ *  ausgereizt; die Unterscheidung muss über den Farbton laufen. Rot trägt zusätzlich die
+ *  Aussage: `guenstig` grün ↔ `teuer` rot liest sich ohne Legende.
+ *
+ *  ⚠ **Bewusste Nähe zu {@link COLORS}`.grid` (#b91c1c, Netzbezug), Regel 0a Stufe 3:**
+ *  Jedes Rot hat denselben Farbton wie das Netzbezug-Rot, der Abstand ist per Definition
+ *  0° und mit keiner Rot-Wahl auflösbar (gemessen: Kontrast 1,55:1 zu red-900). Tragfähig
+ *  ist sie, weil der Börsenpreis-Block **keine Netz-Serie enthält** — die beiden begegnen
+ *  sich in keinem Bild. Wer hier eine Verbrauchs- oder Netz-Serie ergänzt, löst die
+ *  Ausnahme auf und muss neu wählen.
+ *
+ *  ⚠ **Ehrlich zur Gegenrichtung:** im dunklen Modus sinkt der Helligkeitsabstand
+ *  `teuer`↔`guenstig` von 1,74:1 auf 1,20:1 (beide Randstufen müssen dort hell sein).
+ *  Getragen wird das vom Farbton-Abstand (142°) **und** davon, dass jeder Legendenpunkt
+ *  beschriftet ist — die Farbe ist nicht der einzige Informationsträger (WCAG 1.4.1).
  *
  *  Die Grenzen sind Daten, keine Farben: `guenstig` gilt unterhalb der anlagen-eigenen
  *  Günstig-Schwelle (Backend, ungekappt — nicht der auf fünf gedeckelte Rang), `teuer`
@@ -241,12 +263,12 @@ export const PREISSTUFEN_FARBEN = {
   light: {
     guenstig: '#16a34a',   // green-600 · 3,30:1 auf Weiß (green-500 wären 2,28:1)
     normal: '#a855f7',     // = CHART_COLORS.strompreis, in beiden Modi über 3:1
-    teuer: '#7e22ce',      // purple-700 · 6,98:1 — dunkler als die Mitte
+    teuer: '#7f1d1d',      // red-900 · 10,02:1 auf Weiß · 2,53:1 zur Mitte, Farbton 89° entfernt
   },
   dark: {
     guenstig: '#22c55e',   // green-500 · 6,44:1 auf dunklem Grund
     normal: '#a855f7',     // dieselbe Rollenfarbe — die Mitte wandert nicht
-    teuer: '#e879f9',      // fuchsia-400 · 5,97:1 — heller als die Mitte
+    teuer: '#fca5a5',      // red-300 · 7,73:1 auf dunklem Grund · 2,08:1 zur Mitte, Farbton 89° entfernt
   },
 } as const
 

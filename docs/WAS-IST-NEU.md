@@ -23,6 +23,14 @@ Jetzt versorgt dieser eine Zähler **Monat, Tag und Stunde** — als Summe deine
 
 > ⚠ **Fasse deine Dachseiten nicht zu einer Anlage zusammen, nur um Tageswerte zu bekommen.** eedc rechnet Prognose und SOLL je Ausrichtung — eine zusammengelegte Anlage bekäme über den ganzen Tag falsche Erwartungswerte, auch in den Prognose-Sensoren für Home Assistant.
 
+### Börsenpreis-Block: „über dem Durchschnitt" ist jetzt rot statt dunkellila
+
+Die drei Preisstufen im Block *Börsenpreis heute & morgen* waren zwei Lila-Töne und ein Grün — und die beiden Lila-Töne unterschieden sich nur in der Helligkeit. Auf vielen Monitoren waren sie damit nicht auseinanderzuhalten, in der kleinen Legende erst recht nicht.
+
+Jetzt liest sich die Skala von selbst: **grün** unter deiner Günstig-Schwelle, **lila** dazwischen, **rot** über dem Tagesdurchschnitt. An den Zahlen ändert sich nichts — nur an ihrer Farbe.
+
+Danke an *Radiocarbonat*, der es gemeldet hat.
+
 ### Cockpit → Tag behauptet keine PV-Zahlen mehr, die nicht gemessen sind
 
 Hat eine Anlage **gar keinen** kumulativen PV-Zähler — weder je Erzeuger noch für die Anlage —, steht in der Tagessicht jetzt „—" statt einer 0: nicht gemessen ist nicht dasselbe wie null. **Eine echte Null bleibt sichtbar** — eine verschneite Anlage hat 0 kWh erzeugt, und das ist eine Aussage.

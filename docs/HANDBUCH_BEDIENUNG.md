@@ -115,8 +115,8 @@ Die **animierten Flusslinien** zeigen Richtung und Stärke: Liniendicke und Anim
 **Börsenpreis heute & morgen** — ein eigener Block mit der **Day-Ahead-Kurve** über zwei Tage
 auf einer durchgehenden Zeitachse:
 
-- Die Linie ist **nach Preisniveau abgestuft**: grün unterhalb deiner Günstig-Schwelle, in der
-  Rollenfarbe zwischen Schwelle und Tagesdurchschnitt, abgesetzt darüber. Zusammenhängende
+- Die Linie ist **nach Preisniveau abgestuft**: **grün** unterhalb deiner Günstig-Schwelle,
+  **lila** zwischen Schwelle und Tagesdurchschnitt, **rot** darüber. Zusammenhängende
   günstige Stunden sind zusätzlich als Fläche hinterlegt.
 - Darüber drei Kennzahlen für **heute**: aktueller Preis, der **Ø ohne die 3 teuersten Stunden**
   (die Bezugsgröße) und die **Günstig-Schwelle** samt Anzahl der Stunden darunter. Es sind

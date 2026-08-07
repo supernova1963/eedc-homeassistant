@@ -213,13 +213,23 @@ describe('zeitumstellungHinweis', () => {
   })
 })
 
-// ── Die Stufenfarben müssen in ihrem Modus sichtbar sein ────────────────────
+// ── Die Stufenfarben müssen sichtbar UND voneinander unterscheidbar sein ────
 //
-// Die erste Fassung nahm je Stufe EINE feste Farbe. Gemessen fiel sie in je
-// einem Modus unter die 3:1-Schwelle für grafische Objekte (WCAG 1.4.11):
-// Grün-500 erreicht auf Weiß nur 2,28:1, Purple-700 auf dunklem Grund 2,10:1 —
-// im Screenshot war die teure Stufe im Dark Mode praktisch unsichtbar. Diese
-// Probe hält die Messung fest, statt sie einem Kommentar zu überlassen.
+// Zwei verschiedene Prüfungen, und genau das war der Blindfleck: gemessen wurde
+// beim Bau nur die erste.
+//
+// (1) Sichtbarkeit — Kontrast zum Hintergrund. Die erste Fassung nahm je Stufe
+//     EINE feste Farbe und fiel in je einem Modus unter die 3:1-Schwelle für
+//     grafische Objekte (WCAG 1.4.11): Grün-500 auf Weiß nur 2,28:1, Purple-700
+//     auf dunklem Grund 2,10:1 — dort war die teure Stufe praktisch unsichtbar.
+// (2) Unterscheidbarkeit — Abstand der Stufen ZUEINANDER, in Helligkeit und
+//     Farbton. Beide Randstufen können jede für sich gut sichtbar sein und
+//     trotzdem miteinander verschmelzen; genau so kam die Meldung von
+//     Radiocarbonat (T89667 #110, 2026-08-07): zwei Legendenpunkte von 8×12 px,
+//     beide kontrastreich, beide Lila, für ihn nicht auseinanderzuhalten.
+//
+// `check:design` deckt keine der beiden ab — er prüft die Herkunft aus der
+// Farb-SoT, nicht das Ergebnis. Diese Proben halten die Messung fest.
 
 /** Relative Leuchtdichte nach WCAG 2.1 (sRGB). */
 function leuchtdichte(hex: string): number {
@@ -231,6 +241,24 @@ function leuchtdichte(hex: string): number {
 function kontrast(a: string, b: string): number {
   const [hoch, tief] = [leuchtdichte(a), leuchtdichte(b)].sort((x, y) => y - x)
   return (hoch + 0.05) / (tief + 0.05)
+}
+
+/** Farbton (HSL-Hue) in Grad, 0–360. */
+function farbton(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  const max = Math.max(r, g, b)
+  const spanne = max - Math.min(r, g, b)
+  if (spanne === 0) return 0
+  const h = max === r ? ((g - b) / spanne) % 6
+    : max === g ? (b - r) / spanne + 2
+      : (r - g) / spanne + 4
+  return ((h * 60) % 360 + 360) % 360
+}
+
+/** Kürzester Abstand zweier Farbtöne auf dem Farbkreis (0–180 Grad). */
+function farbtonAbstand(a: string, b: string): number {
+  const d = Math.abs(farbton(a) - farbton(b))
+  return Math.min(d, 360 - d)
 }
 
 describe('PREISSTUFEN_FARBEN', () => {
@@ -245,10 +273,23 @@ describe('PREISSTUFEN_FARBEN', () => {
   })
 
   it.each(['light', 'dark'] as const)('trennt normal und teuer in %s hörbar', (modus) => {
-    // Beide sind Lila — auf dieser Achse trägt allein die Helligkeit. Unter 1,4
-    // verschwimmt die Stufe zu einer einzigen Farbe.
+    // ⚠ Diese Probe EXISTIERTE, als der Fehler gemeldet wurde — sie stand nur zu
+    // weich. Ihre Schwelle war 1,4; die beanstandeten Lila-Töne erreichten 1,76
+    // (hell) und 1,61 (dunkel) und liefen damit grün durch (T89667 #110,
+    // Radiocarbonat). Die Schwelle liegt jetzt ÜBER dem gemeldeten Ist-Wert —
+    // eine Schwelle unterhalb dessen, was ein Melder als ununterscheidbar
+    // beschreibt, prüft nichts.
     const { normal, teuer } = PREISSTUFEN_FARBEN[modus]
-    expect(kontrast(normal, teuer)).toBeGreaterThanOrEqual(1.4)
+    expect(kontrast(normal, teuer)).toBeGreaterThanOrEqual(2)
+  })
+
+  it.each(['light', 'dark'] as const)('trennt normal und teuer in %s auch im Farbton', (modus) => {
+    // Die zweite Hälfte der Prüfung, die beim Bau fehlte: Helligkeit ALLEIN kann
+    // die beiden nicht trennen, solange die Mitte die Rollenfarbe bleibt — 3:1
+    // zur Mitte ist dann rechnerisch unerreichbar, weil eine so viel hellere
+    // Farbe auf dem Hintergrund steht. Also muss der Farbton tragen.
+    const { normal, teuer } = PREISSTUFEN_FARBEN[modus]
+    expect(farbtonAbstand(normal, teuer)).toBeGreaterThanOrEqual(60)
   })
 
   it('lässt die Mitte in beiden Modi die Rollenfarbe des Strompreises sein', () => {
