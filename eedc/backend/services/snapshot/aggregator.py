@@ -37,6 +37,7 @@ from backend.services.snapshot.komponenten_beitraege import (
     investition_beitraege,
     investition_hourly_eintraege,
     mqtt_hourly_eintraege,
+    pv_je_investition_in_sensor_keys,
     resolve_either_or_eintraege,
 )
 from backend.services.snapshot.plausibility import (
@@ -111,6 +112,31 @@ async def get_hourly_kwh_by_category(
     eintraege: list[tuple[str, Optional[str], str, Optional[str]]] = []
     seen_keys: set[str] = set()
 
+    # 1a-vorab. Die MQTT-Keys werden schon HIER geholt, obwohl sie erst in 1b
+    # verarbeitet werden: die Alles-oder-nichts-Regel für `basis:pv_gesamt`
+    # (Stufe 1 zu F-7) muss BEIDE Quellen kennen, bevor der Basis-Beitrag
+    # entsteht. Eine gemischte Installation (Aggregat als HA-Sensor, Strings per
+    # MQTT) hätte sonst Aggregat UND Einzelzähler in derselben Bilanz — die
+    # #290/#298-Doppelzähl-Klasse. Nur geholt, nicht verarbeitet: die
+    # Vorrang-Reihenfolge (HA schlägt MQTT über `seen_keys`) bleibt unverändert.
+    cutoff = datetime.now() - timedelta(days=7)
+    mqtt_keys_result = await db.execute(
+        select(MqttEnergySnapshot.energy_key)
+        .where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= cutoff,
+            )
+        )
+        .distinct()
+    )
+    mqtt_sks_alle: list[str] = []
+    for (mqtt_key,) in mqtt_keys_result.all():
+        sk = _mqtt_key_to_sensor_key(mqtt_key)
+        if sk:
+            mqtt_sks_alle.append(sk)
+    pv_extern = pv_je_investition_in_sensor_keys(mqtt_sks_alle)
+
     # 1a. HA-gemappte Zähler aus sensor_mapping — Feld-Auswahl (Whitelist +
     # Either-Or + parent-Skip) über DIESELBE Normalisierung wie der Daily-Pfad
     # (`*_hourly_eintraege`), nicht mehr über rohe `_categorize_counter`-
@@ -119,7 +145,9 @@ async def get_hourly_kwh_by_category(
     # (`verbrauch_kwh` + `ladung_kwh`) wird in der Either-Or-Gruppe aufgelöst
     # statt doppelt summiert.
     basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(sensor_mapping):
+    for he in basis_hourly_eintraege(
+        sensor_mapping, pv_je_investition_extern=pv_extern
+    ):
         cfg = basis.get(he.feld)
         if isinstance(cfg, dict):
             eid = cfg.get("sensor_id")
@@ -146,31 +174,15 @@ async def get_hourly_kwh_by_category(
                     seen_keys.add(sk)
 
     # 1b. MQTT-gespeiste Zähler (Standalone/Docker-Modus ohne HA-Integration).
-    # Enumeriert Keys die in mqtt_energy_snapshots für diese Anlage vorkommen
-    # (Filter: letzte 7 Tage, um nur aktive Topics zu berücksichtigen).
-    cutoff = datetime.now() - timedelta(days=7)
-    mqtt_keys_result = await db.execute(
-        select(MqttEnergySnapshot.energy_key)
-        .where(
-            and_(
-                MqttEnergySnapshot.anlage_id == anlage.id,
-                MqttEnergySnapshot.timestamp >= cutoff,
-            )
-        )
-        .distinct()
-    )
-    # MQTT-Keys einsammeln (seen-gefiltert) und über DIESELBE Normalisierung wie
+    # Die Keys stehen schon oben bereit (`mqtt_sks_alle`, Filter: letzte 7 Tage,
+    # um nur aktive Topics zu berücksichtigen).
+    # Sie werden seen-gefiltert und über DIESELBE Normalisierung wie
     # der HA-Pfad oben auflösen (#317): inv-Keys laufen durch
     # `investition_hourly_eintraege` mit „MQTT-Key vorhanden" als Verfügbarkeit,
     # damit Whitelist + Either-Or + parent-Skip auch hier greifen. Ein E-Auto mit
     # ladung_kwh UND verbrauch_kwh per MQTT (evcc-Bridge) wird so in der Either-Or-
     # Gruppe aufgelöst statt doppelt gezählt — gleiche #298-Klasse, MQTT-Pfad.
-    mqtt_sks: list[str] = []
-    for (mqtt_key,) in mqtt_keys_result.all():
-        sk = _mqtt_key_to_sensor_key(mqtt_key)
-        if not sk or sk in seen_keys:
-            continue
-        mqtt_sks.append(sk)
+    mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
     for sk, kat, grp in mqtt_hourly_eintraege(
         mqtt_sks, investitionen_by_id, investitionen_map
     ):
@@ -493,7 +505,13 @@ async def get_komponenten_tageskwh(
 
     result: dict[str, float] = {}
 
-    # 1. Basis: einspeisung + netzbezug
+    # 1. Basis: einspeisung + netzbezug + PV gesamt (letzteres nur, wenn kein
+    #    Erzeuger einen eigenen Zähler trägt — s. `basis_beitraege`). Anders als
+    #    der Hourly-Pfad braucht diese Funktion KEINE MQTT-Gegenprobe: sie liest
+    #    ausschließlich über `_sensor_id_for` aus dem Mapping und überspringt
+    #    jedes Feld ohne `sensor_id` (`if not sid: continue`). Ein rein per MQTT
+    #    gespeister Zähler je Erzeuger existiert hier also gar nicht und kann
+    #    nichts verdrängen.
     basis_map = sensor_mapping.get("basis", {}) or {}
     await _apply_beitraege(
         basis_beitraege(sensor_mapping),

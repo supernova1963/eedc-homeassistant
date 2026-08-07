@@ -33,6 +33,7 @@ from backend.services.snapshot.komponenten_beitraege import (
     basis_hourly_eintraege,
     investition_hourly_eintraege,
     mqtt_hourly_eintraege,
+    pv_je_investition_in_sensor_keys,
     resolve_either_or_eintraege,
 )
 from backend.services.snapshot.writer import snapshot_anlage, snapshot_anlage_5min
@@ -99,8 +100,33 @@ async def get_reaggregate_preview(
     # sensor_key) bleibt quellen-agnostisch unverändert.
     quellen_energy = extract_quellen_energy(anlage)
 
+    # MQTT-Keys vorab (identisch zum Snapshot-Aggregator): die Alles-oder-nichts-
+    # Regel für `basis:pv_gesamt` (Stufe 1 zu F-7) muss BEIDE Quellen kennen,
+    # bevor der Basis-Eintrag entsteht — sonst zeigt die Vorschau bei gemischter
+    # Installation Aggregat UND Einzelzähler. Nur geholt, nicht verarbeitet;
+    # die `seen_keys`-Vorrangreihenfolge unten bleibt unverändert.
+    cutoff = datetime.now() - timedelta(days=7)
+    mqtt_keys_result = await db.execute(
+        select(MqttEnergySnapshot.energy_key)
+        .where(
+            and_(
+                MqttEnergySnapshot.anlage_id == anlage.id,
+                MqttEnergySnapshot.timestamp >= cutoff,
+            )
+        )
+        .distinct()
+    )
+    mqtt_sks_alle: list[str] = []
+    for (mqtt_key,) in mqtt_keys_result.all():
+        sk = _mqtt_key_to_sensor_key(mqtt_key)
+        if sk:
+            mqtt_sks_alle.append(sk)
+    pv_extern = pv_je_investition_in_sensor_keys(mqtt_sks_alle)
+
     basis = sensor_mapping.get("basis", {}) or {}
-    for he in basis_hourly_eintraege(sensor_mapping):
+    for he in basis_hourly_eintraege(
+        sensor_mapping, pv_je_investition_extern=pv_extern
+    ):
         cfg = basis.get(he.feld)
         if isinstance(cfg, dict):
             eid = cfg.get("sensor_id")
@@ -130,27 +156,11 @@ async def get_reaggregate_preview(
                                       he.kategorie, he.fallback_gruppe))
                     seen_keys.add(sk)
 
-    cutoff = datetime.now() - timedelta(days=7)
-    mqtt_keys_result = await db.execute(
-        select(MqttEnergySnapshot.energy_key)
-        .where(
-            and_(
-                MqttEnergySnapshot.anlage_id == anlage.id,
-                MqttEnergySnapshot.timestamp >= cutoff,
-            )
-        )
-        .distinct()
-    )
-    # MQTT-Keys über DIESELBE Normalisierung wie der HA-Pfad auflösen (#317),
-    # damit die Vorschau-Tabelle ein doppelt per MQTT gemapptes E-Auto (ladung_kwh
-    # + verbrauch_kwh) in der Either-Or-Gruppe auflöst statt doppelt summiert —
-    # deckungsgleich mit dem Snapshot-Hourly-Schreibwert.
-    mqtt_sks: list[str] = []
-    for (mqtt_key,) in mqtt_keys_result.all():
-        sk = _mqtt_key_to_sensor_key(mqtt_key)
-        if not sk or sk in seen_keys:
-            continue
-        mqtt_sks.append(sk)
+    # MQTT-Keys (oben geholt) über DIESELBE Normalisierung wie der HA-Pfad
+    # auflösen (#317), damit die Vorschau-Tabelle ein doppelt per MQTT gemapptes
+    # E-Auto (ladung_kwh + verbrauch_kwh) in der Either-Or-Gruppe auflöst statt
+    # doppelt summiert — deckungsgleich mit dem Snapshot-Hourly-Schreibwert.
+    mqtt_sks = [sk for sk in mqtt_sks_alle if sk not in seen_keys]
     for sk, kat, grp in mqtt_hourly_eintraege(
         mqtt_sks, investitionen_by_id, investitionen_map
     ):

@@ -41,8 +41,13 @@ def _anlage(sensor_mapping: dict):
 def test_field_id_to_sensor_key_translation():
     assert _energy_field_id_to_sensor_key("basis_energy_einspeisung_kwh") == "basis:einspeisung"
     assert _energy_field_id_to_sensor_key("basis_energy_netzbezug_kwh") == "basis:netzbezug"
-    # PV-gesamt hat KEINEN Basis-Snapshot-Counterpart (PV läuft pro Investition):
-    assert _energy_field_id_to_sensor_key("basis_energy_pv_gesamt_kwh") is None
+    # PV-gesamt HAT seit Stufe 1 zu F-7 (2026-08-07) einen Snapshot-Counterpart.
+    # Bis dahin stand hier `is None` — mit der Folge, dass eine Anlage mit EINEM
+    # Summenzähler und mehreren Ausrichtungen gar keine Tages-PV bekam (Forum
+    # kaba-kakao, T89667 #109). Ob der Zähler dann auch WIRKT, entscheidet die
+    # Alles-oder-nichts-Regel in `komponenten_beitraege.basis_beitraege` —
+    # nicht diese Übersetzung.
+    assert _energy_field_id_to_sensor_key("basis_energy_pv_gesamt_kwh") == "basis:pv_gesamt"
     assert _energy_field_id_to_sensor_key("inv_energy_2_pv_erzeugung_kwh") == "inv:2:pv_erzeugung_kwh"
     assert _energy_field_id_to_sensor_key("inv_energy_5_ladung_kwh") == "inv:5:ladung_kwh"
     # Reine Counter (WP-Starts) sind ebenfalls kumulativ → übersetzt:
@@ -61,11 +66,12 @@ def test_extract_quellen_energy_parst_energie_ignoriert_live():
         "inv_energy_5_ladung_kwh": {"quelle": "keine"},
         # Live-Feld → C2a, hier raus:
         "basis_live_netzbezug_w": {"quelle": "ha_app", "entity_id": "sensor.w"},
-        # PV-gesamt ohne Counterpart → raus:
+        # PV-gesamt hat seit Stufe 1 zu F-7 einen Counterpart → bleibt drin:
         "basis_energy_pv_gesamt_kwh": {"quelle": "ha_app", "entity_id": "sensor.pv"},
     }})
     qe = extract_quellen_energy(a)
     assert qe == {
+        "basis:pv_gesamt": ("ha_app", "sensor.pv"),
         "basis:einspeisung": ("ha_connector", "sensor.z"),
         "inv:2:pv_erzeugung_kwh": ("mqtt_inbound_standard", None),
         "inv:5:ladung_kwh": ("keine", None),

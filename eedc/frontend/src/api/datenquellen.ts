@@ -55,10 +55,29 @@ export interface DatenquelleFeld {
 
 /** Diagnostisches Zuordnungs-Problem (§2i) — rein informativ, keine Sperre. */
 export interface FeldProblem {
-  art: 'einheit' | 'state_class' | 'redundant' | 'doppelmapping' | 'takt'
+  /**
+   * ⚠ Diese Liste ist eine **Kopie** der Backend-Werte
+   * (`services/datenquellen_validierung.py`) und wird von nichts zusammen-
+   * gehalten. `teilweise_verdraengt` fehlte hier zunächst, weil schon sein
+   * Vorgänger `nur_monat` bei der Einführung nicht nachgetragen wurde —
+   * folgenlos nur deshalb, weil die Zeile `p.text` generisch rendert und
+   * einzig `redundant` einen Sonderweg hat. Belegfall für die offene
+   * Vokabular-Kopplung (N-35/N-40).
+   */
+  art:
+    | 'einheit'
+    | 'state_class'
+    | 'redundant'
+    | 'doppelmapping'
+    | 'takt'
+    | 'teilweise_verdraengt'
   schwere: 'error' | 'warning'
   text: string
-  /** nur art==='redundant': die wirksamen Komponenten-Felder. */
+  /**
+   * `redundant`: die wirksamen Komponenten-Felder.
+   * `teilweise_verdraengt`: umgekehrt die Erzeuger, denen der eigene Zähler
+   * FEHLT — sie sind der Weg aus der halben Zuordnung heraus.
+   */
   wirksame_felder?: string[]
   /** nur art==='doppelmapping'. */
   entity_id?: string

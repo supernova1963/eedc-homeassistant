@@ -22,7 +22,11 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable, Iterable, Optional
 
-from backend.services.snapshot.keys import _categorize_counter
+from backend.services.snapshot.keys import BASIS_ZAEHLER_FELDER, _categorize_counter
+
+# Das Feld, mit dem ein Erzeuger seinen EIGENEN kumulativen PV-Zähler trägt.
+# Gegenspieler des Anlagen-Aggregats `basis:pv_gesamt` (s. `basis_beitraege`).
+_PV_JE_INVESTITION_FELD = "pv_erzeugung_kwh"
 
 
 # Investitions-Typ → Komponenten-Key-Präfix in komponenten_kwh.
@@ -67,15 +71,115 @@ def _is_sensor_mapping(cfg) -> bool:
     )
 
 
-def basis_beitraege(sensor_mapping: dict) -> list[KomponentenBeitrag]:
-    """Einspeisung + Netzbezug aus dem basis-Mapping.
+def pv_je_investition_belegt_in_map(
+    investitionen_map: dict,
+    mqtt_felder_je_investition: Optional[dict[str, set[str]]] = None,
+) -> bool:
+    """Wie `pv_je_investition_belegt`, aber auf `sensor_mapping["investitionen"]`.
+
+    Zwei Einstiege, weil die Aufrufer verschieden tief stehen: die Aggregatoren
+    halten das ganze `sensor_mapping`, `mqtt_hourly_eintraege` bekommt nur den
+    Teilbaum durchgereicht. Eine der beiden Formen nachzubauen wäre die
+    Kopie, die hier vermieden werden soll.
+    """
+    if isinstance(investitionen_map, dict):
+        for inv_data in investitionen_map.values():
+            if not isinstance(inv_data, dict):
+                continue
+            felder = inv_data.get("felder") or {}
+            if _is_sensor_mapping(felder.get(_PV_JE_INVESTITION_FELD)):
+                return True
+    for felder_vorhanden in (mqtt_felder_je_investition or {}).values():
+        if _PV_JE_INVESTITION_FELD in felder_vorhanden:
+            return True
+    return False
+
+
+def pv_je_investition_belegt(
+    sensor_mapping: dict,
+    mqtt_felder_je_investition: Optional[dict[str, set[str]]] = None,
+) -> bool:
+    """Trägt mindestens ein Erzeuger einen EIGENEN kumulativen PV-Zähler?
+
+    Die Frage entscheidet, ob der Anlagen-Zählerstand `basis:pv_gesamt` auf der
+    Tages-/Stundenebene mitzählt (s. `basis_beitraege`). Sie ist bewusst
+    **quellen-übergreifend** gestellt: ein Erzeuger kann seinen Zähler als
+    HA-Sensor im `sensor_mapping` haben **oder** ihn per MQTT publizieren, ohne
+    im Mapping aufzutauchen — der MQTT-/Standalone-Pfad leitet Verfügbarkeit
+    seit #317 ausdrücklich aus den gesehenen Topics ab
+    (`mqtt_hourly_eintraege`). Wer nur das Mapping befragt, zählt bei einer
+    gemischten Installation (Aggregat aus HA, Strings aus MQTT) doppelt.
+
+    Args:
+        sensor_mapping: `anlage.sensor_mapping`.
+        mqtt_felder_je_investition: `{inv_id: {feld, …}}` der zuletzt per MQTT
+            gesehenen Felder — optional, weil der HA-LTS-Pfad keine MQTT-Zähler
+            kennt und dort auch keine sehen kann.
+    """
+    return pv_je_investition_belegt_in_map(
+        (sensor_mapping or {}).get("investitionen") or {},
+        mqtt_felder_je_investition,
+    )
+
+
+def pv_je_investition_in_sensor_keys(sensor_keys: Iterable[str]) -> bool:
+    """Trägt einer der `sensor_key`s einen eigenen PV-Zähler je Erzeuger?
+
+    Die Form, die die beiden Snapshot-Aufrufer brauchen: sie halten die
+    MQTT-Keys bereits als flache `inv:<id>:<feld>`-Liste und müssen die
+    Alles-oder-nichts-Frage stellen, **bevor** sie den Basis-Beitrag bauen
+    (s. `basis_beitraege`).
+    """
+    suffix = f":{_PV_JE_INVESTITION_FELD}"
+    return any(
+        sk.startswith("inv:") and sk.endswith(suffix) for sk in sensor_keys
+    )
+
+
+def basis_beitraege(
+    sensor_mapping: dict,
+    *,
+    pv_je_investition_extern: bool = False,
+) -> list[KomponentenBeitrag]:
+    """Basis-Zähler aus dem `basis`-Mapping (`BASIS_ZAEHLER_FELDER`).
 
     Liefert für jeden konfigurierten Basis-Zähler einen `+1`-Beitrag mit
-    Target-Key = Feldname (`einspeisung` / `netzbezug`).
+    Target-Key = Feldname (`einspeisung` / `netzbezug` / `pv_gesamt`).
+
+    **`pv_gesamt` gilt alles-oder-nichts** (Stufe 1 zu F-7, 2026-08-07): der
+    Anlagen-Zählerstand zählt nur mit, solange KEIN Erzeuger einen eigenen
+    `pv_erzeugung_kwh`-Zähler trägt. Genau so hält es der Live-Pfad seit jeher
+    (`live_tagesverlauf_service:267` / `live_history_service:341`,
+    `not has_individual_pv`) — dieselbe Regel, damit dieselbe Anlage in Live
+    und Tag nicht verschieden rechnet.
+
+    Warum nicht anteilig auffüllen wie im Monat? `resolve_pv_je_modul` (P7)
+    darf das, weil es einer Investition einen Wert **zuweist**. Hier gibt es
+    diesen Adressaten nicht: `komponenten_kwh` kennt nur einen flachen
+    Keyspace, und `summe_pv_bkw_kwh` summiert **alles** mit Präfix `pv_`.
+    Stünde `pv_gesamt` neben `pv_7`, wäre die Anlagensumme neben ihrem eigenen
+    Summanden gebucht — die Doppelzähl-Klasse aus #290/#298. Eine
+    kWp-Verteilung auf Tagesebene ist ausdrücklich verworfen (Entscheid Gernot
+    2026-08-07): sie erfände Messwerte, die niemand gemessen hat.
+
+    ⚠ **Folge für die Oberfläche:** wer einem von mehreren Erzeugern einen
+    eigenen Zähler zuordnet, schaltet das Aggregat für Tag und Stunde ab und
+    sieht danach nur noch die gemessenen Erzeuger. Die Zuordnungs-Fläche muss
+    das sagen — `datenquellen_validierung.finde_aggregat_teilweise_verdraengt`
+    warnt genau in dieser Lage.
+
+    Args:
+        sensor_mapping: `anlage.sensor_mapping`.
+        pv_je_investition_extern: True, wenn der Aufrufer aus einer Quelle
+            **außerhalb** des Mappings weiß, dass ein Erzeuger seinen eigenen
+            PV-Zähler hat (MQTT-Topics). Siehe `pv_je_investition_belegt`.
     """
     beitraege: list[KomponentenBeitrag] = []
     basis = (sensor_mapping or {}).get("basis", {}) or {}
-    for feld in ("einspeisung", "netzbezug"):
+    pv_verdraengt = pv_je_investition_extern or pv_je_investition_belegt(sensor_mapping)
+    for feld in BASIS_ZAEHLER_FELDER:
+        if feld == "pv_gesamt" and pv_verdraengt:
+            continue
         cfg = basis.get(feld)
         if _is_sensor_mapping(cfg):
             beitraege.append(KomponentenBeitrag(feld=feld, target_key=feld))
@@ -317,13 +421,21 @@ class HourlyEintrag:
     fallback_gruppe: Optional[str] = None
 
 
-def basis_hourly_eintraege(sensor_mapping: dict) -> list[HourlyEintrag]:
-    """Hourly-Einträge der Basis-Zähler (Einspeisung/Netzbezug).
+def basis_hourly_eintraege(
+    sensor_mapping: dict,
+    *,
+    pv_je_investition_extern: bool = False,
+) -> list[HourlyEintrag]:
+    """Hourly-Einträge der Basis-Zähler (Einspeisung/Netzbezug/PV gesamt).
 
-    Spiegelt `basis_beitraege` auf die Energiefluss-Kategorie-Ebene.
+    Spiegelt `basis_beitraege` auf die Energiefluss-Kategorie-Ebene —
+    einschließlich der Alles-oder-nichts-Regel für `pv_gesamt`; das Flag wird
+    unverändert durchgereicht.
     """
     out: list[HourlyEintrag] = []
-    for b in basis_beitraege(sensor_mapping):
+    for b in basis_beitraege(
+        sensor_mapping, pv_je_investition_extern=pv_je_investition_extern
+    ):
         kat = _categorize_counter(b.feld, None, None)
         if kat:
             out.append(HourlyEintrag(feld=b.feld, kategorie=kat,
@@ -378,8 +490,15 @@ def mqtt_hourly_eintraege(
     `investition_hourly_eintraege` mit „MQTT-Key vorhanden" als Verfügbarkeits-
     Quelle → Whitelist + Either-Or + parent-Skip greifen identisch zum HA-Pfad.
 
-    Basis-Keys (Einspeisung/Netzbezug) haben keinen Either-Or-Partner und werden
-    direkt kategorisiert (`fallback_gruppe=None`).
+    Basis-Keys haben keinen Either-Or-Partner und werden direkt kategorisiert
+    (`fallback_gruppe=None`). **Ausnahme `basis:pv_gesamt`** (Stufe 1 zu F-7):
+    der Anlagen-Zählerstand fällt weg, sobald ein Erzeuger seinen eigenen
+    PV-Zähler trägt — geprüft über BEIDE Quellen (`sensor_mapping` und die hier
+    gesehenen MQTT-Keys), s. `pv_je_investition_belegt`.
+
+    ⚠ Die Verdrängung ist **keine** Either-Or-Gruppe: `resolve_either_or_eintraege`
+    ist 1-aus-n und würde bei zwei Modulen plus Aggregat eines der beiden
+    Module verlieren. Hier ist die Regel n-schlägt-1.
 
     Args:
         mqtt_sensor_keys: bereits via `_mqtt_key_to_sensor_key` aufgelöste,
@@ -401,8 +520,12 @@ def mqtt_hourly_eintraege(
             _, inv_id, feld = sk.split(":", 2)
             inv_felder.setdefault(inv_id, set()).add(feld)
 
+    pv_verdraengt = pv_je_investition_belegt_in_map(investitionen_map, inv_felder)
+
     out: list[tuple[str, str, Optional[str]]] = []
     for feld in basis_felder:
+        if feld == "pv_gesamt" and pv_verdraengt:
+            continue
         kat = _categorize_counter(feld, None, None)
         if kat:
             out.append((f"basis:{feld}", kat, None))

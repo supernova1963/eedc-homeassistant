@@ -11,13 +11,21 @@
 
 ## Unveröffentlicht
 
+### Ein PV-Zähler für die ganze Anlage reicht jetzt auch für die Tagessicht
+
+Wenn deine PV **nur** über den Anlagen-Zählerstand gepflegt ist (*Einstellungen → Datenquellen → Anlage (Basis) → PV-Erzeugung Zählerstand*) — typisch, wenn dein Wechselrichter nur eine Summe über mehrere Dachseiten liefert —, stimmten bisher nur deine **Monatswerte**. In *Cockpit → Tag* stand `0 kWh` PV neben deiner gemessenen Einspeisung, und daraus wurde ein **negativer Eigenverbrauch**, eine Performance Ratio von 0 % und eine negative CO₂-Einsparung.
+
+Jetzt versorgt dieser eine Zähler **Monat, Tag und Stunde** — als Summe deiner ganzen Anlage. Tagesbilanz, Eigenverbrauch, spezifischer Ertrag, Performance Ratio, CO₂ und der Stundenverlauf füllen sich, **auch rückwirkend** und ohne dass du etwas einrichten musst.
+
+**Was der eine Zähler nicht kann, ist die Aufschlüsselung je Dachseite.** Dafür braucht jeder Erzeuger einen eigenen Zähler — und dann **alle**: Sobald ein einziger selbst misst, zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist, und der Anlagenwert ist dort aus. Sonst würde die Anlagensumme neben ihren eigenen Bestandteilen stehen und alles doppelt gezählt. **Entweder alle oder keiner** — deine Monatswerte bleiben in jedem Fall vollständig. Machst du es halb, sagt es dir die Datenquellen-Seite.
+
+**Was du tun kannst, wenn dein Wechselrichter je String nur Leistung liefert:** In Home Assistant unter *Helfer → Helfer erstellen → „Integral-Sensor"* (Riemannsche Summe) **für jeden** String einen kWh-Zähler bauen — Methode **Trapez**, Präfix **k**, Zeiteinheit **Stunden**, kein Zyklus — und diese beim jeweiligen Erzeuger zuordnen. Beachte: Ein neuer Helfer **beginnt bei null**, Tageswerte entstehen ab dem Anlegen; für die Vergangenheit bleibt der Anlagen-Zählerstand die bessere Quelle.
+
+> ⚠ **Fasse deine Dachseiten nicht zu einer Anlage zusammen, nur um Tageswerte zu bekommen.** eedc rechnet Prognose und SOLL je Ausrichtung — eine zusammengelegte Anlage bekäme über den ganzen Tag falsche Erwartungswerte, auch in den Prognose-Sensoren für Home Assistant.
+
 ### Cockpit → Tag behauptet keine PV-Zahlen mehr, die nicht gemessen sind
 
-Wenn deine PV **nur** über den Anlagen-Zählerstand gepflegt ist (*Einstellungen → Datenquellen → Anlage (Basis) → PV-Erzeugung Zählerstand*), stimmen deine **Monatswerte** — eedc verteilt die Anlagensumme auf die Strings. **Tages- und Stundenwerte** entstehen dagegen nur aus einem Zähler **je Erzeuger**. Bislang stand in der Tagessicht deshalb `0 kWh` PV neben deiner gemessenen Einspeisung, und daraus wurde ein **negativer Eigenverbrauch**, eine Performance Ratio von 0 % und eine negative CO₂-Einsparung.
-
-Jetzt steht dort „—": nicht gemessen ist nicht dasselbe wie null. **Eine echte Null bleibt sichtbar** — eine verschneite Anlage hat 0 kWh erzeugt, und das ist eine Aussage.
-
-**Was du tun kannst, wenn dein Wechselrichter je String nur Leistung liefert:** In Home Assistant unter *Helfer → Helfer erstellen → „Integral-Sensor"* (Riemannsche Summe) je String einen kWh-Zähler bauen — Methode **Trapez**, Präfix **k**, Zeiteinheit **Stunden**, kein Zyklus — und diesen beim jeweiligen Erzeuger zuordnen. Die Datenquellen-Seite und der Daten-Checker weisen jetzt auf diesen Weg hin, statt „bereits an anderer Stelle zugeordnet" zu melden. Beachte: Ein neuer Helfer **beginnt bei null**, Tageswerte entstehen ab dem Anlegen.
+Hat eine Anlage **gar keinen** kumulativen PV-Zähler — weder je Erzeuger noch für die Anlage —, steht in der Tagessicht jetzt „—" statt einer 0: nicht gemessen ist nicht dasselbe wie null. **Eine echte Null bleibt sichtbar** — eine verschneite Anlage hat 0 kWh erzeugt, und das ist eine Aussage.
 
 ---
 

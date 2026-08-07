@@ -35,13 +35,19 @@ from backend.core.field_definitions import einheit_klasse
 #                     entsteht dort NUR mit `leistung_w` (`val_w is None` →
 #                     `continue`, :107). Ein einziges belegtes `leistung_w`
 #                     macht das Live-Aggregat wirkungslos.
-#   PV gesamt (kWh) — Monat. Das Feld landet über `basis["pv_gesamt"]` in
-#                     `Monatsdaten.pv_erzeugung_kwh` und ist damit der EINGANG
-#                     von `resolve_pv_je_modul`: es füllt die Lücken der Module
-#                     OHNE eigenen Wert. Wirkungslos ist es erst, wenn es keine
-#                     Lücke mehr gibt — sonst rät die Fläche, genau die Quelle
-#                     abzuschalten, aus der die Anlagensumme kommt (Stufe 3 →
-#                     QUELLE_FEHLT → 0 für die ganze Anlage).
+#   PV gesamt (kWh) — Monat UND (seit 2026-08-07) Tag/Stunde. Das Feld landet
+#                     über `basis["pv_gesamt"]` in `Monatsdaten.pv_erzeugung_kwh`
+#                     und ist damit der EINGANG von `resolve_pv_je_modul`: es
+#                     füllt die Lücken der Module OHNE eigenen Wert. Auf der
+#                     Tagesebene gilt eine ANDERE Regel — dort ist es
+#                     alles-oder-nichts (`snapshot/komponenten_beitraege.
+#                     basis_beitraege`), weil `komponenten_kwh` einen flachen
+#                     Keyspace hat und die Anlagensumme nicht neben ihre eigenen
+#                     Summanden gebucht werden darf. Wirkungslos ist das Feld
+#                     erst, wenn es im Monat keine Lücke mehr gibt — sonst rät
+#                     die Fläche, genau die Quelle abzuschalten, aus der die
+#                     Anlagensumme kommt (Stufe 3 → QUELLE_FEHLT → 0 für die
+#                     ganze Anlage).
 #   Netz kombi      — `_collect_values`: kombi nur wenn einspeisung_w UND
 #                     netzbezug_w fehlen → ≥1 Split-Feld belegt = wirkungslos.
 #
@@ -61,55 +67,74 @@ _NETZ_AGGREGAT_FELDER = {"netz_kombi_w"}
 _NETZ_KOMPONENTEN_FELDER = {"einspeisung_w", "netzbezug_w"}
 
 
-def finde_aggregat_ohne_tageszaehler(felder: list[dict]) -> dict[str, dict]:
-    """Anlagen-PV-Zählerstand, der die Tagesebene nicht erreichen kann (F-7).
+def finde_aggregat_teilweise_verdraengt(felder: list[dict]) -> dict[str, dict]:
+    """Anlagen-PV-Zählerstand, den ein **halber** Umbau auf Einzelzähler abschaltet.
 
-    Gegenstück zu `finde_redundante_aggregate`: dort ist das Aggregat
-    **wirkungslos**, weil jede Komponente ihren eigenen Wert hat — hier ist es
-    **wirksam, aber nur für den Monat**. Die Tages-/Stundenebene entsteht
-    ausschließlich aus kumulativen Zählern je Komponente; `basis_energy_pv_gesamt_kwh`
-    hat kein Snapshot-Gegenstück (`snapshot/keys.py::_energy_field_id_to_sensor_key`
-    liefert dafür `None`, `BASIS_ZAEHLER_FELDER` kennt nur Einspeisung/Netzbezug).
+    Dritte Lage neben `finde_redundante_aggregate` (jede Komponente hat ihren
+    eigenen Wert ⇒ das Aggregat ist wirkungslos) und dem stillen Normalfall
+    (keine Komponente hat einen ⇒ das Aggregat trägt die ganze Anlage).
 
-    Gemeldet wird **nur**, wenn die betroffene Komponente einen belegten
-    Leistungssensor hat: dann lässt sich in Home Assistant ein Integral-Sensor
-    daraus bauen und der Anwender kann die Lage auflösen. Wer nur einen
-    Summenzähler besitzt, konfiguriert nichts falsch und bekommt deshalb kein
-    Warndreieck, sondern den Hinweistext an der Komponenten-Zeile
-    (`_PV_AGGREGAT_NUR_MONAT_TEXT`) — sonst wäre es der reflexhafte
-    Fehlerhinweis, den wir sonst vermeiden ([[feedback_user_fehlermeldungen]]).
+    ⚠ **Diese Funktion hat am 2026-08-07 ihre Richtung umgedreht.** Sie hieß bis
+    dahin `finde_aggregat_ohne_tageszaehler` und meldete, dass der
+    Anlagen-Zählerstand die Tagesebene *gar nicht* erreicht — das war der
+    F-7-Befund (Forum kaba-kakao, T89667 #109). Mit Stufe 1 erreicht er sie:
+    `basis:pv_gesamt` ist ein Snapshot-Zähler der Kategorie `pv`
+    (`snapshot/keys.py::BASIS_ZAEHLER_FELDER`). Damit ist die alte Meldung für
+    die häufigste Lage falsch geworden — und die neue Lage ist die gefährlichere:
+
+    **Die Regel ist alles-oder-nichts** (`komponenten_beitraege.basis_beitraege`,
+    identisch zum Live-Pfad). Sobald EIN Erzeuger einen eigenen
+    `pv_erzeugung_kwh`-Zähler trägt, zählt das Aggregat für Tag und Stunde nicht
+    mehr mit — die Tagessumme fällt dann auf die gemessenen Erzeuger zurück und
+    ist still zu niedrig. Genau dahin führt der gut gemeinte halbe Umbau, den
+    die Fläche selbst empfiehlt.
+
+    Gemeldet wird also, wenn **beides** zutrifft: das Aggregat ist belegt UND
+    mindestens ein Erzeuger hat einen eigenen Zähler UND mindestens einer hat
+    keinen. Trägt keiner einen eigenen Zähler, ist die Anlage vollständig
+    versorgt und bekommt kein Warndreieck, sondern nur den Hinweistext an den
+    Komponenten-Zeilen (`_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT`) — warnen nur, wo
+    etwas kaputt ist ([[feedback_user_fehlermeldungen]]).
 
     `felder`: wie `finde_redundante_aggregate` — ALLE Felder aller aktiven
     Investitionen, auch die unbelegten.
-    Returns {aggregat_field_id: {"art":"nur_monat","schwere":"warning","grund","text"}}.
+    Returns {aggregat_field_id: {"art":"teilweise_verdraengt","schwere":"warning",…}}.
     """
-    lueckenhafte_typen = {
-        f.get("typ") for f in felder
+    ohne_zaehler = [
+        f for f in felder
         if f.get("typ") in _PV_KOMPONENTEN_TYPEN
         and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
         and not f.get("belegt")
-    }
-    if not lueckenhafte_typen:
+    ]
+    if not ohne_zaehler:
         return {}  # keine Lücke ⇒ `finde_redundante_aggregate` ist zuständig
-    mit_leistung = [
+    mit_zaehler = [
         f for f in felder
         if f.get("belegt") and f.get("typ") in _PV_KOMPONENTEN_TYPEN
-        and f.get("feld") == _PV_KOMPONENTEN_FELD_LIVE
+        and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
     ]
-    if not mit_leistung:
-        return {}  # nicht auflösbar ⇒ kein Warndreieck
+    if not mit_zaehler:
+        # Kein Erzeuger misst selbst ⇒ das Aggregat trägt die Tagesebene
+        # vollständig. Nichts kaputt, kein Warndreieck.
+        return {}
     out: dict[str, dict] = {}
     for f in felder:
         if (f.get("belegt") and f.get("typ") == "basis"
                 and f.get("feld") == _PV_AGGREGAT_FELD_MONAT):
             out[f["id"]] = {
-                "art": "nur_monat", "schwere": "warning", "grund": "pv_aggregat_tagesebene",
-                "wirksame_felder": [k["id"] for k in mit_leistung],
-                "text": "Deckt die Monatswerte — Tages- und Stundenwerte entstehen "
-                        "nur aus einem Zähler je Erzeuger. Für die Leistungs-Sensoren "
-                        "deiner Erzeuger baut Home Assistant unter Helfer → "
-                        "„Integral-Sensor“ (Riemannsche Summe) einen kWh-Zähler; "
-                        "diesen dann beim jeweiligen Erzeuger zuordnen.",
+                "art": "teilweise_verdraengt", "schwere": "warning",
+                "grund": "pv_aggregat_tagesebene",
+                "wirksame_felder": [k["id"] for k in ohne_zaehler],
+                "text": "Für Tag und Stunde zählt der Anlagen-Zählerstand nicht "
+                        "mehr mit, weil einzelne Erzeuger einen eigenen Zähler "
+                        "haben — dort gilt entweder der Anlagenwert oder die "
+                        "Einzelwerte, nie beides. Die Tagessumme ist damit zu "
+                        "niedrig. Entweder allen Erzeugern einen eigenen Zähler "
+                        "zuordnen (Home Assistant baut aus einem Leistungssensor "
+                        "unter Helfer → „Integral-Sensor“ / Riemannsche Summe "
+                        "einen kWh-Zähler), oder die vorhandenen Einzelzähler "
+                        "entfernen. Die Monatswerte sind in beiden Fällen "
+                        "vollständig.",
             }
     return out
 
@@ -289,15 +314,27 @@ _VERDRAENGT_TEXT = {
 _VERDRAENGT_TYP = {"keine_wallbox": "wallbox", "keine_pv_module": "pv-module"}
 
 # Sonderfall der Gruppe `pv_energie`, wenn sie AUSSCHLIESSLICH durch den
-# Anlagen-Zählerstand belegt ist: „bereits an anderer Stelle zugeordnet" wäre
-# dann nur für die Monatswerte wahr. Die Tages-/Stundenebene entsteht aus
-# kumulativen Zählern **je Komponente** (`snapshot/keys.py`: das Aggregat hat
-# kein Snapshot-Gegenstück) — der Satz führte den Anwender also von der einzigen
-# Zuordnung weg, die ihm Tageswerte bringt (Forum kaba-kakao, T89667 #109).
-_PV_AGGREGAT_NUR_MONAT_TEXT = (
-    "Über den Anlagen-Zählerstand für die Monatswerte abgedeckt. Tages- und "
-    "Stundenwerte entstehen nur aus einem eigenen Zähler je Komponente — "
-    "hier zuordnen, wenn du sie brauchst."
+# Anlagen-Zählerstand belegt ist: „bereits an anderer Stelle zugeordnet" sagt
+# nicht, was ein eigener Zähler noch bringen würde — und seit Stufe 1 zu F-7
+# auch nicht, was er kostet.
+#
+# ⚠ **Text am 2026-08-07 zum zweiten Mal überarbeitet.** Die F-7-Fassung sagte
+# „Tages- und Stundenwerte entstehen nur aus einem eigenen Zähler je
+# Komponente"; das stimmte, solange das Aggregat die Tagesebene nicht erreichte.
+# Mit Stufe 1 erreicht es sie — die Anlagensumme steht in Tag und Stunde. Was
+# ein eigener Zähler noch hinzufügt, ist die **Aufschlüsselung** je Erzeuger.
+#
+# Und er kostet etwas, deshalb steht die Bedingung im Satz: die Regel ist
+# alles-oder-nichts (`komponenten_beitraege.basis_beitraege`). Wer EINEM von
+# mehreren Erzeugern einen Zähler zuordnet, schaltet die Anlagensumme für Tag
+# und Stunde ab und sieht danach weniger als vorher. Ein Hinweis, der dazu rät
+# und das verschweigt, führt in genau diese Falle.
+_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT = (
+    "Über den Anlagen-Zählerstand abgedeckt — als Summe der ganzen Anlage, "
+    "auch für Tag und Stunde. Ein eigener Zähler hier schlüsselt zusätzlich "
+    "je Erzeuger auf. Dann brauchen ihn aber alle Erzeuger: sobald einer "
+    "gemessen wird, zählt für Tag und Stunde nur noch, was je Erzeuger "
+    "gemessen ist."
 )
 
 _GRUPPEN_TEXT = {
@@ -320,7 +357,7 @@ def stufe_bedarf_ein(
     Returns {field_id: {"bedarf": …, "grund": …|None, "text": …|None}}.
     """
     # Nicht nur WELCHE Gruppe belegt ist, sondern WOMIT: beim PV-Energie-Paar
-    # deckt der Anlagen-Zählerstand nur den Monat ab (s. `_PV_AGGREGAT_NUR_MONAT_TEXT`).
+    # deckt der Anlagen-Zählerstand nur den Monat ab (s. `_PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT`).
     belegt_je_gruppe: dict[str, list[dict]] = {}
     for f in felder:
         gruppe_f = f.get("bedarf_gruppe")
@@ -360,7 +397,7 @@ def stufe_bedarf_ein(
                     and f.get("feld") == _PV_KOMPONENTEN_FELD_MONAT
                     and all(b.get("typ") == "basis"
                             for b in belegt_je_gruppe.get(gruppe, ()))):
-                text = _PV_AGGREGAT_NUR_MONAT_TEXT
+                text = _PV_AGGREGAT_NUR_ANLAGENSUMME_TEXT
             out[fid] = {
                 "bedarf": "inaktiv", "grund": f"gruppe:{gruppe}",
                 "text": text,

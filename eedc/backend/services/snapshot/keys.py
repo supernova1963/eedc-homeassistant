@@ -62,7 +62,29 @@ KUMULATIVE_COUNTER_FELDER: dict[str, tuple[str, ...]] = {
 # Eine Quelle der Wahrheit für daily- + hourly-Aggregator (#238).
 FLOAT_COUNTER_FELDER: frozenset[str] = frozenset({"wp_betriebsstunden"})
 
-BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug")
+# Basis-Zähler mit Snapshot-Gegenstück.
+#
+# `pv_gesamt` ist seit 2026-08-07 dabei (Stufe 1 zu F-7, Forum kaba-kakao
+# T89667 #109). Vorher versorgte der Anlagen-Zählerstand ausschließlich den
+# **Monat** (`basis["pv_gesamt"]` → `Monatsdaten.pv_erzeugung_kwh`, Eingang von
+# `resolve_pv_je_modul`, ADR-002/P7); die Tages- und Stundenebene entstand nur
+# aus Zählern **je Erzeuger**. Wer eine Anlage mit EINEM Summenzähler und
+# mehreren Ausrichtungen betreibt, hatte damit gar keine Tages-PV — und die
+# Tagesbilanz rechnete daraus einen negativen Eigenverbrauch (F-7).
+#
+# Der naheliegende Ausweg „alles als EINE Investition erfassen" ist verboten:
+# `services/pv_orientation.py` gruppiert je Investition nach (Neigung, Azimut)
+# und nennt die Folge im Docstring wörtlich — ein systematisch falscher
+# Tagesgang für den gesamten Prognose-Kanon inkl. HA-Prognose-Sensoren und
+# PVGIS-SOLL. Deshalb bekommt das Aggregat einen eigenen Zählerpfad, statt die
+# Anlagenstruktur zu verbiegen.
+#
+# **Alles-oder-nichts, kein Split:** der Beitrag entsteht nur, wenn KEIN
+# Erzeuger einen eigenen `pv_erzeugung_kwh`-Zähler trägt — Regel und
+# Begründung in `komponenten_beitraege.pv_je_investition_belegt`. Eine
+# kWp-Verteilung auf Tagesebene ist ausdrücklich nicht vorgesehen (Entscheid
+# Gernot 2026-08-07, festgehalten in `docs/BERECHNUNGEN.md`).
+BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug", "pv_gesamt")
 
 
 # MQTT-Energy-Topic-Keys → sensor_snapshots.sensor_key Mapping.
@@ -71,7 +93,12 @@ BASIS_ZAEHLER_FELDER: tuple[str, ...] = ("einspeisung", "netzbezug")
 _MQTT_BASIS_KEYS: dict[str, str] = {
     "einspeisung_kwh": "basis:einspeisung",
     "netzbezug_kwh": "basis:netzbezug",
+    "pv_gesamt_kwh": "basis:pv_gesamt",
 }
+
+# Umkehrung von `_MQTT_BASIS_KEYS` — abgeleitet statt zweitgeschrieben, damit
+# ein neuer Basis-Zähler nicht in genau einer Richtung fehlt.
+_BASIS_SENSOR_KEYS: dict[str, str] = {v: k for k, v in _MQTT_BASIS_KEYS.items()}
 
 
 def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
@@ -99,10 +126,8 @@ def _mqtt_key_to_sensor_key(mqtt_key: str) -> Optional[str]:
 
 def _sensor_key_to_mqtt_key(sensor_key: str) -> Optional[str]:
     """Umkehrung von _mqtt_key_to_sensor_key."""
-    if sensor_key == "basis:einspeisung":
-        return "einspeisung_kwh"
-    if sensor_key == "basis:netzbezug":
-        return "netzbezug_kwh"
+    if sensor_key in _BASIS_SENSOR_KEYS:
+        return _BASIS_SENSOR_KEYS[sensor_key]
     if sensor_key.startswith("inv:"):
         parts = sensor_key.split(":", 2)
         if len(parts) == 3:
@@ -140,8 +165,15 @@ def _energy_field_id_to_sensor_key(field_id: str) -> Optional[str]:
     kein zweites Mapping driftet: `basis_energy_einspeisung_kwh` → (mqtt
     `einspeisung_kwh`) → `basis:einspeisung`; `inv_energy_2_pv_erzeugung_kwh` →
     (mqtt `inv/2/pv_erzeugung_kwh`) → `inv:2:pv_erzeugung_kwh`. Felder ohne
-    Snapshot-Counterpart (z. B. `basis_energy_pv_gesamt_kwh` — PV läuft pro
-    Investition) liefern None und werden ignoriert.
+    Snapshot-Counterpart (Preis-Felder, Live-Felder) liefern None und werden
+    ignoriert.
+
+    ⚠ **`basis_energy_pv_gesamt_kwh` gehörte bis 2026-08-07 zu diesen Feldern**
+    und liefert seither `basis:pv_gesamt` — der Anlagen-Zählerstand hat mit
+    Stufe 1 zu F-7 ein Snapshot-Gegenstück bekommen (Begründung an
+    `BASIS_ZAEHLER_FELDER`). Wer den alten Satz sucht: er stand hier, in
+    `datenquellen_mapping_sync.BASIS_ENERGY_FELD` und in
+    `tests/test_datenquellen_resolver_c2b.py`.
     """
     if field_id.startswith("basis_energy_"):
         return _mqtt_key_to_sensor_key(field_id[len("basis_energy_"):])
@@ -246,6 +278,15 @@ def _categorize_counter(
             return "einspeisung"
         if feld == "netzbezug":
             return "netzbezug"
+        if feld == "pv_gesamt":
+            # Der Anlagen-Zählerstand trägt dieselbe Größe wie die Summe der
+            # Erzeuger-Zähler und gehört deshalb in dieselbe Kategorie. Dass
+            # beide nie gleichzeitig gezählt werden, entscheidet NICHT diese
+            # Funktion, sondern die Feld-Auswahl davor (`basis_beitraege` /
+            # `mqtt_hourly_eintraege`) — seit #298 ist `_categorize_counter`
+            # kein Whitelist-Gatekeeper mehr, sondern nur noch die Abbildung
+            # Feld → Kategorie.
+            return "pv"
         return None
 
     if inv_typ in ("pv-module", "balkonkraftwerk") and feld == "pv_erzeugung_kwh":

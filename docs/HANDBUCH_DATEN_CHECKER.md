@@ -523,16 +523,21 @@ homeassistant:
 5. Zuordnung speichern.
 6. Daten-Checker erneut prüfen.
 
-> **Ein Anlagen-Gesamtzähler ersetzt die Zähler je Komponente nicht.** Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* versorgt die **Monatswerte**: eedc verteilt die Anlagensumme auf die Strings, die keinen eigenen Wert haben. **Tages- und Stundenwerte** entstehen dagegen ausschließlich aus einem kumulativen Zähler **je Erzeuger**. Fehlt der, bleibt Cockpit → Tag ohne PV — die Einspeisung ist dann trotzdem gemessen, und Eigenverbrauch, Performance Ratio und CO₂ zeigen „—" statt einer Zahl.
+#### Ein Anlagen-Gesamtzähler reicht — aber dann für alle
 
-**Wenn dein Wechselrichter je String nur Leistung (W) liefert:** Daraus baut Home Assistant selbst einen Zähler.
+Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* versorgt **Monat, Tag und Stunde** als **Summe der ganzen Anlage**. Wenn dein Wechselrichter nur einen Gesamtzähler liefert, ist das eine vollständige Erfassung — du musst nichts weiter einrichten. Was dir fehlt, ist die **Aufschlüsselung je Erzeuger**: eedc kann dann nicht sagen, wie viel „Dach Süd" und wie viel „Dach West" beigetragen hat.
+
+> ⚠ **Entweder die Anlagensumme oder die Einzelwerte — nie beides.** Sobald **ein** Erzeuger einen eigenen kWh-Zähler bekommt, zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist; der Anlagen-Zählerstand ist dort dann aus. Ordnest du also einem von drei Strings einen Zähler zu, siehst du in Cockpit → Tag nur noch diesen einen. **Entweder alle oder keiner.** (Grund: sonst stünde die Anlagensumme neben ihren eigenen Bestandteilen und alles würde doppelt gezählt.) Deine **Monatswerte** bleiben in jedem Fall vollständig.
+
+**Wenn du je String aufschlüsseln willst und dein Wechselrichter dort nur Leistung (W) liefert:** Daraus baut Home Assistant selbst einen Zähler.
 
 1. **Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → „Integral-Sensor"** (Riemannsche Summe) wählen.
 2. Als **Eingangssensor** den Leistungssensor des Strings angeben, **Integrationsmethode Trapez**, **metrisches Präfix „k"** und **Zeiteinheit „Stunden"** — so entsteht ein kWh-Wert. Keinen Zyklus einstellen.
-3. Den neuen Helfer in eedc beim jeweiligen Erzeuger in der Zeile *PV-Erzeugung (kWh)* zuordnen.
-4. Danach die Zuordnung *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* entfernen, damit jede Zahl aus einer Quelle kommt.
+3. Schritt 1 und 2 **für jeden Erzeuger** wiederholen — ein halb erledigter Umbau kostet dich die übrigen (siehe Kasten oben).
+4. Die neuen Helfer in eedc beim jeweiligen Erzeuger in der Zeile *PV-Erzeugung (kWh)* zuordnen.
+5. Danach die Zuordnung *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* entfernen, damit jede Zahl aus einer Quelle kommt.
 
-> Auch dieser Helfer **fängt bei null an** — Tageswerte entstehen ab dem Anlegen, rückwirkend geht es nicht. Bereits erfasste Monatswerte bleiben unverändert.
+> Auch dieser Helfer **fängt bei null an** — Tageswerte entstehen ab dem Anlegen, rückwirkend geht es nicht. Bereits erfasste Monatswerte bleiben unverändert. Solange die Helfer noch keine Historie haben, ist der Anlagen-Zählerstand für die Vergangenheit die bessere Quelle.
 
 > **Hinweis:** Ordnest du einen kWh-Sensor ohne Standard-Metadaten zu (kein `state_class`), erscheint er in §4.9 — siehe Workflow 5.1. Der Sensor-Picker in den Datenquellen warnt beim Zuordnen bereits vor fehlender Langzeitstatistik.
 

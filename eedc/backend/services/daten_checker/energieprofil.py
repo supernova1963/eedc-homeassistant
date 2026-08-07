@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
+from backend.services.snapshot.komponenten_beitraege import pv_je_investition_belegt
 from backend.utils.investition_filter import sort_investitionen_nach_typ
 from backend.core.investition_parameter import (
     ist_dienstlich,
@@ -172,6 +173,25 @@ class EnergieprofilChecks:
         fehlend_pro_komponente: list[tuple[str, str, list[str]]] = []
         gemappt_count = 0   # über Sensor-Mapping abgedeckt
         quelle_count = 0    # über manuelle/importierte Datenquelle abgedeckt
+        aggregat_count = 0  # über den Anlagen-Gesamtzähler abgedeckt
+
+        # Achse C (Stufe 1 zu F-7, 2026-08-07): der Anlagen-Zählerstand
+        # `basis["pv_gesamt"]` ist seit diesem Paket ein Snapshot-Zähler und
+        # trägt Tag und Stunde für die **ganze** Anlage. Eine PV-Komponente ohne
+        # eigenen Zähler ist damit nicht mehr ungedeckt — ihre Erzeugung steckt
+        # in der Anlagensumme, nur die Aufschlüsselung je Erzeuger fehlt.
+        #
+        # Die Bedingung ist DIESELBE wie im Aggregator (alles-oder-nichts, SoT
+        # `snapshot/komponenten_beitraege.pv_je_investition_belegt`): sobald ein
+        # Erzeuger selbst misst, ist das Aggregat für Tag/Stunde abgeschaltet —
+        # dann sind die übrigen Erzeuger wirklich ungedeckt und die Warnung
+        # bleibt richtig. Ohne diese Kopplung widerspräche sich die Anwendung
+        # erneut: die Datenquellen-Fläche meldete „vollständig", der Checker
+        # „Komponente ohne Abdeckung" — genau der F-7-Befund, nur seitenverkehrt.
+        pv_aggregat_deckt = (
+            _has_zaehler(basis.get("pv_gesamt"))
+            and not pv_je_investition_belegt(sensor_mapping)
+        )
 
         # Reihenfolge nach Typ (#214 detLAN: WP vor Wallbox), nicht DB-ID
         heute = date.today()
@@ -212,6 +232,11 @@ class EnergieprofilChecks:
             if inv.typ == "e-auto" and wallbox_deckt_eauto_ladung:
                 continue
 
+            # Achse C: PV/BKW über den Anlagen-Gesamtzähler gedeckt (s. oben).
+            if inv.typ in ("pv-module", "balkonkraftwerk") and pv_aggregat_deckt:
+                aggregat_count += 1
+                continue
+
             # WP mit getrennter Strommessung (#183): hier zählen
             # `strom_heizen_kwh` und `strom_warmwasser_kwh` getrennt — das
             # Legacy-Gesamt-Feld `stromverbrauch_kwh` wird vom Aggregator
@@ -240,7 +265,10 @@ class EnergieprofilChecks:
                 fehlend_pro_komponente.append((inv.bezeichnung, inv.typ, fehlend))
 
         if fehlend_pro_komponente:
-            gesamt = len(fehlend_pro_komponente) + gemappt_count + quelle_count
+            gesamt = (
+                len(fehlend_pro_komponente)
+                + gemappt_count + quelle_count + aggregat_count
+            )
             details_parts = [
                 f"{name} ({typ}): {', '.join(fehlend)}"
                 for name, typ, fehlend in fehlend_pro_komponente
@@ -256,9 +284,7 @@ class EnergieprofilChecks:
                     "Komponenten leer. Betroffen sind Prognosen-IST, Heatmap, "
                     "Lernfaktor und Monatsberichte. Zuzuordnen unter "
                     "Einstellungen → Datenquellen (die kWh-Zeilen, nicht nur die "
-                    "Watt-Zeilen). Ein Anlagen-Gesamtzähler ersetzt das nicht — "
-                    "er versorgt die Monatswerte, nicht die Tages- und "
-                    "Stundenebene. Liefert ein Gerät nur Leistung (W), baut Home "
+                    "Watt-Zeilen). Liefert ein Gerät nur Leistung (W), baut Home "
                     "Assistant unter Helfer → „Integral-Sensor“ (Riemannsche "
                     "Summe) einen kWh-Zähler daraus. Details: "
                     + "; ".join(details_parts)
@@ -271,6 +297,22 @@ class EnergieprofilChecks:
             ergebnisse.append(CheckErgebnis(
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung=f"{prefix}{gemappt_count} aktiven Komponenten haben kWh-Zähler gemappt",
+            ))
+        if aggregat_count > 0:
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK,
+                meldung=(
+                    f"{aggregat_count} Erzeuger über den Anlagen-Zählerstand "
+                    "abgedeckt"
+                ),
+                details=(
+                    "Der PV-Zählerstand der ganzen Anlage versorgt Monat, Tag "
+                    "und Stunde als Summe. Was fehlt, ist die Aufschlüsselung "
+                    "je Erzeuger — dafür braucht jeder einzelne einen eigenen "
+                    "Zähler. Dann aber alle: sobald einer gemessen wird, zählt "
+                    "für Tag und Stunde nur noch, was je Erzeuger gemessen ist."
+                ),
+                link=LINK_DATENQUELLEN,
             ))
         if quelle_count > 0:
             ergebnisse.append(CheckErgebnis(

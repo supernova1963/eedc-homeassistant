@@ -1,9 +1,9 @@
 """Eine Tagesbilanz ohne erfasste PV behauptet keine Zahl (P4-Regel).
 
 Auslöser: Forum kaba-kakao (2026-08-07, T89667 #109). Seine Anlage hat den
-PV-Zähler als **Anlagen-Aggregat** zugeordnet — das versorgt den Monat, nicht
-die Tagesebene (dort zählt nur ein kumulativer Zähler **je Erzeuger**). Die
-Tagessicht zeigte daraufhin:
+PV-Zähler als **Anlagen-Aggregat** zugeordnet — das versorgte damals den Monat,
+nicht die Tagesebene (dort zählte nur ein kumulativer Zähler **je Erzeuger**).
+Die Tagessicht zeigte daraufhin:
 
     PV-Erzeugung   0 kWh        ← nicht gemessen, nicht „nichts erzeugt"
     Einspeisung   25 kWh        ← gemessen
@@ -14,6 +14,14 @@ Tagessicht zeigte daraufhin:
 Regel-SoT: ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`` — eine additive Teilsumme
 darf 0 bleiben (richtungssicher), eine **Differenz mit fehlendem Summanden**
 wird unterdrückt, weil die Richtung des Fehlers unbekannt ist.
+
+⚠ **Der Auslöser selbst ist seit Stufe 1 (2026-08-07) behoben** — der
+Anlagen-Zählerstand erreicht die Tagesebene
+(``snapshot/keys.py::BASIS_ZAEHLER_FELDER``), Stephan bekommt seine PV. Diese
+Regel bleibt trotzdem, und zwar als Netz für alle Lagen, in denen gar kein
+kumulativer PV-Zähler existiert: nur Leistungssensoren, ausgefallener Zähler,
+Lücke im Snapshot. Ein behobener Auslöser macht eine Invariante nicht
+überflüssig.
 
 Die schärfste Probe hier ist ``test_gemessene_null_bleibt_eine_null``: der
 Träger ist ``pv_erfasst`` und **nicht** ``pv_sum > 0``. Eine Anlage, die nachts

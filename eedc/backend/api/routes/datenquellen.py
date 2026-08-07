@@ -825,7 +825,7 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     from backend.services.datenquellen_validierung import (
         einheit_problem, state_class_problem,
         finde_redundante_aggregate, finde_doppelmappings, stufe_bedarf_ein,
-        finde_aggregat_ohne_tageszaehler,
+        finde_aggregat_teilweise_verdraengt,
     )
     feld_einheit = {_feld_id(e["match_key"]): e.get("einheit", "") for e in eintraege}
     feld_feld = {_feld_id(e["match_key"]): e.get("feld", "") for e in eintraege}
@@ -858,9 +858,10 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
     ]
     for fid, p in finde_redundante_aggregate(felder_belegt).items():
         _add_problem(fid, p)
-    # Gegenstück dazu: das Aggregat ist wirksam, erreicht aber die Tagesebene
-    # nicht — und der Anwender kann es auflösen (F-7, Forum T89667 #109).
-    for fid, p in finde_aggregat_ohne_tageszaehler(felder_belegt).items():
+    # Dritte Lage: das Aggregat ist belegt, aber für Tag und Stunde durch
+    # einzelne Erzeuger-Zähler verdrängt — die Tagessumme ist dann still zu
+    # niedrig (F-7 Stufe 1, Forum T89667 #109).
+    for fid, p in finde_aggregat_teilweise_verdraengt(felder_belegt).items():
         _add_problem(fid, p)
     for fid, p in finde_doppelmappings(ha_zuordnungen).items():
         _add_problem(fid, p)

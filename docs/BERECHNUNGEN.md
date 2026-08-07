@@ -1109,15 +1109,43 @@ sind dabei nicht optional:
   unterscheiden (die Klasse aus #352). Fehlt der Sensor, nennt die Oberfläche das Gerät und den
   Weg zur Zuordnung, statt eine Spalte zu zeigen.
 
-**Der Anlagen-Zählerstand erreicht die Tagesebene gar nicht** — auch nicht als Summe. Das Feld
-*Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* landet über `basis["pv_gesamt"]` in
-`Monatsdaten.pv_erzeugung_kwh` und ist damit **Eingang der Monats-Auflösung** (P7). Ein
-Snapshot-Gegenstück hat es nicht: `snapshot/keys.py::BASIS_ZAEHLER_FELDER` führt nur Einspeisung
-und Netzbezug, `_energy_field_id_to_sensor_key` liefert für `basis_energy_pv_gesamt_kwh`
-ausdrücklich `None`. Wer seine PV nur so pflegt, hat also **korrekte Monatswerte und keine
-Tages-PV**.
+##### Der Anlagen-Zählerstand: Summe ja, Aufschlüsselung nein (ab 2026-08-07)
 
-Seit 2026-08-07 sagt die Tagessicht das auch, statt zu rechnen: `TagesBilanz.pv_erfasst` trennt
+Das Feld *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* landet über `basis["pv_gesamt"]` in
+`Monatsdaten.pv_erzeugung_kwh` und ist damit **Eingang der Monats-Auflösung** (P7). Seit
+2026-08-07 ist es zusätzlich ein **Snapshot-Zähler der Kategorie `pv`**
+(`snapshot/keys.py::BASIS_ZAEHLER_FELDER`) und trägt damit auch Tag und Stunde — als **Summe der
+ganzen Anlage**. Wer nur einen Summenzähler hat, bekommt also vollständige Tageswerte; was fehlt,
+ist allein die Aufschlüsselung je Erzeuger (obenstehende Formel liefert für ihn kein `pv_<id>`).
+
+> ⚠ **Bis dahin galt hier das Gegenteil** („erreicht die Tagesebene gar nicht"), und das war der
+> Fehler F-7: eine Anlage mit einem Zähler und mehreren Ausrichtungen hatte gar keine Tages-PV.
+> Der naheliegende Ausweg — alle Ausrichtungen als *eine* Investition führen — bleibt **falsch**:
+> `services/pv_orientation.py` gruppiert je Investition nach (Neigung, Azimut), eine
+> zusammengelegte Anlage bekäme einen systematisch falschen Tagesgang im gesamten
+> Prognose-Kanon inklusive HA-Prognose-Sensoren und PVGIS-SOLL.
+
+**Die Regel ist alles-oder-nichts, nicht anteilig.** Der Anlagen-Zählerstand zählt auf der
+Tagesebene nur mit, solange **kein** Erzeuger einen eigenen kWh-Zähler trägt — genau wie im
+Live-Pfad (`not has_individual_pv`). Sobald einer misst, gilt für Tag und Stunde nur noch, was je
+Erzeuger gemessen ist. Zwei Gründe:
+
+- **Nebeneinander ginge nicht.** `komponenten_kwh` hat einen flachen Keyspace, und die Tages-PV
+  ist die Summe aller `pv_`/`bkw_`-Schlüssel (`summe_pv_bkw_kwh`). Stünde `pv_gesamt` neben
+  `pv_7`, wäre die Anlagensumme neben ihrem eigenen Summanden gebucht — Doppelzählung.
+- **Der Rest ließe sich nur raten.** Die Differenz „Anlagensumme minus gemessene Erzeuger" auf die
+  übrigen zu verteilen, wäre eine kWp-Schätzung mit dem Aussehen einer Messung — dieselbe Klasse,
+  die der Absatz „Keine kWp-Verteilung" oben ausschließt.
+
+**Folge für die Praxis:** ein *halber* Umbau macht die Tageswerte schlechter, nicht besser. Wer
+einem von drei Strings einen eigenen Zähler zuordnet, verliert die anderen beiden auf der
+Tagesebene. Die Zuordnungs-Fläche und der Daten-Checker sagen das an der Zeile
+(`datenquellen_validierung.finde_aggregat_teilweise_verdraengt`, WARNING nur in dieser
+Teilbelegung — nicht, wenn der Summenzähler die ganze Anlage trägt). **Die Monatswerte sind in
+allen drei Lagen vollständig.**
+
+Bleibt gar kein kumulativer PV-Zähler übrig — weder je Erzeuger noch für die Anlage —, sagt die
+Tagessicht das, statt zu rechnen: `TagesBilanz.pv_erfasst` trennt
 „0 kWh gemessen" (Nacht, Schnee — gültig) von „nicht erfasst". Im zweiten Fall bleiben
 **Erzeugung, Eigenverbrauch, spezifischer Ertrag, Performance Ratio und CO₂ leer**. Vorher stand
 dort `0 − Einspeisung`, also ein **negativer Eigenverbrauch** neben einem Peak-PV-Wert aus dem

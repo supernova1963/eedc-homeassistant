@@ -1,28 +1,32 @@
-"""Die Zuordnungs-Seite sagt über den PV-Anlagenzähler die Wahrheit (F-7).
+"""Die Zuordnungs-Seite sagt über den PV-Anlagenzähler die Wahrheit (F-7 + Stufe 1).
 
 Forum kaba-kakao (T89667 #109, 2026-08-07): PV-Gesamtzähler bei „Anlage (Basis)"
 zugeordnet, die beiden Strings haben **nur** Leistungssensoren. Die Fläche
 meldete an den String-Zeilen „Die PV-Erzeugung ist bereits an anderer Stelle
 zugeordnet" — also *hier ist nichts zu tun* —, während der Daten-Checker
-dieselbe Stelle als Lücke führte. Beides kann nicht stimmen: das Aggregat
-versorgt den **Monat** (`resolve_pv_je_modul`), die Tages-/Stundenebene
-entsteht ausschließlich aus kumulativen Zählern **je Komponente**.
+dieselbe Stelle als Lücke führte.
 
-Zwei Regeln, die hier festgehalten werden:
+⚠ **Diese Datei hat am 2026-08-07 mit Stufe 1 ihre Aussage gewechselt.** F-7
+hielt fest, dass der Anlagen-Zählerstand die Tagesebene **gar nicht** erreicht;
+seither erreicht er sie (`snapshot/keys.py::BASIS_ZAEHLER_FELDER`). Die
+Prüfungen bleiben, ihre Richtung dreht sich:
 
-1. **Warnen nur, wo es auflösbar ist.** Liegt ein Leistungssensor je Erzeuger
-   vor, lässt sich daraus in HA ein Integral-Sensor bauen ⇒ Warndreieck mit dem
-   Weg. Wer nur einen Summenzähler besitzt, konfiguriert nichts falsch und
-   bekommt kein Warndreieck ([[feedback_user_fehlermeldungen]]).
+1. **Warnen nur, wo etwas kaputt ist** ([[feedback_user_fehlermeldungen]]).
+   Trägt kein Erzeuger einen eigenen Zähler, ist die Anlage vollständig
+   versorgt — die Anlagensumme steht in Monat, Tag und Stunde. Kein
+   Warndreieck. Gewarnt wird in der **Teilbelegung**: dort schaltet die
+   Alles-oder-nichts-Regel (`komponenten_beitraege.basis_beitraege`) das
+   Aggregat für Tag und Stunde ab, und die Tagessumme wird still zu niedrig.
 2. **Die Herkunft der Gruppen-Deckung zählt.** Deckt nur das Aggregat die
-   Gruppe `pv_energie`, gilt das für den Monat; deckt umgekehrt eine Komponente
-   sie, bleibt „bereits an anderer Stelle zugeordnet" an der Basis-Zeile richtig.
+   Gruppe `pv_energie`, sagt der Text, was ein eigener Zähler *zusätzlich*
+   brächte — und was er kostet. Deckt umgekehrt eine Komponente sie, bleibt
+   „bereits an anderer Stelle zugeordnet" an der Basis-Zeile richtig.
 """
 
 from __future__ import annotations
 
 from backend.services.datenquellen_validierung import (
-    finde_aggregat_ohne_tageszaehler,
+    finde_aggregat_teilweise_verdraengt,
     finde_redundante_aggregate,
     stufe_bedarf_ein,
 )
@@ -39,6 +43,7 @@ def _feld(fid, feld, typ, belegt):
 
 
 def _stephans_lage(mit_leistung: bool = True) -> list[dict]:
+    """Aggregat belegt, KEIN String misst selbst — die Lage aus T89667 #109."""
     return [
         _feld(AGG, "pv_gesamt_kwh", "basis", True),
         _feld(WEST_KWH, "pv_erzeugung_kwh", "pv-module", False),
@@ -48,23 +53,42 @@ def _stephans_lage(mit_leistung: bool = True) -> list[dict]:
     ]
 
 
-def test_warnt_am_aggregat_wenn_die_strings_nur_leistung_haben():
-    probleme = finde_aggregat_ohne_tageszaehler(_stephans_lage())
+def _halber_umbau() -> list[dict]:
+    """Aggregat belegt UND ein String misst selbst — die gefährliche Lage."""
+    felder = _stephans_lage()
+    for f in felder:
+        if f["id"] == WEST_KWH:
+            f["belegt"] = True
+    return felder
+
+
+def test_schweigt_wenn_das_aggregat_die_ganze_anlage_traegt():
+    """Kein Erzeuger misst selbst ⇒ die Anlagensumme deckt Tag und Stunde
+    vollständig ⇒ nichts, worüber zu warnen wäre.
+
+    Das ist die Umkehrung der F-7-Fassung, die hier ein Warndreieck erzeugte:
+    solange `basis:pv_gesamt` kein Snapshot-Zähler war, hatte Stephan an
+    dieser Stelle wirklich keine Tageswerte."""
+    assert finde_aggregat_teilweise_verdraengt(_stephans_lage()) == {}
+    assert finde_aggregat_teilweise_verdraengt(_stephans_lage(mit_leistung=False)) == {}
+
+
+def test_warnt_wenn_ein_einzelner_zaehler_das_aggregat_verdraengt():
+    """Ein Erzeuger misst, der andere nicht ⇒ das Aggregat ist für Tag und
+    Stunde aus, die Tagessumme trägt nur noch den gemessenen Erzeuger."""
+    probleme = finde_aggregat_teilweise_verdraengt(_halber_umbau())
 
     assert set(probleme) == {AGG}
     p = probleme[AGG]
     assert p["schwere"] == "warning"
-    assert p["art"] == "nur_monat"
-    assert "Monatswerte" in p["text"]
+    assert p["art"] == "teilweise_verdraengt"
+    # Der Text muss die Folge benennen, nicht nur die Lage.
+    assert "zu niedrig" in p["text"]
     assert "Integral-Sensor" in p["text"]
-    # Die auflösenden Felder werden benannt (wie bei `redundant`).
-    assert set(p["wirksame_felder"]) == {WEST_W, OST_W}
-
-
-def test_schweigt_ohne_leistungssensor():
-    """Nur ein Summenzähler vorhanden ⇒ nichts, was der Anwender besser machen
-    könnte ⇒ kein Warndreieck (der Hinweistext an der Komponente bleibt)."""
-    assert finde_aggregat_ohne_tageszaehler(_stephans_lage(mit_leistung=False)) == {}
+    # Und er darf die Monatswerte nicht mit verdächtigen: die sind vollständig.
+    assert "Monatswerte sind in beiden Fällen" in p["text"]
+    # Benannt werden die Erzeuger, denen der Zähler FEHLT — sie sind der Weg raus.
+    assert set(p["wirksame_felder"]) == {OST_KWH}
 
 
 def test_schweigt_wenn_jede_komponente_ihren_zaehler_hat():
@@ -76,18 +100,19 @@ def test_schweigt_wenn_jede_komponente_ihren_zaehler_hat():
         _feld(WEST_W, "leistung_w", "pv-module", True),
     ]
 
-    assert finde_aggregat_ohne_tageszaehler(felder) == {}
+    assert finde_aggregat_teilweise_verdraengt(felder) == {}
     assert AGG in finde_redundante_aggregate(felder)  # die andere Meldung greift
 
 
 def test_schweigt_ohne_belegtes_aggregat():
+    """Ohne Aggregat gibt es nichts zu verdrängen — auch nicht bei Teilbelegung."""
     felder = [
         _feld(AGG, "pv_gesamt_kwh", "basis", False),
-        _feld(WEST_KWH, "pv_erzeugung_kwh", "pv-module", False),
-        _feld(WEST_W, "leistung_w", "pv-module", True),
+        _feld(WEST_KWH, "pv_erzeugung_kwh", "pv-module", True),
+        _feld(OST_KWH, "pv_erzeugung_kwh", "pv-module", False),
     ]
 
-    assert finde_aggregat_ohne_tageszaehler(felder) == {}
+    assert finde_aggregat_teilweise_verdraengt(felder) == {}
 
 
 # ─── Gegenseite: der Text an der Komponenten-Zeile ──────────────────────────
@@ -97,8 +122,10 @@ def _bedarf_feld(fid, feld, typ, belegt, gruppe):
             "bedarf": "pflicht", "bedarf_gruppe": gruppe, "bedingung_anlage": None}
 
 
-def test_komponenten_zeile_nennt_die_monats_grenze():
-    """Nur das Aggregat trägt die Gruppe ⇒ „für die Monatswerte abgedeckt"."""
+def test_komponenten_zeile_nennt_gewinn_und_preis():
+    """Nur das Aggregat trägt die Gruppe ⇒ der Text sagt BEIDES: dass die
+    Anlagensumme auch Tag und Stunde deckt, und dass ein einzelner eigener
+    Zähler sie dort abschaltet."""
     felder = [
         _bedarf_feld(AGG, "pv_gesamt_kwh", "basis", True, "pv_energie"),
         _bedarf_feld(WEST_KWH, "pv_erzeugung_kwh", "pv-module", False, "pv_energie"),
@@ -108,9 +135,14 @@ def test_komponenten_zeile_nennt_die_monats_grenze():
 
     assert ergebnis[WEST_KWH]["bedarf"] == "inaktiv"
     text = ergebnis[WEST_KWH]["text"]
-    assert "Monatswerte" in text and "Tages- und Stundenwerte" in text
+    # Gewinn: die Aufschlüsselung je Erzeuger.
+    assert "je Erzeuger" in text
+    # Preis: alles-oder-nichts.
+    assert "sobald einer gemessen wird" in text
     # Der alte, hier falsche Satz darf nicht mehr erscheinen.
     assert "bereits an anderer Stelle" not in text
+    # Und ebensowenig die F-7-Fassung, die die Tagesebene ganz absprach.
+    assert "entstehen nur aus einem eigenen Zähler" not in text
 
 
 def test_basis_zeile_behaelt_den_allgemeinen_satz():

@@ -43,10 +43,16 @@ from __future__ import annotations
 from typing import Optional
 
 # Basis-Energy-Feld-IDs → `basis`-Schlüssel des klassischen Mappings.
-# `basis_energy_pv_gesamt_kwh` ist bewusst dabei, obwohl es KEIN Snapshot-
-# Gegenstück hat (`snapshot/keys.py::_energy_field_id_to_sensor_key` liefert
-# dafür None): `ha_statistics` und `aktueller_monat` lesen `basis["pv_gesamt"]`
-# als Anlagen-Aggregat für den Monatsabschluss.
+# Alle drei tragen einen Zählerstand, den `ha_statistics` und `aktueller_monat`
+# über `basis[<feld>]` für den Monatsabschluss lesen.
+#
+# ⚠ **Korrigiert am 2026-08-07 (Stufe 1 zu F-7):** hier stand bis dahin, dass
+# `basis_energy_pv_gesamt_kwh` „KEIN Snapshot-Gegenstück" habe. Das war wahr
+# und ist der Grund, warum Anlagen mit einem einzigen Summenzähler keine
+# Tages-PV hatten; seither liefert
+# `snapshot/keys.py::_energy_field_id_to_sensor_key` dafür `basis:pv_gesamt`,
+# und das Feld ist in `BASIS_ZAEHLER_FELDER` (Regel: alles-oder-nichts, s.
+# `komponenten_beitraege.basis_beitraege`).
 BASIS_ENERGY_FELD: dict[str, str] = {
     "pv_gesamt_kwh": "pv_gesamt",
     "einspeisung_kwh": "einspeisung",

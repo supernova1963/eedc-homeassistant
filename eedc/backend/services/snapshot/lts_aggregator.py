@@ -79,7 +79,10 @@ async def get_hourly_kwh_by_category_lts(
     # rohen `_categorize_counter`-Aufrufen pro Feld — Issue #298 (Audit-§6.2,
     # Pattern-Klasse [[feedback_aggregator_symmetrie]]). Anders als bei der
     # Snapshot-Variante: HA-LTS hat keine MQTT-Zähler, also nur HA-gemappte
-    # Sensoren.
+    # Sensoren — deshalb bleibt hier auch die Alles-oder-nichts-Prüfung für
+    # `basis:pv_gesamt` (Stufe 1 zu F-7) beim Mapping-Default: ein per MQTT
+    # gespeister Zähler je Erzeuger hat keine HA-Entity und liefert diesem Pfad
+    # ohnehin nichts, was das Aggregat verdrängen könnte.
     eintraege: list[tuple[str, str, Optional[str]]] = []  # (entity_id, kategorie, gruppe)
     quellen_energy = extract_quellen_energy(anlage)  # C2b-Read-Through (HA-only-Pfad)
 
