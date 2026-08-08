@@ -694,7 +694,8 @@ Für Jahresprognose:
 #### PV-Anteil der Heimladung: gemessen, sonst abgeleitet (ab 2026-08-08, N-141)
 
 Die Formeln oben beschreiben die **Prognose**-Achse, die den von Hand gepflegten
-`pv_ladeanteil_prozent` liest. Auf der **IST**-Achse gibt es diesen Parameter nicht — dort steht
+`pv_ladeanteil_prozent` liest — und, wo er fehlt, seit 2026-08-08 den IST-Anteil (s. unten).
+Auf der **IST**-Achse gibt es diesen Parameter nicht — dort steht
 je Monat das erfasste Paar `ladung_pv_kwh` / `ladung_netz_kwh`. Und genau das fehlte den meisten
 Anlagen: **eine Wallbox misst ihren PV-Anteil nicht**, sie zählt nur Kilowattstunden. Ohne evcc
 oder einen eigenen Zähler lieferte `get_emob_pv_netz_kwh` deshalb `(0, Gesamtladung)` — die
@@ -718,6 +719,30 @@ gesamte Heimladung galt als Netzstrom.
 3. **Angewandt wird der Anteil, nicht die Kilowattstunde.** Der abgeleitete Prozentsatz geht auf
    die kanonische Monatsladung — nur so bleibt `Ladung == PV + Netz` exakt geschlossen, auch wenn
    die Tagesspur eine andere Menge kennt als die Monatszeile.
+
+**Wo die Regel angewandt wird — eine Schicht unter dem Pool** (`services/emob_ladeanteil.py`, seit
+2026-08-08, Fund **F-16**): die Monatszeilen werden angereichert, **bevor** irgendjemand sie zu
+einer Heimladung poolt. Das ist keine Feinheit, sondern der Unterschied zwischen vier und achtzehn
+Sichten: liegt die Ableitung *über* `get_emob_heimladung_canonical`, trifft sie nur die Felder
+`EmobFakten.ladung_pv_kwh`/`ladung_netz_kwh` — jede Sicht, die die mitgereichten Rohzeilen selbst
+poolt (Cockpit → Jahr, Jahresbericht-PDF) oder `InvestitionMonatsdaten` direkt liest
+(Komponenten-Hub, Aussichten, HA-Export), zeigt daneben weiter 0 %. Sichten der zweiten Gruppe
+holen dieselbe Anreicherung über `reichere_monatszeilen_an`.
+
+**Zwei Ausnahmen, beide bewusst:**
+
+- Der **Community-Payload** liest `eauto_summe_gemessen`/`wallbox_summe_gemessen` — der Server hat
+  die Rohdaten nie gesehen und rechnet nichts nach; eine Schätzung wäre in einem Benchmark nicht
+  mehr als solche erkennbar (dieselbe Linie wie beim BKW-Eigenverbrauch).
+- **Schreib-, Import- und Checker-Pfade** bleiben außen vor. Die Anreicherung geschieht zur
+  **Lesezeit** auf Kopien; programmatisch in `verbrauch_daten` zu schreiben bleibt verboten.
+
+**Die Prognose-Achse rechnet mit derselben Zahl** (N-188, seit 2026-08-08): fehlt am Fahrzeug der
+gepflegte `pv_ladeanteil_prozent`, nimmt die ROI-Prognose den IST-Anteil über
+`monats_fakten.ist_pv_ladeanteil_prozent` (Σ PV ÷ Σ Ladung, ladungsgewichtet) statt des früheren
+Vorgabewerts von 60 %. Der Default greift nur noch, wenn auch das IST keine Heimladung kennt. Die
+zweite Prognose-Quelle (`aussichten.py`, leitet ihre Quote aus der Historie ab) zieht über dieselbe
+Anreicherung mit.
 
 **Herkunft:** `EmobFakten.ladung_anteil_abgeleitet` sagt, ob die Aufteilung gerechnet ist; auf der
 Tagesebene trägt `source_provenance` die Marke `einspeise_deckung` bzw.

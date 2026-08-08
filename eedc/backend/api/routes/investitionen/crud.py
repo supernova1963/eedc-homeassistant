@@ -64,7 +64,10 @@ from backend.services.eauto_wirtschaftlichkeit import (
     resolve_eauto_benzinpreis,
 )
 from backend.core.calculations import CO2_FAKTOR_STROM_KG_KWH
-from backend.services.monats_fakten import lade_monats_fakten
+from backend.services.monats_fakten import (
+    ist_pv_ladeanteil_prozent,
+    lade_monats_fakten,
+)
 from backend.core.berechnungen import (
     PV_ERZEUGER_TYPEN,
     einspeise_erloes_euro,
@@ -696,6 +699,23 @@ async def get_roi_dashboard(
     anlage = anlage_result.scalar_one_or_none()
     if not anlage:
         raise not_found("Anlage")
+
+    # N-188: der IST-PV-Anteil der Heimladung als Prognose-Vorbelegung.
+    # **Höchstens einmal je Request** — die Fakten-Schicht ist nicht billig, und
+    # die E-Auto-Schleife weiter unten läuft je Fahrzeug. `False` ist der „noch
+    # nicht geholt"-Marker, weil `None` selbst eine Antwort ist („keine
+    # Heimladung im Zeitraum") und ein zweiter Anlauf sie nur wiederholen würde.
+    _ist_anteil_cache: list = [False]
+
+    async def _ist_pv_ladeanteil() -> Optional[float]:
+        if _ist_anteil_cache[0] is False:
+            _ist_anteil_cache[0] = await ist_pv_ladeanteil_prozent(
+                db,
+                anlage_id,
+                von=(jahr, 1) if jahr is not None else None,
+                bis=(jahr, 12) if jahr is not None else None,
+            )
+        return _ist_anteil_cache[0]
 
     # Tarife laden (allgemein + Spezialtarife)
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
@@ -1498,7 +1518,17 @@ async def get_roi_dashboard(
             # User-Eingaben und nutzte stattdessen die hier hinterlegten Defaults.
             km_jahr = params.get(PARAM_E_AUTO["JAHRESFAHRLEISTUNG_KM"], PARAM_E_AUTO_DEFAULTS["jahresfahrleistung_km"])
             verbrauch = params.get(PARAM_E_AUTO["VERBRAUCH_KWH_100KM"], PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"])
-            pv_anteil = params.get(PARAM_E_AUTO["PV_LADEANTEIL_PROZENT"], PARAM_E_AUTO_DEFAULTS["pv_ladeanteil_prozent"])
+            # N-188: die Prognose rät den PV-Anteil nicht mehr, wenn das IST ihn
+            # kennt. Rangfolge: gepflegter Parameter (auch **0** — geprüft wird
+            # die Anwesenheit, nicht die Größe, F-15-Klasse) → IST-Anteil aus den
+            # Monats-Fakten → Default. Bis hierher stand dieselbe Anlage auf
+            # 60 % in der Prognose und dem gemessenen Anteil im IST; zwei Zahlen
+            # für dieselbe Größe, nur auf zwei Zeitachsen.
+            pv_anteil = params.get(PARAM_E_AUTO["PV_LADEANTEIL_PROZENT"])
+            if pv_anteil is None:
+                pv_anteil = await _ist_pv_ladeanteil()
+            if pv_anteil is None:
+                pv_anteil = PARAM_E_AUTO_DEFAULTS["pv_ladeanteil_prozent"]
             benzin_verbrauch = params.get(PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"], PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"])
             nutzt_v2h = params.get(PARAM_E_AUTO["V2H_FAEHIG"], PARAM_E_AUTO_DEFAULTS["v2h_faehig"])
             v2h_entladung = params.get(PARAM_E_AUTO["V2H_ENTLADUNG_KWH_JAHR"], 0)

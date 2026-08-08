@@ -732,3 +732,49 @@ CO₂-Bilanz sinkt, die E-Auto-Ersparnis steigt. **Gehört in die Release-Kommun
 
 Offen bleibt **Rahmenbedingung 7** (Prognose, **N-188**): solange `pv_ladeanteil_prozent` von Hand
 gepflegt wird, steht die Prognose-Achse neben der neuen Rechnung.
+
+> ⚠ **Korrektur 2026-08-08 (F-16 · N-198) — der Absatz darüber war in zwei von drei Wirkungen
+> falsch, und die Zeile zu Rahmenbedingung 7 ist erledigt.** Er bleibt wörtlich stehen, weil er den
+> Stand nach `a7a50abc` beschreibt; was tatsächlich galt, steht hier.
+>
+> **Der Fehler war die Methode, nicht die Formulierung.** Die Wirkungen waren aus der **Bauabsicht**
+> geschrieben, nicht aus den **Lesestellen** ausgezählt. Die Ableitung saß in `monats_fakten.py`
+> *oberhalb* von `get_emob_heimladung_canonical` und traf damit nur die Felder
+> `EmobFakten.ladung_pv_kwh`/`ladung_netz_kwh`. Von **achtzehn** Lesestellen sahen sie **vier**:
+>
+> - **„Der Komponenten-Hub zeigt statt 0 % einen Wert"** traf eine **andere** Sicht — *Auswertungen
+>   → Komponenten* (`cockpit/komponenten.py`). Der **Hub** selbst (`investitionen/dashboards.py`)
+>   liest `InvestitionMonatsdaten` direkt und blieb bei 0 %.
+> - **„Die E-Auto-Ersparnis steigt"** traf **keine** Sicht. Alle drei Ersparnis-Rechner
+>   (`cockpit/uebersicht.py`, `investitionen/dashboards.py`, `aussichten.py`) poolen die Rohzeilen
+>   neu; keiner las `EmobFakten.ladung_netz_kwh`.
+> - **„Die E-Mob-Netzladung in der CO₂-Bilanz sinkt"** war die einzige zutreffende Aussage.
+>
+> **Kein Bestandstest schlug an:** `test_emob_readsite_symmetrie.py` prüft die Heimladungs-**Summe**,
+> und die bleibt unberührt — die Ableitung ändert nur die **Aufteilung**. Ein Symmetrie-Test kann die
+> falsche Größe prüfen und dabei grün bleiben, während die Drift danebensteht.
+>
+> **Gebaut wurde die Schicht, nicht der Anschluss je Sicht** (Entscheid Gernot: *alle IST-Sichten*).
+> `services/emob_ladeanteil.py` reichert die Monatszeilen an, **bevor** irgendjemand sie poolt; die
+> Sichten, die ihre IMD selbst laden, holen dieselbe Anreicherung über
+> `reichere_monatszeilen_an`. Seitdem gilt die Wirkungsbeschreibung so, wie sie oben steht — für
+> Hub, Cockpit → Jahr, Aussichten, Jahresbericht-PDF, Monats-Tabelle **und** die HA-Sensoren.
+>
+> ⚑ **Zwei Ausnahmen, beide bewusst:** der **Community-Payload** bleibt gemessen (der Server hat die
+> Rohdaten nie gesehen und rechnet nichts nach — `eauto_summe_gemessen`/`wallbox_summe_gemessen`,
+> kein neuer Anlagen-Hash), und ein **gepflegter Wert gewinnt** weiterhin überall, auch die
+> gepflegte 0.
+>
+> ⚑ **Rahmenbedingung 7 (N-188) ist damit erledigt.** Die Prognose rät den Anteil nicht mehr:
+> `investitionen/crud.py` nimmt den IST-Anteil aus den Monats-Fakten
+> (`monats_fakten.ist_pv_ladeanteil_prozent`), wenn kein `pv_ladeanteil_prozent` gepflegt ist —
+> Default 60 % nur noch, wenn auch das IST schweigt. Die **zweite**, im ursprünglichen Text nicht
+> genannte Prognose-Quelle (`aussichten.py`, leitet die Quote aus der Historie ab) zieht über
+> dieselbe Anreicherung mit.
+>
+> ⚑ **Wertänderung an einem ausgelieferten HA-Sensor:** `e_auto_pv_anteil_prozent` springt bei
+> jedem, der keinen PV-Ladesensor pflegt, einmalig in der Langzeitstatistik — dasselbe Muster wie
+> beim CO₂-Sensor zu v4.0.0. **Gehört in die Release-Kommunikation.**
+>
+> Der Wächter über die **Aufteilung** (nicht die Summe) ist
+> `backend/tests/test_emob_pv_anteil_sichten_symmetrie.py`.

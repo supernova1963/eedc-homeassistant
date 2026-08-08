@@ -52,6 +52,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis,
     compute_emob_pool_attribution,
 )
+from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.services.monats_fakten import (
     MonatsFakt,
     SonstigesFakten,
@@ -626,6 +627,22 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
             if inv is None or not inv.ist_aktiv_im_monat(imd.jahr, imd.monat):
                 continue
             imd_data_by_inv_vj[imd.investition_id] = imd.verbrauch_daten or {}
+
+        # F-16: auch die Vorjahres-Zeile bekommt den abgeleiteten PV-Anteil.
+        # Sie speist die Vorjahres-eMob-Ersparnis, die in Cockpit → Monat direkt
+        # neben der laufenden steht — ungeteilt daneben wäre der Vergleich eine
+        # Aussage über die Rechenweise statt über das Jahr.
+        _wb_ids_vj = {i.id for i in investitionen if i.typ == "wallbox"}
+        _keys_vj = list(imd_data_by_inv_vj)
+        _daten_vj = await reichere_monatszeilen_an(
+            db,
+            anlage_id,
+            [
+                ((vj, monat), inv_id in _wb_ids_vj, imd_data_by_inv_vj[inv_id])
+                for inv_id in _keys_vj
+            ],
+        )
+        imd_data_by_inv_vj = dict(zip(_keys_vj, _daten_vj))
 
     # Berechnete Energie-Werte — aus der Schicht, also inkl. V2H (Entladung ins
     # Haus zählt wie Speicher-Entladung) und inkl. sonstiger Erzeuger hinter dem
@@ -1894,18 +1911,33 @@ async def get_aktueller_monat(
         # steht die Ladung auf der Wallbox-IMD, das E-Auto trägt nur km. Ohne
         # diese Attribution rechnet die Komponente mit netz=0 + extern=0 und
         # weicht vom Hauptwert (Pool-Tile) ab — Drift gleicher Sicht.
-        eauto_imd_data: list[dict] = []
-        wb_imd_data: list[dict] = []
-        for i in investitionen:
-            if (not i.aktiv
-                or not i.ist_aktiv_im_monat(jahr, monat)
-                or ist_dienstlich(i)
-                or i.id not in imd_by_inv):
-                continue
-            if i.typ == "e-auto":
-                eauto_imd_data.append(imd_by_inv[i.id])
-            elif i.typ == "wallbox":
-                wb_imd_data.append(imd_by_inv[i.id])
+        # F-16: der abgeleitete PV-Anteil erreicht auch DIESEN Block. Er ist der
+        # letzte Rest, der `InvestitionMonatsdaten` selbst faltet (N-107, von C1d
+        # bewusst offen gelassen) — und er sitzt in derselben Route wie die
+        # Heimladungs-Trias aus den Monats-Fakten. Ohne die Anreicherung stünden
+        # in EINER Sicht zwei PV-Anteile derselben Ladung nebeneinander.
+        _emob_invs = [
+            i for i in investitionen
+            if i.aktiv
+            and i.ist_aktiv_im_monat(jahr, monat)
+            and not ist_dienstlich(i)
+            and i.id in imd_by_inv
+            and i.typ in ("e-auto", "wallbox")
+        ]
+        _emob_daten = await reichere_monatszeilen_an(
+            db,
+            anlage_id,
+            [
+                ((jahr, monat), i.typ == "wallbox", imd_by_inv[i.id])
+                for i in _emob_invs
+            ],
+        )
+        for i, daten in zip(_emob_invs, _emob_daten):
+            imd_by_inv[i.id] = daten
+
+        # Wallbox-Pool-Attribution auf denselben (angereicherten) Zeilen.
+        eauto_imd_data = [imd_by_inv[i.id] for i in _emob_invs if i.typ == "e-auto"]
+        wb_imd_data = [imd_by_inv[i.id] for i in _emob_invs if i.typ == "wallbox"]
         emob_pool_attr = compute_emob_pool_attribution(
             eauto_imd_data=eauto_imd_data,
             wallbox_imd_data=wb_imd_data,

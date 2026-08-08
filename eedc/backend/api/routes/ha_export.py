@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, model_validator
 from typing import Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import defaultdict
 import os
 
@@ -54,6 +54,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     build_wb_pool_by_month,
     eigener_verbrauch_l_100km,
 )
+from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
@@ -210,10 +211,18 @@ class _EmobPoolCtx:
     per-E-Auto-Sensoren sonst leere IMD → PV-Anteil fehlt, Ersparnis überhöht
     (kein Netz-Strom abgezogen). Mit diesem Kontext zieht jede E-Auto-Sicht den
     km-anteiligen Wallbox-Pool — dieselbe Logik wie Cockpit/Dashboards.
+
+    ``daten_by_key`` trägt seit F-16 die Monatszeilen **mit** abgeleitetem
+    PV-Anteil. Es liegt hier und nicht bei jedem Aufrufer, weil der Torwächter
+    („ein gepflegter Wert gewinnt") über E-Auto **und** Wallbox eines Monats
+    zusammen entscheidet — die per-Investition-Sensor-Schleife sieht aber immer
+    nur ein Gerät. Wer dort selbst anreicherte, hielte eine gepflegte
+    Wallbox-Zeile für nicht vorhanden und schätzte über eine Messung hinweg.
     """
     use_wb_pool: bool
     wb_pool_by_month: dict
     eauto_km_by_month: dict
+    daten_by_key: dict = field(default_factory=dict)
 
 
 def _build_emob_pool_ctx(inv_daten: dict, eauto_ids: set, wallbox_ids: set) -> _EmobPoolCtx:
@@ -233,7 +242,42 @@ def _build_emob_pool_ctx(inv_daten: dict, eauto_ids: set, wallbox_ids: set) -> _
     use_wb_pool = any(
         (s.pv_kwh + s.netz_kwh) > 0 for s in wb_pool_by_month.values()
     )
-    return _EmobPoolCtx(use_wb_pool, wb_pool_by_month, eauto_km_by_month)
+    return _EmobPoolCtx(
+        use_wb_pool, wb_pool_by_month, eauto_km_by_month, dict(inv_daten)
+    )
+
+
+async def _reichere_emob_imd_an(
+    db: AsyncSession,
+    anlage_id: int,
+    inv_daten: dict,
+    wallbox_ids: set,
+) -> dict:
+    """F-16: die E-Mob-Zeilen mit abgeleitetem PV-Anteil, Schlüssel unverändert.
+
+    Der HA-Export liest ``InvestitionMonatsdaten`` direkt (P10-Restschuld) und
+    speist daraus drei Sensor-Gruppen: die anlagenweite E-Auto-Ersparnis, die
+    Fahrzeug-Sensoren (darunter ``e_auto_pv_anteil_prozent``) und den
+    PHEV-Zweig. Ohne diese Anreicherung meldete HA dauerhaft 0 % PV-Anteil,
+    während die Oberfläche denselben Wert abgeleitet zeigt.
+
+    ⚑ **Wertänderung an einem ausgelieferten Sensor** (Entscheid Gernot
+    2026-08-08): wer keinen PV-Ladesensor pflegt, bekommt in der
+    HA-Langzeitstatistik einen einmaligen Sprung — dasselbe Muster wie beim
+    CO₂-Sensor zu v4.0.0. Gehört in die Release-Kommunikation.
+    """
+    if not inv_daten:
+        return inv_daten
+    keys = list(inv_daten)
+    daten = await reichere_monatszeilen_an(
+        db,
+        anlage_id,
+        [
+            ((jahr, monat), inv_id in wallbox_ids, inv_daten[(inv_id, jahr, monat)])
+            for (inv_id, jahr, monat) in keys
+        ],
+    )
+    return dict(zip(keys, daten))
 
 
 async def _load_emob_pool_ctx(db: AsyncSession, investitionen) -> Optional[_EmobPoolCtx]:
@@ -257,10 +301,14 @@ async def _load_emob_pool_ctx(db: AsyncSession, investitionen) -> Optional[_Emob
         inv = by_id.get(md.investition_id)
         if inv and inv.ist_aktiv_im_monat(md.jahr, md.monat):
             inv_daten[(md.investition_id, md.jahr, md.monat)] = md.verbrauch_daten or {}
+    wallbox_ids = {i.id for i in emob if i.typ == "wallbox"}
+    inv_daten = await _reichere_emob_imd_an(
+        db, emob[0].anlage_id, inv_daten, wallbox_ids
+    )
     return _build_emob_pool_ctx(
         inv_daten,
         {i.id for i in emob if i.typ == "e-auto"},
-        {i.id for i in emob if i.typ == "wallbox"},
+        wallbox_ids,
     )
 
 
@@ -584,6 +632,26 @@ async def calculate_anlage_sensors(
             historische_inv_daten[(imd.investition_id, imd.jahr, imd.monat)] = (
                 imd.verbrauch_daten or {}
             )
+
+    # F-16: die E-Mob-Zeilen bekommen ihren abgeleiteten PV-Anteil, bevor
+    # irgendetwas daraus gerechnet wird — der Pool-Kontext unten und die
+    # Ersparnis-Schleife weiter unten schöpfen beide aus dieser Map.
+    _emob_ids = {
+        i.id for i in investitionen
+        if i.typ in ("e-auto", "wallbox") and not ist_dienstlich(i)
+    }
+    if _emob_ids:
+        _angereichert = await _reichere_emob_imd_an(
+            db,
+            anlage.id,
+            {
+                key: daten
+                for key, daten in historische_inv_daten.items()
+                if key[0] in _emob_ids
+            },
+            {w.id for w in wallboxen},
+        )
+        historische_inv_daten.update(_angereichert)
 
     # Phase 2a: Emob-Pool-Kontext aus den bereits aktiv-gefilterten IMD bauen.
     # Liegt die Heimladung kanonisch auf der Wallbox (evcc), zieht die
@@ -1064,6 +1132,20 @@ async def calculate_investition_sensors(
         if investition.ist_aktiv_im_monat(md.jahr, md.monat)
     ]
 
+    def _emob_daten(md: InvestitionMonatsdaten) -> dict:
+        """F-16: die Zeile mit abgeleitetem PV-Anteil aus dem Pool-Kontext.
+
+        Bewusst **nicht** hier selbst abgeleitet: der Torwächter entscheidet
+        über E-Auto und Wallbox eines Monats zusammen, diese Funktion sieht aber
+        nur ein Gerät (s. ``_EmobPoolCtx.daten_by_key``). Ohne Kontext bleibt es
+        beim Rohwert — dasselbe Verhalten wie vor F-16.
+        """
+        if emob_ctx is None:
+            return md.verbrauch_daten or {}
+        return emob_ctx.daten_by_key.get(
+            (investition.id, md.jahr, md.monat), md.verbrauch_daten or {}
+        )
+
     params = investition.parameter or {}
     netzbezug_preis = strompreis.netzbezug_arbeitspreis_cent_kwh if strompreis else 30.0
 
@@ -1085,7 +1167,7 @@ async def calculate_investition_sensors(
         gesamt_netz_ladung = 0.0
 
         for md in monatsdaten:
-            d = md.verbrauch_daten or {}
+            d = _emob_daten(md)
             km_m = d.get("km_gefahren", 0) or 0
             gesamt_km += km_m
             gesamt_verbrauch += d.get("verbrauch_kwh", 0) or 0
@@ -1142,7 +1224,7 @@ async def calculate_investition_sensors(
                     phev_monate: list[tuple[float, float]] = []
                     phev_kwh = 0.0
                     for md in monatsdaten:
-                        d = md.verbrauch_daten or {}
+                        d = _emob_daten(md)
                         km = d.get("km_gefahren", 0) or 0
                         # #262: SoT-Helper liefert (pv, netz) mit Fallback.
                         _, netz = get_emob_pv_netz_kwh(d)

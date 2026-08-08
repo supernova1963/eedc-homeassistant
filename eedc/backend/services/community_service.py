@@ -350,8 +350,16 @@ def _monatswert(fakt: MonatsFakt) -> dict | None:
     # genau eine der beiden Quellen wählt. Beide sind dienstwagen- und
     # laufzeitgefiltert; ein dienstlich gefahrenes Fahrzeug ist keine Aussage
     # über diese Anlage. [[feedback_dienstwagen_alle_checks]]
+    #
+    # ⚠ **Die `*_gemessen`-Variante, und zwar als einzige Sicht (F-16).** Seit
+    # der PV-Anteil der Heimladung aus der Tagesebene abgeleitet wird, tragen
+    # `eauto_summe`/`wallbox_summe` eine Schätzung. Der Server hat die Rohdaten
+    # nie gesehen und rechnet nichts nach — eine Schätzung wäre dort in einem
+    # Benchmark nicht mehr als solche erkennbar, und der Anlagen-Hash bewegte
+    # sich ohne neue Messung. Der Payload trägt Messwerte, keine Bewertung
+    # (dieselbe Linie wie beim BKW-Eigenverbrauch weiter unten).
     emob = fakt.emob
-    eauto = emob.eauto_summe
+    eauto = emob.eauto_summe_gemessen
     eauto_ladung_gesamt = eauto.ladung_kwh + eauto.extern_kwh
     if eauto_ladung_gesamt > 0:
         monatswert_data["eauto_ladung_gesamt_kwh"] = round(eauto_ladung_gesamt, 1)
@@ -364,7 +372,7 @@ def _monatswert(fakt: MonatsFakt) -> dict | None:
         if emob.v2h_entladung_kwh > 0:
             monatswert_data["eauto_v2h_kwh"] = round(emob.v2h_entladung_kwh, 1)
 
-    wallbox = emob.wallbox_summe
+    wallbox = emob.wallbox_summe_gemessen
     if wallbox.ladung_kwh > 0:
         monatswert_data["wallbox_ladung_kwh"] = round(wallbox.ladung_kwh, 1)
         if wallbox.pv_kwh > 0:

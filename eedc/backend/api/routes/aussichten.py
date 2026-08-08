@@ -53,6 +53,7 @@ from backend.core.berechnungen.ust_eigenverbrauch import (
 )
 from backend.core.field_definitions import get_wp_strom_kwh
 from backend.services.eauto_wirtschaftlichkeit import eigener_verbrauch_l_100km
+from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -964,6 +965,37 @@ async def get_finanz_prognose(
                 continue
             key = (imd.investition_id, imd.jahr, imd.monat)
             historische_inv_daten[key] = imd.verbrauch_daten or {}
+
+    # F-16: der abgeleitete PV-Anteil der Heimladung gilt auch hier. Diese Route
+    # liest die IMD direkt (P10-Restschuld) und speist daraus BEIDE Achsen — die
+    # historische Ersparnis (`gesamt_eauto_pv`/`agg["netz_kwh"]`) und über
+    # `netz_anteil` auch die **Prognose** (N-188). Ohne die Anreicherung stünde
+    # der abgeleitete Anteil im Cockpit und 0 % in den Aussichten, und die
+    # Prognose schriebe die ungeteilte Historie fort. Angereichert wird an genau
+    # DIESER Stelle, weil sechs Lesestellen weiter unten aus derselben Map
+    # schöpfen — eine je Lesestelle wäre die Kopie, die N-181 beschreibt.
+    _emob_keys = [
+        key
+        for key in historische_inv_daten
+        if (_inv := inv_by_id_hist.get(key[0])) is not None
+        and _inv.typ in ("e-auto", "wallbox")
+        and not ist_dienstlich(_inv)
+    ]
+    if _emob_keys:
+        _emob_daten = await reichere_monatszeilen_an(
+            db,
+            anlage_id,
+            [
+                (
+                    (jahr, monat),
+                    inv_by_id_hist[inv_id].typ == "wallbox",
+                    historische_inv_daten[(inv_id, jahr, monat)],
+                )
+                for (inv_id, jahr, monat) in _emob_keys
+            ],
+        )
+        for key, daten in zip(_emob_keys, _emob_daten):
+            historische_inv_daten[key] = daten
 
     # Monatsdaten für Eigenverbrauch etc.
     result = await db.execute(
