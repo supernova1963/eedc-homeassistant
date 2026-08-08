@@ -5,11 +5,14 @@ Nutzt die SolarMAN Open API v1.1.0 um historische Monatsdaten von Deye
 Wechselrichtern abzurufen. Deye-Geräte kommunizieren über die Solarman-Cloud.
 
 Auth: OAuth2 mit appId/appSecret + SHA256-verschlüsseltem Passwort.
-Endpoint: POST /station/v1.0/history (timeType=3 für Monatsdaten, max 12 Monate)
+Endpoint: POST /station/v1.0/history (timeType=3 für Monatsdaten, max 12 Monate,
+Zeitraum als **Monatsstempel** `yyyy-MM` — s. Punkt 4)
 
-Drei Dinge, an denen der Provider scheiterte — alle aus #349 (OliS2811). Die
-ersten beiden wurden in v4.0.9 behoben, der dritte hat sie wirkungslos gemacht
-und kam erst durch seine Folgemeldung vom 05.08.2026 ans Licht:
+Vier Dinge, an denen der Provider scheiterte — alle aus #349 (OliS2811), und
+jedes hat das nächste verdeckt: die ersten beiden wurden in v4.0.9 behoben, der
+dritte hat sie wirkungslos gemacht und kam erst durch die Folgemeldung vom
+05.08.2026 ans Licht; der vierte erst, als der dritte gelöst war und ein Aufruf
+zum ersten Mal überhaupt bis zum Datenabruf durchkam:
 
 1. **Region.** Solarman betreibt zwei getrennte Wolken — die chinesische
    (`api.solarmanpv.com`, Portal `home.solarmanpv.com`) und die
@@ -36,6 +39,31 @@ und kam erst durch seine Folgemeldung vom 05.08.2026 ans Licht:
    ⚠ Der Testlauf war grün, weil die Fixture die `body`-Hülle **selbst
    erfunden** hatte — eine Fixture für eine fremde API ist eine Behauptung
    über sie und braucht eine Quelle.
+
+4. **Datumsformat.** `timeType=3` (Monate) will den Zeitraum als `yyyy-MM`;
+   hier gingen `yyyy-MM-01` und `yyyy-MM-28` raus. Antwort der API:
+   `2101006 invalid param` — also **kein** Datenabruf, obwohl Anmeldung,
+   Region und Header inzwischen stimmten. Der Anwender sah einen Import, der
+   sich anmeldet und dann ohne Zahlen zurückkommt.
+
+   **Gemessen, nicht angenommen** (OliS2811, #349 vom 07.08.2026, an *zwei*
+   Stationen — Sofar 2200 und 1100 — mit identischem Ergebnis):
+
+   | Aufruf | Antwort |
+   | --- | --- |
+   | `timeType=3`, `2025-01-01`…`2025-06-28` | `2101006 invalid param` |
+   | `timeType=3`, `2025-01`…`2025-06` | **success, 6 Datensätze** |
+   | `timeType=2`, `2025-06-01`…`2025-06-28` | success, 22 bzw. 27 Datensätze |
+   | `timeType=3`, `2025-01` **ohne** `endTime` | `2101006 invalid param` |
+
+   Die erste Zeile ist die **Kontrolle**: sie reproduziert genau den Fehler des
+   Melders, deshalb sagen die übrigen drei etwas aus. Aus der letzten folgt,
+   dass `endTime` Pflicht bleibt; aus der zweiten, dass die Grenzen
+   **inklusiv** sind (Januar bis Juni ⇒ sechs Monate).
+
+   Der zeitweise erwogene Umweg — Tageswerte über `timeType=2` holen und je
+   Monat summieren — ist damit **nicht nötig**. Er bleibt der belegte
+   Rückfallweg, falls die API die Monatsstufe je aufgibt.
 
 Das Passwort geht als kleingeschriebener SHA256-Hex-Digest raus — das war
 bereits richtig und ist in #349 ausdrücklich mit geprüft worden.
@@ -360,8 +388,13 @@ class DeyeSolarmanProvider(CloudImportProvider):
                 if (block_end_y, block_end_m) > end:
                     block_end_y, block_end_m = end
 
-                start_time = f"{block_start_y}-{block_start_m:02d}-01"
-                end_time = f"{block_end_y}-{block_end_m:02d}-28"
+                # ⚠ `timeType=3` verlangt **Monatsstempel** `yyyy-MM`, keine
+                # Tagesdaten. Ein `yyyy-MM-dd` beantwortet die API mit
+                # `2101006 invalid param` — von OliS2811 an zwei Stationen
+                # gemessen (s. Punkt 4 im Modul-Docstring). Wer hier einen Tag
+                # anhängt, bricht den Import vollständig, nicht nur am Rand.
+                start_time = f"{block_start_y}-{block_start_m:02d}"
+                end_time = f"{block_end_y}-{block_end_m:02d}"
 
                 resp = await client.post(
                     f"{host}/station/v1.0/history",

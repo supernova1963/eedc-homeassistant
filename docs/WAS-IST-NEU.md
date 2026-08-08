@@ -11,6 +11,16 @@
 
 ## Unveröffentlicht
 
+### Deye/Solarman: der Cloud-Import holt jetzt wirklich Daten
+
+**Betrifft dich das?** Alle, die ihre Historie über **Deye / Solarman** aus der Hersteller-Cloud importieren wollen.
+
+Der Import kam bisher genau bis zur Anmeldung. Die meldete Erfolg — und danach kam er ohne eine einzige Zahl zurück, weil die Hersteller-Schnittstelle den Datenabruf mit `invalid param` abwies. Der Grund war ein Detail im Zeitraum: eedc fragte die Monatswerte mit einem **Tagesdatum** ab (`2025-01-01`), Solarman will dafür einen **Monatsstempel** (`2025-01`).
+
+Das ist jetzt gemessen statt vermutet: **OliS2811** hat vier Probeaufrufe gegen seine beiden echten Anlagen gefahren — darunter eine Kontrolle, die den Fehler zuverlässig auslöst. Erst dadurch stand fest, welches der beiden Formate die Schnittstelle akzeptiert.
+
+> **Der Provider trägt weiterhin den Hinweis „nicht mit echten Geräten getestet".** Er verschwindet, sobald ein vollständiger Import bei einem Anwender durchgelaufen ist — bis dahin bleibt der Hinweis stehen, auch wenn jeder bekannte Defekt behoben ist.
+
 ### Speicher hinter der Wechselrichter-Grenze: dein SOLL war zu niedrig
 
 **Betrifft dich das?** Alle mit **Balkonkraftwerk + Akku** und alle mit **Hybrid-Wechselrichter** (Speicher gleichstromseitig am Wechselrichter).

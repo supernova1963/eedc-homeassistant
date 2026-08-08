@@ -303,7 +303,7 @@ async def test_zeitraum_zerfaellt_in_vorwaerts_laufende_bloecke(monkeypatch):
         dict(CREDS), 2025, 6, 2026, 6
     )
 
-    assert fenster == [("2025-06-01", "2026-05-28"), ("2026-06-01", "2026-06-28")]
+    assert fenster == [("2025-06", "2026-05"), ("2026-06", "2026-06")]
     for start, ende in fenster:
         assert start <= ende, f"Fenster endet vor seinem Anfang: {start} → {ende}"
 
@@ -453,6 +453,138 @@ async def test_monatswerte_werden_flach_gelesen(monkeypatch):
     result = await DeyeSolarmanProvider().fetch_monthly_data(dict(CREDS), 2026, 3, 2026, 3)
 
     assert [(m.jahr, m.monat, m.pv_erzeugung_kwh) for m in result] == [(2026, 3, 412.5)]
+
+
+# --- Datumsformat (F-8, OliS2811 07.08.2026) ---------------------------------
+#
+# ⚠ WOHER DIESE FORM STAMMT — dieselbe Frage wie bei der Antwortform oben, und
+# derselbe Fehler wäre möglich gewesen. Die Regel unten ist **gemessen**, nicht
+# aus dem Handbuch abgeleitet: OliS2811 hat auf Bitte hin vier Proben gegen
+# seine beiden echten Stationen gefahren (#349, 07.08.2026; Sofar 2200 und
+# 1100, identisches Ergebnis):
+#
+#   A  timeType=3, "2025-01-01"…"2025-06-28"  →  2101006 invalid param
+#   B  timeType=3, "2025-01"…"2025-06"        →  success, 6 Datensätze
+#   C  timeType=2, "2025-06-01"…"2025-06-28"  →  success, 22 bzw. 27 Datensätze
+#   D  timeType=3, "2025-01" ohne endTime     →  2101006 invalid param
+#
+# **A ist die Kontrolle** — sie reproduziert den Fehler des Melders. Ohne sie
+# sagten B/C/D nichts, weil dann auch ein ganz anderer Defekt die Ursache sein
+# könnte. Aus D folgt, dass `endTime` Pflicht ist; aus B, dass die Grenzen
+# inklusiv sind (Januar…Juni = sechs Monate).
+#
+# Der Handler unten bildet genau das ab. Das ist der Unterschied zu jedem
+# anderen Mock in dieser Datei: **er akzeptiert nicht jedes Format.** Genau
+# deshalb war der Defekt bis heute unsichtbar — sämtliche Bestandsproben
+# antworteten fröhlich `success` auf einen Aufruf, den der echte Server
+# ablehnt (die F-4-Klasse, hier zum zweiten Mal an derselben API).
+
+_MONATSSTEMPEL = 7   # len("2025-01")
+
+
+def _history_wie_solarman(request: httpx.Request) -> httpx.Response:
+    """Antwortet auf `/station/v1.0/history` wie die gemessene API."""
+    koerper = json.loads(request.content)
+    start, ende = koerper.get("startTime"), koerper.get("endTime")
+
+    if koerper.get("timeType") == 3:
+        # Probe A und D: Tagesstempel oder fehlendes Ende ⇒ Ablehnung.
+        if not ende or len(str(start)) != _MONATSSTEMPEL or len(str(ende)) != _MONATSSTEMPEL:
+            return _json({"success": False, "code": "2101006", "msg": "invalid param"})
+
+    # Probe B: ein Datensatz je Monat des angefragten Fensters, inklusiv.
+    (sj, sm), (ej, em) = (
+        tuple(int(t) for t in str(start).split("-")[:2]),
+        tuple(int(t) for t in str(ende).split("-")[:2]),
+    )
+    items = []
+    j, m = sj, sm
+    while (j, m) <= (ej, em):
+        items.append({"year": j, "month": m, "generationValue": 100.0 + m})
+        m += 1
+        if m > 12:
+            m, j = 1, j + 1
+    return _json({"success": True, "stationDataItems": items})
+
+
+def _handler_mit_echter_formatpruefung(request: httpx.Request) -> httpx.Response:
+    if request.url.path.endswith("/token"):
+        return _json(TOKEN_OK)
+    return _history_wie_solarman(request)
+
+
+async def test_import_gelingt_gegen_die_gemessene_formatpruefung(monkeypatch):
+    """DER Beleg für F-8: gegen einen Server, der A ablehnt, kommen Daten an.
+
+    Vor dem Fix ging `2025-01-01`…`2025-06-28` raus und dieser Handler
+    antwortete — wie Ollis Stationen — mit `2101006`. Der Import brach ohne
+    einen einzigen Monat ab.
+    """
+    _mock_httpx(monkeypatch, _handler_mit_echter_formatpruefung)
+    result = await DeyeSolarmanProvider().fetch_monthly_data(
+        dict(CREDS), 2025, 1, 2025, 6
+    )
+
+    assert [(m.jahr, m.monat) for m in result] == [
+        (2025, 1), (2025, 2), (2025, 3), (2025, 4), (2025, 5), (2025, 6)
+    ], "sechs Monate wie in Ollis Probe B — inklusive beider Grenzen"
+
+
+async def test_zeitraum_geht_als_monatsstempel_raus(monkeypatch):
+    """Die Form selbst, unabhängig davon, ob der Mock sie prüft."""
+    gesendet: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return _json(TOKEN_OK)
+        gesendet.append(json.loads(request.content))
+        return _json({"success": True, "stationDataItems": []})
+
+    _mock_httpx(monkeypatch, handler)
+    await DeyeSolarmanProvider().fetch_monthly_data(dict(CREDS), 2025, 1, 2025, 6)
+
+    assert gesendet, "kein Datenabruf gesehen"
+    for koerper in gesendet:
+        assert koerper["timeType"] == 3
+        assert koerper["startTime"] == "2025-01"
+        assert koerper["endTime"] == "2025-06"
+        # Probe D: ohne Ende lehnt die API ab, es darf also nie fehlen.
+        assert koerper["endTime"], "endTime ist Pflicht (Probe D)"
+
+
+async def test_ollis_fehlercode_erreicht_die_oberflaeche(monkeypatch):
+    """Fällt die Formatregel je wieder, muss der Anwender den Grund lesen.
+
+    `2101006 invalid param` ist der Code, mit dem OliS2811 die Meldung
+    aufgemacht hat — er gehört in die Fehlermeldung, nicht nur ins Log.
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/token"):
+            return _json(TOKEN_OK)
+        return _json({"success": False, "code": "2101006", "msg": "invalid param"})
+
+    _mock_httpx(monkeypatch, handler)
+    with pytest.raises(Exception) as exc:
+        await DeyeSolarmanProvider().fetch_monthly_data(dict(CREDS), 2025, 1, 2025, 6)
+
+    assert "invalid param" in str(exc.value)
+    assert "2101006" in str(exc.value)
+
+
+async def test_langer_zeitraum_bleibt_auch_in_monatsstempeln_lueckenlos(monkeypatch):
+    """Gegenprobe zur Blockrechnung — jetzt gegen den strengen Handler.
+
+    Ein Zeitraum über die 12-Monats-Grenze zerfällt in Blöcke; kein Monat darf
+    dabei doppelt kommen oder fehlen.
+    """
+    _mock_httpx(monkeypatch, _handler_mit_echter_formatpruefung)
+    result = await DeyeSolarmanProvider().fetch_monthly_data(
+        dict(CREDS), 2025, 6, 2026, 6
+    )
+
+    monate = [(m.jahr, m.monat) for m in result]
+    erwartet = [(2025, m) for m in range(6, 13)] + [(2026, m) for m in range(1, 7)]
+    assert monate == erwartet, "13 Monate, lückenlos und ohne Dublette"
 
 
 async def test_tokenanfrage_sendet_language_en(monkeypatch):
