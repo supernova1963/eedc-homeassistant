@@ -2,7 +2,7 @@
  * DatenquellenGatewayPicker — Overlay zum Zuordnen einer MQTT-Gateway-Quelle
  * an ein eedc-Feld (Datenquellen-V4 / B3.2).
  *
- * SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2b (Quell-Picker Punkt 2). Ablauf:
+ * SoT: docs/KONZEPT-DATENQUELLEN-V4.md §2b (Quell-Picker Punkt 2). Ablauf:
  *   1. **Baum-Navigation** Ebene für Ebene durch die MQTT-Topic-Hierarchie bis zum
  *      Blatt. Der Server liefert je Pfad NUR die direkten Kinder (serverseitig
  *      aggregiert → vollständig, kein 1000-Topic-Cap; MQTT kann eine Ebene nicht

@@ -1,6 +1,6 @@
 """Symmetrie-Wächter P2 — Σ Pro-Modul == Σ Anlagen-Summe (A20/Paket D).
 
-Regel P2 (Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` §3): der
+Regel P2 (Befund-Sweep `docs/drafts/archive/BEFUND-SWEEP-WURZELMUSTER.md` §3): der
 kWp-Anteil ist ein **Prognose**-Schlüssel, kein Ertragsschlüssel — auf der
 IST-Seite verteilt er nur, wenn kein Messwert existiert, und dann gekennzeichnet.
 Woran man einen Rückfall erkennt: die Pro-Modul-Sicht

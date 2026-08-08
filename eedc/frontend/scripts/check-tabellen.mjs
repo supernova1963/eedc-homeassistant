@@ -78,7 +78,7 @@ for (const file of dateien) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Regel T (Tabellen-SoT, `docs/drafts/KONZEPT-TABELLEN-SOT.md`, abgenommen 2026-07-10)
+// Regel T (Tabellen-SoT, `docs/drafts/archive/KONZEPT-TABELLEN-SOT.md`, abgenommen 2026-07-10)
 //
 // T1: kein rohes `<table>` außerhalb der Zentrale `components/ui/Table.tsx`.
 // T7: keine eigene Scroll-/Sticky-/Höhen-Mechanik an Tabellen — die Zentrale

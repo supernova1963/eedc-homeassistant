@@ -14,7 +14,7 @@
  * sofort (loading bleibt false), still revalidiert wird trotzdem (`reloading`).
  * Skeleton nur noch beim echten Erst-Load (kein Cache-Eintrag) — genau das
  * Community-Muster (Benchmark einmal laden), ohne den Dispatcher zum
- * Fetch-Monolithen zu machen. SoT: docs/drafts/KONZEPT-LADEZEIT-CACHE-SWR.md.
+ * Fetch-Monolithen zu machen. SoT: docs/KONZEPT-LADEZEIT-CACHE-SWR.md.
  * Ohne `swrKey` ist das Verhalten unverändert (V3-Seiten unberührt).
  */
 

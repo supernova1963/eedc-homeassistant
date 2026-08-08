@@ -1,7 +1,7 @@
 /**
  * HaVerbindungForm — HA-Verbindung als eigenständiger SoT-Baustein (Basis).
  *
- * Datenquellen-V4 / B4a (SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2a):
+ * Datenquellen-V4 / B4a (SoT: docs/KONZEPT-DATENQUELLEN-V4.md §2a):
  * zweiter Verbindungs-Block neben dem MQTT-Broker. HA-App (Supervisor) → nur
  * Status; Standalone → Basis-URL + Long-Lived-Token eingeben/testen/speichern.
  *

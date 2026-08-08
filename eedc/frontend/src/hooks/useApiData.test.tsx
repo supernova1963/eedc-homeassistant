@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { useApiData, _clearSwrCacheForTests } from './useApiData'
 
 // R18-2 (SWR-Sicht-Cache): Invarianten des erweiterten useApiData.
-// SoT: docs/drafts/KONZEPT-LADEZEIT-CACHE-SWR.md §3.
+// SoT: docs/KONZEPT-LADEZEIT-CACHE-SWR.md §3.
 
 function deferred<T>() {
   let resolve!: (v: T) => void

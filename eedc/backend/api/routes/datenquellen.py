@@ -1,7 +1,7 @@
 """
 Datenquellen-Zuordnung — feld-zentrische Fläche (Datenquellen-V4 / B2).
 
-SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2b.
+SoT: docs/KONZEPT-DATENQUELLEN-V4.md §2b.
 
 Liefert je Anlage die vollständige, gruppierte eedc-Feldliste (Anlage-Basis +
 je aktiver Investition, Live + Energie) mit dem kanonischen Standard-Inbound-

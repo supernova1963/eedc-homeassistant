@@ -717,6 +717,48 @@ ist, gehört in einen Doku-Absatz **kein** „ab v4.x" — die Zahl steht dann i
 nicht im Fließtext. Am 2026-08-06 mussten so 19 Behauptungen vor einem Release korrigiert werden,
 14 davon „v4.1", vier in ausgelieferter Anwender-Doku.
 
+### Ein Statuskopf ist eine Behauptung
+
+Konzept-Dokumente werden **im Rumpf** fortgeschrieben — der **Kopf** bleibt stehen. Genau dort
+liest aber jeder zuerst. Am 2026-08-08 gemessen, drei Fälle derselben Klasse:
+
+- `KONZEPT-SPEICHER-AUSWERTUNG.md` nannte „Kern weiterhin offen" und verwies auf ein Issue, das
+  mit v4.0.0 geschlossen wurde — drei Absätze tiefer im **selben** Kasten stand „Phase 1
+  ausgeliefert".
+- `KONZEPT-UNVOLLSTAENDIGE-WERTE.md` trug „VORSCHLAG — kein Code", während die ersten beiden
+  Bausteine am selben Tag gebaut worden waren.
+- `KONZEPT-HA-EXPORT-ARCHITEKTUR.md` führte eine Restarbeit als offen, die längst erledigt war
+  (`sw_version` liest `APP_VERSION`, der tote Helper ist entfernt).
+
+**Die Regel:** Wer ein Konzept anfasst, fasst seinen **Status** mit an und hält die **offenen
+Zeilen gegen den Code**. Ein Statuskopf trägt ein **Mess-Datum, keine Versionsnummer** — eine
+Zahl an dieser Stelle veraltet garantiert. Und: **die offenen Zeilen eines publizierten Konzepts
+sind selbst eine Arbeitsquelle** — sie werden bei der Paket-Wahl mitgelesen, auch wenn kein Issue
+dafür existiert.
+
+### Wenn ein Docstring auf `docs/drafts/` zeigt
+
+`docs/drafts/` ist **gitignored** (`.gitignore:82`) — die Dateien dort liegen nur auf der Maschine,
+auf der sie entstanden sind. Ein Verweis dorthin ist für jeden Mitleser ein 404. Am 2026-08-08
+baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
+(`api/routes/datenquellen.py`, `hooks/useApiData.ts`) mit dem Wort **„SoT"**.
+
+**Die Regel, die daraus folgt:**
+
+1. **Ein Dokument, das im Code als SoT zitiert wird, gehört nach `docs/`** — nicht in `drafts/`.
+   Deshalb sind `KONZEPT-DATENQUELLEN-V4.md`, `KONZEPT-LADEZEIT-CACHE-SWR.md` und
+   `IA-V4-SOT-INVENTAR.md` dorthin gewandert, so wie vorher schon
+   [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md).
+2. **Bestehende Verweise auf `docs/drafts/archive/…` sind Herkunftsbelege, keine Voraussetzung.**
+   Sie sagen, aus welchem Bau-Vertrag eine Regel stammt; die Regel selbst steht immer im
+   versionierten Baum (ADR, Konzept, Docstring). ADR-002 formuliert das für sich selbst
+   ausdrücklich so: *„Diese ADR ist so geschrieben, dass sie ohne den Bericht trägt."* Wer eine
+   solche Stelle anfasst, prüft, ob die tragende Passage schon eine versionierte Heimat hat — und
+   hebt sie sonst dorthin.
+3. **Ein Verweis darf nicht ins Leere zeigen**, auch nicht innerhalb von `drafts/`. Wandert ein
+   Dokument nach `drafts/archive/`, wandern seine Verweise mit (am 2026-08-08 waren acht Pfade
+   falsch, weil das Ziel längst archiviert war).
+
 ## Weiterführende Dokumentation
 
 | Dokument | Inhalt |
@@ -727,6 +769,11 @@ nicht im Fließtext. Am 2026-08-06 mussten so 19 Behauptungen vor einem Release 
 | [KONZEPT-IA-V4.md](KONZEPT-IA-V4.md) | Informationsarchitektur + Invarianten I1–I16 + Redirects |
 | [KONZEPT-STYLE-GUIDE.md](KONZEPT-STYLE-GUIDE.md) | Darstellungs-SoT (Regel 0/0a) |
 | [KONZEPT-MONATS-FAKTEN.md](KONZEPT-MONATS-FAKTEN.md) | die Monatszeile als eine Schicht (P10) |
+| [IA-V4-SOT-INVENTAR.md](IA-V4-SOT-INVENTAR.md) | Register der UI-SoT-Patterns (Invariante I12) |
+| [KONZEPT-DATENQUELLEN-V4.md](KONZEPT-DATENQUELLEN-V4.md) | eine Quelle je Feld, HA-first (Invariante I16) |
+| [KONZEPT-LADEZEIT-CACHE-SWR.md](KONZEPT-LADEZEIT-CACHE-SWR.md) | SoT für `hooks/useApiData.ts` (SWR, Skeletons) |
+| [KONZEPT-HA-EXPORT-ARCHITEKTUR.md](KONZEPT-HA-EXPORT-ARCHITEKTUR.md) | was nach HA exportiert wird — und was nie |
+| [KONZEPT-FOKUS-DEEPLINK.md](KONZEPT-FOKUS-DEEPLINK.md) · [KONZEPT-CHART-TABELLEN.md](KONZEPT-CHART-TABELLEN.md) · [KONZEPT-263-klima-split.md](KONZEPT-263-klima-split.md) | geplante Pakete aus der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) |
 | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Release-Prozess beider Repos |
 | [SETUP_DEVMACHINE.md](SETUP_DEVMACHINE.md) | Entwicklungsrechner einrichten |
 | [SENSOR-REFERENZ.md](SENSOR-REFERENZ.md) · [MQTT_INBOUND.md](MQTT_INBOUND.md) | Sensor-Felder · Topic-Struktur |

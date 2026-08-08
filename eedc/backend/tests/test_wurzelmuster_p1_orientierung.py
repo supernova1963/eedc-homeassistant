@@ -1,6 +1,6 @@
 """Regressionstest P1 — ein Anlagen-Kennwert nie aus EINER Investition (A20/Paket C).
 
-Regel (Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` §2): ein
+Regel (Befund-Sweep `docs/drafts/archive/BEFUND-SWEEP-WURZELMUSTER.md` §2): ein
 Anlagen-Kennwert darf nie aus einer einzelnen Investition abgeleitet werden —
 außer der Aufrufer hat vorher **bewiesen**, dass alle Investitionen in diesem
 Kennwert übereinstimmen (Guard im Code, nicht im Kommentar).

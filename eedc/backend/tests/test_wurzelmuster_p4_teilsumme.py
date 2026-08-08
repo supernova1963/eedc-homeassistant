@@ -1,6 +1,6 @@
 """P4-Ehrlichkeit: eine Antwort, die weniger enthält als sie soll, sagt es selbst.
 
-Wurzelmuster **P4** (`docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` §5): „ein
+Wurzelmuster **P4** (`docs/drafts/archive/BEFUND-SWEEP-WURZELMUSTER.md` §5): „ein
 Wert-Pfad darf nie eine Null oder eine Teilsumme als gültiges Ergebnis
 ausliefern, ohne dass die Antwort selbst es sagt — die Unvollständigkeit gehört
 in die Response, nicht ins Log."

@@ -1,6 +1,6 @@
 """P5-Invariante: „genau eine aktive PVGIS-Prognose je Anlage" (A17).
 
-Der Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md` §6 fand 23 Lesestellen
+Der Sweep `docs/drafts/archive/BEFUND-SWEEP-WURZELMUSTER.md` §6 fand 23 Lesestellen
 derselben Auswahlregel, 6 davon abweichend — und **eine Wurzel**: es gab keinen
 Unique-Constraint, und der JSON-Backup-Import konnte den verletzten Zustand
 erzeugen (`ist_aktiv=pvgis_data.get("ist_aktiv", True)` ohne vorherige

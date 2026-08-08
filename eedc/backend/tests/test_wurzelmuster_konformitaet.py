@@ -1,6 +1,6 @@
 """Konformitäts-Wächter gegen sechs der sieben Wurzelmuster (A14/A17/A24/A25/A27/R8-4).
 
-Hintergrund: Befund-Sweep `docs/drafts/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
+Hintergrund: Befund-Sweep `docs/drafts/archive/BEFUND-SWEEP-WURZELMUSTER.md`. Elf
 Commits der v4.0.1-Runde haben Fundstellen einzeln geheilt, jeder Fix erzeugte
 den nächsten Fund. Diese Datei macht sechs der Muster maschinell prüfbar, damit
 sie nicht neu entstehen. Sie prüft **Struktur, keine Werte** — deshalb kein

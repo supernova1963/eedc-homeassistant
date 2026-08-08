@@ -1,7 +1,7 @@
 /**
  * MqttBrokerForm — Broker-Verbindung als eigenständiger SoT-Baustein.
  *
- * Datenquellen-V4 / B1 (SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2a):
+ * Datenquellen-V4 / B1 (SoT: docs/KONZEPT-DATENQUELLEN-V4.md §2a):
  * „Verbindung" getrennt von „was darüber fließt". EIN Broker für Inbound-Empfang,
  * Gateway und Export. Aus dem MqttInboundSetup-Wizard herausgelöst und als eigener
  * Block unter Einstellungen → Integration montiert.

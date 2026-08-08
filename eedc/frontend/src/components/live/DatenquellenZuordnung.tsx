@@ -1,7 +1,7 @@
 /**
  * DatenquellenZuordnung — feld-zentrische Datenquellen-Fläche (Datenquellen-V4).
  *
- * SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2b1. Struktur BIS ZUR GERÄTE-EBENE
+ * SoT: docs/KONZEPT-DATENQUELLEN-V4.md §2b1. Struktur BIS ZUR GERÄTE-EBENE
  * gespiegelt von Einstellungen → Komponenten (`KomponentenEinstellungen`):
  * `BlockShell` mit EINEM Block je Investitionstyp (farbige `TYP_ICON_STYLE`-Icons,
  * „N Geräte"-Summary) + Zusatz-Block „Anlage / Zähler" (Basis-Felder, `Gauge`).

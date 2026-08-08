@@ -1,7 +1,7 @@
 """
 HA-Remote-Verbindung — Basis (Datenquellen-V4 / B4a).
 
-SoT: docs/drafts/KONZEPT-DATENQUELLEN-V4.md §2a/§3a.
+SoT: docs/KONZEPT-DATENQUELLEN-V4.md §2a/§3a.
 
 Ermöglicht eedc-Standalone, eine ENTFERNTE Home-Assistant-Installation per
 Basis-URL + Long-Lived-Token zu hinterlegen und die Verbindung zu **testen**.

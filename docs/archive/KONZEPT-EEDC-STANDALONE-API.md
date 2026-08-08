@@ -188,6 +188,6 @@ erweitert.
 - `eedc/backend/core/config.py:71` — `HA_RECORDER_DB_URL` als heutiger
   Standalone-Workaround (MariaDB-only)
 - HA-Doku: `recorder/get_statistics_during_period` WebSocket-API
-- [docs/drafts/KONZEPT-LIVE-SNAPSHOT-5MIN.md](KONZEPT-LIVE-SNAPSHOT-5MIN.md) —
+- [docs/archive/KONZEPT-LIVE-SNAPSHOT-5MIN.md](KONZEPT-LIVE-SNAPSHOT-5MIN.md) —
   parallele Refactoring-Story, gleicher Geist (API-First statt
   Datenquelle-Hack)

@@ -1,6 +1,6 @@
 # Konzept — was eedc sagt, wenn ein Messwert fehlt
 
-> **Status: VORSCHLAG (2026-08-02).** Kein Code, keine Migration, keine ADR-Zeile —
+> **Status (gemessen 2026-08-08): B0 + B0b gebaut · B1–B5 offen.** ⚠ Bis heute stand hier „VORSCHLAG (2026-08-02) — kein Code", obwohl die ersten beiden Bausteine noch am selben Tag gebaut wurden (Fund N-183, dieselbe Klasse wie N-182). Für die **offenen** Bausteine gilt weiter: keine ADR-Zeile vor dem Bau —
 > die kommt erst mit dem Bau, sonst behauptet ADR-002 eine Invariante, die nichts
 > absichert ([[feedback_keine_regel_behaupten_ohne_code_beleg]]).
 >
