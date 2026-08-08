@@ -93,6 +93,14 @@ Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis
 
 > **Dynamischer Strompreis (Tibber/aWATTar/EPEX):** Den zugehörigen Sensor ordnest du nicht mehr hier, sondern unter **Einstellungen → Datenquellen** dem Feld „Strompreis" zu (siehe [§7](#7-datenquellen--feld-zentrische-zuordnung)). Ohne eigenen Sensor blendet eedc automatisch den EPEX-Börsenpreis (DE/AT via aWATTar) als Overlay im Live-Tagesverlauf ein.
 
+> **Einspeisevergütung: eedc rechnet flat mit dem eingetragenen Satz.** Der Einspeise-Erlös ist schlicht *eingespeiste Menge × dein Satz* ([Berechnungsreferenz 3.2](BERECHNUNGEN.md#32-finanzen-cockpit)) — es wird nichts im Hintergrund umgerechnet und nichts aus der Anlagengröße abgeleitet.
+>
+> Die EEG-Vergütung ist nach **installierter Leistung** gestaffelt (z. B. ein Satz bis 10 kWp, ein niedrigerer darüber) — nicht nach eingespeister Menge. Für die Gesamtanlage gilt deshalb der nach kWp **gewichtete Mischsatz**, und genau der gehört in dieses Feld. Rechenbeispiel mit **erfundenen** Sätzen — die für dich gültigen stehen in deinem Vergütungsbescheid: 12,5 kWp, davon 10,0 kWp zu 8,20 ct und 2,5 kWp zu 7,10 ct ⇒ (10,0 × 8,20 + 2,5 × 7,10) ÷ 12,5 = **7,98 ct/kWh**. Das ist keine Näherung, sondern exakt der Satz, den der Netzbetreiber im Mittel zahlt.
+>
+> eedc ermittelt diesen Satz **bewusst nicht selbst** — auch nicht als Vorschlag: Die EEG-Sätze ändern sich laufend, und welche Bedingungen für deine Anlage tatsächlich gelten (Inbetriebnahmedatum, Volleinspeisung, PPA, Direktvermarktung), weißt nur du. Ein neuer Tarif startet deshalb mit **0 ct/kWh**; mit 0 bleibt der Einspeise-Erlös des Zeitraums 0 €, und der **Daten-Checker** meldet das, sobald tatsächlich Einspeisung erfasst ist. Ist deine Einspeisung wirklich unvergütet, bleibt 0 richtig und der Hinweis aus.
+>
+> Wechselt dein Satz, trägst du einen **neuen Tarif mit eigenem „Gültig ab"** ein — die Historie bleibt dann mit ihrem alten Satz gerechnet.
+
 ### 2.3 Solarprognose
 
 Diese Kachel kombiniert die PVGIS-Langfristprognose mit den Wetter-Provider-Einstellungen:
@@ -105,6 +113,19 @@ Diese Kachel kombiniert die PVGIS-Langfristprognose mit den Wetter-Provider-Eins
   Ist ein Profil hinterlegt, zeigt die Karte Datenpunkte sowie min/max-Elevation; **Löschen** kehrt zu den automatischen Geländedaten zurück. Das Profil bildet **feste** Hindernisse ab — eine jahreszeitlich wechselnde Verschattung (Laubbäume) ändert sich damit nicht mit.
 - **Wetter-Provider** (für Autofill/historische Werte): Auto (Bright Sky DE, sonst Open-Meteo), Bright Sky (DWD), Open-Meteo, Open-Meteo Solar (GTI-basiert für geneigte Module).
 - **Prognose-Historie:** Jeder Abruf wird gespeichert und bleibt erhalten. **Genau einer ist „Aktiv"** und liefert die SOLL-Werte in *allen* Sichten und Berichten; über „Aktivieren" schaltest du bewusst auf einen anderen — auch auf einen **älteren**, etwa weil er mit einem genaueren Horizontprofil geholt wurde. Mehr dazu: [Prognosen §2.6](HANDBUCH_PROGNOSEN.md#26-die-aktive-pvgis-prognose--eine-und-du-bestimmst-welche).
+
+> **Die Prognose zieht selbst nach, wenn sie nicht mehr zur Anlage passt.**
+> Ändert sich die Nennleistung, die Ausrichtung, die Neigung, der Standort oder
+> das Horizontprofil, holt eedc nachts eine neue Prognose — mit **deinen**
+> eingestellten Systemverlusten, nicht mit dem Standardwert. Die bisherige
+> Prognose bleibt in der Historie und ist jederzeit wieder aktivierbar.
+>
+> Das **Alter** einer Prognose ist dagegen kein Grund für einen Neuabruf, und
+> die Kachel warnt auch nicht mehr davor: PVGIS rechnet mit einem
+> Langzeit-Mittel über viele Jahre. Eine ein Jahr alte Prognose liefert für
+> dieselbe Anlage dieselbe Zahl wie eine von heute — falsch wird sie erst durch
+> eine Änderung. Statt „Letzter Abruf vor N Tagen" meldet die Kachel deshalb,
+> **was** nicht mehr passt, zum Beispiel „Nennleistung 9,80 → 2,40 kWp".
 
 ### 2.4 Community-Share
 
@@ -132,7 +153,7 @@ Unter **Einstellungen → Komponenten** legst du deine Geräte an und pflegst ih
 
 **Nur PV-Module ohne Wechselrichter tragen ein Warnsymbol.** Bis v4.0.0 wurde auch bei Speichern „Speicher ohne Wechselrichter-Zuordnung" gemeldet — und verleitete dazu, eine falsche Zuordnung anzulegen. Speicher ohne Zuordnung heißen jetzt neutral **„Eigenständige Speicher"**.
 
-> **Die Zeile heißt „Zuordnung", nicht „Kopplung".** eedc kennt **kein** Feld für AC-/DC-Kopplung; die frühere Anzeige „DC-gekoppelt" leitete sich allein daraus ab, *ob* ein Wechselrichter zugeordnet ist — ein AC-Speicher am Hybrid-Wechselrichter war damit falsch beschriftet. Die Zeile nennt jetzt den Wechselrichter beim Namen und erklärt, was die Zuordnung bewirkt.
+> **Die Zeile heißt „Zuordnung", nicht „Kopplung".** Die frühere Anzeige „DC-gekoppelt" leitete sich allein daraus ab, *ob* ein Wechselrichter zugeordnet ist — ein AC-Speicher am Hybrid-Wechselrichter war damit falsch beschriftet. Die Zeile nennt jetzt den Wechselrichter beim Namen und erklärt, was die Zuordnung bewirkt. Die Kopplung ist davon **unabhängig** und wird seit #351 als eigenes Feld gepflegt (s. [§3.4](#34-typ-spezifische-parameter)); sie ändert keine Zahl, sondern sagt, **wo** gemessen wird.
 
 ### 3.2 Anschaffungs- und Stilllegungsdatum
 
@@ -153,10 +174,47 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 - **Speicher:** Kapazität (kWh), **nutzbare Kapazität (kWh)**, max. Leistung (kW), **Kopplung**, arbitrage-fähig (Ja/Nein). Die nutzbare Kapazität ist die Reserve-bereinigte Größe (wer 10/90 fährt, trägt bei 10 kWh brutto 8 kWh ein); sie verfeinert den gemessenen Wirkungsgrad. Vollzyklen und die Wirtschaftlichkeits-Prognose rechnen weiterhin mit der Brutto-Kapazität ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
   > **Kopplung — AC oder DC?** Die Vorbelegung *Automatisch* leitet sie aus der Wechselrichter-Zuordnung ab (zugeordnet ⇒ DC, sonst AC) und schreibt im Formular dazu, was dabei herauskommt. Das trifft die meisten Anlagen, aber nicht alle: Ein **AC-Speicher an einem Hybrid-Wechselrichter** und ein **DC-Speicher ohne erfassten Wechselrichter** brauchen die ausdrückliche Angabe. Sie **ändert keine Zahl** — ob der Speicher als Teil des PV-Systems oder eigenständig gerechnet wird, entscheidet weiterhin allein die Zuordnung. Wozu sie dient: Sie legt fest, **wo** Ladung und Entladung gemessen werden — bei AC-Kopplung hausseitig hinter dem Batterie-Wechselrichter, bei DC-Kopplung am Batterie-Anschluss. **Beide Werte müssen von derselben Seite kommen**, sonst enthält der Wirkungsgrad die Wandlung nur in eine Richtung und beschreibt die Messstelle statt den Speicher.
 - **E-Auto:** Batteriekapazität (kWh), V2H-fähig, „nutzt V2H aktiv".
+  > **Plug-in-Hybrid?** Dann trag unter *Vergleich & Betrieb* den **eigenen Verbrauch (L/100 km)**
+  > ein — das ist, was dein Fahrzeug im Verbrenner-Betrieb wirklich tankt, nicht der
+  > Vergleichs-Benziner darüber. Erst dieses Feld sagt eedc, dass überhaupt ein Verbrenner
+  > mitfährt; ein eigenes „Fahrzeugtyp"-Feld gibt es bewusst nicht. Lässt du es leer, rechnet
+  > eedc wie bisher mit rein elektrischer Fahrt.
+  >
+  > Den elektrischen Anteil bestimmt eedc am liebsten **gemessen**: aus dem monatlich erfassten
+  > Fahrverbrauch (kWh) und deinem kWh/100 km. Erfasst du den Fahrverbrauch nicht, trag den
+  > **elektrischen Fahranteil (%)** als Schätzung ein — sonst rechnet eedc weiter mit 100 %
+  > elektrisch und sagt es dir im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md). Einen Richtwert
+  > setzt eedc nicht von sich aus ein: das wäre eine Behauptung über dein Fahrzeug.
+  > Details: [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
 - **Wärmepumpe:** **JAZ** (Standardwert, falls kein Wärmemengenzähler), **Alternativkosten** (Gas/Öl als Mehrkosten-Basis), **jährliche Zusatzkosten der Alt-Heizung** (Schornsteinfeger, Wartung, Gaszähler-Grundpreis), **Alt-Tarif Gas/Öl** (ct/kWh, Fallback wenn ein Monat keinen eigenen Gaspreis führt).
 - **Wallbox:** max. Ladeleistung (kW), bidirektional.
 - **Wechselrichter:** max. Leistung (kW), MaStR-ID.
 - **Sonstiges:** Kategorie (Erzeuger / Verbraucher / Speicher) + Beschreibung; die Monatsdaten-Felder passen sich der Kategorie an.
+
+### 3.5 Balkonkraftwerk **oder** Wechselrichter + PV-Module?
+
+Beide Wege bilden erzeugende Module ab, und die Frage kommt regelmäßig. Die Antwort hängt an **einer** Eigenschaft:
+
+> **Ein Balkonkraftwerk trägt genau *eine* Ausrichtung und *eine* Neigung.** Es ist als Kompaktgerät gedacht — Module, Mikro-Wechselrichter und (optional) Akku in einer Investition. Die Modulzahl steckt in *Leistung je Modul × Anzahl*; alle Module teilen sich zwangsläufig dieselbe Ausrichtung. Der einzige Mehrfach-Fall ist die Option **„Ost-West (gemischt)"**, und die rechnet einen festen **50/50**-Split auf Ost und West — keine dritte Richtung, keine eigene Gewichtung.
+
+**Wann welcher Typ:**
+
+| Deine Anlage | Erfassen als | Warum |
+|---|---|---|
+| Stecker-Solargerät, alle Module gleich ausgerichtet | **Balkonkraftwerk** | Ein Gerät, ein Datensatz. Der Mikro-Wechselrichter braucht keine eigene Investition. |
+| Stecker-Solargerät, Module je zur Hälfte Ost und West | **Balkonkraftwerk**, Ausrichtung „Ost-West (gemischt)" | Der 50/50-Split trifft genau diesen Fall. |
+| Module in **drei oder mehr** Ausrichtungen, oder ungleich verteilt | **Wechselrichter + PV-Module** | Jede Ausrichtung bekommt ein eigenes PV-Modulfeld mit eigener Prognose. |
+| Dachanlage, mehrere Strings | **Wechselrichter + PV-Module** | Der Regelfall. |
+
+**Wenn du auf Wechselrichter + PV-Module ausweichst:** Trage beim Wechselrichter die **max. Leistung (kW)** ein — das ist seine **AC-Einspeisegrenze**, bei einem Stecker-Gerät also 0,8 kW (bzw. 0,6 kW bei älteren). eedc kappt dein SOLL damit **stündlich** an dieser Grenze, gemeinsam über alle Strings desselben Wechselrichters. Ohne diesen Eintrag prognostiziert PVGIS die volle Modulleistung, und dein SOLL wäre ein Ziel, das die Anlage konstruktionsbedingt nie erreicht.
+
+> **Achte auf die Nennleistung der Anlage.** Ein Balkonkraftwerk zählt in eedc **nicht** in die Anlagenleistung — es ist eine eigene Anlage mit eigener MaStR-Registrierung. Wechselrichter + PV-Module dagegen schon. Wer von einem Weg auf den anderen wechselt, prüft danach *Einstellungen → Anlage → Leistung (kWp)*.
+
+**Was ein Balkonkraftwerk trotzdem alles kann:** eigenes PVGIS-SOLL, eigene Zeile im String-Vergleich und in der Mehrjahres-Performance, eigene Zeile im Jahresbericht, eigene Wirtschaftlichkeit, eigener Eintrag in Energiebilanz und CO₂ — und einen **eigenen Akku** (s. unten). Der Ausweichweg ist also nur bei mehreren Ausrichtungen nötig, nicht um Funktionen freizuschalten.
+
+**Der Akku am Balkonkraftwerk** (Anker Solarbank, Zendure u. ä.) wird als **eigene Speicher-Investition** angelegt, mit dem Balkonkraftwerk als übergeordneter Komponente. Nur so bekommt er Live-Leistung, Ladestand, einen Knoten im Energiefluss und einen eigenen Zählerpfad. Die Speicher-Felder im Monatsabschluss des Balkonkraftwerks selbst sind Altbestand aus der Zeit davor — sie lassen sich weiter pflegen, aber der Akku ist darüber keiner Auswertung zuzuordnen.
+
+---
 
 > **Ein Schlüsselsatz für alle Wege:** Setup-Wizard, Komponenten-Formular und das Backend halten dieselben Parameter-Schlüssel. Felder, die du im [Setup-Wizard](HANDBUCH_INSTALLATION.md) erfasst, landen direkt unter den hier dokumentierten Werten.
 

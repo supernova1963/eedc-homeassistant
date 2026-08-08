@@ -1,11 +1,201 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.10)
+> **Stand:** August 2026 (v4.0.11)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.11 — Nichts raten, wo sich messen lässt (August 2026)
+
+### Plug-in-Hybrid: der Benzin-Anteil zählt jetzt mit
+
+**Betrifft dich das?** Alle, deren Fahrzeug **auch** einen Verbrenner hat. Fährst du rein elektrisch, ändert sich für dich **nichts** — keine einzige Zahl.
+
+eedc hat bei einer Fahrzeug-Investition bisher unterstellt, dass **alle** Kilometer elektrisch gefahren wurden. Bei einem Plug-in-Hybrid stimmt das nicht, und der Fehler ging immer in dieselbe Richtung: Der getankte Kraftstoff tauchte **weder als Kosten noch als Emission** auf. Ersparnis und CO₂-Bilanz sahen besser aus als die Realität.
+
+**Was du tun musst:** In der Fahrzeug-Komponente unter *Vergleich & Betrieb* das neue Feld **„Eigener Verbrauch (L/100 km)"** ausfüllen — das ist, was dein Fahrzeug im Verbrenner-Betrieb wirklich verbraucht. Nicht zu verwechseln mit dem Feld darüber: **„Verbrenner-Verbrauch"** beschreibt weiterhin das *hypothetische* Vergleichsfahrzeug, das du *nicht* gekauft hast. Zwei Bedeutungen, zwei Felder — deshalb wurde das alte Feld nicht umgedeutet.
+
+Ein „Fahrzeugtyp: Plug-in-Hybrid" gibt es bewusst nicht. **Das ausgefüllte Feld ist die Aussage.** Bleibt es leer, rechnet eedc wie bisher.
+
+**Woher eedc den elektrischen Anteil nimmt** — in dieser Reihenfolge:
+
+1. **Gemessen**, wenn du den monatlichen **Fahrverbrauch in kWh** erfasst: daraus und aus deinem kWh/100 km folgt, wie weit du elektrisch gekommen bist. Mehr als die gefahrenen Kilometer können es dabei nie werden.
+2. **Geschätzt**, wenn du stattdessen den **elektrischen Fahranteil in %** einträgst.
+3. **Gar nicht** — dann bleibt es beim alten Verhalten, und der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) sagt dir, dass die Angabe fehlt. Einen Richtwert („so 40–60 % sind üblich") setzt eedc **nicht** ein: das wäre eine Behauptung über dein Auto, keine Rechnung.
+
+**Was du danach siehst:** Im Komponenten-Hub stehen unter *Umwelt* zwei neue Werte — **Verbrenner-Anteil** in km und **Kraftstoffkosten** in Euro, mit dem Hinweis, ob sie gemessen oder geschätzt sind. Die Ersparnis vs. Verbrenner sinkt entsprechend, ebenso die CO₂-Einsparung. Der Vergleich mit dem Benziner bleibt dabei über **alle** Kilometer stehen — sonst würdest du dein Auto mit einem halben vergleichen.
+
+> **Deine geladene Energie wird nicht angetastet.** Sie ist gemessen, und ein Hybrid lädt ohnehin weniger. Sie zusätzlich zu kürzen hieße, denselben Anteil zweimal abzuziehen.
+
+### Wie viel deiner Autoladung kam aus der eigenen Sonne? eedc schätzt es jetzt
+
+**Betrifft dich das?** Alle, die zu Hause laden und **keinen eigenen Sensor** für den PV-Anteil haben. Wer den Anteil pflegt — etwa über evcc —, sieht **keine einzige veränderte Zahl**.
+
+Eine Wallbox zählt Kilowattstunden, nicht deren Herkunft. Fehlte die Angabe, hat eedc bisher die **komplette** Heimladung als Netzstrom verbucht: 0 % Sonne im Komponenten-Hub, die volle Ladung als Netzbezug in der CO₂-Bilanz, eine entsprechend zu kleine Ersparnis. Das war keine Messung, sondern eine Annahme — und die ungünstigste von allen.
+
+Jetzt leitet eedc den Anteil aus deinen eigenen Stundenwerten ab, nach derselben Idee wie evcc: Was in einer Ladestunde weder aus dem Netz noch aus dem Speicher kam, kann nur aus deiner PV gekommen sein — und was du in dieser Stunde eingespeist hast, hätte stattdessen laden können.
+
+**Wie gut das trifft, ist gemessen und nicht behauptet:** An einer echten Anlage mit evcc als Referenz (963 kWh Heimladung über sieben Monate) kam evcc auf **67,9 %** Sonnenanteil, eedcs Rechnung auf **64,7 %**. Sie untertreibt also eher, als dir zu schmeicheln. Der Wert ist in der Datenherkunft ausdrücklich als **abgeleitet** gekennzeichnet; wo nicht jede Ladestunde auswertbar war, steht das dabei.
+
+**Was du tun musst: nichts.** Deine Zahlen werden größer — die E-Auto-Netzladung sinkt, die ausgewiesene Ersparnis steigt, und zwar **überall dieselbe**: Komponenten-Hub (E-Auto und Wallbox), *Cockpit → Monat* und *→ Jahr*, *Auswertungen → Komponenten*, Aussichten, Jahresbericht-PDF, Monats-Tabelle und CO₂-Bilanz.
+
+> ⚠ **Der Sensor `sensor.…_e_auto_pv_anteil_prozent` springt einmalig.** Er meldete bisher 0 % und zeigt künftig den abgeleiteten Anteil. In der Langzeitstatistik ist das ein Sprung an einem Tag — es gehen keine Daten verloren. Betroffen ist nur, wer keinen eigenen PV-Ladesensor pflegt.
+
+> **Ein selbst gepflegter Wert wird nie überschrieben** — auch eine bewusst eingetragene **0** nicht. Und **rückwirkend passiert nichts**: Die Schätzung entsteht beim Aggregieren eines Tages, abgeschlossene Zeiträume bleiben, wie sie sind.
+
+Auch die **ROI-Prognose rät nicht mehr**: Sie rechnete bisher mit 60 % PV-Anteil, während dieselbe Anlage im IST 0 % zeigte — zwei Zahlen für dieselbe Größe. Jetzt nimmt sie den tatsächlich erreichten Anteil, solange am Fahrzeug keiner gepflegt ist. Dein eigener Wert im Feld *PV-Ladeanteil (%)* hat weiterhin Vorrang.
+
+> **Der Community-Vergleich bleibt bei gemessenen Werten.** Dorthin geht weiterhin nur, was wirklich gezählt wurde — dein geteilter Datensatz ändert sich durch diese Neuerung nicht.
+
+### Hast du deinen Stromtarif einmal gewechselt? Dann stimmte die E-Auto-Ersparnis nicht
+
+**Betrifft dich das?** Alle mit E-Auto, die **den Tarif schon einmal gewechselt** haben. Wer immer denselben Arbeitspreis hatte, sieht **keine veränderte Zahl** — der Durchschnitt eines einzigen Tarifs ist dieser Tarif.
+
+*Cockpit → Jahr* und die HA-Sensoren haben deine **gesamte** Ladehistorie mit dem **heutigen** Arbeitspreis bewertet — auch Ladungen von vor drei Jahren. Der Komponenten-Hub rechnete gleichzeitig mit den Preisen, die damals galten. Dieselbe Größe, zwei verschiedene Zahlen: An einer Anlage mit vier Tarifstufen (40 → 32 → 34 → 31,5 ct) waren das **41,10 €** Unterschied bei identischer kWh-Basis.
+
+Insgesamt gab es **vier** verschiedene Preisformen für einen Wert; zwei Sichten nahmen zusätzlich deinen allgemeinen Tarif statt eines gepflegten **Wallbox-Tarifs**. Jetzt bewertet jede Sicht die Ladung eines Monats mit dem Tarif dieses Monats — bei dynamischen Tarifen mit dem abgerechneten Durchschnitt.
+
+> ⚠ **Vier HA-Sensoren springen dadurch einmalig:** `e_auto_ersparnis_vs_benzin_euro`, `netto_ertrag_euro`, `roi_prozent` und `amortisation_jahre`. Ein Sprung an einem Tag in der Langzeitstatistik, kein Datenverlust.
+
+**Was du tun musst:** nichts. Wichtig ist nur, dass deine früheren Tarife mit ihrem Gültigkeitszeitraum gepflegt sind — dann rechnet jeder Monat mit seinem eigenen Preis.
+
+### Lädst du über evcc? In den Aussichten fehlten die Stromkosten deines Autos komplett
+
+**Betrifft dich das?** Alle, deren Ladung an der **Wallbox** erfasst wird statt am Fahrzeug — der Normalfall bei evcc.
+
+*Auswertungen → Aussichten* war die einzige Sicht, die ihre Ladedaten ausschließlich an der Fahrzeug-Komponente gesucht hat. Liegen sie an der Wallbox, fand sie **gar nichts**. Folge: Die ausgewiesene bisherige Ersparnis war um die **kompletten Netzstromkosten** zu hoch, und die Prognose rechnete mangels Daten mit geratenen 50 % Netzanteil.
+
+An einer echten Anlage gemessen (März–Juli 2026, ausschließlich Sensordaten): **0 statt 126 kWh** Netzladung und **0 statt 620 kWh** PV-Ladung. Diese Sicht zieht jetzt dieselbe Ladung heran wie Cockpit, Komponenten-Hub und HA-Export.
+
+**Was du tun musst:** nichts — deine Aussichten-Zahlen fallen beim nächsten Aufruf niedriger und richtiger aus.
+
+### Derselbe Ladevorgang konnte im Tagesverlauf zweimal auftauchen
+
+**Betrifft dich das?** Alle, bei denen **Wallbox und E-Auto je einen eigenen kWh-Zähler** haben und das Fahrzeug der Wallbox **nicht ausdrücklich zugeordnet** ist.
+
+In dieser Konstellation hat eedc dieselbe Ladung doppelt gezählt. Jetzt gilt in allen Pfaden dieselbe Regel: **Trägt eine Wallbox die Ladeenergie, ist sie die Quelle** — das Fahrzeug wird dann nicht zusätzlich addiert.
+
+**Was du tun musst:** Bereits gespeicherte Tage bleiben zunächst unverändert. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) meldet sie dir jetzt und bietet **„Zeitraum neu aggregieren"** an. Das ist bewusst ein Knopf und kein automatischer Lauf beim Start: Die Reparatur überschreibt vorhandene Tageswerte, und diese Entscheidung gehört dir.
+
+> **Reichweite des Knopfes:** Er heilt **Tag und Stunde**, nicht den Monatswert. Der Hinweis nennt dir den Zeitraum, den ein Lauf abdeckt.
+
+### Einspeisevergütung: eedc schlägt keinen Satz mehr vor — und sagt, wie es rechnet
+
+**Betrifft dich das?** Alle, die einen **neuen** Stromtarif anlegen, und alle, die den Satz seinerzeit aus dem Setup-Wizard übernommen haben. **Bestehende Tarife sind unberührt.**
+
+Aus dem simon42-Forum kam die Frage, ob eedc flat mit der eingetragenen Zahl rechnet oder im Hintergrund einen Mischsatz aus der Anlagengröße ermittelt. Die Oberfläche gab darauf keine Antwort — das Feld hieß an beiden Eingabestellen nur „Einspeisevergütung (ct/kWh)". Jetzt steht daneben und in der Hilfe: **eedc rechnet flat mit deinem Satz.** Bei gestaffelter EEG-Vergütung gehört der nach kWp gewichtete **Mischsatz** ins Feld.
+
+> ⚠ **Bitte einmal deinen Vergütungsbescheid prüfen.** Der Setup-Wizard trug bisher den Satz der *erreichten* Stufe ein (bis 10 kWp 8,2 ct, bis 40 kWp 7,1 ct, darüber 5,8 ct). Das EEG staffelt aber nach **installierter Leistung**, nicht nach eingespeister Menge: Für die Gesamtanlage gilt der gewichtete Mischsatz, und der liegt **höher** — bei 20 kWp etwa 7,65 statt 7,1 ct. Wer den Vorschlag übernommen hat, rechnet seinen Einspeise-Erlös **zu niedrig**.
+
+Die Tabelle wurde nicht korrigiert, sondern **entfernt**: Die Sätze ändern sich laufend, und welcher für deine Anlage gilt, weißt nur du. Ein neuer Tarif startet deshalb mit **0** — eine geschätzte Zahl sähe aus wie eine gepflegte.
+
+**Was du tun musst:** Beim Anlegen eines neuen Tarifs den Satz aus deinem Bescheid eintragen. Bleibt die 0 stehen, sagen dir beide Formulare, was das bedeutet (kein Einspeise-Erlös), und der Daten-Checker meldet es — aber nur, wenn im Gültigkeitszeitraum des Tarifs tatsächlich Einspeisung erfasst ist. Bei Volleinspeisung ohne Vergütung oder ausgelaufener Förderung ist 0 richtig und nichts zu tun.
+
+### Eine eingetragene 0 ct Einspeisevergütung wurde an drei Stellen still zu 8,2 ct
+
+**Betrifft dich das?** Alle, die bewusst **0** eingetragen haben — etwa bei unvergüteter Einspeisung.
+
+An drei Stellen hat eedc die gepflegte Null nicht von „nichts eingetragen" unterscheiden können und ersatzweise mit **8,2 ct** gerechnet: im **Vorjahresvergleich** in *Cockpit → Monat*, im **T-Konto je Investition** und in der **Wirtschaftlichkeit je Komponente**. Dort stand ein Erlös, den es nie gab — während Jahresbericht, Aussichten und HA-Export im selben Moment korrekt mit 0 rechneten.
+
+**Was du tun musst:** nichts. Alle Sichten nennen jetzt dieselbe Zahl; die betroffenen Werte sinken auf den Betrag, den die übrigen Sichten schon immer zeigten.
+
+### MQTT-Export: „0 von 0 Sensoren publiziert" war eine Fehlermeldung
+
+**Betrifft dich das?** Alle, die den Sensor-Export nach Home Assistant einrichten — besonders kurz nach der Installation.
+
+Die Fläche zeigte „**0 von 0 Sensoren publiziert**" mit einem grünen Häkchen und darunter „Verfügbare Sensoren (0)". Das sah nach *hat geklappt, es gibt eben nichts* aus. Tatsächlich war es das Gegenteil: eedc **hatte** einen Grund genannt, und die Oberfläche hat ihn verschluckt.
+
+Der Grund ist fast immer derselbe: **alle Export-Sensoren werden aus abgeschlossenen Monatsdaten gerechnet.** Live-Werte und Tagesdaten genügen dafür nicht — ROI, Einspeisevergütung und die übrigen Kennzahlen brauchen einen fertigen Monat. Solange keiner vorliegt, gibt es nichts zu publizieren.
+
+Zwei Dinge sind jetzt anders: Ein gescheiterter Publish zeigt **den Grund**, in Rot, statt einer Erfolgsmeldung. Und die leere Sensorliste sagt selbst, worauf sie wartet — statt kommentarlos leer zu bleiben, während die Discovery-Box daneben verspricht, die Sensoren erschienen automatisch in Home Assistant.
+
+> **Du musst nichts umstellen.** Schließe deinen ersten Monat ab (*Cockpit → Monat*), danach erscheinen die Sensoren hier und werden mit dem nächsten Durchlauf publiziert.
+
+### Deye/Solarman: der Cloud-Import holt jetzt wirklich Daten
+
+**Betrifft dich das?** Alle, die ihre Historie über **Deye / Solarman** aus der Hersteller-Cloud importieren wollen.
+
+Der Import kam bisher genau bis zur Anmeldung. Die meldete Erfolg — und danach kam er ohne eine einzige Zahl zurück, weil die Hersteller-Schnittstelle den Datenabruf mit `invalid param` abwies. Der Grund war ein Detail im Zeitraum: eedc fragte die Monatswerte mit einem **Tagesdatum** ab (`2025-01-01`), Solarman will dafür einen **Monatsstempel** (`2025-01`).
+
+Das ist jetzt gemessen statt vermutet: **OliS2811** hat vier Probeaufrufe gegen seine beiden echten Anlagen gefahren — darunter eine Kontrolle, die den Fehler zuverlässig auslöst. Erst dadurch stand fest, welches der beiden Formate die Schnittstelle akzeptiert.
+
+> **Der Provider trägt weiterhin den Hinweis „nicht mit echten Geräten getestet".** Er verschwindet, sobald ein vollständiger Import bei einem Anwender durchgelaufen ist — bis dahin bleibt der Hinweis stehen, auch wenn jeder bekannte Defekt behoben ist.
+
+### Speicher hinter der Wechselrichter-Grenze: dein SOLL war zu niedrig
+
+**Betrifft dich das?** Alle mit **Balkonkraftwerk + Akku** und alle mit **Hybrid-Wechselrichter** (Speicher gleichstromseitig am Wechselrichter).
+
+Seit v4.0.9 begrenzt eedc dein SOLL an der eingetragenen Wechselrichter-Leistung. Das ist richtig, solange der Überschuss über dieser Grenze wirklich verloren geht. Hängt aber ein **DC-gekoppelter Speicher** dahinter, ist er das nicht: er lädt den Akku, ohne durch den Wechselrichter zu müssen. eedc hat ihn trotzdem abgeschnitten.
+
+Sichtbar war das als **zu niedriges SOLL** — dein SOLL/IST-Vergleich sah besser aus, als deine Anlage ist, und die Performance Ratio lag zu hoch. Beim Balkonkraftwerk mit Speicher traf es die Mittagsspitze praktisch täglich.
+
+> **Deine SOLL-Zahlen steigen dadurch.** Deine gemessenen Erträge ändern sich **nicht** — nur die Erwartung, gegen die sie gehalten werden, wird wieder realistisch. Bei **AC**-gekoppeltem Speicher bleibt alles wie bisher: dort läuft die Energie tatsächlich durch den Wechselrichter, die Begrenzung ist dann richtig.
+
+> **Prüf einmal die Kopplung deines Speichers** (*Einstellungen → Komponenten → Speicher → Kopplung*). Sie war bisher eine reine Beschreibung und hat keine Zahl bewegt — ab jetzt entscheidet sie mit, ob dein SOLL begrenzt wird. Die Vorbelegung *Automatisch* trifft den Normalfall (Speicher am Wechselrichter ⇒ DC).
+
+### Balkonkraftwerk: der String-Vergleich zeigt dich jetzt auch
+
+**Betrifft dich das?** Alle, die **nur ein Balkonkraftwerk** haben — und alle mit Balkonkraftwerk **neben** einer Dachanlage.
+
+Seit v4.0.9 bekommt ein Balkonkraftwerk ein PVGIS-SOLL. Zwei Blöcke daneben blieben aber leer und schrieben weiterhin *„Keine PV-Module gefunden"*: **SOLL/IST pro PV-String** und **Mehrjahres-Performance** in *Auswertungen → Prognose*. Genauso fehlte der String-Abschnitt im **Jahresbericht-PDF**. Der Grund: diese Sichten fragen über eine andere Abfrage nach den Komponenten, und die kannte nur den Typ *PV-Modulfeld*.
+
+Sie fragen jetzt nach dem **PV-Erzeuger**. Dein Balkonkraftwerk ist dort eine Zeile wie ein Dach-String — mit seiner Nennleistung (aus *Leistung je Modul × Anzahl*), seinem SOLL und seinem gemessenen Ertrag.
+
+> **Was sich dadurch nicht ändert:** Deine Energiebilanz, dein Eigenverbrauch, deine Wirtschaftlichkeit und die ROI-Sicht bleiben Zahl für Zahl gleich. Das Balkonkraftwerk bekommt **keinen zweiten Erfassungsweg** — es bleibt eine Investition, und seine Erzeugung zählt weiterhin genau einmal.
+
+### Community-Vergleich: deine echte Ausrichtung statt „Süd, 30°"
+
+**Betrifft dich das?** Nur wer **ausschließlich ein Balkonkraftwerk** hat **und** am Community-Vergleich teilnimmt.
+
+Beim Teilen hat eedc Neigung und Ausrichtung bisher nur aus Komponenten vom Typ *PV-Modulfeld* gebildet. Gab es keine, wurden ersatzweise **30° und „Süd"** übermittelt — auch wenn dein Balkonkraftwerk an einer **Westfassade** hängt. Der Community-Server rechnet nichts nach, deine Anlage wurde also mit einer Gruppe verglichen, zu der sie nicht gehört.
+
+Jetzt zählt dein Balkonkraftwerk mit seinen tatsächlich gepflegten Werten. **Bestehende Einträge korrigieren sich beim nächsten vollständigen Teilen** — du musst nichts löschen.
+
+### Deine Solarprognose merkt selbst, wenn sie nicht mehr zu deiner Anlage passt
+
+Eine PVGIS-Prognose wird beim Abruf eingefroren. Baust du danach um — ein String kommt dazu, ein Balkonkraftwerk ersetzt die alte Anlage, das Dach wird anders belegt —, dann vergleicht eedc deine Erträge weiter mit der **alten** Anlage. In einem gemeldeten Fall stand für ein 2,4-kWp-Balkonkraftwerk ein Jahres-SOLL von **357 MWh**, weil die gespeicherte Prognose zu einem viel größeren System gehörte.
+
+Ab jetzt prüft eedc jede Nacht, ob die aktive Prognose noch passt, und holt bei Bedarf eine neue — **mit deinen eingestellten Systemverlusten**, nicht mit dem Standardwert. Nachgezogen wird bei geänderter **Nennleistung, Ausrichtung, Neigung**, geändertem **Standort** oder einem hinzugekommenen bzw. gelöschten **Horizontprofil**. Deine bisherige Prognose bleibt in der Historie und lässt sich jederzeit wieder aktivieren — es geht nichts verloren.
+
+**Die Warnung „Letzter Abruf vor N Tagen" ist weg**, und das ist Absicht: PVGIS rechnet mit einem Mittel über viele Jahre. Eine ein Jahr alte Prognose liefert für dieselbe Anlage dieselbe Zahl wie eine von heute — sie war nie „zu alt". Die Kachel *Einstellungen → Solarprognose* sagt dir stattdessen, **was** nicht mehr passt, zum Beispiel „Nennleistung 9,80 → 2,40 kWp".
+
+> ⚠ **Deine SOLL-Zahlen steigen mit diesem Update einmalig um rund 2 %.** eedc nutzt jetzt den neueren PVGIS-Strahlungsdatensatz (SARAH3 mit den Messjahren 2005–2023 statt SARAH2 mit 2005–2020). Deine bestehende Prognose wird dafür einmal automatisch neu abgerufen. Sichtbar wird das in *Auswertungen → Prognose vs. IST*, im Monatsbericht und beim Performance-Ratio-Hinweis des Daten-Checkers. Deine gemessenen Erträge ändern sich dadurch **nicht** — nur die Erwartung, gegen die sie gehalten werden.
+
+### Zeigte deine Ost- oder West-Anlage dauerhaft zu wenig Ertrag?
+
+Dann lag das womöglich an uns. Wenn die Ausrichtung deiner Module nur als **Wort** gespeichert war („Ost", „West", „Südwest" …) und nicht zusätzlich als Gradzahl, hat eedc sie beim Prognose-Abruf falsch übersetzt: **Ost, West und alle Zwischenrichtungen wurden wie Süd gerechnet**, Nord wie Ost. Deine Anlage wurde damit an einer Süd-Erwartung gemessen, die sie gar nicht erfüllen kann.
+
+Betroffen waren vor allem **ältere Bestände und wiederhergestellte Sicherungen**. Wer seine Komponenten im heutigen Formular gespeichert hat, hatte die Gradzahl hinterlegt — bei ihm stimmte die Prognose. Der Fehler ist behoben, und betroffene Prognosen werden durch die neue nächtliche Prüfung automatisch nachgezogen.
+
+### Ein PV-Zähler für die ganze Anlage reicht jetzt auch für die Tagessicht
+
+Wenn deine PV **nur** über den Anlagen-Zählerstand gepflegt ist (*Einstellungen → Datenquellen → Anlage (Basis) → PV-Erzeugung Zählerstand*) — typisch, wenn dein Wechselrichter nur eine Summe über mehrere Dachseiten liefert —, stimmten bisher nur deine **Monatswerte**. In *Cockpit → Tag* stand `0 kWh` PV neben deiner gemessenen Einspeisung, und daraus wurde ein **negativer Eigenverbrauch**, eine Performance Ratio von 0 % und eine negative CO₂-Einsparung.
+
+Jetzt versorgt dieser eine Zähler **Monat, Tag und Stunde** — als Summe deiner ganzen Anlage. Tagesbilanz, Eigenverbrauch, spezifischer Ertrag, Performance Ratio, CO₂ und der Stundenverlauf füllen sich, **auch rückwirkend** und ohne dass du etwas einrichten musst.
+
+**Was der eine Zähler nicht kann, ist die Aufschlüsselung je Dachseite.** Dafür braucht jeder Erzeuger einen eigenen Zähler — und dann **alle**: Sobald ein einziger selbst misst, zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist, und der Anlagenwert ist dort aus. Sonst würde die Anlagensumme neben ihren eigenen Bestandteilen stehen und alles doppelt gezählt. **Entweder alle oder keiner** — deine Monatswerte bleiben in jedem Fall vollständig. Machst du es halb, sagt es dir die Datenquellen-Seite.
+
+**Was du tun kannst, wenn dein Wechselrichter je String nur Leistung liefert:** In Home Assistant unter *Helfer → Helfer erstellen → „Integral-Sensor"* (Riemannsche Summe) **für jeden** String einen kWh-Zähler bauen — Methode **„Linke Riemann-Summe"**, **maximales Teilintervall 1 Minute**, Präfix **k**, Zeiteinheit **Stunden**, kein Zyklus — und diese beim jeweiligen Erzeuger zuordnen. Beachte: Ein neuer Helfer **beginnt bei null**, Tageswerte entstehen ab dem Anlegen; für die Vergangenheit bleibt der Anlagen-Zählerstand die bessere Quelle.
+
+> ⚠ **Korrektur vom 08.08.2026:** An dieser Stelle stand bis dahin die Methode **Trapez** — das war falsch, und der Hinweis kam von einem Anwender im Forum. Home Assistant speichert keine Wiederholung gleicher Werte; über die Nachtlücke zieht die Trapezregel deshalb eine gerade Linie und verbucht Erzeugung, die es nie gab (gemessen: rund 60 Wh pro Nacht, proportional zum ersten Morgenwert — bei einem Wechselrichter mit gröberer Meldeschwelle entsprechend mehr). **Wer den Helfer schon mit Trapez angelegt hat**, stellt die Methode in den Helfer-Optionen um; der Zählerstand läuft weiter. Der bereits aufgelaufene Wert korrigiert sich dabei nicht rückwirkend. Ausführlich im [Handbuch Daten-Checker §5.2](HANDBUCH_DATEN_CHECKER.md#52-fehlende-kwh-zähler-in-der-datenquellen-zuordnung-ergänzen).
+
+> ⚠ **Fasse deine Dachseiten nicht zu einer Anlage zusammen, nur um Tageswerte zu bekommen.** eedc rechnet Prognose und SOLL je Ausrichtung — eine zusammengelegte Anlage bekäme über den ganzen Tag falsche Erwartungswerte, auch in den Prognose-Sensoren für Home Assistant.
+
+### Börsenpreis-Block: „über dem Durchschnitt" ist jetzt rot statt dunkellila
+
+Die drei Preisstufen im Block *Börsenpreis heute & morgen* waren zwei Lila-Töne und ein Grün — und die beiden Lila-Töne unterschieden sich nur in der Helligkeit. Auf vielen Monitoren waren sie damit nicht auseinanderzuhalten, in der kleinen Legende erst recht nicht.
+
+Jetzt liest sich die Skala von selbst: **grün** unter deiner Günstig-Schwelle, **lila** dazwischen, **rot** über dem Tagesdurchschnitt. An den Zahlen ändert sich nichts — nur an ihrer Farbe.
+
+Danke an *Radiocarbonat*, der es gemeldet hat.
+
+### Cockpit → Tag behauptet keine PV-Zahlen mehr, die nicht gemessen sind
+
+Hat eine Anlage **gar keinen** kumulativen PV-Zähler — weder je Erzeuger noch für die Anlage —, steht in der Tagessicht jetzt „—" statt einer 0: nicht gemessen ist nicht dasselbe wie null. **Eine echte Null bleibt sichtbar** — eine verschneite Anlage hat 0 kWh erzeugt, und das ist eine Aussage.
 
 ---
 
@@ -440,6 +630,12 @@ gepflegte Grenze kappt eedc nichts.
 > **Nebenbei:** Wenn du **nur ein Balkonkraftwerk** hast, bekommst du überhaupt zum ersten Mal ein
 > PVGIS-SOLL. Bisher antwortete die Prognose mit „Keine PV-Module gefunden", obwohl dein BKW alles
 > mitbringt, was PVGIS braucht. *(#354, #367)*
+>
+> **Nachtrag (August 2026):** Das galt nur für den **Jahresvergleich** gegen PVGIS. Die Blöcke
+> *SOLL/IST pro PV-String* und *Mehrjahres-Performance* sowie der String-Abschnitt im
+> Jahresbericht-PDF blieben leer und zeigten weiterhin „Keine PV-Module gefunden" — sie hängen an
+> anderen Abfragen, die damals übersehen wurden. Ein Anwender hat das gemeldet; **behoben** im
+> Abschnitt weiter oben auf dieser Seite.
 
 ### Daten-Checker: zwei Meldungen weniger, eine bessere
 

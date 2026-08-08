@@ -304,6 +304,17 @@ Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
 Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 ```
 
+> **Die Einspeisevergütung ist ein flacher Satz — eedc kennt keine EEG-Leistungsstaffel.**
+> `Einspeisevergütung` ist genau der Wert aus dem für den Monat gültigen Tarif
+> (`Strompreis.einspeiseverguetung_cent_kwh`); es gibt keine Ableitung aus `leistung_kwp`, keine
+> Stufengrenze und keine Aufteilung der eingespeisten Menge auf mehrere Sätze. Wer gestaffelt
+> vergütet wird, trägt den nach kWp gewichteten **Mischsatz** ein — mathematisch identisch, weil
+> das EEG nach *installierter Leistung* staffelt und nicht nach eingespeister Menge. Der einzige
+> Automatismus ist der Fallback `EINSPEISEVERGUETUNG_DEFAULT_CENT`
+> (`core/wirtschaftlichkeit_defaults.py`), der ausschließlich greift, wenn **gar kein** Tarif
+> gepflegt ist — und genau das meldet der Daten-Checker. Anwendersicht:
+> [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise).
+
 > **Kanonisches Finanz-Aggregat (SoT `core/berechnungen/finanz_aggregat.py`):** Netto-Ertrag,
 > Einspeise-Erlös, EV-/BKW-Ersparnis und Sonstige-Netto werden **per-Monat** gerechnet und über die
 > sichtbaren Monate summiert (nicht mit einem Ø-Preis) — bei Flex-Tarifen (Tibber/aWATTar/EPEX) laufen
@@ -587,32 +598,78 @@ Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_f
 
 | Feld | Quelle |
 |------|--------|
-| `km_jahr` | `Investition.parameter["km_jahr"]` (Default: 15000) |
-| `verbrauch_kwh_100km` | `Investition.parameter["verbrauch_kwh_100km"]` (Default: 18) |
-| `pv_anteil_prozent` | `Investition.parameter["pv_anteil_prozent"]` (Default: 60) |
-| `benzinpreis_euro_liter` | `Investition.parameter["benzinpreis_euro"]` (Default: 1.85) |
-| `benzin_verbrauch_liter_100km` | `Investition.parameter["benzin_verbrauch_liter_100km"]` (Default: 7.0) |
-| `nutzt_v2h` | `Investition.parameter["nutzt_v2h"]` (Default: false) |
+| `jahresfahrleistung_km` | `Investition.parameter` (Default: 15000) |
+| `verbrauch_kwh_100km` | `Investition.parameter` (Default: 18) |
+| `pv_ladeanteil_prozent` | `Investition.parameter` (Default: 60) |
+| `benzinpreis_euro` | `Investition.parameter` (Default: 1,65) |
+| `vergleich_verbrauch_l_100km` | `Investition.parameter` (Default: 7,5) — der **fiktive** Vergleichs-Benziner |
+| `v2h_faehig` | `Investition.parameter` (Default: false) |
+| `eigener_verbrauch_l_100km` | `Investition.parameter` — **kein Default**, s. „Plug-in-Hybrid" unten |
+| `elektrischer_fahranteil_prozent` | `Investition.parameter` — **kein Default** |
+
+> ⚠ **Diese Tabelle nannte bis 2026-08-08 vier Schlüssel, die eedc nicht kennt**
+> (`km_jahr`, `pv_anteil_prozent`, `benzin_verbrauch_liter_100km`, `nutzt_v2h`) und
+> zwei falsche Defaults (1,85 € statt 1,65 €; 7,0 L statt 7,5 L). Es sind genau die
+> Legacy-Keys, deren Lesen v3.25.0 im Code als Bugs #1–#4 korrigiert hat —
+> die Doku ist damals nicht mitgezogen. Historie: `LEGACY_PARAM_KEYS` in
+> `core/investition_parameter.py` führt die Zuordnung alt → neu.
 
 #### Formeln
 
 ```
-Strom_Bedarf         = km_jahr * Verbrauch_kWh_100km / 100
-PV_Anteil            = pv_anteil_prozent / 100
+km_elektrisch        = km_jahr                        (BEV — Normalfall)
+                     = km_jahr * Fahranteil / 100     (Plug-in-Hybrid, s. u.)
+km_verbrenner        = km_jahr - km_elektrisch
+
+Strom_Bedarf         = km_elektrisch * Verbrauch_kWh_100km / 100
+PV_Anteil            = pv_ladeanteil_prozent / 100
 Netz_Anteil          = 1 - PV_Anteil
 
 Strom_Kosten         = Strom_Bedarf * Netz_Anteil * Strompreis / 100
-Benzin_Verbrauch     = km_jahr * Benzin_L_100km / 100
+Benzin_Verbrauch     = km_jahr * Vergleich_L_100km / 100      ← ALLE Kilometer
 Benzin_Kosten        = Benzin_Verbrauch * Benzinpreis_EUR
+Fossile_Kosten       = km_verbrenner / 100 * Eigener_L_100km * Benzinpreis_EUR
 
 V2H_Einsparung       = V2H_Entladung_kWh * V2H_Preis / 100    (wenn V2H aktiv)
 
-Jahres-Einsparung    = Benzin_Kosten - Strom_Kosten + V2H_Einsparung
+Jahres-Einsparung    = Benzin_Kosten - Strom_Kosten - Fossile_Kosten + V2H_Einsparung
 
 CO2_Verbrenner       = Benzin_Verbrauch * 2.37
 CO2_E-Auto           = Strom_Bedarf * Netz_Anteil * 0.38
-CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto
+CO2_Fossil           = km_verbrenner / 100 * Eigener_L_100km * 2.37
+CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto - CO2_Fossil
 ```
+
+#### Plug-in-Hybrid: elektrischer und fossiler Anteil (ab #331)
+
+Ein Plug-in-Hybrid fährt einen Teil seiner Kilometer mit Kraftstoff. eedc unterstellte
+bis dahin **100 % elektrisch** — Ersparnis und CO₂-Bilanz fielen dadurch zu gut aus.
+
+**Es gibt keinen Fahrzeugtyp und keinen Schalter: das gepflegte Feld ist die Aussage.**
+Ist `eigener_verbrauch_l_100km` gesetzt, hat das Fahrzeug einen Verbrenner; ist es leer,
+bleibt **jede Zahl exakt wie vorher**. Bestandsfahrzeuge tragen das Feld nicht, für sie
+ändert sich nichts.
+
+Wie der elektrische Anteil bestimmt wird (SoT `core/berechnungen/phev_anteil.py`,
+dieselbe Funktion für IST **und** Prognose):
+
+| Weg | Bedingung | Rechnung |
+| --- | --- | --- |
+| **gemessen** | monatlicher Fahrverbrauch (kWh) erfasst | `km_elektrisch = min(km_gefahren, Fahrverbrauch / Verbrauch_kWh_100km × 100)` |
+| **geschätzt** | nur `elektrischer_fahranteil_prozent` gepflegt | `km_elektrisch = km_gefahren × Anteil / 100` |
+| **unbestimmt** | keines von beiden | `km_elektrisch = km_gefahren` (Verhalten wie vorher) — der Daten-Checker meldet es |
+
+> ⚠ **Die Deckelung auf die gefahrenen Kilometer ist nicht kosmetisch.** Ist der
+> Kennwert zu niedrig gepflegt oder der Zähler zu großzügig, käme rechnerisch mehr
+> elektrische Strecke heraus als gefahren wurde — und damit negative Verbrenner-Kilometer,
+> also eine Ersparnis größer als die Wahrheit.
+
+**Zwei Verbräuche, zwei Bedeutungen:** `vergleich_verbrauch_l_100km` beschreibt weiterhin
+den **fiktiven** Vergleichs-Benziner, und die Frage „was hätte ein Benziner gekostet"
+bleibt über **alle** Kilometer gestellt — sonst verglichen wir ein Auto mit einem halben.
+`eigener_verbrauch_l_100km` ist der **real getankte** Verbrauch und erzeugt eine eigene
+Kostenposition daneben. Die geladene Energie wird **nicht** zusätzlich skaliert: sie ist
+im IST gemessen, ein Hybrid lädt ohnehin weniger.
 
 #### Dynamischer Kraftstoffpreis (ab v3.17.0)
 
@@ -633,6 +690,135 @@ Für Jahresprognose:
 **Datenquelle:** EU Weekly Oil Bulletin (Euro-Super 95, inkl. Steuern, wöchentlich, History seit 2005). Befüllung via Backfill-Endpoint oder wöchentlichem Scheduler-Job (Dienstags 06:00).
 
 **Betroffen:** Aussichten (`aussichten.py`), HA-Sensor-Export (`ha_export.py`), PDF-Finanzbericht (`pdf_operations.py`).
+
+#### PV-Anteil der Heimladung: gemessen, sonst abgeleitet (ab 2026-08-08, N-141)
+
+Die Formeln oben beschreiben die **Prognose**-Achse, die den von Hand gepflegten
+`pv_ladeanteil_prozent` liest — und, wo er fehlt, seit 2026-08-08 den IST-Anteil (s. unten).
+Auf der **IST**-Achse gibt es diesen Parameter nicht — dort steht
+je Monat das erfasste Paar `ladung_pv_kwh` / `ladung_netz_kwh`. Und genau das fehlte den meisten
+Anlagen: **eine Wallbox misst ihren PV-Anteil nicht**, sie zählt nur Kilowattstunden. Ohne evcc
+oder einen eigenen Zähler lieferte `get_emob_pv_netz_kwh` deshalb `(0, Gesamtladung)` — die
+gesamte Heimladung galt als Netzstrom.
+
+**Reihenfolge (SoT `core/berechnungen/pv_anteil_ladung.py`):**
+
+1. **Ein erfasster Wert gewinnt immer** — auch eine gepflegte **0**. Geprüft wird die Anwesenheit
+   des Schlüssels `ladung_pv_kwh`, nicht seine Größe: „diesen Monat kam nichts aus der Sonne" ist
+   eine Aussage, keine Lücke.
+2. **Sonst leitet eedc den Anteil aus den eigenen Stundenwerten ab**, Regel **Einspeise-Deckung**:
+
+   ```
+   je Stunde:  ungedeckt = max(0, Ladung − Netzbezug − Speicherentladung)
+               PV        = min(Ladung, ungedeckt + Einspeisung)
+               Netz      = Ladung − PV
+   ```
+
+   Der zweite Summand fängt die Unschärfe der Stundenmittelung auf: Was in derselben Stunde
+   eingespeist wurde, hätte stattdessen laden können.
+3. **Angewandt wird der Anteil, nicht die Kilowattstunde.** Der abgeleitete Prozentsatz geht auf
+   die kanonische Monatsladung — nur so bleibt `Ladung == PV + Netz` exakt geschlossen, auch wenn
+   die Tagesspur eine andere Menge kennt als die Monatszeile.
+
+**Wo die Regel angewandt wird — eine Schicht unter dem Pool** (`services/emob_ladeanteil.py`, seit
+2026-08-08, Fund **F-16**): die Monatszeilen werden angereichert, **bevor** irgendjemand sie zu
+einer Heimladung poolt. Das ist keine Feinheit, sondern der Unterschied zwischen vier und achtzehn
+Sichten: liegt die Ableitung *über* `get_emob_heimladung_canonical`, trifft sie nur die Felder
+`EmobFakten.ladung_pv_kwh`/`ladung_netz_kwh` — jede Sicht, die die mitgereichten Rohzeilen selbst
+poolt (Cockpit → Jahr, Jahresbericht-PDF) oder `InvestitionMonatsdaten` direkt liest
+(Komponenten-Hub, Aussichten, HA-Export), zeigt daneben weiter 0 %. Sichten der zweiten Gruppe
+holen dieselbe Anreicherung über `reichere_monatszeilen_an`.
+
+**Zwei Ausnahmen, beide bewusst:**
+
+- Der **Community-Payload** liest `eauto_summe_gemessen`/`wallbox_summe_gemessen` — der Server hat
+  die Rohdaten nie gesehen und rechnet nichts nach; eine Schätzung wäre in einem Benchmark nicht
+  mehr als solche erkennbar (dieselbe Linie wie beim BKW-Eigenverbrauch).
+- **Schreib-, Import- und Checker-Pfade** bleiben außen vor. Die Anreicherung geschieht zur
+  **Lesezeit** auf Kopien; programmatisch in `verbrauch_daten` zu schreiben bleibt verboten.
+
+**Die Prognose-Achse rechnet mit derselben Zahl** (N-188, seit 2026-08-08): fehlt am Fahrzeug der
+gepflegte `pv_ladeanteil_prozent`, nimmt die ROI-Prognose den IST-Anteil über
+`monats_fakten.ist_pv_ladeanteil_prozent` (Σ PV ÷ Σ Ladung, ladungsgewichtet) statt des früheren
+Vorgabewerts von 60 %. Der Default greift nur noch, wenn auch das IST keine Heimladung kennt. Die
+zweite Prognose-Quelle (`aussichten.py`, leitet ihre Quote aus der Historie ab) zieht über dieselbe
+Anreicherung mit.
+
+**Herkunft:** `EmobFakten.ladung_anteil_abgeleitet` sagt, ob die Aufteilung gerechnet ist; auf der
+Tagesebene trägt `source_provenance` die Marke `einspeise_deckung` bzw.
+`einspeise_deckung_teilweise` (letztere, wenn nicht jede Ladestunde auswertbar war — dann ist der
+Wert eine Teilsumme, P4).
+
+**Vermessen gegen evcc** (2026-08-08, Anlage 1, Feb–Aug 2026, 963 kWh Heimladung, Referenz
+`sensor.evcc_helper_pv/net_charged_kwh`):
+
+| Regel | PV-Anteil | Abweichung zu evcc (67,9 %) |
+| --- | --- | --- |
+| netzbasiert `min(Ladung, Netzbezug)` | 73,8 % | +5,9 pp |
+| netz + Speicherentladung | 60,8 % | −7,2 pp |
+| **Einspeise-Deckung (gebaut)** | **64,7 %** | **−3,2 pp** |
+
+⚠ **Keine rückwirkende Berechnung.** Der Wert entsteht beim Aggregieren eines Tages; Zeiträume vor
+diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „keine Sonne".
+
+⚠ **Die Auflösung begrenzt die Genauigkeit.** Meldet ein Wallbox-Zähler nur ganze Kilowattstunden
+(an der Referenzanlage 218 von 218 Stunden-Deltas ganzzahlig), trifft keine Rechnung die einzelne
+Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.
+
+> ⚠ **Korrektur (2026-08-08):** hier stand bis dahin „Offen: die Prognose zieht noch nicht mit
+> (N-188)". Das ist seit demselben Tag erledigt und vier Absätze weiter oben beschrieben — der Satz
+> stammte aus dem Paket davor und ist beim Nachziehen stehen geblieben. Ein Dokument, das an zwei
+> Stellen dasselbe verschieden behauptet, ist schlechter als eines, das schweigt.
+
+#### Welcher Strompreis die Ladung bewertet (F-18 · ADR-002/P8)
+
+Die Netzladung eines E-Autos wird mit dem Tarif bewertet, der **im jeweiligen Monat galt** — nicht
+mit dem heutigen. SoT ist `services/eauto_wirtschaftlichkeit.aufgeloester_strompreis_cent`, gerufen
+aus `berechne_eauto_ersparnis_periode`.
+
+Bis 2026-08-08 löste jede Sicht diese eine Größe selbst auf, und zwar auf **vier** Arten:
+
+| Sicht | vorher | jetzt |
+| --- | --- | --- |
+| Cockpit → Jahr | heutiger Wallbox-Tarif | Monatstarif inkl. Flex-Ø |
+| HA-Export (Anlagen-Sensoren) | heutiger **allgemeiner** Tarif | Monats-Wallbox-Tarif |
+| HA-Export (Fahrzeug-Sensor) | heutiger **allgemeiner** Tarif | Monats-Wallbox-Tarif |
+| Komponenten-Hub | mengengewichteter Monats-Ø | unverändert (jetzt über den SoT) |
+| Auswertungen → Aussichten | Monatstarif, aber **allgemein** | Monats-Wallbox-Tarif inkl. Flex-Ø |
+
+**Gewichtet wird nach der Netzladung je Monat**, nicht nach Kilometern: der Preis bepreist
+Kilowattstunden. Nur wo eine Monatsaufteilung der Netzladung nicht existiert — bei reinem PV-Laden
+— fällt die Mittelung auf die km zurück, den Schlüssel, nach dem der Wallbox-Pool ohnehin
+attribuiert.
+
+> ⚠ **Für eine Anlage ohne Tarifwechsel bewegt sich nichts.** Der mengengewichtete Ø eines
+> einzigen Tarifs *ist* dieser Tarif. Wer den Tarif gewechselt hat, sieht dagegen vier
+> HA-Sensoren einmalig springen (`e_auto_ersparnis_vs_benzin_euro`, `netto_ertrag_euro`,
+> `roi_prozent`, `amortisation_jahre`) — an einer vermessenen Anlage um −41,10 €.
+
+> ⚠ **Der P8-Wächter deckt diese Fläche nicht ab.** Alle vier beteiligten Dateien stehen in
+> `P8_BASELINE_AUSNAHMEN`, weil sie den heutigen Tarif für die Hochrechnung nach vorn auch
+> brauchen. Gesichert wird die Preisachse deshalb durch einen eigenen Wächter
+> (`test_wurzelmuster_konformitaet.py::test_p8_emob_ersparnis_bekommt_die_monatspreise`, baumweit)
+> und den Sichten-Vergleich `test_emob_preisachse_sichten_symmetrie.py`.
+
+#### Wo die Wallbox die Quelle ist (F-14 · N-196)
+
+Trägt eine Wallbox die Ladeenergie, ist **sie** die Quelle — auch ohne gesetzte Zuordnung
+(`parent_investition_id`). Diese Regel gilt seit 2026-08-08 in allen drei Pfaden:
+
+| Pfad | Ort |
+| --- | --- |
+| Monatsebene | `eauto_wirtschaftlichkeit.get_emob_heimladung_canonical` |
+| Tages-**Leistungs**pfad | `services/live_sensor_config.py` (#356) |
+| Tages-**Zähler**pfad | `snapshot/komponenten_beitraege.wallbox_deckt_ladung_ab` |
+
+Vorher kannte der Zählerpfad nur die Zuordnung; ein E-Auto mit eigenem kWh-Zähler **ohne** Parent
+lief an ihr vorbei, und derselbe Ladevorgang stand zweimal im Tagesverlauf. Bereits gespeicherte
+Tage bleiben davon unberührt — dafür meldet der Daten-Checker sie (Kategorie
+`emob_doppelzaehlung_tage`) und bietet „Zeitraum neu aggregieren" an. **Bewusst kein
+Start-Migrationslauf:** die Heilung überschreibt Messwerte und bleibt eine Entscheidung des
+Anwenders.
 
 ### 3.5 Wärmepumpe-Einsparung
 
@@ -897,6 +1083,39 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 
 **Endpoint:** `GET /api/cockpit/pv-strings/{anlage_id}?jahr=`
 
+#### Was eine „String"-Zeile ist — die Erzeuger-Abgrenzung (F-10)
+
+> **Die Zeilen dieser Sicht sind PV-*Erzeuger*, nicht PV-*Module*.** Maßgeblich ist
+> `PV_ERZEUGER_TYPEN` (SoT `core/berechnungen/spez_ertrag.py`) = `pv-module` **+**
+> `balkonkraftwerk`. Ein Balkonkraftwerk trägt alles, was die Sicht braucht: kWp über
+> `get_erzeuger_kwp` (beim BKW `leistung_wp × anzahl`), Ausrichtung und Neigung als eigene
+> Formularfelder, und seit #367 ein eigenes PVGIS-SOLL.
+>
+> **Betroffen sind vier Ausgaben derselben Sicht** — `GET /pv-strings`,
+> `GET /pv-strings-gesamtlaufzeit`, Abschnitt 10 des Jahresbericht-PDF und die beiden Leertexte
+> im Client. #367 hatte nur die *zwei PVGIS*-Endpunkte erweitert und im Issue-Text „zwei
+> Endpunkte" behauptet; es waren fünf. Klasse #236 — *ein Filter auf einer Schicht reicht nicht,
+> wenn parallele Pfade existieren.*
+>
+> ⚠ **Die IST-Quelle ist je Typ eine andere, und das ist Absicht.** Ein `pv-module` holt seinen
+> Wert aus `ErzeugungFakten.pv_je_modul` (P7-Auflösung); ein `balkonkraftwerk` steht dort
+> **nicht**, sondern in `BkwFakten.erzeugung_je_investition`. Grund: die Σ von `pv_je_modul` ist
+> `pv_module_kwh`, und die geht in die **ROI-Rechnung**, wo das Balkonkraftwerk eine **eigene**
+> Zeile hat (`investitionen/crud.py::get_pv_erzeugung`) — läge es in beiden, zählte seine
+> Erzeugung dort doppelt. Wer die Sicht erweitert, erweitert deshalb **nicht** `pv_je_modul`.
+> Gewächtert in `tests/test_bkw_erzeuger_sichten_f10.py`.
+>
+> **Kein zweiter Erfassungsweg.** `pv-module` unter `balkonkraftwerk` bleibt verboten
+> (`models/investition.py::ERLAUBTE_PARENT_TYPEN`): das wäre dieselbe Erzeugung zweimal erfasst,
+> mit doppelter kWp als Folge — der Workaround, den der Melder selbst zurückgenommen hat. Wer
+> mehrere Ausrichtungen hat, erfasst **Wechselrichter + PV-Module**; die Abgrenzung steht in
+> [HANDBUCH_EINSTELLUNGEN §3.5](HANDBUCH_EINSTELLUNGEN.md#35-balkonkraftwerk-oder-wechselrichter--pv-module).
+>
+> **Dieselbe Erzeuger-Abgrenzung gilt für die Community-Stammdaten** (`services/community_service.py`):
+> Neigung und Ausrichtung werden über beide Typen gemittelt. Vorher fiel eine reine
+> Balkonkraftwerk-Anlage auf die Annahme *30° / Süd* zurück — der Community-Server rechnet nichts
+> nach, die Anlage wurde also gegen die falsche Vergleichsgruppe gemessen.
+
 #### SOLL-Berechnung (PVGIS)
 
 > **Genau eine Prognose ist die aktive.** eedc bewahrt beliebig viele PVGIS-Abrufe einer Anlage auf;
@@ -905,6 +1124,57 @@ Flug-km        = CO2_gesamt / 0.25     (kg/km)
 > Auswahlregel: `ist_aktiv == True`, `ORDER BY abgerufen_am DESC`, `LIMIT 1`; SoT
 > `services/prognose_auswahl.py`, datenbankseitig gesichert durch einen partiellen Unique-Index
 > (ADR-002/P5). Ist **keine** Prognose aktiv, bleibt die SOLL-Seite leer, statt eine beliebige zu zeigen.
+
+> **Wann eine Prognose von selbst nachgezogen wird (#363).** Eine Prognose wird beim
+> Abruf eingefroren; ändert sich die Anlage danach, rechnet jede SOLL-Sicht gegen eine Anlage, die
+> es nicht mehr gibt (gemeldeter Extremfall: 357 MWh Jahres-SOLL für ein 2,4-kWp-Balkonkraftwerk).
+> Der nächtliche Job `pvgis_aktualitaet` prüft deshalb je Anlage, **ob die aktive Prognose noch
+> passt** — SoT `services/pvgis_aktualitaet.py`, dieselbe Funktion versorgt die Statusanzeige der
+> Einstellungs-Kachel. Auslöser sind ausschließlich:
+>
+> | Auslöser | Vergleich |
+> | --- | --- |
+> | Nennleistung | Σ `get_erzeuger_kwp` der aktiven Erzeuger gegen `gesamt_leistung_kwp` |
+> | Ausrichtung / Neigung | nach kWp gewichtet, wie im Speicherpfad |
+> | Standort | `latitude`/`longitude` der Anlage |
+> | Horizontprofil | hinzugekommen oder entfernt |
+> | Strahlungsdatensatz | `raddatabase` der Zeile gegen den der konfigurierten API-Version |
+>
+> **Das Alter ist ausdrücklich KEIN Auslöser.** PVGIS rechnet auf einem abgeschlossenen Klimamittel
+> (API v5_2 → PVGIS-SARAH2 2005–2020, v5_3 → PVGIS-SARAH3 2005–2023); bei unveränderten Eingaben
+> liefert ein zweiter Abruf dieselbe Zahl, ein turnusmäßiger Abruf wäre Last ohne Wirkung. Die
+> Systemverluste sind ebenfalls kein Auslöser, sondern werden in den Neuabruf **übernommen** — sie
+> sind nirgends sonst gespeichert. Die abgelöste Prognose bleibt als inaktive Zeile erhalten.
+>
+> ⚠ **Mit #363 hebt eedc die API-Version von v5_2 auf v5_3.** Damit wechselt der Strahlungsdatensatz von
+> SARAH2 auf SARAH3 — für dieselbe Anlage rund **+2 %** (am 2026-08-07 gemessen: 9,8 kWp Süd 35°,
+> 10.495,79 → 10.727,57 kWh). Bestandsprognosen tragen kein `raddatabase` und werden deshalb genau
+> einmal automatisch nachgezogen; danach rechnen alle Installationen auf derselben Grundlage.
+
+> **Wann die AC-Kappung NICHT greift (F-11).** Die Grenze begrenzt, was ein Wechselrichter **ins
+> Haus abgibt** — nicht, was die Module ernten. Hängt am **Träger der Grenze** ein
+> **DC-gekoppelter** Speicher, läuft der Überschuss gleichstromseitig in den Akku, ohne je durch
+> den Wechselrichter zu müssen; er ist dann **nicht verloren**, und eine Kappung des
+> Erzeugungsprofils würde ihn wegrechnen. SoT `core/berechnungen/wr_kappung.py::_dc_speicher_traeger`.
+>
+> | Lage | Kappung |
+> | --- | --- |
+> | kein Speicher am Träger | **ja** (#347/#354 unverändert) |
+> | **DC**-gekoppelter Speicher am Träger | **nein** — der Überschuss lädt den Akku |
+> | **AC**-gekoppelter Speicher am Träger | **ja** — alles läuft durch den Wechselrichter |
+> | Speicher ohne Zuordnung, oder an einem *anderen* Wechselrichter | **ja** — er kann den Überschuss dieses Erzeugers nicht aufnehmen |
+>
+> **Warum die IST-Größe die Ernte *vor* dem Speicher ist** — das entscheidet nicht der Hersteller,
+> sondern die eigene Bilanz: `direktverbrauch = max(0, pv − einspeisung − speicher_ladung)`
+> (§3.1). Die Speicherladung wird von der PV-Summe **abgezogen**, sie muss darin enthalten sein.
+> Die [Sensor-Referenz](SENSOR-REFERENZ.md) sagt dasselbe in Worten, und der BKW-Akku-Kanon führt
+> Ladung/Entladung als eigene Speicher-Investition daneben.
+>
+> ⚠ **Damit ändert die Kopplung eines Speichers erstmals eine Zahl.** Bis v4.0.10 war
+> `parameter.kopplung` (#351) rein beschreibend — sie sagte, **wo** gemessen wird, und keine
+> ADR-001-Formel las sie. Ab F-11 liest `wr_kappung` sie, und die Wirkung bleibt auf **SOLL**-Werte
+> beschränkt: Prognose-Kanon und PVGIS-Monatsprognose. Kein IST-Pfad, keine Energiebilanz, keine
+> Finanzrechnung. Wer die Kopplung eines Speichers ändert, verschiebt seither sein SOLL.
 
 **Ab v2.3.2 (Per-Modul PVGIS-Daten vorhanden):**
 ```
@@ -1108,6 +1378,52 @@ sind dabei nicht optional:
   eine so gefüllte Tageszahl unter der Überschrift „Dach Süd" wäre von einer Messung nicht mehr zu
   unterscheiden (die Klasse aus #352). Fehlt der Sensor, nennt die Oberfläche das Gerät und den
   Weg zur Zuordnung, statt eine Spalte zu zeigen.
+
+##### Der Anlagen-Zählerstand: Summe ja, Aufschlüsselung nein (ab 2026-08-07)
+
+Das Feld *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* landet über `basis["pv_gesamt"]` in
+`Monatsdaten.pv_erzeugung_kwh` und ist damit **Eingang der Monats-Auflösung** (P7). Seit
+2026-08-07 ist es zusätzlich ein **Snapshot-Zähler der Kategorie `pv`**
+(`snapshot/keys.py::BASIS_ZAEHLER_FELDER`) und trägt damit auch Tag und Stunde — als **Summe der
+ganzen Anlage**. Wer nur einen Summenzähler hat, bekommt also vollständige Tageswerte; was fehlt,
+ist allein die Aufschlüsselung je Erzeuger (obenstehende Formel liefert für ihn kein `pv_<id>`).
+
+> ⚠ **Bis dahin galt hier das Gegenteil** („erreicht die Tagesebene gar nicht"), und das war der
+> Fehler F-7: eine Anlage mit einem Zähler und mehreren Ausrichtungen hatte gar keine Tages-PV.
+> Der naheliegende Ausweg — alle Ausrichtungen als *eine* Investition führen — bleibt **falsch**:
+> `services/pv_orientation.py` gruppiert je Investition nach (Neigung, Azimut), eine
+> zusammengelegte Anlage bekäme einen systematisch falschen Tagesgang im gesamten
+> Prognose-Kanon inklusive HA-Prognose-Sensoren und PVGIS-SOLL.
+
+**Die Regel ist alles-oder-nichts, nicht anteilig.** Der Anlagen-Zählerstand zählt auf der
+Tagesebene nur mit, solange **kein** Erzeuger einen eigenen kWh-Zähler trägt — genau wie im
+Live-Pfad (`not has_individual_pv`). Sobald einer misst, gilt für Tag und Stunde nur noch, was je
+Erzeuger gemessen ist. Zwei Gründe:
+
+- **Nebeneinander ginge nicht.** `komponenten_kwh` hat einen flachen Keyspace, und die Tages-PV
+  ist die Summe aller `pv_`/`bkw_`-Schlüssel (`summe_pv_bkw_kwh`). Stünde `pv_gesamt` neben
+  `pv_7`, wäre die Anlagensumme neben ihrem eigenen Summanden gebucht — Doppelzählung.
+- **Der Rest ließe sich nur raten.** Die Differenz „Anlagensumme minus gemessene Erzeuger" auf die
+  übrigen zu verteilen, wäre eine kWp-Schätzung mit dem Aussehen einer Messung — dieselbe Klasse,
+  die der Absatz „Keine kWp-Verteilung" oben ausschließt.
+
+**Folge für die Praxis:** ein *halber* Umbau macht die Tageswerte schlechter, nicht besser. Wer
+einem von drei Strings einen eigenen Zähler zuordnet, verliert die anderen beiden auf der
+Tagesebene. Die Zuordnungs-Fläche und der Daten-Checker sagen das an der Zeile
+(`datenquellen_validierung.finde_aggregat_teilweise_verdraengt`, WARNING nur in dieser
+Teilbelegung — nicht, wenn der Summenzähler die ganze Anlage trägt). **Die Monatswerte sind in
+allen drei Lagen vollständig.**
+
+Bleibt gar kein kumulativer PV-Zähler übrig — weder je Erzeuger noch für die Anlage —, sagt die
+Tagessicht das, statt zu rechnen: `TagesBilanz.pv_erfasst` trennt
+„0 kWh gemessen" (Nacht, Schnee — gültig) von „nicht erfasst". Im zweiten Fall bleiben
+**Erzeugung, Eigenverbrauch, spezifischer Ertrag, Performance Ratio und CO₂ leer**. Vorher stand
+dort `0 − Einspeisung`, also ein **negativer Eigenverbrauch** neben einem Peak-PV-Wert aus dem
+Leistungssensor (Forum kaba-kakao, T89667 #109). Regel-SoT:
+[KONZEPT-UNVOLLSTAENDIGE-WERTE](KONZEPT-UNVOLLSTAENDIGE-WERTE.md) — eine Summe darf 0 bleiben,
+eine Differenz mit fehlendem Summanden nicht. Die Zuordnungs-Seite und der Daten-Checker nennen
+in dieser Lage den Weg über einen HA-Integral-Sensor je Erzeuger
+([HANDBUCH_DATEN_CHECKER §5.2](HANDBUCH_DATEN_CHECKER.md#52-fehlende-kwh-zähler-in-der-datenquellen-zuordnung-ergänzen)).
 
 Der Client schlüsselt **ab zwei Erzeugern** auf (`lib/erzeugerSpalten.ts`, geteilt von
 *Cockpit → Tag* und *Auswertungen → Tabelle*) und berücksichtigt Anschaffungs-/Stilllegungsdatum.

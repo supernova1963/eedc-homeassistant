@@ -50,7 +50,7 @@ Die Prüfung läuft pro Anlage, ist nicht zeitgesteuert und liest immer den aktu
 - **Klappbare Kategorie-Sektionen**: Jede Kategorie zeigt im Kopf eine Sammel-Bewertung (z. B. *„2 Warnungen, 1 Hinweis"* oder *OK*) und enthält die Einzelbefunde.
 - **Befund-Zeilen** mit Symbol (Severity), Meldung, optionalen Details und „Beheben"-Link zur betroffenen Stelle (Datenquellen, Monatsdaten, Komponenten-Formular usw.).
 
-> Der Daten-Checker umfasst inzwischen mehr Kategorien als die hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
+> Der Daten-Checker umfasst inzwischen mehr Kategorien als die hier dokumentierten Kern-Kategorien (u. a. Datenquelle-Drift, Daten-Quellen-Konflikte, Batterie-Vorzeichen-Historie, PV-Doppelerfassungs-Verdacht, E-Mobilität-Pool-Pflege, Plug-in-Hybrid ohne bestimmbaren Fahranteil). Sie folgen derselben Severity- und „Beheben"-Logik. Eine vollständige Dokumentation dieser jüngeren Kategorien ist ein separater Redaktions-Schritt (kein Bestandteil des reinen IA-Umbaus).
 
 ### Wann sollte ich den Daten-Checker nutzen?
 
@@ -158,6 +158,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **Kein Ladetarif hinterlegt** | ℹ️ INFO | Aktives E-Auto oder aktive Wallbox vorhanden, aber kein Tarif mit Verwendung *wallbox*. Ohne ihn rechnet eedc die Ladung mit dem allgemeinen Tarif. *(Der Hinweis fragte bis v4.0.4 nach einer Verwendung „e-auto", die es nie gab — er war damit unerfüllbar.)* | Nur bei separatem Ladetarif: Strompreis mit Verwendung *Wallbox* anlegen — das ist die Verwendung, die beide Dashboards lesen. Sonst nichts zu tun. |
 | **Arbeitspreis ungewöhnlich: X,X ct/kWh (Tarifname)** | ⚠️ WARNING | Wert liegt außerhalb des erwarteten Bereichs 5–80 ct/kWh — typischerweise Eingabefehler (Komma vs. Punkt, ct vs. €/kWh). | Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Arbeitspreis prüfen. |
 | **Einspeisevergütung ungewöhnlich: X,X ct/kWh (Tarifname)** | ⚠️ WARNING | Wert außerhalb 0–30 ct/kWh. Negative Werte oder zweistellige Vergütungen sind seit den 2010er Jahren untypisch. | Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Vergütung prüfen. Bei dynamischen Vergütungsmodellen (Direktvermarktung) eine sinnvolle Schätzung eintragen. |
+| **N Tarif(e) ohne Einspeisevergütung, obwohl Einspeisung erfasst ist** | ⚠️ WARNING | Mindestens ein Tarif trägt **0 ct/kWh**, und in seinem Gültigkeitszeitraum ist Einspeisung erfasst — der Einspeise-Erlös dieser Monate bleibt damit 0 € (Cockpit, ROI, Jahresbericht). Der Fall entsteht regelmäßig, weil ein neuer Tarif seit v4.0.10 mit 0 startet: eedc rät den EEG-Satz bewusst nicht. | Einstellungen → Stammdaten → Strompreise → Tarif öffnen, Satz aus dem Vergütungsbescheid eintragen; bei gestaffelter Vergütung den nach kWp gewichteten **Mischsatz** (eedc rechnet flat, siehe [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise)). **Ist deine Einspeisung tatsächlich unvergütet** (Volleinspeisung ohne Vergütung, ausgelaufene EEG-Förderung), **ist 0 richtig und nichts zu tun** — der Hinweis bleibt dann als Auskunft stehen und sagt, womit eedc rechnet (wie die Spezialtarif-Hinweise, siehe Kasten oben). |
 | **N Strompreis-Tarif(e) vorhanden** | ✅ OK | Mindestens ein allgemeiner Tarif vorhanden — Anzahl ist informativ. | – |
 
 ---
@@ -522,6 +523,27 @@ homeassistant:
 4. Erwartete Felder pro Komponententyp siehe Tabelle in §4.6.
 5. Zuordnung speichern.
 6. Daten-Checker erneut prüfen.
+
+#### Ein Anlagen-Gesamtzähler reicht — aber dann für alle
+
+Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* versorgt **Monat, Tag und Stunde** als **Summe der ganzen Anlage**. Wenn dein Wechselrichter nur einen Gesamtzähler liefert, ist das eine vollständige Erfassung — du musst nichts weiter einrichten. Was dir fehlt, ist die **Aufschlüsselung je Erzeuger**: eedc kann dann nicht sagen, wie viel „Dach Süd" und wie viel „Dach West" beigetragen hat.
+
+> ⚠ **Entweder die Anlagensumme oder die Einzelwerte — nie beides.** Sobald **ein** Erzeuger einen eigenen kWh-Zähler bekommt, zählt für Tag und Stunde nur noch, was je Erzeuger gemessen ist; der Anlagen-Zählerstand ist dort dann aus. Ordnest du also einem von drei Strings einen Zähler zu, siehst du in Cockpit → Tag nur noch diesen einen. **Entweder alle oder keiner.** (Grund: sonst stünde die Anlagensumme neben ihren eigenen Bestandteilen und alles würde doppelt gezählt.) Deine **Monatswerte** bleiben in jedem Fall vollständig.
+
+**Wenn du je String aufschlüsseln willst und dein Wechselrichter dort nur Leistung (W) liefert:** Daraus baut Home Assistant selbst einen Zähler.
+
+1. **Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → „Integral-Sensor"** (Riemannsche Summe) wählen.
+2. Als **Eingangssensor** den Leistungssensor des Strings angeben, **Integrationsmethode „Linke Riemann-Summe"**, **metrisches Präfix „k"** und **Zeiteinheit „Stunden"** — so entsteht ein kWh-Wert. Keinen Zyklus einstellen.
+3. **Maximales Teilintervall** auf **1 Minute** setzen (Feld `max_sub_interval`). Ohne diese Angabe verbucht der Helfer eine lange Phase konstanter Leistung erst dann, wenn sich der Wert wieder ändert — die Energie geht nicht verloren, landet aber in der falschen Stunde.
+4. Schritt 1 bis 3 **für jeden Erzeuger** wiederholen — ein halb erledigter Umbau kostet dich die übrigen (siehe Kasten oben).
+5. Die neuen Helfer in eedc beim jeweiligen Erzeuger in der Zeile *PV-Erzeugung (kWh)* zuordnen.
+6. Danach die Zuordnung *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* entfernen, damit jede Zahl aus einer Quelle kommt.
+
+> **Warum „links" und nicht die voreingestellte Trapezregel?** Home Assistant speichert **keine Wiederholung gleicher Werte** — ein Sensor, der stillsteht, erzeugt in dieser Zeit gar keinen Messpunkt. Die Trapezregel zieht dann eine gerade Linie über die Lücke und erfindet Energie, die es nie gab. **Bei PV trifft das jede Nacht:** Der Sensor meldet abends 0 W und morgens den ersten kleinen Wert — dazwischen liegt eine Lücke von mehreren Stunden, über die die Trapezregel den halben Morgenwert als Erzeugung verbucht. Gemessen an einer realen Anlage (7,5 Stunden Lücke, erster Morgenwert 16 W): rund 60 Wh Scheinertrag pro Nacht, und der Wert wächst **proportional zum ersten Morgenwert** — bei einem Wechselrichter, der erst ab 200 W meldet, sind es knapp 750 Wh. **Nachts irrt die Trapezregel immer nach oben**, während der Fehler der linken Summe tagsüber mal nach oben und mal nach unten geht und sich über den symmetrischen PV-Tag weitgehend aufhebt. Die Voreinstellung „Trapez" passt zu Quellen, die durchgehend neue Werte liefern — ein Wechselrichter, der nachts schweigt, ist keine.
+
+> Auch dieser Helfer **fängt bei null an** — Tageswerte entstehen ab dem Anlegen, rückwirkend geht es nicht. Bereits erfasste Monatswerte bleiben unverändert. Solange die Helfer noch keine Historie haben, ist der Anlagen-Zählerstand für die Vergangenheit die bessere Quelle.
+
+> ⚠ **Hast du den Helfer schon mit „Trapez" angelegt?** Stell die Methode in den Helfer-Optionen einfach um — der Zählerstand läuft weiter, du verlierst nichts. **Rückwirkend korrigiert sich der bereits aufgelaufene Wert nicht**; er trägt den Scheinertrag der bisherigen Nächte weiter mit. Bei einem frisch angelegten Helfer ist das vernachlässigbar. Wenn er schon länger läuft und du es genau haben willst, leg ihn neu an und trage den Monatswert für die Übergangszeit von Hand nach.
 
 > **Hinweis:** Ordnest du einen kWh-Sensor ohne Standard-Metadaten zu (kein `state_class`), erscheint er in §4.9 — siehe Workflow 5.1. Der Sensor-Picker in den Datenquellen warnt beim Zuordnen bereits vor fehlender Langzeitstatistik.
 

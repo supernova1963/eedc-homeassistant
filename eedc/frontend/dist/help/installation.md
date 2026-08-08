@@ -167,8 +167,14 @@ Hier legst du deine Anlage als Stammdatensatz an.
 
 Der Stromtarif ist die Grundlage aller Wirtschaftlichkeits-Berechnungen. Zwei Wege:
 
-- **Deutsche Standardwerte verwenden** – ein Klick übernimmt einen Ausgangstarif (ca. 30 ct/kWh Netzbezug, 12 €/Monat Grundpreis und eine an die Anlagengröße angepasste Einspeisevergütung). Die Einspeisevergütung richtet sich nach der Leistung: bis 10 kWp 8,2 ct, bis 40 kWp 7,1 ct, darüber 5,8 ct (Stand 2026).
+- **Deutsche Standardwerte verwenden** – ein Klick übernimmt einen Ausgangstarif (ca. 30 ct/kWh Netzbezug, 12 €/Monat Grundpreis). Die **Einspeisevergütung bleibt dabei 0** — sie ist der einzige Wert, den eedc nicht schätzen kann.
 - **Manuell anpassen** – du trägst Netzbezugspreis (Pflicht), Einspeisevergütung, Grundpreis, das Gültigkeitsdatum („Gültig ab", Pflicht) sowie optional Tarifname und Anbieter selbst ein.
+
+> **Die Einspeisevergütung trägst du selbst ein — sie steht in deinem Vergütungsbescheid.** eedc schlägt hier bewusst **keinen** Satz vor: Die EEG-Sätze ändern sich laufend, und welcher für deine Anlage gilt, hängt an Inbetriebnahmedatum, Anlagengröße und Vertragsform. Eine geratene Zahl im Feld sähe aus wie eine gepflegte.
+>
+> Mit **0 ct** bleibt der Einspeise-Erlös 0 € — in Cockpit, ROI und Jahresbericht. Der Daten-Checker meldet das, sobald tatsächlich Einspeisung erfasst ist; bei unvergüteter Einspeisung (Volleinspeisung ohne Vergütung, ausgelaufene Förderung) bleibt 0 richtig und der Hinweis aus.
+>
+> Wird deine Anlage **gestaffelt** vergütet, gehört der nach kWp gewichtete **Mischsatz** ins Feld — eedc rechnet flat mit dem eingetragenen Wert. Wie er sich berechnet, steht in [Teil III §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise). *(Bis v4.0.10 schlug der Wizard den Satz der erreichten Stufe vor — für jede Anlage über 10 kWp war das zu niedrig.)*
 
 > **Mehrere Tarife später möglich:** Bei einem Tarifwechsel oder einer Preisänderung legst du unter *Einstellungen → Stammdaten → Strompreise* einfach einen weiteren Tarif mit eigenem Gültigkeitszeitraum an. Auch **Spezialtarife** für Wärmepumpe oder Wallbox (separater Zähler, günstigerer Tarif) gehören dorthin.
 
