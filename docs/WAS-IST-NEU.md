@@ -11,6 +11,18 @@
 
 ## Unveröffentlicht
 
+### MQTT-Export: „0 von 0 Sensoren publiziert" war eine Fehlermeldung
+
+**Betrifft dich das?** Alle, die den Sensor-Export nach Home Assistant einrichten — besonders kurz nach der Installation.
+
+Die Fläche zeigte „**0 von 0 Sensoren publiziert**" mit einem grünen Häkchen und darunter „Verfügbare Sensoren (0)". Das sah nach *hat geklappt, es gibt eben nichts* aus. Tatsächlich war es das Gegenteil: eedc **hatte** einen Grund genannt, und die Oberfläche hat ihn verschluckt.
+
+Der Grund ist fast immer derselbe: **alle Export-Sensoren werden aus abgeschlossenen Monatsdaten gerechnet.** Live-Werte und Tagesdaten genügen dafür nicht — ROI, Einspeisevergütung und die übrigen Kennzahlen brauchen einen fertigen Monat. Solange keiner vorliegt, gibt es nichts zu publizieren.
+
+Zwei Dinge sind jetzt anders: Ein gescheiterter Publish zeigt **den Grund**, in Rot, statt einer Erfolgsmeldung. Und die leere Sensorliste sagt selbst, worauf sie wartet — statt kommentarlos leer zu bleiben, während die Discovery-Box daneben verspricht, die Sensoren erschienen automatisch in Home Assistant.
+
+> **Du musst nichts umstellen.** Schließe deinen ersten Monat ab (*Cockpit → Monat*), danach erscheinen die Sensoren hier und werden mit dem nächsten Durchlauf publiziert.
+
 ### Deye/Solarman: der Cloud-Import holt jetzt wirklich Daten
 
 **Betrifft dich das?** Alle, die ihre Historie über **Deye / Solarman** aus der Hersteller-Cloud importieren wollen.

@@ -112,6 +112,17 @@ export interface MQTTPublishResult {
   total: number
   success: number
   failed: number
+  /**
+   * Gesetzt, wenn der Aufruf gescheitert ist — dann trägt `message` den Grund
+   * der API (z. B. „Keine Monatsdaten vorhanden", HTTP 404).
+   *
+   * Ohne dieses Feld war ein Fehlschlag von einem Erfolg nicht zu
+   * unterscheiden: der Client baute im `catch` ein Ergebnis mit `total: 0`,
+   * und die Anzeige machte daraus „0 von 0 Sensoren publiziert" samt grünem
+   * Häkchen (T89667 #112, Phir0n). Der Grund stand in `message` und wurde nie
+   * gerendert.
+   */
+  fehlgeschlagen?: boolean
 }
 
 export interface SensorDefinition {

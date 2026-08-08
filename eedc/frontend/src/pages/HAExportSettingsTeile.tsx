@@ -66,7 +66,7 @@ import {
   mdiHelpCircleOutline
 } from '@mdi/js'
 import { haApi, anlagenApi } from '../api'
-import { Button, Input, SegmentControl, Switch } from '../components/ui'
+import { Button, Input, SegmentControl, Switch, EmptyState } from '../components/ui'
 import { VERBINDUNG_GEAENDERT_EVENT } from '../api/datenquellen'
 
 const MDI_ICON_MAP: Record<string, string> = {
@@ -288,7 +288,10 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
         anlage_id: anlageId,
         total: 0,
         success: 0,
-        failed: 0
+        failed: 0,
+        // Ohne diese Marke sah ein Fehlschlag wie ein Erfolg aus — s. den
+        // Kommentar an `MQTTPublishResult.fehlgeschlagen`.
+        fehlgeschlagen: true
       })
     } finally {
       setMqttPublishing(false)
@@ -634,16 +637,36 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
 
             {/* Publish Ergebnis */}
             {mqttPublishResult && (
+              // Ein Fehlschlag hat hier bis v4.0.10 wie ein Erfolg ausgesehen:
+              // der `catch`-Zweig baute ein Ergebnis mit `total: 0`, und diese
+              // Box zeigte „0 von 0 Sensoren publiziert" mit grünem Häkchen.
+              // Der Grund der API stand in `message` und wurde nie gerendert —
+              // gemeldet von Phir0n (T89667 #112) mit „Keine Monatsdaten
+              // vorhanden" als verschluckter Antwort. Aufbau jetzt wie beim
+              // Verbindungstest darüber: Zustand entscheidet über Farbe UND Icon.
               <div className={`mb-4 p-3 rounded-lg ${
-                mqttPublishResult.success > 0
-                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                  : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
+                mqttPublishResult.fehlgeschlagen
+                  ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                  : mqttPublishResult.success > 0
+                    ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                    : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800'
               }`}>
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                  <span className="text-gray-700 dark:text-gray-300 text-sm">
-                    {mqttPublishResult.success} von {mqttPublishResult.total} Sensoren publiziert
-                  </span>
+                  {mqttPublishResult.fehlgeschlagen ? (
+                    <>
+                      <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                      <span className="text-red-700 dark:text-red-300 text-sm">
+                        {mqttPublishResult.message}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <span className="text-gray-700 dark:text-gray-300 text-sm">
+                        {mqttPublishResult.success} von {mqttPublishResult.total} Sensoren publiziert
+                      </span>
+                    </>
+                  )}
                 </div>
                 {mqttPublishResult.failed > 0 && (
                   <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
@@ -775,6 +798,24 @@ export function MqttExportVerwaltung({ anlageId, anlage, kopfZusatz, onAnlageUpd
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Verfügbare Sensoren ({anlageExport.sensors.length})
           </h2>
+
+          {/* Eine leere Liste nennt ihren Grund (T89667 #112, Phir0n).
+              Sämtliche Export-Sensoren werden aus abgeschlossenen Monatsdaten
+              gerechnet; `calculate_anlage_sensors` steigt ohne eine einzige
+              Monatszeile sofort aus. Bis dahin stand hier nur „Verfügbare
+              Sensoren (0)" über einer leeren Fläche — daneben die Zusage der
+              Discovery-Box, die Sensoren erschienen automatisch in HA. */}
+          {anlageExport.sensors.length === 0 && (
+            <EmptyState
+              icon={Info}
+              title="Noch keine Sensoren zu exportieren"
+              description={
+                'Alle Export-Sensoren werden aus abgeschlossenen Monatsdaten gerechnet — ' +
+                'Live- und Tageswerte allein genügen dafür nicht. Sobald du den ersten Monat ' +
+                'abgeschlossen hast, erscheinen die Sensoren hier und werden publiziert.'
+              }
+            />
+          )}
 
           <div className="space-y-4">
             {sortCategories(Object.entries(groupSensorsByCategory(anlageExport.sensors))).map(([category, sensors]) => (
