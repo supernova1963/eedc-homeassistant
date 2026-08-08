@@ -532,12 +532,17 @@ Der Zählerstand unter *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* vers
 **Wenn du je String aufschlüsseln willst und dein Wechselrichter dort nur Leistung (W) liefert:** Daraus baut Home Assistant selbst einen Zähler.
 
 1. **Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → „Integral-Sensor"** (Riemannsche Summe) wählen.
-2. Als **Eingangssensor** den Leistungssensor des Strings angeben, **Integrationsmethode Trapez**, **metrisches Präfix „k"** und **Zeiteinheit „Stunden"** — so entsteht ein kWh-Wert. Keinen Zyklus einstellen.
-3. Schritt 1 und 2 **für jeden Erzeuger** wiederholen — ein halb erledigter Umbau kostet dich die übrigen (siehe Kasten oben).
-4. Die neuen Helfer in eedc beim jeweiligen Erzeuger in der Zeile *PV-Erzeugung (kWh)* zuordnen.
-5. Danach die Zuordnung *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* entfernen, damit jede Zahl aus einer Quelle kommt.
+2. Als **Eingangssensor** den Leistungssensor des Strings angeben, **Integrationsmethode „Linke Riemann-Summe"**, **metrisches Präfix „k"** und **Zeiteinheit „Stunden"** — so entsteht ein kWh-Wert. Keinen Zyklus einstellen.
+3. **Maximales Teilintervall** auf **1 Minute** setzen (Feld `max_sub_interval`). Ohne diese Angabe verbucht der Helfer eine lange Phase konstanter Leistung erst dann, wenn sich der Wert wieder ändert — die Energie geht nicht verloren, landet aber in der falschen Stunde.
+4. Schritt 1 bis 3 **für jeden Erzeuger** wiederholen — ein halb erledigter Umbau kostet dich die übrigen (siehe Kasten oben).
+5. Die neuen Helfer in eedc beim jeweiligen Erzeuger in der Zeile *PV-Erzeugung (kWh)* zuordnen.
+6. Danach die Zuordnung *Anlage (Basis) → PV-Erzeugung Zählerstand (kWh)* entfernen, damit jede Zahl aus einer Quelle kommt.
+
+> **Warum „links" und nicht die voreingestellte Trapezregel?** Home Assistant speichert **keine Wiederholung gleicher Werte** — ein Sensor, der stillsteht, erzeugt in dieser Zeit gar keinen Messpunkt. Die Trapezregel zieht dann eine gerade Linie über die Lücke und erfindet Energie, die es nie gab. **Bei PV trifft das jede Nacht:** Der Sensor meldet abends 0 W und morgens den ersten kleinen Wert — dazwischen liegt eine Lücke von mehreren Stunden, über die die Trapezregel den halben Morgenwert als Erzeugung verbucht. Gemessen an einer realen Anlage (7,5 Stunden Lücke, erster Morgenwert 16 W): rund 60 Wh Scheinertrag pro Nacht, und der Wert wächst **proportional zum ersten Morgenwert** — bei einem Wechselrichter, der erst ab 200 W meldet, sind es knapp 750 Wh. **Nachts irrt die Trapezregel immer nach oben**, während der Fehler der linken Summe tagsüber mal nach oben und mal nach unten geht und sich über den symmetrischen PV-Tag weitgehend aufhebt. Die Voreinstellung „Trapez" passt zu Quellen, die durchgehend neue Werte liefern — ein Wechselrichter, der nachts schweigt, ist keine.
 
 > Auch dieser Helfer **fängt bei null an** — Tageswerte entstehen ab dem Anlegen, rückwirkend geht es nicht. Bereits erfasste Monatswerte bleiben unverändert. Solange die Helfer noch keine Historie haben, ist der Anlagen-Zählerstand für die Vergangenheit die bessere Quelle.
+
+> ⚠ **Hast du den Helfer schon mit „Trapez" angelegt?** Stell die Methode in den Helfer-Optionen einfach um — der Zählerstand läuft weiter, du verlierst nichts. **Rückwirkend korrigiert sich der bereits aufgelaufene Wert nicht**; er trägt den Scheinertrag der bisherigen Nächte weiter mit. Bei einem frisch angelegten Helfer ist das vernachlässigbar. Wenn er schon länger läuft und du es genau haben willst, leg ihn neu an und trage den Monatswert für die Übergangszeit von Hand nach.
 
 > **Hinweis:** Ordnest du einen kWh-Sensor ohne Standard-Metadaten zu (kein `state_class`), erscheint er in §4.9 — siehe Workflow 5.1. Der Sensor-Picker in den Datenquellen warnt beim Zuordnen bereits vor fehlender Langzeitstatistik.
 
