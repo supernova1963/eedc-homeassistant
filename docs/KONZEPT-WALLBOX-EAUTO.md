@@ -623,3 +623,80 @@ Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emi
 - **Kein Fahrzeugtyp-Feld** (s. Entscheidung 3).
 - **Keine Session-/Fahrten-Ebene.** eedc bleibt bei Monatsaggregaten — unverändert seit
   §„Abgrenzung" ganz oben.
+
+---
+
+## Phase 5 — Der PV-Anteil der Heimladung wird abgeleitet, nicht abgefragt (N-141 Weg c)
+
+> **Stand 2026-08-08: vermessen, Rechenkern gebaut, noch nicht angeschlossen.** Der Layer-SoT
+> `core/berechnungen/pv_anteil_ladung.py` existiert und ist gegen echte Anlagendaten belegt; es
+> liest ihn aber noch keine Sicht, also hat sich **keine angezeigte Zahl geändert**.
+
+### Das Problem
+
+**Eine Wallbox misst ihren PV-Anteil nicht.** Sie zählt Kilowattstunden, nicht deren Herkunft.
+Wer kein evcc betreibt, hat für `ladung_pv_kwh` gar keine Quelle — und der Leser
+`get_emob_pv_netz_kwh` setzt den PV-Anteil dann auf **0**: die gesamte Heimladung gilt als
+Netzstrom. Gleichzeitig liest die ROI-**Prognose** einen von Hand gepflegten
+`pv_ladeanteil_prozent` (Default 60 %). Dieselbe Anlage steht damit auf **60 % PV in der Prognose
+und 0 % im IST**.
+
+### Die Lösung ist von evcc geborgt
+
+evcc kennt ebenfalls keinen PV-Sensor an der Wallbox. Es kennt PV-Leistung, Netzbezug/Einspeisung
+und Ladeleistung und rechnet je Zeitschritt, welcher Teil der Ladung gerade durch Überschuss
+gedeckt war. „Sonne (%)" pro Session ist bei evcc ein **Rechenergebnis, keine Messung**. eedc hat
+dieselben Eingänge stündlich vorliegen.
+
+### Vermessen am 2026-08-08 gegen evcc
+
+Anlage 1, Feb–Aug 2026, **963 kWh Heimladung**. Referenz waren nicht eedc-Monatswerte (die tragen
+an dieser Anlage frühe Schätzungen), sondern **HA-Rohsensoren**: `sensor.evcc_helper_pv_charged_kwh`
+und `…_net_charged_kwh`. Konsistenzprobe: März 175,19 + 64,81 = **240,00 kWh** = exakt die
+Differenz des Wallbox-Zählers.
+
+| Regel | PV-Anteil | Abweichung zu evcc (67,9 %) |
+| --- | --- | --- |
+| netzbasiert `min(Ladung, Netzbezug)` | 73,8 % | +5,9 pp (überschätzt) |
+| netz + Speicherentladung | 60,8 % | −7,2 pp |
+| **Einspeise-Deckung** — gebaut | **64,7 %** | **−3,2 pp** |
+
+**Entscheid: Einspeise-Deckung.** Sie trifft die Referenz am besten und irrt in die unverdächtige
+Richtung — sie schreibt die Ersparnis eher zu klein als zu groß.
+
+### Zwei Messbefunde, die die Bauform bestimmen
+
+1. ⚠ **Der Wallbox-Zähler dieser Anlage meldet nur ganze Kilowattstunden** — 218 von 218
+   Stunden-Deltas ganzzahlig; am 05.06. landeten 20 kWh vollständig in der Stunde 05:00. **Wo ein
+   Zähler so grob meldet, hilft keine feinere Rechnung.** Die ursprünglich vorgesehenen
+   5-Min-Overlays bringen dort nichts; sie lohnen nur, wo der Zähler selbst feiner ist. Der Ort der
+   Rechnung (**im Aggregator**) bleibt davon unberührt.
+2. ⚠ **evcc-gespeiste Zähler springen am Session-Ende, statt mitzulaufen** (29.04.: fünf Stunden
+   konstant, dann +44,49 kWh in einem Schritt). Für Monatswerte harmlos, für Tageswerte nicht — wer
+   damit **stundengenau** prüft, misst einen Zeitversatz und hält ihn für einen Fehler.
+
+### Rahmenbedingungen (Gernots Freigabe, unverändert gültig)
+
+1. **Ein gepflegter echter Wert gewinnt immer** — die Ableitung füllt nur Lücken.
+2. Rechnung **im Aggregator**, nicht nachträglich aus gespeicherten Stunden.
+3. Nur wo Zeitreihen existieren; **Handeingabe bleibt beim heutigen Weg und sagt das**.
+4. Der Wert wird als **abgeleitet gekennzeichnet** (P4-Linie, Muster „geschätzt (kWp-Anteil)").
+5. **Keine rückwirkende Neuberechnung.** Gernot am 08.08.: *„Lass die historischen Werte in der
+   Verantwortung des Benutzers und kümmere dich darum, dass es ab jetzt korrekt funktioniert."*
+6. Zuerst die Messung — **erledigt**, siehe oben.
+7. Die **Prognose zieht mit**: kann eedc den Anteil ableiten, braucht auch die ROI-Prognose keine
+   Anwenderschätzung mehr, sonst lebt `pv_ladeanteil_prozent` neben der neuen Rechnung weiter.
+
+### Restarbeit — der Anschluss
+
+Der Rechenkern steht; die Wirkung fehlt. Drei Stellen, in dieser Reihenfolge:
+
+1. **`services/energie_profil/aggregator.py`** — `kwh_pro_stunde` trägt alle vier Eingänge bereits
+   (`wallbox` · `netzbezug` · `einspeisung` · `entladung_batterie`, sämtlich positive Zähler-Deltas).
+   Kein neuer Snapshot-Zugriff nötig.
+2. **`TagesZusammenfassung`** — Ablage des abgeleiteten Tageswerts samt `source_provenance`-Eintrag
+   (Rahmenbedingung 4). Neue Spalten: die drei Pflicht-Stellen beachten.
+3. **`services/monats_fakten.py`** — den abgeleiteten Wert **nur** heranziehen, wo der IMD-Wert
+   fehlt (Rahmenbedingung 1).
+
+Danach Rahmenbedingung 7 (Prognose).

@@ -19,6 +19,9 @@ Submodule:
 - `einspeise_erloes` — §51-bereinigte Einspeise-Erlös-Berechnung
 - `dienstliche_ladekosten` — Euro-Bewertung der Dienstwagen-Ladung (Gegenposten
   zur AG-Erstattung); PV-Anteil zum Netzbezugspreis, Netzanteil zum Wallbox-Preis
+- `pv_anteil_ladung` — abgeleiteter PV-Anteil einer Heimladung aus den eigenen
+  Stundengrößen, wo keine Wallbox ihn misst (N-141 (c); Ergebnis ist eine
+  Schätzung und muss gekennzeichnet werden)
 - `counter` — Counter-Aggregate (WP-Starts/Betriebsstunden): Stunden-Σ aus
   Tages-Boundary-Diff ableiten + Pflicht-Invariante (Variante 2-light)
 - `invarianten` — Konsistenz-Asserts (Σ Hourly == Daily, Σ pv == komponenten_pv etc.)
@@ -141,6 +144,11 @@ from backend.core.berechnungen.invarianten import (
     pruefe_tep_tz_komponenten_konsistenz,
     pruefe_tep_tz_konsistenz,
 )
+from backend.core.berechnungen.pv_anteil_ladung import (
+    REGEL_EINSPEISE_DECKUNG,
+    AbgeleiteterLadeAnteil,
+    leite_pv_anteil_ab,
+)
 from backend.core.berechnungen.pv_verteilung import (
     QUELLE_FEHLT as PV_QUELLE_FEHLT,
     QUELLE_GEMESSEN as PV_QUELLE_GEMESSEN,
@@ -261,6 +269,9 @@ __all__ = [
     "berechne_dienstliche_ladekosten",
     "EinspeiseErloes",
     "einspeise_erloes_euro",
+    "AbgeleiteterLadeAnteil",
+    "leite_pv_anteil_ab",
+    "REGEL_EINSPEISE_DECKUNG",
     "FinanzAggregat",
     "FinanzMonatsZeile",
     "berechne_finanz_aggregat",
