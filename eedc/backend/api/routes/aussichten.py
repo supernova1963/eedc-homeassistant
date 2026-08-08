@@ -45,12 +45,14 @@ from backend.core.berechnungen import (
 )
 from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
+from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.berechnungen.ust_eigenverbrauch import (
     UstJahresanteil,
     bemessungsgrundlage_aus_investitionen,
     ust_eigenverbrauch_fuer_anlage,
 )
 from backend.core.field_definitions import get_wp_strom_kwh
+from backend.services.eauto_wirtschaftlichkeit import eigener_verbrauch_l_100km
 from backend.core.wirtschaftlichkeit_defaults import (
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -1189,8 +1191,24 @@ async def get_finanz_prognose(
                 PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
                 PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
             ) or PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
+            # #331: der REAL getankte Verbrauch eines Plug-in-Hybrids — `None`
+            # bei einem BEV, dann bleibt hier jede Zahl wie vorher. Diese Route
+            # rechnet die E-Auto-Ersparnis als VIERTE Read-Site selbst (Cockpit,
+            # E-Auto-Dashboard und HA-Export gehen über
+            # `eauto_wirtschaftlichkeit`); ohne diesen Wert zeigte
+            # Auswertungen → Finanzen für einen Hybrid mehr Ersparnis als jede
+            # andere Sicht. [[feedback_aggregations_drift]]
+            "eigener_l_100km": eigener_verbrauch_l_100km(params),
+            "fahranteil_prozent": params.get(
+                PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
+            ),
+            "verbrauch_kwh_100km": params.get(
+                PARAM_E_AUTO["VERBRAUCH_KWH_100KM"],
+                PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
+            ) or PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
             "km": 0.0,
             "netz_kwh": 0.0,
+            "fahrverbrauch_kwh": 0.0,
             "pv_kwh": eauto_pv_pro_inv.get(ea.id, 0.0),
             "bisherige_ersparnis": 0.0,
             # Invariante: immer gesetzt — der Jahres-Block unten (Zeile ~1589)
@@ -1328,6 +1346,7 @@ async def get_finanz_prognose(
             netz = daten.get("ladung_netz_kwh", 0) or 0
             agg["km"] += km
             agg["netz_kwh"] += netz
+            agg["fahrverbrauch_kwh"] += daten.get("verbrauch_kwh", 0) or 0
             # Monats-Benzinpreis: Monatsdaten (EU OB) → Fallback per-Inv-Default
             md = monatsdaten_dict.get((jahr, monat))
             monats_benzinpreis = (
@@ -1340,6 +1359,33 @@ async def get_finanz_prognose(
             md_preis = resolve_netzbezug_preis_cent(md, m_arbeitspreis)
             agg["bisherige_ersparnis"] += (
                 benzin_liter * monats_benzinpreis - netz * md_preis / 100
+            )
+            # #331: den Monat merken, damit der fossile Anteil unten mit
+            # DESSEN Preis abgezogen wird. Der Anteil selbst wird erst nach der
+            # Schleife bestimmt — einmal für den ganzen Zeitraum, exakt wie in
+            # `berechne_eauto_ersparnis_periode`; monatsweise wäre genauer und
+            # würde genau deshalb gegen das Cockpit driften.
+            if km > 0 and agg["eigener_l_100km"] is not None:
+                agg.setdefault("monate", []).append((km, monats_benzinpreis))
+
+    # #331: die real getankte Rechnung des Verbrenner-Anteils. Bei einem BEV
+    # ist `eigener_l_100km` None und diese Schleife ändert nichts.
+    for agg in eauto_aggregate.values():
+        if agg["eigener_l_100km"] is None or agg["km"] <= 0:
+            continue
+        _anteil = teile_fahrleistung(
+            km_gefahren=agg["km"],
+            fahrverbrauch_kwh=agg["fahrverbrauch_kwh"] or None,
+            verbrauch_kwh_100km=agg["verbrauch_kwh_100km"],
+            anteil_prozent=agg["fahranteil_prozent"],
+        )
+        agg["km_verbrenner"] = _anteil.km_verbrenner
+        if _anteil.km_verbrenner <= 0:
+            continue
+        _v_quote = _anteil.km_verbrenner / agg["km"]
+        for _km_m, _preis_m in agg.get("monate", []):
+            agg["bisherige_ersparnis"] -= (
+                _km_m * _v_quote / 100 * agg["eigener_l_100km"] * _preis_m
             )
     bisherige_eauto_ersparnis = sum(a["bisherige_ersparnis"] for a in eauto_aggregate.values())
     gesamt_km = sum(a["km"] for a in eauto_aggregate.values())
@@ -1597,8 +1643,22 @@ async def get_finanz_prognose(
         netz_anteil = gesamt_eauto_netz / (gesamt_eauto_pv + gesamt_eauto_netz) if (gesamt_eauto_pv + gesamt_eauto_netz) > 0 else 0.5
         eauto_netz_kwh_jahr = (jahres_eauto_pv / (1 - netz_anteil) * netz_anteil) if netz_anteil < 1 else 0
         eauto_stromkosten_netz_jahr = eauto_netz_kwh_jahr * netzbezug_preis / 100
+        # #331: die fortgeschriebene Tankrechnung der Plug-in-Hybride. Der
+        # Verbrenner-Anteil je Fahrzeug steht aus der Historie oben fest und
+        # wird mit derselben Quote hochgerechnet wie die Kilometer.
+        fossile_kosten_jahr = 0.0
+        for _agg in eauto_aggregate.values():
+            if _agg["eigener_l_100km"] is None or _agg["km"] <= 0:
+                continue
+            _km_v_jahr = _agg.get("km_verbrenner", 0.0) / anzahl_monate_hist * 12
+            _agg["fossile_kosten_jahr"] = (
+                _km_v_jahr / 100 * _agg["eigener_l_100km"] * prognose_benzinpreis
+            )
+            fossile_kosten_jahr += _agg["fossile_kosten_jahr"]
         # Netto-Ersparnis
-        jahres_eauto_km_ersparnis = benzin_kosten_jahr - eauto_stromkosten_netz_jahr
+        jahres_eauto_km_ersparnis = (
+            benzin_kosten_jahr - eauto_stromkosten_netz_jahr - fossile_kosten_jahr
+        )
         # Per-E-Auto-Aufschlüsselung (für Komponenten-Anzeige).
         # Benzin-Kostenteil: pro E-Auto mit dessen `vergleich_l_100km` exakt.
         # Strom-Kostenteil: km-anteilig aus dem Aggregat (Vereinfachung — der
@@ -1614,7 +1674,12 @@ async def get_finanz_prognose(
             km_jahr_ea = agg["km"] / anzahl_monate_hist * 12
             benzin_kosten_jahr_ea = km_jahr_ea / 100 * agg["vergleich_l_100km"] * prognose_benzinpreis
             stromkosten_ea = eauto_stromkosten_netz_jahr * (agg["km"] / gesamt_km)
-            agg["jahres_ersparnis"] = benzin_kosten_jahr_ea - stromkosten_ea
+            # #331: derselbe Posten wie im Aggregat oben — sonst wäre die Summe
+            # der Pro-Fahrzeug-Zeilen nicht mehr das Aggregat.
+            agg["jahres_ersparnis"] = (
+                benzin_kosten_jahr_ea - stromkosten_ea
+                - agg.get("fossile_kosten_jahr", 0.0)
+            )
 
     # BKW Jahres-Ersparnis (aus historischem Durchschnitt hochgerechnet).
     # P9-konform 0, sobald das BKW seine Erzeugung mitschreibt: dann steckt es

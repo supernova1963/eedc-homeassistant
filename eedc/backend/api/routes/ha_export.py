@@ -47,10 +47,12 @@ from backend.api.routes.strompreise import (
     resolve_strompreis_for_komponente,
 )
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
+from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.services.eauto_wirtschaftlichkeit import (
     attribute_month_share,
     build_eauto_km_by_month,
     build_wb_pool_by_month,
+    eigener_verbrauch_l_100km,
 )
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
@@ -653,6 +655,13 @@ async def calculate_anlage_sensors(
     co2_emob_km = 0.0
     co2_emob_netz_kwh = 0.0
     co2_benzin_liter = 0.0
+    # #331: die PHEV-Aufteilung wird NACH der Schleife je Fahrzeug **einmal für
+    # den ganzen Zeitraum** bestimmt — exakt wie in
+    # `berechne_eauto_ersparnis_periode`, die das Cockpit rechnet. Monatsweise
+    # aufzuteilen wäre genauer und würde genau deshalb driften.
+    _phev_monate: dict[int, list[tuple[float, float]]] = {}
+    _phev_km: dict[int, float] = {}
+    _phev_kwh: dict[int, float] = {}
     for ea in e_autos:
         params = ea.parameter or {}
         ea_benzinpreis_default = params.get(
@@ -686,6 +695,41 @@ async def calculate_anlage_sensors(
             co2_emob_km += km
             co2_emob_netz_kwh += netz
             co2_benzin_liter += benzin_liter
+            if km > 0:
+                _phev_monate.setdefault(ea.id, []).append((km, monats_benzinpreis))
+                _phev_km[ea.id] = _phev_km.get(ea.id, 0.0) + km
+                _phev_kwh[ea.id] = _phev_kwh.get(ea.id, 0.0) + (
+                    daten.get("verbrauch_kwh", 0) or 0
+                )
+
+    # #331: der fossile Anteil eines Plug-in-Hybrids — als Kosten UND als
+    # geminderte CO₂-Vermeidung. Ohne gepflegtes `eigener_verbrauch_l_100km`
+    # bleibt beides 0 und der Export trägt exakt dieselben Zahlen wie vorher.
+    co2_fossil_liter = 0.0
+    for ea in e_autos:
+        km_total = _phev_km.get(ea.id, 0.0)
+        eigener_l = eigener_verbrauch_l_100km(ea.parameter)
+        if km_total <= 0 or eigener_l is None:
+            continue
+        _anteil = teile_fahrleistung(
+            km_gefahren=km_total,
+            fahrverbrauch_kwh=_phev_kwh.get(ea.id) or None,
+            verbrauch_kwh_100km=(ea.parameter or {}).get(
+                PARAM_E_AUTO["VERBRAUCH_KWH_100KM"],
+                PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
+            ) or PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
+            anteil_prozent=(ea.parameter or {}).get(
+                PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
+            ),
+        )
+        if _anteil.km_verbrenner <= 0:
+            continue
+        _v_quote = _anteil.km_verbrenner / km_total
+        co2_fossil_liter += _anteil.km_verbrenner / 100 * eigener_l
+        for _km_m, _preis_m in _phev_monate.get(ea.id, []):
+            bisherige_eauto_ersparnis -= (
+                _km_m * _v_quote / 100 * eigener_l * _preis_m
+            )
 
     # DI-2: WP-CO₂-Aggregate (gemessene Wärme/Strom) über den kanonischen
     # Zeilen-Helper `imd_typ_beitrag` — dieselbe Wärme-/Strom-Auflösung wie das
@@ -708,6 +752,7 @@ async def calculate_anlage_sensors(
         emob_km=co2_emob_km,
         emob_netz_ladung_kwh=co2_emob_netz_kwh,
         benzin_verbrauch_liter=co2_benzin_liter,
+        fossil_getankt_liter=co2_fossil_liter,
     ).co2_gesamt_kg
 
     # BKW: KEIN eigener Posten mehr (ADR-002/P9). Die Ersparnis steckt seit
@@ -1090,6 +1135,12 @@ async def calculate_investition_sensors(
                     }
                     benzin_kosten = 0.0
                     strom_kosten = 0.0
+                    # #331: fünfte Stelle, an der die E-Auto-Ersparnis gebildet
+                    # wird — der per-Fahrzeug-Sensor. Er sammelt (km, Preis) je
+                    # Monat mit, damit der fossile Anteil unten mit demselben
+                    # Monatspreis abgezogen wird wie der Vergleichswert.
+                    phev_monate: list[tuple[float, float]] = []
+                    phev_kwh = 0.0
                     for md in monatsdaten:
                         d = md.verbrauch_daten or {}
                         km = d.get("km_gefahren", 0) or 0
@@ -1105,8 +1156,40 @@ async def calculate_investition_sensors(
                               else fallback_benzinpreis)
                         benzin_kosten += (km / 100) * vergleich_l * bp
                         strom_kosten += netz * netzbezug_preis / 100
-                    value = benzin_kosten - strom_kosten
-                    berechnung = f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom)"
+                        if km > 0:
+                            phev_monate.append((km, bp))
+                            phev_kwh += d.get("verbrauch_kwh", 0) or 0
+
+                    # #331: die real getankte Rechnung des Verbrenner-Anteils.
+                    # Der Anteil wird einmal für den ganzen Zeitraum bestimmt —
+                    # wie in `berechne_eauto_ersparnis_periode`, sonst driftet
+                    # der Sensor gegen Cockpit und Komponenten-Hub.
+                    fossile_kosten = 0.0
+                    eigener_l = eigener_verbrauch_l_100km(params)
+                    if eigener_l is not None and gesamt_km > 0:
+                        _anteil = teile_fahrleistung(
+                            km_gefahren=gesamt_km,
+                            fahrverbrauch_kwh=phev_kwh or None,
+                            verbrauch_kwh_100km=params.get(
+                                PARAM_E_AUTO["VERBRAUCH_KWH_100KM"],
+                                PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
+                            ) or PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
+                            anteil_prozent=params.get(
+                                PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
+                            ),
+                        )
+                        if _anteil.km_verbrenner > 0:
+                            _q = _anteil.km_verbrenner / gesamt_km
+                            fossile_kosten = sum(
+                                (_km * _q / 100) * eigener_l * _bp
+                                for _km, _bp in phev_monate
+                            )
+
+                    value = benzin_kosten - strom_kosten - fossile_kosten
+                    berechnung = (
+                        f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom)"
+                        + (f" - {fossile_kosten:.2f} (Kraftstoff)" if fossile_kosten else "")
+                    )
 
             if value is not None:
                 sensor_values.append(SensorValue(

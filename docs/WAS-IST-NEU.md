@@ -11,6 +11,26 @@
 
 ## Unveröffentlicht
 
+### Plug-in-Hybrid: der Benzin-Anteil zählt jetzt mit
+
+**Betrifft dich das?** Alle, deren Fahrzeug **auch** einen Verbrenner hat. Fährst du rein elektrisch, ändert sich für dich **nichts** — keine einzige Zahl.
+
+eedc hat bei einer Fahrzeug-Investition bisher unterstellt, dass **alle** Kilometer elektrisch gefahren wurden. Bei einem Plug-in-Hybrid stimmt das nicht, und der Fehler ging immer in dieselbe Richtung: Der getankte Kraftstoff tauchte **weder als Kosten noch als Emission** auf. Ersparnis und CO₂-Bilanz sahen besser aus als die Realität.
+
+**Was du tun musst:** In der Fahrzeug-Komponente unter *Vergleich & Betrieb* das neue Feld **„Eigener Verbrauch (L/100 km)"** ausfüllen — das ist, was dein Fahrzeug im Verbrenner-Betrieb wirklich verbraucht. Nicht zu verwechseln mit dem Feld darüber: **„Verbrenner-Verbrauch"** beschreibt weiterhin das *hypothetische* Vergleichsfahrzeug, das du *nicht* gekauft hast. Zwei Bedeutungen, zwei Felder — deshalb wurde das alte Feld nicht umgedeutet.
+
+Ein „Fahrzeugtyp: Plug-in-Hybrid" gibt es bewusst nicht. **Das ausgefüllte Feld ist die Aussage.** Bleibt es leer, rechnet eedc wie bisher.
+
+**Woher eedc den elektrischen Anteil nimmt** — in dieser Reihenfolge:
+
+1. **Gemessen**, wenn du den monatlichen **Fahrverbrauch in kWh** erfasst: daraus und aus deinem kWh/100 km folgt, wie weit du elektrisch gekommen bist. Mehr als die gefahrenen Kilometer können es dabei nie werden.
+2. **Geschätzt**, wenn du stattdessen den **elektrischen Fahranteil in %** einträgst.
+3. **Gar nicht** — dann bleibt es beim alten Verhalten, und der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) sagt dir, dass die Angabe fehlt. Einen Richtwert („so 40–60 % sind üblich") setzt eedc **nicht** ein: das wäre eine Behauptung über dein Auto, keine Rechnung.
+
+**Was du danach siehst:** Im Komponenten-Hub stehen unter *Umwelt* zwei neue Werte — **Verbrenner-Anteil** in km und **Kraftstoffkosten** in Euro, mit dem Hinweis, ob sie gemessen oder geschätzt sind. Die Ersparnis vs. Verbrenner sinkt entsprechend, ebenso die CO₂-Einsparung. Der Vergleich mit dem Benziner bleibt dabei über **alle** Kilometer stehen — sonst würdest du dein Auto mit einem halben vergleichen.
+
+> **Deine geladene Energie wird nicht angetastet.** Sie ist gemessen, und ein Hybrid lädt ohnehin weniger. Sie zusätzlich zu kürzen hieße, denselben Anteil zweimal abzuziehen.
+
 ### MQTT-Export: „0 von 0 Sensoren publiziert" war eine Fehlermeldung
 
 **Betrifft dich das?** Alle, die den Sensor-Export nach Home Assistant einrichten — besonders kurz nach der Installation.

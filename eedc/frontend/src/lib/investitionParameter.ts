@@ -31,6 +31,14 @@ export const PARAM_E_AUTO = {
   JAHRESFAHRLEISTUNG_KM: 'jahresfahrleistung_km',
   PV_LADEANTEIL_PROZENT: 'pv_ladeanteil_prozent',
   VERGLEICH_VERBRAUCH_L_100KM: 'vergleich_verbrauch_l_100km',
+  // #331 (PHEV): der REAL getankte Verbrauch — nicht der fiktive
+  // Vergleichs-Benziner darüber. Ist er gesetzt (> 0), hat das Fahrzeug einen
+  // Verbrenner; fehlt er, bleibt jede Zahl wie vorher. Deshalb steht er
+  // bewusst NICHT in PARAM_E_AUTO_DEFAULTS.
+  EIGENER_VERBRAUCH_L_100KM: 'eigener_verbrauch_l_100km',
+  // #331: geschätzter elektrischer Fahranteil (0–100), Fallback ohne Messung.
+  // Ebenfalls ohne Default.
+  ELEKTRISCHER_FAHRANTEIL_PROZENT: 'elektrischer_fahranteil_prozent',
   BENZINPREIS_EURO: 'benzinpreis_euro',
   V2H_FAEHIG: 'v2h_faehig',
   V2H_ENTLADELEISTUNG_KW: 'v2h_entladeleistung_kw',
@@ -56,6 +64,8 @@ export interface EAutoParameter {
   jahresfahrleistung_km?: number
   pv_ladeanteil_prozent?: number
   vergleich_verbrauch_l_100km?: number
+  eigener_verbrauch_l_100km?: number
+  elektrischer_fahranteil_prozent?: number
   benzinpreis_euro?: number
   v2h_faehig?: boolean
   v2h_entladeleistung_kw?: number

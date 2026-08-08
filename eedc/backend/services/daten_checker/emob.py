@@ -189,6 +189,75 @@ class EmobChecks:
 
         return ergebnisse
 
+    #: #331: unterhalb dieser Monatszahl ohne Fahrverbrauch ist eine Lücke
+    #: kein Muster — ein einzelner nachzupflegender Monat wird nicht gemeldet.
+    PHEV_MINDEST_MONATE_OHNE_VERBRAUCH = 2
+
+    def _check_phev_anteil_unbestimmt(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """PHEV gepflegt, aber der elektrische Anteil ist nicht bestimmbar.
+
+        Trägt ein Fahrzeug einen `eigener_verbrauch_l_100km`, hat es laut
+        Entscheidung 3 des Konzepts einen Verbrenner. Um seine Kilometer
+        aufzuteilen, braucht eedc **eine** von zwei Angaben: den monatlich
+        erfassten Fahrverbrauch (`verbrauch_kwh`, der gemessene Weg) oder einen
+        gepflegten `elektrischer_fahranteil_prozent` (der geschätzte).
+
+        Fehlen beide, rechnet eedc **100 % elektrisch** — das heutige Verhalten,
+        bewusst gewählt statt eines erfundenen Richtwerts. Ersparnis und
+        CO₂-Bilanz fallen dadurch zu gut aus, und genau das darf nicht still
+        passieren ([[feedback_daten_checker_kein_akzeptiert]]).
+        """
+        from backend.core.investition_parameter import ist_dienstlich
+        from backend.services.eauto_wirtschaftlichkeit import (
+            eigener_verbrauch_l_100km,
+        )
+
+        kat = CheckKategorie.PHEV_ANTEIL_UNBESTIMMT.value
+        ergebnisse: list[CheckErgebnis] = []
+
+        for inv in anlage.investitionen:
+            if inv.typ != "e-auto" or ist_dienstlich(inv):
+                continue
+            if eigener_verbrauch_l_100km(inv.parameter) is None:
+                continue  # BEV — nichts aufzuteilen.
+            params = inv.parameter or {}
+            if params.get("elektrischer_fahranteil_prozent") is not None:
+                continue  # geschätzter Weg ist gepflegt.
+
+            # Monate MIT gefahrenen km, aber OHNE erfassten Fahrverbrauch —
+            # nur die sind unbestimmt. Ein Monat ohne km teilt nichts auf.
+            monate_ohne = [
+                imd for imd in getattr(inv, "monatsdaten", []) or []
+                if ((imd.verbrauch_daten or {}).get("km_gefahren") or 0) > 0
+                and not ((imd.verbrauch_daten or {}).get("verbrauch_kwh") or 0)
+            ]
+            if len(monate_ohne) < self.PHEV_MINDEST_MONATE_OHNE_VERBRAUCH:
+                continue
+
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat,
+                schwere=CheckSeverity.WARNING.value,
+                meldung=(
+                    f"{inv.bezeichnung}: Verbrenner-Verbrauch gepflegt, aber "
+                    "der elektrische Fahranteil ist nicht bestimmbar"
+                ),
+                details=(
+                    f"In {len(monate_ohne)} Monaten sind Kilometer erfasst, "
+                    "aber kein elektrischer Fahrverbrauch (Monatsfeld "
+                    "Verbrauch in kWh). Ohne ihn und ohne gepflegten "
+                    "elektrischen Fahranteil in Prozent rechnet eedc diese "
+                    "Monate mit 100 % elektrisch gefahrenen Kilometern — "
+                    "Ersparnis und "
+                    "CO₂-Einsparung fallen dadurch zu gut aus. Abhilfe: "
+                    "entweder den monatlichen Fahrverbrauch erfassen (dann "
+                    "rechnet eedc den Anteil gemessen) oder in der "
+                    "Investition einen geschätzten Fahranteil eintragen."
+                ),
+                investition_id=inv.id,
+            ))
+
+        return ergebnisse
+
     def _check_emob_sensor_doppelmapping(self, anlage: Anlage) -> list[CheckErgebnis]:
         """Gleiche Sensor-Entity an Wallbox UND E-Auto gemappt → Doppelzählung.
 

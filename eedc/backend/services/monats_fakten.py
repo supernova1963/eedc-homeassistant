@@ -272,6 +272,13 @@ class EmobFakten:
     #: km je Fahrzeug (``Investition.id``) — Voraussetzung dafür, dass eine
     #: Ersparnis je Fahrzeug mit DESSEN Verbrauchs-Parameter gerechnet wird (G20-2).
     km_je_fahrzeug: dict[int, float] = field(default_factory=dict)
+    #: Elektrischer Fahrverbrauch je Fahrzeug (``Investition.id``) — dieselbe
+    #: Begründung wie ``km_je_fahrzeug`` eine Zeile höher, eine Stufe weiter:
+    #: der elektrische Fahranteil eines Plug-in-Hybrids folgt aus DESSEN
+    #: Fahrverbrauch und DESSEN ``verbrauch_kwh_100km`` (#331, Phase 4). Die
+    #: anlagenweite Summe ``fahrverbrauch_kwh`` darüber bleibt unverändert —
+    #: additiv statt umgedeutet (Muster ``BkwFakten.erzeugung_je_investition``).
+    fahrverbrauch_je_fahrzeug: dict[int, float] = field(default_factory=dict)
     dienstlich_ladung_pv_kwh: float = 0.0
     dienstlich_ladung_netz_kwh: float = 0.0
     eauto_ladedaten: tuple[dict, ...] = ()
@@ -689,6 +696,7 @@ class _RohMonat:
         self.wallbox_ladedaten: list[dict] = []
         self.eauto_km = 0.0
         self.eauto_km_je_fahrzeug: dict[int, float] = {}
+        self.eauto_fahrverbrauch_je_fahrzeug: dict[int, float] = {}
         self.eauto_fahrverbrauch = 0.0
         self.eauto_v2h = 0.0
         self.dienstlich_pv = 0.0
@@ -774,6 +782,11 @@ class _RohMonat:
                 if b.eauto_km:
                     self.eauto_km_je_fahrzeug[inv.id] = (
                         self.eauto_km_je_fahrzeug.get(inv.id, 0.0) + b.eauto_km
+                    )
+                if b.eauto_verbrauch:
+                    self.eauto_fahrverbrauch_je_fahrzeug[inv.id] = (
+                        self.eauto_fahrverbrauch_je_fahrzeug.get(inv.id, 0.0)
+                        + b.eauto_verbrauch
                     )
             else:
                 self.wallbox_ladedaten.append(data)
@@ -895,6 +908,7 @@ async def _baue_fakt(
         fahrverbrauch_kwh=roh.eauto_fahrverbrauch,
         v2h_entladung_kwh=roh.eauto_v2h,
         km_je_fahrzeug=dict(roh.eauto_km_je_fahrzeug),
+        fahrverbrauch_je_fahrzeug=dict(roh.eauto_fahrverbrauch_je_fahrzeug),
         dienstlich_ladung_pv_kwh=roh.dienstlich_pv,
         dienstlich_ladung_netz_kwh=roh.dienstlich_netz,
         eauto_ladedaten=tuple(roh.eauto_ladedaten),

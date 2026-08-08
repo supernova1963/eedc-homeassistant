@@ -1515,6 +1515,14 @@ async def get_roi_dashboard(
                 nutzt_v2h=nutzt_v2h,
                 v2h_entladung_kwh_jahr=v2h_entladung,
                 v2h_preis_cent=v2h_preis,
+                # #331: PHEV. Beide ohne Default — fehlen sie, rechnet die
+                # Prognose exakt wie vorher (100 % elektrisch).
+                eigener_verbrauch_l_100km=params.get(
+                    PARAM_E_AUTO["EIGENER_VERBRAUCH_L_100KM"]
+                ),
+                elektrischer_fahranteil_prozent=params.get(
+                    PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
+                ),
             )
             jahres_einsparung = result.jahres_einsparung_euro
             co2_einsparung = result.co2_einsparung_kg
@@ -1526,6 +1534,16 @@ async def get_roi_dashboard(
                 'benzinpreis_quelle': preis.quelle,
                 'hinweis': f'E-Auto: {km_jahr} km/Jahr',
             }
+            # #331: nur bei einem Plug-in-Hybrid — bei einem BEV bleibt das
+            # Detail-Dict Zeichen für Zeichen das von vorher.
+            if result.fossile_kosten_euro:
+                detail['fossile_kosten_euro'] = result.fossile_kosten_euro
+                detail['km_elektrisch'] = result.km_elektrisch
+                detail['km_verbrenner'] = result.km_verbrenner
+                detail['hinweis'] = (
+                    f'Plug-in-Hybrid: {km_jahr} km/Jahr, davon '
+                    f'{result.km_elektrisch:.0f} km elektrisch'
+                )
 
         elif inv.typ == InvestitionTyp.WAERMEPUMPE.value and ist_luft_luft_waermepumpe(inv):
             # N-87 / #263 K-0b: Eine Split-Klimaanlage ersetzt keine Heizung.

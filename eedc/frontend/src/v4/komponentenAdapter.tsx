@@ -19,7 +19,7 @@
  * → lebt in Cockpit/Aussicht. Typ-spezifische IST-Analysen (PV-SOLL/IST je String)
  * kommen aus `komponentenAnalyse.tsx`, nicht aus diesem Daten-Adapter.
  */
-import { Activity, Battery, Clock, Droplet, Euro, Flame, Leaf, Power, TrendingUp, Zap } from 'lucide-react'
+import { Activity, Battery, Clock, Droplet, Euro, Flame, Fuel, Leaf, Power, TrendingUp, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { fmtCalc } from '../components/ui'
 import { formatEnergie, formatEffizienz } from '../lib/einheiten'
@@ -602,8 +602,21 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
           kpi(EAUTO_KPI.ersparnis, n0(z.ersparnis_vs_benzin_euro), '€'),
         ],
         // ① CO₂-Ersparnis vs. Verbrenner (IST-getreu, eigene Kennzahl).
+        //    #331: fährt das Fahrzeug einen Verbrenner-Anteil, stehen dessen
+        //    Kilometer und Tankkosten daneben — benannt statt in der Ersparnis
+        //    versteckt. Bei einem BEV sind beide 0 und der Block bleibt, wie er war.
         kennzahlen: z.co2_ersparnis_kg != null ? {
-          titel: 'Umwelt', kpis: [k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'vs. Verbrenner' })],
+          titel: 'Umwelt', kpis: [
+            k('CO₂-Ersparnis', n0(z.co2_ersparnis_kg), 'kg', 'green', Leaf, { subtitle: 'vs. Verbrenner' }),
+            ...((z.fossile_kosten_euro ?? 0) > 0 ? [
+              k('Verbrenner-Anteil', n0(z.km_verbrenner), 'km', 'gray', Fuel, {
+                subtitle: z.phev_anteil_quelle === 'gemessen'
+                  ? 'aus dem gemessenen Fahrverbrauch'
+                  : 'geschätzt aus dem gepflegten Anteil',
+              }),
+              k('Kraftstoffkosten', n0(z.fossile_kosten_euro), '€', 'orange', Euro, { subtitle: 'real getankt' }),
+            ] : []),
+          ],
         } : undefined,
         aufteilung: z.gesamt_ladung_kwh > 0 ? {
           titel: 'Ladequellen', segmente: [

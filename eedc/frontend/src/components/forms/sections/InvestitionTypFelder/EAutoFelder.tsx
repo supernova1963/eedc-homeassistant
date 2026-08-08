@@ -58,6 +58,37 @@ export function EAutoFelder({ paramData, onInputChange, setParam }: TypFelderPro
             hint="Aktueller Benzin/Diesel-Preis"
           />
         </div>
+      </FormSection>
+
+      {/* #331: Plug-in-Hybrid. Kein Fahrzeugtyp und kein Schalter — das
+          gepflegte Feld ist die Aussage. Bleibt es leer, rechnet eedc wie
+          bisher mit 100 % elektrisch gefahrenen Kilometern. */}
+      <FormSection variant="erweitert" title="Plug-in-Hybrid (nur bei Verbrenner-Anteil)">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          <Input
+            label="Eigener Verbrauch (L/100 km)"
+            name="param_eigener_verbrauch_l_100km"
+            type="number" step="any" min="0"
+            value={paramData.eigener_verbrauch_l_100km as string}
+            onChange={onInputChange}
+            hint="Was dieses Fahrzeug im Verbrenner-Betrieb wirklich tankt — nicht der Vergleichs-Benziner darüber. Leer lassen, wenn das Fahrzeug rein elektrisch fährt."
+          />
+          <Input
+            label="Elektrischer Fahranteil (%)"
+            name="param_elektrischer_fahranteil_prozent"
+            type="number" step="1" min="0" max="100"
+            value={paramData.elektrischer_fahranteil_prozent as string}
+            onChange={onInputChange}
+            hint="Nur als Schätzung für die Vorschau nötig. Ist der monatliche Fahrverbrauch (kWh) erfasst, rechnet eedc den Anteil daraus — gemessen schlägt geschätzt."
+          />
+        </div>
+        {(paramData.eigener_verbrauch_l_100km as string) && (
+          <Alert type="info">
+            eedc rechnet ab jetzt mit einem Verbrenner-Anteil: der Vergleich mit einem Benziner
+            bleibt über alle Kilometer bestehen, die real getankten Liter stehen als eigene
+            Kostenposition daneben und mindern auch die CO₂-Einsparung.
+          </Alert>
+        )}
         <div className="space-y-3 mt-4">
           <SchalterZeile
             checked={paramData.v2h_faehig as boolean}

@@ -46,6 +46,7 @@ from backend.core.wirtschaftlichkeit_defaults import (
 from backend.services.wp_wirtschaftlichkeit import berechne_wp_ersparnis
 from backend.services.eauto_wirtschaftlichkeit import (
     berechne_eauto_ersparnis_periode,
+    fossil_getankte_liter,
     get_emob_heimladung_canonical,
 )
 
@@ -262,11 +263,18 @@ async def get_cockpit_uebersicht(
     # Autos ([[feedback_aggregator_symmetrie]]).
     eauto_km_by_inv: dict[int, float] = {}
     eauto_km_pro_monat_by_inv: dict[int, dict[tuple[int, int], float]] = {}
+    # #331: derselbe Schnitt je Fahrzeug für den elektrischen Fahrverbrauch —
+    # der PHEV-Anteil folgt aus DESSEN kWh und DESSEN kWh/100 km.
+    eauto_fahrverbrauch_by_inv: dict[int, float] = {}
     for f in fakten:
         for _inv_id, _km in f.emob.km_je_fahrzeug.items():
             eauto_km_by_inv[_inv_id] = eauto_km_by_inv.get(_inv_id, 0.0) + _km
             _pm = eauto_km_pro_monat_by_inv.setdefault(_inv_id, {})
             _pm[f.schluessel] = _pm.get(f.schluessel, 0.0) + _km
+        for _inv_id, _kwh in f.emob.fahrverbrauch_je_fahrzeug.items():
+            eauto_fahrverbrauch_by_inv[_inv_id] = (
+                eauto_fahrverbrauch_by_inv.get(_inv_id, 0.0) + _kwh
+            )
 
     # Dienstliche Ladekosten über den Layer-SoT (ADR-001) — dieselbe Formel wie
     # in `aussichten.get_finanz_prognose` und im HA-Export, die sie bis
@@ -474,6 +482,7 @@ async def get_cockpit_uebersicht(
                 wallbox_strompreis_cent=wallbox_preis_cent,
                 eauto_parameter=getattr(inv_by_id.get(_inv_id), "parameter", None),
                 monats_benzinpreis_lookup=benzinpreis_lookup,
+                fahrverbrauch_kwh_gesamt=eauto_fahrverbrauch_by_inv.get(_inv_id) or None,
             )
             emob_ersparnis += _car_result.ersparnis_euro
             benzin_verbrauch += (_km_total / 100) * _car_result.verwendeter_verbrauch_l_100km
@@ -618,6 +627,16 @@ async def get_cockpit_uebersicht(
         emob_km=emob_km,
         emob_netz_ladung_kwh=emob_netz_ladung,
         benzin_verbrauch_liter=benzin_verbrauch,
+        # #331: derselbe fossile Anteil, den die Ersparnis oben als eigene
+        # Kostenposition trägt — sonst hätten Geld und CO₂ zwei Wahrheiten.
+        fossil_getankt_liter=fossil_getankte_liter(
+            km_je_fahrzeug=eauto_km_by_inv,
+            fahrverbrauch_je_fahrzeug=eauto_fahrverbrauch_by_inv,
+            params_je_fahrzeug={
+                _id: getattr(inv_by_id.get(_id), "parameter", None)
+                for _id in eauto_km_by_inv
+            },
+        ),
     )
     co2_pv = _co2.co2_pv_kg
     co2_wp = _co2.co2_wp_kg

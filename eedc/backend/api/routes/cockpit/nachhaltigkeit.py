@@ -28,7 +28,10 @@ from pydantic import BaseModel
 from backend.api.deps import get_db
 from backend.models.investition import Investition
 from backend.core.calculations import berechne_co2_bilanz
-from backend.services.eauto_wirtschaftlichkeit import km_gewichtete_eauto_params
+from backend.services.eauto_wirtschaftlichkeit import (
+    fossil_getankte_liter,
+    km_gewichtete_eauto_params,
+)
 from backend.services.monats_fakten import MonatsFakt, lade_monats_fakten
 from backend.api.routes.cockpit._shared import MONATSNAMEN
 
@@ -132,6 +135,13 @@ async def get_nachhaltigkeit(
             emob_km=fakt.emob.km,
             emob_netz_ladung_kwh=fakt.emob.ladung_netz_kwh,
             benzin_verbrauch_liter=fakt.emob.km / 100 * vergleich_l_100km,
+            # #331: der real getankte Anteil eines Plug-in-Hybrids mindert die
+            # vermiedene Emission. Für ein BEV ist er 0.
+            fossil_getankt_liter=fossil_getankte_liter(
+                km_je_fahrzeug=fakt.emob.km_je_fahrzeug,
+                fahrverbrauch_je_fahrzeug=fakt.emob.fahrverbrauch_je_fahrzeug,
+                params_je_fahrzeug=eauto_parameter,
+            ),
         )
 
         # Die Komponenten werden hier geklemmt ausgewiesen — anders als im

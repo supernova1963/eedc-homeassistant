@@ -378,10 +378,28 @@ Diagnose-only, niedrig-prioritär (keine falschen Anzeige-Werte). Sinnvoll **geb
 
 ## Phase 4 — PHEV: elektrischen und fossilen Anteil trennen (#331)
 
-> **Status: ausspezifiziert 2026-08-08, nicht gebaut.** Entscheidungen getroffen (s. u.), Fläche
-> gemessen. Melder **Safi105**, [Discussion #330](https://github.com/supernova1963/eedc-homeassistant/discussions/330)
+> **Status: GEBAUT 2026-08-08.** Ausspezifiziert am Vormittag desselben Tages, gebaut im
+> Anschluss — alle neun Etappen, beide Achsen, Anzeige und Daten-Checker. Melder **Safi105**,
+> [Discussion #330](https://github.com/supernova1963/eedc-homeassistant/discussions/330)
 > vom 09.06.2026 — der erste Punkt dieser Domäne mit einem **wartenden Melder**.
 > Issue: [#331](https://github.com/supernova1963/eedc-homeassistant/issues/331).
+>
+> ⚠ **Eine Präzisierung gegenüber der Spezifikation, gemessen statt angenommen:** Entscheidung 5
+> sagt „die Strom-Kosten bleiben unberührt" und begründet das damit, dass eedc die geladene
+> Energie ohnehin misst. Das gilt für die **IST**-Achse. Auf der **Prognose**-Achse leitet
+> `berechne_eauto_einsparung` den Strombedarf aber aus der Fahrleistung ab
+> (`km × verbrauch_kwh_100km / 100`) — dort *muss* der elektrische Anteil den Bedarf begrenzen,
+> sonst zahlt ein Plug-in-Hybrid in der ROI-Prognose Strom für alle Kilometer **und** Benzin für
+> die verbrennergefahrenen, also dieselbe Strecke zweimal. Gebaut ist deshalb:
+> `Strom_Bedarf = km_elektrisch × verbrauch / 100`, Vergleichs-Benziner weiterhin über alle km.
+>
+> ⚠ **Zwei Etappen-Angaben trugen nicht** (am Code geprüft, statt sie abzuarbeiten): Etappe 1
+> nennt „Response-Model" und `core/field_definitions.py`. Das Response-Model führt `parameter` als
+> freies `dict[str, Any]` (`investitionen/crud.py`), es strippt nichts; und `field_definitions.py`
+> ist die Registry der **Monatsdaten-** und Live-Felder, nicht der Investitions-Parameter — ein
+> Eintrag dort wäre am falschen Ort. Die tatsächlichen Pflicht-Stellen für einen
+> `parameter`-Schlüssel sind `core/investition_parameter.py` **und** sein Frontend-Spiegel
+> `lib/investitionParameter.ts`; beide sind gepflegt.
 
 ### Das Problem
 

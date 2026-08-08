@@ -50,6 +50,7 @@ from backend.services.eauto_wirtschaftlichkeit import (
     build_eauto_km_by_month,
     build_wb_pool_by_month,
     compute_emob_pool_attribution,
+    eigener_verbrauch_l_100km,
     get_emob_heimladung_canonical,
 )
 from backend.core.wirtschaftlichkeit_defaults import (
@@ -449,6 +450,9 @@ async def get_eauto_dashboard(
             wallbox_strompreis_cent=eauto_strompreis_cent,
             eauto_parameter=params,
             monats_benzinpreis_lookup=benzinpreis_lookup,
+            # #331: Σ `verbrauch_kwh` der Periode — der explizite elektrische
+            # Fahrverbrauch dieses Fahrzeugs, nicht seine Ladung.
+            fahrverbrauch_kwh_gesamt=gesamt_verbrauch or None,
         )
         benzin_kosten = eauto_result.benzin_kosten_euro
         heim_netz_kosten = gesamt_netz_ladung * eauto_strompreis_cent / 100
@@ -484,7 +488,15 @@ async def get_eauto_dashboard(
         # CO2 Ersparnis: Benzin vs. Strommix
         benzin_co2 = (gesamt_km / 100) * benzin_verbrauch_100km * CO2_FAKTOR_BENZIN_KG_LITER
         strom_co2 = gesamt_verbrauch * CO2_FAKTOR_STROM_KG_KWH
-        co2_ersparnis = benzin_co2 - strom_co2
+        # #331: die real getankten Liter des Verbrenner-Anteils mindern die
+        # vermiedene Emission — dieselbe Menge, die als Kosten in
+        # `eauto_result.fossile_kosten_euro` steht. Bei einem BEV ist sie 0.
+        fossil_co2 = (
+            eauto_result.km_verbrenner / 100
+            * (eigener_verbrauch_l_100km(params) or 0.0)
+            * CO2_FAKTOR_BENZIN_KG_LITER
+        )
+        co2_ersparnis = benzin_co2 - strom_co2 - fossil_co2
 
         # Ø Verbrauch (kWh/100 km) via zentralem Helper: gemessener verbrauch_kwh
         # hat Vorrang, sonst Näherung aus der Ladung (sonst zeigte die Karte 0,0,
@@ -494,6 +506,7 @@ async def get_eauto_dashboard(
 
         # F-7: dienstlich gefahrene Kilometer sind keine private Ersparnis. Die
         # Mengen oben bleiben stehen (sie sind gemessen), die Bewertung fällt.
+        fossile_kosten = eauto_result.fossile_kosten_euro
         if dienstlich:
             benzin_kosten = 0.0
             strom_kosten_gesamt = 0.0
@@ -501,6 +514,10 @@ async def get_eauto_dashboard(
             v2h_ersparnis = 0.0
             wallbox_ersparnis = 0.0
             co2_ersparnis = 0.0
+            # #331: der Kraftstoff eines Dienstwagens ist Sache des
+            # Arbeitgebers und war nie in eedcs Bilanz — dieselbe Linie wie
+            # der Benzinvergleich eine Zeile höher.
+            fossile_kosten = 0.0
 
         zusammenfassung = {
             'gesamt_km': round(gesamt_km, 0),
@@ -530,6 +547,13 @@ async def get_eauto_dashboard(
             'strom_kosten_extern_euro': round(gesamt_extern_kosten, 2),
             'strom_kosten_gesamt_euro': round(strom_kosten_gesamt, 2),
             'ersparnis_vs_benzin_euro': round(ersparnis_vs_benzin, 2),
+            # #331: die real angefallene Tankrechnung des Verbrenner-Anteils —
+            # als eigene Position, damit die Fläche sie BENENNEN kann statt sie
+            # in der Ersparnis verschwinden zu lassen. 0 bei einem BEV.
+            'fossile_kosten_euro': round(fossile_kosten, 2),
+            'km_elektrisch': round(eauto_result.km_elektrisch, 0),
+            'km_verbrenner': round(eauto_result.km_verbrenner, 0),
+            'phev_anteil_quelle': eauto_result.anteil_quelle,
             # Wallbox-Ersparnis (durch Heimladen statt extern)
             'wallbox_ersparnis_euro': round(wallbox_ersparnis, 2),
             # Gesamt-Ersparnis

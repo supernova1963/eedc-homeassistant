@@ -587,32 +587,78 @@ Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_f
 
 | Feld | Quelle |
 |------|--------|
-| `km_jahr` | `Investition.parameter["km_jahr"]` (Default: 15000) |
-| `verbrauch_kwh_100km` | `Investition.parameter["verbrauch_kwh_100km"]` (Default: 18) |
-| `pv_anteil_prozent` | `Investition.parameter["pv_anteil_prozent"]` (Default: 60) |
-| `benzinpreis_euro_liter` | `Investition.parameter["benzinpreis_euro"]` (Default: 1.85) |
-| `benzin_verbrauch_liter_100km` | `Investition.parameter["benzin_verbrauch_liter_100km"]` (Default: 7.0) |
-| `nutzt_v2h` | `Investition.parameter["nutzt_v2h"]` (Default: false) |
+| `jahresfahrleistung_km` | `Investition.parameter` (Default: 15000) |
+| `verbrauch_kwh_100km` | `Investition.parameter` (Default: 18) |
+| `pv_ladeanteil_prozent` | `Investition.parameter` (Default: 60) |
+| `benzinpreis_euro` | `Investition.parameter` (Default: 1,65) |
+| `vergleich_verbrauch_l_100km` | `Investition.parameter` (Default: 7,5) — der **fiktive** Vergleichs-Benziner |
+| `v2h_faehig` | `Investition.parameter` (Default: false) |
+| `eigener_verbrauch_l_100km` | `Investition.parameter` — **kein Default**, s. „Plug-in-Hybrid" unten |
+| `elektrischer_fahranteil_prozent` | `Investition.parameter` — **kein Default** |
+
+> ⚠ **Diese Tabelle nannte bis 2026-08-08 vier Schlüssel, die eedc nicht kennt**
+> (`km_jahr`, `pv_anteil_prozent`, `benzin_verbrauch_liter_100km`, `nutzt_v2h`) und
+> zwei falsche Defaults (1,85 € statt 1,65 €; 7,0 L statt 7,5 L). Es sind genau die
+> Legacy-Keys, deren Lesen v3.25.0 im Code als Bugs #1–#4 korrigiert hat —
+> die Doku ist damals nicht mitgezogen. Historie: `LEGACY_PARAM_KEYS` in
+> `core/investition_parameter.py` führt die Zuordnung alt → neu.
 
 #### Formeln
 
 ```
-Strom_Bedarf         = km_jahr * Verbrauch_kWh_100km / 100
-PV_Anteil            = pv_anteil_prozent / 100
+km_elektrisch        = km_jahr                        (BEV — Normalfall)
+                     = km_jahr * Fahranteil / 100     (Plug-in-Hybrid, s. u.)
+km_verbrenner        = km_jahr - km_elektrisch
+
+Strom_Bedarf         = km_elektrisch * Verbrauch_kWh_100km / 100
+PV_Anteil            = pv_ladeanteil_prozent / 100
 Netz_Anteil          = 1 - PV_Anteil
 
 Strom_Kosten         = Strom_Bedarf * Netz_Anteil * Strompreis / 100
-Benzin_Verbrauch     = km_jahr * Benzin_L_100km / 100
+Benzin_Verbrauch     = km_jahr * Vergleich_L_100km / 100      ← ALLE Kilometer
 Benzin_Kosten        = Benzin_Verbrauch * Benzinpreis_EUR
+Fossile_Kosten       = km_verbrenner / 100 * Eigener_L_100km * Benzinpreis_EUR
 
 V2H_Einsparung       = V2H_Entladung_kWh * V2H_Preis / 100    (wenn V2H aktiv)
 
-Jahres-Einsparung    = Benzin_Kosten - Strom_Kosten + V2H_Einsparung
+Jahres-Einsparung    = Benzin_Kosten - Strom_Kosten - Fossile_Kosten + V2H_Einsparung
 
 CO2_Verbrenner       = Benzin_Verbrauch * 2.37
 CO2_E-Auto           = Strom_Bedarf * Netz_Anteil * 0.38
-CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto
+CO2_Fossil           = km_verbrenner / 100 * Eigener_L_100km * 2.37
+CO2-Einsparung       = CO2_Verbrenner - CO2_E-Auto - CO2_Fossil
 ```
+
+#### Plug-in-Hybrid: elektrischer und fossiler Anteil (ab #331)
+
+Ein Plug-in-Hybrid fährt einen Teil seiner Kilometer mit Kraftstoff. eedc unterstellte
+bis dahin **100 % elektrisch** — Ersparnis und CO₂-Bilanz fielen dadurch zu gut aus.
+
+**Es gibt keinen Fahrzeugtyp und keinen Schalter: das gepflegte Feld ist die Aussage.**
+Ist `eigener_verbrauch_l_100km` gesetzt, hat das Fahrzeug einen Verbrenner; ist es leer,
+bleibt **jede Zahl exakt wie vorher**. Bestandsfahrzeuge tragen das Feld nicht, für sie
+ändert sich nichts.
+
+Wie der elektrische Anteil bestimmt wird (SoT `core/berechnungen/phev_anteil.py`,
+dieselbe Funktion für IST **und** Prognose):
+
+| Weg | Bedingung | Rechnung |
+| --- | --- | --- |
+| **gemessen** | monatlicher Fahrverbrauch (kWh) erfasst | `km_elektrisch = min(km_gefahren, Fahrverbrauch / Verbrauch_kWh_100km × 100)` |
+| **geschätzt** | nur `elektrischer_fahranteil_prozent` gepflegt | `km_elektrisch = km_gefahren × Anteil / 100` |
+| **unbestimmt** | keines von beiden | `km_elektrisch = km_gefahren` (Verhalten wie vorher) — der Daten-Checker meldet es |
+
+> ⚠ **Die Deckelung auf die gefahrenen Kilometer ist nicht kosmetisch.** Ist der
+> Kennwert zu niedrig gepflegt oder der Zähler zu großzügig, käme rechnerisch mehr
+> elektrische Strecke heraus als gefahren wurde — und damit negative Verbrenner-Kilometer,
+> also eine Ersparnis größer als die Wahrheit.
+
+**Zwei Verbräuche, zwei Bedeutungen:** `vergleich_verbrauch_l_100km` beschreibt weiterhin
+den **fiktiven** Vergleichs-Benziner, und die Frage „was hätte ein Benziner gekostet"
+bleibt über **alle** Kilometer gestellt — sonst verglichen wir ein Auto mit einem halben.
+`eigener_verbrauch_l_100km` ist der **real getankte** Verbrauch und erzeugt eine eigene
+Kostenposition daneben. Die geladene Energie wird **nicht** zusätzlich skaliert: sie ist
+im IST gemessen, ein Hybrid lädt ohnehin weniger.
 
 #### Dynamischer Kraftstoffpreis (ab v3.17.0)
 

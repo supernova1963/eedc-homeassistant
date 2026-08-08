@@ -43,6 +43,24 @@ PARAM_E_AUTO: Final[dict[str, str]] = {
     "JAHRESFAHRLEISTUNG_KM": "jahresfahrleistung_km",
     "PV_LADEANTEIL_PROZENT": "pv_ladeanteil_prozent",
     "VERGLEICH_VERBRAUCH_L_100KM": "vergleich_verbrauch_l_100km",
+    # #331 (PHEV): der REAL getankte Verbrauch des Fahrzeugs — nicht zu
+    # verwechseln mit `vergleich_verbrauch_l_100km` darüber, das den FIKTIVEN
+    # Vergleichs-Benziner beschreibt und sieben Produktions-Leser hat. Zwei
+    # Bedeutungen brauchen zwei Felder (Entscheidung 2, KONZEPT-WALLBOX-EAUTO
+    # Phase 4); eine Umdeutung des Vergleichsfelds hätte Zahlen bei allen
+    # Nicht-PHEV-Nutzern bewegt.
+    #
+    # ⚠ **Das gesetzte Feld IST die Aussage** (Entscheidung 3): ist es > 0, hat
+    # das Fahrzeug einen Verbrenner; fehlt es, ist es ein BEV und jede Zahl
+    # bleibt exakt wie vorher. Deshalb steht es bewusst NICHT in
+    # `PARAM_E_AUTO_DEFAULTS` — ein Default würde genau die Aussage zerstören,
+    # die es trägt, und aus jedem Bestands-BEV einen Hybrid machen.
+    "EIGENER_VERBRAUCH_L_100KM": "eigener_verbrauch_l_100km",
+    # #331: geschätzter elektrischer Fahranteil (0–100). Fallback für die
+    # Prognose-Achse, die keine Messung hat, und für ein IST ohne gepflegten
+    # Fahrverbrauch. Ebenfalls **ohne Default** — ein erfundener Richtwert wäre
+    # eine Behauptung über ein fremdes Fahrzeug (Entscheidung 4).
+    "ELEKTRISCHER_FAHRANTEIL_PROZENT": "elektrischer_fahranteil_prozent",
     "BENZINPREIS_EURO": "benzinpreis_euro",
     "V2H_FAEHIG": "v2h_faehig",
     "V2H_ENTLADELEISTUNG_KW": "v2h_entladeleistung_kw",

@@ -126,6 +126,11 @@ export function getInitialParamData(
         pv_ladeanteil_prozent: paramStr(params.pv_ladeanteil_prozent, PARAM_E_AUTO_DEFAULTS.pv_ladeanteil_prozent),
         vergleich_verbrauch_l_100km: paramStr(params.vergleich_verbrauch_l_100km, PARAM_E_AUTO_DEFAULTS.vergleich_verbrauch_l_100km),
         benzinpreis_euro: paramStr(params.benzinpreis_euro, PARAM_E_AUTO_DEFAULTS.benzinpreis_euro),
+        // #331: bewusst OHNE Default-Argument — das leere Feld ist die Aussage
+        // „dieses Fahrzeug fährt rein elektrisch". Ein vorbelegter Wert würde
+        // aus jedem Bestands-BEV beim ersten Speichern einen Hybrid machen.
+        eigener_verbrauch_l_100km: paramStr(params.eigener_verbrauch_l_100km),
+        elektrischer_fahranteil_prozent: paramStr(params.elektrischer_fahranteil_prozent),
         v2h_faehig: (params.v2h_faehig as boolean) ?? PARAM_E_AUTO_DEFAULTS.v2h_faehig,
         v2h_entladeleistung_kw: paramStr(params.v2h_entladeleistung_kw),
         ist_dienstlich: (params.ist_dienstlich as boolean) ?? PARAM_E_AUTO_DEFAULTS.ist_dienstlich,

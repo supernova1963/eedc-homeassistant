@@ -968,6 +968,10 @@ def _baue_investition_financial(
                 wallbox_strompreis_cent=wb_p,
                 eauto_parameter=inv.parameter,
                 monats_benzinpreis_euro=monats_benzinpreis,
+                # #331: der EXPLIZITE Fahrverbrauch, nicht `ladung` von oben —
+                # `get_eauto_ladung_kwh` fällt auf dasselbe Feld zurück und
+                # läse eine Heimladung als Fahrleistung.
+                fahrverbrauch_kwh=data.get("verbrauch_kwh"),
             )
             inv_ersparnis = round(eauto_result.ersparnis_euro, 2)
             inv_label = "Ersparnis vs. Verbrenner"

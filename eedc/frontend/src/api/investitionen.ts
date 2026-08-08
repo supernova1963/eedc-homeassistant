@@ -157,6 +157,11 @@ export interface EAutoDashboardResponse {
     strom_kosten_extern_euro: number
     strom_kosten_gesamt_euro: number
     ersparnis_vs_benzin_euro: number
+    // #331 Plug-in-Hybrid — 0 bzw. 'unbestimmt' bei einem BEV.
+    fossile_kosten_euro: number
+    km_elektrisch: number
+    km_verbrenner: number
+    phev_anteil_quelle: 'gemessen' | 'prozent' | 'unbestimmt'
     // Wallbox-Ersparnis
     wallbox_ersparnis_euro: number
     // Gesamt

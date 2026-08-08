@@ -68,6 +68,15 @@ class CheckKategorie(str, Enum):
     # Eintrag lenkt den Anwender dann auf eine bewusste Entscheidung: nur eine
     # Quelle pflegen.
     EMOB_POOL_PFLEGE = "emob_pool_pflege"
+    # #331 Phase 4: Ein Fahrzeug trägt einen gepflegten Verbrenner-Verbrauch
+    # (`eigener_verbrauch_l_100km`), aber eedc kann den elektrischen Anteil
+    # nicht bestimmen — weder ist der monatliche Fahrverbrauch (`verbrauch_kwh`)
+    # erfasst noch ein `elektrischer_fahranteil_prozent` gepflegt. Dann rechnet
+    # eedc **still 100 % elektrisch**, und Ersparnis wie CO₂ fallen zu gut aus.
+    # Das ist genau die Sorte stiller Annahme, die diese Diagnose-Linie
+    # sichtbar machen soll — melden und erklären, kein „Akzeptiert"-Knopf und
+    # keine stille Datenänderung.
+    PHEV_ANTEIL_UNBESTIMMT = "phev_anteil_unbestimmt"
     # Sensor-Mapping-Einheit (mameier1234 #674 + #200): prüft Leistung↔Energie
     # in BEIDE Richtungen über ALLE gemappten Slots, einheiten-getrieben aus
     # field_definitions (FELD_EINHEITEN). Energie-Sensor (kWh) in einem

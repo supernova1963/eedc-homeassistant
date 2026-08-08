@@ -16,7 +16,9 @@ from backend.core.berechnungen import (
     gas_kosten_altanlage,
     spezifischer_ertrag_kwh_kwp,
 )
+from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.wirtschaftlichkeit_defaults import (
+    BENZIN_VERBRAUCH_DEFAULT_L_100KM,
     EINSPEISEVERGUETUNG_DEFAULT_CENT,
     GASPREIS_DEFAULT_CENT,
     NETZBEZUG_DEFAULT_CENT,
@@ -96,6 +98,10 @@ class EAutoEinsparung:
     benzin_kosten_alternativ_euro: float
     co2_einsparung_kg: float
     v2h_einsparung_euro: float
+    # #331 (PHEV) — additiv ans Ende, Bestandsaufrufer bleiben gültig.
+    fossile_kosten_euro: float = 0.0
+    km_elektrisch: float = 0.0
+    km_verbrenner: float = 0.0
 
 
 @dataclass
@@ -313,10 +319,12 @@ def berechne_eauto_einsparung(
     pv_anteil_prozent: float,
     strompreis_cent: float,
     benzinpreis_euro_liter: float,
-    benzin_verbrauch_liter_100km: float = 7.0,
+    benzin_verbrauch_liter_100km: float = BENZIN_VERBRAUCH_DEFAULT_L_100KM,
     nutzt_v2h: bool = False,
     v2h_entladung_kwh_jahr: float = 0,
     v2h_preis_cent: float = 0,
+    eigener_verbrauch_l_100km: Optional[float] = None,
+    elektrischer_fahranteil_prozent: Optional[float] = None,
 ) -> EAutoEinsparung:
     """
     Berechnet jährliche E-Auto Einsparung vs. Verbrenner.
@@ -327,25 +335,56 @@ def berechne_eauto_einsparung(
         pv_anteil_prozent: Anteil PV-Strom am Laden (z.B. 60)
         strompreis_cent: Strompreis für Netzladung in Cent
         benzinpreis_euro_liter: Benzinpreis in Euro
-        benzin_verbrauch_liter_100km: Verbrenner-Verbrauch pro 100 km
+        benzin_verbrauch_liter_100km: Verbrenner-Verbrauch pro 100 km —
+            der **fiktive Vergleichs-Benziner**. ⚠ Der Signatur-Default stand
+            bis 2026-08-08 auf 7,0 und widersprach damit dem kanonischen Wert
+            7,5 aus `PARAM_E_AUTO_DEFAULTS`, den das Modul-Docstring von
+            `eauto_wirtschaftlichkeit.py` als Erfolg beschreibt (N-178). Er war
+            tot, solange der einzige Aufrufer den Wert immer übergibt — mit
+            #331 wird an dieser Funktion gebaut, also fällt er hier.
         nutzt_v2h: True wenn V2H aktiviert
         v2h_entladung_kwh_jahr: Jährliche V2H-Entladung ins Haus
         v2h_preis_cent: Vermiedener Strompreis durch V2H
+        eigener_verbrauch_l_100km: **Real getankter** Verbrauch eines
+            Plug-in-Hybrids (#331). `None` ⇒ BEV, jede Zahl bleibt wie vorher.
+        elektrischer_fahranteil_prozent: Geschätzter elektrischer Anteil.
+            Die Prognose hat keine Messung — hier ist der Prozentwert der
+            **einzige** Weg, nicht nur ein Fallback (Entscheidung 4).
 
     Returns:
         EAutoEinsparung: Berechnete Werte
     """
+    # #331: Auf der Prognose-Achse wird der Strombedarf AUS der Fahrleistung
+    # abgeleitet — anders als im IST, wo die Ladung gemessen daneben liegt.
+    # Deshalb muss der elektrische Anteil hier auch den Bedarf begrenzen: sonst
+    # zahlte ein Plug-in-Hybrid in der ROI-Prognose Strom für alle Kilometer
+    # UND zusätzlich Benzin für die verbrennergefahrenen — dieselbe Strecke
+    # zweimal.
+    anteil = teile_fahrleistung(
+        km_gefahren=km_jahr,
+        anteil_prozent=elektrischer_fahranteil_prozent,
+    )
+
     # E-Auto Kosten
-    strom_bedarf_kwh = km_jahr * verbrauch_kwh_100km / 100
+    strom_bedarf_kwh = anteil.km_elektrisch * verbrauch_kwh_100km / 100
     pv_anteil = pv_anteil_prozent / 100
     netz_anteil = 1 - pv_anteil
 
     # PV-Strom ist "kostenlos" (bereits bezahlt durch Anlage)
     strom_kosten = strom_bedarf_kwh * netz_anteil * strompreis_cent / 100
 
-    # Verbrenner-Kosten zum Vergleich
+    # Verbrenner-Kosten zum Vergleich — über ALLE Kilometer, sonst verglichen
+    # wir ein Auto mit einem halben Auto (Entscheidung 5).
     benzin_verbrauch = km_jahr * benzin_verbrauch_liter_100km / 100
     benzin_kosten = benzin_verbrauch * benzinpreis_euro_liter
+
+    # #331: die real anfallende Tankrechnung des Verbrenner-Anteils.
+    fossil_liter = (
+        anteil.km_verbrenner / 100 * eigener_verbrauch_l_100km
+        if eigener_verbrauch_l_100km
+        else 0.0
+    )
+    fossile_kosten = fossil_liter * benzinpreis_euro_liter
 
     # V2H Einsparung
     v2h_einsparung = v2h_entladung_kwh_jahr * v2h_preis_cent / 100 if nutzt_v2h else 0
@@ -353,14 +392,19 @@ def berechne_eauto_einsparung(
     # CO2-Einsparung
     co2_verbrenner = benzin_verbrauch * CO2_FAKTOR_BENZIN_KG_LITER
     co2_eauto = strom_bedarf_kwh * netz_anteil * CO2_FAKTOR_STROM_KG_KWH
-    co2_einsparung = co2_verbrenner - co2_eauto
+    co2_einsparung = co2_verbrenner - co2_eauto - fossil_liter * CO2_FAKTOR_BENZIN_KG_LITER
 
     return EAutoEinsparung(
-        jahres_einsparung_euro=round(benzin_kosten - strom_kosten + v2h_einsparung, 2),
+        jahres_einsparung_euro=round(
+            benzin_kosten - strom_kosten - fossile_kosten + v2h_einsparung, 2
+        ),
         strom_kosten_euro=round(strom_kosten, 2),
         benzin_kosten_alternativ_euro=round(benzin_kosten, 2),
         co2_einsparung_kg=round(co2_einsparung, 1),
         v2h_einsparung_euro=round(v2h_einsparung, 2),
+        fossile_kosten_euro=round(fossile_kosten, 2),
+        km_elektrisch=round(anteil.km_elektrisch, 1),
+        km_verbrenner=round(anteil.km_verbrenner, 1),
     )
 
 
@@ -594,6 +638,7 @@ def berechne_co2_bilanz(
     emob_km: float = 0.0,
     emob_netz_ladung_kwh: float = 0.0,
     benzin_verbrauch_liter: float = 0.0,
+    fossil_getankt_liter: float = 0.0,
 ) -> Co2Bilanz:
     """Kanonische CO₂-Gesamtbilanz (PV-Eigenverbrauch + WP + E-Mobilität).
 
@@ -607,12 +652,17 @@ def berechne_co2_bilanz(
     dieselben SoT-Helfer nutzen (`berechne_verbrauchs_kennzahlen`,
     `get_emob_heimladung_canonical`, Dienstwagen-Ausschluss), sonst driftet die
     Eingabe (Lehre #326).
+
+    `fossil_getankt_liter` ist der **real verfahrene** Kraftstoff eines
+    Plug-in-Hybrids (#331): er mindert die vermiedene Emission, statt sie zu
+    schmälern, indem an der Vergleichsrechnung gedreht würde. Ohne gepflegtes
+    `eigener_verbrauch_l_100km` ist er 0 und die Bilanz exakt die von vorher.
     """
     co2_pv = eigenverbrauch_kwh * CO2_FAKTOR_STROM_KG_KWH
     co2_wp = co2_wp_ersparnis_kg(wp_waerme_kwh, wp_strom_kwh)
     co2_emob = co2_emob_ersparnis_kg(
         benzin_verbrauch_liter, emob_netz_ladung_kwh, emob_km
-    )
+    ) - max(0.0, fossil_getankt_liter) * CO2_FAKTOR_BENZIN_KG_LITER
     co2_gesamt = co2_pv + max(0.0, co2_wp) + max(0.0, co2_emob)
     return Co2Bilanz(
         co2_pv_kg=co2_pv,

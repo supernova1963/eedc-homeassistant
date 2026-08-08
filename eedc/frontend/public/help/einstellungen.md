@@ -166,6 +166,18 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 - **Speicher:** Kapazität (kWh), **nutzbare Kapazität (kWh)**, max. Leistung (kW), **Kopplung**, arbitrage-fähig (Ja/Nein). Die nutzbare Kapazität ist die Reserve-bereinigte Größe (wer 10/90 fährt, trägt bei 10 kWh brutto 8 kWh ein); sie verfeinert den gemessenen Wirkungsgrad. Vollzyklen und die Wirtschaftlichkeits-Prognose rechnen weiterhin mit der Brutto-Kapazität ([Berechnungen §3.3](BERECHNUNGEN.md#33-speicher-einsparung)).
   > **Kopplung — AC oder DC?** Die Vorbelegung *Automatisch* leitet sie aus der Wechselrichter-Zuordnung ab (zugeordnet ⇒ DC, sonst AC) und schreibt im Formular dazu, was dabei herauskommt. Das trifft die meisten Anlagen, aber nicht alle: Ein **AC-Speicher an einem Hybrid-Wechselrichter** und ein **DC-Speicher ohne erfassten Wechselrichter** brauchen die ausdrückliche Angabe. Sie **ändert keine Zahl** — ob der Speicher als Teil des PV-Systems oder eigenständig gerechnet wird, entscheidet weiterhin allein die Zuordnung. Wozu sie dient: Sie legt fest, **wo** Ladung und Entladung gemessen werden — bei AC-Kopplung hausseitig hinter dem Batterie-Wechselrichter, bei DC-Kopplung am Batterie-Anschluss. **Beide Werte müssen von derselben Seite kommen**, sonst enthält der Wirkungsgrad die Wandlung nur in eine Richtung und beschreibt die Messstelle statt den Speicher.
 - **E-Auto:** Batteriekapazität (kWh), V2H-fähig, „nutzt V2H aktiv".
+  > **Plug-in-Hybrid?** Dann trag unter *Vergleich & Betrieb* den **eigenen Verbrauch (L/100 km)**
+  > ein — das ist, was dein Fahrzeug im Verbrenner-Betrieb wirklich tankt, nicht der
+  > Vergleichs-Benziner darüber. Erst dieses Feld sagt eedc, dass überhaupt ein Verbrenner
+  > mitfährt; ein eigenes „Fahrzeugtyp"-Feld gibt es bewusst nicht. Lässt du es leer, rechnet
+  > eedc wie bisher mit rein elektrischer Fahrt.
+  >
+  > Den elektrischen Anteil bestimmt eedc am liebsten **gemessen**: aus dem monatlich erfassten
+  > Fahrverbrauch (kWh) und deinem kWh/100 km. Erfasst du den Fahrverbrauch nicht, trag den
+  > **elektrischen Fahranteil (%)** als Schätzung ein — sonst rechnet eedc weiter mit 100 %
+  > elektrisch und sagt es dir im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md). Einen Richtwert
+  > setzt eedc nicht von sich aus ein: das wäre eine Behauptung über dein Fahrzeug.
+  > Details: [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
 - **Wärmepumpe:** **JAZ** (Standardwert, falls kein Wärmemengenzähler), **Alternativkosten** (Gas/Öl als Mehrkosten-Basis), **jährliche Zusatzkosten der Alt-Heizung** (Schornsteinfeger, Wartung, Gaszähler-Grundpreis), **Alt-Tarif Gas/Öl** (ct/kWh, Fallback wenn ein Monat keinen eigenen Gaspreis führt).
 - **Wallbox:** max. Ladeleistung (kW), bidirektional.
 - **Wechselrichter:** max. Leistung (kW), MaStR-ID.
