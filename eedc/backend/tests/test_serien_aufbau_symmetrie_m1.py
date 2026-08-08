@@ -103,15 +103,39 @@ def test_pool_dedup_wallbox_vor_eauto():
     assert entities["wallbox_2"] == ["sensor.shared"]
 
 
-def test_keine_dedup_bei_getrennten_entities():
-    """Unterschiedliche Entities → beide Serien bleiben."""
+def test_wallbox_verdraengt_eauto_auch_bei_getrennten_entities():
+    """Getrennte Entities → die Wallbox ist trotzdem die einzige Quelle (#356).
+
+    Bis 2026-08-08 forderte dieser Test hier **beide** Serien („keine Dedup bei
+    getrennten Entities") — er beschrieb das Verhalten, nicht eine fachliche
+    Absicht. Der Entity-Dedup (#227) greift nur bei geteiltem Sensor, ein
+    Fahrzeug mit eigenem Ladeleistungs-Sensor lief deshalb doppelt ins
+    `komponenten`-JSON: Anlage 1, 2026-08-06, Zähler 12,00 kWh → `wallbox_2`
+    −12,00 **und** `eauto_1` −17,32, beide Sensoren mit Ladung in genau
+    denselben fünf Stunden.
+
+    Die Regel ist dieselbe wie auf der Monatsebene
+    (`get_emob_heimladung_canonical`): Wallbox vorhanden ⇒ Wallbox ist Quelle.
+    """
     inv_live = {
         "1": {"leistung_w": "sensor.ea"},
         "2": {"leistung_w": "sensor.wb"},
     }
     investitionen = {"1": _inv("1", "e-auto"), "2": _inv("2", "wallbox")}
-    serien, _ = baue_investitions_serien(inv_live, investitionen)
-    assert {s.key for s in serien} == {"eauto_1", "wallbox_2"}
+    serien, entities = baue_investitions_serien(inv_live, investitionen)
+    assert {s.key for s in serien} == {"wallbox_2"}
+    assert "eauto_1" not in entities
+
+
+def test_eauto_ohne_wallbox_behaelt_seine_serie():
+    """Abgrenzung: ohne Wallbox ist das Fahrzeug die Quelle — Steckerlader/
+    Schuko, derselbe Zweig wie `get_emob_heimladung_canonical` ohne Heimladung.
+    Griffe die Regel auch hier, verlöre diese Anlage ihre Ladung komplett."""
+    inv_live = {"1": {"leistung_w": "sensor.ea"}}
+    investitionen = {"1": _inv("1", "e-auto")}
+    serien, entities = baue_investitions_serien(inv_live, investitionen)
+    assert {s.key for s in serien} == {"eauto_1"}
+    assert entities["eauto_1"] == ["sensor.ea"]
 
 
 # ─── Struktureller Wächter: beide Pfade nutzen die geteilte Quelle ──────────

@@ -93,14 +93,73 @@ def test_basis_wird_nicht_geprueft():
 
 def test_wallbox_und_eauto_summiert():
     """TEP.wallbox_kw (Zähler: Wallbox+E-Auto) gegen Σ komponenten[wallbox_*,
-    eauto_*]."""
+    eauto_*].
+
+    ⚠ Die Komponenten stehen **negativ** — der Leistungspfad schreibt jede
+    Serie mit ``seite == "senke"`` als ``-abs(...)``
+    (``live_tagesverlauf_service``), der Zählerpfad schreibt Verbrauch positiv.
+    Bis 2026-08-08 setzte diese Fixture sie positiv und bildete damit die
+    Produktionskonvention nicht ab: der Test war grün, während die Invariante
+    an einer echten Anlage für jeden Ladetag Drift meldete (#356).
+    """
     tep = [
-        _tep_row(h, wallbox_kw=1.0, komponenten={"wallbox_2": 0.6, "eauto_1": 0.4})
+        _tep_row(h, wallbox_kw=1.0, komponenten={"wallbox_2": -0.6, "eauto_1": -0.4})
         for h in range(24)
     ]
     berichte = pruefe_tep_komponenten_intern_konsistenz(tep)
     wb = next(b for b in berichte if "Wallbox+E-Auto" in b.name)
     assert wb.konsistent, str(wb)
+
+
+def test_wallbox_senke_gemessener_tag_ist_konsistent():
+    """Realfall aus der #356-Vermessung: der Betrag stimmt, nur das Vorzeichen
+    war entgegengesetzt — das darf **keine** Drift mehr sein.
+
+    Anlage 1, 2026-03-15: Zähler-Σ 29,48 kWh, Leistungs-Σ −30,42 kWh. Vor der
+    Angleichung meldete die Invariante 59,90 kWh Abweichung (Faktor −1,03),
+    obwohl die beiden Pfade 0,94 kWh auseinanderliegen — innerhalb dessen, was
+    Riemann-/Zählerauflösung erklärt.
+    """
+    tep = [
+        _tep_row(
+            0, wallbox_kw=29.48, komponenten={"wallbox_2": -30.42}
+        )
+    ]
+    berichte = pruefe_tep_komponenten_intern_konsistenz(tep, toleranz_kwh=1.0)
+    wb = next(b for b in berichte if "Wallbox+E-Auto" in b.name)
+    assert wb.konsistent, str(wb)
+    assert wb.abweichung_kwh < 1.0, str(wb)
+
+
+def test_wallbox_echte_drift_bleibt_sichtbar():
+    """Die Angleichung darf die Diagnose nicht blind machen: eine doppelt
+    gezählte Ladung (Wallbox **und** E-Auto messen denselben Stromfluss) muss
+    weiterhin auffallen.
+
+    Realfall Anlage 1, 2026-08-06: Zähler 12,00 kWh, Leistungspfad
+    ``wallbox_2`` −12,00 **plus** ``eauto_1`` −17,32 aus einem zweiten Sensor
+    für dieselben Ladestunden.
+    """
+    tep = [
+        _tep_row(
+            0, wallbox_kw=12.0, komponenten={"wallbox_2": -12.0, "eauto_1": -17.32}
+        )
+    ]
+    berichte = pruefe_tep_komponenten_intern_konsistenz(tep)
+    wb = next(b for b in berichte if "Wallbox+E-Auto" in b.name)
+    assert not wb.konsistent, str(wb)
+    assert abs(wb.abweichung_kwh - 17.32) < 0.01, str(wb)
+
+
+def test_pv_wird_nicht_angeglichen():
+    """Abgrenzung: PV steht auf beiden Pfaden positiv (``seite == "quelle"`` ⇒
+    ``abs(...)``). Würde die Senken-Angleichung auch hier greifen, wäre ein
+    konsistenter PV-Tag plötzlich eine Drift von 2× dem Ertrag."""
+    tep = [_tep_row(h, pv_kw=2.0, komponenten={"pv_3": 2.0}) for h in range(24)]
+    berichte = pruefe_tep_komponenten_intern_konsistenz(tep)
+    pv = next(b for b in berichte if "PV+BKW" in b.name)
+    assert pv.konsistent, str(pv)
+    assert abs(pv.tatsaechlich - 48.0) < 0.01, str(pv)
 
 
 def test_batterie_netto_signed():

@@ -218,6 +218,31 @@ def baue_investitions_serien(
             gesehen_entity.add(primary)
         dedupliziert.append(serie)
 
+    # Strukturelle Quellen-Regel für E-Mob (#356) — dieselbe wie auf der
+    # Monatsebene (`eauto_wirtschaftlichkeit.get_emob_heimladung_canonical`,
+    # Phase 2a / Entscheidung 1): **existiert eine Wallbox-Serie, ist sie die
+    # Quelle der Heimladung**; sonst das E-Auto.
+    #
+    # Die beiden Regeln darüber greifen nur, wenn das E-Auto einen Parent hat
+    # oder **dieselbe** `leistung_w`-Entity teilt. Misst das Fahrzeug mit einem
+    # eigenen Sensor, lief derselbe Ladevorgang zweimal ins `komponenten`-JSON:
+    # Anlage 1, 2026-08-06, Zähler 12,00 kWh → `wallbox_2` −12,00 **und**
+    # `eauto_1` −17,32; die HA-Historie beider Sensoren zeigt Ladung in genau
+    # denselben fünf Stunden (893/779 W · 8237/8773 W · 4239/4406 W · 979/920 W
+    # · 2067/2445 W) — dieselbe Energie, an zwei Enden gemessen.
+    #
+    # Ladung, die **nicht** über die eigene Wallbox lief (auswärts), fällt damit
+    # aus dem Tagesverlauf. Das ist beabsichtigt: sie ist kein Hausstrom und
+    # stünde sonst als Senke in einer Bilanz, durch die sie nie geflossen ist.
+    if any(s.kategorie == "wallbox" for s in dedupliziert):
+        behalten: list[TagesverlaufSerie] = []
+        for serie in dedupliziert:
+            if serie.kategorie == "eauto":
+                serie_entities.pop(serie.key, None)
+                continue
+            behalten.append(serie)
+        dedupliziert = behalten
+
     return dedupliziert, serie_entities
 
 

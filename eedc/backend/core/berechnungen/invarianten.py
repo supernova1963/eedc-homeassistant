@@ -247,14 +247,31 @@ def assert_tep_tz_komponenten_konsistent(
 # Netz als kombinierten, vorzeichenbehafteten `netz`-Key, der Boundary-Pfad als
 # Split einspeisung/netzbezug — diese Konventions-Frage ist Achse 3 (#316), nicht
 # Achse 2, und gehört nicht in diese Prüfung.
-_ACHSE2_KATEGORIEN: tuple[tuple[str, str, tuple[str, ...], callable], ...] = (
-    ("PV+BKW", "pv_kw", PV_KOMPONENTEN_PREFIXE, summe_pv_bkw_kwh),
+#
+# Das fünfte Feld (`leistungspfad_negativ`) sagt, dass die beiden Pfade dieselbe
+# Größe mit **entgegengesetztem Vorzeichen** schreiben und vor dem Vergleich
+# angeglichen werden müssen (#356):
+#   - Zählerpfad: `wallbox_kw`/`waermepumpe_kw` = Verbrauch **positiv**
+#     (`aggregator.py`, `snap_h.get("wallbox")` bzw. `.get("wp")`).
+#   - Leistungspfad: `live_tagesverlauf_service` schreibt jede Serie mit
+#     `seite == "senke"` als `-abs(...)` ins `komponenten`-JSON.
+# Ohne Angleichung kann die Invariante für diese Kategorien **nie** grün werden:
+# jeder Ladetag meldete eine Drift von 2× dem Wert. An Anlage 1 gemessen
+# (2026-01-01…08-07): 39 von 39 Wallbox-Fällen lagen „unter", kein einziger
+# darüber, Median-Faktor −1,01 — kein Gegenbeispiel.
+# PV (`seite == "quelle"` ⇒ `abs(...)`) und Batterie (`bidirektional` ⇒
+# `-serie_sum`, deckungsgleich mit `batterie_kw_spalte`) tragen auf beiden
+# Pfaden dasselbe Vorzeichen und werden **nicht** angeglichen.
+_ACHSE2_KATEGORIEN: tuple[
+    tuple[str, str, tuple[str, ...], callable, bool], ...
+] = (
+    ("PV+BKW", "pv_kw", PV_KOMPONENTEN_PREFIXE, summe_pv_bkw_kwh, False),
     ("Wärmepumpe", "waermepumpe_kw", WAERMEPUMPE_KOMPONENTEN_PREFIXE,
-     summe_waermepumpe_kwh),
+     summe_waermepumpe_kwh, True),
     ("Wallbox+E-Auto", "wallbox_kw", WALLBOX_KOMPONENTEN_PREFIXE,
-     summe_wallbox_eauto_kwh),
+     summe_wallbox_eauto_kwh, True),
     ("Batterie (netto)", "batterie_kw", BATTERIE_KOMPONENTEN_PREFIXE,
-     summe_batterie_netto_kwh),
+     summe_batterie_netto_kwh, False),
 )
 
 
@@ -304,6 +321,13 @@ def pruefe_tep_komponenten_intern_konsistenz(
     ``komponenten``-Key vorhanden). Sonst gäbe eine nur per Zähler — aber nicht
     per Leistungs-Serie — gemappte Kategorie ein Falsch-Positiv „Drift gegen 0".
 
+    Vorzeichen-Angleichung (#356): Senken-Kategorien stehen im Leistungspfad
+    **negativ** (``seite == "senke"`` ⇒ ``-abs(...)``), im Zählerpfad
+    **positiv**. Sie werden vor dem Vergleich angeglichen — ohne das meldete
+    jeder Ladetag eine Drift von 2× dem Wert, und die Invariante konnte für
+    diese Kategorien nie grün werden. Welche Kategorie betroffen ist, steht in
+    ``_ACHSE2_KATEGORIEN``; die Herleitung ebenfalls dort.
+
     Diagnose-Invariante (warning-level im Aggregator), keine harte Sperre:
     Leistungs- und Zählerpfad messen prinzipiell verschieden, die Toleranz
     fängt Riemann-/Rundungsdrift, größere Abweichung soll sichtbar werden.
@@ -312,7 +336,9 @@ def pruefe_tep_komponenten_intern_konsistenz(
     agg = aggregiere_tep_komponenten(tep_rows)
     berichte: list[KonsistenzBericht] = []
 
-    for label, tep_feld, prefixe, summe_fn in _ACHSE2_KATEGORIEN:
+    for label, tep_feld, prefixe, summe_fn, leistungspfad_negativ in (
+        _ACHSE2_KATEGORIEN
+    ):
         summe_tep, any_tep = _summe_tep_field(tep_rows, tep_feld)
         hat_komp_key = any(
             any(str(k).startswith(p) for p in prefixe) for k in agg
@@ -321,6 +347,10 @@ def pruefe_tep_komponenten_intern_konsistenz(
         if not any_tep or not hat_komp_key:
             continue
         summe_komp = summe_fn(agg)
+        # Senken-Konvention angleichen, sonst vergleicht die Invariante zwei
+        # Vorzeichen statt zwei Beträge (s. `_ACHSE2_KATEGORIEN`, #356).
+        if leistungspfad_negativ:
+            summe_komp = -summe_komp
         abweichung = abs(summe_tep - summe_komp)
         konsistent = abweichung <= toleranz_kwh
         berichte.append(

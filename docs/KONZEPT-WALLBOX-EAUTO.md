@@ -322,7 +322,7 @@ existiert (analog zur strukturellen Quellen-Regel). Gleiche Issue-Familie wie A.
 
 ## Offene Lücke 2026-06-29: Tages-Energieprofil-Leistungspfad nicht von Phase 2a erfasst (Achse-2-Magnitude-Drift)
 
-> **Status: ENTDECKT + zu scopen (kein Code).** Aufgetaucht beim Live-Gegencheck der v3.45.9-Achse-2-Diagnose (`GET /api/energie-profil/{id}/achse2-drift`) an Gernots Anlage. SoT für die Weiterarbeit ist dieser Abschnitt + Memory [[project_achse2_magnitude_drift]].
+> **Status (2026-08-08): VERMESSEN + BEIDE FIX-RICHTUNGEN GEBAUT — Restarbeit: Alt-Tage-Erkennung.** Siehe den Abschnitt „✅ Vermessen und gebaut" am Ende. Der Text darunter beschreibt den Stand vom 2026-06-29 und bleibt als Herkunftsbeleg wörtlich stehen; zwei seiner drei Hypothesen sind widerlegt. Aufgetaucht beim Live-Gegencheck der v3.45.9-Achse-2-Diagnose (`GET /api/energie-profil/{id}/achse2-drift`) an Gernots Anlage. SoT für die Weiterarbeit ist dieser Abschnitt + Memory [[project_achse2_magnitude_drift]].
 >
 > ⚠ **Nachtrag 2026-08-08: Dieser Abschnitt hat ein Issue — [#356](https://github.com/supernova1963/eedc-homeassistant/issues/356)** (seit 30.07., offen). Bis dahin stand die Lücke nur hier und im Memory; wer nur die Issue-Liste las, hat sie nicht gesehen. Die Linie dort ist dieselbe wie hier: **Diagnose zuerst, Korrektur alter Tage nur über den Reparatur-Knopf, nie als Start-Migration.**
 
@@ -373,6 +373,66 @@ Diagnose-only, niedrig-prioritär (keine falschen Anzeige-Werte). Sinnvoll **geb
 > weil der Tages-Leistungspfad dann ohnehin aufgeschlagen ist. **Entscheid des Maintainers**, nicht
 > automatisch Teil von Phase 4; ein stillschweigend mitgebautes zweites Thema wäre eine
 > Auftragsausweitung.
+
+### ✅ Vermessen und gebaut 2026-08-08 — beide Fix-Richtungen umgesetzt
+
+> **Der Text oben bleibt wörtlich stehen** (Herkunftsbeleg, N-164-Muster). Was er als Hypothesen
+> führte, ist jetzt gemessen — **eine bestätigt, zwei widerlegt.**
+
+**Die Vermessung** (Endpunkt `achse2-drift`, Anlage 1, 2026-01-01…08-07): **48 Tage mit Drift**.
+Die Kategorie zerfällt in **zwei** Ursachen, nicht in eine:
+
+| Klasse | Fälle | Faktor Leistung/Zähler | Ursache |
+| --- | --- | --- | --- |
+| Vorzeichen-Konvention | 19 (WB) + 15 (Batt) | **−1,01** (Median) | Prüferfehler, s. u. |
+| Doppelzählung Wallbox **+** E-Auto | 10 (WB) | ≈ **−2** | echter Fehler im Leistungspfad |
+
+**Die „~2×-Drift" war überwiegend gar keine Magnitude-Drift.** In 39 von 39 Wallbox-Fällen lag der
+Leistungspfad „unter", in **keinem** darüber — die Invariante verglich die **positive**
+`wallbox_kw`-Spalte gegen das **negativ** butterfly-signierte JSON. Für Senken-Kategorien konnte
+sie damit **nie** grün werden. April/Mai sind nicht grün, sondern von der Skip-Semantik
+übersprungen (kein Komponenten-Key) — es gibt kein Gegenbeispiel.
+
+**Widerlegt — Hypothese 1 (Wallbox-Selbst-Verdopplung):** `baue_investitions_serien` hängt an jede
+Serie **genau eine** Entity (`serie_entities[key] = [live["leistung_w"]]`); `ladung_pv_kwh` geht
+nicht in die Kurve ein.
+
+**Widerlegt — Hypothese 2 in ihrer Begründung, bestätigt in ihrer Wirkung:** „E-Auto hat keinen
+Lade-Sensor mehr" trifft nicht zu. Das Fahrzeug trägt `leistung_w` = `sensor.smart_ladeleistung`
+(Datenquellen-Fläche, gemessen). Es ist keine Phantom-Serie, sondern eine **zweite echte Messung
+desselben Stromflusses**: die HA-Historie beider Sensoren zeigt am 2026-08-06 Ladung in genau
+denselben fünf Stunden (893/779 W · 8237/8773 W · 4239/4406 W · 979/920 W · 2067/2445 W).
+**Keine Fremdladung** — das Auto lädt in keiner Stunde, in der die Wallbox nicht liefert.
+
+**Warum die Beträge trotzdem auseinanderliegen:** die Wallbox hat einen kWh-Zähler, ihre Kurve wird
+per `counter_overlay` auf Zähler-Deltas normiert (glatte Werte: −1,00 · −4,00 · −4,00 …); das
+Fahrzeug hat keinen, seine bleibt W-integriert (−0,78 · −8,77 · −4,41 …). **Zwei
+Bildungsvorschriften in einem JSON** — deshalb 12,00 gegen 17,32 kWh statt exakt 2×.
+
+**⚠ Korrektur an „Diagnose-only — keine falschen Anzeige-Werte" (Abschnitt oben):** das gilt für
+Kacheln, Bilanz und Monats-Auswertung (Zählerpfad) — **nicht** für den Tagesverlauf-Chart.
+`GET /energie-profil/{id}/stunden` liefert für den 2026-08-06 **beide** Serien mit Label aus
+(`SMA eCharger 22` **und** `Smart #1`); der Chart zeichnet denselben Ladevorgang zweimal, in Summe
+**29,32 statt 12,00 kWh**.
+
+**Gebaut — beide Punkte der Fix-Richtung oben:**
+
+1. **Strukturelle Quellen-Regel auf dem Tages-Leistungspfad** (`live_sensor_config.py::baue_investitions_serien`,
+   SoT für Live **und** Backfill): existiert eine Wallbox-Serie, entfällt jede E-Auto-Serie —
+   dieselbe Regel wie monatlich in `get_emob_heimladung_canonical`, deterministisch statt
+   magnitudenabhängig. Die beiden Bestandsregeln (Parent gesetzt · geteilte Entity) deckten nur
+   Sonderfälle ab. **Abgrenzung:** ohne Wallbox behält das Fahrzeug seine Serie (Steckerlader) —
+   eigener Test, sonst verlöre diese Anlage ihre Ladung ganz.
+2. **Senken-Vorzeichen in der Achse-2-Invariante** (`core/berechnungen/invarianten.py`):
+   `_ACHSE2_KATEGORIEN` trägt je Kategorie, ob der Leistungspfad negativ schreibt. PV (`quelle`)
+   und Batterie (`bidirektional`) werden **nicht** angeglichen — je eigene Abgrenzungsprobe.
+
+⚠ **Alt-Tage heilen nicht von selbst.** Bereits gespeicherte `TagesEnergieProfil.komponenten`
+tragen ihre `eauto_*`-Keys weiter, der Chart zeigt sie weiter doppelt. Der Weg dorthin ist der
+**bestehende** Reparatur-Knopf (`reaggregate_range`, Cap 31 Tage) — **keine Start-Migration**
+([[feedback_migration_startup_kein_http]]). Ein Daten-Checker-Punkt, der betroffene Alt-Tage
+*findet* und den Knopf danebenstellt, ist **noch nicht gebaut** und die verbliebene Restarbeit
+dieses Abschnitts.
 
 ---
 
