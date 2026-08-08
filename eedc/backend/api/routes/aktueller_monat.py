@@ -649,7 +649,16 @@ async def _load_vorjahr(anlage_id: int, investitionen: list[Investition], jahr: 
         tarif_vj = tarife_vj.get("allgemein")
         if tarif_vj:
             netz_preis = tarif_vj.netzbezug_arbeitspreis_cent_kwh or NETZBEZUG_DEFAULT_CENT
-            einsp_preis = tarif_vj.einspeiseverguetung_cent_kwh or EINSPEISEVERGUETUNG_DEFAULT_CENT
+            # `is not None` statt truthy — dieselbe Regel wie beim Flex-Tarif
+            # vier Zeilen tiefer: seit 08.08.2026 ist **0** die Vorbelegung
+            # eines neuen Tarifs (eedc rät keinen EEG-Satz mehr). Mit `or`
+            # rechnete genau diese Vorjahres-Zeile still mit 8,2 ct weiter,
+            # während alle anderen Sichten 0 nehmen.
+            einsp_preis = (
+                tarif_vj.einspeiseverguetung_cent_kwh
+                if tarif_vj.einspeiseverguetung_cent_kwh is not None
+                else EINSPEISEVERGUETUNG_DEFAULT_CENT
+            )
             grundpreis = tarif_vj.grundpreis_euro_monat or 0
             # Flexibler Tarif überschreibt wenn vorhanden. `is not None` statt
             # truthy: ein Monats-Ø von 0,0 ct ist bei dynamischem Tarif real
@@ -1852,7 +1861,10 @@ async def get_aktueller_monat(
     investitionen_financials: list[InvestitionFinancialDetail] = []
     if investitionen and allgemein_tarif:
         netz_p = netzbezug_preis_effektiv_cent or NETZBEZUG_DEFAULT_CENT
-        einsp_p = einspeise_cent or EINSPEISEVERGUETUNG_DEFAULT_CENT
+        # `einspeise_cent` ist oben bereits mit `is not None` aufgelöst — ein
+        # `or` hätte hier nur noch den gepflegten Wert **0** überschrieben und
+        # dem T-Konto eine andere Vergütung gegeben als der Zeile darüber.
+        einsp_p = einspeise_cent if einspeise_cent is not None else EINSPEISEVERGUETUNG_DEFAULT_CENT
         wp_tarif_obj = tarife.get("waermepumpe")
         wp_p = (wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh
                 if wp_tarif_obj and wp_tarif_obj.netzbezug_arbeitspreis_cent_kwh is not None

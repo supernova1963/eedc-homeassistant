@@ -78,7 +78,9 @@ const ERLAUBT = new Map([
 /** Zusätzlich erlaubt für Dateien, die BEIDES tun (Vorbelegung + Vergleich). */
 const ERLAUBT_ZEILEN = new Map([
   // istGueltigHeute() darüber ist umgestellt; hier geht es um das Formular-Default.
-  ['src/pages/StrompreiseTeile.tsx', new Set([545])],
+  // ⚠ Zeilennummer, nicht Inhalt: jede Einfügung darüber macht diesen Eintrag
+  // falsch-rot (zuletzt am 08.08.2026 durch vier Kommentarzeilen).
+  ['src/pages/StrompreiseTeile.tsx', new Set([549])],
 ])
 
 function quellDateien(dir) {

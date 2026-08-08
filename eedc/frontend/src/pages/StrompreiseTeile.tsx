@@ -12,7 +12,7 @@ import { Plus, Edit, Trash2, Zap, Calendar, Check } from 'lucide-react'
 import { Button, Card, Modal, EmptyState, Alert, Input, DatumFeld, Select, RadioGroup, FormSection } from '../components/ui'
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import { useAnlage, useStrompreise } from '../hooks'
-import { GELD_TEXT_CLASS, fmtZahl, heuteIso } from '../lib'
+import { GELD_TEXT_CLASS, fmtZahl, heuteIso, EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../lib'
 import type { Strompreis, StrompreisVerwendung } from '../types'
 import type { StrompreisCreate, StrompreisUpdate } from '../api'
 
@@ -539,7 +539,11 @@ export function StrompreisForm({
     tarifname: strompreis?.tarifname || '',
     anbieter: strompreis?.anbieter || '',
     netzbezug_arbeitspreis_cent_kwh: strompreis?.netzbezug_arbeitspreis_cent_kwh?.toString() || '30',
-    einspeiseverguetung_cent_kwh: strompreis?.einspeiseverguetung_cent_kwh?.toString() || '8.2',
+    // Vorbelegung 0 statt eines geschätzten EEG-Satzes: den geltenden Satz
+    // kennt nur der Betreiber, und eine Zahl im Feld sähe gepflegt aus
+    // (Entscheid 08.08.2026, T89667 #122). `plausibelWarnung` sagt daneben,
+    // was 0 bedeutet.
+    einspeiseverguetung_cent_kwh: strompreis?.einspeiseverguetung_cent_kwh?.toString() || '0',
     grundpreis_euro_monat: strompreis?.grundpreis_euro_monat?.toString() || '',
     zaehlergebuehr_euro_jahr: strompreis?.zaehlergebuehr_euro_jahr?.toString() || '',
     gueltig_ab: strompreis?.gueltig_ab || gueltigAbVorbelegung || new Date().toISOString().split('T')[0],
@@ -590,6 +594,14 @@ export function StrompreisForm({
     }
     if (name === 'einspeiseverguetung_cent_kwh' && n > EINSPEISUNG_MAX) {
       return `Ungewöhnlich – erwartet 0–${EINSPEISUNG_MAX} ct/kWh`
+    }
+    // 0 ist die Vorbelegung eines neuen Tarifs und damit der Normalfall eines
+    // noch nicht gepflegten Feldes — sie darf nicht still bleiben: mit 0 ct
+    // ist der Einspeise-Erlös des Zeitraums 0 €, und das fällt in den
+    // Auswertungen erst Monate später auf. Weich, weil 0 legitim sein kann
+    // (Volleinspeisung ohne Vergütung, ausgelaufene EEG-Förderung).
+    if (name === 'einspeiseverguetung_cent_kwh' && n === 0) {
+      return 'Mit 0 ct wird für diesen Zeitraum kein Einspeise-Erlös berechnet'
     }
     return undefined
   }
@@ -691,7 +703,12 @@ export function StrompreisForm({
               onBlur={() => markTouched('einspeiseverguetung_cent_kwh')}
               required
               error={zeigeFehler('einspeiseverguetung_cent_kwh')}
-              hint={(zeigeFehler('einspeiseverguetung_cent_kwh') || plausibelWarnung('einspeiseverguetung_cent_kwh')) ? undefined : 'EEG-Vergütung oder PPA-Preis'}
+              // Anders als beim Netzbezug bleibt der Hinweis auch neben einer
+              // Plausibilitäts-Warnung stehen: die häufigste Warnung ist „0 ct"
+              // — also genau der Moment, in dem der Eingebende erfahren muss,
+              // dass eedc flat rechnet und ein Mischsatz zulässig ist. Bei
+              // einem echten Feld-Fehler unterdrückt `Input` den Hinweis selbst.
+              hint={`EEG-Vergütung oder PPA-Preis. ${EINSPEISEVERGUETUNG_FLAT_HINWEIS}`}
             />
             {!zeigeFehler('einspeiseverguetung_cent_kwh') && plausibelWarnung('einspeiseverguetung_cent_kwh') && (
               <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{plausibelWarnung('einspeiseverguetung_cent_kwh')}</p>

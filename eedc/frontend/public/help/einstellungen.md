@@ -93,6 +93,14 @@ Verwalte deine Stromtarife als Tabelle mit Gültigkeitszeiträumen — die Basis
 
 > **Dynamischer Strompreis (Tibber/aWATTar/EPEX):** Den zugehörigen Sensor ordnest du nicht mehr hier, sondern unter **Einstellungen → Datenquellen** dem Feld „Strompreis" zu (siehe [§7](#7-datenquellen--feld-zentrische-zuordnung)). Ohne eigenen Sensor blendet eedc automatisch den EPEX-Börsenpreis (DE/AT via aWATTar) als Overlay im Live-Tagesverlauf ein.
 
+> **Einspeisevergütung: eedc rechnet flat mit dem eingetragenen Satz.** Der Einspeise-Erlös ist schlicht *eingespeiste Menge × dein Satz* ([Berechnungsreferenz 3.2](BERECHNUNGEN.md#32-finanzen-cockpit)) — es wird nichts im Hintergrund umgerechnet und nichts aus der Anlagengröße abgeleitet.
+>
+> Die EEG-Vergütung ist nach **installierter Leistung** gestaffelt (z. B. ein Satz bis 10 kWp, ein niedrigerer darüber) — nicht nach eingespeister Menge. Für die Gesamtanlage gilt deshalb der nach kWp **gewichtete Mischsatz**, und genau der gehört in dieses Feld. Rechenbeispiel mit **erfundenen** Sätzen — die für dich gültigen stehen in deinem Vergütungsbescheid: 12,5 kWp, davon 10,0 kWp zu 8,20 ct und 2,5 kWp zu 7,10 ct ⇒ (10,0 × 8,20 + 2,5 × 7,10) ÷ 12,5 = **7,98 ct/kWh**. Das ist keine Näherung, sondern exakt der Satz, den der Netzbetreiber im Mittel zahlt.
+>
+> eedc ermittelt diesen Satz **bewusst nicht selbst** — auch nicht als Vorschlag: Die EEG-Sätze ändern sich laufend, und welche Bedingungen für deine Anlage tatsächlich gelten (Inbetriebnahmedatum, Volleinspeisung, PPA, Direktvermarktung), weißt nur du. Ein neuer Tarif startet deshalb mit **0 ct/kWh**; mit 0 bleibt der Einspeise-Erlös des Zeitraums 0 €, und der **Daten-Checker** meldet das, sobald tatsächlich Einspeisung erfasst ist. Ist deine Einspeisung wirklich unvergütet, bleibt 0 richtig und der Hinweis aus.
+>
+> Wechselt dein Satz, trägst du einen **neuen Tarif mit eigenem „Gültig ab"** ein — die Historie bleibt dann mit ihrem alten Satz gerechnet.
+
 ### 2.3 Solarprognose
 
 Diese Kachel kombiniert die PVGIS-Langfristprognose mit den Wetter-Provider-Einstellungen:

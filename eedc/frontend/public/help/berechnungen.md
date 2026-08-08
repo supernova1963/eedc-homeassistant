@@ -304,6 +304,17 @@ Kumulative Ersparnis = Netto-Ertrag + WP-Ersparnis + E-Mob-Ersparnis
 Jahres-Rendite (%)  = Kumulative_Ersparnis / Investition_gesamt * 100
 ```
 
+> **Die Einspeisevergütung ist ein flacher Satz — eedc kennt keine EEG-Leistungsstaffel.**
+> `Einspeisevergütung` ist genau der Wert aus dem für den Monat gültigen Tarif
+> (`Strompreis.einspeiseverguetung_cent_kwh`); es gibt keine Ableitung aus `leistung_kwp`, keine
+> Stufengrenze und keine Aufteilung der eingespeisten Menge auf mehrere Sätze. Wer gestaffelt
+> vergütet wird, trägt den nach kWp gewichteten **Mischsatz** ein — mathematisch identisch, weil
+> das EEG nach *installierter Leistung* staffelt und nicht nach eingespeister Menge. Der einzige
+> Automatismus ist der Fallback `EINSPEISEVERGUETUNG_DEFAULT_CENT`
+> (`core/wirtschaftlichkeit_defaults.py`), der ausschließlich greift, wenn **gar kein** Tarif
+> gepflegt ist — und genau das meldet der Daten-Checker. Anwendersicht:
+> [Einstellungen §2.2](HANDBUCH_EINSTELLUNGEN.md#22-strompreise).
+
 > **Kanonisches Finanz-Aggregat (SoT `core/berechnungen/finanz_aggregat.py`):** Netto-Ertrag,
 > Einspeise-Erlös, EV-/BKW-Ersparnis und Sonstige-Netto werden **per-Monat** gerechnet und über die
 > sichtbaren Monate summiert (nicht mit einem Ø-Preis) — bei Flex-Tarifen (Tibber/aWATTar/EPEX) laufen

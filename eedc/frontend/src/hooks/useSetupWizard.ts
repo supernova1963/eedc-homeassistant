@@ -43,15 +43,18 @@ export interface WizardState {
 // Standard-Strompreise für Deutschland (2026)
 export const DEFAULT_STROMPREISE = {
   netzbezug_arbeitspreis_cent_kwh: 30.0,
-  einspeiseverguetung_cent_kwh: 8.2,  // Für Anlagen < 10 kWp
+  // **0 ist Absicht, kein fehlender Wert.** Bis 08.08.2026 leitete der Wizard
+  // hier eine EEG-Stufe aus `leistung_kwp` ab (8,2 / 7,1 / 5,8) und schlug
+  // damit für jede Anlage über 10 kWp einen zu NIEDRIGEN Satz vor: gestaffelt
+  // wird nach installierter Leistung, für die Gesamtanlage gilt der gewichtete
+  // Mischsatz. Entfernt statt korrigiert (Gernot, 08.08.2026) — die Sätze
+  // ändern sich laufend (für 2027 laufen bereits neue Planungen), eine Tabelle
+  // im Code veraltet garantiert, und den geltenden Satz kennt nur der
+  // Betreiber. Eine geschätzte Zahl sähe wie eine gepflegte aus; die 0 ist
+  // sichtbar unfertig und wird vom Daten-Checker gemeldet, sobald tatsächlich
+  // eingespeist wird (`daten_checker/stammdaten.py`).
+  einspeiseverguetung_cent_kwh: 0,
   grundpreis_euro_monat: 12.0,
-}
-
-// Einspeisevergütung nach Anlagengröße (Stand 2026)
-export function getEinspeiseverguetung(leistungKwp: number): number {
-  if (leistungKwp <= 10) return 8.2
-  if (leistungKwp <= 40) return 7.1
-  return 5.8
 }
 
 // Anlage-Daten für Wizard
@@ -339,11 +342,9 @@ export function useSetupWizard(): UseSetupWizardReturn {
       return
     }
 
-    const einspeiseverguetung = getEinspeiseverguetung(anlage.leistung_kwp)
-
     await createStrompreis({
       netzbezug_arbeitspreis_cent_kwh: DEFAULT_STROMPREISE.netzbezug_arbeitspreis_cent_kwh,
-      einspeiseverguetung_cent_kwh: einspeiseverguetung,
+      einspeiseverguetung_cent_kwh: DEFAULT_STROMPREISE.einspeiseverguetung_cent_kwh,
       grundpreis_euro_monat: DEFAULT_STROMPREISE.grundpreis_euro_monat,
       gueltig_ab: anlage.installationsdatum || new Date().toISOString().split('T')[0],
       tarifname: 'Standard-Tarif',

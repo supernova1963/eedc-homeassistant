@@ -5,7 +5,8 @@
 import { useState, FormEvent } from 'react'
 import { Zap, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react'
 import { Alert, Button, Input, DatumFeld } from '../../ui'
-import { DEFAULT_STROMPREISE, getEinspeiseverguetung } from '../../../hooks/useSetupWizard'
+import { DEFAULT_STROMPREISE } from '../../../hooks/useSetupWizard'
+import { EINSPEISEVERGUETUNG_FLAT_HINWEIS } from '../../../lib'
 import type { Anlage } from '../../../types'
 
 interface StrompreiseStepProps {
@@ -34,10 +35,10 @@ export default function StrompreiseStep({
   onUseDefaults,
   onBack,
 }: StrompreiseStepProps) {
-  // Einspeisevergütung basierend auf Anlagengröße
-  const defaultEinspeisung = anlage
-    ? getEinspeiseverguetung(anlage.leistung_kwp)
-    : DEFAULT_STROMPREISE.einspeiseverguetung_cent_kwh
+  // Ein Startwert, KEINE Ableitung aus der Anlagengröße: die EEG-Sätze und
+  // ihre Stufen ändern sich laufend, und welcher für diese Anlage gilt, weiß
+  // nur der Betreiber (Entscheid 08.08.2026, T89667 #122).
+  const defaultEinspeisung = DEFAULT_STROMPREISE.einspeiseverguetung_cent_kwh
 
   const [formData, setFormData] = useState({
     netzbezug_arbeitspreis_cent_kwh: DEFAULT_STROMPREISE.netzbezug_arbeitspreis_cent_kwh.toString(),
@@ -161,11 +162,9 @@ export default function StrompreiseStep({
               value={formData.einspeiseverguetung_cent_kwh}
               onChange={handleChange}
               required
-              hint={anlage && anlage.leistung_kwp <= 10
-                ? '≤10 kWp: 8,2 ct'
-                : anlage && anlage.leistung_kwp <= 40
-                  ? '10-40 kWp: 7,1 ct'
-                  : '>40 kWp: 5,8 ct'}
+              hint={parseFloat(formData.einspeiseverguetung_cent_kwh) === 0
+                ? `Deinen Satz findest du im Vergütungsbescheid — mit 0 ct wird kein Einspeise-Erlös berechnet. ${EINSPEISEVERGUETUNG_FLAT_HINWEIS}`
+                : EINSPEISEVERGUETUNG_FLAT_HINWEIS}
             />
           </div>
 

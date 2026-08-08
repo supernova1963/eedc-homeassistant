@@ -292,6 +292,42 @@ class StammdatenChecks:
             meldung=f"{len(tarife)} Strompreis-Tarif(e) vorhanden",
         ))
 
+        # ── Tarif ohne Einspeisevergütung, obwohl eingespeist wird ───────────
+        # Seit 08.08.2026 belegt eedc das Feld mit **0** vor, statt einen
+        # EEG-Satz aus der Anlagengröße zu raten (die Sätze ändern sich
+        # laufend; den geltenden kennt nur der Betreiber). Damit die 0 nicht
+        # still bleibt, meldet sie der Checker — aber nur, wenn tatsächlich
+        # eingespeist wurde: 0 ct ist bei Volleinspeisung ohne Vergütung oder
+        # nach dem Ende der EEG-Förderung ein richtiger Wert, und ein Hinweis,
+        # den niemand abstellen kann, ist die P-6-Falle.
+        gratis_tarife = [t for t in tarife if not t.einspeiseverguetung_cent_kwh]
+        if gratis_tarife and any(
+            (m.einspeisung_kwh or 0) > 0
+            # Stichtag ist der Monatserste, wie bei `baue_finanz_zeile`.
+            and any(
+                t.gueltig_ab <= date(m.jahr, m.monat, 1)
+                and (t.gueltig_bis is None or t.gueltig_bis >= date(m.jahr, m.monat, 1))
+                for t in gratis_tarife
+            )
+            for m in (monatsdaten or [])
+        ):
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=(
+                    f"{len(gratis_tarife)} Tarif(e) ohne Einspeisevergütung, "
+                    f"obwohl Einspeisung erfasst ist"
+                ),
+                details=(
+                    "Mit 0 ct/kWh bleibt der Einspeise-Erlös dieser Zeiträume 0 € — "
+                    "in Cockpit, ROI und Jahresbericht. Trag den Satz aus deinem "
+                    "Vergütungsbescheid ein; bei gestaffelter EEG-Vergütung den nach "
+                    "kWp gewichteten Mischsatz, denn eedc rechnet flat mit dem Wert. "
+                    "Ist die Einspeisung tatsächlich unvergütet (Volleinspeisung ohne "
+                    "Vergütung, ausgelaufene Förderung), bleibt 0 richtig."
+                ),
+                link="/einstellungen/strompreise",
+            ))
+
         # ── Monate MIT DATEN vor dem ersten Tarif ────────────────────────────
         # Diese rechnen still mit der Vorbelegung (NETZBEZUG_DEFAULT_CENT).
         # Der Fall entsteht regelmäßig bei Neuinstallationen: erst Monate aus

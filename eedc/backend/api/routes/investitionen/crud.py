@@ -701,7 +701,16 @@ async def get_roi_dashboard(
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     allgemein_tarif = tarife.get("allgemein")
     strompreis_cent = strompreis_cent or resolve_strompreis_for_komponente(tarife, "allgemein")
-    einspeiseverguetung_cent = einspeiseverguetung_cent or (allgemein_tarif.einspeiseverguetung_cent_kwh if allgemein_tarif else EINSPEISEVERGUETUNG_DEFAULT_CENT)
+    # `is not None` statt truthy: **0** ist seit 08.08.2026 die Vorbelegung
+    # eines neuen Tarifs (eedc rät keinen EEG-Satz mehr) und ein gepflegter
+    # Wert — mit `or` rechnete die Wirtschaftlichkeit je Investition still mit
+    # 8,2 ct, während Cockpit und Jahresbericht 0 nehmen.
+    if einspeiseverguetung_cent is None:
+        einspeiseverguetung_cent = (
+            allgemein_tarif.einspeiseverguetung_cent_kwh
+            if allgemein_tarif and allgemein_tarif.einspeiseverguetung_cent_kwh is not None
+            else EINSPEISEVERGUETUNG_DEFAULT_CENT
+        )
     wp_tarif = tarife.get("waermepumpe")
     wp_strompreis = wp_tarif.netzbezug_arbeitspreis_cent_kwh if wp_tarif else strompreis_cent
     wallbox_tarif = tarife.get("wallbox")
