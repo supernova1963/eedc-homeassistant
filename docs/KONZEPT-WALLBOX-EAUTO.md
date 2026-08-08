@@ -1,6 +1,39 @@
 # Konzept: Wallbox / E-Auto — Datenarchitektur
 
-> **✅ Update 2026-06-06 (Koordinator-Abgleich):** Phase 1 + **Phase 2a komplett RELEASED in v3.36.0** (kanonische Heimladungs-Quelle, Migration, Read-/Write-Kanonisierung). Phase 2b/3 (Vehicle-Sensor-Mapping, Multi-Fahrzeug) Trigger weiter **nicht** erfüllt → geparkt. **Schwächen A+B ✅ behoben** (Tier-1-Bündel, Commit `fa89255c`, UNRELEASED): A) `_check_emob_pool_pflege` bildet die E-Auto-Heimladung nur noch aus explizitem `ladung_kwh` (kein `verbrauch_kwh`-Fahrverbrauch-Fallback; `get_eauto_ladung_kwh` selbst unverändert für echte Legacy-Daten); B) E-Auto-kWh-Zähler-Bedarf wird übersprungen, wenn eine aktive Wallbox mit `ladung_kwh`-Sensor deckt. Damit ist dieses Konzept inhaltlich abgeschlossen (nur Phase 2b/3 trigger-gebunden offen). Memory [[project_wallbox_eauto_konzept]].
+> ## Stand 2026-08-08 — neu erhoben
+>
+> **Dieses Dokument stand bis heute auf dem Stand vom 29.06.2026** — also vor dem
+> Oberflächen-Umbau v4.0.0 (25.07.). Erhoben wurde gegen den Code, nicht gegen die Historie;
+> die Abschnitte darunter bleiben inhaltlich gültig, wo nichts anderes vermerkt ist.
+> **Es trägt bewusst keine Versionsnummer, nur dieses Mess-Datum** (Muster aus #359).
+>
+> **Was sich seit dem 29.06. geändert hat und hier eingearbeitet ist:**
+>
+> - **Die Sichten heißen anders.** Seit v4.0.0 gibt es keine „Dashboards" mehr, sondern den
+>   **Komponenten-Hub** je Gerätetyp (`frontend/src/v4/WallboxHubBloecke.tsx`,
+>   `v4/EAutoHubBloecke.tsx`) und das **Cockpit** nach Zeitraum. Wo unten noch
+>   „Wallbox-Dashboard" steht, ist die Wallbox-Fläche des Hubs gemeint; die Backend-Route
+>   heißt weiterhin `api/routes/investitionen/dashboards.py`.
+> - **Die Monatszeile wird einmal aufbereitet (ADR-002/P10).** Der kanonische Helfer wird
+>   heute auch aus `services/monats_fakten.py:882` gerufen; die Read-Sites lesen die Zeile
+>   von dort, statt `InvestitionMonatsdaten` selbst zu falten. Die Zeilenangaben in Etappe 2
+>   sind entsprechend nachgezogen.
+> - **Der Dienstwagen kostet, statt zu verdienen** (v4.0.5). `core/berechnungen/dienstliche_ladekosten.py`
+>   ist eine eigene Layer-Formel und die vierte Stelle, an der E-Auto-Ladung in Geld
+>   umgerechnet wird — sie war in diesem Konzept nicht vorgesehen. Aufrufer:
+>   `cockpit/uebersicht.py:282` · `aussichten.py:1366` · `ha_export.py`.
+> - **Die Achse-2-Lücke hat ein Issue:** **#356**. Ihr Trigger („gebündelt mit der nächsten
+>   echten Wallbox/E-Auto-Arbeit") **tritt mit Phase 4 ein** — siehe dort.
+> - **Neu aufgenommen: Phase 4 — PHEV-Anteile (#331)**, ausspezifiziert mit getroffenen
+>   Entscheidungen. Das ist der erste Punkt dieser Domäne mit einem **wartenden Melder**
+>   (Safi105, Discussion #330 vom 09.06.).
+> - **Offen und ohne anderen Ort: N-141** — welcher der drei Wege den Wallbox-PV-Anteil
+>   bestimmt. Wartet auf Maintainer-Entscheid, blockiert seither.
+> - **Erledigt:** die im Kopf als „UNRELEASED" markierten Schwächen-Fixes A+B (`fa89255c`)
+>   sind längst ausgeliefert; `aggregiere_emob_ladung` ist tatsächlich gelöscht (baumweit
+>   ungekappt geprüft, 0 Treffer).
+
+> **✅ Update 2026-06-06 (Koordinator-Abgleich):** Phase 1 + **Phase 2a komplett RELEASED in v3.36.0** (kanonische Heimladungs-Quelle, Migration, Read-/Write-Kanonisierung). Phase 2b/3 (Vehicle-Sensor-Mapping, Multi-Fahrzeug) Trigger weiter **nicht** erfüllt → geparkt. **Schwächen A+B ✅ behoben** (Tier-1-Bündel, Commit `fa89255c`; damals UNRELEASED, **inzwischen ausgeliefert**): A) `_check_emob_pool_pflege` bildet die E-Auto-Heimladung nur noch aus explizitem `ladung_kwh` (kein `verbrauch_kwh`-Fahrverbrauch-Fallback; `get_eauto_ladung_kwh` selbst unverändert für echte Legacy-Daten); B) E-Auto-kWh-Zähler-Bedarf wird übersprungen, wenn eine aktive Wallbox mit `ladung_kwh`-Sensor deckt. Damit ist dieses Konzept inhaltlich abgeschlossen (nur Phase 2b/3 trigger-gebunden offen). Memory [[project_wallbox_eauto_konzept]].
 
 > **Status (2026-05-20): Phase 1 (Pool-Konsolidierung) vollständig.** Der ursprüngliche Quick-Fix (v3.25.11: getrennte Akkumulatoren EAuto/WB + **Max-pro-Feld**, siehe Memory `project_pool_fix_emob.md`) hat sich selbst als Drift-Quelle erwiesen: feldweises `max()` über `gesamt`/`pv`/`netz` als drei unabhängige Aufrufe konnte die Felder aus verschiedenen Quellen mischen und einen PV-Anteil > 100 % erzeugen (#262 junky84: Komponenten zeigte 48 % PV + 85 % Netz = 133 %). v3.31.6 ersetzt das Max-pro-Feld durch den SoT-Helper `aggregiere_emob_ladung` (`eedc/backend/services/eauto_wirtschaftlichkeit.py`): die Quelle mit der größeren Heimladung gewinnt die **komplette, in sich konsistente Trias** (`pv + netz == ladung` garantiert). **Alle fünf Read-Sites sprechen jetzt dieselbe Pool-Logik:** Wallbox-Dashboard, Komponenten-Zeitreihe, Cockpit-Übersicht und AktuellerMonat über `aggregiere_emob_ladung`, das E-Auto-Dashboard über `compute_emob_pool_attribution` + `attribute_emob_pool_by_km` (km-anteilige Verteilung, selbe use-wb-pool-Entscheidung). **Phase 2 (Vehicle-Sensor-Mapping) und Phase 3 (Multi-Fahrzeug-Dashboard) noch nicht angefangen** — in Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als „Ideen / Konzeptphase"-Item; Trigger-Stand siehe Abschnitt »Phase-2-Trigger«.
 >
@@ -92,6 +125,12 @@ evcc/loadpoints/1/pvCharged → 732 kWh   evcc/vehicles/BMW/pvCharged   → 520 
 `≥` statt `=` weil Gast-Ladungen keinem E-Auto zugeordnet sein können.
 
 ## Dashboard-Darstellung (Ziel)
+
+> ⚠ **2026-08-08: Die Sichten heißen seit v4.0.0 anders.** „Wallbox-Dashboard" ist heute die
+> **Wallbox-Fläche des Komponenten-Hubs** (`frontend/src/v4/WallboxHubBloecke.tsx`),
+> „E-Auto-Dashboard" die **E-Auto-Fläche** (`v4/EAutoHubBloecke.tsx`). Die Backend-Route heißt
+> weiterhin `api/routes/investitionen/dashboards.py`. Die Skizzen darunter beschreiben den
+> **Inhalt**, nicht das heutige Layout — wer sie umsetzt, tut das im Hub und nach Regel 0a.
 
 ### Wallbox-Dashboard
 
@@ -185,6 +224,17 @@ Die **datenabhängige** Laufzeit-Heuristik (`use_wb_pool` = „größere Heimlad
    - **Klasse B** (`compute_emob_pool_attribution.use_wb_pool` von Magnitude → **strukturell** `wb-Heimladung > 0`, km-Attribution unverändert): E-Auto-Dashboard (`dashboards.py:194`), `aktueller_monat.py` (T-Konto `:1364`).
    - **Klasse C** (rohe Summe → kanonisch): `jahresbericht.py` (Doppelzählung E-Auto+Wallbox behoben); `ha_export.py` (Aggregat-Ersparnis + per-Device-E-Auto-Sensoren ziehen jetzt den km-anteiligen Wallbox-Pool via neuem `_EmobPoolCtx`).
    - **Tests:** `test_emob_readsite_symmetrie.py` (Helfer-Kontrakt-Matrix + Cross-Endpoint Wallbox/E-Auto/aktueller_monat = 500/300/200); evcc-Tests in `test_ha_export_multi_eauto.py`; 4 „Premium-Setup"-Tests an Phase-2a-Semantik angepasst (1× roh-dual→strukturell dokumentiert, 3× Post-Migration-Fixtures). **729 Backend-Tests grün.**
+   - ⚠ **Nachtrag 2026-08-08 — die Read-Site-Liste oben ist historisch, die Zeilennummern sind es
+     auch.** Seit ADR-002/**P10** liest eine Read-Site die Monatszeile nicht mehr selbst; die
+     Auflösung ist einmal in `services/monats_fakten.py` passiert. Baumweit gemessen (ungekappt,
+     ohne `tests/`) rufen den kanonischen Helfer heute **vier** Stellen:
+     `services/monats_fakten.py:882` (die Schicht) · `services/pdf/builders/jahresbericht.py:250` ·
+     `api/routes/investitionen/dashboards.py:1311` · `api/routes/cockpit/uebersicht.py:244`.
+     Die km-Attribution (`compute_emob_pool_attribution`) rufen `api/routes/aktueller_monat.py:740`
+     (Vorjahr) und `:1893` sowie `api/routes/investitionen/dashboards.py:316`.
+     **`cockpit/komponenten.py` steht nicht mehr darunter** — es liest `EmobFakten` (`:204`, `:206`,
+     `:269`) statt selbst zu falten. Die Regel selbst ist unverändert; nur der Ort, an dem sie
+     einmal angewandt wird, ist ein anderer.
    - ⚠️ **Release-Kopplung:** Die strukturelle Read-Regel unterzählt *un-migrierte* Dual-Daten-Setups (nimmt den kleineren Wallbox-Wert). Korrekt erst nach Etappe-4-Migration (höherer Wert → Wallbox-Slot). **Etappe 2+3+4 müssen zusammen released werden** — Etappe 2 ist NICHT allein auslieferbar.
 3. ✅ **Write-Side kanonisiert.** **Erledigt 2026-06-04 (UNRELEASED).**
    - **Manuelle Erfassung (monatsabschluss-Form):** neue `bedingung_anlage: "keine_wallbox"` an den E-Auto-Heim-Lade-Feldern `ladung_pv_kwh`/`ladung_netz_kwh` (`core/field_definitions.py`) — existiert eine Wallbox-Investition, blendet `get_felder_fuer_investition` diese Felder am E-Auto aus (analog `keine_pv_module`). Km/Verbrauch/Extern/V2H bleiben am E-Auto. Test `test_emob_write_canonical_felder.py`.
@@ -273,6 +323,8 @@ existiert (analog zur strukturellen Quellen-Regel). Gleiche Issue-Familie wie A.
 ## Offene Lücke 2026-06-29: Tages-Energieprofil-Leistungspfad nicht von Phase 2a erfasst (Achse-2-Magnitude-Drift)
 
 > **Status: ENTDECKT + zu scopen (kein Code).** Aufgetaucht beim Live-Gegencheck der v3.45.9-Achse-2-Diagnose (`GET /api/energie-profil/{id}/achse2-drift`) an Gernots Anlage. SoT für die Weiterarbeit ist dieser Abschnitt + Memory [[project_achse2_magnitude_drift]].
+>
+> ⚠ **Nachtrag 2026-08-08: Dieser Abschnitt hat ein Issue — [#356](https://github.com/supernova1963/eedc-homeassistant/issues/356)** (seit 30.07., offen). Bis dahin stand die Lücke nur hier und im Memory; wer nur die Issue-Liste las, hat sie nicht gesehen. Die Linie dort ist dieselbe wie hier: **Diagnose zuerst, Korrektur alter Tage nur über den Reparatur-Knopf, nie als Start-Migration.**
 
 ### Befund (Daten, Gernots Anlage 1, v3.45.9)
 
@@ -314,3 +366,182 @@ Der Diagnose-Endpoint summiert die Kategorie (`summe_wallbox_eauto_kwh` = Σ `wa
 ### Trigger / Priorität
 
 Diagnose-only, niedrig-prioritär (keine falschen Anzeige-Werte). Sinnvoll **gebündelt** mit der nächsten echten Wallbox/E-Auto-Arbeit (gemeinsamer Test-/Migrations-Zyklus), nicht als isolierter Hotfix. Re-Evaluierung beim nächsten emob-Pool-Signal.
+
+> ⚠ **2026-08-08: Dieser Trigger ist eingetreten.** **Phase 4 (#331)** *ist* die nächste echte
+> Wallbox/E-Auto-Arbeit. Das heißt **nicht**, dass #356 mitgebaut werden muss — es heißt, dass der
+> Scoping-Schritt (Per-Key-Aufschlüsselung des Diagnose-Endpunkts) im selben Zug **billig** ist,
+> weil der Tages-Leistungspfad dann ohnehin aufgeschlagen ist. **Entscheid des Maintainers**, nicht
+> automatisch Teil von Phase 4; ein stillschweigend mitgebautes zweites Thema wäre eine
+> Auftragsausweitung.
+
+---
+
+## Phase 4 — PHEV: elektrischen und fossilen Anteil trennen (#331)
+
+> **Status: ausspezifiziert 2026-08-08, nicht gebaut.** Entscheidungen getroffen (s. u.), Fläche
+> gemessen. Melder **Safi105**, [Discussion #330](https://github.com/supernova1963/eedc-homeassistant/discussions/330)
+> vom 09.06.2026 — der erste Punkt dieser Domäne mit einem **wartenden Melder**.
+> Issue: [#331](https://github.com/supernova1963/eedc-homeassistant/issues/331).
+
+### Das Problem
+
+Die Fahrzeug-Investition unterstellt in Ersparnis **und** CO₂-Rechnung **100 % elektrisch
+gefahrene Kilometer**. Für ein BEV ist das richtig; für einen Plug-in-Hybrid werden dadurch
+**Ersparnis und CO₂-Bilanz zu gut** dargestellt — der Benzin-Anteil fällt unter den Tisch, und
+zwar zweimal: er wird weder als Kosten noch als Emission gezählt, obwohl er real anfällt.
+
+### ⚠ Zwei Rechenachsen, nicht eine
+
+Der Issue-Text nennt `core/calculations.py` — das ist richtig, aber **nur die halbe Fläche**.
+Gemessen am Code gibt es zwei voneinander unabhängige Pfade, und ein Anteil, der nur in einem
+von beiden wirkt, erzeugt genau die Drift-Klasse, die dieses Projekt wiederholt getroffen hat
+([[feedback_aggregations_drift]]):
+
+| Achse | Ort | Rechnet mit | Wer liest sie |
+| --- | --- | --- | --- |
+| **IST** (Vergangenheit) | `services/eauto_wirtschaftlichkeit.py` | **gemessenen** `km_gefahren` + **tatsächlicher** Ladung + `vergleich_verbrauch_l_100km` | Komponenten-Hub, Cockpit, Monatsbericht, HA-Export, Aussichten-Historie, CO₂ |
+| **Prognose/ROI** (Zukunft) | `core/calculations.py:310-364` (`berechne_eauto_einsparung`) | **geplanter** `jahresfahrleistung_km` × `verbrauch_kwh_100km` × `pv_ladeanteil_prozent` | ausschließlich `api/routes/investitionen/crud.py:1508` (ROI-Tabelle) |
+
+Beide müssen den Anteil kennen — **aber sie bestimmen ihn verschieden**, weil die Zukunft keine
+Messung hat. Das ist kein Sonderfall, sondern die schon bestehende Trennung des Systems.
+
+### Getroffene Entscheidungen (2026-08-08)
+
+**1. Der Anteil wird gemessen, nicht geschätzt — wo eine Messung existiert.**
+Die elektrisch gefahrenen Kilometer folgen aus dem **elektrischen Fahrverbrauch** und dem
+Fahrzeug-Kennwert:
+
+```text
+km_elektrisch  = min( km_gefahren ,  fahrverbrauch_kwh / verbrauch_kwh_100km × 100 )
+km_verbrenner  = km_gefahren − km_elektrisch
+```
+
+Beide Eingangsgrößen **existieren heute**: `fahrverbrauch_kwh` ist das E-Auto-Feld `verbrauch_kwh`
+(„der reine Fahrverbrauch, NICHT pro Fahrt und NICHT kWh/100 km", `core/field_definitions.py`),
+`verbrauch_kwh_100km` ist ein gepflegter Parameter (`PARAM_E_AUTO`, Default 18). **Keine
+Schema-Erweiterung für die Messung**, und keine Schätzung — das ist die Zusage aus #330.
+
+> ⚠ **Das `min(…)` ist nicht kosmetisch.** Ist `verbrauch_kwh_100km` zu niedrig gepflegt oder der
+> Fahrverbrauchs-Zähler zu großzügig, kommt rechnerisch mehr elektrische Strecke heraus als
+> überhaupt gefahren wurde. Ohne Deckelung entstünden **negative Verbrenner-Kilometer** und damit
+> eine Ersparnis, die größer ist als die Wahrheit. Gedeckelt bleibt der Fehler sichtbar
+> (Verbrenner-Anteil 0) statt sich in einen Gewinn zu verwandeln.
+
+**2. Ein eigenes Feld für den realen Verbrenner-Verbrauch — `vergleich_verbrauch_l_100km` bleibt,
+was es ist.**
+Neuer Parameter **`eigener_verbrauch_l_100km`**. Das bestehende Feld beschreibt einen **fiktiven
+Vergleichs-Benziner** („was hätte ein gleichwertiges Verbrenner-Fahrzeug gebraucht", Default 7,5)
+und hat **sieben** Produktions-Leser (`aussichten.py` ×2 · `ha_export.py` ×2 ·
+`cockpit/nachhaltigkeit.py` · `investitionen/crud.py` · `eauto_wirtschaftlichkeit.py`). Es beim
+PHEV umzudeuten würde Zahlen bei allen Nicht-PHEV-Nutzern bewegen und wäre dieselbe Doppelbelegung,
+die bei `verbrauch_kwh` als **Schwäche A** dokumentiert ist und dort einen Daten-Checker-Fehlalarm
+erzeugt hat. **Zwei Bedeutungen brauchen zwei Felder.**
+
+**3. Das gesetzte Feld IST die Aussage — kein Fahrzeugtyp, kein Flag.**
+eedc kennt keinen „Fahrzeugtyp PHEV" und bekommt auch keinen. Die Regel ist strukturell, nicht
+magnitudenabhängig — dieselbe Linie wie Entscheidung 1 von Phase 2a („existiert eine Wallbox?"):
+
+> **Ist `eigener_verbrauch_l_100km` gesetzt (> 0), hat das Fahrzeug einen Verbrenner.**
+> Ist es leer, ist es ein BEV und **jede Zahl bleibt exakt wie heute.**
+
+Damit gibt es keine Erkennungsheuristik, die kippen kann, und **keinen Breaking Change**: Bestands-
+anlagen haben das Feld nicht, also ändert sich für sie nichts — auch nicht um einen Cent.
+
+**4. Die Prognose-Achse nutzt den Prozentwert als Fallback, nicht als Primärweg.**
+Neuer Parameter **`elektrischer_fahranteil_prozent`** (0–100). Er greift **genau zwei Mal**:
+in der Prognose/ROI-Achse (dort gibt es keine Messung) und im IST, wenn `verbrauch_kwh` **nicht
+gepflegt** ist. **Kein Zahlen-Default für PHEV** — kein „Richtwert 40–60 %", wie der Issue-Body
+ihn erwägt: ein erfundener Mittelwert ist eine Behauptung über ein fremdes Fahrzeug. Fehlt der
+Wert, gilt **100 % elektrisch** (heutiges Verhalten) und der Daten-Checker sagt, dass die Angabe
+fehlt.
+
+**5. Die Vergleichsrechnung wird nicht angefasst — der fossile Anteil ist eine eigene Kostenposition.**
+Der entscheidende Kunstgriff, der Entscheidung 2 erst trägt:
+
+```text
+benzin_kosten_vergleich = km_gefahren   / 100 × vergleich_verbrauch_l_100km × benzinpreis   ← UNVERÄNDERT
+fossile_restkosten      = km_verbrenner / 100 × eigener_verbrauch_l_100km   × benzinpreis   ← NEU
+strom_kosten            = (wie heute, aus der tatsächlich gemessenen Ladung)                ← UNVERÄNDERT
+
+ersparnis = benzin_kosten_vergleich − strom_kosten − fossile_restkosten
+```
+
+Die Frage „was hätte ein Benziner gekostet" bleibt über **alle** Kilometer gestellt — sonst
+verglichen wir ein Auto mit einem halben Auto. Neu ist nur, dass die **real angefallenen**
+Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emission wird um
+`km_verbrenner / 100 × eigener_verbrauch_l_100km × CO2_FAKTOR_BENZIN_KG_LITER` **reduziert**.
+
+> ⚠ **Die Strom-Kosten bleiben unberührt, und das ist kein Versehen.** eedc misst die geladene
+> Energie ohnehin — sie ist nicht aus der Fahrleistung abgeleitet. Ein PHEV lädt weniger, also
+> steht dort schon die kleinere Zahl. Wer die Ladung zusätzlich mit dem Anteil skalierte, zöge sie
+> **zweimal** ab.
+
+### Etappen (Reihenfolge wichtig)
+
+1. **Parameter + die drei Pflicht-Stellen.** `eigener_verbrauch_l_100km` und
+   `elektrischer_fahranteil_prozent` in `core/investition_parameter.py` (`PARAM_E_AUTO` +
+   `PARAM_E_AUTO_DEFAULTS` + Alias-Map), Response-Model, `core/field_definitions.py`.
+   ⚠ **Kein DB-Default für `eigener_verbrauch_l_100km`** — „nicht gesetzt" ist die tragende
+   Aussage aus Entscheidung 3 und darf nicht durch einen Default zerstört werden.
+2. **`EmobFakten.fahrverbrauch_je_fahrzeug`** — additiv, exakt parallel zum vorhandenen
+   `km_je_fahrzeug` (`services/monats_fakten.py:274`), dessen Docstring die Begründung schon
+   trägt: *„Voraussetzung dafür, dass eine Ersparnis je Fahrzeug mit DESSEN Verbrauchs-Parameter
+   gerechnet wird"*. Der anlagenweite `fahrverbrauch_kwh` (vier Leser) **bleibt unverändert**.
+   Muster: `BkwFakten.erzeugung_je_investition` aus F-10 — additiv statt eine bestehende Summe
+   umzudeuten.
+3. **Layer-Formel `core/berechnungen/phev_anteil.py`** (ADR-001: eine Aggregat-Formel wird in
+   `core/berechnungen/` definiert, nicht in einer Route). Eine reine Funktion
+   `teile_fahrleistung(km, fahrverbrauch_kwh, verbrauch_kwh_100km, anteil_prozent) -> (km_e, km_v)`
+   mit der Deckelung aus Entscheidung 1 und der Fallback-Kette aus Entscheidung 4.
+   **Beide Achsen rufen dieselbe Funktion** — das ist der Punkt, an dem die Drift verhindert wird.
+4. **IST-Achse:** `services/eauto_wirtschaftlichkeit.py` (`berechne_eauto_ersparnis` +
+   `berechne_eauto_ersparnis_periode`) um die fossile Kostenposition erweitern; `EAutoErsparnisErgebnis`
+   bekommt sie als eigenes Feld, damit die Anzeige sie **benennen** kann statt sie zu verstecken.
+5. **CO₂:** ausschließlich über `berechne_co2_bilanz` — ADR-001/**DI-2** sagt, das ist die einzige
+   Konstruktions-Stelle einer CO₂-Menge, und `npm run check:co2-roh` hält die Client-Hälfte.
+   Fundstelle der km-gewichteten Vergleichsrechnung: `api/routes/cockpit/nachhaltigkeit.py:95 ff.`
+6. **Prognose-Achse:** `core/calculations.py::berechne_eauto_einsparung` + der einzige Aufrufer
+   `api/routes/investitionen/crud.py:1508`.
+7. **Anzeige:** E-Auto-Fläche des Komponenten-Hubs (`frontend/src/v4/EAutoHubBloecke.tsx`) und das
+   Investitions-Formular. Regel 0a — Farben/Komponenten aus der SoT, keine zweite Kachel-Klasse.
+8. **Daten-Checker:** ist `eigener_verbrauch_l_100km` gesetzt, aber weder `verbrauch_kwh` gepflegt
+   noch `elektrischer_fahranteil_prozent` angegeben, dann rechnet eedc still 100 % elektrisch —
+   **das muss es sagen.** Linie unverändert: melden und erklären, kein „Akzeptiert"-Knopf, keine
+   stille Datenänderung.
+9. **Symmetrie-Test über beide Achsen** — Pflicht, nicht optional. Vorbild
+   `test_emob_readsite_symmetrie.py` aus Phase 2a und `test_netto_ertrag_vier_wege_symmetrie.py`.
+   ⚠ Ein Symmetrie-Test deckt nur die Achsen ab, die **die Fixture variiert**
+   ([[feedback_aggregator_symmetrie]]): die Fixture muss BEV **und** PHEV führen, mit und ohne
+   gepflegten Fahrverbrauch.
+
+### Wechselwirkungen — vor dem Bau je einzeln entscheiden
+
+| Fläche | Frage | Vorschlag |
+| --- | --- | --- |
+| `pv_ladeanteil_prozent` | Gilt der PV-Anteil auf die ganze Ladung oder nur auf den E-Teil? | **Auf die ganze Ladung** — die Ladung *ist* schon vollständig elektrisch. Hier ist nichts zu teilen; die Frage aus dem Issue-Body beruht auf der Annahme, die Ladung würde aus der Fahrleistung abgeleitet. Das tut sie im IST nicht. |
+| Dienstwagen (`ist_dienstlich`) | Wirkt der fossile Anteil in `dienstliche_ladekosten.py`? | **Nein — am Code gemessen, nicht angenommen.** `berechne_dienstliche_ladekosten` liest ausschließlich `ladung_pv_kwh` und `ladung_netz_kwh` und bewertet **geladene Energie**; die Fahrleistung kommt in der Formel nicht vor. Der fossile Anteil eines Dienstwagens ist Sache des Arbeitgebers und war nie in eedcs Bilanz. **Phase 4 lässt diese Formel unberührt.** |
+| CO₂-Amortisation **#284** | Graue Last vs. reduzierte Betriebs-Einsparung | **Nicht Teil von Phase 4.** #284 ist ein eigenes Issue; hier nur sicherstellen, dass die Betriebs-Einsparung, die #284 konsumiert, den fossilen Anteil bereits abzieht. |
+| **N-141** | Wallbox-PV-Anteil, drei Wege, wartet auf Maintainer-Entscheid | **Blockiert und getrennt halten.** Berührt die Ladung, nicht die Fahrleistung — keine Abhängigkeit in beide Richtungen. |
+| **#356** | Achse-2-Drift, Trigger tritt hiermit ein | Siehe Nachtrag oben — **eigener Entscheid**, nicht automatisch mitgebaut. |
+
+### Bekannte Schwäche, die Phase 4 erbt
+
+`verbrauch_kwh` am E-Auto ist **doppelt belegt** (Fahrverbrauch ∧ Legacy-Heimladung, s. Schwäche A)
+— `get_eauto_ladung_kwh(data)` = `ladung_kwh or verbrauch_kwh`. Phase 4 macht dieses Feld erstmals
+**rechnerisch tragend** für eine Anzeige-Zahl. Zwei Folgerungen:
+
+- Der Anteil darf **nur** aus dem expliziten `verbrauch_kwh` gebildet werden, nie über
+  `get_eauto_ladung_kwh` — sonst wird eine Heimladung als Fahrverbrauch gelesen.
+- Gernots eigenes Fahrzeug (Smart #1) führt das Feld **bewusst leer** (s. Schwäche A). Die
+  Fallback-Kette aus Entscheidung 4 ist deshalb kein Randfall, sondern der Normalfall der einzigen
+  Anlage, an der live gegengeprüft werden kann. **Ein Live-Gegencheck an einem echten PHEV fehlt
+  — Safi105 hat einen und hat die Datenlage in #330 selbst beschrieben.**
+
+### Was NICHT dazugehört
+
+- **Kein Feld für getankte Liter.** Wurde erwogen und verworfen: die wenigsten Fahrzeuge liefern
+  einen kumulativen Liter-Zähler an HA, und der gemessene Weg aus Entscheidung 1 kommt ohne aus.
+  Wird ein solcher Zähler später verbreitet, ist er ein additiver dritter Weg, kein Umbau.
+- **Kein Fahrzeugtyp-Feld** (s. Entscheidung 3).
+- **Keine Session-/Fahrten-Ebene.** eedc bleibt bei Monatsaggregaten — unverändert seit
+  §„Abgrenzung" ganz oben.
