@@ -50,6 +50,13 @@ _AGGREGATOR_SETTER_FELDER: frozenset[str] = frozenset({
     "einspeisung_neg_preis_kwh",
     "komponenten_kwh",
     "komponenten_starts",
+    # N-141 Weg (c): abgeleiteter PV-/Netz-Anteil der Heimladung. Fall (a) und
+    # NICHT (b'): kein zweiter Schreiber befüllt sie additiv — der Aggregator
+    # rechnet sie in derselben Stundenschleife, aus der die übrigen Tageswerte
+    # kommen. Deshalb ist der Delete-and-Recreate-Verlust hier kein Risiko: was
+    # gelöscht wird, wird im selben Lauf neu gerechnet.
+    "emob_ladung_pv_abgeleitet_kwh",
+    "emob_ladung_netz_abgeleitet_kwh",
 })
 
 

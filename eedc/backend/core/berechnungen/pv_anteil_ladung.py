@@ -60,6 +60,54 @@ _LADUNG_EPSILON: Final[float] = 0.001
 REGEL_EINSPEISE_DECKUNG: Final[str] = "einspeise_deckung"
 
 
+def stunde_aus_bilanzwerten(
+    *,
+    ladung: Optional[float],
+    netzbezug: Optional[float],
+    einspeisung: Optional[float],
+    batterie_spalte: Optional[float],
+) -> dict[str, Optional[float]]:
+    """Baut eine Eingangs-Stunde aus den Größen, wie der Aggregator sie hält.
+
+    **Warum es diese Funktion gibt: wegen genau eines Vorzeichens.**
+    ``leite_pv_anteil_ab`` verlangt eine **positive** Speicherentladung. Im
+    Aggregator liegt die Batterie aber in der *Spalten-Konvention* vor
+    (``batterie_kw_spalte``: **ENTLADUNG positiv, LADUNG negativ**), und daneben
+    liegt der Rohwert ``snap_h['batterie_netto']`` mit dem **umgekehrten**
+    Vorzeichen. Wer den Rohwert übergibt, bekommt keinen Fehler: der Layer
+    klemmt eine negative Entladung mit ``max(0, …)`` auf 0 — die
+    Speicherentladung fiele **still** aus der Rechnung, und die Regel wäre
+    heimlich eine andere (netzbasiert + Einspeisung statt Einspeise-Deckung,
+    an Gernots Anlage +9 pp).
+
+    Das ist die Klasse, an der am 2026-08-08 schon eine Test-Fixture scheiterte
+    (F-14): eine Vorzeichen-Konvention, die man nicht sieht, wenn man sie
+    verwechselt. Deshalb steht die Übersetzung hier — benannt, mit Proben —
+    statt als Ausdruck in der Stundenschleife.
+
+    Args:
+        ladung: Heimladung der Stunde (kWh, positiv).
+        netzbezug: Netzbezug der Stunde (kWh, positiv).
+        einspeisung: Einspeisung der Stunde (kWh, positiv).
+        batterie_spalte: Batterie in der **Spalten-Konvention** — Entladung
+            positiv. ``None`` = keine Batterie oder kein Wert.
+
+    Returns:
+        Das Dict, das ``leite_pv_anteil_ab`` je Stunde erwartet.
+    """
+    return {
+        "ladung": ladung,
+        "netzbezug": netzbezug,
+        "einspeisung": einspeisung,
+        # Nur die Entladung interessiert: eine Stunde, in der der Speicher LÄDT,
+        # liefert nichts an die Wallbox. Der Ladeanteil ist bereits im
+        # Netzbezug/in der fehlenden Einspeisung enthalten.
+        "speicher_entladung": (
+            max(0.0, batterie_spalte) if batterie_spalte is not None else None
+        ),
+    }
+
+
 @dataclass(frozen=True)
 class AbgeleiteterLadeAnteil:
     """Aufgeteilte Heimladung eines Zeitraums — abgeleitet, nicht gemessen.

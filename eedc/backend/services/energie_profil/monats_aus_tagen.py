@@ -90,6 +90,14 @@ class TagesMonatsSumme:
     bkw_kwh: float = 0.0
     speicher_ladung_kwh: float = 0.0
     speicher_entladung_kwh: float = 0.0
+    #: Abgeleiteter PV-/Netz-Anteil der Heimladung (N-141 Weg c). ⚠ **Das ist
+    #: die einzige E-Mob-Größe hier, und sie ist mit Bedacht keine Ladungs-
+    #: MENGE**, sondern eine Aufteilung: die Menge bleibt Sache der
+    #: Monatszeile. Die Auflage aus dem Klassen-Docstring ist erfüllt — die
+    #: Regel wurde am 2026-08-08 gegen evcc als externe Referenz vermessen
+    #: (963 kWh, −3,2 pp), nachzulesen in `KONZEPT-WALLBOX-EAUTO.md` Phase 5.
+    emob_ladung_pv_abgeleitet_kwh: float = 0.0
+    emob_ladung_netz_abgeleitet_kwh: float = 0.0
     tage: int = 0
     stunden: int = 0
 
@@ -97,6 +105,25 @@ class TagesMonatsSumme:
     def pv_kwh(self) -> float:
         """Module + Balkonkraftwerk — die PV-Achse der Monats-Fakten."""
         return self.pv_module_kwh + self.bkw_kwh
+
+    @property
+    def abgeleiteter_pv_anteil(self) -> Optional[float]:
+        """Anteil der Heimladung, der aus eigener Sonne kam — 0…1.
+
+        **Ein Anteil, keine Kilowattstunde.** Wer die abgeleiteten kWh direkt
+        in die Monatszeile schriebe, zerbräche die Trias
+        ``ladung_kwh == ladung_pv_kwh + ladung_netz_kwh``: die Tagesebene und
+        die Monatszeile müssen nicht dieselbe Ladungsmenge kennen (Tagesspur
+        unvollständig, Monat aus einer anderen Quelle gepflegt). Mit dem Anteil
+        auf die kanonische Monatsladung angewandt bleibt sie exakt geschlossen
+        — genau der Fehler, der bei #262 einen PV-Anteil > 100 % erzeugt hat.
+
+        ``None`` heißt „keine Aussage" (keine Ladung in der Tagesspur).
+        """
+        gesamt = self.emob_ladung_pv_abgeleitet_kwh + self.emob_ladung_netz_abgeleitet_kwh
+        if gesamt <= 0:
+            return None
+        return self.emob_ladung_pv_abgeleitet_kwh / gesamt
 
 
 def _monatsgrenzen(
@@ -160,10 +187,19 @@ async def lade_monats_summen_aus_tagen(
     tz_result = await db.execute(tz_query)
     pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     bkw_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
+    lade_pv_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
+    lade_netz_je_monat: dict[MonatsSchluessel, float] = defaultdict(float)
     for tz in tz_result.scalars().all():
         schluessel = (tz.datum.year, tz.datum.month)
         pv_je_monat[schluessel] += summe_pv_anlage_kwh(tz.komponenten_kwh)
         bkw_je_monat[schluessel] += summe_bkw_kwh(tz.komponenten_kwh)
+        # `or 0.0` ist hier korrekt und NICHT die `is not None`-Falle: eine
+        # Tageszeile ohne Ableitung trägt None, und None trägt zur Summe
+        # nichts bei. Ob der Monat überhaupt eine Aussage hat, entscheidet
+        # danach `abgeleiteter_pv_anteil` an der Gesamtsumme — nicht dieses
+        # Feld je Tag.
+        lade_pv_je_monat[schluessel] += tz.emob_ladung_pv_abgeleitet_kwh or 0.0
+        lade_netz_je_monat[schluessel] += tz.emob_ladung_netz_abgeleitet_kwh or 0.0
         tage_je_monat[schluessel].add(tz.datum)
 
     summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
@@ -177,6 +213,8 @@ async def lade_monats_summen_aus_tagen(
             bkw_kwh=bkw_je_monat.get(schluessel, 0.0),
             speicher_ladung_kwh=bilanz.speicher_ladung_kwh,
             speicher_entladung_kwh=bilanz.speicher_entladung_kwh,
+            emob_ladung_pv_abgeleitet_kwh=lade_pv_je_monat.get(schluessel, 0.0),
+            emob_ladung_netz_abgeleitet_kwh=lade_netz_je_monat.get(schluessel, 0.0),
             tage=len(tage_je_monat.get(schluessel, ())),
             stunden=len(stunden),
         )

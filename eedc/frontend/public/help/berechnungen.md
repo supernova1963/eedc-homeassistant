@@ -691,6 +691,58 @@ Für Jahresprognose:
 
 **Betroffen:** Aussichten (`aussichten.py`), HA-Sensor-Export (`ha_export.py`), PDF-Finanzbericht (`pdf_operations.py`).
 
+#### PV-Anteil der Heimladung: gemessen, sonst abgeleitet (ab 2026-08-08, N-141)
+
+Die Formeln oben beschreiben die **Prognose**-Achse, die den von Hand gepflegten
+`pv_ladeanteil_prozent` liest. Auf der **IST**-Achse gibt es diesen Parameter nicht — dort steht
+je Monat das erfasste Paar `ladung_pv_kwh` / `ladung_netz_kwh`. Und genau das fehlte den meisten
+Anlagen: **eine Wallbox misst ihren PV-Anteil nicht**, sie zählt nur Kilowattstunden. Ohne evcc
+oder einen eigenen Zähler lieferte `get_emob_pv_netz_kwh` deshalb `(0, Gesamtladung)` — die
+gesamte Heimladung galt als Netzstrom.
+
+**Reihenfolge (SoT `core/berechnungen/pv_anteil_ladung.py`):**
+
+1. **Ein erfasster Wert gewinnt immer** — auch eine gepflegte **0**. Geprüft wird die Anwesenheit
+   des Schlüssels `ladung_pv_kwh`, nicht seine Größe: „diesen Monat kam nichts aus der Sonne" ist
+   eine Aussage, keine Lücke.
+2. **Sonst leitet eedc den Anteil aus den eigenen Stundenwerten ab**, Regel **Einspeise-Deckung**:
+
+   ```
+   je Stunde:  ungedeckt = max(0, Ladung − Netzbezug − Speicherentladung)
+               PV        = min(Ladung, ungedeckt + Einspeisung)
+               Netz      = Ladung − PV
+   ```
+
+   Der zweite Summand fängt die Unschärfe der Stundenmittelung auf: Was in derselben Stunde
+   eingespeist wurde, hätte stattdessen laden können.
+3. **Angewandt wird der Anteil, nicht die Kilowattstunde.** Der abgeleitete Prozentsatz geht auf
+   die kanonische Monatsladung — nur so bleibt `Ladung == PV + Netz` exakt geschlossen, auch wenn
+   die Tagesspur eine andere Menge kennt als die Monatszeile.
+
+**Herkunft:** `EmobFakten.ladung_anteil_abgeleitet` sagt, ob die Aufteilung gerechnet ist; auf der
+Tagesebene trägt `source_provenance` die Marke `einspeise_deckung` bzw.
+`einspeise_deckung_teilweise` (letztere, wenn nicht jede Ladestunde auswertbar war — dann ist der
+Wert eine Teilsumme, P4).
+
+**Vermessen gegen evcc** (2026-08-08, Anlage 1, Feb–Aug 2026, 963 kWh Heimladung, Referenz
+`sensor.evcc_helper_pv/net_charged_kwh`):
+
+| Regel | PV-Anteil | Abweichung zu evcc (67,9 %) |
+| --- | --- | --- |
+| netzbasiert `min(Ladung, Netzbezug)` | 73,8 % | +5,9 pp |
+| netz + Speicherentladung | 60,8 % | −7,2 pp |
+| **Einspeise-Deckung (gebaut)** | **64,7 %** | **−3,2 pp** |
+
+⚠ **Keine rückwirkende Berechnung.** Der Wert entsteht beim Aggregieren eines Tages; Zeiträume vor
+diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „keine Sonne".
+
+⚠ **Die Auflösung begrenzt die Genauigkeit.** Meldet ein Wallbox-Zähler nur ganze Kilowattstunden
+(an der Referenzanlage 218 von 218 Stunden-Deltas ganzzahlig), trifft keine Rechnung die einzelne
+Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.
+
+⚠ **Offen: die Prognose zieht noch nicht mit** (N-188). Solange `pv_ladeanteil_prozent` von Hand
+gepflegt wird, können Prognose- und IST-Achse verschiedene Anteile nennen.
+
 ### 3.5 Wärmepumpe-Einsparung
 
 **Funktion:** `berechne_waermepumpe_einsparung()` in `core/calculations.py`

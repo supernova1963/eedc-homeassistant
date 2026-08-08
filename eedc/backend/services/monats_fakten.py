@@ -123,6 +123,10 @@ TAGESWERT_ZAEHLER = "zaehler"
 TAGESWERT_PV = "pv"
 TAGESWERT_BKW = "bkw"
 TAGESWERT_SPEICHER = "speicher"
+#: Sonderfall unter den Gruppen: hier kommt aus der Tagesebene **keine Menge**,
+#: sondern nur die *Aufteilung* der Heimladung in PV und Netz (N-141 Weg c).
+#: Die Ladungsmenge selbst stammt weiter aus der Monatszeile.
+TAGESWERT_EMOB_ANTEIL = "emob_anteil"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -262,6 +266,16 @@ class EmobFakten:
     ladung_kwh: float = 0.0
     ladung_pv_kwh: float = 0.0
     ladung_netz_kwh: float = 0.0
+    #: Steht die Aufteilung ``ladung_pv_kwh``/``ladung_netz_kwh`` so in den
+    #: Monatsdaten, oder ist sie aus der Tagesebene **abgeleitet** (N-141 Weg c)?
+    #: Eine Wallbox misst ihren PV-Anteil nicht; fehlt er, galt bisher die ganze
+    #: Heimladung als Netzstrom. Wer die Zahl anzeigt, sagt mit diesem Flag, dass
+    #: sie gerechnet ist — eine Schätzung, die aussieht wie eine Messung, ist
+    #: genau der Fehler, den die P4-Linie verhindern soll.
+    #: ⚠ **Die Trias bleibt geschlossen**: abgeleitet wird der *Anteil*, und er
+    #: wird auf die kanonische ``ladung_kwh`` angewandt — nicht die kWh der
+    #: Tagesebene übernommen (sonst #262-Klasse, PV-Anteil > 100 %).
+    ladung_anteil_abgeleitet: bool = False
     extern_kwh: float = 0.0
     extern_euro: float = 0.0
     ladevorgaenge: float = 0.0
@@ -561,8 +575,21 @@ async def lade_monats_fakten(
     # Die lokale Tagesebene als **zusätzliche** Grundgesamtheit (N-121). Ohne
     # das Flag wird sie nicht einmal geladen — die Kosten trägt nur, wer sie
     # bestellt.
+    #
+    # ⚠ Seit N-141 Weg (c) gibt es einen **zweiten** Grund, sie zu laden, und er
+    # hat nichts mit der Grundgesamtheit zu tun: der PV-Anteil der Heimladung
+    # ist nirgends gemessen und wird aus der Tagesebene abgeleitet. Ohne dieses
+    # Nachladen sähe genau EINE Sicht (Cockpit → Monat, der einzige Aufrufer mit
+    # dem Flag) einen PV-Anteil, während Komponenten-Hub, CO₂-Bilanz und
+    # E-Auto-Ersparnis weiter 0 % behaupten — zwei Zahlen für dieselbe Größe,
+    # die Klasse hinter #331 und F-15. Deshalb **bedingt**: nur wenn ein Monat
+    # überhaupt Heimladung ohne gepflegten PV-Anteil trägt. Eine Anlage ohne
+    # Wallbox und ohne E-Auto zahlt dafür nichts (Entscheid Gernot 2026-08-08).
     tages_summen: dict[MonatsSchluessel, TagesMonatsSumme] = {}
-    if inkl_nur_tageswerte:
+    nur_fuer_ladeanteil = not inkl_nur_tageswerte and any(
+        m.emob_ladung_ohne_pv_anteil for m in roh.values()
+    )
+    if inkl_nur_tageswerte or nur_fuer_ladeanteil:
         tages_summen = await lade_monats_summen_aus_tagen(
             db, anlage_id, von=von, bis=bis
         )
@@ -572,7 +599,12 @@ async def lade_monats_fakten(
         | set(pv_summen)
         | set(pv_je_modul)
         | set(roh)
-        | set(tages_summen)
+        # ⚠ Nur mit dem Flag erweitert die Tagesebene die Grundgesamtheit. Wurde
+        # sie allein für den Ladeanteil geholt, darf sie KEINE zusätzlichen
+        # Monate aufmachen — sonst tauchten in jeder Sicht plötzlich Monate auf,
+        # die nur eine Tagesspur haben. Das ist genau die Wirkung, die N-121
+        # hinter das Flag gestellt hat.
+        | (set(tages_summen) if inkl_nur_tageswerte else set())
     )
 
     if tarif_cache is None:
@@ -714,6 +746,24 @@ class _RohMonat:
         self.sonstiges_je_geraet: dict[int, dict[str, float]] = {}
         self.ertraege_euro = 0.0
         self.ausgaben_euro = 0.0
+
+    @property
+    def emob_ladung_ohne_pv_anteil(self) -> bool:
+        """Gibt es Heimlade-Zeilen, aber keine erfasste PV-/Netz-Aufteilung?
+
+        Die **Vorprüfung** vor dem Nachladen der Tagesebene (N-141 Weg c): nur
+        wenn sie zutrifft, lohnt die zusätzliche Query. Sie liest ausschließlich
+        die bereits gefalteten Rohzeilen, kostet also nichts.
+
+        Bewusst grob — ob am Ende überhaupt Ladung > 0 herauskommt, entscheidet
+        erst der Pool in `_baue_fakt`. Eine zu großzügige Vorprüfung kostet eine
+        Query zu viel; eine zu strenge verlöre den Wert still.
+        """
+        if not (self.eauto_ladedaten or self.wallbox_ladedaten):
+            return False
+        return not _hat_gepflegten_pv_anteil(
+            self.eauto_ladedaten, self.wallbox_ladedaten
+        )
 
     def falte(self, inv: Investition, data: dict) -> None:
         b = imd_typ_beitrag(inv, data)
@@ -896,10 +946,32 @@ async def _baue_fakt(
         eauto_imd_data=roh.eauto_ladedaten,
         wallbox_imd_data=roh.wallbox_ladedaten,
     )
+
+    # ── PV-Anteil der Heimladung: echter Wert gewinnt, sonst ableiten ──────
+    # Rahmenbedingung 1 (N-141 Weg c): die Ableitung füllt NUR Lücken. Gepflegt
+    # ist der Anteil, sobald irgendeine Quellzeile den Schlüssel trägt — auch
+    # mit **0**. Das ist bewusst `is not None` und nicht `> 0`: eine gepflegte
+    # 0 („diesen Monat nur nachts geladen") ist eine Aussage, keine Lücke, und
+    # sie darf keine Schätzung auslösen (CLAUDE.md §0-Werte prüfen).
+    ladung_pv_kwh = pool.pv_kwh
+    ladung_netz_kwh = pool.netz_kwh
+    anteil_abgeleitet = False
+    if (
+        not _hat_gepflegten_pv_anteil(roh.eauto_ladedaten, roh.wallbox_ladedaten)
+        and pool.ladung_kwh > 0
+        and tages_summe is not None
+        and (quote := tages_summe.abgeleiteter_pv_anteil) is not None
+    ):
+        ladung_pv_kwh = pool.ladung_kwh * quote
+        ladung_netz_kwh = pool.ladung_kwh - ladung_pv_kwh
+        anteil_abgeleitet = True
+        tageswert_gruppen.add(TAGESWERT_EMOB_ANTEIL)
+
     emob = EmobFakten(
         ladung_kwh=pool.ladung_kwh,
-        ladung_pv_kwh=pool.pv_kwh,
-        ladung_netz_kwh=pool.netz_kwh,
+        ladung_pv_kwh=ladung_pv_kwh,
+        ladung_netz_kwh=ladung_netz_kwh,
+        ladung_anteil_abgeleitet=anteil_abgeleitet,
         extern_kwh=pool.extern_kwh,
         extern_euro=pool.extern_euro,
         ladevorgaenge=pool.ladevorgaenge,
@@ -1062,6 +1134,32 @@ async def _lade_tarif(
         wallbox_preis_effektiv_cent=resolve_netzbezug_preis_cent(monatsdaten, wallbox_cent),
         kraftstoffpreis_euro=monatsdaten.kraftstoffpreis_euro if monatsdaten else None,
         gaspreis_cent_kwh=monatsdaten.gaspreis_cent_kwh if monatsdaten else None,
+    )
+
+
+def _hat_gepflegten_pv_anteil(*quellen: Iterable[dict]) -> bool:
+    """Trägt irgendeine Quellzeile einen erfassten ``ladung_pv_kwh``-Wert?
+
+    Der Torwächter vor der Ableitung (N-141 Weg c, Rahmenbedingung 1: *ein
+    gepflegter echter Wert gewinnt immer*).
+
+    ⚠ **Geprüft wird die Anwesenheit des Schlüssels, nicht seine Größe.** Eine
+    gepflegte ``0`` heißt „diesen Monat kam nichts aus der Sonne" und ist eine
+    Aussage — sie mit einer Schätzung zu überschreiben wäre schlimmer als die
+    Lücke, die dieser Fund schließt. Die Unterscheidung ist dieselbe wie bei
+    F-15 (``wert or DEFAULT`` verschluckte eine gepflegte 0), nur eine Ebene
+    weiter: dort ein Tarif, hier eine Energiemenge.
+
+    ⚠ Bewusst **über beide Quellen**, nicht nur über die vom Pool gewählte: hat
+    die Wallbox keinen PV-Wert, das Fahrzeug aber schon, dann hat der Anwender
+    den Anteil erfasst — die Quellenwahl des Pools ist eine Frage der *Menge*,
+    nicht der *Pflege*.
+    """
+    return any(
+        zeile.get("ladung_pv_kwh") is not None
+        for quelle in quellen
+        for zeile in quelle
+        if zeile
     )
 
 

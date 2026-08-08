@@ -15,6 +15,7 @@ import pytest
 from backend.core.berechnungen.pv_anteil_ladung import (
     REGEL_EINSPEISE_DECKUNG,
     leite_pv_anteil_ab,
+    stunde_aus_bilanzwerten,
 )
 
 
@@ -164,3 +165,70 @@ class TestGemesseneReferenz:
         naiv_netzbasiert = 5.0 - 0.0
         assert r.pv_kwh < naiv_netzbasiert
         assert r.pv_kwh == 2.0
+
+
+class TestVorzeichenUebersetzung:
+    """`stunde_aus_bilanzwerten` — die eine Stelle, an der man sich vertut.
+
+    Der Aggregator hält die Batterie in der **Spalten-Konvention** (Entladung
+    positiv) und direkt daneben das Bilanz-Netto mit umgekehrtem Vorzeichen.
+    Wird das falsche übergeben, gibt es **keinen Fehler**: `max(0, …)` klemmt
+    die negative Entladung auf 0 und die Regel ist heimlich eine andere.
+    """
+
+    def test_entladung_kommt_positiv_durch(self):
+        s = stunde_aus_bilanzwerten(
+            ladung=5.0, netzbezug=1.0, einspeisung=0.0, batterie_spalte=3.0
+        )
+        assert s["speicher_entladung"] == 3.0
+
+    def test_eine_ladestunde_des_speichers_liefert_nichts_an_die_wallbox(self):
+        """Spalten-Konvention: negativ = der Speicher LÄDT.
+
+        Dass daraus 0 wird, ist hier **richtig** — und genau deshalb ist die
+        Verwechslung mit dem Netto so tückisch: dieselbe 0 entstünde auch aus
+        einer echten Entladung mit falschem Vorzeichen.
+        """
+        s = stunde_aus_bilanzwerten(
+            ladung=5.0, netzbezug=1.0, einspeisung=0.0, batterie_spalte=-4.0
+        )
+        assert s["speicher_entladung"] == 0.0
+
+    def test_keine_batterie_bleibt_keine_aussage(self):
+        s = stunde_aus_bilanzwerten(
+            ladung=5.0, netzbezug=1.0, einspeisung=0.0, batterie_spalte=None
+        )
+        assert s["speicher_entladung"] is None
+
+    def test_die_uebrigen_drei_werden_unveraendert_durchgereicht(self):
+        """Abgrenzung: nur die Batterie wird übersetzt.
+
+        Ohne diese Probe könnte der Helfer alle vier Werte klemmen und die
+        anderen drei Proben blieben grün — ein fehlender Netzbezug würde dann
+        stillschweigend zu 0 und die ganze Stunde der Sonne gutgeschrieben.
+        """
+        s = stunde_aus_bilanzwerten(
+            ladung=5.0, netzbezug=None, einspeisung=None, batterie_spalte=1.0
+        )
+        assert s["ladung"] == 5.0
+        assert s["netzbezug"] is None
+        assert s["einspeisung"] is None
+
+    def test_das_ergebnis_passt_in_den_layer(self):
+        """Vertrag zwischen Helfer und Regel — beide zusammen, nicht getrennt.
+
+        Belegt zugleich die Folge der Verwechslung: mit korrektem Vorzeichen
+        deckt die Speicherentladung 3 der 5 kWh, mit dem Netto-Vorzeichen
+        (−3) fiele sie weg und der PV-Anteil wäre 5 statt 2 kWh.
+        """
+        richtig = leite_pv_anteil_ab([stunde_aus_bilanzwerten(
+            ladung=5.0, netzbezug=0.0, einspeisung=0.0, batterie_spalte=3.0
+        )])
+        verwechselt = leite_pv_anteil_ab([stunde_aus_bilanzwerten(
+            ladung=5.0, netzbezug=0.0, einspeisung=0.0, batterie_spalte=-3.0
+        )])
+        assert richtig.pv_kwh == pytest.approx(2.0)
+        assert verwechselt.pv_kwh == pytest.approx(5.0)
+        assert richtig.pv_kwh < verwechselt.pv_kwh, (
+            "die Verwechslung schreibt der Sonne zu, was der Speicher lieferte"
+        )

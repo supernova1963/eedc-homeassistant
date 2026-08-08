@@ -30,6 +30,7 @@ from typing import Any, Literal, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
+from backend.core.berechnungen.pv_anteil_ladung import REGEL_EINSPEISE_DECKUNG
 from backend.core.source_priority import SOURCE_LABELS, SourcePriority
 from backend.models.data_provenance_log import DataProvenanceLog
 
@@ -207,6 +208,17 @@ def _make_audit_entry(
 ABGELEITET_KWP_ANTEIL = "kwp_anteil"
 ABGELEITET_KAPAZITAET_ANTEIL = "kapazitaet_anteil"
 
+# N-141 Weg (c): der PV-Anteil einer Heimladung ist nirgends gemessen, sondern
+# aus den Stundengrößen des Tages abgeleitet. Die Kennung ist DIESELBE
+# Zeichenkette wie die Regel im Layer — importiert statt abgeschrieben, damit
+# eine Umbenennung nicht zwei Wahrheiten hinterlässt.
+ABGELEITET_EINSPEISE_DECKUNG = REGEL_EINSPEISE_DECKUNG
+#: Dieselbe Regel, aber nicht jede Ladestunde war gedeckt ⇒ der Wert ist eine
+#: **Teilsumme** der Tagesladung. Eigene Marke statt eines Zusatzfeldes: eine
+#: Teilsumme, die aussieht wie eine Gesamtsumme, ist genau der Fehler, den die
+#: P4-Linie (`docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`) verhindern soll.
+ABGELEITET_EINSPEISE_DECKUNG_TEILWEISE = f"{REGEL_EINSPEISE_DECKUNG}_teilweise"
+
 # Positivliste: was ein Client als Ableitungs-Marke melden darf. Sie ist der
 # Vertrag zwischen Oberfläche und Provenance — und sie steht hier, nicht in
 # den Routen: bis v4.0.8 gab es zwei Schreibpfade für dieselbe Sache (der
@@ -352,6 +364,7 @@ def seed_provenance(
     fields: Optional[list[str]] = None,
     json_subkeys: Optional[dict[str, list[str]]] = None,
     abgeleitet_je_subkey: Optional[dict[str, str]] = None,
+    abgeleitet_je_feld: Optional[dict[str, str]] = None,
 ) -> None:
     """Setzt source_provenance für eine FRISCHE Row mit bekanntem Initial-Inhalt.
 
@@ -366,8 +379,15 @@ def seed_provenance(
         json_subkeys: dict[json_attr, list[sub_key]] für JSON-Sub-Keys.
         abgeleitet_je_subkey: ``{sub_key: ABGELEITET_*}`` für Werte, die eine
             Zerlegung sind statt einer Messung (#352). Gilt nur für
-            ``json_subkeys`` — die Top-Level-Felder der Anlage tragen keine
-            Gerätezerlegung.
+            ``json_subkeys`` — eine *Gerätezerlegung* betrifft immer einen
+            Sub-Key, nie eine Anlagen-Spalte.
+        abgeleitet_je_feld: ``{feld: ABGELEITET_*}`` für **Top-Level**-Spalten,
+            deren Wert gerechnet statt gemessen ist (N-141 Weg c: der PV-Anteil
+            der Heimladung). Bewusst getrennt von ``abgeleitet_je_subkey``: das
+            ist eine andere Aussage — nicht „aus einem Anlagenwert zerlegt",
+            sondern „aus anderen Größen abgeleitet". Ohne diese Marke trüge der
+            Wert das Label des Aggregator-Laufs (``external:ha_statistics:daily``)
+            und behauptete damit eine Messung, die es nicht gibt.
 
     Verhalten:
         - source_provenance wird direkt gesetzt (KEIN Audit-Log).
@@ -380,8 +400,12 @@ def seed_provenance(
 
     provenance: dict[str, Any] = obj.source_provenance or {}
     if fields:
+        feld_marken = abgeleitet_je_feld or {}
         for field in fields:
-            provenance[field] = dict(entry)
+            feld_entry = dict(entry)
+            if feld_marken.get(field):
+                feld_entry["abgeleitet"] = feld_marken[field]
+            provenance[field] = feld_entry
     if json_subkeys:
         marken = abgeleitet_je_subkey or {}
         for json_attr, sub_keys in json_subkeys.items():

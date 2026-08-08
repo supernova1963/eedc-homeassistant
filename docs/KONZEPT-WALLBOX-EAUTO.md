@@ -628,9 +628,10 @@ Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emi
 
 ## Phase 5 — Der PV-Anteil der Heimladung wird abgeleitet, nicht abgefragt (N-141 Weg c)
 
-> **Stand 2026-08-08: vermessen, Rechenkern gebaut, noch nicht angeschlossen.** Der Layer-SoT
-> `core/berechnungen/pv_anteil_ladung.py` existiert und ist gegen echte Anlagendaten belegt; es
-> liest ihn aber noch keine Sicht, also hat sich **keine angezeigte Zahl geändert**.
+> **Stand 2026-08-08: vermessen, gebaut und angeschlossen.** Der Layer-SoT
+> `core/berechnungen/pv_anteil_ladung.py` ist gegen echte Anlagendaten belegt, der Aggregator legt
+> den Tageswert ab, und die Monats-Fakten ziehen ihn heran, wo kein gepflegter Wert existiert.
+> **Offen bleibt allein Rahmenbedingung 7** (Prognose, N-188).
 
 ### Das Problem
 
@@ -687,16 +688,47 @@ Richtung — sie schreibt die Ersparnis eher zu klein als zu groß.
 7. Die **Prognose zieht mit**: kann eedc den Anteil ableiten, braucht auch die ROI-Prognose keine
    Anwenderschätzung mehr, sonst lebt `pv_ladeanteil_prozent` neben der neuen Rechnung weiter.
 
-### Restarbeit — der Anschluss
+### Der Anschluss — gebaut 2026-08-08
 
-Der Rechenkern steht; die Wirkung fehlt. Drei Stellen, in dieser Reihenfolge:
+Drei Stellen, in dieser Reihenfolge:
 
-1. **`services/energie_profil/aggregator.py`** — `kwh_pro_stunde` trägt alle vier Eingänge bereits
-   (`wallbox` · `netzbezug` · `einspeisung` · `entladung_batterie`, sämtlich positive Zähler-Deltas).
-   Kein neuer Snapshot-Zugriff nötig.
-2. **`TagesZusammenfassung`** — Ablage des abgeleiteten Tageswerts samt `source_provenance`-Eintrag
-   (Rahmenbedingung 4). Neue Spalten: die drei Pflicht-Stellen beachten.
-3. **`services/monats_fakten.py`** — den abgeleiteten Wert **nur** heranziehen, wo der IMD-Wert
-   fehlt (Rahmenbedingung 1).
+1. **`services/energie_profil/aggregator.py`** — die Stundenschleife sammelt die vier Eingänge und
+   ruft `leite_pv_anteil_ab`. Die Vorzeichen-Übersetzung macht der Layer-Helfer
+   `stunde_aus_bilanzwerten`, **nicht** ein Ausdruck in der Schleife (Begründung unten).
+2. **`TagesZusammenfassung`** — zwei Spalten `emob_ladung_{pv,netz}_abgeleitet_kwh` + Migration +
+   `source_provenance`-Marke (Rahmenbedingung 4).
+3. **`services/monats_fakten.py`** — `EmobFakten` zieht den Wert heran, wo kein gepflegter existiert,
+   und weist das mit `ladung_anteil_abgeleitet` aus (Rahmenbedingung 1).
 
-Danach Rahmenbedingung 7 (Prognose).
+**Zwei Befunde haben die Bauform gegenüber dem Schnitt vom Vormittag geändert:**
+
+⚠ **Die Eingänge sind NICHT „sämtlich positiv".** Der Satz galt für die Kategorie-Deltas
+(`lts_aggregator.py:160-166` verwirft negative), **nicht** für den Ausgang: `batterie_netto` ist
+`ladung − entladung`, die Entladung also **negativ**. Der Layer verlangt sie positiv und klemmt eine
+negative mit `max(0, …)` auf 0 — die Speicherdeckung wäre **still** ausgefallen und die Regel
+heimlich eine andere (netzbasiert + Einspeisung, an Gernots Anlage +9 pp). Deshalb übersetzt
+`stunde_aus_bilanzwerten` aus der **Spalten-Konvention** (`batterie_kw_spalte`, Entladung positiv)
+und ist mit eigenen Proben abgesichert. Dieselbe Klasse wie die F-14-Fixture vom selben Tag.
+
+⚠ **Übernommen wird der ANTEIL, nicht die Kilowattstunde.** Tagesebene und Monatszeile müssen nicht
+dieselbe Ladungsmenge kennen. Wer die abgeleiteten kWh direkt in die Monatszeile schreibt, zerbricht
+die Trias `ladung == pv + netz` — und in der einen Richtung entsteht genau der #262-Fehler
+(PV-Anteil > 100 %). Der Anteil auf die kanonische `ladung_kwh` angewandt hält sie exakt geschlossen.
+
+**Reichweite (Entscheid Gernot, 2026-08-08):** Die Tagesebene wird **bedingt nachgeladen** — nur wenn
+ein Monat Heimladung ohne gepflegten PV-Anteil trägt (`_RohMonat.emob_ladung_ohne_pv_anteil`, liest
+nur bereits gefaltete Rohzeilen). Ohne dieses Nachladen sähe **genau eine** Sicht einen PV-Anteil
+(Cockpit → Monat, der einzige Aufrufer mit `inkl_nur_tageswerte`), während Komponenten-Hub,
+CO₂-Bilanz und E-Auto-Ersparnis weiter 0 % behaupteten. Eine Anlage ohne E-Mobilität zahlt nichts.
+⚠ Die **Grundgesamtheit** erweitert das Nachladen ausdrücklich **nicht** — dafür bleibt das Flag
+zuständig (N-121).
+
+**Was sich für Anwender ändert:** Wer den PV-Anteil bisher gepflegt hat (evcc-Nutzer), sieht
+**nichts** — der echte Wert gewinnt. Wer ihn nicht hatte, sah bisher 0 % PV und sieht künftig einen
+abgeleiteten Anteil: der Komponenten-Hub zeigt statt 0 % einen Wert, die E-Mob-Netzladung in der
+CO₂-Bilanz sinkt, die E-Auto-Ersparnis steigt. **Gehört in die Release-Kommunikation.**
+⚠ **Rückwirkend passiert nichts** (Rahmenbedingung 5): Bestandstage tragen NULL, und NULL heißt
+„keine Aussage". Ein Monat bewegt sich erst, wenn seine Tage neu aggregiert wurden.
+
+Offen bleibt **Rahmenbedingung 7** (Prognose, **N-188**): solange `pv_ladeanteil_prozent` von Hand
+gepflegt wird, steht die Prognose-Achse neben der neuen Rechnung.

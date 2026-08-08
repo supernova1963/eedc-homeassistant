@@ -205,6 +205,26 @@ class TagesZusammenfassung(Base):
     # Quelle: EU Weekly Oil Bulletin. Für E-Auto-Ersparnisberechnung.
     kraftstoffpreis_euro: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
+    # PV-/Netz-Anteil der Heimladung — ABGELEITET, nicht gemessen (N-141 Weg c,
+    # `docs/KONZEPT-WALLBOX-EAUTO.md` Phase 5). Eine Wallbox zählt Kilowatt-
+    # stunden, nicht deren Herkunft; wer kein evcc betreibt, hatte für den
+    # PV-Anteil gar keine Quelle. Der Aggregator rechnet ihn nach der Regel
+    # `einspeise_deckung` aus den Stundengrößen dieses Tages
+    # (SoT `core/berechnungen/pv_anteil_ladung.py`).
+    #
+    # ⚠ **Ein gepflegter echter Wert gewinnt immer** — diese beiden Spalten
+    # füllen nur Lücken (`services/monats_fakten.py`), sie überschreiben nichts.
+    # `None` heißt „keine Aussage", ausdrücklich NICHT 0 kWh PV: genau diese
+    # Behauptung löst der Fund auf.
+    #
+    # ⚠ Ihre Summe ist die Ladung der **gedeckten** Stunden, nicht zwingend die
+    # Tagesladung — Stunden ohne Netzbezugs-/Einspeisungswert zählen nicht mit.
+    # Wie viele es waren, steht in der Provenance (`stunden_gedeckt`/
+    # `stunden_mit_ladung`), damit eine Teilsumme sich als solche zu erkennen
+    # gibt (P4-Linie).
+    emob_ladung_pv_abgeleitet_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    emob_ladung_netz_abgeleitet_kwh: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Per-Komponenten Tages-kWh (Summe der stündlichen kW-Werte)
     # z.B. {"pv_3": 22.5, "waermepumpe_5": -8.3, "wallbox_7": -12.1, "haushalt": -15.2}
     # Vorzeichen: positiv = Erzeugung (PV), negativ = Verbrauch (WP, Wallbox, etc.)

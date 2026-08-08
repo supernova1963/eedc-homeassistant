@@ -49,11 +49,16 @@ def _seed_row(
     writer: str,
     skip_columns: frozenset[str],
     json_subkey_columns: tuple[str, ...],
+    abgeleitet_je_feld: dict[str, str] | None = None,
 ) -> None:
     """Setzt source_provenance auf eine fresh Aggregat-Row.
 
     Pro Row alle non-None Top-Level-Spalten + alle existierenden Sub-Keys
     der genannten JSON-Spalten unter dem übergebenen Source-Tag.
+
+    `abgeleitet_je_feld` markiert einzelne Spalten als gerechnet statt
+    gemessen — der Aggregator-Source-Tag beschreibt sonst den *Lauf*, nicht
+    die *Herkunft* der Zahl.
     """
     fields: list[str] = []
     json_subkeys: dict[str, list[str]] = {}
@@ -77,6 +82,7 @@ def _seed_row(
         writer=writer,
         fields=fields or None,
         json_subkeys=json_subkeys or None,
+        abgeleitet_je_feld=abgeleitet_je_feld or None,
     )
 
 
@@ -85,6 +91,7 @@ def seed_tz_provenance(
     *,
     writer: str,
     source: str = "auto:monatsabschluss",
+    abgeleitet_je_feld: dict[str, str] | None = None,
 ) -> None:
     """Setzt source_provenance auf eine fresh TagesZusammenfassung-Row."""
     _seed_row(
@@ -93,6 +100,7 @@ def seed_tz_provenance(
         writer=writer,
         skip_columns=_TZ_SKIP_COLUMNS,
         json_subkey_columns=_TZ_JSON_SUBKEY_COLUMNS,
+        abgeleitet_je_feld=abgeleitet_je_feld,
     )
 
 
