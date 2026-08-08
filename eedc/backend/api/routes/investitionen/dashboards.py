@@ -7,7 +7,7 @@ Balkonkraftwerk, Sonstiges) plus die Investition-Monatsdaten-Abfrage.
 in investitionen/__init__.py aggregiert.
 """
 
-from typing import Optional, Any, NamedTuple
+from typing import Optional, Any, Iterable, NamedTuple
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,9 +102,18 @@ router = APIRouter()
 
 
 class GewichtetePreise(NamedTuple):
-    """Mengengewichtete Ø-Tarife einer Periode, beide Preisseiten (ct/kWh)."""
+    """Mengengewichtete Ø-Tarife einer Periode, beide Preisseiten (ct/kWh).
+
+    ``bezug_lookup`` trägt zusätzlich die **ungemittelten** Monatspreise, aus
+    denen der Ø entstanden ist. Er geht an
+    ``berechne_eauto_ersparnis_periode`` weiter, damit die Preisachse dort
+    aufgelöst wird und nicht hier — sonst gäbe es die Mittelung an zwei Orten
+    (F-18/N-181). Zwei getrennte Query-Schleifen über dieselben Monate wären
+    der Preis dafür gewesen; so bleibt es bei einer.
+    """
     bezug_cent: float
     einspeise_cent: float
+    bezug_lookup: dict[tuple[int, int], float] = {}
 
 
 async def _gewichtete_monatspreise(
@@ -148,25 +157,29 @@ async def _gewichtete_monatspreise(
     """
     summe_gewicht = sum(g for g in gewichte.values() if g and g > 0)
     if summe_gewicht <= 0:
-        return GewichtetePreise(fallback_bezug, fallback_einspeise)
+        return GewichtetePreise(fallback_bezug, fallback_einspeise, {})
 
     gewichteter_bezug = 0.0
     gewichtete_einspeisung = 0.0
+    bezug_lookup: dict[tuple[int, int], float] = {}
     for (jahr, monat), gewicht in gewichte.items():
         if not gewicht or gewicht <= 0:
             continue
         m_tarife = await lade_tarife_fuer_anlage(
             db, anlage_id, target_date=date(jahr, monat, 1)
         )
-        gewichteter_bezug += resolve_strompreis_for_komponente(
+        m_bezug = resolve_strompreis_for_komponente(
             m_tarife, verwendung, fallback=fallback_bezug
-        ) * gewicht
+        )
+        bezug_lookup[(jahr, monat)] = m_bezug
+        gewichteter_bezug += m_bezug * gewicht
         gewichtete_einspeisung += resolve_einspeiseverguetung_cent(
             m_tarife, fallback=fallback_einspeise
         ) * gewicht
     return GewichtetePreise(
         gewichteter_bezug / summe_gewicht,
         gewichtete_einspeisung / summe_gewicht,
+        bezug_lookup,
     )
 
 
@@ -459,15 +472,34 @@ async def get_eauto_dashboard(
             gesamt_extern_ladung = share.extern_kwh
             gesamt_extern_kosten = share.extern_euro
 
-        # ADR-002/P8: Tarif über die Monate der Periode mitteln. Beim Pool-Fall
-        # nach km gewichten — das ist der Schlüssel, nach dem auch attribuiert
-        # wird; sonst nach der Netzladung des Monats.
-        eauto_strompreis_cent, eauto_einspeise_cent = await _gewichtete_monatspreise(
+        # ADR-002/P8: Tarif über die Monate der Periode mitteln.
+        #
+        # F-18: die Gewichte sind seit 2026-08-08 **auch im Pool-Fall** die
+        # Netzladung je Monat. Vorher fiel der Pool-Fall auf km zurück, weil
+        # `attribute_emob_pool_by_km` nur einen Gesamtwert verteilt — die
+        # monatliche Aufteilung existiert aber sehr wohl, `wb_pool_by_month`
+        # baut sie ein paar Zeilen weiter oben für die Detailtabelle. Der
+        # Unterschied ist nicht akademisch: die Netzquote je km ist im Winter
+        # deutlich höher, ein km-gewichteter Preis verschiebt sich damit
+        # gegenüber dem kWh-gewichteten. Und Cockpit → Jahr rechnet jetzt mit
+        # derselben Größe — ohne diese Angleichung wäre die eine Drift durch
+        # eine andere ersetzt worden.
+        netz_gewichte_pool = {
+            k: v.netz_kwh for k, v in wb_pool_by_month.items() if v.netz_kwh > 0
+        }
+        preis_gewichte = netz_gewichte_pool if ist_pool else netz_pro_monat
+        # Ohne jede Netzladung (reines PV-Laden) bleibt km der einzige
+        # Schlüssel, den es gibt — ein leeres Gewicht ergäbe den Fallback.
+        if not preis_gewichte:
+            preis_gewichte = km_gewichte
+        _preise = await _gewichtete_monatspreise(
             db, anlage_id, "wallbox",
-            km_gewichte if ist_pool else netz_pro_monat,
+            preis_gewichte,
             fallback_bezug=strompreis_cent,
             fallback_einspeise=einspeise_verg_fallback_cent,
         )
+        eauto_strompreis_cent = _preise.bezug_cent
+        eauto_einspeise_cent = _preise.einspeise_cent
 
         # Heim-Ladung (Wallbox) = PV + Netz
         gesamt_heim_ladung = gesamt_pv_ladung + gesamt_netz_ladung
@@ -489,6 +521,11 @@ async def get_eauto_dashboard(
             wallbox_strompreis_cent=eauto_strompreis_cent,
             eauto_parameter=params,
             monats_benzinpreis_lookup=benzinpreis_lookup,
+            # F-18: die Auflösung liegt im Layer — dieselbe Funktion, die
+            # Cockpit, Aussichten und HA-Export rufen. Der Ø oben bleibt für
+            # die Anzeige und den V2H-Spread.
+            monats_strompreis_lookup=_preise.bezug_lookup,
+            netz_pro_monat=[(j, m, g) for (j, m), g in preis_gewichte.items()],
             # #331: Σ `verbrauch_kwh` der Periode — der explizite elektrische
             # Fahrverbrauch dieses Fahrzeugs, nicht seine Ladung.
             fahrverbrauch_kwh_gesamt=gesamt_verbrauch or None,

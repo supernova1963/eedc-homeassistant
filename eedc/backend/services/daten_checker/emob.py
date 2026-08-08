@@ -4,6 +4,10 @@ Daten-Checker — E-Mob-Pool-Pflege & Sensor-Doppelmapping (`EmobChecks`).
 Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 """
 
+from datetime import date, timedelta
+
+from sqlalchemy import select
+
 from backend.models.anlage import Anlage
 
 from .kategorien import CheckErgebnis, CheckKategorie, CheckSeverity
@@ -320,3 +324,125 @@ class EmobChecks:
                 ),
             ))
         return ergebnisse
+
+    # ── N-186: die Alt-Tage von F-14 ────────────────────────────────────────
+    #: Unterhalb dieser Schwelle ist die Überschneidung Krümel (Rundung,
+    #: Standby) und kein doppelt gezählter Ladevorgang.
+    EMOB_DOPPEL_MIN_KWH_PRO_TAG = 1.0
+    #: Fenster der Rückschau — dieselbe Größenordnung wie der Drift-Check.
+    EMOB_DOPPEL_FENSTER_TAGE = 180
+
+    async def _check_emob_doppelzaehlung_tage(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """Gespeicherte Tage, an denen Wallbox UND E-Auto dieselbe Ladung tragen.
+
+        F-14 (#356) hat die strukturelle Quellen-Regel gebaut: trägt eine
+        Wallbox die Ladeenergie, ist sie die Quelle. Das gilt für **neue**
+        Tage. Was vorher geschrieben wurde, steht weiter in
+        ``TagesZusammenfassung.komponenten_kwh`` — an Gernots Anlage am
+        2026-08-06 mit 29,32 statt 12,00 kWh.
+
+        ⚠ **Warum ein Checker und keine Start-Migration:** die Heilung
+        überschreibt Tages- und Stundenwerte. Ein Lauf, der beim Hochfahren
+        ungefragt Messwerte ersetzt, ist genau der „große Heiler-Knopf", den
+        dieses Projekt nicht will ([[feedback_kein_grosser_heiler_knopf]] ·
+        [[feedback_reparatur_statt_loesch_features]]). Der Anwender sieht den
+        Befund, die betroffenen Tage und entscheidet.
+
+        ⚠ **Kein Befund heißt hier nicht „geprüft und sauber", sondern
+        „geprüft, soweit Tageswerte vorliegen"** — Tage ohne
+        ``komponenten_kwh`` kann diese Prüfung nicht bewerten.
+        """
+        from backend.models.tages_energie_profil import TagesZusammenfassung
+        from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
+
+        kat = CheckKategorie.EMOB_DOPPELZAEHLUNG_TAGE.value
+
+        eautos = [i for i in anlage.investitionen if i.typ == "e-auto"]
+        wallboxen = [i for i in anlage.investitionen if i.typ == "wallbox"]
+        if not eautos or not wallboxen:
+            return []
+
+        bis = date.today()
+        von = bis - timedelta(days=self.EMOB_DOPPEL_FENSTER_TAGE)
+        rows = (await self.db.execute(
+            select(TagesZusammenfassung).where(
+                TagesZusammenfassung.anlage_id == anlage.id,
+                TagesZusammenfassung.datum >= von,
+                TagesZusammenfassung.datum <= bis,
+            ).order_by(TagesZusammenfassung.datum)
+        )).scalars().all()
+
+        wb_keys = {f"wallbox_{w.id}" for w in wallboxen}
+        ea_keys = {f"eauto_{e.id}" for e in eautos}
+
+        befunde: list[tuple[date, float, float]] = []
+        for tz in rows:
+            komp = tz.komponenten_kwh or {}
+            # Senken stehen negativ im JSON (Butterfly-Konvention) — der Betrag
+            # ist die Energie. Genau diese Vorzeichenfrage hat bei #356 eine
+            # Invariante blind gemacht, deshalb hier ausdrücklich `abs`.
+            wb = sum(abs(v) for k, v in komp.items()
+                     if k in wb_keys and isinstance(v, (int, float)))
+            ea = sum(abs(v) for k, v in komp.items()
+                     if k in ea_keys and isinstance(v, (int, float)))
+            if min(wb, ea) >= self.EMOB_DOPPEL_MIN_KWH_PRO_TAG:
+                befunde.append((tz.datum, wb, ea))
+
+        if not befunde:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung=(
+                    f"Keine doppelt gezählten Ladetage in den letzten "
+                    f"{self.EMOB_DOPPEL_FENSTER_TAGE} Tagen"
+                ),
+            )]
+
+        summe_zuviel = sum(min(wb, ea) for _d, wb, ea in befunde)
+        aeltester, neuester = befunde[0][0], befunde[-1][0]
+        range_von = max(
+            aeltester, neuester - timedelta(days=REAGGREGATE_RANGE_MAX_DAYS - 1)
+        )
+        rest_aelter = sum(1 for d, _w, _e in befunde if d < range_von)
+
+        details = (
+            f"An {len(befunde)} Tag(en) tragen Wallbox und E-Auto beide eine "
+            f"Ladung — insgesamt rund {summe_zuviel:.0f} kWh, die im "
+            f"Tagesverlauf doppelt erscheinen. Seit v4.0.11 zählt eedc eine "
+            f"Ladung nur noch einmal (die Wallbox ist die Quelle); diese Tage "
+            f"wurden vorher geschrieben und bleiben stehen, bis sie neu "
+            f"berechnet werden. "
+            f"„Zeitraum neu aggregieren“ holt {range_von.isoformat()} bis "
+            f"{neuester.isoformat()} nach (max. "
+            f"{REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
+        )
+        if rest_aelter > 0:
+            details += (
+                f" {rest_aelter} ältere(r) Tag(e) liegen außerhalb des "
+                f"Fensters — nach dem Lauf erneut prüfen."
+            )
+        details += (
+            " Reichweite: der Lauf heilt Tages- und Stundenwerte, NICHT die "
+            "Monatswerte."
+        )
+
+        beispiele = ", ".join(
+            f"{d.isoformat()} (Wallbox {wb:.1f} + E-Auto {ea:.1f} kWh)"
+            for d, wb, ea in sorted(befunde, key=lambda x: min(x[1], x[2]),
+                                    reverse=True)[:3]
+        )
+        return [CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            meldung=(
+                f"{len(befunde)} Tag(e) zählen dieselbe Ladung doppelt "
+                f"({aeltester.isoformat()} … {neuester.isoformat()})"
+            ),
+            details=f"{details} Größte Fälle: {beispiele}.",
+            link="/einstellungen/energieprofil",
+            action_kind="reaggregate_range",
+            action_params={
+                "anlage_id": anlage.id,
+                "von": range_von.isoformat(),
+                "bis": neuester.isoformat(),
+            },
+            action_label="Zeitraum neu aggregieren",
+        )]

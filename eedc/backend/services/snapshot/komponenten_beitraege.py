@@ -186,11 +186,52 @@ def basis_beitraege(
     return beitraege
 
 
+def wallbox_deckt_ladung_ab(
+    investitionen: Iterable,
+    sensor_mapping: Optional[dict],
+    *,
+    ist_verfuegbar: Optional[Callable[[Any, str], bool]] = None,
+) -> bool:
+    """Trägt irgendeine Wallbox der Anlage einen kWh-Ladezähler? (N-196)
+
+    Die strukturelle Quellen-Regel der E-Mob-Fläche, hier für den **Zähler**-
+    pfad. Sie existierte bis 2026-08-08 nur im Leistungspfad
+    (`services/live_sensor_config.py`) und auf der Monatsebene
+    (`eauto_wirtschaftlichkeit.get_emob_heimladung_canonical`) — der Zählerpfad
+    schützte allein über ``parent_investition_id``.
+
+    Bewusst **strukturell** (gibt es einen Wallbox-Ladezähler?) und nicht
+    magnitudenabhängig (wer misst mehr?): bei Streudaten wählt der Vergleich
+    die falsche Quelle, das war der Befund von #262.
+
+    Args:
+        investitionen: alle Investitionen der Anlage (der Aufrufer filtert
+            nicht — Aktivität spielt für die Existenz eines Zählers keine
+            Rolle, und ein stillgelegtes Gerät hat keine Tageswerte mehr).
+        sensor_mapping: ``anlage.sensor_mapping``.
+        ist_verfuegbar: ``(inv, feld) -> bool`` für den MQTT-/Standalone-Pfad,
+            der seine Verfügbarkeit nicht aus dem Sensor-Mapping zieht.
+    """
+    inv_map = ((sensor_mapping or {}).get("investitionen") or {})
+    for inv in investitionen or ():
+        if getattr(inv, "typ", None) != "wallbox":
+            continue
+        if ist_verfuegbar is not None:
+            if ist_verfuegbar(inv, "ladung_kwh"):
+                return True
+            continue
+        felder = (inv_map.get(str(getattr(inv, "id", ""))) or {}).get("felder") or {}
+        if _is_sensor_mapping(felder.get("ladung_kwh")):
+            return True
+    return False
+
+
 def investition_beitraege(
     inv,
     sensor_mapping_for_inv: dict,
     *,
     ist_verfuegbar: Optional[Callable[[str], bool]] = None,
+    wallbox_deckt_ladung: bool = False,
 ) -> list[KomponentenBeitrag]:
     """Per-Typ-Beiträge einer Investition zur `komponenten_kwh`.
 
@@ -286,6 +327,23 @@ def investition_beitraege(
         # die Ladung — wir überspringen das E-Auto, damit nicht doppelt
         # gezählt wird (spiegelt Live-Pfad).
         if getattr(inv, "parent_investition_id", None) is not None:
+            return []
+        # N-196: dieselbe STRUKTURELLE Regel wie im Leistungspfad
+        # (`live_sensor_config.py`, F-14/#356) — trägt eine Wallbox die
+        # Ladeenergie, ist sie die Quelle, auch ohne gesetzten Parent.
+        #
+        # Der Zählerpfad kannte bis 2026-08-08 nur die Parent-Bedingung eine
+        # Zeile höher. Ein E-Auto mit eigenem kWh-Zähler **ohne** Parent lief
+        # deshalb an ihr vorbei und schrieb denselben Ladevorgang ein zweites
+        # Mal in `komponenten_kwh` — genau die Masche, durch die F-14 im
+        # Leistungspfad fiel (29,32 statt 12,00 kWh an einem Tag).
+        #
+        # ⚠ **Ohne heute messbaren Schaden, und das steht hier bewusst:** an
+        # der einzigen vermessenen Anlage hat das E-Auto gar keinen kWh-Zähler
+        # gemappt, die Doppelzählung lief dort über `leistung_w`. Das ist ein
+        # Argument für Symmetrie, nicht gegen sie — eine Regel, die nur einer
+        # von zwei Pfaden kennt, ist die nächste Drift-Quelle.
+        if wallbox_deckt_ladung:
             return []
         # Either-Or: erst ladung_kwh, sonst fallback verbrauch_kwh — vom
         # Aggregator über `fallback_gruppe` ausgewertet (genau ein Delta

@@ -765,8 +765,60 @@ diesem Feature tragen `NULL`, und `NULL` heißt „keine Aussage", nicht „kein
 (an der Referenzanlage 218 von 218 Stunden-Deltas ganzzahlig), trifft keine Rechnung die einzelne
 Stunde — über den Monat ist die Ableitung brauchbar, über die Stunde nicht.
 
-⚠ **Offen: die Prognose zieht noch nicht mit** (N-188). Solange `pv_ladeanteil_prozent` von Hand
-gepflegt wird, können Prognose- und IST-Achse verschiedene Anteile nennen.
+> ⚠ **Korrektur (2026-08-08):** hier stand bis dahin „Offen: die Prognose zieht noch nicht mit
+> (N-188)". Das ist seit demselben Tag erledigt und vier Absätze weiter oben beschrieben — der Satz
+> stammte aus dem Paket davor und ist beim Nachziehen stehen geblieben. Ein Dokument, das an zwei
+> Stellen dasselbe verschieden behauptet, ist schlechter als eines, das schweigt.
+
+#### Welcher Strompreis die Ladung bewertet (F-18 · ADR-002/P8)
+
+Die Netzladung eines E-Autos wird mit dem Tarif bewertet, der **im jeweiligen Monat galt** — nicht
+mit dem heutigen. SoT ist `services/eauto_wirtschaftlichkeit.aufgeloester_strompreis_cent`, gerufen
+aus `berechne_eauto_ersparnis_periode`.
+
+Bis 2026-08-08 löste jede Sicht diese eine Größe selbst auf, und zwar auf **vier** Arten:
+
+| Sicht | vorher | jetzt |
+| --- | --- | --- |
+| Cockpit → Jahr | heutiger Wallbox-Tarif | Monatstarif inkl. Flex-Ø |
+| HA-Export (Anlagen-Sensoren) | heutiger **allgemeiner** Tarif | Monats-Wallbox-Tarif |
+| HA-Export (Fahrzeug-Sensor) | heutiger **allgemeiner** Tarif | Monats-Wallbox-Tarif |
+| Komponenten-Hub | mengengewichteter Monats-Ø | unverändert (jetzt über den SoT) |
+| Auswertungen → Aussichten | Monatstarif, aber **allgemein** | Monats-Wallbox-Tarif inkl. Flex-Ø |
+
+**Gewichtet wird nach der Netzladung je Monat**, nicht nach Kilometern: der Preis bepreist
+Kilowattstunden. Nur wo eine Monatsaufteilung der Netzladung nicht existiert — bei reinem PV-Laden
+— fällt die Mittelung auf die km zurück, den Schlüssel, nach dem der Wallbox-Pool ohnehin
+attribuiert.
+
+> ⚠ **Für eine Anlage ohne Tarifwechsel bewegt sich nichts.** Der mengengewichtete Ø eines
+> einzigen Tarifs *ist* dieser Tarif. Wer den Tarif gewechselt hat, sieht dagegen vier
+> HA-Sensoren einmalig springen (`e_auto_ersparnis_vs_benzin_euro`, `netto_ertrag_euro`,
+> `roi_prozent`, `amortisation_jahre`) — an einer vermessenen Anlage um −41,10 €.
+
+> ⚠ **Der P8-Wächter deckt diese Fläche nicht ab.** Alle vier beteiligten Dateien stehen in
+> `P8_BASELINE_AUSNAHMEN`, weil sie den heutigen Tarif für die Hochrechnung nach vorn auch
+> brauchen. Gesichert wird die Preisachse deshalb durch einen eigenen Wächter
+> (`test_wurzelmuster_konformitaet.py::test_p8_emob_ersparnis_bekommt_die_monatspreise`, baumweit)
+> und den Sichten-Vergleich `test_emob_preisachse_sichten_symmetrie.py`.
+
+#### Wo die Wallbox die Quelle ist (F-14 · N-196)
+
+Trägt eine Wallbox die Ladeenergie, ist **sie** die Quelle — auch ohne gesetzte Zuordnung
+(`parent_investition_id`). Diese Regel gilt seit 2026-08-08 in allen drei Pfaden:
+
+| Pfad | Ort |
+| --- | --- |
+| Monatsebene | `eauto_wirtschaftlichkeit.get_emob_heimladung_canonical` |
+| Tages-**Leistungs**pfad | `services/live_sensor_config.py` (#356) |
+| Tages-**Zähler**pfad | `snapshot/komponenten_beitraege.wallbox_deckt_ladung_ab` |
+
+Vorher kannte der Zählerpfad nur die Zuordnung; ein E-Auto mit eigenem kWh-Zähler **ohne** Parent
+lief an ihr vorbei, und derselbe Ladevorgang stand zweimal im Tagesverlauf. Bereits gespeicherte
+Tage bleiben davon unberührt — dafür meldet der Daten-Checker sie (Kategorie
+`emob_doppelzaehlung_tage`) und bietet „Zeitraum neu aggregieren" an. **Bewusst kein
+Start-Migrationslauf:** die Heilung überschreibt Messwerte und bleibt eine Entscheidung des
+Anwenders.
 
 ### 3.5 Wärmepumpe-Einsparung
 

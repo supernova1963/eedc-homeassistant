@@ -4,7 +4,7 @@ Strompreise API Routes
 CRUD Endpoints für Stromtarife.
 """
 
-from typing import Optional
+from typing import Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +109,40 @@ async def lade_tarife_fuer_anlage(
         tarife["wallbox"] = allgemein
 
     return tarife
+
+
+async def monats_strompreis_lookup(
+    db: AsyncSession,
+    anlage_id: int,
+    verwendung: str,
+    monate: Iterable[tuple[int, int]],
+    fallback_bezug: float,
+) -> dict[tuple[int, int], float]:
+    """``{(jahr, monat): netzbezugspreis_cent}`` — der Tarif, der DAMALS galt.
+
+    F-18: bis 2026-08-08 war die Monatstarif-Auflösung in
+    ``_gewichtete_monatspreise`` eingeschlossen und nur über dessen
+    Ø-Rückgabe erreichbar. Cockpit → Jahr und beide HA-Export-Pfade kamen
+    deshalb gar nicht an sie heran und rechneten mit dem **heutigen** Tarif.
+    Als eigener Helfer ist sie das, was der Layer-SoT
+    ``aufgeloester_strompreis_cent`` als Eingabe erwartet — dieselbe Rolle,
+    die ``Monatsdaten.kraftstoffpreis_euro`` auf der Benzinseite längst hat.
+
+    Bewusst **ohne** Flex-Ø: der ``resolve_netzbezug_preis_cent``-Override
+    braucht die Monatsdaten-Zeile, die hier nicht vorliegt. Wer sie hat
+    (Cockpit über ``f.tarif.wallbox_preis_effektiv_cent``), liefert den
+    genaueren Wert — beide sind derselbe Stammtarif, nur einmal mit und
+    einmal ohne den abgerechneten Durchschnitt.
+    """
+    lookup: dict[tuple[int, int], float] = {}
+    for jahr, monat in dict.fromkeys(monate):
+        m_tarife = await lade_tarife_fuer_anlage(
+            db, anlage_id, target_date=date(jahr, monat, 1)
+        )
+        lookup[(jahr, monat)] = resolve_strompreis_for_komponente(
+            m_tarife, verwendung, fallback=fallback_bezug
+        )
+    return lookup
 
 
 def resolve_netzbezug_preis_cent(monatsdaten_obj, tarif_preis_cent: float) -> float:

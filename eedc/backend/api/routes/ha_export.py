@@ -44,14 +44,16 @@ from backend.services.finanz_zeilen import baue_finanz_zeile
 from backend.services.monats_fakten import finanz_zeile_eingabe, lade_monats_fakten
 from backend.api.routes.strompreise import (
     lade_tarife_fuer_anlage,
+    monats_strompreis_lookup,
     resolve_strompreis_for_komponente,
 )
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.services.eauto_wirtschaftlichkeit import (
-    attribute_month_share,
-    build_eauto_km_by_month,
-    build_wb_pool_by_month,
+    EmobPoolCtx,
+    berechne_eauto_ersparnis_periode,
+    build_emob_pool_ctx,
+    emob_month_share,
     eigener_verbrauch_l_100km,
 )
 from backend.services.emob_ladeanteil import reichere_monatszeilen_an
@@ -203,48 +205,14 @@ class AutoPublishRequest(BaseModel):
 # Hilfsfunktionen für Berechnungen
 # =============================================================================
 
-@dataclass
-class _EmobPoolCtx:
-    """Phase-2a-Pool-Kontext einer Anlage für die HA-Sensor-Berechnung.
-
-    Liegt die E-Mob-Heimladung kanonisch auf der Wallbox (evcc-Setup), sehen die
-    per-E-Auto-Sensoren sonst leere IMD → PV-Anteil fehlt, Ersparnis überhöht
-    (kein Netz-Strom abgezogen). Mit diesem Kontext zieht jede E-Auto-Sicht den
-    km-anteiligen Wallbox-Pool — dieselbe Logik wie Cockpit/Dashboards.
-
-    ``daten_by_key`` trägt seit F-16 die Monatszeilen **mit** abgeleitetem
-    PV-Anteil. Es liegt hier und nicht bei jedem Aufrufer, weil der Torwächter
-    („ein gepflegter Wert gewinnt") über E-Auto **und** Wallbox eines Monats
-    zusammen entscheidet — die per-Investition-Sensor-Schleife sieht aber immer
-    nur ein Gerät. Wer dort selbst anreicherte, hielte eine gepflegte
-    Wallbox-Zeile für nicht vorhanden und schätzte über eine Messung hinweg.
-    """
-    use_wb_pool: bool
-    wb_pool_by_month: dict
-    eauto_km_by_month: dict
-    daten_by_key: dict = field(default_factory=dict)
-
-
-def _build_emob_pool_ctx(inv_daten: dict, eauto_ids: set, wallbox_ids: set) -> _EmobPoolCtx:
-    """Baut den Pool-Kontext aus bereits aktiv-gefilterten IMD
-    (`{(inv_id, jahr, monat): verbrauch_daten}`). `use_wb_pool` strukturell:
-    True, sobald eine Wallbox Heimladung trägt (Entscheidung 1)."""
-    wb_pool_by_month = build_wb_pool_by_month(
-        (jahr, monat, daten)
-        for (inv_id, jahr, monat), daten in inv_daten.items()
-        if inv_id in wallbox_ids
-    )
-    eauto_km_by_month = build_eauto_km_by_month(
-        (jahr, monat, daten)
-        for (inv_id, jahr, monat), daten in inv_daten.items()
-        if inv_id in eauto_ids
-    )
-    use_wb_pool = any(
-        (s.pv_kwh + s.netz_kwh) > 0 for s in wb_pool_by_month.values()
-    )
-    return _EmobPoolCtx(
-        use_wb_pool, wb_pool_by_month, eauto_km_by_month, dict(inv_daten)
-    )
+# F-17: Pool-Kontext + Monats-Share liegen seit 2026-08-08 im Layer-SoT
+# (`services/eauto_wirtschaftlichkeit`). Sie standen hier privat — und waren
+# damit für `aussichten.py` unerreichbar, das als einzige der fünf E-Mob-Sichten
+# gar keine Pool-Attribution hatte. Die Namen bleiben lokal gebunden, damit die
+# Aufrufstellen unverändert lesbar sind.
+_EmobPoolCtx = EmobPoolCtx
+_build_emob_pool_ctx = build_emob_pool_ctx
+_emob_month_share = emob_month_share
 
 
 async def _reichere_emob_imd_an(
@@ -310,21 +278,6 @@ async def _load_emob_pool_ctx(db: AsyncSession, investitionen) -> Optional[_Emob
         {i.id for i in emob if i.typ == "e-auto"},
         wallbox_ids,
     )
-
-
-def _emob_month_share(ctx: Optional[_EmobPoolCtx], typ: str, km: float, jahr: int, monat: int):
-    """km-anteiliger Wallbox-Pool-Anteil eines E-Autos für (jahr, monat) — oder
-    None, wenn keine Pool-Attribution greift (kein Kontext, keine Wallbox-
-    Heimladung, oder typ != e-auto). Dann verwendet der Aufrufer die eigenen
-    IMD-Werte. Die Wallbox-Sicht behält immer ihre eigenen Daten (= Quelle)."""
-    if ctx is None or not ctx.use_wb_pool or typ != "e-auto":
-        return None
-    ms = attribute_month_share(
-        ctx.wb_pool_by_month.get((jahr, monat)),
-        km,
-        ctx.eauto_km_by_month.get((jahr, monat), 0),
-    )
-    return ms if (ms.pv_kwh + ms.netz_kwh) > 0 else None
 
 
 async def calculate_anlage_sensors(
@@ -696,6 +649,28 @@ async def calculate_anlage_sensors(
         _tarife, "waermepumpe", fallback=netzbezug_preis_cent
     )
 
+    # F-18: dasselbe für die WALLBOX. Die WP hatte ihre Monats-Auflösung seit
+    # v4.0.5 (#326), die E-Mob-Seite nicht — `bisherige_eauto_ersparnis` unten
+    # bewertete die Netzladung der ganzen Historie mit dem HEUTIGEN Tarif und
+    # driftete damit gegen den Komponenten-Hub, der längst mittelte. Der Wert
+    # steckt über `historischer_netto_ertrag` in vier ausgelieferten Sensoren
+    # (`netto_ertrag_euro` · `roi_prozent` · `amortisation_jahre` und dem
+    # per-Investition-Sensor `e_auto_ersparnis_vs_benzin_euro`).
+    wallbox_preis_by_periode: dict[tuple[int, int], float] = {}
+    for (_inv_id, _p_jahr, _p_monat) in historische_inv_daten:
+        _periode = (_p_jahr, _p_monat)
+        if _periode in wallbox_preis_by_periode:
+            continue
+        _p_tarife = await lade_tarife_fuer_anlage(
+            db, anlage.id, target_date=date(_p_jahr, _p_monat, 1)
+        )
+        wallbox_preis_by_periode[_periode] = resolve_strompreis_for_komponente(
+            _p_tarife, "wallbox", fallback=netzbezug_preis_cent
+        )
+    wallbox_netzbezug_preis_cent = resolve_strompreis_for_komponente(
+        _tarife, "wallbox", fallback=netzbezug_preis_cent
+    )
+
     # WP-Alternativkosten (vs. Gas/Öl) über den Berechnungs-Layer (ADR-001):
     # per-WP-Parameter (kein last-write-wins über waermepumpen), per-Monat-
     # Gaspreis aus Monatsdaten mit Fallback auf den WP-Parameter-Default.
@@ -727,14 +702,18 @@ async def calculate_anlage_sensors(
     # den ganzen Zeitraum** bestimmt — exakt wie in
     # `berechne_eauto_ersparnis_periode`, die das Cockpit rechnet. Monatsweise
     # aufzuteilen wäre genauer und würde genau deshalb driften.
-    _phev_monate: dict[int, list[tuple[float, float]]] = {}
-    _phev_km: dict[int, float] = {}
-    _phev_kwh: dict[int, float] = {}
+    #
+    # N-181/F-18: die **Rechnung** liegt seit 2026-08-08 im Layer-SoT
+    # `berechne_eauto_ersparnis_periode`; diese Schleife sammelt nur noch die
+    # Eingänge und die CO₂-Aggregate. Vorher stand hier eine wortgleiche Kopie
+    # der Formel — inklusive einer eigenen, abweichenden Preisauflösung, und
+    # genau daran ist sie gedriftet.
+    _ea_km_pro_monat: dict[int, list[tuple[int, int, float]]] = {}
+    _ea_netz_pro_monat: dict[int, list[tuple[int, int, float]]] = {}
+    _ea_netz_total: dict[int, float] = {}
+    _ea_fahrverbrauch: dict[int, float] = {}
     for ea in e_autos:
         params = ea.parameter or {}
-        ea_benzinpreis_default = params.get(
-            PARAM_E_AUTO["BENZINPREIS_EURO"], PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"],
-        ) or PARAM_E_AUTO_DEFAULTS["benzinpreis_euro"]
         ea_vergleich_l_100km = params.get(
             PARAM_E_AUTO["VERGLEICH_VERBRAUCH_L_100KM"],
             PARAM_E_AUTO_DEFAULTS["vergleich_verbrauch_l_100km"],
@@ -749,55 +728,51 @@ async def calculate_anlage_sensors(
             share = _emob_month_share(emob_ctx, "e-auto", km, jahr, monat)
             if share is not None:
                 netz = share.netz_kwh
-            md = md_by_periode.get((jahr, monat))
-            monats_benzinpreis = (
-                md.kraftstoffpreis_euro
-                if md and md.kraftstoffpreis_euro is not None
-                else ea_benzinpreis_default
-            )
-            benzin_liter = km / 100 * ea_vergleich_l_100km
-            bisherige_eauto_ersparnis += (
-                benzin_liter * monats_benzinpreis - netz * netzbezug_preis_cent / 100
-            )
             # DI-2: CO₂-Aggregate mitziehen (gleicher Netz-/km-/Benzin-Pfad).
             co2_emob_km += km
             co2_emob_netz_kwh += netz
-            co2_benzin_liter += benzin_liter
+            co2_benzin_liter += km / 100 * ea_vergleich_l_100km
+            _ea_netz_total[ea.id] = _ea_netz_total.get(ea.id, 0.0) + netz
+            if netz > 0:
+                _ea_netz_pro_monat.setdefault(ea.id, []).append((jahr, monat, netz))
             if km > 0:
-                _phev_monate.setdefault(ea.id, []).append((km, monats_benzinpreis))
-                _phev_km[ea.id] = _phev_km.get(ea.id, 0.0) + km
-                _phev_kwh[ea.id] = _phev_kwh.get(ea.id, 0.0) + (
+                _ea_km_pro_monat.setdefault(ea.id, []).append((jahr, monat, km))
+                _ea_fahrverbrauch[ea.id] = _ea_fahrverbrauch.get(ea.id, 0.0) + (
                     daten.get("verbrauch_kwh", 0) or 0
                 )
 
     # #331: der fossile Anteil eines Plug-in-Hybrids — als Kosten UND als
     # geminderte CO₂-Vermeidung. Ohne gepflegtes `eigener_verbrauch_l_100km`
     # bleibt beides 0 und der Export trägt exakt dieselben Zahlen wie vorher.
+    # Die Kosten-Seite kommt jetzt aus dem SoT (`fossile_kosten_euro`), die
+    # CO₂-Seite bleibt hier — sie ist keine Geldgröße.
+    _benzinpreis_lookup_export = {
+        k: md.kraftstoffpreis_euro for k, md in md_by_periode.items()
+    }
     co2_fossil_liter = 0.0
     for ea in e_autos:
-        km_total = _phev_km.get(ea.id, 0.0)
-        eigener_l = eigener_verbrauch_l_100km(ea.parameter)
-        if km_total <= 0 or eigener_l is None:
+        km_pro_monat = _ea_km_pro_monat.get(ea.id, [])
+        if not km_pro_monat:
             continue
-        _anteil = teile_fahrleistung(
-            km_gefahren=km_total,
-            fahrverbrauch_kwh=_phev_kwh.get(ea.id) or None,
-            verbrauch_kwh_100km=(ea.parameter or {}).get(
-                PARAM_E_AUTO["VERBRAUCH_KWH_100KM"],
-                PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
-            ) or PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
-            anteil_prozent=(ea.parameter or {}).get(
-                PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
-            ),
+        _erg = berechne_eauto_ersparnis_periode(
+            km_pro_monat=km_pro_monat,
+            ladung_netz_kwh_gesamt=_ea_netz_total.get(ea.id, 0.0),
+            # ⚠ Der Anlagen-Sensor kannte externe Ladekosten noch nie — hier
+            # bewusst 0.0, damit das Umhängen die Preisachse ändert und sonst
+            # nichts. Die Lücke gegenüber dem Cockpit ist notiert, nicht
+            # nebenbei gefüllt.
+            ladung_extern_euro_gesamt=0.0,
+            wallbox_strompreis_cent=wallbox_netzbezug_preis_cent,
+            eauto_parameter=ea.parameter,
+            monats_benzinpreis_lookup=_benzinpreis_lookup_export,
+            fahrverbrauch_kwh_gesamt=_ea_fahrverbrauch.get(ea.id) or None,
+            monats_strompreis_lookup=wallbox_preis_by_periode,
+            netz_pro_monat=_ea_netz_pro_monat.get(ea.id) or None,
         )
-        if _anteil.km_verbrenner <= 0:
-            continue
-        _v_quote = _anteil.km_verbrenner / km_total
-        co2_fossil_liter += _anteil.km_verbrenner / 100 * eigener_l
-        for _km_m, _preis_m in _phev_monate.get(ea.id, []):
-            bisherige_eauto_ersparnis -= (
-                _km_m * _v_quote / 100 * eigener_l * _preis_m
-            )
+        bisherige_eauto_ersparnis += _erg.ersparnis_euro
+        eigener_l = eigener_verbrauch_l_100km(ea.parameter)
+        if eigener_l is not None and _erg.km_verbrenner > 0:
+            co2_fossil_liter += _erg.km_verbrenner / 100 * eigener_l
 
     # DI-2: WP-CO₂-Aggregate (gemessene Wärme/Strom) über den kanonischen
     # Zeilen-Helper `imd_typ_beitrag` — dieselbe Wärme-/Strom-Auflösung wie das
@@ -1215,14 +1190,16 @@ async def calculate_investition_sensors(
                     anlage_md_dict = {
                         (m.jahr, m.monat): m for m in anlage_md_result.scalars().all()
                     }
-                    benzin_kosten = 0.0
-                    strom_kosten = 0.0
-                    # #331: fünfte Stelle, an der die E-Auto-Ersparnis gebildet
-                    # wird — der per-Fahrzeug-Sensor. Er sammelt (km, Preis) je
-                    # Monat mit, damit der fossile Anteil unten mit demselben
-                    # Monatspreis abgezogen wird wie der Vergleichswert.
-                    phev_monate: list[tuple[float, float]] = []
-                    phev_kwh = 0.0
+                    # N-181/F-18: sechste Kopie der Formel aufgelöst — die
+                    # Rechnung kommt aus dem Layer-SoT, diese Schleife sammelt
+                    # nur die Eingänge. Die Preisachse war hier die letzte, die
+                    # noch den **heutigen** Tarif nahm (`netzbezug_preis`), und
+                    # zwar den ALLGEMEINEN statt des Wallbox-Tarifs.
+                    km_pro_monat_sensor: list[tuple[int, int, float]] = []
+                    netz_pro_monat_sensor: list[tuple[int, int, float]] = []
+                    netz_total_sensor = 0.0
+                    fahrverbrauch_sensor = 0.0
+                    monate_sensor: list[tuple[int, int]] = []
                     for md in monatsdaten:
                         d = _emob_daten(md)
                         km = d.get("km_gefahren", 0) or 0
@@ -1232,44 +1209,42 @@ async def calculate_investition_sensors(
                         share = _emob_month_share(emob_ctx, investition.typ, km, md.jahr, md.monat)
                         if share is not None:
                             netz = share.netz_kwh
-                        amd = anlage_md_dict.get((md.jahr, md.monat))
-                        bp = (amd.kraftstoffpreis_euro
-                              if amd and amd.kraftstoffpreis_euro is not None
-                              else fallback_benzinpreis)
-                        benzin_kosten += (km / 100) * vergleich_l * bp
-                        strom_kosten += netz * netzbezug_preis / 100
+                        monate_sensor.append((md.jahr, md.monat))
+                        netz_total_sensor += netz
+                        if netz > 0:
+                            netz_pro_monat_sensor.append((md.jahr, md.monat, netz))
                         if km > 0:
-                            phev_monate.append((km, bp))
-                            phev_kwh += d.get("verbrauch_kwh", 0) or 0
+                            km_pro_monat_sensor.append((md.jahr, md.monat, km))
+                            fahrverbrauch_sensor += d.get("verbrauch_kwh", 0) or 0
 
-                    # #331: die real getankte Rechnung des Verbrenner-Anteils.
-                    # Der Anteil wird einmal für den ganzen Zeitraum bestimmt —
-                    # wie in `berechne_eauto_ersparnis_periode`, sonst driftet
-                    # der Sensor gegen Cockpit und Komponenten-Hub.
-                    fossile_kosten = 0.0
-                    eigener_l = eigener_verbrauch_l_100km(params)
-                    if eigener_l is not None and gesamt_km > 0:
-                        _anteil = teile_fahrleistung(
-                            km_gefahren=gesamt_km,
-                            fahrverbrauch_kwh=phev_kwh or None,
-                            verbrauch_kwh_100km=params.get(
-                                PARAM_E_AUTO["VERBRAUCH_KWH_100KM"],
-                                PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
-                            ) or PARAM_E_AUTO_DEFAULTS["verbrauch_kwh_100km"],
-                            anteil_prozent=params.get(
-                                PARAM_E_AUTO["ELEKTRISCHER_FAHRANTEIL_PROZENT"]
-                            ),
-                        )
-                        if _anteil.km_verbrenner > 0:
-                            _q = _anteil.km_verbrenner / gesamt_km
-                            fossile_kosten = sum(
-                                (_km * _q / 100) * eigener_l * _bp
-                                for _km, _bp in phev_monate
-                            )
+                    preis_lookup_sensor = await monats_strompreis_lookup(
+                        db, investition.anlage_id, "wallbox", monate_sensor,
+                        fallback_bezug=netzbezug_preis,
+                    )
+                    erg = berechne_eauto_ersparnis_periode(
+                        km_pro_monat=km_pro_monat_sensor,
+                        ladung_netz_kwh_gesamt=netz_total_sensor,
+                        # Wie beim Anlagen-Sensor: externe Ladekosten waren hier
+                        # noch nie enthalten — beim Umhängen nicht stillschweigend
+                        # dazunehmen.
+                        ladung_extern_euro_gesamt=0.0,
+                        wallbox_strompreis_cent=netzbezug_preis,
+                        eauto_parameter=params,
+                        monats_benzinpreis_lookup={
+                            k: m.kraftstoffpreis_euro for k, m in anlage_md_dict.items()
+                        },
+                        fahrverbrauch_kwh_gesamt=fahrverbrauch_sensor or None,
+                        monats_strompreis_lookup=preis_lookup_sensor,
+                        netz_pro_monat=netz_pro_monat_sensor or None,
+                    )
+                    benzin_kosten = erg.benzin_kosten_euro
+                    strom_kosten = erg.strom_kosten_euro
+                    fossile_kosten = erg.fossile_kosten_euro
 
-                    value = benzin_kosten - strom_kosten - fossile_kosten
+                    value = erg.ersparnis_euro
                     berechnung = (
-                        f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom)"
+                        f"{benzin_kosten:.2f} (Benzin) - {strom_kosten:.2f} (Strom"
+                        f" @ {erg.verwendeter_strompreis_cent:.2f} ct/kWh)"
                         + (f" - {fossile_kosten:.2f} (Kraftstoff)" if fossile_kosten else "")
                     )
 

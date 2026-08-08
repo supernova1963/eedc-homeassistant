@@ -68,6 +68,14 @@ class CheckKategorie(str, Enum):
     # Eintrag lenkt den Anwender dann auf eine bewusste Entscheidung: nur eine
     # Quelle pflegen.
     EMOB_POOL_PFLEGE = "emob_pool_pflege"
+    # N-186: gespeicherte Tage, in denen Wallbox UND E-Auto denselben
+    # Ladevorgang tragen — die Hinterlassenschaft von F-14 (#356). Der Fix hat
+    # die Regel für NEUE Tage gebaut; bereits geschriebene `komponenten_kwh`
+    # bleiben stehen und zeichnen die Ladung weiter doppelt.
+    # ⚠ Bewusst ein Checker mit Reparatur-Knopf und **keine Start-Migration**
+    # ([[feedback_kein_grosser_heiler_knopf]]): der Lauf überschreibt Tageswerte
+    # und muss eine bewusste Entscheidung des Anwenders bleiben.
+    EMOB_DOPPELZAEHLUNG_TAGE = "emob_doppelzaehlung_tage"
     # #331 Phase 4: Ein Fahrzeug trägt einen gepflegten Verbrenner-Verbrauch
     # (`eigener_verbrauch_l_100km`), aber eedc kann den elektrischen Anteil
     # nicht bestimmen — weder ist der monatliche Fahrverbrauch (`verbrauch_kwh`)

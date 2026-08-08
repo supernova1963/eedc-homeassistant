@@ -1506,6 +1506,59 @@ def test_p8_tarif_wird_mit_dem_stichtag_des_monats_geladen():
     )
 
 
+#: F-18: die E-Mob-Preisachse hat einen EIGENEN Wächter, weil der P8-Lader-Test
+#: sie nicht sehen kann — alle vier beteiligten Dateien stehen in
+#: `P8_BASELINE_AUSNAHMEN` und brauchen den heutigen Tarif legitimerweise auch
+#: (Prognose nach vorn). Eine Wächter-Baseline ist eine Aussage über sein
+#: **Sichtfeld**, nicht über den Baum; „P8 Baseline 0" galt für diese Fläche nie.
+#:
+#: Geprüft wird stattdessen die Schnittstelle: wer die Perioden-Ersparnis ruft,
+#: muss ihr die Monatspreise geben. Das fängt auch eine sechste Sicht, die es
+#: heute noch nicht gibt.
+_P9_ERSPARNIS_PERIODE = "berechne_eauto_ersparnis_periode"
+
+P9_PREISACHSE_AUSNAHMEN: frozenset[str] = frozenset({
+    # Der Layer-SoT selbst ruft sich nicht auf; hier stünde eine Ausnahme nur,
+    # wenn ein Aufrufer nachweislich keine Monatsauflösung hat. Bewusst leer —
+    # jede Sicht, die über Monate summiert, kann eine bauen.
+})
+
+
+def _p9_ersparnis_ohne_monatspreise() -> list[str]:
+    """Produktionsaufrufe von `berechne_eauto_ersparnis_periode` ohne Lookup."""
+    treffer: list[str] = []
+    for pfad, baum in _quelldateien():
+        modul = f"backend/{pfad.relative_to(_BACKEND).as_posix()}"
+        if modul in P9_PREISACHSE_AUSNAHMEN:
+            continue
+        for knoten in ast.walk(baum):
+            if not isinstance(knoten, ast.Call):
+                continue
+            name = getattr(knoten.func, "id", None) or getattr(knoten.func, "attr", None)
+            if name != _P9_ERSPARNIS_PERIODE:
+                continue
+            if not any(kw.arg == "monats_strompreis_lookup" for kw in knoten.keywords):
+                treffer.append(_ort(pfad, knoten))
+    return treffer
+
+
+def test_p8_emob_ersparnis_bekommt_die_monatspreise():
+    offen = _p9_ersparnis_ohne_monatspreise()
+
+    assert offen == [], (
+        f"{len(offen)} Aufruf(e) von `{_P9_ERSPARNIS_PERIODE}` ohne "
+        f"`monats_strompreis_lookup=`: {offen}\n"
+        "Ohne den Lookup bewertet die Funktion die Netzladung der ganzen "
+        "Periode mit EINEM Skalar — bei einem Tarifwechsel schreibt das die "
+        "Historie um (F-18: 41,10 € Drift zwischen Cockpit und Komponenten-Hub "
+        "an einer laufenden Box, bei identischer kWh-Basis).\n"
+        "Der Lookup kommt aus `strompreise.monats_strompreis_lookup(...)` oder "
+        "aus den Monats-Fakten (`f.tarif.wallbox_preis_effektiv_cent`, dann "
+        "inklusive Flex-Ø). `monats_strompreis_lookup=None` ist erlaubt, aber "
+        "explizit hinzuschreiben — genau wie `monatsdaten=None` bei P8."
+    )
+
+
 def test_p8_finanz_zeile_bekommt_die_monatsdaten_zeile():
     offen = _p8_eingaben_ohne_monatsdaten()
 

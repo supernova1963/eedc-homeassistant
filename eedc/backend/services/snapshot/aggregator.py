@@ -39,6 +39,7 @@ from backend.services.snapshot.komponenten_beitraege import (
     mqtt_hourly_eintraege,
     pv_je_investition_in_sensor_keys,
     resolve_either_or_eintraege,
+    wallbox_deckt_ladung_ab,
 )
 from backend.services.snapshot.plausibility import (
     cap_pv_einspeisung_stunde,
@@ -522,6 +523,9 @@ async def get_komponenten_tageskwh(
 
     # 2. Investitionen — Per-Typ-Auswahl im Helper
     investitionen_map = sensor_mapping.get("investitionen", {}) or {}
+    # N-196: strukturelle Quellen-Regel der E-Mob-Fläche, einmal je Lauf —
+    # dieselbe Regel, die der Leistungspfad seit #356 kennt.
+    _wb_deckt = wallbox_deckt_ladung_ab(investitionen_by_id.values(), sensor_mapping)
     for inv_id_str, inv_data in investitionen_map.items():
         if not isinstance(inv_data, dict):
             continue
@@ -529,7 +533,7 @@ async def get_komponenten_tageskwh(
         if inv is None:
             continue
         await _apply_beitraege(
-            investition_beitraege(inv, inv_data),
+            investition_beitraege(inv, inv_data, wallbox_deckt_ladung=_wb_deckt),
             lambda feld, _id=inv_id_str: f"inv:{_id}:{feld}",
             inv_data,
             result,
