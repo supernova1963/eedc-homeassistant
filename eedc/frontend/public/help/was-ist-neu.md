@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.10)
+> **Stand:** August 2026 (v4.0.11)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Unveröffentlicht
+## v4.0.11 — Nichts raten, wo sich messen lässt (August 2026)
 
 ### Plug-in-Hybrid: der Benzin-Anteil zählt jetzt mit
 
@@ -30,6 +30,78 @@ Ein „Fahrzeugtyp: Plug-in-Hybrid" gibt es bewusst nicht. **Das ausgefüllte Fe
 **Was du danach siehst:** Im Komponenten-Hub stehen unter *Umwelt* zwei neue Werte — **Verbrenner-Anteil** in km und **Kraftstoffkosten** in Euro, mit dem Hinweis, ob sie gemessen oder geschätzt sind. Die Ersparnis vs. Verbrenner sinkt entsprechend, ebenso die CO₂-Einsparung. Der Vergleich mit dem Benziner bleibt dabei über **alle** Kilometer stehen — sonst würdest du dein Auto mit einem halben vergleichen.
 
 > **Deine geladene Energie wird nicht angetastet.** Sie ist gemessen, und ein Hybrid lädt ohnehin weniger. Sie zusätzlich zu kürzen hieße, denselben Anteil zweimal abzuziehen.
+
+### Wie viel deiner Autoladung kam aus der eigenen Sonne? eedc schätzt es jetzt
+
+**Betrifft dich das?** Alle, die zu Hause laden und **keinen eigenen Sensor** für den PV-Anteil haben. Wer den Anteil pflegt — etwa über evcc —, sieht **keine einzige veränderte Zahl**.
+
+Eine Wallbox zählt Kilowattstunden, nicht deren Herkunft. Fehlte die Angabe, hat eedc bisher die **komplette** Heimladung als Netzstrom verbucht: 0 % Sonne im Komponenten-Hub, die volle Ladung als Netzbezug in der CO₂-Bilanz, eine entsprechend zu kleine Ersparnis. Das war keine Messung, sondern eine Annahme — und die ungünstigste von allen.
+
+Jetzt leitet eedc den Anteil aus deinen eigenen Stundenwerten ab, nach derselben Idee wie evcc: Was in einer Ladestunde weder aus dem Netz noch aus dem Speicher kam, kann nur aus deiner PV gekommen sein — und was du in dieser Stunde eingespeist hast, hätte stattdessen laden können.
+
+**Wie gut das trifft, ist gemessen und nicht behauptet:** An einer echten Anlage mit evcc als Referenz (963 kWh Heimladung über sieben Monate) kam evcc auf **67,9 %** Sonnenanteil, eedcs Rechnung auf **64,7 %**. Sie untertreibt also eher, als dir zu schmeicheln. Der Wert ist in der Datenherkunft ausdrücklich als **abgeleitet** gekennzeichnet; wo nicht jede Ladestunde auswertbar war, steht das dabei.
+
+**Was du tun musst: nichts.** Deine Zahlen werden größer — die E-Auto-Netzladung sinkt, die ausgewiesene Ersparnis steigt, und zwar **überall dieselbe**: Komponenten-Hub (E-Auto und Wallbox), *Cockpit → Monat* und *→ Jahr*, *Auswertungen → Komponenten*, Aussichten, Jahresbericht-PDF, Monats-Tabelle und CO₂-Bilanz.
+
+> ⚠ **Der Sensor `sensor.…_e_auto_pv_anteil_prozent` springt einmalig.** Er meldete bisher 0 % und zeigt künftig den abgeleiteten Anteil. In der Langzeitstatistik ist das ein Sprung an einem Tag — es gehen keine Daten verloren. Betroffen ist nur, wer keinen eigenen PV-Ladesensor pflegt.
+
+> **Ein selbst gepflegter Wert wird nie überschrieben** — auch eine bewusst eingetragene **0** nicht. Und **rückwirkend passiert nichts**: Die Schätzung entsteht beim Aggregieren eines Tages, abgeschlossene Zeiträume bleiben, wie sie sind.
+
+Auch die **ROI-Prognose rät nicht mehr**: Sie rechnete bisher mit 60 % PV-Anteil, während dieselbe Anlage im IST 0 % zeigte — zwei Zahlen für dieselbe Größe. Jetzt nimmt sie den tatsächlich erreichten Anteil, solange am Fahrzeug keiner gepflegt ist. Dein eigener Wert im Feld *PV-Ladeanteil (%)* hat weiterhin Vorrang.
+
+> **Der Community-Vergleich bleibt bei gemessenen Werten.** Dorthin geht weiterhin nur, was wirklich gezählt wurde — dein geteilter Datensatz ändert sich durch diese Neuerung nicht.
+
+### Hast du deinen Stromtarif einmal gewechselt? Dann stimmte die E-Auto-Ersparnis nicht
+
+**Betrifft dich das?** Alle mit E-Auto, die **den Tarif schon einmal gewechselt** haben. Wer immer denselben Arbeitspreis hatte, sieht **keine veränderte Zahl** — der Durchschnitt eines einzigen Tarifs ist dieser Tarif.
+
+*Cockpit → Jahr* und die HA-Sensoren haben deine **gesamte** Ladehistorie mit dem **heutigen** Arbeitspreis bewertet — auch Ladungen von vor drei Jahren. Der Komponenten-Hub rechnete gleichzeitig mit den Preisen, die damals galten. Dieselbe Größe, zwei verschiedene Zahlen: An einer Anlage mit vier Tarifstufen (40 → 32 → 34 → 31,5 ct) waren das **41,10 €** Unterschied bei identischer kWh-Basis.
+
+Insgesamt gab es **vier** verschiedene Preisformen für einen Wert; zwei Sichten nahmen zusätzlich deinen allgemeinen Tarif statt eines gepflegten **Wallbox-Tarifs**. Jetzt bewertet jede Sicht die Ladung eines Monats mit dem Tarif dieses Monats — bei dynamischen Tarifen mit dem abgerechneten Durchschnitt.
+
+> ⚠ **Vier HA-Sensoren springen dadurch einmalig:** `e_auto_ersparnis_vs_benzin_euro`, `netto_ertrag_euro`, `roi_prozent` und `amortisation_jahre`. Ein Sprung an einem Tag in der Langzeitstatistik, kein Datenverlust.
+
+**Was du tun musst:** nichts. Wichtig ist nur, dass deine früheren Tarife mit ihrem Gültigkeitszeitraum gepflegt sind — dann rechnet jeder Monat mit seinem eigenen Preis.
+
+### Lädst du über evcc? In den Aussichten fehlten die Stromkosten deines Autos komplett
+
+**Betrifft dich das?** Alle, deren Ladung an der **Wallbox** erfasst wird statt am Fahrzeug — der Normalfall bei evcc.
+
+*Auswertungen → Aussichten* war die einzige Sicht, die ihre Ladedaten ausschließlich an der Fahrzeug-Komponente gesucht hat. Liegen sie an der Wallbox, fand sie **gar nichts**. Folge: Die ausgewiesene bisherige Ersparnis war um die **kompletten Netzstromkosten** zu hoch, und die Prognose rechnete mangels Daten mit geratenen 50 % Netzanteil.
+
+An einer echten Anlage gemessen (März–Juli 2026, ausschließlich Sensordaten): **0 statt 126 kWh** Netzladung und **0 statt 620 kWh** PV-Ladung. Diese Sicht zieht jetzt dieselbe Ladung heran wie Cockpit, Komponenten-Hub und HA-Export.
+
+**Was du tun musst:** nichts — deine Aussichten-Zahlen fallen beim nächsten Aufruf niedriger und richtiger aus.
+
+### Derselbe Ladevorgang konnte im Tagesverlauf zweimal auftauchen
+
+**Betrifft dich das?** Alle, bei denen **Wallbox und E-Auto je einen eigenen kWh-Zähler** haben und das Fahrzeug der Wallbox **nicht ausdrücklich zugeordnet** ist.
+
+In dieser Konstellation hat eedc dieselbe Ladung doppelt gezählt. Jetzt gilt in allen Pfaden dieselbe Regel: **Trägt eine Wallbox die Ladeenergie, ist sie die Quelle** — das Fahrzeug wird dann nicht zusätzlich addiert.
+
+**Was du tun musst:** Bereits gespeicherte Tage bleiben zunächst unverändert. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) meldet sie dir jetzt und bietet **„Zeitraum neu aggregieren"** an. Das ist bewusst ein Knopf und kein automatischer Lauf beim Start: Die Reparatur überschreibt vorhandene Tageswerte, und diese Entscheidung gehört dir.
+
+> **Reichweite des Knopfes:** Er heilt **Tag und Stunde**, nicht den Monatswert. Der Hinweis nennt dir den Zeitraum, den ein Lauf abdeckt.
+
+### Einspeisevergütung: eedc schlägt keinen Satz mehr vor — und sagt, wie es rechnet
+
+**Betrifft dich das?** Alle, die einen **neuen** Stromtarif anlegen, und alle, die den Satz seinerzeit aus dem Setup-Wizard übernommen haben. **Bestehende Tarife sind unberührt.**
+
+Aus dem simon42-Forum kam die Frage, ob eedc flat mit der eingetragenen Zahl rechnet oder im Hintergrund einen Mischsatz aus der Anlagengröße ermittelt. Die Oberfläche gab darauf keine Antwort — das Feld hieß an beiden Eingabestellen nur „Einspeisevergütung (ct/kWh)". Jetzt steht daneben und in der Hilfe: **eedc rechnet flat mit deinem Satz.** Bei gestaffelter EEG-Vergütung gehört der nach kWp gewichtete **Mischsatz** ins Feld.
+
+> ⚠ **Bitte einmal deinen Vergütungsbescheid prüfen.** Der Setup-Wizard trug bisher den Satz der *erreichten* Stufe ein (bis 10 kWp 8,2 ct, bis 40 kWp 7,1 ct, darüber 5,8 ct). Das EEG staffelt aber nach **installierter Leistung**, nicht nach eingespeister Menge: Für die Gesamtanlage gilt der gewichtete Mischsatz, und der liegt **höher** — bei 20 kWp etwa 7,65 statt 7,1 ct. Wer den Vorschlag übernommen hat, rechnet seinen Einspeise-Erlös **zu niedrig**.
+
+Die Tabelle wurde nicht korrigiert, sondern **entfernt**: Die Sätze ändern sich laufend, und welcher für deine Anlage gilt, weißt nur du. Ein neuer Tarif startet deshalb mit **0** — eine geschätzte Zahl sähe aus wie eine gepflegte.
+
+**Was du tun musst:** Beim Anlegen eines neuen Tarifs den Satz aus deinem Bescheid eintragen. Bleibt die 0 stehen, sagen dir beide Formulare, was das bedeutet (kein Einspeise-Erlös), und der Daten-Checker meldet es — aber nur, wenn im Gültigkeitszeitraum des Tarifs tatsächlich Einspeisung erfasst ist. Bei Volleinspeisung ohne Vergütung oder ausgelaufener Förderung ist 0 richtig und nichts zu tun.
+
+### Eine eingetragene 0 ct Einspeisevergütung wurde an drei Stellen still zu 8,2 ct
+
+**Betrifft dich das?** Alle, die bewusst **0** eingetragen haben — etwa bei unvergüteter Einspeisung.
+
+An drei Stellen hat eedc die gepflegte Null nicht von „nichts eingetragen" unterscheiden können und ersatzweise mit **8,2 ct** gerechnet: im **Vorjahresvergleich** in *Cockpit → Monat*, im **T-Konto je Investition** und in der **Wirtschaftlichkeit je Komponente**. Dort stand ein Erlös, den es nie gab — während Jahresbericht, Aussichten und HA-Export im selben Moment korrekt mit 0 rechneten.
+
+**Was du tun musst:** nichts. Alle Sichten nennen jetzt dieselbe Zahl; die betroffenen Werte sinken auf den Betrag, den die übrigen Sichten schon immer zeigten.
 
 ### MQTT-Export: „0 von 0 Sensoren publiziert" war eine Fehlermeldung
 

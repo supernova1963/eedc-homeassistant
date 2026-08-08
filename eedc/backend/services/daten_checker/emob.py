@@ -407,8 +407,8 @@ class EmobChecks:
         details = (
             f"An {len(befunde)} Tag(en) tragen Wallbox und E-Auto beide eine "
             f"Ladung — insgesamt rund {summe_zuviel:.0f} kWh, die im "
-            f"Tagesverlauf doppelt erscheinen. Seit v4.0.11 zählt eedc eine "
-            f"Ladung nur noch einmal (die Wallbox ist die Quelle); diese Tage "
+            f"Tagesverlauf doppelt erscheinen. eedc zählt eine Ladung "
+            f"inzwischen nur noch einmal (die Wallbox ist die Quelle); diese Tage "
             f"wurden vorher geschrieben und bleiben stehen, bis sie neu "
             f"berechnet werden. "
             f"„Zeitraum neu aggregieren“ holt {range_von.isoformat()} bis "
