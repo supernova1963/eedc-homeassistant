@@ -71,6 +71,21 @@ ERLAUBTE_PARENT_TYPEN: dict[str, tuple[str, ...]] = {
 # Typen, für die eine Parent-Zuordnung PFLICHT ist (sofern ein Parent existiert).
 PARENT_PFLICHT_TYPEN: frozenset[str] = frozenset({InvestitionTyp.PV_MODULE.value})
 
+# Typen, an denen ein **Ertrag/Jahr** (`einsparung_prognose_jahr`) gepflegt
+# werden kann — Konzept `docs/KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md` §8/1+2.
+#
+# Für alle anderen Typen rechnet eedc die Jahres-Einsparung selbst (PV,
+# Speicher, WP, E-Auto, BKW, Wechselrichter): dort ist der `else`-Zweig der
+# ROI-Typkette in `api/routes/investitionen/crud.py` gar nicht erreichbar, ein
+# gepflegter Wert bliebe wirkungslos — und in der Prognose (`aussichten.py`)
+# stünde er dann gegen die selbst gerechnete Zahl. **Eine Menge, drei
+# Verwender:** Formular (Client-Pendant `investitionFormHelpers.ts`),
+# ROI-Dashboard, Aussichten-Prognose.
+ERTRAGSFELD_TYPEN: frozenset[str] = frozenset({
+    InvestitionTyp.WALLBOX.value,
+    InvestitionTyp.SONSTIGES.value,
+})
+
 
 class Investition(Base):
     """

@@ -131,6 +131,22 @@ class CheckKategorie(str, Enum):
     # Bereits schief gespeicherte Tage heilt er NICHT und behauptet das auch
     # nicht: er misst den Zustand von jetzt.
     ZEITZONE_ABWEICHUNG = "zeitzone_abweichung"
+    # Konzept-Wirtschaftlichkeit §8.1, Regel 1: dieselbe Bezeichnung taucht an
+    # einer Komponente in mehreren Monaten als sonstige Position auf. Das Modell
+    # verlagert die Entscheidung „einmalig oder wiederkehrend" vom Code zum
+    # **Erfassungsort** (§2) — genau dort kann ein Anwender es verfehlen, und
+    # nur dort ist es erkennbar. Erkannt wird die **Wiederholung**, nie die
+    # Bedeutung eines Wortes: aus „Restwert" oder „Förderung" auf einen
+    # Kapitalzufluss zu schließen wäre eine erfundene Regel über Freitext
+    # (§8.1, ⛔-Kasten; dieselbe Klasse wie das verworfene Feld `art`).
+    POSITION_WIEDERKEHREND = "position_wiederkehrend"
+    # §8.1, Regel 2: der Jahresbetrag ist an der Komponente gepflegt **und**
+    # derselbe Posten wird zusätzlich monatlich gebucht. Im Monatsabschluss
+    # gehört nur die **Abweichung** vom Plan (§2/3) — sonst zählt der Betrag
+    # doppelt. Beide Regeln sind Hinweise, keine Fehler, und beide nennen einen
+    # Weg zur Behebung statt eines „Akzeptiert"-Knopfs
+    # ([[feedback_daten_checker_kein_akzeptiert]]).
+    POSITION_DOPPELERFASSUNG = "position_doppelerfassung"
 
 
 @dataclass

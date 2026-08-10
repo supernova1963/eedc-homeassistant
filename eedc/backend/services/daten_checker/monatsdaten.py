@@ -780,3 +780,126 @@ class MonatsdatenChecks:
             ))
 
         return ergebnisse
+
+
+# ─── Konzept-Wirtschaftlichkeit §8.1 — der Erfassungsort ────────────────────
+#
+# Das Modell rät nichts: die **Form** der Zahl sagt, ob sie wiederkehrt
+# (Jahresbetrag an der Investition) oder einmal wirkt (Position im
+# Monatsabschluss). Genau deshalb gibt es hier eine Fehleingabe-Möglichkeit,
+# und genau deshalb ist sie erkennbar — **an der Wiederholung**, nicht an der
+# Bedeutung eines Wortes.
+#
+# Schwellen: §8.1 nennt „≥ 3 Monate" für die Wiederholung. Für die
+# Doppelerfassung nennt es keine — dort steht „gleichnamige Monatsposition",
+# was ohne Schwelle jede einzelne Reparatur neben einer gepflegten
+# Versicherung melden würde (P-6: ein Hinweis, der keinen Fehler beschreibt).
+# Umgesetzt ist deshalb: **≥ 2** Monate, wenn der Jahresbetrag gepflegt ist
+# (dort ist bereits die zweite Buchung ein Muster), **≥ 3** sonst. Beide Regeln
+# schließen sich gegenseitig aus — ein Sachverhalt, eine Meldung.
+WIEDERHOLUNG_AB_MONATEN = 3
+DOPPELERFASSUNG_AB_MONATEN = 2
+
+
+def _de_euro(betrag: float) -> str:
+    """Betrag in deutscher Schreibweise — Meldungstexte sind Anzeige.
+
+    ⚠ `check:de-de` liest nur `frontend/src` und kann eine Backend-Meldung
+    nicht sehen (N-203). Hier steht die Regel deshalb im Code.
+    """
+    return f"{betrag:_.2f} €".replace(".", ",").replace("_", ".")
+
+
+class ErfassungsortChecks:
+    """§8.1 — welche Fehleingabe das Wirtschaftlichkeits-Modell erzeugen kann."""
+
+    def _check_erfassungsort_positionen(self, anlage: Anlage) -> list[CheckErgebnis]:
+        from backend.models.investition import ERTRAGSFELD_TYPEN
+        from backend.utils.sonstige_positionen import get_sonstige_positionen
+
+        # `.value` wie alle Nachbar-Checks: `CheckErgebnis.kategorie` ist als
+        # `str` deklariert, und das Response-Modell gibt sie unverändert
+        # weiter. Ein Enum-Objekt vergliche sich hier zwar noch richtig
+        # (str-Enum), landete aber als `CheckKategorie.…` im Payload — und
+        # der Client sucht seine Kategorie über den reinen Wert.
+        kat = CheckKategorie.POSITION_WIEDERKEHREND.value
+        kat_doppel = CheckKategorie.POSITION_DOPPELERFASSUNG.value
+        ergebnisse: list[CheckErgebnis] = []
+
+        for inv in anlage.investitionen or []:
+            # (richtung, bezeichnung-normalisiert) → Menge der Monate
+            monate_je_posten: dict[tuple[str, str], set[tuple[int, int]]] = {}
+            anzeige_name: dict[tuple[str, str], str] = {}
+            for imd in inv.monatsdaten or []:
+                for p in get_sonstige_positionen(imd.verbrauch_daten):
+                    if not isinstance(p, dict):
+                        continue
+                    bezeichnung = str(p.get("bezeichnung", "")).strip()
+                    if not bezeichnung:
+                        continue
+                    richtung = "ertrag" if p.get("typ") == "ertrag" else "ausgabe"
+                    schluessel = (richtung, bezeichnung.casefold())
+                    monate_je_posten.setdefault(schluessel, set()).add((imd.jahr, imd.monat))
+                    anzeige_name.setdefault(schluessel, bezeichnung)
+
+            for schluessel, monate in sorted(monate_je_posten.items()):
+                richtung = schluessel[0]
+                bezeichnung = anzeige_name[schluessel]
+                anzahl = len(monate)
+
+                if richtung == "ertrag":
+                    jahresbetrag = inv.einsparung_prognose_jahr
+                    feld = "Ertrag/Jahr (€)"
+                    # Bauschritt 9: für einen Erzeuger gibt es seit 2026-08-10
+                    # den besseren Ort — „Einspeise-Erlös (€)" nimmt den echten
+                    # Monatswert aus einem HA-Sensor, statt einen Jahresbetrag
+                    # zu schätzen. Der Hinweis nennt deshalb DAS Feld, sonst
+                    # schickt er genau den Fall aus §9 auf den zweitbesten Weg.
+                    if (inv.parameter or {}).get("kategorie") == "erzeuger":
+                        feld = "Einspeise-Erlös (€)"
+                    # ⚠ Kein Hinweis ohne Ort: das Ertragsfeld gibt es nur bei
+                    # Wallbox und Sonstiges (`ERTRAGSFELD_TYPEN`). Bei allen
+                    # anderen Typen rechnet eedc die Jahres-Einsparung selbst —
+                    # dort wäre „trag es an der Komponente ein" eine Anleitung
+                    # zu einem Feld, das der Anwender nicht findet (P-6).
+                    if inv.typ not in ERTRAGSFELD_TYPEN and not jahresbetrag:
+                        continue
+                else:
+                    jahresbetrag = inv.betriebskosten_jahr
+                    feld = "Betriebskosten/Jahr (€)"
+
+                if jahresbetrag and anzahl >= DOPPELERFASSUNG_AB_MONATEN:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat_doppel, schwere=CheckSeverity.INFO.value,
+                        meldung=(
+                            f"{inv.bezeichnung}: „{bezeichnung}“ steht in {anzahl} Monaten "
+                            f"im Monatsabschluss, obwohl {feld} gepflegt ist"
+                        ),
+                        details=(
+                            f"{feld} ist mit {_de_euro(jahresbetrag)} hinterlegt und wirkt "
+                            f"jedes Jahr. "
+                            f"Im Monatsabschluss gehört nur die Abweichung vom Plan — sonst "
+                            f"zählt derselbe Betrag doppelt. Entweder den Jahresbetrag anpassen "
+                            f"oder die Monatspositionen entfernen."
+                        ),
+                        link="/einstellungen/investitionen",
+                        investition_id=inv.id,
+                    ))
+                elif not jahresbetrag and anzahl >= WIEDERHOLUNG_AB_MONATEN:
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.INFO.value,
+                        meldung=(
+                            f"{inv.bezeichnung}: „{bezeichnung}“ steht in {anzahl} Monaten "
+                            f"im Monatsabschluss — das sieht wiederkehrend aus"
+                        ),
+                        details=(
+                            f"Ein Betrag, der jedes Jahr wiederkommt, gehört als {feld} an die "
+                            f"Komponente. Dort wirkt er auch in der Prognose und in der "
+                            f"Amortisation; im Monatsabschluss wirkt er nur in der Bilanz des "
+                            f"Monats, in dem er steht. Einmaliges bleibt richtig, wo es ist."
+                        ),
+                        link="/einstellungen/investitionen",
+                        investition_id=inv.id,
+                    ))
+
+        return ergebnisse

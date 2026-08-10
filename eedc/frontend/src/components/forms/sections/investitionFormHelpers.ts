@@ -97,6 +97,17 @@ export const typLabels: Record<InvestitionTyp, string> = {
   'sonstiges': 'Sonstiges',
 }
 
+/**
+ * Typen, bei denen ein **Ertrag/Jahr** an der Investition gepflegt werden kann
+ * (Konzept §8/1, `einsparung_prognose_jahr`).
+ *
+ * Die Liste spiegelt den `else`-Zweig der ROI-Typkette in
+ * `backend/api/routes/investitionen/crud.py` — nur dort wird das Feld gelesen.
+ * Für alle anderen Typen rechnet eedc die Jahres-Einsparung selbst (PV,
+ * Speicher, WP, E-Auto, BKW); ein Eingabefeld wäre dort ohne Wirkung.
+ */
+export const ERTRAGSFELD_TYPEN: InvestitionTyp[] = ['wallbox', 'sonstiges']
+
 // Kontextabhängige Hints für Alternative Kosten
 export const alternativkostenHints: Record<InvestitionTyp, string> = {
   'e-auto': 'Kosten eines vergleichbaren Verbrenners (für ROI-Berechnung)',

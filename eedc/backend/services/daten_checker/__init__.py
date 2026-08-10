@@ -32,7 +32,7 @@ from .kategorien import (
 )
 from ._helpers import _CheckHelpers
 from .stammdaten import StammdatenChecks
-from .monatsdaten import MonatsdatenChecks
+from .monatsdaten import ErfassungsortChecks, MonatsdatenChecks
 from .energieprofil import EnergieprofilChecks
 from .sensoren import SensorChecks
 from .emob import EmobChecks
@@ -44,6 +44,7 @@ from .datenquelle import DatenquelleChecks
 class DatenChecker(
     StammdatenChecks,
     MonatsdatenChecks,
+    ErfassungsortChecks,
     EnergieprofilChecks,
     SensorChecks,
     EmobChecks,
@@ -120,6 +121,7 @@ class DatenChecker(
         ergebnisse.extend(self._check_phev_anteil_unbestimmt(anlage))
         ergebnisse.extend(self._check_emob_sensor_doppelmapping(anlage))
         ergebnisse.extend(await self._check_emob_doppelzaehlung_tage(anlage))
+        ergebnisse.extend(self._check_erfassungsort_positionen(anlage))
 
         # Zusammenfassung
         zusammenfassung = {"error": 0, "warning": 0, "info": 0, "ok": 0}

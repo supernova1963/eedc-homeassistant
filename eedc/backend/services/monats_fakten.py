@@ -357,6 +357,10 @@ class SonstigesGeraetFakten:
     einspeisung_kwh: float = 0.0
     bezug_pv_kwh: float = 0.0
     bezug_netz_kwh: float = 0.0
+    #: Konzept §9 Weg 2: gepflegter Erlös DIESES Erzeugers in €. Er ersetzt
+    #: keine Anlagengröße, sondern kommt hinzu — eedc kennt nur einen
+    #: Einspeisesatz je Anlage, und der bewertet nur den Anlagenzähler.
+    einspeise_erloes_euro: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -392,6 +396,11 @@ class SonstigesFakten:
     einspeisung_kwh: float = 0.0
     bezug_pv_kwh: float = 0.0
     bezug_netz_kwh: float = 0.0
+    #: Konzept §9 Weg 2 — Σ der gepflegten Erzeuger-Erlöse (§9-Fall: eigener
+    #: Einspeisetarif). **Kein** Teil von ``ertraege_euro``: das sind die
+    #: sonstigen Positionen aus dem Monatsabschluss, dies hier ist ein
+    #: gemessener Monatswert je Erzeuger.
+    einspeise_erloes_euro: float = 0.0
     ertraege_euro: float = 0.0
     ausgaben_euro: float = 0.0
     netto_euro: float = 0.0
@@ -795,6 +804,7 @@ class _RohMonat:
         self.sonstiges_einspeisung = 0.0
         self.sonstiges_bezug_pv = 0.0
         self.sonstiges_bezug_netz = 0.0
+        self.sonstiges_einspeise_erloes_euro = 0.0
         #: Je `Investition.id` dieselben sechs Größen — für Sichten, die die
         #: Geräte einzeln ausweisen (Monatsroute: „Sonstige Geräte"). Die
         #: Summen oben bleiben die Wahrheit der Anlage; diese Gruppe ist ihre
@@ -908,10 +918,12 @@ class _RohMonat:
             self.sonstiges_einspeisung += b.sonstiges_einspeisung
             self.sonstiges_bezug_pv += b.sonstiges_bezug_pv
             self.sonstiges_bezug_netz += b.sonstiges_bezug_netz
+            self.sonstiges_einspeise_erloes_euro += b.sonstiges_einspeise_erloes_euro
             g = self.sonstiges_je_geraet.setdefault(
                 inv.id,
                 {"erzeugung": 0.0, "verbrauch": 0.0, "eigenverbrauch": 0.0,
-                 "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0},
+                 "einspeisung": 0.0, "bezug_pv": 0.0, "bezug_netz": 0.0,
+                 "einspeise_erloes_euro": 0.0},
             )
             g["erzeugung"] += b.sonstiges_erzeugung
             g["verbrauch"] += b.sonstiges_verbrauch
@@ -919,6 +931,7 @@ class _RohMonat:
             g["einspeisung"] += b.sonstiges_einspeisung
             g["bezug_pv"] += b.sonstiges_bezug_pv
             g["bezug_netz"] += b.sonstiges_bezug_netz
+            g["einspeise_erloes_euro"] += b.sonstiges_einspeise_erloes_euro
             # Ein Erzeuger mit 0 kWh im Monat ist ein echter 0-Wert, kein
             # „nicht vorhanden" — deshalb zählt auch die Kategorie, nicht nur
             # ein Beitrag > 0.
@@ -1113,6 +1126,7 @@ async def _baue_fakt(
             einspeisung_kwh=roh.sonstiges_einspeisung,
             bezug_pv_kwh=roh.sonstiges_bezug_pv,
             bezug_netz_kwh=roh.sonstiges_bezug_netz,
+            einspeise_erloes_euro=roh.sonstiges_einspeise_erloes_euro,
             je_geraet={
                 inv_id: SonstigesGeraetFakten(
                     erzeugung_kwh=g["erzeugung"],
@@ -1121,6 +1135,7 @@ async def _baue_fakt(
                     einspeisung_kwh=g["einspeisung"],
                     bezug_pv_kwh=g["bezug_pv"],
                     bezug_netz_kwh=g["bezug_netz"],
+                    einspeise_erloes_euro=g.get("einspeise_erloes_euro", 0.0),
                 )
                 for inv_id, g in roh.sonstiges_je_geraet.items()
             },

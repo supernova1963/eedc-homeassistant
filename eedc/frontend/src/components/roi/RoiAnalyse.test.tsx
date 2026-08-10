@@ -17,6 +17,9 @@ vi.mock('../../api', async (importOriginal) => ({
       gesamt_jahres_einsparung: 1500,
       gesamt_roi_prozent: 10,
       gesamt_amortisation_jahre: 10,
+      // Konzept §5/§8-6: der Text kommt fertig aus dem Backend-SoT — der
+      // Client formuliert ihn nicht, er zeigt ihn nur.
+      amortisation_annahme: 'ohne künftige Instandhaltung',
       gesamt_co2_einsparung_kg: 2000,
       benzinpreis_hinweis_euro: 1.7,
       berechnungen: [{
@@ -43,7 +46,7 @@ vi.mock('../../api/aussichten', () => ({
   },
 }))
 
-import { RoiAnalyse } from './RoiAnalyse'
+import { RoiAnalyse, nennerText } from './RoiAnalyse'
 
 describe('RoiAnalyse', () => {
   it('lädt + rendert KPIs, Detailzeile und meldet onLoaded', async () => {
@@ -79,11 +82,46 @@ describe('RoiAnalyse', () => {
     expect(screen.getAllByText(/noch 9\.000 €.*2032/).length).toBeGreaterThan(0)
   })
 
+  it('§8/6: die Dauer nennt ihre Annahme sichtbar unter der Break-Even-Kurve', async () => {
+    // Der Backend-Prüfer deckt, dass der Text geliefert wird
+    // (`test_konzept_wirtschaftlichkeit_konformitaet.py::test_schritt6_*`) —
+    // diese Probe deckt die andere Hälfte: dass ihn auch jemand anzeigt.
+    // Bewusst die SICHTBARE Stelle, nicht der Tooltip: die Kurve ist der Ort,
+    // an dem die Zukunft gezeichnet wird (Konzept §5).
+    render(<RoiAnalyse anlageId={1} />)
+    expect(await screen.findAllByText(/Annahme: ohne künftige Instandhaltung/))
+      .not.toHaveLength(0)
+  })
+
   it('N-137: ohne Fortschritts-Zahl entfällt die Kachel, der Rest steht', async () => {
     const { aussichtenApi } = await import('../../api/aussichten')
     vi.mocked(aussichtenApi.getFinanzPrognose).mockRejectedValueOnce(new Error('offline'))
     render(<RoiAnalyse anlageId={1} />)
     expect(await screen.findAllByText(/Gesamtinvestition/)).not.toHaveLength(0)
     expect(screen.queryByText(/Amortisations-Fortschritt/)).not.toBeInTheDocument()
+  })
+})
+
+describe('nennerText — der Rechenweg des Kapitaleinsatzes', () => {
+  it('nennt beide Seiten: Ausgaben erhöhen, Erträge mindern (Bauschritt 7)', () => {
+    const text = nennerText({
+      gesamt_relevante_kosten: 90900,
+      gesamt_sonstige_ausgaben_euro: 1015,
+      gesamt_sonstige_ertraege_euro: 455,
+      gesamt_kapitaleinsatz: 91460,
+    })
+    expect(text).toContain('sonstige Ausgaben')
+    expect(text).toContain('sonstige Erträge')
+    // Das Minuszeichen ist der Halbgeviertstrich (Typografie-Regel), kein ASCII-Bindestrich.
+    expect(text).toMatch(/− [^ ]+ € sonstige Erträge/)
+    // Und der Rechenweg endet auf der Zahl, mit der das Backend geteilt hat —
+    // sonst stünde neben dem Ergebnis eine andere Summe (N-212-Klasse).
+    expect(text).toMatch(/= 91\.460 €$/)
+  })
+
+  it('ohne sonstige Positionen bleibt es bei einer Zahl', () => {
+    const text = nennerText({ gesamt_relevante_kosten: 15000, gesamt_kapitaleinsatz: 15000 })
+    expect(text).not.toContain('sonstige')
+    expect(text).toBe('15.000 €')
   })
 })

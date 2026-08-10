@@ -51,6 +51,7 @@ from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kw
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
 from backend.core.berechnungen.kapitalrechnung import (
     ErsparnisPosten,
+    annahme_dauer_text,
     erklaerung_jahres_ersparnis,
     jahres_ersparnis_euro,
     kapitaleinsatz_euro,
@@ -66,7 +67,11 @@ from backend.services.emob_ladeanteil import reichere_monatszeilen_an
 from backend.models.anlage import Anlage
 from backend.services.activity_service import log_activity
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.investition import Investition, InvestitionMonatsdaten
+from backend.models.investition import (
+    ERTRAGSFELD_TYPEN,
+    Investition,
+    InvestitionMonatsdaten,
+)
 from backend.utils.investition_filter import aktiv_jetzt
 from backend.models.strompreis import Strompreis
 from backend.services.ha_sensors_export import (
@@ -450,11 +455,17 @@ async def calculate_anlage_sensors(
     # (typ-unabhängig, #310) UND die Basis-Positionen der Monatsdaten-Zeile
     # (G19-1) an einer Stelle, gleiche Netto-Faltung wie Cockpit/Jahresbericht.
     sonstige_netto_gesamt = sum(f.sonstiges.netto_euro for f in fakten)
-    # F-19: nur die AUSGABEN gehen in den Kapitaleinsatz. Sonstige Erträge
-    # bleiben im Zähler (sie stecken in `netto_ertrag`), und die dienstlichen
-    # Ladekosten weiter unten gehören ebenfalls nicht hierher — sie sind
+    # Konzept §9 Weg 2 — eigener Summand neben dem Anlagen-Einspeiseerlös.
+    erzeuger_erloes_gesamt = sum(f.sonstiges.einspeise_erloes_euro for f in fakten)
+    # F-19: die AUSGABEN gehen in den Kapitaleinsatz. Die dienstlichen
+    # Ladekosten weiter unten gehören ausdrücklich nicht hierher — sie sind
     # laufender Aufwand, kein eingesetztes Kapital.
     sonstige_ausgaben_gesamt = sum(f.sonstiges.ausgaben_euro for f in fakten)
+    # §8/3: dasselbe für die Ertragsseite — gebraucht, um die Projektion der
+    # Jahres-Ersparnis unten von den gepflegten Positionen zu befreien.
+    # Bauschritt 7 (2026-08-10): und sie **mindern den Kapitaleinsatz**. Der
+    # Sensor `netto_ertrag_euro` behält beide Seiten (Zeitraum-Bilanz).
+    sonstige_ertraege_gesamt = sum(f.sonstiges.ertraege_euro for f in fakten)
 
     # Dienstliche Ladekosten — bis 2026-07-31 hat der HA-Export sie als einzige
     # der drei Sichten **gar nicht** abgezogen (N-13): der Sensor
@@ -492,7 +503,8 @@ async def calculate_anlage_sensors(
             for f in fakten if f.meta.hat_zaehlerzeile
         ]
         _finanz = berechne_finanz_aggregat(
-            finanz_zeilen, sonstige_netto_euro=sonstige_netto_gesamt
+            finanz_zeilen, sonstige_netto_euro=sonstige_netto_gesamt,
+            erzeuger_erloes_euro=erzeuger_erloes_gesamt
         )
         einspeise_erloes = _finanz.einspeise_erloes_euro
         ev_ersparnis = _finanz.ev_ersparnis_euro
@@ -508,6 +520,17 @@ async def calculate_anlage_sensors(
     alternativ_gesamt = sum(i.anschaffungskosten_alternativ or 0 for i in investitionen)
     relevante_kosten = investition_gesamt - alternativ_gesamt
     betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
+    # §8/2: das Gegenstück auf der Ertragsseite. `investitionen` ist bereits
+    # `aktiv_jetzt()`-gefiltert (heutiger Zustand), es fehlt nur die Typ-Grenze
+    # — nur dort wird das Feld gepflegt und vom ROI-Dashboard gelesen. Ohne
+    # diesen Summanden trügen die HA-Sensoren `jahres_ersparnis_euro`,
+    # `roi_prozent` und `amortisation_jahre` eine andere Zahl als die
+    # Oberfläche, sobald jemand einen Jahres-Ertrag pflegt.
+    jahres_ertraege_ges = sum(
+        i.einsparung_prognose_jahr or 0
+        for i in investitionen
+        if i.typ in ERTRAGSFELD_TYPEN
+    )
 
     # #326-Inventur Dimension 2: USt auf Eigenverbrauch bei Regelbesteuerung.
     # Cockpit und Aussichten ziehen sie ab, der HA-Export bisher nicht — der
@@ -847,12 +870,22 @@ async def calculate_anlage_sensors(
 
     # F-19: für die KAPITALRECHNUNG ohne die sonstigen AUSGABEN — sie stehen ab
     # hier im Nenner. Ohne diesen Abzug stünde dieselbe Reparatur zweimal in
-    # derselben Formel. Die sonstigen ERTRÄGE bleiben drin, sie gehören in den
-    # Zähler. Der Sensor `netto_ertrag_euro` behält beides: er ist die
+    # derselben Formel.
+    #
+    # §8/3 (2026-08-10): und **ohne die sonstigen Erträge**. Eine Position im
+    # Monatsabschluss ist per Form einmal geflossen (§2/2) und wird deshalb
+    # nicht in die Zukunft verlängert — sonst hätte eine einmalige Förderung
+    # jedes künftige Jahr erhöht, spiegelbildlich zu F-19. Wer einen
+    # *wiederkehrenden* Ertrag meint, pflegt ihn seit §8/1 als „Ertrag/Jahr" an
+    # der Investition; der steht als eigener Summand in `jahres_ertraege_ges`.
+    #
+    # Der Sensor `netto_ertrag_euro` behält beide Seiten: er ist die
     # Zeitraum-Bilanz („was hat der Zeitraum eingebracht?"), und dort ist eine
-    # Reparatur ein Aufwand des Zeitraums. Trennlinie:
-    # `core/berechnungen/kapitalrechnung.py`.
-    bilanz_ohne_ausgaben = netto_ertrag + sonstige_ausgaben_gesamt
+    # Reparatur ein Aufwand und eine Förderung ein Ertrag des Zeitraums.
+    # Trennlinie: `core/berechnungen/kapitalrechnung.py`.
+    bilanz_ohne_sonstige = (
+        netto_ertrag + sonstige_ausgaben_gesamt - sonstige_ertraege_gesamt
+    )
 
     # Jahresersparnis — **jeder Posten mit seiner eigenen Monatszahl** (F-20).
     # `netto_ertrag` ist die Anlagenbilanz und gehört zu allen erfassten
@@ -861,20 +894,26 @@ async def calculate_anlage_sensors(
     # dadurch verdünnt — bei vollem Kostenanteil im Nenner.
     anzahl_monate = len(monatsdaten)
     ersparnis_posten = [
-        ErsparnisPosten("Anlagenbilanz", bilanz_ohne_ausgaben, anzahl_monate),
+        ErsparnisPosten("Anlagenbilanz", bilanz_ohne_sonstige, anzahl_monate),
         *wp_posten,
         *emob_posten,
     ]
     jahres_ersparnis = jahres_ersparnis_euro(
-        ersparnis_posten, betriebskosten_jahr_euro=betriebskosten_ges
+        ersparnis_posten,
+        betriebskosten_jahr_euro=betriebskosten_ges,
+        jahres_ertraege_euro=jahres_ertraege_ges,
     )
 
     # ROI und Amortisation. Nenner ist der Kapitaleinsatz (F-19): relevante
-    # Kosten + die kumulierten sonstigen Netto-Kosten, die bis 2026-08-09 im
-    # Zähler standen und dort annualisiert wurden.
+    # Kosten + die kumulierten sonstigen AUSGABEN, die bis 2026-08-09 im
+    # Zähler standen und dort annualisiert wurden — **minus die kumulierten
+    # sonstigen ERTRÄGE** (Bauschritt 7, 2026-08-10). Beide Seiten des
+    # Monatsabschlusses stehen damit im Nenner; im Zähler
+    # (`bilanz_ohne_sonstige`) sind sie seit §8/3 ohnehin nicht mehr.
     kapitaleinsatz = kapitaleinsatz_euro(
         relevante_kosten_euro=relevante_kosten,
         sonstige_ausgaben_euro=sonstige_ausgaben_gesamt,
+        sonstige_ertraege_euro=sonstige_ertraege_gesamt,
     )
     roi_prozent = None
     amortisation_jahre = None
@@ -995,7 +1034,9 @@ async def calculate_anlage_sensors(
                 # hier `(Σ ÷ Anlagenmonate) × 12` — das ergab einen um exakt
                 # die Betriebskosten größeren Wert als der Sensor daneben.
                 berechnung = erklaerung_jahres_ersparnis(
-                    ersparnis_posten, betriebskosten_jahr_euro=betriebskosten_ges
+                    ersparnis_posten,
+                    betriebskosten_jahr_euro=betriebskosten_ges,
+                    jahres_ertraege_euro=jahres_ertraege_ges,
                 )
         elif sensor.key == "roi_prozent":
             if roi_prozent is not None:
@@ -1007,13 +1048,23 @@ async def calculate_anlage_sensors(
                 # F-19: der Nenner ist der Kapitaleinsatz. Er wird ausgeschrieben,
                 # solange sonstige Positionen ihn von den relevanten Kosten
                 # unterscheiden — sonst bliebe die Differenz unerklärt (N-212).
-                if sonstige_ausgaben_gesamt:
-                    berechnung = (
-                        f"({relevante_kosten:.2f} + {sonstige_ausgaben_gesamt:.2f} sonstige Ausgaben)"
-                        f" ÷ {jahres_ersparnis:.2f}"
-                    )
+                if sonstige_ausgaben_gesamt or sonstige_ertraege_gesamt:
+                    _nenner = f"{relevante_kosten:.2f}"
+                    if sonstige_ausgaben_gesamt:
+                        _nenner += f" + {sonstige_ausgaben_gesamt:.2f} sonstige Ausgaben"
+                    # Bauschritt 7: die Erträge mindern den Nenner und werden
+                    # deshalb genauso ausgeschrieben — sonst bliebe die
+                    # Differenz zum Ergebnis unerklärt (N-212).
+                    if sonstige_ertraege_gesamt:
+                        _nenner += f" − {sonstige_ertraege_gesamt:.2f} sonstige Erträge"
+                    berechnung = f"({_nenner}) ÷ {jahres_ersparnis:.2f}"
                 else:
                     berechnung = f"{kapitaleinsatz:.2f} ÷ {jahres_ersparnis:.2f}"
+                # Konzept §5/§8-6: die Annahme steht im selben Attribut wie der
+                # Rechenweg. Ein HA-Sensor hat keinen Tooltip — wer die Zahl in
+                # ein Dashboard hängt, sieht sonst eine Dauer ohne jede
+                # Voraussetzung.
+                berechnung += f" — {annahme_dauer_text(betriebskosten_jahr_euro=betriebskosten_ges)}"
 
         if value is not None:
             sensor_values.append(SensorValue(

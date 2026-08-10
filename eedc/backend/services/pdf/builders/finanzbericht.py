@@ -191,6 +191,12 @@ async def build_finanzbericht_context(
             f" ÷ {_format_euro(jahres_einsparung_euro_wert)} pro Jahr"
             if amortisation_jahre else ""
         ),
+        # Konzept §5/§8-6: die Annahme gehört neben die Zahl, nicht in die
+        # Fußnoten. Im PDF wiegt das schwerer als am Bildschirm — es wird
+        # weitergereicht und gelesen, wenn niemand mehr nachfragen kann.
+        "amortisation_annahme": (
+            _roi.amortisation_annahme if amortisation_jahre else ""
+        ),
         "foerderungen": foerderungen,
         "versicherungen": versicherungen,
         "steuerdaten": steuerdaten,

@@ -98,6 +98,11 @@ class ImdTypBeitrag:
     sonstiges_einspeisung: float = 0.0
     sonstiges_bezug_pv: float = 0.0
     sonstiges_bezug_netz: float = 0.0
+    #: Konzept §9 Weg 2: Erlös DIESES Erzeugers in € (eigener Einspeisetarif,
+    #: den eedc nicht kennen kann — es gibt einen Satz je Anlage). Folgt der
+    #: Kategorie-Regel wie Eigenverbrauch/Einspeisung: ein Verbraucher hat
+    #: keinen Einspeise-Erlös.
+    sonstiges_einspeise_erloes_euro: float = 0.0
 
 
 def _f(data: dict, key: str) -> float:
@@ -183,12 +188,16 @@ def imd_typ_beitrag(inv, data: dict | None) -> ImdTypBeitrag:
         einspeisung = _f(data, "einspeisung_kwh")
         bezug_pv = _f(data, "bezug_pv_kwh")
         bezug_netz = _f(data, "bezug_netz_kwh")
+        erloes_euro = _f(data, "einspeise_erloes_euro")
         if kategorie == "erzeuger":
             verbrauch = 0.0
             bezug_pv = bezug_netz = 0.0
         elif kategorie == "verbraucher":
             erzeugung = 0.0
             eigenverbrauch = einspeisung = 0.0
+            # Ein Verbraucher speist nicht ein und hat deshalb auch keinen
+            # Einspeise-Erlös — dieselbe Stummschaltung wie oben (C1d).
+            erloes_euro = 0.0
         # sonst (leere Kategorie): beide Werte mitnehmen (Site-3-Verhalten)
         return ImdTypBeitrag(
             typ=typ,
@@ -198,6 +207,7 @@ def imd_typ_beitrag(inv, data: dict | None) -> ImdTypBeitrag:
             sonstiges_einspeisung=einspeisung,
             sonstiges_bezug_pv=bezug_pv,
             sonstiges_bezug_netz=bezug_netz,
+            sonstiges_einspeise_erloes_euro=erloes_euro,
         )
 
     return ImdTypBeitrag(typ=typ)

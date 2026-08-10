@@ -324,7 +324,7 @@ Demo-Flags baut, stellt `dist/` danach wieder her, sonst landet ein Demo-Build i
 | neigung_grad | FLOAT | Modulneigung in Grad (PV-Module) |
 | ha_entity_id | VARCHAR(255) | HA Entity-ID (für String-IST-Erfassung) |
 | parameter | JSON | Typ-spezifische Parameter |
-| einsparung_prognose_jahr | FLOAT | Jahres-Einsparungsprognose |
+| einsparung_prognose_jahr | FLOAT | „Ertrag/Jahr" — wiederkehrender Ertrag/Einsparung, pflegbar bei Wallbox/Sonstiges (`ERTRAGSFELD_TYPEN`) |
 | co2_einsparung_prognose_kg | FLOAT | CO2-Einsparungsprognose |
 | aktiv | BOOLEAN | Aktiv/Inaktiv |
 | parent_investition_id | INTEGER | Foreign Key → Investitionen (für Parent-Child) |

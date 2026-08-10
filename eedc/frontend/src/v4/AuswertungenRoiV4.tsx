@@ -94,8 +94,12 @@ function RoiInner() {
     ...(sichtbar(['kpi:investition', 'kpi:einsparung', 'kpi:amortisation', 'kpi:amortisation-fortschritt']) ? [{
       id: 'wirtschaftlichkeit', title: 'Wirtschaftlichkeit auf einen Blick', icon: TrendingUp,
       farbe: 'text-green-500', defaultOpen: true,
+      // Konzept §5/§8-6: die Zusammenfassung ist bei zugeklapptem Block die
+      // EINZIGE sichtbare Dauer-Anzeige — die Annahme gehört deshalb hierher
+      // und nicht nur in die Kachel darunter.
       summary: `${formatGeld(roiData.gesamt_investition).text} investiert · ${roiData.gesamt_amortisation_jahre
-        ? `${roiData.gesamt_amortisation_jahre} J. Amortisation${roiData.gesamt_amortisation_jahr ? ` (≈ ${roiData.gesamt_amortisation_jahr})` : ''}`
+        ? `${roiData.gesamt_amortisation_jahre} J. Amortisation${roiData.gesamt_amortisation_jahr ? ` (≈ ${roiData.gesamt_amortisation_jahr})` : ''}${
+          roiData.amortisation_annahme ? ` · ${roiData.amortisation_annahme}` : ''}`
         : 'Amortisation offen'}`,
       render: () => <KpiStrip kpis={roiKpiItems(roiData, false, vm.fortschritt)} />,
     }] : []),

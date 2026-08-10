@@ -2,9 +2,10 @@
 
 *Auswertungen → ROI*, die **HA-Sensoren**, die **Aussichten** und der
 **PDF-Finanzbericht** rechnen ihre Amortisation gegen denselben Nenner:
-relevante Kosten **plus die kumulierten sonstigen Ausgaben** — und zwar aus
-**beiden** Erfassungsorten: an einer Investition *und* auf der
-``Monatsdaten``-Zeile (Monatsabschluss ohne Komponente).
+relevante Kosten **plus die kumulierten sonstigen Ausgaben, minus die
+kumulierten sonstigen Erträge** — und zwar aus **beiden** Erfassungsorten: an
+einer Investition *und* auf der ``Monatsdaten``-Zeile (Monatsabschluss ohne
+Komponente).
 
 ⚠ **Die zweite Hälfte trug erst ab 2026-08-10** (Bauschritt 4 des Konzepts §8).
 Bis dahin behauptete dieser Docstring „vier Sichten, ein Nenner", während eine
@@ -28,16 +29,19 @@ lässt sich keine der Zahlen in eine andere überführen. Genau das ist die
 Zusicherung, die `test_amortisation_nenner_symmetrie.py` für die relevanten
 Kosten trifft; hier kommt die Ausgaben-Seite dazu.
 
-**Die zweite Zusicherung: Erträge und Ausgaben stehen auf verschiedenen Seiten
-des Bruchs.** Ausgaben kumuliert in den Nenner, Erträge annualisiert im Zähler
-— Begründung und Rechnung in `core/berechnungen/kapitalrechnung.py`.
+**Die zweite Zusicherung: beide Seiten des Monatsabschlusses stehen im
+Nenner** — Ausgaben erhöhen ihn, Erträge mindern ihn, beide **kumuliert** und
+keine von beiden im Zähler. Begründung und Rechnung in
+`core/berechnungen/kapitalrechnung.py`.
 
-⏳ **Eine der Zusicherungen ist ein ZWISCHENSTAND:** `test_ertrag_bleibt_im_
-zaehler_…` gilt nur, **bis Bauschritt 7** aus `docs/KONZEPT-WIRTSCHAFTLICHKEITS
-RECHNUNG.md` §8 gefahren ist. Danach gehören auch die Erträge in den Nenner, und
-**dieser Test ist umzuschreiben — nicht der Code zu „reparieren"**. Wird er nach
-Schritt 7 rot, ist das der geplante Zustand. Alle anderen Proben dieser Datei
-sind dauerhaft.
+⚑ **Bis 2026-08-10 stand hier das Gegenteil**, und zwar als ausdrücklicher
+Zwischenstand: die Erträge blieben im Zähler, solange es keinen Ort für
+*wiederkehrende* Erträge gab. Mit **Bauschritt 7** (Konzept §8) ist die
+Vollkostenrechnung vollständig; die Probe
+`test_ertrag_mindert_den_nenner_wie_die_ausgabe_ihn_erhoeht` unten ist die
+umgeschriebene Fassung der alten `test_ertrag_bleibt_im_zaehler_…` — sie wurde
+**umgeschrieben, nicht der Code repariert**, genau wie die Bauliste es
+vorgesehen hat.
 
 ⚠ **Wer diesen Test „korrigieren" will, liest zuerst
 `docs/KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md` §7.** Mehrere naheliegende
@@ -63,9 +67,9 @@ from backend.services.pdf.builders.finanzbericht import build_finanzbericht_cont
 RELEVANTE_KOSTEN = 15000.0
 #: … plus eine einmalige Reparatur von 3.000 € = Kapitaleinsatz.
 REPARATUR = 3000.0
-#: Ein wiederkehrender sonstiger Ertrag — er gehört NICHT in den Nenner.
+#: Ein sonstiger Ertrag (THG-Quote) — er MINDERT den Nenner (Bauschritt 7).
 THG_ERTRAG = 200.0
-ERWARTETER_KAPITALEINSATZ = RELEVANTE_KOSTEN + REPARATUR
+ERWARTETER_KAPITALEINSATZ = RELEVANTE_KOSTEN + REPARATUR - THG_ERTRAG
 
 
 async def _anlage(db) -> int:
@@ -244,23 +248,33 @@ async def test_anlagenweite_ausgabe_erreicht_alle_vier_sichten(db):
                 if (b.detail_berechnung or {}).get("sonstige_ausgaben_euro")]
 
 
-async def test_ertrag_bleibt_im_zaehler_ausgabe_geht_in_den_nenner(db):
+async def test_ertrag_mindert_den_nenner_wie_die_ausgabe_ihn_erhoeht(db):
     """Die zweite Zusicherung — beide Seiten des Bruchs, an einer Anlage.
 
-    Ein wiederkehrender Ertrag im Nenner ergäbe `(K − E·n) ÷ Z`: eine Zahl, die
-    jedes Jahr schrumpft und irgendwann negativ wird. Deshalb steht er im
-    Zähler (#310 rilmor-mhrs — zwei Wechselrichter mit eigenen Einspeisetarifen,
-    die eedc nur als sonstige Erträge abbilden kann).
+    **Bauschritt 7 (2026-08-10):** eine Position im Monatsabschluss ist per
+    Form einmal geflossen (§2/2) — als eingesetztes Kapital (Ausgabe) oder als
+    Minderung desselben (Ertrag). Eine Förderung ist Geld, das nie eingesetzt
+    wurde.
+
+    ⚠ **Diese Probe stand bis 2026-08-10 auf dem Kopf** (`test_ertrag_bleibt_
+    im_zaehler_…`) und war als Zwischenstand gekennzeichnet: solange es keinen
+    Ort für *wiederkehrende* Erträge gab, hätte `(K − E·n) ÷ Z` jedes Jahr
+    geschrumpft und wäre irgendwann negativ geworden. Den Ort gibt es seit
+    §8/1 („Ertrag/Jahr" an der Investition) und §8/9 (€-Feld je Erzeuger,
+    per HA-Sensor befüllbar) — #310 rilmor-mhrs wurde vorher informiert (§11).
     """
     anlage_id = await _anlage(db)
     roi = await _roi(db, anlage_id)
 
-    # Der Ertrag hat den Nenner NICHT gemindert …
-    assert roi.gesamt_kapitaleinsatz == pytest.approx(RELEVANTE_KOSTEN + REPARATUR)
-    assert roi.gesamt_kapitaleinsatz != pytest.approx(
+    # Der Ertrag hat den Nenner gemindert — um genau seinen Betrag …
+    assert roi.gesamt_sonstige_ertraege_euro == pytest.approx(THG_ERTRAG)
+    assert roi.gesamt_kapitaleinsatz == pytest.approx(
         RELEVANTE_KOSTEN + REPARATUR - THG_ERTRAG
     )
-    # … und die Ausgabe steht auf der Zeile, die sie trägt. Die Fixture hat
+    # … und nicht etwa gar nicht (der Zustand vor Bauschritt 7).
+    assert roi.gesamt_kapitaleinsatz != pytest.approx(RELEVANTE_KOSTEN + REPARATUR)
+
+    # Beide Seiten stehen auf der Zeile, die sie trägt. Die Fixture hat
     # bewusst KEINEN Wechselrichter, das PV-Modul läuft deshalb über den
     # Orphan-Zweig — einen der drei Zweige, die `_sonstige_*_fuer` bedienen.
     zeilen_mit_ausgaben = [
@@ -269,7 +283,64 @@ async def test_ertrag_bleibt_im_zaehler_ausgabe_geht_in_den_nenner(db):
     ]
     assert len(zeilen_mit_ausgaben) == 1, "genau eine Zeile trägt die Reparatur"
     assert zeilen_mit_ausgaben[0].detail_berechnung["sonstige_ausgaben_euro"] == pytest.approx(REPARATUR)
-    assert zeilen_mit_ausgaben[0].kapitaleinsatz == pytest.approx(10000.0 + REPARATUR)
+    assert zeilen_mit_ausgaben[0].detail_berechnung["sonstige_ertraege_euro"] == pytest.approx(THG_ERTRAG)
+    assert zeilen_mit_ausgaben[0].kapitaleinsatz == pytest.approx(
+        10000.0 + REPARATUR - THG_ERTRAG
+    )
+
+
+async def test_ertrag_ueber_dem_kapital_liefert_keine_dauer(db):
+    """Der Randfall, den Bauschritt 7 erst möglich macht: Nenner ≤ 0.
+
+    Übersteigen die Erträge das eingesetzte Kapital, gibt es keine
+    Amortisationsdauer — und eedc **rät** dort nicht (weder 0 Jahre noch eine
+    negative Zahl). Geprüft wird die ausgelieferte Antwort, nicht nur der
+    Layer: `berechne_roi` und `berechne_amortisations_fortschritt` klemmen
+    beide bei `kosten <= 0`.
+    """
+    from sqlalchemy import select as _select
+
+    anlage = Anlage(anlagenname="VollGefoerdert", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    for monat in (4, 5):
+        db.add(Monatsdaten(anlage_id=anlage.id, jahr=2025, monat=monat,
+                           einspeisung_kwh=600.0, netzbezug_kwh=100.0))
+    pv = Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Dach",
+                     leistung_kwp=10.0, anschaffungsdatum=date(2024, 1, 1),
+                     anschaffungskosten_gesamt=5000.0)
+    db.add(pv)
+    await db.flush()
+    db.add(InvestitionMonatsdaten(
+        investition_id=pv.id, jahr=2025, monat=4,
+        verbrauch_daten={
+            "pv_erzeugung_kwh": 600.0,
+            # Förderung über den Anschaffungskosten.
+            "sonstige_positionen": [
+                {"bezeichnung": "Förderung", "betrag": 6000.0, "typ": "ertrag"},
+            ],
+        },
+    ))
+    db.add(InvestitionMonatsdaten(investition_id=pv.id, jahr=2025, monat=5,
+                                  verbrauch_daten={"pv_erzeugung_kwh": 600.0}))
+    await db.commit()
+
+    roi = await _roi(db, anlage.id)
+    assert roi.gesamt_kapitaleinsatz < 0, "Fixture erzeugt den Randfall nicht"
+    assert roi.gesamt_amortisation_jahre is None
+    assert roi.gesamt_roi_prozent is None
+
+    prognose = await get_finanz_prognose(anlage_id=anlage.id, monate=12, db=db)
+    assert prognose.amortisations_fortschritt_prozent == pytest.approx(0.0)
+    assert prognose.amortisation_prognose_jahr is None
+
+    anlage_row = (await db.execute(_select(Anlage).where(Anlage.id == anlage.id))).scalar_one()
+    sensoren = {sv.definition.key: sv for sv in await calculate_anlage_sensors(db, anlage_row)}
+    assert not (sensoren.get("amortisation_jahre") and sensoren["amortisation_jahre"].value)
 
 
 # ============================================================================

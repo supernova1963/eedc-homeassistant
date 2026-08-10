@@ -14,6 +14,9 @@ export interface InvestitionCreate {
   anschaffungskosten_gesamt?: number
   anschaffungskosten_alternativ?: number
   betriebskosten_jahr?: number
+  // Ertragsseite des Jahresbetrags (Konzept §8/1) — nur Wallbox/Sonstiges,
+  // dort liest das ROI-Dashboard ihn als Jahres-Einsparung.
+  einsparung_prognose_jahr?: number
   parameter?: Record<string, unknown>
   aktiv?: boolean
   parent_investition_id?: number
@@ -41,6 +44,7 @@ export interface InvestitionUpdate {
   anschaffungskosten_gesamt?: number | null
   anschaffungskosten_alternativ?: number | null
   betriebskosten_jahr?: number | null
+  einsparung_prognose_jahr?: number | null
   parameter?: Record<string, unknown>
   aktiv?: boolean
   parent_investition_id?: number | null
@@ -75,14 +79,21 @@ export interface ROIBerechnung {
   anschaffungskosten_alternativ: number
   relevante_kosten: number
   /**
-   * F-19: der tatsächliche Nenner von `roi_prozent`/`amortisation_jahre` —
-   * relevante Kosten plus die kumulierten sonstigen **Ausgaben**.
+   * F-19 + Bauschritt 7: der tatsächliche Nenner von
+   * `roi_prozent`/`amortisation_jahre` — relevante Kosten plus die kumulierten
+   * sonstigen **Ausgaben**, minus die kumulierten sonstigen **Erträge**.
    * `relevante_kosten` bleibt die Mehrkosten-Größe (zugleich USt-Grundlage).
    */
   kapitaleinsatz: number
   jahres_einsparung: number
   roi_prozent: number | null
   amortisation_jahre: number | null
+  /**
+   * Konzept §5/§8-6: die Annahme, unter der `amortisation_jahre` gilt —
+   * gebildet im Backend (`kapitalrechnung.annahme_dauer_text`), hier nur
+   * angezeigt. Mit gepflegten Betriebskosten lautet sie anders (Modell C).
+   */
+  amortisation_annahme: string | null
   co2_einsparung_kg: number | null
   detail_berechnung: Record<string, unknown>
   komponenten?: ROIKomponente[]  // Für PV-Systeme: aufklappbare Unterkomponenten
@@ -93,9 +104,18 @@ export interface ROIDashboardResponse {
   anlage_name: string
   gesamt_investition: number
   gesamt_relevante_kosten: number
-  /** F-19: kumulierte sonstige AUSGABEN (positiver Betrag). Erträge stehen im Zähler. */
+  /** F-19: kumulierte sonstige AUSGABEN (positiver Betrag) — sie erhöhen den Nenner. */
   gesamt_sonstige_ausgaben_euro: number
-  /** F-19: Nenner von ROI/Amortisation = relevante Kosten + sonstige Ausgaben. */
+  /**
+   * Bauschritt 7 (Konzept §8): kumulierte sonstige ERTRÄGE (positiver Betrag)
+   * — sie **mindern** den Nenner. Optional, weil ältere Backends das Feld
+   * nicht liefern.
+   */
+  gesamt_sonstige_ertraege_euro?: number
+  /**
+   * Nenner von ROI/Amortisation = relevante Kosten + sonstige Ausgaben
+   * − sonstige Erträge (F-19 + Bauschritt 7).
+   */
   gesamt_kapitaleinsatz: number
   gesamt_jahres_einsparung: number
   gesamt_roi_prozent: number | null
@@ -104,6 +124,8 @@ export interface ROIDashboardResponse {
   basis_jahr: number | null
   /** Voraussichtliches Break-Even-Kalenderjahr (basis_jahr + Amortisationsdauer). */
   gesamt_amortisation_jahr: number | null
+  /** Konzept §5/§8-6: die Annahme hinter Kachel, Kurve und Summenzeile. */
+  amortisation_annahme: string | null
   gesamt_co2_einsparung_kg: number
   berechnungen: ROIBerechnung[]
   // Vorgeschlagener Slider-Wert: letzter Monatsdaten-Preis (EU Weekly Oil

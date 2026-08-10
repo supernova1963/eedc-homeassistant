@@ -1,6 +1,6 @@
 # Konzept — Wirtschaftlichkeitsrechnung: wo eine Zahl hingehört und warum
 
-> **Status: ENTSCHIEDEN (2026-08-10), teilweise gebaut.** Dieses Dokument hält die
+> **Status: ENTSCHIEDEN und GEBAUT (2026-08-10).** Dieses Dokument hält die
 > Entscheidungen fest, die am 09./10.08.2026 zwischen Maintainer und Entwicklung
 > getroffen wurden — samt der **verworfenen** Wege und der Messungen, die sie
 > verworfen haben.
@@ -19,11 +19,14 @@
 > | Der gemeinsame Nenner (Mehrkosten) | ADR-002-Umfeld, `investitionskosten.py`, N-137 |
 > | Anwender-Sicht | [`docs/HANDBUCH_BEDIENUNG.md`](HANDBUCH_BEDIENUNG.md) §Auswertungen → ROI |
 >
-> **Offen ist §8** — die Bauliste. Ohne deren Abarbeitung wird nicht released
-> (Entscheid Maintainer, 10.08.); ein GitHub-Issue gibt es deshalb bewusst nicht.
+> **§8 — die Bauliste — ist am 10.08. abgearbeitet**, zuletzt Schritt 7. Sie war
+> Release-Bedingung (Entscheid Maintainer, 10.08.); ein GitHub-Issue gibt es
+> deshalb bewusst nicht. Der maschinelle Stand steht im Dict
+> ``BAUSCHRITTE_OFFEN`` (leer), nicht in diesem Papier.
 > **§10** hält die Anleitung für Komponenten-Erweiterungen fest (der Fall, aus dem
 > alles entstand), **§11** regelt, wer was über welchen Kanal erfährt — inklusive
-> der einen Mitteilung, die einem Bauschritt **vorausgehen** muss.
+> der einen Mitteilung, die einem Bauschritt **vorausgehen** musste (sie ist
+> gepostet).
 
 ---
 
@@ -62,7 +65,7 @@ nichts zu klassifizieren — und damit nichts, was eedc falsch raten könnte.
 | Erfassungsort | Beispiel | Prognose | laufendes Ergebnis | Kapitaleinsatz |
 | --- | --- | :---: | :---: | :---: |
 | Investition — **Kosten/Jahr** (`betriebskosten_jahr`) | Versicherung 180 € | ✔ | Abzug | — |
-| Investition — **Ertrag/Jahr** *(Feld noch nicht pflegbar, §8)* | zweiter Erzeuger ≈ 500 € | ✔ | Zuschlag | — |
+| Investition — **Ertrag/Jahr** (`einsparung_prognose_jahr`) | zweiter Erzeuger ≈ 500 € | ✔ | Zuschlag | — |
 | Monatsabschluss, `typ: ausgabe` | Reparatur 3.000 € | ✘ | — | **+** |
 | Monatsabschluss, `typ: ertrag` | THG-Quote, Förderung | ✘ | — | **−** |
 
@@ -90,6 +93,15 @@ Er kann nicht geschönt sein, weil er nichts unterstellt.
 braucht eine — die Frage ist nur, welche (§5). Deshalb stehen beide
 nebeneinander, auf **demselben Nenner** (N-137), sodass sich die eine in die
 andere überführen lässt.
+
+> ⚠ **„Keine Annahme" gilt für den Prozentwert, nicht für die Zeile darunter.**
+> Die Fortschritts-Kachel nennt im Untertitel „noch 9.000 € · **voraussichtlich
+> 2032**" — und dieses Jahr rechnet den offenen Rest mit der Jahres-Prognose
+> hoch. Es ist damit selbst eine **Dauer-Aussage** und fällt unter §5, obwohl es
+> in der gemessenen Kachel steht. Beim Bau von §8/6 (2026-08-10) aufgefallen und
+> mitgenommen: die Restlaufzeit trägt denselben Satz wie das ROI-Dashboard,
+> gebildet aus demselben Layer-SoT. **Der Fortschritt in Prozent bleibt, was
+> diese Tabelle sagt** — er unterstellt nichts.
 
 ## 5. Die Annahme hinter der Dauer — drei Modelle, eines gewählt
 
@@ -189,6 +201,7 @@ scheiterte an Geschmack.
 | **Alles** in den Nenner, auch Erträge | bricht bei wiederkehrenden Erträgen (§6, dritter Einwand) |
 | **Instandhaltungsrücklage** als eigenes Konzept | fachlich identisch mit `betriebskosten_jahr` — das Feld existiert |
 | **Modell B** (IST-Hochrechnung in die Prognose) | instabil bei kurzer Historie (§5) |
+| **Zweite Anlage** für den zweiten Erzeuger anlegen | **Für die Abrechnung wäre es der saubere Weg** — die Vergütung hängt an `Strompreis.anlage_id`, die Anlage ist die einzige Ebene mit eigenem Einspeisesatz, und eedc ist mehr-anlagen-fähig. Es scheitert an der **Bilanz und an der Sicht**: ein Haus hat einen Hausverbrauch, einen Speicher, eine Autarkie — beides je Anlage gerechnet, der Speicher gehört genau einer, der Hausverbrauch müsste willkürlich geteilt werden, und im Community-Vergleich erschienen zwei halbe Anlagen. Dazu **jede** Sicht hängt an `useSelectedAnlage()`: es gibt **keine** anlagenübergreifende Auswertung, nur Selektoren (am Code erhoben 2026-08-10) — der Anwender sähe seine Anlage nie auf einen Blick und müsste ständig umschalten und im Kopf addieren. **Richtig bleibt die zweite Anlage für einen wirklich getrennten Zählpunkt** (zweites Haus, Anlage der Eltern), **falsch für einen zweiten Erzeuger hinter demselben Hausanschluss** |
 
 > **Und die Ausgangsfrage, aus der das alles entstand, ist damit beantwortet:**
 > *Es gibt keine Restwert-Behandlung, weil eedc keine Wertfortschreibung kennt.*
@@ -199,16 +212,24 @@ scheiterte an Geschmack.
 
 **Ohne diese Punkte wird nicht released** (Entscheid Maintainer, 10.08.2026).
 
+✅ **Abgearbeitet am 2026-08-10** — alle neun Schritte sind gebaut, der letzte
+war Nr. 7. Maschineller Stand: das Dict ``BAUSCHRITTE_OFFEN`` in
+`eedc/backend/tests/test_konzept_wirtschaftlichkeit_konformitaet.py` ist
+**leer**; jede Zeile unten hat dort ihre Probe, die die Konzept-Erwartung prüft
+statt den Ist-Zustand. Wer einen neuen Bauschritt eröffnet, trägt ihn **hier**
+ein und legt seinen Eintrag im Dict an — nicht umgekehrt.
+
 | # | Was | Größe | Warum |
 | --- | --- | --- | --- |
-| 1 | **Ertragsfeld an der Investition pflegbar machen** — `einsparung_prognose_jahr` ins Formular, neben `betriebskosten_jahr` | klein | Das Feld existiert und wird gelesen (`crud.py`, Typ *Wallbox/Sonstiges*), hat aber **kein Eingabefeld**. Ohne es fehlt der Ort für wiederkehrende Erträge — die Regel aus §2 wäre nur halb anwendbar |
-| 2 | **Prognose zieht die Investitions-Jahreswerte** | klein | Die Aussichten kennen `einsparung_prognose_jahr` bisher nicht (0 Treffer) |
-| 3 | **Monatsabschluss-Positionen werden nicht projiziert** | klein | §5, Modell A |
+| ~~1~~ | ~~**Ertragsfeld an der Investition pflegbar machen** — `einsparung_prognose_jahr` ins Formular, neben `betriebskosten_jahr`~~ | ~~klein~~ | ✅ **gebaut 2026-08-10.** Feld in `InvestitionCreate`/`InvestitionUpdate`, im Formular als **„Ertrag/Jahr (€)"** — sichtbar nur bei *Wallbox* und *Sonstiges*, denn nur dort liest es das ROI-Dashboard (SoT der Menge: `models/investition.py::ERTRAGSFELD_TYPEN`, Client-Pendant in `investitionFormHelpers.ts`). ⚑ **Eine Stelle kam dazu, die die Zeile nicht nannte:** der JSON-Export/Import trug `betriebskosten_jahr`, aber nicht das Ertragsfeld — ein Backup/Restore hätte genau den Wert verloren, den dieser Schritt pflegbar macht. Additiv, Export-Version bleibt 1.3 |
+| ~~2~~ | ~~**Prognose zieht die Investitions-Jahreswerte**~~ | ~~klein~~ | ✅ **gebaut 2026-08-10.** `aussichten.py` addiert den Jahres-Ertrag ungeteilt in `jahres_netto_ertrag` (er ist bereits eine Jahresgröße, §2/1) — begrenzt auf `ERTRAGSFELD_TYPEN` **und** auf heute aktive Investitionen: eine stillgelegte Komponente bringt keinen künftigen Ertrag. ⚑ **Auch hier war die Zeile zu eng:** die HA-Sensoren `jahres_ersparnis_euro` · `roi_prozent` · `amortisation_jahre` bilden ihre Jahresgröße selbst (`kapitalrechnung.jahres_ersparnis_euro`) und hätten eine andere Zahl gezeigt als die Oberfläche, sobald jemand das Feld pflegt. Der Layer-SoT nimmt den Betrag jetzt als eigenen Summanden `jahres_ertraege_euro` — **ohne** Annualisierung, spiegelbildlich zu den Betriebskosten — und schreibt ihn in der Erklärzeile aus (N-212). Das PDF war bereits gedeckt: seine Amortisation kommt aus dem ROI-Dashboard, die Spalte „Einsparung/Jahr" zeigt das Feld je Investition |
+| ~~3~~ | ~~**Monatsabschluss-Positionen werden nicht projiziert**~~ | ~~klein~~ | ✅ **gebaut 2026-08-10.** F-19 hatte die Ausgabenseite geheilt; hier folgt die **Ertragsseite** in denselben drei Sichten (`aussichten.py` · `crud.py::get_roi_dashboard` · `ha_export.py`). **Gemessen an der DB-Kopie:** Jahres-Netto-Ertrag der Aussichten 5.794,52 → **5.618,39 €**, ROI-Jahreseinsparung 5.951,72 → **5.800,05 €** (15,4 → **15,8 Jahre**), HA `jahres_ersparnis_euro` 4.972,96 → **4.796,83 €**, `amortisation_jahre` 18,48 → **19,16**, `roi_prozent` 5,41 → **5,22**. ⚑ **Unverändert, und das ist die Probe auf §3/§4:** `netto_ertrag_euro` (Zeitraum-Bilanz), der Amortisations-**Fortschritt** (10,8 %) und der Kapitaleinsatz. Der Ertrag verschwindet also nicht — er hört nur auf, sich zu wiederholen. ⛔ Bis Bauschritt 7 wirkt er in der Kapitalrechnung dadurch **gar nicht** mehr; das ist der ausdrückliche Zwischenstand aus §9.1 |
 | ~~4~~ | ~~**Allgemeine Positionen in den Fortschritt** (Monatsdaten-Zeile, G19-1)~~ | ~~klein~~ | ✅ **gebaut 2026-08-10.** Der Fortschritt sammelte nur aus `historische_inv_daten` und übersah damit genau den Ort, der für „mehrere Komponenten" vorgesehen ist. ⚑ **Beim Bau wurde die Zeile zweimal zu eng befunden:** die Lücke saß nicht nur im *Fortschritt*, sondern auch im **Nenner**, und nicht nur in `aussichten.py`, sondern ebenso in `crud.py::get_roi_dashboard` (⇒ auch im PDF). **Gemessen 10.08.:** eine anlagenweite Ausgabe von 3.000 € ergab HA-Sensor **18.000 €** gegen ROI/Aussichten **15.000 €**; eine anlagenweite Förderung war in beiden Sichten unsichtbar. Jetzt liest `aussichten.py` die Monats-Fakten (P10-Bereinigung), `crud.py` zieht den `anlage_*_euro`-Anteil in die **Gesamt**-Zahlen (eine Position ohne Investition kann auf keiner ROI-Zeile stehen). Der Symmetrie-Wächter hatte den Fall nicht gesehen, weil seine Fixture die Position komponentengebunden anlegt — Probe ergänzt |
-| 5 | **Amortisations-Fortschritt je Investition** | **groß** | Der Nenner liegt vor (jede ROI-Zeile trägt ihren Kapitaleinsatz); es fehlen die **kumulierten Erträge je Komponente**. Bedingung des Maintainers für Modell C — ohne die Gegenkachel wäre die Dauer die geschönte Zahl ohne Korrektiv |
-| 6 | **Dauer-Anzeige schreibt ihre Annahme aus** | klein | §5, letzter Punkt |
-| 8 | **Zwei Daten-Checker-Regeln** — wiederkehrender Posten im Monatsabschluss · Doppelerfassung Jahresbetrag/Monatsposition | klein | §8.1. Das Modell verlagert die Entscheidung zum Erfassungsort; **genau dort** kann ein Anwender es verfehlen, und nur dort ist es erkennbar |
-| 7 | **Erträge zurück in den Nenner** — erst nach 1–3 **und nach der Kommunikation** | mittel | Vollendet die Vollkostenrechnung. ⛔ **Zwei Vorbedingungen, beide hart:** (a) der Umstiegsweg muss existieren (§9.1), sonst gäbe es keinen Ort für wiederkehrende Erträge; (b) wer sie heute monatlich pflegt, muss es **vorher** wissen (§11, letzte Zeile) — dieser Schritt ändert die Wirkung **bestehender Daten**. Dabei ist zu prüfen, ob eine Migration nötig ist. ⏳ **Und vier Stellen nachziehen — aber nur DREI davon sind per `⏳` auffindbar:** Modul-Docstring `kapitalrechnung.py` · Docstring von `test_kapitaleinsatz_vier_sichten_symmetrie.py` — die Probe `test_ertrag_bleibt_im_zaehler_…` ist dann **umzuschreiben**, nicht der Code zu reparieren · `BERECHNUNGEN.md` §3.6. ⚠ **Die vierte ist `HANDBUCH_BEDIENUNG.md`** („Du musst dafür nichts umstellen") und trägt **absichtlich kein Kennzeichen** — Anwender-Doku beschreibt den IST-Zustand, nicht künftige Pläne (N-217). **Ein `grep ⏳` findet sie deshalb nicht**, und sie ist die Stelle mit der größten Anwenderwirkung: sie steht in der ausgelieferten In-App-Hilfe |
+| ~~5~~ | ~~**Amortisations-Fortschritt je Investition**~~ | ~~groß~~ | ✅ **gebaut 2026-08-10.** Gebaut als **Zerlegung, nicht als zweite Rechnung**: der anlagenweite Zähler wird auf die ROI-Zeilen verteilt (`core/berechnungen/ertrag_zerlegung.py`), sodass `Σ Zeilen + Rest == gesamt` **per Konstruktion** gilt statt per Test. Schlüssel der Erzeugungsseite ist die **gemessene Erzeugung je Zeile** (Entscheid Maintainer) — kWp sagt, was ein Modul könnte, kWh sagt, was es beigetragen hat; ein Wechselrichter ohne Module hat Gewicht 0 und erbt deshalb nichts. Alles, was bereits komponentenscharf vorliegt, wird **nicht** verteilt, sondern direkt zugeordnet (WP je Gerät, E-Auto je Fahrzeug, BKW, gepflegte Monats-Erträge). ⚑ **N-228 ließ sich nicht abtrennen:** mit dem alten, anlagenweiten Betriebskosten-Abzug trug der Rest systematisch die Differenz — **am Dev-Bestand 566,67 €** (1.291,67 € statt 725,00 €), und ein Rest mit bekannter Ursache ist keine Restgröße mehr. Der anlagenweite Fortschritt steigt dadurch von **10,8 % auf 11,4 %**. **Nicht zurechenbare** Erträge (anlagenweite Positionen, §8/4) stehen als eigener Rest in der Response, statt still auf die Zeilen verteilt zu werden |
+| ~~6~~ | ~~**Dauer-Anzeige schreibt ihre Annahme aus**~~ | ~~klein~~ | ✅ **gebaut 2026-08-10.** Formuliert wird der Satz **einmal** (`core/berechnungen/kapitalrechnung.py::annahme_dauer_text`) und von jedem Ausgabeweg abgeholt. ⚑ **„Die Dauer-Anzeige" gibt es nicht — es sind neun Stellen in fünf Dateien**, gespeist aus vier Quellen: ROI-Dashboard gesamt (Kachel · Break-Even-Kurve · Summenzeile · v4-Block-Zusammenfassung) und je Zeile (Tabellen-Tooltip), PDF-Finanzbericht, HA-Sensor `amortisation_jahre` — dort **im Rechenweg-Attribut**, weil ein Sensor keinen Tooltip hat. Dazu die Wallbox-Dauer im Komponenten-Hub, die im Client aus `Anschaffung ÷ Ersparnis` entsteht und deshalb den festen Modell-A-Text aus `lib/amortisationAnnahme.ts` trägt. ⚠ **Und die Zeile kannte den zweiten Fall nicht:** sobald `betriebskosten_jahr` gepflegt ist, rechnet eedc **Modell C** — der Betrag ist im Zähler bereits abgezogen, „ohne künftige Instandhaltung" wäre dort eine falsche Aussage über die eigene Rechnung. Der Text richtet sich deshalb nach den Daten. **Am Dev-Bestand gemessen:** die Anlage trägt 500 €/Jahr ⇒ „inkl. 500,00 €/Jahr Betriebskosten …", die WP-Zeile 200 €, das BHKW 300 €, alle übrigen Zeilen Modell A — der statische Satz wäre dort in **drei** von vier Sichten falsch gewesen. **Keine Zahl bewegt sich**, nur ihre Beschriftung |
+| ~~8~~ | ~~**Zwei Daten-Checker-Regeln**~~ | ~~klein~~ | ✅ **gebaut 2026-08-10** (`daten_checker/monatsdaten.py::ErfassungsortChecks`, Kategorien `position_wiederkehrend` · `position_doppelerfassung`, beide **INFO** mit Weg zur Behebung). ⚑ **Zwei Präzisierungen waren nötig, beide unten in §8.1 nachgetragen:** die Schwelle der zweiten Regel (das Papier nannte nur „gleichnamige Monatsposition" — ohne Schwelle meldete sie jede einzelne Reparatur neben einer gepflegten Versicherung, also **≥ 2** Monate bei gepflegtem Jahresbetrag gegen **≥ 3** ohne) und die **Ertragsrichtung**: der Fall aus §9 (zweiter Erzeuger, monatlich gepflegt) ist genau der, für den Bauschritt 1 gebaut wurde — aber „Ertrag/Jahr" gibt es nur bei *Wallbox* und *Sonstiges*, bei allen anderen Typen wäre der Rat ein Verweis auf ein Feld, das der Anwender nicht findet (P-6). ⚠ **Beide Regeln schließen sich aus** — ein Sachverhalt, eine Meldung: mit gepflegtem Jahresbetrag ist „trag es als Jahresbetrag ein" ein falscher Rat |
+| ~~9~~ | ~~**Erlös je Erzeuger als €-Feld, per Sensor befüllbar** (§9, Weg 2)~~ | ~~mittel~~ | ✅ **gebaut 2026-08-10.** Entscheid Maintainer 2026-08-10: der Jahresbetrag aus §8/1 ist für den Fall aus §9 nur die Notlösung. Mit einem €-Feld an *Sonstiges/Erzeuger*, das ein **HA-Template-Sensor** befüllt, entfällt jede Schätzung: die Tarif-Logik bleibt in Home Assistant, der Wert kommt monatsgenau und wird im Monatsabschluss vorgeschlagen. **Am Code erhoben (10.08.):** *Sonstiges/Erzeuger* trägt heute **nur** `erzeugung_kwh` · `eigenverbrauch_kwh` · `einspeisung_kwh` — **ein €-Feld existiert dort nicht und muss angelegt werden** (SoT `field_definitions.py`, drei Pflicht-Stellen); `€`/`monetary` steht bereits in der Sensor-Allowlist der Datenquellen-Fläche, ein €-Sensor ist also auswählbar. ⚠ **Der Erlös entsteht heute ausschließlich aus `Monatsdaten.einspeisung_kwh` × EINEM Satz** (`monats_fakten.py:706`); die Einspeisung eines Sonstiges-Erzeugers wird **nirgends** in Geld bewertet. Das neue Feld ist deshalb ein **zusätzlicher** Ertrag dieses Erzeugers — **kein Herausrechnen aus der Anlagenbewertung nötig**. ⚑ **Begründung (Maintainer, 10.08., korrigiert einen Fehlschluss der Entwicklung):** zwei Vergütungssätze bedeuten **zwei Messungen** — anders könnte der Netzbetreiber nicht abrechnen. In den Anlagen-Einspeisezähler gehört also ohnehin nur die zum Anlagentarif vergütete Menge; die kWh des zweiten Erzeugers stehen dort gar nicht. Was bleibt, ist ein **Hinweis am Feld** (was in den Anlagenzähler gehört) — mehr kann eedc nicht wissen, welchen Sensor jemand gemappt hat, weiß nur er. **Gebaut als durchgehende Kette:** `field_definitions.py` (Registry ⇒ Monatsabschluss · CSV · MQTT · Datenquellen-Zuordnung kommen von selbst) → `imd_monatsaggregat` (kategorie-bewusst: ein Verbraucher hat keinen Einspeise-Erlös) → `monats_fakten` (Anlagen-Summe **und** je Gerät) → Layer-SoT `finanz_aggregat` als **fünfter** Summand → Aussichten · HA-Export · Cockpit → Jahr · Jahresbericht-PDF. ⚠ **Das Cockpit baut seinen Netto-Ertrag selbst aus den Einzel-Komponenten zusammen** (USt-Abzug dazwischen) und musste eigens angeschlossen werden — dieselbe Stelle, an der #326 auseinanderlief. **Am Dev-Bestand gemessen:** das Mini-BHKW (Kategorie *Erzeuger*) trägt das Feld, der Heizstab (*Verbraucher*) nicht |
+| ~~7~~ | ~~**Erträge zurück in den Nenner**~~ | ~~mittel~~ | ✅ **gebaut 2026-08-10** — der letzte der Bauliste. Die sonstigen **Erträge** mindern den Kapitaleinsatz, spiegelbildlich zu F-19 auf der Ausgabenseite; damit ist die Vollkostenrechnung vollständig und §3 Zeile 4 („Kapitaleinsatz **−**") eingelöst. **Beide Vorbedingungen waren erfüllt und wurden vor dem Bau nachgeprüft**, nicht abgeschrieben: (a) der Umstiegsweg §9.1 existiert seit §8/1 **und** §8/9 (das €-Feld je Erzeuger ist der bessere der beiden), (b) die Kommunikation an rilmor-mhrs steht als [Kommentar zu #310](https://github.com/supernova1963/eedc-homeassistant/issues/310#issuecomment-5242379712) vom 10.08. — mit der Aufforderung, die monatlichen Handbuchungen einzustellen. ⚑ **Keine Migration** (Entscheid Maintainer 10.08.): einmalige Erträge gehören nach der Regel aus §2 ohnehin in den Kapitaleinsatz, und wiederkehrende erkennt seit §8/8 der Daten-Checker **am Erfassungsort**. **Gemessen am Dev-Bestand (455 € Ertrags-Positionen):** Kapitaleinsatz **91.915 → 91.460 €** in allen vier Sichten, Tesla-Zeile 17.560 → 17.105 € (14,3 → 14,0 Jahre), HA `amortisation_jahre` 19,16 → **19,07**, `roi_prozent` 5,219 → **5,245 %**, Amortisations-Fortschritt 11,4 → **10,9 %** (der Ertrag verlässt den Zähler ganz, mindert den Nenner aber nur anteilig) — **unverändert** `netto_ertrag_euro` (Zeitraum-Bilanz) und die Modell-Dauer 15,8 Jahre. ⚑ **Ein Nebeneffekt fiel beim Bau auf und fuhr mit:** der gepflegte Erzeuger-Erlös aus §8/9 landete in der Zerlegung (§8/5) im **nicht zurechenbaren Rest**, obwohl seine Investition bekannt ist — jetzt direkt zugeordnet. Die vier ⏳-Stellen sind nachgezogen, die vierte (`HANDBUCH_BEDIENUNG.md`) trug wie angekündigt kein Kennzeichen |
 
 **Bereits gebaut** (2026-08-09, ungepusht): sonstige **Ausgaben** kumuliert in den
 Nenner statt annualisiert in den Zähler · jeder Ersparnis-Posten wird mit
@@ -226,8 +247,25 @@ Deutung eines Wortes:
 
 | Fehleingabe | Woran erkennbar | Meldung |
 | --- | --- | --- |
-| **Wiederkehrendes im Monatsabschluss** — z. B. „Wartung" in mehreren Monaten | dieselbe Bezeichnung an einer Investition in **≥ 3 Monaten** | Hinweis: gehört als **Jahresbetrag an die Investition** (§2/1). Dort wirkt sie auch in der Prognose — im Monatsabschluss nie |
-| **Doppelerfassung** — Jahresbetrag gepflegt **und** derselbe Posten monatlich gebucht | `betriebskosten_jahr` > 0 **und** gleichnamige Monatsposition an derselben Investition | Hinweis: im Monatsabschluss gehört nur die **Abweichung** vom Plan (§2/3), sonst zählt der Betrag doppelt |
+| **Wiederkehrendes im Monatsabschluss** — z. B. „Wartung" in mehreren Monaten | dieselbe Bezeichnung an einer Investition in **≥ 3 Monaten**, **ohne** gepflegten Jahresbetrag | Hinweis: gehört als **Jahresbetrag an die Investition** (§2/1). Dort wirkt sie auch in der Prognose — im Monatsabschluss nie |
+| **Doppelerfassung** — Jahresbetrag gepflegt **und** derselbe Posten monatlich gebucht | Jahresbetrag > 0 **und** dieselbe Bezeichnung an derselben Investition in **≥ 2 Monaten** | Hinweis: im Monatsabschluss gehört nur die **Abweichung** vom Plan (§2/3), sonst zählt der Betrag doppelt |
+
+> ⚑ **Beide Schwellen präzisiert beim Bau (2026-08-10).** Die zweite Regel
+> nannte ursprünglich keine — wörtlich hätte sie **jede einzelne** Reparatur
+> neben einer gepflegten Versicherung gemeldet, und ein Hinweis, der keinen
+> Fehler beschreibt, ist die P-6-Falle. Tragend ist auch hier die
+> **Wiederholung**, nur früher: bei gepflegtem Jahresbetrag ist bereits die
+> zweite Buchung ein Muster. Und weil beide Regeln denselben Sachverhalt
+> beschreiben, **schließen sie sich aus** — mit gepflegtem Jahresbetrag wäre
+> „trag es als Jahresbetrag ein" ein falscher Rat.
+>
+> ⚠ **Die Ertragsrichtung gilt nur, wo es das Feld gibt.** Der Fall aus §9
+> (zweiter Erzeuger mit eigenem Vergütungssatz, monatlich von Hand gepflegt)
+> ist genau der, für den Bauschritt 1 das Feld **„Ertrag/Jahr"** geschaffen
+> hat — es existiert aber nur bei *Wallbox* und *Sonstiges*
+> (`models/investition.py::ERTRAGSFELD_TYPEN`). Bei allen anderen Typen rechnet
+> eedc die Jahres-Einsparung selbst; dort schweigt die Regel, statt auf ein
+> Feld zu verweisen, das im Formular nicht steht.
 
 > ⛔ **Nicht prüfen: was eine Position *bedeutet*.** Naheliegend wäre, aus
 > Bezeichnungen wie „Restwert", „Verkauf" oder „Förderung" auf einen
@@ -269,7 +307,9 @@ statt gemittelt, ohne jede Handpflege.
 
 ### 9.1 Der Umstiegsweg — und warum er vor Bauschritt 7 liegen muss
 
-**Schritte für den Anwender**, sobald §8/1 gebaut ist:
+**Schritte für den Anwender** (§8/1 ist seit 2026-08-10 gebaut — das Feld
+heißt im Formular **„Ertrag/Jahr (€)"** und steht bei *Wallbox* und
+*Sonstiges* neben den Betriebskosten):
 
 1. Neue Investition **„Sonstiges", Kategorie *Erzeuger*** anlegen, mit dem
    Anschaffungsdatum und den Kosten des zweiten Erzeugers.
@@ -280,7 +320,11 @@ statt gemittelt, ohne jede Handpflege.
 4. Die bisherigen **monatlichen Handbuchungen** ab dem Umstiegsmonat
    **einstellen** — sonst zählt derselbe Erlös zweimal.
 
-> ⛔ **Bauschritt 7 („Erträge zurück in den Nenner") ist erst zulässig, wenn
+> ✅ **Erfüllt am 10.08.** — beide Schritte des Wegs sind gebaut (§8/1 und
+> §8/9), die Mitteilung an #310 ist gepostet, **danach** wurde Bauschritt 7
+> gefahren. Der Absatz bleibt als Begründung stehen, nicht als offene Auflage.
+>
+> ⛔ **Bauschritt 7 („Erträge zurück in den Nenner") war erst zulässig, wenn
 > dieser Weg existiert und die Betroffenen ihn kennen.** Sonst ändert sich die
 > Wirkung **bestehender Daten**: wer wiederkehrende Erträge weiterhin monatlich
 > pflegt, sähe seine Amortisation danach nicht mehr verkürzt, sondern seinen
@@ -355,11 +399,17 @@ die Anleitung ausdrücklich auf Speicher und PV beschränken.
 | **Reupchen** (#374) | GitHub-Discussion | Der Weg aus §10.1, mit dem Ergebnis der Messung — und der offenen Sensor-Frage aus dem Kasten, ehrlich benannt | nach dem Release |
 | **Pelzar** (T90480) | Forum | dasselbe; er hatte den Fall zuerst gemeldet | nach dem Release, **nur Maintainer** |
 | **Radiocarbonat** (T90480) | Forum | Seine Meldung ist **eingelöst**: eine einmalige sonstige Ausgabe verschlechtert die Amortisation nicht mehr dauerhaft. Der damals vorgeschlagene Weg (Investitionshistorie mit Gültigkeitsdatum) wurde **nicht** gebaut — die Wirkung ist trotzdem da | nach dem Release, **nur Maintainer** |
-| **rilmor-mhrs** (#310, geschlossen) | GitHub-Issue-Kommentar | Sein Anliegen bleibt erfüllt; **zusätzlich** der bessere Weg aus §9.1. ⚠ **Und die Warnung vor Bauschritt 7** — bevor der kommt, muss er umgestellt haben | **vor** Bauschritt 7, nicht erst danach |
+| **rilmor-mhrs** (#310, wieder geöffnet) | GitHub-Issue-Kommentar | Sein Anliegen bleibt erfüllt; **zusätzlich** der bessere Weg aus §9.1, samt der Aufforderung, die monatlichen Handbuchungen einzustellen | ✅ **gepostet 10.08.**, vor Bauschritt 7 |
 
-⚑ **Der letzte Punkt ist der einzige mit einer harten Reihenfolge.** Alle
-anderen Mitteilungen sind Information; diese eine ist **Voraussetzung** dafür,
-dass ein Bauschritt überhaupt gefahren werden darf (§9.1).
+⚑ **Der letzte Punkt war der einzige mit einer harten Reihenfolge** — und er
+ist eingehalten: Kommentar zuerst, Bauschritt 7 danach (beides am 10.08.). Alle
+anderen Mitteilungen sind Information; diese eine war **Voraussetzung** dafür,
+dass der Bauschritt überhaupt gefahren werden durfte (§9.1).
+
+⚠ **Und sie ist keine Abhängigkeit von einer Antwort.** Robert *kann*
+antworten, muss aber nicht: die Migrationsfrage ist ohne ihn entschieden
+(keine Migration, s. §8 Zeile 7). Ein Projekt, das einen Bauschritt an eine
+Anwender-Rückmeldung hängt, hätte sich selbst blockiert.
 
 ## 12. Belege
 

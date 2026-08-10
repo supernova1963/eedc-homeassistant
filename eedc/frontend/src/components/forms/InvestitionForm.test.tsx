@@ -121,4 +121,45 @@ describe('InvestitionForm — Submit-Nutzlast', () => {
     expect(nutzlast.anschaffungskosten_alternativ).toBeUndefined()
     expect(nutzlast.parent_investition_id).toBeUndefined()
   })
+
+  // ── „Ertrag/Jahr" (Wirtschaftlichkeits-Konzept §8/1) ──
+  //
+  // Die Typ-Grenze ist kein Anzeige-Detail: gelesen wird das Feld nur im
+  // `else`-Zweig der ROI-Typkette (Wallbox/Sonstiges). Stünde es an einer
+  // PV- oder Speicher-Zeile, könnte der Anwender einen Betrag pflegen, der
+  // nirgends ankommt — SoT der Menge ist `ERTRAGSFELD_TYPEN` (Backend-Pendant
+  // in `models/investition.py`). Backend-Hälfte:
+  // `test_konzept_wirtschaftlichkeit_konformitaet.py::…schritt1…`/`…typ_grenze…`.
+
+  it('§8/1 bietet „Ertrag/Jahr" bei Sonstiges an und sendet den Wert', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    const sonstiges: Investition = {
+      id: 9, anlage_id: 1, typ: 'sonstiges', bezeichnung: 'Zweiter Erzeuger',
+      anschaffungsdatum: '2024-01-01', aktiv: true,
+    }
+    render(<InvestitionForm anlageId={1} typ="sonstiges" investition={sonstiges} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    // Das Feld steht in der einklappbaren Sektion „Weitere Angaben & Kosten"
+    // (`variant="erweitert"`), die geschlossen startet.
+    fireEvent.click(screen.getByRole('button', { name: /Weitere Angaben & Kosten/i }))
+    const feld = screen.getByLabelText(/Ertrag\/Jahr/i)
+    fireEvent.change(feld, { target: { value: '500' } })
+
+    const nutzlast = await submit(onSubmit)
+    expect(nutzlast.einsparung_prognose_jahr).toBe(500)
+  })
+
+  it('§8/1 zeigt „Ertrag/Jahr" NICHT bei selbst gerechneten Typen', async () => {
+    const onSubmit = vi.fn(() => Promise.resolve())
+    render(<InvestitionForm anlageId={1} typ="speicher" investition={speicher} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    // Dieselbe Sektion aufklappen — sonst wäre die Abwesenheit nur die des
+    // eingeklappten Blocks und die Probe könnte nichts sehen.
+    fireEvent.click(screen.getByRole('button', { name: /Weitere Angaben & Kosten/i }))
+    expect(screen.getByLabelText(/Betriebskosten\/Jahr/i)).toBeTruthy()
+    expect(screen.queryByLabelText(/Ertrag\/Jahr/i)).toBeNull()
+    // … und der Schlüssel darf auch nicht still mitgehen.
+    const nutzlast = await submit(onSubmit)
+    expect('einsparung_prognose_jahr' in nutzlast).toBe(false)
+  })
 })

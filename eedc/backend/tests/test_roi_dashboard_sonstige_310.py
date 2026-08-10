@@ -13,13 +13,25 @@ Orphan-Modul).
 ⚠ **Seit F-19 (2026-08-09) auf zwei Seiten des Bruchs**, SoT
 `core/berechnungen/kapitalrechnung.py`:
 
-* **Erträge** (THG-Quote, manuell gepflegte Einspeise-Erlöse) bleiben im
-  **Zähler** und werden bei `jahr=None` auf Jahresbasis gemittelt — genau wie
-  bisher. Das ist Roberts Fall: im Nenner hätten sie seine Amortisation
-  verlängert statt verkürzt.
 * **Ausgaben** (Reparatur, Wartung) gehen **kumuliert in den Nenner**. Vorher
   wurden sie annualisiert im Zähler abgezogen, wodurch eine einmalige Reparatur
   jedes Jahr aufs Neue belastete (Wärmepumpe: 8,1 → 42,6 Jahre).
+* **Erträge** standen bis dahin annualisiert im **Zähler**.
+
+⚠ **Und seit §8/3 des Wirtschaftlichkeits-Konzepts (2026-08-10) werden auch die
+Erträge nicht mehr projiziert.** Eine Position im Monatsabschluss ist per Form
+einmal geflossen; sie zu mitteln und fortzuschreiben unterstellt eine
+Wiederholung. Für Roberts Fall — einen *wiederkehrenden* Einspeise-Erlös —
+gibt es seit §8/1 das Feld **„Ertrag/Jahr"** an der Investition und seit §8/9
+das €-Feld **„Einspeise-Erlös"** je Erzeuger; nur diese wirken in Prognose und
+ROI-Zähler. `sonstige_netto_euro` ist seither beidseitig **kumuliert** und
+damit wieder eine Aussage (vorher: annualisierter Ertrag gegen kumulierte
+Ausgabe).
+
+⚠ **Und seit Bauschritt 7 (ebenfalls 2026-08-10) stehen die Erträge im
+NENNER**: sie mindern den Kapitaleinsatz, spiegelbildlich zu den Ausgaben. In
+der Zeitraum-Bilanz und im Amortisations-Fortschritt bleiben sie unverändert
+sichtbar.
 """
 
 from __future__ import annotations
@@ -77,20 +89,28 @@ async def test_roi_standalone_sonstige_jahr_spezifisch(db):
     b = await _berechnung_fuer(result, inv.id)
     # 200 € Ertrag − 50 € Ausgabe = 150 € netto (Anzeige-Größe, unverändert)
     assert b.detail_berechnung["sonstige_netto_euro"] == pytest.approx(150.0)
-    # F-19: Erträge und Ausgaben landen auf VERSCHIEDENEN Seiten des Bruchs.
-    # Der Zähler trägt nur den Ertrag …
-    assert b.jahres_einsparung == pytest.approx(200.0)
-    # … die Ausgabe erhöht den Kapitaleinsatz (1.000 € Anschaffung + 50 €).
+    # §8/3: der Ertrag wird nicht mehr projiziert — der Zähler bleibt leer.
+    assert b.jahres_einsparung == pytest.approx(0.0)
+    # F-19: die Ausgabe erhöht den Kapitaleinsatz, Bauschritt 7: der Ertrag
+    # mindert ihn — 1.000 € Anschaffung + 50 € − 200 € = 850 €.
     assert b.detail_berechnung["sonstige_ausgaben_euro"] == pytest.approx(50.0)
-    assert b.kapitaleinsatz == pytest.approx(1050.0)
+    assert b.detail_berechnung["sonstige_ertraege_euro"] == pytest.approx(200.0)
+    assert b.kapitaleinsatz == pytest.approx(850.0)
 
 
-async def test_roi_standalone_sonstige_jahr_none_gemittelt(db):
-    """jahr=None: Σ sonstige Netto über alle Jahre / Anzahl Jahre mit Monatsdaten."""
+async def test_roi_standalone_sonstige_jahr_none_kumuliert(db):
+    """jahr=None: Σ sonstige Netto über alle Jahre — **kumuliert**, nicht gemittelt.
+
+    ⚠ Bis §8/3 stand hier ein Jahres-Divisor (150 € ÷ 2 Jahre = 75 €/Jahr). Er
+    diente allein dazu, den Ertrag mit den Jahres-Einsparungen im Zähler
+    vergleichbar zu machen. Ohne Projektion gibt es diesen Zähler nicht mehr —
+    und eine gemittelte Anzeige neben einer kumulierten Ausgabe wäre eine
+    Größe, die keine Frage beantwortet.
+    """
     anlage = Anlage(anlagenname="Test", leistung_kwp=10.0)
     db.add(anlage)
     await db.flush()
-    # Zwei Jahre mit Monatsdaten → Divisor 2 (gleiche Basis wie PV-Mittelung).
+    # Zwei Jahre mit Monatsdaten — der Fall, in dem der frühere Divisor 2 griff.
     for j in (2025, 2026):
         db.add(Monatsdaten(anlage_id=anlage.id, jahr=j, monat=1,
                            netzbezug_kwh=100.0, einspeisung_kwh=200.0))
@@ -113,9 +133,10 @@ async def test_roi_standalone_sonstige_jahr_none_gemittelt(db):
         benzinpreis_euro=None, jahr=None, db=db,
     )
     b = await _berechnung_fuer(result, inv.id)
-    # 150 € / 2 Jahre = 75 €/Jahr
-    assert b.detail_berechnung["sonstige_netto_euro"] == pytest.approx(75.0)
-    assert b.jahres_einsparung == pytest.approx(75.0)
+    # 150 € kumuliert — ungeteilt, über beide Jahre
+    assert b.detail_berechnung["sonstige_netto_euro"] == pytest.approx(150.0)
+    # … und ohne jede Wirkung auf den Zähler (§8/3)
+    assert b.jahres_einsparung == pytest.approx(0.0)
 
 
 async def test_roi_standalone_ohne_sonstige_bleibt_null(db):

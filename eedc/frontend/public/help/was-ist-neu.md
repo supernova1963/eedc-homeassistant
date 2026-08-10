@@ -9,6 +9,106 @@
 
 ---
 
+## In Arbeit — noch nicht veröffentlicht
+
+### Jede Komponente sagt jetzt, wie weit sie ist
+
+**Betrifft dich das?** Alle, die *Auswertungen → ROI* benutzen.
+
+Die Tabelle dort nannte je Komponente zwei Zahlen, und beide waren Rechnungen über die Zukunft: „so viel Prozent pro Jahr" und „so viele Jahre bis zur Amortisation". Was fehlte, war die einfachste Frage: **wie viel ist von dieser Anschaffung eigentlich schon zurückgekommen?**
+
+Genau das steht jetzt in der neuen Spalte **„Fortschritt"** — die tatsächlich erzielten Erträge gegen den Betrag, den du für diese Komponente eingesetzt hast. Diese Zahl unterstellt nichts über die Zukunft; sie kann deshalb auch nicht zu optimistisch sein. Beide Sichten stehen bewusst nebeneinander: die Dauer sagt dir, wohin es geht, der Fortschritt sagt dir, wo du bist.
+
+Zwei Dinge, die dir auffallen könnten:
+
+- **Manche Zeilen zeigen „—".** Das heißt nicht „null Euro", sondern „lässt sich dieser Komponente nicht zuordnen". Eine Förderung, die du im Monatsabschluss für die ganze Anlage gebucht hast, gehört zu keinem einzelnen Gerät — sie zählt weiterhin in der Gesamtzahl, aber eedc verteilt sie nicht auf gut Glück.
+- **Ein Wert kann negativ sein.** Dann hat die Komponente in der bisherigen Laufzeit mehr Betriebskosten verursacht als Ertrag gebracht. Auch das ist eine Aussage — sie wird nicht auf 0 geschönt.
+
+### Zweiter Erzeuger, eigener Einspeisetarif — ohne monatliches Nachtragen
+
+**Betrifft dich das?** Alle, die einen zweiten Erzeuger mit einer **anderen Einspeisevergütung** betreiben — etwa einen später dazugekommenen Wechselrichter mit eigenem EEG-Satz.
+
+eedc kennt genau **einen** Einspeisesatz pro Anlage. Deinen zweiten kann es deshalb nicht ausrechnen — bisher blieb nur, den Erlös jeden Monat von Hand als sonstigen Ertrag zu buchen.
+
+Jetzt gibt es einen besseren Weg: Eine Komponente vom Typ *Sonstiges* mit Kategorie **Erzeuger** hat das neue Feld **„Einspeise-Erlös (€)"**. Du kannst es unter *Einstellungen → Datenquellen* einem Sensor aus Home Assistant zuordnen — einem Helfer, der den Erlös mit deinem Satz aufsummiert. Dann steht der Betrag beim Monatsabschluss als Vorschlag da, monatsgenau und ohne Tippen.
+
+**So richtest du es ein:** In Home Assistant einen Helfer anlegen, der den Erlös aufsummiert — **ohne Zyklus**, also nie zurücksetzen; eedc bildet die Monatswerte selbst aus der Differenz. In eedc die Komponente anlegen, das Feld zuordnen, fertig. Wenn du den Erlös bisher von Hand gebucht hast: ab dem Umstiegsmonat weglassen, sonst zählt er doppelt. Deine bisherigen Buchungen bleiben erhalten.
+
+### Der Daten-Checker sagt dir, wenn ein Betrag am falschen Ort steht
+
+**Betrifft dich das?** Alle, die unter *Sonstige Positionen* im Monatsabschluss regelmäßig denselben Posten buchen — Wartung, Versicherung, den Einspeise-Erlös eines zweiten Erzeugers.
+
+eedc fragt dich nie, ob ein Betrag einmalig oder wiederkehrend ist. Es liest das am **Ort**: Ein Jahresbetrag an der Komponente kommt jedes Jahr wieder (und steht damit in der Prognose), eine Position im Monatsabschluss ist einmal geflossen. Das ist bequem — und genau deshalb kann man sich dort vertun, ohne es zu merken.
+
+Zwei neue Hinweise im Daten-Checker:
+
+- **„‚Wartung' steht in 4 Monaten im Monatsabschluss."** Sieht wiederkehrend aus? Dann gehört der Betrag als **Kosten/Jahr** (oder **Ertrag/Jahr**) an die Komponente — dort wirkt er auch in Prognose und Amortisation. Einmaliges bleibt richtig, wo es ist.
+- **„… obwohl Kosten/Jahr gepflegt ist."** Dann steht derselbe Betrag zweimal in der Rechnung. In den Monatsabschluss gehört nur die **Abweichung** vom Plan — die Nachzahlung, nicht die ganze Rechnung.
+
+**Beides sind Hinweise, keine Fehler**, und beide sagen, was zu tun ist. eedc liest dabei **nur die Wiederholung**, nie die Bedeutung deiner Bezeichnung: aus „Restwert" oder „Förderung" etwas zu schließen wäre geraten.
+
+### „15,8 Jahre" — und unter welcher Annahme
+
+**Betrifft dich das?** Alle, die irgendwo eine Amortisationsdauer lesen.
+
+Eine Dauer ist keine Messung. Sie ist eine Rechnung, die etwas über die Zukunft unterstellen **muss** — und eedc unterstellt: *es geht nie wieder etwas kaputt*. Das ist die optimistische Variante, und sie ist bewusst gewählt (die Alternative wäre, aus ein bis zwei Reparaturen eine Reparatur-Rate hochzurechnen, die jedes Jahr anders aussieht). Nur stand sie bisher nirgends.
+
+Jetzt steht sie neben jeder Dauer: an der Kachel und der Break-Even-Kurve in *Auswertungen → ROI*, je Zeile in der Tabelle, im Komponenten-Hub der Wallbox, im PDF-Finanzbericht und im Rechenweg des HA-Sensors `amortisation_jahre`.
+
+**Und sie richtet sich nach dem, was du gepflegt hast.** Hast du an einer Komponente *Kosten/Jahr* eingetragen, liest du dort „inkl. 200,00 €/Jahr Betriebskosten, ohne weitere Instandhaltung" — dieser Betrag ist in der Zahl bereits enthalten. Wer mit künftiger Instandhaltung rechnen möchte, trägt sie genau dort als Jahresbetrag ein; die Dauer sagt dann selbst, dass sie damit rechnet.
+
+**Es ändert sich keine Zahl** — nur das, was danebensteht.
+
+### Betriebskosten zählen nur, solange das Gerät läuft
+
+**Betrifft dich das?** Alle, die bei einer Komponente **Kosten/Jahr** gepflegt haben und sie **später** angeschafft oder inzwischen stillgelegt haben.
+
+Bisher hat eedc die Jahres-Betriebskosten über deinen **gesamten** Auswertungszeitraum abgezogen — auch für Monate, in denen es das Gerät noch gar nicht gab. Eine 2024 gekaufte Wärmepumpe hat damit rückwirkend ab 2023 Versicherung gezahlt, und eine stillgelegte Komponente hat deine Amortisation dauerhaft verlängert, obwohl sie längst keine Kosten mehr verursacht.
+
+Das ist korrigiert: Jede Komponente trägt ihre Kosten nur für die Zeit, in der sie tatsächlich lief. **Dein Amortisations-Fortschritt wird dadurch etwas besser** — an der Demo-Anlage von 10,8 % auf 11,4 %. Du musst nichts tun.
+
+### Deine Amortisation wird kürzer — fünf HA-Sensoren springen einmalig
+
+**Betrifft dich das?** Alle, die unter *Sonstige Positionen* schon einmal eine **Ausgabe** gebucht haben (Reparatur, Ersatzteil, Wartung) — und alle, die eine Komponente **später** angeschafft haben als die Anlage selbst.
+
+Eine einmalige Reparatur wurde bisher wie eine jährlich wiederkehrende Belastung behandelt: Sie wurde von der Ersparnis **jedes Jahres** abgezogen. Eine Reparatur von 3.000 € an einer Wärmepumpe verlängerte die Amortisation dadurch von 8,1 auf **42,6 Jahre** — und die Zahl wurde jedes Folgejahr schlechter, ohne dass etwas passiert wäre. Jetzt zählt sie als das, was sie ist: **einmal ausgegebenes Geld**, das sich zurückverdienen muss. Dasselbe Beispiel ergibt **10,5 Jahre**.
+
+Zweite Korrektur an derselben Rechnung: Jede Ersparnis wird jetzt mit **ihrer eigenen** Laufzeit hochgerechnet. Eine Wärmepumpe, die erst seit 25 von 31 erfassten Monaten läuft, wurde vorher auf die Anlagen-Laufzeit verdünnt — ihre Kosten zählten aber voll dagegen.
+
+**Was sich sichtbar ändert:** `sensor.*_amortisation_jahre`, `sensor.*_roi_prozent` und `sensor.*_jahres_ersparnis_euro` sowie die Amortisations-Anzeigen in *Auswertungen → ROI* und in den *Aussichten*. An der Demo-Anlage: **26,4 → 18,5 Jahre**. In der Langzeitstatistik ist das ein Sprung an einem Tag — es gehen keine Daten verloren. **Dein Netto-Ertrag bleibt unverändert:** Was ein Monat gekostet und eingebracht hat, rechnet eedc weiter genauso.
+
+### Einmalige Erträge werden nicht mehr in die Zukunft hochgerechnet
+
+**Betrifft dich das?** Alle, die unter *Sonstige Positionen* einen **Ertrag** gebucht haben — THG-Quote, eine Förderung, einen einmaligen Erlös.
+
+Dieselbe Idee wie oben, nur auf der anderen Seite: Ein Betrag, den du in **einem** Monat eingetragen hast, wurde bisher in **jedes** Prognosejahr weitergeschrieben. Das unterstellt eine Wiederholung, die du nie behauptet hast.
+
+Der Betrag zählt weiterhin dort, wo er tatsächlich geflossen ist — in der **Monatsbilanz**. Aus der **Vorhersage** verschwindet er. An der Demo-Anlage sinkt der prognostizierte Jahres-Netto-Ertrag dadurch von 5.794 auf **5.618 €**, die Amortisation in *Auswertungen → ROI* geht von 15,4 auf **15,8 Jahre**.
+
+### Eine Förderung senkt dein eingesetztes Geld
+
+**Betrifft dich das?** Dieselben wie oben: alle, die unter *Sonstige Positionen* einen **Ertrag** gebucht haben.
+
+Wo gehört so ein Betrag hin, wenn nicht in die Vorhersage? In den **Kapitaleinsatz** — also in die Summe, die sich zurückverdienen muss. Eine Förderung oder eine THG-Quote ist Geld, das du **nie ausgeben musstest**; es muss auch nicht wieder hereinkommen. Damit ist die Rechnung rund: Eine **Ausgabe** im Monatsabschluss erhöht deinen Kapitaleinsatz, ein **Ertrag** mindert ihn — beides genau einmal.
+
+**Was du siehst:** Deine Amortisation wird **kürzer**, und der ⓘ-Tooltip in *Auswertungen → ROI* schreibt den Abzug aus („90.900 € + 1.015 € sonstige Ausgaben − 455 € sonstige Erträge"). Das gilt für die Gesamtzahl **und je Zeile**, für die *Aussichten*, den PDF-Finanzbericht und die HA-Sensoren `amortisation_jahre` und `roi_prozent`. An der Demo-Anlage: eingesetzter Betrag 91.915 → **91.460 €**, das Fahrzeug 14,3 → **14,0 Jahre**.
+
+**In der Monatsbilanz ändert sich nichts** — dort bleibt die Förderung ein Ertrag des Monats, in dem sie kam. Und der **Amortisations-Fortschritt** sinkt leicht (11,4 → 10,9 % an der Demo-Anlage): Der Betrag zählt nicht mehr als „zurückgekommen", weil er gar nicht erst eingesetzt wurde. Beide Zahlen beschreiben dasselbe Geld, nur von der jeweils richtigen Seite.
+
+> ⚑ **Wenn der Erlös jedes Jahr wiederkommt**, gehört er nicht in den Monatsabschluss, sondern an die Komponente — als **„Ertrag/Jahr (€)"** oder, beim zweiten Erzeuger, als **„Einspeise-Erlös (€)"** (beides weiter oben). **Umstellen musst du nichts:** deine bisherigen Buchungen bleiben erhalten und sichtbar, und der Daten-Checker sagt dir, wenn ein Posten dauerhaft am unpassenden Ort steht.
+
+### Neu: „Ertrag/Jahr (€)" — für alles, was jedes Jahr wiederkommt
+
+**Betrifft dich das?** Alle mit einem wiederkehrenden Erlös, den eedc nicht selbst ausrechnen kann — der Klassiker ist ein **zweiter Erzeuger mit eigenem Einspeisetarif** (eedc kennt genau einen Einspeisesatz je Anlage).
+
+Bisher blieb dafür nur die monatliche Handbuchung. Jetzt trägst du den Betrag **einmal** bei der Komponente ein: *Bearbeiten → Weitere Angaben & Kosten →* **„Ertrag/Jahr (€)"**. Das ist das Gegenstück zum Feld „Betriebskosten/Jahr" direkt daneben, und es wirkt in der Finanz-Prognose, in *Auswertungen → ROI* und in den HA-Sensoren.
+
+Das Feld gibt es bei **Wallbox** und **Sonstiges**. Bei PV, Speicher, Wärmepumpe, E-Auto und Balkonkraftwerk rechnet eedc die Jahres-Einsparung aus deinen Daten selbst — dort wäre ein eigener Betrag nur eine zweite Meinung.
+
+> ⚠ **Nicht beides pflegen.** Wer den Erlös künftig als Jahresbetrag führt, sollte die monatlichen Handbuchungen ab dem Umstellungsmonat einstellen — sonst zählt derselbe Erlös zweimal. Die bereits gebuchten Monate bleiben unverändert richtig; sie beschreiben die Vergangenheit.
+
+---
+
 ## v4.0.11 — Nichts raten, wo sich messen lässt (August 2026)
 
 ### Plug-in-Hybrid: der Benzin-Anteil zählt jetzt mit

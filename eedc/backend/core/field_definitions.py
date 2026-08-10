@@ -373,6 +373,33 @@ INVESTITION_FELDER: dict = {
                 "csv_suffix": "Einspeisung_kWh",
                 "hinweis": "Ins Netz eingespeister Anteil der Erzeugung (kWh, kumulativ oder Tagessensor). Optional.",
             },
+            # Konzept-Wirtschaftlichkeit §9 Weg 2 (Bauschritt 9): eedc kennt
+            # genau EINEN Einspeisesatz je Anlage (`Strompreis.anlage_id`). Wer
+            # einen zweiten Erzeuger mit eigenem Vergütungssatz betreibt, kann
+            # dessen Erlös deshalb nicht von eedc ausrechnen lassen — wohl aber
+            # von Home Assistant: ein Template-Sensor kennt beide Sätze und
+            # liefert den Betrag monatsgenau. Damit entfällt der geschätzte
+            # Jahresbetrag aus §8/1 für diesen Fall.
+            #
+            # ⚠ KEIN Abzug von der Anlagen-Bewertung (Entscheid Maintainer,
+            # 2026-08-10): zwei Vergütungssätze bedeuten zwei Messungen — sonst
+            # könnte der Netzbetreiber nicht abrechnen. In den Anlagen-
+            # Einspeisezähler gehört ohnehin nur die zum Anlagentarif vergütete
+            # Menge; dieser Betrag kommt zusätzlich dazu. Der Hinweis sagt das.
+            {
+                "feld": "einspeise_erloes_euro", "label": "Einspeise-Erlös", "einheit": "€",
+                "placeholder": "z. B. 42.30",
+                "csv_suffix": "Einspeise_Erloes_Euro",
+                "hinweis": (
+                    "Erlös DIESES Erzeugers in € — für einen eigenen Einspeisetarif, "
+                    "den eedc nicht kennen kann (es gibt einen Satz je Anlage). Am besten "
+                    "als kumulativer Helfer-Sensor aus Home Assistant (state_class "
+                    "total_increasing, device_class monetary), dann wird der Wert im "
+                    "Monatsabschluss vorgeschlagen. Wichtig: In den Anlagen-Einspeisezähler "
+                    "gehört nur die Menge, die zum Anlagentarif abgerechnet wird — dieser "
+                    "Betrag kommt zusätzlich dazu."
+                ),
+            },
         ],
         "verbraucher": [
             {

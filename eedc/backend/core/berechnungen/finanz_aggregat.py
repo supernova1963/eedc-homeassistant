@@ -83,6 +83,11 @@ class FinanzAggregat:
     ev_ersparnis_euro: float
     bkw_ersparnis_euro: float
     sonstige_netto_euro: float
+    #: Konzept §9 Weg 2: Σ der gepflegten Erlöse von Erzeugern mit **eigenem**
+    #: Einspeisetarif. Sie stehen NEBEN ``einspeise_erloes_euro``, nicht darin:
+    #: dieser Posten bewertet den Anlagenzähler mit dem EINEN Satz der Anlage,
+    #: jener trägt einen Betrag, den Home Assistant ausgerechnet hat.
+    erzeuger_erloes_euro: float
     netto_ertrag_euro: float
     eigenverbrauch_kwh: float
     nicht_vergueteter_erloes_euro: float
@@ -94,6 +99,7 @@ def berechne_finanz_aggregat(
     zeilen: Iterable[FinanzMonatsZeile],
     *,
     sonstige_netto_euro: float = 0.0,
+    erzeuger_erloes_euro: float = 0.0,
 ) -> FinanzAggregat:
     """Aggregiert Einspeise-Erlös + EV-/BKW-Ersparnis per-Monat über alle Zeilen.
 
@@ -102,10 +108,16 @@ def berechne_finanz_aggregat(
             sichtbare/aktive Monate durch den Caller).
         sonstige_netto_euro: bereits aggregiertes Sonstige-Netto (Erträge −
             Ausgaben) über die sichtbaren Monate; fließt 1:1 in ``netto_ertrag``.
+        erzeuger_erloes_euro: Σ der gepflegten Einspeise-Erlöse einzelner
+            Erzeuger (Konzept §9 Weg 2). ⚠ **Kein Abzug von** ``einspeise``:
+            zwei Vergütungssätze bedeuten zwei Messungen, im Anlagen-Zähler
+            steht ohnehin nur die zum Anlagentarif vergütete Menge. Wer beides
+            in denselben Zähler schreibt, hat ein Erfassungs-, kein
+            Rechenproblem — und das kann eedc nicht sehen.
 
     Returns:
         FinanzAggregat mit den Einzel-Komponenten + naivem ``netto_ertrag_euro``
-        (= Σ aller vier Komponenten) + §51-Diagnose + ``hat_neg_preis_daten``
+        (= Σ aller fünf Komponenten) + §51-Diagnose + ``hat_neg_preis_daten``
         (True, sobald **eine** Zeile ``neg_preis_kwh is not None`` hat).
     """
     einspeise = 0.0
@@ -142,13 +154,14 @@ def berechne_finanz_aggregat(
         if z.neg_preis_kwh is not None:
             hat_neg = True
 
-    netto = einspeise + ev + bkw + sonstige_netto_euro
+    netto = einspeise + ev + bkw + sonstige_netto_euro + erzeuger_erloes_euro
 
     return FinanzAggregat(
         einspeise_erloes_euro=einspeise,
         ev_ersparnis_euro=ev,
         bkw_ersparnis_euro=bkw,
         sonstige_netto_euro=sonstige_netto_euro,
+        erzeuger_erloes_euro=erzeuger_erloes_euro,
         netto_ertrag_euro=netto,
         eigenverbrauch_kwh=ev_kwh,
         nicht_vergueteter_erloes_euro=nicht_verg_erloes,

@@ -276,6 +276,9 @@
       {% if amortisation_berechnung %}
       <div class="rechenweg">{{ amortisation_berechnung }}</div>
       {% endif %}
+      {% if amortisation_annahme %}
+      <div class="rechenweg">Annahme: {{ amortisation_annahme }}</div>
+      {% endif %}
     </div>
     <div>
       <div class="label">Differenz vs. Alt-Szenario</div>

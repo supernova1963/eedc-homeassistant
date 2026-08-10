@@ -592,7 +592,17 @@ async def get_cockpit_uebersicht(
     # rechnen.
     investition_gesamt = investition_mehrkosten
 
-    betriebskosten_ges = sum(i.betriebskosten_jahr or 0 for i in investitionen)
+    # N-228: die Jahres-Größe trägt nur **heute aktive** Komponenten (sie geht
+    # in Zukunfts-/USt-Größen), der Zeitraum-Abzug weiter unten dagegen jede
+    # Komponente über IHRE Laufzeit. Bis 2026-08-10 war beides dieselbe,
+    # ungefilterte Summe — eine stillgelegte Komponente kostete rückwirkend
+    # über den ganzen Beobachtungszeitraum weiter.
+    _heute_bk = date.today()
+    betriebskosten_ges = sum(
+        i.betriebskosten_jahr or 0
+        for i in investitionen
+        if i.ist_aktiv_im_monat(_heute_bk.year, _heute_bk.month)
+    )
 
     steuerliche_beh = getattr(anlage, 'steuerliche_behandlung', None) or 'keine_ust'
     # N-129 + N-130: Bis 04.08. bekam die USt hier `investition_gesamt` — die
@@ -647,6 +657,14 @@ async def get_cockpit_uebersicht(
     # Eigenverbrauch, nicht die Finanzpositionen).
     netto_ertrag += sonstige_netto
 
+    # Konzept §9 Weg 2: gepflegte Erlöse einzelner Erzeuger mit **eigenem**
+    # Einspeisetarif. Diese Sicht baut ihren Netto-Ertrag selbst aus den
+    # Einzel-Komponenten zusammen (USt-Abzug dazwischen) — der Posten muss
+    # deshalb hier addiert werden, sonst zeigte das Cockpit eine andere Summe
+    # als Auswertungen und HA-Export. Dieselbe Klasse wie #326 eine Zeile höher.
+    erzeuger_erloes_gesamt = sum(f.sonstiges.einspeise_erloes_euro for f in fakten)
+    netto_ertrag += erzeuger_erloes_gesamt
+
     # CO2-Bilanz (DI-2: kanonischer Helper — dieselbe Bilanz wie der HA-Export)
     _co2 = berechne_co2_bilanz(
         eigenverbrauch_kwh=eigenverbrauch,
@@ -686,7 +704,17 @@ async def get_cockpit_uebersicht(
         zeitraum_bis = f"{last[0]}-{last[1]:02d}"
         anzahl_monate = len(alle_monate)
 
-    betriebskosten_zeitraum = betriebskosten_ges * anzahl_monate / 12 if anzahl_monate > 0 else 0
+    # N-228, Messseite: jede Komponente mit IHRER Laufzeit statt der
+    # anlagenweiten Jahressumme über den ganzen Zeitraum. Am Dev-Bestand
+    # gemessen: 1.291,67 € gegen 725,00 € bei zwei Komponenten mit gepflegten
+    # Betriebskosten — der ROI-Fortschritt war entsprechend zu niedrig.
+    betriebskosten_zeitraum = sum(
+        (i.betriebskosten_jahr or 0)
+        * sum(1 for (_j, _m) in alle_monate if i.ist_aktiv_im_monat(_j, _m))
+        / 12
+        for i in investitionen
+        if i.betriebskosten_jahr
+    )
     # sonstige_netto steckt bereits in netto_ertrag (#326) — hier NICHT erneut
     # addieren, sonst Doppelzählung im ROI. Dasselbe gilt für `bkw_ersparnis`:
     # er ist seit P9 Teil von `netto_ertrag` (und bei mitgeschriebener BKW-

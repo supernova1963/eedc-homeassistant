@@ -94,6 +94,9 @@ const SONSTIGES_FELDER: Record<string, FeldDefinition[]> = {
     { feld: 'erzeugung_kwh',     label: 'Erzeugung',     einheit: 'kWh' },
     { feld: 'eigenverbrauch_kwh',label: 'Eigenverbrauch',einheit: 'kWh' },
     { feld: 'einspeisung_kwh',   label: 'Einspeisung',   einheit: 'kWh' },
+    // Konzept §9 Weg 2: eigener Einspeisetarif, den eedc nicht kennen kann
+    // (ein Satz je Anlage). Spiegel von `field_definitions.py`.
+    { feld: 'einspeise_erloes_euro', label: 'Einspeise-Erlös', einheit: '€' },
   ],
   verbraucher: [
     { feld: 'verbrauch_sonstig_kwh',label: 'Verbrauch',  einheit: 'kWh' },

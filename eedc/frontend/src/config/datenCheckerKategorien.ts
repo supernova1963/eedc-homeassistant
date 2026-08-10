@@ -46,6 +46,13 @@ export const KATEGORIE_LABELS: Record<string, string> = {
   batterie_vorzeichen_historie: 'Batterie – Vorzeichen-Historie',
   pv_ueber_erfassung: 'PV – Doppelerfassungs-Verdacht',
   emob_pool_pflege: 'E-Mobilität – Pool-Pflege',
+  // F-21 (10.08.): beide fehlten hier UND in der Reihenfolge unten. Der
+  // Doppelzählungs-Befund trägt einen Reparatur-Knopf („Zeitraum neu
+  // aggregieren", der N-186-Pfad) und war damit unerreichbar.
+  emob_doppelzaehlung_tage: 'E-Mobilität – doppelt gezählte Ladetage',
+  phev_anteil_unbestimmt: 'E-Auto – elektrischer Anteil unbestimmt',
+  position_wiederkehrend: 'Sonstige Positionen – wiederkehrend erfasst',
+  position_doppelerfassung: 'Sonstige Positionen – doppelt erfasst',
 }
 
 /** Anzeige-Reihenfolge der Kategorien (Vollständigkeit → Plausibilität → …). */
@@ -68,4 +75,11 @@ export const KATEGORIE_REIHENFOLGE: string[] = [
   'batterie_vorzeichen_historie',
   'pv_ueber_erfassung',
   'emob_pool_pflege',
+  'emob_doppelzaehlung_tage',
+  'phev_anteil_unbestimmt',
+  // Konzept-Wirtschaftlichkeit §8.1. ⚠ Diese Liste ist **kein Sortier-Wunsch,
+  // sondern ein Filter**: die Daten-Checker-Seite rendert `map` über sie, eine
+  // fehlende Kategorie erscheint dort also gar nicht.
+  'position_wiederkehrend',
+  'position_doppelerfassung',
 ]

@@ -191,6 +191,10 @@ Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sin
 - **Wechselrichter:** max. Leistung (kW), MaStR-ID.
 - **Sonstiges:** Kategorie (Erzeuger / Verbraucher / Speicher) + Beschreibung; die Monatsdaten-Felder passen sich der Kategorie an.
 
+  > **Zweiter Erzeuger mit eigenem Einspeisetarif.** eedc kennt genau **einen** Einspeisesatz je Anlage — für einen Erzeuger, der anders vergütet wird (zweiter Wechselrichter, Erweiterung mit neuem EEG-Satz), gibt es bei Kategorie *Erzeuger* das Feld **„Einspeise-Erlös (€)"**. Trag den Betrag entweder im Monatsabschluss ein oder — besser — ordne ihm unter [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung) einen Sensor zu: ein **Helfer in Home Assistant**, der den Erlös mit deinem Satz aufsummiert, am besten als Verbrauchszähler **ohne Zyklus** (nie zurücksetzen — eedc bildet die Monatswerte aus der Differenz). Rechnest du per Template, gib dem Sensor `state_class: total_increasing` und `device_class: monetary` mit, damit er in der Auswahl erscheint.
+  >
+  > ⚠ **Der Betrag kommt zusätzlich** und wird **nicht** gegen den Einspeise-Erlös der Anlage gerechnet: Zwei Vergütungssätze bedeuten zwei Messungen, in den Einspeisezähler der Anlage gehört also nur die Menge, die zum Anlagentarif abgerechnet wird. Wer den Erlös bisher monatlich als *sonstigen Ertrag* gebucht hat, lässt das ab dem Umstiegsmonat weg — sonst zählt derselbe Betrag zweimal.
+
 ### 3.5 Balkonkraftwerk **oder** Wechselrichter + PV-Module?
 
 Beide Wege bilden erzeugende Module ab, und die Frage kommt regelmäßig. Die Antwort hängt an **einer** Eigenschaft:
@@ -264,7 +268,7 @@ Der Block zeigt die Tabelle aller erfassten Monate inline (sortierbar, mit Spalt
 - **Basis (immer):** Jahr, Monat, Einspeisung (kWh), Netzbezug (kWh).
 - **Je Komponente (Energie-Daten in kWh):** PV-Erzeugung pro String; Speicher-Ladung/-Entladung/-Netzladung; WP Strom/Heizung/Warmwasser; E-Auto km/Verbrauch/externe Ladung; Wallbox-Ladung; BKW Erzeugung/Eigenverbrauch (Einspeisung wird berechnet).
 - **Vergleichspreise (optional):** eine eigene Untergruppe — **Ø Benzinpreis (€/L)** und **Ø Gas-/Ölpreis (ct/kWh)** als Monatsdurchschnitte für die Alternativ-Vergleiche (E-Auto / Wärmepumpe). Sie sind **nicht Teil der kWh-Bilanz** und erscheinen nur, wenn eine E-Auto- oder Wärmepumpe-Komponente vorhanden ist. (Bewusst aus den kWh-Feldern herausgezogen, damit Energie-Werte und Preis-Annahmen nicht vermischt werden.)
-- **Sonstige Positionen (G19-1):** frei erfassbare Kosten und Erlöse je Monat (Reparaturen, Wartung, THG-Quote, sonstige Erträge). Sie fließen als eigene Zeilen in die Finanz-Summen ein — siehe [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen).
+- **Sonstige Positionen (G19-1):** frei erfassbare Kosten und Erlöse je Monat (Reparaturen, Wartung, THG-Quote, sonstige Erträge). Sie fließen als eigene Zeilen in die Finanz-Summen ein — siehe [Auswertungen → Finanzen](HANDBUCH_BEDIENUNG.md#41-finanzen). In der **Wirtschaftlichkeit** wirken sie genau einmal: eine Ausgabe erhöht deinen Kapitaleinsatz, ein Ertrag mindert ihn. **Wiederkehrende** Beträge gehören stattdessen an die Komponente (*Kosten/Jahr* bzw. *Ertrag/Jahr*, beim zweiten Erzeuger *Einspeise-Erlös*) — nur dort wirken sie auch in der Prognose.
 
 > **Heimladung gehört an die Wallbox.** Hast du eine Wallbox angelegt, blendet das E-Auto-Formular die Felder „Heim: PV"/„Heim: Netz" aus — sie werden an der Wallbox erfasst. Ohne Wallbox (Schuko/Steckerlader) bleibt das E-Auto die Quelle. So kann derselbe Stromfluss nicht aus zwei Quellen widersprüchlich gepflegt werden. Hintergrund: [Berechnungen §3.4](BERECHNUNGEN.md#34-e-auto-einsparung).
 

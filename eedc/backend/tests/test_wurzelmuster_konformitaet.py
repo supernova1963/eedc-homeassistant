@@ -1244,6 +1244,10 @@ P7_BASELINE_AUSNAHMEN: frozenset[str] = frozenset({
     # `lade_pv_je_monat` direkt — dieselbe Auflösung, eine Schicht weiter oben
     # (ADR-002/P10). Trägt den String-Vergleich SOLL/IST im Jahresbericht.
     "backend/services/pdf/builders/jahresbericht.py::w",
+    # Dito — die Erzeugungs-Gewichte der Ertrags-Zerlegung (§8/5): der
+    # Einspeise-Erlös wird nach GEMESSENER Erzeugung je ROI-Zeile verteilt,
+    # und genau dafür ist `pv_je_modul` die vorgeschriebene Quelle.
+    "backend/api/routes/aussichten.py::_wert",
     # Import-/Connector-/Parser-DTOs auf dem Weg IN die Datenbank. Sie tragen
     # den Wert, bevor es eine Monatsdaten-Zeile gibt — eine Auflösung wäre dort
     # gegenstandslos.

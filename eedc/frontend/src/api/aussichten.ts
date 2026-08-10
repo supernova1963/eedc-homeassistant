@@ -223,7 +223,18 @@ export interface FinanzPrognose {
   amortisations_fortschritt_prozent: number  // Wie viel % bereits amortisiert (kumuliert)
   amortisation_erreicht: boolean
   amortisation_prognose_jahr: number | null
+  /**
+   * Konzept §5/§8-6: die Annahme hinter Restlaufzeit und Prognosejahr. Der
+   * Fortschritt in Prozent ist eine Messung und braucht sie nicht — die
+   * Restlaufzeit rechnet in die Zukunft und schon.
+   */
+  amortisation_annahme: string | null
   restlaufzeit_bis_amortisation_monate: number | null
+  // Bauschritt 5: derselbe Zähler, auf die ROI-Zeilen zerlegt. Der Nenner je
+  // Zeile kommt aus dem ROI-Dashboard (`kapitaleinsatz`).
+  ertraege_je_investition?: { investition_id: number; bisherige_ertraege_euro: number }[]
+  // Was zu keiner Zeile gehören kann (anlagenweite Monatspositionen).
+  ertraege_nicht_zurechenbar_euro?: number
 
   // Monatswerte
   monatswerte: FinanzPrognoseMonat[]

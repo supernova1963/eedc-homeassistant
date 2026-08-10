@@ -65,6 +65,11 @@ class InvestitionExport(BaseModel):
     anschaffungskosten_gesamt: Optional[float] = None
     anschaffungskosten_alternativ: Optional[float] = None
     betriebskosten_jahr: Optional[float] = None
+    # Ertragsseite des Jahresbetrags (Konzept §8/1). Additiv und optional —
+    # ältere Exporte ohne das Feld bleiben lesbar, die Export-Version bleibt
+    # deshalb bei 1.3. Ohne diese drei Stellen verlöre ein Backup/Restore
+    # genau den Wert, den §8/1 gerade pflegbar gemacht hat.
+    einsparung_prognose_jahr: Optional[float] = None
     anschaffungsdatum: Optional[date] = None
     stilllegungsdatum: Optional[date] = None
     leistung_kwp: Optional[float] = None
@@ -382,6 +387,7 @@ async def _export_anlage_full_impl(anlage_id: int, db: AsyncSession):
             anschaffungskosten_gesamt=inv.anschaffungskosten_gesamt,
             anschaffungskosten_alternativ=inv.anschaffungskosten_alternativ,
             betriebskosten_jahr=inv.betriebskosten_jahr,
+            einsparung_prognose_jahr=inv.einsparung_prognose_jahr,
             anschaffungsdatum=inv.anschaffungsdatum,
             stilllegungsdatum=inv.stilllegungsdatum,
             leistung_kwp=inv.leistung_kwp,
@@ -647,6 +653,7 @@ async def import_json(
                 anschaffungskosten_gesamt=inv_data.get("anschaffungskosten_gesamt"),
                 anschaffungskosten_alternativ=inv_data.get("anschaffungskosten_alternativ"),
                 betriebskosten_jahr=inv_data.get("betriebskosten_jahr"),
+                einsparung_prognose_jahr=inv_data.get("einsparung_prognose_jahr"),
                 anschaffungsdatum=_parse_date(inv_data.get("anschaffungsdatum")),
                 stilllegungsdatum=_parse_date(inv_data.get("stilllegungsdatum")),
                 leistung_kwp=inv_data.get("leistung_kwp"),

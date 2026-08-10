@@ -217,6 +217,9 @@ async def build_jahresbericht_context(
     # unabhängig vom Typ) plus die Basis-Positionen der Monatsdaten-Zeile
     # (G19-1) — beides zusammen ergibt `sonstiges.netto_euro`.
     sonstige_by_ym = {f.schluessel: f.sonstiges.netto_euro for f in fakten}
+    # Konzept §9 Weg 2: gepflegte Erlöse einzelner Erzeuger (eigener
+    # Einspeisetarif) — eigener Summand, kein Teil des Sonstige-Netto.
+    erzeuger_erloes_gesamt = sum(f.sonstiges.einspeise_erloes_euro for f in fakten)
 
     # ── 7. Aggregate Wärmepumpe / E-Mob / Speicher ──────────────────────
     pv_gesamt = 0.0
@@ -372,7 +375,9 @@ async def build_jahresbericht_context(
     # #326: Finanz-Summary über den SoT-Helper = Σ der per-Monat-Zeilen (EV mit
     # Monats-Flexpreis + §51-bereinigter Einspeise-Erlös) + Sonstige.
     _finanz = berechne_finanz_aggregat(
-        finanz_zeilen, sonstige_netto_euro=sonstige_netto_gesamt
+        finanz_zeilen,
+        sonstige_netto_euro=sonstige_netto_gesamt,
+        erzeuger_erloes_euro=erzeuger_erloes_gesamt,
     )
     einspeise_erloes = _finanz.einspeise_erloes_euro
     ev_ersparnis = _finanz.ev_ersparnis_euro

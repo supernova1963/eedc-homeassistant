@@ -31,7 +31,7 @@ import { KpiStrip, type KpiStripItem } from '../blocks'
 import { investitionenApi, type ROIDashboardResponse, type ROIBerechnung, type SpeicherRoiDetail } from '../../api'
 import { aussichtenApi } from '../../api/aussichten'
 import { swrCachePeek, swrCacheStore } from '../../hooks/useApiData'
-import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP } from '../../lib'
+import { TYP_COLORS, GELD_COLORS, GELD_TEXT_CLASS, fmtZahl, formatGeld, formatCo2, xAchse, achsenEinheit, ACHSEN_MARGIN_TOP, amortisationAnnahmeZeile } from '../../lib'
 import { TYP_LABELS } from '../../lib/constants'
 
 const typIcons: Record<string, React.ElementType> = {
@@ -51,18 +51,24 @@ const geldTick = (v: number) => fmtZahl(v, 0)
 
 /**
  * Nenner der Kapitalrechnung als Text — mit dem Zwischenschritt, sobald
- * sonstige Positionen ihn von den relevanten Kosten unterscheiden (F-19).
+ * sonstige Positionen ihn von den relevanten Kosten unterscheiden (F-19 für
+ * die Ausgaben, Bauschritt 7 des Wirtschaftlichkeits-Konzepts für die
+ * Erträge: eine Förderung ist Geld, das nie eingesetzt wurde).
  *
  * Der Client rechnet **nichts**: beide Zahlen kommen aus der Response
  * (`gesamt_kapitaleinsatz` ist der Wert, mit dem das Backend geteilt hat).
  * Er schreibt nur aus, woraus sie besteht — ohne das ergäbe der angezeigte
  * Rechenweg eine andere Zahl als das Ergebnis daneben (die N-212-Klasse).
  */
-const nennerText = (d: { gesamt_relevante_kosten: number; gesamt_kapitaleinsatz?: number; gesamt_sonstige_ausgaben_euro?: number }): string => {
+export const nennerText = (d: { gesamt_relevante_kosten: number; gesamt_kapitaleinsatz?: number; gesamt_sonstige_ausgaben_euro?: number; gesamt_sonstige_ertraege_euro?: number }): string => {
   const einsatz = d.gesamt_kapitaleinsatz ?? d.gesamt_relevante_kosten
   const ausgaben = d.gesamt_sonstige_ausgaben_euro ?? 0
-  if (!ausgaben) return formatGeld(einsatz).text
-  return `${formatGeld(d.gesamt_relevante_kosten).text} + ${formatGeld(ausgaben).text} sonstige Ausgaben = ${formatGeld(einsatz).text}`
+  const ertraege = d.gesamt_sonstige_ertraege_euro ?? 0
+  if (!ausgaben && !ertraege) return formatGeld(einsatz).text
+  const teile = [formatGeld(d.gesamt_relevante_kosten).text]
+  if (ausgaben) teile.push(`+ ${formatGeld(ausgaben).text} sonstige Ausgaben`)
+  if (ertraege) teile.push(`− ${formatGeld(ertraege).text} sonstige Erträge`)
+  return `${teile.join(' ')} = ${formatGeld(einsatz).text}`
 }
 
 /** Zeilen-Variante von {@link nennerText}. */
@@ -95,6 +101,21 @@ export interface AmortisationsFortschrittVM {
   bisherigeErtraege: number
   relevanteKosten: number
   prognoseJahr: number | null
+  /**
+   * Konzept §5: die Annahme hinter `prognoseJahr`. Sie gilt **nur** für die
+   * Restlaufzeit — der Prozentwert daneben ist Messung und unterstellt nichts
+   * (§4). Deshalb erscheint sie in dieser Kachel auch nur, wenn ein Jahr
+   * genannt wird.
+   */
+  annahme: string | null
+  /**
+   * Bauschritt 5: derselbe Zähler, auf die ROI-Zeilen zerlegt —
+   * `investition_id -> kumulierter Netto-Ertrag`. **Fehlt eine Zeile in der
+   * Map, ist ihr Ertrag nicht ZURECHENBAR, nicht null:** die Tabelle zeigt
+   * dort „—". Eine 0 wäre eine Aussage über eine Größe, die es nicht gibt
+   * (dieselbe Grenze wie bei `nicht_bewertet`).
+   */
+  ertragJeInvestition: Record<number, number>
 }
 
 export interface RoiAnalyseVM {
@@ -165,6 +186,10 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
           bisherigeErtraege: p.bisherige_ertraege_euro,
           relevanteKosten: p.investition_gesamt_euro,
           prognoseJahr: p.amortisation_prognose_jahr,
+          annahme: p.amortisation_annahme,
+          ertragJeInvestition: Object.fromEntries(
+            (p.ertraege_je_investition ?? []).map((e) => [e.investition_id, e.bisherige_ertraege_euro]),
+          ),
         })
       })
       // Still: die Fortschritts-Kachel entfällt dann, der Rest der Sicht steht.
@@ -288,7 +313,11 @@ export function roiKpiItems(
       subtitle: roiData.gesamt_amortisation_jahr
         ? `Kostendeckung voraussichtlich ${roiData.gesamt_amortisation_jahr}`
         : 'Bis zur Kostendeckung',
-      sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · MODELL (hochgerechnet, ohne bisherige Erträge) — die gemessene Sicht steht daneben als „Amortisations-Fortschritt“',
+      // Konzept §5/§8-6: eine Dauer kann ohne Annahme über die Zukunft nicht
+      // existieren — sie steht in derselben Tooltip-Zeile wie die Bezugsbasis
+      // (§6, letzter Einwand). Der Text kommt aus dem Backend-SoT.
+      sicht: `Gesamt-Anlage · Mehrkosten-Ansatz · MODELL (hochgerechnet, ohne bisherige Erträge) — die gemessene Sicht steht daneben als „Amortisations-Fortschritt“${
+        roiData.amortisation_annahme ? ` · ${amortisationAnnahmeZeile(roiData.amortisation_annahme)}` : ''}`,
       formel: 'Kapitaleinsatz ÷ Jährliche Einsparung',
       // F-19: Nenner ist der Kapitaleinsatz — relevante Kosten plus die
       // sonstigen Netto-Kosten (Reparatur, Ersatzteil …). Der Zwischenschritt
@@ -314,7 +343,14 @@ export function roiKpiItems(
       subtitle: fortschritt.erreicht
         ? 'Kosten gedeckt'
         : `noch ${formatGeld(rest).text}${fortschritt.prognoseJahr ? ` · voraussichtlich ${fortschritt.prognoseJahr}` : ''}`,
-      sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · GEMESSEN (bisherige Erträge, kein Modell)',
+      // Konzept §4/§5: der Prozentwert ist Messung — das „voraussichtlich JJJJ"
+      // im Untertitel ist es nicht. Es rechnet den offenen Rest mit der
+      // Jahres-Prognose hoch und ist damit selbst eine Dauer-Aussage; also
+      // nennt auch sie ihre Annahme, aber nur wenn sie überhaupt dasteht.
+      sicht: `Gesamt-Anlage · Mehrkosten-Ansatz · GEMESSEN (bisherige Erträge, kein Modell)${
+        fortschritt.prognoseJahr && fortschritt.annahme
+          ? ` — das voraussichtliche Jahr rechnet mit der Jahres-Prognose · ${amortisationAnnahmeZeile(fortschritt.annahme)}`
+          : ''}`,
       formel: 'Bisherige Netto-Erträge ÷ Relevante Kosten × 100',
       berechnung: `${formatGeld(fortschritt.bisherigeErtraege).text} ÷ ${formatGeld(fortschritt.relevanteKosten).text}`,
       ergebnis: `= ${fmtZahl(fortschritt.prozent, 1)} % gedeckt`,
@@ -372,6 +408,14 @@ export function RoiAmortisationChart({ vm }: { vm: RoiAnalyseVM }) {
             <span className="block text-xs mt-0.5">
               Startjahr {basisJahr} (früheste Anschaffung); bei über mehrere Jahre verteilten
               Anschaffungen ist das Jahr eher optimistisch.
+            </span>
+          )}
+          {/* Konzept §5/§8-6: hier steht die Annahme SICHTBAR, nicht im
+              Tooltip — die Kurve ist die Stelle, an der die Zukunft gezeichnet
+              wird, und Modell A ist optimistisch. */}
+          {roiData.amortisation_annahme && (
+            <span className="block text-xs mt-0.5">
+              {amortisationAnnahmeZeile(roiData.amortisation_annahme)}
             </span>
           )}
         </p>
@@ -483,7 +527,11 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   const roiData = vm.roiData
   if (!roiData) return null
-  const cols = zeigeCo2 ? 6 : 5
+  const cols = zeigeCo2 ? 7 : 6
+  // Bauschritt 5: der gemessene Fortschritt je Zeile. Zähler aus den
+  // Aussichten (dort entsteht er, dort wird er zerlegt), Nenner aus dieser
+  // Sicht — dieselbe Arbeitsteilung wie bei der Kachel darüber.
+  const ertragJeInv = vm.fortschritt?.ertragJeInvestition
   return (
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detailübersicht</h3>
@@ -495,6 +543,7 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
               <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Einsparung/Jahr</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>ROI</th>
               <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Amortisation</th>
+              <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>Fortschritt</th>
               {zeigeCo2 && <th className={`${KOPF_ZELLE} text-right text-gray-500 dark:text-gray-400`}>CO2</th>}
             </tr>
           </TableHead>
@@ -585,7 +634,11 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                     <td className={`${ZELLE} text-right`}>
                       {unbewertet ? leerwert : b.amortisation_jahre ? (
                         <FormelTooltip
-                          sicht="Pro Investition · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
+                          // Konzept §5/§8-6: die Annahme kommt aus dem Backend
+                          // (Modell A oder C, je nach gepflegten Betriebskosten
+                          // DIESER Zeile) — der Client formuliert sie nicht.
+                          sicht={`Pro Investition · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)${
+                            b.amortisation_annahme ? ` · ${amortisationAnnahmeZeile(b.amortisation_annahme)}` : ''}`}
                           formel="Kapitaleinsatz ÷ Jahresersparnis"
                           berechnung={`${zeilenNenner(b)} ÷ ${formatGeld(b.jahres_einsparung).text}/Jahr`}
                           ergebnis={`= ${b.amortisation_jahre} Jahre`}
@@ -597,6 +650,30 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                       ) : (
                         <span className="text-gray-400 dark:text-gray-500">—</span>
                       )}
+                    </td>
+                    <td className={`${ZELLE} text-right`}>
+                      {(() => {
+                        // MESSUNG neben dem Modell: was ist zurückgeflossen?
+                        // Fehlt die Zeile in der Zerlegung, ist ihr Ertrag
+                        // nicht zurechenbar — dann „—", keine 0 (P4).
+                        const ertrag = ertragJeInv?.[b.investition_id]
+                        if (ertrag === undefined || !b.kapitaleinsatz || b.kapitaleinsatz <= 0) {
+                          return <span className="text-gray-400 dark:text-gray-500">—</span>
+                        }
+                        const prozent = (ertrag / b.kapitaleinsatz) * 100
+                        return (
+                          <FormelTooltip
+                            sicht="Pro Investition · MESSUNG (kumulierte Erträge, ohne Annahme über die Zukunft)"
+                            formel="bisherige Erträge ÷ Kapitaleinsatz × 100"
+                            berechnung={`${formatGeld(ertrag).text} ÷ ${zeilenNenner(b)} × 100`}
+                            ergebnis={`= ${fmtZahl(prozent, 1)} % gedeckt`}
+                          >
+                            <span className={prozent >= 100 ? `${GELD_TEXT_CLASS.ersparnis} cursor-help border-b border-dotted border-green-400` : 'text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-400'}>
+                              {fmtZahl(prozent, 1)} %
+                            </span>
+                          </FormelTooltip>
+                        )
+                      })()}
                     </td>
                     {zeigeCo2 && (
                       <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>
@@ -619,7 +696,27 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
               <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{formatGeld(roiData.gesamt_relevante_kosten).text}</td>
               <td className={`${ZELLE} text-right ${GELD_TEXT_CLASS.ersparnis}`}>{formatGeld(roiData.gesamt_jahres_einsparung).text}</td>
               <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_roi_prozent ? `${roiData.gesamt_roi_prozent} %` : '—'}</td>
-              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>{roiData.gesamt_amortisation_jahre ? `${roiData.gesamt_amortisation_jahre} J.` : '—'}</td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>
+                {/* Konzept §5/§8-6: auch die Summenzeile ist eine Dauer-Anzeige
+                    und nennt ihre Annahme — sonst wäre sie die eine Stelle der
+                    Sicht, an der die Zahl ohne Voraussetzung dasteht. */}
+                {roiData.gesamt_amortisation_jahre ? (
+                  <FormelTooltip
+                    sicht={`Gesamt-Anlage · Mehrkosten-Ansatz · MODELL (hochgerechnet)${
+                      roiData.amortisation_annahme ? ` · ${amortisationAnnahmeZeile(roiData.amortisation_annahme)}` : ''}`}
+                    formel="Kapitaleinsatz ÷ Jahresersparnis"
+                    berechnung={nennerText(roiData) + ` ÷ ${formatGeld(roiData.gesamt_jahres_einsparung).text}/Jahr`}
+                    ergebnis={`= ${roiData.gesamt_amortisation_jahre} Jahre`}
+                  >
+                    <span className="cursor-help border-b border-dotted border-gray-400">
+                      {roiData.gesamt_amortisation_jahre} J.
+                    </span>
+                  </FormelTooltip>
+                ) : '—'}
+              </td>
+              <td className={`${ZELLE} text-right text-gray-900 dark:text-white`}>
+                {vm.fortschritt ? `${fmtZahl(vm.fortschritt.prozent, 1)} %` : '—'}
+              </td>
               {zeigeCo2 && (
                 <td className={`${ZELLE} text-right text-emerald-600 dark:text-emerald-400`}>{fmtZahl(roiData.gesamt_co2_einsparung_kg, 0)} kg</td>
               )}

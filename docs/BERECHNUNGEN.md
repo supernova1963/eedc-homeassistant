@@ -935,12 +935,13 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 > (**Regression**, drei Sichten auf einer Fixture mit Alternativkosten ≠ Festannahme).
 
 > **Sonstige Positionen: Zeitraum-Bilanz ↔ Kapitalrechnung (seit 2026-08-09).**
-> Eine Reparatur ist zweierlei, je nach Frage:
+> Eine Reparatur ist zweierlei, je nach Frage — und seit 2026-08-10 gilt
+> dasselbe für eine Förderung:
 >
 > | Frage | Sicht | Wo die Position steht |
 > | --- | --- | --- |
-> | „Was hat der Monat gekostet und eingebracht?" | Cockpit, Monatsbericht, Jahresbericht-PDF, CSV-Export, Sensor `netto_ertrag_euro` | **Ertragsseite** — Aufwand des Zeitraums, unverändert |
-> | „Wie lange dauert es, bis sich das rechnet?" | ROI, Amortisation, HA-Sensoren, Finanzbericht-PDF | **Kapitaleinsatz** (Nenner) |
+> | „Was hat der Monat gekostet und eingebracht?" | Cockpit, Monatsbericht, Jahresbericht-PDF, CSV-Export, Sensor `netto_ertrag_euro` | **Ertragsseite** — Aufwand bzw. Ertrag des Zeitraums, unverändert |
+> | „Wie lange dauert es, bis sich das rechnet?" | ROI, Amortisation, HA-Sensoren, Finanzbericht-PDF | **Kapitaleinsatz** (Nenner): Ausgabe **+**, Ertrag **−** |
 >
 > **Warum:** vorher wurden sonstige Ausgaben im Zähler über die Laufzeit
 > **annualisiert**. Eine einmalige Reparatur von 3.000 € an einer Wärmepumpe
@@ -951,24 +952,39 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 > (Wartung) liefert die kumulative Rechnung sogar exakt dasselbe Ergebnis wie
 > vorher (`K + 180n = 1235n ⇒ n = 9,5`).
 >
-> ⏳ **Nur die Ausgaben — sonstige *Erträge* bleiben vorerst im Zähler.** Das ist
-> ein **Zwischenstand**: mit Bauschritt 7 aus
-> [`KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md)
-> §8 wandern auch sie in den Nenner. Bis dahin ist es keine
-> Inkonsequenz, sondern das Verhalten der Formel: ein wiederkehrender Ertrag `E`
-> im Nenner ergäbe `(K − E·n) ÷ Z`, eine Zahl, die jedes Jahr schrumpft und
-> irgendwann negativ wird. Im Zähler ergibt er `K ÷ (Z + E)` und konvergiert.
-> Praktischer Fall: wer zwei Wechselrichter mit **verschiedenen
-> Einspeisetarifen** betreibt, kann den zweiten Erlös nur von Hand als
-> sonstigen Ertrag pflegen (eedc kennt genau **einen** Einspeisesatz je Anlage)
-> — im Nenner hätte diese Pflege die Amortisation *verlängert*.
+> **Sonstige *Erträge* stehen seit 2026-08-10 im Nenner** (Bauschritt 7 —
+> die Vollkostenrechnung ist damit vollständig). Eine Position im
+> Monatsabschluss ist per Form **einmal** geflossen; sie zu mitteln und in
+> jedes künftige Jahr zu verlängern unterstellt eine Wiederholung, die niemand
+> behauptet hat (spiegelbildlich zur Ausgabenseite, seit demselben Tag). Eine
+> THG-Quote oder eine Förderung **mindert deshalb das eingesetzte Kapital**,
+> statt eine künftige Jahres-Ersparnis zu erhöhen. In der **Zeitraum-Bilanz**
+> bleibt sie unverändert stehen — dort ist sie ein Ertrag des Zeitraums.
+>
+> **Warum nicht schon mit F-19:** ein *wiederkehrender* Ertrag `E` im Nenner
+> ergibt `(K − E·n) ÷ Z`, eine Zahl, die jedes Jahr schrumpft und irgendwann
+> negativ wird. Voraussetzung war deshalb ein **Ort für wiederkehrende
+> Erträge**, und den gibt es seit demselben Tag gleich zweimal: **„Ertrag/Jahr
+> (€)"** an der Investition (Wallbox/Sonstiges) und **„Einspeise-Erlös (€)"**
+> bei *Sonstiges/Erzeuger*, per HA-Sensor monatsgenau befüllbar. Praktischer
+> Fall: wer zwei Wechselrichter mit **verschiedenen Einspeisetarifen** betreibt
+> (eedc kennt genau **einen** Einspeisesatz je Anlage), pflegt den zweiten
+> Erlös dort — beide Felder sind wiederkehrend gemeint und wirken im **Zähler**.
+> Die monatliche Handpflege bleibt möglich, beschreibt aber die Vergangenheit
+> und mindert seither den Kapitaleinsatz; der Daten-Checker weist auf den
+> besseren Ort hin, wenn derselbe Posten mehrfach auftaucht.
+>
+> ⚠ **Der Nenner kann dadurch unter die Anschaffungskosten fallen** — das ist
+> die Aussage: eine Förderung ist Geld, das nie eingesetzt wurde. Fällt er auf
+> ≤ 0, zeigt eedc **keine** Amortisationsdauer und keinen ROI statt einer
+> negativen Zahl.
 >
 > Die Unterscheidung kostet **keine zusätzliche Pflege**: `typ: ertrag|ausgabe`
-> wird beim Erfassen ohnehin gewählt.
+> wird beim Erfassen ohnehin gewählt, und der Ort sagt die Häufigkeit.
 >
 > **Und der Kapitaleinsatz ist nicht die USt-Bemessungsgrundlage.** Die bleibt
 > bei den reinen Mehrkosten (§ 3 Abs. 1b UStG, [§3.7](#37-umsatzsteuer-auf-eigenverbrauch)) —
-> eine Reparatur gehört dort nicht hinein. Gesichert durch
+> weder eine Reparatur noch eine Förderung gehört dort hinein. Gesichert durch
 > `test_kapitaleinsatz_vier_sichten_symmetrie.py` (**Regression**, vier Sichten +
 > beide Seiten des Bruchs, **beide Erfassungsorte** — an der Investition und auf
 > der Monatsdaten-Zeile). ⚠ Die zweite Hälfte kam erst am 2026-08-10 dazu: bis
@@ -993,7 +1009,7 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 |---|---|---|
 | **Amortisationsdauer** — Jahre **und Break-Even-Jahr** | Auswertungen → ROI | **MODELL:** `Relevante Kosten ÷ prognostizierte Jahres-Einsparung`, konstant hochgerechnet. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
 | **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`. |
-| **Amortisation (Prognose)** | PDF-Finanzbericht | **Dieselbe Zahl wie *Auswertungen → ROI*** (seit 2026-08-09). Vorher rechnete das PDF `Gesamt-Anschaffung ÷ Σ einsparung_prognose_jahr` — beide Seiten trugen nicht: der Nenner war die Gesamt- statt der relevanten Kosten, und der Zähler ein Feld **ohne Schreiber** (in keinem Formular, keinem Import, keinem Update-Schema). In der Praxis stand dort deshalb „—". |
+| **Amortisation (Prognose)** | PDF-Finanzbericht | **Dieselbe Zahl wie *Auswertungen → ROI*** (seit 2026-08-09). Vorher rechnete das PDF `Gesamt-Anschaffung ÷ Σ einsparung_prognose_jahr` — beide Seiten trugen nicht: der Nenner war die Gesamt- statt der relevanten Kosten, und der Zähler ein Feld **ohne Schreiber** (in keinem Formular, keinem Import, keinem Update-Schema). In der Praxis stand dort deshalb „—". Seit 2026-08-10 ist das Feld als **„Ertrag/Jahr"** pflegbar (Wallbox/Sonstiges) — die Amortisation kommt trotzdem weiter aus dem ROI-Dashboard, damit alle vier Sichten dieselbe Zahl nennen. |
 | **Amortisation (HA-Sensor)** | `sensor.*_amortisation_jahre` | `Kapitaleinsatz ÷ Jahres-Ersparnis`, wobei die Jahres-Ersparnis aus der **gemessenen Historie** annualisiert wird — je Posten mit seiner eigenen Laufzeit. Trägt denselben Nenner wie die drei anderen, aber einen Ist- statt Modell-Zähler; die Zahl liegt deshalb je nach Anlage über oder unter der Modell-Sicht. |
 
 > Die beiden ersten beantworten dieselbe Frage verschieden — „laut Rechnung in 9,2 Jahren" gegen
@@ -1003,6 +1019,28 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 > Verteilen sich die Anschaffungen über mehrere Jahre, ist das ausgewiesene Amortisationsjahr
 > **optimistisch** (der Anker ist die *erste* Anschaffung, die Kosten sind die Summe). Der
 > Break-Even-Text sagt das dazu.
+
+> **Jede Dauer nennt ihre Annahme (seit 2026-08-10).** Der Fortschritt unterstellt
+> nichts, die Dauer **muss** etwas unterstellen — gewählt ist **Modell A**
+> („es geht nie wieder etwas kaputt", Begründung und die verworfenen Modelle B/C
+> in [`KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md) §5).
+> Formuliert wird der Satz **einmal**, im Layer-SoT
+> `core/berechnungen/kapitalrechnung.py::annahme_dauer_text`, und von allen
+> Ausgabewegen abgeholt: ROI-Dashboard (gesamt **und** je Zeile), PDF-Finanzbericht,
+> HA-Sensor `amortisation_jahre` (dort im Rechenweg-Attribut — ein Sensor hat
+> keinen Tooltip) und die **Restlaufzeit** der Finanz-Prognose
+> (`amortisation_prognose_jahr`): sie steht zwar in der *gemessenen* Kachel,
+> rechnet aber den offenen Rest mit der Jahres-Prognose hoch und ist damit selbst
+> eine Dauer-Aussage. Das Client-Pendant `lib/amortisationAnnahme.ts` trägt nur den
+> einen Fall, für den es keine Backend-Zahl gibt: die Wallbox-Dauer im
+> Komponenten-Hub, die aus `Anschaffung ÷ Ersparnis` im Client entsteht.
+>
+> ⚠ **Der Satz richtet sich nach den Daten, nicht nach dem Modellnamen.** Sobald
+> `betriebskosten_jahr` gepflegt ist, rechnet eedc **Modell C** — der Betrag steht
+> als Abzug im Zähler, und „ohne künftige Instandhaltung" wäre dann eine falsche
+> Aussage über die eigene Rechnung. Gesichert durch
+> `test_konzept_wirtschaftlichkeit_konformitaet.py::test_schritt6_*`
+> (**Regression** — die vier Quellen werden namentlich aufgerufen).
 
 ### 3.7 USt auf Eigenverbrauch
 

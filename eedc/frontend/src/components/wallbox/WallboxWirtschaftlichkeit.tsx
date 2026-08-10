@@ -10,7 +10,10 @@ import {
 import ChartTooltip from '../ui/ChartTooltip'
 import { ChartLegende } from '../ui'
 import { Parkbar } from '../park'
-import { GELD_COLORS, GELD_TEXT_CLASS, KOMPONENTEN_FARBEN, CHART_HOVER_CURSOR, fmtZahl } from '../../lib'
+import {
+  GELD_COLORS, GELD_TEXT_CLASS, KOMPONENTEN_FARBEN, CHART_HOVER_CURSOR, fmtZahl,
+  AMORTISATION_ANNAHME_MODELL_A, amortisationAnnahmeZeile,
+} from '../../lib'
 import type { WallboxDashboardResponse } from '../../api/investitionen'
 import type { Investition } from '../../types'
 
@@ -97,6 +100,15 @@ export function WallboxWirtschaftlichkeit({ zusammenfassung: z, investition, mel
             <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
               {jahresErsparnis <= 0 ? '∞' : `${fmtZahl(anschaffung! / jahresErsparnis, 1)} Jahre`}
             </p>
+            {/* Konzept §5/§8-6: diese Dauer entsteht im Client aus
+                Anschaffung ÷ Ersparnis — ohne Betriebskosten-Abzug, also
+                immer Modell A. Deshalb der feste Text aus `lib`, nicht der
+                datenabhängige des ROI-Dashboards. */}
+            {jahresErsparnis > 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {amortisationAnnahmeZeile(AMORTISATION_ANNAHME_MODELL_A)}
+              </p>
+            )}
           </div>
         </div>
         </Parkbar>
