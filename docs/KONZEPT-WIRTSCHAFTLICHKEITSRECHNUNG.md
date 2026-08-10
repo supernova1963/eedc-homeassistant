@@ -15,7 +15,7 @@
 > | --- | --- |
 > | Die Formeln selbst | [`docs/BERECHNUNGEN.md`](BERECHNUNGEN.md) §3.6 |
 > | Der Layer-SoT | `eedc/backend/core/berechnungen/kapitalrechnung.py` |
-> | Der Wächter | `eedc/backend/tests/test_kapitaleinsatz_vier_sichten_symmetrie.py` |
+> | Der Prüfer (**Regression**, ADR-002-Sprachgebrauch) | `eedc/backend/tests/test_kapitaleinsatz_vier_sichten_symmetrie.py` |
 > | Der gemeinsame Nenner (Mehrkosten) | ADR-002-Umfeld, `investitionskosten.py`, N-137 |
 > | Anwender-Sicht | [`docs/HANDBUCH_BEDIENUNG.md`](HANDBUCH_BEDIENUNG.md) §Auswertungen → ROI |
 >
@@ -208,7 +208,7 @@ scheiterte an Geschmack.
 | 5 | **Amortisations-Fortschritt je Investition** | **groß** | Der Nenner liegt vor (jede ROI-Zeile trägt ihren Kapitaleinsatz); es fehlen die **kumulierten Erträge je Komponente**. Bedingung des Maintainers für Modell C — ohne die Gegenkachel wäre die Dauer die geschönte Zahl ohne Korrektiv |
 | 6 | **Dauer-Anzeige schreibt ihre Annahme aus** | klein | §5, letzter Punkt |
 | 8 | **Zwei Daten-Checker-Regeln** — wiederkehrender Posten im Monatsabschluss · Doppelerfassung Jahresbetrag/Monatsposition | klein | §8.1. Das Modell verlagert die Entscheidung zum Erfassungsort; **genau dort** kann ein Anwender es verfehlen, und nur dort ist es erkennbar |
-| 7 | **Erträge zurück in den Nenner** — erst nach 1–3 **und nach der Kommunikation** | mittel | Vollendet die Vollkostenrechnung. ⛔ **Zwei Vorbedingungen, beide hart:** (a) der Umstiegsweg muss existieren (§9.1), sonst gäbe es keinen Ort für wiederkehrende Erträge; (b) wer sie heute monatlich pflegt, muss es **vorher** wissen (§11, letzte Zeile) — dieser Schritt ändert die Wirkung **bestehender Daten**. Dabei ist zu prüfen, ob eine Migration nötig ist. ⏳ **Und die vier Stellen nachziehen, die den heutigen Zustand ausdrücklich als Zwischenstand kennzeichnen:** Modul-Docstring `kapitalrechnung.py` · Wächter-Docstring — die Probe `test_ertrag_bleibt_im_zaehler_…` ist dann **umzuschreiben**, nicht der Code zu reparieren · `BERECHNUNGEN.md` §3.6 · `HANDBUCH_BEDIENUNG.md`, wo heute steht, man müsse nichts umstellen |
+| 7 | **Erträge zurück in den Nenner** — erst nach 1–3 **und nach der Kommunikation** | mittel | Vollendet die Vollkostenrechnung. ⛔ **Zwei Vorbedingungen, beide hart:** (a) der Umstiegsweg muss existieren (§9.1), sonst gäbe es keinen Ort für wiederkehrende Erträge; (b) wer sie heute monatlich pflegt, muss es **vorher** wissen (§11, letzte Zeile) — dieser Schritt ändert die Wirkung **bestehender Daten**. Dabei ist zu prüfen, ob eine Migration nötig ist. ⏳ **Und vier Stellen nachziehen — aber nur DREI davon sind per `⏳` auffindbar:** Modul-Docstring `kapitalrechnung.py` · Docstring von `test_kapitaleinsatz_vier_sichten_symmetrie.py` — die Probe `test_ertrag_bleibt_im_zaehler_…` ist dann **umzuschreiben**, nicht der Code zu reparieren · `BERECHNUNGEN.md` §3.6. ⚠ **Die vierte ist `HANDBUCH_BEDIENUNG.md`** („Du musst dafür nichts umstellen") und trägt **absichtlich kein Kennzeichen** — Anwender-Doku beschreibt den IST-Zustand, nicht künftige Pläne (N-217). **Ein `grep ⏳` findet sie deshalb nicht**, und sie ist die Stelle mit der größten Anwenderwirkung: sie steht in der ausgelieferten In-App-Hilfe |
 
 **Bereits gebaut** (2026-08-09, ungepusht): sonstige **Ausgaben** kumuliert in den
 Nenner statt annualisiert in den Zähler · jeder Ersparnis-Posten wird mit
@@ -365,7 +365,9 @@ dass ein Bauschritt überhaupt gefahren werden darf (§9.1).
 
 * **Layer-SoT:** `eedc/backend/core/berechnungen/kapitalrechnung.py` — Nenner
   und Zähler-Annualisierung an einem Ort, mit der Begründung im Modul-Docstring.
-* **Wächter:** `test_kapitaleinsatz_vier_sichten_symmetrie.py` — ein gemeinsamer
+* **Regression** (nicht Wächter — ADR-002 §„gesichert durch": er ruft die vier
+  Sichten **namentlich** auf, eine fünfte mit demselben Fehler sähe er nicht):
+  `test_kapitaleinsatz_vier_sichten_symmetrie.py` — ein gemeinsamer
   Nenner über *Auswertungen → ROI*, HA-Sensoren, Aussichten und PDF, dazu beide
   Seiten des Bruchs. Er prüft **bewusst keine gleichen Endwerte**: die vier
   Sichten meinen nicht dieselbe Größe (Modell neben Messung), und ein Test auf

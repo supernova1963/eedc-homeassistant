@@ -126,10 +126,13 @@ async def test_roi_dashboard_nennt_den_kapitaleinsatz(db):
     assert roi.gesamt_sonstige_ausgaben_euro == pytest.approx(REPARATUR)
     assert roi.gesamt_kapitaleinsatz == pytest.approx(ERWARTETER_KAPITALEINSATZ)
     # Und die Amortisation rechnet wirklich damit, nicht mit den relevanten Kosten.
-    if roi.gesamt_amortisation_jahre:
-        assert roi.gesamt_amortisation_jahre == pytest.approx(
-            roi.gesamt_kapitaleinsatz / roi.gesamt_jahres_einsparung, rel=0.02
-        )
+    # ⚠ **Ohne `if`** (N-221): ein Guard auf denselben Wert, den die Probe prüft,
+    # schaltet genau dann auf Grün, wenn die Zahl fehlt — also im Fehlerfall.
+    # Die Fixture liefert sie nachweislich (13,9 Jahre, gemessen 10.08.).
+    assert roi.gesamt_amortisation_jahre is not None
+    assert roi.gesamt_amortisation_jahre == pytest.approx(
+        roi.gesamt_kapitaleinsatz / roi.gesamt_jahres_einsparung, rel=0.02
+    )
 
 
 async def test_aussichten_teilen_den_kapitaleinsatz(db):
@@ -152,8 +155,12 @@ async def test_ha_sensoren_teilen_den_kapitaleinsatz(db):
     sensor_values = await calculate_anlage_sensors(db, anlage)
     sensoren = {sv.definition.key: sv for sv in sensor_values}
 
-    if "roi_prozent" not in sensoren:
-        pytest.skip("Anlage liefert keinen bewertbaren ROI-Sensor")
+    # ⚠ **Kein `skip`** (N-221): „Anlage liefert keinen bewertbaren ROI-Sensor"
+    # ist nicht der Sonderfall, sondern der **Befund** — am Stand vor F-19 hat
+    # genau dieser Zweig gegriffen und die Probe still übersprungen. Die Fixture
+    # liefert den Sensor (gemessen 10.08.); fehlt er, ist das rot.
+    assert "roi_prozent" in sensoren, "Fixture liefert keinen ROI-Sensor mehr"
+    assert sensoren["roi_prozent"].value, "ROI-Sensor ohne Wert"
 
     # Aus den ausgelieferten Sensoren zurückgerechnet — der Nenner ist nicht
     # selbst ein Sensor, aber er bestimmt beide Werte.
@@ -170,9 +177,12 @@ async def test_pdf_finanzbericht_teilt_den_kapitaleinsatz(db):
     # N-213: das PDF hatte bis 09.08. gar keinen Zähler
     # (`einsparung_prognose_jahr` ist ein Feld ohne Schreiber) und rechnete
     # gegen die GESAMT-Anschaffung. Jetzt nennt es dieselbe Zahl wie die Sicht.
-    if roi.gesamt_amortisation_jahre:
-        assert ctx["amortisation_jahre"] == f"{roi.gesamt_amortisation_jahre:.1f} Jahre"
-        assert "Kapitaleinsatz" in ctx["amortisation_berechnung"]
+    # ⚠ **Ohne `if`** (N-221): am Stand vor dem Bau war
+    # `gesamt_amortisation_jahre` falsy, und diese Probe lief deshalb **grün
+    # durch, ohne etwas zu prüfen** — sie hätte N-213 nicht gemeldet.
+    assert roi.gesamt_amortisation_jahre is not None
+    assert ctx["amortisation_jahre"] == f"{roi.gesamt_amortisation_jahre:.1f} Jahre"
+    assert "Kapitaleinsatz" in ctx["amortisation_berechnung"]
 
 
 async def test_anlagenweite_ausgabe_erreicht_alle_vier_sichten(db):
