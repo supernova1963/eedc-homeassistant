@@ -107,6 +107,26 @@ Das Feld gibt es bei **Wallbox** und **Sonstiges**. Bei PV, Speicher, Wärmepump
 
 > ⚠ **Nicht beides pflegen.** Wer den Erlös künftig als Jahresbetrag führt, sollte die monatlichen Handbuchungen ab dem Umstellungsmonat einstellen — sonst zählt derselbe Erlös zweimal. Die bereits gebuchten Monate bleiben unverändert richtig; sie beschreiben die Vergangenheit.
 
+### Zwei Wechselrichter in der Hersteller-Wolke? Beide kommen jetzt an
+
+**Betrifft dich das?** Alle, deren Hersteller-Portal **mehrere „Stationen"** führt — meist eine je Wechselrichter. Bei Solarman ist das der Normalfall.
+
+**Erst die Frage, die dahintersteckt: eine Anlage oder zwei?** In eedc ist eine Anlage ein **Standort mit einem Hausanschluss**, kein einzelnes Gerät. Netzbezug, Einspeisung, Eigenverbrauch, Autarkie und die ganze Wirtschaftlichkeit gibt es dort nur **einmal**. Zwei Anlagen für ein Haus anzulegen würde all das in zwei Hälften zerlegen, von denen keine stimmt. Richtig ist: **eine** Anlage, darin **je Gerät ein Wechselrichter**, und an jedem hängen seine PV-Module und ggf. sein Speicher.
+
+**Und jetzt der Teil, der nicht funktioniert hat.** Der Cloud-Import schrieb bisher immer auf die **ganze Anlage**. Beim zweiten Wechselrichter blieben deshalb nur zwei schlechte Ausgänge: ohne Haken wurde der ganze Monat übersprungen — der zweite kam gar nicht an; mit Haken „überschreiben" wurde sein Ertrag anteilig auf **alle** Stränge verteilt und die Hauszähler-Werte des ersten ersetzt. Beides ohne einen Hinweis.
+
+In der Vorschau steht jetzt eine neue Auswahl: **„Diese Quelle misst"**. Voreingestellt ist *die ganze Anlage* — wer nur ein Gerät hat, merkt von der Neuerung nichts. Wählst du einen **Wechselrichter**, dann gilt:
+
+- die Erträge gehen an **seine** PV-Module und **seinen** Speicher, nicht an alle;
+- **Netzbezug, Einspeisung und Eigenverbrauch werden nicht übernommen** — das sind Größen des ganzen Hauses, und eedc sagt dir das nach dem Import auch;
+- ein bereits erfasster Monat blockiert die zweite Quelle **nicht** mehr.
+
+So importierst du Station 1 und Station 2 nacheinander für denselben Zeitraum, und keine verdrängt die andere.
+
+> ⚑ **Wenn du das schon einmal versucht hast:** Sieh dir die Monatswerte deiner PV-Module an (*Komponenten → PV-Modul → Monatswerte*). Ein früherer Import mit „überschreiben" hat dort den Ertrag der **zuletzt** importierten Station nach Nennleistung verteilt stehen lassen. Ein erneuter Import je Wechselrichter mit der neuen Zuordnung setzt beide Stränge wieder auf ihre eigene Messung.
+
+*Gefunden hat das OliS2811, der zwei Sofar-Wechselrichter betreibt ([#349](https://github.com/supernova1963/eedc-homeassistant/issues/349)).*
+
 ---
 
 ## v4.0.11 — Nichts raten, wo sich messen lässt (August 2026)

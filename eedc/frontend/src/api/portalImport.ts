@@ -104,7 +104,15 @@ export const portalImportApi = {
     monate: ParsedMonth[],
     ueberschreiben: boolean = false,
     datenquelle: string = 'portal_import',
-    zuordnung?: InvestitionsZuordnung
+    zuordnung?: InvestitionsZuordnung,
+    /**
+     * Gerätegebundene Einfuhr (F-22, #349): ID des Wechselrichters bzw.
+     * Balkonkraftwerks, an dem die Quelle hängt. Gesetzt schreibt der Import
+     * NUR dessen Erzeuger-Zeilen und lässt die anlagenweiten Hauszähler-Werte
+     * unberührt — nötig, sobald zwei Quellen (z. B. zwei Solarman-Stationen)
+     * dieselbe Anlage beliefern. `undefined` = bisheriges Verhalten.
+     */
+    zielInvestitionId?: number | null
   ): Promise<ApplyResult> {
     const params = new URLSearchParams()
     if (ueberschreiben) params.append('ueberschreiben', 'true')
@@ -114,7 +122,11 @@ export const portalImportApi = {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monate, zuordnung: zuordnung ?? null }),
+        body: JSON.stringify({
+          monate,
+          zuordnung: zuordnung ?? null,
+          ziel_investition_id: zielInvestitionId ?? null,
+        }),
       }
     )
     if (!response.ok) {

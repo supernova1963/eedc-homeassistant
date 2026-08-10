@@ -35,9 +35,10 @@ import ImportErgebnis from '../components/import/ImportErgebnis'
 import { anlagenApi } from '../api/anlagen'
 import { cloudImportApi } from '../api/cloudImport'
 import { portalImportApi } from '../api/portalImport'
+import { investitionenApi } from '../api/investitionen'
 import type { CloudProviderInfo, CloudTestResult, CloudPreviewResult } from '../api/cloudImport'
 import type { ApplyResult } from '../api/portalImport'
-import type { Anlage } from '../types'
+import type { Anlage, Investition } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
 
 export default function CloudImportWizard() {
@@ -68,6 +69,12 @@ export default function CloudImportWizard() {
   // Step 3: Vorschau & Import
   const [anlagen, setAnlagen] = useState<Anlage[]>([])
   const [selectedAnlageId, setSelectedAnlageId] = useState<number | null>(null)
+  // F-22 (#349): Ziel-Erzeuger. Leer = die Quelle beschreibt die ganze Anlage
+  // (bisheriges Verhalten). Gesetzt = sie misst genau diesen Wechselrichter,
+  // dann bleiben die Hauszähler-Werte unberührt und eine zweite Quelle kann
+  // dieselben Monate liefern, ohne die erste zu verdrängen.
+  const [zielInvestitionId, setZielInvestitionId] = useState<number | null>(null)
+  const [zielKandidaten, setZielKandidaten] = useState<Investition[]>([])
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set())
   const [ueberschreiben, setUeberschreiben] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -82,6 +89,22 @@ export default function CloudImportWizard() {
       if (list.length === 1) setSelectedAnlageId(list[0].id)
     }).catch(() => {})
   }, [])
+
+  // Ziel-Kandidaten der gewählten Anlage: die Geräte, unter denen PV-Module
+  // bzw. Speicher hängen dürfen — dieselbe Menge wie `ZIEL_ERLAUBTE_TYPEN` im
+  // Backend (Parent-SoT `models/investition.py::ERLAUBTE_PARENT_TYPEN`).
+  useEffect(() => {
+    setZielInvestitionId(null)
+    if (!selectedAnlageId) {
+      setZielKandidaten([])
+      return
+    }
+    investitionenApi.list(selectedAnlageId)
+      .then((list) => setZielKandidaten(
+        list.filter((i) => i.typ === 'wechselrichter' || i.typ === 'balkonkraftwerk')
+      ))
+      .catch(() => setZielKandidaten([]))
+  }, [selectedAnlageId])
 
   const selectedProvider = providers.find((p) => p.id === selectedProviderId)
 
@@ -179,7 +202,8 @@ export default function CloudImportWizard() {
     try {
       const monate = preview.monate.filter((m) => selectedMonths.has(`${m.jahr}-${m.monat}`))
       const importResult = await portalImportApi.apply(
-        selectedAnlageId, monate, ueberschreiben, 'cloud_import'
+        selectedAnlageId, monate, ueberschreiben, 'cloud_import',
+        undefined, zielInvestitionId
       )
       setResult(importResult)
       setCurrentStep(3)
@@ -188,7 +212,7 @@ export default function CloudImportWizard() {
     } finally {
       setIsImporting(false)
     }
-  }, [preview, selectedAnlageId, selectedMonths, ueberschreiben])
+  }, [preview, selectedAnlageId, selectedMonths, ueberschreiben, zielInvestitionId])
 
   const handleSaveCredentials = useCallback(async () => {
     if (!selectedAnlageId || !selectedProviderId) return
@@ -231,6 +255,14 @@ export default function CloudImportWizard() {
     value: String(a.id),
     label: `${a.anlagenname} (${a.leistung_kwp} kWp)`,
   }))
+
+  const zielOptions = [
+    { value: '', label: 'Die ganze Anlage (Gesamtwerte)' },
+    ...zielKandidaten.map((i) => ({
+      value: String(i.id),
+      label: i.bezeichnung || i.typ,
+    })),
+  ]
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -496,6 +528,16 @@ export default function CloudImportWizard() {
                     placeholder="Anlage wählen…"
                   />
                 </div>
+                {zielKandidaten.length > 0 && (
+                  <div className="flex-1 min-w-[200px]">
+                    <Select
+                      label="Diese Quelle misst"
+                      value={zielInvestitionId != null ? String(zielInvestitionId) : ''}
+                      onChange={(e) => setZielInvestitionId(Number(e.target.value) || null)}
+                      options={zielOptions}
+                    />
+                  </div>
+                )}
                 <div className="pb-2">
                   <Checkbox
                     label="Bestehende Monate überschreiben"
@@ -504,6 +546,14 @@ export default function CloudImportWizard() {
                   />
                 </div>
               </div>
+              {zielInvestitionId != null && (
+                <Alert type="info" className="mt-4">
+                  Die Werte gehen an die PV-Module (und den Speicher) dieses Geräts.
+                  Netzbezug, Einspeisung und Eigenverbrauch bleiben unberührt — die
+                  gelten für das ganze Haus. So kann eine zweite Quelle dieselben
+                  Monate liefern, ohne diese hier zu verdrängen.
+                </Alert>
+              )}
             </div>
           </Card>
 

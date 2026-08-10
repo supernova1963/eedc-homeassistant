@@ -47,6 +47,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
   Die Spalte existierte seit jeher in der Datenbank, war aber über kein Formular und keinen Import erreichbar — im PDF-Finanzbericht stand deshalb dauerhaft „—". Sie wird jetzt auch beim **Datenexport mitgesichert**; bestehende Sicherungen bleiben lesbar.
 
+### Fixed
+
+- **Zwei Wechselrichter, zwei Cloud-Konten, eine Anlage: die zweite Einfuhr verdrängt die erste nicht mehr.** Wer mehrere Wechselrichter betreibt, findet sie in der Hersteller-Wolke oft als **getrennte „Stationen"** wieder (Solarman führt je Gerät eine eigene) — in eedc gehören sie trotzdem in **eine** Anlage, denn Netzbezug, Einspeisung und Eigenverbrauch gibt es je Hausanschluss nur einmal. Der Import konnte das bisher nicht: Er schrieb immer auf die **ganze Anlage**. Beim zweiten Durchgang blieb deshalb nur „überspringen" (dann kam der zweite Wechselrichter gar nicht an) oder „überschreiben" — und das verteilte dessen Ertrag anteilig auf **alle** Stränge und ersetzte obendrein die Hauszähler-Werte des ersten. Beides ohne Warnung.
+
+  Der Cloud-Import fragt jetzt in der Vorschau: **„Diese Quelle misst — die ganze Anlage / diesen Wechselrichter"**. Ist ein Gerät gewählt, gehen die Werte ausschließlich an **seine** PV-Module und **seinen** Speicher; Netzbezug, Einspeisung und Eigenverbrauch bleiben unberührt, und der bereits erfasste Monat blockiert den zweiten Erzeuger nicht mehr. eedc sagt in der Ergebnismeldung ausdrücklich, dass die Hauszähler-Größen nicht übernommen wurden. **Ohne Auswahl ändert sich nichts** — wer eine einzelne Anlage importiert, merkt von der Neuerung nichts. *(Gemeldet von OliS2811, #349.)*
+
+  ⚑ **Wer bereits zwei Stationen in eine Anlage importiert hat**, sollte die Monatswerte seiner PV-Module prüfen (*Komponenten → PV-Modul → Monatswerte*): Ein früherer Import mit „überschreiben" hat dort den Ertrag der zuletzt importierten Station nach kWp verteilt stehen lassen. Ein erneuter Import je Wechselrichter mit der neuen Zuordnung setzt beide Stränge wieder auf ihre eigene Messung.
+
 ---
 
 ## [4.0.11] - 2026-08-08 — Nichts raten, wo sich messen lässt
