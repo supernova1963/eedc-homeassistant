@@ -622,6 +622,13 @@ class ROIBerechnung(BaseModel):
     anschaffungskosten: float
     anschaffungskosten_alternativ: float
     relevante_kosten: float
+    # F-19: der tatsächliche Nenner von `roi_prozent` und `amortisation_jahre`
+    # = relevante Kosten + kumulierte sonstige Netto-KOSTEN. Ohne dieses Feld
+    # könnte die Oberfläche ihren eigenen Rechenweg nicht mehr ausschreiben —
+    # sie zeigt „Relevant ÷ Einsparung" an, und das wäre dann eine andere Zahl.
+    # `relevante_kosten` behält seine Bedeutung (Mehrkosten = USt-Grundlage,
+    # N-137). Default für Altbestand/Tests, die die Zeile direkt bauen.
+    kapitaleinsatz: float = 0.0
     jahres_einsparung: float
     roi_prozent: Optional[float]
     amortisation_jahre: Optional[float]
@@ -636,6 +643,12 @@ class ROIDashboardResponse(BaseModel):
     anlage_name: str
     gesamt_investition: float
     gesamt_relevante_kosten: float
+    # F-19: kumulierte sonstige AUSGABEN (positiver Betrag) und der daraus
+    # gebildete Nenner. `gesamt_relevante_kosten` bleibt die Mehrkosten-Größe.
+    # Sonstige Erträge stehen bewusst nicht hier — sie sind Teil von
+    # `gesamt_jahres_einsparung` (SoT `core/berechnungen/kapitalrechnung.py`).
+    gesamt_sonstige_ausgaben_euro: float = 0.0
+    gesamt_kapitaleinsatz: float = 0.0
     gesamt_jahres_einsparung: float
     gesamt_roi_prozent: Optional[float]
     gesamt_amortisation_jahre: Optional[float]
@@ -691,6 +704,7 @@ async def get_roi_dashboard(
         bemessungsgrundlage_aus_investitionen,
         berechne_ust_eigenverbrauch,
     )
+    from backend.core.berechnungen.kapitalrechnung import kapitaleinsatz_euro
     from sqlalchemy import func
     from backend.services.prognose_auswahl import lade_aktive_prognose
 
@@ -773,9 +787,13 @@ async def get_roi_dashboard(
     # eingerechnet, während Cockpit-Monatsbericht und Aussichten-Finanzprognose
     # sie längst über `berechne_sonstige_netto` berücksichtigen. Reiner Read-
     # Pfad, SoT-Helper `utils/sonstige_positionen`.
-    from backend.utils.sonstige_positionen import berechne_sonstige_netto
+    from backend.utils.sonstige_positionen import berechne_sonstige_summen
     inv_ids_alle = [inv.id for inv in investitionen]
-    sonstige_netto_by_inv: dict[int, float] = {}
+    # F-19: Erträge und Ausgaben getrennt — sie landen auf verschiedenen Seiten
+    # des Bruchs. Ausgaben kumuliert in den Nenner, Erträge annualisiert in den
+    # Zähler (SoT `core/berechnungen/kapitalrechnung.py`).
+    sonstige_ertraege_by_inv: dict[int, float] = {}
+    sonstige_ausgaben_by_inv: dict[int, float] = {}
     if inv_ids_alle:
         smd_query = select(InvestitionMonatsdaten).where(
             InvestitionMonatsdaten.investition_id.in_(inv_ids_alle)
@@ -784,24 +802,76 @@ async def get_roi_dashboard(
             smd_query = smd_query.where(InvestitionMonatsdaten.jahr == jahr)
         smd_result = await db.execute(smd_query)
         for imd in smd_result.scalars().all():
-            netto = berechne_sonstige_netto(imd.verbrauch_daten)
-            if netto:
-                sonstige_netto_by_inv[imd.investition_id] = (
-                    sonstige_netto_by_inv.get(imd.investition_id, 0.0) + netto
+            _s = berechne_sonstige_summen(imd.verbrauch_daten)
+            if _s["ertraege_euro"]:
+                sonstige_ertraege_by_inv[imd.investition_id] = (
+                    sonstige_ertraege_by_inv.get(imd.investition_id, 0.0)
+                    + _s["ertraege_euro"]
+                )
+            if _s["ausgaben_euro"]:
+                sonstige_ausgaben_by_inv[imd.investition_id] = (
+                    sonstige_ausgaben_by_inv.get(imd.investition_id, 0.0)
+                    + _s["ausgaben_euro"]
                 )
 
     # Bei jahr=None sind die Jahres-Einsparungen Jahresdurchschnitte → die
-    # (über alle Jahre summierten) sonstigen Netto-Beträge auf dieselbe
-    # Jahresbasis bringen. Divisor = Anzahl Jahre mit Monatsdaten (gleiche
-    # Basis wie die PV-Einsparungs-Mittelung), mind. 1.
+    # sonstigen ERTRÄGE auf dieselbe Jahresbasis bringen. Divisor = Anzahl
+    # Jahre mit Monatsdaten (gleiche Basis wie die PV-Einsparungs-Mittelung).
     _md_jahre = {j for (j, _m) in benzinpreis_lookup.keys()}
     _sonstige_divisor = max(len(_md_jahre), 1) if jahr is None else 1
 
-    def _sonstige_jahr_fuer(inv_ids: list[int]) -> float:
-        """Sonstige Netto-€/Jahr für eine Gruppe von Investitionen (eine
-        Investition gehört zu genau einer ROI-Berechnung → kein Doppelzählen)."""
-        summe = sum(sonstige_netto_by_inv.get(i, 0.0) for i in inv_ids)
-        return summe / _sonstige_divisor
+    def _sonstige_ertraege_jahr_fuer(inv_ids: list[int]) -> float:
+        """Sonstige **Erträge** in €/Jahr — sie bleiben im ZÄHLER.
+
+        Ein wiederkehrender Ertrag (THG-Quote, oder der manuell gepflegte
+        Einspeise-Erlös eines Zweit-Wechselrichters, #310) verkürzt die
+        Amortisation. Im Nenner würde er sie **verlängern** und die Zahl mit
+        jedem Jahr weiter schrumpfen lassen — Rechnung im Modul-Docstring von
+        `core/berechnungen/kapitalrechnung.py`.
+        """
+        return sum(sonstige_ertraege_by_inv.get(i, 0.0) for i in inv_ids) / _sonstige_divisor
+
+    def _sonstige_ausgaben_kumuliert_fuer(inv_ids: list[int]) -> float:
+        """Sonstige **Ausgaben** **kumuliert** — sie gehen in den NENNER.
+
+        ⚠ **Kumuliert, nicht annualisiert — das ist F-19.** Bis 2026-08-09 lief
+        die Summe durch einen Jahres-Divisor und wurde dem **Zähler**
+        zugeschlagen. Eine einmalige Reparatur belastete damit jedes Jahr aufs
+        Neue (Wärmepumpe: 8,1 → 42,6 Jahre Amortisation).
+        """
+        return sum(sonstige_ausgaben_by_inv.get(i, 0.0) for i in inv_ids)
+
+    # Die **anlagenweiten** Positionen (Monatsabschluss ohne Komponente,
+    # G19-1) — Bauschritt 4 des Wirtschaftlichkeits-Konzepts §8.
+    #
+    # ⚑ Sie haben **keine** Investition und können deshalb auf keiner ROI-Zeile
+    # stehen; sie wirken ausschließlich auf die Gesamt-Zahlen. Bis 2026-08-10
+    # wirkten sie hier **gar nicht**: die Query oben liest nur
+    # `InvestitionMonatsdaten`. Gemessen am 10.08. — eine anlagenweite Ausgabe
+    # von 3.000 € bewegte den Kapitaleinsatz dieser Route um 0 €, während der
+    # HA-Sensor sie voll trug (18.000 gegen 15.000); eine anlagenweite Förderung
+    # von 500 € war in der ganzen Sicht unsichtbar.
+    #
+    # Gelesen über die Monats-Fakten (P10) statt über eine eigene
+    # `Monatsdaten`-Faltung — `anlage_*_euro` ist genau der Anteil der
+    # Basis-Positionen, also **ohne** die IMD-Beträge, die oben schon gezählt
+    # sind. Ein `f.sonstiges.ausgaben_euro` an dieser Stelle wäre die
+    # Doppelzählung.
+    from backend.services.monats_fakten import lade_monats_fakten
+    _anlage_fakten = await lade_monats_fakten(
+        db,
+        anlage_id,
+        von=(jahr, 1) if jahr is not None else None,
+        bis=(jahr, 12) if jahr is not None else None,
+    )
+    anlage_sonstige_ausgaben = sum(
+        f.sonstiges.anlage_ausgaben_euro for f in _anlage_fakten
+    )
+    # Erträge auf dieselbe Jahresbasis wie die komponentengebundenen (s. o.).
+    anlage_sonstige_ertraege_jahr = (
+        sum(f.sonstiges.anlage_ertraege_euro for f in _anlage_fakten)
+        / _sonstige_divisor
+    )
 
     # ==========================================================================
     # Phase 1: Gruppiere Investitionen nach PV-Systemen und Standalone
@@ -1010,6 +1080,10 @@ async def get_roi_dashboard(
     berechnungen: list[ROIBerechnung] = []
     gesamt_investition = 0.0
     gesamt_relevante = 0.0
+    # F-19: kumulierte sonstige AUSGABEN (positiver Betrag). Sie gehen NICHT in
+    # `gesamt_einsparung`, sondern über `kapitaleinsatz_euro` in den Nenner.
+    # Die Erträge bleiben im Zähler — SoT `core/berechnungen/kapitalrechnung.py`.
+    gesamt_sonstige_ausgaben = 0.0
     gesamt_einsparung = 0.0
     gesamt_co2 = 0.0
 
@@ -1302,13 +1376,18 @@ async def get_roi_dashboard(
         # System-ROI berechnen
         # #310: manuell gepflegte sonstige Erträge/Ausgaben des Systems
         # (WR + PV-Module + DC-Speicher) einrechnen.
-        system_sonstige = _sonstige_jahr_fuer(
-            [wr.id, *(m.id for m in pv_module), *(s.id for s in dc_speicher)]
-        )
-        system_einsparung += system_sonstige
+        # F-19: Ausgaben kumuliert in den NENNER, Erträge annualisiert im Zähler.
+        _system_ids = [wr.id, *(m.id for m in pv_module), *(s.id for s in dc_speicher)]
+        system_sonstige_ausgaben = _sonstige_ausgaben_kumuliert_fuer(_system_ids)
+        system_sonstige_ertraege = _sonstige_ertraege_jahr_fuer(_system_ids)
+        system_einsparung += system_sonstige_ertraege
         system_relevante = _relevante_kosten(*system_invs)
+        system_kapitaleinsatz = kapitaleinsatz_euro(
+            relevante_kosten_euro=system_kosten - system_alternativ,
+            sonstige_ausgaben_euro=system_sonstige_ausgaben,
+        )
         system_netto_einsparung = system_einsparung - system_betriebskosten
-        roi_result = berechne_roi(system_kosten, system_einsparung, system_alternativ, system_betriebskosten)
+        roi_result = berechne_roi(system_kapitaleinsatz, system_einsparung, 0, system_betriebskosten)
 
         berechnungen.append(ROIBerechnung(
             investition_id=wr.id,  # WR-ID als System-ID
@@ -1317,6 +1396,7 @@ async def get_roi_dashboard(
             anschaffungskosten=system_kosten,
             anschaffungskosten_alternativ=system_alternativ,
             relevante_kosten=system_relevante,
+            kapitaleinsatz=round(system_kapitaleinsatz, 2),
             jahres_einsparung=round(system_netto_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
@@ -1325,13 +1405,15 @@ async def get_roi_dashboard(
                 **pv_detail,
                 'komponenten_count': len(komponenten),
                 'system_kwp': system_kwp,
-                'sonstige_netto_euro': round(system_sonstige, 2),
+                'sonstige_netto_euro': round(system_sonstige_ertraege - system_sonstige_ausgaben, 2),
+                'sonstige_ausgaben_euro': round(system_sonstige_ausgaben, 2),
             },
             komponenten=komponenten,
         ))
 
         gesamt_investition += system_kosten
         gesamt_relevante += system_relevante
+        gesamt_sonstige_ausgaben += system_sonstige_ausgaben
         gesamt_einsparung += system_netto_einsparung
         gesamt_co2 += system_co2
 
@@ -1360,12 +1442,18 @@ async def get_roi_dashboard(
             jahres_einsparung = 0
             co2_einsparung = 0
 
-        # #310: sonstige Erträge/Ausgaben des Moduls einrechnen.
-        orphan_sonstige = _sonstige_jahr_fuer([inv.id])
-        jahres_einsparung += orphan_sonstige
+        # #310: sonstige Erträge/Ausgaben des Moduls einrechnen — seit F-19
+        # Ausgaben kumuliert im Nenner, Erträge annualisiert im Zähler.
+        orphan_sonstige_ausgaben = _sonstige_ausgaben_kumuliert_fuer([inv.id])
+        orphan_sonstige_ertraege = _sonstige_ertraege_jahr_fuer([inv.id])
+        jahres_einsparung += orphan_sonstige_ertraege
+        orphan_kapitaleinsatz = kapitaleinsatz_euro(
+            relevante_kosten_euro=kosten - alternativ,
+            sonstige_ausgaben_euro=orphan_sonstige_ausgaben,
+        )
         betriebskosten = inv.betriebskosten_jahr or 0
         netto_einsparung = jahres_einsparung - betriebskosten
-        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)
+        roi_result = berechne_roi(orphan_kapitaleinsatz, jahres_einsparung, 0, betriebskosten)
 
         berechnungen.append(ROIBerechnung(
             investition_id=inv.id,
@@ -1374,6 +1462,7 @@ async def get_roi_dashboard(
             anschaffungskosten=kosten,
             anschaffungskosten_alternativ=alternativ,
             relevante_kosten=relevante,
+            kapitaleinsatz=round(orphan_kapitaleinsatz, 2),
             jahres_einsparung=round(netto_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
@@ -1382,12 +1471,14 @@ async def get_roi_dashboard(
                 **pv_detail,
                 'hinweis': 'PV-Modul ohne Wechselrichter-Zuordnung - bitte zuordnen',
                 'anteil_prozent': round(anteil * 100, 1) if gesamt_kwp > 0 else 0,
-                'sonstige_netto_euro': round(orphan_sonstige, 2),
+                'sonstige_netto_euro': round(orphan_sonstige_ertraege - orphan_sonstige_ausgaben, 2),
+                'sonstige_ausgaben_euro': round(orphan_sonstige_ausgaben, 2),
             },
         ))
 
         gesamt_investition += kosten
         gesamt_relevante += relevante
+        gesamt_sonstige_ausgaben += orphan_sonstige_ausgaben
         gesamt_einsparung += netto_einsparung
         gesamt_co2 += co2_einsparung
 
@@ -1732,18 +1823,25 @@ async def get_roi_dashboard(
             co2_einsparung = inv.co2_einsparung_prognose_kg or 0
             detail = {'hinweis': 'Manuelle Prognose verwendet'}
 
-        # #310: manuell gepflegte sonstige Erträge/Ausgaben einrechnen.
-        inv_sonstige = _sonstige_jahr_fuer([inv.id])
-        jahres_einsparung += inv_sonstige
+        # #310: manuell gepflegte sonstige Erträge/Ausgaben einrechnen — seit
+        # F-19 kumuliert im Nenner statt annualisiert im Zähler.
+        inv_sonstige_ausgaben = _sonstige_ausgaben_kumuliert_fuer([inv.id])
+        inv_sonstige_ertraege = _sonstige_ertraege_jahr_fuer([inv.id])
+        jahres_einsparung += inv_sonstige_ertraege
+        inv_kapitaleinsatz = kapitaleinsatz_euro(
+            relevante_kosten_euro=kosten - alternativ,
+            sonstige_ausgaben_euro=inv_sonstige_ausgaben,
+        )
         if isinstance(detail, dict):
-            detail['sonstige_netto_euro'] = round(inv_sonstige, 2)
+            detail['sonstige_netto_euro'] = round(inv_sonstige_ertraege - inv_sonstige_ausgaben, 2)
+            detail['sonstige_ausgaben_euro'] = round(inv_sonstige_ausgaben, 2)
             # Hat der Anwender selbst einen Betrag gepflegt, ist die Zeile sehr
             # wohl bewertet — dann seine Zahl zeigen statt „—" (N-87).
-            if inv_sonstige and detail.get('nicht_bewertet'):
+            if (inv_sonstige_ertraege or inv_sonstige_ausgaben) and detail.get('nicht_bewertet'):
                 detail['nicht_bewertet'] = False
         betriebskosten = inv.betriebskosten_jahr or 0
         netto_einsparung = jahres_einsparung - betriebskosten
-        roi_result = berechne_roi(kosten, jahres_einsparung, alternativ, betriebskosten)
+        roi_result = berechne_roi(inv_kapitaleinsatz, jahres_einsparung, 0, betriebskosten)
 
         berechnungen.append(ROIBerechnung(
             investition_id=inv.id,
@@ -1752,6 +1850,7 @@ async def get_roi_dashboard(
             anschaffungskosten=kosten,
             anschaffungskosten_alternativ=alternativ,
             relevante_kosten=relevante,
+            kapitaleinsatz=round(inv_kapitaleinsatz, 2),
             jahres_einsparung=round(netto_einsparung, 2),
             roi_prozent=roi_result['roi_prozent'],
             amortisation_jahre=roi_result['amortisation_jahre'],
@@ -1761,6 +1860,7 @@ async def get_roi_dashboard(
 
         gesamt_investition += kosten
         gesamt_relevante += relevante
+        gesamt_sonstige_ausgaben += inv_sonstige_ausgaben
         gesamt_einsparung += netto_einsparung
         gesamt_co2 += co2_einsparung
 
@@ -1794,8 +1894,21 @@ async def get_roi_dashboard(
         )
         gesamt_einsparung -= ust_abzug
 
-    # Gesamt-ROI
-    gesamt_roi = berechne_roi(gesamt_investition, gesamt_einsparung, gesamt_investition - gesamt_relevante)
+    # Die anlagenweiten Positionen wirken erst hier — sie gehören zu keiner
+    # Zeile (Bauschritt 4). Ertrag in den Zähler, Ausgabe in den Nenner: die
+    # Seiten-Zuordnung ist dieselbe wie bei den komponentengebundenen.
+    gesamt_einsparung += anlage_sonstige_ertraege_jahr
+    gesamt_sonstige_ausgaben += anlage_sonstige_ausgaben
+
+    # Gesamt-ROI. Nenner ist der Kapitaleinsatz (F-19): die relevanten Kosten
+    # plus die kumulierten sonstigen Netto-Kosten. `gesamt_relevante` selbst
+    # bleibt unberührt — es ist zugleich die USt-Bemessungsgrundlage (N-137),
+    # und dort hat eine Reparatur nichts zu suchen.
+    gesamt_kapitaleinsatz = kapitaleinsatz_euro(
+        relevante_kosten_euro=gesamt_relevante,
+        sonstige_ausgaben_euro=gesamt_sonstige_ausgaben,
+    )
+    gesamt_roi = berechne_roi(gesamt_kapitaleinsatz, gesamt_einsparung, 0)
 
     # Kalender-Anker: Die Kurve modelliert ab „Jahr 0" = der Zeitpunkt, zu dem
     # investiert wurde. Bei mehreren Investitionen mit verschiedenen Daten ist
@@ -1818,6 +1931,8 @@ async def get_roi_dashboard(
         anlage_name=anlage.anlagenname,
         gesamt_investition=round(gesamt_investition, 2),
         gesamt_relevante_kosten=round(gesamt_relevante, 2),
+        gesamt_sonstige_ausgaben_euro=round(gesamt_sonstige_ausgaben, 2),
+        gesamt_kapitaleinsatz=round(gesamt_kapitaleinsatz, 2),
         gesamt_jahres_einsparung=round(gesamt_einsparung, 2),
         gesamt_roi_prozent=gesamt_roi['roi_prozent'],
         gesamt_amortisation_jahre=gesamt_roi['amortisation_jahre'],

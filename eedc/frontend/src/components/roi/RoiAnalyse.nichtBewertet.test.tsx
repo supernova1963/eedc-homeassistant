@@ -15,6 +15,8 @@ vi.mock('../../api', async (importOriginal) => ({
     getROIDashboard: vi.fn(() => Promise.resolve({
       gesamt_investition: 8000,
       gesamt_relevante_kosten: 8000,
+      gesamt_sonstige_ausgaben_euro: 0,
+      gesamt_kapitaleinsatz: 8000,
       gesamt_jahres_einsparung: 0,
       gesamt_roi_prozent: null,
       gesamt_amortisation_jahre: null,
@@ -22,7 +24,7 @@ vi.mock('../../api', async (importOriginal) => ({
       benzinpreis_hinweis_euro: 1.7,
       berechnungen: [{
         investition_id: 1, investition_typ: 'waermepumpe', investition_bezeichnung: 'Daikin Split',
-        relevante_kosten: 8000, anschaffungskosten: 8000, anschaffungskosten_alternativ: 0,
+        relevante_kosten: 8000, kapitaleinsatz: 8000, anschaffungskosten: 8000, anschaffungskosten_alternativ: 0,
         jahres_einsparung: 0, roi_prozent: null, amortisation_jahre: null, co2_einsparung_kg: null,
         detail_berechnung: {
           nicht_bewertet: true,

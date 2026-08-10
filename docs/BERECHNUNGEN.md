@@ -895,6 +895,13 @@ CO2-Einsparung        = CO2_alt - CO2_WP
 ### 3.6 ROI & Amortisation
 
 **Funktion:** `berechne_roi()` in `core/calculations.py`
+**Nenner-SoT:** `core/berechnungen/kapitalrechnung.py`
+
+> **Warum eine Zahl dort steht, wo sie steht:**
+> [`docs/KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md).
+> Dort stehen die Entscheidungen samt den **verworfenen** Alternativen und den
+> Messungen, die sie verworfen haben — inklusive der häufigen Einwände mit
+> Antwort. Dieses Kapitel hier nennt die Formeln, jenes die Begründung.
 
 ```
 Relevante_Kosten     = Anschaffungskosten - Alternativkosten
@@ -927,13 +934,67 @@ Wobei `Betriebskosten_Jahr` = `Investition.betriebskosten_jahr` (Wartung, Versic
 > Daten, die tatsächlich da sind. Gesichert durch `test_amortisation_nenner_symmetrie.py`
 > (**Regression**, drei Sichten auf einer Fixture mit Alternativkosten ≠ Festannahme).
 
+> **Sonstige Positionen: Zeitraum-Bilanz ↔ Kapitalrechnung (seit 2026-08-09).**
+> Eine Reparatur ist zweierlei, je nach Frage:
+>
+> | Frage | Sicht | Wo die Position steht |
+> | --- | --- | --- |
+> | „Was hat der Monat gekostet und eingebracht?" | Cockpit, Monatsbericht, Jahresbericht-PDF, CSV-Export, Sensor `netto_ertrag_euro` | **Ertragsseite** — Aufwand des Zeitraums, unverändert |
+> | „Wie lange dauert es, bis sich das rechnet?" | ROI, Amortisation, HA-Sensoren, Finanzbericht-PDF | **Kapitaleinsatz** (Nenner) |
+>
+> **Warum:** vorher wurden sonstige Ausgaben im Zähler über die Laufzeit
+> **annualisiert**. Eine einmalige Reparatur von 3.000 € an einer Wärmepumpe
+> (Einsparung 1.235 €/Jahr) verlängerte die Amortisation dadurch von **8,1 auf
+> 42,6 Jahre**, in der Jahressicht erschien das Gerät als *nie amortisiert* —
+> und die Zahl driftete jedes Folgejahr weiter, ohne dass etwas passierte. Im
+> Nenner ergibt dieselbe Reparatur **10,5 Jahre**. Bei laufenden Kosten
+> (Wartung) liefert die kumulative Rechnung sogar exakt dasselbe Ergebnis wie
+> vorher (`K + 180n = 1235n ⇒ n = 9,5`).
+>
+> ⏳ **Nur die Ausgaben — sonstige *Erträge* bleiben vorerst im Zähler.** Das ist
+> ein **Zwischenstand**: mit Bauschritt 7 aus
+> [`KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md`](KONZEPT-WIRTSCHAFTLICHKEITSRECHNUNG.md)
+> §8 wandern auch sie in den Nenner. Bis dahin ist es keine
+> Inkonsequenz, sondern das Verhalten der Formel: ein wiederkehrender Ertrag `E`
+> im Nenner ergäbe `(K − E·n) ÷ Z`, eine Zahl, die jedes Jahr schrumpft und
+> irgendwann negativ wird. Im Zähler ergibt er `K ÷ (Z + E)` und konvergiert.
+> Praktischer Fall: wer zwei Wechselrichter mit **verschiedenen
+> Einspeisetarifen** betreibt, kann den zweiten Erlös nur von Hand als
+> sonstigen Ertrag pflegen (eedc kennt genau **einen** Einspeisesatz je Anlage)
+> — im Nenner hätte diese Pflege die Amortisation *verlängert*.
+>
+> Die Unterscheidung kostet **keine zusätzliche Pflege**: `typ: ertrag|ausgabe`
+> wird beim Erfassen ohnehin gewählt.
+>
+> **Und der Kapitaleinsatz ist nicht die USt-Bemessungsgrundlage.** Die bleibt
+> bei den reinen Mehrkosten (§ 3 Abs. 1b UStG, [§3.7](#37-umsatzsteuer-auf-eigenverbrauch)) —
+> eine Reparatur gehört dort nicht hinein. Gesichert durch
+> `test_kapitaleinsatz_vier_sichten_symmetrie.py` (**Regression**, vier Sichten +
+> beide Seiten des Bruchs, **beide Erfassungsorte** — an der Investition und auf
+> der Monatsdaten-Zeile). ⚠ Die zweite Hälfte kam erst am 2026-08-10 dazu: bis
+> dahin trugen anlagenweit erfasste Ausgaben **nur** die HA-Sensoren, und die
+> Fixture konnte das nicht sehen, weil sie die Position komponentengebunden
+> anlegt.
+
+> **Jede Ersparnis wird mit IHRER eigenen Laufzeit hochgerechnet.** Die
+> HA-Sensoren `jahres_ersparnis_euro`, `roi_prozent` und `amortisation_jahre`
+> teilten bis 2026-08-09 **alles** durch die Monatszahl der *Anlage* — auch die
+> Wärmepumpen- und E-Auto-Ersparnis. Eine 2025 nachgerüstete Komponente wurde
+> dadurch anteilig verdünnt, während ihre Kosten voll im Nenner standen. An
+> einer vermessenen Anlage (31 Anlagenmonate, Wärmepumpe 25, zweiter Wagen
+> **12**) waren dadurch mindestens **3,1 Jahre reine Verdünnung**: **26,4 statt
+> höchstens 23,3 Jahre** — eine Schranke, keine Schätzung, denn kein Posten lief
+> länger als 25 Monate. Jetzt bringt jeder Posten seine eigene Monatszahl mit,
+> und der Sensor-Rechenweg schreibt sie aus.
+
 **Und zwei verschiedene Amortisations-Angaben — Modell neben Messung:**
 
 | Angabe | Wo | Grundlage |
 |---|---|---|
 | **Amortisationsdauer** — Jahre **und Break-Even-Jahr** | Auswertungen → ROI | **MODELL:** `Relevante Kosten ÷ prognostizierte Jahres-Einsparung`, konstant hochgerechnet. Anker des Kalenderjahres ist das **früheste Anschaffungsjahr** der Investitionen; ohne gepflegtes Anschaffungsdatum bleibt es beim Jahres-Index ohne Jahreszahl. |
 | **Amortisations-Fortschritt** | Auswertungen → ROI (Kachel daneben), Jahresbericht-PDF | **MESSUNG:** die tatsächlich erzielten Netto-Erträge seit Inbetriebnahme, geteilt durch dieselben relevanten Kosten. Formel-SoT `core/berechnungen/amortisation.py`. |
-| **Amortisation (Prognose)** | PDF-Finanzbericht | `Gesamt-Kosten ÷ prognostizierte Jahres-Einsparung` — eine Projektion, kein gemessener Verlauf. |
+| **Amortisation (Prognose)** | PDF-Finanzbericht | **Dieselbe Zahl wie *Auswertungen → ROI*** (seit 2026-08-09). Vorher rechnete das PDF `Gesamt-Anschaffung ÷ Σ einsparung_prognose_jahr` — beide Seiten trugen nicht: der Nenner war die Gesamt- statt der relevanten Kosten, und der Zähler ein Feld **ohne Schreiber** (in keinem Formular, keinem Import, keinem Update-Schema). In der Praxis stand dort deshalb „—". |
+| **Amortisation (HA-Sensor)** | `sensor.*_amortisation_jahre` | `Kapitaleinsatz ÷ Jahres-Ersparnis`, wobei die Jahres-Ersparnis aus der **gemessenen Historie** annualisiert wird — je Posten mit seiner eigenen Laufzeit. Trägt denselben Nenner wie die drei anderen, aber einen Ist- statt Modell-Zähler; die Zahl liegt deshalb je nach Anlage über oder unter der Modell-Sicht. |
 
 > Die beiden ersten beantworten dieselbe Frage verschieden — „laut Rechnung in 9,2 Jahren" gegen
 > „4.800 € von 12.000 € sind drin". Das ist gewollt und in beiden Tooltips ausgeschrieben; Bedingung

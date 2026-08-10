@@ -89,6 +89,12 @@ from backend.core.berechnungen.amortisation import (
 from backend.core.berechnungen.investitionskosten import (
     relevante_kosten_aus_investitionen,
 )
+from backend.core.berechnungen.kapitalrechnung import (
+    ErsparnisPosten,
+    erklaerung_jahres_ersparnis,
+    jahres_ersparnis_euro,
+    kapitaleinsatz_euro,
+)
 from backend.core.berechnungen.ust_eigenverbrauch import (
     AFA_JAHRE,
     UstJahresanteil,
@@ -280,6 +286,10 @@ __all__ = [
     "AmortisationsFortschritt",
     "berechne_amortisations_fortschritt",
     "relevante_kosten_aus_investitionen",
+    "ErsparnisPosten",
+    "erklaerung_jahres_ersparnis",
+    "jahres_ersparnis_euro",
+    "kapitaleinsatz_euro",
     "bemessungsgrundlage_aus_investitionen",
     "berechne_ust_eigenverbrauch",
     "ust_eigenverbrauch_fuer_anlage",

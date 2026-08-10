@@ -152,6 +152,14 @@
     color: var(--txt);
     font-weight: 700;
   }
+  /* Rechenweg unter einem KPI. Ohne ihn stünde die Amortisation als Zahl da,
+     die sich aus keiner anderen Zahl derselben Seite ergibt — die Tabelle
+     darüber zeigt die Anschaffungs-, nicht die relevanten Kosten. */
+  .kpi-row .rechenweg {
+    font-size: 7.5pt;
+    color: var(--muted);
+    margin-top: 1mm;
+  }
 
   .eintrag {
     margin: 3mm 0;
@@ -265,6 +273,9 @@
     <div>
       <div class="label">Amortisation (Prognose)</div>
       <div class="value">{{ amortisation_jahre }}</div>
+      {% if amortisation_berechnung %}
+      <div class="rechenweg">{{ amortisation_berechnung }}</div>
+      {% endif %}
     </div>
     <div>
       <div class="label">Differenz vs. Alt-Szenario</div>

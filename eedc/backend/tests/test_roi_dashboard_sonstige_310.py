@@ -7,9 +7,19 @@ berücksichtigt — wohl aber im Cockpit-Monatsbericht und in der Aussichten-
 Finanzprognose. Dadurch stimmte der ROI in der Auswertungs-Sicht nicht.
 
 `get_roi_dashboard` rechnet die Beträge jetzt über den SoT-Helper
-`berechne_sonstige_netto` ein — für alle Typen (Standalone + PV-System +
-Orphan-Modul). Bei `jahr=None` auf Jahresbasis gemittelt (gleiche Basis wie
-die PV-Einsparungs-Mittelung).
+`berechne_sonstige_summen` ein — für alle Typen (Standalone + PV-System +
+Orphan-Modul).
+
+⚠ **Seit F-19 (2026-08-09) auf zwei Seiten des Bruchs**, SoT
+`core/berechnungen/kapitalrechnung.py`:
+
+* **Erträge** (THG-Quote, manuell gepflegte Einspeise-Erlöse) bleiben im
+  **Zähler** und werden bei `jahr=None` auf Jahresbasis gemittelt — genau wie
+  bisher. Das ist Roberts Fall: im Nenner hätten sie seine Amortisation
+  verlängert statt verkürzt.
+* **Ausgaben** (Reparatur, Wartung) gehen **kumuliert in den Nenner**. Vorher
+  wurden sie annualisiert im Zähler abgezogen, wodurch eine einmalige Reparatur
+  jedes Jahr aufs Neue belastete (Wärmepumpe: 8,1 → 42,6 Jahre).
 """
 
 from __future__ import annotations
@@ -65,9 +75,14 @@ async def test_roi_standalone_sonstige_jahr_spezifisch(db):
         benzinpreis_euro=None, jahr=2026, db=db,
     )
     b = await _berechnung_fuer(result, inv.id)
-    # 200 € Ertrag − 50 € Ausgabe = 150 € netto
+    # 200 € Ertrag − 50 € Ausgabe = 150 € netto (Anzeige-Größe, unverändert)
     assert b.detail_berechnung["sonstige_netto_euro"] == pytest.approx(150.0)
-    assert b.jahres_einsparung == pytest.approx(150.0)
+    # F-19: Erträge und Ausgaben landen auf VERSCHIEDENEN Seiten des Bruchs.
+    # Der Zähler trägt nur den Ertrag …
+    assert b.jahres_einsparung == pytest.approx(200.0)
+    # … die Ausgabe erhöht den Kapitaleinsatz (1.000 € Anschaffung + 50 €).
+    assert b.detail_berechnung["sonstige_ausgaben_euro"] == pytest.approx(50.0)
+    assert b.kapitaleinsatz == pytest.approx(1050.0)
 
 
 async def test_roi_standalone_sonstige_jahr_none_gemittelt(db):

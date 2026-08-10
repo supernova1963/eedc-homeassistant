@@ -118,11 +118,33 @@ async def build_finanzbericht_context(
             "einsparung_jahr": _format_euro(inv.einsparung_prognose_jahr) if inv.einsparung_prognose_jahr else "",
         })
 
-    # ROI-Kenngrößen (einfach, ohne Cockpit-Service zu duplizieren)
-    # Amortisation = Gesamt-Kosten / Einsparung-pro-Jahr
-    amortisation_jahre: Optional[float] = None
-    if summe_kosten > 0 and summe_einsparung_jahr > 0:
-        amortisation_jahre = summe_kosten / summe_einsparung_jahr
+    # Amortisation aus dem ROI-Dashboard — **dieselbe Größe wie in der
+    # Oberfläche und in den HA-Sensoren** (Entscheid Gernot, 09.08.).
+    #
+    # Vorher stand hier `summe_kosten ÷ Σ einsparung_prognose_jahr`, und beide
+    # Seiten trugen nicht (N-213): der Nenner war die **Gesamt**-Anschaffung
+    # statt der relevanten Kosten — also genau die Größe, die N-137
+    # vereinheitlicht hat —, und der Zähler ein Feld **ohne Schreiber**. Es
+    # steht in keinem Create-/Update-Schema, in keinem Formular und in keinem
+    # Import; an der vermessenen Anlage war es in 12 von 12 Investitionen
+    # `NULL`. Das PDF konnte deshalb strukturell nur „—" ausgeben.
+    #
+    # Alle Query-Parameter werden **explizit** übergeben: bei einem direkten
+    # Funktionsaufruf legt FastAPI sonst die `Query(...)`-Objekte selbst als
+    # Werte ab, und ein `or`-Zweig hielte sie für gepflegte Eingaben (N-111).
+    from backend.api.routes.investitionen.crud import get_roi_dashboard
+
+    _roi = await get_roi_dashboard(
+        anlage_id=anlage_id,
+        strompreis_cent=None,
+        einspeiseverguetung_cent=None,
+        benzinpreis_euro=None,
+        jahr=None,
+        db=db,
+    )
+    amortisation_jahre: Optional[float] = _roi.gesamt_amortisation_jahre
+    kapitaleinsatz_euro_wert: float = _roi.gesamt_kapitaleinsatz
+    jahres_einsparung_euro_wert: float = _roi.gesamt_jahres_einsparung
 
     differenz_alt = summe_alt_kosten - summe_kosten  # positiv = EEDC-Pfad günstiger
 
@@ -160,6 +182,14 @@ async def build_finanzbericht_context(
         },
         "amortisation_jahre": (
             f"{amortisation_jahre:.1f} Jahre" if amortisation_jahre else "—"
+        ),
+        # Der Rechenweg dazu — ohne ihn stünde im PDF eine Zahl, die sich aus
+        # keiner anderen Zahl derselben Seite ergibt (die Tabelle zeigt die
+        # Anschaffungs-, nicht die relevanten Kosten).
+        "amortisation_berechnung": (
+            f"{_format_euro(kapitaleinsatz_euro_wert)} Kapitaleinsatz"
+            f" ÷ {_format_euro(jahres_einsparung_euro_wert)} pro Jahr"
+            if amortisation_jahre else ""
         ),
         "foerderungen": foerderungen,
         "versicherungen": versicherungen,

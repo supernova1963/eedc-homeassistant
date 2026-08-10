@@ -74,6 +74,12 @@ export interface ROIBerechnung {
   anschaffungskosten: number
   anschaffungskosten_alternativ: number
   relevante_kosten: number
+  /**
+   * F-19: der tatsächliche Nenner von `roi_prozent`/`amortisation_jahre` —
+   * relevante Kosten plus die kumulierten sonstigen **Ausgaben**.
+   * `relevante_kosten` bleibt die Mehrkosten-Größe (zugleich USt-Grundlage).
+   */
+  kapitaleinsatz: number
   jahres_einsparung: number
   roi_prozent: number | null
   amortisation_jahre: number | null
@@ -87,6 +93,10 @@ export interface ROIDashboardResponse {
   anlage_name: string
   gesamt_investition: number
   gesamt_relevante_kosten: number
+  /** F-19: kumulierte sonstige AUSGABEN (positiver Betrag). Erträge stehen im Zähler. */
+  gesamt_sonstige_ausgaben_euro: number
+  /** F-19: Nenner von ROI/Amortisation = relevante Kosten + sonstige Ausgaben. */
+  gesamt_kapitaleinsatz: number
   gesamt_jahres_einsparung: number
   gesamt_roi_prozent: number | null
   gesamt_amortisation_jahre: number | null

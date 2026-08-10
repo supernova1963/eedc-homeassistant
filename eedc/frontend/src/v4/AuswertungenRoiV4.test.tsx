@@ -22,6 +22,8 @@ vi.mock('../api/investitionen', () => ({
     getROIDashboard: vi.fn().mockResolvedValue({
       gesamt_investition: 20000,
       gesamt_relevante_kosten: 15000,
+      gesamt_sonstige_ausgaben_euro: 0,
+      gesamt_kapitaleinsatz: 15000,
       gesamt_jahres_einsparung: 1500,
       gesamt_roi_prozent: 10,
       gesamt_amortisation_jahre: 10,
@@ -29,7 +31,7 @@ vi.mock('../api/investitionen', () => ({
       benzinpreis_hinweis_euro: 1.7,
       berechnungen: [{
         investition_id: 1, investition_typ: 'speicher', investition_bezeichnung: 'BYD HVS 10',
-        relevante_kosten: 8000, anschaffungskosten: 8000, anschaffungskosten_alternativ: 0,
+        relevante_kosten: 8000, kapitaleinsatz: 8000, anschaffungskosten: 8000, anschaffungskosten_alternativ: 0,
         jahres_einsparung: 600, roi_prozent: 7.5, amortisation_jahre: 13, co2_einsparung_kg: 0,
         detail_berechnung: null, komponenten: [],
       }],

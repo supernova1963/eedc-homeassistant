@@ -35,6 +35,7 @@ from backend.core.berechnungen import (
     berechne_amortisations_fortschritt,
     berechne_dienstliche_ladekosten,
     berechne_finanz_aggregat,
+    kapitaleinsatz_euro,
     relevante_kosten_aus_investitionen,
     alter_wirkungsgrad,
     berechne_wp_alternativkosten_ersparnis,
@@ -80,7 +81,6 @@ from backend.core.investition_parameter import (
     PARAM_WAERMEPUMPE_DEFAULTS,
     ist_dienstlich,
 )
-from backend.utils.sonstige_positionen import berechne_sonstige_netto
 from backend.services.wetter.open_meteo import fetch_open_meteo_forecast
 from backend.services.wetter.utils import wetter_symbol_aus_tag
 from backend.services.wetter.pvgis import get_pvgis_tmy_defaults
@@ -287,6 +287,11 @@ class FinanzPrognoseResponse(BaseModel):
     investition_eauto_mehrkosten_euro: float = 0  # E-Auto minus Verbrenner
     investition_sonstige_euro: float = 0  # Andere Investitionen
     investition_gesamt_euro: float  # Relevante Kosten (inkl. Mehrkosten-Ansatz)
+    # F-19: der tatsächliche Nenner des Amortisations-Fortschritts — relevante
+    # Kosten plus die kumulierten sonstigen AUSGABEN. Er steht in der Response,
+    # damit die Zahl nachvollziehbar bleibt UND der Symmetrie-Wächter sie
+    # direkt vergleichen kann, statt sie aus Prozentwerten zurückzurechnen.
+    kapitaleinsatz_euro: float = 0.0
     bisherige_ertraege_euro: float  # Kumulierte Erträge seit Inbetriebnahme
     amortisations_fortschritt_prozent: float  # Wie viel % bereits amortisiert (kumuliert)
     amortisation_erreicht: bool
@@ -1473,12 +1478,29 @@ async def get_finanz_prognose(
     # BKW-Ersparnis: kommt aus `berechne_finanz_aggregat` (bkw_eigenverbrauch_kwh
     # in den Finanz-Zeilen oben) — kein eigener Loop mehr.
 
-    # Sonstige Positionen für ALLE Investitionstypen (Wallbox-Erstattungen, THG-Quote, BHKW etc.)
-    bisherige_sonstige_netto = 0.0
-    for inv in alle_investitionen:
-        for (inv_id, jahr, monat), daten in historische_inv_daten.items():
-            if inv_id == inv.id and inv.ist_aktiv_im_monat(jahr, monat):
-                bisherige_sonstige_netto += berechne_sonstige_netto(daten)
+    # Sonstige Positionen — **aus den Monats-Fakten** (Bauschritt 4 des
+    # Wirtschaftlichkeits-Konzepts §8, zugleich eine P10-Bereinigung).
+    #
+    # ⚑ Bis 2026-08-10 lief hier eine eigene Schleife über
+    # `historische_inv_daten` — also ausschließlich über
+    # `InvestitionMonatsdaten`. Damit fehlte genau der Erfassungsort, den das
+    # Handbuch für „mehrere Komponenten" vorsieht: die Positionen auf der
+    # **Monatsdaten-Zeile** (G19-1). Gemessen am 10.08.: eine anlagenweite
+    # Ausgabe von 3.000 € bewegte den Kapitaleinsatz dieser Route um **0 €**,
+    # während der HA-Sensor sie voll trug (18.000 gegen 15.000) — und eine
+    # anlagenweite Förderung war im Fortschritt schlicht unsichtbar.
+    #
+    # `f.sonstiges` fasst beide Orte zusammen (IMD **typ-unabhängig**, #310,
+    # plus die Basis-Positionen der Monatsdaten-Zeile) und bringt den
+    # Laufzeit-Filter (#236) bereits mit — die Schleife hatte ihn von Hand
+    # nachgebaut.
+    #
+    # F-19: die AUSGABEN daneben getrennt — nur sie gehen in den Kapitaleinsatz.
+    # Erträge bleiben im Netto und damit im Zähler; die dienstlichen Ladekosten
+    # unten sind laufender Aufwand und gehören ausdrücklich nicht in den Nenner
+    # (SoT `berechnungen/kapitalrechnung.py`).
+    bisherige_sonstige_netto = sum(f.sonstiges.netto_euro for f in fakten)
+    bisherige_sonstige_ausgaben = sum(f.sonstiges.ausgaben_euro for f in fakten)
 
     # Dienstliche E-Auto/Wallbox-Ladekosten abziehen — Mengen aus den
     # Monats-Fakten (P10: Dienstwagen-Filter, Laufzeit-Fenster und PV/Netz-Split
@@ -1768,10 +1790,22 @@ async def get_finanz_prognose(
     if balkonkraftwerke and anzahl_monate_hist > 0 and bisherige_bkw_ersparnis > 0:
         jahres_bkw_ersparnis = bisherige_bkw_ersparnis / anzahl_monate_hist * 12
 
-    # Sonstige Jahres-Netto (aus historischem Durchschnitt hochgerechnet, alle Investitionstypen)
+    # F-19: die sonstigen AUSGABEN werden nicht mehr in die Zukunft
+    # hochgerechnet. Das war die unangenehmste der vier Rechenstellen — eine
+    # einmalige Reparatur belastete hier **jedes künftige Prognosejahr**, und
+    # zwar dauerhaft: der historische Schnitt trug sie für immer weiter. Sie
+    # gehört einmalig in den Kapitaleinsatz, nicht jährlich in den Ertrag.
+    #
+    # ⚠ Was hier bleibt: die sonstigen **Erträge** (THG-Quote, manuell
+    # gepflegte Einspeise-Erlöse, #310) **und** die dienstlichen Ladekosten —
+    # letztere stecken in `bisherige_sonstige_netto` (Abzug oben), sind aber
+    # laufender Aufwand und gehören weiter in die Prognose. Beides zusammen ist
+    # genau `netto + ausgaben`; ein Nullsetzen der ganzen Zeile hätte die
+    # Dienstwagen-Kosten still aus der Prognose entfernt.
     jahres_sonstige_netto = 0.0
-    if anzahl_monate_hist > 0 and bisherige_sonstige_netto != 0:
-        jahres_sonstige_netto = bisherige_sonstige_netto / anzahl_monate_hist * 12
+    _sonstige_laufend = bisherige_sonstige_netto + bisherige_sonstige_ausgaben
+    if anzahl_monate_hist > 0 and _sonstige_laufend != 0:
+        jahres_sonstige_netto = _sonstige_laufend / anzahl_monate_hist * 12
 
     # Gesamter Jahres-Netto-Ertrag inkl. Alternativkosten, BKW, Sonstige und Betriebskosten
     jahres_netto_ertrag = jahres_einspeise_erloes + jahres_ev_ersparnis + jahres_wp_ersparnis + jahres_eauto_km_ersparnis + jahres_bkw_ersparnis + jahres_sonstige_netto - betriebskosten_ges
@@ -1977,9 +2011,26 @@ async def get_finanz_prognose(
     # Formel speist seit N-137 die Kachel „Amortisations-Fortschritt" in
     # Auswertungen → ROI. Der Fortschritt ist reine MESSUNG (kumulierte Erträge
     # ÷ relevante Kosten); `jahres_netto_ertrag` geht nur in die Restlaufzeit ein.
-    _amort = berechne_amortisations_fortschritt(
+    # F-19: Nenner ist der Kapitaleinsatz — relevante Kosten plus die
+    # kumulierten sonstigen Netto-Kosten. Damit rechnet der Fortschritt gegen
+    # dieselbe Größe wie ROI-Dashboard und HA-Sensoren; `investition_gesamt`
+    # selbst bleibt die Mehrkosten-Größe (N-137, zugleich USt-Grundlage).
+    kapitaleinsatz = kapitaleinsatz_euro(
         relevante_kosten_euro=investition_gesamt,
-        bisherige_ertraege_euro=bisherige_ertraege,
+        sonstige_ausgaben_euro=bisherige_sonstige_ausgaben,
+    )
+    # ⚠ Und der Zähler ohne die sonstigen AUSGABEN — sonst stünde dieselbe
+    # Reparatur zweimal in derselben Formel. Das ausgewiesene Feld
+    # `bisherige_ertraege_euro` bleibt davon **unberührt**: es ist die
+    # Zeitraum-Bilanz und deckungsgleich mit dem Cockpit-Netto-Ertrag
+    # (`test_aussichten_finanz_aggregat_symmetrie.py`). Ein erster Bau zog den
+    # Betrag dort ab und brach genau diese Zusicherung — die Trennlinie
+    # verläuft zwischen ANGEZEIGTER Bilanz und Kapitalrechnung, nicht zwischen
+    # zwei Rechenwegen.
+    ertraege_fuer_kapitalrechnung = bisherige_ertraege + bisherige_sonstige_ausgaben
+    _amort = berechne_amortisations_fortschritt(
+        relevante_kosten_euro=kapitaleinsatz,
+        bisherige_ertraege_euro=ertraege_fuer_kapitalrechnung,
         jahres_netto_ertrag_euro=jahres_netto_ertrag,
         aktuelles_jahr=heute.year,
     )
@@ -2054,6 +2105,7 @@ async def get_finanz_prognose(
         investition_eauto_mehrkosten_euro=round(investition_eauto_mehrkosten, 2),
         investition_sonstige_euro=round(investition_sonstige, 2),
         investition_gesamt_euro=round(investition_gesamt, 2),  # PV + Mehrkosten + Sonstige
+        kapitaleinsatz_euro=round(kapitaleinsatz, 2),
         bisherige_ertraege_euro=round(bisherige_ertraege, 2),
         amortisations_fortschritt_prozent=round(roi_fortschritt, 1),
         amortisation_erreicht=amortisation_erreicht,

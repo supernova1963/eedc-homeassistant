@@ -49,6 +49,12 @@ from backend.api.routes.strompreise import (
 )
 from backend.core.field_definitions import get_emob_pv_netz_kwh, get_wp_strom_kwh
 from backend.core.berechnungen.phev_anteil import teile_fahrleistung
+from backend.core.berechnungen.kapitalrechnung import (
+    ErsparnisPosten,
+    erklaerung_jahres_ersparnis,
+    jahres_ersparnis_euro,
+    kapitaleinsatz_euro,
+)
 from backend.services.eauto_wirtschaftlichkeit import (
     EmobPoolCtx,
     berechne_eauto_ersparnis_periode,
@@ -444,6 +450,11 @@ async def calculate_anlage_sensors(
     # (typ-unabhängig, #310) UND die Basis-Positionen der Monatsdaten-Zeile
     # (G19-1) an einer Stelle, gleiche Netto-Faltung wie Cockpit/Jahresbericht.
     sonstige_netto_gesamt = sum(f.sonstiges.netto_euro for f in fakten)
+    # F-19: nur die AUSGABEN gehen in den Kapitaleinsatz. Sonstige Erträge
+    # bleiben im Zähler (sie stecken in `netto_ertrag`), und die dienstlichen
+    # Ladekosten weiter unten gehören ebenfalls nicht hierher — sie sind
+    # laufender Aufwand, kein eingesetztes Kapital.
+    sonstige_ausgaben_gesamt = sum(f.sonstiges.ausgaben_euro for f in fakten)
 
     # Dienstliche Ladekosten — bis 2026-07-31 hat der HA-Export sie als einzige
     # der drei Sichten **gar nicht** abgezogen (N-13): der Sensor
@@ -674,13 +685,29 @@ async def calculate_anlage_sensors(
     # WP-Alternativkosten (vs. Gas/Öl) über den Berechnungs-Layer (ADR-001):
     # per-WP-Parameter (kein last-write-wins über waermepumpen), per-Monat-
     # Gaspreis aus Monatsdaten mit Fallback auf den WP-Parameter-Default.
-    bisherige_wp_ersparnis = berechne_wp_alternativkosten_ersparnis(
-        waermepumpen,
-        historische_inv_daten,
-        {k: md.gaspreis_cent_kwh for k, md in md_by_periode.items()},
-        wp_preis_by_periode,
-        wp_netzbezug_preis_cent,
-    )
+    # F-20: **je Wärmepumpe einzeln**, damit jeder Posten seine eigene
+    # Monatszahl behält. Ein Sammelaufruf lieferte nur eine Summe — und die
+    # wurde anschließend mit der Monatszahl der ANLAGE annualisiert, obwohl
+    # eine 2024 nachgerüstete WP nur einen Teil davon lief.
+    bisherige_wp_ersparnis = 0.0
+    wp_posten: list[ErsparnisPosten] = []
+    for _wp in waermepumpen:
+        _wp_summe = berechne_wp_alternativkosten_ersparnis(
+            [_wp],
+            historische_inv_daten,
+            {k: md.gaspreis_cent_kwh for k, md in md_by_periode.items()},
+            wp_preis_by_periode,
+            wp_netzbezug_preis_cent,
+        )
+        _wp_monate = len({
+            (j, m) for (inv_id, j, m) in historische_inv_daten if inv_id == _wp.id
+        })
+        bisherige_wp_ersparnis += _wp_summe
+        wp_posten.append(ErsparnisPosten(
+            bezeichnung=f"Wärmepumpe {_wp.bezeichnung}",
+            summe_euro=_wp_summe,
+            monate=_wp_monate,
+        ))
 
     # Per-E-Auto-Aufschlüsselung der bisherige-Ersparnis. Vorher las eine
     # `for ea`-Schleife `benzinpreis_default` + `vergleich_l_100km` in zwei
@@ -750,6 +777,7 @@ async def calculate_anlage_sensors(
         k: md.kraftstoffpreis_euro for k, md in md_by_periode.items()
     }
     co2_fossil_liter = 0.0
+    emob_posten: list[ErsparnisPosten] = []
     for ea in e_autos:
         km_pro_monat = _ea_km_pro_monat.get(ea.id, [])
         if not km_pro_monat:
@@ -770,6 +798,13 @@ async def calculate_anlage_sensors(
             netz_pro_monat=_ea_netz_pro_monat.get(ea.id) or None,
         )
         bisherige_eauto_ersparnis += _erg.ersparnis_euro
+        # F-20: die Monatszahl DIESES Fahrzeugs — `km_pro_monat` ist genau die
+        # Liste der Monate, aus denen `ersparnis_euro` stammt.
+        emob_posten.append(ErsparnisPosten(
+            bezeichnung=f"E-Auto {ea.bezeichnung}",
+            summe_euro=_erg.ersparnis_euro,
+            monate=len({(j, m) for (j, m, _km) in km_pro_monat}),
+        ))
         eigener_l = eigener_verbrauch_l_100km(ea.parameter)
         if eigener_l is not None and _erg.km_verbrenner > 0:
             co2_fossil_liter += _erg.km_verbrenner / 100 * eigener_l
@@ -810,19 +845,42 @@ async def calculate_anlage_sensors(
         + bisherige_eauto_ersparnis
     )
 
-    # Jahresersparnis aus Monatsdaten berechnen (annualisiert)
-    anzahl_monate = len(monatsdaten)
-    if anzahl_monate > 0:
-        jahres_ersparnis = (historischer_netto_ertrag / anzahl_monate) * 12 - betriebskosten_ges
-    else:
-        jahres_ersparnis = 0
+    # F-19: für die KAPITALRECHNUNG ohne die sonstigen AUSGABEN — sie stehen ab
+    # hier im Nenner. Ohne diesen Abzug stünde dieselbe Reparatur zweimal in
+    # derselben Formel. Die sonstigen ERTRÄGE bleiben drin, sie gehören in den
+    # Zähler. Der Sensor `netto_ertrag_euro` behält beides: er ist die
+    # Zeitraum-Bilanz („was hat der Zeitraum eingebracht?"), und dort ist eine
+    # Reparatur ein Aufwand des Zeitraums. Trennlinie:
+    # `core/berechnungen/kapitalrechnung.py`.
+    bilanz_ohne_ausgaben = netto_ertrag + sonstige_ausgaben_gesamt
 
-    # ROI und Amortisation
+    # Jahresersparnis — **jeder Posten mit seiner eigenen Monatszahl** (F-20).
+    # `netto_ertrag` ist die Anlagenbilanz und gehört zu allen erfassten
+    # Monaten; WP und E-Autos bringen ihre eigene Laufzeit mit. Vorher lief
+    # alles durch `len(monatsdaten)`, und jede nachgerüstete Komponente wurde
+    # dadurch verdünnt — bei vollem Kostenanteil im Nenner.
+    anzahl_monate = len(monatsdaten)
+    ersparnis_posten = [
+        ErsparnisPosten("Anlagenbilanz", bilanz_ohne_ausgaben, anzahl_monate),
+        *wp_posten,
+        *emob_posten,
+    ]
+    jahres_ersparnis = jahres_ersparnis_euro(
+        ersparnis_posten, betriebskosten_jahr_euro=betriebskosten_ges
+    )
+
+    # ROI und Amortisation. Nenner ist der Kapitaleinsatz (F-19): relevante
+    # Kosten + die kumulierten sonstigen Netto-Kosten, die bis 2026-08-09 im
+    # Zähler standen und dort annualisiert wurden.
+    kapitaleinsatz = kapitaleinsatz_euro(
+        relevante_kosten_euro=relevante_kosten,
+        sonstige_ausgaben_euro=sonstige_ausgaben_gesamt,
+    )
     roi_prozent = None
     amortisation_jahre = None
-    if relevante_kosten > 0 and jahres_ersparnis > 0:
-        roi_prozent = (jahres_ersparnis / relevante_kosten) * 100
-        amortisation_jahre = relevante_kosten / jahres_ersparnis
+    if kapitaleinsatz > 0 and jahres_ersparnis > 0:
+        roi_prozent = (jahres_ersparnis / kapitaleinsatz) * 100
+        amortisation_jahre = kapitaleinsatz / jahres_ersparnis
 
     # Speicher-KPIs berechnen
     speicher_effizienz = None
@@ -932,15 +990,30 @@ async def calculate_anlage_sensors(
         elif sensor.key == "jahres_ersparnis_euro":
             if jahres_ersparnis > 0:
                 value = jahres_ersparnis
-                berechnung = f"({historischer_netto_ertrag:.2f} ÷ {anzahl_monate}) × 12"
+                # N-212: der Rechenweg nennt jetzt jeden Posten mit SEINER
+                # Monatszahl **und** den Betriebskosten-Abzug. Vorher stand
+                # hier `(Σ ÷ Anlagenmonate) × 12` — das ergab einen um exakt
+                # die Betriebskosten größeren Wert als der Sensor daneben.
+                berechnung = erklaerung_jahres_ersparnis(
+                    ersparnis_posten, betriebskosten_jahr_euro=betriebskosten_ges
+                )
         elif sensor.key == "roi_prozent":
             if roi_prozent is not None:
                 value = roi_prozent
-                berechnung = f"{jahres_ersparnis:.2f} ÷ {relevante_kosten:.2f} × 100"
+                berechnung = f"{jahres_ersparnis:.2f} ÷ {kapitaleinsatz:.2f} × 100"
         elif sensor.key == "amortisation_jahre":
             if amortisation_jahre is not None:
                 value = amortisation_jahre
-                berechnung = f"{relevante_kosten:.2f} ÷ {jahres_ersparnis:.2f}"
+                # F-19: der Nenner ist der Kapitaleinsatz. Er wird ausgeschrieben,
+                # solange sonstige Positionen ihn von den relevanten Kosten
+                # unterscheiden — sonst bliebe die Differenz unerklärt (N-212).
+                if sonstige_ausgaben_gesamt:
+                    berechnung = (
+                        f"({relevante_kosten:.2f} + {sonstige_ausgaben_gesamt:.2f} sonstige Ausgaben)"
+                        f" ÷ {jahres_ersparnis:.2f}"
+                    )
+                else:
+                    berechnung = f"{kapitaleinsatz:.2f} ÷ {jahres_ersparnis:.2f}"
 
         if value is not None:
             sensor_values.append(SensorValue(

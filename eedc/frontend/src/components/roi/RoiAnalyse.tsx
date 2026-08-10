@@ -49,6 +49,26 @@ const typIcons: Record<string, React.ElementType> = {
 // driftete (fehlte 'pv-system' → ROI-Pie zeigte Roh-Key „pv-system", D17-5-Nebenfund).
 const geldTick = (v: number) => fmtZahl(v, 0)
 
+/**
+ * Nenner der Kapitalrechnung als Text — mit dem Zwischenschritt, sobald
+ * sonstige Positionen ihn von den relevanten Kosten unterscheiden (F-19).
+ *
+ * Der Client rechnet **nichts**: beide Zahlen kommen aus der Response
+ * (`gesamt_kapitaleinsatz` ist der Wert, mit dem das Backend geteilt hat).
+ * Er schreibt nur aus, woraus sie besteht — ohne das ergäbe der angezeigte
+ * Rechenweg eine andere Zahl als das Ergebnis daneben (die N-212-Klasse).
+ */
+const nennerText = (d: { gesamt_relevante_kosten: number; gesamt_kapitaleinsatz?: number; gesamt_sonstige_ausgaben_euro?: number }): string => {
+  const einsatz = d.gesamt_kapitaleinsatz ?? d.gesamt_relevante_kosten
+  const ausgaben = d.gesamt_sonstige_ausgaben_euro ?? 0
+  if (!ausgaben) return formatGeld(einsatz).text
+  return `${formatGeld(d.gesamt_relevante_kosten).text} + ${formatGeld(ausgaben).text} sonstige Ausgaben = ${formatGeld(einsatz).text}`
+}
+
+/** Zeilen-Variante von {@link nennerText}. */
+const zeilenNenner = (b: ROIBerechnung): string =>
+  formatGeld(b.kapitaleinsatz ?? b.relevante_kosten).text
+
 export interface RoiAnalyseProps {
   anlageId: number
   /** Berechnungs-Parameter (Override); undefined ⇒ Backend löst Default auf. */
@@ -185,12 +205,17 @@ export function useRoiAnalyse({ anlageId, strompreis, einspeiseverguetung, benzi
     if (!roiData || roiData.gesamt_relevante_kosten <= 0) return []
     const data = []
     let kumulierteEinsparung = 0
+    // F-19: die Break-Even-Linie liegt auf dem **Kapitaleinsatz** — dem Wert,
+    // durch den das Backend teilt. Auf den relevanten Kosten würde die Kurve
+    // die Nulllinie an einem anderen Jahr schneiden als die Amortisations-
+    // Kachel darüber nennt.
+    const nenner = roiData.gesamt_kapitaleinsatz ?? roiData.gesamt_relevante_kosten
     const maxJahre = Math.min(Math.ceil((roiData.gesamt_amortisation_jahre ?? 20) * 1.5), 30)
     for (let j = 0; j <= maxJahre; j++) {
       data.push({
         jahr: j,
         kumulierte_einsparung: Math.round(kumulierteEinsparung),
-        investition: roiData.gesamt_relevante_kosten,
+        investition: nenner,
       })
       kumulierteEinsparung += roiData.gesamt_jahres_einsparung
     }
@@ -251,7 +276,7 @@ export function roiKpiItems(
       subtitle: roiData.gesamt_roi_prozent ? `ROI: ${roiData.gesamt_roi_prozent} %` : 'ROI: -',
       sicht: 'Gesamt-Anlage · Jahres-Prognose · Mehrkosten-Ansatz',
       formel: 'Σ Einsparungen aller Investitionen',
-      berechnung: roiData.gesamt_relevante_kosten > 0 ? 'ROI = Einsparung ÷ Kosten × 100' : undefined,
+      berechnung: roiData.gesamt_relevante_kosten > 0 ? 'ROI = Einsparung ÷ Kapitaleinsatz × 100' : undefined,
       ergebnis: roiData.gesamt_roi_prozent ? `= ${roiData.gesamt_roi_prozent} % ROI` : undefined,
     },
     {
@@ -264,8 +289,12 @@ export function roiKpiItems(
         ? `Kostendeckung voraussichtlich ${roiData.gesamt_amortisation_jahr}`
         : 'Bis zur Kostendeckung',
       sicht: 'Gesamt-Anlage · Mehrkosten-Ansatz · MODELL (hochgerechnet, ohne bisherige Erträge) — die gemessene Sicht steht daneben als „Amortisations-Fortschritt“',
-      formel: 'Relevante Kosten ÷ Jährliche Einsparung',
-      berechnung: roiData.gesamt_jahres_einsparung > 0 ? `${formatGeld(roiData.gesamt_relevante_kosten).text} ÷ ${formatGeld(roiData.gesamt_jahres_einsparung).text}/Jahr` : undefined,
+      formel: 'Kapitaleinsatz ÷ Jährliche Einsparung',
+      // F-19: Nenner ist der Kapitaleinsatz — relevante Kosten plus die
+      // sonstigen Netto-Kosten (Reparatur, Ersatzteil …). Der Zwischenschritt
+      // steht ausgeschrieben, sonst ergäbe der Rechenweg eine andere Zahl als
+      // das Ergebnis daneben.
+      berechnung: roiData.gesamt_jahres_einsparung > 0 ? nennerText(roiData) + ` ÷ ${formatGeld(roiData.gesamt_jahres_einsparung).text}/Jahr` : undefined,
       ergebnis: roiData.gesamt_amortisation_jahre ? `= ${roiData.gesamt_amortisation_jahre} Jahre` : undefined,
     },
   ]
@@ -541,8 +570,8 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                       {unbewertet ? leerwert : b.roi_prozent ? (
                         <FormelTooltip
                           sicht="Pro Investition · Jahres-ROI · Mehrkosten-Ansatz · Prognose"
-                          formel="Jahresersparnis ÷ Relevante Kosten × 100"
-                          berechnung={`${formatGeld(b.jahres_einsparung).text} ÷ ${formatGeld(b.relevante_kosten).text} × 100`}
+                          formel="Jahresersparnis ÷ Kapitaleinsatz × 100"
+                          berechnung={`${formatGeld(b.jahres_einsparung).text} ÷ ${zeilenNenner(b)} × 100`}
                           ergebnis={`= ${b.roi_prozent} % p.a.`}
                         >
                           <span className={b.roi_prozent >= 10 ? `${GELD_TEXT_CLASS.ersparnis} cursor-help border-b border-dotted border-green-400` : 'text-gray-900 dark:text-white cursor-help border-b border-dotted border-gray-400'}>
@@ -557,8 +586,8 @@ export function RoiDetailTabelle({ vm, zeigeCo2 = true }: { vm: RoiAnalyseVM; ze
                       {unbewertet ? leerwert : b.amortisation_jahre ? (
                         <FormelTooltip
                           sicht="Pro Investition · Mehrkosten-Ansatz · Prognose (rechnerisch, ohne bisherige Erträge)"
-                          formel="Relevante Kosten ÷ Jahresersparnis"
-                          berechnung={`${formatGeld(b.relevante_kosten).text} ÷ ${formatGeld(b.jahres_einsparung).text}/Jahr`}
+                          formel="Kapitaleinsatz ÷ Jahresersparnis"
+                          berechnung={`${zeilenNenner(b)} ÷ ${formatGeld(b.jahres_einsparung).text}/Jahr`}
                           ergebnis={`= ${b.amortisation_jahre} Jahre`}
                         >
                           <span className={b.amortisation_jahre <= 10 ? `${GELD_TEXT_CLASS.ersparnis} cursor-help border-b border-dotted border-green-400` : 'text-orange-500 cursor-help border-b border-dotted border-orange-400'}>

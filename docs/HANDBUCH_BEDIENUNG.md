@@ -537,6 +537,19 @@ Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahl
 > pflegt, sieht seine Amortisation seitdem realistischer, und für PV, Speicher und Wechselrichter
 > ändert sich nichts (dort gibt es keine Alternative).
 
+> **Reparaturen zählen als eingesetztes Geld, nicht als Dauer-Abzug.**
+> Buchst du unter *Sonstige Positionen* eine **Ausgabe** — Reparatur, Ersatzteil, Wartung —,
+> erhöht sie ab sofort deinen **Kapitaleinsatz**, statt jedes Jahr von der Ersparnis abgezogen zu
+> werden. Vorher verlängerte eine einmalige Reparatur von 3.000 € an einer Wärmepumpe die
+> Amortisation von 8,1 auf **42,6 Jahre**, und die Zahl wurde jedes Jahr schlechter, ohne dass
+> etwas passiert war. Jetzt sind es **10,5 Jahre**: das Geld ist einmal ausgegeben, nicht jedes
+> Jahr neu. Der Tooltip schreibt den Zwischenschritt aus („90.900 € + 1.015 € sonstige Ausgaben
+> = 91.915 €").
+>
+> **Sonstige Erträge** (THG-Quote, manuell gepflegte Einspeise-Erlöse) verhalten sich unverändert:
+> sie erhöhen deine Ersparnis und verkürzen die Amortisation. Du musst dafür nichts umstellen —
+> ob eine Position Ertrag oder Ausgabe ist, wählst du beim Erfassen ohnehin.
+
 **ROI pro Komponente — zwei Sichten:**
 
 | Sicht | Bezugsbasis | Wann nutzen? |
