@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.11)
+> **Stand:** August 2026 (v4.0.12)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## In Arbeit — noch nicht veröffentlicht
+## v4.0.12 — Nutzerwünsche und notwendige Korrekturen (August 2026)
 
 ### Jede Komponente sagt jetzt, wie weit sie ist
 
@@ -46,6 +46,31 @@ Zwei neue Hinweise im Daten-Checker:
 - **„… obwohl Kosten/Jahr gepflegt ist."** Dann steht derselbe Betrag zweimal in der Rechnung. In den Monatsabschluss gehört nur die **Abweichung** vom Plan — die Nachzahlung, nicht die ganze Rechnung.
 
 **Beides sind Hinweise, keine Fehler**, und beide sagen, was zu tun ist. eedc liest dabei **nur die Wiederholung**, nie die Bedeutung deiner Bezeichnung: aus „Restwert" oder „Förderung" etwas zu schließen wäre geraten.
+
+### Im PDF-Bericht stand bei der Amortisation dauerhaft „—"
+
+**Betrifft dich das?** Alle, die den **Finanzbericht als PDF** erzeugen.
+
+Die Zeile „Amortisation" konnte dort gar keine Zahl zeigen: Das PDF rechnete mit einem Feld, das sich nirgends eintragen ließ — und deshalb bei jeder Komponente leer war. Jetzt nimmt es dieselbe Kennzahl wie *Auswertungen → ROI* und die HA-Sensoren. Eine Zahl, drei Orte.
+
+### Zwei Prüf-Ergebnisse deiner E-Mobilität waren unsichtbar
+
+**Betrifft dich das?** Alle mit **Wallbox und E-Auto** — und alle mit einem **Plug-in-Hybrid**.
+
+Der Daten-Checker prüft seit der letzten Version zwei Dinge, deren Ergebnis auf der Seite *Einstellungen → Daten-Checker* nie erschienen ist. Nicht „stand weiter unten", sondern **gar nicht**: Die Liste kannte diese beiden Prüfungen nicht und ließ sie beim Anzeigen weg.
+
+- **„Doppelt gezählte Ladetage."** Wenn dieselbe Ladung an der Wallbox *und* am Auto gemessen wird, steht sie an manchen Tagen zweimal in den Tageswerten. Der Befund nennt die betroffenen Tage und hat einen Knopf daneben: **„Zeitraum neu aggregieren"**. Der ist damit erstmals erreichbar.
+- **„Elektrischer Anteil unbestimmt"** beim Plug-in-Hybrid — der Hinweis, dass eedc für Monate ohne Fahrverbrauch mit 100 % elektrisch rechnet und deine Ersparnis dadurch zu gut aussieht.
+
+**Was du tun musst:** Einmal in *Einstellungen → Daten-Checker* schauen. Wenn dort jetzt ein Hinweis steht, ist er nicht neu entstanden — er war nur nie sichtbar.
+
+### Eine Buchung „für die ganze Anlage" kommt jetzt überall an
+
+**Betrifft dich das?** Alle, die im Monatsabschluss unter *Sonstige Positionen* etwas **ohne** Komponente buchen — eine Förderung für die Anlage, eine Versicherung fürs Ganze, eine Reparatur, die zu keinem einzelnen Gerät gehört.
+
+Solche Buchungen wirkten bisher nur in einem Teil der Sichten: Der HA-Sensor rechnete sie mit, *Auswertungen → ROI* und die *Aussichten* ließen sie weg. Zwei Sichten auf dieselbe Anlage nannten deshalb verschiedene Beträge, und eine anlagenweit gebuchte Förderung tauchte in der Wirtschaftlichkeit überhaupt nicht auf.
+
+Jetzt zählen sie in **allen** Sichten mit demselben Betrag: *Auswertungen → ROI*, *Aussichten*, PDF-Finanzbericht und HA-Sensoren. Auf einer einzelnen ROI-**Zeile** stehen sie weiterhin nicht — sie gehören zu keinem Gerät; dort steht „—", und der Betrag ist in der Gesamtzahl enthalten. **Du musst nichts umbuchen.**
 
 ### „15,8 Jahre" — und unter welcher Annahme
 
@@ -153,6 +178,8 @@ Ein „Fahrzeugtyp: Plug-in-Hybrid" gibt es bewusst nicht. **Das ausgefüllte Fe
 2. **Geschätzt**, wenn du stattdessen den **elektrischen Fahranteil in %** einträgst.
 3. **Gar nicht** — dann bleibt es beim alten Verhalten, und der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) sagt dir, dass die Angabe fehlt. Einen Richtwert („so 40–60 % sind üblich") setzt eedc **nicht** ein: das wäre eine Behauptung über dein Auto, keine Rechnung.
 
+   > ⚠ **Nachträglich richtiggestellt (August 2026):** Der Hinweis wurde zwar erzeugt, erschien auf der Seite *Einstellungen → Daten-Checker* aber nicht — nur im Komponenten-Hub des Fahrzeugs. Die Anzeige-Liste kannte die Kategorie nicht und ließ sie beim Aufbau der Seite weg. Behoben; seither steht der Hinweis an beiden Orten. Wer ihn damals vermisst hat, hatte recht.
+
 **Was du danach siehst:** Im Komponenten-Hub stehen unter *Umwelt* zwei neue Werte — **Verbrenner-Anteil** in km und **Kraftstoffkosten** in Euro, mit dem Hinweis, ob sie gemessen oder geschätzt sind. Die Ersparnis vs. Verbrenner sinkt entsprechend, ebenso die CO₂-Einsparung. Der Vergleich mit dem Benziner bleibt dabei über **alle** Kilometer stehen — sonst würdest du dein Auto mit einem halben vergleichen.
 
 > **Deine geladene Energie wird nicht angetastet.** Sie ist gemessen, und ein Hybrid lädt ohnehin weniger. Sie zusätzlich zu kürzen hieße, denselben Anteil zweimal abzuziehen.
@@ -206,6 +233,8 @@ An einer echten Anlage gemessen (März–Juli 2026, ausschließlich Sensordaten)
 In dieser Konstellation hat eedc dieselbe Ladung doppelt gezählt. Jetzt gilt in allen Pfaden dieselbe Regel: **Trägt eine Wallbox die Ladeenergie, ist sie die Quelle** — das Fahrzeug wird dann nicht zusätzlich addiert.
 
 **Was du tun musst:** Bereits gespeicherte Tage bleiben zunächst unverändert. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) meldet sie dir jetzt und bietet **„Zeitraum neu aggregieren"** an. Das ist bewusst ein Knopf und kein automatischer Lauf beim Start: Die Reparatur überschreibt vorhandene Tageswerte, und diese Entscheidung gehört dir.
+
+> ⚠ **Nachträglich richtiggestellt (August 2026):** Diese Meldung war zwar gebaut, auf der Seite *Einstellungen → Daten-Checker* aber **nicht sichtbar** — die Anzeige-Liste kannte die Kategorie nicht, und damit war auch der Knopf „Zeitraum neu aggregieren" nicht erreichbar. Behoben; die Meldung erscheint jetzt samt Reparatur-Knopf. Wer die doppelt gezählten Tage bisher nicht heilen konnte, findet den Weg dort ab sofort.
 
 > **Reichweite des Knopfes:** Er heilt **Tag und Stunde**, nicht den Monatswert. Der Hinweis nennt dir den Zeitraum, den ein Lauf abdeckt.
 

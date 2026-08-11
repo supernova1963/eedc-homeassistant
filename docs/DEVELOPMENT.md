@@ -2,6 +2,7 @@
 # EEDC Development Guide
 
 **Stand: 2026-08-07** — gegen den Baum gemessen, nicht fortgeschrieben.
+**Nachgemessen am 2026-08-11:** die Modul-Liste unter `core/berechnungen/` (36 Module, maschinell gegen das Verzeichnis geprüft) und die `services/`-Neuzugänge des Wirtschaftlichkeits- und Cloud-Import-Pakets. Die übrigen Kapitel tragen weiterhin den Stand vom 07.08.
 
 > **Dieses Dokument trägt bewusst keine Versionsnummer.** Der Versions-SoT ist
 > [CHANGELOG.md](../CHANGELOG.md) (oberster released Abschnitt) bzw.
@@ -413,6 +414,8 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   │   ├── finanz_aggregat.py · einspeise_erloes.py · netzbezug_kosten.py
     │   │   │   ├── ust_eigenverbrauch.py · bkw_finanz.py · dienstliche_ladekosten.py
     │   │   │   ├── investitionskosten.py · amortisation.py · alternativkosten.py
+    │   │   │   ├── kapitalrechnung.py · ertrag_zerlegung.py   # Nenner + Fortschritt je ROI-Zeile
+    │   │   │   ├── phev_anteil.py · pv_anteil_ladung.py
     │   │   │   ├── speicher.py · speicher_simulation.py · speicher_wirtschaftlichkeit.py
     │   │   │   ├── pv_verteilung.py · spez_ertrag.py · wr_kappung.py · grundlast.py
     │   │   │   ├── prognose_final.py · prognose_korrektur.py · preis_rang.py
@@ -444,7 +447,9 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
     │   │   ├── energie_profil/       # Tages-Aggregation, Monats-Rollup, Tag-Status
     │   │   ├── snapshot/             # 5-Min-/Stunden-Snapshots + aggregator.py
     │   │   ├── daten_checker/        # Kategorien der Datenqualitäts-Prüfung
-    │   │   ├── cloud_import/         # Cloud-Provider (registry.py = SoT der Liste)
+    │   │   ├── cloud_import/         # Cloud-Provider (registry.py = SoT der Liste,
+    │   │   │                         #   quellen.py = mehrere Quellen je Anlage, je mit Ziel-Gerät)
+    │   │   ├── erzeuger_ziel.py      # SoT: welche Investition darf Ziel einer Quelle sein
     │   │   ├── connectors/           # Geräte-Connectors (registry.py = SoT der Liste)
     │   │   ├── import_parsers/       # CSV/JSON-Parser je Herkunft
     │   │   ├── wetter/               # Multi-Provider-Kaskade
@@ -782,4 +787,4 @@ baumweit gemessen: **16 Stellen im Produktionscode** zeigten dorthin, zwei davon
 
 ---
 
-*Dieses Dokument trägt keine Versionsnummer — siehe Kopf. Stand der letzten Messung: 2026-08-07.*
+*Dieses Dokument trägt keine Versionsnummer — siehe Kopf. Stand der letzten Messung: 2026-08-07, Layer- und Service-Listen 2026-08-11.*

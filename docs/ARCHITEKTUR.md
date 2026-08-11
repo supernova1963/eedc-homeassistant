@@ -2,6 +2,7 @@
 # EEDC Architektur-Dokumentation
 
 **Stand: 2026-08-07** — Frontend-Kapitel (3 · 6 · 9) gegen den Baum neu erhoben.
+**Nachgezogen am 2026-08-11:** der Berechnungs-Layer im Schichtenbild (Kapitalrechnung + Ertrags-Zerlegung).
 
 > **Dieses Dokument trägt bewusst keine Versionsnummer.** Versions-SoT ist
 > [CHANGELOG.md](../CHANGELOG.md) bzw. `eedc/backend/core/config.py::APP_VERSION`;
@@ -950,7 +951,8 @@ Monatsdaten · InvestitionMonatsdaten · Strompreise · TagesZusammenfassung
         ▼   core/berechnungen/               ← Formeln       (ADR-001)
    berechne_verbrauchs_kennzahlen · berechne_finanz_aggregat · imd_typ_beitrag ·
    bkw_finanz_beitrag · erzeugung_hinter_zaehler_kwh ·
-   berechne_dienstliche_ladekosten …                    (DB-frei, rein)
+   berechne_dienstliche_ladekosten · kapitalrechnung (Nenner + Dauer-Annahme) ·
+   ertrag_zerlegung (Fortschritt je ROI-Zeile) …        (DB-frei, rein)
         │
         ▼   api/routes/…                     ← Darstellung
    Cockpit · Aussichten · HA-Export · PDF · Community

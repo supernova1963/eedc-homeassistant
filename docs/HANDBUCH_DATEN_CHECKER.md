@@ -266,6 +266,13 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **E-Auto- und Wallbox-Komponente werden parallel gepflegt** | ℹ️ INFO | In mehreren der letzten Monate tragen sowohl E-Auto als auch Wallbox nennenswerte, ähnlich große Heimladung. Beide messen meist denselben Stromfluss aus zwei Perspektiven — die doppelte Pflege ist überflüssig. | Nur **eine** Quelle pflegen: bei vorhandener Wallbox die Wallbox; die Heim-Felder am E-Auto leer lassen. |
 | **Pflege-Konflikt: E-Auto- und Wallbox-PV-Anteil weichen voneinander ab** | ⚠️ WARNING | Zusätzlich weicht der PV-Anteil beider Seiten um mehr als 10 % ab, obwohl sie denselben Stromfluss messen sollten. Indiz für echte Doppelzählung bzw. widersprüchliche Daten (z. B. verirrte Streudaten auf der falschen Komponente). | Bewusst entscheiden, welche Quelle die Wahrheit liefert (in der Regel die Wallbox), und die andere Seite leeren. |
+| **N Tag(e) zählen dieselbe Ladung doppelt** | ⚠️ WARNING | Betrifft die bereits **gespeicherten Tageswerte**: Dort steht die Ladung eines Tages sowohl an der Wallbox als auch am Fahrzeug. Die Prüfung nennt Zeitraum und die größten Fälle. | Der Knopf **„Zeitraum neu aggregieren"** rechnet die betroffenen Tage neu — bewusst ein Knopf und kein automatischer Lauf, denn die Reparatur überschreibt vorhandene Tageswerte. Kein Befund heißt „geprüft, soweit Tageswerte vorliegen". |
+| **Elektrischer Fahranteil unbestimmt (Plug-in-Hybrid)** | ℹ️ INFO | In N Monaten sind Kilometer erfasst, aber kein elektrischer Fahrverbrauch und kein Fahranteil in Prozent — eedc rechnet diese Monate mit **100 % elektrisch**, Ersparnis und CO₂-Einsparung fallen dadurch zu gut aus. | Entweder den monatlichen Fahrverbrauch in kWh erfassen (dann rechnet eedc den Anteil gemessen) oder am Fahrzeug einen geschätzten **elektrischen Fahranteil (%)** eintragen. |
+
+> ⚠ **Beide Meldungen gab es schon vor August 2026, sichtbar waren sie nicht:** Die Anzeige-Liste
+> der Daten-Checker-Seite kannte ihre Kategorien nicht und ließ sie beim Aufbau weg — samt dem
+> Reparatur-Knopf. Wer die doppelt gezählten Tage bisher nicht heilen konnte, findet den Weg
+> seither an dieser Stelle.
 
 ---
 
