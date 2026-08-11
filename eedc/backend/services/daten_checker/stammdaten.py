@@ -652,10 +652,12 @@ class StammdatenChecks:
                 # Monat. Erst die Summe über die Historie ist aussagekräftig.
                 gesamt_ladung_kwh = 0.0
                 gesamt_netzladung_kwh = 0.0
+                gesamt_entladung_kwh = 0.0
                 for imd in inv.monatsdaten:
                     vd = imd.verbrauch_daten or {}
                     gesamt_ladung_kwh += float(vd.get("ladung_kwh") or 0.0)
                     gesamt_netzladung_kwh += get_speicher_netzladung_kwh(vd)
+                    gesamt_entladung_kwh += float(vd.get("entladung_kwh") or 0.0)
                 bericht = pruefe_speicher_netzladung_kumulativ(
                     gesamt_ladung_kwh, gesamt_netzladung_kwh,
                 )
@@ -664,6 +666,44 @@ class StammdatenChecks:
                         kategorie=kat, schwere=CheckSeverity.WARNING,
                         meldung=f"{name}: Netzladung übersteigt Gesamtladung (kumulativ)",
                         details=bericht.details,
+                        link="/einstellungen/monatsdaten",
+                    ))
+
+                # F-22 (rapahl-PN 2026-08-08, seine ZWEITE zu diesem Thema):
+                # Der Layer klemmt den Wirkungsgrad bewusst nicht — „Diagnose
+                # statt stillem Cap" (core/berechnungen/speicher.py). Die
+                # Diagnose gab es bis v4.0.11 nirgends; der Cap war weg und
+                # niemand sagte etwas. Hier ist sie.
+                #
+                # KUMULATIV, aus demselben Grund wie beim Netzladungs-Check:
+                # ein EINZELNER Monat darf legitim über 100 % liegen, weil
+                # Energie aus dem Vormonat abfließt. Über die ganze Historie
+                # kann er es nicht — dort mittelt sich der Ladestand aus, und
+                # mehr Entladung als Ladung heißt: eine der beiden Größen wird
+                # falsch gemessen oder gepflegt.
+                #
+                # Die mit Abstand häufigste Ursache ist die aus #281: `ladung_kwh`
+                # als reine PV-Ladung gepflegt, Netzladung separat daneben. Dann
+                # ist der Nenner zu klein — und der Check oben schlägt NICHT an,
+                # solange Netz < Gesamt bleibt. Deshalb steht das im Befundtext.
+                if gesamt_ladung_kwh > 0 and gesamt_entladung_kwh > gesamt_ladung_kwh:
+                    _eta = gesamt_entladung_kwh / gesamt_ladung_kwh * 100
+                    _hinweis = (
+                        f"Über die gesamte Historie stehen {gesamt_entladung_kwh:.0f} kWh "
+                        f"Entladung gegen {gesamt_ladung_kwh:.0f} kWh Ladung "
+                        f"({_eta:.0f} %). Ein Speicher kann nicht mehr abgeben, als er "
+                        "aufgenommen hat."
+                    )
+                    if gesamt_netzladung_kwh > 0:
+                        _hinweis += (
+                            " Häufigste Ursache: „Ladung“ enthält nur die PV-Ladung. "
+                            "Dort gehört die GESAMTE Ladung hinein — die Netzladung "
+                            "ist ein Teil davon, kein zweiter Posten daneben."
+                        )
+                    ergebnisse.append(CheckErgebnis(
+                        kategorie=kat, schwere=CheckSeverity.WARNING,
+                        meldung=f"{name}: Entladung übersteigt Ladung (kumulativ)",
+                        details=_hinweis,
                         link="/einstellungen/monatsdaten",
                     ))
 

@@ -11,6 +11,40 @@
 
 ## v4.0.12 — Nutzerwünsche und notwendige Korrekturen (August 2026)
 
+### Der Speicher-Wirkungsgrad steht jetzt da, wo bisher „—" stand
+
+**Betrifft dich das?** Alle mit einem Speicher — besonders, wenn dir leere Monate oder ein Wert über 100 % aufgefallen sind.
+
+Der Wirkungsgrad eines Monats ist nicht einfach „Entladung ÷ Ladung". Was am Monatsende im Akku steht, wird erst im nächsten Monat entladen — über die Monatsgrenze verrutscht also Energie. Ein Monat kann dadurch scheinbar über 100 % kommen, ein anderer zu niedrig aussehen.
+
+eedc hat das erkannt, aber die falsche Konsequenz gezogen: Bei größeren Sprüngen des Ladestands erschien **„—"**, sonst der ungenaue Rohwert. **Ausgerechnet wurde es nie**, obwohl eedc den Ladestand kennt und herausrechnen kann.
+
+Das ist jetzt anders — an unserer Demo-Anlage nachgerechnet:
+
+- Der November 2025 zeigte „—". Richtig sind **81,6 %**.
+- Der Oktober zeigte 83,1 %. Richtig sind **82,4 %**.
+- Über 27 Monate steht jetzt in **jedem** eine Zahl.
+
+**Was du siehst:** Unter der Kachel steht künftig, worauf der Wert beruht. „Ladestand am Rand herausgerechnet" ist der Normalfall. Zeichnet deine Anlage keinen Ladestand auf, steht der einfache Wert da — aber ehrlich beschriftet mit **„ohne Ladestand gerechnet — ungenau"**. Und wo wirklich keine sinnvolle Zahl möglich ist, steht der Grund dabei statt nur ein Strich.
+
+In *Cockpit → Jahr* verschwindet die Warnung ganz: Über ein volles Jahr gleicht sich der Übertrag aus. Bisher stand sie dort sogar **neben einer Zahl**, sobald ein einziger Monat betroffen war.
+
+**Neu im Daten-Checker:** Gibt dein Speicher über die gesamte Historie mehr ab, als er aufgenommen hat, sagt eedc das jetzt — das kann physikalisch nicht sein und deutet auf einen Erfassungsfehler. **Der häufigste:** Ins Feld **„Ladung" gehört die Gesamtladung inklusive Netz.** Die Netzladung ist ein *Teil* davon, kein zweiter Posten daneben. Passend dazu heißt die Zeile in der Monatsansicht jetzt **„davon aus dem Netz"** — vorher standen dort zwei Zeilen, die man versehentlich addieren konnte.
+
+*(Gefunden dank rapahl, der es zum zweiten Mal gemeldet hat. Beim ersten Mal wurde die Lösung gebaut — sie erreichte die Ansicht nur nie.)*
+
+### Der Community-Vergleich zeigte 128,6 % Wirkungsgrad — das ging nicht mit rechten Dingen zu
+
+**Betrifft dich das?** Alle, die *Community → Komponenten* nutzen.
+
+Ein Speicher kann nicht mehr abgeben, als er aufgenommen hat. Der Wert war unser Fehler, nicht der einer Anlage: eedc überträgt **gar keinen Wirkungsgrad** an den Community-Server, sondern nur die reinen kWh — der Prozentwert entstand erst dort, und zwar ohne jede Prüfung.
+
+Schlimmer: Er lief über **alles je Eingereichte**, während die Zyklen direkt daneben auf zwölf Monate gerechnet waren und mindestens ein halbes Jahr Daten verlangten. Zwei verschiedene Zeiträume in einer Tabellenzeile — und ein einziger fehlerhafter Datensatz reichte, um das Klassenmittel um fast 40 Prozentpunkte zu verschieben.
+
+Jetzt gilt für den Wirkungsgrad dasselbe wie für die Zyklen daneben: gleicher Zeitraum, gleiche Mindest-Laufzeit. Unmögliche Werte fließen nicht mehr ein — sie werden **übersprungen, nicht gestutzt**, denn ein auf 100 % gekappter Wert sähe aus wie ein perfekter Speicher. Und statt des Durchschnitts steht der **Median**, den ein einzelner Ausreißer nicht mehr kippt.
+
+**Außerdem:** Es gibt jetzt eine Klasse **bis 5 kWh** — kleine Speicher fehlten in dieser Auswertung bisher komplett, weshalb auch die Zahl der verglichenen Anlagen zu niedrig war. Und wenn dein Speicher größer als 15 kWh ist, wird deine Zeile endlich als **„(Du)"** markiert.
+
 ### Jede Komponente sagt jetzt, wie weit sie ist
 
 **Betrifft dich das?** Alle, die *Auswertungen → ROI* benutzen.

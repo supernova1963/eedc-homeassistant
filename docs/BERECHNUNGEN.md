@@ -589,6 +589,45 @@ Daten-Checker („Kapazität (kWh) fehlt") und die Antwort selbst (`kapazitaet_f
 > Wirtschaftlichkeits-Prognose (`c5c4437c`), baumweit gewächtert (`5dc3f488`, ADR-002 P3-a).
 > **Die Vollzyklen bleiben bewusst brutto** (Kanon `f1644cc8`) — die Netto-Umstellung zieht sie nicht mit.
 
+#### Round-Trip-Wirkungsgrad (η) — SoC-korrigiert, nicht roh
+
+**Funktion:** `services/speicher_wirtschaftlichkeit.py::berechne_ist_wirkungsgrad`
+**Verwendet in:** Cockpit → Monat, Komponenten-Hub, ROI-Analyse
+
+η ist **kein** einfacher Quotient über einen Zeitraum. Ladung und Entladung sind
+*Flüsse*, der Speicher ist ein *Bestand*: Was am Periodenende im Akku steht, wird
+erst danach entladen. Über eine Monatsgrenze verrutscht dadurch Energie, und der
+rohe Quotient zappelt — er kann 100 % überschreiten oder zu niedrig ausfallen.
+
+Zwei Pfade, in dieser Reihenfolge:
+
+| Lage | Rechnung | `quelle` |
+| --- | --- | --- |
+| Fenster ≥ `WIRKUNGSGRAD_FENSTER_MONATE_MIN` (6) | `entladung ÷ ladung` — ΔSoC mittelt sich aus | `fenster_lang` |
+| Kurzes Fenster, SoC am Rand bekannt | `(entladung + ΔSoC_kwh) ÷ ladung`, geklemmt auf 0…100 % | `soc_korrigiert` |
+| Kurzes Fenster, **kein** SoC | roher Quotient, **nur wenn ≤ 100 %** | `roh-unkorrigiert` |
+| sonst | kein Wert, Grund steht an der Kachel (P4) | `fenster-zu-kurz` |
+
+> **Warum der rohe Wert nicht einfach verworfen wird:** Die meisten Anlagen haben
+> keinen SoC-Sensor. Ihn zu unterdrücken hieße, für sie **dauerhaft** „—"
+> anzuzeigen — P4 verlangt „sagen, was man weiß und wie sicher", nicht Schweigen.
+> Deshalb wird er ausgewiesen **und gekennzeichnet**. Unterdrückt wird nur, was
+> nachweislich falsch ist: über 100 % kann kein Speicher.
+
+> **Der Layer-SoT `speicher_effizienz_prozent` klemmt bewusst NICHT**
+> („Diagnose statt stillem Cap"). Die Diagnose ist der Daten-Checker: meldet ein
+> Speicher **kumulativ** mehr Entladung als Ladung, ist das kein Carry-over mehr,
+> sondern ein Erfassungsfehler — meist `ladung_kwh` als reine PV-Ladung gepflegt
+> (#281). `ladung_netz_kwh` ⊆ `ladung_kwh` ist Vertrag, kein zweiter Posten.
+
+> **Historie (F-22, rapahl 2026-05-22 **und** 2026-08-08):** Bis v4.0.11 stand in
+> `aktueller_monat.py` ein Alles-oder-Nichts-Schalter auf `|ΔSoC| > 20 pp` — über
+> der Schwelle wurde ausgeblendet, darunter der **rohe** Wert gezeigt; korrigiert
+> wurde nie, und ohne SoC-Randwerte ging er **ungeprüft** hinaus. Gemessen an der
+> Demo-Anlage: 2025-11 „—" statt 81,6 %, 2025-10 roh 83,1 statt 82,4 %. Die
+> korrigierende Funktion existierte seit #264 und erreichte 2 von 12 Sichten —
+> dieselbe Klasse wie F-16.
+
 ### 3.4 E-Auto-Einsparung
 
 **Funktion:** `berechne_eauto_einsparung()` in `core/calculations.py`

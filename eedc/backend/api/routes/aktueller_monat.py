@@ -164,13 +164,21 @@ class AktuellerMonatResponse(BaseModel):
     speicher_ladung_kwh: Optional[float] = None
     speicher_entladung_kwh: Optional[float] = None
     speicher_ladung_netz_kwh: Optional[float] = None   # Arbitrage-Ladung vom Netz
-    speicher_wirkungsgrad_prozent: Optional[float] = None  # Entladung / Ladung * 100
+    # F-22: SoC-KORRIGIERT (nicht der rohe Quotient) — der Ladestand am
+    # Monatsrand ist herausgerechnet und der Wert auf 100 % geklemmt.
+    speicher_wirkungsgrad_prozent: Optional[float] = None
     speicher_vollzyklen: Optional[float] = None        # Entladung / Kapazität
     speicher_kapazitaet_kwh: Optional[float] = None    # Aus Investition.parameter
-    # Etappe C (#264): SoC-Drift über die Monatsgrenze macht den Monats-η
-    # unzuverlässig (Speicher Anfang voll → Ende leer ergibt naiv > 100 %).
-    # Flag setzen, wenn |ΔSoC × Kapazität| > 10 % der Monats-Ladung; das
-    # Frontend blendet dann den Monats-η aus und verweist auf den Jahreswert.
+    # F-22: worauf der η beruht — `soc_korrigiert` (Ladestand herausgerechnet,
+    # der Regelfall) · `roh-unkorrigiert` (kein SoC verfügbar, Wert plausibel
+    # aber ungenau — der Client kennzeichnet ihn) · `fenster-zu-kurz` /
+    # `nicht-ermittelbar` (kein Wert, Grund steht unter der Kachel, ADR-002/P4).
+    speicher_wirkungsgrad_quelle: Optional[str] = None
+    # Etappe C (#264), Bedeutung seit F-22 geschärft: „für diesen Monat ist kein
+    # belastbarer η ermittelbar" — nicht mehr „der SoC ist gedriftet". Drift
+    # allein blendet NICHTS mehr aus, sie wird herausgerechnet; ausgeblendet
+    # wird nur, was ohne SoC-Randwerte und ohne langes Fenster unbestimmbar ist.
+    # Name bleibt für Bestandsclients, die ihn lesen.
     speicher_soc_drift_signifikant: bool = False
     speicher_effektiver_ladepreis_cent: Optional[float] = None
     speicher_effektiver_ladepreis_quelle: Optional[str] = None  # dyn-tarif | boersenpreis
@@ -1537,6 +1545,10 @@ async def get_aktueller_monat(
 
     speicher_invs = [i for i in investitionen if i.typ == "speicher"]
     speicher_soc_drift_flag = False
+    # F-22: worauf der ausgewiesene η beruht — `soc_korrigiert` · `fenster_lang`
+    # · `fenster-zu-kurz` · `keine-ladung` · `nicht-ermittelbar`. Trägt den
+    # Grund, wenn kein Wert dasteht (P4: unvollständige Antworten sagen es).
+    speicher_wirkungsgrad_quelle = None
     speicher_eff_ladepreis = None
     speicher_eff_ladepreis_quelle = None
     speicher_imd_ladepreis = None
@@ -1567,43 +1579,80 @@ async def get_aktueller_monat(
         sl = speicher_ladung or 0
         se = speicher_entladung or 0
 
-        # Etappe C2 (#264): SoC-Drift über den Monat erkennen, bevor der naive
-        # Quotient ausgewiesen wird. Maintainer-Vorgabe: Schwelle
-        # |soc_ende − soc_start| > 20 pp (≈ ein voller Lade-/Entladezyklus
-        # über die Monatsgrenze hinaus), nicht relativ zur Ladung.
-        if sl > 0:
+        # F-22 (Rainer-PN 2026-08-08, seine ZWEITE Meldung nach 2026-05-22):
+        # Der Monats-η läuft über den SoT-Kanon, der die SoC-Drift
+        # HERAUSRECHNET, statt sie nur zu erkennen und den Wert zu verwerfen.
+        #
+        # Was hier bis v4.0.11 stand, war ein Alles-oder-Nichts-Schalter auf
+        # |ΔSoC| > 20 pp — und der lag in drei Richtungen falsch (gemessen an
+        # der Demo-Anlage, 27 Monate):
+        #   * über der Schwelle wurde ausgeblendet, obwohl ein guter Wert
+        #     ermittelbar war (2025-11: „—" statt 81,6 %),
+        #   * unter der Schwelle stand der ROHE Quotient (2025-10: 83,1 statt
+        #     korrekt 82,4 %) — korrigiert wurde also NIE,
+        #   * fehlten die SoC-Randwerte, blieb das Flag False und der Wert ging
+        #     ungeprüft raus — genau der Pfad zu den >100 %, die Rainer meldete.
+        #
+        # `berechne_ist_wirkungsgrad` löst alle drei: es rechnet ΔSoC heraus
+        # (Energieerhaltung), klemmt auf physikalisch mögliche 100 % und sagt
+        # über `quelle`, worauf das Ergebnis beruht. Ausgeblendet wird nur noch,
+        # was wirklich nicht ermittelbar ist — und dann MIT Grund (P4).
+        if sl > 0 and se > 0:
             from calendar import monthrange
-            from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
-                ist_soc_drift_signifikant,
+            from backend.core.investition_kennwerte import (
+                get_speicher_nutzbare_kapazitaet_kwh,
             )
             from backend.services.speicher_wirtschaftlichkeit import (
-                _lese_soc_am_periodenrand,
+                berechne_ist_wirkungsgrad,
             )
             try:
                 monat_start = date(jahr, monat, 1)
                 monat_ende = date(jahr, monat, monthrange(jahr, monat)[1])
-                soc_start = await _lese_soc_am_periodenrand(
-                    db, anlage_id=anlage_id, datum=monat_start, richtung="erste",
+                nutzbar = sum(
+                    get_speicher_nutzbare_kapazitaet_kwh(i) or 0 for i in speicher_invs
                 )
-                soc_ende = await _lese_soc_am_periodenrand(
-                    db, anlage_id=anlage_id, datum=monat_ende, richtung="letzte",
+                _eta = await berechne_ist_wirkungsgrad(
+                    db,
+                    anlage_id=anlage_id,
+                    von=monat_start,
+                    bis=monat_ende,
+                    ladung_kwh=sl,
+                    entladung_kwh=se,
+                    nutzbare_kapazitaet_kwh=float(nutzbar),
+                    # Ein Kalendermonat — nie das lange Fenster, immer der
+                    # SoC-korrigierte Pfad, sofern Randwerte vorliegen.
+                    fenster_monate=1,
                 )
-                if soc_start is not None and soc_ende is not None:
-                    speicher_soc_drift_flag = ist_soc_drift_signifikant(
-                        soc_start_prozent=soc_start,
-                        soc_ende_prozent=soc_ende,
-                    )
+                speicher_wirkungsgrad_quelle = _eta.quelle
+                if _eta.wirkungsgrad_prozent is not None:
+                    speicher_wirkungsgrad = round(_eta.wirkungsgrad_prozent, 1)
+                else:
+                    # Kein SoC am Periodenrand (kein SoC-Sensor, frisch
+                    # installiert, Lücke in den Tagesprofilen). Hier NICHT
+                    # schweigen: der rohe Quotient ist unkorrigiert, aber
+                    # solange er physikalisch möglich ist, ist er eine Aussage —
+                    # und für die meisten Anlagen die einzige, die es gibt.
+                    # P4 heißt „sagen, was man weiß und wie sicher", nicht
+                    # „lieber gar nichts". Ausgeblendet wird nur, was
+                    # NACHWEISLICH falsch ist: über 100 % kann kein Speicher.
+                    _roh = se / sl * 100
+                    if _roh <= 100.0:
+                        speicher_wirkungsgrad = round(_roh, 1)
+                        speicher_wirkungsgrad_quelle = "roh-unkorrigiert"
+                # Rückwärtskompatibel: das alte Flag bleibt im Vertrag, trägt
+                # jetzt aber die ehrliche Aussage „kein belastbarer η" statt
+                # „SoC ist gedriftet". Clients, die es lesen, blenden weiterhin
+                # korrekt aus — nur eben in den richtigen Fällen.
+                speicher_soc_drift_flag = speicher_wirkungsgrad is None
             except Exception as e:  # noqa: BLE001
-                # SoC-Lookup darf den Endpoint nicht killen — bei Fehler
-                # bleibt das Drift-Flag False und der Monats-η wird angezeigt.
+                # Der η darf den Endpoint nicht killen. Bei Fehler KEIN roher
+                # Fallback-Quotient — das war der Pfad zu den >100 %.
+                speicher_wirkungsgrad_quelle = "nicht-ermittelbar"
+                speicher_soc_drift_flag = True
                 logger.warning(
-                    "aktueller_monat: SoC-Drift-Lookup fehlgeschlagen "
+                    "aktueller_monat: η-Ermittlung fehlgeschlagen "
                     "(anlage=%s, %s/%s): %s", anlage_id, jahr, monat, e,
                 )
-
-        # Monats-η nur ausweisen, wenn SoC-Drift nicht signifikant ist
-        if sl > 0 and se > 0 and not speicher_soc_drift_flag:
-            speicher_wirkungsgrad = round(se / sl * 100, 1)
         # Vollzyklen = ENTLADUNG ÷ Kapazität über den Layer-SoT (Kanon seit
         # 2026-07-28; vorher stand hier die Ladung `sl`).
         _vz = berechne_vollzyklen(se, speicher_kapazitaet)
@@ -2029,6 +2078,7 @@ async def get_aktueller_monat(
         speicher_entladung_kwh=speicher_entladung,
         speicher_ladung_netz_kwh=speicher_ladung_netz,
         speicher_wirkungsgrad_prozent=speicher_wirkungsgrad,
+        speicher_wirkungsgrad_quelle=speicher_wirkungsgrad_quelle,
         speicher_vollzyklen=speicher_vollzyklen,
         speicher_kapazitaet_kwh=speicher_kapazitaet,
         speicher_soc_drift_signifikant=speicher_soc_drift_flag,

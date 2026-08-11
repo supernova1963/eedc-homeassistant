@@ -234,13 +234,18 @@ export function SpeicherDeepDive({
   const speicher = benchmark.benchmark_erweitert?.speicher
   const kapazitaet = benchmark.anlage.speicher_kwh || 0
 
-  // Eigene Kapazitätsklasse ermitteln
+  // Eigene Kapazitätsklasse ermitteln.
+  //
+  // ⚠ Die Grenzen MÜSSEN denen des Servers entsprechen (`components.py`,
+  // `klassen_def`) — dieser String wird gegen das Server-Label verglichen, um
+  // die eigene Zeile mit „(Du)" zu markieren. Vorher standen hier fünf Klassen
+  // gegen drei des Servers: Speicher über 15 kWh landeten in „15-20 kWh" bzw.
+  // „>20 kWh", die es serverseitig nie gab, und wurden deshalb NIE markiert.
   const eigeneKlasse = useMemo(() => {
-    if (kapazitaet <= 5) return '≤5 kWh'
-    if (kapazitaet <= 10) return '5-10 kWh'
-    if (kapazitaet <= 15) return '10-15 kWh'
-    if (kapazitaet <= 20) return '15-20 kWh'
-    return '>20 kWh'
+    if (kapazitaet < 5) return 'bis 5 kWh'
+    if (kapazitaet < 10) return '5-10 kWh'
+    if (kapazitaet < 15) return '10-15 kWh'
+    return '>15 kWh'
   }, [kapazitaet])
 
   // Chart-Daten für Vergleich

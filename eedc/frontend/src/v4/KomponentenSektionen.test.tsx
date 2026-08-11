@@ -133,7 +133,10 @@ describe('Komponenten-Detail (E-Gegencheck)', () => {
       einspeise_preis_cent: 8, netzbezug_preis_cent: 30,
     }))
     renderBlock(bloecke, 'k-speicher')
-    expect(screen.getByText('Netzladung (Arbitrage)')).toBeInTheDocument()
+    // F-22: „davon" ist Pflicht — die Netzladung ist eine TEILMENGE der Ladung
+    // (Vertrag in core/field_definitions.py). Ohne das Wort las ein Tester die
+    // beiden Zeilen als Doppelzählung und meldete sie als Fehler.
+    expect(screen.getByText('davon aus dem Netz (Arbitrage)')).toBeInTheDocument()
     expect(screen.getByText(/Bilanz \(Entladung − Ladung\)/)).toBeInTheDocument()
     // Verlust 10 kWh × 100 % PV × 8 ct = 0,80 €
     expect(screen.getByText('Wirkungsverluste (Opportunitätskosten)')).toBeInTheDocument()

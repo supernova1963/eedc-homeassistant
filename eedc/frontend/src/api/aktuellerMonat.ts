@@ -74,7 +74,13 @@ export interface AktuellerMonatResponse {
   speicher_vollzyklen: number | null
   speicher_kapazitaet_kwh: number | null
   hat_speicher: boolean
-  // Etappe C (#264): SoC-Drift-Flag + TEP-basierter effektiver Ladepreis
+  /** F-22: worauf `speicher_wirkungsgrad_prozent` beruht — `soc_korrigiert`
+   *  (Ladestand herausgerechnet) · `fenster_lang` · `roh-unkorrigiert` (kein
+   *  Ladestand erfasst, Wert plausibel aber ungenau) · `fenster-zu-kurz` /
+   *  `nicht-ermittelbar` (kein Wert). `null` bei Antworten vor v4.0.12. */
+  speicher_wirkungsgrad_quelle: string | null
+  // Etappe C (#264): SoC-Drift-Flag + TEP-basierter effektiver Ladepreis.
+  // Seit F-22 bedeutet es „kein belastbarer η", nicht mehr „SoC ist gedriftet".
   speicher_soc_drift_signifikant: boolean
   speicher_effektiver_ladepreis_cent: number | null
   speicher_effektiver_ladepreis_quelle: string | null

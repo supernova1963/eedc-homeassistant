@@ -294,7 +294,17 @@ export function baueJahrAlsMonat(monate: AktuellerMonatResponse[], jahr: number)
     speicher_auslastung_prozent: quote(speicherEntladung, speicherAuslastungsBasis),
     speicher_ersparnis_euro: summe(f('speicher_ersparnis_euro')),
     hat_speicher: monate.some((m) => m.hat_speicher),
-    speicher_soc_drift_signifikant: monate.some((m) => m.speicher_soc_drift_signifikant),
+    // F-22: Der Jahres-η summiert Ladung und Entladung über viele Monate — der
+    // Ladestand-Übertrag einzelner Monatsgrenzen mittelt sich darin aus. Das
+    // ist genau der Fall, den `EFFIZIENZ_FENSTER_MONATE` im Backend „langes
+    // Fenster" nennt und ohne SoC-Korrektur für belastbar erklärt.
+    //
+    // Bis v4.0.11 stand hier `monate.some(...)`: ein einziger Monat ohne
+    // belastbaren Wert setzte das Flag, und unter der Jahreszahl erschien
+    // „SoC-Drift — Monats-η ausgeblendet" — neben einer Zahl, im Jahreskontext,
+    // wegen eines Teilmonats. Der Satz war dreifach falsch.
+    speicher_soc_drift_signifikant: false,
+    speicher_wirkungsgrad_quelle: (speicherLadung ?? 0) > 0 ? 'fenster_lang' : null,
     speicher_effektiver_ladepreis_cent: mittel(f('speicher_effektiver_ladepreis_cent')),
     speicher_effektiver_ladepreis_quelle:
       monate.find((m) => m.speicher_effektiver_ladepreis_quelle)?.speicher_effektiver_ladepreis_quelle ?? null,

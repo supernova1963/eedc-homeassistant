@@ -141,6 +141,42 @@ function speicherWirkungsverluste(d: AktuellerMonatResponse) {
   return { euro, teile }
 }
 
+/** Untertext der Wirkungsgrad-Kachel (F-22).
+ *
+ *  Der Wirkungsgrad eines Zeitraums ist keine reine Division: Was am Ende im
+ *  Speicher steht, wird erst danach entladen. Das Backend rechnet diesen
+ *  Ladestand heraus, wo es kann — und sagt über `..._quelle`, ob es das
+ *  konnte. Diese Funktion macht daraus den Satz unter der Zahl.
+ *
+ *  Vorher stand hier ein einzelnes Boolean, das drei verschiedene Zustände auf
+ *  einen Satz abbildete („SoC-Drift — Monats-η ausgeblendet"): er erschien
+ *  auch dann, wenn eine Zahl danebenstand, und im Jahreskontext war er
+ *  dreifach falsch. */
+function wirkungsgradHinweis(
+  d: AktuellerMonatResponse,
+  periode: 'monat' | 'tag' | 'jahr',
+): string | undefined {
+  const zeitraum = periode === 'jahr' ? 'Jahres' : periode === 'tag' ? 'Tages' : 'Monats'
+  switch (d.speicher_wirkungsgrad_quelle) {
+    case 'soc_korrigiert':
+      return 'Ladestand am Rand herausgerechnet'
+    case 'fenster_lang':
+      return 'über das ganze Fenster gerechnet'
+    case 'roh-unkorrigiert':
+      // Ehrlich benennen statt verschweigen: ohne SoC-Messung trägt der Wert
+      // den Übertrag über die Zeitraumgrenze und schwankt dadurch.
+      return 'ohne Ladestand gerechnet — ungenau'
+    case 'keine-ladung':
+      return undefined
+    case 'fenster-zu-kurz':
+    case 'nicht-ermittelbar':
+      return `kein Ladestand erfasst — ${zeitraum}wert nicht belastbar`
+    default:
+      // Bestandsverhalten für Antworten ohne das neue Feld.
+      return d.speicher_soc_drift_signifikant ? `${zeitraum}-η nicht belastbar` : undefined
+  }
+}
+
 /** Liefert die Blöcke der aktiven Komponenten in kanonischer Reihenfolge.
  *  `periode` steuert nur die period-spezifischen Label/Texte (WP-Counter: Tag vs.
  *  Monat/Jahr); Default 'monat' lässt Cockpit/Monat unverändert. Cockpit/Tag ruft mit
@@ -174,7 +210,7 @@ export function baueKomponentenBloecke(
       { title: 'Ladung', value: fmt(d.speicher_ladung_kwh), unit: 'kWh', color: 'blue', icon: Battery },
       { title: 'Entladung', value: fmt(d.speicher_entladung_kwh), unit: 'kWh', color: 'green', icon: Battery },
       { ...SPEICHER_KPI.wirkungsgrad, value: fmtCalc(d.speicher_wirkungsgrad_prozent, 1, '—'), unit: '%',
-        subtitle: d.speicher_soc_drift_signifikant ? 'SoC-Drift — Monats-η ausgeblendet' : undefined },
+        subtitle: wirkungsgradHinweis(d, periode) },
       { ...SPEICHER_KPI.vollzyklen, value: fmtCalc(d.speicher_vollzyklen, 2, '—'),
         subtitle: hat(d.speicher_kapazitaet_kwh) ? `Kapazität ${fmt(d.speicher_kapazitaet_kwh)} kWh` : undefined },
     ]
@@ -211,7 +247,11 @@ export function baueKomponentenBloecke(
     // Periodensinnvolle Detailzeilen (E-Gegencheck): Netzladung/Ladepreis/Bilanz/
     // Wirkungsverluste — alles als Tag/Monat/Jahr aggregierbar.
     const detail: DetailZeile[] = []
-    if (hat(d.speicher_ladung_netz_kwh)) detail.push({ label: 'Netzladung (Arbitrage)', wert: `${fmt(d.speicher_ladung_netz_kwh)} kWh` })
+    // „davon" ist nicht Kosmetik: `ladung_netz_kwh` ⊆ `ladung_kwh` (Vertrag in
+    // core/field_definitions.py). Ohne das Wort stehen zwei Zeilen untereinander,
+    // die man addieren möchte — genau so ist Rainers Doppelzählungs-Verdacht
+    // vom 08.08. entstanden (F-22).
+    if (hat(d.speicher_ladung_netz_kwh)) detail.push({ label: 'davon aus dem Netz (Arbitrage)', wert: `${fmt(d.speicher_ladung_netz_kwh)} kWh` })
     if (hat(d.speicher_effektiver_ladepreis_cent)) detail.push({
       label: 'Effektiver Ladepreis (Netz)',
       wert: (
