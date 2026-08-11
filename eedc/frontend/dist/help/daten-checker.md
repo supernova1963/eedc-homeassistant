@@ -26,6 +26,7 @@
    10. [Energieprofil – fehlende Tageswerte](#410-energieprofil--fehlende-tageswerte)
    11. [Geräte-Connector ohne Monatswert](#411-geraete-connector-ohne-monatswert)
    12. [Zeitzone – Abweichung zu Home Assistant](#412-zeitzone--abweichung-zu-home-assistant)
+   13. [Sonstige Positionen – der Erfassungsort](#413-sonstige-positionen--der-erfassungsort)
 5. [Behebungs-Workflows](#5-behebungs-workflows)
 6. [Beziehung zu anderen Werkzeugen](#6-beziehung-zu-anderen-werkzeugen)
 
@@ -265,6 +266,13 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 |---------|----------|-----------|----------|
 | **E-Auto- und Wallbox-Komponente werden parallel gepflegt** | ℹ️ INFO | In mehreren der letzten Monate tragen sowohl E-Auto als auch Wallbox nennenswerte, ähnlich große Heimladung. Beide messen meist denselben Stromfluss aus zwei Perspektiven — die doppelte Pflege ist überflüssig. | Nur **eine** Quelle pflegen: bei vorhandener Wallbox die Wallbox; die Heim-Felder am E-Auto leer lassen. |
 | **Pflege-Konflikt: E-Auto- und Wallbox-PV-Anteil weichen voneinander ab** | ⚠️ WARNING | Zusätzlich weicht der PV-Anteil beider Seiten um mehr als 10 % ab, obwohl sie denselben Stromfluss messen sollten. Indiz für echte Doppelzählung bzw. widersprüchliche Daten (z. B. verirrte Streudaten auf der falschen Komponente). | Bewusst entscheiden, welche Quelle die Wahrheit liefert (in der Regel die Wallbox), und die andere Seite leeren. |
+| **N Tag(e) zählen dieselbe Ladung doppelt** | ⚠️ WARNING | Betrifft die bereits **gespeicherten Tageswerte**: Dort steht die Ladung eines Tages sowohl an der Wallbox als auch am Fahrzeug. Die Prüfung nennt Zeitraum und die größten Fälle. | Der Knopf **„Zeitraum neu aggregieren"** rechnet die betroffenen Tage neu — bewusst ein Knopf und kein automatischer Lauf, denn die Reparatur überschreibt vorhandene Tageswerte. Kein Befund heißt „geprüft, soweit Tageswerte vorliegen". |
+| **Elektrischer Fahranteil unbestimmt (Plug-in-Hybrid)** | ℹ️ INFO | In N Monaten sind Kilometer erfasst, aber kein elektrischer Fahrverbrauch und kein Fahranteil in Prozent — eedc rechnet diese Monate mit **100 % elektrisch**, Ersparnis und CO₂-Einsparung fallen dadurch zu gut aus. | Entweder den monatlichen Fahrverbrauch in kWh erfassen (dann rechnet eedc den Anteil gemessen) oder am Fahrzeug einen geschätzten **elektrischen Fahranteil (%)** eintragen. |
+
+> ⚠ **Beide Meldungen gab es schon vor August 2026, sichtbar waren sie nicht:** Die Anzeige-Liste
+> der Daten-Checker-Seite kannte ihre Kategorien nicht und ließ sie beim Aufbau weg — samt dem
+> Reparatur-Knopf. Wer die doppelt gezählten Tage bisher nicht heilen konnte, findet den Weg
+> seither an dieser Stelle.
 
 ---
 
@@ -474,6 +482,29 @@ Der Sensor-Picker in den Datenquellen zeigt alle Sensoren ohne harten Filter —
 | **eedc und Home Assistant rechnen mit verschiedenen Zeitzonen (… Unterschied)** | ⚠️ WARNING | Die beiden Systeme liegen um mindestens eine Stunde auseinander. Die Details nennen die Zeitzone von Home Assistant und den Abstand. | **Als Add-on:** eedc übernimmt die Zeitzone beim Start von Home Assistant — Add-on einmal neu starten. **Standalone:** `TZ=Europe/Berlin` (bzw. deine Zeitzone) als Umgebungsvariable setzen und den Container neu starten, siehe [HANDBUCH_INSTALLATION.md §2](HANDBUCH_INSTALLATION.md#2-installation). |
 
 **Was der Befund nicht leistet:** Er beschreibt den Zustand von **jetzt**. Bereits gespeicherte Tage werden dadurch nicht korrigiert — die lassen sich nach dem Neustart über *Einstellungen → Datenverwaltung* neu berechnen.
+
+---
+
+### 4.13 Sonstige Positionen – der Erfassungsort <a name="413-sonstige-positionen--der-erfassungsort"></a>
+
+**Was wird geprüft:** Steht ein Betrag, der **jedes Jahr wiederkommt**, an der Stelle, an der er auch in die Zukunft wirkt?
+
+**Warum das zählt:** eedc fragt nie, ob ein Betrag einmalig oder wiederkehrend ist — es liest das am **Ort** deiner Eingabe. Ein Jahresbetrag an der Komponente (*Kosten/Jahr*, *Ertrag/Jahr*) wirkt jedes Jahr, also auch in Prognose und Amortisation. Eine Position im Monatsabschluss ist per Form **einmal** geflossen: Sie zählt in der Bilanz ihres Monats und im Amortisations-Fortschritt, aber nie in der Vorhersage. Das ist der Grund, warum eedc nichts raten muss — und zugleich die einzige Stelle, an der man es verfehlen kann.
+
+**Woran eedc das erkennt: an der Wiederholung, nie an der Bedeutung.** Aus „Restwert", „Verkauf" oder „Förderung" auf etwas zu schließen wäre geraten — genau das tut eedc an keiner Stelle.
+
+#### Befunde
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **\[Komponente\]: „\[Bezeichnung\]" steht in N Monaten im Monatsabschluss — das sieht wiederkehrend aus** | ℹ️ INFO | Dieselbe Bezeichnung taucht an einer Komponente in **mindestens drei** Monaten auf, und an der Komponente ist **kein** passender Jahresbetrag gepflegt. Als Monatsposition wirkt der Betrag nur in der Bilanz des jeweiligen Monats. | Komponente öffnen (*Bearbeiten → Weitere Angaben & Kosten*) und den Betrag als **Kosten/Jahr** bzw. **Ertrag/Jahr** eintragen. Dort wirkt er auch in Prognose und Amortisation. **Einmaliges bleibt richtig, wo es ist** — der Hinweis verlangt nichts, er zeigt eine bessere Stelle. |
+| **\[Komponente\]: „\[Bezeichnung\]" steht in N Monaten im Monatsabschluss, obwohl \[Feld\] gepflegt ist** | ℹ️ INFO | Der Jahresbetrag ist hinterlegt **und** derselbe Posten wird zusätzlich monatlich gebucht — der Betrag zählt damit doppelt. | Entweder den Jahresbetrag anpassen **oder** die Monatspositionen entfernen. In den Monatsabschluss gehört nur die **Abweichung** vom Plan: die Nachzahlung, nicht die ganze Rechnung. |
+
+> **Beides sind Hinweise, keine Fehler.** Deine Erfassung ist nicht falsch — sie steht nur an der Stelle, an der sie weniger kann. Es gibt deshalb auch keinen „Akzeptiert"-Knopf: Wer den Betrag bewusst monatlich pflegt, lässt den Hinweis stehen.
+>
+> **Das Feld „Ertrag/Jahr" gibt es nur bei *Wallbox* und *Sonstiges*.** Bei allen anderen Komponenten rechnet eedc die Jahres-Einsparung selbst; dort meldet der Checker auf der Ertragsseite bewusst nichts, statt auf ein Feld zu verweisen, das im Formular nicht steht.
+
+Hintergrund und die verworfenen Alternativen: [Berechnungen §3.6](BERECHNUNGEN.md#36-roi--amortisation) und [Bedienung → Auswertungen → ROI](HANDBUCH_BEDIENUNG.md#42-roi).
 
 ---
 

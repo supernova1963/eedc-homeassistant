@@ -527,6 +527,19 @@ Zwei klar getrennte Sichten statt vieler paralleler ROI-Zahlen ohne Bezug:
 Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahlen ineinander
 überführen. Welche der beiden du gerade liest, steht im ⓘ-Tooltip der Kachel.
 
+> **Unter welcher Annahme die Dauer gilt.** Der Fortschritt unterstellt nichts — er zählt, was
+> geflossen ist. Eine **Dauer** dagegen muss etwas über die Zukunft unterstellen, und eedc
+> unterstellt: **es geht nie wieder etwas kaputt**. Das steht jetzt neben jeder Dauer:
+> „ohne künftige Instandhaltung" — an der Kachel, unter der Break-Even-Kurve, je Zeile in der
+> Tabelle, im Komponenten-Hub der Wallbox, im PDF-Finanzbericht und im Rechenweg des HA-Sensors
+> `amortisation_jahre`.
+>
+> **Willst du mit Instandhaltung rechnen**, trag sie bei der Komponente als **Kosten/Jahr** ein.
+> Dann steht dort „inkl. 200,00 €/Jahr Betriebskosten, ohne weitere Instandhaltung" — der Betrag
+> ist in der Zahl bereits abgezogen. Aus deiner bisherigen Reparatur-Historie rechnet eedc
+> **keine** Reparatur-Rate hoch: bei ein bis zwei Ereignissen wäre das eine Zahl, die sich jedes
+> Jahr ändert, ohne dass etwas passiert ist.
+
 > **Was als „relevante Kosten" zählt.** Nicht der volle Kaufpreis, sondern die **Mehrkosten**
 > gegenüber der Alternative: Was hätte eine Gasheizung statt der Wärmepumpe gekostet, was ein
 > Verbrenner statt des E-Autos? Diesen Betrag pflegst du je Komponente im Feld
@@ -536,6 +549,36 @@ Beide rechnen gegen **dieselbe** Investitionssumme, deshalb lassen sich die Zahl
 > 35.000 € fürs Auto — auch dann, wenn du etwas anderes eingetragen hattest. Wer die Alternative
 > pflegt, sieht seine Amortisation seitdem realistischer, und für PV, Speicher und Wechselrichter
 > ändert sich nichts (dort gibt es keine Alternative).
+
+> **Reparaturen zählen als eingesetztes Geld, nicht als Dauer-Abzug.**
+> Buchst du unter *Sonstige Positionen* eine **Ausgabe** — Reparatur, Ersatzteil, Wartung —,
+> erhöht sie ab sofort deinen **Kapitaleinsatz**, statt jedes Jahr von der Ersparnis abgezogen zu
+> werden. Vorher verlängerte eine einmalige Reparatur von 3.000 € an einer Wärmepumpe die
+> Amortisation von 8,1 auf **42,6 Jahre**, und die Zahl wurde jedes Jahr schlechter, ohne dass
+> etwas passiert war. Jetzt sind es **10,5 Jahre**: das Geld ist einmal ausgegeben, nicht jedes
+> Jahr neu. Der Tooltip schreibt den Zwischenschritt aus („90.900 € + 1.015 € sonstige Ausgaben
+> − 455 € sonstige Erträge = 91.460 €").
+>
+> **Sonstige Erträge senken dein eingesetztes Geld.**
+> Buchst du unter *Sonstige Positionen* einen **Ertrag** — THG-Quote, eine Förderung, ein
+> einmaliger Erlös —, mindert er deinen **Kapitaleinsatz**: Geld, das du nie ausgeben musstest,
+> muss auch nicht wieder hereinkommen. Deine Amortisation wird dadurch **kürzer**, und der
+> Tooltip nennt den Abzug beim Namen. In der **Monatsbilanz** bleibt der Betrag unverändert
+> stehen — dort ist er ein Ertrag des Monats, in dem er geflossen ist.
+>
+> **Erwartest du den Betrag jedes Jahr wieder** — etwa den Einspeise-Erlös eines zweiten
+> Erzeugers mit eigenem Tarif —, dann gehört er **nicht** in den Monatsabschluss, sondern an die
+> Komponente:
+>
+> - **„Ertrag/Jahr (€)"** (Bearbeiten → *Weitere Angaben & Kosten*, bei *Wallbox* und
+>   *Sonstiges*) — das Gegenstück zu den Betriebskosten pro Jahr;
+> - noch besser bei einem zweiten Erzeuger: **„Einspeise-Erlös (€)"** bei *Sonstiges* mit
+>   Kategorie *Erzeuger*. Das Feld lässt sich einer Datenquelle zuordnen, also einem Sensor aus
+>   Home Assistant — dann kommt der Betrag monatsgenau statt geschätzt.
+>
+> Nur diese beiden Felder wirken in Prognose und Amortisationsdauer. **Buch dann nicht beides** —
+> sonst zählt derselbe Erlös zweimal; der Daten-Checker weist dich darauf hin, wenn derselbe
+> Posten Monat für Monat auftaucht.
 
 **ROI pro Komponente — zwei Sichten:**
 

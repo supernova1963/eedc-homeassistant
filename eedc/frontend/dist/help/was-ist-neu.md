@@ -1,11 +1,196 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.11)
+> **Stand:** August 2026 (v4.0.12)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.12 — Nutzerwünsche und notwendige Korrekturen (August 2026)
+
+### Der Speicher-Wirkungsgrad steht jetzt da, wo bisher „—" stand
+
+**Betrifft dich das?** Alle mit einem Speicher — besonders, wenn dir leere Monate oder ein Wert über 100 % aufgefallen sind.
+
+Der Wirkungsgrad eines Monats ist nicht einfach „Entladung ÷ Ladung". Was am Monatsende im Akku steht, wird erst im nächsten Monat entladen — über die Monatsgrenze verrutscht also Energie. Ein Monat kann dadurch scheinbar über 100 % kommen, ein anderer zu niedrig aussehen.
+
+eedc hat das erkannt, aber die falsche Konsequenz gezogen: Bei größeren Sprüngen des Ladestands erschien **„—"**, sonst der ungenaue Rohwert. **Ausgerechnet wurde es nie**, obwohl eedc den Ladestand kennt und herausrechnen kann.
+
+Das ist jetzt anders — an unserer Demo-Anlage nachgerechnet:
+
+- Der November 2025 zeigte „—". Richtig sind **81,6 %**.
+- Der Oktober zeigte 83,1 %. Richtig sind **82,4 %**.
+- Über 27 Monate steht jetzt in **jedem** eine Zahl.
+
+**Was du siehst:** Unter der Kachel steht künftig, worauf der Wert beruht. „Ladestand am Rand herausgerechnet" ist der Normalfall. Zeichnet deine Anlage keinen Ladestand auf, steht der einfache Wert da — aber ehrlich beschriftet mit **„ohne Ladestand gerechnet — ungenau"**. Und wo wirklich keine sinnvolle Zahl möglich ist, steht der Grund dabei statt nur ein Strich.
+
+In *Cockpit → Jahr* verschwindet die Warnung ganz: Über ein volles Jahr gleicht sich der Übertrag aus. Bisher stand sie dort sogar **neben einer Zahl**, sobald ein einziger Monat betroffen war.
+
+**Neu im Daten-Checker:** Gibt dein Speicher über die gesamte Historie mehr ab, als er aufgenommen hat, sagt eedc das jetzt — das kann physikalisch nicht sein und deutet auf einen Erfassungsfehler. **Der häufigste:** Ins Feld **„Ladung" gehört die Gesamtladung inklusive Netz.** Die Netzladung ist ein *Teil* davon, kein zweiter Posten daneben. Passend dazu heißt die Zeile in der Monatsansicht jetzt **„davon aus dem Netz"** — vorher standen dort zwei Zeilen, die man versehentlich addieren konnte.
+
+*(Gefunden dank rapahl, der es zum zweiten Mal gemeldet hat. Beim ersten Mal wurde die Lösung gebaut — sie erreichte die Ansicht nur nie.)*
+
+### Der Community-Vergleich zeigte 128,6 % Wirkungsgrad — das ging nicht mit rechten Dingen zu
+
+**Betrifft dich das?** Alle, die *Community → Komponenten* nutzen.
+
+Ein Speicher kann nicht mehr abgeben, als er aufgenommen hat. Der Wert war unser Fehler, nicht der einer Anlage: eedc überträgt **gar keinen Wirkungsgrad** an den Community-Server, sondern nur die reinen kWh — der Prozentwert entstand erst dort, und zwar ohne jede Prüfung.
+
+Schlimmer: Er lief über **alles je Eingereichte**, während die Zyklen direkt daneben auf zwölf Monate gerechnet waren und mindestens ein halbes Jahr Daten verlangten. Zwei verschiedene Zeiträume in einer Tabellenzeile — und ein einziger fehlerhafter Datensatz reichte, um das Klassenmittel um fast 40 Prozentpunkte zu verschieben.
+
+Jetzt gilt für den Wirkungsgrad dasselbe wie für die Zyklen daneben: gleicher Zeitraum, gleiche Mindest-Laufzeit. Unmögliche Werte fließen nicht mehr ein — sie werden **übersprungen, nicht gestutzt**, denn ein auf 100 % gekappter Wert sähe aus wie ein perfekter Speicher. Und statt des Durchschnitts steht der **Median**, den ein einzelner Ausreißer nicht mehr kippt.
+
+**Außerdem:** Es gibt jetzt eine Klasse **bis 5 kWh** — kleine Speicher fehlten in dieser Auswertung bisher komplett, weshalb auch die Zahl der verglichenen Anlagen zu niedrig war. Und wenn dein Speicher größer als 15 kWh ist, wird deine Zeile endlich als **„(Du)"** markiert.
+
+### Jede Komponente sagt jetzt, wie weit sie ist
+
+**Betrifft dich das?** Alle, die *Auswertungen → ROI* benutzen.
+
+Die Tabelle dort nannte je Komponente zwei Zahlen, und beide waren Rechnungen über die Zukunft: „so viel Prozent pro Jahr" und „so viele Jahre bis zur Amortisation". Was fehlte, war die einfachste Frage: **wie viel ist von dieser Anschaffung eigentlich schon zurückgekommen?**
+
+Genau das steht jetzt in der neuen Spalte **„Fortschritt"** — die tatsächlich erzielten Erträge gegen den Betrag, den du für diese Komponente eingesetzt hast. Diese Zahl unterstellt nichts über die Zukunft; sie kann deshalb auch nicht zu optimistisch sein. Beide Sichten stehen bewusst nebeneinander: die Dauer sagt dir, wohin es geht, der Fortschritt sagt dir, wo du bist.
+
+Zwei Dinge, die dir auffallen könnten:
+
+- **Manche Zeilen zeigen „—".** Das heißt nicht „null Euro", sondern „lässt sich dieser Komponente nicht zuordnen". Eine Förderung, die du im Monatsabschluss für die ganze Anlage gebucht hast, gehört zu keinem einzelnen Gerät — sie zählt weiterhin in der Gesamtzahl, aber eedc verteilt sie nicht auf gut Glück.
+- **Ein Wert kann negativ sein.** Dann hat die Komponente in der bisherigen Laufzeit mehr Betriebskosten verursacht als Ertrag gebracht. Auch das ist eine Aussage — sie wird nicht auf 0 geschönt.
+
+### Zweiter Erzeuger, eigener Einspeisetarif — ohne monatliches Nachtragen
+
+**Betrifft dich das?** Alle, die einen zweiten Erzeuger mit einer **anderen Einspeisevergütung** betreiben — etwa einen später dazugekommenen Wechselrichter mit eigenem EEG-Satz.
+
+eedc kennt genau **einen** Einspeisesatz pro Anlage. Deinen zweiten kann es deshalb nicht ausrechnen — bisher blieb nur, den Erlös jeden Monat von Hand als sonstigen Ertrag zu buchen.
+
+Jetzt gibt es einen besseren Weg: Eine Komponente vom Typ *Sonstiges* mit Kategorie **Erzeuger** hat das neue Feld **„Einspeise-Erlös (€)"**. Du kannst es unter *Einstellungen → Datenquellen* einem Sensor aus Home Assistant zuordnen — einem Helfer, der den Erlös mit deinem Satz aufsummiert. Dann steht der Betrag beim Monatsabschluss als Vorschlag da, monatsgenau und ohne Tippen.
+
+**So richtest du es ein:** In Home Assistant einen Helfer anlegen, der den Erlös aufsummiert — **ohne Zyklus**, also nie zurücksetzen; eedc bildet die Monatswerte selbst aus der Differenz. In eedc die Komponente anlegen, das Feld zuordnen, fertig. Wenn du den Erlös bisher von Hand gebucht hast: ab dem Umstiegsmonat weglassen, sonst zählt er doppelt. Deine bisherigen Buchungen bleiben erhalten.
+
+### Der Daten-Checker sagt dir, wenn ein Betrag am falschen Ort steht
+
+**Betrifft dich das?** Alle, die unter *Sonstige Positionen* im Monatsabschluss regelmäßig denselben Posten buchen — Wartung, Versicherung, den Einspeise-Erlös eines zweiten Erzeugers.
+
+eedc fragt dich nie, ob ein Betrag einmalig oder wiederkehrend ist. Es liest das am **Ort**: Ein Jahresbetrag an der Komponente kommt jedes Jahr wieder (und steht damit in der Prognose), eine Position im Monatsabschluss ist einmal geflossen. Das ist bequem — und genau deshalb kann man sich dort vertun, ohne es zu merken.
+
+Zwei neue Hinweise im Daten-Checker:
+
+- **„‚Wartung' steht in 4 Monaten im Monatsabschluss."** Sieht wiederkehrend aus? Dann gehört der Betrag als **Kosten/Jahr** (oder **Ertrag/Jahr**) an die Komponente — dort wirkt er auch in Prognose und Amortisation. Einmaliges bleibt richtig, wo es ist.
+- **„… obwohl Kosten/Jahr gepflegt ist."** Dann steht derselbe Betrag zweimal in der Rechnung. In den Monatsabschluss gehört nur die **Abweichung** vom Plan — die Nachzahlung, nicht die ganze Rechnung.
+
+**Beides sind Hinweise, keine Fehler**, und beide sagen, was zu tun ist. eedc liest dabei **nur die Wiederholung**, nie die Bedeutung deiner Bezeichnung: aus „Restwert" oder „Förderung" etwas zu schließen wäre geraten.
+
+### Im PDF-Bericht stand bei der Amortisation dauerhaft „—"
+
+**Betrifft dich das?** Alle, die den **Finanzbericht als PDF** erzeugen.
+
+Die Zeile „Amortisation" konnte dort gar keine Zahl zeigen: Das PDF rechnete mit einem Feld, das sich nirgends eintragen ließ — und deshalb bei jeder Komponente leer war. Jetzt nimmt es dieselbe Kennzahl wie *Auswertungen → ROI* und die HA-Sensoren. Eine Zahl, drei Orte.
+
+### Zwei Prüf-Ergebnisse deiner E-Mobilität waren unsichtbar
+
+**Betrifft dich das?** Alle mit **Wallbox und E-Auto** — und alle mit einem **Plug-in-Hybrid**.
+
+Der Daten-Checker prüft seit der letzten Version zwei Dinge, deren Ergebnis auf der Seite *Einstellungen → Daten-Checker* nie erschienen ist. Nicht „stand weiter unten", sondern **gar nicht**: Die Liste kannte diese beiden Prüfungen nicht und ließ sie beim Anzeigen weg.
+
+- **„Doppelt gezählte Ladetage."** Wenn dieselbe Ladung an der Wallbox *und* am Auto gemessen wird, steht sie an manchen Tagen zweimal in den Tageswerten. Der Befund nennt die betroffenen Tage und hat einen Knopf daneben: **„Zeitraum neu aggregieren"**. Der ist damit erstmals erreichbar.
+- **„Elektrischer Anteil unbestimmt"** beim Plug-in-Hybrid — der Hinweis, dass eedc für Monate ohne Fahrverbrauch mit 100 % elektrisch rechnet und deine Ersparnis dadurch zu gut aussieht.
+
+**Was du tun musst:** Einmal in *Einstellungen → Daten-Checker* schauen. Wenn dort jetzt ein Hinweis steht, ist er nicht neu entstanden — er war nur nie sichtbar.
+
+### Eine Buchung „für die ganze Anlage" kommt jetzt überall an
+
+**Betrifft dich das?** Alle, die im Monatsabschluss unter *Sonstige Positionen* etwas **ohne** Komponente buchen — eine Förderung für die Anlage, eine Versicherung fürs Ganze, eine Reparatur, die zu keinem einzelnen Gerät gehört.
+
+Solche Buchungen wirkten bisher nur in einem Teil der Sichten: Der HA-Sensor rechnete sie mit, *Auswertungen → ROI* und die *Aussichten* ließen sie weg. Zwei Sichten auf dieselbe Anlage nannten deshalb verschiedene Beträge, und eine anlagenweit gebuchte Förderung tauchte in der Wirtschaftlichkeit überhaupt nicht auf.
+
+Jetzt zählen sie in **allen** Sichten mit demselben Betrag: *Auswertungen → ROI*, *Aussichten*, PDF-Finanzbericht und HA-Sensoren. Auf einer einzelnen ROI-**Zeile** stehen sie weiterhin nicht — sie gehören zu keinem Gerät; dort steht „—", und der Betrag ist in der Gesamtzahl enthalten. **Du musst nichts umbuchen.**
+
+### „15,8 Jahre" — und unter welcher Annahme
+
+**Betrifft dich das?** Alle, die irgendwo eine Amortisationsdauer lesen.
+
+Eine Dauer ist keine Messung. Sie ist eine Rechnung, die etwas über die Zukunft unterstellen **muss** — und eedc unterstellt: *es geht nie wieder etwas kaputt*. Das ist die optimistische Variante, und sie ist bewusst gewählt (die Alternative wäre, aus ein bis zwei Reparaturen eine Reparatur-Rate hochzurechnen, die jedes Jahr anders aussieht). Nur stand sie bisher nirgends.
+
+Jetzt steht sie neben jeder Dauer: an der Kachel und der Break-Even-Kurve in *Auswertungen → ROI*, je Zeile in der Tabelle, im Komponenten-Hub der Wallbox, im PDF-Finanzbericht und im Rechenweg des HA-Sensors `amortisation_jahre`.
+
+**Und sie richtet sich nach dem, was du gepflegt hast.** Hast du an einer Komponente *Kosten/Jahr* eingetragen, liest du dort „inkl. 200,00 €/Jahr Betriebskosten, ohne weitere Instandhaltung" — dieser Betrag ist in der Zahl bereits enthalten. Wer mit künftiger Instandhaltung rechnen möchte, trägt sie genau dort als Jahresbetrag ein; die Dauer sagt dann selbst, dass sie damit rechnet.
+
+**Es ändert sich keine Zahl** — nur das, was danebensteht.
+
+### Betriebskosten zählen nur, solange das Gerät läuft
+
+**Betrifft dich das?** Alle, die bei einer Komponente **Kosten/Jahr** gepflegt haben und sie **später** angeschafft oder inzwischen stillgelegt haben.
+
+Bisher hat eedc die Jahres-Betriebskosten über deinen **gesamten** Auswertungszeitraum abgezogen — auch für Monate, in denen es das Gerät noch gar nicht gab. Eine 2024 gekaufte Wärmepumpe hat damit rückwirkend ab 2023 Versicherung gezahlt, und eine stillgelegte Komponente hat deine Amortisation dauerhaft verlängert, obwohl sie längst keine Kosten mehr verursacht.
+
+Das ist korrigiert: Jede Komponente trägt ihre Kosten nur für die Zeit, in der sie tatsächlich lief. **Dein Amortisations-Fortschritt wird dadurch etwas besser** — an der Demo-Anlage von 10,8 % auf 11,4 %. Du musst nichts tun.
+
+### Deine Amortisation wird kürzer — fünf HA-Sensoren springen einmalig
+
+**Betrifft dich das?** Alle, die unter *Sonstige Positionen* schon einmal eine **Ausgabe** gebucht haben (Reparatur, Ersatzteil, Wartung) — und alle, die eine Komponente **später** angeschafft haben als die Anlage selbst.
+
+Eine einmalige Reparatur wurde bisher wie eine jährlich wiederkehrende Belastung behandelt: Sie wurde von der Ersparnis **jedes Jahres** abgezogen. Eine Reparatur von 3.000 € an einer Wärmepumpe verlängerte die Amortisation dadurch von 8,1 auf **42,6 Jahre** — und die Zahl wurde jedes Folgejahr schlechter, ohne dass etwas passiert wäre. Jetzt zählt sie als das, was sie ist: **einmal ausgegebenes Geld**, das sich zurückverdienen muss. Dasselbe Beispiel ergibt **10,5 Jahre**.
+
+Zweite Korrektur an derselben Rechnung: Jede Ersparnis wird jetzt mit **ihrer eigenen** Laufzeit hochgerechnet. Eine Wärmepumpe, die erst seit 25 von 31 erfassten Monaten läuft, wurde vorher auf die Anlagen-Laufzeit verdünnt — ihre Kosten zählten aber voll dagegen.
+
+**Was sich sichtbar ändert:** `sensor.*_amortisation_jahre`, `sensor.*_roi_prozent` und `sensor.*_jahres_ersparnis_euro` sowie die Amortisations-Anzeigen in *Auswertungen → ROI* und in den *Aussichten*. An der Demo-Anlage: **26,4 → 18,5 Jahre**. In der Langzeitstatistik ist das ein Sprung an einem Tag — es gehen keine Daten verloren. **Dein Netto-Ertrag bleibt unverändert:** Was ein Monat gekostet und eingebracht hat, rechnet eedc weiter genauso.
+
+### Einmalige Erträge werden nicht mehr in die Zukunft hochgerechnet
+
+**Betrifft dich das?** Alle, die unter *Sonstige Positionen* einen **Ertrag** gebucht haben — THG-Quote, eine Förderung, einen einmaligen Erlös.
+
+Dieselbe Idee wie oben, nur auf der anderen Seite: Ein Betrag, den du in **einem** Monat eingetragen hast, wurde bisher in **jedes** Prognosejahr weitergeschrieben. Das unterstellt eine Wiederholung, die du nie behauptet hast.
+
+Der Betrag zählt weiterhin dort, wo er tatsächlich geflossen ist — in der **Monatsbilanz**. Aus der **Vorhersage** verschwindet er. An der Demo-Anlage sinkt der prognostizierte Jahres-Netto-Ertrag dadurch von 5.794 auf **5.618 €**, die Amortisation in *Auswertungen → ROI* geht von 15,4 auf **15,8 Jahre**.
+
+### Eine Förderung senkt dein eingesetztes Geld
+
+**Betrifft dich das?** Dieselben wie oben: alle, die unter *Sonstige Positionen* einen **Ertrag** gebucht haben.
+
+Wo gehört so ein Betrag hin, wenn nicht in die Vorhersage? In den **Kapitaleinsatz** — also in die Summe, die sich zurückverdienen muss. Eine Förderung oder eine THG-Quote ist Geld, das du **nie ausgeben musstest**; es muss auch nicht wieder hereinkommen. Damit ist die Rechnung rund: Eine **Ausgabe** im Monatsabschluss erhöht deinen Kapitaleinsatz, ein **Ertrag** mindert ihn — beides genau einmal.
+
+**Was du siehst:** Deine Amortisation wird **kürzer**, und der ⓘ-Tooltip in *Auswertungen → ROI* schreibt den Abzug aus („90.900 € + 1.015 € sonstige Ausgaben − 455 € sonstige Erträge"). Das gilt für die Gesamtzahl **und je Zeile**, für die *Aussichten*, den PDF-Finanzbericht und die HA-Sensoren `amortisation_jahre` und `roi_prozent`. An der Demo-Anlage: eingesetzter Betrag 91.915 → **91.460 €**, das Fahrzeug 14,3 → **14,0 Jahre**.
+
+**In der Monatsbilanz ändert sich nichts** — dort bleibt die Förderung ein Ertrag des Monats, in dem sie kam. Und der **Amortisations-Fortschritt** sinkt leicht (11,4 → 10,9 % an der Demo-Anlage): Der Betrag zählt nicht mehr als „zurückgekommen", weil er gar nicht erst eingesetzt wurde. Beide Zahlen beschreiben dasselbe Geld, nur von der jeweils richtigen Seite.
+
+> ⚑ **Wenn der Erlös jedes Jahr wiederkommt**, gehört er nicht in den Monatsabschluss, sondern an die Komponente — als **„Ertrag/Jahr (€)"** oder, beim zweiten Erzeuger, als **„Einspeise-Erlös (€)"** (beides weiter oben). **Umstellen musst du nichts:** deine bisherigen Buchungen bleiben erhalten und sichtbar, und der Daten-Checker sagt dir, wenn ein Posten dauerhaft am unpassenden Ort steht.
+
+### Neu: „Ertrag/Jahr (€)" — für alles, was jedes Jahr wiederkommt
+
+**Betrifft dich das?** Alle mit einem wiederkehrenden Erlös, den eedc nicht selbst ausrechnen kann — der Klassiker ist ein **zweiter Erzeuger mit eigenem Einspeisetarif** (eedc kennt genau einen Einspeisesatz je Anlage).
+
+Bisher blieb dafür nur die monatliche Handbuchung. Jetzt trägst du den Betrag **einmal** bei der Komponente ein: *Bearbeiten → Weitere Angaben & Kosten →* **„Ertrag/Jahr (€)"**. Das ist das Gegenstück zum Feld „Betriebskosten/Jahr" direkt daneben, und es wirkt in der Finanz-Prognose, in *Auswertungen → ROI* und in den HA-Sensoren.
+
+Das Feld gibt es bei **Wallbox** und **Sonstiges**. Bei PV, Speicher, Wärmepumpe, E-Auto und Balkonkraftwerk rechnet eedc die Jahres-Einsparung aus deinen Daten selbst — dort wäre ein eigener Betrag nur eine zweite Meinung.
+
+> ⚠ **Nicht beides pflegen.** Wer den Erlös künftig als Jahresbetrag führt, sollte die monatlichen Handbuchungen ab dem Umstellungsmonat einstellen — sonst zählt derselbe Erlös zweimal. Die bereits gebuchten Monate bleiben unverändert richtig; sie beschreiben die Vergangenheit.
+
+### Zwei Wechselrichter in der Hersteller-Wolke? Beide kommen jetzt an
+
+**Betrifft dich das?** Alle, deren Hersteller-Portal **mehrere „Stationen"** führt — meist eine je Wechselrichter. Bei Solarman ist das der Normalfall.
+
+**Erst die Frage, die dahintersteckt: eine Anlage oder zwei?** In eedc ist eine Anlage ein **Standort mit einem Hausanschluss**, kein einzelnes Gerät. Netzbezug, Einspeisung, Eigenverbrauch, Autarkie und die ganze Wirtschaftlichkeit gibt es dort nur **einmal**. Zwei Anlagen für ein Haus anzulegen würde all das in zwei Hälften zerlegen, von denen keine stimmt. Richtig ist: **eine** Anlage, darin **je Gerät ein Wechselrichter**, und an jedem hängen seine PV-Module und ggf. sein Speicher.
+
+**Und jetzt der Teil, der nicht funktioniert hat.** Der Cloud-Import schrieb bisher immer auf die **ganze Anlage**. Beim zweiten Wechselrichter blieben deshalb nur zwei schlechte Ausgänge: ohne Haken wurde der ganze Monat übersprungen — der zweite kam gar nicht an; mit Haken „überschreiben" wurde sein Ertrag anteilig auf **alle** Stränge verteilt und die Hauszähler-Werte des ersten ersetzt. Beides ohne einen Hinweis.
+
+In der Vorschau steht jetzt eine neue Auswahl: **„Diese Quelle misst"**. Voreingestellt ist *die ganze Anlage* — wer nur ein Gerät hat, merkt von der Neuerung nichts. Wählst du einen **Wechselrichter**, dann gilt:
+
+- die Erträge gehen an **seine** PV-Module und **seinen** Speicher, nicht an alle;
+- **Netzbezug, Einspeisung und Eigenverbrauch werden nicht übernommen** — das sind Größen des ganzen Hauses, und eedc sagt dir das nach dem Import auch;
+- ein bereits erfasster Monat blockiert die zweite Quelle **nicht** mehr.
+
+So importierst du Station 1 und Station 2 nacheinander für denselben Zeitraum, und keine verdrängt die andere.
+
+**Und du musst die Zugangsdaten nur einmal eintippen.** eedc merkte sich bisher **ein** Cloud-Konto je Anlage; jedes Speichern überschrieb das vorige. Jetzt speicherst du je Gerät eines — und der **monatliche Abruf im Monatsabschluss holt alle**. Jede Station liefert die Werte ihres Wechselrichters, und wenn eine davon gerade klemmt, kommen die anderen trotzdem durch; eedc schreibt dann dazu, welche gefehlt hat. Eine halbe Erzeugung soll nicht wie die ganze aussehen.
+
+> **Woher kommen Netzbezug und Einspeisung?** Nur aus einer Quelle **ohne** Geräte-Zuordnung. Das ist Absicht: Ein Wechselrichter meldet den Netzbezug, den *er* sieht — bei zwei Geräten am selben Hausanschluss wäre das entweder doppelt gezählt oder nur ein Teil. Misst keine deiner Quellen das Haus, bleiben die beiden Felder leer, und eedc sagt dir das. Du pflegst sie dann aus dem Zähler oder aus deinen HA-Sensoren.
+
+An deiner bestehenden Einrichtung musst du nichts ändern — ein bereits gespeichertes Konto wird übernommen und gilt wie bisher für die ganze Anlage.
+
+> ⚑ **Wenn du das schon einmal versucht hast:** Sieh dir die Monatswerte deiner PV-Module an (*Komponenten → PV-Modul → Monatswerte*). Ein früherer Import mit „überschreiben" hat dort den Ertrag der **zuletzt** importierten Station nach Nennleistung verteilt stehen lassen. Ein erneuter Import je Wechselrichter mit der neuen Zuordnung setzt beide Stränge wieder auf ihre eigene Messung.
+
+*Gefunden hat das OliS2811, der zwei Sofar-Wechselrichter betreibt ([#349](https://github.com/supernova1963/eedc-homeassistant/issues/349)).*
 
 ---
 
@@ -26,6 +211,8 @@ Ein „Fahrzeugtyp: Plug-in-Hybrid" gibt es bewusst nicht. **Das ausgefüllte Fe
 1. **Gemessen**, wenn du den monatlichen **Fahrverbrauch in kWh** erfasst: daraus und aus deinem kWh/100 km folgt, wie weit du elektrisch gekommen bist. Mehr als die gefahrenen Kilometer können es dabei nie werden.
 2. **Geschätzt**, wenn du stattdessen den **elektrischen Fahranteil in %** einträgst.
 3. **Gar nicht** — dann bleibt es beim alten Verhalten, und der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) sagt dir, dass die Angabe fehlt. Einen Richtwert („so 40–60 % sind üblich") setzt eedc **nicht** ein: das wäre eine Behauptung über dein Auto, keine Rechnung.
+
+   > ⚠ **Nachträglich richtiggestellt (August 2026):** Der Hinweis wurde zwar erzeugt, erschien auf der Seite *Einstellungen → Daten-Checker* aber nicht — nur im Komponenten-Hub des Fahrzeugs. Die Anzeige-Liste kannte die Kategorie nicht und ließ sie beim Aufbau der Seite weg. Behoben; seither steht der Hinweis an beiden Orten. Wer ihn damals vermisst hat, hatte recht.
 
 **Was du danach siehst:** Im Komponenten-Hub stehen unter *Umwelt* zwei neue Werte — **Verbrenner-Anteil** in km und **Kraftstoffkosten** in Euro, mit dem Hinweis, ob sie gemessen oder geschätzt sind. Die Ersparnis vs. Verbrenner sinkt entsprechend, ebenso die CO₂-Einsparung. Der Vergleich mit dem Benziner bleibt dabei über **alle** Kilometer stehen — sonst würdest du dein Auto mit einem halben vergleichen.
 
@@ -80,6 +267,8 @@ An einer echten Anlage gemessen (März–Juli 2026, ausschließlich Sensordaten)
 In dieser Konstellation hat eedc dieselbe Ladung doppelt gezählt. Jetzt gilt in allen Pfaden dieselbe Regel: **Trägt eine Wallbox die Ladeenergie, ist sie die Quelle** — das Fahrzeug wird dann nicht zusätzlich addiert.
 
 **Was du tun musst:** Bereits gespeicherte Tage bleiben zunächst unverändert. Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) meldet sie dir jetzt und bietet **„Zeitraum neu aggregieren"** an. Das ist bewusst ein Knopf und kein automatischer Lauf beim Start: Die Reparatur überschreibt vorhandene Tageswerte, und diese Entscheidung gehört dir.
+
+> ⚠ **Nachträglich richtiggestellt (August 2026):** Diese Meldung war zwar gebaut, auf der Seite *Einstellungen → Daten-Checker* aber **nicht sichtbar** — die Anzeige-Liste kannte die Kategorie nicht, und damit war auch der Knopf „Zeitraum neu aggregieren" nicht erreichbar. Behoben; die Meldung erscheint jetzt samt Reparatur-Knopf. Wer die doppelt gezählten Tage bisher nicht heilen konnte, findet den Weg dort ab sofort.
 
 > **Reichweite des Knopfes:** Er heilt **Tag und Stunde**, nicht den Monatswert. Der Hinweis nennt dir den Zeitraum, den ein Lauf abdeckt.
 
