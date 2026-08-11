@@ -54,10 +54,22 @@ export interface CloudPreviewResult {
   anzahl_monate: number
 }
 
+/** Eine gespeicherte Cloud-Quelle. `schluessel` ist die Adresse zum Löschen. */
+export interface CloudQuelle {
+  schluessel: string
+  provider_id: string
+  credentials: Record<string, string>
+  ziel_investition_id: number | null
+  ziel_bezeichnung: string | null
+  bezeichnung: string | null
+}
+
 export interface CloudCredentials {
+  /** Alt-Felder: beschreiben die ERSTE Quelle. Maßgeblich ist `quellen`. */
   provider_id: string | null
   credentials: Record<string, string>
   has_credentials: boolean
+  quellen: CloudQuelle[]
 }
 
 // #261 FrodoVDR: kopierte API-Keys/Site-IDs haben oft Whitespace mit drin,
@@ -193,14 +205,25 @@ export const cloudImportApi = {
   async saveCredentials(
     anlageId: number,
     providerId: string,
-    credentials: Record<string, string>
-  ): Promise<{ erfolg: boolean; message: string }> {
+    credentials: Record<string, string>,
+    /**
+     * N-229 (#349): Misst dieses Konto nur EIN Gerät (Hersteller-Wolken führen
+     * je Wechselrichter eine eigene „Station"), dann gehört seine ID hierher.
+     * Mehrere Quellen liegen dann nebeneinander, statt sich zu verdrängen.
+     * `null`/`undefined` = die Quelle beschreibt die ganze Anlage.
+     */
+    zielInvestitionId?: number | null
+  ): Promise<{ erfolg: boolean; message: string; anzahl_quellen?: number }> {
     const response = await fetch(
       `${API_BASE}/cloud-import/save-credentials/${anlageId}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider_id: providerId, credentials: trimCredentials(credentials) }),
+        body: JSON.stringify({
+          provider_id: providerId,
+          credentials: trimCredentials(credentials),
+          ziel_investition_id: zielInvestitionId ?? null,
+        }),
       }
     )
     if (!response.ok) {
@@ -228,10 +251,13 @@ export const cloudImportApi = {
    * Credentials entfernen
    */
   async removeCredentials(
-    anlageId: number
-  ): Promise<{ erfolg: boolean; message: string }> {
+    anlageId: number,
+    /** Schlüssel EINER Quelle (aus `getCredentials`). Ohne Angabe: alle. */
+    quelle?: string
+  ): Promise<{ erfolg: boolean; message: string; entfernt?: number }> {
+    const query = quelle ? `?quelle=${encodeURIComponent(quelle)}` : ''
     const response = await fetch(
-      `${API_BASE}/cloud-import/credentials/${anlageId}`,
+      `${API_BASE}/cloud-import/credentials/${anlageId}${query}`,
       { method: 'DELETE' }
     )
     if (!response.ok) {

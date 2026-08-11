@@ -123,6 +123,12 @@ In der Vorschau steht jetzt eine neue Auswahl: **„Diese Quelle misst"**. Vorei
 
 So importierst du Station 1 und Station 2 nacheinander für denselben Zeitraum, und keine verdrängt die andere.
 
+**Und du musst die Zugangsdaten nur einmal eintippen.** eedc merkte sich bisher **ein** Cloud-Konto je Anlage; jedes Speichern überschrieb das vorige. Jetzt speicherst du je Gerät eines — und der **monatliche Abruf im Monatsabschluss holt alle**. Jede Station liefert die Werte ihres Wechselrichters, und wenn eine davon gerade klemmt, kommen die anderen trotzdem durch; eedc schreibt dann dazu, welche gefehlt hat. Eine halbe Erzeugung soll nicht wie die ganze aussehen.
+
+> **Woher kommen Netzbezug und Einspeisung?** Nur aus einer Quelle **ohne** Geräte-Zuordnung. Das ist Absicht: Ein Wechselrichter meldet den Netzbezug, den *er* sieht — bei zwei Geräten am selben Hausanschluss wäre das entweder doppelt gezählt oder nur ein Teil. Misst keine deiner Quellen das Haus, bleiben die beiden Felder leer, und eedc sagt dir das. Du pflegst sie dann aus dem Zähler oder aus deinen HA-Sensoren.
+
+An deiner bestehenden Einrichtung musst du nichts ändern — ein bereits gespeichertes Konto wird übernommen und gilt wie bisher für die ganze Anlage.
+
 > ⚑ **Wenn du das schon einmal versucht hast:** Sieh dir die Monatswerte deiner PV-Module an (*Komponenten → PV-Modul → Monatswerte*). Ein früherer Import mit „überschreiben" hat dort den Ertrag der **zuletzt** importierten Station nach Nennleistung verteilt stehen lassen. Ein erneuter Import je Wechselrichter mit der neuen Zuordnung setzt beide Stränge wieder auf ihre eigene Messung.
 
 *Gefunden hat das OliS2811, der zwei Sofar-Wechselrichter betreibt ([#349](https://github.com/supernova1963/eedc-homeassistant/issues/349)).*

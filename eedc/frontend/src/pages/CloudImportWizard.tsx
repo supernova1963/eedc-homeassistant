@@ -79,6 +79,9 @@ export default function CloudImportWizard() {
   const [ueberschreiben, setUeberschreiben] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  // Rückmeldung des Speicherns — sie nennt das Gerät und die Zahl der Quellen,
+  // damit sichtbar ist, dass die zweite die erste NICHT verdrängt hat (N-229).
+  const [gespeichert, setGespeichert] = useState<string | null>(null)
   const [result, setResult] = useState<ApplyResult | null>(null)
 
   // Load providers and anlagen
@@ -218,13 +221,19 @@ export default function CloudImportWizard() {
     if (!selectedAnlageId || !selectedProviderId) return
     setIsSaving(true)
     try {
-      await cloudImportApi.saveCredentials(selectedAnlageId, selectedProviderId, credentials)
+      // Das Ziel wird mitgespeichert (N-229): nur so liegen die Konten zweier
+      // Wechselrichter nebeneinander, statt sich gegenseitig zu verdrängen —
+      // und der Monatsabschluss weiß, welcher Wert zu welchem Gerät gehört.
+      const antwort = await cloudImportApi.saveCredentials(
+        selectedAnlageId, selectedProviderId, credentials, zielInvestitionId
+      )
+      setGespeichert(antwort.message)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen')
     } finally {
       setIsSaving(false)
     }
-  }, [selectedAnlageId, selectedProviderId, credentials])
+  }, [selectedAnlageId, selectedProviderId, credentials, zielInvestitionId])
 
   // W3: Abbrechen — im Overlay Dirty-geschützt schließen, sonst zurück navigieren.
   const handleAbbrechen = useCallback(() => {
@@ -664,6 +673,13 @@ export default function CloudImportWizard() {
                 <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Zugangsdaten für spätere Imports speichern?
                 </h3>
+                {zielInvestitionId != null && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Sie werden dem gewählten Gerät zugeordnet. Hast du mehrere Geräte
+                    mit eigenem Cloud-Konto, speicherst du jedes einzeln — sie
+                    verdrängen sich nicht.
+                  </p>
+                )}
                 <div className="flex items-center gap-3">
                   <Button
                     variant="secondary"
@@ -675,6 +691,9 @@ export default function CloudImportWizard() {
                     {isSaving ? 'Speichere…' : 'Credentials speichern'}
                   </Button>
                 </div>
+                {gespeichert && (
+                  <Alert type="success" className="mt-3">{gespeichert}</Alert>
+                )}
               </div>
             </Card>
           ) : undefined}

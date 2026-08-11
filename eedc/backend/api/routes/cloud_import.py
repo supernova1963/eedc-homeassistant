@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,14 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
+from backend.models.investition import Investition
 from backend.services.cloud_import import list_providers, get_provider
+from backend.services.cloud_import.quellen import (
+    entferne_quelle,
+    lade_quellen,
+    setze_quelle,
+)
+from backend.services.erzeuger_ziel import ZielFehler, loese_ziel
 from backend.services.activity_service import log_activity
 
 logger = logging.getLogger(__name__)
@@ -166,12 +173,33 @@ class FetchStatusResponse(BaseModel):
 class SaveCredentialsRequest(BaseModel):
     provider_id: str
     credentials: dict
+    # N-229 (#349): Ein Hersteller-Konto beschreibt oft nur EIN Gerät — Solarman
+    # führt je Wechselrichter eine eigene „Station". Ist das Ziel gesetzt, gilt
+    # die Quelle für diesen Erzeuger; mehrere Quellen können nebeneinander
+    # gespeichert werden. `None` = die Quelle beschreibt die ganze Anlage
+    # (bisherige Bedeutung, davon gibt es je Provider genau eine).
+    ziel_investition_id: Optional[int] = None
+    bezeichnung: Optional[str] = None
+
+
+class CloudQuelleResponse(BaseModel):
+    """Eine gespeicherte Quelle. `schluessel` ist die Adresse zum Löschen."""
+
+    schluessel: str
+    provider_id: str
+    credentials: dict = {}
+    ziel_investition_id: Optional[int] = None
+    ziel_bezeichnung: Optional[str] = None
+    bezeichnung: Optional[str] = None
 
 
 class CredentialsResponse(BaseModel):
+    # Die drei Alt-Felder beschreiben die ERSTE Quelle und bleiben, damit
+    # bestehende Aufrufer nicht brechen. Maßgeblich ist `quellen`.
     provider_id: Optional[str] = None
     credentials: dict = {}
     has_credentials: bool = False
+    quellen: list[CloudQuelleResponse] = []
 
 
 # ─── Async-Fetch-Job-Store ───────────────────────────────────────────────────
@@ -352,16 +380,39 @@ async def save_credentials(
     if not anlage:
         raise HTTPException(404, f"Anlage {anlage_id} nicht gefunden.")
 
-    config = anlage.connector_config or {}
-    config["cloud_import"] = {
-        "provider_id": data.provider_id,
-        "credentials": _trim_credentials(data.credentials),
-    }
+    # Ziel prüfen, BEVOR gespeichert wird — eine Quelle, die auf ein
+    # unauflösbares Gerät zeigt, wäre beim nächsten Monatsabruf ein stiller
+    # Ausfall statt einer Fehlermeldung an der Stelle, an der man sie versteht.
+    ziel_bezeichnung: Optional[str] = None
+    if data.ziel_investition_id is not None:
+        inv_result = await db.execute(
+            select(Investition).where(Investition.anlage_id == anlage_id)
+        )
+        try:
+            ziel = loese_ziel(
+                data.ziel_investition_id, inv_result.scalars().all(), anlage_id=anlage_id
+            )
+        except ZielFehler as e:
+            raise HTTPException(e.status_code, str(e))
+        ziel_bezeichnung = ziel.bezeichnung
+
+    config = setze_quelle(
+        anlage.connector_config,
+        provider_id=data.provider_id,
+        credentials=_trim_credentials(data.credentials),
+        ziel_investition_id=data.ziel_investition_id,
+        bezeichnung=data.bezeichnung,
+    )
     anlage.connector_config = config
     flag_modified(anlage, "connector_config")
     await db.flush()
 
-    return {"erfolg": True, "message": "Credentials gespeichert."}
+    anzahl = len(lade_quellen(config))
+    if ziel_bezeichnung:
+        message = f"Zugangsdaten für '{ziel_bezeichnung}' gespeichert ({anzahl} Quellen)."
+    else:
+        message = "Credentials gespeichert."
+    return {"erfolg": True, "message": message, "anzahl_quellen": anzahl}
 
 
 @router.get("/credentials/{anlage_id}", response_model=CredentialsResponse)
@@ -375,41 +426,69 @@ async def get_credentials(
     if not anlage:
         raise HTTPException(404, f"Anlage {anlage_id} nicht gefunden.")
 
-    config = anlage.connector_config or {}
-    cloud_config = config.get("cloud_import", {})
-
-    if not cloud_config:
+    quellen = lade_quellen(anlage.connector_config)
+    if not quellen:
         return CredentialsResponse(has_credentials=False)
+
+    # Zielnamen mitliefern, damit die Liste ohne zweiten Abruf lesbar ist.
+    inv_result = await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )
+    namen = {i.id: (i.bezeichnung or i.typ) for i in inv_result.scalars().all()}
 
     # Secrets maskieren — Provider-aware (type="password") + Heuristik-Fallback,
     # damit `api_key`, `app_secret`, `access_key_value` etc. nicht mehr im Klartext
     # zurückgegeben werden. Identifier (username/email/site_id/...) bleiben sichtbar.
-    provider_id = cloud_config.get("provider_id")
-    creds = _maskiere_credentials(cloud_config.get("credentials", {}), provider_id)
+    ausgabe = [
+        CloudQuelleResponse(
+            schluessel=q["schluessel"],
+            provider_id=q["provider_id"],
+            credentials=_maskiere_credentials(q["credentials"], q["provider_id"]),
+            ziel_investition_id=q["ziel_investition_id"],
+            ziel_bezeichnung=namen.get(q["ziel_investition_id"]),
+            bezeichnung=q["bezeichnung"],
+        )
+        for q in quellen
+    ]
 
     return CredentialsResponse(
-        provider_id=provider_id,
-        credentials=creds,
+        provider_id=ausgabe[0].provider_id,
+        credentials=ausgabe[0].credentials,
         has_credentials=True,
+        quellen=ausgabe,
     )
 
 
 @router.delete("/credentials/{anlage_id}")
 async def remove_credentials(
     anlage_id: int,
+    quelle: Optional[str] = Query(
+        None,
+        description=(
+            "Schlüssel einer einzelnen Quelle (aus GET /credentials). "
+            "Ohne Angabe werden ALLE entfernt — das bisherige Verhalten."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cloud-Import Credentials entfernen."""
+    """Cloud-Import Credentials entfernen — einzeln oder alle."""
     result = await db.execute(select(Anlage).where(Anlage.id == anlage_id))
     anlage = result.scalar_one_or_none()
     if not anlage:
         raise HTTPException(404, f"Anlage {anlage_id} nicht gefunden.")
 
-    config = anlage.connector_config or {}
-    if "cloud_import" in config:
-        del config["cloud_import"]
+    config, entfernt = entferne_quelle(anlage.connector_config, quelle)
+    if quelle is not None and entfernt == 0:
+        raise HTTPException(404, f"Keine gespeicherte Quelle '{quelle}' an dieser Anlage.")
+
+    if entfernt:
         anlage.connector_config = config
         flag_modified(anlage, "connector_config")
         await db.flush()
 
-    return {"erfolg": True, "message": "Credentials entfernt."}
+    return {
+        "erfolg": True,
+        "message": "Credentials entfernt." if entfernt else "Nichts zu entfernen.",
+        "entfernt": entfernt,
+        "anzahl_quellen": len(lade_quellen(config)),
+    }

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
-from backend.models.investition import Investition, ERLAUBTE_PARENT_TYPEN
+from backend.models.investition import Investition
 from backend.services.import_parsers import (
     list_parsers,
     get_parser,
@@ -29,6 +29,7 @@ from backend.api.routes.import_export.helpers import (
     _distribute_legacy_battery_to_storages,
 )
 from backend.services.activity_service import log_activity
+from backend.services.erzeuger_ziel import ZielFehler, loese_ziel
 from backend.services.provenance import write_with_provenance
 from backend.services.pv_orientation import get_pv_kwp
 from backend.utils.investition_value import get_inv_value
@@ -103,18 +104,10 @@ class InvestitionsZuordnung(BaseModel):
     eauto_id: Optional[int] = None
 
 
-# Typen, die als Ziel einer gerätegebundenen Einfuhr taugen: genau die, unter
-# denen PV-Module bzw. Speicher hängen dürfen. Abgeleitet aus dem Parent-SoT,
-# damit die Menge nicht danebenläuft, wenn dort ein Typ dazukommt.
-ZIEL_ERLAUBTE_TYPEN: tuple[str, ...] = tuple(sorted({
-    typ for erlaubte in ERLAUBTE_PARENT_TYPEN.values() for typ in erlaubte
-}))
-
-
 class ApplyRequest(BaseModel):
     monate: list[ApplyMonthInput]
     zuordnung: Optional[InvestitionsZuordnung] = None
-    # F-22 (#349, OliS2811): Eine Cloud-Station misst EIN Gerät, keine Anlage —
+    # N-229 (#349, OliS2811): Eine Cloud-Station misst EIN Gerät, keine Anlage —
     # Solarman führt je Wechselrichter eine eigene „Station". Ohne Ziel schreibt
     # der Apply die anlagenweiten Hauszähler-Felder; bei zwei Stationen an einem
     # Hausanschluss überschreibt die zweite Einfuhr damit die erste.
@@ -327,43 +320,24 @@ async def apply_import(
     speicher = [i for i in investitionen if i.typ == "speicher"]
     wallboxen = [i for i in investitionen if i.typ == "wallbox"]
 
-    # ── Ziel-Erzeuger auflösen (F-22) ────────────────────────────────────────
+    # ── Ziel-Erzeuger auflösen (N-229) ───────────────────────────────────────
     # Das Ziel ist der Wechselrichter bzw. das Balkonkraftwerk, an dem die
-    # Quelle hängt; die Werte gehen an SEINE Kinder (PV-Module, ggf. Speicher).
-    # Das ist dieselbe Struktur, die `ERLAUBTE_PARENT_TYPEN` vorschreibt.
+    # Quelle hängt; die Werte gehen an SEINE Kinder. Auflösung im SoT
+    # `services/erzeuger_ziel.py` — der Monatsabschluss-Cloudabruf braucht
+    # dieselbe, und zwei Kopien wären die klassische Drift.
     ziel: Optional[Investition] = None
     ziel_pv_module: list[Investition] = []
     ziel_speicher: list[Investition] = []
     if data.ziel_investition_id is not None:
-        ziel = next(
-            (i for i in investitionen if i.id == data.ziel_investition_id), None
-        )
-        if ziel is None:
-            raise HTTPException(
-                404,
-                f"Investition {data.ziel_investition_id} gehört nicht zu Anlage {anlage_id}.",
+        try:
+            empfaenger = loese_ziel(
+                data.ziel_investition_id, investitionen, anlage_id=anlage_id
             )
-        if ziel.typ not in ZIEL_ERLAUBTE_TYPEN:
-            raise HTTPException(
-                400,
-                f"'{ziel.bezeichnung or ziel.typ}' ist vom Typ '{ziel.typ}' und kann kein "
-                f"Ziel sein. Wähle den Wechselrichter oder das Balkonkraftwerk, an dem die "
-                f"Quelle hängt — die Erträge werden an seinen PV-Modulen geführt.",
-            )
-        kinder = [i for i in investitionen if i.parent_investition_id == ziel.id]
-        ziel_pv_module = [i for i in kinder if i.typ == "pv-module"]
-        ziel_speicher = [i for i in kinder if i.typ == "speicher"]
-        # Ein Balkonkraftwerk trägt seine Erzeugung selbst — es hat keine
-        # PV-Modul-Kinder (`ERLAUBTE_PARENT_TYPEN` erlaubt unter ihm nur Speicher).
-        if not ziel_pv_module and ziel.typ == "balkonkraftwerk":
-            ziel_pv_module = [ziel]
-        if not ziel_pv_module:
-            raise HTTPException(
-                400,
-                f"Am Wechselrichter '{ziel.bezeichnung or ziel.typ}' hängen keine PV-Module. "
-                f"Die Erzeugung wird an den Modulen geführt, nicht am Wechselrichter — lege "
-                f"sie unter ihm an und wiederhole den Import.",
-            )
+        except ZielFehler as e:
+            raise HTTPException(e.status_code, str(e))
+        ziel = empfaenger.ziel
+        ziel_pv_module = empfaenger.pv_module
+        ziel_speicher = empfaenger.speicher
 
     importiert = 0
     uebersprungen = 0
