@@ -198,11 +198,14 @@ async def _get_soc_history(
     Returns:
         {stunde: float (SoC %)}
     """
-    from backend.core.config import HA_INTEGRATION_AVAILABLE
     from backend.models.investition import Investition
 
-    if not HA_INTEGRATION_AVAILABLE:
-        return {}
+    # F-26: kein Gate auf `HA_INTEGRATION_AVAILABLE` (= SUPERVISOR_TOKEN) mehr.
+    # Beide Quellen darunter — `ha_statistics_service` und `ha_state_service` —
+    # prüfen ihre Erreichbarkeit selbst und können seit dem 05.08. auch die
+    # Remote-Verbindung per Long-Lived-Token. Das Gate hier übersprang sie im
+    # Docker-Betrieb, obwohl HA erreichbar war: der Speicher-SoC fehlte, und
+    # damit die Vollzyklen des Tages.
 
     # Speicher-IDs für diese Anlage holen, dann SoC-Entities filtern
     inv_result = await db.execute(
@@ -332,9 +335,9 @@ async def _get_tagespeaks_aus_ha_lts(
         TagesPeaks; jeder Wert None wenn nicht ermittelbar (Caller-Fallback
         greift dann auf den Tagesverlauf-Pfad).
     """
-    from backend.core.config import HA_INTEGRATION_AVAILABLE
-    if not HA_INTEGRATION_AVAILABLE:
-        return TagesPeaks(None, None, None)
+    # F-26: wie `_get_soc_history` — die LTS-Abfrage unten prüft `is_available`
+    # selbst und deckt Supervisor wie Long-Lived-Token ab. Mit dem alten Gate
+    # blieben die Tages-Spitzenwerte im Docker-Betrieb leer, obwohl HA sie hatte.
 
     from backend.models.investition import Investition
     from backend.services.live_sensor_config import extract_live_config
@@ -488,8 +491,13 @@ async def _get_strompreis_stunden(
     sensor_id = sp.get("sensor_id") if isinstance(sp, dict) else None
 
     if sensor_id:
-        from backend.core.config import HA_INTEGRATION_AVAILABLE
-        if HA_INTEGRATION_AVAILABLE:
+        # F-26: dritte Stelle derselben Klasse. Der Zugriff hängt an einer
+        # erreichbaren HA-Verbindung, nicht am Supervisor — sonst verschweigt
+        # der Docker-Betrieb den eigenen Strompreis-Sensor und fällt still auf
+        # den Börsenpreis zurück. `is_available` ist `bool(token)` und deckt
+        # beide Wege ab; ohne HA (reiner MQTT-Betrieb) bleibt es beim Börsenpreis.
+        from backend.services.ha_state_service import get_ha_state_service
+        if get_ha_state_service().is_available:
             # ── Pfad 1: HA-LTS-Hourly-Mean (Etappe 5) ────────────────────
             try:
                 import asyncio

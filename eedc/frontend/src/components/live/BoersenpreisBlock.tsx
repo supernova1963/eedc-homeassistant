@@ -2,10 +2,11 @@
  * BoersenpreisBlock — Kennzahlen + Zwei-Tage-Chart der Day-Ahead-Preise (#335).
  *
  * Der Block beantwortet die Frage, die hinter dem Community-Wunsch steht: „Wann
- * ist der Strom heute und morgen billig?" Die drei Kennzahlen darüber sind
- * dieselben, die seit v4.0.10 auch die HA-Sensoren melden (`eedc_preis_aktuell_cent`,
- * `…_optimierter_durchschnitt_cent`, die Schwelle als Attribut) — wer den Block
- * gegen seine Automation hält, sieht dieselben Zahlen.
+ * ist der Strom heute und morgen billig?" Die Kennzahlen darüber sind dieselben,
+ * die auch die HA-Sensoren melden (`eedc_preis_aktuell_cent`,
+ * `…_optimierter_durchschnitt_cent`, die Schwelle als Attribut, seit N-173
+ * `…_abstand_cent`) — wer den Block gegen seine Automation hält, sieht dieselben
+ * Zahlen.
  *
  * **Leitprinzip Trigger ≠ Strategie:** Der Block zeigt Preise. Er empfiehlt kein
  * Ladefenster, rechnet keine Ladeleistung und schlägt nichts vor — das bleibt
@@ -54,6 +55,22 @@ export function baueKennzahlen(daten: BoersenpreisResponse): KpiStripItem[] {
       // Die Zahl daneben ist die UNGEKAPPTE Zählung (N-103) — sie kann größer
       // als fünf sein, anders als der Rang in den älteren Sensoren.
       subtitle: `${guenstigeStunden} ${guenstigeStunden === 1 ? 'Stunde liegt' : 'Stunden liegen'} heute darunter`,
+    })
+  }
+  // N-173 (rapahl-PN 2026-08-11): derselbe Abstand als Betrag. Wer einen
+  // dynamischen Tarif mit festen Bestandteilen zahlt, kann die ct-Zahl 1:1 auf
+  // seinen Endpreis übertragen — ein Aufschlag verschiebt Stundenpreis und Ø um
+  // denselben Betrag, eine Prozentzahl dagegen bedeutet auf beiden Kurven etwas
+  // anderes. Bewusst **ans Ende** und nicht neben den aktuellen Preis: die drei
+  // seit v4.0.10 ausgelieferten Kacheln behalten ihren Platz.
+  if (jetzt?.abstand_cent != null) {
+    kpis.push({
+      ...BOERSENPREIS_KPI.abstand,
+      value: fmtZahl(jetzt.abstand_cent, 2),
+      unit: 'ct/kWh',
+      subtitle: jetzt.abstand_cent < 0
+        ? 'unter dem Ø ohne die 3 teuersten Stunden'
+        : 'über dem Ø ohne die 3 teuersten Stunden',
     })
   }
   return kpis

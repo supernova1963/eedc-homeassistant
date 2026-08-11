@@ -616,6 +616,21 @@ PREIS_SENSOREN = [
         formel="(Preis der laufenden Stunde − Ø ohne Peaks) ÷ |Ø| × 100 — negativ = billiger als der Ø",
         state_class="measurement",
     ),
+    # N-173 (rapahl-PN 2026-08-11): derselbe Abstand als Betrag. Wer einen
+    # dynamischen Tarif mit festen Bestandteilen zahlt, findet in der Prozent-
+    # zahl keine übertragbare Größe — ein Aufschlag verschiebt Preis UND Ø um
+    # denselben Betrag, die Differenz bleibt gleich, der Prozentwert nicht
+    # (an seinen Zahlen: −9,93 ct auf beiden Kurven gegen −100,1 % vs. −33,2 %).
+    # Der Prozent-Sensor bleibt unverändert daneben — er ist ausgeliefert.
+    SensorDefinition(
+        key="eedc_preis_abstand_cent",
+        name="Börsenpreis-Abstand zum Ø (ct)",
+        unit="ct/kWh",
+        icon="mdi:swap-vertical-variant",
+        category=SensorCategory.PREIS,
+        formel="Preis der laufenden Stunde − Ø ohne Peaks — negativ = billiger; gegen feste Preisbestandteile unempfindlich",
+        state_class="measurement",
+    ),
 ]
 
 # =============================================================================

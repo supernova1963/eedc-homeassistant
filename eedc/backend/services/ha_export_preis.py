@@ -38,7 +38,7 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
         dict mit ``preis_rang`` (int | None), ``guenstige_stunden_anzahl``,
         ``guenstige_stunden_tag``, ``guenstige_stunden_nacht`` (int),
         ``guenstig_schwelle_cent``, ``preis_aktuell_cent``,
-        ``optimierter_durchschnitt_cent``, ``abstand_prozent``
+        ``optimierter_durchschnitt_cent``, ``abstand_prozent``, ``abstand_cent``
         (float | None) und ``rang_profil``
         (Liste ``{stunde, rang, preis_cent, unter_schwelle}``) — oder ``None``.
     """
@@ -67,6 +67,10 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
                 "rang": s.rang,
                 "preis_cent": s.preis_cent,
                 "unter_schwelle": s.unter_schwelle,
+                # N-173: je Stunde der ct-Abstand zum Ø — damit sich in HA eine
+                # eigene Schwelle („5 ct unter dem Schnitt") über den ganzen Tag
+                # auswerten lässt, nicht nur für die laufende Stunde.
+                "abstand_cent": s.abstand_cent,
             }
             for s in tag.stunden
         ]
@@ -79,6 +83,7 @@ async def berechne_preis_export(db, anlage) -> Optional[dict]:
             "preis_aktuell_cent": ergebnis.preis_aktuell_cent,
             "optimierter_durchschnitt_cent": ergebnis.optimierter_durchschnitt_cent,
             "abstand_prozent": ergebnis.abstand_prozent,
+            "abstand_cent": ergebnis.abstand_cent,
             "rang_profil": rang_profil,
         }
     except Exception as e:  # Export bleibt für die übrigen Sensoren grün

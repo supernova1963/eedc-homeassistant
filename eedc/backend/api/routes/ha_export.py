@@ -1194,6 +1194,8 @@ async def calculate_anlage_sensors(
                 value = preis["optimierter_durchschnitt_cent"]
             elif sensor.key == "eedc_preis_abstand_prozent":
                 value = preis["abstand_prozent"]
+            elif sensor.key == "eedc_preis_abstand_cent":
+                value = preis["abstand_cent"]
 
             if value is not None:
                 sensor_values.append(SensorValue(

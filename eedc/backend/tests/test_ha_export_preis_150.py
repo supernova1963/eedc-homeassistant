@@ -19,6 +19,7 @@ from backend.core.berechnungen.preis_rang import (
     GUENSTIG_SCHWELLE_FAKTOR,
     GUENSTIG_TOP_N,
     RANG_TEUER,
+    abstand_zum_durchschnitt_cent,
     abstand_zum_durchschnitt_prozent,
     berechne_preis_rang,
     guenstig_schwelle,
@@ -139,6 +140,73 @@ def test_abstand_ohne_bezug_ist_none():
     assert abstand_zum_durchschnitt_prozent(5.0, None) is None
 
 
+# ── N-173: der Abstand als Betrag (ct/kWh) ──────────────────────────────────
+
+def test_abstand_cent_ist_die_reine_differenz():
+    assert abstand_zum_durchschnitt_cent(9.0, 10.0) == pytest.approx(-1.0)
+    assert abstand_zum_durchschnitt_cent(12.0, 10.0) == pytest.approx(2.0)
+    assert abstand_zum_durchschnitt_cent(10.0, 10.0) == pytest.approx(0.0)
+
+
+def test_abstand_cent_bleibt_bei_negativem_durchschnitt_richtig_herum():
+    """−5 ct gegen einen Ø von −10 ct ist **teurer** — hier ohne Betragsnenner.
+
+    Die prozentuale Schwester braucht dafür ``|Ø|``; die Differenz trägt das
+    Vorzeichen von sich aus und hat die Fehlerquelle deshalb gar nicht.
+    """
+    assert abstand_zum_durchschnitt_cent(-5.0, -10.0) == pytest.approx(5.0)
+    assert abstand_zum_durchschnitt_cent(-15.0, -10.0) == pytest.approx(-5.0)
+
+
+def test_abstand_cent_bei_durchschnitt_null_existiert_weiterhin():
+    """Bei Ø = 0 gibt es keinen relativen, wohl aber einen absoluten Abstand.
+
+    Genau hier trennen sich die beiden Größen: ``abstand_prozent`` muss ``None``
+    liefern (Division durch 0), der ct-Abstand ist schlicht der Preis selbst.
+    """
+    assert abstand_zum_durchschnitt_prozent(5.0, 0.0) is None
+    assert abstand_zum_durchschnitt_cent(5.0, 0.0) == pytest.approx(5.0)
+
+
+def test_abstand_cent_ohne_bezug_ist_none():
+    assert abstand_zum_durchschnitt_cent(None, 10.0) is None
+    assert abstand_zum_durchschnitt_cent(5.0, None) is None
+
+
+def test_abstand_cent_ist_gegen_festen_preisaufschlag_invariant():
+    """**Der Beweis, um den es rapahl geht** (PN 11.08., an seinen Zahlen).
+
+    Wer einen dynamischen Tarif bezieht, zahlt Börsenpreis **plus** feste
+    Bestandteile. Ein solcher Aufschlag verschiebt jeden Stundenpreis UND den
+    optimierten Ø um denselben Betrag — auch den optimierten, denn die drei
+    Peak-Stunden bleiben dieselben. Die Differenz ist damit invariant, der
+    Prozentwert nicht: seine Nenner wachsen mit.
+
+    Seine Kurve, Stunde 13 (−0,01 ct) gegen den Ø 9,917 ct: −9,93 ct auf der
+    Börsen- wie auf der Realpreis-Kurve, während die Prozentangabe von −100,1 %
+    auf −33,2 % springt. Eine Prozentzahl, die für beide Welten dasselbe
+    bedeutet, kann es folglich nicht geben — deshalb diese Größe.
+    """
+    preise = {h: float(h) for h in range(24)}       # 0…23 ct
+    AUFSCHLAG = 20.0
+    mit_aufschlag = {h: p + AUFSCHLAG for h, p in preise.items()}
+
+    o_roh = optimierter_durchschnitt(preise)
+    o_real = optimierter_durchschnitt(mit_aufschlag)
+    assert o_real == pytest.approx(o_roh + AUFSCHLAG)
+
+    for stunde in (0, 5, 13, 23):
+        cent_roh = abstand_zum_durchschnitt_cent(preise[stunde], o_roh)
+        cent_real = abstand_zum_durchschnitt_cent(mit_aufschlag[stunde], o_real)
+        assert cent_real == pytest.approx(cent_roh), f"Stunde {stunde}: ct-Abstand driftet"
+
+    # Gegenprobe — die Prozentgröße tut genau das NICHT. Ohne diese Zeile
+    # könnte der Test auch bei einer Größe grün sein, die gar nichts leistet.
+    prozent_roh = abstand_zum_durchschnitt_prozent(preise[13], o_roh)
+    prozent_real = abstand_zum_durchschnitt_prozent(mit_aufschlag[13], o_real)
+    assert prozent_roh != pytest.approx(prozent_real, abs=1.0)
+
+
 def test_ergebnis_traegt_preis_durchschnitt_und_abstand():
     preise = {h: float(h + 1) for h in range(24)}   # Ø ohne Peaks = 11
     erg = berechne_preis_rang(
@@ -148,6 +216,38 @@ def test_ergebnis_traegt_preis_durchschnitt_und_abstand():
     assert erg.preis_aktuell_cent == pytest.approx(22.0)
     assert erg.optimierter_durchschnitt_cent == pytest.approx(11.0)
     assert erg.abstand_prozent == pytest.approx(100.0)
+
+
+def test_ergebnis_traegt_den_ct_abstand_der_aktuellen_stunde():
+    preise = {h: float(h + 1) for h in range(24)}   # Ø ohne Peaks = 11
+    erg = berechne_preis_rang(
+        preise, tag_stunden=set(range(6, 20)), nacht_stunden=set(range(6)) | set(range(20, 24)),
+        aktuelle_stunde=21,                          # 22 ct
+    )
+    assert erg.abstand_cent == pytest.approx(11.0)   # 22 − 11
+    assert erg.abstand_cent is not None and erg.abstand_prozent is not None
+    assert (erg.abstand_cent < 0) is (erg.abstand_prozent < 0)
+
+
+def test_ergebnis_ct_abstand_bei_negativem_tages_durchschnitt():
+    """Ein ganzer Tag im Minus — die Aufrufstelle, nicht nur die reine Formel.
+
+    Die direkte Probe der Formel deckt den negativen Ø ab; sie sagt aber nichts
+    darüber, **womit** ``berechne_preis_rang`` sie füttert. Ein Betragsnenner an
+    dieser Stelle (der beim prozentualen Abstand richtig ist) bliebe bei jeder
+    positiven Kurve unsichtbar — gemessen an einem stummen Sprengsatz.
+    """
+    preise = {h: -20.0 + h for h in range(24)}      # −20 … +3 ct, Ø ohne Peaks < 0
+    erg = berechne_preis_rang(
+        preise, tag_stunden=set(range(6, 20)), nacht_stunden=set(range(6)) | set(range(20, 24)),
+        aktuelle_stunde=0,                           # −20 ct: der billigste Wert
+    )
+    assert erg.optimierter_durchschnitt_cent is not None
+    assert erg.optimierter_durchschnitt_cent < 0
+    assert erg.abstand_cent == pytest.approx(
+        -20.0 - erg.optimierter_durchschnitt_cent, abs=0.01
+    )
+    assert erg.abstand_cent < 0                      # billiger als der Ø
 
 
 def test_ergebnis_ohne_preis_zur_aktuellen_stunde():
@@ -339,6 +439,21 @@ async def test_preis_und_durchschnitt_werden_exportiert(db, _patch_preis, monkey
     abstand = by_key["eedc_preis_abstand_prozent"].value
     assert abstand == pytest.approx((aktuell - o) / abs(o) * 100.0, abs=0.02)
     assert (abstand < 0) is (aktuell < o)
+
+    # N-173: derselbe Abstand als Betrag verlässt eedc als eigener Sensor —
+    # er ist die Größe, die ein Nutzer mit festen Preisbestandteilen 1:1 auf
+    # seinen Endpreis übertragen kann. Beide Größen zeigen in dieselbe Richtung.
+    abstand_ct = by_key["eedc_preis_abstand_cent"].value
+    assert abstand_ct == pytest.approx(aktuell - o, abs=0.01)
+    assert (abstand_ct < 0) is (abstand < 0)
+    assert by_key["eedc_preis_abstand_cent"].definition.unit == "ct/kWh"
+
+    # Und je Stunde im Rang-Profil, damit sich in HA eine eigene ct-Schwelle
+    # über den ganzen Tag auswerten lässt (Muster: `preis_cent` seit v4.0.10).
+    profil = by_key["eedc_preis_rang"].zusatz_attribute["rang_profil"]
+    assert all("abstand_cent" in e for e in profil)
+    for e in profil:
+        assert e["abstand_cent"] == pytest.approx(e["preis_cent"] - o, abs=0.01)
 
     # Die Bezugsgröße reist auch als Attribut mit dem Rang-Sensor.
     assert by_key["eedc_preis_rang"].zusatz_attribute[

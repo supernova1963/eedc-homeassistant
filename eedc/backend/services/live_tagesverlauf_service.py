@@ -11,7 +11,6 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -200,7 +199,31 @@ async def get_tagesverlauf(
     if not basis_live and not inv_live_map:
         return {"serien": [], "punkte": []}
 
-    if not HA_INTEGRATION_AVAILABLE:
+    # ── Welcher Weg? Die ZUORDNUNG entscheidet, nicht die Umgebung (F-26) ──
+    #
+    # Bis 2026-08-11 stand hier `if not HA_INTEGRATION_AVAILABLE` — also allein
+    # `SUPERVISOR_TOKEN`. Wer eedc im Docker betreibt und Home Assistant per
+    # **Long-Lived-Token** angebunden hat (`ha_connector`, Datenquellen-V4),
+    # landete damit im MQTT-Fallback, obwohl er gar kein MQTT nutzt: der gab
+    # `{"serien": [], "punkte": []}` zurück, und `aggregate_day` brach daraufhin
+    # mit `return None` ab — **jeden Lauf, jeden Tag, ohne Tageswert**. Sichtbar
+    # als „—" in *Cockpit → Tag* mit Quelle „Prognose", während die Live-Ansicht
+    # normal lief (die liest ihre Entities seit C2a auch ohne Supervisor,
+    # `live_power_service`) und ein von Hand nachgezogener Tag vollständig war
+    # (Reparatur/Backfill liest die LTS direkt und kommt hier nie vorbei).
+    # Gemeldet von IdleBit (Forum T89667 #142).
+    #
+    # ⚠ `HAStateService` ist seit dem 05.08. remote-fähig — sein Docstring nennt
+    # `live_history_service` sogar namentlich als Leidtragenden. Diese Zeile
+    # wurde damals nicht nachgezogen; sie sprang zwei Zeilen früher ab, als der
+    # reparierte Dienst überhaupt gerufen wird.
+    #
+    # `is_available` ist `bool(token)` und deckt **beide** Wege ab: Supervisor
+    # im Add-on, Long-Lived-Token im Standalone. Ein reiner MQTT-Betrieb hat
+    # keinen Token ⇒ er geht unverändert in den MQTT-Zweig.
+    from backend.services.ha_state_service import get_ha_state_service
+
+    if not get_ha_state_service().is_available:
         return await _get_tagesverlauf_mqtt(anlage, db, tage_zurueck)
 
     # Investitionen aus DB laden (brauchen Bezeichnung + Typ + parent_id)
@@ -525,6 +548,20 @@ async def get_tagesverlauf(
             "einheit": "ct/kWh",
         })
 
+    # Rückfall auf MQTT, wenn der HA-Weg leer bleibt (F-26, Teil 2).
+    #
+    # Vor der Umstellung oben ging JEDER Standalone-Betrieb in den MQTT-Zweig.
+    # Wer HA angebunden hat, dessen `live`-Zuordnungen aber ins Leere zeigen
+    # (umbenannte Entity, abgeschalteter Recorder), bekam bisher trotzdem seine
+    # MQTT-Kurve — die soll er behalten. Ohne diesen Rückfall wäre die Korrektur
+    # für ihn eine Verschlechterung; mit ihm kann niemand schlechter dastehen
+    # als vorher. Der MQTT-Zweig liefert selbst leer, wenn keine Snapshots da
+    # sind — er kostet dann eine Query und ändert nichts.
+    if not punkte:
+        mqtt = await _get_tagesverlauf_mqtt(anlage, db, tage_zurueck)
+        if mqtt.get("punkte"):
+            return mqtt
+
     return {"serien": serien, "punkte": punkte, "uebersprungen": uebersprungen}
 
 
@@ -534,7 +571,11 @@ async def _get_tagesverlauf_mqtt(
     """
     MQTT-Fallback für Tagesverlauf: liest aus MqttLiveSnapshot statt HA-History.
 
-    Wird aufgerufen wenn HA_INTEGRATION_AVAILABLE == False (Docker-Standalone).
+    Wird aufgerufen, wenn **keine HA-Verbindung** besteht — weder per Supervisor
+    noch per Long-Lived-Token (F-26; bis 2026-08-11 hing die Wahl allein am
+    Supervisor-Token, was jeden Docker-Betrieb mit Token-Anbindung hierher
+    schickte, obwohl er gar kein MQTT nutzt). Zusätzlich als **Rückfall**, wenn
+    der HA-Weg nichts hergibt.
     Erwartet dass mqtt_live_history_service alle 5 Min Snapshots schreibt.
     """
     from backend.services.mqtt_live_history_service import get_snapshots_for_range

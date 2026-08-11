@@ -108,6 +108,9 @@ class BoersenpreisStunde(BaseModel):
     preis_cent: float        # ct/kWh, netto (ohne Steuern/Netzentgelte) — kann negativ sein
     rang: int                # 1–5 = eine der günstigsten des Fensters, 99 = Rest
     unter_schwelle: bool     # UNGEKAPPT — anders als der Rang nicht auf 5 begrenzt
+    # ct/kWh unter (negativ) bzw. über dem optimierten Ø DIESES Tages (N-173).
+    # Gegen einen festen Preisaufschlag invariant, anders als jede Prozentzahl.
+    abstand_cent: Optional[float] = None
 
 
 class BoersenpreisTag(BaseModel):
@@ -463,6 +466,7 @@ async def get_boersenpreise(
                     "preis_cent": s.preis_cent,
                     "rang": s.rang,
                     "unter_schwelle": s.unter_schwelle,
+                    "abstand_cent": s.abstand_cent,
                 }
                 for s in tag.stunden
             ],

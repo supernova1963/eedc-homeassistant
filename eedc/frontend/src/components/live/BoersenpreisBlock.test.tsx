@@ -34,6 +34,8 @@ function tag(datum: string, opts: Partial<BoersenpreisTag> = {}): BoersenpreisTa
       preis_cent: 10 + h * 0.5,
       rang: h < 5 ? h + 1 : 99,
       unter_schwelle: h < 8,
+      // Abstand zum Ø dieses Tages (15,00 ct) — wie ihn die Route liefert.
+      abstand_cent: Math.round((10 + h * 0.5 - 15.0) * 1000) / 1000,
     })),
     schwelle_cent: 13.5,
     optimierter_durchschnitt_cent: 15.0,
@@ -54,14 +56,42 @@ function antwort(over: Partial<BoersenpreisResponse> = {}): BoersenpreisResponse
 }
 
 describe('baueKennzahlen', () => {
-  it('nennt aktuellen Preis, Ø und Schwelle', () => {
+  it('nennt aktuellen Preis, Ø, Schwelle und den ct-Abstand', () => {
     const kpis = baueKennzahlen(antwort())
 
+    // Der Abstand steht am ENDE — die drei seit v4.0.10 ausgelieferten Kacheln
+    // behalten ihre Position (N-173).
     expect(kpis.map((k) => k.title)).toEqual([
-      'Aktueller Preis', 'Ø ohne 3 Peaks', 'Günstig-Schwelle',
+      'Aktueller Preis', 'Ø ohne 3 Peaks', 'Günstig-Schwelle', 'Abstand zum Ø',
     ])
     expect(kpis[0].value).toBe('11,50')          // Stunde 3 → 10 + 1,5
     expect(kpis[0].subtitle).toContain('unter der Günstig-Schwelle')
+  })
+
+  it('zeigt den ct-Abstand der laufenden Stunde mit Vorzeichen (N-173)', () => {
+    // Stunde 3: 11,50 ct gegen den Ø 15,00 ct ⇒ −3,50 ct/kWh. Diese Zahl gilt
+    // unverändert auch für einen Endpreis mit festen Bestandteilen — genau
+    // deshalb gibt es sie neben der Prozentgröße.
+    const abstand = baueKennzahlen(antwort()).at(-1)!
+    expect(abstand.title).toBe('Abstand zum Ø')
+    expect(abstand.value).toBe('-3,50')
+    expect(abstand.unit).toBe('ct/kWh')
+    expect(abstand.subtitle).toContain('unter dem Ø')
+  })
+
+  it('sagt „über dem Ø", wenn die laufende Stunde teurer ist', () => {
+    const abstand = baueKennzahlen(antwort({ aktuelle_stunde: 20 })).at(-1)!
+    expect(abstand.value).toBe('5,00')           // 20,00 − 15,00
+    expect(abstand.subtitle).toContain('über dem Ø')
+  })
+
+  it('lässt die Abstands-Kachel weg, wenn die Route sie nicht liefert', () => {
+    // Alt-Stand einer laufenden Box, die noch ohne das Feld antwortet: dann
+    // fehlt die Kachel, statt „0,00 ct Abstand" zu behaupten.
+    const ohneAbstand = tag('2026-08-06')
+    ohneAbstand.stunden = ohneAbstand.stunden.map((s) => ({ ...s, abstand_cent: null }))
+    const kpis = baueKennzahlen(antwort({ tage: [ohneAbstand] }))
+    expect(kpis.map((k) => k.title)).not.toContain('Abstand zum Ø')
   })
 
   it('zählt günstige Stunden ungekappt (N-103)', () => {

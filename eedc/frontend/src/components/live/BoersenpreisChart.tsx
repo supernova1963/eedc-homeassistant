@@ -51,7 +51,15 @@ export interface PreisPunkt {
   datum: string
   /** Ungekappte Günstig-Markierung des Backends (N-103), `null` ohne Preis. */
   guenstig: boolean | null
+  /** Rang des Backends: 1–5 = eine der fünf billigsten ihres Fensters, 99 = Rest.
+   *  `null` ohne Preis. Die Anzahl günstiger Stunden bleibt davon **unberührt** —
+   *  Rang und „günstig" sind seit v4.0.10 zwei Aussagen (N-103). */
+  rang: number | null
 }
+
+/** Ränge, die als Ziffer im Chart erscheinen — deckungsgleich mit `GUENSTIG_TOP_N`
+ *  im Backend (`core/berechnungen/preis_rang.py`). */
+const RANG_SICHTBAR_BIS = 5
 
 function tagLabel(datum: string, stunde: number): string {
   // Datum-Keys kommen als ISO vom Backend; als lokales Datum lesen, nicht als
@@ -89,6 +97,7 @@ export function baueAchse(tage: BoersenpreisTag[]): PreisPunkt[] {
         stunde: h,
         datum: tag.datum,
         guenstig: s ? s.unter_schwelle : null,
+        rang: s ? s.rang : null,
       })
     }
   })
@@ -110,6 +119,10 @@ export function baueAchse(tage: BoersenpreisTag[]): PreisPunkt[] {
       stunde: STUNDEN_JE_TAG,
       datum: tage[letzterTag].datum,
       guenstig: null,
+      // Wie die Günstig-Markierung bewusst ohne Rang: der Schlusspunkt ist keine
+      // eigene Stunde, sondern das Ende der vorigen — sonst stünde eine Ziffer
+      // doppelt im Bild.
+      rang: null,
     })
   }
   // Und die Naht zwischen den Tagen: Tag 0 reicht bis zur ersten Position von
@@ -193,6 +206,49 @@ export function guenstigeBereiche(punkte: PreisPunkt[]): Array<{ von: number; bi
     bereiche.push({ von: start, bis: letzte.pos })
   }
   return bereiche
+}
+
+/**
+ * Markierung der Ränge 1–5 auf der Linie (Rainer-PN 2026-08-11, Gernots Entscheid).
+ *
+ * **Warum eine Ziffer und keine zweite Farbe:** Der Wunsch war „zeig mir die fünf
+ * billigen Stunden". Genau die gibt es bereits — als **Rang**, den das Backend
+ * ohnehin liefert und den die HA-Sensoren melden. Der naheliegende Gegenvorschlag
+ * (die grüne Günstig-Menge auf fünf kappen) wurde **verworfen**: Sie ist seit
+ * v4.0.10 mit Absicht ungekappt, weil sie als Divisor in Automationen dient
+ * (N-103) — sie zu deckeln hieße, eine ausgelieferte Größe für eine Anzeige
+ * kaputtzumachen. Rang und Günstig-Menge stehen deshalb **nebeneinander**:
+ * die Fläche sagt „unter der Schwelle", die Ziffer sagt „eine der fünf besten".
+ *
+ * Die Ränge werden je Fenster (Tag/Nacht) vergeben — an einem Tag stehen also bis
+ * zu zehn Ziffern im Bild, zweimal 1–5. Das ist dieselbe Aussage wie beim Sensor
+ * `eedc_preis_rang` und kein Fehler.
+ */
+export function RangZiffer(props: {
+  cx?: number
+  cy?: number
+  payload?: PreisPunkt
+  farbe: string
+}) {
+  const { cx, cy, payload, farbe } = props
+  const rang = payload?.rang
+  if (cx == null || cy == null || rang == null || rang > RANG_SICHTBAR_BIS) return null
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={7} fill={farbe} />
+      <text
+        x={cx}
+        y={cy}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={9}
+        fontWeight={600}
+        className="fill-white dark:fill-gray-900"
+      >
+        {rang}
+      </text>
+    </g>
+  )
 }
 
 /** Tage, die nicht die üblichen 24 Stundenpreise tragen — mit Grund. */
@@ -302,7 +358,10 @@ export default function BoersenpreisChart({ daten }: Props) {
               name={idx === 0 ? 'preis_0' : 'preis_1'}
               stroke={`url(#preisstufen-${idx})`}
               strokeWidth={2.5}
-              dot={false}
+              // Kein Punkt je Stunde — nur die fünf besten je Fenster tragen
+              // ihre Rangziffer (s. {@link RangZiffer}).
+              dot={<RangZiffer farbe={stufen.guenstig} />}
+              activeDot={false}
               isAnimationActive={false}
               connectNulls={false}
               legendType="none"
@@ -341,6 +400,15 @@ export default function BoersenpreisChart({ daten }: Props) {
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-3 rounded-sm" style={{ backgroundColor: stufen.teuer }} />
           über dem Durchschnitt
+        </span>
+        <span className="flex items-center gap-1">
+          <span
+            className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-semibold text-white dark:text-gray-900"
+            style={{ backgroundColor: stufen.guenstig }}
+          >
+            1
+          </span>
+          Rang 1–5: die günstigsten Stunden je Tag- und Nachtfenster
         </span>
       </div>
 

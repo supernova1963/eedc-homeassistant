@@ -11,6 +11,26 @@
 
 ## In Arbeit (noch nicht veröffentlicht)
 
+### „Wie viel billiger als der Schnitt?" — jetzt auch in Cent
+
+**Betrifft dich das?** Wenn du einen dynamischen Stromtarif hast und mit den Börsenpreis-Sensoren Automationen baust.
+
+eedc sagt dir bisher in **Prozent**, wie weit der aktuelle Börsenpreis vom Tagesmittel entfernt ist. Diese Zahl ist tückisch, sobald du sie auf deinen **echten** Preis überträgst: Du zahlst ja nicht den Börsenpreis, sondern Börsenpreis plus feste Bestandteile — Netzentgelt, Abgaben, Marge deines Anbieters. Dieser Aufschlag verschiebt den Stundenpreis und das Tagesmittel um denselben Betrag. Der **Abstand in Cent bleibt damit gleich, der Prozentwert nicht.**
+
+An einem echten Tag: Die billigste Stunde lag **9,93 ct unter dem Tagesmittel** — auf der Börsenkurve genauso wie auf dem Endpreis. In Prozent sind das einmal −100 %, einmal −33 %. Eine Prozentzahl, die für beides dasselbe bedeutet, kann es nicht geben.
+
+Deshalb gibt es jetzt den Sensor **„Börsenpreis-Abstand zum Ø (ct)"** (`sensor.eedc_preis_abstand_cent`). Damit lassen sich Regeln formulieren, die zu deinem Tarif passen: „lade den Akku, solange der Strom mindestens 5 ct unter dem Schnitt liegt", oder schlicht „unter dem Schnitt" (Wert kleiner 0). Im Attribut `rang_profil` des Rang-Sensors steht der Abstand zusätzlich **für jede Stunde des Tages** — du kannst deine eigene Grenze also über den ganzen Tag auswerten. In *Cockpit → Live* steht der Wert als vierte Kachel bei den Börsenpreisen.
+
+**Dein bestehender Prozent-Sensor ändert sich nicht** — laufende Automationen bleiben, wie sie sind. Der neue Wert kommt daneben.
+
+### Die fünf günstigsten Stunden stehen jetzt im Diagramm
+
+**Betrifft dich das?** Wenn du den Börsenpreis-Block in *Cockpit → Live* nutzt.
+
+Bisher zeigte die Kurve grün, welche Stunden unter deiner Günstig-Schwelle liegen — an einem billigen Tag können das auch zehn sein. Jetzt tragen die günstigsten Stunden zusätzlich die Ziffern **1 bis 5**, jeweils getrennt für Tag und Nacht. Es ist derselbe Rang, den der Sensor `eedc_preis_rang` in Home Assistant meldet.
+
+**Die grüne Fläche bleibt, wie sie war.** Sie beantwortet eine andere Frage: „liegt diese Stunde unter der Schwelle?" — und diese Zahl wird in Automationen als Teiler gebraucht, sie darf deshalb nicht bei fünf abgeschnitten werden. Zwei Fragen, zwei Antworten, ein Diagramm.
+
 ### Eine Speicher-Kapazität in Wh fällt jetzt auf
 
 **Betrifft dich das?** Wenn du ein Balkonkraftwerk mit Akku hast und den Speicher als eigene Komponente führst.
@@ -26,6 +46,26 @@ Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#433-speicher) meldet das jetzt und
 eedc führte die Kapazität deiner Anlage dann als **Summe aus altem und neuem Gerät** — an einem echten Bestand 46,2 statt 30,8 kWh. Betroffen waren *Cockpit → Monat*, der Jahresbericht und der anonyme Community-Vergleich. Gerade dort war es teuer: Deine Anlage stand in einer Größenklasse, die es nie gab.
 
 Gezählt wird jetzt der Speicher, den du zum jeweiligen Zeitpunkt wirklich hattest. Wenn du deine Daten mit der Community teilst, kommt die Korrektur beim nächsten vollständigen Übertragen an.
+
+### Docker mit HA-Token: die Tageswerte kommen jetzt an
+
+**Betrifft dich das?** Wenn du eedc als eigenen Docker-Container betreibst und Home Assistant über einen **langlebigen Zugriffstoken** angebunden hast (nicht als HA-Add-on, nicht über MQTT).
+
+In *Cockpit → Tag* stand bei dir dauerhaft „—" mit der Quelle „Prognose", während die Live-Ansicht normal lief und ein von Hand nachgezogener Tag vollständig war. Das war kein Konfigurationsfehler: eedc kannte für den Tagesverlauf nur zwei Fälle — „HA-Add-on" oder „MQTT". Deine Konstellation ist die dritte, und sie landete beim MQTT-Weg, wo nichts ankam. Damit brach die Tagesaggregation ab, bevor sie deine Zählerstände überhaupt gelesen hat.
+
+Jetzt entscheidet die **Zuordnung** darüber, woher die Werte kommen, nicht die Betriebsart: Wo HA-Sensoren zugeordnet und erreichbar sind, liest eedc aus Home Assistant. Wer MQTT nutzt, behält den MQTT-Weg — und wenn der HA-Weg einmal leer bleibt, springt MQTT weiterhin ein.
+
+Dieselbe Ursache hat dir außerdem den **Speicher-Ladestand** (und damit die Vollzyklen), die **Tages-Spitzenwerte** und deinen eigenen **Strompreis-Sensor** vorenthalten — auch das läuft jetzt.
+
+⚠ **Zurückliegende Tage füllen sich nicht von selbst.** Die holst du über den [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) mit „Zeitraum neu aggregieren" — bis zu 31 Tage je Lauf.
+
+### Community: das Performance-Profil zeigt wieder den aktuellen Monat
+
+**Betrifft dich das?** Wenn du deine Daten mit der Community teilst und dort das Radar-Diagramm „Performance-Profil" ansiehst.
+
+Autarkie und Eigenverbrauch standen dort auf den Werten deines **allerersten** geteilten Monats. War das ein Wintermonat, zeigte das Radar knapp 5 %, während dein Cockpit für denselben Zeitraum 100 % meldete — verständlicherweise verwirrend. Dieselbe Verwechslung traf die Auszeichnungen „Autarkiemeister" und „Dauerbrenner".
+
+Jetzt steht dort der jüngste Monat, den du geteilt hast. Die Ansichten *PV-Ertrag* und *Trends* waren nie betroffen.
 
 ### Kleinigkeit: die Prognose-Tabelle steht wieder gerade
 

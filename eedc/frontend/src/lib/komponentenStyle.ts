@@ -15,7 +15,7 @@
  */
 
 import {
-  Activity, AlertTriangle, ArrowUpFromLine, Battery, BatteryCharging, BatteryMedium, Car,
+  Activity, AlertTriangle, ArrowUpDown, ArrowUpFromLine, Battery, BatteryCharging, BatteryMedium, Car,
   CheckCircle, Coins, Euro, Flame, Gauge, Hash, Home, Info, Leaf, Plug, RotateCw,
   Sun, Thermometer, TrendingUp, Wallet, Wrench, XCircle, Zap,
 } from 'lucide-react'
@@ -182,6 +182,10 @@ export const BOERSENPREIS_KPI = {
   aktuell:      { title: 'Aktueller Preis',  icon: Coins, color: 'purple' as const },
   durchschnitt: { title: 'Ø ohne 3 Peaks',   icon: Gauge, color: 'purple' as const },
   schwelle:     { title: 'Günstig-Schwelle', icon: Hash,  color: 'purple' as const },
+  // N-173: der Abstand als Betrag. Bewusst dieselbe Farbrolle wie die drei
+  // anderen Preis-Kennzahlen — es ist dieselbe Datenrolle, nur eine andere
+  // Größenart.
+  abstand:      { title: 'Abstand zum Ø',    icon: ArrowUpDown, color: 'purple' as const },
 } as const satisfies Record<string, KpiStyle>
 
 // ─── Komponenten-Identität (#3b') — Icon + Farbe + Label je Investitionstyp ───

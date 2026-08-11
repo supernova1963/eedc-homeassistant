@@ -109,6 +109,37 @@ const ACHIEVEMENT_DEFINITIONEN = {
   perfektionist:    { name: 'Perfektionist',     beschreibung: 'Alle Komponenten über Community-Durchschnitt', icon: <Target className="h-5 w-5" />, farbe: 'indigo' },
 }
 
+// ─── Reihenfolge der Monatswerte (F-25, #375 kingcap1 2026-08-11) ────────────
+// `anlage.monatswerte` kommt vom Community-Server **absteigend**
+// (`benchmark.py`: `order_by(jahr.desc(), monat.desc())`) — der neueste Monat
+// steht auf Position 0. Die Übersicht las ihn als `[length - 1]` und zeigte
+// damit den **ältesten** Monat: Autarkie 100 % im Cockpit gegen ~5 % im Radar,
+// weil der erste eingereichte Monat ein Wintermonat war.
+//
+// ⚠ Die Falle ist die **gleichnamige zweite Quelle**: die Teilen-Vorschau
+// (`/community/preview/{id}`, eedc-eigenes Backend) liefert dieselbe Feldliste
+// **aufsteigend** — `CommunityShareBlock.letzterWert` iteriert deshalb zu Recht
+// von hinten. Zwei Quellen, ein Feldname, gegenläufige Reihenfolge.
+//
+// Deshalb hier nicht „richtig herum indizieren", sondern **sortieren**: die
+// Helfer gelten für beide Reihenfolgen und überleben eine Änderung an der
+// Server-Query. (`CommunityPVErtragTeile`/`CommunityTrendsTeile` machen das
+// seit jeher so und waren nie betroffen.)
+type MonatsZeile = { jahr: number; monat: number }
+
+function chronologisch<T extends MonatsZeile>(monatswerte: readonly T[] | undefined): T[] {
+  return [...(monatswerte ?? [])].sort((a, b) => a.jahr - b.jahr || a.monat - b.monat)
+}
+
+export function neuesterMonat<T extends MonatsZeile>(monatswerte: readonly T[] | undefined): T | undefined {
+  const sortiert = chronologisch(monatswerte)
+  return sortiert[sortiert.length - 1]
+}
+
+export function letzteMonate<T extends MonatsZeile>(monatswerte: readonly T[] | undefined, anzahl: number): T[] {
+  return chronologisch(monatswerte).slice(-anzahl)
+}
+
 export interface UebersichtDaten {
   rankingBadge: { label: string; color: string; textColor: string } | null
   achievements: { erreichte: Achievement[]; nichtErreichte: Achievement[] }
@@ -145,7 +176,7 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
     const regionalchampion: Achievement = { id: 'regionalchampion', ...ACHIEVEMENT_DEFINITIONEN.regionalchampion, erreicht: regionalchampionErreicht, fortschritt: regionalchampionErreicht ? 100 : Math.max(0, (1 - rang_region / Math.min(10, anzahl_anlagen_region)) * 100) }
     ;(regionalchampionErreicht ? erreichte : nichtErreichte).push(regionalchampion)
 
-    const letzterMonat = benchmark.anlage.monatswerte?.[benchmark.anlage.monatswerte.length - 1]
+    const letzterMonat = neuesterMonat(benchmark.anlage.monatswerte)
     if (letzterMonat?.autarkie_prozent !== undefined && letzterMonat.autarkie_prozent !== null) {
       const autarkieErreicht = letzterMonat.autarkie_prozent >= 80
       ;(autarkieErreicht ? erreichte : nichtErreichte).push({ id: 'autarkiemeister', ...ACHIEVEMENT_DEFINITIONEN.autarkiemeister, erreicht: autarkieErreicht, fortschritt: autarkieErreicht ? 100 : (letzterMonat.autarkie_prozent / 80) * 100 })
@@ -169,8 +200,7 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
       ;(pvAnteilErreicht ? erreichte : nichtErreichte).push({ id: 'gruenerfahrer', ...ACHIEVEMENT_DEFINITIONEN.gruenerfahrer, erreicht: pvAnteilErreicht, fortschritt: pvAnteilErreicht ? 100 : (eauto.pv_anteil.wert / 70) * 100 })
     }
 
-    const monatswerte = benchmark.anlage.monatswerte || []
-    const letzteZwoelf = monatswerte.slice(-12)
+    const letzteZwoelf = letzteMonate(benchmark.anlage.monatswerte, 12)
     const durchschnittMonat = benchmark.benchmark.spez_ertrag_durchschnitt / 12
     let ueberDurchschnittCount = 0
     for (const m of letzteZwoelf) if ((m.spez_ertrag_kwh_kwp || 0) > durchschnittMonat) ueberDurchschnittCount++
@@ -228,7 +258,7 @@ export function useUebersichtDaten(benchmark: CommunityBenchmarkResponse | null)
     const data: { kategorie: string; du: number; community: number; fullMark: number }[] = []
     const pvMax = Math.max(benchmark.benchmark.spez_ertrag_anlage, benchmark.benchmark.spez_ertrag_durchschnitt) * 1.2
     data.push({ kategorie: 'PV-Ertrag', du: (benchmark.benchmark.spez_ertrag_anlage / pvMax) * 100, community: (benchmark.benchmark.spez_ertrag_durchschnitt / pvMax) * 100, fullMark: 100 })
-    const letzterMonat = benchmark.anlage.monatswerte?.[benchmark.anlage.monatswerte.length - 1]
+    const letzterMonat = neuesterMonat(benchmark.anlage.monatswerte)
     if (letzterMonat?.autarkie_prozent) data.push({ kategorie: 'Autarkie', du: letzterMonat.autarkie_prozent, community: 65, fullMark: 100 })
     if (letzterMonat?.eigenverbrauch_prozent) data.push({ kategorie: 'Eigenverbrauch', du: letzterMonat.eigenverbrauch_prozent, community: 45, fullMark: 100 })
     if (benchmark.benchmark_erweitert?.speicher?.wirkungsgrad?.community_avg) {

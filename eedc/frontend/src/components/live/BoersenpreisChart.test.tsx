@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest'
 import type { BoersenpreisTag } from '../../api/liveDashboard'
 import { CHART_FLAECHE, PREISSTUFEN_FARBEN } from '../../lib'
 import {
-  baueAchse, farbStops, guenstigeBereiche, zeitumstellungHinweis,
+  baueAchse, farbStops, guenstigeBereiche, zeitumstellungHinweis, RangZiffer,
 } from './BoersenpreisChart'
 
 // Die Stufenfarben hängen am Modus (Kontrast-Messung, s. `PREISSTUFEN_FARBEN`).
@@ -22,7 +22,10 @@ import {
 const HELL = PREISSTUFEN_FARBEN.light
 
 function stunde(h: number, preis: number, guenstig = false, rang = 99) {
-  return { stunde: h, preis_cent: preis, rang, unter_schwelle: guenstig }
+  // `abstand_cent` (N-173) ist hier bewusst null: der Chart färbt nach
+  // `unter_schwelle` und liest die Größe nicht — was diese Proben auch prüfen,
+  // indem sie ohne sie auskommen. Die Kennzahl darauf prüft der Block-Test.
+  return { stunde: h, preis_cent: preis, rang, unter_schwelle: guenstig, abstand_cent: null }
 }
 
 /** Ein Tag mit 24 Stunden; die Stunden in `guenstig` liegen unter der Schwelle. */
@@ -296,5 +299,61 @@ describe('PREISSTUFEN_FARBEN', () => {
     // Wandert die Mitte mit, ist es keine Abstufung einer Rolle mehr, sondern
     // eine zweite Palette.
     expect(PREISSTUFEN_FARBEN.light.normal).toBe(PREISSTUFEN_FARBEN.dark.normal)
+  })
+})
+
+// ── Rang 1–5 im Chart (Rainer-PN 11.08., Gernots Entscheid) ─────────────────
+
+describe('Rang-Markierung', () => {
+  it('trägt den Rang des Backends an die Achsenposition', () => {
+    const t = tag('2026-08-06', FLACH, [0, 1, 2])
+    t.stunden[0].rang = 1
+    t.stunden[1].rang = 2
+    t.stunden[5].rang = 99
+    const punkte = baueAchse([t])
+
+    expect(punkte[0].rang).toBe(1)
+    expect(punkte[1].rang).toBe(2)
+    expect(punkte[5].rang).toBe(99)
+  })
+
+  it('gibt dem Schlusspunkt keinen Rang', () => {
+    // Er ist keine eigene Stunde, sondern das Ende der vorigen — sonst stünde
+    // dieselbe Ziffer zweimal im Bild (gleiche Begründung wie bei `guenstig`).
+    const punkte = baueAchse([tag('2026-08-06', FLACH)])
+    expect(punkte[punkte.length - 1].rang).toBeNull()
+  })
+
+  it('zeichnet nur die Ränge 1–5, nicht den Rest', () => {
+    const gezeichnet = (rang: number | null) =>
+      RangZiffer({
+        cx: 10, cy: 20, farbe: HELL.guenstig,
+        payload: { pos: 0, label: 'Do 03', preis_0: 5, preis_1: null, stunde: 3, datum: '2026-08-06', guenstig: true, rang },
+      })
+
+    expect(gezeichnet(1)).not.toBeNull()
+    expect(gezeichnet(5)).not.toBeNull()
+    // 99 = teuer/Rest. Ohne diese Grenze stünde an JEDER Stunde ein Punkt.
+    expect(gezeichnet(99)).toBeNull()
+    expect(gezeichnet(null)).toBeNull()
+  })
+
+  it('zeichnet nichts ohne Koordinaten', () => {
+    // Recharts ruft den Dot auch für Lücken auf (Zeitumstellung, F-6).
+    expect(RangZiffer({ farbe: HELL.guenstig, payload: { pos: 0, label: 'Do 02', preis_0: null, preis_1: null, stunde: 2, datum: '2027-03-28', guenstig: null, rang: 1 } })).toBeNull()
+  })
+
+  it('lässt die Günstig-Menge unangetastet — Rang ist eine ZWEITE Aussage', () => {
+    // Die Gegenprobe zu dem, was NICHT gebaut wurde: Rainers Wunsch „nur fünf
+    // günstige Stunden" hätte die seit v4.0.10 ungekappte Zählung gedeckelt, die
+    // in Automationen als Divisor dient (N-103). Acht Stunden unter der Schwelle
+    // bleiben acht — auch wenn nur fünf eine Ziffer tragen.
+    const t = tag('2026-08-06', FLACH, [0, 1, 2, 3, 4, 5, 6, 7])
+    t.stunden.forEach((s, h) => { s.rang = h < 5 ? h + 1 : 99 })
+    const punkte = baueAchse([t])
+
+    expect(punkte.filter((p) => p.guenstig).length).toBe(8)
+    expect(punkte.filter((p) => p.rang != null && p.rang <= 5).length).toBe(5)
+    expect(guenstigeBereiche(punkte)).toEqual([{ von: 0, bis: 8 }])
   })
 })

@@ -289,6 +289,11 @@ export interface BoersenpreisStunde {
   /** Ungekappt — anders als `rang` nicht auf fünf je Fenster begrenzt (N-103).
    *  Das ist die Größe, nach der der Chart färbt. */
   unter_schwelle: boolean
+  /** ct/kWh unter (negativ) bzw. über dem optimierten Ø dieses Tages (N-173).
+   *  Anders als der prozentuale Abstand bleibt dieser Wert gleich, wenn feste
+   *  Preisbestandteile auf die Börsenkurve aufschlagen — sie verschieben Preis
+   *  und Ø um denselben Betrag. */
+  abstand_cent: number | null
 }
 
 export interface BoersenpreisTag {

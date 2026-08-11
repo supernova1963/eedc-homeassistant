@@ -58,6 +58,7 @@ class PreisRangErgebnis:
     preis_aktuell_cent: Optional[float] = None          # Preis der aktuellen Stunde
     optimierter_durchschnitt_cent: Optional[float] = None  # Ø ohne die 3 Peaks (Bezugsgröße der Schwelle)
     abstand_prozent: Optional[float] = None             # Abstand des aktuellen Preises zum Ø, negativ = billiger
+    abstand_cent: Optional[float] = None                # derselbe Abstand in ct/kWh — aufschlags-invariant (N-173)
 
 
 def optimierter_durchschnitt(
@@ -109,6 +110,32 @@ def abstand_zum_durchschnitt_prozent(
     if preis is None or durchschnitt is None or durchschnitt == 0:
         return None
     return (preis - durchschnitt) / abs(durchschnitt) * 100.0
+
+
+def abstand_zum_durchschnitt_cent(
+    preis: Optional[float],
+    durchschnitt: Optional[float],
+) -> Optional[float]:
+    """Abstand eines Preises zum optimierten Ø in ct/kWh — negativ = billiger.
+
+    **Warum es diese Größe neben der prozentualen gibt (N-173, rapahl-PN
+    2026-08-11):** Wer einen dynamischen Tarif bezieht, zahlt nicht den
+    Börsenpreis, sondern Börsenpreis **plus** feste Bestandteile (Netzentgelt,
+    Abgaben, Marge). Ein solcher Aufschlag verschiebt jeden Stundenpreis **und**
+    den Ø um denselben Betrag — die Differenz bleibt damit exakt gleich, der
+    Prozentwert nicht (sein Nenner wächst mit). An Rainers eigenen Zahlen:
+    die billigste Stunde liegt auf der Börsenkurve wie auf seiner Realpreis-
+    kurve **−9,93 ct** unter dem Ø, während die Prozentangabe von −100,1 % auf
+    −33,2 % springt. Eine Prozentzahl, die für beide Welten dasselbe bedeutet,
+    kann es folglich nicht geben; diese Größe braucht dafür **kein**
+    Eingabefeld für den festen Anteil und keine Konfiguration.
+
+    ``abstand_prozent`` bleibt unverändert daneben stehen — er ist seit v4.0.10
+    als Sensor ausgeliefert, und fremde Automationen hängen an seinen Schwellen.
+    """
+    if preis is None or durchschnitt is None:
+        return None
+    return preis - durchschnitt
 
 
 def _bewerte_fenster(
@@ -200,4 +227,12 @@ def berechne_preis_rang(
         # `runde_exportwert` an der Serialisierungsgrenze (2 Stellen je ct/kWh).
         optimierter_durchschnitt_cent=round(durchschnitt, 3) if durchschnitt is not None else None,
         abstand_prozent=abstand_zum_durchschnitt_prozent(preis_aktuell, durchschnitt),
+        # Aus dem UNGERUNDETEN Ø gebildet wie `abstand_prozent` (sonst driften
+        # die beiden Größen gegeneinander), erst danach auf drei Stellen wie
+        # jede andere ct/kWh-Größe dieser Datei.
+        abstand_cent=(
+            None
+            if (roh := abstand_zum_durchschnitt_cent(preis_aktuell, durchschnitt)) is None
+            else round(roh, 3)
+        ),
     )

@@ -48,6 +48,11 @@ class PreisStunde:
     preis_cent: float
     rang: int
     unter_schwelle: bool
+    # Abstand zum optimierten Ø des Tages in ct/kWh (negativ = billiger, N-173).
+    # Je Stunde und nicht nur für die laufende: wer eine eigene ct-Schwelle
+    # auswerten will, braucht sie über den ganzen Tag — dieselbe Begründung,
+    # aus der das Rang-Profil seit v4.0.10 `preis_cent` mitträgt.
+    abstand_cent: Optional[float] = None
 
 
 @dataclass
@@ -108,7 +113,9 @@ async def bewerte_preistag(db, anlage, datum: date, aktuelle_stunde: int):
 
     from backend.services.strompreis_markt_service import fetch_marktpreise
     from backend.services.solar_forecast_service import sonnenauf_unter_stunde
-    from backend.core.berechnungen.preis_rang import berechne_preis_rang
+    from backend.core.berechnungen.preis_rang import (
+        abstand_zum_durchschnitt_cent, berechne_preis_rang, optimierter_durchschnitt,
+    )
 
     markt = markt_der_anlage(anlage)
 
@@ -132,12 +139,21 @@ async def bewerte_preistag(db, anlage, datum: date, aktuelle_stunde: int):
         schwelle_faktor=schwelle_faktor(anlage),
     )
 
+    # Ein Ø je Kalendertag (s. Klassen-Docstring von `PreisTag`) ⇒ der Abstand
+    # jeder Stunde bezieht sich auf denselben Wert, aus dem auch die Schwelle
+    # gebildet wird. Ungerundet hinein, gerundet heraus — wie im Layer.
+    durchschnitt_roh = optimierter_durchschnitt(preise)
     stunden = [
         PreisStunde(
             stunde=h,
             preis_cent=preise[h],
             rang=ergebnis.rang_profil[h],
             unter_schwelle=ergebnis.unter_schwelle_profil.get(h, False),
+            abstand_cent=(
+                None
+                if (a := abstand_zum_durchschnitt_cent(preise[h], durchschnitt_roh)) is None
+                else round(a, 3)
+            ),
         )
         for h in sorted(ergebnis.rang_profil)
         if preise.get(h) is not None

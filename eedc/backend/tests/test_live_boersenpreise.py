@@ -132,6 +132,13 @@ async def test_jeder_tag_traegt_seine_eigene_schwelle(db, monkeypatch):
     assert tage[0]["schwelle_cent"] == pytest.approx(27.0)
     assert tage[1]["schwelle_cent"] == pytest.approx(2.7)
     assert tage[0]["optimierter_durchschnitt_cent"] == pytest.approx(30.0)
+    # N-173: der ct-Abstand jeder Stunde bezieht sich auf den Ø DIESES Tages —
+    # sonst trüge der billige Tag die Abstände des teuren.
+    for tag in tage:
+        for s in tag["stunden"]:
+            assert s["abstand_cent"] == pytest.approx(
+                s["preis_cent"] - tag["optimierter_durchschnitt_cent"], abs=0.01
+            )
     for tag in tage:
         guenstig = [s["stunde"] for s in tag["stunden"] if s["unter_schwelle"]]
         assert 0 < len(guenstig) < len(tag["stunden"]), (
@@ -270,6 +277,12 @@ async def test_chart_und_ha_sensor_markieren_dieselben_stunden(db, monkeypatch):
     aus_chart = {(s["stunde"], s["rang"], s["unter_schwelle"]) for s in chart["stunden"]}
     aus_sensor = {(s["stunde"], s["rang"], s["unter_schwelle"]) for s in sensor["rang_profil"]}
     assert aus_chart == aus_sensor
+    # N-173: auch der ct-Abstand ist in beiden Pfaden derselbe — sonst nennt die
+    # Live-Kachel eine andere Zahl als der Sensor, auf den die Automation hört.
+    assert (
+        {(s["stunde"], s["abstand_cent"]) for s in chart["stunden"]}
+        == {(s["stunde"], s["abstand_cent"]) for s in sensor["rang_profil"]}
+    )
     # Und die anlagen-eigene Schwelle wirkt in beiden: 15 % statt der Default-10 %.
     assert chart["schwelle_cent"] == pytest.approx(30.0 * 0.85)
 
