@@ -126,9 +126,16 @@ async def build_jahresbericht_context(
 
     # BRUTTO-Kapazität über den SoT-Helper (ADR-002/P3-a). `or 0`, weil ein
     # ungepflegter Speicher `None` liefert und die Summe der übrigen weiterläuft.
+    # F-24: Stichtag statt Summe über alles. `aktiv_im_jahr` oben lässt im
+    # **Wechseljahr** beide Geräte durch (altes bis Juni, neues ab Juli) — und
+    # ohne Jahresfilter ohnehin jedes je erfasste. Der Bericht nennt aber die
+    # Kapazität der Anlage, nicht die Summe ihrer Gerätegeschichte: 15,4 + 30,8
+    # = 46,2 statt 30,8 kWh (an einer Kopie des Dev-Bestands gemessen).
+    # Stichtag ist das Jahresende des Berichtsjahres bzw. heute.
+    stichtag = date(jahr, 12, 31) if jahr is not None else date.today()
     speicher_kapazitaet = 0.0
     for inv in investitionen:
-        if inv.typ == "speicher":
+        if inv.typ == "speicher" and inv.ist_aktiv_an(stichtag):
             speicher_kapazitaet += get_speicher_kapazitaet_kwh(inv) or 0
 
     # ── 4. PVGIS-Prognose (die aktive) ──────────────────────────────────

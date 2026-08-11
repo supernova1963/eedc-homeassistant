@@ -280,6 +280,41 @@ def test_adapter_nimmt_profil_und_tageswert_des_angefragten_tages():
 
 # ── Prognosen-Vergleich: die Solcast-Spalte trägt keine fremde Form mehr ────
 
+async def _fake_solar_prognose(*_a, **kwargs):
+    """OpenMeteo-Ersatz für den Prognose-Kanon — festes Profil, kein Netz.
+
+    Die Kurve belegt bewusst BEIDE Tageshälften (Slots 8…16), denn genau
+    daran erkennt der Test unten, dass übermorgen die OM-Verteilung benutzt
+    wird und nicht die (nur vormittags belegte) Solcast-Kurve von morgen.
+    """
+    import backend.services.solar_forecast_service as _sfs
+
+    days = kwargs.get("days", 4)
+    heute_ = date.today()
+    slots = [0.0] * 24
+    for h in range(8, 17):
+        slots[h] = 1.0
+    tage = [
+        _sfs.SolarPrognoseTag(
+            datum=(heute_ + timedelta(days=o)).isoformat(),
+            pv_ertrag_kwh=sum(slots), gti_kwh_m2=5.0, ghi_kwh_m2=4.0,
+            sonnenstunden=9.0, temperatur_max_c=20.0, temperatur_min_c=10.0,
+            bewoelkung_prozent=10, niederschlag_mm=0.0, schnee_cm=0.0,
+            stunden_kw=list(slots),
+        )
+        for o in range(days)
+    ]
+    return _sfs.SolarPrognoseResponse(
+        anlage_id=None, kwp_gesamt=kwargs.get("kwp", 10.0),
+        neigung=kwargs.get("neigung", 35), ausrichtung=kwargs.get("ausrichtung", 0),
+        system_losses_prozent=14.0,
+        prognose_zeitraum={"von": tage[0].datum, "bis": tage[-1].datum},
+        summe_kwh=sum(t.pv_ertrag_kwh for t in tage),
+        durchschnitt_kwh_tag=sum(t.pv_ertrag_kwh for t in tage) / len(tage),
+        tageswerte=tage, string_prognosen=None,
+        datenquelle="test", abgerufen_am=tage[0].datum,
+    )
+
 @pytest.mark.asyncio
 async def test_vergleich_tageshaelften_morgen_kommen_aus_solcast(db, monkeypatch):
     """Vormittag/Nachmittag der Solcast-Spalte wurden für morgen aus der
@@ -294,6 +329,7 @@ async def test_vergleich_tageshaelften_morgen_kommen_aus_solcast(db, monkeypatch
     from datetime import date as _date, timedelta as _td
 
     import backend.api.routes.prognosen as pr
+    import backend.services.solar_forecast_service as sfs
     from backend.models import Anlage, Investition, Monatsdaten
 
     heute = _date.today()
@@ -340,6 +376,14 @@ async def test_vergleich_tageshaelften_morgen_kommen_aus_solcast(db, monkeypatch
 
     monkeypatch.setattr(pr, "get_solcast_forecast", fake_solcast)
     monkeypatch.setattr(pr, "fetch_open_meteo_forecast", _none)
+
+    # N-232: Die OM-Verteilung für übermorgen kommt aus dem Prognose-Kanon, und
+    # der ruft `sfs.get_solar_prognose` — bis 11.08.2026 ungemockt, also über
+    # das echte Netz. Lokal antwortete Open-Meteo (grün), im CI kam ein Timeout
+    # ⇒ keine Verteilung ⇒ `th_uebermorgen is None`. Der Test prüft die
+    # Aufteilung, nicht die Wetterdaten: ein festes Profil macht ihn
+    # deterministisch UND netzfrei.
+    monkeypatch.setattr(sfs, "get_solar_prognose", _fake_solar_prognose)
 
     vergleich = await pr.get_prognosen_vergleich(anlage.id, db=db)
 

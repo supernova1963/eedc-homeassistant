@@ -271,14 +271,14 @@ export function PvgisDetailTabelle({ vm }: { vm: PrognoseVsIstVM }) {
             {vm.vergleichsDaten.map((d) => (
               <tr key={d.monat} className="border-b border-gray-100 dark:border-gray-800">
                 <td className={`${ZELLE} font-medium`}>{d.monatName}</td>
-                <td className={`${ZELLE} text-yellow-600`}>{e(d.prognose)}</td>
-                <td className={`${ZELLE} text-right`}>
+                <td className={`${ZELLE} text-right tabular-nums text-yellow-600`}>{e(d.prognose)}</td>
+                <td className={`${ZELLE} text-right tabular-nums`}>
                   {d.ist > 0 ? <span className="text-green-600">{e(d.ist)}</span> : <span className="text-gray-400 dark:text-gray-500">-</span>}
                 </td>
-                <td className={`${ZELLE} text-right ${d.abweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <td className={`${ZELLE} text-right tabular-nums ${d.abweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {d.ist > 0 ? `${d.abweichung >= 0 ? '+' : ''}${e(d.abweichung)}` : '-'}
                 </td>
-                <td className={`${ZELLE} text-right ${d.abweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <td className={`${ZELLE} text-right tabular-nums ${d.abweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {d.ist > 0 ? `${d.abweichungProzent >= 0 ? '+' : ''}${formatProzent(d.abweichungProzent).text}` : '-'}
                 </td>
                 <td className={`${ZELLE} text-center`}>
@@ -294,12 +294,12 @@ export function PvgisDetailTabelle({ vm }: { vm: PrognoseVsIstVM }) {
           <TableFoot>
             <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
               <td className={ZELLE}>Gesamt</td>
-              <td className={`${ZELLE} text-yellow-600`}>{e(vm.jahresPrognose)}</td>
-              <td className={`${ZELLE} text-green-600`}>{e(vm.jahresIst)}</td>
-              <td className={`${ZELLE} text-right ${vm.jahresAbweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <td className={`${ZELLE} text-right tabular-nums text-yellow-600`}>{e(vm.jahresPrognose)}</td>
+              <td className={`${ZELLE} text-right tabular-nums text-green-600`}>{e(vm.jahresIst)}</td>
+              <td className={`${ZELLE} text-right tabular-nums ${vm.jahresAbweichung >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {vm.jahresAbweichung >= 0 ? '+' : ''}{e(vm.jahresAbweichung)}
               </td>
-              <td className={`${ZELLE} text-right ${vm.jahresAbweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <td className={`${ZELLE} text-right tabular-nums ${vm.jahresAbweichungProzent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {vm.jahresAbweichungProzent >= 0 ? '+' : ''}{formatProzent(vm.jahresAbweichungProzent).text}
               </td>
               <td></td>

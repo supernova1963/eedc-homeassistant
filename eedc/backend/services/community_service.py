@@ -5,7 +5,7 @@ Bereitet Anlagendaten für die anonyme Übertragung an den Community-Server vor.
 """
 
 import hashlib
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -161,11 +161,25 @@ async def prepare_community_data(
     hat_balkonkraftwerk = any(inv.typ == "balkonkraftwerk" for inv in investitionen)
     hat_sonstiges = any(inv.typ == "sonstiges" for inv in investitionen)
 
-    # Speicherkapazität summieren
+    # Speicherkapazität summieren — NUR die heute vorhandenen Geräte (F-24).
+    #
+    # Der Datensatz beschreibt die **aktuelle Ausstattung** der Anlage; der
+    # Server rechnet nichts nach. Ohne den Stilllegungs-Filter meldete jede
+    # Anlage nach einem Speicher-Tausch oder einer Erweiterung nach dem
+    # Zwei-Datensatz-Weg die **Summe aus altem und neuem** Gerät — an einer
+    # Kopie des Dev-Bestands gemessen (11.08.2026): 15,4 kWh + 30,8 kWh =
+    # **46,2 kWh** statt 30,8. Damit stand die Anlage im öffentlichen
+    # Benchmark mit einer Ausstattung, die es nie gab, und verzerrte die
+    # Größenklassen für alle anderen mit.
+    #
+    # `ist_aktiv_an(heute)` statt `aktiv`: Wer ein Gerät ersetzt, setzt das
+    # **Stilllegungsdatum** — den `aktiv`-Haken zu entfernen würde es auch aus
+    # der Historie nehmen (`models/investition.py::ist_aktiv_an`).
+    heute_ = date.today()
     speicher_kwh = sum(
         get_speicher_kapazitaet_kwh(inv) or 0
         for inv in investitionen
-        if inv.typ == "speicher"
+        if inv.typ == "speicher" and inv.ist_aktiv_an(heute_)
     )
 
     # Wallbox Ladeleistung — Bug #6 v3.25.0: vorher 'ladeleistung_kw' (toter Key,

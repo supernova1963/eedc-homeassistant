@@ -461,6 +461,84 @@ class StammdatenChecks:
 
     # ─── Investitionen ───────────────────────────────────────────────────
 
+    def _check_speicher_kapazitaet_einheit(
+        self, inv, name: str, kap_kwh, alle_invs
+    ) -> list[CheckErgebnis]:
+        """Wh statt kWh — erkannt am **Widerspruch**, nicht an einer Schwelle (N-235).
+
+        Das Balkonkraftwerk fragt seine Akku-Kapazität in **Wh**
+        (`BalkonkraftwerkFelder.tsx`, „z.B. 1600 Wh für Anker SOLIX"), die
+        Speicher-Investition daneben in **kWh** (`SpeicherFelder.tsx`). Wer den
+        Zahlenwert von oben nach unten überträgt, liegt um **Faktor 1000**
+        daneben — und nichts fiel bisher auf: Vollzyklen, Auslastung,
+        Speicher-ROI und die Ladeprognose rechnen still gegen einen Nenner,
+        den es nicht gibt. Real eingetreten bei azywietz-web (Discussion #366,
+        11.08.2026): Anker Solarbank 3 mit 5.376 **Wh**, in eedc als 5.376
+        **kWh** geführt.
+
+        **Warum keine absolute Obergrenze** (Entscheid Gernot 11.08.2026): Eine
+        Grenze „mehr als X kWh ist unplausibel" wäre geraten und meldete bei
+        einer echten Großanlage dauerhaft falsch — und eine Meldung, die man
+        nicht wegklicken kann, muss richtig sein
+        ([[feedback_daten_checker_kein_akzeptiert]]). Hier braucht es keine:
+        Zwei gepflegte Felder desselben Geräts tragen **denselben Zahlenwert**
+        in zwei Einheiten. Ein Speicher mit 5.376 kWh neben einem
+        Balkonkraftwerk mit 5.376 Wh existiert nicht.
+
+        Gemeldet wird nur, was der Anwender selbst auflösen kann — mit der
+        Zahl, die er eintragen soll. **Kein stiller Umbau seiner Daten.**
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        if kap_kwh is None or kap_kwh <= 0:
+            return ergebnisse
+
+        parent_id = getattr(inv, "parent_investition_id", None)
+        if not parent_id:
+            return ergebnisse
+
+        # Wie in `_check_bkw_akku_erfassungsweg`: über die bereits geladene
+        # Liste, NICHT über die `parent`-Beziehung — die ist nicht eager
+        # geladen, ein Zugriff wäre im Async-Kontext ein MissingGreenlet.
+        parent = next(
+            (p for p in (alle_invs or []) if p.id == parent_id and p.typ == "balkonkraftwerk"),
+            None,
+        )
+        if parent is None:
+            return ergebnisse
+
+        roh_wh = (parent.parameter or {}).get("speicher_kapazitaet_wh")
+        try:
+            wh = float(roh_wh)
+        except (TypeError, ValueError):
+            return ergebnisse
+        if wh <= 0:
+            return ergebnisse
+
+        # Derselbe Zahlenwert in zwei Einheiten. Toleranz nur gegen
+        # Tipp-/Rundungsnähe (5376 vs. 5375), nicht als Schwelle.
+        if abs(wh - kap_kwh) > max(1.0, wh * 0.01):
+            return ergebnisse
+
+        def _de(wert: float, nachkomma: int) -> str:
+            return f"{wert:_.{nachkomma}f}".replace(".", ",").replace("_", ".")
+
+        ergebnisse.append(CheckErgebnis(
+            kategorie=CheckKategorie.INVESTITIONEN,
+            schwere=CheckSeverity.WARNING,
+            meldung=f"{name}: Kapazität vermutlich in Wh statt kWh eingetragen",
+            details=(
+                f"„{parent.bezeichnung}“ nennt {_de(wh, 0)} Wh, dieser Speicher "
+                f"{_de(kap_kwh, 0)} kWh — derselbe Zahlenwert in zwei Einheiten. "
+                f"Gemeint sind vermutlich {_de(wh / 1000.0, 3)} kWh. Solange die "
+                "Kapazität tausendfach zu groß ist, rechnen Vollzyklen, Auslastung "
+                "und die Wirtschaftlichkeit des Speichers gegen einen Nenner, den "
+                "es nicht gibt."
+            ),
+            link="/einstellungen/investitionen",
+            investition_id=inv.id,
+        ))
+        return ergebnisse
+
     def _check_bkw_akku_erfassungsweg(self, inv, name: str, alle_invs) -> list[CheckErgebnis]:
         """Weist Weg-B-Altbestand auf den Kanon hin — mit benannter Handlung.
 
@@ -625,6 +703,11 @@ class StammdatenChecks:
                         meldung=f"{name}: Kapazität (kWh) fehlt",
                         link="/einstellungen/investitionen",
                     ))
+                ergebnisse.extend(
+                    self._check_speicher_kapazitaet_einheit(
+                        inv, name, kap, anlage.investitionen
+                    )
+                )
                 if param.get("nutzt_arbitrage"):
                     if not param.get("lade_durchschnittspreis_cent"):
                         ergebnisse.append(CheckErgebnis(

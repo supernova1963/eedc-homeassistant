@@ -1543,7 +1543,16 @@ async def get_aktueller_monat(
     speicher_auslastung = None
     speicher_ersparnis = None
 
-    speicher_invs = [i for i in investitionen if i.typ == "speicher"]
+    # F-24: nur die Speicher, die es in DIESEM Monat gab. `investitionen` ist
+    # oben nur über den `aktiv`-Haken gefiltert — ein ersetztes Gerät trägt
+    # aber ein **Stilllegungsdatum** und bleibt `aktiv` (sonst verschwände es
+    # auch aus der Historie). Ohne diesen Filter summierte die Kachel unten
+    # altes **und** neues Gerät: an einer Kopie des Dev-Bestands 15,4 + 30,8 =
+    # 46,2 statt 30,8 kWh, und damit auch Vollzyklen und Auslastung daneben.
+    speicher_invs = [
+        i for i in investitionen
+        if i.typ == "speicher" and i.ist_aktiv_im_monat(jahr, monat)
+    ]
     speicher_soc_drift_flag = False
     # F-22: worauf der ausgewiesene η beruht — `soc_korrigiert` · `fenster_lang`
     # · `fenster-zu-kurz` · `keine-ladung` · `nicht-ermittelbar`. Trägt den

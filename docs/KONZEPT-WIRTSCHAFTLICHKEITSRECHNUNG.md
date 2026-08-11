@@ -341,6 +341,43 @@ wird deshalb nicht umgebucht, sondern **abgebildet**.
 
 ### 10.1 Speicher — durchgespielt und gemessen
 
+> ## ⛔ ENTSCHIEDEN (Gernot, 11.08.2026) — nicht neu herleiten
+>
+> **Zwei Wege sind gültig**, beide stehen in der Anwender-Fassung
+> ([`HANDBUCH_EINSTELLUNGEN.md` §3.2](HANDBUCH_EINSTELLUNGEN.md#eine-komponente-erweitern-oder-ersetzen)):
+> **A** = ein Datensatz, Kapazität erhöhen, Kosten der Erweiterung als *Ausgabe* im Monat der
+> Aufrüstung · **B** = zwei Datensätze nach den Schritten unten, jeder mit **seinen tatsächlichen
+> Ausgaben**. Die Geldrechnung ist bei beiden gleich; **wer schon gepflegt hat, baut nichts um**.
+>
+> ⛔ **Eine Restwert-Behandlung gehört in KEINEN der beiden Wege** — als Ertrag, als Umbuchung
+> und als Nullsumme ist sie in §7 **mit Zahlen verworfen**. Dass v4.0.12 die Annualisierung
+> einmaliger Positionen behoben hat, macht die Ertrags-Variante *unschädlicher*, nicht *nötig*:
+> eedc stellt die Restwert-Frage gar nicht, weil es Kapitaleinsatz gegen Ersparnis rechnet.
+> **Genau dieser Fehlschluss hat die Frage am 11.08. dreimal an einem Tag neu aufgerollt** und
+> zwei gegensätzliche Anwender-Texte erzeugt.
+>
+> Wer hier etwas ändern will, bringt eine **neue Messung** mit und legt sie vor — er baut nicht
+> still eine andere Variante. Dauerhafte Fassung: `memory/project_speichererweiterung_entschieden.md`.
+
+
+> **Die Anwender-Fassung steht seit dem 11.08.2026 im Handbuch**
+> ([`HANDBUCH_EINSTELLUNGEN.md` §3.2 „Eine Komponente erweitern oder ersetzen"](HANDBUCH_EINSTELLUNGEN.md#eine-komponente-erweitern-oder-ersetzen)).
+> Der Abschnitt hier bleibt die Herleitung samt Messung; wer die Anleitung ändert, ändert **beide**.
+>
+> ⛔ **Was NICHT dazugehört, obwohl es am 11.08. zweimal in Anwender-Kanälen stand:** eine
+> **Restwert-Behandlung**. Schritt 5 ist die am 09.08. gemessene Variante 3 („jeder Datensatz
+> trägt seine tatsächlichen Ausgaben"). Restwert als Ertrag · Umbuchung · Nullsumme sind in §7
+> **mit Zahlen verworfen** — dass v4.0.12 die Annualisierung einmaliger Positionen behoben hat,
+> macht die Ertrags-Variante *unschädlicher*, aber nicht *nötig*: eedc stellt die Restwert-Frage
+> gar nicht, weil es Kapitaleinsatz gegen Ersparnis rechnet.
+>
+> ⛔ **Voraussetzung, die bis zum 11.08.2026 FEHLTE (F-24):** Drei Stellen summierten die
+> Speicher-Kapazität über **alle** je erfassten Geräte statt über die heute vorhandenen —
+> Community-Payload, Jahresbericht-PDF und *Cockpit → Monat*. An einer Kopie des Dev-Bestands
+> gemessen: **15,4 + 30,8 = 46,2 kWh statt 30,8**. Der Testdurchlauf vom 09.08. konnte das nicht
+> sehen, weil er den Komponenten-Hub und die Ladungssummen geprüft hat, nicht die
+> Kapazitäts-Aggregate. **Behoben am 11.08.**, mit Proben für Community und Jahresbericht.
+
 **An einer Kopie des Dev-Bestands durchgeführt (2026-08-09), nicht hergeleitet.**
 Ausgangslage: ein Speicher 15,4 kWh, 12.000 €, ab 06/2023, 31 Monate Daten.
 Erweiterung zum 01.07.2025 auf 30,8 kWh für 8.000 €.

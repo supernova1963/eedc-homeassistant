@@ -9,6 +9,30 @@
 
 ---
 
+## In Arbeit (noch nicht veröffentlicht)
+
+### Eine Speicher-Kapazität in Wh fällt jetzt auf
+
+**Betrifft dich das?** Wenn du ein Balkonkraftwerk mit Akku hast und den Speicher als eigene Komponente führst.
+
+Das Balkonkraftwerk fragt die Kapazität seines Akkus in **Wh** ab — so steht sie auf dem Gerät und in der Hersteller-App (z. B. 5.376 Wh). Die Speicher-Komponente daneben fragt in **kWh**. Wer den Zahlenwert einfach überträgt, hat einen Speicher, der tausendmal größer ist als in Wirklichkeit — und merkt es nicht: Vollzyklen, Auslastung und Wirtschaftlichkeit rechnen dann gegen eine Kapazität, die es nicht gibt.
+
+Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#433-speicher) meldet das jetzt und nennt die Zahl, die richtig wäre. Er meckert dabei **keine großen Speicher an**: Gemeldet wird nur der Widerspruch, dass zwei Felder desselben Geräts denselben Zahlenwert in zwei verschiedenen Einheiten tragen.
+
+### Ein ersetzter Speicher zählt nicht mehr doppelt
+
+**Betrifft dich das?** Wenn du deinen Speicher getauscht oder erweitert und dabei die alte Komponente stillgelegt hast.
+
+eedc führte die Kapazität deiner Anlage dann als **Summe aus altem und neuem Gerät** — an einem echten Bestand 46,2 statt 30,8 kWh. Betroffen waren *Cockpit → Monat*, der Jahresbericht und der anonyme Community-Vergleich. Gerade dort war es teuer: Deine Anlage stand in einer Größenklasse, die es nie gab.
+
+Gezählt wird jetzt der Speicher, den du zum jeweiligen Zeitpunkt wirklich hattest. Wenn du deine Daten mit der Community teilst, kommt die Korrektur beim nächsten vollständigen Übertragen an.
+
+### Kleinigkeit: die Prognose-Tabelle steht wieder gerade
+
+In *Auswertungen → Prognose* standen die Zahlen der Spalte „PVGIS Prognose" und die Gesamt-Zeile nicht unter ihren Überschriften. Im großen Fenster lief die Tabelle dadurch sichtbar auseinander. Danke fürs Melden.
+
+---
+
 ## v4.0.12 — Nutzerwünsche und notwendige Korrekturen (August 2026)
 
 ### Der Speicher-Wirkungsgrad steht jetzt da, wo bisher „—" stand

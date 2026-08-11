@@ -164,6 +164,37 @@ Jede Investition hat zwei Lebenszyklus-Daten, die für **alle** Auswertungen gel
 - **Anschaffungsdatum:** ab hier zählt die Investition. Aggregate (JAZ, Wärme, Strom, Ersparnis usw.) ignorieren Monatsdaten **vor** diesem Datum. Nützlich beim Wechsel der Erfassungsmethode (z. B. von WP-eigener Strommessung auf einen Shelly-Zähler): alte Werte bleiben historisch erhalten, verfälschen aber die aktuelle JAZ nicht.
 - **Stilllegungsdatum:** Endmarker — ab hier zählt die Investition nicht mehr für aktuelle/künftige Auswertungen; historische Aggregate behalten sie.
 
+#### Eine Komponente erweitern oder ersetzen
+
+Ein Speicher wird aufgestockt, ein Gerät gegen ein größeres getauscht — die Frage kommt regelmäßig. **Es gibt zwei Wege, und beide sind richtig; sie kosten nur Verschiedenes.** Eine Erweiterung ohne neue Sensoren lässt sich nicht so abbilden, dass jede Sicht rückwirkend stimmt — deshalb entscheidest du, welcher Preis dir lieber ist:
+
+| | **A — ein Datensatz** | **B — zwei Datensätze** |
+| --- | --- | --- |
+| Was du tust | Kapazität der Komponente erhöhen, die Kosten der Erweiterung als **Ausgabe unter „Sonstige Positionen"** im Monat der Aufrüstung buchen | Altes Gerät stilllegen, neues mit der Gesamtkapazität anlegen (Schritte unten) |
+| Was es kostet | Vollzyklen und Auslastung **der Vergangenheit** rechnen gegen die neue, größere Kapazität — die alten Monate sehen schlechter aus, als sie waren | Die Monatsdaten müssen umgehängt werden, und für das stillgelegte Gerät lässt sich **nichts mehr importieren** |
+| Was unberührt bleibt | Sensoren, Import, Datenquellen — alles läuft weiter | Die Kennzahlen jedes Zeitraums stimmen gegen die Kapazität, die damals da war |
+| Passt, wenn | dir die Wirtschaftlichkeit wichtiger ist als die Speicher-Historie | du die Speicher-Kennzahlen der Vergangenheit auswerten willst |
+
+**Die Geldrechnung ist bei beiden Wegen gleich** — dein Kapitaleinsatz ist die Summe dessen, was du bezahlt hast, und die Amortisation rechnet damit. Weg A ist der bequemere; wenn du bereits so gepflegt hast, gibt es **keinen Grund umzubauen**.
+
+**Weg B im Einzelnen** — an einem echten Bestand durchgespielt, nicht hergeleitet:
+
+1. **Am alten Gerät das Stilllegungsdatum setzen** — und zwar den **Tag vor** dem Erweiterungstag. Anschaffungs- und Stilllegungsdatum sind beide **inklusiv**; trägst du denselben Tag ein, an dem das neue Gerät startet, zählt der Wechselmonat doppelt. **Niemals stattdessen den Haken „aktiv" entfernen** — das nimmt die Komponente auch aus der Historie.
+2. **Neuen Datensatz ab dem Erweiterungstag anlegen**, mit der **Gesamtkapazität** (nicht mit der Differenz).
+3. **Denselben Wechselrichter zuordnen** wie beim alten Gerät. Ohne ihn gilt der neue Speicher als eigenständig und bekommt eine eigene ROI-Zeile, während der alte Teil des PV-Systems bleibt — gleicher Gerätetyp, zwei Darstellungen.
+4. **Monatsdaten ab dem Wechselmonat umhängen.** Sie bleiben sonst am alten Datensatz und fallen mit dessen Stilllegung aus der Anzeige.
+5. **Kosten: jeder Datensatz trägt, was für ihn bezahlt wurde** — das alte Gerät behält seinen ursprünglichen Preis, der neue bekommt **die Kosten der Erweiterung** (nicht den Neuwert des Gesamtsystems). Damit steht in eedc genau die Summe, die du wirklich ausgegeben hast.
+
+> **Und den Restwert des alten Geräts brauchst du nicht** — eedc stellt die Frage gar nicht. Gerechnet wird **eingesetztes Geld gegen Ersparnis**, und eingesetzt ist, was du bezahlt hast; eine Wertfortschreibung wie in einer Bilanz kommt darin nicht vor. Wir haben das durchgerechnet: Den Restwert als Ertrag zu buchen, ihn zwischen den Geräten umzubuchen oder ihn als Nullsumme zu führen — jede dieser Varianten macht eine andere Zahl falsch. Der einfachste Weg ist auch der richtige.
+
+**Was dabei herauskommt:** Der Komponenten-Hub zeigt beide Geräte getrennt, jedes mit eigenem Zeitraum und eigener Kapazität, und jeder Abschnitt rechnet gegen **seine** Kapazität. Die Summe der Lade- und Entlademengen bleibt unverändert — es geht keine Energie verloren und keine wird doppelt gezählt.
+
+> **Die Anlage zählt dabei nur ein Gerät.** Kapazitäts-Angaben — im Cockpit, im Jahresbericht und im anonymen Community-Vergleich — nennen den Speicher, den du **heute** hast, nicht die Summe deiner Gerätegeschichte.
+
+> ⚠ **Eine Einschränkung, die dazugehört:** Für ein stillgelegtes Gerät lässt sich **nichts mehr importieren**. Der Weg gilt deshalb für Bestände, deren Monatswerte gepflegt oder wie in Schritt 4 umgehängt werden — nicht für den laufenden automatischen Sensor-Import über den Wechselmonat hinweg. Trag die Monatsdaten des alten Geräts also **vor** dem Stilllegen fertig ein.
+
+> **Bei PV ist es einfacher:** Ein zusätzliches **Modulfeld mit eigenem Anschaffungsdatum** genügt — kein Stilllegen, kein neuer Datensatz für das Bestehende. Für Wärmepumpe, Wallbox und E-Auto ist dieser Weg **nicht** durchgemessen; dort gilt die Anleitung ausdrücklich nicht.
+
 ### 3.3 Geräte-Detaildaten in der Infothek
 
 Hersteller/Modell/Seriennummer/Garantie, Ansprechpartner und Wartungsvertrag sind **nicht** Teil des Komponenten-Formulars, sondern werden über die [Infothek](HANDBUCH_INFOTHEK.md) gepflegt und N:M mit beliebig vielen Komponenten verknüpft. Beim Bearbeiten einer Komponente werden verknüpfte Infothek-Einträge als kompakte Liste mit Direktlink angezeigt.

@@ -7,6 +7,24 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Der Daten-Checker erkennt eine Speicher-Kapazität, die in Wh statt in kWh eingetragen wurde.** Ein Balkonkraftwerk fragt die Kapazität seines Akkus in **Wh** ab (so steht sie auf dem Gerät und in der Hersteller-App), die Speicher-Komponente daneben in **kWh**. Wer den Zahlenwert von oben nach unten überträgt, liegt um den Faktor 1000 daneben — und nichts fiel bisher auf: Vollzyklen, Auslastung und die Wirtschaftlichkeit des Speichers rechneten still gegen einen Nenner, den es nicht gibt. Gemeldet wird nicht „zu groß" (das wäre geraten und träfe echte Großspeicher), sondern der **Widerspruch**: zwei gepflegte Felder desselben Geräts mit demselben Zahlenwert in zwei Einheiten. Die Meldung nennt die Zahl, die einzutragen ist. *(Gefunden beim Durchgehen der Anker-Solix-Sensorliste von azywietz-web, Discussion #366.)*
+
+### Fixed
+
+- **Nach einem Speicher-Tausch führte eedc alt und neu zusammen als Kapazität der Anlage.** Wer sein Gerät ersetzt oder erweitert, legt in eedc den alten Speicher mit Stilllegungsdatum ab und den neuen daneben — beide bleiben in der Historie, das ist so gewollt. Drei Stellen summierten daraufhin aber **beide Kapazitäten**: *Cockpit → Monat*, der Jahresbericht und der anonyme **Community-Datensatz**. An einem echten Bestand gemessen: **46,2 statt 30,8 kWh**. Im Community-Vergleich war das am teuersten — der Server rechnet nichts nach, die Anlage stand also in einer Größenklasse, die es nie gab, und verzog die Vergleichswerte für alle anderen mit. Gezählt wird jetzt das Gerät, das zum jeweiligen Zeitpunkt vorhanden war; im Jahresbericht die Ausstattung zum Ende des Berichtsjahres. ⚠ **Betroffene Anlagen melden ihre Speichergröße künftig kleiner** — das ist die Korrektur, kein Verlust; sie wirkt beim nächsten vollständigen Teilen.
+
+- **In *Auswertungen → Prognose* standen die Zahlen der Spalte „PVGIS Prognose" und die ganze Gesamt-Zeile nicht unter ihren Überschriften.** Die Spaltenköpfe sind rechtsbündig, die Werte waren es nicht — im großen Fenster lief die Tabelle dadurch sichtbar auseinander. *(Gemeldet von Radiocarbonat.)*
+
+### Changed
+
+- **Intern: Die Testsuite geht nicht mehr ans Netz.** Zweimal ist der Testlauf auf GitHub rot geworden, obwohl derselbe Stand lokal grün war — beide Male, weil ein Test unbemerkt eine echte Wetter-API abgefragt hat und die dort nicht antwortete. Ein Test, der ans Netz geht, prüft nicht mehr nur den Code, sondern auch die Verfügbarkeit eines fremden Servers. Der Testlauf blockiert echte Verbindungen jetzt und nennt jeden Versuch beim Namen. **Für die Anwendung ändert sich nichts** — es betrifft ausschließlich die Entwicklung.
+
+---
+
 ## [4.0.12] - 2026-08-11 — Nutzerwünsche und notwendige Korrekturen
 
 ### Added
