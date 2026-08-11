@@ -177,7 +177,16 @@ def _patche_ha(monkeypatch, history: dict[str, list]) -> None:
         }
         return gefiltert, {}
 
-    monkeypatch.setattr(svc, "HA_INTEGRATION_AVAILABLE", True)
+    # N-156: der HA-Weg hängt nicht mehr am Supervisor-Token, sondern an der
+    # Erreichbarkeit des `HAStateService` — also wird der gefakt statt der
+    # Umgebungs-Konstante.
+    class _FakeHA:
+        is_available = True
+
+    monkeypatch.setattr(
+        "backend.services.ha_state_service.get_ha_state_service",
+        lambda: _FakeHA(),
+    )
     monkeypatch.setattr(svc, "get_history_normalized", _fake_history)
 
 

@@ -103,12 +103,20 @@ from backend.services.scheduler import start_scheduler, stop_scheduler, get_sche
 # unbedingt importieren; der Router wird auch im Standalone gemountet.
 from backend.api.routes import ha_export
 
-# HA-spezifische Imports (nur wenn HA verfügbar)
+# HA-Langzeitstatistik: N-237 — braucht **kein** Supervisor-Token. Der Dienst
+# darunter liest per Recorder-DB **oder** WebSocket und prüft seine
+# Erreichbarkeit an jedem Endpunkt selbst; jeder Endpunkt antwortet ohne
+# Verbindung mit einer klaren Meldung statt mit einem Fehler. Bis 2026-08-11
+# hing der Router am Supervisor — der Statistik-Import war damit für jeden
+# Token-Betrieb unerreichbar, obwohl Cockpit und Monatsabschluss dieselben
+# Werte lesen.
+from backend.api.routes import ha_statistics
+
+# Supervisor-gebundene Imports (Add-on-API — ohne Supervisor gibt es sie nicht)
 if HA_INTEGRATION_AVAILABLE:
     from backend.api.routes import (
         ha_integration,
         ha_import,
-        ha_statistics,
         sensor_mapping,
     )
 
@@ -499,14 +507,17 @@ app.include_router(ha_export.router, prefix="/api", tags=["HA Export"])
 # API Routes - Home Assistant (nur mit SUPERVISOR_TOKEN)
 # =============================================================================
 
+# N-237: die Langzeitstatistik hängt an der VERBINDUNG, nicht am Add-on — der
+# Router wird deshalb immer gemountet (s. Import oben).
+app.include_router(
+    ha_statistics.router, prefix="/api/ha-statistics", tags=["HA Statistics"]
+)
+
 if HA_INTEGRATION_AVAILABLE:
     app.include_router(ha_integration.router, prefix="/api/ha", tags=["Home Assistant"])
     app.include_router(ha_import.router, prefix="/api/ha-import", tags=["HA Import"])
     app.include_router(
         sensor_mapping.router, prefix="/api/sensor-mapping", tags=["Sensor Mapping"]
-    )
-    app.include_router(
-        ha_statistics.router, prefix="/api/ha-statistics", tags=["HA Statistics"]
     )
     print("  HA-Integration: aktiv (SUPERVISOR_TOKEN gesetzt)")
 else:
@@ -623,11 +634,23 @@ async def get_settings():
     Returns:
         dict: Öffentliche Konfiguration
     """
+    # N-237: zwei verschiedene Fragen, zwei Felder.
+    #   `ha_integration_available` = läuft eedc als **Add-on** (Supervisor-API
+    #     erreichbar)? Daran hängt, was ohne Supervisor gar nicht existiert:
+    #     Add-on-Protokolle, HA-Import, die Legacy-Sensor-Zuordnung.
+    #   `ha_verbunden`            = ist **irgendeine** HA-Instanz erreichbar
+    #     (Supervisor **oder** Long-Lived-Token)? Daran hängt alles, was nur
+    #     lesen will — z. B. der Statistik-Import.
+    # Vorher gab es nur die erste Frage, und die zweite wurde mit ihr
+    # beantwortet: ein Container mit Token galt als „kein HA".
+    from backend.services.ha_state_service import get_ha_state_service
+
     result = {
         "version": APP_VERSION,
         "database_path": str(settings.database_path),
         "ha_integration_available": HA_INTEGRATION_AVAILABLE,
         "ha_integration_enabled": bool(settings.supervisor_token),
+        "ha_verbunden": get_ha_state_service().is_available,
     }
     # HA-spezifische Details nur wenn verfügbar
     if HA_INTEGRATION_AVAILABLE:

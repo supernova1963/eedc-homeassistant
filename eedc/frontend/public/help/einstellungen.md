@@ -373,7 +373,7 @@ eedc exportiert berechnete Kennzahlen an einen Broker (HA-Discovery-Konvention).
 
 ### 6.4 Statistik-Import
 
-*(Nur mit Home-Assistant-Integration.)* Importiert **alle historischen Monatsdaten seit Anlagen-Installation** aus der HA-Langzeitstatistik — nützlich bei Neuinstallation, zum Nachbefüllen oder beim Umstieg von manueller auf automatische Erfassung.
+*(Braucht eine **verbundene** Home-Assistant-Instanz — als Add-on oder über einen langlebigen Zugriffstoken. Bis August 2026 war die Fläche irrtümlich dem Add-on vorbehalten, obwohl der Voraussetzungs-Kasten unten den Token-Weg schon nannte.)* Importiert **alle historischen Monatsdaten seit Anlagen-Installation** aus der HA-Langzeitstatistik — nützlich bei Neuinstallation, zum Nachbefüllen oder beim Umstieg von manueller auf automatische Erfassung.
 
 **Ablauf (Assistent):** Quelle/Anlage wählen → Zeitraum festlegen → Vorschau laden → Monate auswählen → importieren. Die Vorschau markiert je Monat:
 

@@ -21,7 +21,7 @@ import { ViewShell } from './ViewShell'
 import { BlockShell, BlockStackSkeleton, type Block } from '../components/blocks'
 import { ParkProvider, ParkFuss } from '../components/park'
 import { Alert, Input } from '../components/ui'
-import { useHAAvailable } from '../hooks/useHAAvailable'
+import { useHAAvailable, useHAVerbunden } from '../hooks/useHAAvailable'
 import { useSelectedAnlage } from '../hooks'
 import { INVESTITION_TYP_ORDER, TYP_LABELS as INVESTITION_TYP_LABELS } from '../lib/constants'
 import {
@@ -36,7 +36,7 @@ import { useOeffneWizard } from './wizardHost'
 // bei Feature-Flag aus mit dem v4-Baum wegwirft.
 const DokumentationsDialog = lazy(() => import('../components/DokumentationsDialog'))
 import {
-  EINSTELLUNGEN_KATEGORIEN, eintraegeDerKategorie, sucheEintraege,
+  EINSTELLUNGEN_KATEGORIEN, eintraegeDerKategorie, fehlendeHAVoraussetzung, sucheEintraege,
   type EinstellungEintrag, type InhaltCtx, type KategorieKey,
 } from '../config/einstellungenKatalog'
 
@@ -135,11 +135,19 @@ function KomponentenEinstellungen() {
   )
 }
 
-/** Hinweis-Inhalt für HA-only-Einträge im Standalone (Entsch. 6). */
-function HAOnlyHinweis() {
+/** Hinweis-Inhalt für HA-Einträge ohne ihre Voraussetzung (Entsch. 6).
+ *
+ * N-237: Der Text nennt die **fehlende** Voraussetzung, statt beide Fälle in einen
+ * Satz zu ziehen — „nur mit aktiver Home-Assistant-Integration" war für einen per
+ * Token verbundenen Betrieb schlicht falsch und ließ ihn nach einem Fehler suchen,
+ * den es nicht gab.
+ */
+function HAOnlyHinweis({ grund }: { grund: 'supervisor' | 'verbindung' }) {
   return (
     <Alert type="info">
-      Diese Einstellung ist nur mit aktiver Home-Assistant-Integration verfügbar.
+      {grund === 'supervisor'
+        ? 'Diese Einstellung gibt es nur im Home-Assistant-Add-on — sie nutzt Funktionen, die der Add-on-Betrieb bereitstellt.'
+        : 'Dafür muss eine Home-Assistant-Instanz verbunden sein: als Add-on oder über einen langlebigen Zugriffstoken unter Einstellungen → Integration.'}
     </Alert>
   )
 }
@@ -155,6 +163,7 @@ export default function EinstellungenV4() {
 function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   const navigate = useNavigate()
   const haVerfuegbar = useHAAvailable()
+  const haVerbunden = useHAVerbunden()
   const { selectedAnlage } = useSelectedAnlage()
   const statusMap = useEinstellungenStatus()
   const [suche, setSuche] = useState('')
@@ -189,7 +198,8 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   const eintraege: EinstellungEintrag[] = suchModus ? sucheEintraege(suche) : eintraegeDerKategorie(kategorie)
 
   const bloecke: Block[] = eintraege.map((e) => {
-    const deaktiviert = e.haOnly && !haVerfuegbar
+    const fehlt = fehlendeHAVoraussetzung(e, { addon: haVerfuegbar, verbunden: haVerbunden })
+    const deaktiviert = fehlt !== null
     // Kein Badge für deaktivierte HA-only-Einträge (Signal gilt dort nicht) und
     // kein Badge ohne belegtes Signal (kein erfundenes ✓).
     const st = deaktiviert ? undefined : statusMap[e.id]
@@ -204,7 +214,7 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
       icon: e.icon,
       defaultOpen: false,
       badge: kopf,
-      render: (fokus: boolean) => (deaktiviert ? <HAOnlyHinweis /> : e.inhalt(fokus, ctx)),
+      render: (fokus: boolean) => (fehlt ? <HAOnlyHinweis grund={fehlt} /> : e.inhalt(fokus, ctx)),
     }
   })
 

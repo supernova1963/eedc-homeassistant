@@ -44,7 +44,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.slot_konvention import backward_slot_aus_period_start
-from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -283,7 +282,14 @@ async def _profil_from_ha(
     Eine Stunde ohne Messpunkte am Netzanschluss liefert **keine** Stichprobe
     (N-46, s. Modul-Docstring).
     """
-    if not HA_INTEGRATION_AVAILABLE:
+    # N-156/F-26: kein Gate auf `HA_INTEGRATION_AVAILABLE` (= SUPERVISOR_TOKEN)
+    # mehr — `get_history_normalized` liest über den `HAStateService`, der
+    # Supervisor **und** Long-Lived-Token kennt und seine Erreichbarkeit selbst
+    # prüft. Ohne Token liefert er nichts, und der Aufrufer fällt wie bisher auf
+    # den DB-Pfad zurück.
+    from backend.services.ha_state_service import get_ha_state_service
+
+    if not get_ha_state_service().is_available:
         return None
 
     basis_live, inv_live_map, basis_invert, inv_invert_map = extract_live_config(anlage)

@@ -18,7 +18,6 @@ from sqlalchemy.orm import selectinload
 
 from backend.core.exceptions import not_found
 from backend.api.deps import get_db
-from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionMonatsdaten
 from backend.models.monatsdaten import Monatsdaten
@@ -335,14 +334,16 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
     Liest MAX(state) - MIN(state) pro Sensor aus der HA statistics-Tabelle.
     Funktioniert für total_increasing UND measurement Sensoren (Fallback).
     """
-    if not HA_INTEGRATION_AVAILABLE:
-        return {}
-
-    from backend.services.ha_statistics_service import get_ha_statistics_service
-    ha_stats = get_ha_statistics_service()
-    if not ha_stats.is_available:
-        return {}
-
+    # N-156/F-26: das frühere Gate auf `HA_INTEGRATION_AVAILABLE`
+    # (= SUPERVISOR_TOKEN) stand unmittelbar vor der Frage, die es beantworten
+    # sollte — `ha_stats.is_available` prüft die Erreichbarkeit selbst, und zwar
+    # per Recorder-DB **oder** WebSocket. Im Docker-Betrieb mit Long-Lived-Token
+    # sperrte es damit die Langzeitstatistik aus, obwohl sie erreichbar war.
+    #
+    # ⚠ Die Erreichbarkeitsfrage steht bewusst **hinter** der Sensor-Liste:
+    # `is_available` baut im Zweifel eine Verbindung auf und zahlt bei nicht
+    # erreichbarer HA einen vollen Timeout. Eine Anlage ohne einen einzigen
+    # Sensor-Feld-Eintrag hat hier nichts zu holen — die darf das nicht kosten.
     mapping = anlage.sensor_mapping or {}
     basis = mapping.get("basis", {})
     inv_mapping = mapping.get("investitionen", {})
@@ -367,6 +368,11 @@ async def _collect_ha_statistics_data(anlage: Anlage, jahr: int, monat: int) -> 
                 sensor_to_feld[feld_config["sensor_id"]] = f"inv_{inv_id_str}_{feld_key}"
 
     if not sensor_to_feld:
+        return {}
+
+    from backend.services.ha_statistics_service import get_ha_statistics_service
+    ha_stats = get_ha_statistics_service()
+    if not ha_stats.is_available:
         return {}
 
     # Synchronen SQLite-Zugriff in Thread auslagern

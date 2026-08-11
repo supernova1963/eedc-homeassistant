@@ -130,12 +130,14 @@ async def get_solcast_forecast(anlage) -> Optional[SolcastForecast]:
             logger.warning(f"Unbekannter Solcast-Modus: {modus}")
             return None
 
-    # Keine explizite Config → im HA-Add-on per Auto-Discovery versuchen
-    from backend.core.config import HA_INTEGRATION_AVAILABLE
-    if HA_INTEGRATION_AVAILABLE:
-        return await _fetch_solcast_ha_auto()
-
-    return None
+    # Keine explizite Config → per Auto-Discovery in HA versuchen.
+    #
+    # N-156/F-26: früher stand hier ein Gate auf `HA_INTEGRATION_AVAILABLE`
+    # (= SUPERVISOR_TOKEN). `_fetch_solcast_ha_auto` prüft `is_available` in
+    # seiner ersten Zeile selbst und liefert ohne HA `None` — das Gate war
+    # also nie nötig, sperrte aber jeden per Long-Lived-Token angebundenen
+    # Standalone-Betrieb von der Auto-Erkennung aus.
+    return await _fetch_solcast_ha_auto()
 
 
 def get_solcast_status(anlage) -> tuple[str, str]:
@@ -148,9 +150,11 @@ def get_solcast_status(anlage) -> tuple[str, str]:
     cfg = (anlage.sensor_mapping or {}).get("solcast_config")
 
     if not cfg:
-        # Keine explizite Config → im HA-Add-on per Auto-Discovery verfügbar?
-        from backend.core.config import HA_INTEGRATION_AVAILABLE as _ha_avail
-        if _ha_avail:
+        # Keine explizite Config → per Auto-Discovery in HA verfügbar?
+        # N-156: dieselbe Frage wie im Abruf oben, also auch dieselbe Antwort —
+        # nicht „läuft das im Add-on?", sondern „ist HA erreichbar?".
+        from backend.services.ha_state_service import get_ha_state_service
+        if get_ha_state_service().is_available:
             cached = _cache_get("solcast_ha:auto")
             if cached is not None:
                 return ("ok", "Solcast HA-Integration automatisch erkannt.")

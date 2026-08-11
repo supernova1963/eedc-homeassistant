@@ -10,7 +10,12 @@ import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
 import type { Investition } from '../types'
 
 // HA-Verfügbarkeit deterministisch (kein Netzwerk in jsdom); Standalone = false.
-vi.mock('../hooks/useHAAvailable', () => ({ useHAAvailable: () => false }))
+// N-237: zwei Fragen, zwei Hooks — „läuft als Add-on?" und „ist HA erreichbar?".
+// Hier gilt der reine Standalone-Fall: beides nein.
+vi.mock('../hooks/useHAAvailable', () => ({
+  useHAAvailable: () => false,
+  useHAVerbunden: () => false,
+}))
 
 // Demo-Anlage + Investitionen für den datengetriebenen Komponenten-Zweig (kein
 // Netzwerk in jsdom). useInvestitionenByTyp bleibt echt (reine Gruppierung).

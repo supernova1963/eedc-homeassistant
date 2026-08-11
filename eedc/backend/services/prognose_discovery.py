@@ -19,8 +19,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from backend.core.config import HA_INTEGRATION_AVAILABLE
-
 logger = logging.getLogger(__name__)
 
 
@@ -126,11 +124,12 @@ async def discover_prognose_sensoren(integration: str) -> PrognoseDiscoveryResul
     Returns:
         PrognoseDiscoveryResult mit gematchten Sensoren und aktuellen Werten.
     """
-    if not HA_INTEGRATION_AVAILABLE:
-        return PrognoseDiscoveryResult(
-            integration=integration,
-            fehler="Nur im HA-Add-on verfügbar.",
-        )
+    # N-156/F-26: kein Gate auf `HA_INTEGRATION_AVAILABLE` (= SUPERVISOR_TOKEN)
+    # mehr. Die Erreichbarkeit prüft weiter unten `HAStateService.is_available`
+    # selbst — und der deckt seit dem 05.08. **beide** Wege ab (Supervisor im
+    # Add-on, Long-Lived-Token im Standalone). Das Gate hier sagte einem per
+    # Token angebundenen Docker-Betrieb „Nur im HA-Add-on verfügbar", obwohl
+    # seine SFML-/Solcast-Sensoren über dieselbe API lesbar sind.
 
     # Cache prüfen
     now = time.monotonic()

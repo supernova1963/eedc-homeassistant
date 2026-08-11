@@ -20,7 +20,6 @@ from sqlalchemy.orm import selectinload
 
 from backend.core.exceptions import not_found
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage
-from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.core.database import get_db
 from backend.core.field_definitions import (
     OPTIONALE_FELDER,
@@ -322,27 +321,38 @@ async def get_monatsabschluss(
 
     # HA Statistics Service für Sensor-Vorschläge
     ha_stats_werte: dict[str, float] = {}  # sensor_id → differenz
-    if HA_INTEGRATION_AVAILABLE:
-        import asyncio
+    # N-156/F-26: kein vorgeschaltetes `HA_INTEGRATION_AVAILABLE`
+    # (= SUPERVISOR_TOKEN) mehr — `is_available` in der nächsten Zeile stellt
+    # dieselbe Frage und beantwortet sie für beide Wege (Recorder-DB oder
+    # WebSocket). Wer HA per Long-Lived-Token angebunden hat, bekam bis
+    # 2026-08-11 im Monatsabschluss **keine** Sensor-Vorschläge, obwohl die
+    # Langzeitstatistik erreichbar war.
+    import asyncio
+
+    # Alle sensor_ids aus dem Mapping sammeln — **vor** der Erreichbarkeitsfrage:
+    # `is_available` baut im Zweifel eine Verbindung auf und zahlt bei nicht
+    # erreichbarer HA einen vollen Timeout. Ohne einen einzigen Sensor-Eintrag
+    # gibt es hier nichts zu holen, und ein Betrieb ganz ohne HA darf für diese
+    # Antwort nicht warten.
+    all_sensor_ids = []
+    for cfg in basis_mapping.values():
+        if cfg and cfg.get("strategie") == "sensor" and cfg.get("sensor_id"):
+            all_sensor_ids.append(cfg["sensor_id"])
+    for inv_cfg in inv_mappings.values():
+        if isinstance(inv_cfg, dict):
+            for fcfg in inv_cfg.get("felder", inv_cfg).values():
+                if isinstance(fcfg, dict) and fcfg.get("strategie") == "sensor" and fcfg.get("sensor_id"):
+                    all_sensor_ids.append(fcfg["sensor_id"])
+
+    if all_sensor_ids:
         from backend.services.ha_statistics_service import get_ha_statistics_service
         ha_stats_svc = get_ha_statistics_service()
         if ha_stats_svc.is_available:
-            # Alle sensor_ids aus dem Mapping sammeln
-            all_sensor_ids = []
-            for cfg in basis_mapping.values():
-                if cfg and cfg.get("strategie") == "sensor" and cfg.get("sensor_id"):
-                    all_sensor_ids.append(cfg["sensor_id"])
-            for inv_cfg in inv_mappings.values():
-                if isinstance(inv_cfg, dict):
-                    for fcfg in inv_cfg.get("felder", inv_cfg).values():
-                        if isinstance(fcfg, dict) and fcfg.get("strategie") == "sensor" and fcfg.get("sensor_id"):
-                            all_sensor_ids.append(fcfg["sensor_id"])
-            if all_sensor_ids:
-                try:
-                    stats_result = await asyncio.to_thread(ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat)
-                    ha_stats_werte = {s.sensor_id: s.differenz for s in stats_result.sensoren if s.differenz is not None}
-                except Exception:
-                    logger.warning("HA Statistics DB nicht erreichbar für Monatsabschluss-Vorschläge")
+            try:
+                stats_result = await asyncio.to_thread(ha_stats_svc.get_monatswerte, all_sensor_ids, jahr, monat)
+                ha_stats_werte = {s.sensor_id: s.differenz for s in stats_result.sensoren if s.differenz is not None}
+            except Exception:
+                logger.warning("HA Statistics DB nicht erreichbar für Monatsabschluss-Vorschläge")
 
     # Datenquelle des Monats ermitteln
     datenquelle = getattr(monatsdaten, "datenquelle", None) if monatsdaten else None

@@ -17,7 +17,6 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.config import HA_INTEGRATION_AVAILABLE
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.utils.investition_filter import aktiv_jetzt
@@ -513,7 +512,17 @@ async def safe_get_tages_kwh(
             return cached
 
     # 1. Versuche HA-History (Trapezregel)
-    if HA_INTEGRATION_AVAILABLE:
+    #
+    # N-156/F-26: die ZUORDNUNG entscheidet, nicht die Umgebung. Bis
+    # 2026-08-11 stand hier `HA_INTEGRATION_AVAILABLE` (= SUPERVISOR_TOKEN),
+    # obwohl `get_tages_kwh` darunter ausschließlich über `HAStateService` und
+    # `ha_statistics_service` liest — beide seit dem 05.08. remote-fähig, beide
+    # prüfen ihre Erreichbarkeit selbst. Der Docstring des `HAStateService`
+    # nennt diesen Dienst sogar namentlich als Leidtragenden. Ohne HA-Token
+    # bleibt es beim MQTT-Fallback darunter, unverändert.
+    from backend.services.ha_state_service import get_ha_state_service
+
+    if get_ha_state_service().is_available:
         try:
             result = await get_tages_kwh(anlage, db, tage_zurueck, inv_types=inv_types)
             if result:

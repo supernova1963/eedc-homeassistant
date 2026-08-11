@@ -59,6 +59,23 @@ Dieselbe Ursache hat dir außerdem den **Speicher-Ladestand** (und damit die Vol
 
 ⚠ **Zurückliegende Tage füllen sich nicht von selbst.** Die holst du über den [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) mit „Zeitraum neu aggregieren" — bis zu 31 Tage je Lauf.
 
+**Und weil dieselbe Weiche an sieben weiteren Stellen stand, sind die gleich mitgegangen.** Alle betreffen denselben Betrieb — eigener Container, HA per Token:
+
+- **Solar Forecast ML und Solcast sind wählbar.** Unter *Einstellungen → Prognose* führte die Wahl bisher stillschweigend zurück auf die eedc-Prognose, mit dem Hinweis, das sei „nur im HA-Add-on verfügbar" — obwohl deine Prognose-Sensoren über dieselbe Verbindung lesbar sind. Solcast erkennt eedc dabei ohne eigenen API-Schlüssel; der Statustext sagt jetzt dasselbe wie der Abruf daneben.
+- **Die kWh-Werte für heute und gestern** in *Cockpit → Live* kommen wieder aus Home Assistant statt nur aus MQTT.
+- **Dein Verbrauchsprofil** wird wieder aus der HA-Historie gebildet.
+- **Die Langzeitstatistik erreicht den Monat:** *Cockpit → Monat* liest die gemessenen Werte, und der **Monatsabschluss schlägt sie dir wieder vor**, statt jedes Feld der Handeingabe zu überlassen.
+
+⚠ **Zur Ehrlichkeit gehört:** Mit v4.0.10 hieß es an dieser Stelle, fünf Funktionen arbeiteten „jetzt auch mit einer Remote-Verbindung". Zutreffend war das damals nur für **eine** davon (die Prüfung auf vertauschte kW-/kWh-Sensoren). Bei den anderen war zwar die Verbindung darunter hergestellt, die Abfrage davor fragte aber weiterhin nach der Betriebsart — und kam nie bei ihr an. Das ist mit dieser Version erledigt.
+
+### Statistik-Import im Container: die Historie lässt sich jetzt nachholen
+
+**Betrifft dich das?** Wenn du eedc ohne Add-on betreibst und Home Assistant über einen Zugriffstoken verbunden hast.
+
+*Einstellungen → Integration → **Statistik-Import*** holt vergangene Monate aus der Home-Assistant-Langzeitstatistik. Diese Kachel war bisher nur im Add-on nutzbar — obwohl der Zugriff darunter über deine ganz normale Verbindung läuft und im Handbuch auch so beschrieben ist. Laufende Monate kamen bei dir also an, deine **Vorgeschichte** konntest du nicht nachholen. Jetzt schon.
+
+**Dazu sagen gesperrte Einstellungen jetzt, was ihnen fehlt.** eedc unterscheidet zwei Voraussetzungen, die vorher beide „HA-Integration" hießen: Was den Add-on-Unterbau braucht (Add-on-Protokolle, direkter HA-Import, die alte Sensor-Zuordnung), bleibt dem Add-on vorbehalten — was nur eine erreichbare Instanz braucht, steht dir offen. Auf einer gesperrten Kachel steht deshalb nicht mehr pauschal „nur mit aktiver Home-Assistant-Integration", sondern der tatsächliche Grund. Das erspart die Suche nach einem Fehler, den es nicht gibt.
+
 ### Community: das Performance-Profil zeigt wieder den aktuellen Monat
 
 **Betrifft dich das?** Wenn du deine Daten mit der Community teilst und dort das Radar-Diagramm „Performance-Profil" ansiehst.
@@ -598,6 +615,8 @@ Und weil dieser Schlüssel für jeden weiteren Aufruf gebraucht wird, konnten au
 Fünf Funktionen waren fest an den Add-on-Betrieb gebunden und meldeten sich bei einer Token-Verbindung einfach als „nicht verfügbar", obwohl die Verbindung stand: der **Live-Tagesverlauf**, die **Solcast-Anbindung**, die Prognose-Erkennung, die **Ladestands-Historie deines Speichers** und die Prüfung des Daten-Checkers auf **vertauschte Leistungs- und Energie-Sensoren**.
 
 Der letzte Punkt war der ärgerlichste: Genau die Verwechslung, kW statt kWh zuzuordnen, wurde ausgerechnet dort nicht geprüft, wo sie am häufigsten passiert. Alle fünf arbeiten jetzt auch mit einer Remote-Verbindung.
+
+> **Nachtrag (11.08.2026):** Dieser letzte Satz stimmte so nicht. Hergestellt war die Verbindung darunter, aber vier der fünf Funktionen fragten davor weiterhin nach der Betriebsart und kamen deshalb nie bei ihr an — tatsächlich remote arbeitete nur der kW/kWh-Test. Behoben ist das erst mit der Version danach (siehe oben, *„Docker mit HA-Token: die Tageswerte kommen jetzt an"*).
 
 ### „Die TagesZusammenfassung vom ? aus unbekannt" — diese Meldung gibt es nicht mehr
 

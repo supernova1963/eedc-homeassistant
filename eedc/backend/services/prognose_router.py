@@ -20,8 +20,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-from backend.core.config import HA_INTEGRATION_AVAILABLE
-
 logger = logging.getLogger(__name__)
 
 
@@ -66,20 +64,32 @@ def resolve_prognose_quelle(anlage) -> PrognoseQuelleResult:
     Liest anlage.prognose_quelle, prüft Verfügbarkeit und liefert
     bei Bedarf einen Fallback auf eedc mit Hinweis.
 
-    Synchron — keine DB-Abfrage nötig. Verfügbarkeit wird anhand
-    der Umgebung (HA_INTEGRATION_AVAILABLE) und Anlage-Konfiguration
-    geprüft. Die tatsächlichen Sensor-Werte werden asynchron über
-    discover_prognose_sensoren() geladen (siehe prognose_discovery.py).
+    Synchron — keine DB-Abfrage nötig. Verfügbarkeit wird anhand der
+    HA-Erreichbarkeit und der Anlage-Konfiguration geprüft. Die tatsächlichen
+    Sensor-Werte werden asynchron über discover_prognose_sensoren() geladen
+    (siehe prognose_discovery.py).
+
+    ⚠ **N-156/F-26 — „HA erreichbar", nicht „Add-on":** bis 2026-08-11 fragten
+    beide Zweige `HA_INTEGRATION_AVAILABLE` (= SUPERVISOR_TOKEN). Wer eedc im
+    Docker betreibt und HA per Long-Lived-Token angebunden hat, bekam damit
+    einen **stillen Fallback auf die eedc-Prognose** — mit dem Hinweis, SFML sei
+    „nur im HA-Add-on verfügbar", während seine Sensoren über dieselbe REST-API
+    lesbar sind. Die Discovery darunter kann diesen Fall seit N-156; ohne diese
+    Zeile hier bliebe sie unerreichbar.
     """
+    from backend.services.ha_state_service import get_ha_state_service
+
+    ha_erreichbar = get_ha_state_service().is_available
+
     gewuenscht = getattr(anlage, "prognose_quelle", None) or "eedc"
 
     # eedc ist immer verfügbar
     if gewuenscht == "eedc":
         return PrognoseQuelleResult(quelle="eedc", gewuenscht="eedc")
 
-    # SFML braucht HA-Integration
+    # SFML braucht eine erreichbare HA-Instanz (Add-on ODER Token)
     if gewuenscht == "sfml":
-        if not HA_INTEGRATION_AVAILABLE:
+        if not ha_erreichbar:
             logger.info(
                 "Anlage %s: SFML gewählt, aber kein HA — Fallback auf eedc",
                 getattr(anlage, "id", "?"),
@@ -87,15 +97,16 @@ def resolve_prognose_quelle(anlage) -> PrognoseQuelleResult:
             return PrognoseQuelleResult(
                 quelle="eedc",
                 ist_fallback=True,
-                hinweis="SFML ist nur im HA-Add-on verfügbar. eedc-Prognose aktiv.",
+                hinweis="SFML braucht eine verbundene Home-Assistant-Instanz. "
+                        "eedc-Prognose aktiv.",
                 gewuenscht="sfml",
             )
         return PrognoseQuelleResult(quelle="sfml", gewuenscht="sfml")
 
-    # Solcast: HA-Integration (Auto-Discovery) oder API-Token (Standalone)
+    # Solcast: HA-Integration (Auto-Discovery) oder API-Token (ohne HA)
     if gewuenscht == "solcast":
-        if HA_INTEGRATION_AVAILABLE:
-            # Im HA-Add-on: Solcast wird per Auto-Discovery erkannt
+        if ha_erreichbar:
+            # Mit HA-Verbindung: Solcast wird per Auto-Discovery erkannt
             return PrognoseQuelleResult(quelle="solcast", gewuenscht="solcast")
 
         # Standalone: braucht API-Token in solcast_config

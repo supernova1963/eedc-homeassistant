@@ -45,7 +45,10 @@ class _FakeHA:
 
 
 def _patch_ha(monkeypatch, states):
-    monkeypatch.setattr(disc, "HA_INTEGRATION_AVAILABLE", True)
+    # Kein `HA_INTEGRATION_AVAILABLE`-Patch mehr: die Discovery gatet seit
+    # N-156 nicht mehr auf den Supervisor-Token, sondern auf die Erreichbarkeit
+    # des `HAStateService` (unten gefakt). Ein Patch auf ein Symbol, das die
+    # Funktion nicht mehr liest, hätte nur Sicherheit vorgetäuscht.
     monkeypatch.setattr(
         "backend.services.ha_state_service.get_ha_state_service",
         lambda: _FakeHA(),

@@ -102,8 +102,15 @@ export interface EinstellungEintrag {
    *  (A1: Community-„teilen"-Schalter). */
   kopfRender?: () => ReactNode
   hilfe?: string
-  /** Nur mit HA-Integration nutzbar → im Standalone deaktiviert (Entsch. 6). */
-  haOnly?: boolean
+  /** Braucht Home Assistant → sonst deaktiviert (Entsch. 6). **Zwei Stufen**, weil
+   *  es zwei verschiedene Voraussetzungen sind (N-237):
+   *  - `'supervisor'`: geht nur im **Add-on** (Supervisor-API — Protokolle,
+   *    HA-Import, Legacy-Sensor-Zuordnung). Ohne Supervisor existiert die Route nicht.
+   *  - `'verbindung'`: braucht nur eine **erreichbare** HA-Instanz, egal ob per
+   *    Supervisor oder Long-Lived-Token (z. B. der Statistik-Import).
+   *  Bis 2026-08-11 gab es nur `true`, und das bedeutete faktisch `'supervisor'` —
+   *  wodurch Token-Nutzer auch von dem ausgesperrt waren, was ihre Verbindung kann. */
+  haOnly?: 'supervisor' | 'verbindung'
   /** Freitext-Treffer für die globale Suche. */
   schlagworte?: string[]
 }
@@ -517,7 +524,9 @@ export const EINSTELLUNGEN_KATALOG: EinstellungEintrag[] = [
   },
   {
     id: 'ha-statistik-import', name: 'Statistik-Import', icon: BarChart3, kategorie: 'integration',
-    route: 'einstellungen/ha-statistik-import', haOnly: true,
+    // N-237: 'verbindung', nicht 'supervisor' — die Langzeitstatistik liest der
+    // Dienst per Recorder-DB oder WebSocket, beides auch aus einem Container heraus.
+    route: 'einstellungen/ha-statistik-import', haOnly: 'verbindung',
     schlagworte: ['home assistant', 'langzeit', 'lts', 'rückwirkend', 'import'],
     inhalt: (_f, ctx) => (
       <StandardInhalt
@@ -607,6 +616,23 @@ export function sucheEintraege(query: string): EinstellungEintrag[] {
     const heu = [e.name, labelOf(e.kategorie), ...(e.schlagworte ?? [])].join(' ').toLowerCase()
     return tokens.every((t) => heu.includes(t))
   })
+}
+
+/** Welche HA-Voraussetzung fehlt diesem Eintrag? `null` = er ist nutzbar (N-237).
+ *
+ * Bewusst eine reine Funktion und kein Ausdruck in der Shell: sie entscheidet,
+ * wer eine Fläche zu sehen bekommt, und ist damit prüfbar — vorher stand die
+ * Regel als `e.haOnly && !haVerfuegbar` mitten im Rendering.
+ */
+export function fehlendeHAVoraussetzung(
+  eintrag: Pick<EinstellungEintrag, 'haOnly'>,
+  umgebung: { addon: boolean; verbunden: boolean },
+): 'supervisor' | 'verbindung' | null {
+  if (!eintrag.haOnly) return null
+  if (eintrag.haOnly === 'supervisor') return umgebung.addon ? null : 'supervisor'
+  // 'verbindung' — der Add-on-Betrieb ist immer auch verbunden, das deckt
+  // `umgebung.verbunden` bereits ab (Backend: Supervisor ODER Token).
+  return umgebung.verbunden ? null : 'verbindung'
 }
 
 /** Alle IST-`einstellungen/*`-Routen, die der Katalog abdeckt (Routen-Inventur). */
