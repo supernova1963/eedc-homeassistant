@@ -1,6 +1,6 @@
 # Konzept: Auswertung PV-Speicher
 
-> **Status (gemessen 2026-08-12): Phase 1 + Phase 2 ausgeliefert · Phasen 3–4 offen, getrackt als [#358](https://github.com/supernova1963/eedc-homeassistant/issues/358).** ⚠ Bis heute nannte diese Zeile „Kern weiterhin offen" und verwies auf **#243**, das mit v4.0.0 geschlossen wurde — während drei Absätze tiefer im selben Kasten „Phase 1 ausgeliefert" steht. Der **Statuskopf** ist die Stelle, die jeder zuerst liest und die beim Fortschreiben des Rumpfes niemand anfasst (Fund N-182). Alles unter dieser Zeile bleibt inhaltlich gültig. Einzel-Issue #142 (rapahl) wurde 2026-05-23 in die Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) verschoben. **Ort-Entscheid (IA-V4):** die Tiefe kommt als **Ausbau des Komponenten-Hubs Speicher** (SPEC-KOMPONENTEN K-O2), NICHT als eigener Auswertungen-Tab — Phase-1-Verortung unten entsprechend re-lesen. **⚑ Präzisiert 2026-08-01 (Gernot, nach Community-Einwand unter #350):** es gilt die **Ortsregel nach Zeitraum** — **zeitbezogene** Sichten (Tag/Monat/Jahr, also Phase 1: Monats-Tabelle, KPI-Kacheln, Sommer/Winter) gehören ins **Cockpit** neben die Energiebilanz; im **Komponenten-Hub** bleibt, was über die **Lebensdauer** des Geräts geht (Phase 2 SoC-Heatmap, Phase 3 Sizing-Simulator, Wirtschaftlichkeit). „Nicht als eigener Auswertungen-Tab" bleibt unverändert gültig — die Korrektur betrifft Hub ↔ Cockpit, nicht den Auswertungen-Bereich. **Seit Konzept-Erstellung bereits geliefert (vor B11-Bau einarbeiten):**
+> **Status (gemessen 2026-08-12): Phase 1 + Phase 2 + Phase 3 ausgeliefert · Phase 4 offen, getrackt als [#358](https://github.com/supernova1963/eedc-homeassistant/issues/358).** ⚠ Bis heute nannte diese Zeile „Kern weiterhin offen" und verwies auf **#243**, das mit v4.0.0 geschlossen wurde — während drei Absätze tiefer im selben Kasten „Phase 1 ausgeliefert" steht. Der **Statuskopf** ist die Stelle, die jeder zuerst liest und die beim Fortschreiben des Rumpfes niemand anfasst (Fund N-182). Alles unter dieser Zeile bleibt inhaltlich gültig. Einzel-Issue #142 (rapahl) wurde 2026-05-23 in die Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) verschoben. **Ort-Entscheid (IA-V4):** die Tiefe kommt als **Ausbau des Komponenten-Hubs Speicher** (SPEC-KOMPONENTEN K-O2), NICHT als eigener Auswertungen-Tab — Phase-1-Verortung unten entsprechend re-lesen. **⚑ Präzisiert 2026-08-01 (Gernot, nach Community-Einwand unter #350):** es gilt die **Ortsregel nach Zeitraum** — **zeitbezogene** Sichten (Tag/Monat/Jahr, also Phase 1: Monats-Tabelle, KPI-Kacheln, Sommer/Winter) gehören ins **Cockpit** neben die Energiebilanz; im **Komponenten-Hub** bleibt, was über die **Lebensdauer** des Geräts geht (Phase 2 SoC-Heatmap, Phase 3 Sizing-Simulator, Wirtschaftlichkeit). „Nicht als eigener Auswertungen-Tab" bleibt unverändert gültig — die Korrektur betrifft Hub ↔ Cockpit, nicht den Auswertungen-Bereich. **Seit Konzept-Erstellung bereits geliefert (vor B11-Bau einarbeiten):**
 > - **#264 Etappen A–C (stlorenz, v3.31.x):** gemessener IST-Wirkungsgrad (SoC-korrigiert + Degradations-Alarm) und stundengewichteter effektiver Ladepreis mit Quelle-Transparenz → beantwortet die „Offenen Fragen" 1 + 2 unten.
 > - **R15-Scheiben (Rainer-PN #88625, 2026-07-05):** Kosten-Kacheln „Batterieladung Netz" + „Durchschnittspreis Netz" in Cockpit Monat/Tag/Jahr (`berechne_netzladung_kosten`, Preis-Kette TEP→IMD→Bezugspreis) · Ø-Ladepreis-**Vorschlag** im Monatsabschluss-Wizard · Netzladung-Kosten-**Ausweis** im Hub-Arbitrage-Block + T-Konto („davon"-Zeile) · Kanon-Key-Fix `get_speicher_netzladung_kwh` (Hub-Arbitrage war unsichtbar) → deckt die Sichtbarkeits-Seite von Frage 4 + 5 im Kleinen.
 > - **Phase-3-Grundstein:** `core/berechnungen/speicher_simulation.py` (`simuliere_speicher_tag`) existiert.
@@ -25,9 +25,16 @@
 > Vollzyklen aus der **Ladung** rechnete (`cockpit/uebersicht.py`; der Kanon-Sweep vom 2026-07-28
 > hatte sie übersehen, sie hatte damals keinen Client-Leser).
 >
-> **Offen (= B11-Kern):** Phase 2 (SoC-Heatmap „ungenutztes Potential"), Phase 3
-> (Sizing-Simulator-UI), Phase 4 (#101-Kopplung) — alle drei im **Komponenten-Hub**, sie gehen
-> über die Lebensdauer des Geräts.
+> **✅ Phase 3 ausgeliefert (2026-08-12, #358).** Block **„Größerer Speicher?"** im
+> Komponenten-Hub Speicher — **eigener Block**, nicht als Anbau an „Wirtschaftlichkeit":
+> dort steht die Vorfrage aus Phase 2, hier die Antwort („wie viel, und rechnet sie sich?").
+> Details in §3 unten. **Gebaut auf Gernots ausdrücklichen Entscheid vom 2026-08-12, nicht
+> weil der Konzept-Trigger gefallen wäre** — „ein Tester fragt aktiv nach Sizing-Beratung"
+> ist **gemessen nicht eingetreten** (Journal + beide Archive + alle Kanäle durchsucht, kein
+> Melder). Das steht hier, damit später niemand einen Melder hineinliest, den es nie gab.
+>
+> **Offen:** Phase 4 (#101-Kopplung) — im **Komponenten-Hub**, sie geht über die Lebensdauer
+> des Geräts. Trigger „nach Prognose-Konsolidierung" **nicht eingetreten**.
 >
 > Zugehörig: [#101](https://github.com/supernova1963/eedc-homeassistant/issues/101) (Live-Restzeit), [Energieprofil Etappe 4](https://github.com/supernova1963/eedc-homeassistant/issues/110) (Saison)
 
@@ -95,15 +102,45 @@ Anzeige im **Komponenten-Hub Speicher**, Block „Wirtschaftlichkeit": Befund-Sa
 
 ⚠ **Der SoC in `TagesEnergieProfil` ist anlagenweit** (die Tabelle hat `anlage_id`, keine `investition_id`). Bei mehreren Speichern ist er ein Mischwert; die Sicht sagt das, statt eine Gerätegenauigkeit zu suggerieren.
 
-### 3. „Lohnt sich eine größere Batterie?" — Was-wäre-wenn-Sizing
+### 3. „Lohnt sich eine größere Batterie?" — Was-wäre-wenn-Sizing ✅ (2026-08-12)
 
-Wir simulieren rückblickend mit den vorhandenen Stunden-Profilen einen **alternativen Speicher** (X kWh, Y kW Leistung, Z % Wirkungsgrad), füttern ihn mit den realen PV/Verbrauch-Stundenwerten und vergleichen Eigenverbrauchsquote / Autarkie / Einspeisung.
+Rückblickende **Vorwärtssimulation** über die real gemessenen Stundenwerte: dieselbe Sonne, derselbe Verbrauch, nur eine andere Speichergröße. Slider 50 % … 200 % der heutigen Kapazität; die vollständige Kurve kommt in **einer** Antwort, der Regler liest daraus und fragt nicht bei jedem Schritt nach.
 
-- Eingabe: Slider „Speicher-Kapazität" (50 % … 200 % der aktuellen) + ggf. Leistung
-- Ausgabe: Δ Eigenverbrauch [kWh], Δ Einsparung [€], Amortisations-Aufschlag bei Mehrkosten [€/kWh-Speicher]
-- Voraussetzung: 6–12 Monate Stundendaten — bei kürzerer Historie Hinweis-Banner anzeigen
+SoT: `core/berechnungen/speicher_sizing.py` (Formeln) · `services/speicher_sizing_service.py` (Sourcing) · `GET /api/investitionen/speicher-sizing/{anlage_id}` · Sicht `v4/SpeicherSizingIST.tsx`.
 
-**Methodischer Hinweis** für die Hilfe-Seite: Die Simulation kennt nur das tatsächlich beobachtete Wetter und Verbrauchsverhalten. Sie überschätzt Speicher-Nutzen tendenziell, weil das vorhandene Verbrauchsprofil bereits auf den vorhandenen Speicher optimiert ist (Lastverschiebung). Für eine Sizing-Entscheidung trotzdem belastbarer als ein generisches Sizing-Tool, weil es die individuelle Saisonalität trägt.
+**Drei Entscheidungen, die den Bau vom Vorschlag oben unterscheiden — alle gemessen (Vorprüfung 2026-08-12, 355 Tage der Referenzanlage):**
+
+**(a) Eingang ist PV + Hausverbrauch, nicht `batterie_kw`.** Die Simulation fährt den Speicher selbst. Das ist der Grund, warum auch Anlagen mit **invertierter Vorzeichen-Historie** (Daten-Checker `BATTERIE_VORZEICHEN_HISTORIE`) auswertbar bleiben: die Validierung fiel auf der Alt-Hälfte (+2,4 % Einspeisung / −2,8 % Netzbezug) sogar besser aus als auf der korrigierten.
+
+**(b) Simuliert wird mit der *effektiv genutzten* Kapazität, aus der SoC-Bewegung kalibriert** — nicht mit dem Typenschild:
+
+| Parametrisierung | Einspeisung (gemessen 8008 kWh) | Netzbezug (gemessen 1665 kWh) |
+| --- | --- | --- |
+| gepflegt (12,1 kWh · 95 %) | 8157 (**+1,9 %**) | 1374 (**−17,5 %**) |
+| kalibriert (8,35 kWh · 86,7 %) | 8184 (**+2,2 %**) | 1575 (**−5,4 %**) |
+
+⛔ **Das ist KEIN Gerätebefund.** Gegenprobe an 28 Tagen mit vollem SoC-Durchlauf (100 → 0 %): Median-Ladung **12,0 kWh** — die gepflegten 12,1 kWh stimmen. Die kleinere Zahl ist der Teil, den die Anlage im Alltag wirklich bewegt (Reserven, Ladestrategie, Leistungsgrenzen, Standby). Wer mit dem Typenschild simuliert, **überschätzt den Speichernutzen systematisch** — dieselbe Richtung, in die schon die verworfene Phase-2-Formel falsch lag. Die Sicht sagt das; sie behauptet nicht, der Speicher sei kleiner als angegeben.
+
+Zwei Pflichten der Kalibrierung, beide gegen einen reproduzierten Fehlgriff: **Bilanzprobe je Stunde** (ohne sie mischen sich beide Vorzeichen-Regime — die erste Messfassung ergab **0,91 kWh/100 %** statt 8,3) und **Median über benachbarte Stundenpaare** statt Ausgleichsrechnung (Least-Squares wird von SoC-Sprüngen an Tagesgrenzen dominiert). Beide Seiten müssen belegt sein: die Entladeseite ist die dünnere (n≈103 gegen n≈435) und zugleich die, die die Kapazität bestimmt. Glückt die Kalibrierung nicht, wird mit den gepflegten Parametern gerechnet **und die Unsicherheit ausgewiesen**.
+
+**(c) Der Nutzen ist der Spread, nicht der Bezugspreis.** Ein größerer Speicher senkt den Netzbezug **und** die Einspeisung; die Differenz ist der Roundtrip-Verlust. Bewertet wird deshalb `gesparter Netzbezug × Bezugspreis − entgangene Einspeisung × Vergütung` (Kanon Gernot 2026-08-04, s. Phase-1-Absatz oben). Nur den Bezug zu bewerten ist genau der Fehler, den v4.0.5 aus `aktueller_monat.py` entfernt hat.
+
+**Die Antwort für die Referenzanlage lautet „lohnt nicht":**
+
+| Kapazität | Einspeisung | Netzbezug | Δ Netz | nur Bezug (falsch) | **Spread** | Amortisation |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4,2 | 8865 | 2164 | +589 | −212 € | **−156 €** | — |
+| **8,3 (heute)** | **8184** | **1575** | **0** | **0 €** | **0 €** | — |
+| 12,5 (**+50 %**) | 7968 | 1390 | −185 | 67 € | **49 €** | **43 Jahre** |
+| 16,7 | 7826 | 1269 | −307 | 110 € | **81 €** | 52 Jahre |
+
+Starke Sättigung: die ersten 8 kWh sparen 976 kWh/Jahr, die nächsten 8 nur noch 185. **Robustheitsprobe, zwei unabhängige Achsen, beide bestanden** — Zeitfenster (nur Feb–Jul hochgerechnet 62 €/Jahr gegen 67 €/Jahr über das volle Jahr, die Voraussetzung „6–12 Monate" trägt) und Parametrisierung (gepflegt 59 € gegen kalibriert 65 € auf der Bezugs-Basis: die *Empfehlung* kippt nicht, nur die angezeigte Zahl).
+
+**Voraussetzung** 6–12 Monate Stundendaten (gebaut: ab 180 Tagen ohne Banner). Darunter — und ebenso bei misslungener Kalibrierung — **Pflicht-Hinweis**; er parkt zusammen mit der Zahl, damit ein Regler nie ohne ihn bedienbar ist.
+
+**Methodischer Hinweis** (steht so in der Sicht und in `HANDBUCH_BEDIENUNG` §3.3): Die Simulation kennt nur das tatsächlich beobachtete Wetter und Verbrauchsverhalten. Sie überschätzt Speicher-Nutzen tendenziell, weil das vorhandene Verbrauchsprofil bereits auf den vorhandenen Speicher optimiert ist (Lastverschiebung). Für eine Sizing-Entscheidung trotzdem belastbarer als ein generisches Sizing-Tool, weil es die individuelle Saisonalität trägt.
+
+⚠ **Der Konzept-Satz „Phase-3-Auswertungen sind teuer (8760 h × Slider-Schritte)" ist widerlegt:** die volle Kurve über 355 Tage läuft in **unter einer Sekunde**. Es gibt deshalb **keinen** Kennzahl-Cache — er kommt, wenn eine Messung ihn verlangt, nicht vorher (s. „Datenmodell — was wir vermutlich brauchen" unten).
 
 ### 4. Solar- vs. Netz-Ladung
 
@@ -152,11 +189,17 @@ Gebaut im **Komponenten-Hub Speicher**, Block „Wirtschaftlichkeit":
 
 **Liefert:** Issue-Punkt 2.
 
-### Phase 3 — Was-wäre-wenn-Sizing-Simulator
+### Phase 3 — Was-wäre-wenn-Sizing-Simulator ✅ (2026-08-12)
 
-- Slider-basiert, rückblickende Simulation
-- Hinweis-Banner zur methodischen Einschränkung
-- Optional: Vergleich „eine Größe kleiner / aktuelle / eine Größe größer"
+Gebaut im **Komponenten-Hub Speicher**, eigener Block „Größerer Speicher?":
+
+- Slider 50 %–200 %, rückblickende Vorwärtssimulation über die realen Stundenwerte
+- Basis aus der **gemessenen** SoC-Bewegung kalibriert, nicht vom Typenschild
+  (Herleitung und Messung oben unter Kennzahl 3)
+- Bewertung als **Spread** (gesparter Bezug minus entgangene Einspeisung)
+- Kurve über alle Kapazitätsstufen + Klartext-Antwort, die „rechnet sich nicht"
+  auch ausspricht
+- Hinweis-Banner zur methodischen Einschränkung — **Pflicht**, parkt mit der Zahl
 
 **Liefert:** Issue-Punkt 3.
 
@@ -171,14 +214,14 @@ Die Live-Restzeit „Speicher voll um HH:MM" erbt aus den Phase-1/2-Aggregaten e
 
 ## Datenmodell — was wir vermutlich brauchen
 
-- **Kennzahl-Cache** für Sizing-Simulationen: Phase-3-Auswertungen sind teuer (8760 h × Slider-Schritte). Caching analog L2-Cache der Prognosen, Key = `(anlage_id, simulations_hash)`. Erst implementieren, wenn Phase 3 wirklich umgesetzt wird.
+- ~~**Kennzahl-Cache** für Sizing-Simulationen: Phase-3-Auswertungen sind teuer (8760 h × Slider-Schritte). Caching analog L2-Cache der Prognosen, Key = `(anlage_id, simulations_hash)`.~~ **Beim Bau 2026-08-12 gemessen und verworfen:** die volle Kurve über 355 Tage läuft in unter einer Sekunde. Es gibt keinen Cache; er kommt, wenn eine Messung ihn verlangt.
 - **Optional**: ein zusätzliches Monats-Aggregat-Feld `speicher_entladung_aus_solar_kwh` würde Phase 1 stark beschleunigen, weil sonst pro Monat die Stundendaten neu durchgerechnet werden. Trigger: messen ob Phase 1 ohne dieses Feld schnell genug ist.
 
 ## Trigger für Umsetzung
 
 - **Phase 1**: Sobald **konkretes Forum-Feedback** kommt, dass die heute schon vorhandenen Speicher-Werte in den Monats-/Jahres-Auswertungen zu versteckt sind. Mehrere Tester haben mindestens 6–12 Monate Snapshot-Daten ab v3.19.0.
 - **Phase 2**: Direkt im Anschluss an Phase 1, wenn das SoC-Heatmap-Visual Sinn ergibt.
-- **Phase 3**: Wenn Phase 1+2 stabil sind UND ein Tester aktiv nach Sizing-Beratung fragt. Vorher zuviel Aufwand für Edge-Case.
+- ~~**Phase 3**: Wenn Phase 1+2 stabil sind UND ein Tester aktiv nach Sizing-Beratung fragt.~~ **Der Trigger ist nie gefallen** (2026-08-12 gemessen: kein Melder fragt nach Sizing). Gebaut auf Gernots ausdrücklichen Entscheid — hier festgehalten, damit später niemand einen Melder hineinliest, den es nicht gab.
 - **Phase 4**: Gekoppelt an [Prognose-Konsolidierung](https://github.com/supernova1963/eedc-homeassistant/issues/110) und #101.
 
 ## Offene Fragen

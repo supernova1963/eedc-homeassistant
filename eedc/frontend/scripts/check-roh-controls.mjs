@@ -83,6 +83,7 @@ const ROH_INFRA = new Map([
   ['src/components/ui/RadioGroup.tsx', 1],
   ['src/components/ui/SegmentControl.tsx', 1],
   ['src/components/ui/Select.tsx', 1],
+  ['src/components/ui/Slider.tsx', 1], // Schieberegler-SoT (2026-08-12, #358 Phase 3)
   ['src/components/ui/Stepper.tsx', 1],
   ['src/components/ui/Switch.tsx', 1],
   ['src/components/ui/Table.tsx', 1],

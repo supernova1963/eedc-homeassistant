@@ -28,6 +28,23 @@ Dazu:
 
 > Bei mehreren Speichern erfasst eedc den Ladestand für die Anlage als Ganzes — die Auswertung gilt dann für alle zusammen, nicht je Gerät. Das steht auch so in der Sicht.
 
+### „Und wie viel größer?" — der Schieberegler dazu
+
+**Betrifft dich das?** Wenn du mit dem Gedanken spielst, deinen Speicher zu erweitern.
+
+Die Auswertung oben sagt dir, *ob* mehr Kapazität etwas gebracht hätte. Der neue Block **„Größerer Speicher?"** im selben Komponenten-Hub sagt dir, **wie viel** — und was es kostet.
+
+Du ziehst einen Regler zwischen **50 % und 200 %** deiner heutigen Kapazität. eedc lässt daraufhin deine echten Stundenwerte noch einmal durchlaufen: dieselbe Sonne, derselbe Verbrauch, nur ein anders großer Speicher. Du siehst den Netto-Nutzen pro Jahr, wie viel weniger du aus dem Netz gebraucht hättest, und wie lange die Mehrkosten brauchen, bis sie wieder hereinkommen. Dazu eine Kurve über alle Größen — flacht sie nach rechts ab, ist dein Speicher bereits groß genug.
+
+**Die Zahl ist ehrlich klein, und dafür gibt es zwei Gründe:**
+
+- **Ein größerer Speicher spart nicht nur Netzbezug, er speist auch weniger ein.** Die entgangene Vergütung wird abgezogen. An einer echten Anlage macht das den Unterschied zwischen 67 € und 49 € im Jahr.
+- **Gerechnet wird mit der Kapazität, die dein Speicher im Alltag wirklich bewegt**, nicht mit der auf dem Typenschild. eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das heißt **nicht**, dass dein Speicher kleiner ist als angegeben — Reserven, Ladestrategie und Standby gehören einfach dazu. Mit der Zahl vom Typenschild fiele die Rechnung deutlich zu optimistisch aus.
+
+Für die Beispielanlage lautet die Antwort übrigens **„lohnt nicht"**: 50 % mehr Kapazität hätten 49 € im Jahr gebracht, bei rund 2.100 € Anschaffung. Der Block sagt das auch genau so.
+
+> **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt. Sie ist keine Vorhersage. Dieser Hinweis steht immer neben der Zahl und lässt sich nicht getrennt wegräumen. Liegen weniger als etwa 180 Tage vor, sagt eedc auch das.
+
 ### Der Börsenpreis-Sensor wechselt jetzt zur vollen Stunde
 
 **Betrifft dich das?** Wenn du eedc-Sensoren per MQTT nach Home Assistant überträgst und damit etwas steuerst — besonders Laden oder Entladen nach dem Börsenpreis.

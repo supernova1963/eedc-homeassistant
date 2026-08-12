@@ -280,6 +280,60 @@ export interface SpeicherPotentialResponse {
   soc_leer_prozent: number
 }
 
+/** Ein simulierter Kapazitäts-Punkt der Sizing-Kurve (#358 Phase 3). */
+export interface SizingPunkt {
+  /** Vielfaches der heutigen Kapazität (0,5 … 2,0). */
+  faktor: number
+  kapazitaet_kwh: number
+  einspeisung_kwh: number
+  netzbezug_kwh: number
+  eigenverbrauch_kwh: number
+  /** Gegen heute; negativ = weniger Netzbezug. */
+  delta_netzbezug_kwh: number
+  delta_einspeisung_kwh: number
+  /**
+   * Netto auf ein Jahr hochgerechnet: gesparter Netzbezug **minus** entgangene
+   * Einspeisung (Spread-Kanon). Bewusst NICHT der gesparte Netzbezug allein —
+   * der wäre um die Einspeisevergütung zu hoch.
+   */
+  nutzen_euro_jahr: number | null
+  mehrkosten_euro: number | null
+  /** `null`, wenn es nichts zu amortisieren gibt oder der Nutzen ≤ 0 ist. */
+  amortisation_jahre: number | null
+}
+
+/**
+ * „Lohnt sich ein größerer Speicher?" — rückblickende Simulation.
+ *
+ * `basis_kalibriert` entscheidet, wie belastbar die Kurve ist: `true` = die
+ * Basis wurde aus der **gemessenen** Speicherbewegung abgeleitet, `false` = es
+ * wird mit den gepflegten Parametern gerechnet (an der Referenzanlage verfehlte
+ * das den Netzbezug um −17,5 % statt −4,3 %). Die Sicht muss den Unterschied
+ * sagen, statt eine Genauigkeit zu suggerieren.
+ */
+export interface SpeicherSizingResponse {
+  kurve: SizingPunkt[]
+  basis_kapazitaet_kwh: number
+  basis_roundtrip_prozent: number
+  basis_kalibriert: boolean
+  kalibrierung_paare_laden: number | null
+  kalibrierung_paare_entladen: number | null
+  kalibrierung_stunden_verworfen: number | null
+  gepflegte_kapazitaet_kwh: number | null
+  gepflegter_wirkungsgrad_prozent: number
+  tage_mit_daten: number
+  tage_simuliert: number
+  historie_reicht: boolean
+  min_tage_fuer_aussage: number
+  von: string | null
+  bis: string | null
+  anzahl_speicher: number
+  /** Der HEUTE gültige Tarif — die Frage ist nach vorn gerichtet, nicht historisch. */
+  bezug_preis_cent: number | null
+  einspeise_verg_cent: number | null
+  richtpreis_eur_je_kwh: number
+}
+
 export interface SpeicherDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
@@ -533,6 +587,19 @@ export const investitionenApi = {
     if (bis) params.append('bis', bis)
     const query = params.toString()
     return api.get<SpeicherPotentialResponse>(`/investitionen/speicher-potential/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * Sizing-Simulator — „lohnt sich ein größerer Speicher?" (#358 Phase 3).
+   * Die vollständige Kurve (50 %–200 %) kommt in EINER Antwort; der Slider in
+   * der Sicht liest daraus und fragt nicht bei jedem Schritt nach.
+   */
+  async getSpeicherSizing(anlageId: number, von?: string, bis?: string): Promise<SpeicherSizingResponse> {
+    const params = new URLSearchParams()
+    if (von) params.append('von', von)
+    if (bis) params.append('bis', bis)
+    const query = params.toString()
+    return api.get<SpeicherSizingResponse>(`/investitionen/speicher-sizing/${anlageId}${query ? '?' + query : ''}`)
   },
 
   /**

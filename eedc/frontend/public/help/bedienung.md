@@ -437,6 +437,7 @@ Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung?
 - **Degradation** (Kapazitätsverlust über die Zeit)
 - **Arbitrage-Analyse** (wenn aktiviert): Netzladung zu günstigem Strom, Entladung bei hohem Preis, Arbitrage-Gewinn
 - **„Hätte mehr Kapazität geholfen?"** (Block *Wirtschaftlichkeit*) — die Sizing-Frage, beantwortet aus deinen Stundenwerten. Siehe unten.
+- **„Größerer Speicher?"** (eigener Block) — die Anschlussfrage *wie viel* und *zu welchem Preis*, mit Schieberegler. Siehe unten.
 
 #### Hätte mehr Kapazität geholfen?
 
@@ -453,6 +454,21 @@ Deshalb zeigt der Block drei Zahlen nebeneinander:
 Dazu eine **Heatmap Monat × Ladestand**: Je dunkler eine Zelle, desto mehr Stunden stand der Speicher in diesem Monat auf diesem Ladestand. Eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer" — erst wenn beides im selben Monat auftritt, ist mehr Kapazität eine ernsthafte Überlegung.
 
 > **Mehrere Speicher:** Den Ladestand erfasst eedc für die Anlage als Ganzes. Die Auswertung gilt dann für alle Speicher zusammen, nicht je Gerät — die Sicht weist darauf hin.
+
+#### Größerer Speicher? — der Sizing-Regler
+
+Der Block daneben beantwortet die Anschlussfrage: **wie viel** mehr, und lohnt es sich? Du ziehst einen Regler zwischen **50 % und 200 %** deiner heutigen Kapazität; eedc lässt daraufhin deine echten Stundenwerte noch einmal durchlaufen — dieselbe Sonne, derselbe Verbrauch, nur ein anders großer Speicher.
+
+Angezeigt werden:
+
+- **Netto-Nutzen pro Jahr** — gesparter Netzbezug **minus** der Einspeisung, die dafür entfällt. Ein größerer Speicher senkt beides; nur den Bezug zu rechnen wäre eine Überschätzung (an der Referenzanlage 67 € statt 49 €).
+- **Netzbezug** — wie viel weniger (oder mehr) aus dem Netz gekommen wäre.
+- **Amortisation** — wie lange die Mehrkosten brauchen, bis sie wieder hereinkommen (Richtwert rund 500 € je kWh; steht als Annahme dabei).
+- **Kurve über alle Größen** — flacht sie nach rechts ab, ist dein Speicher bereits groß genug. Die Null-Linie ist deine heutige Kapazität.
+
+**Womit gerechnet wird.** Nicht mit der Kapazität vom Typenschild, sondern mit der, die dein Speicher im Alltag **wirklich bewegt** — eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das ist **kein Gerätemangel**: Reserven, Ladestrategie, Leistungsgrenzen und Standby gehören dazu. Mit der Zahl vom Typenschild fällt die Rechnung systematisch zu optimistisch aus (an einer echten Anlage: −17,5 % Abweichung beim Netzbezug statt −5,4 %). Lässt sich die Basis nicht ableiten, rechnet eedc mit den gepflegten Parametern **und sagt es**.
+
+> **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt (Lastverschiebung). Sie ist damit belastbarer als ein generisches Sizing-Tool, weil sie deine Saisonalität trägt, aber sie ist **keine Vorhersage**. Dieser Hinweis steht immer neben der Zahl. Unter etwa **180 Tagen** Historie sagt eedc zusätzlich, dass die Aussage noch nicht trägt — ein halbes Jahr deckt Sommer und Winter ab, und genau dazwischen liegt der Nutzen eines Speichers.
 
 ### 3.4 Wärmepumpe
 

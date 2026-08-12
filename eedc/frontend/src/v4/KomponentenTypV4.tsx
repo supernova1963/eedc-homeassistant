@@ -21,7 +21,7 @@ import { ParkProvider, ParkFuss, Parkbar, usePark, type ParkApi } from '../compo
 import { BLOCK_IDENTITAET, STATUS_COLORS, STATUS_ICONS, formatDatum, jaNein, fmtZahl, PARAM_PV_MODULE, LEGACY_KWP_KEY } from '../lib'
 import { KOMPONENTEN_IDENTITAET } from '../lib/komponentenStyle'
 import { datenquellenApi, type DatenquelleGruppe } from '../api/datenquellen'
-import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, Zap } from 'lucide-react'
+import { BarChart3, ClipboardCheck, Cpu, Euro, ExternalLink, FileText, Layers, Network, Paperclip, Radio, Settings, SlidersHorizontal, Zap } from 'lucide-react'
 import { KOMPONENTEN_ADAPTER, type KompGeraet, type KompStruktur, type TopoItem } from './komponentenAdapter'
 import { KOMPONENTEN_ANALYSE } from './komponentenAnalyse'
 import { KomponentenVerlaufChart } from './KomponentenVerlaufChart'
@@ -715,6 +715,16 @@ export function geraetBloecke(g: KompGeraet, typ: string, anlageId: number, park
       render: () => <WirtschaftlichkeitInhalt w={g.wirtschaftlichkeit!} kpis={wKpis} />,
     })
   }
+
+  // Dimensionierung — was-wäre-wenn zur Gerätegröße (Speicher: Sizing-Simulator,
+  // #358 Phase 3). Eigener Block hinter „Wirtschaftlichkeit", weil dort die
+  // Vorfrage steht („hätte mehr Kapazität überhaupt geholfen?") und die Antwort
+  // hier („wie viel, und rechnet sie sich?") sonst darunter verschwände.
+  if (analyse?.dimensionierung && !regVerstecken('dimensionierung')) bloecke.push({
+    id: 'dimensionierung', title: 'Größerer Speicher?', icon: SlidersHorizontal,
+    summary: 'Was eine andere Größe gebracht hätte', defaultOpen: false,
+    render: () => analyse.dimensionierung!(anlageId, g.inv, (ids) => melde('dimensionierung', ids)),
+  })
 
   // ⑥ Aussicht entfällt im Hub (Gernot 2026-06-21): zeitliche Differenzierung → Cockpit/Aussicht.
 
