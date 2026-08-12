@@ -19,6 +19,7 @@ import { LoadingSpinner, Button } from '../components/ui'
 import { KPICard } from '../components/ui'
 import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '../api/datenChecker'
 import { energieProfilApi } from '../api/energie_profil'
+import { monatsdatenApi } from '../api/monatsdaten'
 import { baueBereichsMeldung, baueTagesMeldung, type ReparaturMeldung } from './datenCheckerMeldungen'
 import { fmtZahl } from '../lib'
 import {
@@ -60,6 +61,7 @@ function KategorieSektion({
   defaultOpen,
   onReaggregate,
   onReaggregateBereich,
+  onGeraetewerteLoeschen,
   reparaturBusy,
 }: {
   kategorie: string
@@ -67,7 +69,8 @@ function KategorieSektion({
   defaultOpen: boolean
   onReaggregate?: (anlageId: number, datum: string) => Promise<void>
   onReaggregateBereich?: (anlageId: number, von: string, bis: string) => Promise<void>
-  reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich)
+  onGeraetewerteLoeschen?: (anlageId: number, jahr: number, monat: number) => Promise<void>
+  reparaturBusy?: string | null  // key = `${anlage_id}:${datum}` (Einzeltag) bzw. `${anlage_id}:${von}:${bis}` (Bereich) bzw. `${anlage_id}:${jahr}-${monat}` (#349)
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const navigate = useNavigate()
@@ -134,6 +137,17 @@ function KategorieSektion({
               ? `${rangeAnlageId}:${rangeVon}:${rangeBis}` : null
             const isRangeBusy = rangeKey && reparaturBusy === rangeKey
 
+            // #349: Messwerte ohne Zählerzeile entfernen.
+            const gwAnlageId = e.action_kind === 'geraetewerte_loeschen'
+              ? Number(e.action_params?.anlage_id) : undefined
+            const gwJahr = e.action_kind === 'geraetewerte_loeschen'
+              ? Number(e.action_params?.jahr) : undefined
+            const gwMonat = e.action_kind === 'geraetewerte_loeschen'
+              ? Number(e.action_params?.monat) : undefined
+            const gwKey = gwAnlageId && gwJahr && gwMonat
+              ? `${gwAnlageId}:${gwJahr}-${gwMonat}` : null
+            const isGwBusy = gwKey && reparaturBusy === gwKey
+
             return (
               <div
                 key={i}
@@ -172,6 +186,21 @@ function KategorieSektion({
                   >
                     {!isRangeBusy && <Wrench className="h-3 w-3 mr-1" />}
                     {e.action_label ?? 'Zeitraum neu aggregieren'}
+                  </Button>
+                )}
+                {e.action_kind === 'geraetewerte_loeschen' && onGeraetewerteLoeschen
+                  && gwAnlageId && gwJahr && gwMonat && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-shrink-0"
+                    onClick={() => onGeraetewerteLoeschen(gwAnlageId, gwJahr, gwMonat)}
+                    disabled={!!reparaturBusy}
+                    loading={!!isGwBusy}
+                  >
+                    {!isGwBusy && <Wrench className="h-3 w-3 mr-1" />}
+                    {e.action_label ?? 'Messwerte entfernen'}
                   </Button>
                 )}
                 {e.link && !e.action_kind && (
@@ -255,6 +284,39 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
       setReparaturMessage({
         art: 'fehler',
         text: e instanceof Error ? e.message : `Reaggregation ${von}–${bis} fehlgeschlagen`,
+      })
+    } finally {
+      setReparaturBusy(null)
+    }
+  }
+
+  // #349: Messwerte eines Monats entfernen, dessen Zählerzeile gelöscht wurde.
+  // Die einzige Aktion dieser Seite, die Daten **löscht** — deshalb mit
+  // Rückfrage, und die Rückfrage nennt den Monat statt „diesen Eintrag".
+  const handleGeraetewerteLoeschen = async (anlageId: number, jahr: number, monat: number) => {
+    const key = `${anlageId}:${jahr}-${monat}`
+    const monatText = `${String(monat).padStart(2, '0')}/${jahr}`
+    if (!window.confirm(
+      `Messwerte einzelner Komponenten für ${monatText} endgültig entfernen?\n\n` +
+      'Der Monat hat keine Zählerzeile mehr. Wenn du die Werte behalten willst, ' +
+      'erfasse den Monat stattdessen neu — dann gehören sie wieder dazu.'
+    )) return
+
+    setReparaturBusy(key)
+    setReparaturMessage(null)
+    try {
+      const r = await monatsdatenApi.deleteVerwaisteGeraetewerte(anlageId, jahr, monat)
+      setReparaturMessage({
+        art: r.geloescht > 0 ? 'ok' : 'hinweis',
+        text: r.geloescht > 0
+          ? `${monatText}: ${r.geloescht} Messwert-Zeile(n) entfernt (${r.komponenten.join(', ')}).`
+          : `${monatText}: es war nichts mehr zu entfernen.`,
+      })
+      setRefreshKey(k => k + 1)
+    } catch (e) {
+      setReparaturMessage({
+        art: 'fehler',
+        text: e instanceof Error ? e.message : `${monatText} konnte nicht bereinigt werden`,
       })
     } finally {
       setReparaturBusy(null)
@@ -401,6 +463,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
                   defaultOpen={hasIssues}
                   onReaggregate={handleReaggregateDay}
                   onReaggregateBereich={handleReaggregateBereich}
+                  onGeraetewerteLoeschen={handleGeraetewerteLoeschen}
                   reparaturBusy={reparaturBusy}
                 />
               )

@@ -183,9 +183,41 @@ export const monatsdatenApi = {
 
   /**
    * Monatsdaten löschen
+   *
+   * `mitGeraetewerten` nimmt die Messwerte einzelner Komponenten desselben
+   * Monats mit (#349). **Vorgabe ist `false`**: gemessene Gerätewerte sind
+   * oft die teureren Daten — sie gehen nur auf ausdrückliche Zusage mit.
    */
-  async delete(id: number): Promise<void> {
-    return api.delete(`/monatsdaten/${id}`)
+  async delete(id: number, mitGeraetewerten = false): Promise<void> {
+    const query = mitGeraetewerten ? '?mit_geraetewerten=true' : ''
+    return api.delete(`/monatsdaten/${id}${query}`)
+  },
+
+  /**
+   * Was hängt an diesem Monat außer der Zählerzeile? (#349)
+   * Grundlage für den Lösch-Dialog — er soll benennen, was verschwindet.
+   */
+  async getGeraetewerte(id: number): Promise<{
+    jahr: number
+    monat: number
+    anzahl: number
+    komponenten: { investition_id: number; bezeichnung: string; typ: string | null; felder: string[] }[]
+  }> {
+    return api.get(`/monatsdaten/${id}/geraetewerte`)
+  },
+
+  /**
+   * Messwerte eines Monats OHNE Zählerzeile entfernen (#349).
+   * Nur für den Daten-Checker-Weg: existiert die Zeile noch, antwortet das
+   * Backend mit 409 und verweist auf den Lösch-Dialog.
+   */
+  async deleteVerwaisteGeraetewerte(anlageId: number, jahr: number, monat: number): Promise<{
+    jahr: number
+    monat: number
+    geloescht: number
+    komponenten: string[]
+  }> {
+    return api.delete(`/monatsdaten/geraetewerte/${anlageId}/${jahr}/${monat}`)
   },
 
   /**

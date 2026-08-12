@@ -24,6 +24,15 @@ class CheckKategorie(str, Enum):
     INVESTITIONEN = "investitionen"
     MONATSDATEN_VOLLSTAENDIGKEIT = "monatsdaten_vollstaendigkeit"
     MONATSDATEN_PLAUSIBILITAET = "monatsdaten_plausibilitaet"
+    # #349 (OliS2811): Messwerte einzelner Komponenten (InvestitionMonatsdaten)
+    # für einen Monat, dessen Zählerzeile (Monatsdaten) gelöscht wurde. Der
+    # Monat verschwindet damit aus allen Listen — die Gerätewerte bleiben aber
+    # stehen und weisen einen erneuten Import ab („Felder durch manuell
+    # gepflegte Werte geschützt"), ohne dass der Anwender sehen kann, woran es
+    # liegt. Trägt die Reparatur-Action `geraetewerte_loeschen`: ohne sie wäre
+    # es ein Hinweis, den niemand auflösen kann (die Zeile, über die man den
+    # Monat sonst aufräumt, existiert ja gerade nicht) — die P-6-Falle.
+    GERAETEWERTE_OHNE_MONATSZEILE = "geraetewerte_ohne_monatszeile"
     # Issue #135: Deckungsgrad kumulativer kWh-Zähler für Energieprofil
     ENERGIEPROFIL_ABDECKUNG = "energieprofil_abdeckung"
     # Issue #134: Drift-Schutz Publisher (HA-Automation) ↔ Konsument (field_definitions.py)

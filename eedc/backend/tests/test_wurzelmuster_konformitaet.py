@@ -1739,6 +1739,14 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     # Reparatur-Werkbank: prüft und schreibt Provenance, leitet nichts ab.
     "backend/services/repair_orchestrator.py::_scan_cloud_provenance",
     "backend/services/repair_orchestrator.py::_execute_reset_cloud_import",
+    # #349: lädt die Gerätezeilen eines Monats, um sie zu LÖSCHEN bzw. zu
+    # benennen (Lösch-Dialog, Werkbank-Vorschau, Daten-Checker-Aufräumweg).
+    # Es entsteht keine Monatsgröße — die Zeilen sind hier der Gegenstand,
+    # nicht die Quelle einer Zahl. Ein Weg über die Schicht wäre hier sogar
+    # falsch: sie filtert (aktiv · Anschaffung · Stilllegung · Dienstwagen),
+    # und genau die herausgefilterten Zeilen sind die, die stehen bleiben und
+    # den Re-Import abweisen.
+    "backend/services/monat_loeschen.py::_geraetewerte_des_monats",
     # Daten-Checker / Vorschläge: lesen EINEN Feldwert, um ihn zu prüfen.
     "backend/services/vorschlag_service.py::_get_feld_wert",
     # Zählt Zeilen für die DB-Statistik.

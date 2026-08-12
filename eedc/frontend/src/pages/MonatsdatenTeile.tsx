@@ -119,6 +119,11 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const [createPreset, setCreatePreset] = useState<MonatRef | null>(null)
   const [editingData, setEditingData] = useState<Monatsdaten | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<Monatsdaten | null>(null)
+  // #349: Begleitfunde des Lösch-Dialogs — was hängt außer der Zählerzeile dran?
+  const [geraetewerte, setGeraetewerte] = useState<
+    Awaited<ReturnType<typeof monatsdatenApi.getGeraetewerte>> | null
+  >(null)
+  const [geraeteMitloeschen, setGeraeteMitloeschen] = useState(false)
   const [showColumnSelector, setShowColumnSelector] = useState(false)
 
   // HA-Statistik Laden
@@ -401,10 +406,27 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
 
   const handleDelete = async () => {
     if (deleteConfirm) {
-      await deleteMonatsdaten(deleteConfirm.id)
+      await deleteMonatsdaten(deleteConfirm.id, geraeteMitloeschen)
       setDeleteConfirm(null)
     }
   }
+
+  // #349: Was hängt außer der Zählerzeile noch an diesem Monat? Die Messwerte
+  // je Komponente stehen in einer eigenen Tabelle und blieben bisher stehen —
+  // unsichtbar, aber wirksam: sie weisen einen erneuten Import ab. Der Dialog
+  // fragt beim Öffnen nach und benennt sie.
+  useEffect(() => {
+    if (!deleteConfirm) {
+      setGeraetewerte(null)
+      setGeraeteMitloeschen(false)
+      return
+    }
+    let abgebrochen = false
+    monatsdatenApi.getGeraetewerte(deleteConfirm.id)
+      .then(r => { if (!abgebrochen) setGeraetewerte(r) })
+      .catch(() => { if (!abgebrochen) setGeraetewerte(null) })
+    return () => { abgebrochen = true }
+  }, [deleteConfirm])
 
   // Finde Original-Monatsdaten für Edit/Delete
   const findOriginalMonatsdaten = (aggregiert: AggregierteMonatsdaten): Monatsdaten | undefined => {
@@ -1007,6 +1029,30 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
           <p className="text-gray-600 dark:text-gray-300">
             Möchtest du die Daten für <strong>{MONAT_KURZ[deleteConfirm?.monat || 0]} {deleteConfirm?.jahr}</strong> wirklich löschen?
           </p>
+
+          {/* #349: Der Monat besteht aus zwei Teilen — der Zählerzeile und den
+              Messwerten je Komponente. Blieben Letztere unerwähnt stehen, war der
+              Monat scheinbar weg, wies aber jeden erneuten Import ab. */}
+          {geraetewerte && geraetewerte.anzahl > 0 && (
+            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Zu diesem Monat gibt es außerdem Messwerte von{' '}
+                <strong>{geraetewerte.anzahl} Komponente{geraetewerte.anzahl > 1 ? 'n' : ''}</strong>:{' '}
+                {geraetewerte.komponenten.map(k => k.bezeichnung).join(', ')}.
+              </p>
+              <Checkbox
+                id="geraetewerte-mitloeschen"
+                checked={geraeteMitloeschen}
+                onChange={e => setGeraeteMitloeschen(e.target.checked)}
+                label="Diese Messwerte mitlöschen"
+                hint={
+                  'Ohne Haken bleiben sie erhalten — sie sind dann in keiner Liste mehr '
+                  + 'zu sehen und verhindern, dass dieser Monat neu importiert werden kann.'
+                }
+              />
+            </div>
+          )}
+
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Abbrechen</Button>
             <Button variant="danger" onClick={handleDelete}>Löschen</Button>

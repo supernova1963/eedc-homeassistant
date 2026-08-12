@@ -76,6 +76,18 @@ Dieselbe Ursache hat dir außerdem den **Speicher-Ladestand** (und damit die Vol
 
 **Dazu sagen gesperrte Einstellungen jetzt, was ihnen fehlt.** eedc unterscheidet zwei Voraussetzungen, die vorher beide „HA-Integration" hießen: Was den Add-on-Unterbau braucht (Add-on-Protokolle, direkter HA-Import, die alte Sensor-Zuordnung), bleibt dem Add-on vorbehalten — was nur eine erreichbare Instanz braucht, steht dir offen. Auf einer gesperrten Kachel steht deshalb nicht mehr pauschal „nur mit aktiver Home-Assistant-Integration", sondern der tatsächliche Grund. Das erspart die Suche nach einem Fehler, den es nicht gibt.
 
+### Gelöschte Monate lassen sich wieder importieren
+
+**Betrifft dich das?** Wenn du einen Monat gelöscht und ihn danach neu importiert hast — und der Import durchlief, ohne etwas zu schreiben.
+
+Ein Monat besteht bei eedc aus zwei Teilen: der **Zählerzeile** deiner Anlage und den **Messwerten je Komponente** daneben (PV je Modul, Speicher-Zyklen, Wallbox-Ladung). „Monat löschen" entfernte bisher nur die Zählerzeile. Der Monat war damit aus allen Listen verschwunden — die Gerätewerte standen aber weiter da und wiesen jeden erneuten Import ab, mit der Meldung „Felder wurden durch manuell gepflegte Werte geschützt". Wer den Monat vorher bewusst gelöscht hatte, konnte damit nichts anfangen.
+
+Was sich ändert:
+
+- Der **Lösch-Dialog sagt dir**, wie viele Komponenten-Messwerte an diesem Monat hängen, und du kannst sie mitlöschen. ⚠ **Ohne Haken bleiben sie erhalten** — das ist Absicht: Gemessene Werte sind meist mühsamer zu beschaffen als die Zählerzeile.
+- Ist dir das früher schon passiert, **meldet der Daten-Checker** den Rest und entfernt ihn auf Knopfdruck. Einen anderen Weg gäbe es nicht, denn ohne Zählerzeile erscheint der Monat in keiner Liste.
+- Der **Reset in der Reparatur-Werkbank** findet jetzt die Werte, die ein Import tatsächlich geschrieben hat. Bisher suchte er nach einer internen Bezeichnung, die kein Import vergibt — er fand also nie etwas, obwohl die Import-Meldung genau auf ihn verwies.
+
 ### Community: das Performance-Profil zeigt wieder den aktuellen Monat
 
 **Betrifft dich das?** Wenn du deine Daten mit der Community teilst und dort das Radar-Diagramm „Performance-Profil" ansiehst.

@@ -964,13 +964,119 @@ async def update_monatsdaten(
     return md
 
 
+@router.get("/{monatsdaten_id}/geraetewerte")
+async def get_geraetewerte_des_monats(
+    monatsdaten_id: int, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Welche Gerätewerte hängen an diesem Monat? (#349)
+
+    Grundlage für den Lösch-Dialog: `Monatsdaten` trägt die Zählerwerte der
+    Anlage, die Messwerte je Komponente stehen daneben in
+    `InvestitionMonatsdaten`. Wer den Monat löscht, ohne das zu wissen, hält
+    ihn danach für leer — die Monatslisten hängen an der Zählerzeile, die
+    Gerätewerte bleiben aber stehen und weisen jeden Re-Import ab.
+    """
+    result = await db.execute(select(Monatsdaten).where(Monatsdaten.id == monatsdaten_id))
+    md = result.scalar_one_or_none()
+    if not md:
+        raise not_found("Monatsdaten")
+
+    from backend.services.monat_loeschen import beschreibe_geraetewerte_des_monats
+
+    komponenten = await beschreibe_geraetewerte_des_monats(
+        db, md.anlage_id, md.jahr, md.monat
+    )
+    return {
+        "jahr": md.jahr,
+        "monat": md.monat,
+        "anzahl": len(komponenten),
+        "komponenten": komponenten,
+    }
+
+
+@router.delete(
+    "/geraetewerte/{anlage_id}/{jahr}/{monat}", status_code=status.HTTP_200_OK
+)
+async def delete_verwaiste_geraetewerte(
+    anlage_id: int, jahr: int, monat: int, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Löscht die Gerätewerte eines Monats **ohne** Zählerzeile (#349).
+
+    Der Gegenstand ist ein Monat, der in keiner Liste mehr auftaucht: seine
+    `Monatsdaten`-Zeile ist gelöscht, die Messwerte je Komponente stehen noch.
+    Genau dieser Rest weist einen erneuten Import ab — und weil der Monat
+    nirgends erscheint, gibt es keine Zeile, über die man ihn aufräumen könnte.
+    Deshalb hängt der Weg am Daten-Checker, der ihn meldet.
+
+    ⚠ Bewusst eng: Existiert die Zählerzeile noch, passiert **nichts** — dann
+    ist der Monat normal sichtbar und gehört über den Lösch-Dialog behandelt,
+    der beides zusammen anbietet. Ein zweiter Weg zum selben Ziel wäre genau
+    die Drift, aus der dieser Befund entstanden ist.
+    """
+    md_vorhanden = (await db.execute(
+        select(Monatsdaten).where(
+            Monatsdaten.anlage_id == anlage_id,
+            Monatsdaten.jahr == jahr,
+            Monatsdaten.monat == monat,
+        )
+    )).scalar_one_or_none()
+
+    if md_vorhanden is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Der Monat {monat:02d}/{jahr} hat noch eine Zählerzeile. "
+                "Bitte über „Monatsdaten löschen“ entfernen — dort lassen sich "
+                "die Gerätewerte in einem Zug mitlöschen."
+            ),
+        )
+
+    from backend.services.monat_loeschen import (
+        _geraetewerte_des_monats,
+        beschreibe_geraetewerte_des_monats,
+    )
+    from backend.services.provenance import log_delete
+
+    beschreibung = await beschreibe_geraetewerte_des_monats(db, anlage_id, jahr, monat)
+    zeilen = await _geraetewerte_des_monats(db, anlage_id, jahr, monat)
+
+    for imd in zeilen:
+        log_delete(
+            db, imd,
+            source="manual:form",
+            writer=_MANUAL_WRITER,
+            decision_reason=(
+                f"verwaiste Gerätewerte {jahr}-{monat:02d} gelöscht (#349) — "
+                "keine Monatsdaten-Zeile vorhanden"
+            ),
+        )
+        await db.delete(imd)
+
+    await db.commit()
+    return {
+        "jahr": jahr, "monat": monat,
+        "geloescht": len(zeilen),
+        "komponenten": [k["bezeichnung"] for k in beschreibung],
+    }
+
+
 @router.delete("/{monatsdaten_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_monatsdaten(
+    monatsdaten_id: int,
+    mit_geraetewerten: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
     """
     Löscht Monatsdaten.
 
     Args:
         monatsdaten_id: ID der Monatsdaten
+        mit_geraetewerten: Auch die Messwerte je Komponente desselben Monats
+            löschen (#349). **Vorgabe ist `False`** — gemessene Gerätewerte
+            sind oft die teureren Daten, ein Klick auf „Monat löschen" soll
+            sie nicht mitreißen. Der Dialog fragt vorher, was da ist
+            (`GET /{id}/geraetewerte`), und der Daten-Checker meldet einen
+            übersehenen Rest.
 
     Raises:
         404: Nicht gefunden
@@ -981,7 +1087,13 @@ async def delete_monatsdaten(monatsdaten_id: int, db: AsyncSession = Depends(get
     if not md:
         raise not_found("Monatsdaten")
 
-    # Audit-Log VOR dem Delete (sonst sind die Natural-Keys nicht mehr lesbar).
-    log_delete(db, md, source="manual:form", writer=_MANUAL_WRITER)
+    if mit_geraetewerten:
+        from backend.services.monat_loeschen import loesche_monat_vollstaendig
 
-    await db.delete(md)
+        await loesche_monat_vollstaendig(
+            db, md, source="manual:form", writer=_MANUAL_WRITER
+        )
+    else:
+        # Audit-Log VOR dem Delete (sonst sind die Natural-Keys nicht mehr lesbar).
+        log_delete(db, md, source="manual:form", writer=_MANUAL_WRITER)
+        await db.delete(md)

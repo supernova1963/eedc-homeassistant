@@ -14,7 +14,11 @@ export interface CheckErgebnis {
   link?: string
   // Etappe 6 v3.31.1: optionale Inline-Reparatur-Action.
   // v3.45.9: 'reaggregate_range' für Bulk-Reparatur (Batterie-Vorzeichen-Historie).
-  action_kind?: 'reaggregate_day' | 'reaggregate_range'
+  // #349: 'geraetewerte_loeschen' — Messwerte eines Monats ohne Zählerzeile.
+  // Die einzige Aktion dieser Liste, die etwas **entfernt**; sie steht hier,
+  // weil es für diesen Rest sonst keinen Weg gibt (die Zeile, über die man ihn
+  // sonst aufräumt, ist ja gerade die gelöschte).
+  action_kind?: 'reaggregate_day' | 'reaggregate_range' | 'geraetewerte_loeschen'
   action_params?: Record<string, unknown>
   action_label?: string
   // IA-V4 #243: Komponenten-Zuordnung (nur komponenten-bezogene Befunde) —

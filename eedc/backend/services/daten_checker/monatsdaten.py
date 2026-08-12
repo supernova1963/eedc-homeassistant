@@ -195,6 +195,68 @@ class MonatsdatenChecks:
 
     # ─── Monatsdaten Vollständigkeit ─────────────────────────────────────
 
+    def _check_geraetewerte_ohne_monatszeile(
+        self, anlage: Anlage, monatsdaten: list[Monatsdaten]
+    ) -> list[CheckErgebnis]:
+        """Messwerte je Komponente für Monate, deren Zählerzeile gelöscht wurde (#349).
+
+        **Warum das eine eigene Meldung braucht.** Ein gelöschter Monat
+        verschwindet aus jeder Liste — die hängen an ``Monatsdaten``. Die
+        Messwerte je Komponente stehen aber in einer anderen Tabelle und
+        bleiben. Sichtbar wird das erst beim nächsten Import, und zwar als
+        Meldung über die *Wirkung* statt über die Ursache: „Felder wurden durch
+        manuell gepflegte Werte geschützt". Der Melder hatte seine Monate
+        vorher ausdrücklich gelöscht und suchte den Fehler bei sich.
+
+        Bewusst **WARNING statt ERROR**: die Daten sind nicht falsch, sie sind
+        nur unerreichbar geworden. Und bewusst mit Reparatur-Action — ohne sie
+        gäbe es keinen Weg, sie loszuwerden.
+        """
+        ergebnisse: list[CheckErgebnis] = []
+        kat = CheckKategorie.GERAETEWERTE_OHNE_MONATSZEILE
+
+        vorhandene = {(md.jahr, md.monat) for md in monatsdaten}
+
+        # Je verwaistem Monat: wie viele Komponenten hängen daran?
+        verwaist: dict[tuple[int, int], list[str]] = {}
+        for inv in anlage.investitionen:
+            for imd in inv.monatsdaten:
+                schluessel = (imd.jahr, imd.monat)
+                if schluessel in vorhandene:
+                    continue
+                # Eine leere Zeile ist kein Fund — sie weist auch keinen
+                # Import ab. Gemeldet wird nur, was wirklich einen Wert trägt.
+                if not any(v is not None for v in (imd.verbrauch_daten or {}).values()):
+                    continue
+                verwaist.setdefault(schluessel, []).append(
+                    inv.bezeichnung or f"#{inv.id}"
+                )
+
+        for (jahr, monat), komponenten in sorted(verwaist.items()):
+            namen = ", ".join(sorted(komponenten)[:4])
+            if len(komponenten) > 4:
+                namen += f" (+{len(komponenten) - 4} weitere)"
+            ergebnisse.append(CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.WARNING,
+                meldung=(
+                    f"{monat:02d}/{jahr}: Messwerte von {len(komponenten)} "
+                    "Komponente(n) ohne Monatszeile"
+                ),
+                details=(
+                    f"Der Monat wurde gelöscht, die Messwerte einzelner Geräte "
+                    f"blieben stehen ({namen}). Sie erscheinen in keiner Liste, "
+                    "weisen aber einen erneuten Import dieses Monats ab. "
+                    "Entweder hier entfernen — oder den Monat neu erfassen, "
+                    "dann gehören sie wieder dazu."
+                ),
+                link="/einstellungen/monatsdaten",
+                action_kind="geraetewerte_loeschen",
+                action_params={"anlage_id": anlage.id, "jahr": jahr, "monat": monat},
+                action_label="Messwerte entfernen",
+            ))
+
+        return ergebnisse
+
     def _check_monatsdaten_vollstaendigkeit(
         self, anlage: Anlage, monatsdaten: list[Monatsdaten]
     ) -> list[CheckErgebnis]:

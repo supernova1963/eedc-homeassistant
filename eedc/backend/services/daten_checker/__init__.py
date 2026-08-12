@@ -101,6 +101,7 @@ class DatenChecker(
         ergebnisse.extend(self._check_strompreise(anlage, monatsdaten))
         ergebnisse.extend(self._check_investitionen(anlage, monatsdaten))
         ergebnisse.extend(self._check_monatsdaten_vollstaendigkeit(anlage, monatsdaten))
+        ergebnisse.extend(self._check_geraetewerte_ohne_monatszeile(anlage, monatsdaten))
         ergebnisse.extend(await self._check_monatsdaten_plausibilitaet(
             anlage, monatsdaten, pvgis_prognose, pv_erzeugung_map, pvgis_monat_map, pr, pr_count
         ))

@@ -292,6 +292,20 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 
 ---
 
+### 4.4a Monatsdaten – Messwerte ohne Monatszeile <a name="44a-messwerte-ohne-monatszeile"></a>
+
+**Was wird geprüft:** Gibt es Messwerte einzelner Komponenten (PV je Modul, Speicher-Zyklen, Wallbox-Ladung …) für einen Monat, der selbst nicht mehr erfasst ist?
+
+Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Einspeisung, Netzbezug …) und den **Messwerten je Komponente** daneben. Wird der Monat gelöscht, verschwindet die Zählerzeile — und damit der Monat aus allen Listen. Die Messwerte der Komponenten blieben bis August 2026 stehen, unsichtbar, aber wirksam: Ein erneuter Import dieses Monats prallte an ihnen ab und meldete lediglich „Felder wurden durch manuell gepflegte Werte geschützt". Wer den Monat vorher bewusst gelöscht hatte, suchte den Fehler dann bei sich.
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **MM/JJJJ: Messwerte von N Komponente(n) ohne Monatszeile** | ⚠️ WARNING | Der Monat wurde gelöscht, die Messwerte einzelner Geräte blieben stehen. Sie erscheinen in keiner Liste und verhindern, dass der Monat neu importiert werden kann. | Knopf **„Messwerte entfernen"** direkt an der Meldung — oder den Monat neu erfassen, dann gehören die Werte wieder dazu. |
+
+> **Vorbeugen:** Der Lösch-Dialog unter *Einstellungen → Daten → Monatsdaten* nennt seit derselben Version, wie viele Komponenten-Messwerte an einem Monat hängen, und bietet an, sie mitzulöschen. Ohne Haken bleiben sie erhalten — das ist Absicht, denn gemessene Werte sind meist die teureren Daten.
+
+---
+
 ### 4.5 Monatsdaten – Plausibilität <a name="45-monatsdaten--plausibilitaet"></a>
 
 **Was wird geprüft:** Pro vorhandenem Monatsdaten-Eintrag werden Pflichtfelder, Werte-Ranges, logische Konsistenz und (sobald verfügbar) Vergleich gegen Vorjahresmonat sowie PVGIS-Prognose geprüft. Die PV-Maximum-Prüfung nutzt eine **dynamische Obergrenze** aus PVGIS-Soll × aktueller Performance Ratio × 1,45 (sobald 6+ Monate Historie verfügbar) — sonst statisches Maximum nach Monat und kWp. Der 1,45-Faktor deckt die natürliche Monatsvariation ab.

@@ -753,13 +753,43 @@ async def _plan_delete_monatsdaten(
             f"Monatsdaten {md_id} gehört nicht zu Anlage {req.anlage_id}"
         )
 
+    # #349: Die Gerätewerte desselben Monats stehen in einer anderen Tabelle und
+    # bleiben stehen. Eine Vorschau, die „1 Zeile" sagt und den Rest verschweigt,
+    # erzeugt genau den Zustand, den der Melder hatte: Monat scheinbar leer,
+    # Re-Import prallt an unsichtbaren Werten ab.
+    from backend.services.monat_loeschen import zaehle_geraetewerte_des_monats
+
+    geraete_zeilen = await zaehle_geraetewerte_des_monats(
+        db, md.anlage_id, md.jahr, md.monat
+    )
+    mit_geraetewerten = bool(req.params.get("mit_geraetewerten", False))
+
+    warnungen = [
+        f"Monatsdaten-Row {md.jahr}-{md.monat:02d} wird komplett gelöscht. "
+        "Aggregate aus dieser Row gehen verloren — Audit-Log behält Spur."
+    ]
+    if geraete_zeilen and mit_geraetewerten:
+        warnungen.append(
+            f"Zusätzlich werden {geraete_zeilen} Messwert-Zeilen einzelner "
+            "Komponenten dieses Monats gelöscht (PV je Modul, Speicher, "
+            "Wallbox …). Auch das ist endgültig."
+        )
+    elif geraete_zeilen:
+        warnungen.append(
+            f"{geraete_zeilen} Messwert-Zeilen einzelner Komponenten dieses "
+            "Monats bleiben bestehen. Sie sind danach in den Monatslisten "
+            "nicht mehr zu sehen, weisen aber einen erneuten Import ab — "
+            "mit `mit_geraetewerten: true` gehen sie mit."
+        )
+
     return (
-        {"rows_to_delete": 1},
-        [
-            f"Monatsdaten-Row {md.jahr}-{md.monat:02d} wird komplett gelöscht. "
-            "Aggregate aus dieser Row gehen verloren — Audit-Log behält Spur."
-        ],
-        {"jahr": md.jahr, "monat": md.monat},
+        {"rows_to_delete": 1 + (geraete_zeilen if mit_geraetewerten else 0)},
+        warnungen,
+        {
+            "jahr": md.jahr, "monat": md.monat,
+            "geraete_zeilen": geraete_zeilen,
+            "mit_geraetewerten": mit_geraetewerten,
+        },
     )
 
 
@@ -772,15 +802,30 @@ async def _execute_delete_monatsdaten(
     if md is None:
         raise LookupError(f"Monatsdaten {md_id} nicht gefunden (zwischenzeitlich gelöscht?)")
 
-    log_delete(
-        db, md,
-        source="repair",
-        writer="repair_orchestrator:delete_monatsdaten",
-        decision_reason="repair_orchestrator delete_monatsdaten",
-    )
-    await db.delete(md)
+    # #349: dieselbe Wahl wie in der Route — Vorgabe ist „nur die Zählerzeile".
+    geraete_zeilen = 0
+    if req.params.get("mit_geraetewerten", False):
+        from backend.services.monat_loeschen import loesche_monat_vollstaendig
+
+        geraete_zeilen = await loesche_monat_vollstaendig(
+            db, md,
+            source="repair",
+            writer="repair_orchestrator:delete_monatsdaten",
+        )
+    else:
+        log_delete(
+            db, md,
+            source="repair",
+            writer="repair_orchestrator:delete_monatsdaten",
+            decision_reason="repair_orchestrator delete_monatsdaten",
+        )
+        await db.delete(md)
+
     await db.commit()
-    return {"deleted_id": md_id, "jahr": md.jahr, "monat": md.monat}
+    return {
+        "deleted_id": md_id, "jahr": md.jahr, "monat": md.monat,
+        "geraete_zeilen_geloescht": geraete_zeilen,
+    }
 
 
 # ── Operation: RESET_CLOUD_IMPORT ───────────────────────────────────────────
@@ -788,9 +833,36 @@ async def _execute_delete_monatsdaten(
 
 _CLOUD_PREFIX = "external:cloud_import:"
 
+#: Der Apply-Pfad aller Cloud-/Portal-Importe stempelt **`external:portal_import`**
+#: (`routes/data_import.py`) — ausdrücklich, „weil das Frontend den konkreten
+#: Cloud-Provider-Slug nicht durchreicht". `external:cloud_import:*` steht zwar
+#: in `SOURCE_LABELS`, wird aber von **keinem** Produktivpfad je vergeben
+#: (baumweit geprüft, #349).
+#:
+#: Dieser Scan suchte nur nach dem Prefix — und fand damit strukturell **nie**
+#: etwas, in keiner Konstellation. Genau darauf verweist aber die Meldung des
+#: Imports („Reset über Reparatur-Werkbank wenn gewollt"), wenn er Felder
+#: übersprungen hat. Der Hinweis zeigte auf ein Werkzeug, das die genannten
+#: Felder per Konstruktion nicht sehen konnte.
+_PORTAL_SOURCE = "external:portal_import"
+
 
 def _is_cloud_source(source: Optional[str], filter_providers: Optional[list[str]]) -> bool:
-    if not source or not source.startswith(_CLOUD_PREFIX):
+    """Stammt dieser Wert aus einem Cloud-/Portal-Import? (#349)
+
+    `filter_providers` grenzt auf einzelne Anbieter ein. Das geht nur bei
+    Quellen, die den Anbieter im Label tragen — `external:portal_import` tut
+    das nicht. Ein gesetzter Filter schließt sie deshalb aus, statt sie
+    stillschweigend mitzunehmen: „nur Fronius zurücksetzen" darf keine
+    Deye-Werte löschen, bloß weil beide unter demselben Label stehen.
+    """
+    if not source:
+        return False
+
+    if source == _PORTAL_SOURCE:
+        return not filter_providers
+
+    if not source.startswith(_CLOUD_PREFIX):
         return False
     if not filter_providers:
         return True
