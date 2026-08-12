@@ -23,6 +23,44 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def publish_takt_trigger(interval_minuten: int):
+    """Trigger für den MQTT-Auto-Publish — an der **Uhr** ausgerichtet, nicht am Start.
+
+    **Warum das eine eigene Funktion ist (F-29, rapahl-PN 2026-08-11):** Bis
+    hierher hing der Publish an einem ``IntervalTrigger`` mit
+    ``next_run_time = Start + 2 min``. Sein Takt lief damit ab dem Boot-Zeitpunkt
+    des Add-ons durch — bei der Voreinstellung von 60 Minuten also **einmal je
+    Stunde mit einem Versatz, den allein der letzte Neustart bestimmt**. Der
+    Börsenpreis wechselt aber zur vollen Stunde: gemeldet und an zwei
+    HA-Verläufen belegt wechselte der Sensor um **09:12:56** und — nach einem
+    Update-Neustart — um **11:08:02**, beide Male mit dem *richtigen* Wert der
+    laufenden Stunde. Wer Laden oder Entladen daran hängt, steuert nach jedem
+    Stundenwechsel im Mittel eine halbe Stunde mit den Werten der Vorstunde.
+
+    Ausgerichtet wird, wo das Intervall zur Uhr passt; sonst bleibt es beim
+    bisherigen Verhalten, statt einen krummen Takt zurechtzubiegen:
+
+    * Intervall teilt eine Stunde (5 · 10 · 15 · 20 · 30 · 60) ⇒ zur Minute 0,
+      15, … der Stunde.
+    * Intervall ist ein voller Stundenschritt und teilt den Tag (120 · 180 ·
+      240 · 360 · 720 · 1440) ⇒ zur vollen Stunde im passenden Raster.
+    * alles andere (z. B. 25 oder 90) ⇒ ``IntervalTrigger`` wie bisher.
+
+    Die fünf Sekunden Versatz sind kein Warten auf Daten — der Preis der neuen
+    Stunde steht längst in der DB —, sondern halten die Stundenbestimmung des
+    Jobs (``datetime.now().hour``) sicher auf der neuen Stunde.
+    """
+    if 60 % interval_minuten == 0:
+        minute = "0" if interval_minuten == 60 else f"*/{interval_minuten}"
+        return CronTrigger(minute=minute, second=5)
+    if interval_minuten % 60 == 0 and 1440 % interval_minuten == 0:
+        stunden = interval_minuten // 60
+        # 24 h ist kein Schrittwert im Stundenfeld (0–23), sondern schlicht Mitternacht.
+        stunden_ausdruck = "0" if stunden >= 24 else f"*/{stunden}"
+        return CronTrigger(hour=stunden_ausdruck, minute=0, second=5)
+    return IntervalTrigger(minutes=interval_minuten)
+
+
 class EEDCScheduler:
     """
     Background-Scheduler für periodische Tasks.
@@ -98,13 +136,15 @@ class EEDCScheduler:
             interval = max(5, app_settings.mqtt_publish_interval)  # Minimum 5 Minuten
             self._scheduler.add_job(
                 mqtt_auto_publish_job,
-                IntervalTrigger(minutes=interval),
+                publish_takt_trigger(interval),
                 id="mqtt_auto_publish",
                 name=f"MQTT Auto-Publish (alle {interval} Min)",
                 replace_existing=True,
-                # Start-Publish: IntervalTrigger feuert sonst erst nach einem
-                # vollen Intervall — neue Sensor-Definitionen wären nach einem
-                # Add-on-Update bis zu 60 min unsichtbar (Rainer/Gernot 2026-06-10).
+                # Start-Publish: der Takt feuert sonst erst zum nächsten Rasterpunkt
+                # — neue Sensor-Definitionen wären nach einem Add-on-Update bis zu
+                # 60 min unsichtbar (Rainer/Gernot 2026-06-10). Dieser eine Lauf
+                # liegt bewusst NEBEN dem Raster; ab dem zweiten gilt wieder die Uhr
+                # (F-29), denn `next_run_time` verschiebt nur den ersten Lauf.
                 next_run_time=datetime.now() + timedelta(minutes=2),
             )
             logger.info(f"MQTT Auto-Publish registriert: alle {interval} Minuten (Aktiv-Check je Lauf)")

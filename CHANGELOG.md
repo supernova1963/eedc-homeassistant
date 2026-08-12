@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Die Sensoren wechselten nicht zur vollen Stunde, sondern zu der Minute, in der eedc zuletzt gestartet wurde.** Am deutlichsten beim **Börsenpreis**: Er gilt je Stunde, in Home Assistant kam der neue Wert aber erst Minuten später an — an zwei Verläufen gemeldet um **09:12:56** und, nach einem Update-Neustart am selben Tag, um **11:08:02**. Der Wert war dabei jedes Mal richtig, nur zu spät. Ursache war der Takt des MQTT-Versands: Er lief ab dem Startzeitpunkt des Add-ons durch statt an der Uhr, und bei der Voreinstellung von 60 Minuten bestimmte damit allein der letzte Neustart, wie weit der Versand hinter der vollen Stunde lag. Wer Laden oder Entladen an den Preis-Sensoren aufhängt — Preis, Rang, Abstand zum Mittel, Anzahl günstiger Stunden —, steuerte nach jedem Stundenwechsel im Mittel eine halbe Stunde lang mit den Werten der **Vorstunde**. Der Versand richtet sich jetzt nach der Uhr: bei 60 Minuten zur vollen Stunde, bei kürzeren Abständen im passenden Raster (`:00`, `:15`, `:30`, `:45`), bei ganzen Stundenschritten zur vollen Stunde des Tages. ⚠ **Ein krummes Intervall wie 90 Minuten behält den bisherigen Takt** — dort gibt es keinen Rasterpunkt, der sich wiederholt, und jede Ausrichtung würde den eingestellten Abstand still verändern. Betroffen waren **alle** per MQTT versandten Sensoren; auffallen konnte es nur beim Preis, weil nur er zur vollen Stunde springt. *(Gemeldet von rapahl.)*
+
+---
+
 ## [4.0.13] - 2026-08-12 — Es zählt die Verbindung, nicht die Betriebsart
 
 ### Added

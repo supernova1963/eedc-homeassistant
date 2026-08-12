@@ -9,6 +9,24 @@
 
 ---
 
+## Noch nicht veröffentlicht
+
+### Der Börsenpreis-Sensor wechselt jetzt zur vollen Stunde
+
+**Betrifft dich das?** Wenn du eedc-Sensoren per MQTT nach Home Assistant überträgst und damit etwas steuerst — besonders Laden oder Entladen nach dem Börsenpreis.
+
+Der Börsenpreis gilt je Stunde. In Home Assistant kam der neue Wert aber erst einige Minuten nach dem Stundenwechsel an — mal acht, mal zwölf. Der Wert selbst war immer richtig, nur zu spät: Der Versand lief in festen Abständen ab dem Zeitpunkt, an dem eedc zuletzt gestartet wurde. Bei der Voreinstellung „alle 60 Minuten" bestimmte damit allein der letzte Neustart, wie weit er hinter der vollen Stunde herlief — nach jedem Update war der Versatz ein anderer.
+
+Wer seine Automation an den Preis-Sensoren aufhängt, hat in dieser Zeit mit den Werten der **Vorstunde** gesteuert: im Mittel eine halbe Stunde, genau am Übergang, an dem sich die Entscheidung ändert. Betroffen waren alle per MQTT versandten Sensoren; auffallen konnte es nur beim Preis, weil nur er zur vollen Stunde springt.
+
+Jetzt richtet sich der Versand nach der Uhr: bei 60 Minuten zur vollen Stunde, bei kürzeren Abständen im passenden Raster (`:00`, `:15`, `:30`, `:45`), bei ganzen Stundenschritten zur vollen Stunde. **Du musst nichts umstellen** — der Takt gilt nach dem nächsten Start des Add-ons.
+
+> Ein krummes Intervall wie 90 Minuten behält seinen bisherigen Takt: Dort gibt es keinen Punkt auf der Uhr, der sich wiederholt, und eedc würde den Abstand still verändern, den du eingestellt hast.
+
+*(Gemeldet von rapahl.)*
+
+---
+
 ## v4.0.13 — Es zählt die Verbindung, nicht die Betriebsart (August 2026)
 
 ### Docker mit HA-Token: die Tageswerte kommen jetzt an
