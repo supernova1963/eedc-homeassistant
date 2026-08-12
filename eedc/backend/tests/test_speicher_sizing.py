@@ -25,6 +25,7 @@ from backend.core.berechnungen.speicher_sizing import (
     SizingBewertung,
     SizingStunde,
     kalibriere_speicher,
+    messe_soc_nutzung,
     nutzen_euro,
     simuliere_speicher,
     sizing_kurve,
@@ -309,3 +310,106 @@ def test_amortisation_nur_bei_echtem_nutzen():
     assert punkte[0].nutzen_euro_jahr == pytest.approx(0.0)
     assert punkte[0].mehrkosten_euro == pytest.approx(8.0 * 500.0)
     assert punkte[0].amortisation_jahre is None
+
+
+# ----------------------------------------------------- Wirkungsgrad (N-238) --
+
+
+def test_tages_simulation_meldet_voll_spaeter_wenn_verluste_zaehlen():
+    """N-238: verlustfrei gerechnet ist der Speicher zu früh voll.
+
+    Der eigentliche Befund hinter N-238, und er hängt an keiner
+    Kapazitäts-Debatte: `simuliere_speicher_tag` rechnete den Ladeweg
+    **verlustfrei**. Um 10 kWh einzulagern, braucht es bei η = 50 % aber
+    20 kWh Überschuss — der Sensor `eedc_speicher_voll_um` und die Kachel
+    „Speicher voll" meldeten dadurch systematisch zu früh.
+    """
+    from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
+
+    pv = [0.0] * 6 + [2.0] * 12 + [0.0] * 6      # 24 kWh über den Tag
+    verbrauch = [0.0] * 24
+
+    verlustfrei = simuliere_speicher_tag(pv, verbrauch, 10.0, 0.0)
+    mit_verlust = simuliere_speicher_tag(pv, verbrauch, 10.0, 0.0, wirkungsgrad_prozent=50.0)
+
+    assert verlustfrei.speicher_voll_um == "10:00"
+    assert mit_verlust.speicher_voll_um == "15:00", (
+        "mit halbem Wirkungsgrad braucht dieselbe Füllung doppelt so viel Überschuss"
+    )
+    # Und der Rest geht ins Netz, statt zu verschwinden: Ladung 20, Einspeisung 4.
+    assert sum(b.einspeisung_kwh for b in mit_verlust.stunden_bilanz) == pytest.approx(4.0)
+
+
+def test_default_bleibt_verlustfrei_damit_niemand_still_etwas_anderes_bekommt():
+    """Der Default ist das Verhalten VOR N-238 — beide Produktionspfade
+    übergeben den gepflegten Wert ausdrücklich."""
+    from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
+
+    pv = [0.0] * 6 + [2.0] * 12 + [0.0] * 6
+    ohne = simuliere_speicher_tag(pv, [0.0] * 24, 10.0, 0.0)
+    hundert = simuliere_speicher_tag(pv, [0.0] * 24, 10.0, 0.0, wirkungsgrad_prozent=100.0)
+
+    assert ohne.speicher_voll_um == hundert.speicher_voll_um
+    assert ohne.end_soc_prozent == hundert.end_soc_prozent
+
+
+# -------------------------------------------------------- SoC-Nutzung N-238 --
+
+
+def _soc_reihe(tages_maxima, *, start: datetime = START) -> list[SizingStunde]:
+    """Je Tag 24 Stunden, die von 5 % auf das gegebene Maximum steigen."""
+    zeilen: list[SizingStunde] = []
+    for tag, maximum in enumerate(tages_maxima):
+        for h in range(24):
+            anteil = h / 23
+            zeilen.append(SizingStunde(
+                zeit=start + timedelta(days=tag, hours=h),
+                pv_kwh=1.0, verbrauch_kwh=0.5,
+                soc_prozent=5.0 + anteil * (maximum - 5.0),
+            ))
+    return zeilen
+
+
+def test_anlage_mit_ladegrenze_wird_als_solche_erkannt():
+    """Der Fall, für den Gernot N-238 aufgemacht hat: 80-%-Ladegrenze.
+
+    Der Speicher erreicht die Voll-Schwelle an **keinem** Tag ⇒ die Lücke
+    zwischen gepflegter und gemessener Kapazität ist gewollt, nicht Verlust.
+    """
+    nutzung = messe_soc_nutzung(_soc_reihe([80.0] * 30))
+
+    assert nutzung is not None
+    assert nutzung.tage_bis_voll == 0
+    assert nutzung.tages_max_median == pytest.approx(80.0)
+    assert nutzung.laedt_planmaessig_voll is False
+
+
+def test_anlage_die_durchlaedt_wird_unterschieden():
+    """Die Referenzanlage: 247 von 361 Tagen bis ≥ 95 % ⇒ die Lücke ist Verlust."""
+    nutzung = messe_soc_nutzung(_soc_reihe([100.0] * 20 + [60.0] * 10))
+
+    assert nutzung is not None
+    assert nutzung.tage_bis_voll == 20
+    assert nutzung.anteil_tage_voll == pytest.approx(20 / 30)
+    assert nutzung.laedt_planmaessig_voll is True
+
+
+def test_soc_nutzung_braucht_keine_bilanzkonsistenz():
+    """Ein invertiertes `batterie_kwh` verdirbt den **Ladestand** nicht.
+
+    Die Vorzeichen-Frage betrifft die Kalibrierung; wer sie hier anwendete,
+    würde einer Anlage mit Alt-Tagen die halbe Historie wegnehmen.
+    """
+    reihe = [
+        SizingStunde(zeit=z.zeit, pv_kwh=z.pv_kwh, verbrauch_kwh=z.verbrauch_kwh,
+                     soc_prozent=z.soc_prozent, batterie_kwh=None)
+        for z in _soc_reihe([100.0] * 10)
+    ]
+
+    nutzung = messe_soc_nutzung(reihe)
+
+    assert nutzung is not None and nutzung.tage_bis_voll == 10
+
+
+def test_ohne_ladestand_gibt_es_keine_aussage():
+    assert messe_soc_nutzung(_reihe([(1.0, 0.5)] * 24)) is None

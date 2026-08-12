@@ -303,6 +303,26 @@ export interface SizingPunkt {
 }
 
 /**
+ * Welchen Ladestands-Bereich die Anlage im Alltag fährt (N-238).
+ *
+ * Sie trennt die beiden Ursachen, aus denen gepflegte und gemessene Kapazität
+ * auseinanderliegen können: **gewollte Ladegrenze** (der Speicher wird gar
+ * nicht voll geladen) oder **Ladeverlust** (er wird voll, es kommt trotzdem
+ * weniger heraus). `laedt_planmaessig_voll` ist die fertige Unterscheidung.
+ */
+export interface SocNutzung {
+  soc_p5: number
+  soc_median: number
+  soc_p95: number
+  /** Median des Tages-Maximums: „wie weit lädt sie an einem typischen Tag?" */
+  tages_max_median: number
+  tage_bis_voll: number
+  tage_bis_leer: number
+  tage_mit_soc: number
+  laedt_planmaessig_voll: boolean
+}
+
+/**
  * „Lohnt sich ein größerer Speicher?" — rückblickende Simulation.
  *
  * `basis_kalibriert` entscheidet, wie belastbar die Kurve ist: `true` = die
@@ -321,6 +341,8 @@ export interface SpeicherSizingResponse {
   kalibrierung_stunden_verworfen: number | null
   gepflegte_kapazitaet_kwh: number | null
   gepflegter_wirkungsgrad_prozent: number
+  /** `null`, solange gar kein Ladestand erfasst ist. */
+  soc_nutzung: SocNutzung | null
   tage_mit_daten: number
   tage_simuliert: number
   historie_reicht: boolean

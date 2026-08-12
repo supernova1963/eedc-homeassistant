@@ -45,6 +45,25 @@ Für die Beispielanlage lautet die Antwort übrigens **„lohnt nicht"**: 50 % m
 
 > **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt. Sie ist keine Vorhersage. Dieser Hinweis steht immer neben der Zahl und lässt sich nicht getrennt wegräumen. Liegen weniger als etwa 180 Tage vor, sagt eedc auch das.
 
+### Wie groß ist dein Speicher wirklich?
+
+**Betrifft dich das?** Wenn du einen Speicher mit Ladestands-Sensor hast.
+
+Im selben Block steht jetzt eine Zeile mehr: neben der Kapazität, die du gepflegt hast, die Zahl, die eedc aus deinem **gemessenen Ladestands-Verlauf** ableitet — „im Alltag bewegt". Dazu der Bereich, in dem dein Speicher tatsächlich lebt, und an wie vielen Tagen er voll bzw. leer wurde.
+
+⚠ **Deine gepflegte Zahl bleibt maßgeblich und wird nicht überschrieben.** Sie ist eine Absicht: Wer seinen Speicher bewusst nur bis 80 % lädt, hat das so gewollt, und eine „Korrektur" nach unten wäre falsch. eedc **erklärt** den Unterschied deshalb, statt ihn zu beheben — und unterscheidet dabei zwei Fälle, die vorher nicht auseinanderzuhalten waren:
+
+- **Dein Speicher wird regelmäßig voll, es geht trotzdem weniger durch** ⇒ das sind **Ladeverluste**. Gegen Ende der Ladung nimmt ein Speicher viel Energie auf, die den Ladestand kaum noch bewegt. Deine gepflegte Zahl ist dann richtig, die kleinere beschreibt den Durchsatz.
+- **Dein Speicher wird nie voll** ⇒ dann ist die kleinere Zahl deine eigene Ladestrategie. Falls das nicht gewollt ist, lohnt ein Blick auf die gepflegte nutzbare Kapazität in den Einstellungen.
+
+### „Speicher voll um" kommt jetzt später — und stimmt
+
+**Betrifft dich das?** Wenn du den Sensor `eedc_speicher_voll_um` nutzt oder die Kachel „Speicher voll" in der Tages-Vorschau ansiehst.
+
+Die Schätzung rechnete den Ladeweg **verlustfrei**: Für 12 kWh im Speicher hielt sie 12 kWh Überschuss für ausreichend. Real sind es bei 95 % Wirkungsgrad rund 12,7 kWh, bei 85 % über 14 — die gemeldete Uhrzeit lag also **immer vor** der tatsächlichen, und je schlechter der Speicher, desto weiter davor.
+
+Gerechnet wird jetzt mit dem Wirkungsgrad, den du beim Gerät gepflegt hast (bei mehreren Speichern mit dem niedrigsten). **Die Uhrzeit rückt dadurch nach hinten** — das ist die Korrektur. Wenn du eine Automation daran hängst, greift sie später als bisher, aber dann, wenn der Speicher wirklich voll ist.
+
 ### Der Börsenpreis-Sensor wechselt jetzt zur vollen Stunde
 
 **Betrifft dich das?** Wenn du eedc-Sensoren per MQTT nach Home Assistant überträgst und damit etwas steuerst — besonders Laden oder Entladen nach dem Börsenpreis.

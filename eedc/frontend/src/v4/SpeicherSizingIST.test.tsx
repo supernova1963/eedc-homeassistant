@@ -41,6 +41,11 @@ const ANTWORT = (teil: Partial<SpeicherSizingResponse> = {}): SpeicherSizingResp
   kalibrierung_stunden_verworfen: 2705,
   gepflegte_kapazitaet_kwh: 12.1,
   gepflegter_wirkungsgrad_prozent: 95,
+  soc_nutzung: {
+    soc_p5: 0, soc_median: 53.1, soc_p95: 100,
+    tages_max_median: 100, tage_bis_voll: 247, tage_bis_leer: 159,
+    tage_mit_soc: 361, laedt_planmaessig_voll: true,
+  },
   tage_mit_daten: 365,
   tage_simuliert: 355,
   historie_reicht: true,
@@ -126,6 +131,49 @@ describe('SpeicherSizingIST', () => {
 
     await waitFor(() => expect(screen.getByText(/fehlt die Bezugsgröße/i)).toBeInTheDocument())
     expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+  })
+
+  it('erklärt die Lücke als Ladeverlust, wenn die Anlage voll lädt (N-238)', async () => {
+    // Die Referenzanlage: 247 von 361 Tagen bis 100 %, gepflegt 12,1 / gemessen 8,3.
+    vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherSizingIST anlageId={1} />)
+
+    await waitFor(() => expect(screen.getByText(/Ladeverluste/)).toBeInTheDocument())
+    expect(screen.getByText(/247 von 361 Tagen/)).toBeInTheDocument()
+    expect(screen.getByText(/gepflegte Kapazität ist damit richtig/)).toBeInTheDocument()
+  })
+
+  it('erklärt die Lücke als Ladestrategie, wenn nie voll geladen wird (N-238)', async () => {
+    // Gernots Einwand: es gibt Anwender, die bewusst nicht auf 100 % laden.
+    // Dann ist die kleinere Zahl kein Verlust — und eine „Korrektur" wäre falsch.
+    vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT({
+      soc_nutzung: {
+        soc_p5: 12, soc_median: 45, soc_p95: 78,
+        tages_max_median: 80, tage_bis_voll: 0, tage_bis_leer: 3,
+        tage_mit_soc: 200, laedt_planmaessig_voll: false,
+      },
+    }))
+
+    render(<SpeicherSizingIST anlageId={1} />)
+
+    await waitFor(() => expect(screen.getByText(/planmäßig nicht voll/)).toBeInTheDocument())
+    expect(screen.getByText(/Ihre eigene Ladestrategie/)).toBeInTheDocument()
+    expect(screen.queryByText(/Ladeverluste/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt gepflegte und gemessene Kapazität nebeneinander', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherSizing').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherSizingIST anlageId={1} />)
+
+    await waitFor(() => expect(screen.getByText('Gepflegt (nutzbar)')).toBeInTheDocument())
+    expect(screen.getByText('12,1 kWh')).toBeInTheDocument()
+    expect(screen.getByText('Im Alltag bewegt')).toBeInTheDocument()
+    // „8,3 kWh" steht auch im Befund-Satz — hier zählt die Zeile der Definitionsliste.
+    expect(screen.getAllByText('8,3 kWh').length).toBeGreaterThan(0)
+    expect(screen.getByText('Genutzter Ladestand')).toBeInTheDocument()
+    expect(screen.getByText('0 – 100 %')).toBeInTheDocument()
   })
 
   it('meldet die Park-IDs erst, wenn wirklich etwas zu zeigen ist', async () => {

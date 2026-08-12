@@ -32,6 +32,7 @@ from backend.core.investition_parameter import (
     PARAM_BALKONKRAFTWERK,
     PARAM_PV_MODULE,
     PARAM_SPEICHER,
+    PARAM_SPEICHER_DEFAULTS,
     PARAM_WECHSELRICHTER,
     SPEICHER_KOPPLUNG_AC,
     SPEICHER_KOPPLUNG_DC,
@@ -402,3 +403,48 @@ def get_speicher_kopplung(inv: Any) -> str:
         if getattr(inv, "parent_investition_id", None) is not None
         else SPEICHER_KOPPLUNG_AC
     )
+
+
+def get_speicher_wirkungsgrad_prozent(inv: Any) -> float:
+    """Gepflegter Roundtrip-Wirkungsgrad eines Speichers in Prozent.
+
+    Fällt auf den Kanon-Default (`PARAM_SPEICHER_DEFAULTS`) zurück, wenn das
+    Feld fehlt oder Unsinn enthält — anders als bei der Kapazität ist das hier
+    **kein** P4-Fall: ein Speicher ohne gepflegten Wirkungsgrad hat trotzdem
+    einen, und 95 % ist die Herstellerangabe der überwiegenden Mehrheit. Eine
+    Rechnung deswegen aussetzen zu lassen hieße, sie für fast jede Anlage
+    auszusetzen, die das optionale Feld nie angefasst hat.
+    """
+    params = getattr(inv, "parameter", None) or {}
+    default = float(PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
+    try:
+        wert = float(params.get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"]) or default)
+    except (TypeError, ValueError):
+        return default
+    return wert if 0 < wert <= 100 else default
+
+
+def aggregiere_speicher_basis(speicher: Any) -> tuple[Optional[float], float]:
+    """``(Σ nutzbare Kapazität kWh | None, min Wirkungsgrad %)`` über mehrere Geräte.
+
+    **Ein Helper, weil es eine Regel ist und keine drei.** Dieselbe Aggregation
+    brauchen der Sizing-Simulator (#358 Phase 3), die Tages-Vorschau „Speicher
+    voll um" im Planungs-Tab und der HA-Sensor `eedc_speicher_voll_um`. Drei
+    Kopien derselben Faltung sind genau die Klasse, aus der die
+    Aggregations-Drift dieses Projekts entstanden ist.
+
+    **Kapazität wird summiert, der Wirkungsgrad ist das Minimum.** Kapazitäten
+    addieren sich physikalisch; ein Wirkungsgrad nicht — die Kette kann nicht
+    besser sein als ihr schwächstes Glied, und ein Mittelwert würde einen
+    schlechten Speicher hinter einem guten verstecken. Bei nur einem Gerät
+    (Normalfall) sind beide Lesarten identisch.
+
+    Kapazität ist **netto** (`get_speicher_nutzbare_kapazitaet_kwh`, stiller
+    Brutto-Fallback) und `None`, wenn nichts gepflegt ist — dann gibt es keine
+    Bezugsgröße, und der Aufrufer darf keine erfinden.
+    """
+    geraete = list(speicher)
+    summe = sum(get_speicher_nutzbare_kapazitaet_kwh(g) or 0 for g in geraete)
+    wirkungsgrade = [get_speicher_wirkungsgrad_prozent(g) for g in geraete]
+    default = float(PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
+    return (summe or None), (min(wirkungsgrade) if wirkungsgrade else default)

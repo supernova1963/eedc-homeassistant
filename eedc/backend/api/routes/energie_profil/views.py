@@ -30,7 +30,7 @@ from backend.core.berechnungen.kennzahlen import (
 )
 from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 from backend.core.exceptions import bad_request, not_found
-from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
+from backend.core.investition_kennwerte import aggregiere_speicher_basis
 from backend.api.deps import get_db
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition, InvestitionTyp
@@ -1371,10 +1371,11 @@ async def get_tagesprognose(
     # rechnerisch später voll als real. Stiller Brutto-Fallback (E17) — bei
     # ungepflegtem Netto-Feld bleibt alles wie bisher, deshalb hier bewusst
     # KEIN `hinweise`-Eintrag.
-    speicher_kap = sum(
-        get_speicher_nutzbare_kapazitaet_kwh(inv) or 0
-        for inv in speicher_invs
-    )
+    # N-238: Kapazität UND Wirkungsgrad über den geteilten Helper — der
+    # HA-Sensor `eedc_speicher_voll_um` liest dieselbe Regel, und zwei
+    # gleichlautende Faltungen wären genau die Drift-Klasse dieses Projekts.
+    speicher_kap, speicher_eta = aggregiere_speicher_basis(speicher_invs)
+    speicher_kap = speicher_kap or 0.0
 
     # Start-SoC: Ø SoC um Mitternacht der letzten 7 Tage
     start_soc = 50.0  # Default
@@ -1429,6 +1430,7 @@ async def get_tagesprognose(
             speicher_kap_kwh=speicher_kap,
             start_soc_prozent=start_soc,
             start_stunde=0,
+            wirkungsgrad_prozent=speicher_eta,
         )
         speicher_voll_um = sim.speicher_voll_um
         speicher_leer_um = sim.speicher_leer_um

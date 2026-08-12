@@ -32,6 +32,7 @@ import pytest
 from backend.core.berechnungen.speicher import vollzyklen
 from backend.core.berechnungen.speicher_simulation import simuliere_speicher_tag
 from backend.core.calculations import SPEICHER_ZYKLEN_PRO_JAHR, berechne_speicher_einsparung
+from backend.core.investition_parameter import PARAM_SPEICHER_DEFAULTS
 from backend.core.investition_kennwerte import (
     get_speicher_kapazitaet_kwh,
     get_speicher_nutzbare_kapazitaet_kwh,
@@ -264,7 +265,8 @@ async def test_ha_sensor_speicher_voll_um_nutzt_dieselbe_kapazitaet(db, monkeypa
     voll" tragen denselben Namen und dieselbe Simulation.
 
     Start-SoC und Start-Stunde unterscheiden sich bewusst (Modul-Docstring von
-    `speicher_simulation`) — die Kapazität darf es nicht.
+    `speicher_simulation`) — die Kapazität darf es nicht. **Seit N-238 gilt
+    dasselbe für den Wirkungsgrad**, deshalb liefert der Helper ihn mit.
     """
     from backend.services.ha_export_prognose import _aktueller_speicher
     from backend.models.tages_energie_profil import TagesEnergieProfil
@@ -276,11 +278,15 @@ async def test_ha_sensor_speicher_voll_um_nutzt_dieselbe_kapazitaet(db, monkeypa
     ))
     await db.commit()
 
-    kap, soc = await _aktueller_speicher(db, anlage_id, HEUTE)
+    kap, eta, soc = await _aktueller_speicher(db, anlage_id, HEUTE)
 
     assert kap == pytest.approx(_NETTO_KWH), (
         "Der HA-Sensor lief auf der Brutto-Kapazität weiter — zwei Uhrzeiten "
         "unter demselben Namen."
+    )
+    assert eta == pytest.approx(PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"]), (
+        "N-238: der Sensor muss denselben Wirkungsgrad fahren wie die Kachel — "
+        "verlustfrei gerechnet meldet er die volle Batterie zu früh."
     )
     assert soc == pytest.approx(40.0)
 
@@ -374,6 +380,11 @@ async def test_ohne_gepflegtes_netto_feld_aendert_sich_nichts(db, monkeypatch):
     Eine Anlage ohne `nutzbare_kapazitaet_kwh` — der Normalfall — muss nach
     A31-2 exakt dieselben Zahlen liefern wie davor. „Davor" ist hier die
     Brutto-Kapazität, explizit durchgerechnet statt aus dem Lauf abgeschrieben.
+
+    ⚠ **Die Referenz trägt seit N-238 den gepflegten Wirkungsgrad**, weil die
+    Route ihn übergibt. Geprüft wird weiterhin die Kapazitäts-Frage (netto vs.
+    brutto) — nur eben bei gleichem η auf beiden Seiten, statt die eine
+    verlustfrei und die andere verlustbehaftet zu rechnen.
     """
     anlage_id = await _anlage_mit_speicher(db, netto=None)
     resp = await _tagesprognose(db, monkeypatch, anlage_id)
@@ -383,6 +394,7 @@ async def test_ohne_gepflegtes_netto_feld_aendert_sich_nichts(db, monkeypatch):
         verbrauch_stunden=[0.5] * 24,
         speicher_kap_kwh=_BRUTTO_KWH,
         start_soc_prozent=50.0,
+        wirkungsgrad_prozent=PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"],
     )
 
     assert resp.speicher_kapazitaet_kwh == pytest.approx(_BRUTTO_KWH)

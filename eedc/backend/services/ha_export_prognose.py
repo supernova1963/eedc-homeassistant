@@ -36,7 +36,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
+from backend.core.investition_kennwerte import aggregiere_speicher_basis
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -96,7 +96,9 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
 
         # „Speicher voll um" — Simulation ab aktuellem SoC (nicht Mitternacht).
         speicher_voll_um = None
-        speicher_kap, akt_soc = await _aktueller_speicher(db, anlage.id, heute)
+        speicher_kap, speicher_eta, akt_soc = await _aktueller_speicher(
+            db, anlage.id, heute
+        )
         if speicher_kap > 0 and akt_soc is not None:
             vp = await get_verbrauch_prognose(anlage.id, heute, db)
             verbrauch_stunden = vp["stunden_kw"] if vp else [0.0] * 24
@@ -106,6 +108,7 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
                 speicher_kap_kwh=speicher_kap,
                 start_soc_prozent=akt_soc,
                 start_stunde=now.hour,
+                wirkungsgrad_prozent=speicher_eta,
             )
             speicher_voll_um = sim.speicher_voll_um
 
@@ -129,8 +132,10 @@ async def berechne_prognose_export(db, anlage) -> Optional[dict]:
         return None
 
 
-async def _aktueller_speicher(db, anlage_id: int, heute: date) -> tuple[float, Optional[float]]:
-    """(Speicher-Kapazität kWh, aktueller SoC %).
+async def _aktueller_speicher(
+    db, anlage_id: int, heute: date
+) -> tuple[float, float, Optional[float]]:
+    """(Speicher-Kapazität kWh, Wirkungsgrad %, aktueller SoC %).
 
     Der „aktuelle SoC" ist der zuletzt gespeicherte Stunden-SoC (heute, sonst
     gestern) aus ``TagesEnergieProfil`` — robust und ohne Live-Abhängigkeit.
@@ -148,12 +153,14 @@ async def _aktueller_speicher(db, anlage_id: int, heute: date) -> tuple[float, O
     ]
     # A31-2/E18: NETTO wie im Planungs-Tab. Der Sensor `eedc_speicher_voll_um`
     # und die KPI-Kachel „Speicher voll" tragen denselben Namen und dieselbe
-    # Simulation — sie dürfen nicht auf verschiedenen Kapazitäten laufen.
+    # Simulation — sie dürfen nicht auf verschiedenen Kapazitäten laufen. Seit
+    # N-238 gilt das auch für den **Wirkungsgrad**, deshalb der geteilte Helper
+    # statt zweier gleichlautender Faltungen.
     # (Der abweichende Start-SoC und die abweichende Start-Stunde bleiben
     # bewusst, s. Modul-Docstring von `speicher_simulation`.)
-    kap = sum(get_speicher_nutzbare_kapazitaet_kwh(i) or 0 for i in speicher)
-    if kap <= 0:
-        return 0.0, None
+    kap, eta = aggregiere_speicher_basis(speicher)
+    if not kap:
+        return 0.0, eta, None
 
     soc_res = await db.execute(
         select(TagesEnergieProfil.soc_prozent).where(
@@ -164,4 +171,4 @@ async def _aktueller_speicher(db, anlage_id: int, heute: date) -> tuple[float, O
             TagesEnergieProfil.datum.desc(), TagesEnergieProfil.stunde.desc()
         ).limit(1)
     )
-    return float(kap), soc_res.scalar_one_or_none()
+    return float(kap), eta, soc_res.scalar_one_or_none()

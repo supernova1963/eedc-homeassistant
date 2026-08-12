@@ -114,6 +114,74 @@ function Befund({ d, punkt }: { d: SpeicherSizingResponse; punkt: SizingPunkt })
   )
 }
 
+/**
+ * „Wie groß ist Ihr Speicher wirklich?" — die gepflegte Zahl neben der gemessenen,
+ * und der Satz, der den Unterschied **erklärt** statt ihn zu behaupten (N-238).
+ *
+ * **Warum das nicht einfach die gepflegte Zahl ersetzt** (Gernots Einwand
+ * 2026-08-12): die gepflegte nutzbare Kapazität ist eine **Absicht** — es gibt
+ * Anwender, die ihren Speicher bewusst nicht dauernd auf 100 % fahren. Für die
+ * wäre eine „Korrektur" auf den gemessenen Wert falsch: sie wollen wissen, wann
+ * **ihr** Ziel erreicht ist. Die gemessene Zahl ist **Verhalten**. Beide stehen
+ * deshalb nebeneinander, und der Ladestands-Bereich sagt, welcher der beiden
+ * Fälle vorliegt.
+ */
+function GroesseIST({ d }: { d: SpeicherSizingResponse }) {
+  const n = d.soc_nutzung
+  const gepflegt = d.gepflegte_kapazitaet_kwh
+  const zeigtLuecke = d.basis_kalibriert && gepflegt != null
+    && Math.abs(gepflegt - d.basis_kapazitaet_kwh) > 0.5
+
+  return (
+    <div className="space-y-2">
+      <dl className="grid gap-3 sm:grid-cols-3 text-sm">
+        <div>
+          <dt className="text-gray-500 dark:text-gray-400">Gepflegt (nutzbar)</dt>
+          <dd className="font-semibold text-gray-900 dark:text-white">
+            {gepflegt == null ? '—' : `${fmtZahl(gepflegt, 1)} kWh`}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-gray-500 dark:text-gray-400">Im Alltag bewegt</dt>
+          <dd className="font-semibold text-gray-900 dark:text-white">
+            {d.basis_kalibriert ? `${fmtZahl(d.basis_kapazitaet_kwh, 1)} kWh` : '—'}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-gray-500 dark:text-gray-400">Genutzter Ladestand</dt>
+          <dd className="font-semibold text-gray-900 dark:text-white">
+            {n == null ? '—' : `${fmtZahl(n.soc_p5, 0)} – ${fmtZahl(n.soc_p95, 0)} %`}
+          </dd>
+        </div>
+      </dl>
+
+      {n != null && (
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          An <strong>{n.tage_bis_voll} von {n.tage_mit_soc} Tagen</strong> wurde der Speicher
+          voll, an {n.tage_bis_leer} lief er leer; an einem typischen Tag reicht der Ladestand
+          bis {fmtZahl(n.tages_max_median, 0)} %.{' '}
+          {!zeigtLuecke ? null : n.laedt_planmaessig_voll ? (
+            <>
+              Er wird also <strong>regelmäßig voll geladen</strong> — dass im Alltag trotzdem
+              weniger durchgeht, sind <strong>Ladeverluste</strong>: gegen Ende der Ladung
+              nimmt ein Speicher viel Energie auf, die den Ladestand kaum noch bewegt. Ihre
+              gepflegte Kapazität ist damit richtig, die kleinere Zahl beschreibt den
+              Durchsatz.
+            </>
+          ) : (
+            <>
+              Er wird also <strong>planmäßig nicht voll geladen</strong> — dann ist die
+              kleinere Zahl kein Verlust, sondern Ihre eigene Ladestrategie. Falls das nicht
+              gewollt ist, lohnt ein Blick auf die gepflegte nutzbare Kapazität in den
+              Einstellungen der Komponente.
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** Was die Simulation kann und was nicht — Pflicht neben jeder Zahl. */
 function MethodenHinweis({ d }: { d: SpeicherSizingResponse }) {
   return (
@@ -203,7 +271,7 @@ export function SpeicherSizingIST({ anlageId, melde }: { anlageId: number; inv?:
   )
 
   useEffect(() => {
-    melde?.(leer ? [] : ['speicher:sizing-antwort', 'speicher:sizing-kurve'])
+    melde?.(leer ? [] : ['speicher:sizing-antwort', 'speicher:sizing-groesse', 'speicher:sizing-kurve'])
   }, [leer, melde])
 
   if (laedt) return <p className="text-sm text-gray-400 dark:text-gray-500">Lade…</p>
@@ -291,6 +359,10 @@ export function SpeicherSizingIST({ anlageId, melde }: { anlageId: number; inv?:
             </p>
           )}
         </div>
+      </Parkbar>
+
+      <Parkbar id="speicher:sizing-groesse" titel="Wie groß ist Ihr Speicher wirklich?">
+        <GroesseIST d={daten} />
       </Parkbar>
 
       <Parkbar id="speicher:sizing-kurve" titel="Nutzen über die Kapazität">

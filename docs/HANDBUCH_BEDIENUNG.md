@@ -468,6 +468,13 @@ Angezeigt werden:
 
 **Womit gerechnet wird.** Nicht mit der Kapazität vom Typenschild, sondern mit der, die dein Speicher im Alltag **wirklich bewegt** — eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das ist **kein Gerätemangel**: Reserven, Ladestrategie, Leistungsgrenzen und Standby gehören dazu. Mit der Zahl vom Typenschild fällt die Rechnung systematisch zu optimistisch aus (an einer echten Anlage: −17,5 % Abweichung beim Netzbezug statt −5,4 %). Lässt sich die Basis nicht ableiten, rechnet eedc mit den gepflegten Parametern **und sagt es**.
 
+**Und der Block sagt, woran ein Unterschied liegt.** Unter *Wie groß ist Ihr Speicher wirklich?* stehen die gepflegte nutzbare Kapazität und die gemessene nebeneinander, dazu der Ladestands-Bereich, in dem dein Speicher lebt, und an wie vielen Tagen er voll bzw. leer wurde. Daraus folgt die Unterscheidung:
+
+- **Voll geladen, trotzdem weniger Durchsatz** ⇒ **Ladeverluste**. Gegen Ende der Ladung nimmt ein Speicher viel Energie auf, die den Ladestand kaum noch bewegt. Deine gepflegte Zahl ist richtig, die kleinere beschreibt den Durchsatz.
+- **Nie voll geladen** ⇒ deine **Ladestrategie**. Dann ist die kleinere Zahl kein Verlust; falls das nicht gewollt ist, prüfe die gepflegte nutzbare Kapazität in den Einstellungen der Komponente.
+
+> **Deine gepflegte Zahl wird nie überschrieben.** Sie trägt eine Absicht — wer bewusst nur bis 80 % lädt, hat das so gewollt. eedc erklärt den Unterschied, statt ihn zu „korrigieren".
+
 > **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt (Lastverschiebung). Sie ist damit belastbarer als ein generisches Sizing-Tool, weil sie deine Saisonalität trägt, aber sie ist **keine Vorhersage**. Dieser Hinweis steht immer neben der Zahl. Unter etwa **180 Tagen** Historie sagt eedc zusätzlich, dass die Aussage noch nicht trägt — ein halbes Jahr deckt Sommer und Winter ab, und genau dazwischen liegt der Nutzen eines Speichers.
 
 ### 3.4 Wärmepumpe

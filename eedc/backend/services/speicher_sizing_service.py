@@ -43,14 +43,12 @@ from backend.core.berechnungen.speicher_sizing import (
     SizingBewertung,
     SizingPunkt,
     SizingStunde,
+    SocNutzung,
     kalibriere_speicher,
+    messe_soc_nutzung,
     sizing_kurve,
 )
-from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
-from backend.core.investition_parameter import (
-    PARAM_SPEICHER,
-    PARAM_SPEICHER_DEFAULTS,
-)
+from backend.core.investition_kennwerte import aggregiere_speicher_basis
 from backend.models.investition import Investition, InvestitionTyp
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
@@ -81,6 +79,9 @@ class SizingAuswertung:
     #: `True` = aus der SoC-Bewegung gemessen, `False` = gepflegte Parameter.
     basis_kalibriert: bool
     kalibrierung: Optional[Kalibrierung]
+    #: Welchen Ladestands-Bereich die Anlage fährt — N-238: erst damit lässt
+    #: sich eine gewollte Ladegrenze von Ladeverlusten unterscheiden.
+    soc_nutzung: Optional[SocNutzung]
     #: Gepflegte Werte — stehen auch bei geglückter Kalibrierung daneben, damit
     #: die Sicht den Unterschied benennen kann statt ihn zu verstecken.
     gepflegte_kapazitaet_kwh: Optional[float]
@@ -141,24 +142,6 @@ def _vollstaendige_tage(stunden: list[SizingStunde]) -> list[SizingStunde]:
     return vollstaendig
 
 
-def _gepflegte_basis(speicher: list[Investition]) -> tuple[Optional[float], float]:
-    """(nutzbare Kapazität, Wirkungsgrad %) aus den gepflegten Parametern.
-
-    Netto, nicht brutto — `get_speicher_nutzbare_kapazitaet_kwh` nennt genau
-    diesen Fall („simuliert oder prognostiziert eine Energiemenge"). Mehrere
-    Speicher werden addiert; der Wirkungsgrad ist der kleinste gepflegte, weil
-    die Kette nicht besser sein kann als ihr schwächstes Glied.
-    """
-    kapazitaeten = [get_speicher_nutzbare_kapazitaet_kwh(s) for s in speicher]
-    summe = sum(k for k in kapazitaeten if k)
-    default = float(PARAM_SPEICHER_DEFAULTS["wirkungsgrad_prozent"])
-    wirkungsgrade = [
-        float((s.parameter or {}).get(PARAM_SPEICHER["WIRKUNGSGRAD_PROZENT"]) or default)
-        for s in speicher
-    ]
-    return (summe or None), (min(wirkungsgrade) if wirkungsgrade else default)
-
-
 async def lade_sizing_auswertung(
     db: AsyncSession,
     anlage_id: int,
@@ -190,7 +173,7 @@ async def lade_sizing_auswertung(
         .where(Investition.anlage_id == anlage_id)
         .where(Investition.typ == InvestitionTyp.SPEICHER.value)
     )).scalars().all())
-    gepflegte_kapazitaet, gepflegter_wirkungsgrad = _gepflegte_basis(speicher)
+    gepflegte_kapazitaet, gepflegter_wirkungsgrad = aggregiere_speicher_basis(speicher)
 
     tarife = await lade_tarife_fuer_anlage(db, anlage_id)
     bezug_cent = resolve_strompreis_for_komponente(tarife, "allgemein")
@@ -198,7 +181,7 @@ async def lade_sizing_auswertung(
 
     leer = SizingAuswertung(
         kurve=[], basis_kapazitaet_kwh=0.0, basis_roundtrip=0.0,
-        basis_kalibriert=False, kalibrierung=None,
+        basis_kalibriert=False, kalibrierung=None, soc_nutzung=None,
         gepflegte_kapazitaet_kwh=gepflegte_kapazitaet,
         gepflegter_wirkungsgrad_prozent=gepflegter_wirkungsgrad,
         tage_mit_daten=0, tage_simuliert=0, von=None, bis=None,
@@ -214,6 +197,7 @@ async def lade_sizing_auswertung(
     tage_mit_daten = len({z.datum for z in zeilen})
     tage_simuliert = len({z.zeit.date() for z in simulierbar})
 
+    soc_nutzung = messe_soc_nutzung(stunden)
     kalibrierung = kalibriere_speicher(stunden)
     if kalibrierung is not None:
         basis = kalibrierung
@@ -231,6 +215,7 @@ async def lade_sizing_auswertung(
         # hier schlimmer als die leere Antwort, weil die Kurve echt aussieht.
         return SizingAuswertung(
             **{**vars(leer),
+               "soc_nutzung": soc_nutzung,
                "tage_mit_daten": tage_mit_daten,
                "von": zeilen[0].datum, "bis": zeilen[-1].datum}
         )
@@ -252,6 +237,7 @@ async def lade_sizing_auswertung(
         basis_roundtrip=basis.roundtrip,
         basis_kalibriert=kalibrierung is not None,
         kalibrierung=kalibrierung,
+        soc_nutzung=soc_nutzung,
         gepflegte_kapazitaet_kwh=gepflegte_kapazitaet,
         gepflegter_wirkungsgrad_prozent=gepflegter_wirkungsgrad,
         tage_mit_daten=tage_mit_daten,

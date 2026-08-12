@@ -128,6 +128,104 @@ class SimErgebnis:
     stunden_ohne_eingang: int
 
 
+#: Ab diesem Anteil an Tagen, die den Speicher bis `SOC_VOLL_PROZENT` füllen,
+#: gilt: die Anlage lädt planmäßig voll. Darunter deutet die Lücke zwischen
+#: gepflegter und gemessener Kapazität auf eine **Ladegrenze** (der Anwender
+#: will gar nicht auf 100 %), darüber auf **Ladeverluste**. 20 % ist bewusst
+#: niedrig: eine Anlage mit Ladegrenze erreicht die Schwelle an **keinem** Tag,
+#: eine Winteranlage ohne Grenze an vielen Sommertagen (Referenzanlage 247/361).
+ANTEIL_TAGE_VOLL_SCHWELLE: float = 0.20
+
+#: Ab hier gilt ein Ladestand als „voll" bzw. „leer" — dieselben Schwellen wie
+#: in `speicher_potential.py` (Phase 2), damit zwei Blöcke desselben Hubs nicht
+#: verschiedene Definitionen von „voll" verwenden.
+SOC_VOLL_PROZENT: float = 95.0
+SOC_LEER_PROZENT: float = 5.0
+
+
+@dataclass(frozen=True)
+class SocNutzung:
+    """Welchen Ladestands-Bereich die Anlage im Alltag tatsächlich fährt.
+
+    **Der Grund für diese Auswertung** (N-238, Gernots Einwand 2026-08-12): die
+    gepflegte nutzbare Kapazität ist eine **Absicht** — sie trägt genau den
+    Fall „ich will meinen Speicher nicht dauernd auf 100 % laden". Die
+    gemessene effektive Kapazität ist **Verhalten**. Liegen beide auseinander,
+    gibt es zwei völlig verschiedene Ursachen, und ohne diese Zahlen lassen sie
+    sich nicht unterscheiden:
+
+    * Die Anlage erreicht die oberen Ladestände **gar nicht** ⇒ Ladegrenze,
+      also gewollt; dann gehört die *gepflegte* Zahl überprüft.
+    * Die Anlage lädt voll durch, die Kapazität kommt trotzdem kleiner heraus
+      ⇒ **Ladeverluste** (an der Referenzanlage nimmt der Speicher im obersten
+      SoC-Fünftel 18,7 kWh je 100 % SoC auf gegen 7–9,5 in der Mitte — die
+      Absorptionsphase); dann ist die gepflegte Zahl richtig und die kleinere
+      beschreibt den Durchsatz.
+    """
+
+    stunden_mit_soc: int
+    tage_mit_soc: int
+    #: 5./50./95.-Perzentil des Stunden-SoC — der Bereich, in dem sie wirklich lebt.
+    soc_p5: float
+    soc_median: float
+    soc_p95: float
+    #: Median des **Tages**-Maximums: „wie weit lädt sie an einem typischen Tag?"
+    tages_max_median: float
+    #: Tage, an denen der Speicher `SOC_VOLL_PROZENT` erreicht hat.
+    tage_bis_voll: int
+    #: Tage, an denen er unter `SOC_LEER_PROZENT` gefallen ist.
+    tage_bis_leer: int
+
+    @property
+    def anteil_tage_voll(self) -> float:
+        return self.tage_bis_voll / self.tage_mit_soc if self.tage_mit_soc else 0.0
+
+    @property
+    def laedt_planmaessig_voll(self) -> bool:
+        """True = die Lücke ist Verlust, False = die Lücke ist eine Ladegrenze.
+
+        Das ist die Aussage, die die Sicht braucht — nicht die Rohzahlen.
+        """
+        return self.anteil_tage_voll >= ANTEIL_TAGE_VOLL_SCHWELLE
+
+
+def messe_soc_nutzung(stunden: Sequence[SizingStunde]) -> Optional[SocNutzung]:
+    """Perzentile und Tages-Extreme des Ladestands. ``None`` ohne SoC-Werte.
+
+    Bewusst **ohne** Bilanzprobe: hier wird der SoC selbst ausgewertet, nicht
+    die Energiebilanz — eine Stunde mit invertiertem `batterie_kwh` trägt einen
+    völlig korrekten Ladestand. Die Vorzeichen-Frage betrifft nur die
+    Kalibrierung.
+    """
+    mit_soc = [z for z in stunden if z.soc_prozent is not None]
+    if not mit_soc:
+        return None
+
+    werte = sorted(z.soc_prozent for z in mit_soc)
+    n = len(werte)
+
+    def perzentil(p: float) -> float:
+        return werte[min(n - 1, max(0, int(p * (n - 1))))]
+
+    je_tag: dict = {}
+    for z in mit_soc:
+        je_tag.setdefault(z.zeit.date(), []).append(z.soc_prozent)
+    maxima = [max(v) for v in je_tag.values()]
+
+    return SocNutzung(
+        stunden_mit_soc=n,
+        tage_mit_soc=len(je_tag),
+        soc_p5=perzentil(0.05),
+        soc_median=perzentil(0.5),
+        soc_p95=perzentil(0.95),
+        tages_max_median=median(maxima),
+        tage_bis_voll=sum(1 for m in maxima if m >= SOC_VOLL_PROZENT),
+        tage_bis_leer=sum(
+            1 for v in je_tag.values() if min(v) <= SOC_LEER_PROZENT
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class Kalibrierung:
     """Effektiv genutzte Kapazität und Roundtrip, aus der SoC-Bewegung gemessen."""
@@ -308,6 +406,28 @@ def kalibriere_speicher(
     3. **Beide Seiten belegt.** Die Entladeseite ist die dünnere und zugleich
        die, die die Kapazität bestimmt.
 
+    ⚠ **Was diese Zahl trägt, ist die Jahres-Validierung — nicht der Median**
+    (nachgemessen 2026-08-12 auf Gernots Rückfrage zu N-238). Der Paar-Median
+    ist **schwellenabhängig**: mit `MIN_SOC_HUB_PROZENTPUNKTE` = 3 statt 10
+    liefert derselbe Datenbestand **9,64 kWh** statt 8,35, weil dann die vielen
+    kleinen SoC-Schritte mit ihrer Quantisierung dominieren. Entschieden hat ein
+    Parametergitter gegen das real gemessene Jahr (355 Tage, Σ der absoluten
+    Abweichung auf Einspeisung **und** Netzbezug):
+
+    ==============================  ===========  ==========  =====
+    Parametrisierung                Einspeisung  Netzbezug   Σ|Δ|
+    ==============================  ===========  ==========  =====
+    **gebaut (8,35 · 86,7 %)**      +2,2 %       −5,4 %      7,6
+    ≥ 3 pp (9,64 · 97,6 %)          +3,7 %       −12,1 %     15,8
+    gepflegt (12,1 · 95 %)          +1,9 %       −17,5 %     19,4
+    bestes Gitter (7,5 · 80 %)      +1,3 %       −0,1 %      1,4
+    ==============================  ===========  ==========  =====
+
+    Die 10-pp-Schwelle landet also nahe am Optimum und klar vor beiden
+    Alternativen — aber sie ist **kalibriert, nicht hergeleitet**. Wer sie
+    ändert, misst die Jahres-Abweichung neu und schreibt sie hier hin; ein
+    besserer Median allein belegt nichts.
+
     Returns:
         ``None``, wenn eine Seite zu dünn ist oder der Roundtrip außerhalb des
         plausiblen Bandes liegt. Der Aufrufer fällt dann auf die **gepflegten**
@@ -436,6 +556,7 @@ def sizing_kurve(
 
 
 __all__ = [
+    "ANTEIL_TAGE_VOLL_SCHWELLE",
     "BILANZ_TOLERANZ_KWH",
     "MIN_PAARE_JE_SEITE",
     "MIN_SOC_HUB_PROZENTPUNKTE",
@@ -445,7 +566,9 @@ __all__ = [
     "SizingBewertung",
     "SizingPunkt",
     "SizingStunde",
+    "SocNutzung",
     "kalibriere_speicher",
+    "messe_soc_nutzung",
     "nutzen_euro",
     "simuliere_speicher",
     "sizing_kurve",

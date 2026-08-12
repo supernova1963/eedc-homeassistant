@@ -55,6 +55,7 @@ def simuliere_speicher_tag(
     speicher_kap_kwh: float,
     start_soc_prozent: float,
     start_stunde: int = 0,
+    wirkungsgrad_prozent: float = 100.0,
 ) -> SpeicherSimErgebnis:
     """Simuliert den Batterie-SoC stündlich von ``start_stunde`` bis 23 Uhr.
 
@@ -62,6 +63,15 @@ def simuliere_speicher_tag(
     entlädt (bis 0 %). Schwellen identisch zur Planungs-Vorschau: voll = SoC
     ≥ 98 %, leer = SoC ≤ 2 % (Letzteres erst ab 12 Uhr, um morgendliche
     Niedrigstände nicht als „leer am Abend" zu melden).
+
+    **Der Wirkungsgrad sitzt ganz auf der Ladeseite** (N-238, 2026-08-12): um
+    den Inhalt um X kWh zu heben, müssen X/η hinein. Bis dahin rechnete diese
+    Simulation **verlustfrei** — bei η ≈ 85 % braucht ein 12-kWh-Speicher rund
+    14 kWh Überschuss statt 12, und „Speicher voll um" meldete dadurch
+    systematisch **zu früh**. Entladen bleibt verlustfrei, weil die übergebene
+    Kapazität die **abgabefähige** Menge ist; die Verluste zweimal anzusetzen
+    wäre Doppelzählung (dieselbe Konvention wie
+    `core/berechnungen/speicher_sizing.py`, s. dessen Modul-Docstring Punkt 3).
 
     Args:
         pv_stunden: 24-Slot kWh-Profil (Backward-Slot h = [h-1, h)).
@@ -73,11 +83,17 @@ def simuliere_speicher_tag(
             später voll als real (A31-2/E-1).
         start_soc_prozent: SoC zu Beginn von ``start_stunde`` (0–100).
         start_stunde: erste simulierte Stunde (0–23).
+        wirkungsgrad_prozent: Roundtrip-Wirkungsgrad, aus
+            `investition_kennwerte.aggregiere_speicher_basis`. Der Default 100
+            ist **verlustfrei = das Verhalten vor N-238** und steht hier, damit
+            kein Aufrufer still eine andere Zahl bekommt, als er übergibt —
+            beide Produktionspfade übergeben den gepflegten Wert.
 
     Returns:
         SpeicherSimErgebnis. Bei ``speicher_kap_kwh <= 0`` sind voll/leer None.
     """
     soc = max(0.0, min(100.0, start_soc_prozent))
+    eta = max(0.01, min(1.0, wirkungsgrad_prozent / 100.0))
     voll: Optional[str] = None
     leer: Optional[str] = None
     soc_pro_stunde: dict[int, float] = {}
@@ -94,9 +110,12 @@ def simuliere_speicher_tag(
 
         if hat_speicher:
             if netto > 0:
-                lade_kapazitaet = (100.0 - soc) / 100.0 * speicher_kap_kwh
+                # Aufnahmefähigkeit auf der EINGANGS-Seite: der fehlende
+                # Speicherinhalt geteilt durch η — genau das ist der Unterschied
+                # zur verlustfreien Fassung vor N-238.
+                lade_kapazitaet = (100.0 - soc) / 100.0 * speicher_kap_kwh / eta
                 ladung = min(netto, lade_kapazitaet)
-                soc += (ladung / speicher_kap_kwh) * 100.0
+                soc += (ladung * eta / speicher_kap_kwh) * 100.0
                 soc = min(soc, 100.0)
                 einspeisung = netto - ladung
             else:

@@ -545,6 +545,23 @@ Ein Speicher trägt zwei Kapazitäten, beide im Formular. Die Trennlinie läuft 
 | **Wie oft wurde der Speicher umgeschlagen?** | **brutto** (`kapazitaet_kwh`) | Bezugsgröße der Hersteller-Garantie; ein Nenner, der am Pflegezustand hängt, macht dieselbe Anlage unvergleichbar | Vollzyklen (alle Sichten), graue Last, Community-Datensatz, Anzeige/Beschreibung der Komponente |
 | **Wie viel Energie geht durch den Speicher?** | **netto** (`nutzbare_kapazitaet_kwh`, still auf brutto zurückfallend) | Simuliert bzw. prognostiziert wird eine *durchgefahrene Menge* — und durch den Speicher geht nur der nutzbare Hub | Tages-Vorschau „Speicher voll um …" (Planungs-Tab **und** HA-Sensor `eedc_speicher_voll_um`), Wirtschaftlichkeits-**Prognose** ohne IST-Aggregat, η-SoC-Delta |
 
+> ⚑ **Und seit N-238 (2026-08-12) gehört der Wirkungsgrad dazu.** Die Tages-Vorschau rechnete den
+> Ladeweg **verlustfrei** — für 12 kWh im Speicher hielt sie 12 kWh Überschuss für ausreichend,
+> real sind es bei η = 95 % rund 12,7 und bei 85 % über 14. „Speicher voll um" lag deshalb
+> systematisch **vor** der tatsächlichen Uhrzeit. Kapazität **und** Wirkungsgrad kommen jetzt aus
+> **einem** Helper (`aggregiere_speicher_basis`: Kapazität summiert, Wirkungsgrad als **Minimum** —
+> eine Kette ist nicht besser als ihr schwächstes Glied); der HA-Sensor und die Kachel lesen
+> dieselbe Regel, statt sie zweimal zu bilden. Die Verluste sitzen ganz auf der **Ladeseite**, weil
+> die übergebene Kapazität die abgabefähige Menge ist — sie zusätzlich beim Entladen anzusetzen wäre
+> Doppelzählung (dieselbe Konvention wie `core/berechnungen/speicher_sizing.py`).
+>
+> ⚠ **Die gepflegte Kapazität bleibt maßgeblich und wird NICHT durch die gemessene ersetzt**
+> (Gernots Entscheid 2026-08-12). Sie trägt eine **Absicht**: es gibt Anwender, die ihren Speicher
+> bewusst nicht auf 100 % laden, und für die wäre eine Korrektur nach unten falsch — sie wollen
+> wissen, wann *ihr* Ziel erreicht ist. Der Sizing-Block weist die gemessene Größe stattdessen
+> **daneben** aus und trennt die zwei Ursachen einer Lücke (Ladegrenze ⟷ Ladeverlust) über den
+> tatsächlich genutzten Ladestands-Bereich (`messe_soc_nutzung`).
+
 **SoT netto (seit A31-2):** `core/investition_kennwerte.py::get_speicher_nutzbare_kapazitaet_kwh` —
 netto, sonst brutto, sonst `None`. Der Brutto-Fallback ist **still** (Entscheidung **E17**): kein
 Hinweis, keine Kennzeichnung, **kein P4-Fall**. Der Brutto-Wert ist nicht *unvollständig*, er ist die

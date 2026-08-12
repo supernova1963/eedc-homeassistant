@@ -51,6 +51,28 @@ class SizingPunktResponse(BaseModel):
     )
 
 
+class SocNutzungResponse(BaseModel):
+    """Welchen Ladestands-Bereich die Anlage im Alltag fährt (N-238).
+
+    Sie beantwortet die eine Frage, die die Sicht ohne sie nicht beantworten
+    kann: liegt der Unterschied zwischen gepflegter und gemessener Kapazität
+    daran, dass **gar nicht voll geladen wird** (gewollte Ladegrenze — dann
+    gehört die gepflegte Zahl geprüft), oder daran, dass **beim Laden Energie
+    verloren geht** (dann ist die gepflegte Zahl richtig)?
+    """
+
+    soc_p5: float
+    soc_median: float
+    soc_p95: float
+    tages_max_median: float
+    tage_bis_voll: int
+    tage_bis_leer: int
+    tage_mit_soc: int
+    #: `True` = die Lücke ist Ladeverlust, `False` = die Anlage lädt planmäßig
+    #: nicht voll. Die Sicht formuliert daraus den Satz, nicht die Rohzahlen.
+    laedt_planmaessig_voll: bool
+
+
 class SpeicherSizingResponse(BaseModel):
     """Antwort des Sizing-Simulators.
 
@@ -73,6 +95,8 @@ class SpeicherSizingResponse(BaseModel):
 
     gepflegte_kapazitaet_kwh: Optional[float]
     gepflegter_wirkungsgrad_prozent: float
+    #: `None`, solange gar kein Ladestand erfasst ist.
+    soc_nutzung: Optional[SocNutzungResponse]
 
     tage_mit_daten: int
     tage_simuliert: int
@@ -139,6 +163,16 @@ async def get_speicher_sizing(
             else round(a.gepflegte_kapazitaet_kwh, 1)
         ),
         gepflegter_wirkungsgrad_prozent=a.gepflegter_wirkungsgrad_prozent,
+        soc_nutzung=None if a.soc_nutzung is None else SocNutzungResponse(
+            soc_p5=round(a.soc_nutzung.soc_p5, 1),
+            soc_median=round(a.soc_nutzung.soc_median, 1),
+            soc_p95=round(a.soc_nutzung.soc_p95, 1),
+            tages_max_median=round(a.soc_nutzung.tages_max_median, 1),
+            tage_bis_voll=a.soc_nutzung.tage_bis_voll,
+            tage_bis_leer=a.soc_nutzung.tage_bis_leer,
+            tage_mit_soc=a.soc_nutzung.tage_mit_soc,
+            laedt_planmaessig_voll=a.soc_nutzung.laedt_planmaessig_voll,
+        ),
         tage_mit_daten=a.tage_mit_daten,
         tage_simuliert=a.tage_simuliert,
         historie_reicht=a.historie_reicht,
