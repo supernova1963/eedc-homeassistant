@@ -481,10 +481,21 @@ Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — de
 | `eedc_preis_aktuell_cent` | Day-Ahead-Börsenpreis der laufenden Stunde |
 | `eedc_preis_optimierter_durchschnitt_cent` | Ø der heutigen Preise **ohne** die 3 teuersten Stunden — die Bezugsgröße der Schwelle |
 | `eedc_preis_abstand_prozent` | Abstand des aktuellen Preises zu diesem Ø. **Negativ = billiger als der Ø**, positiv = teurer. Bezugsgröße ist der Betrag des Ø, damit das Vorzeichen auch bei negativen Börsenpreisen stimmt. |
+| `eedc_preis_abstand_cent` | **Derselbe Abstand in ct/kWh** — die Größe, die sich auf den eigenen Endpreis übertragen lässt (s. u.). Negativ = billiger. |
 
-> **Die drei letzten sind für eigene Preis-Regeln da** (v4.0.10, Wunsch aus der Tester-Runde): „nur entladen, wenn der Strom gerade teurer ist als der Tagesschnitt" ist damit eine Bedingung auf `eedc_preis_abstand_prozent > 0` — ohne Template und ohne dass eedc eine Lade-/Entlade-Strategie vorgibt.
+> **Die vier letzten sind für eigene Preis-Regeln da** (v4.0.10, Wunsch aus der Tester-Runde): „nur entladen, wenn der Strom gerade teurer ist als der Tagesschnitt" ist damit eine Bedingung auf `eedc_preis_abstand_prozent > 0` — ohne Template und ohne dass eedc eine Lade-/Entlade-Strategie vorgibt.
 
-**Das Rang-Profil als Attribut** trägt je Stunde vier Angaben: `stunde`, `rang`, `preis_cent` und `unter_schwelle`. Die letzten beiden gibt es ab v4.0.10 — vorher stand dort nur der Rang, und damit ließ sich in HA weder eine eigene Schwelle noch ein eigenes Zeitfenster auswerten.
+> ### Prozent oder Cent? Beide, und sie sagen Verschiedenes
+>
+> Der **Prozentwert** misst gegen den Ø **dieses Tages**: −50 % heißt „halb so teuer wie der Tagesschnitt". Er ist über Tage hinweg vergleichbar, aber **nicht** auf deinen Endpreis übertragbar.
+>
+> Der **ct-Wert** ist es. Denn du zahlst nicht den Börsenpreis, sondern Börsenpreis **plus** feste Bestandteile (Netzentgelt, Abgaben, Marge). Dieser Aufschlag verschiebt Stundenpreis **und** Tagesmittel um denselben Betrag — die Differenz bleibt gleich, der Prozentwert nicht. An einem echten Tag (Ø 9,92 ct): die billigste Stunde liegt **−9,93 ct** unter dem Mittel, auf der Börsenkurve wie auf dem Endpreis; in Prozent sind das **−100,1 %** bzw. **−33,2 %**. Eine Prozentzahl, die für beide Welten dasselbe bedeutet, kann es folglich nicht geben.
+>
+> ⚠ **Was −100 % NICHT heißt:** nicht „billigste Stunde des Tages", sondern **„Preis = 0 ct"**. Der Wert kann unter −100 % fallen — jeder negative Börsenpreis tut das. Wer „ist das eine der besten Stunden?" fragt, nimmt `eedc_preis_rang` (1–5), nicht den Prozentwert.
+>
+> **Faustregel:** Schwellen für Automationen (`< -5` ct) und alles, was mit deinem Tarif zu tun hat → **ct**. Tagesübergreifende Vergleiche → **Prozent**. „Eine der günstigsten Stunden" → **Rang**.
+
+**Das Rang-Profil als Attribut** trägt je Stunde fünf Angaben: `stunde`, `rang`, `preis_cent`, `unter_schwelle` und `abstand_cent`. `preis_cent`/`unter_schwelle` gibt es ab v4.0.10, `abstand_cent` seit dem ct-Sensor — vorher stand dort nur der Rang, und damit ließ sich in HA weder eine eigene Schwelle noch ein eigenes Zeitfenster auswerten.
 
 > **Eigene Kriterien:** Wer eine andere Schwelle bevorzugt, stellt den Prozentsatz auf der Export-Seite um — oder rechnet in HA per Template direkt auf den Attributen (`rang_profil` mit den Stundenpreisen, `optimierter_durchschnitt_cent`). eedc liefert bewusst nur die **Trigger-Werte**; die Lade-/Entlade-Strategie baut jeder selbst in seinen Automationen.
 

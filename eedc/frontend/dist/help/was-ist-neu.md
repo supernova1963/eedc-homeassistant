@@ -1,11 +1,104 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.12)
+> **Stand:** August 2026 (v4.0.13)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.13 — Es zählt die Verbindung, nicht die Betriebsart (August 2026)
+
+### Docker mit HA-Token: die Tageswerte kommen jetzt an
+
+**Betrifft dich das?** Wenn du eedc als eigenen Docker-Container betreibst und Home Assistant über einen **langlebigen Zugriffstoken** angebunden hast (nicht als HA-Add-on, nicht über MQTT).
+
+In *Cockpit → Tag* stand bei dir dauerhaft „—" mit der Quelle „Prognose", während die Live-Ansicht normal lief und ein von Hand nachgezogener Tag vollständig war. Das war kein Konfigurationsfehler: eedc kannte für den Tagesverlauf nur zwei Fälle — „HA-Add-on" oder „MQTT". Deine Konstellation ist die dritte, und sie landete beim MQTT-Weg, wo nichts ankam. Damit brach die Tagesaggregation ab, bevor sie deine Zählerstände überhaupt gelesen hat.
+
+Jetzt entscheidet die **Zuordnung** darüber, woher die Werte kommen, nicht die Betriebsart: Wo HA-Sensoren zugeordnet und erreichbar sind, liest eedc aus Home Assistant. Wer MQTT nutzt, behält den MQTT-Weg — und wenn der HA-Weg einmal leer bleibt, springt MQTT weiterhin ein.
+
+Dieselbe Ursache hat dir außerdem den **Speicher-Ladestand** (und damit die Vollzyklen), die **Tages-Spitzenwerte** und deinen eigenen **Strompreis-Sensor** vorenthalten — auch das läuft jetzt.
+
+⚠ **Zurückliegende Tage füllen sich nicht von selbst.** Die holst du über den [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) mit „Zeitraum neu aggregieren" — bis zu 31 Tage je Lauf.
+
+**Und weil dieselbe Weiche an sieben weiteren Stellen stand, sind die gleich mitgegangen.** Alle betreffen denselben Betrieb — eigener Container, HA per Token:
+
+- **Solar Forecast ML und Solcast sind wählbar.** Unter *Einstellungen → Prognose* führte die Wahl bisher stillschweigend zurück auf die eedc-Prognose, mit dem Hinweis, das sei „nur im HA-Add-on verfügbar" — obwohl deine Prognose-Sensoren über dieselbe Verbindung lesbar sind. Auch das **Auswahlfeld selbst** war für SFML gesperrt; es fragt jetzt nach der Verbindung statt nach dem Add-on. Solcast erkennt eedc dabei ohne eigenen API-Schlüssel; der Statustext sagt jetzt dasselbe wie der Abruf daneben.
+- **Die kWh-Werte für heute und gestern** in *Cockpit → Live* kommen wieder aus Home Assistant statt nur aus MQTT.
+- **Dein Verbrauchsprofil** wird wieder aus der HA-Historie gebildet.
+- **Die Langzeitstatistik erreicht den Monat:** *Cockpit → Monat* liest die gemessenen Werte, und der **Monatsabschluss schlägt sie dir wieder vor**, statt jedes Feld der Handeingabe zu überlassen.
+
+⚠ **Zur Ehrlichkeit gehört:** Mit v4.0.10 hieß es an dieser Stelle, fünf Funktionen arbeiteten „jetzt auch mit einer Remote-Verbindung". Zutreffend war das damals nur für **eine** davon (die Prüfung auf vertauschte kW-/kWh-Sensoren). Bei den anderen war zwar die Verbindung darunter hergestellt, die Abfrage davor fragte aber weiterhin nach der Betriebsart — und kam nie bei ihr an. Das ist mit dieser Version erledigt.
+
+### Statistik-Import im Container: die Historie lässt sich jetzt nachholen
+
+**Betrifft dich das?** Wenn du eedc ohne Add-on betreibst und Home Assistant über einen Zugriffstoken verbunden hast.
+
+*Einstellungen → Integration → **Statistik-Import*** holt vergangene Monate aus der Home-Assistant-Langzeitstatistik. Diese Kachel war bisher nur im Add-on nutzbar — obwohl der Zugriff darunter über deine ganz normale Verbindung läuft und im Handbuch auch so beschrieben ist. Laufende Monate kamen bei dir also an, deine **Vorgeschichte** konntest du nicht nachholen. Jetzt schon.
+
+**Dazu sagen gesperrte Einstellungen jetzt, was ihnen fehlt.** eedc unterscheidet zwei Voraussetzungen, die vorher beide „HA-Integration" hießen: Was den Add-on-Unterbau braucht (Add-on-Protokolle, direkter HA-Import, die alte Sensor-Zuordnung), bleibt dem Add-on vorbehalten — was nur eine erreichbare Instanz braucht, steht dir offen. Auf einer gesperrten Kachel steht deshalb nicht mehr pauschal „nur mit aktiver Home-Assistant-Integration", sondern der tatsächliche Grund. Das erspart die Suche nach einem Fehler, den es nicht gibt.
+
+### Ein ersetzter Speicher zählt nicht mehr doppelt
+
+**Betrifft dich das?** Wenn du deinen Speicher getauscht oder erweitert und dabei die alte Komponente stillgelegt hast.
+
+eedc führte die Kapazität deiner Anlage dann als **Summe aus altem und neuem Gerät** — an einem echten Bestand 46,2 statt 30,8 kWh. Betroffen waren *Cockpit → Monat*, der Jahresbericht und der anonyme Community-Vergleich. Gerade dort war es teuer: Deine Anlage stand in einer Größenklasse, die es nie gab.
+
+Gezählt wird jetzt der Speicher, den du zum jeweiligen Zeitpunkt wirklich hattest. Wenn du deine Daten mit der Community teilst, kommt die Korrektur beim nächsten vollständigen Übertragen an.
+
+### Gelöschte Monate lassen sich wieder importieren
+
+**Betrifft dich das?** Wenn du einen Monat gelöscht und ihn danach neu importiert hast — und der Import durchlief, ohne etwas zu schreiben.
+
+Ein Monat besteht bei eedc aus zwei Teilen: der **Zählerzeile** deiner Anlage und den **Messwerten je Komponente** daneben (PV je Modul, Speicher-Zyklen, Wallbox-Ladung). „Monat löschen" entfernte bisher nur die Zählerzeile. Der Monat war damit aus allen Listen verschwunden — die Gerätewerte standen aber weiter da und wiesen jeden erneuten Import ab, mit der Meldung „Felder wurden durch manuell gepflegte Werte geschützt". Wer den Monat vorher bewusst gelöscht hatte, konnte damit nichts anfangen.
+
+Was sich ändert:
+
+- Der **Lösch-Dialog sagt dir**, wie viele Komponenten-Messwerte an diesem Monat hängen, und du kannst sie mitlöschen. ⚠ **Ohne Haken bleiben sie erhalten** — das ist Absicht: Gemessene Werte sind meist mühsamer zu beschaffen als die Zählerzeile.
+- Ist dir das früher schon passiert, **meldet der Daten-Checker** den Rest und entfernt ihn auf Knopfdruck. Einen anderen Weg gäbe es nicht, denn ohne Zählerzeile erscheint der Monat in keiner Liste.
+- Der **Reset in der Reparatur-Werkbank** findet jetzt die Werte, die ein Import tatsächlich geschrieben hat. Bisher suchte er nach einer internen Bezeichnung, die kein Import vergibt — er fand also nie etwas, obwohl die Import-Meldung genau auf ihn verwies.
+
+### Community: das Performance-Profil zeigt wieder den aktuellen Monat
+
+**Betrifft dich das?** Wenn du deine Daten mit der Community teilst und dort das Radar-Diagramm „Performance-Profil" ansiehst.
+
+Autarkie und Eigenverbrauch standen dort auf den Werten deines **allerersten** geteilten Monats. War das ein Wintermonat, zeigte das Radar knapp 5 %, während dein Cockpit für denselben Zeitraum 100 % meldete — verständlicherweise verwirrend. Dieselbe Verwechslung traf die Auszeichnungen „Autarkiemeister" und „Dauerbrenner".
+
+Jetzt steht dort der jüngste Monat, den du geteilt hast. Die Ansichten *PV-Ertrag* und *Trends* waren nie betroffen.
+
+### Kleinigkeit: die Prognose-Tabelle steht wieder gerade
+
+In *Auswertungen → Prognose* standen die Zahlen der Spalte „PVGIS Prognose" und die Gesamt-Zeile nicht unter ihren Überschriften. Im großen Fenster lief die Tabelle dadurch sichtbar auseinander. Danke fürs Melden.
+
+### „Wie viel billiger als der Schnitt?" — jetzt auch in Cent
+
+**Betrifft dich das?** Wenn du einen dynamischen Stromtarif hast und mit den Börsenpreis-Sensoren Automationen baust.
+
+eedc sagt dir bisher in **Prozent**, wie weit der aktuelle Börsenpreis vom Tagesmittel entfernt ist. Diese Zahl ist tückisch, sobald du sie auf deinen **echten** Preis überträgst: Du zahlst ja nicht den Börsenpreis, sondern Börsenpreis plus feste Bestandteile — Netzentgelt, Abgaben, Marge deines Anbieters. Dieser Aufschlag verschiebt den Stundenpreis und das Tagesmittel um denselben Betrag. Der **Abstand in Cent bleibt damit gleich, der Prozentwert nicht.**
+
+An einem echten Tag: Die billigste Stunde lag **9,93 ct unter dem Tagesmittel** — auf der Börsenkurve genauso wie auf dem Endpreis. In Prozent sind das einmal −100 %, einmal −33 %. Eine Prozentzahl, die für beides dasselbe bedeutet, kann es nicht geben.
+
+Deshalb gibt es jetzt den Sensor **„Börsenpreis-Abstand zum Ø (ct)"** (`sensor.eedc_preis_abstand_cent`). Damit lassen sich Regeln formulieren, die zu deinem Tarif passen: „lade den Akku, solange der Strom mindestens 5 ct unter dem Schnitt liegt", oder schlicht „unter dem Schnitt" (Wert kleiner 0). Im Attribut `rang_profil` des Rang-Sensors steht der Abstand zusätzlich **für jede Stunde des Tages** — du kannst deine eigene Grenze also über den ganzen Tag auswerten. In *Cockpit → Live* steht der Wert als vierte Kachel bei den Börsenpreisen.
+
+**Dein bestehender Prozent-Sensor ändert sich nicht** — laufende Automationen bleiben, wie sie sind. Der neue Wert kommt daneben.
+
+### Die fünf günstigsten Stunden stehen jetzt im Diagramm
+
+**Betrifft dich das?** Wenn du den Börsenpreis-Block in *Cockpit → Live* nutzt.
+
+Bisher zeigte die Kurve grün, welche Stunden unter deiner Günstig-Schwelle liegen — an einem billigen Tag können das auch zehn sein. Jetzt tragen die günstigsten Stunden zusätzlich die Ziffern **1 bis 5**, jeweils getrennt für Tag und Nacht. Es ist derselbe Rang, den der Sensor `eedc_preis_rang` in Home Assistant meldet.
+
+**Die grüne Fläche bleibt, wie sie war.** Sie beantwortet eine andere Frage: „liegt diese Stunde unter der Schwelle?" — und diese Zahl wird in Automationen als Teiler gebraucht, sie darf deshalb nicht bei fünf abgeschnitten werden. Zwei Fragen, zwei Antworten, ein Diagramm.
+
+### Eine Speicher-Kapazität in Wh fällt jetzt auf
+
+**Betrifft dich das?** Wenn du ein Balkonkraftwerk mit Akku hast und den Speicher als eigene Komponente führst.
+
+Das Balkonkraftwerk fragt die Kapazität seines Akkus in **Wh** ab — so steht sie auf dem Gerät und in der Hersteller-App (z. B. 5.376 Wh). Die Speicher-Komponente daneben fragt in **kWh**. Wer den Zahlenwert einfach überträgt, hat einen Speicher, der tausendmal größer ist als in Wirklichkeit — und merkt es nicht: Vollzyklen, Auslastung und Wirtschaftlichkeit rechnen dann gegen eine Kapazität, die es nicht gibt.
+
+Der [Daten-Checker](HANDBUCH_DATEN_CHECKER.md#433-speicher) meldet das jetzt und nennt die Zahl, die richtig wäre. Er meckert dabei **keine großen Speicher an**: Gemeldet wird nur der Widerspruch, dass zwei Felder desselben Geräts denselben Zahlenwert in zwei verschiedenen Einheiten tragen.
 
 ---
 
@@ -534,6 +627,8 @@ Und weil dieser Schlüssel für jeden weiteren Aufruf gebraucht wird, konnten au
 Fünf Funktionen waren fest an den Add-on-Betrieb gebunden und meldeten sich bei einer Token-Verbindung einfach als „nicht verfügbar", obwohl die Verbindung stand: der **Live-Tagesverlauf**, die **Solcast-Anbindung**, die Prognose-Erkennung, die **Ladestands-Historie deines Speichers** und die Prüfung des Daten-Checkers auf **vertauschte Leistungs- und Energie-Sensoren**.
 
 Der letzte Punkt war der ärgerlichste: Genau die Verwechslung, kW statt kWh zuzuordnen, wurde ausgerechnet dort nicht geprüft, wo sie am häufigsten passiert. Alle fünf arbeiten jetzt auch mit einer Remote-Verbindung.
+
+> **Nachtrag (11.08.2026):** Dieser letzte Satz stimmte so nicht. Hergestellt war die Verbindung darunter, aber vier der fünf Funktionen fragten davor weiterhin nach der Betriebsart und kamen deshalb nie bei ihr an — tatsächlich remote arbeitete nur der kW/kWh-Test. Behoben ist das erst mit der Version danach (siehe oben, *„Docker mit HA-Token: die Tageswerte kommen jetzt an"*).
 
 ### „Die TagesZusammenfassung vom ? aus unbekannt" — diese Meldung gibt es nicht mehr
 

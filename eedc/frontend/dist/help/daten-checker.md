@@ -202,6 +202,7 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | Meldung | Severity | Bedeutung | Behebung |
 |---------|----------|-----------|----------|
 | **\[Name\]: Kapazität (kWh) fehlt** | ⚠️ WARNING | `kapazitaet_kwh` ist Bezugsgröße für Vollzyklen, Wirkungsgrad-Berechnung und Live-SoC-Skalierung. | Komponente öffnen, Brutto-Kapazität in kWh eintragen. |
+| **\[Name\]: Kapazität vermutlich in Wh statt kWh eingetragen** | ⚠️ WARNING | Das Balkonkraftwerk darüber nennt seine Akku-Kapazität in **Wh**, dieser Speicher seine in **kWh** — und beide tragen **denselben Zahlenwert**. Dann ist die Kapazität tausendfach zu groß, und Vollzyklen, Auslastung und Wirtschaftlichkeit rechnen gegen einen Nenner, den es nicht gibt. Geprüft wird der Widerspruch der beiden Felder, **keine Obergrenze** — ein großer Speicher wird nicht angemeckert. | Komponente öffnen, die Kapazität in kWh eintragen (5.376 Wh sind 5,376 kWh). Die Meldung nennt die Zahl. |
 | **\[Name\]: Arbitrage aktiv, aber Ø Ladepreis fehlt** | ⚠️ WARNING | `nutzt_arbitrage` ist gesetzt, aber `lade_durchschnittspreis_cent` fehlt. Arbitrage-Einsparung kann nicht berechnet werden. | Komponente öffnen, durchschnittlichen Ladepreis (z. B. negative Börsenpreise) eintragen. |
 | **\[Name\]: Arbitrage aktiv, aber Ø Entladepreis fehlt** | ⚠️ WARNING | Analog zum Ladepreis: ohne `entlade_vermiedener_preis_cent` kein Arbitrage-Erlös berechenbar. | Vermiedenen Entladepreis (z. B. Endkundentarif zur Spitzenlastzeit) eintragen. |
 | **\[Name\]: Speicher-Ladung fehlt in N Monat(en)** | ⚠️ WARNING | `ladung_kwh` fehlt in den genannten Monaten — Vollzyklen und Wirkungsgrad lassen sich für diese Monate nicht berechnen. | Monatsdaten nachtragen. |
@@ -288,6 +289,20 @@ Im **Standalone-Betrieb** kommen die Werte über MQTT (`eedc/<anlage>/…`-Topic
 | **Alle N Monate vollständig** | ✅ OK | Vom Installationsdatum bis Vormonat ist jeder Monat erfasst. | – |
 
 > **Hinweis zur Abdeckungs-KPI:** Der Prozentwert oben bezieht sich auf erwartete Monate, nicht auf Datenfelder *innerhalb* eines Monats. Ein zu 100 % abgedeckter Monatsdaten-Stand kann trotzdem unvollständige Pflichtfelder enthalten — das prüft §4.5.
+
+---
+
+### 4.4a Monatsdaten – Messwerte ohne Monatszeile <a name="44a-messwerte-ohne-monatszeile"></a>
+
+**Was wird geprüft:** Gibt es Messwerte einzelner Komponenten (PV je Modul, Speicher-Zyklen, Wallbox-Ladung …) für einen Monat, der selbst nicht mehr erfasst ist?
+
+Ein Monat besteht in eedc aus zwei Teilen: der **Zählerzeile** der Anlage (Einspeisung, Netzbezug …) und den **Messwerten je Komponente** daneben. Wird der Monat gelöscht, verschwindet die Zählerzeile — und damit der Monat aus allen Listen. Die Messwerte der Komponenten blieben bis August 2026 stehen, unsichtbar, aber wirksam: Ein erneuter Import dieses Monats prallte an ihnen ab und meldete lediglich „Felder wurden durch manuell gepflegte Werte geschützt". Wer den Monat vorher bewusst gelöscht hatte, suchte den Fehler dann bei sich.
+
+| Meldung | Severity | Bedeutung | Behebung |
+|---------|----------|-----------|----------|
+| **MM/JJJJ: Messwerte von N Komponente(n) ohne Monatszeile** | ⚠️ WARNING | Der Monat wurde gelöscht, die Messwerte einzelner Geräte blieben stehen. Sie erscheinen in keiner Liste und verhindern, dass der Monat neu importiert werden kann. | Knopf **„Messwerte entfernen"** direkt an der Meldung — oder den Monat neu erfassen, dann gehören die Werte wieder dazu. |
+
+> **Vorbeugen:** Der Lösch-Dialog unter *Einstellungen → Daten → Monatsdaten* nennt seit derselben Version, wie viele Komponenten-Messwerte an einem Monat hängen, und bietet an, sie mitzulöschen. Ohne Haken bleiben sie erhalten — das ist Absicht, denn gemessene Werte sind meist die teureren Daten.
 
 ---
 

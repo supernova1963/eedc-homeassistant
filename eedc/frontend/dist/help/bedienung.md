@@ -118,10 +118,22 @@ auf einer durchgehenden Zeitachse:
 - Die Linie ist **nach Preisniveau abgestuft**: **grün** unterhalb deiner Günstig-Schwelle,
   **lila** zwischen Schwelle und Tagesdurchschnitt, **rot** darüber. Zusammenhängende
   günstige Stunden sind zusätzlich als Fläche hinterlegt.
-- Darüber drei Kennzahlen für **heute**: aktueller Preis, der **Ø ohne die 3 teuersten Stunden**
-  (die Bezugsgröße) und die **Günstig-Schwelle** samt Anzahl der Stunden darunter. Es sind
-  dieselben Zahlen, die auch die HA-Sensoren `eedc_preis_aktuell_cent`,
-  `eedc_preis_optimierter_durchschnitt_cent` und `eedc_preis_guenstige_stunden_anzahl` melden.
+- Die **fünf günstigsten Stunden tragen die Ziffern 1–5** — je einmal für das Tag- und das
+  Nachtfenster, also bis zu zehn Ziffern am Tag. Es ist derselbe Rang, den der Sensor
+  `eedc_preis_rang` meldet. ⚠ **Rang und „günstig" sind zwei Aussagen:** die Fläche zeigt
+  *alle* Stunden unter der Schwelle (das können mehr als fünf sein — die Zahl dient in
+  Automationen als Teiler und ist deshalb nicht gedeckelt), die Ziffer zeigt die besten fünf.
+- Darüber vier Kennzahlen für **heute**: aktueller Preis, der **Ø ohne die 3 teuersten Stunden**
+  (die Bezugsgröße), die **Günstig-Schwelle** samt Anzahl der Stunden darunter und der
+  **Abstand zum Ø in ct/kWh**. Es sind dieselben Zahlen, die auch die HA-Sensoren
+  `eedc_preis_aktuell_cent`, `eedc_preis_optimierter_durchschnitt_cent`,
+  `eedc_preis_guenstige_stunden_anzahl` und `eedc_preis_abstand_cent` melden.
+- **Warum der Abstand in Cent und nicht in Prozent?** Weil du nicht den Börsenpreis zahlst,
+  sondern Börsenpreis **plus** feste Bestandteile. Dieser Aufschlag verschiebt den Stundenpreis
+  und das Tagesmittel um denselben Betrag — der **ct-Abstand bleibt deshalb gleich**, der
+  Prozentwert nicht. Für eine Regel wie „lade, solange der Strom 5 ct unter dem Schnitt liegt"
+  ist die ct-Zahl also die übertragbare Größe. Den prozentualen Abstand gibt es weiterhin als
+  Sensor; Details in der [Sensor-Referenz](SENSOR-REFERENZ.md).
 - **Jeder Tag hat seine eigene Schwelle** — Day-Ahead ist ein Tagesprodukt, und ein Durchschnitt
   über beide Tage würde an einem teuren Tag keine einzige Stunde als günstig ausweisen.
 - Die Preise für **morgen** veröffentlicht die Auktion gegen **13 Uhr**. Vorher zeigt der Block
