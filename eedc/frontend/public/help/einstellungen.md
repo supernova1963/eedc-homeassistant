@@ -75,7 +75,7 @@ Bei fester Modellwahl versucht eedc zuerst das gewählte Modell und fällt bei f
 >
 > **Nicht mehr verfügbar (Stand Juli 2026):** Für **ECMWF Seamless**, **MeteoSwiss Seamless** und **ECMWF IFS (9 km)** liefert Open-Meteo keine Strahlungsdaten mehr. eedc erkennt das und rechnet für diese Anlagen mit `auto` weiter — die Prognose bleibt vollständig, die Modellwahl greift aber nicht. Empfehlung: **ICON Seamless** (Deutschland) bzw. **MeteoSwiss ICON-CH2** (Alpenraum).
 
-**Prognose-Basis:** Hier wählst du, auf welcher Quelle der eedc-Lernfaktor und die kalibrierte Prognose aufbauen — OpenMeteo (Standard) oder Solcast (wenn konfiguriert). SFML ist im Code als künftige Erweiterung vorbereitet, geht aber bewusst nicht ins Genauigkeits-Ranking ein.
+**PV-Prognose-Quelle für diese Anlage:** Hier wählst du, mit welcher Prognose eedc arbeitet — **eedc-optimiert** (Open-Meteo mit anlagenspezifischem Lernfaktor, Standard; funktioniert auch ohne Home Assistant), **Solcast** (pur, ohne eedc-Korrektur) oder **Solar Forecast ML** (pur). Die beiden letzten lesen ihre Werte aus Home Assistant und setzen deshalb eine **verbundene** Instanz voraus — als Add-on oder über einen langlebigen Zugriffstoken; Solcast geht daneben auch über einen eigenen API-Token. Ist die gewählte Quelle nicht erreichbar, rechnet eedc mit seiner eigenen Prognose weiter und sagt es. SFML geht bewusst nicht ins Genauigkeits-Ranking ein ([Prognosen §2.5](HANDBUCH_PROGNOSEN.md#25-sfml-solar-forecast-ml--sichtbar-aber-bewusst-nicht-bewertet)).
 
 **Steuerliche Behandlung:**
 

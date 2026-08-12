@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { Button, Input, Select, Switch, Alert, DatumFeld, FormSection } from '../ui'
-import type { SelectItem } from '../ui/Select'
+import type { SelectItem, SelectOption } from '../ui/Select'
 import VersorgerSection from './VersorgerSection'
 import AnlagenfotoSection from './AnlagenfotoSection'
 import { wetterApi, type WetterProvider, type WetterProviderList } from '../../api/wetter'
 import { anlagenApi } from '../../api/anlagen'
 import type { Anlage, AnlageCreate, VersorgerDaten } from '../../types'
-import { useHAAvailable } from '../../hooks/useHAAvailable'
+import { useHAVerbunden } from '../../hooks/useHAAvailable'
 
 interface AnlageFormProps {
   anlage?: Anlage | null
@@ -57,10 +57,49 @@ const WETTER_PROVIDER_FALLBACK: SelectItem[] = [
 
 type PflichtFeld = 'anlagenname' | 'leistung_kwp'
 
+/**
+ * Auswahl der PV-Prognose-Quelle.
+ *
+ * Maßgeblich ist die **Verbindung** zu Home Assistant, nicht die Betriebsart:
+ * `prognose_router.resolve_prognose_quelle` liefert SFML seit N-156 auch über
+ * eine Token-Anbindung aus, und Solcast findet seine Sensoren dort ohne eigenen
+ * API-Schlüssel. Das Feld hing bis dahin am Supervisor-Flag und sperrte damit
+ * genau den Betrieb aus, für den der Backend-Weg gebaut wurde (F-28).
+ *
+ * Als reine Funktion, damit die Bedingung prüfbar ist statt im Rendering zu
+ * stehen (dieselbe Form wie `fehlendeHAVoraussetzung`).
+ */
+export function bauePrognoseQuelleOptionen(haVerbunden: boolean): SelectOption[] {
+  return [
+    { value: 'eedc', label: 'eedc-optimiert (Standard)' },
+    { value: 'solcast', label: 'Solcast (pur, ohne Korrektur)' },
+    {
+      value: 'sfml',
+      label: haVerbunden
+        ? 'Solar Forecast ML (pur, aus Home Assistant)'
+        : 'Solar Forecast ML (pur) — nur mit verbundenem Home Assistant',
+      disabled: !haVerbunden,
+    },
+  ]
+}
+
+/** Erklärtext unter dem Auswahlfeld — hängt an derselben Bedingung. */
+export function prognoseQuelleHinweis(quelle: string, haVerbunden: boolean): string {
+  if (quelle === 'eedc') {
+    return 'Open-Meteo Rohprognose mit anlagenspezifischem Lernfaktor (MOS-Verfahren). Funktioniert überall, auch standalone.'
+  }
+  if (quelle === 'solcast') {
+    return haVerbunden
+      ? 'Solcast-Prognose direkt über die Solcast-Integration in Home Assistant, ohne eedc-Korrektur und ohne eigenen API-Schlüssel.'
+      : 'Solcast-Prognose direkt via API-Token, ohne eedc-Korrektur. API-Token muss konfiguriert sein.'
+  }
+  return 'Solar Forecast ML direkt aus der HA-Integration, ohne eedc-Korrektur. eedc nutzt dabei SFMLs echtes Stundenprofil (bis zu 3 Tage, aus dem evcc-Prognose-Sensor). Setzt eine verbundene Home-Assistant-Instanz voraus — als Add-on oder über einen langlebigen Zugriffstoken.'
+}
+
 export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const haAvailable = useHAAvailable()
+  const haVerbunden = useHAVerbunden()
 
   const [formData, setFormData] = useState({
     anlagenname: anlage?.anlagenname || '',
@@ -219,15 +258,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
       }))
     : WETTER_PROVIDER_FALLBACK
 
-  const prognoseQuelleOptionen: SelectItem[] = [
-    { value: 'eedc', label: 'eedc-optimiert (Standard)' },
-    { value: 'solcast', label: 'Solcast (pur, ohne Korrektur)' },
-    {
-      value: 'sfml',
-      label: `Solar Forecast ML (pur${haAvailable ? ', nur HA-Add-on' : ' — nur im HA-Add-on verfügbar'})`,
-      disabled: !haAvailable,
-    },
-  ]
+  const prognoseQuelleOptionen = bauePrognoseQuelleOptionen(haVerbunden)
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -571,15 +602,7 @@ export default function AnlageForm({ anlage, onSubmit, onCancel }: AnlageFormPro
             value={formData.prognose_quelle}
             onChange={handleChange}
             options={prognoseQuelleOptionen}
-            hint={
-              formData.prognose_quelle === 'eedc'
-                ? 'Open-Meteo Rohprognose mit anlagenspezifischem Lernfaktor (MOS-Verfahren). Funktioniert überall, auch standalone.'
-                : formData.prognose_quelle === 'solcast'
-                  ? haAvailable
-                    ? 'Solcast-Prognose direkt über die HA-Integration, ohne eedc-Korrektur.'
-                    : 'Solcast-Prognose direkt via API-Token, ohne eedc-Korrektur. API-Token muss konfiguriert sein.'
-                  : 'Solar Forecast ML direkt aus der HA-Integration, ohne eedc-Korrektur. eedc nutzt dabei SFMLs echtes Stundenprofil (bis zu 3 Tage, aus dem evcc-Prognose-Sensor). Nur im HA-Add-on verfügbar.'
-            }
+            hint={prognoseQuelleHinweis(formData.prognose_quelle, haVerbunden)}
           />
         </div>
       </FormSection>

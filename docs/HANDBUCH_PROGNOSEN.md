@@ -85,7 +85,7 @@ Als operative Prognosequelle stehen zur Wahl:
 
 - **eedc-optimiert** (Default) — OpenMeteo × Lernfaktor.
 - **Solcast** (pur, ohne eedc-Korrektur).
-- **Solar Forecast ML (SFML)** — die HA-Integration von Tom-HA, pur und ohne eedc-Korrektur (das ML-Modell kalibriert sich selbst). **Nur im HA-Add-on auswählbar**; im Standalone ist die Option deaktiviert. Ist SFML gewählt, aber kein HA verfügbar, fällt eedc neutral auf die eedc-Quelle zurück.
+- **Solar Forecast ML (SFML)** — die HA-Integration von Tom-HA, pur und ohne eedc-Korrektur (das ML-Modell kalibriert sich selbst). **Auswählbar, sobald Home Assistant verbunden ist** — als Add-on oder über einen langlebigen Zugriffstoken; ohne Verbindung ist die Option deaktiviert. Ist SFML gewählt, aber kein HA erreichbar, fällt eedc neutral auf die eedc-Quelle zurück.
 
 **Ist SFML deine gewählte Quelle, siehst du sie im Vergleich — als Wert, nicht als Note.** Der Stundenvergleich, der 7-Tage-Vergleich und der Tagesverlauf zeigen dann eine zusätzliche **SFML**-Spalte bzw. -Kurve: sonst fehlte dir in dieser Sicht ausgerechnet die Zahl, mit der eedc bei dir tatsächlich rechnet.
 
@@ -109,12 +109,13 @@ eedc bewahrt **beliebig viele** PVGIS-Abrufe deiner Anlage auf (Historie unter [
 
 Wer nur eine Prognose gespeichert hat oder nie eine Sicherung eingelesen hat, merkt von alldem nichts.
 
-<!-- [T20-Review] Cross-Doc-Konsistenz: HANDBUCH_EINSTELLUNGEN.md §2.1 beschreibt dasselbe Feld
-     als „Prognose-Basis (OpenMeteo/Solcast); SFML im Code als künftige Erweiterung vorbereitet".
-     Der GEBAUTE Code (frontend/src/components/forms/AnlageForm.tsx:222-230, Feld `prognose_quelle`)
-     bietet real die drei operativen Optionen eedc / solcast / sfml (sfml nur im HA-Add-on,
-     sonst disabled). Beide Formulierungen im Flip-Push-Zug angleichen — hier steht die
-     code-genaue Fassung. -->
+<!-- [T20-Review] Cross-Doc-Konsistenz war hier offen und ist mit F-28 (August 2026) eingelöst:
+     HANDBUCH_EINSTELLUNGEN.md §2.1 beschrieb dasselbe Feld (`prognose_quelle`) noch als
+     „Prognose-Basis (OpenMeteo/Solcast); SFML als künftige Erweiterung vorbereitet" — es bietet
+     real die drei operativen Optionen eedc / solcast / sfml. Beide Stellen nennen jetzt dieselbe
+     Bedingung: die HA-**Verbindung** (Add-on oder Token), nicht die Betriebsart. Der SoT der
+     Bedingung ist `bauePrognoseQuelleOptionen` in AnlageForm.tsx, geprüft von
+     AnlageForm.prognoseQuelle.test.ts. -->
 
 ---
 
