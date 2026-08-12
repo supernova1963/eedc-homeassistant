@@ -155,6 +155,15 @@ function GroesseIST({ d }: { d: SpeicherSizingResponse }) {
         </div>
       </dl>
 
+      {n != null && Object.keys(n.median_je_speicher).length > 1 && (
+        <p className="text-sm text-gray-600 dark:text-gray-300">
+          <strong>Je Gerät</strong> (typischer Ladestand):{' '}
+          {Object.entries(n.median_je_speicher)
+            .map(([id, wert]) => `Speicher ${id}: ${fmtZahl(wert, 0)} %`)
+            .join(' · ')}
+        </p>
+      )}
+
       {n != null && (
         <p className="text-sm text-gray-600 dark:text-gray-300">
           An <strong>{n.tage_bis_voll} von {n.tage_mit_soc} Tagen</strong> wurde der Speicher
@@ -353,10 +362,10 @@ export function SpeicherSizingIST({ anlageId, melde }: { anlageId: number; inv?:
 
           {daten.anzahl_speicher > 1 && (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Diese Anlage hat {daten.anzahl_speicher} Speicher, eedc wertet aber nur den
-              Ladestand <strong>eines</strong> davon aus — die Simulation beschreibt deshalb
-              dieses eine Gerät, nicht die Anlage. Die übrigen Zahlen (Erzeugung, Verbrauch,
-              Netzbezug) sind davon unberührt.
+              Diese Anlage hat {daten.anzahl_speicher} Speicher. Der Ladestand darüber ist der
+              <strong> kapazitätsgewichtete</strong> Wert aller Geräte — ein großer Speicher
+              zählt entsprechend mehr als ein kleiner. Die Ladestände der einzelnen Geräte
+              stehen im Block darunter.
             </p>
           )}
         </div>

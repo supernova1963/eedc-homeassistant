@@ -955,6 +955,114 @@ class DatenquelleChecks:
 
         return ergebnisse
 
+    async def _check_soc_nur_ein_speicher(self, anlage: Anlage) -> list[CheckErgebnis]:
+        """N-239: Mehrspeicher-Anlage, deren Historie nur EINEN Ladestand kennt.
+
+        Bis 2026-08-12 nahm ``_get_soc_history`` den **ersten** gemappten
+        SoC-Sensor mit Daten und brach ab. ``TagesEnergieProfil.soc_prozent``
+        trug damit den Ladestand *eines* Geräts — welches, entschied die
+        Reihenfolge im Sensor-Mapping —, während Vollzyklen, SoC-Hübe, die
+        Potential-Heatmap und die Sizing-Kalibrierung ihn als anlagenweit lasen.
+
+        **Die Erkennung braucht weder HA-Read noch Heuristik.** Die Spalte
+        ``soc_je_speicher`` existiert erst seit dem Fix; ihr Fehlen auf einer
+        Stunde mit Ladestand IST die Signatur eines vor dem Fix aggregierten
+        Tages. Zusammen mit „≥ 2 Speicher mit gemapptem SoC-Sensor" ist das
+        eindeutig — keine Schwelle, kein Ratespiel.
+
+        **Anlagen mit einem Speicher tauchen hier nie auf**: dort war die alte
+        Rechnung wertgleich mit der neuen (``anlagen_soc_prozent`` über ein
+        Gerät ist dessen SoC), es gibt also nichts zu reparieren.
+
+        Aktion wie beim Vorzeichen-Befund: manueller Re-Aggregations-Trigger,
+        **nie** eine Start-Migration.
+        """
+        from datetime import date, timedelta as _td
+        from backend.services.repair_orchestrator import REAGGREGATE_RANGE_MAX_DAYS
+        from backend.models.investition import Investition as _Inv
+        from backend.models.tages_energie_profil import TagesEnergieProfil as _TEP
+
+        kat = CheckKategorie.SOC_NUR_EIN_SPEICHER.value
+
+        inv_result = await self.db.execute(
+            select(_Inv).where(
+                _Inv.anlage_id == anlage.id,
+                _Inv.typ == "speicher",
+            )
+        )
+        speicher = list(inv_result.scalars().all())
+        mapping = (anlage.sensor_mapping or {}).get("investitionen", {}) or {}
+        mit_soc = [
+            s for s in speicher
+            if isinstance(mapping.get(str(s.id)), dict)
+            and (mapping[str(s.id)].get("live") or {}).get("soc")
+        ]
+        if len(mit_soc) < 2:
+            return []   # Ein Speicher (oder keiner mit Sensor) — nichts zu heilen.
+
+        alt_result = await self.db.execute(
+            select(_TEP.datum)
+            .where(
+                _TEP.anlage_id == anlage.id,
+                _TEP.soc_prozent.isnot(None),
+                _TEP.soc_je_speicher.is_(None),
+            )
+            .distinct()
+        )
+        alt_tage = sorted(alt_result.scalars().all())
+
+        if not alt_tage:
+            return [CheckErgebnis(
+                kategorie=kat, schwere=CheckSeverity.OK.value,
+                meldung=(
+                    f"Ladestand aller {len(mit_soc)} Speicher wird in der Historie "
+                    f"getrennt geführt"
+                ),
+                details=(
+                    "Der gespeicherte Anlagen-Ladestand ist das kapazitätsgewichtete "
+                    "Mittel über alle Speicher; die Aufschlüsselung je Gerät steht "
+                    "daneben. Tage, die vor dieser Umstellung aggregiert wurden, "
+                    "würden hier auftauchen."
+                ),
+            )]
+
+        aeltester, neuester = alt_tage[0], alt_tage[-1]
+        range_von = max(aeltester, neuester - _td(days=REAGGREGATE_RANGE_MAX_DAYS - 1))
+        rest_aelter = sum(1 for d in alt_tage if d < range_von)
+
+        details = (
+            f"Diese Anlage hat {len(mit_soc)} Speicher mit eigenem Ladestands-Sensor. "
+            f"An {len(alt_tage)} Tag(en) zwischen {aeltester.isoformat()} und "
+            f"{neuester.isoformat()} wurde nur der Ladestand EINES Geräts gespeichert — "
+            f"welches, entschied die Reihenfolge der Zuordnung. Betroffen sind die "
+            f"Vollzyklen dieser Tage, die SoC-Hübe und die Speicher-Auswertungen im "
+            f"Komponenten-Hub; Erzeugung, Verbrauch und Netzbezug sind es NICHT. "
+            f"„Zeitraum neu aggregieren“ rechnet {range_von.isoformat()} bis "
+            f"{neuester.isoformat()} neu (max. {REAGGREGATE_RANGE_MAX_DAYS} Tage/Lauf)."
+        )
+        if rest_aelter > 0:
+            details += (
+                f" {rest_aelter} ältere(r) Tag(e) liegen außerhalb des Fensters — "
+                f"nach dem Lauf erneut prüfen."
+            )
+
+        return [CheckErgebnis(
+            kategorie=kat, schwere=CheckSeverity.WARNING.value,
+            meldung=(
+                f"{len(alt_tage)} Tag(e) kennen nur den Ladestand eines von "
+                f"{len(mit_soc)} Speichern ({aeltester.isoformat()} … "
+                f"{neuester.isoformat()})"
+            ),
+            details=details,
+            action_kind="reaggregate_range",
+            action_params={
+                "anlage_id": anlage.id,
+                "von": range_von.isoformat(),
+                "bis": neuester.isoformat(),
+            },
+            action_label="Zeitraum neu aggregieren",
+        )]
+
     # Ein Connector, der lange nichts mehr geliefert hat, kann für den laufenden
     # Monat kein Delta bilden — nach diesen Tagen gilt das nicht mehr als
     # „gleich behoben". Kürzer wäre Rauschen: am Monatsersten fehlt der Snapshot

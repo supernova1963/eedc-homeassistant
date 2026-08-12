@@ -92,7 +92,7 @@ describe('SpeicherPotentialIST', () => {
     await waitFor(() => {
       // N-239: der Ladestand kommt vom ERSTEN gemappten Sensor, nicht aus einer
       // Mischung — die Sicht darf keine anlagenweite Aussage behaupten.
-      expect(screen.getByText(/nicht die Anlage/i)).toBeInTheDocument()
+      expect(screen.getByText(/kapazitätsgewichtete/i)).toBeInTheDocument()
     })
   })
 

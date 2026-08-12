@@ -178,3 +178,57 @@ def gleitende_effizienz(
             )
         )
     return ergebnis
+
+
+def anlagen_soc_prozent(
+    soc_je_speicher: dict,
+    kapazitaet_je_speicher: dict,
+) -> Optional[float]:
+    """Der Ladestand der **Anlage** aus den Ladeständen ihrer Speicher (N-239).
+
+    ``Σ Inhalt ÷ Σ Kapazität`` — also das **kapazitätsgewichtete** Mittel, nicht
+    das arithmetische. Ein 15-kWh-Speicher auf 20 % und ein 5-kWh-Speicher auf
+    100 % ergeben zusammen ``(3 + 5) / 20 = 40 %``; das arithmetische Mittel
+    behauptete 60 % und damit anderthalb Mal so viel Energie, wie im Haus steht.
+
+    **Warum es diese Funktion gibt.** Bis 2026-08-12 gab es sie nicht, und
+    `energie_profil/_helpers.py::_get_soc_history` nahm bei mehreren Speichern
+    den **ersten** gemappten Sensor und brach ab (`break  # Erstes SoC-Entity
+    reicht`). `TagesEnergieProfil.soc_prozent` trug damit den Ladestand *eines*
+    Geräts, während fünf Stellen im Baum „anlagenweiter Mischwert" behaupteten —
+    und darauf laufen Vollzyklen, SoC-Hübe, die Potential-Heatmap und die
+    Sizing-Kalibrierung.
+
+    ⚑ **Bei genau einem Speicher ist das Ergebnis exakt dessen SoC** — die
+    Umstellung ist für die überwiegende Mehrheit der Anlagen beweisbar ein
+    No-op, und genau das macht sie vor einem Release vertretbar.
+
+    Args:
+        soc_je_speicher: ``{investition_id: soc_prozent}``. Geräte ohne Wert
+            gehören nicht hinein — ein fehlender Ladestand ist keine 0.
+        kapazitaet_je_speicher: ``{investition_id: kwh}``, **netto** (der real
+            fahrbare Hub, auf den sich die Prozentskala bezieht).
+
+    Returns:
+        Ladestand in Prozent, oder ``None`` wenn kein Gerät einen Wert hat.
+        **Fehlt für ein Gerät die Kapazität**, fällt die Rechnung auf das
+        ungewichtete Mittel zurück: eine erfundene Gewichtung wäre schlechter
+        als eine ehrlich gleichverteilte, und ein Gerät wegzulassen wäre still
+        eine andere Anlage.
+    """
+    werte = {k: v for k, v in soc_je_speicher.items() if v is not None}
+    if not werte:
+        return None
+
+    kapazitaeten = {
+        k: kapazitaet_je_speicher.get(k)
+        for k in werte
+    }
+    if any(not k for k in kapazitaeten.values()):
+        return sum(werte.values()) / len(werte)
+
+    gesamt = sum(kapazitaeten[k] for k in werte)
+    if gesamt <= 0:
+        return sum(werte.values()) / len(werte)
+    inhalt = sum(werte[k] / 100.0 * kapazitaeten[k] for k in werte)
+    return inhalt / gesamt * 100.0

@@ -48,7 +48,7 @@ versprechen, die die Methode nicht hat.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from statistics import median
 from typing import Iterable, Optional, Sequence
@@ -175,6 +175,10 @@ class SocNutzung:
     tage_bis_voll: int
     #: Tage, an denen er unter `SOC_LEER_PROZENT` gefallen ist.
     tage_bis_leer: int
+    #: Ladestands-Median **je Speicher** (`{investition_id: prozent}`) — leer,
+    #: solange die Historie nur den Anlagenwert kennt (N-239-Altbestand).
+    #: Damit ist die Anforderung erfüllt, dass jedes Gerät sichtbar bleibt.
+    median_je_speicher: dict = field(default_factory=dict)
 
     @property
     def anteil_tage_voll(self) -> float:
@@ -189,7 +193,10 @@ class SocNutzung:
         return self.anteil_tage_voll >= ANTEIL_TAGE_VOLL_SCHWELLE
 
 
-def messe_soc_nutzung(stunden: Sequence[SizingStunde]) -> Optional[SocNutzung]:
+def messe_soc_nutzung(
+    stunden: Sequence[SizingStunde],
+    soc_je_speicher: Optional[Sequence[dict]] = None,
+) -> Optional[SocNutzung]:
     """Perzentile und Tages-Extreme des Ladestands. ``None`` ohne SoC-Werte.
 
     Bewusst **ohne** Bilanzprobe: hier wird der SoC selbst ausgewertet, nicht
@@ -212,7 +219,14 @@ def messe_soc_nutzung(stunden: Sequence[SizingStunde]) -> Optional[SocNutzung]:
         je_tag.setdefault(z.zeit.date(), []).append(z.soc_prozent)
     maxima = [max(v) for v in je_tag.values()]
 
+    je_geraet: dict = {}
+    for eintrag in (soc_je_speicher or []):
+        for inv_id, wert in (eintrag or {}).items():
+            if wert is not None:
+                je_geraet.setdefault(str(inv_id), []).append(float(wert))
+
     return SocNutzung(
+        median_je_speicher={k: median(v) for k, v in sorted(je_geraet.items())},
         stunden_mit_soc=n,
         tage_mit_soc=len(je_tag),
         soc_p5=perzentil(0.05),

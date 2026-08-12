@@ -195,8 +195,21 @@ async def _get_soc_history(
     speist. State-History-Mittelung nur als Fallback wenn LTS leer (frischer
     Sensor, has_mean=False, oder Tag liegt vor LTS-Recompile).
 
+    ⚑ **N-239 (2026-08-12): jedes Gerät zählt, nicht nur das erste.** Bis dahin
+    nahmen beide Pfade den **ersten** gemappten SoC-Sensor mit Daten und brachen
+    ab (`return` im LTS-Pfad, `break  # Erstes SoC-Entity reicht` im
+    History-Pfad). Bei zwei Speichern trug `TagesEnergieProfil.soc_prozent`
+    damit den Ladestand *eines* Geräts — welches, entschied die Reihenfolge im
+    Sensor-Mapping —, während fünf Stellen im Baum „anlagenweiter Mischwert"
+    behaupteten. Darauf laufen Vollzyklen, SoC-Hübe, die Potential-Heatmap und
+    die Sizing-Kalibrierung.
+
     Returns:
-        {stunde: float (SoC %)}
+        ``{stunde: {investition_id: soc_prozent}}``. Der Aufrufer bildet daraus
+        den Anlagenwert über `core.berechnungen.speicher.anlagen_soc_prozent`
+        (kapazitätsgewichtet) und persistiert die Aufschlüsselung daneben. Bei
+        genau einem Speicher — dem Normalfall — ist das Ergebnis wertgleich mit
+        dem bisherigen Verhalten.
     """
     from backend.models.investition import Investition
 
@@ -219,15 +232,24 @@ async def _get_soc_history(
     if not speicher_ids:
         return {}
 
-    soc_entities = []
+    # Entity → Investitions-ID, damit die Aufschlüsselung ihr Gerät kennt.
+    # Mehrere Speicher dürfen denselben Sensor tragen (ein BMS über zwei
+    # Module); dann steht derselbe Wert bei beiden, und die Gewichtung darunter
+    # ist trotzdem richtig.
+    entity_zu_inv: dict[str, list[int]] = {}
     for key, val in sensor_mapping.get("investitionen", {}).items():
         if str(key) not in speicher_ids:
             continue
         if isinstance(val, dict) and val.get("live", {}).get("soc"):
-            soc_entities.append(val["live"]["soc"])
+            entity_zu_inv.setdefault(val["live"]["soc"], []).append(int(key))
 
+    soc_entities = list(entity_zu_inv)
     if not soc_entities:
         return {}
+
+    def _eintragen(ziel: dict, entity_id: str, stunde: int, wert: float) -> None:
+        for inv_id in entity_zu_inv[entity_id]:
+            ziel.setdefault(stunde, {})[inv_id] = float(wert)
 
     # ── Pfad 1: HA-LTS-Hourly-Mean (Etappe 5) ────────────────────────────
     try:
@@ -240,10 +262,15 @@ async def _get_soc_history(
             hourly = await asyncio.to_thread(
                 stats.get_hourly_sensor_data, soc_entities, datum, datum
             )
+            ergebnis: dict = {}
             for entity_id in soc_entities:
                 slots = hourly.get(entity_id, {}).get(datum_iso, {})
-                if slots:
-                    return {h: float(v) for h, v in slots.items()}
+                for h, v in slots.items():
+                    _eintragen(ergebnis, entity_id, int(h), v)
+            # Nur wenn der LTS-Pfad wirklich etwas geliefert hat — sonst greift
+            # der History-Fallback, wie bisher.
+            if ergebnis:
+                return ergebnis
     except Exception as e:
         logger.debug(f"SoC-LTS-Hourly für {datum}: {e}")
 
@@ -257,7 +284,7 @@ async def _get_soc_history(
 
         history = await ha_service.get_sensor_history(soc_entities, start, end)
 
-        result = {}
+        result: dict = {}
         for entity_id in soc_entities:
             points = history.get(entity_id, [])
             if not points:
@@ -267,10 +294,8 @@ async def _get_soc_history(
                 h_start = start + timedelta(hours=h)
                 h_end = h_start + timedelta(hours=1)
                 h_points = [p[1] for p in points if h_start <= p[0] < h_end]
-                if h_points and h not in result:
-                    result[h] = sum(h_points) / len(h_points)
-
-            break  # Erstes SoC-Entity reicht
+                if h_points:
+                    _eintragen(result, entity_id, h, sum(h_points) / len(h_points))
 
         return result
 
@@ -560,3 +585,22 @@ async def _get_strompreis_stunden(
         logger.debug("Börsenpreis für %s: %s", datum, e)
 
     return StrompreisStunden(sensor=sensor_preise, boerse=boersen_preise)
+
+
+async def _speicher_investitionen(db: AsyncSession, anlage_id: int) -> list:
+    """Alle Speicher einer Anlage — Gewichtungs-Grundlage des Anlagen-SoC (N-239).
+
+    Bewusst **ohne** Aktiv-/Stilllegungs-Filter: ein Gerät, das an diesem Tag
+    noch einen Ladestand gemeldet hat, gehört auch in seine Gewichtung. Wer hier
+    filterte, würde die Summe im Nenner kleiner machen als die Geräte im Zähler
+    und den Anlagen-Ladestand nach oben verzerren.
+    """
+    from backend.models.investition import Investition
+
+    result = await db.execute(
+        select(Investition).where(
+            Investition.anlage_id == anlage_id,
+            Investition.typ == "speicher",
+        )
+    )
+    return list(result.scalars().all())

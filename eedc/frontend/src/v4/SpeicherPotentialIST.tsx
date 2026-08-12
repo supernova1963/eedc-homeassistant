@@ -202,9 +202,9 @@ export function SpeicherPotentialIST({ anlageId, melde }: { anlageId: number; in
 
         {daten.anzahl_speicher > 1 && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Diese Anlage hat {daten.anzahl_speicher} Speicher, eedc wertet aber nur den Ladestand
-            <strong>eines</strong> davon aus — die Aussage beschreibt deshalb dieses eine Gerät,
-            nicht die Anlage.
+            Diese Anlage hat {daten.anzahl_speicher} Speicher. Der Ladestand ist der
+            <strong> kapazitätsgewichtete</strong> Wert aller Geräte — die Aussage gilt damit für
+            die Anlage als Ganzes. Die Ladestände je Gerät stehen im Block „Größerer Speicher?".
           </p>
         )}
       </div>

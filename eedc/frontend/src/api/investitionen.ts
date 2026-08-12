@@ -319,6 +319,9 @@ export interface SocNutzung {
   tage_bis_voll: number
   tage_bis_leer: number
   tage_mit_soc: number
+  /** Ladestands-Median je Speicher (`{investition_id: prozent}`). Leer, solange
+   *  die Historie nur den Anlagenwert kennt (Tage vor der N-239-Umstellung). */
+  median_je_speicher: Record<string, number>
   laedt_planmaessig_voll: boolean
 }
 

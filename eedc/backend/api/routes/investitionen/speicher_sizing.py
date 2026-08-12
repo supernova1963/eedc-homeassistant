@@ -68,6 +68,9 @@ class SocNutzungResponse(BaseModel):
     tage_bis_voll: int
     tage_bis_leer: int
     tage_mit_soc: int
+    #: Ladestands-Median je Speicher (`{investition_id: prozent}`) — leer,
+    #: solange die Historie nur den Anlagenwert kennt (N-239-Altbestand).
+    median_je_speicher: dict[str, float]
     #: `True` = die Lücke ist Ladeverlust, `False` = die Anlage lädt planmäßig
     #: nicht voll. Die Sicht formuliert daraus den Satz, nicht die Rohzahlen.
     laedt_planmaessig_voll: bool
@@ -171,6 +174,9 @@ async def get_speicher_sizing(
             tage_bis_voll=a.soc_nutzung.tage_bis_voll,
             tage_bis_leer=a.soc_nutzung.tage_bis_leer,
             tage_mit_soc=a.soc_nutzung.tage_mit_soc,
+            median_je_speicher={
+                k: round(v, 1) for k, v in a.soc_nutzung.median_je_speicher.items()
+            },
             laedt_planmaessig_voll=a.soc_nutzung.laedt_planmaessig_voll,
         ),
         tage_mit_daten=a.tage_mit_daten,

@@ -64,8 +64,8 @@ class SpeicherPotentialResponse(BaseModel):
     bis: Optional[date]
     monate: list[MonatsPotentialResponse]
 
-    #: Anzahl Speicher der Anlage — ab 2 beschreibt der SoC nur EINES der Geräte
-    #: (N-239, s. Service-Docstring), nicht die Anlage.
+    #: Anzahl Speicher der Anlage. Seit N-239 ist der Ladestand darüber das
+    #: kapazitätsgewichtete Mittel; ältere Tage können noch ein Gerät tragen.
     anzahl_speicher: int
     kapazitaet_kwh: Optional[float]
     soc_voll_prozent: float

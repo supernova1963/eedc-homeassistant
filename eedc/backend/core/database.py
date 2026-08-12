@@ -950,6 +950,14 @@ async def run_migrations(conn):
             # Issue #238: WP-Betriebsstunden pro Stunde (analog Kompressor-Starts)
             if 'wp_betriebsstunden' not in existing_columns:
                 connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN wp_betriebsstunden FLOAT'))
+            # N-239: Ladestand je Speicher-Investition. Rein **additiv** — kein
+            # Backfill, keine Neuberechnung beim Start. Altbestand behält `NULL`
+            # und damit die Ein-Gerät-Zahl in `soc_prozent`; sichtbar gemacht
+            # wird das vom Daten-Checker, repariert auf Knopfdruck über die
+            # bestehende Neu-Aggregation. Ein stiller Massen-Rewrite beim Start
+            # wäre der „große Heiler-Knopf", den dieses Projekt ausschließt.
+            if 'soc_je_speicher' not in existing_columns:
+                connection.execute(text('ALTER TABLE tages_energie_profil ADD COLUMN soc_je_speicher JSON'))
             # v3.26.0: Stündliches Wetter (Bewölkung, Niederschlag, WMO-Code)
             # für Wetter-Stratifizierung und Korrekturprofil — siehe KONZEPT-KORREKTURPROFIL.md
             if 'bewoelkung_prozent' not in existing_columns:

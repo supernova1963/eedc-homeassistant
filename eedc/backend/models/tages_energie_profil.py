@@ -86,8 +86,27 @@ class TagesEnergieProfil(Base):
     niederschlag_mm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     wetter_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
-    # Batterie-SoC (Stundenmittel, %)
+    # Batterie-SoC (Stundenmittel, %) — der Ladestand der ANLAGE, seit N-239
+    # kapazitätsgewichtet über alle Speicher (Σ Inhalt ÷ Σ Kapazität, SoT
+    # `core.berechnungen.speicher.anlagen_soc_prozent`). Bis 2026-08-12 trug die
+    # Spalte bei mehreren Speichern still den Wert des ERSTEN gemappten Sensors.
     soc_prozent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Aufschlüsselung dazu: {investition_id: soc_prozent} (N-239). Eigene Spalte
+    # und NICHT in `komponenten` — das Dict dort trägt kW/kWh und wird von
+    # Whitelist-Konsumenten summiert; ein Prozentwert darin wäre genau die
+    # Einheiten-Verwechslung, aus der der BKW-Doppelzählungs-Bug entstand.
+    # `None` bei Altbestand: der Tag wurde vor N-239 aggregiert und trägt die
+    # Ein-Gerät-Zahl — der Daten-Checker meldet das und bietet die Neuberechnung an.
+    #
+    # ⚠ `none_as_null=True` ist hier **Bedingung**, nicht Geschmack: ohne das
+    # schreibt SQLAlchemy ein Python-`None` als JSON-`null` (die Zeichenkette),
+    # während `ALTER TABLE ADD COLUMN` bei Altbestand echtes SQL-NULL hinterlässt.
+    # Die Erkennung des Daten-Checkers (`soc_je_speicher IS NULL`) fände dann je
+    # nach Herkunft die eine Hälfte nicht — genau die stille Sorte Fehler, gegen
+    # die dieser Befund gebaut ist.
+    soc_je_speicher: Mapped[Optional[dict]] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
 
     # Strompreis (ct/kWh, Stundenmittel)
     # strompreis_cent: Endpreis aus HA-Sensor (Tibber etc.) — nur wenn Sensor konfiguriert

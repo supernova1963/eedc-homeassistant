@@ -56,6 +56,16 @@ Im selben Block steht jetzt eine Zeile mehr: neben der Kapazität, die du gepfle
 - **Dein Speicher wird regelmäßig voll, es geht trotzdem weniger durch** ⇒ das sind **Ladeverluste**. Gegen Ende der Ladung nimmt ein Speicher viel Energie auf, die den Ladestand kaum noch bewegt. Deine gepflegte Zahl ist dann richtig, die kleinere beschreibt den Durchsatz.
 - **Dein Speicher wird nie voll** ⇒ dann ist die kleinere Zahl deine eigene Ladestrategie. Falls das nicht gewollt ist, lohnt ein Blick auf die gepflegte nutzbare Kapazität in den Einstellungen.
 
+### Mehrere Speicher: eedc kannte bisher nur den Ladestand von einem
+
+**Betrifft dich das?** Wenn du **zwei oder mehr** Speicher hast, jeden mit eigenem Ladestands-Sensor. Bei einem Speicher ändert sich nichts.
+
+Der gespeicherte Ladestand deiner Anlage war der **eines** deiner Geräte — welches, entschied die Reihenfolge, in der du die Sensoren zugeordnet hast. Angezeigt wurde er trotzdem als Wert der ganzen Anlage. Betroffen waren die **Vollzyklen** deiner Tage, die Ladestands-Hübe und die beiden Speicher-Auswertungen im Komponenten-Hub — deine Erzeugung, dein Verbrauch und dein Netzbezug nicht.
+
+eedc liest jetzt **jeden** zugeordneten Ladestands-Sensor und rechnet den Wert deiner Anlage **nach Kapazität gewichtet**: Ein 15-kWh-Speicher auf 20 % und ein 5-kWh-Speicher auf 100 % sind zusammen **40 %** — der naheliegende Mittelwert hätte 60 % behauptet und damit anderthalb Mal so viel Energie, wie tatsächlich bei dir steht. Die Ladestände der einzelnen Geräte siehst du zusätzlich im Block „Größerer Speicher?".
+
+> **Deine bisherigen Tage rechnet eedc nicht von selbst neu.** Der Daten-Checker zeigt dir, welche Zeiträume betroffen sind, und bietet „Zeitraum neu aggregieren" gleich daneben an.
+
 ### „Speicher voll um" kommt jetzt später — und stimmt
 
 **Betrifft dich das?** Wenn du den Sensor `eedc_speicher_voll_um` nutzt oder die Kachel „Speicher voll" in der Tages-Vorschau ansiehst.

@@ -20,10 +20,13 @@ from typing import Optional
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.speicher import anlagen_soc_prozent
+from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
 from backend.core.source_priority import SOURCE_LABELS
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.tages_energie_profil import TagesEnergieProfil, TagesZusammenfassung
+from backend.services.energie_profil._helpers import _speicher_investitionen
 from backend.services.energie_profil._provenance_helpers import (
     seed_tep_provenance,
     seed_tz_provenance,
@@ -232,7 +235,18 @@ async def aggregate_day(
     wetter_stunden = await _get_wetter_ist(anlage, datum, pv_module=pv_module_list)
 
     # ── SoC-History holen ─────────────────────────────────────────────────
-    soc_stunden = await _get_soc_history(anlage, sensor_mapping, datum, db)
+    # N-239: `{stunde: {investition_id: soc}}` — JEDES Gerät, nicht nur das
+    # erste. Der Anlagenwert entsteht darunter kapazitätsgewichtet.
+    soc_je_stunde = await _get_soc_history(anlage, sensor_mapping, datum, db)
+    speicher_kapazitaeten = {
+        inv.id: get_speicher_nutzbare_kapazitaet_kwh(inv)
+        for inv in await _speicher_investitionen(db, anlage.id)
+    }
+    soc_stunden = {
+        h: wert
+        for h, je_geraet in soc_je_stunde.items()
+        if (wert := anlagen_soc_prozent(je_geraet, speicher_kapazitaeten)) is not None
+    }
 
     # ── Strompreis-Stundenwerte holen ─────────────────────────────────────
     strompreis_stunden = await _get_strompreis_stunden(anlage, sensor_mapping, datum)
@@ -575,6 +589,10 @@ async def aggregate_day(
             niederschlag_mm=round(niederschlag, 2) if niederschlag is not None else None,
             wetter_code=int(wcode) if wcode is not None else None,
             soc_prozent=round(soc, 1) if soc is not None else None,
+            soc_je_speicher=(
+                {str(k): round(v, 1) for k, v in soc_je_stunde[h].items()}
+                if soc_je_stunde.get(h) else None
+            ),
             strompreis_cent=round(strompreis, 2) if strompreis is not None else None,
             boersenpreis_cent=round(boersenpreis, 2) if boersenpreis is not None else None,
             komponenten={k: v for k, v in werte.items() if k != "strompreis"} if werte else None,

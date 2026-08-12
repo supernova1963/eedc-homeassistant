@@ -44,7 +44,7 @@ const ANTWORT = (teil: Partial<SpeicherSizingResponse> = {}): SpeicherSizingResp
   soc_nutzung: {
     soc_p5: 0, soc_median: 53.1, soc_p95: 100,
     tages_max_median: 100, tage_bis_voll: 247, tage_bis_leer: 159,
-    tage_mit_soc: 361, laedt_planmaessig_voll: true,
+    tage_mit_soc: 361, median_je_speicher: {}, laedt_planmaessig_voll: true,
   },
   tage_mit_daten: 365,
   tage_simuliert: 355,
@@ -151,7 +151,7 @@ describe('SpeicherSizingIST', () => {
       soc_nutzung: {
         soc_p5: 12, soc_median: 45, soc_p95: 78,
         tages_max_median: 80, tage_bis_voll: 0, tage_bis_leer: 3,
-        tage_mit_soc: 200, laedt_planmaessig_voll: false,
+        tage_mit_soc: 200, median_je_speicher: {}, laedt_planmaessig_voll: false,
       },
     }))
 

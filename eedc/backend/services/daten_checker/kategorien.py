@@ -115,6 +115,19 @@ class CheckKategorie(str, Enum):
     # (feedback_migration_startup_kein_http: der v3.45.7-Versuch hat das Add-on
     # gebrickt). Nur HA-LTS-Modus; Standalone hat keine Referenz zum Vergleich.
     BATTERIE_VORZEICHEN_HISTORIE = "batterie_vorzeichen_historie"
+    # N-239 (2026-08-12): Anlagen mit MEHREREN Speichern, deren Historie vor
+    # dem Fix aggregiert wurde. Bis dahin nahm `_get_soc_history` den ERSTEN
+    # gemappten SoC-Sensor und brach ab — `soc_prozent` trug den Ladestand
+    # eines Geräts, während Vollzyklen, SoC-Hübe, Potential-Heatmap und
+    # Sizing-Kalibrierung ihn als anlagenweit lasen. Erkennung ohne HA-Read
+    # und ohne Heuristik: ≥ 2 Speicher mit gemapptem SoC-Sensor UND Stunden
+    # mit `soc_je_speicher IS NULL` — die Spalte gibt es erst seit dem Fix,
+    # ihr Fehlen IST die Signatur. Aktion = dieselbe Neu-Aggregation wie beim
+    # Vorzeichen-Befund, user-getriggert, NIE als Start-Migration
+    # (feedback_migration_startup_kein_http, feedback_kein_grosser_heiler_knopf).
+    # Anlagen mit EINEM Speicher tauchen hier nie auf — dort war die alte
+    # Rechnung wertgleich (s. `anlagen_soc_prozent`).
+    SOC_NUR_EIN_SPEICHER = "soc_nur_ein_speicher"
     # v4.0.4 (Nachlauf v4.0.3): Tage, an denen ein Zähler zugeordnet ist und
     # HA-Statistics einen Wert liefert, die gespeicherte Tageszeile aber leer
     # bzw. 0 ist. Genau die Lücke, in der drei Melder nach dem v4.0.3-Fix

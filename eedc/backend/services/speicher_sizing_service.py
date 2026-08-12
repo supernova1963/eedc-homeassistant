@@ -10,17 +10,18 @@ Stundenreihe aus `TagesEnergieProfil`, Kapazität/Wirkungsgrad, Tarif.
 Ein L2-Cache wäre Vorratshaltung gegen eine Vermutung — er kommt, wenn eine
 Messung ihn verlangt, nicht vorher.
 
-⚠ **Der SoC in `TagesEnergieProfil` hat keine `investition_id` — und er ist bei
-mehreren Speichern KEIN Mischwert** (N-239, am Code gemessen 2026-08-12; die
-erste Fassung dieses Docstrings behauptete das Gegenteil).
-`energie_profil/_helpers.py::_get_soc_history` nimmt den **ersten** gemappten
-SoC-Sensor mit Daten und bricht ab (`return` im LTS-Pfad,
-`break  # Erstes SoC-Entity reicht` im History-Pfad). Bei zwei Speichern trägt
-die Spalte also den Ladestand **eines** Geräts — welches, entscheidet die
-Reihenfolge im Sensor-Mapping.
+⚠ **Der SoC in `TagesEnergieProfil` hat keine `investition_id`, ist aber seit
+N-239 (2026-08-12) ein echter Anlagenwert:** `_get_soc_history` liest **jeden**
+gemappten Speicher-Sensor, `core.berechnungen.speicher.anlagen_soc_prozent`
+bildet daraus das **kapazitätsgewichtete** Mittel, und die Aufschlüsselung je
+Gerät steht in `TagesEnergieProfil.soc_je_speicher`. Vorher gewann der erste
+Sensor in der Mapping-Reihenfolge, und die Kalibrierung beschrieb still ein
+einzelnes Gerät.
 
-Für die Kalibrierung heißt das: sie beschreibt dieses eine Gerät, nicht die
-Anlage. Die Route gibt `anzahl_speicher` mit aus, damit die Sicht es sagen kann.
+⚠ **Tage vor dieser Umstellung tragen weiterhin die Ein-Gerät-Zahl** (`soc_je_speicher`
+ist dort `NULL`) — kein Backfill, das wäre der ausgeschlossene „große Heiler-Knopf".
+Der Daten-Checker (`SOC_NUR_EIN_SPEICHER`) meldet betroffene Zeiträume und stellt
+die Neu-Aggregation daneben.
 
 ⚠ **Bewusst der HEUTE gültige Tarif** (deshalb steht dieses Modul in
 `P8_BASELINE_AUSNAHMEN`): die Sicht beantwortet keine historische Frage
@@ -204,7 +205,9 @@ async def lade_sizing_auswertung(
     tage_mit_daten = len({z.datum for z in zeilen})
     tage_simuliert = len({z.zeit.date() for z in simulierbar})
 
-    soc_nutzung = messe_soc_nutzung(stunden)
+    soc_nutzung = messe_soc_nutzung(
+        stunden, [z.soc_je_speicher for z in zeilen]
+    )
     kalibrierung = kalibriere_speicher(stunden)
     if kalibrierung is not None:
         basis = kalibrierung
