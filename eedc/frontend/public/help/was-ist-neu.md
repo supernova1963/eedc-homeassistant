@@ -11,6 +11,26 @@
 
 ## Noch nicht veröffentlicht
 
+### Zwei Wechselrichter, ein Zähler: der Monatsabschluss entsteht wieder
+
+**Betrifft dich das?** Wenn du mehr als einen Wechselrichter hast und ihre Daten aus der Hersteller-Cloud holst — bei Solarman ist jeder Wechselrichter eine eigene „Station".
+
+Seit eedc den Import je Station kennt, landeten Erträge und Speicherwerte richtig am jeweiligen Gerät. **Einspeisung und Netzbezug fielen dabei aber unter den Tisch.** Das Ergebnis war verwirrend: Der Import meldete Erfolg, die Zahlen standen im Cockpit — in der Monatsliste blieb der Monat leer, und ein erneuter Import änderte daran nichts. Der Daten-Checker meldete den Monat als fehlend und bot obendrein an, die vorhandenen Messwerte zu löschen.
+
+Der Denkfehler lag bei uns: Wir hatten den Zählerwert einer Station für „die halbe Wahrheit" gehalten. **Ein Wechselrichter misst Einspeisung und Netzbezug aber gar nicht** — er liest sie vom Smartmeter am Hausanschluss. Alle deine Geräte melden deshalb **denselben** Wert.
+
+eedc übernimmt ihn jetzt einmal in den Monat, sowohl beim Import als auch beim Cloud-Abruf im Monatsabschluss. Dabei gilt:
+
+- **Nichts wird addiert.** Die zweite Station bestätigt den Wert, sie verdoppelt ihn nicht.
+- **Ein Gerät ohne Smartmeter überschreibt nichts.** Meldet es 0, bleibt der echte Wert stehen.
+- **Verschiedene Zählerstände werden gemeldet.** Weichen zwei Geräte voneinander ab, sagt eedc es dir, statt still eines auszuwählen.
+
+Deine Erzeugung und dein Speicherumsatz bleiben unverändert gerätebezogen — dort ist der Wert einer einzelnen Station tatsächlich nur ein Teil des Ganzen.
+
+> **Was du tun musst:** einmal neu importieren. Die Monate, denen bisher die Zählerzeile fehlt, bekommen sie dabei.
+
+*(Gemeldet von OliS2811.)*
+
 ### „Hätte mir ein größerer Speicher etwas gebracht?" — jetzt mit einer ehrlichen Zahl
 
 **Betrifft dich das?** Wenn du einen Speicher hast und schon einmal überlegt hast, ihn zu erweitern.

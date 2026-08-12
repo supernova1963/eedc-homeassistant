@@ -33,6 +33,10 @@ from backend.models.monatsdaten import Monatsdaten
 from backend.services.activity_service import log_activity
 from backend.services.cloud_import.quellen import lade_quellen
 from backend.services.erzeuger_ziel import ZielFehler, loese_ziel
+from backend.services.import_hauszaehler import (
+    HauszaehlerQuelle,
+    waehle_hauszaehler_quelle,
+)
 from backend.services.ha_state_service import get_ha_state_service
 from backend.services.mqtt_inbound_service import get_mqtt_inbound_service
 from backend.services.provenance import (
@@ -705,6 +709,8 @@ async def fetch_cloud_monatswerte(
 
     field_inv_map = (anlage.connector_config or {}).get("field_inv_map") or {}
     basis: list[CloudMonatswertFeld] = []
+    # Hauszähler-Beiträge aller Quellen; die Wahl fällt nach der Schleife.
+    hz_kandidaten: list[HauszaehlerQuelle] = []
     inv_result: list[dict] = []
     hinweise: list[str] = []
     fehler: list[str] = []
@@ -764,17 +770,19 @@ async def fetch_cloud_monatswerte(
         month_data = months[0]
         erfolge += 1
 
-        # ── Hauszähler-Größen: nur von einer Quelle OHNE Ziel ────────────────
-        if empfaenger is None:
-            for feld, label, einheit in [
-                ("einspeisung_kwh", "Einspeisung", "kWh"),
-                ("netzbezug_kwh", "Netzbezug", "kWh"),
-            ]:
-                val = getattr(month_data, feld, None)
-                if val is not None:
-                    basis.append(CloudMonatswertFeld(
-                        feld=feld, label=label, wert=round(val, 1), einheit=einheit,
-                    ))
+        # ── Hauszähler-Größen: jede Quelle ist ein Kandidat ──────────────────
+        # Bis 12.08. steuerte nur eine Quelle OHNE Ziel etwas bei — wer wie der
+        # Melder ausschließlich zugeordnete Stationen führt, bekam für
+        # Einspeisung und Netzbezug nie einen Vorschlag. Ein Wechselrichter
+        # misst diese Größen nicht selbst, er liest den Zähler am
+        # Hausanschluss; alle Geräte melden denselben Wert. Entschieden wird
+        # nach der Schleife, weil erst dort alle Kandidaten vorliegen.
+        hz_kandidaten.append(HauszaehlerQuelle(
+            herkunft=herkunft,
+            ohne_ziel=empfaenger is None,
+            einspeisung_kwh=getattr(month_data, "einspeisung_kwh", None),
+            netzbezug_kwh=getattr(month_data, "netzbezug_kwh", None),
+        ))
 
         # ── PV ───────────────────────────────────────────────────────────────
         # Ohne Ziel liefert die Cloud EINEN Anlagen-Gesamtwert: er geht an die
@@ -856,8 +864,21 @@ async def fetch_cloud_monatswerte(
             detail=f"Cloud-Abruf fehlgeschlagen: {meldung}" if fehler else meldung,
         )
 
-    # Teil-Erfolg sagt es (P4) — eine Zahl aus einer von zwei Stationen ist
-    # eine Teilsumme, und die darf nicht wie ein vollständiges Ergebnis wirken.
+    # Hauszähler-Größen aus allen Kandidaten wählen — übernehmen, nie summieren.
+    wahl = waehle_hauszaehler_quelle(hz_kandidaten)
+    for feld, label, wert in (
+        ("einspeisung_kwh", "Einspeisung", wahl.einspeisung_kwh),
+        ("netzbezug_kwh", "Netzbezug", wahl.netzbezug_kwh),
+    ):
+        if wert is not None:
+            basis.append(CloudMonatswertFeld(
+                feld=feld, label=label, wert=round(wert, 1), einheit="kWh",
+            ))
+    if wahl.hinweis:
+        hinweise.append(wahl.hinweis)
+
+    # Teil-Erfolg sagt es (P4): liefert keine Quelle die Größen des
+    # Hausanschlusses, darf das Ergebnis nicht wie ein vollständiges wirken.
     hinweise = fehler + hinweise
     if len(quellen) > 1 and not basis:
         hinweise.append(

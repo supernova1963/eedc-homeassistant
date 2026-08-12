@@ -155,11 +155,20 @@ async def test_ohne_ziel_verschluckt_der_monats_skip_die_zweite_quelle(db):
 # ─── Die Hauszähler-Größen ───────────────────────────────────────────────────
 
 
-async def test_hauszaehler_werte_bleiben_unberuehrt(db):
-    """Netzbezug, Einspeisung, Eigenverbrauch und das PV-Aggregat gehören dem
-    Haus, nicht dem Wechselrichter. Eine gerätegebundene Einfuhr fasst die
-    `Monatsdaten`-Zeile deshalb gar nicht an — sonst wäre der Wert eine
-    Teilsumme aus EINER von zwei Stationen (ADR-002/P7)."""
+async def test_hauszaehler_werte_kommen_in_die_monatszeile(db):
+    """Einspeisung und Netzbezug gehören dem Haus — und werden übernommen.
+
+    ⚠ **Dieser Test stand bis 2026-08-12 auf dem Kopf** (`..._bleiben_unberuehrt`,
+    Zusicherung `md is None`). Er zementierte die Annahme, ein Wert aus EINER von
+    zwei Stationen sei eine P7-Teilsumme. Das gilt für die **Erzeugung** — die
+    misst der Wechselrichter selbst — und für den **Speicherumsatz**, nicht aber
+    für Einspeisung und Netzbezug: die misst kein Wechselrichter, er bekommt sie
+    vom Smartmeter am Hausanschluss. Zwei Geräte an einem Anschluss melden
+    **denselben** Wert, nicht zwei Teile davon (Gernot, 12.08.).
+
+    Die Folge der falschen Annahme war ein Anwender ohne Monatsabschluss: Import
+    lief durch, Modulwerte kamen an, die Zählerzeile entstand nie (#349).
+    """
     ids = await _zwei_wechselrichter(db)
 
     antwort = await apply_import(
@@ -182,11 +191,19 @@ async def test_hauszaehler_werte_bleiben_unberuehrt(db):
             Monatsdaten.jahr == 2025, Monatsdaten.monat == 6,
         )
     )).scalar_one_or_none()
-    assert md is None, "Die gerätegebundene Einfuhr hat eine Anlagen-Zeile angelegt."
+    assert md is not None, "Der Stationsimport hat keine Monatszeile angelegt."
+    assert md.einspeisung_kwh == 700.0
+    assert md.netzbezug_kwh == 400.0
 
-    # Und sie sagt es, statt es still zu verschlucken.
+    # Das PV-Aggregat bleibt dagegen leer: DAS wäre die Teilsumme, die P7
+    # verbietet — die Erzeugung steht gemessen an den Modulen.
+    assert not md.pv_erzeugung_kwh, (
+        "Die Stations-Erzeugung wurde als Anlagen-Aggregat geschrieben (P7)."
+    )
+
+    # Und der Import sagt, was mit den Größen des Hauses geschehen ist.
     assert any(
-        "Netzbezug" in w and "NICHT" in w for w in antwort.warnungen
+        "Hausanschluss" in w and "nicht" in w.lower() for w in antwort.warnungen
     ), antwort.warnungen
 
 

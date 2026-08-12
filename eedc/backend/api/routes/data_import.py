@@ -31,6 +31,7 @@ from backend.api.routes.import_export.helpers import (
 from backend.services.activity_service import log_activity
 from backend.services.erzeuger_ziel import ZielFehler, loese_ziel
 from backend.services.provenance import write_with_provenance
+from backend.services.import_hauszaehler import entscheide_hauszaehler
 from backend.services.pv_orientation import get_pv_kwp
 from backend.utils.investition_value import get_inv_value
 
@@ -347,6 +348,10 @@ async def apply_import(
     # Werte, die der Provenance-Helper gegen Portal-/Cloud-Apply abweist).
     geschuetzt_count = 0
     geschuetzte_felder: list[str] = []
+    # N-229/12.08.: ob der gerätegebundene Weg Hauszähler-Größen in die
+    # Monatszeile übernommen hat. Steuert den Abschlusshinweis — ohne das Flag
+    # behauptete er etwas, das im Konfliktfall nicht stattgefunden hat.
+    hauszaehler_uebernommen = False
 
     # Etappe 3d Päckchen 2: Source-/Writer-Konstanten für Provenance-Wrapper.
     # Aktuell werden alle Datenquellen unter external:portal_import geführt
@@ -384,13 +389,25 @@ async def apply_import(
                 fehler.append(f"{jahr}/{monat:02d}: Ungültiger Monat")
                 continue
 
-            # ── Gerätegebundener Weg (F-22) ──────────────────────────────────
-            # Weder Monatsdaten-Zeile noch Monats-Skip: die Geräte-Zeile eines
-            # zweiten Erzeugers darf nicht daran scheitern, dass der erste den
-            # Monat bereits angelegt hat (#349 — genau das machte die zweite
-            # Solarman-Station unimportierbar). Über Ergänzen vs. Ersetzen
-            # entscheidet weiterhin `ueberschreiben`, aber je Sub-Key im
-            # Import-Writer statt für die ganze Monatszeile.
+            # ── Gerätegebundener Weg (N-229) ─────────────────────────────────
+            # **Kein Monats-Skip**: die Geräte-Zeile eines zweiten Erzeugers darf
+            # nicht daran scheitern, dass der erste den Monat bereits angelegt
+            # hat (#349 — genau das machte die zweite Solarman-Station
+            # unimportierbar). Über Ergänzen vs. Ersetzen entscheidet weiterhin
+            # `ueberschreiben`, aber je Sub-Key im Import-Writer statt für die
+            # ganze Monatszeile.
+            #
+            # ⚠ **Die Monatsdaten-Zeile wird hier sehr wohl geschrieben — aber
+            # nur ihre Hauszähler-Größen.** Bis 2026-08-12 blieb sie ganz
+            # unberührt, begründet mit P7 („eine von zwei Stationen ist eine
+            # Teilsumme"). Das gilt für Erzeugung und Speicherumsatz, **nicht**
+            # für Einspeisung und Netzbezug: die misst kein Wechselrichter, die
+            # kommen vom Smartmeter am Hausanschluss. Zwei Stationen an einem
+            # Anschluss melden denselben Wert — redundant, nicht partiell.
+            # Verboten ist das Summieren, nicht das Übernehmen. Ohne diesen
+            # Zweig entstand nie eine Zählerzeile und der Anwender hatte keinen
+            # Monatsabschluss mehr. Entscheidungsregeln:
+            # `services/import_hauszaehler.py`.
             if ziel is not None:
                 etwas_geschrieben = False
 
@@ -426,6 +443,60 @@ async def apply_import(
                             f"'{ziel.bezeichnung or ziel.typ}' hängt kein Speicher — "
                             f"sie wurden nicht übernommen."
                         )
+
+                # ── Hauszähler-Größen (anlagenweit, nicht stationsbezogen) ───
+                md_ziel = (
+                    await db.execute(
+                        select(Monatsdaten).where(
+                            Monatsdaten.anlage_id == anlage_id,
+                            Monatsdaten.jahr == jahr,
+                            Monatsdaten.monat == monat,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                entscheid = entscheide_hauszaehler(
+                    neu_einspeisung_kwh=monat_input.einspeisung_kwh,
+                    neu_netzbezug_kwh=monat_input.netzbezug_kwh,
+                    bestand_einspeisung_kwh=(
+                        md_ziel.einspeisung_kwh if md_ziel else None
+                    ),
+                    bestand_netzbezug_kwh=md_ziel.netzbezug_kwh if md_ziel else None,
+                    hat_bestandszeile=md_ziel is not None,
+                    ueberschreiben=ueberschreiben,
+                    quelle_bezeichnung=f"'{ziel.bezeichnung or ziel.typ}'",
+                )
+                # Warnungen nur einmal je Lauf, nicht je Monat — sonst steht
+                # derselbe Satz zwölfmal im Ergebnis.
+                if entscheid.warnung and entscheid.warnung not in warnungen:
+                    warnungen.append(entscheid.warnung)
+
+                if entscheid.schreiben:
+                    if md_ziel is None:
+                        md_ziel = Monatsdaten(
+                            anlage_id=anlage_id, jahr=jahr, monat=monat
+                        )
+                        db.add(md_ziel)
+                        # flush, damit md_ziel.id für den Provenance-Audit-Log
+                        # existiert — dieselbe Reihenfolge wie im Weg ohne Ziel.
+                        await db.flush()
+                    for feld, wert in (
+                        ("einspeisung_kwh", entscheid.einspeisung_kwh),
+                        ("netzbezug_kwh", entscheid.netzbezug_kwh),
+                    ):
+                        if wert is None:
+                            continue
+                        res = await write_with_provenance(
+                            db, md_ziel, feld, wert,
+                            source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
+                        )
+                        if res.decision == "rejected_lower_priority":
+                            geschuetzt_count += 1
+                            if len(geschuetzte_felder) < 15 and feld not in geschuetzte_felder:
+                                geschuetzte_felder.append(feld)
+                    md_ziel.datenquelle = datenquelle
+                    etwas_geschrieben = True
+                    hauszaehler_uebernommen = True
 
                 if etwas_geschrieben:
                     importiert += 1
@@ -611,21 +682,16 @@ async def apply_import(
 
     await db.flush()
 
-    # F-22: Sagen, was bewusst NICHT übernommen wurde. Eine Station liefert auch
-    # Netzbezug/Einspeisung/Eigenverbrauch, aber das sind Größen des Hauses —
-    # bei zwei Erzeugern am selben Netzanschluss wären sie doppelt gezählt oder
-    # nur ein Teilwert. Schweigen wäre hier die stille Variante des Fehlers.
-    if ziel is not None and any(
-        (m.einspeisung_kwh is not None
-         or m.netzbezug_kwh is not None
-         or m.eigenverbrauch_kwh is not None)
-        for m in data.monate
-    ):
+    # N-229: Sagen, was mit den Größen des Hauses geschehen ist. Sie gelten nur
+    # einmal je Netzanschluss — deshalb werden sie übernommen, aber nie
+    # summiert. (Bis 12.08. sagte dieser Hinweis, sie würden NICHT übernommen;
+    # das war die Folge der falschen P7-Begründung, s. o.)
+    if ziel is not None and hauszaehler_uebernommen:
         warnungen.insert(0, (
-            f"Die Werte wurden '{ziel.bezeichnung or ziel.typ}' zugeordnet. "
-            "Netzbezug, Einspeisung und Eigenverbrauch der Quelle wurden NICHT "
-            "übernommen — das sind Größen des ganzen Hauses, die nur einmal je "
-            "Netzanschluss gelten."
+            f"Erzeugung und Speicherwerte wurden '{ziel.bezeichnung or ziel.typ}' "
+            "zugeordnet. Einspeisung und Netzbezug gelten für den ganzen "
+            "Hausanschluss und wurden einmal in den Monat übernommen — eine "
+            "zweite Quelle am selben Anschluss addiert sie nicht dazu."
         ))
 
     # Etappe 3d Päckchen 2: Wizard-Hinweis bei aktivierter Quellen-Hierarchie.

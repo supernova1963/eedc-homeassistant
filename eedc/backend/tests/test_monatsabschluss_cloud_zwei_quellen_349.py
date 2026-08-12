@@ -154,9 +154,22 @@ async def test_beide_stationen_werden_abgerufen_und_getrennt_zugeordnet(db, monk
             assert feld["abgeleitet"] is None, feld
 
 
-async def test_ohne_hausanschluss_quelle_bleibt_basis_leer_und_sagt_es(db, monkeypatch):
-    """Beide Stationen liefern auch Netzbezug — aber keine misst das HAUS.
-    Der Wert dürfte nicht als Hauszähler-Wert vorgeschlagen werden."""
+async def test_stationen_liefern_die_hauszaehler_werte_und_melden_abweichung(
+    db, monkeypatch
+):
+    """Auch ohne eigene „Haus"-Quelle bekommt der Monatsabschluss Vorschläge.
+
+    ⚠ **Dieser Test stand bis 2026-08-12 auf dem Kopf** (`..._bleibt_basis_leer`,
+    Zusicherung `antwort.basis == []`) — begründet mit „ein Stations-Netzbezug
+    ist kein Hauszähler-Wert". Ein Wechselrichter *misst* Netzbezug und
+    Einspeisung aber gar nicht: er liest den Zähler am Hausanschluss. Der Wert
+    einer Station IST der Hauszähler-Wert (Gernot, 12.08.). Wer wie der Melder
+    ausschließlich zugeordnete Stationen führt, bekam sonst nie einen Vorschlag
+    und stand ohne Monatsabschluss da (#349).
+
+    Die beiden Quellen hier melden **verschiedene** Einspeisungen (700 gegen
+    300) — das darf nicht still entschieden werden.
+    """
     ids = await _anlage(db)
     await _quellen_speichern(db, ids, eintraege=[
         ("111", ids["Sofar 2200"]["wr"]),
@@ -175,8 +188,13 @@ async def test_ohne_hausanschluss_quelle_bleibt_basis_leer_und_sagt_es(db, monke
         anlage_id=ids["anlage"], jahr=2025, monat=6, db=db,
     )
 
-    assert antwort.basis == [], "Ein Stations-Netzbezug ist kein Hauszähler-Wert."
-    assert any("Hausanschluss" in h for h in antwort.hinweise), antwort.hinweise
+    werte = {f.feld: f.wert for f in antwort.basis}
+    assert werte == {"einspeisung_kwh": 700.0, "netzbezug_kwh": 400.0}, (
+        "Die Stationswerte erreichen den Monatsabschluss nicht — Ollis Symptom."
+    )
+    # 700 + 300 wären 1000: der Hausanschluss hat aber nur einmal eingespeist.
+    assert werte["einspeisung_kwh"] != 1000.0, "Die Quellen wurden summiert."
+    assert any("Zähler" in h for h in antwort.hinweise), antwort.hinweise
 
 
 async def test_quelle_ohne_ziel_liefert_die_hauszaehler_werte(db, monkeypatch):

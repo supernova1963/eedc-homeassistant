@@ -557,10 +557,11 @@ export default function CloudImportWizard() {
               </div>
               {zielInvestitionId != null && (
                 <Alert type="info" className="mt-4">
-                  Die Werte gehen an die PV-Module (und den Speicher) dieses Geräts.
-                  Netzbezug, Einspeisung und Eigenverbrauch bleiben unberührt — die
-                  gelten für das ganze Haus. So kann eine zweite Quelle dieselben
-                  Monate liefern, ohne diese hier zu verdrängen.
+                  Erzeugung und Speicherwerte gehen an die PV-Module und den Speicher
+                  dieses Geräts. Einspeisung und Netzbezug misst kein Wechselrichter
+                  selbst — sie kommen vom Zähler am Hausanschluss und gelten deshalb
+                  für die ganze Anlage: sie werden einmal in den Monat übernommen,
+                  eine zweite Quelle addiert sie nicht dazu.
                 </Alert>
               )}
             </div>
