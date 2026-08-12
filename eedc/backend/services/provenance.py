@@ -97,6 +97,7 @@ def _decide(
     input_hash: Optional[str],
     force_override: bool,
     writer: str,
+    benutzer_override: bool = False,
 ) -> tuple[Decision, str, Optional[str]]:
     """Hierarchie-Entscheidung. Reine Funktion ohne Seiteneffekte.
 
@@ -104,6 +105,19 @@ def _decide(
     """
     if force_override:
         return ("applied", f"force_override (writer={writer})", None)
+
+    # Vom Anwender angeordneter Durchbruch (Import-Haken „Bestehende Monate
+    # überschreiben", 2026-08-12). Anders als `force_override` **behält der
+    # Aufrufer seine echte Quelle** — der Wert kommt aus dem Import, nicht aus
+    # einer Reparatur. Das ist keine Feinheit: stünde danach `repair` in der
+    # Provenance, prallte der NÄCHSTE reguläre Import an Stufe 0 ab und wir
+    # hätten die Falle nur verschoben.
+    if benutzer_override:
+        return (
+            "applied",
+            f"benutzer_override — vom Anwender angeordnet (writer={writer})",
+            (existing or {}).get("source") or None,
+        )
 
     if existing is None:
         return ("applied", "initial_write", None)
@@ -297,6 +311,7 @@ async def write_with_provenance(
     input_hash: Optional[str] = None,
     *,
     force_override: bool = False,
+    benutzer_override: bool = False,
 ) -> WriteResult:
     """Atomarer Top-Level-Write mit Hierarchie-Check, No-Op-Detection,
     JSON-Provenance-Update und Append-Only Audit-Log.
@@ -313,6 +328,12 @@ async def write_with_provenance(
         input_hash: Optional, für No-Op-Detection bei idempotenten Re-Imports.
         force_override: NUR Repair-Orchestrator. Durchbricht Hierarchie,
             schreibt Source als "repair".
+        benutzer_override: Vom Anwender ANGEORDNETER Durchbruch (Import-Haken
+            „Bestehende Monate überschreiben"). Durchbricht die Hierarchie wie
+            `force_override`, **behält aber die echte Quelle** — der Wert kommt
+            aus dem Import, nicht aus einer Reparatur. Stünde danach `repair` in
+            der Provenance, prallte der nächste reguläre Import an Stufe 0 ab.
+            Der Aufrufer muss dem Anwender VORHER sagen, was ersetzt wird.
 
     Für Schreiber auf JSON-Sub-Keys (wie InvestitionMonatsdaten.verbrauch_daten)
     siehe `write_json_subkey_with_provenance()`.
@@ -333,6 +354,7 @@ async def write_with_provenance(
         input_hash=input_hash,
         force_override=force_override,
         writer=writer,
+        benutzer_override=benutzer_override,
     )
 
     if decision == "applied":
@@ -495,6 +517,7 @@ async def write_json_subkey_with_provenance(
     input_hash: Optional[str] = None,
     *,
     force_override: bool = False,
+    benutzer_override: bool = False,
     abgeleitet: Optional[str] = None,
 ) -> WriteResult:
     """Per-JSON-Sub-Key-Variante von write_with_provenance.
@@ -535,6 +558,7 @@ async def write_json_subkey_with_provenance(
         input_hash=input_hash,
         force_override=force_override,
         writer=writer,
+        benutzer_override=benutzer_override,
     )
 
     if decision == "applied":

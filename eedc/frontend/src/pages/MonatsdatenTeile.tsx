@@ -123,7 +123,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const [geraetewerte, setGeraetewerte] = useState<
     Awaited<ReturnType<typeof monatsdatenApi.getGeraetewerte>> | null
   >(null)
-  const [geraeteMitloeschen, setGeraeteMitloeschen] = useState(false)
   const [showColumnSelector, setShowColumnSelector] = useState(false)
 
   // HA-Statistik Laden
@@ -406,7 +405,7 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
 
   const handleDelete = async () => {
     if (deleteConfirm) {
-      await deleteMonatsdaten(deleteConfirm.id, geraeteMitloeschen)
+      await deleteMonatsdaten(deleteConfirm.id)
       setDeleteConfirm(null)
     }
   }
@@ -418,7 +417,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   useEffect(() => {
     if (!deleteConfirm) {
       setGeraetewerte(null)
-      setGeraeteMitloeschen(false)
       return
     }
     let abgebrochen = false
@@ -1030,32 +1028,35 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
             Möchtest du die Daten für <strong>{MONAT_KURZ[deleteConfirm?.monat || 0]} {deleteConfirm?.jahr}</strong> wirklich löschen?
           </p>
 
-          {/* #349: Der Monat besteht aus zwei Teilen — der Zählerzeile und den
-              Messwerten je Komponente. Blieben Letztere unerwähnt stehen, war der
-              Monat scheinbar weg, wies aber jeden erneuten Import ab. */}
+          {/* #349: Ein Monat besteht aus zwei Teilen — der Zählerzeile und den
+              Messwerten je Komponente. Beide gehen zusammen (12.08.): Einspeisung
+              und Netzbezug sind Pflichtfelder, eine Hälfte allein zu löschen
+              ergibt keinen darstellbaren Zustand. Bis dahin blieben die
+              Gerätewerte per Vorgabe stehen — der Monat war scheinbar weg und
+              wies trotzdem jeden erneuten Import ab. */}
           {geraetewerte && geraetewerte.anzahl > 0 && (
-            <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Zu diesem Monat gibt es außerdem Messwerte von{' '}
-                <strong>{geraetewerte.anzahl} Komponente{geraetewerte.anzahl > 1 ? 'n' : ''}</strong>:{' '}
-                {geraetewerte.komponenten.map(k => k.bezeichnung).join(', ')}.
-              </p>
-              <Checkbox
-                id="geraetewerte-mitloeschen"
-                checked={geraeteMitloeschen}
-                onChange={e => setGeraeteMitloeschen(e.target.checked)}
-                label="Diese Messwerte mitlöschen"
-                hint={
-                  'Ohne Haken bleiben sie erhalten — sie sind dann in keiner Liste mehr '
-                  + 'zu sehen und verhindern, dass dieser Monat neu importiert werden kann.'
-                }
-              />
-            </div>
+            <Alert type="warning">
+              <div>
+                Dazu gehören Messwerte von{' '}
+                <strong>{geraetewerte.anzahl} Komponente{geraetewerte.anzahl > 1 ? 'n' : ''}</strong>{' '}
+                ({geraetewerte.komponenten.map(k => k.bezeichnung).join(', ')}).
+                Sie werden <strong>mitgelöscht</strong>.
+              </div>
+              <div className="mt-1 text-sm">
+                Nur die Zählerwerte zu löschen ist nicht möglich — der Monat wäre
+                danach in keiner Liste zu sehen und würde trotzdem jeden erneuten
+                Import abweisen.
+              </div>
+            </Alert>
           )}
 
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Abbrechen</Button>
-            <Button variant="danger" onClick={handleDelete}>Löschen</Button>
+            <Button variant="danger" onClick={handleDelete}>
+              {geraetewerte && geraetewerte.anzahl > 0
+                ? 'Monat vollständig löschen'
+                : 'Löschen'}
+            </Button>
           </div>
         </div>
       </Modal>

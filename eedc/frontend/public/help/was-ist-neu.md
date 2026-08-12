@@ -11,6 +11,24 @@
 
 ## Noch nicht veröffentlicht
 
+### „Überschreiben" heißt jetzt überschreiben
+
+**Betrifft dich das?** Wenn du Werte schon einmal von Hand korrigiert und denselben Monat später neu importiert hast.
+
+Bisher hat eedc in dieser Lage etwas anderes getan, als du angekreuzt hattest. Der Haken **Bestehende Monate überschreiben** ließ deine Handarbeit stehen und meldete nach dem Import „6 Felder durch manuell gepflegte Werte geschützt". Gemeint war es gut — praktisch hieß es: Ein Monat, den du einmal korrigiert hast, ließ sich nie wieder importieren.
+
+Der Haken wirkt jetzt. **Und er sagt dir vorher, was er kostet:** Sobald du ihn setzt, zeigt der Assistent, wie viele von Hand gepflegte Werte in welchen Monaten ersetzt würden — mit Beispielen. Nimmst du ihn wieder heraus, bleibt alles stehen und der Import ergänzt nur, was fehlt.
+
+> **Was sich nicht ändert:** Was im Hintergrund schreibt — Sensor-Abrufe, die nächtliche Aggregation —, überschreibt deine Eingaben weiterhin nicht. Diese Regel war von Anfang an dafür da, dass deine Korrekturen ankommen, und daran ändert sich nichts. Es zählt nur dein eigener, ausdrücklicher Klick jetzt als das, was er ist.
+
+### Einen Monat löschen heißt: den ganzen Monat
+
+**Betrifft dich das?** Wenn du einen Monat löschst, um ihn neu zu erfassen oder zu importieren.
+
+Bisher entfernte „Monat löschen" nur die Zählerwerte; die Messwerte der einzelnen Komponenten blieben stehen. Das war als Vorsicht gedacht — gemessene Gerätewerte sind meist mühsamer zu beschaffen. Das Ergebnis war aber ein Monat, der in keiner Liste mehr auftauchte und trotzdem jeden neuen Import abwies: unsichtbar und wirksam zugleich.
+
+Gelöscht wird jetzt immer der ganze Monat. Der Dialog nennt vorher, welche Komponenten betroffen sind, damit du weißt, was verschwindet.
+
 ### Zwei Wechselrichter, ein Zähler: der Monatsabschluss entsteht wieder
 
 **Betrifft dich das?** Wenn du mehr als einen Wechselrichter hast und ihre Daten aus der Hersteller-Cloud holst — bei Solarman ist jeder Wechselrichter eine eigene „Station".

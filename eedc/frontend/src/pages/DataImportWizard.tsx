@@ -45,6 +45,7 @@ import type {
 } from '../api/portalImport'
 import type { Anlage } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
+import { ManuelleWerteHinweis } from '../components/import/ManuelleWerteHinweis'
 
 // ── Vorschau-Tabellen-Spalten ───────────────────────────────────────────────
 // Adaptive Liste: nur Spalten, für die der gewählte Parser tatsächlich Werte liefert,
@@ -516,6 +517,14 @@ export default function DataImportWizard() {
                     label="Bestehende Monate überschreiben"
                     checked={ueberschreiben}
                     onChange={(e) => setUeberschreiben(e.target.checked)}
+                  />
+                  <ManuelleWerteHinweis
+                    anlageId={selectedAnlageId}
+                    perioden={[...selectedMonths].map((k) => {
+                      const [j, m] = k.split('-')
+                      return `${j}-${String(Number(m)).padStart(2, '0')}`
+                    })}
+                    aktiv={ueberschreiben}
                   />
                 </div>
               </div>

@@ -182,15 +182,17 @@ export const monatsdatenApi = {
   },
 
   /**
-   * Monatsdaten löschen
+   * Monatsdaten löschen — **immer vollständig**, inklusive der Messwerte je
+   * Komponente desselben Monats.
    *
-   * `mitGeraetewerten` nimmt die Messwerte einzelner Komponenten desselben
-   * Monats mit (#349). **Vorgabe ist `false`**: gemessene Gerätewerte sind
-   * oft die teureren Daten — sie gehen nur auf ausdrückliche Zusage mit.
+   * ⚠ Bis zum 2026-08-12 war das teilbar (`mitGeraetewerten`, Vorgabe `false`).
+   * Das war als Schonung gemeint und hat den Zustand aus #349 erzeugt: einen
+   * Monat, der in keiner Liste steht und trotzdem jeden Import abweist.
+   * Einspeisung und Netzbezug sind Pflichtfelder — eine Hälfte zu löschen
+   * ergibt keinen darstellbaren Zustand.
    */
-  async delete(id: number, mitGeraetewerten = false): Promise<void> {
-    const query = mitGeraetewerten ? '?mit_geraetewerten=true' : ''
-    return api.delete(`/monatsdaten/${id}${query}`)
+  async delete(id: number): Promise<void> {
+    return api.delete(`/monatsdaten/${id}`)
   },
 
   /**

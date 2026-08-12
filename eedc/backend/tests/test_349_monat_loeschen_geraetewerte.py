@@ -82,6 +82,21 @@ async def _anlage_wie_der_checker(db, anlage_id: int) -> Anlage:
     return res.scalar_one()
 
 
+async def _verwaister_zustand(db, md: Monatsdaten) -> None:
+    """Stellt „Gerätewerte ohne Zählerzeile" her — OHNE den Lösch-Weg.
+
+    ⚠ Seit dem 12.08. löscht ``delete_monatsdaten`` den Monat **ganz**, taugt
+    als Setup für diesen Zustand also nicht mehr. Er entsteht in der Praxis
+    weiterhin: der **HA-Statistik-Import** legt die ``Monatsdaten``-Zeile nur
+    an, wenn Einspeisung oder Netzbezug mitimportiert werden
+    (``ha_statistics.py``) — wer nur Erzeuger-Sensoren zugeordnet hat, bekommt
+    genau das hier. Deshalb wird die Zeile direkt entfernt statt über eine
+    Route, die diesen Zustand nicht mehr erzeugt.
+    """
+    await db.delete(md)
+    await db.flush()
+
+
 async def _geraetezeilen(db, inv_id: int) -> list[InvestitionMonatsdaten]:
     res = await db.execute(
         select(InvestitionMonatsdaten).where(
@@ -91,29 +106,33 @@ async def _geraetezeilen(db, inv_id: int) -> list[InvestitionMonatsdaten]:
     return list(res.scalars().all())
 
 
-# ─── 1. Löschen: Vorgabe schont, Zusage nimmt mit ────────────────────────────
+# ─── 1. Löschen nimmt den ganzen Monat ───────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_loeschen_laesst_die_geraetewerte_stehen(db):
-    """Die Vorgabe bleibt vorsichtig — gemessene Werte gehen nicht nebenbei weg."""
+async def test_loeschen_nimmt_den_ganzen_monat(db):
+    """Ein Monat wird ganz gelöscht — Zählerzeile UND Werte je Gerät.
+
+    ⚠ **Bis zum 2026-08-12 war das teilbar** (`mit_geraetewerten`, Vorgabe
+    `False`), und zwei Tests hielten das fest: `..._laesst_die_geraetewerte_stehen`
+    („die Vorgabe bleibt vorsichtig") und `..._mit_zusage_nimmt_die_geraetewerte_mit`.
+    Die Schonung war gut gemeint — gemessene Gerätewerte sind oft die teureren
+    Daten —, hat aber genau den Zustand erzeugt, den #349 zutage förderte: einen
+    Monat, der in keiner Liste steht und trotzdem jeden Import abweist.
+
+    **Warum die Teilung fachlich nicht trägt** (Gernot, 12.08.): Einspeisung und
+    Netzbezug sind Pflichtfelder des Monatsabschlusses. Eine Hälfte zu löschen
+    und die andere stehen zu lassen ergibt keinen Zustand, den eine Sicht
+    darstellen könnte — der Monat ist danach weder da noch weg.
+    """
     from backend.api.routes.monatsdaten import delete_monatsdaten
 
     anlage, inv, md = await _seed(db)
     await delete_monatsdaten(md.id, db=db)
 
-    assert len(await _geraetezeilen(db, inv.id)) == 1
-
-
-@pytest.mark.asyncio
-async def test_loeschen_mit_zusage_nimmt_die_geraetewerte_mit(db):
-    """Der eigentliche Fix: auf ausdrückliche Zusage ist der Monat wirklich weg."""
-    from backend.api.routes.monatsdaten import delete_monatsdaten
-
-    anlage, inv, md = await _seed(db)
-    await delete_monatsdaten(md.id, mit_geraetewerten=True, db=db)
-
-    assert await _geraetezeilen(db, inv.id) == []
+    assert await _geraetezeilen(db, inv.id) == [], (
+        "Gerätewerte blieben stehen — genau der Zustand aus #349."
+    )
     rest_md = (await db.execute(
         select(Monatsdaten).where(Monatsdaten.anlage_id == anlage.id)
     )).scalars().all()
@@ -132,7 +151,7 @@ async def test_loeschen_greift_nicht_auf_fremde_anlagen_ueber(db):
     anlage_a, inv_a, md_a = await _seed(db)
     anlage_b, inv_b, md_b = await _seed(db, wert=555.0)
 
-    await delete_monatsdaten(md_a.id, mit_geraetewerten=True, db=db)
+    await delete_monatsdaten(md_a.id, db=db)
 
     assert await _geraetezeilen(db, inv_a.id) == []
     assert len(await _geraetezeilen(db, inv_b.id)) == 1, (
@@ -159,13 +178,10 @@ async def test_dialog_erfaehrt_was_dranhaengt(db):
 @pytest.mark.asyncio
 async def test_verwaiste_geraetewerte_lassen_sich_entfernen(db):
     """Ollis Zustand: Zeile weg, Messwerte da — und bis jetzt kein Weg dahin."""
-    from backend.api.routes.monatsdaten import (
-        delete_monatsdaten,
-        delete_verwaiste_geraetewerte,
-    )
+    from backend.api.routes.monatsdaten import delete_verwaiste_geraetewerte
 
     anlage, inv, md = await _seed(db)
-    await delete_monatsdaten(md.id, db=db)          # der Zustand des Melders
+    await _verwaister_zustand(db, md)               # der Zustand des Melders
     assert len(await _geraetezeilen(db, inv.id)) == 1
 
     antwort = await delete_verwaiste_geraetewerte(anlage.id, 2024, 6, db=db)
@@ -202,7 +218,7 @@ async def test_daten_checker_meldet_den_verwaisten_rest(db):
     from backend.services.daten_checker.kategorien import CheckKategorie
 
     anlage, inv, md = await _seed(db)
-    await delete_monatsdaten(md.id, db=db)
+    await _verwaister_zustand(db, md)
 
     geladen = await _anlage_wie_der_checker(db, anlage.id)
     ergebnisse = DatenChecker(db)._check_geraetewerte_ohne_monatszeile(geladen, [])

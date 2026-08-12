@@ -317,6 +317,7 @@ Diese Kachel enthält **nur die Pflege-Funktionen** des Energieprofils; die **An
 - **„Lücken aus HA-LTS nachfüllen" (Vollbackfill):** liest historische Snapshots aus HA und ergänzt **nur fehlende** Tage. **Bestehende Tage bleiben unverändert** — es gibt bewusst keinen Overwrite-Modus. Sinnvoll nach Erstinstallation, längerem Stillstand oder einer Datenquellen-Änderung.
 - **„Kraftstoffpreise nachpflegen":** trägt fehlende Benzin-/Dieselpreise (EU Weekly Oil Bulletin) für die E-Auto-Ersparnis nach; strikt additiv, mehrfach gefahrlos.
 - **Energieprofil-Daten löschen:** anlage-spezifisch (Monatsdaten bleiben erhalten; der Scheduler baut die Tage danach neu auf).
+- **Einen Monat löschen:** nimmt den Monat **ganz** — die Zählerwerte und die Messwerte aller Komponenten desselben Monats. Der Dialog nennt vorher, welche Komponenten betroffen sind. ⚠ **Bis v4.0.13 war das teilbar** und die Voreinstellung schonte die Gerätewerte; gemeint war eine Vorsicht, herausgekommen ist ein Monat, der in keiner Liste mehr auftauchte und trotzdem jeden erneuten Import abwies. Einspeisung und Netzbezug sind Pflichtfelder eines Monats — eine Hälfte allein zu löschen ergibt keinen Zustand, den eine Auswertung darstellen könnte.
 - **Reparatur-Werkbank:** die gezielten Neuberechnungs-Operationen — **„Tag neu aggregieren"** (mit Alt/Neu-Vorschau), **„Mehrere Tage neu aggregieren"** (Datumsbereich, max. 31 Tage, Tag für Tag festgeschrieben) — der punktuelle Reparatur-Pfad, der fehlende Snapshots nachholt. Bewusst **kein** globaler „Heiler-Knopf".
 
 > **Tipp:** Steht im CHANGELOG eines Updates „Empfohlene Aktion: betroffene Tage neu aggregieren", nutze dafür **„Mehrere Tage neu aggregieren"** über den betroffenen Zeitraum (in Schüben zu je max. 31 Tagen). Das Nachfüllen aus HA-LTS überschreibt bestehende Tage nicht — es füllt nur echte Lücken.
@@ -386,6 +387,14 @@ Jeder Monat ist einzeln per Checkbox wählbar — so bleiben manuell erfasste Da
 > **Voraussetzungen:** zugeordnete HA-Sensoren (siehe [Datenquellen](#7-datenquellen--feld-zentrische-zuordnung)) und Sensoren, die in der HA-Langzeitstatistik geführt werden. Den **Zugang zur Statistik** hat eedc auf drei Wegen, und einer genügt: über die verbundene Home-Assistant-Instanz (Add-on oder Long-Lived-Token — **ohne** jede weitere Einrichtung), über das Volume-Mapping `config:ro` auf die Recorder-Datei, oder über `HA_RECORDER_DB_URL` bei MariaDB/MySQL. Wo eine Datenbank erreichbar ist, wird sie bevorzugt; sonst holt eedc dieselben Werte über die HA-API. Bei Tagesreset-Zählern nutzt eedc `MAX(sum) − MIN(sum)` aus HA-Statistics (reset-bereinigt).
 >
 > **Wie weit zurück?** So weit, wie Home Assistant den Sensor selbst führt — die Langzeitstatistik beginnt mit seiner Einrichtung. Für die Zeit davor gibt es den Datei-Import (CSV/Excel); daran ändert auch der API-Weg nichts.
+
+> #### „Bestehende Monate überschreiben" — was der Haken tut
+>
+> **Ohne Haken** ergänzt ein Import nur, was fehlt. Werte, die schon da sind, bleiben unangetastet — egal woher sie kommen.
+>
+> **Mit Haken** ersetzt der Import auch Werte, die du **von Hand** eingetragen oder korrigiert hast. Bevor er das tut, sagt der Assistent, wie viele es sind und in welchen Monaten, mit Beispielen. Nimmst du den Haken wieder heraus, bleiben sie erhalten.
+>
+> ⚠ **Bis v4.0.13 war das anders**, und es war ein Fehler: Der Haken ließ manuell gepflegte Werte stehen und meldete das hinterher als „durch manuell gepflegte Werte geschützt". eedc tat damit etwas anderes, als du angekreuzt hattest — und wer einen einmal korrigierten Monat neu importieren wollte, kam nicht mehr durch. Die Schutzregel selbst bleibt richtig und gilt weiter für alles, was **im Hintergrund** schreibt (Sensor-Abrufe, automatische Aggregation): Handarbeit wird von der Maschine nicht überschrieben. Nur dein eigener, ausdrücklicher Klick zählt jetzt als das, was er ist.
 
 ### 6.5 Import-Assistenten
 

@@ -14,8 +14,8 @@ interface UseMonatsdatenReturn {
   refresh: () => Promise<void>
   createMonatsdaten: (data: MonatsdatenCreate) => Promise<Monatsdaten>
   updateMonatsdaten: (id: number, data: MonatsdatenUpdate) => Promise<Monatsdaten>
-  /** `mitGeraetewerten` nimmt die Messwerte je Komponente mit (#349, Vorgabe: nein). */
-  deleteMonatsdaten: (id: number, mitGeraetewerten?: boolean) => Promise<void>
+  /** Löscht den Monat vollständig — Zählerzeile UND Werte je Gerät (#349). */
+  deleteMonatsdaten: (id: number) => Promise<void>
 }
 
 export function useMonatsdaten(anlageId?: number, jahr?: number): UseMonatsdatenReturn {
@@ -53,8 +53,8 @@ export function useMonatsdaten(anlageId?: number, jahr?: number): UseMonatsdaten
   }, [])
 
   const deleteMonatsdaten = useCallback(
-    async (id: number, mitGeraetewerten = false): Promise<void> => {
-      await monatsdatenApi.delete(id, mitGeraetewerten)
+    async (id: number): Promise<void> => {
+      await monatsdatenApi.delete(id)
       setMonatsdaten(prev => prev.filter(m => m.id !== id))
     }, [])
 

@@ -762,33 +762,28 @@ async def _plan_delete_monatsdaten(
     geraete_zeilen = await zaehle_geraetewerte_des_monats(
         db, md.anlage_id, md.jahr, md.monat
     )
-    mit_geraetewerten = bool(req.params.get("mit_geraetewerten", False))
-
+    # ⚠ Seit 12.08. gibt es die Teilung nicht mehr (Gernot): Einspeisung und
+    # Netzbezug sind Pflichtfelder des Monatsabschlusses — die eine Hälfte zu
+    # löschen und die Gerätewerte stehen zu lassen ergibt keinen Zustand, den
+    # eine Sicht darstellen könnte. Genau diese Teilung war die Ursache von
+    # F-27/#349. `mit_geraetewerten` wird nicht mehr gelesen.
     warnungen = [
         f"Monatsdaten-Row {md.jahr}-{md.monat:02d} wird komplett gelöscht. "
         "Aggregate aus dieser Row gehen verloren — Audit-Log behält Spur."
     ]
-    if geraete_zeilen and mit_geraetewerten:
+    if geraete_zeilen:
         warnungen.append(
             f"Zusätzlich werden {geraete_zeilen} Messwert-Zeilen einzelner "
             "Komponenten dieses Monats gelöscht (PV je Modul, Speicher, "
             "Wallbox …). Auch das ist endgültig."
         )
-    elif geraete_zeilen:
-        warnungen.append(
-            f"{geraete_zeilen} Messwert-Zeilen einzelner Komponenten dieses "
-            "Monats bleiben bestehen. Sie sind danach in den Monatslisten "
-            "nicht mehr zu sehen, weisen aber einen erneuten Import ab — "
-            "mit `mit_geraetewerten: true` gehen sie mit."
-        )
 
     return (
-        {"rows_to_delete": 1 + (geraete_zeilen if mit_geraetewerten else 0)},
+        {"rows_to_delete": 1 + geraete_zeilen},
         warnungen,
         {
             "jahr": md.jahr, "monat": md.monat,
             "geraete_zeilen": geraete_zeilen,
-            "mit_geraetewerten": mit_geraetewerten,
         },
     )
 
@@ -802,24 +797,14 @@ async def _execute_delete_monatsdaten(
     if md is None:
         raise LookupError(f"Monatsdaten {md_id} nicht gefunden (zwischenzeitlich gelöscht?)")
 
-    # #349: dieselbe Wahl wie in der Route — Vorgabe ist „nur die Zählerzeile".
-    geraete_zeilen = 0
-    if req.params.get("mit_geraetewerten", False):
-        from backend.services.monat_loeschen import loesche_monat_vollstaendig
+    # #349: dieselbe Regel wie in der Route — ein Monat wird ganz gelöscht.
+    from backend.services.monat_loeschen import loesche_monat_vollstaendig
 
-        geraete_zeilen = await loesche_monat_vollstaendig(
-            db, md,
-            source="repair",
-            writer="repair_orchestrator:delete_monatsdaten",
-        )
-    else:
-        log_delete(
-            db, md,
-            source="repair",
-            writer="repair_orchestrator:delete_monatsdaten",
-            decision_reason="repair_orchestrator delete_monatsdaten",
-        )
-        await db.delete(md)
+    geraete_zeilen = await loesche_monat_vollstaendig(
+        db, md,
+        source="repair",
+        writer="repair_orchestrator:delete_monatsdaten",
+    )
 
     await db.commit()
     return {

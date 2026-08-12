@@ -40,6 +40,7 @@ import type { CloudProviderInfo, CloudTestResult, CloudPreviewResult } from '../
 import type { ApplyResult } from '../api/portalImport'
 import type { Anlage, Investition } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
+import { ManuelleWerteHinweis } from '../components/import/ManuelleWerteHinweis'
 
 export default function CloudImportWizard() {
   const navigate = useNavigate()
@@ -552,6 +553,14 @@ export default function CloudImportWizard() {
                     label="Bestehende Monate überschreiben"
                     checked={ueberschreiben}
                     onChange={(e) => setUeberschreiben(e.target.checked)}
+                  />
+                  <ManuelleWerteHinweis
+                    anlageId={selectedAnlageId}
+                    perioden={[...selectedMonths].map((k) => {
+                      const [j, m] = k.split('-')
+                      return `${j}-${String(Number(m)).padStart(2, '0')}`
+                    })}
+                    aktiv={ueberschreiben}
                   />
                 </div>
               </div>

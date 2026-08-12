@@ -32,6 +32,7 @@ from backend.services.activity_service import log_activity
 from backend.services.erzeuger_ziel import ZielFehler, loese_ziel
 from backend.services.provenance import write_with_provenance
 from backend.services.import_hauszaehler import entscheide_hauszaehler
+from backend.services.import_writer import zaehle_manuelle_werte
 from backend.services.pv_orientation import get_pv_kwp
 from backend.utils.investition_value import get_inv_value
 
@@ -148,6 +149,19 @@ class ZuordnungInvestition(BaseModel):
     anteil_geschaetzt: bool = False
 
 
+class ManuelleWerteInfo(BaseModel):
+    """Was ein Import mit „Bestehende Monate überschreiben" ersetzen würde.
+
+    Der Haken durchbricht seit 12.08. auch die Hierarchie über manuell
+    gepflegten Werten. Damit das eine Anordnung bleibt und keine Überraschung,
+    fragt der Wizard diese Zahl VOR dem Import ab.
+    """
+    betroffen: bool
+    monate: int
+    felder: int
+    beispiele: list[str] = []
+
+
 class ZuordnungInfo(BaseModel):
     benoetigt_zuordnung: bool
     pv_module: list[ZuordnungInvestition] = []
@@ -163,6 +177,46 @@ class ZuordnungInfo(BaseModel):
 async def get_parsers():
     """Verfügbare Portal-Export-Parser mit Anleitungen."""
     return [p.to_dict() for p in list_parsers()]
+
+
+@router.get("/manuelle-werte/{anlage_id}", response_model=ManuelleWerteInfo)
+async def get_manuelle_werte(
+    anlage_id: int,
+    perioden: str = Query(
+        ...,
+        description="Kommaliste von Monaten im Format YYYY-MM, z. B. '2024-06,2024-07'",
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Wie viele manuell gepflegte Werte würde ein Import mit Haken ersetzen?
+
+    Der Wizard ruft das, bevor er „Bestehende Monate überschreiben" wirken
+    lässt. Ohne diese Zahl wäre der Haken eine Überraschung statt einer
+    Anordnung — genau der Vorwurf, den sich eedc vorher umgekehrt gefallen
+    lassen musste („geschützt", obwohl der Anwender das Gegenteil angekreuzt
+    hatte).
+    """
+    zerlegt: list[tuple[int, int]] = []
+    for roh in perioden.split(","):
+        roh = roh.strip()
+        if not roh:
+            continue
+        try:
+            jahr_s, monat_s = roh.split("-")
+            jahr, monat = int(jahr_s), int(monat_s)
+        except ValueError:
+            raise HTTPException(400, f"Ungültiger Monat: '{roh}' (erwartet YYYY-MM)")
+        if not (1 <= monat <= 12):
+            raise HTTPException(400, f"Ungültiger Monat: '{roh}'")
+        zerlegt.append((jahr, monat))
+
+    bestand = await zaehle_manuelle_werte(db, anlage_id, zerlegt)
+    return ManuelleWerteInfo(
+        betroffen=bestand.betroffen,
+        monate=bestand.monate,
+        felder=bestand.felder,
+        beispiele=bestand.beispiele,
+    )
 
 
 @router.get("/zuordnung-info/{anlage_id}", response_model=ZuordnungInfo)
@@ -489,6 +543,7 @@ async def apply_import(
                         res = await write_with_provenance(
                             db, md_ziel, feld, wert,
                             source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
+                            benutzer_override=ueberschreiben,
                         )
                         if res.decision == "rejected_lower_priority":
                             geschuetzt_count += 1
@@ -611,6 +666,10 @@ async def apply_import(
                     result = await write_with_provenance(
                         db, md, field_name, value,
                         source=_PROVENANCE_SOURCE, writer=_PROVENANCE_WRITER,
+                        # Der Haken IST die Anordnung des Anwenders (12.08.) —
+                        # vorher meldete der Import „geschützt" und tat nicht,
+                        # was angekreuzt war.
+                        benutzer_override=ueberschreiben,
                     )
                     if result.decision == "rejected_lower_priority":
                         geschuetzt_count += 1

@@ -55,6 +55,17 @@ export interface ZuordnungInvestition {
   anteil_geschaetzt?: boolean
 }
 
+/**
+ * Was „Bestehende Monate überschreiben" an Handarbeit ersetzen würde.
+ * Gezählt werden BEIDE Ebenen — Zählerzeile und Werte je Gerät.
+ */
+export interface ManuelleWerteInfo {
+  betroffen: boolean
+  monate: number
+  felder: number
+  beispiele: string[]
+}
+
 export interface ZuordnungInfo {
   benoetigt_zuordnung: boolean
   pv_module: ZuordnungInvestition[]
@@ -96,6 +107,30 @@ export const portalImportApi = {
   async getZuordnungInfo(anlageId: number): Promise<ZuordnungInfo> {
     const response = await fetch(`${API_BASE}/portal-import/zuordnung-info/${anlageId}`)
     if (!response.ok) throw new Error('Fehler beim Laden der Zuordnungs-Info')
+    return response.json()
+  },
+
+  /**
+   * Wie viele manuell gepflegte Werte würde „Bestehende Monate überschreiben"
+   * ersetzen? Seit 2026-08-12 durchbricht der Haken die Provenance-Hierarchie
+   * (vorher meldete der Import hinterher „geschützt" und tat nicht, was
+   * angekreuzt war). Damit das eine Anordnung bleibt und keine Überraschung,
+   * fragt der Wizard die Zahl VOR dem Import ab.
+   *
+   * @param perioden Monate als `YYYY-MM`.
+   */
+  async getManuelleWerte(
+    anlageId: number,
+    perioden: string[],
+  ): Promise<ManuelleWerteInfo> {
+    if (perioden.length === 0) {
+      return { betroffen: false, monate: 0, felder: 0, beispiele: [] }
+    }
+    const query = encodeURIComponent(perioden.join(','))
+    const response = await fetch(
+      `${API_BASE}/portal-import/manuelle-werte/${anlageId}?perioden=${query}`,
+    )
+    if (!response.ok) throw new Error('Fehler beim Prüfen der manuellen Werte')
     return response.json()
   },
 

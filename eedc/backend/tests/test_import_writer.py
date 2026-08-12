@@ -157,10 +157,22 @@ async def test_update_ueberschreiben_false_skips_existing_subkeys(db):
     assert imd.verbrauch_daten == {"km_gefahren": 1200.0, "ladung_kwh": 130.0}
 
 
-async def test_update_ueberschreiben_true_blocks_manual_per_subkey(db):
-    """ueberschreiben=True + manuell gepflegter Sub-Key + Cloud-Import:
-    Hierarchie schützt den manuellen Sub-Key, andere Sub-Keys aus dem
-    Cloud-Payload werden legitim geschrieben. **Der Akzeptanz-Test für P2.**
+async def test_update_ueberschreiben_true_ersetzt_auch_manuelle_subkeys(db):
+    """ueberschreiben=True ersetzt auch manuell gepflegte Sub-Keys (12.08.).
+
+    ⚠ **Dieser Test stand bis zum 12.08. auf dem Kopf**
+    (`..._blocks_manual_per_subkey`, Zusicherung `rejected_count == 1`) und galt
+    als „Akzeptanz-Test für P2". Die Hierarchie schützte die Handarbeit auch
+    dann, wenn der Anwender ausdrücklich „Bestehende Monate überschreiben"
+    angekreuzt hatte — eedc tat also etwas anderes als angeordnet und meldete
+    es hinterher als „geschützt". Dass ein CSV-Import (`manual:csv_import`)
+    beim selben Klick durchkam und ein Cloud-Import nicht, war zusätzlich
+    inkonsistent: derselbe Anwender, dieselbe Absicht, zwei Ergebnisse.
+
+    **Was den Schutz ersetzt:** der Wizard fragt vorher `zaehle_manuelle_werte`
+    und nennt die Zahl, bevor der Haken wirkt. Ohne Haken gewinnt Handarbeit
+    unverändert unbedingt — FrodoVDRs Anliegen (#251) bleibt gewahrt, siehe
+    `test_update_ohne_haken_schuetzt_manuelle_werte_weiterhin`.
     """
     inv = await _make_inv(db)
 
@@ -190,20 +202,58 @@ async def test_update_ueberschreiben_true_blocks_manual_per_subkey(db):
     )
     await db.commit()
 
-    assert result.applied_count == 1
-    assert result.rejected_count == 1
-    assert result.rejected_fields == ["km_gefahren"]
-    # Wert-Check: manuell GESCHÜTZT, Cloud-Sub-Key dazu
+    assert result.applied_count == 2
+    assert result.rejected_count == 0
+    # Wert-Check: der angeordnete Import gewinnt auf BEIDEN Sub-Keys.
     imd = (await db.execute(
         select(InvestitionMonatsdaten).where(
             InvestitionMonatsdaten.investition_id == inv.id
         )
     )).scalar_one()
-    assert imd.verbrauch_daten == {"km_gefahren": 1200.0, "ladung_kwh": 130.0}
-    # Provenance: km_gefahren bleibt manual:form, ladung_kwh ist cloud
+    assert imd.verbrauch_daten == {"km_gefahren": 1500.0, "ladung_kwh": 130.0}
+    # ⚑ Und die Herkunft bleibt EHRLICH: der Wert kommt aus dem Import, nicht
+    # aus einer Reparatur. Stünde hier `repair`, prallte der nächste reguläre
+    # Import an Stufe 0 ab — die Falle wäre nur verschoben.
+    for sub_key in ("km_gefahren", "ladung_kwh"):
+        assert imd.source_provenance[f"verbrauch_daten.{sub_key}"]["source"] == \
+            "external:cloud_import:fronius_solarweb", sub_key
+
+
+async def test_update_ohne_haken_schuetzt_manuelle_werte_weiterhin(db):
+    """Die Gegenprobe zu FrodoVDR #251: OHNE Haken bleibt Handarbeit unangetastet.
+
+    Fiele diese Zusicherung, hätte der 12.08.-Umbau die Hierarchie nicht
+    präzisiert, sondern abgeschafft.
+    """
+    inv = await _make_inv(db)
+    imd_seed = InvestitionMonatsdaten(
+        investition_id=inv.id, jahr=2026, monat=4,
+        verbrauch_daten={}, source_provenance={}, source_hash=None,
+    )
+    db.add(imd_seed)
+    await db.flush()
+    await write_json_subkey_with_provenance(
+        db, imd_seed, "verbrauch_daten", "km_gefahren", 1200.0,
+        source="manual:form", writer="alice@example.com",
+    )
+    await db.commit()
+
+    await upsert_investition_monatsdaten_with_provenance(
+        db, investition_id=inv.id, jahr=2026, monat=4,
+        verbrauch_daten={"km_gefahren": 1500.0, "ladung_kwh": 130.0},
+        source="external:cloud_import:fronius_solarweb",
+        writer="cloud_account_42",
+        ueberschreiben=False,
+    )
+    await db.commit()
+
+    imd = (await db.execute(
+        select(InvestitionMonatsdaten).where(
+            InvestitionMonatsdaten.investition_id == inv.id
+        )
+    )).scalar_one()
+    assert imd.verbrauch_daten["km_gefahren"] == 1200.0, "Handarbeit gefallen"
     assert imd.source_provenance["verbrauch_daten.km_gefahren"]["source"] == "manual:form"
-    assert imd.source_provenance["verbrauch_daten.ladung_kwh"]["source"] == \
-        "external:cloud_import:fronius_solarweb"
 
 
 async def test_update_ueberschreiben_true_same_class_last_writer_wins(db):
@@ -265,7 +315,8 @@ _ASYNC_TESTS = [
     test_insert_path_initial_write,
     test_full_payload_no_op_emits_single_audit,
     test_update_ueberschreiben_false_skips_existing_subkeys,
-    test_update_ueberschreiben_true_blocks_manual_per_subkey,
+    test_update_ueberschreiben_true_ersetzt_auch_manuelle_subkeys,
+    test_update_ohne_haken_schuetzt_manuelle_werte_weiterhin,
     test_update_ueberschreiben_true_same_class_last_writer_wins,
     test_empty_payload_returns_no_op_no_db_writes,
 ]

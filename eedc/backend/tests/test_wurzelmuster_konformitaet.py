@@ -1743,6 +1743,13 @@ P10_SCHREIBEN_IMPORT_CHECKER: frozenset[str] = frozenset({
     "backend/api/routes/monatsabschluss/wizard.py::save_monatsabschluss",
     "backend/api/routes/monatsdaten.py::_save_investitionen_monatsdaten",
     "backend/services/import_writer.py::upsert_investition_monatsdaten_with_provenance",
+    # Zählt, wie viele Werte der Überschreiben-Haken ersetzen würde (12.08.,
+    # #349). Der Gegenstand ist die **Provenance** der Zeilen, nicht ihr
+    # Inhalt: die Funktion liest ausschließlich `source_provenance` und gibt
+    # eine Anzahl aus. Sie leitet keine Monatsgröße ab — durch die Schicht
+    # geführt käme sie an die Herkunft gar nicht heran, weil `MonatsFakt`
+    # bewusst nur Mengen trägt.
+    "backend/services/import_writer.py::zaehle_manuelle_werte",
     # Import / Export / Migration.
     "backend/api/routes/ha_statistics.py::get_import_vorschau",
     "backend/api/routes/ha_statistics.py::import_ha_statistics",

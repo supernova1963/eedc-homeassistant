@@ -1063,20 +1063,26 @@ async def delete_verwaiste_geraetewerte(
 @router.delete("/{monatsdaten_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_monatsdaten(
     monatsdaten_id: int,
-    mit_geraetewerten: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Löscht Monatsdaten.
+    Löscht einen Monat **vollständig** — Zählerzeile und Werte je Gerät.
 
-    Args:
-        monatsdaten_id: ID der Monatsdaten
-        mit_geraetewerten: Auch die Messwerte je Komponente desselben Monats
-            löschen (#349). **Vorgabe ist `False`** — gemessene Gerätewerte
-            sind oft die teureren Daten, ein Klick auf „Monat löschen" soll
-            sie nicht mitreißen. Der Dialog fragt vorher, was da ist
-            (`GET /{id}/geraetewerte`), und der Daten-Checker meldet einen
-            übersehenen Rest.
+    ⚠ **Bis zum 2026-08-12 war das teilbar** (`mit_geraetewerten`, Vorgabe
+    `False`): „Monat löschen" entfernte nur die Zählerzeile, die Gerätewerte
+    blieben. Das war als Schonung gemeint — gemessene Gerätewerte sind oft die
+    teureren Daten — und hat genau den Zustand erzeugt, den F-27/#349 zutage
+    gefördert hat: einen Monat, der in keiner Liste steht, aber jeden erneuten
+    Import abweist.
+
+    **Warum die Teilung fachlich nicht trägt** (Gernot, 12.08.): Einspeisung
+    und Netzbezug sind Pflichtfelder des Monatsabschlusses. Eine Hälfte zu
+    löschen und die andere stehen zu lassen ergibt keinen Zustand, den eine
+    Sicht sinnvoll darstellen könnte — der Monat ist danach weder da noch weg.
+    Wer löscht, meint den Monat.
+
+    Der Dialog fragt vorher, was daran hängt (`GET /{id}/geraetewerte`), und
+    verlangt eine ausdrückliche Bestätigung, wenn Gerätewerte betroffen sind.
 
     Raises:
         404: Nicht gefunden
@@ -1087,13 +1093,8 @@ async def delete_monatsdaten(
     if not md:
         raise not_found("Monatsdaten")
 
-    if mit_geraetewerten:
-        from backend.services.monat_loeschen import loesche_monat_vollstaendig
+    from backend.services.monat_loeschen import loesche_monat_vollstaendig
 
-        await loesche_monat_vollstaendig(
-            db, md, source="manual:form", writer=_MANUAL_WRITER
-        )
-    else:
-        # Audit-Log VOR dem Delete (sonst sind die Natural-Keys nicht mehr lesbar).
-        log_delete(db, md, source="manual:form", writer=_MANUAL_WRITER)
-        await db.delete(md)
+    await loesche_monat_vollstaendig(
+        db, md, source="manual:form", writer=_MANUAL_WRITER
+    )

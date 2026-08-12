@@ -120,9 +120,17 @@ async def upsert_investition_monatsdaten_with_provenance(
       (UNIQUE-Constraint), ist jetzt zusätzlich im Audit-Log als
       `no_op_same_value` sichtbar — auf Payload-Ebene EIN Eintrag, nicht
       pro Sub-Key.
-    - **`ueberschreiben=True` auf manuell gepflegtem Sub-Key:** war bisher
-      destruktiv, wird jetzt durch Hierarchie blockiert. UpsertResult.
-      rejected_fields liefert den Wizard-Hinweis.
+    - **`ueberschreiben=True` auf manuell gepflegtem Sub-Key:** ersetzt ihn
+      (seit 2026-08-12). ⚠ **Das war zwischen Etappe 3d und dem 12.08. anders**
+      — der Haken wurde durch die Hierarchie blockiert, und `rejected_fields`
+      lieferte den Wizard-Hinweis „durch manuell gepflegte Werte geschützt".
+      Damit tat eedc etwas anderes, als der Anwender angeordnet hatte: Wer
+      „Bestehende Monate überschreiben" ankreuzt, äußert genau diesen Willen.
+      Ein CSV-Import galt dabei als `manual:csv_import` und kam durch, ein
+      Cloud-Import mit demselben Klick nicht — derselbe Anwender, dieselbe
+      Absicht, zwei Ergebnisse. **Der Aufrufer muss vorher sagen, wie viele
+      manuell gepflegte Werte betroffen sind** (`zaehle_manuelle_werte`).
+      `rejected_fields` bleibt für Aufrufer OHNE Haken.
     - **`ueberschreiben=True` auf Cloud-/CSV-Wert (gleiche Source-Klasse):**
       erlaubt wie heute (Last-Writer-Wins innerhalb gleicher Priorität).
     - **`ueberschreiben=False`:** Status-quo — Sub-Keys, die schon einen
@@ -208,6 +216,10 @@ async def upsert_investition_monatsdaten_with_provenance(
             db, existing, "verbrauch_daten", sub_key, value,
             source=source, writer=writer, input_hash=new_hash,
             abgeleitet=abgeleitet,
+            # Der Haken IST die Anordnung des Anwenders (12.08.). Die echte
+            # Quelle bleibt erhalten, damit der nächste reguläre Import nicht
+            # an einer `repair`-Stufe abprallt.
+            benutzer_override=ueberschreiben,
         )
 
     # source_hash nur aktualisieren, wenn mindestens ein Sub-Key applied wurde
@@ -218,3 +230,96 @@ async def upsert_investition_monatsdaten_with_provenance(
         existing.source_hash = new_hash
 
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Was der Überschreiben-Haken kosten würde — VOR dem Klick
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Seit dem 12.08. ersetzt „Bestehende Monate überschreiben" auch manuell
+# gepflegte Werte (`benutzer_override`). Das ist der ausdrückliche Wille des
+# Anwenders — aber nur, wenn er weiß, was er anordnet. Vorher meldete eedc
+# hinterher „6 Felder durch manuell gepflegte Werte geschützt"; jetzt muss es
+# vorher sagen, wie viele Werte fallen.
+
+@dataclass
+class ManuellerBestand:
+    """Wie viel Handarbeit ein Import mit Haken überschreiben würde."""
+
+    monate: int = 0
+    felder: int = 0
+    #: Bis zu fünf Beispiele, für den Text im Wizard.
+    beispiele: list[str] = field(default_factory=list)
+
+    @property
+    def betroffen(self) -> bool:
+        return self.felder > 0
+
+
+def _ist_manuell(eintrag: Any) -> bool:
+    """Trägt dieser Provenance-Eintrag eine Quelle aus Menschenhand?
+
+    Maßgeblich ist das ``manual:``-Präfix — dieselbe Grenze, die
+    ``provenance._decide`` zieht (FrodoVDR #251).
+    """
+    return isinstance(eintrag, dict) and str(
+        eintrag.get("source") or ""
+    ).startswith("manual:")
+
+
+async def zaehle_manuelle_werte(
+    db: AsyncSession,
+    anlage_id: int,
+    perioden: "list[tuple[int, int]]",
+) -> ManuellerBestand:
+    """Zählt manuell gepflegte Werte in den genannten Monaten.
+
+    Zählt **beide** Ebenen: die Zählerzeile (``Monatsdaten``) und die Werte je
+    Gerät (``InvestitionMonatsdaten.verbrauch_daten``) — der Anwender
+    unterscheidet sie nicht, für ihn ist es „mein Monat".
+
+    Args:
+        perioden: Liste von ``(jahr, monat)``. Leer ⇒ leerer Bestand.
+    """
+    bestand = ManuellerBestand()
+    if not perioden:
+        return bestand
+
+    from backend.models.investition import Investition
+    from backend.models.monatsdaten import Monatsdaten
+
+    gesucht = set(perioden)
+    betroffene_monate: set[tuple[int, int]] = set()
+
+    md_rows = (await db.execute(
+        select(Monatsdaten).where(Monatsdaten.anlage_id == anlage_id)
+    )).scalars().all()
+    for md in md_rows:
+        if (md.jahr, md.monat) not in gesucht:
+            continue
+        for feld, eintrag in (md.source_provenance or {}).items():
+            if not _ist_manuell(eintrag):
+                continue
+            bestand.felder += 1
+            betroffene_monate.add((md.jahr, md.monat))
+            if len(bestand.beispiele) < 5:
+                bestand.beispiele.append(f"{md.monat:02d}/{md.jahr}: {feld}")
+
+    imd_rows = (await db.execute(
+        select(InvestitionMonatsdaten)
+        .join(Investition, Investition.id == InvestitionMonatsdaten.investition_id)
+        .where(Investition.anlage_id == anlage_id)
+    )).scalars().all()
+    for imd in imd_rows:
+        if (imd.jahr, imd.monat) not in gesucht:
+            continue
+        for sub_key, eintrag in (imd.source_provenance or {}).items():
+            if not _ist_manuell(eintrag):
+                continue
+            bestand.felder += 1
+            betroffene_monate.add((imd.jahr, imd.monat))
+            if len(bestand.beispiele) < 5:
+                bestand.beispiele.append(f"{imd.monat:02d}/{imd.jahr}: {sub_key}")
+
+    bestand.monate = len(betroffene_monate)
+    return bestand
