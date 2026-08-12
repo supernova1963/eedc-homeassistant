@@ -198,19 +198,36 @@ class MonatsdatenChecks:
     def _check_geraetewerte_ohne_monatszeile(
         self, anlage: Anlage, monatsdaten: list[Monatsdaten]
     ) -> list[CheckErgebnis]:
-        """Messwerte je Komponente für Monate, deren Zählerzeile gelöscht wurde (#349).
+        """Messwerte je Komponente für Monate ohne Zählerzeile (#349).
 
-        **Warum das eine eigene Meldung braucht.** Ein gelöschter Monat
-        verschwindet aus jeder Liste — die hängen an ``Monatsdaten``. Die
-        Messwerte je Komponente stehen aber in einer anderen Tabelle und
-        bleiben. Sichtbar wird das erst beim nächsten Import, und zwar als
+        **Warum das eine eigene Meldung braucht.** Ein Monat ohne
+        ``Monatsdaten``-Zeile verschwindet aus jeder Liste — die hängen alle
+        daran. Die Messwerte je Komponente stehen in einer anderen Tabelle und
+        bleiben. Sichtbar wurde das erst beim nächsten Import, und zwar als
         Meldung über die *Wirkung* statt über die Ursache: „Felder wurden durch
-        manuell gepflegte Werte geschützt". Der Melder hatte seine Monate
-        vorher ausdrücklich gelöscht und suchte den Fehler bei sich.
+        manuell gepflegte Werte geschützt". Der Melder suchte den Fehler bei
+        sich.
+
+        ⚠ **Die Meldung darf die Ursache NICHT benennen** (12.08.). Sie stand
+        bis dahin auf „Der Monat wurde gelöscht" — der Zustand entsteht aber auf
+        mehreren Wegen, und nachträglich sind sie nicht zu unterscheiden:
+
+        * **Monat gelöscht, Gerätewerte behalten** — die *Vorgabe* unseres
+          eigenen Lösch-Dialogs (``services/monat_loeschen.py``).
+        * **HA-Statistik-Import ohne Zähler-Sensoren**: ``ha_statistics.py``
+          legt die Monatszeile nur an, wenn Einspeisung oder Netzbezug
+          mitimportiert werden — wer nur Erzeuger-Sensoren gemappt hat, bekommt
+          Gerätewerte ohne Zeile.
+        * **Cloud-Import einer Station ohne Smartmeter**: dann fehlen die
+          Hauszähler-Größen, und der Import sagt es (``import_hauszaehler.py``).
+
+        Kein Weg mehr ist der **Monatsabschluss** (legt immer zuerst die
+        ``Monatsdaten``-Zeile an, ``monatsabschluss/wizard.py``) und seit
+        12.08. auch nicht mehr der **Stationsimport mit** Smartmeter.
 
         Bewusst **WARNING statt ERROR**: die Daten sind nicht falsch, sie sind
-        nur unerreichbar geworden. Und bewusst mit Reparatur-Action — ohne sie
-        gäbe es keinen Weg, sie loszuwerden.
+        nur unerreichbar geworden. Der Link führt direkt in das Formular
+        **dieses** Monats — Nachtragen ist der Regelfall, Löschen die Ausnahme.
         """
         ergebnisse: list[CheckErgebnis] = []
         kat = CheckKategorie.GERAETEWERTE_OHNE_MONATSZEILE
@@ -243,13 +260,19 @@ class MonatsdatenChecks:
                     "Komponente(n) ohne Monatszeile"
                 ),
                 details=(
-                    f"Der Monat wurde gelöscht, die Messwerte einzelner Geräte "
-                    f"blieben stehen ({namen}). Sie erscheinen in keiner Liste, "
-                    "weisen aber einen erneuten Import dieses Monats ab. "
-                    "Entweder hier entfernen — oder den Monat neu erfassen, "
-                    "dann gehören sie wieder dazu."
+                    f"Für diesen Monat liegen Messwerte einzelner Geräte vor "
+                    f"({namen}), aber keine Zählerzeile mit Einspeisung und "
+                    "Netzbezug. Die Werte zählen in Cockpit und Auswertungen "
+                    "mit, der Monat erscheint aber in keiner Liste und weist "
+                    "einen erneuten Import ab. Trage den Monat nach — die "
+                    "Gerätewerte gehören dann wieder dazu. Nur wenn sie gar "
+                    "nicht mehr gebraucht werden, entferne sie."
                 ),
-                link="/einstellungen/monatsdaten",
+                # Deep-Link auf das Formular GENAU dieses Monats (Muster
+                # `?erfassen=YYYY-MM`, wie die Status-Fusszeile). Der bisherige
+                # Link zeigte auf die Liste — dort steht der Monat zwar als
+                # offene Zeile, der Anwender musste ihn aber selbst suchen.
+                link=f"/einstellungen/daten?erfassen={jahr}-{monat:02d}",
                 action_kind="geraetewerte_loeschen",
                 action_params={"anlage_id": anlage.id, "jahr": jahr, "monat": monat},
                 action_label="Messwerte entfernen",

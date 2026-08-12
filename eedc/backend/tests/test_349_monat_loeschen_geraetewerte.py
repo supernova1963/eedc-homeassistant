@@ -217,6 +217,18 @@ async def test_daten_checker_meldet_den_verwaisten_rest(db):
     assert treffer[0].action_kind == "geraetewerte_loeschen"
     assert treffer[0].action_params == {"anlage_id": anlage.id, "jahr": 2024, "monat": 6}
 
+    # Der Link führt in das Formular GENAU dieses Monats (12.08.). Vorher zeigte
+    # er auf die Monatsdaten-Liste — dort steht der Monat zwar als offene Zeile,
+    # der Anwender musste ihn aber selbst finden.
+    assert treffer[0].link == "/einstellungen/daten?erfassen=2024-06", treffer[0].link
+
+    # Und die Meldung behauptet die Ursache NICHT mehr: derselbe Zustand
+    # entsteht auch durch einen HA-Import ohne Zähler-Sensoren, nicht nur durch
+    # Löschen. Eine erfundene Ursache schickt den Anwender in die Irre.
+    assert "gelöscht" not in treffer[0].details, treffer[0].details
+    # Nachtragen ist der Regelfall — das muss vor dem Entfernen stehen.
+    assert treffer[0].details.index("nach") < treffer[0].details.index("entferne")
+
 
 @pytest.mark.asyncio
 async def test_checker_schweigt_wenn_der_monat_noch_existiert(db):
