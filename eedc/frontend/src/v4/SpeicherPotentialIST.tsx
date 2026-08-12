@@ -202,8 +202,9 @@ export function SpeicherPotentialIST({ anlageId, melde }: { anlageId: number; in
 
         {daten.anzahl_speicher > 1 && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Diese Anlage hat {daten.anzahl_speicher} Speicher. Der Ladestand wird für die Anlage als
-            Ganzes erfasst, die Aussage gilt deshalb für alle Speicher zusammen — nicht je Gerät.
+            Diese Anlage hat {daten.anzahl_speicher} Speicher, eedc wertet aber nur den Ladestand
+            <strong>eines</strong> davon aus — die Aussage beschreibt deshalb dieses eine Gerät,
+            nicht die Anlage.
           </p>
         )}
       </div>

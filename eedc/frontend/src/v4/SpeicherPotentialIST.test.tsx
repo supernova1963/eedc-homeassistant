@@ -82,7 +82,7 @@ describe('SpeicherPotentialIST', () => {
     expect(screen.queryByText(/nichts gebracht/i)).not.toBeInTheDocument()
   })
 
-  it('sagt bei mehreren Speichern, dass die Aussage anlagenweit gilt', async () => {
+  it('sagt bei mehreren Speichern, dass nur EIN Gerät ausgewertet wird', async () => {
     vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(
       ANTWORT({ anzahl_speicher: 2 }),
     )
@@ -90,7 +90,9 @@ describe('SpeicherPotentialIST', () => {
     render(<SpeicherPotentialIST anlageId={1} />)
 
     await waitFor(() => {
-      expect(screen.getByText(/nicht je Gerät/i)).toBeInTheDocument()
+      // N-239: der Ladestand kommt vom ERSTEN gemappten Sensor, nicht aus einer
+      // Mischung — die Sicht darf keine anlagenweite Aussage behaupten.
+      expect(screen.getByText(/nicht die Anlage/i)).toBeInTheDocument()
     })
   })
 

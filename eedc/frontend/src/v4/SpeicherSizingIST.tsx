@@ -353,9 +353,10 @@ export function SpeicherSizingIST({ anlageId, melde }: { anlageId: number; inv?:
 
           {daten.anzahl_speicher > 1 && (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Diese Anlage hat {daten.anzahl_speicher} Speicher. Der Ladestand wird für die Anlage
-              als Ganzes erfasst, die Simulation gilt deshalb für alle Speicher zusammen —
-              nicht je Gerät.
+              Diese Anlage hat {daten.anzahl_speicher} Speicher, eedc wertet aber nur den
+              Ladestand <strong>eines</strong> davon aus — die Simulation beschreibt deshalb
+              dieses eine Gerät, nicht die Anlage. Die übrigen Zahlen (Erzeugung, Verbrauch,
+              Netzbezug) sind davon unberührt.
             </p>
           )}
         </div>

@@ -10,10 +10,17 @@ Stundenreihe aus `TagesEnergieProfil`, Kapazität/Wirkungsgrad, Tarif.
 Ein L2-Cache wäre Vorratshaltung gegen eine Vermutung — er kommt, wenn eine
 Messung ihn verlangt, nicht vorher.
 
-⚠ **Der SoC in `TagesEnergieProfil` ist anlagenweit, nicht je Gerät** (die
-Tabelle hat `anlage_id`, keine `investition_id`) — wie schon bei Phase 2. Bei
-mehreren Speichern ist die Kalibrierung ein Mischwert, und die Aussage gilt für
-die Anlage als Ganzes; die Route gibt `anzahl_speicher` mit aus.
+⚠ **Der SoC in `TagesEnergieProfil` hat keine `investition_id` — und er ist bei
+mehreren Speichern KEIN Mischwert** (N-239, am Code gemessen 2026-08-12; die
+erste Fassung dieses Docstrings behauptete das Gegenteil).
+`energie_profil/_helpers.py::_get_soc_history` nimmt den **ersten** gemappten
+SoC-Sensor mit Daten und bricht ab (`return` im LTS-Pfad,
+`break  # Erstes SoC-Entity reicht` im History-Pfad). Bei zwei Speichern trägt
+die Spalte also den Ladestand **eines** Geräts — welches, entscheidet die
+Reihenfolge im Sensor-Mapping.
+
+Für die Kalibrierung heißt das: sie beschreibt dieses eine Gerät, nicht die
+Anlage. Die Route gibt `anzahl_speicher` mit aus, damit die Sicht es sagen kann.
 
 ⚠ **Bewusst der HEUTE gültige Tarif** (deshalb steht dieses Modul in
 `P8_BASELINE_AUSNAHMEN`): die Sicht beantwortet keine historische Frage

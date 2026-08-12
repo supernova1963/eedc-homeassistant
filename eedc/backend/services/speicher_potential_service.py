@@ -5,11 +5,14 @@ Trennung wie in ADR-001: die **Formel** steht in
 Stunden aus `TagesEnergieProfil` holen, in `SpeicherStunde` übersetzen, je Monat
 gruppieren.
 
-⚠ **Der SoC in `TagesEnergieProfil` ist anlagenweit, nicht je Gerät** (die Tabelle
-hat `anlage_id`, keine `investition_id`). Bei mehreren Speichern ist er ein
-Mischwert, und die Aussage gilt entsprechend für die Anlage als Ganzes. Die Route
-gibt das als `mehrere_speicher` mit aus, damit die Sicht es sagen kann, statt eine
-Gerätegenauigkeit zu suggerieren, die die Datenlage nicht hergibt.
+⚠ **Der SoC in `TagesEnergieProfil` hat keine `investition_id` — und er ist bei
+mehreren Speichern KEIN Mischwert** (N-239, am Code gemessen 2026-08-12; dieser
+Docstring behauptete bis dahin das Gegenteil).
+`energie_profil/_helpers.py::_get_soc_history` nimmt den **ersten** gemappten
+SoC-Sensor mit Daten und bricht ab. Bei zwei Speichern beschreibt die Auswertung
+also **ein** Gerät — welches, entscheidet die Reihenfolge im Sensor-Mapping. Die
+Route gibt `anzahl_speicher` mit aus, damit die Sicht es sagen kann, statt eine
+Genauigkeit zu suggerieren, die die Datenlage nicht hergibt.
 """
 
 from __future__ import annotations

@@ -64,7 +64,8 @@ class SpeicherPotentialResponse(BaseModel):
     bis: Optional[date]
     monate: list[MonatsPotentialResponse]
 
-    #: Anzahl Speicher der Anlage — ab 2 ist der SoC ein anlagenweiter Mischwert.
+    #: Anzahl Speicher der Anlage — ab 2 beschreibt der SoC nur EINES der Geräte
+    #: (N-239, s. Service-Docstring), nicht die Anlage.
     anzahl_speicher: int
     kapazitaet_kwh: Optional[float]
     soc_voll_prozent: float

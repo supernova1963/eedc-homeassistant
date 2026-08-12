@@ -274,8 +274,12 @@ einen Trigger. Geführt im Fund-Register.
 
 1. **Wirkungsgrad** — aus `Investition.parameter_schema` oder gemessen aus Lade-/Entlade-Quotient? Gemessen ist genauer, parameter_schema ist Fallback.
 2. **„Strompreis"** für die Einsparungs-Rechnung — Endpreis (inkl. Steuern + Abgaben) ist die korrekte Vergleichsbasis. Bei dynamischem Strompreis: stündlich gewichteter Ø des Entlade-Zeitraums (haben wir seit v3.16.0).
-3. **Garantie-Restzyklen** — `zyklen_garantiert` minus aufsummierte Vollzyklen → KPI „verbleibende Garantie-Reserve". Niedrige Priorität, aber attraktiv für Anwender.
-4. **Multi-Speicher-Anlagen** — heute selten, aber Architektur muss pro Speicher-Investition aggregieren (analog Wallbox/E-Auto-Konzept).
+3. ~~**Garantie-Restzyklen** — `zyklen_garantiert` minus aufsummierte Vollzyklen → KPI „verbleibende Garantie-Reserve".~~ ⛔ **VERWORFEN (Gernot, 2026-08-12):** *„sehe ich im Zusammenhang mit Speicherauswertungen als verzichtbar an. Die Gesamtanzahl der Zyklen existiert und ist ausreichend."* **Nicht neu evaluieren.** (Am Code geprüft: der Parameter `zyklen_garantiert` existierte ohnehin nie — `stamm_garantie_zyklen` ist ein Infothek-Freitextfeld.)
+4. **Multi-Speicher-Anlagen** — ⚑ **aus diesem Konzept herausgelöst (Gernot, 2026-08-12): eigenes Issue.** Seine Linie: *„Das SoC anlagenweit betrachtet wird ist generell korrekt. Es muss nur sichergestellt werden, dass die Information über den SoC jedes Speichers sichtbar ist."*
+
+   ⛔ **Dabei fiel ein Defekt auf, der größer ist als die Frage (N-239, am Code gemessen 2026-08-12):** der gespeicherte `TagesEnergieProfil.soc_prozent` ist bei mehreren Speichern **kein anlagenweiter Mischwert**, wie dieses Konzept und beide Phasen-Sichten behaupteten. `energie_profil/_helpers.py::_get_soc_history` nimmt den **ersten** gemappten SoC-Sensor mit Daten und bricht ab (`return` im LTS-Pfad, `break  # Erstes SoC-Entity reicht` im History-Pfad) — die Spalte trägt den Ladestand **eines** Geräts, und welches, entscheidet die Reihenfolge im Sensor-Mapping. Betroffen ist alles darauf: Vollzyklen des Tages, SoC-Hübe, Phase-2-Heatmap, Phase-3-Kalibrierung. **Die Sicht-Texte sind am 12.08. korrigiert**, bevor Phase 2 + 3 ausgeliefert wurden; der Aggregations-Fix gehört ins neue Issue.
+
+   ✅ **Live ist die Anforderung schon erfüllt:** `live_komponenten_builder.py` gibt den Ladestand **je Investition** aus (`soc_{inv_id}`). Die Lücke ist ausschließlich der historische/auswertende Pfad.
 
 ---
 
