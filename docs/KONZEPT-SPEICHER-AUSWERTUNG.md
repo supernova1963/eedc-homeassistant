@@ -1,6 +1,6 @@
 # Konzept: Auswertung PV-Speicher
 
-> **Status (gemessen 2026-08-08): Phase 1 ausgeliefert · Phasen 2–4 offen, getrackt als [#358](https://github.com/supernova1963/eedc-homeassistant/issues/358).** ⚠ Bis heute nannte diese Zeile „Kern weiterhin offen" und verwies auf **#243**, das mit v4.0.0 geschlossen wurde — während drei Absätze tiefer im selben Kasten „Phase 1 ausgeliefert" steht. Der **Statuskopf** ist die Stelle, die jeder zuerst liest und die beim Fortschreiben des Rumpfes niemand anfasst (Fund N-182). Alles unter dieser Zeile bleibt inhaltlich gültig. Einzel-Issue #142 (rapahl) wurde 2026-05-23 in die Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) verschoben. **Ort-Entscheid (IA-V4):** die Tiefe kommt als **Ausbau des Komponenten-Hubs Speicher** (SPEC-KOMPONENTEN K-O2), NICHT als eigener Auswertungen-Tab — Phase-1-Verortung unten entsprechend re-lesen. **⚑ Präzisiert 2026-08-01 (Gernot, nach Community-Einwand unter #350):** es gilt die **Ortsregel nach Zeitraum** — **zeitbezogene** Sichten (Tag/Monat/Jahr, also Phase 1: Monats-Tabelle, KPI-Kacheln, Sommer/Winter) gehören ins **Cockpit** neben die Energiebilanz; im **Komponenten-Hub** bleibt, was über die **Lebensdauer** des Geräts geht (Phase 2 SoC-Heatmap, Phase 3 Sizing-Simulator, Wirtschaftlichkeit). „Nicht als eigener Auswertungen-Tab" bleibt unverändert gültig — die Korrektur betrifft Hub ↔ Cockpit, nicht den Auswertungen-Bereich. **Seit Konzept-Erstellung bereits geliefert (vor B11-Bau einarbeiten):**
+> **Status (gemessen 2026-08-12): Phase 1 + Phase 2 ausgeliefert · Phasen 3–4 offen, getrackt als [#358](https://github.com/supernova1963/eedc-homeassistant/issues/358).** ⚠ Bis heute nannte diese Zeile „Kern weiterhin offen" und verwies auf **#243**, das mit v4.0.0 geschlossen wurde — während drei Absätze tiefer im selben Kasten „Phase 1 ausgeliefert" steht. Der **Statuskopf** ist die Stelle, die jeder zuerst liest und die beim Fortschreiben des Rumpfes niemand anfasst (Fund N-182). Alles unter dieser Zeile bleibt inhaltlich gültig. Einzel-Issue #142 (rapahl) wurde 2026-05-23 in die Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) verschoben. **Ort-Entscheid (IA-V4):** die Tiefe kommt als **Ausbau des Komponenten-Hubs Speicher** (SPEC-KOMPONENTEN K-O2), NICHT als eigener Auswertungen-Tab — Phase-1-Verortung unten entsprechend re-lesen. **⚑ Präzisiert 2026-08-01 (Gernot, nach Community-Einwand unter #350):** es gilt die **Ortsregel nach Zeitraum** — **zeitbezogene** Sichten (Tag/Monat/Jahr, also Phase 1: Monats-Tabelle, KPI-Kacheln, Sommer/Winter) gehören ins **Cockpit** neben die Energiebilanz; im **Komponenten-Hub** bleibt, was über die **Lebensdauer** des Geräts geht (Phase 2 SoC-Heatmap, Phase 3 Sizing-Simulator, Wirtschaftlichkeit). „Nicht als eigener Auswertungen-Tab" bleibt unverändert gültig — die Korrektur betrifft Hub ↔ Cockpit, nicht den Auswertungen-Bereich. **Seit Konzept-Erstellung bereits geliefert (vor B11-Bau einarbeiten):**
 > - **#264 Etappen A–C (stlorenz, v3.31.x):** gemessener IST-Wirkungsgrad (SoC-korrigiert + Degradations-Alarm) und stundengewichteter effektiver Ladepreis mit Quelle-Transparenz → beantwortet die „Offenen Fragen" 1 + 2 unten.
 > - **R15-Scheiben (Rainer-PN #88625, 2026-07-05):** Kosten-Kacheln „Batterieladung Netz" + „Durchschnittspreis Netz" in Cockpit Monat/Tag/Jahr (`berechne_netzladung_kosten`, Preis-Kette TEP→IMD→Bezugspreis) · Ø-Ladepreis-**Vorschlag** im Monatsabschluss-Wizard · Netzladung-Kosten-**Ausweis** im Hub-Arbitrage-Block + T-Konto („davon"-Zeile) · Kanon-Key-Fix `get_speicher_netzladung_kwh` (Hub-Arbitrage war unsichtbar) → deckt die Sichtbarkeits-Seite von Frage 4 + 5 im Kleinen.
 > - **Phase-3-Grundstein:** `core/berechnungen/speicher_simulation.py` (`simuliere_speicher_tag`) existiert.
@@ -69,13 +69,31 @@ Anzeige: kWh (Ladung/Entladung), Vollzyklen-Äquivalent, Auslastung in % der the
 
 ### 2. Auslastung vs. Einspeisung — „mehr Kapazität sinnvoll gewesen?"
 
-Indikator-Schwelle: **Tage mit `SoC_max ≥ 95 %` UND gleichzeitiger Einspeisung ≥ X kWh** sind Kandidaten für ungenutztes Potential — der Speicher war voll, PV ging trotzdem ins Netz.
+> ⚠ **Korrigiert 2026-08-12 beim Bau von Phase 2 — die ursprüngliche Formel unten beantwortet ihre eigene Frage nicht.** Sie lautete:
+>
+> ```
+> ungenutztes_potential_kwh = Σ (einspeisung_kwh an Tagen mit SoC_max ≥ 95 %)
+> ```
+>
+> An zwölf Junitagen der Dev-Anlage ergibt das **471,6 kWh** „ungenutztes Potential" — die Einspeisung fällt dort fast vollständig in Stunden mit vollem Speicher. Gemessen fiel der Speicher in **keiner** dieser Nächte unter **31 %**: Wer daraufhin Kapazität kauft, hat morgens mehr Restladung und gibt sie nie ab. **Nutzen real 0 kWh, ausgewiesen 471,6 kWh.** Im Winter kippt es in die Gegenrichtung (November: SoC-Maximum 2 %) — dort fehlt die Sonne, nicht der Speicher.
+>
+> **Der begrenzende Faktor ist die Nacht, nicht die Sonne.** Zusätzliche Kapazität nützt nur, wenn *beides* zusammenkommt: Überschuss, den der volle Speicher nicht aufnahm, **und** eine Nacht, in der er vor dem nächsten Sonnenaufgang leer lief. Die gebaute Kennzahl ist deshalb ein **Minimum aus beidem, je Lade-Entlade-Zyklus** (Gernots Entscheid 2026-08-12; die Alternative „naive Summe mit Kleingedrucktem" wurde ausdrücklich verworfen — an dieser Zahl hängt eine Kaufentscheidung):
+>
+> ```
+> je Zyklus:  nutzbar = min( Σ Einspeisung bei SoC ≥ 95 %,
+>                            Σ Netzbezug ab dem Moment, in dem SoC ≤ 5 % war )
+> gesamt   =  Σ nutzbar über alle Zyklen
+> ```
+>
+> Zyklusweise, nicht zeitraumweise: sonst rechtfertigt eine einzige leergelaufene Nacht die Überschüsse aller anderen Tage. Über die **durchgehende** Stundenreihe statt je Kalendertag, weil die Nacht über Mitternacht liegt. SoT: `core/berechnungen/speicher_potential.py`, Sourcing in `services/speicher_potential_service.py`.
+>
+> Gemessene Trennschärfe (Dev-Anlage, je 12 Tage): Juni 471,6 → **0** · März 227,0 → **29,3** · Oktober 9,5 → **0,5** · Februar 32,6 → **32,6** (dort greift die Deckelung nicht — jeder Zyklus lief leer).
 
-```
-ungenutztes_potential_kwh = Σ (einspeisung_kwh an Tagen mit SoC_max ≥ 95 %)
-```
+Die naive Summe bleibt als **Obergrenze** sichtbar („was ein beliebig großer Speicher höchstens hätte aufnehmen können"), damit der Unterschied nicht verschwiegen, sondern erklärt wird.
 
-Anzeige als Monats-Balken neben dem Speicher-Durchsatz. Aussagekraft setzt SoC-Stundendaten voraus (vorhanden seit v3.19.0).
+Anzeige im **Komponenten-Hub Speicher**, Block „Wirtschaftlichkeit": Befund-Satz + drei Kacheln + Heatmap Monat × SoC-Bin. Aussagekraft setzt SoC-Stundendaten voraus (vorhanden seit v3.19.0; an der Dev-Anlage 651 Tage mit 100 % Abdeckung, SoC durchgängig gefüllt).
+
+⚠ **Der SoC in `TagesEnergieProfil` ist anlagenweit** (die Tabelle hat `anlage_id`, keine `investition_id`). Bei mehreren Speichern ist er ein Mischwert; die Sicht sagt das, statt eine Gerätegenauigkeit zu suggerieren.
 
 ### 3. „Lohnt sich eine größere Batterie?" — Was-wäre-wenn-Sizing
 
@@ -118,10 +136,19 @@ Neue Sektion in **Auswertungen** (bestehende Architektur, kein neues Top-Level-T
 
 **Liefert:** Issue-Punkte 1, 4, 5, 6. Reine Aggregation aus Monatsdaten + Stundendaten — ohne neue Datenmodell-Felder.
 
-### Phase 2 — „Hätte mehr Kapazität geholfen?"
+### Phase 2 — „Hätte mehr Kapazität geholfen?" ✅ (2026-08-12)
 
-- Indikator-KPI: Tage mit `SoC_max ≥ 95 %` + Einspeisung
-- Saisonaler Verlauf: Heatmap Monat × SoC-Bin → wo lief der Speicher voll?
+Gebaut im **Komponenten-Hub Speicher**, Block „Wirtschaftlichkeit":
+
+- **Gedeckelte** Kennzahl `nutzbares_zusatzpotential_kwh` (Herleitung und Messung
+  oben unter Kennzahl 2) — daneben die naive Summe als ausdrückliche Obergrenze
+- Befund-Satz, der die Zahl einordnet: „0 kWh" ist sonst nicht von „keine Daten"
+  zu unterscheiden
+- Heatmap Monat × SoC-Bin (zehn Zehntel-Bins) — eine dunkle Zeile oben heißt
+  „lief oft voll", eine dunkle unten „lief oft leer"; erst beides zusammen macht
+  mehr Kapazität sinnvoll
+- Kachel „Nächte mit leerem Speicher" (x von y Zyklen) als die eigentliche
+  Begrenzung
 
 **Liefert:** Issue-Punkt 2.
 

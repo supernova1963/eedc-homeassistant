@@ -22,6 +22,7 @@ import { ExternalLink } from 'lucide-react'
 import { Parkbar } from '../components/park'
 import { PVStringVergleich } from '../components/pv'
 import { SpeicherVerlaufIST, SpeicherVergleichIST } from './SpeicherVerlaufIST'
+import { SpeicherPotentialIST } from './SpeicherPotentialIST'
 import { WaermepumpeVerlaufIST, WaermepumpeVergleichIST, WaermepumpeWirtschaftlichkeitIST } from './WaermepumpeHubBloecke'
 import { EAutoVerlaufIST, EAutoVergleichIST, EAutoWirtschaftlichkeitIST } from './EAutoHubBloecke'
 import { BkwVerlaufIST, BkwVergleichIST } from './BkwHubBloecke'
@@ -68,10 +69,13 @@ export const KOMPONENTEN_ANALYSE: Record<string, KompAnalyse> = {
     ),
   },
   // Speicher: IST-Zeitreihen (η-12M-Degradation, Vollzyklen, Arbitrage-Stapel)
-  // im Verlauf; ⑤ = Jahres-Energiebilanz (Ladung-Herkunft ⟷ Entladung+Verlust).
+  // im Verlauf; ⑤ = Jahres-Energiebilanz (Ladung-Herkunft ⟷ Entladung+Verlust);
+  // Wirtschaftlichkeit = die Sizing-Frage „hätte mehr Kapazität geholfen?"
+  // (#358 Phase 2) — sie geht über die Lebensdauer und gehört damit in den Hub.
   speicher: {
     verlauf: (anlageId, inv, melde) => <SpeicherVerlaufIST anlageId={anlageId} inv={inv} melde={melde} />,
     vergleich: (anlageId, inv, melde) => <SpeicherVergleichIST anlageId={anlageId} inv={inv} melde={melde} />,
+    wirtschaftlichkeit: (anlageId, inv, melde) => <SpeicherPotentialIST anlageId={anlageId} inv={inv} melde={melde} />,
   },
   // Wärmepumpe: ④ Wärme/Monat+Tabelle · ⑤ Monats-/Saisonvergleich (JAZ⇄Strom) ·
   // Wirtschaftlichkeit = Kostenvergleich vs. Gas/Öl.

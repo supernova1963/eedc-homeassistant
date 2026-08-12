@@ -436,6 +436,23 @@ Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung?
 - **Effizienz** = Entladung / Ladung × 100 % (durchgängig cyan)
 - **Degradation** (Kapazitätsverlust über die Zeit)
 - **Arbitrage-Analyse** (wenn aktiviert): Netzladung zu günstigem Strom, Entladung bei hohem Preis, Arbitrage-Gewinn
+- **„Hätte mehr Kapazität geholfen?"** (Block *Wirtschaftlichkeit*) — die Sizing-Frage, beantwortet aus deinen Stundenwerten. Siehe unten.
+
+#### Hätte mehr Kapazität geholfen?
+
+Die Auswertung zählt **nicht** einfach, wie viel Strom ins Netz ging, während der Speicher voll war. Diese Zahl steht zwar da — aber ausdrücklich als **Obergrenze**, denn sie überschätzt den Nutzen systematisch: Zusätzliche Kapazität bringt nur dann etwas, wenn der Speicher vor dem nächsten Sonnenaufgang auch **leer läuft**. Tut er das nicht, hätte ein größerer Speicher morgens bloß mehr Restladung — und niemand hätte sie abgenommen.
+
+An einer echten Anlage gemessen: zwölf Junitage, 471 kWh Einspeisung bei vollem Speicher, aber kein einziges Leerlaufen in der Nacht ⇒ **Nutzen 0 kWh**. Im Winter kehrt es sich um: dort läuft der Speicher jede Nacht leer, es kommt nur kaum Überschuss an, den er aufnehmen könnte.
+
+Deshalb zeigt der Block drei Zahlen nebeneinander:
+
+- **Nutzbares Zusatzpotential** — was ein größerer Speicher wirklich zusätzlich durchgesetzt hätte (je Lade-Entlade-Zyklus das Minimum aus Überschuss und nächtlichem Bedarf)
+- **Überschuss bei vollem Speicher** — die Obergrenze, nicht der Ertrag
+- **Nächte mit leerem Speicher** — die eigentliche Begrenzung
+
+Dazu eine **Heatmap Monat × Ladestand**: Je dunkler eine Zelle, desto mehr Stunden stand der Speicher in diesem Monat auf diesem Ladestand. Eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer" — erst wenn beides im selben Monat auftritt, ist mehr Kapazität eine ernsthafte Überlegung.
+
+> **Mehrere Speicher:** Den Ladestand erfasst eedc für die Anlage als Ganzes. Die Auswertung gilt dann für alle Speicher zusammen, nicht je Gerät — die Sicht weist darauf hin.
 
 ### 3.4 Wärmepumpe
 

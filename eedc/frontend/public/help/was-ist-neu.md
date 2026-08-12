@@ -11,6 +11,23 @@
 
 ## Noch nicht veröffentlicht
 
+### „Hätte mir ein größerer Speicher etwas gebracht?" — jetzt mit einer ehrlichen Zahl
+
+**Betrifft dich das?** Wenn du einen Speicher hast und schon einmal überlegt hast, ihn zu erweitern.
+
+Im Komponenten-Hub deines Speichers steht unter *Wirtschaftlichkeit* eine neue Auswertung. Sie rechnet aus deinen eigenen Stundenwerten aus, wie viel ein größerer Speicher zusätzlich durchgesetzt hätte.
+
+**Die Zahl ist bewusst kleiner als die naheliegende** — und das ist der Punkt. Naheliegend wäre: „zähle, wie viel Strom ins Netz ging, während der Speicher voll war". An einer echten Anlage kommen so für zwölf Junitage **471 kWh** heraus. Nur: Der Speicher dieser Anlage fiel in keiner dieser Nächte unter 31 %. Ein größerer hätte morgens einfach mehr Restladung gehabt und sie **nie abgegeben** — der tatsächliche Nutzen war **null**.
+
+eedc zählt deshalb nur, was auch wieder verbraucht worden wäre: Überschuss bei vollem Speicher **und** eine Nacht, in der er tatsächlich leer lief. Die naheliegende Summe steht als „Obergrenze" daneben, damit du beide Zahlen siehst.
+
+Dazu:
+
+- **Nächte mit leerem Speicher** — die eigentliche Begrenzung. Läuft dein Speicher nie leer, bringt mehr Kapazität nichts, egal wie viel Sonne du einspeist.
+- **Heatmap Monat × Ladestand** — eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer". Interessant wird es erst, wenn beides im selben Monat auftritt.
+
+> Bei mehreren Speichern erfasst eedc den Ladestand für die Anlage als Ganzes — die Auswertung gilt dann für alle zusammen, nicht je Gerät. Das steht auch so in der Sicht.
+
 ### Der Börsenpreis-Sensor wechselt jetzt zur vollen Stunde
 
 **Betrifft dich das?** Wenn du eedc-Sensoren per MQTT nach Home Assistant überträgst und damit etwas steuerst — besonders Laden oder Entladen nach dem Börsenpreis.

@@ -241,6 +241,45 @@ export interface WaermepumpeDashboardResponse {
   }
 }
 
+/** Ein Monat der Speicher-Potentialanalyse (#358 Phase 2). */
+export interface MonatsPotential {
+  jahr: number
+  monat: number
+  nutzbares_zusatzpotential_kwh: number
+  ueberschuss_kwh: number
+  stunden_voll: number
+  zyklen_gesamt: number
+  zyklen_leergelaufen: number
+  /** Stunden je SoC-Zehntel (Index 0 = 0–10 %, Index 9 = 90–100 %). */
+  soc_bins: number[]
+}
+
+/**
+ * „Hätte mehr Kapazität geholfen?" — gedeckelte Antwort.
+ *
+ * `nutzbares_zusatzpotential_kwh` ist die Zahl, an der eine Kaufentscheidung
+ * hängen darf; `ueberschuss_kwh` ist die **Obergrenze** (was ein beliebig großer
+ * Speicher höchstens hätte aufnehmen können) und regelmäßig um ein Vielfaches
+ * größer. `deckelung_greift` sagt, ob sie auseinanderliegen.
+ */
+export interface SpeicherPotentialResponse {
+  nutzbares_zusatzpotential_kwh: number
+  ueberschuss_kwh: number
+  stunden_voll: number
+  zyklen_gesamt: number
+  zyklen_leergelaufen: number
+  deckelung_greift: boolean
+  tage_mit_daten: number
+  von: string | null
+  bis: string | null
+  monate: MonatsPotential[]
+  /** Ab 2 ist der Ladestand ein anlagenweiter Mischwert, keine Geräteaussage. */
+  anzahl_speicher: number
+  kapazitaet_kwh: number | null
+  soc_voll_prozent: number
+  soc_leer_prozent: number
+}
+
 export interface SpeicherDashboardResponse {
   investition: Investition
   monatsdaten: InvestitionMonatsdaten[]
@@ -481,6 +520,19 @@ export const investitionenApi = {
     if (einspeiseverguetungCent) params.append('einspeiseverguetung_cent', einspeiseverguetungCent.toString())
     const query = params.toString()
     return api.get<SpeicherDashboardResponse[]>(`/investitionen/dashboard/speicher/${anlageId}${query ? '?' + query : ''}`)
+  },
+
+  /**
+   * Speicher-Potentialanalyse — „hätte mehr Kapazität geholfen?" (#358 Phase 2).
+   * Liest Stundendaten über die Lebensdauer; deutlich teurer als die Dashboards,
+   * deshalb nur auf Anforderung der Sicht.
+   */
+  async getSpeicherPotential(anlageId: number, von?: string, bis?: string): Promise<SpeicherPotentialResponse> {
+    const params = new URLSearchParams()
+    if (von) params.append('von', von)
+    if (bis) params.append('bis', bis)
+    const query = params.toString()
+    return api.get<SpeicherPotentialResponse>(`/investitionen/speicher-potential/${anlageId}${query ? '?' + query : ''}`)
   },
 
   /**
