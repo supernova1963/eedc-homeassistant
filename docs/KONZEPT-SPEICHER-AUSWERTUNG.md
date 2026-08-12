@@ -33,8 +33,18 @@
 > ist **gemessen nicht eingetreten** (Journal + beide Archive + alle Kanäle durchsucht, kein
 > Melder). Das steht hier, damit später niemand einen Melder hineinliest, den es nie gab.
 >
-> **Offen:** Phase 4 (#101-Kopplung) — im **Komponenten-Hub**, sie geht über die Lebensdauer
-> des Geräts. Trigger „nach Prognose-Konsolidierung" **nicht eingetreten**.
+> **⛔ Phase 4 entfällt (gemessen 2026-08-12, Gernots Frage „ist sie erledigt oder stimmt sie noch
+> so wie gedacht? Anderenfalls könnten wir nie abschließen").** Beides trifft zu — **die Substanz
+> ist gebaut, die Bedingung ist unerfüllbar.** Details in §Phase 4 unten. Kurz: „Speicher voll um
+> HH:MM" ist längst **keine Linear-Extrapolation** mehr, sondern eine stündliche
+> Vorwärtssimulation ab dem aktuellen SoC aus der eedc-korrigierten Prognose (deren
+> Korrektur-Kaskade das geforderte **Saisonbin-×-Stunden-Profil** enthält) und dem gelernten
+> Verbrauchsprofil. Und die Bedingung zeigt auf zwei Dinge, die es nicht gibt: **#101 ist seit
+> 2026-05-21 als COMPLETED geschlossen**, ein „Blended Forecast" steht in **keinem** Dokument
+> außer diesem — auch nicht in #110, auf das der Trigger verweist.
+>
+> **Damit ist #358 inhaltlich abgeschlossen** (Issue-Punkte 1–6 beantwortet). Was von Phase 4
+> übrig bleibt, ist **eine** neue Frage, die es 2026-04 noch nicht gab, s. §Phase 4.
 >
 > Zugehörig: [#101](https://github.com/supernova1963/eedc-homeassistant/issues/101) (Live-Restzeit), [Energieprofil Etappe 4](https://github.com/supernova1963/eedc-homeassistant/issues/110) (Saison)
 
@@ -203,9 +213,45 @@ Gebaut im **Komponenten-Hub Speicher**, eigener Block „Größerer Speicher?":
 
 **Liefert:** Issue-Punkt 3.
 
-### Phase 4 — Verknüpfung mit #101 (Live-Restzeit)
+### Phase 4 — Verknüpfung mit #101 (Live-Restzeit) ⛔ **entfällt (2026-08-12)**
 
-Die Live-Restzeit „Speicher voll um HH:MM" erbt aus den Phase-1/2-Aggregaten ein **typisches Stundenprofil** der PV-Restprognose pro Saisonbin → realistischere Aussage als reine Linear-Extrapolation. Trigger: nach Prognose-Konsolidierung (Blended Forecast).
+> **Der ursprüngliche Text:** „Die Live-Restzeit „Speicher voll um HH:MM" erbt aus den
+> Phase-1/2-Aggregaten ein **typisches Stundenprofil** der PV-Restprognose pro Saisonbin →
+> realistischere Aussage als reine Linear-Extrapolation. Trigger: nach Prognose-Konsolidierung
+> (Blended Forecast)."
+
+**Am Code nachgemessen, nicht weiter abgewartet.** Drei Befunde, jeder einzeln belegt:
+
+**1. Die Prämisse ist falsch — es war nie (mehr) eine Linear-Extrapolation.** `speicher_voll_um`
+(HA-Sensor `eedc_speicher_voll_um` und die Kachel im Planungs-Tab) kommt aus
+`core/berechnungen/speicher_simulation.py::simuliere_speicher_tag`, einer **stündlichen
+Vorwärtssimulation ab dem aktuellen SoC** (`services/ha_export_prognose.py`).
+
+**2. Das geforderte Saisonbin-Profil ist drin.** Ihr PV-Eingang ist das Stundenprofil der
+kanonischen eedc-Prognose (`kanon_tagesprognose`), also OpenMeteo × **Korrekturprofil-Kaskade** —
+und deren zweite Stufe ist genau das Verlangte: `PROFIL_TYP_STUNDE` = **Saisonbin × Stunde**
+(`services/korrekturprofil_lookup.py`, dort ausdrücklich vor die saisonblinde Sonnenstand-Stufe
+gesetzt, weil sie belaubt/kahl trennt). Der Verbrauchs-Eingang ist das **individuell gelernte**
+Profil der letzten acht Wochen nach Wochentag/Tagestyp (`verbrauch_prognose_service.py`).
+Beides ist besser als „ein typisches Profil aus den Phase-1/2-Aggregaten", nur aus einer anderen
+Quelle als 2026-04 gedacht.
+
+**3. Die Bedingung ist unerfüllbar.** Sie nennt zwei Anker, und beide existieren nicht:
+[#101](https://github.com/supernova1963/eedc-homeassistant/issues/101) ist seit **2026-05-21 als
+COMPLETED geschlossen**, und „Prognose-Konsolidierung (Blended Forecast)" steht in **keinem**
+Dokument des Repos außer dieser Zeile — auch nicht in [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110),
+auf das der Trigger verlinkt. Der nächste Verwandte dort ist der „zentrale Prognosequellen-Adapter",
+ein interner Umbau, der an dieser Schätzung **nichts** ändern würde.
+
+⚑ **Was von Phase 4 übrig bleibt, ist eine neue Frage — und sie entstand erst mit Phase 3.**
+`simuliere_speicher_tag` rechnet mit der **gepflegten nutzbaren** Kapazität. Phase 3 hat an der
+Referenzanlage gemessen, dass die **effektiv genutzte** rund ein Drittel darunter liegt (8,35
+gegen 12,1 kWh) — mit der größeren Zahl meldet die Schätzung „voll" **später als in Wirklichkeit**
+oder gar nicht. Das ist ein eigener, kleiner Befund und **kein Phase-4-Rest**: er ändert einen
+ausgelieferten Sensor für alle Anwender und braucht deshalb einen Maintainer-Entscheid, nicht
+einen Trigger. Geführt im Fund-Register.
+
+**Damit sind alle sechs Anwender-Fragen aus #142 beantwortet und #358 ist inhaltlich zu.**
 
 ## Datenmodell — was wir NICHT brauchen
 
@@ -222,7 +268,7 @@ Die Live-Restzeit „Speicher voll um HH:MM" erbt aus den Phase-1/2-Aggregaten e
 - **Phase 1**: Sobald **konkretes Forum-Feedback** kommt, dass die heute schon vorhandenen Speicher-Werte in den Monats-/Jahres-Auswertungen zu versteckt sind. Mehrere Tester haben mindestens 6–12 Monate Snapshot-Daten ab v3.19.0.
 - **Phase 2**: Direkt im Anschluss an Phase 1, wenn das SoC-Heatmap-Visual Sinn ergibt.
 - ~~**Phase 3**: Wenn Phase 1+2 stabil sind UND ein Tester aktiv nach Sizing-Beratung fragt.~~ **Der Trigger ist nie gefallen** (2026-08-12 gemessen: kein Melder fragt nach Sizing). Gebaut auf Gernots ausdrücklichen Entscheid — hier festgehalten, damit später niemand einen Melder hineinliest, den es nicht gab.
-- **Phase 4**: Gekoppelt an [Prognose-Konsolidierung](https://github.com/supernova1963/eedc-homeassistant/issues/110) und #101.
+- ~~**Phase 4**: Gekoppelt an [Prognose-Konsolidierung](https://github.com/supernova1963/eedc-homeassistant/issues/110) und #101.~~ **Entfallen (2026-08-12):** beide Anker existieren nicht mehr (#101 geschlossen, „Blended Forecast" in keinem Dokument), und die Substanz ist gebaut. Begründung in §Phase 4. **Lehre — sie gilt über dieses Konzept hinaus:** ein Trigger, der auf ein *anderes* Vorhaben zeigt, hält ein Thema offen, sobald jenes Vorhaben verschwindet. Wer einen Trigger schreibt, formuliert ihn als **beobachtbares Ereignis** („ein Melder fragt nach X", „Winterdaten liegen vor"), nicht als Verweis auf einen Plan.
 
 ## Offene Fragen
 
