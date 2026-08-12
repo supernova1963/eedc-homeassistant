@@ -80,11 +80,13 @@ cd eedc/frontend && npm run dev
 
 ```bash
 cd eedc && source backend/venv/bin/activate && python -m pytest backend/tests -q
-cd eedc/frontend && npm run test && npx tsc --noEmit && npm run check:design && \
+cd eedc/frontend && npm run lint && npm run test && npx tsc --noEmit && npm run check:design && \
   npm run check:de-de && npm run check:roh-controls && npm run check:parkbar && \
   npm run check:form-controls && npm run check:typografie && npm run check:kennwert-roh && \
   npm run check:co2-roh
 ```
+
+> ⚠ **`npm run lint` gehört dazu, seit der CI-Lauf zu v4.0.13 daran gescheitert ist** (12.08.): Der Workflow ruft ESLint mit `--max-warnings 0` auf, die Liste hier kannte ihn nicht — eine `react-hooks/exhaustive-deps`-**Warnung** aus `62c680b9` lief damit durch alle lokalen Gates und machte den Tests-Lauf **nach** dem Push rot. Ein Prüfer, den nur CI kennt, fällt zwangsläufig zu spät auf.
 
 Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline. `check:park-leertest` ist ein Playwright-Livetest gegen eine laufende Box und verlangt ein `VITE_DEMO_DEFAULT=true`-Build; **danach zwingend** `git checkout -- eedc/frontend/dist/ && git clean -fdq eedc/frontend/dist/` — `dist/` ist versioniert, sonst landet ein Demo-Build im Release.
 

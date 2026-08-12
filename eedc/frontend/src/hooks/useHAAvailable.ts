@@ -26,10 +26,7 @@ type SettingsFlags = {
 let cachedResult: boolean | null = null
 let cachedVerbunden: boolean | null = null
 
-function useSettingsFlag(
-  lies: (data: SettingsFlags) => boolean,
-  cache: 'addon' | 'verbunden',
-): boolean {
+function useSettingsFlag(cache: 'addon' | 'verbunden'): boolean {
   const start = cache === 'addon' ? cachedResult : cachedVerbunden
   const [wert, setWert] = useState<boolean>(start ?? false)
 
@@ -40,30 +37,31 @@ function useSettingsFlag(
     api.get<SettingsFlags>('/settings')
       .then(data => {
         // Beide Antworten stammen aus derselben Abfrage — der zweite Hook
-        // kostet dadurch keinen zusätzlichen Request.
+        // kostet dadurch keinen zusätzlichen Request. Die Fallback-Kette von
+        // `ha_verbunden` steht hier und NICHT beim Aufrufer, damit der Effekt
+        // ohne Funktions-Abhängigkeit auskommt (sonst hinge er an einer bei
+        // jedem Render neuen Referenz — die Lint-Warnung, an der der CI-Lauf
+        // zu v4.0.13 gescheitert ist).
         cachedResult = data.ha_integration_available ?? false
         cachedVerbunden = data.ha_verbunden ?? cachedResult
-        setWert(lies(data) ?? false)
+        setWert(cache === 'addon' ? cachedResult : cachedVerbunden)
       })
       .catch(() => {
         cachedResult = false
         cachedVerbunden = false
         setWert(false)
       })
-  }, [])
+  }, [cache])
 
   return wert
 }
 
 /** Läuft eedc als HA-Add-on (Supervisor-Token vorhanden)? */
 export function useHAAvailable(): boolean {
-  return useSettingsFlag(d => d.ha_integration_available ?? false, 'addon')
+  return useSettingsFlag('addon')
 }
 
 /** Ist eine HA-Instanz erreichbar — als Add-on **oder** per Long-Lived-Token? */
 export function useHAVerbunden(): boolean {
-  return useSettingsFlag(
-    d => d.ha_verbunden ?? d.ha_integration_available ?? false,
-    'verbunden',
-  )
+  return useSettingsFlag('verbunden')
 }
