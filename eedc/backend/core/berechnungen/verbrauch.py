@@ -13,6 +13,24 @@ Definition (deckungsgleich mit cockpit/uebersicht.py + daten_checker.py):
     eigenverbrauch  = direktverbrauch + Speicher-Entladung + V2H-Entladung
     gesamtverbrauch = eigenverbrauch + Netzbezug
 
+**Speicherverluste sind in keiner der drei Größen enthalten** (Gernots Frage 2026-08-12,
+im Zuge einer Rainer-PN): Die Ladung wird abgezogen, die Entladung kommt dazu — gezählt
+wird also, was aus dem Speicher wieder *herauskommt*, und die Differenz fällt zwischen
+beiden Schritten heraus. An der Prod-Anlage nachgerechnet (Lebenszeit): PV 42.311 −
+Einspeisung 25.681 − Ladung 7.675 = Direktverbrauch 8.955; + Entladung 6.461 =
+Eigenverbrauch 15.416. Die 1.214 kWh Verlust (η ≈ 84 %) stehen in keiner der Zahlen.
+Deshalb ist ``gesamtverbrauch_kwh`` das, was **im Haus ankam** — und darf „Hausverbrauch"
+heißen.
+
+**Warum die Netzladung hier nicht vorkommt, obwohl es sie gibt** (``SpeicherFakten.
+netzladung_kwh``): Sie steckt bereits in ``speicher_ladung_kwh`` und im ``netzbezug_kwh``.
+Der aus dem Netz geladene Strom wird damit einmal zu viel vom Direktverbrauch abgezogen
+**und** ist einmal zu viel im Netzbezug — im ``gesamtverbrauch`` heben sich beide exakt
+auf. Übrig bleibt allein, dass der ``eigenverbrauch`` um die Ladeverluste des Netzanteils
+(``netzladung × (1 − η)``) zu **niedrig** liegt; die Abweichung ist konservativ und klein.
+Eine Doppelzählung entsteht nicht — der wiederkehrende Verdacht ist damit an dieser Stelle
+geprüft und widerlegt, nicht übersehen.
+
 V2H (Vehicle-to-Home, E-Auto entlädt ins Haus) wird wie eine zweite Batterie
 behandelt — voll als Eigenverbrauch gezählt, analog zur stationären
 Speicher-Entladung (unabhängig von der Ladequelle). So bleibt die Autobatterie
