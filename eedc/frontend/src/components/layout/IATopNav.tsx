@@ -8,10 +8,10 @@
  * EINE Quelle für die obere Leiste der IA-v4: konsumiert von der öffentlichen
  * Vorschau (`components/preview/IASkeleton`, state-getrieben) UND vom echten
  * /v4-Routenbaum (`v4/LayoutV4`, router-getrieben). Damit gibt es keine zwei
- * driftenden Nav-Kopien mehr (Konvergenz-Leitprinzip). Die Produktiv-
- * `components/layout/TopNavigation` bleibt mit ihren Produktiv-Spezifika
- * (Settings-Dropdown, Monatsabschluss-Badge, HA-Verfügbarkeit) bis zum Flip 3.8
- * separat.
+ * driftenden Nav-Kopien mehr (Konvergenz-Leitprinzip). Die frühere zweite Kopie
+ * `components/layout/TopNavigation` ist mit dem IA-V4-Flip gefallen; ihre
+ * Spezifika (Settings-Dropdown, Monatsabschluss-Badge, HA-Verfügbarkeit) liegen
+ * seither hier, gespeist aus `useGlobalStatus`.
  *
  * Enthält fest: Produktiv-Marke (`eedc-icon.svg` + Wortmarke), Hell/Dunkel/
  * System-Theme-Cycle (Bestands-Muster aus `TopNavigation`/`Header`), Hamburger +

@@ -47,14 +47,13 @@ const STANDARD_REGISTRY: Record<WizardKey, WizardDef> = {
   'ha-statistik-import': { titel: 'Statistik-Import', Comp: lazy(() => import('../pages/HAStatistikImport')) },
   einrichtung: { titel: 'Ersteinrichtung', Comp: lazy(() => import('../pages/Einrichtung')) },
   // Datenquellen-V4 B7 (2026-07-16): `sensor-mapping` + `mqtt-inbound` sind als
-  // V4-Flächen stillgelegt — beide Overlay-Einträge entfernt, alle V4-Einstiege
-  // führen auf die feld-zentrische Datenquellen-Fläche (`v4/einstellungen/
-  // datenquellen`, §2g). Die V3-Routen + `pages/SensorMappingWizard` /
-  // `pages/MqttInboundSetup` bleiben unberührt bis zum Flip (PLAN-IA-V4-RESTWEG).
-  // Monatsabschluss-V4 Bündel 6 (2026-07-12): als V4-Fläche stillgelegt — der
-  // Wizard-Overlay-Eintrag ist entfernt, alle V4-Einstiege öffnen jetzt die
-  // assistierte `MonatsdatenForm` (Bündel 5). Die V3-Route `/monatsabschluss/…`
-  // + `pages/MonatsabschlussWizard` bleiben unberührt bis zum Flip (PLAN-IA-V4-RESTWEG).
+  // Flächen stillgelegt — beide Overlay-Einträge entfernt, alle Einstiege führen
+  // auf die feld-zentrische Datenquellen-Fläche (`einstellungen/datenquellen`, §2g).
+  // Monatsabschluss-V4 Bündel 6 (2026-07-12): ebenso stillgelegt — der
+  // Wizard-Overlay-Eintrag ist entfernt, alle Einstiege öffnen die assistierte
+  // `MonatsdatenForm` (Bündel 5).
+  // Die hier früher genannten V3-Seiten (`SensorMappingWizard`, `MqttInboundSetup`,
+  // `MonatsabschlussWizard`) sind mit dem Flip gefallen, ihre Routen mit ihnen.
 }
 
 /** Titel eines Wizards (für Katalog-Buttons „<Titel> öffnen"). */

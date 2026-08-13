@@ -12,8 +12,9 @@
  *
  * Eingabe ist die normalisierte {@link WerteZeile} (`lib/werte/zeile`); die
  * Vergleichs-/CSV-/Footer-Logik ist in `lib/werte` zentralisiert. Die
- * Produktiv-Seite `pages/auswertung/TabelleTab.tsx` bleibt bis zum Flip (3.8)
- * unangetastet — diese Komponente ist der künftige SoT.
+ * Werte-SoT der Tabellen-Sichten. Die frühere Produktiv-Seite
+ * `pages/auswertung/TabelleTab.tsx` ist mit dem IA-V4-Flip gefallen — diese
+ * Komponente ist seither nicht mehr der künftige, sondern der geltende SoT.
  */
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Columns, GitCompareArrows, ChevronUp, ChevronDown, ArrowRight } from 'lucide-react'
