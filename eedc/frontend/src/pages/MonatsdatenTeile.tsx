@@ -1,17 +1,21 @@
 /**
- * Monatsdaten — geteilte Teile (Spalten-SoT + Tabelle + Formular-Modals + HA-Import
- * + Kraftstoffpreis-Backfill). D14-8-Gate (2026-07-03): die Kraftstoffpreis-
- * Monats-Karte rendert nur in V3 — unter /v4 läuft der Backfill über das
- * Auswahlfeld der EINEN Reparatur-Werkbank (Energieprofil-Pflege).
+ * Monatsdaten — geteilte Teile (Spalten-SoT + Tabelle + Formular-Modals + HA-Import).
  *
- * EINE Code-Wahrheit für IST (`pages/Monatsdaten.tsx`, dünner Komposer) und IA-V4
- * (eigene native V4-Seite `v4/MonatsdatenV4.tsx`). Der Aufrufer reicht die bereits
+ * D14-8 (2026-07-03): die Kraftstoffpreis-Monats-Karte gab es nur in V3; der Backfill
+ * läuft über das Auswahlfeld der EINEN Reparatur-Werkbank (`kraftstoffpreis_backfill`
+ * deckt Tages- UND Monatszeilen ab). **Mit dem V3-Aufräumen 2026-08-13 ist die Karte
+ * samt Handler entfernt** — ebenso die drei Wizard-Einstiege (Kopf · Leerzustand ·
+ * je Zeile), die in Edit + „Nächster offener" aufgegangen sind (B5).
+ *
+ * Einziger Aufrufer ist seit dem Flip `config/einstellungenKatalog.tsx`
+ * (`MonatsdatenVerwaltung`) — die früher hier genannten Seiten `pages/Monatsdaten.tsx`
+ * und `v4/MonatsdatenV4.tsx` gibt es beide nicht mehr. Der Aufrufer reicht die bereits
  * aufgelöste `anlageId` (kein interner Anlage-Guard) und – im Mehr-Anlagen-Fall –
  * einen `kopfZusatz` (Anlage-Auswahl) in die Kopfleiste. Zahlen de-DE über `fmtZahl`.
  */
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, Fuel, PenLine, ArrowRight } from 'lucide-react'
+import { Plus, Calendar, Edit, Trash2, Columns, AlertTriangle, Database, Loader2, PenLine, ArrowRight } from 'lucide-react'
 import { Button, Card, Checkbox, Modal, EmptyState, Alert, Select } from '../components/ui'
 import { TableHead, TableBody, TableRow, TableHeader, TableCell } from '../components/ui'
 import ErfassungZustandBadge from '../components/ui/ErfassungZustandBadge'
@@ -22,7 +26,6 @@ import { useOeffneWizard } from '../v4/wizardHost'
 import { monatsdatenApi, type AggregierteMonatsdaten } from '../api/monatsdaten'
 import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../api/haStatistics'
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
-import { energieProfilApi, type KraftstoffpreisStatus } from '../api/energie_profil'
 import type { Monatsdaten } from '../types'
 import { MONAT_KURZ, fmtZahl } from '../lib'
 import {
@@ -90,23 +93,15 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   // E1 (Donor-Kanten): unter LayoutV4 öffnen Monatsabschluss/CSV-Import im
   // Overlay (oeffneWizard mit Payload); ohne Provider (V3) bleibt navigate.
   const oeffneWizard = useOeffneWizard()
-  // Nur noch V3: der Monatsabschluss-Wizard läuft in V3 über seine Route. Unter V4
-  // ist der Wizard als Fläche stillgelegt (B5) — die Öffner-Buttons sind dort
-  // ausgeblendet, die assistierte Form übernimmt (Edit / „Erfassen" / Sprung).
-  const monatsabschlussOeffnen = (jahr?: number, monat?: number) => {
-    if (jahr != null && monat != null) navigate(`/monatsabschluss/${anlageId}/${jahr}/${monat}`)
-    else navigate(`/monatsabschluss/${anlageId}`)
-  }
   const { monatsdaten, loading, error, createMonatsdaten, updateMonatsdaten, deleteMonatsdaten } = useMonatsdaten(anlageId)
   // Hook wird für MonatsdatenForm benötigt
   const { investitionen } = useInvestitionen(anlageId)
   // Anlage-Installationsdatum als Fallback-Anker für den erwarteten Monatsbereich.
   const { anlage } = useAnlage(anlageId)
-  const hatEAuto = investitionen.some(i => i.typ === 'e-auto')
-  // D14-8-Gate: Kraftstoff-Monats-Karte nur in V3 (V4 = Werkbank).
-  // IA-V4 ist die einzige Oberfläche (Flip v4.0.0). Die `!istV4`-Zweige unten sind
-  // toter V3-Bestand → Entfernung als Flip-Nacharbeit (siehe PLAN-IA-V4-UMSETZUNG-FLIP §2a).
-  const istV4 = true
+  // B5/D14-8: Die vier V3-Zweige sind mit dem V3-Aufräumen 2026-08-13 entfernt — der
+  // Wizard-Einstieg (Kopf, Leerzustand, je Zeile) ist in Edit + „Nächster offener"
+  // aufgegangen, die Kraftstoff-Monats-Karte in der Reparatur-Werkbank
+  // (`kraftstoffpreis_backfill` deckt Tages- UND Monatszeilen ab).
 
   // Aggregierte Daten
   const { data: aggregierteDaten, loading: aggregiertLoading } = useApiData(
@@ -144,48 +139,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
     vorhandeneDaten: Monatsdaten
     vorhandeneInvestitionsDaten: InvestitionMonatsdaten[]
   } | null>(null)
-
-  // Datenverwaltung: Kraftstoffpreis-Monats-Backfill
-  const [kpStatus, setKpStatus] = useState<KraftstoffpreisStatus | null>(null)
-  const [kpMessage, setKpMessage] = useState<string | null>(null)
-  const [kpIsError, setKpIsError] = useState(false)
-  const [runningKpBackfill, setRunningKpBackfill] = useState(false)
-
-  const loadKraftstoffStatus = useCallback(async () => {
-    try {
-      const s = await energieProfilApi.getKraftstoffpreisStatus(anlageId)
-      setKpStatus(s)
-    } catch {
-      setKpStatus(null)
-    }
-  }, [anlageId])
-
-  useEffect(() => { loadKraftstoffStatus() }, [loadKraftstoffStatus])
-
-  const handleKraftstoffMonatsBackfill = async () => {
-    try {
-      setRunningKpBackfill(true)
-      setKpMessage(null)
-      setKpIsError(false)
-      const res = await energieProfilApi.kraftstoffpreisBackfillMonats(anlageId)
-      if (res.fehler) {
-        setKpIsError(true)
-        setKpMessage(`Kraftstoffpreis-Backfill: ${res.fehler}`)
-      } else {
-        setKpMessage(
-          res.aktualisiert > 0
-            ? `${res.aktualisiert} Monate mit Kraftstoffpreis (${res.land}) befüllt.`
-            : (res.hinweis || 'Keine offenen Monate.')
-        )
-      }
-      await loadKraftstoffStatus()
-    } catch (e) {
-      setKpIsError(true)
-      setKpMessage(e instanceof Error ? e.message : 'Kraftstoffpreis-Backfill fehlgeschlagen')
-    } finally {
-      setRunningKpBackfill(false)
-    }
-  }
 
   // Sichtbare Spalten aus LocalStorage laden
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
@@ -471,17 +424,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
               Aus HA laden
             </Button>
           )}
-          {/* B5: Wizard-Einstieg nur in V3 — unter V4 übernehmen Edit +
-              „Nächster offener"-Sprung (assistierte Form), kein Doppel-Einstieg. */}
-          {!istV4 && (
-            <Button
-              variant="secondary"
-              onClick={() => monatsabschlussOeffnen()}
-            >
-              <Calendar className="h-5 w-5 mr-2" />
-              Monatsabschluss
-            </Button>
-          )}
           <Button onClick={() => { setHaVorausfuellung(null); setCreatePreset(null); setShowForm(true) }}>
             <Plus className="h-5 w-5 mr-2" />
             Monat einfügen
@@ -520,14 +462,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                   <Plus className="h-5 w-5 mr-2" />
                   Monat einfügen
                 </Button>
-                {!istV4 && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => monatsabschlussOeffnen()}
-                  >
-                    Monatsabschluss starten
-                  </Button>
-                )}
                 <Button variant="secondary" onClick={() => (oeffneWizard ? oeffneWizard('csv-import') : navigate('/import'))}>CSV importieren</Button>
               </div>
             }
@@ -659,18 +593,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
                         })}
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            {/* B5: per-Zeile-Wizard nur in V3 — unter V4 öffnet Edit
-                                dieselbe assistierte Form für den Monat. */}
-                            {!istV4 && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title="Monatsabschluss-Assistent"
-                                onClick={() => monatsabschlussOeffnen(md.jahr, md.monat)}
-                              >
-                                <Calendar className="h-4 w-4 text-primary-500" />
-                              </Button>
-                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -703,47 +625,6 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
         </>
       )}
 
-      {/* Datenverwaltung — rapahl #188: Kraftstoffpreis-Hinweis nur bei E-Auto-Anlage.
-          D14-8: nur V3 — unter /v4 konsolidiert in der Reparatur-Werkbank. */}
-      {!istV4 && hatEAuto && kpStatus && kpStatus.monats_offen > 0 && (
-        <Card>
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Database className="h-6 w-6 text-primary-500" />
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Datenverwaltung
-              </h2>
-            </div>
-
-            {kpMessage && <Alert type={kpIsError ? "error" : "info"} className="mb-3">{kpMessage}</Alert>}
-
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <Fuel className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-medium text-gray-900 dark:text-white">
-                    Kraftstoffpreise nachpflegen (Monats-Ebene)
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {fmtZahl(kpStatus.monats_offen)} Monate ohne Kraftstoffpreis.
-                    Lädt den Monatsdurchschnitt aus dem EU Oil Bulletin (Euro-Super 95, {kpStatus.land}).
-                  </p>
-                  <div className="mt-3">
-                    <Button
-                      variant="secondary"
-                      onClick={handleKraftstoffMonatsBackfill}
-                      disabled={runningKpBackfill}
-                    >
-                      {runningKpBackfill ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Fuel className="h-4 w-4 mr-2" />}
-                      Kraftstoffpreise nachpflegen
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* HA-Statistik Modal */}
       <Modal

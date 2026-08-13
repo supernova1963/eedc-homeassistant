@@ -95,7 +95,7 @@ const T_ALLOWLIST = new Set([
   'src/components/ui/Table.tsx', // die Zentrale selbst
   'src/pages/aussichten/KorrekturprofilHeatmapCard.tsx', // Heatmap-Matrix, keine Datensatz-Semantik
   'src/components/preview/IASkeleton.tsx', // Design-Attrappe, nicht Teil der App
-  'src/pages/Hilfe.tsx', // statische Info-/Layout-Tabelle
+  // `src/pages/Hilfe.tsx` ist mit dem IA-V4-Flip gefallen, der Eintrag am 13.08. entfernt.
   'src/components/ui/MarkdownDoc.tsx', // Markdown-Render-Tabelle (aus Hilfe.tsx extrahiert, D2)
   // Gernot 2026-07-10: T-Konto bleibt Sonderfall, KEINE Zentralisierung planen.
   // Es ist kein Tabellenraster, sondern ein Layout aus vier Tabellen (Desktop mit

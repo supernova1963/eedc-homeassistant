@@ -60,7 +60,6 @@ const ROH_INFRA = new Map([
   ['src/components/live/EnergieFluss.tsx', 2], // Live-Kartenkopf-Pillen
   ['src/components/werte/WerteTabelle.tsx', 2], // Spalten-Picker Reorder-Pfeile
   ['src/components/prognose/PrognoseVergleichTeile.tsx', 1], // ⚠-Popover-Trigger in Zelle
-  ['src/components/sensor-mapping/FeldMappingInput.tsx', 4], // SensorAutocomplete-Combobox
   ['src/pages/Einrichtung.tsx', 1], // Datenquellen-Karten-Kachel
   ['src/components/setup-wizard/steps/StrompreiseStep.tsx', 1], // Auswahl-Karte (mehrzeilig)
   ['src/components/setup-wizard/steps/InvestitionenStep.tsx', 3], // Schnellstart-Karte + Typ-Kacheln
@@ -91,8 +90,9 @@ const ROH_INFRA = new Map([
   // Gruppe 2 — Shell-/Layout-/Park-Mechanik (Gattung BlockShell/IATopNav):
   ['src/components/blocks/FokusKachel.tsx', 1], // ⤢ Fokus-Icon (Gattung CockpitLiveV4)
   ['src/components/blocks/FokusVollbild.tsx', 1], // „Zurück" im Vollbild-Overlay
-  ['src/components/layout/AnlagenSelektorView.tsx', 2], // Listbox-Combobox-Impl (Gattung FeldMappingInput)
-  ['src/components/layout/Header.tsx', 1], // Theme-Toggle (Shell)
+  // Gattungs-Bezug war `FeldMappingInput` — mit dem V3-Aufräumen 2026-08-13 gefallen;
+  // diese Datei ist seither die einzige verbliebene Listbox-Combobox-Implementierung.
+  ['src/components/layout/AnlagenSelektorView.tsx', 2],
   ['src/components/layout/IASubTabBar.tsx', 1], // Tab-Leisten-SoT selbst
   ['src/components/park/Parkbar.tsx', 2], // Park-Overlay-Mechanik (Gattung GeparktBlock)
   ['src/components/common/DataLoadingState.tsx', 1], // Retry im Fehlerzustand (Impl des geteilten Ladezustand-Bausteins)

@@ -12,9 +12,10 @@
  * (SoT nutzen, oder Eintrag hier anpassen = dokumentierte Freigabe). Weniger
  * Treffer als eingefroren ist erlaubt (Abbau) — die Zahl hier dann mitsenken.
  *
- * V3-only-Dateien (Layout, MonatsabschlussView, CollapsibleSection/SortableSection …)
- * stehen als LEGACY drin und werden mit dem v4-Flip/Donor-Abbau ausgetragen —
- * kein Sweep an Totem.
+ * **Austrag erledigt (2026-08-13, V3-Aufräumen):** `Layout`, `MonatsabschlussView`,
+ * `CommunityShare` und `EnergieprofilTageTabelle` sind mit dem Flip gefallen, ihre
+ * Bestands-Einträge hier entfernt. `CollapsibleSection`/`SortableSection` leben
+ * weiter und bleiben mit ihrem Cap-Entscheid stehen.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -33,8 +34,6 @@ const SOT = new Set([
 const BESTAND = new Map([
   ['src/components/AppWithSetup.tsx', 6],
   ['src/components/blocks/types.ts', 1],
-  ['src/components/energieprofil/EnergieprofilTageTabelle.tsx', 6], // LEGACY V3
-  ['src/components/layout/Layout.tsx', 2], // LEGACY V3
   ['src/components/live/EnergieFluss.tsx', 4],
   ['src/components/live/WetterWidget.tsx', 3],
   ['src/components/park/ParkContext.tsx', 4],
@@ -46,8 +45,6 @@ const BESTAND = new Map([
   ['src/hooks/useSectionOrder.ts', 5],
   ['src/hooks/useSelectedAnlage.ts', 5],
   ['src/hooks/useSetupWizard.ts', 3],
-  ['src/pages/CommunityShare.tsx', 2], // Altlast-Key eedc_community_reset_dismissed (Unterstrich) — Migration vertagt
-  ['src/pages/MonatsabschlussView.tsx', 1], // LEGACY V3 (Donor → R6)
   ['src/pages/MonatsdatenTeile.tsx', 2],
   ['src/v4/AnlagenSelektor.tsx', 1],
 ])

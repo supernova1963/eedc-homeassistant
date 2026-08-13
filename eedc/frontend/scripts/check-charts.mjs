@@ -40,20 +40,15 @@ const SRC = join(ROOT, 'src')
 const SOT_DATEI = 'src/components/ui/AnteilDonut.tsx'
 
 /**
- * R1-Allowlist: V3-only-IST-Seiten mit Hand-Pie, NICHT über eine V4-Route erreichbar
- * (nur die API-Clients werden von v4 importiert, nicht die Seiten selbst). Werden mit
- * ihren jeweiligen V3→V4-Paketen auf `AnteilDonut` umgestellt und hier entfernt.
- * Analog zu `check:chart-tooltip` „V3-Altbestand bleibt bis Flip außerhalb Scope".
+ * R1-Allowlist: **leer seit dem V3-Aufräumen 2026-08-13.**
+ *
+ * Sie trug sieben V3-only-Seiten mit Hand-Pie (`AktuellerMonat`, die sechs
+ * `*Dashboard`-Seiten), die mit dem IA-V4-Flip (v4.0.0) ihre Route verloren hatten.
+ * Deren Dateien sind mit dem Aufräumen gefallen — die Einträge zeigten seither ins
+ * Leere und hätten eine gleichnamige neue Datei stumm freigestellt.
+ * Neue Ausnahmen kommen nur mit Begründung dazu.
  */
-const PIE_ALLOWLIST = new Set([
-  'src/pages/AktuellerMonat.tsx',
-  'src/pages/PVAnlageDashboard.tsx',
-  'src/pages/WaermepumpeDashboard.tsx',
-  'src/pages/WallboxDashboard.tsx',
-  'src/pages/EAutoDashboard.tsx',
-  'src/pages/BalkonkraftwerkDashboard.tsx',
-  'src/pages/SonstigesDashboard.tsx',
-])
+const PIE_ALLOWLIST = new Set([])
 
 function tsxFiles(dir) {
   const out = []
