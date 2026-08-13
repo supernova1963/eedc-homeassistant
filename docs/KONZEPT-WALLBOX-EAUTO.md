@@ -636,7 +636,12 @@ Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emi
 > ist damit erledigt: die Prognose rät den Anteil nicht mehr"), und N-188 ist mit v4.0.11 gebaut.
 > Dieser Kasten wurde beim Fortschreiben nicht mitgezogen — **N-182-Klasse, am selben Tag der
 > dritte Fall** (vgl. HX-6 im HA-Export-Konzept und der Statuskopf des Speicher-Konzepts).
-> ⇒ **Aus diesem Dokument ist derzeit nichts offen.**
+> ⇒ **Aus den Rahmenbedingungen ist damit nichts mehr offen.** ⚠ **Das heißt nicht „Konzept
+> leer":** **Phase 2b** (Vehicle-Sensor-Mapping) und **Phase 3** (Multi-Fahrzeug) bleiben
+> unverändert **trigger-gebunden geparkt** — Trigger ist die nächste evcc-Pool-Meldung, so führt
+> es auch [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110). *Geparkt mit
+> Trigger ist nicht dasselbe wie offener Arbeitsvorrat; ein erster Korrektur-Entwurf hier hat
+> genau das verwechselt.*
 
 ### Das Problem
 
