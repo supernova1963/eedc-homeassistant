@@ -89,6 +89,9 @@ Fundament dieses Entwurfs:
 - **Gate:** `HA_INTEGRATION_AVAILABLE = bool(SUPERVISOR_TOKEN)` (`config.py:24`). Im Standalone werden **alle 5 HA-Routen nicht registriert** (`main.py:100-107, 456-468`) + ~20 Guard-Stellen.
 - **sensor_mapping** (JSON-Spalte `anlage.sensor_mapping:95`): `{ basis:{…,live,live_invert}, investitionen:{<id>:{felder,live,live_invert}}, solcast_config }`, Strategie `sensor`|`keine`. **Verbindungs-unabhängig** — bleibt unverändert.
 - **Entity-Discovery:** `GET /api/sensor-mapping/{id}/available-sensors`. Wizard: `SensorMappingWizard.tsx`. Setup-Panel `HAConnectionStep.tsx` = reine Anzeige, **keine** URL/Token-Eingabe.
+  > ⚠ **IST-Aufnahme von vor dem Umbau.** Beides gibt es nicht mehr: der Wizard ist mit dem
+  > IA-V4-Flip gefallen, der Endpunkt am 2026-08-13 stillgelegt (N-241). Heutige
+  > Entity-Discovery: `GET /api/datenquellen/{id}/ha/sensoren`.
 
 ### 1c. HA ↔ MQTT heute: Merge mit **MQTT**-Vorrang
 

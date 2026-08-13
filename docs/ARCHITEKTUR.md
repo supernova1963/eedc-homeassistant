@@ -621,13 +621,19 @@ GET /api/aussichten/finanzen/{anlage_id}      # Finanz-Prognose + Amortisation
 #### Sensor-Mapping API
 
 ```
-GET    /api/sensor-mapping/{anlage_id}                    # Aktuelles Mapping abrufen
-GET    /api/sensor-mapping/{anlage_id}/available-sensors   # Verfügbare HA-Sensoren
-POST   /api/sensor-mapping/{anlage_id}                    # Mapping speichern
-DELETE /api/sensor-mapping/{anlage_id}                    # Mapping löschen
-GET    /api/sensor-mapping/{anlage_id}/status             # Kurzstatus
-POST   /api/sensor-mapping/{anlage_id}/init-start-values  # MQTT-Startwerte initialisieren
+GET    /api/sensor-mapping/{anlage_id}/suggest            # Vorschläge aus der HA-Energiekonfiguration (#197)
 ```
+
+> **Seit 2026-08-13 ist das der einzige Endpunkt dieses Routers** (Fund N-241). Fünf
+> weitere — Mapping lesen · Sensor-Liste · speichern · löschen · Status — sind stillgelegt:
+> ihre Oberfläche ist mit dem IA-V4-Flip gefallen, und `POST` schrieb weiter auf
+> `Anlage.sensor_mapping`, ohne den Historie-Hinweis auszulösen, den die
+> Datenquellen-Fläche seit Konzept #192 B zeigt. Die heutigen Wege sind
+> `GET/POST /api/datenquellen/{id}/felder` (lesen · speichern) und
+> `GET /api/datenquellen/{id}/ha/sensoren` (Sensor-Liste).
+>
+> Der Router bleibt supervisor-gebunden gemountet (`main.py`, `HA_INTEGRATION_AVAILABLE`).
+> ⚠ Diese Liste nannte bis dahin ein `POST …/init-start-values`, **das es baumweit nie gab**.
 
 **Mapping-Strategien:**
 - `sensor` - Direkter HA-Sensor

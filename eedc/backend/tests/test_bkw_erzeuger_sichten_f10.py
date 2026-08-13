@@ -249,35 +249,31 @@ async def test_community_meldet_die_echte_ausrichtung_statt_sued_30(db):
 
 # ── Klasse C ───────────────────────────────────────────────────────────────
 
-async def test_sensor_mapping_gesamt_kwp_zaehlt_bkw_und_die_spalte(db, monkeypatch):
-    """Zwei Befunde in einer Zeile: `balkonkraftwerk` fehlte, **und** gelesen
-    wurde nur das ``parameter``-JSON — ein Modul mit gepflegter *Spalte* zählte
-    0 (die #229-Klasse mit vertauschten Rollen).
+async def test_erzeuger_kwp_liest_bkw_parameter_und_pv_spalte(db):
+    """Beide Herkunftsformen der Nennleistung, an einer Anlage gemessen.
 
-    ⚠ ``gesamt_kwp`` hat baumweit keinen Leser; der Test hält die Rechnung
-    fest, nicht eine Anzeige.
+    Der Befund war ursprünglich in ``GET /api/sensor-mapping/{id}`` sichtbar:
+    dessen ``gesamt_kwp`` zählte nur das ``parameter``-JSON, ein Modul mit
+    gepflegter *Spalte* zählte 0 (die #229-Klasse mit vertauschten Rollen).
 
-    Der Endpunkt holt seine Session selbst über ``get_session()`` — ohne den
-    Patch liefe er an der Test-DB vorbei und der Test wäre grün, ohne etwas zu
-    beweisen (Muster aus ``test_mqtt_export_toggle_b7_5b.py``).
+    ⚠ Diese Route ist mit N-241 stillgelegt (2026-08-13) und ihr ``gesamt_kwp``
+    hatte baumweit ohnehin keinen Leser. Der Test prüft deshalb den **SoT selbst**
+    (ADR-002/P3-a, ``get_erzeuger_kwp``) statt einer Route, die ihn aufsummierte —
+    dort ist die Invariante zuhause, und dort wirkt sie für jeden Aufrufer.
     """
-    from contextlib import asynccontextmanager
+    from backend.core.investition_kennwerte import get_erzeuger_kwp
 
-    from backend.api.routes import sensor_mapping as sm
-
-    anlage_id, _ = await _bkw_anlage(db)          # BKW: 2,0 kWp nur im parameter
-    db.add(Investition(anlage_id=anlage_id, typ="pv-module", bezeichnung="Dach",
-                       anschaffungsdatum=date(2024, 1, 1), leistung_kwp=8.0))
+    anlage_id, bkw_id = await _bkw_anlage(db)      # BKW: 2,0 kWp nur im parameter
+    modul = Investition(anlage_id=anlage_id, typ="pv-module", bezeichnung="Dach",
+                        anschaffungsdatum=date(2024, 1, 1), leistung_kwp=8.0)
+    db.add(modul)
     await db.commit()
 
-    @asynccontextmanager
-    async def fake_session():
-        yield db
+    bkw = await db.get(Investition, bkw_id)
 
-    monkeypatch.setattr(sm, "get_session", fake_session)
-
-    resp = await sm.get_sensor_mapping(anlage_id=anlage_id)
-
-    assert resp.gesamt_kwp == pytest.approx(10.0), (
-        "Erwartet 8,0 (Spalte) + 2,0 (BKW aus leistung_wp × anzahl)"
+    assert get_erzeuger_kwp(bkw) == pytest.approx(2.0), (
+        "BKW-Nennleistung steht nur im parameter-JSON (leistung_wp × anzahl)"
+    )
+    assert get_erzeuger_kwp(modul) == pytest.approx(8.0), (
+        "PV-Modul-Nennleistung steht in der Spalte leistung_kwp"
     )

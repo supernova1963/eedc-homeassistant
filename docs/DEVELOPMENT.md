@@ -693,7 +693,7 @@ Nach dem Start des Backends verfügbar unter:
 | `/api/infothek` | `infothek` | Komponenten-Akten, Verträge, Datei-Upload (N:M) |
 | `/api/ha` | `ha_remote`, *(HA_MODE)* `ha_integration` | HA-Verbindung/Token · HA-Status |
 | `/api/ha-import` | *(HA_MODE)* `ha_import` | Datenimport aus HA |
-| `/api/sensor-mapping` | *(HA_MODE)* `sensor_mapping` | HA-Sensor-Zuordnung inkl. Strompreis |
+| `/api/sensor-mapping` | *(HA_MODE)* `sensor_mapping` | **nur noch `/{id}/suggest`** (HA-Energy-Vorschläge, #197). Die fünf Zuordnungs-Endpunkte sind seit 2026-08-13 stillgelegt (N-241) — Zuordnung läuft über `/api/datenquellen` |
 | `/api/ha-statistics` | *(HA_MODE)* `ha_statistics` | HA-Langzeitstatistik — **drei Transporte**: externe Recorder-DB (`HA_RECORDER_DB_URL`), eingehängte Recorder-Datei, **WebSocket** `recorder/statistics_during_period` (ohne DB-Zugang) |
 
 > **Hinweis:** die mit *(HA_MODE)* markierten Router werden nur eingehängt, wenn `HA_MODE=true`.

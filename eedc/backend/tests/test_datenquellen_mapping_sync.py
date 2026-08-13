@@ -276,10 +276,14 @@ async def test_migration_zieht_ha_zuordnungen_nach_ohne_zu_raeumen(db):
 # ─── Wächter (baumweit, AST) ────────────────────────────────────────────────
 
 # Schreiber, die den Store bewusst OHNE die Schreib-Schicht setzen:
-#   wizard_sync — Gegenrichtung: der Store folgt dem frisch geschriebenen Mapping.
 #   b8-Materialisierung — Gegenrichtung: leitet die Quelle AUS dem Mapping ab.
+#
+# `services/datenquellen_wizard_sync.py` stand hier bis 2026-08-13. Er sicherte den
+# Store gegen den Voll-Rewrite durch `POST /api/sensor-mapping/{id}`; mit dem
+# Stilllegen dieser Route (N-241) hatte er keinen Aufrufer mehr und ist gefallen.
+# Eine Ausnahme für einen toten Schreiber stellt sonst eine künftige gleichnamige
+# Datei stumm frei.
 _WAECHTER_AUSNAHMEN = {
-    "services/datenquellen_wizard_sync.py",
     "services/migrations/migrate_datenquellen_materialisieren.py",
 }
 _SCHICHT = "datenquellen_mapping_sync"
