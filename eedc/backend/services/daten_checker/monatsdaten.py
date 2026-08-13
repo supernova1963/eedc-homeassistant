@@ -7,8 +7,10 @@ Reiner Move aus dem früheren Modul `daten_checker.py` (Tier-4 Achse C).
 from datetime import date
 from typing import Optional
 
+from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.field_definitions import get_speicher_netzladung_kwh
 from backend.core.investition_kennwerte import get_erzeuger_kwp
+from backend.core.monats_luecken import ermittle_start_anker
 from backend.core.investition_parameter import ist_luft_luft_waermepumpe
 from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
@@ -302,13 +304,24 @@ class MonatsdatenChecks:
         else:
             letzter_jahr, letzter_monat = heute.year, heute.month - 1
 
-        if anlage.installationsdatum:
-            start_jahr = anlage.installationsdatum.year
-            start_monat = anlage.installationsdatum.month
-        else:
-            # Fallback: frühester Monatsdaten-Eintrag
-            start_jahr = monatsdaten[0].jahr
-            start_monat = monatsdaten[0].monat
+        # N-243: über den SoT statt einer dritten eigenen Ableitung. Bis
+        # 2026-08-13 rechnete dieser Check „Anlagendatum → erste Zeile" und
+        # kannte die Investitionen gar nicht, während `core/monats_luecken.py`
+        # (und sein Frontend-Spiegel) „frühestes Anschaffungsdatum → …"
+        # rechnete. Zwei Antworten auf dieselbe Frage: Bei van sagte der Sprung
+        # „Sep 2016", der Checker etwas anderes. Jetzt eine Quelle für alle drei
+        # Sichten ([[feedback_aggregations_drift]]).
+        anker = ermittle_start_anker(
+            anlage.installationsdatum,
+            [
+                inv.anschaffungsdatum for inv in anlage.investitionen
+                if inv.typ in PV_ERZEUGER_TYPEN
+            ],
+            {(md.jahr, md.monat) for md in monatsdaten},
+        )
+        if anker is None:
+            return ergebnisse
+        start_jahr, start_monat = anker
 
         # Vorhandene Monate als Set
         vorhandene = {(md.jahr, md.monat) for md in monatsdaten}

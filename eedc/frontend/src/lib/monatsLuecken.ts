@@ -8,10 +8,12 @@
  * er springt naiv auf „letzter Monat + 1" und verfehlt innere Lücken (z. B. ein
  * einzelner fehlender Monat mitten in der Historie).
  *
- * „Erwarteter Bereich" = [Anschaffungs-Anker … letzter vergangener Monat]:
- * - Start = frühestes `anschaffungsdatum` der Investitionen (Anschaffungsdatum ist
- *   die limitierende Grenze für ALLE Auswertungen — feedback_anschaffungsdatum_grenze),
- *   Fallback Anlage-Installationsdatum, dann erste vorhandene Datenzeile.
+ * „Erwarteter Bereich" = [Anlagen-Anker … letzter vergangener Monat]:
+ * - Start = Anlage-Installationsdatum, Fallback ältestes `anschaffungsdatum` der
+ *   ERZEUGER, dann erste vorhandene Datenzeile (seit 2026-08-13, s.
+ *   {@link ermittleStartAnker}). Welche Investition in welchem Monat *zählt*,
+ *   entscheidet davon unberührt ihr eigenes Anschaffungs-/Stilllegungsdatum
+ *   (feedback_anschaffungsdatum_grenze).
  * - Ende = Vormonat von heute (der laufende Monat ist noch nicht abgeschlossen).
  * Ein Monat OHNE Datenzeile in diesem Bereich gilt als „offen/fehlt".
  */
@@ -32,19 +34,32 @@ export function ausMonatIndex(idx: number): MonatRef {
 }
 
 /**
- * Bereichs-Start (Anschaffungs-Anker) aus den verfügbaren ISO-Datums-Quellen.
- * Reihenfolge: frühestes Investitions-`anschaffungsdatum` → Anlage-Installationsdatum
- * → früheste vorhandene Datenzeile. `null`, wenn keine Quelle greift.
+ * Bereichs-Start für die **Basisdaten** (Anlagenzeile: Einspeisung/Netzbezug).
+ * Reihenfolge: Anlage-Installationsdatum → ältestes `anschaffungsdatum` der
+ * ERZEUGER → früheste vorhandene Datenzeile. `null`, wenn keine Quelle greift.
+ *
+ * **Die Reihenfolge stand bis 2026-08-13 andersherum**, und der Anker nahm das
+ * früheste Anschaffungsdatum ALLER Investitionen. Eine Monatszeile ist aber eine
+ * Aussage über die *Anlage*, nicht über ein Gerät: Ein E-Auto von 2017 begründet
+ * keine Einspeisungszeile von 2017. Zweimal aufgelaufen — fridolin22 (Forum
+ * T77723 #773) hat sein Auto auf 2026 umdatiert, um die Forderung loszuwerden,
+ * und damit dessen echte Historie verloren; van (PN 13.08.) sah „Sep 2016".
+ *
+ * ⚠ Welche Investition in welchem Monat *zählt*, bleibt davon unberührt — das
+ * entscheidet ihr eigenes Anschaffungs-/Stilllegungsdatum
+ * (feedback_anschaffungsdatum_grenze). Hier geht es nur um den Erwartungsrahmen.
+ *
+ * `erzeugerAnschaffungsdaten` filtert der Aufrufer (ERZEUGER_INVESTITION_TYPEN);
+ * dieses Modul bleibt rein, damit es gegen den Backend-Spiegel testbar bleibt.
  */
 export function ermittleStartAnker(params: {
-  anschaffungsdaten: (string | null | undefined)[]
+  erzeugerAnschaffungsdaten: (string | null | undefined)[]
   anlageInstallationsdatum?: string | null
   vorhandene: MonatRef[]
 }): MonatRef | null {
-  const isoDaten = params.anschaffungsdaten.filter((d): d is string => !!d)
-  const fruehestesIso = isoDaten.length
-    ? isoDaten.reduce((a, b) => (a <= b ? a : b))
-    : params.anlageInstallationsdatum || null
+  const isoDaten = params.erzeugerAnschaffungsdaten.filter((d): d is string => !!d)
+  const fruehestesIso = params.anlageInstallationsdatum
+    || (isoDaten.length ? isoDaten.reduce((a, b) => (a <= b ? a : b)) : null)
   if (fruehestesIso) {
     // ISO 'YYYY-MM-DD' direkt zerlegen (kein Date → keine Zeitzonen-Falle).
     const jahr = parseInt(fruehestesIso.slice(0, 4), 10)

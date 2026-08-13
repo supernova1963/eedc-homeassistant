@@ -28,6 +28,7 @@ import { haStatisticsApi, type Monatswerte, type VerfuegbarerMonat } from '../ap
 import { investitionenApi, type InvestitionMonatsdaten } from '../api/investitionen'
 import type { Monatsdaten } from '../types'
 import { MONAT_KURZ, fmtZahl } from '../lib'
+import { ERZEUGER_INVESTITION_TYPEN } from '../lib/erzeugerSpalten'
 import {
   ermittleStartAnker,
   ermittleFehlendeMonate,
@@ -265,14 +266,19 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
   const daten = useMemo(() => aggregierteDaten ?? [], [aggregierteDaten])
 
   // ── Vollständigkeits-Quelle (§7, V-b): fehlende Monate + „nächster offener" ──
-  // EINE Ableitung für Tabellen-Färbung UND Sprung. Bereich = [Anschaffungs-Anker
+  // EINE Ableitung für Tabellen-Färbung UND Sprung. Bereich = [Anlagen-Anker
   // … Vormonat(heute)]. NICHT der naive Backend-`getNaechsterMonat` (verfehlt
-  // innere Lücken). Anker: frühestes Investitions-Anschaffungsdatum → Anlage-
-  // Installationsdatum → erste vorhandene Zeile (feedback_anschaffungsdatum_grenze).
+  // innere Lücken). Anker: Anlage-Installationsdatum → ältestes Anschaffungsdatum
+  // der ERZEUGER → erste vorhandene Zeile (N-243; bis 2026-08-13 zog jede
+  // Investition den Anker, auch ein E-Auto aus der Zeit vor der Anlage).
   const { fehlendeMonate, naechsterOffen } = useMemo(() => {
     const vorhandene: MonatRef[] = daten.map(md => ({ jahr: md.jahr, monat: md.monat }))
     const start = ermittleStartAnker({
-      anschaffungsdaten: investitionen.map(i => i.anschaffungsdatum),
+      // N-243: nur die ERZEUGER stellen den Fallback-Anker. Eine Wallbox oder ein
+      // E-Auto aus der Zeit vor der Anlage begründet keine Einspeisungszeile.
+      erzeugerAnschaffungsdaten: investitionen
+        .filter(i => ERZEUGER_INVESTITION_TYPEN.includes(i.typ))
+        .map(i => i.anschaffungsdatum),
       anlageInstallationsdatum: anlage?.installationsdatum,
       vorhandene,
     })

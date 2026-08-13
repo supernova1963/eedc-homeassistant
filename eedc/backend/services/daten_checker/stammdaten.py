@@ -11,6 +11,7 @@ from backend.models.anlage import Anlage
 from backend.models.monatsdaten import Monatsdaten
 from backend.models.pvgis_prognose import PVGISPrognose
 from backend.utils.investition_filter import sort_investitionen_nach_typ
+from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
 from backend.core.investition_parameter import (
     BKW_EINSPEISEGRENZE_W_TYPISCH,
@@ -64,6 +65,44 @@ class StammdatenChecks:
                 kategorie=kat, schwere=CheckSeverity.OK,
                 meldung="Installationsdatum vorhanden",
             ))
+
+        # N-243: Erzeuger, der ÄLTER ist als das Installationsdatum der Anlage.
+        # Dann gab es Erzeugung, bevor die Anlage laut Stammdaten existierte —
+        # eines der beiden Daten stimmt nicht, und der erwartete Monatsbereich
+        # beginnt zu spät (der Anker ist seit N-243 das Installationsdatum).
+        # ⚠ BEWUSST nur Erzeuger: Eine Wallbox, ein E-Auto oder eine Heizung aus
+        # der Zeit vor der PV-Anlage ist der Normalfall und völlig korrekt
+        # gepflegt. Ein Hinweis darauf wäre die F-30-Klasse — ein zulässiger
+        # Zustand, als Defekt gemeldet — und würde Anwender zum Umdatieren
+        # drängen; genau das hat fridolin22 (Forum T77723 #773) getan und dabei
+        # die echte Historie seines Fahrzeugs verloren.
+        if anlage.installationsdatum is not None:
+            fruehere = [
+                inv for inv in (anlage.investitionen or [])
+                if inv.typ in PV_ERZEUGER_TYPEN
+                and inv.anschaffungsdatum is not None
+                and inv.anschaffungsdatum < anlage.installationsdatum
+            ]
+            if fruehere:
+                aeltester = min(fruehere, key=lambda i: i.anschaffungsdatum)
+                ergebnisse.append(CheckErgebnis(
+                    kategorie=kat, schwere=CheckSeverity.WARNING,
+                    meldung=(
+                        f"Erzeuger älter als die Anlage: "
+                        f"{aeltester.anschaffungsdatum.strftime('%d.%m.%Y')}"
+                    ),
+                    details=(
+                        f"„{aeltester.bezeichnung}“ wurde laut Anschaffungsdatum am "
+                        f"{aeltester.anschaffungsdatum.strftime('%d.%m.%Y')} angeschafft, "
+                        f"die Anlage ist aber erst ab dem "
+                        f"{anlage.installationsdatum.strftime('%d.%m.%Y')} eingetragen"
+                        + (f" ({len(fruehere)} Erzeuger betroffen)" if len(fruehere) > 1 else "")
+                        + ". Für die Monate dazwischen fragt eedc keine Zählerwerte ab, "
+                        "obwohl dort bereits Strom erzeugt wurde. Korrigiere das Datum, "
+                        "das nicht stimmt — meist das Installationsdatum der Anlage."
+                    ),
+                    link="/einstellungen/anlage",
+                ))
 
         # Leistung kWp
         if not anlage.leistung_kwp or anlage.leistung_kwp <= 0:

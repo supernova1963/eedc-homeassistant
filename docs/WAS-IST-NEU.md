@@ -9,6 +9,34 @@
 
 ---
 
+## Kommt mit dem nächsten Update
+
+> Dieser Abschnitt sammelt, was fertig ist, aber noch keine Versionsnummer trägt. Beim Release wird daraus der neue Versions-Abschnitt.
+
+### Ein E-Auto von 2017 verlangt keine Stromzähler-Werte ab 2017
+
+**Betrifft dich das?** Wenn du eine Komponente eingetragen hast, die **älter ist als deine PV-Anlage** — ein Auto, eine Wallbox, eine Heizung.
+
+eedc hat den Zeitraum, für den es Monatsdaten erwartet, bisher am **ältesten Gerät** festgemacht. Wer sein E-Auto korrekt mit dem Anschaffungsdatum 2017 eingetragen hatte, bekam deshalb Einspeisung und Netzbezug ab 2017 abverlangt — für Jahre, in denen es die Anlage noch gar nicht gab. Der Sprung „Nächster offener Monat" landete entsprechend weit in der Vergangenheit.
+
+Maßgeblich ist jetzt das **Installationsdatum deiner Anlage**. Ist es nicht gepflegt, gilt das älteste Anschaffungsdatum deiner **Erzeuger** (PV-Module, Balkonkraftwerk); erst danach die erste vorhandene Datenzeile. Andere Komponenten ziehen den Bereich nicht mehr zurück.
+
+> **Wichtig, falls du dir bisher anders beholfen hast:** Manche haben ihr Fahrzeug auf ein späteres Datum umdatiert, damit die Forderung verschwindet. Das ist jetzt nicht mehr nötig — und du kannst das echte Anschaffungsdatum wieder eintragen. **Datiere Komponenten nie um, nur damit eine Anzeige ruhig wird:** Das Anschaffungsdatum entscheidet, ab wann ein Gerät in Wirtschaftlichkeit und Amortisation mitrechnet.
+
+Neu ist außerdem eine Prüfung im Daten-Checker: Ist ein **Erzeuger** älter als das Installationsdatum der Anlage, wird das gemeldet — dann wurde Strom erzeugt, bevor die Anlage laut Stammdaten existierte, und eines der beiden Daten stimmt nicht. Bei allen anderen Komponenten erscheint bewusst **keine** Meldung, weil ein früheres Datum dort der Normalfall ist.
+
+### „Bitte jeden Monat öffnen und speichern" — wenn das nichts ändern kann, sagt eedc jetzt warum
+
+**Betrifft dich das?** Wenn du Monatsdaten aus der Zeit **vor** dem Anschaffungsdatum deiner Komponenten gepflegt hast.
+
+Der Hinweis „Legacy-Daten gefunden" forderte bisher ausnahmslos dazu auf, jeden betroffenen Monat einmal zu öffnen und zu speichern. Bei einer Bestandsanlage, deren Komponenten mit einem späteren Anschaffungsdatum eingetragen sind, konnte das nie wirken: eedc ordnet einen PV-Gesamtwert nur Modulen zu, die es in dem Monat auch schon gab — sonst würde eine spätere Erweiterung rückwirkend Strom erzeugen. Es gibt dann schlicht kein Gerät, das den Wert übernehmen könnte, und die Meldung blieb nach jedem Speichern stehen.
+
+Jetzt prüft der Hinweis das vorher und nennt in diesem Fall den **Grund** statt einer Handlung, samt Weg zu den Komponenten. Sobald das Anschaffungsdatum auf den tatsächlichen Zeitpunkt zurückgezogen ist, lösen sich die Monate von selbst auf — die Zuordnung wird bei jedem Aufruf gerechnet, nicht einmalig gespeichert.
+
+> Für den echten Migrationsfall bleibt alles wie es war: Steht ein passendes Gerät bereit, ist „öffnen und speichern" weiterhin der richtige Weg.
+
+---
+
 ## v4.0.14 — Gemessen statt geschätzt, gesagt statt geschwiegen (August 2026)
 
 ### Der Statistik-Import sagt jetzt, wenn ein Monat unvollständig bleibt

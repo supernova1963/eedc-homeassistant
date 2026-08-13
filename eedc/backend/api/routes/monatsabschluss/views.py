@@ -919,8 +919,10 @@ async def get_naechster_monat(
     Rückgabe: der früheste offene Monat, oder ``None`` bei lückenlosem Bereich.
     """
     from backend.core.monats_luecken import naechster_offener_monat_fuer
+    from backend.core.berechnungen.spez_ertrag import PV_ERZEUGER_TYPEN
 
-    # Anlage inkl. Investitionen laden (Investitions-anschaffungsdatum = Start-Anker).
+    # Anlage inkl. Investitionen laden — die Erzeuger stellen den Fallback-Anker,
+    # wenn die Anlage kein Installationsdatum trägt (N-243).
     result = await db.execute(
         select(Anlage)
         .where(Anlage.id == anlage_id)
@@ -940,7 +942,10 @@ async def get_naechster_monat(
 
     offen = naechster_offener_monat_fuer(
         vorhandene=vorhandene,
-        anschaffungsdaten=[inv.anschaffungsdatum for inv in anlage.investitionen],
+        erzeuger_anschaffungsdaten=[
+            inv.anschaffungsdatum for inv in anlage.investitionen
+            if inv.typ in PV_ERZEUGER_TYPEN
+        ],
         anlage_installationsdatum=anlage.installationsdatum,
         heute=date.today(),
     )

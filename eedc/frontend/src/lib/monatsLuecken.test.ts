@@ -25,21 +25,34 @@ describe('monatIndex / ausMonatIndex', () => {
 })
 
 describe('ermittleStartAnker', () => {
-  it('nimmt das früheste Investitions-Anschaffungsdatum', () => {
+  it('nimmt das Anlage-Installationsdatum — es schlägt jedes Geräte-Datum', () => {
     expect(
       ermittleStartAnker({
-        anschaffungsdaten: ['2023-12-01', '2023-06-01', '2025-01-01', null],
+        anlageInstallationsdatum: '2022-04-01',
+        erzeugerAnschaffungsdaten: ['2023-06-01'],
+        vorhandene: [M(2024, 1)],
+      }),
+    ).toEqual(M(2022, 4))
+  })
+
+  it('fällt auf den ältesten ERZEUGER zurück, wenn die Anlage kein Datum trägt', () => {
+    expect(
+      ermittleStartAnker({
+        erzeugerAnschaffungsdaten: ['2023-12-01', '2023-06-01', null],
         vorhandene: [M(2024, 1)],
       }),
     ).toEqual(M(2023, 6))
   })
 
-  it('fällt auf Anlage-Installationsdatum zurück, wenn keine Investition datiert', () => {
+  it('lässt ein Gerät, das älter ist als die Anlage, den Anker NICHT ziehen (N-243)', () => {
+    // fridolin22 (Forum T77723 #773): E-Auto von 2017 an einer Anlage von 2022 —
+    // Basisdaten wurden ab 2017 verlangt, er hat das Auto umdatiert und dessen
+    // echte Historie verloren. Nicht-Erzeuger erreichen die Ableitung nicht mehr.
     expect(
       ermittleStartAnker({
-        anschaffungsdaten: [null, undefined],
         anlageInstallationsdatum: '2022-04-01',
-        vorhandene: [M(2023, 1)],
+        erzeugerAnschaffungsdaten: [],
+        vorhandene: [M(2022, 5)],
       }),
     ).toEqual(M(2022, 4))
   })
@@ -47,14 +60,14 @@ describe('ermittleStartAnker', () => {
   it('fällt zuletzt auf die früheste vorhandene Datenzeile zurück', () => {
     expect(
       ermittleStartAnker({
-        anschaffungsdaten: [],
+        erzeugerAnschaffungsdaten: [],
         vorhandene: [M(2024, 5), M(2024, 3), M(2024, 9)],
       }),
     ).toEqual(M(2024, 3))
   })
 
   it('gibt null, wenn keine Quelle greift', () => {
-    expect(ermittleStartAnker({ anschaffungsdaten: [], vorhandene: [] })).toBeNull()
+    expect(ermittleStartAnker({ erzeugerAnschaffungsdaten: [], vorhandene: [] })).toBeNull()
   })
 })
 

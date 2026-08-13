@@ -547,6 +547,39 @@ Sonstiges [Eigenständig]
 - ROI wird auf System-Ebene berechnet
 - Einsparungen werden proportional nach kWp verteilt
 
+### Welches Datum beantwortet welche Frage?
+
+> **Gemessen 2026-08-13.** Diese Unterscheidung hat schon zwei Abstürze verursacht
+> (`installationsdatum` auf einer `Investition` gelesen — das Feld gibt es dort nicht)
+> und zwei Anwender in eine Sackgasse geschickt. Sie steht deshalb hier.
+
+eedc kennt zwei Datums-Ebenen, die **verschiedene Fragen** beantworten und nie
+gegeneinander getauscht werden dürfen:
+
+| Frage | Maßgeblich | Ort |
+| --- | --- | --- |
+| **Auswertungsfilter** — zählt diese Investition in diesem Monat? | `aktiv` · `anschaffungsdatum` · `stilllegungsdatum` **der Investition** | `models/investition.py::ist_aktiv_im_zeitraum` |
+| **Erwartungsrahmen** — welcher Monat soll überhaupt erfasst sein? | `Anlage.installationsdatum`, Fallback ältestes Anschaffungsdatum der **Erzeuger**, dann erste vorhandene Zeile | `core/monats_luecken.py::ermittle_start_anker` + Spiegel `lib/monatsLuecken.ts` |
+
+**`Anlage.installationsdatum` filtert keine Auswertung.** Es ist nachrichtlich
+(PDF-Berichte, Infothek-Vorbelegung, Backup), setzt den Erwartungsrahmen und geht in
+den Community-Hash ein. Eine ältere Forums-Formulierung („perspektivisch sollte das
+harmonisiert werden", T77723 #520) klingt nach offener Schuld — die Frage ist
+entschieden, nur in die andere Richtung: die Investitions-Trias ist der alleinige
+Filter. Siehe `feedback_anschaffungsdatum_grenze`.
+
+**Warum die Erzeuger-Einschränkung im Erwartungsrahmen?** Eine Monatszeile ist eine
+Aussage über die *Anlage* (Einspeisung/Netzbezug). Ein E-Auto von 2017 begründet keine
+Einspeisungszeile von 2017. Bis 2026-08-13 zog jede Investition den Anker zurück; ein
+Anwender hat daraufhin sein Fahrzeug umdatiert und dessen echte Anschaffungshistorie
+verloren. Fällt ein **Erzeuger** vor das Anlagendatum, meldet der Daten-Checker das als
+Diskrepanz — bei allen anderen Typen ist ein früheres Datum der Normalfall und wird
+bewusst nicht gemeldet.
+
+Alle drei Sichten (Daten-Checker, „nächster offener Monat", Tabellen-Färbung) lesen
+**denselben** Anker; `test_monats_luecken_symmetrie.py` hält Backend und Frontend
+deckungsgleich.
+
 ---
 
 ## 5. API-Architektur

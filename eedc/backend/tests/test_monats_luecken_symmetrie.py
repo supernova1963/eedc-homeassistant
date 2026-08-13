@@ -42,32 +42,51 @@ def test_monat_index_ist_umkehrbar_und_chronologisch():
 # ── ermittle_start_anker (== ermittleStartAnker) ───────────────────────────────
 
 
-def test_start_anker_nimmt_fruehestes_investitions_anschaffungsdatum():
+def test_start_anker_nimmt_das_anlage_installationsdatum():
+    """N-243: Die Monatszeile ist eine Aussage ueber die ANLAGE. Ihr
+    Installationsdatum schlaegt deshalb jedes Geraete-Datum."""
     assert ermittle_start_anker(
-        anschaffungsdaten=[date(2023, 12, 1), date(2023, 6, 1), date(2025, 1, 1), None],
+        anlage_installationsdatum=date(2022, 4, 1),
+        erzeuger_anschaffungsdaten=[date(2023, 6, 1)],
+        vorhandene={(2024, 1)},
+    ) == (2022, 4)
+
+
+def test_start_anker_faellt_auf_aeltesten_erzeuger_zurueck():
+    """Ohne gepflegtes Anlagendatum stellt der aelteste ERZEUGER den Anker."""
+    assert ermittle_start_anker(
         anlage_installationsdatum=None,
+        erzeuger_anschaffungsdaten=[date(2023, 12, 1), date(2023, 6, 1), None],
         vorhandene={(2024, 1)},
     ) == (2023, 6)
 
 
-def test_start_anker_faellt_auf_anlage_installationsdatum_zurueck():
+def test_start_anker_ignoriert_geraete_aelter_als_die_anlage():
+    """**Der Fund**: fridolin22 (Forum T77723 #773) hatte ein E-Auto von 2017 an
+    einer PV-Anlage von 2022 und bekam Basisdaten ab 2017 abverlangt. Er hat das
+    Auto auf 2026 umdatiert, um die Forderung loszuwerden -- und damit dessen
+    echte Anschaffungshistorie verloren. van traf dieselbe Klasse mit
+    "Naechster offener: Sep 2016".
+
+    Der Aufrufer uebergibt nur Erzeuger; dieser Test haelt fest, dass ein
+    Nicht-Erzeuger den Anker auch dann nicht zieht, wenn er ihn erreichte."""
     assert ermittle_start_anker(
-        anschaffungsdaten=[None],
         anlage_installationsdatum=date(2022, 4, 1),
-        vorhandene={(2023, 1)},
+        erzeuger_anschaffungsdaten=[],   # das E-Auto von 2017 ist hier gar nicht drin
+        vorhandene={(2022, 5)},
     ) == (2022, 4)
 
 
 def test_start_anker_faellt_zuletzt_auf_frueheste_datenzeile_zurueck():
     assert ermittle_start_anker(
-        anschaffungsdaten=[],
         anlage_installationsdatum=None,
+        erzeuger_anschaffungsdaten=[],
         vorhandene={(2024, 5), (2024, 3), (2024, 9)},
     ) == (2024, 3)
 
 
 def test_start_anker_ist_none_ohne_quelle():
-    assert ermittle_start_anker([], None, set()) is None
+    assert ermittle_start_anker(None, [], set()) is None
 
 
 # ── ermittle_fehlende_monate (== ermittleFehlendeMonate) ───────────────────────
@@ -125,7 +144,7 @@ def test_voll_aufruf_binnen_luecke():
     vorhandene = {m for m in _bereich((2023, 6), (2026, 6)) if not (m[0] == 2026 and m[1] in (1, 2, 3))}
     assert naechster_offener_monat_fuer(
         vorhandene=vorhandene,
-        anschaffungsdaten=[date(2023, 6, 1)],
+        erzeuger_anschaffungsdaten=[date(2023, 6, 1)],
         anlage_installationsdatum=None,
         heute=date(2026, 7, 19),
     ) == (2026, 1)
@@ -135,7 +154,7 @@ def test_voll_aufruf_keine_daten_startet_am_anker():
     """Brandneue Anlage: keine Datenzeilen, Anker = Installationsdatum → dessen Monat."""
     assert naechster_offener_monat_fuer(
         vorhandene=set(),
-        anschaffungsdaten=[],
+        erzeuger_anschaffungsdaten=[],
         anlage_installationsdatum=date(2026, 4, 1),
         heute=date(2026, 7, 19),
     ) == (2026, 4)
@@ -145,7 +164,7 @@ def test_voll_aufruf_lueckenlos_ist_none():
     """Lückenloser Bereich bis Vormonat → None („alle abgeschlossen")."""
     assert naechster_offener_monat_fuer(
         vorhandene=_bereich((2026, 1), (2026, 6)),
-        anschaffungsdaten=[date(2026, 1, 1)],
+        erzeuger_anschaffungsdaten=[date(2026, 1, 1)],
         anlage_installationsdatum=None,
         heute=date(2026, 7, 19),
     ) is None
@@ -155,7 +174,7 @@ def test_voll_aufruf_nur_aktueller_monat_offen_ist_none():
     """Nur der laufende Monat wäre 'offen' → None (heute nie fällig)."""
     assert naechster_offener_monat_fuer(
         vorhandene=_bereich((2026, 1), (2026, 6)),
-        anschaffungsdaten=[date(2026, 1, 1)],
+        erzeuger_anschaffungsdaten=[date(2026, 1, 1)],
         anlage_installationsdatum=None,
         heute=date(2026, 7, 19),
     ) is None
