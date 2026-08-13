@@ -338,9 +338,18 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
-  // Prüfe ob Legacy-Daten existieren
-  const legacyCount = useMemo(() => {
-    return daten.filter(md => md.hat_legacy_daten).length
+  // Prüfe ob Legacy-Daten existieren.
+  // F-31: getrennt gezählt, weil die beiden Fälle verschiedene Handlungen
+  // verlangen. „Migrierbar" = es gibt ein Gerät im Monat, das den Wert
+  // übernehmen kann → öffnen und speichern hilft. „Ohne Ziel" = im Monat war
+  // laut Anschaffungsdatum kein passendes Gerät aktiv → speichern kann den
+  // Zustand nicht ändern, egal wie oft (van, 13.08.2026: 14 Monate vergeblich).
+  const { legacyCount, legacyOhneZiel } = useMemo(() => {
+    const legacy = daten.filter(md => md.hat_legacy_daten)
+    return {
+      legacyCount: legacy.length,
+      legacyOhneZiel: legacy.filter(md => md.legacy_ohne_ziel).length,
+    }
   }, [daten])
 
   const handleCreate = async (data: Parameters<typeof createMonatsdaten>[0]) => {
@@ -442,8 +451,22 @@ export function MonatsdatenVerwaltung({ anlageId, kopfZusatz }: { anlageId: numb
             <p className="text-sm mt-1">
               {legacyCount} Monat{legacyCount > 1 ? 'e' : ''} enthält
               {legacyCount > 1 ? 'en' : ''} Daten im alten Format (PV-Erzeugung/Speicher in Monatsdaten statt InvestitionMonatsdaten).
-              Bitte jeden betroffenen Monat einmal öffnen und speichern.
+              {legacyCount > legacyOhneZiel && ' Bitte jeden betroffenen Monat einmal öffnen und speichern.'}
             </p>
+            {/* F-31: Der Grund statt einer Handlung, die hier nicht wirken kann. */}
+            {legacyOhneZiel > 0 && (
+              <p className="text-sm mt-1">
+                {legacyOhneZiel === legacyCount ? 'Davon lassen sich alle' : `Davon ${legacyOhneZiel}`}{' '}
+                nicht durch Speichern übernehmen: In {legacyOhneZiel > 1 ? 'diesen Monaten' : 'diesem Monat'} war
+                laut Anschaffungsdatum keine passende Komponente aktiv, der die Werte gehören könnten.
+                Prüfe unter{' '}
+                <a href="#/einstellungen/komponenten" className="underline font-medium">
+                  Einstellungen → Komponenten
+                </a>{' '}
+                das Anschaffungsdatum — steht dort ein späteres Datum als der Zeitraum deiner Daten,
+                zieh es auf den tatsächlichen Zeitpunkt zurück. Die Zuordnung entsteht danach von selbst.
+              </p>
+            )}
           </div>
         </Alert>
       )}

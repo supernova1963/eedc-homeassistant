@@ -307,6 +307,10 @@ class AggregierteMonatsdatenResponse(BaseModel):
     netzbezug_preis_cent: float
     # Legacy-Felder (für Migration-Warnung)
     hat_legacy_daten: bool
+    # F-31: `True`, wenn die Legacy-Werte gar kein Ziel haben, weil im Monat
+    # laut Anschaffungsdatum kein passendes Gerät aktiv war. Dann ist „öffnen
+    # und speichern" nicht der Weg — das Anschaffungsdatum ist es.
+    legacy_ohne_ziel: bool = False
     # Feldgruppen, die NICHT aus der DB stammen, sondern aus der lokalen
     # Tagesebene (`inkl_nur_tageswerte`, N-121) — z. B. `["pv", "zaehler"]`.
     # `None` = alles steht so in der Datenbank. Eine Sicht, die solche Monate
@@ -490,6 +494,30 @@ async def list_monatsdaten_aggregiert(
         hat_inv_speicher = speicher_ladung > 0 or speicher_entladung > 0
         hat_legacy = (hat_legacy_pv and not hat_inv_pv) or (hat_legacy_speicher and not hat_inv_speicher)
 
+        # F-31: Der Hinweis forderte bisher ausnahmslos „Monat öffnen und
+        # speichern" — ohne zu prüfen, ob es im Monat überhaupt ein Gerät gibt,
+        # dem der Wert gehören könnte. Ist die Anlage ein Bestand, dessen
+        # Komponenten mit einem SPÄTEREN Anschaffungsdatum eingetragen sind,
+        # überspringt die Auflösung den Monat (`pv_monatswerte.py`, #236):
+        # `hat_legacy_*` bleibt wahr, `hat_inv_*` bleibt falsch, und zwar
+        # unabhängig davon, wie oft gespeichert wird. Die Aufforderung konnte
+        # den Zustand also nie verändern und wiederholte sich endlos — gemeldet
+        # von van (13.08.2026), der ihr über 14 Monate gefolgt ist.
+        # Das Flag trennt „Ziel existiert, Migration steht aus" von „es gibt
+        # kein Ziel"; die Sicht nennt dann den GRUND statt einer Handlung.
+        pv_ziel_aktiv = any(
+            i.typ in ("pv-module", "balkonkraftwerk") and i.ist_aktiv_im_monat(f.jahr, f.monat)
+            for i in inv_rows
+        )
+        speicher_ziel_aktiv = any(
+            i.typ == "speicher" and i.ist_aktiv_im_monat(f.jahr, f.monat)
+            for i in inv_rows
+        )
+        legacy_ohne_ziel = (
+            (hat_legacy_pv and not hat_inv_pv and not pv_ziel_aktiv)
+            or (hat_legacy_speicher and not hat_inv_speicher and not speicher_ziel_aktiv)
+        )
+
         # ── Finanzen dieses Monats über den SoT (N-22) ───────────────────────
         # `berechne_finanz_aggregat` über EINE Zeile: derselbe Weg, den der
         # Tages-Pfad derselben Tabelle längst geht (`tage_werte.py`).
@@ -592,6 +620,7 @@ async def list_monatsdaten_aggregiert(
             netto_bilanz_euro=round(netto_ertrag - netzbezug_kosten, 2),
             netzbezug_preis_cent=round(f.tarif.netzbezug_preis_cent, 2),
             hat_legacy_daten=hat_legacy,
+            legacy_ohne_ziel=legacy_ohne_ziel,
             aus_tageswerten=sorted(aus_tagen) or None,
         ))
 

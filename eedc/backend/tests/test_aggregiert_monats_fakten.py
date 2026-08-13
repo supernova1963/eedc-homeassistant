@@ -367,3 +367,56 @@ async def test_ohne_eeg51_flag_bleibt_none(db):
     mai = (await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db))[0]
 
     assert mai.einspeisung_neg_preis_kwh is None
+
+
+# --- F-31: Legacy-Hinweis nennt den Grund, wenn es kein Ziel gibt ----------
+
+async def test_legacy_ohne_ziel_wenn_modul_im_monat_noch_nicht_existierte(db):
+    """**Der Fund**: van (13.08.2026) folgte 14 Monate lang der Aufforderung
+    "jeden betroffenen Monat einmal oeffnen und speichern" — vergeblich.
+
+    Seine Bestandsanlage traegt PV-Gesamtwerte ab 2025, ihre Komponenten sind
+    aber mit einem SPAETEREN Anschaffungsdatum eingetragen. `pv_monatswerte.py`
+    ueberspringt jeden Monat ohne aktives Modul (#236), also bleibt
+    `hat_legacy_daten` wahr — egal wie oft gespeichert wird. Der Hinweis pruefte
+    seine eigene Vorbedingung nicht und forderte eine Handlung, die den Zustand
+    nicht veraendern konnte.
+    """
+    anlage = await _anlage(db)
+    # Modul erst ab 05/2026 — der April davor hat kein Ziel fuer den Wert.
+    # Bewusst NICHT ueber `_inv`: dessen Default-Anschaffungsdatum kollidiert.
+    db.add(Investition(anlage_id=anlage.id, typ="pv-module", bezeichnung="Bestand",
+                       anschaffungsdatum=date(2026, 5, 21), leistung_kwp=10.0))
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=4,
+                       einspeisung_kwh=930.0, netzbezug_kwh=484.7,
+                       pv_erzeugung_kwh=1500.0))
+    await db.commit()
+
+    april = (await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db))[0]
+
+    assert april.monat == 4
+    assert april.hat_legacy_daten is True      # der Wert steht unzugeordnet da
+    assert april.legacy_ohne_ziel is True      # und Speichern aendert daran nichts
+
+
+async def test_legacy_mit_aktivem_geraet_bleibt_migrierbar(db):
+    """REGRESSION — die Gegenprobe: `legacy_ohne_ziel` darf `hat_legacy_daten`
+    nicht einfach nachplappern.
+
+    Gezeigt am **Speicher**, denn er ist der migrierbare Fall: Fuer die PV loest
+    P7 ein Anlagen-Aggregat zur Laufzeit auf die aktiven Module auf, ein
+    Legacy-Zustand entsteht dort mit aktivem Modul gar nicht erst. Die
+    Batterie-Spalten haben keine solche Aufloesung — hier ist "oeffnen und
+    speichern" weiterhin der richtige Rat, und genau das haelt dieser Test fest.
+    """
+    anlage = await _anlage(db)
+    await _inv(db, anlage.id, "speicher", "Akku")   # Anschaffung 2024-01-01, laengst aktiv
+    db.add(Monatsdaten(anlage_id=anlage.id, jahr=2026, monat=4,
+                       einspeisung_kwh=930.0, netzbezug_kwh=484.7,
+                       batterie_ladung_kwh=300.0, batterie_entladung_kwh=250.0))
+    await db.commit()
+
+    april = (await list_monatsdaten_aggregiert(anlage_id=anlage.id, jahr=2026, db=db))[0]
+
+    assert april.hat_legacy_daten is True
+    assert april.legacy_ohne_ziel is False

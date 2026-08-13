@@ -142,6 +142,10 @@ export interface AggregierteMonatsdaten {
   netzbezug_preis_cent: number
   // Legacy-Marker
   hat_legacy_daten: boolean
+  // F-31: Die Legacy-Werte haben kein Ziel, weil im Monat laut
+  // Anschaffungsdatum kein passendes Gerät aktiv war. Dann hilft „öffnen und
+  // speichern" nicht — nur ein korrigiertes Anschaffungsdatum.
+  legacy_ohne_ziel?: boolean
   // Feldgruppen, die nicht aus der Datenbank stammen, sondern aus der lokalen
   // Tagesebene (`inklNurTageswerte`, N-121) — z. B. `['pv', 'zaehler']`.
   // null/undefined = alles steht so in der Datenbank.
