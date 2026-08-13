@@ -521,11 +521,25 @@ Zur Zuordnungszeit erkennbare Fehler zeigt eedc **direkt an der Feld-Zeile** —
 
 Die datenbasierten (rückblickenden) Prüfungen — Über-Erfassung, Datenquellen-Drift, Vorzeichen-Historie — bleiben im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md).
 
-### 7.7 Voraussetzung: die Verbindungen
+### 7.7 Eine geänderte Zuordnung gilt ab jetzt — nicht rückwirkend
+
+Ordnest du einem Feld eine andere Quelle zu (oder kehrst ein Vorzeichen um), gilt das **ab diesem Moment**. Deine bereits gespeicherten Tages- und Stundenwerte bleiben, wie sie gerechnet wurden: sie tragen die Zuordnung, die zum Zeitpunkt ihrer Berechnung galt. Das betrifft **jede** Art von Zuordnung — Zähler, Leistung, Ladestand und Strompreis fließen alle in die gespeicherten Tageswerte ein.
+
+Praktisch heißt das: Wer eine neue Komponente ergänzt (zweiter Wechselrichter, weitere Module, ein Speicher), findet sie in Live und ab dem laufenden Tag überall wieder — in der Vergangenheit aber nicht.
+
+**eedc sagt es dir.** Nach einer Änderung erscheint oben auf der Datenquellen-Fläche ein Hinweis mit den geänderten Feldern und dem Datum, ab dem die Werte neu sind. Er blockiert nichts und bleibt stehen, bis du ihn mit **„Verstanden"** quittierst — auch über einen Neustart hinweg, denn die Frage stellt sich oft erst Tage später.
+
+**Wenn du die Vergangenheit nachziehen willst,** führt der Knopf **„Zur Reparatur-Werkbank"** direkt dorthin: *Einstellungen → Daten → Energieprofil-Pflege → Zeitraum neu aggregieren*, in Blöcken von bis zu 31 Tagen je Lauf. Deine **Monatsdaten bleiben unberührt** — neu gerechnet werden nur die Tages- und Stundenwerte.
+
+> **Es passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — das kann Stunden dauern und ist selten gewollt. Und die Quittung heißt „zur Kenntnis genommen", nicht „erledigt": ob und wie weit du nachgezogen hast, weißt nur du.
+
+> **Für die Zeit vor eedc gilt das nicht.** Wo keine Sensordaten in Home Assistant liegen (etwa Monate, die du aus einer Hersteller-Cloud importiert hast), findet ein neuer Lauf nichts — dort sind die Monatswerte die Datenlage, und die genügen für Cockpit, Auswertungen und Jahresbericht.
+
+### 7.8 Voraussetzung: die Verbindungen
 
 Damit HA-Sensoren bzw. MQTT-Topics überhaupt wählbar sind, muss die jeweilige Verbindung stehen — MQTT-Broker und HA-Verbindung richtest du unter [Integration](#6-integration) ein. Änderst du dort etwas, blenden sich die Quellen-Buttons in der Datenquellen-Fläche sofort passend ein oder aus.
 
-### 7.8 Was aus den alten Assistenten wurde
+### 7.9 Was aus den alten Assistenten wurde
 
 | Früher | Jetzt |
 |--------|-------|

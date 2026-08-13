@@ -11,6 +11,20 @@
 
 ## Noch nicht veröffentlicht
 
+### Wenn du eine Datenquelle änderst, sagt eedc dir jetzt, was mit den alten Werten ist
+
+**Betrifft dich das?** Wenn du einem Feld einen anderen Sensor zuordnest, ein Vorzeichen umkehrst oder eine Komponente ergänzt — also immer dann, wenn du in **Einstellungen → Datenquellen** etwas änderst.
+
+Eine neue Zuordnung gilt **ab diesem Moment**. Deine bereits gespeicherten Tages- und Stundenwerte bleiben, wie sie berechnet wurden — sie tragen die Zuordnung von damals. Das war immer so; gesagt hat es dir bisher niemand. Wer einen zweiten Wechselrichter samt Modulen ergänzt hat, fand ihn in der Live-Ansicht sofort wieder — in der Historie aber nicht, und ohne Erklärung.
+
+Jetzt erscheint oben auf der Fläche ein Hinweis: welche Felder betroffen sind, ab wann die Werte neu sind, und ein Knopf direkt zur Reparatur-Werkbank, falls du zurückliegende Tage mit der neuen Zuordnung neu rechnen lassen willst (in Blöcken von bis zu 31 Tagen). Deine **Monatsdaten bleiben dabei unberührt**.
+
+Der Hinweis blockiert nichts und bleibt stehen, bis du ihn mit **„Verstanden"** wegklickst — auch über einen Neustart hinweg, denn die Frage stellt sich meist erst ein paar Tage später.
+
+> **Von allein passiert nichts.** eedc rechnet die Vergangenheit nicht selbsttätig neu — das kann bei langer Historie Stunden dauern und ist selten gewollt. Und für Monate, die du aus einer Hersteller-Cloud importiert hast, bringt ein neuer Lauf ohnehin nichts: Für die Zeit gibt es keine Sensordaten, und die Monatswerte genügen.
+
+→ [Handbuch → Einstellungen §7.7 Eine geänderte Zuordnung gilt ab jetzt](HANDBUCH_EINSTELLUNGEN.md#77-eine-geänderte-zuordnung-gilt-ab-jetzt--nicht-rückwirkend)
+
 ### „Überschreiben" heißt jetzt überschreiben
 
 **Betrifft dich das?** Wenn du Werte schon einmal von Hand korrigiert und denselben Monat später neu importiert hast.

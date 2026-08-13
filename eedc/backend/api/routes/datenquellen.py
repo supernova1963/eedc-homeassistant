@@ -15,7 +15,7 @@ B2.2/B5. Die aktive Quelle ist daher vorerst konstant der Standard-Inbound-Pfad.
 import asyncio
 import json as json_mod
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,6 +27,12 @@ from backend.api.deps import get_db
 from backend.core.ha_integrations_wissen import analysiere_vorschlaege
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
+from backend.services.datenquellen_historie import (
+    ist_echte_aenderung,
+    vermerk_ergaenzen,
+    vermerk_leeren,
+    vermerk_lesen,
+)
 from backend.services.datenquellen_resolver import resolve_effektive_quelle
 from backend.services.live_sensor_config import extract_live_config
 from backend.services.mqtt_topic_registry import build_expected_topics
@@ -449,6 +455,67 @@ async def mqtt_level(data: LevelRequest, db: AsyncSession = Depends(get_db)) -> 
 def _feld_id(match_key) -> str:
     """Stabile Feld-Kennung aus dem match_key (Zuordnungs-Schlüssel)."""
     return "_".join(str(x) for x in match_key)
+
+
+async def _feld_label(db: AsyncSession, anlage: Anlage, field_id: str) -> str:
+    """Anwendersichtbare Bezeichnung eines Feldes der Fläche.
+
+    Dieselbe Auflösung wie `_standard_topic_suffix` — Registry + Preis-Slots,
+    also genau die Menge, die die Fläche zeigt. Fällt auf die technische
+    `field_id` zurück, damit ein Hinweis nie leer bleibt (ein Feld ohne Label
+    wäre für den Anwender schlimmer als eine hässliche Kennung).
+    """
+    invs = (await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage.id, aktiv_am_tag(date.today()))
+    )).scalars().all()
+    invs = sort_investitionen_nach_typ(invs)
+    eintraege = list(await build_expected_topics(db, anlage, investitionen=invs))
+    eintraege += await _basis_preis_eintraege(db, anlage.id)
+    for e in eintraege:
+        if _feld_id(e["match_key"]) == field_id:
+            return str(e.get("label") or e.get("feld_label") or field_id)
+    return field_id
+
+
+async def _hat_aggregierte_historie(db: AsyncSession, anlage_id: int) -> bool:
+    """Gibt es überhaupt schon gerechnete Tageswerte für diese Anlage?
+
+    Ohne sie ist eine Zuordnung keine *Änderung* der Vergangenheit, sondern
+    ihre Ersteinrichtung — im Setup-Wizard ordnet der Anwender ein Dutzend
+    Felder zu, und ein Hinweis auf eine Historie, die es nicht gibt, wäre
+    reiner Lärm.
+    """
+    from backend.models.tages_energie_profil import TagesZusammenfassung
+
+    return (await db.execute(
+        select(TagesZusammenfassung.id)
+        .where(TagesZusammenfassung.anlage_id == anlage_id)
+        .limit(1)
+    )).scalar_one_or_none() is not None
+
+
+async def _historie_vermerken(
+    db: AsyncSession, anlage: Anlage, mapping: dict, field_id: str,
+) -> None:
+    """Trägt die Zuordnungsänderung in den Historie-Vermerk ein (Konzept #192 B).
+
+    In-place auf `mapping`; der Aufrufer committet ohnehin. Fehlschläge sind
+    hier folgenlos für die Zuordnung selbst — der Vermerk ist ein Hinweis, kein
+    Datenpfad —, deshalb bricht ein Label-Lookup den Speichervorgang nicht ab.
+    """
+    if not await _hat_aggregierte_historie(db, anlage.id):
+        return
+    try:
+        label = await _feld_label(db, anlage, field_id)
+    except Exception:  # pragma: no cover — Anzeige-Detail, nie ein Blocker
+        logger.warning("Label-Auflösung für Historie-Hinweis fehlgeschlagen", exc_info=True)
+        label = field_id
+    vermerk_ergaenzen(
+        mapping,
+        field_id=field_id,
+        label=label,
+        jetzt_iso=datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+    )
 
 
 async def _standard_topic_suffix(db: AsyncSession, anlage: Anlage, field_id: str) -> str | None:
@@ -968,7 +1035,16 @@ async def get_datenquellen_felder(anlage_id: int, db: AsyncSession = Depends(get
         "mqtt": await _mqtt_import_aktiviert(db),
     }
 
-    return {"anlage_id": anlage_id, "gruppen": gruppen, "verfuegbarkeit": verfuegbarkeit}
+    return {
+        "anlage_id": anlage_id,
+        "gruppen": gruppen,
+        "verfuegbarkeit": verfuegbarkeit,
+        # Konzept #192 B: offener Hinweis auf die unberührte Historie — `None`,
+        # solange keine Zuordnung geändert wurde. Bewusst hier und nicht als
+        # eigener Endpunkt: die Fläche lädt diese Antwort ohnehin, und ein
+        # zweiter Aufruf hätte den Block nur später erscheinen lassen.
+        "historie_hinweis": vermerk_lesen(anlage.sensor_mapping),
+    }
 
 
 class QuelleSetRequest(BaseModel):
@@ -1013,15 +1089,54 @@ async def set_feld_invert(
 
     mapping = dict(anlage.sensor_mapping or {})
     invert = dict(mapping.get("invertieren") or {})
+    vorher_invertiert = bool(invert.get(field_id))
     if body.invertieren:
         invert[field_id] = True
     else:
         invert.pop(field_id, None)
     mapping["invertieren"] = invert
+    # Konzept #192 B: das Vorzeichen dreht die Aggregation, wirkt aber erst ab
+    # dem nächsten Lauf — die gespeicherten Tage behalten ihre Richtung. Genau
+    # dieser Fall war der Anlass der Speicher-Vorzeichen-Selbstkorrektur
+    # (v3.45.7); der Hinweis erspart die zweite Runde.
+    if vorher_invertiert != bool(body.invertieren):
+        await _historie_vermerken(db, anlage, mapping, field_id)
     anlage.sensor_mapping = mapping
     flag_modified(anlage, "sensor_mapping")
     await db.commit()
-    return {"field_id": field_id, "invertieren": bool(body.invertieren)}
+    return {
+        "field_id": field_id,
+        "invertieren": bool(body.invertieren),
+        # Der Client zeigt den Block ohne zweiten Roundtrip — ein Nachladen der
+        # ganzen Feldliste je Klick wäre teuer, und ein Hinweis, der erst beim
+        # nächsten Seitenaufruf erscheint, käme zu spät.
+        "historie_hinweis": vermerk_lesen(mapping),
+    }
+
+
+@router.delete("/{anlage_id}/historie-hinweis")
+async def quittiere_historie_hinweis(anlage_id: int, db: AsyncSession = Depends(get_db)):
+    """Quittiert den Historie-Hinweis („Verstanden") — Konzept #192 B.
+
+    Bewusst eine Quittung des **Anwenders** und kein „erledigt": ob er die
+    Vergangenheit nachgezogen hat, weiß eedc nicht (die Bereichs-Reparatur
+    läuft in 31-Tage-Blöcken, s. `services/datenquellen_historie.py`).
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    anlage = (
+        await db.execute(select(Anlage).where(Anlage.id == anlage_id))
+    ).scalar_one_or_none()
+    if not anlage:
+        raise HTTPException(status_code=404, detail="Anlage nicht gefunden")
+
+    mapping = dict(anlage.sensor_mapping or {})
+    entfernt = vermerk_leeren(mapping)
+    if entfernt:
+        anlage.sensor_mapping = mapping
+        flag_modified(anlage, "sensor_mapping")
+        await db.commit()
+    return {"quittiert": entfernt}
 
 
 @router.post("/{anlage_id}/felder/{field_id}/quelle")
@@ -1126,6 +1241,11 @@ async def set_feld_quelle(
             quellen[field_id] = {"quelle": QUELLE_KEINE}
 
     mapping[QUELLEN_KEY] = quellen
+    # Konzept #192 B: Zuordnungen wirken ab jetzt — die gespeicherten Tages- und
+    # Stundenwerte tragen die Zuordnung ihres Aggregationslaufs. Vermerkt wird
+    # nur eine ECHTE Änderung; ein erneutes Bestätigen derselben Wahl ist keine.
+    if ist_echte_aenderung(vorher, quellen.get(field_id)):
+        await _historie_vermerken(db, anlage, mapping, field_id)
     # Klassische Struktur mitschreiben: HA → Sensor-Eintrag, sonst räumen. Ohne
     # das Räumen spränge die B8-2-Auflösung beim nächsten `/felder` über Stufe 1
     # („HA-Sensor zugeordnet") zurück auf HA und drehte die Wahl zurück.
@@ -1143,7 +1263,12 @@ async def set_feld_quelle(
     except Exception:  # Reload ist best-effort; Persistenz ist bereits committed.
         logger.warning("Gateway-Reload nach Quelle-Änderung fehlgeschlagen", exc_info=True)
 
-    return {"gespeichert": True, "field_id": field_id, "quelle": quelle}
+    return {
+        "gespeichert": True,
+        "field_id": field_id,
+        "quelle": quelle,
+        "historie_hinweis": vermerk_lesen(mapping),
+    }
 
 
 # --- D2: Wizard-Uebernahme der Energy-Dashboard-Vorschlaege ------------------

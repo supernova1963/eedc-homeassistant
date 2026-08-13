@@ -101,10 +101,26 @@ export interface DatenquellenVerfuegbarkeit {
   mqtt: boolean
 }
 
+/** Ein Feld, dessen Zuordnung seit dem letzten Quittieren geändert wurde. */
+export interface HistorieHinweisFeld {
+  id: string
+  label: string
+}
+
+/** Konzept #192 B: Zuordnungen wirken ab jetzt — die gespeicherten Tages- und
+ *  Stundenwerte tragen die Zuordnung ihres Aggregationslaufs. `null`, solange
+ *  nichts geändert wurde (oder die Anlage noch keine Historie hat). */
+export interface HistorieHinweis {
+  felder: HistorieHinweisFeld[]
+  /** ISO-Zeitpunkt der ERSTEN Änderung seit dem letzten Quittieren. */
+  seit: string
+}
+
 export interface DatenquellenResponse {
   anlage_id: number
   gruppen: DatenquelleGruppe[]
   verfuegbarkeit: DatenquellenVerfuegbarkeit
+  historie_hinweis: HistorieHinweis | null
 }
 
 /** Ein HA-Sensor-Kandidat für den HA-Sensor-Picker (Schritt B). */
@@ -145,6 +161,8 @@ export interface QuelleSaveResult {
   gespeichert: boolean
   field_id: string
   quelle: string
+  /** Konzept #192 B: offener Historie-Hinweis nach dieser Änderung. */
+  historie_hinweis: HistorieHinweis | null
 }
 
 /** Transform-Konfiguration für eine MQTT-Gateway-Quelle (§2b). */
@@ -217,10 +235,19 @@ export const datenquellenApi = {
       },
     ),
 
+  /** Quittiert den Historie-Hinweis („Verstanden", Konzept #192 B). Sagt NICHT,
+   *  dass die Vergangenheit nachgezogen wurde — das weiß nur der Anwender. */
+  quittiereHistorieHinweis: (anlageId: number) =>
+    api.delete<{ quittiert: boolean }>(`/datenquellen/${anlageId}/historie-hinweis`),
+
   /** Vorzeichen-Umkehr eines Feldes setzen — QUELLEN-UNABHÄNGIG (Wert-Eigenschaft,
    *  gilt für jede Quelle; am Read-Endwert angewendet). */
   setInvert: (anlageId: number, fieldId: string, invertieren: boolean) =>
-    api.post<{ field_id: string; invertieren: boolean }>(
+    api.post<{
+      field_id: string
+      invertieren: boolean
+      historie_hinweis: HistorieHinweis | null
+    }>(
       `/datenquellen/${anlageId}/felder/${encodeURIComponent(fieldId)}/invert`,
       { invertieren },
     ),

@@ -24,7 +24,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Gauge, Home, Waypoints, Rss, Info, Ban, ArrowUpDown, AlertTriangle } from 'lucide-react'
-import { Button } from '../ui'
+import { Alert, Button } from '../ui'
 import FormSection from '../ui/FormSection'
 import { BlockShell } from '../blocks/BlockShell'
 import type { Block } from '../blocks/types'
@@ -33,6 +33,7 @@ import DatenquellenHaPicker from './DatenquellenHaPicker'
 import { useSelectedAnlage } from '../../hooks'
 import { TYP_LABELS } from '../../lib/constants'
 import { STATUS_TEXT_CLASS } from '../../lib/colors'
+import { formatDatum } from '../../lib/datum'
 import { TYP_ICON_STYLE } from '../../pages/InvestitionenTeile'
 import {
   datenquellenApi,
@@ -41,6 +42,7 @@ import {
   type DatenquelleFeld,
   type DatenquellenVerfuegbarkeit,
   type GatewayQuelleConfig,
+  type HistorieHinweis,
 } from '../../api/datenquellen'
 
 const VERFUEGBARKEIT_DEFAULT: DatenquellenVerfuegbarkeit = { ha: false, ha_quelle: null, mqtt: false }
@@ -66,6 +68,10 @@ function abschnittVon(einheit: string): Abschnitt {
   return 'sonstige'
 }
 
+// Mehr geänderte Felder werden im Historie-Hinweis nicht einzeln benannt; darüber
+// steht „und N weitere". Er soll informieren, nicht das Änderungsprotokoll sein.
+const MAX_BENANNTE_FELDER = 6
+
 // Typ-Icon wie Komponenten; Basis-Block bekommt ein neutrales Zähler-Icon.
 const BASIS_STYLE: { icon: LucideIcon; color: string } = { icon: Gauge, color: 'text-gray-500 dark:text-gray-400' }
 function typStyle(typ: string): { icon: LucideIcon; color: string } {
@@ -90,6 +96,10 @@ export default function DatenquellenZuordnung() {
   const [gatewayFeld, setGatewayFeld] = useState<DatenquelleFeld | null>(null)
   // Offener HA-Sensor-Picker (Feld, für das gerade eine HA-Entity gewählt wird).
   const [haFeld, setHaFeld] = useState<DatenquelleFeld | null>(null)
+  // Konzept #192 B: offener Hinweis auf die unberührte Historie. Kommt vom
+  // Server (Vermerk in `sensor_mapping`) und überlebt damit einen Reload — der
+  // Anwender ändert eine Zuordnung und kommt Tage später wieder.
+  const [historieHinweis, setHistorieHinweis] = useState<HistorieHinweis | null>(null)
   // Aufgeklappte Feld-Hinweise (Hilfetexte aus der Registry, Q3).
   const [offeneHinweise, setOffeneHinweise] = useState<Set<string>>(new Set())
   const toggleHinweis = useCallback((id: string) => {
@@ -105,7 +115,11 @@ export default function DatenquellenZuordnung() {
     setLoading(true)
     setFehler(null)
     datenquellenApi.getFelder(selectedAnlageId)
-      .then((r) => { setGruppen(r.gruppen); setVerfuegbarkeit(r.verfuegbarkeit) })
+      .then((r) => {
+        setGruppen(r.gruppen)
+        setVerfuegbarkeit(r.verfuegbarkeit)
+        setHistorieHinweis(r.historie_hinweis)
+      })
       .catch((e) => setFehler(e instanceof Error ? e.message : 'Laden fehlgeschlagen'))
       .finally(() => setLoading(false))
   }, [selectedAnlageId])
@@ -127,7 +141,11 @@ export default function DatenquellenZuordnung() {
   const neuLaden = useCallback(() => {
     if (selectedAnlageId == null) return
     datenquellenApi.getFelder(selectedAnlageId)
-      .then((r) => { setGruppen(r.gruppen); setVerfuegbarkeit(r.verfuegbarkeit) })
+      .then((r) => {
+        setGruppen(r.gruppen)
+        setVerfuegbarkeit(r.verfuegbarkeit)
+        setHistorieHinweis(r.historie_hinweis)
+      })
       .catch(() => {})
   }, [selectedAnlageId])
 
@@ -150,7 +168,9 @@ export default function DatenquellenZuordnung() {
   const setzeQuelleDirekt = useCallback((feld: DatenquelleFeld, quelle: string) => {
     if (selectedAnlageId == null) return
     setzeFeld(feld.id, { quelle, gateway_topic: null })
-    datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle).catch(neuLaden)
+    datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle)
+      .then((r) => setHistorieHinweis(r.historie_hinweis))
+      .catch(neuLaden)
   }, [selectedAnlageId, setzeFeld, neuLaden])
 
   // Der Klick auf eine Quelle WÄHLT sie — er löscht nie. Bis v4.0.0 schaltete ein
@@ -173,7 +193,9 @@ export default function DatenquellenZuordnung() {
     if (selectedAnlageId == null || !feld) return
     setGatewayFeld(null)
     setzeFeld(feld.id, { quelle: Q_GATEWAY, gateway_topic: config.quell_topic })
-    datenquellenApi.setQuelle(selectedAnlageId, feld.id, Q_GATEWAY, config).catch(neuLaden)
+    datenquellenApi.setQuelle(selectedAnlageId, feld.id, Q_GATEWAY, config)
+      .then((r) => setHistorieHinweis(r.historie_hinweis))
+      .catch(neuLaden)
   }, [selectedAnlageId, gatewayFeld, setzeFeld, neuLaden])
 
   const waehleHa = useCallback((f: DatenquelleFeld) => {
@@ -190,7 +212,9 @@ export default function DatenquellenZuordnung() {
     if (selectedAnlageId == null) return
     const neu = !f.invertieren
     setzeFeld(f.id, { invertieren: neu })
-    datenquellenApi.setInvert(selectedAnlageId, f.id, neu).catch(neuLaden)
+    datenquellenApi.setInvert(selectedAnlageId, f.id, neu)
+      .then((r) => setHistorieHinweis(r.historie_hinweis))
+      .catch(neuLaden)
   }, [selectedAnlageId, setzeFeld, neuLaden])
 
   const speichereHa = useCallback((entityId: string) => {
@@ -201,8 +225,19 @@ export default function DatenquellenZuordnung() {
     // Server validiert ihn ohnehin. Vorschau optimistisch mit derselben Kennung.
     const quelle = verfuegbarkeit.ha_quelle ?? 'ha_app'
     setzeFeld(feld.id, { quelle, ha_entity: entityId, gateway_topic: null })
-    datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle, undefined, entityId).catch(neuLaden)
+    datenquellenApi.setQuelle(selectedAnlageId, feld.id, quelle, undefined, entityId)
+      .then((r) => setHistorieHinweis(r.historie_hinweis))
+      .catch(neuLaden)
   }, [selectedAnlageId, haFeld, verfuegbarkeit.ha_quelle, setzeFeld, neuLaden])
+
+  // Quittung des Anwenders („Verstanden") — sagt NICHT, dass die Vergangenheit
+  // nachgezogen wurde. Optimistisch: der Block verschwindet sofort; scheitert
+  // der Aufruf, holt ihn das nächste Laden zurück.
+  const quittiereHinweis = useCallback(() => {
+    if (selectedAnlageId == null) return
+    setHistorieHinweis(null)
+    datenquellenApi.quittiereHistorieHinweis(selectedAnlageId).catch(neuLaden)
+  }, [selectedAnlageId, neuLaden])
 
   // ── Feld-Zeile ──────────────────────────────────────────────────────────────
   const feldZeile = (f: DatenquelleFeld) => {
@@ -465,6 +500,13 @@ export default function DatenquellenZuordnung() {
         dient „Keine". Zugeordnet, aber ohne empfangenen Wert = Hinweis in Amber.
       </p>
 
+      {historieHinweis && (
+        <HistorieHinweisBlock
+          hinweis={historieHinweis}
+          onQuittieren={quittiereHinweis}
+        />
+      )}
+
       <BlockShell persistKey="v4-einst-datenquellen" bloecke={bloecke} />
 
       {gatewayFeld && selectedAnlageId != null && (
@@ -492,6 +534,60 @@ export default function DatenquellenZuordnung() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * Hinweis auf die unberührte Historie nach einer Zuordnungsänderung (#192 B).
+ *
+ * ⚠ **Warum er überhaupt nötig ist:** die gespeicherten Tages- und Stundenwerte
+ * tragen die Zuordnung, die zum Zeitpunkt ihres Aggregationslaufs galt. Eine
+ * neue Zuordnung wirkt deshalb ab jetzt — rückwirkend ändert sich nichts, bis
+ * der Zeitraum neu gerechnet wird. Das galt immer schon; bis 2026-08-13 stand
+ * es nur nirgends.
+ *
+ * Der Block ist **nicht blockierend** und bietet **keinen** Automatismus, der
+ * die Vergangenheit nachzieht: er zeigt den Weg zur Bereichs-Reparatur, die der
+ * Anwender selbst und in Blöcken auslöst.
+ */
+function HistorieHinweisBlock({
+  hinweis, onQuittieren,
+}: {
+  hinweis: HistorieHinweis
+  onQuittieren: () => void
+}) {
+  const felder = hinweis.felder
+  const benannt = felder.slice(0, MAX_BENANNTE_FELDER)
+  const rest = felder.length - benannt.length
+  return (
+    <Alert type="warning" title="Zuordnung geändert — die bisherigen Werte bleiben, wie sie waren">
+      <p>
+        Seit {formatDatum(hinweis.seit)} {felder.length === 1 ? 'wurde' : 'wurden'} die
+        {' '}Datenquelle{felder.length === 1 ? '' : 'n'} von{' '}
+        <span className="font-medium">{benannt.map((f) => f.label).join(' · ')}</span>
+        {rest > 0 && <> und {rest} weiteren Feldern</>} geändert. Neue Werte kommen ab
+        sofort aus der neuen Quelle; die bereits gespeicherten Tages- und Stundenwerte
+        stammen weiter aus der vorherigen Zuordnung.
+      </p>
+      <p className="mt-2">
+        Wenn du die zurückliegenden Tage mit der neuen Zuordnung neu rechnen lassen
+        willst, geht das in der Reparatur-Werkbank („Zeitraum neu aggregieren", bis zu
+        31 Tage je Lauf). Deine Monatsdaten bleiben dabei unberührt.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => { window.location.hash = '#/einstellungen/daten?block=energieprofil' }}
+        >
+          Zur Reparatur-Werkbank
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onQuittieren}>
+          Verstanden
+        </Button>
+      </div>
+    </Alert>
   )
 }
 

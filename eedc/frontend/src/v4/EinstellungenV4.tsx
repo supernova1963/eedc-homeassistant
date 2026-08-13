@@ -176,8 +176,15 @@ function EinstellungenInner({ kategorie }: { kategorie: KategorieKey }) {
   // B5-Deep-Link: die Fusszeile navigiert mit `?erfassen=YYYY-MM` hierher, um den
   // Monatsabschluss zu öffnen → dann muss der Monatsdaten-Block aufklappen (sonst
   // ist seine Form nicht gemountet). MonatsdatenVerwaltung liest denselben Param.
+  // Konzept #192 B ergänzt den allgemeinen Fall: `?block=<id>` klappt einen
+  // beliebigen Katalog-Block auf. Der Historie-Hinweis der Datenquellen-Fläche
+  // schickt damit auf `daten?block=energieprofil` (Reparatur-Werkbank) — ohne
+  // ihn läge der Anwender in einer Kategorie mit zugeklappten Blöcken und
+  // müsste raten, welcher gemeint ist.
   const [searchParams] = useSearchParams()
-  const erfassenBlock = searchParams.get('erfassen') ? 'monatsdaten' : undefined
+  const erfassenBlock = searchParams.get('erfassen')
+    ? 'monatsdaten'
+    : (searchParams.get('block') || undefined)
 
   const ctx: InhaltCtx = {
     oeffneWizard: globalOeffne ?? setOffenerWizard,
