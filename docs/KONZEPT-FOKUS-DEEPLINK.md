@@ -28,7 +28,43 @@
 | **FD-6** | Hilfe-Abschnitt „eedc im HA-Dashboard" in `HANDBUCH_BEDIENUNG` | ⬜ | erst wenn gebaut; Mixed-Content-Grenze ehrlich nennen |
 | **FD-7** | HACS-Card (iframe-Wrapper) | ⏸ **separat**, nur bei echter Tester-Nachfrage | eigenes Repo + eigenes Konzept; **nie** ein nativer Renderer |
 
-**Vorbedingung:** die 4 Abnahme-Fragen unten (Timing · Auth · Polling · Schema) sind **unbeantwortet**.
+> ## ✅ **ENTSCHIEDEN 2026-08-13 (Gernot): wird umgesetzt.**
+>
+> Das Dokument ist damit vom Entwurf zum **beschlossenen Vorhaben** geworden; in
+> [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) steht es seit dem
+> 13.08. unter *In Arbeit / als Nächstes*. Die Leitplanken bleiben **unverändert bindend** —
+> insbesondere **kein Teil-Bau**.
+>
+> ⛔ **Bevor eine Zeile Code entsteht, wird die Abnahme-Frage „Auth" an der echten Box
+> gemessen — sie entscheidet über den Nutzen des ganzen Vorhabens.** Der Deep-Link ist die
+> leichte Hälfte; die schwere ist die **Adresse**, und sie sieht in den beiden Betriebsarten
+> verschieden aus:
+>
+> * **Add-on-Betrieb: eedc läuft hinter HA-Ingress** (`eedc/config.yaml:33` `ingress: true`,
+>   `ingress_port: 8099`). Eine Ingress-Adresse gehört zur HA-Sitzung — **ob sie sich stabil
+>   kopieren und in eine Webpage-Card einsetzen lässt, ist eine Messung, keine Annahme.**
+>   Fällt sie negativ aus, ist FD-3 („Link kopieren / In HA einbetten") kein Knopf, sondern
+>   eine Anleitung — und dann muss dieses Dokument sagen, welche der beiden es wird, bevor
+>   gebaut wird.
+> * **Standalone-Betrieb:** eedc spricht HTTP, ein HTTPS-HA blockt das iframe (Mixed Content,
+>   unten in FD-6 bereits als „ehrlich nennen" vermerkt). Diese Hälfte ist **nicht lösbar**,
+>   nur benennbar.
+>
+> ⚑ **Der wartende Melder ist bekannt und beschreibt genau den Kiosk-Fall:** **Fesa2702**
+> (Forum T89667 #140, 09.08.) betreibt Wandtablets im Kiosk-Modus — *„Link zum Dashboard ist
+> kein Problem. Aber von da wieder zurück geht nicht."* Der Rückweg aus einer eingebetteten
+> Ansicht gehört damit zum Umfang, nicht zur Kür.
+>
+> ⚠ **Was dieses Vorhaben ausdrücklich NICHT ist: der Weg, eedc-Daten in ein HA-Dashboard zu
+> bekommen.** Dafür gibt es die exportierten Sensoren, und sie sind dort das bessere Mittel
+> (HA-Theme, native Karten, Automationen, Historie) — rapahl baut damit sichtbar erfolgreich
+> eigene Lovelace-Karten. Der Deep-Link zielt auf die Ansichten, die HA **nicht** nachbauen
+> kann: Heatmap Monat × Ladestand, Sizing-Kurve, Prognose-vs-IST. Wer ihn als Dashboard-Ersatz
+> verkauft, verspricht einen Fremdkörper: kein Theme, kein Karten-Layout, eigenes Scrolling.
+
+**Vorbedingung:** von den 4 Abnahme-Fragen unten (Timing · Auth · Polling · Schema) ist
+**Timing** mit dem Entscheid vom 13.08. beantwortet; **Auth · Polling · Schema** sind offen,
+und **Auth wird zuerst gemessen** (Kasten oben).
 Nachverfolgt in der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) („Fokus-Deep-Link + HA-Einbettung").
 
 ---
