@@ -696,7 +696,7 @@ export function SolarprognoseVerwaltung({ anlageId, anlage, kopfZusatz }: {
 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Abgerufen am: {new Date(aktivePrognose.abgerufen_am).toLocaleDateString('de-DE')}
-                  {' • '}Koordinaten: {aktivePrognose.latitude.toFixed(4)}°N, {aktivePrognose.longitude.toFixed(4)}°E
+                  {' • '}Koordinaten: {aktivePrognose.latitude.toFixed(4)}°N, {aktivePrognose.longitude.toFixed(4)}°E{/* de-de-allow: geografische Nicht-Menge, s. Dateikopf */}
                   {' • '}Horizont: {aktivePrognose.horizont_verwendet ? 'Eigenes Profil' : 'PVGIS-Gelände'}
                 </p>
               </div>

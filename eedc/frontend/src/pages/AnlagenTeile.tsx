@@ -45,7 +45,7 @@ function AnlageAktionen({ anlage, onDokumente, onEdit, onDelete }: {
           const datum = new Date().toISOString().slice(0, 10)
           downloadFile(
             importApi.getFullExportUrl(anlage.id),
-            `eedc_backup_${safeName}_${datum}.json`,
+            `eedc_backup_${safeName}_${datum}.json`, /* de-de-allow: Download-Dateiname, ISO bleibt (sortierbar) */
           ).catch(() => {/* still better than 401 in Safari */})
         }}
         title="Export (JSON)"

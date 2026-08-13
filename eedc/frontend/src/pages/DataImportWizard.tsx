@@ -45,6 +45,7 @@ import type {
 } from '../api/portalImport'
 import type { Anlage } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
+import { fmtZahl } from '../lib/einheiten'
 import { ManuelleWerteHinweis } from '../components/import/ManuelleWerteHinweis'
 
 // ── Vorschau-Tabellen-Spalten ───────────────────────────────────────────────
@@ -57,10 +58,8 @@ type PreviewColumn = {
   format: (v: number | null | undefined) => string
 }
 
-const fmtKwh = (v: number | null | undefined) =>
-  v != null ? v.toFixed(1) : '–'
-const fmtInt = (v: number | null | undefined) =>
-  v != null ? String(v) : '–'
+const fmtKwh = (v: number | null | undefined) => fmtZahl(v, 1)
+const fmtInt = (v: number | null | undefined) => fmtZahl(v, 0)
 
 const PREVIEW_COLUMNS: PreviewColumn[] = [
   { key: 'pv_erzeugung_kwh', label: 'PV kWh', format: fmtKwh },
@@ -72,7 +71,7 @@ const PREVIEW_COLUMNS: PreviewColumn[] = [
   { key: 'wallbox_ladung_kwh', label: 'WB kWh', format: fmtKwh },
   { key: 'wallbox_ladung_pv_kwh', label: 'WB PV kWh', format: fmtKwh },
   { key: 'wallbox_ladevorgaenge', label: 'Sessions', format: fmtInt },
-  { key: 'eauto_km_gefahren', label: 'km', format: (v) => (v != null ? v.toFixed(0) : '–') },
+  { key: 'eauto_km_gefahren', label: 'km', format: (v) => fmtZahl(v, 0) },
 ]
 
 // ── Zuordnungs-Hilfsfunktionen ──────────────────────────────────────────────
@@ -116,7 +115,7 @@ function AnteilEingabe({
       {geschaetzt && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Ohne gepflegte {bezugsgroesse} verteilt die Vorauswahl gleichmäßig
-          ({(100 / investitionen.length).toFixed(1)} % je Eintrag) — das ist
+          ({fmtZahl(100 / investitionen.length, 1)} % je Eintrag) — das ist
           keine proportionale Aufteilung. Bitte prüfen oder die {bezugsgroesse}
           {' '}bei den Komponenten nachtragen.
         </p>
@@ -152,7 +151,7 @@ function AnteilEingabe({
         </div>
       ))}
       <div className={`text-xs text-right pt-1 ${fehler ? 'text-red-500 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
-        Summe: {summe.toFixed(1)} % {fehler && '— muss 100 % ergeben'}
+        Summe: {fmtZahl(summe, 1)} % {fehler && '— muss 100 % ergeben'}
       </div>
     </div>
   )

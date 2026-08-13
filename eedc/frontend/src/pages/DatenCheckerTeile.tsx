@@ -21,7 +21,7 @@ import { datenCheckerApi, type DatenCheckResponse, type CheckErgebnis } from '..
 import { energieProfilApi } from '../api/energie_profil'
 import { monatsdatenApi } from '../api/monatsdaten'
 import { baueBereichsMeldung, baueTagesMeldung, type ReparaturMeldung } from './datenCheckerMeldungen'
-import { fmtZahl } from '../lib'
+import { fmtZahl, formatDatum } from '../lib'
 import {
   KATEGORIE_LABELS as kategorieLabels,
   KATEGORIE_REIHENFOLGE as kategorieReihenfolge,
@@ -123,7 +123,7 @@ function KategorieSektion({
             const actionDatum = e.action_kind === 'reaggregate_day'
               ? String(e.action_params?.datum ?? '') : undefined
             const reparaturKey = actionAnlageId && actionDatum
-              ? `${actionAnlageId}:${actionDatum}` : null
+              ? `${actionAnlageId}:${actionDatum}` : null /* de-de-allow: interner State-Key (Busy-Kennung), keine Anzeige */
             const isReparaturBusy = reparaturKey && reparaturBusy === reparaturKey
 
             // v3.45.9: Bereichs-Reparatur (Batterie-Vorzeichen-Historie).
@@ -260,7 +260,7 @@ export function DatenCheckerVerwaltung({ anlageId, kopfZusatz }: { anlageId: num
     } catch (e) {
       setReparaturMessage({
         art: 'fehler',
-        text: e instanceof Error ? e.message : `Reparatur für ${datum} fehlgeschlagen`,
+        text: e instanceof Error ? e.message : `Reparatur für ${formatDatum(datum)} fehlgeschlagen`,
       })
     } finally {
       setReparaturBusy(null)

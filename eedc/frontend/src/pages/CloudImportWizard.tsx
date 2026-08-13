@@ -40,6 +40,7 @@ import type { CloudProviderInfo, CloudTestResult, CloudPreviewResult } from '../
 import type { ApplyResult } from '../api/portalImport'
 import type { Anlage, Investition } from '../types'
 import { MONAT_NAMEN } from '../lib/constants'
+import { fmtZahl } from '../lib/einheiten'
 import { ManuelleWerteHinweis } from '../components/import/ManuelleWerteHinweis'
 
 export default function CloudImportWizard() {
@@ -615,19 +616,19 @@ export default function CloudImportWizard() {
                           />
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.pv_erzeugung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.pv_erzeugung_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.einspeisung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.einspeisung_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.netzbezug_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.netzbezug_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.batterie_ladung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.batterie_ladung_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.batterie_entladung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.batterie_entladung_kwh, 1)}
                         </td>
                       </tr>
                     )

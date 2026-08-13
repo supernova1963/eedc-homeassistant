@@ -47,7 +47,7 @@ import type {
   ApplyResult,
 } from '../api/customImport'
 import { useSelectedAnlage } from '../hooks'
-import { MONAT_NAMEN } from '../lib'
+import { MONAT_NAMEN, fmtZahl } from '../lib'
 
 export default function CustomImportWizard() {
   const navigate = useNavigate()
@@ -659,23 +659,23 @@ export default function CustomImportWizard() {
                           </div>
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.pv_erzeugung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.pv_erzeugung_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.einspeisung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.einspeisung_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.netzbezug_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.netzbezug_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.batterie_ladung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.batterie_ladung_kwh, 1)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                          {m.batterie_entladung_kwh?.toFixed(1) ?? '–'}
+                          {fmtZahl(m.batterie_entladung_kwh, 1)}
                         </td>
                         {(preview.inv_spalten ?? []).map(sp => (
                           <td key={sp} className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300 tabular-nums">
-                            {m.inv_werte?.[sp] !== undefined ? m.inv_werte[sp].toFixed(1) : '–'}
+                            {fmtZahl(m.inv_werte?.[sp], 1)}
                           </td>
                         ))}
                       </tr>

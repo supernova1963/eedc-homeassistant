@@ -57,6 +57,21 @@ const datumErlaubt = /formatDatum|langesDatum|toLocaleDateString|\.split|\.slice
 // importierten `pages/`-Dateien (nur pages→pages-Kanten verfolgt, damit lib/api/hooks
 // NICHT in den Scharf-Scope rutschen). So fängt der Check jede künftig in v4
 // eingezogene pages-Komponente automatisch.
+//
+// ERWEITERT 2026-08-13: der Graph folgte nur STATISCHEN `from '…'`-Kanten. Die
+// Einstellungs-Wizards hängen aber am `lazy(() => import('…'))` in
+// `v4/EinstellungenModalHost.tsx` — sieben in V4 sichtbare Flächen, die der Scope
+// damit alle verfehlte (15 rohe Anzeigen, u. a. „1234.5" in den Import-Vorschauen
+// von Cloud-/Custom-/Portal-Import). Ein Wächter, der an der Import-FORM scheitert
+// statt an der Sichtbarkeit, prüft die falsche Menge → beide Formen werden verfolgt.
+//
+// ZWEITE Lücke derselben Klasse (Gernots Entscheid 2026-08-13): der Graph verfolgte
+// nur `pages→pages`. `v4/EinstellungenV4.tsx` zieht aber `config/einstellungenKatalog`,
+// und DER zieht die zehn `pages/*Teile.tsx` — jede eine sichtbare Einstellungs-Fläche.
+// Die Kette brach an `config/` ab, weil die Kanten-Regel „nur pages" lautete. Die
+// ursprüngliche Absicht war, lib/api/hooks draußen zu halten; `config/` ist aber
+// keine Infrastruktur, sondern eine Sicht-Registry → `config/`-Kanten werden
+// mitverfolgt, lib/api/hooks weiterhin nicht.
 function resolveImport(fromFile, spec) {
   if (!spec.startsWith('.')) return null
   const base = resolve(dirname(fromFile), spec)
@@ -67,9 +82,13 @@ function resolveImport(fromFile, spec) {
 }
 function pagesImportsOf(file) {
   const txt = readFileSync(file, 'utf8')
-  return [...txt.matchAll(/from\s+'([^']+)'/g)]
+  // `from '…'` (statisch) UND `import('…')` (lazy/dynamisch) — s. Kommentar oben.
+  return [...txt.matchAll(/(?:from\s+|import\(\s*)'([^']+)'/g)]
     .map((m) => resolveImport(file, m[1]))
-    .filter((p) => p && relative(ROOT, p).startsWith('src/pages/'))
+    .filter((p) => {
+      const r = p && relative(ROOT, p)
+      return r && (r.startsWith('src/pages/') || r.startsWith('src/config/'))
+    })
 }
 const ALL = files(SRC)
 const pagesInScope = new Set()
@@ -104,7 +123,11 @@ for (const f of ALL) {
   })
 }
 
-console.log(`check:de-de — ${hits.length} roh formatierte Anzeige(n) in v4/+components/ (Soll: 0) · ${pagesPending} offen in IST-v3 pages/ (separater Nachzug)`)
+// Der Rest-Zähler hieß „offen in IST-v3 pages/" und behauptete damit zweierlei, das
+// beim Scope-Ausbau 2026-08-13 nicht mehr stimmte: die verbliebenen Treffer liegen
+// zum Teil in `src/api/` (URL-Parameter `?datum=…`, keine Anzeige) und sind dort
+// gerade NICHT „offen". Er zählt, was außerhalb des Scharf-Scope liegt — nicht mehr.
+console.log(`check:de-de — ${hits.length} roh formatierte Anzeige(n) im Scharf-Scope (Soll: 0) · ${pagesPending} Treffer außerhalb (nicht in V4 sichtbar)`)
 if (hits.length) {
   console.error('\n❌ Nicht-de-DE-Anzeigen (Tausenderpunkt/Komma/Locale):')
   for (const h of hits) console.error('  · ' + h)

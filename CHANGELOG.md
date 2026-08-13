@@ -7,6 +7,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **In den Import-Vorschauen standen die Zahlen englisch.** Wer Daten aus der Cloud, aus einer eigenen Datei oder aus einem Portal importierte, sah in der Monatsübersicht vor dem Import Werte wie „1234.5" statt „1.234,5" — Dezimalpunkt statt Komma, kein Tausenderpunkt. Betroffen waren PV-Erzeugung, Einspeisung, Netzbezug und beide Speicher-Größen in allen drei Import-Assistenten, dazu die Prozentangaben bei der Verteilung auf mehrere Komponenten. Im Daten-Checker nannte außerdem eine Fehlermeldung das Datum roh („Reparatur für 2026-08-13 fehlgeschlagen" statt „13.08.2026"). ⚠ **Die importierten Werte waren immer richtig** — es ging allein um die Anzeige der Vorschau. *(Ursache war nicht der Code, sondern sein Prüfer: der Wächter, der solche Anzeigen seit Juni verhindert, kannte die betroffenen Flächen nicht — er folgte nur statischen Importen und brach an der Einstellungs-Registry ab. Beides ist behoben; die sieben Assistenten und die zehn Einstellungs-Flächen liegen jetzt in seinem Prüfbereich.)*
+
+---
+
 ## [4.0.14] - 2026-08-13 — Gemessen statt geschätzt, gesagt statt geschwiegen
 
 ### Added
