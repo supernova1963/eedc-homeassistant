@@ -10,7 +10,9 @@
 > `scripts/sync-help.sh` arbeiten beide mit einer **Allowlist**, in der Konzepte und ADRs bewusst
 > fehlen. Dieses Dokument ist im Repository lesbar — es ist kein Anwender-Handbuch.
 >
-> **Offen:** **HX-4** (weitere Lücken-Klassen — Reihenfolge nach Nachfrage, kein Bau auf Vorrat) · **HX-5** (Pass-Through-Sensoren prunen, opportunistisch) · **HX-6** (hartcodierte `sw_version` im Device-Block) · **HX-7** (Sensor-Auswahl durch den Nutzer — **vertagt**, der `recorder.yaml`-Weg reicht dem Melder).
+> **Offen:** **HX-4** (weitere Lücken-Klassen — Reihenfolge nach Nachfrage, kein Bau auf Vorrat) · **HX-5** (Pass-Through-Sensoren prunen, opportunistisch) · **HX-7** (Sensor-Auswahl durch den Nutzer — **vertagt**, der `recorder.yaml`-Weg reicht dem Melder).
+>
+> ⚠ **Korrektur 2026-08-13: HX-6 stand hier fälschlich als offen** — die Registerzeile darunter führt es seit dem 2026-08-08 als **erledigt**, und der Code gibt ihr recht (`services/mqtt_client.py:181` setzt `"sw_version": APP_VERSION`, heute erneut nachgemessen). Der Kopf ist die Stelle, die jeder zuerst liest, und die beim Fortschreiben des Rumpfes niemand anfasst — **dieselbe N-182-Klasse, die dieses Register an anderer Stelle selbst benennt.**
 >
 > ⚠ **Zirkulär bleibt zirkulär:** rohe Tages-/Stunden-kWh werden **nie** exportiert — sie stammen im Add-on-Modus selbst aus HA-LTS.
 

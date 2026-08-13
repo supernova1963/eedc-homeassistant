@@ -1,5 +1,41 @@
 # EEDC Community-Umfrage — Konzept
 
+> **ARCHIVIERT (2026-08-13, Entscheid Gernot): kein akuter Bedarf mehr.** Nicht weil die Umfrage
+> ausgefallen wäre, sondern weil ihre Fragen von der Entwicklung überholt wurden — zwischen dem
+> Konzept (Mai) und heute liegen v3.29 bis v4.0.14.
+>
+> ⚠ **Der Trigger ist eingetreten, und niemand hat ihn geprüft.** Das Dokument verlangte „aktuelle
+> Anzahl geteilter Anlagen abrufen, bei ≥ 30 Forum-Post planen" und nannte den Check ausdrücklich
+> jederzeit möglich. **Am 2026-08-13 gemessen: 100 geteilte Anlagen in 16 Regionen**
+> (`/api/statistics/global`) — die reduzierte Schwelle ist um mehr als das Dreifache überschritten,
+> die *ursprüngliche* Schwelle von 100 exakt erreicht. Ein Trigger, den niemand abfragt, ist kein
+> Trigger; er ist ein Vergessen mit Datum ([[feedback_trigger_als_ereignis_nicht_plan]]).
+>
+> ⛔ **Der fertige Umfragetext unten ist die eigentliche Begründung fürs Archiv — er fragt nach
+> Gebautem.** Block C wollte wissen, ob sich jemand *„Energie-Tagesdetail — stündliche
+> Aufschlüsselung einzelner Tage"*, *„Berechnungen zurück nach HA"* und *„… via MQTT"* wünscht:
+> alle drei sind seither ausgeliefert. Block D fragte *„Speichererweiterung — lohnt sich mehr kWh
+> für mein Profil?"* — das ist **#358 Phase 3**, seit **v4.0.14** im Komponenten-Hub, mit genau
+> der versprochenen Begründung („konkrete Zahlen statt Faustformeln", simuliert auf den eigenen
+> gemessenen Stunden). Eine Umfrage, die nach vorhandenen Funktionen fragt, misst nicht den Bedarf,
+> sondern die Bekanntheit — das wäre eine andere Umfrage mit anderen Fragen.
+>
+> **Was NICHT mit archiviert wird — die vier Restposten und wo sie jetzt leben:**
+>
+> | Restposten | Heimat |
+> | --- | --- |
+> | „Meine Anlage öffentlich teilen" (Widget-Seite, Virality) | `memory/project_my_eedc_schublade.md` + **#110** („My eedc"-Widget-Dashboard, ab 3 Anfragen) — unverändert geparkt |
+> | Community-Attraktivität & Reichweite (Share, SEO, Schnellvergleich) | `memory/project_community_attraktivitaet.md` + **#110** — unverändert geparkt |
+> | **Gruppen-Vergleich (2–5 Nutzer)** · **Akkudoktor-Tools-Link** | ⚠ **hatten hier ihre einzige Heimat** — beide gehören zur Community-Site und sind bei der Attraktivitäts-Datei einzuordnen |
+> | **MQTT Auto-Discovery (inbound)** — fremde Geräte-Topics erkennen statt eintragen | ⚠ **heimatlos und nicht gebaut.** Am Code geprüft: `mqtt_client.py` macht ausschließlich **Outbound**-Discovery (eedc meldet seine eigenen Sensoren bei HA an); eine Topic-**Erkennung** existiert nicht (kein Treffer im Backend) |
+>
+> **Investment-Assistent** (Block D) ist kein Restposten mehr, sondern zur Hälfte gebaut: Speicher
+> über #358 Phase 2+3, dynamischer Tarif über die Preis-Sensoren. Offen bleiben PV-Erweiterung,
+> Wärmepumpe und E-Auto/Wallbox als „lohnt sich das für mein Profil?"-Frage — sie hätten, wenn sie
+> jemand will, ihre Heimat im Wirtschaftlichkeits-Konzept, nicht hier.
+>
+> Alles unterhalb ist der Stand vom 2026-05-09 und wird nicht mehr fortgeschrieben.
+
 ## Status (2026-05-09)
 
 **Zurückgestellt** bis > 30 geteilte Anlagen erreicht sind.

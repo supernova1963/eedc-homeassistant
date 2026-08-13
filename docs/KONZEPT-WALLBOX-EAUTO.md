@@ -631,7 +631,12 @@ Benzinkosten des PHEV als Kosten danebenstehen. Analog CO₂: die vermiedene Emi
 > **Stand 2026-08-08: vermessen, gebaut und angeschlossen.** Der Layer-SoT
 > `core/berechnungen/pv_anteil_ladung.py` ist gegen echte Anlagendaten belegt, der Aggregator legt
 > den Tageswert ab, und die Monats-Fakten ziehen ihn heran, wo kein gepflegter Wert existiert.
-> **Offen bleibt allein Rahmenbedingung 7** (Prognose, N-188).
+> ~~**Offen bleibt allein Rahmenbedingung 7** (Prognose, N-188).~~ ⚠ **Korrektur 2026-08-13:
+> auch das ist erledigt** — zwei Abschnitte tiefer steht es selbst („⚑ Rahmenbedingung 7 (N-188)
+> ist damit erledigt: die Prognose rät den Anteil nicht mehr"), und N-188 ist mit v4.0.11 gebaut.
+> Dieser Kasten wurde beim Fortschreiben nicht mitgezogen — **N-182-Klasse, am selben Tag der
+> dritte Fall** (vgl. HX-6 im HA-Export-Konzept und der Statuskopf des Speicher-Konzepts).
+> ⇒ **Aus diesem Dokument ist derzeit nichts offen.**
 
 ### Das Problem
 

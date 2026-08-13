@@ -359,7 +359,7 @@ eedc-homeassistant/                  ← Source of Truth (alle Änderungen hier)
 │   ├── KONZEPT-STYLE-GUIDE.md       # Darstellungs-SoT (Regel 0/0a)
 │   ├── KONZEPT-MONATS-FAKTEN.md     # Monatszeilen-Schicht (ADR-002/P10)
 │   ├── KONZEPT-BERECHNUNGS-LAYER.md · KONZEPT-COMMUNITY.md · KONZEPT-MOBILE.md
-│   ├── KONZEPT-UMFRAGE.md · KONZEPT-UNVOLLSTAENDIGE-WERTE.md
+│   ├── KONZEPT-UNVOLLSTAENDIGE-WERTE.md
 │   ├── KONZEPT-WALLBOX-EAUTO.md
 │   ├── SENSOR-REFERENZ.md · MQTT_INBOUND.md · GLOSSAR.md · FLYER.md
 │   ├── WAS-IST-NEU.md               # In-App-Hilfe „Was ist neu" (Anwender-Sprache)

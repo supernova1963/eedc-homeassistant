@@ -1,6 +1,33 @@
 # Konzept: Community-Site — Datenqualität & Attraktivität
 
-> Status: **Entwurf / Diskussionsgrundlage** (2026-05-28). Kein Code. Betrifft Repo `eedc-community` (energy.raunet.eu). Bündelt zwei Stoßrichtungen aus Roadmap #110: **(1) Datenqualität** (QS-Wunsch Gernot — aktive vs. aufgegebene Anlagen) und **(2) Attraktivität & Reichweite** (Schnellvergleich, Share, SEO).
+> ## **Status (gegen den Code gemessen 2026-08-13): Säule 1 zur Hälfte gebaut · Säule 2 unangetastet**
+>
+> Der Kopf sagte bis heute „Kein Code" — das stimmt so nicht mehr, und die Differenz ist die
+> Aktualitäts-Prüfung wert:
+>
+> * **Min-N / k-Anonymität: teilweise gebaut.** `eedc-community/backend/api/components.py:76`
+>   trägt `MIN_ANLAGEN_FUER_AGGREGAT = 3` und liefert darunter **keinen** Wert (Commit `4808662`,
+>   entstanden als Folge von **F-23**). ⚠ **Es gilt nur für die Komponenten-Aggregate** —
+>   `statistics.py` und `aggregations.py` haben weiterhin keine Schwelle, die Policy des Konzepts
+>   („Gruppen-Statistik erst ab N ≥ 3") ist also **nicht** durchgesetzt, sondern an einer Stelle
+>   vorweggenommen. Verwandt: der offene Fund **N-233** (die Verteilungs-Route antwortet für
+>   unbekannte Metriken still leer statt mit 404).
+> * **Aktiv-/Passiv-Zählung: nicht gebaut.** `aktualisiert_am` wird in keiner API-Datei
+>   ausgewertet (Negativ-Grep über `backend/api/*.py`) — die Headline ist unverändert der rohe
+>   Gesamt-Count. ⚑ **Am 2026-08-13 gemessen: 100 Anlagen in 16 Regionen.** Damit ist die
+>   Größenordnung eine andere als bei der Konzept-Erstellung, und die Frage „wie viele davon
+>   liefern noch?" wiegt schwerer als im Mai.
+> * **Säule 2 vollständig offen:** kein Schnellvergleich, keine Share-Buttons, `sitemap.xml` und
+>   `robots.txt` liegen weiterhin **statisch** unter `backend/static/`, keine server-gerenderten
+>   Landing-Pages.
+>
+> ⚑ **Zwei Punkte sind am 2026-08-13 hier eingezogen**, weil das archivierte
+> [`archive/KONZEPT-UMFRAGE.md`](archive/KONZEPT-UMFRAGE.md) ihre einzige Heimat war:
+> **Gruppen-Vergleich (2–5 Nutzer)** — mittlerer bis hoher Aufwand, ausdrücklich nur bei starker
+> Nachfrage — und ein **Akkudoktor-Tools-Link** für Neueinsteiger. Beide gehören zur
+> Community-Site, beide sind reine Kandidaten ohne Trigger.
+>
+> Status davor: **Entwurf / Diskussionsgrundlage** (2026-05-28). Betrifft Repo `eedc-community` (energy.raunet.eu). Bündelt zwei Stoßrichtungen aus Roadmap #110: **(1) Datenqualität** (QS-Wunsch Gernot — aktive vs. aufgegebene Anlagen) und **(2) Attraktivität & Reichweite** (Schnellvergleich, Share, SEO).
 >
 > **Bewusster Zielkonflikt:** Säule 1 macht die Headline-Zahl *ehrlich-kleiner*, Säule 2 will sie *größer*. Auflösung: Headline bleibt der warme Gesamt-Wert, „davon N aktuell liefernd" als Vertrauenssignal daneben — beides koexistiert.
 
@@ -84,6 +111,6 @@ Schnellvergleich → Share-Buttons → (SEO-Landing-Pages **+** dynamische Sitem
 
 # Verwandte / bewusst getrennte Punkte
 
-- **Community-Umfrage** — zurückgestellt bis ≥30 geteilte Anlagen, eigenes Konzept `docs/KONZEPT-UMFRAGE.md`.
+- ~~**Community-Umfrage** — zurückgestellt bis ≥30 geteilte Anlagen, eigenes Konzept `docs/KONZEPT-UMFRAGE.md`.~~ ⛔ **ARCHIVIERT am 2026-08-13** (`docs/archive/KONZEPT-UMFRAGE.md`, Entscheid Gernot: kein akuter Bedarf mehr). ⚠ Nicht weil die Schwelle unerreicht blieb — **sie ist mit 100 Anlagen mehr als dreifach überschritten** —, sondern weil der fertige Fragebogen nach Funktionen fragte, die seither gebaut wurden.
 - **Ausreißer-/Plausibilitäts-Guard beim Submit** (kWh/kWp-Band) — eigene QS-Maßnahme; Median/IQR (Commit `dfe6739`) mildert bereits.
 - Vorgänger-Brainstorm (2026-04-17) lebt in Memory `project_community_attraktivitaet`; dieses Dokument erdet es im aktuellen Code-Stand.

@@ -10,7 +10,9 @@
 > `scripts/sync-help.sh` arbeiten beide mit einer **Allowlist**, in der Konzepte und ADRs bewusst
 > fehlen. Dieses Dokument ist im Repository lesbar — es ist kein Anwender-Handbuch.
 >
-> **Offen:** **P3 — Remote-HA (LL-Token)** samt Gate-Umbau `HA_INTEGRATION_AVAILABLE` (der riskanteste Teil, betrifft rund 20 Guard-Stellen) und der Rest aus P2 (Wissensbasis über den Initial-Umfang hinaus, Takt-Check für Bestands-Zuordnungen). In der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als **Datenquellen-Ausbau** geführt.
+> ⚑ **Präzisiert 2026-08-13 (gegen den Code gemessen): P3 bleibt offen, aber die Hälfte, die dem Anwender wehtat, ist gebaut.** v4.0.13/v4.0.14 haben die **Verbraucher**-Seite umgehängt — Tagesverlauf, Prognosequellen (SFML/Solcast), kWh heute/gestern, Verbrauchsprofil, Langzeitstatistik und der Statistik-Import fragen nicht mehr nach der Betriebsart, sondern über `is_available` nach der **Verbindung** (die Kommentare in `live_tagesverlauf_service.py:204`, `live_history_service.py:517`, `prognose_discovery.py:127`, `solcast_service.py:135` schreiben den Umbau ausdrücklich fest). **Das zentrale Gate steht weiterhin** — heute **30** Stellen im Backend tragen `HA_INTEGRATION_AVAILABLE` (nicht „rund 20"), und `ha_connection.py:24` sagt selbst „das bleibt P3". ⇒ Der Status stimmt, die Umfangs-Angabe stimmte nicht.
+>
+> **Offen:** **P3 — Remote-HA (LL-Token)** samt Gate-Umbau `HA_INTEGRATION_AVAILABLE` (der riskanteste Teil, 30 Guard-Stellen — Stand 2026-08-13) und der Rest aus P2 (Wissensbasis über den Initial-Umfang hinaus, Takt-Check für Bestands-Zuordnungen). In der Roadmap [#110](https://github.com/supernova1963/eedc-homeassistant/issues/110) als **Datenquellen-Ausbau** geführt.
 >
 > **Historie:** alles, was unten mit ✅ steht, ist mit v4.0.0 ausgeliefert und wird nicht mehr fortgeschrieben.
 
