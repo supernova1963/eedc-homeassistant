@@ -373,8 +373,20 @@ function CockpitLiveInner({ anlageId }: { anlageId: number | undefined }) {
           und einen Block, der ohne jede Einrichtung funktioniert hätte, nie.
           Eigener Block statt Overlay im Tagesverlauf: der zeigt 10-Minuten-
           Leistung von heute, dieser Stundenpreise über zwei Tage.
-          Erscheint mit Preisen ODER mit dem Grund, warum es keine gibt. */}
-      {boersenpreise && (boersenpreise.tage.length > 0 || boersenpreise.hinweis) && (
+          Erscheint mit Preisen ODER mit dem Grund, warum es keine gibt.
+
+          `!loading` seit 13.08.2026 (rapahl + Gernot, beide sichtbar): Die
+          Börsenpreise sind öffentliche Marktdaten und brauchen keinen
+          Sensor-Abruf — ihr Fetch ist regelmäßig als erster zurück. Der Block
+          stand dann für ~1 s als EINZIGER Inhalt oben im Bild, direkt unter dem
+          ~80 px hohen Lade-Spinner, und rutschte weit nach unten, sobald
+          Energiefluss und Kennzahlen den Spinner ersetzten. Das las sich wie
+          „der Chart wird überschrieben"; tatsächlich ist der Platzhalter nur
+          viel kleiner als sein Inhalt. Der Block bleibt bewusst außerhalb des
+          `data.verfuegbar`-Zweigs (s. o.) — er wartet jetzt nur, bis der
+          Ladezustand entschieden ist. Die Alternative, ein Skeleton in
+          Blockhöhe, müsste die Höhe des Energieflusses raten. */}
+      {!loading && boersenpreise && (boersenpreise.tage.length > 0 || boersenpreise.hinweis) && (
         <Parkbar id="live:boersenpreis" titel="Börsenpreis">
           <FokusKachel titel="Börsenpreis heute & morgen" icon={Coins} zeigeTitel>
             <BoersenpreisBlock daten={boersenpreise} />
