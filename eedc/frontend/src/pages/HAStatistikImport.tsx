@@ -61,6 +61,11 @@ export default function HAStatistikImport() {
   const [vorschau, setVorschau] = useState<ImportVorschau | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  // N-240: Sachverhalte, die den Lauf nicht scheitern lassen, aber Folgen haben.
+  // Getrennt von `success`, damit sie nicht in einem grünen Alert untergehen —
+  // „Import erfolgreich" und „dieser Monat fehlt in allen Listen" sind zwei
+  // Aussagen.
+  const [warnungen, setWarnungen] = useState<string[]>([])
 
   // W5: geladene Vorschau + Auswahl gelten bis zum Import als offene Eingaben.
   useEffect(() => {
@@ -266,6 +271,7 @@ export default function HAStatistikImport() {
     setImporting(true)
     setError(null)
     setSuccess(null)
+    setWarnungen([])
 
     try {
       const result = await haStatisticsApi.importieren(selectedAnlage, {
@@ -280,6 +286,7 @@ export default function HAStatistikImport() {
           (result.ueberschrieben > 0 ? `, ${result.ueberschrieben} überschrieben` : '') +
           (result.fehler.length > 0 ? `, ${result.fehler.length} Fehler` : '')
         )
+        setWarnungen(result.warnungen ?? [])
         // Vorschau neu laden
         await loadVorschau()
       } else {
@@ -420,6 +427,9 @@ export default function HAStatistikImport() {
           {/* Alerts */}
           {error && <Alert type="error" className="mb-6">{error}</Alert>}
           {success && <Alert type="success" className="mb-6">{success}</Alert>}
+          {warnungen.map((w, i) => (
+            <Alert key={i} type="warning" className="mb-6">{w}</Alert>
+          ))}
 
           {/* Vorschau */}
           {vorschau && (

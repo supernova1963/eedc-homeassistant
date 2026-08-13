@@ -33,6 +33,7 @@ from backend.services.ha_statistics_service import (
     AlleMonateResponse,
     SensorMonatswert,
 )
+from backend.services.import_hauszaehler import warnung_monate_ohne_zaehlerwerte
 from backend.services.provenance import (
     seed_provenance,
     write_json_subkey_with_provenance,
@@ -593,6 +594,10 @@ class ImportResultat(BaseModel):
     uebersprungen: int
     ueberschrieben: int
     fehler: list[str]
+    #: N-240: Sachverhalte, die kein Fehler sind, aber Folgen haben — heute genau
+    #: einer: Monate, in denen nur Gerätewerte entstanden (keine Zählerzeile).
+    #: Getrennt von `fehler`, weil der Lauf erfolgreich war: `erfolg` bleibt True.
+    warnungen: list[str] = []
 
 
 # =============================================================================
@@ -878,6 +883,9 @@ async def import_ha_statistics(
     uebersprungen = 0
     ueberschrieben = 0
     fehler = []
+    # N-240: Monate, die nur Gerätewerte bekommen haben — gesammelt statt je
+    # Monat gemeldet, sonst stünde derselbe Satz zwölfmal im Ergebnis.
+    monate_ohne_zaehlerwerte: list[tuple[int, int]] = []
 
     for monat_req in request.monate:
         jahr = monat_req.jahr
@@ -915,8 +923,21 @@ async def import_ha_statistics(
             if import_netzbezug and basis_mapping.get("netzbezug", {}).get("sensor_id"):
                 netzbezug = sensor_values.get(basis_mapping["netzbezug"]["sensor_id"])
 
-            # Monatsdaten laden oder erstellen (nur wenn Basis-Felder importiert werden)
-            if import_einspeisung or import_netzbezug:
+            # Monatsdaten laden oder erstellen — nur wenn Basis-Felder importiert
+            # werden UND tatsächlich ein Zählerwert vorliegt.
+            #
+            # ⚠ **Die zweite Bedingung ist neu (13.08., N-240) und korrigiert eine
+            # erfundene Messung.** Ohne sie legte der Import bei aktiven, aber
+            # NICHT zugeordneten Basis-Feldern eine Zeile mit `0/0` an (an echten
+            # Objekten gemessen): eine Einspeisung und ein Netzbezug von exakt
+            # null, die niemand gemessen hat — und die der Plausibilitäts-Check
+            # prompt als „beide 0" meldete. `is not None` statt truthiness, damit
+            # ein echt gemessener 0-Wert weiterhin durchkommt.
+            hat_zaehlerwert = (
+                (import_einspeisung and einspeisung is not None)
+                or (import_netzbezug and netzbezug is not None)
+            )
+            if hat_zaehlerwert:
                 result = await db.execute(
                     select(Monatsdaten).where(
                         and_(
@@ -1074,6 +1095,23 @@ async def import_ha_statistics(
                             if result.applied:
                                 inv_importiert = True
 
+            # N-240: Gerätewerte angekommen, aber keine Zählerzeile für den Monat
+            # — der Zustand aus #349, hier auf dem HA-Weg. Geprüft wird die
+            # ZEILE, nicht die Zuordnung: existiert sie aus einem früheren Lauf
+            # oder aus dem Monatsabschluss, ist alles in Ordnung.
+            if inv_importiert and not hat_zaehlerwert:
+                vorhandene = await db.execute(
+                    select(Monatsdaten.id).where(
+                        and_(
+                            Monatsdaten.anlage_id == anlage_id,
+                            Monatsdaten.jahr == jahr,
+                            Monatsdaten.monat == monat,
+                        )
+                    )
+                )
+                if vorhandene.scalar_one_or_none() is None:
+                    monate_ohne_zaehlerwerte.append((jahr, monat))
+
             # Zähler aktualisieren
             if basis_importiert or inv_importiert:
                 importiert += 1
@@ -1093,10 +1131,12 @@ async def import_ha_statistics(
         anlage_id=anlage_id,
     )
 
+    warnung = warnung_monate_ohne_zaehlerwerte(monate_ohne_zaehlerwerte)
     return ImportResultat(
         erfolg=len(fehler) == 0,
         importiert=importiert,
         uebersprungen=uebersprungen,
         ueberschrieben=ueberschrieben,
-        fehler=fehler
+        fehler=fehler,
+        warnungen=[warnung] if warnung else [],
     )

@@ -258,3 +258,54 @@ def waehle_hauszaehler_quelle(
         gewaehlt.einspeisung_kwh, gewaehlt.netzbezug_kwh,
         herkunft=gewaehlt.herkunft, hinweis=hinweis,
     )
+
+
+# ─── HA-Statistik-Import: Monate ohne Zählerwerte (N-240) ────────────────────
+# Zweiter Nutzer dieses Moduls, dieselbe Aussage in derselben Sprache: „für
+# diesen Monat kamen Gerätewerte an, aber keine Hauszähler-Werte". Der
+# Cloud-Import sagt das seit dem 12.08. (`entscheide_hauszaehler`), der
+# HA-Statistik-Import schwieg — dieselbe Lage, zwei Auskünfte.
+
+
+def _monat_kurz(jahr: int, monat: int) -> str:
+    return f"{monat:02d}/{jahr}"
+
+
+def warnung_monate_ohne_zaehlerwerte(
+    monate: list[tuple[int, int]], *, max_benannt: int = 6,
+) -> Optional[str]:
+    """Warntext für Monate, in denen nur Gerätewerte entstanden sind.
+
+    ⚠ **Gemessen, nicht angenommen** (13.08.): Der Zustand entsteht auf **zwei**
+    Wegen, die sich im Ergebnis unterscheiden — und der Registereintrag N-240
+    kannte nur einen davon.
+
+    * **Basis-Felder abgewählt** (``basis_felder=[]``): keine ``Monatsdaten``-Zeile,
+      Gerätewerte da. Der Monat verschwindet aus allen Listen, die an der
+      Zählerzeile hängen.
+    * **Basis-Felder aktiv, aber kein Zähler-Sensor zugeordnet**: bis 13.08.
+      entstand hier eine Zeile mit **0/0** — eine Messung, die niemand gemessen
+      hat, und der Plausibilitäts-Check meldete sie prompt als „Einspeisung und
+      Netzbezug sind beide 0". Seit 13.08. entsteht auch hier keine Zeile.
+
+    Beide Wege sind für den Anwender derselbe Sachverhalt, deshalb **ein** Text.
+    ``None``, wenn nichts zu melden ist — ein Import ohne Befund schweigt.
+    """
+    if not monate:
+        return None
+    geordnet = sorted(set(monate))
+    benannt = [_monat_kurz(j, m) for j, m in geordnet[:max_benannt]]
+    rest = len(geordnet) - len(benannt)
+    liste = " · ".join(benannt) + (f" und {rest} weitere" if rest else "")
+    mehrzahl = len(geordnet) > 1
+    return (
+        f"{'Für die Monate' if mehrzahl else 'Für den Monat'} {liste} wurden "
+        f"Komponenten-Messwerte übernommen, aber keine Zählerwerte "
+        f"(Einspeisung/Netzbezug). "
+        f"{'Diese Monate bleiben' if mehrzahl else 'Dieser Monat bleibt'} damit "
+        f"ohne Zählerzeile und {'erscheinen' if mehrzahl else 'erscheint'} nicht in "
+        "den Monatslisten, in der Autarkie und im Community-Vergleich. "
+        "Trage die Werte im Monatsabschluss nach oder "
+        "ordne einen HA-Sensor am Hausanschluss zu; der Daten-Checker führt dich "
+        "über „Messwerte ohne Monatszeile“ direkt zum Formular."
+    )

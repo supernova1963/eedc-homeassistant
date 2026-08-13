@@ -11,6 +11,20 @@
 
 ## Noch nicht veröffentlicht
 
+### Der Statistik-Import sagt jetzt, wenn ein Monat unvollständig bleibt
+
+**Betrifft dich das?** Wenn du Monate aus der Home-Assistant-Langzeitstatistik importierst und keine Zähler-Sensoren für Einspeisung und Netzbezug zugeordnet hast — oder die Basis-Felder in der Vorschau abwählst.
+
+Ein Monat besteht in eedc aus zwei Teilen: der Zählerzeile deiner Anlage und den Messwerten je Komponente. Fehlt die Zählerzeile, taucht der Monat in keiner Monatsliste auf und fehlt in Autarkie und Community-Vergleich — auch wenn die Gerätewerte längst da sind.
+
+Bisher passierte in dieser Lage zweierlei, je nachdem wie du importiert hast: Entweder schrieb eedc eine Zeile mit **0 kWh Einspeisung und 0 kWh Netzbezug** — eine Messung, die es nie gab, und die der Daten-Checker dann zu Recht bemängelte. Oder es entstand gar keine Zeile, und der Import sagte nichts dazu.
+
+Jetzt gilt beides nicht mehr: eedc erfindet keine Nullen, und nach dem Import nennt es dir die Monate, die noch eine Zählerzeile brauchen — mit dem Weg dorthin. Im Daten-Checker findest du sie unter „Messwerte ohne Monatszeile", von dort führt ein Link direkt ins Monatsformular.
+
+> **Ein Zähler, der wirklich 0 meldet, ist etwas anderes** — etwa keine Einspeisung im Dezember. Der Monat wird weiterhin geschrieben.
+
+→ [Handbuch → Einstellungen §6.4 Statistik-Import](HANDBUCH_EINSTELLUNGEN.md#64-statistik-import)
+
 ### Wenn du eine Datenquelle änderst, sagt eedc dir jetzt, was mit den alten Werten ist
 
 **Betrifft dich das?** Wenn du einem Feld einen anderen Sensor zuordnest, ein Vorzeichen umkehrst oder eine Komponente ergänzt — also immer dann, wenn du in **Einstellungen → Datenquellen** etwas änderst.

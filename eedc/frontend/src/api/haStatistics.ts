@@ -189,6 +189,9 @@ export interface ImportResult {
   uebersprungen: number
   ueberschrieben: number
   fehler: string[]
+  /** N-240: kein Fehler, aber mit Folgen — z. B. Monate, in denen nur
+   *  Gerätewerte entstanden sind (keine Zählerzeile). `erfolg` bleibt true. */
+  warnungen: string[]
 }
 
 // =============================================================================

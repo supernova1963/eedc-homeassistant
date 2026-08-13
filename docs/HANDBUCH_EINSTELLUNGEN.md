@@ -388,6 +388,10 @@ Jeder Monat ist einzeln per Checkbox wählbar — so bleiben manuell erfasste Da
 >
 > **Wie weit zurück?** So weit, wie Home Assistant den Sensor selbst führt — die Langzeitstatistik beginnt mit seiner Einrichtung. Für die Zeit davor gibt es den Datei-Import (CSV/Excel); daran ändert auch der API-Weg nichts.
 
+> **Ohne Zähler-Sensoren entsteht kein vollständiger Monat — und eedc sagt es.** Ein Monat besteht aus der **Zählerzeile** deiner Anlage (Einspeisung, Netzbezug) und den **Messwerten je Komponente**. Sind nur Erzeuger-Sensoren zugeordnet — oder wählst du die Basis-Felder in der Vorschau ab —, kommen die Gerätewerte an, die Zählerzeile entsteht aber nicht. Der Monat taucht dann in keiner Monatsliste auf und fehlt in Autarkie und Community-Vergleich. Der Import nennt die betroffenen Monate nach dem Lauf und sagt, wie du sie vervollständigst; im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) findest du sie unter „Messwerte ohne Monatszeile" mit einem Link direkt ins Monatsformular.
+>
+> ⚠ **Bis v4.0.13 legte eedc in diesem Fall eine Zeile mit 0 kWh Einspeisung und 0 kWh Netzbezug an** — eine Messung, die niemand gemessen hatte, und die der Daten-Checker anschließend zu Recht als unplausibel meldete. Jetzt entsteht keine Zeile mehr, wo kein Zählerwert vorliegt. Ein Zähler, der ehrlich 0 meldet (Einspeisung im Dezember), schreibt seinen Monat weiterhin.
+
 > #### „Bestehende Monate überschreiben" — was der Haken tut
 >
 > **Ohne Haken** ergänzt ein Import nur, was fehlt. Werte, die schon da sind, bleiben unangetastet — egal woher sie kommen.
