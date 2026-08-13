@@ -474,6 +474,6 @@ Konventions-Regel: jede Bestandsroute kriegt einen `Navigate replace` in `App.ts
 - **Visuelle Sprache (Tokens, Komponenten, Layout)** → [`KONZEPT-STYLE-GUIDE.md`](KONZEPT-STYLE-GUIDE.md)
 - **Mobile-Verhalten** → [`KONZEPT-MOBILE.md`](KONZEPT-MOBILE.md)
 - **Operativer Bausteine-Tracker** → [#243](https://github.com/supernova1963/eedc-homeassistant/issues/243)
-- **Speicher-Auswertungs-Inhalte (B11 alt → Komponenten-Hub-Inhalt)** → [#142](https://github.com/supernova1963/eedc-homeassistant/issues/142) · [`KONZEPT-SPEICHER-AUSWERTUNG.md`](KONZEPT-SPEICHER-AUSWERTUNG.md)
+- **Speicher-Auswertungs-Inhalte (B11 alt → Komponenten-Hub-Inhalt)** → [#142](https://github.com/supernova1963/eedc-homeassistant/issues/142) · [`archive/KONZEPT-SPEICHER-AUSWERTUNG.md`](archive/KONZEPT-SPEICHER-AUSWERTUNG.md) (archiviert 2026-08-13, #358 geschlossen)
 - **CO₂-Amortisation** → [#284](https://github.com/supernova1963/eedc-homeassistant/issues/284)
 - **Saison-/Mehrjahresvergleich (Werte-Tabelle, Wetternormalisierung)** → [#195](https://github.com/supernova1963/eedc-homeassistant/issues/195)

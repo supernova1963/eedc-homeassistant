@@ -1,7 +1,7 @@
 """Hätte ein größerer Speicher etwas gebracht? — die gedeckelte Antwort.
 
 **Warum diese Datei existiert (#358 Phase 2, gemessen 2026-08-12):**
-`docs/KONZEPT-SPEICHER-AUSWERTUNG.md` §2 schlug dafür vor::
+`docs/archive/KONZEPT-SPEICHER-AUSWERTUNG.md` §2 schlug dafür vor::
 
     ungenutztes_potential_kwh = Σ (einspeisung an Tagen mit SoC_max ≥ 95 %)
 
