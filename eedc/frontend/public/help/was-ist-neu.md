@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.13)
+> **Stand:** August 2026 (v4.0.14)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,7 +9,7 @@
 
 ---
 
-## Noch nicht veröffentlicht
+## v4.0.14 — Gemessen statt geschätzt, gesagt statt geschwiegen (August 2026)
 
 ### Der Statistik-Import sagt jetzt, wenn ein Monat unvollständig bleibt
 
@@ -48,6 +48,16 @@ Bisher hat eedc in dieser Lage etwas anderes getan, als du angekreuzt hattest. D
 Der Haken wirkt jetzt. **Und er sagt dir vorher, was er kostet:** Sobald du ihn setzt, zeigt der Assistent, wie viele von Hand gepflegte Werte in welchen Monaten ersetzt würden — mit Beispielen. Nimmst du ihn wieder heraus, bleibt alles stehen und der Import ergänzt nur, was fehlt.
 
 > **Was sich nicht ändert:** Was im Hintergrund schreibt — Sensor-Abrufe, die nächtliche Aggregation —, überschreibt deine Eingaben weiterhin nicht. Diese Regel war von Anfang an dafür da, dass deine Korrekturen ankommen, und daran ändert sich nichts. Es zählt nur dein eigener, ausdrücklicher Klick jetzt als das, was er ist.
+
+### Der Hinweis auf „Messwerte ohne Monatszeile" sagt jetzt, was zu tun ist
+
+**Betrifft dich das?** Wenn der Daten-Checker dir meldet, dass für einen Monat Messwerte einzelner Komponenten vorliegen, aber keine Zählerzeile.
+
+Bisher behauptete diese Meldung eine Ursache: „Der Monat wurde gelöscht." Das trifft nur einen von mehreren Fällen — derselbe Zustand entsteht auch beim Statistik-Import ohne Zähler-Sensoren, und im Nachhinein lässt sich das nicht unterscheiden. Wer den Monat nie gelöscht hatte, suchte den Fehler bei sich.
+
+Die Meldung beschreibt jetzt den Zustand, statt seine Ursache zu raten, und stellt das **Nachtragen** vor das Entfernen — in den allermeisten Fällen willst du die Zählerwerte ergänzen, nicht deine Messwerte löschen. Der Link führt dich direkt in das Formular **dieses** Monats, statt in eine Liste, in der du ihn erst suchen musst.
+
+→ [Handbuch → Daten-Checker](HANDBUCH_DATEN_CHECKER.md)
 
 ### Einen Monat löschen heißt: den ganzen Monat
 
