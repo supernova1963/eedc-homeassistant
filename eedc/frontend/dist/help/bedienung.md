@@ -436,6 +436,46 @@ Typische Abweichungen: ±5 % normal (Wetter), ±10–15 % prüfen (Verschattung?
 - **Effizienz** = Entladung / Ladung × 100 % (durchgängig cyan)
 - **Degradation** (Kapazitätsverlust über die Zeit)
 - **Arbitrage-Analyse** (wenn aktiviert): Netzladung zu günstigem Strom, Entladung bei hohem Preis, Arbitrage-Gewinn
+- **„Hätte mehr Kapazität geholfen?"** (Block *Wirtschaftlichkeit*) — die Sizing-Frage, beantwortet aus deinen Stundenwerten. Siehe unten.
+- **„Größerer Speicher?"** (eigener Block) — die Anschlussfrage *wie viel* und *zu welchem Preis*, mit Schieberegler. Siehe unten.
+
+#### Hätte mehr Kapazität geholfen?
+
+Die Auswertung zählt **nicht** einfach, wie viel Strom ins Netz ging, während der Speicher voll war. Diese Zahl steht zwar da — aber ausdrücklich als **Obergrenze**, denn sie überschätzt den Nutzen systematisch: Zusätzliche Kapazität bringt nur dann etwas, wenn der Speicher vor dem nächsten Sonnenaufgang auch **leer läuft**. Tut er das nicht, hätte ein größerer Speicher morgens bloß mehr Restladung — und niemand hätte sie abgenommen.
+
+An einer echten Anlage gemessen: zwölf Junitage, 471 kWh Einspeisung bei vollem Speicher, aber kein einziges Leerlaufen in der Nacht ⇒ **Nutzen 0 kWh**. Im Winter kehrt es sich um: dort läuft der Speicher jede Nacht leer, es kommt nur kaum Überschuss an, den er aufnehmen könnte.
+
+Deshalb zeigt der Block drei Zahlen nebeneinander:
+
+- **Nutzbares Zusatzpotential** — was ein größerer Speicher wirklich zusätzlich durchgesetzt hätte (je Lade-Entlade-Zyklus das Minimum aus Überschuss und nächtlichem Bedarf)
+- **Überschuss bei vollem Speicher** — die Obergrenze, nicht der Ertrag
+- **Nächte mit leerem Speicher** — die eigentliche Begrenzung
+
+Dazu eine **Heatmap Monat × Ladestand**: Je dunkler eine Zelle, desto mehr Stunden stand der Speicher in diesem Monat auf diesem Ladestand. Eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer" — erst wenn beides im selben Monat auftritt, ist mehr Kapazität eine ernsthafte Überlegung.
+
+> **Mehrere Speicher:** Den Ladestand erfasst eedc für die Anlage als Ganzes. Die Auswertung gilt dann für alle Speicher zusammen, nicht je Gerät — die Sicht weist darauf hin.
+
+#### Größerer Speicher? — der Sizing-Regler
+
+Der Block daneben beantwortet die Anschlussfrage: **wie viel** mehr, und lohnt es sich? Du ziehst einen Regler zwischen **50 % und 200 %** deiner heutigen Kapazität; eedc lässt daraufhin deine echten Stundenwerte noch einmal durchlaufen — dieselbe Sonne, derselbe Verbrauch, nur ein anders großer Speicher.
+
+Angezeigt werden:
+
+- **Netto-Nutzen pro Jahr** — gesparter Netzbezug **minus** der Einspeisung, die dafür entfällt. Ein größerer Speicher senkt beides; nur den Bezug zu rechnen wäre eine Überschätzung (an der Referenzanlage 67 € statt 49 €).
+- **Netzbezug** — wie viel weniger (oder mehr) aus dem Netz gekommen wäre.
+- **Amortisation** — wie lange die Mehrkosten brauchen, bis sie wieder hereinkommen (Richtwert rund 500 € je kWh; steht als Annahme dabei).
+- **Kurve über alle Größen** — flacht sie nach rechts ab, ist dein Speicher bereits groß genug. Die Null-Linie ist deine heutige Kapazität.
+
+**Womit gerechnet wird.** Nicht mit der Kapazität vom Typenschild, sondern mit der, die dein Speicher im Alltag **wirklich bewegt** — eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das ist **kein Gerätemangel**: Reserven, Ladestrategie, Leistungsgrenzen und Standby gehören dazu. Mit der Zahl vom Typenschild fällt die Rechnung systematisch zu optimistisch aus (an einer echten Anlage: −17,5 % Abweichung beim Netzbezug statt −5,4 %). Lässt sich die Basis nicht ableiten, rechnet eedc mit den gepflegten Parametern **und sagt es**.
+
+**Und der Block sagt, woran ein Unterschied liegt.** Unter *Wie groß ist Ihr Speicher wirklich?* stehen die gepflegte nutzbare Kapazität und die gemessene nebeneinander, dazu der Ladestands-Bereich, in dem dein Speicher lebt, und an wie vielen Tagen er voll bzw. leer wurde. Daraus folgt die Unterscheidung:
+
+- **Voll geladen, trotzdem weniger Durchsatz** ⇒ **Ladeverluste**. Gegen Ende der Ladung nimmt ein Speicher viel Energie auf, die den Ladestand kaum noch bewegt. Deine gepflegte Zahl ist richtig, die kleinere beschreibt den Durchsatz.
+- **Nie voll geladen** ⇒ deine **Ladestrategie**. Dann ist die kleinere Zahl kein Verlust; falls das nicht gewollt ist, prüfe die gepflegte nutzbare Kapazität in den Einstellungen der Komponente.
+
+> **Deine gepflegte Zahl wird nie überschrieben.** Sie trägt eine Absicht — wer bewusst nur bis 80 % lädt, hat das so gewollt. eedc erklärt den Unterschied, statt ihn zu „korrigieren".
+
+> **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt (Lastverschiebung). Sie ist damit belastbarer als ein generisches Sizing-Tool, weil sie deine Saisonalität trägt, aber sie ist **keine Vorhersage**. Dieser Hinweis steht immer neben der Zahl. Unter etwa **180 Tagen** Historie sagt eedc zusätzlich, dass die Aussage noch nicht trägt — ein halbes Jahr deckt Sommer und Winter ab, und genau dazwischen liegt der Nutzen eines Speichers.
 
 ### 3.4 Wärmepumpe
 

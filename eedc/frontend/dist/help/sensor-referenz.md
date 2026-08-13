@@ -326,7 +326,7 @@ eedc **exportiert** zusätzlich die eigene PV-Prognose als Sensoren (immer die *
 | `eedc_prognose_heute_kwh` | **PV-Tagesprognose heute** — voller Tageswert (kanonisch, rollt mit OpenMeteo, == Anzeige). |
 | `eedc_prognose_rest_today_kwh` | **Rest heute** — Prognose der verbleibenden Stunden, laufende Stunde anteilig nach Restminuten (#339); aus demselben Kanon → rollt synchron mit „heute". |
 | `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Attribut `stundenprofil_kwh` = 24 Backward-Slots (kWh); Sensor-State == Σ Slots. |
-| `eedc_speicher_voll_um` | Uhrzeit „Speicher voll" aus der SoC-Simulation ab aktuellem Speicherstand. |
+| `eedc_speicher_voll_um` | Uhrzeit „Speicher voll" aus der SoC-Simulation ab aktuellem Speicherstand — **inkl. Ladeverluste**: gerechnet mit dem gepflegten Wirkungsgrad des Speichers. Vorher lief die Rechnung verlustfrei und meldete deshalb zu früh. |
 
 > **Hinweis:** Bis v3.45.5 war `eedc_prognose_heute_kwh` „IST bisher + Rest" und wich damit von der App-Anzeige ab. Seit dem Prognose-Kanon trägt der Sensor den **vollen kanonischen Tageswert** (== Anzeige); „Rest heute" ist der reine Rest. Automationen, die auf den alten „IST+Rest"-Wert gebaut haben, sollten auf `…_rest_today_kwh` umgestellt werden, wenn sie den Rest brauchen.
 
@@ -457,7 +457,7 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 | `eedc_prognose_heute_kwh` | **Kanonische Tagesprognose** (== App-Anzeige): die volle Prognose für den ganzen Tag, **nicht** IST + Rest. Ändert sich, wenn OpenMeteo einen neuen Modelllauf liefert. Trägt das Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 Werte; Slot N = Energie der Stunde N−1 → N). |
 | `eedc_prognose_rest_today_kwh` | **Echter Rest**: Prognose der verbleibenden Stunden ab jetzt (ohne IST) — die **laufende Stunde geht anteilig** nach den noch verbleibenden Minuten ein (#339), der Wert sinkt also gleichmäßig statt in Stundensprüngen. Der Steuerungswert für Automationen — „wie viel PV kommt heute noch?" |
 | `eedc_prognose_day_plus_1/2/3_kwh` | Tagesprognose morgen / übermorgen / in 3 Tagen. Trägt jeweils das korrigierte Stundenprofil des Tages als Attribut `stundenprofil_kwh` (24 kWh-Werte, Slot-Konvention wie oben) — z. B. für Lade-Planung per Template. Werte ändern sich, wenn OpenMeteo einen neuen Modelllauf liefert (alle paar Stunden) **oder** das gelernte Korrekturprofil aktualisiert wird (nächtlich) — stundenlang unveränderte Werte sind normal. |
-| `eedc_speicher_voll_um` | Uhrzeit, zu der der Speicher voraussichtlich voll ist (Simulation ab **aktuellem** Ladestand). |
+| `eedc_speicher_voll_um` | Uhrzeit, zu der der Speicher voraussichtlich voll ist (Simulation ab **aktuellem** Ladestand, **mit** dem gepflegten Wirkungsgrad — bei mehreren Speichern dem niedrigsten). |
 
 > **Vormittag/Nachmittag:** eigene VM/NM-Sensoren gibt es bewusst nicht — beides ist per HA-Template direkt aus `stundenprofil_kwh` ableitbar (z. B. `{{ state_attr('sensor.…_day_plus_1_kwh', 'stundenprofil_kwh')[:13] | sum }}` für die Stunden bis 12 Uhr).
 
@@ -466,6 +466,8 @@ Die Korrektur erfolgt **pro Stunde** über die Korrekturprofil-Kaskade (Sonnenst
 Grundlage ist der **Day-Ahead-Börsenpreis** (nicht der Anbieter-Endpreis — der variiert je Vertrag/Region, die Kurvenform ist dieselbe). Tag- und Nacht-Fenster werden **solar-basiert getrennt** bewertet (Sonnenauf-/-untergang, wandert saisonal).
 
 **Welcher Tag gemeint ist:** der Kalendertag der **Strommarkt-Zeitzone** (CET/CEST für DE und AT) — Stunde 0 ist die Stunde nach Mitternacht deiner Uhr, unabhängig davon, in welcher Zeitzone der eedc-Container läuft. Bis v4.0 wurde stattdessen ein UTC-Tag abgefragt: Die Stunden 0 und 1 trugen dadurch die Preise des **Folgetages** (in der Winterzeit die Stunde 0), und in einem Container ohne gesetzte Zeitzone lagen alle Stunden um denselben Betrag daneben. An den beiden Umstellungstagen hat das Rang-Profil folgerichtig 23 bzw. 24 Einträge — im Oktober zählt die erste der beiden Zwei-Uhr-Stunden.
+
+**Wann der Wert wechselt:** mit dem MQTT-Versand, und der läuft **an der Uhr** — bei der Voreinstellung (alle 60 Minuten) also zur vollen Stunde, bei kürzeren Abständen im passenden Raster (`:00`, `:15`, `:30`, `:45`). Bis dahin lief der Versand ab dem Startzeitpunkt des Add-ons durch; der neue Preis kam damit um einen Versatz zu spät an, den allein der letzte Neustart bestimmte (gemeldet: `09:12:56` und, nach einem Update, `11:08:02`). Ein Intervall, das nicht auf die Uhr passt (z. B. 90 Minuten), behält seinen freien Takt — dort würde jede Ausrichtung den eingestellten Abstand verändern.
 
 **Günstig-Definition:** Eine Stunde gilt als günstig, wenn ihr Preis unter der **Günstig-Schwelle** liegt — standardmäßig 10 % unter dem Tagesdurchschnitt ohne die 3 teuersten Stunden („optimierter Ø"). Der Prozentsatz ist je Anlage einstellbar ([MQTT-Export-Seite](HANDBUCH_EINSTELLUNGEN.md#63-mqtt-export)). Ohne die Schwelle wären die „günstigsten" Stunden rein relativ — erzwungener Verbrauch oder Netzladung in einer kaum billigeren Stunde ergibt keinen Sinn.
 

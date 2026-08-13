@@ -1,11 +1,168 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.13)
+> **Stand:** August 2026 (v4.0.14)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
 >
 > **Lesehinweis:** Die jüngsten Versionen stehen oben. Jeder Punkt verlinkt entweder auf die zuständige Hilfe-Sektion oder direkt auf die App-Funktion (sofern erreichbar). Anker-URLs (`?doc=was-ist-neu`) sind teilbar.
+
+---
+
+## v4.0.14 — Gemessen statt geschätzt, gesagt statt geschwiegen (August 2026)
+
+### Der Statistik-Import sagt jetzt, wenn ein Monat unvollständig bleibt
+
+**Betrifft dich das?** Wenn du Monate aus der Home-Assistant-Langzeitstatistik importierst und keine Zähler-Sensoren für Einspeisung und Netzbezug zugeordnet hast — oder die Basis-Felder in der Vorschau abwählst.
+
+Ein Monat besteht in eedc aus zwei Teilen: der Zählerzeile deiner Anlage und den Messwerten je Komponente. Fehlt die Zählerzeile, taucht der Monat in keiner Monatsliste auf und fehlt in Autarkie und Community-Vergleich — auch wenn die Gerätewerte längst da sind.
+
+Bisher passierte in dieser Lage zweierlei, je nachdem wie du importiert hast: Entweder schrieb eedc eine Zeile mit **0 kWh Einspeisung und 0 kWh Netzbezug** — eine Messung, die es nie gab, und die der Daten-Checker dann zu Recht bemängelte. Oder es entstand gar keine Zeile, und der Import sagte nichts dazu.
+
+Jetzt gilt beides nicht mehr: eedc erfindet keine Nullen, und nach dem Import nennt es dir die Monate, die noch eine Zählerzeile brauchen — mit dem Weg dorthin. Im Daten-Checker findest du sie unter „Messwerte ohne Monatszeile", von dort führt ein Link direkt ins Monatsformular.
+
+> **Ein Zähler, der wirklich 0 meldet, ist etwas anderes** — etwa keine Einspeisung im Dezember. Der Monat wird weiterhin geschrieben.
+
+→ [Handbuch → Einstellungen §6.4 Statistik-Import](HANDBUCH_EINSTELLUNGEN.md#64-statistik-import)
+
+### Wenn du eine Datenquelle änderst, sagt eedc dir jetzt, was mit den alten Werten ist
+
+**Betrifft dich das?** Wenn du einem Feld einen anderen Sensor zuordnest, ein Vorzeichen umkehrst oder eine Komponente ergänzt — also immer dann, wenn du in **Einstellungen → Datenquellen** etwas änderst.
+
+Eine neue Zuordnung gilt **ab diesem Moment**. Deine bereits gespeicherten Tages- und Stundenwerte bleiben, wie sie berechnet wurden — sie tragen die Zuordnung von damals. Das war immer so; gesagt hat es dir bisher niemand. Wer einen zweiten Wechselrichter samt Modulen ergänzt hat, fand ihn in der Live-Ansicht sofort wieder — in der Historie aber nicht, und ohne Erklärung.
+
+Jetzt erscheint oben auf der Fläche ein Hinweis: welche Felder betroffen sind, ab wann die Werte neu sind, und ein Knopf direkt zur Reparatur-Werkbank, falls du zurückliegende Tage mit der neuen Zuordnung neu rechnen lassen willst (in Blöcken von bis zu 31 Tagen). Deine **Monatsdaten bleiben dabei unberührt**.
+
+Der Hinweis blockiert nichts und bleibt stehen, bis du ihn mit **„Verstanden"** wegklickst — auch über einen Neustart hinweg, denn die Frage stellt sich meist erst ein paar Tage später.
+
+> **Von allein passiert nichts.** eedc rechnet die Vergangenheit nicht selbsttätig neu — das kann bei langer Historie Stunden dauern und ist selten gewollt. Und für Monate, die du aus einer Hersteller-Cloud importiert hast, bringt ein neuer Lauf ohnehin nichts: Für die Zeit gibt es keine Sensordaten, und die Monatswerte genügen.
+
+→ [Handbuch → Einstellungen §7.7 Eine geänderte Zuordnung gilt ab jetzt](HANDBUCH_EINSTELLUNGEN.md#77-eine-geänderte-zuordnung-gilt-ab-jetzt--nicht-rückwirkend)
+
+### „Überschreiben" heißt jetzt überschreiben
+
+**Betrifft dich das?** Wenn du Werte schon einmal von Hand korrigiert und denselben Monat später neu importiert hast.
+
+Bisher hat eedc in dieser Lage etwas anderes getan, als du angekreuzt hattest. Der Haken **Bestehende Monate überschreiben** ließ deine Handarbeit stehen und meldete nach dem Import „6 Felder durch manuell gepflegte Werte geschützt". Gemeint war es gut — praktisch hieß es: Ein Monat, den du einmal korrigiert hast, ließ sich nie wieder importieren.
+
+Der Haken wirkt jetzt. **Und er sagt dir vorher, was er kostet:** Sobald du ihn setzt, zeigt der Assistent, wie viele von Hand gepflegte Werte in welchen Monaten ersetzt würden — mit Beispielen. Nimmst du ihn wieder heraus, bleibt alles stehen und der Import ergänzt nur, was fehlt.
+
+> **Was sich nicht ändert:** Was im Hintergrund schreibt — Sensor-Abrufe, die nächtliche Aggregation —, überschreibt deine Eingaben weiterhin nicht. Diese Regel war von Anfang an dafür da, dass deine Korrekturen ankommen, und daran ändert sich nichts. Es zählt nur dein eigener, ausdrücklicher Klick jetzt als das, was er ist.
+
+### Der Hinweis auf „Messwerte ohne Monatszeile" sagt jetzt, was zu tun ist
+
+**Betrifft dich das?** Wenn der Daten-Checker dir meldet, dass für einen Monat Messwerte einzelner Komponenten vorliegen, aber keine Zählerzeile.
+
+Bisher behauptete diese Meldung eine Ursache: „Der Monat wurde gelöscht." Das trifft nur einen von mehreren Fällen — derselbe Zustand entsteht auch beim Statistik-Import ohne Zähler-Sensoren, und im Nachhinein lässt sich das nicht unterscheiden. Wer den Monat nie gelöscht hatte, suchte den Fehler bei sich.
+
+Die Meldung beschreibt jetzt den Zustand, statt seine Ursache zu raten, und stellt das **Nachtragen** vor das Entfernen — in den allermeisten Fällen willst du die Zählerwerte ergänzen, nicht deine Messwerte löschen. Der Link führt dich direkt in das Formular **dieses** Monats, statt in eine Liste, in der du ihn erst suchen musst.
+
+→ [Handbuch → Daten-Checker](HANDBUCH_DATEN_CHECKER.md)
+
+### Einen Monat löschen heißt: den ganzen Monat
+
+**Betrifft dich das?** Wenn du einen Monat löschst, um ihn neu zu erfassen oder zu importieren.
+
+Bisher entfernte „Monat löschen" nur die Zählerwerte; die Messwerte der einzelnen Komponenten blieben stehen. Das war als Vorsicht gedacht — gemessene Gerätewerte sind meist mühsamer zu beschaffen. Das Ergebnis war aber ein Monat, der in keiner Liste mehr auftauchte und trotzdem jeden neuen Import abwies: unsichtbar und wirksam zugleich.
+
+Gelöscht wird jetzt immer der ganze Monat. Der Dialog nennt vorher, welche Komponenten betroffen sind, damit du weißt, was verschwindet.
+
+### Zwei Wechselrichter, ein Zähler: der Monatsabschluss entsteht wieder
+
+**Betrifft dich das?** Wenn du mehr als einen Wechselrichter hast und ihre Daten aus der Hersteller-Cloud holst — bei Solarman ist jeder Wechselrichter eine eigene „Station".
+
+Seit eedc den Import je Station kennt, landeten Erträge und Speicherwerte richtig am jeweiligen Gerät. **Einspeisung und Netzbezug fielen dabei aber unter den Tisch.** Das Ergebnis war verwirrend: Der Import meldete Erfolg, die Zahlen standen im Cockpit — in der Monatsliste blieb der Monat leer, und ein erneuter Import änderte daran nichts. Der Daten-Checker meldete den Monat als fehlend und bot obendrein an, die vorhandenen Messwerte zu löschen.
+
+Der Denkfehler lag bei uns: Wir hatten den Zählerwert einer Station für „die halbe Wahrheit" gehalten. **Ein Wechselrichter misst Einspeisung und Netzbezug aber gar nicht** — er liest sie vom Smartmeter am Hausanschluss. Alle deine Geräte melden deshalb **denselben** Wert.
+
+eedc übernimmt ihn jetzt einmal in den Monat, sowohl beim Import als auch beim Cloud-Abruf im Monatsabschluss. Dabei gilt:
+
+- **Nichts wird addiert.** Die zweite Station bestätigt den Wert, sie verdoppelt ihn nicht.
+- **Ein Gerät ohne Smartmeter überschreibt nichts.** Meldet es 0, bleibt der echte Wert stehen.
+- **Verschiedene Zählerstände werden gemeldet.** Weichen zwei Geräte voneinander ab, sagt eedc es dir, statt still eines auszuwählen.
+
+Deine Erzeugung und dein Speicherumsatz bleiben unverändert gerätebezogen — dort ist der Wert einer einzelnen Station tatsächlich nur ein Teil des Ganzen.
+
+> **Was du tun musst:** einmal neu importieren. Die Monate, denen bisher die Zählerzeile fehlt, bekommen sie dabei.
+
+*(Gemeldet von OliS2811.)*
+
+### „Hätte mir ein größerer Speicher etwas gebracht?" — jetzt mit einer ehrlichen Zahl
+
+**Betrifft dich das?** Wenn du einen Speicher hast und schon einmal überlegt hast, ihn zu erweitern.
+
+Im Komponenten-Hub deines Speichers steht unter *Wirtschaftlichkeit* eine neue Auswertung. Sie rechnet aus deinen eigenen Stundenwerten aus, wie viel ein größerer Speicher zusätzlich durchgesetzt hätte.
+
+**Die Zahl ist bewusst kleiner als die naheliegende** — und das ist der Punkt. Naheliegend wäre: „zähle, wie viel Strom ins Netz ging, während der Speicher voll war". An einer echten Anlage kommen so für zwölf Junitage **471 kWh** heraus. Nur: Der Speicher dieser Anlage fiel in keiner dieser Nächte unter 31 %. Ein größerer hätte morgens einfach mehr Restladung gehabt und sie **nie abgegeben** — der tatsächliche Nutzen war **null**.
+
+eedc zählt deshalb nur, was auch wieder verbraucht worden wäre: Überschuss bei vollem Speicher **und** eine Nacht, in der er tatsächlich leer lief. Die naheliegende Summe steht als „Obergrenze" daneben, damit du beide Zahlen siehst.
+
+Dazu:
+
+- **Nächte mit leerem Speicher** — die eigentliche Begrenzung. Läuft dein Speicher nie leer, bringt mehr Kapazität nichts, egal wie viel Sonne du einspeist.
+- **Heatmap Monat × Ladestand** — eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer". Interessant wird es erst, wenn beides im selben Monat auftritt.
+
+> Bei mehreren Speichern erfasst eedc den Ladestand für die Anlage als Ganzes — die Auswertung gilt dann für alle zusammen, nicht je Gerät. Das steht auch so in der Sicht.
+
+### „Und wie viel größer?" — der Schieberegler dazu
+
+**Betrifft dich das?** Wenn du mit dem Gedanken spielst, deinen Speicher zu erweitern.
+
+Die Auswertung oben sagt dir, *ob* mehr Kapazität etwas gebracht hätte. Der neue Block **„Größerer Speicher?"** im selben Komponenten-Hub sagt dir, **wie viel** — und was es kostet.
+
+Du ziehst einen Regler zwischen **50 % und 200 %** deiner heutigen Kapazität. eedc lässt daraufhin deine echten Stundenwerte noch einmal durchlaufen: dieselbe Sonne, derselbe Verbrauch, nur ein anders großer Speicher. Du siehst den Netto-Nutzen pro Jahr, wie viel weniger du aus dem Netz gebraucht hättest, und wie lange die Mehrkosten brauchen, bis sie wieder hereinkommen. Dazu eine Kurve über alle Größen — flacht sie nach rechts ab, ist dein Speicher bereits groß genug.
+
+**Die Zahl ist ehrlich klein, und dafür gibt es zwei Gründe:**
+
+- **Ein größerer Speicher spart nicht nur Netzbezug, er speist auch weniger ein.** Die entgangene Vergütung wird abgezogen. An einer echten Anlage macht das den Unterschied zwischen 67 € und 49 € im Jahr.
+- **Gerechnet wird mit der Kapazität, die dein Speicher im Alltag wirklich bewegt**, nicht mit der auf dem Typenschild. eedc leitet sie aus dem Verlauf deines Ladestands ab. ⚠ Das heißt **nicht**, dass dein Speicher kleiner ist als angegeben — Reserven, Ladestrategie und Standby gehören einfach dazu. Mit der Zahl vom Typenschild fiele die Rechnung deutlich zu optimistisch aus.
+
+Für die Beispielanlage lautet die Antwort übrigens **„lohnt nicht"**: 50 % mehr Kapazität hätten 49 € im Jahr gebracht, bei rund 2.100 € Anschaffung. Der Block sagt das auch genau so.
+
+> **Was die Simulation nicht kann:** Sie kennt nur das Wetter, das war, und dein Verbrauchsverhalten — und das ist bereits auf deinen jetzigen Speicher eingespielt. Sie ist keine Vorhersage. Dieser Hinweis steht immer neben der Zahl und lässt sich nicht getrennt wegräumen. Liegen weniger als etwa 180 Tage vor, sagt eedc auch das.
+
+### Wie groß ist dein Speicher wirklich?
+
+**Betrifft dich das?** Wenn du einen Speicher mit Ladestands-Sensor hast.
+
+Im selben Block steht jetzt eine Zeile mehr: neben der Kapazität, die du gepflegt hast, die Zahl, die eedc aus deinem **gemessenen Ladestands-Verlauf** ableitet — „im Alltag bewegt". Dazu der Bereich, in dem dein Speicher tatsächlich lebt, und an wie vielen Tagen er voll bzw. leer wurde.
+
+⚠ **Deine gepflegte Zahl bleibt maßgeblich und wird nicht überschrieben.** Sie ist eine Absicht: Wer seinen Speicher bewusst nur bis 80 % lädt, hat das so gewollt, und eine „Korrektur" nach unten wäre falsch. eedc **erklärt** den Unterschied deshalb, statt ihn zu beheben — und unterscheidet dabei zwei Fälle, die vorher nicht auseinanderzuhalten waren:
+
+- **Dein Speicher wird regelmäßig voll, es geht trotzdem weniger durch** ⇒ das sind **Ladeverluste**. Gegen Ende der Ladung nimmt ein Speicher viel Energie auf, die den Ladestand kaum noch bewegt. Deine gepflegte Zahl ist dann richtig, die kleinere beschreibt den Durchsatz.
+- **Dein Speicher wird nie voll** ⇒ dann ist die kleinere Zahl deine eigene Ladestrategie. Falls das nicht gewollt ist, lohnt ein Blick auf die gepflegte nutzbare Kapazität in den Einstellungen.
+
+### Mehrere Speicher: eedc kannte bisher nur den Ladestand von einem
+
+**Betrifft dich das?** Wenn du **zwei oder mehr** Speicher hast, jeden mit eigenem Ladestands-Sensor. Bei einem Speicher ändert sich nichts.
+
+Der gespeicherte Ladestand deiner Anlage war der **eines** deiner Geräte — welches, entschied die Reihenfolge, in der du die Sensoren zugeordnet hast. Angezeigt wurde er trotzdem als Wert der ganzen Anlage. Betroffen waren die **Vollzyklen** deiner Tage, die Ladestands-Hübe und die beiden Speicher-Auswertungen im Komponenten-Hub — deine Erzeugung, dein Verbrauch und dein Netzbezug nicht.
+
+eedc liest jetzt **jeden** zugeordneten Ladestands-Sensor und rechnet den Wert deiner Anlage **nach Kapazität gewichtet**: Ein 15-kWh-Speicher auf 20 % und ein 5-kWh-Speicher auf 100 % sind zusammen **40 %** — der naheliegende Mittelwert hätte 60 % behauptet und damit anderthalb Mal so viel Energie, wie tatsächlich bei dir steht. Die Ladestände der einzelnen Geräte siehst du zusätzlich im Block „Größerer Speicher?".
+
+> **Deine bisherigen Tage rechnet eedc nicht von selbst neu.** Der Daten-Checker zeigt dir, welche Zeiträume betroffen sind, und bietet „Zeitraum neu aggregieren" gleich daneben an.
+
+### „Speicher voll um" kommt jetzt später — und stimmt
+
+**Betrifft dich das?** Wenn du den Sensor `eedc_speicher_voll_um` nutzt oder die Kachel „Speicher voll" in der Tages-Vorschau ansiehst.
+
+Die Schätzung rechnete den Ladeweg **verlustfrei**: Für 12 kWh im Speicher hielt sie 12 kWh Überschuss für ausreichend. Real sind es bei 95 % Wirkungsgrad rund 12,7 kWh, bei 85 % über 14 — die gemeldete Uhrzeit lag also **immer vor** der tatsächlichen, und je schlechter der Speicher, desto weiter davor.
+
+Gerechnet wird jetzt mit dem Wirkungsgrad, den du beim Gerät gepflegt hast (bei mehreren Speichern mit dem niedrigsten). **Die Uhrzeit rückt dadurch nach hinten** — das ist die Korrektur. Wenn du eine Automation daran hängst, greift sie später als bisher, aber dann, wenn der Speicher wirklich voll ist.
+
+### Der Börsenpreis-Sensor wechselt jetzt zur vollen Stunde
+
+**Betrifft dich das?** Wenn du eedc-Sensoren per MQTT nach Home Assistant überträgst und damit etwas steuerst — besonders Laden oder Entladen nach dem Börsenpreis.
+
+Der Börsenpreis gilt je Stunde. In Home Assistant kam der neue Wert aber erst einige Minuten nach dem Stundenwechsel an — mal acht, mal zwölf. Der Wert selbst war immer richtig, nur zu spät: Der Versand lief in festen Abständen ab dem Zeitpunkt, an dem eedc zuletzt gestartet wurde. Bei der Voreinstellung „alle 60 Minuten" bestimmte damit allein der letzte Neustart, wie weit er hinter der vollen Stunde herlief — nach jedem Update war der Versatz ein anderer.
+
+Wer seine Automation an den Preis-Sensoren aufhängt, hat in dieser Zeit mit den Werten der **Vorstunde** gesteuert: im Mittel eine halbe Stunde, genau am Übergang, an dem sich die Entscheidung ändert. Betroffen waren alle per MQTT versandten Sensoren; auffallen konnte es nur beim Preis, weil nur er zur vollen Stunde springt.
+
+Jetzt richtet sich der Versand nach der Uhr: bei 60 Minuten zur vollen Stunde, bei kürzeren Abständen im passenden Raster (`:00`, `:15`, `:30`, `:45`), bei ganzen Stundenschritten zur vollen Stunde. **Du musst nichts umstellen** — der Takt gilt nach dem nächsten Start des Add-ons.
+
+> Ein krummes Intervall wie 90 Minuten behält seinen bisherigen Takt: Dort gibt es keinen Punkt auf der Uhr, der sich wiederholt, und eedc würde den Abstand still verändern, den du eingestellt hast.
+
+*(Gemeldet von rapahl.)*
 
 ---
 

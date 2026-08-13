@@ -317,6 +317,7 @@ Diese Kachel enthält **nur die Pflege-Funktionen** des Energieprofils; die **An
 - **„Lücken aus HA-LTS nachfüllen" (Vollbackfill):** liest historische Snapshots aus HA und ergänzt **nur fehlende** Tage. **Bestehende Tage bleiben unverändert** — es gibt bewusst keinen Overwrite-Modus. Sinnvoll nach Erstinstallation, längerem Stillstand oder einer Datenquellen-Änderung.
 - **„Kraftstoffpreise nachpflegen":** trägt fehlende Benzin-/Dieselpreise (EU Weekly Oil Bulletin) für die E-Auto-Ersparnis nach; strikt additiv, mehrfach gefahrlos.
 - **Energieprofil-Daten löschen:** anlage-spezifisch (Monatsdaten bleiben erhalten; der Scheduler baut die Tage danach neu auf).
+- **Einen Monat löschen:** nimmt den Monat **ganz** — die Zählerwerte und die Messwerte aller Komponenten desselben Monats. Der Dialog nennt vorher, welche Komponenten betroffen sind. ⚠ **Bis v4.0.13 war das teilbar** und die Voreinstellung schonte die Gerätewerte; gemeint war eine Vorsicht, herausgekommen ist ein Monat, der in keiner Liste mehr auftauchte und trotzdem jeden erneuten Import abwies. Einspeisung und Netzbezug sind Pflichtfelder eines Monats — eine Hälfte allein zu löschen ergibt keinen Zustand, den eine Auswertung darstellen könnte.
 - **Reparatur-Werkbank:** die gezielten Neuberechnungs-Operationen — **„Tag neu aggregieren"** (mit Alt/Neu-Vorschau), **„Mehrere Tage neu aggregieren"** (Datumsbereich, max. 31 Tage, Tag für Tag festgeschrieben) — der punktuelle Reparatur-Pfad, der fehlende Snapshots nachholt. Bewusst **kein** globaler „Heiler-Knopf".
 
 > **Tipp:** Steht im CHANGELOG eines Updates „Empfohlene Aktion: betroffene Tage neu aggregieren", nutze dafür **„Mehrere Tage neu aggregieren"** über den betroffenen Zeitraum (in Schüben zu je max. 31 Tagen). Das Nachfüllen aus HA-LTS überschreibt bestehende Tage nicht — es füllt nur echte Lücken.
@@ -387,6 +388,18 @@ Jeder Monat ist einzeln per Checkbox wählbar — so bleiben manuell erfasste Da
 >
 > **Wie weit zurück?** So weit, wie Home Assistant den Sensor selbst führt — die Langzeitstatistik beginnt mit seiner Einrichtung. Für die Zeit davor gibt es den Datei-Import (CSV/Excel); daran ändert auch der API-Weg nichts.
 
+> **Ohne Zähler-Sensoren entsteht kein vollständiger Monat — und eedc sagt es.** Ein Monat besteht aus der **Zählerzeile** deiner Anlage (Einspeisung, Netzbezug) und den **Messwerten je Komponente**. Sind nur Erzeuger-Sensoren zugeordnet — oder wählst du die Basis-Felder in der Vorschau ab —, kommen die Gerätewerte an, die Zählerzeile entsteht aber nicht. Der Monat taucht dann in keiner Monatsliste auf und fehlt in Autarkie und Community-Vergleich. Der Import nennt die betroffenen Monate nach dem Lauf und sagt, wie du sie vervollständigst; im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md) findest du sie unter „Messwerte ohne Monatszeile" mit einem Link direkt ins Monatsformular.
+>
+> ⚠ **Bis v4.0.13 legte eedc in diesem Fall eine Zeile mit 0 kWh Einspeisung und 0 kWh Netzbezug an** — eine Messung, die niemand gemessen hatte, und die der Daten-Checker anschließend zu Recht als unplausibel meldete. Jetzt entsteht keine Zeile mehr, wo kein Zählerwert vorliegt. Ein Zähler, der ehrlich 0 meldet (Einspeisung im Dezember), schreibt seinen Monat weiterhin.
+
+> #### „Bestehende Monate überschreiben" — was der Haken tut
+>
+> **Ohne Haken** ergänzt ein Import nur, was fehlt. Werte, die schon da sind, bleiben unangetastet — egal woher sie kommen.
+>
+> **Mit Haken** ersetzt der Import auch Werte, die du **von Hand** eingetragen oder korrigiert hast. Bevor er das tut, sagt der Assistent, wie viele es sind und in welchen Monaten, mit Beispielen. Nimmst du den Haken wieder heraus, bleiben sie erhalten.
+>
+> ⚠ **Bis v4.0.13 war das anders**, und es war ein Fehler: Der Haken ließ manuell gepflegte Werte stehen und meldete das hinterher als „durch manuell gepflegte Werte geschützt". eedc tat damit etwas anderes, als du angekreuzt hattest — und wer einen einmal korrigierten Monat neu importieren wollte, kam nicht mehr durch. Die Schutzregel selbst bleibt richtig und gilt weiter für alles, was **im Hintergrund** schreibt (Sensor-Abrufe, automatische Aggregation): Handarbeit wird von der Maschine nicht überschrieben. Nur dein eigener, ausdrücklicher Klick zählt jetzt als das, was er ist.
+
 ### 6.5 Import-Assistenten
 
 Ein Sammel-Einstieg für die einmaligen und wiederkehrenden Importe. Jeder Assistent öffnet als **Overlay** (keine eigene Seite mehr):
@@ -398,9 +411,11 @@ Ein Sammel-Einstieg für die einmaligen und wiederkehrenden Importe. Jeder Assis
 
 > **Mehrere Wechselrichter, mehrere Cloud-„Stationen" — trotzdem EINE Anlage.** Hersteller-Wolken führen häufig je Wechselrichter eine eigene Station (Solarman tut das). In eedc ist eine Anlage dagegen ein **Standort mit einem Hausanschluss**: Netzbezug, Einspeisung, Eigenverbrauch, Autarkie und Wirtschaftlichkeit gibt es dort nur einmal, und zwei Anlagen für ein Haus würden sie in zwei Hälften zerlegen. Der richtige Aufbau ist **ein Wechselrichter je Gerät**, darunter seine PV-Module und ggf. sein Speicher.
 >
-> Damit beide Stationen nebeneinander bestehen können, fragt der Cloud-Import in der Vorschau **„Diese Quelle misst"**. Voreingestellt ist *die ganze Anlage* (Gesamtwerte, wie bisher). Wählst du stattdessen einen **Wechselrichter**, dann gilt: die Erträge gehen an **seine** PV-Module und **seinen** Speicher, **Netzbezug/Einspeisung/Eigenverbrauch werden nicht übernommen** (das sind Größen des ganzen Hauses), und ein bereits erfasster Monat blockiert die zweite Quelle nicht mehr. So importierst du Station 1 und Station 2 nacheinander für denselben Zeitraum, ohne dass eine die andere überschreibt.
+> Damit beide Stationen nebeneinander bestehen können, fragt der Cloud-Import in der Vorschau **„Diese Quelle misst"**. Voreingestellt ist *die ganze Anlage* (Gesamtwerte, wie bisher). Wählst du stattdessen einen **Wechselrichter**, dann gilt: die Erträge gehen an **seine** PV-Module und **seinen** Speicher, und ein bereits erfasster Monat blockiert die zweite Quelle nicht mehr. So importierst du Station 1 und Station 2 nacheinander für denselben Zeitraum, ohne dass eine die andere überschreibt.
 >
-> **Die Zugangsdaten werden je Gerät gespeichert.** Beim Speichern im letzten Wizard-Schritt geht die gewählte Zuordnung mit; mehrere Konten liegen nebeneinander, statt sich zu überschreiben. Der **Cloud-Abruf im Monatsabschluss** zieht dann **alle** gespeicherten Quellen: jede liefert die Werte ihres Wechselrichters, und ist eine gerade nicht erreichbar, kommen die übrigen trotzdem — die Antwort nennt die fehlende. **Netzbezug und Einspeisung stammen ausschließlich aus einer Quelle ohne Geräte-Zuordnung.** Misst keine deiner Quellen den Hausanschluss, bleiben diese Felder leer und der Abruf sagt es; sie kommen dann aus dem Zähler bzw. den zugeordneten Sensoren. Ein bereits gespeichertes Konto aus früheren Versionen gilt unverändert für die ganze Anlage — es ist nichts neu einzurichten.
+> **Einspeisung und Netzbezug kommen trotzdem an.** Diese beiden Größen misst kein Wechselrichter selbst — er liest sie vom Smartmeter am Hausanschluss oder vom Zähler. Alle Geräte an einem Anschluss melden deshalb **denselben** Wert. eedc übernimmt ihn **einmal** in den Monat; eine zweite Station addiert nichts dazu, sie bestätigt ihn nur. Meldet ein Wechselrichter gar keine Zählerwerte (kein Smartmeter angebunden), überschreibt seine 0 nichts — und wenn zwei Geräte **verschiedene** Zählerstände melden, sagt eedc es, statt still einen davon zu nehmen. Der **Eigenverbrauch** wird beim gerätegebundenen Import nicht übernommen; eedc leitet ihn ohnehin aus Erzeugung, Einspeisung und Netzbezug ab.
+>
+> **Die Zugangsdaten werden je Gerät gespeichert.** Beim Speichern im letzten Wizard-Schritt geht die gewählte Zuordnung mit; mehrere Konten liegen nebeneinander, statt sich zu überschreiben. Der **Cloud-Abruf im Monatsabschluss** zieht dann **alle** gespeicherten Quellen: jede liefert die Werte ihres Wechselrichters, und ist eine gerade nicht erreichbar, kommen die übrigen trotzdem — die Antwort nennt die fehlende. **Netzbezug und Einspeisung schlägt der Abruf ebenfalls vor**, auch wenn alle deine Quellen einem Gerät zugeordnet sind: eine Quelle **ohne** Zuordnung hat Vorrang, sonst nimmt eedc die erste Station, die den Zähler liest. Weichen zwei Quellen voneinander ab, steht das als Hinweis dabei. Liefert keine deiner Quellen Zählerwerte, bleiben die Felder leer und der Abruf sagt es; sie kommen dann aus dem Zähler bzw. den zugeordneten Sensoren. Ein bereits gespeichertes Konto aus früheren Versionen gilt unverändert für die ganze Anlage — es ist nichts neu einzurichten.
 
 > **Der Schritt „Zuordnung" verteilt nach Nennleistung.** Hast du mehrere PV-Modulfelder (oder mehrere Speicher, Wallboxen, E-Autos), fragt der Assistent, wie die importierten Monatswerte auf die Komponenten aufzuteilen sind. Die Vorauswahl ist **proportional zur Nennleistung** (bei Speichern zur Kapazität) — bei 12 kWp Süddach + 3 kWp Garage also 80/20. Bis v4.0.0 war die Vorauswahl **immer** eine Gleichverteilung, weil der Wizard die Nennleistung unter einem Namen suchte, den eedc gar nicht kennt; die kWp-Spalte blieb dabei leer. **Wer vorher importiert und den Vorschlag übernommen hat, sollte die Aufteilung prüfen** (Komponenten → PV-Modul → Monatswerte); ein erneuter Import mit korrigierten Anteilen überschreibt die Werte. Ist die Bezugsgröße tatsächlich nirgends gepflegt, verteilt der Assistent weiterhin gleichmäßig — sagt aber dazu, dass das **keine** proportionale Aufteilung ist.
 
@@ -510,11 +525,25 @@ Zur Zuordnungszeit erkennbare Fehler zeigt eedc **direkt an der Feld-Zeile** —
 
 Die datenbasierten (rückblickenden) Prüfungen — Über-Erfassung, Datenquellen-Drift, Vorzeichen-Historie — bleiben im [Daten-Checker](HANDBUCH_DATEN_CHECKER.md).
 
-### 7.7 Voraussetzung: die Verbindungen
+### 7.7 Eine geänderte Zuordnung gilt ab jetzt — nicht rückwirkend
+
+Ordnest du einem Feld eine andere Quelle zu (oder kehrst ein Vorzeichen um), gilt das **ab diesem Moment**. Deine bereits gespeicherten Tages- und Stundenwerte bleiben, wie sie gerechnet wurden: sie tragen die Zuordnung, die zum Zeitpunkt ihrer Berechnung galt. Das betrifft **jede** Art von Zuordnung — Zähler, Leistung, Ladestand und Strompreis fließen alle in die gespeicherten Tageswerte ein.
+
+Praktisch heißt das: Wer eine neue Komponente ergänzt (zweiter Wechselrichter, weitere Module, ein Speicher), findet sie in Live und ab dem laufenden Tag überall wieder — in der Vergangenheit aber nicht.
+
+**eedc sagt es dir.** Nach einer Änderung erscheint oben auf der Datenquellen-Fläche ein Hinweis mit den geänderten Feldern und dem Datum, ab dem die Werte neu sind. Er blockiert nichts und bleibt stehen, bis du ihn mit **„Verstanden"** quittierst — auch über einen Neustart hinweg, denn die Frage stellt sich oft erst Tage später.
+
+**Wenn du die Vergangenheit nachziehen willst,** führt der Knopf **„Zur Reparatur-Werkbank"** direkt dorthin: *Einstellungen → Daten → Energieprofil-Pflege → Zeitraum neu aggregieren*, in Blöcken von bis zu 31 Tagen je Lauf. Deine **Monatsdaten bleiben unberührt** — neu gerechnet werden nur die Tages- und Stundenwerte.
+
+> **Es passiert nichts von allein.** eedc rechnet die Historie nicht selbsttätig neu — das kann Stunden dauern und ist selten gewollt. Und die Quittung heißt „zur Kenntnis genommen", nicht „erledigt": ob und wie weit du nachgezogen hast, weißt nur du.
+
+> **Für die Zeit vor eedc gilt das nicht.** Wo keine Sensordaten in Home Assistant liegen (etwa Monate, die du aus einer Hersteller-Cloud importiert hast), findet ein neuer Lauf nichts — dort sind die Monatswerte die Datenlage, und die genügen für Cockpit, Auswertungen und Jahresbericht.
+
+### 7.8 Voraussetzung: die Verbindungen
 
 Damit HA-Sensoren bzw. MQTT-Topics überhaupt wählbar sind, muss die jeweilige Verbindung stehen — MQTT-Broker und HA-Verbindung richtest du unter [Integration](#6-integration) ein. Änderst du dort etwas, blenden sich die Quellen-Buttons in der Datenquellen-Fläche sofort passend ein oder aus.
 
-### 7.8 Was aus den alten Assistenten wurde
+### 7.9 Was aus den alten Assistenten wurde
 
 | Früher | Jetzt |
 |--------|-------|
