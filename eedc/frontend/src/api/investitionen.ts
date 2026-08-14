@@ -148,6 +148,19 @@ export interface CO2AmortisationResponse {
   posten: GraueLastPosten[]
 }
 
+/**
+ * Antwort auf „warum steht dieser Hub-Reiter ohne Zahlen da?" (N-247).
+ * `leer=false` ⇒ das Gerät hat Monatswerte, die Sicht zeigt nichts an.
+ */
+export interface HubLeerGrundResponse {
+  leer: boolean
+  art?: string | null
+  meldung?: string | null
+  details?: string | null
+  link?: string | null
+  link_label?: string | null
+}
+
 // Investitions-Dashboard Types
 export interface InvestitionMonatsdaten {
   id: number
@@ -588,6 +601,16 @@ export const investitionenApi = {
    */
   async getCO2Amortisation(anlageId: number): Promise<CO2AmortisationResponse> {
     return api.get<CO2AmortisationResponse>(`/investitionen/co2-amortisation/${anlageId}`)
+  },
+
+  /**
+   * Warum ein Gerät im Komponenten-Hub keine Monatswerte zeigt (N-247).
+   * Der Grund kommt aus dem Backend — keine Client-Ableitung.
+   */
+  async getHubLeerGrund(anlageId: number, investitionId: number): Promise<HubLeerGrundResponse> {
+    return api.get<HubLeerGrundResponse>(
+      `/investitionen/hub-leer-grund/${anlageId}/${investitionId}`,
+    )
   },
 
   /**

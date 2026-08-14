@@ -557,6 +557,45 @@ describe('KOMPONENTEN_ADAPTER — spezifische Blöcke (Inc. 3b)', () => {
   })
 })
 
+describe('KOMPONENTEN_ADAPTER — Monatszeilen-Zähler (N-247)', () => {
+  // Wächter über ALLE Geräte-Adapter: `monatswerte` ist der einzige Auslöser für
+  // den Leer-Grund im Hub. Vergisst ein künftiger Adapter das Feld, bliebe die
+  // Sicht wieder stumm — genau der Zustand, den CHI3fx117 gemeldet hat.
+  // Die PV-Anlage ist bewusst NICHT dabei: sie ist ein anlagenweites Aggregat
+  // ohne eigene Investition (`inv.id === 0`).
+  const FAELLE: [string, ReturnType<typeof vi.fn>][] = [
+    ['speicher', getSpeicherDashboard],
+    ['waermepumpe', getWaermepumpeDashboard],
+    ['e-auto', getEAutoDashboard],
+    ['wallbox', getWallboxDashboard],
+    ['balkonkraftwerk', getBalkonkraftwerkDashboard],
+    ['sonstiges', getSonstigesDashboard],
+  ]
+
+  it.each(FAELLE)('%s: ohne Monatszeile ist der Zähler 0', async (typ, mock) => {
+    mock.mockResolvedValue([{
+      investition: inv({ typ }),
+      zusammenfassung: { kategorie: 'verbraucher' },
+      monatsdaten: [],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER[typ].fetch(1)
+    expect(g.monatswerte).toBe(0)
+  })
+
+  it.each(FAELLE)('%s: mit zwei Monatszeilen ist der Zähler 2', async (typ, mock) => {
+    mock.mockResolvedValue([{
+      investition: inv({ typ }),
+      zusammenfassung: { kategorie: 'verbraucher' },
+      monatsdaten: [
+        { jahr: 2025, monat: 10, verbrauch_daten: {} },
+        { jahr: 2025, monat: 11, verbrauch_daten: {} },
+      ],
+    }])
+    const [g] = await KOMPONENTEN_ADAPTER[typ].fetch(1)
+    expect(g.monatswerte).toBe(2)
+  })
+})
+
 describe('KOMPONENTEN_ADAPTER — Wirtschaftlichkeit + „nicht bewertet" (P2/P4)', () => {
   it('Sonstiger Erzeuger: CO₂/Ersparnis „nicht bewertet" (—), EV-Quote — wenn ungemessen, Aufteilung unterdrückt', async () => {
     getSonstigesDashboard.mockResolvedValue([{

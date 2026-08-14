@@ -40,7 +40,7 @@ import { baueKomponentenBloecke } from './KomponentenSektionen'
 import { finanzTeaserBlock } from './MonatRahmen'
 import { JahrVerlaufChart, baueJahrChartDaten } from './JahrVerlaufChart'
 import { JahrCo2Chart, baueJahrCo2ChartDaten, co2JahresSumme, CO2_TABELLEN_SPALTEN } from './JahrCo2Chart'
-import { JahrSpeicherTabelle, baueSpeicherZeilen } from './JahrSpeicherTabelle'
+import { JahrSpeicherTabelle, baueSpeicherZeilen, jahrSpeicherParkIds } from './JahrSpeicherTabelle'
 import { verlaufTabellenSpalten } from './verlaufVergleich'
 import { JahresRail, type JahrRailEintrag } from './JahresRail'
 import { JahrStepper } from './JahrStepper'
@@ -416,7 +416,12 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       // (Vollzyklen · Solar-Anteil · Auslastung · Netto-Nutzen) + Saison-
       // Vergleich. Nur wenn überhaupt ein Speicher Bewegung hatte; die Zeilen
       // kommen aus denselben Monats-Antworten wie die Kacheln darüber.
-      ...(speicherZeilen.length > 0 ? [{
+      // N-248: Auch dieser Block muss beim Voll-Park verschwinden — bis 14.08.
+      // hing er allein an `speicherZeilen.length > 0` und blieb als leere Hülle
+      // stehen. Die IDs kommen datenabhängig aus der rendernden Datei, damit
+      // Gate und Rendering nicht auseinanderlaufen können.
+      ...(speicherZeilen.length > 0
+          && !jahrSpeicherParkIds(jahrAntworten).every((id) => park.istGeparkt(id)) ? [{
         id: 'speicher-verlauf', title: 'Speicher im Jahr', ...BLOCK_IDENTITAET.werte,
         summary: `${speicherZeilen.length} Monate mit Speicher-Bewegung`,
         defaultOpen: false,

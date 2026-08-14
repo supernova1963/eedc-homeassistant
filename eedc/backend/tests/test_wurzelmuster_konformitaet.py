@@ -1801,6 +1801,14 @@ P10_PER_INVESTITION: frozenset[str] = frozenset({
     "backend/api/routes/investitionen/dashboards.py::get_wallbox_dashboard",
     "backend/api/routes/investitionen/dashboards.py::get_balkonkraftwerk_dashboard",
     "backend/api/routes/investitionen/dashboards.py::get_sonstiges_dashboard",
+    # N-247 (2026-08-14): der Leer-Grund des Komponenten-Hubs. Diese Funktion
+    # bildet **keine Monatsgröße** — sie beantwortet „hat dieses eine Gerät
+    # überhaupt eine Zeile?" und zählt dafür die Rohzeilen **einer** Investition
+    # mit demselben Aktiv-Filter wie die Dashboards darüber. Über die Schicht zu
+    # gehen wäre hier sogar falsch: `lade_monats_fakten` liefert aufbereitete
+    # Anlagen-Monate, und aus einem aufbereiteten Monat lässt sich nicht ablesen,
+    # ob **dieses Gerät** eine eigene Zeile hat — genau das ist die Frage.
+    "backend/api/routes/investitionen/dashboards.py::get_hub_leer_grund",
 })
 
 #: **Offene Schuld.** Diese Funktionen falten eine ANLAGEN-weite Monatszeile

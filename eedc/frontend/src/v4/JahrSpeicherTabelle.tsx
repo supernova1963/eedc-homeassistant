@@ -107,19 +107,51 @@ export function solarAnteil(ladung: number, netzladung: number | null): number |
 const pct = (v: number | null, stellen = 0) => v == null ? LEER : `${fmtZahl(v, stellen)} %`
 const kwh = (v: number | null) => v == null ? LEER : fmtZahl(v, 0)
 
+/**
+ * Die Saison-Teiltabellen, die diese Sicht für `zeilen` **tatsächlich** rendert.
+ *
+ * Ausgelagert, damit :func:`jahrSpeicherParkIds` und der Rumpf **dieselbe**
+ * Bedingung benutzen. Eine zweite, nachgebaute Bedingung wäre genau die Drift,
+ * an der eine statische Park-ID-Liste stirbt (N-248).
+ */
+function baueSaisons(zeilen: SpeicherZeile[]) {
+  // Saison-Fenster aus dem Kanon (`SAISON_FENSTER`) — sie überlappen bewusst
+  // NICHT zur Partition des Jahres, deshalb steht der Bereich im Label. Ein
+  // eigener Halbjahres-Split hätte eine zweite Saison-Definition in den Baum
+  // gebracht.
+  return ([SAISON_FENSTER.sommer, SAISON_FENSTER.winter] as const).map((f) => {
+    const teil = zeilen.filter((z) => (f.monate as readonly number[]).includes(z.monat))
+    return { ...f, summe: summiereSpeicher(teil) }
+  }).filter((s) => s.summe.monate > 0)
+}
+
+/**
+ * IDs der **tatsächlich gerenderten** Parkbars dieses Blocks (N-248).
+ *
+ * Der Block „Speicher im Jahr" hing allein an `speicherZeilen.length > 0` und
+ * blieb deshalb als **leere Hülle** stehen, wenn man alles parkt — die
+ * Park-Doktrin verlangt, dass jeder Block verschwindet ([[feedback_park_doktrin_atomar]]).
+ * Gefunden hat es `check:park-leertest`, der erstmals gegen eine laufende Box
+ * mit Demo-Build lief.
+ *
+ * Datenabhängig abgeleitet, nicht statisch: die Saison-Tabelle erscheint nur,
+ * wenn ein Saisonfenster überhaupt Monate hat. Eine feste Zweier-Liste hätte
+ * die Hülle in genau dem Fall stehen lassen, in dem es sie nicht gibt.
+ */
+export function jahrSpeicherParkIds(monate: AktuellerMonatResponse[]): string[] {
+  const zeilen = baueSpeicherZeilen(monate)
+  if (zeilen.length === 0) return []
+  const ids = ['tabelle:speicher-monate']
+  if (baueSaisons(zeilen).length > 0) ids.push('tabelle:speicher-saison')
+  return ids
+}
+
 export function JahrSpeicherTabelle({ monate }: { monate: AktuellerMonatResponse[] }) {
   const zeilen = baueSpeicherZeilen(monate)
   if (zeilen.length === 0) return null
 
   const gesamt = summiereSpeicher(zeilen)
-  // Saison-Fenster aus dem Kanon (`SAISON_FENSTER`) — sie überlappen bewusst
-  // NICHT zur Partition des Jahres, deshalb steht der Bereich im Label. Ein
-  // eigener Halbjahres-Split hätte eine zweite Saison-Definition in den Baum
-  // gebracht.
-  const saisons = ([SAISON_FENSTER.sommer, SAISON_FENSTER.winter] as const).map((f) => {
-    const teil = zeilen.filter((z) => (f.monate as readonly number[]).includes(z.monat))
-    return { ...f, summe: summiereSpeicher(teil) }
-  }).filter((s) => s.summe.monate > 0)
+  const saisons = baueSaisons(zeilen)
 
   return (
     <div className="space-y-4">

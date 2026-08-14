@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  baueSpeicherZeilen, summiereSpeicher, auslastungAus, solarAnteil,
+  baueSpeicherZeilen, summiereSpeicher, auslastungAus, solarAnteil, jahrSpeicherParkIds,
 } from './JahrSpeicherTabelle'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 
@@ -92,5 +92,36 @@ describe('Summen', () => {
     const s = summiereSpeicher(zeilen)
     expect(s.vollzyklen).toBe(5)
     expect(s.ersparnis).toBe(55)
+  })
+})
+
+describe('jahrSpeicherParkIds (N-248)', () => {
+  // Der Block „Speicher im Jahr" blieb beim Voll-Park als leere Hülle stehen,
+  // weil er allein an `speicherZeilen.length > 0` hing. Das Gate liest jetzt
+  // die IDs aus DIESER Datei — die Probe hält beide Seiten zusammen.
+  it('nennt nur die Parkbars, die auch gerendert werden', () => {
+    // Ein einzelner Monat im Sommerfenster ⇒ Saison-Tabelle existiert.
+    const mitSaison = jahrSpeicherParkIds([
+      monat(6, { speicher_ladung_kwh: 100, speicher_entladung_kwh: 90 }),
+    ])
+    expect(mitSaison).toEqual(['tabelle:speicher-monate', 'tabelle:speicher-saison'])
+  })
+
+  it('meldet nichts, wenn die Sicht selbst nichts rendert', () => {
+    // `JahrSpeicherTabelle` gibt bei null Zeilen `null` zurück — dann darf auch
+    // keine ID übrig bleiben, sonst wäre der Block nie wegzuparken.
+    expect(jahrSpeicherParkIds([monat(3)])).toEqual([])
+  })
+
+  it('lässt die Saison-ID weg, wo keine Saison-Tabelle entsteht', () => {
+    // April liegt in KEINEM der beiden Fenster (`sommer` 6–8, `winter` 11–2,
+    // am Kanon nachgemessen): die Monatstabelle steht, die Saison-Tabelle
+    // nicht. Eine feste Zweier-Liste hätte hier die Hülle stehen lassen —
+    // genau die Drift, gegen die das Gate gebaut ist. Deshalb exakt geprüft
+    // und nicht „höchstens zwei": eine weiche Schranke wäre auch dann grün,
+    // wenn die Ableitung die Saison-ID fälschlich mitliefert.
+    expect(jahrSpeicherParkIds([
+      monat(4, { speicher_ladung_kwh: 10, speicher_entladung_kwh: 9 }),
+    ])).toEqual(['tabelle:speicher-monate'])
   })
 })

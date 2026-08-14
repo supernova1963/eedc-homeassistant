@@ -8,7 +8,7 @@ in investitionen/__init__.py aggregiert.
 """
 
 from typing import Optional, Any, Iterable, NamedTuple
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
@@ -29,6 +29,7 @@ from backend.api.routes.strompreise import (
     resolve_strompreis_for_komponente,
 )
 from backend.utils.sonstige_positionen import berechne_sonstige_summen
+from backend.core.hub_leer_grund import bestimme_leer_grund
 from backend.core.investition_kennwerte import (
     ANZAHL_LESE_DEFAULT,
     get_bkw_kwp,
@@ -1986,4 +1987,69 @@ async def get_co2_amortisation(
             )
             for p in bericht.posten
         ],
+    )
+
+
+class HubLeerGrundResponse(BaseModel):
+    """Warum der Komponenten-Reiter eines Geräts ohne Zahlen dasteht (N-247)."""
+
+    leer: bool
+    art: Optional[str] = None
+    meldung: Optional[str] = None
+    details: Optional[str] = None
+    link: Optional[str] = None
+    link_label: Optional[str] = None
+
+
+@router.get("/hub-leer-grund/{anlage_id}/{investition_id}", response_model=HubLeerGrundResponse)
+async def get_hub_leer_grund(
+    anlage_id: int,
+    investition_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Der Grund, warum ein Gerät im Komponenten-Hub keine Monatswerte zeigt (N-247).
+
+    **Der Grund kommt aus dem Backend, nicht aus einer Client-Ableitung**
+    (Gernot 2026-08-06: „zweite Wahrheit ist nicht gut") — genau wie bei
+    ``TagLeerGrund``/``getTagStatus``. Der Server prüft die Leere auch selbst
+    nach, statt der Behauptung des Clients zu folgen: gezählt wird mit
+    **demselben Filter wie die Dashboards** (``ist_aktiv_im_monat``), sonst
+    könnte der Hinweis neben gefüllten Blöcken stehen.
+
+    ``leer=False`` ⇒ das Gerät hat Monatswerte, die Sicht zeigt nichts an.
+    """
+    result = await db.execute(
+        select(Investition)
+        .where(Investition.id == investition_id)
+        .where(Investition.anlage_id == anlage_id)
+    )
+    inv = result.scalar_one_or_none()
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Investition nicht gefunden")
+
+    md_result = await db.execute(
+        select(InvestitionMonatsdaten).where(
+            InvestitionMonatsdaten.investition_id == inv.id
+        )
+    )
+    hat_werte = any(
+        inv.ist_aktiv_im_monat(md.jahr, md.monat) for md in md_result.scalars().all()
+    )
+    if hat_werte:
+        return HubLeerGrundResponse(leer=False)
+
+    grund = bestimme_leer_grund(
+        aktiv=bool(inv.aktiv),
+        anschaffungsdatum=inv.anschaffungsdatum,
+        stilllegungsdatum=inv.stilllegungsdatum,
+        heute=date.today(),
+    )
+    return HubLeerGrundResponse(
+        leer=True,
+        art=grund.art.value,
+        meldung=grund.meldung,
+        details=grund.details,
+        link=grund.link,
+        link_label=grund.link_label,
     )

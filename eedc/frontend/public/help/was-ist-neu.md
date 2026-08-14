@@ -13,6 +13,20 @@
 
 > Dieser Abschnitt sammelt, was fertig ist, aber noch keine Versionsnummer trägt. Beim Release wird daraus der neue Versions-Abschnitt.
 
+### Ein neues Gerät sagt jetzt, warum unter „Komponenten" noch nichts steht
+
+**Betrifft dich das?** Wenn du eine **Komponente neu eingetragen** hast und im Reiter *Komponenten* nur Nullen siehst.
+
+Bisher war das ein stummer Zustand: Vollzyklen 0, Wirkungsgrad 0 %, Ersparnis 0 € — ohne jeden Hinweis. Ob das Gerät nur noch keine Historie hat oder ob bei der Einrichtung etwas schiefgegangen ist, war von außen nicht zu unterscheiden.
+
+Über den Blöcken steht jetzt der Grund. Der häufigste ist dieser: Der Reiter *Komponenten* ist die **Lebenslauf-Sicht** eines Geräts — er rechnet Dinge wie Zyklen, Wirtschaftlichkeit und Amortisation über **abgeschlossene** Monate. Solange dein Gerät jünger ist als der erste Monatsabschluss, gibt es dort nichts zu rechnen.
+
+> **Wo du dein Gerät trotzdem schon siehst:** in *Cockpit → Tag* und *Cockpit → Monat*. Diese Sichten rechnen aus den laufenden Sensorwerten und brauchen keinen Monatsabschluss. Der Knopf im Hinweis führt genau dorthin — **nicht** zum Monatsabschluss, denn es gibt noch keinen Monat, den du abschließen könntest.
+
+Liegen dagegen bereits abgeschlossene Monate vor, für die nichts erfasst wurde, verweist derselbe Hinweis auf den **Monatsabschluss**. Stillgelegte und auf inaktiv gesetzte Geräte bekommen ihre eigene Erklärung.
+
+An deinen **Zahlen ändert sich nichts** — die Sicht sagt nur, was sie vorher verschwiegen hat.
+
 ### „Hätte mehr Kapazität geholfen?" ist jetzt lesbar — und zeigt zwei Dinge mehr
 
 **Betrifft dich das?** Wenn du einen **Speicher** hast und dir im Komponenten-Hub die Frage nach mehr Kapazität ansiehst.

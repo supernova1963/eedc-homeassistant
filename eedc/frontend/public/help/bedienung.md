@@ -355,6 +355,15 @@ Jede Komponenten-Sicht bezieht sich auf den **Gesamtzeitraum** (kein Datums-Sele
 
 Blöcke, die für einen Typ keine Daten haben, werden ehrlich als „im Bau" / „keine Daten" markiert statt mit Platzhalter-Zahlen gefüllt. Hat eine Anlage **mehrere Geräte desselben Typs** (z. B. zwei Wärmepumpen), erscheint oben ein **Geräte-Selektor**.
 
+> **Diese Achse rechnet mit *abgeschlossenen* Monaten — das ist der Unterschied zum Cockpit.**
+> Eine Komponenten-Sicht ist die **Lebenslauf-Sicht** eines Geräts: Zyklen, Wirtschaftlichkeit und
+> Amortisation entstehen aus den Monatswerten, die du im Monatsabschluss erfasst oder importierst.
+> Ein Gerät, das du **im laufenden Monat** angeschafft hast, steht hier deshalb zunächst auf Null,
+> obwohl **Cockpit → Tag** und **Cockpit → Monat** es längst zeigen — die rechnen aus den laufenden
+> Sensorwerten. Die Sicht sagt das auch: Über den Blöcken steht der Grund und der Weg dorthin, wo das
+> Gerät heute schon zu sehen ist. Dasselbe gilt für Geräte, die stillgelegt oder auf inaktiv gesetzt
+> sind.
+
 > **Wo ist die „Aussicht" je Komponente?** Bewusst nicht im Hub. Zeitlich-vorausschauende Sichten laufen zentral über [Cockpit → Aussicht](#25-aussicht).
 
 ### 3.2 PV-Anlage

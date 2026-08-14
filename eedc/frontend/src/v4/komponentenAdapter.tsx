@@ -57,6 +57,10 @@ export type KompStruktur =
 export interface KompGeraet {
   inv: Investition
   label: string
+  /** Anzahl der Monatszeilen hinter diesem Gerät (N-247). `0` ⇒ der Hub zeigt
+   *  überall Nullen, und {@link HubLeerGrund} holt den Grund dafür vom Server.
+   *  `undefined` bei Aggregat-Sichten ohne eigene Investition (PV-Anlage). */
+  monatswerte?: number
   /** Optionales Badge am Geräte-Selektor (z. B. Sonstiges-Kategorie Erzeuger/
    *  Verbraucher/Speicher) — macht heterogene Geräte gleichen Typs unterscheidbar. */
   selektorBadge?: string
@@ -432,6 +436,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       }
       return {
         inv, label: inv.bezeichnung,
+        monatswerte: md.length,
         status: [
           kpi(SPEICHER_KPI.vollzyklen, n0(z.vollzyklen)),
           wirkungsgradKpi,
@@ -553,6 +558,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       const wpEnergieRef = Math.max(z.gesamt_waerme_kwh ?? 0, z.gesamt_stromverbrauch_kwh ?? 0)
       return {
         inv, label: inv.bezeichnung,
+        monatswerte: md.length,
         status: [
           kpi(WP_KPI.jaz, formatEffizienz(z.durchschnitt_cop).wert),
           // Wärme+Strom an EINER Referenz skaliert (kein kWh/MWh-Mix im Strip, C3).
@@ -595,6 +601,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       const ds = await investitionenApi.getEAutoDashboard(anlageId)
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
+        monatswerte: md.length,
         status: [
           kpi(EAUTO_KPI.gefahren, n0(z.gesamt_km), 'km'),
           kpi(EAUTO_KPI.verbrauch, n1(z.durchschnitt_verbrauch_kwh_100km), 'kWh/100km'),
@@ -656,6 +663,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       const ds = await investitionenApi.getWallboxDashboard(anlageId)
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
+        monatswerte: md.length,
         status: [
           kpi(WALLBOX_KPI.heimladung, energie(z.gesamt_heim_ladung_kwh).wert, energie(z.gesamt_heim_ladung_kwh).einheit),
           kpi(WALLBOX_KPI.pvAnteil, n0(z.pv_anteil_prozent), '%'),
@@ -692,6 +700,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
       const ds = await investitionenApi.getBalkonkraftwerkDashboard(anlageId)
       return ds.map(({ investition: inv, zusammenfassung: z, monatsdaten: md }) => ({
         inv, label: inv.bezeichnung,
+        monatswerte: md.length,
         status: [
           kpi(BKW_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
           kpi(BKW_KPI.eigenverbrauch, n0(z.eigenverbrauch_quote_prozent), '%'),
@@ -763,6 +772,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         if (z.kategorie === 'verbraucher') {
           return {
             inv, label: inv.bezeichnung, selektorBadge, hinweise,
+            monatswerte: md.length,
             status: [
               kpi(SONSTIGES_VERBRAUCHER_KPI.verbrauch, n0(z.gesamt_verbrauch_kwh), 'kWh'),
               kpi(SONSTIGES_VERBRAUCHER_KPI.pvAnteil, n0(z.pv_anteil_prozent), '%'),
@@ -800,6 +810,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         if (z.kategorie === 'speicher') {
           return {
             inv, label: inv.bezeichnung, selektorBadge, hinweise,
+            monatswerte: md.length,
             status: [
               kpi(SONSTIGES_SPEICHER_KPI.ladung, n0(z.gesamt_ladung_kwh), 'kWh'),
               kpi(SONSTIGES_SPEICHER_KPI.entladung, n0(z.gesamt_entladung_kwh), 'kWh'),
@@ -843,6 +854,7 @@ export const KOMPONENTEN_ADAPTER: Record<string, KompAdapter> = {
         const erzEvGemessen = (z.gesamt_eigenverbrauch_kwh ?? 0) > 0 || (z.gesamt_einspeisung_kwh ?? 0) > 0
         return {
           inv, label: inv.bezeichnung, selektorBadge, hinweise,
+          monatswerte: md.length,
           status: [
             kpi(SONSTIGES_ERZEUGER_KPI.erzeugung, n0(z.gesamt_erzeugung_kwh), 'kWh'),
             erzEvGemessen
