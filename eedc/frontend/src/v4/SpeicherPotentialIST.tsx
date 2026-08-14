@@ -29,6 +29,13 @@ const MONAT_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Se
 /** Mindestbreite einer Monatsspalte — darunter ist der Balken keine Fläche mehr. */
 const SPALTE_MIN_PX = 16
 
+/** Höchstbreite des Balkens IN der Spalte. Die Spalte selbst darf mitwachsen
+ *  (sonst steht die Grafik bei wenigen Monaten links und rechts bleibt der
+ *  leere Raum, den dieser Umbau beseitigen soll) — der Balken darin nicht:
+ *  bei sieben Monaten auf 1400 px wären das sonst 195 px je Balken, und eine
+ *  Spanne, die so breit ist wie hoch, liest sich als Fläche statt als Balken. */
+const BALKEN_MAX = 'max-w-14 mx-auto w-full' 
+
 function useSpeicherPotential(anlageId: number) {
   const [daten, setDaten] = useState<SpeicherPotentialResponse | null>(null)
   const [laedt, setLaedt] = useState(true)
@@ -82,7 +89,7 @@ function SpannenSpalte({ m, soll }: { m: MonatsPotential; soll: SpeicherPotentia
   if (m.soc_p10 == null || m.soc_p50 == null || m.soc_p90 == null) {
     return (
       <div
-        className="h-40 rounded-sm bg-gray-100 dark:bg-gray-800"
+        className={`h-40 rounded-sm bg-gray-100 dark:bg-gray-800 ${BALKEN_MAX}`}
         title={`${beschriftung}: kein Ladestand gemessen`}
       />
     )
@@ -97,7 +104,7 @@ function SpannenSpalte({ m, soll }: { m: MonatsPotential; soll: SpeicherPotentia
   ].join(' · ')
 
   return (
-    <div className="relative h-40 rounded-sm bg-gray-100 dark:bg-gray-800" title={titel}>
+    <div className={`relative h-40 rounded-sm bg-gray-100 dark:bg-gray-800 ${BALKEN_MAX}`} title={titel}>
       {/* Die Spanne: wo der Speicher in acht von zehn Stunden stand. */}
       <div
         className="absolute inset-x-0 rounded-sm"
@@ -163,7 +170,7 @@ function Spuren({ d }: { d: SpeicherPotentialResponse }) {
           sonst wandert sie beim Schieben weg und die Prozente stehen an keiner
           Zahl mehr. */}
       <div>
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-4">
           Ladestand über den Monat
         </p>
         <div className="flex gap-2">
@@ -178,7 +185,7 @@ function Spuren({ d }: { d: SpeicherPotentialResponse }) {
               </span>
             ))}
           </div>
-          <ScrollSchatten>
+          <ScrollSchatten aussenClassName="flex-1 min-w-0">
             <div className="min-w-full" style={spalten}>
               {d.monate.map((m) => (
                 <SpannenSpalte key={`${m.jahr}-${m.monat}`} m={m} soll={d} />
@@ -198,12 +205,12 @@ function Spuren({ d }: { d: SpeicherPotentialResponse }) {
           </p>
           <div className="flex gap-2">
             <div className="w-8 shrink-0" />
-            <ScrollSchatten>
+            <ScrollSchatten aussenClassName="flex-1 min-w-0">
               <div className="min-w-full items-end" style={{ ...spalten, height: '3rem' }}>
                 {d.monate.map((m) => (
                   <div
                     key={`${m.jahr}-${m.monat}`}
-                    className="rounded-sm"
+                    className={`rounded-sm ${BALKEN_MAX}`}
                     style={{
                       height: `${((m.vollzyklen ?? 0) / maxZyklen) * 100}%`,
                       backgroundColor: m.vollzyklen == null ? 'transparent' : `${COLORS.battery}99`,
@@ -236,12 +243,12 @@ function Spuren({ d }: { d: SpeicherPotentialResponse }) {
           </p>
           <div className="flex gap-2">
             <div className="w-8 shrink-0" />
-            <ScrollSchatten>
+            <ScrollSchatten aussenClassName="flex-1 min-w-0">
               <div className="min-w-full items-end" style={{ ...spalten, height: '1.25rem' }}>
                 {d.monate.map((m) => (
                   <div
                     key={`${m.jahr}-${m.monat}`}
-                    className="rounded-sm"
+                    className={`rounded-sm ${BALKEN_MAX}`}
                     style={{
                       height: `${m.netz_ladung_anteil_prozent ?? 0}%`,
                       backgroundColor: LADEQUELLEN_FARBEN.netz,
@@ -258,7 +265,7 @@ function Spuren({ d }: { d: SpeicherPotentialResponse }) {
       {/* Monatsachse — einmal, unter allen Spuren. */}
       <div className="flex gap-2">
         <div className="w-8 shrink-0" />
-        <ScrollSchatten>
+        <ScrollSchatten aussenClassName="flex-1 min-w-0">
           <div className="min-w-full text-[10px] text-gray-400 dark:text-gray-500" style={spalten}>
             {d.monate.map((m, i) => (
               <div key={`${m.jahr}-${m.monat}`} className="text-center overflow-hidden">
