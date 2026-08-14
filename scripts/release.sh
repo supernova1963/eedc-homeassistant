@@ -219,12 +219,12 @@ sed -i "s/io.hass.version=\"[^\"]*\"/io.hass.version=\"$VERSION\"/" eedc/Dockerf
 echo "  eedc/Dockerfile (Label)             → $VERSION"
 
 # =============================================================================
-# SCHRITT 2: Frontend Build (damit dist/ die neue Version enthält)
+# SCHRITT 2: Frontend Build (Gate vor dem Tag — dist/ ist seit N-246 nicht versioniert)
 # =============================================================================
 echo ""
 echo -e "${CYAN}[2/7] Frontend Build...${NC}"
 
-# In-App-Hilfe-Inhalte aus docs/ refreshen, damit dist/ aktuell ist
+# In-App-Hilfe-Inhalte aus docs/ refreshen — public/help/ IST versioniert
 "$REPO_DIR/scripts/sync-help.sh"
 
 cd eedc/frontend
@@ -275,8 +275,12 @@ echo -e "${CYAN}[4/7] Commit + Tag + Push eedc-homeassistant...${NC}"
 # Nur einkehren, was dieses Script oben selbst geschrieben hat — kein `git add -A`.
 # Erhebung der Schreibstellen (Stand 2026-08-03, Nebenfund N-56):
 #   Schritt 1 → die 5 Versionsdateien
-#   Schritt 2 → sync-help.sh nach eedc/frontend/public/help/, vite build nach
-#               eedc/frontend/dist/ (tsc läuft mit noEmit, schreibt nichts)
+#   Schritt 2 → sync-help.sh nach eedc/frontend/public/help/ (tsc läuft mit
+#               noEmit, schreibt nichts). Der vite build schreibt nach
+#               eedc/frontend/dist/ — das ist seit N-246 gitignoriert und
+#               gehört NICHT mehr in die Liste: das Image baut sein Frontend
+#               selbst (Multi-Stage). Der Build bleibt trotzdem stehen, er ist
+#               das Gate „kompiliert das Frontend überhaupt?" vor dem Tag.
 #   Schritt 3 → eedc/CHANGELOG.md, eedc/README.md
 # smoke.sh (Schritt 0) legt nur außerhalb des Baums bzw. gitignoriert ab.
 # Wer hier eine Schreibstelle ergänzt, ergänzt auch diese Liste — sonst
@@ -290,7 +294,6 @@ RELEASE_PFADE=(
     eedc/CHANGELOG.md
     eedc/README.md
     eedc/frontend/public/help
-    eedc/frontend/dist
 )
 git add -A -- "${RELEASE_PFADE[@]}"
 pruefe_nichts_uebrig "$REPO_DIR" "eedc-homeassistant"
@@ -338,6 +341,14 @@ rsync -a --delete \
     --exclude='dist' \
     eedc/frontend/ "$EEDC_STANDALONE/frontend/"
 echo "  frontend/ → eedc/frontend/"
+
+# N-246: Der Spiegel trug ein `frontend/dist` aus **v3.8.17** (02.04.2026) — der
+# rsync oben schließt `dist` aus, also hat es seither kein Release mehr angefasst,
+# und `git add -A` entfernt getrackte Dateien nicht, nur weil eine .gitignore-Regel
+# dazukommt. Ausgeliefert wird es ohnehin nie: das Standalone-Dockerfile baut sein
+# Frontend selbst (Multi-Stage). Einmalig auszutragen — danach ein No-op, deshalb
+# `--ignore-unmatch`.
+git -C "$EEDC_STANDALONE" rm -r --cached --quiet --ignore-unmatch frontend/dist
 
 # Einzeldateien die in beiden Repos existieren
 cp eedc/CHANGELOG.md "$EEDC_STANDALONE/CHANGELOG.md"

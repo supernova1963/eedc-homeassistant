@@ -22,7 +22,9 @@ yarn-error.log*
 .npm
 
 # Build outputs
-# frontend/dist/ - im Repo für Docker-Build
+# frontend/dist/ war bis 2026-08-14 versioniert — der Docker-Build baut es selbst
+# (Multi-Stage, `COPY --from=frontend-builder`). Fund N-246.
+frontend/dist/
 *.js.map
 
 # IDE

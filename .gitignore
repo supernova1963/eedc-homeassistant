@@ -22,7 +22,14 @@ yarn-error.log*
 .npm
 
 # Build outputs
-# eedc/frontend/dist/ - jetzt im Repo für schnellere Add-on Installation
+# eedc/frontend/dist/ war bis 2026-08-14 versioniert. Die Begründung („schnellere
+# Add-on Installation") ist seit dem Multi-Stage-Build überholt: eedc/Dockerfile und
+# das Standalone-Dockerfile bauen das Frontend beide in einer eigenen Stage
+# (`npm run build`) und kopieren NUR deren Ergebnis ins Image — das Verzeichnis aus
+# dem Repo landet dort nie. Ausgeliefert wird ohnehin ein ghcr-Image
+# (config.yaml `image:`), gebaut von .github/workflows/release.yml. Es war damit
+# 4,5 MB in 86 Dateien, die nach jedem Build als geändert dastanden. (Fund N-246)
+eedc/frontend/dist/
 *.js.map
 
 # IA-v4 Vorschau-Build (Wegwerf, Etappe 2) — separates Output, NIE committen.
