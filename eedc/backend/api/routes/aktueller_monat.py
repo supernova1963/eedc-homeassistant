@@ -1174,15 +1174,20 @@ async def get_aktueller_monat(
     # ── Investitions-Felder in Top-Level aggregieren (typabhängig) ──
     # Nur aggregieren wenn kein direkter Top-Level-Wert existiert (sonst Doppelzählung!)
     # Direkte Werte kommen z.B. aus gespeicherten Aggregaten oder MQTT pv_gesamt_kwh.
-    typ_aggregation: dict[str, dict[str, str]] = {
-        "pv-module": {"pv_erzeugung_kwh": "pv_erzeugung_kwh"},
-        "speicher": {"ladung_kwh": "speicher_ladung_kwh", "entladung_kwh": "speicher_entladung_kwh"},
+    # Werte sind **Tupel von Zielfeldern** — ein Investitionsfeld darf in mehr
+    # als eine Top-Level-Größe einlaufen (siehe BKW unten).
+    typ_aggregation: dict[str, dict[str, tuple[str, ...]]] = {
+        "pv-module": {"pv_erzeugung_kwh": ("pv_erzeugung_kwh",)},
+        "speicher": {
+            "ladung_kwh": ("speicher_ladung_kwh",),
+            "entladung_kwh": ("speicher_entladung_kwh",),
+        },
         "waermepumpe": {
-            "stromverbrauch_kwh": "wp_strom_kwh",
-            "strom_heizen_kwh": "wp_strom_kwh",
-            "strom_warmwasser_kwh": "wp_strom_kwh",
-            "heizenergie_kwh": "wp_waerme_kwh",
-            "warmwasser_kwh": "wp_waerme_kwh",
+            "stromverbrauch_kwh": ("wp_strom_kwh",),
+            "strom_heizen_kwh": ("wp_strom_kwh",),
+            "strom_warmwasser_kwh": ("wp_strom_kwh",),
+            "heizenergie_kwh": ("wp_waerme_kwh",),
+            "warmwasser_kwh": ("wp_waerme_kwh",),
         },
         # E-Auto und Wallbox NICHT hier — sie messen denselben Stromfluss aus
         # zwei Perspektiven (Vehicle vs. Loadpoint). Aufsummieren über beide
@@ -1190,7 +1195,19 @@ async def get_aktueller_monat(
         # 2026-05-02). Aggregation passiert unten als max-Pool nach dem
         # Standard-Loop, identisch zu `_collect_saved_data` (Commit 92d522a8)
         # und `cockpit/uebersicht.py`.
-        "balkonkraftwerk": {"pv_erzeugung_kwh": "bkw_erzeugung_kwh"},
+        # BKW zählt in ZWEI Größen, und das ist keine Doppelzählung:
+        # `bkw_erzeugung_kwh` ist die **eigene Zeile** (ROI/Finanz — dort hat das
+        # BKW eine getrennte Position, s. [[project_bkw_erzeuger_abgrenzung]]),
+        # `pv_erzeugung_kwh` ist die **PV-Achse der Anlage**. Der Kanon verlangt
+        # beides: `monats_fakten.ErzeugungFakten.pv_kwh` ist ausdrücklich
+        # „Module + Balkonkraftwerk", und der DB-Zweig oben (`_collect_saved_data`)
+        # setzt `pv_erzeugung_kwh = fakt.erzeugung.pv_kwh` genau so.
+        # ⛔ Bis 2026-08-14 stand hier nur `bkw_erzeugung_kwh` — dadurch fehlte das
+        # BKW in der PV-Erzeugung **nur im laufenden Monat** (Sensor-Zweig), während
+        # derselbe Monat nach dem Abschluss plötzlich richtig rechnete. Gemeldet von
+        # dietmar1968 (Forum T77723 #775): 679 statt 724 kWh in Kennzahl und
+        # Energie-Bilanz, während der Kategorien-Block die 45 kWh korrekt auswies.
+        "balkonkraftwerk": {"pv_erzeugung_kwh": ("bkw_erzeugung_kwh", "pv_erzeugung_kwh")},
     }
 
     # Top-Level-Felder die bereits direkt von Collectoren gesetzt wurden
@@ -1226,8 +1243,9 @@ async def get_aktueller_monat(
         if not inv.ist_aktiv_im_monat(jahr, monat):
             continue
         agg_map = typ_aggregation.get(inv.typ, {})
-        for inv_suffix, top_level_feld in agg_map.items():
-            _aggregate(top_level_feld, f"inv_{inv.id}_{inv_suffix}")
+        for inv_suffix, ziel_felder in agg_map.items():
+            for top_level_feld in ziel_felder:
+                _aggregate(top_level_feld, f"inv_{inv.id}_{inv_suffix}")
 
     # ── E-Mobilität: max-Pool über E-Auto + Wallbox ──
     # Dienstliche Fahrzeuge früh herausfiltern (sie zählen separat in

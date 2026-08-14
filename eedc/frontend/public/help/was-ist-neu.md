@@ -32,6 +32,18 @@ Zwei Spuren sind neu:
 
 An den **Zahlen ändert sich nichts** — der Durchsatz ist derselbe Vollzyklen-Wert, den auch Cockpit, HA-Sensor und Jahresbericht nennen.
 
+### Das Balkonkraftwerk zählt jetzt auch im laufenden Monat zur PV-Erzeugung
+
+**Betrifft dich das?** Wenn du neben deinen PV-Modulen ein **Balkonkraftwerk** erfasst hast und dir *Cockpit → Monat* für den **laufenden** Monat ansiehst.
+
+Die große Kennzahl „PV-Erzeugung" und die Zeile in der Energie-Bilanz zählten dort nur deine **Module** — das Balkonkraftwerk fehlte. Unten im Block „Kategorien" stand es trotzdem korrekt mit seiner eigenen Menge. Bei dem Melder, der es gefunden hat, waren das 679 kWh oben gegen 679 + 45 kWh unten.
+
+Weil die PV-Erzeugung zu klein war, stimmten im laufenden Monat auch **Autarkie und Eigenverbrauchsquote** nicht ganz.
+
+> **Warum das so schwer zu bemerken war:** eedc holt die Zahlen eines **laufenden** Monats aus deinen Sensoren, die eines **abgeschlossenen** aus den gespeicherten Werten — und nur der erste Weg ließ das Balkonkraftwerk aus. Derselbe Monat zeigte also vor und nach dem Monatsabschluss zwei verschiedene Zahlen. Beide Wege rechnen jetzt gleich.
+
+**Was sich nicht ändert:** Abgeschlossene Monate waren nie betroffen, ebenso wenig Anlagen ohne Balkonkraftwerk. In der Wirtschaftlichkeit behält das Balkonkraftwerk seine **eigene Zeile** — es wird nicht doppelt gezählt. Und wer einen Gesamt-Erzeugungssensor für die ganze Anlage zugeordnet hat, war nie betroffen: Der misst beides ohnehin schon, und eedc addiert dann nichts hinzu.
+
 ### Ein E-Auto von 2017 verlangt keine Stromzähler-Werte ab 2017
 
 **Betrifft dich das?** Wenn du eine Komponente eingetragen hast, die **älter ist als deine PV-Anlage** — ein Auto, eine Wallbox, eine Heizung.
