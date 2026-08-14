@@ -13,6 +13,25 @@
 
 > Dieser Abschnitt sammelt, was fertig ist, aber noch keine Versionsnummer trägt. Beim Release wird daraus der neue Versions-Abschnitt.
 
+### „Hätte mehr Kapazität geholfen?" ist jetzt lesbar — und zeigt zwei Dinge mehr
+
+**Betrifft dich das?** Wenn du einen **Speicher** hast und dir im Komponenten-Hub die Frage nach mehr Kapazität ansiehst.
+
+Die farbige Tabelle Monat × Ladestand aus dem letzten Update war schwer zu entschlüsseln. Der Grund war kein Geschmack: Die Helligkeit **aller** Zellen richtete sich nach dem größten Wert im ganzen Bild. Ein einziger Extremmonat — im November steht der Speicher hunderte Stunden fast leer — bestimmte damit die Skala für alles andere, und benachbarte Monate wurden ununterscheidbar grau.
+
+Jetzt steht dort **ein Balken je Monat**. Er zeigt, wo dein Ladestand in **acht von zehn Stunden** lag; die Linie darin ist der typische Wert. Die kurzen Striche oben und unten sind die **Anschläge**: wie oft der Speicher voll (≥ 95 %) und wie oft er leer (≤ 5 %) war.
+
+> **So liest du die Grafik:** Erst wenn im selben Monat **beide** Striche breit sind, ist mehr Kapazität eine ernsthafte Überlegung. Oben angeschlagen heißt „Überschuss ging ins Netz", unten angeschlagen „die Nacht musstest du zukaufen". Nur eines von beidem reicht nicht.
+
+Zwei Spuren sind neu:
+
+- **Durchsatz je Monat** in Vollzyklen. Ohne sie sieht ein Speicher, der dreimal am Tag durchfährt, aus wie einer, der stillsteht — der Ladestand zeigt Zustände, keine Umsätze. Werte über 100 % der Kapazität sind normal und jetzt auch sichtbar.
+- **Ladung aus dem Netz**, sofern es sie gab. Netzladung füllt den Speicher **ohne Sonne**; in solchen Monaten sagt der Ladestand weniger über die Frage nach mehr Kapazität aus. Der Anteil ist eine Obergrenze — innerhalb einer Stunde trennt kein Zähler, was ins Haus und was in den Akku ging.
+
+**Warum keine Ampelfarben?** Das war der naheliegende Wunsch, und er wird bewusst nicht erfüllt: Ein voller Speicher ist nicht „gut" und ein leerer nicht „schlecht". Grün für „immer voll" würde ausgerechnet den Zustand belohnen, in dem du Überschuss verschenkst.
+
+An den **Zahlen ändert sich nichts** — der Durchsatz ist derselbe Vollzyklen-Wert, den auch Cockpit, HA-Sensor und Jahresbericht nennen.
+
 ### Ein E-Auto von 2017 verlangt keine Stromzähler-Werte ab 2017
 
 **Betrifft dich das?** Wenn du eine Komponente eingetragen hast, die **älter ist als deine PV-Anlage** — ein Auto, eine Wallbox, eine Heizung.
@@ -128,7 +147,7 @@ eedc zählt deshalb nur, was auch wieder verbraucht worden wäre: Überschuss be
 Dazu:
 
 - **Nächte mit leerem Speicher** — die eigentliche Begrenzung. Läuft dein Speicher nie leer, bringt mehr Kapazität nichts, egal wie viel Sonne du einspeist.
-- **Heatmap Monat × Ladestand** — eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer". Interessant wird es erst, wenn beides im selben Monat auftritt.
+- **Heatmap Monat × Ladestand** — eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer". Interessant wird es erst, wenn beides im selben Monat auftritt. *(Diese Heatmap war schwer zu lesen und ist inzwischen durch Balken ersetzt — siehe oben unter „Kommt mit dem nächsten Update".)*
 
 > Bei mehreren Speichern erfasst eedc den Ladestand für die Anlage als Ganzes — die Auswertung gilt dann für alle zusammen, nicht je Gerät. Das steht auch so in der Sicht.
 

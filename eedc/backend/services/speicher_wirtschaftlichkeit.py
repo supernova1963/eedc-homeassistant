@@ -24,6 +24,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.berechnungen.speicher import netz_ladung_stunde_kwh
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
 # Re-Export der reinen Funktionen/Typen/Konstanten aus dem Berechnungs-Layer.
@@ -204,10 +205,10 @@ async def berechne_effektiver_ladepreis(
             continue  # nur Ladestunden
         ladung_h = -batterie  # kW × 1 h ≈ kWh (Stundenraster)
 
-        netz = max(0.0, row.netzbezug_kw or 0)
         # Anteil der Ladung, der wirklich aus dem Netz kommt — der Rest
-        # ist PV-Überschuss und kostet keinen Ladepreis.
-        netz_lade_h = min(ladung_h, netz)
+        # ist PV-Überschuss und kostet keinen Ladepreis. Layer-SoT, seit die
+        # Potentialanalyse dieselbe Größe je Monat braucht.
+        netz_lade_h = netz_ladung_stunde_kwh(ladung_h, row.netzbezug_kw)
         if netz_lade_h <= 0:
             continue  # PV-only-Ladung — keine Netz-Ladekosten
 

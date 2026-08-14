@@ -18,27 +18,16 @@ import { useEffect, useState } from 'react'
 import { BatteryCharging, Sun, TrendingUp } from 'lucide-react'
 import { Parkbar } from '../components/park'
 import { KPICard, ScrollSchatten } from '../components/ui'
-import { investitionenApi, type SpeicherPotentialResponse } from '../api/investitionen'
-import { COLORS } from '../lib/colors'
+import { investitionenApi, type MonatsPotential, type SpeicherPotentialResponse } from '../api/investitionen'
+import { COLORS, LADEQUELLEN_FARBEN } from '../lib/colors'
 import { fmtZahl } from '../lib/einheiten'
 import type { MeldeFn } from './komponentenAnalyse'
 import type { Investition } from '../types'
 
 const MONAT_KURZ = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
-/** Bin-Beschriftung: 0 = „0–10 %", 9 = „90–100 %". */
-const BIN_LABELS = Array.from({ length: 10 }, (_, i) => `${i * 10}–${(i + 1) * 10} %`)
-
-/**
- * Häufigkeit → Deckkraft **einer** Farbe, nicht → eigene Farbe.
- * Die Datenrolle ist „Speicher"; eine zweite Farbe dafür wäre Drift
- * (Style-Guide Regel 0a). Der Farbwert selbst kommt aus `lib/colors.ts`.
- */
-function zellenStil(anteil: number): { backgroundColor: string } {
-  if (anteil <= 0) return { backgroundColor: 'transparent' }
-  const deckkraft = 0.12 + 0.78 * Math.min(1, anteil)
-  return { backgroundColor: `${COLORS.battery}${Math.round(deckkraft * 255).toString(16).padStart(2, '0')}` }
-}
+/** Mindestbreite einer Monatsspalte — darunter ist der Balken keine Fläche mehr. */
+const SPALTE_MIN_PX = 16
 
 function useSpeicherPotential(anlageId: number) {
   const [daten, setDaten] = useState<SpeicherPotentialResponse | null>(null)
@@ -87,57 +76,214 @@ function Befund({ d }: { d: SpeicherPotentialResponse }) {
   )
 }
 
-function Heatmap({ d }: { d: SpeicherPotentialResponse }) {
-  const maxStunden = Math.max(
-    1,
-    ...d.monate.flatMap((m) => m.soc_bins),
-  )
+/** Eine Monatsspalte der Ladestands-Spur: Spanne P10–P90, Median, beide Anschläge. */
+function SpannenSpalte({ m, soll }: { m: MonatsPotential; soll: SpeicherPotentialResponse }) {
+  const beschriftung = `${MONAT_KURZ[m.monat - 1]} ${m.jahr}`
+  if (m.soc_p10 == null || m.soc_p50 == null || m.soc_p90 == null) {
+    return (
+      <div
+        className="h-40 rounded-sm bg-gray-100 dark:bg-gray-800"
+        title={`${beschriftung}: kein Ladestand gemessen`}
+      />
+    )
+  }
+  const hoehe = Math.max(1.5, m.soc_p90 - m.soc_p10)
+  const titel = [
+    beschriftung,
+    `Ladestand ${fmtZahl(m.soc_p10, 0)}–${fmtZahl(m.soc_p90, 0)} %`,
+    `typisch ${fmtZahl(m.soc_p50, 0)} %`,
+    `${fmtZahl(m.anteil_voll_prozent ?? 0, 0)} % der Stunden ≥ ${fmtZahl(soll.soc_voll_prozent, 0)} %`,
+    `${fmtZahl(m.anteil_leer_prozent ?? 0, 0)} % der Stunden ≤ ${fmtZahl(soll.soc_leer_prozent, 0)} %`,
+  ].join(' · ')
+
   return (
-    <div>
-      <ScrollSchatten>
-        {/* tabelle-allow: Farb-Heatmap, kein Datensatz-Raster — die Zellen tragen keinen
-            Text, sondern eine Deckkraft; Zeilen sind die zehn SoC-Bins. Höhenfenster,
-            sticky-Kopf und Spalten-Definitionen der Tabellen-SoT greifen hier nicht. */}
-        <table className="text-xs border-separate" style={{ borderSpacing: '2px' }}>
-        <thead>
-          <tr>
-            <th className="text-right pr-2 font-medium text-gray-400 dark:text-gray-500">Ladestand</th>
-            {d.monate.map((m) => (
-              <th key={`${m.jahr}-${m.monat}`} className="font-medium text-gray-400 dark:text-gray-500 px-1">
-                {MONAT_KURZ[m.monat - 1]}
-                {m.monat === 1 || m.monat === d.monate[0].monat ? (
-                  <span className="block text-[10px] opacity-70">{m.jahr}</span>
-                ) : null}
-              </th>
+    <div className="relative h-40 rounded-sm bg-gray-100 dark:bg-gray-800" title={titel}>
+      {/* Die Spanne: wo der Speicher in acht von zehn Stunden stand. */}
+      <div
+        className="absolute inset-x-0 rounded-sm"
+        style={{
+          bottom: `${m.soc_p10}%`,
+          height: `${hoehe}%`,
+          backgroundColor: `${COLORS.battery}66`,
+        }}
+      />
+      {/* Der typische Stand — eine Linie, kein zweiter Balken. */}
+      <div
+        className="absolute inset-x-0 h-[2px]"
+        style={{ bottom: `${m.soc_p50}%`, backgroundColor: COLORS.battery }}
+      />
+      {/* Die beiden Anschläge. Sie tragen ihren Anteil als BREITE, nicht als Höhe:
+          eine Höhe würde man mit dem Ladestand verwechseln, den die Achse daneben
+          misst. Oben UND unten breit heißt „mehr Kapazität hilft" — genau die
+          Frage des Blocks. */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 h-1 rounded-sm"
+        style={{ width: `${m.anteil_voll_prozent ?? 0}%`, backgroundColor: COLORS.battery }}
+      />
+      <div
+        className="absolute bottom-0 left-1/2 -translate-x-1/2 h-1 rounded-sm"
+        style={{ width: `${m.anteil_leer_prozent ?? 0}%`, backgroundColor: COLORS.battery }}
+      />
+    </div>
+  )
+}
+
+/**
+ * Ladestand, Durchsatz und Netzladung je Monat — drei Spuren, eine Monatsachse.
+ *
+ * **Warum keine Heatmap mehr:** die Vorgängerin normierte die Deckkraft ihrer
+ * Zellen **global** über alle Monate und alle zehn SoC-Bins. Ein einzelner
+ * Winter-Extremwert (der Speicher steht im November hunderte Stunden bei
+ * 0–10 %) setzte damit die Skala für das ganze Bild und drückte alles übrige in
+ * einen schmalen Deckkraftbereich — Okt/Nov und Feb/Mär waren nicht mehr zu
+ * unterscheiden (Rainer, 13.08.). Das war ein **Skalierungsfehler**, kein
+ * Geschmack. Jede Monatsspalte trägt jetzt ihre eigene Aussage und braucht
+ * keine gemeinsame Skala mehr.
+ *
+ * **Keine Wertungsfarbe.** Rot→Grün war gewünscht und wird bewusst nicht
+ * geliefert: Der Block verneint die Wertung selbst („erst beides zusammen macht
+ * mehr Kapazität sinnvoll") — ein voller Speicher ist nicht gut, ein leerer
+ * nicht schlecht. Dazu sind Rot/Grün im Projekt Bedeutungsfarben (Regel 0a).
+ * Die Datenrolle „Speicher" hat genau eine Farbe; die Netzladung ist eine
+ * **andere** Rolle und trägt deshalb das Netzbezugs-Rot.
+ */
+function Spuren({ d }: { d: SpeicherPotentialResponse }) {
+  const spalten = {
+    display: 'grid',
+    gridTemplateColumns: `repeat(${d.monate.length}, minmax(${SPALTE_MIN_PX}px, 1fr))`,
+    gap: '2px',
+  }
+  const maxZyklen = Math.max(1, ...d.monate.map((m) => m.vollzyklen ?? 0))
+  const hatZyklen = d.monate.some((m) => m.vollzyklen != null)
+  const hatNetzladung = d.monate.some((m) => (m.netz_ladung_anteil_prozent ?? 0) > 0)
+
+  return (
+    <div className="space-y-3">
+      {/* Spur 1 — Ladestand. Die Achse steht AUSSERHALB des Scrollbereichs:
+          sonst wandert sie beim Schieben weg und die Prozente stehen an keiner
+          Zahl mehr. */}
+      <div>
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+          Ladestand über den Monat
+        </p>
+        <div className="flex gap-2">
+          <div className="relative h-40 w-8 shrink-0 text-[10px] text-gray-400 dark:text-gray-500">
+            {[100, 50, 0].map((wert) => (
+              <span
+                key={wert}
+                className="absolute right-0 -translate-y-1/2 tabular-nums"
+                style={{ bottom: `${wert}%` }}
+              >
+                {fmtZahl(wert, 0)} %
+              </span>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {[...Array(10).keys()].reverse().map((bin) => (
-            <tr key={bin}>
-              <td className="text-right pr-2 font-mono text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                {BIN_LABELS[bin]}
-              </td>
-              {d.monate.map((m) => {
-                const stunden = m.soc_bins[bin] ?? 0
-                return (
-                  <td
-                    key={`${m.jahr}-${m.monat}-${bin}`}
-                    className="w-8 h-5 rounded-sm text-center align-middle"
-                    style={zellenStil(stunden / maxStunden)}
-                    title={`${MONAT_KURZ[m.monat - 1]} ${m.jahr}: ${stunden} Stunden bei ${BIN_LABELS[bin]} Ladestand`}
+          </div>
+          <ScrollSchatten>
+            <div className="min-w-full" style={spalten}>
+              {d.monate.map((m) => (
+                <SpannenSpalte key={`${m.jahr}-${m.monat}`} m={m} soll={d} />
+              ))}
+            </div>
+          </ScrollSchatten>
+        </div>
+      </div>
+
+      {/* Spur 2 — Durchsatz. Ohne sie sieht ein Speicher, der dreimal am Tag
+          durchfährt, aus wie einer, der stillsteht: der Ladestand allein zeigt
+          Zustände, keine Umsätze. */}
+      {hatZyklen ? (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+            Durchsatz je Monat — bis {fmtZahl(maxZyklen, 1)} Vollzyklen
+          </p>
+          <div className="flex gap-2">
+            <div className="w-8 shrink-0" />
+            <ScrollSchatten>
+              <div className="min-w-full items-end" style={{ ...spalten, height: '3rem' }}>
+                {d.monate.map((m) => (
+                  <div
+                    key={`${m.jahr}-${m.monat}`}
+                    className="rounded-sm"
+                    style={{
+                      height: `${((m.vollzyklen ?? 0) / maxZyklen) * 100}%`,
+                      backgroundColor: m.vollzyklen == null ? 'transparent' : `${COLORS.battery}99`,
+                    }}
+                    title={
+                      m.vollzyklen == null
+                        ? `${MONAT_KURZ[m.monat - 1]} ${m.jahr}: keine Entladung erfasst`
+                        : `${MONAT_KURZ[m.monat - 1]} ${m.jahr}: ${fmtZahl(m.vollzyklen, 1)} Vollzyklen`
+                    }
                   />
-                )
-              })}
-            </tr>
-          ))}
-        </tbody>
-        </table>
-      </ScrollSchatten>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-        Je dunkler, desto mehr Stunden stand der Speicher in diesem Monat auf diesem Ladestand.
-        Eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer" —
-        erst beides zusammen macht mehr Kapazität sinnvoll.
+                ))}
+              </div>
+            </ScrollSchatten>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {d.kapazitaet_brutto_kwh == null
+            ? 'Den Durchsatz je Monat zeigt eedc, sobald für den Speicher eine Kapazität gepflegt ist.'
+            : 'Für den Durchsatz je Monat fehlen bisher Entladungswerte.'}
+        </p>
+      )}
+
+      {/* Spur 3 — Netzladung. Sie füllt den Speicher OHNE Sonne; ein Monat mit
+          viel Netzladung beantwortet die Frage des Blocks nicht mit. */}
+      {hatNetzladung && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+            Ladung aus dem Netz (Anteil an der Ladung des Monats)
+          </p>
+          <div className="flex gap-2">
+            <div className="w-8 shrink-0" />
+            <ScrollSchatten>
+              <div className="min-w-full items-end" style={{ ...spalten, height: '1.25rem' }}>
+                {d.monate.map((m) => (
+                  <div
+                    key={`${m.jahr}-${m.monat}`}
+                    className="rounded-sm"
+                    style={{
+                      height: `${m.netz_ladung_anteil_prozent ?? 0}%`,
+                      backgroundColor: LADEQUELLEN_FARBEN.netz,
+                    }}
+                    title={`${MONAT_KURZ[m.monat - 1]} ${m.jahr}: höchstens ${fmtZahl(m.netz_ladung_anteil_prozent ?? 0, 0)} % der Ladung aus dem Netz`}
+                  />
+                ))}
+              </div>
+            </ScrollSchatten>
+          </div>
+        </div>
+      )}
+
+      {/* Monatsachse — einmal, unter allen Spuren. */}
+      <div className="flex gap-2">
+        <div className="w-8 shrink-0" />
+        <ScrollSchatten>
+          <div className="min-w-full text-[10px] text-gray-400 dark:text-gray-500" style={spalten}>
+            {d.monate.map((m, i) => (
+              <div key={`${m.jahr}-${m.monat}`} className="text-center overflow-hidden">
+                {MONAT_KURZ[m.monat - 1]}
+                {m.monat === 1 || i === 0 ? (
+                  <span className="block opacity-70">{m.jahr}</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </ScrollSchatten>
+      </div>
+
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Der Balken zeigt, wo der Ladestand in acht von zehn Stunden lag, die Linie darin den
+        typischen Wert. Die kurzen Striche am oberen und unteren Rand sind die Anschläge:
+        wie oft der Speicher voll (≥ {fmtZahl(d.soc_voll_prozent, 0)} %) bzw. leer
+        (≤ {fmtZahl(d.soc_leer_prozent, 0)} %) war. <strong>Erst beides zusammen macht mehr
+        Kapazität sinnvoll</strong> — oben angeschlagen heißt „Überschuss ging ins Netz", unten
+        angeschlagen „die Nacht wurde zugekauft".
+        {hatNetzladung && (
+          <> Wo Ladung aus dem Netz kam, füllt sich der Speicher ohne Sonne; solche Monate
+          beantworten die Frage nach mehr Kapazität nur eingeschränkt. Der Anteil ist eine
+          Obergrenze — kein Zähler trennt Haushalt und Speicher innerhalb einer Stunde.</>
+        )}
       </p>
     </div>
   )
@@ -198,7 +344,7 @@ export function SpeicherPotentialIST({ anlageId, melde }: { anlageId: number; in
           />
         </div>
 
-        {daten.monate.length > 0 && <Heatmap d={daten} />}
+        {daten.monate.length > 0 && <Spuren d={daten} />}
 
         {daten.anzahl_speicher > 1 && (
           <p className="text-xs text-gray-500 dark:text-gray-400">

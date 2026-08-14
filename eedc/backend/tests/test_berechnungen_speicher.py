@@ -16,6 +16,8 @@ from backend.core.berechnungen import (
     berechne_netzladung_kosten,
     gleitende_effizienz,
     pruefe_speicher_durchsatz_konsistenz,
+    netz_ladung_stunde_kwh,
+    soc_spanne,
     speicher_effizienz_prozent,
 )
 
@@ -159,3 +161,62 @@ def test_netzladung_kosten_null_kwh_ist_eine_aussage():
 
 def test_netzladung_kosten_ohne_preis_none():
     assert berechne_netzladung_kosten(50.0) is None
+
+
+# ─── soc_spanne ─────────────────────────────────────────────────────────────
+# Warum eine Spanne und kein Mittelwert: siehe Klassen-Docstring. Der Anlass war
+# Rainers Befund vom 13.08. — die Vorgänger-Heatmap normierte GLOBAL über alle
+# Monate, ein Winter-Extremwert drückte alle übrigen Zellen zusammen.
+
+
+def test_soc_spanne_interpoliert_linear():
+    """P10/P50/P90 auf einer bekannten Reihe — von Hand nachrechenbar.
+
+    Zehn Werte 0,10,…,90 ⇒ Positionen 0,9·? nein: pos = anteil × (n−1) = anteil × 9.
+    P10 → pos 0,9 ⇒ zwischen 0 und 10, Rest 0,9 ⇒ 9. P50 → pos 4,5 ⇒ 45.
+    P90 → pos 8,1 ⇒ zwischen 80 und 90, Rest 0,1 ⇒ 81.
+    """
+    s = soc_spanne([float(i * 10) for i in range(10)])
+    assert s is not None
+    assert s.p10 == pytest.approx(9.0)
+    assert s.p50 == pytest.approx(45.0)
+    assert s.p90 == pytest.approx(81.0)
+
+
+def test_soc_spanne_ist_gegen_einen_ausreisser_robust():
+    """Der Grund für P10/P90 statt Min/Max — eine Stunde Zwangsladung kippt nichts.
+
+    Neunundzwanzig Stunden zwischen 40 und 60, eine einzelne bei 100: Min/Max
+    spannten 40…100 auf, die Spanne bleibt schmal.
+    """
+    werte = [50.0] * 29 + [100.0]
+    s = soc_spanne(werte)
+    assert s is not None
+    assert s.p90 < 100.0, "ein einzelner Extremwert darf die Spanne nicht bestimmen"
+    assert s.p10 == s.p50 == 50.0
+
+
+def test_soc_spanne_leer_ist_none_und_einzelwert_ist_ein_strich():
+    assert soc_spanne([]) is None
+    s = soc_spanne([37.0])
+    assert s is not None and s.p10 == s.p50 == s.p90 == 37.0
+
+
+# ─── netz_ladung_stunde_kwh ─────────────────────────────────────────────────
+
+
+def test_netz_ladung_ist_das_minimum_aus_ladung_und_bezug():
+    assert netz_ladung_stunde_kwh(2.0, 4.0) == 2.0
+    assert netz_ladung_stunde_kwh(4.0, 1.5) == 1.5
+
+
+def test_netz_ladung_ohne_bezug_ist_null():
+    """PV-Ladung ohne jeden Netzbezug — kein Netzstrom im Akku."""
+    assert netz_ladung_stunde_kwh(4.0, 0.0) == 0.0
+    assert netz_ladung_stunde_kwh(4.0, None) == 0.0
+
+
+def test_netz_ladung_klemmt_negative_eingaben():
+    """Einspeisung steht in `netzbezug_kw` nie negativ — falls doch, kein Unfug."""
+    assert netz_ladung_stunde_kwh(-3.0, 5.0) == 0.0
+    assert netz_ladung_stunde_kwh(3.0, -5.0) == 0.0

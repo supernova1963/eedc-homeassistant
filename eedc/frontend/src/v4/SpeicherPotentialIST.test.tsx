@@ -7,7 +7,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { SpeicherPotentialIST } from './SpeicherPotentialIST'
-import { investitionenApi, type SpeicherPotentialResponse } from '../api/investitionen'
+import {
+  investitionenApi,
+  type MonatsPotential,
+  type SpeicherPotentialResponse,
+} from '../api/investitionen'
 
 vi.mock('../components/park', () => ({
   Parkbar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -24,16 +28,24 @@ const ANTWORT = (teil: Partial<SpeicherPotentialResponse> = {}): SpeicherPotenti
   tage_mit_daten: 12,
   von: '2026-06-10',
   bis: '2026-06-21',
-  monate: [{
-    jahr: 2026, monat: 6,
-    nutzbares_zusatzpotential_kwh: 0, ueberschuss_kwh: 471.6,
-    stunden_voll: 114, zyklen_gesamt: 14, zyklen_leergelaufen: 0,
-    soc_bins: [0, 0, 0, 4, 12, 20, 30, 40, 68, 114],
-  }],
+  monate: [MONAT()],
   anzahl_speicher: 1,
   kapazitaet_kwh: 9.2,
+  kapazitaet_brutto_kwh: 10,
   soc_voll_prozent: 95,
   soc_leer_prozent: 5,
+  ...teil,
+})
+
+const MONAT = (teil: Partial<MonatsPotential> = {}): MonatsPotential => ({
+  jahr: 2026, monat: 6,
+  nutzbares_zusatzpotential_kwh: 0, ueberschuss_kwh: 471.6,
+  stunden_voll: 114, zyklen_gesamt: 14, zyklen_leergelaufen: 0,
+  stunden_mit_soc: 288,
+  soc_p10: 42, soc_p50: 78, soc_p90: 100,
+  anteil_voll_prozent: 39.6, anteil_leer_prozent: 0,
+  vollzyklen: 18.4,
+  ladung_kwh: 190, netz_ladung_kwh: 0, netz_ladung_anteil_prozent: 0,
   ...teil,
 })
 
@@ -106,5 +118,101 @@ describe('SpeicherPotentialIST', () => {
 
     await waitFor(() => expect(melde).toHaveBeenCalled())
     expect(melde).toHaveBeenLastCalledWith([])
+  })
+})
+
+describe('SpeicherPotentialIST — Spannen-Grafik statt Heatmap', () => {
+  beforeEach(() => vi.restoreAllMocks())
+
+  /**
+   * Der Befund, an dem die Heatmap gescheitert ist, als Test:
+   * Ein Monat mit Extremwert darf die Darstellung der übrigen NICHT bestimmen.
+   * Genau das tat die alte globale Deckkraft-Normierung — Okt/Nov und Feb/Mär
+   * waren nicht mehr unterscheidbar (Rainer, 13.08.).
+   */
+  it('stellt zwei Monate unterschiedlich dar, obwohl ein dritter extrem ist', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      monate: [
+        MONAT({ monat: 10, soc_p10: 20, soc_p50: 35, soc_p90: 55 }),
+        MONAT({ monat: 11, soc_p10: 5, soc_p50: 12, soc_p90: 25 }),
+        // Der Extremmonat: früher setzte er die Skala für alle.
+        MONAT({ monat: 12, soc_p10: 0, soc_p50: 0, soc_p90: 2, anteil_leer_prozent: 96 }),
+      ],
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    const okt = await screen.findByTitle(/^Okt 2026 · Ladestand 20–55 %/)
+    const nov = screen.getByTitle(/^Nov 2026 · Ladestand 5–25 %/)
+    // Die Spanne steht in der Höhe des Balkens — und die beiden sind verschieden.
+    const hoehe = (el: HTMLElement) =>
+      (el.querySelector('div[style*="height"]') as HTMLElement).style.height
+    expect(hoehe(okt)).not.toEqual(hoehe(nov))
+  })
+
+  it('nennt beide Anschläge im Titel — erst zusammen tragen sie die Aussage', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      monate: [MONAT({ anteil_voll_prozent: 40, anteil_leer_prozent: 15 })],
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByTitle(
+      /40 % der Stunden ≥ 95 % · 15 % der Stunden ≤ 5 %/,
+    )).toBeInTheDocument()
+  })
+
+  it('zeigt den Durchsatz als eigene Spur — Zustände sind keine Umsätze', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      monate: [MONAT({ vollzyklen: 22.5 })],
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/bis 22,5 Vollzyklen/)).toBeInTheDocument()
+    expect(screen.getByTitle(/Jun 2026: 22,5 Vollzyklen/)).toBeInTheDocument()
+  })
+
+  it('unterscheidet „keine Kapazität gepflegt" von „keine Entladung"', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      kapazitaet_brutto_kwh: null,
+      monate: [MONAT({ vollzyklen: null })],
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByText(/sobald für den Speicher eine Kapazität gepflegt ist/))
+      .toBeInTheDocument()
+  })
+
+  it('weist die Netzladung als Obergrenze aus, nicht als Messung', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      monate: [MONAT({ netz_ladung_kwh: 48, netz_ladung_anteil_prozent: 25 })],
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByTitle(/höchstens 25 % der Ladung aus dem Netz/))
+      .toBeInTheDocument()
+    expect(screen.getByText(/Obergrenze — kein Zähler trennt/)).toBeInTheDocument()
+  })
+
+  it('schweigt über die Netzladung, wenn es keine gab', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT())
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    await waitFor(() => expect(screen.getByText(/Ladestand über den Monat/)).toBeInTheDocument())
+    expect(screen.queryByText(/Ladung aus dem Netz/)).not.toBeInTheDocument()
+  })
+
+  it('sagt bei einem Monat ohne Ladestand, dass nichts gemessen wurde', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(ANTWORT({
+      monate: [MONAT({ soc_p10: null, soc_p50: null, soc_p90: null, stunden_mit_soc: 0 })],
+    }))
+
+    render(<SpeicherPotentialIST anlageId={1} />)
+
+    expect(await screen.findByTitle(/kein Ladestand gemessen/)).toBeInTheDocument()
   })
 })

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 from datetime import date
 
+from sqlalchemy import select
+
 from backend.api.routes.investitionen import get_speicher_potential
-from backend.models import Anlage, Investition
+from backend.models import Anlage, Investition, InvestitionMonatsdaten
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
 
@@ -31,10 +33,15 @@ async def _seed(db, *, mit_speicher: bool = True) -> int:
     return anlage.id
 
 
-def _stunde(anlage_id: int, tag: date, stunde: int, soc, einspeisung=0.0, netzbezug=0.0):
+def _stunde(
+    anlage_id: int, tag: date, stunde: int, soc,
+    einspeisung=0.0, netzbezug=0.0, batterie=None,
+):
+    """`batterie`: Vorzeichen-SoT der Spalte — positiv = Entladung, negativ = Ladung."""
     return TagesEnergieProfil(
         anlage_id=anlage_id, datum=tag, stunde=stunde,
         soc_prozent=soc, einspeisung_kw=einspeisung, netzbezug_kw=netzbezug,
+        batterie_kw=batterie,
     )
 
 
@@ -74,8 +81,14 @@ async def test_leergelaufene_nacht_wird_bis_zum_nachtbezug_gutgeschrieben(db):
     assert antwort.zyklen_leergelaufen == 1
 
 
-async def test_monate_werden_getrennt_ausgewiesen_mit_soc_bins(db):
-    """Je Monat eine Zeile — die Heatmap braucht die SoC-Verteilung."""
+async def test_monate_werden_getrennt_mit_eigener_spanne_ausgewiesen(db):
+    """Je Monat eine Spalte — mit **eigener** Spanne, ohne gemeinsame Skala.
+
+    Der Vorgänger lieferte hier zehn Stundenzähler je SoC-Zehntel, aus denen die
+    Sicht eine Heatmap mit global normierter Deckkraft malte. Genau daran ist sie
+    gescheitert (Rainer, 13.08.): ein Winter-Extremwert bestimmte die Skala aller
+    Monate. P10/P50/P90 je Monat kennen die anderen Monate nicht.
+    """
     anlage_id = await _seed(db)
     for h in range(10, 14):
         db.add(_stunde(anlage_id, date(2026, 6, 10), h, 100.0, einspeisung=5.0))
@@ -87,10 +100,95 @@ async def test_monate_werden_getrennt_ausgewiesen_mit_soc_bins(db):
 
     assert [(m.jahr, m.monat) for m in antwort.monate] == [(2026, 6), (2026, 7)]
     juni, juli = antwort.monate
-    assert sum(juni.soc_bins) == 4
-    assert juni.soc_bins[-1] == 4, "100 % gehört in den obersten Bin, nicht daneben"
-    assert juli.soc_bins[1] == 3, "15 % liegt im Bin 10–20 %"
+    assert juni.stunden_mit_soc == 4
+    assert (juni.soc_p10, juni.soc_p50, juni.soc_p90) == (100.0, 100.0, 100.0)
+    assert juni.anteil_voll_prozent == 100.0
+    assert juni.anteil_leer_prozent == 0.0
+    # Der Juli-Wert hängt NICHT am Juni — das ist der ganze Punkt.
+    assert (juli.soc_p10, juli.soc_p50, juli.soc_p90) == (15.0, 15.0, 15.0)
+    assert juli.anteil_voll_prozent == 0.0
     assert juli.ueberschuss_kwh == 0.0
+
+
+async def test_spanne_bleibt_leer_wenn_der_monat_keinen_ladestand_traegt(db):
+    """Kein SoC ⇒ `None`, nicht 0 — sonst sähe „nicht gemessen" wie „leer" aus."""
+    anlage_id = await _seed(db)
+    for h in range(10, 14):
+        db.add(_stunde(anlage_id, date(2026, 6, 10), h, None, einspeisung=5.0))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    (juni,) = antwort.monate
+    assert juni.stunden_mit_soc == 0
+    assert juni.soc_p10 is None and juni.soc_p50 is None and juni.soc_p90 is None
+    assert juni.anteil_voll_prozent is None
+    assert juni.anteil_leer_prozent is None
+
+
+async def test_netzgeladener_anteil_je_monat_ist_die_obergrenze(db):
+    """`min(Ladung, Netzbezug)` je Stunde — nie über die Monatssumme gebildet.
+
+    Die zweite Stunde ist der Fall, der eine Monatsbildung entlarven würde:
+    Ladung **ohne** Netzbezug. Über den Monat summiert (`min(6, 4)`) käme 4 kWh
+    Netzladung heraus; stundenweise sind es 2 — nur die erste Stunde hatte
+    überhaupt Netzbezug, an dem sie hängen könnte.
+    """
+    anlage_id = await _seed(db)
+    tag = date(2026, 2, 10)
+    db.add(_stunde(anlage_id, tag, 2, 40.0, netzbezug=4.0, batterie=-2.0))
+    db.add(_stunde(anlage_id, tag, 12, 60.0, batterie=-4.0))
+    db.add(_stunde(anlage_id, tag, 20, 30.0, netzbezug=1.0, batterie=3.0))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    (februar,) = antwort.monate
+    assert februar.ladung_kwh == 6.0, "Entladestunden zählen nicht zur Ladung"
+    assert februar.netz_ladung_kwh == 2.0
+    assert februar.netz_ladung_anteil_prozent == 33.3
+
+
+async def test_vollzyklen_kommen_aus_den_monats_fakten_mit_brutto_kapazitaet(db):
+    """Der Durchsatz ist derselbe Wert wie im Cockpit — Quelle und Nenner belegt.
+
+    **Nicht aus den Stundenzeilen gerechnet:** die Entladung stammt aus den
+    Monats-Fakten (ADR-002/P10), der Nenner ist die **Brutto**-Kapazität
+    (10 kWh), nicht die nutzbare (9,2). Beides zusammen ergibt exakt die Zahl,
+    die `vollzyklen()` überall sonst liefert — 25 kWh ÷ 10 kWh = 2,5.
+    Die Stundenzeilen tragen hier bewusst eine **andere** Entladung (4 kWh);
+    würde die Sicht sie summieren, käme 0,4 heraus.
+    """
+    anlage_id = await _seed(db)
+    speicher = (await db.execute(
+        select(Investition).where(Investition.anlage_id == anlage_id)
+    )).scalars().one()
+    db.add(InvestitionMonatsdaten(
+        investition_id=speicher.id, jahr=2026, monat=6,
+        verbrauch_daten={"entladung_kwh": 25.0, "ladung_kwh": 30.0},
+    ))
+    for h in range(10, 14):
+        db.add(_stunde(anlage_id, date(2026, 6, 10), h, 80.0, batterie=1.0))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.kapazitaet_brutto_kwh == 10.0
+    assert antwort.kapazitaet_kwh == 9.2, "die Potentialzahl bleibt netto"
+    assert antwort.monate[0].vollzyklen == 2.5
+
+
+async def test_vollzyklen_bleiben_leer_ohne_gepflegte_kapazitaet(db):
+    """Ohne Kapazität kein Durchsatz-Wert — `None` statt 0 (kein 0-Ersatz)."""
+    anlage_id = await _seed(db, mit_speicher=False)
+    for h in range(10, 14):
+        db.add(_stunde(anlage_id, date(2026, 6, 10), h, 80.0, batterie=-1.0))
+    await db.commit()
+
+    antwort = await get_speicher_potential(anlage_id, von=None, bis=None, db=db)
+
+    assert antwort.kapazitaet_brutto_kwh is None
+    assert antwort.monate[0].vollzyklen is None
 
 
 async def test_kapazitaet_wird_netto_ausgewiesen(db):

@@ -59,7 +59,7 @@
 > bekommen.** Dafür gibt es die exportierten Sensoren, und sie sind dort das bessere Mittel
 > (HA-Theme, native Karten, Automationen, Historie) — rapahl baut damit sichtbar erfolgreich
 > eigene Lovelace-Karten. Der Deep-Link zielt auf die Ansichten, die HA **nicht** nachbauen
-> kann: Heatmap Monat × Ladestand, Sizing-Kurve, Prognose-vs-IST. Wer ihn als Dashboard-Ersatz
+> kann: Ladestands-Spannen je Monat, Sizing-Kurve, Prognose-vs-IST. Wer ihn als Dashboard-Ersatz
 > verkauft, verspricht einen Fremdkörper: kein Theme, kein Karten-Layout, eigenes Scrolling.
 
 **Vorbedingung:** von den 4 Abnahme-Fragen unten (Timing · Auth · Polling · Schema) ist

@@ -22,17 +22,26 @@ from backend.core.berechnungen.speicher_potential import (
     SOC_LEER_PROZENT,
     SOC_VOLL_PROZENT,
 )
-from backend.core.investition_kennwerte import get_speicher_nutzbare_kapazitaet_kwh
-from backend.models.investition import Investition, InvestitionTyp
-from backend.services.speicher_potential_service import (
-    SOC_BIN_ANZAHL,
-    lade_potential_auswertung,
+from backend.core.investition_kennwerte import (
+    get_speicher_kapazitaet_kwh,
+    get_speicher_nutzbare_kapazitaet_kwh,
 )
+from backend.models.investition import Investition, InvestitionTyp
+from backend.services.speicher_potential_service import lade_potential_auswertung
 
 router = APIRouter()
 
 
 class MonatsPotentialResponse(BaseModel):
+    """Eine Monatsspalte der Spannen-Grafik.
+
+    ⚠ **`soc_bins` ist mit v4.0.15 entfallen** (zehn Stundenzähler je
+    SoC-Zehntel). Die Sicht malte daraus eine Heatmap mit **global** normierter
+    Deckkraft — ein Winter-Extremwert bestimmte die Skala aller Monate, und
+    benachbarte Monate waren nicht mehr unterscheidbar. Ersetzt durch
+    `soc_p10/p50/p90` je Monat, die ohne gemeinsame Skala auskommen.
+    """
+
     jahr: int
     monat: int
     nutzbares_zusatzpotential_kwh: float
@@ -40,9 +49,36 @@ class MonatsPotentialResponse(BaseModel):
     stunden_voll: int
     zyklen_gesamt: int
     zyklen_leergelaufen: int
-    soc_bins: list[int] = Field(
-        description=f"Stunden je SoC-Zehntel (0–10 %, …, 90–100 %), {SOC_BIN_ANZAHL} Werte"
+
+    stunden_mit_soc: int = Field(
+        description="Stunden mit gemessenem Ladestand — Nenner der beiden Anteile"
     )
+    soc_p10: Optional[float] = None
+    soc_p50: Optional[float] = None
+    soc_p90: Optional[float] = None
+    anteil_voll_prozent: Optional[float] = Field(
+        default=None, description=f"Anteil der Stunden ≥ {SOC_VOLL_PROZENT} % Ladestand"
+    )
+    anteil_leer_prozent: Optional[float] = Field(
+        default=None, description=f"Anteil der Stunden ≤ {SOC_LEER_PROZENT} % Ladestand"
+    )
+    vollzyklen: Optional[float] = Field(
+        default=None,
+        description=(
+            "Durchsatz als Vollzyklen-Äquivalent (Entladung ÷ Brutto-Kapazität), "
+            "derselbe Kanon wie Cockpit, HA-Sensor und PDF. `null` ohne gepflegte "
+            "Kapazität oder ohne Entladung im Monat — kein 0-Ersatz."
+        ),
+    )
+    ladung_kwh: float = 0.0
+    netz_ladung_kwh: float = Field(
+        default=0.0,
+        description=(
+            "Teil der Ladung, der **höchstens** aus dem Netz kam (min(Ladung, "
+            "Netzbezug) je Stunde). Obergrenze, keine Messung."
+        ),
+    )
+    netz_ladung_anteil_prozent: Optional[float] = None
 
 
 class SpeicherPotentialResponse(BaseModel):
@@ -68,6 +104,10 @@ class SpeicherPotentialResponse(BaseModel):
     #: kapazitätsgewichtete Mittel; ältere Tage können noch ein Gerät tragen.
     anzahl_speicher: int
     kapazitaet_kwh: Optional[float]
+    #: Brutto-Kapazität — der Nenner der Vollzyklen. Getrennt ausgewiesen, damit
+    #: die Sicht „keine Kapazität gepflegt" von „nichts entladen" unterscheiden
+    #: kann, statt beide als leere Spur zu zeigen.
+    kapazitaet_brutto_kwh: Optional[float]
     soc_voll_prozent: float
     soc_leer_prozent: float
 
@@ -92,8 +132,6 @@ async def get_speicher_potential(
         .where(Investition.typ == InvestitionTyp.SPEICHER.value)
     )).scalars().all())
 
-    auswertung = await lade_potential_auswertung(db, anlage_id, von=von, bis=bis)
-
     # NETTO, nicht brutto: Diese Sicht fährt den Speicher rechnerisch durch
     # („wie viel wäre zusätzlich hindurchgegangen?"), und für genau diese Klasse
     # gilt laut `investition_kennwerte` der nutzbare Hub. Der Helper fällt still
@@ -102,6 +140,19 @@ async def get_speicher_potential(
     if speicher:
         summe = sum(get_speicher_nutzbare_kapazitaet_kwh(s) or 0 for s in speicher)
         kapazitaet = round(summe, 1) if summe else None
+
+    # BRUTTO daneben — und zwar **nur** für die Vollzyklen. Zwei Nenner in einer
+    # Antwort sind erklärungsbedürftig, ein abweichender Zyklenwert gegenüber
+    # Cockpit/HA-Sensor/PDF wäre schlimmer: `vollzyklen()` ist auf brutto
+    # festgelegt, weil der Netto-Wert selten gepflegt ist.
+    kapazitaet_brutto = None
+    if speicher:
+        summe_brutto = sum(get_speicher_kapazitaet_kwh(s) or 0 for s in speicher)
+        kapazitaet_brutto = round(summe_brutto, 1) if summe_brutto else None
+
+    auswertung = await lade_potential_auswertung(
+        db, anlage_id, von=von, bis=bis, kapazitaet_brutto_kwh=kapazitaet_brutto
+    )
 
     return SpeicherPotentialResponse(
         nutzbares_zusatzpotential_kwh=round(
@@ -115,9 +166,34 @@ async def get_speicher_potential(
         tage_mit_daten=auswertung.tage_mit_daten,
         von=auswertung.von,
         bis=auswertung.bis,
-        monate=[MonatsPotentialResponse(**vars(m)) for m in auswertung.monate],
+        monate=[
+            MonatsPotentialResponse(
+                jahr=m.jahr,
+                monat=m.monat,
+                nutzbares_zusatzpotential_kwh=m.nutzbares_zusatzpotential_kwh,
+                ueberschuss_kwh=m.ueberschuss_kwh,
+                stunden_voll=m.stunden_voll,
+                zyklen_gesamt=m.zyklen_gesamt,
+                zyklen_leergelaufen=m.zyklen_leergelaufen,
+                stunden_mit_soc=m.stunden_mit_soc,
+                soc_p10=m.spanne.p10 if m.spanne else None,
+                soc_p50=m.spanne.p50 if m.spanne else None,
+                soc_p90=m.spanne.p90 if m.spanne else None,
+                anteil_voll_prozent=m.anteil_voll_prozent,
+                anteil_leer_prozent=m.anteil_leer_prozent,
+                vollzyklen=m.vollzyklen,
+                ladung_kwh=m.ladung_kwh,
+                netz_ladung_kwh=m.netz_ladung_kwh,
+                netz_ladung_anteil_prozent=(
+                    round(m.netz_ladung_anteil_prozent, 1)
+                    if m.netz_ladung_anteil_prozent is not None else None
+                ),
+            )
+            for m in auswertung.monate
+        ],
         anzahl_speicher=len(speicher),
         kapazitaet_kwh=kapazitaet,
+        kapazitaet_brutto_kwh=kapazitaet_brutto,
         soc_voll_prozent=SOC_VOLL_PROZENT,
         soc_leer_prozent=SOC_LEER_PROZENT,
     )

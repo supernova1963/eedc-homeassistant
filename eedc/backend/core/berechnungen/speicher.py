@@ -145,6 +145,83 @@ def auslastung_prozent(
     return entladung_kwh / basis_kwh * 100
 
 
+@dataclass(frozen=True)
+class SocSpanne:
+    """Wo ein Speicher in einem Zeitraum wirklich stand — als Spanne, nicht als Mittel.
+
+    Ein Monatsmittel von 50 % entsteht sowohl bei einem Speicher, der immer
+    halb voll steht, als auch bei einem, der täglich zwischen leer und voll
+    durchfährt — und nur der zweite braucht keine größere Kapazität. Deshalb
+    P10/P50/P90 statt eines Mittelwerts.
+    """
+
+    p10: float
+    p50: float
+    p90: float
+
+
+def soc_spanne(werte: list[float]) -> Optional[SocSpanne]:
+    """P10/P50/P90 einer SoC-Stichprobe, linear interpoliert.
+
+    **Warum P10/P90 und nicht Minimum/Maximum:** ein einziger Ausreißer — eine
+    Stunde Netz-Zwangsladung, ein Sensor-Aussetzer — spannt Min/Max über die
+    volle Skala und macht alle Monate gleich aussehen. Genau dieser Effekt war
+    der Anlass (Rainer, 2026-08-13: Okt/Nov und Feb/Mär waren in der
+    Bin-Heatmap nicht unterscheidbar, weil **ein** Winter-Extremwert die
+    globale Normierung bestimmte).
+
+    Gibt `None` bei leerer Stichprobe — „nicht gemessen", nicht 0. Bei einem
+    einzigen Wert sind alle drei Quantile dieser Wert; das ist korrekt und
+    trägt sich in der Anzeige als Strich statt als Balken.
+    """
+    if not werte:
+        return None
+    sortiert = sorted(werte)
+
+    def q(anteil: float) -> float:
+        if len(sortiert) == 1:
+            return sortiert[0]
+        pos = anteil * (len(sortiert) - 1)
+        unten = int(pos)
+        oben = min(unten + 1, len(sortiert) - 1)
+        rest = pos - unten
+        return sortiert[unten] + (sortiert[oben] - sortiert[unten]) * rest
+
+    return SocSpanne(p10=q(0.10), p50=q(0.50), p90=q(0.90))
+
+
+def netz_ladung_stunde_kwh(
+    ladung_kwh: Optional[float], netzbezug_kwh: Optional[float]
+) -> float:
+    """Der Teil einer **Stunden**-Ladung, der nicht aus PV-Überschuss stammen kann.
+
+    ``min(Ladung, Netzbezug)`` — je Stunde, nie über einen längeren Zeitraum.
+    Wer den Speicher in einer Stunde lädt und gleichzeitig Strom aus dem Netz
+    zieht, kann höchstens so viel Netzstrom in den Akku geschoben haben, wie
+    er insgesamt bezogen hat; der Rest der Ladung war Überschuss.
+
+    ⚠ **Das ist eine Obergrenze, keine Messung.** Der Netzbezug derselben
+    Stunde versorgt auch das Haus — kein Zähler trennt die beiden Wege. Die
+    Zahl darf deshalb „höchstens" sagen und nie „genau". In die andere
+    Richtung zu irren wäre schlimmer: eine zu kleine Netzladung ließe einen
+    Speicher sauberer aussehen, als er fährt.
+
+    ⚠ **Nur auf Stundenzeilen anwenden.** Über einen Tag oder Monat gebildet
+    wäre dasselbe ``min()`` grob falsch — dort stehen Ladung am Mittag und
+    Netzbezug in der Nacht in derselben Summe, obwohl sie sich nie begegnet
+    sind.
+
+    Zwei Aufrufer, eine Regel: ``services/speicher_wirtschaftlichkeit.py``
+    (Ø-Ladepreis der Netzladung) und ``services/speicher_potential_service.py``
+    (netzgeladener Anteil je Monat). Bis 2026-08-14 stand sie nur inline im
+    ersten — die zweite Verwendung hätte sonst eine zweite Definition
+    derselben Größe angelegt (ADR-001).
+    """
+    ladung = max(0.0, ladung_kwh or 0.0)
+    netz = max(0.0, netzbezug_kwh or 0.0)
+    return min(ladung, netz)
+
+
 def gleitende_effizienz(
     monats_reihe: list[tuple[int, int, float, float]],
     fenster: int = EFFIZIENZ_FENSTER_MONATE,

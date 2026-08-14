@@ -451,7 +451,13 @@ Deshalb zeigt der Block drei Zahlen nebeneinander:
 - **Überschuss bei vollem Speicher** — die Obergrenze, nicht der Ertrag
 - **Nächte mit leerem Speicher** — die eigentliche Begrenzung
 
-Dazu eine **Heatmap Monat × Ladestand**: Je dunkler eine Zelle, desto mehr Stunden stand der Speicher in diesem Monat auf diesem Ladestand. Eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer" — erst wenn beides im selben Monat auftritt, ist mehr Kapazität eine ernsthafte Überlegung.
+Dazu eine Grafik mit **drei Spuren über dieselbe Monatsachse**:
+
+- **Ladestand über den Monat** — ein Balken je Monat zeigt, wo dein Speicher in **acht von zehn Stunden** stand; die Linie darin ist der typische Wert. Die kurzen Striche am oberen und unteren Rand sind die **Anschläge**: wie oft er voll (≥ 95 %) bzw. leer (≤ 5 %) war. Erst wenn im selben Monat **beide** Striche breit sind, ist mehr Kapazität eine ernsthafte Überlegung — oben angeschlagen heißt „Überschuss ging ins Netz", unten „die Nacht wurde zugekauft".
+- **Durchsatz je Monat** — Vollzyklen, also entladene Energie geteilt durch die Kapazität. Ohne sie sieht ein Speicher, der dreimal am Tag durchfährt, aus wie einer, der stillsteht: der Ladestand allein zeigt Zustände, keine Umsätze. Der Wert kann über 100 % der Kapazität liegen, und das ist korrekt.
+- **Ladung aus dem Netz** — erscheint nur, wenn es sie gab. Netzladung füllt den Speicher **ohne Sonne**; solche Monate beantworten die Frage nach mehr Kapazität nur eingeschränkt. Der Anteil ist eine **Obergrenze**: innerhalb einer Stunde trennt kein Zähler, was ins Haus und was in den Akku ging.
+
+> **Warum keine Ampelfarben?** Ein voller Speicher ist nicht „gut" und ein leerer nicht „schlecht" — die Aussage entsteht erst aus beidem zusammen. Eine grüne Färbung für „immer voll" würde ausgerechnet den Zustand belohnen, in dem Überschuss verschenkt wird.
 
 > **Mehrere Speicher:** Den Ladestand erfasst eedc für die Anlage als Ganzes. Die Auswertung gilt dann für alle Speicher zusammen, nicht je Gerät — die Sicht weist darauf hin.
 
