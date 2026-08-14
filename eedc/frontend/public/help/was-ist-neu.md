@@ -1,6 +1,6 @@
 # Was ist neu
 
-> **Stand:** August 2026 (v4.0.14)
+> **Stand:** August 2026 (v4.0.15)
 > **Diese Seite** zeigt pro Version, was sich für dich als Anwender geändert hat — kürzer als der technische [CHANGELOG](https://github.com/supernova1963/eedc-homeassistant/blob/main/CHANGELOG.md), ausführlicher als die Schnellübersicht-Tabelle in der [Übersicht](BENUTZERHANDBUCH.md#was-ist-neu-seit-v316).
 >
 > **Kein Banner, kein Pop-up:** eedc zeigt diese Liste nicht ungefragt an. HA-App-Nutzer sehen den Changelog ohnehin schon im Add-on-Store, GitHub-Releases haben einen eigenen. Wer wissen will, was neu ist, schaut hier rein — Pull statt Push.
@@ -9,9 +9,9 @@
 
 ---
 
-## Kommt mit dem nächsten Update
+## v4.0.15 — Kein stummes Nichts (August 2026)
 
-> Dieser Abschnitt sammelt, was fertig ist, aber noch keine Versionsnummer trägt. Beim Release wird daraus der neue Versions-Abschnitt.
+> Drei Anzeigen zeigten etwas, ohne etwas zu sagen: lauter Nullen bei einem neuen Gerät, eine Grafik, die man nicht entschlüsseln konnte, und ein Hinweis, der eine Handlung forderte, die gar nicht wirken konnte. Dazu zwei Zahlen, die an der falschen Bezugsgröße hingen.
 
 ### Ein neues Gerät sagt jetzt, warum unter „Komponenten" noch nichts steht
 
@@ -79,6 +79,26 @@ Der Hinweis „Legacy-Daten gefunden" forderte bisher ausnahmslos dazu auf, jede
 Jetzt prüft der Hinweis das vorher und nennt in diesem Fall den **Grund** statt einer Handlung, samt Weg zu den Komponenten. Sobald das Anschaffungsdatum auf den tatsächlichen Zeitpunkt zurückgezogen ist, lösen sich die Monate von selbst auf — die Zuordnung wird bei jedem Aufruf gerechnet, nicht einmalig gespeichert.
 
 > Für den echten Migrationsfall bleibt alles wie es war: Steht ein passendes Gerät bereit, ist „öffnen und speichern" weiterhin der richtige Weg.
+
+### Beim Öffnen von *Cockpit → Live* springt nichts mehr
+
+**Betrifft dich das?** Wenn du dir den **Börsenpreis** anzeigen lässt und *Cockpit → Live* öffnest — besonders in Edge und Chrome.
+
+Für etwa eine Sekunde stand der Börsenpreis-Verlauf ganz oben und allein auf der Seite, dann erschien der Energiefluss darüber und schob ihn weit nach unten. Es sah aus, als würde der Block überschrieben.
+
+Überschrieben wurde nichts. Die Börsenpreise sind **öffentliche Marktdaten** und brauchen keinen Sensor-Abruf — sie waren deshalb schneller da als deine Live-Werte und standen kurz allein neben einem kleinen Ladebalken. Sobald der Rest ankam, rutschte der Block um mehrere hundert Pixel nach unten. Er wartet jetzt, bis feststeht, was auf der Seite angezeigt wird.
+
+> **Was sich nicht ändert:** Der Börsenpreis-Block bleibt auch dann sichtbar, wenn du **noch keine** Leistungssensoren zugeordnet hast. Er funktioniert ohne jede Einrichtung, und das soll so bleiben.
+
+*(Gemeldet von rapahl.)*
+
+### In den Import-Vorschauen stehen die Zahlen wieder deutsch
+
+**Betrifft dich das?** Wenn du Daten aus der **Cloud**, aus einer **eigenen Datei** oder aus einem **Portal** importierst.
+
+In der Monatsübersicht vor dem Import stand „1234.5" statt „1.234,5" — Punkt statt Komma, kein Tausenderpunkt. Betroffen waren PV-Erzeugung, Einspeisung, Netzbezug und beide Speicher-Größen in allen drei Import-Assistenten, dazu die Prozentangaben bei der Verteilung auf mehrere Komponenten. Im Daten-Checker nannte außerdem eine Fehlermeldung das Datum roh („Reparatur für 2026-08-13 fehlgeschlagen").
+
+Die **importierten Werte waren immer richtig** — es ging allein um die Anzeige der Vorschau.
 
 ---
 
@@ -173,7 +193,9 @@ eedc zählt deshalb nur, was auch wieder verbraucht worden wäre: Überschuss be
 Dazu:
 
 - **Nächte mit leerem Speicher** — die eigentliche Begrenzung. Läuft dein Speicher nie leer, bringt mehr Kapazität nichts, egal wie viel Sonne du einspeist.
-- **Heatmap Monat × Ladestand** — eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer". Interessant wird es erst, wenn beides im selben Monat auftritt. *(Diese Heatmap war schwer zu lesen und ist inzwischen durch Balken ersetzt — siehe oben unter „Kommt mit dem nächsten Update".)*
+- **Heatmap Monat × Ladestand** — eine dunkle Zeile ganz oben heißt „lief oft voll", eine dunkle ganz unten „lief oft leer". Interessant wird es erst, wenn beides im selben Monat auftritt.
+
+  > ⚠ **Nachträglich richtiggestellt (August 2026):** Diese Heatmap gibt es nicht mehr. Sie war schwer zu lesen, weil die Helligkeit **aller** Zellen gemeinsam über alle Monate normiert wurde — ein einzelner Extremmonat drückte alles übrige in einen schmalen Graubereich. An ihre Stelle ist **ein Spannen-Balken je Monat** getreten, mit eigener Skala je Monat und Anschlägen für „voll" und „leer". Die Aussage ist dieselbe geblieben, nur lesbar.
 
 > Bei mehreren Speichern erfasst eedc den Ladestand für die Anlage als Ganzes — die Auswertung gilt dann für alle zusammen, nicht je Gerät. Das steht auch so in der Sicht.
 
