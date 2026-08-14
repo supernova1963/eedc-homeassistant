@@ -79,18 +79,39 @@ cd eedc/frontend && npm run dev
 ### Gates (vor jedem Commit-Paket vollständig laufen lassen)
 
 ```bash
+# Backend — beide Läufe, siehe TZ-Kasten unten
 cd eedc && source backend/venv/bin/activate && python -m pytest backend/tests -q
-cd eedc/frontend && npm run lint && npm run test && npx tsc --noEmit && npm run check:design && \
-  npm run check:de-de && npm run check:roh-controls && npm run check:parkbar && \
-  npm run check:form-controls && npm run check:typografie && npm run check:kennwert-roh && \
-  npm run check:co2-roh
+cd eedc && source backend/venv/bin/activate && TZ=UTC python -m pytest backend/tests -q
+
+# Frontend — lint ZUERST (CI ruft ESLint mit --max-warnings 0), tsc OHNE Pipe
+cd eedc/frontend && npm run lint
+cd eedc/frontend && npx tsc --noEmit          # nie durch `| tail` — $? misst sonst tail
+cd eedc/frontend && npm run test
+
+# ALLE check:* über den EXIT-CODE, nicht über die Bildschirmausgabe
+cd eedc/frontend && for s in $(node -e "console.log(Object.keys(require('./package.json').scripts).filter(x=>x.startsWith('check:')).join(' '))"); do
+  npm run $s >/dev/null 2>&1 || echo "ROT: $s"
+done
+
+# Doku-Spiegel ans ENDE, danach inhaltlich per diff prüfen (nicht nur Exit-Code)
+./scripts/sync-help.sh && cd website && npm run build
 ```
+
+> ⚠ **Die Schleife zählt sich nicht selbst — eine Gegenprobe gehört dazu.** Ein grüner Lauf
+> beweist nur dann etwas, wenn der Prüfer rot melden *kann*: für `check:design` muss der
+> Sprengsatz **außerhalb** `lib/colors.ts` sitzen (dort ist die Hex-Farbe erlaubt, die Gegenprobe
+> greift sonst nicht — gemessen 11.08.). Rückbau per **Dateikopie**, nie `git checkout --`, wenn
+> ungecommittete Arbeit im Baum liegt.
 
 > ⚠ **`npm run lint` gehört dazu, seit der CI-Lauf zu v4.0.13 daran gescheitert ist** (12.08.): Der Workflow ruft ESLint mit `--max-warnings 0` auf, die Liste hier kannte ihn nicht — eine `react-hooks/exhaustive-deps`-**Warnung** aus `62c680b9` lief damit durch alle lokalen Gates und machte den Tests-Lauf **nach** dem Push rot. Ein Prüfer, den nur CI kennt, fällt zwangsläufig zu spät auf.
 >
 > ⚠ **Bei allem Zeitbezogenen zusätzlich `TZ=UTC python -m pytest backend/tests -q` fahren** — seit dem CI-Lauf zu v4.0.14 (13.08.): **Diese Box steht in `Europe/Berlin`, der GitHub-Runner in UTC.** Zwei Fälle aus `test_scheduler_publish_takt.py` waren lokal grün und in CI rot, ohne dass am Produktcode etwas fehlte: `CronTrigger` ohne `timezone`-Argument rechnet in der Zone des **Prozesses**, derselbe korrekte Feuerzeitpunkt heißt dort 10:00:05 und hier 08:00:05. **Ein grüner lokaler Lauf ist auf dieser Box kein grüner CI-Lauf.** Dieselbe Klasse wie der `lint`-Befund darüber — ein Prüfer, den nur CI kennt. Verwandt und **offen**: Proben, die die echte **Uhr** statt einer gestellten lesen (Fund N-167, vier von 24 Stunden rot ohne Code-Änderung) — dagegen hält bis heute kein Wächter.
 
-Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline. `check:park-leertest` ist ein Playwright-Livetest gegen eine laufende Box und verlangt ein `VITE_DEMO_DEFAULT=true`-Build; **danach zwingend** `git checkout -- eedc/frontend/dist/ && git clean -fdq eedc/frontend/dist/` — `dist/` ist versioniert, sonst landet ein Demo-Build im Release.
+Die Soll-Zahlen (pytest/Vitest) stehen **nicht hier**, sondern im laufenden Master-Register unter `~/.claude/plans/` — sie ändern sich mit jedem Paket. `check:form-controls` meldet „1 offen (WelcomeStep.tsx)" als dokumentierte Baseline.
+
+**`check:park-leertest` ist ein Playwright-Livetest gegen eine laufende Box** und verlangt ein `VITE_DEMO_DEFAULT=true`-Build (Runbook: `~/.claude/plans/runbook-dev-box.md`). Er ist **seit dem 14.08. grün und keine Baseline mehr**. Wer ihn nicht fährt, **sagt das ausdrücklich** und belegt an `git status`, dass kein Frontend-Quellcode berührt ist — sonst ist die Aussage „Gates grün" unvollständig.
+
+> ⚠ **Hier stand bis 2026-08-14: „danach zwingend `git checkout -- eedc/frontend/dist/` — `dist/` ist versioniert."** **Das gilt nicht mehr** (Fund **N-246**, ausgeliefert mit v4.0.15): `eedc/frontend/dist` ist **nicht mehr versioniert**, weil beide Dockerfiles das Frontend in einer eigenen Stage bauen. Der Schutz gegen einen eingecheckten Demo-Build sitzt jetzt in `release.sh::pruefe_nichts_uebrig`. Ein sauberer Baum heißt seither wirklich sauber — nicht „sauber bis auf `dist/`".
 
 ### Release-Workflow (ein Script für alles!)
 
