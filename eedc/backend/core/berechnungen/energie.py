@@ -130,6 +130,32 @@ class SonstigesTagesSummen(NamedTuple):
     verbrauch_kwh: Optional[float]
 
 
+def sonstiges_richtung(kategorie: Optional[str], hat_erzeugung: bool) -> str:
+    """Zählt dieses *Sonstiges*-Gerät als ``"erzeuger"`` oder ``"verbraucher"``?
+
+    Eine gepflegte Kategorie schlägt alles. Ist keine gepflegt, entscheidet der
+    **Wert** — genau wie ``monats_fakten``, das ohne Kategorie beide Felder
+    mitnimmt, und wie der Tages-Client, der die Richtung am Vorzeichen ablesen
+    kann.
+
+    **Warum es diese Funktion gibt (N-250).** Dieselbe Frage wurde im Baum
+    viermal verschieden beantwortet: die beiden Tages-Schreibpfade und
+    ``sonstiges_kwh_je_richtung`` unten lesen eine leere Kategorie als
+    *Verbraucher*, ``aktueller_monat`` las sie als *Erzeuger* — und filterte
+    denselben Zweig anschließend mit ``erzeugung > 0``. Ein ungepflegtes
+    Verbrauchsgerät fiel dadurch aus dem Block „Sonstige Geräte" heraus,
+    während seine Zahlen in den Summen darüber weiterliefen.
+
+    ⚠ **Kein Default-Ersatz für die untenstehende Summenfunktion.** Dort bleibt
+    „leer = Verbraucher" richtig: Sie summiert Beträge, deren Richtung feststehen
+    muss, bevor ein Wert vorliegt. Hier geht es um die **Einordnung eines
+    Geräts**, für die der Wert bereits bekannt ist.
+    """
+    if kategorie in ("erzeuger", "verbraucher"):
+        return kategorie
+    return "erzeuger" if hat_erzeugung else "verbraucher"
+
+
 def sonstiges_kwh_je_richtung(
     komponenten_kwh: Optional[dict],
     kategorie_je_investition: dict[str, str],

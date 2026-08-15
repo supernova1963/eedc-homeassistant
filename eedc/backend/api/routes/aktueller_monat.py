@@ -25,6 +25,7 @@ from backend.services.prognose_auswahl import lade_aktive_monatsprognosen
 from backend.api.routes.strompreise import lade_tarife_fuer_anlage, resolve_netzbezug_preis_cent
 from backend.api.routes.connector import _calc_month_delta
 from backend.core.berechnungen import (
+    sonstiges_richtung,
     Monatsfenster,
     anteilig,
     auslastung_prozent,
@@ -1839,7 +1840,21 @@ async def get_aktueller_monat(
             g = mf_sonstiges.je_geraet.get(inv.id)
             if g is None:
                 continue
-            kat = (inv.parameter or {}).get("kategorie", "erzeuger")
+            # N-250: Richtung ohne gepflegte Kategorie aus dem WERT, nicht aus
+            # einem Default. Hier stand `.get("kategorie", "erzeuger")` — als
+            # einzige von vier Stellen im Baum: die beiden Tages-Schreibpfade
+            # (`snapshot/komponenten_beitraege`, `live_sensor_config`) und der
+            # Tages-Layer (`core/berechnungen/energie.sonstiges_kwh_je_richtung`)
+            # lesen eine leere Kategorie als *Verbraucher*, und `monats_fakten`
+            # nimmt ohne sie **beide** Felder mit. Ein ungepflegtes Gerät fiel
+            # deshalb in den Erzeuger-Zweig, scheiterte dort an `erzeugung > 0`
+            # und war unsichtbar — während seine Zahlen in den Summen darüber
+            # mitliefen. Gemeldet an einem Gerät mit Verbrauch (rapahl, 08/2026).
+            # Ein *gepflegtes* Gerät ändert sich durch diese Zeile nicht.
+            kat = sonstiges_richtung(
+                (inv.parameter or {}).get("kategorie"),
+                hat_erzeugung=g.erzeugung_kwh > 0,
+            )
             if kat == "verbraucher":
                 if g.verbrauch_kwh > 0 or g.bezug_pv_kwh > 0 or g.bezug_netz_kwh > 0:
                     sonstiges_geraete.append(SonstigesGeraet(
