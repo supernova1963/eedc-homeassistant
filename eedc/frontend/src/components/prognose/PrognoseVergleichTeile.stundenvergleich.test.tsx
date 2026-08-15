@@ -58,8 +58,12 @@ const daten = (over: Partial<PrognosenVergleich> = {}): PrognosenVergleich => ({
   ...over,
 })
 
-/** Spalten der 24h-Tabelle. Jede Quelle: Wert, dann Einwertung. */
-const SP24 = { std: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 } as const
+/** Spalten der 24h-Tabelle. Jede Quelle: Wert, dann Einwertung.
+ *  Spalte 0 ist ein Platzhalter — sie hält den Spaltenplan deckungsgleich zur
+ *  7-Tage-Tabelle, die direkt darunter steht (Wetter-Symbol, Gernot 2026-08-15). */
+const SP24 = { platz: 0, std: 1, om: 2, omD: 3, eedc: 4, eedcD: 5, sc: 6, scD: 7, ist: 8 } as const
+/** Dieselbe Tabelle, wenn SFML die gewählte Quelle ist — eine Wertspalte mehr, kein Δ. */
+const SP24_SFML = { ...SP24, sfml: 8, ist: 9 } as const
 /** Spalten des Genauigkeits-Trackings (Datum, drei Quellen, IST). */
 const SPTR = { datum: 0, om: 1, omD: 2, eedc: 3, eedcD: 4, sc: 5, scD: 6, ist: 7 } as const
 /** Spalten der 7-Tage-Tabelle (Wetter-Icon und Datum vorweg). */
@@ -75,12 +79,12 @@ const zeige = (over: Partial<PrognosenVergleich> = {}) => {
   return {
     stunde: (label: string) => {
       const tr = Array.from(container.querySelectorAll('tbody tr'))
-        .find(r => (r.querySelector('td')?.textContent ?? '') === label)
+        .find(r => (zellen(r)[SP24.std] ?? '') === label)
       if (!tr) throw new Error(`Stundenzeile ${label} nicht gerendert`)
       return zellen(tr)
     },
     stundenLabels: () => Array.from(container.querySelectorAll('tbody tr'))
-      .map(r => r.querySelector('td')?.textContent ?? ''),
+      .map(r => zellen(r)[SP24.std] ?? ''),
     summe: () => zellen(container.querySelector('tfoot tr') as Element),
   }
 }
@@ -225,7 +229,8 @@ describe('SFML — gewählte Quelle wird gezeigt, aber nicht bewertet', () => {
     const kopf = Array.from(container.querySelectorAll('thead th')).map(th => th.textContent ?? '')
 
     expect(kopf).not.toContain('SFML')
-    expect(kopf).toHaveLength(8)
+    // 9 statt 8: die führende Platzhalter-Spalte zählt mit (s. SP24).
+    expect(kopf).toHaveLength(9)
   })
 
   it('zeigt im Stundenvergleich den SFML-Wert — und KEINE Abweichung dazu', () => {
@@ -235,15 +240,15 @@ describe('SFML — gewählte Quelle wird gezeigt, aber nicht bewertet', () => {
     const { container } = render(<Pvg24hTabelle vm={{ data: mitSfml() } as PrognoseVergleichVM} />)
     const kopf = Array.from(container.querySelectorAll('thead th')).map(th => th.textContent ?? '')
     const tr = Array.from(container.querySelectorAll('tbody tr'))
-      .find(r => (r.querySelector('td')?.textContent ?? '') === '9:00')
+      .find(r => (zellen(r)[SP24.std] ?? '') === '9:00')
     if (!tr) throw new Error('Stundenzeile 9:00 nicht gerendert')
     const z = zellen(tr)
 
-    expect(kopf).toEqual(['Std.', 'OM', 'Δ', 'eedc', 'Δ', 'SC', 'Δ', 'SFML', 'IST'])
+    expect(kopf).toEqual(['', 'Std.', 'OM', 'Δ', 'eedc', 'Δ', 'SC', 'Δ', 'SFML', 'IST'])
     expect(kopf.filter(k => k === 'Δ')).toHaveLength(3)
-    expect(z[7]).toBe('2,90')                    // SFML-Wert steht
-    expect(z[7]).not.toMatch(/[▲▼±%]/)           // ohne jede Einwertung
-    expect(z[8]).toBe('2,69')                    // IST daneben unverändert
+    expect(z[SP24_SFML.sfml]).toBe('2,90')          // SFML-Wert steht
+    expect(z[SP24_SFML.sfml]).not.toMatch(/[▲▼±%]/) // ohne jede Einwertung
+    expect(z[SP24_SFML.ist]).toBe('2,69')           // IST daneben unverändert
   })
 
   it('zeigt im 7-Tage-Vergleich heute und morgen, aber nichts Vergangenes', () => {
@@ -308,7 +313,7 @@ describe('SFML — gewählte Quelle wird gezeigt, aber nicht bewertet', () => {
     } as PrognoseVergleichVM
     const { container } = render(<Pvg24hTabelle vm={vm} />)
     const labels = Array.from(container.querySelectorAll('tbody tr'))
-      .map(r => r.querySelector('td')?.textContent ?? '')
+      .map(r => zellen(r)[SP24.std] ?? '')
 
     expect(labels).toContain('5:00')
   })
@@ -378,5 +383,61 @@ describe('Eine Abweichungs-Sprache in allen drei Tabellen (N-50)', () => {
     // OM 12,4 · eedc 12,0 · SC 11,0 ⇒ Mittel 11,8; die Abweichungen stehen,
     // aber sie messen die Streuung der Prognosen, nicht die Wirklichkeit.
     expect(zellen(heute)[SP7.omD]).toMatch(/▲/)
+  })
+})
+
+/**
+ * Stundenvergleich und 7-Tage-Vergleich stehen im selben Block
+ * „Tages-/Stundenprofil" **unmittelbar untereinander** — OM, eedc und SC sollen
+ * dabei fluchten (Gernot 2026-08-15, gemeldet von rapahl).
+ *
+ * Gemessen wird der **Spaltenplan**, nicht die Optik: beide Tabellen laufen auf
+ * `table-fixed`, dort bestimmt allein die `colgroup` die Spaltengrenzen. Sind
+ * beide `colgroup`s zeichengleich, stehen die Spalten übereinander — ohne dass
+ * ein Test Pixel messen müsste (kein Gate misst Pixel).
+ *
+ * Vorher trug der Stundenvergleich EINE führende Spalte (`w-16`), der
+ * 7-Tage-Vergleich ZWEI (`w-20` fürs Wetter-Symbol + `w-24` fürs Datum): 64
+ * gegen 176 px, und genau um diese 112 px begann die OM-Spalte weiter links (am
+ * Screenshot ~110 px). Der Versatz stammt aus dem IA-V4-Umbau (`eda34e7a`,
+ * v4.0.0) und fiel erst auf, als P-5 alle übrigen Spalten zur Deckung brachte.
+ */
+describe('Spaltenflucht: beide Tabellen tragen denselben Spaltenplan', () => {
+  const spaltenplan = (c: Element) =>
+    Array.from(c.querySelectorAll('colgroup col')).map(col => col.className)
+
+  const beide = (data: PrognosenVergleich) => {
+    const vm = { data, genauigkeit: null } as PrognoseVergleichVM
+    return {
+      stunden: spaltenplan(render(<Pvg24hTabelle vm={vm} />).container),
+      tage: spaltenplan(render(<Pvg7TageTabelle vm={vm} />).container),
+    }
+  }
+
+  it('deckungsgleich im Regelfall (mit Solcast, ohne SFML)', () => {
+    const { stunden, tage } = beide(daten())
+
+    expect(stunden).toEqual(tage)
+    // Und die führende Spalte ist wirklich die breitere von beiden — ohne diese
+    // Zeile wäre der Test auch mit zwei gleich falschen Plänen grün.
+    expect(stunden.slice(0, 2)).toEqual(['w-20', 'w-24'])
+  })
+
+  it('deckungsgleich auch mit SFML als gewählter Quelle', () => {
+    // Gernots Auflage vom 15.08.: die SFML-Spalte ist mit einzuplanen, sonst
+    // bricht die Flucht genau bei denen, die SFML gewählt haben.
+    const { stunden, tage } = beide(daten({
+      sfml_verfuegbar: true,
+      sfml_heute_kwh: 11.7, sfml_morgen_kwh: 9.2, sfml_uebermorgen_kwh: null,
+      sfml_stundenprofil: profil({ ...TAGESGANG, 9: 2.9 }),
+    }))
+
+    expect(stunden).toEqual(tage)
+  })
+
+  it('deckungsgleich auch ohne Solcast', () => {
+    const { stunden, tage } = beide(daten({ solcast_verfuegbar: false }))
+
+    expect(stunden).toEqual(tage)
   })
 })

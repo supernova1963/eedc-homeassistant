@@ -1130,12 +1130,27 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
     <Card>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Stundenvergleich heute</h3>
       <Table zeilen={24} mitFuss className="table-fixed">
+        {/* Spaltenplan IDENTISCH zur 7-Tage-Tabelle darunter (Gernot 2026-08-15):
+            beide stehen im selben Block „Tages-/Stundenprofil" unmittelbar
+            untereinander, und OM/eedc/SC sollen dabei fluchten. Die erste Spalte
+            ist deshalb ein Platzhalter für deren Wetter-Symbol — ohne ihn beginnt
+            die OM-Spalte hier 112 px weiter links (w-16 gegen w-20 + w-24; am
+            Screenshot mit ~110 px Versatz gemessen). Der Versatz stammt aus dem
+            IA-V4-Umbau (`eda34e7a`, v4.0.0) und fiel erst auf, als P-5 alle
+            übrigen Spalten zur Deckung brachte. Wächter:
+            `PrognoseVergleichTeile.stundenvergleich.test.tsx` — „beide Tabellen
+            tragen denselben Spaltenplan". Wer hier eine Spalte ändert, ändert
+            sie in `Pvg7TageTabelle` mit. */}
         <colgroup>
-          <col className="w-16" /><col /><col className="w-24" /><col /><col className="w-24" />
+          <col className="w-20" /><col className="w-24" /><col /><col className="w-24" />
+          <col /><col className="w-24" />
           {hasSolcast && <><col /><col className="w-24" /></>}{hasSfml && <col />}<col />
         </colgroup>
         <TableHead>
           <tr className="border-b border-gray-200 dark:border-gray-700">
+            {/* Platzhalter der Wetter-Spalte der 7-Tage-Tabelle — hält den
+                Spaltenplan beider Tabellen deckungsgleich (s. colgroup oben). */}
+            <th className={KOPF_ZELLE} aria-hidden="true" />
             <th className={`${KOPF_ZELLE} text-left text-gray-500`}>Std.</th>
             <th className={`${KOPF_ZELLE} text-right ${Q.openmeteo}`}>OM</th>
             <AbweichungKopf quelle="OpenMeteo" klasse={Q.openmeteo} />
@@ -1160,6 +1175,7 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
             const istVal = row.ist
             return (
               <tr key={row.stunde} className={`border-b border-gray-50 dark:border-gray-800 ${isPast ? 'bg-gray-50/50 dark:bg-gray-800/30' : ''}`}>
+                <td className={ZELLE} aria-hidden="true" />
                 <td className={`${ZELLE} font-mono text-gray-900 dark:text-white`}>{row.stunde}</td>
                 <PvgPrognoseZelle wert={row.openmeteo} ist={istVal} />
                 <PvgPrognoseZelle wert={hasEedc ? row.eedc : null} ist={istVal} klasse={eedcKlasse(hasEedc)} />
@@ -1172,6 +1188,7 @@ export function Pvg24hTabelle({ vm }: { vm: PrognoseVergleichVM }) {
         </TableBody>
         <TableFoot>
           <tr>
+            <td className={ZELLE} aria-hidden="true" />
             <td className={`${ZELLE} text-gray-900 dark:text-white`}>
               Σ
               {summe.bisStunde !== null && !summe.vollerTag && (
