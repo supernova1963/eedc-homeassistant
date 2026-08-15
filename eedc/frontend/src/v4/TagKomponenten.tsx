@@ -65,6 +65,11 @@ export function baueTagAlsMonat(
     speicher_ladung_kwh: tag.speicher_ladung,
     speicher_entladung_kwh: tag.speicher_entladung,
     speicher_wirkungsgrad_prozent: tag.speicher_effizienz,
+    // Die Quelle gehört zum Wert: `wirkungsgradHinweis` fällt ohne sie in den
+    // Bestands-Zweig und schweigt — dann stand ein η von 100,5 % ohne ein Wort
+    // in der Tageskachel (T89667 #163). Seit 15.08.2026 liefert der Tag sie
+    // wie der Monat.
+    speicher_wirkungsgrad_quelle: tag.speicher_effizienz_quelle,
     // Kanon seit 2026-07-28: Entladung ÷ Kapazität, im Backend gerechnet.
     // `batterie_vollzyklen` (ΔSoC ÷ 200) ist eine ANDERE Größe — sie heißt
     // jetzt „SoC-Hübe" und steht in der Energieprofil-Tabelle.

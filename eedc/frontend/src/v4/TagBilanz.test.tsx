@@ -58,6 +58,19 @@ describe('baueTagKpis — Kosten-Kacheln', () => {
     const mitBezug = kachel(baueTagKpis(tag({ netzbezug: 4, netzbezug_kosten: 1.2 }), null), 'Ø-Preis Netz')!
     expect(mitBezug.value).toBe('30,0')
   })
+
+  it('„Ø-Preis Netz" nimmt den Tarif, nicht den Quotienten zweier Anzeigewerte', () => {
+    // Knallfrosch (T89667 #163): 0,19 kWh Netzbezug ⇒ die Kachel zeigte
+    // 31,6 ct/kWh, während dieselbe Seite mit ~29,5 ct rechnete. Der Quotient
+    // erbte die Rundung der beiden Zahlen, aus denen er gebildet wurde.
+    const t = tag({ netzbezug: 0.19, netzbezug_kosten: 0.06 })
+    expect(kachel(baueTagKpis(t, null), 'Ø-Preis Netz')!.value).toBe('31,6')
+    const k = kachel(baueTagKpis(t, null, null, undefined, 29.53), 'Ø-Preis Netz')!
+    expect(k.value).toBe('29,5')
+    expect(k.formel).toContain('Netzbezugspreis des Tages')
+    // Die Menge daneben bleibt die gemessene — nur der Preis kommt vom Tarif.
+    expect(k.subtitle).toBe('0,2 kWh · 0,06 €')
+  })
 })
 
 describe('baueTagKpis — die beiden Eigenverbrauchs-Begriffe (F3)', () => {

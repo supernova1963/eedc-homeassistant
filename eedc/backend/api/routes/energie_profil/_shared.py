@@ -344,6 +344,12 @@ class TagWerteResponse(BaseModel):
     speicher_ladung: Optional[float] = None
     speicher_entladung: Optional[float] = None
     speicher_effizienz: Optional[float] = None
+    # Worauf der η beruht — dasselbe Vokabular wie im Monat
+    # (`soc_korrigiert` · `roh-unkorrigiert` · `keine-ladung` ·
+    # `nicht-ermittelbar`, Layer-SoT `core/berechnungen/speicher_wirkungsgrad`).
+    # Ohne dieses Feld stand der Tageswert ohne jede Einordnung da, und ein Tag
+    # ist — anders als ein Monat — kein geschlossenes System (T89667 #163).
+    speicher_effizienz_quelle: Optional[str] = None
     # Vollzyklen des Tages = Entladung ÷ Kapazität (Kanon, Layer-SoT
     # `core/berechnungen/speicher.vollzyklen`). Bis 2026-07-28 zeigte die
     # Tages-Kachel stattdessen `batterie_vollzyklen` (ΔSoC ÷ 200) — eine

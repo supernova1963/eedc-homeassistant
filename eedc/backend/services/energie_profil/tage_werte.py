@@ -46,14 +46,19 @@ from backend.core.berechnungen import (
     aggregiere_tep_komponenten,
     berechne_finanz_aggregat,
     bilanz_aus_stundenrows,
+    delta_soc_kwh,
     erzeuger_kwh_je_investition,
     sonstiges_kwh_je_richtung,
+    speicher_wirkungsgrad,
     summe_bkw_kwh,
     summe_pv_anlage_kwh,
     vollzyklen as berechne_vollzyklen,
 )
 from backend.core.calculations import berechne_co2_bilanz
-from backend.core.investition_kennwerte import get_speicher_kapazitaet_kwh
+from backend.core.investition_kennwerte import (
+    get_speicher_kapazitaet_kwh,
+    get_speicher_nutzbare_kapazitaet_kwh,
+)
 from backend.models.anlage import Anlage
 from backend.models.investition import Investition
 from backend.models.monatsdaten import Monatsdaten
@@ -180,6 +185,23 @@ async def baue_tage_werte(
             sonstiges = sonstiges_kwh_je_richtung(
                 aggregiere_tep_komponenten(stunden_rows), sonstiges_kategorien
             )
+        # ── Speicher-η: derselbe Maßstab wie im Monat (Melder Knallfrosch,
+        # T89667 #163). Der rohe Quotient Entladung ÷ Ladung stand hier ohne
+        # jede Einordnung — an einem Tag, der voll beginnt und leer endet,
+        # ergibt er über 100 %. `Cockpit → Monat` unterdrückt das seit F-22 und
+        # nennt die Quelle; die Tagessicht tat beides nicht. ΔSoC kommt aus den
+        # ohnehin geladenen Stunden-Rows, kostet also keine zusätzliche Abfrage.
+        soc_delta = delta_soc_kwh(
+            [r.soc_prozent for r in stunden_rows],
+            sum(
+                get_speicher_nutzbare_kapazitaet_kwh(i) or 0
+                for i in speicher_invs if i.ist_aktiv_an(tag)
+            ),
+        )
+        eta = speicher_wirkungsgrad(
+            bilanz.speicher_ladung_kwh, bilanz.speicher_entladung_kwh, soc_delta,
+        )
+
         # §51 gilt nur für Anlagen mit gesetztem Schalter — das Gate liegt im
         # Erlös-Service, nicht hier (bis 2026-08-03 las diese Zeile die Spalte
         # roh und kürzte den Erlös auch ohne §51-Pflicht).
@@ -234,7 +256,8 @@ async def baue_tage_werte(
             # Speicher (None wenn kein Lade-/Entlade-Geschehen)
             speicher_ladung=_nz(bilanz.speicher_ladung_kwh),
             speicher_entladung=_nz(bilanz.speicher_entladung_kwh),
-            speicher_effizienz=_r(bilanz.speicher_effizienz_prozent, 1),
+            speicher_effizienz=_r(eta.prozent, 1),
+            speicher_effizienz_quelle=eta.quelle,
             speicher_vollzyklen=_r(berechne_vollzyklen(
                 bilanz.speicher_entladung_kwh,
                 sum(
@@ -245,12 +268,24 @@ async def baue_tage_werte(
             wp_strom=_nz(bilanz.wp_strom_kwh),
             sonstiges_erzeugung=_r(sonstiges.erzeugung_kwh, 3),
             sonstiges_verbrauch=_r(sonstiges.verbrauch_kwh, 3),
-            # Finanzen
-            einspeise_erloes=round(finanz.einspeise_erloes_euro, 2),
-            ev_ersparnis=round(finanz.ev_ersparnis_euro, 2),
-            netzbezug_kosten=round(netzbezug_kosten, 2),
-            netto_ertrag=round(netto_ertrag, 2),
-            netto_bilanz=round(netto_bilanz, 2),
+            # Finanzen — bewusst UNGERUNDET, wie der Monatspfad
+            # (`aktueller_monat.py`) sie liefert. Bis 15.08.2026 stand hier je
+            # ein `round(…, 2)`, und das erzeugte zwei sichtbare Widersprüche
+            # auf derselben Seite (Melder Knallfrosch, T89667 #163):
+            #   · Die Finanz-Bilanz-Tabelle summiert die gerundeten Summanden
+            #     (7,49 + 8,55 = 16,04), die Netto-Ertrag-Kachel zeigte die
+            #     gerundete Summe (16,05) — Summe der Gerundeten gegen
+            #     gerundete Summe.
+            #   · „Ø-Preis Netz" teilt Kosten ÷ Menge. Bei 0,19 kWh machte der
+            #     auf 2 Stellen gerundete Cent-Betrag daraus 31,6 ct/kWh,
+            #     während dieselbe Seite mit ~29,5 ct rechnete.
+            # Gerundet wird jetzt erst bei der Anzeige (Client, 2 Stellen); die
+            # Σ-Zeile der Werte-Tabelle summiert dadurch ebenfalls exakt.
+            einspeise_erloes=finanz.einspeise_erloes_euro,
+            ev_ersparnis=finanz.ev_ersparnis_euro,
+            netzbezug_kosten=netzbezug_kosten,
+            netto_ertrag=netto_ertrag,
+            netto_bilanz=netto_bilanz,
             # CO₂ — Kanon statt eigener Formel; nur der PV-Anteil ist auf
             # Tagesebene bestimmbar (s. Modul-Docstring). WP-Strom wird bewusst
             # NICHT übergeben: ohne die zugehörige Wärmemenge wäre die

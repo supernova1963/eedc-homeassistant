@@ -6,8 +6,8 @@ import { KOMPONENTEN_IDENTITAET } from '../lib'
 import type { Block } from '../components/blocks'
 import type { ParkApi } from '../components/park'
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
-import type { StundenWert } from '../api/energie_profil'
-import { socTagWerte } from './TagKomponenten'
+import type { StundenWert, TagWerte } from '../api/energie_profil'
+import { socTagWerte, baueTagKomponentenUndFinanz } from './TagKomponenten'
 
 /** Park-Stub: nichts geparkt — für die Bauer-Aufrufe mit expliziter Periode. */
 const NOOP_PARK_STUB: ParkApi = {
@@ -237,6 +237,46 @@ describe('Speicher: Ladezustand (nur Tagesebene)', () => {
     )
     renderBlock(bloecke, 'k-speicher')
     expect(screen.queryByText('Ladezustand')).not.toBeInTheDocument()
+  })
+})
+
+describe('Speicher-η: der Wert trägt seine Herkunft (T89667 #163)', () => {
+  // Knallfrosch meldete 100,5 % η in der Tagessicht — ohne ein Wort dazu.
+  // Der Satz existierte längst (`wirkungsgradHinweis`), nur erreichte ihn die
+  // Quelle nicht: `TagKomponenten` setzte das Feld nicht, also fiel die
+  // Funktion in ihren Bestands-Zweig und schwieg.
+  const mitQuelle = (quelle: string) => baueKomponentenBloecke(
+    d({ speicher_ladung_kwh: 6.1, speicher_entladung_kwh: 5.4, speicher_wirkungsgrad_prozent: 88.5, speicher_wirkungsgrad_quelle: quelle }),
+    NOOP_PARK_STUB, 'tag',
+  )
+
+  it('ΔSoC herausgerechnet → der Tageswert sagt es', () => {
+    renderBlock(mitQuelle('soc_korrigiert'), 'k-speicher')
+    expect(screen.getByText('Ladestand am Rand herausgerechnet')).toBeInTheDocument()
+  })
+
+  it('ohne Ladestand → „ungenau" statt kommentarlos', () => {
+    renderBlock(mitQuelle('roh-unkorrigiert'), 'k-speicher')
+    expect(screen.getByText(/ohne Ladestand gerechnet — ungenau/)).toBeInTheDocument()
+  })
+
+  it('kein belastbarer Wert → „—" MIT Begründung, und der Zeitraum heißt Tag', () => {
+    const bloecke = baueKomponentenBloecke(
+      d({ speicher_ladung_kwh: 6.1, speicher_entladung_kwh: 6.4, speicher_wirkungsgrad_prozent: null, speicher_wirkungsgrad_quelle: 'nicht-ermittelbar' }),
+      NOOP_PARK_STUB, 'tag',
+    )
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.getByText(/kein Ladestand erfasst — Tageswert nicht belastbar/)).toBeInTheDocument()
+  })
+
+  it('und der Tag reicht die Quelle auch wirklich durch — hier saß der Befund', () => {
+    const tagWerte = {
+      datum: '2026-08-14', speicher_ladung: 6.1, speicher_entladung: 5.4,
+      speicher_effizienz: 88.5, speicher_effizienz_quelle: 'roh-unkorrigiert',
+    } as unknown as TagWerte
+    const bloecke = baueTagKomponentenUndFinanz(tagWerte, [], [], NOOP_PARK_STUB)
+    renderBlock(bloecke, 'k-speicher')
+    expect(screen.getByText(/ohne Ladestand gerechnet — ungenau/)).toBeInTheDocument()
   })
 })
 

@@ -222,6 +222,12 @@ from backend.core.berechnungen.speicher_simulation import (
     StundenBilanz,
     simuliere_speicher_tag,
 )
+from backend.core.berechnungen.speicher_wirkungsgrad import (
+    MINDEST_LADUNG_KWH,
+    SpeicherWirkungsgrad,
+    delta_soc_kwh,
+    speicher_wirkungsgrad,
+)
 from backend.core.berechnungen.speicher_wirtschaftlichkeit import (
     ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE,
     SOC_DRIFT_SCHWELLE_PROZENTPUNKTE,
@@ -382,6 +388,10 @@ __all__ = [
     "soc_spanne",
     "speicher_effizienz_prozent",
     "vollzyklen",
+    "MINDEST_LADUNG_KWH",
+    "SpeicherWirkungsgrad",
+    "delta_soc_kwh",
+    "speicher_wirkungsgrad",
     "SPEICHER_IST_MIN_MONATE",
     "SOC_DRIFT_SCHWELLE_PROZENTPUNKTE",
     "ETA_DEGRADATION_SCHWELLE_PROZENTPUNKTE",

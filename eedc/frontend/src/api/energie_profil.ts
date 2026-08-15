@@ -105,6 +105,15 @@ export interface TagWerte {
   /** Vollzyklen des Tages = Entladung ÷ Kapazität (Backend-SoT). */
   speicher_vollzyklen: number | null
   speicher_effizienz: number | null
+  /**
+   * Worauf der η des Tages beruht — gleiches Vokabular wie im Monat
+   * (`soc_korrigiert` · `roh-unkorrigiert` · `keine-ladung` ·
+   * `nicht-ermittelbar`). Ein Tag ist kein geschlossenes System: wer voll
+   * beginnt und leer endet, entnimmt mehr, als er lädt. Ohne Ladestand am
+   * Rand bleibt der Wert deshalb leer statt über 100 % zu stehen
+   * (Melder Knallfrosch, Forum T89667 #163).
+   */
+  speicher_effizienz_quelle: string | null
   // Wärmepumpe (nur Strom je Tag)
   wp_strom: number | null
   /**

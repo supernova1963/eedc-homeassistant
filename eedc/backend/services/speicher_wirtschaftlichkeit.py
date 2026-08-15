@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.berechnungen.speicher import netz_ladung_stunde_kwh
+from backend.core.berechnungen.speicher_wirkungsgrad import speicher_wirkungsgrad
 from backend.models.tages_energie_profil import TagesEnergieProfil
 
 # Re-Export der reinen Funktionen/Typen/Konstanten aus dem Berechnungs-Layer.
@@ -386,15 +387,18 @@ async def berechne_ist_wirkungsgrad(
         )
 
     delta_soc_kwh = (soc_ende - soc_start) / 100.0 * nutzbare_kapazitaet_kwh
-    # η = (entladung + verbleibende Energie im Speicher) / Ladung
-    wirkungsgrad = (entladung_kwh + delta_soc_kwh) / ladung_kwh
-    # Clamp auf physikalisch plausiblen Bereich — bei Messfehlern oder
-    # Rest-SoC-Drift kann der Quotient kurzzeitig über 1.0 schießen.
-    wirkungsgrad = max(0.0, min(1.0, wirkungsgrad))
+    # η = (entladung + verbleibende Energie im Speicher) / Ladung, geklemmt.
+    # Die Formel liegt seit 15.08.2026 im Layer (ADR-001), weil die Tagessicht
+    # sie ebenfalls braucht — zwei Implementierungen derselben Energiebilanz
+    # wären genau die Drift, die zu #163 geführt hat. `mindest_ladung_kwh=0.0`
+    # hält die Schwelle dieses Pfads (`ladung_kwh <= 0`, oben) unverändert.
+    eta = speicher_wirkungsgrad(
+        ladung_kwh, entladung_kwh, delta_soc_kwh, mindest_ladung_kwh=0.0,
+    )
 
     return WirkungsgradErgebnis(
         quelle="soc_korrigiert",
-        wirkungsgrad_prozent=wirkungsgrad * 100,
+        wirkungsgrad_prozent=eta.prozent,
         fenster_monate=fenster_monate,
         ladung_kwh=ladung_kwh,
         entladung_kwh=entladung_kwh,

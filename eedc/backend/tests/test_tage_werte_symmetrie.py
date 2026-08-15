@@ -116,11 +116,16 @@ async def test_tage_werte_finanz_additiv_und_quoten(db):
     assert erloes_summe == round(einspeisung_summe * 8.0 / 100, 2)
 
     # ev_ersparnis = Eigenverbrauch × 30 ct/kWh
+    # ⚠ `approx` statt `==` seit 15.08.2026: Die Finanz-Felder des Tages werden
+    # nicht mehr auf 2 Stellen vorgerundet (T89667 #163 — die gerundete Summe
+    # widersprach der Summe der gerundeten Summanden auf derselben Seite).
+    # Geprüft wird weiterhin dieselbe Identität, nur ohne die Rundung als
+    # stillen Puffer gegen Float-Reste.
     for t in tage:
-        assert t.ev_ersparnis == round(t.eigenverbrauch * 30.0 / 100, 2)
+        assert t.ev_ersparnis == pytest.approx(t.eigenverbrauch * 30.0 / 100)
         # netto_bilanz = einspeise_erloes + ev_ersparnis − netzbezug_kosten
-        assert t.netto_bilanz == round(
-            t.einspeise_erloes + t.ev_ersparnis - t.netzbezug_kosten, 2
+        assert t.netto_bilanz == pytest.approx(
+            t.einspeise_erloes + t.ev_ersparnis - t.netzbezug_kosten
         )
 
     # Tag-native Felder aus Tageszusammenfassung durchgereicht (Tag 1)

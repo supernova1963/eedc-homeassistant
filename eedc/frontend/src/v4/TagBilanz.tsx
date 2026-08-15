@@ -41,6 +41,11 @@ export function baueTagKpis(
   vt: TagWerte | null,
   sollPvKwh?: number | null,
   netzladung?: { kwh?: number | null; preis_cent?: number | null },
+  /** Tarif des Tages (`tagDetail.netzbezug_preis_cent`, bei flexiblem Tarif der
+   *  Monats-Ø) — dieselbe Zahl, mit der das Backend die Tages-Netzbezugskosten
+   *  bildet. Sie ist der Ø-Preis; der Quotient Kosten ÷ Menge ist nur seine
+   *  Rekonstruktion und bei kleinen Mengen ungenau (T89667 #163). */
+  netzbezugPreisCent?: number | null,
 ): KpiStripItem[] {
   // Ohne erfasste Tages-Erzeugung bleibt das SOLL stehen, die Erfüllung aber
   // leer — sonst stünde dort „0 %" für einen Tag, an dem nur nichts gemessen
@@ -78,12 +83,20 @@ export function baueTagKpis(
   // abgeleitet und ist ohne Bezugsmenge undefiniert (0/0). Im Monat trägt die
   // gleichnamige Kachel dagegen den Tarif-/Ø-Preis, der auch ohne Bezug existiert.
   if (t.netzbezug > 0 && t.netzbezug_kosten != null) {
+    // Der Tarif schlägt den Quotienten (Melder Knallfrosch, T89667 #163): Die
+    // Kachel teilte zwei bereits gerundete Zahlen und zeigte an einem Tag mit
+    // 0,19 kWh Netzbezug 31,6 ct/kWh, während dieselbe Seite die EV-Ersparnis
+    // mit ~29,5 ct rechnete. Beides war derselbe Tarif — nur einmal über die
+    // Rundung gelaufen. Der Quotient bleibt als Rückfall für Antworten ohne
+    // Tagesdetail.
+    const ausTarif = netzbezugPreisCent != null
     kostenKpis.push({
       title: 'Ø-Preis Netz',
-      value: fmtCalc((t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'), unit: 'ct/kWh',
+      value: fmtCalc(ausTarif ? netzbezugPreisCent : (t.netzbezug_kosten / t.netzbezug) * 100, 1, '—'),
+      unit: 'ct/kWh',
       color: 'red', icon: DATENROLLEN_ICONS.netzpreis,
       subtitle: `${fmt(t.netzbezug, 1)} kWh · ${fmtCalc(t.netzbezug_kosten, 2)} €`,
-      formel: 'Netzbezug-Kosten ÷ Netzbezug',
+      formel: ausTarif ? 'Netzbezugspreis des Tages (bei flexiblem Tarif der Monats-Ø)' : 'Netzbezug-Kosten ÷ Netzbezug',
     })
   }
 
