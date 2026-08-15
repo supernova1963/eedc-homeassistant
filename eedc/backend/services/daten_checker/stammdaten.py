@@ -385,7 +385,15 @@ class StammdatenChecks:
         if monate_ohne_tarif:
             aeltester = min((m.jahr, m.monat) for m in monate_ohne_tarif)
             ergebnisse.append(CheckErgebnis(
-                kategorie=kat, schwere=CheckSeverity.WARNING,
+                # ERROR statt WARNING (Gernot, 2026-08-15): Der Fallback auf die
+                # Vorbelegung ist als *Rechenweg* in Ordnung — eedc muss mit
+                # irgendetwas rechnen —, aber das Ergebnis ist ein **geratener
+                # Preis auf gemessenen Mengen**. Netto-Ertrag, ROI und
+                # Jahresbericht dieser Monate tragen damit eine Zahl, die nicht
+                # aus den Daten des Betreibers stammt; das ist ein Fehler und
+                # keine Randnotiz. Auflösbar ist er in einem Schritt (Gültig-ab
+                # des ältesten Tarifs zurückziehen), deshalb keine P-6-Falle.
+                kategorie=kat, schwere=CheckSeverity.ERROR,
                 meldung=(
                     f"{len(monate_ohne_tarif)} Monat(e) mit Daten liegen vor dem "
                     f"ersten Tarif ({erster_tarif_ab.strftime('%m/%Y')})"

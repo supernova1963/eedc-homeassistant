@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.models import Anlage, Monatsdaten, Strompreis
 from backend.services.daten_checker import DatenChecker
+from backend.services.daten_checker.kategorien import CheckSeverity
 
 
 async def _lade(db, anlage_id: int) -> Anlage:
@@ -74,6 +75,12 @@ async def test_importierte_monate_ohne_tarif_werden_gemeldet(db):
     treffer = next(r for r in ergebnisse if "vor dem ersten Tarif" in r.meldung)
     assert "30 ct/kWh" in (treffer.details or "")
     assert treffer.link == "/einstellungen/strompreise"
+    # Schwere ist Teil der Zusage (Gernot, 2026-08-15): ein geratener Preis auf
+    # gemessenen Mengen ist ein **Fehler**, keine Randnotiz — Netto-Ertrag, ROI
+    # und Jahresbericht dieser Monate tragen sonst eine Zahl, die nicht aus den
+    # Daten des Betreibers stammt. Vorher stand hier WARNING, und kein Test
+    # hielt die Stufe fest.
+    assert treffer.schwere == CheckSeverity.ERROR
 
 
 @pytest.mark.asyncio
