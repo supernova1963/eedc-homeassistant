@@ -91,10 +91,14 @@ export interface TagWerte {
   pv_anlage: number
   bkw: number
   eigenverbrauch: number | null
-  einspeisung: number
-  netzbezug: number
-  gesamtverbrauch: number
-  direktverbrauch: number
+  // Ebenso `null`, wenn die Achse an keiner Stunde des Tages einen Wert trug.
+  // Vorher standen hier `0`-Werte neben einem korrekten „—" der PV-Spalte
+  // derselben Zeile (Striker, T89667 #162). `direktverbrauch` braucht PV und
+  // Verbrauch.
+  einspeisung: number | null
+  netzbezug: number | null
+  gesamtverbrauch: number | null
+  direktverbrauch: number | null
   // Quoten (%)
   autarkie: number | null
   evQuote: number | null
@@ -126,10 +130,13 @@ export interface TagWerte {
   sonstiges_verbrauch: number | null
   // Finanzen (€)
   einspeise_erloes: number
-  ev_ersparnis: number
-  netzbezug_kosten: number
-  netto_ertrag: number
-  netto_bilanz: number
+  // `null`, wenn die zugrunde liegende Menge nicht erfasst ist — ein Betrag auf
+  // einer Menge, die es nicht gibt, ist keine 0. Die beiden Summen erben die
+  // Lücke ihres Summanden.
+  ev_ersparnis: number | null
+  netzbezug_kosten: number | null
+  netto_ertrag: number | null
+  netto_bilanz: number | null
   // CO₂
   /** `null`, wenn der Eigenverbrauch nicht erfasst ist — ohne ihn keine CO₂-Aussage. */
   co2_einsparung: number | null

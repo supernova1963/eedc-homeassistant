@@ -332,10 +332,16 @@ class TagWerteResponse(BaseModel):
     pv_anlage: float = 0.0
     bkw: float = 0.0
     eigenverbrauch: Optional[float] = None
-    einspeisung: float = 0.0
-    netzbezug: float = 0.0
-    gesamtverbrauch: float = 0.0
-    direktverbrauch: float = 0.0
+    # Ebenfalls `None`, wenn die jeweilige Achse an keiner Stunde des Tages
+    # einen Wert trug (Träger `TagesBilanz.einspeisung_erfasst` /
+    # `netzbezug_erfasst` / `verbrauch_erfasst`). Bis 15.08.2026 waren diese
+    # vier `float = 0.0` und konnten „nicht gemessen" gar nicht ausdrücken —
+    # neben einem korrekten „—" der PV-Spalte stand dann „0 kWh Netzbezug"
+    # (Striker, T89667 #162). `direktverbrauch` braucht beide Achsen.
+    einspeisung: Optional[float] = None
+    netzbezug: Optional[float] = None
+    gesamtverbrauch: Optional[float] = None
+    direktverbrauch: Optional[float] = None
     # Quoten (%)
     autarkie: Optional[float] = None
     evQuote: Optional[float] = None
@@ -367,12 +373,16 @@ class TagWerteResponse(BaseModel):
     # „für diesen Tag nicht gemessen", nicht 0.
     sonstiges_erzeugung: Optional[float] = None
     sonstiges_verbrauch: Optional[float] = None
-    # Finanzen (€) — einfaches lineares Modell wie createMonatsZeitreihe
+    # Finanzen (€) — einfaches lineares Modell wie createMonatsZeitreihe.
+    # `None`, wenn die Menge fehlt, auf der der Betrag steht: `ev_ersparnis`
+    # ohne erfassten Eigenverbrauch, `netzbezug_kosten` ohne erfassten
+    # Netzbezug, und die beiden Summen erben die Lücke ihres Summanden. Der
+    # Einspeise-Erlös steht dagegen auf einer gemessenen Menge und bleibt.
     einspeise_erloes: float = 0.0
-    ev_ersparnis: float = 0.0
-    netzbezug_kosten: float = 0.0
-    netto_ertrag: float = 0.0
-    netto_bilanz: float = 0.0
+    ev_ersparnis: Optional[float] = None
+    netzbezug_kosten: Optional[float] = None
+    netto_ertrag: Optional[float] = None
+    netto_bilanz: Optional[float] = None
     # CO₂ — der **PV-Anteil** der kanonischen Bilanz (`berechne_co2_bilanz`,
     # ADR-001/DI-2): Eigenverbrauch × Strommix-Faktor. WP-Wärme und
     # E-Mobilitäts-Kilometer sind Monatsgrößen (`InvestitionMonatsdaten`) und auf

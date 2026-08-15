@@ -32,11 +32,13 @@ interface ChartPunkt {
   tag: number
   /** ISO-Datum des Tages — Drill-in-Ziel (B3, Balken-Klick → Cockpit/Tag). */
   datum: string
-  /** `null` = an dem Tag keine PV erfasst (Lücke im Balken statt einer 0). */
+  /** `null` = die Achse war an dem Tag nicht erfasst (Lücke im Balken statt
+   *  einer 0). Galt bis 15.08.2026 nur für die PV-abhängigen Größen; seit
+   *  T89667 #162 sagen Einspeisung, Netzbezug und Direktverbrauch es ebenso. */
   eigenverbrauch: number | null
-  einspeisung: number
-  netzbezug: number
-  direktverbrauch: number
+  einspeisung: number | null
+  netzbezug: number | null
+  direktverbrauch: number | null
   speicherEntladung: number
   autarkie: number | null
   // R17/Vergleich-Modus (ungestackt) — Serien-Keys aus verlaufVergleich.
@@ -54,11 +56,11 @@ export function baueChartDaten(tage: TagWerte[]): ChartPunkt[] {
       tag: Number(t.datum.slice(8, 10)),
       datum: t.datum,
       // null bleibt null: der Chart zeigt eine Lücke statt einer 0-Fläche,
-      // wenn an dem Tag keine PV erfasst war.
+      // wenn die Achse an dem Tag nicht erfasst war.
       eigenverbrauch: t.eigenverbrauch != null ? round1(t.eigenverbrauch) : null,
-      einspeisung: round1(t.einspeisung),
-      netzbezug: round1(t.netzbezug),
-      direktverbrauch: round1(t.direktverbrauch),
+      einspeisung: t.einspeisung != null ? round1(t.einspeisung) : null,
+      netzbezug: t.netzbezug != null ? round1(t.netzbezug) : null,
+      direktverbrauch: t.direktverbrauch != null ? round1(t.direktverbrauch) : null,
       speicherEntladung: round1(t.speicher_entladung ?? 0),
       autarkie: t.autarkie != null ? round1(t.autarkie) : null,
       pvAnlage: round1(t.pv_anlage),

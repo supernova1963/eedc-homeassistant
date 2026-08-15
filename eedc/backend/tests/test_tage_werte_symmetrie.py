@@ -213,3 +213,85 @@ async def test_tage_werte_ohne_monats_durchschnitt_bleiben_beim_tarif(db):
 
     for t in tage:
         assert t.netzbezug_kosten == round(t.netzbezug * 30.0 / 100, 2)
+
+
+@pytest.mark.asyncio
+async def test_nur_einspeisung_erfasst_der_rest_schweigt(db):
+    """Strikers Januar (T89667 #162): eine Achse gemessen, die anderen nicht.
+
+    Seine Einspeisung stammt aus der HA-Historie, PV/Verbrauch/Netzbezug haben
+    für diese Monate keinen Zähler. Vorher lieferte die Tageszeile dafür
+    ``0.0`` — in der Anzeige „0 kWh Netzbezug" neben einem korrekten „—" der
+    PV-Spalte derselben Zeile.
+    """
+    anlage = Anlage(anlagenname="NurEinspeisung", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    tag = date(2026, 1, 20)
+    db.add_all([
+        TagesEnergieProfil(
+            anlage_id=anlage.id, datum=tag, stunde=h,
+            pv_kw=None, verbrauch_kw=None, einspeisung_kw=8.0, netzbezug_kw=None,
+        )
+        for h in (11, 12)
+    ])
+    await db.flush()
+    anlage = await db.get(Anlage, anlage.id)
+
+    tage = await baue_tage_werte(db, anlage, tag, tag)
+
+    assert len(tage) == 1
+    t = tage[0]
+    assert t.einspeisung == 16.0        # gemessen — bleibt stehen
+    assert t.netzbezug is None          # vorher: 0.0
+    assert t.gesamtverbrauch is None    # vorher: 0.0
+    assert t.direktverbrauch is None    # braucht PV UND Verbrauch
+    assert t.ueberschuss_kwh is None
+    assert t.defizit_kwh is None
+    # Unverändert richtig: die PV-Seite schwieg schon vorher.
+    assert t.erzeugung is None
+    assert t.eigenverbrauch is None
+    # Und die €-Seite derselben Zeile widerspricht ihr nicht mehr (Entscheid
+    # Gernot, 15.08.2026): kein Betrag auf einer Menge, die es nicht gibt.
+    assert t.einspeise_erloes == round(16.0 * 8.0 / 100, 2)   # gemessene Menge → Betrag bleibt
+    assert t.netzbezug_kosten is None                          # vorher: 0.0
+    assert t.ev_ersparnis is None                              # vorher: 0.0
+    assert t.netto_ertrag is None                              # erbt die Lücke
+    assert t.netto_bilanz is None
+
+
+@pytest.mark.asyncio
+async def test_autarker_tag_behaelt_seine_gemessene_null(db):
+    """Gegenprobe zur Regel darüber — der Träger ist `is not None`, nicht `> 0`.
+
+    Ein Tag, an dem die Anlage nichts aus dem Netz zieht, ist der Normalfall
+    dieser Anwender und muss seine 0 behalten. Ohne diese Probe wäre die
+    Lücken-Regel selbst die nächste Falschaussage.
+    """
+    anlage = Anlage(anlagenname="Autark", leistung_kwp=10.0)
+    db.add(anlage)
+    await db.flush()
+    db.add(Strompreis(
+        anlage_id=anlage.id, gueltig_ab=date(2024, 1, 1),
+        netzbezug_arbeitspreis_cent_kwh=30.0, einspeiseverguetung_cent_kwh=8.0,
+    ))
+    tag = date(2026, 6, 20)
+    db.add_all([
+        TagesEnergieProfil(
+            anlage_id=anlage.id, datum=tag, stunde=h,
+            pv_kw=5.0, verbrauch_kw=2.0, einspeisung_kw=3.0, netzbezug_kw=0.0,
+        )
+        for h in (11, 12)
+    ])
+    await db.flush()
+    anlage = await db.get(Anlage, anlage.id)
+
+    t = (await baue_tage_werte(db, anlage, tag, tag))[0]
+
+    assert t.netzbezug == 0.0           # NICHT None
+    assert t.gesamtverbrauch == 4.0
+    assert t.direktverbrauch == 4.0

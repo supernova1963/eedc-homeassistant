@@ -58,6 +58,44 @@ def test_kein_negativer_eigenverbrauch_ohne_erfasste_pv():
     assert bilanz.ev_quote_prozent is None
 
 
+def test_netz_seite_sagt_ebenfalls_nicht_gemessen():
+    """Strikers Januar (T89667 #162) — dieselbe Regel, andere Achse.
+
+    Seine Einspeisung kam aus der HA-Historie, PV und Netzbezug hatten dort
+    keinen Zähler. Bis 15.08.2026 kannte nur die PV einen Träger; die
+    Tageszeile zeigte deshalb „— PV · 106 kWh Einspeisung · **0 kWh
+    Netzbezug**", und die 0 war die einzige Zahl der Zeile, hinter der keine
+    Messung stand.
+    """
+    rows = [_row(einspeisung_kw=8.0), _row(einspeisung_kw=8.0)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    assert bilanz.einspeisung_erfasst is True
+    assert bilanz.netzbezug_erfasst is False
+    assert bilanz.verbrauch_erfasst is False
+    # Die Summen selbst bleiben 0.0 — der Layer liefert Zahl **und** Träger,
+    # die Anzeige-Entscheidung trifft die Route (wie bei `pv_erfasst`).
+    assert bilanz.netzbezug_kwh == 0.0
+
+
+def test_gemessene_null_bleibt_eine_null_auch_auf_der_netz_seite():
+    """Wer einen Tag lang nichts bezieht, hat eine gemessene 0 und behält sie.
+
+    Der Gegen-Fehler zur Regel darüber: ein Träger `netzbezug_sum > 0` würde
+    jeden autarken Tag zur Lücke erklären — und autarke Tage sind bei diesen
+    Anlagen der Normalfall, nicht die Ausnahme (Striker bezieht im Mai 13,6 kWh
+    im ganzen Monat).
+    """
+    rows = [_row(netzbezug_kw=0.0, verbrauch_kw=0.0), _row(netzbezug_kw=0.0)]
+
+    bilanz = bilanz_aus_stundenrows(rows)
+
+    assert bilanz.netzbezug_erfasst is True
+    assert bilanz.verbrauch_erfasst is True
+    assert bilanz.netzbezug_kwh == 0.0
+
+
 def test_gemessene_null_bleibt_eine_null():
     """0 kWh gemessen ist ein Wert — kein Fall für die Unterdrückung.
 

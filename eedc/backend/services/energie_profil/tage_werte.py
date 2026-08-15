@@ -224,9 +224,30 @@ async def baue_tage_werte(
             db, anlage_id, eingabe, tarif_cache=tarif_cache
         )
         finanz = berechne_finanz_aggregat([finanz_zeile])
-        netzbezug_kosten = bilanz.netzbezug_kwh * finanz_zeile.netzbezug_preis_cent / 100
-        netto_ertrag = finanz.netto_ertrag_euro
-        netto_bilanz = netto_ertrag - netzbezug_kosten
+        # Ein €-Betrag ist nur so belastbar wie die Menge, auf der er steht.
+        # Fehlt die Menge ganz, ist der Betrag keine 0, sondern nicht
+        # bestimmbar — sonst stünde in derselben Zeile „— kWh Netzbezug" neben
+        # „0,00 € Netzbezug-Kosten" (Entscheid Gernot, 15.08.2026, im Zuge von
+        # T89667 #162). Der Finanz-SoT bleibt unangetastet: er rechnet mit den
+        # Mengen, die er bekommt; die Aussage über ihre Herkunft trifft diese
+        # Schicht. Die umfassende Regel dafür ist die Bewertungsgrenze (eigener
+        # Auftrag) — hier stehen nur die zwei Beträge, deren Menge diese Zeile
+        # selbst als fehlend ausweist.
+        netzbezug_kosten = (
+            bilanz.netzbezug_kwh * finanz_zeile.netzbezug_preis_cent / 100
+            if bilanz.netzbezug_erfasst else None
+        )
+        ev_ersparnis = (
+            finanz.ev_ersparnis_euro if bilanz.eigenverbrauch_kwh is not None else None
+        )
+        # Beide Summen erben die Lücke ihres Summanden. Ohne das wanderte der
+        # Widerspruch nur eine Kachel weiter: „Netto-Ertrag 1,28 €" über einer
+        # Bilanz-Tabelle, in der die EV-Ersparnis mit „—" dasteht.
+        netto_ertrag = finanz.netto_ertrag_euro if ev_ersparnis is not None else None
+        netto_bilanz = (
+            netto_ertrag - netzbezug_kosten
+            if netto_ertrag is not None and netzbezug_kosten is not None else None
+        )
 
         zeilen.append(TagWerteResponse(
             datum=tag,
@@ -242,10 +263,22 @@ async def baue_tage_werte(
             pv_anlage=round(summe_pv_anlage_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
             bkw=round(summe_bkw_kwh(tz.komponenten_kwh) if tz else 0.0, 3),
             eigenverbrauch=_r(bilanz.eigenverbrauch_kwh, 3),
-            einspeisung=round(bilanz.einspeisung_kwh, 3),
-            netzbezug=round(bilanz.netzbezug_kwh, 3),
-            gesamtverbrauch=round(bilanz.gesamtverbrauch_kwh, 3),
-            direktverbrauch=round(bilanz.direktverbrauch_kwh, 3),
+            # Dieselbe Regel wie bei `erzeugung` darüber, jetzt auf allen vier
+            # Achsen: eine Achse, die an KEINER Stunde des Tages einen Wert
+            # trug, ist nicht 0, sondern nicht gemessen. Strikers Januar zeigte
+            # sonst „— PV · 106 kWh Einspeisung · 0 kWh Netzbezug" in einer
+            # Zeile — die 0 war die einzige Zahl daran, die nichts gemessen
+            # hatte (T89667 #162). Träger, nicht `> 0`: wer einen Tag lang
+            # nichts bezieht, hat eine gemessene 0 und behält sie.
+            einspeisung=(round(bilanz.einspeisung_kwh, 3) if bilanz.einspeisung_erfasst else None),
+            netzbezug=(round(bilanz.netzbezug_kwh, 3) if bilanz.netzbezug_erfasst else None),
+            gesamtverbrauch=(round(bilanz.gesamtverbrauch_kwh, 3) if bilanz.verbrauch_erfasst else None),
+            # Σ min(pv, verbrauch) — braucht beide Achsen, wie die Summe selbst
+            # (der Layer zählt nur Stunden mit beiden Werten).
+            direktverbrauch=(
+                round(bilanz.direktverbrauch_kwh, 3)
+                if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+            ),
             # Quoten
             autarkie=_r(bilanz.autarkie_prozent, 1),
             evQuote=_r(bilanz.ev_quote_prozent, 1),
@@ -282,7 +315,7 @@ async def baue_tage_werte(
             # Gerundet wird jetzt erst bei der Anzeige (Client, 2 Stellen); die
             # Σ-Zeile der Werte-Tabelle summiert dadurch ebenfalls exakt.
             einspeise_erloes=finanz.einspeise_erloes_euro,
-            ev_ersparnis=finanz.ev_ersparnis_euro,
+            ev_ersparnis=ev_ersparnis,
             netzbezug_kosten=netzbezug_kosten,
             netto_ertrag=netto_ertrag,
             netto_bilanz=netto_bilanz,
@@ -301,9 +334,17 @@ async def baue_tage_werte(
                 )
                 if bilanz.eigenverbrauch_kwh is not None else None
             ),
-            # Tag-native
-            ueberschuss_kwh=round(bilanz.ueberschuss_kwh, 3),
-            defizit_kwh=round(bilanz.defizit_kwh, 3),
+            # Tag-native. Überschuss und Defizit entstehen stundenweise aus
+            # PV **und** Verbrauch — fehlt eine der beiden Achsen ganz, ist die
+            # Summe 0 aus Mangel an Eingabe, nicht aus Ausgeglichenheit.
+            ueberschuss_kwh=(
+                round(bilanz.ueberschuss_kwh, 3)
+                if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+            ),
+            defizit_kwh=(
+                round(bilanz.defizit_kwh, 3)
+                if bilanz.pv_erfasst and bilanz.verbrauch_erfasst else None
+            ),
             peak_pv_kw=(tz.peak_pv_kw if tz else None),
             peak_netzbezug_kw=(tz.peak_netzbezug_kw if tz else None),
             peak_einspeisung_kw=(tz.peak_einspeisung_kw if tz else None),

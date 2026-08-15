@@ -320,6 +320,19 @@ Feld** statt `stunden: int`. Das ist ein eigener Schnitt in der Stunden-Ebene un
 gehört nicht in B1 — dort würde er die Monats-Schicht mit einer Frage belasten,
 die auf der Stunden-Ebene entschieden werden muss.
 
+> ⚑ **Nachtrag 15.08.2026 — die Hälfte davon steht, und die andere bleibt offen.**
+> `TagesBilanz` trägt seit T89667 #162 je Achse ein `*_erfasst`-Flag (`pv` ·
+> `verbrauch` · `einspeisung` · `netzbezug`), und `tage_werte.py` liefert `None`
+> statt 0.0, wo eine Achse an **keiner** Stunde des Tages einen Wert trug — samt
+> der beiden Geldbeträge, die auf genau diesen Mengen stehen.
+>
+> **Das ist die Total-Lücke, nicht die Teil-Abdeckung.** Ein Boolean beantwortet
+> „gibt es überhaupt Messwerte?", nicht „über wie viele Stunden?". Fehlen der
+> Einspeisung sechs Stunden und der PV keine, ist der Eigenverbrauch weiterhin
+> stillschweigend zu hoch — der ursprüngliche §2.5-Befund. Dafür braucht es
+> weiterhin einen **Zähler je Feld**, und die Beschriftung dazu ist B2.
+> `views.py:590/1400` ist unberührt.
+
 ---
 
 ## §8 Was dieses Papier nicht entscheidet

@@ -13,6 +13,14 @@ Einspeisung ohne PV-Zähler ein negativer Eigenverbrauch. Regel und
 Begründung: ``docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md``; Träger ist
 ``pv_erfasst``.
 
+Eine Summe darf 0 bleiben — **behaupten** darf sie es nicht. Deshalb trägt
+jede der vier Achsen ihr eigenes ``*_erfasst``-Flag (``pv`` · ``verbrauch`` ·
+``einspeisung`` · ``netzbezug``). Der Layer liefert weiterhin Zahl **und**
+Träger; ob daraus „0" oder „—" wird, entscheidet die anzeigende Schicht
+(``services/energie_profil/tage_werte.py``) — dieselbe Arbeitsteilung wie seit
+jeher bei der PV. Bis 15.08.2026 gab es den Träger nur dort, und die Netz-Seite
+lieferte 0.0 ohne jede Unterscheidung (T89667 #162).
+
 Damit gilt für jedes additive Feld die Invariante
 
     Σ ( bilanz_aus_stundenrows(tag_n) )  ==  bilanz_aus_stundenrows(ganzer_monat)
@@ -80,12 +88,26 @@ class TagesBilanz:
     # (kein kWh-Zähler je Erzeuger — Lücke). Wer eine PV-abhängige Größe
     # anzeigt, prüft dieses Feld, nicht `erzeugung_kwh > 0`.
     pv_erfasst: bool = False
+    # Dieselbe Trennung für die drei übrigen Achsen der Bilanz. Bis 15.08.2026
+    # gab es sie nur für die PV — die Netz-Seite konnte „nicht gemessen"
+    # überhaupt nicht ausdrücken und lieferte 0.0. Sichtbar geworden an
+    # Strikers Januar (T89667 #162): Einspeisung aus der HA-Historie vorhanden,
+    # Netzbezug nirgends erfasst, und die Tageszeile behauptete „0 kWh
+    # Netzbezug" neben einem korrekten „—" in der PV-Spalte derselben Zeile.
+    # Regel und Begründung unverändert `docs/KONZEPT-UNVOLLSTAENDIGE-WERTE.md`;
+    # Träger statt `> 0`, damit eine gemessene Null eine Aussage bleibt.
+    verbrauch_erfasst: bool = False
+    einspeisung_erfasst: bool = False
+    netzbezug_erfasst: bool = False
 
 
 def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
     """Aggregiert stündliche TEP-Rows zur Energie-Bilanz (siehe Modul-Docstring)."""
     pv_sum = 0.0
     pv_erfasst = False
+    verbrauch_erfasst = False
+    einspeisung_erfasst = False
+    netzbezug_erfasst = False
     verbrauch_sum = 0.0
     einspeisung_sum = 0.0
     netzbezug_sum = 0.0
@@ -112,10 +134,13 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
             pv_erfasst = True
         if verbrauch is not None:
             verbrauch_sum += verbrauch
+            verbrauch_erfasst = True
         if einspeisung is not None:
             einspeisung_sum += einspeisung
+            einspeisung_erfasst = True
         if netzbezug is not None:
             netzbezug_sum += netzbezug
+            netzbezug_erfasst = True
         if wp is not None:
             wp_sum += wp
 
@@ -175,4 +200,7 @@ def bilanz_aus_stundenrows(rows: Iterable[_StundenRow]) -> TagesBilanz:
         speicher_effizienz_prozent=speicher_eff,
         stunden=n,
         pv_erfasst=pv_erfasst,
+        verbrauch_erfasst=verbrauch_erfasst,
+        einspeisung_erfasst=einspeisung_erfasst,
+        netzbezug_erfasst=netzbezug_erfasst,
     )

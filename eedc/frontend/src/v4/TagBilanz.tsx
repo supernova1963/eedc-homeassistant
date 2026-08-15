@@ -82,7 +82,7 @@ export function baueTagKpis(
   // Hier bleibt `> 0` richtig: der Tages-Ø-Preis wird aus Kosten ÷ Menge
   // abgeleitet und ist ohne Bezugsmenge undefiniert (0/0). Im Monat trägt die
   // gleichnamige Kachel dagegen den Tarif-/Ø-Preis, der auch ohne Bezug existiert.
-  if (t.netzbezug > 0 && t.netzbezug_kosten != null) {
+  if (t.netzbezug != null && t.netzbezug > 0 && t.netzbezug_kosten != null) {
     // Der Tarif schlägt den Quotienten (Melder Knallfrosch, T89667 #163): Die
     // Kachel teilte zwei bereits gerundete Zahlen und zeigte an einem Tag mit
     // 0,19 kWh Netzbezug 31,6 ct/kWh, während dieselbe Seite die EV-Ersparnis
@@ -114,7 +114,7 @@ export function baueTagKpis(
       title: 'Autarkie', value: fmt(t.autarkie), unit: '%', color: 'green', icon: DATENROLLEN_ICONS.autarkie,
       subtitle: vt ? `VT: ${fmt(vt.autarkie)} %` : undefined,
       formel: '(Gesamtverbrauch − Netzbezug) ÷ Gesamtverbrauch × 100',
-      berechnung: t.gesamtverbrauch > 0
+      berechnung: t.gesamtverbrauch != null && t.gesamtverbrauch > 0
         ? `(${fmt(t.gesamtverbrauch)} − ${fmt(t.netzbezug)}) ÷ ${fmt(t.gesamtverbrauch)} kWh`
         : undefined,
       ergebnis: t.autarkie != null ? `= ${fmtCalc(t.autarkie, 1)} %` : undefined,
