@@ -119,6 +119,49 @@ describe('SpeicherPotentialIST', () => {
     await waitFor(() => expect(melde).toHaveBeenCalled())
     expect(melde).toHaveBeenLastCalledWith([])
   })
+
+  // Bis 2026-08-15 lag EINE Parkbar um den ganzen Block: Befund, drei Kacheln,
+  // Spuren-Grafik und Hinweis ließen sich nur gemeinsam parken, und beim
+  // Rechtsklick verdunkelte sich alles statt der angefassten Kachel. Die
+  // gemeldeten IDs sind der beobachtbare Vertrag mit dem Block (`alleGeparkt`)
+  // — eine einzige ID hieße wieder ein Bündel.
+  it('meldet jede Teil-Anzeige einzeln, nicht das Bündel', async () => {
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(
+      ANTWORT({ anzahl_speicher: 2 }),
+    )
+    const melde = vi.fn()
+
+    render(<SpeicherPotentialIST anlageId={1} melde={melde} />)
+
+    // Der erste Lauf meldet `[]` (noch am Laden) — gewartet wird auf die Meldung
+    // MIT Daten, sonst prüft die Probe den Ladezustand.
+    await waitFor(() => expect(melde.mock.calls.at(-1)![0]).not.toHaveLength(0))
+    const ids = melde.mock.calls.at(-1)![0] as string[]
+    expect(ids).toContain('speicher:potential-befund')
+    expect(ids).toContain('speicher:potential-kpi-zusatz')
+    expect(ids).toContain('speicher:potential-kpi-ueberschuss')
+    expect(ids).toContain('speicher:potential-kpi-leer')
+    expect(ids).toContain('speicher:potential-spuren')
+    expect(ids).toContain('speicher:potential-hinweis')
+    expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('meldet nur, was auch gerendert wird', async () => {
+    // Ein Speicher, keine Monate ⇒ weder Spuren-Grafik noch Mehrgeräte-Hinweis.
+    // Stünden sie trotzdem in der Liste, ließe sich der Block nie ganz parken.
+    vi.spyOn(investitionenApi, 'getSpeicherPotential').mockResolvedValue(
+      ANTWORT({ anzahl_speicher: 1, monate: [] }),
+    )
+    const melde = vi.fn()
+
+    render(<SpeicherPotentialIST anlageId={1} melde={melde} />)
+
+    await waitFor(() => expect(melde.mock.calls.at(-1)![0]).not.toHaveLength(0))
+    const ids = melde.mock.calls.at(-1)![0] as string[]
+    expect(ids).not.toContain('speicher:potential-spuren')
+    expect(ids).not.toContain('speicher:potential-hinweis')
+    expect(ids).toContain('speicher:potential-befund')
+  })
 })
 
 describe('SpeicherPotentialIST — Spannen-Grafik statt Heatmap', () => {

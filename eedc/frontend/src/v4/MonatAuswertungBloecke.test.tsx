@@ -74,8 +74,20 @@ describe('baueMonatAuswertungBloecke — Block-Auswahl', () => {
   })
 
   it('Element-Park-Doktrin: Block entfällt, wenn sein einziges Element geparkt ist', () => {
-    expect(baueMonatAuswertungBloecke(a(), parkMit('el:kategorien')).map((b) => b.id)).not.toContain('kategorien')
     expect(baueMonatAuswertungBloecke(a(), parkMit('el:tagesprofil')).map((b) => b.id)).not.toContain('tagesprofil')
+  })
+
+  // Bis 2026-08-15 lag EINE Parkbar über beiden Balken — wer den Verbrauch
+  // wegräumen wollte, verlor die Erzeugung mit. Jetzt wie bei den Peaks zwei.
+  it('Kategorien: jeder Balken einzeln parkbar, Block erst mit beiden weg', () => {
+    const nurErz = baueMonatAuswertungBloecke(a(), parkMit('el:kategorien-verbrauch')).map((b) => b.id)
+    expect(nurErz).toContain('kategorien')
+    const nurVerb = baueMonatAuswertungBloecke(a(), parkMit('el:kategorien-erzeugung')).map((b) => b.id)
+    expect(nurVerb).toContain('kategorien')
+    const beide = baueMonatAuswertungBloecke(
+      a(), parkMit('el:kategorien-erzeugung', 'el:kategorien-verbrauch'),
+    ).map((b) => b.id)
+    expect(beide).not.toContain('kategorien')
   })
 
   it('Peaks entfällt erst, wenn BEIDE Listen geparkt sind', () => {

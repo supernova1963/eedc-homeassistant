@@ -49,7 +49,16 @@ export function baueMonatAuswertungBloecke(
   // M4 — Kategorien-Anteils-Leiste (Erzeuger/Verbraucher getrennt).
   const erzeuger = kategorieSegmente(a, 'erzeuger')
   const verbraucher = kategorieSegmente(a, 'verbraucher')
-  if ((erzeuger.length > 0 || verbraucher.length > 0) && !park.istGeparkt('el:kategorien')) {
+  // Zwei Balken, zwei Aussagen — deshalb zwei Parkbars. Bis 2026-08-15 lag EINE
+  // Parkbar (`el:kategorien`) über beiden: wer nur den Verbrauchs-Balken
+  // wegräumen wollte, verlor auch den Erzeugungs-Balken. Anders als beim
+  // Sizing-Regler hängt hier nichts voneinander ab — jeder Balken ist für sich
+  // lesbar. Dieselbe Klasse wie der Speicher-Block „Hätte mehr Kapazität
+  // geholfen?" (Gernot am Bild, 15.08.); das Muster steht zwei Blöcke weiter
+  // unten schon (`el:peak-netzbezug`/`el:peak-einspeisung`).
+  const erzSichtbar = erzeuger.length > 0 && !park.istGeparkt('el:kategorien-erzeugung')
+  const verbSichtbar = verbraucher.length > 0 && !park.istGeparkt('el:kategorien-verbrauch')
+  if (erzSichtbar || verbSichtbar) {
     bloecke.push({
       id: 'kategorien',
       title: 'Kategorien',
@@ -57,12 +66,18 @@ export function baueMonatAuswertungBloecke(
       summary: 'Erzeugung & Verbrauch nach Kategorie',
       defaultOpen: false,
       render: () => (
-        <Parkbar id="el:kategorien" titel="Kategorien-Anteile">
-          <div className="space-y-4">
-            {erzeuger.length > 0 && <VerteilungsBalken titel="Erzeugung nach Kategorie" segmente={erzeuger} />}
-            {verbraucher.length > 0 && <VerteilungsBalken titel="Verbrauch nach Kategorie" segmente={verbraucher} />}
-          </div>
-        </Parkbar>
+        <div className="space-y-4">
+          {erzSichtbar && (
+            <Parkbar id="el:kategorien-erzeugung" titel="Erzeugung nach Kategorie">
+              <VerteilungsBalken titel="Erzeugung nach Kategorie" segmente={erzeuger} />
+            </Parkbar>
+          )}
+          {verbSichtbar && (
+            <Parkbar id="el:kategorien-verbrauch" titel="Verbrauch nach Kategorie">
+              <VerteilungsBalken titel="Verbrauch nach Kategorie" segmente={verbraucher} />
+            </Parkbar>
+          )}
+        </div>
       ),
     })
   }
