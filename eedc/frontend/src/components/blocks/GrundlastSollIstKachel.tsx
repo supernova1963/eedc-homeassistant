@@ -22,7 +22,10 @@ import type { ReactNode } from 'react'
 import FormelTooltip from '../ui/FormelTooltip'
 import { fmtCalc } from '../ui'
 import { AMPEL_TEXT_CLASS, AMPEL_BG_CLASS, sollIstStufe } from '../../lib'
-import { sollErfuellungProzent, sollFensterText } from '../../lib/sollErfuellung'
+import {
+  sollErfuellungMonatProzent, sollErfuellungProzent, sollFensterText,
+  sollMonatGesamtKwh, zeigeMonatsprognose,
+} from '../../lib/sollErfuellung'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 
 const fmt = (v: number | null | undefined, dec = 0) => fmtCalc(v, dec, '—')
@@ -70,6 +73,46 @@ export function BilanzKachel({
         </p>
       )}
     </>
+  )
+}
+
+/**
+ * Zeigt die volle Monatsprognose (Melder dietmar1968, T89667 #155) — `null`,
+ * solange sie nichts zu sagen hat.
+ *
+ * Bewusst **unabhängig** von der Grundlast/PVGIS-Weiche unten: die SOLL-Kachel
+ * verschwindet, sobald Stundenprofile vorliegen, und genau dann hätte diese
+ * Anlage sonst gar keine Einordnung des laufenden Monats mehr.
+ *
+ * Nur im **angefangenen** Monat: ist er vorbei, sind „bis heute" und „ganzer
+ * Monat" dieselbe Zahl — dann stünde hier eine zweite Kachel mit demselben
+ * Inhalt.
+ */
+export function MonatsprognoseKachel({ d }: { d: AktuellerMonatResponse }) {
+  const gesamt = sollMonatGesamtKwh(d)
+  const pct = sollErfuellungMonatProzent(d)
+  // Ein Gate, zwei Aufrufer (s. `zeigeMonatsprognose`); die null-Prüfungen
+  // daneben sind der Typ-Beweis für die beiden Werte, nicht eine zweite Regel.
+  if (!zeigeMonatsprognose(d) || gesamt == null || pct == null) return null
+  const gerundet = Math.round(pct)
+  return (
+    <BilanzKachel
+      label="Monatsprognose (PVGIS)"
+      formel="IST ÷ SOLL des ganzen Monats × 100"
+      berechnung={`${fmt(d.pv_erzeugung_kwh)} ÷ ${fmt(gesamt)} kWh (${d.soll_pv_tage_gesamt} Tage)`}
+      ergebnis={`= ${fmt(gerundet)} %`}
+      wert={`${fmt(gerundet)} %`}
+      // Keine SOLL/IST-Ampel: Rot hieße hier „der Monat ist noch nicht vorbei"
+      // — eine Bewertung, wo nur ein Fortschritt steht. Farbe = Erzeugungs-Rolle.
+      wertClass="text-energy-solar"
+      balken={{ pct: gerundet, bgClass: 'bg-energy-solar' }}
+      subtitle={<>
+        {fmt(d.pv_erzeugung_kwh)} von {fmt(gesamt)} kWh · ganzer Monat
+        {d.soll_pv_tage != null && d.soll_pv_tage_gesamt != null
+          ? ` (Tag ${d.soll_pv_tage} von ${d.soll_pv_tage_gesamt})`
+          : ''}
+      </>}
+    />
   )
 }
 

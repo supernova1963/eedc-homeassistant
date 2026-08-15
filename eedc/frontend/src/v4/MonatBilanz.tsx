@@ -20,7 +20,8 @@ import { fmtCalc } from '../components/ui'
 import { Table, TableHead, TableBody } from '../components/ui/Table'
 import { ZELLE, KOPF_ZELLE } from '../components/ui/tabelleMasse'
 import { SimpleTooltip } from '../components/ui/FormelTooltip'
-import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel } from '../components/blocks'
+import { VerteilungsBalken, GeraeteHinweis, GrundlastSollIstKachel, MonatsprognoseKachel } from '../components/blocks'
+import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 import { Parkbar } from '../components/park'
 import { DATENROLLE, NETZLADUNG_PREIS_HERKUNFT, VERGLEICH_BADGE } from '../lib'
 // R3b S7/A5: Datenrollen-Icons aus der SoT-Map (eine Datenrolle = ein Icon).
@@ -363,6 +364,17 @@ export function MonatBilanz({
         <Parkbar id="el:bilanz-grundlast" titel="Grundlast SOLL/IST">
           <GrundlastSollIstKachel d={d} />
         </Parkbar>
+
+        {/* Volle Monatsprognose (Melder dietmar1968, T89667 #155) — eigene
+            Angabe neben der Kachel darüber, nicht in ihr: die verschwindet,
+            sobald Stundenprofile vorliegen. Einzeln parkbar, wer sie nicht
+            will, parkt genau sie. Gate = `zeigeMonatsprognose` (dasselbe wie
+            in `bilanzParkIds`). Nur im Monat, nicht im Jahr. */}
+        {zeigeMonatsprognose(d) && (
+          <Parkbar id="el:bilanz-monatsprognose" titel="Monatsprognose" className="mt-4">
+            <MonatsprognoseKachel d={d} />
+          </Parkbar>
+        )}
 
         {/* PV-Verteilung (EV/Einspeisung) — VerteilungsBalken-SoT (B7-Revision 2026-06-19):
             wie IST als Balken, zusätzlich kWh; eine Bildsprache wie WP/Lade-Mix.

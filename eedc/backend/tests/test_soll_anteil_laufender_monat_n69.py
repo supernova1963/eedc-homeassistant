@@ -145,7 +145,12 @@ async def test_route_kuerzt_das_soll_des_laufenden_monats(db):
     soll = await _load_soll_pv(
         anlage_id, 2026, 8, db, monatsfenster(2026, 8, heute=HEUTE),
     )
-    assert soll == 179.1
+    assert soll.anteilig == 179.1
+    # Dieselbe Prognose ungekürzt — die Zahl der Monatsprognose-Kachel
+    # (dietmar1968, T89667 #155). Sie steht in der Antwort, damit der Client
+    # sie nicht aus der gerundeten Zahl darüber zurückrechnen muss: 179,1 mal
+    # 31 durch 4 ergäbe 1388,0 statt 1387,9.
+    assert soll.monat == SOLL_AUGUST_KWH
 
 
 async def test_route_laesst_abgeschlossene_monate_unveraendert(db):
@@ -156,7 +161,8 @@ async def test_route_laesst_abgeschlossene_monate_unveraendert(db):
     soll = await _load_soll_pv(
         anlage_id, 2026, 7, db, monatsfenster(2026, 7, heute=HEUTE),
     )
-    assert soll == 1509.0
+    assert soll.anteilig == 1509.0
+    assert soll.monat == 1509.0  # abgeschlossener Monat: beide Lesarten gleich
 
 
 async def test_route_ohne_prognose_liefert_none(db):
@@ -169,4 +175,4 @@ async def test_route_ohne_prognose_liefert_none(db):
     soll = await _load_soll_pv(
         anlage.id, 2026, 8, db, monatsfenster(2026, 8, heute=HEUTE),
     )
-    assert soll is None
+    assert soll.anteilig is None and soll.monat is None

@@ -210,6 +210,11 @@ export interface AktuellerMonatResponse {
   soll_pv_kwh: number | null
   soll_pv_tage?: number | null
   soll_pv_tage_gesamt?: number | null
+  /** Dasselbe SOLL ungekürzt = Prognose für den ganzen Monat (dietmar1968,
+   *  T89667 #155). Kommt fertig aus der Antwort und wird **nicht** aus
+   *  `soll_pv_kwh` zurückgerechnet — das würde dessen Rundung mit
+   *  `tage_gesamt ÷ tage` vergrößern. Im Jahres-Aggregat nicht belegt. */
+  soll_pv_kwh_monat?: number | null
 
   // Grundlast (Nacht-Sockel; R12-1 ersetzt PVGIS-SOLL/IST). grundlast_kwh additiv
   // → Cockpit/Jahr (JahrAggregat) summiert die Monate.

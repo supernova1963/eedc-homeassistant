@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { GrundlastSollIstKachel } from './GrundlastSollIstKachel'
+import { GrundlastSollIstKachel, MonatsprognoseKachel } from './GrundlastSollIstKachel'
 import { baueJahrAlsMonat } from '../../v4/JahrAggregat'
 import type { AktuellerMonatResponse } from '../../api/aktuellerMonat'
 
@@ -29,6 +29,41 @@ describe('GrundlastSollIstKachel', () => {
   it('zeigt Leer-Hinweis, wenn weder Grundlast noch PVGIS vorliegen', () => {
     render(<GrundlastSollIstKachel d={d({ grundlast_kw: null, soll_pv_kwh: null })} />)
     expect(screen.getByText(/Keine Grundlast- oder PVGIS-Daten/)).toBeInTheDocument()
+  })
+})
+
+describe('MonatsprognoseKachel (Melder dietmar1968, T89667 #155)', () => {
+  // Der laufende Monat: 4 von 31 Tagen, SOLL bis heute 179,1 kWh, volle
+  // Monatsprognose 1387,9 kWh, IST 264,75 kWh.
+  const laufend = (over: Partial<AktuellerMonatResponse> = {}) => d({
+    pv_erzeugung_kwh: 264.75, soll_pv_kwh: 179.1, soll_pv_kwh_monat: 1387.9,
+    soll_pv_tage: 4, soll_pv_tage_gesamt: 31, ...over,
+  })
+
+  it('zeigt den Fortschritt gegen den GANZEN Monat und benennt ihn', () => {
+    render(<MonatsprognoseKachel d={laufend()} />)
+    expect(screen.getByText('Monatsprognose (PVGIS)')).toBeInTheDocument()
+    expect(screen.getByText('19 %')).toBeInTheDocument()          // 264,75 / 1387,9
+    expect(screen.getByText(/von 1\.388 kWh · ganzer Monat/)).toBeInTheDocument()
+    expect(screen.getByText(/Tag 4 von 31/)).toBeInTheDocument()
+  })
+
+  it('erscheint auch dann, wenn die SOLL-Kachel daneben verdrängt ist', () => {
+    // Mit Stundendaten zeigt GrundlastSollIstKachel die Grundlast — ohne diese
+    // Kachel hätte die Anlage gar keine Einordnung des laufenden Monats mehr.
+    const mitStunden = laufend({ grundlast_kw: 0.38, grundlast_anteil_prozent: 18.5 })
+    render(<MonatsprognoseKachel d={mitStunden} />)
+    expect(screen.getByText('19 %')).toBeInTheDocument()
+  })
+
+  it('schweigt im abgeschlossenen Monat und ohne Prognose', () => {
+    const { container: fertig } = render(<MonatsprognoseKachel d={d({
+      pv_erzeugung_kwh: 1843.25, soll_pv_kwh: 1509, soll_pv_kwh_monat: 1509,
+      soll_pv_tage: 31, soll_pv_tage_gesamt: 31,
+    })} />)
+    expect(fertig).toBeEmptyDOMElement()
+    const { container: ohne } = render(<MonatsprognoseKachel d={d({ soll_pv_kwh: null })} />)
+    expect(ohne).toBeEmptyDOMElement()
   })
 })
 

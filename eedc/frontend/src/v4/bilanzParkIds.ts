@@ -8,11 +8,20 @@
  */
 import type { AktuellerMonatResponse } from '../api/aktuellerMonat'
 import type { TagWerte } from '../api/energie_profil'
+import { zeigeMonatsprognose } from '../lib/sollErfuellung'
 
 /** IDs der tatsächlich gerenderten Teil-Anzeigen des Monats-Bilanz-Blocks.
  *  Auch für Jahr (gleicher `AktuellerMonatResponse`-Aggregat-Shape). */
-export function monatBilanzParkIds(d: AktuellerMonatResponse): string[] {
+export function monatBilanzParkIds(
+  d: AktuellerMonatResponse,
+  /** `'jahr'` lässt die Monatsprognose weg — sie wird nur in `MonatBilanz`
+   *  gerendert. Ohne diesen Parameter wartete der Jahres-Block auf das Parken
+   *  eines Elements, das es dort nicht gibt (beide Sichten teilen sich diese
+   *  Funktion, weil sie denselben Aggregat-Shape tragen). */
+  sicht: 'monat' | 'jahr' = 'monat',
+): string[] {
   const ids = ['el:bilanz-vergleich', 'el:bilanz-grundlast']
+  if (sicht === 'monat' && zeigeMonatsprognose(d)) ids.push('el:bilanz-monatsprognose')
   if (d.eigenverbrauch_kwh != null && d.einspeisung_kwh != null && (d.pv_erzeugung_kwh ?? 0) > 0) ids.push('el:bilanz-verteilung')
   const pvGeraete = [...(d.komponenten_geraete?.['pv-module'] ?? []), ...(d.komponenten_geraete?.['wechselrichter'] ?? [])]
   if (pvGeraete.length >= 2) ids.push('el:bilanz-geraete')

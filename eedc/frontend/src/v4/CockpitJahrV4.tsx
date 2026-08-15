@@ -380,7 +380,7 @@ function CockpitJahrInner({ anlageId }: { anlageId: number | undefined }) {
       ...(kennzahlenBlock ? [kennzahlenBlock] : []),
       // Bilanz-Block: jede Teil-Anzeige einzeln parkbar (in JahrBilanz, gleiche IDs wie
       // Monat — gleicher Aggregat-Shape); Block entfällt erst, wenn ALLE geparkt sind.
-      ...(d && monatBilanzParkIds(d).every((id) => park.istGeparkt(id)) ? [] : [{
+      ...(d && monatBilanzParkIds(d, 'jahr').every((id) => park.istGeparkt(id)) ? [] : [{
         id: 'bilanz', title: 'Energie-Bilanz', ...BLOCK_IDENTITAET.energieBilanz,
         summary: bilanzSummary,
         defaultOpen: false,
